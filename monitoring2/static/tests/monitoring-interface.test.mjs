@@ -72,6 +72,10 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(profilingPage, /Seconds/);
   assert.match(profilingPage, /CPU Call Graph/);
   assert.match(profilingPage, /CallGraph/);
+  assert.match(profilingPage, /hotPathNodeIDs/);
+  assert.match(profilingPage, /hotPathEdgeIDs/);
+  assert.match(profilingPage, /max-h-\[36rem\]/);
+  assert.match(profilingPage, /formatSampleCount/);
   assert.match(profilingPage, /RESOURCE_SAMPLE_INTERVAL_MS = 1000/);
   assert.match(profilingPage, /MAX_SECOND_SAMPLES = 60/);
   assert.match(profilingPage, /MAX_MINUTE_SAMPLES = 60/);

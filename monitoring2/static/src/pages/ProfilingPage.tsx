@@ -441,11 +441,27 @@ function TopFunctionBars({ functions }: { functions: ProfileFunctionStat[] }) {
 function shortFunctionName(name: string) {
   const parts = name.split("/");
   const lastPath = parts[parts.length - 1] ?? name;
-  if (lastPath.length <= 26) {
+  if (lastPath.length <= 30) {
     return lastPath;
   }
 
-  return `${lastPath.slice(0, 23)}...`;
+  return `${lastPath.slice(0, 27)}...`;
+}
+
+function formatSampleCount(value: number) {
+  const units = ["", "K", "M", "B", "T"];
+  let scaled = Math.abs(value);
+  let unitIndex = 0;
+
+  while (scaled >= 1000 && unitIndex < units.length - 1) {
+    scaled /= 1000;
+    unitIndex += 1;
+  }
+
+  const digits = scaled >= 10 || unitIndex === 0 ? 0 : 1;
+  const sign = value < 0 ? "-" : "";
+
+  return `${sign}${scaled.toFixed(digits)}${units[unitIndex]}`;
 }
 
 function CallGraph({ graph }: { graph: ProfileCallGraph }) {
@@ -453,47 +469,85 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
     return <div className="text-sm text-muted-foreground">No call graph samples in the captured profile.</div>;
   }
 
-  const width = 1100;
-  const left = 40;
-  const top = 36;
-  const nodeWidth = 190;
-  const nodeHeight = 46;
-  const rowGap = 74;
-  const columnGap = 230;
+  const left = 32;
+  const top = 28;
+  const nodeWidth = 220;
+  const nodeHeight = 44;
+  const rowGap = 58;
+  const columnGap = 250;
+  const maxVisibleDepth = Math.min(10, Math.max(0, ...graph.nodes.map((node) => node.depth)));
+  const depthFor = (node: ProfileCallGraphNode) => Math.max(0, Math.min(maxVisibleDepth, node.depth));
   const grouped = new Map<number, ProfileCallGraphNode[]>();
+  const nodesByID = new Map(graph.nodes.map((node) => [node.id, node]));
+  const incomingNodeIDs = new Set(graph.edges.map((edge) => edge.to));
+  const outgoing = new Map<string, ProfileCallGraphEdge[]>();
+
+  graph.edges.forEach((edge) => {
+    outgoing.set(edge.from, [...(outgoing.get(edge.from) ?? []), edge]);
+  });
+
+  outgoing.forEach((edges, from) => {
+    outgoing.set(from, [...edges].sort((a, b) => b.value - a.value));
+  });
+
+  const hotPathNodeIDs = new Set<string>();
+  const hotPathEdgeIDs = new Set<string>();
+  const roots = graph.nodes
+    .filter((node) => !incomingNodeIDs.has(node.id))
+    .sort((a, b) => a.depth - b.depth || b.value - a.value);
+  let currentNode: ProfileCallGraphNode | undefined =
+    roots[0] ?? [...graph.nodes].sort((a, b) => b.value - a.value)[0];
+
+  while (currentNode && !hotPathNodeIDs.has(currentNode.id) && hotPathNodeIDs.size < 16) {
+    hotPathNodeIDs.add(currentNode.id);
+
+    const nextEdge = (outgoing.get(currentNode.id) ?? []).find((edge) => {
+      return nodesByID.has(edge.to) && !hotPathNodeIDs.has(edge.to);
+    });
+    if (!nextEdge) {
+      break;
+    }
+
+    hotPathEdgeIDs.add(nextEdge.id);
+    currentNode = nodesByID.get(nextEdge.to);
+  }
 
   graph.nodes.forEach((node) => {
-    const depth = Math.max(0, Math.min(5, node.depth));
+    const depth = depthFor(node);
     grouped.set(depth, [...(grouped.get(depth) ?? []), node]);
   });
 
   const depths = [...grouped.keys()].sort((a, b) => a - b);
   const maxRows = Math.max(1, ...depths.map((depth) => grouped.get(depth)?.length ?? 0));
-  const height = Math.max(360, top * 2 + maxRows * rowGap);
+  const width = Math.max(900, left * 2 + Math.max(0, depths.length - 1) * columnGap + nodeWidth);
+  const height = Math.max(320, top * 2 + Math.max(0, maxRows - 1) * rowGap + nodeHeight);
   const maxNodeValue = Math.max(1, ...graph.nodes.map((node) => node.value));
   const maxEdgeValue = Math.max(1, ...graph.edges.map((edge) => edge.value));
   const positions = new Map<string, { x: number; y: number }>();
 
   depths.forEach((depth, columnIndex) => {
-    const nodes = [...(grouped.get(depth) ?? [])].sort((a, b) => b.value - a.value);
-    const columnHeight = (nodes.length - 1) * rowGap;
-    const startY = top + ((maxRows - 1) * rowGap - columnHeight) / 2;
+    const nodes = [...(grouped.get(depth) ?? [])].sort((a, b) => {
+      const hotPathSort = Number(hotPathNodeIDs.has(b.id)) - Number(hotPathNodeIDs.has(a.id));
+      return hotPathSort || b.value - a.value;
+    });
 
     nodes.forEach((node, rowIndex) => {
       positions.set(node.id, {
         x: left + columnIndex * columnGap,
-        y: startY + rowIndex * rowGap,
+        y: top + rowIndex * rowGap,
       });
     });
   });
 
-  const visibleEdges = graph.edges.filter((edge) => positions.has(edge.from) && positions.has(edge.to));
+  const visibleEdges = graph.edges
+    .filter((edge) => positions.has(edge.from) && positions.has(edge.to))
+    .sort((a, b) => a.value - b.value);
 
   return (
-    <div className="overflow-auto rounded border bg-slate-50 p-3">
+    <div className="max-h-[36rem] overflow-auto rounded border bg-slate-50 p-3">
       <svg
-        className="min-h-96 min-w-[900px] overflow-visible"
-        viewBox={`0 0 ${Math.max(width, left * 2 + depths.length * columnGap + nodeWidth)} ${height}`}
+        className="min-h-80 min-w-[900px] overflow-visible"
+        viewBox={`0 0 ${width} ${height}`}
         role="img"
         aria-label="CPU profile call graph"
       >
@@ -509,16 +563,21 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
           const startY = from.y + nodeHeight / 2;
           const endX = to.x;
           const endY = to.y + nodeHeight / 2;
-          const bend = Math.max(60, (endX - startX) / 2);
-          const strokeWidth = 1 + (edge.value / maxEdgeValue) * 4;
+          const forward = endX > startX;
+          const bend = forward ? Math.max(58, (endX - startX) / 2) : 44;
+          const isHotPath = hotPathEdgeIDs.has(edge.id);
+          const strokeWidth = isHotPath ? 2.5 + (edge.value / maxEdgeValue) * 2 : 0.9 + (edge.value / maxEdgeValue) * 2.5;
+          const edgePath = forward
+            ? `M ${startX} ${startY} C ${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX - 6} ${endY}`
+            : `M ${startX} ${startY} C ${startX + bend} ${startY}, ${startX + bend} ${endY}, ${endX - 6} ${endY}`;
 
           return (
             <path
               key={edge.id}
-              d={`M ${startX} ${startY} C ${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX - 6} ${endY}`}
+              d={edgePath}
               fill="none"
-              stroke="#64748b"
-              strokeOpacity={0.25 + (edge.value / maxEdgeValue) * 0.55}
+              stroke={isHotPath ? "#475569" : "#94a3b8"}
+              strokeOpacity={isHotPath ? 0.78 : 0.16 + (edge.value / maxEdgeValue) * 0.42}
               strokeWidth={strokeWidth}
               markerEnd="url(#call-arrow)"
             >
@@ -535,6 +594,7 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
           }
 
           const intensity = node.value / maxNodeValue;
+          const isHotPath = hotPathNodeIDs.has(node.id);
 
           return (
             <g key={node.id} transform={`translate(${position.x} ${position.y})`}>
@@ -543,15 +603,15 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
                 height={nodeHeight}
                 rx="6"
                 fill="#ffffff"
-                stroke={intensity > 0.66 ? "#0284c7" : "#cbd5e1"}
-                strokeWidth={1 + intensity * 2}
+                stroke={isHotPath || intensity > 0.66 ? "#0284c7" : "#cbd5e1"}
+                strokeWidth={isHotPath ? 2.5 : 1 + intensity * 1.5}
               />
               <rect width={Math.max(4, nodeWidth * intensity)} height="4" rx="2" fill="#0284c7" />
-              <text x="10" y="21" className="fill-slate-950 text-[12px] font-semibold">
+              <text x="10" y="19" className="fill-slate-950 text-[12px] font-semibold">
                 {shortFunctionName(node.label)}
               </text>
-              <text x="10" y="37" className="fill-slate-500 text-[11px]">
-                samples {node.value}
+              <text x="10" y="35" className="fill-slate-600 text-[11px]">
+                samples {formatSampleCount(node.value)}
               </text>
               <title>
                 {node.label}: {node.value}
