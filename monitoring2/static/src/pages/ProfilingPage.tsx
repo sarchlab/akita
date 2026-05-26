@@ -51,6 +51,8 @@ interface ProfileCallGraphEdge {
   from: string;
   to: string;
   value: number;
+  indirect: boolean;
+  skippedFrames: number;
 }
 
 interface ProfileValueInfo {
@@ -333,7 +335,7 @@ function formatProfileValue(value: number, valueInfo: ProfileValueInfo) {
 
 function buildCallGraph(samples: unknown[], valueInfo: ProfileValueInfo): ProfileCallGraph {
   const nodeTotals = new Map<string, { value: number; depthTotal: number; count: number }>();
-  const edgeTotals = new Map<string, ProfileCallGraphEdge>();
+  const stacks: { stack: string[]; weight: number }[] = [];
 
   samples.forEach((item) => {
     if (!item || typeof item !== "object") {
@@ -347,6 +349,12 @@ function buildCallGraph(samples: unknown[], valueInfo: ProfileValueInfo): Profil
       return index === 0 || name !== stack[index - 1];
     });
 
+    if (!callerFirstStack.length) {
+      return;
+    }
+
+    stacks.push({ stack: callerFirstStack, weight });
+
     callerFirstStack.forEach((name, depth) => {
       const node = nodeTotals.get(name) ?? { value: 0, depthTotal: 0, count: 0 };
       node.value += weight;
@@ -354,15 +362,6 @@ function buildCallGraph(samples: unknown[], valueInfo: ProfileValueInfo): Profil
       node.count += 1;
       nodeTotals.set(name, node);
     });
-
-    for (let i = 0; i < callerFirstStack.length - 1; i += 1) {
-      const from = callerFirstStack[i];
-      const to = callerFirstStack[i + 1];
-      const id = `${from}->${to}`;
-      const edge = edgeTotals.get(id) ?? { id, from, to, value: 0 };
-      edge.value += weight;
-      edgeTotals.set(id, edge);
-    }
   });
 
   const selectedNodeIDs = new Set(
@@ -371,6 +370,39 @@ function buildCallGraph(samples: unknown[], valueInfo: ProfileValueInfo): Profil
       .slice(0, 24)
       .map(([id]) => id),
   );
+  const edgeTotals = new Map<string, ProfileCallGraphEdge>();
+
+  stacks.forEach(({ stack, weight }) => {
+    let previousSelected: { name: string; index: number } | null = null;
+
+    stack.forEach((name, index) => {
+      if (!selectedNodeIDs.has(name)) {
+        return;
+      }
+
+      if (previousSelected && previousSelected.name !== name) {
+        const skippedFrames = index - previousSelected.index - 1;
+        const id = `${previousSelected.name}->${name}`;
+        const edge =
+          edgeTotals.get(id) ??
+          {
+            id,
+            from: previousSelected.name,
+            to: name,
+            value: 0,
+            indirect: false,
+            skippedFrames: 0,
+          };
+
+        edge.value += weight;
+        edge.indirect = edge.indirect || skippedFrames > 0;
+        edge.skippedFrames = Math.max(edge.skippedFrames, skippedFrames);
+        edgeTotals.set(id, edge);
+      }
+
+      previousSelected = { name, index };
+    });
+  });
 
   const edges = [...edgeTotals.values()]
     .filter((edge) => selectedNodeIDs.has(edge.from) && selectedNodeIDs.has(edge.to))
@@ -662,14 +694,15 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
   const nodeHeight = 44;
   const rowGap = 58;
   const columnGap = 250;
+  const componentGap = 36;
   const maxVisibleDepth = Math.min(10, Math.max(0, ...graph.nodes.map((node) => node.depth)));
   const depthFor = (node: ProfileCallGraphNode) => Math.max(0, Math.min(maxVisibleDepth, node.depth));
-  const grouped = new Map<number, ProfileCallGraphNode[]>();
   const nodesByID = new Map(graph.nodes.map((node) => [node.id, node]));
   const incomingNodeIDs = new Set(graph.edges.map((edge) => edge.to));
   const outgoing = new Map<string, ProfileCallGraphEdge[]>();
+  const visibleEdges = graph.edges.filter((edge) => nodesByID.has(edge.from) && nodesByID.has(edge.to));
 
-  graph.edges.forEach((edge) => {
+  visibleEdges.forEach((edge) => {
     outgoing.set(edge.from, [...(outgoing.get(edge.from) ?? []), edge]);
   });
 
@@ -699,34 +732,95 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
     currentNode = nodesByID.get(nextEdge.to);
   }
 
+  const adjacency = new Map<string, Set<string>>();
   graph.nodes.forEach((node) => {
-    const depth = depthFor(node);
-    grouped.set(depth, [...(grouped.get(depth) ?? []), node]);
+    adjacency.set(node.id, new Set());
   });
 
-  const depths = [...grouped.keys()].sort((a, b) => a - b);
-  const maxRows = Math.max(1, ...depths.map((depth) => grouped.get(depth)?.length ?? 0));
-  const width = Math.max(900, left * 2 + Math.max(0, depths.length - 1) * columnGap + nodeWidth);
-  const height = Math.max(320, top * 2 + Math.max(0, maxRows - 1) * rowGap + nodeHeight);
+  visibleEdges.forEach((edge) => {
+    adjacency.get(edge.from)?.add(edge.to);
+    adjacency.get(edge.to)?.add(edge.from);
+  });
+
+  const unvisitedNodeIDs = new Set(graph.nodes.map((node) => node.id));
+  const components: ProfileCallGraphNode[][] = [];
+
+  while (unvisitedNodeIDs.size) {
+    const startID = unvisitedNodeIDs.values().next().value as string;
+    const componentIDs = new Set<string>();
+    const queue = [startID];
+
+    unvisitedNodeIDs.delete(startID);
+
+    while (queue.length) {
+      const nodeID = queue.shift()!;
+      componentIDs.add(nodeID);
+
+      adjacency.get(nodeID)?.forEach((neighborID) => {
+        if (!unvisitedNodeIDs.has(neighborID)) {
+          return;
+        }
+
+        unvisitedNodeIDs.delete(neighborID);
+        queue.push(neighborID);
+      });
+    }
+
+    components.push(
+      [...componentIDs]
+        .map((id) => nodesByID.get(id))
+        .filter((node): node is ProfileCallGraphNode => Boolean(node)),
+    );
+  }
+
+  components.sort((a, b) => {
+    const aValue = Math.max(0, ...a.map((node) => node.value));
+    const bValue = Math.max(0, ...b.map((node) => node.value));
+    const aDepth = Math.min(...a.map(depthFor));
+    const bDepth = Math.min(...b.map(depthFor));
+    return bValue - aValue || aDepth - bDepth;
+  });
+
   const maxNodeValue = Math.max(1, ...graph.nodes.map((node) => node.value));
   const maxEdgeValue = Math.max(1, ...graph.edges.map((edge) => edge.value));
   const positions = new Map<string, { x: number; y: number }>();
+  let maxColumnIndex = 0;
+  let nextComponentTop = top;
 
-  depths.forEach((depth, columnIndex) => {
-    const nodes = [...(grouped.get(depth) ?? [])].sort((a, b) => {
-      const hotPathSort = Number(hotPathNodeIDs.has(b.id)) - Number(hotPathNodeIDs.has(a.id));
-      return hotPathSort || b.value - a.value;
+  components.forEach((component) => {
+    const minDepth = Math.min(...component.map(depthFor));
+    const grouped = new Map<number, ProfileCallGraphNode[]>();
+
+    component.forEach((node) => {
+      const localDepth = depthFor(node) - minDepth;
+      grouped.set(localDepth, [...(grouped.get(localDepth) ?? []), node]);
     });
 
-    nodes.forEach((node, rowIndex) => {
-      positions.set(node.id, {
-        x: left + columnIndex * columnGap,
-        y: top + rowIndex * rowGap,
+    const depths = [...grouped.keys()].sort((a, b) => a - b);
+    const maxRows = Math.max(1, ...depths.map((depth) => grouped.get(depth)?.length ?? 0));
+
+    depths.forEach((depth) => {
+      const nodes = [...(grouped.get(depth) ?? [])].sort((a, b) => {
+        const hotPathSort = Number(hotPathNodeIDs.has(b.id)) - Number(hotPathNodeIDs.has(a.id));
+        return hotPathSort || b.value - a.value;
       });
+
+      nodes.forEach((node, rowIndex) => {
+        positions.set(node.id, {
+          x: left + depth * columnGap,
+          y: nextComponentTop + rowIndex * rowGap,
+        });
+      });
+
+      maxColumnIndex = Math.max(maxColumnIndex, depth);
     });
+
+    nextComponentTop += Math.max(nodeHeight, (maxRows - 1) * rowGap + nodeHeight) + componentGap;
   });
 
-  const visibleEdges = graph.edges
+  const width = Math.max(900, left * 2 + maxColumnIndex * columnGap + nodeWidth);
+  const height = Math.max(320, nextComponentTop + top - componentGap);
+  const drawableEdges = visibleEdges
     .filter((edge) => positions.has(edge.from) && positions.has(edge.to))
     .sort((a, b) => a.value - b.value);
   const zoomAround = (anchorX: number, anchorY: number, factor: number) => {
@@ -847,7 +941,7 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
             </marker>
           </defs>
           <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.scale})`}>
-            {visibleEdges.map((edge) => {
+            {drawableEdges.map((edge) => {
               const from = positions.get(edge.from)!;
               const to = positions.get(edge.to)!;
               const forward = to.x > from.x;
@@ -873,10 +967,12 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
                   stroke={isHotPath ? "#475569" : "#94a3b8"}
                   strokeOpacity={isHotPath ? 0.78 : 0.16 + (edge.value / maxEdgeValue) * 0.42}
                   strokeWidth={strokeWidth}
+                  strokeDasharray={edge.indirect ? "5 4" : undefined}
                   markerEnd="url(#call-arrow)"
                 >
                   <title>
                     {edge.from} {"->"} {edge.to}: {formatProfileValue(edge.value, valueInfo)}
+                    {edge.indirect ? `, bridged over ${edge.skippedFrames} hidden frames` : ""}
                   </title>
                 </path>
               );
