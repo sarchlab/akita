@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { Activity, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "../components/ui/button";
 
@@ -84,6 +84,7 @@ interface CallGraphViewport {
 }
 
 const INITIAL_CALL_GRAPH_VIEWPORT: CallGraphViewport = { scale: 1, x: 0, y: 0 };
+type ProfileResultTab = "graph" | "top-functions";
 
 function formatBytes(bytes: number | null | undefined) {
   if (typeof bytes !== "number" || !Number.isFinite(bytes)) {
@@ -481,6 +482,7 @@ export default function ProfilingPage() {
   const [profileStatus, setProfileStatus] = useState("");
   const [profileSummary, setProfileSummary] = useState<ProfileSummary | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [activeProfileTab, setActiveProfileTab] = useState<ProfileResultTab>("graph");
 
   const captureProfile = async () => {
     setIsCapturing(true);
@@ -504,22 +506,18 @@ export default function ProfilingPage() {
   return (
     <div className="h-full overflow-auto bg-slate-50 p-4">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
-        <section className="grid gap-4 md:grid-cols-2">
-          <div className="rounded border bg-white p-4">
-            <div className="mb-2 text-sm font-semibold text-slate-950">Resource Usage</div>
-            <ResourceTrendChart secondHistory={history.seconds} minuteHistory={history.minutes} />
-          </div>
-
-          <div className="rounded border bg-white p-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm font-semibold">Latest CPU Profile</div>
+        <section className="rounded border bg-white p-3">
+          <ResourceTrendChart
+            secondHistory={history.seconds}
+            minuteHistory={history.minutes}
+            cpuActions={
               <div className="flex flex-wrap items-center gap-2">
-                <label className="text-xs text-muted-foreground" htmlFor="profile-seconds">
+                <label className="text-[10px] font-medium text-slate-600" htmlFor="profile-seconds">
                   Seconds
                 </label>
                 <select
                   id="profile-seconds"
-                  className="h-8 rounded border border-input bg-background px-2 text-sm"
+                  className="h-7 rounded border border-input bg-background px-2 text-xs"
                   value={profileSeconds}
                   onChange={(event) => setProfileSeconds(Number(event.target.value))}
                   disabled={isCapturing}
@@ -530,35 +528,63 @@ export default function ProfilingPage() {
                     </option>
                   ))}
                 </select>
-                <Button type="button" size="sm" onClick={captureProfile} disabled={isCapturing}>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={captureProfile}
+                  disabled={isCapturing}
+                >
                   <Activity /> Capture CPU Profile
                 </Button>
               </div>
-            </div>
-            {profileStatus ? <div className="mb-3 text-sm text-muted-foreground">{profileStatus}</div> : null}
-            {profileSummary ? (
-              <ProfileMetricBars summary={profileSummary} />
-            ) : (
-              <div className="text-sm text-muted-foreground">No profile captured yet.</div>
-            )}
-          </div>
+            }
+          />
         </section>
 
         <section className="rounded border bg-white p-4">
-          <div className="mb-3 text-sm font-semibold">CPU Call Graph</div>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold">CPU Call Graph</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {profileSummary
+                  ? profileSummaryText(profileSummary)
+                  : profileStatus || "Capture a CPU profile to populate the profile views."}
+              </div>
+            </div>
+            <div className="inline-flex rounded border bg-slate-100 p-0.5" role="tablist" aria-label="CPU profile views">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeProfileTab === "graph"}
+                className={`rounded px-3 py-1 text-xs font-medium ${
+                  activeProfileTab === "graph" ? "bg-white text-slate-950 shadow-sm" : "text-slate-700"
+                }`}
+                onClick={() => setActiveProfileTab("graph")}
+              >
+                Graph
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeProfileTab === "top-functions"}
+                className={`rounded px-3 py-1 text-xs font-medium ${
+                  activeProfileTab === "top-functions" ? "bg-white text-slate-950 shadow-sm" : "text-slate-700"
+                }`}
+                onClick={() => setActiveProfileTab("top-functions")}
+              >
+                Top Functions
+              </button>
+            </div>
+          </div>
           {profileSummary ? (
-            <CallGraph graph={profileSummary.callGraph} valueInfo={profileSummary.valueInfo} />
+            activeProfileTab === "graph" ? (
+              <CallGraph graph={profileSummary.callGraph} valueInfo={profileSummary.valueInfo} />
+            ) : (
+              <TopFunctionBars functions={profileSummary.topFunctions} valueInfo={profileSummary.valueInfo} />
+            )
           ) : (
             <div className="text-sm text-muted-foreground">Capture a CPU profile to generate a call graph.</div>
-          )}
-        </section>
-
-        <section className="rounded border bg-white p-4">
-          <div className="mb-3 text-sm font-semibold">Top Functions</div>
-          {profileSummary ? (
-            <TopFunctionBars functions={profileSummary.topFunctions} valueInfo={profileSummary.valueInfo} />
-          ) : (
-            <div className="text-sm text-muted-foreground">Capture a CPU profile to populate function samples.</div>
           )}
         </section>
       </div>
@@ -566,29 +592,8 @@ export default function ProfilingPage() {
   );
 }
 
-function ProfileMetricBars({ summary }: { summary: ProfileSummary }) {
-  const metrics = [
-    { label: "Samples", value: summary.samples },
-    { label: "Locations", value: summary.locations },
-    { label: "Functions", value: summary.functions },
-  ];
-  const max = Math.max(1, ...metrics.map((metric) => metric.value));
-
-  return (
-    <div className="space-y-3">
-      {metrics.map((metric) => (
-        <div key={metric.label}>
-          <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="font-medium">{metric.label}</span>
-            <span className="font-mono text-muted-foreground">{metric.value}</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-            <div className="h-full bg-sky-600" style={{ width: `${(metric.value / max) * 100}%` }} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+function profileSummaryText(summary: ProfileSummary) {
+  return `${summary.samples} samples | ${summary.locations} locations | ${summary.functions} functions`;
 }
 
 function TopFunctionBars({
@@ -1079,16 +1084,18 @@ function metricPoints(
 function ResourceTrendChart({
   secondHistory,
   minuteHistory,
+  cpuActions,
 }: {
   secondHistory: ResourcePoint[];
   minuteHistory: MinuteResourcePoint[];
+  cpuActions?: ReactNode;
 }) {
   const fallback = { cpu_percent: 0, memory_size: 0, timestamp: Date.now() };
   const seconds = secondHistory.length ? secondHistory : [fallback];
   const minutes = minuteHistory.length ? minuteHistory : [{ ...fallback, samples: 1 }];
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-3 lg:grid-cols-2">
       <MetricTrendFigure
         title="CPU"
         color="#0369a1"
@@ -1097,6 +1104,7 @@ function ResourceTrendChart({
         minimumMax={100}
         valueFor={(point) => point.cpu_percent}
         formatValue={(value) => `${value.toFixed(1)}%`}
+        actions={cpuActions}
       />
       <MetricTrendFigure
         title="RSS"
@@ -1118,6 +1126,7 @@ function MetricTrendFigure({
   minimumMax = 1,
   valueFor,
   formatValue,
+  actions,
 }: {
   title: string;
   color: string;
@@ -1126,6 +1135,7 @@ function MetricTrendFigure({
   minimumMax?: number;
   valueFor: (point: ResourcePoint) => number;
   formatValue: (value: number) => string;
+  actions?: ReactNode;
 }) {
   const secondPoints = metricPoints(secondHistory, valueFor, formatValue);
   const minutePoints = metricPoints(minuteHistory, valueFor, formatValue);
@@ -1138,11 +1148,14 @@ function MetricTrendFigure({
   const chartMax = title === "CPU" ? maxValue : maxValue * 1.12;
 
   return (
-    <section className="border-b border-slate-300 pb-3 last:border-b-0 last:pb-0">
-      <div className="mb-1 flex items-center justify-between gap-3">
-        <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-950">
-          <span className="h-2 w-5 rounded-full" style={{ backgroundColor: color }} />
-          {title}
+    <section className="min-w-0 border-b border-slate-300 pb-3 last:border-b-0 last:pb-0 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-3 lg:last:border-r-0 lg:last:pr-0">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-950">
+            <span className="h-2 w-5 rounded-full" style={{ backgroundColor: color }} />
+            {title}
+          </div>
+          {actions}
         </div>
         <div className="font-mono text-sm font-semibold text-slate-800">{latestPoint?.formattedValue ?? "-"}</div>
       </div>
@@ -1184,11 +1197,11 @@ function TrendSegmentChart({
 }) {
   const [activePoint, setActivePoint] = useState<ActiveTrendPoint | null>(null);
   const width = 360;
-  const height = 96;
+  const height = 84;
   const chartLeft = 34;
   const chartRight = 10;
   const chartTop = 10;
-  const chartHeight = 48;
+  const chartHeight = 38;
   const chartBottom = chartTop + chartHeight;
   const chartWidth = width - chartLeft - chartRight;
   const yMax = Math.max(1, maxValue);
@@ -1222,7 +1235,7 @@ function TrendSegmentChart({
           ) : null}
         </div>
       ) : null}
-      <svg className="h-24 w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${title} resource trend`}>
+      <svg className="h-20 w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${title} resource trend`}>
         <line x1={chartLeft} x2={width - chartRight} y1={chartBottom} y2={chartBottom} stroke="#64748b" />
         <line x1={chartLeft} x2={chartLeft} y1={chartTop} y2={chartBottom} stroke="#64748b" />
         <text x="6" y={chartTop + 4} className="fill-slate-700 text-[10px]">
