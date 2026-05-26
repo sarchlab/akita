@@ -11,6 +11,15 @@ interface ResourcePoint extends ResourceResponse {
   timestamp: number;
 }
 
+interface MinuteResourcePoint extends ResourcePoint {
+  samples: number;
+}
+
+interface ResourceHistory {
+  seconds: ResourcePoint[];
+  minutes: MinuteResourcePoint[];
+}
+
 interface ProfileSummary {
   samples: number;
   locations: number;
@@ -43,6 +52,10 @@ interface ProfileCallGraphEdge {
   value: number;
 }
 
+const RESOURCE_SAMPLE_INTERVAL_MS = 1000;
+const MAX_SECOND_SAMPLES = 60;
+const MAX_MINUTE_SAMPLES = 60;
+
 function formatBytes(bytes: number | null | undefined) {
   if (typeof bytes !== "number" || !Number.isFinite(bytes)) {
     return "-";
@@ -63,7 +76,7 @@ function formatBytes(bytes: number | null | undefined) {
 
 function useResourceUsage() {
   const [resources, setResources] = useState<ResourceResponse>({ cpu_percent: 0, memory_size: 0 });
-  const [history, setHistory] = useState<ResourcePoint[]>([]);
+  const [history, setHistory] = useState<ResourceHistory>({ seconds: [], minutes: [] });
 
   const refresh = useCallback(() => {
     fetch("/api/resource")
@@ -78,18 +91,45 @@ function useResourceUsage() {
           cpu_percent: typeof resource.cpu_percent === "number" ? resource.cpu_percent : 0,
           memory_size: typeof resource.memory_size === "number" ? resource.memory_size : 0,
         };
+        const nextPoint = { ...nextResources, timestamp: Date.now() };
 
         setResources(nextResources);
-        setHistory((previous) =>
-          [...previous, { ...nextResources, timestamp: Date.now() }].slice(-60),
-        );
+        setHistory((previous) => {
+          const seconds = [...previous.seconds, nextPoint].slice(-MAX_SECOND_SAMPLES);
+          const minuteTimestamp = Math.floor(nextPoint.timestamp / 60000) * 60000;
+          const lastMinute = previous.minutes[previous.minutes.length - 1];
+          let minutes: MinuteResourcePoint[];
+
+          if (lastMinute?.timestamp === minuteTimestamp) {
+            const samples = lastMinute.samples + 1;
+            const updatedMinute = {
+              timestamp: minuteTimestamp,
+              samples,
+              cpu_percent:
+                (lastMinute.cpu_percent * lastMinute.samples + nextPoint.cpu_percent) /
+                samples,
+              memory_size:
+                (lastMinute.memory_size * lastMinute.samples + nextPoint.memory_size) /
+                samples,
+            };
+
+            minutes = [...previous.minutes.slice(0, -1), updatedMinute];
+          } else {
+            minutes = [
+              ...previous.minutes,
+              { ...nextResources, timestamp: minuteTimestamp, samples: 1 },
+            ];
+          }
+
+          return { seconds, minutes: minutes.slice(-MAX_MINUTE_SAMPLES) };
+        });
       })
       .catch(() => {});
   }, []);
 
   useEffect(() => {
     refresh();
-    const id = window.setInterval(refresh, 1500);
+    const id = window.setInterval(refresh, RESOURCE_SAMPLE_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [refresh]);
 
@@ -298,7 +338,7 @@ export default function ProfilingPage() {
               <dt className="text-muted-foreground">RSS</dt>
               <dd className="font-mono">{formatBytes(resources.memory_size)}</dd>
             </dl>
-            <ResourceTrendChart history={history} />
+            <ResourceTrendChart secondHistory={history.seconds} minuteHistory={history.minutes} />
           </div>
 
           <div className="rounded border bg-white p-4">
@@ -532,8 +572,31 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
   );
 }
 
-function formatChartTime(timestamp: number) {
+interface MetricTrendPoint {
+  timestamp: number;
+  value: number;
+  formattedValue: string;
+  samples?: number;
+}
+
+interface ActiveTrendPoint extends MetricTrendPoint {
+  leftPercent: number;
+  topPercent: number;
+}
+
+function formatChartTime(timestamp: number, includeSeconds = true) {
   return new Date(timestamp).toLocaleTimeString([], {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    ...(includeSeconds ? { second: "2-digit" } : {}),
+  });
+}
+
+function formatTooltipTime(timestamp: number) {
+  return new Date(timestamp).toLocaleString([], {
+    month: "short",
+    day: "2-digit",
     hour12: false,
     hour: "2-digit",
     minute: "2-digit",
@@ -541,66 +604,246 @@ function formatChartTime(timestamp: number) {
   });
 }
 
-function ResourceTrendChart({ history }: { history: ResourcePoint[] }) {
-  const points = history.length ? history : [{ cpu_percent: 0, memory_size: 0, timestamp: Date.now() }];
-  const width = 420;
-  const height = 154;
-  const chartLeft = 42;
-  const chartRight = 14;
+function tickIndexesFor(points: MetricTrendPoint[], maxTicks = 6) {
+  if (points.length <= 1) {
+    return points.length ? [0] : [];
+  }
+
+  const tickCount = Math.min(maxTicks, points.length);
+  return Array.from(
+    new Set(
+      Array.from({ length: tickCount }, (_, index) =>
+        Math.round((index / (tickCount - 1)) * (points.length - 1)),
+      ),
+    ),
+  );
+}
+
+function metricPoints(
+  points: ResourcePoint[],
+  valueFor: (point: ResourcePoint) => number,
+  formatValue: (value: number) => string,
+): MetricTrendPoint[] {
+  return points.map((point) => ({
+    timestamp: point.timestamp,
+    value: valueFor(point),
+    formattedValue: formatValue(valueFor(point)),
+    samples: "samples" in point && typeof point.samples === "number" ? point.samples : undefined,
+  }));
+}
+
+function ResourceTrendChart({
+  secondHistory,
+  minuteHistory,
+}: {
+  secondHistory: ResourcePoint[];
+  minuteHistory: MinuteResourcePoint[];
+}) {
+  const fallback = { cpu_percent: 0, memory_size: 0, timestamp: Date.now() };
+  const seconds = secondHistory.length ? secondHistory : [fallback];
+  const minutes = minuteHistory.length ? minuteHistory : [{ ...fallback, samples: 1 }];
+
+  return (
+    <div className="mt-4 border-t pt-4">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="text-xs font-semibold">Resource Trend</div>
+        <div className="text-xs text-muted-foreground">1s samples and 1min averages</div>
+      </div>
+      <div className="grid gap-3">
+        <MetricTrendFigure
+          title="CPU"
+          color="#0284c7"
+          secondHistory={seconds}
+          minuteHistory={minutes}
+          minimumMax={100}
+          valueFor={(point) => point.cpu_percent}
+          formatValue={(value) => `${value.toFixed(1)}%`}
+        />
+        <MetricTrendFigure
+          title="RSS"
+          color="#f59e0b"
+          secondHistory={seconds}
+          minuteHistory={minutes}
+          valueFor={(point) => point.memory_size}
+          formatValue={formatBytes}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MetricTrendFigure({
+  title,
+  color,
+  secondHistory,
+  minuteHistory,
+  minimumMax = 1,
+  valueFor,
+  formatValue,
+}: {
+  title: string;
+  color: string;
+  secondHistory: ResourcePoint[];
+  minuteHistory: MinuteResourcePoint[];
+  minimumMax?: number;
+  valueFor: (point: ResourcePoint) => number;
+  formatValue: (value: number) => string;
+}) {
+  const secondPoints = metricPoints(secondHistory, valueFor, formatValue);
+  const minutePoints = metricPoints(minuteHistory, valueFor, formatValue);
+  const latestPoint = secondPoints[secondPoints.length - 1] ?? minutePoints[minutePoints.length - 1];
+  const maxValue = Math.max(
+    minimumMax,
+    ...secondPoints.map((point) => point.value),
+    ...minutePoints.map((point) => point.value),
+  );
+  const chartMax = title === "CPU" ? maxValue : maxValue * 1.12;
+
+  return (
+    <div className="rounded border bg-slate-50 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-2 text-xs font-semibold">
+          <span className="h-2 w-4 rounded-full" style={{ backgroundColor: color }} />
+          {title}
+        </div>
+        <div className="font-mono text-xs text-muted-foreground">{latestPoint?.formattedValue ?? "-"}</div>
+      </div>
+      <div className="grid gap-3 xl:grid-cols-2">
+        <TrendSegmentChart
+          title="Last minute"
+          detail={`${secondPoints.length}/${MAX_SECOND_SAMPLES} per-second samples`}
+          points={secondPoints}
+          color={color}
+          maxValue={chartMax}
+          includeSeconds
+        />
+        <TrendSegmentChart
+          title="Last 60 minutes"
+          detail={`${minutePoints.length}/${MAX_MINUTE_SAMPLES} per-minute averages`}
+          points={minutePoints}
+          color={color}
+          maxValue={chartMax}
+        />
+      </div>
+    </div>
+  );
+}
+
+function TrendSegmentChart({
+  title,
+  detail,
+  points,
+  color,
+  maxValue,
+  includeSeconds = false,
+}: {
+  title: string;
+  detail: string;
+  points: MetricTrendPoint[];
+  color: string;
+  maxValue: number;
+  includeSeconds?: boolean;
+}) {
+  const [activePoint, setActivePoint] = useState<ActiveTrendPoint | null>(null);
+  const width = 360;
+  const height = 138;
+  const chartLeft = 36;
+  const chartRight = 12;
   const chartTop = 18;
-  const chartHeight = 88;
+  const chartHeight = 74;
   const chartBottom = chartTop + chartHeight;
   const chartWidth = width - chartLeft - chartRight;
-  const maxCPU = Math.max(100, ...points.map((point) => point.cpu_percent));
-  const maxMemory = Math.max(1, ...points.map((point) => point.memory_size));
-  const tickIndexes = Array.from(
-    new Set([0, Math.floor((points.length - 1) / 2), points.length - 1]),
-  ).filter((index) => index >= 0);
+  const yMax = Math.max(1, maxValue);
+  const ticks = tickIndexesFor(points);
 
   const xFor = (index: number) =>
     chartLeft + (points.length <= 1 ? chartWidth : (index / (points.length - 1)) * chartWidth);
-  const yFor = (value: number, max: number) =>
-    chartTop + chartHeight - (Math.min(max, Math.max(0, value)) / max) * chartHeight;
-  const cpuPath = points
-    .map((point, index) => `${xFor(index)},${yFor(point.cpu_percent, maxCPU)}`)
-    .join(" ");
-  const memoryPath = points
-    .map((point, index) => `${xFor(index)},${yFor(point.memory_size, maxMemory)}`)
-    .join(" ");
+  const yFor = (value: number) =>
+    chartTop + chartHeight - (Math.min(yMax, Math.max(0, value)) / yMax) * chartHeight;
+  const path = points.map((point, index) => `${xFor(index)},${yFor(point.value)}`).join(" ");
 
   return (
-    <div className="mt-4 rounded border bg-slate-50 p-3">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <div className="text-xs font-semibold">Resource Trend</div>
-        <div className="text-xs text-muted-foreground">Last {points.length} samples</div>
+    <div className="relative rounded border bg-white p-2">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <div className="text-xs font-medium">{title}</div>
+        <div className="text-[10px] text-muted-foreground">{detail}</div>
       </div>
-      <svg className="h-40 w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="CPU and memory trend chart">
+      {activePoint ? (
+        <div
+          className="pointer-events-none absolute z-10 min-w-40 rounded border bg-white px-2 py-1 text-xs shadow"
+          style={{
+            left: `${Math.min(88, Math.max(12, activePoint.leftPercent))}%`,
+            top: `${Math.min(85, Math.max(18, activePoint.topPercent))}%`,
+            transform: "translate(-50%, -112%)",
+          }}
+        >
+          <div className="font-mono font-semibold">{activePoint.formattedValue}</div>
+          <div className="text-muted-foreground">{formatTooltipTime(activePoint.timestamp)}</div>
+          {activePoint.samples ? (
+            <div className="text-muted-foreground">{activePoint.samples} samples averaged</div>
+          ) : null}
+        </div>
+      ) : null}
+      <svg className="h-36 w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${title} resource trend`}>
         <line x1={chartLeft} x2={width - chartRight} y1={chartBottom} y2={chartBottom} stroke="#cbd5e1" />
         <line x1={chartLeft} x2={chartLeft} y1={chartTop} y2={chartBottom} stroke="#cbd5e1" />
         <text x="6" y={chartTop + 4} className="fill-slate-500 text-[10px]">
           max
         </text>
-        <text x="6" y={chartTop + 18} className="fill-sky-700 text-[10px]">
-          {maxCPU.toFixed(0)}%
+        <text x="6" y={chartTop + 18} className="fill-slate-500 text-[10px]">
+          {points[0]?.formattedValue.includes("%") ? `${yMax.toFixed(0)}%` : formatBytes(yMax)}
         </text>
-        <text x="6" y={chartTop + 32} className="fill-amber-700 text-[10px]">
-          {formatBytes(maxMemory)}
-        </text>
-        <polyline points={cpuPath} fill="none" stroke="#0284c7" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-        <polyline points={memoryPath} fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-        <circle
-          cx={xFor(points.length - 1)}
-          cy={yFor(points[points.length - 1].cpu_percent, maxCPU)}
-          r="4"
-          fill="#0284c7"
-        />
-        <circle
-          cx={xFor(points.length - 1)}
-          cy={yFor(points[points.length - 1].memory_size, maxMemory)}
-          r="4"
-          fill="#f59e0b"
-        />
-        {tickIndexes.map((index) => {
+        {points.length > 1 ? (
+          <polyline
+            points={path}
+            fill="none"
+            stroke={color}
+            strokeWidth="2.5"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        ) : null}
+        {points.map((point, index) => {
+          const x = xFor(index);
+          const y = yFor(point.value);
+          const isActive = activePoint?.timestamp === point.timestamp;
+
+          return (
+            <circle
+              key={`${point.timestamp}-${index}`}
+              cx={x}
+              cy={y}
+              r={isActive ? 4 : 2.7}
+              fill="#ffffff"
+              stroke={color}
+              strokeWidth={isActive ? 2.5 : 2}
+              tabIndex={0}
+              aria-label={`${title} ${point.formattedValue} at ${formatTooltipTime(point.timestamp)}`}
+              onFocus={() =>
+                setActivePoint({
+                  ...point,
+                  leftPercent: (x / width) * 100,
+                  topPercent: (y / height) * 100,
+                })
+              }
+              onBlur={() => setActivePoint(null)}
+              onMouseEnter={() =>
+                setActivePoint({
+                  ...point,
+                  leftPercent: (x / width) * 100,
+                  topPercent: (y / height) * 100,
+                })
+              }
+              onMouseLeave={() => setActivePoint(null)}
+            >
+              <title>
+                {formatTooltipTime(point.timestamp)}: {point.formattedValue}
+                {point.samples ? ` (${point.samples} samples averaged)` : ""}
+              </title>
+            </circle>
+          );
+        })}
+        {ticks.map((index) => {
           const x = xFor(index);
           const anchor = index === 0 ? "start" : index === points.length - 1 ? "end" : "middle";
 
@@ -608,7 +851,7 @@ function ResourceTrendChart({ history }: { history: ResourcePoint[] }) {
             <g key={index}>
               <line x1={x} x2={x} y1={chartBottom} y2={chartBottom + 4} stroke="#94a3b8" />
               <text x={x} y={chartBottom + 18} textAnchor={anchor} className="fill-slate-500 text-[10px]">
-                {formatChartTime(points[index].timestamp)}
+                {formatChartTime(points[index].timestamp, includeSeconds)}
               </text>
             </g>
           );
@@ -617,14 +860,6 @@ function ResourceTrendChart({ history }: { history: ResourcePoint[] }) {
           Time
         </text>
       </svg>
-      <div className="flex gap-4 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-2">
-          <span className="h-2 w-4 rounded-full bg-sky-600" /> CPU
-        </span>
-        <span className="inline-flex items-center gap-2">
-          <span className="h-2 w-4 rounded-full bg-amber-500" /> RSS
-        </span>
-      </div>
     </div>
   );
 }
