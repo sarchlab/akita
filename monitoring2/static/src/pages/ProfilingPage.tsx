@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { Activity } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent, type WheelEvent } from "react";
+import { Activity, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "../components/ui/button";
 
 interface ResourceResponse {
@@ -55,6 +55,17 @@ interface ProfileCallGraphEdge {
 const RESOURCE_SAMPLE_INTERVAL_MS = 1000;
 const MAX_SECOND_SAMPLES = 60;
 const MAX_MINUTE_SAMPLES = 60;
+const CALL_GRAPH_MIN_SCALE = 0.35;
+const CALL_GRAPH_MAX_SCALE = 4;
+const CALL_GRAPH_ZOOM_STEP = 1.2;
+
+interface CallGraphViewport {
+  scale: number;
+  x: number;
+  y: number;
+}
+
+const INITIAL_CALL_GRAPH_VIEWPORT: CallGraphViewport = { scale: 1, x: 0, y: 0 };
 
 function formatBytes(bytes: number | null | undefined) {
   if (typeof bytes !== "number" || !Number.isFinite(bytes)) {
@@ -464,7 +475,21 @@ function formatSampleCount(value: number) {
   return `${sign}${scaled.toFixed(digits)}${units[unitIndex]}`;
 }
 
+function clampCallGraphScale(scale: number) {
+  return Math.max(CALL_GRAPH_MIN_SCALE, Math.min(CALL_GRAPH_MAX_SCALE, scale));
+}
+
 function CallGraph({ graph }: { graph: ProfileCallGraph }) {
+  const [viewport, setViewport] = useState<CallGraphViewport>(INITIAL_CALL_GRAPH_VIEWPORT);
+  const [isPanning, setIsPanning] = useState(false);
+  const dragStartRef = useRef<{ clientX: number; clientY: number } | null>(null);
+
+  useEffect(() => {
+    setViewport(INITIAL_CALL_GRAPH_VIEWPORT);
+    setIsPanning(false);
+    dragStartRef.current = null;
+  }, [graph]);
+
   if (!graph.nodes.length) {
     return <div className="text-sm text-muted-foreground">No call graph samples in the captured profile.</div>;
   }
@@ -542,84 +567,181 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
   const visibleEdges = graph.edges
     .filter((edge) => positions.has(edge.from) && positions.has(edge.to))
     .sort((a, b) => a.value - b.value);
+  const zoomAround = (anchorX: number, anchorY: number, factor: number) => {
+    setViewport((previous) => {
+      const scale = clampCallGraphScale(previous.scale * factor);
+      const graphX = (anchorX - previous.x) / previous.scale;
+      const graphY = (anchorY - previous.y) / previous.scale;
+
+      return {
+        scale,
+        x: anchorX - graphX * scale,
+        y: anchorY - graphY * scale,
+      };
+    });
+  };
+  const handleWheel = (event: WheelEvent<SVGSVGElement>) => {
+    event.preventDefault();
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const anchorX = ((event.clientX - rect.left) / rect.width) * width;
+    const anchorY = ((event.clientY - rect.top) / rect.height) * height;
+    const factor = event.deltaY < 0 ? CALL_GRAPH_ZOOM_STEP : 1 / CALL_GRAPH_ZOOM_STEP;
+
+    zoomAround(anchorX, anchorY, factor);
+  };
+  const handlePointerDown = (event: PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragStartRef.current = { clientX: event.clientX, clientY: event.clientY };
+    setIsPanning(true);
+  };
+  const handlePointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    if (!dragStartRef.current) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const dx = ((event.clientX - dragStartRef.current.clientX) / rect.width) * width;
+    const dy = ((event.clientY - dragStartRef.current.clientY) / rect.height) * height;
+
+    dragStartRef.current = { clientX: event.clientX, clientY: event.clientY };
+    setViewport((previous) => ({ ...previous, x: previous.x + dx, y: previous.y + dy }));
+  };
+  const finishPointerPan = (event: PointerEvent<SVGSVGElement>) => {
+    dragStartRef.current = null;
+    setIsPanning(false);
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
 
   return (
-    <div className="max-h-[36rem] overflow-auto rounded border bg-slate-50 p-3">
-      <svg
-        className="min-h-80 min-w-[900px] overflow-visible"
-        viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label="CPU profile call graph"
-      >
-        <defs>
-          <marker id="call-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
-          </marker>
-        </defs>
-        {visibleEdges.map((edge) => {
-          const from = positions.get(edge.from)!;
-          const to = positions.get(edge.to)!;
-          const startX = from.x + nodeWidth;
-          const startY = from.y + nodeHeight / 2;
-          const endX = to.x;
-          const endY = to.y + nodeHeight / 2;
-          const forward = endX > startX;
-          const bend = forward ? Math.max(58, (endX - startX) / 2) : 44;
-          const isHotPath = hotPathEdgeIDs.has(edge.id);
-          const strokeWidth = isHotPath ? 2.5 + (edge.value / maxEdgeValue) * 2 : 0.9 + (edge.value / maxEdgeValue) * 2.5;
-          const edgePath = forward
-            ? `M ${startX} ${startY} C ${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX - 6} ${endY}`
-            : `M ${startX} ${startY} C ${startX + bend} ${startY}, ${startX + bend} ${endY}, ${endX - 6} ${endY}`;
+    <div className="rounded border bg-slate-50 p-2">
+      <div className="mb-2 flex items-center justify-end gap-1">
+        <div className="mr-1 font-mono text-xs text-slate-700">{Math.round(viewport.scale * 100)}%</div>
+        <Button
+          type="button"
+          size="icon"
+          variant="outline"
+          className="h-7 w-7"
+          title="Zoom out"
+          aria-label="Zoom out call graph"
+          onClick={() => zoomAround(width / 2, height / 2, 1 / CALL_GRAPH_ZOOM_STEP)}
+        >
+          <ZoomOut />
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="outline"
+          className="h-7 w-7"
+          title="Zoom in"
+          aria-label="Zoom in call graph"
+          onClick={() => zoomAround(width / 2, height / 2, CALL_GRAPH_ZOOM_STEP)}
+        >
+          <ZoomIn />
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="outline"
+          className="h-7 w-7"
+          title="Reset view"
+          aria-label="Reset call graph view"
+          onClick={() => setViewport(INITIAL_CALL_GRAPH_VIEWPORT)}
+        >
+          <RotateCcw />
+        </Button>
+      </div>
+      <div className="h-[32rem] overflow-hidden rounded border bg-white">
+        <svg
+          className={`h-full w-full select-none touch-none ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
+          viewBox={`0 0 ${width} ${height}`}
+          role="img"
+          aria-label="CPU profile call graph"
+          onWheel={handleWheel}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={finishPointerPan}
+          onPointerCancel={finishPointerPan}
+        >
+          <defs>
+            <marker id="call-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
+            </marker>
+          </defs>
+          <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.scale})`}>
+            {visibleEdges.map((edge) => {
+              const from = positions.get(edge.from)!;
+              const to = positions.get(edge.to)!;
+              const startX = from.x + nodeWidth;
+              const startY = from.y + nodeHeight / 2;
+              const endX = to.x;
+              const endY = to.y + nodeHeight / 2;
+              const forward = endX > startX;
+              const bend = forward ? Math.max(58, (endX - startX) / 2) : 44;
+              const isHotPath = hotPathEdgeIDs.has(edge.id);
+              const strokeWidth = isHotPath ? 2.5 + (edge.value / maxEdgeValue) * 2 : 0.9 + (edge.value / maxEdgeValue) * 2.5;
+              const edgePath = forward
+                ? `M ${startX} ${startY} C ${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX - 6} ${endY}`
+                : `M ${startX} ${startY} C ${startX + bend} ${startY}, ${startX + bend} ${endY}, ${endX - 6} ${endY}`;
 
-          return (
-            <path
-              key={edge.id}
-              d={edgePath}
-              fill="none"
-              stroke={isHotPath ? "#475569" : "#94a3b8"}
-              strokeOpacity={isHotPath ? 0.78 : 0.16 + (edge.value / maxEdgeValue) * 0.42}
-              strokeWidth={strokeWidth}
-              markerEnd="url(#call-arrow)"
-            >
-              <title>
-                {edge.from} {"->"} {edge.to}: {edge.value}
-              </title>
-            </path>
-          );
-        })}
-        {graph.nodes.map((node) => {
-          const position = positions.get(node.id);
-          if (!position) {
-            return null;
-          }
+              return (
+                <path
+                  key={edge.id}
+                  d={edgePath}
+                  fill="none"
+                  stroke={isHotPath ? "#475569" : "#94a3b8"}
+                  strokeOpacity={isHotPath ? 0.78 : 0.16 + (edge.value / maxEdgeValue) * 0.42}
+                  strokeWidth={strokeWidth}
+                  markerEnd="url(#call-arrow)"
+                >
+                  <title>
+                    {edge.from} {"->"} {edge.to}: {edge.value}
+                  </title>
+                </path>
+              );
+            })}
+            {graph.nodes.map((node) => {
+              const position = positions.get(node.id);
+              if (!position) {
+                return null;
+              }
 
-          const intensity = node.value / maxNodeValue;
-          const isHotPath = hotPathNodeIDs.has(node.id);
+              const intensity = node.value / maxNodeValue;
+              const isHotPath = hotPathNodeIDs.has(node.id);
 
-          return (
-            <g key={node.id} transform={`translate(${position.x} ${position.y})`}>
-              <rect
-                width={nodeWidth}
-                height={nodeHeight}
-                rx="6"
-                fill="#ffffff"
-                stroke={isHotPath || intensity > 0.66 ? "#0284c7" : "#cbd5e1"}
-                strokeWidth={isHotPath ? 2.5 : 1 + intensity * 1.5}
-              />
-              <rect width={Math.max(4, nodeWidth * intensity)} height="4" rx="2" fill="#0284c7" />
-              <text x="10" y="19" className="fill-slate-950 text-[12px] font-semibold">
-                {shortFunctionName(node.label)}
-              </text>
-              <text x="10" y="35" className="fill-slate-600 text-[11px]">
-                samples {formatSampleCount(node.value)}
-              </text>
-              <title>
-                {node.label}: {node.value}
-              </title>
-            </g>
-          );
-        })}
-      </svg>
+              return (
+                <g key={node.id} transform={`translate(${position.x} ${position.y})`}>
+                  <rect
+                    width={nodeWidth}
+                    height={nodeHeight}
+                    rx="6"
+                    fill="#ffffff"
+                    stroke={isHotPath || intensity > 0.66 ? "#0284c7" : "#cbd5e1"}
+                    strokeWidth={isHotPath ? 2.5 : 1 + intensity * 1.5}
+                  />
+                  <rect width={Math.max(4, nodeWidth * intensity)} height="4" rx="2" fill="#0284c7" />
+                  <text x="10" y="19" className="fill-slate-950 text-[12px] font-semibold">
+                    {shortFunctionName(node.label)}
+                  </text>
+                  <text x="10" y="35" className="fill-slate-600 text-[11px]">
+                    samples {formatSampleCount(node.value)}
+                  </text>
+                  <title>
+                    {node.label}: {node.value}
+                  </title>
+                </g>
+              );
+            })}
+          </g>
+        </svg>
+      </div>
     </div>
   );
 }

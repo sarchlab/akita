@@ -74,8 +74,14 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(profilingPage, /CallGraph/);
   assert.match(profilingPage, /hotPathNodeIDs/);
   assert.match(profilingPage, /hotPathEdgeIDs/);
-  assert.match(profilingPage, /max-h-\[36rem\]/);
+  assert.match(profilingPage, /h-\[32rem\]/);
   assert.match(profilingPage, /formatSampleCount/);
+  assert.match(profilingPage, /CALL_GRAPH_ZOOM_STEP/);
+  assert.match(profilingPage, /onWheel/);
+  assert.match(profilingPage, /onPointerDown/);
+  assert.match(profilingPage, /ZoomIn/);
+  assert.match(profilingPage, /ZoomOut/);
+  assert.match(profilingPage, /RotateCcw/);
   assert.match(profilingPage, /RESOURCE_SAMPLE_INTERVAL_MS = 1000/);
   assert.match(profilingPage, /MAX_SECOND_SAMPLES = 60/);
   assert.match(profilingPage, /MAX_MINUTE_SAMPLES = 60/);
