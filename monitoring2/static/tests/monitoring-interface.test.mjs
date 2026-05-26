@@ -95,6 +95,9 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(progressPage, /Tracing/);
   assert.match(progressPage, /Start Tracing/);
   assert.match(progressPage, /Stop Tracing/);
+  assert.match(progressPage, /TraceActionIcon/);
+  assert.match(progressPage, /isTracing \? Square : Play/);
+  assert.match(progressPage, /post\(isTracing \? "\/api\/trace\/end" : "\/api\/trace\/start"\)/);
   assert.match(progressPage, /\/api\/trace\/start/);
   assert.match(progressPage, /\/api\/trace\/end/);
   assert.match(progressPage, /\/api\/trace\/is_tracing/);

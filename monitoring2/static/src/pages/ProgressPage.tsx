@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Database, ListChecks, RefreshCcw, Square } from "lucide-react";
+import { ListChecks, Play, RefreshCcw, Square } from "lucide-react";
 import { Button } from "../components/ui/button";
 
 interface ProgressBarState {
@@ -100,6 +100,8 @@ export default function ProgressPage() {
   const { progressBars, refresh } = useProgressBars();
   const { isTracing, refresh: refreshTraceStatus } = useTraceStatus();
   const [traceStatus, setTraceStatus] = useState("");
+  const traceActionLabel = isTracing ? "Stop tracing" : "Start tracing";
+  const TraceActionIcon = isTracing ? Square : Play;
 
   const totals = useMemo(
     () =>
@@ -153,17 +155,13 @@ export default function ProgressPage() {
               type="button"
               size="sm"
               variant={isTracing ? "outline" : "default"}
-              onClick={() => runTraceAction("Start tracing", () => post("/api/trace/start").then(refreshTraceStatus))}
+              onClick={() =>
+                runTraceAction(traceActionLabel, () =>
+                  post(isTracing ? "/api/trace/end" : "/api/trace/start").then(refreshTraceStatus),
+                )
+              }
             >
-              <Database /> Start Tracing
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => runTraceAction("Stop tracing", () => post("/api/trace/end").then(refreshTraceStatus))}
-            >
-              <Square /> Stop Tracing
+              <TraceActionIcon /> {isTracing ? "Stop Tracing" : "Start Tracing"}
             </Button>
           </div>
         </section>
