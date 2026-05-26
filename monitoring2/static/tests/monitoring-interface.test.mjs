@@ -29,11 +29,17 @@ test("monitoring2 presents one monitor surface without product tabs", async () =
 
 test("monitoring2 page supports component selection and tracing controls", async () => {
   const page = await readFile(new URL("../src/pages/LivePage.tsx", import.meta.url), "utf8");
+  const smartValue = await readFile(new URL("../src/utils/smartValue.ts", import.meta.url), "utf8");
 
   assert.match(page, /\/api\/list_components/);
   assert.match(page, /\/api\/component\//);
   assert.match(page, /\/api\/field\//);
   assert.match(page, /chooseComponent/);
+  assert.match(page, /formatPicosecondsAsNanoseconds\(now\)/);
+  assert.doesNotMatch(page, /smartString\(now\)/);
+  assert.match(smartValue, /formatPicosecondsAsNanoseconds/);
+  assert.match(smartValue, /value \/ 1000/);
+  assert.match(smartValue, /ns/);
   assert.match(page, /Start Tracing/);
   assert.match(page, /Pause Tracing/);
   assert.match(page, /\/api\/trace\/start/);

@@ -18,3 +18,13 @@ export function smartString(value: number) {
 
   return `${value.toFixed(2)} s`;
 }
+
+export function formatPicosecondsAsNanoseconds(value: number) {
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+
+  return `${(value / 1000).toLocaleString(undefined, {
+    maximumFractionDigits: 3,
+  })} ns`;
+}

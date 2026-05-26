@@ -3,7 +3,7 @@ import { Database, Pause, Play, RefreshCcw, Search } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useEngineTime } from "../hooks/useEngineTime";
-import { smartString } from "../utils/smartValue";
+import { formatPicosecondsAsNanoseconds } from "../utils/smartValue";
 
 interface SethNode {
   k: number;
@@ -355,7 +355,7 @@ export default function LivePage() {
       <div className="flex min-h-14 flex-wrap items-center gap-2 border-b bg-white px-4 py-2">
         <div className="mr-4 text-sm">
           <span className="text-muted-foreground">Engine time</span>
-          <span className="ml-2 font-semibold">{now == null ? "-" : smartString(now)}</span>
+          <span className="ml-2 font-semibold">{now == null ? "-" : formatPicosecondsAsNanoseconds(now)}</span>
         </div>
         <Button type="button" size="sm" onClick={() => runAction("Continue", () => post("/api/continue"))}>
           <Play /> Continue
