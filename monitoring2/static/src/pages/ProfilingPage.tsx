@@ -24,6 +24,7 @@ interface ProfileSummary {
   samples: number;
   locations: number;
   functions: number;
+  valueInfo: ProfileValueInfo;
   topFunctions: ProfileFunctionStat[];
   callGraph: ProfileCallGraph;
 }
@@ -52,6 +53,13 @@ interface ProfileCallGraphEdge {
   value: number;
 }
 
+interface ProfileValueInfo {
+  index: number;
+  type: string;
+  unit: string;
+  label: string;
+}
+
 const RESOURCE_SAMPLE_INTERVAL_MS = 1000;
 const MAX_SECOND_SAMPLES = 60;
 const MAX_MINUTE_SAMPLES = 60;
@@ -60,6 +68,12 @@ const CALL_GRAPH_MAX_SCALE = 4;
 const CALL_GRAPH_BUTTON_ZOOM_STEP = 1.2;
 const CALL_GRAPH_WHEEL_ZOOM_RATE = 0.0012;
 const CALL_GRAPH_MAX_WHEEL_DELTA = 80;
+const DEFAULT_PROFILE_VALUE_INFO: ProfileValueInfo = {
+  index: 0,
+  type: "samples",
+  unit: "count",
+  label: "samples",
+};
 
 interface CallGraphViewport {
   scale: number;
@@ -161,6 +175,11 @@ function getNumberArray(value: Record<string, unknown>, lower: string, upper: st
   return getArray(value, lower, upper).filter((item): item is number => typeof item === "number");
 }
 
+function getStringField(value: Record<string, unknown>, lower: string, upper: string) {
+  const field = value[lower] ?? value[upper];
+  return typeof field === "string" ? field : "";
+}
+
 function profileLocationName(location: unknown) {
   if (!location || typeof location !== "object") {
     return "unknown";
@@ -203,12 +222,116 @@ function profileFunctionName(sample: unknown) {
   return profileStackNames(sample)[0] ?? "unknown";
 }
 
-function sampleWeight(sample: Record<string, unknown>) {
-  const values = getNumberArray(sample, "value", "Value");
-  return Math.max(1, ...values.map((value) => Math.abs(value)));
+function isTimeUnit(unit: string) {
+  return ["nanoseconds", "microseconds", "milliseconds", "seconds"].includes(unit.toLowerCase());
 }
 
-function buildCallGraph(samples: unknown[]): ProfileCallGraph {
+function isByteUnit(unit: string) {
+  return ["byte", "bytes"].includes(unit.toLowerCase());
+}
+
+function profileValueLabel(type: string, unit: string) {
+  const normalizedType = type.toLowerCase();
+  const normalizedUnit = unit.toLowerCase();
+
+  if (isTimeUnit(normalizedUnit)) {
+    return normalizedType === "cpu" ? "CPU" : type || "time";
+  }
+
+  if (isByteUnit(normalizedUnit)) {
+    return type || "bytes";
+  }
+
+  return normalizedType === "samples" || normalizedUnit === "count" ? "samples" : type || "value";
+}
+
+function profileValueInfo(profile: Record<string, unknown>): ProfileValueInfo {
+  const sampleTypes = [
+    ...getArray(profile, "sampleType", "SampleType"),
+    ...getArray(profile, "sample_type", "Sample_type"),
+  ];
+
+  if (!sampleTypes.length) {
+    return DEFAULT_PROFILE_VALUE_INFO;
+  }
+
+  const types = sampleTypes.map((item) => {
+    const valueType = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+    return {
+      type: getStringField(valueType, "type", "Type"),
+      unit: getStringField(valueType, "unit", "Unit"),
+    };
+  });
+  const cpuIndex = types.findIndex((item) => item.type.toLowerCase() === "cpu");
+  const timeIndex = types.findIndex((item) => isTimeUnit(item.unit));
+  const sampleIndex = types.findIndex((item) => {
+    return item.type.toLowerCase() === "samples" || item.unit.toLowerCase() === "count";
+  });
+  const index = cpuIndex >= 0 ? cpuIndex : timeIndex >= 0 ? timeIndex : sampleIndex >= 0 ? sampleIndex : 0;
+  const selected = types[index] ?? DEFAULT_PROFILE_VALUE_INFO;
+
+  return {
+    index,
+    type: selected.type || DEFAULT_PROFILE_VALUE_INFO.type,
+    unit: selected.unit || DEFAULT_PROFILE_VALUE_INFO.unit,
+    label: profileValueLabel(selected.type, selected.unit),
+  };
+}
+
+function sampleWeight(sample: Record<string, unknown>, valueInfo: ProfileValueInfo) {
+  const values = getNumberArray(sample, "value", "Value");
+  const selected = values[valueInfo.index];
+
+  if (typeof selected === "number" && Number.isFinite(selected)) {
+    return Math.max(0, Math.abs(selected));
+  }
+
+  return 1;
+}
+
+function formatDurationSeconds(seconds: number) {
+  if (seconds < 0.001) {
+    return `${(seconds * 1000000).toFixed(0)}us`;
+  }
+
+  if (seconds < 1) {
+    return `${(seconds * 1000).toFixed(seconds < 0.01 ? 1 : 0)}ms`;
+  }
+
+  if (seconds < 60) {
+    return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
+  }
+
+  return `${(seconds / 60).toFixed(seconds < 600 ? 1 : 0)}min`;
+}
+
+function formatProfileValue(value: number, valueInfo: ProfileValueInfo) {
+  const unit = valueInfo.unit.toLowerCase();
+
+  if (unit === "nanoseconds") {
+    return formatDurationSeconds(value / 1000000000);
+  }
+
+  if (unit === "microseconds") {
+    return formatDurationSeconds(value / 1000000);
+  }
+
+  if (unit === "milliseconds") {
+    return formatDurationSeconds(value / 1000);
+  }
+
+  if (unit === "seconds") {
+    return formatDurationSeconds(value);
+  }
+
+  if (isByteUnit(unit)) {
+    return formatBytes(value);
+  }
+
+  return formatSampleCount(value);
+}
+
+function buildCallGraph(samples: unknown[], valueInfo: ProfileValueInfo): ProfileCallGraph {
   const nodeTotals = new Map<string, { value: number; depthTotal: number; count: number }>();
   const edgeTotals = new Map<string, ProfileCallGraphEdge>();
 
@@ -218,7 +341,7 @@ function buildCallGraph(samples: unknown[]): ProfileCallGraph {
     }
 
     const sample = item as Record<string, unknown>;
-    const weight = sampleWeight(sample);
+    const weight = sampleWeight(sample, valueInfo);
     const leafFirstStack = profileStackNames(sample);
     const callerFirstStack = [...leafFirstStack].reverse().filter((name, index, stack) => {
       return index === 0 || name !== stack[index - 1];
@@ -276,13 +399,21 @@ function buildCallGraph(samples: unknown[]): ProfileCallGraph {
 
 function summarizeProfile(profile: unknown): ProfileSummary {
   if (!profile || typeof profile !== "object") {
-    return { samples: 0, locations: 0, functions: 0, topFunctions: [], callGraph: { nodes: [], edges: [] } };
+    return {
+      samples: 0,
+      locations: 0,
+      functions: 0,
+      valueInfo: DEFAULT_PROFILE_VALUE_INFO,
+      topFunctions: [],
+      callGraph: { nodes: [], edges: [] },
+    };
   }
 
   const p = profile as Record<string, unknown>;
   const sample = Array.isArray(p.sample) ? p.sample : Array.isArray(p.Sample) ? p.Sample : [];
   const location = Array.isArray(p.location) ? p.location : Array.isArray(p.Location) ? p.Location : [];
   const fn = Array.isArray(p.function) ? p.function : Array.isArray(p.Function) ? p.Function : [];
+  const valueInfo = profileValueInfo(p);
   const functionTotals = new Map<string, number>();
 
   sample.forEach((item) => {
@@ -291,7 +422,7 @@ function summarizeProfile(profile: unknown): ProfileSummary {
     }
 
     const sampleObject = item as Record<string, unknown>;
-    const weight = sampleWeight(sampleObject);
+    const weight = sampleWeight(sampleObject, valueInfo);
     const name = profileFunctionName(item);
 
     functionTotals.set(name, (functionTotals.get(name) ?? 0) + weight);
@@ -306,8 +437,9 @@ function summarizeProfile(profile: unknown): ProfileSummary {
     samples: sample.length,
     locations: location.length,
     functions: fn.length,
+    valueInfo,
     topFunctions,
-    callGraph: buildCallGraph(sample),
+    callGraph: buildCallGraph(sample, valueInfo),
   };
 }
 
@@ -383,7 +515,7 @@ export default function ProfilingPage() {
         <section className="rounded border bg-white p-4">
           <div className="mb-3 text-sm font-semibold">CPU Call Graph</div>
           {profileSummary ? (
-            <CallGraph graph={profileSummary.callGraph} />
+            <CallGraph graph={profileSummary.callGraph} valueInfo={profileSummary.valueInfo} />
           ) : (
             <div className="text-sm text-muted-foreground">Capture a CPU profile to generate a call graph.</div>
           )}
@@ -392,7 +524,7 @@ export default function ProfilingPage() {
         <section className="rounded border bg-white p-4">
           <div className="mb-3 text-sm font-semibold">Top Functions</div>
           {profileSummary ? (
-            <TopFunctionBars functions={profileSummary.topFunctions} />
+            <TopFunctionBars functions={profileSummary.topFunctions} valueInfo={profileSummary.valueInfo} />
           ) : (
             <div className="text-sm text-muted-foreground">Capture a CPU profile to populate function samples.</div>
           )}
@@ -427,7 +559,13 @@ function ProfileMetricBars({ summary }: { summary: ProfileSummary }) {
   );
 }
 
-function TopFunctionBars({ functions }: { functions: ProfileFunctionStat[] }) {
+function TopFunctionBars({
+  functions,
+  valueInfo,
+}: {
+  functions: ProfileFunctionStat[];
+  valueInfo: ProfileValueInfo;
+}) {
   const max = Math.max(1, ...functions.map((fn) => fn.value));
 
   if (!functions.length) {
@@ -440,7 +578,9 @@ function TopFunctionBars({ functions }: { functions: ProfileFunctionStat[] }) {
         <div key={fn.name}>
           <div className="mb-1 flex items-center justify-between gap-3 text-xs">
             <span className="min-w-0 truncate font-medium">{fn.name}</span>
-            <span className="shrink-0 font-mono text-muted-foreground">{fn.value}</span>
+            <span className="shrink-0 font-mono text-muted-foreground">
+              {formatProfileValue(fn.value, valueInfo)}
+            </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-slate-200">
             <div className="h-full bg-amber-500" style={{ width: `${(fn.value / max) * 100}%` }} />
@@ -481,7 +621,7 @@ function clampCallGraphScale(scale: number) {
   return Math.max(CALL_GRAPH_MIN_SCALE, Math.min(CALL_GRAPH_MAX_SCALE, scale));
 }
 
-function CallGraph({ graph }: { graph: ProfileCallGraph }) {
+function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: ProfileValueInfo }) {
   const [viewport, setViewport] = useState<CallGraphViewport>(INITIAL_CALL_GRAPH_VIEWPORT);
   const [isPanning, setIsPanning] = useState(false);
   const dragStartRef = useRef<{ clientX: number; clientY: number } | null>(null);
@@ -710,17 +850,20 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
             {visibleEdges.map((edge) => {
               const from = positions.get(edge.from)!;
               const to = positions.get(edge.to)!;
-              const startX = from.x + nodeWidth;
+              const forward = to.x > from.x;
+              const sameColumn = to.x === from.x;
+              const startX = forward ? from.x + nodeWidth : from.x;
               const startY = from.y + nodeHeight / 2;
-              const endX = to.x;
+              const endX = forward ? to.x - 6 : to.x + nodeWidth + 6;
               const endY = to.y + nodeHeight / 2;
-              const forward = endX > startX;
-              const bend = forward ? Math.max(58, (endX - startX) / 2) : 44;
+              const bend = forward ? Math.max(58, (endX - startX) / 2) : 70;
               const isHotPath = hotPathEdgeIDs.has(edge.id);
               const strokeWidth = isHotPath ? 2.5 + (edge.value / maxEdgeValue) * 2 : 0.9 + (edge.value / maxEdgeValue) * 2.5;
               const edgePath = forward
-                ? `M ${startX} ${startY} C ${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX - 6} ${endY}`
-                : `M ${startX} ${startY} C ${startX + bend} ${startY}, ${startX + bend} ${endY}, ${endX - 6} ${endY}`;
+                ? `M ${startX} ${startY} C ${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX} ${endY}`
+                : sameColumn
+                  ? `M ${startX + nodeWidth} ${startY} C ${startX + nodeWidth + bend} ${startY}, ${endX + bend} ${endY}, ${endX} ${endY}`
+                  : `M ${startX} ${startY} C ${startX - bend} ${startY}, ${endX + bend} ${endY}, ${endX} ${endY}`;
 
               return (
                 <path
@@ -733,7 +876,7 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
                   markerEnd="url(#call-arrow)"
                 >
                   <title>
-                    {edge.from} {"->"} {edge.to}: {edge.value}
+                    {edge.from} {"->"} {edge.to}: {formatProfileValue(edge.value, valueInfo)}
                   </title>
                 </path>
               );
@@ -762,10 +905,10 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
                     {shortFunctionName(node.label)}
                   </text>
                   <text x="10" y="35" className="fill-slate-600 text-[11px]">
-                    samples {formatSampleCount(node.value)}
+                    {valueInfo.label} {formatProfileValue(node.value, valueInfo)}
                   </text>
                   <title>
-                    {node.label}: {node.value}
+                    {node.label}: {formatProfileValue(node.value, valueInfo)}
                   </title>
                 </g>
               );

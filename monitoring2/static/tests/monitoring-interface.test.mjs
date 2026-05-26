@@ -76,6 +76,9 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(profilingPage, /hotPathEdgeIDs/);
   assert.match(profilingPage, /h-\[32rem\]/);
   assert.match(profilingPage, /formatSampleCount/);
+  assert.match(profilingPage, /profileValueInfo/);
+  assert.match(profilingPage, /formatProfileValue/);
+  assert.doesNotMatch(profilingPage, /samples \{formatSampleCount\(node\.value\)\}/);
   assert.match(profilingPage, /CALL_GRAPH_BUTTON_ZOOM_STEP/);
   assert.match(profilingPage, /CALL_GRAPH_WHEEL_ZOOM_RATE/);
   assert.match(profilingPage, /CALL_GRAPH_MAX_WHEEL_DELTA/);
