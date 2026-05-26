@@ -154,6 +154,12 @@ function emptyMonitorSections(loading = false): Record<MonitorSectionID, Monitor
   );
 }
 
+function withoutExpandedSubtree(expanded: Record<string, ExpandedFieldState>, fieldName: string) {
+  return Object.fromEntries(
+    Object.entries(expanded).filter(([key]) => key !== fieldName && !key.startsWith(`${fieldName}.`)),
+  );
+}
+
 function childRows(snapshot: SethSnapshot, node: SethNode) {
   if (!node.v) {
     return [];
@@ -293,9 +299,9 @@ function SethRows({
           : expandedField?.error
             ? "Retry"
             : expandedField
-              ? "Opened"
+              ? "Close"
               : "Open";
-        const canOpen = expandable && !expandedField?.loading && (!expandedField || expandedField.error);
+        const canToggle = expandable && !expandedField?.loading;
 
         return (
           <div key={`${fieldPath(childPath)}-${row.valueID}`} className="border-b last:border-b-0">
@@ -323,7 +329,7 @@ function SethRows({
                 <button
                   type="button"
                   className="justify-self-end rounded px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 disabled:text-muted-foreground disabled:hover:bg-transparent"
-                  disabled={!canOpen}
+                  disabled={!canToggle}
                   onClick={() => {
                     if (child) {
                       onSelect({ path: childPath, node: child });
@@ -505,6 +511,23 @@ export default function LivePage() {
       }
 
       const fieldName = fieldPath(path);
+      const existingField = sections[sectionID]?.expanded[fieldName];
+
+      if (existingField?.loading) {
+        return;
+      }
+
+      if (existingField && !existingField.error) {
+        setSections((previous) => ({
+          ...previous,
+          [sectionID]: {
+            ...previous[sectionID],
+            expanded: withoutExpandedSubtree(previous[sectionID].expanded, fieldName),
+          },
+        }));
+        return;
+      }
+
       setSections((previous) => ({
         ...previous,
         [sectionID]: {
@@ -546,7 +569,7 @@ export default function LivePage() {
           }));
         });
     },
-    [selectedComponent],
+    [sections, selectedComponent],
   );
 
   const runAction = async (label: string, action: () => Promise<void>) => {
