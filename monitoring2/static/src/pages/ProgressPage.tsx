@@ -19,6 +19,11 @@ interface TraceStorageState {
   disk_total_bytes: number;
 }
 
+interface ExecutionInfoEntry {
+  property: string;
+  value: string;
+}
+
 function isProgressBarState(value: unknown): value is ProgressBarState {
   if (!value || typeof value !== "object") {
     return false;
@@ -50,6 +55,15 @@ function isTraceStorageState(value: unknown): value is TraceStorageState {
   );
 }
 
+function isExecutionInfoEntry(value: unknown): value is ExecutionInfoEntry {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const entry = value as Partial<ExecutionInfoEntry>;
+  return typeof entry.property === "string" && typeof entry.value === "string";
+}
+
 function useProgressBars() {
   const [progressBars, setProgressBars] = useState<ProgressBarState[]>([]);
 
@@ -69,6 +83,27 @@ function useProgressBars() {
   }, [refresh]);
 
   return { progressBars, refresh };
+}
+
+function useExecutionInfo() {
+  const [entries, setEntries] = useState<ExecutionInfoEntry[]>([]);
+
+  const refresh = useCallback(() => {
+    fetch("/api/execution/info")
+      .then((response) => (response.ok ? response.json() : []))
+      .then((json: unknown) => {
+        setEntries(Array.isArray(json) ? json.filter(isExecutionInfoEntry) : []);
+      })
+      .catch(() => setEntries([]));
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const id = window.setInterval(refresh, 2000);
+    return () => window.clearInterval(id);
+  }, [refresh]);
+
+  return { entries, refresh };
 }
 
 function useTraceStatus() {
@@ -163,6 +198,7 @@ function formatBytes(bytes: number) {
 
 export default function ProgressPage() {
   const { progressBars, refresh } = useProgressBars();
+  const { entries: executionInfo } = useExecutionInfo();
   const { isTracing, refresh: refreshTraceStatus } = useTraceStatus();
   const { storage, refresh: refreshTraceStorage } = useTraceStorage();
   const [traceStatus, setTraceStatus] = useState("");
@@ -208,6 +244,30 @@ export default function ProgressPage() {
             <RefreshCcw /> Refresh
           </Button>
         </header>
+
+        <section className="rounded border bg-white p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold">Execution Info</div>
+              <div className="mt-1 text-xs text-muted-foreground">Recorded in exec_info</div>
+            </div>
+            <div className="font-mono text-xs text-muted-foreground">{executionInfo.length} entries</div>
+          </div>
+          {executionInfo.length ? (
+            <dl className="mt-4 divide-y">
+              {executionInfo.map((entry) => (
+                <div key={entry.property} className="grid gap-2 py-2 text-sm sm:grid-cols-[12rem_minmax(0,1fr)]">
+                  <dt className="font-medium text-muted-foreground">{entry.property}</dt>
+                  <dd className="min-w-0 break-all font-mono text-xs text-foreground">{entry.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <div className="mt-4 border-t pt-3 text-sm text-muted-foreground">
+              No execution metadata recorded yet.
+            </div>
+          )}
+        </section>
 
         <section className="rounded border bg-white p-4">
           <div className="flex flex-wrap items-center gap-3">

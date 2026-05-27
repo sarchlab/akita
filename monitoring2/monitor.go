@@ -2,6 +2,7 @@ package monitoring2
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	"unsafe"
 
 	// Enable profiling.
+	_ "github.com/glebarez/go-sqlite"
 	_ "net/http/pprof"
 
 	"github.com/google/pprof/profile"
@@ -157,6 +159,7 @@ func (m *Monitor) StartServer() {
 	mux.HandleFunc("/api/field/", m.listFieldValue)
 	mux.HandleFunc("/api/hangdetector/buffers", m.hangDetectorBuffers)
 	mux.HandleFunc("/api/progress", m.listProgressBars)
+	mux.HandleFunc("/api/execution/info", m.apiExecutionInfo)
 	mux.HandleFunc("/api/resource", m.listResources)
 	mux.HandleFunc("/api/profile", m.collectProfile)
 	mux.HandleFunc("/api/trace/start", m.apiTraceStart)
@@ -626,6 +629,82 @@ func (m *Monitor) listProgressBars(
 	if err != nil {
 		log.Panic(err)
 	}
+}
+
+type executionInfoEntry struct {
+	Property string `json:"property"`
+	Value    string `json:"value"`
+}
+
+func (m *Monitor) apiExecutionInfo(w http.ResponseWriter, _ *http.Request) {
+	entries, err := m.readExecutionInfo()
+	if err != nil {
+		log.Printf("Error reading execution info: %v", err)
+		http.Error(w, "Internal Server Error",
+			http.StatusInternalServerError)
+
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(entries); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+		http.Error(w, "Internal Server Error",
+			http.StatusInternalServerError)
+	}
+}
+
+func (m *Monitor) readExecutionInfo() ([]executionInfoEntry, error) {
+	if m.tracePath == "" {
+		return []executionInfoEntry{}, nil
+	}
+
+	absPath, err := filepath.Abs(m.tracePath)
+	if err != nil {
+		absPath = m.tracePath
+	}
+
+	if _, err := os.Stat(absPath); err != nil {
+		if os.IsNotExist(err) {
+			return []executionInfoEntry{}, nil
+		}
+
+		return nil, err
+	}
+
+	db, err := sql.Open("sqlite", absPath)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.Query(`SELECT Property, Value FROM exec_info ORDER BY rowid`)
+	if err != nil {
+		if strings.Contains(err.Error(), "no such table") {
+			return []executionInfoEntry{}, nil
+		}
+
+		return nil, err
+	}
+	defer rows.Close()
+
+	entries := []executionInfoEntry{}
+	for rows.Next() {
+		var entry executionInfoEntry
+		if err := rows.Scan(&entry.Property, &entry.Value); err != nil {
+			return nil, err
+		}
+
+		entries = append(entries, entry)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return entries, nil
 }
 
 type resourceRsp struct {

@@ -1,6 +1,7 @@
 package monitoring2
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,56 @@ import (
 	"path/filepath"
 	"testing"
 )
+
+func TestExecutionInfoReadsExecInfoTable(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "trace.sqlite3")
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = db.Exec(`CREATE TABLE exec_info (Property TEXT, Value TEXT)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = db.Exec(`INSERT INTO exec_info (Property, Value) VALUES (?, ?)`,
+		"Command", "akita")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	monitor := NewMonitor()
+	monitor.SetTraceDBPath(dbPath)
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/execution/info", nil)
+
+	monitor.apiExecutionInfo(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+
+	var response []executionInfoEntry
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(response) != 1 {
+		t.Fatalf("expected 1 execution info entry, got %d", len(response))
+	}
+
+	if response[0].Property != "Command" || response[0].Value != "akita" {
+		t.Fatalf("unexpected execution info entry: %#v", response[0])
+	}
+}
 
 func TestTraceStorageReportsDatabaseAndDiskSpace(t *testing.T) {
 	tmpDir := t.TempDir()

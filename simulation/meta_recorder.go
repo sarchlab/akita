@@ -21,7 +21,6 @@ type metaRecorder struct {
 	tableName  string
 	recorder   datarecording.DataRecorder
 	timeTeller timing.TimeTeller
-	entries    []simulationInfo
 	ended      bool
 }
 
@@ -41,32 +40,23 @@ func newMetaRecorder(
 
 func (r *metaRecorder) Start() {
 	currentTime := time.Now()
-	r.entries = append(r.entries, simulationInfo{
-		Property: "Start Time",
-		Value:    currentTime.Format("2006-01-02 15:04:05.000000000"),
-	})
+	r.insertEntry("Start Time", currentTime.Format("2006-01-02 15:04:05.000000000"))
 
-	r.entries = append(r.entries, simulationInfo{
-		Property: "Command",
-		Value:    strings.Join(os.Args, " "),
-	})
+	r.insertEntry("Command", strings.Join(os.Args, " "))
 
 	ex, err := os.Executable()
 	if err != nil {
 		panic(err)
 	}
 
-	r.entries = append(r.entries, simulationInfo{
-		Property: "Working Directory",
-		Value:    filepath.Dir(ex),
-	})
+	r.insertEntry("Working Directory", filepath.Dir(ex))
 
 	if r.timeTeller != nil {
-		r.entries = append(r.entries, simulationInfo{
-			Property: "Start Virtual Time",
-			Value:    strconv.FormatUint(uint64(r.timeTeller.CurrentTime()), 10),
-		})
+		r.insertEntry("Start Virtual Time",
+			strconv.FormatUint(uint64(r.timeTeller.CurrentTime()), 10))
 	}
+
+	r.recorder.Flush()
 }
 
 func (r *metaRecorder) End() {
@@ -75,22 +65,19 @@ func (r *metaRecorder) End() {
 	}
 	r.ended = true
 
-	for _, entry := range r.entries {
-		r.recorder.InsertData(r.tableName, entry)
-	}
-
-	r.recorder.InsertData(r.tableName, simulationInfo{
-		Property: "End Time",
-		Value:    time.Now().Format("2006-01-02 15:04:05.000000000"),
-	})
+	r.insertEntry("End Time", time.Now().Format("2006-01-02 15:04:05.000000000"))
 
 	if r.timeTeller != nil {
-		r.recorder.InsertData(r.tableName, simulationInfo{
-			Property: "End Virtual Time",
-			Value:    strconv.FormatUint(uint64(r.timeTeller.CurrentTime()), 10),
-		})
+		r.insertEntry("End Virtual Time",
+			strconv.FormatUint(uint64(r.timeTeller.CurrentTime()), 10))
 	}
 
-	r.entries = nil
 	r.recorder.Flush()
+}
+
+func (r *metaRecorder) insertEntry(property, value string) {
+	r.recorder.InsertData(r.tableName, simulationInfo{
+		Property: property,
+		Value:    value,
+	})
 }
