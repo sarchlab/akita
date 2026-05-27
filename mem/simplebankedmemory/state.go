@@ -17,7 +17,7 @@ type bankPipelineItemState struct {
 // bankState captures one bank pipeline + buffer contents.
 type bankState struct {
 	Pipeline        queueing.Pipeline[bankPipelineItemState] `json:"pipeline"`
-	PostPipelineBuf []bankPipelineItemState                  `json:"post_pipeline_buf"`
+	PostPipelineBuf queueing.Buffer[bankPipelineItemState]   `json:"post_pipeline_buf"`
 }
 
 // State contains mutable runtime data for the simple banked memory.

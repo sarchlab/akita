@@ -160,6 +160,10 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 			Width:     spec.PipelineWidth,
 			NumStages: b.spec.Latency,
 		},
+		BufferItems: queueing.Buffer[pipelineTLBReqState]{
+			BufferName: name + ".BufferItems",
+			Cap:        spec.PipelineWidth,
+		},
 	}
 
 	modelComp := modeling.NewBuilder[Spec, State]().

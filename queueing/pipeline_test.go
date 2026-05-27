@@ -108,33 +108,6 @@ func TestPipelineTickNoMovement(t *testing.T) {
 	assert.False(t, moved) // Empty pipeline, nothing to move.
 }
 
-func TestPipelineTickFunc(t *testing.T) {
-	p := newPipeline(1, 1)
-	p.Accept(55)
-
-	var received []int
-	moved := p.TickFunc(func(item int) bool {
-		received = append(received, item)
-		return true
-	})
-
-	assert.True(t, moved)
-	assert.Equal(t, []int{55}, received)
-	assert.Equal(t, 0, len(p.Stages))
-}
-
-func TestPipelineTickFuncReject(t *testing.T) {
-	p := newPipeline(1, 1)
-	p.Accept(55)
-
-	moved := p.TickFunc(func(item int) bool {
-		return false
-	})
-
-	assert.False(t, moved)
-	assert.Equal(t, 1, len(p.Stages))
-}
-
 func TestPipelineMultiLane(t *testing.T) {
 	p := newPipeline(2, 2)
 	postBuf := &Buffer[int]{BufferName: "post", Cap: 10}

@@ -454,7 +454,6 @@ type Pipeline[T any] struct {
 | `CanAccept` | `() bool` | Returns `true` if there is a free lane at stage 0 |
 | `Accept` | `(item T)` | Inserts an item into the first stage |
 | `Tick` | `(postBuf *Buffer[T]) bool` | Advances the pipeline by one cycle; completed items are pushed into `postBuf` |
-| `TickFunc` | `(accept func(T) bool) bool` | Like `Tick`, but uses a custom accept function for completed items |
 
 ---
 

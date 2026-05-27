@@ -84,7 +84,6 @@ madeProgress := state.Pipe.Tick(&state.PostBuf)
 | `CanAccept() bool` | True if a lane is free at stage 0 |
 | `Accept(item T)` | Insert item into the first stage |
 | `Tick(postBuf *Buffer[T]) bool` | Advance pipeline; completed items go to postBuf |
-| `TickFunc(accept func(T) bool) bool` | Advance with custom output function |
 
 ### Pipeline Behavior
 

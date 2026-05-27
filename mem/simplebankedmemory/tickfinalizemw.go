@@ -79,8 +79,8 @@ func (m *tickFinalizeMW) finalizeRead(
 		item.ReadData = data
 		item.Committed = true
 
-		// Update the buffer head with the committed state
-		b.PostPipelineBuf[0] = *item
+		// Update the buffer head with the committed state.
+		b.PostPipelineBuf.Elements[0] = *item
 	}
 
 	if !m.topPort().CanSend() {
@@ -143,7 +143,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 		}
 
 		item.Committed = true
-		b.PostPipelineBuf[0] = *item
+		b.PostPipelineBuf.Elements[0] = *item
 	}
 
 	if !m.topPort().CanSend() {
@@ -171,11 +171,10 @@ func (m *tickFinalizeMW) finalizeWrite(
 
 func (m *tickFinalizeMW) tickPipelines() bool {
 	madeProgress := false
-	spec := m.comp.Spec
 	state := &m.comp.State
 
 	for i := range state.Banks {
-		madeProgress = pipelineTick(&state.Banks[i], spec) || madeProgress
+		madeProgress = pipelineTick(&state.Banks[i]) || madeProgress
 	}
 
 	return madeProgress
