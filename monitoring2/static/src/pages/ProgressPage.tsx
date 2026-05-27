@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ListChecks, Play, RefreshCcw, Square } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ListChecks, Play, Square } from "lucide-react";
 import { Button } from "../components/ui/button";
+import { useEngineTime } from "../hooks/useEngineTime";
+import { formatPicosecondsAsNanoseconds } from "../utils/smartValue";
 
 interface ProgressBarState {
   id: number;
@@ -82,7 +84,7 @@ function useProgressBars() {
     return () => window.clearInterval(id);
   }, [refresh]);
 
-  return { progressBars, refresh };
+  return { progressBars };
 }
 
 function useExecutionInfo() {
@@ -197,7 +199,8 @@ function formatBytes(bytes: number) {
 }
 
 export default function ProgressPage() {
-  const { progressBars, refresh } = useProgressBars();
+  const now = useEngineTime(500);
+  const { progressBars } = useProgressBars();
   const { entries: executionInfo } = useExecutionInfo();
   const { isTracing, refresh: refreshTraceStatus } = useTraceStatus();
   const { storage, refresh: refreshTraceStorage } = useTraceStorage();
@@ -205,19 +208,6 @@ export default function ProgressPage() {
   const traceActionLabel = isTracing ? "Stop tracing" : "Start tracing";
   const TraceActionIcon = isTracing ? Square : Play;
   const sqliteBytes = storage?.total_size_bytes ?? storage?.file_size_bytes;
-
-  const totals = useMemo(
-    () =>
-      progressBars.reduce(
-        (acc, progress) => ({
-          total: acc.total + progress.total,
-          finished: acc.finished + progress.finished,
-          inProgress: acc.inProgress + progress.in_progress,
-        }),
-        { total: 0, finished: 0, inProgress: 0 },
-      ),
-    [progressBars],
-  );
 
   const runTraceAction = async (label: string, action: () => Promise<void>) => {
     setTraceStatus(`${label}...`);
@@ -232,17 +222,17 @@ export default function ProgressPage() {
   return (
     <div className="h-full overflow-auto bg-slate-50 p-4">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
-        <header className="flex flex-wrap items-center gap-3 border-b bg-white px-4 py-3">
+        <header className="flex flex-wrap items-center gap-4 border-b bg-white px-4 py-4">
           <ListChecks className="h-5 w-5 text-muted-foreground" />
           <div className="min-w-0 flex-1">
             <h1 className="text-base font-semibold">Execution</h1>
-            <div className="text-xs text-muted-foreground">
-              {progressBars.length} bars, {totals.finished}/{totals.total} finished, {totals.inProgress} in progress
+          </div>
+          <div className="text-right">
+            <div className="text-xs font-medium text-muted-foreground">Current Virtual Time</div>
+            <div className="mt-1 font-mono text-3xl font-semibold">
+              {now == null ? "-" : formatPicosecondsAsNanoseconds(now)}
             </div>
           </div>
-          <Button type="button" size="sm" variant="outline" onClick={refresh}>
-            <RefreshCcw /> Refresh
-          </Button>
         </header>
 
         <section className="rounded border bg-white p-4">
