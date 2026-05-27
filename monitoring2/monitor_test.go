@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/hooking"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -38,6 +40,34 @@ func (e *fakeEngine) Continue() {
 func (e *fakeEngine) CurrentTime() timing.VTimeInSec {
 	return e.now
 }
+
+type sliceFieldState struct {
+	Values []int
+}
+
+type sliceFieldComponent struct {
+	hooking.HookableBase
+	*messaging.PortOwnerBase
+
+	State sliceFieldState
+	name  string
+}
+
+func newSliceFieldComponent(name string, values []int) *sliceFieldComponent {
+	return &sliceFieldComponent{
+		PortOwnerBase: messaging.NewPortOwnerBase(),
+		State:         sliceFieldState{Values: values},
+		name:          name,
+	}
+}
+
+func (c *sliceFieldComponent) Name() string {
+	return c.name
+}
+
+func (c *sliceFieldComponent) NotifyRecv(messaging.Port) {}
+
+func (c *sliceFieldComponent) NotifyPortFree(messaging.Port) {}
 
 func TestEngineStateTracksPauseContinueIdempotently(t *testing.T) {
 	engine := &fakeEngine{}
@@ -99,6 +129,85 @@ func TestEngineStateTracksPauseContinueIdempotently(t *testing.T) {
 
 	if response.State != "running" || response.Paused {
 		t.Fatalf("expected running state after continue, got %#v", response)
+	}
+}
+
+func TestFieldValuePaginatesSlice(t *testing.T) {
+	engine := &fakeEngine{}
+	monitor := NewMonitor()
+	monitor.RegisterEngine(engine)
+	monitor.RegisterComponent(newSliceFieldComponent(
+		"slice-comp",
+		[]int{10, 20, 30, 40, 50},
+	))
+
+	requestJSON := `{"comp_name":"slice-comp","field_name":"State.Values"}`
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/field/"+url.PathEscape(requestJSON)+
+			"?slice_offset=2&slice_limit=2",
+		nil,
+	)
+	recorder := httptest.NewRecorder()
+
+	monitor.listFieldValue(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+
+	type responseNode struct {
+		K int             `json:"k"`
+		T string          `json:"t"`
+		V json.RawMessage `json:"v"`
+		L *int            `json:"l"`
+		O *int            `json:"o"`
+	}
+
+	var response struct {
+		R    string                  `json:"r"`
+		Dict map[string]responseNode `json:"dict"`
+	}
+
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+
+	root := response.Dict[response.R]
+	if root.L == nil || *root.L != 5 {
+		t.Fatalf("expected root length 5, got %#v", root.L)
+	}
+
+	if root.O == nil || *root.O != 2 {
+		t.Fatalf("expected root offset 2, got %#v", root.O)
+	}
+
+	var ids []string
+	if err := json.Unmarshal(root.V, &ids); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(ids) != 2 {
+		t.Fatalf("expected 2 visible IDs, got %d", len(ids))
+	}
+
+	if len(response.Dict) != 3 {
+		t.Fatalf("expected root plus 2 values, got %d nodes", len(response.Dict))
+	}
+
+	var firstValue int
+	if err := json.Unmarshal(response.Dict[ids[0]].V, &firstValue); err != nil {
+		t.Fatal(err)
+	}
+
+	var secondValue int
+	if err := json.Unmarshal(response.Dict[ids[1]].V, &secondValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if firstValue != 30 || secondValue != 40 {
+		t.Fatalf("expected values 30 and 40, got %d and %d",
+			firstValue, secondValue)
 	}
 }
 

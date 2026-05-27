@@ -481,6 +481,11 @@ type fieldReq struct {
 	FieldName string `json:"field_name,omitempty"`
 }
 
+const (
+	defaultSlicePageLimit = 50
+	maxSlicePageLimit     = 1000
+)
+
 func (m *Monitor) listFieldValue(w http.ResponseWriter, r *http.Request) {
 	jsonString := strings.TrimPrefix(r.URL.Path, "/api/field/")
 	req := fieldReq{}
@@ -501,6 +506,30 @@ func (m *Monitor) listFieldValue(w http.ResponseWriter, r *http.Request) {
 	resume := m.pauseForInspection()
 	defer resume()
 
+	sliceOffset, sliceLimit, pagingRequested, err := parseSlicePageParams(r)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "Error: %s", err)
+
+		return
+	}
+
+	if pagingRequested {
+		value, err := monitorEntryPointValue(component, fields)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		if monitorStrip(value).Kind() == reflect.Slice {
+			err = writeSlicePage(w, value, sliceOffset, sliceLimit)
+			if err != nil {
+				log.Panic(err)
+			}
+
+			return
+		}
+	}
+
 	serializer := goseth.NewSerializer()
 	serializer.SetRoot(component)
 	serializer.SetMaxDepth(1)
@@ -514,6 +543,264 @@ func (m *Monitor) listFieldValue(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
+}
+
+func parseSlicePageParams(
+	r *http.Request,
+) (offset, limit int, requested bool, err error) {
+	query := r.URL.Query()
+	offsetStr := query.Get("slice_offset")
+	limitStr := query.Get("slice_limit")
+
+	if offsetStr == "" && limitStr == "" {
+		return 0, 0, false, nil
+	}
+
+	requested = true
+	limit = defaultSlicePageLimit
+
+	if offsetStr != "" {
+		offset, err = strconv.Atoi(offsetStr)
+		if err != nil {
+			return 0, 0, true, fmt.Errorf("invalid slice_offset %q", offsetStr)
+		}
+	}
+
+	if limitStr != "" {
+		limit, err = strconv.Atoi(limitStr)
+		if err != nil {
+			return 0, 0, true, fmt.Errorf("invalid slice_limit %q", limitStr)
+		}
+	}
+
+	if offset < 0 {
+		return 0, 0, true, fmt.Errorf("slice_offset must be non-negative")
+	}
+
+	if limit <= 0 {
+		return 0, 0, true, fmt.Errorf("slice_limit must be positive")
+	}
+
+	if limit > maxSlicePageLimit {
+		limit = maxSlicePageLimit
+	}
+
+	return offset, limit, true, nil
+}
+
+func monitorEntryPointValue(root any, entryPoint []string) (reflect.Value, error) {
+	value := reflect.ValueOf(root)
+
+	for _, next := range entryPoint {
+		value = monitorStrip(value)
+
+		switch value.Kind() {
+		case reflect.Struct:
+			value = value.FieldByName(next)
+			if !value.IsValid() {
+				return reflect.Value{}, fmt.Errorf("field %s not found", next)
+			}
+		case reflect.Map:
+			key := reflect.ValueOf(next)
+			keyType := value.Type().Key()
+			if key.Type().AssignableTo(keyType) {
+				// Use the key as-is.
+			} else if key.Type().ConvertibleTo(keyType) {
+				key = key.Convert(keyType)
+			} else {
+				return reflect.Value{}, fmt.Errorf(
+					"key %s cannot be converted to %s", next, keyType)
+			}
+
+			value = value.MapIndex(key)
+			if !value.IsValid() {
+				return reflect.Value{}, fmt.Errorf("key %s not found", next)
+			}
+		case reflect.Array, reflect.Slice:
+			index, err := strconv.Atoi(next)
+			if err != nil {
+				return reflect.Value{}, err
+			}
+
+			if index < 0 || index >= value.Len() {
+				return reflect.Value{}, fmt.Errorf("index %d is not valid", index)
+			}
+
+			value = value.Index(index)
+		default:
+			return reflect.Value{}, fmt.Errorf("type %s is not supported", value.Type())
+		}
+	}
+
+	return value, nil
+}
+
+func writeSlicePage(
+	w http.ResponseWriter,
+	value reflect.Value,
+	offset, limit int,
+) error {
+	value = monitorStrip(value)
+	total := value.Len()
+
+	if offset > total {
+		offset = total
+	}
+
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+
+	valueIDs := make([]string, 0, end-offset)
+	dict := map[string]map[string]any{}
+
+	root := map[string]any{
+		"k": int(value.Kind()),
+		"t": monitorTypeString(value),
+		"l": total,
+		"o": offset,
+	}
+
+	for index := offset; index < end; index++ {
+		id := strconv.Itoa(len(valueIDs) + 1)
+		valueIDs = append(valueIDs, id)
+		dict[id] = monitorSethNode(value.Index(index), 1, 1)
+	}
+
+	root["v"] = valueIDs
+	dict["0"] = root
+
+	w.Header().Set("Content-Type", "application/json")
+
+	return json.NewEncoder(w).Encode(map[string]any{
+		"r":    "0",
+		"dict": dict,
+	})
+}
+
+func monitorSethNode(value reflect.Value, depth, maxDepth int) map[string]any {
+	value = monitorStrip(value)
+
+	if monitorIsZero(value) {
+		return map[string]any{
+			"k": 0,
+			"t": "null",
+			"v": nil,
+		}
+	}
+
+	node := map[string]any{
+		"k": int(value.Kind()),
+		"t": monitorTypeString(value),
+	}
+
+	if monitorNeedSerializeValue(value, depth, maxDepth) {
+		node["v"] = monitorValue(value)
+	}
+
+	if monitorNeedSerializeLen(value) {
+		node["l"] = value.Len()
+	}
+
+	return node
+}
+
+func monitorNeedSerializeValue(
+	value reflect.Value,
+	depth, maxDepth int,
+) bool {
+	if maxDepth < 0 || depth < maxDepth {
+		return true
+	}
+
+	switch value.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.Struct:
+		return false
+	default:
+		return true
+	}
+}
+
+func monitorNeedSerializeLen(value reflect.Value) bool {
+	switch value.Kind() {
+	case reflect.Array, reflect.Chan, reflect.Map, reflect.Slice:
+		return true
+	default:
+		return false
+	}
+}
+
+func monitorValue(value reflect.Value) any {
+	switch value.Kind() {
+	case reflect.Bool:
+		return value.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return value.Int()
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return value.Uint()
+	case reflect.Float32, reflect.Float64:
+		return value.Float()
+	case reflect.String:
+		return value.String()
+	case reflect.Chan:
+		return map[string]any{
+			"k": int(value.Kind()),
+			"t": monitorTypeString(value),
+			"l": value.Len(),
+		}
+	default:
+		return monitorTypeString(value)
+	}
+}
+
+func monitorIsZero(value reflect.Value) bool {
+	if !value.IsValid() {
+		return true
+	}
+
+	switch value.Kind() {
+	case reflect.Chan, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
+}
+
+func monitorStrip(value reflect.Value) reflect.Value {
+	for value.IsValid() {
+		switch value.Kind() {
+		case reflect.Interface, reflect.Ptr:
+			if value.IsNil() {
+				return reflect.Value{}
+			}
+
+			value = value.Elem()
+		default:
+			return value
+		}
+	}
+
+	return value
+}
+
+func monitorTypeString(value reflect.Value) string {
+	if !value.IsValid() {
+		return "null"
+	}
+
+	name := value.Type().String()
+	pktPath := value.Type().PkgPath()
+
+	if pktPath == "" {
+		return name
+	}
+
+	tokens := strings.Split(pktPath, "/")
+	tokens = tokens[0 : len(tokens)-1]
+	pktPath = strings.Join(tokens, "/")
+
+	return fmt.Sprintf("%s/%s", pktPath, name)
 }
 
 func (m *Monitor) hangDetectorBuffers(
