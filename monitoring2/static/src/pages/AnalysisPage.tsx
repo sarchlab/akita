@@ -16,7 +16,9 @@ interface BufferState {
 }
 
 interface SethNode {
+  k: number;
   v?: unknown;
+  l?: number;
 }
 
 interface SethSnapshot {
@@ -53,23 +55,37 @@ function fieldRequestPath(componentName: string, fieldName: string) {
   )}`;
 }
 
-function numericSnapshotValue(snapshot: SethSnapshot) {
+function watchedSnapshotValue(snapshot: SethSnapshot, sampleKind: WatchedProperty["sampleKind"]) {
   const node = snapshot.dict[snapshot.r];
-  const value = node?.v;
+  if (!node) {
+    return null;
+  }
+
+  if (sampleKind === "count") {
+    if (node.k === 0) {
+      return 0;
+    }
+
+    if (typeof node.l === "number" && Number.isFinite(node.l)) {
+      return node.l;
+    }
+
+    if (Array.isArray(node.v)) {
+      return node.v.length;
+    }
+
+    if (node.v && typeof node.v === "object") {
+      return Object.keys(node.v).length;
+    }
+
+    return null;
+  }
+
+  const value = node.v;
 
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
   }
-
-  if (typeof value === "boolean") {
-    return value ? 1 : 0;
-  }
-
-  if (typeof value === "string") {
-    const numericValue = Number(value);
-    return Number.isFinite(numericValue) ? numericValue : null;
-  }
-
   return null;
 }
 
@@ -89,7 +105,7 @@ async function fetchWatchedPropertyValue(property: WatchedProperty) {
     throw new Error(`${response.status} ${response.statusText}`);
   }
 
-  return numericSnapshotValue((await response.json()) as SethSnapshot);
+  return watchedSnapshotValue((await response.json()) as SethSnapshot, property.sampleKind);
 }
 
 function useBuffers(sortMethod: "percent" | "level") {
@@ -251,7 +267,9 @@ function PropertyChart({
       <div className="mb-1 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate text-xs font-semibold">{property.field}</div>
-          <div className="truncate text-[11px] text-muted-foreground">{property.component}</div>
+          <div className="truncate text-[11px] text-muted-foreground">
+            {property.component} - {property.sampleKind === "count" ? "element count" : "value"}
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <div className="font-mono text-xs font-semibold">

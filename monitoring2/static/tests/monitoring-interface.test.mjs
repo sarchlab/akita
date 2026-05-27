@@ -52,6 +52,11 @@ test("monitoring2 page supports component selection and tracing controls", async
   assert.match(page, /ChevronDown/);
   assert.match(page, /Flag/);
   assert.match(page, /FlagOff/);
+  assert.match(page, /INTEGER_KINDS/);
+  assert.match(page, /FLOAT_KINDS/);
+  assert.match(page, /MAP_KIND/);
+  assert.match(page, /SLICE_KIND/);
+  assert.match(page, /monitorSampleKind/);
   assert.match(page, /addWatchedProperty/);
   assert.match(page, /removeWatchedProperty/);
   assert.match(page, /subscribeToWatchedProperties/);
@@ -106,6 +111,10 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(analysisPage, /PROPERTY_SAMPLE_INTERVAL_MS = 1000/);
   assert.match(analysisPage, /MAX_PROPERTY_SAMPLES = 120/);
   assert.match(analysisPage, /PropertyChart/);
+  assert.match(analysisPage, /watchedSnapshotValue/);
+  assert.match(analysisPage, /sampleKind === "count"/);
+  assert.doesNotMatch(analysisPage, /typeof value === "boolean"/);
+  assert.doesNotMatch(analysisPage, /Number\(value\)/);
   assert.match(analysisPage, /getWatchedProperties/);
   assert.match(analysisPage, /subscribeToWatchedProperties/);
   assert.match(analysisPage, /Waiting for numeric samples/);

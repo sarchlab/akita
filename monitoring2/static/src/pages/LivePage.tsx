@@ -9,6 +9,7 @@ import {
   getWatchedProperties,
   removeWatchedProperty,
   subscribeToWatchedProperties,
+  type WatchedPropertySampleKind,
   watchedPropertyID,
 } from "../utils/watchedProperties";
 
@@ -63,6 +64,11 @@ const MONITOR_SECTIONS: MonitorSectionConfig[] = [
   { id: "state", title: "State", fieldPaths: ["State", "Component.State"] },
 ];
 
+const INTEGER_KINDS = new Set([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+const FLOAT_KINDS = new Set([13, 14]);
+const MAP_KIND = 21;
+const SLICE_KIND = 23;
+
 function rootNode(snapshot: SethSnapshot | null): SethNode | null {
   if (!snapshot) {
     return null;
@@ -80,7 +86,23 @@ function isContainerNode(node: SethNode | null) {
     return false;
   }
 
-  return node.k === 21 || node.k === 23 || node.k === 25;
+  return node.k === MAP_KIND || node.k === SLICE_KIND || node.k === 25;
+}
+
+function monitorSampleKind(node: SethNode | null): WatchedPropertySampleKind | null {
+  if (!node) {
+    return null;
+  }
+
+  if (INTEGER_KINDS.has(node.k) || FLOAT_KINDS.has(node.k)) {
+    return "value";
+  }
+
+  if (node.k === MAP_KIND || node.k === SLICE_KIND) {
+    return "count";
+  }
+
+  return null;
 }
 
 function isExpandableNode(node: SethNode | null) {
@@ -259,7 +281,7 @@ function SethRows({
   onFocus: (path: SethPathSegment[]) => void;
   selectedComponent: string;
   watchedPropertyIDs: Set<string>;
-  onToggleWatch: (path: SethPathSegment[], node: SethNode) => void;
+  onToggleWatch: (path: SethPathSegment[], node: SethNode, sampleKind: WatchedPropertySampleKind) => void;
   expandedFields?: Record<string, ExpandedFieldState>;
   depth?: number;
   framed?: boolean;
@@ -283,7 +305,8 @@ function SethRows({
         const expandedField = expandedFields[childPathID];
         const expandedRoot = rootNode(expandedField?.snapshot ?? null);
         const expandable = isExpandableNode(child);
-        const watchable = child !== null && !isContainerNode(child);
+        const sampleKind = monitorSampleKind(child);
+        const watchable = sampleKind !== null;
         const watched = watchable && watchedPropertyIDs.has(watchedPropertyID(selectedComponent, childPathID));
         const nested = child && isContainerNode(child) && child.v !== undefined && depth < 2;
         const actionLabel = expandedField?.loading
@@ -327,8 +350,10 @@ function SethRows({
                     watched ? "text-primary" : "text-muted-foreground"
                   }`}
                   onClick={() => {
-                    onSelect({ path: childPath, node: child });
-                    onToggleWatch(childPath, child);
+                    if (child && sampleKind) {
+                      onSelect({ path: childPath, node: child });
+                      onToggleWatch(childPath, child, sampleKind);
+                    }
                   }}
                 >
                   {watched ? <FlagOff className="h-4 w-4" /> : <Flag className="h-4 w-4" />}
@@ -416,7 +441,7 @@ function MonitorSectionView({
   onOpenField: (sectionID: MonitorSectionID, path: SethPathSegment[]) => void;
   selectedComponent: string;
   watchedPropertyIDs: Set<string>;
-  onToggleWatch: (path: SethPathSegment[], node: SethNode) => void;
+  onToggleWatch: (path: SethPathSegment[], node: SethNode, sampleKind: WatchedPropertySampleKind) => void;
 }) {
   const root = rootNode(state.snapshot);
 
@@ -626,7 +651,7 @@ export default function LivePage() {
   };
 
   const toggleWatchedProperty = useCallback(
-    (path: SethPathSegment[], node: SethNode) => {
+    (path: SethPathSegment[], node: SethNode, sampleKind: WatchedPropertySampleKind) => {
       if (!selectedComponent) {
         return;
       }
@@ -637,7 +662,12 @@ export default function LivePage() {
       if (watchedPropertyIDs.has(id)) {
         removeWatchedProperty(selectedComponent, fieldName);
       } else {
-        addWatchedProperty(selectedComponent, fieldName, `${selectedComponent}.${fieldName}`);
+        addWatchedProperty(
+          selectedComponent,
+          fieldName,
+          sampleKind,
+          `${selectedComponent}.${fieldName}`,
+        );
       }
 
       setSelected({ path, node });

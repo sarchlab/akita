@@ -3,10 +3,13 @@ export interface WatchedProperty {
   component: string;
   field: string;
   label: string;
+  sampleKind: WatchedPropertySampleKind;
 }
 
 const STORAGE_KEY = "akita-monitoring2-watched-properties";
 const CHANGE_EVENT = "akita-monitoring2-watched-properties-change";
+
+export type WatchedPropertySampleKind = "value" | "count";
 
 export function watchedPropertyID(component: string, field: string) {
   return `${encodeURIComponent(component)}|${encodeURIComponent(field)}`;
@@ -32,7 +35,12 @@ export function isPropertyWatched(component: string, field: string) {
   return getWatchedProperties().some((property) => property.id === id);
 }
 
-export function addWatchedProperty(component: string, field: string, label = field) {
+export function addWatchedProperty(
+  component: string,
+  field: string,
+  sampleKind: WatchedPropertySampleKind,
+  label = field,
+) {
   const id = watchedPropertyID(component, field);
   const properties = getWatchedProperties();
 
@@ -40,7 +48,7 @@ export function addWatchedProperty(component: string, field: string, label = fie
     return;
   }
 
-  writeWatchedProperties([...properties, { id, component, field, label }]);
+  writeWatchedProperties([...properties, { id, component, field, label, sampleKind }]);
 }
 
 export function removeWatchedProperty(component: string, field: string) {
@@ -73,6 +81,11 @@ function isWatchedProperty(value: unknown): value is WatchedProperty {
     typeof property.id === "string" &&
     typeof property.component === "string" &&
     typeof property.field === "string" &&
-    typeof property.label === "string"
+    typeof property.label === "string" &&
+    isWatchedPropertySampleKind(property.sampleKind)
   );
+}
+
+function isWatchedPropertySampleKind(value: unknown): value is WatchedPropertySampleKind {
+  return value === "value" || value === "count";
 }
