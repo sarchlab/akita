@@ -1,9 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Flag, FlagOff, LoaderCircle, Pause, Play, RefreshCcw, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronRight, Flag, FlagOff, LoaderCircle, RefreshCcw, Search } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { useEngineTime } from "../hooks/useEngineTime";
-import { formatPicosecondsAsNanoseconds } from "../utils/smartValue";
 import {
   addWatchedProperty,
   getWatchedProperties,
@@ -64,6 +62,7 @@ const MONITOR_SECTIONS: MonitorSectionConfig[] = [
   { id: "state", title: "State", fieldPaths: ["State", "Component.State"] },
 ];
 
+const PROPERTY_REFRESH_INTERVAL_MS = 2000;
 const INTEGER_KINDS = new Set([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 const FLOAT_KINDS = new Set([13, 14]);
 const MAP_KIND = 21;
@@ -227,7 +226,7 @@ function childRows(snapshot: SethSnapshot, node: SethNode) {
 function useComponentNames() {
   const [components, setComponents] = useState<string[]>([]);
 
-  const refresh = useCallback(() => {
+  useEffect(() => {
     fetch("/api/list_components")
       .then((response) => (response.ok ? response.json() : []))
       .then((json: unknown) => {
@@ -236,20 +235,7 @@ function useComponentNames() {
       .catch(() => setComponents([]));
   }, []);
 
-  useEffect(() => {
-    refresh();
-    const id = window.setInterval(refresh, 2000);
-    return () => window.clearInterval(id);
-  }, [refresh]);
-
-  return { components, refresh };
-}
-
-async function post(path: string) {
-  const response = await fetch(path, { method: "POST" });
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
-  }
+  return { components };
 }
 
 async function fetchSnapshot(path: string) {
@@ -327,17 +313,17 @@ function SethRows({
 
         return (
           <div key={`${fieldPath(childPath)}-${row.valueID}`} className="border-b last:border-b-0">
-            <div className="grid w-full grid-cols-[minmax(8rem,16rem)_minmax(10rem,1fr)_minmax(8rem,16rem)_auto_auto] items-center gap-3 px-3 py-2 text-sm hover:bg-slate-50">
+            <div className="grid min-h-11 w-full grid-cols-[minmax(8rem,16rem)_minmax(10rem,1fr)_minmax(7rem,12rem)_2.25rem_2.25rem] items-center gap-3 px-3 py-2 text-sm hover:bg-slate-50">
               <button
                 type="button"
-                className="col-span-3 grid min-w-0 grid-cols-[minmax(8rem,16rem)_minmax(10rem,1fr)_minmax(8rem,16rem)] items-center gap-3 text-left"
+                className="contents text-left"
                 onClick={() => child && onSelect({ path: childPath, node: child })}
               >
                 <span className="min-w-0 truncate font-medium">{row.label}</span>
                 <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
                   {typeLabel(child)}
                 </span>
-                <span className="min-w-0 truncate text-right font-mono text-xs text-slate-700">
+                <span className="min-w-0 justify-self-end truncate text-right font-mono text-xs tabular-nums text-slate-700">
                   {!expandable ? primitivePreview(child) : ""}
                 </span>
               </button>
@@ -346,7 +332,7 @@ function SethRows({
                   type="button"
                   aria-label={`${watched ? "Stop monitoring" : "Monitor"} ${childPathID}`}
                   title={watched ? "Stop monitoring" : "Monitor property"}
-                  className={`inline-flex h-7 w-7 items-center justify-center justify-self-end rounded hover:bg-primary/10 ${
+                  className={`inline-flex h-8 w-8 items-center justify-center justify-self-center rounded hover:bg-primary/10 ${
                     watched ? "text-primary" : "text-muted-foreground"
                   }`}
                   onClick={() => {
@@ -359,14 +345,14 @@ function SethRows({
                   {watched ? <FlagOff className="h-4 w-4" /> : <Flag className="h-4 w-4" />}
                 </button>
               ) : (
-                <span />
+                <span className="h-8 w-8 justify-self-center" />
               )}
               {expandable ? (
                 <button
                   type="button"
                   aria-label={`${actionLabel} ${childPathID}`}
                   title={actionLabel}
-                  className="inline-flex h-7 w-7 items-center justify-center justify-self-end rounded text-primary hover:bg-primary/10 disabled:text-muted-foreground disabled:hover:bg-transparent"
+                  className="inline-flex h-8 w-8 items-center justify-center justify-self-center rounded text-primary hover:bg-primary/10 disabled:text-muted-foreground disabled:hover:bg-transparent"
                   disabled={!canToggle}
                   onClick={() => {
                     if (child) {
@@ -377,7 +363,9 @@ function SethRows({
                 >
                   <ActionIcon className={`h-4 w-4 ${expandedField?.loading ? "animate-spin" : ""}`} />
                 </button>
-              ) : null}
+              ) : (
+                <span className="h-8 w-8 justify-self-center" />
+              )}
             </div>
             {expandedField ? (
               <div className="border-t bg-slate-50/60 p-2 pl-6">
@@ -480,19 +468,19 @@ function MonitorSectionView({
 }
 
 export default function LivePage() {
-  const now = useEngineTime(500);
-  const { components, refresh: refreshComponents } = useComponentNames();
+  const { components } = useComponentNames();
   const [filter, setFilter] = useState("");
   const [selectedComponent, setSelectedComponent] = useState("");
   const [sectionRefreshID, setSectionRefreshID] = useState(0);
+  const [autoRefreshProperties, setAutoRefreshProperties] = useState(false);
   const [sections, setSections] = useState<Record<MonitorSectionID, MonitorSectionState>>(() =>
     emptyMonitorSections(),
   );
   const [selected, setSelected] = useState<SelectedNode | null>(null);
+  const previousComponentRef = useRef("");
   const [watchedPropertyIDs, setWatchedPropertyIDs] = useState<Set<string>>(() =>
     new Set(getWatchedProperties().map((property) => property.id)),
   );
-  const [status, setStatus] = useState("");
 
   useEffect(() => {
     if (!selectedComponent && components.length) {
@@ -509,14 +497,20 @@ export default function LivePage() {
   }, [components, filter]);
 
   useEffect(() => {
+    const componentChanged = previousComponentRef.current !== selectedComponent;
+    previousComponentRef.current = selectedComponent;
+
     if (!selectedComponent) {
+      setSelected(null);
       setSections(emptyMonitorSections());
       return;
     }
 
     let cancelled = false;
-    setSelected(null);
-    setSections(emptyMonitorSections(true));
+    if (componentChanged) {
+      setSelected(null);
+      setSections(emptyMonitorSections(true));
+    }
 
     MONITOR_SECTIONS.forEach((section) => {
       const loadSection = async () => {
@@ -528,7 +522,13 @@ export default function LivePage() {
             if (!cancelled) {
               setSections((previous) => ({
                 ...previous,
-                [section.id]: { fieldName, snapshot: nextSnapshot, loading: false, error: null, expanded: {} },
+                [section.id]: {
+                  fieldName,
+                  snapshot: nextSnapshot,
+                  loading: false,
+                  error: null,
+                  expanded: componentChanged ? {} : previous[section.id].expanded,
+                },
               }));
             }
             return;
@@ -542,10 +542,10 @@ export default function LivePage() {
             ...previous,
             [section.id]: {
               fieldName: section.fieldPaths[0],
-              snapshot: null,
+              snapshot: componentChanged ? null : previous[section.id].snapshot,
               loading: false,
               error: lastError instanceof Error ? lastError.message : `${section.title} unavailable`,
-              expanded: {},
+              expanded: componentChanged ? {} : previous[section.id].expanded,
             },
           }));
         }
@@ -558,6 +558,18 @@ export default function LivePage() {
       cancelled = true;
     };
   }, [sectionRefreshID, selectedComponent]);
+
+  useEffect(() => {
+    if (!autoRefreshProperties || !selectedComponent) {
+      return;
+    }
+
+    const id = window.setInterval(() => {
+      setSectionRefreshID((previous) => previous + 1);
+    }, PROPERTY_REFRESH_INTERVAL_MS);
+
+    return () => window.clearInterval(id);
+  }, [autoRefreshProperties, selectedComponent]);
 
   useEffect(
     () =>
@@ -635,16 +647,6 @@ export default function LivePage() {
     [sections, selectedComponent],
   );
 
-  const runAction = async (label: string, action: () => Promise<void>) => {
-    setStatus(`${label}...`);
-    try {
-      await action();
-      setStatus(`${label} complete`);
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : `${label} failed`);
-    }
-  };
-
   const chooseComponent = (component: string) => {
     setSelectedComponent(component);
     setSelected(null);
@@ -680,22 +682,6 @@ export default function LivePage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-slate-50">
-      <div className="flex min-h-14 flex-wrap items-center gap-2 border-b bg-white px-4 py-2">
-        <div className="mr-4 text-sm">
-          <span className="text-muted-foreground">Engine time</span>
-          <span className="ml-2 font-semibold">{now == null ? "-" : formatPicosecondsAsNanoseconds(now)}</span>
-        </div>
-        <Button type="button" size="sm" onClick={() => runAction("Continue", () => post("/api/continue"))}>
-          <Play /> Continue
-        </Button>
-        <Button type="button" size="sm" variant="outline" onClick={() => runAction("Pause", () => post("/api/pause"))}>
-          <Pause /> Pause
-        </Button>
-        <div className="ml-auto text-xs text-muted-foreground">
-          {status ? <span>{status}</span> : null}
-        </div>
-      </div>
-
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <aside className="flex w-80 shrink-0 flex-col border-r bg-white">
           <div className="border-b p-3">
@@ -706,9 +692,6 @@ export default function LivePage() {
                 placeholder="Filter components"
                 onChange={(event) => setFilter(event.target.value)}
               />
-              <Button type="button" variant="outline" size="icon" onClick={refreshComponents}>
-                <RefreshCcw />
-              </Button>
             </div>
             <div className="text-xs text-muted-foreground">{components.length} components</div>
           </div>
@@ -737,6 +720,16 @@ export default function LivePage() {
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold">{selectedComponent || "No component selected"}</div>
             </div>
+            <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-primary"
+                checked={autoRefreshProperties}
+                disabled={!selectedComponent}
+                onChange={(event) => setAutoRefreshProperties(event.target.checked)}
+              />
+              Auto refresh
+            </label>
             <Button
               type="button"
               size="sm"
@@ -744,7 +737,7 @@ export default function LivePage() {
               disabled={!selectedComponent}
               onClick={() => setSectionRefreshID((previous) => previous + 1)}
             >
-              <RefreshCcw /> Refresh
+              <RefreshCcw /> Refresh Properties
             </Button>
           </div>
 

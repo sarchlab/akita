@@ -1,5 +1,7 @@
 import { Activity, Bug, Gauge, ListChecks, Monitor as MonitorIcon } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
+import { PropertyMonitoringCollector } from "../hooks/usePropertyMonitoringSamples";
+import { ResourceUsageCollector } from "../hooks/useResourceUsageHistory";
 
 const navItems = [
   { to: "/execution", label: "Execution", icon: ListChecks },
@@ -12,6 +14,8 @@ const navItems = [
 export default function Layout() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      <PropertyMonitoringCollector />
+      <ResourceUsageCollector />
       <nav className="monitor-top-nav">
         <div className="monitor-brand">AkitaRTM</div>
         <div className="monitor-nav-tabs" role="tablist" aria-label="Monitor views">

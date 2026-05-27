@@ -1,24 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { Activity, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "../components/ui/button";
-
-interface ResourceResponse {
-  cpu_percent: number;
-  memory_size: number;
-}
-
-interface ResourcePoint extends ResourceResponse {
-  timestamp: number;
-}
-
-interface MinuteResourcePoint extends ResourcePoint {
-  samples: number;
-}
-
-interface ResourceHistory {
-  seconds: ResourcePoint[];
-  minutes: MinuteResourcePoint[];
-}
+import {
+  MAX_MINUTE_SAMPLES,
+  MAX_SECOND_SAMPLES,
+  type MinuteResourcePoint,
+  type ResourcePoint,
+  useResourceUsageHistory,
+} from "../hooks/useResourceUsageHistory";
 
 interface ProfileSummary {
   samples: number;
@@ -62,9 +51,6 @@ interface ProfileValueInfo {
   label: string;
 }
 
-const RESOURCE_SAMPLE_INTERVAL_MS = 1000;
-const MAX_SECOND_SAMPLES = 60;
-const MAX_MINUTE_SAMPLES = 60;
 const CALL_GRAPH_MIN_SCALE = 0.35;
 const CALL_GRAPH_MAX_SCALE = 4;
 const CALL_GRAPH_BUTTON_ZOOM_STEP = 1.2;
@@ -102,66 +88,6 @@ function formatBytes(bytes: number | null | undefined) {
 
   const digits = value >= 10 || unitIndex === 0 ? 0 : 1;
   return `${value.toFixed(digits)} ${units[unitIndex]}`;
-}
-
-function useResourceUsage() {
-  const [history, setHistory] = useState<ResourceHistory>({ seconds: [], minutes: [] });
-
-  const refresh = useCallback(() => {
-    fetch("/api/resource")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((json: unknown) => {
-        if (!json || typeof json !== "object") {
-          return;
-        }
-
-        const resource = json as Partial<ResourceResponse>;
-        const nextResources = {
-          cpu_percent: typeof resource.cpu_percent === "number" ? resource.cpu_percent : 0,
-          memory_size: typeof resource.memory_size === "number" ? resource.memory_size : 0,
-        };
-        const nextPoint = { ...nextResources, timestamp: Date.now() };
-
-        setHistory((previous) => {
-          const seconds = [...previous.seconds, nextPoint].slice(-MAX_SECOND_SAMPLES);
-          const minuteTimestamp = Math.floor(nextPoint.timestamp / 60000) * 60000;
-          const lastMinute = previous.minutes[previous.minutes.length - 1];
-          let minutes: MinuteResourcePoint[];
-
-          if (lastMinute?.timestamp === minuteTimestamp) {
-            const samples = lastMinute.samples + 1;
-            const updatedMinute = {
-              timestamp: minuteTimestamp,
-              samples,
-              cpu_percent:
-                (lastMinute.cpu_percent * lastMinute.samples + nextPoint.cpu_percent) /
-                samples,
-              memory_size:
-                (lastMinute.memory_size * lastMinute.samples + nextPoint.memory_size) /
-                samples,
-            };
-
-            minutes = [...previous.minutes.slice(0, -1), updatedMinute];
-          } else {
-            minutes = [
-              ...previous.minutes,
-              { ...nextResources, timestamp: minuteTimestamp, samples: 1 },
-            ];
-          }
-
-          return { seconds, minutes: minutes.slice(-MAX_MINUTE_SAMPLES) };
-        });
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    refresh();
-    const id = window.setInterval(refresh, RESOURCE_SAMPLE_INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [refresh]);
-
-  return { history };
 }
 
 function getArray(value: Record<string, unknown>, lower: string, upper: string): unknown[] {
@@ -477,7 +403,7 @@ function summarizeProfile(profile: unknown): ProfileSummary {
 }
 
 export default function ProfilingPage() {
-  const { history } = useResourceUsage();
+  const { history } = useResourceUsageHistory();
   const [profileSeconds, setProfileSeconds] = useState(1);
   const [profileStatus, setProfileStatus] = useState("");
   const [profileSummary, setProfileSummary] = useState<ProfileSummary | null>(null);

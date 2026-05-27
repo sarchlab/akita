@@ -50,6 +50,8 @@ type Monitor struct {
 	// Internal state.
 	components       []messaging.Component
 	buffers          []bufferState
+	engineControlMu  sync.Mutex
+	enginePaused     bool
 	progressBarsLock sync.Mutex
 	progressBars     []*daisen2.ProgressBar
 	httpServer       *http.Server
@@ -151,6 +153,7 @@ func (m *Monitor) StartServer() {
 	mux.HandleFunc("/api/mode", m.apiMode)
 	mux.HandleFunc("/api/pause", m.pauseEngine)
 	mux.HandleFunc("/api/continue", m.continueEngine)
+	mux.HandleFunc("/api/engine/state", m.apiEngineState)
 	mux.HandleFunc("/api/now", m.now)
 	mux.HandleFunc("/api/run", m.run)
 	mux.HandleFunc("/api/tick/", m.tick)
@@ -327,26 +330,81 @@ func (m *Monitor) serveIndex(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (m *Monitor) pauseEngine(w http.ResponseWriter, _ *http.Request) {
-	m.engine.Pause()
-	_, err := w.Write(nil)
-
-	if err != nil {
-		log.Panic(err)
+	m.engineControlMu.Lock()
+	if !m.enginePaused {
+		m.engine.Pause()
+		m.enginePaused = true
 	}
+	response := m.engineStateResponseLocked()
+	m.engineControlMu.Unlock()
+
+	m.writeEngineState(w, response)
 }
 
 func (m *Monitor) continueEngine(w http.ResponseWriter, _ *http.Request) {
-	m.engine.Continue()
-	_, err := w.Write(nil)
+	m.engineControlMu.Lock()
+	if m.enginePaused {
+		m.engine.Continue()
+		m.enginePaused = false
+	}
+	response := m.engineStateResponseLocked()
+	m.engineControlMu.Unlock()
 
-	if err != nil {
-		log.Panic(err)
+	m.writeEngineState(w, response)
+}
+
+type engineStateRsp struct {
+	State  string `json:"state"`
+	Paused bool   `json:"paused"`
+}
+
+func (m *Monitor) apiEngineState(w http.ResponseWriter, _ *http.Request) {
+	m.engineControlMu.Lock()
+	response := m.engineStateResponseLocked()
+	m.engineControlMu.Unlock()
+
+	m.writeEngineState(w, response)
+}
+
+func (m *Monitor) engineStateResponseLocked() engineStateRsp {
+	if m.enginePaused {
+		return engineStateRsp{State: "paused", Paused: true}
+	}
+
+	return engineStateRsp{State: "running", Paused: false}
+}
+
+func (m *Monitor) writeEngineState(w http.ResponseWriter, response engineStateRsp) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+		http.Error(w, "Internal Server Error",
+			http.StatusInternalServerError)
 	}
 }
 
 func (m *Monitor) now(w http.ResponseWriter, _ *http.Request) {
 	nowTime := m.engine.CurrentTime()
 	fmt.Fprintf(w, "{\"now\":%d}", nowTime)
+}
+
+func (m *Monitor) pauseForInspection() func() {
+	m.engineControlMu.Lock()
+
+	if m.enginePaused {
+		return func() {
+			m.engineControlMu.Unlock()
+		}
+	}
+
+	m.engine.Pause()
+
+	return func() {
+		m.engine.Continue()
+		m.engineControlMu.Unlock()
+	}
 }
 
 func (m *Monitor) run(_ http.ResponseWriter, _ *http.Request) {
@@ -405,8 +463,8 @@ func (m *Monitor) listComponentDetails(
 		return
 	}
 
-	m.engine.Pause()
-	defer m.engine.Continue()
+	resume := m.pauseForInspection()
+	defer resume()
 
 	serializer := goseth.NewSerializer()
 	serializer.SetRoot(component)
@@ -440,8 +498,8 @@ func (m *Monitor) listFieldValue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m.engine.Pause()
-	defer m.engine.Continue()
+	resume := m.pauseForInspection()
+	defer resume()
 
 	serializer := goseth.NewSerializer()
 	serializer.SetRoot(component)

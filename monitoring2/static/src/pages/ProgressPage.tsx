@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ListChecks, Play, Square } from "lucide-react";
+import { Pause, Play, Square } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { useEngineTime } from "../hooks/useEngineTime";
 import { formatPicosecondsAsNanoseconds } from "../utils/smartValue";
@@ -25,6 +25,8 @@ interface ExecutionInfoEntry {
   property: string;
   value: string;
 }
+
+type EngineState = "running" | "paused";
 
 function isProgressBarState(value: unknown): value is ProgressBarState {
   if (!value || typeof value !== "object") {
@@ -64,6 +66,47 @@ function isExecutionInfoEntry(value: unknown): value is ExecutionInfoEntry {
 
   const entry = value as Partial<ExecutionInfoEntry>;
   return typeof entry.property === "string" && typeof entry.value === "string";
+}
+
+function parseEngineState(value: unknown): EngineState | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const response = value as { paused?: unknown; state?: unknown };
+  if (typeof response.paused === "boolean") {
+    return response.paused ? "paused" : "running";
+  }
+
+  if (response.state === "paused" || response.state === "running") {
+    return response.state;
+  }
+
+  return null;
+}
+
+function useEngineState() {
+  const [engineState, setEngineState] = useState<EngineState>("running");
+
+  const refresh = useCallback(() => {
+    fetch("/api/engine/state")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((json: unknown) => {
+        const nextState = parseEngineState(json);
+        if (nextState) {
+          setEngineState(nextState);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const id = window.setInterval(refresh, 1000);
+    return () => window.clearInterval(id);
+  }, [refresh]);
+
+  return { engineState, setEngineState, refresh };
 }
 
 function useProgressBars() {
@@ -200,14 +243,39 @@ function formatBytes(bytes: number) {
 
 export default function ProgressPage() {
   const now = useEngineTime(500);
+  const { engineState, setEngineState, refresh: refreshEngineState } = useEngineState();
   const { progressBars } = useProgressBars();
   const { entries: executionInfo } = useExecutionInfo();
   const { isTracing, refresh: refreshTraceStatus } = useTraceStatus();
   const { storage, refresh: refreshTraceStorage } = useTraceStorage();
+  const [controlError, setControlError] = useState("");
+  const [controlBusy, setControlBusy] = useState(false);
   const [traceStatus, setTraceStatus] = useState("");
+  const isPaused = engineState === "paused";
+  const controlActionLabel = isPaused ? "Continue simulation" : "Pause simulation";
+  const ControlActionIcon = isPaused ? Play : Pause;
   const traceActionLabel = isTracing ? "Stop tracing" : "Start tracing";
   const TraceActionIcon = isTracing ? Square : Play;
   const sqliteBytes = storage?.total_size_bytes ?? storage?.file_size_bytes;
+  const executionCardClass = isPaused
+    ? "rounded border-2 border-amber-500 bg-white p-4"
+    : "rounded border-2 border-emerald-500 bg-white p-4";
+
+  const runEngineControl = async () => {
+    const nextState: EngineState = isPaused ? "running" : "paused";
+    setControlBusy(true);
+    setControlError("");
+
+    try {
+      await post(isPaused ? "/api/continue" : "/api/pause");
+      setEngineState(nextState);
+      refreshEngineState();
+    } catch (err) {
+      setControlError(err instanceof Error ? err.message : `${controlActionLabel} failed`);
+    } finally {
+      setControlBusy(false);
+    }
+  };
 
   const runTraceAction = async (label: string, action: () => Promise<void>) => {
     setTraceStatus(`${label}...`);
@@ -222,16 +290,28 @@ export default function ProgressPage() {
   return (
     <div className="h-full overflow-auto bg-slate-50 p-4">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
-        <header className="flex flex-wrap items-center gap-4 border-b bg-white px-4 py-4">
-          <ListChecks className="h-5 w-5 text-muted-foreground" />
-          <div className="min-w-0 flex-1">
-            <h1 className="text-base font-semibold">Execution</h1>
-          </div>
-          <div className="flex items-baseline gap-3 text-right">
-            <span className="text-xs font-medium text-muted-foreground">Current Virtual Time</span>
-            <span className="font-mono text-xl font-semibold">
-              {now == null ? "-" : formatPicosecondsAsNanoseconds(now)}
-            </span>
+        <header className={executionCardClass}>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="text-xs font-medium text-muted-foreground">Current Virtual Time</div>
+              <div className="mt-1 font-mono text-xl font-semibold">
+                {now == null ? "-" : formatPicosecondsAsNanoseconds(now)}
+              </div>
+            </div>
+            <div className="ml-auto flex items-center gap-3">
+              {controlError ? <div className="max-w-56 text-right text-xs text-destructive">{controlError}</div> : null}
+              <Button
+                type="button"
+                size="sm"
+                variant={isPaused ? "default" : "outline"}
+                className="min-w-[7.5rem]"
+                disabled={controlBusy}
+                aria-label={controlActionLabel}
+                onClick={runEngineControl}
+              >
+                <ControlActionIcon /> {isPaused ? "Continue" : "Pause"}
+              </Button>
+            </div>
           </div>
         </header>
 
