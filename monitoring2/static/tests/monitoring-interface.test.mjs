@@ -90,7 +90,9 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.doesNotMatch(livePage, /\/api\/hangdetector\/buffers/);
   assert.doesNotMatch(livePage, /monitorTab ===/);
   assert.match(analysisPage, /Analysis/);
-  assert.match(analysisPage, /Aggregate Buffer Level/);
+  assert.doesNotMatch(analysisPage, /Aggregate Buffer Level/);
+  assert.doesNotMatch(analysisPage, /totalPercent/);
+  assert.doesNotMatch(analysisPage, /totals/);
   assert.match(analysisPage, /\/api\/hangdetector\/buffers/);
   assert.match(analysisPage, /limit=256/);
   assert.match(analysisPage, /repeat\(auto-fill,minmax\(11rem,1fr\)\)/);

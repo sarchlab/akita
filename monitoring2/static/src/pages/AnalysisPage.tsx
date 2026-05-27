@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Gauge } from "lucide-react";
 import { Button } from "../components/ui/button";
 
@@ -66,20 +66,6 @@ export default function AnalysisPage() {
   const [sortMethod, setSortMethod] = useState<"percent" | "level">("percent");
   const { buffers } = useBuffers(sortMethod);
 
-  const totals = useMemo(
-    () =>
-      buffers.reduce(
-        (acc, buffer) => ({
-          level: acc.level + buffer.level,
-          cap: acc.cap + buffer.cap,
-        }),
-        { level: 0, cap: 0 },
-      ),
-    [buffers],
-  );
-
-  const totalPercent = totals.cap ? Math.min(1, totals.level / totals.cap) : 0;
-
   return (
     <div className="h-full overflow-auto bg-slate-50 p-3">
       <div className="mx-auto flex max-w-[96rem] flex-col gap-3">
@@ -107,21 +93,6 @@ export default function AnalysisPage() {
             </Button>
           </div>
         </header>
-
-        <section className="rounded border bg-white px-4 py-3">
-          <div className="grid gap-3 sm:grid-cols-[11rem_minmax(0,1fr)_auto] sm:items-center">
-            <div>
-              <div className="text-sm font-semibold">Aggregate Buffer Level</div>
-              <div className="mt-1 text-xs text-muted-foreground">{buffers.length} buffers</div>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-              <div className="h-full bg-amber-500" style={{ width: `${totalPercent * 100}%` }} />
-            </div>
-            <div className="font-mono text-xs text-muted-foreground">
-              {totals.level}/{totals.cap}
-            </div>
-          </div>
-        </section>
 
         <section>
           {buffers.length ? (
