@@ -50,6 +50,12 @@ test("monitoring2 page supports component selection and tracing controls", async
   assert.match(page, /disabled=\{!canToggle\}/);
   assert.match(page, /ChevronRight/);
   assert.match(page, /ChevronDown/);
+  assert.match(page, /Flag/);
+  assert.match(page, /FlagOff/);
+  assert.match(page, /addWatchedProperty/);
+  assert.match(page, /removeWatchedProperty/);
+  assert.match(page, /subscribeToWatchedProperties/);
+  assert.match(page, /Monitor property/);
   assert.match(page, /ActionIcon/);
   assert.match(page, /aria-label=\{`\$\{actionLabel\}/);
   assert.doesNotMatch(page, /Open Field/);
@@ -94,7 +100,15 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.doesNotMatch(analysisPage, /totalPercent/);
   assert.doesNotMatch(analysisPage, /totals/);
   assert.match(analysisPage, /\/api\/hangdetector\/buffers/);
+  assert.match(analysisPage, /\/api\/field\//);
+  assert.match(analysisPage, /\/api\/now/);
   assert.match(analysisPage, /limit=256/);
+  assert.match(analysisPage, /PROPERTY_SAMPLE_INTERVAL_MS = 1000/);
+  assert.match(analysisPage, /MAX_PROPERTY_SAMPLES = 120/);
+  assert.match(analysisPage, /PropertyChart/);
+  assert.match(analysisPage, /getWatchedProperties/);
+  assert.match(analysisPage, /subscribeToWatchedProperties/);
+  assert.match(analysisPage, /Waiting for numeric samples/);
   assert.match(analysisPage, /repeat\(auto-fill,minmax\(11rem,1fr\)\)/);
   assert.match(analysisPage, /bufferFillClass/);
   assert.doesNotMatch(analysisPage, /RefreshCcw/);

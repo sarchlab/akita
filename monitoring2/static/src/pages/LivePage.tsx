@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, LoaderCircle, Pause, Play, RefreshCcw, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Flag, FlagOff, LoaderCircle, Pause, Play, RefreshCcw, Search } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useEngineTime } from "../hooks/useEngineTime";
 import { formatPicosecondsAsNanoseconds } from "../utils/smartValue";
+import {
+  addWatchedProperty,
+  getWatchedProperties,
+  removeWatchedProperty,
+  subscribeToWatchedProperties,
+  watchedPropertyID,
+} from "../utils/watchedProperties";
 
 interface SethNode {
   k: number;
@@ -238,6 +245,9 @@ function SethRows({
   path,
   onSelect,
   onFocus,
+  selectedComponent,
+  watchedPropertyIDs,
+  onToggleWatch,
   expandedFields = {},
   depth = 0,
   framed = true,
@@ -247,6 +257,9 @@ function SethRows({
   path: SethPathSegment[];
   onSelect: (selection: SelectedNode) => void;
   onFocus: (path: SethPathSegment[]) => void;
+  selectedComponent: string;
+  watchedPropertyIDs: Set<string>;
+  onToggleWatch: (path: SethPathSegment[], node: SethNode) => void;
   expandedFields?: Record<string, ExpandedFieldState>;
   depth?: number;
   framed?: boolean;
@@ -270,6 +283,8 @@ function SethRows({
         const expandedField = expandedFields[childPathID];
         const expandedRoot = rootNode(expandedField?.snapshot ?? null);
         const expandable = isExpandableNode(child);
+        const watchable = child !== null && !isContainerNode(child);
+        const watched = watchable && watchedPropertyIDs.has(watchedPropertyID(selectedComponent, childPathID));
         const nested = child && isContainerNode(child) && child.v !== undefined && depth < 2;
         const actionLabel = expandedField?.loading
           ? "Loading"
@@ -289,26 +304,38 @@ function SethRows({
 
         return (
           <div key={`${fieldPath(childPath)}-${row.valueID}`} className="border-b last:border-b-0">
-            <div className="grid w-full grid-cols-[minmax(8rem,16rem)_minmax(10rem,1fr)_auto] items-center gap-3 px-3 py-2 text-sm hover:bg-slate-50">
+            <div className="grid w-full grid-cols-[minmax(8rem,16rem)_minmax(10rem,1fr)_minmax(8rem,16rem)_auto_auto] items-center gap-3 px-3 py-2 text-sm hover:bg-slate-50">
               <button
                 type="button"
-                className={`grid min-w-0 items-center gap-3 text-left ${
-                  expandable
-                    ? "col-span-2 grid-cols-[minmax(8rem,16rem)_minmax(10rem,1fr)]"
-                    : "col-span-3 grid-cols-[minmax(8rem,16rem)_minmax(10rem,1fr)_auto]"
-                }`}
+                className="col-span-3 grid min-w-0 grid-cols-[minmax(8rem,16rem)_minmax(10rem,1fr)_minmax(8rem,16rem)] items-center gap-3 text-left"
                 onClick={() => child && onSelect({ path: childPath, node: child })}
               >
                 <span className="min-w-0 truncate font-medium">{row.label}</span>
                 <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
                   {typeLabel(child)}
                 </span>
-                {!expandable ? (
-                  <span className="max-w-64 truncate text-right font-mono text-xs text-slate-700">
-                    {primitivePreview(child)}
-                  </span>
-                ) : null}
+                <span className="min-w-0 truncate text-right font-mono text-xs text-slate-700">
+                  {!expandable ? primitivePreview(child) : ""}
+                </span>
               </button>
+              {watchable ? (
+                <button
+                  type="button"
+                  aria-label={`${watched ? "Stop monitoring" : "Monitor"} ${childPathID}`}
+                  title={watched ? "Stop monitoring" : "Monitor property"}
+                  className={`inline-flex h-7 w-7 items-center justify-center justify-self-end rounded hover:bg-primary/10 ${
+                    watched ? "text-primary" : "text-muted-foreground"
+                  }`}
+                  onClick={() => {
+                    onSelect({ path: childPath, node: child });
+                    onToggleWatch(childPath, child);
+                  }}
+                >
+                  {watched ? <FlagOff className="h-4 w-4" /> : <Flag className="h-4 w-4" />}
+                </button>
+              ) : (
+                <span />
+              )}
               {expandable ? (
                 <button
                   type="button"
@@ -340,6 +367,9 @@ function SethRows({
                     path={childPath}
                     onSelect={onSelect}
                     onFocus={onFocus}
+                    selectedComponent={selectedComponent}
+                    watchedPropertyIDs={watchedPropertyIDs}
+                    onToggleWatch={onToggleWatch}
                     expandedFields={expandedFields}
                     depth={depth + 1}
                     framed={framed}
@@ -355,6 +385,9 @@ function SethRows({
                   path={childPath}
                   onSelect={onSelect}
                   onFocus={onFocus}
+                  selectedComponent={selectedComponent}
+                  watchedPropertyIDs={watchedPropertyIDs}
+                  onToggleWatch={onToggleWatch}
                   expandedFields={expandedFields}
                   depth={depth + 1}
                   framed={framed}
@@ -373,11 +406,17 @@ function MonitorSectionView({
   state,
   onSelect,
   onOpenField,
+  selectedComponent,
+  watchedPropertyIDs,
+  onToggleWatch,
 }: {
   config: MonitorSectionConfig;
   state: MonitorSectionState;
   onSelect: (selection: SelectedNode) => void;
   onOpenField: (sectionID: MonitorSectionID, path: SethPathSegment[]) => void;
+  selectedComponent: string;
+  watchedPropertyIDs: Set<string>;
+  onToggleWatch: (path: SethPathSegment[], node: SethNode) => void;
 }) {
   const root = rootNode(state.snapshot);
 
@@ -399,6 +438,9 @@ function MonitorSectionView({
             path={state.fieldName.split(".")}
             onSelect={onSelect}
             onFocus={(path) => onOpenField(config.id, path)}
+            selectedComponent={selectedComponent}
+            watchedPropertyIDs={watchedPropertyIDs}
+            onToggleWatch={onToggleWatch}
             expandedFields={state.expanded}
             framed={false}
           />
@@ -422,6 +464,9 @@ export default function LivePage() {
     emptyMonitorSections(),
   );
   const [selected, setSelected] = useState<SelectedNode | null>(null);
+  const [watchedPropertyIDs, setWatchedPropertyIDs] = useState<Set<string>>(() =>
+    new Set(getWatchedProperties().map((property) => property.id)),
+  );
   const [status, setStatus] = useState("");
 
   useEffect(() => {
@@ -488,6 +533,14 @@ export default function LivePage() {
       cancelled = true;
     };
   }, [sectionRefreshID, selectedComponent]);
+
+  useEffect(
+    () =>
+      subscribeToWatchedProperties(() => {
+        setWatchedPropertyIDs(new Set(getWatchedProperties().map((property) => property.id)));
+      }),
+    [],
+  );
 
   const openSectionField = useCallback(
     (sectionID: MonitorSectionID, path: SethPathSegment[]) => {
@@ -571,6 +624,26 @@ export default function LivePage() {
     setSelectedComponent(component);
     setSelected(null);
   };
+
+  const toggleWatchedProperty = useCallback(
+    (path: SethPathSegment[], node: SethNode) => {
+      if (!selectedComponent) {
+        return;
+      }
+
+      const fieldName = fieldPath(path);
+      const id = watchedPropertyID(selectedComponent, fieldName);
+
+      if (watchedPropertyIDs.has(id)) {
+        removeWatchedProperty(selectedComponent, fieldName);
+      } else {
+        addWatchedProperty(selectedComponent, fieldName, `${selectedComponent}.${fieldName}`);
+      }
+
+      setSelected({ path, node });
+    },
+    [selectedComponent, watchedPropertyIDs],
+  );
 
   const selectedPath = selected ? fieldPath(selected.path) : "";
   const selectedNode = selected?.node ?? null;
@@ -656,6 +729,9 @@ export default function LivePage() {
                       state={sections[section.id]}
                       onSelect={setSelected}
                       onOpenField={openSectionField}
+                      selectedComponent={selectedComponent}
+                      watchedPropertyIDs={watchedPropertyIDs}
+                      onToggleWatch={toggleWatchedProperty}
                     />
                   ))}
                 </div>

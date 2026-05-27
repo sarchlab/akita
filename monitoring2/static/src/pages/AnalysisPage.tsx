@@ -1,12 +1,38 @@
 import { useCallback, useEffect, useState } from "react";
-import { Gauge } from "lucide-react";
+import { Gauge, X } from "lucide-react";
 import { Button } from "../components/ui/button";
+import { formatPicosecondsAsNanoseconds } from "../utils/smartValue";
+import {
+  getWatchedProperties,
+  removeWatchedProperty,
+  subscribeToWatchedProperties,
+  type WatchedProperty,
+} from "../utils/watchedProperties";
 
 interface BufferState {
   buffer: string;
   level: number;
   cap: number;
 }
+
+interface SethNode {
+  v?: unknown;
+}
+
+interface SethSnapshot {
+  r: string;
+  dict: Record<string, SethNode>;
+}
+
+interface PropertySample {
+  timePs: number;
+  value: number;
+}
+
+type PropertySamples = Record<string, PropertySample[]>;
+
+const MAX_PROPERTY_SAMPLES = 120;
+const PROPERTY_SAMPLE_INTERVAL_MS = 1000;
 
 function isBufferState(value: unknown): value is BufferState {
   if (!value || typeof value !== "object") {
@@ -19,6 +45,51 @@ function isBufferState(value: unknown): value is BufferState {
     typeof buffer.level === "number" &&
     typeof buffer.cap === "number"
   );
+}
+
+function fieldRequestPath(componentName: string, fieldName: string) {
+  return `/api/field/${encodeURIComponent(
+    JSON.stringify({ comp_name: componentName, field_name: fieldName }),
+  )}`;
+}
+
+function numericSnapshotValue(snapshot: SethSnapshot) {
+  const node = snapshot.dict[snapshot.r];
+  const value = node?.v;
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "boolean") {
+    return value ? 1 : 0;
+  }
+
+  if (typeof value === "string") {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : null;
+  }
+
+  return null;
+}
+
+async function fetchEngineTime() {
+  const response = await fetch("/api/now");
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+
+  const json = (await response.json()) as { now?: unknown };
+  return typeof json.now === "number" ? json.now : Date.now() * 1_000_000_000;
+}
+
+async function fetchWatchedPropertyValue(property: WatchedProperty) {
+  const response = await fetch(fieldRequestPath(property.component, property.field));
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+
+  return numericSnapshotValue((await response.json()) as SethSnapshot);
 }
 
 function useBuffers(sortMethod: "percent" | "level") {
@@ -62,9 +133,180 @@ function bufferFillClass(percent: number) {
   return "bg-sky-600";
 }
 
+function useWatchedProperties() {
+  const [properties, setProperties] = useState<WatchedProperty[]>(() => getWatchedProperties());
+
+  useEffect(
+    () =>
+      subscribeToWatchedProperties(() => {
+        setProperties(getWatchedProperties());
+      }),
+    [],
+  );
+
+  return properties;
+}
+
+function usePropertySamples(properties: WatchedProperty[]) {
+  const [samples, setSamples] = useState<PropertySamples>({});
+
+  useEffect(() => {
+    const propertyIDs = new Set(properties.map((property) => property.id));
+
+    setSamples((previous) =>
+      Object.fromEntries(Object.entries(previous).filter(([id]) => propertyIDs.has(id))),
+    );
+
+    if (!properties.length) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const collect = async () => {
+      try {
+        const timePs = await fetchEngineTime();
+        const values = await Promise.all(
+          properties.map(async (property) => ({
+            property,
+            value: await fetchWatchedPropertyValue(property),
+          })),
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setSamples((previous) => {
+          const next = { ...previous };
+
+          values.forEach(({ property, value }) => {
+            if (value === null) {
+              return;
+            }
+
+            next[property.id] = [...(next[property.id] ?? []), { timePs, value }].slice(
+              -MAX_PROPERTY_SAMPLES,
+            );
+          });
+
+          return next;
+        });
+      } catch {
+        // Keep existing samples if a component is temporarily unavailable.
+      }
+    };
+
+    collect();
+    const intervalID = window.setInterval(collect, PROPERTY_SAMPLE_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalID);
+    };
+  }, [properties]);
+
+  return samples;
+}
+
+function formatPropertyValue(value: number) {
+  if (Math.abs(value) >= 1000 || (Math.abs(value) > 0 && Math.abs(value) < 0.01)) {
+    return value.toExponential(2);
+  }
+
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function PropertyChart({
+  property,
+  samples,
+}: {
+  property: WatchedProperty;
+  samples: PropertySample[];
+}) {
+  const width = 280;
+  const height = 76;
+  const left = 30;
+  const right = 8;
+  const top = 10;
+  const bottom = 20;
+  const drawableWidth = width - left - right;
+  const drawableHeight = height - top - bottom;
+  const latest = samples[samples.length - 1];
+  const minValue = samples.length ? Math.min(...samples.map((sample) => sample.value)) : 0;
+  const maxValue = samples.length ? Math.max(...samples.map((sample) => sample.value)) : 1;
+  const minTime = samples.length ? samples[0].timePs : 0;
+  const maxTime = samples.length ? samples[samples.length - 1].timePs : 1;
+  const valueRange = maxValue - minValue || 1;
+  const timeRange = maxTime - minTime || 1;
+  const points = samples.map((sample) => {
+    const x = left + ((sample.timePs - minTime) / timeRange) * drawableWidth;
+    const y = top + drawableHeight - ((sample.value - minValue) / valueRange) * drawableHeight;
+    return { ...sample, x, y };
+  });
+  const path = points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`).join(" ");
+
+  return (
+    <div className="min-w-0 rounded border bg-white p-2">
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-xs font-semibold">{property.field}</div>
+          <div className="truncate text-[11px] text-muted-foreground">{property.component}</div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="font-mono text-xs font-semibold">
+            {latest ? formatPropertyValue(latest.value) : "-"}
+          </div>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            title="Remove property"
+            onClick={() => removeWatchedProperty(property.component, property.field)}
+          >
+            <X />
+          </Button>
+        </div>
+      </div>
+      {points.length ? (
+        <svg viewBox={`0 0 ${width} ${height}`} className="h-[4.75rem] w-full overflow-visible">
+          <line x1={left} y1={top + drawableHeight} x2={width - right} y2={top + drawableHeight} stroke="#94a3b8" />
+          <line x1={left} y1={top} x2={left} y2={top + drawableHeight} stroke="#94a3b8" />
+          <text x={left - 4} y={top + 4} textAnchor="end" fontSize="9" fill="#475569">
+            {formatPropertyValue(maxValue)}
+          </text>
+          <text x={left - 4} y={top + drawableHeight} textAnchor="end" fontSize="9" fill="#475569">
+            {formatPropertyValue(minValue)}
+          </text>
+          <text x={left} y={height - 3} fontSize="9" fill="#475569">
+            {formatPicosecondsAsNanoseconds(minTime)}
+          </text>
+          <text x={width - right} y={height - 3} textAnchor="end" fontSize="9" fill="#475569">
+            {formatPicosecondsAsNanoseconds(maxTime)}
+          </text>
+          <path d={path} fill="none" stroke="#0369a1" strokeWidth="2" />
+          {points.map((point) => (
+            <circle key={`${point.timePs}-${point.value}`} cx={point.x} cy={point.y} r="2" fill="#0369a1">
+              <title>
+                {formatPicosecondsAsNanoseconds(point.timePs)}: {formatPropertyValue(point.value)}
+              </title>
+            </circle>
+          ))}
+        </svg>
+      ) : (
+        <div className="flex h-[4.75rem] items-center justify-center text-xs text-muted-foreground">
+          Waiting for numeric samples.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AnalysisPage() {
   const [sortMethod, setSortMethod] = useState<"percent" | "level">("percent");
   const { buffers } = useBuffers(sortMethod);
+  const watchedProperties = useWatchedProperties();
+  const propertySamples = usePropertySamples(watchedProperties);
 
   return (
     <div className="h-full overflow-auto bg-slate-50 p-3">
@@ -93,6 +335,18 @@ export default function AnalysisPage() {
             </Button>
           </div>
         </header>
+
+        {watchedProperties.length ? (
+          <section className="grid grid-cols-[repeat(auto-fill,minmax(17rem,1fr))] gap-2">
+            {watchedProperties.map((property) => (
+              <PropertyChart
+                key={property.id}
+                property={property}
+                samples={propertySamples[property.id] ?? []}
+              />
+            ))}
+          </section>
+        ) : null}
 
         <section>
           {buffers.length ? (
