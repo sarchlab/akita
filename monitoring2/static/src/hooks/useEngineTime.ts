@@ -9,10 +9,13 @@ export function useEngineTime(pollMs = 1000) {
       fetch("/api/now")
         .then((response) => (response.ok ? response.json() : null))
         .then((json) => {
-          if (!cancelled && typeof json?.now === "number") setTime(json.now);
+          if (!cancelled && typeof json?.now === "number") {
+            setTime(json.now);
+          }
         })
         .catch(() => {});
     };
+
     tick();
     const id = window.setInterval(tick, pollMs);
     return () => {

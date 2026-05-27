@@ -51,7 +51,7 @@ a central *engine*.
 | **datarecording** | `akita/v5/datarecording` | SQLite-backed data recording for metrics and visualization |
 | **noc** | `akita/v5/noc` | Network-on-chip: `directconnection`, `messaging`, `networking` (mesh, PCIe, NVLink) |
 | **mem** | `akita/v5/mem` | Memory protocol (ReadReq/WriteReq), Storage, and subpackages for caches, DRAM, TLB, MMU |
-| **monitoring** | `akita/v5/monitoring` | Live web-based monitoring server |
+| **monitoring2** | `akita/v5/monitoring2` | Live web-based monitoring server |
 
 ### Package Dependency Diagram
 

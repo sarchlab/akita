@@ -2,6 +2,7 @@ package monitoring2
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,21 +10,24 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unsafe"
 
 	// Enable profiling.
+	_ "github.com/glebarez/go-sqlite"
 	_ "net/http/pprof"
 
 	"github.com/google/pprof/profile"
 	"github.com/sarchlab/akita/v5/daisen2"
-	"github.com/sarchlab/akita/v5/daisen2/static"
+	"github.com/sarchlab/akita/v5/monitoring2/static"
 
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -31,25 +35,26 @@ import (
 	"github.com/syifan/goseth"
 
 	// Monitor provides live simulation monitoring capabilities. It serves HTTP
-	// endpoints for engine control, component inspection, progress bars,
-	// resource monitoring, and embeds Daisen's trace replay functionality.
+	// endpoints for engine control, component inspection, progress bars, and
+	// resource monitoring.
 	"github.com/sarchlab/akita/v5/messaging"
 )
 
 type Monitor struct {
 	// Configuration (set before StartServer).
-	port        int
-	engine      timing.Engine
-	traceDBPath string
-	visTracer   *tracing.DBTracer
+	port      int
+	engine    timing.Engine
+	visTracer *tracing.DBTracer
+	tracePath string
 
 	// Internal state.
 	components       []messaging.Component
 	buffers          []bufferState
+	engineControlMu  sync.Mutex
+	enginePaused     bool
 	progressBarsLock sync.Mutex
 	progressBars     []*daisen2.ProgressBar
 	httpServer       *http.Server
-	replayServer     *daisen2.Server // for trace endpoints
 	fs               http.FileSystem
 }
 
@@ -57,7 +62,8 @@ type Monitor struct {
 // started until StartServer() is called.
 func NewMonitor() *Monitor {
 	return &Monitor{
-		fs: static.GetAssets(),
+		fs:           static.GetAssets(),
+		progressBars: []*daisen2.ProgressBar{},
 	}
 }
 
@@ -95,17 +101,15 @@ func (m *Monitor) RegisterVisTracer(tr *tracing.DBTracer) {
 	m.visTracer = tr
 }
 
-// SetTraceDBPath sets the path to the SQLite trace database used to serve
-// trace data through the monitoring server.
+// SetTraceDBPath sets the SQLite trace database path used for storage status.
 func (m *Monitor) SetTraceDBPath(path string) {
-	m.traceDBPath = path
+	m.tracePath = path
 }
 
-// GetServer returns the underlying Daisen replay server. This can be used to
-// access advanced server functionality (e.g., CreateProgressBar) or to pass
-// to components that require a *daisen2.Server directly.
+// GetServer is kept for compatibility with older monitoring setup code.
+// Monitoring2 no longer owns a Daisen replay server.
 func (m *Monitor) GetServer() *daisen2.Server {
-	return m.replayServer
+	return nil
 }
 
 // CreateProgressBar creates a new progress bar tracked by the monitor.
@@ -140,21 +144,16 @@ func (m *Monitor) CompleteProgressBar(pb *daisen2.ProgressBar) {
 	m.progressBars = newBars
 }
 
-// StartServer initializes and starts the monitoring HTTP server. It creates
-// a combined HTTP server with live monitoring and trace replay endpoints.
+// StartServer initializes and starts the monitoring HTTP server.
 func (m *Monitor) StartServer() {
-	// Create replay server for trace endpoints (if traceDBPath set).
-	if m.traceDBPath != "" {
-		m.replayServer = daisen2.NewReplayServerReadOnly(m.traceDBPath)
-	}
-
 	// Build combined mux.
 	mux := http.NewServeMux()
 
-	// Register live-mode endpoints (these override replay defaults).
+	// Register live-mode endpoints.
 	mux.HandleFunc("/api/mode", m.apiMode)
 	mux.HandleFunc("/api/pause", m.pauseEngine)
 	mux.HandleFunc("/api/continue", m.continueEngine)
+	mux.HandleFunc("/api/engine/state", m.apiEngineState)
 	mux.HandleFunc("/api/now", m.now)
 	mux.HandleFunc("/api/run", m.run)
 	mux.HandleFunc("/api/tick/", m.tick)
@@ -163,19 +162,15 @@ func (m *Monitor) StartServer() {
 	mux.HandleFunc("/api/field/", m.listFieldValue)
 	mux.HandleFunc("/api/hangdetector/buffers", m.hangDetectorBuffers)
 	mux.HandleFunc("/api/progress", m.listProgressBars)
+	mux.HandleFunc("/api/execution/info", m.apiExecutionInfo)
 	mux.HandleFunc("/api/resource", m.listResources)
 	mux.HandleFunc("/api/profile", m.collectProfile)
 	mux.HandleFunc("/api/trace/start", m.apiTraceStart)
 	mux.HandleFunc("/api/trace/end", m.apiTraceEnd)
 	mux.HandleFunc("/api/trace/is_tracing", m.apiTraceIsTracing)
+	mux.HandleFunc("/api/trace/storage", m.apiTraceStorage)
 
-	// Register trace/replay endpoints (from daisen2.Server), excluding /api/mode.
-	if m.replayServer != nil {
-		m.replayServer.RegisterTraceRoutes(mux)
-	} else {
-		// Serve static assets even without trace DB.
-		m.setupStaticRoutes(mux)
-	}
+	m.setupStaticRoutes(mux)
 
 	// Find port and start listener.
 	listener := m.findPort()
@@ -199,6 +194,14 @@ func (m *Monitor) setupStaticRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/dashboard", m.serveIndex)
 	mux.HandleFunc("/component", m.serveIndex)
 	mux.HandleFunc("/task", m.serveIndex)
+	mux.HandleFunc("/execution", m.serveIndex)
+	mux.HandleFunc("/progress", m.serveIndex)
+	mux.HandleFunc("/monitor", m.serveIndex)
+	mux.HandleFunc("/analysis", m.serveIndex)
+	mux.HandleFunc("/debug", m.serveIndex)
+	mux.HandleFunc("/profiling", m.serveIndex)
+	mux.HandleFunc("/live", m.serveIndex)
+	mux.HandleFunc("/live/", m.serveIndex)
 	mux.Handle("/", fServer)
 }
 
@@ -327,26 +330,81 @@ func (m *Monitor) serveIndex(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (m *Monitor) pauseEngine(w http.ResponseWriter, _ *http.Request) {
-	m.engine.Pause()
-	_, err := w.Write(nil)
-
-	if err != nil {
-		log.Panic(err)
+	m.engineControlMu.Lock()
+	if !m.enginePaused {
+		m.engine.Pause()
+		m.enginePaused = true
 	}
+	response := m.engineStateResponseLocked()
+	m.engineControlMu.Unlock()
+
+	m.writeEngineState(w, response)
 }
 
 func (m *Monitor) continueEngine(w http.ResponseWriter, _ *http.Request) {
-	m.engine.Continue()
-	_, err := w.Write(nil)
+	m.engineControlMu.Lock()
+	if m.enginePaused {
+		m.engine.Continue()
+		m.enginePaused = false
+	}
+	response := m.engineStateResponseLocked()
+	m.engineControlMu.Unlock()
 
-	if err != nil {
-		log.Panic(err)
+	m.writeEngineState(w, response)
+}
+
+type engineStateRsp struct {
+	State  string `json:"state"`
+	Paused bool   `json:"paused"`
+}
+
+func (m *Monitor) apiEngineState(w http.ResponseWriter, _ *http.Request) {
+	m.engineControlMu.Lock()
+	response := m.engineStateResponseLocked()
+	m.engineControlMu.Unlock()
+
+	m.writeEngineState(w, response)
+}
+
+func (m *Monitor) engineStateResponseLocked() engineStateRsp {
+	if m.enginePaused {
+		return engineStateRsp{State: "paused", Paused: true}
+	}
+
+	return engineStateRsp{State: "running", Paused: false}
+}
+
+func (m *Monitor) writeEngineState(w http.ResponseWriter, response engineStateRsp) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+		http.Error(w, "Internal Server Error",
+			http.StatusInternalServerError)
 	}
 }
 
 func (m *Monitor) now(w http.ResponseWriter, _ *http.Request) {
 	nowTime := m.engine.CurrentTime()
 	fmt.Fprintf(w, "{\"now\":%d}", nowTime)
+}
+
+func (m *Monitor) pauseForInspection() func() {
+	m.engineControlMu.Lock()
+
+	if m.enginePaused {
+		return func() {
+			m.engineControlMu.Unlock()
+		}
+	}
+
+	m.engine.Pause()
+
+	return func() {
+		m.engine.Continue()
+		m.engineControlMu.Unlock()
+	}
 }
 
 func (m *Monitor) run(_ http.ResponseWriter, _ *http.Request) {
@@ -405,8 +463,8 @@ func (m *Monitor) listComponentDetails(
 		return
 	}
 
-	m.engine.Pause()
-	defer m.engine.Continue()
+	resume := m.pauseForInspection()
+	defer resume()
 
 	serializer := goseth.NewSerializer()
 	serializer.SetRoot(component)
@@ -440,8 +498,8 @@ func (m *Monitor) listFieldValue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m.engine.Pause()
-	defer m.engine.Continue()
+	resume := m.pauseForInspection()
+	defer resume()
 
 	serializer := goseth.NewSerializer()
 	serializer.SetRoot(component)
@@ -613,7 +671,14 @@ func (m *Monitor) listProgressBars(
 	w http.ResponseWriter,
 	_ *http.Request,
 ) {
-	b, err := json.Marshal(m.progressBars)
+	m.progressBarsLock.Lock()
+	progressBars := m.progressBars
+	if progressBars == nil {
+		progressBars = []*daisen2.ProgressBar{}
+	}
+	m.progressBarsLock.Unlock()
+
+	b, err := json.Marshal(progressBars)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -622,6 +687,82 @@ func (m *Monitor) listProgressBars(
 	if err != nil {
 		log.Panic(err)
 	}
+}
+
+type executionInfoEntry struct {
+	Property string `json:"property"`
+	Value    string `json:"value"`
+}
+
+func (m *Monitor) apiExecutionInfo(w http.ResponseWriter, _ *http.Request) {
+	entries, err := m.readExecutionInfo()
+	if err != nil {
+		log.Printf("Error reading execution info: %v", err)
+		http.Error(w, "Internal Server Error",
+			http.StatusInternalServerError)
+
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(entries); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+		http.Error(w, "Internal Server Error",
+			http.StatusInternalServerError)
+	}
+}
+
+func (m *Monitor) readExecutionInfo() ([]executionInfoEntry, error) {
+	if m.tracePath == "" {
+		return []executionInfoEntry{}, nil
+	}
+
+	absPath, err := filepath.Abs(m.tracePath)
+	if err != nil {
+		absPath = m.tracePath
+	}
+
+	if _, err := os.Stat(absPath); err != nil {
+		if os.IsNotExist(err) {
+			return []executionInfoEntry{}, nil
+		}
+
+		return nil, err
+	}
+
+	db, err := sql.Open("sqlite", absPath)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.Query(`SELECT Property, Value FROM exec_info ORDER BY rowid`)
+	if err != nil {
+		if strings.Contains(err.Error(), "no such table") {
+			return []executionInfoEntry{}, nil
+		}
+
+		return nil, err
+	}
+	defer rows.Close()
+
+	entries := []executionInfoEntry{}
+	for rows.Next() {
+		var entry executionInfoEntry
+		if err := rows.Scan(&entry.Property, &entry.Value); err != nil {
+			return nil, err
+		}
+
+		entries = append(entries, entry)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return entries, nil
 }
 
 type resourceRsp struct {
@@ -663,7 +804,22 @@ func (m *Monitor) listResources(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func (m *Monitor) collectProfile(w http.ResponseWriter, _ *http.Request) {
+func (m *Monitor) collectProfile(w http.ResponseWriter, r *http.Request) {
+	seconds := 1
+	if secondsStr := r.URL.Query().Get("seconds"); secondsStr != "" {
+		secondsNumber, err := strconv.Atoi(secondsStr)
+		if err != nil || secondsNumber < 1 {
+			http.Error(w, "seconds must be a positive integer", http.StatusBadRequest)
+			return
+		}
+
+		if secondsNumber > 60 {
+			secondsNumber = 60
+		}
+
+		seconds = secondsNumber
+	}
+
 	buf := bytes.NewBuffer(nil)
 
 	err := pprof.StartCPUProfile(buf)
@@ -671,7 +827,7 @@ func (m *Monitor) collectProfile(w http.ResponseWriter, _ *http.Request) {
 		log.Panic(err)
 	}
 
-	time.Sleep(time.Second)
+	time.Sleep(time.Duration(seconds) * time.Second)
 
 	pprof.StopCPUProfile()
 
@@ -746,6 +902,75 @@ func (m *Monitor) apiTraceIsTracing(
 		http.Error(w, "Internal Server Error",
 			http.StatusInternalServerError)
 	}
+}
+
+type traceStorageRsp struct {
+	Path               string `json:"path"`
+	FileSizeBytes      uint64 `json:"file_size_bytes"`
+	SidecarSizeBytes   uint64 `json:"sidecar_size_bytes"`
+	TotalSizeBytes     uint64 `json:"total_size_bytes"`
+	DiskAvailableBytes uint64 `json:"disk_available_bytes"`
+	DiskTotalBytes     uint64 `json:"disk_total_bytes"`
+}
+
+func (m *Monitor) apiTraceStorage(w http.ResponseWriter, _ *http.Request) {
+	dbPath := m.tracePath
+	if dbPath == "" {
+		dbPath = "."
+	}
+
+	absPath, err := filepath.Abs(dbPath)
+	if err != nil {
+		absPath = dbPath
+	}
+
+	fileSize := pathFileSize(absPath)
+	sidecarSize := pathFileSize(absPath+"-wal") + pathFileSize(absPath+"-shm")
+	availableBytes, totalBytes := diskSpace(filepath.Dir(absPath))
+
+	response := traceStorageRsp{
+		Path:               absPath,
+		FileSizeBytes:      fileSize,
+		SidecarSizeBytes:   sidecarSize,
+		TotalSizeBytes:     fileSize + sidecarSize,
+		DiskAvailableBytes: availableBytes,
+		DiskTotalBytes:     totalBytes,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+		http.Error(w, "Internal Server Error",
+			http.StatusInternalServerError)
+	}
+}
+
+func pathFileSize(path string) uint64 {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+
+	if info.IsDir() {
+		return 0
+	}
+
+	return uint64(info.Size())
+}
+
+func diskSpace(path string) (availableBytes, totalBytes uint64) {
+	var stat syscall.Statfs_t
+
+	err := syscall.Statfs(path, &stat)
+	if err != nil {
+		return 0, 0
+	}
+
+	blockSize := uint64(stat.Bsize)
+
+	return stat.Bavail * blockSize, stat.Blocks * blockSize
 }
 
 // readAll is a helper to read all bytes from an http.File.

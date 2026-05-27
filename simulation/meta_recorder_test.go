@@ -28,11 +28,31 @@ func TestMetaRecorderWritesExecInfo(t *testing.T) {
 	recorder := datarecording.NewDataRecorder(path)
 	metaRecorder := newMetaRecorder(recorder, clock)
 
+	values := readExecInfo(t, dbFile)
+	if values["Command"] == "" {
+		t.Fatal("expected Command to be recorded at start")
+	}
+	if values["Working Directory"] == "" {
+		t.Fatal("expected Working Directory to be recorded at start")
+	}
+	if values["Start Virtual Time"] != "10" {
+		t.Fatalf("unexpected start virtual time %q", values["Start Virtual Time"])
+	}
+
 	clock.now = 123
 	metaRecorder.End()
 	if err := recorder.Close(); err != nil {
 		t.Fatalf("close recorder: %v", err)
 	}
+
+	values = readExecInfo(t, dbFile)
+	if values["End Virtual Time"] != "123" {
+		t.Fatalf("unexpected end virtual time %q", values["End Virtual Time"])
+	}
+}
+
+func readExecInfo(t *testing.T, dbFile string) map[string]string {
+	t.Helper()
 
 	reader := datarecording.NewReader(dbFile)
 	defer reader.Close()
@@ -53,16 +73,5 @@ func TestMetaRecorderWritesExecInfo(t *testing.T) {
 		values[info.Property] = info.Value
 	}
 
-	if values["Command"] == "" {
-		t.Fatal("expected Command to be recorded")
-	}
-	if values["Working Directory"] == "" {
-		t.Fatal("expected Working Directory to be recorded")
-	}
-	if values["Start Virtual Time"] != "10" {
-		t.Fatalf("unexpected start virtual time %q", values["Start Virtual Time"])
-	}
-	if values["End Virtual Time"] != "123" {
-		t.Fatalf("unexpected end virtual time %q", values["End Virtual Time"])
-	}
+	return values
 }

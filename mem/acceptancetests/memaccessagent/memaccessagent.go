@@ -30,6 +30,41 @@ type MemAccessAgent struct {
 	ReadProgressBar  *daisen2.ProgressBar
 }
 
+// CreateProgressBars creates the read/write progress bars for the agent.
+func (a *MemAccessAgent) CreateProgressBars(
+	createProgressBar func(name string, total uint64) *daisen2.ProgressBar,
+) {
+	if createProgressBar == nil {
+		return
+	}
+
+	writeTotal := remainingAccesses(
+		a.State.WriteLeft,
+		len(a.State.PendingWriteReq),
+	)
+	readTotal := remainingAccesses(
+		a.State.ReadLeft,
+		len(a.State.PendingReadReq),
+	)
+
+	if writeTotal > 0 && a.WriteProgressBar == nil {
+		a.WriteProgressBar = createProgressBar(a.Name()+".Writes", writeTotal)
+	}
+
+	if readTotal > 0 && a.ReadProgressBar == nil {
+		a.ReadProgressBar = createProgressBar(a.Name()+".Reads", readTotal)
+	}
+}
+
+func remainingAccesses(left, pending int) uint64 {
+	total := left + pending
+	if total <= 0 {
+		return 0
+	}
+
+	return uint64(total)
+}
+
 func bytesToUint32(data []byte) uint32 {
 	a := uint32(0)
 	a += uint32(data[0])

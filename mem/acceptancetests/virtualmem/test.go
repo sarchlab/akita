@@ -81,6 +81,9 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		WithMemPort(messaging.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
 		Build("MemAccessAgent")
 	s.RegisterComponent(agent)
+	if monitor := s.GetMonitor(); monitor != nil {
+		agent.CreateProgressBars(monitor.CreateProgressBar)
+	}
 
 	setupConnection(engine, agent,
 		at, tlb, l2TLB, ioMMU,
