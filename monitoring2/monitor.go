@@ -556,7 +556,6 @@ func parseSlicePageParams(
 		return 0, 0, false, nil
 	}
 
-	requested = true
 	limit = defaultSlicePageLimit
 
 	if offsetStr != "" {
