@@ -55,10 +55,7 @@ func (m *tlbMiddleware) processPipeline() bool {
 
 func (m *tlbMiddleware) tickPipeline() bool {
 	next := &m.comp.State
-	return next.Pipeline.TickFunc(func(item pipelineTLBReqState) bool {
-		next.BufferItems = append(next.BufferItems, item)
-		return true
-	})
+	return next.Pipeline.Tick(&next.BufferItems)
 }
 
 func (m *tlbMiddleware) insertIntoPipeline() bool {
@@ -95,16 +92,17 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 	next := &m.comp.State
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		if len(next.BufferItems) == 0 {
+		if next.BufferItems.Size() == 0 {
 			break
 		}
 
-		item := next.BufferItems[0]
+		item := next.BufferItems.Elements[0]
 		msg := item.Msg
 
 		ok := m.lookup(&msg)
 		if ok {
-			next.BufferItems = next.BufferItems[1:]
+			next.BufferItems.Elements[0] = pipelineTLBReqState{}
+			next.BufferItems.Elements = next.BufferItems.Elements[1:]
 			madeProgress = true
 		} else {
 			break

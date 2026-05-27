@@ -26,7 +26,7 @@ func (c *Comp) StorageName() string {
 
 func pipelineCanAccept(bank bankState, spec Spec) bool {
 	if spec.BankPipelineDepth == 0 {
-		return len(bank.PostPipelineBuf) < spec.PostPipelineBufSize
+		return bank.PostPipelineBuf.CanPush()
 	}
 
 	return bank.Pipeline.CanAccept()
@@ -38,38 +38,32 @@ func pipelineAccept(
 	item bankPipelineItemState,
 ) {
 	if spec.BankPipelineDepth == 0 {
-		bank.PostPipelineBuf = append(bank.PostPipelineBuf, item)
+		bank.PostPipelineBuf.PushTyped(item)
 		return
 	}
 
 	bank.Pipeline.Accept(item)
 }
 
-func pipelineTick(bank *bankState, spec Spec) bool {
-	return bank.Pipeline.TickFunc(func(item bankPipelineItemState) bool {
-		if len(bank.PostPipelineBuf) < spec.PostPipelineBufSize {
-			bank.PostPipelineBuf = append(bank.PostPipelineBuf, item)
-			return true
-		}
-
-		return false
-	})
+func pipelineTick(bank *bankState) bool {
+	return bank.Pipeline.Tick(&bank.PostPipelineBuf)
 }
 
 func bufferPeek(bank bankState) (bankPipelineItemState, bool) {
-	if len(bank.PostPipelineBuf) == 0 {
+	if bank.PostPipelineBuf.Size() == 0 {
 		return bankPipelineItemState{}, false
 	}
 
-	return bank.PostPipelineBuf[0], true
+	return bank.PostPipelineBuf.Elements[0], true
 }
 
 func bufferPop(bank *bankState) {
-	if len(bank.PostPipelineBuf) == 0 {
+	if bank.PostPipelineBuf.Size() == 0 {
 		return
 	}
 
-	bank.PostPipelineBuf = bank.PostPipelineBuf[1:]
+	bank.PostPipelineBuf.Elements[0] = bankPipelineItemState{}
+	bank.PostPipelineBuf.Elements = bank.PostPipelineBuf.Elements[1:]
 }
 
 func selectBank(spec Spec, addr uint64) int {

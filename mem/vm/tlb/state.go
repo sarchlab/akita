@@ -30,7 +30,7 @@ type State struct {
 	HasRespondingMSHR   bool                                   `json:"has_responding_mshr"`
 	RespondingMSHRData  mshrEntryState                         `json:"responding_mshr_data"`
 	Pipeline            queueing.Pipeline[pipelineTLBReqState] `json:"pipeline"`
-	BufferItems         []pipelineTLBReqState                  `json:"buffer_items"`
+	BufferItems         queueing.Buffer[pipelineTLBReqState]   `json:"buffer_items"`
 	HasInflightFlushReq bool                                   `json:"has_inflight_flush_req"`
 	InflightFlush       inflightFlushState                     `json:"inflight_flush"`
 }
