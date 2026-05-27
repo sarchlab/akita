@@ -51,9 +51,7 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 		WithMemPort(messaging.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
 		Build("MemAccessAgent")
 	s.RegisterComponent(agent)
-	if monitor := s.GetMonitor(); monitor != nil {
-		agent.CreateProgressBars(monitor.CreateProgressBar)
-	}
+	createProgressBars(s, agent)
 
 	dram := idealmemcontroller.MakeBuilder().
 		WithEngine(engine).
@@ -88,6 +86,15 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 	conn.PlugIn(dram.GetPortByName("Top"))
 
 	return s, engine, agent
+}
+
+func createProgressBars(
+	s *simulation.Simulation,
+	agent *memaccessagent.MemAccessAgent,
+) {
+	if monitor := s.GetMonitor(); monitor != nil {
+		agent.CreateProgressBars(monitor.CreateProgressBar)
+	}
 }
 
 func main() {
