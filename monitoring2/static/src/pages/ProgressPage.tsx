@@ -227,11 +227,11 @@ export default function ProgressPage() {
           <div className="min-w-0 flex-1">
             <h1 className="text-base font-semibold">Execution</h1>
           </div>
-          <div className="text-right">
-            <div className="text-xs font-medium text-muted-foreground">Current Virtual Time</div>
-            <div className="mt-1 font-mono text-xl font-semibold">
+          <div className="flex items-baseline gap-3 text-right">
+            <span className="text-xs font-medium text-muted-foreground">Current Virtual Time</span>
+            <span className="font-mono text-xl font-semibold">
               {now == null ? "-" : formatPicosecondsAsNanoseconds(now)}
-            </div>
+            </span>
           </div>
         </header>
 
