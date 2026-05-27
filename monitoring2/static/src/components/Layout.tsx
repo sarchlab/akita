@@ -13,7 +13,7 @@ export default function Layout() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <nav className="monitor-top-nav">
-        <div className="monitor-brand">Akita Monitor</div>
+        <div className="monitor-brand">AkitaRTM</div>
         <div className="monitor-nav-tabs" role="tablist" aria-label="Monitor views">
           {navItems.map((item) => {
             const Icon = item.icon;

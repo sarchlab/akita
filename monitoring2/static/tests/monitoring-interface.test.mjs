@@ -18,6 +18,8 @@ test("monitoring2 presents one monitor surface without product tabs", async () =
   assert.match(app, /path="component" element={<LivePage/);
   assert.match(app, /path="dashboard" element={<LivePage/);
   assert.match(layout, /Execution[\s\S]*Monitor[\s\S]*Analysis[\s\S]*Debug[\s\S]*Profiling/);
+  assert.match(layout, /AkitaRTM/);
+  assert.doesNotMatch(layout, /Akita Monitor/);
   assert.match(layout, /Monitor/);
   assert.match(layout, /Execution/);
   assert.match(layout, /Analysis/);
