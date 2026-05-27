@@ -95,6 +95,8 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(progressPage, /Current Virtual Time/);
   assert.match(progressPage, /useEngineTime\(500\)/);
   assert.match(progressPage, /formatPicosecondsAsNanoseconds\(now\)/);
+  assert.match(progressPage, /text-xl font-semibold/);
+  assert.doesNotMatch(progressPage, /text-3xl font-semibold/);
   assert.doesNotMatch(progressPage, /RefreshCcw/);
   assert.doesNotMatch(progressPage, /totals/);
   assert.match(progressPage, /\/api\/execution\/info/);

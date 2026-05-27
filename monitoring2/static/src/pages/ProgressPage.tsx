@@ -229,7 +229,7 @@ export default function ProgressPage() {
           </div>
           <div className="text-right">
             <div className="text-xs font-medium text-muted-foreground">Current Virtual Time</div>
-            <div className="mt-1 font-mono text-3xl font-semibold">
+            <div className="mt-1 font-mono text-xl font-semibold">
               {now == null ? "-" : formatPicosecondsAsNanoseconds(now)}
             </div>
           </div>
