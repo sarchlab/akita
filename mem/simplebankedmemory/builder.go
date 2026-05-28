@@ -226,7 +226,10 @@ func (b Builder) buildInitialState(spec Spec) State {
 				Width:     spec.BankPipelineWidth,
 				NumStages: spec.BankPipelineDepth * spec.StageLatency,
 			},
-			PostPipelineBuf: nil,
+			PostPipelineBuf: queueing.Buffer[bankPipelineItemState]{
+				BufferName: spec.StorageRef + ".PostPipelineBuf",
+				Cap:        spec.PostPipelineBufSize,
+			},
 		}
 	}
 

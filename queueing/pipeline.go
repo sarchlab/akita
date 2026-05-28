@@ -74,24 +74,6 @@ func (p *Pipeline[T]) Accept(item T) {
 //
 // Returns true if any item moved.
 func (p *Pipeline[T]) Tick(postBuf *Buffer[T]) bool {
-	return p.TickFunc(func(item T) bool {
-		if postBuf.CanPush() {
-			postBuf.PushTyped(item)
-			return true
-		}
-		return false
-	})
-}
-
-// TickFunc advances the pipeline by one cycle, using the provided accept
-// function for items that have completed all stages (CycleLeft==0 at last
-// stage). The accept function should return true if it consumed the item.
-//
-// Items are processed from highest stage to lowest to prevent
-// double-advancement within a single tick.
-//
-// Returns true if any item moved.
-func (p *Pipeline[T]) TickFunc(accept func(T) bool) bool {
 	n := len(p.Stages)
 	if n == 0 {
 		return false
@@ -104,7 +86,8 @@ func (p *Pipeline[T]) TickFunc(accept func(T) bool) bool {
 	for i := n - 1; i >= 0; i-- {
 		s := &p.Stages[i]
 		if s.Stage == lastStage && s.CycleLeft == 0 {
-			if accept(s.Item) {
+			if postBuf.CanPush() {
+				postBuf.PushTyped(s.Item)
 				p.Stages[i] = p.Stages[n-1]
 				n--
 				moved = true
