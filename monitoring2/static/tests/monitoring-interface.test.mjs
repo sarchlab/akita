@@ -54,6 +54,7 @@ test("monitoring2 page supports component selection and tracing controls", async
   assert.match(page, /Refresh Properties/);
   assert.match(page, /disabled=\{!canToggle\}/);
   assert.match(page, /ChevronRight/);
+  assert.match(page, /ChevronLeft/);
   assert.match(page, /ChevronDown/);
   assert.match(page, /Flag/);
   assert.match(page, /FlagOff/);
@@ -66,6 +67,15 @@ test("monitoring2 page supports component selection and tracing controls", async
   assert.match(page, /MAP_KIND/);
   assert.match(page, /SLICE_KIND/);
   assert.match(page, /monitorSampleKind/);
+  assert.match(page, /function nodeLength/);
+  assert.match(page, /function valuePreview/);
+  assert.match(page, /node\?\.k === SLICE_KIND/);
+  assert.match(page, /child\?\.k === SLICE_KIND \|\| !expandable \? valuePreview\(child\) : ""/);
+  assert.match(page, /SLICE_PAGE_SIZE = 50/);
+  assert.match(page, /slice_offset/);
+  assert.match(page, /slice_limit/);
+  assert.match(page, /function SlicePagination/);
+  assert.match(page, /onSlicePageChange/);
   assert.match(page, /addWatchedProperty/);
   assert.match(page, /removeWatchedProperty/);
   assert.match(page, /subscribeToWatchedProperties/);

@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Flag, FlagOff, LoaderCircle, RefreshCcw, Search } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Flag,
+  FlagOff,
+  LoaderCircle,
+  RefreshCcw,
+  Search,
+} from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import {
@@ -16,6 +25,7 @@ interface SethNode {
   t: string;
   v?: unknown;
   l?: number;
+  o?: number;
 }
 
 interface SethSnapshot {
@@ -42,6 +52,7 @@ interface ExpandedFieldState {
   snapshot: SethSnapshot | null;
   loading: boolean;
   error: string | null;
+  page?: number;
 }
 
 interface MonitorSectionState {
@@ -63,6 +74,7 @@ const MONITOR_SECTIONS: MonitorSectionConfig[] = [
 ];
 
 const PROPERTY_REFRESH_INTERVAL_MS = 2000;
+const SLICE_PAGE_SIZE = 50;
 const INTEGER_KINDS = new Set([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 const FLOAT_KINDS = new Set([13, 14]);
 const MAP_KIND = 21;
@@ -144,6 +156,34 @@ function primitivePreview(node: SethNode | null) {
   return String(node.v);
 }
 
+function nodeLength(node: SethNode | null) {
+  if (!node) {
+    return null;
+  }
+
+  if (typeof node.l === "number" && Number.isFinite(node.l)) {
+    return node.l;
+  }
+
+  if (Array.isArray(node.v)) {
+    return node.v.length;
+  }
+
+  return null;
+}
+
+function valuePreview(node: SethNode | null) {
+  if (node?.k === SLICE_KIND) {
+    const length = nodeLength(node);
+
+    if (length !== null) {
+      return String(length);
+    }
+  }
+
+  return primitivePreview(node);
+}
+
 function typeLabel(node: SethNode | null) {
   if (!node) {
     return "null";
@@ -160,10 +200,25 @@ function fieldPath(path: SethPathSegment[]) {
   return path.join(".");
 }
 
-function fieldRequestPath(componentName: string, fieldName: string) {
-  return `/api/field/${encodeURIComponent(
+function fieldRequestPath(
+  componentName: string,
+  fieldName: string,
+  slicePage?: { offset: number; limit: number },
+) {
+  const path = `/api/field/${encodeURIComponent(
     JSON.stringify({ comp_name: componentName, field_name: fieldName }),
   )}`;
+
+  if (!slicePage) {
+    return path;
+  }
+
+  const query = new URLSearchParams({
+    slice_offset: String(slicePage.offset),
+    slice_limit: String(slicePage.limit),
+  });
+
+  return `${path}?${query}`;
 }
 
 function emptyMonitorSections(loading = false): Record<MonitorSectionID, MonitorSectionState> {
@@ -194,9 +249,11 @@ function childRows(snapshot: SethSnapshot, node: SethNode) {
   }
 
   if (Array.isArray(node.v)) {
+    const offset = node.k === SLICE_KIND ? (node.o ?? 0) : 0;
+
     return node.v.map((valueID, index) => ({
-      label: String(index),
-      path: String(index),
+      label: String(offset + index),
+      path: String(offset + index),
       valueID: String(valueID),
     }));
   }
@@ -223,6 +280,25 @@ function childRows(snapshot: SethSnapshot, node: SethNode) {
   return [];
 }
 
+function slicePageInfo(node: SethNode | null) {
+  if (node?.k !== SLICE_KIND) {
+    return null;
+  }
+
+  const total = nodeLength(node);
+  if (total === null || total <= SLICE_PAGE_SIZE) {
+    return null;
+  }
+
+  const pageCount = Math.max(1, Math.ceil(total / SLICE_PAGE_SIZE));
+  const requestedPage = Math.floor((node.o ?? 0) / SLICE_PAGE_SIZE);
+  const page = Math.min(pageCount - 1, Math.max(0, requestedPage));
+  const start = page * SLICE_PAGE_SIZE + 1;
+  const end = Math.min(total, (page + 1) * SLICE_PAGE_SIZE);
+
+  return { page, pageCount, start, end, total };
+}
+
 function useComponentNames() {
   const [components, setComponents] = useState<string[]>([]);
 
@@ -247,12 +323,62 @@ async function fetchSnapshot(path: string) {
   return (await response.json()) as SethSnapshot;
 }
 
+function SlicePagination({
+  info,
+  path,
+  node,
+  onSlicePageChange,
+}: {
+  info: NonNullable<ReturnType<typeof slicePageInfo>>;
+  path: SethPathSegment[];
+  node: SethNode;
+  onSlicePageChange: (path: SethPathSegment[], node: SethNode, page: number) => void;
+}) {
+  const pathID = fieldPath(path);
+  const canGoBack = info.page > 0;
+  const canGoForward = info.page < info.pageCount - 1;
+
+  return (
+    <div className="flex min-h-10 items-center gap-3 border-b bg-slate-50 px-3 py-2 text-xs text-muted-foreground">
+      <span className="font-mono tabular-nums">
+        {info.start}-{info.end} of {info.total}
+      </span>
+      <span className="ml-auto font-mono tabular-nums">
+        Page {info.page + 1} of {info.pageCount}
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          aria-label={`Previous page ${pathID}`}
+          title="Previous page"
+          disabled={!canGoBack}
+          className="inline-flex h-7 w-7 items-center justify-center rounded text-primary hover:bg-primary/10 disabled:text-muted-foreground disabled:hover:bg-transparent"
+          onClick={() => onSlicePageChange(path, node, info.page - 1)}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          aria-label={`Next page ${pathID}`}
+          title="Next page"
+          disabled={!canGoForward}
+          className="inline-flex h-7 w-7 items-center justify-center rounded text-primary hover:bg-primary/10 disabled:text-muted-foreground disabled:hover:bg-transparent"
+          onClick={() => onSlicePageChange(path, node, info.page + 1)}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SethRows({
   snapshot,
   node,
   path,
   onSelect,
   onFocus,
+  onSlicePageChange,
   selectedComponent,
   watchedPropertyIDs,
   onToggleWatch,
@@ -264,7 +390,8 @@ function SethRows({
   node: SethNode;
   path: SethPathSegment[];
   onSelect: (selection: SelectedNode) => void;
-  onFocus: (path: SethPathSegment[]) => void;
+  onFocus: (path: SethPathSegment[], node: SethNode) => void;
+  onSlicePageChange: (path: SethPathSegment[], node: SethNode, page: number) => void;
   selectedComponent: string;
   watchedPropertyIDs: Set<string>;
   onToggleWatch: (path: SethPathSegment[], node: SethNode, sampleKind: WatchedPropertySampleKind) => void;
@@ -273,18 +400,28 @@ function SethRows({
   framed?: boolean;
 }) {
   const rows = childRows(snapshot, node);
+  const pageInfo = slicePageInfo(node);
+  const visibleRows = pageInfo && node.o === undefined ? rows.slice(0, SLICE_PAGE_SIZE) : rows;
 
   if (!rows.length) {
     return (
       <div className={`${framed ? "rounded border bg-white" : ""} px-3 py-2 text-sm`}>
-        <span className="font-mono text-muted-foreground">{primitivePreview(node)}</span>
+        <span className="font-mono text-muted-foreground">{valuePreview(node)}</span>
       </div>
     );
   }
 
   return (
     <div className={framed ? "overflow-hidden rounded border bg-white" : "overflow-hidden"}>
-      {rows.map((row) => {
+      {pageInfo ? (
+        <SlicePagination
+          info={pageInfo}
+          path={path}
+          node={node}
+          onSlicePageChange={onSlicePageChange}
+        />
+      ) : null}
+      {visibleRows.map((row) => {
         const child = nodeByID(snapshot, row.valueID);
         const childPath = [...path, row.path];
         const childPathID = fieldPath(childPath);
@@ -324,7 +461,7 @@ function SethRows({
                   {typeLabel(child)}
                 </span>
                 <span className="min-w-0 justify-self-end truncate text-right font-mono text-xs tabular-nums text-slate-700">
-                  {!expandable ? primitivePreview(child) : ""}
+                  {child?.k === SLICE_KIND || !expandable ? valuePreview(child) : ""}
                 </span>
               </button>
               {watchable ? (
@@ -357,7 +494,7 @@ function SethRows({
                   onClick={() => {
                     if (child) {
                       onSelect({ path: childPath, node: child });
-                      onFocus(childPath);
+                      onFocus(childPath, child);
                     }
                   }}
                 >
@@ -380,6 +517,7 @@ function SethRows({
                     path={childPath}
                     onSelect={onSelect}
                     onFocus={onFocus}
+                    onSlicePageChange={onSlicePageChange}
                     selectedComponent={selectedComponent}
                     watchedPropertyIDs={watchedPropertyIDs}
                     onToggleWatch={onToggleWatch}
@@ -398,6 +536,7 @@ function SethRows({
                   path={childPath}
                   onSelect={onSelect}
                   onFocus={onFocus}
+                  onSlicePageChange={onSlicePageChange}
                   selectedComponent={selectedComponent}
                   watchedPropertyIDs={watchedPropertyIDs}
                   onToggleWatch={onToggleWatch}
@@ -426,7 +565,12 @@ function MonitorSectionView({
   config: MonitorSectionConfig;
   state: MonitorSectionState;
   onSelect: (selection: SelectedNode) => void;
-  onOpenField: (sectionID: MonitorSectionID, path: SethPathSegment[]) => void;
+  onOpenField: (
+    sectionID: MonitorSectionID,
+    path: SethPathSegment[],
+    node: SethNode,
+    page?: number,
+  ) => void;
   selectedComponent: string;
   watchedPropertyIDs: Set<string>;
   onToggleWatch: (path: SethPathSegment[], node: SethNode, sampleKind: WatchedPropertySampleKind) => void;
@@ -450,7 +594,8 @@ function MonitorSectionView({
             node={root}
             path={state.fieldName.split(".")}
             onSelect={onSelect}
-            onFocus={(path) => onOpenField(config.id, path)}
+            onFocus={(path, node) => onOpenField(config.id, path, node)}
+            onSlicePageChange={(path, node, page) => onOpenField(config.id, path, node, page)}
             selectedComponent={selectedComponent}
             watchedPropertyIDs={watchedPropertyIDs}
             onToggleWatch={onToggleWatch}
@@ -580,19 +725,21 @@ export default function LivePage() {
   );
 
   const openSectionField = useCallback(
-    (sectionID: MonitorSectionID, path: SethPathSegment[]) => {
+    (sectionID: MonitorSectionID, path: SethPathSegment[], node: SethNode, page?: number) => {
       if (!selectedComponent) {
         return;
       }
 
       const fieldName = fieldPath(path);
       const existingField = sections[sectionID]?.expanded[fieldName];
+      const pageRequested = page !== undefined;
+      const nextPage = page ?? existingField?.page ?? 0;
 
       if (existingField?.loading) {
         return;
       }
 
-      if (existingField && !existingField.error) {
+      if (!pageRequested && existingField && !existingField.error) {
         setSections((previous) => ({
           ...previous,
           [sectionID]: {
@@ -609,12 +756,22 @@ export default function LivePage() {
           ...previous[sectionID],
           expanded: {
             ...previous[sectionID].expanded,
-            [fieldName]: { snapshot: null, loading: true, error: null },
+            [fieldName]: {
+              snapshot: existingField?.snapshot ?? null,
+              loading: true,
+              error: null,
+              page: nextPage,
+            },
           },
         },
       }));
 
-      fetchSnapshot(fieldRequestPath(selectedComponent, fieldName))
+      const slicePage =
+        node.k === SLICE_KIND
+          ? { offset: nextPage * SLICE_PAGE_SIZE, limit: SLICE_PAGE_SIZE }
+          : undefined;
+
+      fetchSnapshot(fieldRequestPath(selectedComponent, fieldName, slicePage))
         .then((nextSnapshot) => {
           setSections((previous) => ({
             ...previous,
@@ -622,7 +779,12 @@ export default function LivePage() {
               ...previous[sectionID],
               expanded: {
                 ...previous[sectionID].expanded,
-                [fieldName]: { snapshot: nextSnapshot, loading: false, error: null },
+                [fieldName]: {
+                  snapshot: nextSnapshot,
+                  loading: false,
+                  error: null,
+                  page: nextPage,
+                },
               },
             },
           }));
@@ -635,9 +797,10 @@ export default function LivePage() {
               expanded: {
                 ...previous[sectionID].expanded,
                 [fieldName]: {
-                  snapshot: null,
+                  snapshot: existingField?.snapshot ?? null,
                   loading: false,
                   error: err instanceof Error ? err.message : `Failed to load ${fieldName}`,
+                  page: nextPage,
                 },
               },
             },
@@ -774,7 +937,7 @@ export default function LivePage() {
                   <dt className="text-muted-foreground">Type</dt>
                   <dd className="min-w-0 break-all font-mono text-xs">{typeLabel(selectedNode)}</dd>
                   <dt className="text-muted-foreground">Value</dt>
-                  <dd className="min-w-0 break-all font-mono text-xs">{primitivePreview(selectedNode)}</dd>
+                  <dd className="min-w-0 break-all font-mono text-xs">{valuePreview(selectedNode)}</dd>
                 </dl>
               </section>
 
