@@ -95,7 +95,7 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 
 func (ds *directoryStage) Reset() {
 	next := &ds.cache.comp.State
-	next.DirPipeline.Stages = nil
+	next.DirPipeline.Clear()
 	next.DirPostPipelineBuf.Clear()
 	next.DirStageBuf.Clear()
 }

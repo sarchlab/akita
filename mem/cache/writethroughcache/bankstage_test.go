@@ -98,7 +98,7 @@ var _ = Describe("Bankstage", func() {
 		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeTrue())
-		Expect(next.BankPipelines[0].Stages).To(HaveLen(1))
+		Expect(next.BankPipelines[0].Len()).To(Equal(1))
 	})
 
 	Context("read hit", func() {

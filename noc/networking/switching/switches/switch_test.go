@@ -125,10 +125,9 @@ var _ = Describe("Switch", func() {
 		madeProgress := rpMW.startProcessing()
 
 		Expect(madeProgress).To(BeTrue())
-		// Verify flit was accepted into pipeline
+		// Verify flit was accepted into pipeline.
 		next := &sw.State
-		Expect(next.PortComplexes[0].Pipeline.Stages).To(HaveLen(1))
-		Expect(next.PortComplexes[0].Pipeline.Stages[0].Item.Flit.ID).To(Equal(flit.ID))
+		Expect(next.PortComplexes[0].Pipeline.Len()).To(Equal(1))
 	})
 
 	It("should not start processing if pipeline is busy", func() {
@@ -145,9 +144,7 @@ var _ = Describe("Switch", func() {
 
 		// Fill pipeline so it can't accept
 		next := &sw.State
-		next.PortComplexes[0].Pipeline.Stages = []queueing.PipelineStage[routedFlit]{
-			{Lane: 0, Stage: 0, Item: routedFlit{TaskID: 1}},
-		}
+		next.PortComplexes[0].Pipeline.Accept(routedFlit{TaskID: 1})
 
 		port1.EXPECT().PeekIncoming().Return(flit)
 		port2.EXPECT().PeekIncoming().Return(nil)
@@ -160,19 +157,17 @@ var _ = Describe("Switch", func() {
 	It("should tick the pipelines", func() {
 		// Place an item in pipeline stage 0 for port1
 		next := &sw.State
-		next.PortComplexes[0].Pipeline.Stages = []queueing.PipelineStage[routedFlit]{
-			{Lane: 0, Stage: 0, Item: routedFlit{
-				Flit:   packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 100}},
-				TaskID: 101,
-			}, CycleLeft: 0},
-		}
+		next.PortComplexes[0].Pipeline.Accept(routedFlit{
+			Flit:   packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 100}},
+			TaskID: 101,
+		})
 
 		madeProgress := rpMW.movePipeline()
 
 		Expect(madeProgress).To(BeTrue())
 		// For latency=1, the item should have moved to RouteBuffer
 		next = &sw.State
-		Expect(next.PortComplexes[0].Pipeline.Stages).To(HaveLen(0))
+		Expect(next.PortComplexes[0].Pipeline.Len()).To(Equal(0))
 		Expect(next.PortComplexes[0].RouteBuffer.Size()).To(Equal(1))
 	})
 

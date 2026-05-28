@@ -106,7 +106,7 @@ func (m *pipelineMW) discardInflightTransactions() {
 
 	// Clear all buffers and pipelines
 	next.DirStageBuf.Clear()
-	next.DirPipeline.Stages = nil
+	next.DirPipeline.Clear()
 	next.DirPostPipelineBuf.Clear()
 	for i := range next.DirToBankBufs {
 		next.DirToBankBufs[i].Clear()
@@ -115,7 +115,7 @@ func (m *pipelineMW) discardInflightTransactions() {
 		next.WriteBufferToBankBufs[i].Clear()
 	}
 	for i := range next.BankPipelines {
-		next.BankPipelines[i].Stages = nil
+		next.BankPipelines[i].Clear()
 	}
 	for i := range next.BankPostPipelineBufs {
 		next.BankPostPipelineBufs[i].Clear()
