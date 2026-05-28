@@ -79,9 +79,12 @@ func (b Builder) Build() *Simulation {
 
 func (b Builder) createSimulation() *Simulation {
 	return &Simulation{
-		id:            xid.New().String(),
-		compNameIndex: make(map[string]int),
-		portNameIndex: make(map[string]int),
+		id:                xid.New().String(),
+		compNameIndex:     make(map[string]int),
+		portNameIndex:     make(map[string]int),
+		connNameIndex:     make(map[string]int),
+		resourceNameIndex: make(map[string]int),
+		entityNameIndex:   newEntityNameIndex(),
 	}
 }
 

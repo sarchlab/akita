@@ -33,12 +33,18 @@ import (
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/shirou/gopsutil/process"
 	"github.com/syifan/goseth"
-
-	// Monitor provides live simulation monitoring capabilities. It serves HTTP
-	// endpoints for engine control, component inspection, progress bars, and
-	// resource monitoring.
-	"github.com/sarchlab/akita/v5/messaging"
 )
+
+// Component is the minimal component contract required by the monitor.
+type Component interface {
+	Name() string
+}
+
+type monitorPort interface {
+	Name() string
+	NumIncoming() int
+	NumOutgoing() int
+}
 
 type Monitor struct {
 	// Configuration (set before StartServer).
@@ -48,7 +54,7 @@ type Monitor struct {
 	tracePath string
 
 	// Internal state.
-	components       []messaging.Component
+	components       []Component
 	buffers          []bufferState
 	engineControlMu  sync.Mutex
 	enginePaused     bool
@@ -91,7 +97,7 @@ func (m *Monitor) RegisterEngine(e timing.Engine) {
 
 // RegisterComponent registers a component with the monitor so its internal
 // state can be inspected via the monitoring server.
-func (m *Monitor) RegisterComponent(c messaging.Component) {
+func (m *Monitor) RegisterComponent(c Component) {
 	m.components = append(m.components, c)
 	m.registerBuffers(c)
 }
@@ -250,7 +256,7 @@ type bufferState interface {
 // portBufferAdapter wraps a port to expose one of its internal buffers
 // (incoming or outgoing) as a bufferState for the hang detector.
 type portBufferAdapter struct {
-	port      messaging.Port
+	port      monitorPort
 	direction string // "in" or "out"
 }
 
@@ -270,20 +276,51 @@ func (a *portBufferAdapter) Capacity() int {
 	return a.Size()
 }
 
-func (m *Monitor) registerBuffers(c messaging.Component) {
+func (m *Monitor) registerBuffers(c Component) {
 	m.registerComponentOrPortBuffers(c)
 
-	for _, p := range c.Ports() {
+	for _, p := range componentPorts(c) {
 		m.registerComponentOrPortBuffers(p)
 		m.registerPortBuffers(p)
 	}
 }
 
-func (m *Monitor) registerPortBuffers(p messaging.Port) {
+func (m *Monitor) registerPortBuffers(p monitorPort) {
 	m.buffers = append(m.buffers,
 		&portBufferAdapter{port: p, direction: "in"},
 		&portBufferAdapter{port: p, direction: "out"},
 	)
+}
+
+func componentPorts(c Component) []monitorPort {
+	method := reflect.ValueOf(c).MethodByName("Ports")
+	if !method.IsValid() {
+		return nil
+	}
+
+	methodType := method.Type()
+	if methodType.NumIn() != 0 ||
+		methodType.NumOut() != 1 ||
+		methodType.Out(0).Kind() != reflect.Slice {
+		panic("component " + c.Name() +
+			" Ports method must take no arguments and return one slice")
+	}
+
+	values := method.Call(nil)
+	portsValue := values[0]
+	ports := make([]monitorPort, 0, portsValue.Len())
+
+	for i := 0; i < portsValue.Len(); i++ {
+		port, ok := portsValue.Index(i).Interface().(monitorPort)
+		if !ok {
+			panic("component " + c.Name() +
+				" Ports method returned a non-monitorable port")
+		}
+
+		ports = append(ports, port)
+	}
+
+	return ports
 }
 
 func (m *Monitor) registerComponentOrPortBuffers(c any) {
@@ -932,8 +969,8 @@ func (m *Monitor) sortAndSelectBuffers(
 func (m *Monitor) findComponentOr404(
 	w http.ResponseWriter,
 	name string,
-) messaging.Component {
-	var component messaging.Component
+) Component {
+	var component Component
 
 	for _, c := range m.components {
 		if c.Name() == name {

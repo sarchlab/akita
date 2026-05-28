@@ -64,9 +64,12 @@ type Comp struct {
 }
 
 func (c *Comp) GetStorage() *mem.Storage   // Access backing storage
+func (c *Comp) Resources() []simulation.Resource
 ```
 
-`Comp` implements the `mem.StorageOwner` interface via `StorageName()`.
+`Comp` exposes its backing storage as a simulation shared-state resource, so
+checkpointing can save the memory payload without the `simulation` package
+depending directly on `mem.Storage`.
 
 ## Builder Pattern
 

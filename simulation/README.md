@@ -12,7 +12,11 @@ A `Simulation` holds:
 - A `DataRecorder` (SQLite-backed) for recording simulation data.
 - A `DBTracer` for visual tracing (used by the Daisen visualizer).
 - An optional `Monitor` for live web-based inspection.
-- A registry of all components and ports.
+- A registry of all components, ports, connections, and shared-state resources.
+
+The registry uses local minimal interfaces for components, ports, connections,
+and resources. Concrete messaging types satisfy those interfaces structurally,
+so this package does not need to import the messaging package.
 
 ### Building a Simulation
 
@@ -46,6 +50,7 @@ Registration automatically:
 - Adds the component and its ports to the simulation registry.
 - Connects the component to the monitoring system (if enabled).
 - Attaches visual tracing hooks.
+- Registers any shared-state resources exposed by the component.
 
 ### Accessing Simulation Resources
 
@@ -55,7 +60,14 @@ recorder := sim.GetDataRecorder()
 tracer := sim.GetVisTracer()
 comp := sim.GetComponentByName("myComp")
 port := sim.GetPortByName("myComp.Top")
+resources := sim.Resources()
+entities := sim.Entities()
 ```
+
+`Entities` returns typed references from the simulation's common entity
+registry. It is useful for checkpoint inventory and tooling without requiring
+components, ports, connections, and resources to share one implementation
+interface.
 
 ## Checkpoint Save / Load
 
@@ -73,8 +85,8 @@ err := sim.Load("/path/to/checkpoint")
 
 - **Metadata**: engine time, ID generator state.
 - **Component states**: JSON files for each component implementing `StateSaver`.
-- **Storage data**: binary files for each component implementing
-  `StorageOwner`.
+- **Shared state resources**: payload files for registered resources, such as
+  memory storage or page tables.
 
 ### What Is NOT Saved
 
@@ -86,9 +98,13 @@ err := sim.Load("/path/to/checkpoint")
 
 | Interface | Method | Purpose |
 |-----------|--------|---------|
+| `Component` | `Name() string` | Register runtime components |
+| `Port` | `Name() string` | Register port buffers by stable name |
+| `Connection` | `Name() string` | Register runtime connections |
 | `StateSaver` | `SaveState(w io.Writer)` | Serialize component state |
 | `StateLoader` | `LoadState(r io.Reader)` | Deserialize component state |
-| `StorageOwner` | `GetStorage() *mem.Storage` | Access storage for binary save |
+| `ResourceOwner` | `Resources() []Resource` | Register shared program state |
+| `Resource` | `Save(w io.Writer)` | Serialize shared program state |
 | `WakeupResetter` | `ResetWakeup()` | Reset wakeup guard after load |
 
 `modeling.Component[S,T]` and `modeling.EventDrivenComponent[S,T]` satisfy

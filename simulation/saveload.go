@@ -2,12 +2,12 @@ package simulation
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -23,11 +23,22 @@ type StateLoader interface {
 	LoadState(r io.Reader) error
 }
 
-// StorageOwner is implemented by components that own a mem.Storage that
-// should be checkpointed.
-type StorageOwner interface {
-	GetStorage() *mem.Storage
-	StorageName() string
+// Resource represents non-timing program state that can be shared across
+// components and checkpointed independently from component state.
+type Resource interface {
+	Name() string
+	Kind() string
+	Format() string
+	FileExtension() string
+	Identity() string
+	Save(w io.Writer) error
+	Load(r io.Reader) error
+}
+
+// ResourceOwner is implemented by components that reference resources that
+// should be registered with the simulation.
+type ResourceOwner interface {
+	Resources() []Resource
 }
 
 // WakeupResetter is implemented by event-driven components that need to
@@ -60,11 +71,17 @@ func (s *Simulation) Save(path string) error {
 		return err
 	}
 
-	if err := s.saveComponentStates(filepath.Join(path, "components")); err != nil {
+	manifest := newCheckpointManifest()
+
+	if err := s.saveComponentStates(path, &manifest); err != nil {
 		return err
 	}
 
-	if err := s.saveStorages(filepath.Join(path, "storage")); err != nil {
+	if err := s.saveResources(path, &manifest); err != nil {
+		return err
+	}
+
+	if err := writeCheckpointManifest(path, manifest); err != nil {
 		return err
 	}
 
@@ -76,8 +93,8 @@ func (s *Simulation) createCheckpointDirs(path string) error {
 		return fmt.Errorf("create component dir: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Join(path, "storage"), 0o755); err != nil {
-		return fmt.Errorf("create storage dir: %w", err)
+	if err := os.MkdirAll(filepath.Join(path, "resources"), 0o755); err != nil {
+		return fmt.Errorf("create resources dir: %w", err)
 	}
 
 	return nil
@@ -101,14 +118,18 @@ func (s *Simulation) saveMetadata(path string) error {
 	return nil
 }
 
-func (s *Simulation) saveComponentStates(compDir string) error {
+func (s *Simulation) saveComponentStates(
+	root string,
+	manifest *checkpointManifest,
+) error {
 	for _, comp := range s.components {
 		saver, ok := comp.(StateSaver)
 		if !ok {
 			continue
 		}
 
-		filePath := filepath.Join(compDir, comp.Name()+".json")
+		relPath := checkpointRelPath("components", comp.Name(), ".json")
+		filePath := checkpointAbsPath(root, relPath)
 
 		f, err := os.Create(filePath)
 		if err != nil {
@@ -121,37 +142,52 @@ func (s *Simulation) saveComponentStates(compDir string) error {
 		}
 
 		f.Close()
+
+		manifest.Components[comp.Name()] = manifestEntry{
+			Kind:    "modeling.ComponentState",
+			Path:    relPath,
+			Format:  "json",
+			Version: 1,
+		}
 	}
 
 	return nil
 }
 
-func (s *Simulation) saveStorages(storageDir string) error {
-	for _, comp := range s.components {
-		owner, ok := comp.(StorageOwner)
-		if !ok {
-			continue
-		}
+func (s *Simulation) saveResources(
+	root string,
+	manifest *checkpointManifest,
+) error {
+	resources, err := s.collectResources()
+	if err != nil {
+		return err
+	}
 
-		storage := owner.GetStorage()
-		if storage == nil {
-			continue
-		}
-
-		name := owner.StorageName()
-		filePath := filepath.Join(storageDir, name+".bin")
-
+	for _, resource := range resources {
+		relPath := checkpointRelPath(
+			"resources",
+			resource.name,
+			resource.fileExtension,
+		)
+		filePath := checkpointAbsPath(root, relPath)
 		f, err := os.Create(filePath)
 		if err != nil {
-			return fmt.Errorf("create storage file %s: %w", name, err)
+			return fmt.Errorf("create resource file %s: %w", resource.name, err)
 		}
 
-		if err := storage.Save(f); err != nil {
+		if err := resource.resource.Save(f); err != nil {
 			f.Close()
-			return fmt.Errorf("save storage %s: %w", name, err)
+			return fmt.Errorf("save resource %s: %w", resource.name, err)
 		}
 
 		f.Close()
+
+		manifest.Resources[resource.name] = manifestEntry{
+			Kind:    resource.kind,
+			Path:    relPath,
+			Format:  resource.format,
+			Version: 1,
+		}
 	}
 
 	return nil
@@ -162,15 +198,28 @@ func (s *Simulation) saveStorages(storageDir string) error {
 // The simulation must already be built (topology and connections reconstructed
 // from build code) before calling Load.
 func (s *Simulation) Load(path string) error {
+	manifest, err := readCheckpointManifest(path)
+	if errors.Is(err, errCheckpointManifestMissing) {
+		manifest = nil
+	} else if err != nil {
+		return err
+	}
+
+	if manifest != nil {
+		if err := s.validateManifestForLoad(manifest); err != nil {
+			return err
+		}
+	}
+
 	if err := s.loadMetadata(path); err != nil {
 		return err
 	}
 
-	if err := s.loadComponentStates(filepath.Join(path, "components")); err != nil {
+	if err := s.loadComponentStates(path, manifest); err != nil {
 		return err
 	}
 
-	if err := s.loadStorages(filepath.Join(path, "storage")); err != nil {
+	if err := s.loadResources(path, manifest); err != nil {
 		return err
 	}
 
@@ -201,18 +250,27 @@ func (s *Simulation) loadMetadata(path string) error {
 	return nil
 }
 
-func (s *Simulation) loadComponentStates(compDir string) error {
+func (s *Simulation) loadComponentStates(
+	root string,
+	manifest *checkpointManifest,
+) error {
 	for _, comp := range s.components {
 		loader, ok := comp.(StateLoader)
 		if !ok {
 			continue
 		}
 
-		filePath := filepath.Join(compDir, comp.Name()+".json")
+		var filePath string
+		if manifest == nil {
+			filePath = filepath.Join(root, "components", comp.Name()+".json")
+		} else {
+			entry := manifest.Components[comp.Name()]
+			filePath = checkpointAbsPath(root, entry.Path)
+		}
 
 		f, err := os.Open(filePath)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if manifest == nil && os.IsNotExist(err) {
 				continue
 			}
 			return fmt.Errorf("open component file %s: %w", comp.Name(), err)
@@ -229,32 +287,49 @@ func (s *Simulation) loadComponentStates(compDir string) error {
 	return nil
 }
 
-func (s *Simulation) loadStorages(storageDir string) error {
-	for _, comp := range s.components {
-		owner, ok := comp.(StorageOwner)
-		if !ok {
-			continue
+func (s *Simulation) loadResources(
+	root string,
+	manifest *checkpointManifest,
+) error {
+	resources, err := s.collectResources()
+	if err != nil {
+		return err
+	}
+
+	for _, resource := range resources {
+		var filePath string
+		if manifest == nil {
+			filePath = filepath.Join(
+				root,
+				"resources",
+				resource.name+resource.fileExtension,
+			)
+		} else {
+			entry := manifest.Resources[resource.name]
+			filePath = checkpointAbsPath(root, entry.Path)
 		}
-
-		storage := owner.GetStorage()
-		if storage == nil {
-			continue
-		}
-
-		name := owner.StorageName()
-		filePath := filepath.Join(storageDir, name+".bin")
-
 		f, err := os.Open(filePath)
 		if err != nil {
-			if os.IsNotExist(err) {
-				continue
+			if manifest == nil && os.IsNotExist(err) {
+				legacyPath := filepath.Join(
+					root,
+					"storage",
+					resource.name+resource.fileExtension,
+				)
+				f, err = os.Open(legacyPath)
+				if os.IsNotExist(err) {
+					continue
+				}
 			}
-			return fmt.Errorf("open storage file %s: %w", name, err)
+
+			if err != nil {
+				return fmt.Errorf("open resource file %s: %w", resource.name, err)
+			}
 		}
 
-		if err := storage.Load(f); err != nil {
+		if err := resource.resource.Load(f); err != nil {
 			f.Close()
-			return fmt.Errorf("load storage %s: %w", name, err)
+			return fmt.Errorf("load resource %s: %w", resource.name, err)
 		}
 
 		f.Close()

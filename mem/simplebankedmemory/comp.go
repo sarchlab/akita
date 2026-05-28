@@ -3,6 +3,7 @@ package simplebankedmemory
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/simulation"
 )
 
 // Comp models a banked memory with configurable banking and pipeline behavior.
@@ -20,6 +21,17 @@ func (c *Comp) GetStorage() *mem.Storage {
 // StorageName returns the name used to identify this component's storage.
 func (c *Comp) StorageName() string {
 	return c.Spec.StorageRef
+}
+
+// Resources returns resources referenced by this component.
+func (c *Comp) Resources() []simulation.Resource {
+	if c.storage == nil || c.Spec.StorageRef == "" {
+		return nil
+	}
+
+	return []simulation.Resource{
+		mem.NewStorageCheckpointResource(c.Spec.StorageRef, c.storage),
+	}
 }
 
 // --- Free functions for pipeline / buffer / bank-selection / address conversion ---
