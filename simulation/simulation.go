@@ -105,7 +105,8 @@ func (s *Simulation) registerPort(p Port) {
 
 // RegisterConnection registers a connection with the simulation runtime
 // inventory. Setup code still owns topology construction and PlugIn calls, but
-// registered connections can be validated and checkpointed as runtime owners.
+// registered connections are tracked as runtime entities in the global state
+// manager.
 func (s *Simulation) RegisterConnection(c Connection) {
 	connName := c.Name()
 	s.registerEntity(connectionEntity(connName), c)
@@ -121,7 +122,7 @@ func (s *Simulation) Connections() []Connection {
 }
 
 // RegisterResource registers non-timing program state that can be referenced
-// by multiple components and checkpointed independently.
+// by multiple components and reached by name through the global state manager.
 func (s *Simulation) RegisterResource(r Resource) {
 	s.registerResource(r)
 }

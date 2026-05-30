@@ -30,7 +30,7 @@ func (c *Comp) Resources() []simulation.Resource {
 	}
 
 	return []simulation.Resource{
-		mem.NewStorageCheckpointResource(c.Spec.StorageRef, c.storage),
+		mem.NewStorageResource(c.Spec.StorageRef, c.storage),
 	}
 }
 

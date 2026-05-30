@@ -43,7 +43,7 @@ type Spec struct {
     Latency       int       // Fixed response latency in cycles
     Width         int       // Max new requests accepted per tick
     CacheLineSize int       // Access granularity in bytes
-    StorageRef    string    // Storage identifier (set to component name)
+    StorageRef    string    // Storage resource name (component name + ".Storage")
 }
 ```
 
@@ -67,9 +67,9 @@ func (c *Comp) GetStorage() *mem.Storage   // Access backing storage
 func (c *Comp) Resources() []simulation.Resource
 ```
 
-`Comp` exposes its backing storage as a simulation shared-state resource, so
-checkpointing can save the memory payload without the `simulation` package
-depending directly on `mem.Storage`.
+`Comp` exposes its backing storage as a simulation shared-state resource, so the
+memory is reachable by name through the global state manager without the
+`simulation` package depending directly on `mem.Storage`.
 
 ## Builder Pattern
 

@@ -1,7 +1,6 @@
 package modeling_test
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/modeling"
@@ -143,66 +142,6 @@ func TestEventDrivenHandle(t *testing.T) {
 	if got.Message != "processed" {
 		t.Errorf("State().Message = %q, want %q", got.Message, "processed")
 	}
-}
-
-// --- SaveState/LoadState ---
-
-func TestEventDrivenSaveLoadState(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	proc := &mockProcessor{}
-	spec := edSpec{Capacity: 5, Label: "save-test"}
-
-	comp := modeling.NewEventDrivenBuilder[edSpec, edState]().
-		WithEngine(engine).
-		WithSpec(spec).
-		WithProcessor(proc).
-		Build("EDComp")
-
-	comp.State = edState{Count: 77, Message: "saved"}
-
-	var buf bytes.Buffer
-	if err := comp.SaveState(&buf); err != nil {
-		t.Fatalf("SaveState() error: %v", err)
-	}
-
-	// Create a new component and load state into it.
-	comp2 := modeling.NewEventDrivenBuilder[edSpec, edState]().
-		WithEngine(engine).
-		WithProcessor(proc).
-		Build("EDComp2")
-
-	if err := comp2.LoadState(&buf); err != nil {
-		t.Fatalf("LoadState() error: %v", err)
-	}
-
-	if comp2.Spec != spec {
-		t.Errorf("loaded spec = %v, want %v", comp2.Spec, spec)
-	}
-	if comp2.State.Count != 77 {
-		t.Errorf("loaded state count = %d, want 77", comp2.State.Count)
-	}
-	if comp2.State.Message != "saved" {
-		t.Errorf("loaded state message = %q, want %q",
-			comp2.State.Message, "saved")
-	}
-}
-
-// --- ResetWakeup ---
-
-func TestEventDrivenResetWakeup(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	proc := &mockProcessor{}
-
-	comp := modeling.NewEventDrivenBuilder[edSpec, edState]().
-		WithEngine(engine).
-		WithProcessor(proc).
-		Build("EDComp")
-
-	// After build, pendingWakeup is -1, so scheduling should work.
-	// Schedule a wakeup, then reset and schedule again — no panic.
-	comp.ScheduleWakeAt(10)
-	comp.ResetWakeup()
-	comp.ScheduleWakeAt(5) // Should succeed since we reset.
 }
 
 // --- NotifyRecv and NotifyPortFree ---

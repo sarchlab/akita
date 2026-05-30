@@ -2,8 +2,7 @@
 
 Package `modeling` provides the application-level component framework for Akita
 simulations. It builds on `sim` to offer generic, type-safe components with
-structured Spec+State separation, middleware pipelines, and JSON
-checkpoint/restore.
+structured Spec+State separation and middleware pipelines.
 
 ## Key Concepts
 
@@ -50,7 +49,9 @@ Key methods:
 - `Spec S` — returns the immutable spec.
 - `State T` / ``State` field *T` — read/write the current state.
 - `Tick() bool` — runs the middleware pipeline (returns true if progress made).
-- `SaveState(w) / LoadState(r)` — JSON checkpoint/restore.
+- `StateRef() any` — a live reference to the `State` field, exposed to the
+  simulation's global state manager (`simulation.StateHolder`) for resolution
+  via `GetStateByName`.
 
 ### EventDrivenComponent[S, T]
 
@@ -95,16 +96,3 @@ err := modeling.ValidateState(MyState{})         // allows nested structs
 
 Both reject pointers, interfaces, channels, and functions. Map keys must be
 `string` or integer types.
-
-## Save / Load
-
-Both component types support JSON serialization of their spec and state:
-
-```go
-// Save
-comp.SaveState(writer)
-
-// Load
-comp.LoadState(reader)
-comp.ResetWakeup()        // for EventDrivenComponent[S,T]
-```

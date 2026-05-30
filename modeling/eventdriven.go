@@ -1,8 +1,6 @@
 package modeling
 
 import (
-	"encoding/json"
-	"io"
 	"math"
 	"sync"
 
@@ -101,47 +99,4 @@ func (c *EventDrivenComponent[S, T]) NotifyRecv(port messaging.Port) {
 // immediate wakeup.
 func (c *EventDrivenComponent[S, T]) NotifyPortFree(port messaging.Port) {
 	c.ScheduleWakeNow()
-}
-
-// ResetWakeup resets the pending wakeup guard to math.MaxUint64, allowing new
-// wakeup events to be scheduled. This is used after loading state from a
-// checkpoint.
-func (c *EventDrivenComponent[S, T]) ResetWakeup() {
-	c.pendingWakeup = math.MaxUint64
-}
-
-// SaveState marshals the component's spec and state as JSON and writes
-// it to w.
-func (c *EventDrivenComponent[S, T]) SaveState(w io.Writer) error {
-	snap := componentSnapshot[S, T]{
-		Spec:  c.Spec,
-		State: c.State,
-	}
-
-	data, err := json.Marshal(snap)
-	if err != nil {
-		return err
-	}
-
-	_, err = w.Write(data)
-
-	return err
-}
-
-// LoadState reads JSON from r and restores the component's spec and state.
-func (c *EventDrivenComponent[S, T]) LoadState(r io.Reader) error {
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return err
-	}
-
-	var snap componentSnapshot[S, T]
-	if err := json.Unmarshal(data, &snap); err != nil {
-		return err
-	}
-
-	c.Spec = snap.Spec
-	c.State = snap.State
-
-	return nil
 }

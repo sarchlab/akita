@@ -55,8 +55,8 @@ type Spec struct {
 ### State (mutable runtime data)
 
 Contains the directory state, MSHR state, all inter-stage buffers and
-pipelines, transaction list, and inflight counters. Fully JSON-serializable
-for checkpointing.
+pipelines, transaction list, and inflight counters. Fully JSON-serializable, as
+required by the `State` constraint.
 
 ## Builder Pattern
 
