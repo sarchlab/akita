@@ -256,6 +256,8 @@ var _ = Describe("Simulation", func() {
 		simulation.RegisterConnection(connection)
 
 		Expect(simulation.Entities()).To(ConsistOf(
+			Entity{Kind: EntityKindEngine, Name: "engine"},
+			Entity{Kind: EntityKindIDGenerator, Name: "id-generator"},
 			Entity{Kind: EntityKindComponent, Name: "comp"},
 			Entity{Kind: EntityKindPort, Name: "port"},
 			Entity{Kind: EntityKindConnection, Name: "conn"},

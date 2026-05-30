@@ -12,7 +12,9 @@ A `Simulation` holds:
 - A `DataRecorder` (SQLite-backed) for recording simulation data.
 - A `DBTracer` for visual tracing (used by the Daisen visualizer).
 - An optional `Monitor` for live web-based inspection.
-- A registry of all components, ports, connections, and shared-state resources.
+- A global state manager: one flat entity inventory of all components, ports,
+  connections, shared-state resources, and the engine and ID generator
+  singletons, resolvable by name via `GetStateByName`.
 
 The registry uses local minimal interfaces for components, ports, connections,
 and resources. Concrete messaging types satisfy those interfaces structurally,
@@ -64,10 +66,31 @@ resources := sim.Resources()
 entities := sim.Entities()
 ```
 
-`Entities` returns typed references from the simulation's common entity
-registry. It is useful for checkpoint inventory and tooling without requiring
-components, ports, connections, and resources to share one implementation
-interface.
+### Global State Manager
+
+The simulation is a global state manager: every registered runtime object —
+component, port, connection, shared-state resource, and the engine and ID
+generator singletons — is recorded as an `Entity` in one flat inventory.
+`Entities()` returns these descriptors in registration order, which is useful
+for checkpoint inventory and tooling without requiring every kind to share one
+implementation interface.
+
+Entity names are **globally unique across all kinds**, so any registered object
+can be resolved by name:
+
+```go
+obj, ok := sim.GetStateByName("GPU[1].PageTable") // live object, or (nil, false)
+
+// Typed form: resolves and type-asserts in one step.
+pageTable, ok := simulation.GetState[*vm.PageTable](sim, "GPU[1].PageTable")
+```
+
+This is a deliberate access backdoor (similar to Unity's `GetComponent`): a
+"magic" component can reach designed shared state — a page table, memory, or
+allocator resource — directly by name. Resolve the handle once at setup and
+cache it; `GetStateByName` is a map lookup, not a free dereference, so it does
+not belong on a hot path. The reserved singleton names `engine` and
+`id-generator` must not be reused by user objects.
 
 ## Checkpoint Save / Load
 

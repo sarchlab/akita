@@ -211,7 +211,7 @@ func (b Builder) buildSpec(name string) Spec {
 		AddrTotalNumOfElements:         b.addrTotalNumOfElements,
 		AddrCurrentElementIndex:        b.addrCurrentElementIndex,
 		AddrOffset:                     b.addrOffset,
-		StorageRef:                     name,
+		StorageRef:                     name + ".Storage",
 	}
 }
 

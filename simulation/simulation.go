@@ -27,8 +27,13 @@ type Simulation struct {
 	resources         []Resource
 	resourceNameIndex map[string]int
 
-	entities        []Entity
-	entityNameIndex map[EntityKind]map[string]int
+	// entities is the single, flat inventory of every registered runtime
+	// object. entityObjects holds the live object for each entity (same index),
+	// and entityByName resolves a globally unique name to that index. Together
+	// they back the global state manager and GetStateByName.
+	entities      []Entity
+	entityObjects []any
+	entityByName  map[string]int
 }
 
 // ID returns the ID of the simulation. An ID is a UUID that is generated when
@@ -76,10 +81,7 @@ func (s *Simulation) Components() []Component {
 // RegisterComponent registers a component with the simulation.
 func (s *Simulation) RegisterComponent(c Component) {
 	compName := c.Name()
-	if _, found := s.compNameIndex[compName]; found {
-		panic("component " + compName + " already registered")
-	}
-	s.registerEntity(componentEntity(compName))
+	s.registerEntity(componentEntity(compName), c)
 
 	s.components = append(s.components, c)
 	s.compNameIndex[compName] = len(s.components) - 1
@@ -106,10 +108,7 @@ func (s *Simulation) RegisterComponent(c Component) {
 // registerPort registers a port with the simulation.
 func (s *Simulation) registerPort(p Port) {
 	portName := p.Name()
-	if _, found := s.portNameIndex[portName]; found {
-		panic("port " + portName + " already registered")
-	}
-	s.registerEntity(portEntity(portName))
+	s.registerEntity(portEntity(portName), p)
 
 	s.ports = append(s.ports, p)
 	s.portNameIndex[portName] = len(s.ports) - 1
@@ -120,10 +119,7 @@ func (s *Simulation) registerPort(p Port) {
 // registered connections can be validated and checkpointed as runtime owners.
 func (s *Simulation) RegisterConnection(c Connection) {
 	connName := c.Name()
-	if _, found := s.connNameIndex[connName]; found {
-		panic("connection " + connName + " already registered")
-	}
-	s.registerEntity(connectionEntity(connName))
+	s.registerEntity(connectionEntity(connName), c)
 
 	s.connections = append(s.connections, c)
 	s.connNameIndex[connName] = len(s.connections) - 1
@@ -164,7 +160,7 @@ func (s *Simulation) registerResource(r Resource) {
 
 		return
 	}
-	s.registerEntity(resourceEntity(r))
+	s.registerEntity(resourceEntity(r), r)
 
 	s.resources = append(s.resources, r)
 	s.resourceNameIndex[name] = len(s.resources) - 1
@@ -176,9 +172,56 @@ func (s *Simulation) Resources() []Resource {
 	return s.resources
 }
 
-// Entities returns a stable snapshot of all registered simulation entities.
+// Entities returns a stable snapshot of all registered simulation entities, in
+// registration order.
 func (s *Simulation) Entities() []Entity {
 	return append([]Entity(nil), s.entities...)
+}
+
+// GetStateByName resolves a registered entity name to its live object. It is
+// the global state-access backdoor: any component can reach designed shared
+// state (such as a page table or memory resource) by name. Resolve the handle
+// once at setup and cache it; this is a map lookup, not a free dereference.
+//
+// The returned value is the concrete registered object (a Component, Port,
+// Connection, Resource, the engine, or the ID-generator handle); callers type
+// assert it, or use the generic GetState helper.
+func (s *Simulation) GetStateByName(name string) (any, bool) {
+	idx, found := s.entityByName[name]
+	if !found {
+		return nil, false
+	}
+
+	return s.entityObjects[idx], true
+}
+
+// GetEntityByName returns the entity descriptor for the given name.
+func (s *Simulation) GetEntityByName(name string) (Entity, bool) {
+	idx, found := s.entityByName[name]
+	if !found {
+		return Entity{}, false
+	}
+
+	return s.entities[idx], true
+}
+
+// GetState resolves a registered entity by name and type-asserts it to T. It
+// returns the zero value and false if the name is unknown or the object is not
+// a T. This is the typed form of the GetStateByName backdoor.
+func GetState[T any](s *Simulation, name string) (T, bool) {
+	var zero T
+
+	obj, found := s.GetStateByName(name)
+	if !found {
+		return zero, false
+	}
+
+	typed, ok := obj.(T)
+	if !ok {
+		return zero, false
+	}
+
+	return typed, true
 }
 
 // GetComponentByName returns the component with the given name.

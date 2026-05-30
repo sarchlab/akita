@@ -108,7 +108,7 @@ func (b Builder) Build(
 	name string,
 ) *Comp {
 	spec := b.spec
-	spec.StorageRef = name
+	spec.StorageRef = name + ".Storage"
 
 	initialState := State{
 		CurrentState: "enable",

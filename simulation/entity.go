@@ -15,9 +15,24 @@ const (
 
 	// EntityKindResource identifies a registered shared-state resource.
 	EntityKindResource EntityKind = "resource"
+
+	// EntityKindEngine identifies the simulation engine singleton.
+	EntityKindEngine EntityKind = "engine"
+
+	// EntityKindIDGenerator identifies the global ID generator singleton.
+	EntityKindIDGenerator EntityKind = "id-generator"
 )
 
-// Entity is a stable reference to a registered simulation object.
+// Reserved names for the singleton runtime entities. They share the same flat
+// namespace as user entities, so user objects must not use these names.
+const (
+	engineEntityName      = "engine"
+	idGeneratorEntityName = "id-generator"
+)
+
+// Entity is a stable reference to a registered simulation object. It is the
+// common vocabulary the global state manager uses for every registered runtime
+// object, regardless of its concrete kind.
 type Entity struct {
 	Kind EntityKind
 	Name string
@@ -27,16 +42,10 @@ type Entity struct {
 	Type string
 }
 
-func newEntityNameIndex() map[EntityKind]map[string]int {
-	return map[EntityKind]map[string]int{
-		EntityKindComponent:  make(map[string]int),
-		EntityKindPort:       make(map[string]int),
-		EntityKindConnection: make(map[string]int),
-		EntityKindResource:   make(map[string]int),
-	}
-}
-
-func (s *Simulation) registerEntity(entity Entity) {
+// registerEntity records an entity and the live object it refers to in the
+// single, flat entity inventory. Names must be globally unique across all
+// kinds, which is what makes GetStateByName well defined.
+func (s *Simulation) registerEntity(entity Entity, object any) {
 	if entity.Kind == "" {
 		panic("entity kind cannot be empty")
 	}
@@ -45,22 +54,17 @@ func (s *Simulation) registerEntity(entity Entity) {
 		panic("entity name cannot be empty")
 	}
 
-	if s.entityNameIndex == nil {
-		s.entityNameIndex = newEntityNameIndex()
+	if s.entityByName == nil {
+		s.entityByName = make(map[string]int)
 	}
 
-	kindIndex, found := s.entityNameIndex[entity.Kind]
-	if !found {
-		kindIndex = make(map[string]int)
-		s.entityNameIndex[entity.Kind] = kindIndex
-	}
-
-	if _, found := kindIndex[entity.Name]; found {
+	if _, found := s.entityByName[entity.Name]; found {
 		panic(string(entity.Kind) + " " + entity.Name + " already registered")
 	}
 
 	s.entities = append(s.entities, entity)
-	kindIndex[entity.Name] = len(s.entities) - 1
+	s.entityObjects = append(s.entityObjects, object)
+	s.entityByName[entity.Name] = len(s.entities) - 1
 }
 
 func componentEntity(name string) Entity {
