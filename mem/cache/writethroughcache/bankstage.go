@@ -13,7 +13,7 @@ type bankStage struct {
 func (s *bankStage) Reset() {
 	next := &s.cache.comp.State
 	next.BankPostBufs[s.bankID].Elements = nil
-	next.BankPipelines[s.bankID].Stages = nil
+	next.BankPipelines[s.bankID].Clear()
 }
 
 func (s *bankStage) Tick() bool {

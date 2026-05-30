@@ -32,17 +32,40 @@ func TestPipelineAcceptAssignsLane(t *testing.T) {
 	p.Accept(10)
 	p.Accept(20)
 
-	assert.Equal(t, 2, len(p.Stages))
-	assert.Equal(t, 0, p.Stages[0].Lane)
-	assert.Equal(t, 1, p.Stages[1].Lane)
-	assert.Equal(t, 0, p.Stages[0].Stage)
-	assert.Equal(t, 0, p.Stages[1].Stage)
+	assert.Equal(t, 2, len(p.stages))
+	assert.Equal(t, 0, p.stages[0].Lane)
+	assert.Equal(t, 1, p.stages[1].Lane)
+	assert.Equal(t, 0, p.stages[0].Stage)
+	assert.Equal(t, 0, p.stages[1].Stage)
 }
 
 func TestPipelineAcceptCycleLeft(t *testing.T) {
 	p := newPipeline(1, 4)
 	p.Accept(42)
-	assert.Equal(t, 0, p.Stages[0].CycleLeft) // CycleLeft starts at 0
+	assert.Equal(t, 0, p.stages[0].CycleLeft) // Default stage latency is 1.
+}
+
+func TestPipelineAcceptUsesStageLatency(t *testing.T) {
+	p := &Pipeline[int]{
+		Width:        1,
+		NumStages:    1,
+		StageLatency: 2,
+	}
+	postBuf := &Buffer[int]{BufferName: "post", Cap: 10}
+
+	p.Accept(42)
+	assert.Equal(t, 1, p.stages[0].CycleLeft)
+
+	moved := p.Tick(postBuf)
+	assert.True(t, moved)
+	assert.Equal(t, 1, p.Len())
+	assert.Equal(t, 0, postBuf.Size())
+	assert.Equal(t, 0, p.stages[0].CycleLeft)
+
+	moved = p.Tick(postBuf)
+	assert.True(t, moved)
+	assert.Equal(t, 0, p.Len())
+	assert.Equal(t, 1, postBuf.Size())
 }
 
 func TestPipelineTickAdvancesToPostBuf(t *testing.T) {
@@ -53,11 +76,11 @@ func TestPipelineTickAdvancesToPostBuf(t *testing.T) {
 	p.Accept(100)
 
 	// CycleLeft should be 0 for a 1-stage pipeline.
-	assert.Equal(t, 0, p.Stages[0].CycleLeft)
+	assert.Equal(t, 0, p.stages[0].CycleLeft)
 
 	moved := p.Tick(postBuf)
 	assert.True(t, moved)
-	assert.Equal(t, 0, len(p.Stages))
+	assert.Equal(t, 0, len(p.stages))
 	assert.Equal(t, 1, postBuf.Size())
 	assert.Equal(t, 100, postBuf.Elements[0])
 }
@@ -72,20 +95,20 @@ func TestPipelineTickMultiStage(t *testing.T) {
 	// Tick 1: advance to stage 1.
 	moved := p.Tick(postBuf)
 	assert.True(t, moved)
-	assert.Equal(t, 1, len(p.Stages))
-	assert.Equal(t, 1, p.Stages[0].Stage)
-	assert.Equal(t, 0, p.Stages[0].CycleLeft)
+	assert.Equal(t, 1, len(p.stages))
+	assert.Equal(t, 1, p.stages[0].Stage)
+	assert.Equal(t, 0, p.stages[0].CycleLeft)
 
 	// Tick 2: advance to stage 2 (last stage).
 	moved = p.Tick(postBuf)
 	assert.True(t, moved)
-	assert.Equal(t, 1, len(p.Stages))
-	assert.Equal(t, 2, p.Stages[0].Stage)
+	assert.Equal(t, 1, len(p.stages))
+	assert.Equal(t, 2, p.stages[0].Stage)
 
 	// Tick 3: output to postBuf.
 	moved = p.Tick(postBuf)
 	assert.True(t, moved)
-	assert.Equal(t, 0, len(p.Stages))
+	assert.Equal(t, 0, len(p.stages))
 	assert.Equal(t, 1, postBuf.Size())
 }
 
@@ -97,7 +120,7 @@ func TestPipelineTickPostBufFull(t *testing.T) {
 
 	moved := p.Tick(postBuf)
 	assert.False(t, moved)
-	assert.Equal(t, 1, len(p.Stages)) // Item stays.
+	assert.Equal(t, 1, len(p.stages)) // Item stays.
 }
 
 func TestPipelineTickNoMovement(t *testing.T) {
@@ -118,13 +141,13 @@ func TestPipelineMultiLane(t *testing.T) {
 	// Both items at stage 0 with CycleLeft=0.
 	// Tick 1: both advance to stage 1 (last stage).
 	p.Tick(postBuf)
-	for _, s := range p.Stages {
+	for _, s := range p.stages {
 		assert.Equal(t, 1, s.Stage)
 	}
 
 	// Tick 2: both output.
 	p.Tick(postBuf)
-	assert.Equal(t, 0, len(p.Stages))
+	assert.Equal(t, 0, len(p.stages))
 	assert.Equal(t, 2, postBuf.Size())
 }
 
@@ -133,26 +156,26 @@ func TestPipelineBlockedByNextStage(t *testing.T) {
 	p := &Pipeline[int]{
 		Width:     1,
 		NumStages: 2,
-		Stages: []PipelineStage[int]{
+		stages: []pipelineStage[int]{
 			{Lane: 0, Stage: 0, CycleLeft: 0},
 			{Lane: 0, Stage: 1, CycleLeft: 0},
 		},
 	}
-	p.Stages[0].Item = 10
-	p.Stages[1].Item = 20
+	p.stages[0].Item = 10
+	p.stages[1].Item = 20
 
 	// postBuf is full, so stage-1 item can't leave, stage-0 can't advance.
 	postBuf := &Buffer[int]{BufferName: "post", Cap: 0}
 	moved := p.Tick(postBuf)
 	assert.False(t, moved)
-	assert.Equal(t, 2, len(p.Stages))
+	assert.Equal(t, 2, len(p.stages))
 }
 
 func TestPipelineBlockedThenUnblocked(t *testing.T) {
 	p := &Pipeline[int]{
 		Width:     1,
 		NumStages: 2,
-		Stages: []PipelineStage[int]{
+		stages: []pipelineStage[int]{
 			{Lane: 0, Stage: 0, Item: 10, CycleLeft: 0},
 			{Lane: 0, Stage: 1, Item: 20, CycleLeft: 0},
 		},
@@ -163,18 +186,19 @@ func TestPipelineBlockedThenUnblocked(t *testing.T) {
 	// Tick: stage-1 item outputs, stage-0 item advances.
 	moved := p.Tick(postBuf)
 	assert.True(t, moved)
-	assert.Equal(t, 1, len(p.Stages))
-	assert.Equal(t, 1, p.Stages[0].Stage)
-	assert.Equal(t, 10, p.Stages[0].Item)
+	assert.Equal(t, 1, len(p.stages))
+	assert.Equal(t, 1, p.stages[0].Stage)
+	assert.Equal(t, 10, p.stages[0].Item)
 	assert.Equal(t, 1, postBuf.Size())
 	assert.Equal(t, 20, postBuf.Elements[0])
 }
 
 func TestPipelineJSONRoundTrip(t *testing.T) {
 	p := &Pipeline[string]{
-		Width:     2,
-		NumStages: 3,
-		Stages: []PipelineStage[string]{
+		Width:        2,
+		NumStages:    3,
+		StageLatency: 2,
+		stages: []pipelineStage[string]{
 			{Lane: 0, Stage: 1, Item: "alpha", CycleLeft: 1},
 			{Lane: 1, Stage: 0, Item: "beta", CycleLeft: 2},
 		},
@@ -189,11 +213,12 @@ func TestPipelineJSONRoundTrip(t *testing.T) {
 
 	assert.Equal(t, 2, p2.Width)
 	assert.Equal(t, 3, p2.NumStages)
-	assert.Equal(t, 2, len(p2.Stages))
-	assert.Equal(t, "alpha", p2.Stages[0].Item)
-	assert.Equal(t, "beta", p2.Stages[1].Item)
-	assert.Equal(t, 1, p2.Stages[0].CycleLeft)
-	assert.Equal(t, 2, p2.Stages[1].CycleLeft)
+	assert.Equal(t, 2, p2.StageLatency)
+	assert.Equal(t, 2, len(p2.stages))
+	assert.Equal(t, "alpha", p2.stages[0].Item)
+	assert.Equal(t, "beta", p2.stages[1].Item)
+	assert.Equal(t, 1, p2.stages[0].CycleLeft)
+	assert.Equal(t, 2, p2.stages[1].CycleLeft)
 }
 
 func TestPipelineJSONRoundTripStruct(t *testing.T) {
@@ -204,7 +229,7 @@ func TestPipelineJSONRoundTripStruct(t *testing.T) {
 	p := &Pipeline[myItem]{
 		Width:     1,
 		NumStages: 2,
-		Stages: []PipelineStage[myItem]{
+		stages: []pipelineStage[myItem]{
 			{Lane: 0, Stage: 0, Item: myItem{ID: 7}, CycleLeft: 1},
 		},
 	}
@@ -216,7 +241,40 @@ func TestPipelineJSONRoundTripStruct(t *testing.T) {
 	err = json.Unmarshal(data, &p2)
 	require.NoError(t, err)
 
-	assert.Equal(t, 7, p2.Stages[0].Item.ID)
+	assert.Equal(t, 7, p2.stages[0].Item.ID)
+}
+
+func TestPipelineUnmarshalLegacyJSON(t *testing.T) {
+	data := []byte(`{
+		"width": 1,
+		"num_stages": 1,
+		"stages": [
+			{"lane": 0, "stage": 0, "item": 7, "cycle_left": 0}
+		]
+	}`)
+
+	var p Pipeline[int]
+	err := json.Unmarshal(data, &p)
+	require.NoError(t, err)
+
+	postBuf := &Buffer[int]{BufferName: "post", Cap: 10}
+	moved := p.Tick(postBuf)
+
+	assert.True(t, moved)
+	assert.Equal(t, 0, p.StageLatency)
+	assert.Equal(t, 0, p.Len())
+	assert.Equal(t, []int{7}, postBuf.Elements)
+}
+
+func TestPipelineClear(t *testing.T) {
+	p := newPipeline(2, 3)
+	p.Accept(1)
+	p.Accept(2)
+
+	p.Clear()
+
+	assert.Equal(t, 0, p.Len())
+	assert.True(t, p.CanAccept())
 }
 
 func TestPipelineStreamOfItems(t *testing.T) {
@@ -227,14 +285,14 @@ func TestPipelineStreamOfItems(t *testing.T) {
 
 	// Tick 1: item 1 advances to stage 1.
 	p.Tick(postBuf)
-	assert.Equal(t, 1, p.Stages[0].Stage)
+	assert.Equal(t, 1, p.stages[0].Stage)
 
 	p.Accept(2)
 
 	// Tick 2: Item 1 outputs. Item 2 advances to stage 1.
 	p.Tick(postBuf)
 	assert.Equal(t, 1, postBuf.Size())
-	assert.Equal(t, 1, len(p.Stages))
+	assert.Equal(t, 1, len(p.stages))
 
 	// Tick 3: Item 2 outputs.
 	p.Tick(postBuf)
@@ -248,7 +306,7 @@ func TestPipelineCycleLeftDecrement(t *testing.T) {
 	p := &Pipeline[int]{
 		Width:     1,
 		NumStages: 2,
-		Stages: []PipelineStage[int]{
+		stages: []pipelineStage[int]{
 			{Lane: 0, Stage: 0, Item: 99, CycleLeft: 2},
 		},
 	}
@@ -257,23 +315,23 @@ func TestPipelineCycleLeftDecrement(t *testing.T) {
 	// Tick 1: CycleLeft 2→1.
 	moved := p.Tick(postBuf)
 	assert.True(t, moved)
-	assert.Equal(t, 1, p.Stages[0].CycleLeft)
-	assert.Equal(t, 0, p.Stages[0].Stage)
+	assert.Equal(t, 1, p.stages[0].CycleLeft)
+	assert.Equal(t, 0, p.stages[0].Stage)
 
 	// Tick 2: CycleLeft 1→0.
 	moved = p.Tick(postBuf)
 	assert.True(t, moved)
-	assert.Equal(t, 0, p.Stages[0].CycleLeft)
-	assert.Equal(t, 0, p.Stages[0].Stage)
+	assert.Equal(t, 0, p.stages[0].CycleLeft)
+	assert.Equal(t, 0, p.stages[0].Stage)
 
 	// Tick 3: advance to stage 1.
 	moved = p.Tick(postBuf)
 	assert.True(t, moved)
-	assert.Equal(t, 1, p.Stages[0].Stage)
+	assert.Equal(t, 1, p.stages[0].Stage)
 
 	// Tick 4: output.
 	moved = p.Tick(postBuf)
 	assert.True(t, moved)
-	assert.Equal(t, 0, len(p.Stages))
+	assert.Equal(t, 0, len(p.stages))
 	assert.Equal(t, 1, postBuf.Size())
 }

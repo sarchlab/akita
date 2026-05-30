@@ -41,7 +41,7 @@ func (s *bankStage) tickPipeline() bool {
 func (s *bankStage) Reset() {
 	next := &s.cache.comp.State
 	next.DirToBankBufs[s.bankID].Clear()
-	next.BankPipelines[s.bankID].Stages = nil
+	next.BankPipelines[s.bankID].Clear()
 	next.BankPostPipelineBufs[s.bankID].Clear()
 	next.BankInflightTransCounts[s.bankID] = 0
 }

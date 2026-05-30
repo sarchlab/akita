@@ -76,10 +76,6 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		msg := msgI.(*vm.TranslationReq)
 		next.Pipeline.Accept(pipelineTLBReqState{Msg: *msg})
 
-		// Set CycleLeft=1 on the newly accepted entry to preserve the
-		// same per-stage latency as the original hand-coded pipeline.
-		next.Pipeline.Stages[len(next.Pipeline.Stages)-1].CycleLeft = 1
-
 		madeProgress = true
 	}
 
