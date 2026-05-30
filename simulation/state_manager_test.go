@@ -7,6 +7,25 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+type componentRuntimeState struct {
+	Counter int
+}
+
+// statefulComponent keeps its runtime state in a distinct sub-object and
+// exposes it via StateRef, like modeling.Component does.
+type statefulComponent struct {
+	name  string
+	state *componentRuntimeState
+}
+
+func (c *statefulComponent) Name() string {
+	return c.name
+}
+
+func (c *statefulComponent) StateRef() any {
+	return c.state
+}
+
 var _ = Describe("Global state manager", func() {
 	var sim *Simulation
 
@@ -71,26 +90,40 @@ var _ = Describe("Global state manager", func() {
 		})
 	})
 
-	Describe("GetState typed helper", func() {
-		It("should return the typed object when the type matches", func() {
-			conn := newTestConnection("conn")
-			sim.RegisterConnection(conn)
+	Describe("StateHolder entities", func() {
+		It("should return the StateRef for entities holding a distinct state", func() {
+			comp := &statefulComponent{
+				name:  "sc",
+				state: &componentRuntimeState{Counter: 7},
+			}
+			sim.RegisterComponent(comp)
 
-			got, ok := GetState[*testConnection](sim, "conn")
+			obj, found := sim.GetStateByName("sc")
+			Expect(found).To(BeTrue())
+			Expect(obj).To(BeIdenticalTo(comp.state))
+		})
+
+		It("should return a live reference, so backdoor mutations are shared", func() {
+			comp := &statefulComponent{
+				name:  "sc",
+				state: &componentRuntimeState{Counter: 7},
+			}
+			sim.RegisterComponent(comp)
+
+			obj, ok := sim.GetStateByName("sc")
 			Expect(ok).To(BeTrue())
-			Expect(got).To(BeIdenticalTo(conn))
+			obj.(*componentRuntimeState).Counter = 99
+
+			Expect(comp.state.Counter).To(Equal(99))
 		})
 
-		It("should return false when the type does not match", func() {
-			sim.RegisterConnection(newTestConnection("conn"))
+		It("should fall back to the entity itself when it holds no distinct state", func() {
+			comp := testComponent{name: "plain"}
+			sim.RegisterComponent(comp)
 
-			_, ok := GetState[*Simulation](sim, "conn")
-			Expect(ok).To(BeFalse())
-		})
-
-		It("should return false for unknown names", func() {
-			_, ok := GetState[*testConnection](sim, "missing")
-			Expect(ok).To(BeFalse())
+			obj, found := sim.GetStateByName("plain")
+			Expect(found).To(BeTrue())
+			Expect(obj).To(Equal(comp))
 		})
 	})
 
@@ -100,9 +133,8 @@ var _ = Describe("Global state manager", func() {
 			Expect(found).To(BeTrue())
 			Expect(obj).To(BeIdenticalTo(sim.GetEngine()))
 
-			entity, ok := sim.GetEntityByName("engine")
-			Expect(ok).To(BeTrue())
-			Expect(entity.Kind).To(Equal(EntityKindEngine))
+			Expect(sim.Entities()).To(ContainElement(
+				Entity{Kind: EntityKindEngine, Name: "engine"}))
 		})
 
 		It("should register the ID generator as an entity", func() {
@@ -110,14 +142,14 @@ var _ = Describe("Global state manager", func() {
 			Expect(found).To(BeTrue())
 			Expect(obj).To(BeAssignableToTypeOf(IDGeneratorHandle{}))
 
-			entity, ok := sim.GetEntityByName("id-generator")
-			Expect(ok).To(BeTrue())
-			Expect(entity.Kind).To(Equal(EntityKindIDGenerator))
+			Expect(sim.Entities()).To(ContainElement(
+				Entity{Kind: EntityKindIDGenerator, Name: "id-generator"}))
 		})
 
 		It("should round-trip the ID generator next-ID through the handle", func() {
-			handle, ok := GetState[IDGeneratorHandle](sim, "id-generator")
+			obj, ok := sim.GetStateByName("id-generator")
 			Expect(ok).To(BeTrue())
+			handle := obj.(IDGeneratorHandle)
 
 			original := handle.NextID()
 			defer handle.SetNextID(original)

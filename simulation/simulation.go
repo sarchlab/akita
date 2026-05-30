@@ -1,7 +1,6 @@
 package simulation
 
 import (
-	"github.com/sarchlab/akita/v5/daisen2"
 	"github.com/sarchlab/akita/v5/datarecording"
 
 	"github.com/sarchlab/akita/v5/monitoring2"
@@ -55,16 +54,6 @@ func (s *Simulation) GetDataRecorder() datarecording.DataRecorder {
 // GetMonitor returns the live monitor attached to the simulation, if enabled.
 func (s *Simulation) GetMonitor() *monitoring2.Monitor {
 	return s.monitor
-}
-
-// GetServer is kept for compatibility with older monitoring setup code.
-// Monitoring2 does not expose a Daisen2 replay server.
-func (s *Simulation) GetServer() *daisen2.Server {
-	if s.monitor == nil {
-		return nil
-	}
-
-	return s.monitor.GetServer()
 }
 
 // GetVisTracer returns the tracer used in the simulation.
@@ -178,50 +167,25 @@ func (s *Simulation) Entities() []Entity {
 	return append([]Entity(nil), s.entities...)
 }
 
-// GetStateByName resolves a registered entity name to its live object. It is
-// the global state-access backdoor: any component can reach designed shared
-// state (such as a page table or memory resource) by name. Resolve the handle
-// once at setup and cache it; this is a map lookup, not a free dereference.
+// GetStateByName resolves a registered entity name to a live reference to its
+// State. It is the global state-access backdoor: any component can reach
+// designed shared state (such as a page table or memory resource) by name and
+// mutate it in place. Resolve the reference once at setup and cache it; this is
+// a map lookup, not a free dereference.
 //
-// The returned value is the concrete registered object (a Component, Port,
-// Connection, Resource, the engine, or the ID-generator handle); callers type
-// assert it, or use the generic GetState helper.
-func (s *Simulation) GetStateByName(name string) (any, bool) {
+// The returned State is the entity's StateRef when it implements StateHolder
+// (for example, a modeling.Component returns a pointer to its State field),
+// otherwise the entity value itself (for resources, the engine, or the
+// ID-generator handle). Callers type-assert the result; that friction is
+// intentional, flagging that you are reaching across the normal interfaces into
+// another entity's state.
+func (s *Simulation) GetStateByName(name string) (State, bool) {
 	idx, found := s.entityByName[name]
 	if !found {
 		return nil, false
 	}
 
-	return s.entityObjects[idx], true
-}
-
-// GetEntityByName returns the entity descriptor for the given name.
-func (s *Simulation) GetEntityByName(name string) (Entity, bool) {
-	idx, found := s.entityByName[name]
-	if !found {
-		return Entity{}, false
-	}
-
-	return s.entities[idx], true
-}
-
-// GetState resolves a registered entity by name and type-asserts it to T. It
-// returns the zero value and false if the name is unknown or the object is not
-// a T. This is the typed form of the GetStateByName backdoor.
-func GetState[T any](s *Simulation, name string) (T, bool) {
-	var zero T
-
-	obj, found := s.GetStateByName(name)
-	if !found {
-		return zero, false
-	}
-
-	typed, ok := obj.(T)
-	if !ok {
-		return zero, false
-	}
-
-	return typed, true
+	return stateOf(s.entityObjects[idx]), true
 }
 
 // GetComponentByName returns the component with the given name.
