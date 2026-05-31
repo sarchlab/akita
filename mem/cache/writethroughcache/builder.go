@@ -203,7 +203,7 @@ func (b Builder) WithAddressToPortMapper(
 }
 
 // Build returns a new cache component
-func (b Builder) Build(name string) *modeling.Component[Spec, State] {
+func (b Builder) Build(name string) *Comp {
 	b.assertAllRequiredInformationIsAvailable()
 	b.resolveLegacyMapper()
 
@@ -214,7 +214,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 
 	initialState := b.buildInitialState(name, numSets, blockSize)
 
-	comp := modeling.NewBuilder[Spec, State]().
+	comp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithEngine(b.engine).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
@@ -324,7 +324,7 @@ func (b *Builder) buildSpec(numSets int) Spec {
 }
 
 func (b *Builder) buildPipelineMW(
-	comp *modeling.Component[Spec, State],
+	comp *modeling.Component[Spec, State, modeling.None],
 ) *pipelineMW {
 	m := &pipelineMW{
 		comp: comp,
@@ -343,7 +343,7 @@ func (b *Builder) buildPipelineMW(
 }
 
 func (b *Builder) buildControlMW(
-	comp *modeling.Component[Spec, State],
+	comp *modeling.Component[Spec, State, modeling.None],
 	pmw *pipelineMW,
 ) *controlMW {
 	controlPort := b.controlPort

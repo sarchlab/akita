@@ -56,7 +56,7 @@ func msgMetaToFlits(
 // outgoingMW handles the device→network path:
 // sendFlitOut, prepareMsg, prepareFlits.
 type outgoingMW struct {
-	comp             *modeling.Component[Spec, State]
+	comp             *modeling.Component[Spec, State, modeling.None]
 	devicePorts      []messaging.Port
 	networkPort      messaging.Port
 	defaultSwitchDst messaging.RemotePort

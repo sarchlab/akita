@@ -10,9 +10,9 @@ import (
 )
 
 // EventProcessor defines the processing logic for an EventDrivenComponent.
-// S is the Spec type, T is the State type.
-type EventProcessor[S any, T any] interface {
-	Process(comp *EventDrivenComponent[S, T], now timing.VTimeInSec) bool
+// S is the Spec type, T is the State type, R is the Resources type.
+type EventProcessor[S any, T any, R any] interface {
+	Process(comp *EventDrivenComponent[S, T, R], now timing.VTimeInSec) bool
 }
 
 // TimerFiredEvent is the event scheduled by EventDrivenComponent to wake
@@ -26,11 +26,12 @@ type TimerFiredEvent struct {
 //
 // S is the Spec type (immutable configuration).
 // T is the State type (mutable runtime data).
+// R is the Resources type (references to shared resources; None when unused).
 //
 // Instead of periodic ticking, EventDrivenComponent schedules wakeup events
 // via [ScheduleWakeAt] or [ScheduleWakeNow]. A dedup guard (pendingWakeup)
 // prevents redundant event scheduling.
-type EventDrivenComponent[S any, T any] struct {
+type EventDrivenComponent[S any, T any, R any] struct {
 	sync.Mutex
 	hooking.HookableBase
 	*messaging.PortOwnerBase
@@ -39,13 +40,14 @@ type EventDrivenComponent[S any, T any] struct {
 	name      string
 	Spec      S
 	State     T
-	processor EventProcessor[S, T]
+	Resources R
+	processor EventProcessor[S, T, R]
 
 	pendingWakeup timing.VTimeInSec
 }
 
 // Name returns the component name.
-func (c *EventDrivenComponent[S, T]) Name() string {
+func (c *EventDrivenComponent[S, T, R]) Name() string {
 	return c.name
 }
 
@@ -53,13 +55,13 @@ func (c *EventDrivenComponent[S, T]) Name() string {
 // the State field to the simulation's global state manager (it satisfies
 // simulation.StateHolder structurally). The returned pointer aliases the State
 // field, so reads and writes through it are shared with the component.
-func (c *EventDrivenComponent[S, T]) StateRef() any {
+func (c *EventDrivenComponent[S, T, R]) StateRef() any {
 	return &c.State
 }
 
 // ScheduleWakeAt schedules a wakeup at time t. If a wakeup is already
 // pending at the same or earlier time, this is a no-op (dedup guard).
-func (c *EventDrivenComponent[S, T]) ScheduleWakeAt(t timing.VTimeInSec) {
+func (c *EventDrivenComponent[S, T, R]) ScheduleWakeAt(t timing.VTimeInSec) {
 	if c.pendingWakeup != math.MaxUint64 && c.pendingWakeup <= t {
 		return
 	}
@@ -73,13 +75,13 @@ func (c *EventDrivenComponent[S, T]) ScheduleWakeAt(t timing.VTimeInSec) {
 }
 
 // ScheduleWakeNow schedules a wakeup at the current engine time.
-func (c *EventDrivenComponent[S, T]) ScheduleWakeNow() {
+func (c *EventDrivenComponent[S, T, R]) ScheduleWakeNow() {
 	c.ScheduleWakeAt(c.Engine.CurrentTime())
 }
 
 // Handle processes an event. For TimerFiredEvent, it resets the dedup guard
 // and calls the processor.
-func (c *EventDrivenComponent[S, T]) Handle(e timing.Event) error {
+func (c *EventDrivenComponent[S, T, R]) Handle(e timing.Event) error {
 	c.Lock()
 	defer c.Unlock()
 
@@ -91,12 +93,12 @@ func (c *EventDrivenComponent[S, T]) Handle(e timing.Event) error {
 
 // NotifyRecv is called when a port receives a message. It schedules an
 // immediate wakeup.
-func (c *EventDrivenComponent[S, T]) NotifyRecv(port messaging.Port) {
+func (c *EventDrivenComponent[S, T, R]) NotifyRecv(port messaging.Port) {
 	c.ScheduleWakeNow()
 }
 
 // NotifyPortFree is called when a port becomes free. It schedules an
 // immediate wakeup.
-func (c *EventDrivenComponent[S, T]) NotifyPortFree(port messaging.Port) {
+func (c *EventDrivenComponent[S, T, R]) NotifyPortFree(port messaging.Port) {
 	c.ScheduleWakeNow()
 }

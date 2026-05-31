@@ -9,7 +9,7 @@ import (
 // pipelineMW holds all non-serializable infrastructure for the cache data
 // pipeline. It implements the Tick method and delegates NamedHookable to comp.
 type pipelineMW struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, modeling.None]
 
 	topPort    messaging.Port
 	bottomPort messaging.Port

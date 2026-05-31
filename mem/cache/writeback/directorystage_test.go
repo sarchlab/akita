@@ -54,7 +54,7 @@ var _ = Describe("DirectoryStage", func() {
 		}
 
 		m = &pipelineMW{}
-		m.comp = modeling.NewBuilder[Spec, State]().
+		m.comp = modeling.NewBuilder[Spec, State, modeling.None]().
 			WithEngine(nil).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{

@@ -17,7 +17,7 @@ import (
 )
 
 type walkMW struct {
-	comp      *modeling.Component[Spec, State]
+	comp      *modeling.Component[Spec, State, modeling.None]
 	pageTable vm.PageTable
 }
 

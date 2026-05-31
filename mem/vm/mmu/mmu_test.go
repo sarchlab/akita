@@ -20,7 +20,7 @@ var _ = Describe("MMU", func() {
 		topPort          *MockPort
 		migrationPort    *MockPort
 		pageTable        *MockPageTable
-		mmuComp          *modeling.Component[Spec, State]
+		mmuComp          *modeling.Component[Spec, State, modeling.None]
 		translationMWRef *translationMW
 		migrationMWRef   *migrationMW
 	)
@@ -431,7 +431,7 @@ var _ = Describe("MMU Integration", func() {
 	var (
 		mockCtrl   *gomock.Controller
 		engine     timing.Engine
-		mmuComp    *modeling.Component[Spec, State]
+		mmuComp    *modeling.Component[Spec, State, modeling.None]
 		agent      *MockPort
 		connection messaging.Connection
 	)

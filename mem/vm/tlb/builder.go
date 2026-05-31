@@ -144,7 +144,7 @@ func (b Builder) WithControlPort(port messaging.Port) Builder {
 }
 
 // Build creates a new TLB
-func (b Builder) Build(name string) *modeling.Component[Spec, State] {
+func (b Builder) Build(name string) *Comp {
 	addrMapperKind, addrMapperPorts, addrMapperInterleavingSize := b.resolveAddressMapper()
 
 	spec := b.spec
@@ -166,7 +166,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		},
 	}
 
-	modelComp := modeling.NewBuilder[Spec, State]().
+	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithEngine(b.engine).
 		WithFreq(b.spec.Freq).
 		WithSpec(spec).

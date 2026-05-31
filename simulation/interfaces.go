@@ -2,18 +2,26 @@ package simulation
 
 import "reflect"
 
+// Entity is the abstract base interface for every registered runtime object.
+// Components, ports, connections, and resources all satisfy it. It is the
+// common vocabulary the global state manager uses to track entities and resolve
+// them by name; the concrete kinds extend it with their own capabilities.
+type Entity interface {
+	Name() string
+}
+
 // Component is the minimal component contract the simulation runtime needs.
 // Concrete messaging components satisfy this without the simulation package
 // depending on messaging.
 type Component interface {
-	Name() string
+	Entity
 }
 
 // Port is the minimal port contract the simulation runtime needs.
 // Concrete messaging ports satisfy this without the simulation package
 // depending on messaging.
 type Port interface {
-	Name() string
+	Entity
 	NumIncoming() int
 	NumOutgoing() int
 }
@@ -22,7 +30,7 @@ type Port interface {
 // Concrete messaging connections satisfy this without the simulation package
 // depending on messaging.
 type Connection interface {
-	Name() string
+	Entity
 }
 
 // PortOwner is implemented by simulation-native components that expose ports.

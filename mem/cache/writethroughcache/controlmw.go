@@ -6,7 +6,7 @@ import (
 
 // controlMW runs the control stage (flush/invalidate/restart).
 type controlMW struct {
-	comp         *modeling.Component[Spec, State]
+	comp         *modeling.Component[Spec, State, modeling.None]
 	controlStage *controlStage
 }
 

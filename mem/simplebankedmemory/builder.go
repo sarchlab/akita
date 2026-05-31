@@ -165,27 +165,23 @@ func (b Builder) Build(name string) *Comp {
 	spec := b.buildSpec(name)
 	initialState := b.buildInitialState(spec)
 
-	modelComp := modeling.NewBuilder[Spec, State]().
+	modelComp := modeling.NewBuilder[Spec, State, Resources]().
 		WithEngine(b.engine).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithResources(Resources{Storage: storage}).
 		Build(name)
 	modelComp.State = initialState
 
-	c := &Comp{
-		Component: modelComp,
-		storage:   storage,
-	}
-
-	b.topPort.SetComponent(c)
+	b.topPort.SetComponent(modelComp)
 	modelComp.AddPort("Top", b.topPort)
 
-	tfMW := &tickFinalizeMW{comp: modelComp, storage: storage}
+	tfMW := &tickFinalizeMW{comp: modelComp}
 	modelComp.AddMiddleware(tfMW)
 	dMW := &dispatchMW{comp: modelComp}
 	modelComp.AddMiddleware(dMW)
 
-	return c
+	return modelComp
 }
 
 func (b Builder) resolveStorage() *mem.Storage {

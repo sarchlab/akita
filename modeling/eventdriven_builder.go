@@ -12,46 +12,55 @@ import (
 //
 // S is the Spec type (immutable configuration).
 // T is the State type (mutable runtime data).
-type EventDrivenBuilder[S any, T any] struct {
+// R is the Resources type (references to shared resources; None when unused).
+type EventDrivenBuilder[S any, T any, R any] struct {
 	engine    timing.EventScheduler
 	spec      S
-	processor EventProcessor[S, T]
+	resources R
+	processor EventProcessor[S, T, R]
 }
 
 // NewEventDrivenBuilder creates a new EventDrivenBuilder.
-func NewEventDrivenBuilder[S any, T any]() EventDrivenBuilder[S, T] {
-	return EventDrivenBuilder[S, T]{}
+func NewEventDrivenBuilder[S any, T any, R any]() EventDrivenBuilder[S, T, R] {
+	return EventDrivenBuilder[S, T, R]{}
 }
 
 // WithEngine sets the simulation engine.
-func (b EventDrivenBuilder[S, T]) WithEngine(engine timing.EventScheduler) EventDrivenBuilder[S, T] {
+func (b EventDrivenBuilder[S, T, R]) WithEngine(engine timing.EventScheduler) EventDrivenBuilder[S, T, R] {
 	b.engine = engine
 	return b
 }
 
 // WithSpec sets the component specification.
-func (b EventDrivenBuilder[S, T]) WithSpec(spec S) EventDrivenBuilder[S, T] {
+func (b EventDrivenBuilder[S, T, R]) WithSpec(spec S) EventDrivenBuilder[S, T, R] {
 	b.spec = spec
 	return b
 }
 
+// WithResources sets the component's shared-resource references.
+func (b EventDrivenBuilder[S, T, R]) WithResources(resources R) EventDrivenBuilder[S, T, R] {
+	b.resources = resources
+	return b
+}
+
 // WithProcessor sets the event processor.
-func (b EventDrivenBuilder[S, T]) WithProcessor(
-	processor EventProcessor[S, T],
-) EventDrivenBuilder[S, T] {
+func (b EventDrivenBuilder[S, T, R]) WithProcessor(
+	processor EventProcessor[S, T, R],
+) EventDrivenBuilder[S, T, R] {
 	b.processor = processor
 	return b
 }
 
 // Build creates the EventDrivenComponent with the given name.
-func (b EventDrivenBuilder[S, T]) Build(name string) *EventDrivenComponent[S, T] {
+func (b EventDrivenBuilder[S, T, R]) Build(name string) *EventDrivenComponent[S, T, R] {
 	naming.MustBeValid(name)
 
-	comp := &EventDrivenComponent[S, T]{
+	comp := &EventDrivenComponent[S, T, R]{
 		PortOwnerBase: messaging.NewPortOwnerBase(),
 		Engine:        b.engine,
 		name:          name,
 		Spec:          b.spec,
+		Resources:     b.resources,
 		processor:     b.processor,
 		pendingWakeup: math.MaxUint64,
 	}

@@ -17,6 +17,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		engine        *MockEngine
 		memController *Comp
 		port          *MockPort
+		storage       *mem.Storage
 	)
 
 	BeforeEach(func() {
@@ -32,9 +33,10 @@ var _ = Describe("Ideal Memory Controller", func() {
 			SetComponent(gomock.Any()).
 			AnyTimes()
 
+		storage = mem.NewStorage(1 * mem.MB)
 		memController = MakeBuilder().
 			WithEngine(engine).
-			WithNewStorage(1 * mem.MB).
+			WithStorage(storage).
 			WithSpec(Spec{Width: 1, Latency: 10, CacheLineSize: 64}).
 			WithTopPort(port).
 			WithCtrlPort(messaging.NewPort(nil, 16, 16, "MemCtrl.CtrlPort")).
@@ -59,7 +61,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		madeProgress := memController.Tick()
 
 		Expect(madeProgress).To(BeTrue())
-		state := memController.Component.State
+		state := memController.State
 		Expect(state.InflightTransactions).To(HaveLen(1))
 		Expect(state.InflightTransactions[0].IsRead).To(BeTrue())
 		// After first tick: latency=10, decrement once → 9
@@ -80,7 +82,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		madeProgress := memController.Tick()
 		Expect(madeProgress).To(BeTrue())
-		state := memController.Component.State
+		state := memController.State
 		Expect(state.InflightTransactions).To(HaveLen(1))
 		Expect(state.InflightTransactions[0].IsRead).To(BeFalse())
 		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(9))
@@ -105,7 +107,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 			memController.Tick()
 		}
 
-		state := memController.Component.State
+		state := memController.State
 		Expect(state.InflightTransactions).To(HaveLen(1))
 		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(1))
 
@@ -114,7 +116,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		port.EXPECT().Send(gomock.Any()).Return(nil)
 		memController.Tick()
 
-		state = memController.Component.State
+		state = memController.State
 		Expect(state.InflightTransactions).To(HaveLen(0))
 	})
 
@@ -143,11 +145,11 @@ var _ = Describe("Ideal Memory Controller", func() {
 		port.EXPECT().Send(gomock.Any()).Return(nil)
 		memController.Tick()
 
-		state := memController.Component.State
+		state := memController.State
 		Expect(state.InflightTransactions).To(HaveLen(0))
 
 		// Verify data was written to storage
-		data, err := memController.GetStorage().Read(0, 4)
+		data, err := storage.Read(0, 4)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal([]byte{0, 1, 2, 3}))
 	})
@@ -176,7 +178,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		port.EXPECT().Send(gomock.Any()).Return(&messaging.SendError{})
 		memController.Tick()
 
-		state := memController.Component.State
+		state := memController.State
 		Expect(state.InflightTransactions).To(HaveLen(1))
 		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(0))
 
@@ -185,13 +187,13 @@ var _ = Describe("Ideal Memory Controller", func() {
 		port.EXPECT().Send(gomock.Any()).Return(nil)
 		memController.Tick()
 
-		state = memController.Component.State
+		state = memController.State
 		Expect(state.InflightTransactions).To(HaveLen(0))
 	})
 
 	It("should write with dirty mask", func() {
 		// Pre-write data
-		err := memController.GetStorage().Write(0, []byte{10, 20, 30, 40})
+		err := storage.Write(0, []byte{10, 20, 30, 40})
 		Expect(err).ToNot(HaveOccurred())
 
 		writeData3 := []byte{0, 1, 2, 3}
@@ -220,19 +222,19 @@ var _ = Describe("Ideal Memory Controller", func() {
 		memController.Tick()
 
 		// Check that only dirty bytes were written
-		data, err := memController.GetStorage().Read(0, 4)
+		data, err := storage.Read(0, 4)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal([]byte{10, 20, 2, 40}))
 	})
 
 	It("should use Spec for latency and width", func() {
-		spec := memController.Component.Spec
+		spec := memController.Spec
 		Expect(spec.Latency).To(Equal(10))
 		Expect(spec.Width).To(Equal(1))
 	})
 
 	It("should use State for current state", func() {
-		state := memController.Component.State
+		state := memController.State
 		Expect(state.CurrentState).To(Equal("enable"))
 	})
 })

@@ -235,18 +235,21 @@ var _ = Describe("SimpleBankedMemory", func() {
 	var (
 		engine  timing.EventScheduler
 		memComp *Comp
+		storage *mem.Storage
 		agent   *testAgent
 		conn    *loopbackConnection
 	)
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		storage = mem.NewStorage(4 * mem.GB)
 		memComp = MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1 * timing.GHz).
 			WithNumBanks(2).
 			WithStageLatency(2).
 			WithTopPortBufferSize(4).
+			WithStorage(storage).
 			WithTopPort(messaging.NewPort(nil, 4, 4, "Mem.TopPort")).
 			Build("Mem")
 
@@ -263,7 +266,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 	It("should return read data after configured latency", func() {
 		data := []byte{1, 2, 3, 4}
-		err := memComp.GetStorage().Write(0x0, data)
+		err := storage.Write(0x0, data)
 		Expect(err).NotTo(HaveOccurred())
 
 		topPort := memComp.GetPortByName("Top")
@@ -291,7 +294,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		addr := uint64(0x100)
 
 		initial := []byte{0xAA, 0xBB, 0xCC, 0xDD}
-		err := memComp.GetStorage().Write(addr, initial)
+		err := storage.Write(addr, initial)
 		Expect(err).NotTo(HaveOccurred())
 
 		newData := []byte{0x10, 0x20, 0x30, 0x40}
@@ -332,7 +335,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		Expect(ok).To(BeTrue())
 		Expect(readRsp.Data).To(Equal(newData))
 
-		committed, err := memComp.GetStorage().Read(addr, uint64(len(newData)))
+		committed, err := storage.Read(addr, uint64(len(newData)))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(committed).To(Equal(newData))
 	})

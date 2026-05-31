@@ -67,7 +67,7 @@ var _ = Describe("Bank Stage", func() {
 			storage: storage,
 			topPort: topPort,
 		}
-		m.comp = modeling.NewBuilder[Spec, State]().
+		m.comp = modeling.NewBuilder[Spec, State, modeling.None]().
 			WithEngine(timing.NewSerialEngine()).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{

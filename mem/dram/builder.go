@@ -476,7 +476,7 @@ func (b Builder) WithRFCb(cycle int) Builder {
 }
 
 // Build builds a new MemController.
-func (b Builder) Build(name string) *modeling.Component[Spec, State] {
+func (b Builder) Build(name string) *Comp {
 	b.calculateBurstCycle()
 	b.tRL = b.tAL + b.tCL
 	b.tWL = b.tAL + b.tCWL
@@ -500,13 +500,6 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 			b.numRank, b.numBankGroup, b.numBank),
 	}
 
-	modelComp := modeling.NewBuilder[Spec, State]().
-		WithEngine(b.engine).
-		WithFreq(spec.Freq).
-		WithSpec(spec).
-		Build(name)
-	modelComp.State = initialState
-
 	var storage *mem.Storage
 	if b.useGlobalStorage {
 		storage = b.storage
@@ -518,7 +511,15 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		storage = mem.NewStorage(uint64(totalSize))
 	}
 
-	b.addMiddlewares(modelComp, storage, timing, cmdCycles)
+	modelComp := modeling.NewBuilder[Spec, State, Resources]().
+		WithEngine(b.engine).
+		WithFreq(spec.Freq).
+		WithSpec(spec).
+		WithResources(Resources{Storage: storage}).
+		Build(name)
+	modelComp.State = initialState
+
+	b.addMiddlewares(modelComp, timing, cmdCycles)
 
 	b.topPort.SetComponent(modelComp)
 	modelComp.AddPort("Top", b.topPort)
@@ -531,15 +532,13 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 }
 
 func (b Builder) addMiddlewares(
-	modelComp *modeling.Component[Spec, State],
-	storage *mem.Storage,
+	modelComp *modeling.Component[Spec, State, Resources],
 	timing Timing,
 	cmdCycles map[CommandKind]int,
 ) {
 	rMW := &respondMW{
 		comp:    modelComp,
 		topPort: b.topPort,
-		storage: storage,
 	}
 	modelComp.AddMiddleware(rMW)
 

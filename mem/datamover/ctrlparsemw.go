@@ -14,7 +14,7 @@ import (
 )
 
 type ctrlParseMW struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, modeling.None]
 }
 
 func (m *ctrlParseMW) ctrlPort() messaging.Port {

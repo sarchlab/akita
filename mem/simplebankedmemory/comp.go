@@ -3,36 +3,57 @@ package simplebankedmemory
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/simulation"
+	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
+// Spec contains immutable configuration for the simple banked memory.
+type Spec struct {
+	Freq                           timing.Freq `json:"freq"`
+	NumBanks                       int         `json:"num_banks"`
+	BankPipelineWidth              int         `json:"bank_pipeline_width"`
+	BankPipelineDepth              int         `json:"bank_pipeline_depth"`
+	StageLatency                   int         `json:"stage_latency"`
+	PostPipelineBufSize            int         `json:"post_pipeline_buf_size"`
+	BankSelectorKind               string      `json:"bank_selector_kind"`
+	BankSelectorLog2InterleaveSize uint64      `json:"bank_selector_log2_interleave_size"`
+	AddrConvKind                   string      `json:"addr_conv_kind"`
+	AddrInterleavingSize           uint64      `json:"addr_interleaving_size"`
+	AddrTotalNumOfElements         int         `json:"addr_total_num_of_elements"`
+	AddrCurrentElementIndex        int         `json:"addr_current_element_index"`
+	AddrOffset                     uint64      `json:"addr_offset"`
+	StorageRef                     string      `json:"storage_ref"`
+}
+
+// bankPipelineItemState is a serializable representation of a pipeline item.
+type bankPipelineItemState struct {
+	IsRead    bool         `json:"is_read"`
+	ReadMsg   mem.ReadReq  `json:"read_msg"`
+	WriteMsg  mem.WriteReq `json:"write_msg"`
+	Committed bool         `json:"committed"`
+	ReadData  []byte       `json:"read_data"`
+}
+
+// bankState captures one bank pipeline + buffer contents.
+type bankState struct {
+	Pipeline        queueing.Pipeline[bankPipelineItemState] `json:"pipeline"`
+	PostPipelineBuf queueing.Buffer[bankPipelineItemState]   `json:"post_pipeline_buf"`
+}
+
+// State contains mutable runtime data for the simple banked memory.
+type State struct {
+	Banks []bankState `json:"banks"`
+}
+
+// Resources holds the shared resources referenced by the memory.
+type Resources struct {
+	Storage *mem.Storage
+}
+
 // Comp models a banked memory with configurable banking and pipeline behavior.
-type Comp struct {
-	*modeling.Component[Spec, State]
-
-	storage *mem.Storage
-}
-
-// GetStorage returns the underlying storage.
-func (c *Comp) GetStorage() *mem.Storage {
-	return c.storage
-}
-
-// StorageName returns the name used to identify this component's storage.
-func (c *Comp) StorageName() string {
-	return c.Spec.StorageRef
-}
-
-// Resources returns resources referenced by this component.
-func (c *Comp) Resources() []simulation.Resource {
-	if c.storage == nil || c.Spec.StorageRef == "" {
-		return nil
-	}
-
-	return []simulation.Resource{
-		mem.NewStorageResource(c.Spec.StorageRef, c.storage),
-	}
-}
+// It is a modeling.Component specialized to this package's Spec, State, and
+// Resources.
+type Comp = modeling.Component[Spec, State, Resources]
 
 // --- Free functions for pipeline / buffer / bank-selection / address conversion ---
 

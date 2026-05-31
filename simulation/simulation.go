@@ -17,22 +17,21 @@ type Simulation struct {
 	metaRecorder *metaRecorder
 	monitor      *monitoring2.Monitor
 
-	components        []Component
-	compNameIndex     map[string]int
-	ports             []Port
-	portNameIndex     map[string]int
-	connections       []Connection
-	connNameIndex     map[string]int
-	resources         []Resource
-	resourceNameIndex map[string]int
+	components    []Component
+	compNameIndex map[string]int
+	ports         []Port
+	portNameIndex map[string]int
+	connections   []Connection
+	connNameIndex map[string]int
+	resources     []Resource
 
-	// entities is the single, flat inventory of every registered runtime
-	// object. entityObjects holds the live object for each entity (same index),
-	// and entityByName resolves a globally unique name to that index. Together
-	// they back the global state manager and GetStateByName.
-	entities      []Entity
-	entityObjects []any
-	entityByName  map[string]int
+	// entities is the single, flat inventory of every registered runtime object
+	// (components, ports, connections, resources, and the engine and ID
+	// generator singletons), each held as the Entity it satisfies. entityByName
+	// resolves a globally unique name to its index. Together they back the
+	// global state manager and GetStateByName.
+	entities     []Entity
+	entityByName map[string]int
 }
 
 // ID returns the ID of the simulation. An ID is a UUID that is generated when
@@ -67,10 +66,33 @@ func (s *Simulation) Components() []Component {
 	return s.components
 }
 
+// registerEntity records a live entity in the single, flat inventory. It is the
+// only cross-kind uniqueness check — names must be globally unique across all
+// kinds, which is what makes GetStateByName well defined. The typed Register
+// methods pass the concrete object, which satisfies Entity, so the inventory
+// holds the live entity itself.
+func (s *Simulation) registerEntity(e Entity) {
+	name := e.Name()
+	if name == "" {
+		panic("entity name cannot be empty")
+	}
+
+	if s.entityByName == nil {
+		s.entityByName = make(map[string]int)
+	}
+
+	if _, found := s.entityByName[name]; found {
+		panic("entity " + name + " already registered")
+	}
+
+	s.entities = append(s.entities, e)
+	s.entityByName[name] = len(s.entities) - 1
+}
+
 // RegisterComponent registers a component with the simulation.
 func (s *Simulation) RegisterComponent(c Component) {
 	compName := c.Name()
-	s.registerEntity(componentEntity(compName), c)
+	s.registerEntity(c)
 
 	s.components = append(s.components, c)
 	s.compNameIndex[compName] = len(s.components) - 1
@@ -86,18 +108,12 @@ func (s *Simulation) RegisterComponent(c Component) {
 	for _, p := range componentPorts(c) {
 		s.registerPort(p)
 	}
-
-	if owner, ok := c.(ResourceOwner); ok {
-		for _, resource := range owner.Resources() {
-			s.registerResource(resource)
-		}
-	}
 }
 
 // registerPort registers a port with the simulation.
 func (s *Simulation) registerPort(p Port) {
 	portName := p.Name()
-	s.registerEntity(portEntity(portName), p)
+	s.registerEntity(p)
 
 	s.ports = append(s.ports, p)
 	s.portNameIndex[portName] = len(s.ports) - 1
@@ -109,7 +125,7 @@ func (s *Simulation) registerPort(p Port) {
 // manager.
 func (s *Simulation) RegisterConnection(c Connection) {
 	connName := c.Name()
-	s.registerEntity(connectionEntity(connName), c)
+	s.registerEntity(c)
 
 	s.connections = append(s.connections, c)
 	s.connNameIndex[connName] = len(s.connections) - 1
@@ -121,39 +137,17 @@ func (s *Simulation) Connections() []Connection {
 	return s.connections
 }
 
-// RegisterResource registers non-timing program state that can be referenced
-// by multiple components and reached by name through the global state manager.
+// RegisterResource registers non-timing program state that can be referenced by
+// multiple components and reached by name through the global state manager. The
+// simulation owns the resource; components hold references to it. Setup
+// constructs and registers each shared resource once under a canonical name.
 func (s *Simulation) RegisterResource(r Resource) {
-	s.registerResource(r)
-}
-
-func (s *Simulation) registerResource(r Resource) {
 	if r == nil {
 		panic("resource cannot be nil")
 	}
 
-	name := r.Name()
-	if name == "" {
-		panic("resource name cannot be empty")
-	}
-
-	identity := r.Identity()
-	if identity == "" {
-		panic("resource " + name + " identity cannot be empty")
-	}
-
-	if idx, found := s.resourceNameIndex[name]; found {
-		existing := s.resources[idx]
-		if existing.Identity() != identity {
-			panic("resource " + name + " already registered")
-		}
-
-		return
-	}
-	s.registerEntity(resourceEntity(r), r)
-
+	s.registerEntity(r)
 	s.resources = append(s.resources, r)
-	s.resourceNameIndex[name] = len(s.resources) - 1
 }
 
 // Resources returns all shared-state resources registered in the simulation.
@@ -186,7 +180,7 @@ func (s *Simulation) GetStateByName(name string) (State, bool) {
 		return nil, false
 	}
 
-	return stateOf(s.entityObjects[idx]), true
+	return stateOf(s.entities[idx]), true
 }
 
 // GetComponentByName returns the component with the given name.

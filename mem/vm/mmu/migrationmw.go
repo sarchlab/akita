@@ -10,7 +10,7 @@ import (
 // migrationMW handles migration: sending migration requests to the driver,
 // processing migration returns, and sending translation responses.
 type migrationMW struct {
-	comp      *modeling.Component[Spec, State]
+	comp      *modeling.Component[Spec, State, modeling.None]
 	pageTable vm.PageTable
 }
 

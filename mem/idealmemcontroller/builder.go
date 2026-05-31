@@ -114,13 +114,6 @@ func (b Builder) Build(
 		CurrentState: "enable",
 	}
 
-	modelComp := modeling.NewBuilder[Spec, State]().
-		WithEngine(b.engine).
-		WithFreq(spec.Freq).
-		WithSpec(spec).
-		Build(name)
-	modelComp.State = initialState
-
 	var storage *mem.Storage
 	if b.storage == nil {
 		storage = mem.NewStorage(b.capacity)
@@ -128,20 +121,23 @@ func (b Builder) Build(
 		storage = b.storage
 	}
 
-	c := &Comp{
-		Component: modelComp,
-		storage:   storage,
-	}
+	modelComp := modeling.NewBuilder[Spec, State, Resources]().
+		WithEngine(b.engine).
+		WithFreq(spec.Freq).
+		WithSpec(spec).
+		WithResources(Resources{Storage: storage}).
+		Build(name)
+	modelComp.State = initialState
 
 	ctrlMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(ctrlMW)
-	memMW := &memMiddleware{comp: modelComp, storage: c.storage}
+	memMW := &memMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(memMW)
 
-	b.topPort.SetComponent(c)
+	b.topPort.SetComponent(modelComp)
 	modelComp.AddPort("Top", b.topPort)
-	b.ctrlPort.SetComponent(c)
+	b.ctrlPort.SetComponent(modelComp)
 	modelComp.AddPort("Control", b.ctrlPort)
 
-	return c
+	return modelComp
 }

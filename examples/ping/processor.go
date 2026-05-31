@@ -20,13 +20,13 @@ type PingRsp struct {
 	SeqID int
 }
 
-// PingProcessor implements modeling.EventProcessor[PingSpec, PingState].
+// PingProcessor implements modeling.EventProcessor[PingSpec, PingState, modeling.None].
 type PingProcessor struct{}
 
 // Process handles all ping logic: sending scheduled pings, delivering
 // matured responses, and processing incoming messages.
 func (p *PingProcessor) Process(
-	comp *modeling.EventDrivenComponent[PingSpec, PingState],
+	comp *modeling.EventDrivenComponent[PingSpec, PingState, modeling.None],
 	now timing.VTimeInSec,
 ) bool {
 	progress := false
@@ -41,7 +41,7 @@ func (p *PingProcessor) Process(
 }
 
 func (p *PingProcessor) sendScheduledPings(
-	comp *modeling.EventDrivenComponent[PingSpec, PingState],
+	comp *modeling.EventDrivenComponent[PingSpec, PingState, modeling.None],
 	state *PingState,
 	spec PingSpec,
 	now timing.VTimeInSec,
@@ -77,7 +77,7 @@ func (p *PingProcessor) sendScheduledPings(
 }
 
 func (p *PingProcessor) deliverPendingResponses(
-	comp *modeling.EventDrivenComponent[PingSpec, PingState],
+	comp *modeling.EventDrivenComponent[PingSpec, PingState, modeling.None],
 	state *PingState,
 	spec PingSpec,
 	now timing.VTimeInSec,
@@ -111,7 +111,7 @@ func (p *PingProcessor) deliverPendingResponses(
 }
 
 func (p *PingProcessor) processIncoming(
-	comp *modeling.EventDrivenComponent[PingSpec, PingState],
+	comp *modeling.EventDrivenComponent[PingSpec, PingState, modeling.None],
 	state *PingState,
 	spec PingSpec,
 	now timing.VTimeInSec,

@@ -9,7 +9,7 @@ import (
 )
 
 type parseTopMW struct {
-	comp    *modeling.Component[Spec, State]
+	comp    *modeling.Component[Spec, State, Resources]
 	topPort messaging.Port
 }
 

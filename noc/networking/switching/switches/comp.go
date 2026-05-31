@@ -2,9 +2,16 @@ package switches
 
 import (
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 )
+
+// Spec contains immutable configuration for the switch.
+type Spec struct {
+	Freq timing.Freq `json:"freq"`
+}
 
 // routedFlit is a flit that has been received and assigned a route destination.
 type routedFlit struct {
@@ -31,3 +38,6 @@ type portComplexState struct {
 type State struct {
 	PortComplexes []portComplexState `json:"port_complexes"`
 }
+
+// Comp is the switch component.
+type Comp = modeling.Component[Spec, State, modeling.None]

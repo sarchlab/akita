@@ -111,11 +111,11 @@ func (sdmBuilder Builder) WithOutsidePort(port messaging.Port) Builder {
 }
 
 // Build a new StreamingDataMover
-func (sdmBuilder Builder) Build(name string) *modeling.Component[Spec, State] {
+func (sdmBuilder Builder) Build(name string) *Comp {
 	spec := sdmBuilder.spec
 	initialState := State{}
 
-	modelComp := modeling.NewBuilder[Spec, State]().
+	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithEngine(sdmBuilder.engine).
 		WithFreq(spec.Freq).
 		WithSpec(spec).

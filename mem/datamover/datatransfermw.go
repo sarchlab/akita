@@ -15,7 +15,7 @@ import (
 )
 
 type dataTransferMW struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, modeling.None]
 }
 
 func (m *dataTransferMW) insidePort() messaging.Port {

@@ -79,9 +79,7 @@ var _ = Describe("Global state manager", func() {
 		})
 
 		It("should keep handles valid across the same object pointer", func() {
-			comp := &resourceComponent{
-				testComponent: testComponent{name: "comp"},
-			}
+			comp := &testComponent{name: "comp"}
 			sim.RegisterComponent(comp)
 
 			obj, found := sim.GetStateByName("comp")
@@ -127,38 +125,6 @@ var _ = Describe("Global state manager", func() {
 		})
 	})
 
-	Describe("Singleton runtime entities", func() {
-		It("should register the engine as an entity resolving to the engine", func() {
-			obj, found := sim.GetStateByName("engine")
-			Expect(found).To(BeTrue())
-			Expect(obj).To(BeIdenticalTo(sim.GetEngine()))
-
-			Expect(sim.Entities()).To(ContainElement(
-				Entity{Kind: EntityKindEngine, Name: "engine"}))
-		})
-
-		It("should register the ID generator as an entity", func() {
-			obj, found := sim.GetStateByName("id-generator")
-			Expect(found).To(BeTrue())
-			Expect(obj).To(BeAssignableToTypeOf(IDGeneratorHandle{}))
-
-			Expect(sim.Entities()).To(ContainElement(
-				Entity{Kind: EntityKindIDGenerator, Name: "id-generator"}))
-		})
-
-		It("should round-trip the ID generator next-ID through the handle", func() {
-			obj, ok := sim.GetStateByName("id-generator")
-			Expect(ok).To(BeTrue())
-			handle := obj.(IDGeneratorHandle)
-
-			original := handle.NextID()
-			defer handle.SetNextID(original)
-
-			handle.SetNextID(42)
-			Expect(handle.NextID()).To(Equal(uint64(42)))
-		})
-	})
-
 	Describe("Global name uniqueness", func() {
 		It("should reject a connection whose name collides with a component", func() {
 			sim.RegisterComponent(testComponent{name: "shared"})
@@ -182,11 +148,6 @@ var _ = Describe("Global state manager", func() {
 			}).To(PanicWith(ContainSubstring("already registered")))
 		})
 
-		It("should reject a user entity that reuses a reserved singleton name", func() {
-			Expect(func() {
-				sim.RegisterComponent(testComponent{name: "engine"})
-			}).To(PanicWith(ContainSubstring("already registered")))
-		})
 	})
 
 	Describe("Deterministic entity inventory", func() {

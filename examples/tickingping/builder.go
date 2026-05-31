@@ -44,8 +44,8 @@ func (b Builder) WithOutPort(port messaging.Port) Builder {
 }
 
 // Build creates a new tickingping component.
-func (b Builder) Build(name string) *modeling.Component[Spec, State] {
-	comp := modeling.NewBuilder[Spec, State]().
+func (b Builder) Build(name string) *Comp {
+	comp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithEngine(b.engine).
 		WithFreq(b.spec.Freq).
 		WithSpec(b.spec).

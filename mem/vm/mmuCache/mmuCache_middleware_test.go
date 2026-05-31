@@ -15,7 +15,7 @@ import (
 var _ = Describe("MMUCacheMiddleware", func() {
 	var (
 		mockCtrl    *gomock.Controller
-		comp        *modeling.Component[Spec, State]
+		comp        *modeling.Component[Spec, State, modeling.None]
 		mw          *mmuCacheMiddleware
 		topPort     *MockPort
 		bottomPort  *MockPort
@@ -52,7 +52,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 			Table:        initSets(spec.NumLevels, spec.NumBlocks),
 		}
 
-		comp = modeling.NewBuilder[Spec, State]().
+		comp = modeling.NewBuilder[Spec, State, modeling.None]().
 			WithSpec(spec).
 			Build("MMUCache")
 		comp.State = initialState

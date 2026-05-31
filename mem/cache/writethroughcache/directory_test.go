@@ -62,7 +62,7 @@ var _ = Describe("Directory", func() {
 		// Initialize directoryState before SetState so both buffers match
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
-		c.comp = modeling.NewBuilder[Spec, State]().
+		c.comp = modeling.NewBuilder[Spec, State, modeling.None]().
 			WithEngine(nil).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{

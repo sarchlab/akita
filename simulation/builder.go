@@ -70,7 +70,6 @@ func (b Builder) Build() *Simulation {
 
 	b.createDataRecorder(s)
 	b.createEngine(s)
-	b.registerRuntimeSingletons(s)
 	b.createMetaRecorder(s)
 	b.createVisTracer(s)
 	b.createServer(s)
@@ -80,12 +79,11 @@ func (b Builder) Build() *Simulation {
 
 func (b Builder) createSimulation() *Simulation {
 	return &Simulation{
-		id:                xid.New().String(),
-		compNameIndex:     make(map[string]int),
-		portNameIndex:     make(map[string]int),
-		connNameIndex:     make(map[string]int),
-		resourceNameIndex: make(map[string]int),
-		entityByName:      make(map[string]int),
+		id:            xid.New().String(),
+		compNameIndex: make(map[string]int),
+		portNameIndex: make(map[string]int),
+		connNameIndex: make(map[string]int),
+		entityByName:  make(map[string]int),
 	}
 }
 

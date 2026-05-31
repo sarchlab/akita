@@ -4,8 +4,34 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 )
+
+// Spec contains immutable configuration for the writethroughcache.
+type Spec struct {
+	Freq                  timing.Freq `json:"freq"`
+	NumReqPerCycle        int         `json:"num_req_per_cycle"`
+	Log2BlockSize         uint64      `json:"log2_block_size"`
+	BankLatency           int         `json:"bank_latency"`
+	WayAssociativity      int         `json:"way_associativity"`
+	MaxNumConcurrentTrans int         `json:"max_num_concurrent_trans"`
+	NumBanks              int         `json:"num_banks"`
+	NumMSHREntry          int         `json:"num_mshr_entry"`
+	NumSets               int         `json:"num_sets"`
+	TotalByteSize         uint64      `json:"total_byte_size"`
+	DirLatency            int         `json:"dir_latency"`
+
+	// WritePolicyType selects the write-policy strategy.
+	// Valid values: "write-around" (default), "write-evict", "write-through".
+	WritePolicyType string `json:"write_policy_type"`
+
+	// Address mapper configuration (inlined from interface)
+	AddressMapperType string   `json:"address_mapper_type"`
+	RemotePortNames   []string `json:"remote_port_names"`
+	InterleavingSize  uint64   `json:"interleaving_size"`
+}
 
 // State contains mutable runtime data for the writethroughcache.
 type State struct {
@@ -109,3 +135,6 @@ func (t *transactionState) PID() vm.PID {
 
 	return t.WritePID
 }
+
+// Comp is the writethroughcache component type.
+type Comp = modeling.Component[Spec, State, modeling.None]

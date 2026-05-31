@@ -7,16 +7,34 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v5/daisen2"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 var dumpLog = false
 
+// Spec contains the immutable configuration for the MemAccessAgent.
+type Spec struct {
+	Freq              timing.Freq `json:"freq"`
+	MaxAddress        uint64      `json:"max_address"`
+	UseVirtualAddress bool        `json:"use_virtual_address"`
+}
+
+// State contains the mutable runtime data for the MemAccessAgent.
+type State struct {
+	WriteLeft       int                     `json:"write_left"`
+	ReadLeft        int                     `json:"read_left"`
+	KnownMemValue   map[uint64][]uint32     `json:"known_mem_value"`
+	PendingReadReq  map[uint64]mem.ReadReq  `json:"pending_read_req"`
+	PendingWriteReq map[uint64]mem.WriteReq `json:"pending_write_req"`
+}
+
 // A MemAccessAgent is a Component that can help testing the cache and the
 // memory controllers by generating a large number of read and write requests.
 type MemAccessAgent struct {
-	*modeling.Component[Spec, State]
+	*modeling.Component[Spec, State, modeling.None]
 
 	// LowModule is the downstream port to which memory requests are sent.
 	// It is not serialized as part of the state.

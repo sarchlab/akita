@@ -93,8 +93,8 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 }
 
 func buildMemoryHierarchy(engine timing.EventScheduler, s *simulation.Simulation) (
-	*modeling.Component[writethroughcache.Spec, writethroughcache.State],
-	*modeling.Component[writeback.Spec, writeback.State],
+	*modeling.Component[writethroughcache.Spec, writethroughcache.State, modeling.None],
+	*modeling.Component[writeback.Spec, writeback.State, modeling.None],
 	*idealmemcontroller.Comp,
 ) {
 	memCtrl := idealmemcontroller.MakeBuilder().
@@ -138,9 +138,9 @@ func buildMemoryHierarchy(engine timing.EventScheduler, s *simulation.Simulation
 func buildTranslationHierarchy(
 	engine timing.EventScheduler, s *simulation.Simulation,
 ) (
-	*modeling.Component[mmu.Spec, mmu.State],
-	*modeling.Component[tlb.Spec, tlb.State],
-	*modeling.Component[tlb.Spec, tlb.State],
+	*modeling.Component[mmu.Spec, mmu.State, modeling.None],
+	*modeling.Component[tlb.Spec, tlb.State, modeling.None],
+	*modeling.Component[tlb.Spec, tlb.State, modeling.None],
 ) {
 	pageTable := setupPageTable(*maxAddressFlag)
 

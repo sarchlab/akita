@@ -11,7 +11,7 @@ import (
 )
 
 type dispatchMW struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, Resources]
 }
 
 func (m *dispatchMW) topPort() messaging.Port {

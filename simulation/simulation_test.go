@@ -44,15 +44,6 @@ func (r testResource) Load(io.Reader) error {
 	return nil
 }
 
-type resourceComponent struct {
-	testComponent
-	resources []Resource
-}
-
-func (c *resourceComponent) Resources() []Resource {
-	return c.resources
-}
-
 type testConnection struct {
 	name string
 }
@@ -223,22 +214,6 @@ var _ = Describe("Simulation", func() {
 		}).To(PanicWith(ContainSubstring("already registered")))
 	})
 
-	It("should register shared state resources exposed by components", func() {
-		resource := testResource{
-			name:     "Program.Memory",
-			kind:     "test.Resource",
-			format:   "json",
-			ext:      ".json",
-			identity: "resource-1",
-		}
-		simulation.RegisterComponent(&resourceComponent{
-			testComponent: testComponent{name: "comp"},
-			resources:     []Resource{resource},
-		})
-
-		Expect(simulation.Resources()).To(HaveLen(1))
-	})
-
 	It("should return all registered entities", func() {
 		resource := testResource{
 			name:     "Program.Memory",
@@ -249,23 +224,18 @@ var _ = Describe("Simulation", func() {
 		}
 		connection := newTestConnection("conn")
 
-		simulation.RegisterComponent(&resourceComponent{
-			testComponent: comp,
-			resources:     []Resource{resource},
-		})
+		simulation.RegisterComponent(comp)
 		simulation.RegisterConnection(connection)
+		simulation.RegisterResource(resource)
 
-		Expect(simulation.Entities()).To(ConsistOf(
-			Entity{Kind: EntityKindEngine, Name: "engine"},
-			Entity{Kind: EntityKindIDGenerator, Name: "id-generator"},
-			Entity{Kind: EntityKindComponent, Name: "comp"},
-			Entity{Kind: EntityKindPort, Name: "port"},
-			Entity{Kind: EntityKindConnection, Name: "conn"},
-			Entity{
-				Kind: EntityKindResource,
-				Name: "Program.Memory",
-				Type: "test.Resource",
-			},
+		entities := simulation.Entities()
+		names := make([]string, 0, len(entities))
+		for _, e := range entities {
+			names = append(names, e.Name())
+		}
+
+		Expect(names).To(ConsistOf(
+			"comp", "port", "conn", "Program.Memory",
 		))
 	})
 

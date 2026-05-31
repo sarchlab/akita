@@ -15,7 +15,7 @@ import (
 )
 
 type incomingMW struct {
-	comp        *modeling.Component[Spec, State]
+	comp        *modeling.Component[Spec, State, modeling.None]
 	devicePorts []messaging.Port
 	networkPort messaging.Port
 }

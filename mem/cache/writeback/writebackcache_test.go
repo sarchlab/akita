@@ -32,9 +32,10 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		mockCtrl            *gomock.Controller
 		engine              timing.Engine
 		addressToPortMapper *mem.SinglePortMapper
-		cacheComp           *modeling.Component[Spec, State]
+		cacheComp           *modeling.Component[Spec, State, modeling.None]
 		m                   *pipelineMW
 		dram                *idealmemcontroller.Comp
+		dramStorage         *mem.Storage
 		conn                *directconnection.Comp
 		agentPort           *MockPort
 		controlAgentPort    *MockPort
@@ -70,9 +71,10 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		engine = timing.NewSerialEngine()
 
+		dramStorage = mem.NewStorage(4 * mem.GB)
 		dram = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
-			WithNewStorage(4 * mem.GB).
+			WithStorage(dramStorage).
 			WithFreq(1 * timing.GHz).
 			WithSpec(idealmemcontroller.Spec{Width: 1, Latency: 200, CacheLineSize: 64}).
 			WithTopPort(messaging.NewPort(nil, 16, 16, "DRAM.TopPort")).
@@ -199,7 +201,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	})
 
 	It("should do read miss, mshr miss, w/ fetch, w/o eviction", func() {
-		dram.GetStorage().Write(0x10000, []byte{
+		dramStorage.Write(0x10000, []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
@@ -230,7 +232,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	})
 
 	It("should handle read miss, mshr hit", func() {
-		dram.GetStorage().Write(0x10000, []byte{
+		dramStorage.Write(0x10000, []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
@@ -324,7 +326,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	})
 
 	It("should handle read miss, mshr miss, w/ fetch, w/ eviction", func() {
-		dram.GetStorage().Write(0x10000, []byte{
+		dramStorage.Write(0x10000, []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,

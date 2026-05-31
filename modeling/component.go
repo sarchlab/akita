@@ -1,25 +1,30 @@
 package modeling
 
-// Component is a generic component that combines Spec, State, Ports, and
-// Middlewares.
+// None is the resource type for components that reference no shared resources.
+// It is a zero-size sentinel used as the third type argument of Component:
+// Component[Spec, State, None].
+type None struct{}
+
+// Component is a generic component that combines Spec, State, Resources, Ports,
+// and Middlewares.
 //
 // S is the Spec type (immutable configuration).
 // T is the State type (mutable runtime data).
-//
-// Component stores a spec and a single mutable state value.
+// R is the Resources type (references to shared resources; None when unused).
 //
 // Component embeds [TickingComponent] for tick-based lifecycle management
 // and [MiddlewareHolder] for the middleware pipeline.
-type Component[S any, T any] struct {
+type Component[S any, T any, R any] struct {
 	*TickingComponent
 	MiddlewareHolder
 
-	Spec  S
-	State T
+	Spec      S
+	State     T
+	Resources R
 }
 
 // Tick runs the middleware pipeline.
-func (c *Component[S, T]) Tick() bool {
+func (c *Component[S, T, R]) Tick() bool {
 	return c.MiddlewareHolder.Tick()
 }
 
@@ -28,6 +33,6 @@ func (c *Component[S, T]) Tick() bool {
 // satisfies simulation.StateHolder structurally). The returned pointer aliases
 // the State field, so reads and writes through it are shared with the
 // component.
-func (c *Component[S, T]) StateRef() any {
+func (c *Component[S, T, R]) StateRef() any {
 	return &c.State
 }

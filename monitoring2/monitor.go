@@ -112,12 +112,6 @@ func (m *Monitor) SetTraceDBPath(path string) {
 	m.tracePath = path
 }
 
-// GetServer is kept for compatibility with older monitoring setup code.
-// Monitoring2 no longer owns a Daisen replay server.
-func (m *Monitor) GetServer() *daisen2.Server {
-	return nil
-}
-
 // CreateProgressBar creates a new progress bar tracked by the monitor.
 func (m *Monitor) CreateProgressBar(name string, total uint64) *daisen2.ProgressBar {
 	bar := &daisen2.ProgressBar{

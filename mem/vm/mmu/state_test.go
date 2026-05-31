@@ -15,7 +15,7 @@ func TestValidateState(t *testing.T) {
 	}
 }
 
-func buildTestMMU(engine timing.EventScheduler, name string) *modeling.Component[Spec, State] {
+func buildTestMMU(engine timing.EventScheduler, name string) *modeling.Component[Spec, State, modeling.None] {
 	return MakeBuilder().
 		WithEngine(engine).
 		WithAutoPageAllocation(true).

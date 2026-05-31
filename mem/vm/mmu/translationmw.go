@@ -24,14 +24,14 @@ type pageTable interface {
 }
 
 // PageTable returns the page table from an MMU component.
-func PageTable(c *modeling.Component[Spec, State]) vm.PageTable {
+func PageTable(c *modeling.Component[Spec, State, modeling.None]) vm.PageTable {
 	return c.Middlewares()[0].(*translationMW).pageTable
 }
 
 // translationMW handles translation requests: parsing from top,
 // page table walks, and sending responses for local hits.
 type translationMW struct {
-	comp      *modeling.Component[Spec, State]
+	comp      *modeling.Component[Spec, State, modeling.None]
 	pageTable vm.PageTable
 }
 

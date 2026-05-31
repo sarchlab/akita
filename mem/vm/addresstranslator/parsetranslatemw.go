@@ -14,7 +14,7 @@ import (
 )
 
 type parseTranslateMW struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, modeling.None]
 }
 
 func (m *parseTranslateMW) topPort() messaging.Port {

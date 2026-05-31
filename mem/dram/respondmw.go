@@ -10,9 +10,8 @@ import (
 )
 
 type respondMW struct {
-	comp    *modeling.Component[Spec, State]
+	comp    *modeling.Component[Spec, State, Resources]
 	topPort messaging.Port
-	storage *mem.Storage
 }
 
 // Tick runs the respond stage twice (matching original execution order).
@@ -66,7 +65,7 @@ func (m *respondMW) finalizeWriteTrans(
 	t *transactionState,
 	i int,
 ) bool {
-	err := m.storage.Write(t.InternalAddress, t.WriteMsg.Data)
+	err := m.comp.Resources.Storage.Write(t.InternalAddress, t.WriteMsg.Data)
 	if err != nil {
 		panic(err)
 	}
@@ -96,7 +95,7 @@ func (m *respondMW) finalizeReadTrans(
 	t *transactionState,
 	i int,
 ) bool {
-	data, err := m.storage.Read(
+	data, err := m.comp.Resources.Storage.Read(
 		t.InternalAddress, t.ReadMsg.AccessByteSize)
 	if err != nil {
 		panic(err)

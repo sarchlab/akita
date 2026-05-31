@@ -35,7 +35,7 @@ func TestComponentSpec(t *testing.T) {
 		Enabled:   true,
 	}
 
-	comp := modeling.NewBuilder[TestSpec, TestState]().
+	comp := modeling.NewBuilder[TestSpec, TestState, modeling.None]().
 		WithEngine(engine).
 		WithFreq(1 * timing.GHz).
 		WithSpec(spec).
@@ -49,7 +49,7 @@ func TestComponentSpec(t *testing.T) {
 
 func TestComponentState(t *testing.T) {
 	engine := timing.NewSerialEngine()
-	comp := modeling.NewBuilder[TestSpec, TestState]().
+	comp := modeling.NewBuilder[TestSpec, TestState, modeling.None]().
 		WithEngine(engine).
 		WithFreq(1 * timing.GHz).
 		Build("TestComp")
@@ -62,7 +62,7 @@ func TestComponentState(t *testing.T) {
 
 func TestComponentStateAssignment(t *testing.T) {
 	engine := timing.NewSerialEngine()
-	comp := modeling.NewBuilder[TestSpec, TestState]().
+	comp := modeling.NewBuilder[TestSpec, TestState, modeling.None]().
 		WithEngine(engine).
 		WithFreq(1 * timing.GHz).
 		Build("TestComp")
@@ -96,7 +96,7 @@ func TestComponentSpecImmutableAfterCreation(t *testing.T) {
 		Enabled:   true,
 	}
 
-	comp := modeling.NewBuilder[TestSpec, TestState]().
+	comp := modeling.NewBuilder[TestSpec, TestState, modeling.None]().
 		WithEngine(engine).
 		WithFreq(1 * timing.GHz).
 		WithSpec(spec).
@@ -179,7 +179,7 @@ func (m *countMiddleware) Tick() bool {
 
 func TestComponentMiddlewareTick(t *testing.T) {
 	engine := timing.NewSerialEngine()
-	comp := modeling.NewBuilder[TestSpec, TestState]().
+	comp := modeling.NewBuilder[TestSpec, TestState, modeling.None]().
 		WithEngine(engine).
 		WithFreq(1 * timing.GHz).
 		Build("TestComp")
@@ -213,7 +213,7 @@ func TestBuilderWithSpec(t *testing.T) {
 	engine := timing.NewSerialEngine()
 	spec := TestSpec{Frequency: 5.0, BufferLen: 2, Name: "b", Enabled: true}
 
-	comp := modeling.NewBuilder[TestSpec, TestState]().
+	comp := modeling.NewBuilder[TestSpec, TestState, modeling.None]().
 		WithEngine(engine).
 		WithFreq(1 * timing.GHz).
 		WithSpec(spec).
@@ -365,7 +365,7 @@ func TestValidateStateInvalid(t *testing.T) {
 
 func TestStateReturnsState(t *testing.T) {
 	engine := timing.NewSerialEngine()
-	comp := modeling.NewBuilder[TestSpec, TestState]().
+	comp := modeling.NewBuilder[TestSpec, TestState, modeling.None]().
 		WithEngine(engine).
 		WithFreq(1 * timing.GHz).
 		Build("TestComp")
@@ -383,7 +383,7 @@ func TestStateReturnsState(t *testing.T) {
 
 func TestStatePtrReturnsWritablePointer(t *testing.T) {
 	engine := timing.NewSerialEngine()
-	comp := modeling.NewBuilder[TestSpec, TestState]().
+	comp := modeling.NewBuilder[TestSpec, TestState, modeling.None]().
 		WithEngine(engine).
 		WithFreq(1 * timing.GHz).
 		Build("TestComp")
@@ -405,7 +405,7 @@ func TestStatePtrReturnsWritablePointer(t *testing.T) {
 
 // stateModifyMiddleware modifies component state during Tick via StatePtr.
 type stateModifyMiddleware struct {
-	comp *modeling.Component[TestSpec, TestState]
+	comp *modeling.Component[TestSpec, TestState, modeling.None]
 }
 
 func (m *stateModifyMiddleware) Tick() bool {
@@ -418,7 +418,7 @@ func (m *stateModifyMiddleware) Tick() bool {
 
 func TestTickMutatesStateInPlace(t *testing.T) {
 	engine := timing.NewSerialEngine()
-	comp := modeling.NewBuilder[TestSpec, TestState]().
+	comp := modeling.NewBuilder[TestSpec, TestState, modeling.None]().
 		WithEngine(engine).
 		WithFreq(1 * timing.GHz).
 		Build("TestComp")
@@ -438,7 +438,7 @@ func TestTickMutatesStateInPlace(t *testing.T) {
 }
 
 type stateCheckMiddleware struct {
-	comp           *modeling.Component[TestSpec, TestState]
+	comp           *modeling.Component[TestSpec, TestState, modeling.None]
 	beforeMutation int
 	afterMutation  int
 }
@@ -455,7 +455,7 @@ func (m *stateCheckMiddleware) Tick() bool {
 
 func TestStatePtrMutationAffectsStateDuringTick(t *testing.T) {
 	engine := timing.NewSerialEngine()
-	comp := modeling.NewBuilder[TestSpec, TestState]().
+	comp := modeling.NewBuilder[TestSpec, TestState, modeling.None]().
 		WithEngine(engine).
 		WithFreq(1 * timing.GHz).
 		Build("TestComp")
@@ -480,7 +480,7 @@ func TestStatePtrMutationAffectsStateDuringTick(t *testing.T) {
 
 func TestInPlaceSliceUpdate(t *testing.T) {
 	engine := timing.NewSerialEngine()
-	comp := modeling.NewBuilder[TestSpec, TestState]().
+	comp := modeling.NewBuilder[TestSpec, TestState, modeling.None]().
 		WithEngine(engine).
 		WithFreq(1 * timing.GHz).
 		Build("TestComp")
@@ -506,7 +506,7 @@ func TestInPlaceMapUpdate(t *testing.T) {
 	}
 
 	engine := timing.NewSerialEngine()
-	comp := modeling.NewBuilder[TestSpec, MapState]().
+	comp := modeling.NewBuilder[TestSpec, MapState, modeling.None]().
 		WithEngine(engine).
 		WithFreq(1 * timing.GHz).
 		Build("TestComp")
@@ -528,7 +528,7 @@ func TestInPlaceMapUpdate(t *testing.T) {
 
 func TestStateAssignmentReplacesState(t *testing.T) {
 	engine := timing.NewSerialEngine()
-	comp := modeling.NewBuilder[TestSpec, TestState]().
+	comp := modeling.NewBuilder[TestSpec, TestState, modeling.None]().
 		WithEngine(engine).
 		WithFreq(1 * timing.GHz).
 		Build("TestComp")

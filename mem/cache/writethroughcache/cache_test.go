@@ -23,8 +23,9 @@ var _ = Describe("Cache", func() {
 		connection          messaging.Connection
 		addressToPortMapper mem.AddressToPortMapper
 		dram                *idealmemcontroller.Comp
+		dramStorage         *mem.Storage
 		cuPort              *MockPort
-		c                   *modeling.Component[Spec, State]
+		c                   *modeling.Component[Spec, State, modeling.None]
 	)
 
 	BeforeEach(func() {
@@ -40,9 +41,10 @@ var _ = Describe("Cache", func() {
 			WithFreq(1 * timing.GHz).
 			Build("Conn")
 
+		dramStorage = mem.NewStorage(4 * mem.GB)
 		dram = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
-			WithNewStorage(4 * mem.GB).
+			WithStorage(dramStorage).
 			WithTopPort(messaging.NewPort(nil, 16, 16, "DRAM.TopPort")).
 			WithCtrlPort(messaging.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
 			Build("DRAM")
@@ -70,7 +72,7 @@ var _ = Describe("Cache", func() {
 	})
 
 	It("should do read miss", func() {
-		dram.GetStorage().Write(0x100, []byte{1, 2, 3, 4})
+		dramStorage.Write(0x100, []byte{1, 2, 3, 4})
 		read := &mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = cuPort.AsRemote()
@@ -91,7 +93,7 @@ var _ = Describe("Cache", func() {
 	})
 
 	It("should do read miss coalesce", func() {
-		dram.GetStorage().Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
+		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := &mem.ReadReq{}
 		read1.ID = timing.GetIDGenerator().Generate()
 		read1.Src = cuPort.AsRemote()
@@ -133,7 +135,7 @@ var _ = Describe("Cache", func() {
 	})
 
 	It("should do read hit", func() {
-		dram.GetStorage().Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
+		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := &mem.ReadReq{}
 		read1.ID = timing.GetIDGenerator().Generate()
 		read1.Src = cuPort.AsRemote()
@@ -188,7 +190,7 @@ var _ = Describe("Cache", func() {
 
 		engine.Run()
 
-		data, _ := dram.GetStorage().Read(0x100, 4)
+		data, _ := dramStorage.Read(0x100, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 
@@ -217,7 +219,7 @@ var _ = Describe("Cache", func() {
 			})
 		engine.Run()
 
-		data, _ := dram.GetStorage().Read(0x100, 4)
+		data, _ := dramStorage.Read(0x100, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 

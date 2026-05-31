@@ -11,7 +11,7 @@ import (
 )
 
 type tlbMiddleware struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, modeling.None]
 }
 
 func (m *tlbMiddleware) topPort() messaging.Port {

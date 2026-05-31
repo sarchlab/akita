@@ -31,7 +31,7 @@ var _ = Describe("Respond Stage", func() {
 		mw = &pipelineMW{
 			topPort: topPort,
 		}
-		mw.comp = modeling.NewBuilder[Spec, State]().
+		mw.comp = modeling.NewBuilder[Spec, State, modeling.None]().
 			WithEngine(nil).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{}).

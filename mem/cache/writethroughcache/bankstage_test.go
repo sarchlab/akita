@@ -52,7 +52,7 @@ var _ = Describe("Bankstage", func() {
 		c = &pipelineMW{
 			storage: storage,
 		}
-		c.comp = modeling.NewBuilder[Spec, State]().
+		c.comp = modeling.NewBuilder[Spec, State, modeling.None]().
 			WithEngine(nil).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{

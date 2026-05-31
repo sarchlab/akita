@@ -93,11 +93,11 @@ func (b Builder) WithBottomPort(port messaging.Port) Builder {
 }
 
 // Build returns a new GMMU
-func (b Builder) Build(name string) *modeling.Component[Spec, State] {
+func (b Builder) Build(name string) *Comp {
 	spec := b.spec
 	spec.Latency = b.pageWalkingLatency
 
-	modelComp := modeling.NewBuilder[Spec, State]().
+	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithEngine(b.engine).
 		WithFreq(b.spec.Freq).
 		WithSpec(spec).
@@ -130,7 +130,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 }
 
 func (b Builder) createPorts(
-	modelComp *modeling.Component[Spec, State],
+	modelComp *modeling.Component[Spec, State, modeling.None],
 ) {
 	b.topPort.SetComponent(modelComp)
 	modelComp.AddPort("Top", b.topPort)

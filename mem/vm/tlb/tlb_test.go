@@ -20,7 +20,7 @@ var _ = Describe("TLB", func() {
 	var (
 		mockCtrl    *gomock.Controller
 		engine      *MockEngine
-		tlbComp     *modeling.Component[Spec, State]
+		tlbComp     *modeling.Component[Spec, State, modeling.None]
 		tlbMW       *tlbMiddleware
 		tlbCtrlMW   *ctrlMiddleware
 		topPort     *MockPort
@@ -457,7 +457,7 @@ var _ = Describe("TLB Integration", func() {
 	var (
 		mockCtrl   *gomock.Controller
 		engine     timing.Engine
-		tlbComp    *modeling.Component[Spec, State]
+		tlbComp    *modeling.Component[Spec, State, modeling.None]
 		lowModule  *MockPort
 		agent      *MockPort
 		connection messaging.Connection

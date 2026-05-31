@@ -15,13 +15,15 @@ import (
 
 var _ = Describe("DataMover", func() {
 	var (
-		mockCtrl   *gomock.Controller
-		engine     timing.Engine
-		dataMover  *modeling.Component[Spec, State]
-		insideMem  *idealmemcontroller.Comp
-		outsideMem *idealmemcontroller.Comp
-		conn       *directconnection.Comp
-		srcPort    *MockPort
+		mockCtrl       *gomock.Controller
+		engine         timing.Engine
+		dataMover      *modeling.Component[Spec, State, modeling.None]
+		insideMem      *idealmemcontroller.Comp
+		insideStorage  *mem.Storage
+		outsideMem     *idealmemcontroller.Comp
+		outsideStorage *mem.Storage
+		conn           *directconnection.Comp
+		srcPort        *MockPort
 	)
 
 	BeforeEach(func() {
@@ -32,6 +34,7 @@ var _ = Describe("DataMover", func() {
 		srcPort.EXPECT().SetConnection(gomock.Any()).AnyTimes()
 		srcPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 		srcPort.EXPECT().AsRemote().Return(messaging.RemotePort("SrcPort")).AnyTimes()
+		insideStorage = mem.NewStorage(1 * mem.MB)
 		insideMem = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1 * timing.GHz).
@@ -40,10 +43,11 @@ var _ = Describe("DataMover", func() {
 				Width:         1,
 				CacheLineSize: 64,
 			}).
-			WithNewStorage(1 * mem.MB).
+			WithStorage(insideStorage).
 			WithTopPort(messaging.NewPort(nil, 16, 16, "InsideMem.TopPort")).
 			WithCtrlPort(messaging.NewPort(nil, 16, 16, "InsideMem.CtrlPort")).
 			Build("InsideMem")
+		outsideStorage = mem.NewStorage(1 * mem.MB)
 		outsideMem = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1 * timing.GHz).
@@ -52,7 +56,7 @@ var _ = Describe("DataMover", func() {
 				Width:         1,
 				CacheLineSize: 64,
 			}).
-			WithNewStorage(1 * mem.MB).
+			WithStorage(outsideStorage).
 			WithTopPort(messaging.NewPort(nil, 16, 16, "OutsideMem.TopPort")).
 			WithCtrlPort(messaging.NewPort(nil, 16, 16, "OutsideMem.CtrlPort")).
 			Build("OutsideMem")
@@ -89,7 +93,7 @@ var _ = Describe("DataMover", func() {
 		for i := range 4096 {
 			data[i] = byte(i)
 		}
-		outsideMem.GetStorage().Write(0, data)
+		outsideStorage.Write(0, data)
 
 		srcPort.EXPECT().
 			Deliver(gomock.Any())
@@ -109,7 +113,7 @@ var _ = Describe("DataMover", func() {
 
 		engine.Run()
 
-		Expect(insideMem.GetStorage().Read(0, 4096)).To(Equal(data))
+		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
 	})
 
 	It("should move data inside to outside", func() {
@@ -117,7 +121,7 @@ var _ = Describe("DataMover", func() {
 		for i := range 4096 {
 			data[i] = byte(i)
 		}
-		insideMem.GetStorage().Write(0, data)
+		insideStorage.Write(0, data)
 
 		srcPort.EXPECT().
 			Deliver(gomock.Any())
@@ -137,7 +141,7 @@ var _ = Describe("DataMover", func() {
 
 		engine.Run()
 
-		Expect(insideMem.GetStorage().Read(0, 4096)).To(Equal(data))
+		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
 	})
 
 	It("should move on difference addresses", func() {
@@ -145,7 +149,7 @@ var _ = Describe("DataMover", func() {
 		for i := range 4096 {
 			data[i] = byte(i)
 		}
-		insideMem.GetStorage().Write(0, data)
+		insideStorage.Write(0, data)
 
 		srcPort.EXPECT().
 			Deliver(gomock.Any())
@@ -165,7 +169,7 @@ var _ = Describe("DataMover", func() {
 
 		engine.Run()
 
-		Expect(outsideMem.GetStorage().Read(4096, 4096)).To(Equal(data))
+		Expect(outsideStorage.Read(4096, 4096)).To(Equal(data))
 	})
 
 	It("should move partial data", func() {
@@ -173,7 +177,7 @@ var _ = Describe("DataMover", func() {
 		for i := range 1024 {
 			data[i] = byte(i)
 		}
-		outsideMem.GetStorage().Write(0, data)
+		outsideStorage.Write(0, data)
 
 		srcPort.EXPECT().
 			Deliver(gomock.Any())
@@ -194,7 +198,7 @@ var _ = Describe("DataMover", func() {
 		engine.Run()
 
 		expected := data[:512]
-		Expect(insideMem.GetStorage().Read(512, 512)).To(Equal(expected))
+		Expect(insideStorage.Read(512, 512)).To(Equal(expected))
 	})
 
 	It("should handle zero-size transfers", func() {
@@ -219,7 +223,7 @@ var _ = Describe("DataMover", func() {
 		for i := range 1024 {
 			data[i] = byte(i)
 		}
-		insideMem.GetStorage().Write(0, data)
+		insideStorage.Write(0, data)
 
 		srcPort.EXPECT().
 			Deliver(gomock.Any())
@@ -240,6 +244,6 @@ var _ = Describe("DataMover", func() {
 		engine.Run()
 
 		expected := append(data[:512], data[:512]...)
-		Expect(insideMem.GetStorage().Read(0, 1024)).To(Equal(expected))
+		Expect(insideStorage.Read(0, 1024)).To(Equal(expected))
 	})
 })

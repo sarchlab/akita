@@ -53,7 +53,7 @@ var _ = Describe("Bottom Parser", func() {
 		c = &pipelineMW{
 			bottomPort: bottomPort,
 		}
-		c.comp = modeling.NewBuilder[Spec, State]().
+		c.comp = modeling.NewBuilder[Spec, State, modeling.None]().
 			WithEngine(nil).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{

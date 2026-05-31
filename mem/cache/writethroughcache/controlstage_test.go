@@ -60,7 +60,7 @@ var _ = Describe("Control Stage", func() {
 			topPort:    topPort,
 			bottomPort: bottomPort,
 		}
-		pmw.comp = modeling.NewBuilder[Spec, State]().
+		pmw.comp = modeling.NewBuilder[Spec, State, modeling.None]().
 			WithEngine(nil).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{

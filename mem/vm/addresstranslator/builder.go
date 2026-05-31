@@ -154,13 +154,13 @@ func (b Builder) WithTranslationProviders(ports ...messaging.RemotePort) Builder
 }
 
 // Build returns a new AddressTranslator
-func (b Builder) Build(name string) *modeling.Component[Spec, State] {
+func (b Builder) Build(name string) *Comp {
 	spec := b.spec
 
 	b.populateMemMapperSpec(&spec)
 	b.populateTransMapperSpec(&spec)
 
-	modelComp := modeling.NewBuilder[Spec, State]().
+	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithEngine(b.engine).
 		WithFreq(b.spec.Freq).
 		WithSpec(spec).
@@ -247,7 +247,7 @@ func (b Builder) populateTransMapperSpec(spec *Spec) {
 	}
 }
 
-func (b Builder) createPorts(c messaging.Component, modelComp *modeling.Component[Spec, State]) {
+func (b Builder) createPorts(c messaging.Component, modelComp *modeling.Component[Spec, State, modeling.None]) {
 	b.topPort.SetComponent(c)
 	modelComp.AddPort("Top", b.topPort)
 

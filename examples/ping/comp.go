@@ -2,9 +2,14 @@ package ping
 
 import (
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
-	// ScheduledPing represents a ping that should be initiated at a given time.
 )
+
+// PingSpec is the immutable configuration for a ping component.
+type PingSpec struct {
+	OutPort messaging.Port
+}
 
 type ScheduledPing struct {
 	SendAt timing.VTimeInSec
@@ -26,3 +31,6 @@ type PingState struct {
 	PendingResponses []PendingResponse
 	ScheduledPings   []ScheduledPing
 }
+
+// Comp is the ping component built on EventDrivenComponent.
+type Comp = modeling.EventDrivenComponent[PingSpec, PingState, modeling.None]

@@ -14,8 +14,8 @@ A `Simulation` holds:
 - A `DBTracer` for visual tracing (used by the Daisen visualizer).
 - An optional `Monitor` for live web-based inspection.
 - A global state manager: one flat entity inventory of all components, ports,
-  connections, shared-state resources, and the engine and ID generator
-  singletons, resolvable by name via `GetStateByName`.
+  connections, and shared-state resources, resolvable by name via
+  `GetStateByName`.
 
 The registry uses local minimal interfaces for components, ports, connections,
 and resources. Concrete messaging types satisfy those interfaces structurally,
@@ -70,11 +70,9 @@ entities := sim.Entities()
 ### Global State Manager
 
 The simulation is a global state manager: every registered runtime object —
-component, port, connection, shared-state resource, and the engine and ID
-generator singletons — is recorded as an `Entity` in one flat inventory.
-`Entities()` returns these descriptors in registration order, which is useful
-for inventory, debugging, and tooling without requiring every kind to share one
-implementation interface.
+component, port, connection, and shared-state resource — satisfies the `Entity`
+interface and is held in one flat inventory. `Entities()` returns those entities
+in registration order, which is useful for inventory, debugging, and tooling.
 
 Entity names are **globally unique across all kinds**, so any registered object
 can be resolved by name. `GetStateByName` returns a live reference to the
@@ -91,26 +89,24 @@ allocator resource — directly by name and mutate it in place. The required typ
 assertion is the intentional warning that you are reaching past the normal
 interfaces. Resolve the reference once at setup and cache it; `GetStateByName`
 is a map lookup, not a free dereference, so it does not belong on a hot path.
-The reserved singleton names `engine` and `id-generator` must not be reused by
-user objects.
 
-### How an entity exposes its state
+### Entity interfaces
 
-By default `GetStateByName` returns the registered entity value itself. An
-entity whose serializable state lives in a distinct sub-object implements
-`StateHolder` to expose a live reference to it:
+`Entity` is the abstract base interface; each kind embeds it and adds its own
+capabilities:
 
-| Interface | Method | Purpose |
-|-----------|--------|---------|
-| `Component` | `Name() string` | Register runtime components |
-| `Port` | `Name() string` | Register port buffers by stable name |
-| `Connection` | `Name() string` | Register runtime connections |
-| `ResourceOwner` | `Resources() []Resource` | Register shared program state |
-| `Resource` | `Name()/Kind()/Identity()` | Shared state reachable by name |
+| Interface | Methods | Purpose |
+|-----------|---------|---------|
+| `Entity` | `Name() string` | Abstract base for every registered object |
+| `Component` | `Entity` | Register runtime components |
+| `Port` | `Entity` + `NumIncoming()/NumOutgoing()` | Register port buffers |
+| `Connection` | `Entity` | Register runtime connections |
+| `Resource` | `Entity` + `Kind()/Identity()` | Shared state reachable by name |
+| `ResourceOwner` | `Resources() []Resource` | Expose a component's resources |
 | `StateHolder` | `StateRef() State` | Expose a live reference to runtime state |
 
-`modeling.Component[S,T]` and `modeling.EventDrivenComponent[S,T]` implement
-`StateHolder`, returning a pointer to their `State` field.
-
-`modeling.Component[S,T]` and `modeling.EventDrivenComponent[S,T]` satisfy
-these interfaces automatically.
+By default `GetStateByName` returns the registered entity itself. An entity
+whose state lives in a distinct sub-object implements `StateHolder` to expose a
+live reference to it; `modeling.Component[S,T]` and
+`modeling.EventDrivenComponent[S,T]` do this, returning a pointer to their
+`State` field.

@@ -21,7 +21,7 @@ var _ = Describe("Switch", func() {
 		port1, port2 *MockPort
 		dstPort      *MockPort
 		routingTable *MockTable
-		sw           *modeling.Component[Spec, State]
+		sw           *modeling.Component[Spec, State, modeling.None]
 		rfsMW        *routeForwardSendMW
 		rpMW         *receivePipelineMW
 	)

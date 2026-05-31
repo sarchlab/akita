@@ -21,7 +21,7 @@ var _ = Describe("Builder", func() {
 		topPort            *MockPort
 		bottomPort         *MockPort
 		pageTable          *MockPageTable
-		gmmuComp           *modeling.Component[Spec, State]
+		gmmuComp           *modeling.Component[Spec, State, modeling.None]
 		mw                 *walkMW
 	)
 

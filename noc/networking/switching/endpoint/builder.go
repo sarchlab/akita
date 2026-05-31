@@ -100,7 +100,7 @@ func (b Builder) Build(name string) *Comp {
 
 	spec := b.spec
 
-	modelComp := modeling.NewBuilder[Spec, State]().
+	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithEngine(b.engine).
 		WithFreq(b.spec.Freq).
 		WithSpec(spec).

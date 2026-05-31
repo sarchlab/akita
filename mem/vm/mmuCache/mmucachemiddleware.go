@@ -14,7 +14,7 @@ import (
 )
 
 type mmuCacheMiddleware struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, modeling.None]
 }
 
 func (m *mmuCacheMiddleware) topPort() messaging.Port {

@@ -14,7 +14,7 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 	var (
 		mockCtrl    *gomock.Controller
 		engine      *MockEngine
-		comp        *modeling.Component[Spec, State]
+		comp        *modeling.Component[Spec, State, modeling.None]
 		ctrlMW      *ctrlMiddleware
 		controlPort *MockPort
 	)

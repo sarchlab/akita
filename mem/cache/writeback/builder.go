@@ -217,7 +217,7 @@ func (b Builder) WithInterleavingSize(size uint64) Builder {
 }
 
 // Build creates a usable writeback cache.
-func (b Builder) Build(name string) *modeling.Component[Spec, State] {
+func (b Builder) Build(name string) *Comp {
 	b.resolveLegacyMapper()
 
 	blockSize := 1 << b.log2BlockSize
@@ -232,7 +232,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 
 	initialState := b.buildInitialState(name, laneWidth, numSets)
 
-	comp := modeling.NewBuilder[Spec, State]().
+	comp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithEngine(b.engine).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
@@ -334,7 +334,7 @@ func (b *Builder) buildSpec(numSets int) Spec {
 }
 
 func (b *Builder) buildPipelineMW(
-	comp *modeling.Component[Spec, State],
+	comp *modeling.Component[Spec, State, modeling.None],
 	laneWidth int,
 ) *pipelineMW {
 	m := &pipelineMW{
@@ -350,7 +350,7 @@ func (b *Builder) buildPipelineMW(
 }
 
 func (b *Builder) buildControlMW(
-	comp *modeling.Component[Spec, State],
+	comp *modeling.Component[Spec, State, modeling.None],
 	pmw *pipelineMW,
 ) *controlMW {
 	controlPort := b.controlPort
@@ -372,7 +372,7 @@ func (b *Builder) buildControlMW(
 
 func (b *Builder) createPipelinePorts(
 	m *pipelineMW,
-	comp *modeling.Component[Spec, State],
+	comp *modeling.Component[Spec, State, modeling.None],
 ) {
 	m.topPort = b.topPort
 	m.topPort.SetComponent(comp)

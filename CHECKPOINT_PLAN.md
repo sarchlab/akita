@@ -198,6 +198,96 @@ Strict load fails when:
 An opt-in override for extra entries may be added later, but strict is the
 default.
 
+## Component and Resource Model
+
+This section captures the v5 component-authoring model and resource-ownership
+decisions. They are breaking changes (acceptable for v5) and are the next
+implementation milestone after the global state manager.
+
+### A component is Spec + State + Resources
+
+Every component is `modeling.Component[Spec, State, Resources]` (and likewise
+`EventDrivenComponent[S, T, R]`). The three parts map exactly onto the runtime
+categories:
+
+| Part | Meaning | Serialized? | Rebuilt by |
+|------|---------|-------------|------------|
+| `Spec` | immutable configuration | as spec/compat hash | setup |
+| `State` | mutable runtime data | **yes** — the serializable unit (`StateRef`) | — |
+| `Resources` | typed references to shared resources | **no** — wiring | setup |
+
+`modeling.None` (an exported zero-size `struct{}`) is the sentinel for components
+with no resources: `Component[Spec, State, modeling.None]`. The third type
+parameter is **mandatory and uniform** — every component visibly declares all
+three categories rather than a terse two-parameter default. This was chosen over
+a generic-alias shortcut so the model is the same everywhere a user (or
+downstream) writes a component.
+
+The typed `Resources` slot **supersedes per-field checkpoint tags** for
+resources: a reference structurally lives in `Resources`, not in `State`, so no
+`checkpoint:"resource"` annotation is needed (see Field Classification).
+
+### No hand-written component struct
+
+A user defines only: `Spec`, `State`, and `Resources` data structs plus their
+`Middleware` structs (where the behavior lives). The component *is*
+`modeling.Component[Spec, State, Resources]` — there is no per-component wrapper
+struct and no accessor methods.
+
+- Middlewares hold a single `*modeling.Component[Spec, State, Resources]` and
+  reach everything through it: `comp.Spec`, `comp.State`, `comp.Resources`
+  (`comp.Resources.Storage`), `comp.GetPortByName(...)`. The reference fields
+  previously duplicated onto middlewares (e.g. a separate `storage`) go away.
+- Former accessors (`GetStorage()`, `StorageName()`) become field access
+  (`comp.Resources.Storage`, `comp.Spec.StorageRef`).
+- The residual a user writes is: three data structs + middleware structs + a thin
+  builder/setup call through a generic `NewBuilder[S, T, R]`.
+
+Open item: ports are *not* part of Spec/State/Resources/Middlewares but a
+component still needs ports created and attached. Decide whether ports become a
+declared part of the component or remain a builder/setup concern.
+
+### The simulation owns shared resources
+
+Shared resources (memory contents, page tables, allocator state) are owned by the
+simulation — the global state manager — not by any component. They are top-level
+entities, peers of components, reachable by name through `GetStateByName`. A
+component never embeds a resource payload in its `State`; it holds only a
+reference.
+
+- The durable identifier is the resource's **name** (kept in `Spec`); the
+  `Resources` field holds the cached pointer for fast access. The pointer is
+  wiring, rebuilt by setup; the resource's contents are restored into the one
+  canonical resource object.
+- Setup constructs the resource, gives it **one canonical name**, registers it
+  once with `RegisterResource`, and injects the reference into the components
+  that use it.
+
+### `ResourceOwner` is dropped
+
+The `ResourceOwner` / `component.Resources()` auto-registration is removed. It
+made each holder name and register the resource, so a single shared object could
+end up registered under multiple names (`A.Storage`, `B.Storage`). Registration
+becomes explicit and setup-owned under a canonical name.
+
+- The identity-based dedup in `registerResource` is removed; the global
+  name-uniqueness check in `registerEntity` already detects duplicates.
+- `Resource` slims toward just `Entity` (drop `Identity()`, and `Kind()` if it is
+  dead). A resource is "an entity that happens to be shared state," distinguished
+  only by living in the resource registry for enumeration.
+
+### Implementation order
+
+1. `modeling`: add the `R` parameter, the `Resources` field, and `None` to
+   `Component` and `EventDrivenComponent` and their builders
+   (`NewBuilder[S, T, R]`, `NewEventDrivenBuilder[S, T, R]`).
+2. Sweep the ~92 instantiation sites across `mem`/`noc`/`examples`/tests to add
+   `, modeling.None`.
+3. Convert `idealmemcontroller`/`simplebankedmemory`/`dram` to a `Resources`
+   struct, update their middlewares to read `comp.Resources`, drop
+   `ResourceOwner` and the wrapper accessors, and slim `Resource` /
+   `registerResource`.
+
 ## Checkpoint Format
 
 The checkpoint is a single `tar.gz` archive. Consistent with the type-agnostic
@@ -309,6 +399,11 @@ such field declares a checkpoint policy:
 Untagged extra fields fail validation. Validation inspects both wrapper component
 structs and middleware structs, since shared-resource handles may live in
 middleware.
+
+Note: under the v5 component model (see Component and Resource Model), resource
+references live in the typed `Resources` slot rather than as
+`checkpoint:"resource"`-tagged fields, so that policy is subsumed by structural
+classification — `Spec` is config, `State` is serialized, `Resources` is wiring.
 
 ### Spec Compatibility
 
@@ -498,25 +593,24 @@ metadata, allocator state, and loaded program metadata. The simulation package
 knows only the generic contract and does not import concrete resource packages;
 concrete packages adapt to it.
 
+The resource interface is the slim, access-side contract (serialization methods
+were removed with Phase B; each resource type defines its own serializer when
+Phase B is rebuilt — see below):
+
 ```go
 type Resource interface {
-    Name() string
-    Kind() string
-    Format() string
-    FileExtension() string
+    Entity         // Name() string
+    Kind() string  // candidate for removal; slims toward just Entity
     Identity() string
-    Save(w io.Writer) error
-    Load(r io.Reader) error
-}
-
-type ResourceOwner interface {
-    Resources() []Resource
 }
 ```
 
-The simulation keeps a global registry of resources. Components may expose the
-resources they reference so `RegisterComponent` registers them automatically, but
-the saved unit is the shared resource, not the component field pointing to it.
+The simulation keeps a global registry of resources and **owns** them; components
+hold references (see Component and Resource Model). `ResourceOwner` and the
+auto-registration through `RegisterComponent` are **dropped** — setup constructs
+each shared resource, names it canonically, and registers it once with
+`RegisterResource`. The saved unit is the shared resource, not the component
+field pointing to it.
 
 - `mem.Storage` stays binary (contents may be too large for JSON; the binary
   format already captures capacity, unit size, and allocated units). Sort storage
@@ -695,6 +789,8 @@ Negative tests:
 - What exactly constitutes `BuildID`, and how is it computed deterministically?
 - Should the post-load `Info` re-link (per-component, by message ID) ship in the
   initial non-quiescent milestone, or stay deferred behind reject-if-non-nil?
+- In the v5 component model, are ports a declared part of a component (alongside
+  Spec/State/Resources/Middlewares) or do they remain a builder/setup concern?
 
 ## Resolved Decisions
 
@@ -711,6 +807,13 @@ Negative tests:
   tags are hard errors.
 - The work proceeds as Phase A (global state manager) then Phase B
   (serialization).
+- Phase A (global state manager) is implemented; Phase B serialization code was
+  removed so the codebase represents only Phase A. Phase B will be rebuilt fresh.
+- v5 component model: a component is `Component[Spec, State, Resources]` with a
+  mandatory third type parameter (`modeling.None` when unused). The simulation
+  owns shared resources; components hold references; `ResourceOwner` is dropped.
+  Users define Spec/State/Resources/Middlewares with no per-component wrapper
+  struct. (See Component and Resource Model.)
 
 ## Recommendation
 

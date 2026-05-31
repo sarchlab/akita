@@ -233,7 +233,7 @@ var _ = Describe("Queue Operations", func() {
 var _ = Describe("DRAM Integration", func() {
 	var (
 		engine  timing.Engine
-		memCtrl *modeling.Component[Spec, State]
+		memCtrl *modeling.Component[Spec, State, Resources]
 	)
 
 	BeforeEach(func() {

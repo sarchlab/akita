@@ -22,7 +22,7 @@ var _ = Describe("Address Translator", func() {
 		translationPort *MockPort
 		ctrlPort        *MockPort
 
-		t              *modeling.Component[Spec, State]
+		t              *modeling.Component[Spec, State, modeling.None]
 		tParseTransMW  *parseTranslateMW
 		tRespondPipeMW *respondPipelineMW
 	)

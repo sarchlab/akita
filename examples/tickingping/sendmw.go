@@ -7,13 +7,13 @@ import (
 )
 
 // outPort is a helper that returns the "Out" port from the component.
-func outPort(comp *modeling.Component[Spec, State]) messaging.Port {
+func outPort(comp *modeling.Component[Spec, State, modeling.None]) messaging.Port {
 	return comp.GetPortByName("Out")
 }
 
 // sendMW handles sending responses and ping requests.
 type sendMW struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, modeling.None]
 }
 
 func (m *sendMW) Tick() bool {

@@ -8,7 +8,7 @@ import (
 
 // receiveProcessMW handles receiving messages and counting down transactions.
 type receiveProcessMW struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, modeling.None]
 }
 
 func (m *receiveProcessMW) Tick() bool {

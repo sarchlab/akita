@@ -5,7 +5,7 @@ import (
 )
 
 type bankTickMW struct {
-	comp      *modeling.Component[Spec, State]
+	comp      *modeling.Component[Spec, State, Resources]
 	Timing    Timing
 	CmdCycles map[CommandKind]int
 }

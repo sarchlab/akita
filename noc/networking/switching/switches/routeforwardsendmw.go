@@ -13,18 +13,18 @@ import (
 // routeForwardSendMiddleware returns the routeForwardSendMW from the
 // component's middleware list (registered at index 0).
 func routeForwardSendMiddleware(
-	c *modeling.Component[Spec, State],
+	c *modeling.Component[Spec, State, modeling.None],
 ) *routeForwardSendMW {
 	return c.Middlewares()[0].(*routeForwardSendMW)
 }
 
 // GetRoutingTable returns the routing table used by the switch.
-func GetRoutingTable(c *modeling.Component[Spec, State]) routing.Table {
+func GetRoutingTable(c *modeling.Component[Spec, State, modeling.None]) routing.Table {
 	return routeForwardSendMiddleware(c).routingTable
 }
 
 type routeForwardSendMW struct {
-	comp         *modeling.Component[Spec, State]
+	comp         *modeling.Component[Spec, State, modeling.None]
 	ports        []messaging.Port
 	portIndex    map[messaging.RemotePort]int // remotePort → index in State.PortComplexes
 	routingTable routing.Table

@@ -5,8 +5,25 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/lruset"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 )
+
+// Spec contains immutable configuration for the TLB.
+type Spec struct {
+	Freq                       timing.Freq            `json:"freq"`
+	NumSets                    int                    `json:"num_sets"`
+	NumWays                    int                    `json:"num_ways"`
+	PageSize                   uint64                 `json:"page_size"`
+	NumReqPerCycle             int                    `json:"num_req_per_cycle"`
+	MSHRSize                   int                    `json:"mshr_size"`
+	Latency                    int                    `json:"latency"`
+	PipelineWidth              int                    `json:"pipeline_width"`
+	AddrMapperKind             string                 `json:"addr_mapper_kind"`
+	AddrMapperPorts            []messaging.RemotePort `json:"addr_mapper_ports"`
+	AddrMapperInterleavingSize uint64                 `json:"addr_mapper_interleaving_size"`
+}
 
 // inflightFlushState stores the flat fields needed during a TLB flush.
 type inflightFlushState struct {
@@ -171,3 +188,6 @@ func findTranslationPort(spec Spec, vAddr uint64) messaging.RemotePort {
 		panic("invalid address mapper kind: " + spec.AddrMapperKind)
 	}
 }
+
+// Comp is the TLB component.
+type Comp = modeling.Component[Spec, State, modeling.None]

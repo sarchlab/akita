@@ -12,8 +12,7 @@ import (
 )
 
 type memMiddleware struct {
-	comp    *modeling.Component[Spec, State]
-	storage *mem.Storage
+	comp *modeling.Component[Spec, State, Resources]
 }
 
 func (m *memMiddleware) topPort() messaging.Port {
@@ -137,7 +136,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 		spec.AddrCurrentElementIndex, tx.Address,
 	)
 
-	data, err := m.storage.Read(addr, tx.AccessByteSize)
+	data, err := m.comp.Resources.Storage.Read(addr, tx.AccessByteSize)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -183,12 +182,12 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 	)
 
 	if tx.DirtyMask == nil {
-		err := m.storage.Write(addr, tx.Data)
+		err := m.comp.Resources.Storage.Write(addr, tx.Data)
 		if err != nil {
 			log.Panic(err)
 		}
 	} else {
-		data, err := m.storage.Read(addr, uint64(len(tx.Data)))
+		data, err := m.comp.Resources.Storage.Read(addr, uint64(len(tx.Data)))
 		if err != nil {
 			panic(err)
 		}
@@ -199,7 +198,7 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 			}
 		}
 
-		err = m.storage.Write(addr, data)
+		err = m.comp.Resources.Storage.Write(addr, data)
 		if err != nil {
 			panic(err)
 		}

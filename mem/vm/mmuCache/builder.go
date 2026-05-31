@@ -109,7 +109,7 @@ func (b Builder) WithControlPort(port messaging.Port) Builder {
 }
 
 // Build creates a new mmuCache
-func (b Builder) Build(name string) *modeling.Component[Spec, State] {
+func (b Builder) Build(name string) *Comp {
 	if b.spec.NumBlocks <= 0 {
 		panic("mmuCache.Builder: numBlocks must be > 0")
 	}
@@ -121,7 +121,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		Table:        initSets(b.spec.NumLevels, b.spec.NumBlocks),
 	}
 
-	modelComp := modeling.NewBuilder[Spec, State]().
+	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithEngine(b.engine).
 		WithFreq(b.spec.Freq).
 		WithSpec(spec).

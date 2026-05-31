@@ -6,9 +6,6 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// Comp is the ping component built on EventDrivenComponent.
-type Comp = modeling.EventDrivenComponent[PingSpec, PingState]
-
 // Builder builds ping components.
 type Builder struct {
 	engine  timing.EventScheduler
@@ -34,7 +31,7 @@ func (b Builder) WithOutPort(port messaging.Port) Builder {
 
 // Build creates a new ping component with the given name.
 func (b Builder) Build(name string) *Comp {
-	comp := modeling.NewEventDrivenBuilder[PingSpec, PingState]().
+	comp := modeling.NewEventDrivenBuilder[PingSpec, PingState, modeling.None]().
 		WithEngine(b.engine).
 		WithSpec(PingSpec{OutPort: b.outPort}).
 		WithProcessor(&PingProcessor{}).

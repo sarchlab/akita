@@ -93,7 +93,7 @@ func (b *Builder) Build(name string) *MemAccessAgent {
 		PendingWriteReq: make(map[uint64]mem.WriteReq),
 	}
 
-	modelComp := modeling.NewBuilder[Spec, State]().
+	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithEngine(b.engine).
 		WithFreq(b.spec.Freq).
 		WithSpec(b.spec).

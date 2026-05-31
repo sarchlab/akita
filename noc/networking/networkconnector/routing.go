@@ -43,7 +43,7 @@ type Node interface {
 }
 
 type switchNode struct {
-	sw      *modeling.Component[switches.Spec, switches.State]
+	sw      *modeling.Component[switches.Spec, switches.State, modeling.None]
 	remotes []Remote
 }
 

@@ -46,13 +46,13 @@ func (b Builder) WithRoutingTable(rt routing.Table) Builder {
 }
 
 // Build creates a new switch
-func (b Builder) Build(name string) *modeling.Component[Spec, State] {
+func (b Builder) Build(name string) *Comp {
 	b.engineMustBeGiven()
 	b.freqMustNotBeZero()
 	b.routingTableMustBeGiven()
 
 	spec := b.spec
-	modelComp := modeling.NewBuilder[Spec, State]().
+	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithEngine(b.engine).
 		WithFreq(b.spec.Freq).
 		WithSpec(spec).
@@ -99,7 +99,7 @@ func (b Builder) routingTableMustBeGiven() {
 
 // addPort registers a port complex.
 func addPort(
-	comp *modeling.Component[Spec, State],
+	comp *modeling.Component[Spec, State, modeling.None],
 	ports *[]messaging.Port,
 	portIndex map[messaging.RemotePort]int,
 	port messaging.Port,
@@ -137,7 +137,7 @@ func addPort(
 
 // SwitchPortAdder can add a port to a switch.
 type SwitchPortAdder struct {
-	sw               *modeling.Component[Spec, State]
+	sw               *modeling.Component[Spec, State, modeling.None]
 	localPort        messaging.Port
 	remotePort       messaging.Port
 	latency          int
@@ -147,7 +147,7 @@ type SwitchPortAdder struct {
 
 // MakeSwitchPortAdder creates a SwitchPortAdder that can add ports for the
 // provided switch.
-func MakeSwitchPortAdder(sw *modeling.Component[Spec, State]) SwitchPortAdder {
+func MakeSwitchPortAdder(sw *modeling.Component[Spec, State, modeling.None]) SwitchPortAdder {
 	return SwitchPortAdder{
 		sw:               sw,
 		numInputChannel:  1,

@@ -10,7 +10,7 @@ import (
 )
 
 type ctrlMiddleware struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, modeling.None]
 }
 
 func (m *ctrlMiddleware) controlPort() messaging.Port {

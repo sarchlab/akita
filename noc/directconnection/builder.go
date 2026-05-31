@@ -30,7 +30,7 @@ func (b Builder) WithFreq(f timing.Freq) Builder {
 func (b Builder) Build(name string) *Comp {
 	spec := Spec{Freq: b.freq}
 
-	modelComp := modeling.NewBuilder[Spec, State]().
+	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithEngine(b.engine).
 		WithFreq(b.freq).
 		WithSpec(spec).
