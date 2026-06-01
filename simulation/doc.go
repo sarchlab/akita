@@ -3,8 +3,8 @@
 //
 // A Simulation wires together the engine, data recorder, visual tracer, and
 // optional monitoring server. It also acts as a global state manager: every
-// registered runtime object — component, port, connection, and shared-state
-// resource — is recorded in one flat entity inventory with a globally unique
-// name, and can be resolved to a live reference to its state with
-// GetStateByName.
+// registered runtime object — component, port, connection, shared-state
+// resource, plus the engine and ID generator — is recorded in one flat entity
+// inventory with a globally unique name. Serializing every entity's state
+// therefore captures the complete state required to recover the simulation.
 package simulation

@@ -10,13 +10,6 @@ type Entity interface {
 	Name() string
 }
 
-// State is the value GetStateByName resolves a name to: the live registered
-// entity (a component, port, connection, resource, or other registered object).
-// It is an alias for any; callers type-assert it to the concrete type. That
-// friction is intentional — it flags that you are reaching past the normal
-// interfaces to another entity.
-type State = any
-
 // Component is the minimal component contract the simulation runtime needs.
 // Concrete messaging components satisfy this without the simulation package
 // depending on messaging.

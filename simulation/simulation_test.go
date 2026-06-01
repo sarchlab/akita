@@ -235,6 +235,7 @@ var _ = Describe("Simulation", func() {
 		}
 
 		Expect(names).To(ConsistOf(
+			"Engine", "IDGenerator",
 			"comp", "port", "conn", "Program.Memory",
 		))
 	})
@@ -274,56 +275,6 @@ var _ = Describe("Global state manager", func() {
 		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
 	})
 
-	Describe("GetStateByName", func() {
-		It("should resolve a registered component to its live object", func() {
-			comp := testComponent{name: "comp", ports: []Port{testPort{name: "p"}}}
-			sim.RegisterComponent(comp)
-
-			obj, found := sim.GetStateByName("comp")
-			Expect(found).To(BeTrue())
-			Expect(obj).To(Equal(comp))
-		})
-
-		It("should resolve a registered port to its live object", func() {
-			port := testPort{name: "p"}
-			sim.RegisterComponent(testComponent{name: "comp", ports: []Port{port}})
-
-			obj, found := sim.GetStateByName("p")
-			Expect(found).To(BeTrue())
-			Expect(obj).To(Equal(port))
-		})
-
-		It("should resolve a registered resource to its live object", func() {
-			resource := testResource{
-				name:     "Program.Memory",
-				kind:     "test.Resource",
-				format:   "json",
-				ext:      ".json",
-				identity: "resource-1",
-			}
-			sim.RegisterResource(resource)
-
-			obj, found := sim.GetStateByName("Program.Memory")
-			Expect(found).To(BeTrue())
-			Expect(obj).To(Equal(resource))
-		})
-
-		It("should report not found for unknown names", func() {
-			obj, found := sim.GetStateByName("missing")
-			Expect(found).To(BeFalse())
-			Expect(obj).To(BeNil())
-		})
-
-		It("should keep handles valid across the same object pointer", func() {
-			comp := &testComponent{name: "comp"}
-			sim.RegisterComponent(comp)
-
-			obj, found := sim.GetStateByName("comp")
-			Expect(found).To(BeTrue())
-			Expect(obj).To(BeIdenticalTo(comp))
-		})
-	})
-
 	Describe("Global name uniqueness", func() {
 		It("should reject a connection whose name collides with a component", func() {
 			sim.RegisterComponent(testComponent{name: "shared"})
@@ -350,7 +301,7 @@ var _ = Describe("Global state manager", func() {
 
 	Describe("Deterministic entity inventory", func() {
 		It("should list entities in stable registration order across rebuilds", func() {
-			build := func() []Entity {
+			build := func() []string {
 				s := MakeBuilder().WithoutMonitoring().Build()
 				defer func() {
 					s.Terminate()
@@ -367,10 +318,28 @@ var _ = Describe("Global state manager", func() {
 				})
 				s.RegisterConnection(newTestConnection("GPU[1].GPU[2].Conn"))
 
-				return s.Entities()
+				entities := s.Entities()
+				names := make([]string, 0, len(entities))
+				for _, e := range entities {
+					names = append(names, e.Name())
+				}
+
+				return names
 			}
 
 			Expect(build()).To(Equal(build()))
+		})
+	})
+
+	Describe("Complete state inventory", func() {
+		It("registers the engine and ID generator as entities", func() {
+			entities := sim.Entities()
+			names := make([]string, 0, len(entities))
+			for _, e := range entities {
+				names = append(names, e.Name())
+			}
+
+			Expect(names).To(ContainElements("Engine", "IDGenerator"))
 		})
 	})
 })

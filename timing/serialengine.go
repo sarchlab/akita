@@ -38,6 +38,12 @@ func NewSerialEngine() *SerialEngine {
 	return e
 }
 
+// Name returns the name of the engine. The engine is registered as a simulation
+// entity so its event-queue and time state are part of the state snapshot.
+func (e *SerialEngine) Name() string {
+	return "Engine"
+}
+
 // RegisterHandler registers a handler with the given name.
 func (e *SerialEngine) RegisterHandler(name string, handler Handler) {
 	e.registry[name] = handler
