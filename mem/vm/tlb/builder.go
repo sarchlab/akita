@@ -22,6 +22,7 @@ var DefaultSpec = Spec{
 // A Builder can build TLBs
 type Builder struct {
 	engine            timing.EventScheduler
+	registrar         modeling.Registrar
 	spec              Spec
 	log2PageSize      uint64
 	addressMapperType string
@@ -44,6 +45,14 @@ func MakeBuilder() Builder {
 // WithEngine sets the engine that the TLBs to use
 func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
+	return b
+}
+
+// WithSimulation wires the builder to a simulation. It sources the engine from
+// the simulation and registers the built component with it.
+func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
+	b.registrar = sim
+	b.engine = sim.GetEngine()
 	return b
 }
 
@@ -187,6 +196,10 @@ func (b Builder) Build(name string) *Comp {
 
 	tlbMW := &tlbMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(tlbMW)
+
+	if b.registrar != nil {
+		b.registrar.RegisterComponent(modelComp)
+	}
 
 	return modelComp
 }

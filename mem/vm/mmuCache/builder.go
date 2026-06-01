@@ -19,8 +19,9 @@ var DefaultSpec = Spec{
 
 // A Builder can build mmuCache
 type Builder struct {
-	engine timing.EventScheduler
-	spec   Spec
+	engine    timing.EventScheduler
+	registrar modeling.Registrar
+	spec      Spec
 
 	topPort     messaging.Port
 	bottomPort  messaging.Port
@@ -55,6 +56,14 @@ func (b Builder) WithNumLevels(n int) Builder {
 // WithEngine sets the engine that the mmuCache to use
 func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
+	return b
+}
+
+// WithSimulation wires the builder to a simulation. It sources the engine from
+// the simulation and registers the built component with it.
+func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
+	b.registrar = sim
+	b.engine = sim.GetEngine()
 	return b
 }
 
@@ -142,6 +151,10 @@ func (b Builder) Build(name string) *Comp {
 
 	cacheMW := &mmuCacheMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cacheMW)
+
+	if b.registrar != nil {
+		b.registrar.RegisterComponent(modelComp)
+	}
 
 	return modelComp
 }

@@ -32,6 +32,7 @@ var DefaultSpec = Spec{
 // A Builder can build a writethroughcache cache
 type Builder struct {
 	engine                timing.EventScheduler
+	registrar             modeling.Registrar
 	spec                  Spec
 	log2BlockSize         uint64
 	totalByteSize         uint64
@@ -74,6 +75,15 @@ func MakeBuilder() Builder {
 // WithEngine sets the event driven simulation engine that the cache uses
 func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
+	return b
+}
+
+// WithSimulation wires the builder to a simulation. It sources the engine from
+// the simulation and registers the built component with it, replacing a
+// separate WithEngine call and manual RegisterComponent.
+func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
+	b.registrar = sim
+	b.engine = sim.GetEngine()
 	return b
 }
 
@@ -222,7 +232,7 @@ func (b Builder) Build(name string) *Comp {
 
 	comp.State = initialState
 
-	pmw := b.buildPipelineMW(comp)
+	pmw := b.buildPipelineMW(comp, name)
 	b.buildStages(pmw)
 
 	cmw := b.buildControlMW(comp, pmw)
@@ -233,6 +243,12 @@ func (b Builder) Build(name string) *Comp {
 
 	comp.AddMiddleware(pmw) // index 0
 	comp.AddMiddleware(cmw) // index 1
+
+	// When built through WithSimulation, the component registers itself so that
+	// building and registration cannot drift apart.
+	if b.registrar != nil {
+		b.registrar.RegisterComponent(comp)
+	}
 
 	return comp
 }
@@ -325,6 +341,7 @@ func (b *Builder) buildSpec(numSets int) Spec {
 
 func (b *Builder) buildPipelineMW(
 	comp *modeling.Component[Spec, State, modeling.None],
+	name string,
 ) *pipelineMW {
 	m := &pipelineMW{
 		comp: comp,
@@ -337,7 +354,11 @@ func (b *Builder) buildPipelineMW(
 	m.bottomPort.SetComponent(comp)
 	comp.AddPort("Bottom", m.bottomPort)
 
-	m.storage = mem.NewStorage(b.totalByteSize)
+	storageBuilder := mem.MakeStorageBuilder().WithCapacity(b.totalByteSize)
+	if b.registrar != nil {
+		storageBuilder = storageBuilder.WithSimulation(b.registrar)
+	}
+	m.storage = storageBuilder.Build(name + ".Storage")
 
 	return m
 }

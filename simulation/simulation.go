@@ -127,7 +127,7 @@ func (s *Simulation) registerPort(p Port) {
 // inventory. Setup code still owns topology construction and PlugIn calls, but
 // registered connections are tracked as runtime entities in the global state
 // manager.
-func (s *Simulation) RegisterConnection(c Connection) {
+func (s *Simulation) RegisterConnection(c naming.Named) {
 	connName := c.Name()
 	s.registerEntity(c)
 
@@ -135,17 +135,17 @@ func (s *Simulation) RegisterConnection(c Connection) {
 	s.connNameIndex[connName] = len(s.connections) - 1
 }
 
-// Connections returns all registered connections. The returned slice should be
-// treated as read-only.
+// Connections returns a copy of the registered connections, in registration
+// order.
 func (s *Simulation) Connections() []Connection {
-	return s.connections
+	return append([]Connection(nil), s.connections...)
 }
 
 // RegisterResource registers non-timing program state that can be referenced by
 // multiple components and reached by name through the global state manager. The
 // simulation owns the resource; components hold references to it. Setup
 // constructs and registers each shared resource once under a canonical name.
-func (s *Simulation) RegisterResource(r Resource) {
+func (s *Simulation) RegisterResource(r naming.Named) {
 	if r == nil {
 		panic("resource cannot be nil")
 	}
@@ -154,10 +154,10 @@ func (s *Simulation) RegisterResource(r Resource) {
 	s.resources = append(s.resources, r)
 }
 
-// Resources returns all shared-state resources registered in the simulation.
-// The returned slice should be treated as read-only.
+// Resources returns a copy of the registered shared-state resources, in
+// registration order.
 func (s *Simulation) Resources() []Resource {
-	return s.resources
+	return append([]Resource(nil), s.resources...)
 }
 
 // Entities returns a stable snapshot of all registered simulation entities, in

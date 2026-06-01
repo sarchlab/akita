@@ -25,9 +25,17 @@ const (
 type Storage struct {
 	sync.Mutex
 
+	name     string
 	capacity uint64
 	unitSize uint64
 	data     map[uint64]*storageUnit
+}
+
+// Name returns the name of the storage. It is empty for storage created through
+// the bare NewStorage constructors; use StorageBuilder to give it a name and
+// register it as a simulation resource.
+func (s *Storage) Name() string {
+	return s.name
 }
 
 // Capacity returns the capacity of the storage in bytes.
@@ -48,28 +56,22 @@ func newStorageUnit(uintSize uint64) *storageUnit {
 	return u
 }
 
-// NewStorage creates a storage object with the specified capacity
+// NewStorage creates an unnamed, unregistered storage with the specified
+// capacity. Prefer StorageBuilder for storage that should be a named simulation
+// resource.
 func NewStorage(capacity uint64) *Storage {
-	storage := new(Storage)
-
-	storage.capacity = capacity
-	storage.unitSize = 4 * KB
-	storage.data = make(map[uint64]*storageUnit)
-
-	return storage
+	return MakeStorageBuilder().WithCapacity(capacity).Build("")
 }
 
-// NewStorageWithUnitSize creates a storage object with the specified capacity.
-// The unit size is specified in bytes. Using unit size can reduces the memory
-// consumption of storage.
+// NewStorageWithUnitSize creates an unnamed, unregistered storage with the
+// specified capacity and unit size (in bytes). Using a smaller unit size
+// reduces the memory consumption of storage. Prefer StorageBuilder for storage
+// that should be a named simulation resource.
 func NewStorageWithUnitSize(capacity uint64, unitSize uint64) *Storage {
-	storage := new(Storage)
-
-	storage.capacity = capacity
-	storage.unitSize = unitSize
-	storage.data = make(map[uint64]*storageUnit)
-
-	return storage
+	return MakeStorageBuilder().
+		WithCapacity(capacity).
+		WithUnitSize(unitSize).
+		Build("")
 }
 
 // createOrGetStorageUnit retrieves a storage unit if the unit has been created

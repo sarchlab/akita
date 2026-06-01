@@ -37,28 +37,26 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 	engine := s.GetEngine()
 
 	conn := directconnection.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithFreq(1 * timing.GHz).
 		Build("Conn")
 
 	agent := memaccessagent.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithMaxAddress(*maxAddressFlag).
 		WithWriteLeft(*numAccessFlag).
 		WithReadLeft(*numAccessFlag).
 		WithMemPort(messaging.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
 		Build("MemAccessAgent")
-	s.RegisterComponent(agent)
 	if monitor := s.GetMonitor(); monitor != nil {
 		agent.CreateProgressBars(monitor.CreateProgressBar)
 	}
 
 	memCtrl := dram.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithFreq(1 * timing.GHz).
 		WithTopPort(messaging.NewPort(nil, 1024, 1024, "Mem.TopPort")).
 		Build("Mem")
-	s.RegisterComponent(memCtrl)
 
 	agent.LowModule = memCtrl.GetPortByName("Top")
 

@@ -17,8 +17,9 @@ var DefaultSpec = Spec{
 
 // A Builder can create address translators
 type Builder struct {
-	engine timing.EventScheduler
-	spec   Spec
+	engine    timing.EventScheduler
+	registrar modeling.Registrar
+	spec      Spec
 
 	topPort         messaging.Port
 	bottomPort      messaging.Port
@@ -43,6 +44,14 @@ func MakeBuilder() Builder {
 // WithEngine sets the engine to be used by the address translators
 func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
+	return b
+}
+
+// WithSimulation wires the builder to a simulation. It sources the engine from
+// the simulation and registers the built component with it.
+func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
+	b.registrar = sim
+	b.engine = sim.GetEngine()
 	return b
 }
 
@@ -173,6 +182,10 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.AddMiddleware(rpMW)
 
 	b.createPorts(modelComp, modelComp)
+
+	if b.registrar != nil {
+		b.registrar.RegisterComponent(modelComp)
+	}
 
 	return modelComp
 }

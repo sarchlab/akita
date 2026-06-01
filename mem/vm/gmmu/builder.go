@@ -17,6 +17,7 @@ var DefaultSpec = Spec{
 // A Builder can build GMMU component
 type Builder struct {
 	engine             timing.EventScheduler
+	registrar          modeling.Registrar
 	spec               Spec
 	pageTable          vm.PageTable
 	pageWalkingLatency int
@@ -34,6 +35,14 @@ func MakeBuilder() Builder {
 // WithEngine sets the engine to be used with the GMMU
 func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
+	return b
+}
+
+// WithSimulation wires the builder to a simulation. It sources the engine from
+// the simulation and registers the built component with it.
+func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
+	b.registrar = sim
+	b.engine = sim.GetEngine()
 	return b
 }
 
@@ -110,7 +119,11 @@ func (b Builder) Build(name string) *Comp {
 
 	pt := b.pageTable
 	if pt == nil {
-		pt = vm.NewPageTable(b.spec.Log2PageSize)
+		ptBuilder := vm.MakePageTableBuilder().WithLog2PageSize(b.spec.Log2PageSize)
+		if b.registrar != nil {
+			ptBuilder = ptBuilder.WithSimulation(b.registrar)
+		}
+		pt = ptBuilder.Build(name + ".PageTable")
 	}
 
 	wMW := &walkMW{
@@ -125,6 +138,10 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.AddMiddleware(rMW)
 
 	b.createPorts(modelComp)
+
+	if b.registrar != nil {
+		b.registrar.RegisterComponent(modelComp)
+	}
 
 	return modelComp
 }

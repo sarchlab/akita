@@ -47,8 +47,8 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 
 	engine := s.GetEngine()
 
-	l1Cache, l2Cache, memCtrl := buildMemoryHierarchy(engine, s)
-	ioMMU, tlb, l2TLB := buildTranslationHierarchy(engine, s)
+	l1Cache, l2Cache, memCtrl := buildMemoryHierarchy(s)
+	ioMMU, tlb, l2TLB := buildTranslationHierarchy(s)
 
 	atMemoryMapper := &mem.SinglePortMapper{
 		Port: l1Cache.GetPortByName("Top").AsRemote(),
@@ -58,7 +58,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 	}
 
 	at := addresstranslator.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithFreq(1 * timing.GHz).
 		WithLog2PageSize(12).
 		WithNumReqPerCycle(4).
@@ -69,10 +69,9 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		WithTranslationPort(messaging.NewPort(nil, 4, 4, "AT.TranslationPort")).
 		WithCtrlPort(messaging.NewPort(nil, 1, 1, "AT.CtrlPort")).
 		Build("AT")
-	s.RegisterComponent(at)
 
 	agent = memaccessagent.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithFreq(1 * timing.GHz).
 		WithMaxAddress(*maxAddressFlag).
 		WithReadLeft(*numAccessFlag).
@@ -80,34 +79,32 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		WithLowModule(at.GetPortByName("Top")).
 		WithMemPort(messaging.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
 		Build("MemAccessAgent")
-	s.RegisterComponent(agent)
 	if monitor := s.GetMonitor(); monitor != nil {
 		agent.CreateProgressBars(monitor.CreateProgressBar)
 	}
 
-	setupConnection(engine, agent,
+	setupConnection(s, agent,
 		at, tlb, l2TLB, ioMMU,
 		l1Cache, l2Cache, memCtrl)
 
 	return s, engine, agent
 }
 
-func buildMemoryHierarchy(engine timing.EventScheduler, s *simulation.Simulation) (
+func buildMemoryHierarchy(s *simulation.Simulation) (
 	*modeling.Component[writethroughcache.Spec, writethroughcache.State, modeling.None],
 	*modeling.Component[writeback.Spec, writeback.State, modeling.None],
 	*idealmemcontroller.Comp,
 ) {
 	memCtrl := idealmemcontroller.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithNewStorage(4 * mem.GB).
 		WithSpec(idealmemcontroller.Spec{Width: 1, Latency: 100, CacheLineSize: 64}).
 		WithTopPort(messaging.NewPort(nil, 16, 16, "MemCtrl.TopPort")).
 		WithCtrlPort(messaging.NewPort(nil, 16, 16, "MemCtrl.CtrlPort")).
 		Build("MemCtrl")
-	s.RegisterComponent(memCtrl)
 
 	L2Cache := writeback.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithFreq(1 * timing.GHz).
 		WithWayAssociativity(4).
 		WithNumReqPerCycle(2).
@@ -117,11 +114,10 @@ func buildMemoryHierarchy(engine timing.EventScheduler, s *simulation.Simulation
 		WithBottomPort(messaging.NewPort(nil, 4, 4, "L2Cache.BottomPort")).
 		WithControlPort(messaging.NewPort(nil, 4, 4, "L2Cache.ControlPort")).
 		Build("L2Cache")
-	s.RegisterComponent(L2Cache)
 
 	L1Cache := writethroughcache.MakeBuilder().
 		WithWritePolicyType("write-through").
-		WithEngine(engine).
+		WithSimulation(s).
 		WithFreq(1 * timing.GHz).
 		WithWayAssociativity(2).
 		WithAddressMapperType("single").
@@ -130,22 +126,21 @@ func buildMemoryHierarchy(engine timing.EventScheduler, s *simulation.Simulation
 		WithBottomPort(messaging.NewPort(nil, 4, 4, "L1Cache.BottomPort")).
 		WithControlPort(messaging.NewPort(nil, 4, 4, "L1Cache.ControlPort")).
 		Build("L1Cache")
-	s.RegisterComponent(L1Cache)
 
 	return L1Cache, L2Cache, memCtrl
 }
 
 func buildTranslationHierarchy(
-	engine timing.EventScheduler, s *simulation.Simulation,
+	s *simulation.Simulation,
 ) (
 	*modeling.Component[mmu.Spec, mmu.State, modeling.None],
 	*modeling.Component[tlb.Spec, tlb.State, modeling.None],
 	*modeling.Component[tlb.Spec, tlb.State, modeling.None],
 ) {
-	pageTable := setupPageTable(*maxAddressFlag)
+	pageTable := setupPageTable(*maxAddressFlag, s)
 
 	IoMMU := mmu.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithFreq(1 * timing.GHz).
 		WithLog2PageSize(12).
 		WithMaxNumReqInFlight(16).
@@ -154,14 +149,13 @@ func buildTranslationHierarchy(
 		WithTopPort(messaging.NewPort(nil, 4096, 4096, "IoMMU.ToTop")).
 		WithMigrationPort(messaging.NewPort(nil, 1, 1, "IoMMU.MigrationPort")).
 		Build("IoMMU")
-	s.RegisterComponent(IoMMU)
 
 	L2TLBMapper := &mem.SinglePortMapper{
 		Port: IoMMU.GetPortByName("Top").AsRemote(),
 	}
 
 	L2TLB := tlb.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithFreq(1 * timing.GHz).
 		WithNumWays(64).
 		WithNumSets(64).
@@ -172,14 +166,13 @@ func buildTranslationHierarchy(
 		WithBottomPort(messaging.NewPort(nil, 4, 4, "L2TLB.BottomPort")).
 		WithControlPort(messaging.NewPort(nil, 1, 1, "L2TLB.ControlPort")).
 		Build("L2TLB")
-	s.RegisterComponent(L2TLB)
 
 	TLBMapper := &mem.SinglePortMapper{
 		Port: L2TLB.GetPortByName("Top").AsRemote(),
 	}
 
 	TLB := tlb.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithFreq(1 * timing.GHz).
 		WithNumWays(8).
 		WithNumSets(8).
@@ -190,13 +183,15 @@ func buildTranslationHierarchy(
 		WithBottomPort(messaging.NewPort(nil, 2, 2, "TLB.BottomPort")).
 		WithControlPort(messaging.NewPort(nil, 1, 1, "TLB.ControlPort")).
 		Build("TLB")
-	s.RegisterComponent(TLB)
 
 	return IoMMU, TLB, L2TLB
 }
 
-func setupPageTable(maxAddress uint64) vm.PageTable {
-	pageTable := vm.NewPageTable(12)
+func setupPageTable(maxAddress uint64, s *simulation.Simulation) vm.PageTable {
+	pageTable := vm.MakePageTableBuilder().
+		WithSimulation(s).
+		WithLog2PageSize(12).
+		Build("PageTable")
 
 	ptBase := uint64(0x100000)
 	pageSize := uint64(4096)
@@ -218,42 +213,42 @@ func setupPageTable(maxAddress uint64) vm.PageTable {
 	return pageTable
 }
 
-func connect(engine timing.EventScheduler, name string, p1, p2 messaging.Port) {
-	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * timing.GHz).Build(name)
+func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {
+	conn := directconnection.MakeBuilder().WithSimulation(s).WithFreq(1 * timing.GHz).Build(name)
 	conn.PlugIn(p1)
 	conn.PlugIn(p2)
 }
 
 func setupConnection(
-	engine timing.EventScheduler,
+	s *simulation.Simulation,
 	agent *memaccessagent.MemAccessAgent,
 	AT, TLB, L2TLB, IoMMU, L1Cache, L2Cache, memCtrl messaging.Component,
 ) {
-	connect(engine, "Conn1",
+	connect(s, "Conn1",
 		agent.GetPortByName("Mem"),
 		AT.GetPortByName("Top"),
 	)
-	connect(engine, "Conn2",
+	connect(s, "Conn2",
 		AT.GetPortByName("Translation"),
 		TLB.GetPortByName("Top"),
 	)
-	connect(engine, "Conn3",
+	connect(s, "Conn3",
 		TLB.GetPortByName("Bottom"),
 		L2TLB.GetPortByName("Top"),
 	)
-	connect(engine, "Conn4",
+	connect(s, "Conn4",
 		L2TLB.GetPortByName("Bottom"),
 		IoMMU.GetPortByName("Top"),
 	)
-	connect(engine, "Conn5",
+	connect(s, "Conn5",
 		AT.GetPortByName("Bottom"),
 		L1Cache.GetPortByName("Top"),
 	)
-	connect(engine, "Conn6",
+	connect(s, "Conn6",
 		L1Cache.GetPortByName("Bottom"),
 		L2Cache.GetPortByName("Top"),
 	)
-	connect(engine, "Conn7",
+	connect(s, "Conn7",
 		L2Cache.GetPortByName("Bottom"),
 		memCtrl.GetPortByName("Top"),
 	)

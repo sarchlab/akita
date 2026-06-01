@@ -9,8 +9,9 @@ import (
 )
 
 type Builder struct {
-	engine timing.EventScheduler
-	freq   timing.Freq
+	engine    timing.EventScheduler
+	registrar modeling.Registrar
+	freq      timing.Freq
 }
 
 func MakeBuilder() Builder {
@@ -19,6 +20,14 @@ func MakeBuilder() Builder {
 
 func (b Builder) WithEngine(e timing.EventScheduler) Builder {
 	b.engine = e
+	return b
+}
+
+// WithSimulation wires the builder to a simulation. It sources the engine from
+// the simulation and registers the built connection with it.
+func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
+	b.registrar = sim
+	b.engine = sim.GetEngine()
 	return b
 }
 
@@ -52,5 +61,11 @@ func (b Builder) Build(name string) *Comp {
 	}
 	modelComp.AddMiddleware(mw)
 
-	return &Comp{Component: modelComp}
+	conn := &Comp{Component: modelComp}
+
+	if b.registrar != nil {
+		b.registrar.RegisterConnection(conn)
+	}
+
+	return conn
 }

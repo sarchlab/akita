@@ -39,33 +39,31 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 	engine := s.GetEngine()
 
 	conn := directconnection.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithFreq(1 * timing.GHz).
 		Build("Conn")
 
 	agent := memaccessagent.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithMaxAddress(*maxAddressFlag).
 		WithWriteLeft(*numAccessFlag).
 		WithReadLeft(*numAccessFlag).
 		WithMemPort(messaging.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
 		Build("MemAccessAgent")
-	s.RegisterComponent(agent)
 	createProgressBars(s, agent)
 
 	dram := idealmemcontroller.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithNewStorage(4 * mem.GB).
 		WithTopPort(messaging.NewPort(nil, 16, 16, "DRAM.TopPort")).
 		WithCtrlPort(messaging.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
 		Build("DRAM")
-	s.RegisterComponent(dram)
 
 	addressToPortMapper := new(mem.SinglePortMapper)
 	addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()
 
 	writeBackCache := writeback.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithAddressToPortMapper(addressToPortMapper).
 		WithByteSize(16 * mem.KB).
 		WithLog2BlockSize(6).
@@ -76,7 +74,6 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 		WithBottomPort(messaging.NewPort(nil, 32, 32, "Cache.BottomPort")).
 		WithControlPort(messaging.NewPort(nil, 32, 32, "Cache.ControlPort")).
 		Build("Cache")
-	s.RegisterComponent(writeBackCache)
 
 	agent.LowModule = writeBackCache.GetPortByName("Top")
 

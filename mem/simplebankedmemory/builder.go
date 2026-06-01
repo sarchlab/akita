@@ -22,8 +22,9 @@ var DefaultSpec = Spec{
 
 // Builder constructs SimpleBankedMemory components.
 type Builder struct {
-	engine timing.EventScheduler
-	spec   Spec
+	engine    timing.EventScheduler
+	registrar modeling.Registrar
+	spec      Spec
 
 	numBanks            int
 	bankPipelineWidth   int
@@ -65,6 +66,14 @@ func MakeBuilder() Builder {
 // WithEngine sets the simulation engine.
 func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
+	return b
+}
+
+// WithSimulation wires the builder to a simulation. It sources the engine from
+// the simulation and registers the built component with it.
+func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
+	b.registrar = sim
+	b.engine = sim.GetEngine()
 	return b
 }
 
@@ -161,7 +170,7 @@ func (b Builder) WithTopPort(port messaging.Port) Builder {
 func (b Builder) Build(name string) *Comp {
 	b.configurationMustBeValid()
 
-	storage := b.resolveStorage()
+	storage := b.resolveStorage(name)
 	spec := b.buildSpec(name)
 	initialState := b.buildInitialState(spec)
 
@@ -181,15 +190,24 @@ func (b Builder) Build(name string) *Comp {
 	dMW := &dispatchMW{comp: modelComp}
 	modelComp.AddMiddleware(dMW)
 
+	if b.registrar != nil {
+		b.registrar.RegisterComponent(modelComp)
+	}
+
 	return modelComp
 }
 
-func (b Builder) resolveStorage() *mem.Storage {
+func (b Builder) resolveStorage(name string) *mem.Storage {
 	if b.storage != nil {
 		return b.storage
 	}
 
-	return mem.NewStorage(b.capacity)
+	storageBuilder := mem.MakeStorageBuilder().WithCapacity(b.capacity)
+	if b.registrar != nil {
+		storageBuilder = storageBuilder.WithSimulation(b.registrar)
+	}
+
+	return storageBuilder.Build(name + ".Storage")
 }
 
 func (b Builder) buildSpec(name string) Spec {

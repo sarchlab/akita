@@ -17,6 +17,7 @@ var DefaultSpec = Spec{
 // A Builder can build MMU component
 type Builder struct {
 	engine             timing.EventScheduler
+	registrar          modeling.Registrar
 	spec               Spec
 	pageTable          vm.PageTable
 	pageWalkingLatency int
@@ -34,6 +35,14 @@ func MakeBuilder() Builder {
 // WithEngine sets the engine to be used with the MMU
 func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
+	return b
+}
+
+// WithSimulation wires the builder to a simulation. It sources the engine from
+// the simulation and registers the built component with it.
+func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
+	b.registrar = sim
+	b.engine = sim.GetEngine()
 	return b
 }
 
@@ -110,7 +119,7 @@ func (b Builder) Build(name string) *Comp {
 
 	b.createPorts(name, modelComp)
 
-	pt := b.createPageTable()
+	pt := b.createPageTable(name)
 
 	tmw := &translationMW{comp: modelComp, pageTable: pt}
 	modelComp.AddMiddleware(tmw)
@@ -118,16 +127,25 @@ func (b Builder) Build(name string) *Comp {
 	mmw := &migrationMW{comp: modelComp, pageTable: pt}
 	modelComp.AddMiddleware(mmw)
 
+	if b.registrar != nil {
+		b.registrar.RegisterComponent(modelComp)
+	}
+
 	return modelComp
 }
 
-func (b Builder) createPageTable() vm.PageTable {
+func (b Builder) createPageTable(name string) vm.PageTable {
 	if b.pageTable != nil {
 		b.validatePageTablePageSize()
 		return b.pageTable
 	}
 
-	return vm.NewPageTable(b.spec.Log2PageSize)
+	ptBuilder := vm.MakePageTableBuilder().WithLog2PageSize(b.spec.Log2PageSize)
+	if b.registrar != nil {
+		ptBuilder = ptBuilder.WithSimulation(b.registrar)
+	}
+
+	return ptBuilder.Build(name + ".PageTable")
 }
 
 // validatePageTablePageSize checks if the provided page table's page size

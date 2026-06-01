@@ -31,20 +31,26 @@ type PageTable interface {
 	ReverseLookup(pAddr uint64) (Page, bool)
 }
 
-// NewPageTable creates a new PageTable.
+// NewPageTable creates an unnamed, unregistered PageTable. Prefer
+// PageTableBuilder for a page table that should be a named simulation resource.
 func NewPageTable(log2PageSize uint64) PageTable {
-	return &pageTableImpl{
-		log2PageSize: log2PageSize,
-		tables:       make(map[PID]*processTable),
-	}
+	return MakePageTableBuilder().WithLog2PageSize(log2PageSize).Build("")
 }
 
 // pageTableImpl is the default implementation of a Page Table
 type pageTableImpl struct {
 	sync.Mutex
 
+	name         string
 	log2PageSize uint64
 	tables       map[PID]*processTable
+}
+
+// Name returns the name of the page table. It is empty for page tables created
+// through NewPageTable; use PageTableBuilder to give it a name and register it
+// as a simulation resource.
+func (pt *pageTableImpl) Name() string {
+	return pt.name
 }
 
 func (pt *pageTableImpl) getTable(pid PID) *processTable {

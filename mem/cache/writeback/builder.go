@@ -54,6 +54,7 @@ var DefaultSpec = Spec{
 // A Builder can build writeback caches
 type Builder struct {
 	engine           timing.EventScheduler
+	registrar        modeling.Registrar
 	spec             Spec
 	legacyMapper     mem.AddressToPortMapper
 	wayAssociativity int
@@ -98,6 +99,15 @@ func MakeBuilder() Builder {
 // WithEngine sets the engine to be used by the caches.
 func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
+	return b
+}
+
+// WithSimulation wires the builder to a simulation. It sources the engine from
+// the simulation and registers the built component with it, replacing a
+// separate WithEngine call and manual RegisterComponent.
+func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
+	b.registrar = sim
+	b.engine = sim.GetEngine()
 	return b
 }
 
@@ -240,11 +250,17 @@ func (b Builder) Build(name string) *Comp {
 
 	comp.State = initialState
 
-	pmw := b.buildPipelineMW(comp, laneWidth)
+	pmw := b.buildPipelineMW(comp, name, laneWidth)
 	cmw := b.buildControlMW(comp, pmw)
 
 	comp.AddMiddleware(pmw) // index 0
 	comp.AddMiddleware(cmw) // index 1
+
+	// When built through WithSimulation, the component registers itself so that
+	// building and registration cannot drift apart.
+	if b.registrar != nil {
+		b.registrar.RegisterComponent(comp)
+	}
 
 	return comp
 }
@@ -321,6 +337,7 @@ func (b *Builder) buildSpec(numSets int) Spec {
 
 func (b *Builder) buildPipelineMW(
 	comp *modeling.Component[Spec, State, modeling.None],
+	name string,
 	laneWidth int,
 ) *pipelineMW {
 	m := &pipelineMW{
@@ -328,7 +345,12 @@ func (b *Builder) buildPipelineMW(
 	}
 
 	b.createPipelinePorts(m, comp)
-	m.storage = mem.NewStorage(b.byteSize)
+
+	storageBuilder := mem.MakeStorageBuilder().WithCapacity(b.byteSize)
+	if b.registrar != nil {
+		storageBuilder = storageBuilder.WithSimulation(b.registrar)
+	}
+	m.storage = storageBuilder.Build(name + ".Storage")
 
 	b.createInternalStages(m, laneWidth)
 

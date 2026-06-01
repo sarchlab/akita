@@ -17,6 +17,7 @@ var DefaultSpec = Spec{
 // Builder can help building switches
 type Builder struct {
 	engine       timing.EventScheduler
+	registrar    modeling.Registrar
 	spec         Spec
 	routingTable routing.Table
 }
@@ -30,6 +31,14 @@ func MakeBuilder() Builder {
 // WithEngine sets the engine that the switch to build uses.
 func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
+	return b
+}
+
+// WithSimulation wires the builder to a simulation. It sources the engine from
+// the simulation and registers the built component with it.
+func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
+	b.registrar = sim
+	b.engine = sim.GetEngine()
 	return b
 }
 
@@ -75,6 +84,10 @@ func (b Builder) Build(name string) *Comp {
 	// This matches the execution order: sendOut → forward → route → movePipeline → startProcessing
 	modelComp.AddMiddleware(rfsMW)
 	modelComp.AddMiddleware(rpMW)
+
+	if b.registrar != nil {
+		b.registrar.RegisterComponent(modelComp)
+	}
 
 	return modelComp
 }

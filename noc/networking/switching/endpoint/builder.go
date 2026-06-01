@@ -18,6 +18,7 @@ var DefaultSpec = Spec{
 // Builder can help building End Points.
 type Builder struct {
 	engine                   timing.EventScheduler
+	registrar                modeling.Registrar
 	spec                     Spec
 	flitAssemblingBufferSize int
 	networkPortBufferSize    int
@@ -38,6 +39,14 @@ func MakeBuilder() Builder {
 // WithEngine sets the engine of the End Point to build.
 func (b Builder) WithEngine(e timing.EventScheduler) Builder {
 	b.engine = e
+	return b
+}
+
+// WithSimulation wires the builder to a simulation. It sources the engine from
+// the simulation and registers the built component with it.
+func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
+	b.registrar = sim
+	b.engine = sim.GetEngine()
 	return b
 }
 
@@ -127,6 +136,10 @@ func (b Builder) Build(name string) *Comp {
 
 	for _, dp := range b.devicePorts {
 		ep.PlugIn(dp)
+	}
+
+	if b.registrar != nil {
+		b.registrar.RegisterComponent(ep)
 	}
 
 	return ep

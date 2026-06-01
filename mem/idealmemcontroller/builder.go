@@ -127,7 +127,11 @@ func (b Builder) Build(
 
 	var storage *mem.Storage
 	if b.storage == nil {
-		storage = mem.NewStorage(b.capacity)
+		storageBuilder := mem.MakeStorageBuilder().WithCapacity(b.capacity)
+		if b.registrar != nil {
+			storageBuilder = storageBuilder.WithSimulation(b.registrar)
+		}
+		storage = storageBuilder.Build(name + ".Storage")
 	} else {
 		storage = b.storage
 	}

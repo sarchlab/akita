@@ -53,6 +53,7 @@ var DefaultSpec = Spec{
 // Builder can build new memory controllers.
 type Builder struct {
 	engine           timing.EventScheduler
+	registrar        modeling.Registrar
 	spec             Spec
 	useGlobalStorage bool
 	storage          *mem.Storage
@@ -203,6 +204,14 @@ func (b Builder) WithSpec(spec Spec) Builder {
 // WithEngine sets the engine that the builder uses.
 func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
+	return b
+}
+
+// WithSimulation wires the builder to a simulation. It sources the engine from
+// the simulation and registers the built component with it.
+func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
+	b.registrar = sim
+	b.engine = sim.GetEngine()
 	return b
 }
 
@@ -500,16 +509,7 @@ func (b Builder) Build(name string) *Comp {
 			b.numRank, b.numBankGroup, b.numBank),
 	}
 
-	var storage *mem.Storage
-	if b.useGlobalStorage {
-		storage = b.storage
-	} else {
-		devicePerRank := b.busWidth / b.deviceWidth
-		bankSize := b.numCol * b.numRow * b.deviceWidth / 8
-		rankSize := bankSize * b.numBank * devicePerRank
-		totalSize := rankSize * b.numRank * b.numChannel
-		storage = mem.NewStorage(uint64(totalSize))
-	}
+	storage := b.resolveStorage(name)
 
 	modelComp := modeling.NewBuilder[Spec, State, Resources]().
 		WithEngine(b.engine).
@@ -528,7 +528,29 @@ func (b Builder) Build(name string) *Comp {
 		tracing.CollectTrace(modelComp, tracer)
 	}
 
+	if b.registrar != nil {
+		b.registrar.RegisterComponent(modelComp)
+	}
+
 	return modelComp
+}
+
+func (b Builder) resolveStorage(name string) *mem.Storage {
+	if b.useGlobalStorage {
+		return b.storage
+	}
+
+	devicePerRank := b.busWidth / b.deviceWidth
+	bankSize := b.numCol * b.numRow * b.deviceWidth / 8
+	rankSize := bankSize * b.numBank * devicePerRank
+	totalSize := rankSize * b.numRank * b.numChannel
+
+	storageBuilder := mem.MakeStorageBuilder().WithCapacity(uint64(totalSize))
+	if b.registrar != nil {
+		storageBuilder = storageBuilder.WithSimulation(b.registrar)
+	}
+
+	return storageBuilder.Build(name + ".Storage")
 }
 
 func (b Builder) addMiddlewares(

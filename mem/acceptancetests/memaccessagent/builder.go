@@ -14,6 +14,7 @@ type Builder struct {
 	writeLeft int
 	readLeft  int
 	engine    timing.EventScheduler
+	registrar modeling.Registrar
 	lowModule messaging.Port
 	memPort   messaging.Port
 }
@@ -33,6 +34,14 @@ func MakeBuilder() *Builder {
 // WithEngine sets the simulation engine.
 func (b *Builder) WithEngine(engine timing.EventScheduler) *Builder {
 	b.engine = engine
+	return b
+}
+
+// WithSimulation wires the builder to a simulation. It sources the engine from
+// the simulation and registers the built component with it.
+func (b *Builder) WithSimulation(sim modeling.Registrar) *Builder {
+	b.registrar = sim
+	b.engine = sim.GetEngine()
 	return b
 }
 
@@ -113,6 +122,10 @@ func (b *Builder) Build(name string) *MemAccessAgent {
 
 	b.memPort.SetComponent(agent)
 	modelComp.AddPort("Mem", b.memPort)
+
+	if b.registrar != nil {
+		b.registrar.RegisterComponent(agent)
+	}
 
 	return agent
 }

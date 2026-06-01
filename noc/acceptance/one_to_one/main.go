@@ -10,6 +10,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
+	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/tebeka/atexit"
 )
@@ -18,10 +19,11 @@ func main() {
 	flag.Parse()
 	rand.Seed(1)
 
-	engine := timing.NewSerialEngine()
+	s := simulation.MakeBuilder().WithoutMonitoring().Build()
+	engine := s.GetEngine()
 	t := acceptance.NewTest()
 
-	createNetwork(engine, t)
+	createNetwork(s, t)
 	t.GenerateMsgs(20000)
 
 	err := engine.Run()
@@ -34,7 +36,8 @@ func main() {
 	atexit.Exit(0)
 }
 
-func createNetwork(engine timing.EventScheduler, test *acceptance.Test) {
+func createNetwork(s *simulation.Simulation, test *acceptance.Test) {
+	engine := s.GetEngine()
 	freq := 1.0 * timing.GHz
 
 	var agents []*acceptance.Agent
@@ -51,7 +54,7 @@ func createNetwork(engine timing.EventScheduler, test *acceptance.Test) {
 	}
 
 	ep1 := endpoint.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithFreq(freq).
 		WithFlitByteSize(8).
 		WithDevicePorts(agents[0].AgentPorts).
@@ -59,7 +62,7 @@ func createNetwork(engine timing.EventScheduler, test *acceptance.Test) {
 		Build("EP1")
 
 	ep2 := endpoint.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithFreq(freq).
 		WithFlitByteSize(8).
 		WithDevicePorts(agents[1].AgentPorts).
@@ -70,7 +73,7 @@ func createNetwork(engine timing.EventScheduler, test *acceptance.Test) {
 	ep2.SetDefaultSwitchDst(ep1.NetworkPort().AsRemote())
 
 	conn := directconnection.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithFreq(freq).
 		Build("Conn")
 
