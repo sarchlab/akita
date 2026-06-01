@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/datarecording"
 
 	"github.com/sarchlab/akita/v5/monitoring2"
+	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -90,8 +91,10 @@ func (s *Simulation) registerEntity(e Entity) {
 	s.entityByName[name] = len(s.entities) - 1
 }
 
-// RegisterComponent registers a component with the simulation.
-func (s *Simulation) RegisterComponent(c Component) {
+// RegisterComponent registers a component with the simulation. It accepts any
+// named object so that component builders can register through the
+// modeling.Registrar interface without importing this package.
+func (s *Simulation) RegisterComponent(c naming.Named) {
 	compName := c.Name()
 	s.registerEntity(c)
 

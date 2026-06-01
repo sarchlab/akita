@@ -55,13 +55,12 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 	}
 
 	dram := idealmemcontroller.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(s).
 		WithNewStorage(4 * mem.GB).
 		WithSpec(idealmemcontroller.Spec{Width: 1, Latency: 100, CacheLineSize: 64}).
 		WithTopPort(messaging.NewPort(nil, 16, 16, "DRAM.TopPort")).
 		WithCtrlPort(messaging.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
 		Build("DRAM")
-	s.RegisterComponent(dram)
 
 	agent.LowModule = dram.GetPortByName("Top")
 

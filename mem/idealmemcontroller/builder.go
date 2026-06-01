@@ -20,6 +20,7 @@ type Builder struct {
 	spec       Spec
 	capacity   uint64
 	engine     timing.EventScheduler
+	registrar  modeling.Registrar
 	topBufSize int
 	storage    *mem.Storage
 	topPort    messaging.Port
@@ -58,9 +59,19 @@ func (b Builder) WithNewStorage(capacity uint64) Builder {
 	return b
 }
 
-// WithEngine sets the engine of the memory controller
+// WithEngine sets the engine of the memory controller. This is the engine-only
+// path, intended for isolated tests; assembly code should prefer WithSimulation.
 func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
+	return b
+}
+
+// WithSimulation wires the builder to a simulation. It sources the engine from
+// the simulation and registers the built component with it, replacing a
+// separate WithEngine call and manual RegisterComponent.
+func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
+	b.registrar = sim
+	b.engine = sim.GetEngine()
 	return b
 }
 
@@ -138,6 +149,12 @@ func (b Builder) Build(
 	modelComp.AddPort("Top", b.topPort)
 	b.ctrlPort.SetComponent(modelComp)
 	modelComp.AddPort("Control", b.ctrlPort)
+
+	// When built through WithSimulation, the component registers itself so that
+	// building and registration cannot drift apart.
+	if b.registrar != nil {
+		b.registrar.RegisterComponent(modelComp)
+	}
 
 	return modelComp
 }

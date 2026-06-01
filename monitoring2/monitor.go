@@ -273,8 +273,10 @@ func (a *portBufferAdapter) Capacity() int {
 func (m *Monitor) registerBuffers(c Component) {
 	m.registerComponentOrPortBuffers(c)
 
+	// Port buffers are monitored through portBufferAdapter (registerPortBuffers),
+	// which is the canonical source. Reflecting into the port's own fields would
+	// double-count them.
 	for _, p := range componentPorts(c) {
-		m.registerComponentOrPortBuffers(p)
 		m.registerPortBuffers(p)
 	}
 }
@@ -319,19 +321,23 @@ func componentPorts(c Component) []monitorPort {
 
 func (m *Monitor) registerComponentOrPortBuffers(c any) {
 	v := reflect.ValueOf(c).Elem()
+	bufferType := reflect.TypeOf((*bufferState)(nil)).Elem()
 
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Field(i)
 		fieldType := field.Type()
-		bufferType := reflect.TypeOf((*bufferState)(nil)).Elem()
 
-		if fieldType.Implements(bufferType) ||
-			reflect.PointerTo(fieldType).Implements(bufferType) {
-			fieldRef := reflect.NewAt(
-				field.Type(),
-				unsafe.Pointer(field.UnsafeAddr()),
-			).Elem().Interface().(bufferState)
-			m.buffers = append(m.buffers, fieldRef)
+		// Build an addressable reference to the field. This both bypasses the
+		// unexported-field restriction and lets pointer-receiver buffers (e.g. a
+		// value-embedded queueing.Buffer) be captured as a live reference rather
+		// than a stale copy.
+		ref := reflect.NewAt(fieldType, unsafe.Pointer(field.UnsafeAddr()))
+
+		switch {
+		case fieldType.Implements(bufferType):
+			m.buffers = append(m.buffers, ref.Elem().Interface().(bufferState))
+		case reflect.PointerTo(fieldType).Implements(bufferType):
+			m.buffers = append(m.buffers, ref.Interface().(bufferState))
 		}
 	}
 }
