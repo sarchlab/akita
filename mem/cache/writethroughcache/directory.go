@@ -30,9 +30,8 @@ func (d *directory) Tick() (madeProgress bool) {
 			break
 		}
 
-		transIdx := dirBuf.Elements[0]
+		transIdx := dirBuf.Pop()
 		dirPipeline.Accept(transIdx)
-		dirBuf.Elements = dirBuf.Elements[1:]
 
 		madeProgress = true
 	}
@@ -46,7 +45,7 @@ func (d *directory) Tick() (madeProgress bool) {
 			break
 		}
 
-		transIdx := dirPostBuf.Elements[0]
+		transIdx := dirPostBuf.Peek()
 		trans := &next.Transactions[transIdx]
 
 		var processed bool
@@ -108,7 +107,7 @@ func (d *directory) processMSHRHit(
 	}
 
 	dirPostBuf := &next.DirPostBuf
-	dirPostBuf.Elements = dirPostBuf.Elements[1:]
+	dirPostBuf.Pop()
 
 	return true
 }
@@ -141,7 +140,7 @@ func (d *directory) processReadHit(
 	bankBuf.PushTyped(transIdx)
 
 	dirPostBuf := &next.DirPostBuf
-	dirPostBuf.Elements = dirPostBuf.Elements[1:]
+	dirPostBuf.Pop()
 	tracing.AddTaskStep(trans.ID, d.cache.comp, "read-hit")
 
 	return true
@@ -170,7 +169,7 @@ func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool 
 	}
 
 	dirPostBuf := &next.DirPostBuf
-	dirPostBuf.Elements = dirPostBuf.Elements[1:]
+	dirPostBuf.Pop()
 	tracing.AddTaskStep(trans.ID, d.cache.comp, "read-miss")
 
 	return true

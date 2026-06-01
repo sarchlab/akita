@@ -28,25 +28,17 @@ var _ = Describe("Bottom Parser", func() {
 		bottomPort = NewMockPort(mockCtrl)
 
 		initialState := State{
-			DirBuf: queueing.Buffer[int]{
-				BufferName: "Cache.DirBuf",
-				Cap:        4,
-			},
+			DirBuf: queueing.NewBuffer[int]("Cache.DirBuf", 4),
 			BankBufs: []queueing.Buffer[int]{
-				{BufferName: "Cache.BankBuf0", Cap: 4},
+				queueing.NewBuffer[int]("Cache.BankBuf0", 4),
 			},
-			DirPipeline: queueing.Pipeline[int]{
-				Width: 4, NumStages: 2,
-			},
-			DirPostBuf: queueing.Buffer[int]{
-				BufferName: "Cache.DirPostBuf",
-				Cap:        4,
-			},
+			DirPipeline: queueing.NewPipeline[int](4, 2),
+			DirPostBuf:  queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
 			BankPipelines: []queueing.Pipeline[int]{
-				{Width: 4, NumStages: 10},
+				queueing.NewPipeline[int](4, 10),
 			},
 			BankPostBufs: []queueing.Buffer[int]{
-				{BufferName: "Cache.BankPostBuf0", Cap: 4},
+				queueing.NewBuffer[int]("Cache.BankPostBuf0", 4),
 			},
 		}
 
@@ -206,7 +198,7 @@ var _ = Describe("Bottom Parser", func() {
 
 		It("should stall if bank is busy", func() {
 			next := &c.comp.State
-			next.BankBufs[0].Cap = 0
+			next.BankBufs[0] = queueing.NewBuffer[int]("Cache.BankBuf0", 0)
 
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 
@@ -238,7 +230,7 @@ var _ = Describe("Bottom Parser", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}))
 			// Bank buf should have a write-fetched transaction
-			Expect(next.BankBufs[0].Elements).To(HaveLen(1))
+			Expect(next.BankBufs[0].Size()).To(Equal(1))
 			// Fetcher trans should have bankAction set
 			trans := &next.Transactions[0]
 			Expect(trans.BankAction).To(Equal(bankActionWriteFetched))
@@ -317,7 +309,7 @@ var _ = Describe("Bottom Parser", func() {
 			Expect(next.Transactions[1].Data).To(Equal([]byte{5, 6, 7, 8}))
 			Expect(next.Transactions[2].Done).To(BeTrue())
 			// Bank buf should have the fetcher transaction
-			Expect(next.BankBufs[0].Elements).To(HaveLen(1))
+			Expect(next.BankBufs[0].Size()).To(Equal(1))
 		})
 	})
 

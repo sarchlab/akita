@@ -103,7 +103,7 @@ func (d *directory) writearoundWriteHit(
 	tracing.AddTaskStep(trans.ID, d.cache.comp, "write-hit")
 
 	dirPostBuf := &next.DirPostBuf
-	dirPostBuf.Elements = dirPostBuf.Elements[1:]
+	dirPostBuf.Pop()
 
 	return true
 }
@@ -117,7 +117,7 @@ func (d *directory) writearoundWriteMiss(
 
 		next := &d.cache.comp.State
 		dirPostBuf := &next.DirPostBuf
-		dirPostBuf.Elements = dirPostBuf.Elements[1:]
+		dirPostBuf.Pop()
 
 		return true
 	}
@@ -156,7 +156,7 @@ func (d *directory) writeevictWriteHit(
 	tracing.AddTaskStep(trans.ID, d.cache.comp, "write-hit")
 
 	dirPostBuf := &next.DirPostBuf
-	dirPostBuf.Elements = dirPostBuf.Elements[1:]
+	dirPostBuf.Pop()
 
 	return true
 }
@@ -170,7 +170,7 @@ func (d *directory) writeevictWriteMiss(
 
 		next := &d.cache.comp.State
 		dirPostBuf := &next.DirPostBuf
-		dirPostBuf.Elements = dirPostBuf.Elements[1:]
+		dirPostBuf.Pop()
 
 		return true
 	}
@@ -222,7 +222,7 @@ func (d *directory) writethroughWriteHit(
 	bankBuf.PushTyped(postCoalesceIdx)
 
 	dirPostBuf := &next.DirPostBuf
-	dirPostBuf.Elements = dirPostBuf.Elements[1:]
+	dirPostBuf.Pop()
 
 	return true
 }
@@ -302,7 +302,7 @@ func (d *directory) writethroughPartialWriteMiss(
 	}
 
 	dirPostBuf := &next.DirPostBuf
-	dirPostBuf.Elements = dirPostBuf.Elements[1:]
+	dirPostBuf.Pop()
 	tracing.AddTaskStep(trans.ID, d.cache.comp, "write-miss")
 
 	return true

@@ -10,6 +10,13 @@ type Entity interface {
 	Name() string
 }
 
+// State is the value GetStateByName resolves a name to: the live registered
+// entity (a component, port, connection, resource, or other registered object).
+// It is an alias for any; callers type-assert it to the concrete type. That
+// friction is intentional — it flags that you are reaching past the normal
+// interfaces to another entity.
+type State = any
+
 // Component is the minimal component contract the simulation runtime needs.
 // Concrete messaging components satisfy this without the simulation package
 // depending on messaging.
@@ -30,6 +37,16 @@ type Port interface {
 // Concrete messaging connections satisfy this without the simulation package
 // depending on messaging.
 type Connection interface {
+	Entity
+}
+
+// Resource is a shared-state entity: non-timing program state — such as memory
+// contents or page tables — that can be referenced by multiple components. The
+// simulation owns resources; components hold references to them and resolve them
+// by name through the global state manager rather than embedding the payload in
+// their own state. Setup constructs and registers each resource once under a
+// canonical name.
+type Resource interface {
 	Entity
 }
 

@@ -87,7 +87,7 @@ func bufferPeek(bank bankState) (bankPipelineItemState, bool) {
 		return bankPipelineItemState{}, false
 	}
 
-	return bank.PostPipelineBuf.Elements[0], true
+	return bank.PostPipelineBuf.Peek(), true
 }
 
 func bufferPop(bank *bankState) {
@@ -95,8 +95,7 @@ func bufferPop(bank *bankState) {
 		return
 	}
 
-	bank.PostPipelineBuf.Elements[0] = bankPipelineItemState{}
-	bank.PostPipelineBuf.Elements = bank.PostPipelineBuf.Elements[1:]
+	bank.PostPipelineBuf.Pop()
 }
 
 func selectBank(spec Spec, addr uint64) int {

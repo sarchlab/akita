@@ -12,8 +12,8 @@ type bankStage struct {
 
 func (s *bankStage) Reset() {
 	next := &s.cache.comp.State
-	next.BankPostBufs[s.bankID].Elements = nil
-	next.BankPipelines[s.bankID].Stages = nil
+	next.BankPostBufs[s.bankID].Clear()
+	next.BankPipelines[s.bankID].Clear()
 }
 
 func (s *bankStage) Tick() bool {
@@ -53,9 +53,8 @@ func (s *bankStage) extractFromBuf() bool {
 		return false
 	}
 
-	transIdx := bankBuf.Elements[0]
+	transIdx := bankBuf.Pop()
 	bankPipeline.Accept(transIdx)
-	bankBuf.Elements = bankBuf.Elements[1:]
 
 	return true
 }
@@ -68,7 +67,7 @@ func (s *bankStage) finalizeTrans() bool {
 		return false
 	}
 
-	transIdx := bankPostBuf.Elements[0]
+	transIdx := bankPostBuf.Peek()
 	trans := &next.Transactions[transIdx]
 
 	switch trans.BankAction {
@@ -103,7 +102,7 @@ func (s *bankStage) finalizeReadHitTrans(
 	trans.Done = true
 
 	bankPostBuf := &next.BankPostBufs[s.bankID]
-	bankPostBuf.Elements = bankPostBuf.Elements[1:]
+	bankPostBuf.Pop()
 
 	tracing.EndTask(trans.ID, s.cache.comp)
 
@@ -139,7 +138,7 @@ func (s *bankStage) finalizeWriteTrans(
 	nextBlock.IsLocked = false
 
 	bankPostBuf := &next.BankPostBufs[s.bankID]
-	bankPostBuf.Elements = bankPostBuf.Elements[1:]
+	bankPostBuf.Pop()
 
 	spec := s.cache.comp.Spec
 	if needsDualCompletion(spec.WritePolicyType) {
@@ -179,7 +178,7 @@ func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
 	trans.Done = true
 
 	bankPostBuf := &next.BankPostBufs[s.bankID]
-	bankPostBuf.Elements = bankPostBuf.Elements[1:]
+	bankPostBuf.Pop()
 
 	return true
 }

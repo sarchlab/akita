@@ -49,9 +49,6 @@ Key methods:
 - `Spec S` — returns the immutable spec.
 - `State T` / ``State` field *T` — read/write the current state.
 - `Tick() bool` — runs the middleware pipeline (returns true if progress made).
-- `StateRef() any` — a live reference to the `State` field, exposed to the
-  simulation's global state manager (`simulation.StateHolder`) for resolution
-  via `GetStateByName`.
 
 ### EventDrivenComponent[S, T]
 

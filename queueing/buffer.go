@@ -12,45 +12,54 @@ var HookPosBufPush = &hooking.HookPos{Name: "Buffer Push"}
 // HookPosBufPop marks when an element is popped from the buffer.
 var HookPosBufPop = &hooking.HookPos{Name: "Buffer Pop"}
 
-// Buffer is a generic FIFO queue. It is JSON-serializable via exported fields
-// with json tags.
+// Buffer is a generic, bounded FIFO queue. Its state is fully encapsulated:
+// callers interact through the methods only, which keeps the capacity and
+// FIFO invariants intact and lets the representation evolve freely.
 type Buffer[T any] struct {
 	hooking.HookableBase `json:"-"`
 
-	BufferName string `json:"buffer_name"`
-	Cap        int    `json:"cap"`
-	Elements   []T    `json:"elements"`
+	name     string
+	cap      int
+	elements []T
+}
+
+// NewBuffer creates a FIFO buffer with the given name and capacity. It returns
+// a value so the buffer can be embedded directly in a component's state.
+func NewBuffer[T any](name string, capacity int) Buffer[T] {
+	return Buffer[T]{
+		name: name,
+		cap:  capacity,
+	}
 }
 
 // Name returns the name of the buffer.
 func (b *Buffer[T]) Name() string {
-	return b.BufferName
+	return b.name
 }
 
 // Capacity returns the capacity of the buffer.
 func (b *Buffer[T]) Capacity() int {
-	return b.Cap
+	return b.cap
 }
 
 // Size returns the number of elements currently in the buffer.
 func (b *Buffer[T]) Size() int {
-	return len(b.Elements)
+	return len(b.elements)
 }
 
 // CanPush returns true if the buffer has room for another element.
 func (b *Buffer[T]) CanPush() bool {
-	return len(b.Elements) < b.Cap
+	return len(b.elements) < b.cap
 }
 
-// Push adds an element to the back of the buffer. It panics if the buffer
-// is already at capacity. The element is accepted as interface{}.
-func (b *Buffer[T]) Push(e interface{}) {
-	if len(b.Elements) >= b.Cap {
+// PushTyped adds an element to the back of the buffer. It panics if the buffer
+// is already at capacity.
+func (b *Buffer[T]) PushTyped(e T) {
+	if len(b.elements) >= b.cap {
 		log.Panic("buffer overflow")
 	}
 
-	typed := e.(T)
-	b.Elements = append(b.Elements, typed)
+	b.elements = append(b.elements, e)
 
 	if b.NumHooks() > 0 {
 		b.InvokeHook(hooking.HookCtx{
@@ -59,27 +68,53 @@ func (b *Buffer[T]) Push(e interface{}) {
 			Item:   e,
 		})
 	}
+}
+
+// Peek returns the element at the front of the buffer without removing it. It
+// returns the zero value of T if the buffer is empty.
+func (b *Buffer[T]) Peek() T {
+	if len(b.elements) == 0 {
+		var zero T
+		return zero
+	}
+
+	return b.elements[0]
+}
+
+// UpdateFront replaces the element at the front of the buffer. It is a no-op
+// if the buffer is empty. This lets a consumer process the head item in place
+// across ticks (for example, marking it committed) without dequeuing it.
+func (b *Buffer[T]) UpdateFront(e T) {
+	if len(b.elements) == 0 {
+		return
+	}
+
+	b.elements[0] = e
+}
+
+// Pop removes and returns the element at the front of the buffer. It returns
+// the zero value of T if the buffer is empty.
+func (b *Buffer[T]) Pop() T {
+	if len(b.elements) == 0 {
+		var zero T
+		return zero
+	}
+
+	e := b.elements[0]
+	b.elements = b.elements[1:]
+
+	if b.NumHooks() > 0 {
+		b.InvokeHook(hooking.HookCtx{
+			Domain: b,
+			Pos:    HookPosBufPop,
+			Item:   e,
+		})
+	}
+
+	return e
 }
 
 // Clear removes all elements from the buffer.
 func (b *Buffer[T]) Clear() {
-	b.Elements = nil
-}
-
-// PushTyped adds a typed element to the back of the buffer. It panics if
-// the buffer is already at capacity.
-func (b *Buffer[T]) PushTyped(e T) {
-	if len(b.Elements) >= b.Cap {
-		log.Panic("buffer overflow")
-	}
-
-	b.Elements = append(b.Elements, e)
-
-	if b.NumHooks() > 0 {
-		b.InvokeHook(hooking.HookCtx{
-			Domain: b,
-			Pos:    HookPosBufPush,
-			Item:   e,
-		})
-	}
+	b.elements = nil
 }

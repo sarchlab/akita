@@ -156,14 +156,14 @@ func (b Builder) Build(name string) *Comp {
 	initialState := State{
 		TLBState: tlbStateEnable,
 		Sets:     initSets(b.spec.NumSets, b.spec.NumWays),
-		Pipeline: queueing.Pipeline[pipelineTLBReqState]{
-			Width:     spec.PipelineWidth,
-			NumStages: b.spec.Latency,
-		},
-		BufferItems: queueing.Buffer[pipelineTLBReqState]{
-			BufferName: name + ".BufferItems",
-			Cap:        spec.PipelineWidth,
-		},
+		Pipeline: queueing.NewPipeline[pipelineTLBReqState](
+			spec.PipelineWidth,
+			b.spec.Latency,
+		),
+		BufferItems: queueing.NewBuffer[pipelineTLBReqState](
+			name+".BufferItems",
+			spec.PipelineWidth,
+		),
 	}
 
 	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().

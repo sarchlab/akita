@@ -54,7 +54,7 @@ type setState struct {
 
 func setLookup(s *setState, pid vm.PID, seg uint64) (wayID int, found bool) {
 	key := lruset.KeyString(uint64(pid), seg)
-	wayID, ok := lruset.Lookup(&s.LRU, key)
+	wayID, ok := s.LRU.Lookup(key)
 	if !ok {
 		return 0, false
 	}
@@ -67,15 +67,15 @@ func setUpdate(s *setState, wayID int, pid vm.PID, seg uint64) {
 	block.PID = uint64(pid)
 	block.Seg = seg
 	newKey := lruset.KeyString(uint64(pid), seg)
-	lruset.UpdateKey(&s.LRU, wayID, oldKey, newKey)
+	s.LRU.UpdateKey(wayID, oldKey, newKey)
 }
 
 func setEvict(s *setState) (wayID int, ok bool) {
-	return lruset.Evict(&s.LRU)
+	return s.LRU.Evict()
 }
 
 func setVisit(s *setState, wayID int) {
-	lruset.Visit(&s.LRU, wayID)
+	s.LRU.Visit(wayID)
 }
 
 func initSets(numLevels, numBlocks int) []setState {

@@ -127,8 +127,8 @@ var _ = Describe("Switch", func() {
 		Expect(madeProgress).To(BeTrue())
 		// Verify flit was accepted into pipeline
 		next := &sw.State
-		Expect(next.PortComplexes[0].Pipeline.Stages).To(HaveLen(1))
-		Expect(next.PortComplexes[0].Pipeline.Stages[0].Item.Flit.ID).To(Equal(flit.ID))
+		Expect(next.PortComplexes[0].Pipeline.Stages()).To(HaveLen(1))
+		Expect(next.PortComplexes[0].Pipeline.Stages()[0].Item.Flit.ID).To(Equal(flit.ID))
 	})
 
 	It("should not start processing if pipeline is busy", func() {
@@ -145,9 +145,7 @@ var _ = Describe("Switch", func() {
 
 		// Fill pipeline so it can't accept
 		next := &sw.State
-		next.PortComplexes[0].Pipeline.Stages = []queueing.PipelineStage[routedFlit]{
-			{Lane: 0, Stage: 0, Item: routedFlit{TaskID: 1}},
-		}
+		next.PortComplexes[0].Pipeline.Accept(routedFlit{TaskID: 1})
 
 		port1.EXPECT().PeekIncoming().Return(flit)
 		port2.EXPECT().PeekIncoming().Return(nil)
@@ -160,19 +158,17 @@ var _ = Describe("Switch", func() {
 	It("should tick the pipelines", func() {
 		// Place an item in pipeline stage 0 for port1
 		next := &sw.State
-		next.PortComplexes[0].Pipeline.Stages = []queueing.PipelineStage[routedFlit]{
-			{Lane: 0, Stage: 0, Item: routedFlit{
-				Flit:   packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 100}},
-				TaskID: 101,
-			}, CycleLeft: 0},
-		}
+		next.PortComplexes[0].Pipeline.Accept(routedFlit{
+			Flit:   packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 100}},
+			TaskID: 101,
+		})
 
 		madeProgress := rpMW.movePipeline()
 
 		Expect(madeProgress).To(BeTrue())
 		// For latency=1, the item should have moved to RouteBuffer
 		next = &sw.State
-		Expect(next.PortComplexes[0].Pipeline.Stages).To(HaveLen(0))
+		Expect(next.PortComplexes[0].Pipeline.Stages()).To(HaveLen(0))
 		Expect(next.PortComplexes[0].RouteBuffer.Size()).To(Equal(1))
 	})
 
@@ -189,13 +185,10 @@ var _ = Describe("Switch", func() {
 
 		// Place item in route buffer for port1
 		next := &sw.State
-		next.PortComplexes[0].RouteBuffer = queueing.Buffer[routedFlit]{
-			BufferName: "LocalPort1RouteBuf",
-			Cap:        1,
-			Elements: []routedFlit{
-				{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()},
-			},
-		}
+		next.PortComplexes[0].RouteBuffer =
+			queueing.NewBuffer[routedFlit]("LocalPort1RouteBuf", 1)
+		next.PortComplexes[0].RouteBuffer.PushTyped(
+			routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
 
 		routingTable.EXPECT().
 			FindPort(dstPort.AsRemote()).
@@ -222,20 +215,14 @@ var _ = Describe("Switch", func() {
 
 		// Place item in route buffer and fill forward buffer
 		next := &sw.State
-		next.PortComplexes[0].RouteBuffer = queueing.Buffer[routedFlit]{
-			BufferName: "LocalPort1RouteBuf",
-			Cap:        1,
-			Elements: []routedFlit{
-				{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()},
-			},
-		}
-		next.PortComplexes[0].ForwardBuffer = queueing.Buffer[routedFlit]{
-			BufferName: "LocalPort1FwdBuf",
-			Cap:        1,
-			Elements: []routedFlit{
-				{Flit: packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 300}}},
-			},
-		}
+		next.PortComplexes[0].RouteBuffer =
+			queueing.NewBuffer[routedFlit]("LocalPort1RouteBuf", 1)
+		next.PortComplexes[0].RouteBuffer.PushTyped(
+			routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
+		next.PortComplexes[0].ForwardBuffer =
+			queueing.NewBuffer[routedFlit]("LocalPort1FwdBuf", 1)
+		next.PortComplexes[0].ForwardBuffer.PushTyped(
+			routedFlit{Flit: packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 300}}})
 
 		madeProgress := rfsMW.route()
 
@@ -252,17 +239,12 @@ var _ = Describe("Switch", func() {
 		flit.ID = timing.GetIDGenerator().Generate()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
-		flit.OutputBufIdx = 1
-
 		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
 		next := &sw.State
-		next.PortComplexes[0].ForwardBuffer = queueing.Buffer[routedFlit]{
-			BufferName: "LocalPort1FwdBuf",
-			Cap:        1,
-			Elements: []routedFlit{
-				{Flit: flit},
-			},
-		}
+		next.PortComplexes[0].ForwardBuffer =
+			queueing.NewBuffer[routedFlit]("LocalPort1FwdBuf", 1)
+		next.PortComplexes[0].ForwardBuffer.PushTyped(
+			routedFlit{Flit: flit, OutputBufIdx: 1})
 
 		madeProgress := rfsMW.forward()
 
@@ -282,22 +264,16 @@ var _ = Describe("Switch", func() {
 		flit.ID = timing.GetIDGenerator().Generate()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
-		flit.OutputBufIdx = 1
-
 		// Fill sendOut buffer to capacity, forward buffer targets port2
 		next := &sw.State
-		next.PortComplexes[0].ForwardBuffer = queueing.Buffer[routedFlit]{
-			BufferName: "LocalPort1FwdBuf",
-			Cap:        1,
-			Elements: []routedFlit{
-				{Flit: flit},
-			},
-		}
-		next.PortComplexes[1].SendOutBuffer = queueing.Buffer[packetization.Flit]{
-			BufferName: "LocalPort2SendBuf",
-			Cap:        1,
-			Elements:   []packetization.Flit{{MsgMeta: messaging.MsgMeta{ID: 400}}},
-		}
+		next.PortComplexes[0].ForwardBuffer =
+			queueing.NewBuffer[routedFlit]("LocalPort1FwdBuf", 1)
+		next.PortComplexes[0].ForwardBuffer.PushTyped(
+			routedFlit{Flit: flit, OutputBufIdx: 1})
+		next.PortComplexes[1].SendOutBuffer =
+			queueing.NewBuffer[packetization.Flit]("LocalPort2SendBuf", 1)
+		next.PortComplexes[1].SendOutBuffer.PushTyped(
+			packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 400}})
 
 		madeProgress := rfsMW.forward()
 
@@ -317,11 +293,9 @@ var _ = Describe("Switch", func() {
 
 		// Place flit in sendOutBuffer of port2
 		next := &sw.State
-		next.PortComplexes[1].SendOutBuffer = queueing.Buffer[packetization.Flit]{
-			BufferName: "LocalPort2SendBuf",
-			Cap:        1,
-			Elements:   []packetization.Flit{flit},
-		}
+		next.PortComplexes[1].SendOutBuffer =
+			queueing.NewBuffer[packetization.Flit]("LocalPort2SendBuf", 1)
+		next.PortComplexes[1].SendOutBuffer.PushTyped(flit)
 
 		port2.EXPECT().Send(gomock.Any()).Return(nil)
 
@@ -345,11 +319,9 @@ var _ = Describe("Switch", func() {
 
 		// Place flit in sendOutBuffer of port2
 		next := &sw.State
-		next.PortComplexes[1].SendOutBuffer = queueing.Buffer[packetization.Flit]{
-			BufferName: "LocalPort2SendBuf",
-			Cap:        1,
-			Elements:   []packetization.Flit{flit},
-		}
+		next.PortComplexes[1].SendOutBuffer =
+			queueing.NewBuffer[packetization.Flit]("LocalPort2SendBuf", 1)
+		next.PortComplexes[1].SendOutBuffer.PushTyped(flit)
 
 		port2.EXPECT().Send(gomock.Any()).Return(&messaging.SendError{})
 

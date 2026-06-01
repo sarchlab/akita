@@ -101,12 +101,9 @@ capabilities:
 | `Component` | `Entity` | Register runtime components |
 | `Port` | `Entity` + `NumIncoming()/NumOutgoing()` | Register port buffers |
 | `Connection` | `Entity` | Register runtime connections |
-| `Resource` | `Entity` + `Kind()/Identity()` | Shared state reachable by name |
-| `ResourceOwner` | `Resources() []Resource` | Expose a component's resources |
-| `StateHolder` | `StateRef() State` | Expose a live reference to runtime state |
+| `Resource` | `Entity` | Shared state registered by setup, reachable by name |
 
-By default `GetStateByName` returns the registered entity itself. An entity
-whose state lives in a distinct sub-object implements `StateHolder` to expose a
-live reference to it; `modeling.Component[S,T]` and
-`modeling.EventDrivenComponent[S,T]` do this, returning a pointer to their
-`State` field.
+`GetStateByName` returns the registered entity itself — a component, port,
+connection, or resource — which the caller type-asserts. Shared resources are
+owned by the simulation and registered by setup via `RegisterResource`;
+components hold references to them rather than embedding the payload.

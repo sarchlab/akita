@@ -257,42 +257,28 @@ func (b Builder) buildInitialState(
 	s := State{
 		CacheState:   int(cacheStateRunning),
 		EvictingList: make(map[uint64]bool),
-		DirStageBuf: queueing.Buffer[int]{
-			BufferName: name + ".DirStageBuf",
-			Cap:        b.numReqPerCycle,
+		DirStageBuf: queueing.NewBuffer[int](
+			name+".DirStageBuf", b.numReqPerCycle),
+		DirToBankBufs: []queueing.Buffer[int]{
+			queueing.NewBuffer[int](name+".DirToBankBuf", b.numReqPerCycle),
 		},
-		DirToBankBufs: []queueing.Buffer[int]{{
-			BufferName: name + ".DirToBankBuf",
-			Cap:        b.numReqPerCycle,
-		}},
-		WriteBufferToBankBufs: []queueing.Buffer[int]{{
-			BufferName: name + ".WriteBufferToBankBuf",
-			Cap:        b.numReqPerCycle,
-		}},
-		MSHRStageBuf: queueing.Buffer[int]{
-			BufferName: name + ".MSHRStageBuf",
-			Cap:        b.numReqPerCycle,
+		WriteBufferToBankBufs: []queueing.Buffer[int]{
+			queueing.NewBuffer[int](
+				name+".WriteBufferToBankBuf", b.numReqPerCycle),
 		},
-		WriteBufferBuf: queueing.Buffer[int]{
-			BufferName: name + ".WriteBufferBuf",
-			Cap:        b.numReqPerCycle,
+		MSHRStageBuf: queueing.NewBuffer[int](
+			name+".MSHRStageBuf", b.numReqPerCycle),
+		WriteBufferBuf: queueing.NewBuffer[int](
+			name+".WriteBufferBuf", b.numReqPerCycle),
+		DirPipeline: queueing.NewPipeline[int](laneWidth, b.dirLatency),
+		DirPostPipelineBuf: queueing.NewBuffer[int](
+			name+".DirPostPipelineBuf", b.numReqPerCycle),
+		BankPipelines: []queueing.Pipeline[int]{
+			queueing.NewPipeline[int](laneWidth, b.bankLatency),
 		},
-		DirPipeline: queueing.Pipeline[int]{
-			Width:     laneWidth,
-			NumStages: b.dirLatency,
+		BankPostPipelineBufs: []postPipelineBuf{
+			newPostPipelineBuf(laneWidth),
 		},
-		DirPostPipelineBuf: queueing.Buffer[int]{
-			BufferName: name + ".DirPostPipelineBuf",
-			Cap:        b.numReqPerCycle,
-		},
-		BankPipelines: []queueing.Pipeline[int]{{
-			Width:     laneWidth,
-			NumStages: b.bankLatency,
-		}},
-		BankPostPipelineBufs: []queueing.Buffer[int]{{
-			BufferName: name + ".BankPostPipelineBuf",
-			Cap:        laneWidth,
-		}},
 		BankInflightTransCounts:         make([]int, 1),
 		BankDownwardInflightTransCounts: make([]int, 1),
 	}

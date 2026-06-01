@@ -26,10 +26,11 @@ type Simulation struct {
 	resources     []Resource
 
 	// entities is the single, flat inventory of every registered runtime object
-	// (components, ports, connections, resources, and the engine and ID
-	// generator singletons), each held as the Entity it satisfies. entityByName
-	// resolves a globally unique name to its index. Together they back the
-	// global state manager and GetStateByName.
+	// (components, ports, connections, and resources), each held as the Entity
+	// it satisfies. entityByName resolves a globally unique name to its index.
+	// Together they back the global state manager and GetStateByName. The engine
+	// and ID generator are not entities: the engine is the engine field (see
+	// GetEngine) and the ID generator is a timing-package global.
 	entities     []Entity
 	entityByName map[string]int
 }
@@ -60,10 +61,10 @@ func (s *Simulation) GetVisTracer() *tracing.DBTracer {
 	return s.visTracer
 }
 
-// Components returns all the components registered in the simulation. The
-// returned slice should be treated as read-only.
+// Components returns a copy of the registered components, in registration
+// order.
 func (s *Simulation) Components() []Component {
-	return s.components
+	return append([]Component(nil), s.components...)
 }
 
 // registerEntity records a live entity in the single, flat inventory. It is the
@@ -162,25 +163,23 @@ func (s *Simulation) Entities() []Entity {
 	return append([]Entity(nil), s.entities...)
 }
 
-// GetStateByName resolves a registered entity name to a live reference to its
-// State. It is the global state-access backdoor: any component can reach
-// designed shared state (such as a page table or memory resource) by name and
-// mutate it in place. Resolve the reference once at setup and cache it; this is
-// a map lookup, not a free dereference.
+// GetStateByName resolves a registered entity name to the live entity. It is the
+// global state-access backdoor: a component can reach designed shared state
+// (such as a page table or memory resource) by name and mutate it in place.
+// Resolve the reference once at setup and cache it; this is a map lookup, not a
+// free dereference.
 //
-// The returned State is the entity's StateRef when it implements StateHolder
-// (for example, a modeling.Component returns a pointer to its State field),
-// otherwise the entity value itself (for resources, the engine, or the
-// ID-generator handle). Callers type-assert the result; that friction is
-// intentional, flagging that you are reaching across the normal interfaces into
-// another entity's state.
+// The returned value is the registered entity itself (a component, port,
+// connection, resource, etc.); callers type-assert it to the concrete type.
+// That friction is intentional — it flags that you are reaching past the normal
+// interfaces to another entity.
 func (s *Simulation) GetStateByName(name string) (State, bool) {
 	idx, found := s.entityByName[name]
 	if !found {
 		return nil, false
 	}
 
-	return stateOf(s.entities[idx]), true
+	return s.entities[idx], true
 }
 
 // GetComponentByName returns the component with the given name.

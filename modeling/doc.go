@@ -6,7 +6,6 @@
 //   - Generic Spec+State pattern via Component[S, T]
 //   - Middleware pipeline for tick-based components
 //   - EventDrivenComponent[S, T] for event-driven components
-//   - StateRef access to component state via the global state manager
 //   - Validation helpers for Spec and State types
 //
 // The timing package provides the simulation kernel. The messaging package

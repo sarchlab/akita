@@ -74,11 +74,9 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		}
 
 		msg := msgI.(*vm.TranslationReq)
-		next.Pipeline.Accept(pipelineTLBReqState{Msg: *msg})
-
-		// Set CycleLeft=1 on the newly accepted entry to preserve the
-		// same per-stage latency as the original hand-coded pipeline.
-		next.Pipeline.Stages[len(next.Pipeline.Stages)-1].CycleLeft = 1
+		// Dwell one extra cycle at stage 0 to preserve the same per-stage
+		// latency as the original hand-coded pipeline.
+		next.Pipeline.AcceptWithDelay(pipelineTLBReqState{Msg: *msg}, 1)
 
 		madeProgress = true
 	}
@@ -96,13 +94,12 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 			break
 		}
 
-		item := next.BufferItems.Elements[0]
+		item := next.BufferItems.Peek()
 		msg := item.Msg
 
 		ok := m.lookup(&msg)
 		if ok {
-			next.BufferItems.Elements[0] = pipelineTLBReqState{}
-			next.BufferItems.Elements = next.BufferItems.Elements[1:]
+			next.BufferItems.Pop()
 			madeProgress = true
 		} else {
 			break

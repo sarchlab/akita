@@ -45,13 +45,10 @@ var _ = Describe("Control Stage", func() {
 			AnyTimes()
 
 		initialState := State{
-			DirBuf: queueing.Buffer[int]{
-				BufferName: "Cache.DirBuf",
-				Cap:        4,
-			},
+			DirBuf:        queueing.NewBuffer[int]("Cache.DirBuf", 4),
 			BankBufs:      []queueing.Buffer[int]{},
-			DirPipeline:   queueing.Pipeline[int]{Width: 4, NumStages: 2},
-			DirPostBuf:    queueing.Buffer[int]{BufferName: "Cache.DirPostBuf", Cap: 4},
+			DirPipeline:   queueing.NewPipeline[int](4, 2),
+			DirPostBuf:    queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
 			BankPipelines: []queueing.Pipeline[int]{},
 			BankPostBufs:  []queueing.Buffer[int]{},
 		}

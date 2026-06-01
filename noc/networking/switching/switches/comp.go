@@ -16,8 +16,9 @@ type Spec struct {
 // routedFlit is a flit that has been received and assigned a route destination.
 type routedFlit struct {
 	packetization.Flit
-	TaskID  uint64               `json:"task_id"`
-	RouteTo messaging.RemotePort `json:"route_to"`
+	TaskID       uint64               `json:"task_id"`
+	RouteTo      messaging.RemotePort `json:"route_to"`
+	OutputBufIdx int                  `json:"output_buf_idx"`
 }
 
 // portComplexState is the serializable state of one port complex.

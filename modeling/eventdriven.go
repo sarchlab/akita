@@ -51,14 +51,6 @@ func (c *EventDrivenComponent[S, T, R]) Name() string {
 	return c.name
 }
 
-// StateRef returns a live reference to the component's runtime state, exposing
-// the State field to the simulation's global state manager (it satisfies
-// simulation.StateHolder structurally). The returned pointer aliases the State
-// field, so reads and writes through it are shared with the component.
-func (c *EventDrivenComponent[S, T, R]) StateRef() any {
-	return &c.State
-}
-
 // ScheduleWakeAt schedules a wakeup at time t. If a wakeup is already
 // pending at the same or earlier time, this is a no-op (dedup guard).
 func (c *EventDrivenComponent[S, T, R]) ScheduleWakeAt(t timing.VTimeInSec) {

@@ -89,7 +89,7 @@ type pipelineTLBReqState struct {
 
 func setLookup(s *setState, pid vm.PID, vAddr uint64) (wayID int, page vm.Page, found bool) {
 	key := lruset.KeyString(uint64(pid), vAddr)
-	wayID, ok := lruset.Lookup(&s.LRU, key)
+	wayID, ok := s.LRU.Lookup(key)
 	if !ok {
 		return 0, vm.Page{}, false
 	}
@@ -102,15 +102,15 @@ func setUpdate(s *setState, wayID int, page vm.Page) {
 	oldKey := lruset.KeyString(uint64(block.Page.PID), block.Page.VAddr)
 	block.Page = page
 	newKey := lruset.KeyString(uint64(page.PID), page.VAddr)
-	lruset.UpdateKey(&s.LRU, wayID, oldKey, newKey)
+	s.LRU.UpdateKey(wayID, oldKey, newKey)
 }
 
 func setEvict(s *setState) (wayID int, ok bool) {
-	return lruset.Evict(&s.LRU)
+	return s.LRU.Evict()
 }
 
 func setVisit(s *setState, wayID int) {
-	lruset.Visit(&s.LRU, wayID)
+	s.LRU.Visit(wayID)
 }
 
 func initSets(numSets, numWays int) []setState {

@@ -243,42 +243,42 @@ func (b *Builder) buildInitialState(
 ) State {
 	bankBufs := make([]queueing.Buffer[int], b.numBank)
 	for i := 0; i < b.numBank; i++ {
-		bankBufs[i] = queueing.Buffer[int]{
-			BufferName: fmt.Sprintf("%s.Bank%d.Buffer", name, i),
-			Cap:        b.numReqPerCycle,
-		}
+		bankBufs[i] = queueing.NewBuffer[int](
+			fmt.Sprintf("%s.Bank%d.Buffer", name, i),
+			b.numReqPerCycle,
+		)
 	}
 
 	bankPipelines := make([]queueing.Pipeline[int], b.numBank)
 	for i := 0; i < b.numBank; i++ {
-		bankPipelines[i] = queueing.Pipeline[int]{
-			Width:     b.numReqPerCycle,
-			NumStages: b.bankLatency,
-		}
+		bankPipelines[i] = queueing.NewPipeline[int](
+			b.numReqPerCycle,
+			b.bankLatency,
+		)
 	}
 
 	bankPostBufs := make([]queueing.Buffer[int], b.numBank)
 	for i := 0; i < b.numBank; i++ {
-		bankPostBufs[i] = queueing.Buffer[int]{
-			BufferName: fmt.Sprintf("%s.Bank[%d].PostPipelineBuffer", name, i),
-			Cap:        b.numReqPerCycle,
-		}
+		bankPostBufs[i] = queueing.NewBuffer[int](
+			fmt.Sprintf("%s.Bank[%d].PostPipelineBuffer", name, i),
+			b.numReqPerCycle,
+		)
 	}
 
 	initialState := State{
-		DirBuf: queueing.Buffer[int]{
-			BufferName: name + ".DirectoryBuffer",
-			Cap:        b.numReqPerCycle,
-		},
+		DirBuf: queueing.NewBuffer[int](
+			name+".DirectoryBuffer",
+			b.numReqPerCycle,
+		),
 		BankBufs: bankBufs,
-		DirPipeline: queueing.Pipeline[int]{
-			Width:     b.numReqPerCycle,
-			NumStages: b.dirLatency,
-		},
-		DirPostBuf: queueing.Buffer[int]{
-			BufferName: name + ".DirectoryStage.PostPipelineBuffer",
-			Cap:        b.numReqPerCycle,
-		},
+		DirPipeline: queueing.NewPipeline[int](
+			b.numReqPerCycle,
+			b.dirLatency,
+		),
+		DirPostBuf: queueing.NewBuffer[int](
+			name+".DirectoryStage.PostPipelineBuffer",
+			b.numReqPerCycle,
+		),
 		BankPipelines: bankPipelines,
 		BankPostBufs:  bankPostBufs,
 	}

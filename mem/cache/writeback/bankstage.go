@@ -41,7 +41,7 @@ func (s *bankStage) tickPipeline() bool {
 func (s *bankStage) Reset() {
 	next := &s.cache.comp.State
 	next.DirToBankBufs[s.bankID].Clear()
-	next.BankPipelines[s.bankID].Stages = nil
+	next.BankPipelines[s.bankID].Clear()
 	next.BankPostPipelineBufs[s.bankID].Clear()
 	next.BankInflightTransCounts[s.bankID] = 0
 }
@@ -56,9 +56,8 @@ func (s *bankStage) pullFromBuf() bool {
 
 	// Check write buffer to bank buffer first
 	wbBuf := &next.WriteBufferToBankBufs[s.bankID]
-	if len(wbBuf.Elements) > 0 {
-		transIdx := wbBuf.Elements[0]
-		wbBuf.Elements = wbBuf.Elements[1:]
+	if wbBuf.Size() > 0 {
+		transIdx := wbBuf.Pop()
 		s.acceptIntoPipeline(next, spec, transIdx)
 		next.BankInflightTransCounts[s.bankID]++
 		return true
@@ -90,12 +89,11 @@ func (s *bankStage) canAcceptIntoPipeline(cur State) bool {
 
 func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
 	dirBuf := &next.DirToBankBufs[s.bankID]
-	if len(dirBuf.Elements) == 0 {
+	if dirBuf.Size() == 0 {
 		return false
 	}
 
-	transIdx := dirBuf.Elements[0]
-	dirBuf.Elements = dirBuf.Elements[1:]
+	transIdx := dirBuf.Pop()
 	t := &next.Transactions[transIdx]
 
 	if t.Action == writeBufferFetch {
@@ -127,7 +125,8 @@ func (s *bankStage) finalizeTrans() bool {
 	next := &s.cache.comp.State
 	postBuf := &next.BankPostPipelineBufs[s.bankID]
 
-	for i, idx := range postBuf.Elements {
+	for i := 0; i < postBuf.Size(); i++ {
+		idx := postBuf.Get(i)
 		trans := &next.Transactions[idx]
 
 		done := false
@@ -146,7 +145,7 @@ func (s *bankStage) finalizeTrans() bool {
 		}
 
 		if done {
-			postBuf.Elements = append(postBuf.Elements[:i], postBuf.Elements[i+1:]...)
+			postBuf.RemoveAt(i)
 			return true
 		}
 	}

@@ -62,7 +62,7 @@ type State struct {
 
 	// Bank pipeline + post-buf + counters
 	BankPipelines                   []queueing.Pipeline[int] `json:"bank_pipelines"`
-	BankPostPipelineBufs            []queueing.Buffer[int]   `json:"bank_post_pipeline_bufs"`
+	BankPostPipelineBufs            []postPipelineBuf        `json:"bank_post_pipeline_bufs"`
 	BankInflightTransCounts         []int                    `json:"bank_inflight_trans_counts"`
 	BankDownwardInflightTransCounts []int                    `json:"bank_downward_inflight_trans_counts"`
 

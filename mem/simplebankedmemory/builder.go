@@ -218,14 +218,14 @@ func (b Builder) buildInitialState(spec Spec) State {
 
 	for i := range state.Banks {
 		state.Banks[i] = bankState{
-			Pipeline: queueing.Pipeline[bankPipelineItemState]{
-				Width:     spec.BankPipelineWidth,
-				NumStages: spec.BankPipelineDepth * spec.StageLatency,
-			},
-			PostPipelineBuf: queueing.Buffer[bankPipelineItemState]{
-				BufferName: spec.StorageRef + ".PostPipelineBuf",
-				Cap:        spec.PostPipelineBufSize,
-			},
+			Pipeline: queueing.NewPipeline[bankPipelineItemState](
+				spec.BankPipelineWidth,
+				spec.BankPipelineDepth*spec.StageLatency,
+			),
+			PostPipelineBuf: queueing.NewBuffer[bankPipelineItemState](
+				spec.StorageRef+".PostPipelineBuf",
+				spec.PostPipelineBufSize,
+			),
 		}
 	}
 

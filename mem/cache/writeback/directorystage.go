@@ -35,11 +35,11 @@ func (ds *directoryStage) processTransaction() bool {
 	next := &ds.cache.comp.State
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		if len(next.DirPostPipelineBuf.Elements) == 0 {
+		if next.DirPostPipelineBuf.Size() == 0 {
 			break
 		}
 
-		idx := next.DirPostPipelineBuf.Elements[0]
+		idx := next.DirPostPipelineBuf.Peek()
 		trans := &next.Transactions[idx]
 
 		addr := trans.accessReqAddress()
@@ -70,7 +70,7 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 			break
 		}
 
-		transIdx := next.DirStageBuf.Elements[0]
+		transIdx := next.DirStageBuf.Peek()
 
 		if spec.DirLatency == 0 {
 			// Bypass pipeline: put directly in post-pipeline buffer
@@ -78,14 +78,14 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 				break
 			}
 			next.DirPostPipelineBuf.PushTyped(transIdx)
-			next.DirStageBuf.Elements = next.DirStageBuf.Elements[1:]
+			next.DirStageBuf.Pop()
 			madeProgress = true
 		} else {
 			if !next.DirPipeline.CanAccept() {
 				break
 			}
 			next.DirPipeline.Accept(transIdx)
-			next.DirStageBuf.Elements = next.DirStageBuf.Elements[1:]
+			next.DirStageBuf.Pop()
 			madeProgress = true
 		}
 	}
@@ -95,7 +95,7 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 
 func (ds *directoryStage) Reset() {
 	next := &ds.cache.comp.State
-	next.DirPipeline.Stages = nil
+	next.DirPipeline.Clear()
 	next.DirPostPipelineBuf.Clear()
 	next.DirStageBuf.Clear()
 }
@@ -638,7 +638,7 @@ func (ds *directoryStage) needEviction(victim *cache.BlockState) bool {
 // popDirPostBuf removes the first element from the directory post-pipeline buffer.
 func (ds *directoryStage) popDirPostBuf() {
 	next := &ds.cache.comp.State
-	if len(next.DirPostPipelineBuf.Elements) > 0 {
-		next.DirPostPipelineBuf.Elements = next.DirPostPipelineBuf.Elements[1:]
+	if next.DirPostPipelineBuf.Size() > 0 {
+		next.DirPostPipelineBuf.Pop()
 	}
 }

@@ -31,7 +31,7 @@ func (wb *writeBufferStage) processNewTransaction() bool {
 		return false
 	}
 
-	transIdx := wbBuf.Elements[0]
+	transIdx := wbBuf.Peek()
 	trans := &next.Transactions[transIdx]
 
 	switch trans.Action {
@@ -117,7 +117,7 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 
 	bankBuf.PushTyped(transIdx)
 
-	next.WriteBufferBuf.Elements = next.WriteBufferBuf.Elements[1:]
+	next.WriteBufferBuf.Pop()
 
 	return true
 }
@@ -153,7 +153,7 @@ func (wb *writeBufferStage) fetchFromBottom(
 	trans.FetchReadReqMeta = read.MsgMeta
 	next.InflightFetchIndices = append(next.InflightFetchIndices, transIdx)
 
-	next.WriteBufferBuf.Elements = next.WriteBufferBuf.Elements[1:]
+	next.WriteBufferBuf.Pop()
 
 	reqMeta := trans.reqMeta()
 	tracing.TraceReqInitiate(read, wb.cache.comp,
@@ -187,7 +187,7 @@ func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
 	bankBuf.PushTyped(transIdx)
 
 	next.PendingEvictionIndices = append(next.PendingEvictionIndices, transIdx)
-	next.WriteBufferBuf.Elements = next.WriteBufferBuf.Elements[1:]
+	next.WriteBufferBuf.Pop()
 
 	return true
 }
@@ -218,7 +218,7 @@ func (wb *writeBufferStage) processWriteBufferFlush(
 	next.PendingEvictionIndices = append(next.PendingEvictionIndices, transIdx)
 
 	if popAfterDone {
-		next.WriteBufferBuf.Elements = next.WriteBufferBuf.Elements[1:]
+		next.WriteBufferBuf.Pop()
 	}
 
 	return true

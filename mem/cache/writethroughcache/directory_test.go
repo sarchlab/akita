@@ -37,25 +37,17 @@ var _ = Describe("Directory", func() {
 		}
 
 		initialState := State{
-			DirBuf: queueing.Buffer[int]{
-				BufferName: "Cache.DirBuf",
-				Cap:        4,
-			},
+			DirBuf: queueing.NewBuffer[int]("Cache.DirBuf", 4),
 			BankBufs: []queueing.Buffer[int]{
-				{BufferName: "Cache.BankBuf0", Cap: 4},
+				queueing.NewBuffer[int]("Cache.BankBuf0", 4),
 			},
-			DirPipeline: queueing.Pipeline[int]{
-				Width: 4, NumStages: 2,
-			},
-			DirPostBuf: queueing.Buffer[int]{
-				BufferName: "Cache.DirPostBuf",
-				Cap:        4,
-			},
+			DirPipeline: queueing.NewPipeline[int](4, 2),
+			DirPostBuf:  queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
 			BankPipelines: []queueing.Pipeline[int]{
-				{Width: 4, NumStages: 10},
+				queueing.NewPipeline[int](4, 10),
 			},
 			BankPostBufs: []queueing.Buffer[int]{
-				{BufferName: "Cache.BankPostBuf0", Cap: 4},
+				queueing.NewBuffer[int]("Cache.BankPostBuf0", 4),
 			},
 		}
 
@@ -120,7 +112,7 @@ var _ = Describe("Directory", func() {
 			entryIdx := cache.MSHRAdd(&next.MSHRState, 4, vm.PID(1), uint64(0x100))
 
 			// Put trans in post-pipeline buffer
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
 			madeProgress := d.Tick()
 
@@ -158,7 +150,7 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
 			madeProgress := d.Tick()
 
@@ -170,7 +162,7 @@ var _ = Describe("Directory", func() {
 			Expect(trans.BankAction).To(Equal(bankActionReadHit))
 			Expect(next.DirectoryState.Sets[setID].Blocks[wayID].ReadCount).To(Equal(1))
 			// Bank buf should have the trans index
-			Expect(next.BankBufs[0].Elements).To(HaveLen(1))
+			Expect(next.BankBufs[0].Size()).To(Equal(1))
 		})
 
 		It("should stall if cannot send to bank", func() {
@@ -197,10 +189,10 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
 			// Fill up bank buffer
-			next.BankBufs[0].Cap = 0
+			next.BankBufs[0] = queueing.NewBuffer[int]("Cache.BankBuf0", 0)
 
 			madeProgress := d.Tick()
 
@@ -232,7 +224,7 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 			next.DirectoryState.Sets[setID].Blocks[wayID].IsLocked = true
 
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
 			madeProgress := d.Tick()
 			Expect(madeProgress).To(BeFalse())
@@ -257,7 +249,7 @@ var _ = Describe("Directory", func() {
 					ReadPID:            1,
 				},
 			)
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
 			bottomPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
 				readToBottom := msg.(*mem.ReadReq)
@@ -306,7 +298,7 @@ var _ = Describe("Directory", func() {
 					ReadPID:            1,
 				},
 			)
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
 			setID := 4 // (0x100 / 64) % 16 = 4
 			next.DirectoryState.Sets[setID].Blocks[next.DirectoryState.Sets[setID].LRUOrder[0]].IsLocked = true
@@ -333,7 +325,7 @@ var _ = Describe("Directory", func() {
 					ReadPID:            1,
 				},
 			)
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
 			setID := 4
 			next.DirectoryState.Sets[setID].Blocks[next.DirectoryState.Sets[setID].LRUOrder[0]].ReadCount = 1
@@ -360,7 +352,7 @@ var _ = Describe("Directory", func() {
 					ReadPID:            1,
 				},
 			)
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
 			cache.MSHRAdd(&next.MSHRState, 4, vm.PID(1), 0x200)
 			cache.MSHRAdd(&next.MSHRState, 4, vm.PID(1), 0x300)
@@ -389,7 +381,7 @@ var _ = Describe("Directory", func() {
 					ReadPID:            1,
 				},
 			)
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
 			bottomPort.EXPECT().Send(gomock.Any()).Return(&messaging.SendError{})
 
@@ -420,7 +412,7 @@ var _ = Describe("Directory", func() {
 
 			// Pre-populate MSHR
 			entryIdx := cache.MSHRAdd(&next.MSHRState, 4, vm.PID(1), uint64(0x100))
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg messaging.Msg) {
@@ -466,7 +458,7 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg messaging.Msg) {
@@ -511,7 +503,7 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 			next.DirectoryState.Sets[setID].Blocks[wayID].IsLocked = true
 
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
 			madeProgress := d.Tick()
 
@@ -543,7 +535,7 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 			next.DirectoryState.Sets[setID].Blocks[wayID].ReadCount = 1
 
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
 			madeProgress := d.Tick()
 
@@ -574,9 +566,9 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
-			next.BankBufs[0].Cap = 0
+			next.BankBufs[0] = queueing.NewBuffer[int]("Cache.BankBuf0", 0)
 
 			madeProgress := d.Tick()
 
@@ -607,7 +599,7 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
 			bottomPort.EXPECT().Send(gomock.Any()).Return(&messaging.SendError{})
 
@@ -635,7 +627,7 @@ var _ = Describe("Directory", func() {
 					WritePID:     1,
 				},
 			)
-			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
+			next.DirPostBuf.PushTyped(0)
 
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg messaging.Msg) {

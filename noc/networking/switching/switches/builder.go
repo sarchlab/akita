@@ -114,22 +114,14 @@ func addPort(
 	portIndex[port.AsRemote()] = idx
 
 	// Initialize queueing.Buffer fields
-	pcs.RouteBuffer = queueing.Buffer[routedFlit]{
-		BufferName: pcs.LocalPortName + "RouteBuf",
-		Cap:        pcs.NumInputChannel,
-	}
-	pcs.ForwardBuffer = queueing.Buffer[routedFlit]{
-		BufferName: pcs.LocalPortName + "FwdBuf",
-		Cap:        pcs.NumInputChannel,
-	}
-	pcs.SendOutBuffer = queueing.Buffer[packetization.Flit]{
-		BufferName: pcs.LocalPortName + "SendBuf",
-		Cap:        pcs.NumOutputChannel,
-	}
-	pcs.Pipeline = queueing.Pipeline[routedFlit]{
-		Width:     pcs.PipelineWidth,
-		NumStages: pcs.Latency,
-	}
+	pcs.RouteBuffer = queueing.NewBuffer[routedFlit](
+		pcs.LocalPortName+"RouteBuf", pcs.NumInputChannel)
+	pcs.ForwardBuffer = queueing.NewBuffer[routedFlit](
+		pcs.LocalPortName+"FwdBuf", pcs.NumInputChannel)
+	pcs.SendOutBuffer = queueing.NewBuffer[packetization.Flit](
+		pcs.LocalPortName+"SendBuf", pcs.NumOutputChannel)
+	pcs.Pipeline = queueing.NewPipeline[routedFlit](
+		pcs.PipelineWidth, pcs.Latency)
 
 	state := &comp.State
 	state.PortComplexes = append(state.PortComplexes, pcs)

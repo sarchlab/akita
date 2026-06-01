@@ -79,7 +79,7 @@ func (m *tickFinalizeMW) finalizeRead(
 		item.Committed = true
 
 		// Update the buffer head with the committed state.
-		b.PostPipelineBuf.Elements[0] = *item
+		b.PostPipelineBuf.UpdateFront(*item)
 	}
 
 	if !m.topPort().CanSend() {
@@ -142,7 +142,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 		}
 
 		item.Committed = true
-		b.PostPipelineBuf.Elements[0] = *item
+		b.PostPipelineBuf.UpdateFront(*item)
 	}
 
 	if !m.topPort().CanSend() {
