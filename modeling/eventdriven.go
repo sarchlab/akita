@@ -1,8 +1,6 @@
 package modeling
 
 import (
-	"encoding/json"
-	"io"
 	"math"
 	"sync"
 
@@ -12,9 +10,9 @@ import (
 )
 
 // EventProcessor defines the processing logic for an EventDrivenComponent.
-// S is the Spec type, T is the State type.
-type EventProcessor[S any, T any] interface {
-	Process(comp *EventDrivenComponent[S, T], now timing.VTimeInSec) bool
+// S is the Spec type, T is the State type, R is the Resources type.
+type EventProcessor[S any, T any, R any] interface {
+	Process(comp *EventDrivenComponent[S, T, R], now timing.VTimeInSec) bool
 }
 
 // TimerFiredEvent is the event scheduled by EventDrivenComponent to wake
@@ -28,32 +26,46 @@ type TimerFiredEvent struct {
 //
 // S is the Spec type (immutable configuration).
 // T is the State type (mutable runtime data).
+// R is the Resources type (references to shared resources; None when unused).
 //
 // Instead of periodic ticking, EventDrivenComponent schedules wakeup events
 // via [ScheduleWakeAt] or [ScheduleWakeNow]. A dedup guard (pendingWakeup)
 // prevents redundant event scheduling.
-type EventDrivenComponent[S any, T any] struct {
+type EventDrivenComponent[S any, T any, R any] struct {
 	sync.Mutex
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 
-	Engine    timing.EventScheduler
+	engine    timing.EventScheduler
 	name      string
-	Spec      S
+	spec      S
 	State     T
-	processor EventProcessor[S, T]
+	resources R
+	processor EventProcessor[S, T, R]
 
 	pendingWakeup timing.VTimeInSec
 }
 
+// Spec returns the component's immutable configuration (a copy), so callers
+// cannot mutate the builder-established configuration.
+func (c *EventDrivenComponent[S, T, R]) Spec() S {
+	return c.spec
+}
+
+// Resources returns the component's shared-resource references. The references
+// are fixed at construction; only the state they point to mutates.
+func (c *EventDrivenComponent[S, T, R]) Resources() R {
+	return c.resources
+}
+
 // Name returns the component name.
-func (c *EventDrivenComponent[S, T]) Name() string {
+func (c *EventDrivenComponent[S, T, R]) Name() string {
 	return c.name
 }
 
 // ScheduleWakeAt schedules a wakeup at time t. If a wakeup is already
 // pending at the same or earlier time, this is a no-op (dedup guard).
-func (c *EventDrivenComponent[S, T]) ScheduleWakeAt(t timing.VTimeInSec) {
+func (c *EventDrivenComponent[S, T, R]) ScheduleWakeAt(t timing.VTimeInSec) {
 	if c.pendingWakeup != math.MaxUint64 && c.pendingWakeup <= t {
 		return
 	}
@@ -63,17 +75,17 @@ func (c *EventDrivenComponent[S, T]) ScheduleWakeAt(t timing.VTimeInSec) {
 	evt := &TimerFiredEvent{
 		EventBase: timing.NewEventBase(t, c.Name()),
 	}
-	c.Engine.Schedule(evt)
+	c.engine.Schedule(evt)
 }
 
 // ScheduleWakeNow schedules a wakeup at the current engine time.
-func (c *EventDrivenComponent[S, T]) ScheduleWakeNow() {
-	c.ScheduleWakeAt(c.Engine.CurrentTime())
+func (c *EventDrivenComponent[S, T, R]) ScheduleWakeNow() {
+	c.ScheduleWakeAt(c.engine.CurrentTime())
 }
 
 // Handle processes an event. For TimerFiredEvent, it resets the dedup guard
 // and calls the processor.
-func (c *EventDrivenComponent[S, T]) Handle(e timing.Event) error {
+func (c *EventDrivenComponent[S, T, R]) Handle(e timing.Event) error {
 	c.Lock()
 	defer c.Unlock()
 
@@ -85,55 +97,12 @@ func (c *EventDrivenComponent[S, T]) Handle(e timing.Event) error {
 
 // NotifyRecv is called when a port receives a message. It schedules an
 // immediate wakeup.
-func (c *EventDrivenComponent[S, T]) NotifyRecv(port messaging.Port) {
+func (c *EventDrivenComponent[S, T, R]) NotifyRecv(port messaging.Port) {
 	c.ScheduleWakeNow()
 }
 
 // NotifyPortFree is called when a port becomes free. It schedules an
 // immediate wakeup.
-func (c *EventDrivenComponent[S, T]) NotifyPortFree(port messaging.Port) {
+func (c *EventDrivenComponent[S, T, R]) NotifyPortFree(port messaging.Port) {
 	c.ScheduleWakeNow()
-}
-
-// ResetWakeup resets the pending wakeup guard to math.MaxUint64, allowing new
-// wakeup events to be scheduled. This is used after loading state from a
-// checkpoint.
-func (c *EventDrivenComponent[S, T]) ResetWakeup() {
-	c.pendingWakeup = math.MaxUint64
-}
-
-// SaveState marshals the component's spec and state as JSON and writes
-// it to w.
-func (c *EventDrivenComponent[S, T]) SaveState(w io.Writer) error {
-	snap := componentSnapshot[S, T]{
-		Spec:  c.Spec,
-		State: c.State,
-	}
-
-	data, err := json.Marshal(snap)
-	if err != nil {
-		return err
-	}
-
-	_, err = w.Write(data)
-
-	return err
-}
-
-// LoadState reads JSON from r and restores the component's spec and state.
-func (c *EventDrivenComponent[S, T]) LoadState(r io.Reader) error {
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return err
-	}
-
-	var snap componentSnapshot[S, T]
-	if err := json.Unmarshal(data, &snap); err != nil {
-		return err
-	}
-
-	c.Spec = snap.Spec
-	c.State = snap.State
-
-	return nil
 }

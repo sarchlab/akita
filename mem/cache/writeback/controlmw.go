@@ -7,7 +7,7 @@ import (
 // controlMW runs the flusher (flush/invalidate from controlPort,
 // controls cache state).
 type controlMW struct {
-	comp    *modeling.Component[Spec, State]
+	comp    *modeling.Component[Spec, State, Resources]
 	flusher *flusher
 }
 

@@ -70,6 +70,7 @@ func (b Builder) Build() *Simulation {
 
 	b.createDataRecorder(s)
 	b.createEngine(s)
+	b.createIDGenerator(s)
 	b.createMetaRecorder(s)
 	b.createVisTracer(s)
 	b.createServer(s)
@@ -82,6 +83,8 @@ func (b Builder) createSimulation() *Simulation {
 		id:            xid.New().String(),
 		compNameIndex: make(map[string]int),
 		portNameIndex: make(map[string]int),
+		connNameIndex: make(map[string]int),
+		entityByName:  make(map[string]int),
 	}
 }
 
@@ -95,10 +98,21 @@ func (b Builder) createDataRecorder(s *Simulation) {
 }
 
 func (b Builder) createEngine(s *Simulation) {
-	s.engine = timing.NewSerialEngine()
 	if b.parallelEngine {
-		s.engine = timing.NewParallelEngine()
+		engine := timing.NewParallelEngine()
+		s.engine = engine
+		s.registerEntity(engine)
+	} else {
+		engine := timing.NewSerialEngine()
+		s.engine = engine
+		s.registerEntity(engine)
 	}
+}
+
+// createIDGenerator registers the process-wide ID generator as an entity so its
+// counter is captured in the state snapshot.
+func (b Builder) createIDGenerator(s *Simulation) {
+	s.registerEntity(timing.GetIDGenerator().(Entity))
 }
 
 func (b Builder) createMetaRecorder(s *Simulation) {

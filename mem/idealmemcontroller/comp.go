@@ -2,24 +2,58 @@ package idealmemcontroller
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
-// Comp is an ideal memory controller that can perform read and write.
-// Ideal memory controller always responds to the request in a fixed number of
-// cycles. There is no limitation on the concurrency of this unit.
-type Comp struct {
-	*modeling.Component[Spec, State]
+// Spec contains immutable configuration for the ideal memory controller.
+type Spec struct {
+	Freq          timing.Freq `json:"freq"`
+	Width         int         `json:"width"`
+	Latency       int         `json:"latency"`
+	CacheLineSize int         `json:"cache_line_size"`
+	Capacity      uint64      `json:"capacity"`
+	StorageRef    string      `json:"storage_ref"`
 
-	storage *mem.Storage
+	TopPortBufferSize  int `json:"top_port_buffer_size"`
+	CtrlPortBufferSize int `json:"ctrl_port_buffer_size"`
+
+	AddrConvKind string `json:"addr_conv_kind"`
+
+	AddrInterleavingSize    uint64 `json:"addr_interleaving_size"`
+	AddrTotalNumOfElements  int    `json:"addr_total_num_of_elements"`
+	AddrCurrentElementIndex int    `json:"addr_current_element_index"`
+	AddrOffset              uint64 `json:"addr_offset"`
 }
 
-// GetStorage returns the underlying storage.
-func (c *Comp) GetStorage() *mem.Storage {
-	return c.storage
+// inflightTransaction tracks an in-progress memory request with a countdown.
+type inflightTransaction struct {
+	CycleLeft      int                  `json:"cycle_left"`
+	Address        uint64               `json:"address"`
+	AccessByteSize uint64               `json:"access_byte_size"`
+	ReqID          uint64               `json:"req_id"`
+	RecvTaskID     uint64               `json:"recv_task_id"`
+	IsRead         bool                 `json:"is_read"`
+	Data           []byte               `json:"data,omitempty"`
+	DirtyMask      []bool               `json:"dirty_mask,omitempty"`
+	Src            messaging.RemotePort `json:"src"`
 }
 
-// StorageName returns the name used to identify this component's storage.
-func (c *Comp) StorageName() string {
-	return c.Spec.StorageRef
+// State contains mutable runtime data for the ideal memory controller.
+type State struct {
+	InflightTransactions []inflightTransaction `json:"inflight_transactions"`
+	CurrentState         string                `json:"current_state"`
+	CurrentCmdID         uint64                `json:"current_cmd_id"`
+	CurrentCmdSrc        messaging.RemotePort  `json:"current_cmd_src"`
 }
+
+// Resources holds the shared resources referenced by the memory controller.
+type Resources struct {
+	Storage *mem.Storage
+}
+
+// Comp is an ideal memory controller that always responds to a request in a
+// fixed number of cycles, with no limit on concurrency. It is a
+// modeling.Component specialized to this package's Spec, State, and Resources.
+type Comp = modeling.Component[Spec, State, Resources]

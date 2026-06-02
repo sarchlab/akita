@@ -10,7 +10,7 @@ import (
 )
 
 type receivePipelineMW struct {
-	comp      *modeling.Component[Spec, State]
+	comp      *modeling.Component[Spec, State, modeling.None]
 	ports     []messaging.Port
 	portIndex map[messaging.RemotePort]int
 }

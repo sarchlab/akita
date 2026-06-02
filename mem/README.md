@@ -64,7 +64,9 @@ storage.Write(0x1000, []byte{0xDE, 0xAD})
 data, err := storage.Read(0x1000, 2)
 ```
 
-Storage supports binary checkpoint save/load via `Save(w)` / `Load(r)`.
+A `Storage` can be registered with the simulation as shared state via
+`NewStorageResource(name, storage)`, making its contents reachable by name
+through the global state manager.
 
 Capacity constants: `KB`, `MB`, `GB`, `TB`.
 

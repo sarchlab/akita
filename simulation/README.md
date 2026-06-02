@@ -2,7 +2,8 @@
 
 Package `simulation` provides the top-level simulation runner that wires
 together an engine, data recorder, visual tracer, and optional monitoring
-server. It also provides checkpoint save/load support.
+server. It also acts as a global state manager that registers every runtime
+object as a named entity reachable through `GetStateByName`.
 
 ## Simulation
 
@@ -12,7 +13,13 @@ A `Simulation` holds:
 - A `DataRecorder` (SQLite-backed) for recording simulation data.
 - A `DBTracer` for visual tracing (used by the Daisen visualizer).
 - An optional `Monitor` for live web-based inspection.
-- A registry of all components and ports.
+- A global state manager: one flat entity inventory of all components, ports,
+  connections, and shared-state resources, resolvable by name via
+  `GetStateByName`.
+
+The registry uses local minimal interfaces for components, ports, connections,
+and resources. Concrete messaging types satisfy those interfaces structurally,
+so this package does not need to import the messaging package.
 
 ### Building a Simulation
 
@@ -46,6 +53,7 @@ Registration automatically:
 - Adds the component and its ports to the simulation registry.
 - Connects the component to the monitoring system (if enabled).
 - Attaches visual tracing hooks.
+- Registers any shared-state resources exposed by the component.
 
 ### Accessing Simulation Resources
 
@@ -55,41 +63,47 @@ recorder := sim.GetDataRecorder()
 tracer := sim.GetVisTracer()
 comp := sim.GetComponentByName("myComp")
 port := sim.GetPortByName("myComp.Top")
+resources := sim.Resources()
+entities := sim.Entities()
 ```
 
-## Checkpoint Save / Load
+### Global State Manager
 
-Save and load full simulation state to/from a directory:
+The simulation is a global state manager: every registered runtime object —
+component, port, connection, and shared-state resource — satisfies the `Entity`
+interface and is held in one flat inventory. `Entities()` returns those entities
+in registration order, which is useful for inventory, debugging, and tooling.
+
+Entity names are **globally unique across all kinds**, so any registered object
+can be resolved by name. `GetStateByName` returns a live reference to the
+entity's state, which the caller type-asserts:
 
 ```go
-// Save (requires quiescence — all port buffers must be empty)
-err := sim.Save("/path/to/checkpoint")
-
-// Load (simulation must already be built with same topology)
-err := sim.Load("/path/to/checkpoint")
+obj, ok := sim.GetStateByName("GPU[1].PageTable") // live state ref, or (nil, false)
+pageTable := obj.(*vm.PageTable)                  // caller type-asserts
 ```
 
-### What Gets Saved
+This is a deliberate access backdoor (similar to Unity's `GetComponent`): a
+"magic" component can reach designed shared state — a page table, memory, or
+allocator resource — directly by name and mutate it in place. The required type
+assertion is the intentional warning that you are reaching past the normal
+interfaces. Resolve the reference once at setup and cache it; `GetStateByName`
+is a map lookup, not a free dereference, so it does not belong on a hot path.
 
-- **Metadata**: engine time, ID generator state.
-- **Component states**: JSON files for each component implementing `StateSaver`.
-- **Storage data**: binary files for each component implementing
-  `StorageOwner`.
+### Entity interfaces
 
-### What Is NOT Saved
+`Entity` is the abstract base interface; each kind embeds it and adds its own
+capabilities:
 
-- Event queues (reconstructed via `TickLater` / port notifications).
-- Connections (reconstructed from build code).
-- Port buffer contents (must be empty — quiescence required).
+| Interface | Methods | Purpose |
+|-----------|---------|---------|
+| `Entity` | `Name() string` | Abstract base for every registered object |
+| `Component` | `Entity` | Register runtime components |
+| `Port` | `Entity` + `NumIncoming()/NumOutgoing()` | Register port buffers |
+| `Connection` | `Entity` | Register runtime connections |
+| `Resource` | `Entity` | Shared state registered by setup, reachable by name |
 
-### Interfaces for Checkpointing
-
-| Interface | Method | Purpose |
-|-----------|--------|---------|
-| `StateSaver` | `SaveState(w io.Writer)` | Serialize component state |
-| `StateLoader` | `LoadState(r io.Reader)` | Deserialize component state |
-| `StorageOwner` | `GetStorage() *mem.Storage` | Access storage for binary save |
-| `WakeupResetter` | `ResetWakeup()` | Reset wakeup guard after load |
-
-`modeling.Component[S,T]` and `modeling.EventDrivenComponent[S,T]` satisfy
-these interfaces automatically.
+`GetStateByName` returns the registered entity itself — a component, port,
+connection, or resource — which the caller type-asserts. Shared resources are
+owned by the simulation and registered by setup via `RegisterResource`;
+components hold references to them rather than embedding the payload.

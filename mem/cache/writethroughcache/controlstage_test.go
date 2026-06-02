@@ -11,47 +11,33 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
-	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Control Stage", func() {
 
 	var (
-		mockCtrl   *gomock.Controller
-		ctrlPort   *MockPort
-		topPort    *MockPort
-		bottomPort *MockPort
+		ctrlPort   messaging.Port
+		topPort    messaging.Port
+		bottomPort messaging.Port
 		s          *controlStage
 		pmw        *pipelineMW
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
+		conn := &noopConn{}
 
-		ctrlPort = NewMockPort(mockCtrl)
-		ctrlPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("ControlPort")).
-			AnyTimes()
-		topPort = NewMockPort(mockCtrl)
-		topPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("TopPort")).
-			AnyTimes()
-		bottomPort = NewMockPort(mockCtrl)
-		bottomPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("BottomPort")).
-			AnyTimes()
+		ctrlPort = messaging.NewPort(nil, 4, 4, "Cache.Control")
+		conn.PlugIn(ctrlPort)
+		topPort = messaging.NewPort(nil, 4, 4, "Cache.Top")
+		conn.PlugIn(topPort)
+		bottomPort = messaging.NewPort(nil, 4, 4, "Cache.Bottom")
+		conn.PlugIn(bottomPort)
 
 		initialState := State{
-			DirBuf: queueing.Buffer[int]{
-				BufferName: "Cache.DirBuf",
-				Cap:        4,
-			},
+			DirBuf:        queueing.NewBuffer[int]("Cache.DirBuf", 4),
 			BankBufs:      []queueing.Buffer[int]{},
-			DirPipeline:   queueing.Pipeline[int]{Width: 4, NumStages: 2},
-			DirPostBuf:    queueing.Buffer[int]{BufferName: "Cache.DirPostBuf", Cap: 4},
+			DirPipeline:   queueing.NewPipeline[int](4, 2),
+			DirPostBuf:    queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
 			BankPipelines: []queueing.Pipeline[int]{},
 			BankPostBufs:  []queueing.Buffer[int]{},
 		}
@@ -60,7 +46,7 @@ var _ = Describe("Control Stage", func() {
 			topPort:    topPort,
 			bottomPort: bottomPort,
 		}
-		pmw.comp = modeling.NewBuilder[Spec, State]().
+		pmw.comp = modeling.NewBuilder[Spec, State, Resources]().
 			WithEngine(nil).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
@@ -81,13 +67,7 @@ var _ = Describe("Control Stage", func() {
 		}
 	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
-
 	It("should do nothing if no request", func() {
-		ctrlPort.EXPECT().PeekIncoming().Return(nil)
-
 		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeFalse())
@@ -102,6 +82,7 @@ var _ = Describe("Control Stage", func() {
 		flushReq.TrafficBytes = 0
 		flushReq.TrafficClass = "mem.ControlReq"
 		flushReq.DiscardInflight = false
+		ctrlPort.Deliver(flushReq)
 
 		// Store flush request in State instead of controlStage field
 		next.HasProcessingFlush = true
@@ -110,8 +91,6 @@ var _ = Describe("Control Stage", func() {
 			DiscardInflight: flushReq.DiscardInflight,
 			PauseAfter:      flushReq.PauseAfter,
 		}
-
-		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
 
 		madeProgress := s.Tick()
 
@@ -126,6 +105,8 @@ var _ = Describe("Control Stage", func() {
 		flushReq.PauseAfter = true
 		flushReq.TrafficBytes = 0
 		flushReq.TrafficClass = "mem.ControlReq"
+		flushReq.Src = messaging.RemotePort("Agent")
+		ctrlPort.Deliver(flushReq)
 
 		// Store flush request in State instead of controlStage field
 		next := &pmw.comp.State
@@ -136,20 +117,14 @@ var _ = Describe("Control Stage", func() {
 			PauseAfter:      flushReq.PauseAfter,
 		}
 
-		ctrlPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
-			Expect(msg.Meta().RspTo).To(Equal(flushReq.ID))
-		})
-
-		topPort.EXPECT().PeekIncoming().Return(nil)
-		bottomPort.EXPECT().PeekIncoming().Return(nil)
-
-		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
-
 		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeTrue())
 		next = &pmw.comp.State
 		Expect(next.HasProcessingFlush).To(BeFalse())
+
+		rsp := ctrlPort.RetrieveOutgoing()
+		Expect(rsp.Meta().RspTo).To(Equal(flushReq.ID))
 	})
 
 })

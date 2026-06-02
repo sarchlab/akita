@@ -6,146 +6,102 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// DefaultSpec provides the default configuration for endpoint components.
-var DefaultSpec = Spec{
-	Freq:              1 * timing.GHz,
-	NumInputChannels:  1,
-	NumOutputChannels: 1,
-	FlitByteSize:      32,
-	EncodingOverhead:  0.25,
+// defaultSpec provides the default configuration for endpoint components.
+var defaultSpec = Spec{
+	Freq:                  1 * timing.GHz,
+	NumInputChannels:      1,
+	NumOutputChannels:     1,
+	FlitByteSize:          32,
+	EncodingOverhead:      0.25,
+	NetworkPortBufferSize: 4,
 }
 
-// Builder can help building End Points.
+// DefaultSpec returns a copy of the default configuration. Callers obtain it,
+// tweak the fields they care about, and pass it to WithSpec.
+func DefaultSpec() Spec {
+	return defaultSpec
+}
+
+// Builder builds End Points. Configuration is supplied as a whole through
+// WithSpec; wiring is supplied through WithRegistrar and WithResources. The
+// component creates its own network port.
 type Builder struct {
-	engine                   timing.EventScheduler
-	spec                     Spec
-	flitAssemblingBufferSize int
-	networkPortBufferSize    int
-	devicePorts              []messaging.Port
-	networkPort              messaging.Port
+	registrar modeling.Registrar
+	spec      Spec
+	resources Resources
 }
 
-// MakeBuilder creates a new EndPointBuilder with default
-// configurations.
+// MakeBuilder creates a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec:                     DefaultSpec,
-		flitAssemblingBufferSize: 64,
-		networkPortBufferSize:    4,
+		spec: defaultSpec,
 	}
 }
 
-// WithEngine sets the engine of the End Point to build.
-func (b Builder) WithEngine(e timing.EventScheduler) Builder {
-	b.engine = e
+// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// registrar provides the engine and registers the built component.
+func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+	b.registrar = reg
 	return b
 }
 
-// WithFreq sets the frequency of the End Point to built.
-func (b Builder) WithFreq(freq timing.Freq) Builder {
-	b.spec.Freq = freq
+// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
 	return b
 }
 
-// WithNumInputChannels sets the number of input channels of the End Point
-// to build.
-func (b Builder) WithNumInputChannels(num int) Builder {
-	b.spec.NumInputChannels = num
+// WithResources injects the external wiring (device ports plugged into the
+// endpoint). If not set, the endpoint is built without device ports and they
+// can be plugged in later with PlugIn.
+func (b Builder) WithResources(r Resources) Builder {
+	b.resources = r
 	return b
 }
 
-// WithNumOutputChannels sets the number of output channels of the End Point
-// to build.
-func (b Builder) WithNumOutputChannels(num int) Builder {
-	b.spec.NumOutputChannels = num
-	return b
-}
-
-// WithFlitByteSize sets the flit byte size that the End Point supports.
-func (b Builder) WithFlitByteSize(n int) Builder {
-	b.spec.FlitByteSize = n
-	return b
-}
-
-// WithEncodingOverhead sets the encoding overhead.
-func (b Builder) WithEncodingOverhead(o float64) Builder {
-	b.spec.EncodingOverhead = o
-	return b
-}
-
-// WithNetworkPortBufferSize sets the network port buffer size of the end point.
-func (b Builder) WithNetworkPortBufferSize(n int) Builder {
-	b.networkPortBufferSize = n
-	return b
-}
-
-// WithDevicePorts sets a list of ports that communicate directly through the
-// End Point.
-func (b Builder) WithDevicePorts(ports []messaging.Port) Builder {
-	b.devicePorts = ports
-	return b
-}
-
-// WithNetworkPort sets the network port of the End Point.
-func (b Builder) WithNetworkPort(port messaging.Port) Builder {
-	b.networkPort = port
-	return b
-}
-
-// Build creates a new End Point.
+// Build creates a new End Point. It creates the component's network port.
 func (b Builder) Build(name string) *Comp {
-	b.engineMustBeGiven()
-	b.freqMustBeGiven()
-	b.flitByteSizeMustBeGiven()
+	if b.registrar == nil {
+		panic("endpoint: WithRegistrar is required")
+	}
 
 	spec := b.spec
+	engine := b.registrar.GetEngine()
 
-	modelComp := modeling.NewBuilder[Spec, State]().
-		WithEngine(b.engine).
-		WithFreq(b.spec.Freq).
+	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
+		WithEngine(engine).
+		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
-
-	outMW := &outgoingMW{
-		comp:        modelComp,
-		networkPort: b.networkPort,
-	}
-
-	inMW := &incomingMW{
-		comp:        modelComp,
-		networkPort: b.networkPort,
-	}
 
 	ep := &Comp{
 		Component: modelComp,
 	}
 
+	networkPort := messaging.NewPort(
+		ep, spec.NetworkPortBufferSize, spec.NetworkPortBufferSize,
+		name+".NetworkPort")
+
+	outMW := &outgoingMW{
+		comp:             modelComp,
+		networkPort:      networkPort,
+		defaultSwitchDst: spec.DefaultSwitchDst,
+	}
+
+	inMW := &incomingMW{
+		comp:        modelComp,
+		networkPort: networkPort,
+	}
+
 	ep.AddMiddleware(outMW)
 	ep.AddMiddleware(inMW)
 
-	b.networkPort.SetComponent(ep)
-
-	for _, dp := range b.devicePorts {
+	for _, dp := range b.resources.DevicePorts {
 		ep.PlugIn(dp)
 	}
 
+	b.registrar.RegisterComponent(ep)
+
 	return ep
-}
-
-func (b Builder) engineMustBeGiven() {
-	if b.engine == nil {
-		panic("engine is not given")
-	}
-}
-
-func (b Builder) freqMustBeGiven() {
-	if b.spec.Freq == 0 {
-		panic("freq must be given")
-	}
-}
-
-func (b Builder) flitByteSizeMustBeGiven() {
-	if b.spec.FlitByteSize == 0 {
-		panic("flit byte size must be given")
-	}
 }

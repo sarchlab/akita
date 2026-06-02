@@ -1,27 +1,29 @@
 package tickingping
 
 import (
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 func Example() {
 	engine := timing.NewSerialEngine()
+	registrar := modeling.NewStandaloneRegistrar(engine)
+
+	agentSpec := DefaultSpec()
+	agentSpec.Freq = 1 * timing.Hz
+
 	agentA := MakeBuilder().
-		WithEngine(engine).
-		WithFreq(1 * timing.Hz).
-		WithOutPort(messaging.NewPort(nil, 4, 4, "AgentA.OutPort")).
+		WithRegistrar(registrar).
+		WithSpec(agentSpec).
 		Build("AgentA")
 	agentB := MakeBuilder().
-		WithEngine(engine).
-		WithFreq(1 * timing.Hz).
-		WithOutPort(messaging.NewPort(nil, 4, 4, "AgentB.OutPort")).
+		WithRegistrar(registrar).
+		WithSpec(agentSpec).
 		Build("AgentB")
 	conn := directconnection.
 		MakeBuilder().
-		WithEngine(engine).
-		WithFreq(1 * timing.GHz).
+		WithRegistrar(registrar).
 		Build("Conn")
 
 	conn.PlugIn(agentA.GetPortByName("Out"))

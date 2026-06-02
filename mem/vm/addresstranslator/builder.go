@@ -1,169 +1,81 @@
 package addresstranslator
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// DefaultSpec provides the default configuration for address translators.
-var DefaultSpec = Spec{
+// defaultSpec provides the default configuration for address translators.
+var defaultSpec = Spec{
 	Freq:           1 * timing.GHz,
 	NumReqPerCycle: 4,
 	Log2PageSize:   12,
 	DeviceID:       1,
+
+	TopPortBufferSize:         4,
+	BottomPortBufferSize:      4,
+	TranslationPortBufferSize: 4,
+	CtrlPortBufferSize:        1,
 }
 
-// A Builder can create address translators
+// DefaultSpec returns a copy of the default configuration. Callers typically
+// obtain it, tweak the fields they care about, and pass it to WithSpec.
+func DefaultSpec() Spec {
+	return defaultSpec
+}
+
+// Builder builds address translator components. Configuration is supplied as a
+// whole through WithSpec; wiring is supplied through WithRegistrar and
+// WithResources. The component creates its own ports.
 type Builder struct {
-	engine timing.EventScheduler
-	spec   Spec
-
-	topPort         messaging.Port
-	bottomPort      messaging.Port
-	translationPort messaging.Port
-	ctrlPort        messaging.Port
-
-	memPortMapper             mem.AddressToPortMapper
-	memPortMapperType         string
-	memRemotePorts            []messaging.RemotePort
-	translationPortMapper     mem.AddressToPortMapper
-	translationPortMapperType string
-	translationRemotePorts    []messaging.RemotePort
+	spec      Spec
+	registrar modeling.Registrar
+	resources Resources
 }
 
-// MakeBuilder creates a new builder
+// MakeBuilder creates a new builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: DefaultSpec,
+		spec: defaultSpec,
 	}
 }
 
-// WithEngine sets the engine to be used by the address translators
-func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
-	b.engine = engine
+// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// registrar provides the engine and registers the built component.
+func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+	b.registrar = reg
 	return b
 }
 
-// WithFreq sets the frequency of the address translators
-func (b Builder) WithFreq(freq timing.Freq) Builder {
-	b.spec.Freq = freq
+// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
 	return b
 }
 
-// WithNumReqPerCycle sets the number of request the address translators can
-// process in each cycle.
-func (b Builder) WithNumReqPerCycle(n int) Builder {
-	b.spec.NumReqPerCycle = n
+// WithResources injects the component's external wiring, i.e. the memory- and
+// translation-provider mappers.
+func (b Builder) WithResources(r Resources) Builder {
+	b.resources = r
 	return b
 }
 
-// WithLog2PageSize sets the page size as a power of 2
-func (b Builder) WithLog2PageSize(n uint64) Builder {
-	b.spec.Log2PageSize = n
-	return b
-}
+// Build returns a new AddressTranslator. It creates the component's Top,
+// Bottom, Translation, and Control ports.
+func (b Builder) Build(name string) *Comp {
+	if b.registrar == nil {
+		panic("addresstranslator: WithRegistrar is required")
+	}
 
-// WithDeviceID sets the GPU ID that the address translator belongs to
-func (b Builder) WithDeviceID(n uint64) Builder {
-	b.spec.DeviceID = n
-	return b
-}
-
-// WithTopPort sets the top port of the address translator
-func (b Builder) WithTopPort(p messaging.Port) Builder {
-	b.topPort = p
-	return b
-}
-
-// WithBottomPort sets the bottom port of the address translator
-func (b Builder) WithBottomPort(p messaging.Port) Builder {
-	b.bottomPort = p
-	return b
-}
-
-// WithTranslationPort sets the translation port of the address translator
-func (b Builder) WithTranslationPort(p messaging.Port) Builder {
-	b.translationPort = p
-	return b
-}
-
-// WithCtrlPort sets the port of the component that can send ctrl reqs to AT
-func (b Builder) WithCtrlPort(p messaging.Port) Builder {
-	b.ctrlPort = p
-	return b
-}
-
-// WithMemoryProviderMapper sets the low modules finder that can tell the
-// address translators where to send the memory access request to.
-func (b Builder) WithMemoryProviderMapper(f mem.AddressToPortMapper) Builder {
-	b.memPortMapper = f
-	return b
-}
-
-// WithMemoryProviderType sets the type of the memory provider mapper. The
-// mapper can find the remote port that can provide the memory service according
-// to the virtual address. The type can be "single" or "interleaved".
-func (b Builder) WithMemoryProviderType(t string) Builder {
-	b.memPortMapperType = t
-	return b
-}
-
-// WithMemoryProviders registers the remote ports that handle memory access
-// requests.
-//
-// Use together with `WithMemoryProviderType` to control request distribution:
-//   - "single": exactly one port must be provided.
-//   - "interleaved": the number of ports must be a power of two; requests are
-//     interleaved at page granularity (4 KiB by default).
-func (b Builder) WithMemoryProviders(ports ...messaging.RemotePort) Builder {
-	b.memRemotePorts = ports
-	return b
-}
-
-// WithTranslationProviderMapper sets the mapper that can find the remote port
-// that can provide the translation service according to the virtual address.
-func (b Builder) WithTranslationProviderMapper(
-	table mem.AddressToPortMapper,
-) Builder {
-	b.translationPortMapper = table
-	return b
-}
-
-// WithTranslationProviderMapperType sets the type of the translation provider
-// mapper. The mapper can find the remote port that can provide the translation
-// service according to the virtual address. The type can be "single" or
-// "interleaved".
-func (b Builder) WithTranslationProviderMapperType(t string) Builder {
-	b.translationPortMapperType = t
-	return b
-}
-
-// WithTranslationProviders registers the remote ports that handle address
-// translation requests.
-//
-// Use together with `WithTranslationProviderMapperType` to control request
-// distribution:
-//   - "single": exactly one port must be provided.
-//   - "interleaved": the number of ports must be a power of two; requests are
-//     interleaved at page granularity (4 KiB by default).
-func (b Builder) WithTranslationProviders(ports ...messaging.RemotePort) Builder {
-	b.translationRemotePorts = ports
-	return b
-}
-
-// Build returns a new AddressTranslator
-func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	spec := b.spec
 
-	b.populateMemMapperSpec(&spec)
-	b.populateTransMapperSpec(&spec)
-
-	modelComp := modeling.NewBuilder[Spec, State]().
-		WithEngine(b.engine).
-		WithFreq(b.spec.Freq).
+	modelComp := modeling.NewBuilder[Spec, State, Resources]().
+		WithEngine(b.registrar.GetEngine()).
+		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithResources(b.resources).
 		Build(name)
 
 	ptMW := &parseTranslateMW{comp: modelComp}
@@ -172,91 +84,31 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	rpMW := &respondPipelineMW{comp: modelComp}
 	modelComp.AddMiddleware(rpMW)
 
-	b.createPorts(modelComp, modelComp)
+	b.createPorts(modelComp, spec, name)
+
+	b.registrar.RegisterComponent(modelComp)
 
 	return modelComp
 }
 
-func (b Builder) populateMemMapperSpec(spec *Spec) {
-	if b.memPortMapper != nil {
-		switch m := b.memPortMapper.(type) {
-		case *mem.SinglePortMapper:
-			spec.MemMapperKind = "single"
-			spec.MemMapperPorts = []messaging.RemotePort{m.Port}
-		case *mem.InterleavedAddressPortMapper:
-			spec.MemMapperKind = "interleaved"
-			spec.MemMapperPorts = m.LowModules
-			spec.MemMapperInterleavingSize = m.InterleavingSize
-		default:
-			panic("unsupported memory port mapper type for spec conversion")
-		}
-		return
-	}
+func (b Builder) createPorts(modelComp *Comp, spec Spec, name string) {
+	topPort := messaging.NewPort(
+		modelComp, spec.TopPortBufferSize, spec.TopPortBufferSize,
+		name+".Top")
+	modelComp.AddPort("Top", topPort)
 
-	switch b.memPortMapperType {
-	case "single":
-		if len(b.memRemotePorts) != 1 {
-			panic("single address mapper requires exactly 1 port")
-		}
-		spec.MemMapperKind = "single"
-		spec.MemMapperPorts = b.memRemotePorts
-	case "interleaved":
-		if len(b.memRemotePorts) == 0 {
-			panic("interleaved address mapper requires at least 1 port")
-		}
-		spec.MemMapperKind = "interleaved"
-		spec.MemMapperPorts = b.memRemotePorts
-		spec.MemMapperInterleavingSize = 1 << b.spec.Log2PageSize
-	default:
-		panic("invalid address mapper type: " + b.memPortMapperType)
-	}
-}
+	bottomPort := messaging.NewPort(
+		modelComp, spec.BottomPortBufferSize, spec.BottomPortBufferSize,
+		name+".Bottom")
+	modelComp.AddPort("Bottom", bottomPort)
 
-func (b Builder) populateTransMapperSpec(spec *Spec) {
-	if b.translationPortMapper != nil {
-		switch m := b.translationPortMapper.(type) {
-		case *mem.SinglePortMapper:
-			spec.TransMapperKind = "single"
-			spec.TransMapperPorts = []messaging.RemotePort{m.Port}
-		case *mem.InterleavedAddressPortMapper:
-			spec.TransMapperKind = "interleaved"
-			spec.TransMapperPorts = m.LowModules
-			spec.TransMapperInterleavingSize = m.InterleavingSize
-		default:
-			panic("unsupported translation port mapper type for spec conversion")
-		}
-		return
-	}
+	translationPort := messaging.NewPort(
+		modelComp, spec.TranslationPortBufferSize,
+		spec.TranslationPortBufferSize, name+".Translation")
+	modelComp.AddPort("Translation", translationPort)
 
-	switch b.translationPortMapperType {
-	case "single":
-		if len(b.translationRemotePorts) != 1 {
-			panic("single translation mapper requires exactly 1 port")
-		}
-		spec.TransMapperKind = "single"
-		spec.TransMapperPorts = b.translationRemotePorts
-	case "interleaved":
-		if len(b.translationRemotePorts) == 0 {
-			panic("interleaved translation mapper requires at least 1 port")
-		}
-		spec.TransMapperKind = "interleaved"
-		spec.TransMapperPorts = b.translationRemotePorts
-		spec.TransMapperInterleavingSize = 1 << b.spec.Log2PageSize
-	default:
-		panic("invalid translation mapper type: " + b.translationPortMapperType)
-	}
-}
-
-func (b Builder) createPorts(c messaging.Component, modelComp *modeling.Component[Spec, State]) {
-	b.topPort.SetComponent(c)
-	modelComp.AddPort("Top", b.topPort)
-
-	b.bottomPort.SetComponent(c)
-	modelComp.AddPort("Bottom", b.bottomPort)
-
-	b.translationPort.SetComponent(c)
-	modelComp.AddPort("Translation", b.translationPort)
-
-	b.ctrlPort.SetComponent(c)
-	modelComp.AddPort("Control", b.ctrlPort)
+	ctrlPort := messaging.NewPort(
+		modelComp, spec.CtrlPortBufferSize, spec.CtrlPortBufferSize,
+		name+".Control")
+	modelComp.AddPort("Control", ctrlPort)
 }

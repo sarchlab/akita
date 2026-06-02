@@ -1,12 +1,39 @@
 package tlb
 
 import (
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/mshr"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/lruset"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 )
+
+// Spec contains immutable configuration for the TLB.
+type Spec struct {
+	Freq           timing.Freq `json:"freq"`
+	NumSets        int         `json:"num_sets"`
+	NumWays        int         `json:"num_ways"`
+	Log2PageSize   uint64      `json:"log2_page_size"`
+	PageSize       uint64      `json:"page_size"`
+	NumReqPerCycle int         `json:"num_req_per_cycle"`
+	MSHRSize       int         `json:"mshr_size"`
+	Latency        int         `json:"latency"`
+	PipelineWidth  int         `json:"pipeline_width"`
+
+	TopPortBufferSize    int `json:"top_port_buffer_size"`
+	BottomPortBufferSize int `json:"bottom_port_buffer_size"`
+	CtrlPortBufferSize   int `json:"ctrl_port_buffer_size"`
+}
+
+// Resources holds the external objects wired into the TLB. The translation
+// provider mapper resolves the remote port that serves the translation for a
+// given virtual address.
+type Resources struct {
+	TranslationProviderMapper mem.AddressToPortMapper `json:"-"`
+}
 
 // inflightFlushState stores the flat fields needed during a TLB flush.
 type inflightFlushState struct {
@@ -72,7 +99,7 @@ type pipelineTLBReqState struct {
 
 func setLookup(s *setState, pid vm.PID, vAddr uint64) (wayID int, page vm.Page, found bool) {
 	key := lruset.KeyString(uint64(pid), vAddr)
-	wayID, ok := lruset.Lookup(&s.LRU, key)
+	wayID, ok := s.LRU.Lookup(key)
 	if !ok {
 		return 0, vm.Page{}, false
 	}
@@ -85,15 +112,15 @@ func setUpdate(s *setState, wayID int, page vm.Page) {
 	oldKey := lruset.KeyString(uint64(block.Page.PID), block.Page.VAddr)
 	block.Page = page
 	newKey := lruset.KeyString(uint64(page.PID), page.VAddr)
-	lruset.UpdateKey(&s.LRU, wayID, oldKey, newKey)
+	s.LRU.UpdateKey(wayID, oldKey, newKey)
 }
 
 func setEvict(s *setState) (wayID int, ok bool) {
-	return lruset.Evict(&s.LRU)
+	return s.LRU.Evict()
 }
 
 func setVisit(s *setState, wayID int) {
-	lruset.Visit(&s.LRU, wayID)
+	s.LRU.Visit(wayID)
 }
 
 func initSets(numSets, numWays int) []setState {
@@ -154,20 +181,16 @@ func mshrIsEntryPresent(entries []mshrEntryState, pid vm.PID, vAddr uint64) bool
 
 // --- Free function for address mapping ---
 
-func findTranslationPort(spec Spec, vAddr uint64) messaging.RemotePort {
-	switch spec.AddrMapperKind {
-	case "single":
-		if len(spec.AddrMapperPorts) != 1 {
-			panic("single address mapper requires exactly 1 port")
-		}
-		return spec.AddrMapperPorts[0]
-	case "interleaved":
-		if len(spec.AddrMapperPorts) == 0 {
-			panic("interleaved address mapper requires at least 1 port")
-		}
-		number := vAddr / spec.AddrMapperInterleavingSize % uint64(len(spec.AddrMapperPorts))
-		return spec.AddrMapperPorts[number]
-	default:
-		panic("invalid address mapper kind: " + spec.AddrMapperKind)
+func findTranslationPort(
+	mapper mem.AddressToPortMapper,
+	vAddr uint64,
+) messaging.RemotePort {
+	if mapper == nil {
+		panic("no translation provider mapper configured")
 	}
+
+	return mapper.Find(vAddr)
 }
+
+// Comp is the TLB component.
+type Comp = modeling.Component[Spec, State, Resources]

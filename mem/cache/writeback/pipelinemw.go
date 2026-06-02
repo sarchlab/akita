@@ -10,7 +10,7 @@ import (
 // cache pipeline. It implements the Tick method and delegates NamedHookable
 // to comp. All mutable state is in comp.State.
 type pipelineMW struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, Resources]
 
 	topPort    messaging.Port
 	bottomPort messaging.Port
@@ -26,12 +26,12 @@ type pipelineMW struct {
 
 // GetSpec returns the immutable specification.
 func (m *pipelineMW) GetSpec() Spec {
-	return m.comp.Spec
+	return m.comp.Spec()
 }
 
 // findPort resolves an address to a remote port using data from Spec.
 func (m *pipelineMW) findPort(address uint64) messaging.RemotePort {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 
 	switch spec.AddressMapperType {
 	case "single":
@@ -70,7 +70,7 @@ func (m *pipelineMW) Tick() bool {
 func (m *pipelineMW) runPipeline() bool {
 	madeProgress := false
 
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 
 	madeProgress = m.runStage(m.mshrStage, spec.NumReqPerCycle) || madeProgress
 

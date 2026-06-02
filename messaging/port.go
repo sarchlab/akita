@@ -6,6 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/naming"
+	"github.com/sarchlab/akita/v5/queueing"
 )
 
 // HookPosPortMsgSend marks when a message is sent out from the port.
@@ -66,8 +67,8 @@ type defaultPort struct {
 	comp Component
 	conn Connection
 
-	incomingBuf *portBuffer
-	outgoingBuf *portBuffer
+	incomingBuf queueing.Buffer[Msg]
+	outgoingBuf queueing.Buffer[Msg]
 }
 
 // AsRemote returns the remote port name.
@@ -127,7 +128,7 @@ func (p *defaultPort) Send(msg Msg) *SendError {
 	}
 
 	wasEmpty := (p.outgoingBuf.Size() == 0)
-	p.outgoingBuf.Push(msg)
+	p.outgoingBuf.PushTyped(msg)
 
 	hookCtx := hooking.HookCtx{
 		Domain: p,
@@ -162,7 +163,7 @@ func (p *defaultPort) Deliver(msg Msg) *SendError {
 	}
 	p.InvokeHook(hookCtx)
 
-	p.incomingBuf.Push(msg)
+	p.incomingBuf.PushTyped(msg)
 	p.lock.Unlock()
 
 	if p.comp != nil && wasEmpty {
@@ -276,8 +277,8 @@ func NewPort(
 ) Port {
 	p := new(defaultPort)
 	p.comp = comp
-	p.incomingBuf = newPortBuffer(incomingBufCap)
-	p.outgoingBuf = newPortBuffer(outgoingBufCap)
+	p.incomingBuf = queueing.NewBuffer[Msg](name+".Incoming", incomingBufCap)
+	p.outgoingBuf = queueing.NewBuffer[Msg](name+".Outgoing", outgoingBufCap)
 	p.name = name
 
 	return p

@@ -45,7 +45,7 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 
 	trans.Done = true
 
-	spec := p.cache.comp.Spec
+	spec := p.cache.comp.Spec()
 	if needsDualCompletion(spec.WritePolicyType) {
 		trans.BottomWriteDone = true
 
@@ -87,7 +87,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 
 	pid := trans.ReadToBottomPID
 	addr := trans.Address()
-	spec := p.cache.comp.Spec
+	spec := p.cache.comp.Spec()
 	cachelineID := (addr >> spec.Log2BlockSize) << spec.Log2BlockSize
 	drMsg := msg.(*mem.DataReadyRsp)
 	data := drMsg.Data
@@ -217,7 +217,7 @@ func (p *bottomParser) getBankBuf(
 	setID, wayID int,
 ) *queueing.Buffer[int] {
 	next := &p.cache.comp.State
-	numWaysPerSet := p.cache.comp.Spec.WayAssociativity
+	numWaysPerSet := p.cache.comp.Spec().WayAssociativity
 	blockID := setID*numWaysPerSet + wayID
 	bankID := blockID % len(next.BankBufs)
 

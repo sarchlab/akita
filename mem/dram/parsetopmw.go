@@ -9,14 +9,14 @@ import (
 )
 
 type parseTopMW struct {
-	comp    *modeling.Component[Spec, State]
+	comp    *modeling.Component[Spec, State, Resources]
 	topPort messaging.Port
 }
 
 // Tick runs the parseTop stage.
 func (m *parseTopMW) Tick() bool {
 	next := &m.comp.State
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 
 	return m.parseTop(&spec, next)
 }

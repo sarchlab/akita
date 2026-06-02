@@ -4,7 +4,31 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/lruset"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
+
+// Spec contains immutable configuration for the mmuCache.
+type Spec struct {
+	Freq            timing.Freq `json:"freq"`
+	NumBlocks       int         `json:"num_blocks"`
+	NumLevels       int         `json:"num_levels"`
+	PageSize        uint64      `json:"page_size"`
+	Log2PageSize    uint64      `json:"log2_page_size"`
+	NumReqPerCycle  int         `json:"num_req_per_cycle"`
+	LatencyPerLevel uint64      `json:"latency_per_level"`
+
+	TopPortBufferSize     int `json:"top_port_buffer_size"`
+	BottomPortBufferSize  int `json:"bottom_port_buffer_size"`
+	ControlPortBufferSize int `json:"control_port_buffer_size"`
+}
+
+// Resources holds the external wiring referenced by the mmuCache: the remote
+// ports it forwards translation requests to and responses back from.
+type Resources struct {
+	LowModulePort messaging.RemotePort `json:"low_module_port"`
+	UpModulePort  messaging.RemotePort `json:"up_module_port"`
+}
 
 const (
 	mmuCacheStateEnable = "enable"
@@ -39,7 +63,7 @@ type setState struct {
 
 func setLookup(s *setState, pid vm.PID, seg uint64) (wayID int, found bool) {
 	key := lruset.KeyString(uint64(pid), seg)
-	wayID, ok := lruset.Lookup(&s.LRU, key)
+	wayID, ok := s.LRU.Lookup(key)
 	if !ok {
 		return 0, false
 	}
@@ -52,15 +76,15 @@ func setUpdate(s *setState, wayID int, pid vm.PID, seg uint64) {
 	block.PID = uint64(pid)
 	block.Seg = seg
 	newKey := lruset.KeyString(uint64(pid), seg)
-	lruset.UpdateKey(&s.LRU, wayID, oldKey, newKey)
+	s.LRU.UpdateKey(wayID, oldKey, newKey)
 }
 
 func setEvict(s *setState) (wayID int, ok bool) {
-	return lruset.Evict(&s.LRU)
+	return s.LRU.Evict()
 }
 
 func setVisit(s *setState, wayID int) {
-	lruset.Visit(&s.LRU, wayID)
+	s.LRU.Visit(wayID)
 }
 
 func initSets(numLevels, numBlocks int) []setState {
@@ -77,3 +101,6 @@ func initSets(numLevels, numBlocks int) []setState {
 	}
 	return sets
 }
+
+// Comp is the mmuCache component.
+type Comp = modeling.Component[Spec, State, Resources]

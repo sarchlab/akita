@@ -8,7 +8,7 @@ import (
 
 // receiveProcessMW handles receiving messages and counting down transactions.
 type receiveProcessMW struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, modeling.None]
 }
 
 func (m *receiveProcessMW) Tick() bool {
@@ -27,9 +27,9 @@ func (m *receiveProcessMW) processInput() bool {
 	}
 
 	switch msg := msgI.(type) {
-	case *PingReq:
+	case *pingReq:
 		m.processingPingReq(msg)
-	case *PingRsp:
+	case *pingRsp:
 		m.processingPingRsp(msg)
 	default:
 		panic("unknown message type")
@@ -38,7 +38,7 @@ func (m *receiveProcessMW) processInput() bool {
 	return true
 }
 
-func (m *receiveProcessMW) processingPingReq(msg *PingReq) {
+func (m *receiveProcessMW) processingPingReq(msg *pingReq) {
 	state := &m.comp.State
 
 	trans := pingTransactionState{
@@ -52,7 +52,7 @@ func (m *receiveProcessMW) processingPingReq(msg *PingReq) {
 	outPort(m.comp).RetrieveIncoming()
 }
 
-func (m *receiveProcessMW) processingPingRsp(msg *PingRsp) {
+func (m *receiveProcessMW) processingPingRsp(msg *pingRsp) {
 	state := &m.comp.State
 
 	seqID := msg.SeqID

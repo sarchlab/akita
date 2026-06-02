@@ -6,7 +6,18 @@ import (
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
+
+// Spec holds immutable configuration for the DirectConnection.
+type Spec struct {
+	Freq timing.Freq `json:"freq"`
+}
+
+// State holds mutable runtime state for the DirectConnection.
+type State struct {
+	NextPortID int `json:"next_port_id"`
+}
 
 type ports struct {
 	ports   []messaging.Port
@@ -40,7 +51,7 @@ func (p *ports) len() int {
 
 // Comp is a DirectConnection that connects components without latency.
 type Comp struct {
-	*modeling.Component[Spec, State]
+	*modeling.Component[Spec, State, modeling.None]
 }
 
 func (c *Comp) mw() *middleware {
@@ -78,7 +89,7 @@ func (c *Comp) NotifySend() {
 }
 
 type middleware struct {
-	comp  *modeling.Component[Spec, State]
+	comp  *modeling.Component[Spec, State, modeling.None]
 	ports ports
 }
 

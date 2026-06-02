@@ -3,7 +3,22 @@ package gmmu
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
+
+// Spec contains immutable configuration for the GMMU.
+type Spec struct {
+	Freq                timing.Freq          `json:"freq"`
+	DeviceID            uint64               `json:"device_id"`
+	Log2PageSize        uint64               `json:"log2_page_size"`
+	Latency             int                  `json:"latency"`
+	MaxRequestsInFlight int                  `json:"max_requests_in_flight"`
+	LowModule           messaging.RemotePort `json:"low_module"`
+
+	TopPortBufferSize    int `json:"top_port_buffer_size"`
+	BottomPortBufferSize int `json:"bottom_port_buffer_size"`
+}
 
 // pageState captures vm.Page fields in a serializable form.
 type pageState struct {
@@ -74,3 +89,15 @@ func pageFromPageState(ps pageState) vm.Page {
 		IsPinned:    ps.IsPinned,
 	}
 }
+
+// Resources holds the shared resources referenced by the GMMU, such as the
+// page table used for translations. These are injected through WithResources;
+// they are wiring to objects shared with other components rather than scalar
+// configuration.
+type Resources struct {
+	PageTable vm.PageTable `json:"-"`
+}
+
+// Comp is the GMMU component, a modeling.Component specialized to this
+// package's Spec, State, and Resources.
+type Comp = modeling.Component[Spec, State, Resources]

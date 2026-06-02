@@ -12,8 +12,7 @@ import (
 )
 
 type tickFinalizeMW struct {
-	comp    *modeling.Component[Spec, State]
-	storage *mem.Storage
+	comp *modeling.Component[Spec, State, Resources]
 }
 
 func (m *tickFinalizeMW) topPort() messaging.Port {
@@ -61,7 +60,7 @@ func (m *tickFinalizeMW) finalizeRead(
 	b *bankState,
 	item *bankPipelineItemState,
 ) bool {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	readReq := &item.ReadMsg
 
 	if !item.Committed {
@@ -71,7 +70,7 @@ func (m *tickFinalizeMW) finalizeRead(
 			spec.AddrCurrentElementIndex, readReq.Address,
 		)
 
-		data, err := m.storage.Read(addr, readReq.AccessByteSize)
+		data, err := m.comp.Resources().Storage.Read(addr, readReq.AccessByteSize)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -80,7 +79,7 @@ func (m *tickFinalizeMW) finalizeRead(
 		item.Committed = true
 
 		// Update the buffer head with the committed state.
-		b.PostPipelineBuf.Elements[0] = *item
+		b.PostPipelineBuf.UpdateFront(*item)
 	}
 
 	if !m.topPort().CanSend() {
@@ -111,7 +110,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 	b *bankState,
 	item *bankPipelineItemState,
 ) bool {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	writeReq := &item.WriteMsg
 
 	if !item.Committed {
@@ -122,11 +121,11 @@ func (m *tickFinalizeMW) finalizeWrite(
 		)
 
 		if writeReq.DirtyMask == nil {
-			if err := m.storage.Write(addr, writeReq.Data); err != nil {
+			if err := m.comp.Resources().Storage.Write(addr, writeReq.Data); err != nil {
 				log.Panic(err)
 			}
 		} else {
-			data, err := m.storage.Read(addr, uint64(len(writeReq.Data)))
+			data, err := m.comp.Resources().Storage.Read(addr, uint64(len(writeReq.Data)))
 			if err != nil {
 				log.Panic(err)
 			}
@@ -137,13 +136,13 @@ func (m *tickFinalizeMW) finalizeWrite(
 				}
 			}
 
-			if err := m.storage.Write(addr, data); err != nil {
+			if err := m.comp.Resources().Storage.Write(addr, data); err != nil {
 				log.Panic(err)
 			}
 		}
 
 		item.Committed = true
-		b.PostPipelineBuf.Elements[0] = *item
+		b.PostPipelineBuf.UpdateFront(*item)
 	}
 
 	if !m.topPort().CanSend() {

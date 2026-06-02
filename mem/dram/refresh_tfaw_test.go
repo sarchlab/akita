@@ -9,8 +9,8 @@ var _ = Describe("tFAW and Refresh", func() {
 	var (
 		spec      Spec
 		state     *State
-		cmdCycles map[CommandKind]int
-		timing    Timing
+		cmdCycles map[commandKind]int
+		timing    dramTiming
 	)
 
 	Describe("tFAW Constraint", func() {
@@ -19,12 +19,12 @@ var _ = Describe("tFAW and Refresh", func() {
 			spec.TFAW = 28
 
 			b := MakeBuilder().WithSpec(spec)
-			b.burstCycle = b.burstLength / 2
-			b.tRL = b.tAL + b.tCL
-			b.tWL = b.tAL + b.tCWL
-			b.readDelay = b.tRL + b.burstCycle
-			b.writeDelay = b.tRL + b.burstCycle
-			b.tRC = b.tRAS + b.tRP
+			b.spec.BurstCycle = b.spec.BurstLength / 2
+			b.spec.TRL = b.spec.TAL + b.spec.TCL
+			b.spec.TWL = b.spec.TAL + b.spec.TCWL
+			b.spec.ReadDelay = b.spec.TRL + b.spec.BurstCycle
+			b.spec.WriteDelay = b.spec.TRL + b.spec.BurstCycle
+			b.spec.TRC = b.spec.TRAS + b.spec.TRP
 
 			timing = b.generateTiming()
 			cmdCycles = b.buildCmdCycles()
@@ -42,11 +42,11 @@ var _ = Describe("tFAW and Refresh", func() {
 				state.TickCount = uint64(i * 2) // spread by 2 ticks
 				bs := findBankState(&state.BankStates,
 					0, i%spec.NumBankGroup, i/spec.NumBankGroup)
-				Expect(BankStateKind(bs.State)).To(Equal(BankStateClosed))
+				Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
 
 				cmd := &commandState{
-					Kind: int(CmdKindActivate),
-					Location: Location{
+					Kind: int(cmdKindActivate),
+					Location: location{
 						Rank:      0,
 						BankGroup: uint64(i % spec.NumBankGroup),
 						Bank:      uint64(i / spec.NumBankGroup),
@@ -63,13 +63,13 @@ var _ = Describe("tFAW and Refresh", func() {
 
 			bs := findBankState(&state.BankStates, 0, 0, 1)
 			// First close this bank so it can accept an activate
-			bs.State = int(BankStateClosed)
+			bs.State = int(bankStateClosed)
 			bs.HasCurrentCmd = false
 			bs.CyclesToCmdAvailable = make(map[string]int) // clear timing
 
 			cmd := &commandState{
-				Kind: int(CmdKindRead),
-				Location: Location{
+				Kind: int(cmdKindRead),
+				Location: location{
 					Rank:      0,
 					BankGroup: 0,
 					Bank:      1,
@@ -91,8 +91,8 @@ var _ = Describe("tFAW and Refresh", func() {
 					0, i%spec.NumBankGroup, i/spec.NumBankGroup)
 
 				cmd := &commandState{
-					Kind: int(CmdKindActivate),
-					Location: Location{
+					Kind: int(cmdKindActivate),
+					Location: location{
 						Rank:      0,
 						BankGroup: uint64(i % spec.NumBankGroup),
 						Bank:      uint64(i / spec.NumBankGroup),
@@ -107,13 +107,13 @@ var _ = Describe("tFAW and Refresh", func() {
 			state.TickCount = 28
 
 			bs := findBankState(&state.BankStates, 0, 0, 1)
-			bs.State = int(BankStateClosed)
+			bs.State = int(bankStateClosed)
 			bs.HasCurrentCmd = false
 			bs.CyclesToCmdAvailable = make(map[string]int)
 
 			cmd := &commandState{
-				Kind: int(CmdKindRead),
-				Location: Location{
+				Kind: int(cmdKindRead),
+				Location: location{
 					Rank:      0,
 					BankGroup: 0,
 					Bank:      1,
@@ -124,7 +124,7 @@ var _ = Describe("tFAW and Refresh", func() {
 			// Now the window has passed, activate should be allowed.
 			ready := getReadyCommand(&spec, state, bs, cmd)
 			Expect(ready).NotTo(BeNil())
-			Expect(CommandKind(ready.Kind)).To(Equal(CmdKindActivate))
+			Expect(commandKind(ready.Kind)).To(Equal(cmdKindActivate))
 		})
 
 		It("should not apply tFAW when TFAW is 0", func() {
@@ -137,8 +137,8 @@ var _ = Describe("tFAW and Refresh", func() {
 					0, i%spec.NumBankGroup, i/spec.NumBankGroup)
 
 				cmd := &commandState{
-					Kind: int(CmdKindActivate),
-					Location: Location{
+					Kind: int(cmdKindActivate),
+					Location: location{
 						Rank:      0,
 						BankGroup: uint64(i % spec.NumBankGroup),
 						Bank:      uint64(i / spec.NumBankGroup),
@@ -150,13 +150,13 @@ var _ = Describe("tFAW and Refresh", func() {
 
 			state.TickCount = 4
 			bs := findBankState(&state.BankStates, 0, 0, 1)
-			bs.State = int(BankStateClosed)
+			bs.State = int(bankStateClosed)
 			bs.HasCurrentCmd = false
 			bs.CyclesToCmdAvailable = make(map[string]int)
 
 			cmd := &commandState{
-				Kind: int(CmdKindRead),
-				Location: Location{
+				Kind: int(cmdKindRead),
+				Location: location{
 					Rank:      0,
 					BankGroup: 0,
 					Bank:      1,
@@ -184,7 +184,7 @@ var _ = Describe("tFAW and Refresh", func() {
 
 		It("should trigger refresh after TREFI ticks and stall for TRFC", func() {
 			mw := &bankTickMW{
-				CmdCycles: map[CommandKind]int{},
+				cmdCycles: map[commandKind]int{},
 			}
 
 			// Simulate the countdown
@@ -212,7 +212,7 @@ var _ = Describe("tFAW and Refresh", func() {
 			state.RefreshCycleCounter = 0
 
 			mw := &bankTickMW{
-				CmdCycles: map[CommandKind]int{},
+				cmdCycles: map[commandKind]int{},
 			}
 
 			// Tick TRFC times
@@ -229,7 +229,7 @@ var _ = Describe("tFAW and Refresh", func() {
 			spec.TREFI = 0
 
 			mw := &bankTickMW{
-				CmdCycles: map[CommandKind]int{},
+				cmdCycles: map[commandKind]int{},
 			}
 
 			for range 100 {

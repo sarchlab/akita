@@ -11,7 +11,7 @@ import (
 )
 
 type dispatchMW struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, Resources]
 }
 
 func (m *dispatchMW) topPort() messaging.Port {
@@ -24,7 +24,7 @@ func (m *dispatchMW) Tick() bool {
 
 func (m *dispatchMW) dispatchFromTopPort() bool {
 	madeProgress := false
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	next := &m.comp.State
 
 	for {

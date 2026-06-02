@@ -5,356 +5,248 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
-
-	// resolveLegacyMapper converts a legacy AddressToPortMapper set via
-	// WithAddressToPortMapper into the builder's addressMapperType/remotePorts/
-	// interleavingSize fields. This allows Build() to always populate Spec from
-	// the builder.
-	"github.com/sarchlab/akita/v5/messaging"
 )
 
-func (b *Builder) resolveLegacyMapper() {
-	if b.legacyMapper == nil {
-		return
-	}
-
-	switch m := b.legacyMapper.(type) {
-	case *mem.SinglePortMapper:
-		b.addressMapperType = "single"
-		b.remotePorts = []messaging.RemotePort{m.Port}
-	case *mem.InterleavedAddressPortMapper:
-		b.addressMapperType = "interleaved"
-		b.remotePorts = m.LowModules
-		b.interleavingSize = m.InterleavingSize
-	default:
-		panic(fmt.Sprintf("unsupported address mapper type: %T", b.legacyMapper))
-	}
+// defaultSpec provides default configuration for the writeback cache.
+var defaultSpec = Spec{
+	Freq:                  1 * timing.GHz,
+	NumReqPerCycle:        1,
+	Log2BlockSize:         6,
+	BankLatency:           10,
+	WayAssociativity:      4,
+	NumBanks:              1,
+	NumMSHREntry:          16,
+	TotalByteSize:         512 * mem.KB,
+	WriteBufferCapacity:   1024,
+	MaxInflightFetch:      128,
+	MaxInflightEviction:   128,
+	InterleavingSize:      4096,
+	TopPortBufferSize:     8,
+	BottomPortBufferSize:  8,
+	ControlPortBufferSize: 8,
 }
 
-// DefaultSpec provides default configuration for the writeback cache.
-var DefaultSpec = Spec{
-	Freq:                1 * timing.GHz,
-	NumReqPerCycle:      1,
-	Log2BlockSize:       6,
-	BankLatency:         10,
-	WayAssociativity:    4,
-	NumBanks:            1,
-	NumMSHREntry:        16,
-	TotalByteSize:       512 * mem.KB,
-	WriteBufferCapacity: 1024,
-	MaxInflightFetch:    128,
-	MaxInflightEviction: 128,
-	InterleavingSize:    4096,
+// DefaultSpec returns a copy of the default configuration. Callers typically
+// obtain it, tweak the fields they care about, and pass it to WithSpec.
+func DefaultSpec() Spec {
+	return defaultSpec
 }
 
-// A Builder can build writeback caches
+// A Builder can build writeback caches. Configuration is supplied as a whole
+// through WithSpec; wiring is supplied through WithRegistrar and WithResources.
+// The component creates its own ports.
 type Builder struct {
-	engine           timing.EventScheduler
-	spec             Spec
-	legacyMapper     mem.AddressToPortMapper
-	wayAssociativity int
-	log2BlockSize    uint64
-
-	byteSize            uint64
-	numMSHREntry        int
-	numReqPerCycle      int
-	writeBufferCapacity int
-	maxInflightFetch    int
-	maxInflightEviction int
-
-	dirLatency  int
-	bankLatency int
-
-	addressMapperType string
-	remotePorts       []messaging.RemotePort
-	interleavingSize  uint64
-
-	topPort     messaging.Port
-	bottomPort  messaging.Port
-	controlPort messaging.Port
+	spec      Spec
+	registrar modeling.Registrar
+	resources Resources
 }
 
 // MakeBuilder creates a new builder with default configurations.
 func MakeBuilder() Builder {
-	return Builder{
-		spec:                DefaultSpec,
-		wayAssociativity:    DefaultSpec.WayAssociativity,
-		log2BlockSize:       DefaultSpec.Log2BlockSize,
-		byteSize:            DefaultSpec.TotalByteSize,
-		numMSHREntry:        DefaultSpec.NumMSHREntry,
-		numReqPerCycle:      DefaultSpec.NumReqPerCycle,
-		writeBufferCapacity: DefaultSpec.WriteBufferCapacity,
-		maxInflightFetch:    DefaultSpec.MaxInflightFetch,
-		maxInflightEviction: DefaultSpec.MaxInflightEviction,
-		bankLatency:         DefaultSpec.BankLatency,
-		interleavingSize:    DefaultSpec.InterleavingSize,
+	return Builder{spec: defaultSpec}
+}
+
+// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// registrar provides the engine and registers the built component.
+func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+	b.registrar = reg
+	return b
+}
+
+// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
+	return b
+}
+
+// WithResources injects the component's shared resources and wiring (e.g. a
+// storage shared with other components, the address-to-port mapper, and the
+// remote ports). If Storage is not set, the component builds its own.
+func (b Builder) WithResources(r Resources) Builder {
+	b.resources = r
+	return b
+}
+
+// Build creates a usable writeback cache. It creates the component's Top,
+// Bottom, and Control ports.
+func (b Builder) Build(name string) *Comp {
+	if b.registrar == nil {
+		panic("writeback: WithRegistrar is required")
 	}
-}
 
-// WithEngine sets the engine to be used by the caches.
-func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
-	b.engine = engine
-	return b
-}
-
-// WithFreq sets the frequency to be used by the caches.
-func (b Builder) WithFreq(freq timing.Freq) Builder {
-	b.spec.Freq = freq
-	return b
-}
-
-// WithWayAssociativity sets the way associativity.
-func (b Builder) WithWayAssociativity(n int) Builder {
-	b.wayAssociativity = n
-	return b
-}
-
-// WithLog2BlockSize sets the cache line size as the power of 2.
-func (b Builder) WithLog2BlockSize(n uint64) Builder {
-	b.log2BlockSize = n
-	return b
-}
-
-// WithNumMSHREntry sets the number of MSHR entries.
-func (b Builder) WithNumMSHREntry(n int) Builder {
-	b.numMSHREntry = n
-	return b
-}
-
-// WithAddressToPortMapper sets the AddressToPortMapper to be used.
-// The mapper is read lazily at Tick time, so its fields can be set after Build.
-func (b Builder) WithAddressToPortMapper(f mem.AddressToPortMapper) Builder {
-	b.legacyMapper = f
-	return b
-}
-
-// WithNumReqPerCycle sets the number of requests that can be processed by the
-// cache in each cycle.
-func (b Builder) WithNumReqPerCycle(n int) Builder {
-	b.numReqPerCycle = n
-	return b
-}
-
-// WithByteSize set the size of the cache.
-func (b Builder) WithByteSize(byteSize uint64) Builder {
-	b.byteSize = byteSize
-	return b
-}
-
-// WithWriteBufferSize sets the number of cache lines that can reside in the
-// write buffer.
-func (b Builder) WithWriteBufferSize(n int) Builder {
-	b.writeBufferCapacity = n
-	return b
-}
-
-// WithMaxInflightFetch sets the number of concurrent fetch that the write-back
-// cache can issue at the same time.
-func (b Builder) WithMaxInflightFetch(n int) Builder {
-	b.maxInflightFetch = n
-	return b
-}
-
-// WithMaxInflightEviction sets the number of concurrent eviction that the
-// write buffer can write to a low-level module.
-func (b Builder) WithMaxInflightEviction(n int) Builder {
-	b.maxInflightEviction = n
-	return b
-}
-
-// WithDirectoryLatency sets the number of cycles required to access the
-// directory.
-func (b Builder) WithDirectoryLatency(n int) Builder {
-	b.dirLatency = n
-	return b
-}
-
-// WithBankLatency sets the number of cycles required to process each cache
-// read/write operation.
-func (b Builder) WithBankLatency(n int) Builder {
-	b.bankLatency = n
-	return b
-}
-
-// WithAddressMapperType sets the address mapper type.
-func (b Builder) WithAddressMapperType(t string) Builder {
-	b.addressMapperType = t
-	return b
-}
-
-// WithTopPort sets the top port for the cache
-func (b Builder) WithTopPort(port messaging.Port) Builder {
-	b.topPort = port
-	return b
-}
-
-// WithBottomPort sets the bottom port for the cache
-func (b Builder) WithBottomPort(port messaging.Port) Builder {
-	b.bottomPort = port
-	return b
-}
-
-// WithControlPort sets the control port for the cache
-func (b Builder) WithControlPort(port messaging.Port) Builder {
-	b.controlPort = port
-	return b
-}
-
-// WithRemotePorts sets the remote ports for address mapping.
-func (b Builder) WithRemotePorts(ports ...messaging.RemotePort) Builder {
-	b.remotePorts = ports
-	return b
-}
-
-// WithInterleavingSize sets the interleaving size for the address mapper.
-func (b Builder) WithInterleavingSize(size uint64) Builder {
-	b.interleavingSize = size
-	return b
-}
-
-// Build creates a usable writeback cache.
-func (b Builder) Build(name string) *modeling.Component[Spec, State] {
-	b.resolveLegacyMapper()
-
-	blockSize := 1 << b.log2BlockSize
-	numSets := int(b.byteSize / uint64(b.wayAssociativity*blockSize))
+	blockSize := 1 << b.spec.Log2BlockSize
+	numSets := int(
+		b.spec.TotalByteSize / uint64(b.spec.WayAssociativity*blockSize))
 
 	spec := b.buildSpec(numSets)
 
-	laneWidth := b.numReqPerCycle
+	laneWidth := spec.NumReqPerCycle
 	if laneWidth == 1 {
 		laneWidth = 2
 	}
 
-	initialState := b.buildInitialState(name, laneWidth, numSets)
+	initialState := b.buildInitialState(name, spec, laneWidth, numSets)
 
-	comp := modeling.NewBuilder[Spec, State]().
-		WithEngine(b.engine).
+	storage := b.resolveStorage(name, spec)
+
+	comp := modeling.NewBuilder[Spec, State, Resources]().
+		WithEngine(b.registrar.GetEngine()).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithResources(Resources{
+			Storage:             storage,
+			AddressToPortMapper: b.resources.AddressToPortMapper,
+			RemotePorts:         b.resources.RemotePorts,
+		}).
 		Build(name)
 
 	comp.State = initialState
 
-	pmw := b.buildPipelineMW(comp, laneWidth)
-	cmw := b.buildControlMW(comp, pmw)
+	pmw := b.buildPipelineMW(comp, name, spec, laneWidth)
+	cmw := b.buildControlMW(comp, name, spec, pmw)
 
 	comp.AddMiddleware(pmw) // index 0
 	comp.AddMiddleware(cmw) // index 1
 
+	b.registrar.RegisterComponent(comp)
+
 	return comp
 }
 
+// resolveStorage returns the injected storage, or builds a default one sized by
+// Spec.TotalByteSize.
+func (b Builder) resolveStorage(name string, spec Spec) *mem.Storage {
+	if b.resources.Storage != nil {
+		return b.resources.Storage
+	}
+
+	return mem.MakeStorageBuilder().
+		WithCapacity(spec.TotalByteSize).
+		WithSimulation(b.registrar).
+		Build(name + ".Storage")
+}
+
 func (b Builder) buildInitialState(
-	name string, laneWidth, numSets int,
+	name string, spec Spec, laneWidth, numSets int,
 ) State {
-	blockSize := 1 << b.log2BlockSize
+	blockSize := 1 << spec.Log2BlockSize
 
 	s := State{
 		CacheState:   int(cacheStateRunning),
 		EvictingList: make(map[uint64]bool),
-		DirStageBuf: queueing.Buffer[int]{
-			BufferName: name + ".DirStageBuf",
-			Cap:        b.numReqPerCycle,
+		DirStageBuf: queueing.NewBuffer[int](
+			name+".DirStageBuf", spec.NumReqPerCycle),
+		DirToBankBufs: []queueing.Buffer[int]{
+			queueing.NewBuffer[int](name+".DirToBankBuf", spec.NumReqPerCycle),
 		},
-		DirToBankBufs: []queueing.Buffer[int]{{
-			BufferName: name + ".DirToBankBuf",
-			Cap:        b.numReqPerCycle,
-		}},
-		WriteBufferToBankBufs: []queueing.Buffer[int]{{
-			BufferName: name + ".WriteBufferToBankBuf",
-			Cap:        b.numReqPerCycle,
-		}},
-		MSHRStageBuf: queueing.Buffer[int]{
-			BufferName: name + ".MSHRStageBuf",
-			Cap:        b.numReqPerCycle,
+		WriteBufferToBankBufs: []queueing.Buffer[int]{
+			queueing.NewBuffer[int](
+				name+".WriteBufferToBankBuf", spec.NumReqPerCycle),
 		},
-		WriteBufferBuf: queueing.Buffer[int]{
-			BufferName: name + ".WriteBufferBuf",
-			Cap:        b.numReqPerCycle,
+		MSHRStageBuf: queueing.NewBuffer[int](
+			name+".MSHRStageBuf", spec.NumReqPerCycle),
+		WriteBufferBuf: queueing.NewBuffer[int](
+			name+".WriteBufferBuf", spec.NumReqPerCycle),
+		DirPipeline: queueing.NewPipeline[int](laneWidth, spec.DirLatency),
+		DirPostPipelineBuf: queueing.NewBuffer[int](
+			name+".DirPostPipelineBuf", spec.NumReqPerCycle),
+		BankPipelines: []queueing.Pipeline[int]{
+			queueing.NewPipeline[int](laneWidth, spec.BankLatency),
 		},
-		DirPipeline: queueing.Pipeline[int]{
-			Width:     laneWidth,
-			NumStages: b.dirLatency,
+		BankPostPipelineBufs: []postPipelineBuf{
+			newPostPipelineBuf(laneWidth),
 		},
-		DirPostPipelineBuf: queueing.Buffer[int]{
-			BufferName: name + ".DirPostPipelineBuf",
-			Cap:        b.numReqPerCycle,
-		},
-		BankPipelines: []queueing.Pipeline[int]{{
-			Width:     laneWidth,
-			NumStages: b.bankLatency,
-		}},
-		BankPostPipelineBufs: []queueing.Buffer[int]{{
-			BufferName: name + ".BankPostPipelineBuf",
-			Cap:        laneWidth,
-		}},
 		BankInflightTransCounts:         make([]int, 1),
 		BankDownwardInflightTransCounts: make([]int, 1),
 	}
 
 	cache.DirectoryReset(
-		&s.DirectoryState, numSets, b.wayAssociativity, blockSize)
+		&s.DirectoryState, numSets, spec.WayAssociativity, blockSize)
 
 	return s
 }
 
-func (b *Builder) buildSpec(numSets int) Spec {
-	spec := Spec{
-		Freq:                b.spec.Freq,
-		NumReqPerCycle:      b.numReqPerCycle,
-		Log2BlockSize:       b.log2BlockSize,
-		BankLatency:         b.bankLatency,
-		WayAssociativity:    b.wayAssociativity,
-		NumBanks:            1,
-		NumSets:             numSets,
-		NumMSHREntry:        b.numMSHREntry,
-		TotalByteSize:       b.byteSize,
-		DirLatency:          b.dirLatency,
-		WriteBufferCapacity: b.writeBufferCapacity,
-		MaxInflightFetch:    b.maxInflightFetch,
-		MaxInflightEviction: b.maxInflightEviction,
-	}
+// buildSpec produces the final Spec used by the component. It derives the
+// number of sets and resolves the address mapper (from an injected mapper or
+// from the type string plus the remote ports in Resources) into the flat
+// address-mapping fields read at Tick time.
+func (b Builder) buildSpec(numSets int) Spec {
+	spec := b.spec
+	spec.NumBanks = 1
+	spec.NumSets = numSets
 
-	if b.addressMapperType != "" {
-		remotePortNames := make([]string, len(b.remotePorts))
-		for i, rp := range b.remotePorts {
+	mapperType, remotePorts, interleavingSize := b.resolveAddressMapper()
+	if mapperType != "" {
+		remotePortNames := make([]string, len(remotePorts))
+		for i, rp := range remotePorts {
 			remotePortNames[i] = string(rp)
 		}
-		spec.AddressMapperType = b.addressMapperType
+		spec.AddressMapperType = mapperType
 		spec.RemotePortNames = remotePortNames
-		spec.InterleavingSize = b.interleavingSize
+		spec.InterleavingSize = interleavingSize
 	}
 
 	return spec
 }
 
-func (b *Builder) buildPipelineMW(
-	comp *modeling.Component[Spec, State],
+// resolveAddressMapper returns the address mapper type, remote ports, and
+// interleaving size. An externally injected mapper (Resources.AddressToPortMapper)
+// takes precedence and is decomposed into these fields; otherwise the values
+// come from Spec.AddressMapperType plus Resources.RemotePorts.
+func (b Builder) resolveAddressMapper() (
+	mapperType string,
+	remotePorts []messaging.RemotePort,
+	interleavingSize uint64,
+) {
+	if b.resources.AddressToPortMapper != nil {
+		switch m := b.resources.AddressToPortMapper.(type) {
+		case *mem.SinglePortMapper:
+			return "single", []messaging.RemotePort{m.Port}, b.spec.InterleavingSize
+		case *mem.InterleavedAddressPortMapper:
+			return "interleaved", m.LowModules, m.InterleavingSize
+		default:
+			panic(fmt.Sprintf(
+				"unsupported address mapper type: %T",
+				b.resources.AddressToPortMapper))
+		}
+	}
+
+	return b.spec.AddressMapperType, b.resources.RemotePorts, b.spec.InterleavingSize
+}
+
+func (b Builder) buildPipelineMW(
+	comp *modeling.Component[Spec, State, Resources],
+	name string,
+	spec Spec,
 	laneWidth int,
 ) *pipelineMW {
 	m := &pipelineMW{
 		comp: comp,
 	}
 
-	b.createPipelinePorts(m, comp)
-	m.storage = mem.NewStorage(b.byteSize)
+	b.createPipelinePorts(m, comp, name, spec)
+
+	m.storage = comp.Resources().Storage
 
 	b.createInternalStages(m, laneWidth)
 
 	return m
 }
 
-func (b *Builder) buildControlMW(
-	comp *modeling.Component[Spec, State],
+func (b Builder) buildControlMW(
+	comp *modeling.Component[Spec, State, Resources],
+	name string,
+	spec Spec,
 	pmw *pipelineMW,
 ) *controlMW {
-	controlPort := b.controlPort
-	controlPort.SetComponent(comp)
+	controlPort := messaging.NewPort(
+		comp, spec.ControlPortBufferSize, spec.ControlPortBufferSize,
+		name+".Control")
 	comp.AddPort("Control", controlPort)
 
 	f := &flusher{
@@ -370,20 +262,23 @@ func (b *Builder) buildControlMW(
 	return cmw
 }
 
-func (b *Builder) createPipelinePorts(
+func (b Builder) createPipelinePorts(
 	m *pipelineMW,
-	comp *modeling.Component[Spec, State],
+	comp *modeling.Component[Spec, State, Resources],
+	name string,
+	spec Spec,
 ) {
-	m.topPort = b.topPort
-	m.topPort.SetComponent(comp)
+	m.topPort = messaging.NewPort(
+		comp, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
 	comp.AddPort("Top", m.topPort)
 
-	m.bottomPort = b.bottomPort
-	m.bottomPort.SetComponent(comp)
+	m.bottomPort = messaging.NewPort(
+		comp, spec.BottomPortBufferSize, spec.BottomPortBufferSize,
+		name+".Bottom")
 	comp.AddPort("Bottom", m.bottomPort)
 }
 
-func (b *Builder) createInternalStages(m *pipelineMW, laneWidth int) {
+func (b Builder) createInternalStages(m *pipelineMW, laneWidth int) {
 	m.topParser = &topParser{cache: m}
 
 	m.dirStage = &directoryStage{

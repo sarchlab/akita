@@ -5,105 +5,90 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
-	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("MMUCacheMiddleware", func() {
 	var (
-		mockCtrl    *gomock.Controller
-		comp        *modeling.Component[Spec, State]
+		engine      timing.Engine
+		comp        *Comp
 		mw          *mmuCacheMiddleware
-		topPort     *MockPort
-		bottomPort  *MockPort
-		controlPort *MockPort
+		topPort     messaging.Port
+		bottomPort  messaging.Port
+		controlPort messaging.Port
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
+		engine = timing.NewSerialEngine()
 
-		topPort = NewMockPort(mockCtrl)
-		topPort.EXPECT().AsRemote().Return(messaging.RemotePort("TopPort")).AnyTimes()
-		topPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
-		bottomPort = NewMockPort(mockCtrl)
-		bottomPort.EXPECT().AsRemote().Return(messaging.RemotePort("BottomPort")).AnyTimes()
-		bottomPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
-		controlPort = NewMockPort(mockCtrl)
-		controlPort.EXPECT().AsRemote().Return(messaging.RemotePort("ControlPort")).AnyTimes()
-		controlPort.EXPECT().Name().Return("ControlPort").AnyTimes()
-		controlPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
+		spec := DefaultSpec()
+		spec.NumBlocks = 4
+		spec.NumLevels = 2
+		spec.PageSize = 4096
+		spec.Log2PageSize = 12
+		spec.NumReqPerCycle = 4
+		spec.LatencyPerLevel = 100
 
-		spec := Spec{
-			NumBlocks:       4,
-			NumLevels:       2,
-			PageSize:        4096,
-			Log2PageSize:    12,
-			NumReqPerCycle:  4,
-			LatencyPerLevel: 100,
-			LowModulePort:   messaging.RemotePort("LowModule"),
-			UpModulePort:    messaging.RemotePort("UpModule"),
-		}
-
-		initialState := State{
-			CurrentState: mmuCacheStateEnable,
-			Table:        initSets(spec.NumLevels, spec.NumBlocks),
-		}
-
-		comp = modeling.NewBuilder[Spec, State]().
+		comp = MakeBuilder().
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 			WithSpec(spec).
+			WithResources(Resources{
+				LowModulePort: messaging.RemotePort("LowModule"),
+				UpModulePort:  messaging.RemotePort("UpModule"),
+			}).
 			Build("MMUCache")
-		comp.State = initialState
 
-		comp.AddPort("Top", topPort)
-		comp.AddPort("Bottom", bottomPort)
-		comp.AddPort("Control", controlPort)
+		topPort = comp.GetPortByName("Top")
+		bottomPort = comp.GetPortByName("Bottom")
+		controlPort = comp.GetPortByName("Control")
+		(&noopConn{}).PlugIn(topPort)
+		(&noopConn{}).PlugIn(bottomPort)
+		(&noopConn{}).PlugIn(controlPort)
 
 		mw = &mmuCacheMiddleware{comp: comp}
-	})
-
-	AfterEach(func() {
-		mockCtrl.Finish()
 	})
 
 	It("should send full latency on miss", func() {
 		req := &vm.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
+		req.Src = messaging.RemotePort("UpModule")
+		req.Dst = topPort.AsRemote()
 		req.PID = 1
 		req.VAddr = 0x2000
 		req.DeviceID = 3
 		req.TrafficClass = "vm.TranslationReq"
-
-		topPort.EXPECT().PeekIncoming().Return(req)
-		bottomPort.EXPECT().CanSend().Return(true).AnyTimes()
-		bottomPort.EXPECT().Send(gomock.Any()).Do(func(sent messaging.Msg) {
-			req := sent.(*vm.TranslationReq)
-			Expect(req.TransLatency).To(Equal(uint64(200)))
-			Expect(req.Dst).To(Equal(messaging.RemotePort("LowModule")))
-			Expect(req.Src).To(Equal(messaging.RemotePort("BottomPort")))
-			Expect(req.PID).To(Equal(vm.PID(1)))
-			Expect(req.VAddr).To(Equal(uint64(0x2000)))
-			Expect(req.DeviceID).To(Equal(uint64(3)))
-		}).Return(nil)
-		topPort.EXPECT().RetrieveIncoming().Return(req)
+		Expect(topPort.Deliver(req)).To(BeNil())
 
 		madeProgress := mw.lookup()
 
 		Expect(madeProgress).To(BeTrue())
+
+		sent := bottomPort.RetrieveOutgoing()
+		sentReq, ok := sent.(*vm.TranslationReq)
+		Expect(ok).To(BeTrue())
+		Expect(sentReq.TransLatency).To(Equal(uint64(200)))
+		Expect(sentReq.Dst).To(Equal(messaging.RemotePort("LowModule")))
+		Expect(sentReq.Src).To(Equal(bottomPort.AsRemote()))
+		Expect(sentReq.PID).To(Equal(vm.PID(1)))
+		Expect(sentReq.VAddr).To(Equal(uint64(0x2000)))
+		Expect(sentReq.DeviceID).To(Equal(uint64(3)))
+		Expect(topPort.PeekIncoming()).To(BeNil())
 	})
 
 	It("should reduce latency on upper-level hit", func() {
 		req := &vm.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
+		req.Src = messaging.RemotePort("UpModule")
+		req.Dst = topPort.AsRemote()
 		req.PID = 1
 		req.VAddr = 0x3000
 		req.DeviceID = 2
 		req.TrafficClass = "vm.TranslationReq"
 
 		// Compute seg and wayID for level 1
-		spec := comp.Spec
+		spec := comp.Spec()
 		seg := segForLevelSpec(spec, 1, req.VAddr)
 		wayID := setIDForSegSpec(spec, seg)
 
@@ -111,17 +96,16 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		next := &comp.State
 		setUpdate(&next.Table[1], wayID, req.PID, seg)
 
-		topPort.EXPECT().PeekIncoming().Return(req)
-		bottomPort.EXPECT().CanSend().Return(true).AnyTimes()
-		bottomPort.EXPECT().Send(gomock.Any()).Do(func(sent messaging.Msg) {
-			req := sent.(*vm.TranslationReq)
-			Expect(req.TransLatency).To(Equal(uint64(100)))
-		}).Return(nil)
-		topPort.EXPECT().RetrieveIncoming().Return(req)
+		Expect(topPort.Deliver(req)).To(BeNil())
 
 		madeProgress := mw.lookup()
 
 		Expect(madeProgress).To(BeTrue())
+
+		sent := bottomPort.RetrieveOutgoing()
+		sentReq, ok := sent.(*vm.TranslationReq)
+		Expect(ok).To(BeTrue())
+		Expect(sentReq.TransLatency).To(Equal(uint64(100)))
 	})
 
 	It("should forward response and update cache", func() {
@@ -135,23 +119,25 @@ var _ = Describe("MMUCacheMiddleware", func() {
 			Page: page,
 		}
 		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.Src = messaging.RemotePort("LowModule")
+		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = timing.GetIDGenerator().Generate()
 		rsp.TrafficClass = "vm.TranslationRsp"
-
-		topPort.EXPECT().CanSend().Return(true)
-		topPort.EXPECT().Send(gomock.Any()).Do(func(sent messaging.Msg) {
-			rsp := sent.(*vm.TranslationRsp)
-			Expect(rsp.Dst).To(Equal(messaging.RemotePort("UpModule")))
-			Expect(rsp.Src).To(Equal(messaging.RemotePort("TopPort")))
-			Expect(rsp.Page).To(Equal(page))
-		}).Return(nil)
-		bottomPort.EXPECT().RetrieveIncoming()
+		Expect(bottomPort.Deliver(rsp)).To(BeNil())
 
 		madeProgress := mw.handleRsp(rsp)
 
-		spec := comp.Spec
+		spec := comp.Spec()
 		next := &comp.State
 		Expect(madeProgress).To(BeTrue())
+
+		sent := topPort.RetrieveOutgoing()
+		sentRsp, ok := sent.(*vm.TranslationRsp)
+		Expect(ok).To(BeTrue())
+		Expect(sentRsp.Dst).To(Equal(messaging.RemotePort("UpModule")))
+		Expect(sentRsp.Src).To(Equal(topPort.AsRemote()))
+		Expect(sentRsp.Page).To(Equal(page))
+
 		for level := 0; level < spec.NumLevels; level++ {
 			seg := segForLevelSpec(spec, level, page.VAddr)
 			_, found := setLookup(&next.Table[level], page.PID, seg)
@@ -162,7 +148,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 	It("should flush and reset cache", func() {
 		pid := vm.PID(1)
 		vAddr := uint64(0x6000)
-		spec := comp.Spec
+		spec := comp.Spec()
 		seg := segForLevelSpec(spec, 0, vAddr)
 		wayID := setIDForSegSpec(spec, seg)
 
@@ -175,14 +161,6 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		next.InflightFlushReqSrc = messaging.RemotePort("Requester")
 		next.CurrentState = mmuCacheStateFlush
 
-		controlPort.EXPECT().Send(gomock.Any()).Do(func(sent messaging.Msg) {
-			rsp := sent.(*mem.ControlRsp)
-			Expect(rsp.Command).To(Equal(mem.CmdFlush))
-			Expect(rsp.Success).To(BeTrue())
-			Expect(rsp.Dst).To(Equal(messaging.RemotePort("Requester")))
-			Expect(rsp.Src).To(Equal(messaging.RemotePort("ControlPort")))
-		}).Return(nil)
-
 		madeProgress := mw.processMMUCacheFlush()
 
 		next = &comp.State
@@ -191,6 +169,14 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		Expect(next.InflightFlushReqActive).To(BeFalse())
 		_, found := setLookup(&next.Table[0], pid, seg)
 		Expect(found).To(BeFalse())
+
+		sent := controlPort.RetrieveOutgoing()
+		sentRsp, ok := sent.(*mem.ControlRsp)
+		Expect(ok).To(BeTrue())
+		Expect(sentRsp.Command).To(Equal(mem.CmdFlush))
+		Expect(sentRsp.Success).To(BeTrue())
+		Expect(sentRsp.Dst).To(Equal(messaging.RemotePort("Requester")))
+		Expect(sentRsp.Src).To(Equal(controlPort.AsRemote()))
 	})
 })
 

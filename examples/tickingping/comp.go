@@ -2,7 +2,27 @@ package tickingping
 
 import (
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
+
+// pingReq is a ping request message.
+type pingReq struct {
+	messaging.MsgMeta
+	SeqID int
+}
+
+// pingRsp is a ping response message.
+type pingRsp struct {
+	messaging.MsgMeta
+	SeqID int
+}
+
+// Spec contains immutable configuration for the tickingping component.
+type Spec struct {
+	Freq              timing.Freq `json:"freq"`
+	OutPortBufferSize int         `json:"out_port_buffer_size"`
+}
 
 // pingTransactionState tracks an in-progress ping request with a countdown.
 type pingTransactionState struct {
@@ -20,3 +40,6 @@ type State struct {
 	PingDst             messaging.RemotePort   `json:"ping_dst"`
 	CurrentTransactions []pingTransactionState `json:"current_transactions"`
 }
+
+// Comp is the tickingping component.
+type Comp = modeling.Component[Spec, State, modeling.None]

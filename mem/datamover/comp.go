@@ -1,9 +1,42 @@
 package datamover
 
 import (
-	"github.com/sarchlab/akita/v5/messaging"
 	"log"
+
+	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
+
+// Spec contains immutable configuration for the data mover.
+type Spec struct {
+	Freq                   timing.Freq `json:"freq"`
+	BufferSize             uint64      `json:"buffer_size"`
+	InsideByteGranularity  uint64      `json:"inside_byte_granularity"`
+	OutsideByteGranularity uint64      `json:"outside_byte_granularity"`
+
+	CtrlPortBufferSize    int `json:"ctrl_port_buffer_size"`
+	InsidePortBufferSize  int `json:"inside_port_buffer_size"`
+	OutsidePortBufferSize int `json:"outside_port_buffer_size"`
+
+	InsideMapperKind             string                 `json:"inside_mapper_kind"`
+	InsideMapperPorts            []messaging.RemotePort `json:"inside_mapper_ports"`
+	InsideMapperInterleavingSize uint64                 `json:"inside_mapper_interleaving_size"`
+
+	OutsideMapperKind             string                 `json:"outside_mapper_kind"`
+	OutsideMapperPorts            []messaging.RemotePort `json:"outside_mapper_ports"`
+	OutsideMapperInterleavingSize uint64                 `json:"outside_mapper_interleaving_size"`
+}
+
+// Resources holds the data mover's wiring. The data mover owns no storage; it
+// moves data between external memory controllers. The inside/outside mappers
+// describe which remote port serves a given address on each side. They are
+// optional: when omitted, the equivalent flat mapper fields in Spec are used.
+type Resources struct {
+	InsideMapper  mem.AddressToPortMapper
+	OutsideMapper mem.AddressToPortMapper
+}
 
 // dataChunk wraps a single []byte slot. This avoids [][]byte which fails
 // ValidateState. Valid distinguishes a nil slot from an empty one.
@@ -63,6 +96,9 @@ type State struct {
 	SrcSide            string                    `json:"src_side"`
 	DstSide            string                    `json:"dst_side"`
 }
+
+// Comp is the data mover component.
+type Comp = modeling.Component[Spec, State, modeling.None]
 
 func alignAddress(addr, granularity uint64) uint64 {
 	return addr / granularity * granularity

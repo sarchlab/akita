@@ -72,7 +72,8 @@ entries = mshr.Remove(entries, 1, 0x1000)
 ## Design Notes
 
 - **Slice-based**: MSHR entries are stored in plain Go slices rather than
-  maps or linked lists, keeping them JSON-serializable for checkpointing.
+  maps or linked lists, keeping them JSON-serializable as required by the
+  `State` constraint.
 - **Generic**: Functions work with any concrete entry type, so caches and
   TLBs can define their own entry structs with additional fields.
 - **Lookup by (PID, Address)**: Entries are uniquely identified by the

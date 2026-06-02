@@ -4,7 +4,205 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
+
+// protocol defines the category of the memory controller.
+type protocol int
+
+// A list of all supported DRAM protocols.
+const (
+	protoDDR3 protocol = iota
+	protoDDR4
+	protoGDDR5
+	protoGDDR5X
+	protoGDDR6
+	protoLPDDR
+	protoLPDDR3
+	protoLPDDR4
+	protoHBM
+	protoHBM2
+	protoHMC
+	protoDDR5
+	protoHBM3
+	protoLPDDR5
+	protoHBM3E
+)
+
+func (p protocol) isGDDR() bool {
+	return p == protoGDDR5 || p == protoGDDR5X || p == protoGDDR6
+}
+
+func (p protocol) isHBM() bool {
+	return p == protoHBM || p == protoHBM2 || p == protoHBM3 || p == protoHBM3E
+}
+
+// PagePolicy defines the page management policy for the DRAM controller.
+type PagePolicy int
+
+// A list of supported page policies.
+const (
+	PagePolicyClose PagePolicy = 0
+	PagePolicyOpen  PagePolicy = 1
+)
+
+// Spec contains immutable configuration for the DRAM memory controller.
+type Spec struct {
+	// Frequency
+	Freq timing.Freq `json:"freq"`
+
+	// Protocol
+	Protocol int `json:"protocol"`
+
+	// Page policy
+	PagePolicy PagePolicy `json:"page_policy"`
+
+	// Timing params
+	TAL        int `json:"t_al"`
+	TCL        int `json:"t_cl"`
+	TCWL       int `json:"t_cwl"`
+	TRL        int `json:"t_rl"`
+	TWL        int `json:"t_wl"`
+	ReadDelay  int `json:"read_delay"`
+	WriteDelay int `json:"write_delay"`
+	TRCD       int `json:"t_rcd"`
+	TRP        int `json:"t_rp"`
+	TRAS       int `json:"t_ras"`
+	TCCDS      int `json:"t_ccds"`
+	TCCDL      int `json:"t_ccdl"`
+	TRTRS      int `json:"t_rtrs"`
+	TRTP       int `json:"t_rtp"`
+	TWTRL      int `json:"t_wtrl"`
+	TWTRS      int `json:"t_wtrs"`
+	TWR        int `json:"t_wr"`
+	TPPD       int `json:"t_ppd"`
+	TRC        int `json:"t_rc"`
+	TRRDS      int `json:"t_rrds"`
+	TRRDL      int `json:"t_rrdl"`
+	TFAW       int `json:"t_faw"`
+	TRCDRD     int `json:"t_rcdrd"`
+	TRCDWR     int `json:"t_rcdwr"`
+	TREFI      int `json:"t_refi"`
+	TRFC       int `json:"t_rfc"`
+	TRFCb      int `json:"t_rfcb"`
+	TCKESR     int `json:"t_ckesr"`
+	TXS        int `json:"t_xs"`
+	BurstCycle int `json:"burst_cycle"`
+
+	// Bus / burst / device params
+	BusWidth    int `json:"bus_width"`
+	BurstLength int `json:"burst_length"`
+	DeviceWidth int `json:"device_width"`
+
+	// Bank / rank / channel counts
+	NumChannel   int `json:"num_channel"`
+	NumRank      int `json:"num_rank"`
+	NumBankGroup int `json:"num_bank_group"`
+	NumBank      int `json:"num_bank"`
+	NumRow       int `json:"num_row"`
+	NumCol       int `json:"num_col"`
+
+	// Queue sizes
+	TransactionQueueSize int `json:"transaction_queue_size"`
+	CommandQueueCapacity int `json:"command_queue_capacity"`
+
+	// Port buffer sizes
+	TopPortBufferSize int `json:"top_port_buffer_size"`
+
+	// Read/Write queue separation
+	ReadQueueSize      int `json:"read_queue_size"`
+	WriteQueueSize     int `json:"write_queue_size"`
+	WriteHighWatermark int `json:"write_high_watermark"`
+	WriteLowWatermark  int `json:"write_low_watermark"`
+
+	// Address converter params
+	HasAddrConverter    bool   `json:"has_addr_converter"`
+	InterleavingSize    uint64 `json:"interleaving_size"`
+	TotalNumOfElements  int    `json:"total_num_of_elements"`
+	CurrentElementIndex int    `json:"current_element_index"`
+	Offset              uint64 `json:"offset"`
+
+	// Address mapping: position/mask pairs
+	ChannelPos    int    `json:"channel_pos"`
+	ChannelMask   uint64 `json:"channel_mask"`
+	RankPos       int    `json:"rank_pos"`
+	RankMask      uint64 `json:"rank_mask"`
+	BankGroupPos  int    `json:"bank_group_pos"`
+	BankGroupMask uint64 `json:"bank_group_mask"`
+	BankPos       int    `json:"bank_pos"`
+	BankMask      uint64 `json:"bank_mask"`
+	RowPos        int    `json:"row_pos"`
+	RowMask       uint64 `json:"row_mask"`
+	ColPos        int    `json:"col_pos"`
+	ColMask       uint64 `json:"col_mask"`
+
+	// Sub-transaction splitting
+	Log2AccessUnitSize uint64 `json:"log2_access_unit_size"`
+}
+
+// commandKind represents the kind of the command.
+type commandKind int
+
+// A list of supported DRAM command kinds.
+const (
+	cmdKindRead commandKind = iota
+	cmdKindReadPrecharge
+	cmdKindWrite
+	cmdKindWritePrecharge
+	cmdKindActivate
+	cmdKindPrecharge
+	cmdKindRefreshBank
+	cmdKindRefresh
+	cmdKindSRefEnter
+	cmdKindSRefExit
+	numCmdKind
+)
+
+// location determines where to find the data to access.
+type location struct {
+	Channel   uint64 `json:"channel"`
+	Rank      uint64 `json:"rank"`
+	BankGroup uint64 `json:"bank_group"`
+	Bank      uint64 `json:"bank"`
+	Row       uint64 `json:"row"`
+	Column    uint64 `json:"column"`
+}
+
+// bankStateKind represents the current state of a bank.
+type bankStateKind int
+
+// A list of possible bank states.
+const (
+	bankStateOpen bankStateKind = iota
+	bankStateClosed
+	bankStateSRef
+	bankStatePD
+	bankStateInvalid
+)
+
+// timeTableEntry is an entry in the timeTable.
+type timeTableEntry struct {
+	NextCmdKind       commandKind
+	MinCycleInBetween int
+}
+
+// timeTable is a table that records the minimum number of cycles between any
+// two types of DRAM commands.
+type timeTable [][]timeTableEntry
+
+// makeTimeTable creates a new timeTable.
+func makeTimeTable() timeTable {
+	return make([][]timeTableEntry, numCmdKind)
+}
+
+// dramTiming records all the timing-related parameters for a DRAM model.
+type dramTiming struct {
+	SameBank              timeTable
+	OtherBanksInBankGroup timeTable
+	SameRank              timeTable
+	OtherRanks            timeTable
+}
 
 // State contains mutable runtime data for the DRAM memory controller.
 type State struct {
@@ -71,7 +269,7 @@ type commandState struct {
 	Kind        int         `json:"kind"`
 	Address     uint64      `json:"address"`
 	CycleLeft   int         `json:"cycle_left"`
-	Location    Location    `json:"location"`
+	Location    location    `json:"location"`
 	SubTransRef subTransRef `json:"sub_trans_ref"`
 }
 
@@ -159,8 +357,8 @@ func transactionAccessByteSize(t *transactionState) uint64 {
 	return uint64(len(t.WriteMsg.Data))
 }
 
-// cmdKindToString converts a CommandKind int to string key.
-func cmdKindToString(k CommandKind) string {
+// cmdKindToString converts a commandKind int to string key.
+func cmdKindToString(k commandKind) string {
 	return fmt.Sprintf("%d", int(k))
 }
 
@@ -187,7 +385,7 @@ func initBankStatesFlat(numRanks, numBankGroups, numBanks int) bankStatesFlat {
 					BankGroup: j,
 					BankIndex: k,
 					Data: bankState{
-						State:                int(BankStateClosed),
+						State:                int(bankStateClosed),
 						CyclesToCmdAvailable: make(map[string]int),
 					},
 				})
@@ -208,3 +406,11 @@ func findBankState(flat *bankStatesFlat, rank, bankGroup, bank int) *bankState {
 	}
 	return nil
 }
+
+// Resources holds the shared resources referenced by the DRAM controller.
+type Resources struct {
+	Storage *mem.Storage
+}
+
+// Comp is the DRAM memory controller component.
+type Comp = modeling.Component[Spec, State, Resources]

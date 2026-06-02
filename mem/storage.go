@@ -25,9 +25,22 @@ const (
 type Storage struct {
 	sync.Mutex
 
-	Capacity uint64
+	name     string
+	capacity uint64
 	unitSize uint64
 	data     map[uint64]*storageUnit
+}
+
+// Name returns the name of the storage. It is empty for storage created through
+// the bare NewStorage constructors; use StorageBuilder to give it a name and
+// register it as a simulation resource.
+func (s *Storage) Name() string {
+	return s.name
+}
+
+// Capacity returns the capacity of the storage in bytes.
+func (s *Storage) Capacity() uint64 {
+	return s.capacity
 }
 
 type storageUnit struct {
@@ -43,34 +56,28 @@ func newStorageUnit(uintSize uint64) *storageUnit {
 	return u
 }
 
-// NewStorage creates a storage object with the specified capacity
+// NewStorage creates an unnamed, unregistered storage with the specified
+// capacity. Prefer StorageBuilder for storage that should be a named simulation
+// resource.
 func NewStorage(capacity uint64) *Storage {
-	storage := new(Storage)
-
-	storage.Capacity = capacity
-	storage.unitSize = 4 * KB
-	storage.data = make(map[uint64]*storageUnit)
-
-	return storage
+	return MakeStorageBuilder().WithCapacity(capacity).Build("")
 }
 
-// NewStorageWithUnitSize creates a storage object with the specified capacity.
-// The unit size is specified in bytes. Using unit size can reduces the memory
-// consumption of storage.
+// NewStorageWithUnitSize creates an unnamed, unregistered storage with the
+// specified capacity and unit size (in bytes). Using a smaller unit size
+// reduces the memory consumption of storage. Prefer StorageBuilder for storage
+// that should be a named simulation resource.
 func NewStorageWithUnitSize(capacity uint64, unitSize uint64) *Storage {
-	storage := new(Storage)
-
-	storage.Capacity = capacity
-	storage.unitSize = unitSize
-	storage.data = make(map[uint64]*storageUnit)
-
-	return storage
+	return MakeStorageBuilder().
+		WithCapacity(capacity).
+		WithUnitSize(unitSize).
+		Build("")
 }
 
 // createOrGetStorageUnit retrieves a storage unit if the unit has been created
 // before. Otherwise it initializes a storage unit in the storage object
 func (s *Storage) createOrGetStorageUnit(address uint64) (*storageUnit, error) {
-	if address > s.Capacity {
+	if address > s.capacity {
 		return nil, errors.New(
 			"accessing physical address beyond the storage capacity")
 	}

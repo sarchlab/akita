@@ -83,6 +83,12 @@ func (g *sequentialIDGenerator) Generate() uint64 {
 	return atomic.AddUint64(&g.nextID, 1)
 }
 
+// Name returns the name of the ID generator. It is registered as a simulation
+// entity so its counter is part of the state snapshot.
+func (g *sequentialIDGenerator) Name() string {
+	return "IDGenerator"
+}
+
 // GetIDGeneratorNextID returns the current nextID from the sequential ID
 // generator. It panics if the ID generator is not a sequentialIDGenerator.
 func GetIDGeneratorNextID() uint64 {
@@ -109,4 +115,10 @@ type parallelIDGenerator struct {
 
 func (g *parallelIDGenerator) Generate() uint64 {
 	return atomic.AddUint64(&g.nextID, 1)
+}
+
+// Name returns the name of the ID generator. It is registered as a simulation
+// entity so its counter is part of the state snapshot.
+func (g *parallelIDGenerator) Name() string {
+	return "IDGenerator"
 }

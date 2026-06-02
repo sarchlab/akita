@@ -6,7 +6,6 @@
 //   - Generic Spec+State pattern via Component[S, T]
 //   - Middleware pipeline for tick-based components
 //   - EventDrivenComponent[S, T] for event-driven components
-//   - JSON-based save/load (checkpoint/restore)
 //   - Validation helpers for Spec and State types
 //
 // The timing package provides the simulation kernel. The messaging package

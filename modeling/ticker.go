@@ -35,8 +35,8 @@ type Ticker interface {
 type TickScheduler struct {
 	lock      sync.Mutex
 	handlerID string
-	Freq      timing.Freq
-	Engine    timing.EventScheduler
+	freq      timing.Freq
+	engine    timing.EventScheduler
 	secondary bool
 
 	nextTickTime     timing.VTimeInSec
@@ -52,8 +52,8 @@ func NewTickScheduler(
 	ticker := new(TickScheduler)
 
 	ticker.handlerID = handlerID
-	ticker.Engine = engine
-	ticker.Freq = freq
+	ticker.engine = engine
+	ticker.freq = freq
 	ticker.hasScheduledTick = false
 
 	return ticker
@@ -69,8 +69,8 @@ func NewSecondaryTickScheduler(
 	ticker := new(TickScheduler)
 
 	ticker.handlerID = handlerID
-	ticker.Engine = engine
-	ticker.Freq = freq
+	ticker.engine = engine
+	ticker.freq = freq
 	ticker.secondary = true
 	ticker.hasScheduledTick = false
 
@@ -87,7 +87,7 @@ func (t *TickScheduler) TickNow() {
 		return
 	}
 
-	t.nextTickTime = t.Freq.ThisTick(time)
+	t.nextTickTime = t.freq.ThisTick(time)
 	t.hasScheduledTick = true
 	tick := MakeTickEvent(t.handlerID, t.nextTickTime)
 
@@ -95,14 +95,14 @@ func (t *TickScheduler) TickNow() {
 		tick.Secondary = true
 	}
 
-	t.Engine.Schedule(tick)
+	t.engine.Schedule(tick)
 	t.lock.Unlock()
 }
 
 // TickLater will schedule a tick event at the cycle after the now time.
 func (t *TickScheduler) TickLater() {
 	t.lock.Lock()
-	time := t.Freq.NextTick(t.CurrentTime())
+	time := t.freq.NextTick(t.CurrentTime())
 
 	if t.hasScheduledTick && t.nextTickTime >= time {
 		t.lock.Unlock()
@@ -117,12 +117,12 @@ func (t *TickScheduler) TickLater() {
 		tick.Secondary = true
 	}
 
-	t.Engine.Schedule(tick)
+	t.engine.Schedule(tick)
 	t.lock.Unlock()
 }
 
 func (t *TickScheduler) CurrentTime() timing.VTimeInSec {
-	return t.Engine.CurrentTime()
+	return t.engine.CurrentTime()
 }
 
 // TickingComponent is a type of component that update states from cycle to
@@ -155,12 +155,6 @@ func (c *TickingComponent) NotifyRecv(
 	_ messaging.Port,
 ) {
 	c.TickLater()
-}
-
-// SetTicker replaces the Ticker used by Handle. This allows wrapper types
-// (e.g. endpoint.Comp) to override the Tick method after construction.
-func (c *TickingComponent) SetTicker(t Ticker) {
-	c.ticker = t
 }
 
 // Handle triggers the tick function of the TickingComponent

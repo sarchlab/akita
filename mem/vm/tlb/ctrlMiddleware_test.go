@@ -3,86 +3,40 @@ package tlb
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-
-	"github.com/sarchlab/akita/v5/messaging"
-	"go.uber.org/mock/gomock"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 var _ = Describe("TLB CtrlMiddleware", func() {
 
 	var (
-		mockCtrl    *gomock.Controller
-		engine      *MockEngine
-		comp        *modeling.Component[Spec, State]
-		ctrlMW      *ctrlMiddleware
-		controlPort *MockPort
+		engine timing.Engine
+		comp   *Comp
+		ctrlMW *ctrlMiddleware
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
-		engine = NewMockEngine(mockCtrl)
-		controlPort = NewMockPort(mockCtrl)
-		controlPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("ControlPort")).
-			AnyTimes()
-		controlPort.EXPECT().
-			Name().
-			Return("ControlPort").
-			AnyTimes()
-		controlPort.EXPECT().
-			SetComponent(gomock.Any()).
-			AnyTimes()
-
-		topPort := NewMockPort(mockCtrl)
-		topPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("TopPort")).
-			AnyTimes()
-		topPort.EXPECT().
-			Name().
-			Return("TopPort").
-			AnyTimes()
-		topPort.EXPECT().
-			SetComponent(gomock.Any()).
-			AnyTimes()
-
-		bottomPort := NewMockPort(mockCtrl)
-		bottomPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("BottomPort")).
-			AnyTimes()
-		bottomPort.EXPECT().
-			Name().
-			Return("BottomPort").
-			AnyTimes()
-		bottomPort.EXPECT().
-			SetComponent(gomock.Any()).
-			AnyTimes()
+		engine = timing.NewSerialEngine()
 
 		comp = MakeBuilder().
-			WithEngine(engine).
-			WithTranslationProviderMapperType("single").
-			WithTranslationProviders(messaging.RemotePort("RemotePort")).
-			WithTopPort(topPort).
-			WithBottomPort(bottomPort).
-			WithControlPort(controlPort).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSpec(DefaultSpec()).
+			WithResources(Resources{
+				TranslationProviderMapper: &mem.SinglePortMapper{
+					Port: "RemotePort",
+				},
+			}).
 			Build("TLB")
+
+		plugNoopConn(comp)
 
 		ctrlMW = comp.Middlewares()[0].(*ctrlMiddleware)
 	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
-
 	It("should do nothing if there is no req in ctrlPort", func() {
-		controlPort.EXPECT().PeekIncoming().Return(nil)
-
 		madeProgress := ctrlMW.Tick()
 
 		Expect(madeProgress).To(BeFalse())
 	})
-
 })

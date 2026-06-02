@@ -16,9 +16,14 @@ func (holder *MiddlewareHolder) AddMiddleware(middleware Middleware) {
 	holder.middlewares = append(holder.middlewares, middleware)
 }
 
-// Middlewares returns the list of middleware.
+// Middlewares returns a copy of the middleware list. The copy prevents callers
+// from mutating the holder's internal slice; the middleware objects themselves
+// are shared.
 func (holder *MiddlewareHolder) Middlewares() []Middleware {
-	return holder.middlewares
+	middlewares := make([]Middleware, len(holder.middlewares))
+	copy(middlewares, holder.middlewares)
+
+	return middlewares
 }
 
 // Tick processes a tick event. It returns true if progress is made.

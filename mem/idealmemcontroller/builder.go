@@ -7,141 +7,104 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// DefaultSpec provides default configuration for the ideal memory controller.
-var DefaultSpec = Spec{
-	Freq:          1 * timing.GHz,
-	Latency:       100,
-	Width:         1,
-	CacheLineSize: 64,
+// defaultSpec provides the default configuration for the ideal memory
+// controller.
+var defaultSpec = Spec{
+	Freq:               1 * timing.GHz,
+	Latency:            100,
+	Width:              1,
+	CacheLineSize:      64,
+	Capacity:           4 * mem.GB,
+	TopPortBufferSize:  16,
+	CtrlPortBufferSize: 16,
 }
 
-// Builder builds ideal memory controller components.
+// DefaultSpec returns a copy of the default configuration. Callers typically
+// obtain it, tweak the fields they care about, and pass it to WithSpec.
+func DefaultSpec() Spec {
+	return defaultSpec
+}
+
+// Builder builds ideal memory controller components. Configuration is supplied
+// as a whole through WithSpec; wiring is supplied through WithRegistrar and
+// WithResources. The component creates its own ports.
 type Builder struct {
-	spec       Spec
-	capacity   uint64
-	engine     timing.EventScheduler
-	topBufSize int
-	storage    *mem.Storage
-	topPort    messaging.Port
-	ctrlPort   messaging.Port
+	spec      Spec
+	registrar modeling.Registrar
+	resources Resources
 }
 
-// MakeBuilder returns a new Builder
+// MakeBuilder returns a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{
-		spec:       DefaultSpec,
-		capacity:   4 * mem.GB,
-		topBufSize: 16,
-	}
+	return Builder{spec: defaultSpec}
 }
 
-// WithSpec sets the spec of the memory controller. If the provided spec has
-// a zero Freq, the builder's current Freq is preserved.
+// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// registrar provides the engine and registers the built component.
+func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+	b.registrar = reg
+	return b
+}
+
+// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
 func (b Builder) WithSpec(spec Spec) Builder {
-	prevFreq := b.spec.Freq
 	b.spec = spec
-	if b.spec.Freq == 0 {
-		b.spec.Freq = prevFreq
-	}
 	return b
 }
 
-// WithFreq sets the frequency of the memory controller
-func (b Builder) WithFreq(freq timing.Freq) Builder {
-	b.spec.Freq = freq
+// WithResources injects the component's shared resources (e.g. a storage shared
+// with other components). If not set, the component builds its own, sized by
+// Spec.Capacity.
+func (b Builder) WithResources(r Resources) Builder {
+	b.resources = r
 	return b
 }
 
-// WithNewStorage sets the capacity of the memory controller
-func (b Builder) WithNewStorage(capacity uint64) Builder {
-	b.capacity = capacity
-	return b
-}
-
-// WithEngine sets the engine of the memory controller
-func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
-	b.engine = engine
-	return b
-}
-
-// WithTopBufSize sets the size of the top buffer
-func (b Builder) WithTopBufSize(topBufSize int) Builder {
-	b.topBufSize = topBufSize
-	return b
-}
-
-// WithStorage sets the storage of the memory controller
-func (b Builder) WithStorage(storage *mem.Storage) Builder {
-	b.storage = storage
-	return b
-}
-
-// WithAddressConverter sets the address converter of the memory controller
-func (b Builder) WithAddressConverter(
-	addressConverter mem.AddressConverter,
-) Builder {
-	if ic, ok := addressConverter.(mem.InterleavingConverter); ok {
-		b.spec.AddrConvKind = "interleaving"
-		b.spec.AddrInterleavingSize = ic.InterleavingSize
-		b.spec.AddrTotalNumOfElements = ic.TotalNumOfElements
-		b.spec.AddrCurrentElementIndex = ic.CurrentElementIndex
-		b.spec.AddrOffset = ic.Offset
+// Build builds a new Comp. It creates the component's Top and Control ports.
+func (b Builder) Build(name string) *Comp {
+	if b.registrar == nil {
+		panic("idealmemcontroller: WithRegistrar is required")
 	}
 
-	return b
-}
-
-// WithTopPort sets the top port of the memory controller
-func (b Builder) WithTopPort(port messaging.Port) Builder {
-	b.topPort = port
-	return b
-}
-
-// WithCtrlPort sets the control port of the memory controller
-func (b Builder) WithCtrlPort(port messaging.Port) Builder {
-	b.ctrlPort = port
-	return b
-}
-
-// Build builds a new Comp
-func (b Builder) Build(
-	name string,
-) *Comp {
 	spec := b.spec
-	spec.StorageRef = name
+	spec.StorageRef = name + ".Storage"
 
-	initialState := State{
-		CurrentState: "enable",
-	}
+	storage := b.resolveStorage(name, spec)
 
-	modelComp := modeling.NewBuilder[Spec, State]().
-		WithEngine(b.engine).
+	modelComp := modeling.NewBuilder[Spec, State, Resources]().
+		WithEngine(b.registrar.GetEngine()).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithResources(Resources{Storage: storage}).
 		Build(name)
-	modelComp.State = initialState
+	modelComp.State = State{CurrentState: "enable"}
 
-	var storage *mem.Storage
-	if b.storage == nil {
-		storage = mem.NewStorage(b.capacity)
-	} else {
-		storage = b.storage
+	modelComp.AddMiddleware(&ctrlMiddleware{comp: modelComp})
+	modelComp.AddMiddleware(&memMiddleware{comp: modelComp})
+
+	topPort := messaging.NewPort(
+		modelComp, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
+	modelComp.AddPort("Top", topPort)
+	ctrlPort := messaging.NewPort(
+		modelComp, spec.CtrlPortBufferSize, spec.CtrlPortBufferSize,
+		name+".Control")
+	modelComp.AddPort("Control", ctrlPort)
+
+	b.registrar.RegisterComponent(modelComp)
+
+	return modelComp
+}
+
+// resolveStorage returns the injected storage, or builds a default one sized by
+// Spec.Capacity that self-registers with the registrar.
+func (b Builder) resolveStorage(name string, spec Spec) *mem.Storage {
+	if b.resources.Storage != nil {
+		return b.resources.Storage
 	}
 
-	c := &Comp{
-		Component: modelComp,
-		storage:   storage,
-	}
-
-	ctrlMW := &ctrlMiddleware{comp: modelComp}
-	modelComp.AddMiddleware(ctrlMW)
-	memMW := &memMiddleware{comp: modelComp, storage: c.storage}
-	modelComp.AddMiddleware(memMW)
-
-	b.topPort.SetComponent(c)
-	modelComp.AddPort("Top", b.topPort)
-	b.ctrlPort.SetComponent(c)
-	modelComp.AddPort("Control", b.ctrlPort)
-
-	return c
+	return mem.MakeStorageBuilder().
+		WithCapacity(spec.Capacity).
+		WithSimulation(b.registrar).
+		Build(name + ".Storage")
 }

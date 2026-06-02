@@ -51,9 +51,14 @@ func (h *HookableBase) NumHooks() int {
 	return len(h.hookList)
 }
 
-// Hooks returns all the hooks registered.
+// Hooks returns a copy of the registered hooks. The copy prevents callers from
+// mutating the internal hook list, which would bypass the duplicate check in
+// AcceptHook.
 func (h *HookableBase) Hooks() []Hook {
-	return h.hookList
+	hooks := make([]Hook, len(h.hookList))
+	copy(hooks, h.hookList)
+
+	return hooks
 }
 
 // AcceptHook register a hook.

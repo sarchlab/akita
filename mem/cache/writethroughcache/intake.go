@@ -22,7 +22,7 @@ func (s *intake) Tick() bool {
 	}
 
 	next := &s.cache.comp.State
-	if s.countActive(next) >= s.cache.comp.Spec.MaxNumConcurrentTrans {
+	if s.countActive(next) >= s.cache.comp.Spec().MaxNumConcurrentTrans {
 		return false
 	}
 

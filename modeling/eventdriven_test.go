@@ -1,7 +1,6 @@
 package modeling_test
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/modeling"
@@ -28,7 +27,7 @@ type mockProcessor struct {
 }
 
 func (p *mockProcessor) Process(
-	comp *modeling.EventDrivenComponent[edSpec, edState],
+	comp *modeling.EventDrivenComponent[edSpec, edState, modeling.None],
 	now timing.VTimeInSec,
 ) bool {
 	p.callCount++
@@ -48,7 +47,7 @@ func TestEventDrivenBuilderBuild(t *testing.T) {
 	spec := edSpec{Capacity: 10, Label: "test"}
 	proc := &mockProcessor{}
 
-	comp := modeling.NewEventDrivenBuilder[edSpec, edState]().
+	comp := modeling.NewEventDrivenBuilder[edSpec, edState, modeling.None]().
 		WithEngine(engine).
 		WithSpec(spec).
 		WithProcessor(proc).
@@ -58,8 +57,8 @@ func TestEventDrivenBuilderBuild(t *testing.T) {
 		t.Errorf("Name() = %q, want %q", comp.Name(), "EDComp")
 	}
 
-	if comp.Spec != spec {
-		t.Errorf("Spec() = %v, want %v", comp.Spec, spec)
+	if comp.Spec() != spec {
+		t.Errorf("Spec() = %v, want %v", comp.Spec(), spec)
 	}
 
 	if comp.State.Count != 0 {
@@ -73,7 +72,7 @@ func TestEventDrivenGetStateAssignment(t *testing.T) {
 	engine := timing.NewSerialEngine()
 	proc := &mockProcessor{}
 
-	comp := modeling.NewEventDrivenBuilder[edSpec, edState]().
+	comp := modeling.NewEventDrivenBuilder[edSpec, edState, modeling.None]().
 		WithEngine(engine).
 		WithProcessor(proc).
 		Build("EDComp")
@@ -93,7 +92,7 @@ func TestEventDrivenStatePtr(t *testing.T) {
 	engine := timing.NewSerialEngine()
 	proc := &mockProcessor{}
 
-	comp := modeling.NewEventDrivenBuilder[edSpec, edState]().
+	comp := modeling.NewEventDrivenBuilder[edSpec, edState, modeling.None]().
 		WithEngine(engine).
 		WithProcessor(proc).
 		Build("EDComp")
@@ -117,7 +116,7 @@ func TestEventDrivenHandle(t *testing.T) {
 	engine := timing.NewSerialEngine()
 	proc := &mockProcessor{}
 
-	comp := modeling.NewEventDrivenBuilder[edSpec, edState]().
+	comp := modeling.NewEventDrivenBuilder[edSpec, edState, modeling.None]().
 		WithEngine(engine).
 		WithProcessor(proc).
 		Build("EDComp")
@@ -145,73 +144,13 @@ func TestEventDrivenHandle(t *testing.T) {
 	}
 }
 
-// --- SaveState/LoadState ---
-
-func TestEventDrivenSaveLoadState(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	proc := &mockProcessor{}
-	spec := edSpec{Capacity: 5, Label: "save-test"}
-
-	comp := modeling.NewEventDrivenBuilder[edSpec, edState]().
-		WithEngine(engine).
-		WithSpec(spec).
-		WithProcessor(proc).
-		Build("EDComp")
-
-	comp.State = edState{Count: 77, Message: "saved"}
-
-	var buf bytes.Buffer
-	if err := comp.SaveState(&buf); err != nil {
-		t.Fatalf("SaveState() error: %v", err)
-	}
-
-	// Create a new component and load state into it.
-	comp2 := modeling.NewEventDrivenBuilder[edSpec, edState]().
-		WithEngine(engine).
-		WithProcessor(proc).
-		Build("EDComp2")
-
-	if err := comp2.LoadState(&buf); err != nil {
-		t.Fatalf("LoadState() error: %v", err)
-	}
-
-	if comp2.Spec != spec {
-		t.Errorf("loaded spec = %v, want %v", comp2.Spec, spec)
-	}
-	if comp2.State.Count != 77 {
-		t.Errorf("loaded state count = %d, want 77", comp2.State.Count)
-	}
-	if comp2.State.Message != "saved" {
-		t.Errorf("loaded state message = %q, want %q",
-			comp2.State.Message, "saved")
-	}
-}
-
-// --- ResetWakeup ---
-
-func TestEventDrivenResetWakeup(t *testing.T) {
-	engine := timing.NewSerialEngine()
-	proc := &mockProcessor{}
-
-	comp := modeling.NewEventDrivenBuilder[edSpec, edState]().
-		WithEngine(engine).
-		WithProcessor(proc).
-		Build("EDComp")
-
-	// After build, pendingWakeup is -1, so scheduling should work.
-	// Schedule a wakeup, then reset and schedule again — no panic.
-	comp.ScheduleWakeAt(10)
-	comp.ResetWakeup()
-	comp.ScheduleWakeAt(5) // Should succeed since we reset.
-}
-
 // --- NotifyRecv and NotifyPortFree ---
 
 func TestEventDrivenNotifyRecv(t *testing.T) {
 	engine := timing.NewSerialEngine()
 	proc := &mockProcessor{}
 
-	comp := modeling.NewEventDrivenBuilder[edSpec, edState]().
+	comp := modeling.NewEventDrivenBuilder[edSpec, edState, modeling.None]().
 		WithEngine(engine).
 		WithProcessor(proc).
 		Build("EDComp")
@@ -224,7 +163,7 @@ func TestEventDrivenNotifyPortFree(t *testing.T) {
 	engine := timing.NewSerialEngine()
 	proc := &mockProcessor{}
 
-	comp := modeling.NewEventDrivenBuilder[edSpec, edState]().
+	comp := modeling.NewEventDrivenBuilder[edSpec, edState, modeling.None]().
 		WithEngine(engine).
 		WithProcessor(proc).
 		Build("EDComp")
@@ -239,7 +178,7 @@ func TestEventDrivenScheduleWakeAtDedup(t *testing.T) {
 	engine := timing.NewSerialEngine()
 	proc := &mockProcessor{}
 
-	comp := modeling.NewEventDrivenBuilder[edSpec, edState]().
+	comp := modeling.NewEventDrivenBuilder[edSpec, edState, modeling.None]().
 		WithEngine(engine).
 		WithProcessor(proc).
 		Build("EDComp")

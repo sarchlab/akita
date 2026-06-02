@@ -6,41 +6,62 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// Comp is the ping component built on EventDrivenComponent.
-type Comp = modeling.EventDrivenComponent[PingSpec, PingState]
+// defaultSpec provides the default configuration for a ping component.
+var defaultSpec = Spec{
+	OutPortBufferSize: 4,
+}
 
-// Builder builds ping components.
+// DefaultSpec returns a copy of the default configuration. Callers obtain it,
+// tweak the fields they care about, and pass it to WithSpec.
+func DefaultSpec() Spec {
+	return defaultSpec
+}
+
+// Builder builds ping components. Configuration is supplied as a whole through
+// WithSpec; wiring is supplied through WithRegistrar. The component creates its
+// own Out port.
 type Builder struct {
-	engine  timing.EventScheduler
-	outPort messaging.Port
+	spec      Spec
+	registrar modeling.Registrar
 }
 
-// MakeBuilder creates a new Builder.
+// MakeBuilder creates a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{}
+	return Builder{spec: defaultSpec}
 }
 
-// WithEngine sets the simulation engine.
-func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
-	b.engine = engine
+// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// registrar provides the engine and registers the built component.
+func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+	b.registrar = reg
 	return b
 }
 
-// WithOutPort sets the output port.
-func (b Builder) WithOutPort(port messaging.Port) Builder {
-	b.outPort = port
+// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
 	return b
 }
 
-// Build creates a new ping component with the given name.
+// Build creates a new ping component with the given name. It creates the
+// component's Out port.
 func (b Builder) Build(name string) *Comp {
-	comp := modeling.NewEventDrivenBuilder[PingSpec, PingState]().
-		WithEngine(b.engine).
-		WithSpec(PingSpec{OutPort: b.outPort}).
-		WithProcessor(&PingProcessor{}).
+	if b.registrar == nil {
+		panic("ping: WithRegistrar is required")
+	}
+
+	comp := modeling.NewEventDrivenBuilder[Spec, State, modeling.None]().
+		WithEngine(b.registrar.GetEngine()).
+		WithSpec(b.spec).
+		WithProcessor(&pingProcessor{}).
 		Build(name)
 
-	b.outPort.SetComponent(comp)
+	outPort := messaging.NewPort(
+		comp, b.spec.OutPortBufferSize, b.spec.OutPortBufferSize, name+".Out")
+	comp.AddPort("Out", outPort)
+
+	b.registrar.RegisterComponent(comp)
 
 	return comp
 }
@@ -53,7 +74,7 @@ func SchedulePing(
 	dst messaging.RemotePort,
 ) {
 	state := &comp.State
-	state.ScheduledPings = append(state.ScheduledPings, ScheduledPing{
+	state.ScheduledPings = append(state.ScheduledPings, scheduledPing{
 		SendAt: sendAt,
 		Dst:    dst,
 	})

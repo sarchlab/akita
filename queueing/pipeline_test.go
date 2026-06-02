@@ -1,18 +1,19 @@
 package queueing
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func newPipeline(width, numStages int) *Pipeline[int] {
-	return &Pipeline[int]{
-		Width:     width,
-		NumStages: numStages,
-	}
+	p := NewPipeline[int](width, numStages)
+	return &p
+}
+
+func newPostBuf(capacity int) *Buffer[int] {
+	b := NewBuffer[int]("post", capacity)
+	return &b
 }
 
 func TestPipelineCanAcceptEmpty(t *testing.T) {
@@ -42,36 +43,13 @@ func TestPipelineAcceptAssignsLane(t *testing.T) {
 func TestPipelineAcceptCycleLeft(t *testing.T) {
 	p := newPipeline(1, 4)
 	p.Accept(42)
-	assert.Equal(t, 0, p.stages[0].CycleLeft) // Default stage latency is 1.
-}
-
-func TestPipelineAcceptUsesStageLatency(t *testing.T) {
-	p := &Pipeline[int]{
-		Width:        1,
-		NumStages:    1,
-		StageLatency: 2,
-	}
-	postBuf := &Buffer[int]{BufferName: "post", Cap: 10}
-
-	p.Accept(42)
-	assert.Equal(t, 1, p.stages[0].CycleLeft)
-
-	moved := p.Tick(postBuf)
-	assert.True(t, moved)
-	assert.Equal(t, 1, p.Len())
-	assert.Equal(t, 0, postBuf.Size())
-	assert.Equal(t, 0, p.stages[0].CycleLeft)
-
-	moved = p.Tick(postBuf)
-	assert.True(t, moved)
-	assert.Equal(t, 0, p.Len())
-	assert.Equal(t, 1, postBuf.Size())
+	assert.Equal(t, 0, p.stages[0].CycleLeft) // CycleLeft starts at 0
 }
 
 func TestPipelineTickAdvancesToPostBuf(t *testing.T) {
 	// Single lane, single stage pipeline.
 	p := newPipeline(1, 1)
-	postBuf := &Buffer[int]{BufferName: "post", Cap: 10}
+	postBuf := newPostBuf(10)
 
 	p.Accept(100)
 
@@ -82,13 +60,13 @@ func TestPipelineTickAdvancesToPostBuf(t *testing.T) {
 	assert.True(t, moved)
 	assert.Equal(t, 0, len(p.stages))
 	assert.Equal(t, 1, postBuf.Size())
-	assert.Equal(t, 100, postBuf.Elements[0])
+	assert.Equal(t, 100, postBuf.Peek())
 }
 
 func TestPipelineTickMultiStage(t *testing.T) {
 	// 1 lane, 3 stages. Item should take 3 ticks to reach output.
 	p := newPipeline(1, 3)
-	postBuf := &Buffer[int]{BufferName: "post", Cap: 10}
+	postBuf := newPostBuf(10)
 
 	p.Accept(42)
 
@@ -114,7 +92,7 @@ func TestPipelineTickMultiStage(t *testing.T) {
 
 func TestPipelineTickPostBufFull(t *testing.T) {
 	p := newPipeline(1, 1)
-	postBuf := &Buffer[int]{BufferName: "post", Cap: 0}
+	postBuf := newPostBuf(0)
 
 	p.Accept(10)
 
@@ -125,7 +103,7 @@ func TestPipelineTickPostBufFull(t *testing.T) {
 
 func TestPipelineTickNoMovement(t *testing.T) {
 	p := newPipeline(1, 3)
-	postBuf := &Buffer[int]{BufferName: "post", Cap: 10}
+	postBuf := newPostBuf(10)
 
 	moved := p.Tick(postBuf)
 	assert.False(t, moved) // Empty pipeline, nothing to move.
@@ -133,7 +111,7 @@ func TestPipelineTickNoMovement(t *testing.T) {
 
 func TestPipelineMultiLane(t *testing.T) {
 	p := newPipeline(2, 2)
-	postBuf := &Buffer[int]{BufferName: "post", Cap: 10}
+	postBuf := newPostBuf(10)
 
 	p.Accept(1)
 	p.Accept(2)
@@ -153,35 +131,27 @@ func TestPipelineMultiLane(t *testing.T) {
 
 func TestPipelineBlockedByNextStage(t *testing.T) {
 	// 1 lane, 2 stages. Put items at both stages.
-	p := &Pipeline[int]{
-		Width:     1,
-		NumStages: 2,
-		stages: []pipelineStage[int]{
-			{Lane: 0, Stage: 0, CycleLeft: 0},
-			{Lane: 0, Stage: 1, CycleLeft: 0},
-		},
+	p := newPipeline(1, 2)
+	p.stages = []PipelineStage[int]{
+		{Lane: 0, Stage: 0, Item: 10, CycleLeft: 0},
+		{Lane: 0, Stage: 1, Item: 20, CycleLeft: 0},
 	}
-	p.stages[0].Item = 10
-	p.stages[1].Item = 20
 
 	// postBuf is full, so stage-1 item can't leave, stage-0 can't advance.
-	postBuf := &Buffer[int]{BufferName: "post", Cap: 0}
+	postBuf := newPostBuf(0)
 	moved := p.Tick(postBuf)
 	assert.False(t, moved)
 	assert.Equal(t, 2, len(p.stages))
 }
 
 func TestPipelineBlockedThenUnblocked(t *testing.T) {
-	p := &Pipeline[int]{
-		Width:     1,
-		NumStages: 2,
-		stages: []pipelineStage[int]{
-			{Lane: 0, Stage: 0, Item: 10, CycleLeft: 0},
-			{Lane: 0, Stage: 1, Item: 20, CycleLeft: 0},
-		},
+	p := newPipeline(1, 2)
+	p.stages = []PipelineStage[int]{
+		{Lane: 0, Stage: 0, Item: 10, CycleLeft: 0},
+		{Lane: 0, Stage: 1, Item: 20, CycleLeft: 0},
 	}
 
-	postBuf := &Buffer[int]{BufferName: "post", Cap: 10}
+	postBuf := newPostBuf(10)
 
 	// Tick: stage-1 item outputs, stage-0 item advances.
 	moved := p.Tick(postBuf)
@@ -190,96 +160,12 @@ func TestPipelineBlockedThenUnblocked(t *testing.T) {
 	assert.Equal(t, 1, p.stages[0].Stage)
 	assert.Equal(t, 10, p.stages[0].Item)
 	assert.Equal(t, 1, postBuf.Size())
-	assert.Equal(t, 20, postBuf.Elements[0])
-}
-
-func TestPipelineJSONRoundTrip(t *testing.T) {
-	p := &Pipeline[string]{
-		Width:        2,
-		NumStages:    3,
-		StageLatency: 2,
-		stages: []pipelineStage[string]{
-			{Lane: 0, Stage: 1, Item: "alpha", CycleLeft: 1},
-			{Lane: 1, Stage: 0, Item: "beta", CycleLeft: 2},
-		},
-	}
-
-	data, err := json.Marshal(p)
-	require.NoError(t, err)
-
-	var p2 Pipeline[string]
-	err = json.Unmarshal(data, &p2)
-	require.NoError(t, err)
-
-	assert.Equal(t, 2, p2.Width)
-	assert.Equal(t, 3, p2.NumStages)
-	assert.Equal(t, 2, p2.StageLatency)
-	assert.Equal(t, 2, len(p2.stages))
-	assert.Equal(t, "alpha", p2.stages[0].Item)
-	assert.Equal(t, "beta", p2.stages[1].Item)
-	assert.Equal(t, 1, p2.stages[0].CycleLeft)
-	assert.Equal(t, 2, p2.stages[1].CycleLeft)
-}
-
-func TestPipelineJSONRoundTripStruct(t *testing.T) {
-	type myItem struct {
-		ID int `json:"id"`
-	}
-
-	p := &Pipeline[myItem]{
-		Width:     1,
-		NumStages: 2,
-		stages: []pipelineStage[myItem]{
-			{Lane: 0, Stage: 0, Item: myItem{ID: 7}, CycleLeft: 1},
-		},
-	}
-
-	data, err := json.Marshal(p)
-	require.NoError(t, err)
-
-	var p2 Pipeline[myItem]
-	err = json.Unmarshal(data, &p2)
-	require.NoError(t, err)
-
-	assert.Equal(t, 7, p2.stages[0].Item.ID)
-}
-
-func TestPipelineUnmarshalLegacyJSON(t *testing.T) {
-	data := []byte(`{
-		"width": 1,
-		"num_stages": 1,
-		"stages": [
-			{"lane": 0, "stage": 0, "item": 7, "cycle_left": 0}
-		]
-	}`)
-
-	var p Pipeline[int]
-	err := json.Unmarshal(data, &p)
-	require.NoError(t, err)
-
-	postBuf := &Buffer[int]{BufferName: "post", Cap: 10}
-	moved := p.Tick(postBuf)
-
-	assert.True(t, moved)
-	assert.Equal(t, 0, p.StageLatency)
-	assert.Equal(t, 0, p.Len())
-	assert.Equal(t, []int{7}, postBuf.Elements)
-}
-
-func TestPipelineClear(t *testing.T) {
-	p := newPipeline(2, 3)
-	p.Accept(1)
-	p.Accept(2)
-
-	p.Clear()
-
-	assert.Equal(t, 0, p.Len())
-	assert.True(t, p.CanAccept())
+	assert.Equal(t, 20, postBuf.Peek())
 }
 
 func TestPipelineStreamOfItems(t *testing.T) {
 	p := newPipeline(1, 2)
-	postBuf := &Buffer[int]{BufferName: "post", Cap: 10}
+	postBuf := newPostBuf(10)
 
 	p.Accept(1)
 
@@ -298,19 +184,16 @@ func TestPipelineStreamOfItems(t *testing.T) {
 	p.Tick(postBuf)
 	assert.Equal(t, 2, postBuf.Size())
 
-	assert.Equal(t, 1, postBuf.Elements[0])
-	assert.Equal(t, 2, postBuf.Elements[1])
+	assert.Equal(t, 1, postBuf.Pop())
+	assert.Equal(t, 2, postBuf.Pop())
 }
 
 func TestPipelineCycleLeftDecrement(t *testing.T) {
-	p := &Pipeline[int]{
-		Width:     1,
-		NumStages: 2,
-		stages: []pipelineStage[int]{
-			{Lane: 0, Stage: 0, Item: 99, CycleLeft: 2},
-		},
+	p := newPipeline(1, 2)
+	p.stages = []PipelineStage[int]{
+		{Lane: 0, Stage: 0, Item: 99, CycleLeft: 2},
 	}
-	postBuf := &Buffer[int]{BufferName: "post", Cap: 10}
+	postBuf := newPostBuf(10)
 
 	// Tick 1: CycleLeft 2→1.
 	moved := p.Tick(postBuf)

@@ -14,7 +14,7 @@ import (
 )
 
 type mmuCacheMiddleware struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, Resources]
 }
 
 func (m *mmuCacheMiddleware) topPort() messaging.Port {
@@ -85,7 +85,7 @@ func (m *mmuCacheMiddleware) handleEnable() bool {
 // processRequests handles both incoming lookup requests and bottom port responses.
 func (m *mmuCacheMiddleware) processRequests() bool {
 	madeProgress := false
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.lookup() || madeProgress
 	}
@@ -116,7 +116,7 @@ func (m *mmuCacheMiddleware) lookup() bool {
 func (m *mmuCacheMiddleware) walkCacheLevels(
 	msg *vm.TranslationReq,
 ) bool {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	totalLatency := spec.LatencyPerLevel * uint64(spec.NumLevels)
 
 	for level := spec.NumLevels - 1; level >= 0; level-- {
@@ -137,7 +137,7 @@ func (m *mmuCacheMiddleware) walkCacheLevels(
 func (m *mmuCacheMiddleware) lookupLevel(
 	level int, req *vm.TranslationReq,
 ) bool {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	next := &m.comp.State
 	vAddr := req.VAddr
 	pid := req.PID
@@ -162,12 +162,12 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 		return false
 	}
 
-	spec := m.comp.Spec
+	res := m.comp.Resources()
 
 	reqToBottom := &vm.TranslationReq{}
 	reqToBottom.ID = timing.GetIDGenerator().Generate()
 	reqToBottom.Src = m.bottomPort().AsRemote()
-	reqToBottom.Dst = spec.LowModulePort
+	reqToBottom.Dst = res.LowModulePort
 	reqToBottom.PID = req.PID
 	reqToBottom.VAddr = req.VAddr
 	reqToBottom.DeviceID = req.DeviceID
@@ -208,14 +208,14 @@ func (m *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
 
 	m.updateCacheLevels(rsp)
 
-	spec := m.comp.Spec
+	res := m.comp.Resources()
 
 	rspToTop := &vm.TranslationRsp{
 		Page: rsp.Page,
 	}
 	rspToTop.ID = timing.GetIDGenerator().Generate()
 	rspToTop.Src = m.topPort().AsRemote()
-	rspToTop.Dst = spec.UpModulePort
+	rspToTop.Dst = res.UpModulePort
 	rspToTop.RspTo = rsp.RspTo
 	rspToTop.TrafficClass = "vm.TranslationRsp"
 
@@ -231,13 +231,13 @@ func (m *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
 
 // segToSetID maps a segment to a cache set ID using modulo hashing.
 func (m *mmuCacheMiddleware) segToSetID(seg uint64) int {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	return int(seg % uint64(spec.NumBlocks))
 }
 
 // updateCacheLevels updates all cache levels with the translation response.
 func (m *mmuCacheMiddleware) updateCacheLevels(rsp *vm.TranslationRsp) bool {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	next := &m.comp.State
 	page := rsp.Page
 	vAddr := page.VAddr
@@ -263,7 +263,7 @@ func (m *mmuCacheMiddleware) updateCacheLevels(rsp *vm.TranslationRsp) bool {
 
 func (m *mmuCacheMiddleware) processMMUCacheFlush() bool {
 	next := &m.comp.State
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 
 	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()

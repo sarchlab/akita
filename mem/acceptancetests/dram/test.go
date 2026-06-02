@@ -11,7 +11,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/dram"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -37,28 +36,29 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 	engine := s.GetEngine()
 
 	conn := directconnection.MakeBuilder().
-		WithEngine(engine).
-		WithFreq(1 * timing.GHz).
+		WithRegistrar(s).
 		Build("Conn")
 
+	agentSpec := memaccessagent.DefaultSpec()
+	agentSpec.MaxAddress = *maxAddressFlag
+	agentSpec.WriteLeft = *numAccessFlag
+	agentSpec.ReadLeft = *numAccessFlag
+
 	agent := memaccessagent.MakeBuilder().
-		WithEngine(engine).
-		WithMaxAddress(*maxAddressFlag).
-		WithWriteLeft(*numAccessFlag).
-		WithReadLeft(*numAccessFlag).
-		WithMemPort(messaging.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
+		WithRegistrar(s).
+		WithSpec(agentSpec).
 		Build("MemAccessAgent")
-	s.RegisterComponent(agent)
 	if monitor := s.GetMonitor(); monitor != nil {
 		agent.CreateProgressBars(monitor.CreateProgressBar)
 	}
 
+	dramSpec := dram.DefaultSpec()
+	dramSpec.Freq = 1 * timing.GHz
+
 	memCtrl := dram.MakeBuilder().
-		WithEngine(engine).
-		WithFreq(1 * timing.GHz).
-		WithTopPort(messaging.NewPort(nil, 1024, 1024, "Mem.TopPort")).
+		WithRegistrar(s).
+		WithSpec(dramSpec).
 		Build("Mem")
-	s.RegisterComponent(memCtrl)
 
 	agent.LowModule = memCtrl.GetPortByName("Top")
 

@@ -1,34 +1,32 @@
 package ping
 
 import (
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 func Example_pingWithEvents() {
 	engine := timing.NewSerialEngine()
+	registrar := modeling.NewStandaloneRegistrar(engine)
 
 	agentA := MakeBuilder().
-		WithEngine(engine).
-		WithOutPort(messaging.NewPort(nil, 4, 4, "AgentA.OutPort")).
+		WithRegistrar(registrar).
 		Build("AgentA")
 
 	agentB := MakeBuilder().
-		WithEngine(engine).
-		WithOutPort(messaging.NewPort(nil, 4, 4, "AgentB.OutPort")).
+		WithRegistrar(registrar).
 		Build("AgentB")
 
 	conn := directconnection.MakeBuilder().
-		WithEngine(engine).
-		WithFreq(1 * timing.GHz).
+		WithRegistrar(registrar).
 		Build("Conn")
 
-	conn.PlugIn(agentA.Spec.OutPort)
-	conn.PlugIn(agentB.Spec.OutPort)
+	conn.PlugIn(agentA.GetPortByName("Out"))
+	conn.PlugIn(agentB.GetPortByName("Out"))
 
-	SchedulePing(agentA, 1, agentB.Spec.OutPort.AsRemote())
-	SchedulePing(agentA, 3, agentB.Spec.OutPort.AsRemote())
+	SchedulePing(agentA, 1, agentB.GetPortByName("Out").AsRemote())
+	SchedulePing(agentA, 3, agentB.GetPortByName("Out").AsRemote())
 
 	engine.Run()
 	// Output:

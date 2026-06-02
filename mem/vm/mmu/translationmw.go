@@ -23,22 +23,20 @@ type pageTable interface {
 	GetLog2PageSize() uint64
 }
 
-// PageTable returns the page table from an MMU component.
-func PageTable(c *modeling.Component[Spec, State]) vm.PageTable {
-	return c.Middlewares()[0].(*translationMW).pageTable
-}
-
 // translationMW handles translation requests: parsing from top,
 // page table walks, and sending responses for local hits.
 type translationMW struct {
-	comp      *modeling.Component[Spec, State]
-	pageTable vm.PageTable
+	comp *modeling.Component[Spec, State, Resources]
 }
 
 // Port helpers.
 
 func (m *translationMW) topPort() messaging.Port {
 	return m.comp.GetPortByName("Top")
+}
+
+func (m *translationMW) pageTable() vm.PageTable {
+	return m.comp.Resources().PageTable
 }
 
 // Tick runs the translation stages.
@@ -82,18 +80,18 @@ func (m *translationMW) walkPageTable() bool {
 }
 
 func (m *translationMW) finalizePageWalk(walkingIndex int) bool {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	state := &m.comp.State
 	walking := state.WalkingTranslations[walkingIndex]
 
-	page, found := m.pageTable.Find(
+	page, found := m.pageTable().Find(
 		vm.PID(walking.PID), walking.VAddr)
 
 	if !found {
 		if spec.AutoPageAllocation {
 			page = m.createDefaultPage(
 				vm.PID(walking.PID), walking.VAddr, walking.DeviceID)
-			m.pageTable.Insert(page)
+			m.pageTable().Insert(page)
 		} else {
 			panic("page not found")
 		}
@@ -115,7 +113,7 @@ func (m *translationMW) finalizePageWalk(walkingIndex int) bool {
 func (m *translationMW) addTransactionToMigrationQueue(
 	walkingIndex int,
 ) bool {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	state := &m.comp.State
 
 	if len(state.MigrationQueue) >= spec.MigrationQueueSize {
@@ -128,7 +126,7 @@ func (m *translationMW) addTransactionToMigrationQueue(
 
 	page := state.WalkingTranslations[walkingIndex].Page
 	page.IsMigrating = true
-	m.pageTable.Update(page)
+	m.pageTable().Update(page)
 
 	return true
 }
@@ -177,7 +175,7 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 }
 
 func (m *translationMW) parseFromTop() bool {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	state := &m.comp.State
 
 	if len(state.WalkingTranslations) >= spec.MaxRequestsInFlight {
@@ -202,7 +200,7 @@ func (m *translationMW) parseFromTop() bool {
 }
 
 func (m *translationMW) startWalking(req *vm.TranslationReq) {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	state := &m.comp.State
 
 	ts := transactionState{
@@ -236,7 +234,7 @@ func (m *translationMW) toRemove(index int) bool {
 func (m *translationMW) createDefaultPage(
 	pid vm.PID, vAddr uint64, deviceID uint64,
 ) vm.Page {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	alignedVAddr := (vAddr >> spec.Log2PageSize) << spec.Log2PageSize
 	pageSize := uint64(1) << spec.Log2PageSize
 	pAddr := m.allocatePhysicalPage()
@@ -255,14 +253,14 @@ func (m *translationMW) createDefaultPage(
 }
 
 func (m *translationMW) allocatePhysicalPage() uint64 {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	state := &m.comp.State
 	pageSize := uint64(1) << spec.Log2PageSize
 
 	for {
 		candidatePage := (state.NextPhysicalPage >> spec.Log2PageSize) << spec.Log2PageSize
 
-		if _, found := m.pageTable.ReverseLookup(candidatePage); !found {
+		if _, found := m.pageTable().ReverseLookup(candidatePage); !found {
 			state.NextPhysicalPage = candidatePage + pageSize
 			return candidatePage
 		}

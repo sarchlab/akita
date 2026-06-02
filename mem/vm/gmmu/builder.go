@@ -7,110 +7,76 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// DefaultSpec provides the default configuration for GMMU components.
-var DefaultSpec = Spec{
-	Freq:                1 * timing.GHz,
-	Log2PageSize:        12,
-	MaxRequestsInFlight: 16,
+// defaultSpec provides the default configuration for GMMU components.
+var defaultSpec = Spec{
+	Freq:                 1 * timing.GHz,
+	Log2PageSize:         12,
+	MaxRequestsInFlight:  16,
+	TopPortBufferSize:    16,
+	BottomPortBufferSize: 16,
 }
 
-// A Builder can build GMMU component
+// DefaultSpec returns a copy of the default configuration. Callers typically
+// obtain it, tweak the fields they care about, and pass it to WithSpec.
+func DefaultSpec() Spec {
+	return defaultSpec
+}
+
+// Builder builds GMMU components. Configuration is supplied as a whole through
+// WithSpec; wiring is supplied through WithRegistrar and WithResources. The
+// component creates its own ports.
 type Builder struct {
-	engine             timing.EventScheduler
-	spec               Spec
-	pageTable          vm.PageTable
-	pageWalkingLatency int
-	topPort            messaging.Port
-	bottomPort         messaging.Port
+	spec      Spec
+	registrar modeling.Registrar
+	resources Resources
 }
 
-// MakeBuilder creates a new builder
+// MakeBuilder creates a new builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{
-		spec: DefaultSpec,
+	return Builder{spec: defaultSpec}
+}
+
+// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// registrar provides the engine and registers the built component.
+func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+	b.registrar = reg
+	return b
+}
+
+// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
+	return b
+}
+
+// WithResources injects the component's shared resources (e.g. a page table
+// shared with other components). If the page table is not set, the component
+// builds its own, sized by Spec.Log2PageSize.
+func (b Builder) WithResources(r Resources) Builder {
+	b.resources = r
+	return b
+}
+
+// Build returns a new GMMU. It creates the component's Top and Bottom ports.
+func (b Builder) Build(name string) *Comp {
+	if b.registrar == nil {
+		panic("gmmu: WithRegistrar is required")
 	}
-}
 
-// WithEngine sets the engine to be used with the GMMU
-func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
-	b.engine = engine
-	return b
-}
-
-// WithFreq sets the frequency at which the GMMU works.
-func (b Builder) WithFreq(freq timing.Freq) Builder {
-	b.spec.Freq = freq
-	return b
-}
-
-// WithLog2PageSize sets the page size that the GMMU supports.
-func (b Builder) WithLog2PageSize(log2PageSize uint64) Builder {
-	b.spec.Log2PageSize = log2PageSize
-	return b
-}
-
-// WithPageTable sets the page table that the GMMU uses.
-func (b Builder) WithPageTable(pageTable vm.PageTable) Builder {
-	b.pageTable = pageTable
-	return b
-}
-
-// WithMaxNumReqInFlight sets the number of requests can be concurrently
-// processed by the GMMU.
-func (b Builder) WithMaxNumReqInFlight(maxNumReqInFlight int) Builder {
-	b.spec.MaxRequestsInFlight = maxNumReqInFlight
-	return b
-}
-
-// WithPageWalkingLatency sets the latency of page walking
-func (b Builder) WithPageWalkingLatency(pageWalkingLatency int) Builder {
-	b.pageWalkingLatency = pageWalkingLatency
-	return b
-}
-
-// WithDeviceID sets the device ID of the GMMU
-func (b Builder) WithDeviceID(deviceID uint64) Builder {
-	b.spec.DeviceID = deviceID
-	return b
-}
-
-// WithLowModule sets the low module of the GMMU
-func (b Builder) WithLowModule(p messaging.RemotePort) Builder {
-	b.spec.LowModule = p
-	return b
-}
-
-// WithTopPort sets the top port of the GMMU
-func (b Builder) WithTopPort(port messaging.Port) Builder {
-	b.topPort = port
-	return b
-}
-
-// WithBottomPort sets the bottom port of the GMMU
-func (b Builder) WithBottomPort(port messaging.Port) Builder {
-	b.bottomPort = port
-	return b
-}
-
-// Build returns a new GMMU
-func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	spec := b.spec
-	spec.Latency = b.pageWalkingLatency
 
-	modelComp := modeling.NewBuilder[Spec, State]().
-		WithEngine(b.engine).
-		WithFreq(b.spec.Freq).
+	pt := b.resolvePageTable(name, spec)
+
+	modelComp := modeling.NewBuilder[Spec, State, Resources]().
+		WithEngine(b.registrar.GetEngine()).
+		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithResources(Resources{PageTable: pt}).
 		Build(name)
 
-	initialState := State{
+	modelComp.State = State{
 		RemoteMemReqs: make(map[uint64]transactionState),
-	}
-	modelComp.State = initialState
-
-	pt := b.pageTable
-	if pt == nil {
-		pt = vm.NewPageTable(b.spec.Log2PageSize)
 	}
 
 	wMW := &walkMW{
@@ -124,17 +90,36 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	}
 	modelComp.AddMiddleware(rMW)
 
-	b.createPorts(modelComp)
+	b.createPorts(modelComp, name, spec)
+
+	b.registrar.RegisterComponent(modelComp)
 
 	return modelComp
 }
 
-func (b Builder) createPorts(
-	modelComp *modeling.Component[Spec, State],
-) {
-	b.topPort.SetComponent(modelComp)
-	modelComp.AddPort("Top", b.topPort)
+// resolvePageTable returns the injected page table, or builds a default one
+// sized by Spec.Log2PageSize that self-registers with the registrar.
+func (b Builder) resolvePageTable(name string, spec Spec) vm.PageTable {
+	if b.resources.PageTable != nil {
+		return b.resources.PageTable
+	}
 
-	b.bottomPort.SetComponent(modelComp)
-	modelComp.AddPort("Bottom", b.bottomPort)
+	return vm.MakePageTableBuilder().
+		WithLog2PageSize(spec.Log2PageSize).
+		WithSimulation(b.registrar).
+		Build(name + ".PageTable")
+}
+
+// createPorts creates the Top and Bottom ports sized by the spec and attaches
+// them to the component.
+func (b Builder) createPorts(modelComp *Comp, name string, spec Spec) {
+	topPort := messaging.NewPort(
+		modelComp, spec.TopPortBufferSize, spec.TopPortBufferSize,
+		name+".Top")
+	modelComp.AddPort("Top", topPort)
+
+	bottomPort := messaging.NewPort(
+		modelComp, spec.BottomPortBufferSize, spec.BottomPortBufferSize,
+		name+".Bottom")
+	modelComp.AddPort("Bottom", bottomPort)
 }

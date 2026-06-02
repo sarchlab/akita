@@ -13,7 +13,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -39,44 +38,42 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 	engine := s.GetEngine()
 
 	conn := directconnection.MakeBuilder().
-		WithEngine(engine).
-		WithFreq(1 * timing.GHz).
+		WithRegistrar(s).
 		Build("Conn")
 
+	agentSpec := memaccessagent.DefaultSpec()
+	agentSpec.MaxAddress = *maxAddressFlag
+	agentSpec.WriteLeft = *numAccessFlag
+	agentSpec.ReadLeft = *numAccessFlag
 	agent := memaccessagent.MakeBuilder().
-		WithEngine(engine).
-		WithMaxAddress(*maxAddressFlag).
-		WithWriteLeft(*numAccessFlag).
-		WithReadLeft(*numAccessFlag).
-		WithMemPort(messaging.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
+		WithRegistrar(s).
+		WithSpec(agentSpec).
 		Build("MemAccessAgent")
-	s.RegisterComponent(agent)
 	createProgressBars(s, agent)
 
+	dramSpec := idealmemcontroller.DefaultSpec()
+	dramSpec.Capacity = 4 * mem.GB
 	dram := idealmemcontroller.MakeBuilder().
-		WithEngine(engine).
-		WithNewStorage(4 * mem.GB).
-		WithTopPort(messaging.NewPort(nil, 16, 16, "DRAM.TopPort")).
-		WithCtrlPort(messaging.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
+		WithRegistrar(s).
+		WithSpec(dramSpec).
 		Build("DRAM")
-	s.RegisterComponent(dram)
 
 	addressToPortMapper := new(mem.SinglePortMapper)
 	addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()
 
+	cacheSpec := writeback.DefaultSpec()
+	cacheSpec.TotalByteSize = 16 * mem.KB
+	cacheSpec.Log2BlockSize = 6
+	cacheSpec.WayAssociativity = 4
+	cacheSpec.NumMSHREntry = 4
+	cacheSpec.NumReqPerCycle = 16
 	writeBackCache := writeback.MakeBuilder().
-		WithEngine(engine).
-		WithAddressToPortMapper(addressToPortMapper).
-		WithByteSize(16 * mem.KB).
-		WithLog2BlockSize(6).
-		WithWayAssociativity(4).
-		WithNumMSHREntry(4).
-		WithNumReqPerCycle(16).
-		WithTopPort(messaging.NewPort(nil, 32, 32, "Cache.ToTop")).
-		WithBottomPort(messaging.NewPort(nil, 32, 32, "Cache.BottomPort")).
-		WithControlPort(messaging.NewPort(nil, 32, 32, "Cache.ControlPort")).
+		WithRegistrar(s).
+		WithSpec(cacheSpec).
+		WithResources(writeback.Resources{
+			AddressToPortMapper: addressToPortMapper,
+		}).
 		Build("Cache")
-	s.RegisterComponent(writeBackCache)
 
 	agent.LowModule = writeBackCache.GetPortByName("Top")
 

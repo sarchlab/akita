@@ -1,11 +1,43 @@
 package writethroughcache
 
 import (
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 )
+
+// Spec contains immutable configuration for the writethroughcache.
+type Spec struct {
+	Freq                  timing.Freq `json:"freq"`
+	NumReqPerCycle        int         `json:"num_req_per_cycle"`
+	Log2BlockSize         uint64      `json:"log2_block_size"`
+	BankLatency           int         `json:"bank_latency"`
+	WayAssociativity      int         `json:"way_associativity"`
+	MaxNumConcurrentTrans int         `json:"max_num_concurrent_trans"`
+	NumBanks              int         `json:"num_banks"`
+	NumMSHREntry          int         `json:"num_mshr_entry"`
+	NumSets               int         `json:"num_sets"`
+	TotalByteSize         uint64      `json:"total_byte_size"`
+	DirLatency            int         `json:"dir_latency"`
+
+	// WritePolicyType selects the write-policy strategy.
+	// Valid values: "write-around" (default), "write-evict", "write-through".
+	WritePolicyType string `json:"write_policy_type"`
+
+	// Address mapper configuration (inlined from interface)
+	AddressMapperType string   `json:"address_mapper_type"`
+	RemotePortNames   []string `json:"remote_port_names"`
+	InterleavingSize  uint64   `json:"interleaving_size"`
+
+	// Port buffer sizes.
+	TopPortBufferSize     int `json:"top_port_buffer_size"`
+	BottomPortBufferSize  int `json:"bottom_port_buffer_size"`
+	ControlPortBufferSize int `json:"control_port_buffer_size"`
+}
 
 // State contains mutable runtime data for the writethroughcache.
 type State struct {
@@ -109,3 +141,18 @@ func (t *transactionState) PID() vm.PID {
 
 	return t.WritePID
 }
+
+// Resources holds the shared resources and external wiring referenced by the
+// writethroughcache. Storage is the (optionally shared) backing storage.
+// AddressMapper and RemotePorts describe how the cache reaches the lower-level
+// modules; they are only consumed at Build time to populate the Spec's address
+// mapper configuration and are not serialized with the component state.
+type Resources struct {
+	Storage *mem.Storage
+
+	AddressMapper mem.AddressToPortMapper `json:"-"`
+	RemotePorts   []messaging.RemotePort  `json:"-"`
+}
+
+// Comp is the writethroughcache component type.
+type Comp = modeling.Component[Spec, State, Resources]

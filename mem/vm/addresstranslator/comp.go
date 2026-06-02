@@ -7,8 +7,29 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
+
+// Spec contains immutable configuration for the AddressTranslator.
+type Spec struct {
+	Freq           timing.Freq `json:"freq"`
+	Log2PageSize   uint64      `json:"log2_page_size"`
+	DeviceID       uint64      `json:"device_id"`
+	NumReqPerCycle int         `json:"num_req_per_cycle"`
+
+	TopPortBufferSize         int `json:"top_port_buffer_size"`
+	BottomPortBufferSize      int `json:"bottom_port_buffer_size"`
+	TranslationPortBufferSize int `json:"translation_port_buffer_size"`
+	CtrlPortBufferSize        int `json:"ctrl_port_buffer_size"`
+}
+
+// Resources holds the external wiring referenced by the AddressTranslator. The
+// mappers tell the translator where to send memory and translation requests.
+type Resources struct {
+	MemProviderMapper         mem.AddressToPortMapper `json:"-"`
+	TranslationProviderMapper mem.AddressToPortMapper `json:"-"`
+}
 
 // incomingReqState is a serializable representation of an incoming request.
 type incomingReqState struct {
@@ -104,7 +125,7 @@ func createTranslatedReq(
 	page vm.Page,
 	log2PageSize uint64,
 	bottomPortRemote messaging.RemotePort,
-	spec Spec,
+	memProviderMapper mem.AddressToPortMapper,
 ) messaging.Msg {
 	offset := reqState.Address % (1 << log2PageSize)
 	addr := page.PAddr + offset
@@ -114,7 +135,7 @@ func createTranslatedReq(
 		clone := &mem.ReadReq{}
 		clone.ID = timing.GetIDGenerator().Generate()
 		clone.Src = bottomPortRemote
-		clone.Dst = findMemoryPort(spec, addr)
+		clone.Dst = memProviderMapper.Find(addr)
 		clone.Address = addr
 		clone.AccessByteSize = reqState.AccessByteSize
 		clone.PID = 0
@@ -126,7 +147,7 @@ func createTranslatedReq(
 		clone := &mem.WriteReq{}
 		clone.ID = timing.GetIDGenerator().Generate()
 		clone.Src = bottomPortRemote
-		clone.Dst = findMemoryPort(spec, addr)
+		clone.Dst = memProviderMapper.Find(addr)
 		clone.Data = reqState.Data
 		clone.DirtyMask = reqState.DirtyMask
 		clone.Address = addr
@@ -232,3 +253,6 @@ func buildReqToBottom(
 		ReqToBottomType:       fmt.Sprintf("%T", translatedReq),
 	}
 }
+
+// Comp is the AddressTranslator component.
+type Comp = modeling.Component[Spec, State, Resources]

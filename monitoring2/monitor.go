@@ -33,12 +33,18 @@ import (
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/shirou/gopsutil/process"
 	"github.com/syifan/goseth"
-
-	// Monitor provides live simulation monitoring capabilities. It serves HTTP
-	// endpoints for engine control, component inspection, progress bars, and
-	// resource monitoring.
-	"github.com/sarchlab/akita/v5/messaging"
 )
+
+// Component is the minimal component contract required by the monitor.
+type Component interface {
+	Name() string
+}
+
+type monitorPort interface {
+	Name() string
+	NumIncoming() int
+	NumOutgoing() int
+}
 
 type Monitor struct {
 	// Configuration (set before StartServer).
@@ -48,7 +54,7 @@ type Monitor struct {
 	tracePath string
 
 	// Internal state.
-	components       []messaging.Component
+	components       []Component
 	buffers          []bufferState
 	engineControlMu  sync.Mutex
 	enginePaused     bool
@@ -91,7 +97,7 @@ func (m *Monitor) RegisterEngine(e timing.Engine) {
 
 // RegisterComponent registers a component with the monitor so its internal
 // state can be inspected via the monitoring server.
-func (m *Monitor) RegisterComponent(c messaging.Component) {
+func (m *Monitor) RegisterComponent(c Component) {
 	m.components = append(m.components, c)
 	m.registerBuffers(c)
 }
@@ -104,12 +110,6 @@ func (m *Monitor) RegisterVisTracer(tr *tracing.DBTracer) {
 // SetTraceDBPath sets the SQLite trace database path used for storage status.
 func (m *Monitor) SetTraceDBPath(path string) {
 	m.tracePath = path
-}
-
-// GetServer is kept for compatibility with older monitoring setup code.
-// Monitoring2 no longer owns a Daisen replay server.
-func (m *Monitor) GetServer() *daisen2.Server {
-	return nil
 }
 
 // CreateProgressBar creates a new progress bar tracked by the monitor.
@@ -250,7 +250,7 @@ type bufferState interface {
 // portBufferAdapter wraps a port to expose one of its internal buffers
 // (incoming or outgoing) as a bufferState for the hang detector.
 type portBufferAdapter struct {
-	port      messaging.Port
+	port      monitorPort
 	direction string // "in" or "out"
 }
 
@@ -270,37 +270,74 @@ func (a *portBufferAdapter) Capacity() int {
 	return a.Size()
 }
 
-func (m *Monitor) registerBuffers(c messaging.Component) {
+func (m *Monitor) registerBuffers(c Component) {
 	m.registerComponentOrPortBuffers(c)
 
-	for _, p := range c.Ports() {
-		m.registerComponentOrPortBuffers(p)
+	// Port buffers are monitored through portBufferAdapter (registerPortBuffers),
+	// which is the canonical source. Reflecting into the port's own fields would
+	// double-count them.
+	for _, p := range componentPorts(c) {
 		m.registerPortBuffers(p)
 	}
 }
 
-func (m *Monitor) registerPortBuffers(p messaging.Port) {
+func (m *Monitor) registerPortBuffers(p monitorPort) {
 	m.buffers = append(m.buffers,
 		&portBufferAdapter{port: p, direction: "in"},
 		&portBufferAdapter{port: p, direction: "out"},
 	)
 }
 
+func componentPorts(c Component) []monitorPort {
+	method := reflect.ValueOf(c).MethodByName("Ports")
+	if !method.IsValid() {
+		return nil
+	}
+
+	methodType := method.Type()
+	if methodType.NumIn() != 0 ||
+		methodType.NumOut() != 1 ||
+		methodType.Out(0).Kind() != reflect.Slice {
+		panic("component " + c.Name() +
+			" Ports method must take no arguments and return one slice")
+	}
+
+	values := method.Call(nil)
+	portsValue := values[0]
+	ports := make([]monitorPort, 0, portsValue.Len())
+
+	for i := 0; i < portsValue.Len(); i++ {
+		port, ok := portsValue.Index(i).Interface().(monitorPort)
+		if !ok {
+			panic("component " + c.Name() +
+				" Ports method returned a non-monitorable port")
+		}
+
+		ports = append(ports, port)
+	}
+
+	return ports
+}
+
 func (m *Monitor) registerComponentOrPortBuffers(c any) {
 	v := reflect.ValueOf(c).Elem()
+	bufferType := reflect.TypeOf((*bufferState)(nil)).Elem()
 
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Field(i)
 		fieldType := field.Type()
-		bufferType := reflect.TypeOf((*bufferState)(nil)).Elem()
 
-		if fieldType.Implements(bufferType) ||
-			reflect.PointerTo(fieldType).Implements(bufferType) {
-			fieldRef := reflect.NewAt(
-				field.Type(),
-				unsafe.Pointer(field.UnsafeAddr()),
-			).Elem().Interface().(bufferState)
-			m.buffers = append(m.buffers, fieldRef)
+		// Build an addressable reference to the field. This both bypasses the
+		// unexported-field restriction and lets pointer-receiver buffers (e.g. a
+		// value-embedded queueing.Buffer) be captured as a live reference rather
+		// than a stale copy.
+		ref := reflect.NewAt(fieldType, unsafe.Pointer(field.UnsafeAddr()))
+
+		switch {
+		case fieldType.Implements(bufferType):
+			m.buffers = append(m.buffers, ref.Elem().Interface().(bufferState))
+		case reflect.PointerTo(fieldType).Implements(bufferType):
+			m.buffers = append(m.buffers, ref.Interface().(bufferState))
 		}
 	}
 }
@@ -932,8 +969,8 @@ func (m *Monitor) sortAndSelectBuffers(
 func (m *Monitor) findComponentOr404(
 	w http.ResponseWriter,
 	name string,
-) messaging.Component {
-	var component messaging.Component
+) Component {
+	var component Component
 
 	for _, c := range m.components {
 		if c.Name() == name {

@@ -13,28 +13,50 @@
 # Vendor dependencies
 vendor
 
-# Go test/debug artifacts
+# Compiled binaries and Go test/debug artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 *.test
 *.out
 *.debug
 *.prof
 __debug_bin*
 
-# Root-level executable outputs. Re-include directories with the same names so
-# source trees such as akita/cmd and future */debug packages remain visible.
-/debug
-!/debug/
-!/debug/**
+# Compiled main-package binaries dropped at the repo root by
+# `go build ./<main-pkg>/`. Each entry is a main package's leaf directory name
+# (the binary it produces). When a name also matches a root-level source
+# directory (akita, daisen2), the directory is re-included so its source stays
+# tracked. Add new main packages here, or build with `-o`.
+/akita
+!/akita/
+!/akita/**
+/daisen2
+!/daisen2/
+!/daisen2/**
 /cmd
-!/cmd/
-!/cmd/**
-/virtualmem
-!/virtualmem/
-!/virtualmem/**
-/writebackcache
-!/writebackcache/
-!/writebackcache/**
+/debug
 /akitav5-lint
+/01_print_event
+/02_cell_split
+/dram
+/idealmemcontroller
+/virtualmem
+/writearoundcache
+/writebackcache
+/writeevictcache
+/writethroughcache
+/dgx_single_p2p
+/dgx_single_p2p_all
+/dgx_single_random
+/mesh
+/one_switch
+/one_to_one
+/pcie_p2p
+/pcie_random
+/three_agent_one_switch
 
 # Mock files
 mock_*_test.go

@@ -31,15 +31,15 @@ func (ds *directoryStage) tickPipeline() bool {
 
 func (ds *directoryStage) processTransaction() bool {
 	madeProgress := false
-	spec := ds.cache.comp.Spec
+	spec := ds.cache.comp.Spec()
 	next := &ds.cache.comp.State
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		if len(next.DirPostPipelineBuf.Elements) == 0 {
+		if next.DirPostPipelineBuf.Size() == 0 {
 			break
 		}
 
-		idx := next.DirPostPipelineBuf.Elements[0]
+		idx := next.DirPostPipelineBuf.Peek()
 		trans := &next.Transactions[idx]
 
 		addr := trans.accessReqAddress()
@@ -62,7 +62,7 @@ func (ds *directoryStage) processTransaction() bool {
 
 func (ds *directoryStage) acceptNewTransaction() bool {
 	madeProgress := false
-	spec := ds.cache.comp.Spec
+	spec := ds.cache.comp.Spec()
 	next := &ds.cache.comp.State
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
@@ -70,7 +70,7 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 			break
 		}
 
-		transIdx := next.DirStageBuf.Elements[0]
+		transIdx := next.DirStageBuf.Peek()
 
 		if spec.DirLatency == 0 {
 			// Bypass pipeline: put directly in post-pipeline buffer
@@ -78,14 +78,14 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 				break
 			}
 			next.DirPostPipelineBuf.PushTyped(transIdx)
-			next.DirStageBuf.Elements = next.DirStageBuf.Elements[1:]
+			next.DirStageBuf.Pop()
 			madeProgress = true
 		} else {
 			if !next.DirPipeline.CanAccept() {
 				break
 			}
 			next.DirPipeline.Accept(transIdx)
-			next.DirStageBuf.Elements = next.DirStageBuf.Elements[1:]
+			next.DirStageBuf.Pop()
 			madeProgress = true
 		}
 	}
@@ -101,7 +101,7 @@ func (ds *directoryStage) Reset() {
 }
 
 func (ds *directoryStage) doRead(transIdx int, trans *transactionState) bool {
-	spec := ds.cache.comp.Spec
+	spec := ds.cache.comp.Spec()
 	next := &ds.cache.comp.State
 	cachelineID, _ := getCacheLineID(trans.ReadAddress, spec.Log2BlockSize)
 
@@ -167,7 +167,7 @@ func (ds *directoryStage) handleReadHit(
 }
 
 func (ds *directoryStage) handleReadMiss(transIdx int, trans *transactionState) bool {
-	spec := ds.cache.comp.Spec
+	spec := ds.cache.comp.Spec()
 	next := &ds.cache.comp.State
 	cacheLineID, _ := getCacheLineID(trans.ReadAddress, spec.Log2BlockSize)
 
@@ -212,7 +212,7 @@ func (ds *directoryStage) handleReadMiss(transIdx int, trans *transactionState) 
 }
 
 func (ds *directoryStage) doWrite(transIdx int, trans *transactionState) bool {
-	spec := ds.cache.comp.Spec
+	spec := ds.cache.comp.Spec()
 	next := &ds.cache.comp.State
 	cachelineID, _ := getCacheLineID(trans.WriteAddress, spec.Log2BlockSize)
 
@@ -290,7 +290,7 @@ func (ds *directoryStage) doWriteHit(
 }
 
 func (ds *directoryStage) doWriteMiss(transIdx int, trans *transactionState) bool {
-	spec := ds.cache.comp.Spec
+	spec := ds.cache.comp.Spec()
 	if ds.isWritingFullLine(trans, spec.Log2BlockSize) {
 		return ds.writeFullLineMiss(transIdx, trans)
 	}
@@ -299,7 +299,7 @@ func (ds *directoryStage) doWriteMiss(transIdx int, trans *transactionState) boo
 }
 
 func (ds *directoryStage) writeFullLineMiss(transIdx int, trans *transactionState) bool {
-	spec := ds.cache.comp.Spec
+	spec := ds.cache.comp.Spec()
 	next := &ds.cache.comp.State
 	cachelineID, _ := getCacheLineID(trans.WriteAddress, spec.Log2BlockSize)
 
@@ -322,7 +322,7 @@ func (ds *directoryStage) writeFullLineMiss(transIdx int, trans *transactionStat
 }
 
 func (ds *directoryStage) writePartialLineMiss(transIdx int, trans *transactionState) bool {
-	spec := ds.cache.comp.Spec
+	spec := ds.cache.comp.Spec()
 	next := &ds.cache.comp.State
 	cachelineID, _ := getCacheLineID(trans.WriteAddress, spec.Log2BlockSize)
 
@@ -353,7 +353,7 @@ func (ds *directoryStage) readFromBank(
 	trans *transactionState,
 	setID, wayID int,
 ) bool {
-	spec := ds.cache.comp.Spec
+	spec := ds.cache.comp.Spec()
 	next := &ds.cache.comp.State
 	numBanks := len(next.DirToBankBufs)
 	bank := bankID(setID, wayID, spec.WayAssociativity, numBanks)
@@ -383,7 +383,7 @@ func (ds *directoryStage) writeToBank(
 	trans *transactionState,
 	setID, wayID int,
 ) bool {
-	spec := ds.cache.comp.Spec
+	spec := ds.cache.comp.Spec()
 	next := &ds.cache.comp.State
 	numBanks := len(next.DirToBankBufs)
 	bank := bankID(setID, wayID, spec.WayAssociativity, numBanks)
@@ -418,7 +418,7 @@ func (ds *directoryStage) evict(
 	trans *transactionState,
 	victimSetID, victimWayID int,
 ) bool {
-	spec := ds.cache.comp.Spec
+	spec := ds.cache.comp.Spec()
 	next := &ds.cache.comp.State
 	bankNum := bankID(victimSetID, victimWayID,
 		spec.WayAssociativity, len(next.DirToBankBufs))
@@ -478,7 +478,7 @@ func (ds *directoryStage) updateTransForEviction(
 	pid vm.PID,
 	cacheLineID uint64,
 ) {
-	spec := ds.cache.comp.Spec
+	spec := ds.cache.comp.Spec()
 	next := &ds.cache.comp.State
 	victim := &next.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
 
@@ -536,7 +536,7 @@ func (ds *directoryStage) fetch(
 	trans *transactionState,
 	setID, wayID int,
 ) bool {
-	spec := ds.cache.comp.Spec
+	spec := ds.cache.comp.Spec()
 	next := &ds.cache.comp.State
 
 	addr, pid, reqMeta := ds.transAddrPIDReqMeta(trans)
@@ -638,7 +638,7 @@ func (ds *directoryStage) needEviction(victim *cache.BlockState) bool {
 // popDirPostBuf removes the first element from the directory post-pipeline buffer.
 func (ds *directoryStage) popDirPostBuf() {
 	next := &ds.cache.comp.State
-	if len(next.DirPostPipelineBuf.Elements) > 0 {
-		next.DirPostPipelineBuf.Elements = next.DirPostPipelineBuf.Elements[1:]
+	if next.DirPostPipelineBuf.Size() > 0 {
+		next.DirPostPipelineBuf.Pop()
 	}
 }

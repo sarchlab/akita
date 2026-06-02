@@ -10,71 +10,66 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/timing"
-	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("DataMover", func() {
 	var (
-		mockCtrl   *gomock.Controller
-		engine     timing.Engine
-		dataMover  *modeling.Component[Spec, State]
-		insideMem  *idealmemcontroller.Comp
-		outsideMem *idealmemcontroller.Comp
-		conn       *directconnection.Comp
-		srcPort    *MockPort
+		engine         timing.Engine
+		dataMover      *modeling.Component[Spec, State, modeling.None]
+		insideMem      *idealmemcontroller.Comp
+		insideStorage  *mem.Storage
+		outsideMem     *idealmemcontroller.Comp
+		outsideStorage *mem.Storage
+		conn           *directconnection.Comp
+		srcPort        messaging.Port
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
-
 		engine = timing.NewSerialEngine()
-		srcPort = NewMockPort(mockCtrl)
-		srcPort.EXPECT().SetConnection(gomock.Any()).AnyTimes()
-		srcPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
-		srcPort.EXPECT().AsRemote().Return(messaging.RemotePort("SrcPort")).AnyTimes()
+
+		srcPort = messaging.NewPort(nil, 4, 4, "SrcPort")
+
+		memSpec := idealmemcontroller.DefaultSpec()
+		memSpec.Latency = 100
+		memSpec.Width = 1
+		memSpec.CacheLineSize = 64
+
+		insideStorage = mem.NewStorage(1 * mem.MB)
 		insideMem = idealmemcontroller.MakeBuilder().
-			WithEngine(engine).
-			WithFreq(1 * timing.GHz).
-			WithSpec(idealmemcontroller.Spec{
-				Latency:       100,
-				Width:         1,
-				CacheLineSize: 64,
-			}).
-			WithNewStorage(1 * mem.MB).
-			WithTopPort(messaging.NewPort(nil, 16, 16, "InsideMem.TopPort")).
-			WithCtrlPort(messaging.NewPort(nil, 16, 16, "InsideMem.CtrlPort")).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSpec(memSpec).
+			WithResources(idealmemcontroller.Resources{Storage: insideStorage}).
 			Build("InsideMem")
+		outsideStorage = mem.NewStorage(1 * mem.MB)
 		outsideMem = idealmemcontroller.MakeBuilder().
-			WithEngine(engine).
-			WithFreq(1 * timing.GHz).
-			WithSpec(idealmemcontroller.Spec{
-				Latency:       100,
-				Width:         1,
-				CacheLineSize: 64,
-			}).
-			WithNewStorage(1 * mem.MB).
-			WithTopPort(messaging.NewPort(nil, 16, 16, "OutsideMem.TopPort")).
-			WithCtrlPort(messaging.NewPort(nil, 16, 16, "OutsideMem.CtrlPort")).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSpec(memSpec).
+			WithResources(idealmemcontroller.Resources{Storage: outsideStorage}).
 			Build("OutsideMem")
+
+		dmSpec := DefaultSpec()
+		dmSpec.BufferSize = 2048
+		dmSpec.InsideByteGranularity = 64
+		dmSpec.OutsideByteGranularity = 256
+		dmSpec.CtrlPortBufferSize = 40960000
+		dmSpec.InsidePortBufferSize = 64
+		dmSpec.OutsidePortBufferSize = 64
+
 		dataMover = MakeBuilder().
-			WithEngine(engine).
-			WithBufferSize(2048).
-			WithInsidePortMapper(&mem.SinglePortMapper{
-				Port: insideMem.GetPortByName("Top").AsRemote(),
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSpec(dmSpec).
+			WithResources(Resources{
+				InsideMapper: &mem.SinglePortMapper{
+					Port: insideMem.GetPortByName("Top").AsRemote(),
+				},
+				OutsideMapper: &mem.SinglePortMapper{
+					Port: outsideMem.GetPortByName("Top").AsRemote(),
+				},
 			}).
-			WithOutsidePortMapper(&mem.SinglePortMapper{
-				Port: outsideMem.GetPortByName("Top").AsRemote(),
-			}).
-			WithInsideByteGranularity(64).
-			WithOutsideByteGranularity(256).
-			WithCtrlPort(messaging.NewPort(nil, 40960000, 40960000, "DataMover.CtrlPort")).
-			WithInsidePort(messaging.NewPort(nil, 64, 64, "DataMover.SrcPort")).
-			WithOutsidePort(messaging.NewPort(nil, 64, 64, "DataMover.DstPort")).
 			Build("DataMover")
 
 		conn = directconnection.MakeBuilder().
-			WithEngine(engine).
-			WithFreq(1 * timing.GHz).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 			Build("Conn")
 		conn.PlugIn(srcPort)
 		conn.PlugIn(dataMover.GetPortByName("Control"))
@@ -89,10 +84,7 @@ var _ = Describe("DataMover", func() {
 		for i := range 4096 {
 			data[i] = byte(i)
 		}
-		outsideMem.GetStorage().Write(0, data)
-
-		srcPort.EXPECT().
-			Deliver(gomock.Any())
+		outsideStorage.Write(0, data)
 
 		req := &DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
@@ -109,7 +101,9 @@ var _ = Describe("DataMover", func() {
 
 		engine.Run()
 
-		Expect(insideMem.GetStorage().Read(0, 4096)).To(Equal(data))
+		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
+		Expect(srcPort.RetrieveIncoming()).To(
+			BeAssignableToTypeOf(&DataMoveResponse{}))
 	})
 
 	It("should move data inside to outside", func() {
@@ -117,10 +111,7 @@ var _ = Describe("DataMover", func() {
 		for i := range 4096 {
 			data[i] = byte(i)
 		}
-		insideMem.GetStorage().Write(0, data)
-
-		srcPort.EXPECT().
-			Deliver(gomock.Any())
+		insideStorage.Write(0, data)
 
 		req := &DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
@@ -137,7 +128,9 @@ var _ = Describe("DataMover", func() {
 
 		engine.Run()
 
-		Expect(insideMem.GetStorage().Read(0, 4096)).To(Equal(data))
+		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
+		Expect(srcPort.RetrieveIncoming()).To(
+			BeAssignableToTypeOf(&DataMoveResponse{}))
 	})
 
 	It("should move on difference addresses", func() {
@@ -145,10 +138,7 @@ var _ = Describe("DataMover", func() {
 		for i := range 4096 {
 			data[i] = byte(i)
 		}
-		insideMem.GetStorage().Write(0, data)
-
-		srcPort.EXPECT().
-			Deliver(gomock.Any())
+		insideStorage.Write(0, data)
 
 		req := &DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
@@ -165,7 +155,9 @@ var _ = Describe("DataMover", func() {
 
 		engine.Run()
 
-		Expect(outsideMem.GetStorage().Read(4096, 4096)).To(Equal(data))
+		Expect(outsideStorage.Read(4096, 4096)).To(Equal(data))
+		Expect(srcPort.RetrieveIncoming()).To(
+			BeAssignableToTypeOf(&DataMoveResponse{}))
 	})
 
 	It("should move partial data", func() {
@@ -173,10 +165,7 @@ var _ = Describe("DataMover", func() {
 		for i := range 1024 {
 			data[i] = byte(i)
 		}
-		outsideMem.GetStorage().Write(0, data)
-
-		srcPort.EXPECT().
-			Deliver(gomock.Any())
+		outsideStorage.Write(0, data)
 
 		req := &DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
@@ -194,7 +183,9 @@ var _ = Describe("DataMover", func() {
 		engine.Run()
 
 		expected := data[:512]
-		Expect(insideMem.GetStorage().Read(512, 512)).To(Equal(expected))
+		Expect(insideStorage.Read(512, 512)).To(Equal(expected))
+		Expect(srcPort.RetrieveIncoming()).To(
+			BeAssignableToTypeOf(&DataMoveResponse{}))
 	})
 
 	It("should handle zero-size transfers", func() {
@@ -219,10 +210,7 @@ var _ = Describe("DataMover", func() {
 		for i := range 1024 {
 			data[i] = byte(i)
 		}
-		insideMem.GetStorage().Write(0, data)
-
-		srcPort.EXPECT().
-			Deliver(gomock.Any())
+		insideStorage.Write(0, data)
 
 		req := &DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
@@ -240,6 +228,8 @@ var _ = Describe("DataMover", func() {
 		engine.Run()
 
 		expected := append(data[:512], data[:512]...)
-		Expect(insideMem.GetStorage().Read(0, 1024)).To(Equal(expected))
+		Expect(insideStorage.Read(0, 1024)).To(Equal(expected))
+		Expect(srcPort.RetrieveIncoming()).To(
+			BeAssignableToTypeOf(&DataMoveResponse{}))
 	})
 })

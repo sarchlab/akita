@@ -8,8 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 )
 
-//go:generate mockgen -destination "mock_sim_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/messaging Port
-
 func TestDataMover(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "DataMover Suite")

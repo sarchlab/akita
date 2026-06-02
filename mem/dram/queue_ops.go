@@ -107,9 +107,9 @@ func createClosePageCommand(
 	// Close-page: read => ReadPrecharge, write => WritePrecharge
 	trans := &state.Transactions[ref.TransIndex]
 	if isTransactionRead(trans) {
-		cmd.Kind = int(CmdKindReadPrecharge)
+		cmd.Kind = int(cmdKindReadPrecharge)
 	} else {
-		cmd.Kind = int(CmdKindWritePrecharge)
+		cmd.Kind = int(cmdKindWritePrecharge)
 	}
 
 	loc := mapAddress(spec, st.Address)
@@ -140,9 +140,9 @@ func createOpenPageCommand(
 	// Open-page: read => Read, write => Write (no auto-precharge)
 	trans := &state.Transactions[ref.TransIndex]
 	if isTransactionRead(trans) {
-		cmd.Kind = int(CmdKindRead)
+		cmd.Kind = int(cmdKindRead)
 	} else {
-		cmd.Kind = int(CmdKindWrite)
+		cmd.Kind = int(cmdKindWrite)
 	}
 
 	loc := mapAddress(spec, st.Address)
@@ -158,8 +158,8 @@ func getQueueIndex(cmd *commandState) int {
 
 // isWriteCommand returns true if the command is a write or write-precharge.
 func isWriteCommand(cmd *commandState) bool {
-	kind := CommandKind(cmd.Kind)
-	return kind == CmdKindWrite || kind == CmdKindWritePrecharge
+	kind := commandKind(cmd.Kind)
+	return kind == cmdKindWrite || kind == cmdKindWritePrecharge
 }
 
 // canAcceptCommand returns true if there is space in the command queue for
@@ -266,7 +266,7 @@ func findRowBufferHitCommand(spec *Spec, next *State) *commandState {
 		if bs == nil {
 			continue
 		}
-		if BankStateKind(bs.State) == BankStateOpen && bs.OpenRow == cmd.Location.Row {
+		if bankStateKind(bs.State) == bankStateOpen && bs.OpenRow == cmd.Location.Row {
 			readyCmd := getReadyCommand(spec, next, bs, cmd)
 			if readyCmd != nil {
 				if readyCmd.Kind == cmd.Kind {
@@ -312,7 +312,7 @@ func removeCommandFromQueueByIndex(next *State, idx int) {
 }
 
 // findBankStateByLocation finds the bank state for a given Location.
-func findBankStateByLocation(flat *bankStatesFlat, loc Location) *bankState {
+func findBankStateByLocation(flat *bankStatesFlat, loc location) *bankState {
 	return findBankState(flat,
 		int(loc.Rank), int(loc.BankGroup), int(loc.Bank))
 }
@@ -343,7 +343,7 @@ func getFirstReadyWrite(spec *Spec, next *State) *commandState {
 		if bs == nil {
 			continue
 		}
-		if BankStateKind(bs.State) == BankStateOpen &&
+		if bankStateKind(bs.State) == bankStateOpen &&
 			bs.OpenRow == cmd.Location.Row {
 			readyCmd := getReadyCommand(spec, next, bs, cmd)
 			if readyCmd != nil {

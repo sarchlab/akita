@@ -13,18 +13,26 @@ import (
 // routeForwardSendMiddleware returns the routeForwardSendMW from the
 // component's middleware list (registered at index 0).
 func routeForwardSendMiddleware(
-	c *modeling.Component[Spec, State],
+	c *modeling.Component[Spec, State, modeling.None],
 ) *routeForwardSendMW {
 	return c.Middlewares()[0].(*routeForwardSendMW)
 }
 
-// GetRoutingTable returns the routing table used by the switch.
-func GetRoutingTable(c *modeling.Component[Spec, State]) routing.Table {
-	return routeForwardSendMiddleware(c).routingTable
+// GetRoutingTable returns the routing table used by the switch. It locates the
+// routeForwardSendMW by type rather than by middleware index, so it does not
+// depend on the order in which middlewares were registered.
+func GetRoutingTable(c *modeling.Component[Spec, State, modeling.None]) routing.Table {
+	for _, mw := range c.Middlewares() {
+		if rfsMW, ok := mw.(*routeForwardSendMW); ok {
+			return rfsMW.routingTable
+		}
+	}
+
+	panic(fmt.Sprintf("%s: no routeForwardSendMW middleware found", c.Name()))
 }
 
 type routeForwardSendMW struct {
-	comp         *modeling.Component[Spec, State]
+	comp         *modeling.Component[Spec, State, modeling.None]
 	ports        []messaging.Port
 	portIndex    map[messaging.RemotePort]int // remotePort → index in State.PortComplexes
 	routingTable routing.Table
@@ -57,10 +65,9 @@ func (m *routeForwardSendMW) route() (madeProgress bool) {
 				break
 			}
 
-			item := pcs.RouteBuffer.Elements[0]
-			pcs.RouteBuffer.Elements = pcs.RouteBuffer.Elements[1:]
+			item := pcs.RouteBuffer.Pop()
 			outputBufIdx := m.resolveOutputBufIdx(item.RouteTo)
-			item.Flit.OutputBufIdx = outputBufIdx
+			item.OutputBufIdx = outputBufIdx
 
 			pcs.ForwardBuffer.PushTyped(item)
 
@@ -96,8 +103,8 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 		pcs := &state.PortComplexes[i]
 
 		for pcs.ForwardBuffer.Size() > 0 {
-			item := pcs.ForwardBuffer.Elements[0]
-			outIdx := item.Flit.OutputBufIdx
+			item := pcs.ForwardBuffer.Peek()
+			outIdx := item.OutputBufIdx
 
 			if occupiedOutputPort[outIdx] {
 				break
@@ -108,7 +115,7 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 				break
 			}
 
-			pcs.ForwardBuffer.Elements = pcs.ForwardBuffer.Elements[1:]
+			pcs.ForwardBuffer.Pop()
 			sendBuf.PushTyped(item.Flit)
 
 			tracing.EndTask(item.TaskID, m.comp)
@@ -128,27 +135,21 @@ func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 
 	for i, port := range m.ports {
 		pcs := &state.PortComplexes[i]
-		numSent := 0
 
 		for j := 0; j < pcs.NumOutputChannel; j++ {
-			if numSent >= pcs.SendOutBuffer.Size() {
+			if pcs.SendOutBuffer.Size() == 0 {
 				break
 			}
 
-			flit := pcs.SendOutBuffer.Elements[numSent]
+			flit := pcs.SendOutBuffer.Peek()
 			flit.Src = port.AsRemote()
 			flit.Dst = pcs.RemotePort
 
 			err := port.Send(&flit)
 			if err == nil {
+				pcs.SendOutBuffer.Pop()
 				madeProgress = true
-				numSent++
 			}
-		}
-
-		if numSent > 0 {
-			pcs.SendOutBuffer.Elements =
-				pcs.SendOutBuffer.Elements[numSent:]
 		}
 	}
 

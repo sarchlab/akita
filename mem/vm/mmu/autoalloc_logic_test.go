@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -13,11 +13,11 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 	engine := timing.NewSerialEngine()
 
 	// Create MMU with auto page allocation enabled
+	spec := DefaultSpec()
+	spec.AutoPageAllocation = true
 	mmu := MakeBuilder().
-		WithEngine(engine).
-		WithAutoPageAllocation(true).
-		WithTopPort(messaging.NewPort(nil, 4096, 4096, "TestMMU.ToTop")).
-		WithMigrationPort(messaging.NewPort(nil, 1, 1, "TestMMU.MigrationPort")).
+		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithSpec(spec).
 		Build("TestMMU")
 
 	mw := mmu.Middlewares()[0].(*translationMW)
@@ -72,12 +72,12 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 func TestPhysicalPageAllocator(t *testing.T) {
 	engine := timing.NewSerialEngine()
 
+	spec := DefaultSpec()
+	spec.AutoPageAllocation = true
+	spec.Log2PageSize = 12 // 4KB pages
 	mmu := MakeBuilder().
-		WithEngine(engine).
-		WithAutoPageAllocation(true).
-		WithLog2PageSize(12). // 4KB pages
-		WithTopPort(messaging.NewPort(nil, 4096, 4096, "TestMMU.ToTop")).
-		WithMigrationPort(messaging.NewPort(nil, 1, 1, "TestMMU.MigrationPort")).
+		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithSpec(spec).
 		Build("TestMMU")
 
 	mw := mmu.Middlewares()[0].(*translationMW)
@@ -114,12 +114,11 @@ func TestAutoPageAllocationDisabled(t *testing.T) {
 
 	// Create MMU with auto page allocation disabled (default)
 	mmu := MakeBuilder().
-		WithEngine(engine).
-		WithTopPort(messaging.NewPort(nil, 4096, 4096, "TestMMU.ToTop")).
-		WithMigrationPort(messaging.NewPort(nil, 1, 1, "TestMMU.MigrationPort")).
+		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithSpec(DefaultSpec()).
 		Build("TestMMU")
 
-	if mmu.Spec.AutoPageAllocation {
+	if mmu.Spec().AutoPageAllocation {
 		t.Error("Auto page allocation should be disabled by default")
 	}
 }
@@ -129,14 +128,14 @@ func TestAutoPageAllocationEnabled(t *testing.T) {
 	engine := timing.NewSerialEngine()
 
 	// Create MMU with auto page allocation enabled
+	spec := DefaultSpec()
+	spec.AutoPageAllocation = true
 	mmu := MakeBuilder().
-		WithEngine(engine).
-		WithAutoPageAllocation(true).
-		WithTopPort(messaging.NewPort(nil, 4096, 4096, "TestMMU.ToTop")).
-		WithMigrationPort(messaging.NewPort(nil, 1, 1, "TestMMU.MigrationPort")).
+		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithSpec(spec).
 		Build("TestMMU")
 
-	if !mmu.Spec.AutoPageAllocation {
+	if !mmu.Spec().AutoPageAllocation {
 		t.Error("Auto page allocation should be enabled when set")
 	}
 

@@ -11,7 +11,7 @@ import (
 )
 
 type tlbMiddleware struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, Resources]
 }
 
 func (m *tlbMiddleware) topPort() messaging.Port {
@@ -60,7 +60,7 @@ func (m *tlbMiddleware) tickPipeline() bool {
 
 func (m *tlbMiddleware) insertIntoPipeline() bool {
 	madeProgress := false
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	next := &m.comp.State
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
@@ -74,7 +74,9 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		}
 
 		msg := msgI.(*vm.TranslationReq)
-		next.Pipeline.Accept(pipelineTLBReqState{Msg: *msg})
+		// Dwell one extra cycle at stage 0 to preserve the same per-stage
+		// latency as the original hand-coded pipeline.
+		next.Pipeline.AcceptWithDelay(pipelineTLBReqState{Msg: *msg}, 1)
 
 		madeProgress = true
 	}
@@ -84,7 +86,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 
 func (m *tlbMiddleware) extractFromPipeline() bool {
 	madeProgress := false
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	next := &m.comp.State
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
@@ -92,13 +94,12 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 			break
 		}
 
-		item := next.BufferItems.Elements[0]
+		item := next.BufferItems.Peek()
 		msg := item.Msg
 
 		ok := m.lookup(&msg)
 		if ok {
-			next.BufferItems.Elements[0] = pipelineTLBReqState{}
-			next.BufferItems.Elements = next.BufferItems.Elements[1:]
+			next.BufferItems.Pop()
 			madeProgress = true
 		} else {
 			break
@@ -110,7 +111,7 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 
 func (m *tlbMiddleware) handleEnable() bool {
 	madeProgress := false
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
@@ -126,7 +127,7 @@ func (m *tlbMiddleware) handleEnable() bool {
 
 func (m *tlbMiddleware) handleDrain() bool {
 	madeProgress := false
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
@@ -197,7 +198,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 }
 
 func (m *tlbMiddleware) lookup(msg *vm.TranslationReq) bool {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	next := &m.comp.State
 
 	_, found := mshrGetEntry(next.MSHREntries, msg.PID, msg.VAddr)
@@ -244,7 +245,7 @@ func (m *tlbMiddleware) handleTranslationHit(
 
 func (m *tlbMiddleware) handleTranslationMiss(msg *vm.TranslationReq) bool {
 	next := &m.comp.State
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 
 	if mshrIsFull(next.MSHREntries, spec.MSHRSize) {
 		return false
@@ -320,12 +321,13 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 }
 
 func (m *tlbMiddleware) fetchBottom(msg *vm.TranslationReq) bool {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
+	mapper := m.comp.Resources().TranslationProviderMapper
 
 	fetchBottom := &vm.TranslationReq{}
 	fetchBottom.ID = timing.GetIDGenerator().Generate()
 	fetchBottom.Src = m.bottomPort().AsRemote()
-	fetchBottom.Dst = findTranslationPort(spec, msg.VAddr)
+	fetchBottom.Dst = findTranslationPort(mapper, msg.VAddr)
 	fetchBottom.PID = msg.PID
 	fetchBottom.VAddr = msg.VAddr
 	fetchBottom.DeviceID = msg.DeviceID
@@ -368,7 +370,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 	}
 
 	item := itemI.(*vm.TranslationRsp)
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	tracing.AddMilestone(
 		tracing.MsgIDAtReceiver(item, m.comp),
 		tracing.MilestoneKindData,
@@ -418,7 +420,7 @@ func (m *tlbMiddleware) handleFlush() bool {
 	}
 
 	madeProgress := false
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 
 	if mshrIsEmpty(next.MSHREntries) && !next.HasRespondingMSHR && m.bottomPort().PeekIncoming() == nil {
 		madeProgress = m.processTLBFlush() || madeProgress
@@ -439,7 +441,7 @@ func (m *tlbMiddleware) handleFlush() bool {
 }
 
 func (m *tlbMiddleware) processTLBFlush() bool {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	next := &m.comp.State
 	flush := next.InflightFlush
 

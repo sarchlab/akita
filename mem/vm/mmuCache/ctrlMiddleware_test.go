@@ -5,68 +5,49 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
-	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("MMUCacheCtrlMiddleware", func() {
 	var (
-		mockCtrl    *gomock.Controller
-		comp        *modeling.Component[Spec, State]
+		engine      timing.Engine
+		comp        *Comp
 		ctrl        *ctrlMiddleware
-		topPort     *MockPort
-		bottomPort  *MockPort
-		controlPort *MockPort
+		topPort     messaging.Port
+		bottomPort  messaging.Port
+		controlPort messaging.Port
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
+		engine = timing.NewSerialEngine()
 
-		topPort = NewMockPort(mockCtrl)
-		topPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
-		bottomPort = NewMockPort(mockCtrl)
-		bottomPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
-		controlPort = NewMockPort(mockCtrl)
-		controlPort.EXPECT().AsRemote().Return(messaging.RemotePort("ControlPort")).AnyTimes()
-		controlPort.EXPECT().Name().Return("ControlPort").AnyTimes()
-		controlPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
+		spec := DefaultSpec()
+		spec.NumBlocks = 1
+		spec.NumLevels = 5
+		spec.PageSize = 4096
+		spec.Log2PageSize = 12
+		spec.NumReqPerCycle = 4
+		spec.LatencyPerLevel = 100
 
-		spec := Spec{
-			NumBlocks:       1,
-			NumLevels:       5,
-			PageSize:        4096,
-			Log2PageSize:    12,
-			NumReqPerCycle:  4,
-			LatencyPerLevel: 100,
-		}
-
-		initialState := State{
-			CurrentState: mmuCacheStatePause,
-			Table:        initSets(spec.NumLevels, spec.NumBlocks),
-		}
-
-		comp = modeling.NewBuilder[Spec, State]().
+		comp = MakeBuilder().
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 			WithSpec(spec).
 			Build("MMUCache")
-		comp.State = initialState
+		comp.State.CurrentState = mmuCacheStatePause
 
-		comp.AddPort("Top", topPort)
-		comp.AddPort("Bottom", bottomPort)
-		comp.AddPort("Control", controlPort)
+		topPort = comp.GetPortByName("Top")
+		bottomPort = comp.GetPortByName("Bottom")
+		controlPort = comp.GetPortByName("Control")
+		(&noopConn{}).PlugIn(topPort)
+		(&noopConn{}).PlugIn(bottomPort)
+		(&noopConn{}).PlugIn(controlPort)
 
 		ctrl = &ctrlMiddleware{comp: comp}
 	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
-
 	It("should do nothing when no control message", func() {
-		controlPort.EXPECT().PeekIncoming().Return(nil)
-
 		madeProgress := ctrl.Tick()
 
 		Expect(madeProgress).To(BeFalse())
@@ -80,44 +61,43 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		topMsg := &vm.TranslationReq{}
 		topMsg.ID = timing.GetIDGenerator().Generate()
+		topMsg.Src = messaging.RemotePort("Requester")
+		topMsg.Dst = topPort.AsRemote()
 		topMsg.PID = 1
 		topMsg.VAddr = 0x1000
 		topMsg.DeviceID = 1
 		topMsg.TrafficClass = "vm.TranslationReq"
+		Expect(topPort.Deliver(topMsg)).To(BeNil())
+
 		bottomMsg := &vm.TranslationRsp{
 			Page: vm.Page{},
 		}
 		bottomMsg.ID = timing.GetIDGenerator().Generate()
+		bottomMsg.Src = messaging.RemotePort("LowModule")
+		bottomMsg.Dst = bottomPort.AsRemote()
 		bottomMsg.RspTo = timing.GetIDGenerator().Generate()
 		bottomMsg.TrafficClass = "vm.TranslationRsp"
-
-		controlPort.EXPECT().Send(gomock.Any()).Do(func(sent messaging.Msg) {
-			rsp := sent.(*mem.ControlRsp)
-			Expect(rsp.Command).To(Equal(mem.CmdReset))
-			Expect(rsp.Success).To(BeTrue())
-			Expect(rsp.Dst).To(Equal(messaging.RemotePort("Requester")))
-			Expect(rsp.Src).To(Equal(messaging.RemotePort("ControlPort")))
-		}).Return(nil)
-		controlPort.EXPECT().RetrieveIncoming()
-
-		topPort.EXPECT().PeekIncoming().Return(topMsg)
-		topPort.EXPECT().RetrieveIncoming()
-		topPort.EXPECT().PeekIncoming().Return(nil)
-
-		bottomPort.EXPECT().PeekIncoming().Return(bottomMsg)
-		bottomPort.EXPECT().RetrieveIncoming()
-		bottomPort.EXPECT().PeekIncoming().Return(nil)
+		Expect(bottomPort.Deliver(bottomMsg)).To(BeNil())
 
 		madeProgress := ctrl.handleMMUCacheRestart(req)
 
 		next := &comp.State
 		Expect(madeProgress).To(BeTrue())
 		Expect(next.CurrentState).To(Equal(mmuCacheStateEnable))
+		Expect(topPort.PeekIncoming()).To(BeNil())
+		Expect(bottomPort.PeekIncoming()).To(BeNil())
+
+		rsp := controlPort.RetrieveOutgoing()
+		ctrlRsp, ok := rsp.(*mem.ControlRsp)
+		Expect(ok).To(BeTrue())
+		Expect(ctrlRsp.Command).To(Equal(mem.CmdReset))
+		Expect(ctrlRsp.Success).To(BeTrue())
+		Expect(ctrlRsp.Dst).To(Equal(messaging.RemotePort("Requester")))
+		Expect(ctrlRsp.Src).To(Equal(controlPort.AsRemote()))
 	})
 
 	It("should accept flush request in enable state", func() {
-		// Set state to enable (both base and next)
-		spec := comp.Spec
+		spec := comp.Spec()
 		comp.State = State{
 			CurrentState: mmuCacheStateEnable,
 			Table:        initSets(spec.NumLevels, spec.NumBlocks),
@@ -126,8 +106,9 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		req := &mem.ControlReq{Command: mem.CmdFlush}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
+		req.Dst = controlPort.AsRemote()
 		req.TrafficClass = "mem.ControlReq"
-		controlPort.EXPECT().RetrieveIncoming()
+		Expect(controlPort.Deliver(req)).To(BeNil())
 
 		madeProgress := ctrl.handleMMUCacheFlush(req)
 
@@ -140,8 +121,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 	})
 
 	It("should handle control pause", func() {
-		// Set state to enable (both base and next)
-		spec := comp.Spec
+		spec := comp.Spec()
 		comp.State = State{
 			CurrentState: mmuCacheStateEnable,
 			Table:        initSets(spec.NumLevels, spec.NumBlocks),
@@ -151,12 +131,11 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 			Command: mem.CmdPause,
 		}
 		msg.ID = timing.GetIDGenerator().Generate()
-		msg.Dst = messaging.RemotePort("ControlPort")
+		msg.Src = messaging.RemotePort("Requester")
+		msg.Dst = controlPort.AsRemote()
 		msg.TrafficBytes = 4
 		msg.TrafficClass = "mem.ControlReq"
-
-		controlPort.EXPECT().PeekIncoming().Return(msg)
-		controlPort.EXPECT().RetrieveIncoming().Return(msg)
+		Expect(controlPort.Deliver(msg)).To(BeNil())
 
 		madeProgress := ctrl.handleIncomingCommands()
 

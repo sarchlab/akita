@@ -3,7 +3,6 @@ package writethroughcache_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	gomock "go.uber.org/mock/gomock"
 
 	. "github.com/sarchlab/akita/v5/mem/cache/writethroughcache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
@@ -18,59 +17,63 @@ import (
 
 var _ = Describe("Cache", func() {
 	var (
-		mockCtrl            *gomock.Controller
 		engine              timing.Engine
 		connection          messaging.Connection
 		addressToPortMapper mem.AddressToPortMapper
 		dram                *idealmemcontroller.Comp
-		cuPort              *MockPort
-		c                   *modeling.Component[Spec, State]
+		dramStorage         *mem.Storage
+		cuPort              messaging.Port
+		c                   *modeling.Component[Spec, State, Resources]
 	)
 
+	// drainResponses retrieves every message that has been delivered to cuPort.
+	drainResponses := func() []messaging.Msg {
+		msgs := []messaging.Msg{}
+		for {
+			msg := cuPort.RetrieveIncoming()
+			if msg == nil {
+				break
+			}
+			msgs = append(msgs, msg)
+		}
+		return msgs
+	}
+
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
-
-		cuPort = NewMockPort(mockCtrl)
-		cuPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
-		cuPort.EXPECT().AsRemote().Return(messaging.RemotePort("cuPort")).AnyTimes()
-
 		engine = timing.NewSerialEngine()
 		connection = directconnection.MakeBuilder().
-			WithEngine(engine).
-			WithFreq(1 * timing.GHz).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 			Build("Conn")
 
+		// cuPort is a real, component-less port that stands in for the compute
+		// unit. It is plugged into the connection so the cache's responses land
+		// in its incoming buffer, which the tests then drain and inspect.
+		cuPort = messaging.NewPort(nil, 16, 16, "cuPort")
+
+		dramStorage = mem.NewStorage(4 * mem.GB)
 		dram = idealmemcontroller.MakeBuilder().
-			WithEngine(engine).
-			WithNewStorage(4 * mem.GB).
-			WithTopPort(messaging.NewPort(nil, 16, 16, "DRAM.TopPort")).
-			WithCtrlPort(messaging.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 			Build("DRAM")
 		addressToPortMapper = &mem.SinglePortMapper{
 			Port: dram.GetPortByName("Top").AsRemote(),
 		}
 
 		c = MakeBuilder().
-			WithEngine(engine).
-			WithAddressToPortMapper(addressToPortMapper).
-			WithTopPort(messaging.NewPort(nil, 4, 4, "Cache.TopPort")).
-			WithBottomPort(messaging.NewPort(nil, 4, 4, "Cache.BottomPort")).
-			WithControlPort(messaging.NewPort(nil, 4, 4, "Cache.ControlPort")).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithResources(Resources{
+				AddressMapper: addressToPortMapper,
+			}).
 			Build("Cache")
 
 		connection.PlugIn(dram.GetPortByName("Top"))
 		connection.PlugIn(c.GetPortByName("Top"))
 		connection.PlugIn(c.GetPortByName("Bottom"))
-		cuPort.EXPECT().SetConnection(connection)
 		connection.PlugIn(cuPort)
 	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
-
 	It("should do read miss", func() {
-		dram.GetStorage().Write(0x100, []byte{1, 2, 3, 4})
+		dramStorage.Write(0x100, []byte{1, 2, 3, 4})
 		read := &mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = cuPort.AsRemote()
@@ -81,17 +84,16 @@ var _ = Describe("Cache", func() {
 		read.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read)
 
-		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg messaging.Msg) {
-				dr := msg.(*mem.DataReadyRsp)
-				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
-			})
-
 		engine.Run()
+
+		rsps := drainResponses()
+		Expect(rsps).To(HaveLen(1))
+		dr := rsps[0].(*mem.DataReadyRsp)
+		Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 
 	It("should do read miss coalesce", func() {
-		dram.GetStorage().Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
+		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := &mem.ReadReq{}
 		read1.ID = timing.GetIDGenerator().Generate()
 		read1.Src = cuPort.AsRemote()
@@ -112,28 +114,27 @@ var _ = Describe("Cache", func() {
 		read2.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read2)
 
+		engine.Run()
+
 		// Without coalescing, the MSHR-hit transaction (read2) may be
 		// finalized before the fetcher (read1). Accept responses in
 		// any order as long as both data values are received.
 		received := make(map[string]bool)
-		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg messaging.Msg) {
-				dr := msg.(*mem.DataReadyRsp)
-				if string(dr.Data) == string([]byte{1, 2, 3, 4}) {
-					received["1234"] = true
-				} else if string(dr.Data) == string([]byte{5, 6, 7, 8}) {
-					received["5678"] = true
-				}
-			}).Times(2)
-
-		engine.Run()
+		for _, msg := range drainResponses() {
+			dr := msg.(*mem.DataReadyRsp)
+			if string(dr.Data) == string([]byte{1, 2, 3, 4}) {
+				received["1234"] = true
+			} else if string(dr.Data) == string([]byte{5, 6, 7, 8}) {
+				received["5678"] = true
+			}
+		}
 
 		Expect(received["1234"]).To(BeTrue())
 		Expect(received["5678"]).To(BeTrue())
 	})
 
 	It("should do read hit", func() {
-		dram.GetStorage().Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
+		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := &mem.ReadReq{}
 		read1.ID = timing.GetIDGenerator().Generate()
 		read1.Src = cuPort.AsRemote()
@@ -143,13 +144,12 @@ var _ = Describe("Cache", func() {
 		read1.TrafficBytes = 12
 		read1.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read1)
-		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg messaging.Msg) {
-				dr := msg.(*mem.DataReadyRsp)
-				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
-			})
 		engine.Run()
 		t1 := engine.CurrentTime()
+
+		rsps := drainResponses()
+		Expect(rsps).To(HaveLen(1))
+		Expect(rsps[0].(*mem.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
 
 		read2 := &mem.ReadReq{}
 		read2.ID = timing.GetIDGenerator().Generate()
@@ -160,13 +160,12 @@ var _ = Describe("Cache", func() {
 		read2.TrafficBytes = 12
 		read2.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read2)
-		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg messaging.Msg) {
-				dr := msg.(*mem.DataReadyRsp)
-				Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
-			})
 		engine.Run()
 		t2 := engine.CurrentTime()
+
+		rsps = drainResponses()
+		Expect(rsps).To(HaveLen(1))
+		Expect(rsps[0].(*mem.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
 
 		Expect(t2 - t1).To(BeNumerically("<", t1))
 	})
@@ -181,14 +180,14 @@ var _ = Describe("Cache", func() {
 		write.TrafficBytes = 4 + 12
 		write.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(write)
-		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg messaging.Msg) {
-				Expect(msg.Meta().RspTo).To(Equal(write.ID))
-			})
 
 		engine.Run()
 
-		data, _ := dram.GetStorage().Read(0x100, 4)
+		rsps := drainResponses()
+		Expect(rsps).To(HaveLen(1))
+		Expect(rsps[0].Meta().RspTo).To(Equal(write.ID))
+
+		data, _ := dramStorage.Read(0x100, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 
@@ -211,13 +210,13 @@ var _ = Describe("Cache", func() {
 		write.TrafficBytes = 64 + 12
 		write.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(write)
-		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg messaging.Msg) {
-				Expect(msg.Meta().RspTo).To(Equal(write.ID))
-			})
 		engine.Run()
 
-		data, _ := dram.GetStorage().Read(0x100, 4)
+		rsps := drainResponses()
+		Expect(rsps).To(HaveLen(1))
+		Expect(rsps[0].Meta().RspTo).To(Equal(write.ID))
+
+		data, _ := dramStorage.Read(0x100, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 

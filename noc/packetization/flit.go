@@ -10,6 +10,5 @@ type Flit struct {
 	messaging.MsgMeta
 	SeqID        int               `json:"seq_id"`
 	NumFlitInMsg int               `json:"num_flit_in_msg"`
-	Msg          messaging.MsgMeta `json:"msg"`            // carried message metadata
-	OutputBufIdx int               `json:"output_buf_idx"` // output buffer index within a switch
+	Msg          messaging.MsgMeta `json:"msg"` // carried message metadata
 }

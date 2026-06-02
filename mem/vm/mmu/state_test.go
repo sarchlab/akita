@@ -15,13 +15,13 @@ func TestValidateState(t *testing.T) {
 	}
 }
 
-func buildTestMMU(engine timing.EventScheduler, name string) *modeling.Component[Spec, State] {
+func buildTestMMU(engine timing.Engine, name string) *Comp {
+	spec := DefaultSpec()
+	spec.AutoPageAllocation = true
+	spec.MigrationServiceProvider = messaging.RemotePort("MigrationService")
 	return MakeBuilder().
-		WithEngine(engine).
-		WithAutoPageAllocation(true).
-		WithTopPort(messaging.NewPort(nil, 4096, 4096, name+".ToTop")).
-		WithMigrationPort(messaging.NewPort(nil, 1, 1, name+".MigrationPort")).
-		WithMigrationServiceProvider(messaging.RemotePort("MigrationService")).
+		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithSpec(spec).
 		Build(name)
 }
 

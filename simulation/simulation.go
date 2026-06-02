@@ -1,15 +1,12 @@
 package simulation
 
 import (
-	"github.com/sarchlab/akita/v5/daisen2"
 	"github.com/sarchlab/akita/v5/datarecording"
 
 	"github.com/sarchlab/akita/v5/monitoring2"
+	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
-
-	// A Simulation provides the service requires to define a simulation.
-	"github.com/sarchlab/akita/v5/messaging"
 )
 
 type Simulation struct {
@@ -21,10 +18,23 @@ type Simulation struct {
 	metaRecorder *metaRecorder
 	monitor      *monitoring2.Monitor
 
-	components    []messaging.Component
+	components    []Component
 	compNameIndex map[string]int
-	ports         []messaging.Port
+	ports         []Port
 	portNameIndex map[string]int
+	connections   []Connection
+	connNameIndex map[string]int
+	resources     []Resource
+
+	// entities is the single, flat inventory of every registered runtime object
+	// (components, ports, connections, resources, the engine, and the ID
+	// generator), each held as the Entity it satisfies. entityByName resolves a
+	// globally unique name to its index. Together they make the inventory a
+	// complete state snapshot: serializing every entity's state captures
+	// everything needed to recover the simulation. The engine is additionally
+	// held in the engine field for direct typed access (see GetEngine).
+	entities     []Entity
+	entityByName map[string]int
 }
 
 // ID returns the ID of the simulation. An ID is a UUID that is generated when
@@ -48,33 +58,46 @@ func (s *Simulation) GetMonitor() *monitoring2.Monitor {
 	return s.monitor
 }
 
-// GetServer is kept for compatibility with older monitoring setup code.
-// Monitoring2 does not expose a Daisen2 replay server.
-func (s *Simulation) GetServer() *daisen2.Server {
-	if s.monitor == nil {
-		return nil
-	}
-
-	return s.monitor.GetServer()
-}
-
 // GetVisTracer returns the tracer used in the simulation.
 func (s *Simulation) GetVisTracer() *tracing.DBTracer {
 	return s.visTracer
 }
 
-// Components returns all the components registered in the simulation. The
-// returned slice should be treated as read-only.
-func (s *Simulation) Components() []messaging.Component {
-	return s.components
+// Components returns a copy of the registered components, in registration
+// order.
+func (s *Simulation) Components() []Component {
+	return append([]Component(nil), s.components...)
 }
 
-// RegisterComponent registers a component with the simulation.
-func (s *Simulation) RegisterComponent(c messaging.Component) {
-	compName := c.Name()
-	if s.compNameIndex[compName] != 0 {
-		panic("component " + compName + " already registered")
+// registerEntity records a live entity in the single, flat inventory. It is the
+// only cross-kind uniqueness check — names must be globally unique across all
+// kinds, which is what makes the inventory a well-defined state snapshot. The
+// typed Register methods pass the concrete object, which satisfies Entity, so
+// the inventory holds the live entity itself.
+func (s *Simulation) registerEntity(e Entity) {
+	name := e.Name()
+	if name == "" {
+		panic("entity name cannot be empty")
 	}
+
+	if s.entityByName == nil {
+		s.entityByName = make(map[string]int)
+	}
+
+	if _, found := s.entityByName[name]; found {
+		panic("entity " + name + " already registered")
+	}
+
+	s.entities = append(s.entities, e)
+	s.entityByName[name] = len(s.entities) - 1
+}
+
+// RegisterComponent registers a component with the simulation. It accepts any
+// named object so that component builders can register through the
+// modeling.Registrar interface without importing this package.
+func (s *Simulation) RegisterComponent(c naming.Named) {
+	compName := c.Name()
+	s.registerEntity(c)
 
 	s.components = append(s.components, c)
 	s.compNameIndex[compName] = len(s.components) - 1
@@ -87,30 +110,75 @@ func (s *Simulation) RegisterComponent(c messaging.Component) {
 		s.monitor.RegisterComponent(c)
 	}
 
-	for _, p := range c.Ports() {
+	for _, p := range componentPorts(c) {
 		s.registerPort(p)
 	}
 }
 
 // registerPort registers a port with the simulation.
-func (s *Simulation) registerPort(p messaging.Port) {
+func (s *Simulation) registerPort(p Port) {
 	portName := p.Name()
-	if s.portNameIndex[portName] != 0 {
-		panic("port " + portName + " already registered")
-	}
+	s.registerEntity(p)
 
 	s.ports = append(s.ports, p)
 	s.portNameIndex[portName] = len(s.ports) - 1
 }
 
+// RegisterConnection registers a connection with the simulation runtime
+// inventory. Setup code still owns topology construction and PlugIn calls, but
+// registered connections are tracked as runtime entities in the global state
+// manager.
+func (s *Simulation) RegisterConnection(c naming.Named) {
+	connName := c.Name()
+	s.registerEntity(c)
+
+	s.connections = append(s.connections, c)
+	s.connNameIndex[connName] = len(s.connections) - 1
+}
+
+// Connections returns a copy of the registered connections, in registration
+// order.
+func (s *Simulation) Connections() []Connection {
+	return append([]Connection(nil), s.connections...)
+}
+
+// RegisterResource registers non-timing program state that can be referenced by
+// multiple components and reached by name through the global state manager. The
+// simulation owns the resource; components hold references to it. Setup
+// constructs and registers each shared resource once under a canonical name.
+func (s *Simulation) RegisterResource(r naming.Named) {
+	if r == nil {
+		panic("resource cannot be nil")
+	}
+
+	s.registerEntity(r)
+	s.resources = append(s.resources, r)
+}
+
+// Resources returns a copy of the registered shared-state resources, in
+// registration order.
+func (s *Simulation) Resources() []Resource {
+	return append([]Resource(nil), s.resources...)
+}
+
 // GetComponentByName returns the component with the given name.
-func (s *Simulation) GetComponentByName(name string) messaging.Component {
-	return s.components[s.compNameIndex[name]]
+func (s *Simulation) GetComponentByName(name string) Component {
+	idx, found := s.compNameIndex[name]
+	if !found {
+		panic("component " + name + " not registered")
+	}
+
+	return s.components[idx]
 }
 
 // GetPortByName returns the port with the given name.
-func (s *Simulation) GetPortByName(name string) messaging.Port {
-	return s.ports[s.portNameIndex[name]]
+func (s *Simulation) GetPortByName(name string) Port {
+	idx, found := s.portNameIndex[name]
+	if !found {
+		panic("port " + name + " not registered")
+	}
+
+	return s.ports[idx]
 }
 
 // Terminate terminates the simulation.

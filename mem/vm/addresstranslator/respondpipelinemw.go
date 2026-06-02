@@ -16,7 +16,7 @@ import (
 )
 
 type respondPipelineMW struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, Resources]
 }
 
 func (m *respondPipelineMW) topPort() messaging.Port {
@@ -35,7 +35,7 @@ func (m *respondPipelineMW) translationPort() messaging.Port {
 func (m *respondPipelineMW) Tick() bool {
 	madeProgress := false
 
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respond() || madeProgress
@@ -65,9 +65,10 @@ func (m *respondPipelineMW) parseTranslation() bool {
 
 	nextTrans := &nextState.Transactions[transIdx]
 	reqState := nextTrans.IncomingReqs[0]
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	translatedReq := createTranslatedReq(reqState, rsp.Page,
-		spec.Log2PageSize, m.bottomPort().AsRemote(), spec)
+		spec.Log2PageSize, m.bottomPort().AsRemote(),
+		m.comp.Resources().MemProviderMapper)
 
 	err := m.bottomPort().Send(translatedReq)
 	if err != nil {

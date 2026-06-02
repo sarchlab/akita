@@ -1,96 +1,57 @@
 package tlb
 
 import (
-	"fmt"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
-	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("TLB", func() {
 
 	var (
-		mockCtrl    *gomock.Controller
-		engine      *MockEngine
-		tlbComp     *modeling.Component[Spec, State]
+		engine      timing.Engine
+		tlbComp     *Comp
 		tlbMW       *tlbMiddleware
 		tlbCtrlMW   *ctrlMiddleware
-		topPort     *MockPort
-		bottomPort  *MockPort
-		controlPort *MockPort
+		topPort     messaging.Port
+		bottomPort  messaging.Port
+		controlPort messaging.Port
+		remotePort  = messaging.RemotePort("RemotePort")
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
-		engine = NewMockEngine(mockCtrl)
-		topPort = NewMockPort(mockCtrl)
-		topPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("TopPort")).
-			AnyTimes()
-		topPort.EXPECT().
-			Name().
-			Return("TopPort").
-			AnyTimes()
-		topPort.EXPECT().
-			SetComponent(gomock.Any()).
-			AnyTimes()
-		bottomPort = NewMockPort(mockCtrl)
-		bottomPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("BottomPort")).
-			AnyTimes()
-		bottomPort.EXPECT().
-			Name().
-			Return("BottomPort").
-			AnyTimes()
-		bottomPort.EXPECT().
-			SetComponent(gomock.Any()).
-			AnyTimes()
-		controlPort = NewMockPort(mockCtrl)
-		controlPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("ControlPort")).
-			AnyTimes()
-		controlPort.EXPECT().
-			Name().
-			Return("ControlPort").
-			AnyTimes()
-		controlPort.EXPECT().
-			SetComponent(gomock.Any()).
-			AnyTimes()
+		engine = timing.NewSerialEngine()
+
+		spec := DefaultSpec()
+		spec.NumSets = 1
+		spec.NumWays = 32
+		spec.Log2PageSize = 12
 
 		tlbComp = MakeBuilder().
-			WithEngine(engine).
-			WithNumSets(1).
-			WithNumWays(32).
-			WithLog2PageSize(12).
-			WithTranslationProviderMapperType("single").
-			WithTranslationProviders(messaging.RemotePort("RemotePort")).
-			WithTopPort(topPort).
-			WithBottomPort(bottomPort).
-			WithControlPort(controlPort).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSpec(spec).
+			WithResources(Resources{
+				TranslationProviderMapper: &mem.SinglePortMapper{
+					Port: remotePort,
+				},
+			}).
 			Build("TLB")
+
+		plugNoopConn(tlbComp)
+
+		topPort = tlbComp.GetPortByName("Top")
+		bottomPort = tlbComp.GetPortByName("Bottom")
+		controlPort = tlbComp.GetPortByName("Control")
 
 		tlbMW = tlbComp.Middlewares()[1].(*tlbMiddleware)
 		tlbCtrlMW = tlbComp.Middlewares()[0].(*ctrlMiddleware)
 	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
-
 	It("should do nothing if there is no req in TopPort", func() {
-		topPort.EXPECT().RetrieveIncoming().Return(nil)
-
 		madeProgress := tlbMW.insertIntoPipeline()
 
 		Expect(madeProgress).To(BeFalse())
@@ -99,13 +60,14 @@ var _ = Describe("TLB", func() {
 	It("should insert req into pipeline when topPort has req", func() {
 		req := &vm.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
+		req.Src = messaging.RemotePort("Agent")
+		req.Dst = topPort.AsRemote()
 		req.PID = 1
 		req.VAddr = uint64(0x100)
 		req.DeviceID = 1
 		req.TrafficClass = "vm.TranslationReq"
+		topPort.Deliver(req)
 
-		topPort.EXPECT().RetrieveIncoming().Return(req).Times(1)
-		topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 		madeProgress := tlbMW.insertIntoPipeline()
 
 		Expect(madeProgress).To(BeTrue())
@@ -127,10 +89,10 @@ var _ = Describe("TLB", func() {
 			next := &tlbComp.State
 			setUpdate(&next.Sets[0], 1, page)
 			setVisit(&next.Sets[0], 1)
-			// Commit the state
 
 			req = &vm.TranslationReq{}
 			req.ID = timing.GetIDGenerator().Generate()
+			req.Src = messaging.RemotePort("Agent")
 			req.PID = 1
 			req.VAddr = uint64(0x100)
 			req.DeviceID = 1
@@ -138,11 +100,11 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should respond to top", func() {
-			topPort.EXPECT().Send(gomock.Any()).Times(1)
-
 			madeProgress := tlbMW.lookup(req)
 
 			Expect(madeProgress).To(BeTrue())
+			rsp := topPort.RetrieveOutgoing()
+			Expect(rsp).To(BeAssignableToTypeOf(&vm.TranslationRsp{}))
 		})
 	})
 
@@ -165,6 +127,7 @@ var _ = Describe("TLB", func() {
 
 			req = &vm.TranslationReq{}
 			req.ID = timing.GetIDGenerator().Generate()
+			req.Src = messaging.RemotePort("Agent")
 			req.PID = 1
 			req.VAddr = 0x100
 			req.DeviceID = 1
@@ -172,21 +135,20 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should fetch from bottom and add entry to MSHR", func() {
-			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					sentMsg := msg.(*vm.TranslationReq)
-					Expect(sentMsg.VAddr).To(Equal(uint64(0x100)))
-					Expect(sentMsg.PID).To(Equal(vm.PID(1)))
-					Expect(sentMsg.DeviceID).To(Equal(uint64(1)))
-				}).
-				Return(nil)
-
 			madeProgress := tlbMW.lookup(req)
 
 			Expect(madeProgress).To(BeTrue())
 			nextState := &tlbComp.State
 			Expect(mshrIsEntryPresent(nextState.MSHREntries, vm.PID(1), uint64(0x100))).
 				To(Equal(true))
+
+			sent := bottomPort.RetrieveOutgoing()
+			Expect(sent).To(BeAssignableToTypeOf(&vm.TranslationReq{}))
+			sentMsg := sent.(*vm.TranslationReq)
+			Expect(sentMsg.VAddr).To(Equal(uint64(0x100)))
+			Expect(sentMsg.PID).To(Equal(vm.PID(1)))
+			Expect(sentMsg.DeviceID).To(Equal(uint64(1)))
+			Expect(sentMsg.Dst).To(Equal(remotePort))
 		})
 	})
 
@@ -201,6 +163,7 @@ var _ = Describe("TLB", func() {
 		BeforeEach(func() {
 			req = &vm.TranslationReq{}
 			req.ID = timing.GetIDGenerator().Generate()
+			req.Src = messaging.RemotePort("Agent")
 			req.PID = 1
 			req.VAddr = 0x100
 			req.DeviceID = 1
@@ -221,13 +184,13 @@ var _ = Describe("TLB", func() {
 				Page: page,
 			}
 			rsp.ID = timing.GetIDGenerator().Generate()
+			rsp.Src = messaging.RemotePort("Agent")
+			rsp.Dst = bottomPort.AsRemote()
 			rsp.RspTo = fetchBottom.ID
 			rsp.TrafficClass = "vm.TranslationRsp"
 		})
 
 		It("should do nothing if no return", func() {
-			bottomPort.EXPECT().PeekIncoming().Return(nil)
-
 			madeProgress := tlbMW.parseBottom()
 
 			Expect(madeProgress).To(BeFalse())
@@ -251,8 +214,7 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should parse respond from bottom", func() {
-			bottomPort.EXPECT().PeekIncoming().Return(rsp)
-			bottomPort.EXPECT().RetrieveIncoming()
+			bottomPort.Deliver(rsp)
 
 			// Add MSHR entry
 			next := &tlbComp.State
@@ -280,21 +242,21 @@ var _ = Describe("TLB", func() {
 				Requests: []vm.TranslationReq{*req},
 			}
 
-			topPort.EXPECT().Send(gomock.Any()).Return(nil)
-
 			madeProgress := tlbMW.respondMSHREntry()
 
 			Expect(madeProgress).To(BeTrue())
 			nextState := &tlbComp.State
 			Expect(nextState.RespondingMSHRData.Requests).To(HaveLen(0))
 			Expect(nextState.HasRespondingMSHR).To(BeFalse())
+
+			rsp := topPort.RetrieveOutgoing()
+			Expect(rsp).To(BeAssignableToTypeOf(&vm.TranslationRsp{}))
 		})
 	})
 
 	Context("flush related handling", func() {
 
 		It("should do nothing if no req", func() {
-			controlPort.EXPECT().PeekIncoming().Return(nil)
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -306,7 +268,7 @@ var _ = Describe("TLB", func() {
 				PID:       1,
 			}
 			flushReq.ID = timing.GetIDGenerator().Generate()
-			flushReq.Src = messaging.RemotePort("")
+			flushReq.Src = messaging.RemotePort("Agent")
 			flushReq.Dst = controlPort.AsRemote()
 			flushReq.TrafficClass = "mem.ControlReq"
 
@@ -320,36 +282,31 @@ var _ = Describe("TLB", func() {
 			setUpdate(&next.Sets[0], 1, page)
 			setVisit(&next.Sets[0], 1)
 
-			controlPort.EXPECT().PeekIncoming().Return(flushReq)
-			controlPort.EXPECT().RetrieveIncoming().Return(flushReq)
-			controlPort.EXPECT().Send(gomock.Any())
-			bottomPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
-			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
-			topPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
+			controlPort.Deliver(flushReq)
 
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
 			madeProgress = tlbMW.Tick() || madeProgress
 
 			Expect(madeProgress).To(BeTrue())
+
+			rsp := controlPort.RetrieveOutgoing()
+			Expect(rsp).To(BeAssignableToTypeOf(&mem.ControlRsp{}))
 		})
 
 		It("should handle restart request", func() {
 			restartReq := &mem.ControlReq{Command: mem.CmdReset}
 			restartReq.ID = timing.GetIDGenerator().Generate()
-			restartReq.Src = messaging.RemotePort("")
+			restartReq.Src = messaging.RemotePort("Agent")
 			restartReq.Dst = controlPort.AsRemote()
 			restartReq.TrafficClass = "mem.ControlReq"
-			controlPort.EXPECT().PeekIncoming().
-				Return(restartReq)
-			controlPort.EXPECT().RetrieveIncoming().
-				Return(restartReq)
-			controlPort.EXPECT().Send(gomock.Any())
-			topPort.EXPECT().PeekIncoming().Return(nil)
-			bottomPort.EXPECT().PeekIncoming().Return(nil)
+			controlPort.Deliver(restartReq)
 
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
 			Expect(madeProgress).To(BeTrue())
+
+			rsp := controlPort.RetrieveOutgoing()
+			Expect(rsp).To(BeAssignableToTypeOf(&mem.ControlRsp{}))
 		})
 	})
 
@@ -359,15 +316,12 @@ var _ = Describe("TLB", func() {
 				Command: mem.CmdPause,
 			}
 			pauseMsg.ID = timing.GetIDGenerator().Generate()
-			pauseMsg.Src = messaging.RemotePort("")
+			pauseMsg.Src = messaging.RemotePort("Agent")
 			pauseMsg.Dst = controlPort.AsRemote()
 			pauseMsg.TrafficBytes = 4
 			pauseMsg.TrafficClass = "mem.ControlReq"
 
-			controlPort.EXPECT().PeekIncoming().
-				Return(pauseMsg)
-			controlPort.EXPECT().RetrieveIncoming().
-				Return(pauseMsg)
+			controlPort.Deliver(pauseMsg)
 
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
@@ -381,15 +335,12 @@ var _ = Describe("TLB", func() {
 				Command: mem.CmdPause,
 			}
 			pause.ID = timing.GetIDGenerator().Generate()
-			pause.Src = messaging.RemotePort("")
+			pause.Src = messaging.RemotePort("Agent")
 			pause.Dst = controlPort.AsRemote()
 			pause.TrafficBytes = 4
 			pause.TrafficClass = "mem.ControlReq"
 
-			controlPort.EXPECT().PeekIncoming().
-				Return(pause)
-			controlPort.EXPECT().RetrieveIncoming().
-				Return(pause)
+			controlPort.Deliver(pause)
 
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
@@ -397,21 +348,16 @@ var _ = Describe("TLB", func() {
 			nextState := &tlbComp.State
 			Expect(nextState.TLBState).To(Equal(tlbStatePause))
 
-			// Commit the state change
-
 			enable := &mem.ControlReq{
 				Command: mem.CmdEnable,
 			}
 			enable.ID = timing.GetIDGenerator().Generate()
-			enable.Src = messaging.RemotePort("")
+			enable.Src = messaging.RemotePort("Agent")
 			enable.Dst = controlPort.AsRemote()
 			enable.TrafficBytes = 4
 			enable.TrafficClass = "mem.ControlReq"
 
-			controlPort.EXPECT().PeekIncoming().
-				Return(enable)
-			controlPort.EXPECT().RetrieveIncoming().
-				Return(enable)
+			controlPort.Deliver(enable)
 
 			madeProgress = tlbCtrlMW.handleIncomingCommands()
 			Expect(madeProgress).To(BeTrue())
@@ -424,15 +370,12 @@ var _ = Describe("TLB", func() {
 				Command: mem.CmdDrain,
 			}
 			drainMsg.ID = timing.GetIDGenerator().Generate()
-			drainMsg.Src = messaging.RemotePort("")
+			drainMsg.Src = messaging.RemotePort("Agent")
 			drainMsg.Dst = controlPort.AsRemote()
 			drainMsg.TrafficBytes = 4
 			drainMsg.TrafficClass = "mem.ControlReq"
 
-			controlPort.EXPECT().PeekIncoming().
-				Return(drainMsg)
-			controlPort.EXPECT().RetrieveIncoming().
-				Return(drainMsg)
+			controlPort.Deliver(drainMsg)
 
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
@@ -440,11 +383,6 @@ var _ = Describe("TLB", func() {
 			nextState := &tlbComp.State
 			Expect(nextState.TLBState).To(Equal(tlbStateDrain))
 
-			// Commit the state
-
-			bottomPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
-			topPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
-			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 			madeProgress = tlbMW.handleDrain()
 			Expect(madeProgress).To(BeFalse())
 			nextState = &tlbComp.State
@@ -455,53 +393,34 @@ var _ = Describe("TLB", func() {
 
 var _ = Describe("TLB Integration", func() {
 	var (
-		mockCtrl   *gomock.Controller
 		engine     timing.Engine
-		tlbComp    *modeling.Component[Spec, State]
-		lowModule  *MockPort
-		agent      *MockPort
+		tlbComp    *Comp
+		lowModule  *idealEndpoint
+		agent      *idealEndpoint
 		connection messaging.Connection
 		page       vm.Page
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
 		engine = timing.NewSerialEngine()
-		lowModule = NewMockPort(mockCtrl)
-		lowModule.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("LowModule")).
-			AnyTimes()
-		lowModuleCall := lowModule.EXPECT().
-			PeekOutgoing().
-			Return(nil).
-			AnyTimes()
 
-		agent = NewMockPort(mockCtrl)
-		agent.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
-		agent.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("Agent")).
-			AnyTimes()
+		connection = makeDirectConnection(engine)
 
-		connection = directconnection.MakeBuilder().
-			WithEngine(engine).
-			WithFreq(1 * timing.GHz).
-			Build("Conn")
+		lowModule = newIdealEndpoint("LowModule")
+		agent = newIdealEndpoint("Agent")
 
 		tlbComp = MakeBuilder().
-			WithEngine(engine).
-			WithTranslationProviderMapperType("single").
-			WithTranslationProviders(lowModule.AsRemote()).
-			WithTopPort(messaging.NewPort(nil, 4, 4, "TLB.TopPort")).
-			WithBottomPort(messaging.NewPort(nil, 4, 4, "TLB.BottomPort")).
-			WithControlPort(messaging.NewPort(nil, 1, 1, "TLB.ControlPort")).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSpec(DefaultSpec()).
+			WithResources(Resources{
+				TranslationProviderMapper: &mem.SinglePortMapper{
+					Port: lowModule.port.AsRemote(),
+				},
+			}).
 			Build("TLB")
 
-		agent.EXPECT().SetConnection(connection)
-		lowModule.EXPECT().SetConnection(connection)
-		connection.PlugIn(agent)
-		connection.PlugIn(lowModule)
+		connection.PlugIn(agent.port)
+		connection.PlugIn(lowModule.port)
 		connection.PlugIn(tlbComp.GetPortByName("Top"))
 		connection.PlugIn(tlbComp.GetPortByName("Bottom"))
 		connection.PlugIn(tlbComp.GetPortByName("Control"))
@@ -512,81 +431,70 @@ var _ = Describe("TLB Integration", func() {
 			PAddr: 0x2000,
 			Valid: true,
 		}
-		lowModule.EXPECT().Deliver(gomock.Any()).
-			Do(func(req messaging.Msg) {
-				translationReq := req.(*vm.TranslationReq)
-				rsp := &vm.TranslationRsp{
-					Page: page,
-				}
-				rsp.ID = timing.GetIDGenerator().Generate()
-				rsp.Src = lowModule.AsRemote()
-				rsp.Dst = translationReq.Src
-				rsp.RspTo = translationReq.ID
-				rsp.TrafficClass = "vm.TranslationRsp"
-				lowModuleCall.Times(0)
-				lowModule.EXPECT().PeekOutgoing().Return(rsp)
-				lowModule.EXPECT().RetrieveOutgoing().Return(rsp)
-				lowModule.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
-			}).
-			AnyTimes()
-	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
+		// lowModule answers every translation request with the page.
+		lowModule.onDeliver = func(msg messaging.Msg) {
+			translationReq := msg.(*vm.TranslationReq)
+			rsp := &vm.TranslationRsp{Page: page}
+			rsp.ID = timing.GetIDGenerator().Generate()
+			rsp.Src = lowModule.port.AsRemote()
+			rsp.Dst = translationReq.Src
+			rsp.RspTo = translationReq.ID
+			rsp.TrafficClass = "vm.TranslationRsp"
+			lowModule.port.Send(rsp)
+		}
 	})
 
 	It("should do tlb miss", func() {
 		req := &vm.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
-		req.Src = agent.AsRemote()
+		req.Src = agent.port.AsRemote()
 		req.Dst = tlbComp.GetPortByName("Top").AsRemote()
 		req.PID = 1
 		req.VAddr = 0x1000
 		req.DeviceID = 1
 		req.TrafficClass = "vm.TranslationReq"
-		tlbComp.GetPortByName("Top").Deliver(req)
-
-		agent.EXPECT().Deliver(gomock.Any()).
-			Do(func(rsp messaging.Msg) {
-				translationRsp := rsp.(*vm.TranslationRsp)
-				fmt.Println("Deliver() called with Page:", translationRsp.Page)
-				Expect(translationRsp.Page).To(Equal(page))
-			})
+		agent.port.Send(req)
 
 		engine.Run()
+
+		rsp := agent.lastDelivered.(*vm.TranslationRsp)
+		Expect(rsp.Page).To(Equal(page))
 	})
 
 	It("should have faster hit than miss", func() {
 		time1 := engine.CurrentTime()
 		req := &vm.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
-		req.Src = agent.AsRemote()
+		req.Src = agent.port.AsRemote()
 		req.Dst = tlbComp.GetPortByName("Top").AsRemote()
 		req.PID = 1
 		req.VAddr = 0x1000
 		req.DeviceID = 1
 		req.TrafficClass = "vm.TranslationReq"
-		tlbComp.GetPortByName("Top").Deliver(req)
-
-		agent.EXPECT().Deliver(gomock.Any()).
-			Do(func(rsp messaging.Msg) {
-				translationRsp := rsp.(*vm.TranslationRsp)
-				Expect(translationRsp.Page).To(Equal(page))
-			})
+		agent.port.Send(req)
 
 		engine.Run()
+
+		rsp := agent.lastDelivered.(*vm.TranslationRsp)
+		Expect(rsp.Page).To(Equal(page))
 
 		time2 := engine.CurrentTime()
 
-		tlbComp.GetPortByName("Top").Deliver(req)
-
-		agent.EXPECT().Deliver(gomock.Any()).
-			Do(func(rsp messaging.Msg) {
-				translationRsp := rsp.(*vm.TranslationRsp)
-				Expect(translationRsp.Page).To(Equal(page))
-			})
+		req2 := &vm.TranslationReq{}
+		req2.ID = timing.GetIDGenerator().Generate()
+		req2.Src = agent.port.AsRemote()
+		req2.Dst = tlbComp.GetPortByName("Top").AsRemote()
+		req2.PID = 1
+		req2.VAddr = 0x1000
+		req2.DeviceID = 1
+		req2.TrafficClass = "vm.TranslationReq"
+		agent.port.Send(req2)
 
 		engine.Run()
+
+		rsp = agent.lastDelivered.(*vm.TranslationRsp)
+		Expect(rsp.Page).To(Equal(page))
 
 		time3 := engine.CurrentTime()
 

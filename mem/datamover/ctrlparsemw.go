@@ -14,7 +14,7 @@ import (
 )
 
 type ctrlParseMW struct {
-	comp *modeling.Component[Spec, State]
+	comp *modeling.Component[Spec, State, modeling.None]
 }
 
 func (m *ctrlParseMW) ctrlPort() messaging.Port {
@@ -48,7 +48,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		return false
 	}
 
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 
 	srcByteGranularity := resolveByteGranularity(spec, req.SrcSide)
 	addressMustBeAligned(req.SrcAddress, srcByteGranularity)

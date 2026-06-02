@@ -1,11 +1,51 @@
 package writeback
 
 import (
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 )
+
+type cacheState int
+
+const (
+	cacheStateInvalid cacheState = iota
+	cacheStateRunning
+	cacheStatePreFlushing
+	cacheStateFlushing
+	cacheStatePaused
+)
+
+// Spec contains immutable configuration for the writeback cache.
+type Spec struct {
+	Freq                timing.Freq `json:"freq"`
+	NumReqPerCycle      int         `json:"num_req_per_cycle"`
+	Log2BlockSize       uint64      `json:"log2_block_size"`
+	BankLatency         int         `json:"bank_latency"`
+	WayAssociativity    int         `json:"way_associativity"`
+	NumBanks            int         `json:"num_banks"`
+	NumSets             int         `json:"num_sets"`
+	NumMSHREntry        int         `json:"num_mshr_entry"`
+	TotalByteSize       uint64      `json:"total_byte_size"`
+	DirLatency          int         `json:"dir_latency"`
+	WriteBufferCapacity int         `json:"write_buffer_capacity"`
+	MaxInflightFetch    int         `json:"max_inflight_fetch"`
+	MaxInflightEviction int         `json:"max_inflight_eviction"`
+
+	// Address mapper configuration (inlined from interface)
+	AddressMapperType string   `json:"address_mapper_type"`
+	RemotePortNames   []string `json:"remote_port_names"`
+	InterleavingSize  uint64   `json:"interleaving_size"`
+
+	// Port buffer sizes.
+	TopPortBufferSize     int `json:"top_port_buffer_size"`
+	BottomPortBufferSize  int `json:"bottom_port_buffer_size"`
+	ControlPortBufferSize int `json:"control_port_buffer_size"`
+}
 
 // State contains mutable runtime data for the writeback cache.
 type State struct {
@@ -28,7 +68,7 @@ type State struct {
 
 	// Bank pipeline + post-buf + counters
 	BankPipelines                   []queueing.Pipeline[int] `json:"bank_pipelines"`
-	BankPostPipelineBufs            []queueing.Buffer[int]   `json:"bank_post_pipeline_bufs"`
+	BankPostPipelineBufs            []postPipelineBuf        `json:"bank_post_pipeline_bufs"`
 	BankInflightTransCounts         []int                    `json:"bank_inflight_trans_counts"`
 	BankDownwardInflightTransCounts []int                    `json:"bank_downward_inflight_trans_counts"`
 
@@ -165,3 +205,17 @@ func (t *transactionState) reqMeta() messaging.MsgMeta {
 	}
 	panic("no request")
 }
+
+// Resources holds the shared resources and wiring referenced by the writeback
+// cache. Storage is the backing store. AddressToPortMapper is an externally
+// injected mapper used to derive the remote ports the cache evicts/fetches to;
+// RemotePorts is the equivalent wiring data when the mapper is built from
+// Spec.AddressMapperType. Only one of the two needs to be supplied.
+type Resources struct {
+	Storage             *mem.Storage
+	AddressToPortMapper mem.AddressToPortMapper
+	RemotePorts         []messaging.RemotePort
+}
+
+// Comp is the writeback cache component.
+type Comp = modeling.Component[Spec, State, Resources]

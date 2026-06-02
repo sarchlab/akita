@@ -86,33 +86,47 @@ Activate → Read/Write → Precharge → (next row)
 
 ## Builder Pattern
 
+All scalar configuration is supplied as a whole through `WithSpec`. Start from a
+preset (or `DefaultSpec()`), tweak the fields you need, and pass it in. Wiring is
+supplied through `WithRegistrar` (which provides the engine and registers the
+component) and `WithResources` (shared objects such as backing storage). The
+component creates its own `Top` port internally; its buffer size is the
+`TopPortBufferSize` field of the spec.
+
 ```go
+spec := dram.DDR4Spec
+spec.Freq = 1200 * timing.MHz
+spec.PagePolicy = dram.PagePolicyOpen
+
 ctrl := dram.MakeBuilder().
-    WithEngine(engine).
-    WithSpec(dram.DDR4Spec).
-    WithFreq(1200 * sim.MHz).
-    WithTopPort(topPort).
+    WithRegistrar(sim).
+    WithSpec(spec).
+    WithResources(dram.Resources{Storage: storage}).
     Build("DRAM")
+
+topPort := ctrl.GetPortByName("Top")
 ```
 
-### Common Builder Options
+### Builder Methods
 
 | Method | Description |
 |---|---|
-| `WithEngine(e)` | Event scheduler (required) |
-| `WithSpec(s)` | Use a preset spec (DDR4Spec, HBM2Spec, etc.) |
-| `WithFreq(f)` | Operating frequency |
-| `WithTopPort(p)` | Port for read/write requests |
-| `WithProtocol(p)` | DRAM protocol type |
-| `WithNumRank(n)` | Number of ranks |
-| `WithNumBankGroup(n)` | Number of bank groups |
-| `WithNumBank(n)` | Banks per bank group |
-| `WithBusWidth(n)` | Data bus width in bits |
-| `WithBurstLength(n)` | Burst transfer length |
-| `WithGlobalStorage(s)` | Shared backing storage |
-| `WithPagePolicy(p)` | `PagePolicyOpen` or `PagePolicyClose` |
-| `WithTransactionQueueSize(n)` | Transaction buffer depth |
-| `WithInterleavingAddrConversion(...)` | Address interleaving for multi-controller setups |
+| `WithRegistrar(r)` | Source of the engine and component registration (required) |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` or a preset (DDR4Spec, HBM2Spec, ...) |
+| `WithResources(Resources{Storage: s})` | Shared backing storage (built internally if omitted) |
+
+### Commonly Tweaked Spec Fields
+
+| Field | Description |
+|---|---|
+| `Freq` | Operating frequency |
+| `Protocol` | DRAM protocol type |
+| `NumRank` / `NumBankGroup` / `NumBank` | Bank geometry |
+| `BusWidth` / `BurstLength` | Data bus width (bits) and burst transfer length |
+| `PagePolicy` | `PagePolicyOpen` or `PagePolicyClose` |
+| `TransactionQueueSize` / `CommandQueueCapacity` | Queue depths |
+| `TopPortBufferSize` | Buffer size of the internally-created `Top` port |
+| `HasAddrConverter` / `InterleavingSize` / ... | Address interleaving for multi-controller setups |
 
 ## Statistics
 

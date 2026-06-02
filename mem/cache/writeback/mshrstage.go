@@ -24,8 +24,7 @@ func (s *mshrStage) Tick() bool {
 		return false
 	}
 
-	transIdx := mshrBuf.Elements[0]
-	mshrBuf.Elements = mshrBuf.Elements[1:]
+	transIdx := mshrBuf.Pop()
 	trans := &next.Transactions[transIdx]
 	next.HasProcessingMSHREntry = true
 	next.ProcessingMSHREntryIdx = transIdx
@@ -69,7 +68,7 @@ func (s *mshrStage) processOneReq() bool {
 
 	transactionPresent := trans != nil && s.findTransaction(transIdx)
 
-	spec := s.cache.comp.Spec
+	spec := s.cache.comp.Spec()
 
 	if transactionPresent {
 		next.Transactions[transIdx].Removed = true

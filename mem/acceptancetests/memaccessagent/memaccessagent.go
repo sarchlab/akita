@@ -7,27 +7,56 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v5/daisen2"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 var dumpLog = false
 
+// Spec contains the immutable configuration for the MemAccessAgent.
+type Spec struct {
+	Freq       timing.Freq `json:"freq"`
+	MaxAddress uint64      `json:"max_address"`
+	WriteLeft  int         `json:"write_left"`
+	ReadLeft   int         `json:"read_left"`
+
+	MemPortBufferSize int `json:"mem_port_buffer_size"`
+}
+
+// Resources holds the external wiring referenced by the MemAccessAgent. The
+// LowModule is the downstream port to which memory requests are sent. It can be
+// supplied through WithResources, or assigned to the public LowModule field
+// after Build when construction ordering requires it.
+type Resources struct {
+	LowModule messaging.Port
+}
+
+// State contains the mutable runtime data for the MemAccessAgent.
+type State struct {
+	WriteLeft       int                     `json:"write_left"`
+	ReadLeft        int                     `json:"read_left"`
+	KnownMemValue   map[uint64][]uint32     `json:"known_mem_value"`
+	PendingReadReq  map[uint64]mem.ReadReq  `json:"pending_read_req"`
+	PendingWriteReq map[uint64]mem.WriteReq `json:"pending_write_req"`
+}
+
 // A MemAccessAgent is a Component that can help testing the cache and the
 // memory controllers by generating a large number of read and write requests.
 type MemAccessAgent struct {
-	*modeling.Component[Spec, State]
+	*modeling.Component[Spec, State, modeling.None]
 
 	// LowModule is the downstream port to which memory requests are sent.
 	// It is not serialized as part of the state.
 	LowModule messaging.Port
 
-	// Rand is the random source used by the agent. If nil, the global
+	// rng is the random source used by the agent. If nil, the global
 	// math/rand functions are used (non-deterministic in Go 1.22+).
-	Rand *rand.Rand
+	rng *rand.Rand
 
-	WriteProgressBar *daisen2.ProgressBar
-	ReadProgressBar  *daisen2.ProgressBar
+	writeProgressBar *daisen2.ProgressBar
+	readProgressBar  *daisen2.ProgressBar
 }
 
 // CreateProgressBars creates the read/write progress bars for the agent.
@@ -47,12 +76,12 @@ func (a *MemAccessAgent) CreateProgressBars(
 		len(a.State.PendingReadReq),
 	)
 
-	if writeTotal > 0 && a.WriteProgressBar == nil {
-		a.WriteProgressBar = createProgressBar(a.Name()+".Writes", writeTotal)
+	if writeTotal > 0 && a.writeProgressBar == nil {
+		a.writeProgressBar = createProgressBar(a.Name()+".Writes", writeTotal)
 	}
 
-	if readTotal > 0 && a.ReadProgressBar == nil {
-		a.ReadProgressBar = createProgressBar(a.Name()+".Reads", readTotal)
+	if readTotal > 0 && a.readProgressBar == nil {
+		a.readProgressBar = createProgressBar(a.Name()+".Reads", readTotal)
 	}
 }
 

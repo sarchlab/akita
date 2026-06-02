@@ -43,7 +43,7 @@ type pingTransaction struct {
 // --- Middleware ---
 
 type pingMiddleware struct {
-	comp                *modeling.Component[PingSpec, PingState]
+	comp                *modeling.Component[PingSpec, PingState, modeling.None]
 	outPort             messaging.Port
 	pingDst             messaging.RemotePort
 	currentTransactions []*pingTransaction
@@ -167,7 +167,7 @@ func Example() {
 	portA := messaging.NewPort(nil, 4, 4, "AgentA.OutPort")
 	portB := messaging.NewPort(nil, 4, 4, "AgentB.OutPort")
 
-	agentA := modeling.NewBuilder[PingSpec, PingState]().
+	agentA := modeling.NewBuilder[PingSpec, PingState, modeling.None]().
 		WithEngine(engine).
 		WithFreq(1 * timing.Hz).
 		WithSpec(specA).
@@ -181,7 +181,7 @@ func Example() {
 	agentA.AddMiddleware(mwA)
 	portA.SetComponent(agentA)
 
-	agentB := modeling.NewBuilder[PingSpec, PingState]().
+	agentB := modeling.NewBuilder[PingSpec, PingState, modeling.None]().
 		WithEngine(engine).
 		WithFreq(1 * timing.Hz).
 		WithSpec(specB).
@@ -197,8 +197,7 @@ func Example() {
 
 	conn := directconnection.
 		MakeBuilder().
-		WithEngine(engine).
-		WithFreq(1 * timing.GHz).
+		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 		Build("Conn")
 
 	conn.PlugIn(portA)

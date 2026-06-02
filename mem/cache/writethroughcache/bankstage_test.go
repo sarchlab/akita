@@ -11,48 +11,37 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
-	gomock "go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Bankstage", func() {
 	var (
-		mockCtrl *gomock.Controller
-		storage  *mem.Storage
-		s        *bankStage
-		c        *pipelineMW
+		storage *mem.Storage
+		s       *bankStage
+		c       *pipelineMW
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
 		storage = mem.NewStorage(4 * mem.KB)
 
 		initialState := State{
-			DirBuf: queueing.Buffer[int]{
-				BufferName: "Cache.DirBuf",
-				Cap:        4,
-			},
+			DirBuf: queueing.NewBuffer[int]("Cache.DirBuf", 4),
 			BankBufs: []queueing.Buffer[int]{
-				{BufferName: "Cache.BankBuf0", Cap: 1},
+				queueing.NewBuffer[int]("Cache.BankBuf0", 1),
 			},
-			DirPipeline: queueing.Pipeline[int]{
-				Width: 1, NumStages: 2,
-			},
-			DirPostBuf: queueing.Buffer[int]{
-				BufferName: "Cache.DirPostBuf",
-				Cap:        4,
-			},
+			DirPipeline: queueing.NewPipeline[int](1, 2),
+			DirPostBuf:  queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
 			BankPipelines: []queueing.Pipeline[int]{
-				{Width: 1, NumStages: 10},
+				queueing.NewPipeline[int](1, 10),
 			},
 			BankPostBufs: []queueing.Buffer[int]{
-				{BufferName: "Cache.BankPostBuf0", Cap: 1},
+				queueing.NewBuffer[int]("Cache.BankPostBuf0", 1),
 			},
 		}
 
 		c = &pipelineMW{
 			storage: storage,
 		}
-		c.comp = modeling.NewBuilder[Spec, State]().
+		c.comp = modeling.NewBuilder[Spec, State, Resources]().
 			WithEngine(nil).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
@@ -78,10 +67,6 @@ var _ = Describe("Bankstage", func() {
 		}
 	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
-
 	It("should do nothing if no request", func() {
 		madeProgress := s.Tick()
 
@@ -93,12 +78,12 @@ var _ = Describe("Bankstage", func() {
 
 		// Add a transaction
 		next.Transactions = append(next.Transactions, transactionState{})
-		next.BankBufs[0].Elements = append(next.BankBufs[0].Elements, 0)
+		next.BankBufs[0].PushTyped(0)
 
 		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeTrue())
-		Expect(next.BankPipelines[0].Len()).To(Equal(1))
+		Expect(next.BankPipelines[0].Stages()).To(HaveLen(1))
 	})
 
 	Context("read hit", func() {
@@ -150,8 +135,7 @@ var _ = Describe("Bankstage", func() {
 			)
 
 			// Put in post-pipeline buffer
-			next.BankPostBufs[0].Elements = append(
-				next.BankPostBufs[0].Elements, 0)
+			next.BankPostBufs[0].PushTyped(0)
 		})
 
 		It("should read", func() {
@@ -225,8 +209,7 @@ var _ = Describe("Bankstage", func() {
 				},
 			)
 
-			next.BankPostBufs[0].Elements = append(
-				next.BankPostBufs[0].Elements, 0)
+			next.BankPostBufs[0].PushTyped(0)
 		})
 
 		It("should write", func() {
@@ -289,8 +272,7 @@ var _ = Describe("Bankstage", func() {
 				},
 			)
 
-			next.BankPostBufs[0].Elements = append(
-				next.BankPostBufs[0].Elements, 0)
+			next.BankPostBufs[0].PushTyped(0)
 		})
 
 		It("should write fetched", func() {

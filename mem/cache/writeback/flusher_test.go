@@ -45,29 +45,23 @@ var _ = Describe("Flusher", func() {
 		initialState := State{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
-			DirStageBuf: queueing.Buffer[int]{
-				BufferName: "Cache.DirStageBuf", Cap: 4,
+			DirStageBuf:  queueing.NewBuffer[int]("Cache.DirStageBuf", 4),
+			DirToBankBufs: []queueing.Buffer[int]{
+				queueing.NewBuffer[int]("Cache.DirToBankBuf", 4),
 			},
-			DirToBankBufs: []queueing.Buffer[int]{{
-				BufferName: "Cache.DirToBankBuf", Cap: 4,
-			}},
-			WriteBufferToBankBufs: []queueing.Buffer[int]{{
-				BufferName: "Cache.WBToBankBuf", Cap: 4,
-			}},
-			MSHRStageBuf: queueing.Buffer[int]{
-				BufferName: "Cache.MSHRStageBuf", Cap: 4,
+			WriteBufferToBankBufs: []queueing.Buffer[int]{
+				queueing.NewBuffer[int]("Cache.WBToBankBuf", 4),
 			},
-			WriteBufferBuf: queueing.Buffer[int]{
-				BufferName: "Cache.WriteBufferBuf", Cap: 4,
+			MSHRStageBuf:       queueing.NewBuffer[int]("Cache.MSHRStageBuf", 4),
+			WriteBufferBuf:     queueing.NewBuffer[int]("Cache.WriteBufferBuf", 4),
+			DirPipeline:        queueing.NewPipeline[int](4, 0),
+			DirPostPipelineBuf: queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
+			BankPipelines: []queueing.Pipeline[int]{
+				queueing.NewPipeline[int](4, 10),
 			},
-			DirPipeline: queueing.Pipeline[int]{Width: 4, NumStages: 0},
-			DirPostPipelineBuf: queueing.Buffer[int]{
-				BufferName: "Cache.DirPostBuf", Cap: 4,
+			BankPostPipelineBufs: []postPipelineBuf{
+				newPostPipelineBuf(4),
 			},
-			BankPipelines: []queueing.Pipeline[int]{{Width: 4, NumStages: 10}},
-			BankPostPipelineBufs: []queueing.Buffer[int]{{
-				BufferName: "Cache.BankPostBuf", Cap: 4,
-			}},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
 		}
@@ -76,7 +70,7 @@ var _ = Describe("Flusher", func() {
 			topPort:    topPort,
 			bottomPort: bottomPort,
 		}
-		m.comp = modeling.NewBuilder[Spec, State]().
+		m.comp = modeling.NewBuilder[Spec, State, Resources]().
 			WithEngine(nil).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{

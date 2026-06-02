@@ -16,7 +16,7 @@ type bankStage struct {
 }
 
 func (s *bankStage) Tick() (madeProgress bool) {
-	spec := s.cache.comp.Spec
+	spec := s.cache.comp.Spec()
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = s.finalizeTrans() || madeProgress
@@ -48,7 +48,7 @@ func (s *bankStage) Reset() {
 
 func (s *bankStage) pullFromBuf() bool {
 	next := &s.cache.comp.State
-	spec := s.cache.comp.Spec
+	spec := s.cache.comp.Spec()
 
 	if !s.canAcceptIntoPipeline(*next) {
 		return false
@@ -56,9 +56,8 @@ func (s *bankStage) pullFromBuf() bool {
 
 	// Check write buffer to bank buffer first
 	wbBuf := &next.WriteBufferToBankBufs[s.bankID]
-	if len(wbBuf.Elements) > 0 {
-		transIdx := wbBuf.Elements[0]
-		wbBuf.Elements = wbBuf.Elements[1:]
+	if wbBuf.Size() > 0 {
+		transIdx := wbBuf.Pop()
 		s.acceptIntoPipeline(next, spec, transIdx)
 		next.BankInflightTransCounts[s.bankID]++
 		return true
@@ -78,7 +77,7 @@ func (s *bankStage) pullFromBuf() bool {
 }
 
 func (s *bankStage) canAcceptIntoPipeline(cur State) bool {
-	spec := s.cache.comp.Spec
+	spec := s.cache.comp.Spec()
 
 	if spec.BankLatency > 0 {
 		return cur.BankPipelines[s.bankID].CanAccept()
@@ -90,12 +89,11 @@ func (s *bankStage) canAcceptIntoPipeline(cur State) bool {
 
 func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
 	dirBuf := &next.DirToBankBufs[s.bankID]
-	if len(dirBuf.Elements) == 0 {
+	if dirBuf.Size() == 0 {
 		return false
 	}
 
-	transIdx := dirBuf.Elements[0]
-	dirBuf.Elements = dirBuf.Elements[1:]
+	transIdx := dirBuf.Pop()
 	t := &next.Transactions[transIdx]
 
 	if t.Action == writeBufferFetch {
@@ -127,7 +125,8 @@ func (s *bankStage) finalizeTrans() bool {
 	next := &s.cache.comp.State
 	postBuf := &next.BankPostPipelineBufs[s.bankID]
 
-	for i, idx := range postBuf.Elements {
+	for i := 0; i < postBuf.Size(); i++ {
+		idx := postBuf.Get(i)
 		trans := &next.Transactions[idx]
 
 		done := false
@@ -146,7 +145,7 @@ func (s *bankStage) finalizeTrans() bool {
 		}
 
 		if done {
-			postBuf.Elements = append(postBuf.Elements[:i], postBuf.Elements[i+1:]...)
+			postBuf.RemoveAt(i)
 			return true
 		}
 	}
@@ -159,7 +158,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 		return false
 	}
 
-	spec := s.cache.comp.Spec
+	spec := s.cache.comp.Spec()
 	next := &s.cache.comp.State
 
 	addr := trans.ReadAddress
@@ -199,7 +198,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 		return false
 	}
 
-	spec := s.cache.comp.Spec
+	spec := s.cache.comp.Spec()
 	next := &s.cache.comp.State
 
 	addr := trans.WriteAddress
@@ -296,7 +295,7 @@ func (s *bankStage) finalizeBankEviction(
 	transIdx int,
 	trans *transactionState,
 ) bool {
-	spec := s.cache.comp.Spec
+	spec := s.cache.comp.Spec()
 	next := &s.cache.comp.State
 	wbBuf := &next.WriteBufferBuf
 

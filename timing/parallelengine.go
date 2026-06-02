@@ -32,6 +32,12 @@ type ParallelEngine struct {
 	registry map[string]Handler
 }
 
+// Name returns the name of the engine. The engine is registered as a simulation
+// entity so its event-queue and time state are part of the state snapshot.
+func (e *ParallelEngine) Name() string {
+	return "Engine"
+}
+
 // NewParallelEngine creates a ParallelEngine.
 func NewParallelEngine() *ParallelEngine {
 	e := new(ParallelEngine)
