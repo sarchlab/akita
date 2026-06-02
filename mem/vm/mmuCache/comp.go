@@ -10,15 +10,24 @@ import (
 
 // Spec contains immutable configuration for the mmuCache.
 type Spec struct {
-	Freq            timing.Freq          `json:"freq"`
-	NumBlocks       int                  `json:"num_blocks"`
-	NumLevels       int                  `json:"num_levels"`
-	PageSize        uint64               `json:"page_size"`
-	Log2PageSize    uint64               `json:"log2_page_size"`
-	NumReqPerCycle  int                  `json:"num_req_per_cycle"`
-	LatencyPerLevel uint64               `json:"latency_per_level"`
-	LowModulePort   messaging.RemotePort `json:"low_module_port"`
-	UpModulePort    messaging.RemotePort `json:"up_module_port"`
+	Freq            timing.Freq `json:"freq"`
+	NumBlocks       int         `json:"num_blocks"`
+	NumLevels       int         `json:"num_levels"`
+	PageSize        uint64      `json:"page_size"`
+	Log2PageSize    uint64      `json:"log2_page_size"`
+	NumReqPerCycle  int         `json:"num_req_per_cycle"`
+	LatencyPerLevel uint64      `json:"latency_per_level"`
+
+	TopPortBufferSize     int `json:"top_port_buffer_size"`
+	BottomPortBufferSize  int `json:"bottom_port_buffer_size"`
+	ControlPortBufferSize int `json:"control_port_buffer_size"`
+}
+
+// Resources holds the external wiring referenced by the mmuCache: the remote
+// ports it forwards translation requests to and responses back from.
+type Resources struct {
+	LowModulePort messaging.RemotePort `json:"low_module_port"`
+	UpModulePort  messaging.RemotePort `json:"up_module_port"`
 }
 
 const (
@@ -94,4 +103,4 @@ func initSets(numLevels, numBlocks int) []setState {
 }
 
 // Comp is the mmuCache component.
-type Comp = modeling.Component[Spec, State, modeling.None]
+type Comp = modeling.Component[Spec, State, Resources]

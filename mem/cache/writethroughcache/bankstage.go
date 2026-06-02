@@ -87,7 +87,7 @@ func (s *bankStage) finalizeReadHitTrans(
 ) bool {
 	next := &s.cache.comp.State
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
-	blockSize := uint64(1 << s.cache.comp.Spec.Log2BlockSize)
+	blockSize := uint64(1 << s.cache.comp.Spec().Log2BlockSize)
 
 	data, err := s.cache.storage.Read(
 		nextBlock.CacheAddress, blockSize)
@@ -114,7 +114,7 @@ func (s *bankStage) finalizeWriteTrans(
 ) bool {
 	next := &s.cache.comp.State
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
-	blockSize := 1 << s.cache.comp.Spec.Log2BlockSize
+	blockSize := 1 << s.cache.comp.Spec().Log2BlockSize
 
 	data, err := s.cache.storage.Read(nextBlock.CacheAddress, uint64(blockSize))
 	if err != nil {
@@ -140,7 +140,7 @@ func (s *bankStage) finalizeWriteTrans(
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 	bankPostBuf.Pop()
 
-	spec := s.cache.comp.Spec
+	spec := s.cache.comp.Spec()
 	if needsDualCompletion(spec.WritePolicyType) {
 		trans.BankDone = true
 

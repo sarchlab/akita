@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -43,12 +44,14 @@ var _ = Describe("End Point", func() {
 
 		devicePort.EXPECT().SetConnection(gomock.Any())
 
+		spec := DefaultSpec()
+		spec.Freq = 1
+		spec.FlitByteSize = 32
+
 		endPoint = MakeBuilder().
-			WithEngine(engine).
-			WithFreq(1).
-			WithFlitByteSize(32).
-			WithDevicePorts([]messaging.Port{devicePort}).
-			WithNetworkPort(messaging.NewPort(nil, 4, 4, "EndPoint.NetworkPort")).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSpec(spec).
+			WithResources(Resources{DevicePorts: []messaging.Port{devicePort}}).
 			Build("EndPoint")
 		endPoint.SetNetworkPort(networkPort)
 		endPoint.SetDefaultSwitchDst(defaultSwitchPort.AsRemote())

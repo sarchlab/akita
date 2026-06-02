@@ -6,119 +6,70 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// DefaultSpec provides the default configuration for mmuCache components.
-var DefaultSpec = Spec{
-	Freq:            1 * timing.GHz,
-	NumReqPerCycle:  4,
-	NumLevels:       5,
-	NumBlocks:       1,
-	PageSize:        4096,
-	LatencyPerLevel: 100,
-	Log2PageSize:    12,
+// defaultSpec provides the default configuration for mmuCache components.
+var defaultSpec = Spec{
+	Freq:                  1 * timing.GHz,
+	NumReqPerCycle:        4,
+	NumLevels:             5,
+	NumBlocks:             1,
+	PageSize:              4096,
+	LatencyPerLevel:       100,
+	Log2PageSize:          12,
+	TopPortBufferSize:     16,
+	BottomPortBufferSize:  16,
+	ControlPortBufferSize: 16,
 }
 
-// A Builder can build mmuCache
+// DefaultSpec returns a copy of the default configuration. Callers typically
+// obtain it, tweak the fields they care about, and pass it to WithSpec.
+func DefaultSpec() Spec {
+	return defaultSpec
+}
+
+// A Builder builds mmuCache components. Configuration is supplied as a whole
+// through WithSpec; wiring is supplied through WithRegistrar and WithResources.
+// The component creates its own ports.
 type Builder struct {
-	engine    timing.EventScheduler
 	registrar modeling.Registrar
 	spec      Spec
-
-	topPort     messaging.Port
-	bottomPort  messaging.Port
-	controlPort messaging.Port
+	resources Resources
 }
 
-// MakeBuilder returns a Builder
+// MakeBuilder returns a Builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: DefaultSpec,
+		spec: defaultSpec,
 	}
 }
 
-// WithLatencyPerLevel sets the latency per level
-func (b Builder) WithLatencyPerLevel(latency uint64) Builder {
-	b.spec.LatencyPerLevel = latency
+// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// registrar provides the engine and registers the built component.
+func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+	b.registrar = reg
 	return b
 }
 
-// WithUpperModule sets the upper module remote port
-func (b Builder) WithUpperModule(m messaging.RemotePort) Builder {
-	b.spec.UpModulePort = m
+// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
 	return b
 }
 
-// WithNumLevels sets the number of levels in the mmuCache
-func (b Builder) WithNumLevels(n int) Builder {
-	b.spec.NumLevels = n
+// WithResources injects the component's external wiring (the low-module and
+// up-module remote ports).
+func (b Builder) WithResources(r Resources) Builder {
+	b.resources = r
 	return b
 }
 
-// WithEngine sets the engine that the mmuCache to use
-func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
-	b.engine = engine
-	return b
-}
-
-// WithSimulation wires the builder to a simulation. It sources the engine from
-// the simulation and registers the built component with it.
-func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
-	b.registrar = sim
-	b.engine = sim.GetEngine()
-	return b
-}
-
-// WithFreq sets the freq the mmuCache use
-func (b Builder) WithFreq(freq timing.Freq) Builder {
-	b.spec.Freq = freq
-	return b
-}
-
-// WithNumBlocks sets the number of blocks in a mmuCache.
-func (b Builder) WithNumBlocks(n int) Builder {
-	b.spec.NumBlocks = n
-	return b
-}
-
-// WithPageSize sets the page size that the mmuCache works with.
-func (b Builder) WithPageSize(n uint64) Builder {
-	b.spec.PageSize = n
-	return b
-}
-
-// WithNumReqPerCycle sets the number of requests per cycle can be processed by
-// a mmuCache
-func (b Builder) WithNumReqPerCycle(n int) Builder {
-	b.spec.NumReqPerCycle = n
-	return b
-}
-
-// WithLowModule sets the port that can provide the address translation in case
-// of mmuCache miss.
-func (b Builder) WithLowModule(lowModule messaging.RemotePort) Builder {
-	b.spec.LowModulePort = lowModule
-	return b
-}
-
-// WithTopPort sets the top port for the mmuCache
-func (b Builder) WithTopPort(port messaging.Port) Builder {
-	b.topPort = port
-	return b
-}
-
-// WithBottomPort sets the bottom port for the mmuCache
-func (b Builder) WithBottomPort(port messaging.Port) Builder {
-	b.bottomPort = port
-	return b
-}
-
-// WithControlPort sets the control port for the mmuCache
-func (b Builder) WithControlPort(port messaging.Port) Builder {
-	b.controlPort = port
-	return b
-}
-
-// Build creates a new mmuCache
+// Build creates a new mmuCache. It creates the component's Top, Bottom, and
+// Control ports.
 func (b Builder) Build(name string) *Comp {
+	if b.registrar == nil {
+		panic("mmuCache: WithRegistrar is required")
+	}
+
 	if b.spec.NumBlocks <= 0 {
 		panic("mmuCache.Builder: numBlocks must be > 0")
 	}
@@ -127,24 +78,30 @@ func (b Builder) Build(name string) *Comp {
 
 	initialState := State{
 		CurrentState: mmuCacheStateEnable,
-		Table:        initSets(b.spec.NumLevels, b.spec.NumBlocks),
+		Table:        initSets(spec.NumLevels, spec.NumBlocks),
 	}
 
-	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithEngine(b.engine).
-		WithFreq(b.spec.Freq).
+	modelComp := modeling.NewBuilder[Spec, State, Resources]().
+		WithEngine(b.registrar.GetEngine()).
+		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithResources(b.resources).
 		Build(name)
 	modelComp.State = initialState
 
-	b.topPort.SetComponent(modelComp)
-	modelComp.AddPort("Top", b.topPort)
+	topPort := messaging.NewPort(
+		modelComp, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
+	modelComp.AddPort("Top", topPort)
 
-	b.bottomPort.SetComponent(modelComp)
-	modelComp.AddPort("Bottom", b.bottomPort)
+	bottomPort := messaging.NewPort(
+		modelComp, spec.BottomPortBufferSize, spec.BottomPortBufferSize,
+		name+".Bottom")
+	modelComp.AddPort("Bottom", bottomPort)
 
-	b.controlPort.SetComponent(modelComp)
-	modelComp.AddPort("Control", b.controlPort)
+	controlPort := messaging.NewPort(
+		modelComp, spec.ControlPortBufferSize, spec.ControlPortBufferSize,
+		name+".Control")
+	modelComp.AddPort("Control", controlPort)
 
 	ctrlMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(ctrlMW)
@@ -152,9 +109,7 @@ func (b Builder) Build(name string) *Comp {
 	cacheMW := &mmuCacheMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cacheMW)
 
-	if b.registrar != nil {
-		b.registrar.RegisterComponent(modelComp)
-	}
+	b.registrar.RegisterComponent(modelComp)
 
 	return modelComp
 }

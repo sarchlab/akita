@@ -228,7 +228,7 @@ var _ = Describe("Simulation", func() {
 		simulation.RegisterConnection(connection)
 		simulation.RegisterResource(resource)
 
-		entities := simulation.Entities()
+		entities := simulation.entities
 		names := make([]string, 0, len(entities))
 		for _, e := range entities {
 			names = append(names, e.Name())
@@ -318,7 +318,7 @@ var _ = Describe("Global state manager", func() {
 				})
 				s.RegisterConnection(newTestConnection("GPU[1].GPU[2].Conn"))
 
-				entities := s.Entities()
+				entities := s.entities
 				names := make([]string, 0, len(entities))
 				for _, e := range entities {
 					names = append(names, e.Name())
@@ -333,7 +333,7 @@ var _ = Describe("Global state manager", func() {
 
 	Describe("Complete state inventory", func() {
 		It("registers the engine and ID generator as entities", func() {
-			entities := sim.Entities()
+			entities := sim.entities
 			names := make([]string, 0, len(entities))
 			for _, e := range entities {
 				names = append(names, e.Name())

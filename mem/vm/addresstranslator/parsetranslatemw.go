@@ -14,7 +14,7 @@ import (
 )
 
 type parseTranslateMW struct {
-	comp *modeling.Component[Spec, State, modeling.None]
+	comp *modeling.Component[Spec, State, Resources]
 }
 
 func (m *parseTranslateMW) topPort() messaging.Port {
@@ -39,7 +39,7 @@ func (m *parseTranslateMW) Tick() bool {
 
 	nextState := &m.comp.State
 	if !nextState.IsFlushing {
-		spec := m.comp.Spec
+		spec := m.comp.Spec()
 		for i := 0; i < spec.NumReqPerCycle; i++ {
 			madeProgress = m.translate() || madeProgress
 		}
@@ -58,13 +58,13 @@ func (m *parseTranslateMW) translate() bool {
 
 	item := itemI.(mem.AccessReq)
 	vAddr := item.GetAddress()
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
 
 	transReq := &vm.TranslationReq{}
 	transReq.ID = timing.GetIDGenerator().Generate()
 	transReq.Src = m.translationPort().AsRemote()
-	transReq.Dst = findTranslationPort(spec, vAddr)
+	transReq.Dst = m.comp.Resources().TranslationProviderMapper.Find(vAddr)
 	transReq.PID = item.GetPID()
 	transReq.VAddr = vPageID
 	transReq.DeviceID = spec.DeviceID

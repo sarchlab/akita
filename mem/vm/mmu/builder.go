@@ -7,161 +7,128 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// DefaultSpec provides the default configuration for MMU components.
-var DefaultSpec = Spec{
-	Freq:                1 * timing.GHz,
-	Log2PageSize:        12,
-	MaxRequestsInFlight: 16,
+// defaultSpec provides the default configuration for MMU components.
+var defaultSpec = Spec{
+	Freq:                    1 * timing.GHz,
+	Log2PageSize:            12,
+	Latency:                 10,
+	MaxRequestsInFlight:     16,
+	MigrationQueueSize:      4096,
+	TopPortBufferSize:       4096,
+	MigrationPortBufferSize: 1,
 }
 
-// A Builder can build MMU component
+// DefaultSpec returns a copy of the default configuration. Callers typically
+// obtain it, tweak the fields they care about, and pass it to WithSpec.
+func DefaultSpec() Spec {
+	return defaultSpec
+}
+
+// Builder builds MMU components. Configuration is supplied as a whole through
+// WithSpec; wiring is supplied through WithRegistrar and WithResources. The
+// component creates its own ports.
 type Builder struct {
-	engine             timing.EventScheduler
-	registrar          modeling.Registrar
-	spec               Spec
-	pageTable          vm.PageTable
-	pageWalkingLatency int
-	topPort            messaging.Port
-	migrationPort      messaging.Port
+	registrar modeling.Registrar
+	spec      Spec
+	resources Resources
 }
 
-// MakeBuilder creates a new builder
+// MakeBuilder creates a new builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: DefaultSpec,
+		spec: defaultSpec,
 	}
 }
 
-// WithEngine sets the engine to be used with the MMU
-func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
-	b.engine = engine
+// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// registrar provides the engine and registers the built component.
+func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+	b.registrar = reg
 	return b
 }
 
-// WithSimulation wires the builder to a simulation. It sources the engine from
-// the simulation and registers the built component with it.
-func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
-	b.registrar = sim
-	b.engine = sim.GetEngine()
+// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
 	return b
 }
 
-// WithFreq sets the frequency that the MMU to work at
-func (b Builder) WithFreq(freq timing.Freq) Builder {
-	b.spec.Freq = freq
+// WithResources injects the component's shared resources, such as a page table
+// shared with other components. If no page table is supplied, the component
+// builds its own.
+func (b Builder) WithResources(r Resources) Builder {
+	b.resources = r
 	return b
 }
 
-// WithLog2PageSize sets the page size that the mmu support.
-func (b Builder) WithLog2PageSize(log2PageSize uint64) Builder {
-	b.spec.Log2PageSize = log2PageSize
-	return b
-}
-
-// WithPageTable sets the page table that the MMU uses.
-func (b Builder) WithPageTable(pageTable vm.PageTable) Builder {
-	b.pageTable = pageTable
-	return b
-}
-
-// WithMigrationServiceProvider sets the destination port that can perform
-// page migration.
-func (b Builder) WithMigrationServiceProvider(p messaging.RemotePort) Builder {
-	b.spec.MigrationServiceProvider = p
-	return b
-}
-
-// WithMaxNumReqInFlight sets the number of requests can be concurrently
-// processed by the MMU.
-func (b Builder) WithMaxNumReqInFlight(n int) Builder {
-	b.spec.MaxRequestsInFlight = n
-	return b
-}
-
-// WithPageWalkingLatency sets the number of cycles required for walking a page
-// table.
-func (b Builder) WithPageWalkingLatency(n int) Builder {
-	b.pageWalkingLatency = n
-	return b
-}
-
-// WithAutoPageAllocation enables or disables automatic page allocation.
-// When enabled, the MMU will automatically create page table entries for
-// virtual addresses that don't exist, instead of panicking.
-func (b Builder) WithAutoPageAllocation(enabled bool) Builder {
-	b.spec.AutoPageAllocation = enabled
-	return b
-}
-
-// WithTopPort sets the top port of the MMU
-func (b Builder) WithTopPort(port messaging.Port) Builder {
-	b.topPort = port
-	return b
-}
-
-// WithMigrationPort sets the migration port of the MMU
-func (b Builder) WithMigrationPort(port messaging.Port) Builder {
-	b.migrationPort = port
-	return b
-}
-
-// Build returns a newly created MMU component
+// Build returns a newly created MMU component. It creates the component's Top
+// and Migration ports.
 func (b Builder) Build(name string) *Comp {
-	spec := b.spec
-	spec.Latency = b.pageWalkingLatency
-	spec.MigrationQueueSize = 4096
+	if b.registrar == nil {
+		panic("mmu: WithRegistrar is required")
+	}
 
-	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithEngine(b.engine).
-		WithFreq(b.spec.Freq).
+	spec := b.spec
+
+	pt := b.resolvePageTable(name, spec)
+
+	modelComp := modeling.NewBuilder[Spec, State, Resources]().
+		WithEngine(b.registrar.GetEngine()).
+		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithResources(Resources{PageTable: pt}).
 		Build(name)
 
-	b.createPorts(name, modelComp)
+	b.createPorts(name, spec, modelComp)
 
-	pt := b.createPageTable(name)
-
-	tmw := &translationMW{comp: modelComp, pageTable: pt}
+	tmw := &translationMW{comp: modelComp}
 	modelComp.AddMiddleware(tmw)
 
-	mmw := &migrationMW{comp: modelComp, pageTable: pt}
+	mmw := &migrationMW{comp: modelComp}
 	modelComp.AddMiddleware(mmw)
 
-	if b.registrar != nil {
-		b.registrar.RegisterComponent(modelComp)
-	}
+	b.registrar.RegisterComponent(modelComp)
 
 	return modelComp
 }
 
-func (b Builder) createPageTable(name string) vm.PageTable {
-	if b.pageTable != nil {
-		b.validatePageTablePageSize()
-		return b.pageTable
+// resolvePageTable returns the injected page table, or builds a default one
+// sized by Spec.Log2PageSize that self-registers with the registrar.
+func (b Builder) resolvePageTable(name string, spec Spec) vm.PageTable {
+	if b.resources.PageTable != nil {
+		validatePageTablePageSize(b.resources.PageTable, spec.Log2PageSize)
+		return b.resources.PageTable
 	}
 
-	ptBuilder := vm.MakePageTableBuilder().WithLog2PageSize(b.spec.Log2PageSize)
-	if b.registrar != nil {
-		ptBuilder = ptBuilder.WithSimulation(b.registrar)
-	}
-
-	return ptBuilder.Build(name + ".PageTable")
+	return vm.MakePageTableBuilder().
+		WithLog2PageSize(spec.Log2PageSize).
+		WithSimulation(b.registrar).
+		Build(name + ".PageTable")
 }
 
-// validatePageTablePageSize checks if the provided page table's page size
-// is consistent with the MMU's log2PageSize configuration.
-func (b Builder) validatePageTablePageSize() {
-	if pageTableInterface, ok := b.pageTable.(pageTable); ok {
+// validatePageTablePageSize checks if the provided page table's page size is
+// consistent with the MMU's log2PageSize configuration.
+func validatePageTablePageSize(pt vm.PageTable, log2PageSize uint64) {
+	if pageTableInterface, ok := pt.(pageTable); ok {
 		pageTableLog2PageSize := pageTableInterface.GetLog2PageSize()
-		if pageTableLog2PageSize != b.spec.Log2PageSize {
+		if pageTableLog2PageSize != log2PageSize {
 			panic("page table page size does not match MMU page size")
 		}
 	}
 }
 
-func (b Builder) createPorts(name string, mmu *modeling.Component[Spec, State, modeling.None]) {
-	b.topPort.SetComponent(mmu)
-	mmu.AddPort("Top", b.topPort)
-	b.migrationPort.SetComponent(mmu)
-	mmu.AddPort("Migration", b.migrationPort)
+func (b Builder) createPorts(
+	name string,
+	spec Spec,
+	mmu *Comp,
+) {
+	topPort := messaging.NewPort(
+		mmu, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
+	mmu.AddPort("Top", topPort)
+
+	migrationPort := messaging.NewPort(
+		mmu, spec.MigrationPortBufferSize, spec.MigrationPortBufferSize,
+		name+".Migration")
+	mmu.AddPort("Migration", migrationPort)
 }

@@ -86,7 +86,7 @@ func (f *flusher) processFlush() bool {
 		return false
 	}
 
-	spec := f.pipeline.comp.Spec
+	spec := f.pipeline.comp.Spec()
 	ref := next.FlusherBlockToEvictRefs[0]
 	block := &next.DirectoryState.Sets[ref.SetID].Blocks[ref.WayID]
 	bankNum := bankID(
@@ -211,7 +211,7 @@ func (f *flusher) finalizeFlushing() bool {
 		return false
 	}
 
-	spec := f.pipeline.comp.Spec
+	spec := f.pipeline.comp.Spec()
 
 	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()

@@ -64,10 +64,13 @@ var _ = Describe("Switch", func() {
 
 		routingTable = NewMockTable(mockCtrl)
 
+		spec := DefaultSpec()
+		spec.Freq = 1
+
 		sw = MakeBuilder().
-			WithEngine(engine).
-			WithFreq(1).
-			WithRoutingTable(routingTable).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSpec(spec).
+			WithResources(Resources{RoutingTable: routingTable}).
 			Build("Switch")
 
 		pcs1 := portComplexState{

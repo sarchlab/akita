@@ -57,10 +57,10 @@ func (b EventDrivenBuilder[S, T, R]) Build(name string) *EventDrivenComponent[S,
 
 	comp := &EventDrivenComponent[S, T, R]{
 		PortOwnerBase: messaging.NewPortOwnerBase(),
-		Engine:        b.engine,
+		engine:        b.engine,
 		name:          name,
-		Spec:          b.spec,
-		Resources:     b.resources,
+		spec:          b.spec,
+		resources:     b.resources,
 		processor:     b.processor,
 		pendingWakeup: math.MaxUint64,
 	}

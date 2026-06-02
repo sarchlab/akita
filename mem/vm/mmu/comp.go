@@ -16,6 +16,9 @@ type Spec struct {
 	AutoPageAllocation       bool                 `json:"auto_page_allocation"`
 	Log2PageSize             uint64               `json:"log2_page_size"`
 	MigrationServiceProvider messaging.RemotePort `json:"migration_service_provider"`
+
+	TopPortBufferSize       int `json:"top_port_buffer_size"`
+	MigrationPortBufferSize int `json:"migration_port_buffer_size"`
 }
 
 // transactionState is the canonical transaction representation.
@@ -55,5 +58,11 @@ type State struct {
 	ToRemoveFromPTW          []int              `json:"to_remove_from_ptw"`
 }
 
+// Resources holds the shared resources referenced by the MMU. The page table is
+// external wiring shared with other components.
+type Resources struct {
+	PageTable vm.PageTable `json:"-"`
+}
+
 // Comp is the MMU component.
-type Comp = modeling.Component[Spec, State, modeling.None]
+type Comp = modeling.Component[Spec, State, Resources]

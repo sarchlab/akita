@@ -34,7 +34,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 		return false
 	}
 
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 
 	for i := 0; i < spec.Width; i++ {
 		msgI := m.topPort().RetrieveIncoming()
@@ -56,7 +56,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 }
 
 func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransaction {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 
 	switch payload := msg.(type) {
 	case *mem.ReadReq:
@@ -129,14 +129,14 @@ func (m *memMiddleware) sendResponse(tx *inflightTransaction) bool {
 }
 
 func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	addr := mem.ConvertAddress(
 		spec.AddrConvKind, spec.AddrOffset,
 		spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
 		spec.AddrCurrentElementIndex, tx.Address,
 	)
 
-	data, err := m.comp.Resources.Storage.Read(addr, tx.AccessByteSize)
+	data, err := m.comp.Resources().Storage.Read(addr, tx.AccessByteSize)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -174,7 +174,7 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 		return false
 	}
 
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	addr := mem.ConvertAddress(
 		spec.AddrConvKind, spec.AddrOffset,
 		spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
@@ -182,12 +182,12 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 	)
 
 	if tx.DirtyMask == nil {
-		err := m.comp.Resources.Storage.Write(addr, tx.Data)
+		err := m.comp.Resources().Storage.Write(addr, tx.Data)
 		if err != nil {
 			log.Panic(err)
 		}
 	} else {
-		data, err := m.comp.Resources.Storage.Read(addr, uint64(len(tx.Data)))
+		data, err := m.comp.Resources().Storage.Read(addr, uint64(len(tx.Data)))
 		if err != nil {
 			panic(err)
 		}
@@ -198,7 +198,7 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 			}
 		}
 
-		err = m.comp.Resources.Storage.Write(addr, data)
+		err = m.comp.Resources().Storage.Write(addr, data)
 		if err != nil {
 			panic(err)
 		}

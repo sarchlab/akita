@@ -48,8 +48,8 @@ func (b Builder[S, T, R]) WithResources(resources R) Builder[S, T, R] {
 // Build creates the Component with the given name.
 func (b Builder[S, T, R]) Build(name string) *Component[S, T, R] {
 	comp := &Component[S, T, R]{
-		Spec:      b.spec,
-		Resources: b.resources,
+		spec:      b.spec,
+		resources: b.resources,
 	}
 	comp.TickingComponent = NewTickingComponent(
 		name, b.engine, b.freq, comp)

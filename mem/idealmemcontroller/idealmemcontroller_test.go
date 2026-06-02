@@ -2,61 +2,77 @@ package idealmemcontroller
 
 import (
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/sarchlab/akita/v5/mem"
-	"go.uber.org/mock/gomock"
-
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/hooking"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-var _ = Describe("Ideal Memory Controller", func() {
+// noopConn is a minimal messaging.Connection used to drive a component's real
+// ports in isolation. Because the controller now owns its ports (they are no
+// longer injectable), tests feed requests with Deliver and read responses with
+// RetrieveOutgoing; the port still needs a connection so its send/retrieve
+// notifications have somewhere to go.
+type noopConn struct {
+	hooking.HookableBase
+}
 
+func (c *noopConn) Name() string                     { return "NoopConn" }
+func (c *noopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
+func (c *noopConn) Unplug(_ messaging.Port)          {}
+func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
+func (c *noopConn) NotifySend()                      {}
+
+var _ = Describe("Ideal Memory Controller", func() {
 	var (
-		mockCtrl      *gomock.Controller
-		engine        *MockEngine
-		memController *Comp
-		port          *MockPort
+		engine        timing.Engine
 		storage       *mem.Storage
+		memController *Comp
+		topPort       messaging.Port
 	)
 
-	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
+	// build constructs a controller with the given Top-port buffer size, injects
+	// the shared storage, and plugs a noopConn so its ports can be driven.
+	build := func(topBufSize int) {
+		spec := DefaultSpec()
+		spec.Width = 1
+		spec.Latency = 10
+		spec.CacheLineSize = 64
+		spec.TopPortBufferSize = topBufSize
 
-		engine = NewMockEngine(mockCtrl)
-		port = NewMockPort(mockCtrl)
-		port.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("Port")).
-			AnyTimes()
-		port.EXPECT().
-			SetComponent(gomock.Any()).
-			AnyTimes()
-
-		storage = mem.NewStorage(1 * mem.MB)
 		memController = MakeBuilder().
-			WithEngine(engine).
-			WithStorage(storage).
-			WithSpec(Spec{Width: 1, Latency: 10, CacheLineSize: 64}).
-			WithTopPort(port).
-			WithCtrlPort(messaging.NewPort(nil, 16, 16, "MemCtrl.CtrlPort")).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithResources(Resources{Storage: storage}).
+			WithSpec(spec).
 			Build("MemCtrl")
-		memController.Freq = 1000 * timing.MHz
-	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
+		topPort = memController.GetPortByName("Top")
+		conn := &noopConn{}
+		conn.PlugIn(topPort)
+	}
+
+	makeReadReq := func() *mem.ReadReq {
+		req := &mem.ReadReq{}
+		req.ID = timing.GetIDGenerator().Generate()
+		req.Src = messaging.RemotePort("Agent")
+		req.Dst = topPort.AsRemote()
+		req.Address = 0
+		req.AccessByteSize = 4
+		req.TrafficBytes = 12
+		req.TrafficClass = "mem.ReadReq"
+		return req
+	}
+
+	BeforeEach(func() {
+		engine = timing.NewSerialEngine()
+		storage = mem.NewStorage(1 * mem.MB)
+		build(16)
 	})
 
 	It("should accept read request and add to inflight transactions", func() {
-		readReq := &mem.ReadReq{}
-		readReq.ID = timing.GetIDGenerator().Generate()
-		readReq.Dst = port.AsRemote()
-		readReq.Address = 0
-		readReq.AccessByteSize = 4
-		readReq.TrafficBytes = 12
-		readReq.TrafficClass = "mem.ReadReq"
-		port.EXPECT().RetrieveIncoming().Return(readReq)
+		topPort.Deliver(makeReadReq())
 
 		madeProgress := memController.Tick()
 
@@ -69,16 +85,16 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should accept write request and add to inflight transactions", func() {
-		writeData1 := []byte{0, 1, 2, 3}
 		writeReq := &mem.WriteReq{}
 		writeReq.ID = timing.GetIDGenerator().Generate()
-		writeReq.Dst = port.AsRemote()
+		writeReq.Src = messaging.RemotePort("Agent")
+		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0
-		writeReq.Data = writeData1
+		writeReq.Data = []byte{0, 1, 2, 3}
 		writeReq.DirtyMask = []bool{false, false, true, false}
-		writeReq.TrafficBytes = len(writeData1) + 12
+		writeReq.TrafficBytes = len(writeReq.Data) + 12
 		writeReq.TrafficClass = "mem.WriteReq"
-		port.EXPECT().RetrieveIncoming().Return(writeReq)
+		topPort.Deliver(writeReq)
 
 		madeProgress := memController.Tick()
 		Expect(madeProgress).To(BeTrue())
@@ -89,21 +105,13 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should send read response after latency ticks", func() {
-		readReq := &mem.ReadReq{}
-		readReq.ID = timing.GetIDGenerator().Generate()
-		readReq.Dst = port.AsRemote()
-		readReq.Address = 0
-		readReq.AccessByteSize = 4
-		readReq.TrafficBytes = 12
-		readReq.TrafficClass = "mem.ReadReq"
+		topPort.Deliver(makeReadReq())
 
 		// Tick 1: take request, CycleLeft: 10 → 9
-		port.EXPECT().RetrieveIncoming().Return(readReq)
 		memController.Tick()
 
 		// Ticks 2-9: count down (9 → 2)
 		for i := 0; i < 8; i++ {
-			port.EXPECT().RetrieveIncoming().Return(nil)
 			memController.Tick()
 		}
 
@@ -112,41 +120,42 @@ var _ = Describe("Ideal Memory Controller", func() {
 		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(1))
 
 		// Tick 10: CycleLeft 1→0, then send response
-		port.EXPECT().RetrieveIncoming().Return(nil)
-		port.EXPECT().Send(gomock.Any()).Return(nil)
 		memController.Tick()
 
 		state = memController.State
 		Expect(state.InflightTransactions).To(HaveLen(0))
+
+		rsp := topPort.RetrieveOutgoing()
+		Expect(rsp).To(BeAssignableToTypeOf(&mem.DataReadyRsp{}))
 	})
 
 	It("should send write response after latency ticks", func() {
-		writeData2 := []byte{0, 1, 2, 3}
 		writeReq := &mem.WriteReq{}
 		writeReq.ID = timing.GetIDGenerator().Generate()
-		writeReq.Dst = port.AsRemote()
+		writeReq.Src = messaging.RemotePort("Agent")
+		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0
-		writeReq.Data = writeData2
-		writeReq.TrafficBytes = len(writeData2) + 12
+		writeReq.Data = []byte{0, 1, 2, 3}
+		writeReq.TrafficBytes = len(writeReq.Data) + 12
 		writeReq.TrafficClass = "mem.WriteReq"
+		topPort.Deliver(writeReq)
 
 		// Tick 1: take request, CycleLeft: 10 → 9
-		port.EXPECT().RetrieveIncoming().Return(writeReq)
 		memController.Tick()
 
 		// Ticks 2-9: count down
 		for i := 0; i < 8; i++ {
-			port.EXPECT().RetrieveIncoming().Return(nil)
 			memController.Tick()
 		}
 
 		// Tick 10: CycleLeft 1→0, send response
-		port.EXPECT().RetrieveIncoming().Return(nil)
-		port.EXPECT().Send(gomock.Any()).Return(nil)
 		memController.Tick()
 
 		state := memController.State
 		Expect(state.InflightTransactions).To(HaveLen(0))
+
+		rsp := topPort.RetrieveOutgoing()
+		Expect(rsp).To(BeAssignableToTypeOf(&mem.WriteDoneRsp{}))
 
 		// Verify data was written to storage
 		data, err := storage.Read(0, 4)
@@ -155,36 +164,40 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should retry send when port is busy", func() {
-		readReq := &mem.ReadReq{}
-		readReq.ID = timing.GetIDGenerator().Generate()
-		readReq.Dst = port.AsRemote()
-		readReq.Address = 0
-		readReq.AccessByteSize = 4
-		readReq.TrafficBytes = 12
-		readReq.TrafficClass = "mem.ReadReq"
+		// Rebuild with a single-slot Top port so the outgoing buffer can be
+		// forced full.
+		build(1)
+
+		// Pre-fill the outgoing buffer so the controller's response Send fails.
+		dummy := &mem.WriteDoneRsp{}
+		dummy.Src = topPort.AsRemote()
+		dummy.Dst = messaging.RemotePort("Agent")
+		dummy.TrafficClass = "mem.WriteDoneRsp"
+		Expect(topPort.Send(dummy)).To(BeNil())
+
+		topPort.Deliver(makeReadReq())
 
 		// Tick 1: take request, CycleLeft: 10 → 9
-		port.EXPECT().RetrieveIncoming().Return(readReq)
 		memController.Tick()
 
-		// Ticks 2-9: count down (8 ticks, 9→2)
+		// Ticks 2-9: count down (8 ticks, 9→1)
 		for i := 0; i < 8; i++ {
-			port.EXPECT().RetrieveIncoming().Return(nil)
 			memController.Tick()
 		}
 
-		// Tick 10: CycleLeft 1→0, send fails
-		port.EXPECT().RetrieveIncoming().Return(nil)
-		port.EXPECT().Send(gomock.Any()).Return(&messaging.SendError{})
+		state := memController.State
+		Expect(state.InflightTransactions).To(HaveLen(1))
+		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(1))
+
+		// Tick 10: CycleLeft 1→0, send fails (outgoing buffer full)
 		memController.Tick()
 
-		state := memController.State
+		state = memController.State
 		Expect(state.InflightTransactions).To(HaveLen(1))
 		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(0))
 
-		// Tick 11: Retry succeeds (CycleLeft stays 0, attempts send again)
-		port.EXPECT().RetrieveIncoming().Return(nil)
-		port.EXPECT().Send(gomock.Any()).Return(nil)
+		// Free the outgoing buffer, then retry succeeds.
+		Expect(topPort.RetrieveOutgoing()).To(Equal(dummy))
 		memController.Tick()
 
 		state = memController.State
@@ -196,29 +209,26 @@ var _ = Describe("Ideal Memory Controller", func() {
 		err := storage.Write(0, []byte{10, 20, 30, 40})
 		Expect(err).ToNot(HaveOccurred())
 
-		writeData3 := []byte{0, 1, 2, 3}
 		writeReq := &mem.WriteReq{}
 		writeReq.ID = timing.GetIDGenerator().Generate()
-		writeReq.Dst = port.AsRemote()
+		writeReq.Src = messaging.RemotePort("Agent")
+		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0
-		writeReq.Data = writeData3
+		writeReq.Data = []byte{0, 1, 2, 3}
 		writeReq.DirtyMask = []bool{false, false, true, false}
-		writeReq.TrafficBytes = len(writeData3) + 12
+		writeReq.TrafficBytes = len(writeReq.Data) + 12
 		writeReq.TrafficClass = "mem.WriteReq"
+		topPort.Deliver(writeReq)
 
 		// Tick 1: take request
-		port.EXPECT().RetrieveIncoming().Return(writeReq)
 		memController.Tick()
 
 		// Ticks 2-9: count down
 		for i := 0; i < 8; i++ {
-			port.EXPECT().RetrieveIncoming().Return(nil)
 			memController.Tick()
 		}
 
 		// Tick 10: send response
-		port.EXPECT().RetrieveIncoming().Return(nil)
-		port.EXPECT().Send(gomock.Any()).Return(nil)
 		memController.Tick()
 
 		// Check that only dirty bytes were written
@@ -228,7 +238,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should use Spec for latency and width", func() {
-		spec := memController.Spec
+		spec := memController.Spec()
 		Expect(spec.Latency).To(Equal(10))
 		Expect(spec.Width).To(Equal(1))
 	})

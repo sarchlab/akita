@@ -7,7 +7,7 @@ import (
 // DDR4Spec provides a predefined Spec for DDR4-2400.
 var DDR4Spec = Spec{
 	Freq:                 1200 * timing.MHz,
-	Protocol:             int(DDR4),
+	Protocol:             int(protoDDR4),
 	BurstLength:          8,
 	NumBankGroup:         4,
 	NumBank:              4,
@@ -43,12 +43,13 @@ var DDR4Spec = Spec{
 	NumChannel:           1,
 	TransactionQueueSize: 32,
 	CommandQueueCapacity: 8,
+	TopPortBufferSize:    1024,
 }
 
 // DDR5Spec provides a predefined Spec for DDR5-4800.
 var DDR5Spec = Spec{
 	Freq:                 2400 * timing.MHz,
-	Protocol:             int(DDR5),
+	Protocol:             int(protoDDR5),
 	BurstLength:          16,
 	NumBankGroup:         8,
 	NumBank:              4,
@@ -84,12 +85,13 @@ var DDR5Spec = Spec{
 	NumChannel:           1,
 	TransactionQueueSize: 32,
 	CommandQueueCapacity: 8,
+	TopPortBufferSize:    1024,
 }
 
 // HBM2Spec provides a predefined Spec for HBM2-2Gbps.
 var HBM2Spec = Spec{
 	Freq:                 1000 * timing.MHz,
-	Protocol:             int(HBM2),
+	Protocol:             int(protoHBM2),
 	BurstLength:          4,
 	NumBankGroup:         4,
 	NumBank:              4,
@@ -124,12 +126,13 @@ var HBM2Spec = Spec{
 	NumChannel:           1,
 	TransactionQueueSize: 32,
 	CommandQueueCapacity: 8,
+	TopPortBufferSize:    1024,
 }
 
 // HBM3Spec provides a predefined Spec for HBM3-6.4Gbps.
 var HBM3Spec = Spec{
 	Freq:                 3200 * timing.MHz,
-	Protocol:             int(HBM3),
+	Protocol:             int(protoHBM3),
 	BurstLength:          8,
 	NumBankGroup:         4,
 	NumBank:              4,
@@ -164,12 +167,13 @@ var HBM3Spec = Spec{
 	NumChannel:           1,
 	TransactionQueueSize: 32,
 	CommandQueueCapacity: 8,
+	TopPortBufferSize:    1024,
 }
 
 // GDDR6Spec provides a predefined Spec for GDDR6-14Gbps.
 var GDDR6Spec = Spec{
 	Freq:                 1750 * timing.MHz,
-	Protocol:             int(GDDR6),
+	Protocol:             int(protoGDDR6),
 	BurstLength:          16,
 	NumBankGroup:         4,
 	NumBank:              4,
@@ -204,4 +208,5 @@ var GDDR6Spec = Spec{
 	NumChannel:           1,
 	TransactionQueueSize: 32,
 	CommandQueueCapacity: 8,
+	TopPortBufferSize:    1024,
 }

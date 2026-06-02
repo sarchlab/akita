@@ -8,41 +8,42 @@ import (
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
-	gomock "go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Respond Stage", func() {
 	var (
-		mockCtrl *gomock.Controller
-		mw       *pipelineMW
-		topPort  *MockPort
-		s        *respondStage
+		mw      *pipelineMW
+		topPort messaging.Port
+		s       *respondStage
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
-
-		topPort = NewMockPort(mockCtrl)
-		topPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("TopPort")).
-			AnyTimes()
-
-		mw = &pipelineMW{
-			topPort: topPort,
-		}
-		mw.comp = modeling.NewBuilder[Spec, State, modeling.None]().
-			WithEngine(nil).
+		mw = &pipelineMW{}
+		mw.comp = modeling.NewBuilder[Spec, State, Resources]().
+			WithEngine(timing.NewSerialEngine()).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{}).
 			Build("Cache")
 
+		// topPort is a real, single-slot port (owned by the component) so the
+		// "cannot send" cases can be forced by pre-filling its outgoing buffer.
+		topPort = messaging.NewPort(mw.comp, 1, 1, "Cache.Top")
+		(&noopConn{}).PlugIn(topPort)
+		mw.topPort = topPort
+		mw.comp.AddPort("Top", topPort)
+
 		s = &respondStage{cache: mw}
 	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
+	// fillOutgoing pre-fills topPort's single outgoing slot so the next Send
+	// fails, simulating a busy port.
+	fillOutgoing := func() {
+		dummy := &mem.DataReadyRsp{}
+		dummy.Src = topPort.AsRemote()
+		dummy.Dst = messaging.RemotePort("SomeSrc")
+		dummy.TrafficClass = "rsp"
+		Expect(topPort.Send(dummy)).To(BeNil())
+	}
 
 	Context("read", func() {
 		var readMeta messaging.MsgMeta
@@ -72,7 +73,7 @@ var _ = Describe("Respond Stage", func() {
 			next := &mw.comp.State
 			next.Transactions[0].Data = []byte{1, 2, 3, 4}
 			next.Transactions[0].Done = true
-			topPort.EXPECT().Send(gomock.Any()).Return(&messaging.SendError{})
+			fillOutgoing()
 
 			madeProgress := s.Tick()
 
@@ -83,17 +84,16 @@ var _ = Describe("Respond Stage", func() {
 			next := &mw.comp.State
 			next.Transactions[0].Data = []byte{1, 2, 3, 4}
 			next.Transactions[0].Done = true
-			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					dr := msg.(*mem.DataReadyRsp)
-					Expect(dr.RspTo).To(Equal(readMeta.ID))
-					Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
-				})
 
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(next.Transactions[0].Removed).To(BeTrue())
+
+			out := topPort.RetrieveOutgoing()
+			dr := out.(*mem.DataReadyRsp)
+			Expect(dr.RspTo).To(Equal(readMeta.ID))
+			Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 		})
 	})
 
@@ -123,7 +123,7 @@ var _ = Describe("Respond Stage", func() {
 		It("should stall if cannot send to top", func() {
 			next := &mw.comp.State
 			next.Transactions[0].Done = true
-			topPort.EXPECT().Send(gomock.Any()).Return(&messaging.SendError{})
+			fillOutgoing()
 
 			madeProgress := s.Tick()
 
@@ -134,15 +134,14 @@ var _ = Describe("Respond Stage", func() {
 			next := &mw.comp.State
 			next.Transactions[0].Data = []byte{1, 2, 3, 4}
 			next.Transactions[0].Done = true
-			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					Expect(msg.Meta().RspTo).To(Equal(writeMeta.ID))
-				})
 
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(next.Transactions[0].Removed).To(BeTrue())
+
+			out := topPort.RetrieveOutgoing()
+			Expect(out.Meta().RspTo).To(Equal(writeMeta.ID))
 		})
 	})
 

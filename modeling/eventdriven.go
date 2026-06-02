@@ -36,14 +36,26 @@ type EventDrivenComponent[S any, T any, R any] struct {
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 
-	Engine    timing.EventScheduler
+	engine    timing.EventScheduler
 	name      string
-	Spec      S
+	spec      S
 	State     T
-	Resources R
+	resources R
 	processor EventProcessor[S, T, R]
 
 	pendingWakeup timing.VTimeInSec
+}
+
+// Spec returns the component's immutable configuration (a copy), so callers
+// cannot mutate the builder-established configuration.
+func (c *EventDrivenComponent[S, T, R]) Spec() S {
+	return c.spec
+}
+
+// Resources returns the component's shared-resource references. The references
+// are fixed at construction; only the state they point to mutates.
+func (c *EventDrivenComponent[S, T, R]) Resources() R {
+	return c.resources
 }
 
 // Name returns the component name.
@@ -63,12 +75,12 @@ func (c *EventDrivenComponent[S, T, R]) ScheduleWakeAt(t timing.VTimeInSec) {
 	evt := &TimerFiredEvent{
 		EventBase: timing.NewEventBase(t, c.Name()),
 	}
-	c.Engine.Schedule(evt)
+	c.engine.Schedule(evt)
 }
 
 // ScheduleWakeNow schedules a wakeup at the current engine time.
 func (c *EventDrivenComponent[S, T, R]) ScheduleWakeNow() {
-	c.ScheduleWakeAt(c.Engine.CurrentTime())
+	c.ScheduleWakeAt(c.engine.CurrentTime())
 }
 
 // Handle processes an event. For TimerFiredEvent, it resets the dedup guard

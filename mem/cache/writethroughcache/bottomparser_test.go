@@ -12,20 +12,18 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
-	gomock "go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Bottom Parser", func() {
 	var (
-		mockCtrl   *gomock.Controller
-		bottomPort *MockPort
+		bottomPort messaging.Port
 		p          *bottomParser
 		c          *pipelineMW
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
-		bottomPort = NewMockPort(mockCtrl)
+		bottomPort = messaging.NewPort(nil, 4, 4, "Cache.Bottom")
+		(&noopConn{}).PlugIn(bottomPort)
 
 		initialState := State{
 			DirBuf: queueing.NewBuffer[int]("Cache.DirBuf", 4),
@@ -45,7 +43,7 @@ var _ = Describe("Bottom Parser", func() {
 		c = &pipelineMW{
 			bottomPort: bottomPort,
 		}
-		c.comp = modeling.NewBuilder[Spec, State, modeling.None]().
+		c.comp = modeling.NewBuilder[Spec, State, Resources]().
 			WithEngine(nil).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
@@ -66,12 +64,7 @@ var _ = Describe("Bottom Parser", func() {
 		p = &bottomParser{cache: c}
 	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
-
 	It("should do nothing if no respond", func() {
-		bottomPort.EXPECT().PeekIncoming().Return(nil)
 		madeProgress := p.Tick()
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -111,8 +104,7 @@ var _ = Describe("Bottom Parser", func() {
 			done.TrafficBytes = 4
 			done.TrafficClass = "rsp"
 
-			bottomPort.EXPECT().PeekIncoming().Return(done)
-			bottomPort.EXPECT().RetrieveIncoming()
+			bottomPort.Deliver(done)
 
 			madeProgress := p.Tick()
 
@@ -200,7 +192,7 @@ var _ = Describe("Bottom Parser", func() {
 			next := &c.comp.State
 			next.BankBufs[0] = queueing.NewBuffer[int]("Cache.BankBuf0", 0)
 
-			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
+			bottomPort.Deliver(dataReady)
 
 			madeProgress := p.Tick()
 
@@ -210,8 +202,7 @@ var _ = Describe("Bottom Parser", func() {
 		It("should send transaction to bank", func() {
 			next := &c.comp.State
 
-			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
-			bottomPort.EXPECT().RetrieveIncoming()
+			bottomPort.Deliver(dataReady)
 
 			madeProgress := p.Tick()
 
@@ -282,8 +273,7 @@ var _ = Describe("Bottom Parser", func() {
 			next.MSHRState.Entries[entryIdx].TransactionIndices = append(
 				next.MSHRState.Entries[entryIdx].TransactionIndices, 1, 2)
 
-			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
-			bottomPort.EXPECT().RetrieveIncoming()
+			bottomPort.Deliver(dataReady)
 
 			madeProgress := p.Tick()
 

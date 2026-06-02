@@ -18,9 +18,17 @@ func routeForwardSendMiddleware(
 	return c.Middlewares()[0].(*routeForwardSendMW)
 }
 
-// GetRoutingTable returns the routing table used by the switch.
+// GetRoutingTable returns the routing table used by the switch. It locates the
+// routeForwardSendMW by type rather than by middleware index, so it does not
+// depend on the order in which middlewares were registered.
 func GetRoutingTable(c *modeling.Component[Spec, State, modeling.None]) routing.Table {
-	return routeForwardSendMiddleware(c).routingTable
+	for _, mw := range c.Middlewares() {
+		if rfsMW, ok := mw.(*routeForwardSendMW); ok {
+			return rfsMW.routingTable
+		}
+	}
+
+	panic(fmt.Sprintf("%s: no routeForwardSendMW middleware found", c.Name()))
 }
 
 type routeForwardSendMW struct {

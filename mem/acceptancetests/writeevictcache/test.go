@@ -13,7 +13,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -39,44 +38,45 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 	engine := s.GetEngine()
 
 	conn := directconnection.MakeBuilder().
-		WithSimulation(s).
-		WithFreq(1 * timing.GHz).
+		WithRegistrar(s).
 		Build("Conn")
 
+	agentSpec := memaccessagent.DefaultSpec()
+	agentSpec.MaxAddress = *maxAddressFlag
+	agentSpec.WriteLeft = *numAccessFlag
+	agentSpec.ReadLeft = *numAccessFlag
 	agent := memaccessagent.MakeBuilder().
-		WithSimulation(s).
-		WithMaxAddress(*maxAddressFlag).
-		WithWriteLeft(*numAccessFlag).
-		WithReadLeft(*numAccessFlag).
-		WithMemPort(messaging.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
+		WithRegistrar(s).
+		WithSpec(agentSpec).
 		Build("MemAccessAgent")
 	if monitor := s.GetMonitor(); monitor != nil {
 		agent.CreateProgressBars(monitor.CreateProgressBar)
 	}
 
+	dramSpec := idealmemcontroller.DefaultSpec()
+	dramSpec.Capacity = 4 * mem.GB
 	dram := idealmemcontroller.MakeBuilder().
-		WithSimulation(s).
-		WithNewStorage(4 * mem.GB).
-		WithTopPort(messaging.NewPort(nil, 16, 16, "DRAM.TopPort")).
-		WithCtrlPort(messaging.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
+		WithRegistrar(s).
+		WithSpec(dramSpec).
 		Build("DRAM")
 
 	addressToPortMapper := new(mem.SinglePortMapper)
 	addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()
 
+	cacheSpec := writethroughcache.DefaultSpec()
+	cacheSpec.WritePolicyType = "write-evict"
+	cacheSpec.Log2BlockSize = 6
+	cacheSpec.NumMSHREntry = 4
+	cacheSpec.WayAssociativity = 8
+	cacheSpec.TotalByteSize = 4 * mem.KB
+	cacheSpec.NumBanks = 1
+	cacheSpec.BankLatency = 20
 	writeEvictCache := writethroughcache.MakeBuilder().
-		WithWritePolicyType("write-evict").
-		WithSimulation(s).
-		WithAddressToPortMapper(addressToPortMapper).
-		WithLog2BlockSize(6).
-		WithNumMSHREntry(4).
-		WithWayAssociativity(8).
-		WithTotalByteSize(4 * mem.KB).
-		WithNumBanks(1).
-		WithBankLatency(20).
-		WithTopPort(messaging.NewPort(nil, 4, 4, "Cache.TopPort")).
-		WithBottomPort(messaging.NewPort(nil, 4, 4, "Cache.BottomPort")).
-		WithControlPort(messaging.NewPort(nil, 4, 4, "Cache.ControlPort")).
+		WithRegistrar(s).
+		WithSpec(cacheSpec).
+		WithResources(writethroughcache.Resources{
+			AddressMapper: addressToPortMapper,
+		}).
 		Build("Cache")
 
 	agent.LowModule = writeEvictCache.GetPortByName("Top")

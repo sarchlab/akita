@@ -17,7 +17,7 @@ type respondMW struct {
 // Tick runs the respond stage twice (matching original execution order).
 func (m *respondMW) Tick() bool {
 	next := &m.comp.State
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 
 	progress := m.respond(&spec, next)
 	progress = m.respond(&spec, next) || progress
@@ -65,7 +65,7 @@ func (m *respondMW) finalizeWriteTrans(
 	t *transactionState,
 	i int,
 ) bool {
-	err := m.comp.Resources.Storage.Write(t.InternalAddress, t.WriteMsg.Data)
+	err := m.comp.Resources().Storage.Write(t.InternalAddress, t.WriteMsg.Data)
 	if err != nil {
 		panic(err)
 	}
@@ -95,7 +95,7 @@ func (m *respondMW) finalizeReadTrans(
 	t *transactionState,
 	i int,
 ) bool {
-	data, err := m.comp.Resources.Storage.Read(
+	data, err := m.comp.Resources().Storage.Read(
 		t.InternalAddress, t.ReadMsg.AccessByteSize)
 	if err != nil {
 		panic(err)

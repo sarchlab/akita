@@ -12,29 +12,28 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
-	gomock "go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Directory", func() {
 	var (
-		mockCtrl   *gomock.Controller
-		bottomPort *MockPort
+		bottomPort messaging.Port
 		d          *directory
 		c          *pipelineMW
 	)
 
+	// fillBottomOutgoing pre-fills bottomPort's single outgoing slot so the
+	// next Send fails, simulating a busy port.
+	fillBottomOutgoing := func() {
+		dummy := &mem.ReadReq{}
+		dummy.ID = timing.GetIDGenerator().Generate()
+		dummy.Src = bottomPort.AsRemote()
+		dummy.Dst = messaging.RemotePort("DRAM")
+		dummy.TrafficClass = "req"
+		Expect(bottomPort.Send(dummy)).To(BeNil())
+	}
+
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
-
-		bottomPort = NewMockPort(mockCtrl)
-		bottomPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("BottomPort")).
-			AnyTimes()
-
-		c = &pipelineMW{
-			bottomPort: bottomPort,
-		}
+		c = &pipelineMW{}
 
 		initialState := State{
 			DirBuf: queueing.NewBuffer[int]("Cache.DirBuf", 4),
@@ -54,8 +53,8 @@ var _ = Describe("Directory", func() {
 		// Initialize directoryState before SetState so both buffers match
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
-		c.comp = modeling.NewBuilder[Spec, State, modeling.None]().
-			WithEngine(nil).
+		c.comp = modeling.NewBuilder[Spec, State, Resources]().
+			WithEngine(timing.NewSerialEngine()).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:     6,
@@ -70,15 +69,19 @@ var _ = Describe("Directory", func() {
 			}).
 			Build("Cache")
 
+		// bottomPort is a real, single-slot port owned by the component.
+		// Success cases read the sent request back via RetrieveOutgoing;
+		// failure cases pre-fill the slot.
+		bottomPort = messaging.NewPort(c.comp, 1, 1, "Cache.Bottom")
+		(&noopConn{}).PlugIn(bottomPort)
+		c.bottomPort = bottomPort
+		c.comp.AddPort("Bottom", bottomPort)
+
 		c.comp.State = initialState
 
 		d = &directory{
 			cache: c,
 		}
-	})
-
-	AfterEach(func() {
-		mockCtrl.Finish()
 	})
 
 	It("should do nothing if no transaction", func() {
@@ -251,16 +254,14 @@ var _ = Describe("Directory", func() {
 			)
 			next.DirPostBuf.PushTyped(0)
 
-			bottomPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
-				readToBottom := msg.(*mem.ReadReq)
-				Expect(readToBottom.Address).To(Equal(uint64(0x100)))
-				Expect(readToBottom.AccessByteSize).To(Equal(uint64(64)))
-				Expect(readToBottom.PID).To(Equal(vm.PID(1)))
-			})
-
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
+
+			readToBottom := bottomPort.RetrieveOutgoing().(*mem.ReadReq)
+			Expect(readToBottom.Address).To(Equal(uint64(0x100)))
+			Expect(readToBottom.AccessByteSize).To(Equal(uint64(64)))
+			Expect(readToBottom.PID).To(Equal(vm.PID(1)))
 			// Check MSHR entry was created
 			entryIdx, found := cache.MSHRQuery(&next.MSHRState, vm.PID(1), 0x100)
 			Expect(found).To(BeTrue())
@@ -383,7 +384,7 @@ var _ = Describe("Directory", func() {
 			)
 			next.DirPostBuf.PushTyped(0)
 
-			bottomPort.EXPECT().Send(gomock.Any()).Return(&messaging.SendError{})
+			fillBottomOutgoing()
 
 			madeProgress := d.Tick()
 
@@ -414,17 +415,14 @@ var _ = Describe("Directory", func() {
 			entryIdx := cache.MSHRAdd(&next.MSHRState, 4, vm.PID(1), uint64(0x100))
 			next.DirPostBuf.PushTyped(0)
 
-			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					writeToBottom := msg.(*mem.WriteReq)
-					Expect(writeToBottom.Address).To(Equal(uint64(0x104)))
-					Expect(writeToBottom.Data).To(Equal([]byte{1, 2, 3, 4}))
-					Expect(writeToBottom.PID).To(Equal(vm.PID(1)))
-				})
-
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
+
+			writeToBottom := bottomPort.RetrieveOutgoing().(*mem.WriteReq)
+			Expect(writeToBottom.Address).To(Equal(uint64(0x104)))
+			Expect(writeToBottom.Data).To(Equal([]byte{1, 2, 3, 4}))
+			Expect(writeToBottom.PID).To(Equal(vm.PID(1)))
 			entry := next.MSHRState.Entries[entryIdx]
 			Expect(entry.TransactionIndices).To(ContainElement(0))
 			trans := &next.Transactions[0]
@@ -460,15 +458,12 @@ var _ = Describe("Directory", func() {
 
 			next.DirPostBuf.PushTyped(0)
 
-			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					w := msg.(*mem.WriteReq)
-					Expect(w.Address).To(Equal(uint64(0x104)))
-					Expect(w.Data).To(Equal([]byte{1, 2, 3, 4}))
-					Expect(w.PID).To(Equal(vm.PID(1)))
-				})
-
 			madeProgress := d.Tick()
+
+			w := bottomPort.RetrieveOutgoing().(*mem.WriteReq)
+			Expect(w.Address).To(Equal(uint64(0x104)))
+			Expect(w.Data).To(Equal([]byte{1, 2, 3, 4}))
+			Expect(w.PID).To(Equal(vm.PID(1)))
 
 			trans := &next.Transactions[0]
 			Expect(madeProgress).To(BeTrue())
@@ -601,7 +596,7 @@ var _ = Describe("Directory", func() {
 
 			next.DirPostBuf.PushTyped(0)
 
-			bottomPort.EXPECT().Send(gomock.Any()).Return(&messaging.SendError{})
+			fillBottomOutgoing()
 
 			madeProgress := d.Tick()
 
@@ -629,15 +624,12 @@ var _ = Describe("Directory", func() {
 			)
 			next.DirPostBuf.PushTyped(0)
 
-			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					w := msg.(*mem.WriteReq)
-					Expect(w.Address).To(Equal(uint64(0x100)))
-					Expect(w.Data).To(HaveLen(64))
-					Expect(w.PID).To(Equal(vm.PID(1)))
-				})
-
 			madeProgress := d.Tick()
+
+			w := bottomPort.RetrieveOutgoing().(*mem.WriteReq)
+			Expect(w.Address).To(Equal(uint64(0x100)))
+			Expect(w.Data).To(HaveLen(64))
+			Expect(w.PID).To(Equal(vm.PID(1)))
 
 			trans := &next.Transactions[0]
 			Expect(madeProgress).To(BeTrue())

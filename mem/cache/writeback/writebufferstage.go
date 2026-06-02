@@ -85,7 +85,7 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 	transIdx int,
 	trans *transactionState,
 ) bool {
-	spec := wb.cache.comp.Spec
+	spec := wb.cache.comp.Spec()
 	next := &wb.cache.comp.State
 	bankNum := bankID(trans.BlockSetID, trans.BlockWayID,
 		spec.WayAssociativity,
@@ -136,7 +136,7 @@ func (wb *writeBufferStage) fetchFromBottom(
 		return false
 	}
 
-	spec := wb.cache.comp.Spec
+	spec := wb.cache.comp.Spec()
 	lowModulePort := wb.cache.findPort(trans.FetchAddress)
 	read := &mem.ReadReq{}
 	read.ID = timing.GetIDGenerator().Generate()
@@ -170,7 +170,7 @@ func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
 		return false
 	}
 
-	spec := wb.cache.comp.Spec
+	spec := wb.cache.comp.Spec()
 	next := &wb.cache.comp.State
 	bankNum := bankID(
 		trans.BlockSetID, trans.BlockWayID,
@@ -286,7 +286,7 @@ func (wb *writeBufferStage) processReturnRsp() bool {
 func (wb *writeBufferStage) processDataReadyRsp(
 	msg *mem.DataReadyRsp,
 ) bool {
-	spec := wb.cache.comp.Spec
+	spec := wb.cache.comp.Spec()
 	next := &wb.cache.comp.State
 
 	transIdx := wb.findInflightFetchIdxByFetchReadReqID(msg.RspTo)
@@ -332,7 +332,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 }
 
 func (wb *writeBufferStage) combineData(mshrIdx int) {
-	spec := wb.cache.comp.Spec
+	spec := wb.cache.comp.Spec()
 	next := &wb.cache.comp.State
 	mshrEntry := &next.MSHRState.Entries[mshrIdx]
 	block := &next.DirectoryState.Sets[mshrEntry.BlockSetID].Blocks[mshrEntry.BlockWayID]
@@ -419,20 +419,20 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 
 func (wb *writeBufferStage) writeBufferFull() bool {
 	next := &wb.cache.comp.State
-	spec := wb.cache.comp.Spec
+	spec := wb.cache.comp.Spec()
 	numEntry := len(next.PendingEvictionIndices) + len(next.InflightEvictionIndices)
 	return numEntry >= spec.WriteBufferCapacity
 }
 
 func (wb *writeBufferStage) tooManyInflightFetches() bool {
 	next := &wb.cache.comp.State
-	spec := wb.cache.comp.Spec
+	spec := wb.cache.comp.Spec()
 	return len(next.InflightFetchIndices) >= spec.MaxInflightFetch
 }
 
 func (wb *writeBufferStage) tooManyInflightEvictions() bool {
 	next := &wb.cache.comp.State
-	spec := wb.cache.comp.Spec
+	spec := wb.cache.comp.Spec()
 	return len(next.InflightEvictionIndices) >= spec.MaxInflightEviction
 }
 

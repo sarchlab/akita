@@ -10,16 +10,16 @@ import (
 // ---------------------------------------------------------------
 // Helper: build timing + cmdCycles for any Spec (replicates Build logic)
 // ---------------------------------------------------------------
-func buildTimingForSpec(spec Spec) (Timing, map[CommandKind]int) {
+func buildTimingForSpec(spec Spec) (dramTiming, map[commandKind]int) {
 	b := MakeBuilder().WithSpec(spec)
 	b.calculateBurstCycle()
-	b.tRL = b.tAL + b.tCL
-	b.tWL = b.tAL + b.tCWL
-	b.readDelay = b.tRL + b.burstCycle
+	b.spec.TRL = b.spec.TAL + b.spec.TCL
+	b.spec.TWL = b.spec.TAL + b.spec.TCWL
+	b.spec.ReadDelay = b.spec.TRL + b.spec.BurstCycle
 	// NOTE: In this codebase writeDelay = tRL + burstCycle, NOT tWL + burstCycle.
 	// This is a known deviation from DRAMSim3 where writeDelay = tWL + burstCycle.
-	b.writeDelay = b.tRL + b.burstCycle
-	b.tRC = b.tRAS + b.tRP
+	b.spec.WriteDelay = b.spec.TRL + b.spec.BurstCycle
+	b.spec.TRC = b.spec.TRAS + b.spec.TRP
 
 	timing := b.generateTiming()
 	cmdCycles := b.buildCmdCycles()
@@ -29,7 +29,7 @@ func buildTimingForSpec(spec Spec) (Timing, map[CommandKind]int) {
 // ---------------------------------------------------------------
 // Helper: look up a timing value from a TimeTable
 // ---------------------------------------------------------------
-func lookupTiming(table TimeTable, srcCmd, dstCmd CommandKind) (int, bool) {
+func lookupTiming(table timeTable, srcCmd, dstCmd commandKind) (int, bool) {
 	if int(srcCmd) >= len(table) {
 		return 0, false
 	}
@@ -88,16 +88,16 @@ type expectedTimings struct {
 }
 
 func computeBurstCycle(spec Spec) int {
-	protocol := Protocol(spec.Protocol)
+	protocol := protocol(spec.Protocol)
 
 	burstCycle := spec.BurstLength / 2
 
 	switch protocol {
-	case GDDR5:
+	case protoGDDR5:
 		burstCycle = spec.BurstLength / 4
-	case GDDR5X:
+	case protoGDDR5X:
 		burstCycle = spec.BurstLength / 8
-	case GDDR6:
+	case protoGDDR6:
 		burstCycle = spec.BurstLength / 16
 	}
 
@@ -154,7 +154,7 @@ func computeWriteTimings(
 func computeActivateTimings(spec Spec, tRC int) (
 	actToRead, actToWrite, actToAct, actToActL, actToActS, actToPre int,
 ) {
-	protocol := Protocol(spec.Protocol)
+	protocol := protocol(spec.Protocol)
 
 	actToRead = spec.TRCD - spec.TAL
 	actToWrite = spec.TRCD - spec.TAL
@@ -227,7 +227,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 			sc := sc // capture
 			Describe(sc.name, func() {
 				var (
-					timing   Timing
+					timing   dramTiming
 					expected expectedTimings
 				)
 
@@ -239,7 +239,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 				// --- Read → Read ---
 				It("should match readToRead_L (SameBank)", func() {
 					got, ok := lookupTiming(timing.SameBank,
-						CmdKindRead, CmdKindRead)
+						cmdKindRead, cmdKindRead)
 					Expect(ok).To(BeTrue(),
 						"Read→Read not found in SameBank")
 					Expect(got).To(Equal(expected.readToReadL),
@@ -250,21 +250,21 @@ var _ = Describe("Timing Cross-Validation", func() {
 				It("should match readToRead_L (OtherBanksInBankGroup)", func() {
 					got, ok := lookupTiming(
 						timing.OtherBanksInBankGroup,
-						CmdKindRead, CmdKindRead)
+						cmdKindRead, cmdKindRead)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.readToReadL))
 				})
 
 				It("should match readToRead_S (SameRank)", func() {
 					got, ok := lookupTiming(timing.SameRank,
-						CmdKindRead, CmdKindRead)
+						cmdKindRead, cmdKindRead)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.readToReadS))
 				})
 
 				It("should match readToRead_O (OtherRanks)", func() {
 					got, ok := lookupTiming(timing.OtherRanks,
-						CmdKindRead, CmdKindRead)
+						cmdKindRead, cmdKindRead)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.readToReadO))
 				})
@@ -272,14 +272,14 @@ var _ = Describe("Timing Cross-Validation", func() {
 				// --- Read → Write ---
 				It("should match readToWrite (SameBank)", func() {
 					got, ok := lookupTiming(timing.SameBank,
-						CmdKindRead, CmdKindWrite)
+						cmdKindRead, cmdKindWrite)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.readToWrite))
 				})
 
 				It("should match readToWrite_O (OtherRanks)", func() {
 					got, ok := lookupTiming(timing.OtherRanks,
-						CmdKindRead, CmdKindWritePrecharge)
+						cmdKindRead, cmdKindWritePrecharge)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.readToWriteO))
 				})
@@ -287,21 +287,21 @@ var _ = Describe("Timing Cross-Validation", func() {
 				// --- Write → Read ---
 				It("should match writeToRead_L (SameBank)", func() {
 					got, ok := lookupTiming(timing.SameBank,
-						CmdKindWrite, CmdKindRead)
+						cmdKindWrite, cmdKindRead)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.writeToReadL))
 				})
 
 				It("should match writeToRead_S (SameRank)", func() {
 					got, ok := lookupTiming(timing.SameRank,
-						CmdKindWrite, CmdKindRead)
+						cmdKindWrite, cmdKindRead)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.writeToReadS))
 				})
 
 				It("should match writeToRead_O (OtherRanks)", func() {
 					got, ok := lookupTiming(timing.OtherRanks,
-						CmdKindWrite, CmdKindRead)
+						cmdKindWrite, cmdKindRead)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.writeToReadO))
 				})
@@ -309,21 +309,21 @@ var _ = Describe("Timing Cross-Validation", func() {
 				// --- Write → Write ---
 				It("should match writeToWrite_L (SameBank)", func() {
 					got, ok := lookupTiming(timing.SameBank,
-						CmdKindWrite, CmdKindWrite)
+						cmdKindWrite, cmdKindWrite)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.writeToWriteL))
 				})
 
 				It("should match writeToWrite_S (SameRank)", func() {
 					got, ok := lookupTiming(timing.SameRank,
-						CmdKindWrite, CmdKindWrite)
+						cmdKindWrite, cmdKindWrite)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.writeToWriteS))
 				})
 
 				It("should match writeToWrite_O (OtherRanks)", func() {
 					got, ok := lookupTiming(timing.OtherRanks,
-						CmdKindWrite, CmdKindWrite)
+						cmdKindWrite, cmdKindWrite)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.writeToWriteO))
 				})
@@ -331,7 +331,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 				// --- Write → Precharge ---
 				It("should match writeToPrecharge (SameBank)", func() {
 					got, ok := lookupTiming(timing.SameBank,
-						CmdKindWrite, CmdKindPrecharge)
+						cmdKindWrite, cmdKindPrecharge)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.writeToPrecharge))
 				})
@@ -339,7 +339,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 				// --- Read → Precharge ---
 				It("should match readToPrecharge (SameBank)", func() {
 					got, ok := lookupTiming(timing.SameBank,
-						CmdKindRead, CmdKindPrecharge)
+						cmdKindRead, cmdKindPrecharge)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.readToPrecharge))
 				})
@@ -347,7 +347,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 				// --- Precharge → Activate ---
 				It("should match prechargeToActivate (SameBank)", func() {
 					got, ok := lookupTiming(timing.SameBank,
-						CmdKindPrecharge, CmdKindActivate)
+						cmdKindPrecharge, cmdKindActivate)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.prechargeToActivate))
 				})
@@ -355,14 +355,14 @@ var _ = Describe("Timing Cross-Validation", func() {
 				// --- Activate → Read / Write ---
 				It("should match activateToRead (SameBank)", func() {
 					got, ok := lookupTiming(timing.SameBank,
-						CmdKindActivate, CmdKindRead)
+						cmdKindActivate, cmdKindRead)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.activateToRead))
 				})
 
 				It("should match activateToWrite (SameBank)", func() {
 					got, ok := lookupTiming(timing.SameBank,
-						CmdKindActivate, CmdKindWrite)
+						cmdKindActivate, cmdKindWrite)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.activateToWrite))
 				})
@@ -370,7 +370,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 				// --- Activate → Activate ---
 				It("should match activateToActivate (SameBank)", func() {
 					got, ok := lookupTiming(timing.SameBank,
-						CmdKindActivate, CmdKindActivate)
+						cmdKindActivate, cmdKindActivate)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.activateToActivate))
 				})
@@ -378,14 +378,14 @@ var _ = Describe("Timing Cross-Validation", func() {
 				It("should match activateToActivate_L (OtherBanksInBankGroup)", func() {
 					got, ok := lookupTiming(
 						timing.OtherBanksInBankGroup,
-						CmdKindActivate, CmdKindActivate)
+						cmdKindActivate, cmdKindActivate)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.activateToActivateL))
 				})
 
 				It("should match activateToActivate_S (SameRank)", func() {
 					got, ok := lookupTiming(timing.SameRank,
-						CmdKindActivate, CmdKindActivate)
+						cmdKindActivate, cmdKindActivate)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.activateToActivateS))
 				})
@@ -393,7 +393,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 				// --- Activate → Precharge ---
 				It("should match activateToPrecharge (SameBank)", func() {
 					got, ok := lookupTiming(timing.SameBank,
-						CmdKindActivate, CmdKindPrecharge)
+						cmdKindActivate, cmdKindPrecharge)
 					Expect(ok).To(BeTrue())
 					Expect(got).To(Equal(expected.activateToPrecharge))
 				})
@@ -406,8 +406,8 @@ var _ = Describe("Timing Cross-Validation", func() {
 	// =================================================================
 	Describe("Tier 2: Single-Request Latency", func() {
 		var (
-			timing    Timing
-			cmdCycles map[CommandKind]int
+			timing    dramTiming
+			cmdCycles map[commandKind]int
 			state     *State
 			spec      Spec
 		)
@@ -421,20 +421,20 @@ var _ = Describe("Timing Cross-Validation", func() {
 		It("closed-bank read: total cycles = tRCD + readDelay", func() {
 			// A read to a closed bank requires ACT + wait tRCD + READ.
 			bs := findBankState(&state.BankStates, 0, 0, 0)
-			Expect(BankStateKind(bs.State)).To(Equal(BankStateClosed))
+			Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
 
 			// Determine required command: should be Activate.
 			readCmd := &commandState{
-				Kind:     int(CmdKindRead),
-				Location: Location{Rank: 0, BankGroup: 0, Bank: 0, Row: 1},
+				Kind:     int(cmdKindRead),
+				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 1},
 			}
 			reqKind := getRequiredCommandKind(bs, readCmd)
-			Expect(reqKind).To(Equal(CmdKindActivate))
+			Expect(reqKind).To(Equal(cmdKindActivate))
 
 			// Issue Activate.
 			actCmd := &commandState{
-				Kind:     int(CmdKindActivate),
-				Location: Location{Rank: 0, BankGroup: 0, Bank: 0, Row: 1},
+				Kind:     int(cmdKindActivate),
+				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 1},
 			}
 			startCommand(cmdCycles, state, bs, actCmd)
 			updateTiming(timing, state, actCmd)
@@ -452,7 +452,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 			// Now issue Read.
 			ready := getReadyCommand(&spec, state, bs, readCmd)
 			Expect(ready).NotTo(BeNil())
-			Expect(CommandKind(ready.Kind)).To(Equal(CmdKindRead))
+			Expect(commandKind(ready.Kind)).To(Equal(cmdKindRead))
 
 			startCommand(cmdCycles, state, bs, ready)
 			updateTiming(timing, state, ready)
@@ -470,8 +470,8 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Open bank to row 42.
 			actCmd := &commandState{
-				Kind:     int(CmdKindActivate),
-				Location: Location{Rank: 0, BankGroup: 0, Bank: 0, Row: 42},
+				Kind:     int(cmdKindActivate),
+				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 42},
 			}
 			startCommand(cmdCycles, state, bs, actCmd)
 			updateTiming(timing, state, actCmd)
@@ -481,15 +481,15 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Read same row → should immediately return Read.
 			readCmd := &commandState{
-				Kind:     int(CmdKindRead),
-				Location: Location{Rank: 0, BankGroup: 0, Bank: 0, Row: 42},
+				Kind:     int(cmdKindRead),
+				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 42},
 			}
 			reqKind := getRequiredCommandKind(bs, readCmd)
-			Expect(reqKind).To(Equal(CmdKindRead))
+			Expect(reqKind).To(Equal(cmdKindRead))
 
 			ready := getReadyCommand(&spec, state, bs, readCmd)
 			Expect(ready).NotTo(BeNil())
-			Expect(CommandKind(ready.Kind)).To(Equal(CmdKindRead))
+			Expect(commandKind(ready.Kind)).To(Equal(cmdKindRead))
 		})
 
 		It("row-conflict read: PRE + tRP + ACT + tRCD + READ", func() {
@@ -497,8 +497,8 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Open bank to row 100.
 			actCmd := &commandState{
-				Kind:     int(CmdKindActivate),
-				Location: Location{Rank: 0, BankGroup: 0, Bank: 0, Row: 100},
+				Kind:     int(cmdKindActivate),
+				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 100},
 			}
 			startCommand(cmdCycles, state, bs, actCmd)
 			updateTiming(timing, state, actCmd)
@@ -508,16 +508,16 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Request read for different row → row conflict → Precharge first.
 			readCmd := &commandState{
-				Kind:     int(CmdKindRead),
-				Location: Location{Rank: 0, BankGroup: 0, Bank: 0, Row: 200},
+				Kind:     int(cmdKindRead),
+				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 200},
 			}
 			reqKind := getRequiredCommandKind(bs, readCmd)
-			Expect(reqKind).To(Equal(CmdKindPrecharge))
+			Expect(reqKind).To(Equal(cmdKindPrecharge))
 
 			// Wait for activateToPrecharge timing (tRAS).
 			// After tRCD ticks the ACT→PRE constraint has partially drained.
 			// The remaining is tRAS - tRCD.
-			preKey := cmdKindToString(CmdKindPrecharge)
+			preKey := cmdKindToString(cmdKindPrecharge)
 			remaining := bs.CyclesToCmdAvailable[preKey]
 			for range remaining {
 				tickBanks(&spec, cmdCycles, state)
@@ -525,12 +525,12 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Issue Precharge.
 			preCmd := &commandState{
-				Kind:     int(CmdKindPrecharge),
-				Location: Location{Rank: 0, BankGroup: 0, Bank: 0, Row: 100},
+				Kind:     int(cmdKindPrecharge),
+				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 100},
 			}
 			startCommand(cmdCycles, state, bs, preCmd)
 			updateTiming(timing, state, preCmd)
-			Expect(BankStateKind(bs.State)).To(Equal(BankStateClosed))
+			Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
 
 			// Wait tRP for Precharge to complete.
 			for range spec.TRP {
@@ -539,11 +539,11 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Now Activate should be ready.
 			reqKind2 := getRequiredCommandKind(bs, readCmd)
-			Expect(reqKind2).To(Equal(CmdKindActivate))
+			Expect(reqKind2).To(Equal(cmdKindActivate))
 
 			actCmd2 := getReadyCommand(&spec, state, bs, readCmd)
 			Expect(actCmd2).NotTo(BeNil())
-			Expect(CommandKind(actCmd2.Kind)).To(Equal(CmdKindActivate))
+			Expect(commandKind(actCmd2.Kind)).To(Equal(cmdKindActivate))
 		})
 
 		It("write-then-read same bank: writeToReadL gap enforced", func() {
@@ -551,8 +551,8 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Open bank.
 			actCmd := &commandState{
-				Kind:     int(CmdKindActivate),
-				Location: Location{Rank: 0, BankGroup: 0, Bank: 0, Row: 50},
+				Kind:     int(cmdKindActivate),
+				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 50},
 			}
 			startCommand(cmdCycles, state, bs, actCmd)
 			updateTiming(timing, state, actCmd)
@@ -562,14 +562,14 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Issue Write.
 			writeCmd := &commandState{
-				Kind:     int(CmdKindWrite),
-				Location: Location{Rank: 0, BankGroup: 0, Bank: 0, Row: 50},
+				Kind:     int(cmdKindWrite),
+				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 50},
 			}
 			startCommand(cmdCycles, state, bs, writeCmd)
 			updateTiming(timing, state, writeCmd)
 
 			// Check Write→Read constraint on same bank.
-			readKey := cmdKindToString(CmdKindRead)
+			readKey := cmdKindToString(cmdKindRead)
 			exp := computeExpectedTimings(spec)
 			Expect(bs.CyclesToCmdAvailable[readKey]).To(
 				Equal(exp.writeToReadL),
@@ -577,8 +577,8 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Read should NOT be ready immediately.
 			readCmd := &commandState{
-				Kind:     int(CmdKindRead),
-				Location: Location{Rank: 0, BankGroup: 0, Bank: 0, Row: 50},
+				Kind:     int(cmdKindRead),
+				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 50},
 			}
 			// The bank is busy with the write command, so wait for it.
 			for range exp.readDelay {
@@ -599,7 +599,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 			Expect(bs.CyclesToCmdAvailable[readKey]).To(Equal(0))
 			ready := getReadyCommand(&spec, state, bs, readCmd)
 			Expect(ready).NotTo(BeNil())
-			Expect(CommandKind(ready.Kind)).To(Equal(CmdKindRead))
+			Expect(commandKind(ready.Kind)).To(Equal(cmdKindRead))
 		})
 	})
 
@@ -608,8 +608,8 @@ var _ = Describe("Timing Cross-Validation", func() {
 	// =================================================================
 	Describe("Tier 3: Multi-Request Behavioral", func() {
 		var (
-			timing    Timing
-			cmdCycles map[CommandKind]int
+			timing    dramTiming
+			cmdCycles map[commandKind]int
 			state     *State
 			spec      Spec
 		)
@@ -625,8 +625,8 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Open the bank.
 			actCmd := &commandState{
-				Kind:     int(CmdKindActivate),
-				Location: Location{Rank: 0, BankGroup: 0, Bank: 0, Row: 10},
+				Kind:     int(cmdKindActivate),
+				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 10},
 			}
 			startCommand(cmdCycles, state, bs, actCmd)
 			updateTiming(timing, state, actCmd)
@@ -638,14 +638,14 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Issue first read.
 			read1 := &commandState{
-				Kind:     int(CmdKindRead),
-				Location: Location{Rank: 0, BankGroup: 0, Bank: 0, Row: 10},
+				Kind:     int(cmdKindRead),
+				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 10},
 			}
 			startCommand(cmdCycles, state, bs, read1)
 			updateTiming(timing, state, read1)
 
 			// Same bank Read→Read = tCCDL (=6 for DDR4)
-			readKey := cmdKindToString(CmdKindRead)
+			readKey := cmdKindToString(cmdKindRead)
 			Expect(bs.CyclesToCmdAvailable[readKey]).To(Equal(exp.readToReadL))
 
 			// Tick until read completes and CCD constraint drains.
@@ -656,16 +656,16 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Second read: should be ready (no new ACT needed).
 			read2 := &commandState{
-				Kind:     int(CmdKindRead),
-				Location: Location{Rank: 0, BankGroup: 0, Bank: 0, Row: 10},
+				Kind:     int(cmdKindRead),
+				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 10},
 			}
 			reqKind := getRequiredCommandKind(bs, read2)
-			Expect(reqKind).To(Equal(CmdKindRead),
+			Expect(reqKind).To(Equal(cmdKindRead),
 				"second read should not need ACT (row buffer hit)")
 
 			ready := getReadyCommand(&spec, state, bs, read2)
 			Expect(ready).NotTo(BeNil())
-			Expect(CommandKind(ready.Kind)).To(Equal(CmdKindRead))
+			Expect(commandKind(ready.Kind)).To(Equal(cmdKindRead))
 		})
 
 		It("parallel bank reads: bounded by tRRD", func() {
@@ -676,14 +676,14 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Activate bank (0,0,0).
 			act0 := &commandState{
-				Kind:     int(CmdKindActivate),
-				Location: Location{Rank: 0, BankGroup: 0, Bank: 0, Row: 1},
+				Kind:     int(cmdKindActivate),
+				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 1},
 			}
 			startCommand(cmdCycles, state, bs0, act0)
 			updateTiming(timing, state, act0)
 
 			// Check that bank (0,1,0) has tRRDS constraint.
-			actKey := cmdKindToString(CmdKindActivate)
+			actKey := cmdKindToString(cmdKindActivate)
 			constraint := bs1.CyclesToCmdAvailable[actKey]
 			exp := computeExpectedTimings(spec)
 			Expect(constraint).To(Equal(exp.activateToActivateS),
@@ -697,12 +697,12 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Now Activate on bank (0,1,0) should be ready.
 			act1Cmd := &commandState{
-				Kind:     int(CmdKindRead),
-				Location: Location{Rank: 0, BankGroup: 1, Bank: 0, Row: 2},
+				Kind:     int(cmdKindRead),
+				Location: location{Rank: 0, BankGroup: 1, Bank: 0, Row: 2},
 			}
 			ready := getReadyCommand(&spec, state, bs1, act1Cmd)
 			Expect(ready).NotTo(BeNil())
-			Expect(CommandKind(ready.Kind)).To(Equal(CmdKindActivate))
+			Expect(commandKind(ready.Kind)).To(Equal(cmdKindActivate))
 		})
 
 		It("same bank-group reads: bounded by tRRDL", func() {
@@ -711,13 +711,13 @@ var _ = Describe("Timing Cross-Validation", func() {
 			bs1 := findBankState(&state.BankStates, 0, 0, 1)
 
 			act0 := &commandState{
-				Kind:     int(CmdKindActivate),
-				Location: Location{Rank: 0, BankGroup: 0, Bank: 0, Row: 5},
+				Kind:     int(cmdKindActivate),
+				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 5},
 			}
 			startCommand(cmdCycles, state, bs0, act0)
 			updateTiming(timing, state, act0)
 
-			actKey := cmdKindToString(CmdKindActivate)
+			actKey := cmdKindToString(cmdKindActivate)
 			constraint := bs1.CyclesToCmdAvailable[actKey]
 			exp := computeExpectedTimings(spec)
 			Expect(constraint).To(Equal(exp.activateToActivateL),
@@ -739,8 +739,8 @@ var _ = Describe("Timing Cross-Validation", func() {
 					0, i%spec.NumBankGroup, i/spec.NumBankGroup)
 
 				cmd := &commandState{
-					Kind: int(CmdKindActivate),
-					Location: Location{
+					Kind: int(cmdKindActivate),
+					Location: location{
 						Rank:      0,
 						BankGroup: uint64(i % spec.NumBankGroup),
 						Bank:      uint64(i / spec.NumBankGroup),
@@ -754,13 +754,13 @@ var _ = Describe("Timing Cross-Validation", func() {
 			// 5th activate within tFAW window → should be blocked.
 			state.TickCount = 7 // oldest was at tick 0, 7 < 28
 			bs := findBankState(&state.BankStates, 0, 0, 1)
-			bs.State = int(BankStateClosed)
+			bs.State = int(bankStateClosed)
 			bs.HasCurrentCmd = false
 			bs.CyclesToCmdAvailable = make(map[string]int)
 
 			readCmd := &commandState{
-				Kind: int(CmdKindRead),
-				Location: Location{
+				Kind: int(cmdKindRead),
+				Location: location{
 					Rank: 0, BankGroup: 0, Bank: 1, Row: 999,
 				},
 			}
@@ -773,7 +773,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 			ready = getReadyCommand(&spec, state, bs, readCmd)
 			Expect(ready).NotTo(BeNil(),
 				"activate should be allowed after tFAW passes")
-			Expect(CommandKind(ready.Kind)).To(Equal(CmdKindActivate))
+			Expect(commandKind(ready.Kind)).To(Equal(cmdKindActivate))
 		})
 	})
 

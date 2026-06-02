@@ -51,7 +51,7 @@ func (m *dataTransferMW) dstPort() messaging.Port {
 }
 
 func (m *dataTransferMW) findSrcPort(addr uint64) messaging.RemotePort {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	state := &m.comp.State
 	switch state.SrcSide {
 	case "inside":
@@ -67,7 +67,7 @@ func (m *dataTransferMW) findSrcPort(addr uint64) messaging.RemotePort {
 }
 
 func (m *dataTransferMW) findDstPort(addr uint64) messaging.RemotePort {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	state := &m.comp.State
 	switch state.DstSide {
 	case "inside":
@@ -104,7 +104,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 	trans := &state.CurrentTransaction
 	addr := alignAddress(trans.NextReadAddr, state.SrcByteGranularity)
 
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	bufEndAddr := state.Buffer.Offset + spec.BufferSize
 	if addr >= bufEndAddr {
 		return false

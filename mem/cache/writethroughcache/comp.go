@@ -1,6 +1,7 @@
 package writethroughcache
 
 import (
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
@@ -31,6 +32,11 @@ type Spec struct {
 	AddressMapperType string   `json:"address_mapper_type"`
 	RemotePortNames   []string `json:"remote_port_names"`
 	InterleavingSize  uint64   `json:"interleaving_size"`
+
+	// Port buffer sizes.
+	TopPortBufferSize     int `json:"top_port_buffer_size"`
+	BottomPortBufferSize  int `json:"bottom_port_buffer_size"`
+	ControlPortBufferSize int `json:"control_port_buffer_size"`
 }
 
 // State contains mutable runtime data for the writethroughcache.
@@ -136,5 +142,17 @@ func (t *transactionState) PID() vm.PID {
 	return t.WritePID
 }
 
+// Resources holds the shared resources and external wiring referenced by the
+// writethroughcache. Storage is the (optionally shared) backing storage.
+// AddressMapper and RemotePorts describe how the cache reaches the lower-level
+// modules; they are only consumed at Build time to populate the Spec's address
+// mapper configuration and are not serialized with the component state.
+type Resources struct {
+	Storage *mem.Storage
+
+	AddressMapper mem.AddressToPortMapper `json:"-"`
+	RemotePorts   []messaging.RemotePort  `json:"-"`
+}
+
 // Comp is the writethroughcache component type.
-type Comp = modeling.Component[Spec, State, modeling.None]
+type Comp = modeling.Component[Spec, State, Resources]

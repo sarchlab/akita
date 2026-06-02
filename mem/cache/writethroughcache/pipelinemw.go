@@ -9,7 +9,7 @@ import (
 // pipelineMW holds all non-serializable infrastructure for the cache data
 // pipeline. It implements the Tick method and delegates NamedHookable to comp.
 type pipelineMW struct {
-	comp *modeling.Component[Spec, State, modeling.None]
+	comp *modeling.Component[Spec, State, Resources]
 
 	topPort    messaging.Port
 	bottomPort messaging.Port
@@ -23,14 +23,9 @@ type pipelineMW struct {
 	respondStage     *respondStage
 }
 
-// GetSpec returns the immutable specification.
-func (m *pipelineMW) GetSpec() Spec {
-	return m.comp.Spec
-}
-
 // findPort resolves an address to a remote port using data from Spec.
 func (m *pipelineMW) findPort(address uint64) messaging.RemotePort {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 
 	switch spec.AddressMapperType {
 	case "single":
@@ -79,7 +74,7 @@ func (m *pipelineMW) runPipeline() bool {
 
 func (m *pipelineMW) tickRespondStage() bool {
 	madeProgress := false
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respondStage.Tick() || madeProgress
 	}
@@ -90,7 +85,7 @@ func (m *pipelineMW) tickRespondStage() bool {
 func (m *pipelineMW) tickParseBottomStage() bool {
 	madeProgress := false
 
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.parseBottomStage.Tick() || madeProgress
 	}
@@ -113,7 +108,7 @@ func (m *pipelineMW) tickDirectoryStage() bool {
 
 func (m *pipelineMW) tickIntakeStage() bool {
 	madeProgress := false
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.intakeStage.Tick() || madeProgress
 	}

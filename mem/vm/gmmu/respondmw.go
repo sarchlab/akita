@@ -16,7 +16,7 @@ import (
 )
 
 type respondMW struct {
-	comp *modeling.Component[Spec, State, modeling.None]
+	comp *modeling.Component[Spec, State, Resources]
 }
 
 func (m *respondMW) topPort() messaging.Port {

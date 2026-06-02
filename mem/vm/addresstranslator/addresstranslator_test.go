@@ -5,88 +5,84 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
-	"go.uber.org/mock/gomock"
 )
+
+// noopConn is a minimal messaging.Connection used to drive a component's real
+// ports in isolation. Because the translator now owns its ports (they are no
+// longer injectable), tests feed requests with Deliver and read responses with
+// RetrieveOutgoing; the port still needs a connection so its send/retrieve
+// notifications have somewhere to go.
+type noopConn struct {
+	hooking.HookableBase
+}
+
+func (c *noopConn) Name() string                     { return "NoopConn" }
+func (c *noopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
+func (c *noopConn) Unplug(_ messaging.Port)          {}
+func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
+func (c *noopConn) NotifySend()                      {}
 
 var _ = Describe("Address Translator", func() {
 	var (
-		mockCtrl        *gomock.Controller
-		topPort         *MockPort
-		bottomPort      *MockPort
-		translationPort *MockPort
-		ctrlPort        *MockPort
-
-		t              *modeling.Component[Spec, State, modeling.None]
-		tParseTransMW  *parseTranslateMW
-		tRespondPipeMW *respondPipelineMW
+		engine          timing.Engine
+		t               *Comp
+		topPort         messaging.Port
+		bottomPort      messaging.Port
+		translationPort messaging.Port
+		ctrlPort        messaging.Port
+		tParseTransMW   *parseTranslateMW
+		tRespondPipeMW  *respondPipelineMW
 	)
 
-	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
-		topPort = NewMockPort(mockCtrl)
-		topPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("TopPort")).
-			AnyTimes()
-		topPort.EXPECT().
-			Name().
-			Return("TopPort").
-			AnyTimes()
-		bottomPort = NewMockPort(mockCtrl)
-		bottomPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("BottomPort")).
-			AnyTimes()
-		bottomPort.EXPECT().
-			Name().
-			Return("BottomPort").
-			AnyTimes()
-		ctrlPort = NewMockPort(mockCtrl)
-		ctrlPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("CtrlPort")).
-			AnyTimes()
-		translationPort = NewMockPort(mockCtrl)
-		translationPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("TranslationPort")).
-			AnyTimes()
-		translationPort.EXPECT().
-			Name().
-			Return("TranslationPort").
-			AnyTimes()
+	// build constructs a translator with the given Top-port buffer size, injects
+	// the mappers, and plugs a noopConn into each port so they can be driven.
+	build := func(topBufSize int) {
+		spec := DefaultSpec()
+		spec.Log2PageSize = 12
+		spec.Freq = 1
+		spec.TopPortBufferSize = topBufSize
 
-		topPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
-		bottomPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
-		translationPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
-		ctrlPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
+		resources := Resources{
+			MemProviderMapper: &mem.SinglePortMapper{
+				Port: messaging.RemotePort("MemPort"),
+			},
+			TranslationProviderMapper: &mem.SinglePortMapper{
+				Port: messaging.RemotePort("TranslationProvider"),
+			},
+		}
 
-		builder := MakeBuilder().
-			WithLog2PageSize(12).
-			WithFreq(1).
-			WithMemoryProviderType("single").
-			WithMemoryProviders(messaging.RemotePort("MemPort")).
-			WithTranslationProviderMapperType("single").
-			WithTranslationProviders(messaging.RemotePort("TranslationPort")).
-			WithTopPort(topPort).
-			WithBottomPort(bottomPort).
-			WithTranslationPort(translationPort).
-			WithCtrlPort(ctrlPort)
+		t = MakeBuilder().
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSpec(spec).
+			WithResources(resources).
+			Build("AddressTranslator")
 
-		t = builder.Build("AddressTranslator")
+		topPort = t.GetPortByName("Top")
+		bottomPort = t.GetPortByName("Bottom")
+		translationPort = t.GetPortByName("Translation")
+		ctrlPort = t.GetPortByName("Control")
+
+		for _, p := range []messaging.Port{
+			topPort, bottomPort, translationPort, ctrlPort,
+		} {
+			conn := &noopConn{}
+			conn.PlugIn(p)
+		}
 
 		tParseTransMW = t.Middlewares()[0].(*parseTranslateMW)
 		tRespondPipeMW = t.Middlewares()[1].(*respondPipelineMW)
-	})
+	}
 
-	AfterEach(func() {
-		mockCtrl.Finish()
+	BeforeEach(func() {
+		engine = timing.NewSerialEngine()
+		build(4)
 	})
 
 	Context("translate stage", func() {
@@ -97,6 +93,8 @@ var _ = Describe("Address Translator", func() {
 		BeforeEach(func() {
 			req = &mem.ReadReq{}
 			req.ID = timing.GetIDGenerator().Generate()
+			req.Src = messaging.RemotePort("Agent")
+			req.Dst = topPort.AsRemote()
 			req.Address = 0x100
 			req.AccessByteSize = 4
 			req.PID = 1
@@ -105,50 +103,31 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should do nothing if there is no request", func() {
-			topPort.EXPECT().PeekIncoming().Return(nil)
 			madeProgress := tParseTransMW.translate()
 			Expect(madeProgress).To(BeFalse())
 		})
 
 		It("should send translation", func() {
-			var transReqReturn *vm.TranslationReq
-			transReq := &vm.TranslationReq{}
-			transReq.ID = timing.GetIDGenerator().Generate()
-			transReq.PID = 1
-			transReq.VAddr = 0x100
-			transReq.DeviceID = 1
-			transReq.TrafficClass = "vm.TranslationReq"
-
-			// Set initial state with an existing transaction
-			nextState := &t.State
-			nextState.Transactions = append(nextState.Transactions, transactionState{
-				TranslationReqID: transReq.ID,
-			})
-
 			req.Address = 0x1040
-
-			topPort.EXPECT().PeekIncoming().Return(req)
-			topPort.EXPECT().RetrieveIncoming()
-			translationPort.EXPECT().Send(gomock.Any()).
-				DoAndReturn(func(msg messaging.Msg) *messaging.SendError {
-					transReqReturn = msg.(*vm.TranslationReq)
-					return nil
-				})
+			topPort.Deliver(req)
 
 			needTick := tParseTransMW.translate()
 
 			Expect(needTick).To(BeTrue())
 			updatedState := &t.State
-			Expect(updatedState.Transactions).To(HaveLen(2))
-			Expect(updatedState.Transactions[1].TranslationReqID).
-				To(Equal(transReqReturn.ID))
+			Expect(updatedState.Transactions).To(HaveLen(1))
+
+			sent := translationPort.RetrieveOutgoing()
+			Expect(sent).To(BeAssignableToTypeOf(&vm.TranslationReq{}))
+			transReq := sent.(*vm.TranslationReq)
+			Expect(updatedState.Transactions[0].TranslationReqID).
+				To(Equal(transReq.ID))
 		})
 
 		It("should stall if cannot send for translation", func() {
-			topPort.EXPECT().PeekIncoming().Return(req)
-			translationPort.EXPECT().
-				Send(gomock.Any()).
-				Return(&messaging.SendError{})
+			// Fill the translation port's outgoing buffer so Send fails.
+			fillOutgoing(translationPort, t.Spec().TranslationPortBufferSize)
+			topPort.Deliver(req)
 
 			needTick := tParseTransMW.translate()
 
@@ -186,7 +165,6 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should do nothing if there is no translation return", func() {
-			translationPort.EXPECT().PeekIncoming().Return(nil)
 			needTick := tRespondPipeMW.parseTranslation()
 			Expect(needTick).To(BeFalse())
 		})
@@ -222,8 +200,9 @@ var _ = Describe("Address Translator", func() {
 				},
 			}
 
-			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
-			bottomPort.EXPECT().Send(gomock.Any()).Return(messaging.NewSendError())
+			// Fill the bottom port's outgoing buffer so Send fails.
+			fillOutgoing(bottomPort, t.Spec().BottomPortBufferSize)
+			translationPort.Deliver(translationRsp)
 
 			madeProgress := tRespondPipeMW.parseTranslation()
 
@@ -261,21 +240,19 @@ var _ = Describe("Address Translator", func() {
 				},
 			}
 
-			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
-			translationPort.EXPECT().RetrieveIncoming()
-			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					read := msg.(*mem.ReadReq)
-					Expect(read.PID).To(Equal(vm.PID(0)))
-					Expect(read.Address).To(Equal(uint64(0x20040)))
-					Expect(read.AccessByteSize).To(Equal(uint64(4)))
-					Expect(read.Src).To(Equal(bottomPort.AsRemote()))
-				}).
-				Return(nil)
+			translationPort.Deliver(translationRsp)
 
 			madeProgress := tRespondPipeMW.parseTranslation()
 
 			Expect(madeProgress).To(BeTrue())
+
+			sent := bottomPort.RetrieveOutgoing()
+			read := sent.(*mem.ReadReq)
+			Expect(read.PID).To(Equal(vm.PID(0)))
+			Expect(read.Address).To(Equal(uint64(0x20040)))
+			Expect(read.AccessByteSize).To(Equal(uint64(4)))
+			Expect(read.Src).To(Equal(bottomPort.AsRemote()))
+
 			updatedState := &t.State
 			Expect(updatedState.Transactions).NotTo(
 				ContainElement(
@@ -322,22 +299,20 @@ var _ = Describe("Address Translator", func() {
 				},
 			}
 
-			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
-			translationPort.EXPECT().RetrieveIncoming()
-			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					writeMsg := msg.(*mem.WriteReq)
-					Expect(writeMsg.PID).To(Equal(vm.PID(0)))
-					Expect(writeMsg.Address).To(Equal(uint64(0x20040)))
-					Expect(writeMsg.Src).To(Equal(bottomPort.AsRemote()))
-					Expect(writeMsg.Data).To(Equal(data))
-					Expect(writeMsg.DirtyMask).To(Equal(dirty))
-				}).
-				Return(nil)
+			translationPort.Deliver(translationRsp)
 
 			madeProgress := tRespondPipeMW.parseTranslation()
 
 			Expect(madeProgress).To(BeTrue())
+
+			sent := bottomPort.RetrieveOutgoing()
+			writeMsg := sent.(*mem.WriteReq)
+			Expect(writeMsg.PID).To(Equal(vm.PID(0)))
+			Expect(writeMsg.Address).To(Equal(uint64(0x20040)))
+			Expect(writeMsg.Src).To(Equal(bottomPort.AsRemote()))
+			Expect(writeMsg.Data).To(Equal(data))
+			Expect(writeMsg.DirtyMask).To(Equal(dirty))
+
 			updatedState := &t.State
 			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
 		})
@@ -354,23 +329,31 @@ var _ = Describe("Address Translator", func() {
 		BeforeEach(func() {
 			readFromTop = &mem.ReadReq{}
 			readFromTop.ID = timing.GetIDGenerator().Generate()
+			readFromTop.Src = messaging.RemotePort("Agent")
+			readFromTop.Dst = topPort.AsRemote()
 			readFromTop.Address = 0x10040
 			readFromTop.AccessByteSize = 4
 			readFromTop.TrafficBytes = 12
 			readFromTop.TrafficClass = "mem.ReadReq"
 			readToBottom = &mem.ReadReq{}
 			readToBottom.ID = timing.GetIDGenerator().Generate()
+			readToBottom.Src = bottomPort.AsRemote()
+			readToBottom.Dst = messaging.RemotePort("MemPort")
 			readToBottom.Address = 0x20040
 			readToBottom.AccessByteSize = 4
 			readToBottom.TrafficBytes = 12
 			readToBottom.TrafficClass = "mem.ReadReq"
 			writeFromTop = &mem.WriteReq{}
 			writeFromTop.ID = timing.GetIDGenerator().Generate()
+			writeFromTop.Src = messaging.RemotePort("Agent")
+			writeFromTop.Dst = topPort.AsRemote()
 			writeFromTop.Address = 0x10040
 			writeFromTop.TrafficBytes = 12
 			writeFromTop.TrafficClass = "mem.WriteReq"
 			writeToBottom = &mem.WriteReq{}
 			writeToBottom.ID = timing.GetIDGenerator().Generate()
+			writeToBottom.Src = bottomPort.AsRemote()
+			writeToBottom.Dst = messaging.RemotePort("MemPort")
 			writeToBottom.Address = 0x10040
 			writeToBottom.TrafficBytes = 12
 			writeToBottom.TrafficClass = "mem.WriteReq"
@@ -402,7 +385,6 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should do nothing if there is no response to process", func() {
-			bottomPort.EXPECT().PeekIncoming().Return(nil)
 			madeProgress := tRespondPipeMW.respond()
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -413,19 +395,17 @@ var _ = Describe("Address Translator", func() {
 			dataReady.RspTo = readToBottom.ID
 			dataReady.TrafficBytes = 4
 			dataReady.TrafficClass = "mem.DataReadyRsp"
-			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
-			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					dr := msg.(*mem.DataReadyRsp)
-					Expect(dr.RspTo).To(Equal(readFromTop.ID))
-					Expect(dr.Data).To(Equal(dataReady.Data))
-				}).
-				Return(nil)
-			bottomPort.EXPECT().RetrieveIncoming()
+			bottomPort.Deliver(dataReady)
 
 			madeProgress := tRespondPipeMW.respond()
 
 			Expect(madeProgress).To(BeTrue())
+
+			sent := topPort.RetrieveOutgoing()
+			dr := sent.(*mem.DataReadyRsp)
+			Expect(dr.RspTo).To(Equal(readFromTop.ID))
+			Expect(dr.Data).To(Equal(dataReady.Data))
+
 			updatedState := &t.State
 			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
 		})
@@ -436,18 +416,16 @@ var _ = Describe("Address Translator", func() {
 			done.RspTo = writeToBottom.ID
 			done.TrafficBytes = 4
 			done.TrafficClass = "mem.WriteDoneRsp"
-			bottomPort.EXPECT().PeekIncoming().Return(done)
-			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					doneMsg := msg.(*mem.WriteDoneRsp)
-					Expect(doneMsg.RspTo).To(Equal(writeFromTop.ID))
-				}).
-				Return(nil)
-			bottomPort.EXPECT().RetrieveIncoming()
+			bottomPort.Deliver(done)
 
 			madeProgress := tRespondPipeMW.respond()
 
 			Expect(madeProgress).To(BeTrue())
+
+			sent := topPort.RetrieveOutgoing()
+			doneMsg := sent.(*mem.WriteDoneRsp)
+			Expect(doneMsg.RspTo).To(Equal(writeFromTop.ID))
+
 			updatedState := &t.State
 			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
 		})
@@ -458,14 +436,10 @@ var _ = Describe("Address Translator", func() {
 			dataReady.RspTo = readToBottom.ID
 			dataReady.TrafficBytes = 4
 			dataReady.TrafficClass = "mem.DataReadyRsp"
-			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
-			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					dr := msg.(*mem.DataReadyRsp)
-					Expect(dr.RspTo).To(Equal(readFromTop.ID))
-					Expect(dr.Data).To(Equal(dataReady.Data))
-				}).
-				Return(&messaging.SendError{})
+
+			// Fill the top port's outgoing buffer so Send fails.
+			fillOutgoing(topPort, t.Spec().TopPortBufferSize)
+			bottomPort.Deliver(dataReady)
 
 			madeProgress := tRespondPipeMW.respond()
 
@@ -519,6 +493,7 @@ var _ = Describe("Address Translator", func() {
 				Command: mem.CmdFlush,
 			}
 			flushReq.ID = timing.GetIDGenerator().Generate()
+			flushReq.Src = messaging.RemotePort("Agent")
 			flushReq.Dst = ctrlPort.AsRemote()
 			flushReq.TrafficBytes = 4
 			flushReq.TrafficClass = "mem.ControlReq"
@@ -526,6 +501,7 @@ var _ = Describe("Address Translator", func() {
 				Command: mem.CmdReset,
 			}
 			restartReq.ID = timing.GetIDGenerator().Generate()
+			restartReq.Src = messaging.RemotePort("Agent")
 			restartReq.Dst = ctrlPort.AsRemote()
 			restartReq.TrafficBytes = 4
 			restartReq.TrafficClass = "mem.ControlReq"
@@ -556,32 +532,43 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should handle flush req", func() {
-			ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
-			ctrlPort.EXPECT().RetrieveIncoming().Return(flushReq)
-			ctrlPort.EXPECT().Send(gomock.Any()).Return(nil)
+			ctrlPort.Deliver(flushReq)
 
 			madeProgress := tParseTransMW.handleCtrlRequest()
 
 			Expect(madeProgress).To(BeTrue())
+			Expect(ctrlPort.RetrieveOutgoing()).To(
+				BeAssignableToTypeOf(&mem.ControlRsp{}))
 			updatedState := &t.State
 			Expect(updatedState.IsFlushing).To(BeTrue())
 			Expect(updatedState.InflightReqToBottom).To(BeNil())
 		})
 
 		It("should handle restart req", func() {
-			ctrlPort.EXPECT().PeekIncoming().Return(restartReq)
-			ctrlPort.EXPECT().RetrieveIncoming().Return(restartReq)
-			ctrlPort.EXPECT().Send(gomock.Any()).Return(nil)
-			topPort.EXPECT().RetrieveIncoming().Return(nil)
-			bottomPort.EXPECT().RetrieveIncoming().Return(nil)
-			translationPort.EXPECT().RetrieveIncoming().Return(nil)
+			ctrlPort.Deliver(restartReq)
 
 			madeProgress := tParseTransMW.handleCtrlRequest()
 
 			Expect(madeProgress).To(BeTrue())
+			Expect(ctrlPort.RetrieveOutgoing()).To(
+				BeAssignableToTypeOf(&mem.ControlRsp{}))
 			updatedState := &t.State
 			Expect(updatedState.IsFlushing).To(BeFalse())
 		})
 
 	})
 })
+
+// fillOutgoing fills a port's outgoing buffer with dummy messages so the next
+// Send returns a SendError. Each dummy's Src equals the port (required by
+// Send's validation) and is sent to a distinct destination.
+func fillOutgoing(p messaging.Port, n int) {
+	for i := 0; i < n; i++ {
+		dummy := &mem.WriteDoneRsp{}
+		dummy.ID = timing.GetIDGenerator().Generate()
+		dummy.Src = p.AsRemote()
+		dummy.Dst = messaging.RemotePort("Dummy")
+		dummy.TrafficClass = "mem.WriteDoneRsp"
+		Expect(p.Send(dummy)).To(BeNil())
+	}
+}

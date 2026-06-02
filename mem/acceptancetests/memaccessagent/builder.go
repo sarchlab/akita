@@ -8,104 +8,79 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// Builder constructs MemAccessAgent instances.
+// defaultSpec provides the default configuration for the memory access agent.
+var defaultSpec = Spec{
+	Freq:              1 * timing.GHz,
+	MaxAddress:        1024 * 1024,
+	WriteLeft:         1000,
+	ReadLeft:          1000,
+	MemPortBufferSize: 1,
+}
+
+// DefaultSpec returns a copy of the default configuration. Callers typically
+// obtain it, tweak the fields they care about, and pass it to WithSpec.
+func DefaultSpec() Spec {
+	return defaultSpec
+}
+
+// Builder constructs MemAccessAgent instances. Configuration is supplied as a
+// whole through WithSpec; wiring is supplied through WithRegistrar and
+// WithResources. The component creates its own ports.
 type Builder struct {
 	spec      Spec
-	writeLeft int
-	readLeft  int
-	engine    timing.EventScheduler
 	registrar modeling.Registrar
-	lowModule messaging.Port
-	memPort   messaging.Port
+	resources Resources
 }
 
-// MakeBuilder returns a new Builder with sensible defaults.
-func MakeBuilder() *Builder {
-	return &Builder{
-		spec: Spec{
-			Freq:       1 * timing.GHz,
-			MaxAddress: 1024 * 1024,
-		},
-		writeLeft: 1000,
-		readLeft:  1000,
+// MakeBuilder returns a new Builder seeded with the default spec.
+func MakeBuilder() Builder {
+	return Builder{spec: defaultSpec}
+}
+
+// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// registrar provides the engine and registers the built component.
+func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+	b.registrar = reg
+	return b
+}
+
+// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
+	return b
+}
+
+// WithResources injects the component's external wiring, notably the downstream
+// LowModule port that memory requests are sent to. The same port can also be
+// assigned to the public LowModule field after Build when construction ordering
+// requires it.
+func (b Builder) WithResources(r Resources) Builder {
+	b.resources = r
+	return b
+}
+
+// Build creates a new MemAccessAgent with the given name. It creates the
+// agent's Mem port internally.
+func (b Builder) Build(name string) *MemAccessAgent {
+	if b.registrar == nil {
+		panic("memaccessagent: WithRegistrar is required")
 	}
-}
 
-// WithEngine sets the simulation engine.
-func (b *Builder) WithEngine(engine timing.EventScheduler) *Builder {
-	b.engine = engine
-	return b
-}
+	spec := b.spec
 
-// WithSimulation wires the builder to a simulation. It sources the engine from
-// the simulation and registers the built component with it.
-func (b *Builder) WithSimulation(sim modeling.Registrar) *Builder {
-	b.registrar = sim
-	b.engine = sim.GetEngine()
-	return b
-}
-
-// WithName is a no-op kept for backward compatibility; name is passed to Build.
-func (b *Builder) WithName(_ string) *Builder {
-	return b
-}
-
-// WithFreq sets the tick frequency.
-func (b *Builder) WithFreq(freq timing.Freq) *Builder {
-	b.spec.Freq = freq
-	return b
-}
-
-// WithMaxAddress sets the address space size.
-func (b *Builder) WithMaxAddress(addr uint64) *Builder {
-	b.spec.MaxAddress = addr
-	return b
-}
-
-// WithWriteLeft sets the initial number of writes to perform.
-func (b *Builder) WithWriteLeft(write int) *Builder {
-	b.writeLeft = write
-	return b
-}
-
-// WithReadLeft sets the initial number of reads to perform.
-func (b *Builder) WithReadLeft(read int) *Builder {
-	b.readLeft = read
-	return b
-}
-
-// UseVirtualAddress configures whether virtual addresses are used.
-func (b *Builder) UseVirtualAddress(use bool) *Builder {
-	b.spec.UseVirtualAddress = use
-	return b
-}
-
-// WithLowModule sets the downstream module port.
-func (b *Builder) WithLowModule(port messaging.Port) *Builder {
-	b.lowModule = port
-	return b
-}
-
-// WithMemPort sets the port used to send/receive memory messages.
-func (b *Builder) WithMemPort(port messaging.Port) *Builder {
-	b.memPort = port
-	return b
-}
-
-// Build creates a new MemAccessAgent with the given name.
-func (b *Builder) Build(name string) *MemAccessAgent {
 	initialState := State{
-		WriteLeft:       b.writeLeft,
-		ReadLeft:        b.readLeft,
+		WriteLeft:       spec.WriteLeft,
+		ReadLeft:        spec.ReadLeft,
 		KnownMemValue:   make(map[uint64][]uint32),
 		PendingReadReq:  make(map[uint64]mem.ReadReq),
 		PendingWriteReq: make(map[uint64]mem.WriteReq),
 	}
 
 	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithEngine(b.engine).
-		WithFreq(b.spec.Freq).
-		WithSpec(b.spec).
+		WithEngine(b.registrar.GetEngine()).
+		WithFreq(spec.Freq).
+		WithSpec(spec).
 		Build(name)
 	modelComp.State = initialState
 
@@ -113,19 +88,18 @@ func (b *Builder) Build(name string) *MemAccessAgent {
 		Component: modelComp,
 	}
 
-	if b.lowModule != nil {
-		agent.LowModule = b.lowModule
+	if b.resources.LowModule != nil {
+		agent.LowModule = b.resources.LowModule
 	}
 
 	mw := &agentMiddleware{agent: agent}
 	modelComp.AddMiddleware(mw)
 
-	b.memPort.SetComponent(agent)
-	modelComp.AddPort("Mem", b.memPort)
+	memPort := messaging.NewPort(
+		agent, spec.MemPortBufferSize, spec.MemPortBufferSize, name+".Mem")
+	modelComp.AddPort("Mem", memPort)
 
-	if b.registrar != nil {
-		b.registrar.RegisterComponent(agent)
-	}
+	b.registrar.RegisterComponent(agent)
 
 	return agent
 }

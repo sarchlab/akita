@@ -10,8 +10,7 @@ import (
 // migrationMW handles migration: sending migration requests to the driver,
 // processing migration returns, and sending translation responses.
 type migrationMW struct {
-	comp      *modeling.Component[Spec, State, modeling.None]
-	pageTable vm.PageTable
+	comp *modeling.Component[Spec, State, Resources]
 }
 
 // Port helpers.
@@ -22,6 +21,10 @@ func (m *migrationMW) topPort() messaging.Port {
 
 func (m *migrationMW) migrationPort() messaging.Port {
 	return m.comp.GetPortByName("Migration")
+}
+
+func (m *migrationMW) pageTable() vm.PageTable {
+	return m.comp.Resources().PageTable
 }
 
 // Tick runs the migration stages.
@@ -42,7 +45,7 @@ func (m *migrationMW) sendMigrationToDriver() (madeProgress bool) {
 	}
 
 	trans := state.MigrationQueue[0]
-	page, found := m.pageTable.Find(
+	page, found := m.pageTable().Find(
 		vm.PID(trans.PID), trans.VAddr)
 
 	if !found {
@@ -75,7 +78,7 @@ func (m *migrationMW) sendMigrationToDriver() (madeProgress bool) {
 	}
 
 	trans.Page.IsMigrating = true
-	m.pageTable.Update(trans.Page)
+	m.pageTable().Update(trans.Page)
 	trans.HasMigration = true
 	trans.MigrationReqID = migrationReq.ID
 	trans.MigrationReqSrc = migrationReq.Src
@@ -102,7 +105,7 @@ func (m *migrationMW) markPageAsNotMigratingIfNotInTheMigrationQueue(
 
 	if !inQueue {
 		page.IsMigrating = false
-		m.pageTable.Update(page)
+		m.pageTable().Update(page)
 
 		return page
 	}
@@ -139,7 +142,7 @@ func (m *migrationMW) processMigrationReturn() bool {
 	state := &m.comp.State
 	trans := state.CurrentOnDemandMigration
 
-	page, found := m.pageTable.Find(
+	page, found := m.pageTable().Find(
 		vm.PID(trans.PID), trans.VAddr)
 
 	if !found {
@@ -160,7 +163,7 @@ func (m *migrationMW) processMigrationReturn() bool {
 
 	page = m.markPageAsNotMigratingIfNotInTheMigrationQueue(page)
 	page.IsPinned = true
-	m.pageTable.Update(page)
+	m.pageTable().Update(page)
 
 	m.migrationPort().RetrieveIncoming()
 
@@ -171,7 +174,7 @@ func (m *migrationMW) createMigrationRequest(
 	trans transactionState,
 	page vm.Page,
 ) *vm.PageMigrationReqToDriver {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	state := &m.comp.State
 
 	migrationInfo := new(vm.PageMigrationInfo)

@@ -1,173 +1,90 @@
 package tlb
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// DefaultSpec provides the default configuration for TLB components.
-var DefaultSpec = Spec{
-	Freq:           1 * timing.GHz,
-	NumReqPerCycle: 4,
-	NumSets:        1,
-	NumWays:        32,
-	PageSize:       4096,
-	MSHRSize:       4,
-	Latency:        4,
+// defaultSpec provides the default configuration for TLB components.
+var defaultSpec = Spec{
+	Freq:                 1 * timing.GHz,
+	NumReqPerCycle:       4,
+	NumSets:              1,
+	NumWays:              32,
+	Log2PageSize:         12,
+	PageSize:             4096,
+	MSHRSize:             4,
+	Latency:              4,
+	TopPortBufferSize:    4,
+	BottomPortBufferSize: 4,
+	CtrlPortBufferSize:   1,
 }
 
-// A Builder can build TLBs
+// DefaultSpec returns a copy of the default configuration. Callers typically
+// obtain it, tweak the fields they care about, and pass it to WithSpec.
+func DefaultSpec() Spec {
+	return defaultSpec
+}
+
+// A Builder can build TLBs. Configuration is supplied as a whole through
+// WithSpec; wiring is supplied through WithRegistrar and WithResources. The
+// component creates its own ports.
 type Builder struct {
-	engine            timing.EventScheduler
-	registrar         modeling.Registrar
-	spec              Spec
-	log2PageSize      uint64
-	addressMapperType string
-	remotePorts       []messaging.RemotePort
-	topPort           messaging.Port
-	bottomPort        messaging.Port
-	controlPort       messaging.Port
-
-	// Legacy support for WithTranslationProviderMapper
-	legacyMapper mem.AddressToPortMapper
+	spec      Spec
+	registrar modeling.Registrar
+	resources Resources
 }
 
-// MakeBuilder returns a Builder
+// MakeBuilder returns a Builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: DefaultSpec,
+		spec: defaultSpec,
 	}
 }
 
-// WithEngine sets the engine that the TLBs to use
-func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
-	b.engine = engine
+// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// registrar provides the engine and registers the built component.
+func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+	b.registrar = reg
 	return b
 }
 
-// WithSimulation wires the builder to a simulation. It sources the engine from
-// the simulation and registers the built component with it.
-func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
-	b.registrar = sim
-	b.engine = sim.GetEngine()
+// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
 	return b
 }
 
-// WithFreq sets the freq the TLBs use
-func (b Builder) WithFreq(freq timing.Freq) Builder {
-	b.spec.Freq = freq
+// WithResources injects the component's external wiring, in particular the
+// translation provider mapper used to locate the remote port that serves the
+// translation for a given virtual address.
+func (b Builder) WithResources(r Resources) Builder {
+	b.resources = r
 	return b
 }
 
-// WithNumSets sets the number of sets in a TLB. Use 1 for fully associated
-// TLBs.
-func (b Builder) WithNumSets(n int) Builder {
-	b.spec.NumSets = n
-	return b
-}
-
-// WithNumWays sets the number of ways in a TLB. Set this field to the number
-// of TLB entries for all the functions.
-func (b Builder) WithNumWays(n int) Builder {
-	b.spec.NumWays = n
-	return b
-}
-
-// WithLog2PageSize sets the page size as a power of 2
-func (b Builder) WithLog2PageSize(n uint64) Builder {
-	b.log2PageSize = n
-	b.spec.PageSize = 1 << n
-	return b
-}
-
-// WithNumReqPerCycle sets the number of requests per cycle can be processed by
-// a TLB
-func (b Builder) WithNumReqPerCycle(n int) Builder {
-	b.spec.NumReqPerCycle = n
-	return b
-}
-
-// WithNumMSHREntry sets the number of mshr entry
-func (b Builder) WithNumMSHREntry(num int) Builder {
-	b.spec.MSHRSize = num
-	return b
-}
-
-// WithLatency sets the latency of the TLB lookup. The latency is counted in
-// both hit and miss cases.
-func (b Builder) WithLatency(cycles int) Builder {
-	b.spec.Latency = cycles
-	return b
-}
-
-// WithTranslationProviderMapper sets the mapper that can find the remote port
-// that can provide the translation service according to the virtual address.
-func (b Builder) WithTranslationProviderMapper(
-	mapper mem.AddressToPortMapper,
-) Builder {
-	b.legacyMapper = mapper
-	return b
-}
-
-// WithTranslationProviderMapperType sets the type of the translation provider
-// mapper. The mapper can find the remote port that can provide the translation
-// service according to the virtual address. The type can be "single" or
-// "interleaved".
-func (b Builder) WithTranslationProviderMapperType(t string) Builder {
-	b.addressMapperType = t
-	return b
-}
-
-// WithTranslationProviders registers the remote ports that handle address
-// translation requests.
-//
-// Use together with `WithTranslationProviderMapperType` to control request
-// distribution:
-//   - "single": exactly one port must be provided.
-//   - "interleaved": the number of ports must be a power of two; requests are
-//     interleaved at page granularity (4 KiB by default).
-func (b Builder) WithTranslationProviders(ports ...messaging.RemotePort) Builder {
-	b.remotePorts = ports
-	return b
-}
-
-// WithTopPort sets the top port for the TLB
-func (b Builder) WithTopPort(port messaging.Port) Builder {
-	b.topPort = port
-	return b
-}
-
-// WithBottomPort sets the bottom port for the TLB
-func (b Builder) WithBottomPort(port messaging.Port) Builder {
-	b.bottomPort = port
-	return b
-}
-
-// WithControlPort sets the control port for the TLB
-func (b Builder) WithControlPort(port messaging.Port) Builder {
-	b.controlPort = port
-	return b
-}
-
-// Build creates a new TLB
+// Build creates a new TLB. It creates the component's Top, Bottom, and Control
+// ports.
 func (b Builder) Build(name string) *Comp {
-	addrMapperKind, addrMapperPorts, addrMapperInterleavingSize := b.resolveAddressMapper()
+	if b.registrar == nil {
+		panic("tlb: WithRegistrar is required")
+	}
 
 	spec := b.spec
-	spec.PipelineWidth = b.spec.NumReqPerCycle
-	spec.AddrMapperKind = addrMapperKind
-	spec.AddrMapperPorts = addrMapperPorts
-	spec.AddrMapperInterleavingSize = addrMapperInterleavingSize
+	if spec.Log2PageSize != 0 {
+		spec.PageSize = 1 << spec.Log2PageSize
+	}
+	spec.PipelineWidth = spec.NumReqPerCycle
 
 	initialState := State{
 		TLBState: tlbStateEnable,
-		Sets:     initSets(b.spec.NumSets, b.spec.NumWays),
+		Sets:     initSets(spec.NumSets, spec.NumWays),
 		Pipeline: queueing.NewPipeline[pipelineTLBReqState](
 			spec.PipelineWidth,
-			b.spec.Latency,
+			spec.Latency,
 		),
 		BufferItems: queueing.NewBuffer[pipelineTLBReqState](
 			name+".BufferItems",
@@ -175,21 +92,27 @@ func (b Builder) Build(name string) *Comp {
 		),
 	}
 
-	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithEngine(b.engine).
-		WithFreq(b.spec.Freq).
+	modelComp := modeling.NewBuilder[Spec, State, Resources]().
+		WithEngine(b.registrar.GetEngine()).
+		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithResources(b.resources).
 		Build(name)
 	modelComp.State = initialState
 
-	b.topPort.SetComponent(modelComp)
-	modelComp.AddPort("Top", b.topPort)
+	topPort := messaging.NewPort(
+		modelComp, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
+	modelComp.AddPort("Top", topPort)
 
-	b.bottomPort.SetComponent(modelComp)
-	modelComp.AddPort("Bottom", b.bottomPort)
+	bottomPort := messaging.NewPort(
+		modelComp, spec.BottomPortBufferSize, spec.BottomPortBufferSize,
+		name+".Bottom")
+	modelComp.AddPort("Bottom", bottomPort)
 
-	b.controlPort.SetComponent(modelComp)
-	modelComp.AddPort("Control", b.controlPort)
+	ctrlPort := messaging.NewPort(
+		modelComp, spec.CtrlPortBufferSize, spec.CtrlPortBufferSize,
+		name+".Control")
+	modelComp.AddPort("Control", ctrlPort)
 
 	ctrlMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(ctrlMW)
@@ -197,48 +120,7 @@ func (b Builder) Build(name string) *Comp {
 	tlbMW := &tlbMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(tlbMW)
 
-	if b.registrar != nil {
-		b.registrar.RegisterComponent(modelComp)
-	}
+	b.registrar.RegisterComponent(modelComp)
 
 	return modelComp
-}
-
-func (b Builder) resolveAddressMapper() (string, []messaging.RemotePort, uint64) {
-	if b.legacyMapper != nil {
-		// Convert legacy mapper to spec fields
-		switch m := b.legacyMapper.(type) {
-		case *mem.SinglePortMapper:
-			return "single", []messaging.RemotePort{m.Port}, 0
-		case *mem.InterleavedAddressPortMapper:
-			return "interleaved", m.LowModules, m.InterleavingSize
-		default:
-			// For any unknown mapper type, try to use it as single port
-			// Fall through to the addressMapperType logic
-		}
-	}
-
-	interleavingSize := b.spec.PageSize
-	if interleavingSize == 0 {
-		interleavingSize = 4096
-	}
-
-	if b.addressMapperType != "" {
-		switch b.addressMapperType {
-		case "single":
-			if len(b.remotePorts) != 1 {
-				panic("single address mapper requires exactly 1 port")
-			}
-			return "single", b.remotePorts, 0
-		case "interleaved":
-			if len(b.remotePorts) == 0 {
-				panic("interleaved address mapper requires at least 1 port")
-			}
-			return "interleaved", b.remotePorts, interleavingSize
-		default:
-			panic("invalid address mapper type: " + b.addressMapperType)
-		}
-	}
-
-	panic("no address mapper configured")
 }

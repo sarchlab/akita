@@ -1,6 +1,7 @@
 package writeback
 
 import (
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
@@ -39,6 +40,11 @@ type Spec struct {
 	AddressMapperType string   `json:"address_mapper_type"`
 	RemotePortNames   []string `json:"remote_port_names"`
 	InterleavingSize  uint64   `json:"interleaving_size"`
+
+	// Port buffer sizes.
+	TopPortBufferSize     int `json:"top_port_buffer_size"`
+	BottomPortBufferSize  int `json:"bottom_port_buffer_size"`
+	ControlPortBufferSize int `json:"control_port_buffer_size"`
 }
 
 // State contains mutable runtime data for the writeback cache.
@@ -200,5 +206,16 @@ func (t *transactionState) reqMeta() messaging.MsgMeta {
 	panic("no request")
 }
 
+// Resources holds the shared resources and wiring referenced by the writeback
+// cache. Storage is the backing store. AddressToPortMapper is an externally
+// injected mapper used to derive the remote ports the cache evicts/fetches to;
+// RemotePorts is the equivalent wiring data when the mapper is built from
+// Spec.AddressMapperType. Only one of the two needs to be supplied.
+type Resources struct {
+	Storage             *mem.Storage
+	AddressToPortMapper mem.AddressToPortMapper
+	RemotePorts         []messaging.RemotePort
+}
+
 // Comp is the writeback cache component.
-type Comp = modeling.Component[Spec, State, modeling.None]
+type Comp = modeling.Component[Spec, State, Resources]

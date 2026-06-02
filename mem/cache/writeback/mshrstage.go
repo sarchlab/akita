@@ -68,7 +68,7 @@ func (s *mshrStage) processOneReq() bool {
 
 	transactionPresent := trans != nil && s.findTransaction(transIdx)
 
-	spec := s.cache.comp.Spec
+	spec := s.cache.comp.Spec()
 
 	if transactionPresent {
 		next.Transactions[transIdx].Removed = true

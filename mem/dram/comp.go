@@ -8,34 +8,34 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// Protocol defines the category of the memory controller.
-type Protocol int
+// protocol defines the category of the memory controller.
+type protocol int
 
 // A list of all supported DRAM protocols.
 const (
-	DDR3 Protocol = iota
-	DDR4
-	GDDR5
-	GDDR5X
-	GDDR6
-	LPDDR
-	LPDDR3
-	LPDDR4
-	HBM
-	HBM2
-	HMC
-	DDR5
-	HBM3
-	LPDDR5
-	HBM3E
+	protoDDR3 protocol = iota
+	protoDDR4
+	protoGDDR5
+	protoGDDR5X
+	protoGDDR6
+	protoLPDDR
+	protoLPDDR3
+	protoLPDDR4
+	protoHBM
+	protoHBM2
+	protoHMC
+	protoDDR5
+	protoHBM3
+	protoLPDDR5
+	protoHBM3E
 )
 
-func (p Protocol) isGDDR() bool {
-	return p == GDDR5 || p == GDDR5X || p == GDDR6
+func (p protocol) isGDDR() bool {
+	return p == protoGDDR5 || p == protoGDDR5X || p == protoGDDR6
 }
 
-func (p Protocol) isHBM() bool {
-	return p == HBM || p == HBM2 || p == HBM3 || p == HBM3E
+func (p protocol) isHBM() bool {
+	return p == protoHBM || p == protoHBM2 || p == protoHBM3 || p == protoHBM3E
 }
 
 // PagePolicy defines the page management policy for the DRAM controller.
@@ -107,6 +107,9 @@ type Spec struct {
 	TransactionQueueSize int `json:"transaction_queue_size"`
 	CommandQueueCapacity int `json:"command_queue_capacity"`
 
+	// Port buffer sizes
+	TopPortBufferSize int `json:"top_port_buffer_size"`
+
 	// Read/Write queue separation
 	ReadQueueSize      int `json:"read_queue_size"`
 	WriteQueueSize     int `json:"write_queue_size"`
@@ -138,48 +141,26 @@ type Spec struct {
 	Log2AccessUnitSize uint64 `json:"log2_access_unit_size"`
 }
 
-// CommandKind represents the kind of the command.
-type CommandKind int
+// commandKind represents the kind of the command.
+type commandKind int
 
 // A list of supported DRAM command kinds.
 const (
-	CmdKindRead CommandKind = iota
-	CmdKindReadPrecharge
-	CmdKindWrite
-	CmdKindWritePrecharge
-	CmdKindActivate
-	CmdKindPrecharge
-	CmdKindRefreshBank
-	CmdKindRefresh
-	CmdKindSRefEnter
-	CmdKindSRefExit
-	NumCmdKind
+	cmdKindRead commandKind = iota
+	cmdKindReadPrecharge
+	cmdKindWrite
+	cmdKindWritePrecharge
+	cmdKindActivate
+	cmdKindPrecharge
+	cmdKindRefreshBank
+	cmdKindRefresh
+	cmdKindSRefEnter
+	cmdKindSRefExit
+	numCmdKind
 )
 
-var cmdKindString = map[CommandKind]string{
-	CmdKindRead:           "Read",
-	CmdKindReadPrecharge:  "ReadPrecharge",
-	CmdKindWrite:          "Write",
-	CmdKindWritePrecharge: "WritePrecharge",
-	CmdKindActivate:       "Activate",
-	CmdKindPrecharge:      "Precharge",
-	CmdKindRefreshBank:    "RefreshBank",
-	CmdKindRefresh:        "Refresh",
-	CmdKindSRefEnter:      "SRefEnter",
-	CmdKindSRefExit:       "SRefExit",
-}
-
-// String converts the command kind to the string representation.
-func (k CommandKind) String() string {
-	str, found := cmdKindString[k]
-	if found {
-		return str
-	}
-	return "Invalid"
-}
-
-// Location determines where to find the data to access.
-type Location struct {
+// location determines where to find the data to access.
+type location struct {
 	Channel   uint64 `json:"channel"`
 	Rank      uint64 `json:"rank"`
 	BankGroup uint64 `json:"bank_group"`
@@ -188,39 +169,39 @@ type Location struct {
 	Column    uint64 `json:"column"`
 }
 
-// BankStateKind represents the current state of a bank.
-type BankStateKind int
+// bankStateKind represents the current state of a bank.
+type bankStateKind int
 
 // A list of possible bank states.
 const (
-	BankStateOpen BankStateKind = iota
-	BankStateClosed
-	BankStateSRef
-	BankStatePD
-	BankStateInvalid
+	bankStateOpen bankStateKind = iota
+	bankStateClosed
+	bankStateSRef
+	bankStatePD
+	bankStateInvalid
 )
 
-// TimeTableEntry is an entry in the TimeTable.
-type TimeTableEntry struct {
-	NextCmdKind       CommandKind
+// timeTableEntry is an entry in the timeTable.
+type timeTableEntry struct {
+	NextCmdKind       commandKind
 	MinCycleInBetween int
 }
 
-// TimeTable is a table that records the minimum number of cycles between any
+// timeTable is a table that records the minimum number of cycles between any
 // two types of DRAM commands.
-type TimeTable [][]TimeTableEntry
+type timeTable [][]timeTableEntry
 
-// MakeTimeTable creates a new TimeTable.
-func MakeTimeTable() TimeTable {
-	return make([][]TimeTableEntry, NumCmdKind)
+// makeTimeTable creates a new timeTable.
+func makeTimeTable() timeTable {
+	return make([][]timeTableEntry, numCmdKind)
 }
 
-// Timing records all the timing-related parameters for a DRAM model.
-type Timing struct {
-	SameBank              TimeTable
-	OtherBanksInBankGroup TimeTable
-	SameRank              TimeTable
-	OtherRanks            TimeTable
+// dramTiming records all the timing-related parameters for a DRAM model.
+type dramTiming struct {
+	SameBank              timeTable
+	OtherBanksInBankGroup timeTable
+	SameRank              timeTable
+	OtherRanks            timeTable
 }
 
 // State contains mutable runtime data for the DRAM memory controller.
@@ -288,7 +269,7 @@ type commandState struct {
 	Kind        int         `json:"kind"`
 	Address     uint64      `json:"address"`
 	CycleLeft   int         `json:"cycle_left"`
-	Location    Location    `json:"location"`
+	Location    location    `json:"location"`
 	SubTransRef subTransRef `json:"sub_trans_ref"`
 }
 
@@ -376,8 +357,8 @@ func transactionAccessByteSize(t *transactionState) uint64 {
 	return uint64(len(t.WriteMsg.Data))
 }
 
-// cmdKindToString converts a CommandKind int to string key.
-func cmdKindToString(k CommandKind) string {
+// cmdKindToString converts a commandKind int to string key.
+func cmdKindToString(k commandKind) string {
 	return fmt.Sprintf("%d", int(k))
 }
 
@@ -404,7 +385,7 @@ func initBankStatesFlat(numRanks, numBankGroups, numBanks int) bankStatesFlat {
 					BankGroup: j,
 					BankIndex: k,
 					Data: bankState{
-						State:                int(BankStateClosed),
+						State:                int(bankStateClosed),
 						CyclesToCmdAvailable: make(map[string]int),
 					},
 				})

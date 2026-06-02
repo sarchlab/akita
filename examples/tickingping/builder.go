@@ -6,56 +6,54 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// DefaultSpec provides default configuration for the tickingping component.
-var DefaultSpec = Spec{
-	Freq: 1 * timing.GHz,
+// defaultSpec provides default configuration for the tickingping component.
+var defaultSpec = Spec{
+	Freq:              1 * timing.GHz,
+	OutPortBufferSize: 4,
 }
 
-// Builder builds tickingping components.
+// DefaultSpec returns a copy of the default configuration. Callers obtain it,
+// tweak the fields they care about, and pass it to WithSpec.
+func DefaultSpec() Spec {
+	return defaultSpec
+}
+
+// Builder builds tickingping components. Configuration is supplied as a whole
+// through WithSpec; wiring is supplied through WithRegistrar. The component
+// creates its own Out port.
 type Builder struct {
-	engine    timing.EventScheduler
-	registrar modeling.Registrar
 	spec      Spec
-	outPort   messaging.Port
+	registrar modeling.Registrar
 }
 
-// MakeBuilder returns a new Builder.
+// MakeBuilder returns a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{
-		spec: DefaultSpec,
-	}
+	return Builder{spec: defaultSpec}
 }
 
-// WithEngine sets the engine.
-func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
-	b.engine = engine
+// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// registrar provides the engine and registers the built component.
+func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+	b.registrar = reg
 	return b
 }
 
-// WithSimulation wires the builder to a simulation. It sources the engine from
-// the simulation and registers the built component with it.
-func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
-	b.registrar = sim
-	b.engine = sim.GetEngine()
+// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
 	return b
 }
 
-// WithFreq sets the frequency.
-func (b Builder) WithFreq(freq timing.Freq) Builder {
-	b.spec.Freq = freq
-	return b
-}
-
-// WithOutPort sets the output port.
-func (b Builder) WithOutPort(port messaging.Port) Builder {
-	b.outPort = port
-	return b
-}
-
-// Build creates a new tickingping component.
+// Build creates a new tickingping component. It creates the component's Out
+// port.
 func (b Builder) Build(name string) *Comp {
+	if b.registrar == nil {
+		panic("tickingping: WithRegistrar is required")
+	}
+
 	comp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithEngine(b.engine).
+		WithEngine(b.registrar.GetEngine()).
 		WithFreq(b.spec.Freq).
 		WithSpec(b.spec).
 		Build(name)
@@ -64,12 +62,11 @@ func (b Builder) Build(name string) *Comp {
 	comp.AddMiddleware(&sendMW{comp: comp})
 	comp.AddMiddleware(&receiveProcessMW{comp: comp})
 
-	b.outPort.SetComponent(comp)
-	comp.AddPort("Out", b.outPort)
+	outPort := messaging.NewPort(
+		comp, b.spec.OutPortBufferSize, b.spec.OutPortBufferSize, name+".Out")
+	comp.AddPort("Out", outPort)
 
-	if b.registrar != nil {
-		b.registrar.RegisterComponent(comp)
-	}
+	b.registrar.RegisterComponent(comp)
 
 	return comp
 }

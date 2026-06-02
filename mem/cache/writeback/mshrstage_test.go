@@ -55,7 +55,7 @@ var _ = Describe("MSHR Stage", func() {
 		m = &pipelineMW{
 			topPort: topPort,
 		}
-		m.comp = modeling.NewBuilder[Spec, State, modeling.None]().
+		m.comp = modeling.NewBuilder[Spec, State, Resources]().
 			WithEngine(nil).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{

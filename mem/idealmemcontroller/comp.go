@@ -13,8 +13,13 @@ type Spec struct {
 	Width         int         `json:"width"`
 	Latency       int         `json:"latency"`
 	CacheLineSize int         `json:"cache_line_size"`
+	Capacity      uint64      `json:"capacity"`
 	StorageRef    string      `json:"storage_ref"`
-	AddrConvKind  string      `json:"addr_conv_kind"`
+
+	TopPortBufferSize  int `json:"top_port_buffer_size"`
+	CtrlPortBufferSize int `json:"ctrl_port_buffer_size"`
+
+	AddrConvKind string `json:"addr_conv_kind"`
 
 	AddrInterleavingSize    uint64 `json:"addr_interleaving_size"`
 	AddrTotalNumOfElements  int    `json:"addr_total_num_of_elements"`

@@ -57,8 +57,8 @@ func TestEventDrivenBuilderBuild(t *testing.T) {
 		t.Errorf("Name() = %q, want %q", comp.Name(), "EDComp")
 	}
 
-	if comp.Spec != spec {
-		t.Errorf("Spec() = %v, want %v", comp.Spec, spec)
+	if comp.Spec() != spec {
+		t.Errorf("Spec() = %v, want %v", comp.Spec(), spec)
 	}
 
 	if comp.State.Count != 0 {

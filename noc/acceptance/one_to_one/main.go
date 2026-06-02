@@ -53,28 +53,27 @@ func createNetwork(s *simulation.Simulation, test *acceptance.Test) {
 		agents = append(agents, agent)
 	}
 
+	epSpec := endpoint.DefaultSpec()
+	epSpec.Freq = freq
+	epSpec.FlitByteSize = 8
+
 	ep1 := endpoint.MakeBuilder().
-		WithSimulation(s).
-		WithFreq(freq).
-		WithFlitByteSize(8).
-		WithDevicePorts(agents[0].AgentPorts).
-		WithNetworkPort(messaging.NewPort(nil, 4, 4, "EP1.NetworkPort")).
+		WithRegistrar(s).
+		WithSpec(epSpec).
+		WithResources(endpoint.Resources{DevicePorts: agents[0].AgentPorts}).
 		Build("EP1")
 
 	ep2 := endpoint.MakeBuilder().
-		WithSimulation(s).
-		WithFreq(freq).
-		WithFlitByteSize(8).
-		WithDevicePorts(agents[1].AgentPorts).
-		WithNetworkPort(messaging.NewPort(nil, 4, 4, "EP2.NetworkPort")).
+		WithRegistrar(s).
+		WithSpec(epSpec).
+		WithResources(endpoint.Resources{DevicePorts: agents[1].AgentPorts}).
 		Build("EP2")
 
 	ep1.SetDefaultSwitchDst(ep2.NetworkPort().AsRemote())
 	ep2.SetDefaultSwitchDst(ep1.NetworkPort().AsRemote())
 
 	conn := directconnection.MakeBuilder().
-		WithSimulation(s).
-		WithFreq(freq).
+		WithRegistrar(s).
 		Build("Conn")
 
 	conn.PlugIn(ep1.NetworkPort())

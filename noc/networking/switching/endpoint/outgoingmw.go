@@ -75,7 +75,7 @@ func (m *outgoingMW) Tick() bool {
 
 func (m *outgoingMW) sendFlitOut() bool {
 	madeProgress := false
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	state := &m.comp.State
 
 	numSent := 0
@@ -143,7 +143,7 @@ const maxFlitsToBuffer = 64
 
 func (m *outgoingMW) prepareFlits() bool {
 	madeProgress := false
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	state := &m.comp.State
 	networkPortRemote := m.networkPort.AsRemote()
 

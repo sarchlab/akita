@@ -16,7 +16,7 @@ type bankStage struct {
 }
 
 func (s *bankStage) Tick() (madeProgress bool) {
-	spec := s.cache.comp.Spec
+	spec := s.cache.comp.Spec()
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = s.finalizeTrans() || madeProgress
@@ -48,7 +48,7 @@ func (s *bankStage) Reset() {
 
 func (s *bankStage) pullFromBuf() bool {
 	next := &s.cache.comp.State
-	spec := s.cache.comp.Spec
+	spec := s.cache.comp.Spec()
 
 	if !s.canAcceptIntoPipeline(*next) {
 		return false
@@ -77,7 +77,7 @@ func (s *bankStage) pullFromBuf() bool {
 }
 
 func (s *bankStage) canAcceptIntoPipeline(cur State) bool {
-	spec := s.cache.comp.Spec
+	spec := s.cache.comp.Spec()
 
 	if spec.BankLatency > 0 {
 		return cur.BankPipelines[s.bankID].CanAccept()
@@ -158,7 +158,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 		return false
 	}
 
-	spec := s.cache.comp.Spec
+	spec := s.cache.comp.Spec()
 	next := &s.cache.comp.State
 
 	addr := trans.ReadAddress
@@ -198,7 +198,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 		return false
 	}
 
-	spec := s.cache.comp.Spec
+	spec := s.cache.comp.Spec()
 	next := &s.cache.comp.State
 
 	addr := trans.WriteAddress
@@ -295,7 +295,7 @@ func (s *bankStage) finalizeBankEviction(
 	transIdx int,
 	trans *transactionState,
 ) bool {
-	spec := s.cache.comp.Spec
+	spec := s.cache.comp.Spec()
 	next := &s.cache.comp.State
 	wbBuf := &next.WriteBufferBuf
 

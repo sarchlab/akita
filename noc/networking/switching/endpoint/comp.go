@@ -9,12 +9,20 @@ import (
 
 // Spec contains immutable configuration for the endpoint.
 type Spec struct {
-	Freq              timing.Freq          `json:"freq"`
-	NumInputChannels  int                  `json:"num_input_channels"`
-	NumOutputChannels int                  `json:"num_output_channels"`
-	FlitByteSize      int                  `json:"flit_byte_size"`
-	EncodingOverhead  float64              `json:"encoding_overhead"`
-	DefaultSwitchDst  messaging.RemotePort `json:"default_switch_dst"`
+	Freq                  timing.Freq          `json:"freq"`
+	NumInputChannels      int                  `json:"num_input_channels"`
+	NumOutputChannels     int                  `json:"num_output_channels"`
+	FlitByteSize          int                  `json:"flit_byte_size"`
+	EncodingOverhead      float64              `json:"encoding_overhead"`
+	DefaultSwitchDst      messaging.RemotePort `json:"default_switch_dst"`
+	NetworkPortBufferSize int                  `json:"network_port_buffer_size"`
+}
+
+// Resources holds the external wiring referenced by the endpoint, namely the
+// device ports that communicate directly through it. These are remote ports
+// owned by other components, so they belong in Resources rather than Spec.
+type Resources struct {
+	DevicePorts []messaging.Port `json:"-"`
 }
 
 // assemblingMsgState is a serializable representation of a message being
@@ -59,18 +67,20 @@ func (c *Comp) NetworkPort() messaging.Port {
 	return c.outgoingMW().networkPort
 }
 
-// SetNetworkPort sets the network port of the endpoint.
+// SetNetworkPort sets the network port of the endpoint. It is load-bearing as a
+// post-build setter: callers (e.g. the network connector) create the real
+// network port from the built endpoint component itself, so the port does not
+// exist at build time.
 func (c *Comp) SetNetworkPort(p messaging.Port) {
 	c.outgoingMW().networkPort = p
 	c.incomingMW().networkPort = p
 }
 
-// DefaultSwitchDst returns the default switch destination.
-func (c *Comp) DefaultSwitchDst() messaging.RemotePort {
-	return c.outgoingMW().defaultSwitchDst
-}
-
-// SetDefaultSwitchDst sets the default switch destination.
+// SetDefaultSwitchDst sets the default switch destination. Prefer the
+// WithDefaultSwitchDst builder option for build-time wiring. This setter remains
+// for callers that only learn the destination after the endpoint is built (e.g.
+// the network connector creates the switch port from the built endpoint, and
+// two endpoints connected directly each need the other's post-build port).
 func (c *Comp) SetDefaultSwitchDst(dst messaging.RemotePort) {
 	c.outgoingMW().defaultSwitchDst = dst
 }

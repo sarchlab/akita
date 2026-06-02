@@ -41,7 +41,7 @@ func TestComponentSpec(t *testing.T) {
 		WithSpec(spec).
 		Build("TestComp")
 
-	got := comp.Spec
+	got := comp.Spec()
 	if got != spec {
 		t.Errorf("Spec() = %v, want %v", got, spec)
 	}
@@ -106,7 +106,7 @@ func TestComponentSpecImmutableAfterCreation(t *testing.T) {
 	// a value copy.
 	spec.Name = "modified"
 
-	got := comp.Spec
+	got := comp.Spec()
 	if got.Name != "original" {
 		t.Errorf("spec was mutated: got %q, want %q", got.Name, "original")
 	}
@@ -219,8 +219,8 @@ func TestBuilderWithSpec(t *testing.T) {
 		WithSpec(spec).
 		Build("BuilderComp")
 
-	if comp.Spec != spec {
-		t.Errorf("builder spec = %v, want %v", comp.Spec, spec)
+	if comp.Spec() != spec {
+		t.Errorf("builder spec = %v, want %v", comp.Spec(), spec)
 	}
 
 	if comp.Name() != "BuilderComp" {

@@ -3,67 +3,72 @@ package switches
 import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// DefaultSpec provides the default configuration for switch components.
-var DefaultSpec = Spec{
+// defaultSpec provides the default configuration for switch components.
+var defaultSpec = Spec{
 	Freq: 1 * timing.GHz,
 }
 
-// Builder can help building switches
-type Builder struct {
-	engine       timing.EventScheduler
-	registrar    modeling.Registrar
-	spec         Spec
-	routingTable routing.Table
+// DefaultSpec returns a copy of the default configuration. Callers obtain it,
+// tweak the fields they care about, and pass it to WithSpec.
+func DefaultSpec() Spec {
+	return defaultSpec
 }
 
+// Builder builds switches. Configuration is supplied as a whole through
+// WithSpec; wiring is supplied through WithRegistrar and WithResources. Ports
+// are added after build with MakeSwitchPortAdder.
+type Builder struct {
+	registrar modeling.Registrar
+	spec      Spec
+	resources Resources
+}
+
+// MakeBuilder creates a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: DefaultSpec,
+		spec: defaultSpec,
 	}
 }
 
-// WithEngine sets the engine that the switch to build uses.
-func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
-	b.engine = engine
+// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// registrar provides the engine and registers the built component.
+func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+	b.registrar = reg
 	return b
 }
 
-// WithSimulation wires the builder to a simulation. It sources the engine from
-// the simulation and registers the built component with it.
-func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
-	b.registrar = sim
-	b.engine = sim.GetEngine()
+// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
 	return b
 }
 
-// WithFreq sets the frequency that the switch to build works at.
-func (b Builder) WithFreq(freq timing.Freq) Builder {
-	b.spec.Freq = freq
-	return b
-}
-
-// WithRoutingTable sets the routing table to be used by the switch to build.
-func (b Builder) WithRoutingTable(rt routing.Table) Builder {
-	b.routingTable = rt
+// WithResources injects the external wiring, namely the routing table the
+// switch uses to resolve flit destinations.
+func (b Builder) WithResources(r Resources) Builder {
+	b.resources = r
 	return b
 }
 
 // Build creates a new switch
 func (b Builder) Build(name string) *Comp {
-	b.engineMustBeGiven()
-	b.freqMustNotBeZero()
+	if b.registrar == nil {
+		panic("switches: WithRegistrar is required")
+	}
+
 	b.routingTableMustBeGiven()
 
 	spec := b.spec
+	engine := b.registrar.GetEngine()
 	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithEngine(b.engine).
-		WithFreq(b.spec.Freq).
+		WithEngine(engine).
+		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
 
@@ -72,7 +77,7 @@ func (b Builder) Build(name string) *Comp {
 	rfsMW := &routeForwardSendMW{
 		comp:         modelComp,
 		portIndex:    portIndex,
-		routingTable: b.routingTable,
+		routingTable: b.resources.RoutingTable,
 	}
 
 	rpMW := &receivePipelineMW{
@@ -85,27 +90,13 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.AddMiddleware(rfsMW)
 	modelComp.AddMiddleware(rpMW)
 
-	if b.registrar != nil {
-		b.registrar.RegisterComponent(modelComp)
-	}
+	b.registrar.RegisterComponent(modelComp)
 
 	return modelComp
 }
 
-func (b Builder) engineMustBeGiven() {
-	if b.engine == nil {
-		panic("engine of switch is not given")
-	}
-}
-
-func (b Builder) freqMustNotBeZero() {
-	if b.spec.Freq == 0 {
-		panic("switch frequency cannot be 0")
-	}
-}
-
 func (b Builder) routingTableMustBeGiven() {
-	if b.routingTable == nil {
+	if b.resources.RoutingTable == nil {
 		panic("switch requires a routing table to operate")
 	}
 }

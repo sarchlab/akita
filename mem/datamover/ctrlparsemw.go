@@ -48,7 +48,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		return false
 	}
 
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 
 	srcByteGranularity := resolveByteGranularity(spec, req.SrcSide)
 	addressMustBeAligned(req.SrcAddress, srcByteGranularity)

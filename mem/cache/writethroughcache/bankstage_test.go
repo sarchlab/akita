@@ -11,19 +11,16 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
-	gomock "go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Bankstage", func() {
 	var (
-		mockCtrl *gomock.Controller
-		storage  *mem.Storage
-		s        *bankStage
-		c        *pipelineMW
+		storage *mem.Storage
+		s       *bankStage
+		c       *pipelineMW
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
 		storage = mem.NewStorage(4 * mem.KB)
 
 		initialState := State{
@@ -44,7 +41,7 @@ var _ = Describe("Bankstage", func() {
 		c = &pipelineMW{
 			storage: storage,
 		}
-		c.comp = modeling.NewBuilder[Spec, State, modeling.None]().
+		c.comp = modeling.NewBuilder[Spec, State, Resources]().
 			WithEngine(nil).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
@@ -68,10 +65,6 @@ var _ = Describe("Bankstage", func() {
 			bankID:         0,
 			numReqPerCycle: 1,
 		}
-	})
-
-	AfterEach(func() {
-		mockCtrl.Finish()
 	})
 
 	It("should do nothing if no request", func() {

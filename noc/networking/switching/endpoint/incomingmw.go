@@ -33,7 +33,7 @@ func (m *incomingMW) Tick() bool {
 
 func (m *incomingMW) recv() bool {
 	madeProgress := false
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	state := &m.comp.State
 
 	for i := 0; i < spec.NumInputChannels; i++ {

@@ -7,116 +7,69 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// DefaultSpec provides default configuration for the data mover.
-var DefaultSpec = Spec{
-	Freq: 1 * timing.GHz,
+// defaultSpec provides default configuration for the data mover.
+var defaultSpec = Spec{
+	Freq:                  1 * timing.GHz,
+	CtrlPortBufferSize:    16,
+	InsidePortBufferSize:  16,
+	OutsidePortBufferSize: 16,
 }
 
-// A Builder for StreamingDataMover
+// DefaultSpec returns a copy of the default configuration. Callers typically
+// obtain it, tweak the fields they care about, and pass it to WithSpec.
+func DefaultSpec() Spec {
+	return defaultSpec
+}
+
+// Builder builds StreamingDataMover components. Configuration is supplied as a
+// whole through WithSpec; wiring is supplied through WithRegistrar and
+// WithResources. The component creates its own ports.
 type Builder struct {
-	engine      timing.EventScheduler
-	ctrlPort    messaging.Port
-	insidePort  messaging.Port
-	outsidePort messaging.Port
-	spec        Spec
+	spec      Spec
+	registrar modeling.Registrar
+	resources Resources
 }
 
-// MakeBuilder creates a new Builder
+// MakeBuilder creates a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: DefaultSpec,
+		spec: defaultSpec,
 	}
 }
 
-// WithEngine sets StreamingDataMover's engine
-func (sdmBuilder Builder) WithEngine(
-	inputEngine timing.EventScheduler,
-) Builder {
-	sdmBuilder.engine = inputEngine
-	return sdmBuilder
+// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// registrar provides the engine and registers the built component.
+func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+	b.registrar = reg
+	return b
 }
 
-// WithFreq sets the frequency of StreamingDataMover
-func (sdmBuilder Builder) WithFreq(freq timing.Freq) Builder {
-	sdmBuilder.spec.Freq = freq
-	return sdmBuilder
+// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
+	return b
 }
 
-// WithBufferSize sets the buffer size of StreamingDataMover
-func (sdmBuilder Builder) WithBufferSize(
-	inputBufferSize uint64,
-) Builder {
-	sdmBuilder.spec.BufferSize = inputBufferSize
-	return sdmBuilder
+// WithResources injects the component's wiring (the inside/outside address
+// mappers). The data mover owns no storage of its own.
+func (b Builder) WithResources(r Resources) Builder {
+	b.resources = r
+	return b
 }
 
-// WithInsidePortMapper sets the inside port mapper of StreamingDataMover.
-// It inlines the mapper configuration into the Spec.
-func (sdmBuilder Builder) WithInsidePortMapper(
-	inputInsidePortMapper mem.AddressToPortMapper,
-) Builder {
-	inlineMapper(inputInsidePortMapper,
-		&sdmBuilder.spec.InsideMapperKind,
-		&sdmBuilder.spec.InsideMapperPorts,
-		&sdmBuilder.spec.InsideMapperInterleavingSize)
-	return sdmBuilder
-}
+// Build builds a new StreamingDataMover. It creates the component's Control,
+// Inside, and Outside ports.
+func (b Builder) Build(name string) *Comp {
+	if b.registrar == nil {
+		panic("datamover: WithRegistrar is required")
+	}
 
-// WithOutsidePortMapper sets the outside port mapper of StreamingDataMover.
-// It inlines the mapper configuration into the Spec.
-func (sdmBuilder Builder) WithOutsidePortMapper(
-	inputOutsidePortMapper mem.AddressToPortMapper,
-) Builder {
-	inlineMapper(inputOutsidePortMapper,
-		&sdmBuilder.spec.OutsideMapperKind,
-		&sdmBuilder.spec.OutsideMapperPorts,
-		&sdmBuilder.spec.OutsideMapperInterleavingSize)
-	return sdmBuilder
-}
-
-// WithInsideByteGranularity sets the inside byte granularity of
-// StreamingDataMover
-func (sdmBuilder Builder) WithInsideByteGranularity(
-	inputInsideByteGranularity uint64,
-) Builder {
-	sdmBuilder.spec.InsideByteGranularity = inputInsideByteGranularity
-	return sdmBuilder
-}
-
-// WithOutsideByteGranularity sets the outside byte granularity of
-// StreamingDataMover
-func (sdmBuilder Builder) WithOutsideByteGranularity(
-	inputOutsideByteGranularity uint64,
-) Builder {
-	sdmBuilder.spec.OutsideByteGranularity = inputOutsideByteGranularity
-	return sdmBuilder
-}
-
-// WithCtrlPort sets the control port of StreamingDataMover
-func (sdmBuilder Builder) WithCtrlPort(port messaging.Port) Builder {
-	sdmBuilder.ctrlPort = port
-	return sdmBuilder
-}
-
-// WithInsidePort sets the inside port of StreamingDataMover
-func (sdmBuilder Builder) WithInsidePort(port messaging.Port) Builder {
-	sdmBuilder.insidePort = port
-	return sdmBuilder
-}
-
-// WithOutsidePort sets the outside port of StreamingDataMover
-func (sdmBuilder Builder) WithOutsidePort(port messaging.Port) Builder {
-	sdmBuilder.outsidePort = port
-	return sdmBuilder
-}
-
-// Build a new StreamingDataMover
-func (sdmBuilder Builder) Build(name string) *Comp {
-	spec := sdmBuilder.spec
+	spec := b.resolveSpec()
 	initialState := State{}
 
 	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithEngine(sdmBuilder.engine).
+		WithEngine(b.registrar.GetEngine()).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
@@ -128,16 +81,48 @@ func (sdmBuilder Builder) Build(name string) *Comp {
 	dataMW := &dataTransferMW{comp: modelComp}
 	modelComp.AddMiddleware(dataMW)
 
-	sdmBuilder.ctrlPort.SetComponent(modelComp)
-	modelComp.AddPort("Control", sdmBuilder.ctrlPort)
+	ctrlPort := messaging.NewPort(
+		modelComp, spec.CtrlPortBufferSize, spec.CtrlPortBufferSize,
+		name+".Control")
+	modelComp.AddPort("Control", ctrlPort)
 
-	sdmBuilder.insidePort.SetComponent(modelComp)
-	modelComp.AddPort("Inside", sdmBuilder.insidePort)
+	insidePort := messaging.NewPort(
+		modelComp, spec.InsidePortBufferSize, spec.InsidePortBufferSize,
+		name+".Inside")
+	modelComp.AddPort("Inside", insidePort)
 
-	sdmBuilder.outsidePort.SetComponent(modelComp)
-	modelComp.AddPort("Outside", sdmBuilder.outsidePort)
+	outsidePort := messaging.NewPort(
+		modelComp, spec.OutsidePortBufferSize, spec.OutsidePortBufferSize,
+		name+".Outside")
+	modelComp.AddPort("Outside", outsidePort)
+
+	b.registrar.RegisterComponent(modelComp)
 
 	return modelComp
+}
+
+// resolveSpec produces the final Spec used by the component. Any address mapper
+// injected through Resources takes precedence and is decomposed into the flat
+// mapper fields read at Tick time; otherwise the Spec's own mapper fields are
+// used as-is.
+func (b Builder) resolveSpec() Spec {
+	spec := b.spec
+
+	if b.resources.InsideMapper != nil {
+		inlineMapper(b.resources.InsideMapper,
+			&spec.InsideMapperKind,
+			&spec.InsideMapperPorts,
+			&spec.InsideMapperInterleavingSize)
+	}
+
+	if b.resources.OutsideMapper != nil {
+		inlineMapper(b.resources.OutsideMapper,
+			&spec.OutsideMapperKind,
+			&spec.OutsideMapperPorts,
+			&spec.OutsideMapperInterleavingSize)
+	}
+
+	return spec
 }
 
 // inlineMapper converts an AddressToPortMapper into serializable Spec fields.

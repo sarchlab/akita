@@ -161,12 +161,6 @@ func (s *Simulation) Resources() []Resource {
 	return append([]Resource(nil), s.resources...)
 }
 
-// Entities returns a stable snapshot of all registered simulation entities, in
-// registration order.
-func (s *Simulation) Entities() []Entity {
-	return append([]Entity(nil), s.entities...)
-}
-
 // GetComponentByName returns the component with the given name.
 func (s *Simulation) GetComponentByName(name string) Component {
 	idx, found := s.compNameIndex[name]

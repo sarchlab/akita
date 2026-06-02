@@ -17,7 +17,7 @@ import (
 )
 
 type walkMW struct {
-	comp      *modeling.Component[Spec, State, modeling.None]
+	comp      *modeling.Component[Spec, State, Resources]
 	pageTable vm.PageTable
 }
 
@@ -40,7 +40,7 @@ func (m *walkMW) Tick() bool {
 }
 
 func (m *walkMW) parseFromTop() bool {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	state := &m.comp.State
 
 	if len(state.WalkingTranslations) >= spec.MaxRequestsInFlight {
@@ -65,7 +65,7 @@ func (m *walkMW) parseFromTop() bool {
 }
 
 func (m *walkMW) startWalking(req *vm.TranslationReq) {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	state := &m.comp.State
 
 	ts := transactionState{
@@ -91,7 +91,7 @@ func (m *walkMW) walkPageTable() bool {
 	}
 
 	madeProgress := false
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 
 	for i := 0; i < len(state.WalkingTranslations); i++ {
 		if state.WalkingTranslations[i].CycleLeft > 0 {
@@ -150,7 +150,7 @@ func (m *walkMW) processRemoteMemReq(
 		return false
 	}
 
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	walking := state.WalkingTranslations[walkingIndex]
 
 	req := &vm.TranslationReq{}

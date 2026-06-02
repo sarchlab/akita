@@ -17,9 +17,20 @@ var dumpLog = false
 
 // Spec contains the immutable configuration for the MemAccessAgent.
 type Spec struct {
-	Freq              timing.Freq `json:"freq"`
-	MaxAddress        uint64      `json:"max_address"`
-	UseVirtualAddress bool        `json:"use_virtual_address"`
+	Freq       timing.Freq `json:"freq"`
+	MaxAddress uint64      `json:"max_address"`
+	WriteLeft  int         `json:"write_left"`
+	ReadLeft   int         `json:"read_left"`
+
+	MemPortBufferSize int `json:"mem_port_buffer_size"`
+}
+
+// Resources holds the external wiring referenced by the MemAccessAgent. The
+// LowModule is the downstream port to which memory requests are sent. It can be
+// supplied through WithResources, or assigned to the public LowModule field
+// after Build when construction ordering requires it.
+type Resources struct {
+	LowModule messaging.Port
 }
 
 // State contains the mutable runtime data for the MemAccessAgent.
@@ -40,12 +51,12 @@ type MemAccessAgent struct {
 	// It is not serialized as part of the state.
 	LowModule messaging.Port
 
-	// Rand is the random source used by the agent. If nil, the global
+	// rng is the random source used by the agent. If nil, the global
 	// math/rand functions are used (non-deterministic in Go 1.22+).
-	Rand *rand.Rand
+	rng *rand.Rand
 
-	WriteProgressBar *daisen2.ProgressBar
-	ReadProgressBar  *daisen2.ProgressBar
+	writeProgressBar *daisen2.ProgressBar
+	readProgressBar  *daisen2.ProgressBar
 }
 
 // CreateProgressBars creates the read/write progress bars for the agent.
@@ -65,12 +76,12 @@ func (a *MemAccessAgent) CreateProgressBars(
 		len(a.State.PendingReadReq),
 	)
 
-	if writeTotal > 0 && a.WriteProgressBar == nil {
-		a.WriteProgressBar = createProgressBar(a.Name()+".Writes", writeTotal)
+	if writeTotal > 0 && a.writeProgressBar == nil {
+		a.writeProgressBar = createProgressBar(a.Name()+".Writes", writeTotal)
 	}
 
-	if readTotal > 0 && a.ReadProgressBar == nil {
-		a.ReadProgressBar = createProgressBar(a.Name()+".Reads", readTotal)
+	if readTotal > 0 && a.readProgressBar == nil {
+		a.readProgressBar = createProgressBar(a.Name()+".Reads", readTotal)
 	}
 }
 

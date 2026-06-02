@@ -8,11 +8,6 @@ import (
 // It can be either inside or outside.
 type DataMovePort string
 
-const (
-	InsidePort  DataMovePort = "inside"
-	OutsidePort DataMovePort = "outside"
-)
-
 // DataMoveResponse is sent when a data move operation completes.
 type DataMoveResponse struct {
 	messaging.MsgMeta

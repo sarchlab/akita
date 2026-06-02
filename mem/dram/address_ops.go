@@ -24,8 +24,8 @@ func convertExternalToInternal(spec *Spec, addr uint64) uint64 {
 
 // mapAddress maps an internal address to a Location (channel, rank, etc.)
 // using the address mapping parameters in Spec.
-func mapAddress(spec *Spec, addr uint64) Location {
-	l := Location{}
+func mapAddress(spec *Spec, addr uint64) location {
+	l := location{}
 
 	l.Channel = (addr >> spec.ChannelPos) & spec.ChannelMask
 	l.Rank = (addr >> spec.RankPos) & spec.RankMask

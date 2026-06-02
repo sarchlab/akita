@@ -197,8 +197,7 @@ func Example() {
 
 	conn := directconnection.
 		MakeBuilder().
-		WithEngine(engine).
-		WithFreq(1 * timing.GHz).
+		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 		Build("Conn")
 
 	conn.PlugIn(portA)

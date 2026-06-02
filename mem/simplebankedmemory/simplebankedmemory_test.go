@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -181,14 +182,16 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.F
 	engine := timing.NewSerialEngine()
 	freq := 1 * timing.GHz
 
+	spec := DefaultSpec()
+	spec.Freq = freq
+	spec.NumBanks = 16
+	spec.StageLatency = 6
+	spec.TopPortBufferSize = 32
+	spec.PostPipelineBufSize = 32
+
 	memComp := MakeBuilder().
-		WithEngine(engine).
-		WithFreq(freq).
-		WithNumBanks(16).
-		WithStageLatency(6).
-		WithTopPortBufferSize(32).
-		WithPostPipelineBufferSize(32).
-		WithTopPort(messaging.NewPort(nil, 32, 32, "Mem.TopPort")).
+		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithSpec(spec).
 		Build("Mem")
 
 	topPort := memComp.GetPortByName("Top")
@@ -233,7 +236,7 @@ func collectLatency(
 
 var _ = Describe("SimpleBankedMemory", func() {
 	var (
-		engine  timing.EventScheduler
+		engine  timing.Engine
 		memComp *Comp
 		storage *mem.Storage
 		agent   *testAgent
@@ -243,14 +246,16 @@ var _ = Describe("SimpleBankedMemory", func() {
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
 		storage = mem.NewStorage(4 * mem.GB)
+
+		spec := DefaultSpec()
+		spec.NumBanks = 2
+		spec.StageLatency = 2
+		spec.TopPortBufferSize = 4
+
 		memComp = MakeBuilder().
-			WithEngine(engine).
-			WithFreq(1 * timing.GHz).
-			WithNumBanks(2).
-			WithStageLatency(2).
-			WithTopPortBufferSize(4).
-			WithStorage(storage).
-			WithTopPort(messaging.NewPort(nil, 4, 4, "Mem.TopPort")).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSpec(spec).
+			WithResources(Resources{Storage: storage}).
 			Build("Mem")
 
 		topPort := memComp.GetPortByName("Top")
@@ -341,24 +346,22 @@ var _ = Describe("SimpleBankedMemory", func() {
 	})
 
 	It("should use converted address for storage access", func() {
-		// Use InterleavingConverter: InterleavingSize=256, 2 elements, index 0.
-		// External address 0x0 maps to internal address 0x0.
-		// External address 0x200 maps to internal address 0x100.
-		converter := mem.InterleavingConverter{
-			InterleavingSize:    256,
-			TotalNumOfElements:  2,
-			CurrentElementIndex: 0,
-			Offset:              0,
-		}
+		// Use the interleaving converter: InterleavingSize=256, 2 elements,
+		// index 0. External address 0x0 maps to internal address 0x0. External
+		// address 0x200 maps to internal address 0x100.
+		spec := DefaultSpec()
+		spec.NumBanks = 2
+		spec.StageLatency = 2
+		spec.TopPortBufferSize = 4
+		spec.AddrConvKind = "interleaving"
+		spec.AddrInterleavingSize = 256
+		spec.AddrTotalNumOfElements = 2
+		spec.AddrCurrentElementIndex = 0
+		spec.AddrOffset = 0
 
 		memComp = MakeBuilder().
-			WithEngine(engine).
-			WithFreq(1 * timing.GHz).
-			WithNumBanks(2).
-			WithStageLatency(2).
-			WithTopPortBufferSize(4).
-			WithAddressConverter(converter).
-			WithTopPort(messaging.NewPort(nil, 4, 4, "MemConv.TopPort")).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSpec(spec).
 			Build("MemConv")
 
 		topPort := memComp.GetPortByName("Top")

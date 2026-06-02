@@ -3,148 +3,116 @@ package gmmu
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	gomock "go.uber.org/mock/gomock"
 
+	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-var _ = Describe("Builder", func() {
+// noopConn is a minimal messaging.Connection used to drive a component's real
+// ports in isolation. Because the GMMU now owns its ports (they are no longer
+// injectable), tests feed requests with Deliver and read responses with
+// RetrieveOutgoing; the port still needs a connection so its send/retrieve
+// notifications have somewhere to go.
+type noopConn struct {
+	hooking.HookableBase
+}
 
+func (c *noopConn) Name() string                     { return "NoopConn" }
+func (c *noopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
+func (c *noopConn) Unplug(_ messaging.Port)          {}
+func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
+func (c *noopConn) NotifySend()                      {}
+
+var _ = Describe("GMMU", func() {
 	var (
-		mockCtrl           *gomock.Controller
-		engine             *MockEngine
-		upperComponentPort *MockPort
-		lowerComponentPort *MockPort
-		topPort            *MockPort
-		bottomPort         *MockPort
-		pageTable          *MockPageTable
-		gmmuComp           *modeling.Component[Spec, State, modeling.None]
-		mw                 *walkMW
+		engine     timing.Engine
+		pageTable  vm.PageTable
+		gmmuComp   *Comp
+		topPort    messaging.Port
+		bottomPort messaging.Port
+		mw         *walkMW
 	)
 
-	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
+	const (
+		agentPort     = messaging.RemotePort("Agent")
+		lowModulePort = messaging.RemotePort("LowModule")
+	)
 
-		engine = NewMockEngine(mockCtrl)
-		pageTable = NewMockPageTable(mockCtrl)
+	// build constructs a GMMU, injects the shared page table, and plugs a
+	// noopConn into each port so they can be driven.
+	build := func() {
+		spec := DefaultSpec()
+		spec.DeviceID = 0
+		spec.Latency = 1
+		spec.LowModule = lowModulePort
 
-		upperComponentPort = NewMockPort(mockCtrl)
-		upperComponentPort.EXPECT().AsRemote().
-			Return(messaging.RemotePort("UpperComponentPort")).
-			AnyTimes()
+		gmmuComp = MakeBuilder().
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithResources(Resources{PageTable: pageTable}).
+			WithSpec(spec).
+			Build("MMU")
 
-		lowerComponentPort = NewMockPort(mockCtrl)
-		lowerComponentPort.EXPECT().AsRemote().
-			Return(messaging.RemotePort("LowerComponentPort")).
-			AnyTimes()
-
-		topPort = NewMockPort(mockCtrl)
-		topPort.EXPECT().AsRemote().
-			Return(messaging.RemotePort("TopPort")).
-			AnyTimes()
-		topPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
-
-		bottomPort = NewMockPort(mockCtrl)
-		bottomPort.EXPECT().AsRemote().
-			Return(messaging.RemotePort("BottomPort")).
-			AnyTimes()
-		bottomPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
-
-		builder := MakeBuilder().
-			WithEngine(engine).
-			WithDeviceID(0).
-			WithPageWalkingLatency(1).
-			WithLowModule(lowerComponentPort.AsRemote()).
-			WithPageTable(pageTable).
-			WithTopPort(topPort).
-			WithBottomPort(bottomPort)
-
-		gmmuComp = builder.Build("MMU")
 		mw = gmmuComp.Middlewares()[0].(*walkMW)
-	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
+		topPort = gmmuComp.GetPortByName("Top")
+		bottomPort = gmmuComp.GetPortByName("Bottom")
+
+		topConn := &noopConn{}
+		topConn.PlugIn(topPort)
+		bottomConn := &noopConn{}
+		bottomConn.PlugIn(bottomPort)
+	}
+
+	makeTranslationReq := func(vAddr uint64) *vm.TranslationReq {
+		req := &vm.TranslationReq{}
+		req.ID = timing.GetIDGenerator().Generate()
+		req.Src = agentPort
+		req.Dst = topPort.AsRemote()
+		req.PID = 1
+		req.VAddr = vAddr
+		req.DeviceID = 0
+		req.TrafficClass = "vm.TranslationReq"
+		return req
+	}
+
+	BeforeEach(func() {
+		engine = timing.NewSerialEngine()
+		pageTable = vm.NewPageTable(12)
+		build()
 	})
 
 	Context("GMMU Builder", func() {
 		It("should build GMMU correctly", func() {
-			Expect(gmmuComp.Engine).To(Equal(engine))
-			Expect(gmmuComp.Freq).To(Equal(1 * timing.GHz))
-			Expect(gmmuComp.Spec.MaxRequestsInFlight).To(Equal(16))
+			Expect(gmmuComp.Spec().Freq).To(Equal(1 * timing.GHz))
+			Expect(gmmuComp.Spec().MaxRequestsInFlight).To(Equal(16))
 			Expect(mw.pageTable).To(Equal(pageTable))
-			Expect(gmmuComp.Spec.DeviceID).To(Equal(uint64(0)))
+			Expect(gmmuComp.Spec().DeviceID).To(Equal(uint64(0)))
 		})
 	})
 
 	Context("GMMU parse from top", func() {
 		It("should process translation request", func() {
-			req := &vm.TranslationReq{}
-			req.ID = timing.GetIDGenerator().Generate()
-			req.Dst = topPort.AsRemote()
-			req.PID = 1
-			req.VAddr = 0x00000001
-			req.DeviceID = 0
-			req.TrafficClass = "vm.TranslationReq"
-
-			topPort.EXPECT().
-				RetrieveIncoming().
-				Return(req)
+			topPort.Deliver(makeTranslationReq(0x00000000))
 
 			mw.Tick()
 
-			nextState := &gmmuComp.State
-			Expect(len(nextState.WalkingTranslations)).To(Equal(1))
+			state := &gmmuComp.State
+			Expect(state.WalkingTranslations).To(HaveLen(1))
 		})
 
 		It("should walk page table", func() {
-			req := &vm.TranslationReq{}
-			req.ID = timing.GetIDGenerator().Generate()
-			req.Dst = topPort.AsRemote()
-			req.Src = upperComponentPort.AsRemote()
-			req.PID = 1
-			req.VAddr = 0x10000001
-			req.DeviceID = 0
-			req.TrafficClass = "vm.TranslationReq"
-
 			page := vm.Page{
 				PID:      vm.PID(1),
-				VAddr:    0x10000001,
+				VAddr:    0x10000000,
 				DeviceID: 0,
+				Valid:    true,
 			}
+			pageTable.Insert(page)
 
-			topPort.EXPECT().
-				RetrieveIncoming().
-				Return(req)
-
-			topPort.EXPECT().
-				RetrieveIncoming().
-				Return(nil).
-				AnyTimes()
-
-			pageTable.EXPECT().
-				Find(vm.PID(1), uint64(0x10000001)).
-				Return(page, true).AnyTimes()
-
-			topPort.EXPECT().CanSend().
-				Return(true).
-				AnyTimes()
-
-			bottomPort.EXPECT().
-				RetrieveIncoming().
-				Return(nil).
-				AnyTimes()
-
-			var sentRsp *vm.TranslationRsp
-			topPort.EXPECT().
-				Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					sentRsp = msg.(*vm.TranslationRsp)
-				}).
-				Return(nil)
+			topPort.Deliver(makeTranslationReq(0x10000000))
 
 			// Tick 1: parseFromTop accepts the request into component state.
 			gmmuComp.Tick()
@@ -154,155 +122,79 @@ var _ = Describe("Builder", func() {
 			// Tick 3: CycleLeft==0, page walk completes and sends response.
 			gmmuComp.Tick()
 
-			Expect(sentRsp).NotTo(BeNil())
-			Expect(sentRsp.Page).To(Equal(page))
-			Expect(sentRsp.Page.PID).To(Equal(req.PID))
+			rspI := topPort.RetrieveOutgoing()
+			Expect(rspI).NotTo(BeNil())
+			rsp := rspI.(*vm.TranslationRsp)
+			Expect(rsp.Page).To(Equal(page))
+			Expect(rsp.Page.PID).To(Equal(vm.PID(1)))
 		})
 
 		It("should send request remotely", func() {
-			req := &vm.TranslationReq{}
-			req.ID = timing.GetIDGenerator().Generate()
-			req.Dst = topPort.AsRemote()
-			req.Src = upperComponentPort.AsRemote()
-			req.PID = 1
-			req.VAddr = 0x10000001
-			req.DeviceID = 0
-			req.TrafficClass = "vm.TranslationReq"
-
 			page := vm.Page{
 				PID:      vm.PID(1),
-				VAddr:    0x10000001,
+				VAddr:    0x10000000,
 				DeviceID: 1,
+				Valid:    true,
 			}
+			pageTable.Insert(page)
 
-			topPort.EXPECT().
-				RetrieveIncoming().
-				Return(req)
+			topPort.Deliver(makeTranslationReq(0x10000000))
 
-			topPort.EXPECT().
-				RetrieveIncoming().
-				Return(nil).
-				AnyTimes()
-
-			topPort.EXPECT().CanSend().
-				Return(true).
-				AnyTimes()
-
-			pageTable.EXPECT().
-				Find(vm.PID(1), uint64(0x10000001)).
-				Return(page, true).AnyTimes()
-
-			bottomPort.EXPECT().
-				CanSend().
-				Return(true).
-				AnyTimes()
-
-			bottomPort.EXPECT().
-				Send(gomock.Any()).
-				Return(nil)
-
-			bottomPort.EXPECT().
-				RetrieveIncoming().
-				Return(nil).
-				AnyTimes()
-
-			// Tick 1: parseFromTop adds translation to next.
+			// Tick 1: parseFromTop adds translation to state.
 			gmmuComp.Tick()
 			// Tick 2: walkPageTable sees translation, decrements CycleLeft.
 			gmmuComp.Tick()
 			// Tick 3: CycleLeft==0, page is remote, sends request to bottom.
 			gmmuComp.Tick()
+
+			reqI := bottomPort.RetrieveOutgoing()
+			Expect(reqI).NotTo(BeNil())
+			req := reqI.(*vm.TranslationReq)
+			Expect(req.Dst).To(Equal(lowModulePort))
+			Expect(req.VAddr).To(Equal(uint64(0x10000000)))
 		})
 
 		It("should return response from remote page table", func() {
-			req := &vm.TranslationReq{}
-			req.ID = timing.GetIDGenerator().Generate()
-			req.Dst = topPort.AsRemote()
-			req.Src = upperComponentPort.AsRemote()
-			req.PID = 1
-			req.VAddr = 0x10000001
-			req.DeviceID = 0
-			req.TrafficClass = "vm.TranslationReq"
-
 			page := vm.Page{
 				PID:      vm.PID(1),
-				VAddr:    0x10000001,
+				VAddr:    0x10000000,
 				DeviceID: 1,
+				Valid:    true,
 			}
+			pageTable.Insert(page)
 
-			topPort.EXPECT().
-				RetrieveIncoming().
-				Return(req)
+			topPort.Deliver(makeTranslationReq(0x10000000))
 
-			topPort.EXPECT().
-				RetrieveIncoming().
-				Return(nil).
-				AnyTimes()
-
-			topPort.EXPECT().
-				CanSend().
-				Return(true).
-				AnyTimes()
-
-			pageTable.EXPECT().
-				Find(vm.PID(1), uint64(0x10000001)).
-				Return(page, true).AnyTimes()
-
-			bottomPort.EXPECT().
-				CanSend().
-				Return(true).
-				AnyTimes()
-
-			var sentReqToBottom *vm.TranslationReq
-			bottomPort.EXPECT().
-				Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					sentReqToBottom = msg.(*vm.TranslationReq)
-				}).
-				Return(nil)
-
-			// Before the remote response arrives, return nil.
-			bottomPort.EXPECT().
-				RetrieveIncoming().
-				Return(nil).
-				Times(3)
-
-			// Tick 1: parseFromTop adds translation to next.
+			// Tick 1: parseFromTop adds translation to state.
 			gmmuComp.Tick()
 			// Tick 2: walkPageTable sees translation, decrements CycleLeft.
 			gmmuComp.Tick()
 			// Tick 3: CycleLeft==0, page is remote, sends request to bottom.
 			gmmuComp.Tick()
 
-			// Now set up the response from the bottom port.
-			bottomPort.EXPECT().
-				RetrieveIncoming().
-				DoAndReturn(func() messaging.Msg {
-					rsp := &vm.TranslationRsp{
-						Page: page,
-					}
-					rsp.ID = timing.GetIDGenerator().Generate()
-					rsp.Src = gmmuComp.Spec.LowModule
-					rsp.Dst = bottomPort.AsRemote()
-					rsp.RspTo = sentReqToBottom.ID
-					rsp.TrafficClass = "vm.TranslationRsp"
-					return rsp
-				})
+			reqI := bottomPort.RetrieveOutgoing()
+			Expect(reqI).NotTo(BeNil())
+			sentReqToBottom := reqI.(*vm.TranslationReq)
 
-			var sentRsp *vm.TranslationRsp
-			topPort.EXPECT().
-				Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					sentRsp = msg.(*vm.TranslationRsp)
-				}).
-				Return(nil)
+			// Deliver the response from the bottom (remote page table).
+			rsp := &vm.TranslationRsp{
+				Page: page,
+			}
+			rsp.ID = timing.GetIDGenerator().Generate()
+			rsp.Src = lowModulePort
+			rsp.Dst = bottomPort.AsRemote()
+			rsp.RspTo = sentReqToBottom.ID
+			rsp.TrafficClass = "vm.TranslationRsp"
+			bottomPort.Deliver(rsp)
 
-			// Tick 4: fetchFromBottom receives response, sends to top.
+			// Tick: fetchFromBottom receives response, sends to top.
 			gmmuComp.Tick()
 
-			Expect(sentRsp).NotTo(BeNil())
-			Expect(sentRsp.Page).To(Equal(page))
-			Expect(sentRsp.Page.PID).To(Equal(req.PID))
+			rspToTopI := topPort.RetrieveOutgoing()
+			Expect(rspToTopI).NotTo(BeNil())
+			rspToTop := rspToTopI.(*vm.TranslationRsp)
+			Expect(rspToTop.Page).To(Equal(page))
+			Expect(rspToTop.Page.PID).To(Equal(vm.PID(1)))
 		})
 	})
 })

@@ -60,7 +60,7 @@ func (m *tickFinalizeMW) finalizeRead(
 	b *bankState,
 	item *bankPipelineItemState,
 ) bool {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	readReq := &item.ReadMsg
 
 	if !item.Committed {
@@ -70,7 +70,7 @@ func (m *tickFinalizeMW) finalizeRead(
 			spec.AddrCurrentElementIndex, readReq.Address,
 		)
 
-		data, err := m.comp.Resources.Storage.Read(addr, readReq.AccessByteSize)
+		data, err := m.comp.Resources().Storage.Read(addr, readReq.AccessByteSize)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -110,7 +110,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 	b *bankState,
 	item *bankPipelineItemState,
 ) bool {
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 	writeReq := &item.WriteMsg
 
 	if !item.Committed {
@@ -121,11 +121,11 @@ func (m *tickFinalizeMW) finalizeWrite(
 		)
 
 		if writeReq.DirtyMask == nil {
-			if err := m.comp.Resources.Storage.Write(addr, writeReq.Data); err != nil {
+			if err := m.comp.Resources().Storage.Write(addr, writeReq.Data); err != nil {
 				log.Panic(err)
 			}
 		} else {
-			data, err := m.comp.Resources.Storage.Read(addr, uint64(len(writeReq.Data)))
+			data, err := m.comp.Resources().Storage.Read(addr, uint64(len(writeReq.Data)))
 			if err != nil {
 				log.Panic(err)
 			}
@@ -136,7 +136,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 				}
 			}
 
-			if err := m.comp.Resources.Storage.Write(addr, data); err != nil {
+			if err := m.comp.Resources().Storage.Write(addr, data); err != nil {
 				log.Panic(err)
 			}
 		}

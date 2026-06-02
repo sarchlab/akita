@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -14,12 +14,12 @@ func TestPageSizeValidation(t *testing.T) {
 
 	// Test case 1: Matching page sizes should work
 	pageTable := vm.NewPageTable(12) // 4KB pages
+	matchingSpec := DefaultSpec()
+	matchingSpec.Log2PageSize = 12 // 4KB pages
 	builder := MakeBuilder().
-		WithEngine(engine).
-		WithPageTable(pageTable).
-		WithLog2PageSize(12). // 4KB pages
-		WithTopPort(messaging.NewPort(nil, 4096, 4096, "MatchingPageSizes.ToTop")).
-		WithMigrationPort(messaging.NewPort(nil, 1, 1, "MatchingPageSizes.MigrationPort"))
+		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithResources(Resources{PageTable: pageTable}).
+		WithSpec(matchingSpec)
 
 	// This should not panic
 	mmu := builder.Build("MatchingPageSizes")
@@ -29,12 +29,12 @@ func TestPageSizeValidation(t *testing.T) {
 
 	// Test case 2: Mismatched page sizes should panic
 	pageTable2 := vm.NewPageTable(12) // 4KB pages
+	mismatchedSpec := DefaultSpec()
+	mismatchedSpec.Log2PageSize = 16 // 64KB pages
 	builder2 := MakeBuilder().
-		WithEngine(engine).
-		WithPageTable(pageTable2).
-		WithLog2PageSize(16). // 64KB pages
-		WithTopPort(messaging.NewPort(nil, 4096, 4096, "MismatchedPageSizes.ToTop")).
-		WithMigrationPort(messaging.NewPort(nil, 1, 1, "MismatchedPageSizes.MigrationPort"))
+		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithResources(Resources{PageTable: pageTable2}).
+		WithSpec(mismatchedSpec)
 
 	// This should panic
 	defer func() {

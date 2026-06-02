@@ -57,27 +57,28 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		Port: tlb.GetPortByName("Top").AsRemote(),
 	}
 
+	atSpec := addresstranslator.DefaultSpec()
+	atSpec.Log2PageSize = 12
+	atSpec.NumReqPerCycle = 4
 	at := addresstranslator.MakeBuilder().
-		WithSimulation(s).
-		WithFreq(1 * timing.GHz).
-		WithLog2PageSize(12).
-		WithNumReqPerCycle(4).
-		WithMemoryProviderMapper(atMemoryMapper).
-		WithTranslationProviderMapper(atTranslationMapper).
-		WithTopPort(messaging.NewPort(nil, 4, 4, "AT.TopPort")).
-		WithBottomPort(messaging.NewPort(nil, 4, 4, "AT.BottomPort")).
-		WithTranslationPort(messaging.NewPort(nil, 4, 4, "AT.TranslationPort")).
-		WithCtrlPort(messaging.NewPort(nil, 1, 1, "AT.CtrlPort")).
+		WithRegistrar(s).
+		WithSpec(atSpec).
+		WithResources(addresstranslator.Resources{
+			MemProviderMapper:         atMemoryMapper,
+			TranslationProviderMapper: atTranslationMapper,
+		}).
 		Build("AT")
 
+	agentSpec := memaccessagent.DefaultSpec()
+	agentSpec.MaxAddress = *maxAddressFlag
+	agentSpec.ReadLeft = *numAccessFlag
+	agentSpec.WriteLeft = *numAccessFlag
 	agent = memaccessagent.MakeBuilder().
-		WithSimulation(s).
-		WithFreq(1 * timing.GHz).
-		WithMaxAddress(*maxAddressFlag).
-		WithReadLeft(*numAccessFlag).
-		WithWriteLeft(*numAccessFlag).
-		WithLowModule(at.GetPortByName("Top")).
-		WithMemPort(messaging.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
+		WithRegistrar(s).
+		WithSpec(agentSpec).
+		WithResources(memaccessagent.Resources{
+			LowModule: at.GetPortByName("Top"),
+		}).
 		Build("MemAccessAgent")
 	if monitor := s.GetMonitor(); monitor != nil {
 		agent.CreateProgressBars(monitor.CreateProgressBar)
@@ -91,40 +92,46 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 }
 
 func buildMemoryHierarchy(s *simulation.Simulation) (
-	*modeling.Component[writethroughcache.Spec, writethroughcache.State, modeling.None],
-	*modeling.Component[writeback.Spec, writeback.State, modeling.None],
+	*modeling.Component[writethroughcache.Spec, writethroughcache.State, writethroughcache.Resources],
+	*modeling.Component[writeback.Spec, writeback.State, writeback.Resources],
 	*idealmemcontroller.Comp,
 ) {
+	memCtrlSpec := idealmemcontroller.DefaultSpec()
+	memCtrlSpec.Capacity = 4 * mem.GB
+	memCtrlSpec.Width = 1
+	memCtrlSpec.Latency = 100
+	memCtrlSpec.CacheLineSize = 64
 	memCtrl := idealmemcontroller.MakeBuilder().
-		WithSimulation(s).
-		WithNewStorage(4 * mem.GB).
-		WithSpec(idealmemcontroller.Spec{Width: 1, Latency: 100, CacheLineSize: 64}).
-		WithTopPort(messaging.NewPort(nil, 16, 16, "MemCtrl.TopPort")).
-		WithCtrlPort(messaging.NewPort(nil, 16, 16, "MemCtrl.CtrlPort")).
+		WithRegistrar(s).
+		WithSpec(memCtrlSpec).
 		Build("MemCtrl")
 
+	l2Spec := writeback.DefaultSpec()
+	l2Spec.WayAssociativity = 4
+	l2Spec.NumReqPerCycle = 2
+	l2Spec.AddressMapperType = "single"
 	L2Cache := writeback.MakeBuilder().
-		WithSimulation(s).
-		WithFreq(1 * timing.GHz).
-		WithWayAssociativity(4).
-		WithNumReqPerCycle(2).
-		WithAddressMapperType("single").
-		WithRemotePorts(memCtrl.GetPortByName("Top").AsRemote()).
-		WithTopPort(messaging.NewPort(nil, 4, 4, "L2Cache.ToTop")).
-		WithBottomPort(messaging.NewPort(nil, 4, 4, "L2Cache.BottomPort")).
-		WithControlPort(messaging.NewPort(nil, 4, 4, "L2Cache.ControlPort")).
+		WithRegistrar(s).
+		WithSpec(l2Spec).
+		WithResources(writeback.Resources{
+			RemotePorts: []messaging.RemotePort{
+				memCtrl.GetPortByName("Top").AsRemote(),
+			},
+		}).
 		Build("L2Cache")
 
+	l1Spec := writethroughcache.DefaultSpec()
+	l1Spec.WritePolicyType = "write-through"
+	l1Spec.WayAssociativity = 2
+	l1Spec.AddressMapperType = "single"
 	L1Cache := writethroughcache.MakeBuilder().
-		WithWritePolicyType("write-through").
-		WithSimulation(s).
-		WithFreq(1 * timing.GHz).
-		WithWayAssociativity(2).
-		WithAddressMapperType("single").
-		WithRemotePorts(L2Cache.GetPortByName("Top").AsRemote()).
-		WithTopPort(messaging.NewPort(nil, 4, 4, "L1Cache.TopPort")).
-		WithBottomPort(messaging.NewPort(nil, 4, 4, "L1Cache.BottomPort")).
-		WithControlPort(messaging.NewPort(nil, 4, 4, "L1Cache.ControlPort")).
+		WithRegistrar(s).
+		WithSpec(l1Spec).
+		WithResources(writethroughcache.Resources{
+			RemotePorts: []messaging.RemotePort{
+				L2Cache.GetPortByName("Top").AsRemote(),
+			},
+		}).
 		Build("L1Cache")
 
 	return L1Cache, L2Cache, memCtrl
@@ -133,55 +140,50 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 func buildTranslationHierarchy(
 	s *simulation.Simulation,
 ) (
-	*modeling.Component[mmu.Spec, mmu.State, modeling.None],
-	*modeling.Component[tlb.Spec, tlb.State, modeling.None],
-	*modeling.Component[tlb.Spec, tlb.State, modeling.None],
+	*mmu.Comp,
+	*tlb.Comp,
+	*tlb.Comp,
 ) {
 	pageTable := setupPageTable(*maxAddressFlag, s)
 
+	mmuSpec := mmu.DefaultSpec()
+	mmuSpec.Log2PageSize = 12
+	mmuSpec.MaxRequestsInFlight = 16
+	mmuSpec.Latency = 10
 	IoMMU := mmu.MakeBuilder().
-		WithSimulation(s).
-		WithFreq(1 * timing.GHz).
-		WithLog2PageSize(12).
-		WithMaxNumReqInFlight(16).
-		WithPageWalkingLatency(10).
-		WithPageTable(pageTable).
-		WithTopPort(messaging.NewPort(nil, 4096, 4096, "IoMMU.ToTop")).
-		WithMigrationPort(messaging.NewPort(nil, 1, 1, "IoMMU.MigrationPort")).
+		WithRegistrar(s).
+		WithSpec(mmuSpec).
+		WithResources(mmu.Resources{PageTable: pageTable}).
 		Build("IoMMU")
 
 	L2TLBMapper := &mem.SinglePortMapper{
 		Port: IoMMU.GetPortByName("Top").AsRemote(),
 	}
 
+	l2TLBSpec := tlb.DefaultSpec()
+	l2TLBSpec.NumWays = 64
+	l2TLBSpec.NumSets = 64
+	l2TLBSpec.Log2PageSize = 12
+	l2TLBSpec.NumReqPerCycle = 4
 	L2TLB := tlb.MakeBuilder().
-		WithSimulation(s).
-		WithFreq(1 * timing.GHz).
-		WithNumWays(64).
-		WithNumSets(64).
-		WithLog2PageSize(12).
-		WithNumReqPerCycle(4).
-		WithTranslationProviderMapper(L2TLBMapper).
-		WithTopPort(messaging.NewPort(nil, 4, 4, "L2TLB.TopPort")).
-		WithBottomPort(messaging.NewPort(nil, 4, 4, "L2TLB.BottomPort")).
-		WithControlPort(messaging.NewPort(nil, 1, 1, "L2TLB.ControlPort")).
+		WithRegistrar(s).
+		WithSpec(l2TLBSpec).
+		WithResources(tlb.Resources{TranslationProviderMapper: L2TLBMapper}).
 		Build("L2TLB")
 
 	TLBMapper := &mem.SinglePortMapper{
 		Port: L2TLB.GetPortByName("Top").AsRemote(),
 	}
 
+	tlbSpec := tlb.DefaultSpec()
+	tlbSpec.NumWays = 8
+	tlbSpec.NumSets = 8
+	tlbSpec.Log2PageSize = 12
+	tlbSpec.NumReqPerCycle = 2
 	TLB := tlb.MakeBuilder().
-		WithSimulation(s).
-		WithFreq(1 * timing.GHz).
-		WithNumWays(8).
-		WithNumSets(8).
-		WithLog2PageSize(12).
-		WithNumReqPerCycle(2).
-		WithTranslationProviderMapper(TLBMapper).
-		WithTopPort(messaging.NewPort(nil, 2, 2, "TLB.TopPort")).
-		WithBottomPort(messaging.NewPort(nil, 2, 2, "TLB.BottomPort")).
-		WithControlPort(messaging.NewPort(nil, 1, 1, "TLB.ControlPort")).
+		WithRegistrar(s).
+		WithSpec(tlbSpec).
+		WithResources(tlb.Resources{TranslationProviderMapper: TLBMapper}).
 		Build("TLB")
 
 	return IoMMU, TLB, L2TLB
@@ -214,7 +216,7 @@ func setupPageTable(maxAddress uint64, s *simulation.Simulation) vm.PageTable {
 }
 
 func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {
-	conn := directconnection.MakeBuilder().WithSimulation(s).WithFreq(1 * timing.GHz).Build(name)
+	conn := directconnection.MakeBuilder().WithRegistrar(s).Build(name)
 	conn.PlugIn(p1)
 	conn.PlugIn(p2)
 }

@@ -16,7 +16,7 @@ type parseTopMW struct {
 // Tick runs the parseTop stage.
 func (m *parseTopMW) Tick() bool {
 	next := &m.comp.State
-	spec := m.comp.Spec
+	spec := m.comp.Spec()
 
 	return m.parseTop(&spec, next)
 }

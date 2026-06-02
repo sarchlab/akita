@@ -2,7 +2,7 @@ package dram
 
 // tickBanks updates all bank states: counts down timers and completes commands.
 // Returns true if any progress was made.
-func tickBanks(spec *Spec, cmdCycles map[CommandKind]int, state *State) bool {
+func tickBanks(spec *Spec, cmdCycles map[commandKind]int, state *State) bool {
 	madeProgress := false
 
 	for i := range state.BankStates.Entries {
@@ -42,7 +42,7 @@ func completeCommand(state *State, bs *bankState) {
 	cmd := &bs.CurrentCmd
 	cmd.CycleLeft = 0
 
-	kind := CommandKind(cmd.Kind)
+	kind := commandKind(cmd.Kind)
 	if isReadOrWrite(kind) {
 		// Mark the sub-transaction as completed.
 		// The ref may have been invalidated (TransIndex == -1) if the
@@ -61,23 +61,23 @@ func completeCommand(state *State, bs *bankState) {
 }
 
 // isReadOrWrite returns true if the command kind is a read/write variant.
-func isReadOrWrite(kind CommandKind) bool {
-	return kind == CmdKindRead || kind == CmdKindReadPrecharge ||
-		kind == CmdKindWrite || kind == CmdKindWritePrecharge
+func isReadOrWrite(kind commandKind) bool {
+	return kind == cmdKindRead || kind == cmdKindReadPrecharge ||
+		kind == cmdKindWrite || kind == cmdKindWritePrecharge
 }
 
 // getReadyCommand checks if a command can be issued to the bank.
 // It returns a copy of the command with the required kind, or nil.
 func getReadyCommand(spec *Spec, state *State, bs *bankState, cmd *commandState) *commandState {
 	requiredKind := getRequiredCommandKind(bs, cmd)
-	if requiredKind == NumCmdKind {
+	if requiredKind == numCmdKind {
 		return nil
 	}
 
 	key := cmdKindToString(requiredKind)
 	if bs.CyclesToCmdAvailable[key] == 0 {
 		// Check tFAW for activate commands
-		if requiredKind == CmdKindActivate && spec.TFAW > 0 {
+		if requiredKind == cmdKindActivate && spec.TFAW > 0 {
 			if !canActivateUnderTFAW(spec, state, int(cmd.Location.Rank)) {
 				return nil
 			}
@@ -119,38 +119,38 @@ func findActivateHistory(flat *bankStatesFlat, rank int) *rankActivateHistory {
 
 // getRequiredCommandKind determines what command kind is actually needed
 // given the bank state and the requested command.
-func getRequiredCommandKind(bs *bankState, cmd *commandState) CommandKind {
-	bankSt := BankStateKind(bs.State)
-	cmdKind := CommandKind(cmd.Kind)
+func getRequiredCommandKind(bs *bankState, cmd *commandState) commandKind {
+	bankSt := bankStateKind(bs.State)
+	cmdKind := commandKind(cmd.Kind)
 
 	type key struct {
-		state BankStateKind
-		kind  CommandKind
+		state bankStateKind
+		kind  commandKind
 	}
 
 	switch (key{bankSt, cmdKind}) {
-	case key{BankStateClosed, CmdKindRead},
-		key{BankStateClosed, CmdKindReadPrecharge},
-		key{BankStateClosed, CmdKindWrite},
-		key{BankStateClosed, CmdKindWritePrecharge}:
-		return CmdKindActivate
+	case key{bankStateClosed, cmdKindRead},
+		key{bankStateClosed, cmdKindReadPrecharge},
+		key{bankStateClosed, cmdKindWrite},
+		key{bankStateClosed, cmdKindWritePrecharge}:
+		return cmdKindActivate
 
-	case key{BankStateOpen, CmdKindRead},
-		key{BankStateOpen, CmdKindReadPrecharge},
-		key{BankStateOpen, CmdKindWrite},
-		key{BankStateOpen, CmdKindWritePrecharge}:
+	case key{bankStateOpen, cmdKindRead},
+		key{bankStateOpen, cmdKindReadPrecharge},
+		key{bankStateOpen, cmdKindWrite},
+		key{bankStateOpen, cmdKindWritePrecharge}:
 		if bs.OpenRow == cmd.Location.Row {
 			return cmdKind
 		}
-		return CmdKindPrecharge
+		return cmdKindPrecharge
 
 	default:
-		return NumCmdKind
+		return numCmdKind
 	}
 }
 
 // startCommand starts a command on a bank.
-func startCommand(cmdCycles map[CommandKind]int, state *State, bs *bankState, cmd *commandState) {
+func startCommand(cmdCycles map[commandKind]int, state *State, bs *bankState, cmd *commandState) {
 	if bs.HasCurrentCmd {
 		panic("previous cmd is not completed")
 	}
@@ -158,7 +158,7 @@ func startCommand(cmdCycles map[CommandKind]int, state *State, bs *bankState, cm
 	bs.HasCurrentCmd = true
 	bs.CurrentCmd = *cmd
 
-	kind := CommandKind(cmd.Kind)
+	kind := commandKind(cmd.Kind)
 	cycles, ok := cmdCycles[kind]
 	if ok {
 		bs.CurrentCmd.CycleLeft = cycles
@@ -166,56 +166,56 @@ func startCommand(cmdCycles map[CommandKind]int, state *State, bs *bankState, cm
 
 	// Track statistics
 	switch kind {
-	case CmdKindRead, CmdKindReadPrecharge:
+	case cmdKindRead, cmdKindReadPrecharge:
 		state.TotalReadCommands++
-	case CmdKindWrite, CmdKindWritePrecharge:
+	case cmdKindWrite, cmdKindWritePrecharge:
 		state.TotalWriteCommands++
-	case CmdKindActivate:
+	case cmdKindActivate:
 		state.TotalActivates++
-	case CmdKindPrecharge:
+	case cmdKindPrecharge:
 		state.TotalPrecharges++
 	}
 
 	// Update bank state based on the command
-	bankSt := BankStateKind(bs.State)
+	bankSt := bankStateKind(bs.State)
 
 	type key struct {
-		state BankStateKind
-		kind  CommandKind
+		state bankStateKind
+		kind  commandKind
 	}
 
 	switch (key{bankSt, kind}) {
-	case key{BankStateClosed, CmdKindActivate}:
+	case key{bankStateClosed, cmdKindActivate}:
 		bs.OpenRow = cmd.Location.Row
-		bs.State = int(BankStateOpen)
+		bs.State = int(bankStateOpen)
 		recordActivateTimestamp(state, int(cmd.Location.Rank))
-	case key{BankStateOpen, CmdKindPrecharge},
-		key{BankStateOpen, CmdKindReadPrecharge},
-		key{BankStateOpen, CmdKindWritePrecharge}:
-		bs.State = int(BankStateClosed)
-	case key{BankStateOpen, CmdKindRead},
-		key{BankStateOpen, CmdKindWrite}:
+	case key{bankStateOpen, cmdKindPrecharge},
+		key{bankStateOpen, cmdKindReadPrecharge},
+		key{bankStateOpen, cmdKindWritePrecharge}:
+		bs.State = int(bankStateClosed)
+	case key{bankStateOpen, cmdKindRead},
+		key{bankStateOpen, cmdKindWrite}:
 		// Do nothing
 	}
 }
 
 // updateTiming updates timing constraints across all banks after a command
 // is issued.
-func updateTiming(timing Timing, state *State, cmd *commandState) {
-	kind := CommandKind(cmd.Kind)
+func updateTiming(timing dramTiming, state *State, cmd *commandState) {
+	kind := commandKind(cmd.Kind)
 
 	switch kind {
-	case CmdKindActivate,
-		CmdKindRead, CmdKindReadPrecharge,
-		CmdKindWrite, CmdKindWritePrecharge,
-		CmdKindPrecharge, CmdKindRefreshBank:
+	case cmdKindActivate,
+		cmdKindRead, cmdKindReadPrecharge,
+		cmdKindWrite, cmdKindWritePrecharge,
+		cmdKindPrecharge, cmdKindRefreshBank:
 		updateAllBankTiming(timing, state, cmd)
 	}
 }
 
 // updateAllBankTiming iterates over all banks and applies timing constraints.
-func updateAllBankTiming(timing Timing, state *State, cmd *commandState) {
-	kind := CommandKind(cmd.Kind)
+func updateAllBankTiming(timing dramTiming, state *State, cmd *commandState) {
+	kind := commandKind(cmd.Kind)
 	flat := &state.BankStates
 
 	for i := range flat.Entries {
@@ -224,7 +224,7 @@ func updateAllBankTiming(timing Timing, state *State, cmd *commandState) {
 		bankGroup := uint64(entry.BankGroup)
 		bank := uint64(entry.BankIndex)
 
-		var timingTable TimeTable
+		var timingTable timeTable
 		if cmd.Location.Rank == rank {
 			if cmd.Location.BankGroup == bankGroup {
 				if cmd.Location.Bank == bank {

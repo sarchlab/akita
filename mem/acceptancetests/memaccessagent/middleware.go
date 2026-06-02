@@ -59,8 +59,8 @@ func (m *agentMiddleware) processMsgRsp() bool {
 		tracing.TraceReqFinalize(&req, m.agent)
 		delete(state.PendingWriteReq, msg.RspTo)
 
-		if m.agent.WriteProgressBar != nil {
-			m.agent.WriteProgressBar.MoveInProgressToFinished(1)
+		if m.agent.writeProgressBar != nil {
+			m.agent.writeProgressBar.MoveInProgressToFinished(1)
 		}
 
 		return true
@@ -77,8 +77,8 @@ func (m *agentMiddleware) processMsgRsp() bool {
 		tracing.TraceReqFinalize(&req, m.agent)
 		delete(state.PendingReadReq, msg.RspTo)
 
-		if m.agent.ReadProgressBar != nil {
-			m.agent.ReadProgressBar.MoveInProgressToFinished(1)
+		if m.agent.readProgressBar != nil {
+			m.agent.readProgressBar.MoveInProgressToFinished(1)
 		}
 
 		return true
@@ -118,22 +118,22 @@ func (m *agentMiddleware) checkReadResult(
 }
 
 func (m *agentMiddleware) float64() float64 {
-	if m.agent.Rand != nil {
-		return m.agent.Rand.Float64()
+	if m.agent.rng != nil {
+		return m.agent.rng.Float64()
 	}
 	return globalFloat64()
 }
 
 func (m *agentMiddleware) uint64() uint64 {
-	if m.agent.Rand != nil {
-		return m.agent.Rand.Uint64()
+	if m.agent.rng != nil {
+		return m.agent.rng.Uint64()
 	}
 	return globalUint64()
 }
 
 func (m *agentMiddleware) uint32r() uint32 {
-	if m.agent.Rand != nil {
-		return m.agent.Rand.Uint32()
+	if m.agent.rng != nil {
+		return m.agent.rng.Uint32()
 	}
 	return globalUint32()
 }
@@ -166,8 +166,6 @@ func (m *agentMiddleware) doRead() bool {
 		return false
 	}
 
-	spec := m.agent.Spec
-
 	readReq := &mem.ReadReq{}
 	readReq.ID = timing.GetIDGenerator().Generate()
 	readReq.Src = m.memPort().AsRemote()
@@ -178,10 +176,6 @@ func (m *agentMiddleware) doRead() bool {
 	readReq.TrafficBytes = 12
 	readReq.TrafficClass = "mem.ReadReq"
 
-	if spec.UseVirtualAddress {
-		readReq.PID = 1
-	}
-
 	err := m.memPort().Send(readReq)
 	if err == nil {
 		tracing.TraceReqInitiate(readReq, m.agent, 0)
@@ -189,8 +183,8 @@ func (m *agentMiddleware) doRead() bool {
 		state.PendingReadReq[readReq.ID] = *readReq
 		state.ReadLeft--
 
-		if m.agent.ReadProgressBar != nil {
-			m.agent.ReadProgressBar.IncrementInProgress(1)
+		if m.agent.readProgressBar != nil {
+			m.agent.readProgressBar.IncrementInProgress(1)
 		}
 
 		if dumpLog {
@@ -204,7 +198,7 @@ func (m *agentMiddleware) doRead() bool {
 }
 
 func (m *agentMiddleware) randomReadAddress(state *State) uint64 {
-	spec := m.agent.Spec
+	spec := m.agent.Spec()
 
 	var addr uint64
 
@@ -243,7 +237,7 @@ func (m *agentMiddleware) isAddressInPendingRead(state *State, addr uint64) bool
 
 func (m *agentMiddleware) doWrite() bool {
 	state := &m.agent.State
-	spec := m.agent.Spec
+	spec := m.agent.Spec()
 
 	address := m.uint64() % (spec.MaxAddress / 4) * 4
 
@@ -272,8 +266,8 @@ func (m *agentMiddleware) doWrite() bool {
 		m.addKnownValue(state, address, data)
 		state.PendingWriteReq[writeReq.ID] = *writeReq
 
-		if m.agent.WriteProgressBar != nil {
-			m.agent.WriteProgressBar.IncrementInProgress(1)
+		if m.agent.writeProgressBar != nil {
+			m.agent.writeProgressBar.IncrementInProgress(1)
 		}
 
 		if dumpLog {

@@ -18,43 +18,17 @@ type Spec struct {
 	DeviceID       uint64      `json:"device_id"`
 	NumReqPerCycle int         `json:"num_req_per_cycle"`
 
-	MemMapperKind             string                 `json:"mem_mapper_kind"`
-	MemMapperPorts            []messaging.RemotePort `json:"mem_mapper_ports"`
-	MemMapperInterleavingSize uint64                 `json:"mem_mapper_interleaving_size"`
-
-	TransMapperKind             string                 `json:"trans_mapper_kind"`
-	TransMapperPorts            []messaging.RemotePort `json:"trans_mapper_ports"`
-	TransMapperInterleavingSize uint64                 `json:"trans_mapper_interleaving_size"`
+	TopPortBufferSize         int `json:"top_port_buffer_size"`
+	BottomPortBufferSize      int `json:"bottom_port_buffer_size"`
+	TranslationPortBufferSize int `json:"translation_port_buffer_size"`
+	CtrlPortBufferSize        int `json:"ctrl_port_buffer_size"`
 }
 
-// findMemoryPort implements the same Find() logic as SinglePortMapper and
-// InterleavedAddressPortMapper, using Spec fields.
-func findMemoryPort(spec Spec, addr uint64) messaging.RemotePort {
-	switch spec.MemMapperKind {
-	case "single":
-		return spec.MemMapperPorts[0]
-	case "interleaved":
-		n := addr / spec.MemMapperInterleavingSize %
-			uint64(len(spec.MemMapperPorts))
-		return spec.MemMapperPorts[n]
-	default:
-		panic("invalid mem mapper kind: " + spec.MemMapperKind)
-	}
-}
-
-// findTranslationPort implements the same Find() logic as SinglePortMapper and
-// InterleavedAddressPortMapper, using Spec fields.
-func findTranslationPort(spec Spec, addr uint64) messaging.RemotePort {
-	switch spec.TransMapperKind {
-	case "single":
-		return spec.TransMapperPorts[0]
-	case "interleaved":
-		n := addr / spec.TransMapperInterleavingSize %
-			uint64(len(spec.TransMapperPorts))
-		return spec.TransMapperPorts[n]
-	default:
-		panic("invalid trans mapper kind: " + spec.TransMapperKind)
-	}
+// Resources holds the external wiring referenced by the AddressTranslator. The
+// mappers tell the translator where to send memory and translation requests.
+type Resources struct {
+	MemProviderMapper         mem.AddressToPortMapper `json:"-"`
+	TranslationProviderMapper mem.AddressToPortMapper `json:"-"`
 }
 
 // incomingReqState is a serializable representation of an incoming request.
@@ -151,7 +125,7 @@ func createTranslatedReq(
 	page vm.Page,
 	log2PageSize uint64,
 	bottomPortRemote messaging.RemotePort,
-	spec Spec,
+	memProviderMapper mem.AddressToPortMapper,
 ) messaging.Msg {
 	offset := reqState.Address % (1 << log2PageSize)
 	addr := page.PAddr + offset
@@ -161,7 +135,7 @@ func createTranslatedReq(
 		clone := &mem.ReadReq{}
 		clone.ID = timing.GetIDGenerator().Generate()
 		clone.Src = bottomPortRemote
-		clone.Dst = findMemoryPort(spec, addr)
+		clone.Dst = memProviderMapper.Find(addr)
 		clone.Address = addr
 		clone.AccessByteSize = reqState.AccessByteSize
 		clone.PID = 0
@@ -173,7 +147,7 @@ func createTranslatedReq(
 		clone := &mem.WriteReq{}
 		clone.ID = timing.GetIDGenerator().Generate()
 		clone.Src = bottomPortRemote
-		clone.Dst = findMemoryPort(spec, addr)
+		clone.Dst = memProviderMapper.Find(addr)
 		clone.Data = reqState.Data
 		clone.DirtyMask = reqState.DirtyMask
 		clone.Address = addr
@@ -281,4 +255,4 @@ func buildReqToBottom(
 }
 
 // Comp is the AddressTranslator component.
-type Comp = modeling.Component[Spec, State, modeling.None]
+type Comp = modeling.Component[Spec, State, Resources]

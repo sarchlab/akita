@@ -10,9 +10,9 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -38,28 +38,29 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 	engine := s.GetEngine()
 
 	conn := directconnection.MakeBuilder().
-		WithEngine(engine).
-		WithFreq(1 * timing.GHz).
+		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 		Build("Conn")
 
+	agentSpec := memaccessagent.DefaultSpec()
+	agentSpec.MaxAddress = *maxAddressFlag
+	agentSpec.WriteLeft = *numAccessFlag
+	agentSpec.ReadLeft = *numAccessFlag
 	agent := memaccessagent.MakeBuilder().
-		WithEngine(engine).
-		WithMaxAddress(*maxAddressFlag).
-		WithWriteLeft(*numAccessFlag).
-		WithReadLeft(*numAccessFlag).
-		WithMemPort(messaging.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
+		WithRegistrar(s).
+		WithSpec(agentSpec).
 		Build("MemAccessAgent")
-	s.RegisterComponent(agent)
 	if monitor := s.GetMonitor(); monitor != nil {
 		agent.CreateProgressBars(monitor.CreateProgressBar)
 	}
 
+	dramSpec := idealmemcontroller.DefaultSpec()
+	dramSpec.Capacity = 4 * mem.GB
+	dramSpec.Width = 1
+	dramSpec.Latency = 100
+	dramSpec.CacheLineSize = 64
 	dram := idealmemcontroller.MakeBuilder().
-		WithSimulation(s).
-		WithNewStorage(4 * mem.GB).
-		WithSpec(idealmemcontroller.Spec{Width: 1, Latency: 100, CacheLineSize: 64}).
-		WithTopPort(messaging.NewPort(nil, 16, 16, "DRAM.TopPort")).
-		WithCtrlPort(messaging.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
+		WithRegistrar(s).
+		WithSpec(dramSpec).
 		Build("DRAM")
 
 	agent.LowModule = dram.GetPortByName("Top")

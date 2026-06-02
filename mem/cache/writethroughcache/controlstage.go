@@ -67,7 +67,7 @@ func (s *controlStage) hardResetCache() {
 		next.BankBufs[i].Clear()
 	}
 
-	spec := s.pipeline.comp.Spec
+	spec := s.pipeline.comp.Spec()
 	blockSize := int(1 << spec.Log2BlockSize)
 	cache.DirectoryReset(
 		&next.DirectoryState,

@@ -16,8 +16,8 @@ type Spec struct {
 	MaxRequestsInFlight int                  `json:"max_requests_in_flight"`
 	LowModule           messaging.RemotePort `json:"low_module"`
 
-	// MigrationServiceProvider is the port used for page migration requests.
-	MigrationServiceProvider messaging.RemotePort `json:"migration_service_provider"`
+	TopPortBufferSize    int `json:"top_port_buffer_size"`
+	BottomPortBufferSize int `json:"bottom_port_buffer_size"`
 }
 
 // pageState captures vm.Page fields in a serializable form.
@@ -90,6 +90,14 @@ func pageFromPageState(ps pageState) vm.Page {
 	}
 }
 
+// Resources holds the shared resources referenced by the GMMU, such as the
+// page table used for translations. These are injected through WithResources;
+// they are wiring to objects shared with other components rather than scalar
+// configuration.
+type Resources struct {
+	PageTable vm.PageTable `json:"-"`
+}
+
 // Comp is the GMMU component, a modeling.Component specialized to this
-// package's Spec and State.
-type Comp = modeling.Component[Spec, State, modeling.None]
+// package's Spec, State, and Resources.
+type Comp = modeling.Component[Spec, State, Resources]

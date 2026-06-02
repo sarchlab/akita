@@ -8,40 +8,52 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 )
 
+// defaultSpec provides the default configuration for a direct connection.
+var defaultSpec = Spec{Freq: 1 * timing.GHz}
+
+// DefaultSpec returns a copy of the default configuration. Callers obtain it,
+// tweak the fields they care about, and pass it to WithSpec.
+func DefaultSpec() Spec {
+	return defaultSpec
+}
+
+// Builder builds direct connections. A connection owns no ports (ports plug in)
+// and has no resources, so it is configured by Spec alone and wired to the
+// simulation through a registrar.
 type Builder struct {
-	engine    timing.EventScheduler
+	spec      Spec
 	registrar modeling.Registrar
-	freq      timing.Freq
 }
 
 func MakeBuilder() Builder {
-	return Builder{}
+	return Builder{spec: defaultSpec}
 }
 
-func (b Builder) WithEngine(e timing.EventScheduler) Builder {
-	b.engine = e
+// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// registrar provides the engine and registers the built connection.
+func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+	b.registrar = reg
 	return b
 }
 
-// WithSimulation wires the builder to a simulation. It sources the engine from
-// the simulation and registers the built connection with it.
-func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
-	b.registrar = sim
-	b.engine = sim.GetEngine()
-	return b
-}
-
-func (b Builder) WithFreq(f timing.Freq) Builder {
-	b.freq = f
+// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
 	return b
 }
 
 func (b Builder) Build(name string) *Comp {
-	spec := Spec{Freq: b.freq}
+	if b.registrar == nil {
+		panic("directconnection: WithRegistrar is required")
+	}
+
+	engine := b.registrar.GetEngine()
+	spec := b.spec
 
 	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithEngine(b.engine).
-		WithFreq(b.freq).
+		WithEngine(engine).
+		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
 
@@ -50,7 +62,7 @@ func (b Builder) Build(name string) *Comp {
 	// with a secondary one. Since SerialEngine.RegisterHandler overwrites by
 	// name, the final registration is for the secondary component. ✓
 	modelComp.TickingComponent = modeling.NewSecondaryTickingComponent(
-		name, b.engine, b.freq, modelComp)
+		name, engine, spec.Freq, modelComp)
 
 	mw := &middleware{
 		comp: modelComp,
@@ -63,9 +75,7 @@ func (b Builder) Build(name string) *Comp {
 
 	conn := &Comp{Component: modelComp}
 
-	if b.registrar != nil {
-		b.registrar.RegisterConnection(conn)
-	}
+	b.registrar.RegisterConnection(conn)
 
 	return conn
 }

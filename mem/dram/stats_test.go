@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/dram"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -77,18 +78,17 @@ var _ = Describe("DRAM Statistics", func() {
 	It("should accumulate statistics during simulation", func() {
 		engine := timing.NewSerialEngine()
 		conn := directconnection.MakeBuilder().
-			WithEngine(engine).
-			WithFreq(1 * timing.GHz).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 			Build("StatsConn")
 
-		topPort := messaging.NewPort(nil, 1024, 1024, "StatsDRAM.Top")
+		spec := dram.DefaultSpec()
+		spec.Freq = 1 * timing.GHz
 		dramComp := dram.MakeBuilder().
-			WithEngine(engine).
-			WithFreq(1 * timing.GHz).
-			WithTopPort(topPort).
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSpec(spec).
 			Build("StatsDRAM")
-		_ = dramComp
 
+		topPort := dramComp.GetPortByName("Top")
 		srcPort := messaging.NewPort(nil, 1024, 1024, "SrcPort")
 		conn.PlugIn(topPort)
 		conn.PlugIn(srcPort)

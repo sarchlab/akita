@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/hooking"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/monitoring2"
 	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
@@ -69,10 +70,26 @@ type PortFactory func(
 	name string,
 ) messaging.Port
 
+// engineRegistrar adapts a bare EventScheduler into a modeling.Registrar so the
+// connector can keep its engine-only WithEngine API while the component builders
+// require a registrar. Registration is a no-op; the connector registers
+// components with its monitor separately.
+type engineRegistrar struct {
+	engine timing.EventScheduler
+}
+
+func (r engineRegistrar) GetEngine() timing.Engine {
+	return r.engine.(timing.Engine)
+}
+func (r engineRegistrar) RegisterComponent(_ naming.Named)  {}
+func (r engineRegistrar) RegisterConnection(_ naming.Named) {}
+func (r engineRegistrar) RegisterResource(_ naming.Named)   {}
+
 // Connector can build complex network topologies.
 type Connector struct {
 	name        string
 	engine      timing.EventScheduler
+	registrar   modeling.Registrar
 	monitor     *monitoring2.Monitor
 	defaultFreq timing.Freq
 	flitSize    int
@@ -97,9 +114,20 @@ func MakeConnector() Connector {
 }
 
 // WithEngine sets the engine to be used by all the components in the
-// connection.
+// connection. It wraps the engine in a registrar whose registration is a no-op;
+// the connector registers components with its monitor separately.
 func (c Connector) WithEngine(e timing.EventScheduler) Connector {
 	c.engine = e
+	c.registrar = engineRegistrar{engine: e}
+	return c
+}
+
+// WithRegistrar sets the registrar used to source the engine and register the
+// components built by the connector. Prefer this over WithEngine when a full
+// simulation registrar is available.
+func (c Connector) WithRegistrar(reg modeling.Registrar) Connector {
+	c.registrar = reg
+	c.engine = reg.GetEngine()
 	return c
 }
 
@@ -180,10 +208,12 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 	switchID = len(c.switches)
 
 	name := fmt.Sprintf("%s.%s", c.name, swName)
+	swSpec := switches.DefaultSpec()
+	swSpec.Freq = c.defaultFreq
 	sw := switches.MakeBuilder().
-		WithEngine(c.engine).
-		WithFreq(c.defaultFreq).
-		WithRoutingTable(rt).
+		WithRegistrar(c.registrar).
+		WithSpec(swSpec).
+		WithResources(switches.Resources{RoutingTable: rt}).
 		Build(name)
 
 	if c.monitor != nil {
@@ -259,14 +289,17 @@ func (c *Connector) createEndPointWithName(
 	name string,
 ) *deviceNode {
 	fullName := fmt.Sprintf("%s.%s", c.name, name)
+
+	epSpec := endpoint.DefaultSpec()
+	epSpec.Freq = c.defaultFreq
+	epSpec.FlitByteSize = c.flitSize
+	epSpec.NumInputChannels = param.DeviceEndParam.NumInputChannel
+	epSpec.NumOutputChannels = param.DeviceEndParam.NumOutputChannel
+
 	endPoint := endpoint.MakeBuilder().
-		WithEngine(c.engine).
-		WithFreq(c.defaultFreq).
-		WithFlitByteSize(c.flitSize).
-		WithDevicePorts(ports).
-		WithNumInputChannels(param.DeviceEndParam.NumInputChannel).
-		WithNumOutputChannels(param.DeviceEndParam.NumOutputChannel).
-		WithNetworkPort(c.portFactory(nil, 4, 4, fullName+".NetworkPort")).
+		WithRegistrar(c.registrar).
+		WithSpec(epSpec).
+		WithResources(endpoint.Resources{DevicePorts: ports}).
 		Build(fullName)
 
 	if c.monitor != nil {
@@ -356,8 +389,8 @@ func (c *Connector) connectPorts(
 
 	if linkParam.IsIdeal {
 		conn = directconnection.MakeBuilder().
-			WithEngine(c.engine).
-			WithFreq(c.defaultFreq).
+			WithRegistrar(c.registrar).
+			WithSpec(directconnection.Spec{Freq: c.defaultFreq}).
 			Build(connName)
 	} else {
 		panic("non-ideal (with latency) connection is not implemented.")

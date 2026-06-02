@@ -6,31 +6,31 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// PingSpec is the immutable configuration for a ping component.
-type PingSpec struct {
-	OutPort messaging.Port
+// Spec is the immutable configuration for a ping component.
+type Spec struct {
+	OutPortBufferSize int `json:"out_port_buffer_size"`
 }
 
-type ScheduledPing struct {
+type scheduledPing struct {
 	SendAt timing.VTimeInSec
 	Dst    messaging.RemotePort
 }
 
-// PendingResponse represents a ping response that will be sent after a delay.
-type PendingResponse struct {
+// pendingResponse represents a ping response that will be sent after a delay.
+type pendingResponse struct {
 	DeliverAt timing.VTimeInSec
 	Dst       messaging.RemotePort
 	OrigMsgID uint64
 	SeqID     int
 }
 
-// PingState is the mutable runtime state for a ping component.
-type PingState struct {
+// State is the mutable runtime state for a ping component.
+type State struct {
 	StartTimes       []timing.VTimeInSec
 	NextSeqID        int
-	PendingResponses []PendingResponse
-	ScheduledPings   []ScheduledPing
+	PendingResponses []pendingResponse
+	ScheduledPings   []scheduledPing
 }
 
 // Comp is the ping component built on EventDrivenComponent.
-type Comp = modeling.EventDrivenComponent[PingSpec, PingState, modeling.None]
+type Comp = modeling.EventDrivenComponent[Spec, State, modeling.None]

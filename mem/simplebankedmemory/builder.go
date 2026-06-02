@@ -8,228 +8,111 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// DefaultSpec provides default configuration for the simple banked memory.
-var DefaultSpec = Spec{
+// defaultSpec provides default configuration for the simple banked memory.
+var defaultSpec = Spec{
 	Freq:                           1 * timing.GHz,
 	NumBanks:                       4,
 	BankPipelineWidth:              1,
 	BankPipelineDepth:              1,
 	StageLatency:                   10,
 	PostPipelineBufSize:            1,
+	TopPortBufferSize:              16,
+	Capacity:                       4 * mem.GB,
 	BankSelectorKind:               "interleaved",
 	BankSelectorLog2InterleaveSize: 6,
 }
 
-// Builder constructs SimpleBankedMemory components.
+// DefaultSpec returns a copy of the default configuration. Callers typically
+// obtain it, tweak the fields they care about, and pass it to WithSpec.
+func DefaultSpec() Spec {
+	return defaultSpec
+}
+
+// Builder constructs SimpleBankedMemory components. Configuration is supplied
+// as a whole through WithSpec; wiring is supplied through WithRegistrar and
+// WithResources. The component creates its own ports.
 type Builder struct {
-	engine    timing.EventScheduler
-	registrar modeling.Registrar
 	spec      Spec
-
-	numBanks            int
-	bankPipelineWidth   int
-	bankPipelineDepth   int
-	stageLatency        int
-	topPortBufferSize   int
-	postPipelineBufSize int
-
-	bankSelectorKind   string
-	log2InterleaveSize uint64
-
-	addrConvKind            string
-	addrInterleavingSize    uint64
-	addrTotalNumOfElements  int
-	addrCurrentElementIndex int
-	addrOffset              uint64
-
-	capacity uint64
-	storage  *mem.Storage
-	topPort  messaging.Port
+	registrar modeling.Registrar
+	resources Resources
 }
 
-// MakeBuilder creates a builder with reasonable defaults.
+// MakeBuilder creates a builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{
-		spec:                DefaultSpec,
-		numBanks:            DefaultSpec.NumBanks,
-		bankPipelineWidth:   DefaultSpec.BankPipelineWidth,
-		bankPipelineDepth:   DefaultSpec.BankPipelineDepth,
-		stageLatency:        DefaultSpec.StageLatency,
-		topPortBufferSize:   16,
-		postPipelineBufSize: DefaultSpec.PostPipelineBufSize,
-		bankSelectorKind:    DefaultSpec.BankSelectorKind,
-		log2InterleaveSize:  DefaultSpec.BankSelectorLog2InterleaveSize,
-		capacity:            4 * mem.GB,
-	}
+	return Builder{spec: defaultSpec}
 }
 
-// WithEngine sets the simulation engine.
-func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
-	b.engine = engine
+// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// registrar provides the engine and registers the built component.
+func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+	b.registrar = reg
 	return b
 }
 
-// WithSimulation wires the builder to a simulation. It sources the engine from
-// the simulation and registers the built component with it.
-func (b Builder) WithSimulation(sim modeling.Registrar) Builder {
-	b.registrar = sim
-	b.engine = sim.GetEngine()
+// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
 	return b
 }
 
-// WithFreq sets the component frequency.
-func (b Builder) WithFreq(freq timing.Freq) Builder {
-	b.spec.Freq = freq
+// WithResources injects the component's shared resources (e.g. a storage
+// shared with other components). If not set, the component builds its own,
+// sized by Spec.Capacity.
+func (b Builder) WithResources(r Resources) Builder {
+	b.resources = r
 	return b
 }
 
-// WithNumBanks sets the number of banks.
-func (b Builder) WithNumBanks(numBanks int) Builder {
-	b.numBanks = numBanks
-	return b
-}
-
-// WithBankPipelineWidth sets the pipeline width inside each bank.
-func (b Builder) WithBankPipelineWidth(width int) Builder {
-	b.bankPipelineWidth = width
-	return b
-}
-
-// WithBankPipelineDepth sets the pipeline depth inside each bank.
-func (b Builder) WithBankPipelineDepth(depth int) Builder {
-	b.bankPipelineDepth = depth
-	return b
-}
-
-// WithStageLatency sets the latency of each pipeline stage in cycles.
-func (b Builder) WithStageLatency(latency int) Builder {
-	b.stageLatency = latency
-	return b
-}
-
-// WithTopPortBufferSize sets the buffer size of the top port.
-func (b Builder) WithTopPortBufferSize(size int) Builder {
-	b.topPortBufferSize = size
-	return b
-}
-
-// WithPostPipelineBufferSize sets the post-pipeline buffer capacity per bank.
-func (b Builder) WithPostPipelineBufferSize(size int) Builder {
-	b.postPipelineBufSize = size
-	return b
-}
-
-// WithBankSelectorType selects the bank selector implementation by name.
-func (b Builder) WithBankSelectorType(selectorType string) Builder {
-	b.bankSelectorKind = selectorType
-	return b
-}
-
-// WithLog2InterleaveSize sets the log2 interleave size used by the default
-// selector.
-func (b Builder) WithLog2InterleaveSize(log2Size uint64) Builder {
-	b.log2InterleaveSize = log2Size
-	return b
-}
-
-// WithStorage reuses an existing storage object.
-func (b Builder) WithStorage(storage *mem.Storage) Builder {
-	b.storage = storage
-	return b
-}
-
-// WithNewStorage creates a new storage with the given capacity.
-func (b Builder) WithNewStorage(capacity uint64) Builder {
-	b.capacity = capacity
-	return b
-}
-
-// WithAddressConverter sets the address converter, inlining the configuration
-// into the Spec if it is an InterleavingConverter.
-func (b Builder) WithAddressConverter(
-	addressConverter mem.AddressConverter,
-) Builder {
-	if ic, ok := addressConverter.(mem.InterleavingConverter); ok {
-		b.addrConvKind = "interleaving"
-		b.addrInterleavingSize = ic.InterleavingSize
-		b.addrTotalNumOfElements = ic.TotalNumOfElements
-		b.addrCurrentElementIndex = ic.CurrentElementIndex
-		b.addrOffset = ic.Offset
-	}
-
-	return b
-}
-
-// WithTopPort sets the top port of the memory component.
-func (b Builder) WithTopPort(port messaging.Port) Builder {
-	b.topPort = port
-	return b
-}
-
-// Build creates a SimpleBankedMemory component.
+// Build creates a SimpleBankedMemory component. It creates the component's Top
+// port.
 func (b Builder) Build(name string) *Comp {
-	b.configurationMustBeValid()
+	if b.registrar == nil {
+		panic("simplebankedmemory: WithRegistrar is required")
+	}
 
-	storage := b.resolveStorage(name)
-	spec := b.buildSpec(name)
-	initialState := b.buildInitialState(spec)
+	spec := b.spec
+	spec.StorageRef = name + ".Storage"
+
+	storage := b.resolveStorage(name, spec)
+	initialState := buildInitialState(spec)
 
 	modelComp := modeling.NewBuilder[Spec, State, Resources]().
-		WithEngine(b.engine).
+		WithEngine(b.registrar.GetEngine()).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		WithResources(Resources{Storage: storage}).
 		Build(name)
 	modelComp.State = initialState
 
-	b.topPort.SetComponent(modelComp)
-	modelComp.AddPort("Top", b.topPort)
+	topPort := messaging.NewPort(
+		modelComp, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
+	modelComp.AddPort("Top", topPort)
 
 	tfMW := &tickFinalizeMW{comp: modelComp}
 	modelComp.AddMiddleware(tfMW)
 	dMW := &dispatchMW{comp: modelComp}
 	modelComp.AddMiddleware(dMW)
 
-	if b.registrar != nil {
-		b.registrar.RegisterComponent(modelComp)
-	}
+	b.registrar.RegisterComponent(modelComp)
 
 	return modelComp
 }
 
-func (b Builder) resolveStorage(name string) *mem.Storage {
-	if b.storage != nil {
-		return b.storage
+// resolveStorage returns the injected storage, or builds a default one sized by
+// Spec.Capacity that self-registers with the registrar.
+func (b Builder) resolveStorage(name string, spec Spec) *mem.Storage {
+	if b.resources.Storage != nil {
+		return b.resources.Storage
 	}
 
-	storageBuilder := mem.MakeStorageBuilder().WithCapacity(b.capacity)
-	if b.registrar != nil {
-		storageBuilder = storageBuilder.WithSimulation(b.registrar)
-	}
-
-	return storageBuilder.Build(name + ".Storage")
+	return mem.MakeStorageBuilder().
+		WithCapacity(spec.Capacity).
+		WithSimulation(b.registrar).
+		Build(name + ".Storage")
 }
 
-func (b Builder) buildSpec(name string) Spec {
-	return Spec{
-		Freq:                           b.spec.Freq,
-		NumBanks:                       b.numBanks,
-		BankPipelineWidth:              b.bankPipelineWidth,
-		BankPipelineDepth:              b.bankPipelineDepth,
-		StageLatency:                   b.stageLatency,
-		PostPipelineBufSize:            b.postPipelineBufSize,
-		BankSelectorKind:               b.bankSelectorKind,
-		BankSelectorLog2InterleaveSize: b.log2InterleaveSize,
-		AddrConvKind:                   b.addrConvKind,
-		AddrInterleavingSize:           b.addrInterleavingSize,
-		AddrTotalNumOfElements:         b.addrTotalNumOfElements,
-		AddrCurrentElementIndex:        b.addrCurrentElementIndex,
-		AddrOffset:                     b.addrOffset,
-		StorageRef:                     name + ".Storage",
-	}
-}
-
-func (b Builder) buildInitialState(spec Spec) State {
+func buildInitialState(spec Spec) State {
 	state := State{
 		Banks: make([]bankState, spec.NumBanks),
 	}
@@ -248,34 +131,4 @@ func (b Builder) buildInitialState(spec Spec) State {
 	}
 
 	return state
-}
-
-func (b Builder) configurationMustBeValid() {
-	if b.engine == nil {
-		panic("simplebankedmemory.Builder: engine is nil; call WithEngine")
-	}
-
-	if b.numBanks <= 0 {
-		panic("simplebankedmemory.Builder: numBanks must be > 0")
-	}
-
-	if b.bankPipelineWidth <= 0 {
-		panic("simplebankedmemory.Builder: bankPipelineWidth must be > 0")
-	}
-
-	if b.bankPipelineDepth <= 0 {
-		panic("simplebankedmemory.Builder: bankPipelineDepth must be > 0")
-	}
-
-	if b.stageLatency <= 0 {
-		panic("simplebankedmemory.Builder: stageLatency must be > 0")
-	}
-
-	if b.topPortBufferSize <= 0 {
-		panic("simplebankedmemory.Builder: topPortBufferSize must be > 0")
-	}
-
-	if b.postPipelineBufSize <= 0 {
-		panic("simplebankedmemory.Builder: postPipelineBufSize must be > 0")
-	}
 }
