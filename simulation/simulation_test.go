@@ -3,6 +3,9 @@ package simulation
 import (
 	"io"
 	"os"
+	"path/filepath"
+
+	"github.com/sarchlab/akita/v5/checkpoint"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -14,6 +17,17 @@ type testResource struct {
 	format   string
 	ext      string
 	identity string
+}
+
+// dummyPayloads builds one placeholder archive entry per registered entity, so
+// coverage passes and the foundation's "no serializer" path can be exercised.
+func dummyPayloads(s *Simulation) []checkpoint.ArchiveEntry {
+	entries := make([]checkpoint.ArchiveEntry, 0, len(s.entities))
+	for _, entity := range s.entities {
+		entries = append(entries,
+			checkpoint.ArchiveEntry{Name: entity.Name(), Data: []byte("{}")})
+	}
+	return entries
 }
 
 func (r testResource) Name() string {
@@ -259,6 +273,81 @@ var _ = Describe("Simulation", func() {
 
 			Expect(customSim).ToNot(BeNil())
 			Expect(customSim.GetDataRecorder()).ToNot(BeNil())
+		})
+	})
+
+	Context("checkpoint foundation", func() {
+		It("should reject unimplemented entity serializers on save", func() {
+			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
+
+			err := simulation.SaveCheckpoint(path, "test-build")
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"has no checkpoint serializer")))
+			_, statErr := os.Stat(path)
+			Expect(os.IsNotExist(statErr)).To(BeTrue())
+		})
+
+		It("should reject checkpoints for parallel engines", func() {
+			parallelSim := MakeBuilder().
+				WithoutMonitoring().
+				WithParallelEngine().
+				Build()
+			defer func() {
+				parallelSim.Terminate()
+				os.Remove("akita_sim_" + parallelSim.ID() + ".sqlite3")
+			}()
+
+			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
+
+			err := parallelSim.SaveCheckpoint(path, "test-build")
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"only timing.SerialEngine is supported")))
+		})
+
+		It("should reject a checkpoint from a different build", func() {
+			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
+
+			err := checkpoint.WriteArchive(path, "other-build", dummyPayloads(simulation))
+			Expect(err).ToNot(HaveOccurred())
+
+			err = simulation.LoadCheckpoint(path, "test-build")
+
+			Expect(err).To(MatchError(ContainSubstring("build ID mismatch")))
+		})
+
+		It("should reject when a rebuilt entity is missing from the checkpoint", func() {
+			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
+
+			entries := []checkpoint.ArchiveEntry{}
+			for _, entity := range simulation.entities {
+				if entity.Name() == "IDGenerator" {
+					continue
+				}
+				entries = append(entries,
+					checkpoint.ArchiveEntry{Name: entity.Name(), Data: []byte("{}")})
+			}
+
+			err := checkpoint.WriteArchive(path, "test-build", entries)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = simulation.LoadCheckpoint(path, "test-build")
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"rebuilt entity \"IDGenerator\" is missing from checkpoint")))
+		})
+
+		It("should reject unimplemented entity serializers on load after coverage passes", func() {
+			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
+
+			err := checkpoint.WriteArchive(path, "test-build", dummyPayloads(simulation))
+			Expect(err).ToNot(HaveOccurred())
+
+			err = simulation.LoadCheckpoint(path, "test-build")
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"has no checkpoint serializer")))
 		})
 	})
 })
