@@ -6,37 +6,43 @@ import (
 	"io"
 )
 
-// portCheckpoint is the serialized form of a port. The foundation supports
-// quiescent checkpoints only, so it carries the buffer capacities for a shape
-// check; the buffers themselves must be empty (serializing in-flight messages
-// needs the message codec registry, a later milestone).
+// portCheckpoint is the serialized form of a port: the buffer capacities (a
+// shape check) plus the in-flight messages in each buffer, encoded as typed
+// payloads so their concrete types survive the round trip. Hooks and the owning
+// component/connection are rebuilt by setup and not serialized.
 type portCheckpoint struct {
-	IncomingCapacity int `json:"incoming_capacity"`
-	OutgoingCapacity int `json:"outgoing_capacity"`
+	IncomingCapacity int            `json:"incoming_capacity"`
+	OutgoingCapacity int            `json:"outgoing_capacity"`
+	Incoming         []TypedPayload `json:"incoming"`
+	Outgoing         []TypedPayload `json:"outgoing"`
 }
 
-// SaveCheckpoint writes the port's buffer capacities. It refuses to checkpoint a
-// port whose buffers are not empty, since restoring in-flight messages is not
-// yet supported. Hooks and the owning component/connection are rebuilt by setup
-// and not serialized.
+// SaveCheckpoint writes the port's buffer capacities and contents. Message types
+// must be registered with RegisterMsg.
 func (p *defaultPort) SaveCheckpoint(w io.Writer) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	if p.incomingBuf.Size() != 0 || p.outgoingBuf.Size() != 0 {
-		return fmt.Errorf(
-			"messaging: cannot checkpoint port %q with non-empty buffers "+
-				"(non-quiescent checkpoints are not yet supported)", p.name)
+	incoming, err := encodeMsgs(p.incomingBuf.Elements())
+	if err != nil {
+		return fmt.Errorf("messaging: port %q incoming: %w", p.name, err)
+	}
+	outgoing, err := encodeMsgs(p.outgoingBuf.Elements())
+	if err != nil {
+		return fmt.Errorf("messaging: port %q outgoing: %w", p.name, err)
 	}
 
 	return json.NewEncoder(w).Encode(portCheckpoint{
 		IncomingCapacity: p.incomingBuf.Capacity(),
 		OutgoingCapacity: p.outgoingBuf.Capacity(),
+		Incoming:         incoming,
+		Outgoing:         outgoing,
 	})
 }
 
-// LoadCheckpoint verifies that the rebuilt port has the saved buffer capacities
-// and empty buffers. There is nothing to restore for a quiescent port.
+// LoadCheckpoint restores the buffer contents after checking that the rebuilt
+// port has the saved capacities. Buffers are restored directly, without calling
+// Send/Deliver, so no hooks fire and no connection is notified.
 func (p *defaultPort) LoadCheckpoint(r io.Reader) error {
 	var dto portCheckpoint
 	if err := json.NewDecoder(r).Decode(&dto); err != nil {
@@ -56,11 +62,44 @@ func (p *defaultPort) LoadCheckpoint(r io.Reader) error {
 			"messaging: port %q outgoing capacity mismatch: checkpoint %d, rebuilt %d",
 			p.name, dto.OutgoingCapacity, got)
 	}
-	if p.incomingBuf.Size() != 0 || p.outgoingBuf.Size() != 0 {
-		return fmt.Errorf(
-			"messaging: cannot load a checkpoint into port %q with non-empty buffers",
-			p.name)
+
+	incoming, err := decodeMsgs(dto.Incoming)
+	if err != nil {
+		return fmt.Errorf("messaging: port %q incoming: %w", p.name, err)
+	}
+	outgoing, err := decodeMsgs(dto.Outgoing)
+	if err != nil {
+		return fmt.Errorf("messaging: port %q outgoing: %w", p.name, err)
 	}
 
+	p.incomingBuf.Restore(incoming)
+	p.outgoingBuf.Restore(outgoing)
+
 	return nil
+}
+
+func encodeMsgs(msgs []Msg) ([]TypedPayload, error) {
+	out := make([]TypedPayload, len(msgs))
+	for i, m := range msgs {
+		tp, err := EncodeMsg(m)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = tp
+	}
+
+	return out, nil
+}
+
+func decodeMsgs(payloads []TypedPayload) ([]Msg, error) {
+	out := make([]Msg, len(payloads))
+	for i, tp := range payloads {
+		m, err := DecodeMsg(tp)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = m
+	}
+
+	return out, nil
 }
