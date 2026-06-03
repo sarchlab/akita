@@ -497,3 +497,82 @@ var _ = Describe("Checkpoint round trip", func() {
 		Expect(engine.CurrentTime()).To(Equal(timing.VTimeInSec(100)))
 	})
 })
+
+type resumeSpec struct {
+	N int `json:"n"`
+}
+
+type resumeState struct {
+	Pending  int    `json:"pending"`
+	Done     int    `json:"done"`
+	Checksum uint64 `json:"checksum"`
+}
+
+type resumeWorkerMW struct {
+	comp *modeling.Component[resumeSpec, resumeState, modeling.None]
+}
+
+func (m *resumeWorkerMW) Tick() bool {
+	if m.comp.State.Pending <= 0 {
+		return false
+	}
+	m.comp.State.Done++
+	m.comp.State.Checksum = m.comp.State.Checksum*1000003 + uint64(m.comp.State.Done)
+	m.comp.State.Pending--
+	return true
+}
+
+func buildResumeSim() (*Simulation, *modeling.Component[resumeSpec, resumeState, modeling.None]) {
+	sim := MakeBuilder().WithoutMonitoring().Build()
+	engine := sim.GetEngine().(*timing.SerialEngine)
+	w := modeling.NewBuilder[resumeSpec, resumeState, modeling.None]().
+		WithEngine(engine).
+		WithFreq(1 * timing.GHz).
+		WithSpec(resumeSpec{N: 1}).
+		Build("Worker")
+	w.AddMiddleware(&resumeWorkerMW{comp: w})
+	sim.RegisterComponent(w)
+	return sim, w
+}
+
+var _ = Describe("Mid-transaction resume", func() {
+	It("resumes from a checkpoint with a pending tick identically to running uninterrupted", func() {
+		path := filepath.Join(GinkgoT().TempDir(), "ck.tar.gz")
+		const buildID = "test-build"
+
+		// Reference run: set up mid-transaction state (work pending, one tick
+		// already scheduled), checkpoint there, then continue to completion.
+		refSim, refW := buildResumeSim()
+		defer func() {
+			refSim.Terminate()
+			os.Remove("akita_sim_" + refSim.ID() + ".sqlite3")
+		}()
+		refW.State = resumeState{Pending: 5}
+		refW.TickLater() // schedule the first tick -> non-empty engine queue
+
+		Expect(refSim.SaveCheckpoint(path, buildID)).To(Succeed())
+
+		refEngine := refSim.GetEngine().(*timing.SerialEngine)
+		Expect(refEngine.Run()).To(Succeed())
+		wantDone := refW.State.Done
+		wantChecksum := refW.State.Checksum
+		wantTime := refEngine.CurrentTime()
+
+		// Resumed run: fresh sim, load the mid-transaction checkpoint, run to
+		// completion. The pending tick comes from the restored queue.
+		resSim, resW := buildResumeSim()
+		defer func() {
+			resSim.Terminate()
+			os.Remove("akita_sim_" + resSim.ID() + ".sqlite3")
+		}()
+		Expect(resSim.LoadCheckpoint(path, buildID)).To(Succeed())
+
+		resEngine := resSim.GetEngine().(*timing.SerialEngine)
+		Expect(resEngine.Run()).To(Succeed())
+
+		Expect(resW.State.Done).To(Equal(wantDone))
+		Expect(resW.State.Checksum).To(Equal(wantChecksum))
+		Expect(resEngine.CurrentTime()).To(Equal(wantTime))
+		Expect(wantDone).To(Equal(5)) // sanity: work actually happened
+	})
+})
