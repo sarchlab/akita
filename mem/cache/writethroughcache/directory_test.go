@@ -431,8 +431,27 @@ var _ = Describe("Directory", func() {
 	})
 
 	Context("write mshr hit", func() {
-		It("should add to mshr entry", func() {
+		It("should add to mshr entry and wait for fill", func() {
 			next := &c.comp.State
+
+			// Pre-existing fetcher transaction (index 0) that allocated
+			// the MSHR — required so the coalesced write can record it
+			// as MSHRFillFetcherIdx.
+			fetcherReadMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
+				TrafficBytes: 12,
+				TrafficClass: "req",
+			}
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					HasRead:            true,
+					ReadMeta:           fetcherReadMeta,
+					ReadAddress:        0x100,
+					ReadAccessByteSize: 4,
+					ReadPID:            1,
+					HasReadToBottom:    true,
+				},
+			)
 
 			writeMeta := messaging.MsgMeta{
 				ID:           timing.GetIDGenerator().Generate(),
@@ -449,9 +468,10 @@ var _ = Describe("Directory", func() {
 				},
 			)
 
-			// Pre-populate MSHR
+			// Pre-populate MSHR with the fetcher at index 0.
 			entryIdx := cache.MSHRAdd(&next.MSHRState, 4, vm.PID(1), uint64(0x100))
-			next.DirPostBuf.PushTyped(0)
+			next.MSHRState.Entries[entryIdx].TransactionIndices = []int{0}
+			next.DirPostBuf.PushTyped(1)
 
 			madeProgress := d.Tick()
 
@@ -462,9 +482,14 @@ var _ = Describe("Directory", func() {
 			Expect(writeToBottom.Data).To(Equal([]byte{1, 2, 3, 4}))
 			Expect(writeToBottom.PID).To(Equal(vm.PID(1)))
 			entry := next.MSHRState.Entries[entryIdx]
-			Expect(entry.TransactionIndices).To(ContainElement(0))
-			trans := &next.Transactions[0]
+			Expect(entry.TransactionIndices).To(ContainElement(1))
+			trans := &next.Transactions[1]
 			Expect(trans.HasWriteToBottom).To(BeTrue())
+			// The coalesced write must wait for the fetcher's merged-line
+			// write to land in storage before completing upstream.
+			Expect(trans.WaitForMSHRFill).To(BeTrue())
+			Expect(trans.MSHRFillFetcherIdx).To(Equal(0))
+			Expect(trans.MSHRFillDone).To(BeFalse())
 		})
 	})
 

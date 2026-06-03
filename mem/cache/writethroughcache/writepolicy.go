@@ -7,11 +7,12 @@ import (
 
 // writeTransIsReady reports whether a write transaction has met every
 // completion dependency it has (bank pipeline work, fetch-and-write fill,
-// lower-memory ack) and can be returned to the requester.
+// lower-memory ack, MSHR fill) and can be returned to the requester.
 //
 // The result depends only on per-transaction flags so it works uniformly
 // across write-through, write-around, and write-evict — including the
-// MSHR-coalesced case where the write never visits the bank stage.
+// MSHR-coalesced case where the write never visits the bank stage but
+// still depends on the fetcher's merged-line write reaching storage.
 func writeTransIsReady(trans *transactionState) bool {
 	if trans.HasWriteToBottom && !trans.BottomWriteDone {
 		return false
@@ -21,6 +22,10 @@ func writeTransIsReady(trans *transactionState) bool {
 		trans.BankAction == bankActionWrite ||
 		trans.BankAction == bankActionWriteFetched
 	if needsBank && !trans.BankDone {
+		return false
+	}
+
+	if trans.WaitForMSHRFill && !trans.MSHRFillDone {
 		return false
 	}
 

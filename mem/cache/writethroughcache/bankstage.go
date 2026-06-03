@@ -76,7 +76,7 @@ func (s *bankStage) finalizeTrans() bool {
 	case bankActionWrite:
 		return s.finalizeWriteTrans(trans, transIdx)
 	case bankActionWriteFetched:
-		return s.finalizeWriteFetchedTrans(trans)
+		return s.finalizeWriteFetchedTrans(trans, transIdx)
 	default:
 		panic("cannot handle trans bank action")
 	}
@@ -150,7 +150,9 @@ func (s *bankStage) finalizeWriteTrans(
 	return true
 }
 
-func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
+func (s *bankStage) finalizeWriteFetchedTrans(
+	trans *transactionState, transIdx int,
+) bool {
 	next := &s.cache.comp.State
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 
@@ -164,6 +166,11 @@ func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
 
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 	bankPostBuf.Pop()
+
+	// The merged line is now in storage. Any MSHR-coalesced write whose
+	// data was folded into this fill can be considered "fill-done"; if
+	// its bottom WriteDoneRsp has also arrived, finalize it here.
+	s.completeMSHRFillWaiters(transIdx)
 
 	if trans.HasRead {
 		// Read fetcher — restore the correct read slice (Data was the
@@ -184,4 +191,28 @@ func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
 	}
 
 	return true
+}
+
+func (s *bankStage) completeMSHRFillWaiters(fetcherIdx int) {
+	next := &s.cache.comp.State
+
+	for i := range next.Transactions {
+		waiter := &next.Transactions[i]
+		if waiter.Removed || waiter.Done {
+			continue
+		}
+		if !waiter.WaitForMSHRFill || waiter.MSHRFillDone {
+			continue
+		}
+		if waiter.MSHRFillFetcherIdx != fetcherIdx {
+			continue
+		}
+
+		waiter.MSHRFillDone = true
+
+		if writeTransIsReady(waiter) {
+			waiter.Done = true
+			tracing.EndTask(waiter.ID, s.cache.comp)
+		}
+	}
 }

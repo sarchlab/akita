@@ -188,6 +188,14 @@ func (d *directory) processWrite(trans *transactionState, transIdx int) bool {
 	if mshrFound {
 		ok := d.writeBottom(trans)
 		if ok {
+			// The coalesced write's data is merged into the fetcher's
+			// fill data (see mergeMSHRData) and reaches storage only when
+			// the fetcher's bankActionWriteFetched stage runs. Record the
+			// fetcher so writeTransIsReady can gate completion on that.
+			entry := &next.MSHRState.Entries[entryIdx]
+			trans.WaitForMSHRFill = true
+			trans.MSHRFillFetcherIdx = entry.TransactionIndices[0]
+
 			return d.processMSHRHit(trans, entryIdx, transIdx)
 		}
 
