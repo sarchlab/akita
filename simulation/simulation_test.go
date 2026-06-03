@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/sarchlab/akita/v5/checkpoint"
+	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -277,10 +280,22 @@ var _ = Describe("Simulation", func() {
 	})
 
 	Context("checkpoint foundation", func() {
-		It("should reject unimplemented entity serializers on save", func() {
+		It("should reject an entity that has no serializer", func() {
+			// A bare component/port has no checkpoint serializer yet, so save
+			// must fail loudly and not leave an archive behind.
+			noSerializerSim := MakeBuilder().WithoutMonitoring().Build()
+			defer func() {
+				noSerializerSim.Terminate()
+				os.Remove("akita_sim_" + noSerializerSim.ID() + ".sqlite3")
+			}()
+			noSerializerSim.RegisterComponent(testComponent{
+				name:  "comp",
+				ports: []Port{testPort{name: "comp.Port"}},
+			})
+
 			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
 
-			err := simulation.SaveCheckpoint(path, "test-build")
+			err := noSerializerSim.SaveCheckpoint(path, "test-build")
 
 			Expect(err).To(MatchError(ContainSubstring(
 				"has no checkpoint serializer")))
@@ -338,17 +353,6 @@ var _ = Describe("Simulation", func() {
 				"rebuilt entity \"IDGenerator\" is missing from checkpoint")))
 		})
 
-		It("should reject unimplemented entity serializers on load after coverage passes", func() {
-			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
-
-			err := checkpoint.WriteArchive(path, "test-build", dummyPayloads(simulation))
-			Expect(err).ToNot(HaveOccurred())
-
-			err = simulation.LoadCheckpoint(path, "test-build")
-
-			Expect(err).To(MatchError(ContainSubstring(
-				"has no checkpoint serializer")))
-		})
 	})
 })
 
@@ -430,5 +434,67 @@ var _ = Describe("Global state manager", func() {
 
 			Expect(names).To(ContainElements("Engine", "IDGenerator"))
 		})
+	})
+})
+
+type roundTripSpec struct {
+	Latency int `json:"latency"`
+}
+
+type roundTripState struct {
+	Count int `json:"count"`
+}
+
+var _ = Describe("Checkpoint round trip", func() {
+	It("restores component state, storage, ID counter, and engine time", func() {
+		sim := MakeBuilder().WithoutMonitoring().Build()
+		defer func() {
+			sim.Terminate()
+			os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
+		}()
+
+		// A port-less component plus a storage resource: every entity
+		// (Engine, IDGenerator, Comp, Mem) is checkpointable, so no port or
+		// connection serializers are needed yet.
+		engine := sim.GetEngine().(*timing.SerialEngine)
+		comp := modeling.NewBuilder[roundTripSpec, roundTripState, modeling.None]().
+			WithEngine(engine).
+			WithFreq(1 * timing.GHz).
+			WithSpec(roundTripSpec{Latency: 5}).
+			Build("Comp")
+		sim.RegisterComponent(comp)
+		storage := mem.MakeStorageBuilder().
+			WithCapacity(4 * mem.KB).
+			WithSimulation(sim).
+			Build("Mem")
+
+		// Establish runtime state across all four entity kinds.
+		comp.State = roundTripState{Count: 7}
+		Expect(storage.Write(0, []byte{1, 2, 3, 4})).To(Succeed())
+		for i := 0; i < 5; i++ {
+			timing.GetIDGenerator().Generate()
+		}
+		savedCounter := timing.GetIDGeneratorNextID()
+		engine.SetCurrentTime(100)
+
+		path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
+		Expect(sim.SaveCheckpoint(path, "test-build")).To(Succeed())
+
+		// Mutate every piece of runtime state away from the checkpoint.
+		comp.State = roundTripState{Count: 999}
+		Expect(storage.Write(0, []byte{0, 0, 0, 0})).To(Succeed())
+		timing.GetIDGenerator().Generate()
+		timing.GetIDGenerator().Generate()
+		engine.SetCurrentTime(500)
+
+		// Restore and confirm every piece came back.
+		Expect(sim.LoadCheckpoint(path, "test-build")).To(Succeed())
+
+		Expect(comp.State.Count).To(Equal(7))
+		data, err := storage.Read(0, 4)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
+		Expect(timing.GetIDGeneratorNextID()).To(Equal(savedCounter))
+		Expect(engine.CurrentTime()).To(Equal(timing.VTimeInSec(100)))
 	})
 })
