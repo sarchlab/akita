@@ -70,7 +70,7 @@ func (m *respondMW) finalizeWriteTrans(
 		panic(err)
 	}
 
-	writeDone := &mem.WriteDoneRsp{}
+	writeDone := mem.WriteDoneRsp{}
 	writeDone.ID = timing.GetIDGenerator().Generate()
 	writeDone.Src = m.topPort.AsRemote()
 	writeDone.Dst = t.WriteMsg.Src
@@ -101,7 +101,7 @@ func (m *respondMW) finalizeReadTrans(
 		panic(err)
 	}
 
-	dataReady := &mem.DataReadyRsp{}
+	dataReady := mem.DataReadyRsp{}
 	dataReady.ID = timing.GetIDGenerator().Generate()
 	dataReady.Src = m.topPort.AsRemote()
 	dataReady.Dst = t.ReadMsg.Src

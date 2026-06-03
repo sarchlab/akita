@@ -15,7 +15,7 @@ type Agent struct {
 
 	test       *Test
 	AgentPorts []messaging.Port
-	MsgsToSend []*TrafficMsg
+	MsgsToSend []TrafficMsg
 	sendBytes  uint64
 	recvBytes  uint64
 }

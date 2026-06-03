@@ -98,7 +98,7 @@ var _ = Describe("Bottom Parser", func() {
 				},
 			)
 
-			done := &mem.WriteDoneRsp{}
+			done := mem.WriteDoneRsp{}
 			done.ID = timing.GetIDGenerator().Generate()
 			done.RspTo = writeToBottomMeta.ID
 			done.TrafficBytes = 4
@@ -119,7 +119,7 @@ var _ = Describe("Bottom Parser", func() {
 	Context("data ready", func() {
 		var (
 			readToBottomMeta       messaging.MsgMeta
-			dataReady              *mem.DataReadyRsp
+			dataReady              mem.DataReadyRsp
 			blockSetID, blockWayID int
 		)
 
@@ -142,7 +142,7 @@ var _ = Describe("Bottom Parser", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}
-			dataReady = &mem.DataReadyRsp{}
+			dataReady = mem.DataReadyRsp{}
 			dataReady.ID = timing.GetIDGenerator().Generate()
 			dataReady.RspTo = readToBottomMeta.ID
 			dataReady.Data = drData

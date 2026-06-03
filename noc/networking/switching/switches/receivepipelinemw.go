@@ -25,7 +25,7 @@ func (m *receivePipelineMW) Tick() bool {
 	return madeProgress
 }
 
-func (m *receivePipelineMW) flitParentTaskID(flit *packetization.Flit) uint64 {
+func (m *receivePipelineMW) flitParentTaskID(flit packetization.Flit) uint64 {
 	return flit.MsgMeta.ID
 }
 
@@ -41,10 +41,10 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 				break
 			}
 
-			flit := itemI.(*packetization.Flit)
+			flit := itemI.(packetization.Flit)
 			taskID := timing.GetIDGenerator().Generate()
 			item := routedFlit{
-				Flit:    *flit,
+				Flit:    flit,
 				TaskID:  taskID,
 				RouteTo: flit.Msg.Dst,
 			}

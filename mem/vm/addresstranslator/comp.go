@@ -94,12 +94,12 @@ func msgToIncomingReqState(msg messaging.Msg) incomingReqState {
 	}
 
 	switch req := msg.(type) {
-	case *mem.ReadReq:
+	case mem.ReadReq:
 		s.Address = req.Address
 		s.AccessByteSize = req.AccessByteSize
 		s.PID = req.PID
 		s.CanWaitForCoalesce = req.CanWaitForCoalesce
-	case *mem.WriteReq:
+	case mem.WriteReq:
 		s.Address = req.Address
 		s.PID = req.PID
 		s.Data = req.Data
@@ -123,8 +123,8 @@ func createTranslatedReq(
 	addr := page.PAddr + offset
 
 	switch reqState.Type {
-	case "*mem.ReadReq":
-		clone := &mem.ReadReq{}
+	case "mem.ReadReq":
+		clone := mem.ReadReq{}
 		clone.ID = timing.GetIDGenerator().Generate()
 		clone.Src = bottomPortRemote
 		clone.Dst = memProviderMapper.Find(addr)
@@ -135,8 +135,8 @@ func createTranslatedReq(
 		clone.TrafficClass = "mem.ReadReq"
 		clone.CanWaitForCoalesce = reqState.CanWaitForCoalesce
 		return clone
-	case "*mem.WriteReq":
-		clone := &mem.WriteReq{}
+	case "mem.WriteReq":
+		clone := mem.WriteReq{}
 		clone.ID = timing.GetIDGenerator().Generate()
 		clone.Src = bottomPortRemote
 		clone.Dst = memProviderMapper.Find(addr)
@@ -162,10 +162,10 @@ func restoreMemMsg(
 ) messaging.Msg {
 	meta := messaging.MsgMeta{ID: id, Src: src, Dst: dst, RspTo: rspTo}
 	switch typ {
-	case "*mem.WriteReq":
-		return &mem.WriteReq{MsgMeta: meta}
+	case "mem.WriteReq":
+		return mem.WriteReq{MsgMeta: meta}
 	default:
-		return &mem.ReadReq{MsgMeta: meta}
+		return mem.ReadReq{MsgMeta: meta}
 	}
 }
 

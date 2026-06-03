@@ -24,7 +24,7 @@ var _ = Describe("Directory", func() {
 	// fillBottomOutgoing pre-fills bottomPort's single outgoing slot so the
 	// next Send fails, simulating a busy port.
 	fillBottomOutgoing := func() {
-		dummy := &mem.ReadReq{}
+		dummy := mem.ReadReq{}
 		dummy.ID = timing.GetIDGenerator().Generate()
 		dummy.Src = bottomPort.AsRemote()
 		dummy.Dst = messaging.RemotePort("DRAM")
@@ -258,7 +258,7 @@ var _ = Describe("Directory", func() {
 
 			Expect(madeProgress).To(BeTrue())
 
-			readToBottom := bottomPort.RetrieveOutgoing().(*mem.ReadReq)
+			readToBottom := bottomPort.RetrieveOutgoing().(mem.ReadReq)
 			Expect(readToBottom.Address).To(Equal(uint64(0x100)))
 			Expect(readToBottom.AccessByteSize).To(Equal(uint64(64)))
 			Expect(readToBottom.PID).To(Equal(vm.PID(1)))
@@ -419,7 +419,7 @@ var _ = Describe("Directory", func() {
 
 			Expect(madeProgress).To(BeTrue())
 
-			writeToBottom := bottomPort.RetrieveOutgoing().(*mem.WriteReq)
+			writeToBottom := bottomPort.RetrieveOutgoing().(mem.WriteReq)
 			Expect(writeToBottom.Address).To(Equal(uint64(0x104)))
 			Expect(writeToBottom.Data).To(Equal([]byte{1, 2, 3, 4}))
 			Expect(writeToBottom.PID).To(Equal(vm.PID(1)))
@@ -460,7 +460,7 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			w := bottomPort.RetrieveOutgoing().(*mem.WriteReq)
+			w := bottomPort.RetrieveOutgoing().(mem.WriteReq)
 			Expect(w.Address).To(Equal(uint64(0x104)))
 			Expect(w.Data).To(Equal([]byte{1, 2, 3, 4}))
 			Expect(w.PID).To(Equal(vm.PID(1)))
@@ -626,7 +626,7 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			w := bottomPort.RetrieveOutgoing().(*mem.WriteReq)
+			w := bottomPort.RetrieveOutgoing().(mem.WriteReq)
 			Expect(w.Address).To(Equal(uint64(0x100)))
 			Expect(w.Data).To(HaveLen(64))
 			Expect(w.PID).To(Equal(vm.PID(1)))

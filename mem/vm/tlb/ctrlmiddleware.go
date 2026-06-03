@@ -37,7 +37,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 		return false
 	}
 
-	ctrlReq, ok := msg.(*mem.ControlReq)
+	ctrlReq, ok := msg.(mem.ControlReq)
 	if !ok {
 		panic("Unhandled message")
 	}
@@ -58,7 +58,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	}
 }
 
-func (m *ctrlMiddleware) performCtrlEnable(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) performCtrlEnable(msg mem.ControlReq) bool {
 	state := &m.comp.State
 	state.TLBState = tlbStateEnable
 
@@ -74,7 +74,7 @@ func (m *ctrlMiddleware) performCtrlEnable(msg *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) performCtrlDrain(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) performCtrlDrain(msg mem.ControlReq) bool {
 	state := &m.comp.State
 	state.TLBState = tlbStateDrain
 
@@ -90,7 +90,7 @@ func (m *ctrlMiddleware) performCtrlDrain(msg *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) performCtrlPause(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) performCtrlPause(msg mem.ControlReq) bool {
 	state := &m.comp.State
 	state.TLBState = tlbStatePause
 
@@ -106,7 +106,7 @@ func (m *ctrlMiddleware) performCtrlPause(msg *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleTLBFlush(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleTLBFlush(msg mem.ControlReq) bool {
 	state := &m.comp.State
 	state.HasInflightFlushReq = true
 	state.InflightFlush = inflightFlushState{
@@ -120,8 +120,8 @@ func (m *ctrlMiddleware) handleTLBFlush(msg *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleTLBRestart(msg *mem.ControlReq) bool {
-	rsp := &mem.ControlRsp{Command: mem.CmdReset, Success: true}
+func (m *ctrlMiddleware) handleTLBRestart(msg mem.ControlReq) bool {
+	rsp := mem.ControlRsp{Command: mem.CmdReset, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.controlPort().AsRemote()
 	rsp.Dst = msg.Src

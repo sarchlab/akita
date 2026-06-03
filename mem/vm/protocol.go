@@ -43,8 +43,8 @@ type PageMigrationReqToDriver struct {
 // NewPageMigrationReqToDriver creates a new PageMigrationReqToDriver.
 func NewPageMigrationReqToDriver(
 	src, dst messaging.RemotePort,
-) *PageMigrationReqToDriver {
-	r := &PageMigrationReqToDriver{}
+) PageMigrationReqToDriver {
+	r := PageMigrationReqToDriver{}
 	r.ID = timing.GetIDGenerator().Generate()
 	r.Src = src
 	r.Dst = dst
@@ -65,8 +65,8 @@ type PageMigrationRspFromDriver struct {
 func NewPageMigrationRspFromDriver(
 	src, dst messaging.RemotePort,
 	originalReqID uint64,
-) *PageMigrationRspFromDriver {
-	r := &PageMigrationRspFromDriver{}
+) PageMigrationRspFromDriver {
+	r := PageMigrationRspFromDriver{}
 	r.ID = timing.GetIDGenerator().Generate()
 	r.Src = src
 	r.Dst = dst

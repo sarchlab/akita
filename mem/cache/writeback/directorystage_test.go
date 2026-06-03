@@ -78,7 +78,7 @@ var _ = Describe("DirectoryStage", func() {
 
 	Context("read", func() {
 		BeforeEach(func() {
-			read := &mem.ReadReq{}
+			read := mem.ReadReq{}
 			read.ID = timing.GetIDGenerator().Generate()
 			read.Address = 0x100
 			read.PID = 1
@@ -176,7 +176,7 @@ var _ = Describe("DirectoryStage", func() {
 
 	Context("write", func() {
 		BeforeEach(func() {
-			write := &mem.WriteReq{}
+			write := mem.WriteReq{}
 			write.ID = timing.GetIDGenerator().Generate()
 			write.Address = 0x100
 			write.PID = 1

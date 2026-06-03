@@ -203,9 +203,9 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.F
 	return memComp, agent, conn, freq
 }
 
-func makeReadReq(src, dst messaging.RemotePort, index int) *mem.ReadReq {
+func makeReadReq(src, dst messaging.RemotePort, index int) mem.ReadReq {
 	addr := uint64(index * readSize)
-	r := &mem.ReadReq{}
+	r := mem.ReadReq{}
 	r.ID = timing.GetIDGenerator().Generate()
 	r.Src = src
 	r.Dst = dst
@@ -275,7 +275,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		topPort := memComp.GetPortByName("Top")
-		read := &mem.ReadReq{}
+		read := mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = agent.port.AsRemote()
 		read.Dst = topPort.AsRemote()
@@ -291,7 +291,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		}
 
 		Expect(agent.received).To(HaveLen(1))
-		rsp := agent.received[0].(*mem.DataReadyRsp)
+		rsp := agent.received[0].(mem.DataReadyRsp)
 		Expect(rsp.Data).To(Equal(data))
 	})
 
@@ -306,7 +306,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		topPort := memComp.GetPortByName("Top")
 
-		write := &mem.WriteReq{}
+		write := mem.WriteReq{}
 		write.ID = timing.GetIDGenerator().Generate()
 		write.Src = agent.port.AsRemote()
 		write.Dst = topPort.AsRemote()
@@ -315,7 +315,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		write.TrafficBytes = len(newData) + 12
 		write.TrafficClass = "mem.WriteReq"
 
-		read := &mem.ReadReq{}
+		read := mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = agent.port.AsRemote()
 		read.Dst = topPort.AsRemote()
@@ -333,10 +333,10 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		Expect(agent.received).To(HaveLen(2))
 
-		_, isWriteDone := agent.received[0].(*mem.WriteDoneRsp)
+		_, isWriteDone := agent.received[0].(mem.WriteDoneRsp)
 		Expect(isWriteDone).To(BeTrue())
 
-		readRsp, ok := agent.received[1].(*mem.DataReadyRsp)
+		readRsp, ok := agent.received[1].(mem.DataReadyRsp)
 		Expect(ok).To(BeTrue())
 		Expect(readRsp.Data).To(Equal(newData))
 
@@ -372,7 +372,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		// Write 4 bytes at external address 0x0 → internal 0x0.
 		convWriteData := []byte{1, 2, 3, 4}
-		write := &mem.WriteReq{}
+		write := mem.WriteReq{}
 		write.ID = timing.GetIDGenerator().Generate()
 		write.Src = agent.port.AsRemote()
 		write.Dst = topPort.AsRemote()
@@ -382,7 +382,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		write.TrafficClass = "mem.WriteReq"
 
 		// Read 4 bytes at external address 0x0 → internal 0x0.
-		read := &mem.ReadReq{}
+		read := mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = agent.port.AsRemote()
 		read.Dst = topPort.AsRemote()
@@ -400,7 +400,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		Expect(agent.received).To(HaveLen(2))
 
-		readRsp, ok := agent.received[1].(*mem.DataReadyRsp)
+		readRsp, ok := agent.received[1].(mem.DataReadyRsp)
 		Expect(ok).To(BeTrue())
 		Expect(readRsp.Data).To(Equal([]byte{1, 2, 3, 4}))
 	})
@@ -413,22 +413,24 @@ func Example() {
 	dstRemote := topPort.AsRemote()
 
 	startCycles := make(map[uint64]int)
-	var pendingReq *mem.ReadReq
+	var pendingReq mem.ReadReq
+	hasPending := false
 	requestsSent := 0
 	cycles := 0
 	processed := 0
 	var latencySum float64
 
 	for agent.completed < numRequests {
-		if pendingReq == nil && requestsSent < numRequests {
+		if !hasPending && requestsSent < numRequests {
 			pendingReq = makeReadReq(srcRemote, dstRemote, requestsSent)
+			hasPending = true
 		}
 
-		if pendingReq != nil {
+		if hasPending {
 			if err := agent.port.Send(pendingReq); err == nil {
 				startCycles[pendingReq.ID] = cycles
 				requestsSent++
-				pendingReq = nil
+				hasPending = false
 				conn.transfer()
 			}
 		}

@@ -77,7 +77,7 @@ var _ = Describe("Control Stage", func() {
 		next := &pmw.comp.State
 		next.Transactions = append(next.Transactions, transactionState{})
 
-		flushReq := &mem.ControlReq{Command: mem.CmdFlush}
+		flushReq := mem.ControlReq{Command: mem.CmdFlush}
 		flushReq.ID = timing.GetIDGenerator().Generate()
 		flushReq.TrafficBytes = 0
 		flushReq.TrafficClass = "mem.ControlReq"
@@ -98,7 +98,7 @@ var _ = Describe("Control Stage", func() {
 	})
 
 	It("should reset directory", func() {
-		flushReq := &mem.ControlReq{Command: mem.CmdFlush}
+		flushReq := mem.ControlReq{Command: mem.CmdFlush}
 		flushReq.ID = timing.GetIDGenerator().Generate()
 		flushReq.InvalidateAfter = true
 		flushReq.DiscardInflight = true

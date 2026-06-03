@@ -83,7 +83,7 @@ func (m *outgoingMW) sendFlitOut() bool {
 			break
 		}
 
-		flit := &state.FlitsToSend[numSent]
+		flit := state.FlitsToSend[numSent]
 
 		err := m.networkPort.Send(flit)
 		if err == nil {
@@ -127,7 +127,7 @@ func (m *outgoingMW) prepareMsg() bool {
 		}
 
 		msg := port.RetrieveOutgoing()
-		state.MsgOutBuf = append(state.MsgOutBuf, *msg.Meta())
+		state.MsgOutBuf = append(state.MsgOutBuf, msg.Meta())
 
 		madeProgress = true
 	}
@@ -185,7 +185,7 @@ func (m *outgoingMW) logFlitE2ETask(
 		return
 	}
 
-	flit := &packetization.Flit{
+	flit := packetization.Flit{
 		MsgMeta:      fs.MsgMeta,
 		SeqID:        fs.SeqID,
 		NumFlitInMsg: fs.NumFlitInMsg,

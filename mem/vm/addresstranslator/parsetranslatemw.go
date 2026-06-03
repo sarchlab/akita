@@ -61,7 +61,7 @@ func (m *parseTranslateMW) translate() bool {
 	spec := m.comp.Spec()
 	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
 
-	transReq := &vm.TranslationReq{}
+	transReq := vm.TranslationReq{}
 	transReq.ID = timing.GetIDGenerator().Generate()
 	transReq.Src = m.translationPort().AsRemote()
 	transReq.Dst = m.comp.Resources().TranslationProviderMapper.Find(vAddr)
@@ -105,7 +105,7 @@ func (m *parseTranslateMW) handleCtrlRequest() bool {
 		return false
 	}
 
-	msg := msgI.(*mem.ControlReq)
+	msg := msgI.(mem.ControlReq)
 
 	switch msg.Command {
 	case mem.CmdFlush:
@@ -117,8 +117,8 @@ func (m *parseTranslateMW) handleCtrlRequest() bool {
 	}
 }
 
-func (m *parseTranslateMW) handleFlushReq(msg *mem.ControlReq) bool {
-	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
+func (m *parseTranslateMW) handleFlushReq(msg mem.ControlReq) bool {
+	rsp := mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = msg.Src
@@ -140,8 +140,8 @@ func (m *parseTranslateMW) handleFlushReq(msg *mem.ControlReq) bool {
 	return true
 }
 
-func (m *parseTranslateMW) handleRestartReq(msg *mem.ControlReq) bool {
-	rsp := &mem.ControlRsp{Command: mem.CmdReset, Success: true}
+func (m *parseTranslateMW) handleRestartReq(msg mem.ControlReq) bool {
+	rsp := mem.ControlRsp{Command: mem.CmdReset, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = msg.Src

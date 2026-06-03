@@ -94,7 +94,7 @@ var _ = Describe("DRAM Statistics", func() {
 		conn.PlugIn(srcPort)
 
 		// Send a write request
-		write := &mem.WriteReq{}
+		write := mem.WriteReq{}
 		write.ID = timing.GetIDGenerator().Generate()
 		write.Address = 0x40
 		write.Data = []byte{1, 2, 3, 4}
@@ -105,7 +105,7 @@ var _ = Describe("DRAM Statistics", func() {
 		srcPort.Send(write)
 
 		// Send a read request
-		read := &mem.ReadReq{}
+		read := mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Address = 0x40
 		read.AccessByteSize = 4

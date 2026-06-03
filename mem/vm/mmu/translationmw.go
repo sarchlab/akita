@@ -157,7 +157,7 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	state := &m.comp.State
 	walking := state.WalkingTranslations[walkingIndex]
 
-	rsp := &vm.TranslationRsp{
+	rsp := vm.TranslationRsp{
 		Page: walking.Page,
 	}
 	rsp.ID = timing.GetIDGenerator().Generate()
@@ -188,7 +188,7 @@ func (m *translationMW) parseFromTop() bool {
 	}
 
 	switch req := reqI.(type) {
-	case *vm.TranslationReq:
+	case vm.TranslationReq:
 		tracing.TraceReqReceive(req, m.comp)
 		m.startWalking(req)
 	default:
@@ -199,7 +199,7 @@ func (m *translationMW) parseFromTop() bool {
 	return true
 }
 
-func (m *translationMW) startWalking(req *vm.TranslationReq) {
+func (m *translationMW) startWalking(req vm.TranslationReq) {
 	spec := m.comp.Spec()
 	state := &m.comp.State
 

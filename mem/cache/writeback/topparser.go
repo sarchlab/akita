@@ -32,13 +32,13 @@ func (p *topParser) Tick() bool {
 	}
 
 	switch msg := msg.(type) {
-	case *mem.ReadReq:
+	case mem.ReadReq:
 		trans.HasRead = true
 		trans.ReadMeta = msg.MsgMeta
 		trans.ReadAddress = msg.Address
 		trans.ReadAccessByteSize = msg.AccessByteSize
 		trans.ReadPID = msg.PID
-	case *mem.WriteReq:
+	case mem.WriteReq:
 		trans.HasWrite = true
 		trans.WriteMeta = msg.MsgMeta
 		trans.WriteAddress = msg.Address

@@ -56,7 +56,7 @@ func (p *pingProcessor) sendScheduledPings(
 
 	for _, sp := range state.ScheduledPings {
 		if sp.SendAt <= now {
-			pingMsg := &pingReq{
+			pingMsg := pingReq{
 				MsgMeta: messaging.MsgMeta{
 					ID:  timing.GetIDGenerator().Generate(),
 					Src: outPort(comp).AsRemote(),
@@ -91,7 +91,7 @@ func (p *pingProcessor) deliverPendingResponses(
 
 	for _, pr := range state.PendingResponses {
 		if pr.DeliverAt <= now {
-			rsp := &pingRsp{
+			rsp := pingRsp{
 				MsgMeta: messaging.MsgMeta{
 					ID:    timing.GetIDGenerator().Generate(),
 					Src:   outPort(comp).AsRemote(),
@@ -128,7 +128,7 @@ func (p *pingProcessor) processIncoming(
 		}
 
 		switch m := msg.(type) {
-		case *pingReq:
+		case pingReq:
 			state.PendingResponses = append(state.PendingResponses,
 				pendingResponse{
 					DeliverAt: now + 2_000_000_000_000,
@@ -138,7 +138,7 @@ func (p *pingProcessor) processIncoming(
 				})
 			comp.ScheduleWakeAt(now + 2_000_000_000_000)
 			progress = true
-		case *pingRsp:
+		case pingRsp:
 			seqID := m.SeqID
 			startTime := state.StartTimes[seqID]
 			duration := now - startTime

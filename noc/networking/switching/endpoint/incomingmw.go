@@ -41,7 +41,7 @@ func (m *incomingMW) recv() bool {
 			return madeProgress
 		}
 
-		flit := receivedI.(*packetization.Flit)
+		flit := receivedI.(packetization.Flit)
 		msg := &flit.Msg
 
 		var assemblingIdx int = -1
@@ -166,7 +166,7 @@ func (m *incomingMW) tryDeliver() bool {
 }
 
 func (m *incomingMW) logFlitE2ETaskFromFlit(
-	flit *packetization.Flit, isEnd bool,
+	flit packetization.Flit, isEnd bool,
 ) {
 	if m.comp.NumHooks() == 0 {
 		return

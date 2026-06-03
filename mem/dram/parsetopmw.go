@@ -30,12 +30,12 @@ func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
 	ts := transactionState{}
 
 	switch msg := msgI.(type) {
-	case *mem.ReadReq:
+	case mem.ReadReq:
 		ts.HasRead = true
-		ts.ReadMsg = *msg
-	case *mem.WriteReq:
+		ts.ReadMsg = msg
+	case mem.WriteReq:
 		ts.HasWrite = true
-		ts.WriteMsg = *msg
+		ts.WriteMsg = msg
 	}
 
 	// Assign internal address

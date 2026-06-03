@@ -71,21 +71,21 @@ type MockAccessReq struct {
 	pid      vm.PID
 }
 
-func (r *MockAccessReq) GetAddress() uint64 {
+func (r MockAccessReq) GetAddress() uint64 {
 	return r.address
 }
 
-func (r *MockAccessReq) GetByteSize() uint64 {
+func (r MockAccessReq) GetByteSize() uint64 {
 	return r.byteSize
 }
 
-func (r *MockAccessReq) GetPID() vm.PID {
+func (r MockAccessReq) GetPID() vm.PID {
 	return r.pid
 }
 
 func (suite *TracerTestSuite) TestStartAndEndTask() {
 	// Create a mock access request
-	req := &MockAccessReq{
+	req := MockAccessReq{
 		address:  0x1000,
 		byteSize: 64,
 		pid:      1,
@@ -159,7 +159,7 @@ func (suite *TracerTestSuite) verifyBasicTransaction(task tracing.Task) {
 
 func (suite *TracerTestSuite) TestStepTask() {
 	// Create a mock access request
-	req := &MockAccessReq{
+	req := MockAccessReq{
 		address:  0x2000,
 		byteSize: 32,
 		pid:      2,
@@ -209,7 +209,7 @@ func (suite *TracerTestSuite) TestStepTask() {
 
 func (suite *TracerTestSuite) TestCompleteMemoryTrace() {
 	// Create a mock access request
-	req := &MockAccessReq{
+	req := MockAccessReq{
 		address:  0x3000,
 		byteSize: 128,
 		pid:      3,
@@ -369,7 +369,7 @@ func TestDBTracerWithFixedTimeTeller(t *testing.T) {
 	tracer := NewDBTracer(recorder, timeTeller)
 
 	// Create a mock request
-	req := &MockAccessReq{
+	req := MockAccessReq{
 		address:  0x4000,
 		byteSize: 256,
 		pid:      4,

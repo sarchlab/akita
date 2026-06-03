@@ -78,7 +78,7 @@ var _ = Describe("End Point", func() {
 		Expect(madeProgress).To(BeTrue())
 
 		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
-			flit := msg.(*packetization.Flit)
+			flit := msg.(packetization.Flit)
 			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
 			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
 			Expect(flit.SeqID).To(Equal(0))
@@ -90,7 +90,7 @@ var _ = Describe("End Point", func() {
 		Expect(madeProgress).To(BeTrue())
 
 		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
-			flit := msg.(*packetization.Flit)
+			flit := msg.(packetization.Flit)
 			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
 			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
 			Expect(flit.SeqID).To(Equal(1))
@@ -112,13 +112,13 @@ var _ = Describe("End Point", func() {
 			Dst: devicePort.AsRemote(),
 		}
 
-		flit0 := &packetization.Flit{}
+		flit0 := packetization.Flit{}
 		flit0.ID = timing.GetIDGenerator().Generate()
 		flit0.TrafficClass = reflect.TypeOf(msg).String()
 		flit0.SeqID = 0
 		flit0.NumFlitInMsg = 2
 		flit0.Msg = *msg
-		flit1 := &packetization.Flit{}
+		flit1 := packetization.Flit{}
 		flit1.ID = timing.GetIDGenerator().Generate()
 		flit1.TrafficClass = reflect.TypeOf(msg).String()
 		flit1.SeqID = 1

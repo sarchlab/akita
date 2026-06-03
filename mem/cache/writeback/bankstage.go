@@ -178,7 +178,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 
 	nextBlock.ReadCount--
 
-	dataReady := &mem.DataReadyRsp{}
+	dataReady := mem.DataReadyRsp{}
 	dataReady.ID = timing.GetIDGenerator().Generate()
 	dataReady.Src = s.cache.topPort.AsRemote()
 	dataReady.Dst = trans.ReadMeta.Src
@@ -188,7 +188,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	dataReady.TrafficClass = "mem.DataReadyRsp"
 	s.cache.topPort.Send(dataReady)
 
-	tracing.TraceReqComplete(&trans.ReadMeta, s.cache.comp)
+	tracing.TraceReqComplete(trans.ReadMeta, s.cache.comp)
 
 	return true
 }
@@ -217,7 +217,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 	next.BankInflightTransCounts[s.bankID]--
 	next.BankDownwardInflightTransCounts[s.bankID]--
 
-	done := &mem.WriteDoneRsp{}
+	done := mem.WriteDoneRsp{}
 	done.ID = timing.GetIDGenerator().Generate()
 	done.Src = s.cache.topPort.AsRemote()
 	done.Dst = trans.WriteMeta.Src
@@ -226,7 +226,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 	done.TrafficClass = "mem.WriteDoneRsp"
 	s.cache.topPort.Send(done)
 
-	tracing.TraceReqComplete(&trans.WriteMeta, s.cache.comp)
+	tracing.TraceReqComplete(trans.WriteMeta, s.cache.comp)
 
 	return true
 }

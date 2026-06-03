@@ -36,15 +36,15 @@ type ExampleReadReq struct {
 	pid      vm.PID
 }
 
-func (r *ExampleReadReq) GetAddress() uint64 {
+func (r ExampleReadReq) GetAddress() uint64 {
 	return r.address
 }
 
-func (r *ExampleReadReq) GetByteSize() uint64 {
+func (r ExampleReadReq) GetByteSize() uint64 {
 	return r.byteSize
 }
 
-func (r *ExampleReadReq) GetPID() vm.PID {
+func (r ExampleReadReq) GetPID() vm.PID {
 	return r.pid
 }
 
@@ -91,7 +91,7 @@ func Example() {
 
 func runExampleTrace(memTracer tracing.Tracer, timeTeller *SimpleTimeTeller) {
 	// Simulate a memory read operation
-	readReq := &ExampleReadReq{
+	readReq := ExampleReadReq{
 		address:  0x1000,
 		byteSize: 64,
 		pid:      1,

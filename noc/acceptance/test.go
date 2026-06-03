@@ -15,8 +15,8 @@ type TrafficMsg struct {
 // Test is a test case.
 type Test struct {
 	agents            []*Agent
-	msgs              []*TrafficMsg
-	receivedMsgs      []*TrafficMsg
+	msgs              []TrafficMsg
+	receivedMsgs      []TrafficMsg
 	receivedMsgsTable map[uint64]bool
 }
 
@@ -51,7 +51,7 @@ func (t *Test) GenerateMsgs(n uint64) {
 		dstPortID := rand.Intn(len(dstAgent.AgentPorts))
 		dstPort := dstAgent.AgentPorts[dstPortID]
 
-		msg := &TrafficMsg{
+		msg := TrafficMsg{
 			MsgMeta: messaging.MsgMeta{
 				ID:           timing.GetIDGenerator().Generate(),
 				Src:          srcPort.AsRemote(),
@@ -64,12 +64,12 @@ func (t *Test) GenerateMsgs(n uint64) {
 	}
 }
 
-func (t *Test) registerMsg(msg *TrafficMsg) {
+func (t *Test) registerMsg(msg TrafficMsg) {
 	t.msgs = append(t.msgs, msg)
 }
 
 // receiveMsgMeta marks that a message (identified by its MsgMeta) is received.
-func (t *Test) receiveMsgMeta(meta *messaging.MsgMeta, recvPort messaging.Port) {
+func (t *Test) receiveMsgMeta(meta messaging.MsgMeta, recvPort messaging.Port) {
 	if meta.Dst != recvPort.AsRemote() {
 		panic("msg delivered to a wrong destination")
 	}
@@ -80,7 +80,7 @@ func (t *Test) receiveMsgMeta(meta *messaging.MsgMeta, recvPort messaging.Port) 
 	t.receivedMsgsTable[meta.ID] = true
 
 	// Wrap in TrafficMsg so existing bookkeeping works.
-	t.receivedMsgs = append(t.receivedMsgs, &TrafficMsg{MsgMeta: *meta})
+	t.receivedMsgs = append(t.receivedMsgs, TrafficMsg{MsgMeta: meta})
 }
 
 // MustHaveReceivedAllMsgs asserts that all the messages sent are received.

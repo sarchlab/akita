@@ -54,7 +54,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 		return false
 	}
 
-	rsp := rspI.(*vm.TranslationRsp)
+	rsp := rspI.(vm.TranslationRsp)
 	nextState := &m.comp.State
 	transIdx := findTransactionByReqID(nextState.Transactions, rsp.RspTo)
 
@@ -121,7 +121,7 @@ func (m *respondPipelineMW) traceTranslationComplete(
 		m.comp,
 	)
 
-	fakeTransReq := &vm.TranslationReq{
+	fakeTransReq := vm.TranslationReq{
 		MsgMeta: messaging.MsgMeta{
 			ID:  trans.TranslationReqID,
 			Src: trans.TranslationReqSrc,
@@ -150,11 +150,11 @@ func (m *respondPipelineMW) respond() bool {
 	reqInBottom := false
 
 	switch rsp := rspI.(type) {
-	case *mem.DataReadyRsp:
+	case mem.DataReadyRsp:
 		reqInBottom = isReqInBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 		if reqInBottom {
 			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
-			rspToTop = &mem.DataReadyRsp{
+			rspToTop = mem.DataReadyRsp{
 				MsgMeta: messaging.MsgMeta{
 					ID:           timing.GetIDGenerator().Generate(),
 					Src:          m.topPort().AsRemote(),
@@ -179,11 +179,11 @@ func (m *respondPipelineMW) respond() bool {
 				m.comp,
 			)
 		}
-	case *mem.WriteDoneRsp:
+	case mem.WriteDoneRsp:
 		reqInBottom = isReqInBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 		if reqInBottom {
 			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
-			rspToTop = &mem.WriteDoneRsp{
+			rspToTop = mem.WriteDoneRsp{
 				MsgMeta: messaging.MsgMeta{
 					ID:           timing.GetIDGenerator().Generate(),
 					Src:          m.topPort().AsRemote(),

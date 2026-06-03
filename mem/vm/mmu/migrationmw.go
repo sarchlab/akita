@@ -116,7 +116,7 @@ func (m *migrationMW) markPageAsNotMigratingIfNotInTheMigrationQueue(
 func (m *migrationMW) sendTranslationRsp(
 	trans transactionState,
 ) (madeProgress bool) {
-	rsp := &vm.TranslationRsp{
+	rsp := vm.TranslationRsp{
 		Page: trans.Page,
 	}
 	rsp.ID = timing.GetIDGenerator().Generate()
@@ -149,7 +149,7 @@ func (m *migrationMW) processMigrationReturn() bool {
 		panic("page not found")
 	}
 
-	rsp := &vm.TranslationRsp{
+	rsp := vm.TranslationRsp{
 		Page: page,
 	}
 	rsp.ID = timing.GetIDGenerator().Generate()
@@ -173,7 +173,7 @@ func (m *migrationMW) processMigrationReturn() bool {
 func (m *migrationMW) createMigrationRequest(
 	trans transactionState,
 	page vm.Page,
-) *vm.PageMigrationReqToDriver {
+) vm.PageMigrationReqToDriver {
 	spec := m.comp.Spec()
 	state := &m.comp.State
 

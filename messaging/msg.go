@@ -2,13 +2,12 @@ package messaging
 
 // Msg is the interface for all messages transferred between components.
 //
-// Messages are conventionally constructed as pointer values (e.g.
-// `&mem.ReadReq{...}`) because Meta() returns *MsgMeta to give a stable
-// identity that survives interface boxing. Even so, callers must treat a
-// message as immutable once it has been handed to a port: every field of
-// MsgMeta is set at construction and never reassigned in flight.
+// Messages are value types: a message is constructed as a struct value (e.g.
+// `mem.ReadReq{...}`) and passed by value through ports. Once a message has
+// been handed to a port, it is single-use, immutable data — callers must not
+// mutate the value after Send/Deliver.
 type Msg interface {
-	Meta() *MsgMeta
+	Meta() MsgMeta
 }
 
 // MsgMeta contains routing and identification metadata. All fields are set at
@@ -22,7 +21,7 @@ type MsgMeta struct {
 }
 
 // Meta returns the message metadata.
-func (m *MsgMeta) Meta() *MsgMeta { return m }
+func (m MsgMeta) Meta() MsgMeta { return m }
 
 // IsRsp returns true if this message is a response to another message.
-func (m *MsgMeta) IsRsp() bool { return m.RspTo != 0 }
+func (m MsgMeta) IsRsp() bool { return m.RspTo != 0 }
