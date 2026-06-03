@@ -4,14 +4,12 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/checkpoint"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 // SaveCheckpoint writes a checkpoint archive for the simulation. The simulation
 // must use a SerialEngine and be stopped outside an event handler. buildID
-// overrides the build identity (mainly for tests); pass "" to use
-// checkpoint.DefaultBuildID().
+// overrides the build identity (mainly for tests); pass "" to use the default.
 //
 // The foundation milestone implements archive writing and validation only.
 // Entity payload serializers land in later milestones, so this currently
@@ -21,12 +19,12 @@ func (s *Simulation) SaveCheckpoint(path, buildID string) error {
 		return err
 	}
 	if buildID == "" {
-		buildID = checkpoint.DefaultBuildID()
+		buildID = defaultBuildID()
 	}
 
-	payloads := make([]checkpoint.ArchiveEntry, 0, len(s.entities))
+	payloads := make([]archiveEntry, 0, len(s.entities))
 	for _, entity := range s.entities {
-		checkpointable, ok := entity.(checkpoint.Checkpointable)
+		checkpointable, ok := entity.(Checkpointable)
 		if !ok {
 			return fmt.Errorf(
 				"checkpoint: entity %q (%T) has no checkpoint serializer",
@@ -38,10 +36,10 @@ func (s *Simulation) SaveCheckpoint(path, buildID string) error {
 			return fmt.Errorf("checkpoint: save entity %q: %w", entity.Name(), err)
 		}
 		payloads = append(payloads,
-			checkpoint.ArchiveEntry{Name: entity.Name(), Data: buf.Bytes()})
+			archiveEntry{name: entity.Name(), data: buf.Bytes()})
 	}
 
-	return checkpoint.WriteArchive(path, buildID, payloads)
+	return writeArchive(path, buildID, payloads)
 }
 
 // LoadCheckpoint loads a checkpoint archive into this rebuilt simulation. It
@@ -52,10 +50,10 @@ func (s *Simulation) LoadCheckpoint(path, buildID string) error {
 		return err
 	}
 	if buildID == "" {
-		buildID = checkpoint.DefaultBuildID()
+		buildID = defaultBuildID()
 	}
 
-	savedBuildID, payloads, err := checkpoint.ReadArchive(path)
+	savedBuildID, payloads, err := readArchive(path)
 	if err != nil {
 		return err
 	}
@@ -68,7 +66,7 @@ func (s *Simulation) LoadCheckpoint(path, buildID string) error {
 	}
 
 	for _, entity := range s.entities {
-		checkpointable, ok := entity.(checkpoint.Checkpointable)
+		checkpointable, ok := entity.(Checkpointable)
 		if !ok {
 			return fmt.Errorf(
 				"checkpoint: entity %q (%T) has no checkpoint serializer",

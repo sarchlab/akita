@@ -1,7 +1,4 @@
-// Package checkpoint provides the on-disk archive format for simulation
-// checkpoints. An archive is a tar.gz holding a build-identity entry and one
-// payload per registered entity; each entity owns the bytes of its own payload.
-package checkpoint
+package simulation
 
 import (
 	"archive/tar"
@@ -19,6 +16,9 @@ import (
 	"time"
 )
 
+// A checkpoint archive is a tar.gz holding a build-identity entry and one
+// payload per registered entity; the payload files are the inventory, so there
+// is no manifest. Each entity owns the bytes of its own payload.
 const (
 	buildIDPath  = "build_id"
 	entityPrefix = "entities/"
@@ -26,28 +26,42 @@ const (
 
 // Checkpointable is implemented by runtime entities that save and load their own
 // payload bytes. The entity owns its encoding (JSON, binary, ...); the archive
-// only shuttles bytes.
+// only shuttles bytes. It is satisfied structurally, so an entity package never
+// imports the simulation package to be checkpointable.
 type Checkpointable interface {
 	SaveCheckpoint(w io.Writer) error
 	LoadCheckpoint(r io.Reader) error
 }
 
-// ArchiveEntry is one entity payload to write into an archive.
-type ArchiveEntry struct {
-	Name string
-	Data []byte
+// archiveEntry is one entity payload to write into a checkpoint archive.
+type archiveEntry struct {
+	name string
+	data []byte
 }
 
-// EntityPath returns the archive path for an entity's payload. The name is
+// entityPath returns the archive path for an entity's payload. The name is
 // escaped so it can never become a real filesystem path.
-func EntityPath(name string) string {
+func entityPath(name string) string {
 	return entityPrefix + url.PathEscape(name)
 }
 
-// DefaultBuildID returns a deterministic fingerprint for the current executable.
+// entityName reverses entityPath, returning false for non-entity archive paths.
+func entityName(archivePath string) (string, bool) {
+	if !strings.HasPrefix(archivePath, entityPrefix) {
+		return "", false
+	}
+
+	name, err := url.PathUnescape(strings.TrimPrefix(archivePath, entityPrefix))
+	if err != nil {
+		return "", false
+	}
+	return name, true
+}
+
+// defaultBuildID returns a deterministic fingerprint for the current executable.
 // It is intentionally process-local: checkpoints are expected to be restored by
 // the same binary that produced them.
-func DefaultBuildID() string {
+func defaultBuildID() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return hashStrings("unknown-build-info")
@@ -86,9 +100,9 @@ func hashStrings(parts ...string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// WriteArchive atomically writes a checkpoint archive: the build identity
+// writeArchive atomically writes a checkpoint archive: the build identity
 // followed by entity payloads sorted by name.
-func WriteArchive(path, buildID string, entries []ArchiveEntry) error {
+func writeArchive(path, buildID string, entries []archiveEntry) error {
 	if buildID == "" {
 		return errors.New("checkpoint: build ID is required")
 	}
@@ -106,7 +120,7 @@ func WriteArchive(path, buildID string, entries []ArchiveEntry) error {
 		}
 	}()
 
-	err = writeArchive(file, buildID, entries)
+	err = writeArchiveStream(file, buildID, entries)
 	closeErr := file.Close()
 	if err != nil {
 		return err
@@ -123,7 +137,7 @@ func WriteArchive(path, buildID string, entries []ArchiveEntry) error {
 	return nil
 }
 
-func writeArchive(w io.Writer, buildID string, entries []ArchiveEntry) error {
+func writeArchiveStream(w io.Writer, buildID string, entries []archiveEntry) error {
 	gz := gzip.NewWriter(w)
 	gz.ModTime = time.Unix(0, 0)
 
@@ -133,19 +147,19 @@ func writeArchive(w io.Writer, buildID string, entries []ArchiveEntry) error {
 		return err
 	}
 
-	sorted := append([]ArchiveEntry(nil), entries...)
+	sorted := append([]archiveEntry(nil), entries...)
 	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Name < sorted[j].Name
+		return sorted[i].name < sorted[j].name
 	})
 
 	seen := map[string]struct{}{}
 	for _, entry := range sorted {
-		if _, dup := seen[entry.Name]; dup {
-			return fmt.Errorf("checkpoint: duplicate entity %q", entry.Name)
+		if _, dup := seen[entry.name]; dup {
+			return fmt.Errorf("checkpoint: duplicate entity %q", entry.name)
 		}
-		seen[entry.Name] = struct{}{}
+		seen[entry.name] = struct{}{}
 
-		if err := writeTarEntry(tw, EntityPath(entry.Name), entry.Data); err != nil {
+		if err := writeTarEntry(tw, entityPath(entry.name), entry.data); err != nil {
 			return err
 		}
 	}
@@ -171,19 +185,19 @@ func writeTarEntry(tw *tar.Writer, path string, data []byte) error {
 	return err
 }
 
-// ReadArchive reads a checkpoint archive, returning the build identity and the
+// readArchive reads a checkpoint archive, returning the build identity and the
 // entity payloads keyed by entity name. Unknown archive entries are rejected.
-func ReadArchive(path string) (string, map[string][]byte, error) {
+func readArchive(path string) (string, map[string][]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return "", nil, err
 	}
 	defer file.Close()
 
-	return readArchive(file)
+	return readArchiveStream(file)
 }
 
-func readArchive(r io.Reader) (string, map[string][]byte, error) {
+func readArchiveStream(r io.Reader) (string, map[string][]byte, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return "", nil, err
@@ -241,16 +255,4 @@ func readArchive(r io.Reader) (string, map[string][]byte, error) {
 	}
 
 	return buildID, payloads, nil
-}
-
-func entityName(archivePath string) (string, bool) {
-	if !strings.HasPrefix(archivePath, entityPrefix) {
-		return "", false
-	}
-
-	name, err := url.PathUnescape(strings.TrimPrefix(archivePath, entityPrefix))
-	if err != nil {
-		return "", false
-	}
-	return name, true
 }

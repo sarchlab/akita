@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sarchlab/akita/v5/checkpoint"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -24,11 +23,11 @@ type testResource struct {
 
 // dummyPayloads builds one placeholder archive entry per registered entity, so
 // coverage passes and the foundation's "no serializer" path can be exercised.
-func dummyPayloads(s *Simulation) []checkpoint.ArchiveEntry {
-	entries := make([]checkpoint.ArchiveEntry, 0, len(s.entities))
+func dummyPayloads(s *Simulation) []archiveEntry {
+	entries := make([]archiveEntry, 0, len(s.entities))
 	for _, entity := range s.entities {
 		entries = append(entries,
-			checkpoint.ArchiveEntry{Name: entity.Name(), Data: []byte("{}")})
+			archiveEntry{name: entity.Name(), data: []byte("{}")})
 	}
 	return entries
 }
@@ -324,7 +323,7 @@ var _ = Describe("Simulation", func() {
 		It("should reject a checkpoint from a different build", func() {
 			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
 
-			err := checkpoint.WriteArchive(path, "other-build", dummyPayloads(simulation))
+			err := writeArchive(path, "other-build", dummyPayloads(simulation))
 			Expect(err).ToNot(HaveOccurred())
 
 			err = simulation.LoadCheckpoint(path, "test-build")
@@ -335,16 +334,16 @@ var _ = Describe("Simulation", func() {
 		It("should reject when a rebuilt entity is missing from the checkpoint", func() {
 			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
 
-			entries := []checkpoint.ArchiveEntry{}
+			entries := []archiveEntry{}
 			for _, entity := range simulation.entities {
 				if entity.Name() == "IDGenerator" {
 					continue
 				}
 				entries = append(entries,
-					checkpoint.ArchiveEntry{Name: entity.Name(), Data: []byte("{}")})
+					archiveEntry{name: entity.Name(), data: []byte("{}")})
 			}
 
-			err := checkpoint.WriteArchive(path, "test-build", entries)
+			err := writeArchive(path, "test-build", entries)
 			Expect(err).ToNot(HaveOccurred())
 
 			err = simulation.LoadCheckpoint(path, "test-build")
