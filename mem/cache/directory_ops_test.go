@@ -110,6 +110,37 @@ func TestDirectoryFindVictim_AfterVisit(t *testing.T) {
 	}
 }
 
+func TestDirectoryFindVictim_SkipsLocked(t *testing.T) {
+	var ds DirectoryState
+	DirectoryReset(&ds, 4, 4, 64)
+
+	// LRUOrder starts [0,1,2,3]. Lock way 0, busy-read way 1.
+	ds.Sets[1].Blocks[0].IsLocked = true
+	ds.Sets[1].Blocks[1].ReadCount = 1
+
+	_, wayID := DirectoryFindVictim(&ds, 4, 64, 64)
+
+	if wayID != 2 {
+		t.Errorf("wayID: got %d, want 2 (first unlocked/idle way)", wayID)
+	}
+}
+
+func TestDirectoryFindVictim_AllBusyFallsBackToLRU(t *testing.T) {
+	var ds DirectoryState
+	DirectoryReset(&ds, 4, 2, 64)
+
+	// Every way busy — caller still gets LRUOrder[0] so it can stall.
+	ds.Sets[1].Blocks[0].IsLocked = true
+	ds.Sets[1].Blocks[1].ReadCount = 1
+
+	_, wayID := DirectoryFindVictim(&ds, 4, 64, 64)
+
+	if wayID != ds.Sets[1].LRUOrder[0] {
+		t.Errorf("wayID: got %d, want %d (LRU fallback)",
+			wayID, ds.Sets[1].LRUOrder[0])
+	}
+}
+
 func TestDirectoryVisit(t *testing.T) {
 	var ds DirectoryState
 	DirectoryReset(&ds, 2, 4, 64)

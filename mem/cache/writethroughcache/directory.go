@@ -206,11 +206,17 @@ func (d *directory) processWrite(trans *transactionState, transIdx int) bool {
 
 func (d *directory) writeBottom(trans *transactionState) bool {
 	addr := trans.WriteAddress
+	spec := d.cache.comp.Spec()
+	blockSize := uint64(1 << spec.Log2BlockSize)
+	cacheLineID := addr / blockSize * blockSize
 
 	writeToBottom := &mem.WriteReq{}
 	writeToBottom.ID = timing.GetIDGenerator().Generate()
 	writeToBottom.Src = d.cache.bottomPort.AsRemote()
-	writeToBottom.Dst = d.cache.findPort(addr)
+	// Route by cache-line ID so the write-through write and the
+	// corresponding read-fill always target the same lower-memory port,
+	// preserving per-line ordering.
+	writeToBottom.Dst = d.cache.findPort(cacheLineID)
 	writeToBottom.Address = addr
 	writeToBottom.PID = trans.WritePID
 	writeToBottom.Data = trans.WriteData
