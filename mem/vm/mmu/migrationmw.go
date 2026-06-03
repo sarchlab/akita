@@ -70,12 +70,12 @@ func (m *migrationMW) sendMigrationToDriver() (madeProgress bool) {
 		return false
 	}
 
-	migrationReq := m.createMigrationRequest(trans, page)
-
-	err := m.migrationPort().Send(migrationReq)
-	if err != nil {
+	if !m.migrationPort().CanSend() {
 		return false
 	}
+
+	migrationReq := m.createMigrationRequest(trans, page)
+	m.migrationPort().Send(migrationReq)
 
 	trans.Page.IsMigrating = true
 	m.pageTable().Update(trans.Page)

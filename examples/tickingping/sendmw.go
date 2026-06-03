@@ -47,10 +47,11 @@ func (m *sendMW) sendRsp() bool {
 		SeqID: trans.SeqID,
 	}
 
-	err := outPort(m.comp).Send(rsp)
-	if err != nil {
+	if !outPort(m.comp).CanSend() {
 		return false
 	}
+
+	outPort(m.comp).Send(rsp)
 
 	state.CurrentTransactions = state.CurrentTransactions[1:]
 
@@ -73,10 +74,11 @@ func (m *sendMW) sendPing() bool {
 		SeqID: state.NextSeqID,
 	}
 
-	err := outPort(m.comp).Send(pingMsg)
-	if err != nil {
+	if !outPort(m.comp).CanSend() {
 		return false
 	}
+
+	outPort(m.comp).Send(pingMsg)
 
 	state.StartTimes = append(state.StartTimes, uint64(m.comp.CurrentTime()))
 	state.NumPingNeedToSend--

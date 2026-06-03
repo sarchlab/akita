@@ -118,10 +118,11 @@ func (m *middleware) forwardMany(port messaging.Port) bool {
 		}
 		dst := head.Meta().Dst
 		dstPort := m.ports.getPortByName(dst)
-		err := dstPort.Deliver(head)
-		if err != nil {
+		if !dstPort.CanDeliver() {
 			break
 		}
+
+		dstPort.Deliver(head)
 		madeProgress = true
 		port.RetrieveOutgoing()
 	}

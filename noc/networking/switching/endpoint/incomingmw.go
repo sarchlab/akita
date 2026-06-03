@@ -148,10 +148,11 @@ func (m *incomingMW) tryDeliver() bool {
 			TrafficBytes: meta.TrafficBytes,
 		}
 
-		err := dstPort.Deliver(msg)
-		if err != nil {
+		if !dstPort.CanDeliver() {
 			break
 		}
+
+		dstPort.Deliver(msg)
 
 		m.logMsgE2ETask(msg, true)
 

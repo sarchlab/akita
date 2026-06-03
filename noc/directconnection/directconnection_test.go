@@ -76,12 +76,14 @@ var _ = Describe("DirectConnection", func() {
 		port1.EXPECT().PeekOutgoing().Return(msg1)
 		port1.EXPECT().PeekOutgoing().Return(nil)
 		port1.EXPECT().RetrieveOutgoing().Return(msg1)
-		port1.EXPECT().Deliver(msg2).Return(nil)
+		port1.EXPECT().CanDeliver().Return(true)
+		port1.EXPECT().Deliver(msg2)
 
 		port2.EXPECT().PeekOutgoing().Return(msg2)
 		port2.EXPECT().PeekOutgoing().Return(nil)
 		port2.EXPECT().RetrieveOutgoing().Return(msg2)
-		port2.EXPECT().Deliver(msg1).Return(nil)
+		port2.EXPECT().CanDeliver().Return(true)
+		port2.EXPECT().Deliver(msg1)
 
 		engine.EXPECT().
 			Schedule(gomock.Any()).
@@ -101,7 +103,7 @@ var _ = Describe("DirectConnection", func() {
 		msg.Dst = port2.AsRemote()
 
 		port1.EXPECT().PeekOutgoing().Return(msg)
-		port2.EXPECT().Deliver(msg).Return(messaging.NewSendError())
+		port2.EXPECT().CanDeliver().Return(false)
 		port2.EXPECT().PeekOutgoing().Return(nil)
 
 		connection.Handle(tick)
@@ -135,12 +137,10 @@ func (a *agent) Tick() bool {
 		madeProgress = true
 	}
 
-	if len(a.msgsOut) > 0 {
-		err := a.OutPort.Send(a.msgsOut[0])
-		if err == nil {
-			madeProgress = true
-			a.msgsOut = a.msgsOut[1:]
-		}
+	if len(a.msgsOut) > 0 && a.OutPort.CanSend() {
+		a.OutPort.Send(a.msgsOut[0])
+		madeProgress = true
+		a.msgsOut = a.msgsOut[1:]
 	}
 
 	return madeProgress

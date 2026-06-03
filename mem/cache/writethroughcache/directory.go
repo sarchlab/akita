@@ -218,10 +218,11 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 	writeToBottom.TrafficBytes = len(trans.WriteData) + 12
 	writeToBottom.TrafficClass = "req"
 
-	err := d.cache.bottomPort.Send(writeToBottom)
-	if err != nil {
+	if !d.cache.bottomPort.CanSend() {
 		return false
 	}
+
+	d.cache.bottomPort.Send(writeToBottom)
 
 	trans.HasWriteToBottom = true
 	trans.WriteToBottomMeta = writeToBottom.MsgMeta
@@ -257,10 +258,11 @@ func (d *directory) fetchFromBottom(
 	readToBottom.Dst = bottomModule
 	readToBottom.TrafficBytes, readToBottom.TrafficClass = 12, "req"
 
-	err := d.cache.bottomPort.Send(readToBottom)
-	if err != nil {
+	if !d.cache.bottomPort.CanSend() {
 		return false
 	}
+
+	d.cache.bottomPort.Send(readToBottom)
 
 	tracing.TraceReqInitiate(readToBottom, d.cache.comp, trans.ID)
 
