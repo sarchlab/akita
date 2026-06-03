@@ -1,6 +1,9 @@
 package timing
 
-import "sync"
+import (
+	"sort"
+	"sync"
+)
 
 // EventQueue is a queue of events ordered by event time.
 type EventQueue interface {
@@ -145,6 +148,29 @@ func (q *unsafeEventQueue) Len() int {
 // Peek returns the event in front of the queue without removing it.
 func (q *unsafeEventQueue) Peek() Event {
 	return q.events[0].event
+}
+
+// snapshot returns the queue's events in pop order — by time, then schedule
+// order — without modifying the queue. Used to checkpoint the queue.
+func (q *unsafeEventQueue) snapshot() []Event {
+	sorted := append(eventHeap(nil), q.events...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted.less(i, j) })
+
+	out := make([]Event, len(sorted))
+	for i := range sorted {
+		out[i] = sorted[i].event
+	}
+
+	return out
+}
+
+// restore pushes events as if freshly scheduled, re-assigning sequence numbers
+// in input order. Given events in pop order, this reproduces the original
+// (time, seq) ordering. The queue should be empty.
+func (q *unsafeEventQueue) restore(events []Event) {
+	for _, e := range events {
+		q.Push(e)
+	}
 }
 
 // popHeap removes and returns the earliest event from the heap.
