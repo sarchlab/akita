@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -61,5 +62,51 @@ func TestComponentCheckpointSpecMismatch(t *testing.T) {
 	err := dst.LoadCheckpoint(&buf)
 	if err == nil || !strings.Contains(err.Error(), "spec hash mismatch") {
 		t.Fatalf("expected spec hash mismatch, got %v", err)
+	}
+}
+
+type bufSpec struct {
+	N int `json:"n"`
+}
+
+type bufState struct {
+	Items queueing.Buffer[int] `json:"items"`
+}
+
+func buildBufComp() *modeling.Component[bufSpec, bufState, modeling.None] {
+	c := modeling.NewBuilder[bufSpec, bufState, modeling.None]().
+		WithEngine(timing.NewSerialEngine()).
+		WithFreq(1 * timing.GHz).
+		WithSpec(bufSpec{N: 1}).
+		Build("C")
+	c.State.Items = queueing.NewBuffer[int]("items", 8)
+	return c
+}
+
+// TestComponentCheckpointPreservesStateBuffer proves that a queueing.Buffer held
+// in a component's State round-trips through the component serializer. Before
+// queueing gained MarshalJSON/UnmarshalJSON this dropped the contents silently.
+func TestComponentCheckpointPreservesStateBuffer(t *testing.T) {
+	src := buildBufComp()
+	src.State.Items.PushTyped(7)
+	src.State.Items.PushTyped(8)
+
+	var buf bytes.Buffer
+	if err := src.SaveCheckpoint(&buf); err != nil {
+		t.Fatalf("SaveCheckpoint: %v", err)
+	}
+
+	dst := buildBufComp()
+	if err := dst.LoadCheckpoint(&buf); err != nil {
+		t.Fatalf("LoadCheckpoint: %v", err)
+	}
+
+	if dst.State.Items.Size() != 2 {
+		t.Fatalf("restored buffer size = %d, want 2", dst.State.Items.Size())
+	}
+	for _, want := range []int{7, 8} {
+		if got := dst.State.Items.Pop(); got != want {
+			t.Fatalf("Pop = %d, want %d", got, want)
+		}
 	}
 }
