@@ -18,7 +18,18 @@ type EventProcessor[S any, T any, R any] interface {
 // TimerFiredEvent is the event scheduled by EventDrivenComponent to wake
 // itself up at a future time.
 type TimerFiredEvent struct {
-	*timing.EventBase
+	timing.EventBase
+}
+
+// MakeTimerFiredEvent creates a new TimerFiredEvent.
+func MakeTimerFiredEvent(handlerID string, time timing.VTimeInSec) TimerFiredEvent {
+	evt := TimerFiredEvent{}
+	evt.ID = timing.GetIDGenerator().Generate()
+	evt.HandlerID_ = handlerID
+	evt.Time_ = time
+	evt.Secondary = false
+
+	return evt
 }
 
 // EventDrivenComponent is a generic component that reacts to events rather
@@ -72,10 +83,7 @@ func (c *EventDrivenComponent[S, T, R]) ScheduleWakeAt(t timing.VTimeInSec) {
 
 	c.pendingWakeup = t
 
-	evt := &TimerFiredEvent{
-		EventBase: timing.NewEventBase(t, c.Name()),
-	}
-	c.engine.Schedule(evt)
+	c.engine.Schedule(MakeTimerFiredEvent(c.Name(), t))
 }
 
 // ScheduleWakeNow schedules a wakeup at the current engine time.

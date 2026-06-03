@@ -26,7 +26,7 @@ func (m *receivePipelineMW) Tick() bool {
 }
 
 func (m *receivePipelineMW) flitParentTaskID(flit *packetization.Flit) uint64 {
-	return flit.MsgMeta.SendTaskID
+	return flit.MsgMeta.ID
 }
 
 func (m *receivePipelineMW) startProcessing() (madeProgress bool) {

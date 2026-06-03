@@ -54,7 +54,7 @@ func (m *walkMW) parseFromTop() bool {
 
 	switch req := reqI.(type) {
 	case *vm.TranslationReq:
-		tracing.TraceReqReceive(req, m.comp) // sets RecvTaskID
+		tracing.TraceReqReceive(req, m.comp)
 		m.startWalking(req)
 	default:
 		log.Panicf("gmmu cannot handle request of type %s",
@@ -70,7 +70,7 @@ func (m *walkMW) startWalking(req *vm.TranslationReq) {
 
 	ts := transactionState{
 		ReqID:      req.ID,
-		RecvTaskID: req.RecvTaskID,
+		RecvTaskID: tracing.MsgIDAtReceiver(req, m.comp),
 		ReqSrc:     req.Src,
 		ReqDst:     req.Dst,
 		PID:        uint64(req.PID),
@@ -211,10 +211,9 @@ func (m *walkMW) doPageWalkHit(
 	tracing.TraceReqComplete(
 		&vm.TranslationReq{
 			MsgMeta: messaging.MsgMeta{
-				ID:         walking.ReqID,
-				Src:        walking.ReqSrc,
-				Dst:        walking.ReqDst,
-				RecvTaskID: walking.RecvTaskID,
+				ID:  walking.ReqID,
+				Src: walking.ReqSrc,
+				Dst: walking.ReqDst,
 			},
 		},
 		m.comp,

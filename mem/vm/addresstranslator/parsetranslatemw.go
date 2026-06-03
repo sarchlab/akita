@@ -86,15 +86,11 @@ func (m *parseTranslateMW) translate() bool {
 		tracing.MsgIDAtReceiver(itemI, m.comp),
 	)
 
-	// Update incoming state with recv task ID after tracing
-	incoming.RecvTaskID = itemI.(messaging.Msg).Meta().RecvTaskID
-
 	trans := transactionState{
-		IncomingReqs:             []incomingReqState{incoming},
-		TranslationReqID:         transReq.ID,
-		TranslationReqSendTaskID: transReq.SendTaskID,
-		TranslationReqSrc:        transReq.Src,
-		TranslationReqDst:        transReq.Dst,
+		IncomingReqs:      []incomingReqState{incoming},
+		TranslationReqID:  transReq.ID,
+		TranslationReqSrc: transReq.Src,
+		TranslationReqDst: transReq.Dst,
 	}
 	nextState.Transactions = append(nextState.Transactions, trans)
 

@@ -55,8 +55,9 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 	return madeProgress
 }
 
-func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransaction {
+func (m *memMiddleware) msgToInflightTransaction(msg messaging.Msg) inflightTransaction {
 	spec := m.comp.Spec()
+	recvTaskID := tracing.MsgIDAtReceiver(msg, m.comp)
 
 	switch payload := msg.(type) {
 	case *mem.ReadReq:
@@ -65,7 +66,7 @@ func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransa
 			Address:        payload.Address,
 			AccessByteSize: payload.AccessByteSize,
 			ReqID:          payload.ID,
-			RecvTaskID:     payload.RecvTaskID,
+			RecvTaskID:     recvTaskID,
 			IsRead:         true,
 			Src:            payload.Src,
 		}
@@ -75,7 +76,7 @@ func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransa
 			Address:        payload.Address,
 			AccessByteSize: uint64(len(payload.Data)),
 			ReqID:          payload.ID,
-			RecvTaskID:     payload.RecvTaskID,
+			RecvTaskID:     recvTaskID,
 			IsRead:         false,
 			Data:           payload.Data,
 			DirtyMask:      payload.DirtyMask,

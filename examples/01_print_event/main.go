@@ -26,9 +26,7 @@ func main() {
 		registrar.RegisterHandler("printer", handler)
 	}
 
-	evt := timing.NewEventBase(1, "printer")
-
-	engine.Schedule(evt)
+	engine.Schedule(timing.MakeEventBase(1, "printer"))
 
 	err := engine.Run()
 	if err != nil {

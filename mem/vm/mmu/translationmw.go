@@ -205,7 +205,7 @@ func (m *translationMW) startWalking(req *vm.TranslationReq) {
 
 	ts := transactionState{
 		ReqID:        req.ID,
-		RecvTaskID:   req.RecvTaskID,
+		RecvTaskID:   tracing.MsgIDAtReceiver(req, m.comp),
 		ReqSrc:       req.Src,
 		ReqDst:       req.Dst,
 		PID:          uint32(req.PID),
