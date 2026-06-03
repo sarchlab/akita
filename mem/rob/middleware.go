@@ -81,7 +81,7 @@ func (m *middleware) topDown() bool {
 
 	req, ok := msg.(mem.AccessReq)
 	if !ok {
-		return false
+		panic("rob: unsupported top-port message type")
 	}
 
 	shadow, isRead := m.buildShadowReq(req)
@@ -116,29 +116,36 @@ func (m *middleware) parseBottom() bool {
 		return false
 	}
 
-	rsp, ok := msg.(mem.AccessRsp)
-	if !ok {
+	switch dataRsp := msg.(type) {
+	case *mem.DataReadyRsp:
+		idx := m.findTransactionByBottomID(dataRsp.RspTo)
+		m.bottomPort().RetrieveIncoming()
+
+		if idx < 0 {
+			return true
+		}
+
+		trans := &m.comp.State.Transactions[idx]
+		trans.HasRsp = true
+		trans.RspData = dataRsp.Data
+		tracing.TraceReqFinalize(m.shadowReqTraceMsg(*trans), m.comp)
+		return true
+	case *mem.WriteDoneRsp:
+		idx := m.findTransactionByBottomID(dataRsp.RspTo)
+		m.bottomPort().RetrieveIncoming()
+
+		if idx < 0 {
+			return true
+		}
+
+		trans := &m.comp.State.Transactions[idx]
+		trans.HasRsp = true
+		tracing.TraceReqFinalize(m.shadowReqTraceMsg(*trans), m.comp)
+		return true
+	default:
 		m.bottomPort().RetrieveIncoming()
 		return true
 	}
-
-	rspTo := rsp.Meta().RspTo
-	idx := m.findTransactionByBottomID(rspTo)
-	m.bottomPort().RetrieveIncoming()
-
-	if idx < 0 {
-		return true
-	}
-
-	trans := &m.comp.State.Transactions[idx]
-	trans.HasRsp = true
-	if data, isData := rsp.(*mem.DataReadyRsp); isData {
-		trans.RspData = data.Data
-	}
-
-	tracing.TraceReqFinalize(m.shadowReqTraceMsg(*trans), m.comp)
-
-	return true
 }
 
 // bottomUp releases the head-of-line transaction once its bottom-unit response

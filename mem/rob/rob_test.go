@@ -169,6 +169,17 @@ var _ = Describe("Reorder Buffer", func() {
 			Expect(rob.State.Transactions).To(BeEmpty())
 			Expect(topPort.PeekIncoming()).ToNot(BeNil())
 		})
+
+		It("panics on unsupported top-port traffic", func() {
+			req := &mem.ControlReq{Command: mem.CmdFlush}
+			req.ID = timing.GetIDGenerator().Generate()
+			req.Src = topRemote
+			req.Dst = topPort.AsRemote()
+			req.TrafficClass = "mem.ControlReq"
+			Expect(topPort.Deliver(req)).To(BeNil())
+
+			Expect(func() { rob.Tick() }).To(Panic())
+		})
 	})
 
 	Context("parse bottom", func() {
@@ -208,6 +219,21 @@ var _ = Describe("Reorder Buffer", func() {
 			rob.Tick()
 
 			Expect(bottomPort.PeekIncoming()).To(BeNil())
+		})
+
+		It("drops unsupported bottom-port traffic", func() {
+			req := &mem.ControlReq{Command: mem.CmdFlush}
+			req.ID = timing.GetIDGenerator().Generate()
+			req.Src = bottomUnitRemote
+			req.Dst = bottomPort.AsRemote()
+			req.TrafficClass = "mem.ControlReq"
+			Expect(bottomPort.Deliver(req)).To(BeNil())
+
+			progress := rob.Tick()
+
+			Expect(progress).To(BeTrue())
+			Expect(bottomPort.PeekIncoming()).To(BeNil())
+			Expect(rob.State.Transactions).To(BeEmpty())
 		})
 	})
 

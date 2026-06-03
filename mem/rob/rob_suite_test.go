@@ -1,4 +1,4 @@
-package rob_test
+package rob
 
 import (
 	"testing"
