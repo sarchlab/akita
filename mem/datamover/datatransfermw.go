@@ -127,10 +127,11 @@ func (m *dataTransferMW) readFromSrc() bool {
 	req.TrafficBytes = 12
 	req.TrafficClass = "mem.ReadReq"
 
-	err := srcP.Send(req)
-	if err != nil {
+	if !srcP.CanSend() {
 		return false
 	}
+
+	srcP.Send(req)
 
 	trans.NextReadAddr += state.SrcByteGranularity
 	trans.PendingRead[req.ID] = pendingReadState{
@@ -214,10 +215,11 @@ func (m *dataTransferMW) writeToDst() bool {
 	req.TrafficBytes = len(data) + 12
 	req.TrafficClass = "mem.WriteReq"
 
-	err := dstP.Send(req)
-	if err != nil {
+	if !dstP.CanSend() {
 		return false
 	}
+
+	dstP.Send(req)
 
 	trans.NextWriteAddr += state.DstByteGranularity
 	trans.PendingWrite[req.ID] = pendingWriteState{

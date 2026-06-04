@@ -77,6 +77,7 @@ var _ = Describe("End Point", func() {
 		madeProgress := endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
+		networkPort.EXPECT().CanSend().Return(true)
 		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
 			flit := msg.(*packetization.Flit)
 			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
@@ -89,6 +90,7 @@ var _ = Describe("End Point", func() {
 		madeProgress = endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
+		networkPort.EXPECT().CanSend().Return(true)
 		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
 			flit := msg.(*packetization.Flit)
 			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
@@ -129,6 +131,7 @@ var _ = Describe("End Point", func() {
 		networkPort.EXPECT().PeekIncoming().Return(flit1)
 		networkPort.EXPECT().PeekIncoming().Return(nil).Times(3)
 		networkPort.EXPECT().RetrieveIncoming().Times(2)
+		devicePort.EXPECT().CanDeliver().Return(true)
 		devicePort.EXPECT().Deliver(msg)
 		devicePort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 

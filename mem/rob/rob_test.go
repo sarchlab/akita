@@ -160,7 +160,8 @@ var _ = Describe("Reorder Buffer", func() {
 				filler.Src = bottomPort.AsRemote()
 				filler.Dst = bottomUnitRemote
 				filler.TrafficClass = "mem.ReadReq"
-				Expect(bottomPort.Send(filler)).To(BeNil())
+				Expect(bottomPort.CanSend()).To(BeTrue())
+				bottomPort.Send(filler)
 			}
 
 			progress := rob.Tick()
@@ -176,7 +177,7 @@ var _ = Describe("Reorder Buffer", func() {
 			req.Src = topRemote
 			req.Dst = topPort.AsRemote()
 			req.TrafficClass = "mem.ControlReq"
-			Expect(topPort.Deliver(req)).To(BeNil())
+			topPort.Deliver(req)
 
 			Expect(func() { rob.Tick() }).To(Panic())
 		})
@@ -197,7 +198,7 @@ var _ = Describe("Reorder Buffer", func() {
 			rsp.Dst = bottomPort.AsRemote()
 			rsp.RspTo = shadowID
 			rsp.TrafficClass = "mem.WriteDoneRsp"
-			Expect(bottomPort.Deliver(rsp)).To(BeNil())
+			bottomPort.Deliver(rsp)
 
 			rob.Tick()
 
@@ -214,7 +215,7 @@ var _ = Describe("Reorder Buffer", func() {
 			rsp.Dst = bottomPort.AsRemote()
 			rsp.RspTo = 999999
 			rsp.TrafficClass = "mem.WriteDoneRsp"
-			Expect(bottomPort.Deliver(rsp)).To(BeNil())
+			bottomPort.Deliver(rsp)
 
 			rob.Tick()
 
@@ -227,7 +228,7 @@ var _ = Describe("Reorder Buffer", func() {
 			req.Src = bottomUnitRemote
 			req.Dst = bottomPort.AsRemote()
 			req.TrafficClass = "mem.ControlReq"
-			Expect(bottomPort.Deliver(req)).To(BeNil())
+			bottomPort.Deliver(req)
 
 			progress := rob.Tick()
 
@@ -253,7 +254,7 @@ var _ = Describe("Reorder Buffer", func() {
 			rsp.Dst = bottomPort.AsRemote()
 			rsp.RspTo = shadowID
 			rsp.TrafficClass = "mem.DataReadyRsp"
-			Expect(bottomPort.Deliver(rsp)).To(BeNil())
+			bottomPort.Deliver(rsp)
 
 			rob.Tick() // parseBottom records the response
 			rob.Tick() // bottomUp drains the head
@@ -293,7 +294,7 @@ var _ = Describe("Reorder Buffer", func() {
 			rsp2.Dst = bottomPort.AsRemote()
 			rsp2.RspTo = shadow2
 			rsp2.TrafficClass = "mem.DataReadyRsp"
-			Expect(bottomPort.Deliver(rsp2)).To(BeNil())
+			bottomPort.Deliver(rsp2)
 
 			rob.Tick() // parseBottom records rsp2
 			rob.Tick() // bottomUp finds head not ready, makes no progress
@@ -311,7 +312,7 @@ var _ = Describe("Reorder Buffer", func() {
 			rsp1.Dst = bottomPort.AsRemote()
 			rsp1.RspTo = shadow1
 			rsp1.TrafficClass = "mem.DataReadyRsp"
-			Expect(bottomPort.Deliver(rsp1)).To(BeNil())
+			bottomPort.Deliver(rsp1)
 
 			rob.Tick() // parseBottom records rsp1
 			rob.Tick() // bottomUp drains both (NumReqPerCycle=2)
@@ -341,7 +342,7 @@ var _ = Describe("Reorder Buffer", func() {
 			rsp.Dst = bottomPort.AsRemote()
 			rsp.RspTo = shadowID
 			rsp.TrafficClass = "mem.DataReadyRsp"
-			Expect(bottomPort.Deliver(rsp)).To(BeNil())
+			bottomPort.Deliver(rsp)
 
 			rob.Tick() // parseBottom records the response
 
@@ -352,7 +353,8 @@ var _ = Describe("Reorder Buffer", func() {
 				filler.Src = topPort.AsRemote()
 				filler.Dst = topRemote
 				filler.TrafficClass = "mem.DataReadyRsp"
-				Expect(topPort.Send(filler)).To(BeNil())
+				Expect(topPort.CanSend()).To(BeTrue())
+				topPort.Send(filler)
 			}
 
 			rob.Tick()
@@ -380,7 +382,7 @@ var _ = Describe("Reorder Buffer", func() {
 			req.Src = messaging.RemotePort("Cmd")
 			req.Dst = ctrlPort.AsRemote()
 			req.TrafficClass = "mem.ControlReq"
-			Expect(ctrlPort.Deliver(req)).To(BeNil())
+			ctrlPort.Deliver(req)
 
 			rob.Tick()
 
@@ -417,14 +419,14 @@ var _ = Describe("Reorder Buffer", func() {
 			stray.Dst = bottomPort.AsRemote()
 			stray.RspTo = 0xDEAD
 			stray.TrafficClass = "mem.DataReadyRsp"
-			Expect(bottomPort.Deliver(stray)).To(BeNil())
+			bottomPort.Deliver(stray)
 
 			req := &mem.ControlReq{Command: mem.CmdEnable}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.Src = messaging.RemotePort("Cmd")
 			req.Dst = ctrlPort.AsRemote()
 			req.TrafficClass = "mem.ControlReq"
-			Expect(ctrlPort.Deliver(req)).To(BeNil())
+			ctrlPort.Deliver(req)
 
 			rob.Tick()
 

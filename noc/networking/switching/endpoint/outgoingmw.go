@@ -87,11 +87,13 @@ func (m *outgoingMW) sendFlitOut() bool {
 
 		flit := &state.FlitsToSend[numSent]
 
-		err := m.networkPort.Send(flit)
-		if err == nil {
-			numSent++
-			madeProgress = true
+		if !m.networkPort.CanSend() {
+			break
 		}
+
+		m.networkPort.Send(flit)
+		numSent++
+		madeProgress = true
 	}
 
 	if numSent > 0 {

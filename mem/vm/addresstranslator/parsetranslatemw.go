@@ -70,10 +70,11 @@ func (m *parseTranslateMW) translate() bool {
 	transReq.DeviceID = spec.DeviceID
 	transReq.TrafficClass = "vm.TranslationReq"
 
-	err := m.translationPort().Send(transReq)
-	if err != nil {
+	if !m.translationPort().CanSend() {
 		return false
 	}
+
+	m.translationPort().Send(transReq)
 
 	incoming := msgToIncomingReqState(itemI)
 
@@ -129,10 +130,11 @@ func (m *parseTranslateMW) handleFlushReq(msg *mem.ControlReq) bool {
 	rsp.TrafficBytes = 4
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := m.ctrlPort().Send(rsp)
-	if err != nil {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
+
+	m.ctrlPort().Send(rsp)
 
 	m.ctrlPort().RetrieveIncoming()
 
@@ -152,11 +154,11 @@ func (m *parseTranslateMW) handleRestartReq(msg *mem.ControlReq) bool {
 	rsp.TrafficBytes = 4
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := m.ctrlPort().Send(rsp)
-
-	if err != nil {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
+
+	m.ctrlPort().Send(rsp)
 
 	for m.topPort().RetrieveIncoming() != nil {
 	}

@@ -537,7 +537,9 @@ type transactionState struct {
     req.Address = trans.ReadAddress
     req.AccessByteSize = trans.ReadAccessByteSize
     req.PID = trans.ReadToBottomPID
-    err := bottomPort.Send(req)
+    if bottomPort.CanSend() {
+        bottomPort.Send(req)
+    }
     ```
 
 4. **`sim.MsgMeta` is a value type**, not a pointer — it is safe to store
@@ -694,6 +696,10 @@ func (m *sendMW) sendRsp() bool {
         return false
     }
 
+    if !outPort(m.comp).CanSend() {
+        return false
+    }
+
     rsp := &PingRsp{
         MsgMeta: sim.MsgMeta{
             ID:    sim.GetIDGenerator().Generate(),
@@ -704,10 +710,7 @@ func (m *sendMW) sendRsp() bool {
         SeqID: trans.SeqID,
     }
 
-    err := outPort(m.comp).Send(rsp)
-    if err != nil {
-        return false
-    }
+    outPort(m.comp).Send(rsp)
 
     state.CurrentTransactions = state.CurrentTransactions[1:]
 
@@ -1184,6 +1187,10 @@ func (m *sendMW) sendPing() bool {
         return false
     }
 
+    if !outPort(m.comp).CanSend() {
+        return false
+    }
+
     pingMsg := &PingReq{
         MsgMeta: sim.MsgMeta{
             ID:  sim.GetIDGenerator().Generate(),
@@ -1193,10 +1200,7 @@ func (m *sendMW) sendPing() bool {
         SeqID: state.NextSeqID,
     }
 
-    err := outPort(m.comp).Send(pingMsg)
-    if err != nil {
-        return false
-    }
+    outPort(m.comp).Send(pingMsg)
 
     state.StartTimes = append(state.StartTimes, uint64(m.comp.CurrentTime()))
     state.NumPingNeedToSend--
@@ -1690,10 +1694,11 @@ func (m *ctrlMiddleware) handleDrainState() bool {
     rsp.RspTo = state.CurrentCmdID
     rsp.TrafficClass = "mem.ControlRsp"
 
-    err := m.ctrlPort().Send(rsp)
-    if err != nil {
+    if !m.ctrlPort().CanSend() {
         return false
     }
+
+    m.ctrlPort().Send(rsp)
 
     state.CurrentState = "pause"
 

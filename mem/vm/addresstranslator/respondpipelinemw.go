@@ -70,10 +70,11 @@ func (m *respondPipelineMW) parseTranslation() bool {
 		spec.Log2PageSize, m.bottomPort().AsRemote(),
 		m.comp.Resources().MemProviderMapper)
 
-	err := m.bottomPort().Send(translatedReq)
-	if err != nil {
+	if !m.bottomPort().CanSend() {
 		return false
 	}
+
+	m.bottomPort().Send(translatedReq)
 
 	nextTrans = &nextState.Transactions[transIdx]
 	nextTrans.TranslationDone = true
@@ -209,10 +210,11 @@ func (m *respondPipelineMW) respond() bool {
 	}
 
 	if reqInBottom {
-		err := m.topPort().Send(rspToTop)
-		if err != nil {
+		if !m.topPort().CanSend() {
 			return false
 		}
+
+		m.topPort().Send(rspToTop)
 
 		fakeFromTop := restoreMemMsg(
 			reqFromTopState.ReqFromTopID,

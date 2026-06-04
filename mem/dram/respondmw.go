@@ -78,16 +78,16 @@ func (m *respondMW) finalizeWriteTrans(
 	writeDone.TrafficBytes = 4
 	writeDone.TrafficClass = "mem.WriteDoneRsp"
 
-	sendErr := m.topPort.Send(writeDone)
-	if sendErr == nil {
-		state.TotalWriteLatencyCycles += state.TickCount - t.ArrivalTick
-		state.BytesWritten += uint64(len(t.WriteMsg.Data))
-		state.CompletedWrites++
-		m.removeTransaction(state, i)
-		return true
+	if !m.topPort.CanSend() {
+		return false
 	}
 
-	return false
+	m.topPort.Send(writeDone)
+	state.TotalWriteLatencyCycles += state.TickCount - t.ArrivalTick
+	state.BytesWritten += uint64(len(t.WriteMsg.Data))
+	state.CompletedWrites++
+	m.removeTransaction(state, i)
+	return true
 }
 
 func (m *respondMW) finalizeReadTrans(
@@ -110,16 +110,16 @@ func (m *respondMW) finalizeReadTrans(
 	dataReady.TrafficBytes = len(data) + 4
 	dataReady.TrafficClass = "mem.DataReadyRsp"
 
-	sendErr := m.topPort.Send(dataReady)
-	if sendErr == nil {
-		state.TotalReadLatencyCycles += state.TickCount - t.ArrivalTick
-		state.BytesRead += t.ReadMsg.AccessByteSize
-		state.CompletedReads++
-		m.removeTransaction(state, i)
-		return true
+	if !m.topPort.CanSend() {
+		return false
 	}
 
-	return false
+	m.topPort.Send(dataReady)
+	state.TotalReadLatencyCycles += state.TickCount - t.ArrivalTick
+	state.BytesRead += t.ReadMsg.AccessByteSize
+	state.CompletedReads++
+	m.removeTransaction(state, i)
+	return true
 }
 
 // removeTransaction removes a transaction and remaps all references.

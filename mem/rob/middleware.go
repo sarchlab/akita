@@ -88,9 +88,11 @@ func (m *middleware) topDown() bool {
 	shadow.Meta().Src = m.bottomPort().AsRemote()
 	shadow.Meta().Dst = m.comp.Spec().BottomUnit
 
-	if err := m.bottomPort().Send(shadow); err != nil {
+	if !m.bottomPort().CanSend() {
 		return false
 	}
+
+	m.bottomPort().Send(shadow)
 
 	state.Transactions = append(state.Transactions, transactionState{
 		ReqFromTopID:  req.Meta().ID,
@@ -166,9 +168,11 @@ func (m *middleware) bottomUp() bool {
 	rsp.Meta().Dst = head.ReqFromTopSrc
 	rsp.Meta().RspTo = head.ReqFromTopID
 
-	if err := m.topPort().Send(rsp); err != nil {
+	if !m.topPort().CanSend() {
 		return false
 	}
+
+	m.topPort().Send(rsp)
 
 	state.Transactions = state.Transactions[1:]
 
@@ -304,9 +308,7 @@ func (m *middleware) handleFlush(req *mem.ControlReq) bool {
 	rsp.RspTo = req.ID
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	if err := m.ctrlPort().Send(rsp); err != nil {
-		return false
-	}
+	m.ctrlPort().Send(rsp)
 
 	state := &m.comp.State
 	state.Transactions = state.Transactions[:0]
@@ -329,9 +331,7 @@ func (m *middleware) handleEnable(req *mem.ControlReq) bool {
 	rsp.RspTo = req.ID
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	if err := m.ctrlPort().Send(rsp); err != nil {
-		return false
-	}
+	m.ctrlPort().Send(rsp)
 
 	state := &m.comp.State
 	state.Transactions = state.Transactions[:0]

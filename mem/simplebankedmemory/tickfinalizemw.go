@@ -95,9 +95,7 @@ func (m *tickFinalizeMW) finalizeRead(
 	rsp.TrafficBytes = len(item.ReadData) + 4
 	rsp.TrafficClass = "mem.DataReadyRsp"
 
-	if err := m.topPort().Send(rsp); err != nil {
-		return false
-	}
+	m.topPort().Send(rsp)
 
 	tracing.TraceReqComplete(&item.ReadMsg, m.comp)
 
@@ -157,9 +155,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 	rsp.TrafficBytes = 4
 	rsp.TrafficClass = "mem.WriteDoneRsp"
 
-	if err := m.topPort().Send(rsp); err != nil {
-		return false
-	}
+	m.topPort().Send(rsp)
 
 	tracing.TraceReqComplete(&item.WriteMsg, m.comp)
 

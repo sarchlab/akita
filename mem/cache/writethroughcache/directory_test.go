@@ -22,14 +22,15 @@ var _ = Describe("Directory", func() {
 	)
 
 	// fillBottomOutgoing pre-fills bottomPort's single outgoing slot so the
-	// next Send fails, simulating a busy port.
+	// next CanSend returns false, simulating a busy port.
 	fillBottomOutgoing := func() {
 		dummy := &mem.ReadReq{}
 		dummy.ID = timing.GetIDGenerator().Generate()
 		dummy.Src = bottomPort.AsRemote()
 		dummy.Dst = messaging.RemotePort("DRAM")
 		dummy.TrafficClass = "req"
-		Expect(bottomPort.Send(dummy)).To(BeNil())
+		Expect(bottomPort.CanSend()).To(BeTrue())
+		bottomPort.Send(dummy)
 	}
 
 	BeforeEach(func() {

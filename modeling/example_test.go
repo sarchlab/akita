@@ -119,10 +119,11 @@ func (m *pingMiddleware) sendRsp() bool {
 		SeqID: trans.req.SeqID,
 	}
 
-	err := m.outPort.Send(rsp)
-	if err != nil {
+	if !m.outPort.CanSend() {
 		return false
 	}
+
+	m.outPort.Send(rsp)
 
 	m.currentTransactions = m.currentTransactions[1:]
 	return true
@@ -143,10 +144,11 @@ func (m *pingMiddleware) sendPing() bool {
 		SeqID: state.NextSeqID,
 	}
 
-	err := m.outPort.Send(req)
-	if err != nil {
+	if !m.outPort.CanSend() {
 		return false
 	}
+
+	m.outPort.Send(req)
 
 	state.StartTimes = append(state.StartTimes, m.comp.CurrentTime())
 	state.NumPingNeedToSend--

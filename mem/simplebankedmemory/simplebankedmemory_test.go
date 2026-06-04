@@ -66,10 +66,11 @@ func (c *loopbackConnection) forward(src, dst messaging.Port) {
 			break
 		}
 
-		if err := dst.Deliver(msg); err != nil {
+		if !dst.CanDeliver() {
 			break
 		}
 
+		dst.Deliver(msg)
 		src.RetrieveOutgoing()
 	}
 }
@@ -121,8 +122,8 @@ func (a *testAgent) Handle(timing.Event) error {
 }
 
 func (a *testAgent) send(msg messaging.Msg) {
-	sendErr := a.port.Send(msg)
-	Expect(sendErr).To(BeNil())
+	Expect(a.port.CanSend()).To(BeTrue())
+	a.port.Send(msg)
 }
 
 type bandwidthAgent struct {
@@ -424,13 +425,12 @@ func Example() {
 			pendingReq = makeReadReq(srcRemote, dstRemote, requestsSent)
 		}
 
-		if pendingReq != nil {
-			if err := agent.port.Send(pendingReq); err == nil {
-				startCycles[pendingReq.ID] = cycles
-				requestsSent++
-				pendingReq = nil
-				conn.transfer()
-			}
+		if pendingReq != nil && agent.port.CanSend() {
+			agent.port.Send(pendingReq)
+			startCycles[pendingReq.ID] = cycles
+			requestsSent++
+			pendingReq = nil
+			conn.transfer()
 		}
 
 		memComp.Tick()

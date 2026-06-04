@@ -174,10 +174,11 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	rspToTop.RspTo = reqMsg.ID
 	rspToTop.TrafficClass = "vm.TranslationRsp"
 
-	err := m.topPort().Send(rspToTop)
-	if err != nil {
+	if !m.topPort().CanSend() {
 		return false
 	}
+
+	m.topPort().Send(rspToTop)
 
 	tracing.AddMilestone(
 		tracing.MsgIDAtReceiver(&reqMsg, m.comp),
@@ -290,17 +291,19 @@ func (m *tlbMiddleware) sendRspToTop(
 	rsp.RspTo = msg.ID
 	rsp.TrafficClass = "vm.TranslationRsp"
 
-	err := m.topPort().Send(rsp)
-	if err == nil {
-		tracing.AddMilestone(
-			tracing.MsgIDAtReceiver(msg, m.comp),
-			tracing.MilestoneKindNetworkBusy,
-			m.topPort().Name(),
-			m.comp.Name(),
-			m.comp,
-		)
+	if !m.topPort().CanSend() {
+		return false
 	}
-	return err == nil
+
+	m.topPort().Send(rsp)
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(msg, m.comp),
+		tracing.MilestoneKindNetworkBusy,
+		m.topPort().Name(),
+		m.comp.Name(),
+		m.comp,
+	)
+	return true
 }
 
 func (m *tlbMiddleware) processTLBMSHRHit(
@@ -333,10 +336,11 @@ func (m *tlbMiddleware) fetchBottom(msg *vm.TranslationReq) bool {
 	fetchBottom.DeviceID = msg.DeviceID
 	fetchBottom.TrafficClass = "vm.TranslationReq"
 
-	err := m.bottomPort().Send(fetchBottom)
-	if err != nil {
+	if !m.bottomPort().CanSend() {
 		return false
 	}
+
+	m.bottomPort().Send(fetchBottom)
 
 	tracing.AddMilestone(
 		tracing.MsgIDAtReceiver(msg, m.comp),
@@ -451,10 +455,11 @@ func (m *tlbMiddleware) processTLBFlush() bool {
 	rsp.Dst = flush.Meta.Src
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := m.controlPort().Send(rsp)
-	if err != nil {
+	if !m.controlPort().CanSend() {
 		return false
 	}
+
+	m.controlPort().Send(rsp)
 	tracing.AddMilestone(
 		tracing.MsgIDAtReceiver(&flush.Meta, m.comp),
 		tracing.MilestoneKindNetworkBusy,

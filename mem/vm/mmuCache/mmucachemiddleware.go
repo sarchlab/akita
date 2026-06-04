@@ -174,10 +174,7 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 	reqToBottom.TransLatency = latency
 	reqToBottom.TrafficClass = "vm.TranslationReq"
 
-	err := m.bottomPort().Send(reqToBottom)
-	if err != nil {
-		return false
-	}
+	m.bottomPort().Send(reqToBottom)
 
 	m.topPort().RetrieveIncoming()
 
@@ -219,10 +216,7 @@ func (m *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
 	rspToTop.RspTo = rsp.RspTo
 	rspToTop.TrafficClass = "vm.TranslationRsp"
 
-	err := m.topPort().Send(rspToTop)
-	if err != nil {
-		return false
-	}
+	m.topPort().Send(rspToTop)
 
 	m.bottomPort().RetrieveIncoming()
 
@@ -271,10 +265,11 @@ func (m *mmuCacheMiddleware) processMMUCacheFlush() bool {
 	rsp.Dst = next.InflightFlushReqSrc
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := m.controlPort().Send(rsp)
-	if err != nil {
+	if !m.controlPort().CanSend() {
 		return false
 	}
+
+	m.controlPort().Send(rsp)
 	tracing.AddMilestone(
 		next.InflightFlushReqID,
 		tracing.MilestoneKindNetworkBusy,

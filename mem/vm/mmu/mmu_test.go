@@ -174,7 +174,7 @@ var _ = Describe("MMU", func() {
 			dummy.Src = topPort.AsRemote()
 			dummy.Dst = messaging.RemotePort("Agent")
 			dummy.TrafficClass = "vm.TranslationRsp"
-			Expect(topPort.Send(dummy)).To(BeNil())
+			topPort.Send(dummy)
 
 			mmuComp.State = State{
 				WalkingTranslations: []transactionState{
@@ -287,7 +287,7 @@ var _ = Describe("MMU", func() {
 			dummy.Src = migrationPort.AsRemote()
 			dummy.Dst = messaging.RemotePort("MigrationServiceProvider")
 			dummy.TrafficClass = "vm.PageMigrationReqToDriver"
-			Expect(migrationPort.Send(dummy)).To(BeNil())
+			migrationPort.Send(dummy)
 
 			mmuComp.State = State{
 				MigrationQueue: []transactionState{walking},
@@ -398,7 +398,7 @@ var _ = Describe("MMU", func() {
 			dummy.Src = topPort.AsRemote()
 			dummy.Dst = messaging.RemotePort("Agent")
 			dummy.TrafficClass = "vm.TranslationRsp"
-			Expect(topPort.Send(dummy)).To(BeNil())
+			topPort.Send(dummy)
 
 			migrationDone.Dst = migrationPort.AsRemote()
 			migrationDone.Src = messaging.RemotePort("MigrationServiceProvider")
