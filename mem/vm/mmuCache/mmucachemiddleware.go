@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -25,10 +24,6 @@ func (m *mmuCacheMiddleware) bottomPort() messaging.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
-func (m *mmuCacheMiddleware) controlPort() messaging.Port {
-	return m.comp.GetPortByName("Control")
-}
-
 func (m *mmuCacheMiddleware) Tick() bool {
 	madeProgress := false
 	next := &m.comp.State
@@ -38,8 +33,6 @@ func (m *mmuCacheMiddleware) Tick() bool {
 		madeProgress = m.handleDrain() || madeProgress
 	case mmuCacheStatePause:
 		return false
-	case mmuCacheStateFlush:
-		madeProgress = m.handleFlush() || madeProgress
 	default:
 		madeProgress = m.handleEnable() || madeProgress
 	}
@@ -62,19 +55,6 @@ func (m *mmuCacheMiddleware) handleDrain() bool {
 	}
 
 	return madeProgress
-}
-
-func (m *mmuCacheMiddleware) handleFlush() bool {
-	next := &m.comp.State
-	if !next.InflightFlushReqActive {
-		return false
-	}
-
-	if m.topPort().PeekIncoming() == nil && m.bottomPort().PeekIncoming() == nil {
-		return m.processMMUCacheFlush()
-	}
-
-	return m.processRequests()
 }
 
 // handleEnable processes requests when cache is in enabled state.
@@ -251,41 +231,6 @@ func (m *mmuCacheMiddleware) updateCacheLevels(rsp *vm.TranslationRsp) bool {
 
 		setUpdate(&next.Table[level], wayID, pid, seg)
 	}
-
-	return true
-}
-
-func (m *mmuCacheMiddleware) processMMUCacheFlush() bool {
-	next := &m.comp.State
-	spec := m.comp.Spec()
-
-	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
-	rsp.ID = timing.GetIDGenerator().Generate()
-	rsp.Src = m.controlPort().AsRemote()
-	rsp.Dst = next.InflightFlushReqSrc
-	rsp.RspTo = next.InflightFlushReqID
-	rsp.TrafficClass = "mem.ControlRsp"
-
-	if !m.controlPort().CanSend() {
-		return false
-	}
-
-	m.controlPort().Send(rsp)
-	tracing.AddMilestone(
-		next.InflightFlushReqID,
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
-
-	// Reset table
-	next.Table = initSets(spec.NumLevels, spec.NumBlocks)
-
-	next.InflightFlushReqActive = false
-	next.InflightFlushReqID = 0
-	next.InflightFlushReqSrc = ""
-	next.CurrentState = mmuCacheStatePause
 
 	return true
 }

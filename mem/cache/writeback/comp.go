@@ -96,6 +96,17 @@ type flushReqState struct {
 	InvalidateAfter bool              `json:"invalidate_after"`
 	DiscardInflight bool              `json:"discard_inflight"`
 	PauseAfter      bool              `json:"pause_after"`
+
+	// FilterAddresses / FilterPID narrow which dirty blocks are written
+	// back. An empty address list matches every block address; a zero PID
+	// matches every PID (same convention as Invalidate).
+	FilterAddresses []uint64 `json:"filter_addresses"`
+	FilterPID       vm.PID   `json:"filter_pid"`
+
+	// FlushedRefs records the blocks selected for write-back so that, once
+	// the write-backs complete, exactly those blocks (and no others) are
+	// marked clean. Blocks outside the filter are left untouched.
+	FlushedRefs []blockRef `json:"flushed_refs"`
 }
 
 type action int

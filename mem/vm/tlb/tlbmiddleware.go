@@ -1,7 +1,6 @@
 package tlb
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -22,10 +21,6 @@ func (m *tlbMiddleware) bottomPort() messaging.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
-func (m *tlbMiddleware) controlPort() messaging.Port {
-	return m.comp.GetPortByName("Control")
-}
-
 func (m *tlbMiddleware) Tick() bool {
 	madeProgress := false
 	next := &m.comp.State
@@ -35,8 +30,6 @@ func (m *tlbMiddleware) Tick() bool {
 		madeProgress = m.handleDrain() || madeProgress
 	case tlbStatePause:
 		return false
-	case tlbStateFlush:
-		madeProgress = m.handleFlush() || madeProgress
 	default:
 		madeProgress = m.handleEnable() || madeProgress
 	}
@@ -418,84 +411,6 @@ func (m *tlbMiddleware) parseBottom() bool {
 	if next.RespondingMSHRData.HasReqToBottom {
 		tracing.TraceReqFinalize(&reqToBottom, m.comp)
 	}
-
-	return true
-}
-
-func (m *tlbMiddleware) handleFlush() bool {
-	next := &m.comp.State
-	if !next.HasInflightFlushReq {
-		return false
-	}
-
-	madeProgress := false
-	spec := m.comp.Spec()
-
-	if mshrIsEmpty(next.MSHREntries) && !next.HasRespondingMSHR && m.bottomPort().PeekIncoming() == nil {
-		madeProgress = m.processTLBFlush() || madeProgress
-		return madeProgress
-	}
-
-	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = m.respondMSHREntry() || madeProgress
-	}
-
-	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = m.parseBottom() || madeProgress
-	}
-
-	madeProgress = m.processPipeline() || madeProgress
-
-	return madeProgress
-}
-
-func (m *tlbMiddleware) processTLBFlush() bool {
-	spec := m.comp.Spec()
-	next := &m.comp.State
-	flush := next.InflightFlush
-
-	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
-	rsp.ID = timing.GetIDGenerator().Generate()
-	rsp.Src = m.controlPort().AsRemote()
-	rsp.Dst = flush.Meta.Src
-	rsp.RspTo = flush.Meta.ID
-	rsp.TrafficClass = "mem.ControlRsp"
-
-	if !m.controlPort().CanSend() {
-		return false
-	}
-
-	m.controlPort().Send(rsp)
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(&flush.Meta, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
-
-	for _, vAddr := range flush.VAddr {
-		setID := vAddrToSetID(vAddr, spec)
-		wayID, page, found := setLookup(&next.Sets[setID], flush.PID, vAddr)
-
-		if !found {
-			continue
-		}
-		tracing.AddMilestone(
-			tracing.MsgIDAtReceiver(&flush.Meta, m.comp),
-			tracing.MilestoneKindDependency,
-			m.comp.Name()+".Sets",
-			m.comp.Name(),
-			m.comp,
-		)
-		page.Valid = false
-		setUpdate(&next.Sets[setID], wayID, page)
-	}
-
-	next.MSHREntries = nil
-
-	next.HasInflightFlushReq = false
-	next.TLBState = tlbStatePause
 
 	return true
 }

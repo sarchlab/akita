@@ -35,11 +35,9 @@ func TestControlContract(t *testing.T) {
 		}
 	}
 
-	// Phase 2: mmuCache's CmdFlush is really an Invalidate-with-filter.
-	// Phase 3 will rename the handler and mark CmdFlush unsupported.
-	matrix := control.Universal()
-	matrix.Flush = true
-	control.RunContract(t, "mmuCache", build, matrix)
+	// An mmuCache caches translations (never dirty), so it supports
+	// Invalidate but not Flush.
+	control.RunContract(t, "mmuCache", build, control.TranslationCacheLike())
 }
 
 var _ control.Controllable = (*Comp)(nil)

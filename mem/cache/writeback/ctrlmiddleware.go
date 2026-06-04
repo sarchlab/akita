@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -97,9 +98,85 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 		// Owned by flusher; leave in queue.
 		return false
 	case mem.CmdInvalidate:
-		return m.handleUnsupported(req)
+		return m.handleInvalidate(req)
 	default:
 		return m.handleUnsupported(req)
+	}
+}
+
+// handleInvalidate drops cached blocks matching the request's
+// address/PID filter (empty address list = all addresses, zero PID = all
+// PIDs) WITHOUT writeback: matched blocks are marked invalid even if
+// dirty. Per the resolved protocol decision, Invalidate discards dirty
+// data silently; a caller that wants to keep it must Flush first.
+// Invalidate is acknowledged synchronously but is only legal once the
+// cache is paused (or drained, which lands in paused); issued while
+// Running it is rejected with ErrMustBePausedOrDrained.
+func (m *ctrlMiddleware) handleInvalidate(req *mem.ControlReq) bool {
+	next := &m.pipeline.comp.State
+	if cacheState(next.CacheState) != cacheStatePaused {
+		return m.rejectMustBePaused(req)
+	}
+	if !m.ctrlPort.CanSend() {
+		return false
+	}
+
+	spec := m.pipeline.comp.Spec()
+	blockSize := uint64(1) << spec.Log2BlockSize
+	invalidateBlocks(next, blockSize, req.Addresses, req.PID)
+
+	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdInvalidate,
+		req.Src, req.ID, true, ""))
+	m.ctrlPort.RetrieveIncoming()
+	return true
+}
+
+// rejectMustBePaused responds that a conditional verb is illegal while
+// the cache is Running (Enabled).
+func (m *ctrlMiddleware) rejectMustBePaused(req *mem.ControlReq) bool {
+	if !m.ctrlPort.CanSend() {
+		return false
+	}
+	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, req.Command,
+		req.Src, req.ID, false, control.ErrMustBePausedOrDrained))
+	m.ctrlPort.RetrieveIncoming()
+	return true
+}
+
+// invalidateBlocks marks every valid directory block matching the filter
+// invalid and clean. An empty address list matches every block address; a
+// zero PID matches every PID. Block addresses are cache-line aligned in
+// Tag, so the requested addresses are aligned to the block before
+// matching.
+func invalidateBlocks(
+	state *State,
+	blockSize uint64,
+	addresses []uint64,
+	pid vm.PID,
+) {
+	matchAddr := make(map[uint64]bool, len(addresses))
+	for _, a := range addresses {
+		matchAddr[a/blockSize*blockSize] = true
+	}
+
+	for si := range state.DirectoryState.Sets {
+		set := &state.DirectoryState.Sets[si]
+		for wi := range set.Blocks {
+			block := &set.Blocks[wi]
+			if !block.IsValid {
+				continue
+			}
+			if pid != 0 && vm.PID(block.PID) != pid {
+				continue
+			}
+			if len(addresses) > 0 && !matchAddr[block.Tag] {
+				continue
+			}
+
+			block.IsValid = false
+			block.IsDirty = false
+			block.DirtyMask = nil
+		}
 	}
 }
 

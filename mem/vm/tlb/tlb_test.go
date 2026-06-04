@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -261,19 +262,10 @@ var _ = Describe("TLB", func() {
 			Expect(madeProgress).To(BeFalse())
 		})
 
-		It("should handle flush request", func() {
-			flushReq := &mem.ControlReq{
-				Command:   mem.CmdFlush,
-				Addresses: []uint64{0x1000},
-				PID:       1,
-			}
-			flushReq.ID = timing.GetIDGenerator().Generate()
-			flushReq.Src = messaging.RemotePort("Agent")
-			flushReq.Dst = controlPort.AsRemote()
-			flushReq.TrafficClass = "mem.ControlReq"
-
-			// Set up a page in the TLB
+		It("should invalidate a matching entry when paused", func() {
 			next := &tlbComp.State
+			next.TLBState = tlbStatePause
+
 			page := vm.Page{
 				PID:   1,
 				VAddr: 0x1000,
@@ -282,15 +274,77 @@ var _ = Describe("TLB", func() {
 			setUpdate(&next.Sets[0], 1, page)
 			setVisit(&next.Sets[0], 1)
 
-			controlPort.Deliver(flushReq)
+			invReq := &mem.ControlReq{
+				Command:   mem.CmdInvalidate,
+				Addresses: []uint64{0x1000},
+				PID:       1,
+			}
+			invReq.ID = timing.GetIDGenerator().Generate()
+			invReq.Src = messaging.RemotePort("Agent")
+			invReq.Dst = controlPort.AsRemote()
+			invReq.TrafficClass = "mem.ControlReq"
+
+			controlPort.Deliver(invReq)
 
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
-			madeProgress = tlbMW.Tick() || madeProgress
-
 			Expect(madeProgress).To(BeTrue())
 
-			rsp := controlPort.RetrieveOutgoing()
-			Expect(rsp).To(BeAssignableToTypeOf(&mem.ControlRsp{}))
+			_, gotPage, found := setLookup(&next.Sets[0], 1, 0x1000)
+			Expect(found && gotPage.Valid).To(BeFalse())
+
+			rspMsg := controlPort.RetrieveOutgoing()
+			Expect(rspMsg).To(BeAssignableToTypeOf(&mem.ControlRsp{}))
+			rsp := rspMsg.(*mem.ControlRsp)
+			Expect(rsp.Command).To(Equal(mem.CmdInvalidate))
+			Expect(rsp.Success).To(BeTrue())
+		})
+
+		It("should reject Invalidate while enabled", func() {
+			next := &tlbComp.State
+			next.TLBState = tlbStateEnable
+
+			invReq := &mem.ControlReq{Command: mem.CmdInvalidate}
+			invReq.ID = timing.GetIDGenerator().Generate()
+			invReq.Src = messaging.RemotePort("Agent")
+			invReq.Dst = controlPort.AsRemote()
+			invReq.TrafficClass = "mem.ControlReq"
+
+			controlPort.Deliver(invReq)
+			Expect(tlbCtrlMW.handleIncomingCommands()).To(BeTrue())
+
+			rspMsg := controlPort.RetrieveOutgoing()
+			rsp := rspMsg.(*mem.ControlRsp)
+			Expect(rsp.Success).To(BeFalse())
+			Expect(rsp.Error).To(Equal(control.ErrMustBePausedOrDrained))
+		})
+
+		It("invalidates only entries matching the PID filter", func() {
+			next := &tlbComp.State
+			next.TLBState = tlbStatePause
+
+			pageA := vm.Page{PID: 1, VAddr: 0x1000, Valid: true}
+			pageB := vm.Page{PID: 2, VAddr: 0x2000, Valid: true}
+			setUpdate(&next.Sets[0], 0, pageA)
+			setVisit(&next.Sets[0], 0)
+			setUpdate(&next.Sets[0], 1, pageB)
+			setVisit(&next.Sets[0], 1)
+
+			invReq := &mem.ControlReq{Command: mem.CmdInvalidate, PID: 1}
+			invReq.ID = timing.GetIDGenerator().Generate()
+			invReq.Src = messaging.RemotePort("Agent")
+			invReq.Dst = controlPort.AsRemote()
+			invReq.TrafficClass = "mem.ControlReq"
+			controlPort.Deliver(invReq)
+
+			Expect(tlbCtrlMW.handleIncomingCommands()).To(BeTrue())
+
+			// Only the PID-1 entry is dropped; the PID-2 entry survives.
+			Expect(next.Sets[0].Blocks[0].Page.Valid).To(BeFalse())
+			Expect(next.Sets[0].Blocks[1].Page.Valid).To(BeTrue())
+
+			rsp := controlPort.RetrieveOutgoing().(*mem.ControlRsp)
+			Expect(rsp.Command).To(Equal(mem.CmdInvalidate))
+			Expect(rsp.Success).To(BeTrue())
 		})
 
 		It("should handle restart request", func() {

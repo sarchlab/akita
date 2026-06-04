@@ -60,10 +60,10 @@ func TestControlContract(t *testing.T) {
 		}
 	}
 
-	// Phase 2 ships universal verbs + Flush. Invalidate is added in
-	// Phase 3 along with the address/PID filter.
-	matrix := control.Universal()
-	matrix.Flush = true
+	// Phase 3 adds Invalidate and the address/PID filter on Flush, so the
+	// writeback cache now satisfies the full cache-like matrix: the four
+	// universal verbs plus the two conditional verbs (Invalidate, Flush).
+	matrix := control.CacheLike()
 	control.RunContract(t, "writeback", build, matrix)
 }
 

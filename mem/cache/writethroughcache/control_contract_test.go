@@ -60,10 +60,10 @@ func TestControlContract(t *testing.T) {
 		}
 	}
 
-	// Phase 2 ships universal verbs + Flush. Invalidate arrives in
-	// Phase 3.
-	matrix := control.Universal()
-	matrix.Flush = true
+	// Phase 3 completes the writethrough control surface: the universal
+	// verbs plus both conditional verbs (Invalidate drops clean blocks,
+	// Flush is a no-op because writethrough holds no dirty data).
+	matrix := control.CacheLike()
 	control.RunContract(t, "writethroughcache", build, matrix)
 }
 

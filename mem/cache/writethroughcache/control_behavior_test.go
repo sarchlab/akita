@@ -5,6 +5,9 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -112,6 +115,25 @@ var _ = Describe("Writethrough cache control behavior", func() {
 			}
 		}
 		return count
+	}
+
+	// seedBlock writes a single valid (clean) directory block holding the
+	// cache line that contains addr for pid. It returns the (setID, wayID)
+	// it occupied so a test can assert directly against that block. The
+	// writethrough directory only ever holds clean lines, so IsDirty stays
+	// false.
+	seedBlock := func(addr uint64, pid vm.PID) (int, int) {
+		ds := &comp.State.DirectoryState
+		cacheLineID := addr / blockSize * blockSize
+		setID, _, _ := cache.DirectoryLookup(
+			ds, comp.Spec().NumSets, int(blockSize), pid, cacheLineID)
+		wayID := 0
+		block := &ds.Sets[setID].Blocks[wayID]
+		block.IsValid = true
+		block.IsDirty = false
+		block.Tag = cacheLineID
+		block.PID = uint32(pid)
+		return setID, wayID
 	}
 
 	// captureBottomReads drains every outgoing bottom read the cache has
@@ -271,4 +293,94 @@ var _ = Describe("Writethrough cache control behavior", func() {
 			comp.State.IsDraining = true
 		}),
 	)
+
+	// driveCtrl delivers a control req and ticks until its ControlRsp comes
+	// back (or the budget runs out), returning the matching Rsp.
+	driveCtrl := func(req *mem.ControlReq) *mem.ControlRsp {
+		ctrlPort.Deliver(req)
+
+		for range 64 {
+			comp.Tick()
+			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if rsp, ok := out.(*mem.ControlRsp); ok &&
+					rsp.RspTo == req.ID {
+					return rsp
+				}
+			}
+		}
+		return nil
+	}
+
+	It("invalidates only directory blocks matching the address filter", func() {
+		// Two distinct, clean, resident cache lines.
+		const addrA = uint64(0)
+		const addrB = blockSize
+		setA, wayA := seedBlock(addrA, vm.PID(1))
+		setB, wayB := seedBlock(addrB, vm.PID(1))
+
+		// They must occupy distinct blocks for the filter to be meaningful.
+		Expect([2]int{setA, wayA}).ToNot(Equal([2]int{setB, wayB}))
+
+		// Invalidate is only legal once quiesced.
+		comp.State.IsPaused = true
+
+		inv := makeCtrlReq(mem.CmdInvalidate)
+		inv.Addresses = []uint64{addrA}
+		inv.PID = vm.PID(1)
+
+		rsp := driveCtrl(inv)
+
+		Expect(rsp).ToNot(BeNil())
+		Expect(rsp.Command).To(Equal(mem.CmdInvalidate))
+		Expect(rsp.Success).To(BeTrue())
+		Expect(rsp.Error).To(BeEmpty())
+
+		// Only the filtered block A is dropped; block B survives untouched.
+		blockA := comp.State.DirectoryState.Sets[setA].Blocks[wayA]
+		blockB := comp.State.DirectoryState.Sets[setB].Blocks[wayB]
+		Expect(blockA.IsValid).To(BeFalse())
+		Expect(blockB.IsValid).To(BeTrue())
+		Expect(blockB.Tag).To(Equal(addrB / blockSize * blockSize))
+	})
+
+	It("acks Flush while paused without dropping any blocks", func() {
+		const addr = uint64(0)
+		setID, wayID := seedBlock(addr, vm.PID(2))
+
+		comp.State.IsPaused = true
+
+		rsp := driveCtrl(makeCtrlReq(mem.CmdFlush))
+
+		Expect(rsp).ToNot(BeNil())
+		Expect(rsp.Command).To(Equal(mem.CmdFlush))
+		Expect(rsp.Success).To(BeTrue())
+		Expect(rsp.Error).To(BeEmpty())
+
+		// Flush is a no-op for writethrough: the clean block is untouched.
+		block := comp.State.DirectoryState.Sets[setID].Blocks[wayID]
+		Expect(block.IsValid).To(BeTrue())
+		Expect(block.Tag).To(Equal(addr / blockSize * blockSize))
+	})
+
+	It("rejects Invalidate issued while Enabled", func() {
+		setID, wayID := seedBlock(0, vm.PID(1))
+
+		// Component is freshly built: Enabled (not paused, not draining).
+		Expect(comp.State.IsPaused).To(BeFalse())
+		Expect(comp.State.IsDraining).To(BeFalse())
+
+		inv := makeCtrlReq(mem.CmdInvalidate)
+		inv.Addresses = []uint64{0}
+
+		rsp := driveCtrl(inv)
+
+		Expect(rsp).ToNot(BeNil())
+		Expect(rsp.Command).To(Equal(mem.CmdInvalidate))
+		Expect(rsp.Success).To(BeFalse())
+		Expect(rsp.Error).To(Equal(control.ErrMustBePausedOrDrained))
+
+		// Rejected Invalidate must leave the directory intact.
+		block := comp.State.DirectoryState.Sets[setID].Blocks[wayID]
+		Expect(block.IsValid).To(BeTrue())
+	})
 })

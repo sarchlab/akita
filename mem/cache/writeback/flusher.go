@@ -2,7 +2,8 @@ package writeback
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/vm"
 
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -63,16 +64,36 @@ func (f *flusher) existInflightTransaction() bool {
 
 func (f *flusher) prepareBlockToFlushList() {
 	next := &f.pipeline.comp.State
+	spec := f.pipeline.comp.Spec()
+	blockSize := uint64(1) << spec.Log2BlockSize
+
+	matchAddr := make(map[uint64]bool, len(next.ProcessingFlush.FilterAddresses))
+	for _, a := range next.ProcessingFlush.FilterAddresses {
+		matchAddr[a/blockSize*blockSize] = true
+	}
+	filterPID := next.ProcessingFlush.FilterPID
+
 	for setID, set := range next.DirectoryState.Sets {
 		for wayID, block := range set.Blocks {
 			if block.ReadCount > 0 || block.IsLocked {
 				panic("all the blocks should be unlocked before flushing")
 			}
 
-			if block.IsValid && block.IsDirty {
-				next.FlusherBlockToEvictRefs = append(next.FlusherBlockToEvictRefs,
-					blockRef{SetID: setID, WayID: wayID})
+			if !block.IsValid || !block.IsDirty {
+				continue
 			}
+			if filterPID != 0 && vm.PID(block.PID) != filterPID {
+				continue
+			}
+			if len(matchAddr) > 0 && !matchAddr[block.Tag] {
+				continue
+			}
+
+			ref := blockRef{SetID: setID, WayID: wayID}
+			next.FlusherBlockToEvictRefs = append(
+				next.FlusherBlockToEvictRefs, ref)
+			next.ProcessingFlush.FlushedRefs = append(
+				next.ProcessingFlush.FlushedRefs, ref)
 		}
 	}
 }
@@ -104,10 +125,11 @@ func (f *flusher) processFlush() bool {
 		FlushDiscardInflight: next.ProcessingFlush.DiscardInflight,
 		FlushPauseAfter:      next.ProcessingFlush.PauseAfter,
 		HasVictim:            true,
-		VictimPID:            0,
+		VictimPID:            vm.PID(block.PID),
 		VictimTag:            block.Tag,
 		VictimCacheAddress:   block.CacheAddress,
 		Action:               bankEvict,
+		EvictingPID:          vm.PID(block.PID),
 		EvictingAddr:         block.Tag,
 		EvictingDirtyMask:    block.DirtyMask,
 		BlockSetID:           ref.SetID,
@@ -142,20 +164,38 @@ func (f *flusher) extractFromPort() bool {
 		return false
 	}
 
+	// Flush is a conditional verb: it is only legal once the cache is
+	// paused (Drain lands the cache in paused too). Issued while Running it
+	// is rejected with ErrMustBePausedOrDrained.
+	next := &f.pipeline.comp.State
+	if cacheState(next.CacheState) != cacheStatePaused {
+		return f.rejectFlush(req)
+	}
+
 	return f.startProcessingFlush(req)
+}
+
+// rejectFlush replies that Flush is illegal while the cache is Running.
+func (f *flusher) rejectFlush(msg *mem.ControlReq) bool {
+	if !f.ctrlPort.CanSend() {
+		return false
+	}
+
+	f.ctrlPort.Send(makeCtrlRsp(f.ctrlPort, mem.CmdFlush,
+		msg.Src, msg.ID, false, control.ErrMustBePausedOrDrained))
+	f.ctrlPort.RetrieveIncoming()
+
+	return true
 }
 
 func (f *flusher) startProcessingFlush(msg *mem.ControlReq) bool {
 	next := &f.pipeline.comp.State
 
-	// TODO(control-protocol): Phase 2 splits Flush from Reset; the
-	// InvalidateAfter/DiscardInflight/PauseAfter modifier flags were
-	// removed from mem.ControlReq. The flushReqState fields stay for
-	// now so the in-progress flush bookkeeping still serializes; they
-	// take their zero values until Phase 2 rewires this code path.
 	next.HasProcessingFlush = true
 	next.ProcessingFlush = flushReqState{
-		MsgMeta: msg.MsgMeta,
+		MsgMeta:         msg.MsgMeta,
+		FilterAddresses: msg.Addresses,
+		FilterPID:       msg.PID,
 	}
 
 	next.CacheState = int(cacheStatePreFlushing)
@@ -181,8 +221,6 @@ func (f *flusher) finalizeFlushing() bool {
 		return false
 	}
 
-	spec := f.pipeline.comp.Spec()
-
 	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = f.ctrlPort.AsRemote()
@@ -191,21 +229,18 @@ func (f *flusher) finalizeFlushing() bool {
 	rsp.TrafficClass = "mem.ControlRsp"
 	f.ctrlPort.Send(rsp)
 
-	// Reset MSHR and directory state
-	next.MSHRState = cache.MSHRState{}
-	blockSize := 1 << spec.Log2BlockSize
-	cache.DirectoryReset(
-		&next.DirectoryState,
-		spec.NumSets,
-		spec.WayAssociativity,
-		blockSize,
-	)
-
-	if next.ProcessingFlush.PauseAfter {
-		next.CacheState = int(cacheStatePaused)
-	} else {
-		next.CacheState = int(cacheStateRunning)
+	// Per protocol, Flush leaves clean entries valid: only the blocks that
+	// were written back are now clean (their dirty data is in backing
+	// memory), while blocks outside the filter are untouched. Mark exactly
+	// the flushed blocks clean; leave them valid.
+	for _, ref := range next.ProcessingFlush.FlushedRefs {
+		block := &next.DirectoryState.Sets[ref.SetID].Blocks[ref.WayID]
+		block.IsDirty = false
+		block.DirtyMask = nil
 	}
+
+	// Flush is only legal from paused, and returns the cache to paused.
+	next.CacheState = int(cacheStatePaused)
 
 	tracing.TraceReqComplete(&next.ProcessingFlush.MsgMeta, f.pipeline.comp)
 	next.HasProcessingFlush = false

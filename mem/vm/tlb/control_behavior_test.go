@@ -180,15 +180,10 @@ var _ = Describe("TLB control behavior", func() {
 		Expect(drainRsp).ToNot(BeNil())
 		Expect(drainRsp.Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
-		// EXPOSES COMPONENT DEFECT: handleDrain (tlbmiddleware.go:142)
-		// transitions to tlbStatePause as soon as the MSHR empties, ignoring
-		// HasRespondingMSHR. The translation response that retires the final
-		// MSHR entry is staged as RespondingMSHRData in the same tick the state
-		// flips to pause; pause then short-circuits Tick(), so that last
-		// response is never sent to Top. completed reaches only n-1. Feeding
-		// the identical responses while staying in tlbStateEnable yields
-		// completed==n, proving the handshake is correct and the loss is
-		// drain-specific.
+		// Every in-flight miss finishes cleanly before the async Drain ack:
+		// handleDrain stays draining until HasRespondingMSHR clears, so the
+		// translation response that retires the final MSHR entry reaches Top
+		// before the component transitions to Paused.
 		Expect(completed).To(Equal(n))
 		Expect(mshrIsEmpty(tlbComp.State.MSHREntries)).To(BeTrue())
 		Expect(tlbComp.State.TLBState).To(Equal(tlbStatePause))
@@ -235,12 +230,8 @@ var _ = Describe("TLB control behavior", func() {
 			Expect(rsp.Command).To(Equal(mem.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
-			// EXPOSES COMPONENT DEFECT: handleReset (ctrlmiddleware.go:162)
-			// acks the Reset, sets TLBState=tlbStateEnable, and drains the
-			// Top/Bottom port buffers, but never clears State.MSHREntries.
-			// (MSHREntries is set to nil only on the Flush path,
-			// tlbmiddleware.go:490.) So an in-flight MSHR entry survives a
-			// Reset and this assertion fails.
+			// Reset is a hard reset: the in-flight MSHR entry is discarded
+			// (handleReset clears MSHREntries) and the TLB returns to Enabled.
 			Expect(mshrIsEmpty(tlbComp.State.MSHREntries)).To(BeTrue())
 			Expect(tlbComp.State.TLBState).To(Equal(tlbStateEnable))
 		},

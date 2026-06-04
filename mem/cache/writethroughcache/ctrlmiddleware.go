@@ -4,13 +4,16 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// ctrlMiddleware owns Pause, Drain, Enable, Reset, and the
-// unsupported-Invalidate response. CmdFlush is owned by controlStage
-// (legacy compound implementation).
+// ctrlMiddleware owns every control verb: the universal verbs (Pause,
+// Drain, Enable, Reset) and the conditional verbs (Invalidate, Flush).
+// Invalidate and Flush are only legal once the cache is paused or
+// drained; issued while Enabled they are rejected with
+// ErrMustBePausedOrDrained.
 type ctrlMiddleware struct {
 	pipeline *pipelineMW
 	ctrlPort messaging.Port
@@ -68,11 +71,10 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 		return m.handleEnable(req)
 	case mem.CmdReset:
 		return m.handleReset(req)
-	case mem.CmdFlush:
-		// Owned by controlStage; leave in queue.
-		return false
 	case mem.CmdInvalidate:
-		return m.handleUnsupported(req)
+		return m.handleInvalidate(req)
+	case mem.CmdFlush:
+		return m.handleFlush(req)
 	default:
 		return m.handleUnsupported(req)
 	}
@@ -157,6 +159,97 @@ func (m *ctrlMiddleware) handleReset(req *mem.ControlReq) bool {
 		req.Src, req.ID, true, ""))
 	m.ctrlPort.RetrieveIncoming()
 	return true
+}
+
+// handleInvalidate drops directory blocks matching the request's
+// address/PID filter (empty address list = all addresses, zero PID = all
+// PIDs). The writethrough directory only ever holds clean blocks, so the
+// matching blocks are dropped without any writeback. Invalidate is a
+// synchronous verb that is only legal once the cache is paused or
+// drained; issued while Enabled it is rejected.
+func (m *ctrlMiddleware) handleInvalidate(req *mem.ControlReq) bool {
+	next := &m.pipeline.comp.State
+	if !next.IsPaused && !next.IsDraining {
+		return m.rejectMustBePaused(req)
+	}
+	if !m.ctrlPort.CanSend() {
+		return false
+	}
+
+	invalidateBlocks(
+		&next.DirectoryState, m.pipeline.comp.Spec(), req.Addresses, req.PID)
+
+	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdInvalidate,
+		req.Src, req.ID, true, ""))
+	m.ctrlPort.RetrieveIncoming()
+	return true
+}
+
+// handleFlush acknowledges a Flush. A writethrough cache never holds
+// dirty data (every write is forwarded to the bottom immediately), so
+// there is nothing to write back: Flush is a no-op that immediately acks
+// Success, leaving the directory intact. Like Invalidate it is only legal
+// once the cache is paused or drained.
+func (m *ctrlMiddleware) handleFlush(req *mem.ControlReq) bool {
+	next := &m.pipeline.comp.State
+	if !next.IsPaused && !next.IsDraining {
+		return m.rejectMustBePaused(req)
+	}
+	if !m.ctrlPort.CanSend() {
+		return false
+	}
+
+	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdFlush,
+		req.Src, req.ID, true, ""))
+	m.ctrlPort.RetrieveIncoming()
+	return true
+}
+
+// rejectMustBePaused responds that a conditional verb is illegal while
+// the cache is Enabled.
+func (m *ctrlMiddleware) rejectMustBePaused(req *mem.ControlReq) bool {
+	if !m.ctrlPort.CanSend() {
+		return false
+	}
+	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, req.Command,
+		req.Src, req.ID, false, control.ErrMustBePausedOrDrained))
+	m.ctrlPort.RetrieveIncoming()
+	return true
+}
+
+// invalidateBlocks marks every directory block matching the filter
+// invalid. An empty address list matches all addresses; a zero PID
+// matches all PIDs. Addresses are aligned to the cache-line size before
+// comparison against each block's Tag.
+func invalidateBlocks(
+	ds *cache.DirectoryState,
+	spec Spec,
+	addresses []uint64,
+	pid vm.PID,
+) {
+	blockSize := uint64(1) << spec.Log2BlockSize
+
+	matchAddr := make(map[uint64]bool, len(addresses))
+	for _, a := range addresses {
+		matchAddr[a/blockSize*blockSize] = true
+	}
+
+	for si := range ds.Sets {
+		set := &ds.Sets[si]
+		for wi := range set.Blocks {
+			block := &set.Blocks[wi]
+			if !block.IsValid {
+				continue
+			}
+			if pid != 0 && vm.PID(block.PID) != pid {
+				continue
+			}
+			if len(addresses) > 0 && !matchAddr[block.Tag] {
+				continue
+			}
+			block.IsValid = false
+		}
+	}
 }
 
 func (m *ctrlMiddleware) handleUnsupported(req *mem.ControlReq) bool {

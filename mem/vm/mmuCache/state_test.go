@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 )
 
@@ -27,11 +26,8 @@ func TestStateWithTable(t *testing.T) {
 	setVisit(&table[1], 1)
 
 	s := State{
-		CurrentState:           mmuCacheStateEnable,
-		Table:                  table,
-		InflightFlushReqActive: true,
-		InflightFlushReqID:     123,
-		InflightFlushReqSrc:    messaging.RemotePort("ctrl.port"),
+		CurrentState: mmuCacheStateEnable,
+		Table:        table,
 	}
 
 	// Verify state
@@ -40,15 +36,6 @@ func TestStateWithTable(t *testing.T) {
 	}
 	if len(s.Table) != 2 {
 		t.Fatalf("len(Table) = %d, want 2", len(s.Table))
-	}
-	if !s.InflightFlushReqActive {
-		t.Error("InflightFlushReqActive = false, want true")
-	}
-	if s.InflightFlushReqID != 123 {
-		t.Errorf("InflightFlushReqID = %d, want %d", s.InflightFlushReqID, 123)
-	}
-	if s.InflightFlushReqSrc != messaging.RemotePort("ctrl.port") {
-		t.Errorf("InflightFlushReqSrc = %q, want %q", s.InflightFlushReqSrc, "ctrl.port")
 	}
 
 	// Verify lookups
@@ -69,7 +56,7 @@ func TestStateWithTable(t *testing.T) {
 	}
 }
 
-func TestStateNoInflightFlush(t *testing.T) {
+func TestStatePauseDefaults(t *testing.T) {
 	spec := Spec{
 		NumBlocks:       1,
 		NumLevels:       1,
@@ -84,8 +71,8 @@ func TestStateNoInflightFlush(t *testing.T) {
 		Table:        initSets(spec.NumLevels, spec.NumBlocks),
 	}
 
-	if s.InflightFlushReqActive {
-		t.Error("InflightFlushReqActive = true, want false")
+	if s.PendingDrainRsp {
+		t.Error("PendingDrainRsp = true, want false")
 	}
 	if s.CurrentState != mmuCacheStatePause {
 		t.Errorf("CurrentState = %q, want %q", s.CurrentState, mmuCacheStatePause)

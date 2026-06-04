@@ -44,11 +44,9 @@ func TestControlContract(t *testing.T) {
 		}
 	}
 
-	// Phase 2: TLB's "Flush" is really an Invalidate-with-filter.
-	// Keep CmdFlush supported until Phase 3 renames it to CmdInvalidate.
-	matrix := control.Universal()
-	matrix.Flush = true
-	control.RunContract(t, "tlb", build, matrix)
+	// A TLB caches translations (never dirty), so it supports Invalidate
+	// but not Flush.
+	control.RunContract(t, "tlb", build, control.TranslationCacheLike())
 }
 
 var _ control.Controllable = (*Comp)(nil)

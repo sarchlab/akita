@@ -3,6 +3,7 @@ package tlb
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -73,15 +74,13 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 		return m.performCtrlDrain(ctrlReq)
 	case mem.CmdPause:
 		return m.performCtrlPause(ctrlReq)
-	case mem.CmdFlush:
-		// TODO(control-protocol): Phase 3 splits this verb. The current
-		// implementation treats CmdFlush as an Invalidate-with-filter,
-		// which is what TLBs actually need. Phase 3 renames the
-		// handler to CmdInvalidate and marks CmdFlush unsupported.
-		return m.handleTLBFlush(ctrlReq)
 	case mem.CmdReset:
 		return m.handleReset(ctrlReq)
 	case mem.CmdInvalidate:
+		return m.handleInvalidate(ctrlReq)
+	case mem.CmdFlush:
+		// A TLB holds no dirty data, so Flush is not meaningful; callers
+		// drop entries with Invalidate instead.
 		return m.handleUnsupported(ctrlReq)
 	default:
 		return m.handleUnsupported(ctrlReq)
@@ -146,17 +145,75 @@ func (m *ctrlMiddleware) performCtrlPause(msg *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleTLBFlush(msg *mem.ControlReq) bool {
+// handleInvalidate drops cached translations matching the request's
+// address/PID filter (empty address list = all addresses, zero PID = all
+// PIDs). Invalidate is a synchronous verb but is only legal once the TLB
+// is paused or drained; issued while Enabled it is rejected.
+func (m *ctrlMiddleware) handleInvalidate(msg *mem.ControlReq) bool {
 	state := &m.comp.State
-	state.HasInflightFlushReq = true
-	state.InflightFlush = inflightFlushState{
-		VAddr: msg.Addresses,
-		PID:   msg.PID,
-		Meta:  msg.MsgMeta,
+	if state.TLBState == tlbStateEnable {
+		return m.rejectMustBePaused(msg)
 	}
+	if !m.controlPort().CanSend() {
+		return false
+	}
+
+	invalidateEntries(state, m.comp.Spec(), msg.Addresses, msg.PID)
+
+	m.controlPort().Send(makeCtrlRsp(m.controlPort(), mem.CmdInvalidate,
+		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
-	state.TLBState = tlbStateFlush
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(msg, m.comp),
+		tracing.MilestoneKindDependency,
+		m.comp.Name()+".Sets",
+		m.comp.Name(),
+		m.comp,
+	)
 	return true
+}
+
+// rejectMustBePaused responds that a conditional verb is illegal while the
+// component is Enabled.
+func (m *ctrlMiddleware) rejectMustBePaused(msg *mem.ControlReq) bool {
+	if !m.controlPort().CanSend() {
+		return false
+	}
+	m.controlPort().Send(makeCtrlRsp(m.controlPort(), msg.Command,
+		msg.Src, msg.ID, false, control.ErrMustBePausedOrDrained))
+	m.controlPort().RetrieveIncoming()
+	return true
+}
+
+// invalidateEntries marks every cached page matching the filter invalid.
+func invalidateEntries(
+	state *State,
+	spec Spec,
+	addresses []uint64,
+	pid vm.PID,
+) {
+	matchAddr := make(map[uint64]bool, len(addresses))
+	for _, a := range addresses {
+		matchAddr[a/spec.PageSize*spec.PageSize] = true
+	}
+
+	for si := range state.Sets {
+		set := &state.Sets[si]
+		for wi := range set.Blocks {
+			page := set.Blocks[wi].Page
+			if !page.Valid {
+				continue
+			}
+			if pid != 0 && page.PID != pid {
+				continue
+			}
+			if len(addresses) > 0 && !matchAddr[page.VAddr] {
+				continue
+			}
+			page.Valid = false
+			setUpdate(set, wi, page)
+		}
+	}
 }
 
 func (m *ctrlMiddleware) handleReset(msg *mem.ControlReq) bool {

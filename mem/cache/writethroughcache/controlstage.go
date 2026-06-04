@@ -86,23 +86,13 @@ func (s *controlStage) flushPort(port messaging.Port) {
 	}
 }
 
-// processNewRequest consumes only CmdFlush from the Control port.
-// All other verbs are owned by ctrlMiddleware and are left in the
-// incoming queue.
+// processNewRequest no longer consumes any control verb: ctrlMiddleware
+// owns every verb, including the now no-op Flush. The legacy
+// startCacheFlush / processCurrentFlush compound-flush path is retained
+// only for its dedicated unit tests, which drive HasProcessingFlush
+// directly.
 func (s *controlStage) processNewRequest() bool {
-	msgI := s.ctrlPort.PeekIncoming()
-	if msgI == nil {
-		return false
-	}
-
-	req, ok := msgI.(*mem.ControlReq)
-	if !ok {
-		return false
-	}
-	if req.Command != mem.CmdFlush {
-		return false
-	}
-	return s.startCacheFlush(req)
+	return false
 }
 
 func (s *controlStage) startCacheFlush(msg *mem.ControlReq) bool {

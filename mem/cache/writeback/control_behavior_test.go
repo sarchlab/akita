@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -97,6 +98,36 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		rsp.RspTo = read.ID
 		rsp.TrafficClass = "mem.DataReadyRsp"
 		return rsp
+	}
+
+	makeFilteredCtrlReq := func(
+		cmd mem.ControlCommand,
+		addresses []uint64,
+	) *mem.ControlReq {
+		req := makeCtrlReq(cmd)
+		req.Addresses = addresses
+		return req
+	}
+
+	// residentDirtyBlock installs a valid+dirty block holding addr at way 0
+	// of addr's set, writing distinct data into its backing storage slot so
+	// a later flush write-back can be identified by its payload. It returns
+	// the block's set ID so the test can inspect it after the verb.
+	residentDirtyBlock := func(addr uint64, fill byte) int {
+		setID := int(addr / uint64(blockSize) % uint64(comp.Spec().NumSets))
+		block := &comp.State.DirectoryState.Sets[setID].Blocks[0]
+		block.Tag = addr
+		block.PID = 0
+		block.IsValid = true
+		block.IsDirty = true
+
+		data := make([]byte, blockSize)
+		for i := range data {
+			data[i] = fill
+		}
+		Expect(storage.Write(block.CacheAddress, data)).To(Succeed())
+
+		return setID
 	}
 
 	BeforeEach(func() {
@@ -240,4 +271,150 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		Entry("from Paused", cacheStatePaused),
 		Entry("from Draining", cacheStateDraining),
 	)
+
+	It("drops only the address-filtered block on Invalidate, keeping the "+
+		"other resident block", func() {
+		// Two resident blocks in different sets so they never collide.
+		const addrKeep = uint64(0x0)
+		const addrDrop = uint64(blockSize) // next block, set 1
+		setKeep := residentDirtyBlock(addrKeep, 0xAA)
+		setDrop := residentDirtyBlock(addrDrop, 0xBB)
+
+		// Both are valid before the verb.
+		Expect(comp.State.DirectoryState.Sets[setKeep].Blocks[0].IsValid).
+			To(BeTrue())
+		Expect(comp.State.DirectoryState.Sets[setDrop].Blocks[0].IsValid).
+			To(BeTrue())
+
+		// Pause: Invalidate is only legal once paused.
+		comp.State.CacheState = int(cacheStatePaused)
+
+		inv := makeFilteredCtrlReq(mem.CmdInvalidate, []uint64{addrDrop})
+		ctrlPort.Deliver(inv)
+
+		var rsp *mem.ControlRsp
+		for i := 0; i < 64 && rsp == nil; i++ {
+			comp.Tick()
+			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				rsp, _ = out.(*mem.ControlRsp)
+			}
+		}
+
+		Expect(rsp).ToNot(BeNil())
+		Expect(rsp.Command).To(Equal(mem.CmdInvalidate))
+		Expect(rsp.Success).To(BeTrue())
+		Expect(rsp.RspTo).To(Equal(inv.ID))
+
+		// Only the filtered block was dropped; the other stays resident.
+		dropBlock := &comp.State.DirectoryState.Sets[setDrop].Blocks[0]
+		keepBlock := &comp.State.DirectoryState.Sets[setKeep].Blocks[0]
+		Expect(dropBlock.IsValid).To(BeFalse(),
+			"filtered block must be invalidated")
+		Expect(keepBlock.IsValid).To(BeTrue(),
+			"unfiltered block must remain resident")
+		Expect(keepBlock.Tag).To(Equal(addrKeep))
+
+		// Invalidate discards dirty data silently: no write-back is emitted.
+		Expect(botPort.RetrieveOutgoing()).To(BeNil())
+	})
+
+	It("rejects Invalidate while Enabled with ErrMustBePausedOrDrained",
+		func() {
+			residentDirtyBlock(0x0, 0xAA)
+			// Cache is Running (Enabled) as freshly built.
+			Expect(cacheState(comp.State.CacheState)).
+				To(Equal(cacheStateRunning))
+
+			inv := makeCtrlReq(mem.CmdInvalidate)
+			ctrlPort.Deliver(inv)
+
+			var rsp *mem.ControlRsp
+			for i := 0; i < 64 && rsp == nil; i++ {
+				comp.Tick()
+				if out := ctrlPort.RetrieveOutgoing(); out != nil {
+					rsp, _ = out.(*mem.ControlRsp)
+				}
+			}
+
+			Expect(rsp).ToNot(BeNil())
+			Expect(rsp.Command).To(Equal(mem.CmdInvalidate))
+			Expect(rsp.Success).To(BeFalse())
+			Expect(rsp.Error).To(Equal(control.ErrMustBePausedOrDrained))
+
+			// The block is untouched because the verb was rejected.
+			Expect(comp.State.DirectoryState.Sets[0].Blocks[0].IsValid).
+				To(BeTrue())
+		})
+
+	It("writes back only the address-filtered dirty block on Flush, "+
+		"leaving the other dirty block in place", func() {
+		const addrFlush = uint64(0x0)
+		const addrKeep = uint64(blockSize) // set 1
+		const flushFill = byte(0x11)
+		const keepFill = byte(0x22)
+		setFlush := residentDirtyBlock(addrFlush, flushFill)
+		setKeep := residentDirtyBlock(addrKeep, keepFill)
+
+		// Pause so Flush is legal.
+		comp.State.CacheState = int(cacheStatePaused)
+
+		flush := makeFilteredCtrlReq(mem.CmdFlush, []uint64{addrFlush})
+		ctrlPort.Deliver(flush)
+
+		// Drive to completion, capturing every Bottom write-back and the
+		// async Flush ack. The lower memory must answer write-backs with a
+		// WriteDoneRsp or the flush never finishes.
+		botWrites := []*mem.WriteReq{}
+		var flushRsp *mem.ControlRsp
+		for i := 0; i < 4096 && flushRsp == nil; i++ {
+			comp.Tick()
+			for {
+				out := botPort.RetrieveOutgoing()
+				if out == nil {
+					break
+				}
+				if w, ok := out.(*mem.WriteReq); ok {
+					botWrites = append(botWrites, w)
+					done := &mem.WriteDoneRsp{}
+					done.ID = timing.GetIDGenerator().Generate()
+					done.Src = messaging.RemotePort("LowerCache")
+					done.Dst = botPort.AsRemote()
+					done.RspTo = w.ID
+					done.TrafficClass = "mem.WriteDoneRsp"
+					botPort.Deliver(done)
+				}
+			}
+			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if r, ok := out.(*mem.ControlRsp); ok &&
+					r.Command == mem.CmdFlush {
+					flushRsp = r
+				}
+			}
+		}
+
+		Expect(flushRsp).ToNot(BeNil())
+		Expect(flushRsp.Success).To(BeTrue())
+		Expect(flushRsp.RspTo).To(Equal(flush.ID))
+
+		// Exactly one write-back, for the filtered block only.
+		Expect(botWrites).To(HaveLen(1))
+		Expect(botWrites[0].Address).To(Equal(addrFlush))
+		Expect(botWrites[0].Data).To(HaveLen(blockSize))
+		Expect(botWrites[0].Data[0]).To(Equal(flushFill),
+			"the written-back payload must be the filtered block's data")
+		for _, b := range botWrites[0].Data {
+			Expect(b).To(Equal(flushFill))
+		}
+
+		// The flushed block is now clean but still valid; the unfiltered
+		// dirty block was neither written back nor cleaned.
+		flushBlock := &comp.State.DirectoryState.Sets[setFlush].Blocks[0]
+		keepBlock := &comp.State.DirectoryState.Sets[setKeep].Blocks[0]
+		Expect(flushBlock.IsValid).To(BeTrue())
+		Expect(flushBlock.IsDirty).To(BeFalse(),
+			"flushed block must be clean after write-back")
+		Expect(keepBlock.IsValid).To(BeTrue())
+		Expect(keepBlock.IsDirty).To(BeTrue(),
+			"unfiltered dirty block must stay dirty")
+	})
 })

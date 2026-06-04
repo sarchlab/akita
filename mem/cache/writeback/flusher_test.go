@@ -114,6 +114,9 @@ var _ = Describe("Flusher", func() {
 
 	Context("flush without reset", func() {
 		It("should start flushing", func() {
+			// Flush is a conditional verb: it is only legal once paused.
+			m.comp.State.CacheState = int(cacheStatePaused)
+
 			req := &mem.ControlReq{Command: mem.CmdFlush}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.TrafficClass = "mem.ControlReq"
@@ -190,12 +193,16 @@ var _ = Describe("Flusher", func() {
 			Expect(ret).To(BeTrue())
 			next = &m.comp.State
 			Expect(next.HasProcessingFlush).To(BeFalse())
-			Expect(cacheState(next.CacheState)).To(Equal(cacheStateRunning))
+			// Flush returns the cache to paused (its prior, legal state).
+			Expect(cacheState(next.CacheState)).To(Equal(cacheStatePaused))
 		})
 	})
 
 	Context("flush with reset", func() {
 		It("should remove inflight state", func() {
+			// Flush is a conditional verb: it is only legal once paused.
+			m.comp.State.CacheState = int(cacheStatePaused)
+
 			req := &mem.ControlReq{Command: mem.CmdFlush}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.TrafficClass = "mem.ControlReq"

@@ -350,6 +350,25 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		write2.TrafficClass = "mem.WriteReq"
 		cacheComp.GetPortByName("Top").Deliver(write2)
 
+		// Let the writes settle so the block is resident and dirty.
+		engine.Run()
+		Expect(controlAgentPort.RetrieveIncoming()).To(BeNil())
+
+		// Flush is a conditional verb: pause first so it is legal.
+		pause := &mem.ControlReq{Command: mem.CmdPause}
+		pause.ID = timing.GetIDGenerator().Generate()
+		pause.Src = controlAgentPort.AsRemote()
+		pause.Dst = cacheComp.GetPortByName("Control").AsRemote()
+		pause.TrafficClass = "mem.ControlReq"
+		cacheComp.GetPortByName("Control").Deliver(pause)
+
+		engine.Run()
+
+		pauseRsp := controlAgentPort.RetrieveIncoming()
+		Expect(pauseRsp).NotTo(BeNil())
+		Expect(pauseRsp.(*mem.ControlRsp).Command).To(Equal(mem.CmdPause))
+		Expect(pauseRsp.(*mem.ControlRsp).Success).To(BeTrue())
+
 		flush := &mem.ControlReq{Command: mem.CmdFlush}
 		flush.ID = timing.GetIDGenerator().Generate()
 		flush.Src = controlAgentPort.AsRemote()
@@ -362,5 +381,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		rsp := controlAgentPort.RetrieveIncoming()
 		Expect(rsp).NotTo(BeNil())
 		Expect(rsp.Meta().RspTo).To(Equal(flush.ID))
+		Expect(rsp.(*mem.ControlRsp).Success).To(BeTrue())
+
+		// The dirty block's data reached DRAM.
+		flushed, err := dramStorage.Read(0x100000, 4)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(flushed).To(Equal([]byte{1, 2, 3, 4}))
 	})
 })
