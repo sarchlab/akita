@@ -1,0 +1,8 @@
+{
+  "label": "Building Systems",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "Composing components into a memory subsystem and a small network."
+  }
+}

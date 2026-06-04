@@ -30,6 +30,19 @@ timing.
 cd 02_cell_split && go run main.go
 ```
 
+### 03_first_component — Minimal Tick-Based Component
+
+A single tick-based component, no ports. Ticks three times, prints the
+current cycle, then stops. Demonstrates the Spec / State / middleware
+shape with the smallest possible code.
+
+**Key concepts**: `modeling.Component`, `Spec`/`State` separation, the
+`Tick() bool` middleware contract, `TickLater` to start the loop.
+
+```bash
+cd 03_first_component && go run main.go
+```
+
 ### tickingping — Tick-Based Component Communication
 
 Two components exchange ping/pong messages using the **ticking middleware**
