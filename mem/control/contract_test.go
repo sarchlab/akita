@@ -27,6 +27,10 @@ type fakeComp struct {
 	// pending captures an in-flight async verb that owes a Rsp; sync
 	// verbs are answered inside the same tick and never sit here.
 	pending  *pendingReq
+
+	// paused tracks whether the component is paused/drained, which the
+	// conditional verbs (Invalidate, Flush) require.
+	paused bool
 }
 
 type pendingReq struct {
@@ -73,6 +77,9 @@ func (c *fakeComp) Tick() bool {
 	if c.pending != nil {
 		c.pending.ticksLeft--
 		if c.pending.ticksLeft <= 0 && port.CanSend() {
+			if c.pending.cmd == mem.CmdDrain {
+				c.paused = true
+			}
 			port.Send(c.makeRsp(c.pending.cmd, c.pending.src,
 				c.pending.id, true, ""))
 			c.pending = nil
@@ -94,20 +101,24 @@ func (c *fakeComp) Tick() bool {
 
 func (c *fakeComp) handleReq(port messaging.Port, req *mem.ControlReq) bool {
 	if !c.matrix.Supports(req.Command) {
-		if !port.CanSend() {
-			return false
-		}
-		port.Send(c.makeRsp(req.Command, req.Src, req.ID, false,
-			control.ErrUnsupported))
-		return true
+		return c.respond(port, req, false, control.ErrUnsupported)
+	}
+
+	// Conditional verbs are only legal while paused or drained.
+	if (req.Command == mem.CmdInvalidate || req.Command == mem.CmdFlush) &&
+		!c.paused {
+		return c.respond(port, req, false, control.ErrMustBePausedOrDrained)
+	}
+
+	switch req.Command {
+	case mem.CmdPause:
+		c.paused = true
+	case mem.CmdEnable, mem.CmdReset:
+		c.paused = false
 	}
 
 	if control.IsSyncVerb(req.Command) {
-		if !port.CanSend() {
-			return false
-		}
-		port.Send(c.makeRsp(req.Command, req.Src, req.ID, true, ""))
-		return true
+		return c.respond(port, req, true, "")
 	}
 
 	c.pending = &pendingReq{
@@ -116,6 +127,19 @@ func (c *fakeComp) handleReq(port messaging.Port, req *mem.ControlReq) bool {
 		id:        req.ID,
 		ticksLeft: c.asyncDelay,
 	}
+	return true
+}
+
+func (c *fakeComp) respond(
+	port messaging.Port,
+	req *mem.ControlReq,
+	success bool,
+	errStr string,
+) bool {
+	if !port.CanSend() {
+		return false
+	}
+	port.Send(c.makeRsp(req.Command, req.Src, req.ID, success, errStr))
 	return true
 }
 

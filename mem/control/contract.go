@@ -103,6 +103,78 @@ func RunContract(
 			checkVerb(t, h, v.cmd, matrix.Supports(v.cmd))
 		})
 	}
+
+	// Conditional verbs (Invalidate, Flush) are only legal once the
+	// component is paused or drained. When supported, issuing them from
+	// the freshly-built (Enabled) state must be rejected with
+	// ErrMustBePausedOrDrained rather than silently acted on.
+	for _, v := range verbs {
+		if !matrix.Supports(v.cmd) || !isConditionalVerb(v.cmd) {
+			continue
+		}
+
+		t.Run(fmt.Sprintf("%s/%s-illegal-when-enabled", name, v.label),
+			func(t *testing.T) {
+				h := build()
+				defer func() {
+					if h.Teardown != nil {
+						h.Teardown()
+					}
+				}()
+
+				checkConditionalIllegalState(t, h, v.cmd)
+			})
+	}
+}
+
+// isConditionalVerb reports whether the verb requires the component to be
+// paused or drained before it is legal.
+func isConditionalVerb(cmd mem.ControlCommand) bool {
+	return cmd == mem.CmdInvalidate || cmd == mem.CmdFlush
+}
+
+// pauseForConditionalVerb drives the component to a paused state so a
+// subsequent Invalidate or Flush is legal.
+func pauseForConditionalVerb(t *testing.T, h *Harness) {
+	t.Helper()
+
+	req := newControlReq(h.Ctrl, mem.CmdPause)
+	h.Ctrl.Deliver(req)
+
+	rsp := drainForRsp(h, maxTicks)
+	if rsp == nil || rsp.Command != mem.CmdPause || !rsp.Success {
+		t.Fatalf("could not pause before conditional verb; got %+v", rsp)
+	}
+}
+
+// checkConditionalIllegalState delivers a conditional verb to an Enabled
+// component and asserts it is rejected per the protocol.
+func checkConditionalIllegalState(
+	t *testing.T,
+	h *Harness,
+	cmd mem.ControlCommand,
+) {
+	t.Helper()
+
+	req := newControlReq(h.Ctrl, cmd)
+	h.Ctrl.Deliver(req)
+
+	rsp := drainForRsp(h, maxTicks)
+	if rsp == nil {
+		t.Fatalf("no ControlRsp received for %v issued while Enabled", cmd)
+	}
+
+	if rsp.Command != cmd {
+		t.Errorf("Rsp.Command = %v, want %v", rsp.Command, cmd)
+	}
+
+	if rsp.Success {
+		t.Errorf("Rsp.Success = true, want false for %v while Enabled", cmd)
+	}
+
+	if rsp.Error != ErrMustBePausedOrDrained {
+		t.Errorf("Rsp.Error = %q, want %q", rsp.Error, ErrMustBePausedOrDrained)
+	}
 }
 
 // checkVerb performs one verb's round trip against the harness.
@@ -113,6 +185,12 @@ func checkVerb(
 	supported bool,
 ) {
 	t.Helper()
+
+	if supported && isConditionalVerb(cmd) {
+		// Invalidate and Flush are only legal once the component is
+		// paused or drained, so quiesce it before driving the verb.
+		pauseForConditionalVerb(t, h)
+	}
 
 	req := newControlReq(h.Ctrl, cmd)
 	h.Ctrl.Deliver(req)
