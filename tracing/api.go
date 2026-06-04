@@ -221,7 +221,7 @@ func TraceReqInitiate(
 		taskParentID,
 		domain,
 		"req_out",
-		reflect.TypeOf(msg).Name(),
+		msgTypeName(msg),
 		msg,
 	)
 }
@@ -242,7 +242,7 @@ func TraceReqReceive(
 		msg.Meta().ID,
 		domain,
 		"req_in",
-		reflect.TypeOf(msg).Name(),
+		msgTypeName(msg),
 		msg,
 	)
 }
@@ -264,4 +264,16 @@ func TraceReqFinalize(
 	domain NamedHookable,
 ) {
 	EndTask(msg.Meta().ID, domain)
+}
+
+// msgTypeName returns the Go type name of the message's underlying type,
+// transparently unwrapping pointers so both value- and pointer-typed
+// implementations of [messaging.Msg] yield a non-empty name.
+func msgTypeName(msg messaging.Msg) string {
+	t := reflect.TypeOf(msg)
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+
+	return t.Name()
 }
