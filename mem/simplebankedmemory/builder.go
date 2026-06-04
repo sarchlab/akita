@@ -17,6 +17,7 @@ var defaultSpec = Spec{
 	StageLatency:                   10,
 	PostPipelineBufSize:            1,
 	TopPortBufferSize:              16,
+	CtrlPortBufferSize:             4,
 	Capacity:                       4 * mem.GB,
 	BankSelectorKind:               "interleaved",
 	BankSelectorLog2InterleaveSize: 6,
@@ -89,6 +90,16 @@ func (b Builder) Build(name string) *Comp {
 		modelComp, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
 	modelComp.AddPort("Top", topPort)
 
+	ctrlBuf := spec.CtrlPortBufferSize
+	if ctrlBuf == 0 {
+		ctrlBuf = 4
+	}
+	ctrlPort := messaging.NewPort(
+		modelComp, ctrlBuf, ctrlBuf, name+".Control")
+	modelComp.AddPort("Control", ctrlPort)
+
+	cMW := &ctrlMiddleware{comp: modelComp}
+	modelComp.AddMiddleware(cMW)
 	tfMW := &tickFinalizeMW{comp: modelComp}
 	modelComp.AddMiddleware(tfMW)
 	dMW := &dispatchMW{comp: modelComp}
@@ -113,12 +124,15 @@ func (b Builder) resolveStorage(name string, spec Spec) *mem.Storage {
 }
 
 func buildInitialState(spec Spec) State {
-	state := State{
-		Banks: make([]bankState, spec.NumBanks),
+	return State{
+		Banks: buildInitialBanks(spec),
 	}
+}
 
-	for i := range state.Banks {
-		state.Banks[i] = bankState{
+func buildInitialBanks(spec Spec) []bankState {
+	banks := make([]bankState, spec.NumBanks)
+	for i := range banks {
+		banks[i] = bankState{
 			Pipeline: queueing.NewPipeline[bankPipelineItemState](
 				spec.BankPipelineWidth,
 				spec.BankPipelineDepth*spec.StageLatency,
@@ -129,6 +143,5 @@ func buildInitialState(spec Spec) State {
 			),
 		}
 	}
-
-	return state
+	return banks
 }

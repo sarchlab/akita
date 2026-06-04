@@ -2,6 +2,8 @@ package simplebankedmemory
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
@@ -16,6 +18,7 @@ type Spec struct {
 	StageLatency                   int         `json:"stage_latency"`
 	PostPipelineBufSize            int         `json:"post_pipeline_buf_size"`
 	TopPortBufferSize              int         `json:"top_port_buffer_size"`
+	CtrlPortBufferSize             int         `json:"ctrl_port_buffer_size"`
 	Capacity                       uint64      `json:"capacity"`
 	BankSelectorKind               string      `json:"bank_selector_kind"`
 	BankSelectorLog2InterleaveSize uint64      `json:"bank_selector_log2_interleave_size"`
@@ -44,7 +47,10 @@ type bankState struct {
 
 // State contains mutable runtime data for the simple banked memory.
 type State struct {
-	Banks []bankState `json:"banks"`
+	ControlState  control.State        `json:"control_state"`
+	CurrentCmdID  uint64               `json:"current_cmd_id"`
+	CurrentCmdSrc messaging.RemotePort `json:"current_cmd_src"`
+	Banks         []bankState          `json:"banks"`
 }
 
 // Resources holds the shared resources referenced by the memory.
