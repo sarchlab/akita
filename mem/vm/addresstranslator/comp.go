@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -78,9 +79,11 @@ type reqToBottomState struct {
 
 // State contains mutable runtime data for the AddressTranslator.
 type State struct {
-	IsFlushing          bool               `json:"is_flushing"`
-	Transactions        []transactionState `json:"transactions"`
-	InflightReqToBottom []reqToBottomState `json:"inflight_req_to_bottom"`
+	ControlState        control.State        `json:"control_state"`
+	CurrentCmdID        uint64               `json:"current_cmd_id"`
+	CurrentCmdSrc       messaging.RemotePort `json:"current_cmd_src"`
+	Transactions        []transactionState   `json:"transactions"`
+	InflightReqToBottom []reqToBottomState   `json:"inflight_req_to_bottom"`
 }
 
 // Helper functions

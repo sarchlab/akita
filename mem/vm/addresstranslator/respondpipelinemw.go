@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -31,17 +32,24 @@ func (m *respondPipelineMW) translationPort() messaging.Port {
 	return m.comp.GetPortByName("Translation")
 }
 
-// Tick runs the respond pipeline: respond + parseTranslation.
+// Tick runs the respond pipeline: respond + parseTranslation. It is
+// gated by ControlState — paused agents do not advance in-flight
+// transactions; draining and enabled agents do, so a Drain can
+// converge.
 func (m *respondPipelineMW) Tick() bool {
+	if m.comp.State.ControlState == control.StatePaused {
+		return false
+	}
+
 	madeProgress := false
 
 	spec := m.comp.Spec()
 
-	for i := 0; i < spec.NumReqPerCycle; i++ {
+	for range spec.NumReqPerCycle {
 		madeProgress = m.respond() || madeProgress
 	}
 
-	for i := 0; i < spec.NumReqPerCycle; i++ {
+	for range spec.NumReqPerCycle {
 		madeProgress = m.parseTranslation() || madeProgress
 	}
 

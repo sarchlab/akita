@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -76,8 +77,8 @@ var _ = Describe("Address Translator", func() {
 			conn.PlugIn(p)
 		}
 
-		tParseTransMW = t.Middlewares()[0].(*parseTranslateMW)
-		tRespondPipeMW = t.Middlewares()[1].(*respondPipelineMW)
+		tParseTransMW = t.Middlewares()[1].(*parseTranslateMW)
+		tRespondPipeMW = t.Middlewares()[2].(*respondPipelineMW)
 	}
 
 	BeforeEach(func() {
@@ -531,29 +532,32 @@ var _ = Describe("Address Translator", func() {
 			}
 		})
 
-		It("should handle flush req", func() {
+		It("rejects Flush as unsupported", func() {
 			ctrlPort.Deliver(flushReq)
 
-			madeProgress := tParseTransMW.handleCtrlRequest()
+			madeProgress := t.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(ctrlPort.RetrieveOutgoing()).To(
-				BeAssignableToTypeOf(&mem.ControlRsp{}))
-			updatedState := &t.State
-			Expect(updatedState.IsFlushing).To(BeTrue())
-			Expect(updatedState.InflightReqToBottom).To(BeNil())
+			rspMsg := ctrlPort.RetrieveOutgoing()
+			Expect(rspMsg).To(BeAssignableToTypeOf(&mem.ControlRsp{}))
+			rsp := rspMsg.(*mem.ControlRsp)
+			Expect(rsp.Success).To(BeFalse())
+			Expect(rsp.Error).To(Equal(control.ErrUnsupported))
 		})
 
-		It("should handle restart req", func() {
+		It("clears in-flight state on Reset", func() {
 			ctrlPort.Deliver(restartReq)
 
-			madeProgress := tParseTransMW.handleCtrlRequest()
+			madeProgress := t.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(ctrlPort.RetrieveOutgoing()).To(
-				BeAssignableToTypeOf(&mem.ControlRsp{}))
+			rspMsg := ctrlPort.RetrieveOutgoing()
+			Expect(rspMsg).To(BeAssignableToTypeOf(&mem.ControlRsp{}))
+			rsp := rspMsg.(*mem.ControlRsp)
+			Expect(rsp.Success).To(BeTrue())
 			updatedState := &t.State
-			Expect(updatedState.IsFlushing).To(BeFalse())
+			Expect(updatedState.ControlState).To(Equal(control.StateEnabled))
+			Expect(updatedState.InflightReqToBottom).To(BeEmpty())
 		})
 
 	})
