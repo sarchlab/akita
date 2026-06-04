@@ -2,6 +2,7 @@ package dram
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -13,9 +14,14 @@ type parseTopMW struct {
 	topPort messaging.Port
 }
 
-// Tick runs the parseTop stage.
+// Tick runs the parseTop stage. Pause and Drain both stop accepting
+// new traffic from the Top port; only Enabled DRAM accepts new
+// transactions.
 func (m *parseTopMW) Tick() bool {
 	next := &m.comp.State
+	if next.ControlState != control.StateEnabled {
+		return false
+	}
 	spec := m.comp.Spec()
 
 	return m.parseTop(&spec, next)

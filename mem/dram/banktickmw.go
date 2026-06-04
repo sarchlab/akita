@@ -1,6 +1,7 @@
 package dram
 
 import (
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/modeling"
 )
 
@@ -10,9 +11,14 @@ type bankTickMW struct {
 	cmdCycles map[commandKind]int
 }
 
-// Tick runs tickBanks, issue, and tickSubTransQueue.
+// Tick runs tickBanks, issue, and tickSubTransQueue. Paused DRAM
+// freezes the timing pipeline so in-flight transactions stay where
+// they are; draining DRAM continues so the drain can converge.
 func (m *bankTickMW) Tick() bool {
 	next := &m.comp.State
+	if next.ControlState == control.StatePaused {
+		return false
+	}
 	spec := m.comp.Spec()
 	next.TickCount++
 	next.TotalCycles++
