@@ -1,11 +1,11 @@
 ---
-sidebar_position: 2
+sidebar_position: 1
 ---
 
 # Ports and Messages
 
-The previous chapter showed the minimal component — one component, no
-ports, one middleware. This chapter shows the full pattern: **ports** for
+Getting Started showed the minimal component — one component, no ports,
+one middleware. This chapter shows the full pattern: **ports** for
 inter-component messages, **multiple middlewares** in one component, and
 the per-package **builder** convention used throughout Akita.
 

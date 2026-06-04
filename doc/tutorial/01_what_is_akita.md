@@ -96,5 +96,7 @@ muscle memory to extend it.
 
 ## Where to Next
 
-The next chapter is a short Getting Started — install Go, clone the
-repository, and run the first example to confirm your environment works.
+The next chapter is a short **Install and Verify** — install Go, clone
+the repository, and run the smallest example to confirm your environment
+works. After that, **Getting Started** introduces what a component is and
+walks through that example line by line.

@@ -1,6 +1,6 @@
 {
   "label": "Observability and Persistence",
-  "position": 6,
+  "position": 7,
   "link": {
     "type": "generated-index",
     "description": "Tracing, live monitoring, and checkpointing — the tools you use to understand a running simulation and stop and resume it."
