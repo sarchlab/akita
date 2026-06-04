@@ -157,7 +157,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 
 	m.topPort().Send(rsp)
 
-	m.traceReqComplete(tx.RecvTaskID)
+	m.traceReqComplete(tx.RecvTaskID, tx.ReqID)
 
 	return true
 }
@@ -207,11 +207,12 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 		}
 	}
 
-	m.traceReqComplete(tx.RecvTaskID)
+	m.traceReqComplete(tx.RecvTaskID, tx.ReqID)
 
 	return true
 }
 
-func (m *memMiddleware) traceReqComplete(recvTaskID uint64) {
+func (m *memMiddleware) traceReqComplete(recvTaskID, reqMsgID uint64) {
 	tracing.EndTask(recvTaskID, m.comp)
+	tracing.ForgetMsgIDAtReceiver(reqMsgID, m.comp)
 }

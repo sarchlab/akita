@@ -39,7 +39,11 @@ func lookupOrCreateReceiverTaskID(msg messaging.Msg, domain NamedHookable) uint6
 }
 
 func forgetReceiverTaskID(msg messaging.Msg, domain NamedHookable) {
-	key := receiverTaskKey{domain: domain.Name(), msgID: msg.Meta().ID}
+	forgetReceiverTaskIDByMsgID(msg.Meta().ID, domain)
+}
+
+func forgetReceiverTaskIDByMsgID(msgID uint64, domain NamedHookable) {
+	key := receiverTaskKey{domain: domain.Name(), msgID: msgID}
 
 	receiverTaskIDsMu.Lock()
 	delete(receiverTaskIDs, key)

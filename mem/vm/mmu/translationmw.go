@@ -169,7 +169,7 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	m.topPort().Send(rsp)
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
-	m.traceReqComplete(walking.RecvTaskID)
+	m.traceReqComplete(walking.RecvTaskID, walking.ReqID)
 
 	return true
 }
@@ -269,6 +269,7 @@ func (m *translationMW) allocatePhysicalPage() uint64 {
 	}
 }
 
-func (m *translationMW) traceReqComplete(recvTaskID uint64) {
+func (m *translationMW) traceReqComplete(recvTaskID, reqMsgID uint64) {
 	tracing.EndTask(recvTaskID, m.comp)
+	tracing.ForgetMsgIDAtReceiver(reqMsgID, m.comp)
 }

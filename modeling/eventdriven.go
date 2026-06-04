@@ -23,13 +23,7 @@ type TimerFiredEvent struct {
 
 // MakeTimerFiredEvent creates a new TimerFiredEvent.
 func MakeTimerFiredEvent(handlerID string, time timing.VTimeInSec) TimerFiredEvent {
-	evt := TimerFiredEvent{}
-	evt.ID = timing.GetIDGenerator().Generate()
-	evt.HandlerID_ = handlerID
-	evt.Time_ = time
-	evt.Secondary = false
-
-	return evt
+	return TimerFiredEvent{EventBase: timing.MakeEventBase(time, handlerID)}
 }
 
 // EventDrivenComponent is a generic component that reacts to events rather

@@ -185,9 +185,23 @@ func EndTask(
 // MsgIDAtReceiver returns the receiver-side task ID for the message at the
 // given domain, generating one if needed. The ID is held in a tracing-local
 // registry keyed by (domain, msg.Meta().ID), so the message itself is never
-// mutated.
+// mutated. When the domain has no hooks the receiver-side ID is unused, so
+// this returns 0 without touching the registry — that avoids accumulating
+// entries in simulations that never enable tracing.
 func MsgIDAtReceiver(msg messaging.Msg, domain NamedHookable) uint64 {
+	if domain.NumHooks() == 0 {
+		return 0
+	}
+
 	return lookupOrCreateReceiverTaskID(msg, domain)
+}
+
+// ForgetMsgIDAtReceiver releases the registry entry created by
+// [MsgIDAtReceiver] for the message identified by msgID. Use this on
+// completion paths that only retain the request's message ID, not the
+// message value.
+func ForgetMsgIDAtReceiver(msgID uint64, domain NamedHookable) {
+	forgetReceiverTaskIDByMsgID(msgID, domain)
 }
 
 // TraceReqInitiate marks a task starting at the sender of a message. The

@@ -203,6 +203,7 @@ func (m *incomingMW) logMsgReq(isEnd bool, msg messaging.Msg) {
 	taskID := tracing.MsgIDAtReceiver(msg, m.comp)
 	if isEnd {
 		tracing.EndTask(taskID, m.comp)
+		tracing.ForgetMsgIDAtReceiver(msg.Meta().ID, m.comp)
 	} else {
 		tracing.StartTask(
 			taskID,
@@ -216,6 +217,7 @@ func (m *incomingMW) logMsgRsp(isEnd bool, msg messaging.Msg) {
 	taskID := tracing.MsgIDAtReceiver(msg, m.comp)
 	if isEnd {
 		tracing.EndTask(taskID, m.comp)
+		tracing.ForgetMsgIDAtReceiver(msg.Meta().ID, m.comp)
 	} else {
 		tracing.StartTask(
 			taskID,
