@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -17,6 +18,7 @@ type Spec struct {
 	OutsideByteGranularity uint64      `json:"outside_byte_granularity"`
 
 	CtrlPortBufferSize    int `json:"ctrl_port_buffer_size"`
+	TopPortBufferSize     int `json:"top_port_buffer_size"`
 	InsidePortBufferSize  int `json:"inside_port_buffer_size"`
 	OutsidePortBufferSize int `json:"outside_port_buffer_size"`
 
@@ -89,6 +91,9 @@ type dataMoverTransactionState struct {
 
 // State contains mutable runtime data for the data mover.
 type State struct {
+	ControlState       control.State             `json:"control_state"`
+	CurrentCmdID       uint64                    `json:"current_cmd_id"`
+	CurrentCmdSrc      messaging.RemotePort      `json:"current_cmd_src"`
 	CurrentTransaction dataMoverTransactionState `json:"current_transaction"`
 	Buffer             bufferState               `json:"buffer"`
 	SrcByteGranularity uint64                    `json:"src_byte_granularity"`

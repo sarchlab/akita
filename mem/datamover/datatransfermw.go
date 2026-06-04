@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/timing"
@@ -82,8 +83,14 @@ func (m *dataTransferMW) findDstPort(addr uint64) messaging.RemotePort {
 	}
 }
 
-// Tick runs data transfer stages.
+// Tick runs data transfer stages. Paused data movers make no progress;
+// draining data movers continue to let the current transaction
+// complete so a drain can converge.
 func (m *dataTransferMW) Tick() bool {
+	if m.comp.State.ControlState == control.StatePaused {
+		return false
+	}
+
 	madeProgress := false
 
 	madeProgress = m.processWriteDoneFromDst() || madeProgress

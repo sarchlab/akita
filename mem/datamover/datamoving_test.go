@@ -72,7 +72,7 @@ var _ = Describe("DataMover", func() {
 			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 			Build("Conn")
 		conn.PlugIn(srcPort)
-		conn.PlugIn(dataMover.GetPortByName("Control"))
+		conn.PlugIn(dataMover.GetPortByName("Top"))
 		conn.PlugIn(dataMover.GetPortByName("Inside"))
 		conn.PlugIn(dataMover.GetPortByName("Outside"))
 		conn.PlugIn(insideMem.GetPortByName("Top"))
@@ -89,7 +89,7 @@ var _ = Describe("DataMover", func() {
 		req := &DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.GetPortByName("Control").AsRemote()
+		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
 		req.SrcSide = "outside"
 		req.DstAddress = 0
@@ -97,7 +97,7 @@ var _ = Describe("DataMover", func() {
 		req.ByteSize = 4096
 		req.TrafficClass = "datamover.DataMoveRequest"
 
-		dataMover.GetPortByName("Control").Deliver(req)
+		dataMover.GetPortByName("Top").Deliver(req)
 
 		engine.Run()
 
@@ -116,7 +116,7 @@ var _ = Describe("DataMover", func() {
 		req := &DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.GetPortByName("Control").AsRemote()
+		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
 		req.SrcSide = "inside"
 		req.DstAddress = 0
@@ -124,7 +124,7 @@ var _ = Describe("DataMover", func() {
 		req.ByteSize = 4096
 		req.TrafficClass = "datamover.DataMoveRequest"
 
-		dataMover.GetPortByName("Control").Deliver(req)
+		dataMover.GetPortByName("Top").Deliver(req)
 
 		engine.Run()
 
@@ -143,7 +143,7 @@ var _ = Describe("DataMover", func() {
 		req := &DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.GetPortByName("Control").AsRemote()
+		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
 		req.SrcSide = "inside"
 		req.DstAddress = 4096
@@ -151,7 +151,7 @@ var _ = Describe("DataMover", func() {
 		req.ByteSize = 4096
 		req.TrafficClass = "datamover.DataMoveRequest"
 
-		dataMover.GetPortByName("Control").Deliver(req)
+		dataMover.GetPortByName("Top").Deliver(req)
 
 		engine.Run()
 
@@ -170,7 +170,7 @@ var _ = Describe("DataMover", func() {
 		req := &DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.GetPortByName("Control").AsRemote()
+		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
 		req.SrcSide = "outside"
 		req.DstAddress = 512
@@ -178,7 +178,7 @@ var _ = Describe("DataMover", func() {
 		req.ByteSize = 512
 		req.TrafficClass = "datamover.DataMoveRequest"
 
-		dataMover.GetPortByName("Control").Deliver(req)
+		dataMover.GetPortByName("Top").Deliver(req)
 
 		engine.Run()
 
@@ -192,7 +192,7 @@ var _ = Describe("DataMover", func() {
 		req := &DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.GetPortByName("Control").AsRemote()
+		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
 		req.SrcSide = "inside"
 		req.DstAddress = 0
@@ -201,7 +201,7 @@ var _ = Describe("DataMover", func() {
 		req.TrafficClass = "datamover.DataMoveRequest"
 
 		Expect(func() {
-			dataMover.GetPortByName("Control").Deliver(req)
+			dataMover.GetPortByName("Top").Deliver(req)
 		}).NotTo(Panic())
 	})
 
@@ -215,7 +215,7 @@ var _ = Describe("DataMover", func() {
 		req := &DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.GetPortByName("Control").AsRemote()
+		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
 		req.SrcSide = "inside"
 		req.DstAddress = 512
@@ -223,7 +223,7 @@ var _ = Describe("DataMover", func() {
 		req.ByteSize = 512
 		req.TrafficClass = "datamover.DataMoveRequest"
 
-		dataMover.GetPortByName("Control").Deliver(req)
+		dataMover.GetPortByName("Top").Deliver(req)
 
 		engine.Run()
 
