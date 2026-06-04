@@ -49,8 +49,13 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 }
 
 func cacheIsQuiescent(state *State) bool {
-	if len(state.Transactions) != 0 {
-		return false
+	// Completed transactions are only marked Removed (the slice is compacted
+	// at Reset, not on each completion), so quiescence means no transaction
+	// is still live, not that the slice is empty.
+	for i := range state.Transactions {
+		if !state.Transactions[i].Removed {
+			return false
+		}
 	}
 	if state.WriteBufferBuf.Size() > 0 {
 		return false

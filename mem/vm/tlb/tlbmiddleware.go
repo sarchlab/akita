@@ -139,7 +139,12 @@ func (m *tlbMiddleware) handleDrain() bool {
 	madeProgress = m.processPipeline() || madeProgress
 
 	next := &m.comp.State
-	if mshrIsEmpty(next.MSHREntries) && m.bottomPort().PeekIncoming() == nil {
+	// Stay draining until the last fetched page has also been responded to
+	// the top. parseBottom stages that response in RespondingMSHRData (and
+	// empties MSHREntries) before respondMSHREntry can drain it, so pausing
+	// on mshrIsEmpty alone would strand the final translation response.
+	if mshrIsEmpty(next.MSHREntries) && !next.HasRespondingMSHR &&
+		m.bottomPort().PeekIncoming() == nil {
 		next.TLBState = tlbStatePause
 		tracing.AddMilestone(
 			timing.GetIDGenerator().Generate(),

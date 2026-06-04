@@ -180,6 +180,11 @@ func (m *ctrlMiddleware) handleReset(msg *mem.ControlReq) bool {
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 
+	// Reset is a hard reset: in-flight misses are discarded, not preserved.
+	state.MSHREntries = nil
+	state.HasRespondingMSHR = false
+	state.RespondingMSHRData = mshrEntryState{}
+
 	for m.topPort().PeekIncoming() != nil {
 		m.topPort().RetrieveIncoming()
 	}
