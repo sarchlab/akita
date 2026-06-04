@@ -169,6 +169,10 @@ func (m *processMW) Tick() bool {
         return false
     }
 
+    if !port.CanSend() {
+        return false
+    }
+
     state := &m.comp.State
     spec := m.comp.Spec
 
@@ -189,10 +193,7 @@ func (m *processMW) Tick() bool {
         NewValue: newValue,
     }
 
-    err := port.Send(rsp)
-    if err != nil {
-        return false
-    }
+    port.Send(rsp)
 
     port.RetrieveIncoming()
     return true
@@ -585,12 +586,13 @@ port := sim.NewPort(comp, inBufCap, outBufCap, name)
 
 // Component-side API
 port.CanSend() bool
-port.Send(msg) *SendError
+port.Send(msg)
 port.PeekIncoming() Msg
 port.RetrieveIncoming() Msg
 
 // Connection-side API
-port.Deliver(msg) *SendError
+port.CanDeliver() bool
+port.Deliver(msg)
 port.RetrieveOutgoing() Msg
 port.PeekOutgoing() Msg
 ```
