@@ -198,7 +198,6 @@ var _ = Describe("Flusher", func() {
 		It("should remove inflight state", func() {
 			req := &mem.ControlReq{Command: mem.CmdFlush}
 			req.ID = timing.GetIDGenerator().Generate()
-			req.DiscardInflight = true
 			req.TrafficClass = "mem.ControlReq"
 
 			controlPort.EXPECT().PeekIncoming().Return(req)

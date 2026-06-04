@@ -123,11 +123,13 @@ func (s *controlStage) startCacheFlush(msg *mem.ControlReq) bool {
 		return false
 	}
 
+	// TODO(control-protocol): Phase 2 splits Flush from Reset; the
+	// DiscardInflight/PauseAfter modifier flags were removed from
+	// mem.ControlReq. flushReqState's matching fields stay as zero
+	// until Phase 2 rewires this code path.
 	next.HasProcessingFlush = true
 	next.ProcessingFlush = flushReqState{
-		MsgMeta:         msg.MsgMeta,
-		DiscardInflight: msg.DiscardInflight,
-		PauseAfter:      msg.PauseAfter,
+		MsgMeta: msg.MsgMeta,
 	}
 
 	s.ctrlPort.RetrieveIncoming()

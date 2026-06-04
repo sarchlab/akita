@@ -152,16 +152,14 @@ func (f *flusher) extractFromPort() bool {
 func (f *flusher) startProcessingFlush(msg *mem.ControlReq) bool {
 	next := &f.pipeline.comp.State
 
+	// TODO(control-protocol): Phase 2 splits Flush from Reset; the
+	// InvalidateAfter/DiscardInflight/PauseAfter modifier flags were
+	// removed from mem.ControlReq. The flushReqState fields stay for
+	// now so the in-progress flush bookkeeping still serializes; they
+	// take their zero values until Phase 2 rewires this code path.
 	next.HasProcessingFlush = true
 	next.ProcessingFlush = flushReqState{
-		MsgMeta:         msg.MsgMeta,
-		InvalidateAfter: msg.InvalidateAfter,
-		DiscardInflight: msg.DiscardInflight,
-		PauseAfter:      msg.PauseAfter,
-	}
-
-	if msg.DiscardInflight {
-		f.pipeline.discardInflightTransactions()
+		MsgMeta: msg.MsgMeta,
 	}
 
 	next.CacheState = int(cacheStatePreFlushing)

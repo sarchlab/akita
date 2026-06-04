@@ -81,15 +81,12 @@ var _ = Describe("Control Stage", func() {
 		flushReq.ID = timing.GetIDGenerator().Generate()
 		flushReq.TrafficBytes = 0
 		flushReq.TrafficClass = "mem.ControlReq"
-		flushReq.DiscardInflight = false
 		ctrlPort.Deliver(flushReq)
 
 		// Store flush request in State instead of controlStage field
 		next.HasProcessingFlush = true
 		next.ProcessingFlush = flushReqState{
-			MsgMeta:         flushReq.MsgMeta,
-			DiscardInflight: flushReq.DiscardInflight,
-			PauseAfter:      flushReq.PauseAfter,
+			MsgMeta: flushReq.MsgMeta,
 		}
 
 		madeProgress := s.Tick()
@@ -100,9 +97,6 @@ var _ = Describe("Control Stage", func() {
 	It("should reset directory", func() {
 		flushReq := &mem.ControlReq{Command: mem.CmdFlush}
 		flushReq.ID = timing.GetIDGenerator().Generate()
-		flushReq.InvalidateAfter = true
-		flushReq.DiscardInflight = true
-		flushReq.PauseAfter = true
 		flushReq.TrafficBytes = 0
 		flushReq.TrafficClass = "mem.ControlReq"
 		flushReq.Src = messaging.RemotePort("Agent")
@@ -112,9 +106,7 @@ var _ = Describe("Control Stage", func() {
 		next := &pmw.comp.State
 		next.HasProcessingFlush = true
 		next.ProcessingFlush = flushReqState{
-			MsgMeta:         flushReq.MsgMeta,
-			DiscardInflight: flushReq.DiscardInflight,
-			PauseAfter:      flushReq.PauseAfter,
+			MsgMeta: flushReq.MsgMeta,
 		}
 
 		madeProgress := s.Tick()

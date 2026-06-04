@@ -374,9 +374,7 @@ var _ = Describe("Reorder Buffer", func() {
 			Expect(rob.State.Transactions).To(HaveLen(1))
 
 			req := &mem.ControlReq{
-				Command:         mem.CmdFlush,
-				DiscardInflight: true,
-				PauseAfter:      true,
+				Command: mem.CmdFlush,
 			}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.Src = messaging.RemotePort("Cmd")
