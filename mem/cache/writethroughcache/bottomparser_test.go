@@ -148,7 +148,7 @@ var _ = Describe("Bottom Parser", func() {
 				},
 			)
 
-			done := &mem.WriteDoneRsp{}
+			done := mem.WriteDoneRsp{}
 			done.ID = timing.GetIDGenerator().Generate()
 			done.RspTo = writeToBottomMeta.ID
 			done.TrafficBytes = 4
