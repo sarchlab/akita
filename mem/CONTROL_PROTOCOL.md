@@ -1,0 +1,246 @@
+# Memory Agent Control Protocol
+
+A uniform request/response protocol that lets external code start, stop,
+quiesce, and reset every memory agent in Akita — caches, TLBs, MMU,
+GMMU, MMU cache, address translator, ROB, ideal memory controller,
+DRAM, simple banked memory, and the datamover — through one message
+type on one well-known port.
+
+The protocol primitives live in `mem/protocol.go`. The reusable state
+enum, support matrix, and a `*testing.T` conformance harness live in
+`mem/control/`.
+
+For the migration plan that brings every component onto this protocol,
+see [`CONTROL_PROTOCOL_PLAN.md`](../CONTROL_PROTOCOL_PLAN.md) at the
+repo root.
+
+## TL;DR
+
+- Every memory agent exposes a port named `Control`.
+- That port carries `*mem.ControlReq` in and `*mem.ControlRsp` out.
+- The request's `Command` field is one of six verbs.
+- The component runs the verb and replies on the same port.
+- Whether the reply is same-tick (sync) or whenever-the-work-finishes
+  (async) is fixed by the verb, not the component.
+- A component that does not implement a verb still replies, with
+  `Success: false, Error: "unsupported"`.
+
+## The six verbs
+
+Four verbs are **universal** — every memory agent supports them. Two
+are **conditional** — only agents that hold private cache-of-memory
+state support them.
+
+| Verb           | Universal? | What it does                                                                                                                            | Ack timing |
+| -------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| **Pause**      | ✓          | Stop accepting new traffic and stop scheduling internal work. In-flight transactions stay where they are.                                | Sync       |
+| **Drain**      | ✓          | Stop accepting new traffic; let in-flight transactions finish; end in the paused state.                                                  | Async      |
+| **Enable**     | ✓          | Resume processing from paused.                                                                                                          | Sync       |
+| **Reset**      | ✓          | Hard reset to post-build state: drop in-flight, clear queues, clear private caches, drain Top/Bottom queues. Legal from any state.       | Sync       |
+| **Invalidate** | conditional | Drop entries from private cache state without writeback. Component must be paused or drained first. Filterable by `Addresses` and `PID`. | Sync       |
+| **Flush**      | conditional | Write dirty private state back to backing memory. Clean entries stay valid. Component must be paused or drained first.                   | Async      |
+
+### Sync vs async, more precisely
+
+- **Sync** means the component sends the response in the same tick it
+  receives the request. The caller sees `Success: true` (or
+  `Success: false` for unsupported/illegal-state) on the very next
+  outgoing message.
+- **Async** means the request is accepted silently. The component
+  acknowledges by sending the response when the underlying work is
+  finished — Drain when all in-flight transactions have drained, Flush
+  when all dirty data has been written back.
+
+### Why no `PauseAfter`/`InvalidateAfter`/`DiscardInflight`
+
+The old `ControlReq` carried modifier flags that encoded compound
+operations: "Flush, then pause", "Flush, then invalidate", "Flush, but
+discard in-flight rather than wait for it." These are now sequenced by
+the caller:
+
+| Old compound                                                  | New sequence                          |
+| ------------------------------------------------------------- | ------------------------------------- |
+| `Flush{PauseAfter: true}`                                     | `Drain` → `Flush` (stays paused)      |
+| `Flush{InvalidateAfter: true}`                                | `Drain` → `Flush` → `Invalidate`      |
+| `Flush{DiscardInflight: true, InvalidateAfter: true}`         | `Pause` → `Reset`                     |
+
+The primitives compose. The protocol stays small.
+
+## Conventions
+
+1. **One control port per component.** Every memory agent exposes a
+   port named `Control`. It carries `*mem.ControlReq` in and
+   `*mem.ControlRsp` out. Workload requests (reads, writes,
+   translations, data-move requests) use other ports (`Top`,
+   `Bottom`, `Migration`, etc.), never `Control`.
+2. **One control state per component.** Every agent holds a
+   `control.State` value in its own state struct. Values are
+   `StateEnabled`, `StatePausing`, `StatePaused`, `StateDraining`,
+   `StateFlushing`. Reset and Invalidate are operations within these
+   states, not separate states; Reset always lands the component in
+   `StateEnabled`.
+3. **Unsupported verbs always reply.** A component that does not
+   implement a verb sends `ControlRsp{Command: <verb>, Success:
+   false, Error: control.ErrUnsupported}`. It never panics on a
+   well-formed verb.
+4. **Illegal-state verbs reply with a reason.** Invalidate and Flush
+   require the component to be in `StatePaused` or `StateDraining`.
+   Issuing them while `StateEnabled` returns `Success: false,
+   Error: control.ErrMustBePausedOrDrained`.
+5. **Reset is a hard signal.** Reset is processed unconditionally
+   regardless of current state. If Drain or Flush is in flight when
+   Reset arrives, the in-flight verb is dropped without a response.
+   Avoiding concurrent Reset + async control is the sender's
+   responsibility.
+6. **Verbs are idempotent.** Pause-when-Paused, Enable-when-Enabled,
+   and Drain-when-Paused all succeed without side effects.
+
+## Wire format
+
+```go
+type ControlCommand int
+
+const (
+    CmdPause ControlCommand = iota
+    CmdDrain
+    CmdEnable
+    CmdReset
+    CmdInvalidate
+    CmdFlush
+)
+
+type ControlReq struct {
+    messaging.MsgMeta
+    Command   ControlCommand
+    Addresses []uint64 // Invalidate / Flush filter; empty = all entries.
+    PID       vm.PID   // Invalidate / Flush filter; zero = all PIDs.
+}
+
+type ControlRsp struct {
+    messaging.MsgMeta
+    Command ControlCommand
+    Success bool
+    Error   string // Empty on success. control.ErrUnsupported or
+                   // control.ErrMustBePausedOrDrained on failure.
+}
+```
+
+`Addresses` and `PID` are only meaningful for `CmdInvalidate` and
+`CmdFlush`. For the other verbs they are ignored.
+
+## Support matrix (target end state)
+
+|                              | Pause | Drain | Enable | Reset | Invalidate | Flush |
+| ---------------------------- | ----- | ----- | ------ | ----- | ---------- | ----- |
+| `cache/writeback`            | ✓     | ✓     | ✓      | ✓     | ✓          | ✓     |
+| `cache/writethroughcache`    | ✓     | ✓     | ✓      | ✓     | ✓          | no-op |
+| `vm/tlb`                     | ✓     | ✓     | ✓      | ✓     | ✓          | —     |
+| `vm/mmuCache`                | ✓     | ✓     | ✓      | ✓     | ✓          | —     |
+| `vm/mmu`                     | ✓     | ✓     | ✓      | ✓     | —          | —     |
+| `vm/gmmu`                    | ✓     | ✓     | ✓      | ✓     | —          | —     |
+| `vm/addresstranslator`       | ✓     | ✓     | ✓      | ✓     | —          | —     |
+| `rob`                        | ✓     | ✓     | ✓      | ✓     | —          | —     |
+| `idealmemcontroller`         | ✓     | ✓     | ✓      | ✓     | —          | —     |
+| `dram`                       | ✓     | ✓     | ✓      | ✓     | —          | —     |
+| `simplebankedmemory`         | ✓     | ✓     | ✓      | ✓     | —          | —     |
+| `datamover`                  | ✓     | ✓     | ✓      | ✓     | —          | —     |
+
+`mshr` is not in the matrix — it is a substructure of a cache, not a
+component. Its state is part of the enclosing cache and is wiped by the
+cache's Reset.
+
+`Flush` on the writethrough cache is a no-op (no dirty data) but the
+verb still succeeds, so callers can issue it uniformly across cache
+types without branching.
+
+## Helpers in `mem/control`
+
+```go
+import "github.com/sarchlab/akita/v5/mem/control"
+
+// State enum used by every component for its control bookkeeping.
+control.State            // StateEnabled, StatePausing, StatePaused, ...
+
+// Per-component declaration of which verbs are supported.
+control.VerbSupport{...}
+control.Universal()                  // {Pause, Drain, Enable, Reset}
+control.CacheLike()                  // Universal + Invalidate + Flush
+control.TranslationCacheLike()       // Universal + Invalidate
+
+// Verb classification.
+control.IsSyncVerb(mem.CmdPause)     // true
+
+// Error string constants on ControlRsp.
+control.ErrUnsupported
+control.ErrMustBePausedOrDrained
+```
+
+## Implementing the protocol in a new component
+
+1. Add a `Control` port in the builder:
+   ```go
+   ctrl := messaging.NewPort(modelComp, ctrlBufSize, ctrlBufSize,
+       name+".Control")
+   modelComp.AddPort("Control", ctrl)
+   ```
+2. Add a `control.State` field to the component's `State` struct so
+   the control bookkeeping is uniform and serializable.
+3. Add a control middleware that peeks the `Control` port, dispatches
+   on `req.Command`, mutates `State.ControlState`, and sends the
+   response per the sync/async timing rules.
+4. For any verb you do not implement, reply with
+   `ControlRsp{Success: false, Error: control.ErrUnsupported}`.
+5. Declare the component's support matrix via a `VerbSupport` helper
+   (`Universal()`, `CacheLike()`, or a literal).
+6. Add one test that calls `control.RunContract`:
+   ```go
+   func TestControlContract(t *testing.T) {
+       control.RunContract(t, "mycomp", buildMyComp,
+           control.Universal())
+   }
+   ```
+7. Add component-specific behavior tests separately — the contract
+   harness only enforces the protocol surface (verb roundtrip, ack
+   timing, supported/unsupported response shape). It does **not** check
+   that Reset actually wiped the directory, that Flush actually wrote
+   dirty data, etc. Those are component-internal invariants and belong
+   in the component's own test file.
+
+## Conformance harness: `control.RunContract`
+
+```go
+func RunContract(
+    t *testing.T,
+    name string,
+    build control.BuildFunc, // func() *control.Harness
+    matrix control.VerbSupport,
+)
+
+type Harness struct {
+    Comp     Controllable      // Tick() bool, Name() string
+    Ctrl     messaging.Port    // the component's Control port
+    Teardown func()            // optional, called after each subtest
+}
+```
+
+For each of the six verbs the harness:
+
+- rebuilds the component fresh (verb tests are independent of each
+  other),
+- delivers a `ControlReq` for that verb to `Ctrl`,
+- ticks the component until a `ControlRsp` comes out (or a tick budget
+  expires — 64 ticks for sync verbs and unsupported verbs, 4096 ticks
+  for async verbs),
+- asserts `Command`, `RspTo`, `Success`, and `Error` match the protocol
+  for `(verb, supported?)`.
+
+A failure in any verb is reported as a separate subtest, so the output
+points at exactly which verb the component handles wrong.
+
+## See also
+
+- `mem/protocol.go` — the request/response type definitions.
+- `mem/control/state.go` — `State` enum, `VerbSupport`, helpers.
+- `mem/control/contract.go` — the `RunContract` harness.
+- [`CONTROL_PROTOCOL_PLAN.md`](../CONTROL_PROTOCOL_PLAN.md) — the
+  migration plan that brings every component onto this protocol.
