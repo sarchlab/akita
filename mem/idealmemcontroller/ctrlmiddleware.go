@@ -2,6 +2,7 @@ package idealmemcontroller
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -21,117 +22,139 @@ func (m *ctrlMiddleware) ctrlPort() messaging.Port {
 	return m.comp.GetPortByName("Control")
 }
 
+// handleStateUpdate notices Drain completion and acks the pending
+// Drain request, transitioning the component to Paused.
 func (m *ctrlMiddleware) handleStateUpdate() (madeProgress bool) {
 	state := &m.comp.State
-	if state.CurrentState == "drain" {
-		madeProgress = m.handleDrainState() || madeProgress
-	}
-
-	return madeProgress
-}
-
-func (m *ctrlMiddleware) handleDrainState() bool {
-	state := &m.comp.State
-	if len(state.InflightTransactions) != 0 {
+	if state.ControlState != control.StateDraining {
 		return false
 	}
 
-	rsp := &mem.ControlRsp{Command: mem.CmdDrain, Success: true}
-	rsp.ID = timing.GetIDGenerator().Generate()
-	rsp.Src = m.ctrlPort().AsRemote()
-	rsp.Dst = state.CurrentCmdSrc
-	rsp.RspTo = state.CurrentCmdID
-	rsp.TrafficClass = "mem.ControlRsp"
+	if len(state.InflightTransactions) != 0 {
+		return false
+	}
 
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
+	rsp := makeRsp(m.ctrlPort(), mem.CmdDrain,
+		state.CurrentCmdSrc, state.CurrentCmdID, true, "")
 	m.ctrlPort().Send(rsp)
-
-	state.CurrentState = "pause"
+	state.ControlState = control.StatePaused
 
 	return true
 }
 
 func (m *ctrlMiddleware) handleIncomingCommands() (madeProgress bool) {
-	msgI := m.ctrlPort().PeekIncoming()
-	if msgI == nil {
+	msg := m.ctrlPort().PeekIncoming()
+	if msg == nil {
 		return false
 	}
 
-	msg := msgI.(*mem.ControlReq)
-
-	switch msg.Command {
-	case mem.CmdEnable:
-		madeProgress = m.handleEnable(msg) || madeProgress
-	case mem.CmdPause:
-		madeProgress = m.handlePause(msg) || madeProgress
-	case mem.CmdDrain:
-		madeProgress = m.handleDrain(msg) || madeProgress
-	default:
-		// Immediate ack for unhandled commands
+	req, ok := msg.(*mem.ControlReq)
+	if !ok {
 		m.ctrlPort().RetrieveIncoming()
-		madeProgress = true
+		return true
 	}
 
-	return madeProgress
+	switch req.Command {
+	case mem.CmdPause:
+		return m.handlePause(req)
+	case mem.CmdDrain:
+		return m.handleDrain(req)
+	case mem.CmdEnable:
+		return m.handleEnable(req)
+	case mem.CmdReset:
+		return m.handleReset(req)
+	default:
+		return m.handleUnsupported(req)
+	}
 }
 
-func (m *ctrlMiddleware) handleEnable(
-	msg *mem.ControlReq,
-) bool {
-	state := &m.comp.State
-	state.CurrentState = "enable"
-
-	rsp := &mem.ControlRsp{Command: mem.CmdEnable, Success: true}
-	rsp.ID = timing.GetIDGenerator().Generate()
-	rsp.Src = m.ctrlPort().AsRemote()
-	rsp.Dst = msg.Src
-	rsp.RspTo = msg.ID
-	rsp.TrafficClass = "mem.ControlRsp"
-
+func (m *ctrlMiddleware) handlePause(req *mem.ControlReq) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
-	m.ctrlPort().Send(rsp)
+	state := &m.comp.State
+	state.ControlState = control.StatePaused
 
+	m.ctrlPort().Send(makeRsp(m.ctrlPort(), mem.CmdPause,
+		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
-func (m *ctrlMiddleware) handlePause(
-	msg *mem.ControlReq,
-) bool {
-	state := &m.comp.State
-	state.CurrentState = "pause"
-
-	rsp := &mem.ControlRsp{Command: mem.CmdPause, Success: true}
-	rsp.ID = timing.GetIDGenerator().Generate()
-	rsp.Src = m.ctrlPort().AsRemote()
-	rsp.Dst = msg.Src
-	rsp.RspTo = msg.ID
-	rsp.TrafficClass = "mem.ControlRsp"
-
+func (m *ctrlMiddleware) handleEnable(req *mem.ControlReq) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
-	m.ctrlPort().Send(rsp)
+	state := &m.comp.State
+	state.ControlState = control.StateEnabled
+
+	m.ctrlPort().Send(makeRsp(m.ctrlPort(), mem.CmdEnable,
+		req.Src, req.ID, true, ""))
+	m.ctrlPort().RetrieveIncoming()
+	return true
+}
+
+func (m *ctrlMiddleware) handleDrain(req *mem.ControlReq) bool {
+	state := &m.comp.State
+	state.ControlState = control.StateDraining
+	state.CurrentCmdID = req.ID
+	state.CurrentCmdSrc = req.Src
 
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
-func (m *ctrlMiddleware) handleDrain(
-	msg *mem.ControlReq,
-) bool {
-	state := &m.comp.State
-	state.CurrentState = "drain"
-	state.CurrentCmdID = msg.ID
-	state.CurrentCmdSrc = msg.Src
+func (m *ctrlMiddleware) handleReset(req *mem.ControlReq) bool {
+	if !m.ctrlPort().CanSend() {
+		return false
+	}
 
+	state := &m.comp.State
+	state.InflightTransactions = nil
+	state.CurrentCmdID = 0
+	state.CurrentCmdSrc = ""
+	state.ControlState = control.StateEnabled
+
+	m.ctrlPort().Send(makeRsp(m.ctrlPort(), mem.CmdReset,
+		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
+}
+
+func (m *ctrlMiddleware) handleUnsupported(req *mem.ControlReq) bool {
+	if !m.ctrlPort().CanSend() {
+		return false
+	}
+
+	m.ctrlPort().Send(makeRsp(m.ctrlPort(), req.Command,
+		req.Src, req.ID, false, control.ErrUnsupported))
+	m.ctrlPort().RetrieveIncoming()
+	return true
+}
+
+func makeRsp(
+	port messaging.Port,
+	cmd mem.ControlCommand,
+	dst messaging.RemotePort,
+	rspTo uint64,
+	success bool,
+	errStr string,
+) *mem.ControlRsp {
+	rsp := &mem.ControlRsp{
+		Command: cmd,
+		Success: success,
+		Error:   errStr,
+	}
+	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.Src = port.AsRemote()
+	rsp.Dst = dst
+	rsp.RspTo = rspTo
+	rsp.TrafficClass = "mem.ControlRsp"
+	return rsp
 }

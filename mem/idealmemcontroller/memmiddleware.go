@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -30,7 +31,7 @@ func (m *memMiddleware) Tick() bool {
 
 func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 	state := &m.comp.State
-	if state.CurrentState != "enable" {
+	if state.ControlState != control.StateEnabled {
 		return false
 	}
 
@@ -89,7 +90,7 @@ func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransa
 
 func (m *memMiddleware) processCountdowns() bool {
 	state := &m.comp.State
-	if state.CurrentState == "pause" {
+	if state.ControlState == control.StatePaused {
 		return false
 	}
 
