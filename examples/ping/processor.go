@@ -55,25 +55,31 @@ func (p *pingProcessor) sendScheduledPings(
 	remaining := make([]scheduledPing, 0, len(state.ScheduledPings))
 
 	for _, sp := range state.ScheduledPings {
-		if sp.SendAt <= now {
-			pingMsg := pingReq{
-				MsgMeta: messaging.MsgMeta{
-					ID:  timing.GetIDGenerator().Generate(),
-					Src: outPort(comp).AsRemote(),
-					Dst: sp.Dst,
-				},
-				SeqID: state.NextSeqID,
-			}
-
-			outPort(comp).Send(pingMsg)
-
-			state.StartTimes = append(state.StartTimes, now)
-			state.NextSeqID++
-			progress = true
-		} else {
+		if sp.SendAt > now {
 			remaining = append(remaining, sp)
 			comp.ScheduleWakeAt(sp.SendAt)
+			continue
 		}
+
+		if !outPort(comp).CanSend() {
+			remaining = append(remaining, sp)
+			continue
+		}
+
+		pingMsg := pingReq{
+			MsgMeta: messaging.MsgMeta{
+				ID:  timing.GetIDGenerator().Generate(),
+				Src: outPort(comp).AsRemote(),
+				Dst: sp.Dst,
+			},
+			SeqID: state.NextSeqID,
+		}
+
+		outPort(comp).Send(pingMsg)
+
+		state.StartTimes = append(state.StartTimes, now)
+		state.NextSeqID++
+		progress = true
 	}
 
 	state.ScheduledPings = remaining
@@ -90,23 +96,29 @@ func (p *pingProcessor) deliverPendingResponses(
 	remaining := make([]pendingResponse, 0, len(state.PendingResponses))
 
 	for _, pr := range state.PendingResponses {
-		if pr.DeliverAt <= now {
-			rsp := pingRsp{
-				MsgMeta: messaging.MsgMeta{
-					ID:    timing.GetIDGenerator().Generate(),
-					Src:   outPort(comp).AsRemote(),
-					Dst:   pr.Dst,
-					RspTo: pr.OrigMsgID,
-				},
-				SeqID: pr.SeqID,
-			}
-
-			outPort(comp).Send(rsp)
-			progress = true
-		} else {
+		if pr.DeliverAt > now {
 			remaining = append(remaining, pr)
 			comp.ScheduleWakeAt(pr.DeliverAt)
+			continue
 		}
+
+		if !outPort(comp).CanSend() {
+			remaining = append(remaining, pr)
+			continue
+		}
+
+		rsp := pingRsp{
+			MsgMeta: messaging.MsgMeta{
+				ID:    timing.GetIDGenerator().Generate(),
+				Src:   outPort(comp).AsRemote(),
+				Dst:   pr.Dst,
+				RspTo: pr.OrigMsgID,
+			},
+			SeqID: pr.SeqID,
+		}
+
+		outPort(comp).Send(rsp)
+		progress = true
 	}
 
 	state.PendingResponses = remaining

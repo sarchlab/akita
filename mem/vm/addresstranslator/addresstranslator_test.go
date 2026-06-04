@@ -560,8 +560,8 @@ var _ = Describe("Address Translator", func() {
 })
 
 // fillOutgoing fills a port's outgoing buffer with dummy messages so the next
-// Send returns a SendError. Each dummy's Src equals the port (required by
-// Send's validation) and is sent to a distinct destination.
+// CanSend returns false. Each dummy's Src equals the port (required by Send's
+// validation) and is sent to a distinct destination.
 func fillOutgoing(p messaging.Port, n int) {
 	for i := 0; i < n; i++ {
 		dummy := mem.WriteDoneRsp{}
@@ -569,6 +569,7 @@ func fillOutgoing(p messaging.Port, n int) {
 		dummy.Src = p.AsRemote()
 		dummy.Dst = messaging.RemotePort("Dummy")
 		dummy.TrafficClass = "mem.WriteDoneRsp"
-		Expect(p.Send(dummy)).To(BeNil())
+		Expect(p.CanSend()).To(BeTrue())
+		p.Send(dummy)
 	}
 }

@@ -108,10 +108,11 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		},
 	}
 
-	err := m.ctrlPort().Send(rsp)
-	if err != nil {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
+
+	m.ctrlPort().Send(rsp)
 
 	// Reset transaction
 	state.CurrentTransaction = dataMoverTransactionState{

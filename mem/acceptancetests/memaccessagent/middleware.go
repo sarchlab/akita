@@ -176,25 +176,26 @@ func (m *agentMiddleware) doRead() bool {
 	readReq.TrafficBytes = 12
 	readReq.TrafficClass = "mem.ReadReq"
 
-	err := m.memPort().Send(readReq)
-	if err == nil {
-		tracing.TraceReqInitiate(readReq, m.agent, 0)
-
-		state.PendingReadReq[readReq.ID] = readReq
-		state.ReadLeft--
-
-		if m.agent.readProgressBar != nil {
-			m.agent.readProgressBar.IncrementInProgress(1)
-		}
-
-		if dumpLog {
-			log.Printf("%d, agent, read, 0x%X\n", m.agent.CurrentTime(), address)
-		}
-
-		return true
+	if !m.memPort().CanSend() {
+		return false
 	}
 
-	return false
+	m.memPort().Send(readReq)
+
+	tracing.TraceReqInitiate(readReq, m.agent, 0)
+
+	state.PendingReadReq[readReq.ID] = readReq
+	state.ReadLeft--
+
+	if m.agent.readProgressBar != nil {
+		m.agent.readProgressBar.IncrementInProgress(1)
+	}
+
+	if dumpLog {
+		log.Printf("%d, agent, read, 0x%X\n", m.agent.CurrentTime(), address)
+	}
+
+	return true
 }
 
 func (m *agentMiddleware) randomReadAddress(state *State) uint64 {
@@ -258,27 +259,28 @@ func (m *agentMiddleware) doWrite() bool {
 	writeReq.TrafficBytes = len(writeData) + 12
 	writeReq.TrafficClass = "mem.WriteReq"
 
-	err := m.memPort().Send(writeReq)
-	if err == nil {
-		tracing.TraceReqInitiate(writeReq, m.agent, 0)
-
-		state.WriteLeft--
-		m.addKnownValue(state, address, data)
-		state.PendingWriteReq[writeReq.ID] = writeReq
-
-		if m.agent.writeProgressBar != nil {
-			m.agent.writeProgressBar.IncrementInProgress(1)
-		}
-
-		if dumpLog {
-			log.Printf("%d, agent, write, 0x%X, %v\n",
-				m.agent.CurrentTime(), address, writeReq.Data)
-		}
-
-		return true
+	if !m.memPort().CanSend() {
+		return false
 	}
 
-	return false
+	m.memPort().Send(writeReq)
+
+	tracing.TraceReqInitiate(writeReq, m.agent, 0)
+
+	state.WriteLeft--
+	m.addKnownValue(state, address, data)
+	state.PendingWriteReq[writeReq.ID] = writeReq
+
+	if m.agent.writeProgressBar != nil {
+		m.agent.writeProgressBar.IncrementInProgress(1)
+	}
+
+	if dumpLog {
+		log.Printf("%d, agent, write, 0x%X, %v\n",
+			m.agent.CurrentTime(), address, writeReq.Data)
+	}
+
+	return true
 }
 
 func (m *agentMiddleware) addKnownValue(state *State, address uint64, data uint32) {

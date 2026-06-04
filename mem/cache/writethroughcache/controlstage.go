@@ -43,10 +43,11 @@ func (s *controlStage) processCurrentFlush() bool {
 	rsp.TrafficBytes = 0
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := s.ctrlPort.Send(rsp)
-	if err != nil {
+	if !s.ctrlPort.CanSend() {
 		return false
 	}
+
+	s.ctrlPort.Send(rsp)
 
 	s.hardResetCache()
 	next.HasProcessingFlush = false
@@ -135,6 +136,10 @@ func (s *controlStage) startCacheFlush(msg mem.ControlReq) bool {
 }
 
 func (s *controlStage) doCacheRestart(msg mem.ControlReq) bool {
+	if !s.ctrlPort.CanSend() {
+		return false
+	}
+
 	next := &s.pipeline.comp.State
 	next.IsPaused = false
 
@@ -155,10 +160,7 @@ func (s *controlStage) doCacheRestart(msg mem.ControlReq) bool {
 	rsp.TrafficBytes = 0
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := s.ctrlPort.Send(rsp)
-	if err != nil {
-		log.Panic("Unable to send restart rsp")
-	}
+	s.ctrlPort.Send(rsp)
 
 	return true
 }

@@ -43,10 +43,11 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 	dr.TrafficBytes = len(trans.Data) + 4
 	dr.TrafficClass = "rsp"
 
-	err := s.cache.topPort.Send(dr)
-	if err != nil {
+	if !s.cache.topPort.CanSend() {
 		return false
 	}
+
+	s.cache.topPort.Send(dr)
 
 	trans.Removed = true
 
@@ -71,10 +72,11 @@ func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
 	done.TrafficBytes = 4
 	done.TrafficClass = "rsp"
 
-	err := s.cache.topPort.Send(done)
-	if err != nil {
+	if !s.cache.topPort.CanSend() {
 		return false
 	}
+
+	s.cache.topPort.Send(done)
 
 	trans.Removed = true
 

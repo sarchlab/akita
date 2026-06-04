@@ -300,7 +300,8 @@ var _ = Describe("Switch", func() {
 			queueing.NewBuffer[packetization.Flit]("LocalPort2SendBuf", 1)
 		next.PortComplexes[1].SendOutBuffer.PushTyped(flit)
 
-		port2.EXPECT().Send(gomock.Any()).Return(nil)
+		port2.EXPECT().CanSend().Return(true)
+		port2.EXPECT().Send(gomock.Any())
 
 		madeProgress := rfsMW.sendOut()
 
@@ -326,7 +327,7 @@ var _ = Describe("Switch", func() {
 			queueing.NewBuffer[packetization.Flit]("LocalPort2SendBuf", 1)
 		next.PortComplexes[1].SendOutBuffer.PushTyped(flit)
 
-		port2.EXPECT().Send(gomock.Any()).Return(&messaging.SendError{})
+		port2.EXPECT().CanSend().Return(false)
 
 		madeProgress := rfsMW.sendOut()
 

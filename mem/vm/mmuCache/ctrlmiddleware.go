@@ -154,10 +154,11 @@ func (m *ctrlMiddleware) handleMMUCacheRestart(msg mem.ControlReq) bool {
 	rsp.Dst = msg.Src
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := m.controlPort().Send(rsp)
-	if err != nil {
+	if !m.controlPort().CanSend() {
 		return false
 	}
+
+	m.controlPort().Send(rsp)
 	tracing.AddMilestone(
 		tracing.MsgIDAtReceiver(msg, m.comp),
 		tracing.MilestoneKindNetworkBusy,

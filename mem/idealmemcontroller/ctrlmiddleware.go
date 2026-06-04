@@ -43,10 +43,11 @@ func (m *ctrlMiddleware) handleDrainState() bool {
 	rsp.RspTo = state.CurrentCmdID
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := m.ctrlPort().Send(rsp)
-	if err != nil {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
+
+	m.ctrlPort().Send(rsp)
 
 	state.CurrentState = "pause"
 
@@ -90,10 +91,11 @@ func (m *ctrlMiddleware) handleEnable(
 	rsp.RspTo = msg.ID
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := m.ctrlPort().Send(rsp)
-	if err != nil {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
+
+	m.ctrlPort().Send(rsp)
 
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -112,10 +114,11 @@ func (m *ctrlMiddleware) handlePause(
 	rsp.RspTo = msg.ID
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := m.ctrlPort().Send(rsp)
-	if err != nil {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
+
+	m.ctrlPort().Send(rsp)
 
 	m.ctrlPort().RetrieveIncoming()
 	return true

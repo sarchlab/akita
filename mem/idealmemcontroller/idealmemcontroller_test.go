@@ -173,7 +173,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		dummy.Src = topPort.AsRemote()
 		dummy.Dst = messaging.RemotePort("Agent")
 		dummy.TrafficClass = "mem.WriteDoneRsp"
-		Expect(topPort.Send(dummy)).To(BeNil())
+		topPort.Send(dummy)
 
 		topPort.Deliver(makeReadReq())
 

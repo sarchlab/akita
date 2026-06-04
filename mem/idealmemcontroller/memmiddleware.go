@@ -151,10 +151,11 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 	rsp.TrafficBytes = len(data) + 4
 	rsp.TrafficClass = "mem.DataReadyRsp"
 
-	networkErr := m.topPort().Send(rsp)
-	if networkErr != nil {
+	if !m.topPort().CanSend() {
 		return false
 	}
+
+	m.topPort().Send(rsp)
 
 	m.traceReqComplete(tx.RecvTaskID)
 
@@ -170,10 +171,11 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 	rsp.TrafficBytes = 4
 	rsp.TrafficClass = "mem.WriteDoneRsp"
 
-	networkErr := m.topPort().Send(rsp)
-	if networkErr != nil {
+	if !m.topPort().CanSend() {
 		return false
 	}
+
+	m.topPort().Send(rsp)
 
 	spec := m.comp.Spec()
 	addr := mem.ConvertAddress(
