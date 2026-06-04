@@ -1,3 +1,8 @@
+---
+slug: /
+sidebar_position: 1
+---
+
 # Akita V5 — Framework Documentation
 
 Akita V5 is a discrete-event simulation (DES) framework for computer
