@@ -138,7 +138,7 @@ func (m *incomingMW) tryDeliver() bool {
 			panic(fmt.Sprintf("no dst port found for %s", dst))
 		}
 
-		msg := &messaging.MsgMeta{
+		msg := messaging.MsgMeta{
 			ID:           meta.ID,
 			Src:          meta.Src,
 			Dst:          meta.Dst,

@@ -62,7 +62,7 @@ var _ = Describe("End Point", func() {
 	})
 
 	It("should send flits", func() {
-		msg := &messaging.MsgMeta{
+		msg := messaging.MsgMeta{
 			ID:           timing.GetIDGenerator().Generate(),
 			Src:          devicePort.AsRemote(),
 			TrafficBytes: 33,
@@ -107,7 +107,7 @@ var _ = Describe("End Point", func() {
 	})
 
 	It("should receive message", func() {
-		msg := &messaging.MsgMeta{
+		msg := messaging.MsgMeta{
 			ID:  timing.GetIDGenerator().Generate(),
 			Dst: devicePort.AsRemote(),
 		}
@@ -117,13 +117,13 @@ var _ = Describe("End Point", func() {
 		flit0.TrafficClass = reflect.TypeOf(msg).String()
 		flit0.SeqID = 0
 		flit0.NumFlitInMsg = 2
-		flit0.Msg = *msg
+		flit0.Msg = msg
 		flit1 := packetization.Flit{}
 		flit1.ID = timing.GetIDGenerator().Generate()
 		flit1.TrafficClass = reflect.TypeOf(msg).String()
 		flit1.SeqID = 1
 		flit1.NumFlitInMsg = 2
-		flit1.Msg = *msg
+		flit1.Msg = msg
 
 		networkPort.EXPECT().PeekIncoming().Return(flit0)
 		networkPort.EXPECT().PeekIncoming().Return(flit1)
