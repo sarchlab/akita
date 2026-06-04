@@ -55,27 +55,28 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 	return madeProgress
 }
 
-func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransaction {
+func (m *memMiddleware) msgToInflightTransaction(msg messaging.Msg) inflightTransaction {
 	spec := m.comp.Spec()
+	recvTaskID := tracing.MsgIDAtReceiver(msg, m.comp)
 
 	switch payload := msg.(type) {
-	case *mem.ReadReq:
+	case mem.ReadReq:
 		return inflightTransaction{
 			CycleLeft:      spec.Latency,
 			Address:        payload.Address,
 			AccessByteSize: payload.AccessByteSize,
 			ReqID:          payload.ID,
-			RecvTaskID:     payload.RecvTaskID,
+			RecvTaskID:     recvTaskID,
 			IsRead:         true,
 			Src:            payload.Src,
 		}
-	case *mem.WriteReq:
+	case mem.WriteReq:
 		return inflightTransaction{
 			CycleLeft:      spec.Latency,
 			Address:        payload.Address,
 			AccessByteSize: uint64(len(payload.Data)),
 			ReqID:          payload.ID,
-			RecvTaskID:     payload.RecvTaskID,
+			RecvTaskID:     recvTaskID,
 			IsRead:         false,
 			Data:           payload.Data,
 			DirtyMask:      payload.DirtyMask,
@@ -141,7 +142,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 		log.Panic(err)
 	}
 
-	rsp := &mem.DataReadyRsp{}
+	rsp := mem.DataReadyRsp{}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
@@ -156,13 +157,13 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 
 	m.topPort().Send(rsp)
 
-	m.traceReqComplete(tx.RecvTaskID)
+	m.traceReqComplete(tx.RecvTaskID, tx.ReqID)
 
 	return true
 }
 
 func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
-	rsp := &mem.WriteDoneRsp{}
+	rsp := mem.WriteDoneRsp{}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
@@ -206,11 +207,12 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 		}
 	}
 
-	m.traceReqComplete(tx.RecvTaskID)
+	m.traceReqComplete(tx.RecvTaskID, tx.ReqID)
 
 	return true
 }
 
-func (m *memMiddleware) traceReqComplete(recvTaskID uint64) {
+func (m *memMiddleware) traceReqComplete(recvTaskID, reqMsgID uint64) {
 	tracing.EndTask(recvTaskID, m.comp)
+	tracing.ForgetMsgIDAtReceiver(reqMsgID, m.comp)
 }

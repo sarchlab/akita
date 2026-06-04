@@ -133,7 +133,7 @@ func (f *flusher) extractFromPort() bool {
 	}
 
 	switch msg := msg.(type) {
-	case *mem.ControlReq:
+	case mem.ControlReq:
 		switch msg.Command {
 		case mem.CmdFlush:
 			return f.startProcessingFlush(msg)
@@ -149,7 +149,7 @@ func (f *flusher) extractFromPort() bool {
 	return true
 }
 
-func (f *flusher) startProcessingFlush(msg *mem.ControlReq) bool {
+func (f *flusher) startProcessingFlush(msg mem.ControlReq) bool {
 	next := &f.pipeline.comp.State
 
 	next.HasProcessingFlush = true
@@ -172,7 +172,7 @@ func (f *flusher) startProcessingFlush(msg *mem.ControlReq) bool {
 	return true
 }
 
-func (f *flusher) handleCacheRestart(msg *mem.ControlReq) bool {
+func (f *flusher) handleCacheRestart(msg mem.ControlReq) bool {
 	if !f.ctrlPort.CanSend() {
 		return false
 	}
@@ -183,7 +183,7 @@ func (f *flusher) handleCacheRestart(msg *mem.ControlReq) bool {
 	next := &f.pipeline.comp.State
 	next.CacheState = int(cacheStateRunning)
 
-	rsp := &mem.ControlRsp{Command: mem.CmdEnable, Success: true}
+	rsp := mem.ControlRsp{Command: mem.CmdEnable, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = f.ctrlPort.AsRemote()
 	rsp.Dst = msg.Src
@@ -213,7 +213,7 @@ func (f *flusher) finalizeFlushing() bool {
 
 	spec := f.pipeline.comp.Spec()
 
-	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
+	rsp := mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = f.ctrlPort.AsRemote()
 	rsp.Dst = next.ProcessingFlush.MsgMeta.Src
@@ -237,7 +237,7 @@ func (f *flusher) finalizeFlushing() bool {
 		next.CacheState = int(cacheStateRunning)
 	}
 
-	tracing.TraceReqComplete(&next.ProcessingFlush.MsgMeta, f.pipeline.comp)
+	tracing.TraceReqComplete(next.ProcessingFlush.MsgMeta, f.pipeline.comp)
 	next.HasProcessingFlush = false
 	next.ProcessingFlush = flushReqState{}
 

@@ -84,9 +84,8 @@ func (m *middleware) topDown() bool {
 		panic("rob: unsupported top-port message type")
 	}
 
-	shadow, isRead := m.buildShadowReq(req)
-	shadow.Meta().Src = m.bottomPort().AsRemote()
-	shadow.Meta().Dst = m.comp.Spec().BottomUnit
+	shadow, isRead := m.buildShadowReq(
+		req, m.bottomPort().AsRemote(), m.comp.Spec().BottomUnit)
 
 	if !m.bottomPort().CanSend() {
 		return false
@@ -119,7 +118,7 @@ func (m *middleware) parseBottom() bool {
 	}
 
 	switch dataRsp := msg.(type) {
-	case *mem.DataReadyRsp:
+	case mem.DataReadyRsp:
 		idx := m.findTransactionByBottomID(dataRsp.RspTo)
 		m.bottomPort().RetrieveIncoming()
 
@@ -132,7 +131,7 @@ func (m *middleware) parseBottom() bool {
 		trans.RspData = dataRsp.Data
 		tracing.TraceReqFinalize(m.shadowReqTraceMsg(*trans), m.comp)
 		return true
-	case *mem.WriteDoneRsp:
+	case mem.WriteDoneRsp:
 		idx := m.findTransactionByBottomID(dataRsp.RspTo)
 		m.bottomPort().RetrieveIncoming()
 
@@ -163,10 +162,7 @@ func (m *middleware) bottomUp() bool {
 		return false
 	}
 
-	rsp := m.buildTopRsp(head)
-	rsp.Meta().Src = m.topPort().AsRemote()
-	rsp.Meta().Dst = head.ReqFromTopSrc
-	rsp.Meta().RspTo = head.ReqFromTopID
+	rsp := m.buildTopRsp(head, m.topPort().AsRemote())
 
 	if !m.topPort().CanSend() {
 		return false
@@ -192,26 +188,32 @@ func (m *middleware) findTransactionByBottomID(id uint64) int {
 
 // buildShadowReq mirrors the incoming request as a fresh request the bottom
 // unit will see. The returned bool is true when the source request is a read.
-func (m *middleware) buildShadowReq(req mem.AccessReq) (mem.AccessReq, bool) {
+func (m *middleware) buildShadowReq(
+	req mem.AccessReq, src, dst messaging.RemotePort,
+) (mem.AccessReq, bool) {
 	switch r := req.(type) {
-	case *mem.ReadReq:
-		shadow := &mem.ReadReq{
+	case mem.ReadReq:
+		shadow := mem.ReadReq{
 			Address:        r.Address,
 			AccessByteSize: r.AccessByteSize,
 			PID:            r.PID,
 		}
 		shadow.ID = timing.GetIDGenerator().Generate()
+		shadow.Src = src
+		shadow.Dst = dst
 		shadow.TrafficBytes = r.TrafficBytes
 		shadow.TrafficClass = r.TrafficClass
 		return shadow, true
-	case *mem.WriteReq:
-		shadow := &mem.WriteReq{
+	case mem.WriteReq:
+		shadow := mem.WriteReq{
 			Address:   r.Address,
 			Data:      r.Data,
 			DirtyMask: r.DirtyMask,
 			PID:       r.PID,
 		}
 		shadow.ID = timing.GetIDGenerator().Generate()
+		shadow.Src = src
+		shadow.Dst = dst
 		shadow.TrafficBytes = r.TrafficBytes
 		shadow.TrafficClass = r.TrafficClass
 		return shadow, false
@@ -220,17 +222,25 @@ func (m *middleware) buildShadowReq(req mem.AccessReq) (mem.AccessReq, bool) {
 	}
 }
 
-func (m *middleware) buildTopRsp(trans transactionState) messaging.Msg {
+func (m *middleware) buildTopRsp(
+	trans transactionState, src messaging.RemotePort,
+) messaging.Msg {
 	if trans.IsRead {
-		rsp := &mem.DataReadyRsp{Data: trans.RspData}
+		rsp := mem.DataReadyRsp{Data: trans.RspData}
 		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.Src = src
+		rsp.Dst = trans.ReqFromTopSrc
+		rsp.RspTo = trans.ReqFromTopID
 		rsp.TrafficBytes = len(trans.RspData) + 4
 		rsp.TrafficClass = "mem.DataReadyRsp"
 		return rsp
 	}
 
-	rsp := &mem.WriteDoneRsp{}
+	rsp := mem.WriteDoneRsp{}
 	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.Src = src
+	rsp.Dst = trans.ReqFromTopSrc
+	rsp.RspTo = trans.ReqFromTopID
 	rsp.TrafficBytes = 4
 	rsp.TrafficClass = "mem.WriteDoneRsp"
 	return rsp
@@ -240,13 +250,13 @@ func (m *middleware) buildTopRsp(trans transactionState) messaging.Msg {
 // trace event for the shadow request the reorder buffer issued.
 func (m *middleware) shadowReqTraceMsg(trans transactionState) messaging.Msg {
 	if trans.IsRead {
-		req := &mem.ReadReq{}
+		req := mem.ReadReq{}
 		req.ID = trans.ReqToBottomID
 		req.Src = m.bottomPort().AsRemote()
 		req.Dst = m.comp.Spec().BottomUnit
 		return req
 	}
-	req := &mem.WriteReq{}
+	req := mem.WriteReq{}
 	req.ID = trans.ReqToBottomID
 	req.Src = m.bottomPort().AsRemote()
 	req.Dst = m.comp.Spec().BottomUnit
@@ -257,13 +267,13 @@ func (m *middleware) shadowReqTraceMsg(trans transactionState) messaging.Msg {
 // trace event for the original top-side request.
 func (m *middleware) topReqTraceMsg(trans transactionState) messaging.Msg {
 	if trans.IsRead {
-		req := &mem.ReadReq{}
+		req := mem.ReadReq{}
 		req.ID = trans.ReqFromTopID
 		req.Src = trans.ReqFromTopSrc
 		req.Dst = m.topPort().AsRemote()
 		return req
 	}
-	req := &mem.WriteReq{}
+	req := mem.WriteReq{}
 	req.ID = trans.ReqFromTopID
 	req.Src = trans.ReqFromTopSrc
 	req.Dst = m.topPort().AsRemote()
@@ -279,7 +289,7 @@ func (m *middleware) processControlMsg() bool {
 		return false
 	}
 
-	req, ok := msg.(*mem.ControlReq)
+	req, ok := msg.(mem.ControlReq)
 	if !ok {
 		m.ctrlPort().RetrieveIncoming()
 		return true
@@ -296,12 +306,12 @@ func (m *middleware) processControlMsg() bool {
 	}
 }
 
-func (m *middleware) handleFlush(req *mem.ControlReq) bool {
+func (m *middleware) handleFlush(req mem.ControlReq) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
-	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
+	rsp := mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = req.Src
@@ -311,6 +321,7 @@ func (m *middleware) handleFlush(req *mem.ControlReq) bool {
 	m.ctrlPort().Send(rsp)
 
 	state := &m.comp.State
+	m.forgetInflightReceiverIDs()
 	state.Transactions = state.Transactions[:0]
 	state.IsFlushing = true
 
@@ -319,12 +330,12 @@ func (m *middleware) handleFlush(req *mem.ControlReq) bool {
 	return true
 }
 
-func (m *middleware) handleEnable(req *mem.ControlReq) bool {
+func (m *middleware) handleEnable(req mem.ControlReq) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
-	rsp := &mem.ControlRsp{Command: mem.CmdEnable, Success: true}
+	rsp := mem.ControlRsp{Command: mem.CmdEnable, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = req.Src
@@ -334,6 +345,7 @@ func (m *middleware) handleEnable(req *mem.ControlReq) bool {
 	m.ctrlPort().Send(rsp)
 
 	state := &m.comp.State
+	m.forgetInflightReceiverIDs()
 	state.Transactions = state.Transactions[:0]
 	state.IsFlushing = false
 
@@ -347,6 +359,16 @@ func (m *middleware) handleEnable(req *mem.ControlReq) bool {
 
 func drainIncoming(p messaging.Port) {
 	for p.RetrieveIncoming() != nil {
+	}
+}
+
+// forgetInflightReceiverIDs releases the tracing receiver-task registry
+// entries that topDown allocated for each in-flight top-side request. Control
+// paths that drop the transaction table call this so the entries do not
+// outlive the transactions they describe.
+func (m *middleware) forgetInflightReceiverIDs() {
+	for _, trans := range m.comp.State.Transactions {
+		tracing.ForgetMsgIDAtReceiver(trans.ReqFromTopID, m.comp)
 	}
 }
 

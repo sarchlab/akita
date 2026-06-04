@@ -3,7 +3,7 @@ package timing
 import "testing"
 
 type testEvent struct {
-	*EventBase
+	EventBase
 	label string
 }
 
@@ -12,7 +12,7 @@ type recordingHandler struct {
 }
 
 func (h *recordingHandler) Handle(e Event) error {
-	h.labels = append(h.labels, e.(*testEvent).label)
+	h.labels = append(h.labels, e.(testEvent).label)
 	return nil
 }
 
@@ -23,12 +23,12 @@ func TestSerialEngineRunsEventsInTimeOrder(t *testing.T) {
 	handler := &recordingHandler{}
 	engine.RegisterHandler("handler", handler)
 
-	engine.Schedule(&testEvent{
-		EventBase: NewEventBase(2, "handler"),
+	engine.Schedule(testEvent{
+		EventBase: MakeEventBase(2, "handler"),
 		label:     "second",
 	})
-	engine.Schedule(&testEvent{
-		EventBase: NewEventBase(1, "handler"),
+	engine.Schedule(testEvent{
+		EventBase: MakeEventBase(1, "handler"),
 		label:     "first",
 	})
 
@@ -48,15 +48,15 @@ func TestSerialEngineRunsSecondaryEventsAfterPrimaryEvents(t *testing.T) {
 	handler := &recordingHandler{}
 	engine.RegisterHandler("handler", handler)
 
-	secondary := &testEvent{
-		EventBase: NewEventBase(1, "handler"),
+	secondary := testEvent{
+		EventBase: MakeEventBase(1, "handler"),
 		label:     "secondary",
 	}
 	secondary.Secondary = true
 
 	engine.Schedule(secondary)
-	engine.Schedule(&testEvent{
-		EventBase: NewEventBase(1, "handler"),
+	engine.Schedule(testEvent{
+		EventBase: MakeEventBase(1, "handler"),
 		label:     "primary",
 	})
 

@@ -35,7 +35,7 @@ func (s *controlStage) processCurrentFlush() bool {
 		return false
 	}
 
-	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
+	rsp := mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = s.ctrlPort.AsRemote()
 	rsp.Dst = next.ProcessingFlush.MsgMeta.Src
@@ -100,7 +100,7 @@ func (s *controlStage) processNewRequest() bool {
 	}
 
 	switch msg := msgI.(type) {
-	case *mem.ControlReq:
+	case mem.ControlReq:
 		switch msg.Command {
 		case mem.CmdFlush:
 			return s.startCacheFlush(msg)
@@ -117,7 +117,7 @@ func (s *controlStage) processNewRequest() bool {
 	panic("never")
 }
 
-func (s *controlStage) startCacheFlush(msg *mem.ControlReq) bool {
+func (s *controlStage) startCacheFlush(msg mem.ControlReq) bool {
 	next := &s.pipeline.comp.State
 	if next.HasProcessingFlush {
 		return false
@@ -135,7 +135,7 @@ func (s *controlStage) startCacheFlush(msg *mem.ControlReq) bool {
 	return true
 }
 
-func (s *controlStage) doCacheRestart(msg *mem.ControlReq) bool {
+func (s *controlStage) doCacheRestart(msg mem.ControlReq) bool {
 	if !s.ctrlPort.CanSend() {
 		return false
 	}
@@ -153,7 +153,7 @@ func (s *controlStage) doCacheRestart(msg *mem.ControlReq) bool {
 		s.pipeline.bottomPort.RetrieveIncoming()
 	}
 
-	rsp := &mem.ControlRsp{Command: mem.CmdEnable, Success: true}
+	rsp := mem.ControlRsp{Command: mem.CmdEnable, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = s.ctrlPort.AsRemote()
 	rsp.Dst = msg.Src

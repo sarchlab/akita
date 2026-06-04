@@ -117,7 +117,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 
 	srcP := m.srcPort()
 
-	req := &mem.ReadReq{}
+	req := mem.ReadReq{}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Address = addr
 	req.Src = srcP.AsRemote()
@@ -160,7 +160,7 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 		return false
 	}
 
-	rsp, ok := rspI.(*mem.DataReadyRsp)
+	rsp, ok := rspI.(mem.DataReadyRsp)
 	if !ok {
 		// it can be write done rsp if src and dst is the same side. So ignore.
 		return false
@@ -179,7 +179,7 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 	srcP.RetrieveIncoming()
 
 	// Create a temporary msg for tracing
-	traceReq := &mem.ReadReq{}
+	traceReq := mem.ReadReq{}
 	traceReq.ID = originalReq.ID
 	traceReq.Src = originalReq.Src
 	traceReq.Dst = originalReq.Dst
@@ -205,7 +205,7 @@ func (m *dataTransferMW) writeToDst() bool {
 
 	dstP := m.dstPort()
 
-	req := &mem.WriteReq{}
+	req := mem.WriteReq{}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Address = trans.NextWriteAddr
 	req.Data = data
@@ -250,7 +250,7 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 		return false
 	}
 
-	rsp, ok := rspI.(*mem.WriteDoneRsp)
+	rsp, ok := rspI.(mem.WriteDoneRsp)
 	if !ok {
 		return false
 	}
@@ -265,7 +265,7 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 	dstP.RetrieveIncoming()
 
 	// Create a temporary msg for tracing
-	traceReq := &mem.WriteReq{}
+	traceReq := mem.WriteReq{}
 	traceReq.ID = originalReq.ID
 	traceReq.Src = originalReq.Src
 	traceReq.Dst = originalReq.Dst

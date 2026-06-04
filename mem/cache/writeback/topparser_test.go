@@ -86,7 +86,7 @@ var _ = Describe("TopParser", func() {
 	})
 
 	It("should parse read from top", func() {
-		read := &mem.ReadReq{}
+		read := mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Address = 0x100
 		read.AccessByteSize = 64
@@ -106,7 +106,7 @@ var _ = Describe("TopParser", func() {
 	})
 
 	It("should parse write from top", func() {
-		write := &mem.WriteReq{}
+		write := mem.WriteReq{}
 		write.ID = timing.GetIDGenerator().Generate()
 		write.Address = 0x100
 		write.TrafficBytes = 12

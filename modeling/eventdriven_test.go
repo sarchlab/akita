@@ -121,7 +121,7 @@ func TestEventDrivenHandle(t *testing.T) {
 		WithProcessor(proc).
 		Build("EDComp")
 
-	evt := timing.NewEventBase(10, comp.Name())
+	evt := timing.MakeEventBase(10, comp.Name())
 
 	err := comp.Handle(evt)
 	if err != nil {

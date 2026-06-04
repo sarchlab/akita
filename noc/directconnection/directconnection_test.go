@@ -17,8 +17,8 @@ type testMsg struct {
 	messaging.MsgMeta
 }
 
-func newTestMsg() *testMsg {
-	return &testMsg{
+func newTestMsg() testMsg {
+	return testMsg{
 		MsgMeta: messaging.MsgMeta{
 			ID: timing.GetIDGenerator().Generate(),
 		},
@@ -113,7 +113,7 @@ var _ = Describe("DirectConnection", func() {
 type agent struct {
 	*modeling.TickingComponent
 
-	msgsOut []*testMsg
+	msgsOut []testMsg
 	msgsIn  []messaging.Msg
 
 	OutPort messaging.Port

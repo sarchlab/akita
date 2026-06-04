@@ -53,8 +53,8 @@ func (m *walkMW) parseFromTop() bool {
 	}
 
 	switch req := reqI.(type) {
-	case *vm.TranslationReq:
-		tracing.TraceReqReceive(req, m.comp) // sets RecvTaskID
+	case vm.TranslationReq:
+		tracing.TraceReqReceive(req, m.comp)
 		m.startWalking(req)
 	default:
 		log.Panicf("gmmu cannot handle request of type %s",
@@ -64,13 +64,13 @@ func (m *walkMW) parseFromTop() bool {
 	return true
 }
 
-func (m *walkMW) startWalking(req *vm.TranslationReq) {
+func (m *walkMW) startWalking(req vm.TranslationReq) {
 	spec := m.comp.Spec()
 	state := &m.comp.State
 
 	ts := transactionState{
 		ReqID:      req.ID,
-		RecvTaskID: req.RecvTaskID,
+		RecvTaskID: tracing.MsgIDAtReceiver(req, m.comp),
 		ReqSrc:     req.Src,
 		ReqDst:     req.Dst,
 		PID:        uint64(req.PID),
@@ -153,7 +153,7 @@ func (m *walkMW) processRemoteMemReq(
 	spec := m.comp.Spec()
 	walking := state.WalkingTranslations[walkingIndex]
 
-	req := &vm.TranslationReq{}
+	req := vm.TranslationReq{}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = m.bottomPort().AsRemote()
 	req.Dst = spec.LowModule
@@ -195,7 +195,7 @@ func (m *walkMW) doPageWalkHit(
 	}
 	walking := state.WalkingTranslations[walkingIndex]
 
-	rsp := &vm.TranslationRsp{
+	rsp := vm.TranslationRsp{
 		Page: pageFromPageState(walking.Page),
 	}
 	rsp.ID = timing.GetIDGenerator().Generate()
@@ -209,12 +209,11 @@ func (m *walkMW) doPageWalkHit(
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
 	tracing.TraceReqComplete(
-		&vm.TranslationReq{
+		vm.TranslationReq{
 			MsgMeta: messaging.MsgMeta{
-				ID:         walking.ReqID,
-				Src:        walking.ReqSrc,
-				Dst:        walking.ReqDst,
-				RecvTaskID: walking.RecvTaskID,
+				ID:  walking.ReqID,
+				Src: walking.ReqSrc,
+				Dst: walking.ReqDst,
 			},
 		},
 		m.comp,

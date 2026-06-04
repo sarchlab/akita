@@ -51,7 +51,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 	})
 
 	It("should send full latency on miss", func() {
-		req := &vm.TranslationReq{}
+		req := vm.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("UpModule")
 		req.Dst = topPort.AsRemote()
@@ -66,7 +66,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		Expect(madeProgress).To(BeTrue())
 
 		sent := bottomPort.RetrieveOutgoing()
-		sentReq, ok := sent.(*vm.TranslationReq)
+		sentReq, ok := sent.(vm.TranslationReq)
 		Expect(ok).To(BeTrue())
 		Expect(sentReq.TransLatency).To(Equal(uint64(200)))
 		Expect(sentReq.Dst).To(Equal(messaging.RemotePort("LowModule")))
@@ -78,7 +78,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 	})
 
 	It("should reduce latency on upper-level hit", func() {
-		req := &vm.TranslationReq{}
+		req := vm.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("UpModule")
 		req.Dst = topPort.AsRemote()
@@ -103,7 +103,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		Expect(madeProgress).To(BeTrue())
 
 		sent := bottomPort.RetrieveOutgoing()
-		sentReq, ok := sent.(*vm.TranslationReq)
+		sentReq, ok := sent.(vm.TranslationReq)
 		Expect(ok).To(BeTrue())
 		Expect(sentReq.TransLatency).To(Equal(uint64(100)))
 	})
@@ -115,7 +115,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 			PAddr: 0x5000,
 			Valid: true,
 		}
-		rsp := &vm.TranslationRsp{
+		rsp := vm.TranslationRsp{
 			Page: page,
 		}
 		rsp.ID = timing.GetIDGenerator().Generate()
@@ -132,7 +132,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		Expect(madeProgress).To(BeTrue())
 
 		sent := topPort.RetrieveOutgoing()
-		sentRsp, ok := sent.(*vm.TranslationRsp)
+		sentRsp, ok := sent.(vm.TranslationRsp)
 		Expect(ok).To(BeTrue())
 		Expect(sentRsp.Dst).To(Equal(messaging.RemotePort("UpModule")))
 		Expect(sentRsp.Src).To(Equal(topPort.AsRemote()))
@@ -171,7 +171,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		Expect(found).To(BeFalse())
 
 		sent := controlPort.RetrieveOutgoing()
-		sentRsp, ok := sent.(*mem.ControlRsp)
+		sentRsp, ok := sent.(mem.ControlRsp)
 		Expect(ok).To(BeTrue())
 		Expect(sentRsp.Command).To(Equal(mem.CmdFlush))
 		Expect(sentRsp.Success).To(BeTrue())

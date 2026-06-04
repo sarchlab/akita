@@ -86,7 +86,7 @@ func (m *tickFinalizeMW) finalizeRead(
 		return false
 	}
 
-	rsp := &mem.DataReadyRsp{}
+	rsp := mem.DataReadyRsp{}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = readReq.Src
@@ -147,7 +147,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 		return false
 	}
 
-	rsp := &mem.WriteDoneRsp{}
+	rsp := mem.WriteDoneRsp{}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = writeReq.Src

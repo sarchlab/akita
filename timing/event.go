@@ -24,15 +24,14 @@ type EventBase struct {
 	Secondary  bool       `json:"secondary"`
 }
 
-// NewEventBase creates a new EventBase.
-func NewEventBase(t VTimeInPicoSec, handlerID string) *EventBase {
-	e := new(EventBase)
-	e.ID = GetIDGenerator().Generate()
-	e.Time_ = t
-	e.HandlerID_ = handlerID
-	e.Secondary = false
-
-	return e
+// MakeEventBase creates a new EventBase as a value.
+func MakeEventBase(t VTimeInPicoSec, handlerID string) EventBase {
+	return EventBase{
+		ID:         GetIDGenerator().Generate(),
+		Time_:      t,
+		HandlerID_: handlerID,
+		Secondary:  false,
+	}
 }
 
 // Time returns the time that the event is going to happen.

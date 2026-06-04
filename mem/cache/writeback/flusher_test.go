@@ -114,7 +114,7 @@ var _ = Describe("Flusher", func() {
 
 	Context("flush without reset", func() {
 		It("should start flushing", func() {
-			req := &mem.ControlReq{Command: mem.CmdFlush}
+			req := mem.ControlReq{Command: mem.CmdFlush}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.TrafficClass = "mem.ControlReq"
 			controlPort.EXPECT().PeekIncoming().Return(req)
@@ -196,7 +196,7 @@ var _ = Describe("Flusher", func() {
 
 	Context("flush with reset", func() {
 		It("should remove inflight state", func() {
-			req := &mem.ControlReq{Command: mem.CmdFlush}
+			req := mem.ControlReq{Command: mem.CmdFlush}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.DiscardInflight = true
 			req.TrafficClass = "mem.ControlReq"
@@ -216,7 +216,7 @@ var _ = Describe("Flusher", func() {
 
 	Context("restarting", func() {
 		It("should stall if cannot send to control port", func() {
-			req := &mem.ControlReq{Command: mem.CmdEnable}
+			req := mem.ControlReq{Command: mem.CmdEnable}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.TrafficClass = "mem.ControlReq"
 			controlPort.EXPECT().PeekIncoming().Return(req)
@@ -228,7 +228,7 @@ var _ = Describe("Flusher", func() {
 		})
 
 		It("should restart", func() {
-			req := &mem.ControlReq{Command: mem.CmdEnable}
+			req := mem.ControlReq{Command: mem.CmdEnable}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.TrafficClass = "mem.ControlReq"
 			controlPort.EXPECT().PeekIncoming().Return(req)

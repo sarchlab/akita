@@ -37,7 +37,7 @@ func (m *sendMW) sendRsp() bool {
 		return false
 	}
 
-	rsp := &pingRsp{
+	rsp := pingRsp{
 		MsgMeta: messaging.MsgMeta{
 			ID:    timing.GetIDGenerator().Generate(),
 			Src:   outPort(m.comp).AsRemote(),
@@ -65,7 +65,7 @@ func (m *sendMW) sendPing() bool {
 		return false
 	}
 
-	pingMsg := &pingReq{
+	pingMsg := pingReq{
 		MsgMeta: messaging.MsgMeta{
 			ID:  timing.GetIDGenerator().Generate(),
 			Src: outPort(m.comp).AsRemote(),

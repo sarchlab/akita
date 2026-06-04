@@ -73,10 +73,10 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 			break
 		}
 
-		msg := msgI.(*vm.TranslationReq)
+		msg := msgI.(vm.TranslationReq)
 		// Dwell one extra cycle at stage 0 to preserve the same per-stage
 		// latency as the original hand-coded pipeline.
-		next.Pipeline.AcceptWithDelay(pipelineTLBReqState{Msg: *msg}, 1)
+		next.Pipeline.AcceptWithDelay(pipelineTLBReqState{Msg: msg}, 1)
 
 		madeProgress = true
 	}
@@ -97,7 +97,7 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 		item := next.BufferItems.Peek()
 		msg := item.Msg
 
-		ok := m.lookup(&msg)
+		ok := m.lookup(msg)
 		if ok {
 			next.BufferItems.Pop()
 			madeProgress = true
@@ -165,7 +165,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	mshrEntry := &next.RespondingMSHRData
 	page := mshrEntry.Page
 	reqMsg := mshrEntry.Requests[0]
-	rspToTop := &vm.TranslationRsp{
+	rspToTop := vm.TranslationRsp{
 		Page: page,
 	}
 	rspToTop.ID = timing.GetIDGenerator().Generate()
@@ -198,7 +198,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	return true
 }
 
-func (m *tlbMiddleware) lookup(msg *vm.TranslationReq) bool {
+func (m *tlbMiddleware) lookup(msg vm.TranslationReq) bool {
 	spec := m.comp.Spec()
 	next := &m.comp.State
 
@@ -217,7 +217,7 @@ func (m *tlbMiddleware) lookup(msg *vm.TranslationReq) bool {
 }
 
 func (m *tlbMiddleware) handleTranslationHit(
-	msg *vm.TranslationReq,
+	msg vm.TranslationReq,
 	setID, wayID int,
 	page vm.Page,
 ) bool {
@@ -244,7 +244,7 @@ func (m *tlbMiddleware) handleTranslationHit(
 	return true
 }
 
-func (m *tlbMiddleware) handleTranslationMiss(msg *vm.TranslationReq) bool {
+func (m *tlbMiddleware) handleTranslationMiss(msg vm.TranslationReq) bool {
 	next := &m.comp.State
 	spec := m.comp.Spec()
 
@@ -279,10 +279,10 @@ func vAddrToSetID(vAddr uint64, spec Spec) (setID int) {
 }
 
 func (m *tlbMiddleware) sendRspToTop(
-	msg *vm.TranslationReq,
+	msg vm.TranslationReq,
 	page vm.Page,
 ) bool {
-	rsp := &vm.TranslationRsp{
+	rsp := vm.TranslationRsp{
 		Page: page,
 	}
 	rsp.ID = timing.GetIDGenerator().Generate()
@@ -307,14 +307,14 @@ func (m *tlbMiddleware) sendRspToTop(
 }
 
 func (m *tlbMiddleware) processTLBMSHRHit(
-	msg *vm.TranslationReq,
+	msg vm.TranslationReq,
 ) bool {
 	next := &m.comp.State
 	idx, found := mshrGetEntry(next.MSHREntries, msg.PID, msg.VAddr)
 	if !found {
 		return false
 	}
-	next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, *msg)
+	next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, msg)
 
 	tracing.TraceReqReceive(msg, m.comp)
 	tracing.AddTaskStep(
@@ -323,11 +323,11 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 	return true
 }
 
-func (m *tlbMiddleware) fetchBottom(msg *vm.TranslationReq) bool {
+func (m *tlbMiddleware) fetchBottom(msg vm.TranslationReq) bool {
 	spec := m.comp.Spec()
 	mapper := m.comp.Resources().TranslationProviderMapper
 
-	fetchBottom := &vm.TranslationReq{}
+	fetchBottom := vm.TranslationReq{}
 	fetchBottom.ID = timing.GetIDGenerator().Generate()
 	fetchBottom.Src = m.bottomPort().AsRemote()
 	fetchBottom.Dst = findTranslationPort(mapper, msg.VAddr)
@@ -353,9 +353,9 @@ func (m *tlbMiddleware) fetchBottom(msg *vm.TranslationReq) bool {
 	next := &m.comp.State
 	var idx int
 	next.MSHREntries, idx = mshrAdd(next.MSHREntries, spec.MSHRSize, msg.PID, msg.VAddr)
-	next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, *msg)
+	next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, msg)
 	next.MSHREntries[idx].HasReqToBottom = true
-	next.MSHREntries[idx].ReqToBottom = *fetchBottom
+	next.MSHREntries[idx].ReqToBottom = fetchBottom
 
 	tracing.TraceReqInitiate(fetchBottom, m.comp,
 		tracing.MsgIDAtReceiver(msg, m.comp))
@@ -373,7 +373,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 		return false
 	}
 
-	item := itemI.(*vm.TranslationRsp)
+	item := itemI.(vm.TranslationRsp)
 	spec := m.comp.Spec()
 	tracing.AddMilestone(
 		tracing.MsgIDAtReceiver(item, m.comp),
@@ -449,7 +449,7 @@ func (m *tlbMiddleware) processTLBFlush() bool {
 	next := &m.comp.State
 	flush := next.InflightFlush
 
-	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
+	rsp := mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.controlPort().AsRemote()
 	rsp.Dst = flush.Meta.Src
