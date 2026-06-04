@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -367,14 +368,14 @@ var _ = Describe("Reorder Buffer", func() {
 	})
 
 	Context("control", func() {
-		It("flushes in-flight transactions and pauses on CmdFlush", func() {
+		It("drops in-flight transactions and pauses on CmdReset", func() {
 			topPort.Deliver(makeRead(0))
 			rob.Tick()
 			bottomPort.RetrieveOutgoing()
 			Expect(rob.State.Transactions).To(HaveLen(1))
 
 			req := &mem.ControlReq{
-				Command: mem.CmdFlush,
+				Command: mem.CmdReset,
 			}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.Src = messaging.RemotePort("Cmd")
@@ -385,18 +386,18 @@ var _ = Describe("Reorder Buffer", func() {
 			rob.Tick()
 
 			Expect(rob.State.Transactions).To(BeEmpty())
-			Expect(rob.State.IsFlushing).To(BeTrue())
+			Expect(rob.State.ControlState).To(Equal(control.StateEnabled))
 
 			ack := ctrlPort.RetrieveOutgoing()
 			Expect(ack).To(BeAssignableToTypeOf(&mem.ControlRsp{}))
 			rsp := ack.(*mem.ControlRsp)
-			Expect(rsp.Command).To(Equal(mem.CmdFlush))
+			Expect(rsp.Command).To(Equal(mem.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(req.ID))
 		})
 
-		It("pauses the data pipeline while flushing", func() {
-			rob.State.IsFlushing = true
+		It("freezes the data pipeline while paused", func() {
+			rob.State.ControlState = control.StatePaused
 			topPort.Deliver(makeRead(0))
 
 			progress := rob.Tick()
@@ -406,10 +407,10 @@ var _ = Describe("Reorder Buffer", func() {
 			Expect(topPort.PeekIncoming()).ToNot(BeNil())
 		})
 
-		It("restarts on CmdEnable, draining incoming traffic", func() {
-			rob.State.IsFlushing = true
+		It("resumes on CmdEnable, draining incoming traffic", func() {
+			rob.State.ControlState = control.StatePaused
 
-			// Stale traffic that should be cleared on restart.
+			// Stale traffic that should be cleared on resume.
 			topPort.Deliver(makeRead(0))
 			stray := &mem.DataReadyRsp{Data: []byte{0xFF}}
 			stray.ID = timing.GetIDGenerator().Generate()
@@ -428,7 +429,7 @@ var _ = Describe("Reorder Buffer", func() {
 
 			rob.Tick()
 
-			Expect(rob.State.IsFlushing).To(BeFalse())
+			Expect(rob.State.ControlState).To(Equal(control.StateEnabled))
 			Expect(topPort.PeekIncoming()).To(BeNil())
 			Expect(bottomPort.PeekIncoming()).To(BeNil())
 
