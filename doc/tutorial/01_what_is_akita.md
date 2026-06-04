@@ -80,14 +80,16 @@ It is not a fit for:
 Each chapter is one runnable example. You can read the code, run it, and
 modify it. The chapters build on each other:
 
-1. **Components** — the default Akita pattern. Write a component with
-   Spec, State, middleware, and ports, then connect two of them.
-2. **Event-based simulation** — open the layer underneath: schedule
+1. **Create a component** — the default Akita pattern. Write a component
+   with Spec, State, and middleware, built up a few lines at a time.
+2. **Make components talk to each other** — add ports and messages, and
+   connect two components so they can communicate.
+3. **Event-based simulation** — open the layer underneath: schedule
    events directly, write custom event types, and use event-driven
    components for the idle case.
-3. **Building systems** — compose components into a memory subsystem and
+4. **Building systems** — compose components into a memory subsystem and
    a small network.
-4. **Observability and persistence** — trace what your simulation does,
+5. **Observability and persistence** — trace what your simulation does,
    watch it live, write your own component, and checkpoint to resume
    long runs.
 
@@ -98,5 +100,5 @@ muscle memory to extend it.
 
 The next chapter is a short **Install and Verify** — install Go, clone
 the repository, and run the smallest example to confirm your environment
-works. After that, **Getting Started** introduces what a component is and
-walks through that example line by line.
+works. After that, **Create a Component** introduces what a component is
+and builds that example up a few lines at a time.

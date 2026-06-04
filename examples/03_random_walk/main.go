@@ -18,8 +18,12 @@ type walkState struct {
 	Steps    int `json:"steps"`
 }
 
+// Comp is the random-walk component. The alias keeps the long generic
+// modeling.Component[Spec, State, Resources] type out of the rest of the code.
+type Comp = modeling.Component[walkSpec, walkState, modeling.None]
+
 type walkMW struct {
-	comp *modeling.Component[walkSpec, walkState, modeling.None]
+	comp *Comp
 	rng  *rand.Rand
 }
 

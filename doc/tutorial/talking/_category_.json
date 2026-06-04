@@ -1,0 +1,8 @@
+{
+  "label": "Make Components Talk to Each Other",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "A component on its own only walks its own clock. Real simulations are graphs of components exchanging messages. This section adds ports and messages, shows the per-package builder convention that creates ports internally, and wires two components together with a connection so they can ping each other."
+  }
+}

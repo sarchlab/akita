@@ -36,9 +36,11 @@ A single tick-based component, no ports. Takes one ±1 step per cycle
 until it drifts to ±10 from the origin, then prints the final position,
 step count, and simulated time. Smallest useful Akita simulation.
 
-**Key concepts**: `modeling.Component`, `Spec`/`State` separation, the
-`Tick() bool` middleware contract, `TickLater` to start the loop,
-middleware holding auxiliary state (a seeded RNG) outside Spec/State.
+**Key concepts**: `modeling.Component`, the
+`type Comp = modeling.Component[Spec, State, modeling.None]` alias,
+`Spec`/`State` separation, the `Tick() bool` middleware contract,
+`TickLater` to start the loop, middleware holding auxiliary state (a seeded
+RNG) outside Spec/State.
 
 ```bash
 cd 03_random_walk && go run main.go

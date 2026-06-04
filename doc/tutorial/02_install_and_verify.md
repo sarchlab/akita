@@ -45,5 +45,5 @@ works yet — the next chapter dissects it.)
 
 ## Where to Next
 
-The next chapter, **Getting Started**, introduces what a component is and
-walks through the example you just ran, line by line.
+The next section, **Create a Component**, introduces what a component is
+and builds the example you just ran up a few lines at a time.
