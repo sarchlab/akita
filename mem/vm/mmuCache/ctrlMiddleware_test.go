@@ -79,7 +79,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		bottomMsg.TrafficClass = "vm.TranslationRsp"
 		bottomPort.Deliver(bottomMsg)
 
-		madeProgress := ctrl.handleMMUCacheRestart(req)
+		madeProgress := ctrl.handleReset(req)
 
 		next := &comp.State
 		Expect(madeProgress).To(BeTrue())

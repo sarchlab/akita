@@ -40,6 +40,9 @@ const (
 // State contains mutable runtime data for the mmuCache.
 type State struct {
 	CurrentState           string               `json:"current_state"`
+	PendingDrainRsp        bool                 `json:"pending_drain_rsp"`
+	CurrentCmdID           uint64               `json:"current_cmd_id"`
+	CurrentCmdSrc          messaging.RemotePort `json:"current_cmd_src"`
 	Table                  []setState           `json:"table"`
 	InflightFlushReqID     uint64               `json:"inflight_flush_req_id"`
 	InflightFlushReqSrc    messaging.RemotePort `json:"inflight_flush_req_src"`

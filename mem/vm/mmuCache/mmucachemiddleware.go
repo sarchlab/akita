@@ -263,6 +263,7 @@ func (m *mmuCacheMiddleware) processMMUCacheFlush() bool {
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.controlPort().AsRemote()
 	rsp.Dst = next.InflightFlushReqSrc
+	rsp.RspTo = next.InflightFlushReqID
 	rsp.TrafficClass = "mem.ControlRsp"
 
 	if !m.controlPort().CanSend() {
