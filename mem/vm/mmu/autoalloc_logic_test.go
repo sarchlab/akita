@@ -20,7 +20,7 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 		WithSpec(spec).
 		Build("TestMMU")
 
-	mw := mmu.Middlewares()[0].(*translationMW)
+	mw := mmu.Middlewares()[1].(*translationMW)
 
 	// Test physical page allocation starts at 0
 	firstPage := mw.createDefaultPage(vm.PID(1), 0x1234, 2)
@@ -80,7 +80,7 @@ func TestPhysicalPageAllocator(t *testing.T) {
 		WithSpec(spec).
 		Build("TestMMU")
 
-	mw := mmu.Middlewares()[0].(*translationMW)
+	mw := mmu.Middlewares()[1].(*translationMW)
 
 	// Test multiple allocations to ensure unique physical pages
 	allocatedPages := make(map[uint64]bool)

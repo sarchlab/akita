@@ -1,6 +1,7 @@
 package mmu
 
 import (
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -27,8 +28,13 @@ func (m *migrationMW) pageTable() vm.PageTable {
 	return m.comp.Resources().PageTable
 }
 
-// Tick runs the migration stages.
+// Tick runs the migration stages. Paused MMUs make no progress;
+// draining MMUs continue migration so in-flight work can complete.
 func (m *migrationMW) Tick() bool {
+	if m.comp.State.ControlState == control.StatePaused {
+		return false
+	}
+
 	madeProgress := false
 
 	madeProgress = m.sendMigrationToDriver() || madeProgress

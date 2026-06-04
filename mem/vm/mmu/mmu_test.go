@@ -57,9 +57,10 @@ var _ = Describe("MMU", func() {
 		migrationPort = mmuComp.GetPortByName("Migration")
 		(&noopConn{}).PlugIn(topPort)
 		(&noopConn{}).PlugIn(migrationPort)
+		(&noopConn{}).PlugIn(mmuComp.GetPortByName("Control"))
 
-		translationMWRef = mmuComp.Middlewares()[0].(*translationMW)
-		migrationMWRef = mmuComp.Middlewares()[1].(*migrationMW)
+		translationMWRef = mmuComp.Middlewares()[1].(*translationMW)
+		migrationMWRef = mmuComp.Middlewares()[2].(*migrationMW)
 	}
 
 	BeforeEach(func() {

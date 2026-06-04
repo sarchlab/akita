@@ -16,6 +16,7 @@ var defaultSpec = Spec{
 	MigrationQueueSize:      4096,
 	TopPortBufferSize:       4096,
 	MigrationPortBufferSize: 1,
+	CtrlPortBufferSize:      4,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -82,6 +83,9 @@ func (b Builder) Build(name string) *Comp {
 
 	b.createPorts(name, spec, modelComp)
 
+	cmw := &ctrlMiddleware{comp: modelComp}
+	modelComp.AddMiddleware(cmw)
+
 	tmw := &translationMW{comp: modelComp}
 	modelComp.AddMiddleware(tmw)
 
@@ -131,4 +135,9 @@ func (b Builder) createPorts(
 		mmu, spec.MigrationPortBufferSize, spec.MigrationPortBufferSize,
 		name+".Migration")
 	mmu.AddPort("Migration", migrationPort)
+
+	ctrlPort := messaging.NewPort(
+		mmu, spec.CtrlPortBufferSize, spec.CtrlPortBufferSize,
+		name+".Control")
+	mmu.AddPort("Control", ctrlPort)
 }

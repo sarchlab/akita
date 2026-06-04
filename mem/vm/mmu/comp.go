@@ -1,6 +1,7 @@
 package mmu
 
 import (
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -19,6 +20,7 @@ type Spec struct {
 
 	TopPortBufferSize       int `json:"top_port_buffer_size"`
 	MigrationPortBufferSize int `json:"migration_port_buffer_size"`
+	CtrlPortBufferSize      int `json:"ctrl_port_buffer_size"`
 }
 
 // transactionState is the canonical transaction representation.
@@ -49,13 +51,16 @@ type devicePageAccess struct {
 
 // State contains mutable runtime data for the MMU.
 type State struct {
-	WalkingTranslations      []transactionState `json:"walking_translations"`
-	MigrationQueue           []transactionState `json:"migration_queue"`
-	CurrentOnDemandMigration transactionState   `json:"current_on_demand_migration"`
-	IsDoingMigration         bool               `json:"is_doing_migration"`
-	PageAccessedByDeviceID   []devicePageAccess `json:"page_accessed_by_device_id"`
-	NextPhysicalPage         uint64             `json:"next_physical_page"`
-	ToRemoveFromPTW          []int              `json:"to_remove_from_ptw"`
+	ControlState             control.State        `json:"control_state"`
+	CurrentCmdID             uint64               `json:"current_cmd_id"`
+	CurrentCmdSrc            messaging.RemotePort `json:"current_cmd_src"`
+	WalkingTranslations      []transactionState   `json:"walking_translations"`
+	MigrationQueue           []transactionState   `json:"migration_queue"`
+	CurrentOnDemandMigration transactionState     `json:"current_on_demand_migration"`
+	IsDoingMigration         bool                 `json:"is_doing_migration"`
+	PageAccessedByDeviceID   []devicePageAccess   `json:"page_accessed_by_device_id"`
+	NextPhysicalPage         uint64               `json:"next_physical_page"`
+	ToRemoveFromPTW          []int                `json:"to_remove_from_ptw"`
 }
 
 // Resources holds the shared resources referenced by the MMU. The page table is
