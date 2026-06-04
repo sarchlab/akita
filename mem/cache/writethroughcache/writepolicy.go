@@ -5,17 +5,31 @@ import (
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
-// needsDualCompletion returns true if the current write policy requires both
-// bank and bottom-write completion before a write-hit transaction is done.
-func needsDualCompletion(policyType string) bool {
-	switch policyType {
-	case "write-around", "write-through":
-		return true
-	case "write-evict":
+// writeTransIsReady reports whether a write transaction has met every
+// completion dependency it has (bank pipeline work, fetch-and-write fill,
+// lower-memory ack, MSHR fill) and can be returned to the requester.
+//
+// The result depends only on per-transaction flags so it works uniformly
+// across write-through, write-around, and write-evict — including the
+// MSHR-coalesced case where the write never visits the bank stage but
+// still depends on the fetcher's merged-line write reaching storage.
+func writeTransIsReady(trans *transactionState) bool {
+	if trans.HasWriteToBottom && !trans.BottomWriteDone {
 		return false
-	default:
-		panic("unknown write policy type: " + policyType)
 	}
+
+	needsBank := trans.FetchAndWrite ||
+		trans.BankAction == bankActionWrite ||
+		trans.BankAction == bankActionWriteFetched
+	if needsBank && !trans.BankDone {
+		return false
+	}
+
+	if trans.WaitForMSHRFill && !trans.MSHRFillDone {
+		return false
+	}
+
+	return true
 }
 
 // handleWriteHit dispatches to the correct write-hit handler based on

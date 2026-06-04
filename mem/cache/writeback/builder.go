@@ -135,19 +135,29 @@ func (b Builder) buildInitialState(
 	name string, spec Spec, laneWidth, numSets int,
 ) State {
 	blockSize := 1 << spec.Log2BlockSize
+	numBanks := spec.NumBanks
+
+	dirToBank := make([]queueing.Buffer[int], numBanks)
+	wbToBank := make([]queueing.Buffer[int], numBanks)
+	bankPipes := make([]queueing.Pipeline[int], numBanks)
+	bankPostBufs := make([]postPipelineBuf, numBanks)
+	for i := 0; i < numBanks; i++ {
+		dirToBank[i] = queueing.NewBuffer[int](
+			fmt.Sprintf("%s.DirToBankBuf%d", name, i), spec.NumReqPerCycle)
+		wbToBank[i] = queueing.NewBuffer[int](
+			fmt.Sprintf("%s.WriteBufferToBankBuf%d", name, i),
+			spec.NumReqPerCycle)
+		bankPipes[i] = queueing.NewPipeline[int](laneWidth, spec.BankLatency)
+		bankPostBufs[i] = newPostPipelineBuf(laneWidth)
+	}
 
 	s := State{
 		CacheState:   int(cacheStateRunning),
 		EvictingList: make(map[uint64]bool),
 		DirStageBuf: queueing.NewBuffer[int](
 			name+".DirStageBuf", spec.NumReqPerCycle),
-		DirToBankBufs: []queueing.Buffer[int]{
-			queueing.NewBuffer[int](name+".DirToBankBuf", spec.NumReqPerCycle),
-		},
-		WriteBufferToBankBufs: []queueing.Buffer[int]{
-			queueing.NewBuffer[int](
-				name+".WriteBufferToBankBuf", spec.NumReqPerCycle),
-		},
+		DirToBankBufs:         dirToBank,
+		WriteBufferToBankBufs: wbToBank,
 		MSHRStageBuf: queueing.NewBuffer[int](
 			name+".MSHRStageBuf", spec.NumReqPerCycle),
 		WriteBufferBuf: queueing.NewBuffer[int](
@@ -155,14 +165,10 @@ func (b Builder) buildInitialState(
 		DirPipeline: queueing.NewPipeline[int](laneWidth, spec.DirLatency),
 		DirPostPipelineBuf: queueing.NewBuffer[int](
 			name+".DirPostPipelineBuf", spec.NumReqPerCycle),
-		BankPipelines: []queueing.Pipeline[int]{
-			queueing.NewPipeline[int](laneWidth, spec.BankLatency),
-		},
-		BankPostPipelineBufs: []postPipelineBuf{
-			newPostPipelineBuf(laneWidth),
-		},
-		BankInflightTransCounts:         make([]int, 1),
-		BankDownwardInflightTransCounts: make([]int, 1),
+		BankPipelines:                   bankPipes,
+		BankPostPipelineBufs:            bankPostBufs,
+		BankInflightTransCounts:         make([]int, numBanks),
+		BankDownwardInflightTransCounts: make([]int, numBanks),
 	}
 
 	cache.DirectoryReset(
@@ -177,7 +183,9 @@ func (b Builder) buildInitialState(
 // address-mapping fields read at Tick time.
 func (b Builder) buildSpec(numSets int) Spec {
 	spec := b.spec
-	spec.NumBanks = 1
+	if spec.NumBanks < 1 {
+		spec.NumBanks = 1
+	}
 	spec.NumSets = numSets
 
 	mapperType, remotePorts, interleavingSize := b.resolveAddressMapper()
@@ -285,11 +293,14 @@ func (b Builder) createInternalStages(m *pipelineMW, laneWidth int) {
 		cache: m,
 	}
 
-	m.bankStages = make([]*bankStage, 1)
-	m.bankStages[0] = &bankStage{
-		cache:         m,
-		bankID:        0,
-		pipelineWidth: laneWidth,
+	numBanks := m.comp.Spec().NumBanks
+	m.bankStages = make([]*bankStage, numBanks)
+	for i := 0; i < numBanks; i++ {
+		m.bankStages[i] = &bankStage{
+			cache:         m,
+			bankID:        i,
+			pipelineWidth: laneWidth,
+		}
 	}
 
 	m.mshrStage = &mshrStage{cache: m}

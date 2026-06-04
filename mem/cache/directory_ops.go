@@ -24,8 +24,12 @@ func DirectoryLookup(
 	return setID, -1, false
 }
 
-// DirectoryFindVictim returns (setID, wayID) of the LRU victim for addr.
-// The victim is the block at LRUOrder[0] (least recently used).
+// DirectoryFindVictim returns (setID, wayID) of the best eviction victim
+// for addr. Ways are scanned in LRU order; the first one that is neither
+// IsLocked nor has outstanding readers (ReadCount > 0) is returned. When
+// every way in the set is busy, LRUOrder[0] is returned so the caller's
+// own IsLocked/ReadCount guard can decide to stall — preserving the
+// previous behavior on that pathological case.
 func DirectoryFindVictim(
 	ds *DirectoryState,
 	numSets int,
@@ -34,6 +38,13 @@ func DirectoryFindVictim(
 ) (int, int) {
 	setID := int(addr / uint64(blockSize) % uint64(numSets))
 	set := &ds.Sets[setID]
+
+	for _, wayID := range set.LRUOrder {
+		block := &set.Blocks[wayID]
+		if !block.IsLocked && block.ReadCount == 0 {
+			return setID, wayID
+		}
+	}
 
 	return setID, set.LRUOrder[0]
 }
