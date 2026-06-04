@@ -63,7 +63,7 @@ type DBTracer struct {
 
 	tracingTasks     map[uint64]*runningTask
 	isTracing        bool
-	tracingStartTime timing.VTimeInSec
+	tracingStartTime timing.VTimeInPicoSec
 
 	terminated              bool
 	firstTerminateBacktrace string

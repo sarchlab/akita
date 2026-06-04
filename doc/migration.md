@@ -31,10 +31,11 @@ for exact, reproducible arithmetic.
 
 | V4 | V5 |
 |----|-----|
-| `type VTimeInSec float64` (seconds) | `type VTimeInSec uint64` (picoseconds) |
+| `type VTimeInSec float64` (seconds) | `type VTimeInPicoSec uint64` (picoseconds) |
 | `type Freq float64` (cycles/second) | `type Freq uint64` (Hz) |
 
-Despite the legacy name `VTimeInSec`, the unit is now **picoseconds**.
+V5 renames the type to make the unit explicit. The old V4 name `VTimeInSec`
+no longer exists in V5.
 
 ### Freq Constants
 
@@ -52,12 +53,12 @@ const (
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `Period()` | `func (f Freq) Period() VTimeInSec` | Picoseconds per cycle. 1 GHz → 1000 ps. |
-| `Cycle()` | `func (f Freq) Cycle(time VTimeInSec) uint64` | Number of complete cycles since time 0. |
-| `ThisTick()` | `func (f Freq) ThisTick(now VTimeInSec) VTimeInSec` | Ceil to nearest tick boundary. |
-| `NextTick()` | `func (f Freq) NextTick(now VTimeInSec) VTimeInSec` | Next tick strictly after `now`. |
-| `NCyclesLater()` | `func (f Freq) NCyclesLater(n int, now VTimeInSec) VTimeInSec` | Time `n` cycles from current tick. |
-| `HalfTick()` | `func (f Freq) HalfTick(t VTimeInSec) VTimeInSec` | Midpoint between two ticks. |
+| `Period()` | `func (f Freq) Period() VTimeInPicoSec` | Picoseconds per cycle. 1 GHz → 1000 ps. |
+| `Cycle()` | `func (f Freq) Cycle(time VTimeInPicoSec) uint64` | Number of complete cycles since time 0. |
+| `ThisTick()` | `func (f Freq) ThisTick(now VTimeInPicoSec) VTimeInPicoSec` | Ceil to nearest tick boundary. |
+| `NextTick()` | `func (f Freq) NextTick(now VTimeInPicoSec) VTimeInPicoSec` | Next tick strictly after `now`. |
+| `NCyclesLater()` | `func (f Freq) NCyclesLater(n int, now VTimeInPicoSec) VTimeInPicoSec` | Time `n` cycles from current tick. |
+| `HalfTick()` | `func (f Freq) HalfTick(t VTimeInPicoSec) VTimeInPicoSec` | Midpoint between two ticks. |
 
 ### Before / After
 
@@ -65,9 +66,9 @@ const (
 ```go
 freq := sim.Freq(1e9) // 1 GHz as float64
 
-now := sim.VTimeInSec(0.000000001) // 1 nanosecond
+now := sim.VTimeInPicoSec(0.000000001) // 1 nanosecond
 period := 1.0 / float64(freq)      // 1e-9 seconds
-next := now + sim.VTimeInSec(period)
+next := now + sim.VTimeInPicoSec(period)
 
 // Danger: float rounding errors accumulate over millions of cycles.
 ```
@@ -76,7 +77,7 @@ next := now + sim.VTimeInSec(period)
 ```go
 freq := 1 * sim.GHz // Freq(1_000_000_000)
 
-now := sim.VTimeInSec(1000) // 1000 ps = 1 ns
+now := sim.VTimeInPicoSec(1000) // 1000 ps = 1 ns
 period := freq.Period()      // 1000 ps
 next := freq.NextTick(now)   // 2000 ps
 
@@ -320,14 +321,14 @@ concrete handler in a registry at dispatch time.
 ```go
 // v5/sim/event.go
 type Event interface {
-    Time() VTimeInSec
+    Time() VTimeInPicoSec
     HandlerID() string    // was Handler() Handler in V4
     IsSecondary() bool
 }
 
 type EventBase struct {
     ID         uint64     `json:"id"`
-    Time_      VTimeInSec `json:"time"`
+    Time_      VTimeInPicoSec `json:"time"`
     HandlerID_ string     `json:"handler_id"`
     Secondary  bool       `json:"secondary"`
 }
@@ -374,7 +375,7 @@ func NewTickingComponent(
 **Before (V4) — interface reference:**
 ```go
 type Event interface {
-    Time() VTimeInSec
+    Time() VTimeInPicoSec
     Handler() Handler    // direct pointer to handler
     IsSecondary() bool
 }
@@ -386,7 +387,7 @@ evt := sim.NewEventBase(now, myComponent) // passed handler object
 **After (V5) — string ID + registry:**
 ```go
 type Event interface {
-    Time() VTimeInSec
+    Time() VTimeInPicoSec
     HandlerID() string   // string name, serializable
     IsSecondary() bool
 }

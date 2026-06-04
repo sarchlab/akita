@@ -16,7 +16,7 @@ type TickEvent struct {
 }
 
 // MakeTickEvent creates a new TickEvent
-func MakeTickEvent(handlerID string, time timing.VTimeInSec) TickEvent {
+func MakeTickEvent(handlerID string, time timing.VTimeInPicoSec) TickEvent {
 	evt := TickEvent{}
 	evt.ID = timing.GetIDGenerator().Generate()
 	evt.HandlerID_ = handlerID
@@ -39,7 +39,7 @@ type TickScheduler struct {
 	engine    timing.EventScheduler
 	secondary bool
 
-	nextTickTime     timing.VTimeInSec
+	nextTickTime     timing.VTimeInPicoSec
 	hasScheduledTick bool
 }
 
@@ -121,7 +121,7 @@ func (t *TickScheduler) TickLater() {
 	t.lock.Unlock()
 }
 
-func (t *TickScheduler) CurrentTime() timing.VTimeInSec {
+func (t *TickScheduler) CurrentTime() timing.VTimeInPicoSec {
 	return t.engine.CurrentTime()
 }
 

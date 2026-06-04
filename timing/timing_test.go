@@ -82,7 +82,7 @@ func TestIDGeneratorNextID(t *testing.T) {
 }
 
 func TestFreqNextTick(t *testing.T) {
-	if got, want := GHz.NextTick(102_011), VTimeInSec(103_000); got != want {
+	if got, want := GHz.NextTick(102_011), VTimeInPicoSec(103_000); got != want {
 		t.Fatalf("GHz.NextTick(102011) = %d, want %d", got, want)
 	}
 }

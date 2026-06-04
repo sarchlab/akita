@@ -8,11 +8,11 @@ import (
 )
 
 type testEngine struct {
-	now       timing.VTimeInSec
+	now       timing.VTimeInPicoSec
 	scheduled []timing.Event
 }
 
-func (e *testEngine) CurrentTime() timing.VTimeInSec {
+func (e *testEngine) CurrentTime() timing.VTimeInPicoSec {
 	return e.now
 }
 
@@ -36,7 +36,7 @@ var _ = Describe("Ticking Component", func() {
 	)
 
 	BeforeEach(func() {
-		engine = &testEngine{now: timing.VTimeInSec(10000)}
+		engine = &testEngine{now: timing.VTimeInPicoSec(10000)}
 		ticker = &testTicker{}
 		tc = NewTickingComponent("TC", engine, 1*timing.GHz, ticker)
 	})
@@ -45,7 +45,7 @@ var _ = Describe("Ticking Component", func() {
 		tc.NotifyRecv(nil)
 
 		Expect(engine.scheduled).To(HaveLen(1))
-		Expect(engine.scheduled[0].Time()).To(Equal(timing.VTimeInSec(11000)))
+		Expect(engine.scheduled[0].Time()).To(Equal(timing.VTimeInPicoSec(11000)))
 	})
 
 	It("should start ticking when notified of a port becoming available",
@@ -54,34 +54,34 @@ var _ = Describe("Ticking Component", func() {
 
 			Expect(engine.scheduled).To(HaveLen(1))
 			Expect(engine.scheduled[0].Time()).
-				To(Equal(timing.VTimeInSec(11000)))
+				To(Equal(timing.VTimeInPicoSec(11000)))
 		})
 
 	It("should tick when the ticker make progress in a tick", func() {
 		ticker.progress = true
 
-		tc.Handle(MakeTickEvent(tc.Name(), timing.VTimeInSec(10000)))
+		tc.Handle(MakeTickEvent(tc.Name(), timing.VTimeInPicoSec(10000)))
 
 		Expect(engine.scheduled).To(HaveLen(1))
-		Expect(engine.scheduled[0].Time()).To(Equal(timing.VTimeInSec(11000)))
+		Expect(engine.scheduled[0].Time()).To(Equal(timing.VTimeInPicoSec(11000)))
 	})
 
 	It("should not tick if there is another tick scheduled in the future",
 		func() {
 			ticker.progress = true
 
-			tc.Handle(MakeTickEvent(tc.Name(), timing.VTimeInSec(10000)))
+			tc.Handle(MakeTickEvent(tc.Name(), timing.VTimeInPicoSec(10000)))
 			tc.TickNow()
 
 			Expect(engine.scheduled).To(HaveLen(1))
 			Expect(engine.scheduled[0].Time()).
-				To(Equal(timing.VTimeInSec(11000)))
+				To(Equal(timing.VTimeInPicoSec(11000)))
 		})
 
 	It("should stop ticking if no progress is made", func() {
 		ticker.progress = false
 
-		tc.Handle(MakeTickEvent(tc.Name(), timing.VTimeInSec(10000)))
+		tc.Handle(MakeTickEvent(tc.Name(), timing.VTimeInPicoSec(10000)))
 
 		Expect(engine.scheduled).To(BeEmpty())
 	})

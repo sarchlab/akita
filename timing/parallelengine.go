@@ -17,7 +17,7 @@ type ParallelEngine struct {
 
 	pauseLock              sync.Mutex
 	nowLock                sync.RWMutex
-	now                    VTimeInSec
+	now                    VTimeInPicoSec
 	runningSecondaryEvents bool
 
 	eventChan    chan Event
@@ -75,8 +75,8 @@ func (e *ParallelEngine) RegisterHandler(name string, handler Handler) {
 	e.registry[name] = handler
 }
 
-func (e *ParallelEngine) readNow() VTimeInSec {
-	var now VTimeInSec
+func (e *ParallelEngine) readNow() VTimeInPicoSec {
+	var now VTimeInPicoSec
 
 	e.nowLock.RLock()
 	now = e.now
@@ -85,7 +85,7 @@ func (e *ParallelEngine) readNow() VTimeInSec {
 	return now
 }
 
-func (e *ParallelEngine) writeNow(t VTimeInSec) {
+func (e *ParallelEngine) writeNow(t VTimeInPicoSec) {
 	e.nowLock.Lock()
 	e.now = t
 	e.nowLock.Unlock()
@@ -147,8 +147,8 @@ func (e *ParallelEngine) determineWhatToRun() {
 
 func (e *ParallelEngine) earliestTimeInQueueGroup(
 	queues []EventQueue,
-) VTimeInSec {
-	earliestTime := VTimeInSec(math.MaxUint64)
+) VTimeInPicoSec {
+	earliestTime := VTimeInPicoSec(math.MaxUint64)
 
 	for _, q := range queues {
 		if q.Len() == 0 {
@@ -282,6 +282,6 @@ func (e *ParallelEngine) Continue() {
 
 // CurrentTime returns the current time at which the engine is at.
 // Specifically, the run time of the current event.
-func (e *ParallelEngine) CurrentTime() VTimeInSec {
+func (e *ParallelEngine) CurrentTime() VTimeInPicoSec {
 	return e.readNow()
 }

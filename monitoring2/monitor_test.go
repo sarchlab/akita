@@ -25,7 +25,7 @@ type fakeEngine struct {
 	hooking.HookableBase
 
 	mu            sync.Mutex
-	now           timing.VTimeInSec
+	now           timing.VTimeInPicoSec
 	pauseCalls    int
 	continueCalls int
 	runCalls      int
@@ -61,7 +61,7 @@ func (e *fakeEngine) Continue() {
 	e.continueCalls++
 }
 
-func (e *fakeEngine) CurrentTime() timing.VTimeInSec {
+func (e *fakeEngine) CurrentTime() timing.VTimeInPicoSec {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -404,7 +404,7 @@ func TestApiModeReturnsLiveJSON(t *testing.T) {
 }
 
 func TestNowReportsEngineCurrentTime(t *testing.T) {
-	engine := &fakeEngine{now: timing.VTimeInSec(1234)}
+	engine := &fakeEngine{now: timing.VTimeInPicoSec(1234)}
 	monitor := NewMonitor()
 	monitor.RegisterEngine(engine)
 
@@ -413,7 +413,7 @@ func TestNowReportsEngineCurrentTime(t *testing.T) {
 	monitor.now(recorder, request)
 
 	var response struct {
-		Now timing.VTimeInSec `json:"now"`
+		Now timing.VTimeInPicoSec `json:"now"`
 	}
 	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
 		t.Fatal(err)

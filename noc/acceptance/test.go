@@ -99,7 +99,7 @@ func (t *Test) MustHaveReceivedAllMsgs() {
 }
 
 // ReportBandwidthAchieved dumps the bandwidth observed by each agents.
-func (t *Test) ReportBandwidthAchieved(now timing.VTimeInSec) {
+func (t *Test) ReportBandwidthAchieved(now timing.VTimeInPicoSec) {
 	for _, a := range t.agents {
 		nowSec := float64(now) / 1e12
 		log.Printf(
