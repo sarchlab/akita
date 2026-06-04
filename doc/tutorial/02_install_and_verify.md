@@ -27,21 +27,21 @@ before continuing — every example assumes a working build.
 ## Run the smallest example
 
 ```bash
-cd examples/03_first_component
+cd examples/03_random_walk
 go run main.go
 ```
 
 Expected output:
 
 ```
-tick 0 at 1000 ps
-tick 1 at 2000 ps
-tick 2 at 3000 ps
+hit wall at +10 after 52 steps (53000 ps)
 ```
 
-`1000 ps` is one cycle at 1 GHz. If you see those three lines, your
-environment is ready. (You will not learn how the program works yet — the
-next chapter dissects it.)
+That is a tiny random-walk simulation: a single component that takes one
+random step per cycle until it hits ±10 and stops. The output is
+deterministic — same seed, same numbers, every run — so if you see exactly
+that line, your environment is ready. (You will not learn how the program
+works yet — the next chapter dissects it.)
 
 ## Where to Next
 

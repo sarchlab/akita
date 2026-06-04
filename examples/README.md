@@ -30,17 +30,18 @@ timing.
 cd 02_cell_split && go run main.go
 ```
 
-### 03_first_component — Minimal Tick-Based Component
+### 03_random_walk — Single-Component Random Walk
 
-A single tick-based component, no ports. Ticks three times, prints the
-current cycle, then stops. Demonstrates the Spec / State / middleware
-shape with the smallest possible code.
+A single tick-based component, no ports. Takes one ±1 step per cycle
+until it drifts to ±10 from the origin, then prints the final position,
+step count, and simulated time. Smallest useful Akita simulation.
 
 **Key concepts**: `modeling.Component`, `Spec`/`State` separation, the
-`Tick() bool` middleware contract, `TickLater` to start the loop.
+`Tick() bool` middleware contract, `TickLater` to start the loop,
+middleware holding auxiliary state (a seeded RNG) outside Spec/State.
 
 ```bash
-cd 03_first_component && go run main.go
+cd 03_random_walk && go run main.go
 ```
 
 ### tickingping — Tick-Based Component Communication
