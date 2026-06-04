@@ -33,8 +33,14 @@ The merged Phase A baseline is:
 - Ports are discovered during component registration. Existing messaging
   components are adapted with reflection because `Ports() []messaging.Port` is
   not assignable to `[]simulation.Port`.
-- `queueing.Buffer` and `queueing.Pipeline` are encapsulated value types. They do
-  not currently serialize their private state through default JSON.
+- `messaging.Msg` and `timing.Event` are immutable **value** types, constructed
+  once and used once. `Msg.Meta()` returns `MsgMeta` by value; `MsgMeta` carries
+  no task-ID fields. Tracing keeps receiver task IDs in a side-table keyed by
+  (domain, message ID), so messages are never mutated in flight.
+- Ports use the `CanSend`/`CanDeliver` convention: `Send`/`Deliver` panic on
+  overflow, so callers check capacity first.
+- `queueing.Buffer` and `queueing.Pipeline` are encapsulated value types and now
+  serialize their full contents through `MarshalJSON`/`UnmarshalJSON`.
 - The old quiescent `Save`/`Load` code was removed. Phase B starts fresh.
 
 There is currently no public `GetStateByName`, no public `Entities()` accessor,
@@ -47,6 +53,13 @@ and no checkpoint archive writer/loader.
 - No `ParallelEngine` checkpoint support in Phase B. Save/load must reject it.
 - No serialization of observers or setup choices: hooks, tracers, monitors, data
   recorders, visualizers, output handles, and HTTP state are rebuilt or omitted.
+  This includes tracing's global receiver-task-ID side-table: it is observer
+  state, so it is not checkpointed and traces do not span a checkpoint boundary.
+  One caveat: that table generates task IDs from the global ID generator when
+  tracing is active, so it perturbs the ID-generator counter that *is*
+  checkpointed. For a deterministic resume oracle (byte-exact counter), run
+  checkpointable simulations with tracing off, or treat tracing's ID consumption
+  as outside the determinism guarantee.
 - No arbitrary pointer-graph checkpointing. Runtime references cross the boundary
   by stable names, IDs, or explicit typed payloads.
 - No rollback guarantee after a payload-level load failure. Load should check the
@@ -289,20 +302,28 @@ at an already-stopped boundary.
   }
   ```
 
-- Use `%T`-derived keys for same-binary checkpoints, with optional explicit names
-  if a package wants them.
-- Provide default JSON codecs and one-line `init()` registration for built-in
-  message types.
-- Reject unknown message tags and unsupported non-serializable fields such as
-  non-nil `Info` unless a custom codec handles them.
+- Use `%T`-derived keys for same-binary checkpoints. Messages are value types, so
+  register the value (`messaging.RegisterMsg(mem.ReadReq{})`); the codec
+  reconstructs the same value (or pointer) form from the tag.
+- Each message-defining package registers its types in an `init()` (see
+  `mem/msgcodec.go`). A forgotten registration fails loud at checkpoint time.
+- Because messages are now immutable value snapshots that no longer carry
+  task-ID fields, default JSON captures the whole message — the old concern about
+  in-transit metadata mutation or non-serializable task IDs no longer applies. A
+  transient `Info interface{}` field stays `json:"-"`; it is data-plane scratch
+  that is empty for a buffered message.
 
 ### 7. Port checkpointing
 
 - Implement checkpoint support in `messaging.defaultPort`.
 - Save incoming and outgoing capacities plus buffer contents through the message
   registry.
-- Restore buffers directly without calling `Send`, `Deliver`, `RetrieveIncoming`,
-  or `RetrieveOutgoing`.
+- Restore buffers directly with `Buffer.Restore`, never `Send`/`Deliver` (which
+  now panic on overflow under the `CanSend`/`CanDeliver` convention) and never
+  `RetrieveIncoming`/`RetrieveOutgoing`. Restoring directly also fires no hooks
+  and notifies no connection.
+- A restored full outgoing buffer is consistent: on resume the owner's
+  `CanSend` check sees it full and retries, exactly as before the checkpoint.
 - Preserve FIFO order and validate `Src`/`Dst` names against rebuilt ports.
 - Leave hooks and connection/component pointers untouched; setup rebuilt them.
 
@@ -424,12 +445,15 @@ Negative tests:
   checkpointing remain an internal `Simulation` capability?
 - Should message/event codec keys always be `%T`, or should packages be able to
   opt into explicit stable names for readability?
-- Should non-nil `Info` fields be rejected for the first non-quiescent milestone,
-  or should the first milestone include per-component relinking by message ID?
 - How strict should post-load pending-work validation be for components that
   intentionally leave messages buffered without a scheduled tick?
 - Is build identity based only on VCS/build info enough, or should it also include
   a hash of registered checkpoint codec keys?
+
+(The earlier question about non-nil `Info` / per-component relinking by message
+ID is resolved: messages are now immutable value snapshots that carry no
+task-ID fields, so a buffered message round-trips completely and needs no
+relinking.)
 
 ## Recommendation
 
