@@ -174,7 +174,6 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	trans.Removed = true
 
 	next.BankInflightTransCounts[s.bankID]--
-	next.BankDownwardInflightTransCounts[s.bankID]--
 
 	nextBlock.ReadCount--
 
@@ -215,7 +214,6 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 	trans.Removed = true
 
 	next.BankInflightTransCounts[s.bankID]--
-	next.BankDownwardInflightTransCounts[s.bankID]--
 
 	done := &mem.WriteDoneRsp{}
 	done.ID = timing.GetIDGenerator().Generate()
@@ -322,7 +320,11 @@ func (s *bankStage) finalizeBankEviction(
 		panic("unsupported action")
 	}
 
-	delete(next.EvictingList, trans.EvictingAddr)
+	// EvictingList stays set until the lower-memory WriteDoneRsp for this
+	// eviction lands in writeBufferStage.processWriteDoneRsp. Releasing it
+	// earlier would let the directory issue a fresh fetch for the same line
+	// while the dirty write-back is still in flight, allowing stale lower-
+	// memory data to be returned.
 
 	wbBuf.PushTyped(transIdx)
 

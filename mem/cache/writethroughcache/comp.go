@@ -121,6 +121,15 @@ type transactionState struct {
 	BottomWriteDone bool `json:"bottom_write_done"`
 	BankDone        bool `json:"bank_done"`
 
+	// WaitForMSHRFill / MSHRFillDone / MSHRFillFetcherIdx track an
+	// MSHR-coalesced write whose data is merged into another transaction's
+	// fetched line. The coalesced write never visits the bank itself, so
+	// completion must wait until the fetcher's bankActionWriteFetched stage
+	// has written the merged line into storage.
+	WaitForMSHRFill    bool `json:"wait_for_mshr_fill"`
+	MSHRFillDone       bool `json:"mshr_fill_done"`
+	MSHRFillFetcherIdx int  `json:"mshr_fill_fetcher_idx"`
+
 	// Removed marks a transaction that has been completed
 	// and removed from active processing.
 	Removed bool `json:"removed"`

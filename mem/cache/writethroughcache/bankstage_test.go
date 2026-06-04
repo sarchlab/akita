@@ -286,5 +286,57 @@ var _ = Describe("Bankstage", func() {
 			data, _ := storage.Read(0x400, 64)
 			Expect(data).To(Equal(trans.Data))
 		})
+
+		Context("with an MSHR-coalesced write waiter", func() {
+			var coalescedWriteMeta messaging.MsgMeta
+
+			BeforeEach(func() {
+				next := &c.comp.State
+
+				// Fetcher is the read at index 0 (set up above). Append
+				// the coalesced write that depends on the fetcher's
+				// merged fill landing in storage.
+				coalescedWriteMeta = messaging.MsgMeta{
+					ID:           timing.GetIDGenerator().Generate(),
+					TrafficBytes: 4 + 12,
+					TrafficClass: "req",
+				}
+				next.Transactions = append(next.Transactions,
+					transactionState{
+						HasWrite:           true,
+						WriteMeta:          coalescedWriteMeta,
+						WriteAddress:       0x108,
+						WriteData:          []byte{9, 9, 9, 9},
+						WritePID:           1,
+						HasWriteToBottom:   true,
+						WaitForMSHRFill:    true,
+						MSHRFillFetcherIdx: 0,
+					},
+				)
+			})
+
+			It("does not complete the coalesced write when its bottom ack hasn't arrived", func() {
+				next := &c.comp.State
+
+				madeProgress := s.Tick()
+
+				Expect(madeProgress).To(BeTrue())
+				coalesced := &next.Transactions[1]
+				Expect(coalesced.MSHRFillDone).To(BeTrue())
+				Expect(coalesced.Done).To(BeFalse())
+			})
+
+			It("completes the coalesced write when its bottom ack already arrived", func() {
+				next := &c.comp.State
+				next.Transactions[1].BottomWriteDone = true
+
+				madeProgress := s.Tick()
+
+				Expect(madeProgress).To(BeTrue())
+				coalesced := &next.Transactions[1]
+				Expect(coalesced.MSHRFillDone).To(BeTrue())
+				Expect(coalesced.Done).To(BeTrue())
+			})
+		})
 	})
 })
