@@ -437,5 +437,114 @@ var _ = Describe("Reorder Buffer", func() {
 			Expect(ack).To(BeAssignableToTypeOf(&mem.ControlRsp{}))
 			Expect(ack.(*mem.ControlRsp).Command).To(Equal(mem.CmdEnable))
 		})
+
+		makeCtrlReq := func(cmd mem.ControlCommand) *mem.ControlReq {
+			req := &mem.ControlReq{Command: cmd}
+			req.ID = timing.GetIDGenerator().Generate()
+			req.Src = messaging.RemotePort("Cmd")
+			req.Dst = ctrlPort.AsRemote()
+			req.TrafficClass = "mem.ControlReq"
+			return req
+		}
+
+		It("acks Drain only after in-flight transactions retire", func() {
+			const n = 2
+			for i := range n {
+				topPort.Deliver(makeRead(uint64(i * 0x100)))
+			}
+			rob.Tick() // forward both to the bottom (NumReqPerCycle=2)
+			Expect(rob.State.Transactions).To(HaveLen(n))
+
+			shadowIDs := make([]uint64, 0, n)
+			for i := range rob.State.Transactions {
+				shadowIDs = append(shadowIDs,
+					rob.State.Transactions[i].ReqToBottomID)
+			}
+			for bottomPort.RetrieveOutgoing() != nil {
+			}
+
+			drain := makeCtrlReq(mem.CmdDrain)
+			ctrlPort.Deliver(drain)
+
+			// While transactions are still in flight (no bottom responses
+			// fed yet), Drain must stay pending and emit no ack.
+			for range 5 {
+				rob.Tick()
+				Expect(rob.State.ControlState).To(Equal(control.StateDraining))
+				Expect(ctrlPort.RetrieveOutgoing()).To(BeNil())
+			}
+			Expect(rob.State.Transactions).To(HaveLen(n))
+
+			// Now let the in-flight reads complete.
+			for _, id := range shadowIDs {
+				rsp := &mem.DataReadyRsp{Data: []byte{0x1}}
+				rsp.ID = timing.GetIDGenerator().Generate()
+				rsp.Src = bottomUnitRemote
+				rsp.Dst = bottomPort.AsRemote()
+				rsp.RspTo = id
+				rsp.TrafficClass = "mem.DataReadyRsp"
+				bottomPort.Deliver(rsp)
+			}
+
+			completed := 0
+			var drainRsp *mem.ControlRsp
+			for i := 0; i < 64 && drainRsp == nil; i++ {
+				rob.Tick()
+				for {
+					out := topPort.RetrieveOutgoing()
+					if out == nil {
+						break
+					}
+					if _, ok := out.(*mem.DataReadyRsp); ok {
+						completed++
+					}
+				}
+				if out := ctrlPort.RetrieveOutgoing(); out != nil {
+					if rsp, ok := out.(*mem.ControlRsp); ok &&
+						rsp.Command == mem.CmdDrain {
+						drainRsp = rsp
+					}
+				}
+			}
+
+			Expect(drainRsp).ToNot(BeNil())
+			Expect(drainRsp.Success).To(BeTrue())
+			Expect(drainRsp.RspTo).To(Equal(drain.ID))
+			// All in-flight reads finished before the async Drain ack.
+			Expect(completed).To(Equal(n))
+			Expect(rob.State.Transactions).To(BeEmpty())
+			Expect(rob.State.ControlState).To(Equal(control.StatePaused))
+		})
+
+		DescribeTable("Reset wipes in-flight transactions from any state",
+			func(startState control.State) {
+				topPort.Deliver(makeRead(0))
+				rob.Tick()
+				Expect(rob.State.Transactions).To(HaveLen(1))
+
+				rob.State.ControlState = startState
+
+				reset := makeCtrlReq(mem.CmdReset)
+				ctrlPort.Deliver(reset)
+
+				var rsp *mem.ControlRsp
+				for i := 0; i < 64 && rsp == nil; i++ {
+					rob.Tick()
+					if out := ctrlPort.RetrieveOutgoing(); out != nil {
+						rsp, _ = out.(*mem.ControlRsp)
+					}
+				}
+
+				Expect(rsp).ToNot(BeNil())
+				Expect(rsp.Command).To(Equal(mem.CmdReset))
+				Expect(rsp.Success).To(BeTrue())
+				Expect(rsp.RspTo).To(Equal(reset.ID))
+				Expect(rob.State.Transactions).To(BeEmpty())
+				Expect(rob.State.ControlState).To(Equal(control.StateEnabled))
+			},
+			Entry("from Enabled", control.StateEnabled),
+			Entry("from Paused", control.StatePaused),
+			Entry("from Draining", control.StateDraining),
+		)
 	})
 })

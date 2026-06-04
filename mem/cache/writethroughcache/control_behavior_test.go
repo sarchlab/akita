@@ -1,0 +1,274 @@
+package writethroughcache
+
+import (
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
+)
+
+// This file holds Layer-2 control-behavior tests: it asserts the actual
+// behavior the universal verbs promise (Drain quiescence, Pause freeze,
+// Reset from every state), beyond the protocol-surface checks in
+// control_contract_test.go.
+//
+// The writethroughcache is downstream-dependent: a read miss issues a fetch
+// request out the "Bottom" port and only retires once a matching
+// *mem.DataReadyRsp (RspTo == the outgoing bottom read ID) is fed back in.
+// The Drain test exploits exactly that: it proves the cache holds the Drain
+// ack until those bottom responses arrive and every transaction completes.
+var _ = Describe("Writethrough cache control behavior", func() {
+	const blockSize = uint64(64) // Log2BlockSize == 6
+
+	var (
+		engine     timing.Engine
+		storage    *mem.Storage
+		comp       *Comp
+		topPort    messaging.Port
+		bottomPort messaging.Port
+		ctrlPort   messaging.Port
+	)
+
+	build := func() {
+		spec := DefaultSpec()
+		spec.NumReqPerCycle = 1
+		spec.NumBanks = 1
+		spec.NumMSHREntry = 8
+		spec.WayAssociativity = 2
+		spec.Log2BlockSize = 6
+		spec.BankLatency = 1
+		spec.DirLatency = 1
+		spec.TotalByteSize = 64 * 1024
+		spec.MaxNumConcurrentTrans = 16
+		spec.TopPortBufferSize = 16
+		spec.BottomPortBufferSize = 16
+		spec.ControlPortBufferSize = 16
+
+		comp = MakeBuilder().
+			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSpec(spec).
+			WithResources(Resources{
+				Storage: storage,
+				AddressMapper: &mem.SinglePortMapper{
+					Port: messaging.RemotePort("LowerCache"),
+				},
+			}).
+			Build("L1Cache")
+
+		topPort = comp.GetPortByName("Top")
+		bottomPort = comp.GetPortByName("Bottom")
+		ctrlPort = comp.GetPortByName("Control")
+		for _, p := range []messaging.Port{topPort, bottomPort, ctrlPort} {
+			(&ccNoopConn{}).PlugIn(p)
+		}
+	}
+
+	makeRead := func(addr uint64) *mem.ReadReq {
+		req := &mem.ReadReq{}
+		req.ID = timing.GetIDGenerator().Generate()
+		req.Src = messaging.RemotePort("Agent")
+		req.Dst = topPort.AsRemote()
+		req.Address = addr
+		req.AccessByteSize = 4
+		req.TrafficBytes = 12
+		req.TrafficClass = "mem.ReadReq"
+		return req
+	}
+
+	makeCtrlReq := func(cmd mem.ControlCommand) *mem.ControlReq {
+		req := &mem.ControlReq{Command: cmd}
+		req.ID = timing.GetIDGenerator().Generate()
+		req.Src = messaging.RemotePort("Ctrl")
+		req.Dst = ctrlPort.AsRemote()
+		req.TrafficClass = "mem.ControlReq"
+		return req
+	}
+
+	// makeFill builds the bottom DataReadyRsp that satisfies a captured
+	// outgoing bottom read. RspTo matches the bottom read's ID (which the
+	// cache stored as ReadToBottomMeta.ID), and Data is a full cache line so
+	// the fetcher's slice [offset:offset+AccessByteSize] is always in range.
+	makeFill := func(bottomRead *mem.ReadReq) *mem.DataReadyRsp {
+		rsp := &mem.DataReadyRsp{Data: make([]byte, blockSize)}
+		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.Src = messaging.RemotePort("LowerCache")
+		rsp.Dst = bottomPort.AsRemote()
+		rsp.RspTo = bottomRead.ID
+		rsp.TrafficBytes = int(blockSize) + 4
+		rsp.TrafficClass = "mem.DataReadyRsp"
+		return rsp
+	}
+
+	// inflightCount counts transactions that are still being processed (not
+	// yet removed by the respond stage).
+	inflightCount := func() int {
+		count := 0
+		for i := range comp.State.Transactions {
+			if !comp.State.Transactions[i].Removed {
+				count++
+			}
+		}
+		return count
+	}
+
+	// captureBottomReads drains every outgoing bottom read the cache has
+	// issued so far, returning them so the test can fabricate matching fills.
+	captureBottomReads := func() []*mem.ReadReq {
+		reads := []*mem.ReadReq{}
+		for {
+			out := bottomPort.RetrieveOutgoing()
+			if out == nil {
+				break
+			}
+			if r, ok := out.(*mem.ReadReq); ok {
+				reads = append(reads, r)
+			}
+		}
+		return reads
+	}
+
+	BeforeEach(func() {
+		engine = timing.NewSerialEngine()
+		storage = mem.NewStorage(4 * mem.GB)
+		build()
+	})
+
+	It("drains all in-flight read misses before acking Drain", func() {
+		const n = 3
+
+		// Deliver n read misses to distinct cache lines.
+		for i := range n {
+			topPort.Deliver(makeRead(uint64(i) * blockSize))
+		}
+
+		// Tick until the cache has issued all n bottom fetches and there are
+		// in-flight transactions waiting on them.
+		bottomReads := []*mem.ReadReq{}
+		for i := 0; i < 256 && len(bottomReads) < n; i++ {
+			comp.Tick()
+			bottomReads = append(bottomReads, captureBottomReads()...)
+		}
+		Expect(bottomReads).To(HaveLen(n))
+
+		// Teeth: at least one transaction is genuinely in flight, waiting on
+		// a bottom response.
+		Expect(inflightCount()).To(BeNumerically(">", 0))
+
+		// Issue Drain.
+		drain := makeCtrlReq(mem.CmdDrain)
+		ctrlPort.Deliver(drain)
+
+		// Tick a window WITHOUT feeding any bottom responses. Drain must wait
+		// because transactions are still in flight.
+		for range 16 {
+			comp.Tick()
+			// No completion can occur, so no DataReadyRsp should leave Top.
+			Expect(topPort.RetrieveOutgoing()).To(BeNil())
+			// And no Drain ack yet on Control.
+			Expect(ctrlPort.RetrieveOutgoing()).To(BeNil())
+		}
+		Expect(comp.State.IsDraining).To(BeTrue())
+		Expect(inflightCount()).To(BeNumerically(">", 0))
+
+		// Now feed the matching fill for every captured bottom read.
+		for _, br := range bottomReads {
+			bottomPort.Deliver(makeFill(br))
+		}
+
+		// Tick until the Drain ack appears, counting completed reads on Top.
+		completed := 0
+		var drainRsp *mem.ControlRsp
+		for i := 0; i < 4096 && drainRsp == nil; i++ {
+			comp.Tick()
+
+			for {
+				out := topPort.RetrieveOutgoing()
+				if out == nil {
+					break
+				}
+				if _, ok := out.(*mem.DataReadyRsp); ok {
+					completed++
+				}
+			}
+
+			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if rsp, ok := out.(*mem.ControlRsp); ok &&
+					rsp.Command == mem.CmdDrain {
+					drainRsp = rsp
+				}
+			}
+		}
+
+		Expect(drainRsp).ToNot(BeNil())
+		Expect(drainRsp.Success).To(BeTrue())
+		Expect(drainRsp.RspTo).To(Equal(drain.ID))
+		// Every read miss finished by the time the async Drain ack is sent.
+		Expect(completed).To(Equal(n))
+		for i := range comp.State.Transactions {
+			Expect(comp.State.Transactions[i].Removed).To(BeTrue())
+		}
+		// Drain ends Paused.
+		Expect(comp.State.IsDraining).To(BeFalse())
+		Expect(comp.State.IsPaused).To(BeTrue())
+	})
+
+	It("freezes incoming traffic while paused", func() {
+		comp.State.IsPaused = true
+		topPort.Deliver(makeRead(0))
+
+		for range 5 {
+			comp.Tick()
+		}
+
+		// The request is neither consumed nor turned into work, and nothing
+		// is forwarded out the Bottom port, while paused.
+		Expect(topPort.PeekIncoming()).ToNot(BeNil())
+		Expect(inflightCount()).To(Equal(0))
+		Expect(bottomPort.RetrieveOutgoing()).To(BeNil())
+	})
+
+	DescribeTable("Reset wipes in-flight state from any control state",
+		func(setStart func()) {
+			// Get a read miss in flight.
+			topPort.Deliver(makeRead(0))
+			for i := 0; i < 256 && inflightCount() == 0; i++ {
+				comp.Tick()
+			}
+			Expect(inflightCount()).To(BeNumerically(">", 0))
+
+			setStart()
+
+			reset := makeCtrlReq(mem.CmdReset)
+			ctrlPort.Deliver(reset)
+
+			var rsp *mem.ControlRsp
+			for i := 0; i < 64 && rsp == nil; i++ {
+				comp.Tick()
+				if out := ctrlPort.RetrieveOutgoing(); out != nil {
+					rsp, _ = out.(*mem.ControlRsp)
+				}
+			}
+
+			Expect(rsp).ToNot(BeNil())
+			Expect(rsp.Command).To(Equal(mem.CmdReset))
+			Expect(rsp.Success).To(BeTrue())
+			Expect(rsp.RspTo).To(Equal(reset.ID))
+			Expect(comp.State.Transactions).To(BeEmpty())
+			Expect(comp.State.IsPaused).To(BeFalse())
+			Expect(comp.State.IsDraining).To(BeFalse())
+		},
+		Entry("from Running", func() {
+			comp.State.IsPaused = false
+			comp.State.IsDraining = false
+		}),
+		Entry("from Paused", func() {
+			comp.State.IsPaused = true
+		}),
+		Entry("from Draining", func() {
+			comp.State.IsDraining = true
+		}),
+	)
+})
