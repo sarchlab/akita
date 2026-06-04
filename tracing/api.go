@@ -207,7 +207,7 @@ func TraceReqInitiate(
 		taskParentID,
 		domain,
 		"req_out",
-		reflect.TypeOf(msg).Elem().Name(),
+		reflect.TypeOf(msg).Name(),
 		msg,
 	)
 }
@@ -228,7 +228,7 @@ func TraceReqReceive(
 		msg.Meta().ID,
 		domain,
 		"req_in",
-		reflect.TypeOf(msg).Elem().Name(),
+		reflect.TypeOf(msg).Name(),
 		msg,
 	)
 }
