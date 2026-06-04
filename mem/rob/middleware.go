@@ -321,6 +321,7 @@ func (m *middleware) handleFlush(req mem.ControlReq) bool {
 	m.ctrlPort().Send(rsp)
 
 	state := &m.comp.State
+	m.forgetInflightReceiverIDs()
 	state.Transactions = state.Transactions[:0]
 	state.IsFlushing = true
 
@@ -344,6 +345,7 @@ func (m *middleware) handleEnable(req mem.ControlReq) bool {
 	m.ctrlPort().Send(rsp)
 
 	state := &m.comp.State
+	m.forgetInflightReceiverIDs()
 	state.Transactions = state.Transactions[:0]
 	state.IsFlushing = false
 
@@ -357,6 +359,16 @@ func (m *middleware) handleEnable(req mem.ControlReq) bool {
 
 func drainIncoming(p messaging.Port) {
 	for p.RetrieveIncoming() != nil {
+	}
+}
+
+// forgetInflightReceiverIDs releases the tracing receiver-task registry
+// entries that topDown allocated for each in-flight top-side request. Control
+// paths that drop the transaction table call this so the entries do not
+// outlive the transactions they describe.
+func (m *middleware) forgetInflightReceiverIDs() {
+	for _, trans := range m.comp.State.Transactions {
+		tracing.ForgetMsgIDAtReceiver(trans.ReqFromTopID, m.comp)
 	}
 }
 
