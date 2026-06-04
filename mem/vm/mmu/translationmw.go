@@ -157,7 +157,7 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	state := &m.comp.State
 	walking := state.WalkingTranslations[walkingIndex]
 
-	rsp := &vm.TranslationRsp{
+	rsp := vm.TranslationRsp{
 		Page: walking.Page,
 	}
 	rsp.ID = timing.GetIDGenerator().Generate()
@@ -169,7 +169,7 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	m.topPort().Send(rsp)
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
-	m.traceReqComplete(walking.RecvTaskID)
+	m.traceReqComplete(walking.RecvTaskID, walking.ReqID)
 
 	return true
 }
@@ -188,7 +188,7 @@ func (m *translationMW) parseFromTop() bool {
 	}
 
 	switch req := reqI.(type) {
-	case *vm.TranslationReq:
+	case vm.TranslationReq:
 		tracing.TraceReqReceive(req, m.comp)
 		m.startWalking(req)
 	default:
@@ -199,13 +199,13 @@ func (m *translationMW) parseFromTop() bool {
 	return true
 }
 
-func (m *translationMW) startWalking(req *vm.TranslationReq) {
+func (m *translationMW) startWalking(req vm.TranslationReq) {
 	spec := m.comp.Spec()
 	state := &m.comp.State
 
 	ts := transactionState{
 		ReqID:        req.ID,
-		RecvTaskID:   req.RecvTaskID,
+		RecvTaskID:   tracing.MsgIDAtReceiver(req, m.comp),
 		ReqSrc:       req.Src,
 		ReqDst:       req.Dst,
 		PID:          uint32(req.PID),
@@ -269,6 +269,7 @@ func (m *translationMW) allocatePhysicalPage() uint64 {
 	}
 }
 
-func (m *translationMW) traceReqComplete(recvTaskID uint64) {
+func (m *translationMW) traceReqComplete(recvTaskID, reqMsgID uint64) {
 	tracing.EndTask(recvTaskID, m.comp)
+	tracing.ForgetMsgIDAtReceiver(reqMsgID, m.comp)
 }

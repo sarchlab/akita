@@ -461,13 +461,20 @@ type Pipeline[T any] struct {
 
 ### The Problem
 
-Messages like `*mem.ReadReq` and `*mem.WriteReq` are pointer types. Storing
-them in State violates the "no pointers, no interfaces" rule and breaks
-JSON serialization. In pre-V5 code, transaction structs commonly held fields
-like:
+V5 messages (`mem.ReadReq`, `mem.WriteReq`, …) are now **value types**, so
+they can technically be stored in State and survive JSON serialization.
+But embedding whole messages in State is still the wrong shape:
+
+- It carries fields the component does not actually depend on across
+  ticks, inflating serialized state and obscuring intent.
+- It couples checkpoint format to the full message struct — adding a
+  field to `mem.ReadReq` silently grows every saved transaction.
+- In pre-V5 code these were pointer types (`*mem.ReadReq`,
+  `*mem.WriteReq`), which made the problem unmissable; pre-V5
+  transactions typically looked like:
 
 ```go
-// ❌ Old pattern — pointer fields, NOT serializable
+// ❌ V4 pattern — pointer fields, NOT serializable
 type transaction struct {
     Read          *mem.ReadReq
     Write         *mem.WriteReq
@@ -477,10 +484,9 @@ type transaction struct {
 }
 ```
 
-This cannot be stored in State because:
-- `*mem.ReadReq` and `*mem.WriteReq` are pointers
-- `[]*transaction` is a slice of pointers
-- None of these types are JSON-serializable
+The pointer issue is gone in V5, but the underlying design problem
+(storing more than the component needs) remains. The flat pattern below
+is still the recommended shape for in-flight transactions.
 
 ### The Solution: Flat Value Fields
 
@@ -531,13 +537,16 @@ type transactionState struct {
    need to be sent over a port — they are never stored in State:
 
     ```go
-    // Example: reconstructing a ReadReq from flat fields at send time
-    req := &mem.ReadReq{}
+    // Example: reconstructing a ReadReq from flat fields at send time.
+    // V5 messages are value types — build a struct value, not a pointer.
+    req := mem.ReadReq{}
     req.MsgMeta = trans.ReadToBottomMeta
     req.Address = trans.ReadAddress
     req.AccessByteSize = trans.ReadAccessByteSize
     req.PID = trans.ReadToBottomPID
-    err := bottomPort.Send(req)
+    if bottomPort.CanSend() {
+        bottomPort.Send(req)
+    }
     ```
 
 4. **`sim.MsgMeta` is a value type**, not a pointer — it is safe to store
@@ -546,7 +555,7 @@ type transactionState struct {
 
 ### Before and After Comparison
 
-**Before (pointer-based — ❌ cannot go in State):**
+**V4 (pointer-based — ❌ cannot go in State):**
 
 ```go
 type transaction struct {
@@ -557,7 +566,7 @@ type transaction struct {
 }
 ```
 
-**After (flat — ✅ fully serializable):**
+**V5 (flat — ✅ fully serializable):**
 
 ```go
 // From v5/mem/cache/writethroughcache/state.go
@@ -694,6 +703,10 @@ func (m *sendMW) sendRsp() bool {
         return false
     }
 
+    if !outPort(m.comp).CanSend() {
+        return false
+    }
+
     rsp := &PingRsp{
         MsgMeta: sim.MsgMeta{
             ID:    sim.GetIDGenerator().Generate(),
@@ -704,10 +717,7 @@ func (m *sendMW) sendRsp() bool {
         SeqID: trans.SeqID,
     }
 
-    err := outPort(m.comp).Send(rsp)
-    if err != nil {
-        return false
-    }
+    outPort(m.comp).Send(rsp)
 
     state.CurrentTransactions = state.CurrentTransactions[1:]
 
@@ -1184,6 +1194,10 @@ func (m *sendMW) sendPing() bool {
         return false
     }
 
+    if !outPort(m.comp).CanSend() {
+        return false
+    }
+
     pingMsg := &PingReq{
         MsgMeta: sim.MsgMeta{
             ID:  sim.GetIDGenerator().Generate(),
@@ -1193,10 +1207,7 @@ func (m *sendMW) sendPing() bool {
         SeqID: state.NextSeqID,
     }
 
-    err := outPort(m.comp).Send(pingMsg)
-    if err != nil {
-        return false
-    }
+    outPort(m.comp).Send(pingMsg)
 
     state.StartTimes = append(state.StartTimes, uint64(m.comp.CurrentTime()))
     state.NumPingNeedToSend--
@@ -1395,7 +1406,7 @@ type EventDrivenComponent[S any, T any] struct {
     current   T
     processor EventProcessor[S, T]
 
-    pendingWakeup sim.VTimeInSec
+    pendingWakeup sim.VTimeInPicoSec
 }
 ```
 
@@ -1426,7 +1437,7 @@ Key methods:
 ```go
 // From v5/modeling/eventdriven.go
 type EventProcessor[S any, T any] interface {
-    Process(comp *EventDrivenComponent[S, T], now sim.VTimeInSec) bool
+    Process(comp *EventDrivenComponent[S, T], now sim.VTimeInPicoSec) bool
 }
 ```
 
@@ -1467,7 +1478,7 @@ type PingSpec struct {
 ```go
 // From v5/examples/ping/state.go
 type PingState struct {
-    StartTimes       []sim.VTimeInSec
+    StartTimes       []sim.VTimeInPicoSec
     NextSeqID        int
     PendingResponses []PendingResponse
     ScheduledPings   []ScheduledPing
@@ -1486,7 +1497,7 @@ type PingProcessor struct{}
 
 func (p *PingProcessor) Process(
     comp *modeling.EventDrivenComponent[PingSpec, PingState],
-    now sim.VTimeInSec,
+    now sim.VTimeInPicoSec,
 ) bool {
     progress := false
     state := &comp.State
@@ -1683,17 +1694,18 @@ func (m *ctrlMiddleware) handleDrainState() bool {
         return false
     }
 
-    rsp := &mem.ControlRsp{Command: mem.CmdDrain, Success: true}
+    rsp := mem.ControlRsp{Command: mem.CmdDrain, Success: true}
     rsp.ID = sim.GetIDGenerator().Generate()
     rsp.Src = m.ctrlPort().AsRemote()
     rsp.Dst = state.CurrentCmdSrc
     rsp.RspTo = state.CurrentCmdID
     rsp.TrafficClass = "mem.ControlRsp"
 
-    err := m.ctrlPort().Send(rsp)
-    if err != nil {
+    if !m.ctrlPort().CanSend() {
         return false
     }
+
+    m.ctrlPort().Send(rsp)
 
     state.CurrentState = "pause"
 

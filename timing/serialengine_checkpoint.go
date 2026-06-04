@@ -10,7 +10,7 @@ import (
 // and the primary and secondary event queues, each as typed payloads in pop
 // order. Event types must be registered with RegisterEvent.
 type serialEngineCheckpoint struct {
-	Time      VTimeInSec     `json:"time"`
+	Time      VTimeInPicoSec `json:"time"`
 	Primary   []TypedPayload `json:"primary"`
 	Secondary []TypedPayload `json:"secondary"`
 }

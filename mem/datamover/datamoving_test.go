@@ -86,7 +86,7 @@ var _ = Describe("DataMover", func() {
 		}
 		outsideStorage.Write(0, data)
 
-		req := &DataMoveRequest{}
+		req := DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Control").AsRemote()
@@ -103,7 +103,7 @@ var _ = Describe("DataMover", func() {
 
 		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
 		Expect(srcPort.RetrieveIncoming()).To(
-			BeAssignableToTypeOf(&DataMoveResponse{}))
+			BeAssignableToTypeOf(DataMoveResponse{}))
 	})
 
 	It("should move data inside to outside", func() {
@@ -113,7 +113,7 @@ var _ = Describe("DataMover", func() {
 		}
 		insideStorage.Write(0, data)
 
-		req := &DataMoveRequest{}
+		req := DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Control").AsRemote()
@@ -130,7 +130,7 @@ var _ = Describe("DataMover", func() {
 
 		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
 		Expect(srcPort.RetrieveIncoming()).To(
-			BeAssignableToTypeOf(&DataMoveResponse{}))
+			BeAssignableToTypeOf(DataMoveResponse{}))
 	})
 
 	It("should move on difference addresses", func() {
@@ -140,7 +140,7 @@ var _ = Describe("DataMover", func() {
 		}
 		insideStorage.Write(0, data)
 
-		req := &DataMoveRequest{}
+		req := DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Control").AsRemote()
@@ -157,7 +157,7 @@ var _ = Describe("DataMover", func() {
 
 		Expect(outsideStorage.Read(4096, 4096)).To(Equal(data))
 		Expect(srcPort.RetrieveIncoming()).To(
-			BeAssignableToTypeOf(&DataMoveResponse{}))
+			BeAssignableToTypeOf(DataMoveResponse{}))
 	})
 
 	It("should move partial data", func() {
@@ -167,7 +167,7 @@ var _ = Describe("DataMover", func() {
 		}
 		outsideStorage.Write(0, data)
 
-		req := &DataMoveRequest{}
+		req := DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Control").AsRemote()
@@ -185,11 +185,11 @@ var _ = Describe("DataMover", func() {
 		expected := data[:512]
 		Expect(insideStorage.Read(512, 512)).To(Equal(expected))
 		Expect(srcPort.RetrieveIncoming()).To(
-			BeAssignableToTypeOf(&DataMoveResponse{}))
+			BeAssignableToTypeOf(DataMoveResponse{}))
 	})
 
 	It("should handle zero-size transfers", func() {
-		req := &DataMoveRequest{}
+		req := DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Control").AsRemote()
@@ -212,7 +212,7 @@ var _ = Describe("DataMover", func() {
 		}
 		insideStorage.Write(0, data)
 
-		req := &DataMoveRequest{}
+		req := DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Control").AsRemote()
@@ -230,6 +230,6 @@ var _ = Describe("DataMover", func() {
 		expected := append(data[:512], data[:512]...)
 		Expect(insideStorage.Read(0, 1024)).To(Equal(expected))
 		Expect(srcPort.RetrieveIncoming()).To(
-			BeAssignableToTypeOf(&DataMoveResponse{}))
+			BeAssignableToTypeOf(DataMoveResponse{}))
 	})
 })

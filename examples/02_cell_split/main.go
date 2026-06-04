@@ -8,18 +8,18 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-var endTime = timing.VTimeInSec(10_000_000_000_000) // 10 seconds in picoseconds
+var endTime = timing.VTimeInPicoSec(10_000_000_000_000) // 10 seconds in picoseconds
 var engine timing.Engine
 var randGen *rand.Rand
 
 // splitEvent is an event that splits a cell into two cells.
 type splitEvent struct {
-	time      timing.VTimeInSec
+	time      timing.VTimeInPicoSec
 	handlerID string
 	id        int
 }
 
-func (e splitEvent) Time() timing.VTimeInSec {
+func (e splitEvent) Time() timing.VTimeInPicoSec {
 	return e.time
 }
 
@@ -48,8 +48,8 @@ func (h *handler) Handle(e timing.Event) error {
 	return nil
 }
 
-func (h *handler) scheduleNextSplitEvent(now timing.VTimeInSec, id int) {
-	timeUntilNextSplit := timing.VTimeInSec(uint64((randGen.Float64() + 1) * 1e12))
+func (h *handler) scheduleNextSplitEvent(now timing.VTimeInPicoSec, id int) {
+	timeUntilNextSplit := timing.VTimeInPicoSec(uint64((randGen.Float64() + 1) * 1e12))
 	nextEvt := splitEvent{
 		time:      now + timeUntilNextSplit,
 		handlerID: "splitter",
@@ -74,7 +74,7 @@ func main() {
 		registrar.RegisterHandler("splitter", &h)
 	}
 
-	firstEvtTime := timing.VTimeInSec(uint64((randGen.Float64() + 1) * 1e12))
+	firstEvtTime := timing.VTimeInPicoSec(uint64((randGen.Float64() + 1) * 1e12))
 	firstEvt := splitEvent{
 		time:      firstEvtTime,
 		handlerID: "splitter",

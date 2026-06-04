@@ -188,6 +188,14 @@ func (d *directory) processWrite(trans *transactionState, transIdx int) bool {
 	if mshrFound {
 		ok := d.writeBottom(trans)
 		if ok {
+			// The coalesced write's data is merged into the fetcher's
+			// fill data (see mergeMSHRData) and reaches storage only when
+			// the fetcher's bankActionWriteFetched stage runs. Record the
+			// fetcher so writeTransIsReady can gate completion on that.
+			entry := &next.MSHRState.Entries[entryIdx]
+			trans.WaitForMSHRFill = true
+			trans.MSHRFillFetcherIdx = entry.TransactionIndices[0]
+
 			return d.processMSHRHit(trans, entryIdx, transIdx)
 		}
 
@@ -206,11 +214,17 @@ func (d *directory) processWrite(trans *transactionState, transIdx int) bool {
 
 func (d *directory) writeBottom(trans *transactionState) bool {
 	addr := trans.WriteAddress
+	spec := d.cache.comp.Spec()
+	blockSize := uint64(1 << spec.Log2BlockSize)
+	cacheLineID := addr / blockSize * blockSize
 
-	writeToBottom := &mem.WriteReq{}
+	writeToBottom := mem.WriteReq{}
 	writeToBottom.ID = timing.GetIDGenerator().Generate()
 	writeToBottom.Src = d.cache.bottomPort.AsRemote()
-	writeToBottom.Dst = d.cache.findPort(addr)
+	// Route by cache-line ID so the write-through write and the
+	// corresponding read-fill always target the same lower-memory port,
+	// preserving per-line ordering.
+	writeToBottom.Dst = d.cache.findPort(cacheLineID)
 	writeToBottom.Address = addr
 	writeToBottom.PID = trans.WritePID
 	writeToBottom.Data = trans.WriteData
@@ -218,10 +232,11 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 	writeToBottom.TrafficBytes = len(trans.WriteData) + 12
 	writeToBottom.TrafficClass = "req"
 
-	err := d.cache.bottomPort.Send(writeToBottom)
-	if err != nil {
+	if !d.cache.bottomPort.CanSend() {
 		return false
 	}
+
+	d.cache.bottomPort.Send(writeToBottom)
 
 	trans.HasWriteToBottom = true
 	trans.WriteToBottomMeta = writeToBottom.MsgMeta
@@ -247,7 +262,7 @@ func (d *directory) fetchFromBottom(
 	next := &d.cache.comp.State
 
 	bottomModule := d.cache.findPort(cacheLineID)
-	readToBottom := &mem.ReadReq{
+	readToBottom := mem.ReadReq{
 		Address:        cacheLineID,
 		PID:            pid,
 		AccessByteSize: blockSize,
@@ -257,10 +272,11 @@ func (d *directory) fetchFromBottom(
 	readToBottom.Dst = bottomModule
 	readToBottom.TrafficBytes, readToBottom.TrafficClass = 12, "req"
 
-	err := d.cache.bottomPort.Send(readToBottom)
-	if err != nil {
+	if !d.cache.bottomPort.CanSend() {
 		return false
 	}
+
+	d.cache.bottomPort.Send(readToBottom)
 
 	tracing.TraceReqInitiate(readToBottom, d.cache.comp, trans.ID)
 

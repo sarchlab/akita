@@ -62,7 +62,7 @@ var _ = Describe("End Point", func() {
 	})
 
 	It("should send flits", func() {
-		msg := &messaging.MsgMeta{
+		msg := messaging.MsgMeta{
 			ID:           timing.GetIDGenerator().Generate(),
 			Src:          devicePort.AsRemote(),
 			TrafficBytes: 33,
@@ -77,8 +77,9 @@ var _ = Describe("End Point", func() {
 		madeProgress := endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
+		networkPort.EXPECT().CanSend().Return(true)
 		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
-			flit := msg.(*packetization.Flit)
+			flit := msg.(packetization.Flit)
 			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
 			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
 			Expect(flit.SeqID).To(Equal(0))
@@ -89,8 +90,9 @@ var _ = Describe("End Point", func() {
 		madeProgress = endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
+		networkPort.EXPECT().CanSend().Return(true)
 		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
-			flit := msg.(*packetization.Flit)
+			flit := msg.(packetization.Flit)
 			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
 			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
 			Expect(flit.SeqID).To(Equal(1))
@@ -107,28 +109,29 @@ var _ = Describe("End Point", func() {
 	})
 
 	It("should receive message", func() {
-		msg := &messaging.MsgMeta{
+		msg := messaging.MsgMeta{
 			ID:  timing.GetIDGenerator().Generate(),
 			Dst: devicePort.AsRemote(),
 		}
 
-		flit0 := &packetization.Flit{}
+		flit0 := packetization.Flit{}
 		flit0.ID = timing.GetIDGenerator().Generate()
 		flit0.TrafficClass = reflect.TypeOf(msg).String()
 		flit0.SeqID = 0
 		flit0.NumFlitInMsg = 2
-		flit0.Msg = *msg
-		flit1 := &packetization.Flit{}
+		flit0.Msg = msg
+		flit1 := packetization.Flit{}
 		flit1.ID = timing.GetIDGenerator().Generate()
 		flit1.TrafficClass = reflect.TypeOf(msg).String()
 		flit1.SeqID = 1
 		flit1.NumFlitInMsg = 2
-		flit1.Msg = *msg
+		flit1.Msg = msg
 
 		networkPort.EXPECT().PeekIncoming().Return(flit0)
 		networkPort.EXPECT().PeekIncoming().Return(flit1)
 		networkPort.EXPECT().PeekIncoming().Return(nil).Times(3)
 		networkPort.EXPECT().RetrieveIncoming().Times(2)
+		devicePort.EXPECT().CanDeliver().Return(true)
 		devicePort.EXPECT().Deliver(msg)
 		devicePort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 

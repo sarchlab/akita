@@ -23,7 +23,7 @@ func (h *idRecordingHandler) Handle(e Event) error {
 func TestSerialEngineQueueRoundTrip(t *testing.T) {
 	RegisterEvent(queueTestEvent{})
 
-	mk := func(time VTimeInSec, id uint64) queueTestEvent {
+	mk := func(time VTimeInPicoSec, id uint64) queueTestEvent {
 		e := queueTestEvent{}
 		e.Time_ = time
 		e.ID = id

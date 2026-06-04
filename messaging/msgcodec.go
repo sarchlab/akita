@@ -22,15 +22,15 @@ var (
 )
 
 // RegisterMsg registers a concrete message type so it can be encoded and decoded
-// for checkpoints. Call it from an init() with a zero pointer of each message
-// type, e.g. messaging.RegisterMsg(&mem.ReadReq{}). The type tag is derived from
-// the Go type, so checkpoints are restored by the same binary that produced
-// them. Registering the same type twice is harmless.
+// for checkpoints. Call it from an init() with a zero value of each message
+// type, e.g. messaging.RegisterMsg(mem.ReadReq{}). Messages are value types, so
+// register the value (a pointer also works). The tag is derived from the Go
+// type, so checkpoints are restored by the same binary. Registering the same
+// type twice is harmless.
 func RegisterMsg(msg Msg) {
 	t := reflect.TypeOf(msg)
-	if t == nil || t.Kind() != reflect.Ptr {
-		panic(fmt.Sprintf(
-			"messaging: RegisterMsg requires a non-nil pointer message, got %T", msg))
+	if t == nil {
+		panic("messaging: RegisterMsg requires a non-nil message")
 	}
 
 	msgRegistryMu.Lock()
@@ -51,7 +51,8 @@ func EncodeMsg(msg Msg) (TypedPayload, error) {
 	}, nil
 }
 
-// DecodeMsg decodes a TypedPayload back into a message of its registered type.
+// DecodeMsg decodes a TypedPayload back into a message of its registered type,
+// in the same value or pointer form the type was registered as.
 func DecodeMsg(tp TypedPayload) (Msg, error) {
 	msgRegistryMu.RLock()
 	t, ok := msgRegistry[tp.Type]
@@ -62,12 +63,22 @@ func DecodeMsg(tp TypedPayload) (Msg, error) {
 			tp.Type)
 	}
 
-	ptr := reflect.New(t.Elem()) // a fresh *ConcreteMsg
+	elem := t
+	if t.Kind() == reflect.Ptr {
+		elem = t.Elem()
+	}
+	ptr := reflect.New(elem)
+
 	if err := json.Unmarshal(tp.Payload, ptr.Interface()); err != nil {
 		return nil, fmt.Errorf("messaging: decode %s: %w", tp.Type, err)
 	}
 
-	msg, ok := ptr.Interface().(Msg)
+	result := ptr.Interface()
+	if t.Kind() != reflect.Ptr {
+		result = ptr.Elem().Interface()
+	}
+
+	msg, ok := result.(Msg)
 	if !ok {
 		return nil, fmt.Errorf("messaging: %s does not implement Msg", tp.Type)
 	}

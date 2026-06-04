@@ -6,7 +6,6 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 
 	// incomingMW handles the network→device path:
@@ -42,7 +41,7 @@ func (m *incomingMW) recv() bool {
 			return madeProgress
 		}
 
-		flit := receivedI.(*packetization.Flit)
+		flit := receivedI.(packetization.Flit)
 		msg := &flit.Msg
 
 		var assemblingIdx int = -1
@@ -139,7 +138,7 @@ func (m *incomingMW) tryDeliver() bool {
 			panic(fmt.Sprintf("no dst port found for %s", dst))
 		}
 
-		msg := &messaging.MsgMeta{
+		msg := messaging.MsgMeta{
 			ID:           meta.ID,
 			Src:          meta.Src,
 			Dst:          meta.Dst,
@@ -148,10 +147,11 @@ func (m *incomingMW) tryDeliver() bool {
 			TrafficBytes: meta.TrafficBytes,
 		}
 
-		err := dstPort.Deliver(msg)
-		if err != nil {
+		if !dstPort.CanDeliver() {
 			break
 		}
+
+		dstPort.Deliver(msg)
 
 		m.logMsgE2ETask(msg, true)
 
@@ -167,19 +167,19 @@ func (m *incomingMW) tryDeliver() bool {
 }
 
 func (m *incomingMW) logFlitE2ETaskFromFlit(
-	flit *packetization.Flit, isEnd bool,
+	flit packetization.Flit, isEnd bool,
 ) {
 	if m.comp.NumHooks() == 0 {
 		return
 	}
 
 	if isEnd {
-		tracing.EndTask(flit.MsgMeta.SendTaskID, m.comp)
+		tracing.EndTask(flit.MsgMeta.ID, m.comp)
 		return
 	}
 
 	tracing.StartTaskWithSpecificLocation(
-		flit.MsgMeta.SendTaskID, flit.Msg.SendTaskID,
+		flit.MsgMeta.ID, flit.Msg.ID,
 		m.comp, "flit_e2e", "flit_e2e", m.comp.Name()+".FlitBuf", flit,
 	)
 }
@@ -200,32 +200,28 @@ func (m *incomingMW) logMsgE2ETask(msg messaging.Msg, isEnd bool) {
 }
 
 func (m *incomingMW) logMsgReq(isEnd bool, msg messaging.Msg) {
-	meta := msg.Meta()
-	if meta.RecvTaskID == 0 {
-		meta.RecvTaskID = timing.GetIDGenerator().Generate()
-	}
+	taskID := tracing.MsgIDAtReceiver(msg, m.comp)
 	if isEnd {
-		tracing.EndTask(meta.RecvTaskID, m.comp)
+		tracing.EndTask(taskID, m.comp)
+		tracing.ForgetMsgIDAtReceiver(msg.Meta().ID, m.comp)
 	} else {
 		tracing.StartTask(
-			meta.RecvTaskID,
-			meta.SendTaskID,
+			taskID,
+			msg.Meta().ID,
 			m.comp, "msg_e2e", "msg_e2e", msg,
 		)
 	}
 }
 
 func (m *incomingMW) logMsgRsp(isEnd bool, msg messaging.Msg) {
-	meta := msg.Meta()
-	if meta.RecvTaskID == 0 {
-		meta.RecvTaskID = timing.GetIDGenerator().Generate()
-	}
+	taskID := tracing.MsgIDAtReceiver(msg, m.comp)
 	if isEnd {
-		tracing.EndTask(meta.RecvTaskID, m.comp)
+		tracing.EndTask(taskID, m.comp)
+		tracing.ForgetMsgIDAtReceiver(msg.Meta().ID, m.comp)
 	} else {
 		tracing.StartTask(
-			meta.RecvTaskID,
-			meta.SendTaskID,
+			taskID,
+			msg.Meta().ID,
 			m.comp, "msg_e2e", "msg_e2e", msg,
 		)
 	}

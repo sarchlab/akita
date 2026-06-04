@@ -7,5 +7,5 @@ import "github.com/sarchlab/akita/v5/timing"
 // value; TimerFiredEvent is scheduled as a pointer.
 func init() {
 	timing.RegisterEvent(TickEvent{})
-	timing.RegisterEvent(&TimerFiredEvent{})
+	timing.RegisterEvent(TimerFiredEvent{})
 }

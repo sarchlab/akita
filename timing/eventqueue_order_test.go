@@ -8,13 +8,13 @@ import (
 // orderEvent carries an id so a test can observe the order events are popped or
 // handled in.
 type orderEvent struct {
-	t  VTimeInSec
+	t  VTimeInPicoSec
 	id int
 }
 
-func (e *orderEvent) Time() VTimeInSec  { return e.t }
-func (e *orderEvent) HandlerID() string { return "h" }
-func (e *orderEvent) IsSecondary() bool { return false }
+func (e *orderEvent) Time() VTimeInPicoSec { return e.t }
+func (e *orderEvent) HandlerID() string    { return "h" }
+func (e *orderEvent) IsSecondary() bool    { return false }
 
 func TestEventQueueOrdersByTimeThenSchedule(t *testing.T) {
 	q := newUnsafeEventQueue()

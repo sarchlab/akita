@@ -34,7 +34,7 @@ func outPort(
 // matured responses, and processing incoming messages.
 func (p *pingProcessor) Process(
 	comp *modeling.EventDrivenComponent[Spec, State, modeling.None],
-	now timing.VTimeInSec,
+	now timing.VTimeInPicoSec,
 ) bool {
 	progress := false
 	state := &comp.State
@@ -49,31 +49,37 @@ func (p *pingProcessor) Process(
 func (p *pingProcessor) sendScheduledPings(
 	comp *modeling.EventDrivenComponent[Spec, State, modeling.None],
 	state *State,
-	now timing.VTimeInSec,
+	now timing.VTimeInPicoSec,
 ) bool {
 	progress := false
 	remaining := make([]scheduledPing, 0, len(state.ScheduledPings))
 
 	for _, sp := range state.ScheduledPings {
-		if sp.SendAt <= now {
-			pingMsg := &pingReq{
-				MsgMeta: messaging.MsgMeta{
-					ID:  timing.GetIDGenerator().Generate(),
-					Src: outPort(comp).AsRemote(),
-					Dst: sp.Dst,
-				},
-				SeqID: state.NextSeqID,
-			}
-
-			outPort(comp).Send(pingMsg)
-
-			state.StartTimes = append(state.StartTimes, now)
-			state.NextSeqID++
-			progress = true
-		} else {
+		if sp.SendAt > now {
 			remaining = append(remaining, sp)
 			comp.ScheduleWakeAt(sp.SendAt)
+			continue
 		}
+
+		if !outPort(comp).CanSend() {
+			remaining = append(remaining, sp)
+			continue
+		}
+
+		pingMsg := pingReq{
+			MsgMeta: messaging.MsgMeta{
+				ID:  timing.GetIDGenerator().Generate(),
+				Src: outPort(comp).AsRemote(),
+				Dst: sp.Dst,
+			},
+			SeqID: state.NextSeqID,
+		}
+
+		outPort(comp).Send(pingMsg)
+
+		state.StartTimes = append(state.StartTimes, now)
+		state.NextSeqID++
+		progress = true
 	}
 
 	state.ScheduledPings = remaining
@@ -84,29 +90,35 @@ func (p *pingProcessor) sendScheduledPings(
 func (p *pingProcessor) deliverPendingResponses(
 	comp *modeling.EventDrivenComponent[Spec, State, modeling.None],
 	state *State,
-	now timing.VTimeInSec,
+	now timing.VTimeInPicoSec,
 ) bool {
 	progress := false
 	remaining := make([]pendingResponse, 0, len(state.PendingResponses))
 
 	for _, pr := range state.PendingResponses {
-		if pr.DeliverAt <= now {
-			rsp := &pingRsp{
-				MsgMeta: messaging.MsgMeta{
-					ID:    timing.GetIDGenerator().Generate(),
-					Src:   outPort(comp).AsRemote(),
-					Dst:   pr.Dst,
-					RspTo: pr.OrigMsgID,
-				},
-				SeqID: pr.SeqID,
-			}
-
-			outPort(comp).Send(rsp)
-			progress = true
-		} else {
+		if pr.DeliverAt > now {
 			remaining = append(remaining, pr)
 			comp.ScheduleWakeAt(pr.DeliverAt)
+			continue
 		}
+
+		if !outPort(comp).CanSend() {
+			remaining = append(remaining, pr)
+			continue
+		}
+
+		rsp := pingRsp{
+			MsgMeta: messaging.MsgMeta{
+				ID:    timing.GetIDGenerator().Generate(),
+				Src:   outPort(comp).AsRemote(),
+				Dst:   pr.Dst,
+				RspTo: pr.OrigMsgID,
+			},
+			SeqID: pr.SeqID,
+		}
+
+		outPort(comp).Send(rsp)
+		progress = true
 	}
 
 	state.PendingResponses = remaining
@@ -117,7 +129,7 @@ func (p *pingProcessor) deliverPendingResponses(
 func (p *pingProcessor) processIncoming(
 	comp *modeling.EventDrivenComponent[Spec, State, modeling.None],
 	state *State,
-	now timing.VTimeInSec,
+	now timing.VTimeInPicoSec,
 ) bool {
 	progress := false
 
@@ -128,7 +140,7 @@ func (p *pingProcessor) processIncoming(
 		}
 
 		switch m := msg.(type) {
-		case *pingReq:
+		case pingReq:
 			state.PendingResponses = append(state.PendingResponses,
 				pendingResponse{
 					DeliverAt: now + 2_000_000_000_000,
@@ -138,7 +150,7 @@ func (p *pingProcessor) processIncoming(
 				})
 			comp.ScheduleWakeAt(now + 2_000_000_000_000)
 			progress = true
-		case *pingRsp:
+		case pingRsp:
 			seqID := m.SeqID
 			startTime := state.StartTimes[seqID]
 			duration := now - startTime

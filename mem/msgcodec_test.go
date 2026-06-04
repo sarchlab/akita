@@ -8,18 +8,18 @@ import (
 )
 
 func TestProtocolMessagesRoundTrip(t *testing.T) {
-	read := &mem.ReadReq{Address: 0x100, AccessByteSize: 64}
+	read := mem.ReadReq{Address: 0x100, AccessByteSize: 64}
 	read.ID = 5
-	write := &mem.WriteReq{Address: 0x200, Data: []byte{1, 2, 3}}
+	write := mem.WriteReq{Address: 0x200, Data: []byte{1, 2, 3}}
 	write.ID = 6
 
-	dataReady := &mem.DataReadyRsp{}
+	dataReady := mem.DataReadyRsp{}
 	dataReady.ID = 7
-	writeDone := &mem.WriteDoneRsp{}
+	writeDone := mem.WriteDoneRsp{}
 	writeDone.ID = 8
-	ctrlReq := &mem.ControlReq{}
+	ctrlReq := mem.ControlReq{}
 	ctrlReq.ID = 9
-	ctrlRsp := &mem.ControlRsp{}
+	ctrlRsp := mem.ControlRsp{}
 	ctrlRsp.ID = 10
 
 	for _, msg := range []messaging.Msg{
@@ -41,7 +41,7 @@ func TestProtocolMessagesRoundTrip(t *testing.T) {
 	// A concrete field survives the round trip.
 	tp, _ := messaging.EncodeMsg(read)
 	got, _ := messaging.DecodeMsg(tp)
-	if got.(*mem.ReadReq).Address != 0x100 {
+	if got.(mem.ReadReq).Address != 0x100 {
 		t.Fatalf("ReadReq.Address not preserved: %+v", got)
 	}
 }

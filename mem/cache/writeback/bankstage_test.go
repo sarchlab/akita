@@ -100,7 +100,7 @@ var _ = Describe("Bank Stage", func() {
 
 			storage.Write(0x40, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 
-			read := &mem.ReadReq{}
+			read := mem.ReadReq{}
 			read.ID = timing.GetIDGenerator().Generate()
 			read.Address = 0x104
 			read.AccessByteSize = 4
@@ -138,7 +138,7 @@ var _ = Describe("Bank Stage", func() {
 			topPort.EXPECT().CanSend().Return(true)
 			topPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg messaging.Msg) {
-					dr := msg.(*mem.DataReadyRsp)
+					dr := msg.(mem.DataReadyRsp)
 					Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 				})
 
@@ -161,7 +161,7 @@ var _ = Describe("Bank Stage", func() {
 			block.ReadCount = 1
 			block.IsLocked = true
 
-			write := &mem.WriteReq{}
+			write := mem.WriteReq{}
 			write.ID = timing.GetIDGenerator().Generate()
 			write.Address = 0x104
 			write.Data = []byte{5, 6, 7, 8}

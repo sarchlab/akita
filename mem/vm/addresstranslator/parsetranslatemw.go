@@ -61,7 +61,7 @@ func (m *parseTranslateMW) translate() bool {
 	spec := m.comp.Spec()
 	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
 
-	transReq := &vm.TranslationReq{}
+	transReq := vm.TranslationReq{}
 	transReq.ID = timing.GetIDGenerator().Generate()
 	transReq.Src = m.translationPort().AsRemote()
 	transReq.Dst = m.comp.Resources().TranslationProviderMapper.Find(vAddr)
@@ -70,10 +70,11 @@ func (m *parseTranslateMW) translate() bool {
 	transReq.DeviceID = spec.DeviceID
 	transReq.TrafficClass = "vm.TranslationReq"
 
-	err := m.translationPort().Send(transReq)
-	if err != nil {
+	if !m.translationPort().CanSend() {
 		return false
 	}
+
+	m.translationPort().Send(transReq)
 
 	incoming := msgToIncomingReqState(itemI)
 
@@ -86,15 +87,11 @@ func (m *parseTranslateMW) translate() bool {
 		tracing.MsgIDAtReceiver(itemI, m.comp),
 	)
 
-	// Update incoming state with recv task ID after tracing
-	incoming.RecvTaskID = itemI.(messaging.Msg).Meta().RecvTaskID
-
 	trans := transactionState{
-		IncomingReqs:             []incomingReqState{incoming},
-		TranslationReqID:         transReq.ID,
-		TranslationReqSendTaskID: transReq.SendTaskID,
-		TranslationReqSrc:        transReq.Src,
-		TranslationReqDst:        transReq.Dst,
+		IncomingReqs:      []incomingReqState{incoming},
+		TranslationReqID:  transReq.ID,
+		TranslationReqSrc: transReq.Src,
+		TranslationReqDst: transReq.Dst,
 	}
 	nextState.Transactions = append(nextState.Transactions, trans)
 
@@ -109,7 +106,7 @@ func (m *parseTranslateMW) handleCtrlRequest() bool {
 		return false
 	}
 
-	msg := msgI.(*mem.ControlReq)
+	msg := msgI.(mem.ControlReq)
 
 	switch msg.Command {
 	case mem.CmdFlush:
@@ -121,18 +118,19 @@ func (m *parseTranslateMW) handleCtrlRequest() bool {
 	}
 }
 
-func (m *parseTranslateMW) handleFlushReq(msg *mem.ControlReq) bool {
-	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
+func (m *parseTranslateMW) handleFlushReq(msg mem.ControlReq) bool {
+	rsp := mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.TrafficBytes = 4
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := m.ctrlPort().Send(rsp)
-	if err != nil {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
+
+	m.ctrlPort().Send(rsp)
 
 	m.ctrlPort().RetrieveIncoming()
 
@@ -144,19 +142,19 @@ func (m *parseTranslateMW) handleFlushReq(msg *mem.ControlReq) bool {
 	return true
 }
 
-func (m *parseTranslateMW) handleRestartReq(msg *mem.ControlReq) bool {
-	rsp := &mem.ControlRsp{Command: mem.CmdReset, Success: true}
+func (m *parseTranslateMW) handleRestartReq(msg mem.ControlReq) bool {
+	rsp := mem.ControlRsp{Command: mem.CmdReset, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.TrafficBytes = 4
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := m.ctrlPort().Send(rsp)
-
-	if err != nil {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
+
+	m.ctrlPort().Send(rsp)
 
 	for m.topPort().RetrieveIncoming() != nil {
 	}

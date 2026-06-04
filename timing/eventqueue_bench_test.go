@@ -6,12 +6,12 @@ import "testing"
 // fixed pool are reused so the benchmark loop itself allocates nothing, leaving
 // only the queue's own allocations visible in allocs/op.
 type benchEvent struct {
-	t VTimeInSec
+	t VTimeInPicoSec
 }
 
-func (e *benchEvent) Time() VTimeInSec  { return e.t }
-func (e *benchEvent) HandlerID() string { return "" }
-func (e *benchEvent) IsSecondary() bool { return false }
+func (e *benchEvent) Time() VTimeInPicoSec { return e.t }
+func (e *benchEvent) HandlerID() string    { return "" }
+func (e *benchEvent) IsSecondary() bool    { return false }
 
 // benchPushPop fills a queue to depth (with same-time clusters), then repeatedly
 // pops the earliest event and reschedules it into the future, holding the queue
@@ -21,7 +21,7 @@ func benchPushPop(b *testing.B, push func(Event), pop func() Event) {
 
 	pool := make([]*benchEvent, depth)
 	for i := range pool {
-		pool[i] = &benchEvent{t: VTimeInSec(i % 64)} // ~16 events per time
+		pool[i] = &benchEvent{t: VTimeInPicoSec(i % 64)} // ~16 events per time
 		push(pool[i])
 	}
 

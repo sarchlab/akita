@@ -66,7 +66,7 @@ comp := builder.Build("MyEDComponent")
 The `EventProcessor[S, T]` interface has a single method:
 
 ```go
-Process(comp *EventDrivenComponent[S, T], now sim.VTimeInSec) bool
+Process(comp *EventDrivenComponent[S, T], now sim.VTimeInPicoSec) bool
 ```
 
 Wakeups are scheduled via:

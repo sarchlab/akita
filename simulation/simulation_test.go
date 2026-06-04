@@ -494,7 +494,7 @@ var _ = Describe("Checkpoint round trip", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
 		Expect(timing.GetIDGeneratorNextID()).To(Equal(savedCounter))
-		Expect(engine.CurrentTime()).To(Equal(timing.VTimeInSec(100)))
+		Expect(engine.CurrentTime()).To(Equal(timing.VTimeInPicoSec(100)))
 	})
 })
 

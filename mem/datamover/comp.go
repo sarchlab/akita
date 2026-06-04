@@ -208,8 +208,8 @@ func resolveByteGranularity(spec Spec, side DataMovePort) uint64 {
 // transactionAsMsg creates a temporary DataMoveRequest for tracing purposes.
 func transactionAsMsg(
 	trans *dataMoverTransactionState,
-) *DataMoveRequest {
-	req := &DataMoveRequest{
+) DataMoveRequest {
+	req := DataMoveRequest{
 		SrcAddress: trans.SrcAddress,
 		DstAddress: trans.DstAddress,
 		ByteSize:   trans.ByteSize,

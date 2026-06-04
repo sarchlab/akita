@@ -10,10 +10,10 @@ import (
 )
 
 type SampleTimeTeller struct {
-	time timing.VTimeInSec
+	time timing.VTimeInPicoSec
 }
 
-func (t *SampleTimeTeller) CurrentTime() timing.VTimeInSec {
+func (t *SampleTimeTeller) CurrentTime() timing.VTimeInPicoSec {
 	return t.time
 }
 

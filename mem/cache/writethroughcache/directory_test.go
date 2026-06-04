@@ -22,14 +22,15 @@ var _ = Describe("Directory", func() {
 	)
 
 	// fillBottomOutgoing pre-fills bottomPort's single outgoing slot so the
-	// next Send fails, simulating a busy port.
+	// next CanSend returns false, simulating a busy port.
 	fillBottomOutgoing := func() {
-		dummy := &mem.ReadReq{}
+		dummy := mem.ReadReq{}
 		dummy.ID = timing.GetIDGenerator().Generate()
 		dummy.Src = bottomPort.AsRemote()
 		dummy.Dst = messaging.RemotePort("DRAM")
 		dummy.TrafficClass = "req"
-		Expect(bottomPort.Send(dummy)).To(BeNil())
+		Expect(bottomPort.CanSend()).To(BeTrue())
+		bottomPort.Send(dummy)
 	}
 
 	BeforeEach(func() {
@@ -258,7 +259,7 @@ var _ = Describe("Directory", func() {
 
 			Expect(madeProgress).To(BeTrue())
 
-			readToBottom := bottomPort.RetrieveOutgoing().(*mem.ReadReq)
+			readToBottom := bottomPort.RetrieveOutgoing().(mem.ReadReq)
 			Expect(readToBottom.Address).To(Equal(uint64(0x100)))
 			Expect(readToBottom.AccessByteSize).To(Equal(uint64(64)))
 			Expect(readToBottom.PID).To(Equal(vm.PID(1)))
@@ -282,7 +283,7 @@ var _ = Describe("Directory", func() {
 			Expect(trans.HasBlock).To(BeTrue())
 		})
 
-		It("should stall if victim block is locked", func() {
+		It("should stall if every way in the set is locked", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
@@ -302,14 +303,16 @@ var _ = Describe("Directory", func() {
 			next.DirPostBuf.PushTyped(0)
 
 			setID := 4 // (0x100 / 64) % 16 = 4
-			next.DirectoryState.Sets[setID].Blocks[next.DirectoryState.Sets[setID].LRUOrder[0]].IsLocked = true
+			for w := range next.DirectoryState.Sets[setID].Blocks {
+				next.DirectoryState.Sets[setID].Blocks[w].IsLocked = true
+			}
 
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
-		It("should stall if victim block is being read", func() {
+		It("should stall if every way in the set is being read", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
@@ -329,11 +332,47 @@ var _ = Describe("Directory", func() {
 			next.DirPostBuf.PushTyped(0)
 
 			setID := 4
-			next.DirectoryState.Sets[setID].Blocks[next.DirectoryState.Sets[setID].LRUOrder[0]].ReadCount = 1
+			for w := range next.DirectoryState.Sets[setID].Blocks {
+				next.DirectoryState.Sets[setID].Blocks[w].ReadCount = 1
+			}
 
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
+		})
+
+		It("should skip the LRU victim if it is locked and try another way", func() {
+			next := &c.comp.State
+
+			readMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
+				TrafficBytes: 12,
+				TrafficClass: "req",
+			}
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					HasRead:            true,
+					ReadMeta:           readMeta,
+					ReadAddress:        0x104,
+					ReadAccessByteSize: 4,
+					ReadPID:            1,
+				},
+			)
+			next.DirPostBuf.PushTyped(0)
+
+			setID := 4
+			// Lock only the LRU-most way; other ways should still be picked.
+			lockedWay := next.DirectoryState.Sets[setID].LRUOrder[0]
+			next.DirectoryState.Sets[setID].Blocks[lockedWay].IsLocked = true
+
+			madeProgress := d.Tick()
+
+			Expect(madeProgress).To(BeTrue())
+			trans := &next.Transactions[0]
+			Expect(trans.HasReadToBottom).To(BeTrue())
+			Expect(trans.HasBlock).To(BeTrue())
+			// Victim must be a different (unlocked) way.
+			Expect(trans.BlockWayID).NotTo(Equal(lockedWay))
 		})
 
 		It("should stall if mshr is full", func() {
@@ -393,8 +432,27 @@ var _ = Describe("Directory", func() {
 	})
 
 	Context("write mshr hit", func() {
-		It("should add to mshr entry", func() {
+		It("should add to mshr entry and wait for fill", func() {
 			next := &c.comp.State
+
+			// Pre-existing fetcher transaction (index 0) that allocated
+			// the MSHR — required so the coalesced write can record it
+			// as MSHRFillFetcherIdx.
+			fetcherReadMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
+				TrafficBytes: 12,
+				TrafficClass: "req",
+			}
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					HasRead:            true,
+					ReadMeta:           fetcherReadMeta,
+					ReadAddress:        0x100,
+					ReadAccessByteSize: 4,
+					ReadPID:            1,
+					HasReadToBottom:    true,
+				},
+			)
 
 			writeMeta := messaging.MsgMeta{
 				ID:           timing.GetIDGenerator().Generate(),
@@ -411,22 +469,28 @@ var _ = Describe("Directory", func() {
 				},
 			)
 
-			// Pre-populate MSHR
+			// Pre-populate MSHR with the fetcher at index 0.
 			entryIdx := cache.MSHRAdd(&next.MSHRState, 4, vm.PID(1), uint64(0x100))
-			next.DirPostBuf.PushTyped(0)
+			next.MSHRState.Entries[entryIdx].TransactionIndices = []int{0}
+			next.DirPostBuf.PushTyped(1)
 
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 
-			writeToBottom := bottomPort.RetrieveOutgoing().(*mem.WriteReq)
+			writeToBottom := bottomPort.RetrieveOutgoing().(mem.WriteReq)
 			Expect(writeToBottom.Address).To(Equal(uint64(0x104)))
 			Expect(writeToBottom.Data).To(Equal([]byte{1, 2, 3, 4}))
 			Expect(writeToBottom.PID).To(Equal(vm.PID(1)))
 			entry := next.MSHRState.Entries[entryIdx]
-			Expect(entry.TransactionIndices).To(ContainElement(0))
-			trans := &next.Transactions[0]
+			Expect(entry.TransactionIndices).To(ContainElement(1))
+			trans := &next.Transactions[1]
 			Expect(trans.HasWriteToBottom).To(BeTrue())
+			// The coalesced write must wait for the fetcher's merged-line
+			// write to land in storage before completing upstream.
+			Expect(trans.WaitForMSHRFill).To(BeTrue())
+			Expect(trans.MSHRFillFetcherIdx).To(Equal(0))
+			Expect(trans.MSHRFillDone).To(BeFalse())
 		})
 	})
 
@@ -460,7 +524,7 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			w := bottomPort.RetrieveOutgoing().(*mem.WriteReq)
+			w := bottomPort.RetrieveOutgoing().(mem.WriteReq)
 			Expect(w.Address).To(Equal(uint64(0x104)))
 			Expect(w.Data).To(Equal([]byte{1, 2, 3, 4}))
 			Expect(w.PID).To(Equal(vm.PID(1)))
@@ -626,7 +690,7 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			w := bottomPort.RetrieveOutgoing().(*mem.WriteReq)
+			w := bottomPort.RetrieveOutgoing().(mem.WriteReq)
 			Expect(w.Address).To(Equal(uint64(0x100)))
 			Expect(w.Data).To(HaveLen(64))
 			Expect(w.PID).To(Equal(vm.PID(1)))

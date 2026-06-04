@@ -82,7 +82,7 @@ var _ = Describe("MSHR Stage", func() {
 	})
 
 	It("should stall if topSender is busy", func() {
-		read := &mem.ReadReq{}
+		read := mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Address = 0x104
 		read.AccessByteSize = 4
@@ -127,7 +127,7 @@ var _ = Describe("MSHR Stage", func() {
 	})
 
 	It("should send data ready to top", func() {
-		read := &mem.ReadReq{}
+		read := mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Address = 0x104
 		read.AccessByteSize = 4
@@ -163,7 +163,7 @@ var _ = Describe("MSHR Stage", func() {
 		topPort.EXPECT().CanSend().Return(true)
 		topPort.EXPECT().Send(gomock.Any()).
 			Do(func(msg messaging.Msg) {
-				dr := msg.(*mem.DataReadyRsp)
+				dr := msg.(mem.DataReadyRsp)
 				Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 			})
 

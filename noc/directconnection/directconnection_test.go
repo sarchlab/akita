@@ -17,8 +17,8 @@ type testMsg struct {
 	messaging.MsgMeta
 }
 
-func newTestMsg() *testMsg {
-	return &testMsg{
+func newTestMsg() testMsg {
+	return testMsg{
 		MsgMeta: messaging.MsgMeta{
 			ID: timing.GetIDGenerator().Generate(),
 		},
@@ -61,9 +61,9 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should forward when handling tick event", func() {
-		engine.EXPECT().CurrentTime().Return(timing.VTimeInSec(10000))
+		engine.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10000))
 
-		tick := modeling.MakeTickEvent(connection.Name(), timing.VTimeInSec(10000))
+		tick := modeling.MakeTickEvent(connection.Name(), timing.VTimeInPicoSec(10000))
 
 		msg1 := newTestMsg()
 		msg1.Src = port1.AsRemote()
@@ -76,17 +76,19 @@ var _ = Describe("DirectConnection", func() {
 		port1.EXPECT().PeekOutgoing().Return(msg1)
 		port1.EXPECT().PeekOutgoing().Return(nil)
 		port1.EXPECT().RetrieveOutgoing().Return(msg1)
-		port1.EXPECT().Deliver(msg2).Return(nil)
+		port1.EXPECT().CanDeliver().Return(true)
+		port1.EXPECT().Deliver(msg2)
 
 		port2.EXPECT().PeekOutgoing().Return(msg2)
 		port2.EXPECT().PeekOutgoing().Return(nil)
 		port2.EXPECT().RetrieveOutgoing().Return(msg2)
-		port2.EXPECT().Deliver(msg1).Return(nil)
+		port2.EXPECT().CanDeliver().Return(true)
+		port2.EXPECT().Deliver(msg1)
 
 		engine.EXPECT().
 			Schedule(gomock.Any()).
 			Do(func(evt modeling.TickEvent) {
-				Expect(evt.Time()).To(Equal(timing.VTimeInSec(11000)))
+				Expect(evt.Time()).To(Equal(timing.VTimeInPicoSec(11000)))
 				Expect(evt.IsSecondary()).To(BeTrue())
 			})
 
@@ -94,14 +96,14 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should keep outgoing messages queued when delivery is blocked", func() {
-		tick := modeling.MakeTickEvent(connection.Name(), timing.VTimeInSec(10000))
+		tick := modeling.MakeTickEvent(connection.Name(), timing.VTimeInPicoSec(10000))
 
 		msg := newTestMsg()
 		msg.Src = port1.AsRemote()
 		msg.Dst = port2.AsRemote()
 
 		port1.EXPECT().PeekOutgoing().Return(msg)
-		port2.EXPECT().Deliver(msg).Return(messaging.NewSendError())
+		port2.EXPECT().CanDeliver().Return(false)
 		port2.EXPECT().PeekOutgoing().Return(nil)
 
 		connection.Handle(tick)
@@ -111,7 +113,7 @@ var _ = Describe("DirectConnection", func() {
 type agent struct {
 	*modeling.TickingComponent
 
-	msgsOut []*testMsg
+	msgsOut []testMsg
 	msgsIn  []messaging.Msg
 
 	OutPort messaging.Port
@@ -135,12 +137,10 @@ func (a *agent) Tick() bool {
 		madeProgress = true
 	}
 
-	if len(a.msgsOut) > 0 {
-		err := a.OutPort.Send(a.msgsOut[0])
-		if err == nil {
-			madeProgress = true
-			a.msgsOut = a.msgsOut[1:]
-		}
+	if len(a.msgsOut) > 0 && a.OutPort.CanSend() {
+		a.OutPort.Send(a.msgsOut[0])
+		madeProgress = true
+		a.msgsOut = a.msgsOut[1:]
 	}
 
 	return madeProgress
@@ -209,7 +209,7 @@ var _ = Describe("Direct Connection Integration", func() {
 	})
 })
 
-func directConnectionTest(seed int64) timing.VTimeInSec {
+func directConnectionTest(seed int64) timing.VTimeInPicoSec {
 	r := rand.New(rand.NewSource(seed))
 
 	numAgents := 100

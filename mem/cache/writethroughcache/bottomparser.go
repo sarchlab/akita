@@ -20,9 +20,9 @@ func (p *bottomParser) Tick() bool {
 	}
 
 	switch itemI.(type) {
-	case *mem.WriteDoneRsp:
+	case mem.WriteDoneRsp:
 		return p.processDoneRsp(itemI)
-	case *mem.DataReadyRsp:
+	case mem.DataReadyRsp:
 		return p.processDataReady(itemI)
 	default:
 		panic("cannot process response")
@@ -38,28 +38,17 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 	}
 
 	trans := &next.Transactions[transIdx]
-	if trans.FetchAndWrite {
-		p.cache.bottomPort.RetrieveIncoming()
-		return true
-	}
+	trans.BottomWriteDone = true
 
-	trans.Done = true
-
-	spec := p.cache.comp.Spec()
-	if needsDualCompletion(spec.WritePolicyType) {
-		trans.BottomWriteDone = true
-
-		if trans.BankDone {
-			tracing.EndTask(trans.ID, p.cache.comp)
-		}
-	} else {
+	if !trans.Done && writeTransIsReady(trans) {
+		trans.Done = true
 		tracing.EndTask(trans.ID, p.cache.comp)
 	}
 
 	p.cache.bottomPort.RetrieveIncoming()
 
 	// Reconstruct writeToBottom for tracing
-	writeToBottom := &mem.WriteReq{
+	writeToBottom := mem.WriteReq{
 		MsgMeta:   trans.WriteToBottomMeta,
 		Data:      trans.WriteToBottomData,
 		DirtyMask: trans.WriteToBottomDirtyMask,
@@ -89,7 +78,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 	addr := trans.Address()
 	spec := p.cache.comp.Spec()
 	cachelineID := (addr >> spec.Log2BlockSize) << spec.Log2BlockSize
-	drMsg := msg.(*mem.DataReadyRsp)
+	drMsg := msg.(mem.DataReadyRsp)
 	data := drMsg.Data
 	dirtyMask := make([]bool, 1<<spec.Log2BlockSize)
 
@@ -121,7 +110,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 	p.cache.bottomPort.RetrieveIncoming()
 
 	// Reconstruct readToBottom for tracing
-	readToBottom := &mem.ReadReq{
+	readToBottom := mem.ReadReq{
 		MsgMeta: trans.ReadToBottomMeta,
 		PID:     trans.ReadToBottomPID,
 	}
@@ -162,22 +151,28 @@ func (p *bottomParser) finalizeMSHRTransExcept(
 	exceptIdx int,
 ) {
 	for _, idx := range entryTransIdxs {
+		if idx == exceptIdx {
+			// The fetcher transaction — bank stage finalizes it.
+			continue
+		}
+
 		trans := &next.Transactions[idx]
 
-		if idx == exceptIdx {
-			// The fetcher transaction — don't overwrite Data (the bank
-			// stage needs the full block data) and don't mark Done yet.
-			// The bank stage will restore the correct read slice and mark
-			// Done after writing to storage.
-		} else if trans.HasRead {
+		if trans.HasRead {
 			offset := trans.ReadAddress - blockTag
 			trans.Data = data[offset : offset+trans.ReadAccessByteSize]
 			trans.Done = true
-		} else {
-			trans.Done = true
+			tracing.EndTask(trans.ID, p.cache.comp)
+			continue
 		}
 
-		tracing.EndTask(trans.ID, p.cache.comp)
+		// Coalesced write: completion now depends on its own bottom
+		// WriteDoneRsp arriving. Only finalize if everything is already
+		// satisfied (e.g. WriteDoneRsp landed first).
+		if !trans.Done && writeTransIsReady(trans) {
+			trans.Done = true
+			tracing.EndTask(trans.ID, p.cache.comp)
+		}
 	}
 }
 

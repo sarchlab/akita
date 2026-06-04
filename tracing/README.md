@@ -18,8 +18,8 @@ type Task struct {
     Kind       string         // e.g., "req_in", "req_out"
     What       string         // e.g., "ReadReq", "WriteReq"
     Location   string         // component name
-    StartTime  sim.VTimeInSec // picoseconds
-    EndTime    sim.VTimeInSec
+    StartTime  sim.VTimeInPicoSec // picoseconds
+    EndTime    sim.VTimeInPicoSec
     Steps      []TaskStep
     Milestones []Milestone
 }

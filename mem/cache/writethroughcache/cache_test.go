@@ -74,7 +74,7 @@ var _ = Describe("Cache", func() {
 
 	It("should do read miss", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4})
-		read := &mem.ReadReq{}
+		read := mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = cuPort.AsRemote()
 		read.Dst = c.GetPortByName("Top").AsRemote()
@@ -88,13 +88,13 @@ var _ = Describe("Cache", func() {
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
-		dr := rsps[0].(*mem.DataReadyRsp)
+		dr := rsps[0].(mem.DataReadyRsp)
 		Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 
 	It("should do read miss coalesce", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
-		read1 := &mem.ReadReq{}
+		read1 := mem.ReadReq{}
 		read1.ID = timing.GetIDGenerator().Generate()
 		read1.Src = cuPort.AsRemote()
 		read1.Dst = c.GetPortByName("Top").AsRemote()
@@ -104,7 +104,7 @@ var _ = Describe("Cache", func() {
 		read1.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read1)
 
-		read2 := &mem.ReadReq{}
+		read2 := mem.ReadReq{}
 		read2.ID = timing.GetIDGenerator().Generate()
 		read2.Src = cuPort.AsRemote()
 		read2.Dst = c.GetPortByName("Top").AsRemote()
@@ -121,7 +121,7 @@ var _ = Describe("Cache", func() {
 		// any order as long as both data values are received.
 		received := make(map[string]bool)
 		for _, msg := range drainResponses() {
-			dr := msg.(*mem.DataReadyRsp)
+			dr := msg.(mem.DataReadyRsp)
 			if string(dr.Data) == string([]byte{1, 2, 3, 4}) {
 				received["1234"] = true
 			} else if string(dr.Data) == string([]byte{5, 6, 7, 8}) {
@@ -135,7 +135,7 @@ var _ = Describe("Cache", func() {
 
 	It("should do read hit", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
-		read1 := &mem.ReadReq{}
+		read1 := mem.ReadReq{}
 		read1.ID = timing.GetIDGenerator().Generate()
 		read1.Src = cuPort.AsRemote()
 		read1.Dst = c.GetPortByName("Top").AsRemote()
@@ -149,9 +149,9 @@ var _ = Describe("Cache", func() {
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
-		Expect(rsps[0].(*mem.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
+		Expect(rsps[0].(mem.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
 
-		read2 := &mem.ReadReq{}
+		read2 := mem.ReadReq{}
 		read2.ID = timing.GetIDGenerator().Generate()
 		read2.Src = cuPort.AsRemote()
 		read2.Dst = c.GetPortByName("Top").AsRemote()
@@ -165,13 +165,13 @@ var _ = Describe("Cache", func() {
 
 		rsps = drainResponses()
 		Expect(rsps).To(HaveLen(1))
-		Expect(rsps[0].(*mem.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
+		Expect(rsps[0].(mem.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
 
 		Expect(t2 - t1).To(BeNumerically("<", t1))
 	})
 
 	It("should write partial line", func() {
-		write := &mem.WriteReq{}
+		write := mem.WriteReq{}
 		write.ID = timing.GetIDGenerator().Generate()
 		write.Src = cuPort.AsRemote()
 		write.Dst = c.GetPortByName("Top").AsRemote()
@@ -192,7 +192,7 @@ var _ = Describe("Cache", func() {
 	})
 
 	It("should write full line", func() {
-		write := &mem.WriteReq{}
+		write := mem.WriteReq{}
 		write.ID = timing.GetIDGenerator().Generate()
 		write.Src = cuPort.AsRemote()
 		write.Dst = c.GetPortByName("Top").AsRemote()
