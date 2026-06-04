@@ -213,35 +213,6 @@ var _ = Describe("Flusher", func() {
 		})
 	})
 
-	Context("restarting", func() {
-		It("should stall if cannot send to control port", func() {
-			req := &mem.ControlReq{Command: mem.CmdEnable}
-			req.ID = timing.GetIDGenerator().Generate()
-			req.TrafficClass = "mem.ControlReq"
-			controlPort.EXPECT().PeekIncoming().Return(req)
-			controlPort.EXPECT().CanSend().Return(false)
-
-			madeProgress := f.Tick()
-
-			Expect(madeProgress).To(BeFalse())
-		})
-
-		It("should restart", func() {
-			req := &mem.ControlReq{Command: mem.CmdEnable}
-			req.ID = timing.GetIDGenerator().Generate()
-			req.TrafficClass = "mem.ControlReq"
-			controlPort.EXPECT().PeekIncoming().Return(req)
-			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
-			controlPort.EXPECT().CanSend().Return(true)
-			controlPort.EXPECT().Send(gomock.Any())
-			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
-			bottomPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
-
-			madeProgress := f.Tick()
-
-			Expect(madeProgress).To(BeTrue())
-			next := &m.comp.State
-			Expect(cacheState(next.CacheState)).To(Equal(cacheStateRunning))
-		})
-	})
+	// CmdEnable / Reset handling moved out of flusher to ctrlmiddleware;
+	// those code paths are covered by TestControlContract.
 })

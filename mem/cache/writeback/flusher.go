@@ -1,8 +1,6 @@
 package writeback
 
 import (
-	"log"
-
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 
@@ -126,27 +124,25 @@ func (f *flusher) processFlush() bool {
 	return true
 }
 
+// extractFromPort consumes only CmdFlush from the Control port. Every
+// other verb (Pause, Drain, Enable, Reset, Invalidate) is owned by
+// ctrlMiddleware and is left in the incoming queue.
 func (f *flusher) extractFromPort() bool {
 	msg := f.ctrlPort.PeekIncoming()
 	if msg == nil {
 		return false
 	}
 
-	switch msg := msg.(type) {
-	case *mem.ControlReq:
-		switch msg.Command {
-		case mem.CmdFlush:
-			return f.startProcessingFlush(msg)
-		case mem.CmdEnable:
-			return f.handleCacheRestart(msg)
-		default:
-			log.Panicf("Cannot process control command %d", msg.Command)
-		}
-	default:
-		log.Panicf("Cannot process request of type %T", msg)
+	req, ok := msg.(*mem.ControlReq)
+	if !ok {
+		return false
 	}
 
-	return true
+	if req.Command != mem.CmdFlush {
+		return false
+	}
+
+	return f.startProcessingFlush(req)
 }
 
 func (f *flusher) startProcessingFlush(msg *mem.ControlReq) bool {
@@ -166,30 +162,6 @@ func (f *flusher) startProcessingFlush(msg *mem.ControlReq) bool {
 	f.ctrlPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(msg, f.pipeline.comp)
-
-	return true
-}
-
-func (f *flusher) handleCacheRestart(msg *mem.ControlReq) bool {
-	if !f.ctrlPort.CanSend() {
-		return false
-	}
-
-	clearPort(f.pipeline.topPort)
-	clearPort(f.pipeline.bottomPort)
-
-	next := &f.pipeline.comp.State
-	next.CacheState = int(cacheStateRunning)
-
-	rsp := &mem.ControlRsp{Command: mem.CmdEnable, Success: true}
-	rsp.ID = timing.GetIDGenerator().Generate()
-	rsp.Src = f.ctrlPort.AsRemote()
-	rsp.Dst = msg.Src
-	rsp.RspTo = msg.ID
-	rsp.TrafficClass = "mem.ControlRsp"
-	f.ctrlPort.Send(rsp)
-
-	f.ctrlPort.RetrieveIncoming()
 
 	return true
 }

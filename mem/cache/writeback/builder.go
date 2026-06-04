@@ -109,9 +109,11 @@ func (b Builder) Build(name string) *Comp {
 
 	pmw := b.buildPipelineMW(comp, name, spec, laneWidth)
 	cmw := b.buildControlMW(comp, name, spec, pmw)
+	ucmw := &ctrlMiddleware{pipeline: pmw, ctrlPort: comp.GetPortByName("Control")}
 
-	comp.AddMiddleware(pmw) // index 0
-	comp.AddMiddleware(cmw) // index 1
+	comp.AddMiddleware(pmw)   // index 0
+	comp.AddMiddleware(cmw)   // index 1: legacy flush walker
+	comp.AddMiddleware(ucmw)  // index 2: universal control verbs
 
 	b.registrar.RegisterComponent(comp)
 

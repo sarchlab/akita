@@ -18,6 +18,7 @@ const (
 	cacheStatePreFlushing
 	cacheStateFlushing
 	cacheStatePaused
+	cacheStateDraining
 )
 
 // Spec contains immutable configuration for the writeback cache.
@@ -50,6 +51,8 @@ type Spec struct {
 // State contains mutable runtime data for the writeback cache.
 type State struct {
 	CacheState     int                  `json:"cache_state"`
+	CurrentCmdID   uint64               `json:"current_cmd_id"`
+	CurrentCmdSrc  messaging.RemotePort `json:"current_cmd_src"`
 	DirectoryState cache.DirectoryState `json:"directory_state"`
 	MSHRState      cache.MSHRState      `json:"mshr_state"`
 	Transactions   []transactionState   `json:"transactions"`
