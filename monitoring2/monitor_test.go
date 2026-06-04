@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/sarchlab/akita/v5/datarecording"
 	"github.com/sarchlab/akita/v5/hooking"
@@ -431,7 +432,11 @@ func TestRunInvokesEngineRun(t *testing.T) {
 	monitor.run(httptest.NewRecorder(),
 		httptest.NewRequest(http.MethodPost, "/api/run", nil))
 
-	<-engine.runReady
+	select {
+	case <-engine.runReady:
+	case <-time.After(time.Second):
+		t.Fatal("engine.Run was not invoked within 1s")
+	}
 
 	engine.mu.Lock()
 	defer engine.mu.Unlock()
@@ -578,8 +583,13 @@ func TestProgressBarsLifecycleRoundtripsThroughHandler(t *testing.T) {
 		monitor.listProgressBars(recorder,
 			httptest.NewRequest(http.MethodGet, "/api/progress", nil))
 
-		if got := recorder.Body.String(); got != "[]" {
-			t.Fatalf("expected empty array, got %q", got)
+		var bars []json.RawMessage
+		if err := json.NewDecoder(recorder.Body).Decode(&bars); err != nil {
+			t.Fatalf("expected JSON array, got %v", err)
+		}
+
+		if len(bars) != 0 {
+			t.Fatalf("expected empty array, got %d entries", len(bars))
 		}
 	}
 
