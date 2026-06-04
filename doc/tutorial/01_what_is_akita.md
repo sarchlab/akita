@@ -84,14 +84,16 @@ modify it. The chapters build on each other:
    with Spec, State, and middleware, built up a few lines at a time.
 2. **Make components talk to each other** — add ports and messages, and
    connect two components so they can communicate.
-3. **Event-based simulation** — open the layer underneath: schedule
+3. **Hooks and tracing** — observe a running simulation: attach callbacks
+   that log events and messages, and measure work with tracing tasks.
+4. **Event-based simulation** — open the layer underneath: schedule
    events directly, write custom event types, and use event-driven
    components for the idle case.
-4. **Building systems** — compose components into a memory subsystem and
+5. **Building systems** — compose components into a memory subsystem and
    a small network.
-5. **Observability and persistence** — trace what your simulation does,
-   watch it live, write your own component, and checkpoint to resume
-   long runs.
+6. **Observability and persistence** — record traces to a database, watch
+   your simulation live, write your own component, and checkpoint to
+   resume long runs.
 
 By the end you will have a working memory-subsystem simulator and the
 muscle memory to extend it.

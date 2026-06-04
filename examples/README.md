@@ -78,6 +78,34 @@ delayed response delivery, event-driven (non-ticking) design.
 cd ping && go test -v -run Example
 ```
 
+### hooks — Observing a Simulation with Hooks
+
+Two ticking agents exchange a ping/response, observed entirely from the
+outside. An engine hook logs every event and a port hook logs every message;
+the agents themselves print nothing. Shows the `hooking` API
+(`Hook`, `HookCtx`, `AcceptHook`) and the engine/port hook positions.
+
+**Key concepts**: `hooking.Hook`, `HookCtx`, `AcceptHook`,
+`timing.HookPosBeforeEvent`, `messaging.HookPosPortMsgSend`/`Recvd`.
+
+```bash
+cd hooks && go run main.go
+```
+
+### tracing — Measuring Work with Tracing Tasks
+
+A single worker component wraps each job in a tracing task
+(`tracing.StartTask` / `EndTask`). A `BusyTimeTracer` and an
+`AverageTimeTracer`, attached with `tracing.CollectTrace`, report how long
+the worker was busy and how long an average job took.
+
+**Key concepts**: tracing tasks, `tracing.CollectTrace`, `BusyTimeTracer`,
+`AverageTimeTracer`, `TaskFilter` — tracing built on hooks.
+
+```bash
+cd tracing && go run main.go
+```
+
 ## Choosing a Paradigm
 
 | Paradigm | Component Type | When to Use |

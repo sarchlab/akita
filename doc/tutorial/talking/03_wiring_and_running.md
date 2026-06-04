@@ -95,7 +95,6 @@ cycle.
 ## Where to Next
 
 You can build a working simulation with everything in these two sections.
-The next section opens the layer underneath: the events and handlers that
-the engine itself uses to schedule and dispatch work — and, at the end, an
-event-driven component variant for the cases where ticking every cycle is
-wasteful.
+The next section, **Hooks and Tracing**, shows how to observe one: attach
+callbacks that log events and messages, and measure how long work takes —
+all without changing the components you just wrote.
