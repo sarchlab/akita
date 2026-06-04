@@ -407,6 +407,7 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 				next.InflightEvictionIndices[:i],
 				next.InflightEvictionIndices[i+1:]...,
 			)
+			delete(next.EvictingList, e.EvictingAddr)
 			wb.cache.bottomPort.RetrieveIncoming()
 			tracing.TraceReqFinalize(e.EvictionWriteReqMeta, wb.cache.comp)
 

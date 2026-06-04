@@ -76,7 +76,7 @@ func (s *bankStage) finalizeTrans() bool {
 	case bankActionWrite:
 		return s.finalizeWriteTrans(trans, transIdx)
 	case bankActionWriteFetched:
-		return s.finalizeWriteFetchedTrans(trans)
+		return s.finalizeWriteFetchedTrans(trans, transIdx)
 	default:
 		panic("cannot handle trans bank action")
 	}
@@ -140,21 +140,19 @@ func (s *bankStage) finalizeWriteTrans(
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 	bankPostBuf.Pop()
 
-	spec := s.cache.comp.Spec()
-	if needsDualCompletion(spec.WritePolicyType) {
-		trans.BankDone = true
+	trans.BankDone = true
 
-		if trans.BottomWriteDone {
-			tracing.EndTask(trans.ID, s.cache.comp)
-		}
-	} else {
+	if !trans.Done && writeTransIsReady(trans) {
+		trans.Done = true
 		tracing.EndTask(trans.ID, s.cache.comp)
 	}
 
 	return true
 }
 
-func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
+func (s *bankStage) finalizeWriteFetchedTrans(
+	trans *transactionState, transIdx int,
+) bool {
 	next := &s.cache.comp.State
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 
@@ -166,19 +164,55 @@ func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
 	nextBlock.DirtyMask = trans.WriteFetchedDirtyMask
 	nextBlock.IsLocked = false
 
-	// If this transaction was a read, restore the correct read data slice
-	// (Data was temporarily set to the full block for writing to storage)
-	// and mark Done so the respond stage picks it up.
-	if trans.HasRead {
-		offset := trans.ReadAddress - nextBlock.Tag
-		trans.Data = trans.Data[offset : offset+trans.ReadAccessByteSize]
-	}
-
-	// Mark transaction Done — the respond stage will send the response.
-	trans.Done = true
-
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 	bankPostBuf.Pop()
 
+	// The merged line is now in storage. Any MSHR-coalesced write whose
+	// data was folded into this fill can be considered "fill-done"; if
+	// its bottom WriteDoneRsp has also arrived, finalize it here.
+	s.completeMSHRFillWaiters(transIdx)
+
+	if trans.HasRead {
+		// Read fetcher — restore the correct read slice (Data was the
+		// full block for writing to storage) and finalize.
+		offset := trans.ReadAddress - nextBlock.Tag
+		trans.Data = trans.Data[offset : offset+trans.ReadAccessByteSize]
+		trans.Done = true
+		tracing.EndTask(trans.ID, s.cache.comp)
+		return true
+	}
+
+	// Write fetcher (partial-line write miss): wait for its own
+	// bottom WriteDoneRsp before reporting completion upstream.
+	trans.BankDone = true
+	if !trans.Done && writeTransIsReady(trans) {
+		trans.Done = true
+		tracing.EndTask(trans.ID, s.cache.comp)
+	}
+
 	return true
+}
+
+func (s *bankStage) completeMSHRFillWaiters(fetcherIdx int) {
+	next := &s.cache.comp.State
+
+	for i := range next.Transactions {
+		waiter := &next.Transactions[i]
+		if waiter.Removed || waiter.Done {
+			continue
+		}
+		if !waiter.WaitForMSHRFill || waiter.MSHRFillDone {
+			continue
+		}
+		if waiter.MSHRFillFetcherIdx != fetcherIdx {
+			continue
+		}
+
+		waiter.MSHRFillDone = true
+
+		if writeTransIsReady(waiter) {
+			waiter.Done = true
+			tracing.EndTask(waiter.ID, s.cache.comp)
+		}
+	}
 }

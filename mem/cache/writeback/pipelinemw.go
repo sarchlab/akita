@@ -137,6 +137,12 @@ func (m *pipelineMW) discardInflightTransactions() {
 	next.InflightFetchIndices = nil
 	next.InflightEvictionIndices = nil
 
+	// Discard pending-eviction guards; the WriteDoneRsps that normally
+	// clear them won't arrive for transactions we just dropped.
+	for k := range next.EvictingList {
+		delete(next.EvictingList, k)
+	}
+
 	clearPort(m.topPort)
 
 	next.Transactions = nil

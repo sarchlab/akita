@@ -114,6 +114,57 @@ var _ = Describe("Bottom Parser", func() {
 			Expect(next.Transactions[0].BottomWriteDone).To(BeTrue())
 			Expect(next.Transactions[0].Removed).To(BeFalse())
 		})
+
+		It("does not complete an MSHR-coalesced write before the fill", func() {
+			next := &c.comp.State
+
+			writeToBottomMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
+				TrafficBytes: 12,
+				TrafficClass: "req",
+			}
+			writeMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
+				TrafficBytes: 4 + 12,
+				TrafficClass: "req",
+			}
+
+			// Index 0 is a placeholder fetcher (the read miss that
+			// allocated the MSHR). Only its index matters here.
+			next.Transactions = append(next.Transactions, transactionState{})
+			// Index 1 is the MSHR-coalesced write whose bottom ack arrives.
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					HasWrite:           true,
+					WriteMeta:          writeMeta,
+					WriteAddress:       0x104,
+					WriteData:          []byte{1, 2, 3, 4},
+					WritePID:           1,
+					HasWriteToBottom:   true,
+					WriteToBottomMeta:  writeToBottomMeta,
+					WriteToBottomPID:   1,
+					WaitForMSHRFill:    true,
+					MSHRFillFetcherIdx: 0,
+				},
+			)
+
+			done := &mem.WriteDoneRsp{}
+			done.ID = timing.GetIDGenerator().Generate()
+			done.RspTo = writeToBottomMeta.ID
+			done.TrafficBytes = 4
+			done.TrafficClass = "rsp"
+
+			bottomPort.Deliver(done)
+
+			madeProgress := p.Tick()
+
+			Expect(madeProgress).To(BeTrue())
+			coalesced := &next.Transactions[1]
+			Expect(coalesced.BottomWriteDone).To(BeTrue())
+			// Must NOT be done — the fetcher's bankActionWriteFetched
+			// stage hasn't written the merged line yet.
+			Expect(coalesced.Done).To(BeFalse())
+		})
 	})
 
 	Context("data ready", func() {
