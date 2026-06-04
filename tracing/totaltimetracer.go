@@ -12,7 +12,7 @@ type TotalTimeTracer struct {
 	timeTeller    timing.TimeTeller
 	filter        TaskFilter
 	lock          sync.Mutex
-	totalTime     timing.VTimeInSec
+	totalTime     timing.VTimeInPicoSec
 	inflightTasks map[uint64]Task
 }
 
@@ -31,7 +31,7 @@ func NewTotalTimeTracer(
 }
 
 // TotalTime returns the total time has been spent on a certain type of tasks.
-func (t *TotalTimeTracer) TotalTime() timing.VTimeInSec {
+func (t *TotalTimeTracer) TotalTime() timing.VTimeInPicoSec {
 	t.lock.Lock()
 	time := t.totalTime
 	t.lock.Unlock()

@@ -1406,7 +1406,7 @@ type EventDrivenComponent[S any, T any] struct {
     current   T
     processor EventProcessor[S, T]
 
-    pendingWakeup sim.VTimeInSec
+    pendingWakeup sim.VTimeInPicoSec
 }
 ```
 
@@ -1437,7 +1437,7 @@ Key methods:
 ```go
 // From v5/modeling/eventdriven.go
 type EventProcessor[S any, T any] interface {
-    Process(comp *EventDrivenComponent[S, T], now sim.VTimeInSec) bool
+    Process(comp *EventDrivenComponent[S, T], now sim.VTimeInPicoSec) bool
 }
 ```
 
@@ -1478,7 +1478,7 @@ type PingSpec struct {
 ```go
 // From v5/examples/ping/state.go
 type PingState struct {
-    StartTimes       []sim.VTimeInSec
+    StartTimes       []sim.VTimeInPicoSec
     NextSeqID        int
     PendingResponses []PendingResponse
     ScheduledPings   []ScheduledPing
@@ -1497,7 +1497,7 @@ type PingProcessor struct{}
 
 func (p *PingProcessor) Process(
     comp *modeling.EventDrivenComponent[PingSpec, PingState],
-    now sim.VTimeInSec,
+    now sim.VTimeInPicoSec,
 ) bool {
     progress := false
     state := &comp.State

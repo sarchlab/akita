@@ -17,14 +17,14 @@ import (
 )
 
 type SimpleTimeTeller struct {
-	currentTime timing.VTimeInSec
+	currentTime timing.VTimeInPicoSec
 }
 
-func (t *SimpleTimeTeller) CurrentTime() timing.VTimeInSec {
+func (t *SimpleTimeTeller) CurrentTime() timing.VTimeInPicoSec {
 	return t.currentTime
 }
 
-func (t *SimpleTimeTeller) AdvanceTime(duration timing.VTimeInSec) {
+func (t *SimpleTimeTeller) AdvanceTime(duration timing.VTimeInPicoSec) {
 	t.currentTime += duration
 }
 

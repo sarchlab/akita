@@ -30,8 +30,8 @@ type PageMigrationInfo struct {
 // PageMigrationReqToDriver is a page migration request from MMU to the driver.
 type PageMigrationReqToDriver struct {
 	messaging.MsgMeta
-	StartTime         timing.VTimeInSec
-	EndTime           timing.VTimeInSec
+	StartTime         timing.VTimeInPicoSec
+	EndTime           timing.VTimeInPicoSec
 	MigrationInfo     PageMigrationInfo
 	CurrAccessingGPUs []uint64
 	PID               PID
@@ -55,8 +55,8 @@ func NewPageMigrationReqToDriver(
 // PageMigrationRspFromDriver is a page migration response from driver to MMU.
 type PageMigrationRspFromDriver struct {
 	messaging.MsgMeta
-	StartTime timing.VTimeInSec
-	EndTime   timing.VTimeInSec
+	StartTime timing.VTimeInPicoSec
+	EndTime   timing.VTimeInPicoSec
 	VAddr     []uint64
 	RspToTop  bool
 }

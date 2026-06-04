@@ -6,7 +6,7 @@ import (
 )
 
 type taskTimeStartEnd struct {
-	start, end timing.VTimeInSec
+	start, end timing.VTimeInPicoSec
 	completed  bool
 }
 
@@ -18,7 +18,7 @@ type BusyTimeTracer struct {
 	filter        TaskFilter
 	inflightTasks map[uint64]*list.Element
 	taskTimes     *list.List
-	busyTime      timing.VTimeInSec
+	busyTime      timing.VTimeInPicoSec
 }
 
 // NewBusyTimeTracer creates a new BusyTimeTracer
@@ -39,12 +39,12 @@ func NewBusyTimeTracer(
 }
 
 // BusyTime returns the total time has been spent on a certain type of tasks.
-func (t *BusyTimeTracer) BusyTime() timing.VTimeInSec {
+func (t *BusyTimeTracer) BusyTime() timing.VTimeInPicoSec {
 	return t.busyTime
 }
 
 // TerminateAllTasks will mark all the tasks as completed.
-func (t *BusyTimeTracer) TerminateAllTasks(now timing.VTimeInSec) {
+func (t *BusyTimeTracer) TerminateAllTasks(now timing.VTimeInPicoSec) {
 	for e := t.taskTimes.Front(); e != nil; e = e.Next() {
 		task := e.Value.(*taskTimeStartEnd)
 		if !task.completed {
@@ -111,7 +111,7 @@ func (t *BusyTimeTracer) EndTask(task Task) {
 	t.collapse(task.EndTime)
 }
 
-func (t *BusyTimeTracer) collapse(now timing.VTimeInSec) {
+func (t *BusyTimeTracer) collapse(now timing.VTimeInPicoSec) {
 	time, found := t.startTimeOfFirstImcompleteTask()
 	if found && time < now {
 		return
@@ -139,7 +139,7 @@ func (t *BusyTimeTracer) collapse(now timing.VTimeInSec) {
 }
 
 func (t *BusyTimeTracer) startTimeOfFirstImcompleteTask() (
-	timing.VTimeInSec, bool,
+	timing.VTimeInPicoSec, bool,
 ) {
 	for e := t.taskTimes.Front(); e != nil; e = e.Next() {
 		task := e.Value.(*taskTimeStartEnd)
@@ -153,8 +153,8 @@ func (t *BusyTimeTracer) startTimeOfFirstImcompleteTask() (
 
 func (t *BusyTimeTracer) taskBusyTime(
 	tasks []*taskTimeStartEnd,
-) timing.VTimeInSec {
-	busyTime := timing.VTimeInSec(0)
+) timing.VTimeInPicoSec {
+	busyTime := timing.VTimeInPicoSec(0)
 	coveredMask := make(map[int]bool)
 
 	for i, t1 := range tasks {

@@ -27,93 +27,93 @@ var _ = Describe("BusyTimeTracer", func() {
 	})
 
 	It("should track busy time, one task", func() {
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(10))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10))
 		t.StartTask(Task{ID: 1})
 
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(20))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(20))
 		t.EndTask(Task{ID: 1})
 
-		Expect(t.BusyTime()).To(Equal(timing.VTimeInSec(10)))
+		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(10)))
 	})
 
 	It("should track busy time, two tasks", func() {
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(10))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10))
 		t.StartTask(Task{ID: 1})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(20))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(20))
 		t.EndTask(Task{ID: 1})
 
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(30))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(30))
 		t.StartTask(Task{ID: 2})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(40))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(40))
 		t.EndTask(Task{ID: 2})
 
-		Expect(t.BusyTime()).To(Equal(timing.VTimeInSec(20)))
+		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(20)))
 	})
 
 	It("should track busy time, two tasks adjacent", func() {
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(10))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10))
 		t.StartTask(Task{ID: 1})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(20))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(20))
 		t.EndTask(Task{ID: 1})
 
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(20))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(20))
 		t.StartTask(Task{ID: 2})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(30))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(30))
 		t.EndTask(Task{ID: 2})
 
-		Expect(t.BusyTime()).To(Equal(timing.VTimeInSec(20)))
+		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(20)))
 	})
 
 	It("should track busy time, two tasks overlap", func() {
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(10))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10))
 		t.StartTask(Task{ID: 1})
 
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(15))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(15))
 		t.StartTask(Task{ID: 2})
 
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(20))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(20))
 		t.EndTask(Task{ID: 1})
 
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(25))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(25))
 		t.EndTask(Task{ID: 2})
 
-		Expect(t.BusyTime()).To(Equal(timing.VTimeInSec(15)))
+		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(15)))
 	})
 
 	It("should track busy time, four tasks", func() {
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(10))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10))
 		t.StartTask(Task{ID: 1})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(11))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(11))
 		t.StartTask(Task{ID: 2})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(12))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(12))
 		t.EndTask(Task{ID: 2})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(19))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(19))
 		t.StartTask(Task{ID: 3})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(20))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(20))
 		t.EndTask(Task{ID: 1})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(21))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(21))
 		t.EndTask(Task{ID: 3})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(31))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(31))
 		t.StartTask(Task{ID: 4})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(32))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(32))
 		t.EndTask(Task{ID: 4})
 
-		Expect(t.BusyTime()).To(Equal(timing.VTimeInSec(12)))
+		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(12)))
 	})
 
 	It("should be able to terminate all the tasks", func() {
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(10))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10))
 		t.StartTask(Task{ID: 1})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(11))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(11))
 		t.StartTask(Task{ID: 2})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(19))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(19))
 		t.StartTask(Task{ID: 3})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(21))
+		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(21))
 		t.EndTask(Task{ID: 3})
 
 		t.TerminateAllTasks(35)
 
-		Expect(t.BusyTime()).To(Equal(timing.VTimeInSec(25)))
+		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(25)))
 	})
 
 	It("measure busy time tracer", func() {
@@ -125,20 +125,20 @@ var _ = Describe("BusyTimeTracer", func() {
 				taskID := uint64(i + 1)
 
 				timeTeller.EXPECT().CurrentTime().
-					Return(timing.VTimeInSec(i * 2))
+					Return(timing.VTimeInPicoSec(i * 2))
 				t.StartTask(Task{
 					ID: taskID,
 				})
 
 				timeTeller.EXPECT().CurrentTime().
-					Return(timing.VTimeInSec(i*2 + 1))
+					Return(timing.VTimeInPicoSec(i*2 + 1))
 				t.EndTask((Task{
 					ID:      taskID,
-					EndTime: timing.VTimeInSec(i*2 + 1),
+					EndTime: timing.VTimeInPicoSec(i*2 + 1),
 				}))
 			}
 
-			Expect(t.BusyTime()).To(Equal(timing.VTimeInSec(10000)))
+			Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(10000)))
 		})
 	})
 })

@@ -6,7 +6,7 @@ import (
 
 // A TaskStep represents a milestone in the processing of task
 type TaskStep struct {
-	Time timing.VTimeInSec `json:"time"`
+	Time timing.VTimeInPicoSec `json:"time"`
 	What string            `json:"what"`
 }
 
@@ -29,7 +29,7 @@ const (
 type Milestone struct {
 	ID       uint64            `json:"id"`
 	TaskID   uint64            `json:"task_id"`
-	Time     timing.VTimeInSec `json:"time"`
+	Time     timing.VTimeInPicoSec `json:"time"`
 	Kind     MilestoneKind     `json:"kind"`
 	What     string            `json:"what"`
 	Location string            `json:"location"`
@@ -42,8 +42,8 @@ type Task struct {
 	Kind       string            `json:"kind"`
 	What       string            `json:"what"`
 	Location   string            `json:"location"`
-	StartTime  timing.VTimeInSec `json:"start_time"`
-	EndTime    timing.VTimeInSec `json:"end_time"`
+	StartTime  timing.VTimeInPicoSec `json:"start_time"`
+	EndTime    timing.VTimeInPicoSec `json:"end_time"`
 	Steps      []TaskStep        `json:"steps"`
 	Milestones []Milestone       `json:"milestones"`
 	Detail     interface{}       `json:"-"`

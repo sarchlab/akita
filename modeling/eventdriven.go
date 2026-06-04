@@ -12,7 +12,7 @@ import (
 // EventProcessor defines the processing logic for an EventDrivenComponent.
 // S is the Spec type, T is the State type, R is the Resources type.
 type EventProcessor[S any, T any, R any] interface {
-	Process(comp *EventDrivenComponent[S, T, R], now timing.VTimeInSec) bool
+	Process(comp *EventDrivenComponent[S, T, R], now timing.VTimeInPicoSec) bool
 }
 
 // TimerFiredEvent is the event scheduled by EventDrivenComponent to wake
@@ -22,7 +22,7 @@ type TimerFiredEvent struct {
 }
 
 // MakeTimerFiredEvent creates a new TimerFiredEvent.
-func MakeTimerFiredEvent(handlerID string, time timing.VTimeInSec) TimerFiredEvent {
+func MakeTimerFiredEvent(handlerID string, time timing.VTimeInPicoSec) TimerFiredEvent {
 	return TimerFiredEvent{EventBase: timing.MakeEventBase(time, handlerID)}
 }
 
@@ -48,7 +48,7 @@ type EventDrivenComponent[S any, T any, R any] struct {
 	resources R
 	processor EventProcessor[S, T, R]
 
-	pendingWakeup timing.VTimeInSec
+	pendingWakeup timing.VTimeInPicoSec
 }
 
 // Spec returns the component's immutable configuration (a copy), so callers
@@ -70,7 +70,7 @@ func (c *EventDrivenComponent[S, T, R]) Name() string {
 
 // ScheduleWakeAt schedules a wakeup at time t. If a wakeup is already
 // pending at the same or earlier time, this is a no-op (dedup guard).
-func (c *EventDrivenComponent[S, T, R]) ScheduleWakeAt(t timing.VTimeInSec) {
+func (c *EventDrivenComponent[S, T, R]) ScheduleWakeAt(t timing.VTimeInPicoSec) {
 	if c.pendingWakeup != math.MaxUint64 && c.pendingWakeup <= t {
 		return
 	}

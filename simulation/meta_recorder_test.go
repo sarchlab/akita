@@ -10,10 +10,10 @@ import (
 )
 
 type fakeTimeTeller struct {
-	now timing.VTimeInSec
+	now timing.VTimeInPicoSec
 }
 
-func (f *fakeTimeTeller) CurrentTime() timing.VTimeInSec {
+func (f *fakeTimeTeller) CurrentTime() timing.VTimeInPicoSec {
 	return f.now
 }
 

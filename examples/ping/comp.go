@@ -12,13 +12,13 @@ type Spec struct {
 }
 
 type scheduledPing struct {
-	SendAt timing.VTimeInSec
+	SendAt timing.VTimeInPicoSec
 	Dst    messaging.RemotePort
 }
 
 // pendingResponse represents a ping response that will be sent after a delay.
 type pendingResponse struct {
-	DeliverAt timing.VTimeInSec
+	DeliverAt timing.VTimeInPicoSec
 	Dst       messaging.RemotePort
 	OrigMsgID uint64
 	SeqID     int
@@ -26,7 +26,7 @@ type pendingResponse struct {
 
 // State is the mutable runtime state for a ping component.
 type State struct {
-	StartTimes       []timing.VTimeInSec
+	StartTimes       []timing.VTimeInPicoSec
 	NextSeqID        int
 	PendingResponses []pendingResponse
 	ScheduledPings   []scheduledPing
