@@ -1,6 +1,6 @@
 {
   "label": "Event-Based Simulation",
-  "position": 3,
+  "position": 4,
   "link": {
     "type": "generated-index",
     "description": "Components sit on top of an event-driven engine. This section opens the layer underneath: schedule events directly, define custom event types, and use event-driven components for work that is too sporadic to justify a per-cycle tick."
