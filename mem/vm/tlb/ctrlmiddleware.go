@@ -70,6 +70,7 @@ func (m *ctrlMiddleware) performCtrlEnable(msg mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
@@ -86,6 +87,7 @@ func (m *ctrlMiddleware) performCtrlDrain(msg mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
@@ -102,6 +104,7 @@ func (m *ctrlMiddleware) performCtrlPause(msg mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
@@ -139,6 +142,7 @@ func (m *ctrlMiddleware) handleTLBRestart(msg mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	state := &m.comp.State
 	state.TLBState = tlbStateEnable

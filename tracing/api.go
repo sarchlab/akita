@@ -199,8 +199,13 @@ func MsgIDAtReceiver(msg messaging.Msg, domain NamedHookable) uint64 {
 // ForgetMsgIDAtReceiver releases the registry entry created by
 // [MsgIDAtReceiver] for the message identified by msgID. Use this on
 // completion paths that only retain the request's message ID, not the
-// message value.
+// message value. When the domain has no hooks no entry was ever
+// inserted, so this is a no-op and avoids taking the registry mutex.
 func ForgetMsgIDAtReceiver(msgID uint64, domain NamedHookable) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
 	forgetReceiverTaskIDByMsgID(msgID, domain)
 }
 
@@ -253,6 +258,10 @@ func TraceReqComplete(
 	msg messaging.Msg,
 	domain NamedHookable,
 ) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
 	EndTask(MsgIDAtReceiver(msg, domain), domain)
 	forgetReceiverTaskID(msg, domain)
 }
