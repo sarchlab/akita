@@ -14,6 +14,7 @@ var defaultSpec = Spec{
 	MaxRequestsInFlight:  16,
 	TopPortBufferSize:    16,
 	BottomPortBufferSize: 16,
+	CtrlPortBufferSize:   4,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -79,6 +80,11 @@ func (b Builder) Build(name string) *Comp {
 		RemoteMemReqs: make(map[uint64]transactionState),
 	}
 
+	b.createPorts(modelComp, name, spec)
+
+	cMW := &ctrlMiddleware{comp: modelComp}
+	modelComp.AddMiddleware(cMW)
+
 	wMW := &walkMW{
 		comp:      modelComp,
 		pageTable: pt,
@@ -89,8 +95,6 @@ func (b Builder) Build(name string) *Comp {
 		comp: modelComp,
 	}
 	modelComp.AddMiddleware(rMW)
-
-	b.createPorts(modelComp, name, spec)
 
 	b.registrar.RegisterComponent(modelComp)
 
@@ -122,4 +126,9 @@ func (b Builder) createPorts(modelComp *Comp, name string, spec Spec) {
 		modelComp, spec.BottomPortBufferSize, spec.BottomPortBufferSize,
 		name+".Bottom")
 	modelComp.AddPort("Bottom", bottomPort)
+
+	ctrlPort := messaging.NewPort(
+		modelComp, spec.CtrlPortBufferSize, spec.CtrlPortBufferSize,
+		name+".Control")
+	modelComp.AddPort("Control", ctrlPort)
 }
