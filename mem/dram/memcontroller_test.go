@@ -279,6 +279,7 @@ var _ = Describe("DRAM Integration", func() {
 		// Collect responses
 		var writeDone mem.WriteDoneRsp
 		var dataReady mem.DataReadyRsp
+		var gotWriteDone, gotDataReady bool
 
 		for {
 			msg := srcPort.RetrieveIncoming()
@@ -288,14 +289,16 @@ var _ = Describe("DRAM Integration", func() {
 			switch m := msg.(type) {
 			case mem.WriteDoneRsp:
 				writeDone = m
+				gotWriteDone = true
 			case mem.DataReadyRsp:
 				dataReady = m
+				gotDataReady = true
 			}
 		}
 
-		Expect(writeDone).NotTo(BeNil())
+		Expect(gotWriteDone).To(BeTrue())
 		Expect(writeDone.RspTo).To(Equal(write.ID))
-		Expect(dataReady).NotTo(BeNil())
+		Expect(gotDataReady).To(BeTrue())
 		Expect(dataReady.RspTo).To(Equal(read.ID))
 		Expect(dataReady.Data).To(Equal([]byte{1, 2, 3, 4}))
 	})

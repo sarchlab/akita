@@ -82,6 +82,7 @@ func (m *ctrlMiddleware) performCtrlEnable(msg mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
@@ -98,6 +99,7 @@ func (m *ctrlMiddleware) performCtrlDrain(msg mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
@@ -114,6 +116,7 @@ func (m *ctrlMiddleware) performCtrlPause(msg mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
@@ -166,6 +169,7 @@ func (m *ctrlMiddleware) handleMMUCacheRestart(msg mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	state := &m.comp.State
 	state.CurrentState = mmuCacheStateEnable
