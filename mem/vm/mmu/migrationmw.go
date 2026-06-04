@@ -177,11 +177,11 @@ func (m *migrationMW) createMigrationRequest(
 	spec := m.comp.Spec()
 	state := &m.comp.State
 
-	migrationInfo := new(vm.PageMigrationInfo)
-	migrationInfo.GPUReqToVAddrMap = make(map[uint64][]uint64)
-	migrationInfo.GPUReqToVAddrMap[trans.DeviceID] =
-		append(migrationInfo.GPUReqToVAddrMap[trans.DeviceID],
-			trans.VAddr)
+	migrationInfo := vm.PageMigrationInfo{
+		GPUReqToVAddrMap: map[uint64][]uint64{
+			trans.DeviceID: {trans.VAddr},
+		},
+	}
 
 	state.PageAccessedByDeviceID = appendDeviceID(
 		state.PageAccessedByDeviceID, page.VAddr, page.DeviceID)

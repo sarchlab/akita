@@ -32,7 +32,7 @@ type PageMigrationReqToDriver struct {
 	messaging.MsgMeta
 	StartTime         timing.VTimeInSec
 	EndTime           timing.VTimeInSec
-	MigrationInfo     *PageMigrationInfo
+	MigrationInfo     PageMigrationInfo
 	CurrAccessingGPUs []uint64
 	PID               PID
 	CurrPageHostGPU   uint64
