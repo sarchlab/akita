@@ -1,9 +1,6 @@
 package writethroughcache
 
 import (
-	"log"
-	"reflect"
-
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/messaging"
@@ -81,10 +78,6 @@ func (s *controlStage) hardResetCache() {
 
 	// Clear all transactions
 	next.Transactions = nil
-
-	if next.ProcessingFlush.PauseAfter {
-		next.IsPaused = true
-	}
 }
 
 func (s *controlStage) flushPort(port messaging.Port) {
@@ -93,28 +86,23 @@ func (s *controlStage) flushPort(port messaging.Port) {
 	}
 }
 
+// processNewRequest consumes only CmdFlush from the Control port.
+// All other verbs are owned by ctrlMiddleware and are left in the
+// incoming queue.
 func (s *controlStage) processNewRequest() bool {
 	msgI := s.ctrlPort.PeekIncoming()
 	if msgI == nil {
 		return false
 	}
 
-	switch msg := msgI.(type) {
-	case *mem.ControlReq:
-		switch msg.Command {
-		case mem.CmdFlush:
-			return s.startCacheFlush(msg)
-		case mem.CmdEnable:
-			return s.doCacheRestart(msg)
-		default:
-			log.Panicf("cannot handle control command %d", msg.Command)
-		}
-	default:
-		log.Panicf("cannot handle request of type %s ",
-			reflect.TypeOf(msgI))
+	req, ok := msgI.(*mem.ControlReq)
+	if !ok {
+		return false
 	}
-
-	panic("never")
+	if req.Command != mem.CmdFlush {
+		return false
+	}
+	return s.startCacheFlush(req)
 }
 
 func (s *controlStage) startCacheFlush(msg *mem.ControlReq) bool {
@@ -137,41 +125,8 @@ func (s *controlStage) startCacheFlush(msg *mem.ControlReq) bool {
 	return true
 }
 
-func (s *controlStage) doCacheRestart(msg *mem.ControlReq) bool {
-	if !s.ctrlPort.CanSend() {
-		return false
-	}
-
-	next := &s.pipeline.comp.State
-	next.IsPaused = false
-
-	s.ctrlPort.RetrieveIncoming()
-
-	for s.pipeline.topPort.PeekIncoming() != nil {
-		s.pipeline.topPort.RetrieveIncoming()
-	}
-
-	for s.pipeline.bottomPort.PeekIncoming() != nil {
-		s.pipeline.bottomPort.RetrieveIncoming()
-	}
-
-	rsp := &mem.ControlRsp{Command: mem.CmdEnable, Success: true}
-	rsp.ID = timing.GetIDGenerator().Generate()
-	rsp.Src = s.ctrlPort.AsRemote()
-	rsp.Dst = msg.Src
-	rsp.TrafficBytes = 0
-	rsp.TrafficClass = "mem.ControlRsp"
-
-	s.ctrlPort.Send(rsp)
-
-	return true
-}
-
 func (s *controlStage) shouldWaitForInFlightTransactions() bool {
 	next := &s.pipeline.comp.State
-	if next.ProcessingFlush.DiscardInflight {
-		return false
-	}
 	for i := range next.Transactions {
 		if !next.Transactions[i].Removed {
 			return true

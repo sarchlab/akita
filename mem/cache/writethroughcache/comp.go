@@ -54,7 +54,10 @@ type State struct {
 	BankPipelines []queueing.Pipeline[int] `json:"bank_pipelines"`
 	BankPostBufs  []queueing.Buffer[int]   `json:"bank_post_bufs"`
 
-	IsPaused bool `json:"is_paused"`
+	IsPaused      bool                 `json:"is_paused"`
+	IsDraining    bool                 `json:"is_draining"`
+	CurrentCmdID  uint64               `json:"current_cmd_id"`
+	CurrentCmdSrc messaging.RemotePort `json:"current_cmd_src"`
 
 	// Flush request fields (flattened from *mem.ControlReq for serialization)
 	HasProcessingFlush bool          `json:"has_processing_flush"`

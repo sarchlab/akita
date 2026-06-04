@@ -110,9 +110,11 @@ func (b Builder) Build(name string) *Comp {
 	b.buildStages(pmw, spec)
 
 	cmw := b.buildControlMW(comp, pmw, spec, name)
+	ucmw := &ctrlMiddleware{pipeline: pmw, ctrlPort: comp.GetPortByName("Control")}
 
-	comp.AddMiddleware(pmw) // index 0
-	comp.AddMiddleware(cmw) // index 1
+	comp.AddMiddleware(pmw)  // index 0
+	comp.AddMiddleware(cmw)  // index 1: legacy flush
+	comp.AddMiddleware(ucmw) // index 2: universal control verbs
 
 	b.registrar.RegisterComponent(comp)
 
