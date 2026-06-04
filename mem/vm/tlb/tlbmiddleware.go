@@ -453,6 +453,7 @@ func (m *tlbMiddleware) processTLBFlush() bool {
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.controlPort().AsRemote()
 	rsp.Dst = flush.Meta.Src
+	rsp.RspTo = flush.Meta.ID
 	rsp.TrafficClass = "mem.ControlRsp"
 
 	if !m.controlPort().CanSend() {

@@ -52,6 +52,9 @@ const (
 // State contains mutable runtime data for the TLB.
 type State struct {
 	TLBState            string                                 `json:"tlb_state"`
+	PendingDrainRsp     bool                                   `json:"pending_drain_rsp"`
+	CurrentCmdID        uint64                                 `json:"current_cmd_id"`
+	CurrentCmdSrc       messaging.RemotePort                   `json:"current_cmd_src"`
 	Sets                []setState                             `json:"sets"`
 	MSHREntries         []mshrEntryState                       `json:"mshr_entries"`
 	HasRespondingMSHR   bool                                   `json:"has_responding_mshr"`

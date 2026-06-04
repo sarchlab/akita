@@ -348,6 +348,11 @@ var _ = Describe("TLB", func() {
 			nextState := &tlbComp.State
 			Expect(nextState.TLBState).To(Equal(tlbStatePause))
 
+			// Drain the Pause ack so the next ack has room in the
+			// single-slot control port outgoing buffer.
+			Expect(controlPort.RetrieveOutgoing()).
+				To(BeAssignableToTypeOf(&mem.ControlRsp{}))
+
 			enable := &mem.ControlReq{
 				Command: mem.CmdEnable,
 			}
