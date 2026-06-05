@@ -224,6 +224,35 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		Expect(cacheState(comp.State.CacheState)).To(Equal(cacheStatePaused))
 	})
 
+	It("does not abort an in-flight flush on Pause", func() {
+		// An active flush that is still pre-flushing (waiting on an in-flight
+		// transaction) so it cannot finalize this tick.
+		comp.State.CacheState = int(cacheStatePreFlushing)
+		comp.State.HasProcessingFlush = true
+		comp.State.Transactions = []transactionState{{}}
+
+		pause := makeCtrlReq(mem.CmdPause)
+		ctrlPort.Deliver(pause)
+
+		acked := false
+		for i := 0; i < 16 && !acked; i++ {
+			comp.Tick()
+			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if r, ok := out.(mem.ControlRsp); ok &&
+					r.Command == mem.CmdPause {
+					Expect(r.Success).To(BeTrue())
+					acked = true
+				}
+			}
+		}
+		Expect(acked).To(BeTrue())
+		// Pause must not abort the flush: it stays in the flushing pipeline so
+		// its async response is eventually sent and dirty blocks are written
+		// back. Aborting it would strand the flusher in cacheStatePaused.
+		Expect(comp.State.HasProcessingFlush).To(BeTrue())
+		Expect(cacheState(comp.State.CacheState)).ToNot(Equal(cacheStatePaused))
+	})
+
 	It("freezes incoming traffic while paused", func() {
 		comp.State.CacheState = int(cacheStatePaused)
 		topPort.Deliver(makeRead(0))

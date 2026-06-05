@@ -186,7 +186,16 @@ func (m *ctrlMiddleware) handlePause(req mem.ControlReq) bool {
 	if !m.ctrlPort.CanSend() {
 		return false
 	}
-	m.pipeline.comp.State.CacheState = int(cacheStatePaused)
+	next := &m.pipeline.comp.State
+	// Do not abort an in-flight Flush: it runs only while the cache state is
+	// pre-flushing/flushing and ends in the paused state on its own.
+	// Overwriting the state here would strand the flusher (its async response
+	// would never be sent and dirty blocks would never be marked clean). The
+	// flushing state already blocks new Top intake, so the Pause guarantee
+	// still holds, and the cache lands in Paused once the flush completes.
+	if !next.HasProcessingFlush {
+		next.CacheState = int(cacheStatePaused)
+	}
 	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdPause,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort.RetrieveIncoming()
