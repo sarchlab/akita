@@ -8,11 +8,13 @@ type on one well-known port.
 
 The protocol primitives live in `mem/protocol.go`. The reusable state
 enum, support matrix, and a `*testing.T` conformance harness live in
-`mem/control/`.
+`mem/control/` (see [`mem/control/README.md`](control/README.md)).
 
-For the migration plan that brings every component onto this protocol,
-see [`CONTROL_PROTOCOL_PLAN.md`](../CONTROL_PROTOCOL_PLAN.md) at the
-repo root.
+Every memory agent now implements its supported subset of the protocol;
+the support matrix below is the final, implemented state, not a target.
+For the original migration plan, see
+[`CONTROL_PROTOCOL_PLAN.md`](../CONTROL_PROTOCOL_PLAN.md) at the repo
+root.
 
 ## TL;DR
 
@@ -128,7 +130,7 @@ type ControlRsp struct {
 `Addresses` and `PID` are only meaningful for `CmdInvalidate` and
 `CmdFlush`. For the other verbs they are ignored.
 
-## Support matrix (target end state)
+## Support matrix (final state)
 
 |                              | Pause | Drain | Enable | Reset | Invalidate | Flush |
 | ---------------------------- | ----- | ----- | ------ | ----- | ---------- | ----- |
@@ -145,13 +147,28 @@ type ControlRsp struct {
 | `simplebankedmemory`         | ✓     | ✓     | ✓      | ✓     | —          | —     |
 | `datamover`                  | ✓     | ✓     | ✓      | ✓     | —          | —     |
 
+Legend: **✓** = supported; **no-op** = supported (verb succeeds) but
+does no work; **—** = unsupported (replies `Success: false,
+Error: "unsupported"`).
+
+The matrix corresponds directly to the `VerbSupport` each component
+declares to `control.RunContract`:
+
+- `cache/writeback`, `cache/writethroughcache` → `control.CacheLike()`
+  (Universal + Invalidate + Flush).
+- `vm/tlb`, `vm/mmuCache` → `control.TranslationCacheLike()`
+  (Universal + Invalidate; Flush is **not** supported because
+  translations are never dirty).
+- everyone else → `control.Universal()` (Pause, Drain, Enable, Reset).
+
 `mshr` is not in the matrix — it is a substructure of a cache, not a
 component. Its state is part of the enclosing cache and is wiped by the
 cache's Reset.
 
-`Flush` on the writethrough cache is a no-op (no dirty data) but the
-verb still succeeds, so callers can issue it uniformly across cache
-types without branching.
+`Flush` on the writethrough cache is a *supported* verb (the matrix
+declares it via `CacheLike()`), but it is a no-op because writethrough
+holds no dirty data: it acks `Success: true` immediately. Callers can
+therefore issue Flush uniformly across cache types without branching.
 
 ## Helpers in `mem/control`
 
@@ -240,7 +257,10 @@ points at exactly which verb the component handles wrong.
 ## See also
 
 - `mem/protocol.go` — the request/response type definitions.
+- [`mem/control/README.md`](control/README.md) — the `control` package
+  overview (State, VerbSupport, errors, `RunContract`).
 - `mem/control/state.go` — `State` enum, `VerbSupport`, helpers.
 - `mem/control/contract.go` — the `RunContract` harness.
 - [`CONTROL_PROTOCOL_PLAN.md`](../CONTROL_PROTOCOL_PLAN.md) — the
-  migration plan that brings every component onto this protocol.
+  original migration plan (historical; the protocol is now fully
+  implemented).

@@ -33,7 +33,8 @@ these messages.
 See [`CONTROL_PROTOCOL.md`](CONTROL_PROTOCOL.md) for verb definitions,
 response timing, the support matrix, and how to implement and test the
 protocol in a new component. The reusable state enum and conformance
-harness live in `mem/control/`.
+harness live in `mem/control/` (see
+[`control/README.md`](control/README.md)).
 
 ## Storage
 
