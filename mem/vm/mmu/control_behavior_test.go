@@ -17,12 +17,10 @@ import (
 // control_contract_test.go.
 //
 // The MMU resolves a translation against its in-process page table without a
-// downstream round-trip, so a walk for a MAPPED page that does not need
-// migration is self-completing: it produces a *vm.TranslationRsp on the Top
-// port and removes itself from WalkingTranslations. The tests below rely on
-// that by inserting pages whose DeviceID matches the request's DeviceID (so
-// pageNeedMigrate stays false) and that are not migrating, keeping the walk
-// entirely local.
+// downstream round-trip, so a walk for a MAPPED page is self-completing: it
+// produces a vm.TranslationRsp on the Top port and removes itself from
+// WalkingTranslations. The tests below rely on that by inserting mapped pages,
+// keeping the walk entirely local.
 var _ = Describe("MMU control behavior", func() {
 	var (
 		engine    timing.Engine
@@ -33,19 +31,15 @@ var _ = Describe("MMU control behavior", func() {
 	)
 
 	build := func() {
-		spec := DefaultSpec()
-		spec.MigrationServiceProvider =
-			messaging.RemotePort("MigrationServiceProvider")
-
 		comp = MakeBuilder().
 			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(spec).
+			WithSpec(DefaultSpec()).
 			Build("MMU")
 
 		topPort = comp.GetPortByName("Top")
 		ctrlPort = comp.GetPortByName("Control")
-		for _, name := range []string{"Top", "Migration", "Control"} {
+		for _, name := range []string{"Top", "Control"} {
 			(&noopConn{}).PlugIn(comp.GetPortByName(name))
 		}
 	}

@@ -73,7 +73,7 @@ The primitives compose. The protocol stays small.
    port named `Control`. It carries `mem.ControlReq` in and
    `mem.ControlRsp` out (by value). Workload requests (reads, writes,
    translations, data-move requests) use other ports (`Top`,
-   `Bottom`, `Migration`, etc.), never `Control`.
+   `Bottom`, `Inside`, `Outside`, etc.), never `Control`.
 2. **One control state per component.** Every agent holds a
    `control.State` value in its own state struct. Values are
    `StateEnabled`, `StatePausing`, `StatePaused`, `StateDraining`,
@@ -214,11 +214,10 @@ Error: "must be paused or drained"`.
 ### Virtual-memory agents
 
 **`vm/mmu`** — `Universal`; `State.ControlState`.
-- Drain acks once `WalkingTranslations` and `MigrationQueue` are empty
-  and no migration is in progress (`!IsDoingMigration`).
-- Reset clears the in-flight walks, the migration queue and current
-  migration, and pending page-table-walker removals. The **shared page
-  table** (owned by the simulation) is deliberately not touched.
+- Drain acks once `WalkingTranslations` is empty.
+- Reset clears the in-flight walks and pending page-table-walker removals,
+  and drains the Top port. The **shared page table** (owned by the
+  simulation) is deliberately not touched.
 
 **`vm/gmmu`** — `Universal`; `State.ControlState`.
 - Drain acks once `WalkingTranslations` and `RemoteMemReqs` are empty.

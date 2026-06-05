@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/control"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -16,10 +15,7 @@ func TestControlContract(t *testing.T) {
 	build := func() *control.Harness {
 		engine := timing.NewSerialEngine()
 		spec := DefaultSpec()
-		spec.MigrationServiceProvider =
-			messaging.RemotePort("MigrationServiceProvider")
 		spec.TopPortBufferSize = 16
-		spec.MigrationPortBufferSize = 2
 		spec.CtrlPortBufferSize = 4
 
 		comp := MakeBuilder().
@@ -27,7 +23,7 @@ func TestControlContract(t *testing.T) {
 			WithSpec(spec).
 			Build("MMU")
 
-		for _, name := range []string{"Top", "Migration", "Control"} {
+		for _, name := range []string{"Top", "Control"} {
 			(&noopConn{}).PlugIn(comp.GetPortByName(name))
 		}
 
@@ -35,9 +31,7 @@ func TestControlContract(t *testing.T) {
 			Comp: comp,
 			Ctrl: comp.GetPortByName("Control"),
 			IsQuiescent: func() bool {
-				return len(comp.State.WalkingTranslations) == 0 &&
-					len(comp.State.MigrationQueue) == 0 &&
-					!comp.State.IsDoingMigration
+				return len(comp.State.WalkingTranslations) == 0
 			},
 		}
 	}

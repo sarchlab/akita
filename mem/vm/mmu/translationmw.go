@@ -107,54 +107,7 @@ func (m *translationMW) finalizePageWalk(walkingIndex int) bool {
 
 	state.WalkingTranslations[walkingIndex].Page = page
 
-	if page.IsMigrating {
-		return m.addTransactionToMigrationQueue(walkingIndex)
-	}
-
-	if m.pageNeedMigrate(state.WalkingTranslations[walkingIndex]) {
-		return m.addTransactionToMigrationQueue(walkingIndex)
-	}
-
 	return m.doPageWalkHit(walkingIndex)
-}
-
-func (m *translationMW) addTransactionToMigrationQueue(
-	walkingIndex int,
-) bool {
-	spec := m.comp.Spec()
-	state := &m.comp.State
-
-	if len(state.MigrationQueue) >= spec.MigrationQueueSize {
-		return false
-	}
-
-	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
-	state.MigrationQueue = append(state.MigrationQueue,
-		state.WalkingTranslations[walkingIndex])
-
-	page := state.WalkingTranslations[walkingIndex].Page
-	page.IsMigrating = true
-	m.pageTable().Update(page)
-
-	return true
-}
-
-func (m *translationMW) pageNeedMigrate(
-	walking transactionState,
-) bool {
-	if walking.DeviceID == walking.Page.DeviceID {
-		return false
-	}
-
-	if !walking.Page.Unified {
-		return false
-	}
-
-	if walking.Page.IsPinned {
-		return false
-	}
-
-	return true
 }
 
 func (m *translationMW) doPageWalkHit(walkingIndex int) bool {

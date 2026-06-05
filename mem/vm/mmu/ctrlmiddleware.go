@@ -20,10 +20,6 @@ func (m *ctrlMiddleware) topPort() messaging.Port {
 	return m.comp.GetPortByName("Top")
 }
 
-func (m *ctrlMiddleware) migrationPort() messaging.Port {
-	return m.comp.GetPortByName("Migration")
-}
-
 func (m *ctrlMiddleware) Tick() bool {
 	madeProgress := false
 	madeProgress = m.completePendingDrain() || madeProgress
@@ -32,17 +28,14 @@ func (m *ctrlMiddleware) Tick() bool {
 }
 
 // completePendingDrain notices Drain has reached quiescence and acks.
-// Quiescence means no walks in progress, no migrations queued, and no
-// migration in flight.
+// Quiescence means no page-table walks are in progress.
 func (m *ctrlMiddleware) completePendingDrain() bool {
 	state := &m.comp.State
 	if state.ControlState != control.StateDraining {
 		return false
 	}
 
-	if len(state.WalkingTranslations) != 0 ||
-		len(state.MigrationQueue) != 0 ||
-		state.IsDoingMigration {
+	if len(state.WalkingTranslations) != 0 {
 		return false
 	}
 
@@ -117,7 +110,7 @@ func (m *ctrlMiddleware) handleDrain(req mem.ControlReq) bool {
 // handleReset clears all local MMU bookkeeping back to a freshly-built
 // state. Shared page-table state lives in the simulation and is not
 // touched here; per the checkpointing model the MMU only owns local
-// walk and migration state.
+// walk state.
 func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
@@ -125,17 +118,12 @@ func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
 
 	state := &m.comp.State
 	state.WalkingTranslations = nil
-	state.MigrationQueue = nil
-	state.CurrentOnDemandMigration = transactionState{}
-	state.IsDoingMigration = false
 	state.ToRemoveFromPTW = nil
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 	state.ControlState = control.StateEnabled
 
 	for m.topPort().RetrieveIncoming() != nil {
-	}
-	for m.migrationPort().RetrieveIncoming() != nil {
 	}
 
 	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdReset,
