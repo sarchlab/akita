@@ -84,8 +84,9 @@ modify it. The chapters build on each other:
    with Spec, State, and middleware, built up a few lines at a time.
 2. **Make components talk to each other** — add ports and messages, and
    connect two components so they can communicate.
-3. **Hooks and tracing** — observe a running simulation: attach callbacks
-   that log events and messages, and measure work with tracing tasks.
+3. **Getting information from a simulation** — observe a running simulation
+   with hooks that log events and messages, and measure work with tracing
+   tasks.
 4. **Event-based simulation** — open the layer underneath: schedule
    events directly, write custom event types, and use event-driven
    components for the idle case.

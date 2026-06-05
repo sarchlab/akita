@@ -95,6 +95,7 @@ cycle.
 ## Where to Next
 
 You can build a working simulation with everything in these two sections.
-The next section, **Hooks and Tracing**, shows how to observe one: attach
+The next section, **Getting Information from a Simulation**, shows how to
+observe one: attach
 callbacks that log events and messages, and measure how long work takes —
 all without changing the components you just wrote.

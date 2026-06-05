@@ -3,6 +3,6 @@
   "position": 8,
   "link": {
     "type": "generated-index",
-    "description": "Building on the Hooks and Tracing section, these chapters cover recording traces to a database, watching a simulation live with Daisen, writing your own component, and checkpointing to stop and resume long runs."
+    "description": "Building on the Getting Information from a Simulation section, these chapters cover recording traces to a database, watching a simulation live with Daisen, writing your own component, and checkpointing to stop and resume long runs."
   }
 }

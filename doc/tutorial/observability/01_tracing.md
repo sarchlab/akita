@@ -4,7 +4,8 @@ sidebar_position: 1
 
 # Recording Traces to a Database
 
-The **Hooks and Tracing** section introduced tasks and in-memory tracers
+The **Getting Information from a Simulation** section introduced tasks and
+in-memory tracers
 (`tracing.StartTask` / `EndTask`, `BusyTimeTracer`, `AverageTimeTracer`).
 This chapter builds on that to *persist* a full trace for offline analysis,
 rather than reading a single number at the end of a run.
@@ -26,7 +27,7 @@ This chapter is being written. The runnable example will live at
 
 1. Take the cache + memory system from the Building Systems section.
 2. Wrap each request in a tracing task so the full lifecycle is recorded
-   (the task API from Hooks and Tracing).
+   (the task API from Getting Information from a Simulation).
 3. Attach a `DBTracer` backed by a `datarecording` recorder to the
    simulation.
 4. Run the workload, open the resulting SQLite file, and query it. The next
