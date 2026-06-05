@@ -17,8 +17,13 @@ observe and record what a simulation does.
   observing a run, and finally the raw event layer underneath. Every chapter
   has a runnable example.
 
-- **Packages** — reference for the first-party component libraries, in
-  dependency order:
+- **Core** — reference for the framework packages, in dependency order:
+  [modeling](/packages/modeling/), [queueing](/packages/queueing/),
+  [datarecording](/packages/datarecording/), [tracing](/packages/tracing/),
+  [simulation](/packages/simulation/), and [examples](/packages/examples/).
+
+- **First-party components** — reference for the ready-made component
+  libraries:
   - **[noc](/packages/noc/)** — networks-on-chip: connections and switches
     (direct connection, mesh, PCIe, NVLink-style links).
   - **[mem](/packages/mem/)** — the memory hierarchy: caches, DRAM
