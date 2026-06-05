@@ -22,7 +22,7 @@ set of worked recipes.
 > | Buffer hook points | `v5/queueing/buffer.go` | `HookPosBufPush`, `HookPosBufPop` |
 > | Ideal component example | `v5/mem/idealmemcontroller/` | A "perfect memory" variant |
 > | Middleware | `v5/modeling/middleware.go` | `Middleware`, `AddMiddleware` |
-> | Writing a component | `v5/doc/component_guide.md` | The full component how-to |
+> | Writing a component | the [Create a Component](/tutorial/components/what_is_a_component) tutorial | The full component how-to |
 
 ---
 
@@ -100,7 +100,7 @@ When the magic is "this whole component behaves differently," write an
 alternative that satisfies the **same port interface** and substitute it at
 build time. Nothing else in the system needs to know.
 
-This is already how Akita ships idealizations: [`idealmemcontroller`](../mem/idealmemcontroller/)
+This is already how Akita ships idealizations: [`idealmemcontroller`](/packages/mem/idealmemcontroller/)
 is "perfect memory" living next to the real `dram` and `simplebankedmemory`
 models. To run with perfect memory, you build an `idealmemcontroller` where you
 would have built `dram`.

@@ -82,7 +82,7 @@ const config = {
         include: ['README.md'],
       }),
     ],
-    ...['datarecording', 'examples', 'mem', 'modeling', 'noc', 'queueing', 'simulation', 'tracing'].map(pkg => [
+    ...['noc', 'mem'].map(pkg => [
       '@docusaurus/plugin-content-docs',
       /** @type {import('@docusaurus/plugin-content-docs').Options} */
       ({
@@ -114,10 +114,22 @@ const config = {
             label: 'Tutorial',
           },
           {
-            type: 'docSidebar',
-            sidebarId: 'coreSidebar',
+            type: 'dropdown',
+            label: 'Packages',
             position: 'left',
-            label: 'Core',
+            items: [
+              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-noc', label: 'noc'},
+              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-mem', label: 'mem'},
+            ],
+          },
+          {
+            type: 'dropdown',
+            label: 'Reference',
+            position: 'left',
+            items: [
+              {type: 'doc', docId: 'migration', label: 'Migration (V4 → V5)'},
+              {type: 'doc', docId: 'magic_guide', label: 'Magic Guide'},
+            ],
           },
           {
             type: 'dropdown',
@@ -136,21 +148,6 @@ const config = {
                 docsPluginId: 'akita-rtm',
                 label: 'Akita RTM',
               },
-            ],
-          },
-          {
-            type: 'dropdown',
-            label: 'Packages',
-            position: 'left',
-            items: [
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-modeling', label: 'modeling'},
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-simulation', label: 'simulation'},
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-noc', label: 'noc'},
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-mem', label: 'mem'},
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-tracing', label: 'tracing'},
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-queueing', label: 'queueing'},
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-datarecording', label: 'datarecording'},
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-examples', label: 'examples'},
             ],
           },
           {
