@@ -6,17 +6,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // componentCheckpoint is the serialized form of a generic component: a spec hash
 // for compatibility checking plus the mutable State. Resources and ports are
-// rebuilt by setup, not serialized. The tick-scheduler guard is intentionally
-// omitted: the foundation supports quiescent checkpoints only (empty event
-// queue), so a freshly rebuilt component's "no pending tick" guard is already
-// correct. The guard is restored alongside the event queue in a later milestone.
+// rebuilt by setup, not serialized. The tick-scheduler guard is not serialized:
+// it is derived from the restored event queue in AfterCheckpointLoad, since the
+// queue (not the live guard, which can be stale) is the authoritative record of
+// whether a tick is pending.
 type componentCheckpoint struct {
 	SpecHash string          `json:"spec_hash"`
 	State    json.RawMessage `json:"state"`
+}
+
+// pendingEventQuerier is implemented by engines that can report the next
+// scheduled event time for a handler. After a checkpoint is restored, the event
+// queue is authoritative, so a scheduler reconciles its guard against it.
+type pendingEventQuerier interface {
+	NextEventTimeForHandler(handlerID string) (timing.VTimeInPicoSec, bool)
 }
 
 // SaveCheckpoint writes the component's spec hash and State as JSON. It
@@ -55,6 +64,40 @@ func (c *Component[S, T, R]) LoadCheckpoint(r io.Reader) error {
 	c.State = state
 
 	return nil
+}
+
+// AfterCheckpointLoad reconciles the tick-scheduler guard with the restored
+// event queue. It runs after every entity — including the engine — has loaded
+// its raw state, so the queue is fully restored and authoritative.
+func (c *Component[S, T, R]) AfterCheckpointLoad() error {
+	if c.TickingComponent != nil && c.TickScheduler != nil {
+		c.TickScheduler.restoreGuardFromQueue()
+	}
+
+	return nil
+}
+
+// restoreGuardFromQueue sets the tick-scheduler guard to agree with the restored
+// event queue: a tick is considered pending iff the engine holds an event for
+// this handler, and nextTickTime is that event's time. This reproduces the
+// guard state of an uninterrupted run, so a stimulus arriving before the pending
+// tick fires does not schedule a duplicate.
+func (t *TickScheduler) restoreGuardFromQueue() {
+	querier, ok := t.engine.(pendingEventQuerier)
+	if !ok {
+		return
+	}
+
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	if when, has := querier.NextEventTimeForHandler(t.handlerID); has {
+		t.nextTickTime = when
+		t.hasScheduledTick = true
+	} else {
+		t.nextTickTime = 0
+		t.hasScheduledTick = false
+	}
 }
 
 // specHash is a deterministic fingerprint of the component's immutable Spec, used

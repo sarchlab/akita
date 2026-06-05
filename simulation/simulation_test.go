@@ -576,3 +576,152 @@ var _ = Describe("Mid-transaction resume", func() {
 		Expect(wantDone).To(Equal(5)) // sanity: work actually happened
 	})
 })
+
+type tickCountSpec struct {
+	Tag int `json:"tag"`
+}
+
+type tickCountState struct {
+	Ticks int `json:"ticks"`
+}
+
+// tickCountMW counts every tick and never reports progress, so the component
+// chains no follow-up ticks: exactly the ticks present in the engine queue fire.
+type tickCountMW struct {
+	comp *modeling.Component[tickCountSpec, tickCountState, modeling.None]
+}
+
+func (m *tickCountMW) Tick() bool {
+	m.comp.State.Ticks++
+	return false
+}
+
+func buildTickCountSim() (
+	*Simulation,
+	*modeling.Component[tickCountSpec, tickCountState, modeling.None],
+) {
+	sim := MakeBuilder().WithoutMonitoring().Build()
+	engine := sim.GetEngine().(*timing.SerialEngine)
+	c := modeling.NewBuilder[tickCountSpec, tickCountState, modeling.None]().
+		WithEngine(engine).
+		WithFreq(1 * timing.GHz).
+		WithSpec(tickCountSpec{Tag: 1}).
+		Build("Ticker")
+	c.AddMiddleware(&tickCountMW{comp: c})
+	sim.RegisterComponent(c)
+	return sim, c
+}
+
+var _ = Describe("Tick scheduler guard restore", func() {
+	It("derives the guard from the restored queue so a stimulus before the "+
+		"pending tick fires schedules no duplicate", func() {
+		path := filepath.Join(GinkgoT().TempDir(), "ck.tar.gz")
+		const buildID = "test-build"
+
+		// Checkpoint with exactly one tick pending in the engine queue and the
+		// engine still at time 0.
+		srcSim, srcC := buildTickCountSim()
+		defer func() {
+			srcSim.Terminate()
+			os.Remove("akita_sim_" + srcSim.ID() + ".sqlite3")
+		}()
+		srcC.TickLater()
+		Expect(srcSim.SaveCheckpoint(path, buildID)).To(Succeed())
+
+		// Restore into a fresh sim. A freshly rebuilt component's guard says
+		// "no pending tick"; AfterCheckpointLoad must derive it from the
+		// restored queue so it agrees that a tick is already scheduled.
+		dstSim, dstC := buildTickCountSim()
+		defer func() {
+			dstSim.Terminate()
+			os.Remove("akita_sim_" + dstSim.ID() + ".sqlite3")
+		}()
+		Expect(dstSim.LoadCheckpoint(path, buildID)).To(Succeed())
+
+		// A stimulus (what NotifyRecv does) arrives before the pending tick
+		// fires. With the guard derived, this is recognized as redundant and
+		// schedules no second tick at the same cycle.
+		dstC.TickLater()
+
+		engine := dstSim.GetEngine().(*timing.SerialEngine)
+		Expect(engine.Run()).To(Succeed())
+
+		// Exactly one tick fired. Without the derivation the stimulus would
+		// have scheduled a duplicate (Ticks == 2); a dropped pending tick
+		// would be 0.
+		Expect(dstC.State.Ticks).To(Equal(1))
+	})
+})
+
+type wakeSpec struct {
+	Tag int `json:"tag"`
+}
+
+type wakeState struct {
+	Wakeups int `json:"wakeups"`
+}
+
+// wakeProcessor counts every wakeup and schedules no follow-up, so exactly the
+// timer events present in the engine queue fire.
+type wakeProcessor struct{}
+
+func (wakeProcessor) Process(
+	c *modeling.EventDrivenComponent[wakeSpec, wakeState, modeling.None],
+	_ timing.VTimeInPicoSec,
+) bool {
+	c.State.Wakeups++
+	return false
+}
+
+func buildWakeSim() (
+	*Simulation,
+	*modeling.EventDrivenComponent[wakeSpec, wakeState, modeling.None],
+) {
+	sim := MakeBuilder().WithoutMonitoring().Build()
+	engine := sim.GetEngine().(*timing.SerialEngine)
+	c := modeling.NewEventDrivenBuilder[wakeSpec, wakeState, modeling.None]().
+		WithEngine(engine).
+		WithSpec(wakeSpec{Tag: 1}).
+		WithProcessor(wakeProcessor{}).
+		Build("Waker")
+	sim.RegisterComponent(c)
+	return sim, c
+}
+
+var _ = Describe("Event-driven wakeup guard restore", func() {
+	It("derives the wakeup guard from the restored queue so a redundant "+
+		"wakeup request after restore schedules no duplicate", func() {
+		path := filepath.Join(GinkgoT().TempDir(), "ck.tar.gz")
+		const buildID = "test-build"
+		const wakeTime = timing.VTimeInPicoSec(1000)
+
+		// Checkpoint with one wakeup pending in the engine queue.
+		srcSim, srcC := buildWakeSim()
+		defer func() {
+			srcSim.Terminate()
+			os.Remove("akita_sim_" + srcSim.ID() + ".sqlite3")
+		}()
+		srcC.ScheduleWakeAt(wakeTime)
+		Expect(srcSim.SaveCheckpoint(path, buildID)).To(Succeed())
+
+		// Restore into a fresh sim, whose wakeup guard starts empty until
+		// AfterCheckpointLoad derives it from the restored queue.
+		dstSim, dstC := buildWakeSim()
+		defer func() {
+			dstSim.Terminate()
+			os.Remove("akita_sim_" + dstSim.ID() + ".sqlite3")
+		}()
+		Expect(dstSim.LoadCheckpoint(path, buildID)).To(Succeed())
+
+		// A redundant request for a wakeup at the already-pending time. With the
+		// guard derived, it is recognized as redundant and queues no duplicate.
+		dstC.ScheduleWakeAt(wakeTime)
+
+		engine := dstSim.GetEngine().(*timing.SerialEngine)
+		Expect(engine.Run()).To(Succeed())
+
+		// Exactly one wakeup fired. Without the derivation the redundant
+		// request would have queued a duplicate (Wakeups == 2).
+		Expect(dstC.State.Wakeups).To(Equal(1))
+	})
+})

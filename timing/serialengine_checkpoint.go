@@ -64,6 +64,31 @@ func (e *SerialEngine) LoadCheckpoint(r io.Reader) error {
 	return nil
 }
 
+// NextEventTimeForHandler returns the earliest time of a scheduled event for the
+// given handler, and whether any is scheduled. After a checkpoint is restored,
+// the queue is the authoritative record of pending work, so a component uses
+// this to reconcile its scheduler/wakeup guard with the restored queue.
+func (e *SerialEngine) NextEventTimeForHandler(
+	handlerID string,
+) (VTimeInPicoSec, bool) {
+	primary, hasPrimary := e.queue.earliestForHandler(handlerID)
+	secondary, hasSecondary := e.secondaryQueue.earliestForHandler(handlerID)
+
+	switch {
+	case hasPrimary && hasSecondary:
+		if secondary < primary {
+			return secondary, true
+		}
+		return primary, true
+	case hasPrimary:
+		return primary, true
+	case hasSecondary:
+		return secondary, true
+	default:
+		return 0, false
+	}
+}
+
 func encodeEvents(events []Event) ([]TypedPayload, error) {
 	out := make([]TypedPayload, len(events))
 	for i, evt := range events {

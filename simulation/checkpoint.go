@@ -80,6 +80,20 @@ func (s *Simulation) LoadCheckpoint(path, buildID string) error {
 		}
 	}
 
+	// Second pass: now that every entity (including the engine and its queue)
+	// has loaded its raw state, let entities reconcile derived state — e.g. a
+	// component's scheduler guard against the restored event queue.
+	for _, entity := range s.entities {
+		hook, ok := entity.(afterCheckpointLoad)
+		if !ok {
+			continue
+		}
+		if err := hook.AfterCheckpointLoad(); err != nil {
+			return fmt.Errorf(
+				"checkpoint: after-load entity %q: %w", entity.Name(), err)
+		}
+	}
+
 	return nil
 }
 

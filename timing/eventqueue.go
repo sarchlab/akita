@@ -173,6 +173,25 @@ func (q *unsafeEventQueue) restore(events []Event) {
 	}
 }
 
+// earliestForHandler returns the earliest time of a queued event whose handler
+// is handlerID, and whether any such event exists.
+func (q *unsafeEventQueue) earliestForHandler(handlerID string) (VTimeInPicoSec, bool) {
+	found := false
+	var earliest VTimeInPicoSec
+	for i := range q.events {
+		evt := q.events[i].event
+		if evt.HandlerID() != handlerID {
+			continue
+		}
+		if !found || evt.Time() < earliest {
+			earliest = evt.Time()
+			found = true
+		}
+	}
+
+	return earliest, found
+}
+
 // popHeap removes and returns the earliest event from the heap.
 func popHeap(h *eventHeap) Event {
 	events := *h

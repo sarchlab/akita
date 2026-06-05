@@ -33,6 +33,14 @@ type Checkpointable interface {
 	LoadCheckpoint(r io.Reader) error
 }
 
+// afterCheckpointLoad is optionally implemented by entities that need to
+// reconcile derived state after every entity has loaded its raw payload — for
+// example, restoring a component's scheduler guard from the restored event
+// queue. It is satisfied structurally, like Checkpointable.
+type afterCheckpointLoad interface {
+	AfterCheckpointLoad() error
+}
+
 // archiveEntry is one entity payload to write into a checkpoint archive.
 type archiveEntry struct {
 	name string
