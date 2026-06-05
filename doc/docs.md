@@ -646,40 +646,48 @@ import "github.com/sarchlab/akita/v5/tracing"
 
 // Start a top-level task
 taskID := sim.GetIDGenerator().Generate()
-tracing.StartTask(taskID, 0, domain, "kind", "what", detail)
+tracing.StartTask(domain, tracing.TaskStart{
+    ID: taskID, Kind: "kind", What: "what", Detail: detail,
+})
 
-// Add a step to a task
-tracing.AddTaskStep(taskID, domain, "step description")
+// Add a tag to a task
+tracing.AddTaskTag(domain, tracing.TaskTag{
+    TaskID: taskID, What: "tag description",
+})
 
 // End a task
-tracing.EndTask(taskID, domain)
+tracing.EndTask(domain, tracing.TaskEnd{ID: taskID})
 ```
 
 **Message tracing helpers** (for request-response patterns):
 
 ```go
 // Sender side: when initiating a request
-tracing.TraceReqInitiate(msg, domain, parentTaskID)
+tracing.TraceReqInitiate(domain, msg, parentTaskID)
 
 // Receiver side: when receiving a request
-tracing.TraceReqReceive(msg, domain)
+tracing.TraceReqReceive(domain, msg)
 
 // Receiver side: when completing request processing
-tracing.TraceReqComplete(msg, domain)
+tracing.TraceReqComplete(domain, msg)
 
 // Sender side: when receiving the response
-tracing.TraceReqFinalize(msg, domain)
+tracing.TraceReqFinalize(domain, msg)
 ```
 
-These helpers automatically manage `SendTaskID` / `RecvTaskID` on `MsgMeta`.
+These helpers derive sender-side and receiver-side task IDs from the message and
+the receiver-ID registry without mutating the message.
 
 ### Milestones
 
 Milestones record points in time where a task's blocking status is resolved:
 
 ```go
-tracing.AddMilestone(taskID, tracing.MilestoneKindNetworkTransfer,
-    "data arrived", "Switch.Port1", domain)
+tracing.AddMilestone(domain, tracing.Milestone{
+    TaskID: taskID,
+    Kind:   tracing.MilestoneKindNetworkTransfer,
+    What:   "data arrived",
+})
 ```
 
 Milestone kinds: `MilestoneKindHardwareResource`, `MilestoneKindNetworkTransfer`,
@@ -711,7 +719,7 @@ port.AcceptHook(&MyHook{})
   `sim.HookPosPortMsgRetrieveIncoming`, `sim.HookPosPortMsgRetrieveOutgoing`
 - Connection: `sim.HookPosConnStartSend`, `sim.HookPosConnStartTrans`,
   `sim.HookPosConnDoneTrans`, `sim.HookPosConnDeliver`
-- Tracing: `tracing.HookPosTaskStart`, `tracing.HookPosTaskStep`,
+- Tracing: `tracing.HookPosTaskStart`, `tracing.HookPosTaskTag`,
   `tracing.HookPosMilestone`, `tracing.HookPosTaskEnd`
 
 ### Connecting Tracers
@@ -722,11 +730,11 @@ tracing.CollectTrace(component, tracer)
 ```
 
 Built-in tracers:
-- `tracing.NewDBTracer(timeTeller, dataRecorder)` — persists traces to SQLite via
-  the `datarecording` package.
-- `tracing.NewAverageTimeTracer(...)` — calculates average task durations.
-- `tracing.NewBusyTimeTracer(...)` — tracks component busy time.
-- `tracing.NewStepCountTracer(...)` — counts task steps.
+- `tracing.NewDBTracer(timeTeller, dataRecorder)` — persists tasks, tags, and
+  milestones to SQLite via the `datarecording` package.
+- `tracing.NewAverageTimeTracer(filter)` — calculates average task durations.
+- `tracing.NewBusyTimeTracer(filter)` — tracks component busy time.
+- `tracing.NewTagCountTracer(filter)` — counts task tags.
 
 ### Data Recording
 
