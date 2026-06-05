@@ -2,6 +2,7 @@ package checkpointresume
 
 import (
 	"encoding/binary"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -278,5 +279,70 @@ func TestMidTransactionResumeOracle(t *testing.T) {
 	}
 	if resEngine.CurrentTime() != wantTime {
 		t.Fatalf("resumed end time %d, want %d", resEngine.CurrentTime(), wantTime)
+	}
+}
+
+// TestResumeOracleDeterministicAcrossBoundaries checkpoints the same simulation
+// at many boundaries spanning both the write and read phases, and confirms every
+// one resumes to the identical final state and end time as the uninterrupted
+// reference. A boundary that lands in a quiescent gap is as valid as one with
+// traffic in flight; the point is that no boundary diverges.
+func TestResumeOracleDeterministicAcrossBoundaries(t *testing.T) {
+	refSim, refD := buildSim()
+	refEngine := refSim.GetEngine().(*timing.SerialEngine)
+	refD.TickLater()
+	if err := refEngine.Run(); err != nil {
+		t.Fatalf("reference run: %v", err)
+	}
+	if !refD.done() {
+		t.Fatalf("reference run did not finish: %+v", refD.State)
+	}
+	wantVerified := refD.State.ReadsVerified
+	wantTime := refEngine.CurrentTime()
+	cleanup(refSim)
+
+	const slices = 8
+	for i := 1; i < slices; i++ {
+		boundary := wantTime * timing.VTimeInPicoSec(i) / slices
+		t.Run(fmt.Sprintf("boundary_%d_of_%d", i, slices), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "ck.tar.gz")
+			const buildID = "multi-boundary"
+
+			srcSim, srcD := buildSim()
+			srcEngine := srcSim.GetEngine().(*timing.SerialEngine)
+			srcD.TickLater()
+			if err := srcEngine.RunUntil(boundary); err != nil {
+				t.Fatalf("RunUntil(%d): %v", boundary, err)
+			}
+			if err := srcSim.SaveCheckpoint(path, buildID); err != nil {
+				t.Fatalf("SaveCheckpoint: %v", err)
+			}
+			cleanup(srcSim)
+
+			resSim, resD := buildSim()
+			resEngine := resSim.GetEngine().(*timing.SerialEngine)
+			if err := resSim.LoadCheckpoint(path, buildID); err != nil {
+				t.Fatalf("LoadCheckpoint: %v", err)
+			}
+			if err := resEngine.Run(); err != nil {
+				t.Fatalf("resumed run: %v", err)
+			}
+			defer cleanup(resSim)
+
+			if !resD.done() {
+				t.Fatalf("resumed run did not finish: %+v", resD.State)
+			}
+			if resD.State.Mismatch {
+				t.Fatalf("resumed run read stale/incorrect data")
+			}
+			if resD.State.ReadsVerified != wantVerified {
+				t.Fatalf("resumed verified %d, want %d",
+					resD.State.ReadsVerified, wantVerified)
+			}
+			if resEngine.CurrentTime() != wantTime {
+				t.Fatalf("resumed end time %d, want %d",
+					resEngine.CurrentTime(), wantTime)
+			}
+		})
 	}
 }
