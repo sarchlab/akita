@@ -239,6 +239,59 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		Expect(comp.State.IsPaused).To(BeTrue())
 	})
 
+	It("does not abort an in-flight Drain when a Pause arrives", func() {
+		// Get a read miss in flight and capture its bottom fetch.
+		topPort.Deliver(makeRead(0))
+		bottomReads := []mem.ReadReq{}
+		for i := 0; i < 256 && len(bottomReads) == 0; i++ {
+			comp.Tick()
+			bottomReads = append(bottomReads, captureBottomReads()...)
+		}
+		Expect(bottomReads).To(HaveLen(1))
+		Expect(inflightCount()).To(BeNumerically(">", 0))
+
+		// Begin draining, then a Pause arrives mid-drain. Only Reset preempts
+		// an async verb, so the Pause must not freeze the pipeline (which only
+		// runs while !IsPaused) and strand the drain.
+		drain := makeCtrlReq(mem.CmdDrain)
+		ctrlPort.Deliver(drain)
+		comp.Tick()
+		Expect(comp.State.IsDraining).To(BeTrue())
+
+		pause := makeCtrlReq(mem.CmdPause)
+		ctrlPort.Deliver(pause)
+		comp.Tick()
+
+		// Feed the fill; the in-flight read retires and the drain still acks.
+		for _, br := range bottomReads {
+			bottomPort.Deliver(makeFill(br))
+		}
+		drainAcked, pauseAcked := false, false
+		for i := 0; i < 4096 && !drainAcked; i++ {
+			comp.Tick()
+			for {
+				out := ctrlPort.RetrieveOutgoing()
+				if out == nil {
+					break
+				}
+				r, ok := out.(mem.ControlRsp)
+				if !ok {
+					continue
+				}
+				switch r.Command {
+				case mem.CmdDrain:
+					drainAcked = true
+				case mem.CmdPause:
+					pauseAcked = true
+				}
+			}
+		}
+		Expect(pauseAcked).To(BeTrue())
+		Expect(drainAcked).To(BeTrue())
+		Expect(comp.State.IsDraining).To(BeFalse())
+		Expect(comp.State.IsPaused).To(BeTrue())
+	})
+
 	It("completes a Drain issued while paused with work in flight", func() {
 		// Get a read miss in flight, then capture its bottom fetch.
 		topPort.Deliver(makeRead(0))

@@ -84,7 +84,12 @@ func (m *ctrlMiddleware) handlePause(req mem.ControlReq) bool {
 	}
 
 	state := &m.comp.State
-	state.ControlState = control.StatePaused
+	// Only Reset preempts an in-flight async verb: a Pause must not abort a
+	// Drain in progress. Leave the draining state so the drain finishes and
+	// lands in paused on its own.
+	if state.ControlState != control.StateDraining {
+		state.ControlState = control.StatePaused
+	}
 
 	m.ctrlPort().Send(makeRsp(m.ctrlPort(), mem.CmdPause,
 		req.Src, req.ID, true, ""))

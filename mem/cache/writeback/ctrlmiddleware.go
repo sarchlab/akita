@@ -190,13 +190,13 @@ func (m *ctrlMiddleware) handlePause(req mem.ControlReq) bool {
 		return false
 	}
 	next := &m.pipeline.comp.State
-	// Do not abort an in-flight Flush: it runs only while the cache state is
-	// pre-flushing/flushing and ends in the paused state on its own.
-	// Overwriting the state here would strand the flusher (its async response
-	// would never be sent and dirty blocks would never be marked clean). The
-	// flushing state already blocks new Top intake, so the Pause guarantee
-	// still holds, and the cache lands in Paused once the flush completes.
-	if !next.HasProcessingFlush {
+	// Only Reset preempts an in-flight async verb. A Pause must not abort an
+	// in-flight Flush or Drain: both run only outside the paused state and end
+	// in paused on their own, and overwriting the state here would strand them
+	// (their async response would never be sent). Those states already block
+	// new Top intake, so the Pause guarantee still holds.
+	if !next.HasProcessingFlush &&
+		cacheState(next.CacheState) != cacheStateDraining {
 		next.CacheState = int(cacheStatePaused)
 	}
 	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdPause,

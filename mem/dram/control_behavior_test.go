@@ -131,6 +131,52 @@ var _ = Describe("DRAM control behavior", func() {
 		Expect(topPort.RetrieveOutgoing()).To(BeNil())
 	})
 
+	It("does not abort an in-flight Drain when a Pause arrives", func() {
+		const n = 2
+		for i := range n {
+			topPort.Deliver(makeRead(uint64(i * 64)))
+		}
+		comp.Tick()
+		Expect(comp.State.Transactions).ToNot(BeEmpty())
+
+		// Begin draining while work is still in flight.
+		drain := makeCtrlReq(mem.CmdDrain)
+		ctrlPort.Deliver(drain)
+		comp.Tick()
+		Expect(comp.State.ControlState).To(Equal(control.StateDraining))
+
+		// A Pause arrives mid-drain. Only Reset preempts an async verb, so the
+		// Pause must not freeze the controller and strand the drain.
+		pause := makeCtrlReq(mem.CmdPause)
+		ctrlPort.Deliver(pause)
+
+		drainAcked, pauseAcked := false, false
+		for i := 0; i < 4096 && !drainAcked; i++ {
+			comp.Tick()
+			for {
+				out := ctrlPort.RetrieveOutgoing()
+				if out == nil {
+					break
+				}
+				r, ok := out.(mem.ControlRsp)
+				if !ok {
+					continue
+				}
+				switch r.Command {
+				case mem.CmdDrain:
+					drainAcked = true
+					Expect(r.RspTo).To(Equal(drain.ID))
+				case mem.CmdPause:
+					pauseAcked = true
+				}
+			}
+		}
+		Expect(pauseAcked).To(BeTrue())
+		Expect(drainAcked).To(BeTrue())
+		Expect(comp.State.Transactions).To(BeEmpty())
+		Expect(comp.State.ControlState).To(Equal(control.StatePaused))
+	})
+
 	It("completes a pending Drain even when a non-Reset verb is queued", func() {
 		// Draining and just quiescent, with a Pause queued in the same window.
 		// Only Reset preempts a pending drain; a Pause must let it finish, so
