@@ -248,6 +248,72 @@ var _ = Describe("TLB control behavior", func() {
 		Expect(topPort.PeekIncoming()).ToNot(BeNil()) // late lookup survived
 	})
 
+	It("drops a stale bottom translation that arrives after Reset", func() {
+		// First lookup misses and forwards a bottom request (MSHR entry A).
+		topPort.Deliver(makeLookup(0x100))
+		var reqA vm.TranslationReq
+		gotA := false
+		for i := 0; i < 64 && !gotA; i++ {
+			tlbComp.Tick()
+			if out := bottomPort.RetrieveOutgoing(); out != nil {
+				reqA, gotA = out.(vm.TranslationReq)
+			}
+		}
+		Expect(gotA).To(BeTrue())
+
+		// Reset discards the outstanding walk and the TLB contents.
+		rst := makeCtrlReq(mem.CmdReset)
+		controlPort.Deliver(rst)
+		acked := false
+		for i := 0; i < 64 && !acked; i++ {
+			tlbComp.Tick()
+			if out := controlPort.RetrieveOutgoing(); out != nil {
+				if r, ok := out.(mem.ControlRsp); ok &&
+					r.Command == mem.CmdReset {
+					acked = true
+				}
+			}
+		}
+		Expect(acked).To(BeTrue())
+
+		// A new lookup for the SAME address misses and forwards a fresh bottom
+		// request (MSHR entry B) with a different ID.
+		topPort.Deliver(makeLookup(0x100))
+		var reqB vm.TranslationReq
+		gotB := false
+		for i := 0; i < 64 && !gotB; i++ {
+			tlbComp.Tick()
+			if out := bottomPort.RetrieveOutgoing(); out != nil {
+				reqB, gotB = out.(vm.TranslationReq)
+			}
+		}
+		Expect(gotB).To(BeTrue())
+		Expect(reqB.ID).ToNot(Equal(reqA.ID))
+
+		// The stale pre-reset response (for request A) arrives. It must be
+		// dropped: no Top response, and the new request's MSHR entry survives.
+		bottomPort.Deliver(makeBottomRsp(reqA))
+		for range 8 {
+			tlbComp.Tick()
+			Expect(topPort.RetrieveOutgoing()).To(BeNil())
+		}
+		Expect(mshrIsEntryPresent(
+			tlbComp.State.MSHREntries, reqB.PID, reqB.VAddr)).To(BeTrue())
+
+		// The legitimate response (for request B) is accepted and answered.
+		bottomPort.Deliver(makeBottomRsp(reqB))
+		answered := false
+		for i := 0; i < 64 && !answered; i++ {
+			tlbComp.Tick()
+			if out := topPort.RetrieveOutgoing(); out != nil {
+				if _, ok := out.(vm.TranslationRsp); ok {
+					answered = true
+				}
+			}
+		}
+		Expect(answered).To(BeTrue())
+	})
+
 	It("freezes incoming traffic while paused", func() {
 		tlbComp.State.TLBState = tlbStatePause
 		topPort.Deliver(makeLookup(0x0))

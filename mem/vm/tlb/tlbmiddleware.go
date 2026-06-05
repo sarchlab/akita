@@ -386,7 +386,13 @@ func (m *tlbMiddleware) parseBottom() bool {
 	)
 	page := item.Page
 
-	if !mshrIsEntryPresent(next.MSHREntries, page.PID, page.VAddr) {
+	mshrIdx, found := mshrGetEntry(next.MSHREntries, page.PID, page.VAddr)
+	if !found || next.MSHREntries[mshrIdx].ReqToBottom.ID != item.RspTo {
+		// Either no request is outstanding for this page, or this is a stale
+		// response whose request was discarded by a Reset (the current MSHR
+		// entry, if any, belongs to a newer request). Correlating by the
+		// outstanding request's ID keeps a stale pre-reset translation from
+		// filling the reset TLB and satisfying a fresh request.
 		m.bottomPort().RetrieveIncoming()
 		return true
 	}
@@ -401,7 +407,6 @@ func (m *tlbMiddleware) parseBottom() bool {
 	setUpdate(&next.Sets[setID], wayID, page)
 	setVisit(&next.Sets[setID], wayID)
 
-	mshrIdx, _ := mshrGetEntry(next.MSHREntries, page.PID, page.VAddr)
 	next.HasRespondingMSHR = true
 	next.RespondingMSHRData = next.MSHREntries[mshrIdx]
 	next.RespondingMSHRData.Page = page

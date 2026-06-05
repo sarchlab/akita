@@ -244,6 +244,61 @@ var _ = Describe("DataMover control behavior", func() {
 		Expect(dataMover.State.ControlState).To(Equal(control.StatePaused))
 	})
 
+	It("drops a stale memory ack that arrives after Reset", func() {
+		// Move 1 issues an Outside read (readA), then is reset mid-flight.
+		readA, ok := startMove()
+		Expect(ok).To(BeTrue())
+
+		reset := makeCtrlReq(mem.CmdReset)
+		ctrlPort.Deliver(reset)
+		acked := false
+		for i := 0; i < 64 && !acked; i++ {
+			dataMover.Tick()
+			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if r, ok := out.(mem.ControlRsp); ok &&
+					r.Command == mem.CmdReset {
+					acked = true
+				}
+			}
+		}
+		Expect(acked).To(BeTrue())
+
+		// Move 2 issues its own Outside read (readB) with a different ID.
+		readB, ok := startMove()
+		Expect(ok).To(BeTrue())
+		Expect(readB.ID).ToNot(Equal(readA.ID))
+
+		// The stale response for readA arrives. It must be dropped (no panic),
+		// leaving move 2 in flight.
+		answerRead(outsidePort, readA)
+		for range 8 {
+			dataMover.Tick()
+		}
+		Expect(dataMover.State.CurrentTransaction.Active).To(BeTrue())
+
+		// Move 2 completes once its own read and write are answered.
+		answerRead(outsidePort, readB)
+		gotWrite := false
+		moveDone := false
+		for i := 0; i < 256 && !moveDone; i++ {
+			dataMover.Tick()
+			if !gotWrite {
+				if out := insidePort.RetrieveOutgoing(); out != nil {
+					if w, ok := out.(mem.WriteReq); ok {
+						gotWrite = true
+						answerWrite(insidePort, w)
+					}
+				}
+			}
+			if out := topPort.RetrieveOutgoing(); out != nil {
+				if _, ok := out.(DataMoveResponse); ok {
+					moveDone = true
+				}
+			}
+		}
+		Expect(moveDone).To(BeTrue())
+	})
+
 	It("freezes incoming move requests while paused", func() {
 		dataMover.State.ControlState = control.StatePaused
 		topPort.Deliver(makeMove())

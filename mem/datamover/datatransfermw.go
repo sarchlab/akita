@@ -176,7 +176,10 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 	trans := &state.CurrentTransaction
 	originalReq, ok := trans.PendingRead[rsp.RspTo]
 	if !ok {
-		log.Panicf("can't find original request for response %d", rsp.RspTo)
+		// Orphaned response: its read was discarded by a Reset issued while it
+		// was in flight. Drop it rather than crash the current transaction.
+		srcP.RetrieveIncoming()
+		return true
 	}
 
 	offset := originalReq.Address - trans.SrcAddress
@@ -265,7 +268,10 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 	trans := &state.CurrentTransaction
 	originalReq, ok := trans.PendingWrite[rsp.RspTo]
 	if !ok {
-		log.Panicf("can't find original request for response %d", rsp.RspTo)
+		// Orphaned ack: its write was discarded by a Reset issued while it was
+		// in flight. Drop it rather than crash the current transaction.
+		dstP.RetrieveIncoming()
+		return true
 	}
 
 	delete(trans.PendingWrite, rsp.RspTo)
