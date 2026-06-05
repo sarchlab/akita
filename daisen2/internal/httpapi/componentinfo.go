@@ -539,13 +539,21 @@ func buildTraceSQL(locations []string, startTime, endTime float64) string {
 	for _, loc := range locations {
 		quoted = append(quoted, "'"+loc+"'")
 	}
-	// Location is an interned id; join the location table so we can both
-	// filter by component name and surface the name in the output.
+	// Location is an interned id; join the location table to filter by component
+	// name and surface the readable name under the original "Location" column,
+	// rather than leaking the integer id (via t.*) or adding an extra column.
 	whereClause := "loc.Locale IN (" + strings.Join(quoted, ",") + ")"
 	timeClause := fmt.Sprintf(
 		"t.StartTime >= %.15f AND t.EndTime <= %.15f", startTime, endTime)
 	return `
-SELECT t.*, loc.Locale AS LocationName
+SELECT
+	t.ID,
+	t.ParentID,
+	t.Kind,
+	t.What,
+	loc.Locale AS Location,
+	t.StartTime,
+	t.EndTime
 FROM trace t
 JOIN location loc ON t.Location = loc.ID
 WHERE ` + whereClause + `

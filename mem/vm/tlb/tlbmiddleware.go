@@ -141,11 +141,6 @@ func (m *tlbMiddleware) handleDrain() bool {
 	next := &m.comp.State
 	if mshrIsEmpty(next.MSHREntries) && m.bottomPort().PeekIncoming() == nil {
 		next.TLBState = tlbStatePause
-		tracing.AddMilestone(m.comp, tracing.Milestone{
-			TaskID: timing.GetIDGenerator().Generate(),
-			Kind:   tracing.MilestoneKindHardwareResource,
-			What:   m.comp.Name() + ".MSHR",
-		})
 	}
 
 	return madeProgress

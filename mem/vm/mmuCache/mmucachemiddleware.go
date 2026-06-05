@@ -52,11 +52,6 @@ func (m *mmuCacheMiddleware) handleDrain() bool {
 	if m.bottomPort().PeekIncoming() == nil && m.topPort().PeekIncoming() == nil {
 		next := &m.comp.State
 		next.CurrentState = mmuCacheStatePause
-		tracing.AddMilestone(m.comp, tracing.Milestone{
-			TaskID: timing.GetIDGenerator().Generate(),
-			Kind:   tracing.MilestoneKindHardwareResource,
-			What:   m.comp.Name() + ".",
-		})
 	}
 
 	return madeProgress

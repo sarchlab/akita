@@ -270,9 +270,22 @@ func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Ta
 
 	if query.EnableMilestones {
 		r.loadMilestonesForTasks(tasks)
+		r.loadTagsForTasks(tasks)
+		sortTaskSteps(tasks)
 	}
 
 	return tasks
+}
+
+// sortTaskSteps orders each task's Steps by time, so milestones and tags loaded
+// from separate tables form one coherent timeline.
+func sortTaskSteps(tasks []Task) {
+	for i := range tasks {
+		steps := tasks[i].Steps
+		sort.SliceStable(steps, func(a, b int) bool {
+			return steps[a].Time < steps[b].Time
+		})
+	}
 }
 
 // TimeRange returns the min task start time and max task end time in the trace.
@@ -415,6 +428,61 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 				Kind: kind,
 			}
 			task.Steps = append(task.Steps, step)
+		}
+	}
+}
+
+// loadTagsForTasks loads the categorical tags persisted in the tag table for
+// the given tasks and merges them into each task's Steps stream alongside
+// milestones. A tag's location is inherited from its task, so the tag table
+// stores none; tags also carry no Kind, so they are labelled "tag" to stay
+// distinguishable from milestones in the merged stream.
+func (r *SQLiteTraceReader) loadTagsForTasks(tasks []Task) {
+	if len(tasks) == 0 {
+		return
+	}
+
+	taskMap := make(map[uint64]*Task)
+	taskIDs := make([]interface{}, 0, len(tasks))
+	for i := range tasks {
+		taskMap[tasks[i].ID] = &tasks[i]
+		taskIDs = append(taskIDs, tasks[i].ID)
+	}
+
+	placeholders := strings.Repeat("?,", len(taskIDs))
+	if len(placeholders) > 0 {
+		placeholders = placeholders[:len(placeholders)-1] // remove trailing comma
+	}
+
+	sqlStr := fmt.Sprintf(`
+		SELECT TaskID, Time, What
+		FROM tag
+		WHERE TaskID IN (%s)
+		ORDER BY TaskID, Time`, placeholders)
+
+	rows, err := r.Query(sqlStr, taskIDs...)
+	if err != nil {
+		// If the tag table doesn't exist, just return without error.
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var taskID uint64
+		var what string
+		var time float64
+
+		err := rows.Scan(&taskID, &time, &what)
+		if err != nil {
+			continue
+		}
+
+		if task, exists := taskMap[taskID]; exists {
+			task.Steps = append(task.Steps, TaskStep{
+				Time: timing.VTimeInPicoSec(uint64(time)),
+				What: what,
+				Kind: "tag",
+			})
 		}
 	}
 }

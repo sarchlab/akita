@@ -5,7 +5,9 @@ import (
 )
 
 // TaskStart carries the information needed to begin a task. Callers pass it to
-// [StartTask]. Time is supplied by the caller, typically domain.CurrentTime().
+// [StartTask]. Time is not set by the caller: [StartTask] stamps it from the
+// domain clock, after the NumHooks==0 guard, so the clock is never read when
+// tracing is disabled.
 type TaskStart struct {
 	ID       uint64
 	ParentID uint64
