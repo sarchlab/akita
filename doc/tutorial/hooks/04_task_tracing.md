@@ -58,6 +58,18 @@ Two more calls fill in detail within a task, both optional:
 `tracing.AddMilestone(...)` records why a task was blocked and when it
 unblocked. We will not need them here.
 
+## Tasks Form a Tree
+
+The `parentID` argument is what makes tasks more than a flat list. A task can
+be the **child** of a larger task: a request being served may spawn a
+sub-request, which spawns another, and so on. Recording each task's parent
+turns them into a **tree** that mirrors how the work fanned out.
+
+The worker in this chapter only has flat, top-level tasks, so it passes `0`
+for `parentID`. The tree becomes useful once work crosses components — a
+cache miss that goes to the next level down, for instance. Building a task
+tree that spans a memory hierarchy is the subject of *Tracing Requests*.
+
 ## The Worker
 
 The component being measured is a small worker that processes a fixed number

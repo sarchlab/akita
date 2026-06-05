@@ -148,6 +148,20 @@ helpers, selecting tasks by `Kind` with a `TaskFilter`.
 cd reqtracing && go run main.go
 ```
 
+### tasktree — Chaining Tasks Across a Hierarchy
+
+A request travels a memory hierarchy (`Client → L1 → L2 → Memory`); each cache
+misses and forwards downward, parenting the downstream task to the one it is
+handling with `tracing.MsgIDAtReceiver`. A custom tracer attached to every
+component prints the resulting task tree.
+
+**Key concepts**: `tracing.MsgIDAtReceiver`, `parentID` chaining, task trees
+across components, attaching one tracer to many domains.
+
+```bash
+cd tasktree && go run main.go
+```
+
 ## Choosing a Paradigm
 
 | Paradigm | Component Type | When to Use |

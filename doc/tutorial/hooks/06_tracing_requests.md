@@ -18,6 +18,7 @@ The example is in `examples/reqtracing/`.
 - The four stages of a request: initiate, receive, complete, finalize.
 - Which side calls which helper, and the two tasks they create.
 - How to read round-trip latency and handling time from the same run.
+- How `MsgIDAtReceiver` chains tasks across components into a task tree.
 
 ## The Four Stages
 
@@ -145,6 +146,71 @@ The extra 2000 ps is the two trips across the connection — visible precisely
 because `req_out` wraps `req_in`. The same run yields both numbers; the
 filter is what decides which task each tracer measures.
 
+## Chaining Tasks Across Components
+
+Real work rarely stops at one component. An L1 cache that misses sends a
+request to L2; if L2 also misses, it goes to memory. Each hop is its own
+request with its own `req_out`/`req_in` pair — and you want them linked, so
+the trace shows the L2 access happened *because of* the L1 miss.
+
+The link is the `parentID` you pass to `TraceReqInitiate`. When a component
+fires off a downstream request *while handling* an upstream one, the
+downstream task's parent should be the upstream **handling task**. But what
+is that task's id?
+
+### `MsgIDAtReceiver`
+
+When you called `TraceReqReceive(req, comp)`, it opened a `req_in` task whose
+id is the request's receiver-side id, `req.Meta().RecvTaskID`. You retrieve
+that same id with:
+
+```go
+parentID := tracing.MsgIDAtReceiver(upReq, comp)
+```
+
+So a cache that misses initiates its downstream request as a child of the
+task it is currently handling:
+
+```go
+tracing.TraceReqReceive(upReq, comp) // open req_in (handling)
+
+downReq := newReq(...)               // build the next-level-down request
+tracing.TraceReqInitiate(
+    downReq, comp,
+    tracing.MsgIDAtReceiver(upReq, comp)) // parent = the req_in above
+bottom.Send(downReq)
+```
+
+`TraceReqReceive` on the next component down then parents *its* `req_in` to
+this `downReq`'s `req_out` automatically (through the message's `SendTaskID`,
+as before). Apply the pattern at every level and the parent links chain all
+the way down.
+
+### The Task Tree
+
+`examples/tasktree` wires a client to a small hierarchy — `Client → L1 → L2 →
+Memory` — where each cache misses and forwards downward using exactly that
+pattern (`L1` and `L2` are the same reusable cache component). A custom tracer
+attached to every component records each task's kind, parent, and location,
+then prints them by parent link:
+
+```
+req_out @ Client
+  req_in @ L1
+    req_out @ L1
+      req_in @ L2
+        req_out @ L2
+          req_in @ Memory
+```
+
+That tree is the whole story of one request: the client's outbound task
+parents L1's handling task, which parents L1's downstream task, and so on
+down to the leaf task at memory. The example attaches **one** tracer instance
+to all four components — `CollectTrace` is happy to put the same tracer on
+many domains — which is how it sees the complete tree. With a `DBTracer` (next
+chapter) the same tree is recorded to a database, so you can later ask where
+a request spent its time across the entire hierarchy.
+
 ## Key Concepts
 
 - **A request is two nested tasks**: `req_out` (round trip, sender) parents
@@ -155,6 +221,9 @@ filter is what decides which task each tracer measures.
 - **Hold the original request** on each side: finalize and complete take the
   message they began with.
 - **Filter by kind** to separate round-trip latency from handling time.
+- **Chain tasks with `parentID`.** A downstream request initiated while
+  handling an upstream one uses `tracing.MsgIDAtReceiver(upReq, comp)` as its
+  parent, so requests across a component hierarchy form one task tree.
 
 ## Where to Next
 

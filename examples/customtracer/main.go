@@ -97,7 +97,7 @@ func (t *maxDurationTracer) EndTask(task tracing.Task) {
 }
 
 // This tracer does not care about steps or milestones.
-func (t *maxDurationTracer) StepTask(_ tracing.Task)         {}
+func (t *maxDurationTracer) StepTask(_ tracing.Task)          {}
 func (t *maxDurationTracer) AddMilestone(_ tracing.Milestone) {}
 
 func (t *maxDurationTracer) MaxDuration() timing.VTimeInSec { return t.max }
