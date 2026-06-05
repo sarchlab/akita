@@ -80,10 +80,10 @@ func (m *parseTranslateMW) translate() bool {
 
 	nextState := &m.comp.State
 
-	tracing.TraceReqReceive(itemI, m.comp)
+	tracing.TraceReqReceive(m.comp, itemI)
 	tracing.TraceReqInitiate(
-		transReq,
 		m.comp,
+		transReq,
 		tracing.MsgIDAtReceiver(itemI, m.comp),
 	)
 

@@ -250,6 +250,10 @@ func (t *sqliteWriter) createLocationTable() {
 		` (` + "\n\t" + fields + "\n" + `);`
 	t.mustExecute(createTableSQL)
 
+	// Index the dictionary key so readers can resolve an interned id back to
+	// its string with an indexed lookup.
+	t.createIndex("location", "ID", true)
+
 	tableInfo := &table{
 		structType: reflect.TypeOf(sampleLoc),
 		entries:    []any{},
@@ -309,7 +313,10 @@ func (t *sqliteWriter) createIndexesForTable(
 			switch dbTag {
 			case "unique":
 				t.createIndex(tableName, field.Name, true)
-			case "index":
+			case "index", "location":
+				// "location" columns store the interned integer id; index
+				// them so filtering by location stays fast even though the
+				// string lives in the shared location table.
 				t.createIndex(tableName, field.Name, false)
 			}
 		}

@@ -118,7 +118,7 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 			pcs.ForwardBuffer.Pop()
 			sendBuf.PushTyped(item.Flit)
 
-			tracing.EndTask(item.TaskID, m.comp)
+			tracing.EndTask(m.comp, tracing.TaskEnd{ID: item.TaskID})
 
 			occupiedOutputPort[outIdx] = true
 			madeProgress = true

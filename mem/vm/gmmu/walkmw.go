@@ -54,7 +54,7 @@ func (m *walkMW) parseFromTop() bool {
 
 	switch req := reqI.(type) {
 	case vm.TranslationReq:
-		tracing.TraceReqReceive(req, m.comp)
+		tracing.TraceReqReceive(m.comp, req)
 		m.startWalking(req)
 	default:
 		log.Panicf("gmmu cannot handle request of type %s",
@@ -209,6 +209,7 @@ func (m *walkMW) doPageWalkHit(
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
 	tracing.TraceReqComplete(
+		m.comp,
 		vm.TranslationReq{
 			MsgMeta: messaging.MsgMeta{
 				ID:  walking.ReqID,
@@ -216,7 +217,6 @@ func (m *walkMW) doPageWalkHit(
 				Dst: walking.ReqDst,
 			},
 		},
-		m.comp,
 	)
 
 	return true

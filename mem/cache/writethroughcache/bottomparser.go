@@ -42,7 +42,7 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 
 	if !trans.Done && writeTransIsReady(trans) {
 		trans.Done = true
-		tracing.EndTask(trans.ID, p.cache.comp)
+		tracing.EndTask(p.cache.comp, tracing.TaskEnd{ID: trans.ID})
 	}
 
 	p.cache.bottomPort.RetrieveIncoming()
@@ -54,7 +54,7 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 		DirtyMask: trans.WriteToBottomDirtyMask,
 		PID:       trans.WriteToBottomPID,
 	}
-	tracing.TraceReqFinalize(writeToBottom, p.cache.comp)
+	tracing.TraceReqFinalize(p.cache.comp, writeToBottom)
 
 	return true
 }
@@ -114,7 +114,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 		MsgMeta: trans.ReadToBottomMeta,
 		PID:     trans.ReadToBottomPID,
 	}
-	tracing.TraceReqFinalize(readToBottom, p.cache.comp)
+	tracing.TraceReqFinalize(p.cache.comp, readToBottom)
 
 	return true
 }
@@ -162,7 +162,7 @@ func (p *bottomParser) finalizeMSHRTransExcept(
 			offset := trans.ReadAddress - blockTag
 			trans.Data = data[offset : offset+trans.ReadAccessByteSize]
 			trans.Done = true
-			tracing.EndTask(trans.ID, p.cache.comp)
+			tracing.EndTask(p.cache.comp, tracing.TaskEnd{ID: trans.ID})
 			continue
 		}
 
@@ -171,7 +171,7 @@ func (p *bottomParser) finalizeMSHRTransExcept(
 		// satisfied (e.g. WriteDoneRsp landed first).
 		if !trans.Done && writeTransIsReady(trans) {
 			trans.Done = true
-			tracing.EndTask(trans.ID, p.cache.comp)
+			tracing.EndTask(p.cache.comp, tracing.TaskEnd{ID: trans.ID})
 		}
 	}
 }

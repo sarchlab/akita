@@ -63,13 +63,11 @@ func (m *ctrlMiddleware) performCtrlEnable(msg mem.ControlReq) bool {
 	state.TLBState = tlbStateEnable
 
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.controlPort().Name(),
+	})
 	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
@@ -80,13 +78,11 @@ func (m *ctrlMiddleware) performCtrlDrain(msg mem.ControlReq) bool {
 	state.TLBState = tlbStateDrain
 
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.controlPort().Name(),
+	})
 	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
@@ -97,13 +93,11 @@ func (m *ctrlMiddleware) performCtrlPause(msg mem.ControlReq) bool {
 	state.TLBState = tlbStatePause
 
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.controlPort().Name(),
+	})
 	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
@@ -135,13 +129,11 @@ func (m *ctrlMiddleware) handleTLBRestart(msg mem.ControlReq) bool {
 	}
 
 	m.controlPort().Send(rsp)
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.controlPort().Name(),
+	})
 	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	state := &m.comp.State

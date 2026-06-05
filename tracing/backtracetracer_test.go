@@ -25,15 +25,15 @@ var _ = Describe("BackTraceTracer", func() {
 	})
 
 	It("should trace a single task", func() {
-		t.StartTask(Task{ID: 1})
+		t.StartTask(TaskStart{ID: 1})
 
 		Expect(len(t.tracingTasks)).To(Equal(1))
 		Expect(t.tracingTasks[1].ParentID).To(Equal(uint64(0)))
 	})
 
 	It("should trace two tasks", func() {
-		t.StartTask(Task{ID: 1})
-		t.StartTask(Task{ID: 2, ParentID: 1})
+		t.StartTask(TaskStart{ID: 1})
+		t.StartTask(TaskStart{ID: 2, ParentID: 1})
 
 		Expect(len(t.tracingTasks)).To(Equal(2))
 		Expect(t.tracingTasks[1].ParentID).To(Equal(uint64(0)))
@@ -41,9 +41,9 @@ var _ = Describe("BackTraceTracer", func() {
 	})
 
 	It("should trace three tasks", func() {
-		t.StartTask(Task{ID: 1})
-		t.StartTask(Task{ID: 2, ParentID: 1})
-		t.StartTask(Task{ID: 3, ParentID: 2})
+		t.StartTask(TaskStart{ID: 1})
+		t.StartTask(TaskStart{ID: 2, ParentID: 1})
+		t.StartTask(TaskStart{ID: 3, ParentID: 2})
 
 		Expect(len(t.tracingTasks)).To(Equal(3))
 		Expect(t.tracingTasks[1].ParentID).To(Equal(uint64(0)))
@@ -52,27 +52,27 @@ var _ = Describe("BackTraceTracer", func() {
 	})
 
 	It("should end a single task", func() {
-		t.StartTask(Task{ID: 1})
+		t.StartTask(TaskStart{ID: 1})
 
-		t.EndTask(Task{ID: 1})
+		t.EndTask(TaskEnd{ID: 1})
 
 		Expect(len(t.tracingTasks)).To(Equal(0))
 	})
 
 	It("should end two tasks", func() {
-		t.StartTask(Task{ID: 1})
-		t.StartTask(Task{ID: 2, ParentID: 1})
-		t.StartTask(Task{ID: 3, ParentID: 2})
+		t.StartTask(TaskStart{ID: 1})
+		t.StartTask(TaskStart{ID: 2, ParentID: 1})
+		t.StartTask(TaskStart{ID: 3, ParentID: 2})
 
-		t.EndTask(Task{ID: 3, ParentID: 2})
-		t.EndTask(Task{ID: 2, ParentID: 1})
+		t.EndTask(TaskEnd{ID: 3})
+		t.EndTask(TaskEnd{ID: 2})
 
 		Expect(len(t.tracingTasks)).To(Equal(1))
 		Expect(t.tracingTasks[1].ParentID).To(Equal(uint64(0)))
 	})
 
 	It("should print single tasks", func() {
-		t.StartTask(Task{ID: 1})
+		t.StartTask(TaskStart{ID: 1})
 
 		mockTaskPrinter.EXPECT().Print(Task{ID: 1})
 
@@ -80,9 +80,9 @@ var _ = Describe("BackTraceTracer", func() {
 	})
 
 	It("should print three tasks", func() {
-		t.StartTask(Task{ID: 1})
-		t.StartTask(Task{ID: 2, ParentID: 1})
-		t.StartTask(Task{ID: 3, ParentID: 2})
+		t.StartTask(TaskStart{ID: 1})
+		t.StartTask(TaskStart{ID: 2, ParentID: 1})
+		t.StartTask(TaskStart{ID: 3, ParentID: 2})
 
 		e3 := mockTaskPrinter.EXPECT().
 			Print(Task{ID: 3, ParentID: 2})
@@ -96,11 +96,11 @@ var _ = Describe("BackTraceTracer", func() {
 	})
 
 	It("should print three tasks", func() {
-		t.StartTask(Task{ID: 1})
-		t.StartTask(Task{ID: 2, ParentID: 1})
-		t.StartTask(Task{ID: 3, ParentID: 2})
+		t.StartTask(TaskStart{ID: 1})
+		t.StartTask(TaskStart{ID: 2, ParentID: 1})
+		t.StartTask(TaskStart{ID: 3, ParentID: 2})
 
-		t.EndTask(Task{ID: 2, ParentID: 1})
+		t.EndTask(TaskEnd{ID: 2})
 
 		mockTaskPrinter.EXPECT().
 			Print(Task{ID: 3, ParentID: 2})

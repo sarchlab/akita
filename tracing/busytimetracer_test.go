@@ -5,111 +5,71 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gmeasure"
 	"github.com/sarchlab/akita/v5/timing"
-	gomock "go.uber.org/mock/gomock"
 )
 
 var _ = Describe("BusyTimeTracer", func() {
 	var (
-		mockCtrl   *gomock.Controller
-		timeTeller *MockTimeTeller
-		t          *BusyTimeTracer
+		t *BusyTimeTracer
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
-		timeTeller = NewMockTimeTeller(mockCtrl)
-
-		t = NewBusyTimeTracer(timeTeller, nil)
-	})
-
-	AfterEach(func() {
-		mockCtrl.Finish()
+		t = NewBusyTimeTracer(nil)
 	})
 
 	It("should track busy time, one task", func() {
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10))
-		t.StartTask(Task{ID: 1})
-
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(20))
-		t.EndTask(Task{ID: 1})
+		t.StartTask(TaskStart{ID: 1, Time: 10})
+		t.EndTask(TaskEnd{ID: 1, Time: 20})
 
 		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(10)))
 	})
 
 	It("should track busy time, two tasks", func() {
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10))
-		t.StartTask(Task{ID: 1})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(20))
-		t.EndTask(Task{ID: 1})
+		t.StartTask(TaskStart{ID: 1, Time: 10})
+		t.EndTask(TaskEnd{ID: 1, Time: 20})
 
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(30))
-		t.StartTask(Task{ID: 2})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(40))
-		t.EndTask(Task{ID: 2})
+		t.StartTask(TaskStart{ID: 2, Time: 30})
+		t.EndTask(TaskEnd{ID: 2, Time: 40})
 
 		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(20)))
 	})
 
 	It("should track busy time, two tasks adjacent", func() {
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10))
-		t.StartTask(Task{ID: 1})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(20))
-		t.EndTask(Task{ID: 1})
+		t.StartTask(TaskStart{ID: 1, Time: 10})
+		t.EndTask(TaskEnd{ID: 1, Time: 20})
 
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(20))
-		t.StartTask(Task{ID: 2})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(30))
-		t.EndTask(Task{ID: 2})
+		t.StartTask(TaskStart{ID: 2, Time: 20})
+		t.EndTask(TaskEnd{ID: 2, Time: 30})
 
 		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(20)))
 	})
 
 	It("should track busy time, two tasks overlap", func() {
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10))
-		t.StartTask(Task{ID: 1})
-
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(15))
-		t.StartTask(Task{ID: 2})
-
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(20))
-		t.EndTask(Task{ID: 1})
-
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(25))
-		t.EndTask(Task{ID: 2})
+		t.StartTask(TaskStart{ID: 1, Time: 10})
+		t.StartTask(TaskStart{ID: 2, Time: 15})
+		t.EndTask(TaskEnd{ID: 1, Time: 20})
+		t.EndTask(TaskEnd{ID: 2, Time: 25})
 
 		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(15)))
 	})
 
 	It("should track busy time, four tasks", func() {
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10))
-		t.StartTask(Task{ID: 1})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(11))
-		t.StartTask(Task{ID: 2})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(12))
-		t.EndTask(Task{ID: 2})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(19))
-		t.StartTask(Task{ID: 3})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(20))
-		t.EndTask(Task{ID: 1})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(21))
-		t.EndTask(Task{ID: 3})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(31))
-		t.StartTask(Task{ID: 4})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(32))
-		t.EndTask(Task{ID: 4})
+		t.StartTask(TaskStart{ID: 1, Time: 10})
+		t.StartTask(TaskStart{ID: 2, Time: 11})
+		t.EndTask(TaskEnd{ID: 2, Time: 12})
+		t.StartTask(TaskStart{ID: 3, Time: 19})
+		t.EndTask(TaskEnd{ID: 1, Time: 20})
+		t.EndTask(TaskEnd{ID: 3, Time: 21})
+		t.StartTask(TaskStart{ID: 4, Time: 31})
+		t.EndTask(TaskEnd{ID: 4, Time: 32})
 
 		Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(12)))
 	})
 
 	It("should be able to terminate all the tasks", func() {
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10))
-		t.StartTask(Task{ID: 1})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(11))
-		t.StartTask(Task{ID: 2})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(19))
-		t.StartTask(Task{ID: 3})
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(21))
-		t.EndTask(Task{ID: 3})
+		t.StartTask(TaskStart{ID: 1, Time: 10})
+		t.StartTask(TaskStart{ID: 2, Time: 11})
+		t.StartTask(TaskStart{ID: 3, Time: 19})
+		t.EndTask(TaskEnd{ID: 3, Time: 21})
 
 		t.TerminateAllTasks(35)
 
@@ -124,18 +84,8 @@ var _ = Describe("BusyTimeTracer", func() {
 			for i := 0; i < 10000; i++ {
 				taskID := uint64(i + 1)
 
-				timeTeller.EXPECT().CurrentTime().
-					Return(timing.VTimeInPicoSec(i * 2))
-				t.StartTask(Task{
-					ID: taskID,
-				})
-
-				timeTeller.EXPECT().CurrentTime().
-					Return(timing.VTimeInPicoSec(i*2 + 1))
-				t.EndTask((Task{
-					ID:      taskID,
-					EndTime: timing.VTimeInPicoSec(i*2 + 1),
-				}))
+				t.StartTask(TaskStart{ID: taskID, Time: timing.VTimeInPicoSec(i * 2)})
+				t.EndTask(TaskEnd{ID: taskID, Time: timing.VTimeInPicoSec(i*2 + 1)})
 			}
 
 			Expect(t.BusyTime()).To(Equal(timing.VTimeInPicoSec(10000)))

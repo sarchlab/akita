@@ -101,9 +101,15 @@ func (d *directory) processMSHRHit(
 			transIdx)
 
 	if trans.HasRead {
-		tracing.AddTaskStep(trans.ID, d.cache.comp, "read-mshr-hit")
+		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+			TaskID: trans.ID,
+			What:   "read-mshr-hit",
+		})
 	} else {
-		tracing.AddTaskStep(trans.ID, d.cache.comp, "write-mshr-hit")
+		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+			TaskID: trans.ID,
+			What:   "write-mshr-hit",
+		})
 	}
 
 	dirPostBuf := &next.DirPostBuf
@@ -141,7 +147,10 @@ func (d *directory) processReadHit(
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
-	tracing.AddTaskStep(trans.ID, d.cache.comp, "read-hit")
+	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+		TaskID: trans.ID,
+		What:   "read-hit",
+	})
 
 	return true
 }
@@ -170,7 +179,10 @@ func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool 
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
-	tracing.AddTaskStep(trans.ID, d.cache.comp, "read-miss")
+	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+		TaskID: trans.ID,
+		What:   "read-miss",
+	})
 
 	return true
 }
@@ -244,7 +256,7 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 	trans.WriteToBottomData = trans.WriteData
 	trans.WriteToBottomDirtyMask = trans.WriteDirtyMask
 
-	tracing.TraceReqInitiate(writeToBottom, d.cache.comp, trans.ID)
+	tracing.TraceReqInitiate(d.cache.comp, writeToBottom, trans.ID)
 
 	return true
 }
@@ -278,7 +290,7 @@ func (d *directory) fetchFromBottom(
 
 	d.cache.bottomPort.Send(readToBottom)
 
-	tracing.TraceReqInitiate(readToBottom, d.cache.comp, trans.ID)
+	tracing.TraceReqInitiate(d.cache.comp, readToBottom, trans.ID)
 
 	trans.HasReadToBottom = true
 	trans.ReadToBottomMeta = readToBottom.MsgMeta
