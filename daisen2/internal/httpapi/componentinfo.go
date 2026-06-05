@@ -301,7 +301,8 @@ func (s *Server) fillBinnedEventRate(
 	query := fmt.Sprintf(`
 		SELECT CAST(((%s - ?) / ?) AS INTEGER) AS Bin, COUNT(*)
 		FROM trace
-		WHERE Location = ? AND Kind = ? AND %s > ? AND %s < ?
+		WHERE Location = (SELECT ID FROM location WHERE Locale = ?)
+			AND Kind = ? AND %s > ? AND %s < ?
 		GROUP BY Bin
 	`, timeColumn, timeColumn, timeColumn)
 
@@ -344,7 +345,8 @@ func (s *Server) fillBinnedAverageLatency(
 		SELECT CAST(((EndTime - ?) / ?) AS INTEGER) AS Bin,
 			AVG(EndTime - StartTime)
 		FROM trace
-		WHERE Location = ? AND Kind = 'req_in' AND EndTime > ? AND EndTime < ?
+		WHERE Location = (SELECT ID FROM location WHERE Locale = ?)
+			AND Kind = 'req_in' AND EndTime > ? AND EndTime < ?
 		GROUP BY Bin
 	`
 
@@ -537,11 +539,15 @@ func buildTraceSQL(locations []string, startTime, endTime float64) string {
 	for _, loc := range locations {
 		quoted = append(quoted, "'"+loc+"'")
 	}
-	whereClause := "Location IN (" + strings.Join(quoted, ",") + ")"
-	timeClause := fmt.Sprintf("StartTime >= %.15f AND EndTime <= %.15f", startTime, endTime)
+	// Location is an interned id; join the location table so we can both
+	// filter by component name and surface the name in the output.
+	whereClause := "loc.Locale IN (" + strings.Join(quoted, ",") + ")"
+	timeClause := fmt.Sprintf(
+		"t.StartTime >= %.15f AND t.EndTime <= %.15f", startTime, endTime)
 	return `
-SELECT *
-FROM trace
+SELECT t.*, loc.Locale AS LocationName
+FROM trace t
+JOIN location loc ON t.Location = loc.ID
 WHERE ` + whereClause + `
 AND ` + timeClause
 }

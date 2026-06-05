@@ -31,21 +31,21 @@ type taskTableEntry struct {
 	ParentID  uint64  `json:"parent_id" akita_data:"index"`
 	Kind      string  `json:"kind" akita_data:"index"`
 	What      string  `json:"what" akita_data:"index"`
-	Location  string  `json:"location" akita_data:"index"`
+	Location  string  `json:"location" akita_data:"location"`
 	StartTime float64 `json:"start_time" akita_data:"index"`
 	EndTime   float64 `json:"end_time" akita_data:"index"`
 }
 
 // milestoneTableEntry is the table structure for storing milestone information.
-// All milestones are stored in a single "milestone" table. Location is inherited
-// from the owning task.
+// All milestones are stored in a single "milestone" table. A milestone's
+// location is inherited from its owning task (joined via TaskID), so it is not
+// stored here.
 type milestoneTableEntry struct {
-	ID       uint64  `json:"id" akita_data:"unique"`
-	TaskID   uint64  `json:"task_id" akita_data:"index"`
-	Time     float64 `json:"time" akita_data:"index"`
-	Kind     string  `json:"kind" akita_data:"index"`
-	What     string  `json:"what" akita_data:"index"`
-	Location string  `json:"location" akita_data:"index"`
+	ID     uint64  `json:"id" akita_data:"unique"`
+	TaskID uint64  `json:"task_id" akita_data:"index"`
+	Time   float64 `json:"time" akita_data:"index"`
+	Kind   string  `json:"kind" akita_data:"index"`
+	What   string  `json:"what" akita_data:"index"`
 }
 
 // tagTableEntry is the table structure for storing task tag information. All
@@ -207,15 +207,15 @@ func (t *DBTracer) EndTask(task TaskEnd) {
 	}
 	t.backend.InsertData(traceTableName, entry)
 
-	// Write milestones to the milestone table, inheriting the task's location.
+	// Write milestones to the milestone table. A milestone's location is
+	// the task's location, recovered by readers via the TaskID join.
 	for _, m := range originalTask.Milestones {
 		milestoneEntry := milestoneTableEntry{
-			ID:       m.ID,
-			TaskID:   m.TaskID,
-			Time:     float64(m.Time),
-			Kind:     string(m.Kind),
-			What:     m.What,
-			Location: originalTask.Location,
+			ID:     m.ID,
+			TaskID: m.TaskID,
+			Time:   float64(m.Time),
+			Kind:   string(m.Kind),
+			What:   m.What,
 		}
 		t.backend.InsertData(milestoneTableName, milestoneEntry)
 	}

@@ -104,22 +104,22 @@ type TaskQuery struct {
 // TaskStep represents a milestone/step in a task.
 type TaskStep struct {
 	Time timing.VTimeInPicoSec `json:"time"`
-	What string            `json:"what"`
-	Kind string            `json:"kind"`
+	What string                `json:"what"`
+	Kind string                `json:"kind"`
 }
 
 // Task represents a traced task.
 type Task struct {
-	ID         uint64            `json:"id"`
-	ParentID   uint64            `json:"parent_id"`
-	Kind       string            `json:"kind"`
-	What       string            `json:"what"`
-	Location   string            `json:"location"`
+	ID         uint64                `json:"id"`
+	ParentID   uint64                `json:"parent_id"`
+	Kind       string                `json:"kind"`
+	What       string                `json:"what"`
+	Location   string                `json:"location"`
 	StartTime  timing.VTimeInPicoSec `json:"start_time"`
 	EndTime    timing.VTimeInPicoSec `json:"end_time"`
-	Steps      []TaskStep        `json:"steps"`
-	Detail     interface{}       `json:"-"`
-	ParentTask *Task             `json:"-"`
+	Steps      []TaskStep            `json:"steps"`
+	Detail     interface{}           `json:"-"`
+	ParentTask *Task                 `json:"-"`
 }
 
 // TraceReader can parse a trace file.
@@ -212,7 +212,9 @@ func naturalLess(a, b string) bool {
 func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
 	var components []string
 
-	rows, err := r.QueryContext(ctx, "SELECT DISTINCT Location FROM trace")
+	// The shared location table holds exactly the set of component names used
+	// in the trace, each interned once.
+	rows, err := r.QueryContext(ctx, "SELECT Locale FROM location")
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil
@@ -381,10 +383,11 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 		placeholders = placeholders[:len(placeholders)-1] // remove trailing comma
 	}
 
-	// Fixed: read from "milestone" table (matching what DBTracer writes)
+	// A milestone's location is inherited from its task, so the milestone
+	// table no longer stores it; we read the remaining columns only.
 	sqlStr := fmt.Sprintf(`
-		SELECT TaskID, Time, Kind, What, Location 
-		FROM milestone 
+		SELECT TaskID, Time, Kind, What
+		FROM milestone
 		WHERE TaskID IN (%s)
 		ORDER BY TaskID, Time`, placeholders)
 
@@ -397,10 +400,10 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 
 	for rows.Next() {
 		var taskID uint64
-		var kind, what, location string
+		var kind, what string
 		var time float64
 
-		err := rows.Scan(&taskID, &time, &kind, &what, &location)
+		err := rows.Scan(&taskID, &time, &kind, &what)
 		if err != nil {
 			continue
 		}
@@ -493,13 +496,15 @@ func (r *SQLiteTraceReader) scanTaskWithoutParent(rows *sql.Rows, t *Task) {
 }
 
 func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) string {
+	// Location is stored as an integer id that references the shared location
+	// table; join it back to the component name string.
 	sqlStr := `
-		SELECT 
-			t.ID, 
+		SELECT
+			t.ID,
 			t.ParentID,
 			t.Kind,
 			t.What,
-			t.Location,
+			loc.Locale,
 			t.StartTime,
 			t.EndTime
 	`
@@ -510,7 +515,7 @@ func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) string {
 			pt.ParentID,
 			pt.Kind,
 			pt.What,
-			pt.Location,
+			ploc.Locale,
 			pt.StartTime,
 			pt.EndTime
 		`
@@ -518,12 +523,15 @@ func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) string {
 
 	sqlStr += `
 		FROM trace t
+		JOIN location loc ON t.Location = loc.ID
 	`
 
 	if query.EnableParentTask {
 		sqlStr += `
 			LEFT JOIN trace pt
 			ON t.ParentID = pt.ID
+			LEFT JOIN location ploc
+			ON pt.Location = ploc.ID
 		`
 	}
 
@@ -560,7 +568,7 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 
 	if query.Where != "" {
 		sqlStr += `
-			AND t.Location = '` + query.Where + `'
+			AND loc.Locale = '` + query.Where + `'
 		`
 	}
 
