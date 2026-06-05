@@ -193,6 +193,6 @@ moments are observable and what data they carry.
 
 ## Where to Next
 
-You have now seen hooks end to end — built-in points and your own. The last
-chapter shows **tracing**, which builds on exactly this machinery to measure
-how long work takes.
+You have now seen hooks end to end — built-in points and your own. The next
+chapters cover **tracing**, which builds on exactly this machinery to measure
+how long work takes, starting with what a task is and why you need one.

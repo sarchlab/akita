@@ -119,6 +119,35 @@ the worker was busy and how long an average job took.
 cd tracing && go run main.go
 ```
 
+### customtracer — Writing Your Own Tracer
+
+A worker plus a hand-written `maxDurationTracer` that implements the
+`tracing.Tracer` interface (real `StartTask`/`EndTask`, no-op
+`StepTask`/`AddMilestone`) and reports the longest job. Attached the same way
+as a built-in tracer, with `tracing.CollectTrace`.
+
+**Key concepts**: the `tracing.Tracer` interface, holding state across
+`StartTask`/`EndTask`, reading a `timing.TimeTeller`.
+
+```bash
+cd customtracer && go run main.go
+```
+
+### reqtracing — Tracing the Request Lifecycle
+
+A client and server exchange request/response over a direct connection,
+annotated with the four request helpers (`TraceReqInitiate`, `TraceReqReceive`,
+`TraceReqComplete`, `TraceReqFinalize`). Two `AverageTimeTracer`s — filtering
+`req_out` and `req_in` — report round-trip latency and server handling time
+from the same run.
+
+**Key concepts**: nested `req_out`/`req_in` tasks, the four `TraceReq*`
+helpers, selecting tasks by `Kind` with a `TaskFilter`.
+
+```bash
+cd reqtracing && go run main.go
+```
+
 ## Choosing a Paradigm
 
 | Paradigm | Component Type | When to Use |

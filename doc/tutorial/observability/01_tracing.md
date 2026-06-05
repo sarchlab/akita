@@ -4,11 +4,11 @@ sidebar_position: 1
 
 # Recording Traces to a Database
 
-The **Getting Information from a Simulation** section introduced tasks and
-in-memory tracers
-(`tracing.StartTask` / `EndTask`, `BusyTimeTracer`, `AverageTimeTracer`).
-This chapter builds on that to *persist* a full trace for offline analysis,
-rather than reading a single number at the end of a run.
+The **Getting Information from a Simulation** section introduced tasks,
+tracers, and the `DBTracer` among the built-in tracers
+(`tracing.StartTask` / `EndTask`, `BusyTimeTracer`, `AverageTimeTracer`,
+`DBTracer`). This chapter builds on that to *persist* a full trace for
+offline analysis, rather than reading a single number at the end of a run.
 
 :::note Coming soon
 This chapter is being written. The runnable example will live at

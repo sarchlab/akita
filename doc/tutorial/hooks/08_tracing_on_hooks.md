@@ -1,0 +1,103 @@
+---
+sidebar_position: 8
+---
+
+# How Tracing Builds on Hooks
+
+This last chapter is optional — you can use tracing without it — but it ties
+the section together. Everything in the tracing chapters is the **hook**
+mechanism from the start of this section, specialized around one payload type:
+a `Task`. Once you see that, nothing about tracing is mysterious.
+
+## `StartTask` Fires a Hook
+
+Recall *Defining Your Own Hook Point*: a component exposes internal behavior
+by filling a `HookCtx` and calling `InvokeHook`. `tracing.StartTask` does
+exactly that. Stripped to its essence:
+
+```go
+func StartTask(id, parentID uint64, domain NamedHookable, kind, what string, detail interface{}) {
+    if domain.NumHooks() == 0 {
+        return
+    }
+
+    task := Task{ID: id, ParentID: parentID, Kind: kind, What: what, ...}
+    domain.InvokeHook(hooking.HookCtx{
+        Domain: domain,
+        Pos:    HookPosTaskStart,
+        Item:   task,
+    })
+}
+```
+
+The payload (`ctx.Item`) is a `Task`; the position is the predefined
+`HookPosTaskStart`. `EndTask`, `AddTaskStep`, and `AddMilestone` are the same
+shape with `HookPosTaskEnd`, `HookPosTaskStep`, and `HookPosMilestone`. So a
+component that traces tasks is just a component firing its own hook points —
+the technique you already learned — at four standard positions.
+
+The `NumHooks() == 0` guard is why tasks are free when nothing is observing:
+with no tracer attached there are no hooks, and the call returns before
+building the `Task`.
+
+## A Tracer Is a Hook
+
+On the other side, `CollectTrace` is a thin wrapper over `AcceptHook`. It
+attaches an internal hook, `traceHook`, that translates hook positions into
+`Tracer` method calls:
+
+```go
+func CollectTrace(domain NamedHookable, tracer Tracer) {
+    domain.AcceptHook(&traceHook{t: tracer})
+}
+
+func (h *traceHook) Func(ctx hooking.HookCtx) {
+    switch ctx.Pos {
+    case HookPosTaskStart:
+        h.t.StartTask(ctx.Item.(Task))
+    case HookPosTaskStep:
+        h.t.StepTask(ctx.Item.(Task))
+    case HookPosMilestone:
+        h.t.AddMilestone(ctx.Item.(Milestone))
+    case HookPosTaskEnd:
+        h.t.EndTask(ctx.Item.(Task))
+    }
+}
+```
+
+This is the `ctx.Pos` switch and `ctx.Item` type assertion from *Hooking into
+Messages* and *Defining Your Own Hook Point*, doing one specific job: routing
+each task event to the matching method of the `Tracer` interface. Your
+`maxDurationTracer` from chapter 5 never touched `hooking` — `traceHook` did
+the hook work and handed it clean `Task` values.
+
+## The Whole Picture
+
+```text
+component:  tracing.StartTask(...)  --->  InvokeHook(HookPosTaskStart, Task)
+                                                  |
+                                          traceHook.Func
+                                                  |
+tracer:                                   Tracer.StartTask(Task)
+```
+
+Tracing, then, is a **convention** layered on hooks: standard hook positions
+(`HookPosTaskStart` and friends), a standard payload (`Task`), and a standard
+hook (`traceHook`) that adapts them to the `Tracer` interface. Hooks are the
+general mechanism for getting information out of a simulation; tracing is the
+specialization for measuring work over time.
+
+## Key Concepts
+
+- **`StartTask`/`EndTask` are `InvokeHook` calls** at the standard positions
+  `HookPosTaskStart` / `HookPosTaskEnd`, carrying a `Task` as the item.
+- **`CollectTrace` is `AcceptHook`** of a built-in `traceHook` that dispatches
+  task hook positions to `Tracer` methods.
+- **Tracing is hooks plus a convention** — standard positions, a standard
+  payload, and a standard adapter hook.
+
+## Where to Next
+
+That completes the toolkit for observing a simulation. The next section drops
+below the component layer to the **events** the engine schedules directly —
+the primitive that components, hooks, and tracing are all built on.
