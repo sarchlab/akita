@@ -65,12 +65,13 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 
 			madeProgress = true
 
-			tracing.StartTask(
-				taskID,
-				m.flitParentTaskID(flit),
-				m.comp, "flit", "flit_inside_sw",
-				flit,
-			)
+			tracing.StartTask(m.comp, tracing.TaskStart{
+				ID:       taskID,
+				ParentID: m.flitParentTaskID(flit),
+				Kind:     "flit",
+				What:     "flit_inside_sw",
+				Detail:   flit,
+			})
 		}
 	}
 

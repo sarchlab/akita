@@ -52,13 +52,11 @@ func (m *mmuCacheMiddleware) handleDrain() bool {
 	if m.bottomPort().PeekIncoming() == nil && m.topPort().PeekIncoming() == nil {
 		next := &m.comp.State
 		next.CurrentState = mmuCacheStatePause
-		tracing.AddMilestone(
-			timing.GetIDGenerator().Generate(),
-			tracing.MilestoneKindHardwareResource,
-			m.comp.Name()+".",
-			m.comp.Name(),
-			m.comp,
-		)
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: timing.GetIDGenerator().Generate(),
+			Kind:   tracing.MilestoneKindHardwareResource,
+			What:   m.comp.Name() + ".",
+		})
 	}
 
 	return madeProgress
@@ -270,13 +268,11 @@ func (m *mmuCacheMiddleware) processMMUCacheFlush() bool {
 	}
 
 	m.controlPort().Send(rsp)
-	tracing.AddMilestone(
-		next.InflightFlushReqID,
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: next.InflightFlushReqID,
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.controlPort().Name(),
+	})
 
 	// Reset table
 	next.Table = initSets(spec.NumLevels, spec.NumBlocks)

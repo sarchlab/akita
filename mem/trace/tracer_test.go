@@ -10,12 +10,10 @@ import (
 
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/mock/gomock"
 
 	// Need SQLite driver for tests
 	_ "github.com/glebarez/go-sqlite"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 type TracerTestSuite struct {
@@ -24,15 +22,10 @@ type TracerTestSuite struct {
 	dataRecorder datarecording.DataRecorder
 	db           *sql.DB
 	tracer       tracing.Tracer
-	timeTeller   *MockTimeTeller
-	mockCtrl     *gomock.Controller
 	tempFileName string
 }
 
 func (suite *TracerTestSuite) SetupTest() {
-	// Create gomock controller
-	suite.mockCtrl = gomock.NewController(suite.T())
-
 	// Create temporary file database for testing (instead of in-memory)
 	tempFile, err := os.CreateTemp("", "tracer_test_*.db")
 	suite.Require().NoError(err)
@@ -44,8 +37,7 @@ func (suite *TracerTestSuite) SetupTest() {
 
 	suite.db = db
 	suite.dataRecorder = datarecording.NewDataRecorderWithDB(db)
-	suite.timeTeller = NewMockTimeTeller(suite.mockCtrl)
-	suite.tracer = NewDBTracer(suite.dataRecorder, suite.timeTeller)
+	suite.tracer = NewDBTracer(suite.dataRecorder)
 }
 
 func (suite *TracerTestSuite) TearDownTest() {
@@ -54,9 +46,6 @@ func (suite *TracerTestSuite) TearDownTest() {
 	}
 	if suite.db != nil {
 		suite.db.Close()
-	}
-	if suite.mockCtrl != nil {
-		suite.mockCtrl.Finish()
 	}
 	if suite.tempFileName != "" {
 		os.Remove(suite.tempFileName)
@@ -84,41 +73,28 @@ func (r MockAccessReq) GetPID() vm.PID {
 }
 
 func (suite *TracerTestSuite) TestStartAndEndTask() {
-	// Create a mock access request
 	req := MockAccessReq{
 		address:  0x1000,
 		byteSize: 64,
 		pid:      1,
 	}
 
-	// Create a task
-	task := tracing.Task{
+	suite.tracer.StartTask(tracing.TaskStart{
 		ID:       1,
 		Location: "test_location",
 		What:     "read",
 		Detail:   req,
-	}
+		Time:     100,
+	})
 
-	suite.runBasicTrace(task)
-	suite.verifyBasicTransaction(task)
-}
+	suite.tracer.EndTask(tracing.TaskEnd{ID: 1, Time: 200})
 
-func (suite *TracerTestSuite) runBasicTrace(task tracing.Task) {
-	// Set up mock expectations
-	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(100.0)).Times(1) // StartTask
-	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(200.0)).Times(1) // EndTask
-
-	// Start the task
-	suite.tracer.StartTask(task)
-
-	// End the task
-	suite.tracer.EndTask(task)
-
-	// Flush data to ensure it's written
 	suite.dataRecorder.Flush()
+
+	suite.verifyBasicTransaction()
 }
 
-func (suite *TracerTestSuite) verifyBasicTransaction(task tracing.Task) {
+func (suite *TracerTestSuite) verifyBasicTransaction() {
 	// Check row count first
 	countRows, err := suite.db.Query("SELECT COUNT(*) FROM memory_transactions")
 	suite.Require().NoError(err)
@@ -142,7 +118,15 @@ func (suite *TracerTestSuite) verifyBasicTransaction(task tracing.Task) {
 	var startTime, endTime float64
 	var address, byteSize uint64
 
-	err = rows.Scan(&id, &location, &what, &startTime, &endTime, &address, &byteSize)
+	err = rows.Scan(
+		&id,
+		&location,
+		&what,
+		&startTime,
+		&endTime,
+		&address,
+		&byteSize,
+	)
 	suite.Require().NoError(err)
 
 	suite.Equal(uint64(1), id)
@@ -157,36 +141,19 @@ func (suite *TracerTestSuite) verifyBasicTransaction(task tracing.Task) {
 	suite.False(rows.Next(), "Expected only one row")
 }
 
-func (suite *TracerTestSuite) TestStepTask() {
-	// Create a mock access request
-	req := MockAccessReq{
-		address:  0x2000,
-		byteSize: 32,
-		pid:      2,
-	}
+func (suite *TracerTestSuite) TestTaskTag() {
+	suite.tracer.AddTaskTag(tracing.TaskTag{
+		TaskID: 2,
+		What:   "cache_hit",
+		Time:   150,
+	})
 
-	// Create a task with a step
-	task := tracing.Task{
-		ID:       2,
-		Location: "test_location",
-		What:     "write",
-		Detail:   req,
-		Steps: []tracing.TaskStep{
-			{What: "cache_hit"},
-		},
-	}
-
-	// Set up mock expectations
-	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(150.0)).Times(1)
-
-	// Record the step
-	suite.tracer.StepTask(task)
-
-	// Flush data to ensure it's written
 	suite.dataRecorder.Flush()
 
-	// Verify the step was recorded
-	rows, err := suite.db.Query("SELECT ID, TaskID, Time, What FROM memory_steps")
+	// Verify the tag was recorded
+	rows, err := suite.db.Query(
+		"SELECT ID, TaskID, Time, What FROM memory_tags",
+	)
 	suite.Require().NoError(err)
 	defer rows.Close()
 
@@ -208,51 +175,35 @@ func (suite *TracerTestSuite) TestStepTask() {
 }
 
 func (suite *TracerTestSuite) TestCompleteMemoryTrace() {
-	// Create a mock access request
 	req := MockAccessReq{
 		address:  0x3000,
 		byteSize: 128,
 		pid:      3,
 	}
 
-	// Create a task
-	task := tracing.Task{
+	suite.tracer.StartTask(tracing.TaskStart{
 		ID:       3,
 		Location: "memory_controller",
 		What:     "read",
 		Detail:   req,
-		Steps: []tracing.TaskStep{
-			{What: "cache_miss"},
-		},
-	}
+		Time:     50,
+	})
 
-	suite.runCompleteTrace(task)
-	suite.verifyCompleteTransaction(task)
-	suite.verifyCompleteStep(task)
-}
+	suite.tracer.AddTaskTag(tracing.TaskTag{
+		TaskID: 3,
+		What:   "cache_miss",
+		Time:   75,
+	})
 
-func (suite *TracerTestSuite) runCompleteTrace(task tracing.Task) {
-	// Set up mock expectations in order
-	gomock.InOrder(
-		suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(50.0)).Times(1),  // StartTask
-		suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(75.0)).Times(1),  // StepTask
-		suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(100.0)).Times(1), // EndTask
-	)
+	suite.tracer.EndTask(tracing.TaskEnd{ID: 3, Time: 100})
 
-	// Start task at time 50
-	suite.tracer.StartTask(task)
-
-	// Record step at time 75
-	suite.tracer.StepTask(task)
-
-	// End task at time 100
-	suite.tracer.EndTask(task)
-
-	// Flush data
 	suite.dataRecorder.Flush()
+
+	suite.verifyCompleteTransaction()
+	suite.verifyCompleteTag()
 }
 
-func (suite *TracerTestSuite) verifyCompleteTransaction(task tracing.Task) {
+func (suite *TracerTestSuite) verifyCompleteTransaction() {
 	transactionQuery := "SELECT ID, Location, What, StartTime, EndTime, Address, ByteSize FROM memory_transactions"
 	transactionRows, err := suite.db.Query(transactionQuery)
 	suite.Require().NoError(err)
@@ -264,7 +215,15 @@ func (suite *TracerTestSuite) verifyCompleteTransaction(task tracing.Task) {
 	var startTime, endTime float64
 	var address, byteSize uint64
 
-	err = transactionRows.Scan(&id, &location, &what, &startTime, &endTime, &address, &byteSize)
+	err = transactionRows.Scan(
+		&id,
+		&location,
+		&what,
+		&startTime,
+		&endTime,
+		&address,
+		&byteSize,
+	)
 	suite.Require().NoError(err)
 
 	suite.Equal(uint64(3), id)
@@ -276,43 +235,37 @@ func (suite *TracerTestSuite) verifyCompleteTransaction(task tracing.Task) {
 	suite.Equal(uint64(128), byteSize)
 }
 
-func (suite *TracerTestSuite) verifyCompleteStep(task tracing.Task) {
-	stepRows, err := suite.db.Query("SELECT ID, TaskID, Time, What FROM memory_steps")
+func (suite *TracerTestSuite) verifyCompleteTag() {
+	tagRows, err := suite.db.Query(
+		"SELECT ID, TaskID, Time, What FROM memory_tags",
+	)
 	suite.Require().NoError(err)
-	defer stepRows.Close()
+	defer tagRows.Close()
 
-	suite.Require().True(stepRows.Next())
-	var stepID, taskID uint64
-	var stepWhat string
-	var stepTime float64
+	suite.Require().True(tagRows.Next())
+	var tagID, taskID uint64
+	var tagWhat string
+	var tagTime float64
 
-	err = stepRows.Scan(&stepID, &taskID, &stepTime, &stepWhat)
+	err = tagRows.Scan(&tagID, &taskID, &tagTime, &tagWhat)
 	suite.Require().NoError(err)
 
 	suite.Equal(uint64(3), taskID)
-	suite.Equal(75.0, stepTime)
-	suite.Equal("cache_miss", stepWhat)
+	suite.Equal(75.0, tagTime)
+	suite.Equal("cache_miss", tagWhat)
 }
 
 func (suite *TracerTestSuite) TestTaskWithoutAccessReq() {
-	// Create a task without AccessReq detail
-	task := tracing.Task{
+	suite.tracer.StartTask(tracing.TaskStart{
 		ID:       4,
 		Location: "test_location",
 		What:     "non_memory",
 		Detail:   "not_an_access_req",
-	}
+		Time:     10,
+	})
 
-	// Set up mock expectations - CurrentTime should be called for StartTask but not EndTask since no AccessReq
-	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10.0)).Times(1)
+	suite.tracer.EndTask(tracing.TaskEnd{ID: 4, Time: 20})
 
-	// Start the task (this will not create a pending transaction due to no AccessReq)
-	suite.tracer.StartTask(task)
-
-	// End the task (this should not call CurrentTime since no pending transaction exists)
-	suite.tracer.EndTask(task)
-
-	// Flush data
 	suite.dataRecorder.Flush()
 
 	// Verify no transaction was recorded (since Detail is not AccessReq)
@@ -329,34 +282,26 @@ func (suite *TracerTestSuite) TestTaskWithoutAccessReq() {
 }
 
 func (suite *TracerTestSuite) TestAddMilestone() {
-	// AddMilestone should do nothing for memory tracer
+	// AddMilestone should do nothing for the memory tracer.
 	milestone := tracing.Milestone{
-		ID:       10,
-		TaskID:   11,
-		Kind:     tracing.MilestoneKindHardwareResource,
-		What:     "resource_acquired",
-		Location: "test_location",
+		ID:     10,
+		TaskID: 11,
+		Kind:   tracing.MilestoneKindHardwareResource,
+		What:   "resource_acquired",
 	}
 
-	// This should not panic and should do nothing
+	// This should not panic and should do nothing.
 	suite.tracer.AddMilestone(milestone)
 
-	// Flush and verify no data was written
 	suite.dataRecorder.Flush()
-
-	// Check that no milestone-related tables exist or are populated
-	// Since AddMilestone does nothing, we just ensure it doesn't crash
 }
 
 func TestTracerTestSuite(t *testing.T) {
 	suite.Run(t, new(TracerTestSuite))
 }
 
-// Test DBTracer with fixedTimeTeller
-func TestDBTracerWithFixedTimeTeller(t *testing.T) {
-	// Create a simple time teller that returns the current time
-	timeTeller := &fixedTimeTeller{time: 100.0}
-
+// TestDBTracerEndToEnd exercises the tracer through a full task lifecycle.
+func TestDBTracerEndToEnd(t *testing.T) {
 	// Create a temp DB file
 	tmpFile, err := os.CreateTemp(t.TempDir(), "tracer-compat-*.db")
 	if err != nil {
@@ -366,51 +311,32 @@ func TestDBTracerWithFixedTimeTeller(t *testing.T) {
 
 	recorder := datarecording.NewDataRecorder(tmpFile.Name())
 	defer recorder.Close()
-	tracer := NewDBTracer(recorder, timeTeller)
+	tracer := NewDBTracer(recorder)
 
-	// Create a mock request
 	req := MockAccessReq{
 		address:  0x4000,
 		byteSize: 256,
 		pid:      4,
 	}
 
-	// Test that the DB tracer works
-	task := tracing.Task{
+	// These should not panic.
+	tracer.StartTask(tracing.TaskStart{
 		ID:       20,
 		Location: "test_loc",
 		What:     "test_what",
 		Detail:   req,
-		Steps: []tracing.TaskStep{
-			{What: "test_step"},
-		},
-	}
+		Time:     100,
+	})
 
-	// These should not panic
-	tracer.StartTask(task)
+	tracer.AddTaskTag(tracing.TaskTag{TaskID: 20, What: "test_tag", Time: 150})
 
-	timeTeller.time = 150.0
-	tracer.StepTask(task)
+	tracer.EndTask(tracing.TaskEnd{ID: 20, Time: 200})
 
-	timeTeller.time = 200.0
-	tracer.EndTask(task)
-
-	// Add milestone (should do nothing)
-	milestone := tracing.Milestone{
-		ID:       30,
-		TaskID:   20,
-		Kind:     tracing.MilestoneKindOther,
-		What:     "test",
-		Location: "test_loc",
-	}
-	tracer.AddMilestone(milestone)
-}
-
-// fixedTimeTeller is a simple implementation for testing
-type fixedTimeTeller struct {
-	time timing.VTimeInPicoSec
-}
-
-func (f *fixedTimeTeller) CurrentTime() timing.VTimeInPicoSec {
-	return f.time
+	// Add milestone (should do nothing).
+	tracer.AddMilestone(tracing.Milestone{
+		ID:     30,
+		TaskID: 20,
+		Kind:   tracing.MilestoneKindOther,
+		What:   "test",
+	})
 }

@@ -174,14 +174,18 @@ func (m *incomingMW) logFlitE2ETaskFromFlit(
 	}
 
 	if isEnd {
-		tracing.EndTask(flit.MsgMeta.ID, m.comp)
+		tracing.EndTask(m.comp, tracing.TaskEnd{ID: flit.MsgMeta.ID})
 		return
 	}
 
-	tracing.StartTaskWithSpecificLocation(
-		flit.MsgMeta.ID, flit.Msg.ID,
-		m.comp, "flit_e2e", "flit_e2e", m.comp.Name()+".FlitBuf", flit,
-	)
+	tracing.StartTask(m.comp, tracing.TaskStart{
+		ID:       flit.MsgMeta.ID,
+		ParentID: flit.Msg.ID,
+		Kind:     "flit_e2e",
+		What:     "flit_e2e",
+		Location: m.comp.Name() + ".FlitBuf",
+		Detail:   flit,
+	})
 }
 
 func (m *incomingMW) logMsgE2ETask(msg messaging.Msg, isEnd bool) {
@@ -202,27 +206,31 @@ func (m *incomingMW) logMsgE2ETask(msg messaging.Msg, isEnd bool) {
 func (m *incomingMW) logMsgReq(isEnd bool, msg messaging.Msg) {
 	taskID := tracing.MsgIDAtReceiver(msg, m.comp)
 	if isEnd {
-		tracing.EndTask(taskID, m.comp)
+		tracing.EndTask(m.comp, tracing.TaskEnd{ID: taskID})
 		tracing.ForgetMsgIDAtReceiver(msg.Meta().ID, m.comp)
 	} else {
-		tracing.StartTask(
-			taskID,
-			msg.Meta().ID,
-			m.comp, "msg_e2e", "msg_e2e", msg,
-		)
+		tracing.StartTask(m.comp, tracing.TaskStart{
+			ID:       taskID,
+			ParentID: msg.Meta().ID,
+			Kind:     "msg_e2e",
+			What:     "msg_e2e",
+			Detail:   msg,
+		})
 	}
 }
 
 func (m *incomingMW) logMsgRsp(isEnd bool, msg messaging.Msg) {
 	taskID := tracing.MsgIDAtReceiver(msg, m.comp)
 	if isEnd {
-		tracing.EndTask(taskID, m.comp)
+		tracing.EndTask(m.comp, tracing.TaskEnd{ID: taskID})
 		tracing.ForgetMsgIDAtReceiver(msg.Meta().ID, m.comp)
 	} else {
-		tracing.StartTask(
-			taskID,
-			msg.Meta().ID,
-			m.comp, "msg_e2e", "msg_e2e", msg,
-		)
+		tracing.StartTask(m.comp, tracing.TaskStart{
+			ID:       taskID,
+			ParentID: msg.Meta().ID,
+			Kind:     "msg_e2e",
+			What:     "msg_e2e",
+			Detail:   msg,
+		})
 	}
 }

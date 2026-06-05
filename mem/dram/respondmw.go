@@ -48,14 +48,14 @@ func (m *respondMW) finalizeTransaction(
 	if t.HasWrite {
 		done := m.finalizeWriteTrans(state, t, i)
 		if done {
-			tracing.TraceReqComplete(&t.WriteMsg, m.comp)
+			tracing.TraceReqComplete(m.comp, &t.WriteMsg)
 		}
 		return done
 	}
 
 	done := m.finalizeReadTrans(state, t, i)
 	if done {
-		tracing.TraceReqComplete(&t.ReadMsg, m.comp)
+		tracing.TraceReqComplete(m.comp, &t.ReadMsg)
 	}
 	return done
 }

@@ -97,7 +97,7 @@ func (m *tickFinalizeMW) finalizeRead(
 
 	m.topPort().Send(rsp)
 
-	tracing.TraceReqComplete(&item.ReadMsg, m.comp)
+	tracing.TraceReqComplete(m.comp, &item.ReadMsg)
 
 	bufferPop(b)
 
@@ -157,7 +157,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 
 	m.topPort().Send(rsp)
 
-	tracing.TraceReqComplete(&item.WriteMsg, m.comp)
+	tracing.TraceReqComplete(m.comp, &item.WriteMsg)
 
 	bufferPop(b)
 

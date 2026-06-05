@@ -59,7 +59,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		}
 
 		m.topPort().RetrieveIncoming()
-		tracing.TraceReqReceive(msg, m.comp)
+		tracing.TraceReqReceive(m.comp, msg)
 
 		item := m.msgToItem(msg)
 		pipelineAccept(&next.Banks[bankID], spec, item)

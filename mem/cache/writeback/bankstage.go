@@ -187,7 +187,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	dataReady.TrafficClass = "mem.DataReadyRsp"
 	s.cache.topPort.Send(dataReady)
 
-	tracing.TraceReqComplete(trans.ReadMeta, s.cache.comp)
+	tracing.TraceReqComplete(s.cache.comp, trans.ReadMeta)
 
 	return true
 }
@@ -224,7 +224,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 	done.TrafficClass = "mem.WriteDoneRsp"
 	s.cache.topPort.Send(done)
 
-	tracing.TraceReqComplete(trans.WriteMeta, s.cache.comp)
+	tracing.TraceReqComplete(s.cache.comp, trans.WriteMeta)
 
 	return true
 }
