@@ -168,7 +168,10 @@ func (m *ctrlMiddleware) performCtrlPause(msg mem.ControlReq) bool {
 // mmuCache is paused or drained; issued while Enabled it is rejected.
 func (m *ctrlMiddleware) handleInvalidate(msg mem.ControlReq) bool {
 	state := &m.comp.State
-	if state.CurrentState == mmuCacheStateEnable {
+	// Invalidate is only legal once the cache is fully paused; while it is
+	// still draining, in-flight responses can still repopulate the table
+	// after the invalidate, so accept only the paused state.
+	if state.CurrentState != mmuCacheStatePause {
 		return m.rejectMustBePaused(msg)
 	}
 	if !m.controlPort().CanSend() {
@@ -289,6 +292,11 @@ func (m *ctrlMiddleware) handleReset(msg mem.ControlReq) bool {
 	state.PendingDrainRsp = false
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
+
+	// Reset is a hard reset: drop the cached page-walk entries so the
+	// component matches its freshly-built (empty) table.
+	spec := m.comp.Spec()
+	state.Table = initSets(spec.NumLevels, spec.NumBlocks)
 
 	for m.topPort().PeekIncoming() != nil {
 		m.topPort().RetrieveIncoming()

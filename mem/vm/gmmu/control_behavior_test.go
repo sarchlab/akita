@@ -199,6 +199,10 @@ var _ = Describe("GMMU control behavior", func() {
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			Expect(comp.State.WalkingTranslations).To(BeEmpty())
 			Expect(comp.State.RemoteMemReqs).To(HaveLen(0))
+			// RemoteMemReqs must remain a usable (non-nil) map after Reset:
+			// walkMW writes to it directly, so a nil map would panic on the
+			// next remote walk.
+			Expect(comp.State.RemoteMemReqs).ToNot(BeNil())
 			Expect(comp.State.ControlState).
 				To(Equal(control.StateEnabled))
 		},

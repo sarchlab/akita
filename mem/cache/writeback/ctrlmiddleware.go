@@ -204,8 +204,9 @@ func (m *ctrlMiddleware) handleEnable(req mem.ControlReq) bool {
 	if !m.ctrlPort.CanSend() {
 		return false
 	}
-	clearPort(m.pipeline.topPort)
-	clearPort(m.pipeline.bottomPort)
+	// Enable resumes from Paused; it must not discard traffic queued while
+	// paused (e.g. bottom responses for frozen in-flight transactions),
+	// which the pipeline processes once it runs again.
 	m.pipeline.comp.State.CacheState = int(cacheStateRunning)
 	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdEnable,
 		req.Src, req.ID, true, ""))
@@ -231,6 +232,30 @@ func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
 	next.MSHRState = cache.MSHRState{}
 	next.Transactions = nil
 	next.EvictingList = map[uint64]bool{}
+
+	clearCachePipelinesAndBuffers(next)
+
+	next.FlusherBlockToEvictRefs = nil
+	next.HasProcessingFlush = false
+	next.ProcessingFlush = flushReqState{}
+	next.CurrentCmdID = 0
+	next.CurrentCmdSrc = ""
+	next.CacheState = int(cacheStateRunning)
+
+	clearPort(m.pipeline.topPort)
+	clearPort(m.pipeline.bottomPort)
+
+	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdReset,
+		req.Src, req.ID, true, ""))
+	m.ctrlPort.RetrieveIncoming()
+	return true
+}
+
+// clearCachePipelinesAndBuffers empties every stage buffer, pipeline, and
+// per-bank in-flight counter, and clears the MSHR/write-buffer stage
+// bookkeeping. It does not touch the directory, MSHR contents, or the
+// transaction table.
+func clearCachePipelinesAndBuffers(next *State) {
 	next.DirStageBuf.Clear()
 	for i := range next.DirToBankBufs {
 		next.DirToBankBufs[i].Clear()
@@ -259,20 +284,6 @@ func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
 	next.InflightEvictionIndices = nil
 	next.HasProcessingMSHREntry = false
 	next.ProcessingMSHREntryIdx = 0
-	next.FlusherBlockToEvictRefs = nil
-	next.HasProcessingFlush = false
-	next.ProcessingFlush = flushReqState{}
-	next.CurrentCmdID = 0
-	next.CurrentCmdSrc = ""
-	next.CacheState = int(cacheStateRunning)
-
-	clearPort(m.pipeline.topPort)
-	clearPort(m.pipeline.bottomPort)
-
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdReset,
-		req.Src, req.ID, true, ""))
-	m.ctrlPort.RetrieveIncoming()
-	return true
 }
 
 func (m *ctrlMiddleware) handleUnsupported(req mem.ControlReq) bool {

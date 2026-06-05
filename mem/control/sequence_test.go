@@ -197,64 +197,10 @@ func lookupMisses(
 // installs two dirty blocks and confirms each verb's externally visible
 // effect.
 func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
-	const blockSize = 64
+	comp, storage, ctrl, bottom := buildWritebackForSequence(t)
 
-	engine := timing.NewSerialEngine()
-	storage := mem.NewStorage(1 * mem.MB)
-
-	spec := writeback.DefaultSpec()
-	spec.TotalByteSize = 64 * 1024
-	spec.NumBanks = 1
-	spec.NumMSHREntry = 16
-	spec.NumReqPerCycle = 4
-	spec.WayAssociativity = 2
-	spec.Log2BlockSize = 6
-	spec.BankLatency = 1
-	spec.DirLatency = 1
-	spec.TopPortBufferSize = 16
-	spec.BottomPortBufferSize = 16
-	spec.ControlPortBufferSize = 16
-
-	comp := writeback.MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
-		WithSpec(spec).
-		WithResources(writeback.Resources{
-			Storage: storage,
-			AddressToPortMapper: &mem.SinglePortMapper{
-				Port: messaging.RemotePort("LowerCache"),
-			},
-		}).
-		Build("L1Cache")
-
-	bottom := comp.GetPortByName("Bottom")
-	ctrl := comp.GetPortByName("Control")
-	for _, p := range []messaging.Port{
-		comp.GetPortByName("Top"), bottom, ctrl,
-	} {
-		(&noopConn{}).PlugIn(p)
-	}
-
-	// install seats a valid+dirty block holding addr at way 0 of its set,
-	// with a recognizable payload in backing storage.
-	install := func(addr uint64, fill byte) int {
-		setID := int(addr / blockSize % uint64(comp.Spec().NumSets))
-		block := &comp.State.DirectoryState.Sets[setID].Blocks[0]
-		block.Tag = addr
-		block.PID = 0
-		block.IsValid = true
-		block.IsDirty = true
-		data := make([]byte, blockSize)
-		for i := range data {
-			data[i] = fill
-		}
-		if err := storage.Write(block.CacheAddress, data); err != nil {
-			t.Fatalf("seed storage: %v", err)
-		}
-		return setID
-	}
-
-	setA := install(0x0, 0xAA)
-	setB := install(0x40, 0xBB)
+	setA := installDirtyBlock(t, comp, storage, 0x0, 0xAA)
+	setB := installDirtyBlock(t, comp, storage, 0x40, 0xBB)
 
 	// 1. Drain: the cache holds no in-flight work, so it quiesces and acks.
 	if rsp := driveCtrl(t, comp, ctrl, mem.CmdDrain, nil, 0); !rsp.Success {
@@ -262,48 +208,7 @@ func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
 	}
 
 	// 2. Flush (no filter): both dirty blocks are written back to Bottom.
-	flush := mem.ControlReq{Command: mem.CmdFlush}
-	flush.ID = timing.GetIDGenerator().Generate()
-	flush.Src = messaging.RemotePort("Cmd")
-	flush.Dst = ctrl.AsRemote()
-	flush.TrafficClass = "mem.ControlReq"
-	ctrl.Deliver(flush)
-
-	writtenBack := map[byte]bool{}
-	var flushRsp mem.ControlRsp
-	flushDone := false
-	for i := 0; i < 2048 && !flushDone; i++ {
-		comp.Tick()
-		for {
-			out := bottom.RetrieveOutgoing()
-			if out == nil {
-				break
-			}
-			if w, ok := out.(mem.WriteReq); ok {
-				if len(w.Data) > 0 {
-					writtenBack[w.Data[0]] = true
-				}
-				done := mem.WriteDoneRsp{}
-				done.ID = timing.GetIDGenerator().Generate()
-				done.Src = messaging.RemotePort("LowerCache")
-				done.Dst = bottom.AsRemote()
-				done.RspTo = w.ID
-				done.TrafficClass = "mem.WriteDoneRsp"
-				bottom.Deliver(done)
-			}
-		}
-		if out := ctrl.RetrieveOutgoing(); out != nil {
-			if rsp, ok := out.(mem.ControlRsp); ok &&
-				rsp.Command == mem.CmdFlush {
-				flushRsp = rsp
-				flushDone = true
-			}
-		}
-	}
-
-	if !flushDone || !flushRsp.Success {
-		t.Fatalf("Flush did not complete: %+v", flushRsp)
-	}
+	writtenBack := driveFlushAll(t, comp, ctrl, bottom)
 	if !writtenBack[0xAA] || !writtenBack[0xBB] {
 		t.Errorf("Flush did not write back both dirty blocks: %v", writtenBack)
 	}
@@ -356,4 +261,143 @@ func makeTransReq(
 	req.DeviceID = 1
 	req.TrafficClass = "vm.TranslationReq"
 	return req
+}
+
+// driveFlushAll issues an unfiltered Flush, answers every write-back on
+// the bottom port, and returns the set of first-data-bytes written back,
+// once the async Flush ack arrives. It fails the test if Flush never acks.
+func driveFlushAll(
+	t *testing.T,
+	comp ticker,
+	ctrl, bottom messaging.Port,
+) map[byte]bool {
+	t.Helper()
+
+	flush := mem.ControlReq{Command: mem.CmdFlush}
+	flush.ID = timing.GetIDGenerator().Generate()
+	flush.Src = messaging.RemotePort("Cmd")
+	flush.Dst = ctrl.AsRemote()
+	flush.TrafficClass = "mem.ControlReq"
+	ctrl.Deliver(flush)
+
+	writtenBack := map[byte]bool{}
+	for range 2048 {
+		comp.Tick()
+		answerWriteBacks(bottom, writtenBack)
+		if out := ctrl.RetrieveOutgoing(); out != nil {
+			rsp, ok := out.(mem.ControlRsp)
+			if ok && rsp.Command == mem.CmdFlush {
+				if !rsp.Success {
+					t.Fatalf("Flush failed: %q", rsp.Error)
+				}
+				return writtenBack
+			}
+		}
+	}
+
+	t.Fatal("Flush did not complete within budget")
+	return writtenBack
+}
+
+// answerWriteBacks drains the bottom port's outgoing write-backs,
+// recording each block's first data byte and acking it with a
+// WriteDoneRsp so the flush can make progress.
+func answerWriteBacks(bottom messaging.Port, writtenBack map[byte]bool) {
+	for {
+		out := bottom.RetrieveOutgoing()
+		if out == nil {
+			return
+		}
+		w, ok := out.(mem.WriteReq)
+		if !ok {
+			continue
+		}
+		if len(w.Data) > 0 {
+			writtenBack[w.Data[0]] = true
+		}
+		done := mem.WriteDoneRsp{}
+		done.ID = timing.GetIDGenerator().Generate()
+		done.Src = messaging.RemotePort("LowerCache")
+		done.Dst = bottom.AsRemote()
+		done.RspTo = w.ID
+		done.TrafficClass = "mem.WriteDoneRsp"
+		bottom.Deliver(done)
+	}
+}
+
+// buildWritebackForSequence builds a small write-back cache wired with
+// noop connections, returning the component, its backing storage, and the
+// Control and Bottom ports the sequence test drives.
+func buildWritebackForSequence(
+	t *testing.T,
+) (*writeback.Comp, *mem.Storage, messaging.Port, messaging.Port) {
+	t.Helper()
+
+	engine := timing.NewSerialEngine()
+	storage := mem.NewStorage(1 * mem.MB)
+
+	spec := writeback.DefaultSpec()
+	spec.TotalByteSize = 64 * 1024
+	spec.NumBanks = 1
+	spec.NumMSHREntry = 16
+	spec.NumReqPerCycle = 4
+	spec.WayAssociativity = 2
+	spec.Log2BlockSize = 6
+	spec.BankLatency = 1
+	spec.DirLatency = 1
+	spec.TopPortBufferSize = 16
+	spec.BottomPortBufferSize = 16
+	spec.ControlPortBufferSize = 16
+
+	comp := writeback.MakeBuilder().
+		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithSpec(spec).
+		WithResources(writeback.Resources{
+			Storage: storage,
+			AddressToPortMapper: &mem.SinglePortMapper{
+				Port: messaging.RemotePort("LowerCache"),
+			},
+		}).
+		Build("L1Cache")
+
+	bottom := comp.GetPortByName("Bottom")
+	ctrl := comp.GetPortByName("Control")
+	for _, p := range []messaging.Port{
+		comp.GetPortByName("Top"), bottom, ctrl,
+	} {
+		(&noopConn{}).PlugIn(p)
+	}
+
+	return comp, storage, ctrl, bottom
+}
+
+// installDirtyBlock seats a valid+dirty block holding addr at way 0 of its
+// set, writing a recognizable payload (fill bytes) into backing storage so
+// a later flush write-back can be identified by its data. Returns the set.
+func installDirtyBlock(
+	t *testing.T,
+	comp *writeback.Comp,
+	storage *mem.Storage,
+	addr uint64,
+	fill byte,
+) int {
+	t.Helper()
+
+	const blockSize = 64
+	setID := int(addr / blockSize % uint64(comp.Spec().NumSets))
+	block := &comp.State.DirectoryState.Sets[setID].Blocks[0]
+	block.Tag = addr
+	block.PID = 0
+	block.IsValid = true
+	block.IsDirty = true
+
+	data := make([]byte, blockSize)
+	for i := range data {
+		data[i] = fill
+	}
+	if err := storage.Write(block.CacheAddress, data); err != nil {
+		t.Fatalf("seed storage: %v", err)
+	}
+
+	return setID
 }

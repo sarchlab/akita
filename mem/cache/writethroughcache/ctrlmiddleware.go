@@ -59,7 +59,9 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 
 	req, ok := msg.(mem.ControlReq)
 	if !ok {
-		return false
+		// Drop unexpected message types so the Control port does not stall.
+		m.ctrlPort.RetrieveIncoming()
+		return true
 	}
 
 	switch req.Command {
@@ -109,13 +111,8 @@ func (m *ctrlMiddleware) handleEnable(req mem.ControlReq) bool {
 	next.IsPaused = false
 	next.IsDraining = false
 
-	for m.pipeline.topPort.PeekIncoming() != nil {
-		m.pipeline.topPort.RetrieveIncoming()
-	}
-	for m.pipeline.bottomPort.PeekIncoming() != nil {
-		m.pipeline.bottomPort.RetrieveIncoming()
-	}
-
+	// Enable resumes from Paused; it must not discard traffic queued while
+	// paused, which the pipeline processes once it runs again.
 	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdEnable,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort.RetrieveIncoming()
@@ -167,7 +164,9 @@ func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
 // drained; issued while Enabled it is rejected.
 func (m *ctrlMiddleware) handleInvalidate(req mem.ControlReq) bool {
 	next := &m.pipeline.comp.State
-	if !next.IsPaused && !next.IsDraining {
+	if !next.IsPaused {
+		// Only the fully-paused state is legal; while still draining,
+		// in-flight work can still touch the directory after the verb.
 		return m.rejectMustBePaused(req)
 	}
 	if !m.ctrlPort.CanSend() {
@@ -190,7 +189,9 @@ func (m *ctrlMiddleware) handleInvalidate(req mem.ControlReq) bool {
 // once the cache is paused or drained.
 func (m *ctrlMiddleware) handleFlush(req mem.ControlReq) bool {
 	next := &m.pipeline.comp.State
-	if !next.IsPaused && !next.IsDraining {
+	if !next.IsPaused {
+		// Only the fully-paused state is legal; while still draining,
+		// in-flight work can still touch the directory after the verb.
 		return m.rejectMustBePaused(req)
 	}
 	if !m.ctrlPort.CanSend() {

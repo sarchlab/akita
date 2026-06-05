@@ -119,7 +119,9 @@ func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
 
 	state := &m.comp.State
 	state.WalkingTranslations = nil
-	state.RemoteMemReqs = nil
+	// RemoteMemReqs must stay a usable (non-nil) map: walkMW writes to it
+	// directly, so leaving it nil would panic on the next remote walk.
+	state.RemoteMemReqs = make(map[uint64]transactionState)
 	state.ToRemoveFromPTW = nil
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""

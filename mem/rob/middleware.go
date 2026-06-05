@@ -372,9 +372,9 @@ func (m *middleware) handleEnable(req mem.ControlReq) bool {
 	state := &m.comp.State
 	state.ControlState = control.StateEnabled
 
-	drainIncoming(m.topPort())
-	drainIncoming(m.bottomPort())
-
+	// Enable resumes from Paused; it must not discard traffic queued while
+	// paused (e.g. bottom responses that retire frozen in-flight
+	// transactions). They are processed once the pipeline runs again.
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }

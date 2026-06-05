@@ -64,7 +64,9 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 
 	ctrlReq, ok := msg.(mem.ControlReq)
 	if !ok {
-		return false
+		// Drop unexpected message types so the Control port does not stall.
+		m.controlPort().RetrieveIncoming()
+		return true
 	}
 
 	switch ctrlReq.Command {
@@ -157,7 +159,10 @@ func (m *ctrlMiddleware) performCtrlPause(msg mem.ControlReq) bool {
 // is paused or drained; issued while Enabled it is rejected.
 func (m *ctrlMiddleware) handleInvalidate(msg mem.ControlReq) bool {
 	state := &m.comp.State
-	if state.TLBState == tlbStateEnable {
+	// Invalidate is only legal once the TLB is fully paused. While it is
+	// still draining, in-flight bottom responses can still be parsed into
+	// the sets after the invalidate, so accept only the paused state.
+	if state.TLBState != tlbStatePause {
 		return m.rejectMustBePaused(msg)
 	}
 	if !m.controlPort().CanSend() {
@@ -246,10 +251,16 @@ func (m *ctrlMiddleware) handleReset(msg mem.ControlReq) bool {
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 
-	// Reset is a hard reset: in-flight misses are discarded, not preserved.
+	// Reset is a hard reset to the freshly-built shape: discard in-flight
+	// misses, the cached translations, and any staged pipeline work.
 	state.MSHREntries = nil
 	state.HasRespondingMSHR = false
 	state.RespondingMSHRData = mshrEntryState{}
+
+	spec := m.comp.Spec()
+	state.Sets = initSets(spec.NumSets, spec.NumWays)
+	state.Pipeline.Clear()
+	state.BufferItems.Clear()
 
 	for m.topPort().PeekIncoming() != nil {
 		m.topPort().RetrieveIncoming()

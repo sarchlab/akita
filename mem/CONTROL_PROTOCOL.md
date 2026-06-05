@@ -177,8 +177,9 @@ here and only the component-specific details are repeated below:
 - **Pause** (sync) sets the component to its paused state immediately;
   the data path stops accepting new traffic from its workload ports.
   In-flight work is frozen, not discarded.
-- **Enable** (sync) returns the component to its running state and drops
-  any stale traffic left in the workload-port queues.
+- **Enable** (sync) returns the component to its running state and
+  resumes processing. Traffic that queued while paused is processed once
+  the data path runs again, not discarded.
 - **Reset** (sync) is a hard reset: it discards in-flight transactions
   and internal queues and returns the component to its freshly-built
   shape. What exactly each component wipes (and deliberately preserves)
@@ -232,8 +233,9 @@ string in `State.TLBState` (`enable`/`pause`/`drain`).
 - Drain lets the data path finish resolving in-flight misses (the MSHR
   empties and the final translation response is sent to the top) before
   the async ack.
-- Reset discards the MSHR (in-flight misses). Cached translations in the
-  sets are **not** evicted by Reset — use Invalidate to drop them.
+- Reset is a hard reset to the freshly-built shape: it discards the MSHR
+  (in-flight misses) and re-initializes the sets and pipeline, so cached
+  translations and staged work are dropped.
 - Invalidate marks cached entries matching the `Addresses`
   (page-aligned) and `PID` filter invalid (empty filter = all). No
   writeback — translations are never dirty.
@@ -242,8 +244,8 @@ string in `State.TLBState` (`enable`/`pause`/`drain`).
 **`vm/mmuCache`** — `TranslationCacheLike`; string state in
 `State.CurrentState`.
 - Drain lets the data path forward/quiesce queued work, then acks.
-- Reset clears control bookkeeping and drains the ports; cached entries
-  persist (drop them with Invalidate).
+- Reset drains the ports and re-initializes the cache table, returning it
+  to its freshly-built empty state.
 - Invalidate drops cached page-walk entries matching the filter. Because
   the cache stores per-level VPN segments, an address filter can also
   drop sibling pages that share an upper-level segment — this is safe

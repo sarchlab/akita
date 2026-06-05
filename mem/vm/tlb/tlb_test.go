@@ -347,6 +347,30 @@ var _ = Describe("TLB", func() {
 			Expect(rsp.Success).To(BeTrue())
 		})
 
+		It("clears cached entries on Reset", func() {
+			next := &tlbComp.State
+			page := vm.Page{PID: 1, VAddr: 0x1000, Valid: true}
+			setUpdate(&next.Sets[0], 0, page)
+			setVisit(&next.Sets[0], 0)
+
+			resetReq := mem.ControlReq{Command: mem.CmdReset}
+			resetReq.ID = timing.GetIDGenerator().Generate()
+			resetReq.Src = messaging.RemotePort("Agent")
+			resetReq.Dst = controlPort.AsRemote()
+			resetReq.TrafficClass = "mem.ControlReq"
+			controlPort.Deliver(resetReq)
+
+			Expect(tlbCtrlMW.handleIncomingCommands()).To(BeTrue())
+
+			// Reset returns the TLB to its freshly-built empty state.
+			_, gotPage, found := setLookup(&next.Sets[0], 1, 0x1000)
+			Expect(found && gotPage.Valid).To(BeFalse())
+
+			rsp := controlPort.RetrieveOutgoing().(mem.ControlRsp)
+			Expect(rsp.Command).To(Equal(mem.CmdReset))
+			Expect(rsp.Success).To(BeTrue())
+		})
+
 		It("should handle restart request", func() {
 			restartReq := mem.ControlReq{Command: mem.CmdReset}
 			restartReq.ID = timing.GetIDGenerator().Generate()
