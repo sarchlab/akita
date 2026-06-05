@@ -89,7 +89,9 @@ const config = {
         id: `pkg-${pkg}`,
         path: `../${pkg}`,
         routeBasePath: `packages/${pkg}`,
-        sidebarPath: './sidebars-packages.js',
+        sidebarPath: (pkg === 'noc' || pkg === 'mem')
+          ? './sidebars-components-group.js'
+          : './sidebars-core-group.js',
         editUrl: `https://github.com/sarchlab/akita/blob/main/${pkg}/`,
         include: ['**/README.md'],
         exclude: ['**/node_modules/**', '**/static/**'],
@@ -114,26 +116,18 @@ const config = {
             label: 'Tutorial',
           },
           {
-            type: 'dropdown',
-            label: 'Core',
+            type: 'docSidebar',
+            sidebarId: 'coreGroupSidebar',
+            docsPluginId: 'pkg-modeling',
             position: 'left',
-            items: [
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-modeling', label: 'modeling'},
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-queueing', label: 'queueing'},
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-datarecording', label: 'datarecording'},
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-tracing', label: 'tracing'},
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-simulation', label: 'simulation'},
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-examples', label: 'examples'},
-            ],
+            label: 'Core',
           },
           {
-            type: 'dropdown',
-            label: 'First-party Components',
+            type: 'docSidebar',
+            sidebarId: 'componentsGroupSidebar',
+            docsPluginId: 'pkg-noc',
             position: 'left',
-            items: [
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-noc', label: 'noc'},
-              {type: 'docSidebar', sidebarId: 'packagesSidebar', docsPluginId: 'pkg-mem', label: 'mem'},
-            ],
+            label: 'First-party Components',
           },
           {
             type: 'dropdown',
