@@ -129,7 +129,11 @@ func (m *tlbMiddleware) handleDrain() bool {
 		madeProgress = m.parseBottom() || madeProgress
 	}
 
-	madeProgress = m.processPipeline() || madeProgress
+	// Draining advances in-flight pipeline work but admits no new Top
+	// requests (insertIntoPipeline), per the protocol's "Drain stops
+	// accepting new traffic"; queued requests resume after Enable.
+	madeProgress = m.extractFromPipeline() || madeProgress
+	madeProgress = m.tickPipeline() || madeProgress
 
 	next := &m.comp.State
 	// Stay draining until the last fetched page has also been responded to

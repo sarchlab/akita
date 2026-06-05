@@ -40,11 +40,19 @@ func (m *mmuCacheMiddleware) Tick() bool {
 }
 
 func (m *mmuCacheMiddleware) handleDrain() bool {
-	madeProgress := m.processRequests()
+	// Draining retires already-forwarded walks but admits no new Top traffic,
+	// per the protocol's "Drain stops accepting new traffic". Quiescence is
+	// based only on in-flight work (bottom responses + outstanding walks), not
+	// on the Top queue, so the drain converges even if upstream keeps queuing;
+	// those queued requests resume after Enable.
+	madeProgress := false
+	spec := m.comp.Spec()
+	for i := 0; i < spec.NumReqPerCycle; i++ {
+		madeProgress = m.handleBottomPort() || madeProgress
+	}
 
 	next := &m.comp.State
 	quiescent := m.bottomPort().PeekIncoming() == nil &&
-		m.topPort().PeekIncoming() == nil &&
 		len(next.OutstandingBottomReqs) == 0
 	if quiescent {
 		next.CurrentState = mmuCacheStatePause

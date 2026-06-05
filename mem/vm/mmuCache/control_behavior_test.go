@@ -107,11 +107,8 @@ var _ = Describe("MMUCache control behavior", func() {
 			topPort.Deliver(makeTranslationReq(uint64(0x1000 + i*0x1000)))
 		}
 
-		drain := makeCtrlReq(mem.CmdDrain)
-		controlPort.Deliver(drain)
-
-		// The cache forwards every lookup down the Bottom port, but with no
-		// responses yet the walks are still outstanding, so Drain must NOT ack.
+		// Forward every lookup down the Bottom port while still enabled (Drain
+		// itself admits no new Top traffic).
 		forwarded := []vm.TranslationReq{}
 		for i := 0; i < 256 && len(forwarded) < n; i++ {
 			comp.Tick()
@@ -124,17 +121,29 @@ var _ = Describe("MMUCache control behavior", func() {
 					forwarded = append(forwarded, r)
 				}
 			}
-			Expect(controlPort.RetrieveOutgoing()).To(BeNil())
 		}
 		Expect(forwarded).To(HaveLen(n))
 		Expect(comp.State.OutstandingBottomReqs).To(HaveLen(n))
 
-		// A few more ticks while the walks are still outstanding: still no ack.
+		drain := makeCtrlReq(mem.CmdDrain)
+		controlPort.Deliver(drain)
+
+		// Let the Drain take effect.
+		for i := 0; i < 8 && comp.State.CurrentState != mmuCacheStateDrain; i++ {
+			comp.Tick()
+		}
+		Expect(comp.State.CurrentState).To(Equal(mmuCacheStateDrain))
+
+		// A request delivered while draining must not be admitted (no new
+		// forward), and with the walks still outstanding Drain must NOT ack.
+		topPort.Deliver(makeTranslationReq(0x9000))
 		for range 8 {
 			comp.Tick()
 			Expect(controlPort.RetrieveOutgoing()).To(BeNil())
+			Expect(bottomPort.RetrieveOutgoing()).To(BeNil())
 		}
-		Expect(comp.State.CurrentState).To(Equal(mmuCacheStateDrain))
+		Expect(comp.State.OutstandingBottomReqs).To(HaveLen(n))
+		Expect(topPort.PeekIncoming()).ToNot(BeNil()) // late req still queued
 
 		// Let every outstanding walk complete.
 		for _, fr := range forwarded {
@@ -171,7 +180,9 @@ var _ = Describe("MMUCache control behavior", func() {
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
 		Expect(upResponses).To(Equal(n))
 		Expect(comp.State.OutstandingBottomReqs).To(BeEmpty())
-		Expect(topPort.PeekIncoming()).To(BeNil())
+		// The request delivered mid-drain was never admitted; it remains
+		// queued for after Enable.
+		Expect(topPort.PeekIncoming()).ToNot(BeNil())
 		Expect(comp.State.CurrentState).To(Equal(mmuCacheStatePause))
 	})
 

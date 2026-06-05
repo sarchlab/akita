@@ -192,6 +192,62 @@ var _ = Describe("TLB control behavior", func() {
 		Expect(tlbComp.State.TLBState).To(Equal(tlbStatePause))
 	})
 
+	It("does not admit new Top traffic while draining", func() {
+		// Get a miss in flight so Drain has something to wait for.
+		topPort.Deliver(makeLookup(0x0))
+		var bottomReq vm.TranslationReq
+		got := false
+		for i := 0; i < 64 && !got; i++ {
+			tlbComp.Tick()
+			if out := bottomPort.RetrieveOutgoing(); out != nil {
+				bottomReq, got = out.(vm.TranslationReq)
+			}
+		}
+		Expect(got).To(BeTrue())
+		Expect(mshrIsEmpty(tlbComp.State.MSHREntries)).To(BeFalse())
+
+		// Drain, and let it take effect.
+		drain := makeCtrlReq(mem.CmdDrain)
+		controlPort.Deliver(drain)
+		for i := 0; i < 8 && tlbComp.State.TLBState != tlbStateDrain; i++ {
+			tlbComp.Tick()
+		}
+		Expect(tlbComp.State.TLBState).To(Equal(tlbStateDrain))
+
+		// A lookup delivered while draining must not be admitted: no new Bottom
+		// forward, it stays queued on Top, and Drain must not ack.
+		topPort.Deliver(makeLookup(0x5000))
+		for range 8 {
+			tlbComp.Tick()
+			Expect(bottomPort.RetrieveOutgoing()).To(BeNil())
+			Expect(controlPort.RetrieveOutgoing()).To(BeNil())
+		}
+		Expect(tlbComp.State.TLBState).To(Equal(tlbStateDrain))
+		Expect(topPort.PeekIncoming()).ToNot(BeNil()) // late lookup still queued
+
+		// Completing the in-flight miss lets Drain finish; the late lookup is
+		// still queued for after Enable.
+		bottomPort.Deliver(makeBottomRsp(bottomReq))
+		drainFound := false
+		for i := 0; i < 256 && !drainFound; i++ {
+			tlbComp.Tick()
+			for {
+				if topPort.RetrieveOutgoing() == nil {
+					break
+				}
+			}
+			if out := controlPort.RetrieveOutgoing(); out != nil {
+				if rsp, ok := out.(mem.ControlRsp); ok &&
+					rsp.Command == mem.CmdDrain {
+					drainFound = true
+				}
+			}
+		}
+		Expect(drainFound).To(BeTrue())
+		Expect(tlbComp.State.TLBState).To(Equal(tlbStatePause))
+		Expect(topPort.PeekIncoming()).ToNot(BeNil()) // late lookup survived
+	})
+
 	It("freezes incoming traffic while paused", func() {
 		tlbComp.State.TLBState = tlbStatePause
 		topPort.Deliver(makeLookup(0x0))
