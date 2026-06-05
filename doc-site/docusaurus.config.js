@@ -9,7 +9,7 @@ const config = {
 
 
   url: 'https://sarchlab.github.io',
-  baseUrl: '/',
+  baseUrl: '/akita/',
 
   organizationName: 'sarchlab',
   projectName: 'akita',
