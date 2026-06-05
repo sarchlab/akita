@@ -34,6 +34,11 @@ func TestControlContract(t *testing.T) {
 		return &control.Harness{
 			Comp: comp,
 			Ctrl: comp.GetPortByName("Control"),
+			IsQuiescent: func() bool {
+				return len(comp.State.WalkingTranslations) == 0 &&
+					len(comp.State.MigrationQueue) == 0 &&
+					!comp.State.IsDoingMigration
+			},
 		}
 	}
 

@@ -19,14 +19,14 @@ import (
 type fakeComp struct {
 	hooking.HookableBase
 
-	name     string
-	matrix   control.VerbSupport
+	name       string
+	matrix     control.VerbSupport
 	asyncDelay int
-	ports    map[string]messaging.Port
+	ports      map[string]messaging.Port
 
 	// pending captures an in-flight async verb that owes a Rsp; sync
 	// verbs are answered inside the same tick and never sit here.
-	pending  *pendingReq
+	pending *pendingReq
 
 	// paused tracks whether the component is paused/drained, which the
 	// conditional verbs (Invalidate, Flush) require.
@@ -42,10 +42,10 @@ type pendingReq struct {
 
 func newFakeComp(name string, matrix control.VerbSupport, asyncDelay int) *fakeComp {
 	c := &fakeComp{
-		name:     name,
-		matrix:   matrix,
+		name:       name,
+		matrix:     matrix,
 		asyncDelay: asyncDelay,
-		ports:    map[string]messaging.Port{},
+		ports:      map[string]messaging.Port{},
 	}
 	port := messaging.NewPort(c, 4, 4, name+".Control")
 	c.AddPort("Control", port)
@@ -54,7 +54,7 @@ func newFakeComp(name string, matrix control.VerbSupport, asyncDelay int) *fakeC
 	return c
 }
 
-func (c *fakeComp) Name() string                       { return c.name }
+func (c *fakeComp) Name() string { return c.name }
 func (c *fakeComp) AddPort(name string, p messaging.Port) {
 	c.ports[name] = p
 	p.SetComponent(c)
@@ -184,8 +184,9 @@ func buildFake(matrix control.VerbSupport, asyncDelay int) control.BuildFunc {
 	return func() *control.Harness {
 		c := newFakeComp("Fake", matrix, asyncDelay)
 		return &control.Harness{
-			Comp: c,
-			Ctrl: c.GetPortByName("Control"),
+			Comp:        c,
+			Ctrl:        c.GetPortByName("Control"),
+			IsQuiescent: func() bool { return c.pending == nil },
 		}
 	}
 }

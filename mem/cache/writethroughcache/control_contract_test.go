@@ -57,6 +57,14 @@ func TestControlContract(t *testing.T) {
 		return &control.Harness{
 			Comp: comp,
 			Ctrl: comp.GetPortByName("Control"),
+			IsQuiescent: func() bool {
+				for i := range comp.State.Transactions {
+					if !comp.State.Transactions[i].Removed {
+						return false
+					}
+				}
+				return true
+			},
 		}
 	}
 

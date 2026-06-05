@@ -38,6 +38,16 @@ func TestControlContract(t *testing.T) {
 		return &control.Harness{
 			Comp: comp,
 			Ctrl: comp.GetPortByName("Control"),
+			IsQuiescent: func() bool {
+				for i := range comp.State.Banks {
+					b := &comp.State.Banks[i]
+					if len(b.Pipeline.Stages()) != 0 ||
+						b.PostPipelineBuf.Size() != 0 {
+						return false
+					}
+				}
+				return true
+			},
 		}
 	}
 

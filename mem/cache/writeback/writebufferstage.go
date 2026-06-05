@@ -408,6 +408,17 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 				next.InflightEvictionIndices[i+1:]...,
 			)
 			delete(next.EvictingList, e.EvictingAddr)
+
+			// A pure flush eviction (writeBufferFlush) terminates here: its
+			// write-back has landed and it has no fetch/write follow-up
+			// (unlike evict-and-fetch/evict-and-write, which carry on and are
+			// retired downstream). Mark it Removed now; otherwise it lingers
+			// in the transaction table and stalls any later Drain, whose
+			// quiescence check never clears.
+			if e.Action == writeBufferFlush {
+				e.Removed = true
+			}
+
 			wb.cache.bottomPort.RetrieveIncoming()
 			tracing.TraceReqFinalize(e.EvictionWriteReqMeta, wb.cache.comp)
 

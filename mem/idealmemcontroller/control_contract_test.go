@@ -37,6 +37,9 @@ func TestControlContract(t *testing.T) {
 		return &control.Harness{
 			Comp: comp,
 			Ctrl: ctrl,
+			IsQuiescent: func() bool {
+				return len(comp.State.InflightTransactions) == 0
+			},
 		}
 	}
 

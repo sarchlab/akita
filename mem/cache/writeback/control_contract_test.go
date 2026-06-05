@@ -57,6 +57,9 @@ func TestControlContract(t *testing.T) {
 		return &control.Harness{
 			Comp: comp,
 			Ctrl: comp.GetPortByName("Control"),
+			IsQuiescent: func() bool {
+				return cacheIsQuiescent(&comp.State)
+			},
 		}
 	}
 

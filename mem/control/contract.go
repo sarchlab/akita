@@ -28,6 +28,13 @@ type Harness struct {
 	// RetrieveOutgoing.
 	Ctrl messaging.Port
 
+	// IsQuiescent, if non-nil, reports whether the component currently
+	// holds no in-flight work. RunContract uses it to enforce that a Drain
+	// ack and a Reset both leave the component quiescent. Components for
+	// which quiescence is not a meaningful/cheap query may leave it nil to
+	// skip the check.
+	IsQuiescent func() bool
+
 	// Teardown is invoked once after the harness finishes with this
 	// component, regardless of test outcome. Nil is acceptable.
 	Teardown func()
@@ -125,6 +132,78 @@ func RunContract(
 				checkConditionalIllegalState(t, h, v.cmd)
 			})
 	}
+
+	runLifecycleInvariants(t, name, build, matrix)
+}
+
+// runLifecycleInvariants checks properties that single-verb round trips
+// miss: the sync universal verbs are idempotent, and Reset from the paused
+// state lands the component back in a clean (quiescent) enabled state.
+func runLifecycleInvariants(
+	t *testing.T,
+	name string,
+	build BuildFunc,
+	matrix VerbSupport,
+) {
+	t.Helper()
+
+	if matrix.Pause {
+		t.Run(name+"/idempotent-pause", func(t *testing.T) {
+			h := build()
+			defer teardown(h)
+			driveExpectSuccess(t, h, mem.CmdPause)
+			driveExpectSuccess(t, h, mem.CmdPause)
+		})
+	}
+
+	if matrix.Enable {
+		t.Run(name+"/idempotent-enable", func(t *testing.T) {
+			h := build()
+			defer teardown(h)
+			driveExpectSuccess(t, h, mem.CmdEnable)
+			driveExpectSuccess(t, h, mem.CmdEnable)
+		})
+	}
+
+	if matrix.Reset && matrix.Pause {
+		t.Run(name+"/reset-from-paused", func(t *testing.T) {
+			h := build()
+			defer teardown(h)
+			driveExpectSuccess(t, h, mem.CmdPause)
+			driveExpectSuccess(t, h, mem.CmdReset)
+			if h.IsQuiescent != nil && !h.IsQuiescent() {
+				t.Errorf("component not quiescent after Reset from Paused")
+			}
+		})
+	}
+}
+
+func teardown(h *Harness) {
+	if h.Teardown != nil {
+		h.Teardown()
+	}
+}
+
+// driveExpectSuccess delivers one verb and asserts a Success ack returns
+// within the verb's tick budget.
+func driveExpectSuccess(t *testing.T, h *Harness, cmd mem.ControlCommand) {
+	t.Helper()
+
+	req := newControlReq(h.Ctrl, cmd)
+	h.Ctrl.Deliver(req)
+
+	budget := maxTicks
+	if !IsSyncVerb(cmd) {
+		budget = asyncMaxTicks
+	}
+
+	rsp, ok := drainForRsp(h, budget)
+	if !ok {
+		t.Fatalf("no ack for %v", cmd)
+	}
+	if rsp.Command != cmd || !rsp.Success {
+		t.Errorf("%v: got %+v, want Success ack", cmd, rsp)
+	}
 }
 
 // isConditionalVerb reports whether the verb requires the component to be
@@ -218,6 +297,15 @@ func checkVerb(
 		if !rsp.Success {
 			t.Errorf("Rsp.Success = false (Error=%q), want true",
 				rsp.Error)
+			return
+		}
+		// Drain promises quiescence on ack; Reset returns to a freshly-
+		// built (quiescent) state. Enforce it when the component supplies
+		// a probe.
+		if h.IsQuiescent != nil &&
+			(cmd == mem.CmdDrain || cmd == mem.CmdReset) &&
+			!h.IsQuiescent() {
+			t.Errorf("%v acked but component is not quiescent", cmd)
 		}
 		return
 	}
