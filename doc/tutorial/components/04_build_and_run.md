@@ -24,9 +24,14 @@ comp.AddMiddleware(&walkMW{
 ```
 
 `modeling.NewBuilder` is the generic constructor for a
-`Component[Spec, State, Resources]`. It returns a `*Comp` — the alias and
-the spelled-out generic are the same type, so `comp` is a `*Comp`. Set the
-engine, the clock frequency, and the spec, then build with a unique name.
+`Component[Spec, State, Resources]`, and it returns a `*Comp`. Note that the
+type arguments are still spelled out here even though we defined `Comp`:
+`NewBuilder` is a generic *function* with its own `[S, T, R]` parameters, and
+an alias for the component *type* cannot be substituted for them. The alias
+still earns its keep on the middleware field and this return value — just not
+on the constructor call. (The per-package builders in the next section hide
+the generics by writing them once, inside `Build`.) Set the engine, the clock
+frequency, and the spec, then build with a unique name.
 
 `AddMiddleware` registers the middleware that will run every cycle. The RNG
 is seeded with `1` so the output is reproducible.
