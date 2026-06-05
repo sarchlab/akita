@@ -63,7 +63,10 @@ func (m *respondMW) handleTranslationRsp(rsp vm.TranslationRsp) bool {
 	reqTransaction, exists := state.RemoteMemReqs[rsp.RspTo]
 
 	if !exists || reqTransaction.ReqID == 0 {
-		log.Panicf("Cannot find matching request for response %+v", rsp)
+		// Orphaned response: the request it answers was discarded, e.g. by a
+		// Reset issued while this remote walk was still outstanding. The
+		// message has already been retrieved, so drop it rather than crash.
+		return true
 	}
 
 	if !m.topPort().CanSend() {

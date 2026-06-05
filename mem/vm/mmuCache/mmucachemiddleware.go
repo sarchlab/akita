@@ -45,7 +45,7 @@ func (m *mmuCacheMiddleware) handleDrain() bool {
 	next := &m.comp.State
 	quiescent := m.bottomPort().PeekIncoming() == nil &&
 		m.topPort().PeekIncoming() == nil &&
-		next.InflightBottomReqs == 0
+		len(next.OutstandingBottomReqs) == 0
 	if quiescent {
 		next.CurrentState = mmuCacheStatePause
 		tracing.AddMilestone(
@@ -158,7 +158,7 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 	reqToBottom.TrafficClass = "vm.TranslationReq"
 
 	m.bottomPort().Send(reqToBottom)
-	m.comp.State.InflightBottomReqs++
+	m.comp.State.OutstandingBottomReqs[reqToBottom.ID] = true
 
 	m.topPort().RetrieveIncoming()
 
@@ -183,6 +183,15 @@ func (m *mmuCacheMiddleware) handleBottomPort() bool {
 }
 
 func (m *mmuCacheMiddleware) handleRsp(rsp vm.TranslationRsp) bool {
+	next := &m.comp.State
+	if _, live := next.OutstandingBottomReqs[rsp.RspTo]; !live {
+		// Orphaned response: its forwarded request was dropped (e.g. a Reset
+		// landed mid-walk). Discard it instead of repopulating the freshly
+		// reset table or emitting a stale translation upward.
+		m.bottomPort().RetrieveIncoming()
+		return true
+	}
+
 	if !m.topPort().CanSend() {
 		return false
 	}
@@ -203,9 +212,7 @@ func (m *mmuCacheMiddleware) handleRsp(rsp vm.TranslationRsp) bool {
 	m.topPort().Send(rspToTop)
 
 	m.bottomPort().RetrieveIncoming()
-	if m.comp.State.InflightBottomReqs > 0 {
-		m.comp.State.InflightBottomReqs--
-	}
+	delete(next.OutstandingBottomReqs, rsp.RspTo)
 
 	return true
 }

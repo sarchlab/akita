@@ -77,8 +77,9 @@ func (b Builder) Build(name string) *Comp {
 	spec := b.spec
 
 	initialState := State{
-		CurrentState: mmuCacheStateEnable,
-		Table:        initSets(spec.NumLevels, spec.NumBlocks),
+		CurrentState:          mmuCacheStateEnable,
+		Table:                 initSets(spec.NumLevels, spec.NumBlocks),
+		OutstandingBottomReqs: map[uint64]bool{},
 	}
 
 	modelComp := modeling.NewBuilder[Spec, State, Resources]().

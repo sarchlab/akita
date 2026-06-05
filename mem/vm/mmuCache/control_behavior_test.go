@@ -127,7 +127,7 @@ var _ = Describe("MMUCache control behavior", func() {
 			Expect(controlPort.RetrieveOutgoing()).To(BeNil())
 		}
 		Expect(forwarded).To(HaveLen(n))
-		Expect(comp.State.InflightBottomReqs).To(Equal(n))
+		Expect(comp.State.OutstandingBottomReqs).To(HaveLen(n))
 
 		// A few more ticks while the walks are still outstanding: still no ack.
 		for range 8 {
@@ -170,9 +170,50 @@ var _ = Describe("MMUCache control behavior", func() {
 		Expect(drainRsp.Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
 		Expect(upResponses).To(Equal(n))
-		Expect(comp.State.InflightBottomReqs).To(Equal(0))
+		Expect(comp.State.OutstandingBottomReqs).To(BeEmpty())
 		Expect(topPort.PeekIncoming()).To(BeNil())
 		Expect(comp.State.CurrentState).To(Equal(mmuCacheStatePause))
+	})
+
+	It("drops a late bottom response that arrives after Reset", func() {
+		// Forward a lookup so a bottom request is outstanding.
+		topPort.Deliver(makeTranslationReq(0x1000))
+		var fwd vm.TranslationReq
+		gotFwd := false
+		for i := 0; i < 64 && !gotFwd; i++ {
+			comp.Tick()
+			if out := bottomPort.RetrieveOutgoing(); out != nil {
+				fwd, gotFwd = out.(vm.TranslationReq)
+			}
+		}
+		Expect(gotFwd).To(BeTrue())
+		Expect(comp.State.OutstandingBottomReqs).To(HaveLen(1))
+
+		// Reset discards the outstanding walk.
+		reset := makeCtrlReq(mem.CmdReset)
+		controlPort.Deliver(reset)
+		resetAcked := false
+		for i := 0; i < 64 && !resetAcked; i++ {
+			comp.Tick()
+			if out := controlPort.RetrieveOutgoing(); out != nil {
+				if rsp, ok := out.(mem.ControlRsp); ok &&
+					rsp.Command == mem.CmdReset {
+					resetAcked = true
+				}
+			}
+		}
+		Expect(resetAcked).To(BeTrue())
+		Expect(comp.State.OutstandingBottomReqs).To(BeEmpty())
+
+		// The low module's now-orphaned response arrives. It must be dropped:
+		// no panic, and no stale translation emitted up the Top port. Before
+		// the fix this repopulated the reset table and replied upward.
+		bottomPort.Deliver(makeBottomRsp(fwd))
+		for range 16 {
+			comp.Tick()
+			Expect(topPort.RetrieveOutgoing()).To(BeNil())
+		}
+		Expect(comp.State.OutstandingBottomReqs).To(BeEmpty())
 	})
 
 	It("freezes incoming traffic while paused", func() {

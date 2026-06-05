@@ -186,6 +186,64 @@ var _ = Describe("DataMover control behavior", func() {
 		Expect(dataMover.State.ControlState).To(Equal(control.StatePaused))
 	})
 
+	It("acks Drain only after outstanding destination writes are acked", func() {
+		read, gotRead := startMove()
+		Expect(gotRead).To(BeTrue())
+
+		// Answer the read so the data mover issues the destination write.
+		answerRead(outsidePort, read)
+		var write mem.WriteReq
+		gotWrite := false
+		for i := 0; i < 64 && !gotWrite; i++ {
+			dataMover.Tick()
+			if out := insidePort.RetrieveOutgoing(); out != nil {
+				write, gotWrite = out.(mem.WriteReq)
+			}
+		}
+		Expect(gotWrite).To(BeTrue())
+		Expect(dataMover.State.CurrentTransaction.Active).To(BeTrue())
+		Expect(dataMover.State.CurrentTransaction.PendingWrite).ToNot(BeEmpty())
+
+		// Drain while the write's ack is still outstanding: the move is not
+		// complete, so Drain must stay pending and emit no move response.
+		drain := makeCtrlReq(mem.CmdDrain)
+		ctrlPort.Deliver(drain)
+		for range 8 {
+			dataMover.Tick()
+			Expect(topPort.RetrieveOutgoing()).To(BeNil())
+			Expect(ctrlPort.RetrieveOutgoing()).To(BeNil())
+			Expect(dataMover.State.CurrentTransaction.Active).To(BeTrue())
+		}
+
+		// Ack the write; only now may the move finish and the Drain ack.
+		answerWrite(insidePort, write)
+		moveDone := false
+		gotDrainRsp := false
+		var drainRsp mem.ControlRsp
+		for i := 0; i < 256 && !gotDrainRsp; i++ {
+			dataMover.Tick()
+			if out := topPort.RetrieveOutgoing(); out != nil {
+				if _, ok := out.(DataMoveResponse); ok {
+					moveDone = true
+				}
+			}
+			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if rsp, ok := out.(mem.ControlRsp); ok &&
+					rsp.Command == mem.CmdDrain {
+					drainRsp = rsp
+					gotDrainRsp = true
+				}
+			}
+		}
+
+		Expect(moveDone).To(BeTrue())
+		Expect(gotDrainRsp).To(BeTrue())
+		Expect(drainRsp.Success).To(BeTrue())
+		Expect(drainRsp.RspTo).To(Equal(drain.ID))
+		Expect(dataMover.State.CurrentTransaction.Active).To(BeFalse())
+		Expect(dataMover.State.ControlState).To(Equal(control.StatePaused))
+	})
+
 	It("freezes incoming move requests while paused", func() {
 		dataMover.State.ControlState = control.StatePaused
 		topPort.Deliver(makeMove())

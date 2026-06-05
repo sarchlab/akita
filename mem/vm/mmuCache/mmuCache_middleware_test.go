@@ -125,6 +125,9 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		rsp.TrafficClass = "vm.TranslationRsp"
 		bottomPort.Deliver(rsp)
 
+		// Mark the response's request as outstanding, as a real forward would.
+		comp.State.OutstandingBottomReqs[rsp.RspTo] = true
+
 		madeProgress := mw.handleRsp(rsp)
 
 		spec := comp.Spec()

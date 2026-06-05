@@ -111,6 +111,14 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		return false
 	}
 
+	// All reads/writes have been issued, but the move is only truly complete
+	// once every one is acknowledged. Completing earlier would report the copy
+	// done (and let a Drain quiesce) while destination writes are still in
+	// flight and their pending metadata is about to be discarded.
+	if len(trans.PendingRead) > 0 || len(trans.PendingWrite) > 0 {
+		return false
+	}
+
 	rsp := DataMoveResponse{
 		MsgMeta: messaging.MsgMeta{
 			ID:    timing.GetIDGenerator().Generate(),

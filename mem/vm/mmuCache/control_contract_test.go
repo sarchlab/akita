@@ -33,7 +33,7 @@ func TestControlContract(t *testing.T) {
 			Comp: comp,
 			Ctrl: comp.GetPortByName("Control"),
 			IsQuiescent: func() bool {
-				return comp.State.InflightBottomReqs == 0
+				return len(comp.State.OutstandingBottomReqs) == 0
 			},
 		}
 	}

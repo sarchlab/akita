@@ -278,5 +278,8 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 	traceReq.Dst = originalReq.Dst
 	tracing.TraceReqFinalize(traceReq, m.comp)
 
-	return false
+	// Processing a write ack is real progress: the component must tick again
+	// so the remaining acks drain and the transaction can finish (which now
+	// waits for every write to be acknowledged).
+	return true
 }

@@ -44,12 +44,13 @@ type State struct {
 	CurrentCmdSrc   messaging.RemotePort `json:"current_cmd_src"`
 	Table           []setState           `json:"table"`
 
-	// InflightBottomReqs counts translation requests forwarded to the low
-	// module for which no response has returned yet. A Drain is not complete
-	// while any of these are outstanding, otherwise the late response would
-	// land (updating the table and replying upward) after the caller was told
-	// the cache had drained.
-	InflightBottomReqs int `json:"inflight_bottom_reqs"`
+	// OutstandingBottomReqs holds the IDs of translation requests forwarded
+	// to the low module for which no response has returned yet. A Drain is not
+	// complete while any are outstanding (otherwise a late response would land
+	// after the caller was told the cache had drained), and a response whose
+	// ID is absent here is orphaned — e.g. its request was dropped by a Reset
+	// issued mid-walk — and must be discarded rather than repopulate the table.
+	OutstandingBottomReqs map[uint64]bool `json:"outstanding_bottom_reqs"`
 }
 
 // blockState is a serializable snapshot of a single cache block.
