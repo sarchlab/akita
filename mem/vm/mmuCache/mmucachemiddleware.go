@@ -52,13 +52,6 @@ func (m *mmuCacheMiddleware) handleDrain() bool {
 	if m.bottomPort().PeekIncoming() == nil && m.topPort().PeekIncoming() == nil {
 		next := &m.comp.State
 		next.CurrentState = mmuCacheStatePause
-		tracing.AddMilestone(
-			timing.GetIDGenerator().Generate(),
-			tracing.MilestoneKindHardwareResource,
-			m.comp.Name()+".",
-			m.comp.Name(),
-			m.comp,
-		)
 	}
 
 	return madeProgress
@@ -105,8 +98,8 @@ func (m *mmuCacheMiddleware) lookup() bool {
 		return false
 	}
 
-	msg, ok := msgI.(*vm.TranslationReq)
-	if !ok || msg == nil {
+	msg, ok := msgI.(vm.TranslationReq)
+	if !ok {
 		return false
 	}
 
@@ -114,7 +107,7 @@ func (m *mmuCacheMiddleware) lookup() bool {
 }
 
 func (m *mmuCacheMiddleware) walkCacheLevels(
-	msg *vm.TranslationReq,
+	msg vm.TranslationReq,
 ) bool {
 	spec := m.comp.Spec()
 	totalLatency := spec.LatencyPerLevel * uint64(spec.NumLevels)
@@ -135,7 +128,7 @@ func (m *mmuCacheMiddleware) walkCacheLevels(
 }
 
 func (m *mmuCacheMiddleware) lookupLevel(
-	level int, req *vm.TranslationReq,
+	level int, req vm.TranslationReq,
 ) bool {
 	spec := m.comp.Spec()
 	next := &m.comp.State
@@ -156,7 +149,7 @@ func (m *mmuCacheMiddleware) lookupLevel(
 }
 
 func (m *mmuCacheMiddleware) sendReqToBottom(
-	req *vm.TranslationReq,
+	req vm.TranslationReq,
 	latency uint64) bool {
 	if !m.bottomPort().CanSend() {
 		return false
@@ -164,7 +157,7 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 
 	res := m.comp.Resources()
 
-	reqToBottom := &vm.TranslationReq{}
+	reqToBottom := vm.TranslationReq{}
 	reqToBottom.ID = timing.GetIDGenerator().Generate()
 	reqToBottom.Src = m.bottomPort().AsRemote()
 	reqToBottom.Dst = res.LowModulePort
@@ -174,10 +167,7 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 	reqToBottom.TransLatency = latency
 	reqToBottom.TrafficClass = "vm.TranslationReq"
 
-	err := m.bottomPort().Send(reqToBottom)
-	if err != nil {
-		return false
-	}
+	m.bottomPort().Send(reqToBottom)
 
 	m.topPort().RetrieveIncoming()
 
@@ -193,7 +183,7 @@ func (m *mmuCacheMiddleware) handleBottomPort() bool {
 	}
 
 	switch item := itemI.(type) {
-	case *vm.TranslationRsp:
+	case vm.TranslationRsp:
 		madeProgress = m.handleRsp(item) || madeProgress
 	default:
 		log.Panicf("cannot process request %s", fmt.Sprintf("%T", itemI))
@@ -201,7 +191,7 @@ func (m *mmuCacheMiddleware) handleBottomPort() bool {
 	return madeProgress
 }
 
-func (m *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
+func (m *mmuCacheMiddleware) handleRsp(rsp vm.TranslationRsp) bool {
 	if !m.topPort().CanSend() {
 		return false
 	}
@@ -210,7 +200,7 @@ func (m *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
 
 	res := m.comp.Resources()
 
-	rspToTop := &vm.TranslationRsp{
+	rspToTop := vm.TranslationRsp{
 		Page: rsp.Page,
 	}
 	rspToTop.ID = timing.GetIDGenerator().Generate()
@@ -219,10 +209,7 @@ func (m *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
 	rspToTop.RspTo = rsp.RspTo
 	rspToTop.TrafficClass = "vm.TranslationRsp"
 
-	err := m.topPort().Send(rspToTop)
-	if err != nil {
-		return false
-	}
+	m.topPort().Send(rspToTop)
 
 	m.bottomPort().RetrieveIncoming()
 
@@ -236,7 +223,7 @@ func (m *mmuCacheMiddleware) segToSetID(seg uint64) int {
 }
 
 // updateCacheLevels updates all cache levels with the translation response.
-func (m *mmuCacheMiddleware) updateCacheLevels(rsp *vm.TranslationRsp) bool {
+func (m *mmuCacheMiddleware) updateCacheLevels(rsp vm.TranslationRsp) bool {
 	spec := m.comp.Spec()
 	next := &m.comp.State
 	page := rsp.Page
@@ -265,23 +252,22 @@ func (m *mmuCacheMiddleware) processMMUCacheFlush() bool {
 	next := &m.comp.State
 	spec := m.comp.Spec()
 
-	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
+	rsp := mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.controlPort().AsRemote()
 	rsp.Dst = next.InflightFlushReqSrc
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := m.controlPort().Send(rsp)
-	if err != nil {
+	if !m.controlPort().CanSend() {
 		return false
 	}
-	tracing.AddMilestone(
-		next.InflightFlushReqID,
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+
+	m.controlPort().Send(rsp)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: next.InflightFlushReqID,
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.controlPort().Name(),
+	})
 
 	// Reset table
 	next.Table = initSets(spec.NumLevels, spec.NumBlocks)

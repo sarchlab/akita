@@ -9,40 +9,46 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// NamedHookable represent something both have a name and can be hooked
+// NamedHookable represent something that has a name, can tell the current
+// time, and can be hooked. The tracing API stamps event times from the
+// domain's clock, but only after confirming the domain has hooks, so the
+// clock is never consulted when tracing is disabled.
 type NamedHookable interface {
 	naming.Named
 	hooking.Hookable
+	timing.TimeTeller
 	InvokeHook(hooking.HookCtx)
 }
 
 // A list of hook poses for the hooks to apply to
 var (
 	HookPosTaskStart = &hooking.HookPos{Name: "HookPosTaskStart"}
-	HookPosTaskStep  = &hooking.HookPos{Name: "HookPosTaskStep"}
+	HookPosTaskTag   = &hooking.HookPos{Name: "HookPosTaskTag"}
 	HookPosMilestone = &hooking.HookPos{Name: "HookPosMilestone"}
 	HookPosTaskEnd   = &hooking.HookPos{Name: "HookPosTaskEnd"}
 )
 
 // StartTask notifies the hooks that hook to the domain about the start of a
-// task.
-func StartTask(
-	id uint64,
-	parentID uint64,
-	domain NamedHookable,
-	kind string,
-	what string,
-	detail interface{},
-) {
-	StartTaskWithSpecificLocation(
-		id,
-		parentID,
-		domain,
-		kind,
-		what,
-		domain.Name(),
-		detail,
-	)
+// task. When the task's Location is empty it defaults to the domain name.
+func StartTask(domain NamedHookable, t TaskStart) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
+	allRequiredFieldsMustBeNotEmpty(t.ID, domain, t.Kind, t.What)
+	domainMustHaveName(domain)
+
+	if t.Location == "" {
+		t.Location = domain.Name()
+	}
+
+	t.Time = domain.CurrentTime()
+
+	domain.InvokeHook(hooking.HookCtx{
+		Domain: domain,
+		Item:   t,
+		Pos:    HookPosTaskStart,
+	})
 }
 
 func allRequiredFieldsMustBeNotEmpty(
@@ -74,180 +80,165 @@ func domainMustHaveName(domain NamedHookable) {
 	}
 }
 
-// StartTaskWithSpecificLocation notifies the hooks that hook to the domain
-// about the start of a task, and is able to customize `where` field of a task,
-// especially for network tracing.
-func StartTaskWithSpecificLocation(
-	id uint64,
-	parentID uint64,
-	domain NamedHookable,
-	kind string,
-	what string,
-	location string,
-	detail interface{},
-) {
-	if domain.NumHooks() == 0 {
-		return
-	}
-
-	allRequiredFieldsMustBeNotEmpty(id, domain, kind, what)
-	domainMustHaveName(domain)
-
-	task := Task{
-		ID:       id,
-		ParentID: parentID,
-		Kind:     kind,
-		What:     what,
-		Location: location,
-		Detail:   detail,
-	}
-	ctx := hooking.HookCtx{
-		Domain: domain,
-		Item:   task,
-		Pos:    HookPosTaskStart,
-	}
-	domain.InvokeHook(ctx)
-}
-
-// AddTaskStep marks that a milestone has been reached when processing a task.
-func AddTaskStep(
-	id uint64,
-	domain NamedHookable,
-	what string,
-) {
-	if domain.NumHooks() == 0 {
-		return
-	}
-
-	step := TaskStep{
-		What: what,
-	}
-	task := Task{
-		ID:    id,
-		Steps: []TaskStep{step},
-	}
-	ctx := hooking.HookCtx{
-		Domain: domain,
-		Item:   task,
-		Pos:    HookPosTaskStep,
-	}
-	domain.InvokeHook(ctx)
-}
-
-// AddMilestone records the time that that a blocking reason is resolved.
-func AddMilestone(
-	taskID uint64,
-	kind MilestoneKind,
-	what string,
-	location string,
-	domain NamedHookable,
-) {
-	if domain.NumHooks() == 0 {
-		return
-	}
-
-	milestone := Milestone{
-		ID:       timing.GetIDGenerator().Generate(),
-		TaskID:   taskID,
-		Kind:     kind,
-		What:     what,
-		Location: location,
-	}
-
-	ctx := hooking.HookCtx{
-		Domain: domain,
-		Item:   milestone,
-		Pos:    HookPosMilestone,
-	}
-	domain.InvokeHook(ctx)
-}
-
 // EndTask notifies the hooks about the end of a task.
-func EndTask(
-	id uint64,
-	domain NamedHookable,
-) {
+func EndTask(domain NamedHookable, t TaskEnd) {
 	if domain.NumHooks() == 0 {
 		return
 	}
 
-	task := Task{
-		ID: id,
-	}
-	ctx := hooking.HookCtx{
+	t.Time = domain.CurrentTime()
+
+	domain.InvokeHook(hooking.HookCtx{
 		Domain: domain,
-		Item:   task,
+		Item:   t,
 		Pos:    HookPosTaskEnd,
-	}
-	domain.InvokeHook(ctx)
+	})
 }
 
-// MsgIDAtReceiver returns the RecvTaskID for the message, generating one if needed.
+// AddTaskTag attaches a categorical tag to a task. A tag ID is generated when
+// the caller leaves it zero.
+func AddTaskTag(domain NamedHookable, tag TaskTag) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
+	if tag.ID == 0 {
+		tag.ID = timing.GetIDGenerator().Generate()
+	}
+
+	tag.Time = domain.CurrentTime()
+
+	domain.InvokeHook(hooking.HookCtx{
+		Domain: domain,
+		Item:   tag,
+		Pos:    HookPosTaskTag,
+	})
+}
+
+// AddMilestone records the time that a blocking reason is resolved. A milestone
+// ID is generated when the caller leaves it zero. The milestone's location is
+// inherited from the owning task.
+func AddMilestone(domain NamedHookable, m Milestone) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
+	if m.ID == 0 {
+		m.ID = timing.GetIDGenerator().Generate()
+	}
+
+	m.Time = domain.CurrentTime()
+
+	domain.InvokeHook(hooking.HookCtx{
+		Domain: domain,
+		Item:   m,
+		Pos:    HookPosMilestone,
+	})
+}
+
+// MsgIDAtReceiver returns the receiver-side task ID for the message at the
+// given domain, generating one if needed. The ID is held in a tracing-local
+// registry keyed by (domain, msg.Meta().ID), so the message itself is never
+// mutated. When the domain has no hooks the receiver-side ID is unused, so
+// this returns 0 without touching the registry — that avoids accumulating
+// entries in simulations that never enable tracing.
 func MsgIDAtReceiver(msg messaging.Msg, domain NamedHookable) uint64 {
-	if msg.Meta().RecvTaskID == 0 {
-		msg.Meta().RecvTaskID = timing.GetIDGenerator().Generate()
+	if domain.NumHooks() == 0 {
+		return 0
 	}
-	return msg.Meta().RecvTaskID
+
+	return lookupOrCreateReceiverTaskID(msg, domain)
 }
 
-// TraceReqInitiate generates a new task. The new task has Type="req_out",
-// What=[the type name of the message]. This function is to be called by the
-// sender of the message.
+// ForgetMsgIDAtReceiver releases the registry entry created by
+// [MsgIDAtReceiver] for the message identified by msgID. Use this on
+// completion paths that only retain the request's message ID, not the
+// message value. When the domain has no hooks no entry was ever
+// inserted, so this is a no-op and avoids taking the registry mutex.
+func ForgetMsgIDAtReceiver(msgID uint64, domain NamedHookable) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
+	forgetReceiverTaskIDByMsgID(msgID, domain)
+}
+
+// TraceReqInitiate marks a task starting at the sender of a message. The
+// task ID is the message's own ID, which is fixed at message construction.
+// The task kind is "req_out".
 func TraceReqInitiate(
-	msg messaging.Msg,
 	domain NamedHookable,
+	msg messaging.Msg,
 	taskParentID uint64,
 ) {
 	if domain.NumHooks() == 0 {
 		return
 	}
 
-	if msg.Meta().SendTaskID == 0 {
-		msg.Meta().SendTaskID = timing.GetIDGenerator().Generate()
-	}
-	StartTask(
-		msg.Meta().SendTaskID,
-		taskParentID,
-		domain,
-		"req_out",
-		reflect.TypeOf(msg).Elem().Name(),
-		msg,
-	)
+	StartTask(domain, TaskStart{
+		ID:       msg.Meta().ID,
+		ParentID: taskParentID,
+		Kind:     "req_out",
+		What:     msgTypeName(msg),
+		Detail:   msg,
+	})
 }
 
-// TraceReqReceive generates a new task for the message handling. The kind of
-// the task is always "req_in".
+// TraceReqReceive marks a task starting at the receiver of a message. The
+// parent is the sender's req_out task, identified by the message's ID. The
+// task kind is "req_in".
 func TraceReqReceive(
-	msg messaging.Msg,
 	domain NamedHookable,
+	msg messaging.Msg,
 ) {
 	if domain.NumHooks() == 0 {
 		return
 	}
 
-	StartTask(
-		MsgIDAtReceiver(msg, domain),
-		msg.Meta().SendTaskID,
-		domain,
-		"req_in",
-		reflect.TypeOf(msg).Elem().Name(),
-		msg,
-	)
+	StartTask(domain, TaskStart{
+		ID:       MsgIDAtReceiver(msg, domain),
+		ParentID: msg.Meta().ID,
+		Kind:     "req_in",
+		What:     msgTypeName(msg),
+		Detail:   msg,
+	})
 }
 
-// TraceReqComplete terminates the message handling task.
+// TraceReqComplete terminates the receiver-side handling task for a message
+// and releases the registry entry held for it.
 func TraceReqComplete(
-	msg messaging.Msg,
 	domain NamedHookable,
+	msg messaging.Msg,
 ) {
-	EndTask(MsgIDAtReceiver(msg, domain), domain)
+	if domain.NumHooks() == 0 {
+		return
+	}
+
+	EndTask(domain, TaskEnd{ID: MsgIDAtReceiver(msg, domain)})
+	forgetReceiverTaskID(msg, domain)
 }
 
-// TraceReqFinalize terminates the message task. This function should be called
-// when the sender receives the response.
+// TraceReqFinalize terminates the sender-side task for a message. The sender
+// calls this when the response arrives.
 func TraceReqFinalize(
-	msg messaging.Msg,
 	domain NamedHookable,
+	msg messaging.Msg,
 ) {
-	EndTask(msg.Meta().SendTaskID, domain)
+	if domain.NumHooks() == 0 {
+		return
+	}
+
+	EndTask(domain, TaskEnd{ID: msg.Meta().ID})
+}
+
+// msgTypeName returns the Go type name of the message's underlying type,
+// transparently unwrapping pointers so both value- and pointer-typed
+// implementations of [messaging.Msg] yield a non-empty name.
+func msgTypeName(msg messaging.Msg) string {
+	t := reflect.TypeOf(msg)
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+
+	return t.Name()
 }

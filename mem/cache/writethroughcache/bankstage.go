@@ -104,7 +104,7 @@ func (s *bankStage) finalizeReadHitTrans(
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 	bankPostBuf.Pop()
 
-	tracing.EndTask(trans.ID, s.cache.comp)
+	tracing.EndTask(s.cache.comp, tracing.TaskEnd{ID: trans.ID})
 
 	return true
 }
@@ -144,7 +144,7 @@ func (s *bankStage) finalizeWriteTrans(
 
 	if !trans.Done && writeTransIsReady(trans) {
 		trans.Done = true
-		tracing.EndTask(trans.ID, s.cache.comp)
+		tracing.EndTask(s.cache.comp, tracing.TaskEnd{ID: trans.ID})
 	}
 
 	return true
@@ -178,7 +178,7 @@ func (s *bankStage) finalizeWriteFetchedTrans(
 		offset := trans.ReadAddress - nextBlock.Tag
 		trans.Data = trans.Data[offset : offset+trans.ReadAccessByteSize]
 		trans.Done = true
-		tracing.EndTask(trans.ID, s.cache.comp)
+		tracing.EndTask(s.cache.comp, tracing.TaskEnd{ID: trans.ID})
 		return true
 	}
 
@@ -187,7 +187,7 @@ func (s *bankStage) finalizeWriteFetchedTrans(
 	trans.BankDone = true
 	if !trans.Done && writeTransIsReady(trans) {
 		trans.Done = true
-		tracing.EndTask(trans.ID, s.cache.comp)
+		tracing.EndTask(s.cache.comp, tracing.TaskEnd{ID: trans.ID})
 	}
 
 	return true
@@ -212,7 +212,7 @@ func (s *bankStage) completeMSHRFillWaiters(fetcherIdx int) {
 
 		if writeTransIsReady(waiter) {
 			waiter.Done = true
-			tracing.EndTask(waiter.ID, s.cache.comp)
+			tracing.EndTask(s.cache.comp, tracing.TaskEnd{ID: waiter.ID})
 		}
 	}
 }

@@ -38,7 +38,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		return false
 	}
 
-	req, ok := reqI.(*DataMoveRequest)
+	req, ok := reqI.(DataMoveRequest)
 	if !ok {
 		log.Panicf("can't process request of type %s", reflect.TypeOf(reqI))
 	}
@@ -81,7 +81,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		Granularity: srcByteGranularity,
 	}
 
-	tracing.TraceReqReceive(req, m.comp)
+	tracing.TraceReqReceive(m.comp, req)
 
 	return true
 }
@@ -99,7 +99,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		return false
 	}
 
-	rsp := &DataMoveResponse{
+	rsp := DataMoveResponse{
 		MsgMeta: messaging.MsgMeta{
 			ID:    timing.GetIDGenerator().Generate(),
 			Src:   trans.ReqDst,
@@ -108,10 +108,11 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		},
 	}
 
-	err := m.ctrlPort().Send(rsp)
-	if err != nil {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
+
+	m.ctrlPort().Send(rsp)
 
 	// Reset transaction
 	state.CurrentTransaction = dataMoverTransactionState{
@@ -123,7 +124,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		Granularity: state.SrcByteGranularity,
 	}
 
-	tracing.TraceReqComplete(rsp, m.comp)
+	tracing.TraceReqComplete(m.comp, rsp)
 
 	return true
 }

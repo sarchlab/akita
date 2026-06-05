@@ -86,7 +86,7 @@ func (m *tickFinalizeMW) finalizeRead(
 		return false
 	}
 
-	rsp := &mem.DataReadyRsp{}
+	rsp := mem.DataReadyRsp{}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = readReq.Src
@@ -95,11 +95,9 @@ func (m *tickFinalizeMW) finalizeRead(
 	rsp.TrafficBytes = len(item.ReadData) + 4
 	rsp.TrafficClass = "mem.DataReadyRsp"
 
-	if err := m.topPort().Send(rsp); err != nil {
-		return false
-	}
+	m.topPort().Send(rsp)
 
-	tracing.TraceReqComplete(&item.ReadMsg, m.comp)
+	tracing.TraceReqComplete(m.comp, &item.ReadMsg)
 
 	bufferPop(b)
 
@@ -149,7 +147,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 		return false
 	}
 
-	rsp := &mem.WriteDoneRsp{}
+	rsp := mem.WriteDoneRsp{}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = writeReq.Src
@@ -157,11 +155,9 @@ func (m *tickFinalizeMW) finalizeWrite(
 	rsp.TrafficBytes = 4
 	rsp.TrafficClass = "mem.WriteDoneRsp"
 
-	if err := m.topPort().Send(rsp); err != nil {
-		return false
-	}
+	m.topPort().Send(rsp)
 
-	tracing.TraceReqComplete(&item.WriteMsg, m.comp)
+	tracing.TraceReqComplete(m.comp, &item.WriteMsg)
 
 	bufferPop(b)
 

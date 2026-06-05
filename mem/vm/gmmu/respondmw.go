@@ -43,8 +43,8 @@ func (m *respondMW) fetchFromBottom() bool {
 	}
 
 	switch rsp := rspI.(type) {
-	case *vm.TranslationRsp:
-		tracing.TraceReqReceive(rsp, m.comp)
+	case vm.TranslationRsp:
+		tracing.TraceReqReceive(m.comp, rsp)
 		return m.handleTranslationRsp(rsp)
 	default:
 		log.Panicf("gmmu cannot handle request of type %s",
@@ -53,7 +53,7 @@ func (m *respondMW) fetchFromBottom() bool {
 	}
 }
 
-func (m *respondMW) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
+func (m *respondMW) handleTranslationRsp(rsp vm.TranslationRsp) bool {
 	state := &m.comp.State
 
 	reqTransaction, exists := state.RemoteMemReqs[rsp.RspTo]
@@ -66,7 +66,7 @@ func (m *respondMW) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
 		return false
 	}
 
-	rspToTop := &vm.TranslationRsp{
+	rspToTop := vm.TranslationRsp{
 		Page: rsp.Page,
 	}
 	rspToTop.ID = timing.GetIDGenerator().Generate()

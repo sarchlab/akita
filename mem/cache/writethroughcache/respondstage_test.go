@@ -35,14 +35,15 @@ var _ = Describe("Respond Stage", func() {
 		s = &respondStage{cache: mw}
 	})
 
-	// fillOutgoing pre-fills topPort's single outgoing slot so the next Send
-	// fails, simulating a busy port.
+	// fillOutgoing pre-fills topPort's single outgoing slot so the next
+	// CanSend returns false, simulating a busy port.
 	fillOutgoing := func() {
-		dummy := &mem.DataReadyRsp{}
+		dummy := mem.DataReadyRsp{}
 		dummy.Src = topPort.AsRemote()
 		dummy.Dst = messaging.RemotePort("SomeSrc")
 		dummy.TrafficClass = "rsp"
-		Expect(topPort.Send(dummy)).To(BeNil())
+		Expect(topPort.CanSend()).To(BeTrue())
+		topPort.Send(dummy)
 	}
 
 	Context("read", func() {
@@ -91,7 +92,7 @@ var _ = Describe("Respond Stage", func() {
 			Expect(next.Transactions[0].Removed).To(BeTrue())
 
 			out := topPort.RetrieveOutgoing()
-			dr := out.(*mem.DataReadyRsp)
+			dr := out.(mem.DataReadyRsp)
 			Expect(dr.RspTo).To(Equal(readMeta.ID))
 			Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 		})

@@ -25,8 +25,8 @@ func (m *receivePipelineMW) Tick() bool {
 	return madeProgress
 }
 
-func (m *receivePipelineMW) flitParentTaskID(flit *packetization.Flit) uint64 {
-	return flit.MsgMeta.SendTaskID
+func (m *receivePipelineMW) flitParentTaskID(flit packetization.Flit) uint64 {
+	return flit.MsgMeta.ID
 }
 
 func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
@@ -41,10 +41,10 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 				break
 			}
 
-			flit := itemI.(*packetization.Flit)
+			flit := itemI.(packetization.Flit)
 			taskID := timing.GetIDGenerator().Generate()
 			item := routedFlit{
-				Flit:    *flit,
+				Flit:    flit,
 				TaskID:  taskID,
 				RouteTo: flit.Msg.Dst,
 			}
@@ -65,12 +65,13 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 
 			madeProgress = true
 
-			tracing.StartTask(
-				taskID,
-				m.flitParentTaskID(flit),
-				m.comp, "flit", "flit_inside_sw",
-				flit,
-			)
+			tracing.StartTask(m.comp, tracing.TaskStart{
+				ID:       taskID,
+				ParentID: m.flitParentTaskID(flit),
+				Kind:     "flit",
+				What:     "flit_inside_sw",
+				Detail:   flit,
+			})
 		}
 	}
 

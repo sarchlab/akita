@@ -253,7 +253,7 @@ var _ = Describe("DRAM Integration", func() {
 		conn.PlugIn(srcPort)
 
 		writeData := []byte{1, 2, 3, 4}
-		write := &mem.WriteReq{}
+		write := mem.WriteReq{}
 		write.ID = timing.GetIDGenerator().Generate()
 		write.Address = 0x40
 		write.Data = writeData
@@ -262,7 +262,7 @@ var _ = Describe("DRAM Integration", func() {
 		write.TrafficBytes = len(writeData) + 12
 		write.TrafficClass = "mem.WriteReq"
 
-		read := &mem.ReadReq{}
+		read := mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Address = 0x40
 		read.AccessByteSize = 4
@@ -277,8 +277,9 @@ var _ = Describe("DRAM Integration", func() {
 		engine.Run()
 
 		// Collect responses
-		var writeDone *mem.WriteDoneRsp
-		var dataReady *mem.DataReadyRsp
+		var writeDone mem.WriteDoneRsp
+		var dataReady mem.DataReadyRsp
+		var gotWriteDone, gotDataReady bool
 
 		for {
 			msg := srcPort.RetrieveIncoming()
@@ -286,16 +287,18 @@ var _ = Describe("DRAM Integration", func() {
 				break
 			}
 			switch m := msg.(type) {
-			case *mem.WriteDoneRsp:
+			case mem.WriteDoneRsp:
 				writeDone = m
-			case *mem.DataReadyRsp:
+				gotWriteDone = true
+			case mem.DataReadyRsp:
 				dataReady = m
+				gotDataReady = true
 			}
 		}
 
-		Expect(writeDone).NotTo(BeNil())
+		Expect(gotWriteDone).To(BeTrue())
 		Expect(writeDone.RspTo).To(Equal(write.ID))
-		Expect(dataReady).NotTo(BeNil())
+		Expect(gotDataReady).To(BeTrue())
 		Expect(dataReady.RspTo).To(Equal(read.ID))
 		Expect(dataReady.Data).To(Equal([]byte{1, 2, 3, 4}))
 	})

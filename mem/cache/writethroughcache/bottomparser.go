@@ -20,9 +20,9 @@ func (p *bottomParser) Tick() bool {
 	}
 
 	switch itemI.(type) {
-	case *mem.WriteDoneRsp:
+	case mem.WriteDoneRsp:
 		return p.processDoneRsp(itemI)
-	case *mem.DataReadyRsp:
+	case mem.DataReadyRsp:
 		return p.processDataReady(itemI)
 	default:
 		panic("cannot process response")
@@ -42,19 +42,19 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 
 	if !trans.Done && writeTransIsReady(trans) {
 		trans.Done = true
-		tracing.EndTask(trans.ID, p.cache.comp)
+		tracing.EndTask(p.cache.comp, tracing.TaskEnd{ID: trans.ID})
 	}
 
 	p.cache.bottomPort.RetrieveIncoming()
 
 	// Reconstruct writeToBottom for tracing
-	writeToBottom := &mem.WriteReq{
+	writeToBottom := mem.WriteReq{
 		MsgMeta:   trans.WriteToBottomMeta,
 		Data:      trans.WriteToBottomData,
 		DirtyMask: trans.WriteToBottomDirtyMask,
 		PID:       trans.WriteToBottomPID,
 	}
-	tracing.TraceReqFinalize(writeToBottom, p.cache.comp)
+	tracing.TraceReqFinalize(p.cache.comp, writeToBottom)
 
 	return true
 }
@@ -78,7 +78,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 	addr := trans.Address()
 	spec := p.cache.comp.Spec()
 	cachelineID := (addr >> spec.Log2BlockSize) << spec.Log2BlockSize
-	drMsg := msg.(*mem.DataReadyRsp)
+	drMsg := msg.(mem.DataReadyRsp)
 	data := drMsg.Data
 	dirtyMask := make([]bool, 1<<spec.Log2BlockSize)
 
@@ -110,11 +110,11 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 	p.cache.bottomPort.RetrieveIncoming()
 
 	// Reconstruct readToBottom for tracing
-	readToBottom := &mem.ReadReq{
+	readToBottom := mem.ReadReq{
 		MsgMeta: trans.ReadToBottomMeta,
 		PID:     trans.ReadToBottomPID,
 	}
-	tracing.TraceReqFinalize(readToBottom, p.cache.comp)
+	tracing.TraceReqFinalize(p.cache.comp, readToBottom)
 
 	return true
 }
@@ -162,7 +162,7 @@ func (p *bottomParser) finalizeMSHRTransExcept(
 			offset := trans.ReadAddress - blockTag
 			trans.Data = data[offset : offset+trans.ReadAccessByteSize]
 			trans.Done = true
-			tracing.EndTask(trans.ID, p.cache.comp)
+			tracing.EndTask(p.cache.comp, tracing.TaskEnd{ID: trans.ID})
 			continue
 		}
 
@@ -171,7 +171,7 @@ func (p *bottomParser) finalizeMSHRTransExcept(
 		// satisfied (e.g. WriteDoneRsp landed first).
 		if !trans.Done && writeTransIsReady(trans) {
 			trans.Done = true
-			tracing.EndTask(trans.ID, p.cache.comp)
+			tracing.EndTask(p.cache.comp, tracing.TaskEnd{ID: trans.ID})
 		}
 	}
 }

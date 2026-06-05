@@ -27,9 +27,9 @@ func (m *receiveProcessMW) processInput() bool {
 	}
 
 	switch msg := msgI.(type) {
-	case *pingReq:
+	case pingReq:
 		m.processingPingReq(msg)
-	case *pingRsp:
+	case pingRsp:
 		m.processingPingRsp(msg)
 	default:
 		panic("unknown message type")
@@ -38,7 +38,7 @@ func (m *receiveProcessMW) processInput() bool {
 	return true
 }
 
-func (m *receiveProcessMW) processingPingReq(msg *pingReq) {
+func (m *receiveProcessMW) processingPingReq(msg pingReq) {
 	state := &m.comp.State
 
 	trans := pingTransactionState{
@@ -52,7 +52,7 @@ func (m *receiveProcessMW) processingPingReq(msg *pingReq) {
 	outPort(m.comp).RetrieveIncoming()
 }
 
-func (m *receiveProcessMW) processingPingRsp(msg *pingRsp) {
+func (m *receiveProcessMW) processingPingRsp(msg pingRsp) {
 	state := &m.comp.State
 
 	seqID := msg.SeqID

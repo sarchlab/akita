@@ -32,12 +32,26 @@ type traceHook struct {
 func (h *traceHook) Func(ctx hooking.HookCtx) {
 	switch ctx.Pos {
 	case HookPosTaskStart:
-		h.t.StartTask(ctx.Item.(Task))
-	case HookPosTaskStep:
-		h.t.StepTask(ctx.Item.(Task))
+		h.t.StartTask(mustItem[TaskStart](ctx))
+	case HookPosTaskTag:
+		h.t.AddTaskTag(mustItem[TaskTag](ctx))
 	case HookPosMilestone:
-		h.t.AddMilestone(ctx.Item.(Milestone))
+		h.t.AddMilestone(mustItem[Milestone](ctx))
 	case HookPosTaskEnd:
-		h.t.EndTask(ctx.Item.(Task))
+		h.t.EndTask(mustItem[TaskEnd](ctx))
 	}
+}
+
+// mustItem extracts the hook item as type T, panicking with a clear message
+// that names the hook position and the actual type if the assertion fails.
+func mustItem[T any](ctx hooking.HookCtx) T {
+	item, ok := ctx.Item.(T)
+	if !ok {
+		var want T
+		panic(fmt.Sprintf(
+			"tracing: hook at %s carried %T, expected %T",
+			ctx.Pos.Name, ctx.Item, want))
+	}
+
+	return item
 }

@@ -14,6 +14,7 @@ import (
 const (
 	traceTableName     = "trace"
 	milestoneTableName = "milestone"
+	tagTableName       = "tag"
 	segmentTableName   = "daisen$segments"
 )
 
@@ -30,20 +31,31 @@ type taskTableEntry struct {
 	ParentID  uint64  `json:"parent_id" akita_data:"index"`
 	Kind      string  `json:"kind" akita_data:"index"`
 	What      string  `json:"what" akita_data:"index"`
-	Location  string  `json:"location" akita_data:"index"`
+	Location  string  `json:"location" akita_data:"location"`
 	StartTime float64 `json:"start_time" akita_data:"index"`
 	EndTime   float64 `json:"end_time" akita_data:"index"`
 }
 
 // milestoneTableEntry is the table structure for storing milestone information.
-// All milestones are stored in a single "milestone" table.
+// All milestones are stored in a single "milestone" table. A milestone's
+// location is inherited from its owning task (joined via TaskID), so it is not
+// stored here.
 type milestoneTableEntry struct {
-	ID       uint64  `json:"id" akita_data:"unique"`
-	TaskID   uint64  `json:"task_id" akita_data:"index"`
-	Time     float64 `json:"time" akita_data:"index"`
-	Kind     string  `json:"kind" akita_data:"index"`
-	What     string  `json:"what" akita_data:"index"`
-	Location string  `json:"location" akita_data:"index"`
+	ID     uint64  `json:"id" akita_data:"unique"`
+	TaskID uint64  `json:"task_id" akita_data:"index"`
+	Time   float64 `json:"time" akita_data:"index"`
+	Kind   string  `json:"kind" akita_data:"index"`
+	What   string  `json:"what" akita_data:"index"`
+}
+
+// tagTableEntry is the table structure for storing task tag information. All
+// tags are stored in a single "tag" table. Location is inherited from the
+// owning task.
+type tagTableEntry struct {
+	ID     uint64  `json:"id" akita_data:"unique"`
+	TaskID uint64  `json:"task_id" akita_data:"index"`
+	Time   float64 `json:"time" akita_data:"index"`
+	What   string  `json:"what" akita_data:"index"`
 }
 
 // segmentTableEntry is the table structure for storing tracing segment information.
@@ -63,7 +75,7 @@ type DBTracer struct {
 
 	tracingTasks     map[uint64]*runningTask
 	isTracing        bool
-	tracingStartTime timing.VTimeInSec
+	tracingStartTime timing.VTimeInPicoSec
 
 	terminated              bool
 	firstTerminateBacktrace string
@@ -78,33 +90,32 @@ func (t *DBTracer) IsTracing() bool {
 }
 
 // StartTask marks the start of a task.
-func (t *DBTracer) StartTask(task Task) {
+func (t *DBTracer) StartTask(task TaskStart) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	t.startingTaskMustBeValid(task)
 
-	// A task may first be mentioned by a milestone
+	// A task may first be mentioned by a tag or a milestone.
 	rt, found := t.tracingTasks[task.ID]
 	if !found {
-		rt = &runningTask{
-			Task: task,
-		}
+		rt = &runningTask{}
 		t.tracingTasks[task.ID] = rt
 	}
 
+	rt.ID = task.ID
 	rt.ParentID = task.ParentID
 	rt.Kind = task.Kind
 	rt.What = task.What
 	rt.Location = task.Location
-	rt.StartTime = t.timeTeller.CurrentTime()
+	rt.StartTime = task.Time
 
 	if t.isTracing {
 		rt.toRecord = true
 	}
 }
 
-func (t *DBTracer) startingTaskMustBeValid(task Task) {
+func (t *DBTracer) startingTaskMustBeValid(task TaskStart) {
 	if task.ID == 0 {
 		panic("task ID must be set")
 	}
@@ -122,17 +133,25 @@ func (t *DBTracer) startingTaskMustBeValid(task Task) {
 	}
 }
 
-// StepTask marks a step of a task.
-func (t *DBTracer) StepTask(_ Task) {
-	// Do nothing for now.
+// AddTaskTag records a tag on a task.
+func (t *DBTracer) AddTaskTag(tag TaskTag) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	task, found := t.tracingTasks[tag.TaskID]
+	if !found {
+		task = &runningTask{}
+		task.ID = tag.TaskID
+		t.tracingTasks[tag.TaskID] = task
+	}
+
+	task.Tags = append(task.Tags, tag)
 }
 
 // AddMilestone adds a milestone.
 func (t *DBTracer) AddMilestone(milestone Milestone) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-
-	milestone.Time = t.timeTeller.CurrentTime()
 
 	task, found := t.tracingTasks[milestone.TaskID]
 	if !found {
@@ -156,11 +175,11 @@ func (t *DBTracer) AddMilestone(milestone Milestone) {
 }
 
 func sameMilestone(a, b Milestone) bool {
-	return a.Kind == b.Kind && a.What == b.What && a.Location == b.Location
+	return a.Kind == b.Kind && a.What == b.What
 }
 
 // EndTask marks the end of a task.
-func (t *DBTracer) EndTask(task Task) {
+func (t *DBTracer) EndTask(task TaskEnd) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -169,7 +188,7 @@ func (t *DBTracer) EndTask(task Task) {
 		return
 	}
 
-	originalTask.EndTime = t.timeTeller.CurrentTime()
+	originalTask.EndTime = task.Time
 	delete(t.tracingTasks, task.ID)
 
 	if !originalTask.toRecord {
@@ -188,17 +207,28 @@ func (t *DBTracer) EndTask(task Task) {
 	}
 	t.backend.InsertData(traceTableName, entry)
 
-	// Write milestones to the milestone table
+	// Write milestones to the milestone table. A milestone's location is
+	// the task's location, recovered by readers via the TaskID join.
 	for _, m := range originalTask.Milestones {
 		milestoneEntry := milestoneTableEntry{
-			ID:       m.ID,
-			TaskID:   m.TaskID,
-			Time:     float64(m.Time),
-			Kind:     string(m.Kind),
-			What:     m.What,
-			Location: m.Location,
+			ID:     m.ID,
+			TaskID: m.TaskID,
+			Time:   float64(m.Time),
+			Kind:   string(m.Kind),
+			What:   m.What,
 		}
 		t.backend.InsertData(milestoneTableName, milestoneEntry)
+	}
+
+	// Write tags to the tag table.
+	for _, tag := range originalTask.Tags {
+		tagEntry := tagTableEntry{
+			ID:     tag.ID,
+			TaskID: tag.TaskID,
+			Time:   float64(tag.Time),
+			What:   tag.What,
+		}
+		t.backend.InsertData(tagTableName, tagEntry)
 	}
 }
 
@@ -283,6 +313,7 @@ func NewDBTracer(
 ) *DBTracer {
 	dataRecorder.CreateTable(traceTableName, taskTableEntry{})
 	dataRecorder.CreateTable(milestoneTableName, milestoneTableEntry{})
+	dataRecorder.CreateTable(tagTableName, tagTableEntry{})
 	dataRecorder.CreateTable(segmentTableName, segmentTableEntry{})
 
 	t := &DBTracer{

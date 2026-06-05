@@ -54,7 +54,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 		return false
 	}
 
-	rsp := rspI.(*vm.TranslationRsp)
+	rsp := rspI.(vm.TranslationRsp)
 	nextState := &m.comp.State
 	transIdx := findTransactionByReqID(nextState.Transactions, rsp.RspTo)
 
@@ -70,10 +70,11 @@ func (m *respondPipelineMW) parseTranslation() bool {
 		spec.Log2PageSize, m.bottomPort().AsRemote(),
 		m.comp.Resources().MemProviderMapper)
 
-	err := m.bottomPort().Send(translatedReq)
-	if err != nil {
+	if !m.bottomPort().CanSend() {
 		return false
 	}
+
+	m.bottomPort().Send(translatedReq)
 
 	nextTrans = &nextState.Transactions[transIdx]
 	nextTrans.TranslationDone = true
@@ -102,32 +103,30 @@ func (m *respondPipelineMW) traceTranslationComplete(
 	reqState incomingReqState,
 	translatedReq messaging.Msg,
 ) {
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(translatedReq, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.bottomPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(translatedReq, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.bottomPort().Name(),
+	})
 
 	fakeFromTop := restoreMemMsg(reqState.ID, reqState.Src, reqState.Dst,
-		reqState.RspTo, reqState.SendTaskID, reqState.RecvTaskID, reqState.Type)
+		reqState.RspTo, reqState.Type)
 
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
-		tracing.MilestoneKindTranslation,
-		"translation",
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
+		Kind:   tracing.MilestoneKindTranslation,
+		What:   "translation",
+	})
 
-	fakeTransReq := &vm.TranslationReq{}
-	fakeTransReq.ID = trans.TranslationReqID
-	fakeTransReq.SendTaskID = trans.TranslationReqSendTaskID
-	fakeTransReq.Src = trans.TranslationReqSrc
-	fakeTransReq.Dst = trans.TranslationReqDst
-	tracing.TraceReqFinalize(fakeTransReq, m.comp)
-	tracing.TraceReqInitiate(translatedReq, m.comp,
+	fakeTransReq := vm.TranslationReq{
+		MsgMeta: messaging.MsgMeta{
+			ID:  trans.TranslationReqID,
+			Src: trans.TranslationReqSrc,
+			Dst: trans.TranslationReqDst,
+		},
+	}
+	tracing.TraceReqFinalize(m.comp, fakeTransReq)
+	tracing.TraceReqInitiate(m.comp, translatedReq,
 		tracing.MsgIDAtReceiver(fakeFromTop, m.comp))
 }
 
@@ -148,87 +147,81 @@ func (m *respondPipelineMW) respond() bool {
 	reqInBottom := false
 
 	switch rsp := rspI.(type) {
-	case *mem.DataReadyRsp:
+	case mem.DataReadyRsp:
 		reqInBottom = isReqInBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 		if reqInBottom {
 			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
-			rspToTop = &mem.DataReadyRsp{
+			rspToTop = mem.DataReadyRsp{
+				MsgMeta: messaging.MsgMeta{
+					ID:           timing.GetIDGenerator().Generate(),
+					Src:          m.topPort().AsRemote(),
+					Dst:          reqFromTopState.ReqFromTopSrc,
+					RspTo:        reqFromTopState.ReqFromTopID,
+					TrafficBytes: len(rsp.Data) + 4,
+					TrafficClass: "mem.DataReadyRsp",
+				},
 				Data: rsp.Data,
 			}
-			rspToTop.Meta().ID = timing.GetIDGenerator().Generate()
-			rspToTop.Meta().Src = m.topPort().AsRemote()
-			rspToTop.Meta().Dst = reqFromTopState.ReqFromTopSrc
-			rspToTop.Meta().RspTo = reqFromTopState.ReqFromTopID
-			rspToTop.Meta().TrafficBytes = len(rsp.Data) + 4
-			rspToTop.Meta().TrafficClass = "mem.DataReadyRsp"
 
 			fakeFromTop := restoreMemMsg(
 				reqFromTopState.ReqFromTopID,
 				reqFromTopState.ReqFromTopSrc,
 				reqFromTopState.ReqFromTopDst,
-				0, reqFromTopState.ReqFromTopSendTaskID,
-				reqFromTopState.ReqFromTopRecvTaskID,
-				reqFromTopState.ReqFromTopType)
-			tracing.AddMilestone(
-				tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
-				tracing.MilestoneKindData,
-				"data",
-				m.comp.Name(),
-				m.comp,
-			)
+				0, reqFromTopState.ReqFromTopType)
+			tracing.AddMilestone(m.comp, tracing.Milestone{
+				TaskID: tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
+				Kind:   tracing.MilestoneKindData,
+				What:   "data",
+			})
 		}
-	case *mem.WriteDoneRsp:
+	case mem.WriteDoneRsp:
 		reqInBottom = isReqInBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 		if reqInBottom {
 			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
-			rspToTop = &mem.WriteDoneRsp{}
-			rspToTop.Meta().ID = timing.GetIDGenerator().Generate()
-			rspToTop.Meta().Src = m.topPort().AsRemote()
-			rspToTop.Meta().Dst = reqFromTopState.ReqFromTopSrc
-			rspToTop.Meta().RspTo = reqFromTopState.ReqFromTopID
-			rspToTop.Meta().TrafficBytes = 4
-			rspToTop.Meta().TrafficClass = "mem.WriteDoneRsp"
+			rspToTop = mem.WriteDoneRsp{
+				MsgMeta: messaging.MsgMeta{
+					ID:           timing.GetIDGenerator().Generate(),
+					Src:          m.topPort().AsRemote(),
+					Dst:          reqFromTopState.ReqFromTopSrc,
+					RspTo:        reqFromTopState.ReqFromTopID,
+					TrafficBytes: 4,
+					TrafficClass: "mem.WriteDoneRsp",
+				},
+			}
 
 			fakeFromTop := restoreMemMsg(
 				reqFromTopState.ReqFromTopID,
 				reqFromTopState.ReqFromTopSrc,
 				reqFromTopState.ReqFromTopDst,
-				0, reqFromTopState.ReqFromTopSendTaskID,
-				reqFromTopState.ReqFromTopRecvTaskID,
-				reqFromTopState.ReqFromTopType)
-			tracing.AddMilestone(
-				tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
-				tracing.MilestoneKindSubTask,
-				"subtask",
-				m.comp.Name(),
-				m.comp,
-			)
+				0, reqFromTopState.ReqFromTopType)
+			tracing.AddMilestone(m.comp, tracing.Milestone{
+				TaskID: tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
+				Kind:   tracing.MilestoneKindSubTask,
+				What:   "subtask",
+			})
 		}
 	default:
 		log.Panicf("cannot handle respond of type %s", fmt.Sprintf("%T", rspI))
 	}
 
 	if reqInBottom {
-		err := m.topPort().Send(rspToTop)
-		if err != nil {
+		if !m.topPort().CanSend() {
 			return false
 		}
+
+		m.topPort().Send(rspToTop)
 
 		fakeFromTop := restoreMemMsg(
 			reqFromTopState.ReqFromTopID,
 			reqFromTopState.ReqFromTopSrc,
 			reqFromTopState.ReqFromTopDst,
-			0, reqFromTopState.ReqFromTopSendTaskID,
-			reqFromTopState.ReqFromTopRecvTaskID,
-			reqFromTopState.ReqFromTopType)
+			0, reqFromTopState.ReqFromTopType)
 
-		tracing.AddMilestone(
-			tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
-			tracing.MilestoneKindNetworkBusy,
-			m.topPort().Name(),
-			m.comp.Name(),
-			m.comp,
-		)
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
+			Kind:   tracing.MilestoneKindNetworkBusy,
+			What:   m.topPort().Name(),
+		})
 
 		rspMeta := rspI.Meta()
 		removeReqToBottomByID(nextState, rspMeta.RspTo)
@@ -237,10 +230,9 @@ func (m *respondPipelineMW) respond() bool {
 			reqFromTopState.ReqToBottomID,
 			reqFromTopState.ReqToBottomSrc,
 			reqFromTopState.ReqToBottomDst,
-			0, reqFromTopState.ReqToBottomSendTaskID, 0,
-			reqFromTopState.ReqToBottomType)
-		tracing.TraceReqFinalize(fakeReqToBottom, m.comp)
-		tracing.TraceReqComplete(fakeFromTop, m.comp)
+			0, reqFromTopState.ReqToBottomType)
+		tracing.TraceReqFinalize(m.comp, fakeReqToBottom)
+		tracing.TraceReqComplete(m.comp, fakeFromTop)
 	}
 
 	m.bottomPort().RetrieveIncoming()

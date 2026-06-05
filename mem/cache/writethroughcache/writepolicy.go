@@ -114,7 +114,10 @@ func (d *directory) writearoundWriteHit(
 
 	bankBuf.PushTyped(postCoalesceIdx)
 
-	tracing.AddTaskStep(trans.ID, d.cache.comp, "write-hit")
+	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+		TaskID: trans.ID,
+		What:   "write-hit",
+	})
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
@@ -127,7 +130,10 @@ func (d *directory) writearoundWriteMiss(
 	postCoalesceIdx int,
 ) bool {
 	if ok := d.writeBottom(trans); ok {
-		tracing.AddTaskStep(trans.ID, d.cache.comp, "write-miss")
+		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+			TaskID: trans.ID,
+			What:   "write-miss",
+		})
 
 		next := &d.cache.comp.State
 		dirPostBuf := &next.DirPostBuf
@@ -167,7 +173,10 @@ func (d *directory) writeevictWriteHit(
 	nextBlock := &next.DirectoryState.Sets[setID].Blocks[wayID]
 	nextBlock.IsValid = false
 
-	tracing.AddTaskStep(trans.ID, d.cache.comp, "write-hit")
+	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+		TaskID: trans.ID,
+		What:   "write-hit",
+	})
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
@@ -180,7 +189,10 @@ func (d *directory) writeevictWriteMiss(
 	postCoalesceIdx int,
 ) bool {
 	if ok := d.writeBottom(trans); ok {
-		tracing.AddTaskStep(trans.ID, d.cache.comp, "write-miss")
+		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+			TaskID: trans.ID,
+			What:   "write-miss",
+		})
 
 		next := &d.cache.comp.State
 		dirPostBuf := &next.DirPostBuf
@@ -251,7 +263,10 @@ func (d *directory) writethroughWriteMiss(
 
 	ok := d.writethroughFullLineWriteMiss(trans, postCoalesceIdx)
 	if ok {
-		tracing.AddTaskStep(trans.ID, d.cache.comp, "write-miss")
+		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+			TaskID: trans.ID,
+			What:   "write-miss",
+		})
 	}
 
 	return ok
@@ -317,7 +332,10 @@ func (d *directory) writethroughPartialWriteMiss(
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
-	tracing.AddTaskStep(trans.ID, d.cache.comp, "write-miss")
+	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+		TaskID: trans.ID,
+		What:   "write-miss",
+	})
 
 	return true
 }

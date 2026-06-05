@@ -53,8 +53,8 @@ var _ = Describe("Ideal Memory Controller", func() {
 		conn.PlugIn(topPort)
 	}
 
-	makeReadReq := func() *mem.ReadReq {
-		req := &mem.ReadReq{}
+	makeReadReq := func() mem.ReadReq {
+		req := mem.ReadReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
@@ -85,7 +85,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should accept write request and add to inflight transactions", func() {
-		writeReq := &mem.WriteReq{}
+		writeReq := mem.WriteReq{}
 		writeReq.ID = timing.GetIDGenerator().Generate()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
@@ -126,11 +126,11 @@ var _ = Describe("Ideal Memory Controller", func() {
 		Expect(state.InflightTransactions).To(HaveLen(0))
 
 		rsp := topPort.RetrieveOutgoing()
-		Expect(rsp).To(BeAssignableToTypeOf(&mem.DataReadyRsp{}))
+		Expect(rsp).To(BeAssignableToTypeOf(mem.DataReadyRsp{}))
 	})
 
 	It("should send write response after latency ticks", func() {
-		writeReq := &mem.WriteReq{}
+		writeReq := mem.WriteReq{}
 		writeReq.ID = timing.GetIDGenerator().Generate()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
@@ -155,7 +155,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		Expect(state.InflightTransactions).To(HaveLen(0))
 
 		rsp := topPort.RetrieveOutgoing()
-		Expect(rsp).To(BeAssignableToTypeOf(&mem.WriteDoneRsp{}))
+		Expect(rsp).To(BeAssignableToTypeOf(mem.WriteDoneRsp{}))
 
 		// Verify data was written to storage
 		data, err := storage.Read(0, 4)
@@ -169,11 +169,11 @@ var _ = Describe("Ideal Memory Controller", func() {
 		build(1)
 
 		// Pre-fill the outgoing buffer so the controller's response Send fails.
-		dummy := &mem.WriteDoneRsp{}
+		dummy := mem.WriteDoneRsp{}
 		dummy.Src = topPort.AsRemote()
 		dummy.Dst = messaging.RemotePort("Agent")
 		dummy.TrafficClass = "mem.WriteDoneRsp"
-		Expect(topPort.Send(dummy)).To(BeNil())
+		topPort.Send(dummy)
 
 		topPort.Deliver(makeReadReq())
 
@@ -209,7 +209,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		err := storage.Write(0, []byte{10, 20, 30, 40})
 		Expect(err).ToNot(HaveOccurred())
 
-		writeReq := &mem.WriteReq{}
+		writeReq := mem.WriteReq{}
 		writeReq.ID = timing.GetIDGenerator().Generate()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()

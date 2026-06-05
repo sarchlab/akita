@@ -42,14 +42,15 @@ type Port interface {
 	SetComponent(comp Component)
 
 	// For connection
-	Deliver(msg Msg) *SendError
+	CanDeliver() bool
+	Deliver(msg Msg)
 	NotifyAvailable()
 	RetrieveOutgoing() Msg
 	PeekOutgoing() Msg
 
 	// For component
 	CanSend() bool
-	Send(msg Msg) *SendError
+	Send(msg Msg)
 	RetrieveIncoming() Msg
 	PeekIncoming() Msg
 
@@ -116,15 +117,21 @@ func (p *defaultPort) CanSend() bool {
 	return canSend
 }
 
-// Send is used to send a message out from a component.
-func (p *defaultPort) Send(msg Msg) *SendError {
+// Send is used to send a message out from a component. The caller must verify
+// the port has capacity with CanSend before calling Send; sending into a full
+// outgoing buffer is a programming error and will panic.
+func (p *defaultPort) Send(msg Msg) {
 	p.lock.Lock()
 
 	p.msgMustBeValid(msg)
 
 	if !p.outgoingBuf.CanPush() {
 		p.lock.Unlock()
-		return NewSendError()
+		panic(fmt.Sprintf(
+			"Send called on port %s with full outgoing buffer; "+
+				"caller must check CanSend first",
+			p.name,
+		))
 	}
 
 	wasEmpty := (p.outgoingBuf.Size() == 0)
@@ -141,17 +148,29 @@ func (p *defaultPort) Send(msg Msg) *SendError {
 	if wasEmpty {
 		p.conn.NotifySend()
 	}
-
-	return nil
 }
 
-// Deliver is used to deliver a message to a component.
-func (p *defaultPort) Deliver(msg Msg) *SendError {
+// CanDeliver checks if the port can accept an incoming message without error.
+func (p *defaultPort) CanDeliver() bool {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	return p.incomingBuf.CanPush()
+}
+
+// Deliver is used to deliver a message to a component. The caller must verify
+// the port has capacity with CanDeliver before calling Deliver; delivering
+// into a full incoming buffer is a programming error and will panic.
+func (p *defaultPort) Deliver(msg Msg) {
 	p.lock.Lock()
 
 	if !p.incomingBuf.CanPush() {
 		p.lock.Unlock()
-		return NewSendError()
+		panic(fmt.Sprintf(
+			"Deliver called on port %s with full incoming buffer; "+
+				"caller must check CanDeliver first",
+			p.name,
+		))
 	}
 
 	wasEmpty := (p.incomingBuf.Size() == 0)
@@ -169,8 +188,6 @@ func (p *defaultPort) Deliver(msg Msg) *SendError {
 	if p.comp != nil && wasEmpty {
 		p.comp.NotifyRecv(p)
 	}
-
-	return nil
 }
 
 // RetrieveIncoming is used by the component to take a message from the

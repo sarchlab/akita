@@ -94,7 +94,7 @@ var _ = Describe("WriteBufferStage", func() {
 
 	Context("processing new writeBufferFetch transactions", func() {
 		It("should fetch from bottom", func() {
-			read := &mem.ReadReq{}
+			read := mem.ReadReq{}
 			read.ID = timing.GetIDGenerator().Generate()
 			read.TrafficClass = "mem.ReadReq"
 			trans := transactionState{
@@ -129,7 +129,7 @@ var _ = Describe("WriteBufferStage", func() {
 			next := &m.comp.State
 			next.InflightFetchIndices = []int{10, 11, 12, 13}
 
-			read := &mem.ReadReq{}
+			read := mem.ReadReq{}
 			read.ID = timing.GetIDGenerator().Generate()
 			read.TrafficClass = "mem.ReadReq"
 			trans := transactionState{
@@ -153,7 +153,7 @@ var _ = Describe("WriteBufferStage", func() {
 
 	Context("writing evictions", func() {
 		It("should send eviction to bottom", func() {
-			read := &mem.ReadReq{}
+			read := mem.ReadReq{}
 			read.ID = timing.GetIDGenerator().Generate()
 			read.TrafficClass = "mem.ReadReq"
 			trans := transactionState{
@@ -197,11 +197,11 @@ var _ = Describe("WriteBufferStage", func() {
 
 	Context("processing responses", func() {
 		It("should process write done response", func() {
-			evictWrite := &mem.WriteReq{}
+			evictWrite := mem.WriteReq{}
 			evictWrite.ID = 9001
 			evictWrite.TrafficClass = "mem.WriteReq"
 
-			read := &mem.ReadReq{}
+			read := mem.ReadReq{}
 			read.ID = timing.GetIDGenerator().Generate()
 			read.TrafficClass = "mem.ReadReq"
 			trans := transactionState{
@@ -216,7 +216,7 @@ var _ = Describe("WriteBufferStage", func() {
 			next.Transactions = []transactionState{trans}
 			next.InflightEvictionIndices = []int{0}
 
-			rsp := &mem.WriteDoneRsp{}
+			rsp := mem.WriteDoneRsp{}
 			rsp.RspTo = 9001
 			rsp.TrafficClass = "mem.WriteDoneRsp"
 

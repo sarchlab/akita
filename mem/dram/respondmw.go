@@ -48,14 +48,14 @@ func (m *respondMW) finalizeTransaction(
 	if t.HasWrite {
 		done := m.finalizeWriteTrans(state, t, i)
 		if done {
-			tracing.TraceReqComplete(&t.WriteMsg, m.comp)
+			tracing.TraceReqComplete(m.comp, &t.WriteMsg)
 		}
 		return done
 	}
 
 	done := m.finalizeReadTrans(state, t, i)
 	if done {
-		tracing.TraceReqComplete(&t.ReadMsg, m.comp)
+		tracing.TraceReqComplete(m.comp, &t.ReadMsg)
 	}
 	return done
 }
@@ -70,7 +70,7 @@ func (m *respondMW) finalizeWriteTrans(
 		panic(err)
 	}
 
-	writeDone := &mem.WriteDoneRsp{}
+	writeDone := mem.WriteDoneRsp{}
 	writeDone.ID = timing.GetIDGenerator().Generate()
 	writeDone.Src = m.topPort.AsRemote()
 	writeDone.Dst = t.WriteMsg.Src
@@ -78,16 +78,16 @@ func (m *respondMW) finalizeWriteTrans(
 	writeDone.TrafficBytes = 4
 	writeDone.TrafficClass = "mem.WriteDoneRsp"
 
-	sendErr := m.topPort.Send(writeDone)
-	if sendErr == nil {
-		state.TotalWriteLatencyCycles += state.TickCount - t.ArrivalTick
-		state.BytesWritten += uint64(len(t.WriteMsg.Data))
-		state.CompletedWrites++
-		m.removeTransaction(state, i)
-		return true
+	if !m.topPort.CanSend() {
+		return false
 	}
 
-	return false
+	m.topPort.Send(writeDone)
+	state.TotalWriteLatencyCycles += state.TickCount - t.ArrivalTick
+	state.BytesWritten += uint64(len(t.WriteMsg.Data))
+	state.CompletedWrites++
+	m.removeTransaction(state, i)
+	return true
 }
 
 func (m *respondMW) finalizeReadTrans(
@@ -101,7 +101,7 @@ func (m *respondMW) finalizeReadTrans(
 		panic(err)
 	}
 
-	dataReady := &mem.DataReadyRsp{}
+	dataReady := mem.DataReadyRsp{}
 	dataReady.ID = timing.GetIDGenerator().Generate()
 	dataReady.Src = m.topPort.AsRemote()
 	dataReady.Dst = t.ReadMsg.Src
@@ -110,16 +110,16 @@ func (m *respondMW) finalizeReadTrans(
 	dataReady.TrafficBytes = len(data) + 4
 	dataReady.TrafficClass = "mem.DataReadyRsp"
 
-	sendErr := m.topPort.Send(dataReady)
-	if sendErr == nil {
-		state.TotalReadLatencyCycles += state.TickCount - t.ArrivalTick
-		state.BytesRead += t.ReadMsg.AccessByteSize
-		state.CompletedReads++
-		m.removeTransaction(state, i)
-		return true
+	if !m.topPort.CanSend() {
+		return false
 	}
 
-	return false
+	m.topPort.Send(dataReady)
+	state.TotalReadLatencyCycles += state.TickCount - t.ArrivalTick
+	state.BytesRead += t.ReadMsg.AccessByteSize
+	state.CompletedReads++
+	m.removeTransaction(state, i)
+	return true
 }
 
 // removeTransaction removes a transaction and remaps all references.

@@ -101,9 +101,15 @@ func (d *directory) processMSHRHit(
 			transIdx)
 
 	if trans.HasRead {
-		tracing.AddTaskStep(trans.ID, d.cache.comp, "read-mshr-hit")
+		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+			TaskID: trans.ID,
+			What:   "read-mshr-hit",
+		})
 	} else {
-		tracing.AddTaskStep(trans.ID, d.cache.comp, "write-mshr-hit")
+		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+			TaskID: trans.ID,
+			What:   "write-mshr-hit",
+		})
 	}
 
 	dirPostBuf := &next.DirPostBuf
@@ -141,7 +147,10 @@ func (d *directory) processReadHit(
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
-	tracing.AddTaskStep(trans.ID, d.cache.comp, "read-hit")
+	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+		TaskID: trans.ID,
+		What:   "read-hit",
+	})
 
 	return true
 }
@@ -170,7 +179,10 @@ func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool 
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
-	tracing.AddTaskStep(trans.ID, d.cache.comp, "read-miss")
+	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+		TaskID: trans.ID,
+		What:   "read-miss",
+	})
 
 	return true
 }
@@ -218,7 +230,7 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
-	writeToBottom := &mem.WriteReq{}
+	writeToBottom := mem.WriteReq{}
 	writeToBottom.ID = timing.GetIDGenerator().Generate()
 	writeToBottom.Src = d.cache.bottomPort.AsRemote()
 	// Route by cache-line ID so the write-through write and the
@@ -232,10 +244,11 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 	writeToBottom.TrafficBytes = len(trans.WriteData) + 12
 	writeToBottom.TrafficClass = "req"
 
-	err := d.cache.bottomPort.Send(writeToBottom)
-	if err != nil {
+	if !d.cache.bottomPort.CanSend() {
 		return false
 	}
+
+	d.cache.bottomPort.Send(writeToBottom)
 
 	trans.HasWriteToBottom = true
 	trans.WriteToBottomMeta = writeToBottom.MsgMeta
@@ -243,7 +256,7 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 	trans.WriteToBottomData = trans.WriteData
 	trans.WriteToBottomDirtyMask = trans.WriteDirtyMask
 
-	tracing.TraceReqInitiate(writeToBottom, d.cache.comp, trans.ID)
+	tracing.TraceReqInitiate(d.cache.comp, writeToBottom, trans.ID)
 
 	return true
 }
@@ -261,7 +274,7 @@ func (d *directory) fetchFromBottom(
 	next := &d.cache.comp.State
 
 	bottomModule := d.cache.findPort(cacheLineID)
-	readToBottom := &mem.ReadReq{
+	readToBottom := mem.ReadReq{
 		Address:        cacheLineID,
 		PID:            pid,
 		AccessByteSize: blockSize,
@@ -271,12 +284,13 @@ func (d *directory) fetchFromBottom(
 	readToBottom.Dst = bottomModule
 	readToBottom.TrafficBytes, readToBottom.TrafficClass = 12, "req"
 
-	err := d.cache.bottomPort.Send(readToBottom)
-	if err != nil {
+	if !d.cache.bottomPort.CanSend() {
 		return false
 	}
 
-	tracing.TraceReqInitiate(readToBottom, d.cache.comp, trans.ID)
+	d.cache.bottomPort.Send(readToBottom)
+
+	tracing.TraceReqInitiate(d.cache.comp, readToBottom, trans.ID)
 
 	trans.HasReadToBottom = true
 	trans.ReadToBottomMeta = readToBottom.MsgMeta

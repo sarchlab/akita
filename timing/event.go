@@ -1,12 +1,12 @@
 package timing
 
-// VTimeInSec defines the time in the simulated space in the unit of picosecond.
-type VTimeInSec uint64
+// VTimeInPicoSec defines the time in the simulated space in the unit of picosecond.
+type VTimeInPicoSec uint64
 
 // An Event is something going to happen in the future.
 type Event interface {
 	// Time returns the time that the event should happen.
-	Time() VTimeInSec
+	Time() VTimeInPicoSec
 
 	// HandlerID returns the handler ID that can handle the event.
 	HandlerID() string
@@ -19,24 +19,23 @@ type Event interface {
 // EventBase provides the basic fields and getters for other events.
 type EventBase struct {
 	ID         uint64     `json:"id"`
-	Time_      VTimeInSec `json:"time"`
+	Time_      VTimeInPicoSec `json:"time"`
 	HandlerID_ string     `json:"handler_id"`
 	Secondary  bool       `json:"secondary"`
 }
 
-// NewEventBase creates a new EventBase.
-func NewEventBase(t VTimeInSec, handlerID string) *EventBase {
-	e := new(EventBase)
-	e.ID = GetIDGenerator().Generate()
-	e.Time_ = t
-	e.HandlerID_ = handlerID
-	e.Secondary = false
-
-	return e
+// MakeEventBase creates a new EventBase as a value.
+func MakeEventBase(t VTimeInPicoSec, handlerID string) EventBase {
+	return EventBase{
+		ID:         GetIDGenerator().Generate(),
+		Time_:      t,
+		HandlerID_: handlerID,
+		Secondary:  false,
+	}
 }
 
 // Time returns the time that the event is going to happen.
-func (e EventBase) Time() VTimeInSec {
+func (e EventBase) Time() VTimeInPicoSec {
 	return e.Time_
 }
 

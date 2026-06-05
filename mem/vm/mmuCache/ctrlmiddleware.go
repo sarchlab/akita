@@ -42,7 +42,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	}
 
 	switch msg := msgI.(type) {
-	case *mem.ControlReq:
+	case mem.ControlReq:
 		return m.handleControlReq(msg)
 	default:
 		log.Panicf("Unhandled message type: %s", reflect.TypeOf(msgI))
@@ -51,7 +51,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	return false
 }
 
-func (m *ctrlMiddleware) handleControlReq(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleControlReq(msg mem.ControlReq) bool {
 	switch msg.Command {
 	case mem.CmdEnable:
 		return m.performCtrlEnable(msg)
@@ -70,55 +70,52 @@ func (m *ctrlMiddleware) handleControlReq(msg *mem.ControlReq) bool {
 	return false
 }
 
-func (m *ctrlMiddleware) performCtrlEnable(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) performCtrlEnable(msg mem.ControlReq) bool {
 	state := &m.comp.State
 	state.CurrentState = mmuCacheStateEnable
 
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.controlPort().Name(),
+	})
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
 
-func (m *ctrlMiddleware) performCtrlDrain(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) performCtrlDrain(msg mem.ControlReq) bool {
 	state := &m.comp.State
 	state.CurrentState = mmuCacheStateDrain
 
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.controlPort().Name(),
+	})
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
 
-func (m *ctrlMiddleware) performCtrlPause(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) performCtrlPause(msg mem.ControlReq) bool {
 	state := &m.comp.State
 	state.CurrentState = mmuCacheStatePause
 
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.controlPort().Name(),
+	})
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
 }
 
-func (m *ctrlMiddleware) handleMMUCacheFlush(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleMMUCacheFlush(msg mem.ControlReq) bool {
 	m.flushMsgMustBeValidInCurrentStage(msg)
 
 	state := &m.comp.State
@@ -147,24 +144,24 @@ func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg messaging.Msg) {
 	}
 }
 
-func (m *ctrlMiddleware) handleMMUCacheRestart(msg *mem.ControlReq) bool {
-	rsp := &mem.ControlRsp{Command: mem.CmdReset, Success: true}
+func (m *ctrlMiddleware) handleMMUCacheRestart(msg mem.ControlReq) bool {
+	rsp := mem.ControlRsp{Command: mem.CmdReset, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.controlPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := m.controlPort().Send(rsp)
-	if err != nil {
+	if !m.controlPort().CanSend() {
 		return false
 	}
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+
+	m.controlPort().Send(rsp)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.controlPort().Name(),
+	})
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	state := &m.comp.State
 	state.CurrentState = mmuCacheStateEnable

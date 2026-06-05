@@ -54,12 +54,12 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 	})
 
 	It("should restart and drain ports", func() {
-		req := &mem.ControlReq{Command: mem.CmdReset}
+		req := mem.ControlReq{Command: mem.CmdReset}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.TrafficClass = "mem.ControlReq"
 
-		topMsg := &vm.TranslationReq{}
+		topMsg := vm.TranslationReq{}
 		topMsg.ID = timing.GetIDGenerator().Generate()
 		topMsg.Src = messaging.RemotePort("Requester")
 		topMsg.Dst = topPort.AsRemote()
@@ -67,9 +67,9 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		topMsg.VAddr = 0x1000
 		topMsg.DeviceID = 1
 		topMsg.TrafficClass = "vm.TranslationReq"
-		Expect(topPort.Deliver(topMsg)).To(BeNil())
+		topPort.Deliver(topMsg)
 
-		bottomMsg := &vm.TranslationRsp{
+		bottomMsg := vm.TranslationRsp{
 			Page: vm.Page{},
 		}
 		bottomMsg.ID = timing.GetIDGenerator().Generate()
@@ -77,7 +77,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		bottomMsg.Dst = bottomPort.AsRemote()
 		bottomMsg.RspTo = timing.GetIDGenerator().Generate()
 		bottomMsg.TrafficClass = "vm.TranslationRsp"
-		Expect(bottomPort.Deliver(bottomMsg)).To(BeNil())
+		bottomPort.Deliver(bottomMsg)
 
 		madeProgress := ctrl.handleMMUCacheRestart(req)
 
@@ -88,7 +88,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		Expect(bottomPort.PeekIncoming()).To(BeNil())
 
 		rsp := controlPort.RetrieveOutgoing()
-		ctrlRsp, ok := rsp.(*mem.ControlRsp)
+		ctrlRsp, ok := rsp.(mem.ControlRsp)
 		Expect(ok).To(BeTrue())
 		Expect(ctrlRsp.Command).To(Equal(mem.CmdReset))
 		Expect(ctrlRsp.Success).To(BeTrue())
@@ -103,12 +103,12 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 			Table:        initSets(spec.NumLevels, spec.NumBlocks),
 		}
 
-		req := &mem.ControlReq{Command: mem.CmdFlush}
+		req := mem.ControlReq{Command: mem.CmdFlush}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = controlPort.AsRemote()
 		req.TrafficClass = "mem.ControlReq"
-		Expect(controlPort.Deliver(req)).To(BeNil())
+		controlPort.Deliver(req)
 
 		madeProgress := ctrl.handleMMUCacheFlush(req)
 
@@ -127,7 +127,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 			Table:        initSets(spec.NumLevels, spec.NumBlocks),
 		}
 
-		msg := &mem.ControlReq{
+		msg := mem.ControlReq{
 			Command: mem.CmdPause,
 		}
 		msg.ID = timing.GetIDGenerator().Generate()
@@ -135,7 +135,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		msg.Dst = controlPort.AsRemote()
 		msg.TrafficBytes = 4
 		msg.TrafficClass = "mem.ControlReq"
-		Expect(controlPort.Deliver(msg)).To(BeNil())
+		controlPort.Deliver(msg)
 
 		madeProgress := ctrl.handleIncomingCommands()
 

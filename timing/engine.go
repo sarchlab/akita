@@ -4,7 +4,7 @@ import "github.com/sarchlab/akita/v5/hooking"
 
 // TimeTeller can be used to get the current time.
 type TimeTeller interface {
-	CurrentTime() VTimeInSec
+	CurrentTime() VTimeInPicoSec
 }
 
 // EventScheduler can be used to schedule future events.

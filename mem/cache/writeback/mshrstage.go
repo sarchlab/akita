@@ -102,7 +102,7 @@ func (s *mshrStage) respondRead(
 ) {
 	_, offset := getCacheLineID(trans.ReadAddress, log2BlockSize)
 	respondData := data[offset : offset+trans.ReadAccessByteSize]
-	dataReady := &mem.DataReadyRsp{}
+	dataReady := mem.DataReadyRsp{}
 	dataReady.ID = timing.GetIDGenerator().Generate()
 	dataReady.Src = s.cache.topPort.AsRemote()
 	dataReady.Dst = trans.ReadMeta.Src
@@ -112,11 +112,11 @@ func (s *mshrStage) respondRead(
 	dataReady.TrafficClass = "mem.DataReadyRsp"
 	s.cache.topPort.Send(dataReady)
 
-	tracing.TraceReqComplete(&trans.ReadMeta, s.cache.comp)
+	tracing.TraceReqComplete(s.cache.comp, trans.ReadMeta)
 }
 
 func (s *mshrStage) respondWrite(trans *transactionState) {
-	writeDoneRsp := &mem.WriteDoneRsp{}
+	writeDoneRsp := mem.WriteDoneRsp{}
 	writeDoneRsp.ID = timing.GetIDGenerator().Generate()
 	writeDoneRsp.Src = s.cache.topPort.AsRemote()
 	writeDoneRsp.Dst = trans.WriteMeta.Src
@@ -125,7 +125,7 @@ func (s *mshrStage) respondWrite(trans *transactionState) {
 	writeDoneRsp.TrafficClass = "mem.WriteDoneRsp"
 	s.cache.topPort.Send(writeDoneRsp)
 
-	tracing.TraceReqComplete(&trans.WriteMeta, s.cache.comp)
+	tracing.TraceReqComplete(s.cache.comp, trans.WriteMeta)
 }
 
 func (s *mshrStage) findTransaction(transIdx int) bool {

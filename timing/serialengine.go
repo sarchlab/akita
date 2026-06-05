@@ -13,7 +13,7 @@ import (
 type SerialEngine struct {
 	hooking.HookableBase
 
-	time           VTimeInSec
+	time           VTimeInPicoSec
 	queue          *unsafeEventQueue
 	secondaryQueue *unsafeEventQueue
 
@@ -166,11 +166,11 @@ func (e *SerialEngine) Continue() {
 
 // CurrentTime returns the current time at which the engine is at.
 // Specifically, the run time of the current event.
-func (e *SerialEngine) CurrentTime() VTimeInSec {
+func (e *SerialEngine) CurrentTime() VTimeInPicoSec {
 	return e.time
 }
 
 // SetCurrentTime sets the current time of the engine.
-func (e *SerialEngine) SetCurrentTime(t VTimeInSec) {
+func (e *SerialEngine) SetCurrentTime(t VTimeInPicoSec) {
 	e.time = t
 }

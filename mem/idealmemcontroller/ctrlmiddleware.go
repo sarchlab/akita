@@ -36,17 +36,18 @@ func (m *ctrlMiddleware) handleDrainState() bool {
 		return false
 	}
 
-	rsp := &mem.ControlRsp{Command: mem.CmdDrain, Success: true}
+	rsp := mem.ControlRsp{Command: mem.CmdDrain, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = state.CurrentCmdSrc
 	rsp.RspTo = state.CurrentCmdID
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := m.ctrlPort().Send(rsp)
-	if err != nil {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
+
+	m.ctrlPort().Send(rsp)
 
 	state.CurrentState = "pause"
 
@@ -59,7 +60,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() (madeProgress bool) {
 		return false
 	}
 
-	msg := msgI.(*mem.ControlReq)
+	msg := msgI.(mem.ControlReq)
 
 	switch msg.Command {
 	case mem.CmdEnable:
@@ -78,51 +79,53 @@ func (m *ctrlMiddleware) handleIncomingCommands() (madeProgress bool) {
 }
 
 func (m *ctrlMiddleware) handleEnable(
-	msg *mem.ControlReq,
+	msg mem.ControlReq,
 ) bool {
 	state := &m.comp.State
 	state.CurrentState = "enable"
 
-	rsp := &mem.ControlRsp{Command: mem.CmdEnable, Success: true}
+	rsp := mem.ControlRsp{Command: mem.CmdEnable, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.RspTo = msg.ID
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := m.ctrlPort().Send(rsp)
-	if err != nil {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
+
+	m.ctrlPort().Send(rsp)
 
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
 func (m *ctrlMiddleware) handlePause(
-	msg *mem.ControlReq,
+	msg mem.ControlReq,
 ) bool {
 	state := &m.comp.State
 	state.CurrentState = "pause"
 
-	rsp := &mem.ControlRsp{Command: mem.CmdPause, Success: true}
+	rsp := mem.ControlRsp{Command: mem.CmdPause, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.RspTo = msg.ID
 	rsp.TrafficClass = "mem.ControlRsp"
 
-	err := m.ctrlPort().Send(rsp)
-	if err != nil {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
+
+	m.ctrlPort().Send(rsp)
 
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
 func (m *ctrlMiddleware) handleDrain(
-	msg *mem.ControlReq,
+	msg mem.ControlReq,
 ) bool {
 	state := &m.comp.State
 	state.CurrentState = "drain"

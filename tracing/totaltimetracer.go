@@ -1,80 +1,60 @@
 package tracing
 
 import (
-	"github.com/sarchlab/akita/v5/timing"
 	"sync"
+
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // TotalTimeTracer can collect the total time of executing a certain type of
 // task. If the execution of two tasks overlaps, this tracer will simply add
 // the two task processing time together.
 type TotalTimeTracer struct {
-	timeTeller    timing.TimeTeller
+	NopTracer
+
 	filter        TaskFilter
 	lock          sync.Mutex
-	totalTime     timing.VTimeInSec
-	inflightTasks map[uint64]Task
+	totalTime     timing.VTimeInPicoSec
+	inflightTasks map[uint64]timing.VTimeInPicoSec
 }
 
 // NewTotalTimeTracer creates a new TotalTimeTracer
-func NewTotalTimeTracer(
-	timeTeller timing.TimeTeller,
-	filter TaskFilter,
-) *TotalTimeTracer {
-	t := &TotalTimeTracer{
-		timeTeller:    timeTeller,
+func NewTotalTimeTracer(filter TaskFilter) *TotalTimeTracer {
+	return &TotalTimeTracer{
 		filter:        filter,
-		inflightTasks: make(map[uint64]Task),
+		inflightTasks: make(map[uint64]timing.VTimeInPicoSec),
 	}
-
-	return t
 }
 
 // TotalTime returns the total time has been spent on a certain type of tasks.
-func (t *TotalTimeTracer) TotalTime() timing.VTimeInSec {
+func (t *TotalTimeTracer) TotalTime() timing.VTimeInPicoSec {
 	t.lock.Lock()
-	time := t.totalTime
-	t.lock.Unlock()
+	defer t.lock.Unlock()
 
-	return time
+	return t.totalTime
 }
 
 // StartTask records the task start time
-func (t *TotalTimeTracer) StartTask(task Task) {
-	task.StartTime = t.timeTeller.CurrentTime()
-
+func (t *TotalTimeTracer) StartTask(task TaskStart) {
 	if !t.filter(task) {
 		return
 	}
 
 	t.lock.Lock()
-	t.inflightTasks[task.ID] = task
+	t.inflightTasks[task.ID] = task.Time
 	t.lock.Unlock()
-}
-
-// StepTask does nothing
-func (t *TotalTimeTracer) StepTask(_ Task) {
-	// Do nothing
-}
-
-// AddMilestone does nothing
-func (t *TotalTimeTracer) AddMilestone(_ Milestone) {
-	// Do nothing
 }
 
 // EndTask records the end of the task
-func (t *TotalTimeTracer) EndTask(task Task) {
-	task.EndTime = t.timeTeller.CurrentTime()
-
+func (t *TotalTimeTracer) EndTask(task TaskEnd) {
 	t.lock.Lock()
+	defer t.lock.Unlock()
 
-	originalTask, ok := t.inflightTasks[task.ID]
+	startTime, ok := t.inflightTasks[task.ID]
 	if !ok {
-		t.lock.Unlock()
 		return
 	}
 
-	t.totalTime += task.EndTime - originalTask.StartTime
+	t.totalTime += task.Time - startTime
 	delete(t.inflightTasks, task.ID)
-	t.lock.Unlock()
 }

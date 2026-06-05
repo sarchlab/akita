@@ -138,7 +138,7 @@ func (wb *writeBufferStage) fetchFromBottom(
 
 	spec := wb.cache.comp.Spec()
 	lowModulePort := wb.cache.findPort(trans.FetchAddress)
-	read := &mem.ReadReq{}
+	read := mem.ReadReq{}
 	read.ID = timing.GetIDGenerator().Generate()
 	read.Src = wb.cache.bottomPort.AsRemote()
 	read.Dst = lowModulePort
@@ -156,8 +156,8 @@ func (wb *writeBufferStage) fetchFromBottom(
 	next.WriteBufferBuf.Pop()
 
 	reqMeta := trans.reqMeta()
-	tracing.TraceReqInitiate(read, wb.cache.comp,
-		tracing.MsgIDAtReceiver(&reqMeta, wb.cache.comp))
+	tracing.TraceReqInitiate(wb.cache.comp, read,
+		tracing.MsgIDAtReceiver(reqMeta, wb.cache.comp))
 
 	return true
 }
@@ -243,7 +243,7 @@ func (wb *writeBufferStage) write() bool {
 	}
 
 	lowModulePort := wb.cache.findPort(trans.EvictingAddr)
-	write := &mem.WriteReq{}
+	write := mem.WriteReq{}
 	write.ID = timing.GetIDGenerator().Generate()
 	write.Src = wb.cache.bottomPort.AsRemote()
 	write.Dst = lowModulePort
@@ -261,8 +261,8 @@ func (wb *writeBufferStage) write() bool {
 	next.InflightEvictionIndices = append(next.InflightEvictionIndices, transIdx)
 
 	reqMeta := trans.reqMeta()
-	tracing.TraceReqInitiate(write, wb.cache.comp,
-		tracing.MsgIDAtReceiver(&reqMeta, wb.cache.comp))
+	tracing.TraceReqInitiate(wb.cache.comp, write,
+		tracing.MsgIDAtReceiver(reqMeta, wb.cache.comp))
 
 	return true
 }
@@ -274,9 +274,9 @@ func (wb *writeBufferStage) processReturnRsp() bool {
 	}
 
 	switch msg := msg.(type) {
-	case *mem.DataReadyRsp:
+	case mem.DataReadyRsp:
 		return wb.processDataReadyRsp(msg)
-	case *mem.WriteDoneRsp:
+	case mem.WriteDoneRsp:
 		return wb.processWriteDoneRsp(msg)
 	default:
 		panic("unknown msg type")
@@ -284,7 +284,7 @@ func (wb *writeBufferStage) processReturnRsp() bool {
 }
 
 func (wb *writeBufferStage) processDataReadyRsp(
-	msg *mem.DataReadyRsp,
+	msg mem.DataReadyRsp,
 ) bool {
 	spec := wb.cache.comp.Spec()
 	next := &wb.cache.comp.State
@@ -326,7 +326,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	wb.removeInflightFetch(transIdx)
 	wb.cache.bottomPort.RetrieveIncoming()
 
-	tracing.TraceReqFinalize(&trans.FetchReadReqMeta, wb.cache.comp)
+	tracing.TraceReqFinalize(wb.cache.comp, trans.FetchReadReqMeta)
 
 	return true
 }
@@ -395,7 +395,7 @@ func (wb *writeBufferStage) removeInflightFetch(transIdx int) {
 }
 
 func (wb *writeBufferStage) processWriteDoneRsp(
-	msg *mem.WriteDoneRsp,
+	msg mem.WriteDoneRsp,
 ) bool {
 	next := &wb.cache.comp.State
 
@@ -409,7 +409,7 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 			)
 			delete(next.EvictingList, e.EvictingAddr)
 			wb.cache.bottomPort.RetrieveIncoming()
-			tracing.TraceReqFinalize(&e.EvictionWriteReqMeta, wb.cache.comp)
+			tracing.TraceReqFinalize(wb.cache.comp, e.EvictionWriteReqMeta)
 
 			return true
 		}

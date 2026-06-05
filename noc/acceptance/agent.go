@@ -15,7 +15,7 @@ type Agent struct {
 
 	test       *Test
 	AgentPorts []messaging.Port
-	MsgsToSend []*TrafficMsg
+	MsgsToSend []TrafficMsg
 	sendBytes  uint64
 	recvBytes  uint64
 }
@@ -59,15 +59,15 @@ func (a *Agent) send() bool {
 
 	srcPort := a.findPortByName(src)
 
-	err := srcPort.Send(msg)
-	if err == nil {
-		a.MsgsToSend = a.MsgsToSend[1:]
-		a.sendBytes += uint64(msg.TrafficBytes)
-
-		return true
+	if !srcPort.CanSend() {
+		return false
 	}
 
-	return false
+	srcPort.Send(msg)
+	a.MsgsToSend = a.MsgsToSend[1:]
+	a.sendBytes += uint64(msg.TrafficBytes)
+
+	return true
 }
 
 func (a *Agent) findPortByName(src messaging.RemotePort) messaging.Port {

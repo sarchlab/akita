@@ -118,7 +118,7 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 			pcs.ForwardBuffer.Pop()
 			sendBuf.PushTyped(item.Flit)
 
-			tracing.EndTask(item.TaskID, m.comp)
+			tracing.EndTask(m.comp, tracing.TaskEnd{ID: item.TaskID})
 
 			occupiedOutputPort[outIdx] = true
 			madeProgress = true
@@ -141,15 +141,17 @@ func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 				break
 			}
 
+			if !port.CanSend() {
+				break
+			}
+
 			flit := pcs.SendOutBuffer.Peek()
 			flit.Src = port.AsRemote()
 			flit.Dst = pcs.RemotePort
 
-			err := port.Send(&flit)
-			if err == nil {
-				pcs.SendOutBuffer.Pop()
-				madeProgress = true
-			}
+			port.Send(flit)
+			pcs.SendOutBuffer.Pop()
+			madeProgress = true
 		}
 	}
 

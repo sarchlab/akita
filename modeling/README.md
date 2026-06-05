@@ -67,7 +67,7 @@ comp := modeling.NewEventDrivenBuilder[MySpec, MyState, modeling.None]().
 The `EventProcessor[S, T, R]` interface has a single method:
 
 ```go
-Process(comp *EventDrivenComponent[S, T, R], now timing.VTimeInSec) bool
+Process(comp *EventDrivenComponent[S, T, R], now timing.VTimeInPicoSec) bool
 ```
 
 Wakeups are scheduled via:
