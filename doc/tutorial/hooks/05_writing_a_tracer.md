@@ -23,21 +23,24 @@ A tracer has four methods, one per kind of task event:
 
 ```go
 type Tracer interface {
-    StartTask(task Task)
-    StepTask(task Task)
+    StartTask(task TaskStart)
+    EndTask(task TaskEnd)
+    AddTaskTag(tag TaskTag)
     AddMilestone(milestone Milestone)
-    EndTask(task Task)
 }
 ```
 
 `CollectTrace` wires these up: it attaches a hook that calls `StartTask` when
 a task starts, `EndTask` when it ends, and so on. Most tracers only care
-about a couple of them and leave the rest as no-ops.
+about a couple of them and leave the rest as no-ops. The simplest way to get
+those no-ops is to embed `tracing.NopTracer`, which implements all four
+methods as empty defaults — then you only override the ones you need.
 
-Note that the `Task` passed to `EndTask` only carries the task's `id` — the
-framework does not remember the start time for you. A tracer that measures
-duration keeps its own record between start and end, and reads the clock from
-a `timing.TimeTeller`.
+Each event struct (`TaskStart`, `TaskEnd`, …) carries its own
+`Time timing.VTimeInPicoSec`, so the framework hands you the time of every
+event directly. A tracer that measures duration just records the start time
+from `StartTask` and reads the end time from `EndTask` — no `timing.TimeTeller`
+needed.
 
 ## A Max-Duration Tracer
 
@@ -46,37 +49,34 @@ that. Here is the whole tracer:
 
 ```go
 type maxDurationTracer struct {
-    timeTeller timing.TimeTeller
-    starts     map[uint64]timing.VTimeInSec
-    max        timing.VTimeInSec
+    tracing.NopTracer
+    starts map[uint64]timing.VTimeInPicoSec
+    max    timing.VTimeInPicoSec
 }
 
-func (t *maxDurationTracer) StartTask(task tracing.Task) {
-    t.starts[task.ID] = t.timeTeller.CurrentTime()
+func (t *maxDurationTracer) StartTask(task tracing.TaskStart) {
+    t.starts[task.ID] = task.Time
 }
 
-func (t *maxDurationTracer) EndTask(task tracing.Task) {
+func (t *maxDurationTracer) EndTask(task tracing.TaskEnd) {
     start, ok := t.starts[task.ID]
     if !ok {
         return
     }
     delete(t.starts, task.ID)
 
-    if d := t.timeTeller.CurrentTime() - start; d > t.max {
+    if d := task.Time - start; d > t.max {
         t.max = d
     }
 }
 
-// This tracer does not care about steps or milestones.
-func (t *maxDurationTracer) StepTask(_ tracing.Task)          {}
-func (t *maxDurationTracer) AddMilestone(_ tracing.Milestone) {}
-
-func (t *maxDurationTracer) MaxDuration() timing.VTimeInSec { return t.max }
+func (t *maxDurationTracer) MaxDuration() timing.VTimeInPicoSec { return t.max }
 ```
 
-`StartTask` stamps the start time into a map keyed by task id; `EndTask`
-looks it up, computes the span, and keeps the largest. `StepTask` and
-`AddMilestone` are empty because this metric does not use them. The exported
+`StartTask` stamps the event's `Time` into a map keyed by task id; `EndTask`
+looks it up, subtracts to get the span, and keeps the largest. There are no
+`AddTaskTag` or `AddMilestone` methods here because the embedded
+`tracing.NopTracer` already supplies them as no-ops. The exported
 `MaxDuration` is how the program reads the result afterward.
 
 ## Attaching It
@@ -84,7 +84,7 @@ looks it up, computes the span, and keeps the largest. `StepTask` and
 A custom tracer attaches exactly like a built-in one:
 
 ```go
-tracer := newMaxDurationTracer(engine)
+tracer := newMaxDurationTracer()
 tracing.CollectTrace(worker, tracer)
 ```
 
@@ -113,9 +113,11 @@ longest job: 12000 ps
 ## Key Concepts
 
 - **A tracer is any type implementing `Tracer`** — four methods, most often
-  with only `StartTask`/`EndTask` doing real work.
-- **`EndTask` gets only the id**, so a tracer that measures duration records
-  start times itself and reads a `timing.TimeTeller` for the clock.
+  with only `StartTask`/`EndTask` doing real work. Embed `tracing.NopTracer`
+  to get the rest as no-ops.
+- **Each event carries its own `Time`**, so a tracer that measures duration
+  records the start time itself and subtracts it from the end time — no
+  `timing.TimeTeller` needed.
 - **Custom and built-in tracers attach identically** with
   `tracing.CollectTrace`.
 

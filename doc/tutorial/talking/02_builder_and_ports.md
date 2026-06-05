@@ -105,18 +105,30 @@ func (m *sendMW) Tick() bool {
 
 `sendRsp` checks whether any in-flight transaction has finished its
 countdown and, if so, builds a `pingRsp` and sends it. `sendPing` checks
-whether more pings are queued and, if so, builds a `pingReq`. The actual
-send:
+whether more pings are queued and, if so, builds a `pingReq`. Messages are
+values, so the literal has no `&`:
 
 ```go
-err := outPort(m.comp).Send(pingMsg)
-if err != nil {
+pingMsg := pingReq{
+    MsgMeta: messaging.MsgMeta{
+        ID:  timing.GetIDGenerator().Generate(),
+        Src: outPort(m.comp).AsRemote(),
+        Dst: state.PingDst,
+    },
+    SeqID: state.NextSeqID,
+}
+
+if !outPort(m.comp).CanSend() {
     return false
 }
+
+outPort(m.comp).Send(pingMsg)
 ```
 
-If the outgoing port's buffer is full, `Send` returns an error and we
-return false — no progress this cycle. The engine will retry next tick.
+`Send` takes the message by value and returns nothing, so you guard it
+with `CanSend()` instead of checking a return error. If the outgoing
+port's buffer is full, `CanSend()` is false and we return false — no
+progress this cycle. The engine will retry next tick.
 
 ### `receiveProcessMW` — pulls work in
 
@@ -142,12 +154,19 @@ if msgI == nil {
 }
 
 switch msg := msgI.(type) {
-case *pingReq:
+case pingReq:
     m.processingPingReq(msg)
-case *pingRsp:
+case pingRsp:
     m.processingPingRsp(msg)
+default:
+    panic("unknown message type")
 }
 ```
+
+Because messages are values, the type switch matches on value cases
+(`pingReq`, `pingRsp`) — not pointer cases. `PeekIncoming` returns the
+message as a `messaging.Msg` interface value; the handlers then call
+`RetrieveIncoming()` to consume it.
 
 Note `Peek` then `Retrieve`: peek does not consume the message — you can
 look at it, decide you cannot process it (port full, no resource), and

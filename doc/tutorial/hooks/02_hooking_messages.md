@@ -66,10 +66,10 @@ attached, the run shows the full conversation. Filtering to just the message
 lines:
 
 ```
-[msg]   AgentA sends *main.pingReq
-[msg]   AgentB recvd *main.pingReq
-[msg]   AgentB sends *main.pingRsp
-[msg]   AgentA recvd *main.pingRsp
+[msg]   AgentA sends main.pingReq
+[msg]   AgentB recvd main.pingReq
+[msg]   AgentB sends main.pingRsp
+[msg]   AgentA recvd main.pingRsp
 ```
 
 The whole round trip, observed from the ports: Agent A sends a request,

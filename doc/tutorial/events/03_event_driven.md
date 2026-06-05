@@ -46,7 +46,7 @@ type Spec struct {
 }
 
 type State struct {
-    StartTimes       []timing.VTimeInSec
+    StartTimes       []timing.VTimeInPicoSec
     NextSeqID        int
     PendingResponses []pendingResponse
     ScheduledPings   []scheduledPing
@@ -69,7 +69,7 @@ type pingProcessor struct{}
 
 func (p *pingProcessor) Process(
     comp *modeling.EventDrivenComponent[Spec, State, modeling.None],
-    now timing.VTimeInSec,
+    now timing.VTimeInPicoSec,
 ) bool {
     progress := false
     state := &comp.State

@@ -7,7 +7,7 @@ time, and dispatches each event to the handler that owns it.
 
 ## Key Concepts
 
-- **Virtual time** is represented by `VTimeInSec`, a `uint64` counting
+- **Virtual time** is represented by `VTimeInPicoSec`, a `uint64` counting
   picoseconds of simulated time. The engine always moves time forward.
 - **Events** describe something that will happen at a future time. Each event
   is bound to exactly one handler.
@@ -23,7 +23,7 @@ time, and dispatches each event to the handler that owns it.
 
 ```go
 type Event interface {
-    Time() VTimeInSec   // when the event happens
+    Time() VTimeInPicoSec   // when the event happens
     HandlerID() string  // name of the handler that processes it
     IsSecondary() bool  // secondary events run after same-time primary events
 }
@@ -52,7 +52,7 @@ type Handler interface {
 
 ```go
 type TimeTeller interface {
-    CurrentTime() VTimeInSec
+    CurrentTime() VTimeInPicoSec
 }
 
 type EventScheduler interface {

@@ -66,51 +66,49 @@ func (m *agentMW) Tick() bool {
 
 func (m *agentMW) send() bool {
 	s := &m.comp.State
+	port := out(m.comp)
 	progress := false
 
-	if len(s.Pending) > 0 {
+	if len(s.Pending) > 0 && port.CanSend() {
 		p := s.Pending[0]
-		rsp := &pingRsp{
+		port.Send(pingRsp{
 			MsgMeta: messaging.MsgMeta{
 				ID:    timing.GetIDGenerator().Generate(),
-				Src:   out(m.comp).AsRemote(),
+				Src:   port.AsRemote(),
 				Dst:   p.Dst,
 				RspTo: p.ReqID,
 			},
 			SeqID: p.SeqID,
-		}
-		if out(m.comp).Send(rsp) == nil {
-			s.Pending = s.Pending[1:]
-			progress = true
-		}
+		})
+		s.Pending = s.Pending[1:]
+		progress = true
 	}
 
-	if s.PingsToSend > 0 {
-		req := &pingReq{
+	if s.PingsToSend > 0 && port.CanSend() {
+		port.Send(pingReq{
 			MsgMeta: messaging.MsgMeta{
 				ID:  timing.GetIDGenerator().Generate(),
-				Src: out(m.comp).AsRemote(),
+				Src: port.AsRemote(),
 				Dst: s.PingDst,
 			},
 			SeqID: s.NextSeqID,
-		}
-		if out(m.comp).Send(req) == nil {
-			s.PingsToSend--
-			s.NextSeqID++
-			progress = true
-		}
+		})
+		s.PingsToSend--
+		s.NextSeqID++
+		progress = true
 	}
 
 	return progress
 }
 
 func (m *agentMW) recv() bool {
-	msgI := out(m.comp).PeekIncoming()
+	port := out(m.comp)
+	msgI := port.PeekIncoming()
 	if msgI == nil {
 		return false
 	}
 
-	if req, ok := msgI.(*pingReq); ok {
+	if req, ok := msgI.(pingReq); ok {
 		m.comp.State.Pending = append(m.comp.State.Pending, pendingRsp{
 			SeqID: req.SeqID,
 			ReqID: req.ID,
@@ -118,7 +116,7 @@ func (m *agentMW) recv() bool {
 		})
 	}
 
-	out(m.comp).RetrieveIncoming()
+	port.RetrieveIncoming()
 	return true
 }
 

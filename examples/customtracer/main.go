@@ -44,9 +44,11 @@ func (m *workerMW) Tick() bool {
 
 		s.NextID++
 		s.CurTaskID = s.NextID
-		tracing.StartTask(
-			s.CurTaskID, 0, m.comp,
-			"job", fmt.Sprintf("job-%d", s.CurTaskID), nil)
+		tracing.StartTask(m.comp, tracing.TaskStart{
+			ID:   s.CurTaskID,
+			Kind: "job",
+			What: fmt.Sprintf("job-%d", s.CurTaskID),
+		})
 
 		s.Working = true
 		// Jobs get progressively longer so "the longest" is meaningful.
@@ -58,49 +60,44 @@ func (m *workerMW) Tick() bool {
 
 	s.CountDown--
 	if s.CountDown == 0 {
-		tracing.EndTask(s.CurTaskID, m.comp)
+		tracing.EndTask(m.comp, tracing.TaskEnd{ID: s.CurTaskID})
 		s.Working = false
 	}
 
 	return true
 }
 
-// maxDurationTracer is a custom tracer. It implements tracing.Tracer by
-// recording each task's start time and tracking the longest start-to-end span.
+// maxDurationTracer is a custom tracer. Each trace event carries the time it
+// happened, so the tracer just records every task's start time and tracks the
+// longest start-to-end span. It embeds tracing.NopTracer, so it only has to
+// implement the two methods it actually cares about.
 type maxDurationTracer struct {
-	timeTeller timing.TimeTeller
-	starts     map[uint64]timing.VTimeInSec
-	max        timing.VTimeInSec
+	tracing.NopTracer
+	starts map[uint64]timing.VTimeInPicoSec
+	max    timing.VTimeInPicoSec
 }
 
-func newMaxDurationTracer(tt timing.TimeTeller) *maxDurationTracer {
-	return &maxDurationTracer{
-		timeTeller: tt,
-		starts:     make(map[uint64]timing.VTimeInSec),
-	}
+func newMaxDurationTracer() *maxDurationTracer {
+	return &maxDurationTracer{starts: make(map[uint64]timing.VTimeInPicoSec)}
 }
 
-func (t *maxDurationTracer) StartTask(task tracing.Task) {
-	t.starts[task.ID] = t.timeTeller.CurrentTime()
+func (t *maxDurationTracer) StartTask(task tracing.TaskStart) {
+	t.starts[task.ID] = task.Time
 }
 
-func (t *maxDurationTracer) EndTask(task tracing.Task) {
+func (t *maxDurationTracer) EndTask(task tracing.TaskEnd) {
 	start, ok := t.starts[task.ID]
 	if !ok {
 		return
 	}
 	delete(t.starts, task.ID)
 
-	if d := t.timeTeller.CurrentTime() - start; d > t.max {
+	if d := task.Time - start; d > t.max {
 		t.max = d
 	}
 }
 
-// This tracer does not care about steps or milestones.
-func (t *maxDurationTracer) StepTask(_ tracing.Task)          {}
-func (t *maxDurationTracer) AddMilestone(_ tracing.Milestone) {}
-
-func (t *maxDurationTracer) MaxDuration() timing.VTimeInSec { return t.max }
+func (t *maxDurationTracer) MaxDuration() timing.VTimeInPicoSec { return t.max }
 
 func main() {
 	engine := timing.NewSerialEngine()
@@ -114,7 +111,7 @@ func main() {
 	worker.AddMiddleware(&workerMW{comp: worker})
 	registrar.RegisterComponent(worker)
 
-	tracer := newMaxDurationTracer(engine)
+	tracer := newMaxDurationTracer()
 	tracing.CollectTrace(worker, tracer)
 
 	worker.State.JobsLeft = worker.Spec().NumJobs

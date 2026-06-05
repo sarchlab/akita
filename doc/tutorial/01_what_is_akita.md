@@ -34,7 +34,7 @@ on its next cycle. That is the default pattern, and most of this tutorial
 works at this level.
 
 Underneath the component layer is a smaller, more general primitive: an
-**engine** that owns simulated time (`timing.VTimeInSec`, picoseconds),
+**engine** that owns simulated time (`timing.VTimeInPicoSec`, picoseconds),
 holds **events** in a priority queue, and dispatches each event to a
 named **handler** when its time comes. Components are themselves built
 on this primitive — every cycle is an event the engine fires at the

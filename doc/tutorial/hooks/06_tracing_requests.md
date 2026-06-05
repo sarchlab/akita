@@ -26,16 +26,22 @@ A request creates two nested tasks:
 
 | Stage | Helper | Called by | Effect |
 |---|---|---|---|
-| Initiate | `TraceReqInitiate(req, domain, parentID)` | sender, on send | opens a `req_out` task (the round trip) |
-| Receive (start) | `TraceReqReceive(req, domain)` | receiver, on arrival | opens a `req_in` task (handling), child of `req_out` |
-| Complete (end) | `TraceReqComplete(req, domain)` | receiver, when done | ends the `req_in` task |
-| Finalize | `TraceReqFinalize(req, domain)` | sender, on response | ends the `req_out` task |
+| Initiate | `TraceReqInitiate(domain, req, parentID)` | sender, on send | opens a `req_out` task (the round trip) |
+| Receive (start) | `TraceReqReceive(domain, req)` | receiver, on arrival | opens a `req_in` task (handling), child of `req_out` |
+| Complete (end) | `TraceReqComplete(domain, req)` | receiver, when done | ends the `req_in` task |
+| Finalize | `TraceReqFinalize(domain, req)` | sender, on response | ends the `req_out` task |
+
+Every helper takes the **domain first, then the message** (and `parentID`
+last, for `TraceReqInitiate`).
 
 The `req_out` task spans the whole round trip as the sender sees it; the
 `req_in` task spans just the receiver's handling and is recorded as a child.
-The helpers thread the ids through the message's metadata for you
-(`SendTaskID` on the way out, `RecvTaskID` at the receiver), so the two sides
-agree without you managing ids by hand.
+The two tasks agree on identity without you managing ids by hand: the
+`req_out` task is keyed by the request's own message ID (`req.Meta().ID`), and
+`TraceReqReceive` opens its `req_in` task with that same ID as the parent. The
+receiver-side task gets its own id from a tracing-local registry — the message
+value itself is never mutated, so there is no `SendTaskID`/`RecvTaskID` field
+to thread through.
 
 The one thing you must do is **hold onto the original request** on each side:
 the sender finalizes with the request it sent, and the receiver completes
@@ -56,9 +62,10 @@ func (m *clientMW) send() bool {
         return false
     }
 
-    req := &readReq{ /* MsgMeta{ID, Src, Dst}, Seq */ }
+    req := readReq{ /* MsgMeta{ID, Src, Dst}, Seq */ }
 
-    tracing.TraceReqInitiate(req, m.comp, 0) // open req_out
+    // The req_out task is keyed by the request's own message ID.
+    tracing.TraceReqInitiate(m.comp, req, 0) // open req_out
     port.Send(req)
     m.inFlight[req.ID] = req
 
@@ -68,9 +75,9 @@ func (m *clientMW) send() bool {
 }
 
 func (m *clientMW) receive() bool {
-    rsp := m.comp.GetPortByName("Out").PeekIncoming().(*readRsp)
+    rsp := m.comp.GetPortByName("Out").PeekIncoming().(readRsp)
     if req, ok := m.inFlight[rsp.RspTo]; ok {
-        tracing.TraceReqFinalize(req, m.comp) // close req_out
+        tracing.TraceReqFinalize(m.comp, req) // close req_out
         delete(m.inFlight, rsp.RspTo)
     }
     m.comp.GetPortByName("Out").RetrieveIncoming()
@@ -78,9 +85,11 @@ func (m *clientMW) receive() bool {
 }
 ```
 
-`TraceReqInitiate` runs before `Send` so the request carries its `SendTaskID`
-across the wire. When the response comes back, the client looks up the
-original request by `rsp.RspTo` and finalizes with it.
+Messages are value types, and `port.Send` returns nothing — the `CanSend()`
+check above is what guarantees there is room. `TraceReqInitiate` runs before
+`Send` so the `req_out` task exists by the time anything observes the message.
+When the response comes back, the client looks up the original request by
+`rsp.RspTo` and finalizes with it.
 
 ## Receiver Side
 
@@ -89,8 +98,8 @@ a fixed latency, then completes the task and sends the response:
 
 ```go
 func (m *serverMW) receive() bool {
-    req := m.comp.GetPortByName("Out").PeekIncoming().(*readReq)
-    tracing.TraceReqReceive(req, m.comp) // open req_in
+    req := m.comp.GetPortByName("Out").PeekIncoming().(readReq)
+    tracing.TraceReqReceive(m.comp, req) // open req_in
     m.pending = append(m.pending, serverTxn{req: req, left: m.comp.Spec().Latency})
     m.comp.GetPortByName("Out").RetrieveIncoming()
     return true
@@ -100,12 +109,13 @@ func (m *serverMW) respond() bool {
     if len(m.pending) == 0 || m.pending[0].left > 0 {
         return false
     }
-    txn := m.pending[0]
-    rsp := &readRsp{ /* MsgMeta{ID, Src, Dst, RspTo: txn.req.ID}, Seq */ }
-    if m.comp.GetPortByName("Out").Send(rsp) != nil {
+    port := m.comp.GetPortByName("Out")
+    if !port.CanSend() {
         return false
     }
-    tracing.TraceReqComplete(txn.req, m.comp) // close req_in
+    txn := m.pending[0]
+    port.Send(readRsp{ /* MsgMeta{ID, Src, Dst, RspTo: txn.req.ID}, Seq */ })
+    tracing.TraceReqComplete(m.comp, txn.req) // close req_in
     m.pending = m.pending[1:]
     return true
 }
@@ -117,14 +127,18 @@ Because the two tasks have different kinds (`req_out` and `req_in`), one
 filter picks out each. We attach an `AverageTimeTracer` to each side:
 
 ```go
-roundTrip := tracing.NewAverageTimeTracer(engine,
-    func(t tracing.Task) bool { return t.Kind == "req_out" })
-handling := tracing.NewAverageTimeTracer(engine,
-    func(t tracing.Task) bool { return t.Kind == "req_in" })
+roundTrip := tracing.NewAverageTimeTracer(
+    func(t tracing.TaskStart) bool { return t.Kind == "req_out" })
+handling := tracing.NewAverageTimeTracer(
+    func(t tracing.TaskStart) bool { return t.Kind == "req_in" })
 
 tracing.CollectTrace(client, roundTrip)
 tracing.CollectTrace(server, handling)
 ```
+
+The filter is a `func(tracing.TaskStart) bool` — it inspects the task at the
+moment it starts. `NewAverageTimeTracer` reads the clock from the domain it is
+attached to, so the constructor takes only the filter.
 
 ## Running It
 
@@ -160,30 +174,32 @@ is that task's id?
 
 ### `MsgIDAtReceiver`
 
-When you called `TraceReqReceive(req, comp)`, it opened a `req_in` task whose
-id is the request's receiver-side id, `req.Meta().RecvTaskID`. You retrieve
-that same id with:
+When you called `TraceReqReceive(comp, req)`, it opened a `req_in` task whose
+id is the request's receiver-side id. That id is not stored on the message; it
+lives in a tracing-local registry keyed by `(domain, req.Meta().ID)`. You read
+back the same id with:
 
 ```go
 parentID := tracing.MsgIDAtReceiver(upReq, comp)
 ```
 
-So a cache that misses initiates its downstream request as a child of the
-task it is currently handling:
+Note the argument order: `MsgIDAtReceiver` takes the **message first, then the
+domain**. So a cache that misses initiates its downstream request as a child
+of the task it is currently handling:
 
 ```go
-tracing.TraceReqReceive(upReq, comp) // open req_in (handling)
+tracing.TraceReqReceive(comp, upReq) // open req_in (handling)
 
 downReq := newReq(...)               // build the next-level-down request
 tracing.TraceReqInitiate(
-    downReq, comp,
+    comp, downReq,
     tracing.MsgIDAtReceiver(upReq, comp)) // parent = the req_in above
 bottom.Send(downReq)
 ```
 
 `TraceReqReceive` on the next component down then parents *its* `req_in` to
-this `downReq`'s `req_out` automatically (through the message's `SendTaskID`,
-as before). Apply the pattern at every level and the parent links chain all
+this `downReq`'s `req_out` automatically (the parent is just `downReq`'s
+message ID). Apply the pattern at every level and the parent links chain all
 the way down.
 
 ### The Task Tree
@@ -216,8 +232,9 @@ a request spent its time across the entire hierarchy.
 - **A request is two nested tasks**: `req_out` (round trip, sender) parents
   `req_in` (handling, receiver).
 - **Four helpers mark the four moments** — initiate/finalize on the sender,
-  receive/complete on the receiver — threading the ids through the message
-  metadata for you.
+  receive/complete on the receiver — each taking the domain first, then the
+  message. The `req_out` task is keyed by the message ID; the receiver-side id
+  comes from a tracing-local registry, not the message.
 - **Hold the original request** on each side: finalize and complete take the
   message they began with.
 - **Filter by kind** to separate round-trip latency from handling time.

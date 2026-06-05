@@ -15,30 +15,30 @@ answer many different questions.
 Every measuring tracer takes a `TaskFilter`:
 
 ```go
-type TaskFilter func(t Task) bool
+type TaskFilter func(t TaskStart) bool
 ```
 
-The tracer calls it on each task; it only measures tasks for which the filter
-returns `true`. There are no special helpers — it is an ordinary function,
-so you select on whatever field of the `Task` matters:
+The tracer calls it when a task **starts**; it only measures tasks for which
+the filter returns `true`. There are no special helpers — it is an ordinary
+function, so you select on whatever field of the `TaskStart` matters:
 
 ```go
 // By kind — the most common choice.
-func(t tracing.Task) bool { return t.Kind == "req_in" }
+func(t tracing.TaskStart) bool { return t.Kind == "req_in" }
 
 // By the message/operation name.
-func(t tracing.Task) bool { return t.What == "readReq" }
+func(t tracing.TaskStart) bool { return t.What == "readReq" }
 
 // By where the task ran (the component, or a network location).
-func(t tracing.Task) bool { return t.Location == "L1Cache" }
+func(t tracing.TaskStart) bool { return t.Location == "L1Cache" }
 
 // Combine freely.
-func(t tracing.Task) bool {
+func(t tracing.TaskStart) bool {
     return t.Kind == "req_in" && t.What == "readReq"
 }
 
 // Everything (when the domain only emits what you want).
-func(t tracing.Task) bool { return true }
+func(t tracing.TaskStart) bool { return true }
 ```
 
 This is why the request example could read two different numbers from one
@@ -48,16 +48,17 @@ only its kind — `req_out` for the round trip, `req_in` for handling.
 ## The Time Tracers
 
 Three tracers measure time and differ only in how they combine tasks. Each
-takes a `timing.TimeTeller` and a filter:
+takes a filter **only** — they read the clock from the domain they are
+attached to, so there is no `TimeTeller` argument:
 
-- **`NewAverageTimeTracer(tt, filter)`** — the mean duration of matching
-  tasks. Read it with `AverageTime()`; `TotalCount()` gives how many
-  finished. Use it for "how long does an average request take?"
-- **`NewBusyTimeTracer(tt, filter)`** — the wall-clock time during which *at
-  least one* matching task was open. Overlapping tasks collapse into one
-  interval, so this is **utilization**: "how much of the run was this
-  component doing something?" Read it with `BusyTime()`.
-- **`NewTotalTimeTracer(tt, filter)`** — the sum of every matching task's
+- **`NewAverageTimeTracer(filter)`** — the mean duration of matching tasks.
+  Read it with `AverageTime()`; `TotalCount()` gives how many finished. Use it
+  for "how long does an average request take?"
+- **`NewBusyTimeTracer(filter)`** — the wall-clock time during which *at least
+  one* matching task was open. Overlapping tasks collapse into one interval,
+  so this is **utilization**: "how much of the run was this component doing
+  something?" Read it with `BusyTime()`.
+- **`NewTotalTimeTracer(filter)`** — the sum of every matching task's
   duration, counting overlaps multiple times. Read it with `TotalTime()`.
   Divide by `BusyTime()` for average concurrency.
 
@@ -65,13 +66,14 @@ For a component that never overlaps tasks (like the worker), busy and total
 time are equal; for one that handles many requests at once, they diverge, and
 the gap tells you how parallel it is.
 
-## The Step Tracer
+## The Tag Tracer
 
-**`NewStepCountTracer(filter)`** counts the named steps you record with
-`tracing.AddTaskStep`. It needs no `TimeTeller` — it counts, not times.
-`GetStepNames()`, `GetStepCount(name)`, and `GetTaskCount(name)` tell you how
-often each step fired and how many tasks reached it — handy for seeing which
-path through a component is hot.
+**`NewTagCountTracer(filter)`** counts the categorical **tags** you attach to
+a task with `tracing.AddTaskTag` (for example `"read-hit"` or `"write-miss"`).
+It needs no `TimeTeller` — it counts, not times. `GetTagNames()`,
+`GetTagCount(name)`, and `GetTaskCount(name)` tell you how often each tag was
+recorded and how many distinct tasks carried it — handy for seeing which path
+through a component is hot.
 
 ## The Back-Trace Tracer
 
@@ -83,7 +85,9 @@ stuck and what it was waiting on.
 ## The DB Tracer
 
 The tracers above keep a single aggregate in memory. **`DBTracer`** instead
-records *every* task and milestone to a database for offline analysis:
+records *every* task, tag, and milestone to a database for offline analysis.
+Unlike the time tracers it does take a `timing.TimeTeller` (the engine works),
+alongside a `datarecording.DataRecorder`:
 
 ```go
 recorder := datarecording.NewDataRecorder("trace")
@@ -108,7 +112,7 @@ offline; here we just place the tracer in the lineup.
 | Average request latency | `AverageTimeTracer` |
 | Utilization / busy fraction | `BusyTimeTracer` |
 | Average concurrency | `TotalTimeTracer` ÷ `BusyTimeTracer` |
-| Which steps run, how often | `StepCountTracer` |
+| Which tags occur, how often | `TagCountTracer` |
 | What is stuck in a deadlock | `BackTraceTracer` |
 | A full, queryable trace | `DBTracer` |
 
@@ -117,12 +121,13 @@ tasks behind your question.
 
 ## Key Concepts
 
-- **The filter selects; the tracer measures.** A `func(Task) bool` over
-  `Kind` / `What` / `Location` picks the tasks; the tracer turns them into a
-  number.
+- **The filter selects; the tracer measures.** A `func(TaskStart) bool` over
+  `Kind` / `What` / `Location` picks the tasks at start; the tracer turns them
+  into a number.
 - **Time tracers differ by overlap handling** — average, busy (union), and
-  total (sum) answer different questions.
-- **`StepCountTracer` counts steps; `BackTraceTracer` finds stuck tasks;
+  total (sum) answer different questions. They take a filter only and read the
+  clock from their domain.
+- **`TagCountTracer` counts tags; `BackTraceTracer` finds stuck tasks;
   `DBTracer` records everything** to SQLite for offline analysis.
 
 ## Where to Next

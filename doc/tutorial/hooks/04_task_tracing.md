@@ -41,20 +41,21 @@ with a shared **id**.
 You mark the boundaries of a task with two calls:
 
 ```go
-tracing.StartTask(id, parentID, domain, kind, what, detail)
-tracing.EndTask(id, domain)
+tracing.StartTask(domain, tracing.TaskStart{ID: id, ParentID: parentID, Kind: kind, What: what})
+tracing.EndTask(domain, tracing.TaskEnd{ID: id})
 ```
 
-- `id` uniquely identifies this task; `EndTask` matches the `StartTask` with
-  the same `id`. `parentID` links it to a larger task (use `0` for none).
-- `domain` is the component the task belongs to. It must be a component (or
-  other `NamedHookable`), because these calls fire **task hooks** on it —
-  that is the bridge back to the hook chapters.
-- `kind` and `what` describe the task. Tracers select tasks by `kind`, so
+- `domain` comes **first**. It is the component the task belongs to. It must
+  be a component (or other `NamedHookable`), because these calls fire **task
+  hooks** on it — that is the bridge back to the hook chapters. The time of
+  the task is sourced from the domain automatically.
+- `ID` uniquely identifies this task; `EndTask` matches the `StartTask` with
+  the same `ID`. `ParentID` links it to a larger task (use `0` for none).
+- `Kind` and `What` describe the task. Tracers select tasks by `Kind`, so
   give related tasks a common kind.
 
 Two more calls fill in detail within a task, both optional:
-`tracing.AddTaskStep(id, domain, what)` records a named checkpoint, and
+`tracing.AddTaskTag(domain, tracing.TaskTag{...})` attaches a named tag, and
 `tracing.AddMilestone(...)` records why a task was blocked and when it
 unblocked. We will not need them here.
 
@@ -65,8 +66,9 @@ be the **child** of a larger task: a request being served may spawn a
 sub-request, which spawns another, and so on. Recording each task's parent
 turns them into a **tree** that mirrors how the work fanned out.
 
-The worker in this chapter only has flat, top-level tasks, so it passes `0`
-for `parentID`. The tree becomes useful once work crosses components — a
+The worker in this chapter only has flat, top-level tasks, so it leaves
+`ParentID` at its zero value. The tree becomes useful once work crosses
+components — a
 cache miss that goes to the next level down, for instance. Building a task
 tree that spans a memory hierarchy is the subject of *Tracing Requests*.
 
@@ -87,9 +89,11 @@ func (m *workerMW) Tick() bool {
 
         s.NextID++
         s.CurTaskID = s.NextID
-        tracing.StartTask(
-            s.CurTaskID, 0, m.comp,
-            "job", fmt.Sprintf("job-%d", s.CurTaskID), nil)
+        tracing.StartTask(m.comp, tracing.TaskStart{
+            ID:   s.CurTaskID,
+            Kind: "job",
+            What: fmt.Sprintf("job-%d", s.CurTaskID),
+        })
 
         s.Working = true
         s.CountDown = m.comp.Spec().CyclesPerJob
@@ -100,7 +104,7 @@ func (m *workerMW) Tick() bool {
 
     s.CountDown--
     if s.CountDown == 0 {
-        tracing.EndTask(s.CurTaskID, m.comp)
+        tracing.EndTask(m.comp, tracing.TaskEnd{ID: s.CurTaskID})
         s.Working = false
     }
 
@@ -120,16 +124,16 @@ write one; for now we use a built-in `BusyTimeTracer`, which reports how much
 simulated time the component spent inside matching tasks:
 
 ```go
-onlyJobs := func(t tracing.Task) bool { return t.Kind == "job" }
+onlyJobs := func(t tracing.TaskStart) bool { return t.Kind == "job" }
 
-busy := tracing.NewBusyTimeTracer(engine, onlyJobs)
+busy := tracing.NewBusyTimeTracer(onlyJobs)
 tracing.CollectTrace(worker, busy)
 ```
 
 `CollectTrace(domain, tracer)` registers the tracer on the component — the
 same idea as `AcceptHook`, which is exactly what it does under the hood. The
-`func(tracing.Task) bool` is a **filter**: the tracer only counts tasks it
-returns true for. (Filters and the other built-in tracers get their own
+`func(tracing.TaskStart) bool` is a **filter**: the tracer only counts tasks
+it returns true for. (Filters and the other built-in tracers get their own
 chapter.)
 
 ## Running It
@@ -156,8 +160,8 @@ pair; *what* to measure was decided at the call site by choosing a tracer.
 
 - **A task is a unit of work with a start and an end**, tied together by a
   shared `id` — something a single-point hook cannot express.
-- **Mark tasks with `StartTask` / `EndTask`** on a component;
-  `AddTaskStep` and `AddMilestone` add optional detail.
+- **Mark tasks with `StartTask` / `EndTask`** on a component (domain first);
+  `AddTaskTag` and `AddMilestone` add optional detail.
 - **A tracer turns marks into measurements.** Attach it with
   `tracing.CollectTrace(domain, tracer)`.
 - **Tasks are free when unobserved.** With no tracer attached, the calls

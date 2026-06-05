@@ -31,13 +31,13 @@ type readRsp struct {
 	messaging.MsgMeta
 }
 
-func newReq(src, dst messaging.RemotePort) *readReq {
-	return &readReq{MsgMeta: messaging.MsgMeta{
+func newReq(src, dst messaging.RemotePort) readReq {
+	return readReq{MsgMeta: messaging.MsgMeta{
 		ID: timing.GetIDGenerator().Generate(), Src: src, Dst: dst}}
 }
 
-func newRsp(src, dst messaging.RemotePort, rspTo uint64) *readRsp {
-	return &readRsp{MsgMeta: messaging.MsgMeta{
+func newRsp(src, dst messaging.RemotePort, rspTo uint64) readRsp {
+	return readRsp{MsgMeta: messaging.MsgMeta{
 		ID: timing.GetIDGenerator().Generate(), Src: src, Dst: dst, RspTo: rspTo}}
 }
 
@@ -52,7 +52,7 @@ type ClientComp = modeling.Component[modeling.None, clientState, modeling.None]
 
 type clientMW struct {
 	comp     *ClientComp
-	inFlight map[uint64]*readReq
+	inFlight map[uint64]readReq
 }
 
 func (m *clientMW) Tick() bool {
@@ -70,7 +70,7 @@ func (m *clientMW) send() bool {
 	}
 
 	req := newReq(port.AsRemote(), s.Dst)
-	tracing.TraceReqInitiate(req, m.comp, 0) // root task, no parent
+	tracing.TraceReqInitiate(m.comp, req, 0) // root task, no parent
 	port.Send(req)
 	m.inFlight[req.ID] = req
 	s.ReqsToSend--
@@ -83,9 +83,9 @@ func (m *clientMW) receive() bool {
 	if msg == nil {
 		return false
 	}
-	rsp := msg.(*readRsp)
+	rsp := msg.(readRsp)
 	if req, ok := m.inFlight[rsp.RspTo]; ok {
-		tracing.TraceReqFinalize(req, m.comp)
+		tracing.TraceReqFinalize(m.comp, req)
 		delete(m.inFlight, rsp.RspTo)
 	}
 	port.RetrieveIncoming()
@@ -101,8 +101,8 @@ type cacheState struct {
 type CacheComp = modeling.Component[modeling.None, cacheState, modeling.None]
 
 type cacheTxn struct {
-	upReq   *readReq
-	downReq *readReq
+	upReq   readReq
+	downReq readReq
 }
 
 type cacheMW struct {
@@ -130,14 +130,14 @@ func (m *cacheMW) forwardDown() bool {
 	if msg == nil {
 		return false
 	}
-	upReq := msg.(*readReq)
+	upReq := msg.(readReq)
 
 	// Open the handling task for the request we received.
-	tracing.TraceReqReceive(upReq, m.comp) // req_in @ this cache
+	tracing.TraceReqReceive(m.comp, upReq) // req_in @ this cache
 
 	// Miss: send a request one level down, parented to the task above.
 	downReq := newReq(bottom.AsRemote(), m.comp.State.DownstreamDst)
-	tracing.TraceReqInitiate(downReq, m.comp, tracing.MsgIDAtReceiver(upReq, m.comp))
+	tracing.TraceReqInitiate(m.comp, downReq, tracing.MsgIDAtReceiver(upReq, m.comp))
 	bottom.Send(downReq)
 
 	m.txns[downReq.ID] = cacheTxn{upReq: upReq, downReq: downReq}
@@ -157,14 +157,14 @@ func (m *cacheMW) respondUp() bool {
 	if msg == nil {
 		return false
 	}
-	downRsp := msg.(*readRsp)
+	downRsp := msg.(readRsp)
 	txn := m.txns[downRsp.RspTo]
 
-	tracing.TraceReqFinalize(txn.downReq, m.comp) // close the downstream task
+	tracing.TraceReqFinalize(m.comp, txn.downReq) // close the downstream task
 
 	upRsp := newRsp(top.AsRemote(), txn.upReq.Src, txn.upReq.ID)
 	top.Send(upRsp)
-	tracing.TraceReqComplete(txn.upReq, m.comp) // close the handling task
+	tracing.TraceReqComplete(m.comp, txn.upReq) // close the handling task
 
 	delete(m.txns, downRsp.RspTo)
 	bottom.RetrieveIncoming()
@@ -188,11 +188,11 @@ func (m *memMW) Tick() bool {
 	if !port.CanSend() {
 		return false
 	}
-	req := msg.(*readReq)
+	req := msg.(readReq)
 
-	tracing.TraceReqReceive(req, m.comp) // req_in @ Memory — a leaf task
+	tracing.TraceReqReceive(m.comp, req) // req_in @ Memory — a leaf task
 	port.Send(newRsp(port.AsRemote(), req.Src, req.ID))
-	tracing.TraceReqComplete(req, m.comp)
+	tracing.TraceReqComplete(m.comp, req)
 	port.RetrieveIncoming()
 	return true
 }
@@ -206,21 +206,18 @@ type taskNode struct {
 }
 
 type treeTracer struct {
+	tracing.NopTracer
 	order []uint64
 	nodes map[uint64]taskNode
 }
 
-func (t *treeTracer) StartTask(task tracing.Task) {
+func (t *treeTracer) StartTask(task tracing.TaskStart) {
 	if _, seen := t.nodes[task.ID]; seen {
 		return
 	}
 	t.nodes[task.ID] = taskNode{parent: task.ParentID, kind: task.Kind, loc: task.Location}
 	t.order = append(t.order, task.ID)
 }
-
-func (t *treeTracer) EndTask(_ tracing.Task)           {}
-func (t *treeTracer) StepTask(_ tracing.Task)          {}
-func (t *treeTracer) AddMilestone(_ tracing.Milestone) {}
 
 func (t *treeTracer) print() {
 	children := make(map[uint64][]uint64)
@@ -252,7 +249,7 @@ func main() {
 
 	client := modeling.NewBuilder[modeling.None, clientState, modeling.None]().
 		WithEngine(engine).WithFreq(1 * timing.GHz).Build("Client")
-	client.AddMiddleware(&clientMW{comp: client, inFlight: map[uint64]*readReq{}})
+	client.AddMiddleware(&clientMW{comp: client, inFlight: map[uint64]readReq{}})
 	client.AddPort("Out", messaging.NewPort(client, 4, 4, "Client.Out"))
 	reg.RegisterComponent(client)
 

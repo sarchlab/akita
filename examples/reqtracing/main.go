@@ -53,7 +53,7 @@ type ClientComp = modeling.Component[clientSpec, clientState, modeling.None]
 
 type clientMW struct {
 	comp     *ClientComp
-	inFlight map[uint64]*readReq
+	inFlight map[uint64]readReq
 }
 
 func (m *clientMW) Tick() bool {
@@ -72,7 +72,7 @@ func (m *clientMW) send() bool {
 		return false
 	}
 
-	req := &readReq{
+	req := readReq{
 		MsgMeta: messaging.MsgMeta{
 			ID:  timing.GetIDGenerator().Generate(),
 			Src: port.AsRemote(),
@@ -81,8 +81,8 @@ func (m *clientMW) send() bool {
 		Seq: s.NextSeq,
 	}
 
-	// Initiate before sending so the request carries its SendTaskID.
-	tracing.TraceReqInitiate(req, m.comp, 0)
+	// The req_out task is keyed by the request's own message ID.
+	tracing.TraceReqInitiate(m.comp, req, 0)
 	port.Send(req)
 
 	m.inFlight[req.ID] = req
@@ -100,9 +100,9 @@ func (m *clientMW) receive() bool {
 		return false
 	}
 
-	rsp := msg.(*readRsp)
+	rsp := msg.(readRsp)
 	if req, ok := m.inFlight[rsp.RspTo]; ok {
-		tracing.TraceReqFinalize(req, m.comp)
+		tracing.TraceReqFinalize(m.comp, req)
 		delete(m.inFlight, rsp.RspTo)
 	}
 	port.RetrieveIncoming()
@@ -123,7 +123,7 @@ type serverState struct{}
 type ServerComp = modeling.Component[serverSpec, serverState, modeling.None]
 
 type serverTxn struct {
-	req  *readReq
+	req  readReq
 	left int
 }
 
@@ -148,8 +148,8 @@ func (m *serverMW) receive() bool {
 		return false
 	}
 
-	req := msg.(*readReq)
-	tracing.TraceReqReceive(req, m.comp)
+	req := msg.(readReq)
+	tracing.TraceReqReceive(m.comp, req)
 	m.pending = append(m.pending, serverTxn{req: req, left: m.comp.Spec().Latency})
 	port.RetrieveIncoming()
 
@@ -172,10 +172,13 @@ func (m *serverMW) respond() bool {
 		return false
 	}
 
-	txn := m.pending[0]
 	port := m.comp.GetPortByName("Out")
+	if !port.CanSend() {
+		return false
+	}
 
-	rsp := &readRsp{
+	txn := m.pending[0]
+	port.Send(readRsp{
 		MsgMeta: messaging.MsgMeta{
 			ID:    timing.GetIDGenerator().Generate(),
 			Src:   port.AsRemote(),
@@ -183,12 +186,9 @@ func (m *serverMW) respond() bool {
 			RspTo: txn.req.ID,
 		},
 		Seq: txn.req.Seq,
-	}
-	if port.Send(rsp) != nil {
-		return false
-	}
+	})
 
-	tracing.TraceReqComplete(txn.req, m.comp)
+	tracing.TraceReqComplete(m.comp, txn.req)
 	m.pending = m.pending[1:]
 
 	return true
@@ -205,7 +205,7 @@ func main() {
 		WithFreq(1 * timing.GHz).
 		WithSpec(clientSpec{Freq: 1 * timing.GHz}).
 		Build("Client")
-	client.AddMiddleware(&clientMW{comp: client, inFlight: make(map[uint64]*readReq)})
+	client.AddMiddleware(&clientMW{comp: client, inFlight: make(map[uint64]readReq)})
 	client.AddPort("Out", messaging.NewPort(client, 4, 4, "Client.Out"))
 	registrar.RegisterComponent(client)
 
@@ -223,10 +223,10 @@ func main() {
 	conn.PlugIn(server.GetPortByName("Out"))
 
 	// The filter is how each tracer selects the tasks it cares about.
-	roundTrip := tracing.NewAverageTimeTracer(engine,
-		func(t tracing.Task) bool { return t.Kind == "req_out" })
-	handling := tracing.NewAverageTimeTracer(engine,
-		func(t tracing.Task) bool { return t.Kind == "req_in" })
+	roundTrip := tracing.NewAverageTimeTracer(
+		func(t tracing.TaskStart) bool { return t.Kind == "req_out" })
+	handling := tracing.NewAverageTimeTracer(
+		func(t tracing.TaskStart) bool { return t.Kind == "req_in" })
 	tracing.CollectTrace(client, roundTrip)
 	tracing.CollectTrace(server, handling)
 

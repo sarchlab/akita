@@ -34,12 +34,12 @@ has three methods:
 
 ```go
 type splitEvent struct {
-    time      timing.VTimeInSec
+    time      timing.VTimeInPicoSec
     handlerID string
     id        int
 }
 
-func (e splitEvent) Time() timing.VTimeInSec { return e.time }
+func (e splitEvent) Time() timing.VTimeInPicoSec { return e.time }
 func (e splitEvent) HandlerID() string       { return e.handlerID }
 func (e splitEvent) IsSecondary() bool       { return false }
 ```
@@ -80,8 +80,8 @@ Two important things here:
 ### 3. Scheduling the next event
 
 ```go
-func (h *handler) scheduleNextSplitEvent(now timing.VTimeInSec, id int) {
-    timeUntilNextSplit := timing.VTimeInSec(uint64((randGen.Float64() + 1) * 1e12))
+func (h *handler) scheduleNextSplitEvent(now timing.VTimeInPicoSec, id int) {
+    timeUntilNextSplit := timing.VTimeInPicoSec(uint64((randGen.Float64() + 1) * 1e12))
     nextEvt := splitEvent{
         time:      now + timeUntilNextSplit,
         handlerID: "splitter",
@@ -113,7 +113,7 @@ if registrar, ok := engine.(timing.HandlerRegistrar); ok {
     registrar.RegisterHandler("splitter", &h)
 }
 
-firstEvtTime := timing.VTimeInSec(uint64((randGen.Float64() + 1) * 1e12))
+firstEvtTime := timing.VTimeInPicoSec(uint64((randGen.Float64() + 1) * 1e12))
 firstEvt := splitEvent{
     time:      firstEvtTime,
     handlerID: "splitter",

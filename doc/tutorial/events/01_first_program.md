@@ -127,7 +127,7 @@ and the engine returned because no further events were scheduled.
 
 ## Key Concepts
 
-- **Time is unsigned 64-bit picoseconds** (`timing.VTimeInSec`). Despite
+- **Time is unsigned 64-bit picoseconds** (`timing.VTimeInPicoSec`). Despite
   the name, the unit is picoseconds. 1 second = 1,000,000,000,000.
 - **Handlers are registered by name**, not by reference. This is what
   lets the engine work with serializable state.

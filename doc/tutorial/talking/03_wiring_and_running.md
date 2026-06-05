@@ -85,8 +85,9 @@ cycle.
 
 - **A component = Spec + State + Middleware + Builder.** The same shape as
   the single component, now with ports added.
-- **Ports buffer messages.** `Send` may fail because the outgoing buffer
-  is full; `Peek` lets you look without consuming.
+- **Ports buffer messages.** Messages are value types: construct them with
+  no `&`, check `CanSend()` before `Send` because the outgoing buffer can
+  be full, and `Peek` lets you look at incoming messages without consuming.
 - **Connections move messages.** Plug ports into a `directconnection` and
   any plugged port can reach any other.
 - **The builder pattern is universal.** Every component and connection uses

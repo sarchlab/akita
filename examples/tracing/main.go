@@ -46,9 +46,11 @@ func (m *workerMW) Tick() bool {
 		// Start a new job and open a tracing task for it.
 		s.NextID++
 		s.CurTaskID = s.NextID
-		tracing.StartTask(
-			s.CurTaskID, 0, m.comp,
-			"job", fmt.Sprintf("job-%d", s.CurTaskID), nil)
+		tracing.StartTask(m.comp, tracing.TaskStart{
+			ID:   s.CurTaskID,
+			Kind: "job",
+			What: fmt.Sprintf("job-%d", s.CurTaskID),
+		})
 
 		s.Working = true
 		s.CountDown = m.comp.Spec().CyclesPerJob
@@ -60,7 +62,7 @@ func (m *workerMW) Tick() bool {
 	// Working: count down, and close the task when the job finishes.
 	s.CountDown--
 	if s.CountDown == 0 {
-		tracing.EndTask(s.CurTaskID, m.comp)
+		tracing.EndTask(m.comp, tracing.TaskEnd{ID: s.CurTaskID})
 		s.Working = false
 	}
 
@@ -80,10 +82,10 @@ func main() {
 	registrar.RegisterComponent(worker)
 
 	// A tracer only cares about tasks whose Kind matches this filter.
-	onlyJobs := func(t tracing.Task) bool { return t.Kind == "job" }
+	onlyJobs := func(t tracing.TaskStart) bool { return t.Kind == "job" }
 
-	busy := tracing.NewBusyTimeTracer(engine, onlyJobs)
-	avg := tracing.NewAverageTimeTracer(engine, onlyJobs)
+	busy := tracing.NewBusyTimeTracer(onlyJobs)
+	avg := tracing.NewAverageTimeTracer(onlyJobs)
 
 	tracing.CollectTrace(worker, busy)
 	tracing.CollectTrace(worker, avg)

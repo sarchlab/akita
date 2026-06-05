@@ -69,9 +69,15 @@ type pingRsp struct {
 }
 ```
 
+Messages are **value types** — a `pingReq` is a plain struct, not a
+pointer. You construct one with a composite literal (no `&`), send it by
+value, and receive it by value.
+
 `messaging.MsgMeta` is embedded in every message and carries routing
-metadata (source, destination, ID, response-to-ID). The `SeqID` field is
-the payload you actually care about.
+metadata. Its fields are `ID`, `Src`, `Dst`, `TrafficClass`,
+`TrafficBytes`, and `RspTo`. Every message satisfies `messaging.Msg`,
+whose `Meta() MsgMeta` method returns that metadata by value. The `SeqID`
+field is the payload you actually care about.
 
 ## Ports
 
@@ -83,9 +89,10 @@ pings and receives them.
 
 Two operations matter on a port:
 
-- **`Send`** pushes a message into the port's outgoing buffer. If the
-  buffer is full it returns an error, and the caller tries again next
-  cycle.
+- **`CanSend` / `Send`** push a message into the port's outgoing buffer.
+  Check `CanSend()` first; if it returns true, `Send(msg)` enqueues the
+  message (by value) and returns nothing. If `CanSend()` is false the
+  buffer is full, so you leave the work and try again next cycle.
 - **`PeekIncoming` / `RetrieveIncoming`** read messages that have arrived.
   `Peek` looks without consuming, so you can decide you cannot handle a
   message yet and leave it; `Retrieve` is the commit.
