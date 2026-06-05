@@ -17,7 +17,8 @@ below describe the implemented state.
 ## TL;DR
 
 - Every memory agent exposes a port named `Control`.
-- That port carries `*mem.ControlReq` in and `*mem.ControlRsp` out.
+- That port carries `mem.ControlReq` in and `mem.ControlRsp` out (by
+  value, not pointers — handlers type-assert `msg.(mem.ControlReq)`).
 - The request's `Command` field is one of six verbs.
 - The component runs the verb and replies on the same port.
 - Whether the reply is same-tick (sync) or whenever-the-work-finishes
@@ -69,8 +70,8 @@ The primitives compose. The protocol stays small.
 ## Conventions
 
 1. **One control port per component.** Every memory agent exposes a
-   port named `Control`. It carries `*mem.ControlReq` in and
-   `*mem.ControlRsp` out. Workload requests (reads, writes,
+   port named `Control`. It carries `mem.ControlReq` in and
+   `mem.ControlRsp` out (by value). Workload requests (reads, writes,
    translations, data-move requests) use other ports (`Top`,
    `Bottom`, `Migration`, etc.), never `Control`.
 2. **One control state per component.** Every agent holds a

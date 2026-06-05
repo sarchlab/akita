@@ -96,6 +96,12 @@ func (m *ctrlMiddleware) handlePause(req mem.ControlReq) bool {
 func (m *ctrlMiddleware) handleDrain(req mem.ControlReq) bool {
 	next := &m.pipeline.comp.State
 	next.IsDraining = true
+	// Clear any prior pause so the data pipeline runs and lets in-flight work
+	// finish. Intake is gated on IsDraining, so no new traffic is admitted
+	// while the drain completes. Without this, a Drain issued from the paused
+	// state would never quiesce (the pipeline only runs when !IsPaused) and so
+	// would never ack.
+	next.IsPaused = false
 	next.CurrentCmdID = req.ID
 	next.CurrentCmdSrc = req.Src
 	m.ctrlPort.RetrieveIncoming()

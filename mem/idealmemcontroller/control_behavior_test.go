@@ -164,4 +164,43 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		Entry("from Paused", control.StatePaused),
 		Entry("from Draining", control.StateDraining),
 	)
+
+	It("drops Top traffic queued at Reset", func() {
+		// Queue a read on Top while paused, so it sits unconsumed in the Top
+		// port's incoming queue.
+		memController.State.ControlState = control.StatePaused
+		topPort.Deliver(makeRead(0))
+		for range 3 {
+			memController.Tick()
+		}
+		Expect(topPort.PeekIncoming()).ToNot(BeNil())
+		Expect(memController.State.InflightTransactions).To(BeEmpty())
+
+		// Reset must drop that queued request. Before the fix it survived and
+		// (the control middleware runs before the memory middleware) was
+		// consumed in the same tick the controller returned to Enabled,
+		// producing a stale response.
+		reset := makeCtrlReq(mem.CmdReset)
+		ctrlPort.Deliver(reset)
+		found := false
+		for i := 0; i < 64 && !found; i++ {
+			memController.Tick()
+			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if rsp, ok := out.(mem.ControlRsp); ok &&
+					rsp.Command == mem.CmdReset {
+					Expect(rsp.Success).To(BeTrue())
+					found = true
+				}
+			}
+		}
+		Expect(found).To(BeTrue())
+
+		// The stale read never became work and never produced a response.
+		for range 16 {
+			memController.Tick()
+			Expect(topPort.RetrieveOutgoing()).To(BeNil())
+		}
+		Expect(topPort.PeekIncoming()).To(BeNil())
+		Expect(memController.State.InflightTransactions).To(BeEmpty())
+	})
 })

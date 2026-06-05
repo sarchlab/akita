@@ -293,6 +293,11 @@ func (m *ctrlMiddleware) handleReset(msg mem.ControlReq) bool {
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 
+	// A hard reset discards the in-flight bottom requests along with the
+	// queued port traffic below, so their (now orphaned) responses must not
+	// keep a future Drain from quiescing.
+	state.InflightBottomReqs = 0
+
 	// Reset is a hard reset: drop the cached page-walk entries so the
 	// component matches its freshly-built (empty) table.
 	spec := m.comp.Spec()

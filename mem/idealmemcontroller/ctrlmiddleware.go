@@ -121,6 +121,15 @@ func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
 	state.CurrentCmdSrc = ""
 	state.ControlState = control.StateEnabled
 
+	// Reset is a hard reset to a freshly-built, no-work state. Drop any
+	// requests still queued on the Top port; otherwise (the control
+	// middleware runs before the memory middleware) takeNewReqs would consume
+	// a stale request in the very same tick, right after the reset ack.
+	top := m.comp.GetPortByName("Top")
+	for top.PeekIncoming() != nil {
+		top.RetrieveIncoming()
+	}
+
 	m.ctrlPort().Send(makeRsp(m.ctrlPort(), mem.CmdReset,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()

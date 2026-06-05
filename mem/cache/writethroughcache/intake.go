@@ -16,12 +16,18 @@ type intake struct {
 }
 
 func (s *intake) Tick() bool {
+	next := &s.cache.comp.State
+	if next.IsDraining {
+		// A draining cache admits no new traffic so its in-flight work can
+		// quiesce; requests queued on Top resume after the cache is Enabled.
+		return false
+	}
+
 	msg := s.cache.topPort.PeekIncoming()
 	if msg == nil {
 		return false
 	}
 
-	next := &s.cache.comp.State
 	if s.countActive(next) >= s.cache.comp.Spec().MaxNumConcurrentTrans {
 		return false
 	}

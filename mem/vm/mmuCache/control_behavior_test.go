@@ -80,12 +80,28 @@ var _ = Describe("MMUCache control behavior", func() {
 		return req
 	}
 
+	// makeBottomRsp fabricates the low module's response to a forwarded
+	// lookup, so the test can let an outstanding walk complete.
+	makeBottomRsp := func(fwd vm.TranslationReq) vm.TranslationRsp {
+		rsp := vm.TranslationRsp{
+			Page: vm.Page{
+				PID: fwd.PID, VAddr: fwd.VAddr, PAddr: 0x5000, Valid: true,
+			},
+		}
+		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.Src = messaging.RemotePort("LowModule")
+		rsp.Dst = bottomPort.AsRemote()
+		rsp.RspTo = fwd.ID
+		rsp.TrafficClass = "vm.TranslationRsp"
+		return rsp
+	}
+
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
 		build()
 	})
 
-	It("forwards all in-flight lookups before acking Drain", func() {
+	It("waits for outstanding bottom walks before acking Drain", func() {
 		const n = 3
 		for i := range n {
 			topPort.Deliver(makeTranslationReq(uint64(0x1000 + i*0x1000)))
@@ -94,22 +110,53 @@ var _ = Describe("MMUCache control behavior", func() {
 		drain := makeCtrlReq(mem.CmdDrain)
 		controlPort.Deliver(drain)
 
-		forwarded := 0
-		var drainRsp mem.ControlRsp
-		drainFound := false
-		for i := 0; i < 4096 && !drainFound; i++ {
+		// The cache forwards every lookup down the Bottom port, but with no
+		// responses yet the walks are still outstanding, so Drain must NOT ack.
+		forwarded := []vm.TranslationReq{}
+		for i := 0; i < 256 && len(forwarded) < n; i++ {
 			comp.Tick()
-
 			for {
 				out := bottomPort.RetrieveOutgoing()
 				if out == nil {
 					break
 				}
-				if _, ok := out.(vm.TranslationReq); ok {
-					forwarded++
+				if r, ok := out.(vm.TranslationReq); ok {
+					forwarded = append(forwarded, r)
 				}
 			}
+			Expect(controlPort.RetrieveOutgoing()).To(BeNil())
+		}
+		Expect(forwarded).To(HaveLen(n))
+		Expect(comp.State.InflightBottomReqs).To(Equal(n))
 
+		// A few more ticks while the walks are still outstanding: still no ack.
+		for range 8 {
+			comp.Tick()
+			Expect(controlPort.RetrieveOutgoing()).To(BeNil())
+		}
+		Expect(comp.State.CurrentState).To(Equal(mmuCacheStateDrain))
+
+		// Let every outstanding walk complete.
+		for _, fr := range forwarded {
+			bottomPort.Deliver(makeBottomRsp(fr))
+		}
+
+		// Now the cache can quiesce: every walk is answered up the Top port
+		// and only then is the async Drain acked.
+		upResponses := 0
+		var drainRsp mem.ControlRsp
+		drainFound := false
+		for i := 0; i < 4096 && !drainFound; i++ {
+			comp.Tick()
+			for {
+				out := topPort.RetrieveOutgoing()
+				if out == nil {
+					break
+				}
+				if _, ok := out.(vm.TranslationRsp); ok {
+					upResponses++
+				}
+			}
 			if out := controlPort.RetrieveOutgoing(); out != nil {
 				if rsp, ok := out.(mem.ControlRsp); ok &&
 					rsp.Command == mem.CmdDrain {
@@ -122,10 +169,8 @@ var _ = Describe("MMUCache control behavior", func() {
 		Expect(drainFound).To(BeTrue())
 		Expect(drainRsp.Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
-		// Every queued lookup was forwarded out the Bottom port, the Top queue
-		// is empty, and the component parked in Pause, all by the time the
-		// async Drain ack is sent.
-		Expect(forwarded).To(Equal(n))
+		Expect(upResponses).To(Equal(n))
+		Expect(comp.State.InflightBottomReqs).To(Equal(0))
 		Expect(topPort.PeekIncoming()).To(BeNil())
 		Expect(comp.State.CurrentState).To(Equal(mmuCacheStatePause))
 	})

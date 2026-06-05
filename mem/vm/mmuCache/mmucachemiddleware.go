@@ -42,8 +42,11 @@ func (m *mmuCacheMiddleware) Tick() bool {
 func (m *mmuCacheMiddleware) handleDrain() bool {
 	madeProgress := m.processRequests()
 
-	if m.bottomPort().PeekIncoming() == nil && m.topPort().PeekIncoming() == nil {
-		next := &m.comp.State
+	next := &m.comp.State
+	quiescent := m.bottomPort().PeekIncoming() == nil &&
+		m.topPort().PeekIncoming() == nil &&
+		next.InflightBottomReqs == 0
+	if quiescent {
 		next.CurrentState = mmuCacheStatePause
 		tracing.AddMilestone(
 			timing.GetIDGenerator().Generate(),
@@ -155,6 +158,7 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 	reqToBottom.TrafficClass = "vm.TranslationReq"
 
 	m.bottomPort().Send(reqToBottom)
+	m.comp.State.InflightBottomReqs++
 
 	m.topPort().RetrieveIncoming()
 
@@ -199,6 +203,9 @@ func (m *mmuCacheMiddleware) handleRsp(rsp vm.TranslationRsp) bool {
 	m.topPort().Send(rspToTop)
 
 	m.bottomPort().RetrieveIncoming()
+	if m.comp.State.InflightBottomReqs > 0 {
+		m.comp.State.InflightBottomReqs--
+	}
 
 	return true
 }

@@ -43,6 +43,13 @@ type State struct {
 	CurrentCmdID    uint64               `json:"current_cmd_id"`
 	CurrentCmdSrc   messaging.RemotePort `json:"current_cmd_src"`
 	Table           []setState           `json:"table"`
+
+	// InflightBottomReqs counts translation requests forwarded to the low
+	// module for which no response has returned yet. A Drain is not complete
+	// while any of these are outstanding, otherwise the late response would
+	// land (updating the table and replying upward) after the caller was told
+	// the cache had drained.
+	InflightBottomReqs int `json:"inflight_bottom_reqs"`
 }
 
 // blockState is a serializable snapshot of a single cache block.

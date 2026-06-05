@@ -239,6 +239,67 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		Expect(comp.State.IsPaused).To(BeTrue())
 	})
 
+	It("completes a Drain issued while paused with work in flight", func() {
+		// Get a read miss in flight, then capture its bottom fetch.
+		topPort.Deliver(makeRead(0))
+		bottomReads := []mem.ReadReq{}
+		for i := 0; i < 256 && len(bottomReads) == 0; i++ {
+			comp.Tick()
+			bottomReads = append(bottomReads, captureBottomReads()...)
+		}
+		Expect(bottomReads).To(HaveLen(1))
+		Expect(inflightCount()).To(BeNumerically(">", 0))
+
+		// Pause: the in-flight transaction freezes (pipeline stops).
+		pause := makeCtrlReq(mem.CmdPause)
+		ctrlPort.Deliver(pause)
+		pausedAck := false
+		for i := 0; i < 64 && !pausedAck; i++ {
+			comp.Tick()
+			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if rsp, ok := out.(mem.ControlRsp); ok && rsp.RspTo == pause.ID {
+					Expect(rsp.Success).To(BeTrue())
+					pausedAck = true
+				}
+			}
+		}
+		Expect(pausedAck).To(BeTrue())
+		Expect(comp.State.IsPaused).To(BeTrue())
+		Expect(inflightCount()).To(BeNumerically(">", 0))
+
+		// Make the fill available, then Drain from the paused state. The drain
+		// must clear the pause so the pipeline resumes, retire the frozen
+		// transaction, and ack. Before the fix the pipeline stayed frozen
+		// (IsPaused never cleared) and this Drain hung forever.
+		for _, br := range bottomReads {
+			bottomPort.Deliver(makeFill(br))
+		}
+		drain := makeCtrlReq(mem.CmdDrain)
+		ctrlPort.Deliver(drain)
+
+		var drainRsp mem.ControlRsp
+		found := false
+		for i := 0; i < 4096 && !found; i++ {
+			comp.Tick()
+			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if rsp, ok := out.(mem.ControlRsp); ok &&
+					rsp.Command == mem.CmdDrain {
+					drainRsp = rsp
+					found = true
+				}
+			}
+		}
+
+		Expect(found).To(BeTrue())
+		Expect(drainRsp.Success).To(BeTrue())
+		Expect(drainRsp.RspTo).To(Equal(drain.ID))
+		for i := range comp.State.Transactions {
+			Expect(comp.State.Transactions[i].Removed).To(BeTrue())
+		}
+		Expect(comp.State.IsDraining).To(BeFalse())
+		Expect(comp.State.IsPaused).To(BeTrue())
+	})
+
 	It("freezes incoming traffic while paused", func() {
 		comp.State.IsPaused = true
 		topPort.Deliver(makeRead(0))
