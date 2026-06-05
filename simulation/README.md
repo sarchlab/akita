@@ -90,6 +90,56 @@ assertion is the intentional warning that you are reaching past the normal
 interfaces. Resolve the reference once at setup and cache it; `GetStateByName`
 is a map lookup, not a free dereference, so it does not belong on a hot path.
 
+## Checkpoint and Resume
+
+A simulation can be checkpointed to a `.tar.gz` archive and resumed later — for
+example, to snapshot between GPU kernels or to restart a long run. The contract
+is an oracle: *running to the end* must equal *checkpoint, rebuild, restore, run
+to the end*.
+
+```go
+// Save (engine stopped, outside an event handler):
+err := sim.SaveCheckpoint("snap.tar.gz", "")  // "" uses the default build ID
+
+// Resume: rebuild the *identical* simulation with the same setup code, then:
+err := sim.LoadCheckpoint("snap.tar.gz", "")
+engine.Run()                                   // continue to completion
+```
+
+Setup rebuilds the *shape* (components, ports, connections, resources, wiring);
+the checkpoint restores only the *runtime* (each entity's `State`, port buffers,
+shared resources, the event queue, the engine time, and the ID-generator
+counter). The archive holds a `build_id` entry plus one payload per entity; the
+payload files are the inventory (there is no manifest). Loading validates the
+build ID and that the saved and rebuilt entity sets match exactly.
+
+### The golden rule: all mutable runtime state lives in `State`
+
+Anything that changes during simulation and is not derivable from the restored
+queue **must** be a field of the component's `State` (or a registered resource).
+Runtime state hidden on a middleware struct — a round-robin cursor, a counter, an
+RNG — is *not* checkpointed, so a resumed run silently diverges. Keep middleware
+fields to structural wiring (ports, downstream references, routing tables) that
+setup rebuilds; put cursors and counters in `State`.
+
+### Requirements and tips
+
+- **Serial engine only.** `SaveCheckpoint`/`LoadCheckpoint` reject a
+  `ParallelEngine`.
+- **Run with tracing off** for a deterministic resume: the tracing task-ID side
+  table consumes the global ID generator, perturbing the ID sequence.
+- **`SerialEngine.RunUntil(t)`** stops the engine at a deterministic boundary
+  (every event with time ≤ `t`), unlike `Run` (drains everything) or `Pause`
+  (stops at a non-reproducible point) — useful for taking a mid-transaction
+  checkpoint.
+- An entity package becomes checkpointable by implementing the structural
+  `Checkpointable` interface (`SaveCheckpoint(io.Writer)` / `LoadCheckpoint(io.Reader)`);
+  it never imports `simulation`. `modeling.Component`/`EventDrivenComponent`,
+  ports, `mem.Storage`, and `vm.PageTable` already do.
+
+See `examples/checkpointdemo` for a runnable save/load demo and
+`mem/acceptancetests/checkpointresume` for a mid-transaction resume oracle.
+
 ### Entity interfaces
 
 `Entity` is the abstract base interface; each kind embeds it and adds its own

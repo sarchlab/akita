@@ -465,27 +465,34 @@ remain.
   together — retiring the connection/NoC "implicitly covered" item for a real
   assembly. Tracing is off (its task-ID side-table consumes the global ID
   generator).
+- **Hardening (Milestone C)**: negative tests (corrupted/truncated archive,
+  saved-not-rebuilt entity; spec-hash / build-id / shape mismatch and unknown
+  codec tags were already covered); focused connection and switch round-trip
+  tests; and a multi-boundary determinism regression (seven boundaries across
+  both phases all resume identically). Auditing the NoC for checkpoint surfaced
+  and fixed a real bug — the switch's round-robin arbitration cursor lived on a
+  middleware, not in `State`, so it was not checkpointed; it now round-trips.
+  The checkpoint/resume contract and the "all runtime state in `State`" rule are
+  documented in `simulation/README.md`.
 
-### Remaining
+**The Phase B core is complete**: a simulation can be checkpointed mid-transaction
+and resumed deterministically, validated by an oracle across many boundaries, with
+hardening and docs in place.
 
-Drive B's stretch; C runs alongside.
+### Remaining (optional)
 
 **B (stretch). Hierarchy resume oracle** (§11, §12, §14)
 - Extend the resume oracle to a cache + TLB + page-table hierarchy, validating
   the `vm.PageTable` serializer in a live assembly and surfacing any hidden
-  (non-`State`) runtime in the cache/TLB components. Optional for the gate,
-  which the ideal-controller oracle already meets, but raises confidence for
-  production assemblies.
+  (non-`State`) runtime in the cache/TLB components. Not required for the gate,
+  which the ideal-controller oracle meets, but raises confidence for production
+  assemblies — especially given the switch arbitration-cursor bug, which shows
+  hidden runtime state is a real risk worth a broader component audit.
 
-**C. Hardening and ship** (breadth; §13, §14)
-- Negative tests: corrupted/truncated archive, spec-hash / topology /
-  resource-shape / build-id mismatch, and unknown codec tags (fill gaps; several
-  already pass).
-- A standalone connection/NoC round-trip test (DirectConnection round-robin
-  cursor; a one-switch network checkpoint).
-- A determinism regression: a fixed simulation checkpointed at several boundaries
-  all resume to identical final state.
-- Refresh the docs and examples, and declare Phase B complete.
+**C (stretch). Full one-switch network resume**
+- The focused switch test round-trips the arbitration cursor; a full network
+  (endpoints + routing + flit traffic) resume oracle would exercise the switch
+  mid-transaction the way the memory oracle exercises the controller.
 
 ## Open Questions
 
