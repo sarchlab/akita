@@ -1,14 +1,18 @@
 # Builds the Docusaurus site in doc-site/ and deploys it to GitHub Pages.
 #
-# The site is served at a project-page subpath, so docusaurus.config.js sets
-# baseUrl: '/akita/' (i.e. https://sarchlab.github.io/akita/). Deploy this in
-# the repository whose Pages you are publishing, and in that repo's
-# Settings -> Pages, set Source to "GitHub Actions".
+# This same workflow runs in both repos that host a copy of the site:
+#   - sarchlab/akita-dev  -> https://sarchlab.github.io/akita-dev/  (dev)
+#   - sarchlab/akita       -> https://sarchlab.github.io/akita/      (public)
+# The site's baseUrl is derived from the repository name below, so no per-repo
+# config edits are needed. In each repo's Settings -> Pages, set Source to
+# "GitHub Actions".
 name: Deploy docs
 
 on:
   push:
-    branches: [main]
+    # main is akita-dev's default branch; v5 is the branch publish_v5.yml
+    # mirrors into the public akita repo.
+    branches: [main, v5]
     paths:
       - 'doc-site/**'
       - 'doc/**'
@@ -41,6 +45,9 @@ jobs:
           cache-dependency-path: doc-site/package-lock.json
       - run: npm ci
       - run: npm run build
+        env:
+          # Serve under /<repo-name>/ to match the GitHub Pages project URL.
+          DOCS_BASE_URL: /${{ github.event.repository.name }}/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: doc-site/build

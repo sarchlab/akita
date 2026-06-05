@@ -9,7 +9,10 @@ const config = {
 
 
   url: 'https://sarchlab.github.io',
-  baseUrl: '/akita/',
+  // Project-page subpath. The deploy workflow sets DOCS_BASE_URL to the repo
+  // name so the same config publishes correctly from both sarchlab/akita
+  // (/akita/) and sarchlab/akita-dev (/akita-dev/). Defaults to this repo.
+  baseUrl: process.env.DOCS_BASE_URL || '/akita-dev/',
 
   organizationName: 'sarchlab',
   projectName: 'akita',
