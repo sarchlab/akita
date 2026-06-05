@@ -22,11 +22,13 @@ func (m *ctrlMiddleware) topPort() messaging.Port {
 
 func (m *ctrlMiddleware) Tick() bool {
 	madeProgress := false
-	// Reset is the highest-priority verb: service incoming control (which may
-	// be a Reset that preempts the in-progress async verb) before completing a
-	// pending drain, so a stale Drain ack is never sent ahead of a Reset.
+	// Reset is the highest-priority verb: when one is queued it preempts a
+	// pending async verb, so skip completing the drain this tick; any other
+	// verb lets the pending drain finish first.
+	if !control.IsResetPending(m.ctrlPort()) {
+		madeProgress = m.completePendingDrain() || madeProgress
+	}
 	madeProgress = m.handleIncoming() || madeProgress
-	madeProgress = m.completePendingDrain() || madeProgress
 	return madeProgress
 }
 

@@ -131,6 +131,43 @@ var _ = Describe("DRAM control behavior", func() {
 		Expect(topPort.RetrieveOutgoing()).To(BeNil())
 	})
 
+	It("completes a pending Drain even when a non-Reset verb is queued", func() {
+		// Draining and just quiescent, with a Pause queued in the same window.
+		// Only Reset preempts a pending drain; a Pause must let it finish, so
+		// the Drain ack is still sent (and the Pause is serviced too).
+		comp.State.ControlState = control.StateDraining
+		comp.State.CurrentCmdID = 777
+		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
+		comp.State.Transactions = nil
+
+		pause := makeCtrlReq(mem.CmdPause)
+		ctrlPort.Deliver(pause)
+
+		drainAcked, pauseAcked := false, false
+		for range 8 {
+			comp.Tick()
+			for {
+				out := ctrlPort.RetrieveOutgoing()
+				if out == nil {
+					break
+				}
+				r, ok := out.(mem.ControlRsp)
+				if !ok {
+					continue
+				}
+				switch r.Command {
+				case mem.CmdDrain:
+					drainAcked = true
+					Expect(r.RspTo).To(Equal(uint64(777)))
+				case mem.CmdPause:
+					pauseAcked = true
+				}
+			}
+		}
+		Expect(drainAcked).To(BeTrue())
+		Expect(pauseAcked).To(BeTrue())
+	})
+
 	It("services a queued Reset before completing a pending Drain", func() {
 		// The controller is draining and has just become quiescent (no
 		// transactions): completePendingDrain would otherwise ack the Drain.

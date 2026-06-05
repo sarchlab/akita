@@ -291,31 +291,37 @@ func (m *middleware) topReqTraceMsg(trans transactionState) messaging.Msg {
 // processControlMsg handles the universal control verbs and finalizes
 // a pending Drain when in-flight transactions have settled.
 func (m *middleware) processControlMsg() bool {
-	// Reset is the highest-priority verb: service incoming control (a Reset
-	// preempts the in-progress async verb) before completing a pending drain,
-	// so a stale Drain ack is never sent ahead of a queued Reset.
-	if msg := m.ctrlPort().PeekIncoming(); msg != nil {
-		req, ok := msg.(mem.ControlReq)
-		if !ok {
-			m.ctrlPort().RetrieveIncoming()
-			return true
-		}
-
-		switch req.Command {
-		case mem.CmdPause:
-			return m.handlePause(req)
-		case mem.CmdDrain:
-			return m.handleDrain(req)
-		case mem.CmdEnable:
-			return m.handleEnable(req)
-		case mem.CmdReset:
-			return m.handleReset(req)
-		default:
-			return m.handleUnsupported(req)
-		}
+	// Reset is the highest-priority verb: a queued Reset preempts a pending
+	// async verb, so finish the drain first only when the next verb is not a
+	// Reset. Any other verb lets the pending drain complete before it runs, so
+	// a stale Drain ack is never sent ahead of a queued Reset.
+	if !control.IsResetPending(m.ctrlPort()) && m.completePendingDrain() {
+		return true
 	}
 
-	return m.completePendingDrain()
+	msg := m.ctrlPort().PeekIncoming()
+	if msg == nil {
+		return false
+	}
+
+	req, ok := msg.(mem.ControlReq)
+	if !ok {
+		m.ctrlPort().RetrieveIncoming()
+		return true
+	}
+
+	switch req.Command {
+	case mem.CmdPause:
+		return m.handlePause(req)
+	case mem.CmdDrain:
+		return m.handleDrain(req)
+	case mem.CmdEnable:
+		return m.handleEnable(req)
+	case mem.CmdReset:
+		return m.handleReset(req)
+	default:
+		return m.handleUnsupported(req)
+	}
 }
 
 // completePendingDrain notices Drain has reached quiescence (no

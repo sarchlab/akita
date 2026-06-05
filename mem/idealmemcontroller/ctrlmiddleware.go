@@ -13,8 +13,14 @@ type ctrlMiddleware struct {
 }
 
 func (m *ctrlMiddleware) Tick() (madeProgress bool) {
+	// Reset is the highest-priority verb: when one is queued it preempts a
+	// pending async verb (handled in handleIncomingCommands), so skip
+	// completing the drain this tick; any other verb lets the pending drain
+	// finish first.
+	if !control.IsResetPending(m.ctrlPort()) {
+		madeProgress = m.handleStateUpdate() || madeProgress
+	}
 	madeProgress = m.handleIncomingCommands() || madeProgress
-	madeProgress = m.handleStateUpdate() || madeProgress
 	return madeProgress
 }
 
