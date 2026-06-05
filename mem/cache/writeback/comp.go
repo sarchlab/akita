@@ -92,10 +92,7 @@ type State struct {
 
 // flushReqState is a serializable representation of a flush control request.
 type flushReqState struct {
-	MsgMeta         messaging.MsgMeta `json:"msg_meta"`
-	InvalidateAfter bool              `json:"invalidate_after"`
-	DiscardInflight bool              `json:"discard_inflight"`
-	PauseAfter      bool              `json:"pause_after"`
+	MsgMeta messaging.MsgMeta `json:"msg_meta"`
 
 	// FilterAddresses / FilterPID narrow which dirty blocks are written
 	// back. An empty address list matches every block address; a zero PID
@@ -148,11 +145,8 @@ type transactionState struct {
 	WritePID       vm.PID            `json:"write_pid"`
 
 	// Flush request fields (flat)
-	HasFlush             bool              `json:"has_flush"`
-	FlushMeta            messaging.MsgMeta `json:"flush_meta"`
-	FlushInvalidateAfter bool              `json:"flush_invalidate_after"`
-	FlushDiscardInflight bool              `json:"flush_discard_inflight"`
-	FlushPauseAfter      bool              `json:"flush_pause_after"`
+	HasFlush  bool              `json:"has_flush"`
+	FlushMeta messaging.MsgMeta `json:"flush_meta"`
 
 	// Block reference (into directoryState)
 	BlockSetID int  `json:"block_set_id"`

@@ -141,8 +141,6 @@ func (m *ctrlMiddleware) handleReset(req *mem.ControlReq) bool {
 		int(1<<spec.Log2BlockSize))
 	next.MSHRState = cache.MSHRState{}
 	next.Transactions = nil
-	next.HasProcessingFlush = false
-	next.ProcessingFlush = flushReqState{}
 	next.IsPaused = false
 	next.IsDraining = false
 	next.CurrentCmdID = 0

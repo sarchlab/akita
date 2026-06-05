@@ -119,22 +119,19 @@ func (f *flusher) processFlush() bool {
 	}
 
 	trans := transactionState{
-		HasFlush:             true,
-		FlushMeta:            next.ProcessingFlush.MsgMeta,
-		FlushInvalidateAfter: next.ProcessingFlush.InvalidateAfter,
-		FlushDiscardInflight: next.ProcessingFlush.DiscardInflight,
-		FlushPauseAfter:      next.ProcessingFlush.PauseAfter,
-		HasVictim:            true,
-		VictimPID:            vm.PID(block.PID),
-		VictimTag:            block.Tag,
-		VictimCacheAddress:   block.CacheAddress,
-		Action:               bankEvict,
-		EvictingPID:          vm.PID(block.PID),
-		EvictingAddr:         block.Tag,
-		EvictingDirtyMask:    block.DirtyMask,
-		BlockSetID:           ref.SetID,
-		BlockWayID:           ref.WayID,
-		HasBlock:             true,
+		HasFlush:           true,
+		FlushMeta:          next.ProcessingFlush.MsgMeta,
+		HasVictim:          true,
+		VictimPID:          vm.PID(block.PID),
+		VictimTag:          block.Tag,
+		VictimCacheAddress: block.CacheAddress,
+		Action:             bankEvict,
+		EvictingPID:        vm.PID(block.PID),
+		EvictingAddr:       block.Tag,
+		EvictingDirtyMask:  block.DirtyMask,
+		BlockSetID:         ref.SetID,
+		BlockWayID:         ref.WayID,
+		HasBlock:           true,
 	}
 
 	next.Transactions = append(next.Transactions, trans)

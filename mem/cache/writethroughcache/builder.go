@@ -109,12 +109,14 @@ func (b Builder) Build(name string) *Comp {
 	pmw := b.buildPipelineMW(comp, spec, name)
 	b.buildStages(pmw, spec)
 
-	cmw := b.buildControlMW(comp, pmw, spec, name)
-	ucmw := &ctrlMiddleware{pipeline: pmw, ctrlPort: comp.GetPortByName("Control")}
+	controlPort := messaging.NewPort(
+		comp, spec.ControlPortBufferSize, spec.ControlPortBufferSize,
+		name+".Control")
+	comp.AddPort("Control", controlPort)
+	ucmw := &ctrlMiddleware{pipeline: pmw, ctrlPort: controlPort}
 
 	comp.AddMiddleware(pmw)  // index 0
-	comp.AddMiddleware(cmw)  // index 1: legacy flush
-	comp.AddMiddleware(ucmw) // index 2: universal control verbs
+	comp.AddMiddleware(ucmw) // index 1: control verbs
 
 	b.registrar.RegisterComponent(comp)
 
@@ -245,31 +247,6 @@ func (b *Builder) buildPipelineMW(
 	m.storage = comp.Resources().Storage
 
 	return m
-}
-
-func (b *Builder) buildControlMW(
-	comp *modeling.Component[Spec, State, Resources],
-	pmw *pipelineMW,
-	spec Spec,
-	name string,
-) *controlMW {
-	controlPort := messaging.NewPort(
-		comp, spec.ControlPortBufferSize, spec.ControlPortBufferSize,
-		name+".Control")
-	comp.AddPort("Control", controlPort)
-
-	cs := &controlStage{
-		ctrlPort:   controlPort,
-		pipeline:   pmw,
-		bankStages: pmw.bankStages,
-	}
-
-	cmw := &controlMW{
-		comp:         comp,
-		controlStage: cs,
-	}
-
-	return cmw
 }
 
 func (b *Builder) buildStages(m *pipelineMW, spec Spec) {
