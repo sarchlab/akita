@@ -444,6 +444,13 @@ remain.
 - **Resume oracle (partial)**: a mid-transaction checkpoint/resume for a
   port-less component (a pending tick in the queue) matches the uninterrupted
   run.
+- **Scheduler and wakeup consistency (Milestone A)**: after restore, each
+  component reconciles its scheduler/wakeup guard with the restored queue —
+  `timing.SerialEngine.NextEventTimeForHandler` reports the earliest scheduled
+  event for a handler, and `simulation.LoadCheckpoint` runs a post-load pass
+  calling `AfterCheckpointLoad`. `Component` derives its `TickScheduler` guard;
+  `EventDrivenComponent` (now itself checkpointable) derives `pendingWakeup` the
+  same way. Two regression tests assert no duplicate/missed tick or wakeup.
 
 Registered connections and NoC components are **implicitly covered**: they are
 `modeling.Component`s, so their `State` — including round-robin cursors and
@@ -452,17 +459,7 @@ queueing serializers. This needs a confirming test, not new code.
 
 ### Remaining
 
-Drive A → B; C runs alongside.
-
-**A. Scheduler and wakeup consistency** (critical path; §9)
-- Restore each ticking component's `TickScheduler` guard
-  (`hasScheduledTick`/`nextTickTime`) by **deriving it from the restored engine
-  queue** (the queue is authoritative) via a small engine query — the earliest
-  event time for a handler — run as a post-load step. Restoring the saved guard
-  blindly is wrong: it can be stale at a quiescent boundary.
-- Restore `EventDrivenComponent.pendingWakeup` the same way.
-- Gate: a ticking component with a pending tick *and* an incoming message resumes
-  with no duplicate or missed tick.
+Drive B; C runs alongside.
 
 **B. Full resume oracle** (the Phase B gate; §11, §12, §14)
 - Add the `vm.PageTable` serializer — the last quiescent resource.
