@@ -36,7 +36,6 @@ type routeForwardSendMW struct {
 	ports        []messaging.Port
 	portIndex    map[messaging.RemotePort]int // remotePort → index in State.PortComplexes
 	routingTable routing.Table
-	nextArbPort  int
 }
 
 // Tick runs sendOut → forward → route.
@@ -99,7 +98,7 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 	occupiedOutputPort := make([]bool, len(m.ports))
 
 	for offset := 0; offset < len(m.ports); offset++ {
-		i := (m.nextArbPort + offset) % len(m.ports)
+		i := (state.NextArbPort + offset) % len(m.ports)
 		pcs := &state.PortComplexes[i]
 
 		for pcs.ForwardBuffer.Size() > 0 {
@@ -125,7 +124,7 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 		}
 	}
 
-	m.nextArbPort = (m.nextArbPort + 1) % len(m.ports)
+	state.NextArbPort = (state.NextArbPort + 1) % len(m.ports)
 
 	return madeProgress
 }
