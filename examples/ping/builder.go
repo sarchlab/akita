@@ -70,7 +70,7 @@ func (b Builder) Build(name string) *Comp {
 // destination.
 func SchedulePing(
 	comp *Comp,
-	sendAt timing.VTimeInSec,
+	sendAt timing.VTimeInPicoSec,
 	dst messaging.RemotePort,
 ) {
 	state := &comp.State

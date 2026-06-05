@@ -61,8 +61,8 @@ var _ = Describe("DataMover control behavior", func() {
 
 	// makeMove builds a 64-byte outside->inside transfer, the minimal move
 	// (one read on Outside, one write on Inside).
-	makeMove := func() *DataMoveRequest {
-		req := &DataMoveRequest{}
+	makeMove := func() DataMoveRequest {
+		req := DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
@@ -75,8 +75,8 @@ var _ = Describe("DataMover control behavior", func() {
 		return req
 	}
 
-	makeCtrlReq := func(cmd mem.ControlCommand) *mem.ControlReq {
-		req := &mem.ControlReq{Command: cmd}
+	makeCtrlReq := func(cmd mem.ControlCommand) mem.ControlReq {
+		req := mem.ControlReq{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Cmd")
 		req.Dst = ctrlPort.AsRemote()
@@ -84,8 +84,8 @@ var _ = Describe("DataMover control behavior", func() {
 		return req
 	}
 
-	answerRead := func(port messaging.Port, read *mem.ReadReq) {
-		rsp := &mem.DataReadyRsp{Data: make([]byte, int(read.AccessByteSize))}
+	answerRead := func(port messaging.Port, read mem.ReadReq) {
+		rsp := mem.DataReadyRsp{Data: make([]byte, int(read.AccessByteSize))}
 		rsp.ID = timing.GetIDGenerator().Generate()
 		rsp.Src = read.Dst
 		rsp.Dst = port.AsRemote()
@@ -94,8 +94,8 @@ var _ = Describe("DataMover control behavior", func() {
 		port.Deliver(rsp)
 	}
 
-	answerWrite := func(port messaging.Port, write *mem.WriteReq) {
-		rsp := &mem.WriteDoneRsp{}
+	answerWrite := func(port messaging.Port, write mem.WriteReq) {
+		rsp := mem.WriteDoneRsp{}
 		rsp.ID = timing.GetIDGenerator().Generate()
 		rsp.Src = write.Dst
 		rsp.Dst = port.AsRemote()
@@ -106,17 +106,18 @@ var _ = Describe("DataMover control behavior", func() {
 
 	// startMove delivers a move and ticks until it is active and the first
 	// Outside read has been issued, returning that read.
-	startMove := func() *mem.ReadReq {
+	startMove := func() (mem.ReadReq, bool) {
 		topPort.Deliver(makeMove())
 
-		var read *mem.ReadReq
-		for i := 0; i < 64 && read == nil; i++ {
+		var read mem.ReadReq
+		gotRead := false
+		for i := 0; i < 64 && !gotRead; i++ {
 			dataMover.Tick()
 			if out := outsidePort.RetrieveOutgoing(); out != nil {
-				read, _ = out.(*mem.ReadReq)
+				read, gotRead = out.(mem.ReadReq)
 			}
 		}
-		return read
+		return read, gotRead
 	}
 
 	BeforeEach(func() {
@@ -125,8 +126,8 @@ var _ = Describe("DataMover control behavior", func() {
 	})
 
 	It("acks Drain only after the in-flight move completes", func() {
-		read := startMove()
-		Expect(read).ToNot(BeNil())
+		read, gotRead := startMove()
+		Expect(gotRead).To(BeTrue())
 		Expect(dataMover.State.CurrentTransaction.Active).To(BeTrue())
 
 		drain := makeCtrlReq(mem.CmdDrain)
@@ -145,34 +146,38 @@ var _ = Describe("DataMover control behavior", func() {
 		// Let the move finish: answer the read, then the write it triggers.
 		answerRead(outsidePort, read)
 
-		var drainRsp *mem.ControlRsp
-		var write *mem.WriteReq
+		var drainRsp mem.ControlRsp
+		gotDrainRsp := false
+		var write mem.WriteReq
+		gotWrite := false
 		moveDone := false
-		for i := 0; i < 256 && drainRsp == nil; i++ {
+		for i := 0; i < 256 && !gotDrainRsp; i++ {
 			dataMover.Tick()
-			if write == nil {
+			if !gotWrite {
 				if out := insidePort.RetrieveOutgoing(); out != nil {
-					if w, ok := out.(*mem.WriteReq); ok {
+					if w, ok := out.(mem.WriteReq); ok {
 						write = w
+						gotWrite = true
 						answerWrite(insidePort, write)
 					}
 				}
 			}
 			if out := topPort.RetrieveOutgoing(); out != nil {
-				if _, ok := out.(*DataMoveResponse); ok {
+				if _, ok := out.(DataMoveResponse); ok {
 					moveDone = true
 				}
 			}
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(*mem.ControlRsp); ok &&
+				if rsp, ok := out.(mem.ControlRsp); ok &&
 					rsp.Command == mem.CmdDrain {
 					drainRsp = rsp
+					gotDrainRsp = true
 				}
 			}
 		}
 
-		Expect(write).ToNot(BeNil())
-		Expect(drainRsp).ToNot(BeNil())
+		Expect(gotWrite).To(BeTrue())
+		Expect(gotDrainRsp).To(BeTrue())
 		Expect(drainRsp.Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
 		// The move completed (response emitted) before the async Drain ack.
@@ -196,8 +201,8 @@ var _ = Describe("DataMover control behavior", func() {
 
 	DescribeTable("Reset wipes the in-flight move from any control state",
 		func(startState control.State) {
-			read := startMove()
-			Expect(read).ToNot(BeNil())
+			_, gotRead := startMove()
+			Expect(gotRead).To(BeTrue())
 			Expect(dataMover.State.CurrentTransaction.Active).To(BeTrue())
 
 			dataMover.State.ControlState = startState
@@ -205,15 +210,16 @@ var _ = Describe("DataMover control behavior", func() {
 			reset := makeCtrlReq(mem.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp *mem.ControlRsp
-			for i := 0; i < 64 && rsp == nil; i++ {
+			var rsp mem.ControlRsp
+			gotRsp := false
+			for i := 0; i < 64 && !gotRsp; i++ {
 				dataMover.Tick()
 				if out := ctrlPort.RetrieveOutgoing(); out != nil {
-					rsp, _ = out.(*mem.ControlRsp)
+					rsp, gotRsp = out.(mem.ControlRsp)
 				}
 			}
 
-			Expect(rsp).ToNot(BeNil())
+			Expect(gotRsp).To(BeTrue())
 			Expect(rsp.Command).To(Equal(mem.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))

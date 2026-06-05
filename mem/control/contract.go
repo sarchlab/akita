@@ -141,8 +141,8 @@ func pauseForConditionalVerb(t *testing.T, h *Harness) {
 	req := newControlReq(h.Ctrl, mem.CmdPause)
 	h.Ctrl.Deliver(req)
 
-	rsp := drainForRsp(h, maxTicks)
-	if rsp == nil || rsp.Command != mem.CmdPause || !rsp.Success {
+	rsp, ok := drainForRsp(h, maxTicks)
+	if !ok || rsp.Command != mem.CmdPause || !rsp.Success {
 		t.Fatalf("could not pause before conditional verb; got %+v", rsp)
 	}
 }
@@ -159,8 +159,8 @@ func checkConditionalIllegalState(
 	req := newControlReq(h.Ctrl, cmd)
 	h.Ctrl.Deliver(req)
 
-	rsp := drainForRsp(h, maxTicks)
-	if rsp == nil {
+	rsp, ok := drainForRsp(h, maxTicks)
+	if !ok {
 		t.Fatalf("no ControlRsp received for %v issued while Enabled", cmd)
 	}
 
@@ -200,8 +200,8 @@ func checkVerb(
 		budget = asyncMaxTicks
 	}
 
-	rsp := drainForRsp(h, budget)
-	if rsp == nil {
+	rsp, ok := drainForRsp(h, budget)
+	if !ok {
 		t.Fatalf("no ControlRsp received within %d ticks for verb %v "+
 			"(supported=%v)", budget, cmd, supported)
 	}
@@ -237,8 +237,8 @@ func checkVerb(
 func newControlReq(
 	ctrl messaging.Port,
 	cmd mem.ControlCommand,
-) *mem.ControlReq {
-	req := &mem.ControlReq{Command: cmd}
+) mem.ControlReq {
+	req := mem.ControlReq{Command: cmd}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = messaging.RemotePort("ContractAgent")
 	req.Dst = ctrl.AsRemote()
@@ -248,12 +248,13 @@ func newControlReq(
 
 // drainForRsp ticks the component up to budget times waiting for a
 // ControlRsp to appear on the Control port's outgoing queue. It returns
-// the first such Rsp, or nil if the budget is exhausted.
-func drainForRsp(h *Harness, budget int) *mem.ControlRsp {
+// the first such Rsp and true, or a zero Rsp and false if the budget is
+// exhausted.
+func drainForRsp(h *Harness, budget int) (mem.ControlRsp, bool) {
 	for range budget {
 		if msg := h.Ctrl.RetrieveOutgoing(); msg != nil {
-			if rsp, ok := msg.(*mem.ControlRsp); ok {
-				return rsp
+			if rsp, ok := msg.(mem.ControlRsp); ok {
+				return rsp, true
 			}
 		}
 		h.Comp.Tick()
@@ -261,9 +262,9 @@ func drainForRsp(h *Harness, budget int) *mem.ControlRsp {
 
 	// One last sweep in case the final tick produced the Rsp.
 	if msg := h.Ctrl.RetrieveOutgoing(); msg != nil {
-		if rsp, ok := msg.(*mem.ControlRsp); ok {
-			return rsp
+		if rsp, ok := msg.(mem.ControlRsp); ok {
+			return rsp, true
 		}
 	}
-	return nil
+	return mem.ControlRsp{}, false
 }

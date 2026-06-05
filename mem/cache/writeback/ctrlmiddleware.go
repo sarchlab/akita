@@ -80,7 +80,7 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 		return false
 	}
 
-	req, ok := msg.(*mem.ControlReq)
+	req, ok := msg.(mem.ControlReq)
 	if !ok {
 		return false
 	}
@@ -112,7 +112,7 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 // Invalidate is acknowledged synchronously but is only legal once the
 // cache is paused (or drained, which lands in paused); issued while
 // Running it is rejected with ErrMustBePausedOrDrained.
-func (m *ctrlMiddleware) handleInvalidate(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleInvalidate(req mem.ControlReq) bool {
 	next := &m.pipeline.comp.State
 	if cacheState(next.CacheState) != cacheStatePaused {
 		return m.rejectMustBePaused(req)
@@ -133,7 +133,7 @@ func (m *ctrlMiddleware) handleInvalidate(req *mem.ControlReq) bool {
 
 // rejectMustBePaused responds that a conditional verb is illegal while
 // the cache is Running (Enabled).
-func (m *ctrlMiddleware) rejectMustBePaused(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) rejectMustBePaused(req mem.ControlReq) bool {
 	if !m.ctrlPort.CanSend() {
 		return false
 	}
@@ -180,7 +180,7 @@ func invalidateBlocks(
 	}
 }
 
-func (m *ctrlMiddleware) handlePause(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handlePause(req mem.ControlReq) bool {
 	if !m.ctrlPort.CanSend() {
 		return false
 	}
@@ -191,7 +191,7 @@ func (m *ctrlMiddleware) handlePause(req *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleDrain(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleDrain(req mem.ControlReq) bool {
 	next := &m.pipeline.comp.State
 	next.CacheState = int(cacheStateDraining)
 	next.CurrentCmdID = req.ID
@@ -200,7 +200,7 @@ func (m *ctrlMiddleware) handleDrain(req *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleEnable(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleEnable(req mem.ControlReq) bool {
 	if !m.ctrlPort.CanSend() {
 		return false
 	}
@@ -218,7 +218,7 @@ func (m *ctrlMiddleware) handleEnable(req *mem.ControlReq) bool {
 // empty port queues. No writeback happens — dirty data is discarded
 // per the resolved-decision policy ("Invalidate-on-dirty: drop
 // silently" generalized to Reset).
-func (m *ctrlMiddleware) handleReset(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
 	if !m.ctrlPort.CanSend() {
 		return false
 	}
@@ -275,7 +275,7 @@ func (m *ctrlMiddleware) handleReset(req *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleUnsupported(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleUnsupported(req mem.ControlReq) bool {
 	if !m.ctrlPort.CanSend() {
 		return false
 	}
@@ -292,8 +292,8 @@ func makeCtrlRsp(
 	rspTo uint64,
 	success bool,
 	errStr string,
-) *mem.ControlRsp {
-	rsp := &mem.ControlRsp{
+) mem.ControlRsp {
+	rsp := mem.ControlRsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,

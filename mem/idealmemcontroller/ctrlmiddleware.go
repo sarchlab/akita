@@ -52,7 +52,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() (madeProgress bool) {
 		return false
 	}
 
-	req, ok := msg.(*mem.ControlReq)
+	req, ok := msg.(mem.ControlReq)
 	if !ok {
 		m.ctrlPort().RetrieveIncoming()
 		return true
@@ -72,7 +72,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() (madeProgress bool) {
 	}
 }
 
-func (m *ctrlMiddleware) handlePause(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handlePause(req mem.ControlReq) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
@@ -86,7 +86,7 @@ func (m *ctrlMiddleware) handlePause(req *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleEnable(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleEnable(req mem.ControlReq) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
@@ -100,7 +100,7 @@ func (m *ctrlMiddleware) handleEnable(req *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleDrain(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleDrain(req mem.ControlReq) bool {
 	state := &m.comp.State
 	state.ControlState = control.StateDraining
 	state.CurrentCmdID = req.ID
@@ -110,7 +110,7 @@ func (m *ctrlMiddleware) handleDrain(req *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleReset(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
@@ -127,7 +127,7 @@ func (m *ctrlMiddleware) handleReset(req *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleUnsupported(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleUnsupported(req mem.ControlReq) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
@@ -145,8 +145,8 @@ func makeRsp(
 	rspTo uint64,
 	success bool,
 	errStr string,
-) *mem.ControlRsp {
-	rsp := &mem.ControlRsp{
+) mem.ControlRsp {
+	rsp := mem.ControlRsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,

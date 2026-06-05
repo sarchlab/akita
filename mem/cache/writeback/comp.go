@@ -129,14 +129,14 @@ type transactionState struct {
 
 	ID uint64 `json:"id"`
 
-	// Read request fields (flat, replaces *mem.ReadReq)
+	// Read request fields (flat, replaces mem.ReadReq)
 	HasRead            bool              `json:"has_read"`
 	ReadMeta           messaging.MsgMeta `json:"read_meta"`
 	ReadAddress        uint64            `json:"read_address"`
 	ReadAccessByteSize uint64            `json:"read_access_byte_size"`
 	ReadPID            vm.PID            `json:"read_pid"`
 
-	// Write request fields (flat, replaces *mem.WriteReq)
+	// Write request fields (flat, replaces mem.WriteReq)
 	HasWrite       bool              `json:"has_write"`
 	WriteMeta      messaging.MsgMeta `json:"write_meta"`
 	WriteAddress   uint64            `json:"write_address"`
@@ -164,7 +164,7 @@ type transactionState struct {
 	FetchAddress uint64 `json:"fetch_address"`
 	FetchedData  []byte `json:"fetched_data"`
 
-	// Fetch read request fields (flat, replaces *mem.ReadReq)
+	// Fetch read request fields (flat, replaces mem.ReadReq)
 	HasFetchReadReq  bool              `json:"has_fetch_read_req"`
 	FetchReadReqMeta messaging.MsgMeta `json:"fetch_read_req_meta"`
 
@@ -173,7 +173,7 @@ type transactionState struct {
 	EvictingData      []byte `json:"evicting_data"`
 	EvictingDirtyMask []bool `json:"evicting_dirty_mask"`
 
-	// Eviction write request fields (flat, replaces *mem.WriteReq)
+	// Eviction write request fields (flat, replaces mem.WriteReq)
 	HasEvictionWriteReq  bool              `json:"has_eviction_write_req"`
 	EvictionWriteReqMeta messaging.MsgMeta `json:"eviction_write_req_meta"`
 

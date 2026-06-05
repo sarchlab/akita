@@ -31,12 +31,12 @@ type PingSpec struct {
 type PingState struct {
 	NumPingNeedToSend int                 `json:"num_ping_need_to_send"`
 	NextSeqID         int                 `json:"next_seq_id"`
-	StartTimes        []timing.VTimeInSec `json:"start_times"`
+	StartTimes        []timing.VTimeInPicoSec `json:"start_times"`
 	CompletedPings    int                 `json:"completed_pings"`
 }
 
 type pingTransaction struct {
-	req       *PingReq
+	req       PingReq
 	cycleLeft int
 }
 
@@ -67,11 +67,11 @@ func (m *pingMiddleware) processInput() bool {
 	}
 
 	switch msg := rawMsg.(type) {
-	case *PingReq:
+	case PingReq:
 		trans := &pingTransaction{req: msg, cycleLeft: 2}
 		m.currentTransactions = append(m.currentTransactions, trans)
 		m.outPort.RetrieveIncoming()
-	case *PingRsp:
+	case PingRsp:
 		state := m.comp.State
 		state.CompletedPings++
 		seqID := msg.SeqID
@@ -110,7 +110,7 @@ func (m *pingMiddleware) sendRsp() bool {
 		return false
 	}
 
-	rsp := &PingRsp{
+	rsp := PingRsp{
 		MsgMeta: messaging.MsgMeta{
 			ID:  timing.GetIDGenerator().Generate(),
 			Src: m.outPort.AsRemote(),
@@ -135,7 +135,7 @@ func (m *pingMiddleware) sendPing() bool {
 		return false
 	}
 
-	req := &PingReq{
+	req := PingReq{
 		MsgMeta: messaging.MsgMeta{
 			ID:  timing.GetIDGenerator().Generate(),
 			Src: m.outPort.AsRemote(),

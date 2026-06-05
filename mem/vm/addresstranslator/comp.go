@@ -34,13 +34,11 @@ type Resources struct {
 
 // incomingReqState is a serializable representation of an incoming request.
 type incomingReqState struct {
-	ID         uint64               `json:"id"`
-	Src        messaging.RemotePort `json:"src"`
-	Dst        messaging.RemotePort `json:"dst"`
-	RspTo      uint64               `json:"rsp_to"`
-	SendTaskID uint64               `json:"send_task_id"`
-	RecvTaskID uint64               `json:"recv_task_id"`
-	Type       string               `json:"type"`
+	ID    uint64               `json:"id"`
+	Src   messaging.RemotePort `json:"src"`
+	Dst   messaging.RemotePort `json:"dst"`
+	RspTo uint64               `json:"rsp_to"`
+	Type  string               `json:"type"`
 
 	// Fields preserved for translated request creation.
 	Address            uint64 `json:"address"`
@@ -53,28 +51,24 @@ type incomingReqState struct {
 
 // transactionState is a serializable representation of a runtime transaction.
 type transactionState struct {
-	IncomingReqs             []incomingReqState   `json:"incoming_reqs"`
-	TranslationReqID         uint64               `json:"translation_req_id"`
-	TranslationReqSendTaskID uint64               `json:"translation_req_send_task_id"`
-	TranslationReqSrc        messaging.RemotePort `json:"translation_req_src"`
-	TranslationReqDst        messaging.RemotePort `json:"translation_req_dst"`
-	TranslationDone          bool                 `json:"translation_done"`
-	Page                     vm.Page              `json:"page"`
+	IncomingReqs      []incomingReqState   `json:"incoming_reqs"`
+	TranslationReqID  uint64               `json:"translation_req_id"`
+	TranslationReqSrc messaging.RemotePort `json:"translation_req_src"`
+	TranslationReqDst messaging.RemotePort `json:"translation_req_dst"`
+	TranslationDone   bool                 `json:"translation_done"`
+	Page              vm.Page              `json:"page"`
 }
 
 // reqToBottomState is a serializable representation of a runtime reqToBottom.
 type reqToBottomState struct {
-	ReqFromTopID          uint64               `json:"req_from_top_id"`
-	ReqFromTopSrc         messaging.RemotePort `json:"req_from_top_src"`
-	ReqFromTopDst         messaging.RemotePort `json:"req_from_top_dst"`
-	ReqFromTopSendTaskID  uint64               `json:"req_from_top_send_task_id"`
-	ReqFromTopRecvTaskID  uint64               `json:"req_from_top_recv_task_id"`
-	ReqFromTopType        string               `json:"req_from_top_type"`
-	ReqToBottomID         uint64               `json:"req_to_bottom_id"`
-	ReqToBottomSendTaskID uint64               `json:"req_to_bottom_send_task_id"`
-	ReqToBottomSrc        messaging.RemotePort `json:"req_to_bottom_src"`
-	ReqToBottomDst        messaging.RemotePort `json:"req_to_bottom_dst"`
-	ReqToBottomType       string               `json:"req_to_bottom_type"`
+	ReqFromTopID    uint64               `json:"req_from_top_id"`
+	ReqFromTopSrc   messaging.RemotePort `json:"req_from_top_src"`
+	ReqFromTopDst   messaging.RemotePort `json:"req_from_top_dst"`
+	ReqFromTopType  string               `json:"req_from_top_type"`
+	ReqToBottomID   uint64               `json:"req_to_bottom_id"`
+	ReqToBottomSrc  messaging.RemotePort `json:"req_to_bottom_src"`
+	ReqToBottomDst  messaging.RemotePort `json:"req_to_bottom_dst"`
+	ReqToBottomType string               `json:"req_to_bottom_type"`
 }
 
 // State contains mutable runtime data for the AddressTranslator.
@@ -95,22 +89,20 @@ func addrToPageID(addr, log2PageSize uint64) uint64 {
 func msgToIncomingReqState(msg messaging.Msg) incomingReqState {
 	meta := msg.Meta()
 	s := incomingReqState{
-		ID:         meta.ID,
-		Src:        meta.Src,
-		Dst:        meta.Dst,
-		RspTo:      meta.RspTo,
-		SendTaskID: meta.SendTaskID,
-		RecvTaskID: meta.RecvTaskID,
-		Type:       fmt.Sprintf("%T", msg),
+		ID:    meta.ID,
+		Src:   meta.Src,
+		Dst:   meta.Dst,
+		RspTo: meta.RspTo,
+		Type:  fmt.Sprintf("%T", msg),
 	}
 
 	switch req := msg.(type) {
-	case *mem.ReadReq:
+	case mem.ReadReq:
 		s.Address = req.Address
 		s.AccessByteSize = req.AccessByteSize
 		s.PID = req.PID
 		s.CanWaitForCoalesce = req.CanWaitForCoalesce
-	case *mem.WriteReq:
+	case mem.WriteReq:
 		s.Address = req.Address
 		s.PID = req.PID
 		s.Data = req.Data
@@ -134,8 +126,8 @@ func createTranslatedReq(
 	addr := page.PAddr + offset
 
 	switch reqState.Type {
-	case "*mem.ReadReq":
-		clone := &mem.ReadReq{}
+	case "mem.ReadReq":
+		clone := mem.ReadReq{}
 		clone.ID = timing.GetIDGenerator().Generate()
 		clone.Src = bottomPortRemote
 		clone.Dst = memProviderMapper.Find(addr)
@@ -146,8 +138,8 @@ func createTranslatedReq(
 		clone.TrafficClass = "mem.ReadReq"
 		clone.CanWaitForCoalesce = reqState.CanWaitForCoalesce
 		return clone
-	case "*mem.WriteReq":
-		clone := &mem.WriteReq{}
+	case "mem.WriteReq":
+		clone := mem.WriteReq{}
 		clone.ID = timing.GetIDGenerator().Generate()
 		clone.Src = bottomPortRemote
 		clone.Dst = memProviderMapper.Find(addr)
@@ -165,30 +157,18 @@ func createTranslatedReq(
 	}
 }
 
-// restoreMemMsg reconstructs a concrete mem message from saved metadata.
+// restoreMemMsg reconstructs a concrete mem message from saved metadata. It
+// preserves the original message ID so tracing lookups (keyed by the message
+// ID) resolve to the same task as the original incoming message.
 func restoreMemMsg(
-	id uint64, src, dst messaging.RemotePort, rspTo uint64,
-	sendTaskID, recvTaskID uint64, typ string,
+	id uint64, src, dst messaging.RemotePort, rspTo uint64, typ string,
 ) messaging.Msg {
+	meta := messaging.MsgMeta{ID: id, Src: src, Dst: dst, RspTo: rspTo}
 	switch typ {
-	case "*mem.WriteReq":
-		m := &mem.WriteReq{}
-		m.ID = id
-		m.Src = src
-		m.Dst = dst
-		m.RspTo = rspTo
-		m.SendTaskID = sendTaskID
-		m.RecvTaskID = recvTaskID
-		return m
+	case "mem.WriteReq":
+		return mem.WriteReq{MsgMeta: meta}
 	default:
-		m := &mem.ReadReq{}
-		m.ID = id
-		m.Src = src
-		m.Dst = dst
-		m.RspTo = rspTo
-		m.SendTaskID = sendTaskID
-		m.RecvTaskID = recvTaskID
-		return m
+		return mem.ReadReq{MsgMeta: meta}
 	}
 }
 
@@ -243,17 +223,14 @@ func buildReqToBottom(
 	reqState incomingReqState, translatedReq messaging.Msg,
 ) reqToBottomState {
 	return reqToBottomState{
-		ReqFromTopID:          reqState.ID,
-		ReqFromTopSrc:         reqState.Src,
-		ReqFromTopDst:         reqState.Dst,
-		ReqFromTopSendTaskID:  reqState.SendTaskID,
-		ReqFromTopRecvTaskID:  reqState.RecvTaskID,
-		ReqFromTopType:        reqState.Type,
-		ReqToBottomID:         translatedReq.Meta().ID,
-		ReqToBottomSendTaskID: translatedReq.Meta().SendTaskID,
-		ReqToBottomSrc:        translatedReq.Meta().Src,
-		ReqToBottomDst:        translatedReq.Meta().Dst,
-		ReqToBottomType:       fmt.Sprintf("%T", translatedReq),
+		ReqFromTopID:    reqState.ID,
+		ReqFromTopSrc:   reqState.Src,
+		ReqFromTopDst:   reqState.Dst,
+		ReqFromTopType:  reqState.Type,
+		ReqToBottomID:   translatedReq.Meta().ID,
+		ReqToBottomSrc:  translatedReq.Meta().Src,
+		ReqToBottomDst:  translatedReq.Meta().Dst,
+		ReqToBottomType: fmt.Sprintf("%T", translatedReq),
 	}
 }
 

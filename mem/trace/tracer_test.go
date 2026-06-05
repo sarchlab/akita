@@ -71,21 +71,21 @@ type MockAccessReq struct {
 	pid      vm.PID
 }
 
-func (r *MockAccessReq) GetAddress() uint64 {
+func (r MockAccessReq) GetAddress() uint64 {
 	return r.address
 }
 
-func (r *MockAccessReq) GetByteSize() uint64 {
+func (r MockAccessReq) GetByteSize() uint64 {
 	return r.byteSize
 }
 
-func (r *MockAccessReq) GetPID() vm.PID {
+func (r MockAccessReq) GetPID() vm.PID {
 	return r.pid
 }
 
 func (suite *TracerTestSuite) TestStartAndEndTask() {
 	// Create a mock access request
-	req := &MockAccessReq{
+	req := MockAccessReq{
 		address:  0x1000,
 		byteSize: 64,
 		pid:      1,
@@ -105,8 +105,8 @@ func (suite *TracerTestSuite) TestStartAndEndTask() {
 
 func (suite *TracerTestSuite) runBasicTrace(task tracing.Task) {
 	// Set up mock expectations
-	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(100.0)).Times(1) // StartTask
-	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(200.0)).Times(1) // EndTask
+	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(100.0)).Times(1) // StartTask
+	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(200.0)).Times(1) // EndTask
 
 	// Start the task
 	suite.tracer.StartTask(task)
@@ -159,7 +159,7 @@ func (suite *TracerTestSuite) verifyBasicTransaction(task tracing.Task) {
 
 func (suite *TracerTestSuite) TestStepTask() {
 	// Create a mock access request
-	req := &MockAccessReq{
+	req := MockAccessReq{
 		address:  0x2000,
 		byteSize: 32,
 		pid:      2,
@@ -177,7 +177,7 @@ func (suite *TracerTestSuite) TestStepTask() {
 	}
 
 	// Set up mock expectations
-	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(150.0)).Times(1)
+	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(150.0)).Times(1)
 
 	// Record the step
 	suite.tracer.StepTask(task)
@@ -209,7 +209,7 @@ func (suite *TracerTestSuite) TestStepTask() {
 
 func (suite *TracerTestSuite) TestCompleteMemoryTrace() {
 	// Create a mock access request
-	req := &MockAccessReq{
+	req := MockAccessReq{
 		address:  0x3000,
 		byteSize: 128,
 		pid:      3,
@@ -234,9 +234,9 @@ func (suite *TracerTestSuite) TestCompleteMemoryTrace() {
 func (suite *TracerTestSuite) runCompleteTrace(task tracing.Task) {
 	// Set up mock expectations in order
 	gomock.InOrder(
-		suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(50.0)).Times(1),  // StartTask
-		suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(75.0)).Times(1),  // StepTask
-		suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(100.0)).Times(1), // EndTask
+		suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(50.0)).Times(1),  // StartTask
+		suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(75.0)).Times(1),  // StepTask
+		suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(100.0)).Times(1), // EndTask
 	)
 
 	// Start task at time 50
@@ -304,7 +304,7 @@ func (suite *TracerTestSuite) TestTaskWithoutAccessReq() {
 	}
 
 	// Set up mock expectations - CurrentTime should be called for StartTask but not EndTask since no AccessReq
-	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(10.0)).Times(1)
+	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10.0)).Times(1)
 
 	// Start the task (this will not create a pending transaction due to no AccessReq)
 	suite.tracer.StartTask(task)
@@ -369,7 +369,7 @@ func TestDBTracerWithFixedTimeTeller(t *testing.T) {
 	tracer := NewDBTracer(recorder, timeTeller)
 
 	// Create a mock request
-	req := &MockAccessReq{
+	req := MockAccessReq{
 		address:  0x4000,
 		byteSize: 256,
 		pid:      4,
@@ -408,9 +408,9 @@ func TestDBTracerWithFixedTimeTeller(t *testing.T) {
 
 // fixedTimeTeller is a simple implementation for testing
 type fixedTimeTeller struct {
-	time timing.VTimeInSec
+	time timing.VTimeInPicoSec
 }
 
-func (f *fixedTimeTeller) CurrentTime() timing.VTimeInSec {
+func (f *fixedTimeTeller) CurrentTime() timing.VTimeInPicoSec {
 	return f.time
 }

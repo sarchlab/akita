@@ -52,7 +52,7 @@ func (m *parseTranslateMW) translate() bool {
 	spec := m.comp.Spec()
 	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
 
-	transReq := &vm.TranslationReq{}
+	transReq := vm.TranslationReq{}
 	transReq.ID = timing.GetIDGenerator().Generate()
 	transReq.Src = m.translationPort().AsRemote()
 	transReq.Dst = m.comp.Resources().TranslationProviderMapper.Find(vAddr)
@@ -78,14 +78,11 @@ func (m *parseTranslateMW) translate() bool {
 		tracing.MsgIDAtReceiver(itemI, m.comp),
 	)
 
-	incoming.RecvTaskID = itemI.(messaging.Msg).Meta().RecvTaskID
-
 	trans := transactionState{
-		IncomingReqs:             []incomingReqState{incoming},
-		TranslationReqID:         transReq.ID,
-		TranslationReqSendTaskID: transReq.SendTaskID,
-		TranslationReqSrc:        transReq.Src,
-		TranslationReqDst:        transReq.Dst,
+		IncomingReqs:      []incomingReqState{incoming},
+		TranslationReqID:  transReq.ID,
+		TranslationReqSrc: transReq.Src,
+		TranslationReqDst: transReq.Dst,
 	}
 	nextState.Transactions = append(nextState.Transactions, trans)
 

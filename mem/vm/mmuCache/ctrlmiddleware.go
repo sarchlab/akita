@@ -68,7 +68,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	}
 
 	switch msg := msgI.(type) {
-	case *mem.ControlReq:
+	case mem.ControlReq:
 		return m.handleControlReq(msg)
 	default:
 		log.Panicf("Unhandled message type: %s", reflect.TypeOf(msgI))
@@ -77,7 +77,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	return false
 }
 
-func (m *ctrlMiddleware) handleControlReq(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleControlReq(msg mem.ControlReq) bool {
 	switch msg.Command {
 	case mem.CmdEnable:
 		return m.performCtrlEnable(msg)
@@ -98,7 +98,7 @@ func (m *ctrlMiddleware) handleControlReq(msg *mem.ControlReq) bool {
 	}
 }
 
-func (m *ctrlMiddleware) performCtrlEnable(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) performCtrlEnable(msg mem.ControlReq) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
@@ -115,10 +115,12 @@ func (m *ctrlMiddleware) performCtrlEnable(msg *mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
+
 	return true
 }
 
-func (m *ctrlMiddleware) performCtrlDrain(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) performCtrlDrain(msg mem.ControlReq) bool {
 	state := &m.comp.State
 	state.CurrentState = mmuCacheStateDrain
 	state.PendingDrainRsp = true
@@ -133,10 +135,12 @@ func (m *ctrlMiddleware) performCtrlDrain(msg *mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
+
 	return true
 }
 
-func (m *ctrlMiddleware) performCtrlPause(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) performCtrlPause(msg mem.ControlReq) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
@@ -153,6 +157,8 @@ func (m *ctrlMiddleware) performCtrlPause(msg *mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
+
 	return true
 }
 
@@ -160,7 +166,7 @@ func (m *ctrlMiddleware) performCtrlPause(msg *mem.ControlReq) bool {
 // address/PID filter (empty address list = all addresses, zero PID = all
 // PIDs). Invalidate is a synchronous verb but is only legal once the
 // mmuCache is paused or drained; issued while Enabled it is rejected.
-func (m *ctrlMiddleware) handleInvalidate(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleInvalidate(msg mem.ControlReq) bool {
 	state := &m.comp.State
 	if state.CurrentState == mmuCacheStateEnable {
 		return m.rejectMustBePaused(msg)
@@ -181,12 +187,14 @@ func (m *ctrlMiddleware) handleInvalidate(msg *mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
+
 	return true
 }
 
 // rejectMustBePaused responds that a conditional verb is illegal while the
 // component is Enabled.
-func (m *ctrlMiddleware) rejectMustBePaused(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) rejectMustBePaused(msg mem.ControlReq) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
@@ -260,7 +268,7 @@ func invalidateSegment(set *setState, pid vm.PID, seg uint64) {
 	}
 }
 
-func (m *ctrlMiddleware) handleReset(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleReset(msg mem.ControlReq) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
@@ -274,6 +282,7 @@ func (m *ctrlMiddleware) handleReset(msg *mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	state := &m.comp.State
 	state.CurrentState = mmuCacheStateEnable
@@ -293,7 +302,7 @@ func (m *ctrlMiddleware) handleReset(msg *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleUnsupported(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleUnsupported(msg mem.ControlReq) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
@@ -310,8 +319,8 @@ func makeCtrlRsp(
 	rspTo uint64,
 	success bool,
 	errStr string,
-) *mem.ControlRsp {
-	rsp := &mem.ControlRsp{
+) mem.ControlRsp {
+	rsp := mem.ControlRsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,

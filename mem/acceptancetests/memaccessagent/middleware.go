@@ -48,7 +48,7 @@ func (m *agentMiddleware) processMsgRsp() bool {
 	state := &m.agent.State
 
 	switch msg := msgI.(type) {
-	case *mem.WriteDoneRsp:
+	case mem.WriteDoneRsp:
 		if dumpLog {
 			write := state.PendingWriteReq[msg.RspTo]
 			log.Printf("%d, agent, write complete, 0x%X\n",
@@ -56,7 +56,7 @@ func (m *agentMiddleware) processMsgRsp() bool {
 		}
 
 		req := state.PendingWriteReq[msg.RspTo]
-		tracing.TraceReqFinalize(&req, m.agent)
+		tracing.TraceReqFinalize(req, m.agent)
 		delete(state.PendingWriteReq, msg.RspTo)
 
 		if m.agent.writeProgressBar != nil {
@@ -64,7 +64,7 @@ func (m *agentMiddleware) processMsgRsp() bool {
 		}
 
 		return true
-	case *mem.DataReadyRsp:
+	case mem.DataReadyRsp:
 		req := state.PendingReadReq[msg.RspTo]
 
 		if dumpLog {
@@ -72,9 +72,9 @@ func (m *agentMiddleware) processMsgRsp() bool {
 				m.agent.CurrentTime(), req.Address, msg.Data)
 		}
 
-		m.checkReadResult(&req, msg, state)
+		m.checkReadResult(req, msg, state)
 
-		tracing.TraceReqFinalize(&req, m.agent)
+		tracing.TraceReqFinalize(req, m.agent)
 		delete(state.PendingReadReq, msg.RspTo)
 
 		if m.agent.readProgressBar != nil {
@@ -90,8 +90,8 @@ func (m *agentMiddleware) processMsgRsp() bool {
 }
 
 func (m *agentMiddleware) checkReadResult(
-	read *mem.ReadReq,
-	dataReady *mem.DataReadyRsp,
+	read mem.ReadReq,
+	dataReady mem.DataReadyRsp,
 	state *State,
 ) {
 	found := false
@@ -166,7 +166,7 @@ func (m *agentMiddleware) doRead() bool {
 		return false
 	}
 
-	readReq := &mem.ReadReq{}
+	readReq := mem.ReadReq{}
 	readReq.ID = timing.GetIDGenerator().Generate()
 	readReq.Src = m.memPort().AsRemote()
 	readReq.Dst = m.agent.LowModule.AsRemote()
@@ -184,7 +184,7 @@ func (m *agentMiddleware) doRead() bool {
 
 	tracing.TraceReqInitiate(readReq, m.agent, 0)
 
-	state.PendingReadReq[readReq.ID] = *readReq
+	state.PendingReadReq[readReq.ID] = readReq
 	state.ReadLeft--
 
 	if m.agent.readProgressBar != nil {
@@ -249,7 +249,7 @@ func (m *agentMiddleware) doWrite() bool {
 	}
 
 	writeData := uint32ToBytes(data)
-	writeReq := &mem.WriteReq{}
+	writeReq := mem.WriteReq{}
 	writeReq.ID = timing.GetIDGenerator().Generate()
 	writeReq.Src = m.memPort().AsRemote()
 	writeReq.Dst = m.agent.LowModule.AsRemote()
@@ -269,7 +269,7 @@ func (m *agentMiddleware) doWrite() bool {
 
 	state.WriteLeft--
 	m.addKnownValue(state, address, data)
-	state.PendingWriteReq[writeReq.ID] = *writeReq
+	state.PendingWriteReq[writeReq.ID] = writeReq
 
 	if m.agent.writeProgressBar != nil {
 		m.agent.writeProgressBar.IncrementInProgress(1)

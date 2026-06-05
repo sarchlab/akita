@@ -34,7 +34,7 @@ func (s *respondStage) Tick() bool {
 }
 
 func (s *respondStage) respondReadTrans(trans *transactionState) bool {
-	dr := &mem.DataReadyRsp{}
+	dr := mem.DataReadyRsp{}
 	dr.ID = timing.GetIDGenerator().Generate()
 	dr.Src = s.cache.topPort.AsRemote()
 	dr.Dst = trans.ReadMeta.Src
@@ -52,7 +52,7 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 	trans.Removed = true
 
 	// Reconstruct read for tracing
-	read := &mem.ReadReq{
+	read := mem.ReadReq{
 		MsgMeta:        trans.ReadMeta,
 		Address:        trans.ReadAddress,
 		AccessByteSize: trans.ReadAccessByteSize,
@@ -64,7 +64,7 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 }
 
 func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
-	done := &mem.WriteDoneRsp{}
+	done := mem.WriteDoneRsp{}
 	done.ID = timing.GetIDGenerator().Generate()
 	done.Src = s.cache.topPort.AsRemote()
 	done.Dst = trans.WriteMeta.Src
@@ -81,7 +81,7 @@ func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
 	trans.Removed = true
 
 	// Reconstruct write for tracing
-	write := &mem.WriteReq{
+	write := mem.WriteReq{
 		MsgMeta:   trans.WriteMeta,
 		Address:   trans.WriteAddress,
 		Data:      trans.WriteData,

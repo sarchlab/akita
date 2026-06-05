@@ -63,8 +63,8 @@ var _ = Describe("Address Translator control behavior", func() {
 		}
 	}
 
-	makeRead := func(addr uint64) *mem.ReadReq {
-		req := &mem.ReadReq{}
+	makeRead := func(addr uint64) mem.ReadReq {
+		req := mem.ReadReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
@@ -75,8 +75,8 @@ var _ = Describe("Address Translator control behavior", func() {
 		return req
 	}
 
-	makeCtrlReq := func(cmd mem.ControlCommand) *mem.ControlReq {
-		req := &mem.ControlReq{Command: cmd}
+	makeCtrlReq := func(cmd mem.ControlCommand) mem.ControlReq {
+		req := mem.ControlReq{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
@@ -87,8 +87,8 @@ var _ = Describe("Address Translator control behavior", func() {
 	// makeBottomReq builds the read the translator would itself have sent out
 	// the Bottom port, with Src = Bottom and Dst = the memory provider, exactly
 	// as createTranslatedReq does.
-	makeBottomReq := func(addr uint64) *mem.ReadReq {
-		req := &mem.ReadReq{}
+	makeBottomReq := func(addr uint64) mem.ReadReq {
+		req := mem.ReadReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = bottomPort.AsRemote()
 		req.Dst = messaging.RemotePort("MemPort")
@@ -103,7 +103,7 @@ var _ = Describe("Address Translator control behavior", func() {
 	// top-side read and bottom-side read, mirroring the Reset test's direct
 	// state fabrication. It returns the bottom-side ReqToBottomID so the test
 	// can later feed a matching response that retires the entry.
-	injectInflight := func(fromTop, toBottom *mem.ReadReq) uint64 {
+	injectInflight := func(fromTop, toBottom mem.ReadReq) uint64 {
 		t.State.InflightReqToBottom = append(t.State.InflightReqToBottom,
 			reqToBottomState{
 				ReqFromTopID:    fromTop.ID,
@@ -122,7 +122,7 @@ var _ = Describe("Address Translator control behavior", func() {
 	// RspTo matches an in-flight ReqToBottomID. respond() recognises it, sends a
 	// DataReadyRsp out Top, and removes the in-flight entry.
 	feedBottomDataReady := func(rspTo uint64) {
-		dataReady := &mem.DataReadyRsp{}
+		dataReady := mem.DataReadyRsp{}
 		dataReady.ID = timing.GetIDGenerator().Generate()
 		dataReady.Src = messaging.RemotePort("MemPort")
 		dataReady.Dst = bottomPort.AsRemote()
@@ -161,7 +161,7 @@ var _ = Describe("Address Translator control behavior", func() {
 		for range 8 {
 			t.Tick()
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(*mem.ControlRsp); ok &&
+				if rsp, ok := out.(mem.ControlRsp); ok &&
 					rsp.Command == mem.CmdDrain {
 					Fail("Drain acked while bottom requests still in flight")
 				}
@@ -175,28 +175,30 @@ var _ = Describe("Address Translator control behavior", func() {
 		feedBottomDataReady(id1)
 		feedBottomDataReady(id2)
 
-		var drainRsp *mem.ControlRsp
+		var drainRsp mem.ControlRsp
+		drainFound := false
 		topResponses := 0
-		for i := 0; i < 64 && drainRsp == nil; i++ {
+		for i := 0; i < 64 && !drainFound; i++ {
 			t.Tick()
 			for {
 				out := topPort.RetrieveOutgoing()
 				if out == nil {
 					break
 				}
-				if _, ok := out.(*mem.DataReadyRsp); ok {
+				if _, ok := out.(mem.DataReadyRsp); ok {
 					topResponses++
 				}
 			}
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(*mem.ControlRsp); ok &&
+				if rsp, ok := out.(mem.ControlRsp); ok &&
 					rsp.Command == mem.CmdDrain {
 					drainRsp = rsp
+					drainFound = true
 				}
 			}
 		}
 
-		Expect(drainRsp).ToNot(BeNil())
+		Expect(drainFound).To(BeTrue())
 		Expect(drainRsp.Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
 		// Each retired bottom request produced a Top-side response, and no
@@ -235,15 +237,16 @@ var _ = Describe("Address Translator control behavior", func() {
 			reset := makeCtrlReq(mem.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp *mem.ControlRsp
-			for i := 0; i < 64 && rsp == nil; i++ {
+			var rsp mem.ControlRsp
+			found := false
+			for i := 0; i < 64 && !found; i++ {
 				t.Tick()
 				if out := ctrlPort.RetrieveOutgoing(); out != nil {
-					rsp, _ = out.(*mem.ControlRsp)
+					rsp, found = out.(mem.ControlRsp)
 				}
 			}
 
-			Expect(rsp).ToNot(BeNil())
+			Expect(found).To(BeTrue())
 			Expect(rsp.Command).To(Equal(mem.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))

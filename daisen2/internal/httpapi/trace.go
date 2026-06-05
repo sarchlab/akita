@@ -103,7 +103,7 @@ type TaskQuery struct {
 
 // TaskStep represents a milestone/step in a task.
 type TaskStep struct {
-	Time timing.VTimeInSec `json:"time"`
+	Time timing.VTimeInPicoSec `json:"time"`
 	What string            `json:"what"`
 	Kind string            `json:"kind"`
 }
@@ -115,8 +115,8 @@ type Task struct {
 	Kind       string            `json:"kind"`
 	What       string            `json:"what"`
 	Location   string            `json:"location"`
-	StartTime  timing.VTimeInSec `json:"start_time"`
-	EndTime    timing.VTimeInSec `json:"end_time"`
+	StartTime  timing.VTimeInPicoSec `json:"start_time"`
+	EndTime    timing.VTimeInPicoSec `json:"end_time"`
 	Steps      []TaskStep        `json:"steps"`
 	Detail     interface{}       `json:"-"`
 	ParentTask *Task             `json:"-"`
@@ -407,7 +407,7 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 
 		if task, exists := taskMap[taskID]; exists {
 			step := TaskStep{
-				Time: timing.VTimeInSec(uint64(time)),
+				Time: timing.VTimeInPicoSec(uint64(time)),
 				What: what,
 				Kind: kind,
 			}
@@ -458,8 +458,8 @@ func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
 		panic(err)
 	}
 
-	t.StartTime = timing.VTimeInSec(uint64(startTime))
-	t.EndTime = timing.VTimeInSec(uint64(endTime))
+	t.StartTime = timing.VTimeInPicoSec(uint64(startTime))
+	t.EndTime = timing.VTimeInPicoSec(uint64(endTime))
 
 	if ptID.Valid {
 		t.ParentTask.ID = uint64(ptID.Int64)
@@ -467,8 +467,8 @@ func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
 		t.ParentTask.Kind = ptKind.String
 		t.ParentTask.What = ptWhat.String
 		t.ParentTask.Location = ptLocation.String
-		t.ParentTask.StartTime = timing.VTimeInSec(uint64(ptStartTime.Float64))
-		t.ParentTask.EndTime = timing.VTimeInSec(uint64(ptEndTime.Float64))
+		t.ParentTask.StartTime = timing.VTimeInPicoSec(uint64(ptStartTime.Float64))
+		t.ParentTask.EndTime = timing.VTimeInPicoSec(uint64(ptEndTime.Float64))
 	}
 }
 
@@ -488,8 +488,8 @@ func (r *SQLiteTraceReader) scanTaskWithoutParent(rows *sql.Rows, t *Task) {
 		panic(err)
 	}
 
-	t.StartTime = timing.VTimeInSec(uint64(startTime))
-	t.EndTime = timing.VTimeInSec(uint64(endTime))
+	t.StartTime = timing.VTimeInPicoSec(uint64(startTime))
+	t.EndTime = timing.VTimeInPicoSec(uint64(endTime))
 }
 
 func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) string {

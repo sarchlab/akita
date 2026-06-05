@@ -57,7 +57,7 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 
 	var t transactionState
 	switch m := msg.(type) {
-	case *mem.ReadReq:
+	case mem.ReadReq:
 		t = transactionState{
 			ID:                 timing.GetIDGenerator().Generate(),
 			HasRead:            true,
@@ -72,7 +72,7 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 			s.cache.comp, "cache_transaction", "read",
 			s.cache.comp.Name()+".Local",
 			nil)
-	case *mem.WriteReq:
+	case mem.WriteReq:
 		t = transactionState{
 			ID:             timing.GetIDGenerator().Generate(),
 			HasWrite:       true,

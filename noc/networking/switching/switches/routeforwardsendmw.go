@@ -149,7 +149,7 @@ func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 			flit.Src = port.AsRemote()
 			flit.Dst = pcs.RemotePort
 
-			port.Send(&flit)
+			port.Send(flit)
 			pcs.SendOutBuffer.Pop()
 			madeProgress = true
 		}

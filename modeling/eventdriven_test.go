@@ -23,12 +23,12 @@ type edState struct {
 
 type mockProcessor struct {
 	callCount int
-	lastTime  timing.VTimeInSec
+	lastTime  timing.VTimeInPicoSec
 }
 
 func (p *mockProcessor) Process(
 	comp *modeling.EventDrivenComponent[edSpec, edState, modeling.None],
-	now timing.VTimeInSec,
+	now timing.VTimeInPicoSec,
 ) bool {
 	p.callCount++
 	p.lastTime = now
@@ -121,7 +121,7 @@ func TestEventDrivenHandle(t *testing.T) {
 		WithProcessor(proc).
 		Build("EDComp")
 
-	evt := timing.NewEventBase(10, comp.Name())
+	evt := timing.MakeEventBase(10, comp.Name())
 
 	err := comp.Handle(evt)
 	if err != nil {

@@ -115,7 +115,7 @@ var _ = Describe("Switch", func() {
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := &packetization.Flit{}
+		flit := packetization.Flit{}
 		flit.ID = timing.GetIDGenerator().Generate()
 		flit.Dst = port1.AsRemote()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
@@ -140,7 +140,7 @@ var _ = Describe("Switch", func() {
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := &packetization.Flit{}
+		flit := packetization.Flit{}
 		flit.ID = timing.GetIDGenerator().Generate()
 		flit.Dst = port1.AsRemote()
 		flit.TrafficClass = reflect.TypeOf(msg).String()

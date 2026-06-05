@@ -30,9 +30,9 @@ type PageMigrationInfo struct {
 // PageMigrationReqToDriver is a page migration request from MMU to the driver.
 type PageMigrationReqToDriver struct {
 	messaging.MsgMeta
-	StartTime         timing.VTimeInSec
-	EndTime           timing.VTimeInSec
-	MigrationInfo     *PageMigrationInfo
+	StartTime         timing.VTimeInPicoSec
+	EndTime           timing.VTimeInPicoSec
+	MigrationInfo     PageMigrationInfo
 	CurrAccessingGPUs []uint64
 	PID               PID
 	CurrPageHostGPU   uint64
@@ -43,8 +43,8 @@ type PageMigrationReqToDriver struct {
 // NewPageMigrationReqToDriver creates a new PageMigrationReqToDriver.
 func NewPageMigrationReqToDriver(
 	src, dst messaging.RemotePort,
-) *PageMigrationReqToDriver {
-	r := &PageMigrationReqToDriver{}
+) PageMigrationReqToDriver {
+	r := PageMigrationReqToDriver{}
 	r.ID = timing.GetIDGenerator().Generate()
 	r.Src = src
 	r.Dst = dst
@@ -55,8 +55,8 @@ func NewPageMigrationReqToDriver(
 // PageMigrationRspFromDriver is a page migration response from driver to MMU.
 type PageMigrationRspFromDriver struct {
 	messaging.MsgMeta
-	StartTime timing.VTimeInSec
-	EndTime   timing.VTimeInSec
+	StartTime timing.VTimeInPicoSec
+	EndTime   timing.VTimeInPicoSec
 	VAddr     []uint64
 	RspToTop  bool
 }
@@ -65,8 +65,8 @@ type PageMigrationRspFromDriver struct {
 func NewPageMigrationRspFromDriver(
 	src, dst messaging.RemotePort,
 	originalReqID uint64,
-) *PageMigrationRspFromDriver {
-	r := &PageMigrationRspFromDriver{}
+) PageMigrationRspFromDriver {
+	r := PageMigrationRspFromDriver{}
 	r.ID = timing.GetIDGenerator().Generate()
 	r.Src = src
 	r.Dst = dst

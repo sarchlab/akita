@@ -71,7 +71,7 @@ var _ = Describe("MMU", func() {
 
 	Context("parse top", func() {
 		It("should process translation request", func() {
-			translationReq := &vm.TranslationReq{}
+			translationReq := vm.TranslationReq{}
 			translationReq.ID = timing.GetIDGenerator().Generate()
 			translationReq.Src = messaging.RemotePort("Agent")
 			translationReq.Dst = topPort.AsRemote()
@@ -153,8 +153,8 @@ var _ = Describe("MMU", func() {
 			Expect(next.WalkingTranslations).To(HaveLen(0))
 
 			rsp := topPort.RetrieveOutgoing()
-			Expect(rsp).To(BeAssignableToTypeOf(&vm.TranslationRsp{}))
-			Expect(rsp.(*vm.TranslationRsp).Page).To(Equal(page))
+			Expect(rsp).To(BeAssignableToTypeOf(vm.TranslationRsp{}))
+			Expect(rsp.(vm.TranslationRsp).Page).To(Equal(page))
 		})
 
 		It("should stall if cannot send to top", func() {
@@ -171,7 +171,7 @@ var _ = Describe("MMU", func() {
 			}
 			pageTable.Insert(page)
 
-			dummy := &vm.TranslationRsp{}
+			dummy := vm.TranslationRsp{}
 			dummy.Src = topPort.AsRemote()
 			dummy.Dst = messaging.RemotePort("Agent")
 			dummy.TrafficClass = "vm.TranslationRsp"
@@ -284,7 +284,7 @@ var _ = Describe("MMU", func() {
 
 		It("should stall if send failed", func() {
 			// Pre-fill the single-slot Migration port so the send fails.
-			dummy := &vm.PageMigrationReqToDriver{}
+			dummy := vm.PageMigrationReqToDriver{}
 			dummy.Src = migrationPort.AsRemote()
 			dummy.Dst = messaging.RemotePort("MigrationServiceProvider")
 			dummy.TrafficClass = "vm.PageMigrationReqToDriver"
@@ -314,7 +314,7 @@ var _ = Describe("MMU", func() {
 			Expect(next.IsDoingMigration).To(BeTrue())
 
 			req := migrationPort.RetrieveOutgoing()
-			Expect(req).To(BeAssignableToTypeOf(&vm.PageMigrationReqToDriver{}))
+			Expect(req).To(BeAssignableToTypeOf(vm.PageMigrationReqToDriver{}))
 
 			updatedPage, found := pageTable.Find(vm.PID(1), 0x1000)
 			Expect(found).To(BeTrue())
@@ -336,7 +336,7 @@ var _ = Describe("MMU", func() {
 			Expect(next.IsDoingMigration).To(BeFalse())
 
 			rsp := topPort.RetrieveOutgoing()
-			Expect(rsp).To(BeAssignableToTypeOf(&vm.TranslationRsp{}))
+			Expect(rsp).To(BeAssignableToTypeOf(vm.TranslationRsp{}))
 
 			updatedPage, found := pageTable.Find(vm.PID(1), 0x1000)
 			Expect(found).To(BeTrue())
@@ -348,7 +348,7 @@ var _ = Describe("MMU", func() {
 		var (
 			page          vm.Page
 			migrating     transactionState
-			migrationDone *vm.PageMigrationRspFromDriver
+			migrationDone vm.PageMigrationRspFromDriver
 		)
 
 		BeforeEach(func() {
@@ -395,7 +395,7 @@ var _ = Describe("MMU", func() {
 			mmuComp.State = State{CurrentOnDemandMigration: migrating}
 
 			// Pre-fill the single-slot Top port so the send fails.
-			dummy := &vm.TranslationRsp{}
+			dummy := vm.TranslationRsp{}
 			dummy.Src = topPort.AsRemote()
 			dummy.Dst = messaging.RemotePort("Agent")
 			dummy.TrafficClass = "vm.TranslationRsp"
@@ -424,8 +424,8 @@ var _ = Describe("MMU", func() {
 			Expect(next.IsDoingMigration).To(BeFalse())
 
 			rsp := topPort.RetrieveOutgoing()
-			Expect(rsp).To(BeAssignableToTypeOf(&vm.TranslationRsp{}))
-			Expect(rsp.(*vm.TranslationRsp).Page).To(Equal(page))
+			Expect(rsp).To(BeAssignableToTypeOf(vm.TranslationRsp{}))
+			Expect(rsp.(vm.TranslationRsp).Page).To(Equal(page))
 
 			updatedPage, found := pageTable.Find(vm.PID(1), 0x1000)
 			Expect(found).To(BeTrue())
@@ -474,7 +474,7 @@ var _ = Describe("MMU Integration", func() {
 		}
 		pageTable.Insert(page)
 
-		req := &vm.TranslationReq{}
+		req := vm.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = agentPort.AsRemote()
 		req.Dst = topPort.AsRemote()
@@ -492,7 +492,7 @@ var _ = Describe("MMU Integration", func() {
 
 		rspI := topPort.RetrieveOutgoing()
 		Expect(rspI).ToNot(BeNil())
-		rsp := rspI.(*vm.TranslationRsp)
+		rsp := rspI.(vm.TranslationRsp)
 		Expect(rsp.Page).To(Equal(page))
 		Expect(rsp.RspTo).To(Equal(req.ID))
 	})

@@ -12,7 +12,7 @@ type AverageTimeTracer struct {
 	timeTeller    timing.TimeTeller
 	filter        TaskFilter
 	lock          sync.Mutex
-	averageTime   timing.VTimeInSec
+	averageTime   timing.VTimeInPicoSec
 	inflightTasks map[uint64]Task
 	taskCount     uint64
 }
@@ -32,7 +32,7 @@ func NewAverageTimeTracer(
 }
 
 // AverageTime returns the total time has been spent on a certain type of tasks.
-func (t *AverageTimeTracer) AverageTime() timing.VTimeInSec {
+func (t *AverageTimeTracer) AverageTime() timing.VTimeInPicoSec {
 	t.lock.Lock()
 	time := t.averageTime
 	t.lock.Unlock()
@@ -84,8 +84,8 @@ func (t *AverageTimeTracer) EndTask(task Task) {
 	}
 
 	taskTime := task.EndTime - originalTask.StartTime
-	t.averageTime = (t.averageTime*timing.VTimeInSec(t.taskCount) + taskTime) /
-		timing.VTimeInSec(t.taskCount+1)
+	t.averageTime = (t.averageTime*timing.VTimeInPicoSec(t.taskCount) + taskTime) /
+		timing.VTimeInPicoSec(t.taskCount+1)
 
 	delete(t.inflightTasks, task.ID)
 

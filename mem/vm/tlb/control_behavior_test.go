@@ -17,7 +17,7 @@ import (
 //
 // The TLB is downstream-dependent: a lookup miss creates an MSHR entry and
 // forwards a request out the "Bottom" port; the request does not complete
-// until a matching *vm.TranslationRsp is fed back on "Bottom". The Drain test
+// until a matching vm.TranslationRsp is fed back on "Bottom". The Drain test
 // below drives real completion through that handshake.
 var _ = Describe("TLB control behavior", func() {
 	var (
@@ -50,8 +50,8 @@ var _ = Describe("TLB control behavior", func() {
 		}
 	}
 
-	makeLookup := func(vAddr uint64) *vm.TranslationReq {
-		req := &vm.TranslationReq{}
+	makeLookup := func(vAddr uint64) vm.TranslationReq {
+		req := vm.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
@@ -62,8 +62,8 @@ var _ = Describe("TLB control behavior", func() {
 		return req
 	}
 
-	makeCtrlReq := func(cmd mem.ControlCommand) *mem.ControlReq {
-		req := &mem.ControlReq{Command: cmd}
+	makeCtrlReq := func(cmd mem.ControlCommand) mem.ControlReq {
+		req := mem.ControlReq{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = controlPort.AsRemote()
@@ -71,19 +71,19 @@ var _ = Describe("TLB control behavior", func() {
 		return req
 	}
 
-	// makeBottomRsp builds the *vm.TranslationRsp that retires the MSHR entry
+	// makeBottomRsp builds the vm.TranslationRsp that retires the MSHR entry
 	// for the forwarded bottom request. parseBottom matches the response to an
 	// MSHR entry by the resolved page's PID/VAddr, so those must equal the
 	// request's PID/VAddr; RspTo is set to the forwarded request's ID to mirror
 	// the real downstream handshake.
-	makeBottomRsp := func(req *vm.TranslationReq) *vm.TranslationRsp {
+	makeBottomRsp := func(req vm.TranslationReq) vm.TranslationRsp {
 		page := vm.Page{
 			PID:   req.PID,
 			VAddr: req.VAddr,
 			PAddr: req.VAddr + 0x10000,
 			Valid: true,
 		}
-		rsp := &vm.TranslationRsp{Page: page}
+		rsp := vm.TranslationRsp{Page: page}
 		rsp.ID = timing.GetIDGenerator().Generate()
 		rsp.Src = remotePort
 		rsp.Dst = bottomPort.AsRemote()
@@ -102,7 +102,7 @@ var _ = Describe("TLB control behavior", func() {
 
 		// Deliver N distinct-VAddr lookups that all miss (fresh TLB, distinct
 		// pages so each gets its own MSHR entry).
-		lookups := []*vm.TranslationReq{
+		lookups := []vm.TranslationReq{
 			makeLookup(0x0),
 			makeLookup(0x1000),
 		}
@@ -112,7 +112,7 @@ var _ = Describe("TLB control behavior", func() {
 
 		// Tick until both misses are in flight: 2 MSHR entries created and 2
 		// requests forwarded out Bottom. Capture the forwarded request IDs.
-		var bottomReqs []*vm.TranslationReq
+		var bottomReqs []vm.TranslationReq
 		for i := 0; i < 64 &&
 			(len(tlbComp.State.MSHREntries) < n || len(bottomReqs) < n); i++ {
 			tlbComp.Tick()
@@ -121,7 +121,7 @@ var _ = Describe("TLB control behavior", func() {
 				if out == nil {
 					break
 				}
-				bottomReqs = append(bottomReqs, out.(*vm.TranslationReq))
+				bottomReqs = append(bottomReqs, out.(vm.TranslationReq))
 			}
 		}
 
@@ -135,18 +135,20 @@ var _ = Describe("TLB control behavior", func() {
 		controlPort.Deliver(drain)
 
 		// Negative phase: without feeding responses, Drain must NOT complete.
-		var drainRsp *mem.ControlRsp
+		var drainRsp mem.ControlRsp
+		drainFound := false
 		for range 5 {
 			tlbComp.Tick()
 			if out := controlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(*mem.ControlRsp); ok &&
+				if rsp, ok := out.(mem.ControlRsp); ok &&
 					rsp.Command == mem.CmdDrain {
 					drainRsp = rsp
+					drainFound = true
 				}
 			}
 		}
 
-		Expect(drainRsp).To(BeNil())
+		Expect(drainFound).To(BeFalse())
 		Expect(tlbComp.State.TLBState).To(Equal(tlbStateDrain))
 		Expect(mshrIsEmpty(tlbComp.State.MSHREntries)).To(BeFalse())
 
@@ -158,26 +160,27 @@ var _ = Describe("TLB control behavior", func() {
 		}
 
 		completed := 0
-		for i := 0; i < 256 && drainRsp == nil; i++ {
+		for i := 0; i < 256 && !drainFound; i++ {
 			tlbComp.Tick()
 			for {
 				out := topPort.RetrieveOutgoing()
 				if out == nil {
 					break
 				}
-				if _, ok := out.(*vm.TranslationRsp); ok {
+				if _, ok := out.(vm.TranslationRsp); ok {
 					completed++
 				}
 			}
 			if out := controlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(*mem.ControlRsp); ok &&
+				if rsp, ok := out.(mem.ControlRsp); ok &&
 					rsp.Command == mem.CmdDrain {
 					drainRsp = rsp
+					drainFound = true
 				}
 			}
 		}
 
-		Expect(drainRsp).ToNot(BeNil())
+		Expect(drainFound).To(BeTrue())
 		Expect(drainRsp.Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
 		// Every in-flight miss finishes cleanly before the async Drain ack:
@@ -218,15 +221,16 @@ var _ = Describe("TLB control behavior", func() {
 			reset := makeCtrlReq(mem.CmdReset)
 			controlPort.Deliver(reset)
 
-			var rsp *mem.ControlRsp
-			for i := 0; i < 64 && rsp == nil; i++ {
+			var rsp mem.ControlRsp
+			found := false
+			for i := 0; i < 64 && !found; i++ {
 				tlbComp.Tick()
 				if out := controlPort.RetrieveOutgoing(); out != nil {
-					rsp, _ = out.(*mem.ControlRsp)
+					rsp, found = out.(mem.ControlRsp)
 				}
 			}
 
-			Expect(rsp).ToNot(BeNil())
+			Expect(found).To(BeTrue())
 			Expect(rsp.Command).To(Equal(mem.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))

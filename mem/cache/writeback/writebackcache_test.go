@@ -105,7 +105,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 		})
 
-		read := &mem.ReadReq{}
+		read := mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = agentPort.AsRemote()
 		read.Dst = cacheComp.GetPortByName("Top").AsRemote()
@@ -118,7 +118,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		engine.Run()
 
 		rsp := agentPort.RetrieveIncoming()
-		dr := rsp.(*mem.DataReadyRsp)
+		dr := rsp.(mem.DataReadyRsp)
 		Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 		Expect(dr.RspTo).To(Equal(read.ID))
 	})
@@ -144,7 +144,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 		})
 
-		write := &mem.WriteReq{}
+		write := mem.WriteReq{}
 		write.ID = timing.GetIDGenerator().Generate()
 		write.Src = agentPort.AsRemote()
 		write.Dst = cacheComp.GetPortByName("Top").AsRemote()
@@ -180,7 +180,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 		})
 
-		read := &mem.ReadReq{}
+		read := mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = agentPort.AsRemote()
 		read.Dst = cacheComp.GetPortByName("Top").AsRemote()
@@ -193,7 +193,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		engine.Run()
 
 		rsp := agentPort.RetrieveIncoming()
-		dr := rsp.(*mem.DataReadyRsp)
+		dr := rsp.(mem.DataReadyRsp)
 		Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 		Expect(dr.RspTo).To(Equal(read.ID))
 	})
@@ -210,7 +210,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 		})
 
-		read1 := &mem.ReadReq{}
+		read1 := mem.ReadReq{}
 		read1.ID = timing.GetIDGenerator().Generate()
 		read1.Src = agentPort.AsRemote()
 		read1.Dst = cacheComp.GetPortByName("Top").AsRemote()
@@ -220,7 +220,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		read1.TrafficClass = "mem.ReadReq"
 		cacheComp.GetPortByName("Top").Deliver(read1)
 
-		read2 := &mem.ReadReq{}
+		read2 := mem.ReadReq{}
 		read2.ID = timing.GetIDGenerator().Generate()
 		read2.Src = agentPort.AsRemote()
 		read2.Dst = cacheComp.GetPortByName("Top").AsRemote()
@@ -236,7 +236,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		for i := 0; i < 2; i++ {
 			rsp := agentPort.RetrieveIncoming()
 			Expect(rsp).NotTo(BeNil())
-			dr := rsp.(*mem.DataReadyRsp)
+			dr := rsp.(mem.DataReadyRsp)
 			rsps[dr.RspTo] = dr.Data
 		}
 		Expect(rsps[read1.ID]).To(Equal([]byte{5, 6, 7, 8}))
@@ -254,7 +254,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
 		}
-		write := &mem.WriteReq{}
+		write := mem.WriteReq{}
 		write.ID = timing.GetIDGenerator().Generate()
 		write.Src = agentPort.AsRemote()
 		write.Dst = cacheComp.GetPortByName("Top").AsRemote()
@@ -264,7 +264,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		write.TrafficClass = "mem.WriteReq"
 		cacheComp.GetPortByName("Top").Deliver(write)
 
-		read := &mem.ReadReq{}
+		read := mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = agentPort.AsRemote()
 		read.Dst = cacheComp.GetPortByName("Top").AsRemote()
@@ -283,7 +283,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			rsps[rsp.Meta().RspTo] = rsp
 		}
 		Expect(rsps).To(HaveKey(write.ID))
-		dr := rsps[read.ID].(*mem.DataReadyRsp)
+		dr := rsps[read.ID].(mem.DataReadyRsp)
 		Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 	})
 
@@ -311,7 +311,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		}
 		m.comp.State = state
 
-		read := &mem.ReadReq{}
+		read := mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = agentPort.AsRemote()
 		read.Dst = cacheComp.GetPortByName("Top").AsRemote()
@@ -324,13 +324,13 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		engine.Run()
 
 		rsp := agentPort.RetrieveIncoming()
-		dr := rsp.(*mem.DataReadyRsp)
+		dr := rsp.(mem.DataReadyRsp)
 		Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 		Expect(dr.RspTo).To(Equal(read.ID))
 	})
 
 	It("should flush", func() {
-		write1 := &mem.WriteReq{}
+		write1 := mem.WriteReq{}
 		write1.ID = timing.GetIDGenerator().Generate()
 		write1.Src = agentPort.AsRemote()
 		write1.Dst = cacheComp.GetPortByName("Top").AsRemote()
@@ -340,7 +340,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		write1.TrafficClass = "mem.WriteReq"
 		cacheComp.GetPortByName("Top").Deliver(write1)
 
-		write2 := &mem.WriteReq{}
+		write2 := mem.WriteReq{}
 		write2.ID = timing.GetIDGenerator().Generate()
 		write2.Src = agentPort.AsRemote()
 		write2.Dst = cacheComp.GetPortByName("Top").AsRemote()
@@ -355,7 +355,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		Expect(controlAgentPort.RetrieveIncoming()).To(BeNil())
 
 		// Flush is a conditional verb: pause first so it is legal.
-		pause := &mem.ControlReq{Command: mem.CmdPause}
+		pause := mem.ControlReq{Command: mem.CmdPause}
 		pause.ID = timing.GetIDGenerator().Generate()
 		pause.Src = controlAgentPort.AsRemote()
 		pause.Dst = cacheComp.GetPortByName("Control").AsRemote()
@@ -366,10 +366,10 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		pauseRsp := controlAgentPort.RetrieveIncoming()
 		Expect(pauseRsp).NotTo(BeNil())
-		Expect(pauseRsp.(*mem.ControlRsp).Command).To(Equal(mem.CmdPause))
-		Expect(pauseRsp.(*mem.ControlRsp).Success).To(BeTrue())
+		Expect(pauseRsp.(mem.ControlRsp).Command).To(Equal(mem.CmdPause))
+		Expect(pauseRsp.(mem.ControlRsp).Success).To(BeTrue())
 
-		flush := &mem.ControlReq{Command: mem.CmdFlush}
+		flush := mem.ControlReq{Command: mem.CmdFlush}
 		flush.ID = timing.GetIDGenerator().Generate()
 		flush.Src = controlAgentPort.AsRemote()
 		flush.Dst = cacheComp.GetPortByName("Control").AsRemote()
@@ -381,7 +381,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		rsp := controlAgentPort.RetrieveIncoming()
 		Expect(rsp).NotTo(BeNil())
 		Expect(rsp.Meta().RspTo).To(Equal(flush.ID))
-		Expect(rsp.(*mem.ControlRsp).Success).To(BeTrue())
+		Expect(rsp.(mem.ControlRsp).Success).To(BeTrue())
 
 		// The dirty block's data reached DRAM.
 		flushed, err := dramStorage.Read(0x100000, 4)

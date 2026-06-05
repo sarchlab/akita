@@ -487,7 +487,7 @@ type MyProcessor struct{}
 
 func (p *MyProcessor) Process(
     comp *modeling.EventDrivenComponent[MySpec, MyState],
-    now sim.VTimeInSec,
+    now sim.VTimeInPicoSec,
 ) bool {
     state := &comp.State
     spec := comp.Spec
@@ -520,10 +520,10 @@ event-driven component.
 
 ## 7. Key Types Reference
 
-### `sim.VTimeInSec`
+### `sim.VTimeInPicoSec`
 
 ```go
-type VTimeInSec uint64  // time in picoseconds (despite the legacy name)
+type VTimeInPicoSec uint64  // time in picoseconds
 ```
 
 All simulation time is measured in **picoseconds** as unsigned 64-bit integers.
@@ -543,7 +543,7 @@ const (
 ```
 
 Key methods:
-- `f.Period()` → `VTimeInSec` — picoseconds between ticks. E.g., `(1*GHz).Period()` = 1000 ps.
+- `f.Period()` → `VTimeInPicoSec` — picoseconds between ticks. E.g., `(1*GHz).Period()` = 1000 ps.
 - `f.NextTick(now)` → next tick boundary after `now`.
 - `f.ThisTick(now)` → current tick boundary (ceil to nearest).
 - `f.NCyclesLater(n, now)` → time after N cycles from current tick.
@@ -623,7 +623,7 @@ Implementations:
 
 ```go
 type Event interface {
-    Time() VTimeInSec
+    Time() VTimeInPicoSec
     HandlerID() string       // dispatched to registered handler
     IsSecondary() bool       // secondary events run after same-time primaries
 }

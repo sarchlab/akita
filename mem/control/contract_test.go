@@ -89,7 +89,7 @@ func (c *fakeComp) Tick() bool {
 
 	if c.pending == nil {
 		if msg := port.PeekIncoming(); msg != nil {
-			if req, ok := msg.(*mem.ControlReq); ok {
+			if req, ok := msg.(mem.ControlReq); ok {
 				port.RetrieveIncoming()
 				made = c.handleReq(port, req) || made
 			}
@@ -99,7 +99,7 @@ func (c *fakeComp) Tick() bool {
 	return made
 }
 
-func (c *fakeComp) handleReq(port messaging.Port, req *mem.ControlReq) bool {
+func (c *fakeComp) handleReq(port messaging.Port, req mem.ControlReq) bool {
 	if !c.matrix.Supports(req.Command) {
 		return c.respond(port, req, false, control.ErrUnsupported)
 	}
@@ -132,7 +132,7 @@ func (c *fakeComp) handleReq(port messaging.Port, req *mem.ControlReq) bool {
 
 func (c *fakeComp) respond(
 	port messaging.Port,
-	req *mem.ControlReq,
+	req mem.ControlReq,
 	success bool,
 	errStr string,
 ) bool {
@@ -149,9 +149,9 @@ func (c *fakeComp) makeRsp(
 	rspTo uint64,
 	success bool,
 	errStr string,
-) *mem.ControlRsp {
+) mem.ControlRsp {
 	port := c.ports["Control"]
-	rsp := &mem.ControlRsp{
+	rsp := mem.ControlRsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,

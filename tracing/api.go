@@ -182,17 +182,36 @@ func EndTask(
 	domain.InvokeHook(ctx)
 }
 
-// MsgIDAtReceiver returns the RecvTaskID for the message, generating one if needed.
+// MsgIDAtReceiver returns the receiver-side task ID for the message at the
+// given domain, generating one if needed. The ID is held in a tracing-local
+// registry keyed by (domain, msg.Meta().ID), so the message itself is never
+// mutated. When the domain has no hooks the receiver-side ID is unused, so
+// this returns 0 without touching the registry — that avoids accumulating
+// entries in simulations that never enable tracing.
 func MsgIDAtReceiver(msg messaging.Msg, domain NamedHookable) uint64 {
-	if msg.Meta().RecvTaskID == 0 {
-		msg.Meta().RecvTaskID = timing.GetIDGenerator().Generate()
+	if domain.NumHooks() == 0 {
+		return 0
 	}
-	return msg.Meta().RecvTaskID
+
+	return lookupOrCreateReceiverTaskID(msg, domain)
 }
 
-// TraceReqInitiate generates a new task. The new task has Type="req_out",
-// What=[the type name of the message]. This function is to be called by the
-// sender of the message.
+// ForgetMsgIDAtReceiver releases the registry entry created by
+// [MsgIDAtReceiver] for the message identified by msgID. Use this on
+// completion paths that only retain the request's message ID, not the
+// message value. When the domain has no hooks no entry was ever
+// inserted, so this is a no-op and avoids taking the registry mutex.
+func ForgetMsgIDAtReceiver(msgID uint64, domain NamedHookable) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
+	forgetReceiverTaskIDByMsgID(msgID, domain)
+}
+
+// TraceReqInitiate marks a task starting at the sender of a message. The
+// task ID is the message's own ID, which is fixed at message construction.
+// The task kind is "req_out".
 func TraceReqInitiate(
 	msg messaging.Msg,
 	domain NamedHookable,
@@ -202,21 +221,19 @@ func TraceReqInitiate(
 		return
 	}
 
-	if msg.Meta().SendTaskID == 0 {
-		msg.Meta().SendTaskID = timing.GetIDGenerator().Generate()
-	}
 	StartTask(
-		msg.Meta().SendTaskID,
+		msg.Meta().ID,
 		taskParentID,
 		domain,
 		"req_out",
-		reflect.TypeOf(msg).Elem().Name(),
+		msgTypeName(msg),
 		msg,
 	)
 }
 
-// TraceReqReceive generates a new task for the message handling. The kind of
-// the task is always "req_in".
+// TraceReqReceive marks a task starting at the receiver of a message. The
+// parent is the sender's req_out task, identified by the message's ID. The
+// task kind is "req_in".
 func TraceReqReceive(
 	msg messaging.Msg,
 	domain NamedHookable,
@@ -227,27 +244,45 @@ func TraceReqReceive(
 
 	StartTask(
 		MsgIDAtReceiver(msg, domain),
-		msg.Meta().SendTaskID,
+		msg.Meta().ID,
 		domain,
 		"req_in",
-		reflect.TypeOf(msg).Elem().Name(),
+		msgTypeName(msg),
 		msg,
 	)
 }
 
-// TraceReqComplete terminates the message handling task.
+// TraceReqComplete terminates the receiver-side handling task for a message
+// and releases the registry entry held for it.
 func TraceReqComplete(
 	msg messaging.Msg,
 	domain NamedHookable,
 ) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
 	EndTask(MsgIDAtReceiver(msg, domain), domain)
+	forgetReceiverTaskID(msg, domain)
 }
 
-// TraceReqFinalize terminates the message task. This function should be called
-// when the sender receives the response.
+// TraceReqFinalize terminates the sender-side task for a message. The sender
+// calls this when the response arrives.
 func TraceReqFinalize(
 	msg messaging.Msg,
 	domain NamedHookable,
 ) {
-	EndTask(msg.Meta().SendTaskID, domain)
+	EndTask(msg.Meta().ID, domain)
+}
+
+// msgTypeName returns the Go type name of the message's underlying type,
+// transparently unwrapping pointers so both value- and pointer-typed
+// implementations of [messaging.Msg] yield a non-empty name.
+func msgTypeName(msg messaging.Msg) string {
+	t := reflect.TypeOf(msg)
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+
+	return t.Name()
 }

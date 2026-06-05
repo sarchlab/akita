@@ -50,7 +50,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		return false
 	}
 
-	req, ok := reqI.(*DataMoveRequest)
+	req, ok := reqI.(DataMoveRequest)
 	if !ok {
 		log.Panicf("can't process request of type %s", reflect.TypeOf(reqI))
 	}
@@ -111,7 +111,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		return false
 	}
 
-	rsp := &DataMoveResponse{
+	rsp := DataMoveResponse{
 		MsgMeta: messaging.MsgMeta{
 			ID:    timing.GetIDGenerator().Generate(),
 			Src:   trans.ReqDst,

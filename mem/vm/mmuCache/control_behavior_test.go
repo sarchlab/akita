@@ -59,8 +59,8 @@ var _ = Describe("MMUCache control behavior", func() {
 		}
 	}
 
-	makeTranslationReq := func(vAddr uint64) *vm.TranslationReq {
-		req := &vm.TranslationReq{}
+	makeTranslationReq := func(vAddr uint64) vm.TranslationReq {
+		req := vm.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = topPort.AsRemote()
@@ -71,8 +71,8 @@ var _ = Describe("MMUCache control behavior", func() {
 		return req
 	}
 
-	makeCtrlReq := func(cmd mem.ControlCommand) *mem.ControlReq {
-		req := &mem.ControlReq{Command: cmd}
+	makeCtrlReq := func(cmd mem.ControlCommand) mem.ControlReq {
+		req := mem.ControlReq{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = controlPort.AsRemote()
@@ -95,8 +95,9 @@ var _ = Describe("MMUCache control behavior", func() {
 		controlPort.Deliver(drain)
 
 		forwarded := 0
-		var drainRsp *mem.ControlRsp
-		for i := 0; i < 4096 && drainRsp == nil; i++ {
+		var drainRsp mem.ControlRsp
+		drainFound := false
+		for i := 0; i < 4096 && !drainFound; i++ {
 			comp.Tick()
 
 			for {
@@ -104,20 +105,21 @@ var _ = Describe("MMUCache control behavior", func() {
 				if out == nil {
 					break
 				}
-				if _, ok := out.(*vm.TranslationReq); ok {
+				if _, ok := out.(vm.TranslationReq); ok {
 					forwarded++
 				}
 			}
 
 			if out := controlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(*mem.ControlRsp); ok &&
+				if rsp, ok := out.(mem.ControlRsp); ok &&
 					rsp.Command == mem.CmdDrain {
 					drainRsp = rsp
+					drainFound = true
 				}
 			}
 		}
 
-		Expect(drainRsp).ToNot(BeNil())
+		Expect(drainFound).To(BeTrue())
 		Expect(drainRsp.Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
 		// Every queued lookup was forwarded out the Bottom port, the Top queue
@@ -149,15 +151,16 @@ var _ = Describe("MMUCache control behavior", func() {
 			reset := makeCtrlReq(mem.CmdReset)
 			controlPort.Deliver(reset)
 
-			var rsp *mem.ControlRsp
-			for i := 0; i < 64 && rsp == nil; i++ {
+			var rsp mem.ControlRsp
+			found := false
+			for i := 0; i < 64 && !found; i++ {
 				comp.Tick()
 				if out := controlPort.RetrieveOutgoing(); out != nil {
-					rsp, _ = out.(*mem.ControlRsp)
+					rsp, found = out.(mem.ControlRsp)
 				}
 			}
 
-			Expect(rsp).ToNot(BeNil())
+			Expect(found).To(BeTrue())
 			Expect(rsp.Command).To(Equal(mem.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))

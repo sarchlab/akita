@@ -36,8 +36,8 @@ var _ = Describe("DRAM control behavior", func() {
 		}
 	}
 
-	makeRead := func(addr uint64) *mem.ReadReq {
-		req := &mem.ReadReq{}
+	makeRead := func(addr uint64) mem.ReadReq {
+		req := mem.ReadReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
@@ -48,8 +48,8 @@ var _ = Describe("DRAM control behavior", func() {
 		return req
 	}
 
-	makeCtrlReq := func(cmd mem.ControlCommand) *mem.ControlReq {
-		req := &mem.ControlReq{Command: cmd}
+	makeCtrlReq := func(cmd mem.ControlCommand) mem.ControlReq {
+		req := mem.ControlReq{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
@@ -84,27 +84,29 @@ var _ = Describe("DRAM control behavior", func() {
 		ctrlPort.Deliver(drain)
 
 		completed := 0
-		var drainRsp *mem.ControlRsp
-		for i := 0; i < 4096 && drainRsp == nil; i++ {
+		var drainRsp mem.ControlRsp
+		drainFound := false
+		for i := 0; i < 4096 && !drainFound; i++ {
 			comp.Tick()
 			for {
 				out := topPort.RetrieveOutgoing()
 				if out == nil {
 					break
 				}
-				if _, ok := out.(*mem.DataReadyRsp); ok {
+				if _, ok := out.(mem.DataReadyRsp); ok {
 					completed++
 				}
 			}
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(*mem.ControlRsp); ok &&
+				if rsp, ok := out.(mem.ControlRsp); ok &&
 					rsp.Command == mem.CmdDrain {
 					drainRsp = rsp
+					drainFound = true
 				}
 			}
 		}
 
-		Expect(drainRsp).ToNot(BeNil())
+		Expect(drainFound).To(BeTrue())
 		Expect(drainRsp.Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
 		// Every in-flight read finished, and none remain, by the time the
@@ -138,15 +140,19 @@ var _ = Describe("DRAM control behavior", func() {
 			reset := makeCtrlReq(mem.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp *mem.ControlRsp
-			for i := 0; i < 64 && rsp == nil; i++ {
+			var rsp mem.ControlRsp
+			found := false
+			for i := 0; i < 64 && !found; i++ {
 				comp.Tick()
 				if out := ctrlPort.RetrieveOutgoing(); out != nil {
-					rsp, _ = out.(*mem.ControlRsp)
+					if r, ok := out.(mem.ControlRsp); ok {
+						rsp = r
+						found = true
+					}
 				}
 			}
 
-			Expect(rsp).ToNot(BeNil())
+			Expect(found).To(BeTrue())
 			Expect(rsp.Command).To(Equal(mem.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))

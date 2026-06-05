@@ -57,7 +57,7 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 		return false
 	}
 
-	req, ok := msg.(*mem.ControlReq)
+	req, ok := msg.(mem.ControlReq)
 	if !ok {
 		return false
 	}
@@ -80,7 +80,7 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 	}
 }
 
-func (m *ctrlMiddleware) handlePause(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handlePause(req mem.ControlReq) bool {
 	if !m.ctrlPort.CanSend() {
 		return false
 	}
@@ -91,7 +91,7 @@ func (m *ctrlMiddleware) handlePause(req *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleDrain(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleDrain(req mem.ControlReq) bool {
 	next := &m.pipeline.comp.State
 	next.IsDraining = true
 	next.CurrentCmdID = req.ID
@@ -100,7 +100,7 @@ func (m *ctrlMiddleware) handleDrain(req *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleEnable(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleEnable(req mem.ControlReq) bool {
 	if !m.ctrlPort.CanSend() {
 		return false
 	}
@@ -124,7 +124,7 @@ func (m *ctrlMiddleware) handleEnable(req *mem.ControlReq) bool {
 
 // handleReset wipes the cache back to a freshly-built state without
 // writeback (the writethrough cache holds no dirty data anyway).
-func (m *ctrlMiddleware) handleReset(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
 	if !m.ctrlPort.CanSend() {
 		return false
 	}
@@ -165,7 +165,7 @@ func (m *ctrlMiddleware) handleReset(req *mem.ControlReq) bool {
 // matching blocks are dropped without any writeback. Invalidate is a
 // synchronous verb that is only legal once the cache is paused or
 // drained; issued while Enabled it is rejected.
-func (m *ctrlMiddleware) handleInvalidate(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleInvalidate(req mem.ControlReq) bool {
 	next := &m.pipeline.comp.State
 	if !next.IsPaused && !next.IsDraining {
 		return m.rejectMustBePaused(req)
@@ -188,7 +188,7 @@ func (m *ctrlMiddleware) handleInvalidate(req *mem.ControlReq) bool {
 // there is nothing to write back: Flush is a no-op that immediately acks
 // Success, leaving the directory intact. Like Invalidate it is only legal
 // once the cache is paused or drained.
-func (m *ctrlMiddleware) handleFlush(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleFlush(req mem.ControlReq) bool {
 	next := &m.pipeline.comp.State
 	if !next.IsPaused && !next.IsDraining {
 		return m.rejectMustBePaused(req)
@@ -205,7 +205,7 @@ func (m *ctrlMiddleware) handleFlush(req *mem.ControlReq) bool {
 
 // rejectMustBePaused responds that a conditional verb is illegal while
 // the cache is Enabled.
-func (m *ctrlMiddleware) rejectMustBePaused(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) rejectMustBePaused(req mem.ControlReq) bool {
 	if !m.ctrlPort.CanSend() {
 		return false
 	}
@@ -250,7 +250,7 @@ func invalidateBlocks(
 	}
 }
 
-func (m *ctrlMiddleware) handleUnsupported(req *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleUnsupported(req mem.ControlReq) bool {
 	if !m.ctrlPort.CanSend() {
 		return false
 	}
@@ -267,8 +267,8 @@ func makeCtrlRsp(
 	rspTo uint64,
 	success bool,
 	errStr string,
-) *mem.ControlRsp {
-	rsp := &mem.ControlRsp{
+) mem.ControlRsp {
+	rsp := mem.ControlRsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,

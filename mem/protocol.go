@@ -30,17 +30,17 @@ type ReadReq struct {
 }
 
 // GetByteSize returns the number of bytes that the request is accessing.
-func (r *ReadReq) GetByteSize() uint64 {
+func (r ReadReq) GetByteSize() uint64 {
 	return r.AccessByteSize
 }
 
 // GetAddress returns the address that the request is accessing.
-func (r *ReadReq) GetAddress() uint64 {
+func (r ReadReq) GetAddress() uint64 {
 	return r.Address
 }
 
 // GetPID returns the process ID that the request is working on.
-func (r *ReadReq) GetPID() vm.PID {
+func (r ReadReq) GetPID() vm.PID {
 	return r.PID
 }
 
@@ -56,17 +56,17 @@ type WriteReq struct {
 }
 
 // GetByteSize returns the number of bytes that the request is writing.
-func (r *WriteReq) GetByteSize() uint64 {
+func (r WriteReq) GetByteSize() uint64 {
 	return uint64(len(r.Data))
 }
 
 // GetAddress returns the address that the request is accessing.
-func (r *WriteReq) GetAddress() uint64 {
+func (r WriteReq) GetAddress() uint64 {
 	return r.Address
 }
 
 // GetPID returns the PID of the read address.
-func (r *WriteReq) GetPID() vm.PID {
+func (r WriteReq) GetPID() vm.PID {
 	return r.PID
 }
 

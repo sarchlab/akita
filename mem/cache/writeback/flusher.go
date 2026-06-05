@@ -152,7 +152,7 @@ func (f *flusher) extractFromPort() bool {
 		return false
 	}
 
-	req, ok := msg.(*mem.ControlReq)
+	req, ok := msg.(mem.ControlReq)
 	if !ok {
 		return false
 	}
@@ -173,7 +173,7 @@ func (f *flusher) extractFromPort() bool {
 }
 
 // rejectFlush replies that Flush is illegal while the cache is Running.
-func (f *flusher) rejectFlush(msg *mem.ControlReq) bool {
+func (f *flusher) rejectFlush(msg mem.ControlReq) bool {
 	if !f.ctrlPort.CanSend() {
 		return false
 	}
@@ -185,7 +185,7 @@ func (f *flusher) rejectFlush(msg *mem.ControlReq) bool {
 	return true
 }
 
-func (f *flusher) startProcessingFlush(msg *mem.ControlReq) bool {
+func (f *flusher) startProcessingFlush(msg mem.ControlReq) bool {
 	next := &f.pipeline.comp.State
 
 	next.HasProcessingFlush = true
@@ -218,7 +218,7 @@ func (f *flusher) finalizeFlushing() bool {
 		return false
 	}
 
-	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
+	rsp := mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = f.ctrlPort.AsRemote()
 	rsp.Dst = next.ProcessingFlush.MsgMeta.Src
@@ -239,7 +239,7 @@ func (f *flusher) finalizeFlushing() bool {
 	// Flush is only legal from paused, and returns the cache to paused.
 	next.CacheState = int(cacheStatePaused)
 
-	tracing.TraceReqComplete(&next.ProcessingFlush.MsgMeta, f.pipeline.comp)
+	tracing.TraceReqComplete(next.ProcessingFlush.MsgMeta, f.pipeline.comp)
 	next.HasProcessingFlush = false
 	next.ProcessingFlush = flushReqState{}
 

@@ -62,7 +62,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 		return false
 	}
 
-	ctrlReq, ok := msg.(*mem.ControlReq)
+	ctrlReq, ok := msg.(mem.ControlReq)
 	if !ok {
 		return false
 	}
@@ -87,7 +87,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	}
 }
 
-func (m *ctrlMiddleware) performCtrlEnable(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) performCtrlEnable(msg mem.ControlReq) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
@@ -104,10 +104,12 @@ func (m *ctrlMiddleware) performCtrlEnable(msg *mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
+
 	return true
 }
 
-func (m *ctrlMiddleware) performCtrlDrain(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) performCtrlDrain(msg mem.ControlReq) bool {
 	state := &m.comp.State
 	state.TLBState = tlbStateDrain
 	state.PendingDrainRsp = true
@@ -122,10 +124,12 @@ func (m *ctrlMiddleware) performCtrlDrain(msg *mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
+
 	return true
 }
 
-func (m *ctrlMiddleware) performCtrlPause(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) performCtrlPause(msg mem.ControlReq) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
@@ -142,6 +146,8 @@ func (m *ctrlMiddleware) performCtrlPause(msg *mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
+
 	return true
 }
 
@@ -149,7 +155,7 @@ func (m *ctrlMiddleware) performCtrlPause(msg *mem.ControlReq) bool {
 // address/PID filter (empty address list = all addresses, zero PID = all
 // PIDs). Invalidate is a synchronous verb but is only legal once the TLB
 // is paused or drained; issued while Enabled it is rejected.
-func (m *ctrlMiddleware) handleInvalidate(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleInvalidate(msg mem.ControlReq) bool {
 	state := &m.comp.State
 	if state.TLBState == tlbStateEnable {
 		return m.rejectMustBePaused(msg)
@@ -170,12 +176,14 @@ func (m *ctrlMiddleware) handleInvalidate(msg *mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
+
 	return true
 }
 
 // rejectMustBePaused responds that a conditional verb is illegal while the
 // component is Enabled.
-func (m *ctrlMiddleware) rejectMustBePaused(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) rejectMustBePaused(msg mem.ControlReq) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
@@ -216,7 +224,7 @@ func invalidateEntries(
 	}
 }
 
-func (m *ctrlMiddleware) handleReset(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleReset(msg mem.ControlReq) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
@@ -230,6 +238,7 @@ func (m *ctrlMiddleware) handleReset(msg *mem.ControlReq) bool {
 		m.comp.Name(),
 		m.comp,
 	)
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	state := &m.comp.State
 	state.TLBState = tlbStateEnable
@@ -253,7 +262,7 @@ func (m *ctrlMiddleware) handleReset(msg *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleUnsupported(msg *mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleUnsupported(msg mem.ControlReq) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
@@ -270,8 +279,8 @@ func makeCtrlRsp(
 	rspTo uint64,
 	success bool,
 	errStr string,
-) *mem.ControlRsp {
-	rsp := &mem.ControlRsp{
+) mem.ControlRsp {
+	rsp := mem.ControlRsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,

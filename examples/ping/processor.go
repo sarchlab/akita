@@ -34,7 +34,7 @@ func outPort(
 // matured responses, and processing incoming messages.
 func (p *pingProcessor) Process(
 	comp *modeling.EventDrivenComponent[Spec, State, modeling.None],
-	now timing.VTimeInSec,
+	now timing.VTimeInPicoSec,
 ) bool {
 	progress := false
 	state := &comp.State
@@ -49,7 +49,7 @@ func (p *pingProcessor) Process(
 func (p *pingProcessor) sendScheduledPings(
 	comp *modeling.EventDrivenComponent[Spec, State, modeling.None],
 	state *State,
-	now timing.VTimeInSec,
+	now timing.VTimeInPicoSec,
 ) bool {
 	progress := false
 	remaining := make([]scheduledPing, 0, len(state.ScheduledPings))
@@ -66,7 +66,7 @@ func (p *pingProcessor) sendScheduledPings(
 			continue
 		}
 
-		pingMsg := &pingReq{
+		pingMsg := pingReq{
 			MsgMeta: messaging.MsgMeta{
 				ID:  timing.GetIDGenerator().Generate(),
 				Src: outPort(comp).AsRemote(),
@@ -90,7 +90,7 @@ func (p *pingProcessor) sendScheduledPings(
 func (p *pingProcessor) deliverPendingResponses(
 	comp *modeling.EventDrivenComponent[Spec, State, modeling.None],
 	state *State,
-	now timing.VTimeInSec,
+	now timing.VTimeInPicoSec,
 ) bool {
 	progress := false
 	remaining := make([]pendingResponse, 0, len(state.PendingResponses))
@@ -107,7 +107,7 @@ func (p *pingProcessor) deliverPendingResponses(
 			continue
 		}
 
-		rsp := &pingRsp{
+		rsp := pingRsp{
 			MsgMeta: messaging.MsgMeta{
 				ID:    timing.GetIDGenerator().Generate(),
 				Src:   outPort(comp).AsRemote(),
@@ -129,7 +129,7 @@ func (p *pingProcessor) deliverPendingResponses(
 func (p *pingProcessor) processIncoming(
 	comp *modeling.EventDrivenComponent[Spec, State, modeling.None],
 	state *State,
-	now timing.VTimeInSec,
+	now timing.VTimeInPicoSec,
 ) bool {
 	progress := false
 
@@ -140,7 +140,7 @@ func (p *pingProcessor) processIncoming(
 		}
 
 		switch m := msg.(type) {
-		case *pingReq:
+		case pingReq:
 			state.PendingResponses = append(state.PendingResponses,
 				pendingResponse{
 					DeliverAt: now + 2_000_000_000_000,
@@ -150,7 +150,7 @@ func (p *pingProcessor) processIncoming(
 				})
 			comp.ScheduleWakeAt(now + 2_000_000_000_000)
 			progress = true
-		case *pingRsp:
+		case pingRsp:
 			seqID := m.SeqID
 			startTime := state.StartTimes[seqID]
 			duration := now - startTime

@@ -61,8 +61,8 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		}
 	}
 
-	makeRead := func(addr uint64) *mem.ReadReq {
-		req := &mem.ReadReq{}
+	makeRead := func(addr uint64) mem.ReadReq {
+		req := mem.ReadReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
@@ -73,8 +73,8 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		return req
 	}
 
-	makeCtrlReq := func(cmd mem.ControlCommand) *mem.ControlReq {
-		req := &mem.ControlReq{Command: cmd}
+	makeCtrlReq := func(cmd mem.ControlCommand) mem.ControlReq {
+		req := mem.ControlReq{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
@@ -86,12 +86,12 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 	// the cache matches the response to the in-flight fetch by
 	// FetchReadReqMeta.ID == msg.RspTo, so RspTo must equal the captured Bottom
 	// read's ID. The data is block-sized.
-	makeFillRsp := func(read *mem.ReadReq) *mem.DataReadyRsp {
+	makeFillRsp := func(read mem.ReadReq) mem.DataReadyRsp {
 		data := make([]byte, blockSize)
 		for i := range data {
 			data[i] = byte(i + 1)
 		}
-		rsp := &mem.DataReadyRsp{Data: data}
+		rsp := mem.DataReadyRsp{Data: data}
 		rsp.ID = timing.GetIDGenerator().Generate()
 		rsp.Src = messaging.RemotePort("LowerCache")
 		rsp.Dst = botPort.AsRemote()
@@ -103,7 +103,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 	makeFilteredCtrlReq := func(
 		cmd mem.ControlCommand,
 		addresses []uint64,
-	) *mem.ControlReq {
+	) mem.ControlReq {
 		req := makeCtrlReq(cmd)
 		req.Addresses = addresses
 		return req
@@ -140,7 +140,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		const n = 3
 
 		// Deliver N distinct-block read misses.
-		reads := make([]*mem.ReadReq, n)
+		reads := make([]mem.ReadReq, n)
 		for i := range n {
 			reads[i] = makeRead(uint64(i) * blockSize)
 			topPort.Deliver(reads[i])
@@ -148,7 +148,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 
 		// Tick until every miss has fired a Bottom read; capture them so we
 		// can answer later. Until we answer, the cache cannot be quiescent.
-		botReads := make([]*mem.ReadReq, 0, n)
+		botReads := make([]mem.ReadReq, 0, n)
 		for i := 0; i < 64 && len(botReads) < n; i++ {
 			comp.Tick()
 			for {
@@ -156,7 +156,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 				if out == nil {
 					break
 				}
-				if r, ok := out.(*mem.ReadReq); ok {
+				if r, ok := out.(mem.ReadReq); ok {
 					botReads = append(botReads, r)
 				}
 			}
@@ -177,7 +177,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		for range 5 {
 			comp.Tick()
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(*mem.ControlRsp); ok {
+				if rsp, ok := out.(mem.ControlRsp); ok {
 					Expect(rsp.Command).ToNot(Equal(mem.CmdDrain),
 						"Drain must not ack before in-flight misses finish")
 				}
@@ -194,27 +194,29 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		// Tick while counting completed Top responses and watching Control for
 		// the async Drain ack.
 		completed := 0
-		var drainRsp *mem.ControlRsp
-		for i := 0; i < 4096 && drainRsp == nil; i++ {
+		var drainRsp mem.ControlRsp
+		gotDrainRsp := false
+		for i := 0; i < 4096 && !gotDrainRsp; i++ {
 			comp.Tick()
 			for {
 				out := topPort.RetrieveOutgoing()
 				if out == nil {
 					break
 				}
-				if _, ok := out.(*mem.DataReadyRsp); ok {
+				if _, ok := out.(mem.DataReadyRsp); ok {
 					completed++
 				}
 			}
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(*mem.ControlRsp); ok &&
+				if rsp, ok := out.(mem.ControlRsp); ok &&
 					rsp.Command == mem.CmdDrain {
 					drainRsp = rsp
+					gotDrainRsp = true
 				}
 			}
 		}
 
-		Expect(drainRsp).ToNot(BeNil())
+		Expect(gotDrainRsp).To(BeTrue())
 		Expect(drainRsp.Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
 		Expect(completed).To(Equal(n))
@@ -251,15 +253,16 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 			reset := makeCtrlReq(mem.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp *mem.ControlRsp
-			for i := 0; i < 64 && rsp == nil; i++ {
+			var rsp mem.ControlRsp
+			gotRsp := false
+			for i := 0; i < 64 && !gotRsp; i++ {
 				comp.Tick()
 				if out := ctrlPort.RetrieveOutgoing(); out != nil {
-					rsp, _ = out.(*mem.ControlRsp)
+					rsp, gotRsp = out.(mem.ControlRsp)
 				}
 			}
 
-			Expect(rsp).ToNot(BeNil())
+			Expect(gotRsp).To(BeTrue())
 			Expect(rsp.Command).To(Equal(mem.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
@@ -292,15 +295,16 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		inv := makeFilteredCtrlReq(mem.CmdInvalidate, []uint64{addrDrop})
 		ctrlPort.Deliver(inv)
 
-		var rsp *mem.ControlRsp
-		for i := 0; i < 64 && rsp == nil; i++ {
+		var rsp mem.ControlRsp
+		gotRsp := false
+		for i := 0; i < 64 && !gotRsp; i++ {
 			comp.Tick()
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				rsp, _ = out.(*mem.ControlRsp)
+				rsp, gotRsp = out.(mem.ControlRsp)
 			}
 		}
 
-		Expect(rsp).ToNot(BeNil())
+		Expect(gotRsp).To(BeTrue())
 		Expect(rsp.Command).To(Equal(mem.CmdInvalidate))
 		Expect(rsp.Success).To(BeTrue())
 		Expect(rsp.RspTo).To(Equal(inv.ID))
@@ -328,15 +332,16 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 			inv := makeCtrlReq(mem.CmdInvalidate)
 			ctrlPort.Deliver(inv)
 
-			var rsp *mem.ControlRsp
-			for i := 0; i < 64 && rsp == nil; i++ {
+			var rsp mem.ControlRsp
+			gotRsp := false
+			for i := 0; i < 64 && !gotRsp; i++ {
 				comp.Tick()
 				if out := ctrlPort.RetrieveOutgoing(); out != nil {
-					rsp, _ = out.(*mem.ControlRsp)
+					rsp, gotRsp = out.(mem.ControlRsp)
 				}
 			}
 
-			Expect(rsp).ToNot(BeNil())
+			Expect(gotRsp).To(BeTrue())
 			Expect(rsp.Command).To(Equal(mem.CmdInvalidate))
 			Expect(rsp.Success).To(BeFalse())
 			Expect(rsp.Error).To(Equal(control.ErrMustBePausedOrDrained))
@@ -364,18 +369,19 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		// Drive to completion, capturing every Bottom write-back and the
 		// async Flush ack. The lower memory must answer write-backs with a
 		// WriteDoneRsp or the flush never finishes.
-		botWrites := []*mem.WriteReq{}
-		var flushRsp *mem.ControlRsp
-		for i := 0; i < 4096 && flushRsp == nil; i++ {
+		botWrites := []mem.WriteReq{}
+		var flushRsp mem.ControlRsp
+		gotFlushRsp := false
+		for i := 0; i < 4096 && !gotFlushRsp; i++ {
 			comp.Tick()
 			for {
 				out := botPort.RetrieveOutgoing()
 				if out == nil {
 					break
 				}
-				if w, ok := out.(*mem.WriteReq); ok {
+				if w, ok := out.(mem.WriteReq); ok {
 					botWrites = append(botWrites, w)
-					done := &mem.WriteDoneRsp{}
+					done := mem.WriteDoneRsp{}
 					done.ID = timing.GetIDGenerator().Generate()
 					done.Src = messaging.RemotePort("LowerCache")
 					done.Dst = botPort.AsRemote()
@@ -385,14 +391,15 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 				}
 			}
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if r, ok := out.(*mem.ControlRsp); ok &&
+				if r, ok := out.(mem.ControlRsp); ok &&
 					r.Command == mem.CmdFlush {
 					flushRsp = r
+					gotFlushRsp = true
 				}
 			}
 		}
 
-		Expect(flushRsp).ToNot(BeNil())
+		Expect(gotFlushRsp).To(BeTrue())
 		Expect(flushRsp.Success).To(BeTrue())
 		Expect(flushRsp.RspTo).To(Equal(flush.ID))
 

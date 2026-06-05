@@ -117,7 +117,7 @@ var _ = Describe("Flusher", func() {
 			// Flush is a conditional verb: it is only legal once paused.
 			m.comp.State.CacheState = int(cacheStatePaused)
 
-			req := &mem.ControlReq{Command: mem.CmdFlush}
+			req := mem.ControlReq{Command: mem.CmdFlush}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.TrafficClass = "mem.ControlReq"
 			controlPort.EXPECT().PeekIncoming().Return(req)
@@ -203,7 +203,7 @@ var _ = Describe("Flusher", func() {
 			// Flush is a conditional verb: it is only legal once paused.
 			m.comp.State.CacheState = int(cacheStatePaused)
 
-			req := &mem.ControlReq{Command: mem.CmdFlush}
+			req := mem.ControlReq{Command: mem.CmdFlush}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.TrafficClass = "mem.ControlReq"
 

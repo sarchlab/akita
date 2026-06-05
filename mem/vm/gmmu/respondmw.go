@@ -47,7 +47,7 @@ func (m *respondMW) fetchFromBottom() bool {
 	}
 
 	switch rsp := rspI.(type) {
-	case *vm.TranslationRsp:
+	case vm.TranslationRsp:
 		tracing.TraceReqReceive(rsp, m.comp)
 		return m.handleTranslationRsp(rsp)
 	default:
@@ -57,7 +57,7 @@ func (m *respondMW) fetchFromBottom() bool {
 	}
 }
 
-func (m *respondMW) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
+func (m *respondMW) handleTranslationRsp(rsp vm.TranslationRsp) bool {
 	state := &m.comp.State
 
 	reqTransaction, exists := state.RemoteMemReqs[rsp.RspTo]
@@ -70,7 +70,7 @@ func (m *respondMW) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
 		return false
 	}
 
-	rspToTop := &vm.TranslationRsp{
+	rspToTop := vm.TranslationRsp{
 		Page: rsp.Page,
 	}
 	rspToTop.ID = timing.GetIDGenerator().Generate()

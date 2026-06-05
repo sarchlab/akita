@@ -218,7 +218,7 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
-	writeToBottom := &mem.WriteReq{}
+	writeToBottom := mem.WriteReq{}
 	writeToBottom.ID = timing.GetIDGenerator().Generate()
 	writeToBottom.Src = d.cache.bottomPort.AsRemote()
 	// Route by cache-line ID so the write-through write and the
@@ -262,7 +262,7 @@ func (d *directory) fetchFromBottom(
 	next := &d.cache.comp.State
 
 	bottomModule := d.cache.findPort(cacheLineID)
-	readToBottom := &mem.ReadReq{
+	readToBottom := mem.ReadReq{
 		Address:        cacheLineID,
 		PID:            pid,
 		AccessByteSize: blockSize,

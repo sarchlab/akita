@@ -30,10 +30,10 @@ func driveCtrl(
 	cmd mem.ControlCommand,
 	addrs []uint64,
 	pid vm.PID,
-) *mem.ControlRsp {
+) mem.ControlRsp {
 	t.Helper()
 
-	req := &mem.ControlReq{Command: cmd, Addresses: addrs, PID: pid}
+	req := mem.ControlReq{Command: cmd, Addresses: addrs, PID: pid}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = messaging.RemotePort("Cmd")
 	req.Dst = ctrl.AsRemote()
@@ -43,14 +43,14 @@ func driveCtrl(
 	for range 256 {
 		comp.Tick()
 		if out := ctrl.RetrieveOutgoing(); out != nil {
-			if rsp, ok := out.(*mem.ControlRsp); ok && rsp.Command == cmd {
+			if rsp, ok := out.(mem.ControlRsp); ok && rsp.Command == cmd {
 				return rsp
 			}
 		}
 	}
 
 	t.Fatalf("no ack received for %v", cmd)
-	return nil
+	return mem.ControlRsp{}
 }
 
 // TestTLBSequence_PauseInvalidateEnable exercises the canonical TLB control
@@ -121,21 +121,24 @@ func resolveTranslation(
 ) {
 	t.Helper()
 
-	req := makeTransReq(top, vAddr, pid)
-	top.Deliver(req)
+	top.Deliver(makeTransReq(top, vAddr, pid))
 
-	var botReq *vm.TranslationReq
-	for i := 0; i < 64 && botReq == nil; i++ {
+	var botReq vm.TranslationReq
+	botFound := false
+	for i := 0; i < 64 && !botFound; i++ {
 		comp.Tick()
 		if out := bottom.RetrieveOutgoing(); out != nil {
-			botReq = out.(*vm.TranslationReq)
+			if r, ok := out.(vm.TranslationReq); ok {
+				botReq = r
+				botFound = true
+			}
 		}
 	}
-	if botReq == nil {
+	if !botFound {
 		t.Fatalf("TLB did not forward a miss for %#x to Bottom", vAddr)
 	}
 
-	rsp := &vm.TranslationRsp{Page: vm.Page{
+	rsp := vm.TranslationRsp{Page: vm.Page{
 		PID: pid, VAddr: vAddr, PAddr: vAddr + 0x10000, Valid: true,
 	}}
 	rsp.ID = timing.GetIDGenerator().Generate()
@@ -148,7 +151,7 @@ func resolveTranslation(
 	for range 64 {
 		comp.Tick()
 		if out := top.RetrieveOutgoing(); out != nil {
-			if _, ok := out.(*vm.TranslationRsp); ok {
+			if _, ok := out.(vm.TranslationRsp); ok {
 				return
 			}
 		}
@@ -172,12 +175,12 @@ func lookupMisses(
 	for range 64 {
 		comp.Tick()
 		if out := bottom.RetrieveOutgoing(); out != nil {
-			if _, ok := out.(*vm.TranslationReq); ok {
+			if _, ok := out.(vm.TranslationReq); ok {
 				return true
 			}
 		}
 		if out := top.RetrieveOutgoing(); out != nil {
-			if _, ok := out.(*vm.TranslationRsp); ok {
+			if _, ok := out.(vm.TranslationRsp); ok {
 				return false
 			}
 		}
@@ -259,7 +262,7 @@ func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
 	}
 
 	// 2. Flush (no filter): both dirty blocks are written back to Bottom.
-	flush := &mem.ControlReq{Command: mem.CmdFlush}
+	flush := mem.ControlReq{Command: mem.CmdFlush}
 	flush.ID = timing.GetIDGenerator().Generate()
 	flush.Src = messaging.RemotePort("Cmd")
 	flush.Dst = ctrl.AsRemote()
@@ -267,19 +270,20 @@ func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
 	ctrl.Deliver(flush)
 
 	writtenBack := map[byte]bool{}
-	var flushRsp *mem.ControlRsp
-	for i := 0; i < 2048 && flushRsp == nil; i++ {
+	var flushRsp mem.ControlRsp
+	flushDone := false
+	for i := 0; i < 2048 && !flushDone; i++ {
 		comp.Tick()
 		for {
 			out := bottom.RetrieveOutgoing()
 			if out == nil {
 				break
 			}
-			if w, ok := out.(*mem.WriteReq); ok {
+			if w, ok := out.(mem.WriteReq); ok {
 				if len(w.Data) > 0 {
 					writtenBack[w.Data[0]] = true
 				}
-				done := &mem.WriteDoneRsp{}
+				done := mem.WriteDoneRsp{}
 				done.ID = timing.GetIDGenerator().Generate()
 				done.Src = messaging.RemotePort("LowerCache")
 				done.Dst = bottom.AsRemote()
@@ -289,14 +293,15 @@ func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
 			}
 		}
 		if out := ctrl.RetrieveOutgoing(); out != nil {
-			if rsp, ok := out.(*mem.ControlRsp); ok &&
+			if rsp, ok := out.(mem.ControlRsp); ok &&
 				rsp.Command == mem.CmdFlush {
 				flushRsp = rsp
+				flushDone = true
 			}
 		}
 	}
 
-	if flushRsp == nil || !flushRsp.Success {
+	if !flushDone || !flushRsp.Success {
 		t.Fatalf("Flush did not complete: %+v", flushRsp)
 	}
 	if !writtenBack[0xAA] || !writtenBack[0xBB] {
@@ -341,8 +346,8 @@ func makeTransReq(
 	top messaging.Port,
 	vAddr uint64,
 	pid vm.PID,
-) *vm.TranslationReq {
-	req := &vm.TranslationReq{}
+) vm.TranslationReq {
+	req := vm.TranslationReq{}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = messaging.RemotePort("Agent")
 	req.Dst = top.AsRemote()

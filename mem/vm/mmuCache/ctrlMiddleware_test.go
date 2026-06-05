@@ -55,12 +55,12 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 	})
 
 	It("should restart and drain ports", func() {
-		req := &mem.ControlReq{Command: mem.CmdReset}
+		req := mem.ControlReq{Command: mem.CmdReset}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.TrafficClass = "mem.ControlReq"
 
-		topMsg := &vm.TranslationReq{}
+		topMsg := vm.TranslationReq{}
 		topMsg.ID = timing.GetIDGenerator().Generate()
 		topMsg.Src = messaging.RemotePort("Requester")
 		topMsg.Dst = topPort.AsRemote()
@@ -70,7 +70,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		topMsg.TrafficClass = "vm.TranslationReq"
 		topPort.Deliver(topMsg)
 
-		bottomMsg := &vm.TranslationRsp{
+		bottomMsg := vm.TranslationRsp{
 			Page: vm.Page{},
 		}
 		bottomMsg.ID = timing.GetIDGenerator().Generate()
@@ -89,7 +89,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		Expect(bottomPort.PeekIncoming()).To(BeNil())
 
 		rsp := controlPort.RetrieveOutgoing()
-		ctrlRsp, ok := rsp.(*mem.ControlRsp)
+		ctrlRsp, ok := rsp.(mem.ControlRsp)
 		Expect(ok).To(BeTrue())
 		Expect(ctrlRsp.Command).To(Equal(mem.CmdReset))
 		Expect(ctrlRsp.Success).To(BeTrue())
@@ -98,7 +98,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 	})
 
 	It("should reject Flush as unsupported", func() {
-		req := &mem.ControlReq{Command: mem.CmdFlush}
+		req := mem.ControlReq{Command: mem.CmdFlush}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = controlPort.AsRemote()
@@ -107,7 +107,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		Expect(ctrl.handleIncomingCommands()).To(BeTrue())
 
-		rsp := controlPort.RetrieveOutgoing().(*mem.ControlRsp)
+		rsp := controlPort.RetrieveOutgoing().(mem.ControlRsp)
 		Expect(rsp.Command).To(Equal(mem.CmdFlush))
 		Expect(rsp.Success).To(BeFalse())
 		Expect(rsp.Error).To(Equal(control.ErrUnsupported))
@@ -128,7 +128,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		_, found := setLookup(&next.Table[0], pid, seg)
 		Expect(found).To(BeTrue())
 
-		req := &mem.ControlReq{Command: mem.CmdInvalidate}
+		req := mem.ControlReq{Command: mem.CmdInvalidate}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = controlPort.AsRemote()
@@ -140,7 +140,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		_, found = setLookup(&next.Table[0], pid, seg)
 		Expect(found).To(BeFalse())
 
-		rsp := controlPort.RetrieveOutgoing().(*mem.ControlRsp)
+		rsp := controlPort.RetrieveOutgoing().(mem.ControlRsp)
 		Expect(rsp.Command).To(Equal(mem.CmdInvalidate))
 		Expect(rsp.Success).To(BeTrue())
 	})
@@ -149,7 +149,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		next := &comp.State
 		next.CurrentState = mmuCacheStateEnable
 
-		req := &mem.ControlReq{Command: mem.CmdInvalidate}
+		req := mem.ControlReq{Command: mem.CmdInvalidate}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = controlPort.AsRemote()
@@ -158,7 +158,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		Expect(ctrl.handleIncomingCommands()).To(BeTrue())
 
-		rsp := controlPort.RetrieveOutgoing().(*mem.ControlRsp)
+		rsp := controlPort.RetrieveOutgoing().(mem.ControlRsp)
 		Expect(rsp.Command).To(Equal(mem.CmdInvalidate))
 		Expect(rsp.Success).To(BeFalse())
 		Expect(rsp.Error).To(Equal(control.ErrMustBePausedOrDrained))
@@ -195,7 +195,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		setUpdate(&next.Table[0], 1, vm.PID(2), segB)
 		setVisit(&next.Table[0], 1)
 
-		req := &mem.ControlReq{Command: mem.CmdInvalidate, PID: 1}
+		req := mem.ControlReq{Command: mem.CmdInvalidate, PID: 1}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = control2.AsRemote()
@@ -210,7 +210,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		_, foundB := setLookup(&next.Table[0], vm.PID(2), segB)
 		Expect(foundB).To(BeTrue())
 
-		rsp := control2.RetrieveOutgoing().(*mem.ControlRsp)
+		rsp := control2.RetrieveOutgoing().(mem.ControlRsp)
 		Expect(rsp.Command).To(Equal(mem.CmdInvalidate))
 		Expect(rsp.Success).To(BeTrue())
 	})
@@ -222,7 +222,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 			Table:        initSets(spec.NumLevels, spec.NumBlocks),
 		}
 
-		msg := &mem.ControlReq{
+		msg := mem.ControlReq{
 			Command: mem.CmdPause,
 		}
 		msg.ID = timing.GetIDGenerator().Generate()

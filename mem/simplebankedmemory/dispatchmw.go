@@ -75,15 +75,15 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 
 func (m *dispatchMW) msgToItem(msg messaging.Msg) bankPipelineItemState {
 	switch r := msg.(type) {
-	case *mem.ReadReq:
+	case mem.ReadReq:
 		return bankPipelineItemState{
 			IsRead:  true,
-			ReadMsg: *r,
+			ReadMsg: r,
 		}
-	case *mem.WriteReq:
+	case mem.WriteReq:
 		return bankPipelineItemState{
 			IsRead:   false,
-			WriteMsg: *r,
+			WriteMsg: r,
 		}
 	default:
 		log.Panicf("simplebankedmemory: unsupported request type %T", msg)

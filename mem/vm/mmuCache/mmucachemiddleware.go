@@ -85,8 +85,8 @@ func (m *mmuCacheMiddleware) lookup() bool {
 		return false
 	}
 
-	msg, ok := msgI.(*vm.TranslationReq)
-	if !ok || msg == nil {
+	msg, ok := msgI.(vm.TranslationReq)
+	if !ok {
 		return false
 	}
 
@@ -94,7 +94,7 @@ func (m *mmuCacheMiddleware) lookup() bool {
 }
 
 func (m *mmuCacheMiddleware) walkCacheLevels(
-	msg *vm.TranslationReq,
+	msg vm.TranslationReq,
 ) bool {
 	spec := m.comp.Spec()
 	totalLatency := spec.LatencyPerLevel * uint64(spec.NumLevels)
@@ -115,7 +115,7 @@ func (m *mmuCacheMiddleware) walkCacheLevels(
 }
 
 func (m *mmuCacheMiddleware) lookupLevel(
-	level int, req *vm.TranslationReq,
+	level int, req vm.TranslationReq,
 ) bool {
 	spec := m.comp.Spec()
 	next := &m.comp.State
@@ -136,7 +136,7 @@ func (m *mmuCacheMiddleware) lookupLevel(
 }
 
 func (m *mmuCacheMiddleware) sendReqToBottom(
-	req *vm.TranslationReq,
+	req vm.TranslationReq,
 	latency uint64) bool {
 	if !m.bottomPort().CanSend() {
 		return false
@@ -144,7 +144,7 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 
 	res := m.comp.Resources()
 
-	reqToBottom := &vm.TranslationReq{}
+	reqToBottom := vm.TranslationReq{}
 	reqToBottom.ID = timing.GetIDGenerator().Generate()
 	reqToBottom.Src = m.bottomPort().AsRemote()
 	reqToBottom.Dst = res.LowModulePort
@@ -170,7 +170,7 @@ func (m *mmuCacheMiddleware) handleBottomPort() bool {
 	}
 
 	switch item := itemI.(type) {
-	case *vm.TranslationRsp:
+	case vm.TranslationRsp:
 		madeProgress = m.handleRsp(item) || madeProgress
 	default:
 		log.Panicf("cannot process request %s", fmt.Sprintf("%T", itemI))
@@ -178,7 +178,7 @@ func (m *mmuCacheMiddleware) handleBottomPort() bool {
 	return madeProgress
 }
 
-func (m *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
+func (m *mmuCacheMiddleware) handleRsp(rsp vm.TranslationRsp) bool {
 	if !m.topPort().CanSend() {
 		return false
 	}
@@ -187,7 +187,7 @@ func (m *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
 
 	res := m.comp.Resources()
 
-	rspToTop := &vm.TranslationRsp{
+	rspToTop := vm.TranslationRsp{
 		Page: rsp.Page,
 	}
 	rspToTop.ID = timing.GetIDGenerator().Generate()
@@ -210,7 +210,7 @@ func (m *mmuCacheMiddleware) segToSetID(seg uint64) int {
 }
 
 // updateCacheLevels updates all cache levels with the translation response.
-func (m *mmuCacheMiddleware) updateCacheLevels(rsp *vm.TranslationRsp) bool {
+func (m *mmuCacheMiddleware) updateCacheLevels(rsp vm.TranslationRsp) bool {
 	spec := m.comp.Spec()
 	next := &m.comp.State
 	page := rsp.Page

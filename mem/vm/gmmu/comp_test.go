@@ -67,8 +67,8 @@ var _ = Describe("GMMU", func() {
 		(&noopConn{}).PlugIn(gmmuComp.GetPortByName("Control"))
 	}
 
-	makeTranslationReq := func(vAddr uint64) *vm.TranslationReq {
-		req := &vm.TranslationReq{}
+	makeTranslationReq := func(vAddr uint64) vm.TranslationReq {
+		req := vm.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = agentPort
 		req.Dst = topPort.AsRemote()
@@ -125,7 +125,7 @@ var _ = Describe("GMMU", func() {
 
 			rspI := topPort.RetrieveOutgoing()
 			Expect(rspI).NotTo(BeNil())
-			rsp := rspI.(*vm.TranslationRsp)
+			rsp := rspI.(vm.TranslationRsp)
 			Expect(rsp.Page).To(Equal(page))
 			Expect(rsp.Page.PID).To(Equal(vm.PID(1)))
 		})
@@ -150,7 +150,7 @@ var _ = Describe("GMMU", func() {
 
 			reqI := bottomPort.RetrieveOutgoing()
 			Expect(reqI).NotTo(BeNil())
-			req := reqI.(*vm.TranslationReq)
+			req := reqI.(vm.TranslationReq)
 			Expect(req.Dst).To(Equal(lowModulePort))
 			Expect(req.VAddr).To(Equal(uint64(0x10000000)))
 		})
@@ -175,10 +175,10 @@ var _ = Describe("GMMU", func() {
 
 			reqI := bottomPort.RetrieveOutgoing()
 			Expect(reqI).NotTo(BeNil())
-			sentReqToBottom := reqI.(*vm.TranslationReq)
+			sentReqToBottom := reqI.(vm.TranslationReq)
 
 			// Deliver the response from the bottom (remote page table).
-			rsp := &vm.TranslationRsp{
+			rsp := vm.TranslationRsp{
 				Page: page,
 			}
 			rsp.ID = timing.GetIDGenerator().Generate()
@@ -193,7 +193,7 @@ var _ = Describe("GMMU", func() {
 
 			rspToTopI := topPort.RetrieveOutgoing()
 			Expect(rspToTopI).NotTo(BeNil())
-			rspToTop := rspToTopI.(*vm.TranslationRsp)
+			rspToTop := rspToTopI.(vm.TranslationRsp)
 			Expect(rspToTop.Page).To(Equal(page))
 			Expect(rspToTop.Page.PID).To(Equal(vm.PID(1)))
 		})
