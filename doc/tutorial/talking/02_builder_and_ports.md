@@ -59,6 +59,32 @@ Things to notice:
 - The `MakeBuilder` → `WithX` → `Build(name)` shape is universal across
   Akita components and connections.
 
+## Why a Custom Builder?
+
+In *Create a Component* the walker had no ports and a single middleware, so we
+built it inline with `modeling.NewBuilder` right in `main`. Assembling this
+component is more work: create the `Out` port at the configured buffer size,
+add two middlewares in the right order, and register with the registrar.
+Repeating all of that at every call site — and we build two agents — would be
+verbose and easy to get wrong.
+
+Wrapping construction in a per-package builder buys three things:
+
+- **Correct assembly, every time.** All the steps live inside `Build`, so a
+  caller cannot forget to add a middleware or register the component;
+  `Build(name)` always returns a fully wired `*Comp`.
+- **Easy instances.** `MakeBuilder().WithSpec(spec).Build(name)` stamps out an
+  agent on demand — we call it twice, for AgentA and AgentB — and
+  `DefaultSpec()` gives a base configuration to tweak.
+- **A clean surface.** The `modeling.NewBuilder` generics and the ports are
+  written once, inside `Build`; callers only ever see
+  `MakeBuilder → WithX → Build`. This is the per-package builder that the
+  *Create a Component* section's builder-pattern callout pointed ahead to.
+
+Rule of thumb: build inline when a component is trivial; give it a builder
+once it owns ports, has more than one middleware, or gets instantiated more
+than once — which is to say, nearly every real component.
+
 ## Middleware: Where Behaviour Lives
 
 A component has one or more middlewares. Each tick, the engine calls every
