@@ -272,6 +272,10 @@ func TraceReqFinalize(
 	msg messaging.Msg,
 	domain NamedHookable,
 ) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
 	EndTask(msg.Meta().ID, domain)
 }
 
