@@ -352,6 +352,46 @@ var _ = Describe("Simulation", func() {
 				"rebuilt entity \"IDGenerator\" is missing from checkpoint")))
 		})
 
+		It("should reject a checkpoint that carries an entity the sim does not rebuild", func() {
+			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
+
+			entries := append(dummyPayloads(simulation),
+				archiveEntry{name: "GhostEntity", data: []byte("{}")})
+
+			err := writeArchive(path, "test-build", entries)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = simulation.LoadCheckpoint(path, "test-build")
+
+			Expect(err).To(MatchError(ContainSubstring(
+				"saved entity \"GhostEntity\" is not rebuilt")))
+		})
+
+		It("should reject a corrupted archive", func() {
+			path := filepath.Join(GinkgoT().TempDir(), "corrupt.tar.gz")
+			Expect(os.WriteFile(
+				path, []byte("this is not a gzip archive"), 0o644)).To(Succeed())
+
+			err := simulation.LoadCheckpoint(path, "test-build")
+
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should reject a truncated archive", func() {
+			path := filepath.Join(GinkgoT().TempDir(), "truncated.tar.gz")
+			Expect(writeArchive(
+				path, "test-build", dummyPayloads(simulation))).To(Succeed())
+
+			full, err := os.ReadFile(path)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(len(full)).To(BeNumerically(">", 4))
+			Expect(os.WriteFile(path, full[:len(full)/2], 0o644)).To(Succeed())
+
+			err = simulation.LoadCheckpoint(path, "test-build")
+
+			Expect(err).To(HaveOccurred())
+		})
+
 	})
 })
 
