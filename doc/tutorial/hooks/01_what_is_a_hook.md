@@ -114,7 +114,9 @@ engine.AcceptHook(&eventHook{})
 
 `examples/hooks/` builds two ticking agents — Agent A sends a ping to Agent
 B, which replies — over a direct connection, then attaches the hook above.
-The agents print nothing themselves; every line comes from the hook:
+The agents print nothing themselves; every line comes from a hook. (The
+example also attaches the message hook from the next chapter, so a full run
+interleaves `[msg]` lines; showing just the event-hook output:)
 
 ```
 [event] t=1000 handler=AgentA

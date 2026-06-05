@@ -139,12 +139,13 @@ Tail of output:
 
 ```
 ...
-Cell 7321 split at 9999847284 ps, current count: 14642
-Cell count at time 10000000000000 ps: 14642
+Cell 3 split at 9990583990560 ps, current count: 75
+Cell count at time 10000000000000 ps: 75
 ```
 
 (Your exact numbers will match, given the fixed seed.) Notice how the
-population grows: roughly doubling every cell's lifetime.
+population grows: every split creates cells that themselves split, so the
+count climbs exponentially.
 
 ## Key Concepts
 
