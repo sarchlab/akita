@@ -424,20 +424,65 @@ Negative tests:
 
 ## Milestones
 
-1. **Foundation**: checkpoint package, archive helpers, build ID, and
-   simulation save/load skeleton that validates entity coverage but rejects
-   unimplemented entities.
-2. **Quiescent state**: generic components, ID generator, storage, page tables,
-   and strict spec/resource compatibility. This restores phase-boundary behavior
-   on top of the new architecture.
-3. **Queues and polymorphism**: queueing JSON, message registry, port buffers, and
-   event registry.
-4. **Serial engine**: deterministic event ordering, serial engine queue snapshot,
-   tick scheduler, and event-driven wakeup state.
-5. **Full runtime owners**: registered connections and any remaining networking
-   runtime state.
-6. **Resume oracle**: non-quiescent uninterrupted-vs-resumed integration tests,
-   negative tests, and documentation refresh.
+Phase B progressed non-linearly — the foundation, the polymorphic codecs, and the
+queue machinery landed early to de-risk — so the original linear list no longer
+maps cleanly. This section records what is done and defines the milestones that
+remain.
+
+### Done
+
+- **Foundation**: the archive format (a build-id entry plus per-entity payloads,
+  no manifest), build identity, simulation `SaveCheckpoint`/`LoadCheckpoint`
+  orchestration, and saved-vs-rebuilt coverage validation.
+- **Quiescent serializers**: generic components (`State` + spec hash), the ID
+  generator, and `mem.Storage`, with strict spec/shape compatibility checks.
+- **Queues and polymorphism**: `queueing.Buffer`/`Pipeline` JSON, the
+  `messaging.Msg` and `timing.Event` codec registries, and non-empty port
+  buffers serialized through the message registry.
+- **Serial engine (partial)**: deterministic same-time event ordering by
+  `(time, sequence)`, and the serial-engine event-queue snapshot.
+- **Resume oracle (partial)**: a mid-transaction checkpoint/resume for a
+  port-less component (a pending tick in the queue) matches the uninterrupted
+  run.
+
+Registered connections and NoC components are **implicitly covered**: they are
+`modeling.Component`s, so their `State` — including round-robin cursors and
+`queueing` buffers — already round-trips through the component, port, and
+queueing serializers. This needs a confirming test, not new code.
+
+### Remaining
+
+Drive A → B; C runs alongside.
+
+**A. Scheduler and wakeup consistency** (critical path; §9)
+- Restore each ticking component's `TickScheduler` guard
+  (`hasScheduledTick`/`nextTickTime`) by **deriving it from the restored engine
+  queue** (the queue is authoritative) via a small engine query — the earliest
+  event time for a handler — run as a post-load step. Restoring the saved guard
+  blindly is wrong: it can be stale at a quiescent boundary.
+- Restore `EventDrivenComponent.pendingWakeup` the same way.
+- Gate: a ticking component with a pending tick *and* an incoming message resumes
+  with no duplicate or missed tick.
+
+**B. Full resume oracle** (the Phase B gate; §11, §12, §14)
+- Add the `vm.PageTable` serializer — the last quiescent resource.
+- Checkpoint a real memory simulation mid-transaction — `memaccessagent ↔
+  idealmemcontroller` over a connection, and a cache + TLB + page-table hierarchy
+  — with non-empty port buffers and pending events, resume, and assert the final
+  state and time match an uninterrupted run. Run with tracing off (its task-ID
+  side-table consumes the global ID generator).
+- This also exercises connections and NoC components in a real assembly,
+  retiring the "implicitly covered" item.
+
+**C. Hardening and ship** (breadth; §13, §14)
+- Negative tests: corrupted/truncated archive, spec-hash / topology /
+  resource-shape / build-id mismatch, and unknown codec tags (fill gaps; several
+  already pass).
+- A standalone connection/NoC round-trip test (DirectConnection round-robin
+  cursor; a one-switch network checkpoint).
+- A determinism regression: a fixed simulation checkpointed at several boundaries
+  all resume to identical final state.
+- Refresh the docs and examples, and declare Phase B complete.
 
 ## Open Questions
 
