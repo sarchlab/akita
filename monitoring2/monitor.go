@@ -554,7 +554,9 @@ func (m *Monitor) listFieldValue(w http.ResponseWriter, r *http.Request) {
 	if pagingRequested {
 		value, err := monitorEntryPointValue(component, fields)
 		if err != nil {
-			log.Panic(err)
+			writeFieldNotFound(w, err)
+
+			return
 		}
 
 		if monitorStrip(value).Kind() == reflect.Slice {
@@ -573,7 +575,9 @@ func (m *Monitor) listFieldValue(w http.ResponseWriter, r *http.Request) {
 
 	err = serializer.SetEntryPoint(fields)
 	if err != nil {
-		log.Panic(err)
+		writeFieldNotFound(w, err)
+
+		return
 	}
 
 	err = serializer.Serialize(w)
@@ -988,6 +992,20 @@ func (m *Monitor) findComponentOr404(
 	}
 
 	return component
+}
+
+// writeFieldNotFound reports a field-path resolution failure as a 404. The
+// monitor frontend probes several candidate field paths per component (e.g.
+// "Spec" then "Component.Spec") and treats any non-2xx response as "this path
+// is absent, try the next one". A missing field is therefore an expected,
+// recoverable condition for the client — not a server fault to panic on.
+func writeFieldNotFound(w http.ResponseWriter, cause error) {
+	w.WriteHeader(http.StatusNotFound)
+
+	_, err := fmt.Fprintf(w, "Field not found: %s", cause)
+	if err != nil {
+		log.Panic(err)
+	}
 }
 
 func (m *Monitor) listProgressBars(
