@@ -58,7 +58,7 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 		AccessByteSize: trans.ReadAccessByteSize,
 		PID:            trans.ReadPID,
 	}
-	tracing.TraceReqComplete(read, s.cache.comp)
+	tracing.TraceReqComplete(s.cache.comp, read)
 
 	return true
 }
@@ -88,7 +88,7 @@ func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
 		DirtyMask: trans.WriteDirtyMask,
 		PID:       trans.WritePID,
 	}
-	tracing.TraceReqComplete(write, s.cache.comp)
+	tracing.TraceReqComplete(s.cache.comp, write)
 
 	return true
 }

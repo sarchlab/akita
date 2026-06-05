@@ -60,7 +60,7 @@ func Example() {
 	timeTeller := &SimpleTimeTeller{currentTime: 0}
 
 	// Create the database-based memory tracer
-	memTracer := trace.NewDBTracer(dataRecorder, timeTeller)
+	memTracer := trace.NewDBTracer(dataRecorder)
 
 	runExampleTrace(memTracer, timeTeller)
 
@@ -84,7 +84,7 @@ func Example() {
 	// Started memory read at time 100.0 ns
 	// Cache miss recorded at time 150.0 ns
 	// Completed memory read at time 200.0 ns
-	// Tables created: [memory_steps memory_transactions]
+	// Tables created: [memory_tags memory_transactions]
 	// Memory trace example completed successfully!
 	// Database saved to: memory_trace_example.sqlite3
 }
@@ -97,30 +97,40 @@ func runExampleTrace(memTracer tracing.Tracer, timeTeller *SimpleTimeTeller) {
 		pid:      1,
 	}
 
-	// Create a memory task
-	task := tracing.Task{
-		ID:       1,
-		Location: "L1_cache",
-		What:     "read",
-		Detail:   readReq,
-	}
-
 	// Trace the complete memory operation lifecycle
 	fmt.Println("Starting memory trace example...")
 
 	// Start the task at time 100ns
 	timeTeller.AdvanceTime(100)
-	memTracer.StartTask(task)
-	fmt.Printf("Started memory read at time %.1f ns\n", float64(timeTeller.CurrentTime()))
+	memTracer.StartTask(tracing.TaskStart{
+		ID:       1,
+		Location: "L1_cache",
+		What:     "read",
+		Detail:   readReq,
+		Time:     timeTeller.CurrentTime(),
+	})
+	fmt.Printf(
+		"Started memory read at time %.1f ns\n",
+		float64(timeTeller.CurrentTime()),
+	)
 
-	// Add a step (cache miss)
+	// Add a tag (cache miss)
 	timeTeller.AdvanceTime(50)
-	task.Steps = []tracing.TaskStep{{What: "cache_miss"}}
-	memTracer.StepTask(task)
-	fmt.Printf("Cache miss recorded at time %.1f ns\n", float64(timeTeller.CurrentTime()))
+	memTracer.AddTaskTag(tracing.TaskTag{
+		TaskID: 1,
+		What:   "cache_miss",
+		Time:   timeTeller.CurrentTime(),
+	})
+	fmt.Printf(
+		"Cache miss recorded at time %.1f ns\n",
+		float64(timeTeller.CurrentTime()),
+	)
 
 	// End the task at time 200ns
 	timeTeller.AdvanceTime(50)
-	memTracer.EndTask(task)
-	fmt.Printf("Completed memory read at time %.1f ns\n", float64(timeTeller.CurrentTime()))
+	memTracer.EndTask(tracing.TaskEnd{ID: 1, Time: timeTeller.CurrentTime()})
+	fmt.Printf(
+		"Completed memory read at time %.1f ns\n",
+		float64(timeTeller.CurrentTime()),
+	)
 }

@@ -93,7 +93,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		Granularity: srcByteGranularity,
 	}
 
-	tracing.TraceReqReceive(req, m.comp)
+	tracing.TraceReqReceive(m.comp, req)
 
 	return true
 }
@@ -144,7 +144,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		Granularity: state.SrcByteGranularity,
 	}
 
-	tracing.TraceReqComplete(rsp, m.comp)
+	tracing.TraceReqComplete(m.comp, rsp)
 
 	return true
 }

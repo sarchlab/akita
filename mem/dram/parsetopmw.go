@@ -66,18 +66,16 @@ func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
 	pushSubTrans(next, transIdx)
 	m.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(msgI, m.comp)
+	tracing.TraceReqReceive(m.comp, msgI)
 
 	for _, st := range ts.SubTransactions {
-		tracing.StartTaskWithSpecificLocation(
-			st.ID,
-			tracing.MsgIDAtReceiver(msgI, m.comp),
-			m.comp,
-			"sub-trans",
-			"sub-trans",
-			m.comp.Name()+".SubTransQueue",
-			nil,
-		)
+		tracing.StartTask(m.comp, tracing.TaskStart{
+			ID:       st.ID,
+			ParentID: tracing.MsgIDAtReceiver(msgI, m.comp),
+			Kind:     "sub-trans",
+			What:     "sub-trans",
+			Location: m.comp.Name() + ".SubTransQueue",
+		})
 	}
 
 	return true

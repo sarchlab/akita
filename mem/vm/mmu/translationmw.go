@@ -150,7 +150,7 @@ func (m *translationMW) parseFromTop() bool {
 
 	switch req := reqI.(type) {
 	case vm.TranslationReq:
-		tracing.TraceReqReceive(req, m.comp)
+		tracing.TraceReqReceive(m.comp, req)
 		m.startWalking(req)
 	default:
 		log.Panicf("MMU canot handle request of type %s",
@@ -231,6 +231,6 @@ func (m *translationMW) allocatePhysicalPage() uint64 {
 }
 
 func (m *translationMW) traceReqComplete(recvTaskID, reqMsgID uint64) {
-	tracing.EndTask(recvTaskID, m.comp)
+	tracing.EndTask(m.comp, tracing.TaskEnd{ID: recvTaskID})
 	tracing.ForgetMsgIDAtReceiver(reqMsgID, m.comp)
 }

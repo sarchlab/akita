@@ -198,7 +198,7 @@ func (f *flusher) startProcessingFlush(msg mem.ControlReq) bool {
 	next.CacheState = int(cacheStatePreFlushing)
 	f.ctrlPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(msg, f.pipeline.comp)
+	tracing.TraceReqReceive(f.pipeline.comp, msg)
 
 	return true
 }
@@ -239,7 +239,7 @@ func (f *flusher) finalizeFlushing() bool {
 	// Flush is only legal from paused, and returns the cache to paused.
 	next.CacheState = int(cacheStatePaused)
 
-	tracing.TraceReqComplete(next.ProcessingFlush.MsgMeta, f.pipeline.comp)
+	tracing.TraceReqComplete(f.pipeline.comp, next.ProcessingFlush.MsgMeta)
 	next.HasProcessingFlush = false
 	next.ProcessingFlush = flushReqState{}
 

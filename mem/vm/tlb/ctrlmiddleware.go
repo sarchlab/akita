@@ -101,13 +101,11 @@ func (m *ctrlMiddleware) performCtrlEnable(msg mem.ControlReq) bool {
 	m.controlPort().Send(makeCtrlRsp(m.controlPort(), mem.CmdEnable,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.controlPort().Name(),
+	})
 	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
@@ -121,13 +119,11 @@ func (m *ctrlMiddleware) performCtrlDrain(msg mem.ControlReq) bool {
 	state.CurrentCmdSrc = msg.Src
 
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.controlPort().Name(),
+	})
 	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
@@ -143,13 +139,11 @@ func (m *ctrlMiddleware) performCtrlPause(msg mem.ControlReq) bool {
 	m.controlPort().Send(makeCtrlRsp(m.controlPort(), mem.CmdPause,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.controlPort().Name(),
+	})
 	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
@@ -176,13 +170,11 @@ func (m *ctrlMiddleware) handleInvalidate(msg mem.ControlReq) bool {
 	m.controlPort().Send(makeCtrlRsp(m.controlPort(), mem.CmdInvalidate,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindDependency,
-		m.comp.Name()+".Sets",
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindDependency,
+		What:   m.comp.Name() + ".Sets",
+	})
 	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	return true
@@ -238,13 +230,11 @@ func (m *ctrlMiddleware) handleReset(msg mem.ControlReq) bool {
 
 	m.controlPort().Send(makeCtrlRsp(m.controlPort(), mem.CmdReset,
 		msg.Src, msg.ID, true, ""))
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.controlPort().Name(),
+	})
 	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
 
 	state := &m.comp.State

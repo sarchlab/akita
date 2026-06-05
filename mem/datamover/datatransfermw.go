@@ -148,7 +148,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 		Address: req.Address,
 	}
 
-	tracing.TraceReqInitiate(req, m.comp,
+	tracing.TraceReqInitiate(m.comp, req,
 		tracing.MsgIDAtReceiver(transactionAsMsg(trans), m.comp))
 
 	return true
@@ -193,7 +193,7 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 	traceReq.ID = originalReq.ID
 	traceReq.Src = originalReq.Src
 	traceReq.Dst = originalReq.Dst
-	tracing.TraceReqFinalize(traceReq, m.comp)
+	tracing.TraceReqFinalize(m.comp, traceReq)
 
 	return true
 }
@@ -241,7 +241,7 @@ func (m *dataTransferMW) writeToDst() bool {
 	}
 	bufferMoveOffsetForwardTo(&state.Buffer, trans.NextWriteAddr-trans.DstAddress)
 
-	tracing.TraceReqInitiate(req, m.comp,
+	tracing.TraceReqInitiate(m.comp, req,
 		tracing.MsgIDAtReceiver(transactionAsMsg(trans), m.comp))
 
 	return true
@@ -282,7 +282,7 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 	traceReq.ID = originalReq.ID
 	traceReq.Src = originalReq.Src
 	traceReq.Dst = originalReq.Dst
-	tracing.TraceReqFinalize(traceReq, m.comp)
+	tracing.TraceReqFinalize(m.comp, traceReq)
 
 	// Processing a write ack is real progress: the component must tick again
 	// so the remaining acks drain and the transaction can finish (which now

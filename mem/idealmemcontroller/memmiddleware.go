@@ -44,7 +44,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 		}
 
 		msg := msgI.(messaging.Msg)
-		tracing.TraceReqReceive(msg, m.comp)
+		tracing.TraceReqReceive(m.comp, msg)
 
 		tx := m.msgToInflightTransaction(msg)
 
@@ -214,6 +214,6 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 }
 
 func (m *memMiddleware) traceReqComplete(recvTaskID, reqMsgID uint64) {
-	tracing.EndTask(recvTaskID, m.comp)
+	tracing.EndTask(m.comp, tracing.TaskEnd{ID: recvTaskID})
 	tracing.ForgetMsgIDAtReceiver(reqMsgID, m.comp)
 }

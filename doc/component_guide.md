@@ -666,16 +666,16 @@ itself is the `NamedHookable` — it already implements the interface via
 
 ```go
 // From v5/mem/idealmemcontroller/memmiddleware.go
-tracing.TraceReqReceive(msg, m.comp)
+tracing.TraceReqReceive(m.comp, msg)
 ```
 
-When completing a traced request, the middleware passes the `recvTaskID` and
-calls `tracing.EndTask` with `m.comp`:
+When completing a traced request, the middleware passes the same message and
+calls `TraceReqComplete` with `m.comp`:
 
 ```go
 // From v5/mem/idealmemcontroller/memmiddleware.go
-func (m *memMiddleware) traceReqComplete(recvTaskID uint64) {
-    tracing.EndTask(recvTaskID, m.comp)
+func (m *memMiddleware) traceReqComplete(msg messaging.Msg) {
+    tracing.TraceReqComplete(m.comp, msg)
 }
 ```
 
@@ -1766,7 +1766,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
         }
 
         msg := msgI.(sim.Msg)
-        tracing.TraceReqReceive(msg, m.comp)
+        tracing.TraceReqReceive(m.comp, msg)
 
         tx := m.msgToInflightTransaction(msg)
 

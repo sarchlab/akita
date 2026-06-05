@@ -56,7 +56,7 @@ func (m *agentMiddleware) processMsgRsp() bool {
 		}
 
 		req := state.PendingWriteReq[msg.RspTo]
-		tracing.TraceReqFinalize(req, m.agent)
+		tracing.TraceReqFinalize(m.agent, req)
 		delete(state.PendingWriteReq, msg.RspTo)
 
 		if m.agent.writeProgressBar != nil {
@@ -74,7 +74,7 @@ func (m *agentMiddleware) processMsgRsp() bool {
 
 		m.checkReadResult(req, msg, state)
 
-		tracing.TraceReqFinalize(req, m.agent)
+		tracing.TraceReqFinalize(m.agent, req)
 		delete(state.PendingReadReq, msg.RspTo)
 
 		if m.agent.readProgressBar != nil {
@@ -182,7 +182,7 @@ func (m *agentMiddleware) doRead() bool {
 
 	m.memPort().Send(readReq)
 
-	tracing.TraceReqInitiate(readReq, m.agent, 0)
+	tracing.TraceReqInitiate(m.agent, readReq, 0)
 
 	state.PendingReadReq[readReq.ID] = readReq
 	state.ReadLeft--
@@ -265,7 +265,7 @@ func (m *agentMiddleware) doWrite() bool {
 
 	m.memPort().Send(writeReq)
 
-	tracing.TraceReqInitiate(writeReq, m.agent, 0)
+	tracing.TraceReqInitiate(m.agent, writeReq, 0)
 
 	state.WriteLeft--
 	m.addKnownValue(state, address, data)

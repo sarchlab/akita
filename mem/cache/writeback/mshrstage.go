@@ -112,7 +112,7 @@ func (s *mshrStage) respondRead(
 	dataReady.TrafficClass = "mem.DataReadyRsp"
 	s.cache.topPort.Send(dataReady)
 
-	tracing.TraceReqComplete(trans.ReadMeta, s.cache.comp)
+	tracing.TraceReqComplete(s.cache.comp, trans.ReadMeta)
 }
 
 func (s *mshrStage) respondWrite(trans *transactionState) {
@@ -125,7 +125,7 @@ func (s *mshrStage) respondWrite(trans *transactionState) {
 	writeDoneRsp.TrafficClass = "mem.WriteDoneRsp"
 	s.cache.topPort.Send(writeDoneRsp)
 
-	tracing.TraceReqComplete(trans.WriteMeta, s.cache.comp)
+	tracing.TraceReqComplete(s.cache.comp, trans.WriteMeta)
 }
 
 func (s *mshrStage) findTransaction(transIdx int) bool {

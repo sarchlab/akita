@@ -9,7 +9,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
-	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type mmuCacheMiddleware struct {
@@ -56,13 +55,6 @@ func (m *mmuCacheMiddleware) handleDrain() bool {
 		len(next.OutstandingBottomReqs) == 0
 	if quiescent {
 		next.CurrentState = mmuCacheStatePause
-		tracing.AddMilestone(
-			timing.GetIDGenerator().Generate(),
-			tracing.MilestoneKindHardwareResource,
-			m.comp.Name()+".",
-			m.comp.Name(),
-			m.comp,
-		)
 	}
 
 	return madeProgress

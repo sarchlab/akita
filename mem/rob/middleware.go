@@ -109,8 +109,8 @@ func (m *middleware) topDown() bool {
 	})
 	m.topPort().RetrieveIncoming()
 
-	tracing.TraceReqReceive(req, m.comp)
-	tracing.TraceReqInitiate(shadow, m.comp,
+	tracing.TraceReqReceive(m.comp, req)
+	tracing.TraceReqInitiate(m.comp, shadow,
 		tracing.MsgIDAtReceiver(req, m.comp))
 
 	return true
@@ -137,7 +137,7 @@ func (m *middleware) parseBottom() bool {
 		trans := &m.comp.State.Transactions[idx]
 		trans.HasRsp = true
 		trans.RspData = dataRsp.Data
-		tracing.TraceReqFinalize(m.shadowReqTraceMsg(*trans), m.comp)
+		tracing.TraceReqFinalize(m.comp, m.shadowReqTraceMsg(*trans))
 		return true
 	case mem.WriteDoneRsp:
 		idx := m.findTransactionByBottomID(dataRsp.RspTo)
@@ -149,7 +149,7 @@ func (m *middleware) parseBottom() bool {
 
 		trans := &m.comp.State.Transactions[idx]
 		trans.HasRsp = true
-		tracing.TraceReqFinalize(m.shadowReqTraceMsg(*trans), m.comp)
+		tracing.TraceReqFinalize(m.comp, m.shadowReqTraceMsg(*trans))
 		return true
 	default:
 		m.bottomPort().RetrieveIncoming()
@@ -180,7 +180,7 @@ func (m *middleware) bottomUp() bool {
 
 	state.Transactions = state.Transactions[1:]
 
-	tracing.TraceReqComplete(m.topReqTraceMsg(head), m.comp)
+	tracing.TraceReqComplete(m.comp, m.topReqTraceMsg(head))
 
 	return true
 }

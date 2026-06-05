@@ -48,7 +48,7 @@ func (m *respondMW) fetchFromBottom() bool {
 
 	switch rsp := rspI.(type) {
 	case vm.TranslationRsp:
-		tracing.TraceReqReceive(rsp, m.comp)
+		tracing.TraceReqReceive(m.comp, rsp)
 		return m.handleTranslationRsp(rsp)
 	default:
 		log.Panicf("gmmu cannot handle request of type %s",

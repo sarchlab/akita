@@ -43,7 +43,7 @@ func (s *intake) Tick() bool {
 
 	s.cache.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(msg, s.cache.comp)
+	tracing.TraceReqReceive(s.cache.comp, msg)
 
 	return true
 }
@@ -73,11 +73,13 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 			ReadPID:            m.PID,
 		}
 
-		tracing.StartTaskWithSpecificLocation(t.ID,
-			tracing.MsgIDAtReceiver(m, s.cache.comp),
-			s.cache.comp, "cache_transaction", "read",
-			s.cache.comp.Name()+".Local",
-			nil)
+		tracing.StartTask(s.cache.comp, tracing.TaskStart{
+			ID:       t.ID,
+			ParentID: tracing.MsgIDAtReceiver(m, s.cache.comp),
+			Kind:     "cache_transaction",
+			What:     "read",
+			Location: s.cache.comp.Name() + ".Local",
+		})
 	case mem.WriteReq:
 		t = transactionState{
 			ID:             timing.GetIDGenerator().Generate(),
@@ -96,11 +98,13 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 			}
 		}
 
-		tracing.StartTaskWithSpecificLocation(t.ID,
-			tracing.MsgIDAtReceiver(m, s.cache.comp),
-			s.cache.comp, "cache_transaction", "write",
-			s.cache.comp.Name()+".Local",
-			nil)
+		tracing.StartTask(s.cache.comp, tracing.TaskStart{
+			ID:       t.ID,
+			ParentID: tracing.MsgIDAtReceiver(m, s.cache.comp),
+			Kind:     "cache_transaction",
+			What:     "write",
+			Location: s.cache.comp.Name() + ".Local",
+		})
 	default:
 		log.Panicf("cannot process request of type %s\n",
 			reflect.TypeOf(msg))
