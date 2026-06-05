@@ -89,6 +89,6 @@ the traffic go by.
 
 ## Where to Next
 
-Logging is useful, but most of the time you want *measurements*: how many
-requests, how long each took. Doing that by hand with raw hooks is tedious,
-so Akita builds **tracing** on top of hooks — the next chapter.
+So far you have attached hooks to points Akita provides — engine events and
+port messages. The next chapter shows how to expose your component's *own*
+internal behavior by **defining your own hook point**.

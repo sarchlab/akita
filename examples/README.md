@@ -92,6 +92,19 @@ the agents themselves print nothing. Shows the `hooking` API
 cd hooks && go run main.go
 ```
 
+### customhook — Defining Your Own Hook Point
+
+A random walker defines its own `HookPos` and fires it with `InvokeHook` on
+every step, exposing internal behavior the built-in hook points cannot see.
+An external hook logs each step; the walker itself prints nothing.
+
+**Key concepts**: declaring a `hooking.HookPos`, `InvokeHook`, a component as
+`Hookable`, payload via `HookCtx.Item`.
+
+```bash
+cd customhook && go run main.go
+```
+
 ### tracing — Measuring Work with Tracing Tasks
 
 A single worker component wraps each job in a tracing task

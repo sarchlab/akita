@@ -3,6 +3,6 @@
   "position": 5,
   "link": {
     "type": "generated-index",
-    "description": "Once a simulation runs, you want to watch it without rewriting your components. Akita's hooks are callbacks the framework invokes at defined points — before each event, when a port sends a message, and so on. This section introduces the hook mechanism, then tracing: a hooks-based tool for marking units of work and measuring how long they take."
+    "description": "Once a simulation runs, you want to watch it without rewriting your components. Akita's hooks are callbacks the framework invokes at defined points — before each event, when a port sends a message, or at points you define yourself. This section introduces the hook mechanism, shows how to expose your own component's internal behavior, then covers tracing: a hooks-based tool for marking units of work and measuring how long they take."
   }
 }
