@@ -109,6 +109,57 @@ Attaching it is the same `AcceptHook` call as before — a component is
 walker.AcceptHook(&stepLogger{})
 ```
 
+## Reading the Item
+
+`ctx.Item` is an `interface{}`, so a hook has to recover the concrete type
+before it can use it. Go gives you three ways, and the right one depends on
+how sure you are about what `Item` holds.
+
+**Type assertion** is the shortest form. Use it when you have already
+narrowed things down — you checked `ctx.Pos` and you know exactly one payload
+fires there:
+
+```go
+step := ctx.Item.(walkStep)
+```
+
+This is what `stepLogger` does. It **panics** if `Item` is not a `walkStep`,
+which is fine here: only `HookPosStep` carries this payload, and we returned
+early for every other position.
+
+**The comma-ok form** is the safe version. Use it when you are not certain —
+a position might carry different payloads, or you would simply rather skip
+than crash:
+
+```go
+step, ok := ctx.Item.(walkStep)
+if !ok {
+    return
+}
+```
+
+On a mismatch `ok` is `false` and `step` is the zero value, so the hook
+quietly ignores anything it does not recognize.
+
+**A type switch** is for when one hook legitimately handles several concrete
+types. The message hook from *Hooking into Messages* is the natural case — a
+port carries both requests and responses:
+
+```go
+switch msg := ctx.Item.(type) {
+case *pingReq:
+    // msg is a *pingReq in this branch
+case *pingRsp:
+    // msg is a *pingRsp in this branch
+}
+```
+
+Each case binds `msg` to that branch's type, and a `default` catches
+anything unexpected.
+
+Rule of thumb: assert directly when the type is guaranteed, use comma-ok when
+it is not, and reach for a type switch when more than one type is valid.
+
 ## Running It
 
 ```bash
