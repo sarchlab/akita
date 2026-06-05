@@ -451,25 +451,31 @@ remain.
   calling `AfterCheckpointLoad`. `Component` derives its `TickScheduler` guard;
   `EventDrivenComponent` (now itself checkpointable) derives `pendingWakeup` the
   same way. Two regression tests assert no duplicate/missed tick or wakeup.
-
-Registered connections and NoC components are **implicitly covered**: they are
-`modeling.Component`s, so their `State` — including round-robin cursors and
-`queueing` buffers — already round-trips through the component, port, and
-queueing serializers. This needs a confirming test, not new code.
+- **Page table serializer**: `vm.PageTable` saves its shape (log2 page size)
+  plus, per process and sorted by PID, the pages in list order; load validates
+  the shape and rebuilds the per-process tables. The last quiescent resource.
+- **Mid-transaction resume oracle (Milestone B gate)**: a deterministic driver
+  and an ideal memory controller over a direct connection. `RunUntil` (a new
+  deterministic engine boundary) stops the source run with requests in flight;
+  a fresh sim loads the checkpoint and runs to completion with the same
+  reads-verified count, no data mismatch, and the same end time as an
+  uninterrupted reference. This exercises non-empty port buffers, the
+  controller's in-flight transactions, pending primary/secondary ticks, the
+  connection's round-robin cursor, and the Milestone A guard derivation
+  together — retiring the connection/NoC "implicitly covered" item for a real
+  assembly. Tracing is off (its task-ID side-table consumes the global ID
+  generator).
 
 ### Remaining
 
-Drive B; C runs alongside.
+Drive B's stretch; C runs alongside.
 
-**B. Full resume oracle** (the Phase B gate; §11, §12, §14)
-- Add the `vm.PageTable` serializer — the last quiescent resource.
-- Checkpoint a real memory simulation mid-transaction — `memaccessagent ↔
-  idealmemcontroller` over a connection, and a cache + TLB + page-table hierarchy
-  — with non-empty port buffers and pending events, resume, and assert the final
-  state and time match an uninterrupted run. Run with tracing off (its task-ID
-  side-table consumes the global ID generator).
-- This also exercises connections and NoC components in a real assembly,
-  retiring the "implicitly covered" item.
+**B (stretch). Hierarchy resume oracle** (§11, §12, §14)
+- Extend the resume oracle to a cache + TLB + page-table hierarchy, validating
+  the `vm.PageTable` serializer in a live assembly and surfacing any hidden
+  (non-`State`) runtime in the cache/TLB components. Optional for the gate,
+  which the ideal-controller oracle already meets, but raises confidence for
+  production assemblies.
 
 **C. Hardening and ship** (breadth; §13, §14)
 - Negative tests: corrupted/truncated archive, spec-hash / topology /
