@@ -192,5 +192,8 @@ in one simulation.
 
 You now have every component pattern Akita offers — default ticking
 components, raw events for ad-hoc work, and event-driven components for
-the idle case. The next section composes these into a real system: a
-traffic generator pointing at an ideal memory controller.
+the idle case. Together with ports and connections and the
+hooks-and-tracing tools from the earlier sections, that is the core toolkit
+for building and observing an Akita simulation. From here, explore the
+ready-made `mem/` and `noc/` packages to compose those pieces into larger
+memory hierarchies and networks.

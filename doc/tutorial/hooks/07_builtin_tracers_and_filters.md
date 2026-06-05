@@ -97,9 +97,9 @@ dbTracer.Terminate() // flush to disk
 
 It writes a SQLite file you can query afterward, and supports
 `StartTracing()` / `StopTracing()` to capture only a window of interest
-(full traces get large fast). Recording to a database, and reading it back
-with the visualizer, is the subject of the *Observability and Persistence*
-section — this is just where the tracer fits in the lineup.
+(full traces get large fast). Recording a full trace this way — then querying
+it, or loading it into a visualizer — is how you analyze a large simulation
+offline; here we just place the tracer in the lineup.
 
 ## Choosing One
 

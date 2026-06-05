@@ -90,14 +90,10 @@ modify it. The chapters build on each other:
 4. **Event-based simulation** — open the layer underneath: schedule
    events directly, write custom event types, and use event-driven
    components for the idle case.
-5. **Building systems** — compose components into a memory subsystem and
-   a small network.
-6. **Observability and persistence** — record traces to a database, watch
-   your simulation live, write your own component, and checkpoint to
-   resume long runs.
 
-By the end you will have a working memory-subsystem simulator and the
-muscle memory to extend it.
+By the end you will be able to write components, connect them into a
+simulation, observe what they do, and drop to the event layer when the
+component pattern does not fit.
 
 ## Where to Next
 
