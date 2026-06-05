@@ -17,8 +17,10 @@ func (p *defaultTaskPrinter) Print(task Task) {
 	fmt.Printf("%s-%s@%s\n", task.Kind, task.What, task.Location)
 }
 
-// BackTraceTracer can record tasks incomplete tasks
+// BackTraceTracer can record incomplete tasks.
 type BackTraceTracer struct {
+	NopTracer
+
 	printer      TaskPrinter
 	tracingTasks map[uint64]Task
 	lock         sync.Mutex
@@ -38,29 +40,31 @@ func NewBackTraceTracer(printer TaskPrinter) *BackTraceTracer {
 	return t
 }
 
-func (t *BackTraceTracer) StartTask(task Task) {
+// StartTask records the started task so it can be back-traced.
+func (t *BackTraceTracer) StartTask(task TaskStart) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	t.tracingTasks[task.ID] = task
+	t.tracingTasks[task.ID] = Task{
+		ID:        task.ID,
+		ParentID:  task.ParentID,
+		Kind:      task.Kind,
+		What:      task.What,
+		Location:  task.Location,
+		StartTime: task.Time,
+		Detail:    task.Detail,
+	}
 }
 
-func (t *BackTraceTracer) StepTask(task Task) {
-	// Do Nothing
-}
-
-// AddMilestone does nothing
-func (t *BackTraceTracer) AddMilestone(_ Milestone) {
-	// Do nothing
-}
-
-func (t *BackTraceTracer) EndTask(task Task) {
+// EndTask removes the completed task.
+func (t *BackTraceTracer) EndTask(task TaskEnd) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	delete(t.tracingTasks, task.ID)
 }
 
+// DumpBackTrace prints the task and the chain of its ancestors.
 func (t *BackTraceTracer) DumpBackTrace(task Task) {
 	t.printer.Print(task)
 

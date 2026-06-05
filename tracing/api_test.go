@@ -26,34 +26,34 @@ var _ = Describe("Api", func() {
 	It("should panic if ID is not given", func() {
 		domain.EXPECT().Name().Return("domain").AnyTimes()
 		Expect(func() {
-			StartTask(0, 123, domain, "kind", "what", nil)
+			StartTask(domain, TaskStart{ParentID: 123, Kind: "kind", What: "what"})
 		}).Should(Panic())
 	})
 
 	It("should be panic if domain is nil.", func() {
 		Expect(func() {
-			StartTask(1, 123, nil, "kind", "what", nil)
+			StartTask(nil, TaskStart{ID: 1, ParentID: 123, Kind: "kind", What: "what"})
 		}).Should(Panic())
 	})
 
 	It("should be panic if domain's name is empty.", func() {
 		domain.EXPECT().Name().Return("").AnyTimes()
 		Expect(func() {
-			StartTask(1, 123, domain, "kind", "what", nil)
+			StartTask(domain, TaskStart{ID: 1, ParentID: 123, Kind: "kind", What: "what"})
 		}).Should(Panic())
 	})
 
 	It("should be panic if kind is empty.", func() {
 		domain.EXPECT().Name().Return("domain").AnyTimes()
 		Expect(func() {
-			StartTask(1, 123, domain, "", "what", nil)
+			StartTask(domain, TaskStart{ID: 1, ParentID: 123, What: "what"})
 		}).Should(Panic())
 	})
 
 	It("should be panic if what is empty.", func() {
 		domain.EXPECT().Name().Return("domain").AnyTimes()
 		Expect(func() {
-			StartTask(1, 123, domain, "kind", "", nil)
+			StartTask(domain, TaskStart{ID: 1, ParentID: 123, Kind: "kind"})
 		}).Should(Panic())
 	})
 })

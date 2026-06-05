@@ -1,43 +1,37 @@
 package tracing
 
 import (
-	"github.com/sarchlab/akita/v5/timing"
 	"sync"
+
+	"github.com/sarchlab/akita/v5/timing"
 )
 
-// AverageTimeTracer can collect the total time of executing a certain type of
-// task. If the execution of two tasks overlaps, this tracer will simply add
-// the two task processing time together.
+// AverageTimeTracer can collect the average time of executing a certain type of
+// task.
 type AverageTimeTracer struct {
-	timeTeller    timing.TimeTeller
+	NopTracer
+
 	filter        TaskFilter
 	lock          sync.Mutex
 	averageTime   timing.VTimeInPicoSec
-	inflightTasks map[uint64]Task
+	inflightTasks map[uint64]timing.VTimeInPicoSec
 	taskCount     uint64
 }
 
 // NewAverageTimeTracer creates a new AverageTimeTracer
-func NewAverageTimeTracer(
-	timeTeller timing.TimeTeller,
-	filter TaskFilter,
-) *AverageTimeTracer {
-	t := &AverageTimeTracer{
-		timeTeller:    timeTeller,
+func NewAverageTimeTracer(filter TaskFilter) *AverageTimeTracer {
+	return &AverageTimeTracer{
 		filter:        filter,
-		inflightTasks: make(map[uint64]Task),
+		inflightTasks: make(map[uint64]timing.VTimeInPicoSec),
 	}
-
-	return t
 }
 
-// AverageTime returns the total time has been spent on a certain type of tasks.
+// AverageTime returns the average time spent on a certain type of tasks.
 func (t *AverageTimeTracer) AverageTime() timing.VTimeInPicoSec {
 	t.lock.Lock()
-	time := t.averageTime
-	t.lock.Unlock()
+	defer t.lock.Unlock()
 
-	return time
+	return t.averageTime
 }
 
 // TotalCount returns the total number of tasks.
@@ -49,46 +43,31 @@ func (t *AverageTimeTracer) TotalCount() uint64 {
 }
 
 // StartTask records the task start time
-func (t *AverageTimeTracer) StartTask(task Task) {
-	task.StartTime = t.timeTeller.CurrentTime()
-
+func (t *AverageTimeTracer) StartTask(task TaskStart) {
 	if !t.filter(task) {
 		return
 	}
 
 	t.lock.Lock()
-	t.inflightTasks[task.ID] = task
+	t.inflightTasks[task.ID] = task.Time
 	t.lock.Unlock()
 }
 
-// StepTask does nothing
-func (t *AverageTimeTracer) StepTask(_ Task) {
-	// Do nothing
-}
-
-// AddMilestone does nothing
-func (t *AverageTimeTracer) AddMilestone(_ Milestone) {
-	// Do nothing
-}
-
 // EndTask records the end of the task
-func (t *AverageTimeTracer) EndTask(task Task) {
-	task.EndTime = t.timeTeller.CurrentTime()
-
+func (t *AverageTimeTracer) EndTask(task TaskEnd) {
 	t.lock.Lock()
-	originalTask, ok := t.inflightTasks[task.ID]
+	defer t.lock.Unlock()
 
+	startTime, ok := t.inflightTasks[task.ID]
 	if !ok {
-		t.lock.Unlock()
 		return
 	}
 
-	taskTime := task.EndTime - originalTask.StartTime
+	taskTime := task.Time - startTime
 	t.averageTime = (t.averageTime*timing.VTimeInPicoSec(t.taskCount) + taskTime) /
 		timing.VTimeInPicoSec(t.taskCount+1)
 
 	delete(t.inflightTasks, task.ID)
 
 	t.taskCount++
-	t.lock.Unlock()
 }

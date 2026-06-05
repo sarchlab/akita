@@ -29,26 +29,26 @@ func (d *SampleDomain) Name() string {
 	return "sample domain"
 }
 
+func (d *SampleDomain) CurrentTime() timing.VTimeInPicoSec {
+	return d.timeTeller.CurrentTime()
+}
+
 func (d *SampleDomain) Start() {
 	d.nextID++
 
-	tracing.StartTask(
-		d.nextID,
-		0,
-		d,
-		"sampleTaskKind",
-		"something",
-		nil,
-	)
+	tracing.StartTask(d, tracing.TaskStart{
+		ID:   d.nextID,
+		Kind: "sampleTaskKind",
+		What: "something",
+	})
 
 	d.taskIDs = append(d.taskIDs, d.nextID)
 }
 
 func (d *SampleDomain) End() {
-	tracing.EndTask(
-		d.taskIDs[0],
-		d,
-	)
+	tracing.EndTask(d, tracing.TaskEnd{
+		ID: d.taskIDs[0],
+	})
 
 	d.taskIDs = d.taskIDs[1:]
 }
@@ -61,13 +61,13 @@ func ExampleTracer() {
 		timeTeller:   timeTeller,
 	}
 
-	filter := func(t tracing.Task) bool {
+	filter := func(t tracing.TaskStart) bool {
 		return t.Kind == "sampleTaskKind"
 	}
 
-	totalTimeTracer := tracing.NewTotalTimeTracer(timeTeller, filter)
-	busyTimeTracer := tracing.NewBusyTimeTracer(timeTeller, filter)
-	avgTimeTracer := tracing.NewAverageTimeTracer(timeTeller, filter)
+	totalTimeTracer := tracing.NewTotalTimeTracer(filter)
+	busyTimeTracer := tracing.NewBusyTimeTracer(filter)
+	avgTimeTracer := tracing.NewAverageTimeTracer(filter)
 	tracing.CollectTrace(domain, totalTimeTracer)
 	tracing.CollectTrace(domain, busyTimeTracer)
 	tracing.CollectTrace(domain, avgTimeTracer)

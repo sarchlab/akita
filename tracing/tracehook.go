@@ -32,13 +32,13 @@ type traceHook struct {
 func (h *traceHook) Func(ctx hooking.HookCtx) {
 	switch ctx.Pos {
 	case HookPosTaskStart:
-		h.t.StartTask(mustItem[Task](ctx))
-	case HookPosTaskStep:
-		h.t.StepTask(mustItem[Task](ctx))
+		h.t.StartTask(mustItem[TaskStart](ctx))
+	case HookPosTaskTag:
+		h.t.AddTaskTag(mustItem[TaskTag](ctx))
 	case HookPosMilestone:
 		h.t.AddMilestone(mustItem[Milestone](ctx))
 	case HookPosTaskEnd:
-		h.t.EndTask(mustItem[Task](ctx))
+		h.t.EndTask(mustItem[TaskEnd](ctx))
 	}
 }
 
