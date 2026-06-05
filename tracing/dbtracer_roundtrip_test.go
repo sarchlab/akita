@@ -27,10 +27,27 @@ func (d *roundTripDomain) CurrentTime() timing.VTimeInPicoSec { return d.now }
 // interned location id resolves to the component name and that milestones and
 // tags inherit the task's location.
 func TestDBTracerLocationRoundTrip(t *testing.T) {
+	dbFile := writeRoundTripTrace(t)
+
+	db, err := sql.Open("sqlite", dbFile)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	assertTaskLocation(t, db)
+	assertDictionaryAndChildren(t, db)
+}
+
+// writeRoundTripTrace emits one task (with a tag and a milestone) through the
+// real DBTracer and returns the path of the SQLite file it produced.
+func writeRoundTripTrace(t *testing.T) string {
+	t.Helper()
+
 	dbName := "roundtrip_loc_test"
 	dbFile := dbName + ".sqlite3"
 	os.Remove(dbFile)
-	defer os.Remove(dbFile)
+	t.Cleanup(func() { os.Remove(dbFile) })
 
 	recorder := datarecording.NewDataRecorder(dbName)
 	domain := &roundTripDomain{
@@ -53,17 +70,18 @@ func TestDBTracerLocationRoundTrip(t *testing.T) {
 	tracer.StopTracing()
 	tracer.Terminate()
 
-	db, err := sql.Open("sqlite", dbFile)
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	defer db.Close()
+	return dbFile
+}
 
-	// trace.Location is an interned id; join it back to the name (as daisen does).
+// assertTaskLocation checks that trace.Location (an interned id) joins back to
+// the component name and that the task times round-trip.
+func assertTaskLocation(t *testing.T, db *sql.DB) {
+	t.Helper()
+
 	var id uint64
 	var location string
 	var start, end float64
-	err = db.QueryRow(`
+	err := db.QueryRow(`
 		SELECT t.ID, loc.Locale, t.StartTime, t.EndTime
 		FROM trace t JOIN location loc ON t.Location = loc.ID
 		WHERE t.ID = 1`).Scan(&id, &location, &start, &end)
@@ -76,8 +94,13 @@ func TestDBTracerLocationRoundTrip(t *testing.T) {
 	if start != 10 || end != 20 {
 		t.Fatalf("times = (%v,%v), want (10,20)", start, end)
 	}
+}
 
-	// The component list comes straight from the location dictionary.
+// assertDictionaryAndChildren checks the location dictionary plus the milestone
+// and tag rows, neither of which stores its own location.
+func assertDictionaryAndChildren(t *testing.T, db *sql.DB) {
+	t.Helper()
+
 	var locCount int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM location`).Scan(&locCount); err != nil {
 		t.Fatalf("count location: %v", err)
@@ -86,7 +109,6 @@ func TestDBTracerLocationRoundTrip(t *testing.T) {
 		t.Fatalf("location rows = %d, want 1", locCount)
 	}
 
-	// The milestone has no Location column; its location is the task's.
 	var mWhat string
 	if err := db.QueryRow(`SELECT What FROM milestone WHERE TaskID = 1`).Scan(&mWhat); err != nil {
 		t.Fatalf("query milestone: %v", err)
@@ -95,7 +117,6 @@ func TestDBTracerLocationRoundTrip(t *testing.T) {
 		t.Fatalf("milestone What = %q, want queued", mWhat)
 	}
 
-	// The tag was persisted to the new tag table.
 	var tagWhat string
 	if err := db.QueryRow(`SELECT What FROM tag WHERE TaskID = 1`).Scan(&tagWhat); err != nil {
 		t.Fatalf("query tag: %v", err)
