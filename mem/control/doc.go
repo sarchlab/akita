@@ -18,6 +18,6 @@
 //     component package adds one test that calls RunContract with its
 //     build function and its declared VerbSupport.
 //
-// See CONTROL_PROTOCOL_PLAN.md at the repo root for the verb
-// definitions, response timing, and migration plan.
+// See mem/CONTROL_PROTOCOL.md for the verb definitions, response timing,
+// support matrix, and per-component behavior.
 package control

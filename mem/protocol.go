@@ -83,8 +83,9 @@ type WriteDoneRsp struct {
 
 // ControlCommand enumerates the verbs of the uniform control protocol for
 // memory agents. Every memory agent component implements its supported
-// subset of these verbs over its "Control" port. See CONTROL_PROTOCOL_PLAN.md
-// at the repo root for definitions, response timing, and the support matrix.
+// subset of these verbs over its "Control" port. See mem/CONTROL_PROTOCOL.md
+// for definitions, response timing, the support matrix, and per-component
+// behavior.
 type ControlCommand int
 
 const (

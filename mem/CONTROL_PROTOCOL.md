@@ -10,11 +10,9 @@ The protocol primitives live in `mem/protocol.go`. The reusable state
 enum, support matrix, and a `*testing.T` conformance harness live in
 `mem/control/` (see [`mem/control/README.md`](control/README.md)).
 
-Every memory agent now implements its supported subset of the protocol;
-the support matrix below is the final, implemented state, not a target.
-For the original migration plan, see
-[`CONTROL_PROTOCOL_PLAN.md`](../CONTROL_PROTOCOL_PLAN.md) at the repo
-root.
+Every memory agent implements its supported subset of the protocol. The
+support matrix and the [per-component behavior](#per-component-behavior)
+below describe the implemented state.
 
 ## TL;DR
 
@@ -170,6 +168,127 @@ declares it via `CacheLike()`), but it is a no-op because writethrough
 holds no dirty data: it acks `Success: true` immediately. Callers can
 therefore issue Flush uniformly across cache types without branching.
 
+## Per-component behavior
+
+This section records how each agent actually implements its verbs. The
+universal verbs share a common shape everywhere, so it is stated once
+here and only the component-specific details are repeated below:
+
+- **Pause** (sync) sets the component to its paused state immediately;
+  the data path stops accepting new traffic from its workload ports.
+  In-flight work is frozen, not discarded.
+- **Enable** (sync) returns the component to its running state and drops
+  any stale traffic left in the workload-port queues.
+- **Reset** (sync) is a hard reset: it discards in-flight transactions
+  and internal queues and returns the component to its freshly-built
+  shape. What exactly each component wipes (and deliberately preserves)
+  is listed below.
+- **Drain** (async) stops accepting new traffic, lets in-flight work
+  finish, and acks once the component is quiescent — landing in the
+  paused state. The per-component entry gives the exact quiescence
+  condition.
+
+Unsupported verbs reply `Success: false, Error: "unsupported"`.
+Invalidate and Flush issued while running reply `Success: false,
+Error: "must be paused or drained"`.
+
+### Memory controllers
+
+**`idealmemcontroller`** — `Universal`; state in `State.ControlState`
+(`control.State`).
+- Drain acks once `len(State.InflightTransactions) == 0`.
+- Reset discards `InflightTransactions`.
+
+**`dram`** — `Universal`; `State.ControlState`.
+- Drain acks once `len(State.Transactions) == 0`.
+- Reset clears `Transactions`, rebuilds the sub-transaction queue,
+  command queues, and per-bank states, and resets the refresh counters.
+
+**`simplebankedmemory`** — `Universal`; `State.ControlState`.
+- Drain acks once every bank is quiescent (its pipeline is empty and its
+  post-pipeline buffer is empty).
+- Reset rebuilds all banks (fresh pipelines and buffers).
+
+### Virtual-memory agents
+
+**`vm/mmu`** — `Universal`; `State.ControlState`.
+- Drain acks once `WalkingTranslations` and `MigrationQueue` are empty
+  and no migration is in progress (`!IsDoingMigration`).
+- Reset clears the in-flight walks, the migration queue and current
+  migration, and pending page-table-walker removals. The **shared page
+  table** (owned by the simulation) is deliberately not touched.
+
+**`vm/gmmu`** — `Universal`; `State.ControlState`.
+- Drain acks once `WalkingTranslations` and `RemoteMemReqs` are empty.
+- Reset clears in-flight walks and outstanding remote memory requests;
+  the shared page table is not touched.
+
+**`vm/addresstranslator`** — `Universal`; `State.ControlState`.
+- Drain acks once `Transactions` and `InflightReqToBottom` are empty.
+- Reset clears both and drains the Top/Bottom/Translation ports.
+
+**`vm/tlb`** — `TranslationCacheLike` (Invalidate, no Flush); state is a
+string in `State.TLBState` (`enable`/`pause`/`drain`).
+- Drain lets the data path finish resolving in-flight misses (the MSHR
+  empties and the final translation response is sent to the top) before
+  the async ack.
+- Reset discards the MSHR (in-flight misses). Cached translations in the
+  sets are **not** evicted by Reset — use Invalidate to drop them.
+- Invalidate marks cached entries matching the `Addresses`
+  (page-aligned) and `PID` filter invalid (empty filter = all). No
+  writeback — translations are never dirty.
+- Flush is unsupported.
+
+**`vm/mmuCache`** — `TranslationCacheLike`; string state in
+`State.CurrentState`.
+- Drain lets the data path forward/quiesce queued work, then acks.
+- Reset clears control bookkeeping and drains the ports; cached entries
+  persist (drop them with Invalidate).
+- Invalidate drops cached page-walk entries matching the filter. Because
+  the cache stores per-level VPN segments, an address filter can also
+  drop sibling pages that share an upper-level segment — this is safe
+  over-invalidation (it only forces re-walks), never incorrect.
+- Flush is unsupported.
+
+### Caches
+
+**`cache/writeback`** — `CacheLike`; state in `State.CacheState` (an int
+holding `cacheState`: running / paused / draining / pre-flushing /
+flushing).
+- Drain acks once the cache is quiescent: no live (non-`Removed`)
+  transactions, the write buffer is empty, and every per-bank in-flight
+  counter is zero.
+- Reset resets the directory and MSHR and clears all transactions,
+  stage/bank buffers, pipelines, and flusher state.
+- Invalidate drops blocks matching the `Addresses` (line-aligned) and
+  `PID` filter **without writeback** — dirty data is discarded silently,
+  so Flush first if it must survive.
+- Flush (async) writes back the dirty blocks matching the filter and
+  marks exactly those clean; clean lines and blocks outside the filter
+  stay valid.
+
+**`cache/writethroughcache`** — `CacheLike`; two bools `State.IsPaused`
+and `State.IsDraining`.
+- Drain acks once every transaction is retired (`Removed`).
+- Reset resets the directory and MSHR and clears transactions and
+  buffers.
+- Invalidate drops matching blocks (always clean; no writeback).
+- Flush is a no-op that acks `Success` immediately (no dirty data).
+
+### Others
+
+**`rob`** — `Universal`; `State.ControlState`. Pause freezes the
+pipeline.
+- Drain acks once `State.Transactions` is empty.
+- Reset discards all in-flight transactions (releasing their receiver
+  task IDs for tracing) and drains the Top/Bottom ports.
+
+**`datamover`** — `Universal`; `State.ControlState`.
+- Drain acks once the current transfer finishes
+  (`State.CurrentTransaction.Active == false`).
+- Reset wipes the current transaction and the data buffer and drains the
+  Top/Inside/Outside ports.
+
 ## Helpers in `mem/control`
 
 ```go
@@ -261,6 +380,3 @@ points at exactly which verb the component handles wrong.
   overview (State, VerbSupport, errors, `RunContract`).
 - `mem/control/state.go` — `State` enum, `VerbSupport`, helpers.
 - `mem/control/contract.go` — the `RunContract` harness.
-- [`CONTROL_PROTOCOL_PLAN.md`](../CONTROL_PROTOCOL_PLAN.md) — the
-  original migration plan (historical; the protocol is now fully
-  implemented).
