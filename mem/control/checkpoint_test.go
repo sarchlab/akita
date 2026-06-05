@@ -284,3 +284,73 @@ func TestFlush_DoesNotStrandTransactions_AllowingLaterDrain(t *testing.T) {
 		t.Fatalf("Drain after Flush failed: %q", rsp.Error)
 	}
 }
+
+// TestReset_DropsOrphanedBottomResponse is a regression test. A Reset issued
+// while a fetch is in flight to the lower memory clears the cache's inflight
+// correlation metadata; the lower memory's late response then has nothing to
+// match. The cache must drop it rather than panic in
+// findInflightFetchIdxByFetchReadReqID.
+func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
+	h := buildCacheOverDRAM(t)
+
+	// A read miss makes the cache issue a fetch out the Bottom port. Tick only
+	// the cache (no ferry) and capture that fetch so it stays "outstanding".
+	read := mem.ReadReq{Address: 0, AccessByteSize: 4}
+	read.ID = timing.GetIDGenerator().Generate()
+	read.Src = h.agent
+	read.Dst = h.top.AsRemote()
+	read.TrafficClass = "mem.ReadReq"
+	h.top.Deliver(read)
+
+	var fetch mem.ReadReq
+	gotFetch := false
+	for i := 0; i < 4096 && !gotFetch; i++ {
+		h.cache.Tick()
+		if out := h.bottom.RetrieveOutgoing(); out != nil {
+			fetch, gotFetch = out.(mem.ReadReq)
+		}
+	}
+	if !gotFetch {
+		t.Fatal("cache never issued a bottom fetch")
+	}
+
+	// Reset while the fetch is outstanding (this clears the inflight indices).
+	rst := mem.ControlReq{Command: mem.CmdReset}
+	rst.ID = timing.GetIDGenerator().Generate()
+	rst.Src = h.agent
+	rst.Dst = h.ctrl.AsRemote()
+	rst.TrafficClass = "mem.ControlReq"
+	h.ctrl.Deliver(rst)
+	acked := false
+	for i := 0; i < 64 && !acked; i++ {
+		h.cache.Tick()
+		if out := h.ctrl.RetrieveOutgoing(); out != nil {
+			if rsp, ok := out.(mem.ControlRsp); ok &&
+				rsp.Command == mem.CmdReset {
+				acked = true
+			}
+		}
+	}
+	if !acked {
+		t.Fatal("reset never acked")
+	}
+
+	// The lower memory's now-orphaned response arrives after the reset.
+	rsp := mem.DataReadyRsp{Data: make([]byte, cpBlockSize)}
+	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.Src = h.dramTop.AsRemote()
+	rsp.Dst = h.bottom.AsRemote()
+	rsp.RspTo = fetch.ID
+	rsp.TrafficClass = "mem.DataReadyRsp"
+	h.bottom.Deliver(rsp)
+
+	// Processing the orphan must not panic; it is simply dropped.
+	for range 16 {
+		h.cache.Tick()
+	}
+
+	// The cache still works: a fresh read re-fetches from the backing store.
+	if got := h.read(t, 0, 4); len(got) != 4 {
+		t.Fatalf("post-reset read returned %d bytes, want 4", len(got))
+	}
+}
