@@ -21,6 +21,7 @@ The example for this and the next chapter is in `examples/hooks/`.
 - The `hooking` API: the `Hook` interface, `HookCtx`, and `AcceptHook`.
 - What a **hook position** is and which objects expose them.
 - How to attach an engine hook that logs every event.
+- Why hooks are an instance of the observer pattern, and what that buys you.
 
 ## The Hook Interface
 
@@ -133,6 +134,41 @@ You are watching the engine's heartbeat: each agent ticking, and the
 connection delivering messages between them — without a single `fmt.Print`
 inside the agents.
 
+## The Observer Pattern
+
+Hooks are Akita's take on a classic design: the **observer pattern**, also
+called publish–subscribe. The idea is simple — a *subject* keeps a list of
+*observers* and notifies each one when something happens, without knowing or
+caring what they do. The pieces you just used map straight onto it:
+
+| Observer pattern | In Akita |
+|---|---|
+| Subject (the thing being watched) | a `Hookable` — engine, port, component |
+| Observer (the thing watching) | a `Hook` |
+| Subscribe | `AcceptHook` |
+| Notify | the framework firing the hook at a position |
+
+Why this shape is worth using:
+
+- **Decoupling.** The subject does not depend on its observers. The agents in
+  `examples/hooks` were written, compiled, and tested with no knowledge of
+  `eventHook` — you can observe code you do not own and cannot change.
+- **Flexibility.** Add, remove, or swap observers without touching the
+  subject. Want message counts instead of a log? Attach a different hook; the
+  engine and agents are untouched.
+- **Many at once.** A subject can have any number of observers. The next
+  chapter adds a port hook while this event hook keeps running, and each sees
+  its own events independently.
+- **Separation of concerns.** Each observer does one job. Logging, metrics,
+  and validation live in their own hooks instead of being tangled into the
+  component.
+
+This is also why **tracing needs no new mechanism**. A tracer, which you will
+meet shortly, is just another observer: you build it and subscribe it with
+the same kind of call, and the components it watches stay oblivious. One
+pattern, applied once, carries everything from a one-line logger to the full
+tracing system.
+
 ## Key Concepts
 
 - **A hook is a `Func(ctx HookCtx)` callback** the framework invokes at
@@ -143,6 +179,9 @@ inside the agents.
   `Hookable`.
 - **Hooks are non-invasive.** The observed component is unchanged and
   unaware.
+- **Hooks are the observer pattern.** Subjects (`Hookable`s) notify
+  subscribed observers (`Hook`s); the decoupling is what makes them flexible,
+  and tracers are observers too.
 
 ## Where to Next
 
