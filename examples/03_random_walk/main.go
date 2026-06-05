@@ -10,7 +10,8 @@ import (
 )
 
 type walkSpec struct {
-	WallDistance int `json:"wall_distance"`
+	Freq         timing.Freq `json:"freq"`
+	WallDistance int         `json:"wall_distance"`
 }
 
 type walkState struct {
@@ -50,10 +51,11 @@ func (m *walkMW) Tick() bool {
 func main() {
 	s := simulation.MakeBuilder().Build()
 
+	spec := walkSpec{Freq: 1 * timing.GHz, WallDistance: 10}
 	comp := modeling.NewBuilder[walkSpec, walkState, modeling.None]().
 		WithEngine(s.GetEngine()).
-		WithFreq(1 * timing.GHz).
-		WithSpec(walkSpec{WallDistance: 10}).
+		WithFreq(spec.Freq).
+		WithSpec(spec).
 		Build("Walker")
 	comp.AddMiddleware(&walkMW{
 		comp: comp,

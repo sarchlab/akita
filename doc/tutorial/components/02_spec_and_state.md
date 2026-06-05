@@ -11,14 +11,18 @@ and a mutable **State**. For the random walk they are tiny.
 
 ```go
 type walkSpec struct {
-    WallDistance int `json:"wall_distance"`
+    Freq         timing.Freq `json:"freq"`
+    WallDistance int         `json:"wall_distance"`
 }
 ```
 
-`walkSpec` is set once when the component is built — here, "stop when the
-walker drifts 10 units from the origin in either direction". Spec holds
-the things that never change at runtime: in larger components this is
-clock frequency, port buffer sizes, latencies, thresholds.
+`walkSpec` is set once when the component is built and never changes at
+runtime. `Freq` is the clock the component ticks at; `WallDistance` is our
+own setting — "stop when the walker drifts 10 units from the origin in either
+direction". By convention the **clock frequency lives in the spec** alongside
+the rest of a component's configuration (in larger components: port buffer
+sizes, latencies, thresholds), so the full configuration travels — and
+serializes — together.
 
 ## State — Runtime Data
 

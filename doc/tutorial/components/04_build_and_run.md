@@ -12,10 +12,11 @@ component and runs the engine.
 ```go
 s := simulation.MakeBuilder().Build()
 
+spec := walkSpec{Freq: 1 * timing.GHz, WallDistance: 10}
 comp := modeling.NewBuilder[walkSpec, walkState, modeling.None]().
     WithEngine(s.GetEngine()).
-    WithFreq(1 * timing.GHz).
-    WithSpec(walkSpec{WallDistance: 10}).
+    WithFreq(spec.Freq).
+    WithSpec(spec).
     Build("Walker")
 comp.AddMiddleware(&walkMW{
     comp: comp,
@@ -31,7 +32,32 @@ an alias for the component *type* cannot be substituted for them. The alias
 still earns its keep on the middleware field and this return value — just not
 on the constructor call. (The per-package builders in the next section hide
 the generics by writing them once, inside `Build`.) Set the engine, the clock
-frequency, and the spec, then build with a unique name.
+frequency (read from the spec), and the spec itself, then build with a unique
+name.
+
+:::info The builder pattern
+
+`NewBuilder().WithEngine(…).WithFreq(…).WithSpec(…).Build("Walker")` is the
+**builder pattern**: rather than one constructor with a long argument list,
+you assemble the component through a chain of small `WithX` calls and finish
+with `Build`. It reads top to bottom, and each setting is independent.
+
+**How the chaining works.** Every `WithX` takes the builder *by value*, sets
+one field on its copy, and returns that copy. Because each call returns a
+builder, the next one hangs off it. Nothing is mutated in place, so a
+partially configured builder is just a value you can stash and reuse.
+
+**Akita's convention.** Per-package builders — the subject of the next
+section — take a component's whole configuration as one `Spec` through
+`WithSpec` (there is no setter per spec field) and start from a
+`DefaultSpec()`. That is why the clock frequency lives in the spec. They also
+follow a fixed shape, `MakeBuilder().WithRegistrar(…).WithSpec(…).Build(name)`,
+and create their ports inside `Build`. The low-level `modeling.NewBuilder`
+shown here cannot pull `Freq` out of an arbitrary spec type on its own, so we
+hand it over explicitly with `WithFreq(spec.Freq)`; a per-package builder does
+that once, inside `Build`.
+
+:::
 
 `AddMiddleware` registers the middleware that will run every cycle. The RNG
 is seeded with `1` so the output is reproducible.

@@ -47,10 +47,15 @@ A few things to notice:
 - It also holds its **own** state — the random source (`rng`). Middleware
   is just a regular Go struct, so it can carry anything that does not need
   to survive checkpointing.
-- The return value controls whether the engine reschedules. While there is
-  work left, return `true`; once the wall is hit, return `false`. When
-  every component returns `false`, the engine's event queue empties and
-  `Run` returns.
+- The return value tells the engine whether the middleware **made progress**
+  this tick. Return `true` when it did something useful — advanced state, sent
+  a message — and the engine ticks the component again next cycle. Return
+  `false` when it did nothing, either because there was no work or because it
+  was blocked (for example, an outgoing port was full); the engine then lets
+  the component go idle until something wakes it, such as an incoming message
+  or a `TickLater`. Here the walker makes progress on every step, so it returns
+  `true` until it reaches the wall and then returns `false`. When every
+  component is idle, the engine's event queue empties and `Run` returns.
 
 ## Where to Next
 
