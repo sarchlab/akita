@@ -89,9 +89,7 @@ const config = {
         id: `pkg-${pkg}`,
         path: `../${pkg}`,
         routeBasePath: `packages/${pkg}`,
-        sidebarPath: (pkg === 'noc' || pkg === 'mem')
-          ? './sidebars-components-group.js'
-          : './sidebars-core-group.js',
+        sidebarPath: `./sidebars/${pkg}.js`,
         editUrl: `https://github.com/sarchlab/akita/blob/main/${pkg}/`,
         include: ['**/README.md'],
         exclude: ['**/node_modules/**', '**/static/**'],
