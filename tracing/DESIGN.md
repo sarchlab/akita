@@ -140,6 +140,17 @@ type Milestone struct {
 
 Notes:
 
+- **Time is sourced from the domain, not the caller.** `NamedHookable` embeds
+  `timing.TimeTeller`, and each emit function stamps the event's `Time` with
+  `domain.CurrentTime()` *after* the `NumHooks()==0` guard. This is a change
+  from the original "caller supplies `Time`" plan: passing `domain.CurrentTime()`
+  as a call-site argument is evaluated eagerly, which (a) defeats the
+  cheap-when-disabled guarantee and (b) panics the many unit tests that build
+  components with `WithEngine(nil)`. Sourcing the time inside the guard keeps
+  tracing free when no tracer is attached and leaves those tests untouched.
+  Callers therefore pass **no** time; the `Time` fields exist only for the
+  emit→tracer handoff. `TraceReq*` helpers take `(domain, msg, ...)` with no
+  `now`.
 - `Location` field on `TaskStart` **subsumes** `StartTaskWithSpecificLocation`
   (set it for network tracing, omit it otherwise). That function is deleted.
 - `Kind` stays `string`. Each component package may declare its own constants
@@ -368,7 +379,7 @@ any solution here must stay explicit and data-driven.
 |---|---|
 | Task kind | Plain `string`; no enum |
 | Parameters | `(domain, struct)`; `TaskStart` / `TaskEnd` / `TaskTag` / `Milestone` |
-| Time | Caller-supplied in the struct; tracers drop `TimeTeller` |
+| Time | Sourced from `domain.CurrentTime()` inside the NumHooks guard (NamedHookable is a TimeTeller); tracers drop their own `TimeTeller` |
 | Steps | Renamed to **tags**; persisted in a new `tag` table |
 | Milestone location | **Removed** (inherited from task) |
 | Tag location | None (inherited from task); has a `What` field |
