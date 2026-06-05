@@ -81,35 +81,87 @@ func (e *SerialEngine) Run() error {
 			e.waitForResume()
 		}
 
-		evt := e.nextEvent()
-
-		if evt.Time() < e.time {
-			log.Panicf(
-				"cannot run event in the past, evt %s @ %d, now %d",
-				reflect.TypeOf(evt), evt.Time(), e.time,
-			)
-		}
-
-		e.time = evt.Time()
-
-		if hasHooks {
-			hookCtx := hooking.HookCtx{
-				Domain: e,
-				Pos:    HookPosBeforeEvent,
-				Item:   evt,
-			}
-			e.InvokeHook(hookCtx)
-
-			handler := e.registry[evt.HandlerID()]
-			_ = handler.Handle(evt)
-
-			hookCtx.Pos = HookPosAfterEvent
-			e.InvokeHook(hookCtx)
-		} else {
-			handler := e.registry[evt.HandlerID()]
-			_ = handler.Handle(evt)
-		}
+		e.dispatchNext(hasHooks)
 	}
+}
+
+// RunUntil runs events in time order until the next event's time would exceed t,
+// or the queue empties. Events at times <= t scheduled while running (including
+// newly scheduled ones) are processed; the engine stops with its time at the
+// last processed event and all later events still queued. This is a
+// deterministic mid-run boundary — unlike Pause, which stops at a
+// non-reproducible point — used to take a mid-transaction checkpoint.
+func (e *SerialEngine) RunUntil(t VTimeInPicoSec) error {
+	e.singleRunLock.Lock()
+	defer e.singleRunLock.Unlock()
+
+	hasHooks := e.NumHooks() > 0
+
+	for {
+		if e.noMoreEvent() {
+			return nil
+		}
+		if e.nextEventTime() > t {
+			return nil
+		}
+
+		if atomic.LoadInt32(&e.paused) != 0 {
+			e.waitForResume()
+		}
+
+		e.dispatchNext(hasHooks)
+	}
+}
+
+// dispatchNext pops the earliest event and runs it, invoking hooks when present.
+func (e *SerialEngine) dispatchNext(hasHooks bool) {
+	evt := e.nextEvent()
+
+	if evt.Time() < e.time {
+		log.Panicf(
+			"cannot run event in the past, evt %s @ %d, now %d",
+			reflect.TypeOf(evt), evt.Time(), e.time,
+		)
+	}
+
+	e.time = evt.Time()
+
+	if hasHooks {
+		hookCtx := hooking.HookCtx{
+			Domain: e,
+			Pos:    HookPosBeforeEvent,
+			Item:   evt,
+		}
+		e.InvokeHook(hookCtx)
+
+		handler := e.registry[evt.HandlerID()]
+		_ = handler.Handle(evt)
+
+		hookCtx.Pos = HookPosAfterEvent
+		e.InvokeHook(hookCtx)
+	} else {
+		handler := e.registry[evt.HandlerID()]
+		_ = handler.Handle(evt)
+	}
+}
+
+// nextEventTime returns the time of the earliest queued event. It must not be
+// called when both queues are empty.
+func (e *SerialEngine) nextEventTime() VTimeInPicoSec {
+	if e.queue.Len() == 0 {
+		return e.secondaryQueue.Peek().Time()
+	}
+	if e.secondaryQueue.Len() == 0 {
+		return e.queue.Peek().Time()
+	}
+
+	primary := e.queue.Peek().Time()
+	secondary := e.secondaryQueue.Peek().Time()
+	if primary <= secondary {
+		return primary
+	}
+
+	return secondary
 }
 
 // waitForResume blocks until the engine is unpaused.
