@@ -71,7 +71,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 				AddressToPortMapper: addressToPortMapper,
 			}).
 			Build("Cache")
-		m = cacheComp.Middlewares()[0].(*pipelineMW)
+		for _, mw := range cacheComp.Middlewares() {
+			if p, ok := mw.(*pipelineMW); ok {
+				m = p
+			}
+		}
 
 		conn = directconnection.MakeBuilder().
 			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).

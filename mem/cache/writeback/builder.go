@@ -111,9 +111,13 @@ func (b Builder) Build(name string) *Comp {
 	cmw := b.buildControlMW(comp, name, spec, pmw)
 	ucmw := &ctrlMiddleware{pipeline: pmw, ctrlPort: comp.GetPortByName("Control")}
 
-	comp.AddMiddleware(pmw)   // index 0
-	comp.AddMiddleware(cmw)   // index 1: legacy flush walker
-	comp.AddMiddleware(ucmw)  // index 2: universal control verbs
+	// Control runs before the data pipeline so a Pause/Drain/Reset takes
+	// effect this tick before any Top/Bottom traffic or in-flight operation
+	// advances. The flusher (legacy control) then runs, and the data pipeline
+	// last.
+	comp.AddMiddleware(ucmw) // index 0: universal control verbs
+	comp.AddMiddleware(cmw)  // index 1: legacy flush walker
+	comp.AddMiddleware(pmw)  // index 2: data pipeline
 
 	b.registrar.RegisterComponent(comp)
 

@@ -22,8 +22,11 @@ func (m *ctrlMiddleware) topPort() messaging.Port {
 
 func (m *ctrlMiddleware) Tick() bool {
 	madeProgress := false
-	madeProgress = m.completePendingDrain() || madeProgress
+	// Reset is the highest-priority verb: service incoming control (which may
+	// be a Reset that preempts the in-progress async verb) before completing a
+	// pending drain, so a stale Drain ack is never sent ahead of a Reset.
 	madeProgress = m.handleIncoming() || madeProgress
+	madeProgress = m.completePendingDrain() || madeProgress
 	return madeProgress
 }
 
@@ -134,6 +137,8 @@ func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
 	state.CurrentCmdSrc = ""
 	state.ControlState = control.StateEnabled
 
+	resetStatistics(state)
+
 	for m.topPort().RetrieveIncoming() != nil {
 	}
 
@@ -141,6 +146,26 @@ func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
+}
+
+// resetStatistics zeroes the accumulated DRAM statistics so a Reset returns
+// the controller to its freshly-built shape. These counters are reported for
+// experiment results, so a reset before a new measurement phase must not carry
+// pre-reset traffic into the post-reset run.
+func resetStatistics(state *State) {
+	state.TotalReadCommands = 0
+	state.TotalWriteCommands = 0
+	state.TotalActivates = 0
+	state.TotalPrecharges = 0
+	state.RowBufferHits = 0
+	state.RowBufferMisses = 0
+	state.TotalCycles = 0
+	state.TotalReadLatencyCycles = 0
+	state.TotalWriteLatencyCycles = 0
+	state.CompletedReads = 0
+	state.CompletedWrites = 0
+	state.BytesRead = 0
+	state.BytesWritten = 0
 }
 
 func (m *ctrlMiddleware) handleUnsupported(req mem.ControlReq) bool {

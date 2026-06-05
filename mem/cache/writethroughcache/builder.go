@@ -115,8 +115,10 @@ func (b Builder) Build(name string) *Comp {
 	comp.AddPort("Control", controlPort)
 	ucmw := &ctrlMiddleware{pipeline: pmw, ctrlPort: controlPort}
 
-	comp.AddMiddleware(pmw)  // index 0
-	comp.AddMiddleware(ucmw) // index 1: control verbs
+	// Control runs before the data pipeline so a Pause/Drain/Reset takes
+	// effect this tick before any Top/Bottom traffic advances.
+	comp.AddMiddleware(ucmw) // index 0: control verbs
+	comp.AddMiddleware(pmw)  // index 1: data pipeline
 
 	b.registrar.RegisterComponent(comp)
 

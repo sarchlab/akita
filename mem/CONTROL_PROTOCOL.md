@@ -88,12 +88,19 @@ The primitives compose. The protocol stays small.
    require the component to be in `StatePaused` or `StateDraining`.
    Issuing them while `StateEnabled` returns `Success: false,
    Error: control.ErrMustBePausedOrDrained`.
-5. **Reset is a hard signal.** Reset is processed unconditionally
-   regardless of current state. If Drain or Flush is in flight when
-   Reset arrives, the in-flight verb is dropped without a response.
-   Avoiding concurrent Reset + async control is the sender's
-   responsibility.
-6. **Verbs are idempotent.** Pause-when-Paused, Enable-when-Enabled,
+5. **Reset is the highest-priority verb.** Reset is processed
+   unconditionally, regardless of current state, and it takes precedence
+   over finishing any in-progress async verb: within a tick a component
+   services an incoming Reset *before* it would send a pending
+   Drain/Flush completion, so a stale async ack is never emitted ahead of
+   the Reset. The preempted in-flight verb is dropped without a response.
+   (Avoiding concurrent Reset + async control otherwise remains the
+   sender's responsibility.)
+6. **Control is serviced before the data path.** Within a single tick a
+   component handles control messages before advancing its data pipeline,
+   so a synchronous verb (Pause/Reset) takes effect that same tick before
+   any further Top/Bottom traffic or in-flight work advances.
+7. **Verbs are idempotent.** Pause-when-Paused, Enable-when-Enabled,
    and Drain-when-Paused all succeed without side effects.
 
 ## Wire format

@@ -131,6 +131,75 @@ var _ = Describe("DRAM control behavior", func() {
 		Expect(topPort.RetrieveOutgoing()).To(BeNil())
 	})
 
+	It("services a queued Reset before completing a pending Drain", func() {
+		// The controller is draining and has just become quiescent (no
+		// transactions): completePendingDrain would otherwise ack the Drain.
+		comp.State.ControlState = control.StateDraining
+		comp.State.CurrentCmdID = 999
+		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
+		comp.State.Transactions = nil
+
+		// A Reset is queued in the same window. As the highest-priority verb it
+		// must be serviced before the Drain completes, so no stale Drain ack is
+		// emitted.
+		reset := makeCtrlReq(mem.CmdReset)
+		ctrlPort.Deliver(reset)
+
+		var rsps []mem.ControlRsp
+		for range 4 {
+			comp.Tick()
+			for {
+				out := ctrlPort.RetrieveOutgoing()
+				if out == nil {
+					break
+				}
+				if r, ok := out.(mem.ControlRsp); ok {
+					rsps = append(rsps, r)
+				}
+			}
+		}
+
+		// Exactly one ack — the Reset — and never a Drain ack.
+		Expect(rsps).To(HaveLen(1))
+		Expect(rsps[0].Command).To(Equal(mem.CmdReset))
+		Expect(rsps[0].RspTo).To(Equal(reset.ID))
+		Expect(comp.State.ControlState).To(Equal(control.StateEnabled))
+	})
+
+	It("zeroes accumulated statistics on Reset", func() {
+		comp.State.TotalReadCommands = 7
+		comp.State.RowBufferHits = 3
+		comp.State.TotalCycles = 100
+		comp.State.CompletedReads = 5
+		comp.State.BytesRead = 640
+		comp.State.TotalWriteLatencyCycles = 42
+
+		reset := makeCtrlReq(mem.CmdReset)
+		ctrlPort.Deliver(reset)
+		found := false
+		for i := 0; i < 8 && !found; i++ {
+			comp.Tick()
+			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if r, ok := out.(mem.ControlRsp); ok &&
+					r.Command == mem.CmdReset {
+					found = true
+				}
+			}
+		}
+
+		Expect(found).To(BeTrue())
+		// Activity counters have no post-reset traffic, so they are exactly 0.
+		Expect(comp.State.TotalReadCommands).To(BeZero())
+		Expect(comp.State.RowBufferHits).To(BeZero())
+		Expect(comp.State.CompletedReads).To(BeZero())
+		Expect(comp.State.BytesRead).To(BeZero())
+		Expect(comp.State.TotalWriteLatencyCycles).To(BeZero())
+		// TotalCycles is cleared by the reset, then counts only post-reset
+		// cycles, so it is far below the pre-reset value rather than carrying
+		// it forward.
+		Expect(comp.State.TotalCycles).To(BeNumerically("<", 100))
+	})
+
 	DescribeTable("Reset wipes in-flight state from any control state",
 		func(startState control.State) {
 			acceptReads(1)
