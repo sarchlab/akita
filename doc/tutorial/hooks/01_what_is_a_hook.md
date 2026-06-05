@@ -134,7 +134,7 @@ You are watching the engine's heartbeat: each agent ticking, and the
 connection delivering messages between them — without a single `fmt.Print`
 inside the agents.
 
-## The Observer Pattern
+:::info The observer pattern
 
 Hooks are Akita's take on a classic design: the **observer pattern**, also
 called publish–subscribe. The idea is simple — a *subject* keeps a list of
@@ -168,6 +168,8 @@ meet shortly, is just another observer: you build it and subscribe it with
 the same kind of call, and the components it watches stay oblivious. One
 pattern, applied once, carries everything from a one-line logger to the full
 tracing system.
+
+:::
 
 ## Key Concepts
 
