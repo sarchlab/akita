@@ -103,4 +103,5 @@ they maintain full backward compatibility. For v5 plans and progress, see
 [issue #304](https://github.com/sarchlab/akita/issues/304) and the
 [v5 milestone](https://github.com/sarchlab/akita/milestone).
 
-For migration between versions, see the [Migration Guide](migration.md).
+For migration between versions, see the
+[Migration Guide](doc/core/migration.md).

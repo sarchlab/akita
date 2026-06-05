@@ -1,10 +1,10 @@
-# tracing
+# tracing — Task-Based Tracing Framework
 
-Package `tracing` provides a task-based tracing framework for observing what
-happens inside a simulation. It uses the `sim.Hook` mechanism to collect
-structured traces without modifying component logic.
+Package `tracing` provides a task-based tracing framework for the Akita
+simulation framework. It uses the `hooking.Hook` mechanism to collect structured
+traces of what happens inside a simulation without modifying component logic.
 
-## Core Concepts
+## Key Concepts
 
 ### Tasks
 
@@ -13,15 +13,17 @@ optional parent for hierarchical tracing:
 
 ```go
 type Task struct {
-    ID         uint64         // unique task ID
-    ParentID   uint64         // parent task (0 = root)
-    Kind       string         // e.g., "req_in", "req_out"
-    What       string         // e.g., "ReadReq", "WriteReq"
-    Location   string         // component name
-    StartTime  sim.VTimeInSec // picoseconds
-    EndTime    sim.VTimeInSec
+    ID         uint64            // unique task ID
+    ParentID   uint64            // parent task (0 = root)
+    Kind       string            // e.g., "req_in", "req_out"
+    What       string            // e.g., "ReadReq", "WriteReq"
+    Location   string            // component name
+    StartTime  timing.VTimeInSec // picoseconds
+    EndTime    timing.VTimeInSec
     Steps      []TaskStep
     Milestones []Milestone
+    Detail     interface{}       // arbitrary payload (e.g., the message)
+    ParentTask *Task             // resolved parent, when available
 }
 ```
 
@@ -60,7 +62,9 @@ tracing.TraceReqComplete(msg, domain)               // receiver done
 tracing.TraceReqFinalize(msg, domain)               // sender gets response
 ```
 
-## Tracer Interface
+## Key Types
+
+### Tracer
 
 ```go
 type Tracer interface {
@@ -71,44 +75,45 @@ type Tracer interface {
 }
 ```
 
-### Connecting a Tracer to a Domain
+Connect a tracer to a domain so it receives that domain's trace events:
 
 ```go
 tracing.CollectTrace(domain, tracer)
 ```
 
-This installs a hook on the `NamedHookable` domain that forwards trace events
-to the tracer.
+This installs a hook on the `NamedHookable` domain that forwards trace events to
+the tracer.
 
-## Built-in Tracers
+### Built-in Tracers
 
 | Tracer | Purpose |
-|--------|---------|
+|---|---|
 | `AverageTimeTracer` | Tracks average task duration for filtered tasks |
 | `TotalTimeTracer` | Accumulates total task processing time |
 | `BusyTimeTracer` | Tracks non-overlapping busy time (merges overlapping tasks) |
 | `StepCountTracer` | Counts how many times each step name occurs |
-| `BackTraceTracer` | Records in-flight tasks for debugging; `DumpBackTrace` prints parent chain |
-| `DBTracer` | Persists tasks and milestones to a SQLite database via `DataRecorder` |
+| `BackTraceTracer` | Records in-flight tasks for debugging; `DumpBackTrace` prints the parent chain |
+| `DBTracer` | Persists tasks and milestones to a SQLite database via a `DataRecorder` |
 
 ### DBTracer
 
-The `DBTracer` writes to a `DataRecorder` backend and supports on/off tracing:
+The `DBTracer` writes to a `datarecording.DataRecorder` backend and supports
+on/off tracing:
 
 ```go
 tracer := tracing.NewDBTracer(timeTeller, dataRecorder)
 tracer.StartTracing()   // begin recording
 // ... simulation runs ...
-tracer.StopTracing()    // flush and stop
+tracer.StopTracing()    // pause recording
 tracer.Terminate()      // final cleanup
 ```
 
 Only tasks that overlap with an active tracing period are recorded.
 
-## Hook Positions
+## Hooks
 
 | Position | When |
-|----------|------|
+|---|---|
 | `HookPosTaskStart` | Task begins |
 | `HookPosTaskStep` | Task step recorded |
 | `HookPosMilestone` | Milestone recorded |

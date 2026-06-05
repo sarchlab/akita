@@ -47,26 +47,6 @@ memTracer := trace.NewDBTracer(dataRecorder, timeTeller)
 tracing.CollectTrace(memoryComponent, memTracer)
 ```
 
-### Logger-Based Tracer (Deprecated)
-
-**Deprecated: Please use the database-based tracer (NewDBTracer) for new projects.**
-
-```go
-import (
-    "log"
-    "github.com/sarchlab/akita/v5/mem/trace"
-)
-
-// Create a logger
-logger := log.New(os.Stdout, "", log.LstdFlags)
-
-// Create the tracer
-memTracer := trace.NewTracer(logger, timeTeller)
-
-// Use the tracer in your simulation
-tracing.CollectTrace(memoryComponent, memTracer)
-```
-
 ## Benefits of Database-Based Tracing
 
 1. **Structured Data**: Data is stored in a structured SQLite database with proper indexing
@@ -97,7 +77,7 @@ WHERE EndTime > 0;
 
 ## Compatibility
 
-The new database-based tracer is fully compatible with existing Akita simulations. The logger-based tracer remains available for backward compatibility.
+The database-based tracer is fully compatible with existing Akita simulations.
 
 ## Performance Considerations
 

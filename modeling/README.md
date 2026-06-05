@@ -1,27 +1,30 @@
-# modeling
+# modeling — Generic Component Framework
 
-Package `modeling` provides the application-level component framework for Akita
-simulations. It builds on `sim` to offer generic, type-safe components with
-structured Spec+State separation and middleware pipelines.
+Package `modeling` provides the application-level component framework for the
+Akita simulation framework. It builds on the `timing` and `messaging` packages
+to offer generic, type-safe components with a structured Spec / State / Resources
+separation and a middleware pipeline.
 
 ## Key Concepts
 
-### Spec and State
-
-Every modeled component is parameterized by two type arguments:
+Every modeled component is parameterized by three type arguments:
 
 - **Spec (`S`)** — immutable configuration set at build time (e.g., cache size,
   number of banks). Must be a plain struct with primitive fields only.
 - **State (`T`)** — mutable runtime data (e.g., queues, counters, in-flight
-  tables). May contain nested structs, slices, and maps. Must be
+  tables). May contain nested structs, slices, and maps; must be
   JSON-serializable.
+- **Resources (`R`)** — references to shared objects (e.g., backing storage).
+  Use `modeling.None` when a component references no shared resources.
 
-Use `ValidateSpec(v)` and `ValidateState(v)` at runtime to verify compliance.
-No pointers, interfaces, channels, or functions are allowed in either.
+Validate values at runtime with `ValidateSpec(v)` and `ValidateState(v)`. Both
+reject pointers, interfaces, channels, and functions. `ValidateSpec` additionally
+rejects nested structs; `ValidateState` allows them. Map keys must be `string` or
+an integer type.
 
-## Component Types
+## Key Types
 
-### Component[S, T] (tick-driven)
+### Component[S, T, R] (tick-driven)
 
 A fixed-frequency component that processes state each tick via a middleware
 pipeline.
@@ -35,38 +38,36 @@ type MyState struct {
     Count int
 }
 
-builder := modeling.NewBuilder[MySpec, MyState]().
+comp := modeling.NewBuilder[MySpec, MyState, modeling.None]().
     WithEngine(engine).
-    WithFreq(1 * sim.GHz).
-    WithSpec(MySpec{Size: 64})
+    WithFreq(1 * timing.GHz).
+    WithSpec(MySpec{Size: 64}).
+    Build("MyComponent")
 
-comp := builder.Build("MyComponent")
 comp.AddMiddleware(&myMiddleware{comp: comp})
 ```
 
-Key methods:
-
-- `Spec S` — returns the immutable spec.
-- `State T` / ``State` field *T` — read/write the current state.
+- `Spec() S` — read-only accessor for the immutable spec (returns a copy).
+- `Resources() R` — read-only accessor for the shared-resource references.
+- `State` — a plain exported field of type `T`; middleware mutates it in place.
 - `Tick() bool` — runs the middleware pipeline (returns true if progress made).
 
-### EventDrivenComponent[S, T]
+### EventDrivenComponent[S, T, R]
 
 A component that wakes on events rather than ticking at a fixed frequency.
 
 ```go
-builder := modeling.NewEventDrivenBuilder[MySpec, MyState]().
+comp := modeling.NewEventDrivenBuilder[MySpec, MyState, modeling.None]().
     WithEngine(engine).
     WithSpec(MySpec{Size: 64}).
-    WithProcessor(&myProcessor{})
-
-comp := builder.Build("MyEDComponent")
+    WithProcessor(&myProcessor{}).
+    Build("MyEDComponent")
 ```
 
-The `EventProcessor[S, T]` interface has a single method:
+The `EventProcessor[S, T, R]` interface has a single method:
 
 ```go
-Process(comp *EventDrivenComponent[S, T], now sim.VTimeInSec) bool
+Process(comp *EventDrivenComponent[S, T, R], now timing.VTimeInSec) bool
 ```
 
 Wakeups are scheduled via:
@@ -77,19 +78,12 @@ Wakeups are scheduled via:
 Port notifications (`NotifyRecv`, `NotifyPortFree`) automatically schedule
 wakeups.
 
-## Builders
+## Builder Pattern
 
 | Builder | Creates | Key Settings |
-|---------|---------|-------------|
-| `NewBuilder[S,T]()` | `*Component[S,T]` | `WithEngine`, `WithFreq`, `WithSpec` |
-| `NewEventDrivenBuilder[S,T]()` | `*EventDrivenComponent[S,T]` | `WithEngine`, `WithSpec`, `WithProcessor` |
+|---|---|---|
+| `NewBuilder[S, T, R]()` | `*Component[S, T, R]` | `WithEngine`, `WithFreq`, `WithSpec`, `WithResources` |
+| `NewEventDrivenBuilder[S, T, R]()` | `*EventDrivenComponent[S, T, R]` | `WithEngine`, `WithSpec`, `WithResources`, `WithProcessor` |
 
-## Validation
-
-```go
-err := modeling.ValidateSpec(MySpec{Size: 64})  // checks no nested structs
-err := modeling.ValidateState(MyState{})         // allows nested structs
-```
-
-Both reject pointers, interfaces, channels, and functions. Map keys must be
-`string` or integer types.
+Both builders register the component as an event handler when the engine
+implements `timing.HandlerRegistrar`.

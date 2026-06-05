@@ -11,7 +11,8 @@ component communication patterns.
 The simplest Akita program. Creates an engine, registers an event handler,
 schedules one event, and runs the simulation.
 
-**Key concepts**: `sim.Engine`, `sim.Event`, `sim.Handler`, event scheduling.
+**Key concepts**: `timing.Engine`, `timing.Event`, `timing.Handler`, event
+scheduling.
 
 ```bash
 cd 01_print_event && go run main.go
@@ -49,8 +50,8 @@ cd 03_random_walk && go run main.go
 ### tickingping — Tick-Based Component Communication
 
 Two components exchange ping/pong messages using the **ticking middleware**
-paradigm (`modeling.Component[Spec, State]`). Each component has two
-middlewares:
+paradigm (`modeling.Component[Spec, State, modeling.None]`). Each component has
+two middlewares:
 
 - **sendMW** — Sends a `PingMsg` each tick until `NumPingPerCycle` is
   reached.
@@ -67,7 +68,7 @@ cd tickingping && go test -v -run Example
 ### ping — Event-Driven Component Communication
 
 Two components exchange ping/pong messages using the **event-driven**
-paradigm (`modeling.EventDrivenComponent[Spec, State]`). A single
+paradigm (`modeling.EventDrivenComponent[Spec, State, modeling.None]`). A single
 `PingProcessor` handles all logic: sending scheduled pings, processing
 incoming requests, and delivering responses after a configurable delay.
 
@@ -166,7 +167,7 @@ cd tasktree && go run main.go
 
 | Paradigm | Component Type | When to Use |
 |---|---|---|
-| **Ticking** | `modeling.Component[S, T]` | Pipeline-like components that do work every cycle (caches, DRAM controllers) |
-| **Event-driven** | `modeling.EventDrivenComponent[S, T]` | Components that react to messages/events and may be idle for long periods |
+| **Ticking** | `modeling.Component[S, T, R]` | Pipeline-like components that do work every cycle (caches, DRAM controllers) |
+| **Event-driven** | `modeling.EventDrivenComponent[S, T, R]` | Components that react to messages/events and may be idle for long periods |
 
 Both paradigms use the same port and message infrastructure for communication.
