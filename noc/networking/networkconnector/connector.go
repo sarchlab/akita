@@ -84,6 +84,7 @@ func (r engineRegistrar) GetEngine() timing.Engine {
 func (r engineRegistrar) RegisterComponent(_ naming.Named)  {}
 func (r engineRegistrar) RegisterConnection(_ naming.Named) {}
 func (r engineRegistrar) RegisterResource(_ naming.Named)   {}
+func (r engineRegistrar) RegisterPort(_ naming.Named)       {}
 
 // Connector can build complex network topologies.
 type Connector struct {

@@ -67,8 +67,9 @@ to `WithSpec`. Wiring comes from `WithRegistrar` (which provides the engine and
 registers the component) and `WithResources` (the shared backing storage). When
 `WithResources` is omitted, the controller builds its own storage sized by
 `Spec.Capacity`. `Build` declares the `Top` and `Control` ports but does not
-create their instances; assign the instances after `Build` with `AssignPort`,
-choosing the buffer sizes.
+create their instances. Build each port with `modeling.MakePortBuilder` (which
+registers the port with the simulation) and attach it with `AssignPort`,
+choosing the buffer size.
 
 ```go
 spec := idealmemcontroller.DefaultSpec()
@@ -80,12 +81,21 @@ ctrl := idealmemcontroller.MakeBuilder().
     WithResources(idealmemcontroller.Resources{Storage: storage}).
     Build("IdealMem")
 
-ctrl.AssignPort("Top",
-    messaging.NewPort(ctrl, 16, 16, ctrl.Name()+".Top"))
-ctrl.AssignPort("Control",
-    messaging.NewPort(ctrl, 16, 16, ctrl.Name()+".Control"))
+topPort := modeling.MakePortBuilder().
+    WithRegistrar(sim).
+    WithComponent(ctrl).
+    WithSpec(modeling.PortSpec{BufSize: 16}).
+    Build("Top")
+ctrl.AssignPort("Top", topPort)
 
-topPort := ctrl.GetPortByName("Top")
+ctrlPort := modeling.MakePortBuilder().
+    WithRegistrar(sim).
+    WithComponent(ctrl).
+    WithSpec(modeling.PortSpec{BufSize: 16}).
+    Build("Control")
+ctrl.AssignPort("Control", ctrlPort)
+
+topPort = ctrl.GetPortByName("Top")
 ```
 
 | Method | Description |

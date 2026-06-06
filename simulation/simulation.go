@@ -115,6 +115,24 @@ func (s *Simulation) RegisterComponent(c naming.Named) {
 	}
 }
 
+// RegisterPort registers a port with the simulation so it can be resolved by
+// name and monitored. Port builders call this through the modeling.Registrar
+// interface, mirroring RegisterComponent — a component is registered when it is
+// built, and each of its ports is registered when the port is built.
+func (s *Simulation) RegisterPort(p naming.Named) {
+	port, ok := p.(Port)
+	if !ok {
+		panic("simulation: RegisterPort requires a messaging.Port, got " +
+			p.Name())
+	}
+
+	s.registerPort(port)
+
+	if s.monitor != nil {
+		s.monitor.RegisterPort(port)
+	}
+}
+
 // registerPort registers a port with the simulation.
 func (s *Simulation) registerPort(p Port) {
 	portName := p.Name()
@@ -171,24 +189,17 @@ func (s *Simulation) GetComponentByName(name string) Component {
 	return s.components[idx]
 }
 
-// GetPortByName returns the port with the given name. Ports created and
-// assigned to a component after the component was registered are not in the
-// eager index, so on a miss this scans the registered components for a
-// matching port.
+// GetPortByName returns the port with the given name. Ports are registered
+// either when their component is registered (legacy components that create
+// ports in Build) or when the port is built (via a port builder that calls
+// RegisterPort).
 func (s *Simulation) GetPortByName(name string) Port {
-	if idx, found := s.portNameIndex[name]; found {
-		return s.ports[idx]
+	idx, found := s.portNameIndex[name]
+	if !found {
+		panic("port " + name + " not registered")
 	}
 
-	for _, c := range s.components {
-		for _, p := range componentPorts(c) {
-			if p.Name() == name {
-				return p
-			}
-		}
-	}
-
-	panic("port " + name + " not registered")
+	return s.ports[idx]
 }
 
 // Terminate terminates the simulation.

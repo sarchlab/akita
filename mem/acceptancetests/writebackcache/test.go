@@ -11,7 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 
 	"github.com/sarchlab/akita/v5/simulation"
@@ -58,10 +58,18 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 		WithRegistrar(s).
 		WithSpec(dramSpec).
 		Build("DRAM")
-	dram.AssignPort("Top",
-		messaging.NewPort(dram, 16, 16, dram.Name()+".Top"))
-	dram.AssignPort("Control",
-		messaging.NewPort(dram, 16, 16, dram.Name()+".Control"))
+	dramTop := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(dram).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Top")
+	dram.AssignPort("Top", dramTop)
+	dramCtrl := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(dram).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Control")
+	dram.AssignPort("Control", dramCtrl)
 
 	addressToPortMapper := new(mem.SinglePortMapper)
 	addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()

@@ -76,6 +76,11 @@ Create a port with `NewPort`:
 port := messaging.NewPort(comp, incomingCap, outgoingCap, "MyComp.Top")
 ```
 
+In assembly, prefer `modeling.MakePortBuilder` — it wraps `NewPort` and
+registers the port with the simulation (and the monitor) through the registrar,
+mirroring how component and connection builders register themselves. `NewPort`
+is the low-level constructor it builds on.
+
 `Send` pushes onto the outgoing buffer (returning a `*SendError` if full) and,
 when the buffer transitions from empty, notifies the connection via
 `NotifySend`. `Deliver` pushes onto the incoming buffer and notifies the owning
@@ -130,9 +135,10 @@ yet assigned.
 ## How It Works
 
 1. A component declares its ports with `DeclarePort`; setup code builds each
-   port with `NewPort` and attaches it with `AssignPort` (components that have
-   not yet been migrated still create and add their ports in one step with
-   `AddPort`).
+   port with `modeling.MakePortBuilder` (which registers it with the
+   simulation) — or the low-level `NewPort` — and attaches it with `AssignPort`
+   (components not yet migrated still create and add their ports in one step
+   with `AddPort`).
 2. A connection is plugged into the ports with `PlugIn`, and each port's
    connection is set with `SetConnection`.
 3. To send, a component builds a message with `Src`/`Dst` remote port names and

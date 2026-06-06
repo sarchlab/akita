@@ -481,7 +481,7 @@ V5 unifies component structure into five orthogonal parts. See the
 |------|------|----------|
 | **Spec** | Immutable configuration | Primitives only. JSON-friendly. No pointers. |
 | **State** | Mutable runtime data | Pure data. No ports, functions, channels. Use IDs for cross-references. |
-| **Ports** | Communication endpoints | Declared by the component (`DeclarePort`); instances created externally and attached via `AssignPort(name, port)`. Never constructed internally. |
+| **Ports** | Communication endpoints | Declared by the component (`DeclarePort`); instances built and registered externally with a port builder (`modeling.MakePortBuilder`), then attached via `AssignPort(name, port)`. Never constructed internally. |
 | **Middlewares** | Per-tick behavior pipeline | Ordered. Operate on State via `State` field. Stateless w.r.t. external deps. |
 | **Hooks** | Observation/tracing | Attached via `HookableBase`. Don't affect simulation logic. |
 
@@ -539,7 +539,7 @@ V5 unifies how components are modeled and wired. Each component is a single stru
    - Snapshot/restore uses deep copies of State so checkpoints are immutable.
 
 3. Ports (declared by the component, instances injected)
-   - A component declares the ports it has (`DeclarePort`) but never constructs the instances or owns connections. Port instances are created during wiring and attached via `AssignPort(name, port)`.
+   - A component declares the ports it has (`DeclarePort`) but never constructs the instances or owns connections. Port instances are built and registered during wiring with a port builder (`modeling.MakePortBuilder`, which registers each port with the simulation through the registrar) and attached via `AssignPort(name, port)`.
    - Components access ports by name via `GetPortByName("...")` to avoid compile‑time coupling.
 
 4. Middlewares (ordered, stateless over the component)
@@ -566,7 +566,7 @@ V5 unifies how components are modeled and wired. Each component is a single stru
    - Do not create the port instances or connect them here.
 
 2. Wire topology
-   - Create the port instances and connections, then attach ports via `AssignPort("...", port)`.
+   - Build the port instances with a port builder (which registers each with the simulation) and the connections, then attach ports via `AssignPort("...", port)`.
    - Use names consistently so components and tooling can introspect topology.
 
 #### Determinism and Introspection
@@ -750,23 +750,29 @@ cache := cachebuilder.New().
 
 **After (V5):**
 ```go
-// V5: the component declares its ports; setup creates and assigns the instances.
+// V5: the component declares its ports; a port builder creates+registers each
+// instance (like component/connection builders), and the caller attaches it.
 comp := somepkg.MakeBuilder().
     WithRegistrar(sim).
     WithSpec(spec).
     Build("Comp") // Build calls DeclarePort("Top"), DeclarePort("Bottom"), ...
 
-comp.AssignPort("Top",
-    messaging.NewPort(comp, 4, 4, comp.Name()+".Top"))
-comp.AssignPort("Bottom",
-    messaging.NewPort(comp, 4, 4, comp.Name()+".Bottom"))
-comp.AssignPort("Control",
-    messaging.NewPort(comp, 4, 4, comp.Name()+".Control"))
+for _, name := range []string{"Top", "Bottom", "Control"} {
+    p := modeling.MakePortBuilder().
+        WithRegistrar(sim).
+        WithComponent(comp).
+        WithSpec(modeling.PortSpec{BufSize: 4}).
+        Build(name) // creates comp.Name()+"."+name and registers it
+    comp.AssignPort(name, p)
+}
 ```
 
-`AssignPort` panics if the name was not declared or is already assigned, so a
-typo or a forgotten port fails fast. (Components not yet migrated to this model
-still create and attach their ports in one step inside `Build` with `AddPort`.)
+The port builder takes the registrar and registers the port with the
+simulation, exactly as `RegisterComponent` registers a component. `AssignPort`
+then panics if the name was not declared or is already assigned, so a typo or a
+forgotten port fails fast. (Components not yet migrated to this model still
+create, attach, and register their ports in one step inside `Build` with
+`AddPort`.)
 
 ### SetComponent
 
