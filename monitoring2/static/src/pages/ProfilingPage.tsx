@@ -72,9 +72,17 @@ interface CallGraphViewport {
 const INITIAL_CALL_GRAPH_VIEWPORT: CallGraphViewport = { scale: 1, x: 0, y: 0 };
 type ProfileResultTab = "graph" | "top-functions";
 type ProfileKind = "cpu" | "heap";
-// "scratch" captures the absolute heap; "incremental" diffs against the previous
-// capture (growth since then). Incremental needs a prior capture as a baseline.
-type HeapCaptureMode = "scratch" | "incremental";
+
+// A captured heap profile the user can keep around and pick as a diff baseline.
+interface HeapSnapshot {
+  id: string;
+  label: string;
+  profile: unknown;
+}
+
+// Cap retained snapshots so a long session does not pile up large profiles in
+// memory; the oldest is dropped past this limit.
+const MAX_HEAP_SNAPSHOTS = 10;
 
 interface HeapSampleType {
   value: string;
@@ -443,6 +451,82 @@ function summarizeProfile(profile: unknown, preferredSampleType?: string): Profi
   };
 }
 
+function profileSamples(profile: unknown): Record<string, unknown>[] {
+  if (!profile || typeof profile !== "object") {
+    return [];
+  }
+
+  const p = profile as Record<string, unknown>;
+  const sample = Array.isArray(p.sample) ? p.sample : Array.isArray(p.Sample) ? p.Sample : [];
+  return sample.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object");
+}
+
+// indexByStack folds a profile's samples into per-call-stack value totals,
+// keyed by the leaf-first function stack the call graph already uses for
+// identity. A representative location chain is kept so the diff result can be
+// rendered by the existing views.
+function indexByStack(samples: Record<string, unknown>[]) {
+  const totals = new Map<string, { values: number[]; location: unknown[] }>();
+
+  for (const sample of samples) {
+    const names = profileStackNames(sample);
+    if (!names.length) {
+      continue;
+    }
+
+    const key = names.join(";");
+    const values = getNumberArray(sample, "value", "Value");
+    const location = getArray(sample, "location", "Location");
+    const entry = totals.get(key) ?? { values: [], location };
+
+    for (let index = 0; index < values.length; index++) {
+      entry.values[index] = (entry.values[index] ?? 0) + values[index];
+    }
+    if (!entry.location.length) {
+      entry.location = location;
+    }
+    totals.set(key, entry);
+  }
+
+  return totals;
+}
+
+// diffHeapProfiles returns a synthetic profile of (current - baseline), summing
+// each call stack's sample values elementwise so every heap sample type stays in
+// sync. The result is shaped like a parsed profile so summarizeProfile can
+// consume it directly. This mirrors `go tool pprof -base` at function-stack
+// granularity (the precision the call graph renders at).
+function diffHeapProfiles(current: unknown, baseline: unknown): Record<string, unknown> {
+  const currentByStack = indexByStack(profileSamples(current));
+  const baselineByStack = indexByStack(profileSamples(baseline));
+  const deltaSamples: Record<string, unknown>[] = [];
+
+  for (const key of new Set([...currentByStack.keys(), ...baselineByStack.keys()])) {
+    const cur = currentByStack.get(key);
+    const base = baselineByStack.get(key);
+    const length = Math.max(cur?.values.length ?? 0, base?.values.length ?? 0);
+    const values: number[] = [];
+
+    for (let index = 0; index < length; index++) {
+      values.push((cur?.values[index] ?? 0) - (base?.values[index] ?? 0));
+    }
+
+    if (values.every((value) => value === 0)) {
+      continue;
+    }
+
+    deltaSamples.push({ location: cur?.location ?? base?.location ?? [], value: values });
+  }
+
+  const p = (current && typeof current === "object" ? current : {}) as Record<string, unknown>;
+  return {
+    sampleType: getArray(p, "sampleType", "SampleType"),
+    sample: deltaSamples,
+    location: getArray(p, "location", "Location"),
+    function: getArray(p, "function", "Function"),
+  };
+}
+
 export default function ProfilingPage() {
   const { history } = useResourceUsageHistory();
   const [profileSeconds, setProfileSeconds] = useState(1);
@@ -450,21 +534,41 @@ export default function ProfilingPage() {
   const [rawProfile, setRawProfile] = useState<unknown>(null);
   const [profileKind, setProfileKind] = useState<ProfileKind | null>(null);
   const [heapSampleType, setHeapSampleType] = useState(DEFAULT_HEAP_SAMPLE_TYPE);
-  const [heapMode, setHeapMode] = useState<HeapCaptureMode>("scratch");
-  const [hasHeapBaseline, setHasHeapBaseline] = useState(false);
-  const [heapIsDelta, setHeapIsDelta] = useState(false);
+  const [heapSnapshots, setHeapSnapshots] = useState<HeapSnapshot[]>([]);
+  const [currentHeapId, setCurrentHeapId] = useState<string | null>(null);
+  const [baselineId, setBaselineId] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState<ProfileResultTab>("graph");
+  const heapIdRef = useRef(0);
+
+  // Drop a baseline selection if its snapshot has been evicted by the cap.
+  useEffect(() => {
+    if (baselineId && !heapSnapshots.some((snapshot) => snapshot.id === baselineId)) {
+      setBaselineId(null);
+    }
+  }, [heapSnapshots, baselineId]);
+
+  // Baselines are the captured snapshots other than the one currently shown.
+  const baselineProfile =
+    baselineId && baselineId !== currentHeapId
+      ? heapSnapshots.find((snapshot) => snapshot.id === baselineId)?.profile ?? null
+      : null;
+  const heapIsDelta = profileKind === "heap" && baselineProfile != null;
 
   // Derive the summary from the last captured profile. For heap profiles the
-  // selected sample type feeds the value selection, so switching inuse/alloc
-  // re-renders the views without re-capturing.
+  // selected sample type feeds the value selection, and a selected baseline
+  // turns the view into a (current - baseline) delta. Both recompute without
+  // re-capturing, so switching sample type or baseline is instant.
   const profileSummary = useMemo(() => {
     if (rawProfile == null) {
       return null;
     }
-    return summarizeProfile(rawProfile, profileKind === "heap" ? heapSampleType : undefined);
-  }, [rawProfile, profileKind, heapSampleType]);
+    if (profileKind === "heap") {
+      const profile = baselineProfile ? diffHeapProfiles(rawProfile, baselineProfile) : rawProfile;
+      return summarizeProfile(profile, heapSampleType);
+    }
+    return summarizeProfile(rawProfile);
+  }, [rawProfile, profileKind, heapSampleType, baselineProfile]);
 
   const captureProfile = async () => {
     setIsCapturing(true);
@@ -487,22 +591,25 @@ export default function ProfilingPage() {
   };
 
   const captureHeapProfile = async () => {
-    // Incremental needs a prior capture; fall back to scratch without a baseline.
-    const incremental = heapMode === "incremental" && hasHeapBaseline;
     setIsCapturing(true);
-    setProfileStatus(incremental ? "Capturing incremental heap profile..." : "Capturing heap profile...");
+    setProfileStatus("Capturing heap profile...");
     try {
-      const response = await fetch(`/api/heap?gc=1&mode=${incremental ? "incremental" : "scratch"}`);
+      const response = await fetch(`/api/heap?gc=1`);
       if (!response.ok) {
         throw new Error(`${response.status} ${response.statusText}`);
       }
 
       const profile = await response.json();
+      const id = `heap-${(heapIdRef.current += 1)}`;
+      const label = `Snapshot ${heapIdRef.current} · ${new Date().toLocaleTimeString([], { hour12: false })}`;
+      setHeapSnapshots((previous) => {
+        const next = [...previous, { id, label, profile }];
+        return next.length > MAX_HEAP_SNAPSHOTS ? next.slice(next.length - MAX_HEAP_SNAPSHOTS) : next;
+      });
+      setCurrentHeapId(id);
       setRawProfile(profile);
       setProfileKind("heap");
-      setHeapIsDelta(incremental);
-      setHasHeapBaseline(true);
-      setProfileStatus(incremental ? "Incremental heap profile captured" : "Heap profile captured");
+      setProfileStatus("Heap profile captured");
     } catch (err) {
       setProfileStatus(err instanceof Error ? err.message : "Heap profile capture failed");
     } finally {
@@ -550,20 +657,24 @@ export default function ProfilingPage() {
             }
             memoryActions={
               <div className="flex flex-wrap items-center gap-2">
-                <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-mode">
-                  Mode
+                <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-baseline">
+                  Baseline
                 </label>
                 <select
-                  id="heap-mode"
+                  id="heap-baseline"
                   className="h-7 rounded border border-input bg-background px-2 text-xs"
-                  value={hasHeapBaseline ? heapMode : "scratch"}
-                  onChange={(event) => setHeapMode(event.target.value as HeapCaptureMode)}
+                  value={baselineId ?? ""}
+                  onChange={(event) => setBaselineId(event.target.value || null)}
                   disabled={isCapturing}
                 >
-                  <option value="scratch">From scratch</option>
-                  <option value="incremental" disabled={!hasHeapBaseline}>
-                    Incremental{hasHeapBaseline ? "" : " (capture one first)"}
-                  </option>
+                  <option value="">No baseline (from scratch)</option>
+                  {heapSnapshots
+                    .filter((snapshot) => snapshot.id !== currentHeapId)
+                    .map((snapshot) => (
+                      <option key={snapshot.id} value={snapshot.id}>
+                        {snapshot.label}
+                      </option>
+                    ))}
                 </select>
                 <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-sample-type">
                   Sample

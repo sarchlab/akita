@@ -242,12 +242,14 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(profilingPage, /heapSampleType/);
   assert.match(profilingPage, /memoryActions/);
   assert.match(profilingPage, /inuse_space/);
-  // Incremental heap profiling: scratch/incremental mode gated on a baseline.
-  assert.match(profilingPage, /From scratch/);
-  assert.match(profilingPage, /Incremental/);
-  assert.match(profilingPage, /hasHeapBaseline/);
-  assert.match(profilingPage, /mode=\$\{incremental \? "incremental" : "scratch"\}/);
-  assert.match(profilingPage, /disabled=\{!hasHeapBaseline\}/);
+  // Selectable diff baseline: a dropdown of prior snapshots, diffed in-browser.
+  assert.match(profilingPage, /No baseline/);
+  assert.match(profilingPage, /baselineId/);
+  assert.match(profilingPage, /heapSnapshots/);
+  assert.match(profilingPage, /diffHeapProfiles/);
+  assert.match(profilingPage, /Incremental Heap/);
+  // The diff is client-side; the heap endpoint stays a plain absolute capture.
+  assert.doesNotMatch(profilingPage, /\/api\/heap\?gc=1&mode=/);
   assert.match(profilingPage, /profileSummaryText/);
   assert.match(profilingPage, /CallGraph/);
   assert.match(profilingPage, /hotPathNodeIDs/);
