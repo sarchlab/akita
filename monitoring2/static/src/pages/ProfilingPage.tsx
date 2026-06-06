@@ -72,6 +72,8 @@ interface CallGraphViewport {
 const INITIAL_CALL_GRAPH_VIEWPORT: CallGraphViewport = { scale: 1, x: 0, y: 0 };
 type ProfileResultTab = "graph" | "top-functions";
 type ProfileKind = "cpu" | "heap";
+// "single" views one snapshot (absolute); "compare" diffs a base against a target.
+type HeapViewMode = "single" | "compare";
 
 // A captured heap profile the user can keep around and pick as a diff baseline.
 interface HeapSnapshot {
@@ -531,44 +533,52 @@ export default function ProfilingPage() {
   const { history } = useResourceUsageHistory();
   const [profileSeconds, setProfileSeconds] = useState(1);
   const [profileStatus, setProfileStatus] = useState("");
-  const [rawProfile, setRawProfile] = useState<unknown>(null);
+  const [cpuProfile, setCpuProfile] = useState<unknown>(null);
   const [profileKind, setProfileKind] = useState<ProfileKind | null>(null);
-  const [heapSampleType, setHeapSampleType] = useState(DEFAULT_HEAP_SAMPLE_TYPE);
   const [heapSnapshots, setHeapSnapshots] = useState<HeapSnapshot[]>([]);
-  const [currentHeapId, setCurrentHeapId] = useState<string | null>(null);
-  const [baselineId, setBaselineId] = useState<string | null>(null);
+  const [heapSampleType, setHeapSampleType] = useState(DEFAULT_HEAP_SAMPLE_TYPE);
+  const [heapViewMode, setHeapViewMode] = useState<HeapViewMode>("single");
+  const [singleSnapshotId, setSingleSnapshotId] = useState<string | null>(null);
+  const [baseSnapshotId, setBaseSnapshotId] = useState<string | null>(null);
+  const [targetSnapshotId, setTargetSnapshotId] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState<ProfileResultTab>("graph");
   const heapIdRef = useRef(0);
 
-  // Drop a baseline selection if its snapshot has been evicted by the cap.
-  useEffect(() => {
-    if (baselineId && !heapSnapshots.some((snapshot) => snapshot.id === baselineId)) {
-      setBaselineId(null);
-    }
-  }, [heapSnapshots, baselineId]);
+  // Capture only collects snapshots; which snapshot(s) to view and whether to
+  // diff them is chosen in the results panel below. Selections resolve to the
+  // latest/previous snapshot when unset or evicted, so they stay valid.
+  const findSnapshot = (id: string | null) => heapSnapshots.find((snapshot) => snapshot.id === id) ?? null;
+  const latestSnapshot = heapSnapshots[heapSnapshots.length - 1] ?? null;
+  const previousSnapshot = heapSnapshots.length >= 2 ? heapSnapshots[heapSnapshots.length - 2] : null;
+  const singleSnapshot = findSnapshot(singleSnapshotId) ?? latestSnapshot;
+  const targetSnapshot = findSnapshot(targetSnapshotId) ?? latestSnapshot;
+  const baseSnapshot = findSnapshot(baseSnapshotId) ?? previousSnapshot;
+  const heapIsDelta =
+    profileKind === "heap" &&
+    heapViewMode === "compare" &&
+    baseSnapshot != null &&
+    targetSnapshot != null &&
+    baseSnapshot.id !== targetSnapshot.id;
 
-  // Baselines are the captured snapshots other than the one currently shown.
-  const baselineProfile =
-    baselineId && baselineId !== currentHeapId
-      ? heapSnapshots.find((snapshot) => snapshot.id === baselineId)?.profile ?? null
-      : null;
-  const heapIsDelta = profileKind === "heap" && baselineProfile != null;
-
-  // Derive the summary from the last captured profile. For heap profiles the
-  // selected sample type feeds the value selection, and a selected baseline
-  // turns the view into a (current - baseline) delta. Both recompute without
-  // re-capturing, so switching sample type or baseline is instant.
+  // Resolve the profile to summarize from the current selection. Heap diffs are
+  // computed in the browser, so switching snapshots, mode, or sample type is
+  // instant and never re-captures.
   const profileSummary = useMemo(() => {
-    if (rawProfile == null) {
-      return null;
+    if (profileKind === "cpu") {
+      return cpuProfile ? summarizeProfile(cpuProfile) : null;
     }
     if (profileKind === "heap") {
-      const profile = baselineProfile ? diffHeapProfiles(rawProfile, baselineProfile) : rawProfile;
-      return summarizeProfile(profile, heapSampleType);
+      if (heapViewMode === "compare") {
+        if (heapIsDelta && baseSnapshot && targetSnapshot) {
+          return summarizeProfile(diffHeapProfiles(targetSnapshot.profile, baseSnapshot.profile), heapSampleType);
+        }
+        return targetSnapshot ? summarizeProfile(targetSnapshot.profile, heapSampleType) : null;
+      }
+      return singleSnapshot ? summarizeProfile(singleSnapshot.profile, heapSampleType) : null;
     }
-    return summarizeProfile(rawProfile);
-  }, [rawProfile, profileKind, heapSampleType, baselineProfile]);
+    return null;
+  }, [profileKind, cpuProfile, heapViewMode, heapIsDelta, baseSnapshot, targetSnapshot, singleSnapshot, heapSampleType]);
 
   const captureProfile = async () => {
     setIsCapturing(true);
@@ -580,7 +590,7 @@ export default function ProfilingPage() {
       }
 
       const profile = await response.json();
-      setRawProfile(profile);
+      setCpuProfile(profile);
       setProfileKind("cpu");
       setProfileStatus("CPU profile captured");
     } catch (err) {
@@ -606,8 +616,9 @@ export default function ProfilingPage() {
         const next = [...previous, { id, label, profile }];
         return next.length > MAX_HEAP_SNAPSHOTS ? next.slice(next.length - MAX_HEAP_SNAPSHOTS) : next;
       });
-      setCurrentHeapId(id);
-      setRawProfile(profile);
+      // Point Single (and Compare's target) at the snapshot just captured.
+      setSingleSnapshotId(id);
+      setTargetSnapshotId(id);
       setProfileKind("heap");
       setProfileStatus("Heap profile captured");
     } catch (err) {
@@ -617,7 +628,7 @@ export default function ProfilingPage() {
     }
   };
 
-  const profileKindLabel = profileKind === "heap" ? (heapIsDelta ? "Incremental Heap" : "Heap") : "CPU";
+  const profileKindLabel = profileKind === "heap" ? (heapIsDelta ? "Heap Comparison" : "Heap") : "CPU";
 
   return (
     <div className="h-full overflow-auto bg-slate-50 p-4">
@@ -657,40 +668,6 @@ export default function ProfilingPage() {
 
             <div className="flex flex-wrap items-center gap-2">
               <span className="w-9 text-xs font-semibold text-slate-700">Heap</span>
-              <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-baseline">
-                Baseline
-              </label>
-              <select
-                id="heap-baseline"
-                className="h-7 rounded border border-input bg-background px-2 text-xs"
-                value={baselineId ?? ""}
-                onChange={(event) => setBaselineId(event.target.value || null)}
-                disabled={isCapturing}
-              >
-                <option value="">No baseline (from scratch)</option>
-                {heapSnapshots.map((snapshot) => (
-                  <option key={snapshot.id} value={snapshot.id}>
-                    {snapshot.label}
-                    {snapshot.id === currentHeapId ? " (current)" : ""}
-                  </option>
-                ))}
-              </select>
-              <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-sample-type">
-                Sample
-              </label>
-              <select
-                id="heap-sample-type"
-                className="h-7 rounded border border-input bg-background px-2 text-xs"
-                value={heapSampleType}
-                onChange={(event) => setHeapSampleType(event.target.value)}
-                disabled={isCapturing}
-              >
-                {HEAP_SAMPLE_TYPES.map((sampleType) => (
-                  <option key={sampleType.value} value={sampleType.value}>
-                    {sampleType.label}
-                  </option>
-                ))}
-              </select>
               <Button
                 type="button"
                 size="sm"
@@ -744,6 +721,109 @@ export default function ProfilingPage() {
               </button>
             </div>
           </div>
+
+          {profileKind === "heap" ? (
+            <div className="mb-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+              <div className="inline-flex rounded border bg-slate-100 p-0.5" role="tablist" aria-label="Heap view mode">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={heapViewMode === "single"}
+                  className={`rounded px-3 py-1 text-xs font-medium ${
+                    heapViewMode === "single" ? "bg-white text-slate-950 shadow-sm" : "text-slate-700"
+                  }`}
+                  onClick={() => setHeapViewMode("single")}
+                >
+                  Single
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={heapViewMode === "compare"}
+                  className={`rounded px-3 py-1 text-xs font-medium ${
+                    heapViewMode === "compare" ? "bg-white text-slate-950 shadow-sm" : "text-slate-700"
+                  }`}
+                  onClick={() => setHeapViewMode("compare")}
+                >
+                  Compare
+                </button>
+              </div>
+
+              {heapViewMode === "single" ? (
+                <>
+                  <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-single">
+                    Snapshot
+                  </label>
+                  <select
+                    id="heap-single"
+                    className="h-7 rounded border border-input bg-background px-2 text-xs"
+                    value={singleSnapshot?.id ?? ""}
+                    onChange={(event) => setSingleSnapshotId(event.target.value || null)}
+                  >
+                    {heapSnapshots.map((snapshot) => (
+                      <option key={snapshot.id} value={snapshot.id}>
+                        {snapshot.label}
+                        {snapshot.id === latestSnapshot?.id ? " (latest)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : (
+                <>
+                  <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-base">
+                    Base
+                  </label>
+                  <select
+                    id="heap-base"
+                    className="h-7 rounded border border-input bg-background px-2 text-xs"
+                    value={baseSnapshot?.id ?? ""}
+                    onChange={(event) => setBaseSnapshotId(event.target.value || null)}
+                  >
+                    <option value="">—</option>
+                    {heapSnapshots.map((snapshot) => (
+                      <option key={snapshot.id} value={snapshot.id}>
+                        {snapshot.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-xs text-slate-500" aria-hidden="true">→</span>
+                  <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-target">
+                    Target
+                  </label>
+                  <select
+                    id="heap-target"
+                    className="h-7 rounded border border-input bg-background px-2 text-xs"
+                    value={targetSnapshot?.id ?? ""}
+                    onChange={(event) => setTargetSnapshotId(event.target.value || null)}
+                  >
+                    {heapSnapshots.map((snapshot) => (
+                      <option key={snapshot.id} value={snapshot.id}>
+                        {snapshot.label}
+                        {snapshot.id === latestSnapshot?.id ? " (latest)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+
+              <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-sample-type">
+                Sample
+              </label>
+              <select
+                id="heap-sample-type"
+                className="h-7 rounded border border-input bg-background px-2 text-xs"
+                value={heapSampleType}
+                onChange={(event) => setHeapSampleType(event.target.value)}
+              >
+                {HEAP_SAMPLE_TYPES.map((sampleType) => (
+                  <option key={sampleType.value} value={sampleType.value}>
+                    {sampleType.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
           {profileSummary ? (
             activeProfileTab === "graph" ? (
               <CallGraph graph={profileSummary.callGraph} valueInfo={profileSummary.valueInfo} />

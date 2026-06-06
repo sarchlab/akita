@@ -244,16 +244,16 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   // Capture controls live in a dedicated toolbar, not injected into the trend
   // chart headers, so the CPU/RSS trends stay aligned.
   assert.doesNotMatch(profilingPage, /cpuActions|memoryActions/);
-  // Selectable diff baseline: a dropdown of prior snapshots, diffed in-browser.
-  assert.match(profilingPage, /No baseline/);
-  assert.match(profilingPage, /baselineId/);
+  // Capture only collects snapshots; comparison is a separate Single/Compare tab
+  // in the results panel that diffs a base against a target in the browser.
   assert.match(profilingPage, /heapSnapshots/);
   assert.match(profilingPage, /diffHeapProfiles/);
-  // Every captured snapshot is listed immediately (the current one is marked,
-  // not hidden), so the first capture is usable as a baseline right away.
-  assert.match(profilingPage, /\(current\)/);
-  assert.doesNotMatch(profilingPage, /filter\(\(snapshot\) => snapshot\.id !== currentHeapId\)/);
-  assert.match(profilingPage, /Incremental Heap/);
+  assert.match(profilingPage, /heapViewMode/);
+  assert.match(profilingPage, /Single/);
+  assert.match(profilingPage, /Compare/);
+  assert.match(profilingPage, /baseSnapshotId/);
+  assert.match(profilingPage, /targetSnapshotId/);
+  assert.match(profilingPage, /\(latest\)/);
   // The diff is client-side; the heap endpoint stays a plain absolute capture.
   assert.doesNotMatch(profilingPage, /\/api\/heap\?gc=1&mode=/);
   assert.match(profilingPage, /profileSummaryText/);
