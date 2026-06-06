@@ -20,7 +20,8 @@ interface ProfileSummary {
 
 interface ProfileFunctionStat {
   name: string;
-  value: number;
+  value: number; // magnitude (drives bar length / ranking)
+  signedValue: number; // net change; sign drives increase/decrease color in a diff
 }
 
 interface ProfileCallGraph {
@@ -31,7 +32,8 @@ interface ProfileCallGraph {
 interface ProfileCallGraphNode {
   id: string;
   label: string;
-  value: number;
+  value: number; // magnitude (drives node size / ranking)
+  signedValue: number; // net change; sign drives increase/decrease color in a diff
   depth: number;
 }
 
@@ -268,6 +270,14 @@ function sampleWeight(sample: Record<string, unknown>, valueInfo: ProfileValueIn
   return 1;
 }
 
+// sampleSignedValue keeps the sign of the selected value (a diff can be
+// negative), so the views can color increases and decreases differently.
+function sampleSignedValue(sample: Record<string, unknown>, valueInfo: ProfileValueInfo) {
+  const values = getNumberArray(sample, "value", "Value");
+  const selected = values[valueInfo.index];
+  return typeof selected === "number" && Number.isFinite(selected) ? selected : 0;
+}
+
 function formatDurationSeconds(seconds: number) {
   if (seconds < 0.001) {
     return `${(seconds * 1000000).toFixed(0)}us`;
@@ -310,8 +320,22 @@ function formatProfileValue(value: number, valueInfo: ProfileValueInfo) {
   return formatSampleCount(value);
 }
 
+// In a comparison, an increase (more CPU/memory) is usually a regression -> red;
+// a decrease -> green. Matches `go tool pprof` diff coloring.
+const DIFF_INCREASE_COLOR = "#dc2626";
+const DIFF_DECREASE_COLOR = "#16a34a";
+
+function diffColor(signedValue: number) {
+  return signedValue >= 0 ? DIFF_INCREASE_COLOR : DIFF_DECREASE_COLOR;
+}
+
+function formatSignedProfileValue(signedValue: number, valueInfo: ProfileValueInfo) {
+  const sign = signedValue > 0 ? "+" : signedValue < 0 ? "−" : "";
+  return `${sign}${formatProfileValue(Math.abs(signedValue), valueInfo)}`;
+}
+
 function buildCallGraph(samples: unknown[], valueInfo: ProfileValueInfo): ProfileCallGraph {
-  const nodeTotals = new Map<string, { value: number; depthTotal: number; count: number }>();
+  const nodeTotals = new Map<string, { value: number; signed: number; depthTotal: number; count: number }>();
   const stacks: { stack: string[]; weight: number }[] = [];
 
   samples.forEach((item) => {
@@ -321,6 +345,7 @@ function buildCallGraph(samples: unknown[], valueInfo: ProfileValueInfo): Profil
 
     const sample = item as Record<string, unknown>;
     const weight = sampleWeight(sample, valueInfo);
+    const signed = sampleSignedValue(sample, valueInfo);
     const leafFirstStack = profileStackNames(sample);
     const callerFirstStack = [...leafFirstStack].reverse().filter((name, index, stack) => {
       return index === 0 || name !== stack[index - 1];
@@ -333,8 +358,9 @@ function buildCallGraph(samples: unknown[], valueInfo: ProfileValueInfo): Profil
     stacks.push({ stack: callerFirstStack, weight });
 
     callerFirstStack.forEach((name, depth) => {
-      const node = nodeTotals.get(name) ?? { value: 0, depthTotal: 0, count: 0 };
+      const node = nodeTotals.get(name) ?? { value: 0, signed: 0, depthTotal: 0, count: 0 };
       node.value += weight;
+      node.signed += signed;
       node.depthTotal += depth;
       node.count += 1;
       nodeTotals.set(name, node);
@@ -398,6 +424,7 @@ function buildCallGraph(samples: unknown[], valueInfo: ProfileValueInfo): Profil
         id,
         label: id,
         value: node?.value ?? 0,
+        signedValue: node?.signed ?? 0,
         depth: node && node.count ? Math.round(node.depthTotal / node.count) : 0,
       };
     })
@@ -423,7 +450,7 @@ function summarizeProfile(profile: unknown, preferredSampleType?: string): Profi
   const location = Array.isArray(p.location) ? p.location : Array.isArray(p.Location) ? p.Location : [];
   const fn = Array.isArray(p.function) ? p.function : Array.isArray(p.Function) ? p.Function : [];
   const valueInfo = profileValueInfo(p, preferredSampleType);
-  const functionTotals = new Map<string, number>();
+  const functionTotals = new Map<string, { value: number; signed: number }>();
 
   sample.forEach((item) => {
     if (!item || typeof item !== "object") {
@@ -432,13 +459,16 @@ function summarizeProfile(profile: unknown, preferredSampleType?: string): Profi
 
     const sampleObject = item as Record<string, unknown>;
     const weight = sampleWeight(sampleObject, valueInfo);
+    const signed = sampleSignedValue(sampleObject, valueInfo);
     const name = profileFunctionName(item);
-
-    functionTotals.set(name, (functionTotals.get(name) ?? 0) + weight);
+    const total = functionTotals.get(name) ?? { value: 0, signed: 0 };
+    total.value += weight;
+    total.signed += signed;
+    functionTotals.set(name, total);
   });
 
   const topFunctions = [...functionTotals.entries()]
-    .map(([name, value]) => ({ name, value }))
+    .map(([name, total]) => ({ name, value: total.value, signedValue: total.signed }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 8);
 
@@ -569,6 +599,27 @@ export default function ProfilingPage() {
   const isComparison = selectedProfiles.length === 2 && !mismatchedKinds;
   const showsHeap = selectedProfiles.some((profile) => profile.kind === "heap");
   const viewKindLabel = selectedProfiles.length ? (selectedProfiles[0].kind === "heap" ? "Heap" : "CPU") : "Profile";
+
+  // When two CPU profiles cover different windows, explain that the baseline was
+  // scaled so the comparison is fair.
+  const durationWarning = (() => {
+    if (!isComparison || selectedProfiles[0].kind !== "cpu") {
+      return null;
+    }
+    const [base, target] = selectedProfiles;
+    const baseNanos = profileDurationNanos(base.profile);
+    const targetNanos = profileDurationNanos(target.profile);
+    if (baseNanos <= 0 || targetNanos <= 0) {
+      return null;
+    }
+    if (Math.abs(baseNanos - targetNanos) / Math.max(baseNanos, targetNanos) < 0.02) {
+      return null;
+    }
+    const fmt = (nanos: number) => formatDurationSeconds(nanos / 1e9);
+    return `These CPU profiles cover different windows (${fmt(baseNanos)} vs ${fmt(targetNanos)}). The ${fmt(
+      baseNanos,
+    )} baseline was scaled to the ${fmt(targetNanos)} window so the comparison reflects real per-function change, not the difference in capture length. Values are shown over the ${fmt(targetNanos)} window.`;
+  })();
 
   // Resolve the profile to summarize. Diffs are computed in the browser, so
   // changing the selection or sample type is instant and never re-captures.
@@ -815,15 +866,38 @@ export default function ProfilingPage() {
                 </div>
               </div>
 
+              {isComparison ? (
+                <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-3 rounded-sm" style={{ backgroundColor: DIFF_INCREASE_COLOR }} />
+                    increase (newer &gt; older)
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-3 rounded-sm" style={{ backgroundColor: DIFF_DECREASE_COLOR }} />
+                    decrease (newer &lt; older)
+                  </span>
+                </div>
+              ) : null}
+
+              {durationWarning ? (
+                <div className="mb-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status">
+                  {durationWarning}
+                </div>
+              ) : null}
+
               {mismatchedKinds ? (
                 <div className="text-sm text-muted-foreground">
                   Select two profiles of the same type to compare (CPU with CPU, or heap with heap).
                 </div>
               ) : profileSummary ? (
                 activeProfileTab === "graph" ? (
-                  <CallGraph graph={profileSummary.callGraph} valueInfo={profileSummary.valueInfo} />
+                  <CallGraph graph={profileSummary.callGraph} valueInfo={profileSummary.valueInfo} signed={isComparison} />
                 ) : (
-                  <TopFunctionBars functions={profileSummary.topFunctions} valueInfo={profileSummary.valueInfo} />
+                  <TopFunctionBars
+                    functions={profileSummary.topFunctions}
+                    valueInfo={profileSummary.valueInfo}
+                    signed={isComparison}
+                  />
                 )
               ) : (
                 <div className="text-sm text-muted-foreground">
@@ -845,9 +919,11 @@ function profileSummaryText(summary: ProfileSummary) {
 function TopFunctionBars({
   functions,
   valueInfo,
+  signed = false,
 }: {
   functions: ProfileFunctionStat[];
   valueInfo: ProfileValueInfo;
+  signed?: boolean;
 }) {
   const max = Math.max(1, ...functions.map((fn) => fn.value));
 
@@ -861,12 +937,21 @@ function TopFunctionBars({
         <div key={fn.name}>
           <div className="mb-1 flex items-center justify-between gap-3 text-xs">
             <span className="min-w-0 truncate font-medium">{fn.name}</span>
-            <span className="shrink-0 font-mono text-muted-foreground">
-              {formatProfileValue(fn.value, valueInfo)}
+            <span
+              className="shrink-0 font-mono"
+              style={{ color: signed ? diffColor(fn.signedValue) : undefined }}
+            >
+              {signed ? formatSignedProfileValue(fn.signedValue, valueInfo) : formatProfileValue(fn.value, valueInfo)}
             </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-            <div className="h-full bg-amber-500" style={{ width: `${(fn.value / max) * 100}%` }} />
+            <div
+              className={signed ? "h-full" : "h-full bg-amber-500"}
+              style={{
+                width: `${(fn.value / max) * 100}%`,
+                backgroundColor: signed ? diffColor(fn.signedValue) : undefined,
+              }}
+            />
           </div>
         </div>
       ))}
@@ -904,7 +989,15 @@ function clampCallGraphScale(scale: number) {
   return Math.max(CALL_GRAPH_MIN_SCALE, Math.min(CALL_GRAPH_MAX_SCALE, scale));
 }
 
-function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: ProfileValueInfo }) {
+function CallGraph({
+  graph,
+  valueInfo,
+  signed = false,
+}: {
+  graph: ProfileCallGraph;
+  valueInfo: ProfileValueInfo;
+  signed?: boolean;
+}) {
   const [viewport, setViewport] = useState<CallGraphViewport>(INITIAL_CALL_GRAPH_VIEWPORT);
   const [isPanning, setIsPanning] = useState(false);
   const dragStartRef = useRef<{ clientX: number; clientY: number } | null>(null);
@@ -1243,6 +1336,10 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
 
               const intensity = node.value / maxNodeValue;
               const isHotPath = hotPathNodeIDs.has(node.id);
+              const accent = signed ? diffColor(node.signedValue) : "#0284c7";
+              const valueText = signed
+                ? formatSignedProfileValue(node.signedValue, valueInfo)
+                : formatProfileValue(node.value, valueInfo);
 
               return (
                 <g key={node.id} transform={`translate(${position.x} ${position.y})`}>
@@ -1251,18 +1348,18 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
                     height={nodeHeight}
                     rx="6"
                     fill="#ffffff"
-                    stroke={isHotPath || intensity > 0.66 ? "#0284c7" : "#cbd5e1"}
+                    stroke={isHotPath || intensity > 0.66 || signed ? accent : "#cbd5e1"}
                     strokeWidth={isHotPath ? 2.5 : 1 + intensity * 1.5}
                   />
-                  <rect width={Math.max(4, nodeWidth * intensity)} height="4" rx="2" fill="#0284c7" />
+                  <rect width={Math.max(4, nodeWidth * intensity)} height="4" rx="2" fill={accent} />
                   <text x="10" y="19" className="fill-slate-950 text-[12px] font-semibold">
                     {shortFunctionName(node.label)}
                   </text>
-                  <text x="10" y="35" className="fill-slate-600 text-[11px]">
-                    {valueInfo.label} {formatProfileValue(node.value, valueInfo)}
+                  <text x="10" y="35" className="text-[11px]" fill={signed ? accent : "#475569"}>
+                    {valueInfo.label} {valueText}
                   </text>
                   <title>
-                    {node.label}: {formatProfileValue(node.value, valueInfo)}
+                    {node.label}: {valueText}
                   </title>
                 </g>
               );

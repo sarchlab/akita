@@ -257,9 +257,15 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(profilingPage, /same type to compare/);
   assert.match(profilingPage, /mismatchedKinds/);
   // CPU comparisons normalize the baseline onto the target's capture window so
-  // different durations (1s vs 60s) compare fairly.
+  // different durations (1s vs 60s) compare fairly, with a warning explaining it.
   assert.match(profilingPage, /profileDurationNanos/);
   assert.match(profilingPage, /baseScale/);
+  assert.match(profilingPage, /durationWarning/);
+  // Comparisons keep the sign of the delta and color increase vs decrease.
+  assert.match(profilingPage, /signedValue/);
+  assert.match(profilingPage, /DIFF_INCREASE_COLOR/);
+  assert.match(profilingPage, /DIFF_DECREASE_COLOR/);
+  assert.match(profilingPage, /signed=\{isComparison\}/);
   // The diff is client-side; the heap endpoint stays a plain absolute capture.
   assert.doesNotMatch(profilingPage, /\/api\/heap\?gc=1&mode=/);
   assert.match(profilingPage, /profileSummaryText/);
