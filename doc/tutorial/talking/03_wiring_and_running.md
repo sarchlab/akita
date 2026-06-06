@@ -16,15 +16,27 @@ registrar := modeling.NewStandaloneRegistrar(engine)
 agentSpec := DefaultSpec()
 agentSpec.Freq = 1 * timing.Hz
 
+// Each agent declares an "Out" port; build its instance and attach it.
+assignOut := func(c *Comp) {
+    out := modeling.MakePortBuilder().
+        WithRegistrar(registrar).
+        WithComponent(c).
+        WithSpec(modeling.PortSpec{BufSize: 4}).
+        Build("Out")
+    c.AssignPort("Out", out)
+}
+
 agentA := MakeBuilder().
     WithRegistrar(registrar).
     WithSpec(agentSpec).
     Build("AgentA")
+assignOut(agentA)
 
 agentB := MakeBuilder().
     WithRegistrar(registrar).
     WithSpec(agentSpec).
     Build("AgentB")
+assignOut(agentB)
 
 conn := directconnection.MakeBuilder().
     WithRegistrar(registrar).

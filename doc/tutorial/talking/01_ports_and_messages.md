@@ -29,8 +29,7 @@ middleware on top.
 
 ```go
 type Spec struct {
-    Freq              timing.Freq `json:"freq"`
-    OutPortBufferSize int         `json:"out_port_buffer_size"`
+    Freq timing.Freq `json:"freq"`
 }
 
 type State struct {
@@ -98,9 +97,10 @@ Two operations matter on a port:
   message yet and leave it; `Retrieve` is the commit.
 
 The next page shows the middlewares that call these, and the builder that
-creates the port.
+declares the port.
 
 ## Where to Next
 
-Next: the **builder** that creates the port internally and the two
-middlewares that push and pull messages through it.
+Next: the **builder** that declares the port (its instance is built and
+attached externally) and the two middlewares that push and pull messages
+through it.
