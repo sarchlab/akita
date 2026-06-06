@@ -529,6 +529,13 @@ function diffHeapProfiles(current: unknown, baseline: unknown): Record<string, u
   };
 }
 
+// Prefer the server's explanatory body (e.g. "the program may already be
+// CPU-profiled ...") over a bare status line for a failed capture.
+async function captureErrorMessage(response: Response): Promise<string> {
+  const text = await response.text().catch(() => "");
+  return text.trim() || `${response.status} ${response.statusText}`;
+}
+
 export default function ProfilingPage() {
   const { history } = useResourceUsageHistory();
   const [profileSeconds, setProfileSeconds] = useState(1);
@@ -542,6 +549,7 @@ export default function ProfilingPage() {
   const [baseSnapshotId, setBaseSnapshotId] = useState<string | null>(null);
   const [targetSnapshotId, setTargetSnapshotId] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [captureFailed, setCaptureFailed] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState<ProfileResultTab>("graph");
   const heapIdRef = useRef(0);
 
@@ -582,11 +590,12 @@ export default function ProfilingPage() {
 
   const captureProfile = async () => {
     setIsCapturing(true);
+    setCaptureFailed(false);
     setProfileStatus(`Capturing ${profileSeconds}s CPU profile...`);
     try {
       const response = await fetch(`/api/profile?seconds=${profileSeconds}`);
       if (!response.ok) {
-        throw new Error(`${response.status} ${response.statusText}`);
+        throw new Error(await captureErrorMessage(response));
       }
 
       const profile = await response.json();
@@ -594,7 +603,8 @@ export default function ProfilingPage() {
       setProfileKind("cpu");
       setProfileStatus("CPU profile captured");
     } catch (err) {
-      setProfileStatus(err instanceof Error ? err.message : "Profile capture failed");
+      setCaptureFailed(true);
+      setProfileStatus(`CPU capture failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsCapturing(false);
     }
@@ -602,11 +612,12 @@ export default function ProfilingPage() {
 
   const captureHeapProfile = async () => {
     setIsCapturing(true);
+    setCaptureFailed(false);
     setProfileStatus("Capturing heap profile...");
     try {
       const response = await fetch(`/api/heap?gc=1`);
       if (!response.ok) {
-        throw new Error(`${response.status} ${response.statusText}`);
+        throw new Error(await captureErrorMessage(response));
       }
 
       const profile = await response.json();
@@ -622,7 +633,8 @@ export default function ProfilingPage() {
       setProfileKind("heap");
       setProfileStatus("Heap profile captured");
     } catch (err) {
-      setProfileStatus(err instanceof Error ? err.message : "Heap profile capture failed");
+      setCaptureFailed(true);
+      setProfileStatus(`Heap capture failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsCapturing(false);
     }
@@ -680,6 +692,14 @@ export default function ProfilingPage() {
               </Button>
             </div>
           </div>
+          {profileStatus ? (
+            <div
+              className={`mt-2 text-xs ${captureFailed ? "font-medium text-red-600" : "text-muted-foreground"}`}
+              role={captureFailed ? "alert" : undefined}
+            >
+              {profileStatus}
+            </div>
+          ) : null}
         </section>
 
         <section className="rounded border bg-white p-3">
@@ -693,7 +713,7 @@ export default function ProfilingPage() {
               <div className="mt-1 text-xs text-muted-foreground">
                 {profileSummary
                   ? profileSummaryText(profileSummary)
-                  : profileStatus || "Capture a CPU or heap profile to populate the profile views."}
+                  : "Capture a CPU or heap profile to populate the profile views."}
               </div>
             </div>
             <div className="inline-flex rounded border bg-slate-100 p-0.5" role="tablist" aria-label="Profile views">
@@ -937,7 +957,12 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
 
   if (!graph.nodes.length) {
     wheelHandlerRef.current = null;
-    return <div className="text-sm text-muted-foreground">No call graph samples in the captured profile.</div>;
+    return (
+      <div className="text-sm text-muted-foreground">
+        No samples in the captured profile. For CPU, the program may have been idle during the capture window — try a
+        longer duration or capture while the simulation is running.
+      </div>
+    );
   }
 
   const left = 32;

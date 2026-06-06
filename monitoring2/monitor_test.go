@@ -4,11 +4,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -942,5 +944,26 @@ func TestCollectHeapProfileExposesHeapSampleTypes(t *testing.T) {
 					"type %q", query, want)
 			}
 		}
+	}
+}
+
+func TestCollectProfileReportsWhenCPUProfilingActive(t *testing.T) {
+	// Emulate a program that is already running a CPU profile (e.g. started with
+	// -cpuprofile). The monitor's capture must report a conflict rather than
+	// panicking, so the UI can explain why the capture failed.
+	if err := pprof.StartCPUProfile(io.Discard); err != nil {
+		t.Skipf("could not start CPU profile for setup: %v", err)
+	}
+	defer pprof.StopCPUProfile()
+
+	monitor := NewMonitor()
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/profile?seconds=1", nil)
+
+	monitor.collectProfile(recorder, request)
+
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("expected status %d when CPU profiling is already active, got %d",
+			http.StatusConflict, recorder.Code)
 	}
 }

@@ -1165,9 +1165,15 @@ func (m *Monitor) collectProfile(w http.ResponseWriter, r *http.Request) {
 
 	buf := bytes.NewBuffer(nil)
 
-	err := pprof.StartCPUProfile(buf)
-	if err != nil {
-		log.Panic(err)
+	// StartCPUProfile fails if the program is already being CPU-profiled (for
+	// example started with -cpuprofile, or another capture in flight). Report
+	// that instead of panicking, so the UI can show why the capture failed.
+	if err := pprof.StartCPUProfile(buf); err != nil {
+		http.Error(w, fmt.Sprintf(
+			"could not start CPU profile: %v; the program may already be "+
+				"CPU-profiled (e.g. started with -cpuprofile) or another capture "+
+				"is in progress", err), http.StatusConflict)
+		return
 	}
 
 	time.Sleep(time.Duration(seconds) * time.Second)
@@ -1176,17 +1182,19 @@ func (m *Monitor) collectProfile(w http.ResponseWriter, r *http.Request) {
 
 	prof, err := profile.ParseData(buf.Bytes())
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, "could not parse CPU profile: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	b, err := json.Marshal(prof)
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, "could not encode CPU profile: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	_, err = w.Write(b)
 	if err != nil {
-		log.Panic(err)
+		log.Println("failed to write CPU profile response:", err)
 	}
 }
 
@@ -1208,24 +1216,26 @@ func (m *Monitor) collectHeapProfile(w http.ResponseWriter, r *http.Request) {
 
 	buf := bytes.NewBuffer(nil)
 
-	err := pprof.WriteHeapProfile(buf)
-	if err != nil {
-		log.Panic(err)
+	if err := pprof.WriteHeapProfile(buf); err != nil {
+		http.Error(w, "could not write heap profile: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	prof, err := profile.ParseData(buf.Bytes())
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, "could not parse heap profile: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	b, err := json.Marshal(prof)
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, "could not encode heap profile: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	_, err = w.Write(b)
 	if err != nil {
-		log.Panic(err)
+		log.Println("failed to write heap profile response:", err)
 	}
 }
 
