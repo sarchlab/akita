@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -39,12 +40,19 @@ func (m *translationMW) pageTable() vm.PageTable {
 	return m.comp.Resources().PageTable
 }
 
-// Tick runs the translation stages.
+// Tick runs the translation stages. Paused MMUs make no progress;
+// draining MMUs continue walks but accept no new requests.
 func (m *translationMW) Tick() bool {
+	if m.comp.State.ControlState == control.StatePaused {
+		return false
+	}
+
 	madeProgress := false
 
 	madeProgress = m.walkPageTable() || madeProgress
-	madeProgress = m.parseFromTop() || madeProgress
+	if m.comp.State.ControlState == control.StateEnabled {
+		madeProgress = m.parseFromTop() || madeProgress
+	}
 
 	return madeProgress
 }
@@ -99,54 +107,7 @@ func (m *translationMW) finalizePageWalk(walkingIndex int) bool {
 
 	state.WalkingTranslations[walkingIndex].Page = page
 
-	if page.IsMigrating {
-		return m.addTransactionToMigrationQueue(walkingIndex)
-	}
-
-	if m.pageNeedMigrate(state.WalkingTranslations[walkingIndex]) {
-		return m.addTransactionToMigrationQueue(walkingIndex)
-	}
-
 	return m.doPageWalkHit(walkingIndex)
-}
-
-func (m *translationMW) addTransactionToMigrationQueue(
-	walkingIndex int,
-) bool {
-	spec := m.comp.Spec()
-	state := &m.comp.State
-
-	if len(state.MigrationQueue) >= spec.MigrationQueueSize {
-		return false
-	}
-
-	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
-	state.MigrationQueue = append(state.MigrationQueue,
-		state.WalkingTranslations[walkingIndex])
-
-	page := state.WalkingTranslations[walkingIndex].Page
-	page.IsMigrating = true
-	m.pageTable().Update(page)
-
-	return true
-}
-
-func (m *translationMW) pageNeedMigrate(
-	walking transactionState,
-) bool {
-	if walking.DeviceID == walking.Page.DeviceID {
-		return false
-	}
-
-	if !walking.Page.Unified {
-		return false
-	}
-
-	if walking.Page.IsPinned {
-		return false
-	}
-
-	return true
 }
 
 func (m *translationMW) doPageWalkHit(walkingIndex int) bool {

@@ -2,9 +2,10 @@ package tlb
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/modeling"
-
+	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -27,8 +28,37 @@ func (m *ctrlMiddleware) bottomPort() messaging.Port {
 
 func (m *ctrlMiddleware) Tick() bool {
 	madeProgress := false
-	madeProgress = m.handleIncomingCommands() || madeProgress
+	madeProgress = m.completePendingDrain() || madeProgress
+	// Control commands are processed serially: while an async verb (Drain) is
+	// in progress, the next command is not accepted — it stays queued on the
+	// Control port and is handled once the component settles.
+	if m.comp.State.TLBState != tlbStateDrain {
+		madeProgress = m.handleIncomingCommands() || madeProgress
+	}
 	return madeProgress
+}
+
+// completePendingDrain detects that the data-path middleware has
+// finished draining (TLBState transitioned to pause) and sends the
+// async Drain Rsp.
+func (m *ctrlMiddleware) completePendingDrain() bool {
+	state := &m.comp.State
+	if !state.PendingDrainRsp {
+		return false
+	}
+	if state.TLBState != tlbStatePause {
+		return false
+	}
+	if !m.controlPort().CanSend() {
+		return false
+	}
+
+	m.controlPort().Send(makeCtrlRsp(m.controlPort(), mem.CmdDrain,
+		state.CurrentCmdSrc, state.CurrentCmdID, true, ""))
+	state.PendingDrainRsp = false
+	state.CurrentCmdID = 0
+	state.CurrentCmdSrc = ""
+	return true
 }
 
 func (m *ctrlMiddleware) handleIncomingCommands() bool {
@@ -39,7 +69,9 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 
 	ctrlReq, ok := msg.(mem.ControlReq)
 	if !ok {
-		panic("Unhandled message")
+		// Drop unexpected message types so the Control port does not stall.
+		m.controlPort().RetrieveIncoming()
+		return true
 	}
 
 	switch ctrlReq.Command {
@@ -49,19 +81,28 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 		return m.performCtrlDrain(ctrlReq)
 	case mem.CmdPause:
 		return m.performCtrlPause(ctrlReq)
-	case mem.CmdFlush:
-		return m.handleTLBFlush(ctrlReq)
 	case mem.CmdReset:
-		return m.handleTLBRestart(ctrlReq)
+		return m.handleReset(ctrlReq)
+	case mem.CmdInvalidate:
+		return m.handleInvalidate(ctrlReq)
+	case mem.CmdFlush:
+		// A TLB holds no dirty data, so Flush is not meaningful; callers
+		// drop entries with Invalidate instead.
+		return m.handleUnsupported(ctrlReq)
 	default:
-		panic("Unhandled control command")
+		return m.handleUnsupported(ctrlReq)
 	}
 }
 
 func (m *ctrlMiddleware) performCtrlEnable(msg mem.ControlReq) bool {
+	if !m.controlPort().CanSend() {
+		return false
+	}
 	state := &m.comp.State
 	state.TLBState = tlbStateEnable
 
+	m.controlPort().Send(makeCtrlRsp(m.controlPort(), mem.CmdEnable,
+		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
@@ -76,6 +117,9 @@ func (m *ctrlMiddleware) performCtrlEnable(msg mem.ControlReq) bool {
 func (m *ctrlMiddleware) performCtrlDrain(msg mem.ControlReq) bool {
 	state := &m.comp.State
 	state.TLBState = tlbStateDrain
+	state.PendingDrainRsp = true
+	state.CurrentCmdID = msg.ID
+	state.CurrentCmdSrc = msg.Src
 
 	m.controlPort().RetrieveIncoming()
 	tracing.AddMilestone(m.comp, tracing.Milestone{
@@ -89,9 +133,14 @@ func (m *ctrlMiddleware) performCtrlDrain(msg mem.ControlReq) bool {
 }
 
 func (m *ctrlMiddleware) performCtrlPause(msg mem.ControlReq) bool {
+	if !m.controlPort().CanSend() {
+		return false
+	}
 	state := &m.comp.State
 	state.TLBState = tlbStatePause
 
+	m.controlPort().Send(makeCtrlRsp(m.controlPort(), mem.CmdPause,
+		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
@@ -103,32 +152,87 @@ func (m *ctrlMiddleware) performCtrlPause(msg mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleTLBFlush(msg mem.ControlReq) bool {
+// handleInvalidate drops cached translations matching the request's
+// address/PID filter (empty address list = all addresses, zero PID = all
+// PIDs). Invalidate is a synchronous verb but is only legal once the TLB
+// is paused or drained; issued while Enabled it is rejected.
+func (m *ctrlMiddleware) handleInvalidate(msg mem.ControlReq) bool {
 	state := &m.comp.State
-	state.HasInflightFlushReq = true
-	state.InflightFlush = inflightFlushState{
-		VAddr: msg.Addresses,
-		PID:   msg.PID,
-		Meta:  msg.MsgMeta,
+	// Invalidate is only legal once the TLB is fully paused. While it is
+	// still draining, in-flight bottom responses can still be parsed into
+	// the sets after the invalidate, so accept only the paused state.
+	if state.TLBState != tlbStatePause {
+		return m.rejectMustBePaused(msg)
 	}
-	m.controlPort().RetrieveIncoming()
-	state.TLBState = tlbStateFlush
-
-	return true
-}
-
-func (m *ctrlMiddleware) handleTLBRestart(msg mem.ControlReq) bool {
-	rsp := mem.ControlRsp{Command: mem.CmdReset, Success: true}
-	rsp.ID = timing.GetIDGenerator().Generate()
-	rsp.Src = m.controlPort().AsRemote()
-	rsp.Dst = msg.Src
-	rsp.TrafficClass = "mem.ControlRsp"
-
 	if !m.controlPort().CanSend() {
 		return false
 	}
 
-	m.controlPort().Send(rsp)
+	invalidateEntries(state, m.comp.Spec(), msg.Addresses, msg.PID)
+
+	m.controlPort().Send(makeCtrlRsp(m.controlPort(), mem.CmdInvalidate,
+		msg.Src, msg.ID, true, ""))
+	m.controlPort().RetrieveIncoming()
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindDependency,
+		What:   m.comp.Name() + ".Sets",
+	})
+	tracing.ForgetMsgIDAtReceiver(msg.ID, m.comp)
+
+	return true
+}
+
+// rejectMustBePaused responds that a conditional verb is illegal while the
+// component is Enabled.
+func (m *ctrlMiddleware) rejectMustBePaused(msg mem.ControlReq) bool {
+	if !m.controlPort().CanSend() {
+		return false
+	}
+	m.controlPort().Send(makeCtrlRsp(m.controlPort(), msg.Command,
+		msg.Src, msg.ID, false, control.ErrMustBePausedOrDrained))
+	m.controlPort().RetrieveIncoming()
+	return true
+}
+
+// invalidateEntries marks every cached page matching the filter invalid.
+func invalidateEntries(
+	state *State,
+	spec Spec,
+	addresses []uint64,
+	pid vm.PID,
+) {
+	matchAddr := make(map[uint64]bool, len(addresses))
+	for _, a := range addresses {
+		matchAddr[a/spec.PageSize*spec.PageSize] = true
+	}
+
+	for si := range state.Sets {
+		set := &state.Sets[si]
+		for wi := range set.Blocks {
+			page := set.Blocks[wi].Page
+			if !page.Valid {
+				continue
+			}
+			if pid != 0 && page.PID != pid {
+				continue
+			}
+			if len(addresses) > 0 && !matchAddr[page.VAddr] {
+				continue
+			}
+			page.Valid = false
+			setUpdate(set, wi, page)
+		}
+	}
+}
+
+func (m *ctrlMiddleware) handleReset(msg mem.ControlReq) bool {
+	if !m.controlPort().CanSend() {
+		return false
+	}
+
+	m.controlPort().Send(makeCtrlRsp(m.controlPort(), mem.CmdReset,
+		msg.Src, msg.ID, true, ""))
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
 		Kind:   tracing.MilestoneKindNetworkBusy,
@@ -138,16 +242,59 @@ func (m *ctrlMiddleware) handleTLBRestart(msg mem.ControlReq) bool {
 
 	state := &m.comp.State
 	state.TLBState = tlbStateEnable
+	state.PendingDrainRsp = false
+	state.CurrentCmdID = 0
+	state.CurrentCmdSrc = ""
+
+	// Reset is a hard reset to the freshly-built shape: discard in-flight
+	// misses, the cached translations, and any staged pipeline work.
+	state.MSHREntries = nil
+	state.HasRespondingMSHR = false
+	state.RespondingMSHRData = mshrEntryState{}
+
+	spec := m.comp.Spec()
+	state.Sets = initSets(spec.NumSets, spec.NumWays)
+	state.Pipeline.Clear()
+	state.BufferItems.Clear()
 
 	for m.topPort().PeekIncoming() != nil {
 		m.topPort().RetrieveIncoming()
 	}
-
 	for m.bottomPort().PeekIncoming() != nil {
 		m.bottomPort().RetrieveIncoming()
 	}
 
 	m.controlPort().RetrieveIncoming()
-
 	return true
+}
+
+func (m *ctrlMiddleware) handleUnsupported(msg mem.ControlReq) bool {
+	if !m.controlPort().CanSend() {
+		return false
+	}
+	m.controlPort().Send(makeCtrlRsp(m.controlPort(), msg.Command,
+		msg.Src, msg.ID, false, control.ErrUnsupported))
+	m.controlPort().RetrieveIncoming()
+	return true
+}
+
+func makeCtrlRsp(
+	port messaging.Port,
+	cmd mem.ControlCommand,
+	dst messaging.RemotePort,
+	rspTo uint64,
+	success bool,
+	errStr string,
+) mem.ControlRsp {
+	rsp := mem.ControlRsp{
+		Command: cmd,
+		Success: success,
+		Error:   errStr,
+	}
+	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.Src = port.AsRemote()
+	rsp.Dst = dst
+	rsp.RspTo = rspTo
+	rsp.TrafficClass = "mem.ControlRsp"
+	return rsp
 }

@@ -78,6 +78,9 @@ func (b Builder) Build(name string) *Comp {
 		WithResources(b.resources).
 		Build(name)
 
+	cMW := &ctrlMiddleware{comp: modelComp}
+	modelComp.AddMiddleware(cMW)
+
 	ptMW := &parseTranslateMW{comp: modelComp}
 	modelComp.AddMiddleware(ptMW)
 

@@ -9,13 +9,12 @@ import (
 
 // defaultSpec provides the default configuration for MMU components.
 var defaultSpec = Spec{
-	Freq:                    1 * timing.GHz,
-	Log2PageSize:            12,
-	Latency:                 10,
-	MaxRequestsInFlight:     16,
-	MigrationQueueSize:      4096,
-	TopPortBufferSize:       4096,
-	MigrationPortBufferSize: 1,
+	Freq:                1 * timing.GHz,
+	Log2PageSize:        12,
+	Latency:             10,
+	MaxRequestsInFlight: 16,
+	TopPortBufferSize:   4096,
+	CtrlPortBufferSize:  4,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -63,7 +62,7 @@ func (b Builder) WithResources(r Resources) Builder {
 }
 
 // Build returns a newly created MMU component. It creates the component's Top
-// and Migration ports.
+// and Control ports.
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("mmu: WithRegistrar is required")
@@ -82,11 +81,11 @@ func (b Builder) Build(name string) *Comp {
 
 	b.createPorts(name, spec, modelComp)
 
+	cmw := &ctrlMiddleware{comp: modelComp}
+	modelComp.AddMiddleware(cmw)
+
 	tmw := &translationMW{comp: modelComp}
 	modelComp.AddMiddleware(tmw)
-
-	mmw := &migrationMW{comp: modelComp}
-	modelComp.AddMiddleware(mmw)
 
 	b.registrar.RegisterComponent(modelComp)
 
@@ -127,8 +126,8 @@ func (b Builder) createPorts(
 		mmu, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
 	mmu.AddPort("Top", topPort)
 
-	migrationPort := messaging.NewPort(
-		mmu, spec.MigrationPortBufferSize, spec.MigrationPortBufferSize,
-		name+".Migration")
-	mmu.AddPort("Migration", migrationPort)
+	ctrlPort := messaging.NewPort(
+		mmu, spec.CtrlPortBufferSize, spec.CtrlPortBufferSize,
+		name+".Control")
+	mmu.AddPort("Control", ctrlPort)
 }

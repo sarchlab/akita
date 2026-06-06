@@ -125,6 +125,9 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		rsp.TrafficClass = "vm.TranslationRsp"
 		bottomPort.Deliver(rsp)
 
+		// Mark the response's request as outstanding, as a real forward would.
+		comp.State.OutstandingBottomReqs[rsp.RspTo] = true
+
 		madeProgress := mw.handleRsp(rsp)
 
 		spec := comp.Spec()
@@ -145,35 +148,60 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		}
 	})
 
-	It("should flush and reset cache", func() {
+	It("drops the addressed page's segments while a sibling page survives", func() {
 		pid := vm.PID(1)
-		vAddr := uint64(0x6000)
 		spec := comp.Spec()
-		seg := segForLevelSpec(spec, 0, vAddr)
-		wayID := setIDForSegSpec(spec, seg)
+
+		// dropAddr and keepAddr share their upper-level (level-1) segment
+		// but differ at level 0. A page-walk cache stores per-level VPN
+		// segments, so invalidating dropAddr removes its level-0 segment
+		// (and the shared upper-level segment), while keepAddr's distinct
+		// level-0 segment must survive.
+		dropAddr := uint64(0x6000)
+		keepAddr := uint64(0x9000)
+		Expect(segForLevelSpec(spec, 0, dropAddr)).
+			ToNot(Equal(segForLevelSpec(spec, 0, keepAddr)))
+		Expect(segForLevelSpec(spec, 1, dropAddr)).
+			To(Equal(segForLevelSpec(spec, 1, keepAddr)))
 
 		next := &comp.State
-		setUpdate(&next.Table[0], wayID, pid, seg)
+		next.CurrentState = mmuCacheStatePause
 
-		// Set up flush state
-		next.InflightFlushReqActive = true
-		next.InflightFlushReqID = timing.GetIDGenerator().Generate()
-		next.InflightFlushReqSrc = messaging.RemotePort("Requester")
-		next.CurrentState = mmuCacheStateFlush
+		for level := 0; level < spec.NumLevels; level++ {
+			dropSeg := segForLevelSpec(spec, level, dropAddr)
+			keepSeg := segForLevelSpec(spec, level, keepAddr)
+			setUpdate(&next.Table[level], setIDForSegSpec(spec, dropSeg), pid, dropSeg)
+			setVisit(&next.Table[level], setIDForSegSpec(spec, dropSeg))
+			setUpdate(&next.Table[level], setIDForSegSpec(spec, keepSeg), pid, keepSeg)
+			setVisit(&next.Table[level], setIDForSegSpec(spec, keepSeg))
+		}
 
-		madeProgress := mw.processMMUCacheFlush()
+		ctrl := &ctrlMiddleware{comp: comp}
+		req := mem.ControlReq{
+			Command:   mem.CmdInvalidate,
+			Addresses: []uint64{dropAddr},
+		}
+		req.ID = timing.GetIDGenerator().Generate()
+		req.Src = messaging.RemotePort("Requester")
+		req.Dst = controlPort.AsRemote()
+		req.TrafficClass = "mem.ControlReq"
+		controlPort.Deliver(req)
 
-		next = &comp.State
-		Expect(madeProgress).To(BeTrue())
-		Expect(next.CurrentState).To(Equal(mmuCacheStatePause))
-		Expect(next.InflightFlushReqActive).To(BeFalse())
-		_, found := setLookup(&next.Table[0], pid, seg)
-		Expect(found).To(BeFalse())
+		Expect(ctrl.handleIncomingCommands()).To(BeTrue())
 
-		sent := controlPort.RetrieveOutgoing()
-		sentRsp, ok := sent.(mem.ControlRsp)
-		Expect(ok).To(BeTrue())
-		Expect(sentRsp.Command).To(Equal(mem.CmdFlush))
+		// The dropped address's segment is gone at every level it cached.
+		for level := 0; level < spec.NumLevels; level++ {
+			dropSeg := segForLevelSpec(spec, level, dropAddr)
+			_, dropFound := setLookup(&next.Table[level], pid, dropSeg)
+			Expect(dropFound).To(BeFalse())
+		}
+		// keepAddr's distinct level-0 segment survives.
+		keepSeg0 := segForLevelSpec(spec, 0, keepAddr)
+		_, keepFound := setLookup(&next.Table[0], pid, keepSeg0)
+		Expect(keepFound).To(BeTrue())
+
+		sentRsp := controlPort.RetrieveOutgoing().(mem.ControlRsp)
+		Expect(sentRsp.Command).To(Equal(mem.CmdInvalidate))
 		Expect(sentRsp.Success).To(BeTrue())
 		Expect(sentRsp.Dst).To(Equal(messaging.RemotePort("Requester")))
 		Expect(sentRsp.Src).To(Equal(controlPort.AsRemote()))

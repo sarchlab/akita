@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -29,12 +30,19 @@ func (m *walkMW) bottomPort() messaging.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
-// Tick runs the walk stages.
+// Tick runs the walk stages. Paused GMMUs make no progress; draining
+// GMMUs continue page-table walks but accept no new requests.
 func (m *walkMW) Tick() bool {
+	if m.comp.State.ControlState == control.StatePaused {
+		return false
+	}
+
 	madeProgress := false
 
 	madeProgress = m.walkPageTable() || madeProgress
-	madeProgress = m.parseFromTop() || madeProgress
+	if m.comp.State.ControlState == control.StateEnabled {
+		madeProgress = m.parseFromTop() || madeProgress
+	}
 
 	return madeProgress
 }

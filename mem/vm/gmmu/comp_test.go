@@ -55,7 +55,7 @@ var _ = Describe("GMMU", func() {
 			WithSpec(spec).
 			Build("MMU")
 
-		mw = gmmuComp.Middlewares()[0].(*walkMW)
+		mw = gmmuComp.Middlewares()[1].(*walkMW)
 
 		topPort = gmmuComp.GetPortByName("Top")
 		bottomPort = gmmuComp.GetPortByName("Bottom")
@@ -64,6 +64,7 @@ var _ = Describe("GMMU", func() {
 		topConn.PlugIn(topPort)
 		bottomConn := &noopConn{}
 		bottomConn.PlugIn(bottomPort)
+		(&noopConn{}).PlugIn(gmmuComp.GetPortByName("Control"))
 	}
 
 	makeTranslationReq := func(vAddr uint64) vm.TranslationReq {

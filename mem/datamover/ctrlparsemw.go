@@ -4,6 +4,7 @@ import (
 	"log"
 	"reflect"
 
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/timing"
@@ -17,23 +18,34 @@ type ctrlParseMW struct {
 	comp *modeling.Component[Spec, State, modeling.None]
 }
 
-func (m *ctrlParseMW) ctrlPort() messaging.Port {
-	return m.comp.GetPortByName("Control")
+// topPort is the workload-request port the data mover listens on for
+// DataMoveRequest messages. (It was historically named "Control" but
+// that name is now reserved for the uniform control protocol.)
+func (m *ctrlParseMW) topPort() messaging.Port {
+	return m.comp.GetPortByName("Top")
 }
 
-// Tick runs finishTransaction and parseFromCP.
+// Tick runs finishTransaction and parseFromCP. Paused data movers
+// freeze entirely; draining ones finish the current transaction but
+// don't accept new ones.
 func (m *ctrlParseMW) Tick() bool {
+	if m.comp.State.ControlState == control.StatePaused {
+		return false
+	}
+
 	madeProgress := false
 
 	madeProgress = m.finishTransaction() || madeProgress
-	madeProgress = m.parseFromCP() || madeProgress
+	if m.comp.State.ControlState == control.StateEnabled {
+		madeProgress = m.parseFromCP() || madeProgress
+	}
 
 	return madeProgress
 }
 
 // parseFromCP retrieves Msg from ctrlPort.
 func (m *ctrlParseMW) parseFromCP() bool {
-	reqI := m.ctrlPort().RetrieveIncoming()
+	reqI := m.topPort().RetrieveIncoming()
 	if reqI == nil {
 		return false
 	}
@@ -99,6 +111,14 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		return false
 	}
 
+	// All reads/writes have been issued, but the move is only truly complete
+	// once every one is acknowledged. Completing earlier would report the copy
+	// done (and let a Drain quiesce) while destination writes are still in
+	// flight and their pending metadata is about to be discarded.
+	if len(trans.PendingRead) > 0 || len(trans.PendingWrite) > 0 {
+		return false
+	}
+
 	rsp := DataMoveResponse{
 		MsgMeta: messaging.MsgMeta{
 			ID:    timing.GetIDGenerator().Generate(),
@@ -108,11 +128,11 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		},
 	}
 
-	if !m.ctrlPort().CanSend() {
+	if !m.topPort().CanSend() {
 		return false
 	}
 
-	m.ctrlPort().Send(rsp)
+	m.topPort().Send(rsp)
 
 	// Reset transaction
 	state.CurrentTransaction = dataMoverTransactionState{

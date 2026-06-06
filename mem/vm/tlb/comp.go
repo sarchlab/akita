@@ -35,31 +35,24 @@ type Resources struct {
 	TranslationProviderMapper mem.AddressToPortMapper `json:"-"`
 }
 
-// inflightFlushState stores the flat fields needed during a TLB flush.
-type inflightFlushState struct {
-	VAddr []uint64          `json:"vaddr"`
-	PID   vm.PID            `json:"pid"`
-	Meta  messaging.MsgMeta `json:"meta"`
-}
-
 const (
 	tlbStateEnable = "enable"
 	tlbStatePause  = "pause"
 	tlbStateDrain  = "drain"
-	tlbStateFlush  = "flush"
 )
 
 // State contains mutable runtime data for the TLB.
 type State struct {
-	TLBState            string                                 `json:"tlb_state"`
-	Sets                []setState                             `json:"sets"`
-	MSHREntries         []mshrEntryState                       `json:"mshr_entries"`
-	HasRespondingMSHR   bool                                   `json:"has_responding_mshr"`
-	RespondingMSHRData  mshrEntryState                         `json:"responding_mshr_data"`
-	Pipeline            queueing.Pipeline[pipelineTLBReqState] `json:"pipeline"`
-	BufferItems         queueing.Buffer[pipelineTLBReqState]   `json:"buffer_items"`
-	HasInflightFlushReq bool                                   `json:"has_inflight_flush_req"`
-	InflightFlush       inflightFlushState                     `json:"inflight_flush"`
+	TLBState           string                                 `json:"tlb_state"`
+	PendingDrainRsp    bool                                   `json:"pending_drain_rsp"`
+	CurrentCmdID       uint64                                 `json:"current_cmd_id"`
+	CurrentCmdSrc      messaging.RemotePort                   `json:"current_cmd_src"`
+	Sets               []setState                             `json:"sets"`
+	MSHREntries        []mshrEntryState                       `json:"mshr_entries"`
+	HasRespondingMSHR  bool                                   `json:"has_responding_mshr"`
+	RespondingMSHRData mshrEntryState                         `json:"responding_mshr_data"`
+	Pipeline           queueing.Pipeline[pipelineTLBReqState] `json:"pipeline"`
+	BufferItems        queueing.Buffer[pipelineTLBReqState]   `json:"buffer_items"`
 }
 
 // blockState is a serializable representation of an internal block.

@@ -25,30 +25,16 @@ The `AccessReq` interface unifies read/write requests with `GetAddress()`,
 
 ### Control Messages
 
-`ControlReq` provides a unified control interface for all memory components:
+`ControlReq` and `ControlRsp` carry the uniform control protocol used by
+every memory agent: Pause, Drain, Enable, Reset, Invalidate, Flush. Each
+component exposes a `Control` port that carries these messages and only
+these messages.
 
-```go
-type ControlReq struct {
-    messaging.MsgMeta
-    Command         ControlCommand
-    DiscardInflight bool
-    InvalidateAfter bool
-    PauseAfter      bool
-    Addresses       []uint64
-    PID             vm.PID
-}
-```
-
-| Command | Description |
-|---------|-------------|
-| `CmdFlush` | Write back dirty data |
-| `CmdInvalidate` | Invalidate entries (no writeback) |
-| `CmdDrain` | Wait for in-flight operations to complete |
-| `CmdReset` | Soft reset |
-| `CmdPause` | Disable further processing |
-| `CmdEnable` | Re-enable processing |
-
-Responses use `ControlRsp` with `Command` and `Success` fields.
+See [`CONTROL_PROTOCOL.md`](CONTROL_PROTOCOL.md) for verb definitions,
+response timing, the support matrix, and how to implement and test the
+protocol in a new component. The reusable state enum and conformance
+harness live in `mem/control/` (see
+[`control/README.md`](control/README.md)).
 
 ## Storage
 

@@ -2,6 +2,7 @@ package idealmemcontroller
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -78,7 +79,7 @@ func (b Builder) Build(name string) *Comp {
 		WithSpec(spec).
 		WithResources(Resources{Storage: storage}).
 		Build(name)
-	modelComp.State = State{CurrentState: "enable"}
+	modelComp.State = State{ControlState: control.StateEnabled}
 
 	modelComp.AddMiddleware(&ctrlMiddleware{comp: modelComp})
 	modelComp.AddMiddleware(&memMiddleware{comp: modelComp})

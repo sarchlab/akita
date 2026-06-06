@@ -59,6 +59,14 @@ func (s *Set) UpdateKey(wayID int, oldKey, newKey string) {
 	s.keyMap[newKey] = wayID
 }
 
+// Remove drops the mapping for key, if present. The way it referenced
+// becomes a lookup miss; its slot is reused when a future insertion
+// installs a new key. The caller is responsible for updating the block
+// payload.
+func (s *Set) Remove(key string) {
+	delete(s.keyMap, key)
+}
+
 // Evict removes and returns the least-recently-used wayID.
 func (s *Set) Evict() (wayID int, ok bool) {
 	if len(s.visitList) == 0 {
