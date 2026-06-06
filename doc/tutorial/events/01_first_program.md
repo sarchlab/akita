@@ -77,11 +77,11 @@ The type assertion is a safety check — most engines implement
 ### 4. Creating and scheduling the event
 
 ```go
-evt := timing.NewEventBase(1, "printer")
+evt := timing.MakeEventBase(1, "printer")
 engine.Schedule(evt)
 ```
 
-`NewEventBase(time, handlerID)` creates a minimal event whose `Time()`
+`MakeEventBase(time, handlerID)` creates a minimal event whose `Time()`
 returns `1` and whose `HandlerID()` returns `"printer"`. The engine will
 fire it at time = 1 picosecond and dispatch it to the handler registered
 under `"printer"`.

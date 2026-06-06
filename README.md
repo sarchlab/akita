@@ -92,7 +92,7 @@ go test ./...
 
 The fastest way in is the tutorial — it builds a working memory subsystem
 across a handful of runnable examples. Start with [Your First
-Component](https://akitasim.dev/docs/akita/tutorial/components/first_component)
+Component](https://akitasim.dev/docs/akita/tutorial/components/what_is_a_component)
 or browse [`examples/`](examples/) directly.
 
 ## V5 Development

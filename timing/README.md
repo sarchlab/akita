@@ -29,15 +29,15 @@ type Event interface {
 }
 ```
 
-Embed `EventBase` to get the standard fields and getters. `NewEventBase(t, handlerID)`
-assigns a fresh ID from the global ID generator:
+Embed `EventBase` to get the standard fields and getters. `MakeEventBase(t, handlerID)`
+returns an `EventBase` value with a fresh ID from the global ID generator:
 
 ```go
 type tickEvent struct {
-    *timing.EventBase
+    timing.EventBase
 }
 
-evt := &tickEvent{timing.NewEventBase(now, comp.Name())}
+evt := tickEvent{timing.MakeEventBase(now, comp.Name())}
 ```
 
 ### Handler
