@@ -481,7 +481,7 @@ V5 unifies component structure into five orthogonal parts. See the
 |------|------|----------|
 | **Spec** | Immutable configuration | Primitives only. JSON-friendly. No pointers. |
 | **State** | Mutable runtime data | Pure data. No ports, functions, channels. Use IDs for cross-references. |
-| **Ports** | Communication endpoints | Created externally, injected via `AddPort(name, port)`. Never constructed internally. |
+| **Ports** | Communication endpoints | Declared by the component (`DeclarePort`); instances created externally and attached via `AssignPort(name, port)`. Never constructed internally. |
 | **Middlewares** | Per-tick behavior pipeline | Ordered. Operate on State via `State` field. Stateless w.r.t. external deps. |
 | **Hooks** | Observation/tracing | Attached via `HookableBase`. Don't affect simulation logic. |
 
@@ -513,9 +513,11 @@ comp := modeling.NewBuilder[MySpec, MyState]().
 comp.State = initialState
 comp.AddMiddleware(&myMiddleware{comp: comp})
 
-port := sim.NewPort(nil, 4, 4, "MyComponent.Top")
-port.SetComponent(comp)
-comp.AddPort("Top", port)
+comp.DeclarePort("Top")
+
+// During wiring, after the component is built, create and attach the instance:
+port := messaging.NewPort(comp, 4, 4, "MyComponent.Top")
+comp.AssignPort("Top", port)
 ```
 
 ### Defining Components in V5: Philosophy and Patterns
@@ -536,8 +538,8 @@ V5 unifies how components are modeled and wired. Each component is a single stru
    - All cross‑references use stable identifiers (IDs), never in‑memory pointers.
    - Snapshot/restore uses deep copies of State so checkpoints are immutable.
 
-3. Ports (externally injected)
-   - Components never construct or own connections. Ports are created/injected during wiring and registered via `AddPort(name, port)`.
+3. Ports (declared by the component, instances injected)
+   - A component declares the ports it has (`DeclarePort`) but never constructs the instances or owns connections. Port instances are created during wiring and attached via `AssignPort(name, port)`.
    - Components access ports by name via `GetPortByName("...")` to avoid compile‑time coupling.
 
 4. Middlewares (ordered, stateless over the component)
@@ -560,11 +562,11 @@ V5 unifies how components are modeled and wired. Each component is a single stru
 #### Build and Wire (two stages)
 
 1. Build from Spec
-   - `Builder.WithSpec(spec).WithEngine(engine).WithFreq(freq).Build(name)` constructs the component with defaults and resolved strategies.
-   - Do not create or connect ports here.
+   - `Builder.WithRegistrar(reg).WithSpec(spec).Build(name)` constructs the component with defaults and resolved strategies, and declares the component's ports.
+   - Do not create the port instances or connect them here.
 
 2. Wire topology
-   - Create ports and connections, then inject ports via `AddPort("...", port)`.
+   - Create the port instances and connections, then attach ports via `AssignPort("...", port)`.
    - Use names consistently so components and tooling can introspect topology.
 
 #### Determinism and Introspection
@@ -730,7 +732,12 @@ ctrl := dram.MakeBuilder().
 
 ## 8. Port Creation API
 
-In V4, ports were created internally by component builders. In V5, ports are created externally and passed into builders via `WithXxxPort()` methods. This makes wiring explicit and allows ports to be shared or configured before a component is built.
+In V4, ports were created internally by component builders. In V5, the
+component owns its port *topology* — its builder declares the ports the
+component has (`DeclarePort`) but does not create the instances. Setup code
+creates each port externally and attaches it with `AssignPort`. This makes
+wiring explicit and lets ports be sized or implemented differently without
+changing the component.
 
 **Before (V4):**
 ```go
@@ -743,40 +750,47 @@ cache := cachebuilder.New().
 
 **After (V5):**
 ```go
-// V5: Ports are created externally and injected into the builder.
-topPort := sim.NewPort(nil, 4, 4, "Cache.TopPort")
-bottomPort := sim.NewPort(nil, 4, 4, "Cache.BottomPort")
-controlPort := sim.NewPort(nil, 4, 4, "Cache.ControlPort")
+// V5: the component declares its ports; setup creates and assigns the instances.
+comp := somepkg.MakeBuilder().
+    WithRegistrar(sim).
+    WithSpec(spec).
+    Build("Comp") // Build calls DeclarePort("Top"), DeclarePort("Bottom"), ...
 
-cache := cachebuilder.New().
-    WithEngine(engine).
-    WithFreq(1 * sim.GHz).
-    WithTopPort(topPort).
-    WithBottomPort(bottomPort).
-    WithControlPort(controlPort).
-    Build("Cache")
+comp.AssignPort("Top",
+    messaging.NewPort(comp, 4, 4, comp.Name()+".Top"))
+comp.AssignPort("Bottom",
+    messaging.NewPort(comp, 4, 4, comp.Name()+".Bottom"))
+comp.AssignPort("Control",
+    messaging.NewPort(comp, 4, 4, comp.Name()+".Control"))
 ```
 
-This pattern applies to all V5 components. Each builder exposes `WithXxxPort(port sim.Port)` methods for every port the component needs.
+`AssignPort` panics if the name was not declared or is already assigned, so a
+typo or a forgotten port fails fast. (Components not yet migrated to this model
+still create and attach their ports in one step inside `Build` with `AddPort`.)
 
 ### SetComponent
 
-The `Port` interface in V5 now includes a `SetComponent(comp Component)` method. This allows creating a port before the owning component is built, then associating the port with the component afterward.
+The `Port` interface in V5 includes a `SetComponent(comp Component)` method.
+Because the component is built before its ports, a port is normally created
+with its owner directly and then assigned:
 
 ```go
-// Create port before the component exists.
-outPort := sim.NewPort(nil, 4, 4, "Agent.OutPort")
+agent := somepkg.MakeBuilder().WithRegistrar(sim).Build("Agent")
+outPort := messaging.NewPort(agent, 4, 4, "Agent.Out")
+agent.AssignPort("Out", outPort)
+```
 
-// Build the component, injecting the port.
-agent := pingbuilder.New().
-    WithOutPort(outPort).
-    Build("Agent")
+`SetComponent` remains for the less common case of building a port before its
+owning component exists, then associating it afterward:
 
-// The builder calls SetComponent internally, but you can also call it manually:
+```go
+outPort := messaging.NewPort(nil, 4, 4, "Agent.Out")
+// ... later, once the component exists:
 outPort.SetComponent(agent)
 ```
 
-This decouples port creation from component construction, which is essential for the V5 wiring model where topology is assembled separately from component internals.
+This decouples port creation from component construction, which suits the V5
+wiring model where topology is assembled separately from component internals.
 
 ---
 

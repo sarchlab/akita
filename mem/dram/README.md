@@ -93,6 +93,12 @@ component) and `WithResources` (shared objects such as backing storage). The
 component creates its own `Top` port internally; its buffer size is the
 `TopPortBufferSize` field of the spec.
 
+> **Note:** Akita is migrating to externally-assigned ports — a component
+> declares its ports with `DeclarePort` and setup supplies the instances with
+> `AssignPort` (see `idealmemcontroller`, already migrated). This component
+> still creates its port internally in `Build`; it will adopt the new
+> convention during the rollout.
+
 ```go
 spec := dram.DDR4Spec
 spec.Freq = 1200 * timing.MHz

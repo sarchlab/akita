@@ -59,6 +59,13 @@ Things to notice:
 - The `MakeBuilder` → `WithX` → `Build(name)` shape is universal across
   Akita components and connections.
 
+> **Convention note:** Akita is moving port creation out of components. New
+> components declare their ports in `Build` with `DeclarePort` and have setup
+> code assign the instances afterward with `AssignPort` (see `idealmemcontroller`
+> and the `messaging` package README). `tickingping` still creates its `Out`
+> port inside `Build` as shown here; the externalized model is the direction
+> going forward.
+
 ## Why a Custom Builder?
 
 In *Create a Component* the walker had no ports and a single middleware, so we

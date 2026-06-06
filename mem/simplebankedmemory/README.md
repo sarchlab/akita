@@ -73,6 +73,12 @@ registers the component) and `WithResources` (the shared backing storage). When
 `WithResources` is omitted, the controller builds its own storage sized by
 `Spec.Capacity`. The `Top` port is created internally by `Build`.
 
+> **Note:** Akita is migrating to externally-assigned ports — a component
+> declares its ports with `DeclarePort` and setup supplies the instances with
+> `AssignPort` (see `idealmemcontroller`, already migrated). This component
+> still creates its port internally in `Build`; it will adopt the new
+> convention during the rollout.
+
 ```go
 engine := timing.NewSerialEngine()
 

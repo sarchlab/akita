@@ -56,6 +56,12 @@ Configuration is supplied as a whole through `WithSpec` (start from
 `DefaultSpec()`); the engine and registration come from `WithRegistrar`. The
 component creates its own `Top`, `Bottom`, and `Control` ports.
 
+> **Note:** Akita is migrating to externally-assigned ports — a component
+> declares its ports with `DeclarePort` and setup supplies the instances with
+> `AssignPort` (see `idealmemcontroller`, already migrated). This component
+> still creates its ports internally in `Build`; it will adopt the new
+> convention during the rollout.
+
 ```go
 spec := rob.DefaultSpec()
 spec.BufferSize = 256

@@ -75,6 +75,12 @@ address-to-port mapping for lower memory). When the storage is omitted, the
 component builds its own sized by `Spec.TotalByteSize`. The `Top`, `Bottom`, and
 `Control` ports are created internally by `Build`.
 
+> **Note:** Akita is migrating to externally-assigned ports — a component
+> declares its ports with `DeclarePort` and setup supplies the instances with
+> `AssignPort` (see `idealmemcontroller`, already migrated). This component
+> still creates its ports internally in `Build`; it will adopt the new
+> convention during the rollout.
+
 ```go
 spec := writeback.DefaultSpec()
 spec.TotalByteSize = 64 * mem.KB

@@ -67,6 +67,12 @@ Configuration is supplied as a whole through `WithSpec` (start from
 and the address-to-port mapping come from `WithResources`. The component creates
 its own `Top`, `Bottom`, and `Control` ports.
 
+> **Note:** Akita is migrating to externally-assigned ports — a component
+> declares its ports with `DeclarePort` and setup supplies the instances with
+> `AssignPort` (see `idealmemcontroller`, already migrated). This component
+> still creates its ports internally in `Build`; it will adopt the new
+> convention during the rollout.
+
 ```go
 spec := writethroughcache.DefaultSpec()
 spec.WritePolicyType = "write-through"
