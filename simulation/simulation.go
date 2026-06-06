@@ -171,14 +171,24 @@ func (s *Simulation) GetComponentByName(name string) Component {
 	return s.components[idx]
 }
 
-// GetPortByName returns the port with the given name.
+// GetPortByName returns the port with the given name. Ports created and
+// assigned to a component after the component was registered are not in the
+// eager index, so on a miss this scans the registered components for a
+// matching port.
 func (s *Simulation) GetPortByName(name string) Port {
-	idx, found := s.portNameIndex[name]
-	if !found {
-		panic("port " + name + " not registered")
+	if idx, found := s.portNameIndex[name]; found {
+		return s.ports[idx]
 	}
 
-	return s.ports[idx]
+	for _, c := range s.components {
+		for _, p := range componentPorts(c) {
+			if p.Name() == name {
+				return p
+			}
+		}
+	}
+
+	panic("port " + name + " not registered")
 }
 
 // Terminate terminates the simulation.

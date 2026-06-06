@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 
@@ -62,6 +63,10 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		WithRegistrar(s).
 		WithSpec(dramSpec).
 		Build("DRAM")
+	dram.AssignPort("Top",
+		messaging.NewPort(dram, 16, 16, dram.Name()+".Top"))
+	dram.AssignPort("Control",
+		messaging.NewPort(dram, 16, 16, dram.Name()+".Control"))
 
 	agent.LowModule = dram.GetPortByName("Top")
 

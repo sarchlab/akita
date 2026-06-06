@@ -40,12 +40,20 @@ var _ = Describe("DataMover", func() {
 			WithSpec(memSpec).
 			WithResources(idealmemcontroller.Resources{Storage: insideStorage}).
 			Build("InsideMem")
+		insideMem.AssignPort("Top",
+			messaging.NewPort(insideMem, 16, 16, insideMem.Name()+".Top"))
+		insideMem.AssignPort("Control",
+			messaging.NewPort(insideMem, 16, 16, insideMem.Name()+".Control"))
 		outsideStorage = mem.NewStorage(1 * mem.MB)
 		outsideMem = idealmemcontroller.MakeBuilder().
 			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 			WithSpec(memSpec).
 			WithResources(idealmemcontroller.Resources{Storage: outsideStorage}).
 			Build("OutsideMem")
+		outsideMem.AssignPort("Top",
+			messaging.NewPort(outsideMem, 16, 16, outsideMem.Name()+".Top"))
+		outsideMem.AssignPort("Control",
+			messaging.NewPort(outsideMem, 16, 16, outsideMem.Name()+".Control"))
 
 		dmSpec := DefaultSpec()
 		dmSpec.BufferSize = 2048

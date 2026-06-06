@@ -28,13 +28,17 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		spec.Width = 4
 		spec.Latency = 10
 		spec.CacheLineSize = 64
-		spec.TopPortBufferSize = 16
 
 		memController = MakeBuilder().
 			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 			WithResources(Resources{Storage: storage}).
 			WithSpec(spec).
 			Build("MemCtrl")
+
+		memController.AssignPort("Top",
+			messaging.NewPort(memController, 16, 16, memController.Name()+".Top"))
+		memController.AssignPort("Control",
+			messaging.NewPort(memController, 16, 16, memController.Name()+".Control"))
 
 		topPort = memController.GetPortByName("Top")
 		ctrlPort = memController.GetPortByName("Control")

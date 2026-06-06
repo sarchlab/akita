@@ -105,6 +105,10 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 		WithRegistrar(s).
 		WithSpec(memCtrlSpec).
 		Build("MemCtrl")
+	memCtrl.AssignPort("Top",
+		messaging.NewPort(memCtrl, 16, 16, memCtrl.Name()+".Top"))
+	memCtrl.AssignPort("Control",
+		messaging.NewPort(memCtrl, 16, 16, memCtrl.Name()+".Control"))
 
 	l2Spec := writeback.DefaultSpec()
 	l2Spec.WayAssociativity = 4

@@ -55,6 +55,10 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 			WithSpec(dramSpec).
 			Build("DRAM")
+		dram.AssignPort("Top",
+			messaging.NewPort(dram, 16, 16, dram.Name()+".Top"))
+		dram.AssignPort("Control",
+			messaging.NewPort(dram, 16, 16, dram.Name()+".Control"))
 
 		addressToPortMapper = &mem.SinglePortMapper{
 			Port: dram.GetPortByName("Top").AsRemote(),
