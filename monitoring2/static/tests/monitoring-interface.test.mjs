@@ -240,8 +240,10 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(profilingPage, /\/api\/heap/);
   assert.match(profilingPage, /HEAP_SAMPLE_TYPES/);
   assert.match(profilingPage, /heapSampleType/);
-  assert.match(profilingPage, /memoryActions/);
   assert.match(profilingPage, /inuse_space/);
+  // Capture controls live in a dedicated toolbar, not injected into the trend
+  // chart headers, so the CPU/RSS trends stay aligned.
+  assert.doesNotMatch(profilingPage, /cpuActions|memoryActions/);
   // Selectable diff baseline: a dropdown of prior snapshots, diffed in-browser.
   assert.match(profilingPage, /No baseline/);
   assert.match(profilingPage, /baselineId/);
@@ -298,7 +300,6 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(profilingPage, /const chartTop = 18/);
   assert.match(profilingPage, /const chartHeight = 34/);
   assert.match(profilingPage, /lg:grid-cols-2/);
-  assert.match(profilingPage, /cpuActions/);
   assert.doesNotMatch(profilingPage, /Resource Trend|1s samples and 1min averages/);
   assert.doesNotMatch(profilingPage, /grid-cols-\[8rem_1fr\]/);
   assert.doesNotMatch(profilingPage, /resources\.cpu_percent|resources\.memory_size/);

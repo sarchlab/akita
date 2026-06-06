@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { Activity, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "../components/ui/button";
 import {
@@ -623,88 +623,91 @@ export default function ProfilingPage() {
     <div className="h-full overflow-auto bg-slate-50 p-4">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
         <section className="rounded border bg-white p-3">
-          <ResourceTrendChart
-            secondHistory={history.seconds}
-            minuteHistory={history.minutes}
-            cpuActions={
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="text-[10px] font-medium text-slate-600" htmlFor="profile-seconds">
-                  Seconds
-                </label>
-                <select
-                  id="profile-seconds"
-                  className="h-7 rounded border border-input bg-background px-2 text-xs"
-                  value={profileSeconds}
-                  onChange={(event) => setProfileSeconds(Number(event.target.value))}
-                  disabled={isCapturing}
-                >
-                  {[1, 2, 5, 10, 30].map((seconds) => (
-                    <option key={seconds} value={seconds}>
-                      {seconds}
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-9 text-xs font-semibold text-slate-700">CPU</span>
+              <label className="text-[10px] font-medium text-slate-600" htmlFor="profile-seconds">
+                Seconds
+              </label>
+              <select
+                id="profile-seconds"
+                className="h-7 rounded border border-input bg-background px-2 text-xs"
+                value={profileSeconds}
+                onChange={(event) => setProfileSeconds(Number(event.target.value))}
+                disabled={isCapturing}
+              >
+                {[1, 2, 5, 10, 30].map((seconds) => (
+                  <option key={seconds} value={seconds}>
+                    {seconds}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={captureProfile}
+                disabled={isCapturing}
+              >
+                <Activity /> Capture CPU Profile
+              </Button>
+            </div>
+
+            <div className="hidden h-7 w-px self-center bg-slate-200 sm:block" aria-hidden="true" />
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-9 text-xs font-semibold text-slate-700">Heap</span>
+              <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-baseline">
+                Baseline
+              </label>
+              <select
+                id="heap-baseline"
+                className="h-7 rounded border border-input bg-background px-2 text-xs"
+                value={baselineId ?? ""}
+                onChange={(event) => setBaselineId(event.target.value || null)}
+                disabled={isCapturing}
+              >
+                <option value="">No baseline (from scratch)</option>
+                {heapSnapshots
+                  .filter((snapshot) => snapshot.id !== currentHeapId)
+                  .map((snapshot) => (
+                    <option key={snapshot.id} value={snapshot.id}>
+                      {snapshot.label}
                     </option>
                   ))}
-                </select>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  onClick={captureProfile}
-                  disabled={isCapturing}
-                >
-                  <Activity /> Capture CPU Profile
-                </Button>
-              </div>
-            }
-            memoryActions={
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-baseline">
-                  Baseline
-                </label>
-                <select
-                  id="heap-baseline"
-                  className="h-7 rounded border border-input bg-background px-2 text-xs"
-                  value={baselineId ?? ""}
-                  onChange={(event) => setBaselineId(event.target.value || null)}
-                  disabled={isCapturing}
-                >
-                  <option value="">No baseline (from scratch)</option>
-                  {heapSnapshots
-                    .filter((snapshot) => snapshot.id !== currentHeapId)
-                    .map((snapshot) => (
-                      <option key={snapshot.id} value={snapshot.id}>
-                        {snapshot.label}
-                      </option>
-                    ))}
-                </select>
-                <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-sample-type">
-                  Sample
-                </label>
-                <select
-                  id="heap-sample-type"
-                  className="h-7 rounded border border-input bg-background px-2 text-xs"
-                  value={heapSampleType}
-                  onChange={(event) => setHeapSampleType(event.target.value)}
-                  disabled={isCapturing}
-                >
-                  {HEAP_SAMPLE_TYPES.map((sampleType) => (
-                    <option key={sampleType.value} value={sampleType.value}>
-                      {sampleType.label}
-                    </option>
-                  ))}
-                </select>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-xs"
-                  onClick={captureHeapProfile}
-                  disabled={isCapturing}
-                >
-                  <Activity /> Capture Heap Profile
-                </Button>
-              </div>
-            }
-          />
+              </select>
+              <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-sample-type">
+                Sample
+              </label>
+              <select
+                id="heap-sample-type"
+                className="h-7 rounded border border-input bg-background px-2 text-xs"
+                value={heapSampleType}
+                onChange={(event) => setHeapSampleType(event.target.value)}
+                disabled={isCapturing}
+              >
+                {HEAP_SAMPLE_TYPES.map((sampleType) => (
+                  <option key={sampleType.value} value={sampleType.value}>
+                    {sampleType.label}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                onClick={captureHeapProfile}
+                disabled={isCapturing}
+              >
+                <Activity /> Capture Heap Profile
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded border bg-white p-3">
+          <ResourceTrendChart secondHistory={history.seconds} minuteHistory={history.minutes} />
         </section>
 
         <section className="rounded border bg-white p-4">
@@ -1251,13 +1254,9 @@ function metricPoints(
 function ResourceTrendChart({
   secondHistory,
   minuteHistory,
-  cpuActions,
-  memoryActions,
 }: {
   secondHistory: ResourcePoint[];
   minuteHistory: MinuteResourcePoint[];
-  cpuActions?: ReactNode;
-  memoryActions?: ReactNode;
 }) {
   const fallback = { cpu_percent: 0, memory_size: 0, timestamp: Date.now() };
   const seconds = secondHistory.length ? secondHistory : [fallback];
@@ -1273,7 +1272,6 @@ function ResourceTrendChart({
         minimumMax={100}
         valueFor={(point) => point.cpu_percent}
         formatValue={(value) => `${value.toFixed(1)}%`}
-        actions={cpuActions}
       />
       <MetricTrendFigure
         title="RSS"
@@ -1282,7 +1280,6 @@ function ResourceTrendChart({
         minuteHistory={minutes}
         valueFor={(point) => point.memory_size}
         formatValue={formatBytes}
-        actions={memoryActions}
       />
     </div>
   );
@@ -1296,7 +1293,6 @@ function MetricTrendFigure({
   minimumMax = 1,
   valueFor,
   formatValue,
-  actions,
 }: {
   title: string;
   color: string;
@@ -1305,7 +1301,6 @@ function MetricTrendFigure({
   minimumMax?: number;
   valueFor: (point: ResourcePoint) => number;
   formatValue: (value: number) => string;
-  actions?: ReactNode;
 }) {
   const secondPoints = metricPoints(secondHistory, valueFor, formatValue);
   const minutePoints = metricPoints(minuteHistory, valueFor, formatValue);
@@ -1320,12 +1315,9 @@ function MetricTrendFigure({
   return (
     <section className="min-w-0 border-b border-slate-300 pb-3 last:border-b-0 last:pb-0 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-3 lg:last:border-r-0 lg:last:pr-0">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-950">
-            <span className="h-2 w-5 rounded-full" style={{ backgroundColor: color }} />
-            {title}
-          </div>
-          {actions}
+        <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-950">
+          <span className="h-2 w-5 rounded-full" style={{ backgroundColor: color }} />
+          {title}
         </div>
         <div className="font-mono text-sm font-semibold text-slate-800">{latestPoint?.formattedValue ?? "-"}</div>
       </div>
