@@ -461,10 +461,10 @@ remain.
   reads-verified count, no data mismatch, and the same end time as an
   uninterrupted reference. This exercises non-empty port buffers, the
   controller's in-flight transactions, pending primary/secondary ticks, the
-  connection's round-robin cursor, and the Milestone A guard derivation
-  together — retiring the connection/NoC "implicitly covered" item for a real
-  assembly. Tracing is off (its task-ID side-table consumes the global ID
-  generator).
+  `directconnection` round-robin cursor, and the Milestone A guard derivation
+  together — proving the *direct*-connection path end-to-end. (Switched networks
+  built via `networkconnector` are a separate, still-open gap — see below.)
+  Tracing is off (its task-ID side-table consumes the global ID generator).
 - **Hardening (Milestone C)**: negative tests (corrupted/truncated archive,
   saved-not-rebuilt entity; spec-hash / build-id / shape mismatch and unknown
   codec tags were already covered); focused connection and switch round-trip
@@ -489,10 +489,23 @@ hardening and docs in place.
   assemblies — especially given the switch arbitration-cursor bug, which shows
   hidden runtime state is a real risk worth a broader component audit.
 
-**C (stretch). Full one-switch network resume**
-- The focused switch test round-trips the arbitration cursor; a full network
-  (endpoints + routing + flit traffic) resume oracle would exercise the switch
-  mid-transaction the way the memory oracle exercises the controller.
+**C (stretch). Switched-network checkpoint coverage**
+- Known gap (raised in PR review): networks built via `networkconnector` are
+  **outside the checkpoint inventory**. The connector registers components only
+  with its monitor (`engineRegistrar.RegisterComponent` is a no-op), and the
+  network ports that hold in-flight flits are added *after* construction
+  (endpoint `NetworkPort` via `SetNetworkPort`; switch ports via
+  `SwitchPortAdder.AddPort`) without being registered as entities. A checkpoint
+  taken with a flit in one of those buffers silently drops it. The archive is
+  entity-only, so closing this means registering the connector's components,
+  connections, and dynamically-added ports with the simulation. The focused
+  switch test round-trips the arbitration cursor, but a full network (endpoints
+  + routing + flit traffic) resume oracle is needed to prove the path the way
+  the memory oracle proves the controller.
+- Built-in message coverage: `mem` and `mem/vm` protocol messages now register
+  themselves for port serialization; a sweep of the remaining message-defining
+  packages (so any port that can hold them round-trips) belongs with the
+  hierarchy/network oracles.
 
 ## Open Questions
 

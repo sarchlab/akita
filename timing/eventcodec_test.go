@@ -78,3 +78,24 @@ func TestEventRegistryUnknownType(t *testing.T) {
 		t.Fatalf("expected unknown-type error, got %v", err)
 	}
 }
+
+// TestEventBaseRegisteredByDefault confirms a plain event scheduled via
+// MakeEventBase round-trips without the caller registering EventBase: the timing
+// package registers its own built-in event type.
+func TestEventBaseRegisteredByDefault(t *testing.T) {
+	e := MakeEventBase(42, "h")
+	e.ID = 7
+
+	tp, err := EncodeEvent(e)
+	if err != nil {
+		t.Fatalf("EncodeEvent: %v", err)
+	}
+
+	got, err := DecodeEvent(tp)
+	if err != nil {
+		t.Fatalf("DecodeEvent (is EventBase registered by default?): %v", err)
+	}
+	if got.Time() != 42 || got.HandlerID() != "h" {
+		t.Fatalf("round-trip = %+v, want time 42 handler h", got)
+	}
+}

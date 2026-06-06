@@ -20,6 +20,13 @@ var (
 	eventRegistry   = map[string]reflect.Type{}
 )
 
+// init registers the built-in EventBase so a checkpoint can round-trip a plain
+// event scheduled via MakeEventBase. Concrete events that embed EventBase
+// register their own outer type (e.g. modeling.TickEvent) separately.
+func init() {
+	RegisterEvent(EventBase{})
+}
+
 // RegisterEvent registers a concrete event type so it can be encoded and decoded
 // for checkpoints. Call it from an init() with a zero value of each event type.
 // Events may be value types (e.g. modeling.TickEvent) or pointers; the tag is
