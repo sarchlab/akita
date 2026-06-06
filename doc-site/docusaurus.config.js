@@ -85,7 +85,7 @@ const config = {
         include: ['README.md'],
       }),
     ],
-    ...['modeling', 'queueing', 'datarecording', 'tracing', 'simulation', 'examples', 'noc', 'mem'].map(pkg => [
+    ...['hooking', 'naming', 'timing', 'queueing', 'datarecording', 'messaging', 'modeling', 'tracing', 'simulation', 'examples', 'noc', 'mem'].map(pkg => [
       '@docusaurus/plugin-content-docs',
       /** @type {import('@docusaurus/plugin-content-docs').Options} */
       ({
@@ -119,7 +119,7 @@ const config = {
           {
             type: 'docSidebar',
             sidebarId: 'coreGroupSidebar',
-            docsPluginId: 'pkg-modeling',
+            docsPluginId: 'pkg-hooking',
             position: 'left',
             label: 'Core',
           },
