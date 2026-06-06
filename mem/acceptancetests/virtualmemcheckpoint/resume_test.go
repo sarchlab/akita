@@ -21,10 +21,6 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// maxAddress bounds the mapped virtual range; the driver's addresses all fall
-// inside it.
-const maxAddress = 1 * mem.MB
-
 func cleanup(sim *simulation.Simulation) {
 	sim.Terminate()
 	os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
@@ -164,7 +160,12 @@ func setupPageTable(s *simulation.Simulation) vm.PageTable {
 
 	const ptBase = uint64(0x100000)
 	const pageSize = uint64(4096)
-	numEntries := (maxAddress-1)/pageSize + 1
+
+	// Map every page the driver can touch (addresses up to numOps*512), plus a
+	// margin. With a larger numOps this exceeds the TLB capacity, so the LRU
+	// evicts — exercising the lruset state that must round-trip.
+	span := uint64(numOps)*512 + pageSize
+	numEntries := span/pageSize + 1
 
 	for i := uint64(0); i < numEntries; i++ {
 		pageTable.Insert(vm.Page{

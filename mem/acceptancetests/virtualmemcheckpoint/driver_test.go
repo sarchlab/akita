@@ -2,6 +2,8 @@ package virtualmemcheckpoint
 
 import (
 	"encoding/binary"
+	"os"
+	"strconv"
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/messaging"
@@ -9,8 +11,21 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// numOps is the number of distinct virtual addresses written then read back.
-const numOps = 48
+// numOps is the number of distinct virtual addresses written then read back. It
+// defaults small for fast unit runs; the acceptance suite sets
+// CHECKPOINT_NUM_OPS to a larger value to stress the hierarchy harder across the
+// checkpoint — more in-flight state and TLB eviction pressure (the LRU whose
+// serialization this test guards).
+var numOps = numOpsFromEnv()
+
+func numOpsFromEnv() int {
+	if v := os.Getenv("CHECKPOINT_NUM_OPS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 48
+}
 
 // pid is the process the driver issues traffic for; it must match the page
 // table entries the test installs.
