@@ -232,9 +232,16 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(profilingPage, /Capture CPU Profile/);
   assert.doesNotMatch(profilingPage, /Latest CPU Profile/);
   assert.match(profilingPage, /Seconds/);
-  assert.match(profilingPage, /CPU Call Graph/);
+  assert.match(profilingPage, /\{profileKindLabel\} Call Graph/);
   assert.match(profilingPage, /activeProfileTab/);
-  assert.match(profilingPage, /CPU profile views/);
+  assert.match(profilingPage, /Profile views/);
+  // Heap profiling parity: capture button, endpoint, and inuse/alloc selector.
+  assert.match(profilingPage, /Capture Heap Profile/);
+  assert.match(profilingPage, /\/api\/heap/);
+  assert.match(profilingPage, /HEAP_SAMPLE_TYPES/);
+  assert.match(profilingPage, /heapSampleType/);
+  assert.match(profilingPage, /memoryActions/);
+  assert.match(profilingPage, /inuse_space/);
   assert.match(profilingPage, /profileSummaryText/);
   assert.match(profilingPage, /CallGraph/);
   assert.match(profilingPage, /hotPathNodeIDs/);

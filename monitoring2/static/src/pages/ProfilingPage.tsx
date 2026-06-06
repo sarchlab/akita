@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { Activity, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "../components/ui/button";
 import {
@@ -71,6 +71,23 @@ interface CallGraphViewport {
 
 const INITIAL_CALL_GRAPH_VIEWPORT: CallGraphViewport = { scale: 1, x: 0, y: 0 };
 type ProfileResultTab = "graph" | "top-functions";
+type ProfileKind = "cpu" | "heap";
+
+interface HeapSampleType {
+  value: string;
+  label: string;
+}
+
+// The standard sample types carried by a Go heap profile. The frontend lets the
+// user switch between them without re-capturing; inuse_space (live bytes) is the
+// most common starting point.
+const HEAP_SAMPLE_TYPES: HeapSampleType[] = [
+  { value: "inuse_space", label: "In-use space" },
+  { value: "inuse_objects", label: "In-use objects" },
+  { value: "alloc_space", label: "Allocated space" },
+  { value: "alloc_objects", label: "Allocated objects" },
+];
+const DEFAULT_HEAP_SAMPLE_TYPE = HEAP_SAMPLE_TYPES[0].value;
 
 function formatBytes(bytes: number | null | undefined) {
   if (typeof bytes !== "number" || !Number.isFinite(bytes)) {
@@ -171,10 +188,18 @@ function profileValueLabel(type: string, unit: string) {
     return type || "bytes";
   }
 
-  return normalizedType === "samples" || normalizedUnit === "count" ? "samples" : type || "value";
+  if (normalizedType === "samples") {
+    return "samples";
+  }
+
+  if (normalizedUnit === "count") {
+    return type || "samples";
+  }
+
+  return type || "value";
 }
 
-function profileValueInfo(profile: Record<string, unknown>): ProfileValueInfo {
+function profileValueInfo(profile: Record<string, unknown>, preferredSampleType?: string): ProfileValueInfo {
   const sampleTypes = [
     ...getArray(profile, "sampleType", "SampleType"),
     ...getArray(profile, "sample_type", "Sample_type"),
@@ -191,12 +216,25 @@ function profileValueInfo(profile: Record<string, unknown>): ProfileValueInfo {
       unit: getStringField(valueType, "unit", "Unit"),
     };
   });
+  // An explicit selection (e.g. a heap inuse/alloc choice) wins when present.
+  const preferredIndex = preferredSampleType
+    ? types.findIndex((item) => item.type.toLowerCase() === preferredSampleType.toLowerCase())
+    : -1;
   const cpuIndex = types.findIndex((item) => item.type.toLowerCase() === "cpu");
   const timeIndex = types.findIndex((item) => isTimeUnit(item.unit));
   const sampleIndex = types.findIndex((item) => {
     return item.type.toLowerCase() === "samples" || item.unit.toLowerCase() === "count";
   });
-  const index = cpuIndex >= 0 ? cpuIndex : timeIndex >= 0 ? timeIndex : sampleIndex >= 0 ? sampleIndex : 0;
+  const index =
+    preferredIndex >= 0
+      ? preferredIndex
+      : cpuIndex >= 0
+        ? cpuIndex
+        : timeIndex >= 0
+          ? timeIndex
+          : sampleIndex >= 0
+            ? sampleIndex
+            : 0;
   const selected = types[index] ?? DEFAULT_PROFILE_VALUE_INFO;
 
   return {
@@ -356,7 +394,7 @@ function buildCallGraph(samples: unknown[], valueInfo: ProfileValueInfo): Profil
   return { nodes, edges };
 }
 
-function summarizeProfile(profile: unknown): ProfileSummary {
+function summarizeProfile(profile: unknown, preferredSampleType?: string): ProfileSummary {
   if (!profile || typeof profile !== "object") {
     return {
       samples: 0,
@@ -372,7 +410,7 @@ function summarizeProfile(profile: unknown): ProfileSummary {
   const sample = Array.isArray(p.sample) ? p.sample : Array.isArray(p.Sample) ? p.Sample : [];
   const location = Array.isArray(p.location) ? p.location : Array.isArray(p.Location) ? p.Location : [];
   const fn = Array.isArray(p.function) ? p.function : Array.isArray(p.Function) ? p.Function : [];
-  const valueInfo = profileValueInfo(p);
+  const valueInfo = profileValueInfo(p, preferredSampleType);
   const functionTotals = new Map<string, number>();
 
   sample.forEach((item) => {
@@ -406,9 +444,21 @@ export default function ProfilingPage() {
   const { history } = useResourceUsageHistory();
   const [profileSeconds, setProfileSeconds] = useState(1);
   const [profileStatus, setProfileStatus] = useState("");
-  const [profileSummary, setProfileSummary] = useState<ProfileSummary | null>(null);
+  const [rawProfile, setRawProfile] = useState<unknown>(null);
+  const [profileKind, setProfileKind] = useState<ProfileKind | null>(null);
+  const [heapSampleType, setHeapSampleType] = useState(DEFAULT_HEAP_SAMPLE_TYPE);
   const [isCapturing, setIsCapturing] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState<ProfileResultTab>("graph");
+
+  // Derive the summary from the last captured profile. For heap profiles the
+  // selected sample type feeds the value selection, so switching inuse/alloc
+  // re-renders the views without re-capturing.
+  const profileSummary = useMemo(() => {
+    if (rawProfile == null) {
+      return null;
+    }
+    return summarizeProfile(rawProfile, profileKind === "heap" ? heapSampleType : undefined);
+  }, [rawProfile, profileKind, heapSampleType]);
 
   const captureProfile = async () => {
     setIsCapturing(true);
@@ -420,14 +470,37 @@ export default function ProfilingPage() {
       }
 
       const profile = await response.json();
-      setProfileSummary(summarizeProfile(profile));
-      setProfileStatus("Profile captured");
+      setRawProfile(profile);
+      setProfileKind("cpu");
+      setProfileStatus("CPU profile captured");
     } catch (err) {
       setProfileStatus(err instanceof Error ? err.message : "Profile capture failed");
     } finally {
       setIsCapturing(false);
     }
   };
+
+  const captureHeapProfile = async () => {
+    setIsCapturing(true);
+    setProfileStatus("Capturing heap profile...");
+    try {
+      const response = await fetch(`/api/heap?gc=1`);
+      if (!response.ok) {
+        throw new Error(`${response.status} ${response.statusText}`);
+      }
+
+      const profile = await response.json();
+      setRawProfile(profile);
+      setProfileKind("heap");
+      setProfileStatus("Heap profile captured");
+    } catch (err) {
+      setProfileStatus(err instanceof Error ? err.message : "Heap profile capture failed");
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+
+  const profileKindLabel = profileKind === "heap" ? "Heap" : "CPU";
 
   return (
     <div className="h-full overflow-auto bg-slate-50 p-4">
@@ -465,20 +538,50 @@ export default function ProfilingPage() {
                 </Button>
               </div>
             }
+            memoryActions={
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-sample-type">
+                  Sample
+                </label>
+                <select
+                  id="heap-sample-type"
+                  className="h-7 rounded border border-input bg-background px-2 text-xs"
+                  value={heapSampleType}
+                  onChange={(event) => setHeapSampleType(event.target.value)}
+                  disabled={isCapturing}
+                >
+                  {HEAP_SAMPLE_TYPES.map((sampleType) => (
+                    <option key={sampleType.value} value={sampleType.value}>
+                      {sampleType.label}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-xs"
+                  onClick={captureHeapProfile}
+                  disabled={isCapturing}
+                >
+                  <Activity /> Capture Heap Profile
+                </Button>
+              </div>
+            }
           />
         </section>
 
         <section className="rounded border bg-white p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold">CPU Call Graph</div>
+              <div className="text-sm font-semibold">{profileKindLabel} Call Graph</div>
               <div className="mt-1 text-xs text-muted-foreground">
                 {profileSummary
                   ? profileSummaryText(profileSummary)
-                  : profileStatus || "Capture a CPU profile to populate the profile views."}
+                  : profileStatus || "Capture a CPU or heap profile to populate the profile views."}
               </div>
             </div>
-            <div className="inline-flex rounded border bg-slate-100 p-0.5" role="tablist" aria-label="CPU profile views">
+            <div className="inline-flex rounded border bg-slate-100 p-0.5" role="tablist" aria-label="Profile views">
               <button
                 type="button"
                 role="tab"
@@ -510,7 +613,7 @@ export default function ProfilingPage() {
               <TopFunctionBars functions={profileSummary.topFunctions} valueInfo={profileSummary.valueInfo} />
             )
           ) : (
-            <div className="text-sm text-muted-foreground">Capture a CPU profile to generate a call graph.</div>
+            <div className="text-sm text-muted-foreground">Capture a CPU or heap profile to generate a call graph.</div>
           )}
         </section>
       </div>
@@ -862,7 +965,7 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
           className={`h-full w-full select-none touch-none ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
           viewBox={`0 0 ${width} ${height}`}
           role="img"
-          aria-label="CPU profile call graph"
+          aria-label="Profile call graph"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={finishPointerPan}
@@ -1013,10 +1116,12 @@ function ResourceTrendChart({
   secondHistory,
   minuteHistory,
   cpuActions,
+  memoryActions,
 }: {
   secondHistory: ResourcePoint[];
   minuteHistory: MinuteResourcePoint[];
   cpuActions?: ReactNode;
+  memoryActions?: ReactNode;
 }) {
   const fallback = { cpu_percent: 0, memory_size: 0, timestamp: Date.now() };
   const seconds = secondHistory.length ? secondHistory : [fallback];
@@ -1041,6 +1146,7 @@ function ResourceTrendChart({
         minuteHistory={minutes}
         valueFor={(point) => point.memory_size}
         formatValue={formatBytes}
+        actions={memoryActions}
       />
     </div>
   );

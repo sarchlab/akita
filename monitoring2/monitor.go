@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"runtime/pprof"
 	"sort"
 	"strconv"
@@ -165,6 +166,7 @@ func (m *Monitor) StartServer() {
 	mux.HandleFunc("/api/execution/info", m.apiExecutionInfo)
 	mux.HandleFunc("/api/resource", m.listResources)
 	mux.HandleFunc("/api/profile", m.collectProfile)
+	mux.HandleFunc("/api/heap", m.collectHeapProfile)
 	mux.HandleFunc("/api/trace/start", m.apiTraceStart)
 	mux.HandleFunc("/api/trace/end", m.apiTraceEnd)
 	mux.HandleFunc("/api/trace/is_tracing", m.apiTraceIsTracing)
@@ -1171,6 +1173,41 @@ func (m *Monitor) collectProfile(w http.ResponseWriter, r *http.Request) {
 	time.Sleep(time.Duration(seconds) * time.Second)
 
 	pprof.StopCPUProfile()
+
+	prof, err := profile.ParseData(buf.Bytes())
+	if err != nil {
+		log.Panic(err)
+	}
+
+	b, err := json.Marshal(prof)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	_, err = w.Write(b)
+	if err != nil {
+		log.Panic(err)
+	}
+}
+
+// collectHeapProfile captures a heap (memory) profile and returns it as JSON,
+// mirroring collectProfile. The heap profile carries the alloc_objects,
+// alloc_space, inuse_objects, and inuse_space sample types, so the frontend can
+// switch between allocation and in-use views without re-capturing. Pass gc=1 to
+// force a garbage collection first, which makes the in-use values exclude
+// objects that are unreferenced but not yet collected, at the cost of perturbing
+// the running simulation.
+func (m *Monitor) collectHeapProfile(w http.ResponseWriter, r *http.Request) {
+	if gc := r.URL.Query().Get("gc"); gc == "1" || strings.EqualFold(gc, "true") {
+		runtime.GC()
+	}
+
+	buf := bytes.NewBuffer(nil)
+
+	err := pprof.WriteHeapProfile(buf)
+	if err != nil {
+		log.Panic(err)
+	}
 
 	prof, err := profile.ParseData(buf.Bytes())
 	if err != nil {

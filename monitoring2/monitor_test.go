@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -907,5 +908,39 @@ func TestTraceHandlersWhenTracerUnset(t *testing.T) {
 	if endRecorder.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500 when tracer unset, got %d",
 			endRecorder.Code)
+	}
+}
+
+func TestCollectHeapProfileExposesHeapSampleTypes(t *testing.T) {
+	monitor := NewMonitor()
+
+	// Cover both the default path and the gc=1 path that forces a collection.
+	for _, query := range []string{"", "?gc=1"} {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/heap"+query, nil)
+
+		monitor.collectHeapProfile(recorder, request)
+
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("query %q: expected status %d, got %d",
+				query, http.StatusOK, recorder.Code)
+		}
+
+		body := recorder.Body.String()
+		if !json.Valid([]byte(body)) {
+			t.Fatalf("query %q: response was not valid JSON", query)
+		}
+
+		// The heap profile must expose the four standard sample types so the
+		// frontend can switch between allocation and in-use views. Match on the
+		// type values, which appear verbatim regardless of JSON key casing.
+		for _, want := range []string{
+			"inuse_space", "inuse_objects", "alloc_space", "alloc_objects",
+		} {
+			if !strings.Contains(body, want) {
+				t.Fatalf("query %q: expected heap profile JSON to expose sample "+
+					"type %q", query, want)
+			}
+		}
 	}
 }
