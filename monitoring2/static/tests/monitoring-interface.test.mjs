@@ -256,6 +256,10 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(profilingPage, /type="checkbox"/);
   assert.match(profilingPage, /same type to compare/);
   assert.match(profilingPage, /mismatchedKinds/);
+  // CPU comparisons normalize the baseline onto the target's capture window so
+  // different durations (1s vs 60s) compare fairly.
+  assert.match(profilingPage, /profileDurationNanos/);
+  assert.match(profilingPage, /baseScale/);
   // The diff is client-side; the heap endpoint stays a plain absolute capture.
   assert.doesNotMatch(profilingPage, /\/api\/heap\?gc=1&mode=/);
   assert.match(profilingPage, /profileSummaryText/);

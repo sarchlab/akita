@@ -492,13 +492,26 @@ function indexByStack(samples: Record<string, unknown>[]) {
   return totals;
 }
 
-// diffProfiles returns a synthetic profile of (current - baseline), summing each
-// call stack's sample values elementwise so every sample type stays in sync. The
-// result is shaped like a parsed profile so summarizeProfile can consume it
-// directly. It is profile-kind agnostic (CPU or heap) and mirrors
-// `go tool pprof -base` at function-stack granularity (the precision the call
-// graph renders at). Callers must only diff two profiles of the same kind.
-function diffProfiles(current: unknown, baseline: unknown): Record<string, unknown> {
+// profileDurationNanos reads the capture window (in nanoseconds) a profile
+// covers. CPU profiles carry it; instantaneous heap profiles report 0.
+function profileDurationNanos(profile: unknown): number {
+  if (!profile || typeof profile !== "object") {
+    return 0;
+  }
+  const p = profile as Record<string, unknown>;
+  const value = p.durationNanos ?? p.DurationNanos ?? p.duration_nanos ?? p.Duration_nanos;
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+// diffProfiles returns a synthetic profile of (current - baseScale*baseline),
+// summing each call stack's sample values elementwise so every sample type stays
+// in sync. The result is shaped like a parsed profile so summarizeProfile can
+// consume it directly. baseScale lets callers normalize the baseline onto the
+// current profile's window (so CPU captures of different durations compare on
+// equal footing). It is profile-kind agnostic and mirrors `go tool pprof -base`
+// (with -normalize) at function-stack granularity. Callers must only diff two
+// profiles of the same kind.
+function diffProfiles(current: unknown, baseline: unknown, baseScale = 1): Record<string, unknown> {
   const currentByStack = indexByStack(profileSamples(current));
   const baselineByStack = indexByStack(profileSamples(baseline));
   const deltaSamples: Record<string, unknown>[] = [];
@@ -510,7 +523,7 @@ function diffProfiles(current: unknown, baseline: unknown): Record<string, unkno
     const values: number[] = [];
 
     for (let index = 0; index < length; index++) {
-      values.push((cur?.values[index] ?? 0) - (base?.values[index] ?? 0));
+      values.push((cur?.values[index] ?? 0) - (base?.values[index] ?? 0) * baseScale);
     }
 
     if (values.every((value) => value === 0)) {
@@ -568,14 +581,23 @@ export default function ProfilingPage() {
     // Comparison is only meaningful between two profiles of the same kind.
     if (selected.length === 2 && selected[0].kind === selected[1].kind) {
       const [base, target] = selected;
-      return summarizeProfile(diffProfiles(target.profile, base.profile), base.kind === "heap" ? heapSampleType : undefined);
+      if (base.kind === "cpu") {
+        // Normalize the baseline onto the target's capture window so CPU
+        // profiles of different durations (e.g. 1s vs 60s) compare fairly.
+        const baseDuration = profileDurationNanos(base.profile);
+        const targetDuration = profileDurationNanos(target.profile);
+        const baseScale = baseDuration > 0 && targetDuration > 0 ? targetDuration / baseDuration : 1;
+        return summarizeProfile(diffProfiles(target.profile, base.profile, baseScale));
+      }
+      return summarizeProfile(diffProfiles(target.profile, base.profile), heapSampleType);
     }
     return null;
   }, [profiles, selectedIds, heapSampleType]);
 
-  const addProfile = (kind: ProfileKind, profile: unknown) => {
+  const addProfile = (kind: ProfileKind, profile: unknown, detail = "") => {
     const id = `${kind}-${(profileIdRef.current += 1)}`;
-    const label = new Date().toLocaleTimeString([], { hour12: false });
+    const time = new Date().toLocaleTimeString([], { hour12: false });
+    const label = detail ? `${detail} · ${time}` : time;
     setProfiles((previous) => {
       const next = [...previous, { id, kind, label, profile }];
       return next.length > MAX_PROFILES ? next.slice(next.length - MAX_PROFILES) : next;
@@ -605,7 +627,7 @@ export default function ProfilingPage() {
         throw new Error(await captureErrorMessage(response));
       }
 
-      addProfile("cpu", await response.json());
+      addProfile("cpu", await response.json(), `${profileSeconds}s`);
       setProfileStatus("CPU profile captured");
     } catch (err) {
       setCaptureFailed(true);
