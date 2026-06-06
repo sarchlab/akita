@@ -269,4 +269,39 @@ var _ = Describe("MMUCache control behavior", func() {
 		Entry("from Pause", mmuCacheStatePause),
 		Entry("from Drain", mmuCacheStateDrain),
 	)
+
+	It("completes a pending Drain before servicing a queued Reset", func() {
+		// Draining with the drain ack pending and no in-flight work: the data
+		// path flips the state to pause and completePendingDrain acks the
+		// Drain. Control commands are serialized with no preemption, so a Reset
+		// queued behind the drain is serviced only after the Drain acks.
+		comp.State.CurrentState = mmuCacheStateDrain
+		comp.State.PendingDrainRsp = true
+		comp.State.CurrentCmdID = 999
+		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
+
+		reset := makeCtrlReq(mem.CmdReset)
+		controlPort.Deliver(reset)
+
+		var rsps []mem.ControlRsp
+		for range 32 {
+			comp.Tick()
+			for {
+				out := controlPort.RetrieveOutgoing()
+				if out == nil {
+					break
+				}
+				if r, ok := out.(mem.ControlRsp); ok {
+					rsps = append(rsps, r)
+				}
+			}
+		}
+
+		Expect(rsps).To(HaveLen(2))
+		Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
+		Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+		Expect(rsps[1].RspTo).To(Equal(reset.ID))
+		Expect(comp.State.CurrentState).To(Equal(mmuCacheStateEnable))
+	})
 })

@@ -291,12 +291,15 @@ func (m *middleware) topReqTraceMsg(trans transactionState) messaging.Msg {
 // processControlMsg handles the universal control verbs and finalizes
 // a pending Drain when in-flight transactions have settled.
 func (m *middleware) processControlMsg() bool {
-	// Reset is the highest-priority verb: a queued Reset preempts a pending
-	// async verb, so finish the drain first only when the next verb is not a
-	// Reset. Any other verb lets the pending drain complete before it runs, so
-	// a stale Drain ack is never sent ahead of a queued Reset.
-	if !control.IsResetPending(m.ctrlPort()) && m.completePendingDrain() {
+	if m.completePendingDrain() {
 		return true
+	}
+
+	// Control commands are processed serially: while an async verb (Drain) is
+	// in progress, the next command is not dequeued — it stays queued on the
+	// Control port and is handled once the component settles.
+	if m.comp.State.ControlState == control.StateDraining {
+		return false
 	}
 
 	msg := m.ctrlPort().PeekIncoming()
@@ -349,12 +352,7 @@ func (m *middleware) handlePause(req mem.ControlReq) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	// Only Reset preempts an in-flight async verb: a Pause must not abort a
-	// Drain in progress. Leave the draining state so the drain finishes and
-	// lands in paused on its own.
-	if m.comp.State.ControlState != control.StateDraining {
-		m.comp.State.ControlState = control.StatePaused
-	}
+	m.comp.State.ControlState = control.StatePaused
 	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdPause,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()

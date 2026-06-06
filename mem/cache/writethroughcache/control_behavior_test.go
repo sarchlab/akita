@@ -250,9 +250,10 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		Expect(bottomReads).To(HaveLen(1))
 		Expect(inflightCount()).To(BeNumerically(">", 0))
 
-		// Begin draining, then a Pause arrives mid-drain. Only Reset preempts
-		// an async verb, so the Pause must not freeze the pipeline (which only
-		// runs while !IsPaused) and strand the drain.
+		// Begin draining, then a Pause arrives mid-drain. Control commands are
+		// serialized, so the Pause stays queued until the drain finishes; it
+		// must not freeze the pipeline (which only runs while !IsPaused) and
+		// strand the drain.
 		drain := makeCtrlReq(mem.CmdDrain)
 		ctrlPort.Deliver(drain)
 		comp.Tick()
@@ -406,10 +407,46 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		Entry("from Paused", func() {
 			comp.State.IsPaused = true
 		}),
-		Entry("from Draining", func() {
-			comp.State.IsDraining = true
-		}),
+		// The "from Draining" case is covered separately by the dedicated test
+		// below, because with strict serialization a Reset queued behind an
+		// in-progress Drain is only serviced after the Drain acks.
 	)
+
+	It("completes a pending Drain before servicing a queued Reset", func() {
+		// Draining and already quiescent (all transactions retired):
+		// completePendingDrain acks the Drain. Control commands are serialized
+		// with no preemption, so a Reset queued behind the drain is serviced
+		// only after the Drain acks.
+		comp.State.IsDraining = true
+		comp.State.IsPaused = false
+		comp.State.CurrentCmdID = 999
+		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
+
+		reset := makeCtrlReq(mem.CmdReset)
+		ctrlPort.Deliver(reset)
+
+		var rsps []mem.ControlRsp
+		for range 16 {
+			comp.Tick()
+			for {
+				out := ctrlPort.RetrieveOutgoing()
+				if out == nil {
+					break
+				}
+				if r, ok := out.(mem.ControlRsp); ok {
+					rsps = append(rsps, r)
+				}
+			}
+		}
+
+		Expect(rsps).To(HaveLen(2))
+		Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
+		Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+		Expect(rsps[1].RspTo).To(Equal(reset.ID))
+		Expect(comp.State.IsDraining).To(BeFalse())
+		Expect(comp.State.IsPaused).To(BeFalse())
+	})
 
 	// driveCtrl delivers a control req and ticks until its ControlRsp comes
 	// back (or the budget runs out), returning the matching Rsp and whether

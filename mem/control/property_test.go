@@ -307,9 +307,9 @@ func (f *fuzzer) run(iterations int) {
 		}
 	}
 
-	// Settle any in-flight control verb first. Issuing Enable while a
-	// Drain is still in flight would preempt the Drain's ack, which the
-	// protocol makes the sender's responsibility to avoid.
+	// Settle any in-flight control verb first. Control commands are
+	// serialized, so a verb issued while a Drain is still in flight just
+	// queues behind it; settling first keeps the wind-down bookkeeping simple.
 	f.tickUntil(func() bool { return len(f.ctrlIDs) == 0 })
 
 	// Resume so queued workload can finish, then confirm nothing was lost

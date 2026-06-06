@@ -208,6 +208,44 @@ var _ = Describe("GMMU control behavior", func() {
 		},
 		Entry("from Enabled", control.StateEnabled),
 		Entry("from Paused", control.StatePaused),
-		Entry("from Draining", control.StateDraining),
+		// The Draining case is covered by the dedicated test below: control
+		// commands are serialized with no preemption, so a Reset issued while
+		// draining is not serviced until the in-progress Drain acks first.
 	)
+
+	It("completes a pending Drain before servicing a queued Reset", func() {
+		// The component is draining and already quiescent: completePendingDrain
+		// acks the Drain. Control commands are serialized with no preemption,
+		// so a Reset queued behind the drain is serviced only after the Drain
+		// acks.
+		comp.State.ControlState = control.StateDraining
+		comp.State.CurrentCmdID = 999
+		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
+		comp.State.WalkingTranslations = nil
+		comp.State.RemoteMemReqs = nil
+
+		reset := makeCtrlReq(mem.CmdReset)
+		ctrlPort.Deliver(reset)
+
+		var rsps []mem.ControlRsp
+		for range 16 {
+			comp.Tick()
+			for {
+				out := ctrlPort.RetrieveOutgoing()
+				if out == nil {
+					break
+				}
+				if r, ok := out.(mem.ControlRsp); ok {
+					rsps = append(rsps, r)
+				}
+			}
+		}
+
+		Expect(rsps).To(HaveLen(2))
+		Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
+		Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+		Expect(rsps[1].RspTo).To(Equal(reset.ID))
+		Expect(comp.State.ControlState).To(Equal(control.StateEnabled))
+	})
 })

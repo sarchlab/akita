@@ -20,13 +20,17 @@ type ctrlMiddleware struct {
 
 func (m *ctrlMiddleware) Tick() bool {
 	madeProgress := false
-	// Reset is the highest-priority verb: when one is queued it preempts a
-	// pending async verb, so skip completing the drain this tick; any other
-	// verb lets the pending drain finish first.
-	if !control.IsResetPending(m.ctrlPort) {
-		madeProgress = m.completePendingDrain() || madeProgress
+	madeProgress = m.completePendingDrain() || madeProgress
+	// Control commands are processed serially: while an async verb (Drain or
+	// Flush) is in progress, the next command is not accepted — it stays queued
+	// on the Control port and is handled once the component settles. Flush is
+	// driven by the separate flusher middleware, which gates its own intake the
+	// same way.
+	next := &m.pipeline.comp.State
+	if cacheState(next.CacheState) != cacheStateDraining &&
+		!next.HasProcessingFlush {
+		madeProgress = m.handleIncoming() || madeProgress
 	}
-	madeProgress = m.handleIncoming() || madeProgress
 	return madeProgress
 }
 
@@ -190,15 +194,7 @@ func (m *ctrlMiddleware) handlePause(req mem.ControlReq) bool {
 		return false
 	}
 	next := &m.pipeline.comp.State
-	// Only Reset preempts an in-flight async verb. A Pause must not abort an
-	// in-flight Flush or Drain: both run only outside the paused state and end
-	// in paused on their own, and overwriting the state here would strand them
-	// (their async response would never be sent). Those states already block
-	// new Top intake, so the Pause guarantee still holds.
-	if !next.HasProcessingFlush &&
-		cacheState(next.CacheState) != cacheStateDraining {
-		next.CacheState = int(cacheStatePaused)
-	}
+	next.CacheState = int(cacheStatePaused)
 	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdPause,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort.RetrieveIncoming()

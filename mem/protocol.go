@@ -102,8 +102,9 @@ const (
 	CmdEnable
 
 	// CmdReset hard-resets the component to its post-build state. Legal
-	// from any state; preempts in-flight async verbs without a response.
-	// Universal verb. Ack is synchronous.
+	// from any state. Control commands are processed serially, so a Reset
+	// queued behind an in-flight async verb waits for that verb to ack
+	// before it runs (no preemption). Universal verb. Ack is synchronous.
 	CmdReset
 
 	// CmdInvalidate drops entries from the agent's private cache state

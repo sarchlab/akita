@@ -547,7 +547,44 @@ var _ = Describe("Reorder Buffer", func() {
 			},
 			Entry("from Enabled", control.StateEnabled),
 			Entry("from Paused", control.StatePaused),
-			Entry("from Draining", control.StateDraining),
+			// The draining case is covered separately by the test below, since
+			// control commands are serialized: a Reset queued behind an
+			// in-progress Drain is only serviced after the Drain acks.
 		)
+
+		It("completes a pending Drain before servicing a queued Reset", func() {
+			// Draining and already quiescent (no in-flight transactions):
+			// completePendingDrain acks the Drain. Control commands are
+			// serialized with no preemption, so a Reset queued behind the
+			// drain is serviced only after the Drain acks.
+			rob.State.ControlState = control.StateDraining
+			rob.State.CurrentCmdID = 999
+			rob.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
+			rob.State.Transactions = nil
+
+			reset := makeCtrlReq(mem.CmdReset)
+			ctrlPort.Deliver(reset)
+
+			var rsps []mem.ControlRsp
+			for range 16 {
+				rob.Tick()
+				for {
+					out := ctrlPort.RetrieveOutgoing()
+					if out == nil {
+						break
+					}
+					if r, ok := out.(mem.ControlRsp); ok {
+						rsps = append(rsps, r)
+					}
+				}
+			}
+
+			Expect(rsps).To(HaveLen(2))
+			Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+			Expect(rsps[0].RspTo).To(Equal(uint64(999)))
+			Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+			Expect(rsps[1].RspTo).To(Equal(reset.ID))
+			Expect(rob.State.ControlState).To(Equal(control.StateEnabled))
+		})
 	})
 })

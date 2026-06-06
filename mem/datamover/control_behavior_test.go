@@ -344,6 +344,42 @@ var _ = Describe("DataMover control behavior", func() {
 		},
 		Entry("from Enabled", control.StateEnabled),
 		Entry("from Paused", control.StatePaused),
-		Entry("from Draining", control.StateDraining),
+		// The Draining case is covered separately below: under strict
+		// serialization a Reset queued behind an in-progress Drain is not
+		// serviced until the Drain acks, so it needs its own scenario.
 	)
+
+	It("completes a pending Drain before servicing a queued Reset", func() {
+		// Draining and already quiescent (no active transfer):
+		// completePendingDrain acks the Drain. Control commands are serialized
+		// with no preemption, so a Reset queued behind the drain is serviced
+		// only after the Drain acks.
+		dataMover.State.ControlState = control.StateDraining
+		dataMover.State.CurrentCmdID = 999
+		dataMover.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
+
+		reset := makeCtrlReq(mem.CmdReset)
+		ctrlPort.Deliver(reset)
+
+		var rsps []mem.ControlRsp
+		for range 16 {
+			dataMover.Tick()
+			for {
+				out := ctrlPort.RetrieveOutgoing()
+				if out == nil {
+					break
+				}
+				if r, ok := out.(mem.ControlRsp); ok {
+					rsps = append(rsps, r)
+				}
+			}
+		}
+
+		Expect(rsps).To(HaveLen(2))
+		Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
+		Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+		Expect(rsps[1].RspTo).To(Equal(reset.ID))
+		Expect(dataMover.State.ControlState).To(Equal(control.StateEnabled))
+	})
 })

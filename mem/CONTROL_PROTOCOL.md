@@ -88,14 +88,18 @@ The primitives compose. The protocol stays small.
    require the component to be in `StatePaused` or `StateDraining`.
    Issuing them while `StateEnabled` returns `Success: false,
    Error: control.ErrMustBePausedOrDrained`.
-5. **Reset is the highest-priority verb.** Reset is processed
-   unconditionally, regardless of current state, and it takes precedence
-   over finishing any in-progress async verb: within a tick a component
-   services an incoming Reset *before* it would send a pending
-   Drain/Flush completion, so a stale async ack is never emitted ahead of
-   the Reset. The preempted in-flight verb is dropped without a response.
-   (Avoiding concurrent Reset + async control otherwise remains the
-   sender's responsibility.)
+5. **Control commands are processed serially.** A component handles one
+   control command at a time, to completion, before it dequeues the next.
+   While an async verb (Drain or Flush) is in progress the component does
+   **not** accept another control command — the next command stays queued
+   on the `Control` port and is taken only once the component settles
+   (the async verb acks and the state lands in `StatePaused`), so each
+   command is always handled from a clean, fully-settled state. There is
+   no priority or preemption: a Reset queued behind an in-flight Drain
+   waits for the Drain to finish and ack, then runs. Issuing a new control
+   command before the previous one has acked is therefore safe — it is
+   buffered, not dropped — but the sender must wait for each ack to know
+   when the command took effect.
 6. **Control is serviced before the data path.** Within a single tick a
    component handles control messages before advancing its data pipeline,
    so a synchronous verb (Pause/Reset) takes effect that same tick before

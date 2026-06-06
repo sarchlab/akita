@@ -363,6 +363,43 @@ var _ = Describe("TLB control behavior", func() {
 		},
 		Entry("from Enable", tlbStateEnable),
 		Entry("from Pause", tlbStatePause),
-		Entry("from Drain", tlbStateDrain),
+		// The Drain case is covered separately: while draining, control
+		// commands are serialized, so a Reset waits for the Drain to ack first
+		// (see "completes a pending Drain before servicing a queued Reset").
 	)
+
+	It("completes a pending Drain before servicing a queued Reset", func() {
+		// Draining with the drain ack pending and no in-flight work: the data
+		// path flips the state to pause and completePendingDrain acks the
+		// Drain. Control commands are serialized with no preemption, so a Reset
+		// queued behind the drain is serviced only after the Drain acks.
+		tlbComp.State.TLBState = tlbStateDrain
+		tlbComp.State.PendingDrainRsp = true
+		tlbComp.State.CurrentCmdID = 999
+		tlbComp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
+
+		reset := makeCtrlReq(mem.CmdReset)
+		controlPort.Deliver(reset)
+
+		var rsps []mem.ControlRsp
+		for range 32 {
+			tlbComp.Tick()
+			for {
+				out := controlPort.RetrieveOutgoing()
+				if out == nil {
+					break
+				}
+				if r, ok := out.(mem.ControlRsp); ok {
+					rsps = append(rsps, r)
+				}
+			}
+		}
+
+		Expect(rsps).To(HaveLen(2))
+		Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
+		Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+		Expect(rsps[1].RspTo).To(Equal(reset.ID))
+		Expect(tlbComp.State.TLBState).To(Equal(tlbStateEnable))
+	})
 })

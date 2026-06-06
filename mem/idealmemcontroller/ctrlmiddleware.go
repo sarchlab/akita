@@ -13,14 +13,13 @@ type ctrlMiddleware struct {
 }
 
 func (m *ctrlMiddleware) Tick() (madeProgress bool) {
-	// Reset is the highest-priority verb: when one is queued it preempts a
-	// pending async verb (handled in handleIncomingCommands), so skip
-	// completing the drain this tick; any other verb lets the pending drain
-	// finish first.
-	if !control.IsResetPending(m.ctrlPort()) {
-		madeProgress = m.handleStateUpdate() || madeProgress
+	madeProgress = m.handleStateUpdate() || madeProgress
+	// Control commands are processed serially: while an async verb (Drain) is
+	// in progress, the next command is not accepted — it stays queued on the
+	// Control port and is handled once the component settles.
+	if m.comp.State.ControlState != control.StateDraining {
+		madeProgress = m.handleIncomingCommands() || madeProgress
 	}
-	madeProgress = m.handleIncomingCommands() || madeProgress
 	return madeProgress
 }
 
@@ -84,12 +83,7 @@ func (m *ctrlMiddleware) handlePause(req mem.ControlReq) bool {
 	}
 
 	state := &m.comp.State
-	// Only Reset preempts an in-flight async verb: a Pause must not abort a
-	// Drain in progress. Leave the draining state so the drain finishes and
-	// lands in paused on its own.
-	if state.ControlState != control.StateDraining {
-		state.ControlState = control.StatePaused
-	}
+	state.ControlState = control.StatePaused
 
 	m.ctrlPort().Send(makeRsp(m.ctrlPort(), mem.CmdPause,
 		req.Src, req.ID, true, ""))

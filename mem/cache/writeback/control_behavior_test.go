@@ -224,9 +224,9 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		Expect(cacheState(comp.State.CacheState)).To(Equal(cacheStatePaused))
 	})
 
-	It("does not abort an in-flight flush on Pause", func() {
+	It("leaves a Pause queued while a flush is in progress", func() {
 		// An active flush that is still pre-flushing (waiting on an in-flight
-		// transaction) so it cannot finalize this tick.
+		// transaction) so it cannot finalize.
 		comp.State.CacheState = int(cacheStatePreFlushing)
 		comp.State.HasProcessingFlush = true
 		comp.State.Transactions = []transactionState{{}}
@@ -234,23 +234,19 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		pause := makeCtrlReq(mem.CmdPause)
 		ctrlPort.Deliver(pause)
 
-		acked := false
-		for i := 0; i < 16 && !acked; i++ {
+		// Control commands are serialized: while the flush is in progress the
+		// Pause is not dequeued, so it is never acked and the flush state is
+		// preserved (aborting it would strand the flusher).
+		for range 16 {
 			comp.Tick()
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if r, ok := out.(mem.ControlRsp); ok &&
-					r.Command == mem.CmdPause {
-					Expect(r.Success).To(BeTrue())
-					acked = true
-				}
-			}
+			Expect(ctrlPort.RetrieveOutgoing()).To(BeNil())
 		}
-		Expect(acked).To(BeTrue())
-		// Pause must not abort the flush: it stays in the flushing pipeline so
-		// its async response is eventually sent and dirty blocks are written
-		// back. Aborting it would strand the flusher in cacheStatePaused.
 		Expect(comp.State.HasProcessingFlush).To(BeTrue())
-		Expect(cacheState(comp.State.CacheState)).ToNot(Equal(cacheStatePaused))
+		Expect(cacheState(comp.State.CacheState)).
+			To(Equal(cacheStatePreFlushing))
+		// The Pause is still waiting on the Control port, to be handled once the
+		// flush settles.
+		Expect(ctrlPort.PeekIncoming()).ToNot(BeNil())
 	})
 
 	It("freezes incoming traffic while paused", func() {
@@ -301,8 +297,43 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		},
 		Entry("from Running", cacheStateRunning),
 		Entry("from Paused", cacheStatePaused),
-		Entry("from Draining", cacheStateDraining),
+		// The Draining case is covered separately by the
+		// "completes a pending Drain before servicing a queued Reset" test,
+		// since a queued Reset waits for the in-progress Drain to ack first.
 	)
+
+	It("completes a pending Drain before servicing a queued Reset", func() {
+		// Draining and already quiescent: completePendingDrain acks the Drain.
+		// Control commands are serialized with no preemption, so a Reset queued
+		// behind the drain is serviced only after the Drain acks.
+		comp.State.CacheState = int(cacheStateDraining)
+		comp.State.CurrentCmdID = 999
+		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
+
+		reset := makeCtrlReq(mem.CmdReset)
+		ctrlPort.Deliver(reset)
+
+		var rsps []mem.ControlRsp
+		for range 16 {
+			comp.Tick()
+			for {
+				out := ctrlPort.RetrieveOutgoing()
+				if out == nil {
+					break
+				}
+				if r, ok := out.(mem.ControlRsp); ok {
+					rsps = append(rsps, r)
+				}
+			}
+		}
+
+		Expect(rsps).To(HaveLen(2))
+		Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
+		Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+		Expect(rsps[1].RspTo).To(Equal(reset.ID))
+		Expect(cacheState(comp.State.CacheState)).To(Equal(cacheStateRunning))
+	})
 
 	It("drops only the address-filtered block on Invalidate, keeping the "+
 		"other resident block", func() {

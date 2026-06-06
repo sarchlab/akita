@@ -145,8 +145,9 @@ var _ = Describe("DRAM control behavior", func() {
 		comp.Tick()
 		Expect(comp.State.ControlState).To(Equal(control.StateDraining))
 
-		// A Pause arrives mid-drain. Only Reset preempts an async verb, so the
-		// Pause must not freeze the controller and strand the drain.
+		// A Pause arrives mid-drain. Control commands are serialized, so the
+		// Pause stays queued until the drain finishes; it must not freeze the
+		// controller and strand the drain.
 		pause := makeCtrlReq(mem.CmdPause)
 		ctrlPort.Deliver(pause)
 
@@ -179,8 +180,8 @@ var _ = Describe("DRAM control behavior", func() {
 
 	It("completes a pending Drain even when a non-Reset verb is queued", func() {
 		// Draining and just quiescent, with a Pause queued in the same window.
-		// Only Reset preempts a pending drain; a Pause must let it finish, so
-		// the Drain ack is still sent (and the Pause is serviced too).
+		// Commands are serialized: the in-flight Drain finishes and acks first,
+		// then the queued Pause is serviced.
 		comp.State.ControlState = control.StateDraining
 		comp.State.CurrentCmdID = 777
 		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
@@ -214,17 +215,17 @@ var _ = Describe("DRAM control behavior", func() {
 		Expect(pauseAcked).To(BeTrue())
 	})
 
-	It("services a queued Reset before completing a pending Drain", func() {
+	It("completes a pending Drain before servicing a queued Reset", func() {
 		// The controller is draining and has just become quiescent (no
-		// transactions): completePendingDrain would otherwise ack the Drain.
+		// transactions): completePendingDrain acks the Drain.
 		comp.State.ControlState = control.StateDraining
 		comp.State.CurrentCmdID = 999
 		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 		comp.State.Transactions = nil
 
-		// A Reset is queued in the same window. As the highest-priority verb it
-		// must be serviced before the Drain completes, so no stale Drain ack is
-		// emitted.
+		// A Reset is queued in the same window. Control commands are serialized
+		// with no preemption: the in-flight Drain finishes and acks first, then
+		// the queued Reset runs.
 		reset := makeCtrlReq(mem.CmdReset)
 		ctrlPort.Deliver(reset)
 
@@ -242,10 +243,12 @@ var _ = Describe("DRAM control behavior", func() {
 			}
 		}
 
-		// Exactly one ack — the Reset — and never a Drain ack.
-		Expect(rsps).To(HaveLen(1))
-		Expect(rsps[0].Command).To(Equal(mem.CmdReset))
-		Expect(rsps[0].RspTo).To(Equal(reset.ID))
+		// Two acks, in order: the Drain completion (RspTo 999) then the Reset.
+		Expect(rsps).To(HaveLen(2))
+		Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
+		Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(comp.State.ControlState).To(Equal(control.StateEnabled))
 	})
 
@@ -312,8 +315,10 @@ var _ = Describe("DRAM control behavior", func() {
 			Expect(comp.State.ControlState).
 				To(Equal(control.StateEnabled))
 		},
+		// Reset from a draining state is covered separately ("completes a
+		// pending Drain before servicing a queued Reset"): under serialization
+		// it does not run immediately but waits for the drain to ack.
 		Entry("from Enabled", control.StateEnabled),
 		Entry("from Paused", control.StatePaused),
-		Entry("from Draining", control.StateDraining),
 	)
 })

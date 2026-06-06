@@ -37,6 +37,13 @@ func (f *flusher) Tick() bool {
 		return madeProgress
 	}
 
+	// Control commands are processed serially: while a Drain is in progress the
+	// flusher must not consume a queued Flush — it stays on the Control port
+	// until the drain settles into paused, where it is handled fresh.
+	if cacheState(next.CacheState) == cacheStateDraining {
+		return false
+	}
+
 	return f.extractFromPort()
 }
 
