@@ -481,13 +481,18 @@ hardening and docs in place.
 
 ### Remaining (optional)
 
-**B (stretch). Hierarchy resume oracle** (§11, §12, §14)
-- Extend the resume oracle to a cache + TLB + page-table hierarchy, validating
-  the `vm.PageTable` serializer in a live assembly and surfacing any hidden
-  (non-`State`) runtime in the cache/TLB components. Not required for the gate,
-  which the ideal-controller oracle meets, but raises confidence for production
-  assemblies — especially given the switch arbitration-cursor bug, which shows
-  hidden runtime state is a real risk worth a broader component audit.
+**B (stretch). Hierarchy resume oracle** — *done.* The full virtualmem assembly
+(address translator → write-through L1 → write-back L2 → ideal controller, with a
+TLB → L2TLB → MMU → page-table translation path over 7 connections) is
+checkpointed mid-transaction and resumed deterministically across many
+boundaries, driven by a deterministic generator in place of the RNG-based
+`MemAccessAgent` (`mem/acceptancetests/virtualmemcheckpoint`). As anticipated, it
+surfaced a real hidden-state bug: `lruset.Set` (the LRU used by the TLB and
+mmuCache) had only unexported fields and no JSON methods, so it serialized as an
+empty object — a restored TLB had an empty visit list and crashed on the first
+eviction (`failed to evict`). Fixed by adding round-trip JSON to `lruset.Set`.
+This validates the `vm.PageTable` serializer and the cache/TLB/MMU/AT state in a
+live assembly.
 
 **C (stretch). Switched-network checkpoint coverage**
 - Known gap (raised in PR review): networks built via `networkconnector` are
