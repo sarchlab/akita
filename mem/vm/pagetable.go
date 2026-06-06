@@ -11,15 +11,15 @@ type PID uint32
 // A Page is an entry in the page table, maintaining the information about how
 // to translate a virtual address to a physical address.
 type Page struct {
-	PID         PID
-	PAddr       uint64
-	VAddr       uint64
-	PageSize    uint64
-	Valid       bool
-	DeviceID    uint64
-	Unified     bool
-	IsMigrating bool
-	IsPinned    bool
+	PID         PID    `json:"pid"`
+	PAddr       uint64 `json:"p_addr"`
+	VAddr       uint64 `json:"v_addr"`
+	PageSize    uint64 `json:"page_size"`
+	Valid       bool   `json:"valid"`
+	DeviceID    uint64 `json:"device_id"`
+	Unified     bool   `json:"unified"`
+	IsMigrating bool   `json:"is_migrating"`
+	IsPinned    bool   `json:"is_pinned"`
 }
 
 // A PageTable holds the a list of pages.

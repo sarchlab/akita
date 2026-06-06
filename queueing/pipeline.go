@@ -3,10 +3,10 @@ package queueing
 // PipelineStage represents a single item occupying a lane and stage in a
 // pipeline. It is a plain data record used to inspect pipeline occupancy.
 type PipelineStage[T any] struct {
-	Lane      int
-	Stage     int
-	Item      T
-	CycleLeft int
+	Lane      int `json:"lane"`
+	Stage     int `json:"stage"`
+	Item      T   `json:"item"`
+	CycleLeft int `json:"cycle_left"`
 }
 
 // Sink is the destination a Pipeline pushes completed items into. Both

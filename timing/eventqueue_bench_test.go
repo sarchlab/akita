@@ -17,6 +17,8 @@ func (e *benchEvent) IsSecondary() bool    { return false }
 // pops the earliest event and reschedules it into the future, holding the queue
 // at steady-state depth.
 func benchPushPop(b *testing.B, push func(Event), pop func() Event) {
+	b.Helper()
+
 	const depth = 1024
 
 	pool := make([]*benchEvent, depth)

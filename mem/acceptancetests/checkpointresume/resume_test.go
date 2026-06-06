@@ -202,12 +202,14 @@ func cleanup(sim *simulation.Simulation) {
 	os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
 }
 
-func TestMidTransactionResumeOracle(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "ck.tar.gz")
-	const buildID = "resume-oracle"
+// runReference runs a full uninterrupted simulation and returns the oracle: the
+// final reads-verified count and end time that every resumed run must match.
+func runReference(t *testing.T) (wantVerified int, wantTime timing.VTimeInPicoSec) {
+	t.Helper()
 
-	// Reference run: full, uninterrupted. Records the oracle (final state/time).
 	refSim, refD := buildSim()
+	defer cleanup(refSim)
+
 	refEngine := refSim.GetEngine().(*timing.SerialEngine)
 	refD.TickLater()
 	if err := refEngine.Run(); err != nil {
@@ -216,49 +218,23 @@ func TestMidTransactionResumeOracle(t *testing.T) {
 	if !refD.done() {
 		t.Fatalf("reference run did not finish: %+v", refD.State)
 	}
-	wantVerified := refD.State.ReadsVerified
-	wantTime := refEngine.CurrentTime()
-	cleanup(refSim)
 
-	// Source run: advance to a genuinely mid-transaction boundary (requests in
-	// flight), then checkpoint.
-	srcSim, srcD := buildSim()
-	srcEngine := srcSim.GetEngine().(*timing.SerialEngine)
-	srcD.TickLater()
+	return refD.State.ReadsVerified, refEngine.CurrentTime()
+}
 
-	step := wantTime / 8
-	if step == 0 {
-		step = 1
-	}
-	boundary := timing.VTimeInPicoSec(0)
-	for boundary < wantTime {
-		boundary += step
-		if err := srcEngine.RunUntil(boundary); err != nil {
-			t.Fatalf("RunUntil: %v", err)
-		}
-		if len(srcD.State.PendingWrite)+len(srcD.State.PendingRead) > 0 {
-			break
-		}
-	}
+// resumeAndVerify loads a checkpoint into a fresh simulation, runs to
+// completion, and asserts it matches the uninterrupted reference exactly.
+func resumeAndVerify(
+	t *testing.T,
+	path, buildID string,
+	wantVerified int,
+	wantTime timing.VTimeInPicoSec,
+) {
+	t.Helper()
 
-	inFlight := len(srcD.State.PendingWrite) + len(srcD.State.PendingRead)
-	if inFlight == 0 {
-		t.Fatalf("never reached a mid-transaction boundary: %+v", srcD.State)
-	}
-	if srcD.done() {
-		t.Fatalf("boundary is not mid-transaction: already done")
-	}
-	t.Logf("checkpoint at t=%d: %d requests in flight, writesAcked=%d",
-		srcEngine.CurrentTime(), inFlight, srcD.State.WritesAcked)
-
-	if err := srcSim.SaveCheckpoint(path, buildID); err != nil {
-		t.Fatalf("SaveCheckpoint: %v", err)
-	}
-	cleanup(srcSim)
-
-	// Resumed run: fresh sim, load the mid-transaction checkpoint, run to
-	// completion, and confirm it matches the uninterrupted reference exactly.
 	resSim, resD := buildSim()
+	defer cleanup(resSim)
+
 	resEngine := resSim.GetEngine().(*timing.SerialEngine)
 	if err := resSim.LoadCheckpoint(path, buildID); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
@@ -266,7 +242,6 @@ func TestMidTransactionResumeOracle(t *testing.T) {
 	if err := resEngine.Run(); err != nil {
 		t.Fatalf("resumed run: %v", err)
 	}
-	defer cleanup(resSim)
 
 	if !resD.done() {
 		t.Fatalf("resumed run did not finish: %+v", resD.State)
@@ -282,24 +257,58 @@ func TestMidTransactionResumeOracle(t *testing.T) {
 	}
 }
 
+// checkpointAtMidTransaction advances a fresh source sim to a genuinely
+// mid-transaction boundary (requests in flight, found via RunUntil) and writes
+// a checkpoint there.
+func checkpointAtMidTransaction(t *testing.T, path, buildID string, wantTime timing.VTimeInPicoSec) {
+	t.Helper()
+
+	srcSim, srcD := buildSim()
+	srcEngine := srcSim.GetEngine().(*timing.SerialEngine)
+	srcD.TickLater()
+
+	step := wantTime / 8
+	if step == 0 {
+		step = 1
+	}
+	for boundary := step; boundary < wantTime; boundary += step {
+		if err := srcEngine.RunUntil(boundary); err != nil {
+			t.Fatalf("RunUntil: %v", err)
+		}
+		if len(srcD.State.PendingWrite)+len(srcD.State.PendingRead) > 0 {
+			break
+		}
+	}
+
+	inFlight := len(srcD.State.PendingWrite) + len(srcD.State.PendingRead)
+	if inFlight == 0 || srcD.done() {
+		t.Fatalf("never reached a mid-transaction boundary: %+v", srcD.State)
+	}
+	t.Logf("checkpoint at t=%d: %d requests in flight, writesAcked=%d",
+		srcEngine.CurrentTime(), inFlight, srcD.State.WritesAcked)
+
+	if err := srcSim.SaveCheckpoint(path, buildID); err != nil {
+		t.Fatalf("SaveCheckpoint: %v", err)
+	}
+	cleanup(srcSim)
+}
+
+func TestMidTransactionResumeOracle(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ck.tar.gz")
+	const buildID = "resume-oracle"
+
+	wantVerified, wantTime := runReference(t)
+	checkpointAtMidTransaction(t, path, buildID, wantTime)
+	resumeAndVerify(t, path, buildID, wantVerified, wantTime)
+}
+
 // TestResumeOracleDeterministicAcrossBoundaries checkpoints the same simulation
 // at many boundaries spanning both the write and read phases, and confirms every
 // one resumes to the identical final state and end time as the uninterrupted
 // reference. A boundary that lands in a quiescent gap is as valid as one with
 // traffic in flight; the point is that no boundary diverges.
 func TestResumeOracleDeterministicAcrossBoundaries(t *testing.T) {
-	refSim, refD := buildSim()
-	refEngine := refSim.GetEngine().(*timing.SerialEngine)
-	refD.TickLater()
-	if err := refEngine.Run(); err != nil {
-		t.Fatalf("reference run: %v", err)
-	}
-	if !refD.done() {
-		t.Fatalf("reference run did not finish: %+v", refD.State)
-	}
-	wantVerified := refD.State.ReadsVerified
-	wantTime := refEngine.CurrentTime()
-	cleanup(refSim)
+	wantVerified, wantTime := runReference(t)
 
 	const slices = 8
 	for i := 1; i < slices; i++ {
@@ -319,30 +328,7 @@ func TestResumeOracleDeterministicAcrossBoundaries(t *testing.T) {
 			}
 			cleanup(srcSim)
 
-			resSim, resD := buildSim()
-			resEngine := resSim.GetEngine().(*timing.SerialEngine)
-			if err := resSim.LoadCheckpoint(path, buildID); err != nil {
-				t.Fatalf("LoadCheckpoint: %v", err)
-			}
-			if err := resEngine.Run(); err != nil {
-				t.Fatalf("resumed run: %v", err)
-			}
-			defer cleanup(resSim)
-
-			if !resD.done() {
-				t.Fatalf("resumed run did not finish: %+v", resD.State)
-			}
-			if resD.State.Mismatch {
-				t.Fatalf("resumed run read stale/incorrect data")
-			}
-			if resD.State.ReadsVerified != wantVerified {
-				t.Fatalf("resumed verified %d, want %d",
-					resD.State.ReadsVerified, wantVerified)
-			}
-			if resEngine.CurrentTime() != wantTime {
-				t.Fatalf("resumed end time %d, want %d",
-					resEngine.CurrentTime(), wantTime)
-			}
+			resumeAndVerify(t, path, buildID, wantVerified, wantTime)
 		})
 	}
 }
