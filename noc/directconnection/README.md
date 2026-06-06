@@ -22,25 +22,32 @@ a compute unit and its L1 cache — without modeling a full network-on-chip.
 
 ```go
 type Comp struct {
-    *sim.TickingComponent
-    sim.MiddlewareHolder
+    *modeling.Component[Spec, State, modeling.None]
 }
 
-func (c *Comp) PlugIn(port sim.Port)       // Connect a port
-func (c *Comp) Unplug(port sim.Port)       // (not implemented)
-func (c *Comp) NotifyAvailable(p sim.Port)  // Port buffer space freed
-func (c *Comp) NotifySend()                 // Port has outgoing message
+func (c *Comp) PlugIn(port messaging.Port)          // Connect a port
+func (c *Comp) Unplug(port messaging.Port)          // (not implemented)
+func (c *Comp) NotifyAvailable(p messaging.Port)    // Port buffer space freed
+func (c *Comp) NotifySend()                         // Port has outgoing message
 ```
 
-`Comp` implements `sim.Connection`, so ports can use it as their connection
-for message delivery.
+`Comp` implements `messaging.Connection`, so ports can use it as their
+connection for message delivery. The only configuration is the `Freq` field on
+`Spec`, which sets the connection's tick frequency.
 
 ## Builder Pattern
 
+A connection owns no resources, so it is configured by `Spec` alone and wired to
+the simulation through a registrar. The registrar supplies the engine and
+registers the connection.
+
 ```go
+spec := directconnection.DefaultSpec()
+spec.Freq = 1 * timing.GHz
+
 conn := directconnection.MakeBuilder().
-    WithEngine(engine).
-    WithFreq(1 * sim.GHz).
+    WithRegistrar(reg).
+    WithSpec(spec).
     Build("Connection")
 
 conn.PlugIn(portA)
@@ -48,21 +55,22 @@ conn.PlugIn(portB)
 conn.PlugIn(portC)
 ```
 
-### Builder Options
+### Builder Methods
 
 | Method | Description |
 |---|---|
-| `WithEngine(e)` | Event scheduler (required) |
-| `WithFreq(f)` | Tick frequency for the connection |
+| `WithRegistrar(r)` | Source of the engine and connection registration (required) |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and set `Freq` |
 
 ## Usage
 
 ```go
 // Create engine and connection
-engine := sim.NewSerialEngine()
+engine := timing.NewSerialEngine()
+reg := modeling.NewStandaloneRegistrar(engine)
 conn := directconnection.MakeBuilder().
-    WithEngine(engine).
-    WithFreq(1 * sim.GHz).
+    WithRegistrar(reg).
+    WithSpec(directconnection.DefaultSpec()).
     Build("Bus")
 
 // Create components with ports, then plug them in

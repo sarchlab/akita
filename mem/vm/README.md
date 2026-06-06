@@ -54,7 +54,7 @@ Address translation uses a request/response protocol:
 ```go
 // Request: virtual → physical translation
 type TranslationReq struct {
-    sim.MsgMeta
+    messaging.MsgMeta
     VAddr    uint64
     PID      PID
     DeviceID uint64
@@ -62,7 +62,7 @@ type TranslationReq struct {
 
 // Response: carries the resolved Page
 type TranslationRsp struct {
-    sim.MsgMeta
+    messaging.MsgMeta
     Page Page
 }
 ```
@@ -120,8 +120,3 @@ pageTable.Insert(vm.Page{
 // Look up a translation
 page, found := pageTable.Find(1, 0x1000)
 ```
-
-## TLB Tracing
-
-The `TLBTracer` type records TLB access events (hits and misses) and can
-be attached to a TLB component for performance analysis.

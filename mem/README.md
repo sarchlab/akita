@@ -18,7 +18,7 @@ components (caches, memory controllers, compute units).
 | `DataReadyRsp` | Response | `Data []byte` |
 | `WriteDoneRsp` | Response | *(empty — acknowledgment only)* |
 
-All messages embed `sim.MsgMeta` for routing (Src, Dst, ID, RspTo).
+All messages embed `messaging.MsgMeta` for routing (Src, Dst, ID, RspTo).
 
 The `AccessReq` interface unifies read/write requests with `GetAddress()`,
 `GetByteSize()`, and `GetPID()`.
@@ -75,7 +75,7 @@ internal := conv.ConvertExternalToInternal(externalAddr)
 
 ### AddressToPortMapper
 
-Maps a memory address to the `sim.RemotePort` of the component responsible
+Maps a memory address to the `messaging.RemotePort` of the component responsible
 for that address:
 
 | Mapper | Use Case |
