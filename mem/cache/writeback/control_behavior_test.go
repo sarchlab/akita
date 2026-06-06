@@ -38,9 +38,6 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		spec.Log2BlockSize = 6
 		spec.BankLatency = 1
 		spec.DirLatency = 1
-		spec.TopPortBufferSize = 16
-		spec.BottomPortBufferSize = 16
-		spec.ControlPortBufferSize = 16
 
 		comp = MakeBuilder().
 			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
@@ -53,6 +50,12 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 			}).
 			Build("L1Cache")
 
+		// Build only declares the ports; the caller assigns the instances and
+		// chooses their buffer sizes.
+		for _, name := range []string{"Top", "Bottom", "Control"} {
+			comp.AssignPort(name,
+				messaging.NewPort(comp, 16, 16, comp.Name()+"."+name))
+		}
 		topPort = comp.GetPortByName("Top")
 		botPort = comp.GetPortByName("Bottom")
 		ctrlPort = comp.GetPortByName("Control")

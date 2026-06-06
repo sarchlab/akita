@@ -17,8 +17,6 @@ type Spec struct {
 	BankPipelineDepth              int         `json:"bank_pipeline_depth"`
 	StageLatency                   int         `json:"stage_latency"`
 	PostPipelineBufSize            int         `json:"post_pipeline_buf_size"`
-	TopPortBufferSize              int         `json:"top_port_buffer_size"`
-	CtrlPortBufferSize             int         `json:"ctrl_port_buffer_size"`
 	Capacity                       uint64      `json:"capacity"`
 	BankSelectorKind               string      `json:"bank_selector_kind"`
 	BankSelectorLog2InterleaveSize uint64      `json:"bank_selector_log2_interleave_size"`

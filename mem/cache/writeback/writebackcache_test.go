@@ -75,6 +75,12 @@ var _ = Describe("Write-Back Cache Integration", func() {
 				AddressToPortMapper: addressToPortMapper,
 			}).
 			Build("Cache")
+		// Build only declares the cache's ports; assign the instances and
+		// choose their buffer sizes here.
+		for _, name := range []string{"Top", "Bottom", "Control"} {
+			cacheComp.AssignPort(name,
+				messaging.NewPort(cacheComp, 8, 8, cacheComp.Name()+"."+name))
+		}
 		for _, mw := range cacheComp.Middlewares() {
 			if p, ok := mw.(*pipelineMW); ok {
 				m = p

@@ -63,12 +63,26 @@ var _ = Describe("Cache", func() {
 			Port: dram.GetPortByName("Top").AsRemote(),
 		}
 
+		cacheReg := modeling.NewStandaloneRegistrar(engine)
 		c = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(cacheReg).
 			WithResources(Resources{
 				AddressMapper: addressToPortMapper,
 			}).
 			Build("Cache")
+
+		// Build declares the cache's ports; assign every declared port
+		// instance (the caller now chooses the buffer sizes). Control is
+		// unused here but must still be assigned so the first tick can
+		// resolve it.
+		for _, name := range []string{"Top", "Bottom", "Control"} {
+			p := modeling.MakePortBuilder().
+				WithRegistrar(cacheReg).
+				WithComponent(c).
+				WithSpec(modeling.PortSpec{BufSize: 4}).
+				Build(name)
+			c.AssignPort(name, p)
+		}
 
 		connection.PlugIn(dram.GetPortByName("Top"))
 		connection.PlugIn(c.GetPortByName("Top"))

@@ -35,7 +35,8 @@ requests can occupy different banks while earlier ones are still in flight.
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, bank geometry, pipeline shape,
-  buffer sizes, capacity, bank-selection, and address-conversion fields.
+  post-pipeline buffer depth, capacity, bank-selection, and address-conversion
+  fields.
 - `State` — mutable runtime data: the per-bank pipelines and post-pipeline
   buffers.
 - `Resources` — shared wiring; holds the backing `*mem.Storage`.
@@ -49,7 +50,6 @@ type Spec struct {
     BankPipelineDepth   int         // Pipeline stages per bank
     StageLatency        int         // Cycles per pipeline stage
     PostPipelineBufSize int         // Post-pipeline buffer depth per bank
-    TopPortBufferSize   int         // Top port buffer capacity
     Capacity            uint64      // Backing-storage size when built internally
     StorageRef          string      // Storage resource name (set by Build)
 
@@ -71,17 +71,12 @@ Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec
 to `WithSpec`. Wiring comes from `WithRegistrar` (which provides the engine and
 registers the component) and `WithResources` (the shared backing storage). When
 `WithResources` is omitted, the controller builds its own storage sized by
-`Spec.Capacity`. The `Top` port is created internally by `Build`.
-
-> **Note:** Akita is migrating to externally-assigned ports — a component
-> declares its ports with `DeclarePort` and setup supplies the instances with
-> `AssignPort` (see `idealmemcontroller`, already migrated). This component
-> still creates its port internally in `Build`; it will adopt the new
-> convention during the rollout.
+`Spec.Capacity`. `Build` declares the `Top` and `Control` ports but does not
+create their instances. Build each port with `modeling.MakePortBuilder` (which
+registers the port with the simulation) and attach it with `AssignPort`,
+choosing the buffer size.
 
 ```go
-engine := timing.NewSerialEngine()
-
 spec := simplebankedmemory.DefaultSpec()
 spec.NumBanks = 4
 spec.BankPipelineWidth = 2
@@ -95,7 +90,21 @@ memCtrl := simplebankedmemory.MakeBuilder().
     WithResources(simplebankedmemory.Resources{Storage: storage}).
     Build("MyMemCtrl")
 
-topPort := memCtrl.GetPortByName("Top")
+topPort := modeling.MakePortBuilder().
+    WithRegistrar(reg).
+    WithComponent(memCtrl).
+    WithSpec(modeling.PortSpec{BufSize: 16}).
+    Build("Top")
+memCtrl.AssignPort("Top", topPort)
+
+ctrlPort := modeling.MakePortBuilder().
+    WithRegistrar(reg).
+    WithComponent(memCtrl).
+    WithSpec(modeling.PortSpec{BufSize: 4}).
+    Build("Control")
+memCtrl.AssignPort("Control", ctrlPort)
+
+topPort = memCtrl.GetPortByName("Top")
 ```
 
 | Method | Description |
@@ -113,7 +122,6 @@ topPort := memCtrl.GetPortByName("Top")
 | Bank pipeline width / depth | 1 / 1 |
 | Stage latency | 10 cycles |
 | Post-pipeline buffer | 1 |
-| Top port buffer | 16 |
 | Storage capacity | 4 GB |
 | Bank selector | `"interleaved"`, 64 B stride (log2 = 6) |
 
@@ -121,6 +129,8 @@ topPort := memCtrl.GetPortByName("Top")
 
 - **Top**: accepts `mem.ReadReq` and `mem.WriteReq`, returns `mem.DataReadyRsp`
   and `mem.WriteDoneRsp`.
+- **Control**: accepts `mem.ControlReq` (enable / pause / drain / reset),
+  returns `mem.ControlRsp`.
 
 ## Example
 

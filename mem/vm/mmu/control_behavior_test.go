@@ -31,14 +31,16 @@ var _ = Describe("MMU control behavior", func() {
 	)
 
 	build := func() {
+		reg := modeling.NewStandaloneRegistrar(engine)
+
 		comp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(DefaultSpec()).
 			Build("MMU")
 
-		topPort = comp.GetPortByName("Top")
-		ctrlPort = comp.GetPortByName("Control")
+		topPort = assignPort(reg, comp, "Top", 16)
+		ctrlPort = assignPort(reg, comp, "Control", 4)
 		for _, name := range []string{"Top", "Control"} {
 			(&noopConn{}).PlugIn(comp.GetPortByName(name))
 		}

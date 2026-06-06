@@ -11,9 +11,6 @@ import (
 type pipelineMW struct {
 	comp *modeling.Component[Spec, State, Resources]
 
-	topPort    messaging.Port
-	bottomPort messaging.Port
-
 	storage *mem.Storage
 
 	intakeStage      *intake
@@ -21,6 +18,19 @@ type pipelineMW struct {
 	bankStages       []*bankStage
 	parseBottomStage *bottomParser
 	respondStage     *respondStage
+}
+
+// topPort resolves the "Top" port by name. The port instance no longer exists
+// at Build time (it is assigned externally), so it is looked up lazily on use.
+func (m *pipelineMW) topPort() messaging.Port {
+	return m.comp.GetPortByName("Top")
+}
+
+// bottomPort resolves the "Bottom" port by name. The port instance no longer
+// exists at Build time (it is assigned externally), so it is looked up lazily
+// on use.
+func (m *pipelineMW) bottomPort() messaging.Port {
+	return m.comp.GetPortByName("Bottom")
 }
 
 // findPort resolves an address to a remote port using data from Spec.

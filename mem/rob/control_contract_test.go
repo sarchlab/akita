@@ -16,12 +16,20 @@ func TestControlContract(t *testing.T) {
 		spec := DefaultSpec()
 		spec.BottomUnit = messaging.RemotePort("BottomUnit")
 
+		reg := modeling.NewStandaloneRegistrar(engine)
+
 		comp := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			Build("ROB")
 
 		for _, name := range []string{"Top", "Bottom", "Control"} {
+			p := modeling.MakePortBuilder().
+				WithRegistrar(reg).
+				WithComponent(comp).
+				WithSpec(modeling.PortSpec{BufSize: 16}).
+				Build(name)
+			comp.AssignPort(name, p)
 			(&noopConn{}).PlugIn(comp.GetPortByName(name))
 		}
 

@@ -10,27 +10,28 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
-	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Bank Stage", func() {
 	var (
-		mockCtrl *gomock.Controller
-		m        *pipelineMW
-		bs       *bankStage
-		storage  *mem.Storage
-		topPort  *MockPort
+		m       *pipelineMW
+		bs      *bankStage
+		storage *mem.Storage
+		topPort messaging.Port
 	)
 
+	// fillTop pre-fills topPort's single outgoing slot so the next CanSend
+	// returns false, simulating a busy port.
+	fillTop := func() {
+		dummy := mem.DataReadyRsp{}
+		dummy.Src = topPort.AsRemote()
+		dummy.Dst = messaging.RemotePort("SomeSrc")
+		dummy.TrafficClass = "rsp"
+		Expect(topPort.CanSend()).To(BeTrue())
+		topPort.Send(dummy)
+	}
+
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
-
-		topPort = NewMockPort(mockCtrl)
-		topPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("TopPort")).
-			AnyTimes()
-
 		storage = mem.NewStorage(4 * mem.KB)
 
 		initialState := State{
@@ -59,7 +60,6 @@ var _ = Describe("Bank Stage", func() {
 
 		m = &pipelineMW{
 			storage: storage,
-			topPort: topPort,
 		}
 		m.comp = modeling.NewBuilder[Spec, State, Resources]().
 			WithEngine(timing.NewSerialEngine()).
@@ -74,6 +74,12 @@ var _ = Describe("Bank Stage", func() {
 			}).
 			Build("Cache")
 
+		// The stage resolves the "Top" port by name, so the test assigns a real
+		// single-slot port (owned by the component) and plugs a noop connection.
+		topPort = messaging.NewPort(m.comp, 1, 1, "Cache.Top")
+		(&ccNoopConn{}).PlugIn(topPort)
+		m.comp.AddPort("Top", topPort)
+
 		m.comp.State = initialState
 		next := &m.comp.State
 
@@ -87,10 +93,6 @@ var _ = Describe("Bank Stage", func() {
 		m.bankStages = []*bankStage{bs}
 	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
-
 	Context("completing a read hit transaction", func() {
 		BeforeEach(func() {
 			next := &m.comp.State
@@ -102,6 +104,7 @@ var _ = Describe("Bank Stage", func() {
 
 			read := mem.ReadReq{}
 			read.ID = timing.GetIDGenerator().Generate()
+			read.Src = messaging.RemotePort("Agent")
 			read.Address = 0x104
 			read.AccessByteSize = 4
 			read.TrafficBytes = 12
@@ -125,7 +128,7 @@ var _ = Describe("Bank Stage", func() {
 		})
 
 		It("should stall if send buffer is full", func() {
-			topPort.EXPECT().CanSend().Return(false).AnyTimes()
+			fillTop()
 
 			ret := bs.Tick()
 
@@ -135,13 +138,6 @@ var _ = Describe("Bank Stage", func() {
 		})
 
 		It("should read and send response", func() {
-			topPort.EXPECT().CanSend().Return(true)
-			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					dr := msg.(mem.DataReadyRsp)
-					Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
-				})
-
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
@@ -150,6 +146,10 @@ var _ = Describe("Bank Stage", func() {
 			Expect(block.ReadCount).To(Equal(0))
 			Expect(next.Transactions[0].Removed).To(BeTrue())
 			Expect(next.BankInflightTransCounts[0]).To(Equal(0))
+
+			out := topPort.RetrieveOutgoing()
+			dr := out.(mem.DataReadyRsp)
+			Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 		})
 	})
 
@@ -163,6 +163,7 @@ var _ = Describe("Bank Stage", func() {
 
 			write := mem.WriteReq{}
 			write.ID = timing.GetIDGenerator().Generate()
+			write.Src = messaging.RemotePort("Agent")
 			write.Address = 0x104
 			write.Data = []byte{5, 6, 7, 8}
 			write.TrafficBytes = len([]byte{5, 6, 7, 8}) + 12
@@ -184,7 +185,7 @@ var _ = Describe("Bank Stage", func() {
 		})
 
 		It("should stall if send buffer is full", func() {
-			topPort.EXPECT().CanSend().Return(false).AnyTimes()
+			fillTop()
 
 			ret := bs.Tick()
 
@@ -194,10 +195,6 @@ var _ = Describe("Bank Stage", func() {
 		})
 
 		It("should write and send response", func() {
-			topPort.EXPECT().CanSend().Return(true)
-			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {})
-
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
@@ -210,6 +207,9 @@ var _ = Describe("Bank Stage", func() {
 			Expect(block.IsDirty).To(BeTrue())
 			Expect(next.Transactions[0].Removed).To(BeTrue())
 			Expect(next.BankInflightTransCounts[0]).To(Equal(0))
+
+			out := topPort.RetrieveOutgoing()
+			Expect(out).NotTo(BeNil())
 		})
 	})
 

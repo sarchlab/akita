@@ -30,7 +30,8 @@ optionally invalidate the directory, and pause the cache.
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, geometry, latencies, MSHR/buffer
-  capacities, inflight limits, address mapping, and port buffer sizes.
+  capacities, inflight limits, and address mapping. Port buffer sizes are chosen
+  by the caller when assigning the port instances, not in the spec.
 - `State` — mutable runtime data: the directory state, MSHR state, all
   inter-stage buffers and pipelines, the transaction list, and inflight
   counters. Fully JSON-serializable, as required by the `State` constraint.
@@ -59,10 +60,6 @@ type Spec struct {
     AddressMapperType string   // "single" or "interleaved"
     RemotePortNames   []string
     InterleavingSize  uint64
-
-    TopPortBufferSize     int
-    BottomPortBufferSize  int
-    ControlPortBufferSize int
 }
 ```
 
@@ -72,14 +69,9 @@ Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec t
 `WithSpec`. Wiring comes from `WithRegistrar` (which provides the engine and
 registers the component) and `WithResources` (the backing storage plus the
 address-to-port mapping for lower memory). When the storage is omitted, the
-component builds its own sized by `Spec.TotalByteSize`. The `Top`, `Bottom`, and
-`Control` ports are created internally by `Build`.
-
-> **Note:** Akita is migrating to externally-assigned ports — a component
-> declares its ports with `DeclarePort` and setup supplies the instances with
-> `AssignPort` (see `idealmemcontroller`, already migrated). This component
-> still creates its ports internally in `Build`; it will adopt the new
-> convention during the rollout.
+component builds its own sized by `Spec.TotalByteSize`. `Build` only *declares*
+the `Top`, `Bottom`, and `Control` ports; the caller builds the port instances
+(choosing their buffer sizes) and attaches them with `AssignPort` after `Build`.
 
 ```go
 spec := writeback.DefaultSpec()
@@ -95,6 +87,17 @@ cache := writeback.MakeBuilder().
         AddressToPortMapper: lowModuleMapper,
     }).
     Build("L1Cache")
+
+// Build only declares the ports; assign the instances (and pick their buffer
+// sizes) after Build.
+for _, name := range []string{"Top", "Bottom", "Control"} {
+    p := modeling.MakePortBuilder().
+        WithRegistrar(sim).
+        WithComponent(cache).
+        WithSpec(modeling.PortSpec{BufSize: 8}).
+        Build(name)
+    cache.AssignPort(name, p)
+}
 
 topPort := cache.GetPortByName("Top")
 ```
@@ -132,6 +135,9 @@ The cache operates in one of five states (the `cacheState` constants):
 - **Invalid** — uninitialized
 
 ## Ports
+
+`Build` declares these ports by logical name; the caller assigns the instances
+with `AssignPort` (see the Builder Pattern section above).
 
 - **Top**: accepts `mem.ReadReq` and `mem.WriteReq`, returns `mem.DataReadyRsp`
   and `mem.WriteDoneRsp`.

@@ -60,8 +60,8 @@ type DataMoveResponse struct {
 ```
 
 - **Spec** — immutable config: `Freq`, `BufferSize`,
-  `InsideByteGranularity`/`OutsideByteGranularity`, the `*PortBufferSize`
-  fields, and the inside/outside address-mapper fields.
+  `InsideByteGranularity`/`OutsideByteGranularity`, and the inside/outside
+  address-mapper fields.
 - **State** — mutable runtime: the single `CurrentTransaction` (with its pending
   read/write maps and next read/write addresses) and the sliding `Buffer`.
 - **Resources** — the inside/outside `mem.AddressToPortMapper`s describing which
@@ -72,8 +72,10 @@ type DataMoveResponse struct {
 
 Configuration is supplied as a whole through `WithSpec` (start from
 `DefaultSpec()`); the engine and registration come from `WithRegistrar`; the
-side mappers come from `WithResources`. The component creates its own `Control`,
-`Inside`, and `Outside` ports.
+side mappers come from `WithResources`. `Build` declares the component's `Top`,
+`Inside`, `Outside`, and `Control` ports; the caller builds the port instances
+(choosing the buffer sizes) with `modeling.MakePortBuilder` and attaches them
+with `AssignPort`.
 
 ```go
 spec := datamover.DefaultSpec()
@@ -89,6 +91,15 @@ mover := datamover.MakeBuilder().
         OutsideMapper: &mem.SinglePortMapper{Port: dramPort},
     }).
     Build("DMA")
+
+for _, name := range []string{"Top", "Inside", "Outside", "Control"} {
+    p := modeling.MakePortBuilder().
+        WithRegistrar(sim).
+        WithComponent(mover).
+        WithSpec(modeling.PortSpec{BufSize: 16}).
+        Build(name)
+    mover.AssignPort(name, p)
+}
 
 ctrlPort := mover.GetPortByName("Control")
 ```

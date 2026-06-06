@@ -17,11 +17,6 @@ type Spec struct {
 	InsideByteGranularity  uint64      `json:"inside_byte_granularity"`
 	OutsideByteGranularity uint64      `json:"outside_byte_granularity"`
 
-	CtrlPortBufferSize    int `json:"ctrl_port_buffer_size"`
-	TopPortBufferSize     int `json:"top_port_buffer_size"`
-	InsidePortBufferSize  int `json:"inside_port_buffer_size"`
-	OutsidePortBufferSize int `json:"outside_port_buffer_size"`
-
 	InsideMapperKind             string                 `json:"inside_mapper_kind"`
 	InsideMapperPorts            []messaging.RemotePort `json:"inside_mapper_ports"`
 	InsideMapperInterleavingSize uint64                 `json:"inside_mapper_interleaving_size"`

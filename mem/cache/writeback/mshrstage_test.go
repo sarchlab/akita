@@ -9,25 +9,27 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
-	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("MSHR Stage", func() {
 	var (
-		mockCtrl *gomock.Controller
-		m        *pipelineMW
-		ms       *mshrStage
-		topPort  *MockPort
+		m       *pipelineMW
+		ms      *mshrStage
+		topPort messaging.Port
 	)
 
-	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
-		topPort = NewMockPort(mockCtrl)
-		topPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("TopPort")).
-			AnyTimes()
+	// fillTop pre-fills topPort's single outgoing slot so the next CanSend
+	// returns false, simulating a busy port.
+	fillTop := func() {
+		dummy := mem.DataReadyRsp{}
+		dummy.Src = topPort.AsRemote()
+		dummy.Dst = messaging.RemotePort("SomeSrc")
+		dummy.TrafficClass = "rsp"
+		Expect(topPort.CanSend()).To(BeTrue())
+		topPort.Send(dummy)
+	}
 
+	BeforeEach(func() {
 		initialState := State{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
@@ -52,11 +54,9 @@ var _ = Describe("MSHR Stage", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &pipelineMW{
-			topPort: topPort,
-		}
+		m = &pipelineMW{}
 		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(nil).
+			WithEngine(timing.NewSerialEngine()).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:  6,
@@ -64,15 +64,17 @@ var _ = Describe("MSHR Stage", func() {
 			}).
 			Build("Cache")
 
+		// The stage resolves the "Top" port by name, so the test assigns a real
+		// single-slot port (owned by the component) and plugs a noop connection.
+		topPort = messaging.NewPort(m.comp, 1, 1, "Cache.Top")
+		(&ccNoopConn{}).PlugIn(topPort)
+		m.comp.AddPort("Top", topPort)
+
 		m.comp.State = initialState
 
 		ms = &mshrStage{
 			cache: m,
 		}
-	})
-
-	AfterEach(func() {
-		mockCtrl.Finish()
 	})
 
 	It("should do nothing if there is no entry in input buffer", func() {
@@ -117,7 +119,7 @@ var _ = Describe("MSHR Stage", func() {
 		next.MSHRStageBuf.Clear()
 		next.MSHRStageBuf.PushTyped(1)
 
-		topPort.EXPECT().CanSend().Return(false)
+		fillTop()
 
 		ret := ms.Tick()
 
@@ -129,6 +131,7 @@ var _ = Describe("MSHR Stage", func() {
 	It("should send data ready to top", func() {
 		read := mem.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
+		read.Src = messaging.RemotePort("Agent")
 		read.Address = 0x104
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
@@ -160,19 +163,16 @@ var _ = Describe("MSHR Stage", func() {
 		next.MSHRStageBuf.Clear()
 		next.MSHRStageBuf.PushTyped(1)
 
-		topPort.EXPECT().CanSend().Return(true)
-		topPort.EXPECT().Send(gomock.Any()).
-			Do(func(msg messaging.Msg) {
-				dr := msg.(mem.DataReadyRsp)
-				Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
-			})
-
 		ret := ms.Tick()
 
 		Expect(ret).To(BeTrue())
 		next = &m.comp.State
 		Expect(next.HasProcessingMSHREntry).To(BeFalse())
 		Expect(next.Transactions[0].Removed).To(BeTrue())
+
+		out := topPort.RetrieveOutgoing()
+		dr := out.(mem.DataReadyRsp)
+		Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 	})
 
 	It("should discard the request if it is no longer inflight", func() {
@@ -194,8 +194,6 @@ var _ = Describe("MSHR Stage", func() {
 		next.Transactions = []transactionState{mshrTrans}
 		next.MSHRStageBuf.Clear()
 		next.MSHRStageBuf.PushTyped(0)
-
-		topPort.EXPECT().CanSend().Return(true)
 
 		ret := ms.Tick()
 

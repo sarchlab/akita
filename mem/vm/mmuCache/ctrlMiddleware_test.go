@@ -32,11 +32,14 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		comp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			Build("MMUCache")
 		comp.State.CurrentState = mmuCacheStatePause
+
+		assignDefaultPorts(reg, comp)
 
 		topPort = comp.GetPortByName("Top")
 		bottomPort = comp.GetPortByName("Bottom")
@@ -175,10 +178,12 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
+		reg2 := modeling.NewStandaloneRegistrar(engine)
 		comp2 := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg2).
 			WithSpec(spec).
 			Build("MMUCache2")
+		assignDefaultPorts(reg2, comp2)
 		control2 := comp2.GetPortByName("Control")
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			(&noopConn{}).PlugIn(comp2.GetPortByName(name))

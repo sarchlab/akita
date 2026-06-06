@@ -25,6 +25,24 @@ func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
 
+// assignPort builds a port with the given buffer size using the same registrar
+// the component was built with, and assigns it to the component's declared port
+// of the same name.
+func assignPort(
+	reg modeling.Registrar,
+	comp *Comp,
+	name string,
+	bufSize int,
+) messaging.Port {
+	p := modeling.MakePortBuilder().
+		WithRegistrar(reg).
+		WithComponent(comp).
+		WithSpec(modeling.PortSpec{BufSize: bufSize}).
+		Build(name)
+	comp.AssignPort(name, p)
+	return p
+}
+
 var _ = Describe("MMU", func() {
 
 	var (
@@ -38,16 +56,17 @@ var _ = Describe("MMU", func() {
 	// build constructs an MMU with the given Top buffer size, injects the
 	// shared page table, and plugs noopConns so its ports can be driven.
 	build := func(topBufSize int) {
-		spec := DefaultSpec()
-		spec.TopPortBufferSize = topBufSize
+		reg := modeling.NewStandaloneRegistrar(engine)
 
 		mmuComp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(spec).
+			WithSpec(DefaultSpec()).
 			Build("MMU")
 
-		topPort = mmuComp.GetPortByName("Top")
+		topPort = assignPort(reg, mmuComp, "Top", topBufSize)
+		assignPort(reg, mmuComp, "Control", 4)
+
 		(&noopConn{}).PlugIn(topPort)
 		(&noopConn{}).PlugIn(mmuComp.GetPortByName("Control"))
 
@@ -204,13 +223,16 @@ var _ = Describe("MMU Integration", func() {
 
 		pageTable = vm.NewPageTable(12)
 
+		reg := modeling.NewStandaloneRegistrar(engine)
+
 		mmuComp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(DefaultSpec()).
 			Build("MMU")
 
-		topPort = mmuComp.GetPortByName("Top")
+		topPort = assignPort(reg, mmuComp, "Top", 4096)
+		assignPort(reg, mmuComp, "Control", 4)
 		(&noopConn{}).PlugIn(topPort)
 
 		agentPort = messaging.NewPort(nil, 4, 4, "Agent")

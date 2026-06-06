@@ -49,6 +49,12 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		WithRegistrar(s).
 		WithSpec(agentSpec).
 		Build("MemAccessAgent")
+	agentMem := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(agent).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Mem")
+	agent.AssignPort("Mem", agentMem)
 	if monitor := s.GetMonitor(); monitor != nil {
 		agent.CreateProgressBars(monitor.CreateProgressBar)
 	}

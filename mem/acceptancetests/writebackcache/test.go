@@ -50,6 +50,12 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 		WithRegistrar(s).
 		WithSpec(agentSpec).
 		Build("MemAccessAgent")
+	agentMem := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(agent).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Mem")
+	agent.AssignPort("Mem", agentMem)
 	createProgressBars(s, agent)
 
 	dramSpec := idealmemcontroller.DefaultSpec()
@@ -87,6 +93,24 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 			AddressToPortMapper: addressToPortMapper,
 		}).
 		Build("Cache")
+	cacheTop := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(writeBackCache).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Top")
+	writeBackCache.AssignPort("Top", cacheTop)
+	cacheBottom := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(writeBackCache).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Bottom")
+	writeBackCache.AssignPort("Bottom", cacheBottom)
+	cacheControl := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(writeBackCache).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Control")
+	writeBackCache.AssignPort("Control", cacheControl)
 
 	agent.LowModule = writeBackCache.GetPortByName("Top")
 

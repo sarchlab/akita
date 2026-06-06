@@ -12,8 +12,11 @@ import (
 )
 
 type parseTopMW struct {
-	comp    *modeling.Component[Spec, State, Resources]
-	topPort messaging.Port
+	comp *modeling.Component[Spec, State, Resources]
+}
+
+func (m *parseTopMW) topPort() messaging.Port {
+	return m.comp.GetPortByName("Top")
 }
 
 // Tick runs the parseTop stage. Pause and Drain both stop accepting
@@ -30,7 +33,7 @@ func (m *parseTopMW) Tick() bool {
 }
 
 func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
-	msgI := m.topPort.PeekIncoming()
+	msgI := m.topPort().PeekIncoming()
 	if msgI == nil {
 		return false
 	}
@@ -64,7 +67,7 @@ func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
 	ts.ArrivalTick = next.TickCount
 	next.Transactions = append(next.Transactions, ts)
 	pushSubTrans(next, transIdx)
-	m.topPort.RetrieveIncoming()
+	m.topPort().RetrieveIncoming()
 
 	tracing.TraceReqReceive(m.comp, msgI)
 

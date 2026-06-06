@@ -38,17 +38,33 @@ var _ = Describe("Reorder Buffer", func() {
 		topPort    messaging.Port
 		bottomPort messaging.Port
 		ctrlPort   messaging.Port
+
+		topBufSize    int
+		bottomBufSize int
+		ctrlBufSize   int
 	)
 
 	build := func(spec Spec) {
+		reg := modeling.NewStandaloneRegistrar(engine)
+
 		rob = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			Build("Rob")
 
-		topPort = rob.GetPortByName("Top")
-		bottomPort = rob.GetPortByName("Bottom")
-		ctrlPort = rob.GetPortByName("Control")
+		assign := func(name string, bufSize int) messaging.Port {
+			p := modeling.MakePortBuilder().
+				WithRegistrar(reg).
+				WithComponent(rob).
+				WithSpec(modeling.PortSpec{BufSize: bufSize}).
+				Build(name)
+			rob.AssignPort(name, p)
+			return p
+		}
+
+		topPort = assign("Top", topBufSize)
+		bottomPort = assign("Bottom", bottomBufSize)
+		ctrlPort = assign("Control", ctrlBufSize)
 
 		for _, p := range []messaging.Port{topPort, bottomPort, ctrlPort} {
 			conn := &noopConn{}
@@ -87,10 +103,10 @@ var _ = Describe("Reorder Buffer", func() {
 		spec := DefaultSpec()
 		spec.BufferSize = 4
 		spec.NumReqPerCycle = 2
-		spec.TopPortBufferSize = 4
-		spec.BottomPortBufferSize = 4
-		spec.ControlPortBufferSize = 2
 		spec.BottomUnit = bottomUnitRemote
+		topBufSize = 4
+		bottomBufSize = 4
+		ctrlBufSize = 2
 		build(spec)
 	})
 
@@ -155,7 +171,7 @@ var _ = Describe("Reorder Buffer", func() {
 			topPort.Deliver(makeRead(0))
 
 			// Fill the bottom outgoing buffer so Send fails.
-			for i := 0; i < rob.Spec().BottomPortBufferSize; i++ {
+			for i := 0; i < bottomBufSize; i++ {
 				filler := mem.ReadReq{Address: uint64(i)}
 				filler.ID = timing.GetIDGenerator().Generate()
 				filler.Src = bottomPort.AsRemote()
@@ -348,7 +364,7 @@ var _ = Describe("Reorder Buffer", func() {
 			rob.Tick() // parseBottom records the response
 
 			// Fill the top outgoing buffer so the next bottomUp Send fails.
-			for i := 0; i < rob.Spec().TopPortBufferSize; i++ {
+			for i := 0; i < topBufSize; i++ {
 				filler := mem.DataReadyRsp{Data: []byte{byte(i)}}
 				filler.ID = timing.GetIDGenerator().Generate()
 				filler.Src = topPort.AsRemote()

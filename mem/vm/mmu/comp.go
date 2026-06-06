@@ -15,9 +15,6 @@ type Spec struct {
 	MaxRequestsInFlight int         `json:"max_requests_in_flight"`
 	AutoPageAllocation  bool        `json:"auto_page_allocation"`
 	Log2PageSize        uint64      `json:"log2_page_size"`
-
-	TopPortBufferSize  int `json:"top_port_buffer_size"`
-	CtrlPortBufferSize int `json:"ctrl_port_buffer_size"`
 }
 
 // transactionState is the canonical transaction representation.

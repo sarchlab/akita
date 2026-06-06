@@ -68,6 +68,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 			TranslationProviderMapper: atTranslationMapper,
 		}).
 		Build("AT")
+	assignPorts(s, at, "Top", "Bottom", "Translation", "Control")
 
 	agentSpec := memaccessagent.DefaultSpec()
 	agentSpec.MaxAddress = *maxAddressFlag
@@ -80,6 +81,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 			LowModule: at.GetPortByName("Top"),
 		}).
 		Build("MemAccessAgent")
+	assignPorts(s, agent, "Mem")
 	if monitor := s.GetMonitor(); monitor != nil {
 		agent.CreateProgressBars(monitor.CreateProgressBar)
 	}
@@ -105,18 +107,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 		WithRegistrar(s).
 		WithSpec(memCtrlSpec).
 		Build("MemCtrl")
-	memCtrlTop := modeling.MakePortBuilder().
-		WithRegistrar(s).
-		WithComponent(memCtrl).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Top")
-	memCtrl.AssignPort("Top", memCtrlTop)
-	memCtrlCtrl := modeling.MakePortBuilder().
-		WithRegistrar(s).
-		WithComponent(memCtrl).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Control")
-	memCtrl.AssignPort("Control", memCtrlCtrl)
+	assignPorts(s, memCtrl, "Top", "Control")
 
 	l2Spec := writeback.DefaultSpec()
 	l2Spec.WayAssociativity = 4
@@ -131,6 +122,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 			},
 		}).
 		Build("L2Cache")
+	assignPorts(s, L2Cache, "Top", "Bottom", "Control")
 
 	l1Spec := writethroughcache.DefaultSpec()
 	l1Spec.WritePolicyType = "write-through"
@@ -145,6 +137,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 			},
 		}).
 		Build("L1Cache")
+	assignPorts(s, L1Cache, "Top", "Bottom", "Control")
 
 	return L1Cache, L2Cache, memCtrl
 }
@@ -167,6 +160,7 @@ func buildTranslationHierarchy(
 		WithSpec(mmuSpec).
 		WithResources(mmu.Resources{PageTable: pageTable}).
 		Build("IoMMU")
+	assignPorts(s, IoMMU, "Top", "Control")
 
 	L2TLBMapper := &mem.SinglePortMapper{
 		Port: IoMMU.GetPortByName("Top").AsRemote(),
@@ -182,6 +176,7 @@ func buildTranslationHierarchy(
 		WithSpec(l2TLBSpec).
 		WithResources(tlb.Resources{TranslationProviderMapper: L2TLBMapper}).
 		Build("L2TLB")
+	assignPorts(s, L2TLB, "Top", "Bottom", "Control")
 
 	TLBMapper := &mem.SinglePortMapper{
 		Port: L2TLB.GetPortByName("Top").AsRemote(),
@@ -197,6 +192,7 @@ func buildTranslationHierarchy(
 		WithSpec(tlbSpec).
 		WithResources(tlb.Resources{TranslationProviderMapper: TLBMapper}).
 		Build("TLB")
+	assignPorts(s, TLB, "Top", "Bottom", "Control")
 
 	return IoMMU, TLB, L2TLB
 }
@@ -225,6 +221,25 @@ func setupPageTable(maxAddress uint64, s *simulation.Simulation) vm.PageTable {
 	}
 
 	return pageTable
+}
+
+// assignPorts builds a port for each named, declared port of the component
+// (with a default buffer size) and assigns it. Every declared port must be
+// assigned because the component resolves all of its ports by name on each
+// tick.
+func assignPorts(
+	s *simulation.Simulation,
+	comp messaging.Component,
+	names ...string,
+) {
+	for _, name := range names {
+		p := modeling.MakePortBuilder().
+			WithRegistrar(s).
+			WithComponent(comp).
+			WithSpec(modeling.PortSpec{BufSize: 16}).
+			Build(name)
+		comp.AssignPort(name, p)
+	}
 }
 
 func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {

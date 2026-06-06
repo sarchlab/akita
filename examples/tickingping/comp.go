@@ -20,8 +20,7 @@ type pingRsp struct {
 
 // Spec contains immutable configuration for the tickingping component.
 type Spec struct {
-	Freq              timing.Freq `json:"freq"`
-	OutPortBufferSize int         `json:"out_port_buffer_size"`
+	Freq timing.Freq `json:"freq"`
 }
 
 // pingTransactionState tracks an in-progress ping request with a countdown.

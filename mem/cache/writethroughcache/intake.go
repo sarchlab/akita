@@ -23,7 +23,7 @@ func (s *intake) Tick() bool {
 		return false
 	}
 
-	msg := s.cache.topPort.PeekIncoming()
+	msg := s.cache.topPort().PeekIncoming()
 	if msg == nil {
 		return false
 	}
@@ -41,7 +41,7 @@ func (s *intake) Tick() bool {
 
 	dirBuf.PushTyped(transIdx)
 
-	s.cache.topPort.RetrieveIncoming()
+	s.cache.topPort().RetrieveIncoming()
 
 	tracing.TraceReqReceive(s.cache.comp, msg)
 

@@ -4,25 +4,21 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
-	gomock "go.uber.org/mock/gomock"
 )
 
 var _ = Describe("TopParser", func() {
 	var (
-		mockCtrl *gomock.Controller
-		m        *pipelineMW
-		parser   *topParser
-		port     *MockPort
+		m       *pipelineMW
+		parser  *topParser
+		topPort messaging.Port
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
-		port = NewMockPort(mockCtrl)
-
 		initialState := State{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
@@ -47,17 +43,21 @@ var _ = Describe("TopParser", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &pipelineMW{
-			topPort: port,
-		}
+		m = &pipelineMW{}
 		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(nil).
+			WithEngine(timing.NewSerialEngine()).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				NumReqPerCycle: 4,
 				Log2BlockSize:  6,
 			}).
 			Build("Cache")
+
+		// The stage resolves the "Top" port by name, so the test assigns a real
+		// port (owned by the component) and plugs a noop connection.
+		topPort = messaging.NewPort(m.comp, 4, 4, "Cache.Top")
+		(&ccNoopConn{}).PlugIn(topPort)
+		m.comp.AddPort("Top", topPort)
 
 		m.comp.State = initialState
 
@@ -66,13 +66,7 @@ var _ = Describe("TopParser", func() {
 		}
 	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
-
 	It("should return if no req to parse", func() {
-		port.EXPECT().PeekIncoming().Return(nil)
-
 		ret := parser.Tick()
 		Expect(ret).To(BeFalse())
 	})
@@ -93,8 +87,7 @@ var _ = Describe("TopParser", func() {
 		read.TrafficBytes = 12
 		read.TrafficClass = "mem.ReadReq"
 
-		port.EXPECT().PeekIncoming().Return(read)
-		port.EXPECT().RetrieveIncoming().Return(read)
+		topPort.Deliver(read)
 
 		parser.Tick()
 
@@ -103,6 +96,7 @@ var _ = Describe("TopParser", func() {
 		Expect(next.Transactions[0].HasRead).To(BeTrue())
 		Expect(next.Transactions[0].ReadAddress).To(Equal(uint64(0x100)))
 		Expect(next.Transactions[0].ReadAccessByteSize).To(Equal(uint64(64)))
+		Expect(topPort.PeekIncoming()).To(BeNil())
 	})
 
 	It("should parse write from top", func() {
@@ -112,8 +106,7 @@ var _ = Describe("TopParser", func() {
 		write.TrafficBytes = 12
 		write.TrafficClass = "mem.WriteReq"
 
-		port.EXPECT().PeekIncoming().Return(write)
-		port.EXPECT().RetrieveIncoming().Return(write)
+		topPort.Deliver(write)
 
 		parser.Tick()
 
@@ -121,5 +114,6 @@ var _ = Describe("TopParser", func() {
 		Expect(next.Transactions).To(HaveLen(1))
 		Expect(next.Transactions[0].HasWrite).To(BeTrue())
 		Expect(next.Transactions[0].WriteAddress).To(Equal(uint64(0x100)))
+		Expect(topPort.PeekIncoming()).To(BeNil())
 	})
 })

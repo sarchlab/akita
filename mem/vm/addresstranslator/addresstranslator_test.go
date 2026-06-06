@@ -30,6 +30,44 @@ func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
 
+// Historical default port buffer sizes for the address translator. Buffer size
+// is now the caller's choice (the Spec no longer carries *PortBufferSize
+// fields), so tests own these constants.
+const (
+	topBufSize         = 4
+	bottomBufSize      = 4
+	translationBufSize = 4
+	ctrlBufSize        = 1
+)
+
+// assignPort builds a port with the given buffer size using the same registrar
+// the component was built with, and assigns it to the component's declared port
+// of the same name.
+func assignPort(
+	reg modeling.Registrar,
+	comp *Comp,
+	name string,
+	bufSize int,
+) messaging.Port {
+	p := modeling.MakePortBuilder().
+		WithRegistrar(reg).
+		WithComponent(comp).
+		WithSpec(modeling.PortSpec{BufSize: bufSize}).
+		Build(name)
+	comp.AssignPort(name, p)
+	return p
+}
+
+// assignPorts assigns the translator's four declared ports (Top, Bottom,
+// Translation, Control), with the given Top buffer size and the historical
+// defaults for the rest.
+func assignPorts(reg modeling.Registrar, comp *Comp, topBufSize int) {
+	assignPort(reg, comp, "Top", topBufSize)
+	assignPort(reg, comp, "Bottom", bottomBufSize)
+	assignPort(reg, comp, "Translation", translationBufSize)
+	assignPort(reg, comp, "Control", ctrlBufSize)
+}
+
 var _ = Describe("Address Translator", func() {
 	var (
 		engine          timing.Engine
@@ -48,7 +86,6 @@ var _ = Describe("Address Translator", func() {
 		spec := DefaultSpec()
 		spec.Log2PageSize = 12
 		spec.Freq = 1
-		spec.TopPortBufferSize = topBufSize
 
 		resources := Resources{
 			MemProviderMapper: &mem.SinglePortMapper{
@@ -59,11 +96,14 @@ var _ = Describe("Address Translator", func() {
 			},
 		}
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		t = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			WithResources(resources).
 			Build("AddressTranslator")
+
+		assignPorts(reg, t, topBufSize)
 
 		topPort = t.GetPortByName("Top")
 		bottomPort = t.GetPortByName("Bottom")
@@ -83,7 +123,7 @@ var _ = Describe("Address Translator", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		build(4)
+		build(topBufSize)
 	})
 
 	Context("translate stage", func() {
@@ -127,7 +167,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should stall if cannot send for translation", func() {
 			// Fill the translation port's outgoing buffer so Send fails.
-			fillOutgoing(translationPort, t.Spec().TranslationPortBufferSize)
+			fillOutgoing(translationPort, translationBufSize)
 			topPort.Deliver(req)
 
 			needTick := tParseTransMW.translate()
@@ -202,7 +242,7 @@ var _ = Describe("Address Translator", func() {
 			}
 
 			// Fill the bottom port's outgoing buffer so Send fails.
-			fillOutgoing(bottomPort, t.Spec().BottomPortBufferSize)
+			fillOutgoing(bottomPort, bottomBufSize)
 			translationPort.Deliver(translationRsp)
 
 			madeProgress := tRespondPipeMW.parseTranslation()
@@ -439,7 +479,7 @@ var _ = Describe("Address Translator", func() {
 			dataReady.TrafficClass = "mem.DataReadyRsp"
 
 			// Fill the top port's outgoing buffer so Send fails.
-			fillOutgoing(topPort, t.Spec().TopPortBufferSize)
+			fillOutgoing(topPort, topBufSize)
 			bottomPort.Deliver(dataReady)
 
 			madeProgress := tRespondPipeMW.respond()

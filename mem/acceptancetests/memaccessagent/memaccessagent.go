@@ -21,8 +21,6 @@ type Spec struct {
 	MaxAddress uint64      `json:"max_address"`
 	WriteLeft  int         `json:"write_left"`
 	ReadLeft   int         `json:"read_left"`
-
-	MemPortBufferSize int `json:"mem_port_buffer_size"`
 }
 
 // Resources holds the external wiring referenced by the MemAccessAgent. The

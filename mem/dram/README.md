@@ -23,12 +23,15 @@ Additional protocol constants: `DDR3`, `GDDR5`, `GDDR5X`, `LPDDR`, `LPDDR3`,
 The controller is organized as three middleware stages executed each tick:
 
 ```
-TopPort ──► parseTopMW ──► bankTickMW ──► respondMW ──► TopPort
-               │               │              │
-          (parse reqs,    (issue DRAM     (send data-ready
-           split into     commands,        / write-done
-           sub-trans)     tick banks)       responses)
+Top port ──► parseTopMW ──► bankTickMW ──► respondMW ──► Top port
+                │               │              │
+           (parse reqs,    (issue DRAM     (send data-ready
+            split into     commands,        / write-done
+            sub-trans)     tick banks)       responses)
 ```
+
+A `ctrlMiddleware` also runs each tick, handling `mem.ControlReq` (enable /
+pause / drain / reset) on the `Control` port.
 
 1. **parseTopMW** — Receives `mem.ReadReq`/`mem.WriteReq` from the top port,
    splits large requests into sub-transactions aligned to the access unit size
@@ -89,15 +92,10 @@ Activate → Read/Write → Precharge → (next row)
 All scalar configuration is supplied as a whole through `WithSpec`. Start from a
 preset (or `DefaultSpec()`), tweak the fields you need, and pass it in. Wiring is
 supplied through `WithRegistrar` (which provides the engine and registers the
-component) and `WithResources` (shared objects such as backing storage). The
-component creates its own `Top` port internally; its buffer size is the
-`TopPortBufferSize` field of the spec.
-
-> **Note:** Akita is migrating to externally-assigned ports — a component
-> declares its ports with `DeclarePort` and setup supplies the instances with
-> `AssignPort` (see `idealmemcontroller`, already migrated). This component
-> still creates its port internally in `Build`; it will adopt the new
-> convention during the rollout.
+component) and `WithResources` (shared objects such as backing storage). `Build`
+declares the `Top` and `Control` ports but does not create their instances.
+Build each port with `modeling.MakePortBuilder` (which registers the port with
+the simulation) and attach it with `AssignPort`, choosing the buffer size.
 
 ```go
 spec := dram.DDR4Spec
@@ -110,7 +108,21 @@ ctrl := dram.MakeBuilder().
     WithResources(dram.Resources{Storage: storage}).
     Build("DRAM")
 
-topPort := ctrl.GetPortByName("Top")
+topPort := modeling.MakePortBuilder().
+    WithRegistrar(sim).
+    WithComponent(ctrl).
+    WithSpec(modeling.PortSpec{BufSize: 1024}).
+    Build("Top")
+ctrl.AssignPort("Top", topPort)
+
+ctrlPort := modeling.MakePortBuilder().
+    WithRegistrar(sim).
+    WithComponent(ctrl).
+    WithSpec(modeling.PortSpec{BufSize: 4}).
+    Build("Control")
+ctrl.AssignPort("Control", ctrlPort)
+
+topPort = ctrl.GetPortByName("Top")
 ```
 
 ### Builder Methods
@@ -131,7 +143,6 @@ topPort := ctrl.GetPortByName("Top")
 | `BusWidth` / `BurstLength` | Data bus width (bits) and burst transfer length |
 | `PagePolicy` | `PagePolicyOpen` or `PagePolicyClose` |
 | `TransactionQueueSize` / `CommandQueueCapacity` | Queue depths |
-| `TopPortBufferSize` | Buffer size of the internally-created `Top` port |
 | `HasAddrConverter` / `InterleavingSize` / ... | Address interleaving for multi-controller setups |
 
 ## Statistics
@@ -151,10 +162,12 @@ Available counters: `TotalReadCommands`, `TotalWriteCommands`,
 `TotalActivates`, `TotalPrecharges`, `RowBufferHits`, `RowBufferMisses`,
 `CompletedReads`, `CompletedWrites`, `BytesRead`, `BytesWritten`.
 
-## Protocol
+## Ports
 
-- **Top port**: accepts `mem.ReadReq` and `mem.WriteReq`, returns
+- **Top**: accepts `mem.ReadReq` and `mem.WriteReq`, returns
   `mem.DataReadyRsp` and `mem.WriteDoneRsp`
+- **Control**: accepts `mem.ControlReq` (enable / pause / drain / reset),
+  returns `mem.ControlRsp`
 
 ## Validation
 

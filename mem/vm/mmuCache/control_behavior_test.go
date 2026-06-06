@@ -42,14 +42,17 @@ var _ = Describe("MMUCache control behavior", func() {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		comp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			WithResources(Resources{
 				LowModulePort: messaging.RemotePort("LowModule"),
 				UpModulePort:  messaging.RemotePort("UpModule"),
 			}).
 			Build("MMUCache")
+
+		assignDefaultPorts(reg, comp)
 
 		topPort = comp.GetPortByName("Top")
 		bottomPort = comp.GetPortByName("Bottom")

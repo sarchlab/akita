@@ -29,10 +29,14 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 	)
 
 	build := func() {
+		reg := modeling.NewStandaloneRegistrar(engine)
 		comp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithResources(Resources{Storage: storage}).
 			Build("BankedMem")
+
+		assignPort(reg, comp, "Top", 16)
+		assignPort(reg, comp, "Control", 16)
 
 		topPort = comp.GetPortByName("Top")
 		ctrlPort = comp.GetPortByName("Control")

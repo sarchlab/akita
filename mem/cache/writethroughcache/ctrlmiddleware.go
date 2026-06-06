@@ -16,7 +16,13 @@ import (
 // ErrMustBePausedOrDrained.
 type ctrlMiddleware struct {
 	pipeline *pipelineMW
-	ctrlPort messaging.Port
+}
+
+// ctrlPort resolves the "Control" port by name. The port instance no longer
+// exists at Build time (it is assigned externally), so it is looked up lazily
+// on use.
+func (m *ctrlMiddleware) ctrlPort() messaging.Port {
+	return m.pipeline.comp.GetPortByName("Control")
 }
 
 func (m *ctrlMiddleware) Tick() bool {
@@ -43,11 +49,11 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 		}
 	}
 
-	if !m.ctrlPort.CanSend() {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdDrain,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdDrain,
 		next.CurrentCmdSrc, next.CurrentCmdID, true, ""))
 	next.IsDraining = false
 	next.IsPaused = true
@@ -57,7 +63,7 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 }
 
 func (m *ctrlMiddleware) handleIncoming() bool {
-	msg := m.ctrlPort.PeekIncoming()
+	msg := m.ctrlPort().PeekIncoming()
 	if msg == nil {
 		return false
 	}
@@ -65,7 +71,7 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 	req, ok := msg.(mem.ControlReq)
 	if !ok {
 		// Drop unexpected message types so the Control port does not stall.
-		m.ctrlPort.RetrieveIncoming()
+		m.ctrlPort().RetrieveIncoming()
 		return true
 	}
 
@@ -88,13 +94,13 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 }
 
 func (m *ctrlMiddleware) handlePause(req mem.ControlReq) bool {
-	if !m.ctrlPort.CanSend() {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
 	m.pipeline.comp.State.IsPaused = true
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdPause,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdPause,
 		req.Src, req.ID, true, ""))
-	m.ctrlPort.RetrieveIncoming()
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
@@ -109,12 +115,12 @@ func (m *ctrlMiddleware) handleDrain(req mem.ControlReq) bool {
 	next.IsPaused = false
 	next.CurrentCmdID = req.ID
 	next.CurrentCmdSrc = req.Src
-	m.ctrlPort.RetrieveIncoming()
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
 func (m *ctrlMiddleware) handleEnable(req mem.ControlReq) bool {
-	if !m.ctrlPort.CanSend() {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
@@ -124,16 +130,16 @@ func (m *ctrlMiddleware) handleEnable(req mem.ControlReq) bool {
 
 	// Enable resumes from Paused; it must not discard traffic queued while
 	// paused, which the pipeline processes once it runs again.
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdEnable,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdEnable,
 		req.Src, req.ID, true, ""))
-	m.ctrlPort.RetrieveIncoming()
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
 // handleReset wipes the cache back to a freshly-built state without
 // writeback (the writethrough cache holds no dirty data anyway).
 func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
-	if !m.ctrlPort.CanSend() {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
@@ -154,16 +160,16 @@ func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
 	next.CurrentCmdID = 0
 	next.CurrentCmdSrc = ""
 
-	for m.pipeline.topPort.PeekIncoming() != nil {
-		m.pipeline.topPort.RetrieveIncoming()
+	for m.pipeline.topPort().PeekIncoming() != nil {
+		m.pipeline.topPort().RetrieveIncoming()
 	}
-	for m.pipeline.bottomPort.PeekIncoming() != nil {
-		m.pipeline.bottomPort.RetrieveIncoming()
+	for m.pipeline.bottomPort().PeekIncoming() != nil {
+		m.pipeline.bottomPort().RetrieveIncoming()
 	}
 
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdReset,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdReset,
 		req.Src, req.ID, true, ""))
-	m.ctrlPort.RetrieveIncoming()
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
@@ -180,16 +186,16 @@ func (m *ctrlMiddleware) handleInvalidate(req mem.ControlReq) bool {
 		// in-flight work can still touch the directory after the verb.
 		return m.rejectMustBePaused(req)
 	}
-	if !m.ctrlPort.CanSend() {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
 	invalidateBlocks(
 		&next.DirectoryState, m.pipeline.comp.Spec(), req.Addresses, req.PID)
 
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdInvalidate,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdInvalidate,
 		req.Src, req.ID, true, ""))
-	m.ctrlPort.RetrieveIncoming()
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
@@ -205,25 +211,25 @@ func (m *ctrlMiddleware) handleFlush(req mem.ControlReq) bool {
 		// in-flight work can still touch the directory after the verb.
 		return m.rejectMustBePaused(req)
 	}
-	if !m.ctrlPort.CanSend() {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdFlush,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdFlush,
 		req.Src, req.ID, true, ""))
-	m.ctrlPort.RetrieveIncoming()
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
 // rejectMustBePaused responds that a conditional verb is illegal while
 // the cache is Enabled.
 func (m *ctrlMiddleware) rejectMustBePaused(req mem.ControlReq) bool {
-	if !m.ctrlPort.CanSend() {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, req.Command,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), req.Command,
 		req.Src, req.ID, false, control.ErrMustBePausedOrDrained))
-	m.ctrlPort.RetrieveIncoming()
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
@@ -263,12 +269,12 @@ func invalidateBlocks(
 }
 
 func (m *ctrlMiddleware) handleUnsupported(req mem.ControlReq) bool {
-	if !m.ctrlPort.CanSend() {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, req.Command,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), req.Command,
 		req.Src, req.ID, false, control.ErrUnsupported))
-	m.ctrlPort.RetrieveIncoming()
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 

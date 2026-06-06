@@ -238,9 +238,19 @@ var _ = Describe("DRAM Integration", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		reg := modeling.NewStandaloneRegistrar(engine)
 		memCtrl = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			Build("MemCtrl")
+
+		for _, name := range []string{"Top", "Control"} {
+			p := modeling.MakePortBuilder().
+				WithRegistrar(reg).
+				WithComponent(memCtrl).
+				WithSpec(modeling.PortSpec{BufSize: 1024}).
+				Build(name)
+			memCtrl.AssignPort(name, p)
+		}
 	})
 
 	It("should read and write via direct connection", func() {

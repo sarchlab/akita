@@ -19,7 +19,13 @@ type blockRef struct {
 
 type flusher struct {
 	pipeline *pipelineMW
-	ctrlPort messaging.Port
+}
+
+// ctrlPort resolves the "Control" port by name. The port instance is assigned
+// externally after Build, so it is resolved lazily on every use rather than
+// cached at build time.
+func (f *flusher) ctrlPort() messaging.Port {
+	return f.pipeline.comp.GetPortByName("Control")
 }
 
 func (f *flusher) Tick() bool {
@@ -154,7 +160,7 @@ func (f *flusher) processFlush() bool {
 // other verb (Pause, Drain, Enable, Reset, Invalidate) is owned by
 // ctrlMiddleware and is left in the incoming queue.
 func (f *flusher) extractFromPort() bool {
-	msg := f.ctrlPort.PeekIncoming()
+	msg := f.ctrlPort().PeekIncoming()
 	if msg == nil {
 		return false
 	}
@@ -181,13 +187,13 @@ func (f *flusher) extractFromPort() bool {
 
 // rejectFlush replies that Flush is illegal while the cache is Running.
 func (f *flusher) rejectFlush(msg mem.ControlReq) bool {
-	if !f.ctrlPort.CanSend() {
+	if !f.ctrlPort().CanSend() {
 		return false
 	}
 
-	f.ctrlPort.Send(makeCtrlRsp(f.ctrlPort, mem.CmdFlush,
+	f.ctrlPort().Send(makeCtrlRsp(f.ctrlPort(), mem.CmdFlush,
 		msg.Src, msg.ID, false, control.ErrMustBePausedOrDrained))
-	f.ctrlPort.RetrieveIncoming()
+	f.ctrlPort().RetrieveIncoming()
 
 	return true
 }
@@ -203,7 +209,7 @@ func (f *flusher) startProcessingFlush(msg mem.ControlReq) bool {
 	}
 
 	next.CacheState = int(cacheStatePreFlushing)
-	f.ctrlPort.RetrieveIncoming()
+	f.ctrlPort().RetrieveIncoming()
 
 	tracing.TraceReqReceive(f.pipeline.comp, msg)
 
@@ -221,17 +227,17 @@ func (f *flusher) finalizeFlushing() bool {
 		return false
 	}
 
-	if !f.ctrlPort.CanSend() {
+	if !f.ctrlPort().CanSend() {
 		return false
 	}
 
 	rsp := mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
-	rsp.Src = f.ctrlPort.AsRemote()
+	rsp.Src = f.ctrlPort().AsRemote()
 	rsp.Dst = next.ProcessingFlush.MsgMeta.Src
 	rsp.RspTo = next.ProcessingFlush.MsgMeta.ID
 	rsp.TrafficClass = "mem.ControlRsp"
-	f.ctrlPort.Send(rsp)
+	f.ctrlPort().Send(rsp)
 
 	// Per protocol, Flush leaves clean entries valid: only the blocks that
 	// were written back are now clean (their dirty data is in backing

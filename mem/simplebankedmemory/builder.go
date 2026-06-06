@@ -2,7 +2,6 @@ package simplebankedmemory
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
@@ -16,8 +15,6 @@ var defaultSpec = Spec{
 	BankPipelineDepth:              1,
 	StageLatency:                   10,
 	PostPipelineBufSize:            1,
-	TopPortBufferSize:              16,
-	CtrlPortBufferSize:             4,
 	Capacity:                       4 * mem.GB,
 	BankSelectorKind:               "interleaved",
 	BankSelectorLog2InterleaveSize: 6,
@@ -31,7 +28,9 @@ func DefaultSpec() Spec {
 
 // Builder constructs SimpleBankedMemory components. Configuration is supplied
 // as a whole through WithSpec; wiring is supplied through WithRegistrar and
-// WithResources. The component creates its own ports.
+// WithResources. The component declares its "Top" and "Control" ports; the
+// port instances are supplied externally after Build with AssignPort (the
+// caller chooses the buffer sizes).
 type Builder struct {
 	spec      Spec
 	registrar modeling.Registrar
@@ -65,8 +64,9 @@ func (b Builder) WithResources(r Resources) Builder {
 	return b
 }
 
-// Build creates a SimpleBankedMemory component. It creates the component's Top
-// port.
+// Build creates a SimpleBankedMemory component. It declares the component's
+// "Top" and "Control" ports; assign the port instances after Build with
+// AssignPort.
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("simplebankedmemory: WithRegistrar is required")
@@ -86,24 +86,15 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 	modelComp.State = initialState
 
-	topPort := messaging.NewPort(
-		modelComp, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
-	modelComp.AddPort("Top", topPort)
-
-	ctrlBuf := spec.CtrlPortBufferSize
-	if ctrlBuf == 0 {
-		ctrlBuf = 4
-	}
-	ctrlPort := messaging.NewPort(
-		modelComp, ctrlBuf, ctrlBuf, name+".Control")
-	modelComp.AddPort("Control", ctrlPort)
-
 	cMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cMW)
 	tfMW := &tickFinalizeMW{comp: modelComp}
 	modelComp.AddMiddleware(tfMW)
 	dMW := &dispatchMW{comp: modelComp}
 	modelComp.AddMiddleware(dMW)
+
+	modelComp.DeclarePort("Top")
+	modelComp.DeclarePort("Control")
 
 	b.registrar.RegisterComponent(modelComp)
 

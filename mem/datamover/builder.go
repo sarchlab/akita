@@ -9,11 +9,7 @@ import (
 
 // defaultSpec provides default configuration for the data mover.
 var defaultSpec = Spec{
-	Freq:                  1 * timing.GHz,
-	CtrlPortBufferSize:    4,
-	TopPortBufferSize:     16,
-	InsidePortBufferSize:  16,
-	OutsidePortBufferSize: 16,
+	Freq: 1 * timing.GHz,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -24,7 +20,9 @@ func DefaultSpec() Spec {
 
 // Builder builds StreamingDataMover components. Configuration is supplied as a
 // whole through WithSpec; wiring is supplied through WithRegistrar and
-// WithResources. The component creates its own ports.
+// WithResources. The component declares its "Top", "Inside", "Outside", and
+// "Control" ports; the port instances are supplied externally after Build with
+// AssignPort (the caller chooses the buffer sizes).
 type Builder struct {
 	spec      Spec
 	registrar modeling.Registrar
@@ -59,8 +57,9 @@ func (b Builder) WithResources(r Resources) Builder {
 	return b
 }
 
-// Build builds a new StreamingDataMover. It creates the component's Control,
-// Inside, and Outside ports.
+// Build builds a new StreamingDataMover. It declares the component's "Top",
+// "Inside", "Outside", and "Control" ports; assign the port instances after
+// Build with AssignPort.
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("datamover: WithRegistrar is required")
@@ -76,37 +75,6 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 	modelComp.State = initialState
 
-	topBuf := spec.TopPortBufferSize
-	if topBuf == 0 {
-		// Backwards-compat: the workload port was historically sized
-		// by CtrlPortBufferSize when both were the same port.
-		topBuf = spec.CtrlPortBufferSize
-		if topBuf == 0 {
-			topBuf = 16
-		}
-	}
-	topPort := messaging.NewPort(
-		modelComp, topBuf, topBuf, name+".Top")
-	modelComp.AddPort("Top", topPort)
-
-	insidePort := messaging.NewPort(
-		modelComp, spec.InsidePortBufferSize, spec.InsidePortBufferSize,
-		name+".Inside")
-	modelComp.AddPort("Inside", insidePort)
-
-	outsidePort := messaging.NewPort(
-		modelComp, spec.OutsidePortBufferSize, spec.OutsidePortBufferSize,
-		name+".Outside")
-	modelComp.AddPort("Outside", outsidePort)
-
-	ctrlBuf := spec.CtrlPortBufferSize
-	if ctrlBuf == 0 {
-		ctrlBuf = 4
-	}
-	ctrlPort := messaging.NewPort(
-		modelComp, ctrlBuf, ctrlBuf, name+".Control")
-	modelComp.AddPort("Control", ctrlPort)
-
 	cMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cMW)
 
@@ -115,6 +83,11 @@ func (b Builder) Build(name string) *Comp {
 
 	dataMW := &dataTransferMW{comp: modelComp}
 	modelComp.AddMiddleware(dataMW)
+
+	modelComp.DeclarePort("Top")
+	modelComp.DeclarePort("Inside")
+	modelComp.DeclarePort("Outside")
+	modelComp.DeclarePort("Control")
 
 	b.registrar.RegisterComponent(modelComp)
 

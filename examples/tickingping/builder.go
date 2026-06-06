@@ -1,15 +1,13 @@
 package tickingping
 
 import (
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 // defaultSpec provides default configuration for the tickingping component.
 var defaultSpec = Spec{
-	Freq:              1 * timing.GHz,
-	OutPortBufferSize: 4,
+	Freq: 1 * timing.GHz,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers obtain it,
@@ -20,7 +18,8 @@ func DefaultSpec() Spec {
 
 // Builder builds tickingping components. Configuration is supplied as a whole
 // through WithSpec; wiring is supplied through WithRegistrar. The component
-// creates its own Out port.
+// declares its "Out" port; the port instance is supplied externally after
+// Build with AssignPort (the caller chooses the buffer size).
 type Builder struct {
 	spec      Spec
 	registrar modeling.Registrar
@@ -45,8 +44,8 @@ func (b Builder) WithSpec(spec Spec) Builder {
 	return b
 }
 
-// Build creates a new tickingping component. It creates the component's Out
-// port.
+// Build creates a new tickingping component. It declares the component's "Out"
+// port; assign the port instance after Build with AssignPort.
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("tickingping: WithRegistrar is required")
@@ -62,9 +61,7 @@ func (b Builder) Build(name string) *Comp {
 	comp.AddMiddleware(&sendMW{comp: comp})
 	comp.AddMiddleware(&receiveProcessMW{comp: comp})
 
-	outPort := messaging.NewPort(
-		comp, b.spec.OutPortBufferSize, b.spec.OutPortBufferSize, name+".Out")
-	comp.AddPort("Out", outPort)
+	comp.DeclarePort("Out")
 
 	b.registrar.RegisterComponent(comp)
 

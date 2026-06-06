@@ -9,6 +9,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/dram"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 
 	"github.com/sarchlab/akita/v5/simulation"
@@ -48,6 +49,12 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		WithRegistrar(s).
 		WithSpec(agentSpec).
 		Build("MemAccessAgent")
+	agentMem := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(agent).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Mem")
+	agent.AssignPort("Mem", agentMem)
 	if monitor := s.GetMonitor(); monitor != nil {
 		agent.CreateProgressBars(monitor.CreateProgressBar)
 	}
@@ -59,6 +66,18 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		WithRegistrar(s).
 		WithSpec(dramSpec).
 		Build("Mem")
+	memCtrlTop := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(memCtrl).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Top")
+	memCtrl.AssignPort("Top", memCtrlTop)
+	memCtrlCtrl := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(memCtrl).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Control")
+	memCtrl.AssignPort("Control", memCtrlCtrl)
 
 	agent.LowModule = memCtrl.GetPortByName("Top")
 

@@ -35,9 +35,6 @@ func TestControlContract(t *testing.T) {
 		spec.Log2BlockSize = 6
 		spec.BankLatency = 1
 		spec.DirLatency = 1
-		spec.TopPortBufferSize = 4
-		spec.BottomPortBufferSize = 4
-		spec.ControlPortBufferSize = 4
 
 		comp := MakeBuilder().
 			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
@@ -50,7 +47,11 @@ func TestControlContract(t *testing.T) {
 			}).
 			Build("L1Cache")
 
+		// Build only declares the ports; the caller assigns the instances and
+		// chooses their buffer sizes.
 		for _, name := range []string{"Top", "Bottom", "Control"} {
+			comp.AssignPort(name,
+				messaging.NewPort(comp, 4, 4, comp.Name()+"."+name))
 			(&ccNoopConn{}).PlugIn(comp.GetPortByName(name))
 		}
 
