@@ -232,7 +232,9 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(profilingPage, /Capture CPU Profile/);
   assert.doesNotMatch(profilingPage, /Latest CPU Profile/);
   assert.match(profilingPage, /Seconds/);
-  assert.match(profilingPage, /\{profileKindLabel\} Call Graph/);
+  // CPU capture durations span 1s to 600s.
+  assert.match(profilingPage, /\[1, 10, 60, 300, 600\]/);
+  assert.match(profilingPage, /callGraphTitle/);
   assert.match(profilingPage, /activeProfileTab/);
   assert.match(profilingPage, /Profile views/);
   // Heap profiling parity: capture button, endpoint, and inuse/alloc selector.
@@ -244,16 +246,16 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   // Capture controls live in a dedicated toolbar, not injected into the trend
   // chart headers, so the CPU/RSS trends stay aligned.
   assert.doesNotMatch(profilingPage, /cpuActions|memoryActions/);
-  // Capture only collects snapshots; comparison is a separate Single/Compare tab
-  // in the results panel that diffs a base against a target in the browser.
-  assert.match(profilingPage, /heapSnapshots/);
-  assert.match(profilingPage, /diffHeapProfiles/);
-  assert.match(profilingPage, /heapViewMode/);
-  assert.match(profilingPage, /Single/);
-  assert.match(profilingPage, /Compare/);
-  assert.match(profilingPage, /baseSnapshotId/);
-  assert.match(profilingPage, /targetSnapshotId/);
-  assert.match(profilingPage, /\(latest\)/);
+  // Unified profile list: browse all captures (CPU and heap), select one to view
+  // or two of the same kind to compare; the diff is computed in the browser.
+  assert.match(profilingPage, /Collected profiles/);
+  assert.match(profilingPage, /CollectedProfile/);
+  assert.match(profilingPage, /selectedIds/);
+  assert.match(profilingPage, /toggleSelected/);
+  assert.match(profilingPage, /diffProfiles/);
+  assert.match(profilingPage, /type="checkbox"/);
+  assert.match(profilingPage, /same type to compare/);
+  assert.match(profilingPage, /mismatchedKinds/);
   // The diff is client-side; the heap endpoint stays a plain absolute capture.
   assert.doesNotMatch(profilingPage, /\/api\/heap\?gc=1&mode=/);
   assert.match(profilingPage, /profileSummaryText/);

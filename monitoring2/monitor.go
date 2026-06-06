@@ -1156,8 +1156,8 @@ func (m *Monitor) collectProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if secondsNumber > 60 {
-			secondsNumber = 60
+		if secondsNumber > 600 {
+			secondsNumber = 600
 		}
 
 		seconds = secondsNumber
