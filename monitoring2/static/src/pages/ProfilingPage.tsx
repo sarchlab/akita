@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { Activity, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "../components/ui/button";
 import {
@@ -20,7 +20,8 @@ interface ProfileSummary {
 
 interface ProfileFunctionStat {
   name: string;
-  value: number;
+  value: number; // magnitude (drives bar length / ranking)
+  signedValue: number; // net change; sign drives increase/decrease color in a diff
 }
 
 interface ProfileCallGraph {
@@ -31,7 +32,8 @@ interface ProfileCallGraph {
 interface ProfileCallGraphNode {
   id: string;
   label: string;
-  value: number;
+  value: number; // magnitude (drives node size / ranking)
+  signedValue: number; // net change; sign drives increase/decrease color in a diff
   depth: number;
 }
 
@@ -71,6 +73,35 @@ interface CallGraphViewport {
 
 const INITIAL_CALL_GRAPH_VIEWPORT: CallGraphViewport = { scale: 1, x: 0, y: 0 };
 type ProfileResultTab = "graph" | "top-functions";
+type ProfileKind = "cpu" | "heap";
+
+// A captured profile the user can browse, view, or pick as one side of a diff.
+interface CollectedProfile {
+  id: string;
+  kind: ProfileKind;
+  label: string;
+  profile: unknown;
+}
+
+// Cap retained profiles so a long session does not pile up large profiles in
+// memory; the oldest is dropped past this limit.
+const MAX_PROFILES = 20;
+
+interface HeapSampleType {
+  value: string;
+  label: string;
+}
+
+// The standard sample types carried by a Go heap profile. The frontend lets the
+// user switch between them without re-capturing; inuse_space (live bytes) is the
+// most common starting point.
+const HEAP_SAMPLE_TYPES: HeapSampleType[] = [
+  { value: "inuse_space", label: "In-use space" },
+  { value: "inuse_objects", label: "In-use objects" },
+  { value: "alloc_space", label: "Allocated space" },
+  { value: "alloc_objects", label: "Allocated objects" },
+];
+const DEFAULT_HEAP_SAMPLE_TYPE = HEAP_SAMPLE_TYPES[0].value;
 
 function formatBytes(bytes: number | null | undefined) {
   if (typeof bytes !== "number" || !Number.isFinite(bytes)) {
@@ -171,10 +202,18 @@ function profileValueLabel(type: string, unit: string) {
     return type || "bytes";
   }
 
-  return normalizedType === "samples" || normalizedUnit === "count" ? "samples" : type || "value";
+  if (normalizedType === "samples") {
+    return "samples";
+  }
+
+  if (normalizedUnit === "count") {
+    return type || "samples";
+  }
+
+  return type || "value";
 }
 
-function profileValueInfo(profile: Record<string, unknown>): ProfileValueInfo {
+function profileValueInfo(profile: Record<string, unknown>, preferredSampleType?: string): ProfileValueInfo {
   const sampleTypes = [
     ...getArray(profile, "sampleType", "SampleType"),
     ...getArray(profile, "sample_type", "Sample_type"),
@@ -191,12 +230,25 @@ function profileValueInfo(profile: Record<string, unknown>): ProfileValueInfo {
       unit: getStringField(valueType, "unit", "Unit"),
     };
   });
+  // An explicit selection (e.g. a heap inuse/alloc choice) wins when present.
+  const preferredIndex = preferredSampleType
+    ? types.findIndex((item) => item.type.toLowerCase() === preferredSampleType.toLowerCase())
+    : -1;
   const cpuIndex = types.findIndex((item) => item.type.toLowerCase() === "cpu");
   const timeIndex = types.findIndex((item) => isTimeUnit(item.unit));
   const sampleIndex = types.findIndex((item) => {
     return item.type.toLowerCase() === "samples" || item.unit.toLowerCase() === "count";
   });
-  const index = cpuIndex >= 0 ? cpuIndex : timeIndex >= 0 ? timeIndex : sampleIndex >= 0 ? sampleIndex : 0;
+  const index =
+    preferredIndex >= 0
+      ? preferredIndex
+      : cpuIndex >= 0
+        ? cpuIndex
+        : timeIndex >= 0
+          ? timeIndex
+          : sampleIndex >= 0
+            ? sampleIndex
+            : 0;
   const selected = types[index] ?? DEFAULT_PROFILE_VALUE_INFO;
 
   return {
@@ -216,6 +268,14 @@ function sampleWeight(sample: Record<string, unknown>, valueInfo: ProfileValueIn
   }
 
   return 1;
+}
+
+// sampleSignedValue keeps the sign of the selected value (a diff can be
+// negative), so the views can color increases and decreases differently.
+function sampleSignedValue(sample: Record<string, unknown>, valueInfo: ProfileValueInfo) {
+  const values = getNumberArray(sample, "value", "Value");
+  const selected = values[valueInfo.index];
+  return typeof selected === "number" && Number.isFinite(selected) ? selected : 0;
 }
 
 function formatDurationSeconds(seconds: number) {
@@ -260,8 +320,22 @@ function formatProfileValue(value: number, valueInfo: ProfileValueInfo) {
   return formatSampleCount(value);
 }
 
+// In a comparison, an increase (more CPU/memory) is usually a regression -> red;
+// a decrease -> green. Matches `go tool pprof` diff coloring.
+const DIFF_INCREASE_COLOR = "#dc2626";
+const DIFF_DECREASE_COLOR = "#16a34a";
+
+function diffColor(signedValue: number) {
+  return signedValue >= 0 ? DIFF_INCREASE_COLOR : DIFF_DECREASE_COLOR;
+}
+
+function formatSignedProfileValue(signedValue: number, valueInfo: ProfileValueInfo) {
+  const sign = signedValue > 0 ? "+" : signedValue < 0 ? "−" : "";
+  return `${sign}${formatProfileValue(Math.abs(signedValue), valueInfo)}`;
+}
+
 function buildCallGraph(samples: unknown[], valueInfo: ProfileValueInfo): ProfileCallGraph {
-  const nodeTotals = new Map<string, { value: number; depthTotal: number; count: number }>();
+  const nodeTotals = new Map<string, { value: number; signed: number; depthTotal: number; count: number }>();
   const stacks: { stack: string[]; weight: number }[] = [];
 
   samples.forEach((item) => {
@@ -271,6 +345,7 @@ function buildCallGraph(samples: unknown[], valueInfo: ProfileValueInfo): Profil
 
     const sample = item as Record<string, unknown>;
     const weight = sampleWeight(sample, valueInfo);
+    const signed = sampleSignedValue(sample, valueInfo);
     const leafFirstStack = profileStackNames(sample);
     const callerFirstStack = [...leafFirstStack].reverse().filter((name, index, stack) => {
       return index === 0 || name !== stack[index - 1];
@@ -283,8 +358,9 @@ function buildCallGraph(samples: unknown[], valueInfo: ProfileValueInfo): Profil
     stacks.push({ stack: callerFirstStack, weight });
 
     callerFirstStack.forEach((name, depth) => {
-      const node = nodeTotals.get(name) ?? { value: 0, depthTotal: 0, count: 0 };
+      const node = nodeTotals.get(name) ?? { value: 0, signed: 0, depthTotal: 0, count: 0 };
       node.value += weight;
+      node.signed += signed;
       node.depthTotal += depth;
       node.count += 1;
       nodeTotals.set(name, node);
@@ -348,6 +424,7 @@ function buildCallGraph(samples: unknown[], valueInfo: ProfileValueInfo): Profil
         id,
         label: id,
         value: node?.value ?? 0,
+        signedValue: node?.signed ?? 0,
         depth: node && node.count ? Math.round(node.depthTotal / node.count) : 0,
       };
     })
@@ -356,7 +433,7 @@ function buildCallGraph(samples: unknown[], valueInfo: ProfileValueInfo): Profil
   return { nodes, edges };
 }
 
-function summarizeProfile(profile: unknown): ProfileSummary {
+function summarizeProfile(profile: unknown, preferredSampleType?: string): ProfileSummary {
   if (!profile || typeof profile !== "object") {
     return {
       samples: 0,
@@ -372,8 +449,8 @@ function summarizeProfile(profile: unknown): ProfileSummary {
   const sample = Array.isArray(p.sample) ? p.sample : Array.isArray(p.Sample) ? p.Sample : [];
   const location = Array.isArray(p.location) ? p.location : Array.isArray(p.Location) ? p.Location : [];
   const fn = Array.isArray(p.function) ? p.function : Array.isArray(p.Function) ? p.Function : [];
-  const valueInfo = profileValueInfo(p);
-  const functionTotals = new Map<string, number>();
+  const valueInfo = profileValueInfo(p, preferredSampleType);
+  const functionTotals = new Map<string, { value: number; signed: number }>();
 
   sample.forEach((item) => {
     if (!item || typeof item !== "object") {
@@ -382,13 +459,16 @@ function summarizeProfile(profile: unknown): ProfileSummary {
 
     const sampleObject = item as Record<string, unknown>;
     const weight = sampleWeight(sampleObject, valueInfo);
+    const signed = sampleSignedValue(sampleObject, valueInfo);
     const name = profileFunctionName(item);
-
-    functionTotals.set(name, (functionTotals.get(name) ?? 0) + weight);
+    const total = functionTotals.get(name) ?? { value: 0, signed: 0 };
+    total.value += weight;
+    total.signed += signed;
+    functionTotals.set(name, total);
   });
 
   const topFunctions = [...functionTotals.entries()]
-    .map(([name, value]) => ({ name, value }))
+    .map(([name, total]) => ({ name, value: total.value, signedValue: total.signed }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 8);
 
@@ -402,116 +482,430 @@ function summarizeProfile(profile: unknown): ProfileSummary {
   };
 }
 
+function profileSamples(profile: unknown): Record<string, unknown>[] {
+  if (!profile || typeof profile !== "object") {
+    return [];
+  }
+
+  const p = profile as Record<string, unknown>;
+  const sample = Array.isArray(p.sample) ? p.sample : Array.isArray(p.Sample) ? p.Sample : [];
+  return sample.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object");
+}
+
+// indexByStack folds a profile's samples into per-call-stack value totals,
+// keyed by the leaf-first function stack the call graph already uses for
+// identity. A representative location chain is kept so the diff result can be
+// rendered by the existing views.
+function indexByStack(samples: Record<string, unknown>[]) {
+  const totals = new Map<string, { values: number[]; location: unknown[] }>();
+
+  for (const sample of samples) {
+    const names = profileStackNames(sample);
+    if (!names.length) {
+      continue;
+    }
+
+    const key = names.join(";");
+    const values = getNumberArray(sample, "value", "Value");
+    const location = getArray(sample, "location", "Location");
+    const entry = totals.get(key) ?? { values: [], location };
+
+    for (let index = 0; index < values.length; index++) {
+      entry.values[index] = (entry.values[index] ?? 0) + values[index];
+    }
+    if (!entry.location.length) {
+      entry.location = location;
+    }
+    totals.set(key, entry);
+  }
+
+  return totals;
+}
+
+// profileDurationNanos reads the capture window (in nanoseconds) a profile
+// covers. CPU profiles carry it; instantaneous heap profiles report 0.
+function profileDurationNanos(profile: unknown): number {
+  if (!profile || typeof profile !== "object") {
+    return 0;
+  }
+  const p = profile as Record<string, unknown>;
+  const value = p.durationNanos ?? p.DurationNanos ?? p.duration_nanos ?? p.Duration_nanos;
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+// diffProfiles returns a synthetic profile of (current - baseScale*baseline),
+// summing each call stack's sample values elementwise so every sample type stays
+// in sync. The result is shaped like a parsed profile so summarizeProfile can
+// consume it directly. baseScale lets callers normalize the baseline onto the
+// current profile's window (so CPU captures of different durations compare on
+// equal footing). It is profile-kind agnostic and mirrors `go tool pprof -base`
+// (with -normalize) at function-stack granularity. Callers must only diff two
+// profiles of the same kind.
+function diffProfiles(current: unknown, baseline: unknown, baseScale = 1): Record<string, unknown> {
+  const currentByStack = indexByStack(profileSamples(current));
+  const baselineByStack = indexByStack(profileSamples(baseline));
+  const deltaSamples: Record<string, unknown>[] = [];
+
+  for (const key of new Set([...currentByStack.keys(), ...baselineByStack.keys()])) {
+    const cur = currentByStack.get(key);
+    const base = baselineByStack.get(key);
+    const length = Math.max(cur?.values.length ?? 0, base?.values.length ?? 0);
+    const values: number[] = [];
+
+    for (let index = 0; index < length; index++) {
+      values.push((cur?.values[index] ?? 0) - (base?.values[index] ?? 0) * baseScale);
+    }
+
+    if (values.every((value) => value === 0)) {
+      continue;
+    }
+
+    deltaSamples.push({ location: cur?.location ?? base?.location ?? [], value: values });
+  }
+
+  const p = (current && typeof current === "object" ? current : {}) as Record<string, unknown>;
+  return {
+    sampleType: getArray(p, "sampleType", "SampleType"),
+    sample: deltaSamples,
+    location: getArray(p, "location", "Location"),
+    function: getArray(p, "function", "Function"),
+  };
+}
+
+// Prefer the server's explanatory body (e.g. "the program may already be
+// CPU-profiled ...") over a bare status line for a failed capture.
+async function captureErrorMessage(response: Response): Promise<string> {
+  const text = await response.text().catch(() => "");
+  return text.trim() || `${response.status} ${response.statusText}`;
+}
+
 export default function ProfilingPage() {
   const { history } = useResourceUsageHistory();
   const [profileSeconds, setProfileSeconds] = useState(1);
   const [profileStatus, setProfileStatus] = useState("");
-  const [profileSummary, setProfileSummary] = useState<ProfileSummary | null>(null);
+  const [profiles, setProfiles] = useState<CollectedProfile[]>([]);
+  // Selected profiles to view: 1 id -> view it, 2 ids of the same kind -> diff.
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [heapSampleType, setHeapSampleType] = useState(DEFAULT_HEAP_SAMPLE_TYPE);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [captureFailed, setCaptureFailed] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState<ProfileResultTab>("graph");
+  const profileIdRef = useRef(0);
+
+  // Selected profiles, in capture order (oldest first), so a comparison diffs
+  // the newer against the older.
+  const selectedProfiles = profiles.filter((profile) => selectedIds.includes(profile.id));
+  const mismatchedKinds = selectedProfiles.length === 2 && selectedProfiles[0].kind !== selectedProfiles[1].kind;
+  const isComparison = selectedProfiles.length === 2 && !mismatchedKinds;
+  const showsHeap = selectedProfiles.some((profile) => profile.kind === "heap");
+  const viewKindLabel = selectedProfiles.length ? (selectedProfiles[0].kind === "heap" ? "Heap" : "CPU") : "Profile";
+
+  // When two CPU profiles cover different windows, explain that the baseline was
+  // scaled so the comparison is fair.
+  const durationWarning = (() => {
+    if (!isComparison || selectedProfiles[0].kind !== "cpu") {
+      return null;
+    }
+    const [base, target] = selectedProfiles;
+    const baseNanos = profileDurationNanos(base.profile);
+    const targetNanos = profileDurationNanos(target.profile);
+    if (baseNanos <= 0 || targetNanos <= 0) {
+      return null;
+    }
+    if (Math.abs(baseNanos - targetNanos) / Math.max(baseNanos, targetNanos) < 0.02) {
+      return null;
+    }
+    const fmt = (nanos: number) => formatDurationSeconds(nanos / 1e9);
+    return `These CPU profiles cover different windows (${fmt(baseNanos)} vs ${fmt(targetNanos)}). The ${fmt(
+      baseNanos,
+    )} baseline was scaled to the ${fmt(targetNanos)} window so the comparison reflects real per-function change, not the difference in capture length. Values are shown over the ${fmt(targetNanos)} window.`;
+  })();
+
+  // Resolve the profile to summarize. Diffs are computed in the browser, so
+  // changing the selection or sample type is instant and never re-captures.
+  const profileSummary = useMemo(() => {
+    const selected = profiles.filter((profile) => selectedIds.includes(profile.id));
+    if (selected.length === 1) {
+      const only = selected[0];
+      return summarizeProfile(only.profile, only.kind === "heap" ? heapSampleType : undefined);
+    }
+    // Comparison is only meaningful between two profiles of the same kind.
+    if (selected.length === 2 && selected[0].kind === selected[1].kind) {
+      const [base, target] = selected;
+      if (base.kind === "cpu") {
+        // Normalize the baseline onto the target's capture window so CPU
+        // profiles of different durations (e.g. 1s vs 60s) compare fairly.
+        const baseDuration = profileDurationNanos(base.profile);
+        const targetDuration = profileDurationNanos(target.profile);
+        const baseScale = baseDuration > 0 && targetDuration > 0 ? targetDuration / baseDuration : 1;
+        return summarizeProfile(diffProfiles(target.profile, base.profile, baseScale));
+      }
+      return summarizeProfile(diffProfiles(target.profile, base.profile), heapSampleType);
+    }
+    return null;
+  }, [profiles, selectedIds, heapSampleType]);
+
+  const addProfile = (kind: ProfileKind, profile: unknown, detail = "") => {
+    const id = `${kind}-${(profileIdRef.current += 1)}`;
+    const time = new Date().toLocaleTimeString([], { hour12: false });
+    const label = detail ? `${detail} · ${time}` : time;
+    setProfiles((previous) => {
+      const next = [...previous, { id, kind, label, profile }];
+      return next.length > MAX_PROFILES ? next.slice(next.length - MAX_PROFILES) : next;
+    });
+    // Show the just-captured profile.
+    setSelectedIds([id]);
+  };
+
+  // Toggle a profile in the selection, keeping at most two (newest wins).
+  const toggleSelected = (id: string) => {
+    setSelectedIds((previous) => {
+      if (previous.includes(id)) {
+        return previous.filter((selectedId) => selectedId !== id);
+      }
+      const next = [...previous, id];
+      return next.length > 2 ? next.slice(next.length - 2) : next;
+    });
+  };
 
   const captureProfile = async () => {
     setIsCapturing(true);
+    setCaptureFailed(false);
     setProfileStatus(`Capturing ${profileSeconds}s CPU profile...`);
     try {
       const response = await fetch(`/api/profile?seconds=${profileSeconds}`);
       if (!response.ok) {
-        throw new Error(`${response.status} ${response.statusText}`);
+        throw new Error(await captureErrorMessage(response));
       }
 
-      const profile = await response.json();
-      setProfileSummary(summarizeProfile(profile));
-      setProfileStatus("Profile captured");
+      addProfile("cpu", await response.json(), `${profileSeconds}s`);
+      setProfileStatus("CPU profile captured");
     } catch (err) {
-      setProfileStatus(err instanceof Error ? err.message : "Profile capture failed");
+      setCaptureFailed(true);
+      setProfileStatus(`CPU capture failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsCapturing(false);
     }
   };
 
+  const captureHeapProfile = async () => {
+    setIsCapturing(true);
+    setCaptureFailed(false);
+    setProfileStatus("Capturing heap profile...");
+    try {
+      const response = await fetch(`/api/heap?gc=1`);
+      if (!response.ok) {
+        throw new Error(await captureErrorMessage(response));
+      }
+
+      addProfile("heap", await response.json());
+      setProfileStatus("Heap profile captured");
+    } catch (err) {
+      setCaptureFailed(true);
+      setProfileStatus(`Heap capture failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+
+  const callGraphTitle = `${isComparison ? `${viewKindLabel} Comparison` : viewKindLabel} Call Graph`;
+
   return (
     <div className="h-full overflow-auto bg-slate-50 p-4">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
         <section className="rounded border bg-white p-3">
-          <ResourceTrendChart
-            secondHistory={history.seconds}
-            minuteHistory={history.minutes}
-            cpuActions={
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="text-[10px] font-medium text-slate-600" htmlFor="profile-seconds">
-                  Seconds
-                </label>
-                <select
-                  id="profile-seconds"
-                  className="h-7 rounded border border-input bg-background px-2 text-xs"
-                  value={profileSeconds}
-                  onChange={(event) => setProfileSeconds(Number(event.target.value))}
-                  disabled={isCapturing}
-                >
-                  {[1, 2, 5, 10, 30].map((seconds) => (
-                    <option key={seconds} value={seconds}>
-                      {seconds}
-                    </option>
-                  ))}
-                </select>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  onClick={captureProfile}
-                  disabled={isCapturing}
-                >
-                  <Activity /> Capture CPU Profile
-                </Button>
-              </div>
-            }
-          />
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-9 text-xs font-semibold text-slate-700">CPU</span>
+              <label className="text-[10px] font-medium text-slate-600" htmlFor="profile-seconds">
+                Seconds
+              </label>
+              <select
+                id="profile-seconds"
+                className="h-7 rounded border border-input bg-background px-2 text-xs"
+                value={profileSeconds}
+                onChange={(event) => setProfileSeconds(Number(event.target.value))}
+                disabled={isCapturing}
+              >
+                {[1, 10, 60, 300, 600].map((seconds) => (
+                  <option key={seconds} value={seconds}>
+                    {seconds}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={captureProfile}
+                disabled={isCapturing}
+              >
+                <Activity /> Capture CPU Profile
+              </Button>
+            </div>
+
+            <div className="hidden h-7 w-px self-center bg-slate-200 sm:block" aria-hidden="true" />
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-9 text-xs font-semibold text-slate-700">Heap</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                onClick={captureHeapProfile}
+                disabled={isCapturing}
+              >
+                <Activity /> Capture Heap Profile
+              </Button>
+            </div>
+          </div>
+          {profileStatus ? (
+            <div
+              className={`mt-2 text-xs ${captureFailed ? "font-medium text-red-600" : "text-muted-foreground"}`}
+              role={captureFailed ? "alert" : undefined}
+            >
+              {profileStatus}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="rounded border bg-white p-3">
+          <ResourceTrendChart secondHistory={history.seconds} minuteHistory={history.minutes} />
         </section>
 
         <section className="rounded border bg-white p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold">CPU Call Graph</div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                {profileSummary
-                  ? profileSummaryText(profileSummary)
-                  : profileStatus || "Capture a CPU profile to populate the profile views."}
+          <div className="grid gap-4 lg:grid-cols-[16rem_1fr]">
+            <aside className="min-w-0 lg:border-r lg:border-slate-200 lg:pr-4">
+              <div className="text-sm font-semibold">Collected profiles</div>
+              <div className="mt-2 max-h-[28rem] space-y-1 overflow-auto">
+                {profiles.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">No profiles captured yet.</div>
+                ) : (
+                  [...profiles].reverse().map((profile) => {
+                    const checked = selectedIds.includes(profile.id);
+                    return (
+                      <label
+                        key={profile.id}
+                        className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs ${
+                          checked ? "bg-slate-100" : "hover:bg-slate-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleSelected(profile.id)}
+                        />
+                        <span
+                          className={`rounded px-1 py-0.5 text-[10px] font-semibold ${
+                            profile.kind === "heap" ? "bg-amber-100 text-amber-800" : "bg-sky-100 text-sky-800"
+                          }`}
+                        >
+                          {profile.kind === "heap" ? "HEAP" : "CPU"}
+                        </span>
+                        <span className="font-mono text-slate-700">{profile.label}</span>
+                      </label>
+                    );
+                  })
+                )}
               </div>
-            </div>
-            <div className="inline-flex rounded border bg-slate-100 p-0.5" role="tablist" aria-label="CPU profile views">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeProfileTab === "graph"}
-                className={`rounded px-3 py-1 text-xs font-medium ${
-                  activeProfileTab === "graph" ? "bg-white text-slate-950 shadow-sm" : "text-slate-700"
-                }`}
-                onClick={() => setActiveProfileTab("graph")}
-              >
-                Graph
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeProfileTab === "top-functions"}
-                className={`rounded px-3 py-1 text-xs font-medium ${
-                  activeProfileTab === "top-functions" ? "bg-white text-slate-950 shadow-sm" : "text-slate-700"
-                }`}
-                onClick={() => setActiveProfileTab("top-functions")}
-              >
-                Top Functions
-              </button>
+              <div className="mt-2 text-[10px] text-muted-foreground">
+                Select one to view, or two of the same type to compare.
+              </div>
+            </aside>
+
+            <div className="min-w-0">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold">{callGraphTitle}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {profileSummary
+                      ? profileSummaryText(profileSummary)
+                      : "Capture a profile, then pick it from the list."}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {showsHeap ? (
+                    <select
+                      aria-label="Heap sample type"
+                      className="h-7 rounded border border-input bg-background px-2 text-xs"
+                      value={heapSampleType}
+                      onChange={(event) => setHeapSampleType(event.target.value)}
+                    >
+                      {HEAP_SAMPLE_TYPES.map((sampleType) => (
+                        <option key={sampleType.value} value={sampleType.value}>
+                          {sampleType.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                  <div className="inline-flex rounded border bg-slate-100 p-0.5" role="tablist" aria-label="Profile views">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeProfileTab === "graph"}
+                      className={`rounded px-3 py-1 text-xs font-medium ${
+                        activeProfileTab === "graph" ? "bg-white text-slate-950 shadow-sm" : "text-slate-700"
+                      }`}
+                      onClick={() => setActiveProfileTab("graph")}
+                    >
+                      Graph
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeProfileTab === "top-functions"}
+                      className={`rounded px-3 py-1 text-xs font-medium ${
+                        activeProfileTab === "top-functions" ? "bg-white text-slate-950 shadow-sm" : "text-slate-700"
+                      }`}
+                      onClick={() => setActiveProfileTab("top-functions")}
+                    >
+                      Top Functions
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {isComparison ? (
+                <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-3 rounded-sm" style={{ backgroundColor: DIFF_INCREASE_COLOR }} />
+                    increase (newer &gt; older)
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-3 rounded-sm" style={{ backgroundColor: DIFF_DECREASE_COLOR }} />
+                    decrease (newer &lt; older)
+                  </span>
+                </div>
+              ) : null}
+
+              {durationWarning ? (
+                <div className="mb-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status">
+                  {durationWarning}
+                </div>
+              ) : null}
+
+              {mismatchedKinds ? (
+                <div className="text-sm text-muted-foreground">
+                  Select two profiles of the same type to compare (CPU with CPU, or heap with heap).
+                </div>
+              ) : profileSummary ? (
+                activeProfileTab === "graph" ? (
+                  <CallGraph graph={profileSummary.callGraph} valueInfo={profileSummary.valueInfo} signed={isComparison} />
+                ) : (
+                  <TopFunctionBars
+                    functions={profileSummary.topFunctions}
+                    valueInfo={profileSummary.valueInfo}
+                    signed={isComparison}
+                  />
+                )
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  Capture a profile and select it from the list to populate the views.
+                </div>
+              )}
             </div>
           </div>
-          {profileSummary ? (
-            activeProfileTab === "graph" ? (
-              <CallGraph graph={profileSummary.callGraph} valueInfo={profileSummary.valueInfo} />
-            ) : (
-              <TopFunctionBars functions={profileSummary.topFunctions} valueInfo={profileSummary.valueInfo} />
-            )
-          ) : (
-            <div className="text-sm text-muted-foreground">Capture a CPU profile to generate a call graph.</div>
-          )}
         </section>
       </div>
     </div>
@@ -525,9 +919,11 @@ function profileSummaryText(summary: ProfileSummary) {
 function TopFunctionBars({
   functions,
   valueInfo,
+  signed = false,
 }: {
   functions: ProfileFunctionStat[];
   valueInfo: ProfileValueInfo;
+  signed?: boolean;
 }) {
   const max = Math.max(1, ...functions.map((fn) => fn.value));
 
@@ -541,12 +937,21 @@ function TopFunctionBars({
         <div key={fn.name}>
           <div className="mb-1 flex items-center justify-between gap-3 text-xs">
             <span className="min-w-0 truncate font-medium">{fn.name}</span>
-            <span className="shrink-0 font-mono text-muted-foreground">
-              {formatProfileValue(fn.value, valueInfo)}
+            <span
+              className="shrink-0 font-mono"
+              style={{ color: signed ? diffColor(fn.signedValue) : undefined }}
+            >
+              {signed ? formatSignedProfileValue(fn.signedValue, valueInfo) : formatProfileValue(fn.value, valueInfo)}
             </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-            <div className="h-full bg-amber-500" style={{ width: `${(fn.value / max) * 100}%` }} />
+            <div
+              className={signed ? "h-full" : "h-full bg-amber-500"}
+              style={{
+                width: `${(fn.value / max) * 100}%`,
+                backgroundColor: signed ? diffColor(fn.signedValue) : undefined,
+              }}
+            />
           </div>
         </div>
       ))}
@@ -584,7 +989,15 @@ function clampCallGraphScale(scale: number) {
   return Math.max(CALL_GRAPH_MIN_SCALE, Math.min(CALL_GRAPH_MAX_SCALE, scale));
 }
 
-function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: ProfileValueInfo }) {
+function CallGraph({
+  graph,
+  valueInfo,
+  signed = false,
+}: {
+  graph: ProfileCallGraph;
+  valueInfo: ProfileValueInfo;
+  signed?: boolean;
+}) {
   const [viewport, setViewport] = useState<CallGraphViewport>(INITIAL_CALL_GRAPH_VIEWPORT);
   const [isPanning, setIsPanning] = useState(false);
   const dragStartRef = useRef<{ clientX: number; clientY: number } | null>(null);
@@ -616,7 +1029,12 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
 
   if (!graph.nodes.length) {
     wheelHandlerRef.current = null;
-    return <div className="text-sm text-muted-foreground">No call graph samples in the captured profile.</div>;
+    return (
+      <div className="text-sm text-muted-foreground">
+        No samples in the captured profile. For CPU, the program may have been idle during the capture window — try a
+        longer duration or capture while the simulation is running.
+      </div>
+    );
   }
 
   const left = 32;
@@ -862,7 +1280,7 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
           className={`h-full w-full select-none touch-none ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
           viewBox={`0 0 ${width} ${height}`}
           role="img"
-          aria-label="CPU profile call graph"
+          aria-label="Profile call graph"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={finishPointerPan}
@@ -918,6 +1336,10 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
 
               const intensity = node.value / maxNodeValue;
               const isHotPath = hotPathNodeIDs.has(node.id);
+              const accent = signed ? diffColor(node.signedValue) : "#0284c7";
+              const valueText = signed
+                ? formatSignedProfileValue(node.signedValue, valueInfo)
+                : formatProfileValue(node.value, valueInfo);
 
               return (
                 <g key={node.id} transform={`translate(${position.x} ${position.y})`}>
@@ -926,18 +1348,18 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
                     height={nodeHeight}
                     rx="6"
                     fill="#ffffff"
-                    stroke={isHotPath || intensity > 0.66 ? "#0284c7" : "#cbd5e1"}
+                    stroke={isHotPath || intensity > 0.66 || signed ? accent : "#cbd5e1"}
                     strokeWidth={isHotPath ? 2.5 : 1 + intensity * 1.5}
                   />
-                  <rect width={Math.max(4, nodeWidth * intensity)} height="4" rx="2" fill="#0284c7" />
+                  <rect width={Math.max(4, nodeWidth * intensity)} height="4" rx="2" fill={accent} />
                   <text x="10" y="19" className="fill-slate-950 text-[12px] font-semibold">
                     {shortFunctionName(node.label)}
                   </text>
-                  <text x="10" y="35" className="fill-slate-600 text-[11px]">
-                    {valueInfo.label} {formatProfileValue(node.value, valueInfo)}
+                  <text x="10" y="35" className="text-[11px]" fill={signed ? accent : "#475569"}>
+                    {valueInfo.label} {valueText}
                   </text>
                   <title>
-                    {node.label}: {formatProfileValue(node.value, valueInfo)}
+                    {node.label}: {valueText}
                   </title>
                 </g>
               );
@@ -1012,11 +1434,9 @@ function metricPoints(
 function ResourceTrendChart({
   secondHistory,
   minuteHistory,
-  cpuActions,
 }: {
   secondHistory: ResourcePoint[];
   minuteHistory: MinuteResourcePoint[];
-  cpuActions?: ReactNode;
 }) {
   const fallback = { cpu_percent: 0, memory_size: 0, timestamp: Date.now() };
   const seconds = secondHistory.length ? secondHistory : [fallback];
@@ -1032,7 +1452,6 @@ function ResourceTrendChart({
         minimumMax={100}
         valueFor={(point) => point.cpu_percent}
         formatValue={(value) => `${value.toFixed(1)}%`}
-        actions={cpuActions}
       />
       <MetricTrendFigure
         title="RSS"
@@ -1054,7 +1473,6 @@ function MetricTrendFigure({
   minimumMax = 1,
   valueFor,
   formatValue,
-  actions,
 }: {
   title: string;
   color: string;
@@ -1063,7 +1481,6 @@ function MetricTrendFigure({
   minimumMax?: number;
   valueFor: (point: ResourcePoint) => number;
   formatValue: (value: number) => string;
-  actions?: ReactNode;
 }) {
   const secondPoints = metricPoints(secondHistory, valueFor, formatValue);
   const minutePoints = metricPoints(minuteHistory, valueFor, formatValue);
@@ -1078,12 +1495,9 @@ function MetricTrendFigure({
   return (
     <section className="min-w-0 border-b border-slate-300 pb-3 last:border-b-0 last:pb-0 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-3 lg:last:border-r-0 lg:last:pr-0">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-950">
-            <span className="h-2 w-5 rounded-full" style={{ backgroundColor: color }} />
-            {title}
-          </div>
-          {actions}
+        <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-950">
+          <span className="h-2 w-5 rounded-full" style={{ backgroundColor: color }} />
+          {title}
         </div>
         <div className="font-mono text-sm font-semibold text-slate-800">{latestPoint?.formattedValue ?? "-"}</div>
       </div>

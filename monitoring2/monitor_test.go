@@ -4,12 +4,15 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -907,5 +910,60 @@ func TestTraceHandlersWhenTracerUnset(t *testing.T) {
 	if endRecorder.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500 when tracer unset, got %d",
 			endRecorder.Code)
+	}
+}
+
+func TestCollectHeapProfileExposesHeapSampleTypes(t *testing.T) {
+	monitor := NewMonitor()
+
+	// Cover both the default path and the gc=1 path that forces a collection.
+	for _, query := range []string{"", "?gc=1"} {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/heap"+query, nil)
+
+		monitor.collectHeapProfile(recorder, request)
+
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("query %q: expected status %d, got %d",
+				query, http.StatusOK, recorder.Code)
+		}
+
+		body := recorder.Body.String()
+		if !json.Valid([]byte(body)) {
+			t.Fatalf("query %q: response was not valid JSON", query)
+		}
+
+		// The heap profile must expose the four standard sample types so the
+		// frontend can switch between allocation and in-use views. Match on the
+		// type values, which appear verbatim regardless of JSON key casing.
+		for _, want := range []string{
+			"inuse_space", "inuse_objects", "alloc_space", "alloc_objects",
+		} {
+			if !strings.Contains(body, want) {
+				t.Fatalf("query %q: expected heap profile JSON to expose sample "+
+					"type %q", query, want)
+			}
+		}
+	}
+}
+
+func TestCollectProfileReportsWhenCPUProfilingActive(t *testing.T) {
+	// Emulate a program that is already running a CPU profile (e.g. started with
+	// -cpuprofile). The monitor's capture must report a conflict rather than
+	// panicking, so the UI can explain why the capture failed.
+	if err := pprof.StartCPUProfile(io.Discard); err != nil {
+		t.Skipf("could not start CPU profile for setup: %v", err)
+	}
+	defer pprof.StopCPUProfile()
+
+	monitor := NewMonitor()
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/profile?seconds=1", nil)
+
+	monitor.collectProfile(recorder, request)
+
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("expected status %d when CPU profiling is already active, got %d",
+			http.StatusConflict, recorder.Code)
 	}
 }

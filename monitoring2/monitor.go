@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"runtime/pprof"
 	"sort"
 	"strconv"
@@ -165,6 +166,7 @@ func (m *Monitor) StartServer() {
 	mux.HandleFunc("/api/execution/info", m.apiExecutionInfo)
 	mux.HandleFunc("/api/resource", m.listResources)
 	mux.HandleFunc("/api/profile", m.collectProfile)
+	mux.HandleFunc("/api/heap", m.collectHeapProfile)
 	mux.HandleFunc("/api/trace/start", m.apiTraceStart)
 	mux.HandleFunc("/api/trace/end", m.apiTraceEnd)
 	mux.HandleFunc("/api/trace/is_tracing", m.apiTraceIsTracing)
@@ -1154,8 +1156,8 @@ func (m *Monitor) collectProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if secondsNumber > 60 {
-			secondsNumber = 60
+		if secondsNumber > 600 {
+			secondsNumber = 600
 		}
 
 		seconds = secondsNumber
@@ -1163,9 +1165,15 @@ func (m *Monitor) collectProfile(w http.ResponseWriter, r *http.Request) {
 
 	buf := bytes.NewBuffer(nil)
 
-	err := pprof.StartCPUProfile(buf)
-	if err != nil {
-		log.Panic(err)
+	// StartCPUProfile fails if the program is already being CPU-profiled (for
+	// example started with -cpuprofile, or another capture in flight). Report
+	// that instead of panicking, so the UI can show why the capture failed.
+	if err := pprof.StartCPUProfile(buf); err != nil {
+		http.Error(w, fmt.Sprintf(
+			"could not start CPU profile: %v; the program may already be "+
+				"CPU-profiled (e.g. started with -cpuprofile) or another capture "+
+				"is in progress", err), http.StatusConflict)
+		return
 	}
 
 	time.Sleep(time.Duration(seconds) * time.Second)
@@ -1174,17 +1182,60 @@ func (m *Monitor) collectProfile(w http.ResponseWriter, r *http.Request) {
 
 	prof, err := profile.ParseData(buf.Bytes())
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, "could not parse CPU profile: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	b, err := json.Marshal(prof)
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, "could not encode CPU profile: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	_, err = w.Write(b)
 	if err != nil {
-		log.Panic(err)
+		log.Println("failed to write CPU profile response:", err)
+	}
+}
+
+// collectHeapProfile captures a heap (memory) profile and returns it as JSON,
+// mirroring collectProfile. The heap profile carries the alloc_objects,
+// alloc_space, inuse_objects, and inuse_space sample types, so the frontend can
+// switch between allocation and in-use views without re-capturing. Pass gc=1 to
+// force a garbage collection first, which makes the in-use values exclude
+// objects that are unreferenced but not yet collected, at the cost of perturbing
+// the running simulation.
+//
+// The endpoint always returns the absolute heap profile; baselining (diffing one
+// capture against another) is done client-side, so any captured snapshot can be
+// chosen as the comparison baseline.
+func (m *Monitor) collectHeapProfile(w http.ResponseWriter, r *http.Request) {
+	if gc := r.URL.Query().Get("gc"); gc == "1" || strings.EqualFold(gc, "true") {
+		runtime.GC()
+	}
+
+	buf := bytes.NewBuffer(nil)
+
+	if err := pprof.WriteHeapProfile(buf); err != nil {
+		http.Error(w, "could not write heap profile: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	prof, err := profile.ParseData(buf.Bytes())
+	if err != nil {
+		http.Error(w, "could not parse heap profile: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	b, err := json.Marshal(prof)
+	if err != nil {
+		http.Error(w, "could not encode heap profile: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	_, err = w.Write(b)
+	if err != nil {
+		log.Println("failed to write heap profile response:", err)
 	}
 }
 
