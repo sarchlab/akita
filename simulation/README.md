@@ -1,39 +1,59 @@
-# simulation
+# simulation — Top-Level Simulation Runner
 
-Package `simulation` provides the top-level simulation runner that wires
-together an engine, data recorder, visual tracer, and optional monitoring
-server. It also acts as a global state manager that registers every runtime
-object as a named entity reachable through `GetStateByName`.
+Package `simulation` provides the top-level simulation runner for the Akita
+simulation framework. It wires together an engine, a data recorder, a visual
+tracer, and an optional monitoring server, and acts as a global inventory that
+registers every runtime object as a named entity.
 
-## Simulation
+## How It Works
 
-A `Simulation` holds:
+A `Simulation` is created through its `Builder`, which constructs and connects
+the supporting infrastructure. Once built, you register components, connections,
+and shared resources with the simulation; registration tracks each object in a
+flat inventory and wires it into tracing and monitoring. The simulation exposes
+typed accessors for the engine and infrastructure, plus name-based and
+inventory accessors for the registered entities.
 
-- An `Engine` (serial or parallel) for event processing.
-- A `DataRecorder` (SQLite-backed) for recording simulation data.
-- A `DBTracer` for visual tracing (used by the Daisen visualizer).
-- An optional `Monitor` for live web-based inspection.
-- A global state manager: one flat entity inventory of all components, ports,
-  connections, and shared-state resources, resolvable by name via
-  `GetStateByName`.
+The runner depends only on minimal local interfaces (`Component`, `Port`,
+`Connection`, `Resource`). Concrete messaging types satisfy them structurally,
+so this package does not import the messaging package.
 
-The registry uses local minimal interfaces for components, ports, connections,
-and resources. Concrete messaging types satisfy those interfaces structurally,
-so this package does not need to import the messaging package.
+## Key Concepts
 
-### Building a Simulation
+- A `Simulation` holds an `Engine` (serial or parallel), a SQLite-backed
+  `DataRecorder`, a `DBTracer` for visual tracing (used by the Daisen
+  visualizer), and an optional `Monitor` for live web inspection.
+- Every registered runtime object — component, port, connection, and
+  shared-state resource — satisfies the `Entity` interface and is held in one
+  flat inventory. Entity names are **globally unique across all kinds**.
+- A `Resource` is non-timing program state (such as memory contents or page
+  tables) that multiple components reference. The simulation owns resources;
+  components hold references to them rather than embedding the payload.
+
+## Entity Interfaces
+
+`Entity` is the abstract base interface; each kind embeds it and adds its own
+capabilities:
+
+| Interface | Methods | Purpose |
+|-----------|---------|---------|
+| `Entity` | `Name() string` | Abstract base for every registered object |
+| `Component` | `Entity` | Runtime components |
+| `Port` | `Entity` + `NumIncoming()` / `NumOutgoing()` | Port buffers |
+| `Connection` | `Entity` | Runtime connections |
+| `Resource` | `Entity` | Shared state registered by setup, reachable by name |
+
+## Builder Pattern
 
 ```go
 sim := simulation.MakeBuilder().
-    WithParallelEngine().       // optional: use parallel engine
+    WithParallelEngine().       // optional: use the parallel engine
     WithMonitorPort(8080).      // optional: monitoring server port
     WithVisTracingOnStart().    // optional: start tracing immediately
     Build()
 
 defer sim.Terminate()
 ```
-
-Builder options:
 
 | Method | Description |
 |--------|-------------|
@@ -43,52 +63,39 @@ Builder options:
 | `WithOutputFileName(name)` | Custom SQLite output file name |
 | `WithVisTracingOnStart()` | Enable visual tracing from time 0 |
 
+## Usage
+
 ### Registering Components
 
 ```go
 sim.RegisterComponent(myComponent)
 ```
 
-Registration automatically:
-- Adds the component and its ports to the simulation registry.
-- Connects the component to the monitoring system (if enabled).
-- Attaches visual tracing hooks.
-- Registers any shared-state resources exposed by the component.
+Registration automatically adds the component and its ports to the inventory,
+attaches visual tracing hooks, connects the component to the monitoring system
+(if enabled), and registers any shared-state resources it exposes. Use
+`RegisterConnection` and `RegisterResource` to register connections and shared
+resources directly.
 
-### Accessing Simulation Resources
+### Accessing the Simulation
 
 ```go
 engine := sim.GetEngine()
 recorder := sim.GetDataRecorder()
 tracer := sim.GetVisTracer()
-comp := sim.GetComponentByName("myComp")
-port := sim.GetPortByName("myComp.Top")
+
+comp := sim.GetComponentByName("myComp")    // panics if not registered
+port := sim.GetPortByName("myComp.Top")     // panics if not registered
+
+components := sim.Components()               // copy, in registration order
+connections := sim.Connections()
 resources := sim.Resources()
-entities := sim.Entities()
 ```
 
-### Global State Manager
-
-The simulation is a global state manager: every registered runtime object —
-component, port, connection, and shared-state resource — satisfies the `Entity`
-interface and is held in one flat inventory. `Entities()` returns those entities
-in registration order, which is useful for inventory, debugging, and tooling.
-
-Entity names are **globally unique across all kinds**, so any registered object
-can be resolved by name. `GetStateByName` returns a live reference to the
-entity's state, which the caller type-asserts:
-
-```go
-obj, ok := sim.GetStateByName("GPU[1].PageTable") // live state ref, or (nil, false)
-pageTable := obj.(*vm.PageTable)                  // caller type-asserts
-```
-
-This is a deliberate access backdoor (similar to Unity's `GetComponent`): a
-"magic" component can reach designed shared state — a page table, memory, or
-allocator resource — directly by name and mutate it in place. The required type
-assertion is the intentional warning that you are reaching past the normal
-interfaces. Resolve the reference once at setup and cache it; `GetStateByName`
-is a map lookup, not a free dereference, so it does not belong on a hot path.
+`GetComponentByName` and `GetPortByName` resolve a globally unique name to the
+registered entity. `Components`, `Connections`, and `Resources` each return a
+copy of the registered objects in registration order, which is useful for
+inventory, debugging, and tooling.
 
 ## Checkpoint and Resume
 
@@ -139,21 +146,3 @@ setup rebuilds; put cursors and counters in `State`.
 
 See `examples/checkpointdemo` for a runnable save/load demo and
 `mem/acceptancetests/checkpointresume` for a mid-transaction resume oracle.
-
-### Entity interfaces
-
-`Entity` is the abstract base interface; each kind embeds it and adds its own
-capabilities:
-
-| Interface | Methods | Purpose |
-|-----------|---------|---------|
-| `Entity` | `Name() string` | Abstract base for every registered object |
-| `Component` | `Entity` | Register runtime components |
-| `Port` | `Entity` + `NumIncoming()/NumOutgoing()` | Register port buffers |
-| `Connection` | `Entity` | Register runtime connections |
-| `Resource` | `Entity` | Shared state registered by setup, reachable by name |
-
-`GetStateByName` returns the registered entity itself — a component, port,
-connection, or resource — which the caller type-asserts. Shared resources are
-owned by the simulation and registered by setup via `RegisterResource`;
-components hold references to them rather than embedding the payload.

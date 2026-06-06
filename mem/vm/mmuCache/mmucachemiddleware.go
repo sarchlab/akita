@@ -4,13 +4,11 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
-	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type mmuCacheMiddleware struct {
@@ -25,10 +23,6 @@ func (m *mmuCacheMiddleware) bottomPort() messaging.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
-func (m *mmuCacheMiddleware) controlPort() messaging.Port {
-	return m.comp.GetPortByName("Control")
-}
-
 func (m *mmuCacheMiddleware) Tick() bool {
 	madeProgress := false
 	next := &m.comp.State
@@ -38,8 +32,6 @@ func (m *mmuCacheMiddleware) Tick() bool {
 		madeProgress = m.handleDrain() || madeProgress
 	case mmuCacheStatePause:
 		return false
-	case mmuCacheStateFlush:
-		madeProgress = m.handleFlush() || madeProgress
 	default:
 		madeProgress = m.handleEnable() || madeProgress
 	}
@@ -47,34 +39,25 @@ func (m *mmuCacheMiddleware) Tick() bool {
 }
 
 func (m *mmuCacheMiddleware) handleDrain() bool {
-	madeProgress := m.processRequests()
+	// Draining retires already-forwarded walks but admits no new Top traffic,
+	// per the protocol's "Drain stops accepting new traffic". Quiescence is
+	// based only on in-flight work (bottom responses + outstanding walks), not
+	// on the Top queue, so the drain converges even if upstream keeps queuing;
+	// those queued requests resume after Enable.
+	madeProgress := false
+	spec := m.comp.Spec()
+	for i := 0; i < spec.NumReqPerCycle; i++ {
+		madeProgress = m.handleBottomPort() || madeProgress
+	}
 
-	if m.bottomPort().PeekIncoming() == nil && m.topPort().PeekIncoming() == nil {
-		next := &m.comp.State
+	next := &m.comp.State
+	quiescent := m.bottomPort().PeekIncoming() == nil &&
+		len(next.OutstandingBottomReqs) == 0
+	if quiescent {
 		next.CurrentState = mmuCacheStatePause
-		tracing.AddMilestone(
-			timing.GetIDGenerator().Generate(),
-			tracing.MilestoneKindHardwareResource,
-			m.comp.Name()+".",
-			m.comp.Name(),
-			m.comp,
-		)
 	}
 
 	return madeProgress
-}
-
-func (m *mmuCacheMiddleware) handleFlush() bool {
-	next := &m.comp.State
-	if !next.InflightFlushReqActive {
-		return false
-	}
-
-	if m.topPort().PeekIncoming() == nil && m.bottomPort().PeekIncoming() == nil {
-		return m.processMMUCacheFlush()
-	}
-
-	return m.processRequests()
 }
 
 // handleEnable processes requests when cache is in enabled state.
@@ -175,6 +158,7 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 	reqToBottom.TrafficClass = "vm.TranslationReq"
 
 	m.bottomPort().Send(reqToBottom)
+	m.comp.State.OutstandingBottomReqs[reqToBottom.ID] = true
 
 	m.topPort().RetrieveIncoming()
 
@@ -199,6 +183,15 @@ func (m *mmuCacheMiddleware) handleBottomPort() bool {
 }
 
 func (m *mmuCacheMiddleware) handleRsp(rsp vm.TranslationRsp) bool {
+	next := &m.comp.State
+	if _, live := next.OutstandingBottomReqs[rsp.RspTo]; !live {
+		// Orphaned response: its forwarded request was dropped (e.g. a Reset
+		// landed mid-walk). Discard it instead of repopulating the freshly
+		// reset table or emitting a stale translation upward.
+		m.bottomPort().RetrieveIncoming()
+		return true
+	}
+
 	if !m.topPort().CanSend() {
 		return false
 	}
@@ -219,6 +212,7 @@ func (m *mmuCacheMiddleware) handleRsp(rsp vm.TranslationRsp) bool {
 	m.topPort().Send(rspToTop)
 
 	m.bottomPort().RetrieveIncoming()
+	delete(next.OutstandingBottomReqs, rsp.RspTo)
 
 	return true
 }
@@ -251,40 +245,6 @@ func (m *mmuCacheMiddleware) updateCacheLevels(rsp vm.TranslationRsp) bool {
 
 		setUpdate(&next.Table[level], wayID, pid, seg)
 	}
-
-	return true
-}
-
-func (m *mmuCacheMiddleware) processMMUCacheFlush() bool {
-	next := &m.comp.State
-	spec := m.comp.Spec()
-
-	rsp := mem.ControlRsp{Command: mem.CmdFlush, Success: true}
-	rsp.ID = timing.GetIDGenerator().Generate()
-	rsp.Src = m.controlPort().AsRemote()
-	rsp.Dst = next.InflightFlushReqSrc
-	rsp.TrafficClass = "mem.ControlRsp"
-
-	if !m.controlPort().CanSend() {
-		return false
-	}
-
-	m.controlPort().Send(rsp)
-	tracing.AddMilestone(
-		next.InflightFlushReqID,
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
-
-	// Reset table
-	next.Table = initSets(spec.NumLevels, spec.NumBlocks)
-
-	next.InflightFlushReqActive = false
-	next.InflightFlushReqID = 0
-	next.InflightFlushReqSrc = ""
-	next.CurrentState = mmuCacheStatePause
 
 	return true
 }

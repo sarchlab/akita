@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/timing"
@@ -82,8 +83,14 @@ func (m *dataTransferMW) findDstPort(addr uint64) messaging.RemotePort {
 	}
 }
 
-// Tick runs data transfer stages.
+// Tick runs data transfer stages. Paused data movers make no progress;
+// draining data movers continue to let the current transaction
+// complete so a drain can converge.
 func (m *dataTransferMW) Tick() bool {
+	if m.comp.State.ControlState == control.StatePaused {
+		return false
+	}
+
 	madeProgress := false
 
 	madeProgress = m.processWriteDoneFromDst() || madeProgress
@@ -141,7 +148,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 		Address: req.Address,
 	}
 
-	tracing.TraceReqInitiate(req, m.comp,
+	tracing.TraceReqInitiate(m.comp, req,
 		tracing.MsgIDAtReceiver(transactionAsMsg(trans), m.comp))
 
 	return true
@@ -169,7 +176,10 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 	trans := &state.CurrentTransaction
 	originalReq, ok := trans.PendingRead[rsp.RspTo]
 	if !ok {
-		log.Panicf("can't find original request for response %d", rsp.RspTo)
+		// Orphaned response: its read was discarded by a Reset issued while it
+		// was in flight. Drop it rather than crash the current transaction.
+		srcP.RetrieveIncoming()
+		return true
 	}
 
 	offset := originalReq.Address - trans.SrcAddress
@@ -183,7 +193,7 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 	traceReq.ID = originalReq.ID
 	traceReq.Src = originalReq.Src
 	traceReq.Dst = originalReq.Dst
-	tracing.TraceReqFinalize(traceReq, m.comp)
+	tracing.TraceReqFinalize(m.comp, traceReq)
 
 	return true
 }
@@ -231,7 +241,7 @@ func (m *dataTransferMW) writeToDst() bool {
 	}
 	bufferMoveOffsetForwardTo(&state.Buffer, trans.NextWriteAddr-trans.DstAddress)
 
-	tracing.TraceReqInitiate(req, m.comp,
+	tracing.TraceReqInitiate(m.comp, req,
 		tracing.MsgIDAtReceiver(transactionAsMsg(trans), m.comp))
 
 	return true
@@ -258,7 +268,10 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 	trans := &state.CurrentTransaction
 	originalReq, ok := trans.PendingWrite[rsp.RspTo]
 	if !ok {
-		log.Panicf("can't find original request for response %d", rsp.RspTo)
+		// Orphaned ack: its write was discarded by a Reset issued while it was
+		// in flight. Drop it rather than crash the current transaction.
+		dstP.RetrieveIncoming()
+		return true
 	}
 
 	delete(trans.PendingWrite, rsp.RspTo)
@@ -269,7 +282,10 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 	traceReq.ID = originalReq.ID
 	traceReq.Src = originalReq.Src
 	traceReq.Dst = originalReq.Dst
-	tracing.TraceReqFinalize(traceReq, m.comp)
+	tracing.TraceReqFinalize(m.comp, traceReq)
 
-	return false
+	// Processing a write ack is real progress: the component must tick again
+	// so the remaining acks drain and the transaction can finish (which now
+	// waits for every write to be acknowledged).
+	return true
 }

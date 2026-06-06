@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -108,7 +110,8 @@ type Spec struct {
 	CommandQueueCapacity int `json:"command_queue_capacity"`
 
 	// Port buffer sizes
-	TopPortBufferSize int `json:"top_port_buffer_size"`
+	TopPortBufferSize  int `json:"top_port_buffer_size"`
+	CtrlPortBufferSize int `json:"ctrl_port_buffer_size"`
 
 	// Read/Write queue separation
 	ReadQueueSize      int `json:"read_queue_size"`
@@ -206,6 +209,10 @@ type dramTiming struct {
 
 // State contains mutable runtime data for the DRAM memory controller.
 type State struct {
+	ControlState  control.State        `json:"control_state"`
+	CurrentCmdID  uint64               `json:"current_cmd_id"`
+	CurrentCmdSrc messaging.RemotePort `json:"current_cmd_src"`
+
 	Transactions  []transactionState `json:"transactions"`
 	SubTransQueue subTransQueueState `json:"sub_trans_queue"`
 	CommandQueues commandQueueState  `json:"command_queues"`

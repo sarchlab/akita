@@ -10,7 +10,8 @@ import (
 // defaultSpec provides default configuration for the data mover.
 var defaultSpec = Spec{
 	Freq:                  1 * timing.GHz,
-	CtrlPortBufferSize:    16,
+	CtrlPortBufferSize:    4,
+	TopPortBufferSize:     16,
 	InsidePortBufferSize:  16,
 	OutsidePortBufferSize: 16,
 }
@@ -75,16 +76,18 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 	modelComp.State = initialState
 
-	ctrlMW := &ctrlParseMW{comp: modelComp}
-	modelComp.AddMiddleware(ctrlMW)
-
-	dataMW := &dataTransferMW{comp: modelComp}
-	modelComp.AddMiddleware(dataMW)
-
-	ctrlPort := messaging.NewPort(
-		modelComp, spec.CtrlPortBufferSize, spec.CtrlPortBufferSize,
-		name+".Control")
-	modelComp.AddPort("Control", ctrlPort)
+	topBuf := spec.TopPortBufferSize
+	if topBuf == 0 {
+		// Backwards-compat: the workload port was historically sized
+		// by CtrlPortBufferSize when both were the same port.
+		topBuf = spec.CtrlPortBufferSize
+		if topBuf == 0 {
+			topBuf = 16
+		}
+	}
+	topPort := messaging.NewPort(
+		modelComp, topBuf, topBuf, name+".Top")
+	modelComp.AddPort("Top", topPort)
 
 	insidePort := messaging.NewPort(
 		modelComp, spec.InsidePortBufferSize, spec.InsidePortBufferSize,
@@ -95,6 +98,23 @@ func (b Builder) Build(name string) *Comp {
 		modelComp, spec.OutsidePortBufferSize, spec.OutsidePortBufferSize,
 		name+".Outside")
 	modelComp.AddPort("Outside", outsidePort)
+
+	ctrlBuf := spec.CtrlPortBufferSize
+	if ctrlBuf == 0 {
+		ctrlBuf = 4
+	}
+	ctrlPort := messaging.NewPort(
+		modelComp, ctrlBuf, ctrlBuf, name+".Control")
+	modelComp.AddPort("Control", ctrlPort)
+
+	cMW := &ctrlMiddleware{comp: modelComp}
+	modelComp.AddMiddleware(cMW)
+
+	parseMW := &ctrlParseMW{comp: modelComp}
+	modelComp.AddMiddleware(parseMW)
+
+	dataMW := &dataTransferMW{comp: modelComp}
+	modelComp.AddMiddleware(dataMW)
 
 	b.registrar.RegisterComponent(modelComp)
 

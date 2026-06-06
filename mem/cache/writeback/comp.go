@@ -18,6 +18,7 @@ const (
 	cacheStatePreFlushing
 	cacheStateFlushing
 	cacheStatePaused
+	cacheStateDraining
 )
 
 // Spec contains immutable configuration for the writeback cache.
@@ -50,6 +51,8 @@ type Spec struct {
 // State contains mutable runtime data for the writeback cache.
 type State struct {
 	CacheState     int                  `json:"cache_state"`
+	CurrentCmdID   uint64               `json:"current_cmd_id"`
+	CurrentCmdSrc  messaging.RemotePort `json:"current_cmd_src"`
 	DirectoryState cache.DirectoryState `json:"directory_state"`
 	MSHRState      cache.MSHRState      `json:"mshr_state"`
 	Transactions   []transactionState   `json:"transactions"`
@@ -89,10 +92,18 @@ type State struct {
 
 // flushReqState is a serializable representation of a flush control request.
 type flushReqState struct {
-	MsgMeta         messaging.MsgMeta `json:"msg_meta"`
-	InvalidateAfter bool              `json:"invalidate_after"`
-	DiscardInflight bool              `json:"discard_inflight"`
-	PauseAfter      bool              `json:"pause_after"`
+	MsgMeta messaging.MsgMeta `json:"msg_meta"`
+
+	// FilterAddresses / FilterPID narrow which dirty blocks are written
+	// back. An empty address list matches every block address; a zero PID
+	// matches every PID (same convention as Invalidate).
+	FilterAddresses []uint64 `json:"filter_addresses"`
+	FilterPID       vm.PID   `json:"filter_pid"`
+
+	// FlushedRefs records the blocks selected for write-back so that, once
+	// the write-backs complete, exactly those blocks (and no others) are
+	// marked clean. Blocks outside the filter are left untouched.
+	FlushedRefs []blockRef `json:"flushed_refs"`
 }
 
 type action int
@@ -134,11 +145,8 @@ type transactionState struct {
 	WritePID       vm.PID            `json:"write_pid"`
 
 	// Flush request fields (flat)
-	HasFlush             bool              `json:"has_flush"`
-	FlushMeta            messaging.MsgMeta `json:"flush_meta"`
-	FlushInvalidateAfter bool              `json:"flush_invalidate_after"`
-	FlushDiscardInflight bool              `json:"flush_discard_inflight"`
-	FlushPauseAfter      bool              `json:"flush_pause_after"`
+	HasFlush  bool              `json:"has_flush"`
+	FlushMeta messaging.MsgMeta `json:"flush_meta"`
 
 	// Block reference (into directoryState)
 	BlockSetID int  `json:"block_set_id"`

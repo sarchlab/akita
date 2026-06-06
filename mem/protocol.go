@@ -81,32 +81,63 @@ type WriteDoneRsp struct {
 	messaging.MsgMeta
 }
 
-// ControlCommand enumerates control operations for memory components.
+// ControlCommand enumerates the verbs of the uniform control protocol for
+// memory agents. Every memory agent component implements its supported
+// subset of these verbs over its "Control" port. See mem/CONTROL_PROTOCOL.md
+// for definitions, response timing, the support matrix, and per-component
+// behavior.
 type ControlCommand int
 
 const (
-	CmdFlush      ControlCommand = iota // Write back dirty data
-	CmdInvalidate                       // Invalidate entries without writeback
-	CmdDrain                            // Wait for in-flight ops to complete
-	CmdReset                            // Soft reset
-	CmdPause                            // Disable further processing
-	CmdEnable                           // Re-enable processing
+	// CmdPause stops new traffic and freezes in-flight state in place.
+	// Universal verb. Ack is synchronous.
+	CmdPause ControlCommand = iota
+
+	// CmdDrain stops new traffic and lets in-flight finish; ends paused.
+	// Universal verb. Ack is asynchronous (on completion).
+	CmdDrain
+
+	// CmdEnable resumes processing from paused.
+	// Universal verb. Ack is synchronous.
+	CmdEnable
+
+	// CmdReset hard-resets the component to its post-build state. Legal
+	// from any state. Control commands are processed serially, so a Reset
+	// queued behind an in-flight async verb waits for that verb to ack
+	// before it runs (no preemption). Universal verb. Ack is synchronous.
+	CmdReset
+
+	// CmdInvalidate drops entries from the agent's private cache state
+	// without writeback. Requires Paused or Drained. May be filtered by
+	// Addresses and PID. Conditional verb (caches, TLB, MMU cache).
+	// Ack is synchronous.
+	CmdInvalidate
+
+	// CmdFlush writes back dirty private state to backing memory. Clean
+	// entries remain valid. Requires Paused or Drained. May be filtered
+	// by Addresses and PID. Conditional verb (caches only). Ack is
+	// asynchronous (on writeback completion).
+	CmdFlush
 )
 
-// ControlReq is a unified control request for all memory components.
+// ControlReq is the unified control request for all memory agents.
 type ControlReq struct {
 	messaging.MsgMeta
-	Command         ControlCommand
-	DiscardInflight bool     // For Flush: discard vs wait for in-flight
-	InvalidateAfter bool     // For Flush: invalidate lines after writeback
-	PauseAfter      bool     // For Flush/Drain: pause after completion
-	Addresses       []uint64 // For Invalidate: specific addresses (empty = all)
-	PID             vm.PID   // For Invalidate: process filter
+	Command   ControlCommand
+	Addresses []uint64 // Invalidate / Flush filter; empty = all entries.
+	PID       vm.PID   // Invalidate / Flush filter; zero = all PIDs.
 }
 
 // ControlRsp is the unified response to a ControlReq.
+//
+// Success is true when the verb was accepted and (for async verbs)
+// completed. When Success is false, Error names the reason; conventional
+// values include "unsupported" (the component does not implement this
+// verb) and "must be paused or drained" (Invalidate/Flush issued while
+// Enabled).
 type ControlRsp struct {
 	messaging.MsgMeta
 	Command ControlCommand
 	Success bool
+	Error   string
 }

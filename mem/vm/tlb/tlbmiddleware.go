@@ -1,7 +1,6 @@
 package tlb
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -22,10 +21,6 @@ func (m *tlbMiddleware) bottomPort() messaging.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
-func (m *tlbMiddleware) controlPort() messaging.Port {
-	return m.comp.GetPortByName("Control")
-}
-
 func (m *tlbMiddleware) Tick() bool {
 	madeProgress := false
 	next := &m.comp.State
@@ -35,8 +30,6 @@ func (m *tlbMiddleware) Tick() bool {
 		madeProgress = m.handleDrain() || madeProgress
 	case tlbStatePause:
 		return false
-	case tlbStateFlush:
-		madeProgress = m.handleFlush() || madeProgress
 	default:
 		madeProgress = m.handleEnable() || madeProgress
 	}
@@ -136,18 +129,20 @@ func (m *tlbMiddleware) handleDrain() bool {
 		madeProgress = m.parseBottom() || madeProgress
 	}
 
-	madeProgress = m.processPipeline() || madeProgress
+	// Draining advances in-flight pipeline work but admits no new Top
+	// requests (insertIntoPipeline), per the protocol's "Drain stops
+	// accepting new traffic"; queued requests resume after Enable.
+	madeProgress = m.extractFromPipeline() || madeProgress
+	madeProgress = m.tickPipeline() || madeProgress
 
 	next := &m.comp.State
-	if mshrIsEmpty(next.MSHREntries) && m.bottomPort().PeekIncoming() == nil {
+	// Stay draining until the last fetched page has also been responded to
+	// the top. parseBottom stages that response in RespondingMSHRData (and
+	// empties MSHREntries) before respondMSHREntry can drain it, so pausing
+	// on mshrIsEmpty alone would strand the final translation response.
+	if mshrIsEmpty(next.MSHREntries) && !next.HasRespondingMSHR &&
+		m.bottomPort().PeekIncoming() == nil {
 		next.TLBState = tlbStatePause
-		tracing.AddMilestone(
-			timing.GetIDGenerator().Generate(),
-			tracing.MilestoneKindHardwareResource,
-			m.comp.Name()+".MSHR",
-			m.comp.Name(),
-			m.comp,
-		)
 	}
 
 	return madeProgress
@@ -180,20 +175,18 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 
 	m.topPort().Send(rspToTop)
 
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(&reqMsg, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.topPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(&reqMsg, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.topPort().Name(),
+	})
 
 	mshrEntry.Requests = mshrEntry.Requests[1:]
 	if len(mshrEntry.Requests) == 0 {
 		next.HasRespondingMSHR = false
 	}
 
-	tracing.TraceReqComplete(&reqMsg, m.comp)
+	tracing.TraceReqComplete(m.comp, &reqMsg)
 
 	return true
 }
@@ -229,17 +222,18 @@ func (m *tlbMiddleware) handleTranslationHit(
 	next := &m.comp.State
 	setVisit(&next.Sets[setID], wayID)
 
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindData,
-		m.comp.Name()+".Sets",
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindData,
+		What:   m.comp.Name() + ".Sets",
+	})
 
-	tracing.TraceReqReceive(msg, m.comp)
-	tracing.AddTaskStep(tracing.MsgIDAtReceiver(msg, m.comp), m.comp, "hit")
-	tracing.TraceReqComplete(msg, m.comp)
+	tracing.TraceReqReceive(m.comp, msg)
+	tracing.AddTaskTag(m.comp, tracing.TaskTag{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		What:   "hit",
+	})
+	tracing.TraceReqComplete(m.comp, msg)
 
 	return true
 }
@@ -252,22 +246,19 @@ func (m *tlbMiddleware) handleTranslationMiss(msg vm.TranslationReq) bool {
 		return false
 	}
 
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindHardwareResource,
-		m.comp.Name()+".MSHR",
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindHardwareResource,
+		What:   m.comp.Name() + ".MSHR",
+	})
 
 	fetched := m.fetchBottom(msg)
 	if fetched {
-		tracing.TraceReqReceive(msg, m.comp)
-		tracing.AddTaskStep(
-			tracing.MsgIDAtReceiver(msg, m.comp),
-			m.comp,
-			"miss",
-		)
+		tracing.TraceReqReceive(m.comp, msg)
+		tracing.AddTaskTag(m.comp, tracing.TaskTag{
+			TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+			What:   "miss",
+		})
 
 		return true
 	}
@@ -296,13 +287,11 @@ func (m *tlbMiddleware) sendRspToTop(
 	}
 
 	m.topPort().Send(rsp)
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.topPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.topPort().Name(),
+	})
 	return true
 }
 
@@ -316,9 +305,11 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 	}
 	next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, msg)
 
-	tracing.TraceReqReceive(msg, m.comp)
-	tracing.AddTaskStep(
-		tracing.MsgIDAtReceiver(msg, m.comp), m.comp, "mshr-hit")
+	tracing.TraceReqReceive(m.comp, msg)
+	tracing.AddTaskTag(m.comp, tracing.TaskTag{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		What:   "mshr-hit",
+	})
 
 	return true
 }
@@ -342,13 +333,11 @@ func (m *tlbMiddleware) fetchBottom(msg vm.TranslationReq) bool {
 
 	m.bottomPort().Send(fetchBottom)
 
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.bottomPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.bottomPort().Name(),
+	})
 
 	next := &m.comp.State
 	var idx int
@@ -357,7 +346,7 @@ func (m *tlbMiddleware) fetchBottom(msg vm.TranslationReq) bool {
 	next.MSHREntries[idx].HasReqToBottom = true
 	next.MSHREntries[idx].ReqToBottom = fetchBottom
 
-	tracing.TraceReqInitiate(fetchBottom, m.comp,
+	tracing.TraceReqInitiate(m.comp, fetchBottom,
 		tracing.MsgIDAtReceiver(msg, m.comp))
 
 	return true
@@ -375,16 +364,20 @@ func (m *tlbMiddleware) parseBottom() bool {
 
 	item := itemI.(vm.TranslationRsp)
 	spec := m.comp.Spec()
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(item, m.comp),
-		tracing.MilestoneKindData,
-		m.bottomPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(item, m.comp),
+		Kind:   tracing.MilestoneKindData,
+		What:   m.bottomPort().Name(),
+	})
 	page := item.Page
 
-	if !mshrIsEntryPresent(next.MSHREntries, page.PID, page.VAddr) {
+	mshrIdx, found := mshrGetEntry(next.MSHREntries, page.PID, page.VAddr)
+	if !found || next.MSHREntries[mshrIdx].ReqToBottom.ID != item.RspTo {
+		// Either no request is outstanding for this page, or this is a stale
+		// response whose request was discarded by a Reset (the current MSHR
+		// entry, if any, belongs to a newer request). Correlating by the
+		// outstanding request's ID keeps a stale pre-reset translation from
+		// filling the reset TLB and satisfying a fresh request.
 		m.bottomPort().RetrieveIncoming()
 		return true
 	}
@@ -399,7 +392,6 @@ func (m *tlbMiddleware) parseBottom() bool {
 	setUpdate(&next.Sets[setID], wayID, page)
 	setVisit(&next.Sets[setID], wayID)
 
-	mshrIdx, _ := mshrGetEntry(next.MSHREntries, page.PID, page.VAddr)
 	next.HasRespondingMSHR = true
 	next.RespondingMSHRData = next.MSHREntries[mshrIdx]
 	next.RespondingMSHRData.Page = page
@@ -411,85 +403,8 @@ func (m *tlbMiddleware) parseBottom() bool {
 	m.bottomPort().RetrieveIncoming()
 
 	if next.RespondingMSHRData.HasReqToBottom {
-		tracing.TraceReqFinalize(&reqToBottom, m.comp)
+		tracing.TraceReqFinalize(m.comp, &reqToBottom)
 	}
-
-	return true
-}
-
-func (m *tlbMiddleware) handleFlush() bool {
-	next := &m.comp.State
-	if !next.HasInflightFlushReq {
-		return false
-	}
-
-	madeProgress := false
-	spec := m.comp.Spec()
-
-	if mshrIsEmpty(next.MSHREntries) && !next.HasRespondingMSHR && m.bottomPort().PeekIncoming() == nil {
-		madeProgress = m.processTLBFlush() || madeProgress
-		return madeProgress
-	}
-
-	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = m.respondMSHREntry() || madeProgress
-	}
-
-	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = m.parseBottom() || madeProgress
-	}
-
-	madeProgress = m.processPipeline() || madeProgress
-
-	return madeProgress
-}
-
-func (m *tlbMiddleware) processTLBFlush() bool {
-	spec := m.comp.Spec()
-	next := &m.comp.State
-	flush := next.InflightFlush
-
-	rsp := mem.ControlRsp{Command: mem.CmdFlush, Success: true}
-	rsp.ID = timing.GetIDGenerator().Generate()
-	rsp.Src = m.controlPort().AsRemote()
-	rsp.Dst = flush.Meta.Src
-	rsp.TrafficClass = "mem.ControlRsp"
-
-	if !m.controlPort().CanSend() {
-		return false
-	}
-
-	m.controlPort().Send(rsp)
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(&flush.Meta, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
-
-	for _, vAddr := range flush.VAddr {
-		setID := vAddrToSetID(vAddr, spec)
-		wayID, page, found := setLookup(&next.Sets[setID], flush.PID, vAddr)
-
-		if !found {
-			continue
-		}
-		tracing.AddMilestone(
-			tracing.MsgIDAtReceiver(&flush.Meta, m.comp),
-			tracing.MilestoneKindDependency,
-			m.comp.Name()+".Sets",
-			m.comp.Name(),
-			m.comp,
-		)
-		page.Valid = false
-		setUpdate(&next.Sets[setID], wayID, page)
-	}
-
-	next.MSHREntries = nil
-
-	next.HasInflightFlushReq = false
-	next.TLBState = tlbStatePause
 
 	return true
 }

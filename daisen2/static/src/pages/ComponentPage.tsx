@@ -708,21 +708,28 @@ export default function ComponentPage() {
   const dataRange = useDebouncedValue(viewRange, DATA_RANGE_DEBOUNCE_MS);
   const { ref, size } = useElementSize<HTMLDivElement>();
   const { data: segmentsData } = useSegments();
-  const { info, loading: infoLoading } = useCompInfo(name, "ConcurrentTask", dataRange.startTime, dataRange.endTime, NUM_DOTS);
+  // Resolve the selected task independently of the component-scoped query, so the
+  // component in view can follow it when navigating to a parent task or subtask.
+  const selectedTaskQuery = useMemo(() => (selectedTaskId ? { id: selectedTaskId } : {}), [selectedTaskId]);
+  const { tasks: selectedTaskMatches, loading: selectedTaskLoading } = useTraceData(selectedTaskQuery);
+  const selectedTaskFromFetch = selectedTaskMatches.find((task) => String(task.id) === selectedTaskId) ?? null;
+  const selectedTaskFromSeed = selectedTaskSeed && String(selectedTaskSeed.id) === selectedTaskId ? selectedTaskSeed : null;
+  const selectedTask = selectedTaskFromFetch ?? selectedTaskFromSeed;
+  // The component in view tracks the selected task's location; clicking a parent
+  // task or subtask navigates to that task's component (issue #156).
+  const componentName = selectedTask?.location || name;
+
+  const { info, loading: infoLoading } = useCompInfo(componentName, "ConcurrentTask", dataRange.startTime, dataRange.endTime, NUM_DOTS);
   const query = useMemo(
-    () => (name ? { where: name, startTime: dataRange.startTime, endTime: dataRange.endTime } : {}),
-    [dataRange.endTime, dataRange.startTime, name],
+    () => (componentName ? { where: componentName, startTime: dataRange.startTime, endTime: dataRange.endTime } : {}),
+    [dataRange.endTime, dataRange.startTime, componentName],
   );
   const { tasks, loading: tasksLoading } = useTraceData(query);
   const selectedTaskFromComponent = useMemo(
     () => tasks.find((task) => String(task.id) === selectedTaskId) ?? null,
     [selectedTaskId, tasks],
   );
-  const selectedTaskQuery = useMemo(() => (selectedTaskId ? { id: selectedTaskId } : {}), [selectedTaskId]);
-  const { tasks: selectedTaskMatches, loading: selectedTaskLoading } = useTraceData(selectedTaskQuery);
-  const selectedTaskFromFetch = selectedTaskMatches.find((task) => String(task.id) === selectedTaskId) ?? null;
-  const selectedTaskFromSeed = selectedTaskSeed && String(selectedTaskSeed.id) === selectedTaskId ? selectedTaskSeed : null;
-  const currentTask = selectedTaskFromFetch ?? selectedTaskFromSeed ?? selectedTaskFromComponent;
+  const currentTask = selectedTask ?? selectedTaskFromComponent;
   const parentTaskQuery = useMemo(
     () => (currentTask?.parent_id ? { id: String(currentTask.parent_id) } : {}),
     [currentTask?.parent_id],
@@ -751,13 +758,13 @@ export default function ComponentPage() {
   }, [urlRange.startTime, urlRange.endTime, name, urlTaskId]);
 
   useEffect(() => {
-    if (!name) return;
+    if (!componentName) return;
     const params = new URLSearchParams(window.location.search);
-    params.set("name", name);
+    params.set("name", componentName);
     params.set("starttime", dataRange.startTime.toString());
     params.set("endtime", dataRange.endTime.toString());
     window.history.replaceState(null, "", `/component?${params.toString()}`);
-  }, [dataRange.endTime, dataRange.startTime, name]);
+  }, [dataRange.endTime, dataRange.startTime, componentName]);
 
   const colorMap = useMemo(
     () => buildColorMap([...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks]),
@@ -873,7 +880,7 @@ export default function ComponentPage() {
     setViewRange(focusRangeForTask(task));
 
     const params = new URLSearchParams(window.location.search);
-    params.set("name", name);
+    params.set("name", task.location || name);
     params.set("taskid", taskId);
     window.history.replaceState(null, "", `/component?${params.toString()}`);
   };
@@ -921,7 +928,7 @@ export default function ComponentPage() {
         </div>
         <div className="daisen1-component-view" style={{ height: componentHeight }}>
           <ComponentTimeline
-            name={name}
+            name={componentName}
             tasks={tasks}
             info={info}
             segments={segmentsData?.segments ?? []}
@@ -938,7 +945,7 @@ export default function ComponentPage() {
       </div>
 
       <aside className="daisen1-side-column" style={{ width: SIDE_COLUMN_WIDTH }}>
-        <div className="daisen1-location-label">{name}</div>
+        <div className="daisen1-location-label">{componentName}</div>
         {(dataPending || infoLoading || tasksLoading || selectedTaskLoading || parentTaskLoading || childTasksLoading) && (
           <div className="daisen1-data-status">Updating component data...</div>
         )}

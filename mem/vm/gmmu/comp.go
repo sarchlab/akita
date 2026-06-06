@@ -1,6 +1,7 @@
 package gmmu
 
 import (
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -18,6 +19,7 @@ type Spec struct {
 
 	TopPortBufferSize    int `json:"top_port_buffer_size"`
 	BottomPortBufferSize int `json:"bottom_port_buffer_size"`
+	CtrlPortBufferSize   int `json:"ctrl_port_buffer_size"`
 }
 
 // pageState captures vm.Page fields in a serializable form.
@@ -54,6 +56,9 @@ type devicePageAccess struct {
 
 // State contains mutable runtime data for the GMMU.
 type State struct {
+	ControlState           control.State               `json:"control_state"`
+	CurrentCmdID           uint64                      `json:"current_cmd_id"`
+	CurrentCmdSrc          messaging.RemotePort        `json:"current_cmd_src"`
 	WalkingTranslations    []transactionState          `json:"walking_translations"`
 	RemoteMemReqs          map[uint64]transactionState `json:"remote_mem_reqs"`
 	ToRemoveFromPTW        []int                       `json:"to_remove_from_ptw"`

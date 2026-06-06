@@ -3,6 +3,7 @@ package monitoring2
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -179,6 +180,39 @@ func TestFieldValuePaginatesSlice(t *testing.T) {
 	ids := assertSlicePageRoot(t, response, 5, 2, 2)
 
 	assertSlicePageValues(t, response, ids, []int{30, 40})
+}
+
+func TestFieldValueMissingFieldReturns404(t *testing.T) {
+	monitor := newSliceFieldMonitor([]int{10, 20, 30})
+
+	// The frontend probes candidate paths (e.g. "Component.Spec") and expects a
+	// non-2xx response, not a panic, when a path is absent.
+	for _, path := range []string{"Component", "Component.Spec", "Missing"} {
+		recorder := requestFieldValue(t, monitor, "slice-comp", path)
+
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("path %q: expected status %d, got %d",
+				path, http.StatusNotFound, recorder.Code)
+		}
+	}
+}
+
+func requestFieldValue(
+	t *testing.T,
+	monitor *Monitor,
+	compName, fieldName string,
+) *httptest.ResponseRecorder {
+	t.Helper()
+
+	requestJSON := fmt.Sprintf(
+		`{"comp_name":%q,"field_name":%q}`, compName, fieldName)
+	requestPath := "/api/field/" + url.PathEscape(requestJSON)
+	request := httptest.NewRequest(http.MethodGet, requestPath, nil)
+	recorder := httptest.NewRecorder()
+
+	monitor.listFieldValue(recorder, request)
+
+	return recorder
 }
 
 func newSliceFieldMonitor(values []int) *Monitor {

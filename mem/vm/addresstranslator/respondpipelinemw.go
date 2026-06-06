@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -31,17 +32,24 @@ func (m *respondPipelineMW) translationPort() messaging.Port {
 	return m.comp.GetPortByName("Translation")
 }
 
-// Tick runs the respond pipeline: respond + parseTranslation.
+// Tick runs the respond pipeline: respond + parseTranslation. It is
+// gated by ControlState — paused agents do not advance in-flight
+// transactions; draining and enabled agents do, so a Drain can
+// converge.
 func (m *respondPipelineMW) Tick() bool {
+	if m.comp.State.ControlState == control.StatePaused {
+		return false
+	}
+
 	madeProgress := false
 
 	spec := m.comp.Spec()
 
-	for i := 0; i < spec.NumReqPerCycle; i++ {
+	for range spec.NumReqPerCycle {
 		madeProgress = m.respond() || madeProgress
 	}
 
-	for i := 0; i < spec.NumReqPerCycle; i++ {
+	for range spec.NumReqPerCycle {
 		madeProgress = m.parseTranslation() || madeProgress
 	}
 
@@ -103,24 +111,20 @@ func (m *respondPipelineMW) traceTranslationComplete(
 	reqState incomingReqState,
 	translatedReq messaging.Msg,
 ) {
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(translatedReq, m.comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.bottomPort().Name(),
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(translatedReq, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.bottomPort().Name(),
+	})
 
 	fakeFromTop := restoreMemMsg(reqState.ID, reqState.Src, reqState.Dst,
 		reqState.RspTo, reqState.Type)
 
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
-		tracing.MilestoneKindTranslation,
-		"translation",
-		m.comp.Name(),
-		m.comp,
-	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
+		Kind:   tracing.MilestoneKindTranslation,
+		What:   "translation",
+	})
 
 	fakeTransReq := vm.TranslationReq{
 		MsgMeta: messaging.MsgMeta{
@@ -129,8 +133,8 @@ func (m *respondPipelineMW) traceTranslationComplete(
 			Dst: trans.TranslationReqDst,
 		},
 	}
-	tracing.TraceReqFinalize(fakeTransReq, m.comp)
-	tracing.TraceReqInitiate(translatedReq, m.comp,
+	tracing.TraceReqFinalize(m.comp, fakeTransReq)
+	tracing.TraceReqInitiate(m.comp, translatedReq,
 		tracing.MsgIDAtReceiver(fakeFromTop, m.comp))
 }
 
@@ -172,13 +176,11 @@ func (m *respondPipelineMW) respond() bool {
 				reqFromTopState.ReqFromTopSrc,
 				reqFromTopState.ReqFromTopDst,
 				0, reqFromTopState.ReqFromTopType)
-			tracing.AddMilestone(
-				tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
-				tracing.MilestoneKindData,
-				"data",
-				m.comp.Name(),
-				m.comp,
-			)
+			tracing.AddMilestone(m.comp, tracing.Milestone{
+				TaskID: tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
+				Kind:   tracing.MilestoneKindData,
+				What:   "data",
+			})
 		}
 	case mem.WriteDoneRsp:
 		reqInBottom = isReqInBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
@@ -200,13 +202,11 @@ func (m *respondPipelineMW) respond() bool {
 				reqFromTopState.ReqFromTopSrc,
 				reqFromTopState.ReqFromTopDst,
 				0, reqFromTopState.ReqFromTopType)
-			tracing.AddMilestone(
-				tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
-				tracing.MilestoneKindSubTask,
-				"subtask",
-				m.comp.Name(),
-				m.comp,
-			)
+			tracing.AddMilestone(m.comp, tracing.Milestone{
+				TaskID: tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
+				Kind:   tracing.MilestoneKindSubTask,
+				What:   "subtask",
+			})
 		}
 	default:
 		log.Panicf("cannot handle respond of type %s", fmt.Sprintf("%T", rspI))
@@ -225,13 +225,11 @@ func (m *respondPipelineMW) respond() bool {
 			reqFromTopState.ReqFromTopDst,
 			0, reqFromTopState.ReqFromTopType)
 
-		tracing.AddMilestone(
-			tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
-			tracing.MilestoneKindNetworkBusy,
-			m.topPort().Name(),
-			m.comp.Name(),
-			m.comp,
-		)
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
+			Kind:   tracing.MilestoneKindNetworkBusy,
+			What:   m.topPort().Name(),
+		})
 
 		rspMeta := rspI.Meta()
 		removeReqToBottomByID(nextState, rspMeta.RspTo)
@@ -241,8 +239,8 @@ func (m *respondPipelineMW) respond() bool {
 			reqFromTopState.ReqToBottomSrc,
 			reqFromTopState.ReqToBottomDst,
 			0, reqFromTopState.ReqToBottomType)
-		tracing.TraceReqFinalize(fakeReqToBottom, m.comp)
-		tracing.TraceReqComplete(fakeFromTop, m.comp)
+		tracing.TraceReqFinalize(m.comp, fakeReqToBottom)
+		tracing.TraceReqComplete(m.comp, fakeFromTop)
 	}
 
 	m.bottomPort().RetrieveIncoming()

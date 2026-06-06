@@ -2,6 +2,7 @@ package dram
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -14,9 +15,14 @@ type respondMW struct {
 	topPort messaging.Port
 }
 
-// Tick runs the respond stage twice (matching original execution order).
+// Tick runs the respond stage twice (matching original execution
+// order). Paused DRAM makes no progress; draining DRAM continues so
+// in-flight transactions can finish and the drain can converge.
 func (m *respondMW) Tick() bool {
 	next := &m.comp.State
+	if next.ControlState == control.StatePaused {
+		return false
+	}
 	spec := m.comp.Spec()
 
 	progress := m.respond(&spec, next)
@@ -48,14 +54,14 @@ func (m *respondMW) finalizeTransaction(
 	if t.HasWrite {
 		done := m.finalizeWriteTrans(state, t, i)
 		if done {
-			tracing.TraceReqComplete(&t.WriteMsg, m.comp)
+			tracing.TraceReqComplete(m.comp, &t.WriteMsg)
 		}
 		return done
 	}
 
 	done := m.finalizeReadTrans(state, t, i)
 	if done {
-		tracing.TraceReqComplete(&t.ReadMsg, m.comp)
+		tracing.TraceReqComplete(m.comp, &t.ReadMsg)
 	}
 	return done
 }

@@ -18,7 +18,6 @@ func TestValidateState(t *testing.T) {
 func buildTestMMU(engine timing.Engine, name string) *Comp {
 	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
-	spec.MigrationServiceProvider = messaging.RemotePort("MigrationService")
 	return MakeBuilder().
 		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 		WithSpec(spec).
@@ -42,27 +41,7 @@ func makeTestState(reqID uint64) State {
 				CycleLeft: 5,
 			},
 		},
-		MigrationQueue: []transactionState{
-			{
-				ReqID:    reqID,
-				ReqSrc:   messaging.RemotePort("Agent"),
-				ReqDst:   messaging.RemotePort("TestMMU.ToTop"),
-				PID:      1,
-				VAddr:    0x3000,
-				DeviceID: 3,
-				Page: vm.Page{
-					PID: 1, VAddr: 0x3000, PAddr: 0x4000,
-					PageSize: 4096, Valid: true, DeviceID: 3,
-				},
-				CycleLeft: 2,
-			},
-		},
-		IsDoingMigration: true,
 		NextPhysicalPage: 0x8000,
-		PageAccessedByDeviceID: []devicePageAccess{
-			{PageVAddr: 0x1000, DeviceIDs: []uint64{1, 2}},
-			{PageVAddr: 0x3000, DeviceIDs: []uint64{3}},
-		},
 	}
 }
 
@@ -85,20 +64,9 @@ func verifyState(t *testing.T, got State, reqID uint64) {
 		t.Errorf("expected page PAddr 0x2000, got 0x%x",
 			got.WalkingTranslations[0].Page.PAddr)
 	}
-	if len(got.MigrationQueue) != 1 {
-		t.Fatalf("expected 1 migration queue entry, got %d",
-			len(got.MigrationQueue))
-	}
-	if !got.IsDoingMigration {
-		t.Error("expected IsDoingMigration to be true")
-	}
 	if got.NextPhysicalPage != 0x8000 {
 		t.Errorf("expected NextPhysicalPage 0x8000, got 0x%x",
 			got.NextPhysicalPage)
-	}
-	if len(got.PageAccessedByDeviceID) != 2 {
-		t.Errorf("expected 2 device page access entries, got %d",
-			len(got.PageAccessedByDeviceID))
 	}
 }
 

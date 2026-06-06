@@ -2,6 +2,7 @@ package rob
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -24,14 +25,17 @@ func (m *middleware) ctrlPort() messaging.Port {
 	return m.comp.GetPortByName("Control")
 }
 
-// Tick advances the reorder buffer by one cycle. The control port is serviced
-// first so a flush can quiesce the pipeline before any new traffic moves.
+// Tick advances the reorder buffer by one cycle. The control port is
+// serviced first so Reset or Pause can quiesce the pipeline before any
+// new traffic moves. While paused the pipeline is frozen entirely.
+// Drain completion is handled inside processControlMsg.
 func (m *middleware) Tick() bool {
 	madeProgress := false
 
 	madeProgress = m.processControlMsg() || madeProgress
 
-	if !m.comp.State.IsFlushing {
+	switch m.comp.State.ControlState {
+	case control.StateEnabled, control.StateDraining:
 		madeProgress = m.runPipeline() || madeProgress
 	}
 
@@ -67,9 +71,13 @@ func (m *middleware) runPipeline() bool {
 }
 
 // topDown pulls a request from the top, forwards a shadow request to the
-// bottom, and records the transaction in FIFO order.
+// bottom, and records the transaction in FIFO order. Skipped while not
+// Enabled so Drain and Pause stop accepting new traffic.
 func (m *middleware) topDown() bool {
 	state := &m.comp.State
+	if state.ControlState != control.StateEnabled {
+		return false
+	}
 	if len(state.Transactions) >= m.comp.Spec().BufferSize {
 		return false
 	}
@@ -101,8 +109,8 @@ func (m *middleware) topDown() bool {
 	})
 	m.topPort().RetrieveIncoming()
 
-	tracing.TraceReqReceive(req, m.comp)
-	tracing.TraceReqInitiate(shadow, m.comp,
+	tracing.TraceReqReceive(m.comp, req)
+	tracing.TraceReqInitiate(m.comp, shadow,
 		tracing.MsgIDAtReceiver(req, m.comp))
 
 	return true
@@ -129,7 +137,7 @@ func (m *middleware) parseBottom() bool {
 		trans := &m.comp.State.Transactions[idx]
 		trans.HasRsp = true
 		trans.RspData = dataRsp.Data
-		tracing.TraceReqFinalize(m.shadowReqTraceMsg(*trans), m.comp)
+		tracing.TraceReqFinalize(m.comp, m.shadowReqTraceMsg(*trans))
 		return true
 	case mem.WriteDoneRsp:
 		idx := m.findTransactionByBottomID(dataRsp.RspTo)
@@ -141,7 +149,7 @@ func (m *middleware) parseBottom() bool {
 
 		trans := &m.comp.State.Transactions[idx]
 		trans.HasRsp = true
-		tracing.TraceReqFinalize(m.shadowReqTraceMsg(*trans), m.comp)
+		tracing.TraceReqFinalize(m.comp, m.shadowReqTraceMsg(*trans))
 		return true
 	default:
 		m.bottomPort().RetrieveIncoming()
@@ -172,7 +180,7 @@ func (m *middleware) bottomUp() bool {
 
 	state.Transactions = state.Transactions[1:]
 
-	tracing.TraceReqComplete(m.topReqTraceMsg(head), m.comp)
+	tracing.TraceReqComplete(m.comp, m.topReqTraceMsg(head))
 
 	return true
 }
@@ -280,10 +288,20 @@ func (m *middleware) topReqTraceMsg(trans transactionState) messaging.Msg {
 	return req
 }
 
-// processControlMsg handles the two control commands the reorder buffer
-// understands: a flush that drops in-flight transactions and quiesces the
-// pipeline, and an enable that drains stale port traffic and resumes work.
+// processControlMsg handles the universal control verbs and finalizes
+// a pending Drain when in-flight transactions have settled.
 func (m *middleware) processControlMsg() bool {
+	if m.completePendingDrain() {
+		return true
+	}
+
+	// Control commands are processed serially: while an async verb (Drain) is
+	// in progress, the next command is not dequeued — it stays queued on the
+	// Control port and is handled once the component settles.
+	if m.comp.State.ControlState == control.StateDraining {
+		return false
+	}
+
 	msg := m.ctrlPort().PeekIncoming()
 	if msg == nil {
 		return false
@@ -296,37 +314,57 @@ func (m *middleware) processControlMsg() bool {
 	}
 
 	switch req.Command {
-	case mem.CmdFlush:
-		return m.handleFlush(req)
+	case mem.CmdPause:
+		return m.handlePause(req)
+	case mem.CmdDrain:
+		return m.handleDrain(req)
 	case mem.CmdEnable:
 		return m.handleEnable(req)
+	case mem.CmdReset:
+		return m.handleReset(req)
 	default:
-		m.ctrlPort().RetrieveIncoming()
-		return true
+		return m.handleUnsupported(req)
 	}
 }
 
-func (m *middleware) handleFlush(req mem.ControlReq) bool {
+// completePendingDrain notices Drain has reached quiescence (no
+// in-flight transactions) and acks. The component transitions to
+// Paused.
+func (m *middleware) completePendingDrain() bool {
+	state := &m.comp.State
+	if state.ControlState != control.StateDraining {
+		return false
+	}
+	if len(state.Transactions) != 0 {
+		return false
+	}
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
-	rsp := mem.ControlRsp{Command: mem.CmdFlush, Success: true}
-	rsp.ID = timing.GetIDGenerator().Generate()
-	rsp.Src = m.ctrlPort().AsRemote()
-	rsp.Dst = req.Src
-	rsp.RspTo = req.ID
-	rsp.TrafficClass = "mem.ControlRsp"
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdDrain,
+		state.CurrentCmdSrc, state.CurrentCmdID, true, ""))
+	state.ControlState = control.StatePaused
+	return true
+}
 
-	m.ctrlPort().Send(rsp)
-
-	state := &m.comp.State
-	m.forgetInflightReceiverIDs()
-	state.Transactions = state.Transactions[:0]
-	state.IsFlushing = true
-
+func (m *middleware) handlePause(req mem.ControlReq) bool {
+	if !m.ctrlPort().CanSend() {
+		return false
+	}
+	m.comp.State.ControlState = control.StatePaused
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdPause,
+		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
+	return true
+}
 
+func (m *middleware) handleDrain(req mem.ControlReq) bool {
+	state := &m.comp.State
+	state.ControlState = control.StateDraining
+	state.CurrentCmdID = req.ID
+	state.CurrentCmdSrc = req.Src
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
@@ -335,26 +373,74 @@ func (m *middleware) handleEnable(req mem.ControlReq) bool {
 		return false
 	}
 
-	rsp := mem.ControlRsp{Command: mem.CmdEnable, Success: true}
-	rsp.ID = timing.GetIDGenerator().Generate()
-	rsp.Src = m.ctrlPort().AsRemote()
-	rsp.Dst = req.Src
-	rsp.RspTo = req.ID
-	rsp.TrafficClass = "mem.ControlRsp"
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdEnable,
+		req.Src, req.ID, true, ""))
 
-	m.ctrlPort().Send(rsp)
+	state := &m.comp.State
+	state.ControlState = control.StateEnabled
+
+	// Enable resumes from Paused; it must not discard traffic queued while
+	// paused (e.g. bottom responses that retire frozen in-flight
+	// transactions). They are processed once the pipeline runs again.
+	m.ctrlPort().RetrieveIncoming()
+	return true
+}
+
+// handleReset drops every in-flight transaction, drains stale port
+// traffic, and lands the ROB back in Enabled. The tracing receiver-task
+// registry entries that topDown allocated for each in-flight top-side
+// request are released so they do not outlive the transactions.
+func (m *middleware) handleReset(req mem.ControlReq) bool {
+	if !m.ctrlPort().CanSend() {
+		return false
+	}
+
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdReset,
+		req.Src, req.ID, true, ""))
 
 	state := &m.comp.State
 	m.forgetInflightReceiverIDs()
 	state.Transactions = state.Transactions[:0]
-	state.IsFlushing = false
+	state.CurrentCmdID = 0
+	state.CurrentCmdSrc = ""
+	state.ControlState = control.StateEnabled
 
 	drainIncoming(m.topPort())
 	drainIncoming(m.bottomPort())
 
 	m.ctrlPort().RetrieveIncoming()
-
 	return true
+}
+
+func (m *middleware) handleUnsupported(req mem.ControlReq) bool {
+	if !m.ctrlPort().CanSend() {
+		return false
+	}
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), req.Command,
+		req.Src, req.ID, false, control.ErrUnsupported))
+	m.ctrlPort().RetrieveIncoming()
+	return true
+}
+
+func makeCtrlRsp(
+	port messaging.Port,
+	cmd mem.ControlCommand,
+	dst messaging.RemotePort,
+	rspTo uint64,
+	success bool,
+	errStr string,
+) mem.ControlRsp {
+	rsp := mem.ControlRsp{
+		Command: cmd,
+		Success: success,
+		Error:   errStr,
+	}
+	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.Src = port.AsRemote()
+	rsp.Dst = dst
+	rsp.RspTo = rspTo
+	rsp.TrafficClass = "mem.ControlRsp"
+	return rsp
 }
 
 func drainIncoming(p messaging.Port) {

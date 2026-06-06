@@ -54,18 +54,10 @@ type State struct {
 	BankPipelines []queueing.Pipeline[int] `json:"bank_pipelines"`
 	BankPostBufs  []queueing.Buffer[int]   `json:"bank_post_bufs"`
 
-	IsPaused bool `json:"is_paused"`
-
-	// Flush request fields (flattened from mem.ControlReq for serialization)
-	HasProcessingFlush bool          `json:"has_processing_flush"`
-	ProcessingFlush    flushReqState `json:"processing_flush"`
-}
-
-// flushReqState is a serializable representation of a flush control request.
-type flushReqState struct {
-	MsgMeta         messaging.MsgMeta `json:"msg_meta"`
-	DiscardInflight bool              `json:"discard_inflight"`
-	PauseAfter      bool              `json:"pause_after"`
+	IsPaused      bool                 `json:"is_paused"`
+	IsDraining    bool                 `json:"is_draining"`
+	CurrentCmdID  uint64               `json:"current_cmd_id"`
+	CurrentCmdSrc messaging.RemotePort `json:"current_cmd_src"`
 }
 
 type bankActionType int

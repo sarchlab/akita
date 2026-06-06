@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -367,16 +368,14 @@ var _ = Describe("Reorder Buffer", func() {
 	})
 
 	Context("control", func() {
-		It("flushes in-flight transactions and pauses on CmdFlush", func() {
+		It("drops in-flight transactions and pauses on CmdReset", func() {
 			topPort.Deliver(makeRead(0))
 			rob.Tick()
 			bottomPort.RetrieveOutgoing()
 			Expect(rob.State.Transactions).To(HaveLen(1))
 
 			req := mem.ControlReq{
-				Command:         mem.CmdFlush,
-				DiscardInflight: true,
-				PauseAfter:      true,
+				Command: mem.CmdReset,
 			}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.Src = messaging.RemotePort("Cmd")
@@ -387,18 +386,18 @@ var _ = Describe("Reorder Buffer", func() {
 			rob.Tick()
 
 			Expect(rob.State.Transactions).To(BeEmpty())
-			Expect(rob.State.IsFlushing).To(BeTrue())
+			Expect(rob.State.ControlState).To(Equal(control.StateEnabled))
 
 			ack := ctrlPort.RetrieveOutgoing()
 			Expect(ack).To(BeAssignableToTypeOf(mem.ControlRsp{}))
 			rsp := ack.(mem.ControlRsp)
-			Expect(rsp.Command).To(Equal(mem.CmdFlush))
+			Expect(rsp.Command).To(Equal(mem.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(req.ID))
 		})
 
-		It("pauses the data pipeline while flushing", func() {
-			rob.State.IsFlushing = true
+		It("freezes the data pipeline while paused", func() {
+			rob.State.ControlState = control.StatePaused
 			topPort.Deliver(makeRead(0))
 
 			progress := rob.Tick()
@@ -408,10 +407,10 @@ var _ = Describe("Reorder Buffer", func() {
 			Expect(topPort.PeekIncoming()).ToNot(BeNil())
 		})
 
-		It("restarts on CmdEnable, draining incoming traffic", func() {
-			rob.State.IsFlushing = true
+		It("resumes on CmdEnable, draining incoming traffic", func() {
+			rob.State.ControlState = control.StatePaused
 
-			// Stale traffic that should be cleared on restart.
+			// Stale traffic that should be cleared on resume.
 			topPort.Deliver(makeRead(0))
 			stray := mem.DataReadyRsp{Data: []byte{0xFF}}
 			stray.ID = timing.GetIDGenerator().Generate()
@@ -430,13 +429,162 @@ var _ = Describe("Reorder Buffer", func() {
 
 			rob.Tick()
 
-			Expect(rob.State.IsFlushing).To(BeFalse())
+			Expect(rob.State.ControlState).To(Equal(control.StateEnabled))
 			Expect(topPort.PeekIncoming()).To(BeNil())
 			Expect(bottomPort.PeekIncoming()).To(BeNil())
 
 			ack := ctrlPort.RetrieveOutgoing()
 			Expect(ack).To(BeAssignableToTypeOf(mem.ControlRsp{}))
 			Expect(ack.(mem.ControlRsp).Command).To(Equal(mem.CmdEnable))
+		})
+
+		makeCtrlReq := func(cmd mem.ControlCommand) mem.ControlReq {
+			req := mem.ControlReq{Command: cmd}
+			req.ID = timing.GetIDGenerator().Generate()
+			req.Src = messaging.RemotePort("Cmd")
+			req.Dst = ctrlPort.AsRemote()
+			req.TrafficClass = "mem.ControlReq"
+			return req
+		}
+
+		It("acks Drain only after in-flight transactions retire", func() {
+			const n = 2
+			for i := range n {
+				topPort.Deliver(makeRead(uint64(i * 0x100)))
+			}
+			rob.Tick() // forward both to the bottom (NumReqPerCycle=2)
+			Expect(rob.State.Transactions).To(HaveLen(n))
+
+			shadowIDs := make([]uint64, 0, n)
+			for i := range rob.State.Transactions {
+				shadowIDs = append(shadowIDs,
+					rob.State.Transactions[i].ReqToBottomID)
+			}
+			for bottomPort.RetrieveOutgoing() != nil {
+			}
+
+			drain := makeCtrlReq(mem.CmdDrain)
+			ctrlPort.Deliver(drain)
+
+			// While transactions are still in flight (no bottom responses
+			// fed yet), Drain must stay pending and emit no ack.
+			for range 5 {
+				rob.Tick()
+				Expect(rob.State.ControlState).To(Equal(control.StateDraining))
+				Expect(ctrlPort.RetrieveOutgoing()).To(BeNil())
+			}
+			Expect(rob.State.Transactions).To(HaveLen(n))
+
+			// Now let the in-flight reads complete.
+			for _, id := range shadowIDs {
+				rsp := mem.DataReadyRsp{Data: []byte{0x1}}
+				rsp.ID = timing.GetIDGenerator().Generate()
+				rsp.Src = bottomUnitRemote
+				rsp.Dst = bottomPort.AsRemote()
+				rsp.RspTo = id
+				rsp.TrafficClass = "mem.DataReadyRsp"
+				bottomPort.Deliver(rsp)
+			}
+
+			completed := 0
+			var drainRsp mem.ControlRsp
+			drainFound := false
+			for i := 0; i < 64 && !drainFound; i++ {
+				rob.Tick()
+				for {
+					out := topPort.RetrieveOutgoing()
+					if out == nil {
+						break
+					}
+					if _, ok := out.(mem.DataReadyRsp); ok {
+						completed++
+					}
+				}
+				if out := ctrlPort.RetrieveOutgoing(); out != nil {
+					if rsp, ok := out.(mem.ControlRsp); ok &&
+						rsp.Command == mem.CmdDrain {
+						drainRsp = rsp
+						drainFound = true
+					}
+				}
+			}
+
+			Expect(drainFound).To(BeTrue())
+			Expect(drainRsp.Success).To(BeTrue())
+			Expect(drainRsp.RspTo).To(Equal(drain.ID))
+			// All in-flight reads finished before the async Drain ack.
+			Expect(completed).To(Equal(n))
+			Expect(rob.State.Transactions).To(BeEmpty())
+			Expect(rob.State.ControlState).To(Equal(control.StatePaused))
+		})
+
+		DescribeTable("Reset wipes in-flight transactions from any state",
+			func(startState control.State) {
+				topPort.Deliver(makeRead(0))
+				rob.Tick()
+				Expect(rob.State.Transactions).To(HaveLen(1))
+
+				rob.State.ControlState = startState
+
+				reset := makeCtrlReq(mem.CmdReset)
+				ctrlPort.Deliver(reset)
+
+				var rsp mem.ControlRsp
+				found := false
+				for i := 0; i < 64 && !found; i++ {
+					rob.Tick()
+					if out := ctrlPort.RetrieveOutgoing(); out != nil {
+						rsp, found = out.(mem.ControlRsp)
+					}
+				}
+
+				Expect(found).To(BeTrue())
+				Expect(rsp.Command).To(Equal(mem.CmdReset))
+				Expect(rsp.Success).To(BeTrue())
+				Expect(rsp.RspTo).To(Equal(reset.ID))
+				Expect(rob.State.Transactions).To(BeEmpty())
+				Expect(rob.State.ControlState).To(Equal(control.StateEnabled))
+			},
+			Entry("from Enabled", control.StateEnabled),
+			Entry("from Paused", control.StatePaused),
+			// The draining case is covered separately by the test below, since
+			// control commands are serialized: a Reset queued behind an
+			// in-progress Drain is only serviced after the Drain acks.
+		)
+
+		It("completes a pending Drain before servicing a queued Reset", func() {
+			// Draining and already quiescent (no in-flight transactions):
+			// completePendingDrain acks the Drain. Control commands are
+			// serialized with no preemption, so a Reset queued behind the
+			// drain is serviced only after the Drain acks.
+			rob.State.ControlState = control.StateDraining
+			rob.State.CurrentCmdID = 999
+			rob.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
+			rob.State.Transactions = nil
+
+			reset := makeCtrlReq(mem.CmdReset)
+			ctrlPort.Deliver(reset)
+
+			var rsps []mem.ControlRsp
+			for range 16 {
+				rob.Tick()
+				for {
+					out := ctrlPort.RetrieveOutgoing()
+					if out == nil {
+						break
+					}
+					if r, ok := out.(mem.ControlRsp); ok {
+						rsps = append(rsps, r)
+					}
+				}
+			}
+
+			Expect(rsps).To(HaveLen(2))
+			Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+			Expect(rsps[0].RspTo).To(Equal(uint64(999)))
+			Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+			Expect(rsps[1].RspTo).To(Equal(reset.ID))
+			Expect(rob.State.ControlState).To(Equal(control.StateEnabled))
 		})
 	})
 })

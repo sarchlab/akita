@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -20,6 +21,9 @@ func (m *tickFinalizeMW) topPort() messaging.Port {
 }
 
 func (m *tickFinalizeMW) Tick() bool {
+	if m.comp.State.ControlState == control.StatePaused {
+		return false
+	}
 	madeProgress := m.finalizeBanks()
 	madeProgress = m.tickPipelines() || madeProgress
 	return madeProgress
@@ -97,7 +101,7 @@ func (m *tickFinalizeMW) finalizeRead(
 
 	m.topPort().Send(rsp)
 
-	tracing.TraceReqComplete(&item.ReadMsg, m.comp)
+	tracing.TraceReqComplete(m.comp, &item.ReadMsg)
 
 	bufferPop(b)
 
@@ -157,7 +161,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 
 	m.topPort().Send(rsp)
 
-	tracing.TraceReqComplete(&item.WriteMsg, m.comp)
+	tracing.TraceReqComplete(m.comp, &item.WriteMsg)
 
 	bufferPop(b)
 

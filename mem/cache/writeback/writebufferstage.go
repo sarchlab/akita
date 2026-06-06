@@ -156,7 +156,7 @@ func (wb *writeBufferStage) fetchFromBottom(
 	next.WriteBufferBuf.Pop()
 
 	reqMeta := trans.reqMeta()
-	tracing.TraceReqInitiate(read, wb.cache.comp,
+	tracing.TraceReqInitiate(wb.cache.comp, read,
 		tracing.MsgIDAtReceiver(reqMeta, wb.cache.comp))
 
 	return true
@@ -261,7 +261,7 @@ func (wb *writeBufferStage) write() bool {
 	next.InflightEvictionIndices = append(next.InflightEvictionIndices, transIdx)
 
 	reqMeta := trans.reqMeta()
-	tracing.TraceReqInitiate(write, wb.cache.comp,
+	tracing.TraceReqInitiate(wb.cache.comp, write,
 		tracing.MsgIDAtReceiver(reqMeta, wb.cache.comp))
 
 	return true
@@ -289,7 +289,13 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	spec := wb.cache.comp.Spec()
 	next := &wb.cache.comp.State
 
-	transIdx := wb.findInflightFetchIdxByFetchReadReqID(msg.RspTo)
+	transIdx, found := wb.findInflightFetchIdxByFetchReadReqID(msg.RspTo)
+	if !found {
+		// Orphaned response: the fetch it answers was discarded by a Reset
+		// issued while it was still in flight. Drop it rather than crash.
+		wb.cache.bottomPort.RetrieveIncoming()
+		return true
+	}
 	trans := &next.Transactions[transIdx]
 	bankIndex := bankID(
 		trans.BlockSetID, trans.BlockWayID,
@@ -326,7 +332,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	wb.removeInflightFetch(transIdx)
 	wb.cache.bottomPort.RetrieveIncoming()
 
-	tracing.TraceReqFinalize(trans.FetchReadReqMeta, wb.cache.comp)
+	tracing.TraceReqFinalize(wb.cache.comp, trans.FetchReadReqMeta)
 
 	return true
 }
@@ -364,17 +370,17 @@ func (wb *writeBufferStage) combineData(mshrIdx int) {
 
 func (wb *writeBufferStage) findInflightFetchIdxByFetchReadReqID(
 	id uint64,
-) int {
+) (int, bool) {
 	next := &wb.cache.comp.State
 
 	for _, tIdx := range next.InflightFetchIndices {
 		t := &next.Transactions[tIdx]
 		if t.FetchReadReqMeta.ID == id {
-			return tIdx
+			return tIdx, true
 		}
 	}
 
-	panic("inflight read not found")
+	return 0, false
 }
 
 func (wb *writeBufferStage) removeInflightFetch(transIdx int) {
@@ -408,14 +414,29 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 				next.InflightEvictionIndices[i+1:]...,
 			)
 			delete(next.EvictingList, e.EvictingAddr)
+
+			// A pure flush eviction (writeBufferFlush) terminates here: its
+			// write-back has landed and it has no fetch/write follow-up
+			// (unlike evict-and-fetch/evict-and-write, which carry on and are
+			// retired downstream). Mark it Removed now; otherwise it lingers
+			// in the transaction table and stalls any later Drain, whose
+			// quiescence check never clears.
+			if e.Action == writeBufferFlush {
+				e.Removed = true
+			}
+
 			wb.cache.bottomPort.RetrieveIncoming()
-			tracing.TraceReqFinalize(e.EvictionWriteReqMeta, wb.cache.comp)
+			tracing.TraceReqFinalize(wb.cache.comp, e.EvictionWriteReqMeta)
 
 			return true
 		}
 	}
 
-	panic("write request not found")
+	// Orphaned eviction ack: the eviction it answers was discarded by a Reset
+	// issued while the write-back was still in flight. Drop it rather than
+	// crash.
+	wb.cache.bottomPort.RetrieveIncoming()
+	return true
 }
 
 func (wb *writeBufferStage) writeBufferFull() bool {

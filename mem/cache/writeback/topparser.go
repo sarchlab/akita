@@ -52,7 +52,7 @@ func (p *topParser) Tick() bool {
 	idx := len(next.Transactions) - 1
 	next.DirStageBuf.PushTyped(idx)
 
-	tracing.TraceReqReceive(msg, p.cache.comp)
+	tracing.TraceReqReceive(p.cache.comp, msg)
 
 	p.cache.topPort.RetrieveIncoming()
 

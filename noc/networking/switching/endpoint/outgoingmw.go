@@ -183,7 +183,7 @@ func (m *outgoingMW) logFlitE2ETask(
 	}
 
 	if isEnd {
-		tracing.EndTask(fs.MsgMeta.ID, m.comp)
+		tracing.EndTask(m.comp, tracing.TaskEnd{ID: fs.MsgMeta.ID})
 		return
 	}
 
@@ -194,8 +194,12 @@ func (m *outgoingMW) logFlitE2ETask(
 		Msg:          *meta,
 	}
 
-	tracing.StartTaskWithSpecificLocation(
-		fs.MsgMeta.ID, msgE2ETaskID,
-		m.comp, "flit_e2e", "flit_e2e", m.comp.Name()+".FlitBuf", flit,
-	)
+	tracing.StartTask(m.comp, tracing.TaskStart{
+		ID:       fs.MsgMeta.ID,
+		ParentID: msgE2ETaskID,
+		Kind:     "flit_e2e",
+		What:     "flit_e2e",
+		Location: m.comp.Name() + ".FlitBuf",
+		Detail:   flit,
+	})
 }

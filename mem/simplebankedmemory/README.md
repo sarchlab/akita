@@ -1,116 +1,126 @@
-# SimpleBankedMemory
+# simplebankedmemory — Banked Memory Controller
 
-`SimpleBankedMemory` is a configurable memory controller that models a
-banked memory subsystem built on top of Akita’s pipeline primitives. It is
-recommended to be the default memory unit to be used in most of the
-simulations. It is not a super detailed DRAM model, but can provide good
-bandwidth and latency control for most of the cases.
+Package `simplebankedmemory` provides a configurable banked memory controller
+for the Akita simulation framework. It models a banked memory subsystem built on
+top of Akita's pipeline primitives and is a good default memory unit for most
+simulations: it is not a detailed DRAM model, but provides controllable
+bandwidth and latency for the common case.
 
+## How It Works
 
-## Component Overview
-
-The component exposes a single top port. All clients share this port and the
-internal logic determines which bank will eventually serve a request. Each
-bank owns:
-
-- A configurable pipeline (width, depth, per-stage latency)
-- A post-pipeline buffer that holds completed items until responses can be
-  delivered
+The component exposes a single `Top` port. All clients share this port, and the
+internal logic determines which bank serves each request. Each bank owns a
+configurable pipeline (width, depth, per-stage latency) and a post-pipeline
+buffer that holds completed items until responses can be delivered.
 
 Requests traverse the following stages:
 
-1. **Ingress:** Messages arriving at the top port remain queued in the port’s
+1. **Ingress** — Messages arriving at the `Top` port remain queued in the port's
    incoming buffer.
-2. **Bank selection:** On every tick up to one request per bank is taken from
-   the port buffer and dispatched into the bank’s pipeline. The default bank
-   selector distributes addresses by interleaving (configurable stride).
-3. **Pipeline traversal:** Banks simulate execution latency by advancing all
+2. **Bank selection** — On each tick the dispatch middleware takes requests from
+   the port buffer and dispatches them into the selected bank's pipeline. With
+   the default `"interleaved"` selector, addresses are interleaved by a
+   configurable stride (`2 ^ BankSelectorLog2InterleaveSize` bytes).
+3. **Pipeline traversal** — Banks simulate execution latency by advancing all
    in-flight pipeline slots every tick.
-4. **Completion:** When items exit the pipeline, reads gather their data from
+4. **Completion** — When items exit the pipeline, reads gather their data from
    the backing `mem.Storage` while writes commit the modified bytes. Both
-   generate responses once the top port has space to send.
+   generate responses once the `Top` port has space to send.
 
+For a quick approximation, the achievable peak bandwidth is
+`NumBanks × BankPipelineWidth × (1 / StageLatency) × Freq`. To keep sequential
+traffic saturated, configure more banks than the pipeline latency so a stream of
+requests can occupy different banks while earlier ones are still in flight.
 
-## Key Properties
+## Key Types
 
-- **Banking policy:** Configurable via the builder. By default addresses are
-  interleaved using a 64 B stride (log₂ value is adjustable).
-- **Slide-in pipelines:** Each bank is a first-class pipeline from the
-  `pipelining` package, allowing you to control width, depth, and per-stage
-  latency.
-- **Bandwidth modeling:** For a quick approximation, the achievable peak
-  bandwidth is
-
-  ```
-  numBanks × pipelineWidth × (1 / stageLatency) × frequency
-  ```
-
-- **Tuning tips:**
-  - When each bank uses a single pipeline stage, the observed end-to-end
-    latency is roughly one cycle plus the configured per-stage latency. Add
-    additional stage latency to model longer service times.
-  - To keep sequential traffic saturated, configure the number of banks
-    greater than the pipeline latency. This ensures a stream of requests can
-    occupy different banks while earlier ones are still in flight.
-
-- **Storage semantics:** Reads are consistent with writes that finish earlier
-  in the same cycle. Writes apply at completion; reads that finish later in
-  the cycle observe the updated data.
-
-
-## Building a Memory Instance
+- `Spec` — immutable configuration: frequency, bank geometry, pipeline shape,
+  buffer sizes, capacity, bank-selection, and address-conversion fields.
+- `State` — mutable runtime data: the per-bank pipelines and post-pipeline
+  buffers.
+- `Resources` — shared wiring; holds the backing `*mem.Storage`.
+- `Comp` — `modeling.Component[Spec, State, Resources]`.
 
 ```go
-engine := sim.NewSerialEngine()
-memCtrl := simplebankedmemory.MakeBuilder().
-    WithEngine(engine).
-    WithFreq(1 * sim.GHz).
-    WithNumBanks(4).
-    WithBankPipelineWidth(2).
-    WithBankPipelineDepth(3).
-    WithStageLatency(2).
-    WithTopPortBufferSize(16).
-    WithPostPipelineBufferSize(32).
-    WithLog2InterleaveSize(6). // 64 B stride
-    Build("MyMemCtrl")
+type Spec struct {
+    Freq                timing.Freq // Operating frequency
+    NumBanks            int         // Number of banks
+    BankPipelineWidth   int         // Items entering a bank pipeline per tick
+    BankPipelineDepth   int         // Pipeline stages per bank
+    StageLatency        int         // Cycles per pipeline stage
+    PostPipelineBufSize int         // Post-pipeline buffer depth per bank
+    TopPortBufferSize   int         // Top port buffer capacity
+    Capacity            uint64      // Backing-storage size when built internally
+    StorageRef          string      // Storage resource name (set by Build)
+
+    BankSelectorKind               string // "interleaved"
+    BankSelectorLog2InterleaveSize uint64 // log2 of the interleave stride
+
+    // Address conversion for interleaved multi-controller setups.
+    AddrConvKind            string
+    AddrInterleavingSize    uint64
+    AddrTotalNumOfElements  int
+    AddrCurrentElementIndex int
+    AddrOffset              uint64
+}
 ```
 
-The controller exposes a single port named `"Top"` that should be connected to
-upstream components (e.g., caches or agents) via an Akita connection.
+## Builder Pattern
 
+Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec
+to `WithSpec`. Wiring comes from `WithRegistrar` (which provides the engine and
+registers the component) and `WithResources` (the shared backing storage). When
+`WithResources` is omitted, the controller builds its own storage sized by
+`Spec.Capacity`. The `Top` port is created internally by `Build`.
+
+```go
+engine := timing.NewSerialEngine()
+
+spec := simplebankedmemory.DefaultSpec()
+spec.NumBanks = 4
+spec.BankPipelineWidth = 2
+spec.BankPipelineDepth = 3
+spec.StageLatency = 2
+spec.BankSelectorLog2InterleaveSize = 6 // 64 B stride
+
+memCtrl := simplebankedmemory.MakeBuilder().
+    WithRegistrar(reg).
+    WithSpec(spec).
+    WithResources(simplebankedmemory.Resources{Storage: storage}).
+    Build("MyMemCtrl")
+
+topPort := memCtrl.GetPortByName("Top")
+```
+
+| Method | Description |
+|---|---|
+| `WithRegistrar(r)` | Source of the engine and component registration (required) |
+| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
+| `WithResources(Resources{Storage: s})` | Shared backing storage (built internally if omitted) |
+
+### Default Configuration
+
+| Parameter | Default |
+|---|---|
+| Frequency | 1 GHz |
+| Banks | 4 |
+| Bank pipeline width / depth | 1 / 1 |
+| Stage latency | 10 cycles |
+| Post-pipeline buffer | 1 |
+| Top port buffer | 16 |
+| Storage capacity | 4 GB |
+| Bank selector | `"interleaved"`, 64 B stride (log2 = 6) |
+
+## Ports
+
+- **Top**: accepts `mem.ReadReq` and `mem.WriteReq`, returns `mem.DataReadyRsp`
+  and `mem.WriteDoneRsp`.
 
 ## Example
 
-The package ships with a runnable example that issues 100,000 sequential 64 B
-reads and prints the achieved bandwidth. You can execute it with:
+The package ships with a runnable example that issues sequential 64 B reads and
+prints the achieved bandwidth:
 
 ```sh
 go test ./mem/simplebankedmemory -run Example
-```
-
-The example demonstrates how to create an agent, wire it to the controller,
-and drive the simulation loop until all responses arrive.
-
-
-## Extensibility
-
-- Implement your own `bankSelector` by supplying `WithBankSelector` on the
-  builder. A selector maps an address to a bank index.
-- Replace the default storage with `WithStorage` to share memory across
-  controllers or to preload data.
-- Because the component is built on top of Akita’s middleware system, you can
-  attach additional middlewares for tracing or statistics gathering.
-
-
-## Tests
-
-Unit tests live within the package and cover:
-
-- Basic read latency and write commit behavior
-- The bandwidth example as a documentation test
-
-Run them with:
-
-```sh
-go test ./mem/simplebankedmemory
 ```

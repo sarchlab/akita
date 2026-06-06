@@ -36,7 +36,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	if err := storage.Write(0x40, []byte(payload)); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	dram.State.CurrentState = "pause"
+	dram.State.CurrentCmdID = 7
 
 	if err := sim.SaveCheckpoint(path, buildID); err != nil {
 		t.Fatalf("SaveCheckpoint: %v", err)
@@ -46,7 +46,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	if err := storage.Write(0x40, make([]byte, len(payload))); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	dram.State.CurrentState = "enable"
+	dram.State.CurrentCmdID = 99
 
 	if err := sim.LoadCheckpoint(path, buildID); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
@@ -59,7 +59,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	if string(got) != payload {
 		t.Fatalf("storage = %q, want %q", got, payload)
 	}
-	if dram.State.CurrentState != "pause" {
-		t.Fatalf("CurrentState = %q, want pause", dram.State.CurrentState)
+	if dram.State.CurrentCmdID != 7 {
+		t.Fatalf("CurrentCmdID = %d, want 7", dram.State.CurrentCmdID)
 	}
 }

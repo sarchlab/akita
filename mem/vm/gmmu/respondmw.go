@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -27,8 +28,11 @@ func (m *respondMW) bottomPort() messaging.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
-// Tick runs the respond stage.
+// Tick runs the respond stage. Paused GMMUs make no progress.
 func (m *respondMW) Tick() bool {
+	if m.comp.State.ControlState == control.StatePaused {
+		return false
+	}
 	return m.fetchFromBottom()
 }
 
@@ -44,7 +48,7 @@ func (m *respondMW) fetchFromBottom() bool {
 
 	switch rsp := rspI.(type) {
 	case vm.TranslationRsp:
-		tracing.TraceReqReceive(rsp, m.comp)
+		tracing.TraceReqReceive(m.comp, rsp)
 		return m.handleTranslationRsp(rsp)
 	default:
 		log.Panicf("gmmu cannot handle request of type %s",
@@ -59,7 +63,10 @@ func (m *respondMW) handleTranslationRsp(rsp vm.TranslationRsp) bool {
 	reqTransaction, exists := state.RemoteMemReqs[rsp.RspTo]
 
 	if !exists || reqTransaction.ReqID == 0 {
-		log.Panicf("Cannot find matching request for response %+v", rsp)
+		// Orphaned response: the request it answers was discarded, e.g. by a
+		// Reset issued while this remote walk was still outstanding. The
+		// message has already been retrieved, so drop it rather than crash.
+		return true
 	}
 
 	if !m.topPort().CanSend() {

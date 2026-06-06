@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -19,6 +20,9 @@ func (m *dispatchMW) topPort() messaging.Port {
 }
 
 func (m *dispatchMW) Tick() bool {
+	if m.comp.State.ControlState != control.StateEnabled {
+		return false
+	}
 	return m.dispatchFromTopPort()
 }
 
@@ -59,7 +63,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		}
 
 		m.topPort().RetrieveIncoming()
-		tracing.TraceReqReceive(msg, m.comp)
+		tracing.TraceReqReceive(m.comp, msg)
 
 		item := m.msgToItem(msg)
 		pipelineAccept(&next.Banks[bankID], spec, item)

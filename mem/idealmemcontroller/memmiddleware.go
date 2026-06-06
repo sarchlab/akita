@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -30,7 +31,7 @@ func (m *memMiddleware) Tick() bool {
 
 func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 	state := &m.comp.State
-	if state.CurrentState != "enable" {
+	if state.ControlState != control.StateEnabled {
 		return false
 	}
 
@@ -43,7 +44,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 		}
 
 		msg := msgI.(messaging.Msg)
-		tracing.TraceReqReceive(msg, m.comp)
+		tracing.TraceReqReceive(m.comp, msg)
 
 		tx := m.msgToInflightTransaction(msg)
 
@@ -90,7 +91,7 @@ func (m *memMiddleware) msgToInflightTransaction(msg messaging.Msg) inflightTran
 
 func (m *memMiddleware) processCountdowns() bool {
 	state := &m.comp.State
-	if state.CurrentState == "pause" {
+	if state.ControlState == control.StatePaused {
 		return false
 	}
 
@@ -213,6 +214,6 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 }
 
 func (m *memMiddleware) traceReqComplete(recvTaskID, reqMsgID uint64) {
-	tracing.EndTask(recvTaskID, m.comp)
+	tracing.EndTask(m.comp, tracing.TaskEnd{ID: recvTaskID})
 	tracing.ForgetMsgIDAtReceiver(reqMsgID, m.comp)
 }

@@ -48,6 +48,7 @@ var defaultSpec = Spec{
 	TransactionQueueSize: 32,
 	CommandQueueCapacity: 8,
 	TopPortBufferSize:    1024,
+	CtrlPortBufferSize:   4,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -132,6 +133,14 @@ func (b Builder) Build(name string) *Comp {
 		modelComp, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
 	modelComp.AddPort("Top", topPort)
 
+	ctrlBuf := spec.CtrlPortBufferSize
+	if ctrlBuf == 0 {
+		ctrlBuf = 4
+	}
+	ctrlPort := messaging.NewPort(
+		modelComp, ctrlBuf, ctrlBuf, name+".Control")
+	modelComp.AddPort("Control", ctrlPort)
+
 	b.addMiddlewares(modelComp, timing, cmdCycles)
 
 	for _, tracer := range b.tracers {
@@ -174,6 +183,9 @@ func (b Builder) addMiddlewares(
 	timing dramTiming, cmdCycles map[commandKind]int,
 ) {
 	topPort := modelComp.GetPortByName("Top")
+
+	cMW := &ctrlMiddleware{comp: modelComp}
+	modelComp.AddMiddleware(cMW)
 
 	rMW := &respondMW{
 		comp:    modelComp,

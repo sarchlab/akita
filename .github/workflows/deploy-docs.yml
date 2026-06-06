@@ -1,0 +1,63 @@
+# Builds the Docusaurus site in doc-site/ and deploys it to GitHub Pages.
+#
+# This same workflow runs in both repos that host a copy of the site:
+#   - sarchlab/akita-dev  -> https://sarchlab.github.io/akita-dev/  (dev)
+#   - sarchlab/akita       -> https://sarchlab.github.io/akita/      (public)
+# The site's baseUrl is derived from the repository name below, so no per-repo
+# config edits are needed. In each repo's Settings -> Pages, set Source to
+# "GitHub Actions".
+name: Deploy docs
+
+on:
+  push:
+    # main is akita-dev's default branch; v5 is the branch publish_v5.yml
+    # mirrors into the public akita repo.
+    branches: [main, v5]
+    paths:
+      - 'doc-site/**'
+      - 'doc/**'
+      - '**/README.md'
+      - '.github/workflows/deploy-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; don't cancel an in-progress one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: doc-site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: doc-site/package-lock.json
+      - run: npm ci
+      - run: npm run build
+        env:
+          # Serve under /<repo-name>/ to match the GitHub Pages project URL.
+          DOCS_BASE_URL: /${{ github.event.repository.name }}/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: doc-site/build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

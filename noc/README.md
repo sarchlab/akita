@@ -2,7 +2,7 @@
 
 Package `noc` and its sub-packages provide network-on-chip (NoC)
 implementations for connecting simulation components. All network
-types implement the `sim.Connection` interface, using `PlugIn(port)`
+types implement the `messaging.Connection` interface, using `PlugIn(port)`
 to attach component ports.
 
 ## Direct Connection
@@ -13,15 +13,15 @@ The simplest connection type — zero-latency message forwarding between ports.
 import "github.com/sarchlab/akita/v5/noc/directconnection"
 
 conn := directconnection.MakeBuilder().
-    WithEngine(engine).
-    WithFreq(1 * sim.GHz).
+    WithRegistrar(reg).
+    WithSpec(directconnection.DefaultSpec()).
     Build("conn")
 
 conn.PlugIn(componentA.GetPortByName("Top"))
 conn.PlugIn(componentB.GetPortByName("Top"))
 ```
 
-`directconnection.Comp` is a `TickingComponent` that forwards messages
+`directconnection.Comp` is a ticking component that forwards messages
 between all plugged-in ports each tick, with no latency or bandwidth
 modeling.
 
@@ -40,7 +40,7 @@ import "github.com/sarchlab/akita/v5/noc/networking/networkconnector"
 
 connector := networkconnector.NewConnector().
     WithEngine(engine).
-    WithDefaultFreq(1 * sim.GHz).
+    WithDefaultFreq(1 * timing.GHz).
     WithFlitSize(64)
 
 // Add switches, connect devices, build routing tables...
@@ -70,15 +70,14 @@ unit on a network:
 
 ```go
 type Flit struct {
-    sim.MsgMeta
-    SeqID        int         // flit sequence number within a message
-    NumFlitInMsg int         // total flits in the parent message
-    Msg          sim.MsgMeta // metadata of the carried message
-    OutputBufIdx int         // output buffer index within a switch
+    messaging.MsgMeta
+    SeqID        int               // flit sequence number within a message
+    NumFlitInMsg int               // total flits in the parent message
+    Msg          messaging.MsgMeta // metadata of the carried message
 }
 ```
 
-Endpoints fragment `sim.Msg` into `Flit`s for transmission and reassemble
+Endpoints fragment `messaging.Msg` into `Flit`s for transmission and reassemble
 them at the destination.
 
 ## Connection Pattern

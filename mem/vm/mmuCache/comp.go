@@ -34,16 +34,23 @@ const (
 	mmuCacheStateEnable = "enable"
 	mmuCacheStatePause  = "pause"
 	mmuCacheStateDrain  = "drain"
-	mmuCacheStateFlush  = "flush"
 )
 
 // State contains mutable runtime data for the mmuCache.
 type State struct {
-	CurrentState           string               `json:"current_state"`
-	Table                  []setState           `json:"table"`
-	InflightFlushReqID     uint64               `json:"inflight_flush_req_id"`
-	InflightFlushReqSrc    messaging.RemotePort `json:"inflight_flush_req_src"`
-	InflightFlushReqActive bool                 `json:"inflight_flush_req_active"`
+	CurrentState    string               `json:"current_state"`
+	PendingDrainRsp bool                 `json:"pending_drain_rsp"`
+	CurrentCmdID    uint64               `json:"current_cmd_id"`
+	CurrentCmdSrc   messaging.RemotePort `json:"current_cmd_src"`
+	Table           []setState           `json:"table"`
+
+	// OutstandingBottomReqs holds the IDs of translation requests forwarded
+	// to the low module for which no response has returned yet. A Drain is not
+	// complete while any are outstanding (otherwise a late response would land
+	// after the caller was told the cache had drained), and a response whose
+	// ID is absent here is orphaned — e.g. its request was dropped by a Reset
+	// issued mid-walk — and must be discarded rather than repopulate the table.
+	OutstandingBottomReqs map[uint64]bool `json:"outstanding_bottom_reqs"`
 }
 
 // blockState is a serializable snapshot of a single cache block.
@@ -81,6 +88,12 @@ func setUpdate(s *setState, wayID int, pid vm.PID, seg uint64) {
 
 func setEvict(s *setState) (wayID int, ok bool) {
 	return s.LRU.Evict()
+}
+
+// setRemove drops the cached entry keyed by (pid, seg), turning future
+// lookups for that key into misses. It is a no-op if the key is absent.
+func setRemove(s *setState, pid vm.PID, seg uint64) {
+	s.LRU.Remove(lruset.KeyString(uint64(pid), seg))
 }
 
 func setVisit(s *setState, wayID int) {

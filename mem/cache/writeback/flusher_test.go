@@ -114,6 +114,9 @@ var _ = Describe("Flusher", func() {
 
 	Context("flush without reset", func() {
 		It("should start flushing", func() {
+			// Flush is a conditional verb: it is only legal once paused.
+			m.comp.State.CacheState = int(cacheStatePaused)
+
 			req := mem.ControlReq{Command: mem.CmdFlush}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.TrafficClass = "mem.ControlReq"
@@ -190,15 +193,18 @@ var _ = Describe("Flusher", func() {
 			Expect(ret).To(BeTrue())
 			next = &m.comp.State
 			Expect(next.HasProcessingFlush).To(BeFalse())
-			Expect(cacheState(next.CacheState)).To(Equal(cacheStateRunning))
+			// Flush returns the cache to paused (its prior, legal state).
+			Expect(cacheState(next.CacheState)).To(Equal(cacheStatePaused))
 		})
 	})
 
 	Context("flush with reset", func() {
 		It("should remove inflight state", func() {
+			// Flush is a conditional verb: it is only legal once paused.
+			m.comp.State.CacheState = int(cacheStatePaused)
+
 			req := mem.ControlReq{Command: mem.CmdFlush}
 			req.ID = timing.GetIDGenerator().Generate()
-			req.DiscardInflight = true
 			req.TrafficClass = "mem.ControlReq"
 
 			controlPort.EXPECT().PeekIncoming().Return(req)
@@ -214,35 +220,6 @@ var _ = Describe("Flusher", func() {
 		})
 	})
 
-	Context("restarting", func() {
-		It("should stall if cannot send to control port", func() {
-			req := mem.ControlReq{Command: mem.CmdEnable}
-			req.ID = timing.GetIDGenerator().Generate()
-			req.TrafficClass = "mem.ControlReq"
-			controlPort.EXPECT().PeekIncoming().Return(req)
-			controlPort.EXPECT().CanSend().Return(false)
-
-			madeProgress := f.Tick()
-
-			Expect(madeProgress).To(BeFalse())
-		})
-
-		It("should restart", func() {
-			req := mem.ControlReq{Command: mem.CmdEnable}
-			req.ID = timing.GetIDGenerator().Generate()
-			req.TrafficClass = "mem.ControlReq"
-			controlPort.EXPECT().PeekIncoming().Return(req)
-			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
-			controlPort.EXPECT().CanSend().Return(true)
-			controlPort.EXPECT().Send(gomock.Any())
-			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
-			bottomPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
-
-			madeProgress := f.Tick()
-
-			Expect(madeProgress).To(BeTrue())
-			next := &m.comp.State
-			Expect(cacheState(next.CacheState)).To(Equal(cacheStateRunning))
-		})
-	})
+	// CmdEnable / Reset handling moved out of flusher to ctrlmiddleware;
+	// those code paths are covered by TestControlContract.
 })
