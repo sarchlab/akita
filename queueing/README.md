@@ -1,80 +1,82 @@
-# queueing
+# queueing — Generic Buffers and Pipelines
 
 Package `queueing` provides generic `Buffer[T]` and `Pipeline[T]` data
-structures designed for use as serializable fields in component State structs.
+structures for the Akita simulation framework. They are reusable building
+blocks for component state: a bounded FIFO queue and a fixed-latency,
+multi-lane pipeline that a component embeds in its `State` and drives once per
+tick.
 
-Both types use exported fields with `json` tags, making them directly
-embeddable in `modeling.State` types for checkpoint/restore.
+## How It Works
+
+Both types fully encapsulate their state behind methods — their fields are
+unexported, so callers interact through the API only, which keeps the capacity
+and FIFO invariants intact. Construct them with the provided constructors,
+which return values so they can be embedded directly in a component's state.
+
+A `Pipeline[T]` drains its completed items into a `Sink[T]`, which is any
+destination that can accept an item:
+
+```go
+type Sink[T any] interface {
+    CanPush() bool
+    PushTyped(T)
+}
+```
+
+A `*Buffer[T]` satisfies `Sink[T]`, so a buffer is the natural post-pipeline
+landing spot.
 
 ## Buffer[T]
 
-A fixed-capacity FIFO queue with hook support.
+A bounded FIFO queue with hook support. Create one with `NewBuffer`:
 
 ```go
-type MyState struct {
-    Inbox queueing.Buffer[MyRequest] `json:"inbox"`
+inbox := queueing.NewBuffer[MyRequest]("inbox", 16)
+
+if inbox.CanPush() {
+    inbox.PushTyped(req)
 }
 
-// Initialize
-state.Inbox = queueing.Buffer[MyRequest]{
-    BufferName: "inbox",
-    Cap:        16,
-}
-
-// Use
-if state.Inbox.CanPush() {
-    state.Inbox.PushTyped(req)
-}
-fmt.Println(state.Inbox.Size(), state.Inbox.Capacity())
+fmt.Println(inbox.Size(), inbox.Capacity())
 ```
 
 ### Key Methods
 
 | Method | Description |
 |--------|-------------|
-| `CanPush() bool` | True if the buffer has room |
-| `Push(e interface{})` | Add element (panics if full) |
-| `PushTyped(e T)` | Type-safe push (panics if full) |
+| `CanPush() bool` | True if the buffer has room for another element |
+| `PushTyped(e T)` | Add an element to the back (panics if full) |
+| `Peek() T` | Return the front element without removing it (zero value if empty) |
+| `UpdateFront(e T)` | Replace the front element in place (no-op if empty) |
+| `Pop() T` | Remove and return the front element (zero value if empty) |
 | `Clear()` | Remove all elements |
 | `Size() int` | Current number of elements |
 | `Capacity() int` | Maximum capacity |
-| `Name() string` | Buffer name (for hooks/monitoring) |
-
-`Buffer[T]` also satisfies the `BufferState` interface for type-erased
-inspection by monitoring and arbitration code.
+| `Name() string` | Buffer name (for hooks and monitoring) |
 
 ### Hook Positions
 
-- `HookPosBufPush` — triggered after an element is pushed.
-- `HookPosBufPop` — triggered after an element is popped.
+`Buffer[T]` embeds `hooking.HookableBase` and fires:
+
+- `HookPosBufPush` — after an element is pushed.
+- `HookPosBufPop` — after an element is popped.
 
 ## Pipeline[T]
 
-A multi-lane, multi-stage pipeline that models fixed-latency processing.
-Items enter at stage 0 and advance one stage per tick until they exit from
-the last stage into a post-buffer.
+A multi-lane, multi-stage pipeline that models fixed-latency processing. Items
+enter at stage 0 and advance one stage per tick until they exit the last stage
+into a `Sink[T]`. Total latency through the pipeline equals `numStages` ticks.
+Create one with `NewPipeline`:
 
 ```go
-type MyState struct {
-    Pipe    queueing.Pipeline[MyItem]  `json:"pipe"`
-    PostBuf queueing.Buffer[MyItem]    `json:"post_buf"`
+pipe := queueing.NewPipeline[MyItem](4, 3) // 4 lanes, 3 stages
+post := queueing.NewBuffer[MyItem]("post", 8)
+
+if pipe.CanAccept() {
+    pipe.Accept(item)
 }
 
-// Initialize: 4 lanes, 3 stages
-state.Pipe = queueing.Pipeline[MyItem]{
-    Width:     4,
-    NumStages: 3,
-}
-state.PostBuf = queueing.Buffer[MyItem]{
-    BufferName: "post",
-    Cap:        8,
-}
-
-// Each tick
-if state.Pipe.CanAccept() {
-    state.Pipe.Accept(item)
-}
-madeProgress := state.Pipe.Tick(&state.PostBuf)
+madeProgress := pipe.Tick(&post)
 ```
 
 ### Key Methods
@@ -82,13 +84,19 @@ madeProgress := state.Pipe.Tick(&state.PostBuf)
 | Method | Description |
 |--------|-------------|
 | `CanAccept() bool` | True if a lane is free at stage 0 |
-| `Accept(item T)` | Insert item into the first stage |
-| `Tick(postBuf *Buffer[T]) bool` | Advance pipeline; completed items go to postBuf |
+| `Accept(item T)` | Insert an item into the first stage |
+| `AcceptWithDelay(item T, delay int)` | Like `Accept`, but the item dwells `delay` extra cycles at stage 0 |
+| `Tick(sink Sink[T]) bool` | Advance one cycle; completed items go to `sink`. Returns true if any item moved |
+| `Stages() []PipelineStage[T]` | Copy of current occupancy, for inspection and testing |
+| `Clear()` | Remove all items |
 
 ### Pipeline Behavior
 
-- Each item occupies one lane at one stage.
-- Items advance from stage `i` to stage `i+1` if the same lane is free.
-- Items at the last stage with `CycleLeft == 0` are output.
-- Total latency = `NumStages` ticks.
-- Stages are processed from last to first to prevent double-advancement.
+- Each item occupies one lane at one stage, described by `PipelineStage[T]`
+  (`Lane`, `Stage`, `Item`, `CycleLeft`).
+- Items advance from stage `i` to stage `i+1` when the same lane is free at the
+  next stage.
+- Items at the last stage with `CycleLeft == 0` are pushed into the sink, but
+  only while `sink.CanPush()` is true.
+- Stages are processed from last to first to prevent double-advancement within
+  a tick.
