@@ -72,6 +72,9 @@ interface CallGraphViewport {
 const INITIAL_CALL_GRAPH_VIEWPORT: CallGraphViewport = { scale: 1, x: 0, y: 0 };
 type ProfileResultTab = "graph" | "top-functions";
 type ProfileKind = "cpu" | "heap";
+// "scratch" captures the absolute heap; "incremental" diffs against the previous
+// capture (growth since then). Incremental needs a prior capture as a baseline.
+type HeapCaptureMode = "scratch" | "incremental";
 
 interface HeapSampleType {
   value: string;
@@ -447,6 +450,9 @@ export default function ProfilingPage() {
   const [rawProfile, setRawProfile] = useState<unknown>(null);
   const [profileKind, setProfileKind] = useState<ProfileKind | null>(null);
   const [heapSampleType, setHeapSampleType] = useState(DEFAULT_HEAP_SAMPLE_TYPE);
+  const [heapMode, setHeapMode] = useState<HeapCaptureMode>("scratch");
+  const [hasHeapBaseline, setHasHeapBaseline] = useState(false);
+  const [heapIsDelta, setHeapIsDelta] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState<ProfileResultTab>("graph");
 
@@ -481,10 +487,12 @@ export default function ProfilingPage() {
   };
 
   const captureHeapProfile = async () => {
+    // Incremental needs a prior capture; fall back to scratch without a baseline.
+    const incremental = heapMode === "incremental" && hasHeapBaseline;
     setIsCapturing(true);
-    setProfileStatus("Capturing heap profile...");
+    setProfileStatus(incremental ? "Capturing incremental heap profile..." : "Capturing heap profile...");
     try {
-      const response = await fetch(`/api/heap?gc=1`);
+      const response = await fetch(`/api/heap?gc=1&mode=${incremental ? "incremental" : "scratch"}`);
       if (!response.ok) {
         throw new Error(`${response.status} ${response.statusText}`);
       }
@@ -492,7 +500,9 @@ export default function ProfilingPage() {
       const profile = await response.json();
       setRawProfile(profile);
       setProfileKind("heap");
-      setProfileStatus("Heap profile captured");
+      setHeapIsDelta(incremental);
+      setHasHeapBaseline(true);
+      setProfileStatus(incremental ? "Incremental heap profile captured" : "Heap profile captured");
     } catch (err) {
       setProfileStatus(err instanceof Error ? err.message : "Heap profile capture failed");
     } finally {
@@ -500,7 +510,7 @@ export default function ProfilingPage() {
     }
   };
 
-  const profileKindLabel = profileKind === "heap" ? "Heap" : "CPU";
+  const profileKindLabel = profileKind === "heap" ? (heapIsDelta ? "Incremental Heap" : "Heap") : "CPU";
 
   return (
     <div className="h-full overflow-auto bg-slate-50 p-4">
@@ -540,6 +550,21 @@ export default function ProfilingPage() {
             }
             memoryActions={
               <div className="flex flex-wrap items-center gap-2">
+                <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-mode">
+                  Mode
+                </label>
+                <select
+                  id="heap-mode"
+                  className="h-7 rounded border border-input bg-background px-2 text-xs"
+                  value={hasHeapBaseline ? heapMode : "scratch"}
+                  onChange={(event) => setHeapMode(event.target.value as HeapCaptureMode)}
+                  disabled={isCapturing}
+                >
+                  <option value="scratch">From scratch</option>
+                  <option value="incremental" disabled={!hasHeapBaseline}>
+                    Incremental{hasHeapBaseline ? "" : " (capture one first)"}
+                  </option>
+                </select>
                 <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-sample-type">
                   Sample
                 </label>

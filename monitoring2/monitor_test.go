@@ -944,3 +944,53 @@ func TestCollectHeapProfileExposesHeapSampleTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectHeapProfileIncrementalRequiresBaseline(t *testing.T) {
+	monitor := NewMonitor()
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/heap?mode=incremental", nil)
+
+	monitor.collectHeapProfile(recorder, request)
+
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("expected status %d when no baseline exists, got %d",
+			http.StatusConflict, recorder.Code)
+	}
+}
+
+func TestCollectHeapProfileIncrementalReturnsDeltaAfterScratch(t *testing.T) {
+	monitor := NewMonitor()
+
+	// A from-scratch capture establishes the baseline.
+	scratchRecorder := httptest.NewRecorder()
+	monitor.collectHeapProfile(scratchRecorder,
+		httptest.NewRequest(http.MethodGet, "/api/heap?mode=scratch", nil))
+	if scratchRecorder.Code != http.StatusOK {
+		t.Fatalf("scratch: expected status %d, got %d",
+			http.StatusOK, scratchRecorder.Code)
+	}
+
+	// The incremental capture now diffs against that baseline and succeeds.
+	deltaRecorder := httptest.NewRecorder()
+	monitor.collectHeapProfile(deltaRecorder,
+		httptest.NewRequest(http.MethodGet, "/api/heap?mode=incremental", nil))
+	if deltaRecorder.Code != http.StatusOK {
+		t.Fatalf("incremental: expected status %d, got %d",
+			http.StatusOK, deltaRecorder.Code)
+	}
+
+	body := deltaRecorder.Body.String()
+	if !json.Valid([]byte(body)) {
+		t.Fatal("incremental response was not valid JSON")
+	}
+
+	// The delta is still a heap profile, so it keeps the heap sample types.
+	for _, want := range []string{
+		"inuse_space", "inuse_objects", "alloc_space", "alloc_objects",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected delta heap profile to expose sample type %q", want)
+		}
+	}
+}

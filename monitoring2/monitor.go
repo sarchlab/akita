@@ -63,6 +63,11 @@ type Monitor struct {
 	progressBars     []*daisen2.ProgressBar
 	httpServer       *http.Server
 	fs               http.FileSystem
+
+	// heapBaseline is the last absolute heap profile served, used as the base
+	// for incremental (delta) heap captures.
+	heapProfileMu sync.Mutex
+	heapBaseline  *profile.Profile
 }
 
 // NewMonitor creates a new Monitor with default settings. The monitor is not
@@ -1197,7 +1202,18 @@ func (m *Monitor) collectProfile(w http.ResponseWriter, r *http.Request) {
 // force a garbage collection first, which makes the in-use values exclude
 // objects that are unreferenced but not yet collected, at the cost of perturbing
 // the running simulation.
+//
+// The mode query selects what is returned:
+//   - "scratch" (default): the absolute heap profile.
+//   - "incremental": the delta versus the previously served heap profile
+//     (current - baseline), the way `go tool pprof -base` reports growth.
+//
+// Either way the captured absolute profile becomes the baseline for the next
+// incremental capture. Requesting "incremental" before any capture is a
+// 409 Conflict, since there is no baseline to diff against.
 func (m *Monitor) collectHeapProfile(w http.ResponseWriter, r *http.Request) {
+	incremental := strings.EqualFold(r.URL.Query().Get("mode"), "incremental")
+
 	if gc := r.URL.Query().Get("gc"); gc == "1" || strings.EqualFold(gc, "true") {
 		runtime.GC()
 	}
@@ -1209,9 +1225,15 @@ func (m *Monitor) collectHeapProfile(w http.ResponseWriter, r *http.Request) {
 		log.Panic(err)
 	}
 
-	prof, err := profile.ParseData(buf.Bytes())
+	current, err := profile.ParseData(buf.Bytes())
 	if err != nil {
 		log.Panic(err)
+	}
+
+	prof, err := m.resolveHeapProfile(current, incremental)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
 	}
 
 	b, err := json.Marshal(prof)
@@ -1223,6 +1245,40 @@ func (m *Monitor) collectHeapProfile(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
+}
+
+// resolveHeapProfile records current as the new incremental baseline and returns
+// the profile to serve: current itself for a from-scratch capture, or the delta
+// against the previous baseline for an incremental capture.
+func (m *Monitor) resolveHeapProfile(
+	current *profile.Profile,
+	incremental bool,
+) (*profile.Profile, error) {
+	m.heapProfileMu.Lock()
+	defer m.heapProfileMu.Unlock()
+
+	baseline := m.heapBaseline
+	m.heapBaseline = current
+
+	if !incremental {
+		return current, nil
+	}
+
+	if baseline == nil {
+		return nil, errors.New(
+			"no heap baseline yet; capture a from-scratch profile first")
+	}
+
+	// delta = current - baseline, mirroring `go tool pprof -base`.
+	negBaseline := baseline.Copy()
+	negBaseline.Scale(-1)
+
+	delta, err := profile.Merge([]*profile.Profile{current, negBaseline})
+	if err != nil {
+		return nil, err
+	}
+
+	return delta, nil
 }
 
 func (m *Monitor) apiTraceStart(w http.ResponseWriter, r *http.Request) {
