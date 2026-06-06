@@ -249,6 +249,10 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(profilingPage, /baselineId/);
   assert.match(profilingPage, /heapSnapshots/);
   assert.match(profilingPage, /diffHeapProfiles/);
+  // Every captured snapshot is listed immediately (the current one is marked,
+  // not hidden), so the first capture is usable as a baseline right away.
+  assert.match(profilingPage, /\(current\)/);
+  assert.doesNotMatch(profilingPage, /filter\(\(snapshot\) => snapshot\.id !== currentHeapId\)/);
   assert.match(profilingPage, /Incremental Heap/);
   // The diff is client-side; the heap endpoint stays a plain absolute capture.
   assert.doesNotMatch(profilingPage, /\/api\/heap\?gc=1&mode=/);

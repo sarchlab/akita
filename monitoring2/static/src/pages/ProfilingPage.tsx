@@ -668,13 +668,12 @@ export default function ProfilingPage() {
                 disabled={isCapturing}
               >
                 <option value="">No baseline (from scratch)</option>
-                {heapSnapshots
-                  .filter((snapshot) => snapshot.id !== currentHeapId)
-                  .map((snapshot) => (
-                    <option key={snapshot.id} value={snapshot.id}>
-                      {snapshot.label}
-                    </option>
-                  ))}
+                {heapSnapshots.map((snapshot) => (
+                  <option key={snapshot.id} value={snapshot.id}>
+                    {snapshot.label}
+                    {snapshot.id === currentHeapId ? " (current)" : ""}
+                  </option>
+                ))}
               </select>
               <label className="text-[10px] font-medium text-slate-600" htmlFor="heap-sample-type">
                 Sample
