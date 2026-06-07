@@ -25,10 +25,3 @@ func init() {
 func RegisterEvent(evt Event) {
 	eventCodec.Register(evt)
 }
-
-// CheckRoundTrip verifies that evt encodes and decodes back to an equal event of
-// the same type. It is a test aid for an event-defining package to confirm its
-// types are registered and serialize losslessly.
-func CheckRoundTrip(evt Event) error {
-	return eventCodec.CheckRoundTrip(evt)
-}

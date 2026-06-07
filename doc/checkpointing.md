@@ -166,17 +166,12 @@ and be registered with `sim.RegisterResource`.
 
 ## Testing your types
 
-`messaging.CheckRoundTrip(msg)` and `timing.CheckRoundTrip(evt)` encode a value,
-decode it, and confirm it comes back equal — a one-line way for a package to test
-that its types are registered and serialize losslessly:
-
-```go
-func TestMyMessagesRoundTrip(t *testing.T) {
-	if err := messaging.CheckRoundTrip(MyReq{Address: 0x40}); err != nil {
-		t.Fatal(err)
-	}
-}
-```
+You usually do not need a dedicated test: a forgotten `RegisterMsg`/`RegisterEvent`
+fails loudly when a checkpoint that captured the type is loaded, and a
+non-serializable `State` panics at `Build`. For end-to-end confidence, take and
+restore a checkpoint in a test and assert the resumed run matches an
+uninterrupted one — see the resume oracles under `mem/acceptancetests` for the
+pattern.
 
 ## See also
 

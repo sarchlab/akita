@@ -20,10 +20,3 @@ var msgCodec = codec.NewRegistry[Msg]("message")
 func RegisterMsg(msg Msg) {
 	msgCodec.Register(msg)
 }
-
-// CheckRoundTrip verifies that msg encodes and decodes back to an equal message
-// of the same type. It is a test aid for a message-defining package to confirm
-// its types are registered and serialize losslessly.
-func CheckRoundTrip(msg Msg) error {
-	return msgCodec.CheckRoundTrip(msg)
-}

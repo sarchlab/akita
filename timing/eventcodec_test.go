@@ -25,7 +25,7 @@ func TestEventRegistryValueRoundTrip(t *testing.T) {
 	e.Time_ = 10
 	e.HandlerID_ = "h"
 
-	if err := CheckRoundTrip(e); err != nil {
+	if err := eventCodec.CheckRoundTrip(e); err != nil {
 		t.Fatalf("CheckRoundTrip (value): %v", err)
 	}
 }
@@ -36,7 +36,7 @@ func TestEventRegistryPointerRoundTrip(t *testing.T) {
 	e := &pointerEvent{Tag: "x"}
 	e.Time_ = 20
 
-	if err := CheckRoundTrip(e); err != nil {
+	if err := eventCodec.CheckRoundTrip(e); err != nil {
 		t.Fatalf("CheckRoundTrip (pointer): %v", err)
 	}
 }
@@ -56,7 +56,7 @@ func TestEventBaseRegisteredByDefault(t *testing.T) {
 	e := MakeEventBase(42, "h")
 	e.ID = 7
 
-	if err := CheckRoundTrip(e); err != nil {
+	if err := eventCodec.CheckRoundTrip(e); err != nil {
 		t.Fatalf("CheckRoundTrip (is EventBase registered by default?): %v", err)
 	}
 }

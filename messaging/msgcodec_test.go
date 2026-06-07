@@ -20,7 +20,7 @@ func TestMsgRegistryRoundTrip(t *testing.T) {
 	msg.Dst = "B"
 	msg.TrafficClass = "test"
 
-	if err := CheckRoundTrip(msg); err != nil {
+	if err := msgCodec.CheckRoundTrip(msg); err != nil {
 		t.Fatalf("CheckRoundTrip: %v", err)
 	}
 }
