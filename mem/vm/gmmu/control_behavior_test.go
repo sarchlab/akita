@@ -46,11 +46,14 @@ var _ = Describe("GMMU control behavior", func() {
 		spec.Latency = 10
 		spec.LowModule = lowModule
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		comp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(spec).
 			Build("GMMU")
+
+		assignDefaultPorts(reg, comp)
 
 		topPort = comp.GetPortByName("Top")
 		ctrlPort = comp.GetPortByName("Control")

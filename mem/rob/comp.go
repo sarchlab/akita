@@ -17,10 +17,6 @@ type Spec struct {
 	// forwards requests to. The reorder buffer rewrites the Dst of every
 	// shadow request to this value.
 	BottomUnit messaging.RemotePort `json:"bottom_unit"`
-
-	TopPortBufferSize     int `json:"top_port_buffer_size"`
-	BottomPortBufferSize  int `json:"bottom_port_buffer_size"`
-	ControlPortBufferSize int `json:"control_port_buffer_size"`
 }
 
 // transactionState captures everything the reorder buffer needs to remember

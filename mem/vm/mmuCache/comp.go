@@ -17,10 +17,6 @@ type Spec struct {
 	Log2PageSize    uint64      `json:"log2_page_size"`
 	NumReqPerCycle  int         `json:"num_req_per_cycle"`
 	LatencyPerLevel uint64      `json:"latency_per_level"`
-
-	TopPortBufferSize     int `json:"top_port_buffer_size"`
-	BottomPortBufferSize  int `json:"bottom_port_buffer_size"`
-	ControlPortBufferSize int `json:"control_port_buffer_size"`
 }
 
 // Resources holds the external wiring referenced by the mmuCache: the remote

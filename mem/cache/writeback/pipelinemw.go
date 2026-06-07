@@ -12,9 +12,6 @@ import (
 type pipelineMW struct {
 	comp *modeling.Component[Spec, State, Resources]
 
-	topPort    messaging.Port
-	bottomPort messaging.Port
-
 	storage *mem.Storage
 
 	topParser   *topParser
@@ -27,6 +24,19 @@ type pipelineMW struct {
 // GetSpec returns the immutable specification.
 func (m *pipelineMW) GetSpec() Spec {
 	return m.comp.Spec()
+}
+
+// topPort resolves the "Top" port by name. The port instance is assigned
+// externally after Build, so it is resolved lazily on every use rather than
+// cached at build time.
+func (m *pipelineMW) topPort() messaging.Port {
+	return m.comp.GetPortByName("Top")
+}
+
+// bottomPort resolves the "Bottom" port by name, lazily, for the same reason
+// as topPort.
+func (m *pipelineMW) bottomPort() messaging.Port {
+	return m.comp.GetPortByName("Bottom")
 }
 
 // findPort resolves an address to a remote port using data from Spec.

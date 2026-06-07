@@ -2,7 +2,6 @@ package mmu
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -13,8 +12,6 @@ var defaultSpec = Spec{
 	Log2PageSize:        12,
 	Latency:             10,
 	MaxRequestsInFlight: 16,
-	TopPortBufferSize:   4096,
-	CtrlPortBufferSize:  4,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -25,7 +22,9 @@ func DefaultSpec() Spec {
 
 // Builder builds MMU components. Configuration is supplied as a whole through
 // WithSpec; wiring is supplied through WithRegistrar and WithResources. The
-// component creates its own ports.
+// component declares its "Top" and "Control" ports; the port instances are
+// supplied externally after Build with AssignPort (the caller chooses the
+// buffer sizes).
 type Builder struct {
 	registrar modeling.Registrar
 	spec      Spec
@@ -61,8 +60,9 @@ func (b Builder) WithResources(r Resources) Builder {
 	return b
 }
 
-// Build returns a newly created MMU component. It creates the component's Top
-// and Control ports.
+// Build returns a newly created MMU component. It declares the component's
+// "Top" and "Control" ports; assign the port instances after Build with
+// AssignPort.
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("mmu: WithRegistrar is required")
@@ -79,7 +79,8 @@ func (b Builder) Build(name string) *Comp {
 		WithResources(Resources{PageTable: pt}).
 		Build(name)
 
-	b.createPorts(name, spec, modelComp)
+	modelComp.DeclarePort("Top")
+	modelComp.DeclarePort("Control")
 
 	cmw := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cmw)
@@ -115,19 +116,4 @@ func validatePageTablePageSize(pt vm.PageTable, log2PageSize uint64) {
 			panic("page table page size does not match MMU page size")
 		}
 	}
-}
-
-func (b Builder) createPorts(
-	name string,
-	spec Spec,
-	mmu *Comp,
-) {
-	topPort := messaging.NewPort(
-		mmu, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
-	mmu.AddPort("Top", topPort)
-
-	ctrlPort := messaging.NewPort(
-		mmu, spec.CtrlPortBufferSize, spec.CtrlPortBufferSize,
-		name+".Control")
-	mmu.AddPort("Control", ctrlPort)
 }

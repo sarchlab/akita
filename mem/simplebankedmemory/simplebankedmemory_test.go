@@ -14,6 +14,22 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
+// assignPort builds a port instance for a declared component port and attaches
+// it, using the same registrar the component builder used.
+func assignPort(
+	reg modeling.Registrar,
+	comp *Comp,
+	name string,
+	bufSize int,
+) {
+	p := modeling.MakePortBuilder().
+		WithRegistrar(reg).
+		WithComponent(comp).
+		WithSpec(modeling.PortSpec{BufSize: bufSize}).
+		Build(name)
+	comp.AssignPort(name, p)
+}
+
 type loopbackConnection struct {
 	hooking.HookableBase
 
@@ -93,7 +109,8 @@ func newTestAgent(name string) *testAgent {
 	}
 
 	a.port = messaging.NewPort(a, 4, 4, fmt.Sprintf("%s.Port", name))
-	a.AddPort("Port", a.port)
+	a.DeclarePort("Port")
+	a.AssignPort("Port", a.port)
 
 	return a
 }
@@ -145,7 +162,8 @@ func newBandwidthAgent(name string) *bandwidthAgent {
 	}
 
 	a.port = messaging.NewPort(a, 8, 8, fmt.Sprintf("%s.Port", name))
-	a.AddPort("Port", a.port)
+	a.DeclarePort("Port")
+	a.AssignPort("Port", a.port)
 
 	return a
 }
@@ -187,13 +205,16 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.F
 	spec.Freq = freq
 	spec.NumBanks = 16
 	spec.StageLatency = 6
-	spec.TopPortBufferSize = 32
 	spec.PostPipelineBufSize = 32
 
+	reg := modeling.NewStandaloneRegistrar(engine)
 	memComp := MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithRegistrar(reg).
 		WithSpec(spec).
 		Build("Mem")
+
+	assignPort(reg, memComp, "Top", 32)
+	assignPort(reg, memComp, "Control", 16)
 
 	topPort := memComp.GetPortByName("Top")
 	agent := newBandwidthAgent("Agent")
@@ -251,13 +272,16 @@ var _ = Describe("SimpleBankedMemory", func() {
 		spec := DefaultSpec()
 		spec.NumBanks = 2
 		spec.StageLatency = 2
-		spec.TopPortBufferSize = 4
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		memComp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			WithResources(Resources{Storage: storage}).
 			Build("Mem")
+
+		assignPort(reg, memComp, "Top", 4)
+		assignPort(reg, memComp, "Control", 16)
 
 		topPort := memComp.GetPortByName("Top")
 		agent = newTestAgent("Agent")
@@ -353,17 +377,20 @@ var _ = Describe("SimpleBankedMemory", func() {
 		spec := DefaultSpec()
 		spec.NumBanks = 2
 		spec.StageLatency = 2
-		spec.TopPortBufferSize = 4
 		spec.AddrConvKind = "interleaving"
 		spec.AddrInterleavingSize = 256
 		spec.AddrTotalNumOfElements = 2
 		spec.AddrCurrentElementIndex = 0
 		spec.AddrOffset = 0
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		memComp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			Build("MemConv")
+
+		assignPort(reg, memComp, "Top", 4)
+		assignPort(reg, memComp, "Control", 16)
 
 		topPort := memComp.GetPortByName("Top")
 		agent = newTestAgent("AgentConv")

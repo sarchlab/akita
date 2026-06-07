@@ -18,11 +18,6 @@ type Spec struct {
 	Log2PageSize   uint64      `json:"log2_page_size"`
 	DeviceID       uint64      `json:"device_id"`
 	NumReqPerCycle int         `json:"num_req_per_cycle"`
-
-	TopPortBufferSize         int `json:"top_port_buffer_size"`
-	BottomPortBufferSize      int `json:"bottom_port_buffer_size"`
-	TranslationPortBufferSize int `json:"translation_port_buffer_size"`
-	CtrlPortBufferSize        int `json:"ctrl_port_buffer_size"`
 }
 
 // Resources holds the external wiring referenced by the AddressTranslator. The

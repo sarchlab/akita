@@ -52,6 +52,7 @@ func buildSim() (*simulation.Simulation, *driver) {
 			},
 		}).
 		Build("AT")
+	assignPorts(sim, at, "Top", "Bottom", "Translation", "Control")
 
 	d := buildDriver(sim, at.GetPortByName("Top"))
 
@@ -74,6 +75,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 		WithRegistrar(s).
 		WithSpec(memCtrlSpec).
 		Build("MemCtrl")
+	assignPorts(s, memCtrl, "Top", "Control")
 
 	l2Spec := writeback.DefaultSpec()
 	l2Spec.WayAssociativity = 4
@@ -88,6 +90,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 			},
 		}).
 		Build("L2Cache")
+	assignPorts(s, l2Cache, "Top", "Bottom", "Control")
 
 	l1Spec := writethroughcache.DefaultSpec()
 	l1Spec.WritePolicyType = "write-through"
@@ -102,6 +105,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 			},
 		}).
 		Build("L1Cache")
+	assignPorts(s, l1Cache, "Top", "Bottom", "Control")
 
 	return l1Cache, l2Cache, memCtrl
 }
@@ -118,6 +122,7 @@ func buildTranslationHierarchy(s *simulation.Simulation) (*mmu.Comp, *tlb.Comp, 
 		WithSpec(mmuSpec).
 		WithResources(mmu.Resources{PageTable: pageTable}).
 		Build("IoMMU")
+	assignPorts(s, ioMMU, "Top", "Control")
 
 	l2TLBSpec := tlb.DefaultSpec()
 	l2TLBSpec.NumWays = 64
@@ -133,6 +138,7 @@ func buildTranslationHierarchy(s *simulation.Simulation) (*mmu.Comp, *tlb.Comp, 
 			},
 		}).
 		Build("L2TLB")
+	assignPorts(s, l2TLB, "Top", "Bottom", "Control")
 
 	tlbSpec := tlb.DefaultSpec()
 	tlbSpec.NumWays = 8
@@ -148,6 +154,7 @@ func buildTranslationHierarchy(s *simulation.Simulation) (*mmu.Comp, *tlb.Comp, 
 			},
 		}).
 		Build("TLB")
+	assignPorts(s, itlb, "Top", "Bottom", "Control")
 
 	return ioMMU, itlb, l2TLB
 }
@@ -178,6 +185,23 @@ func setupPageTable(s *simulation.Simulation) vm.PageTable {
 	}
 
 	return pageTable
+}
+
+// assignPorts builds a port for each declared name on the component, registers
+// it, and assigns it, choosing a default buffer size.
+func assignPorts(
+	s *simulation.Simulation,
+	comp messaging.Component,
+	names ...string,
+) {
+	for _, name := range names {
+		p := modeling.MakePortBuilder().
+			WithRegistrar(s).
+			WithComponent(comp).
+			WithSpec(modeling.PortSpec{BufSize: 16}).
+			Build(name)
+		comp.AssignPort(name, p)
+	}
 }
 
 func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {

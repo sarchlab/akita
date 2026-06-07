@@ -17,9 +17,6 @@ type Spec struct {
 	Capacity      uint64      `json:"capacity"`
 	StorageRef    string      `json:"storage_ref"`
 
-	TopPortBufferSize  int `json:"top_port_buffer_size"`
-	CtrlPortBufferSize int `json:"ctrl_port_buffer_size"`
-
 	AddrConvKind string `json:"addr_conv_kind"`
 
 	AddrInterleavingSize    uint64 `json:"addr_interleaving_size"`

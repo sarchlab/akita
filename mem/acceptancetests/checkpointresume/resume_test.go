@@ -163,11 +163,18 @@ func buildDriver(reg modeling.Registrar, lowModule messaging.Port) *driver {
 		PendingWrite: make(map[uint64]int),
 		PendingRead:  make(map[uint64]int),
 	}
+	modelComp.DeclarePort("Mem")
 
 	d := &driver{Component: modelComp, lowModule: lowModule}
 	modelComp.AddMiddleware(&driverMW{d: d})
-	modelComp.AddPort("Mem", messaging.NewPort(d, 4, 4, "Driver.Mem"))
 	reg.RegisterComponent(d)
+
+	memPort := modeling.MakePortBuilder().
+		WithRegistrar(reg).
+		WithComponent(d).
+		WithSpec(modeling.PortSpec{BufSize: 4}).
+		Build("Mem")
+	d.AssignPort("Mem", memPort)
 
 	return d
 }
@@ -182,11 +189,11 @@ func buildSim() (*simulation.Simulation, *driver) {
 	dramSpec.Capacity = 1 * mem.MB
 	dramSpec.Width = 4
 	dramSpec.Latency = 10
-	dramSpec.TopPortBufferSize = 8
 	dram := idealmemcontroller.MakeBuilder().
 		WithRegistrar(sim).
 		WithSpec(dramSpec).
 		Build("DRAM")
+	assignPorts(sim, dram, "Top", "Control")
 
 	d := buildDriver(sim, dram.GetPortByName("Top"))
 
@@ -195,6 +202,23 @@ func buildSim() (*simulation.Simulation, *driver) {
 	conn.PlugIn(dram.GetPortByName("Top"))
 
 	return sim, d
+}
+
+// assignPorts builds a port for each declared name on the component, registers
+// it, and assigns it, choosing a default buffer size.
+func assignPorts(
+	sim *simulation.Simulation,
+	comp messaging.Component,
+	names ...string,
+) {
+	for _, name := range names {
+		p := modeling.MakePortBuilder().
+			WithRegistrar(sim).
+			WithComponent(comp).
+			WithSpec(modeling.PortSpec{BufSize: 8}).
+			Build(name)
+		comp.AssignPort(name, p)
+	}
 }
 
 func cleanup(sim *simulation.Simulation) {

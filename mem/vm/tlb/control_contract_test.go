@@ -25,14 +25,17 @@ func TestControlContract(t *testing.T) {
 	build := func() *control.Harness {
 		engine := timing.NewSerialEngine()
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		comp := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
 					Port: messaging.RemotePort("MMU"),
 				},
 			}).
 			Build("TLB")
+
+		assignDefaultPorts(reg, comp)
 
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			(&ccNoopConn{}).PlugIn(comp.GetPortByName(name))

@@ -326,11 +326,17 @@ control.ErrMustBePausedOrDrained
 
 ## Implementing the protocol in a new component
 
-1. Add a `Control` port in the builder:
+1. Declare a `Control` port in the builder, and have setup code assign the
+   instance after `Build`:
    ```go
-   ctrl := messaging.NewPort(modelComp, ctrlBufSize, ctrlBufSize,
-       name+".Control")
-   modelComp.AddPort("Control", ctrl)
+   modelComp.DeclarePort("Control") // in Build
+
+   // during assembly, after Build:
+   comp.AssignPort("Control", modeling.MakePortBuilder().
+       WithRegistrar(reg).
+       WithComponent(comp).
+       WithSpec(modeling.PortSpec{BufSize: ctrlBufSize}).
+       Build("Control"))
    ```
 2. Add a `control.State` field to the component's `State` struct so
    the control bookkeeping is uniform and serializable.

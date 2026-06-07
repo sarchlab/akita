@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/cache/writethroughcache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 
 	"github.com/sarchlab/akita/v5/simulation"
@@ -49,6 +50,12 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 		WithRegistrar(s).
 		WithSpec(agentSpec).
 		Build("MemAccessAgent")
+	agentMem := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(agent).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Mem")
+	agent.AssignPort("Mem", agentMem)
 	if monitor := s.GetMonitor(); monitor != nil {
 		agent.CreateProgressBars(monitor.CreateProgressBar)
 	}
@@ -59,6 +66,18 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 		WithRegistrar(s).
 		WithSpec(dramSpec).
 		Build("DRAM")
+	dramTop := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(dram).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Top")
+	dram.AssignPort("Top", dramTop)
+	dramCtrl := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(dram).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Control")
+	dram.AssignPort("Control", dramCtrl)
 
 	addressToPortMapper := new(mem.SinglePortMapper)
 	addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()
@@ -78,6 +97,24 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 			AddressMapper: addressToPortMapper,
 		}).
 		Build("Cache")
+	cacheTop := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(writeAroundCache).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Top")
+	writeAroundCache.AssignPort("Top", cacheTop)
+	cacheBottom := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(writeAroundCache).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Bottom")
+	writeAroundCache.AssignPort("Bottom", cacheBottom)
+	cacheControl := modeling.MakePortBuilder().
+		WithRegistrar(s).
+		WithComponent(writeAroundCache).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Control")
+	writeAroundCache.AssignPort("Control", cacheControl)
 
 	agent.LowModule = writeAroundCache.GetPortByName("Top")
 

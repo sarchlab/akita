@@ -10,38 +10,16 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
-	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Flusher", func() {
 	var (
-		mockCtrl    *gomock.Controller
-		controlPort *MockPort
-		topPort     *MockPort
-		bottomPort  *MockPort
+		controlPort messaging.Port
 		m           *pipelineMW
 		f           *flusher
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
-
-		controlPort = NewMockPort(mockCtrl)
-		controlPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("ControlPort")).
-			AnyTimes()
-		topPort = NewMockPort(mockCtrl)
-		topPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("TopPort")).
-			AnyTimes()
-		bottomPort = NewMockPort(mockCtrl)
-		bottomPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("BottomPort")).
-			AnyTimes()
-
 		initialState := State{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
@@ -66,12 +44,9 @@ var _ = Describe("Flusher", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &pipelineMW{
-			topPort:    topPort,
-			bottomPort: bottomPort,
-		}
+		m = &pipelineMW{}
 		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(nil).
+			WithEngine(timing.NewSerialEngine()).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:    6,
@@ -81,6 +56,25 @@ var _ = Describe("Flusher", func() {
 				NumBanks:         1,
 			}).
 			Build("Cache")
+
+		// The flusher resolves the "Control" port by name; the data pipeline
+		// resolves "Top"/"Bottom". Assign real ports (owned by the component)
+		// and plug a noop connection. Ticking the flusher only touches Control,
+		// but Top/Bottom are declared so the pipeline can resolve them too.
+		controlPort = messaging.NewPort(m.comp, 4, 4, "Cache.Control")
+		(&ccNoopConn{}).PlugIn(controlPort)
+		m.comp.DeclarePort("Control")
+		m.comp.AssignPort("Control", controlPort)
+
+		topPort := messaging.NewPort(m.comp, 4, 4, "Cache.Top")
+		(&ccNoopConn{}).PlugIn(topPort)
+		m.comp.DeclarePort("Top")
+		m.comp.AssignPort("Top", topPort)
+
+		bottomPort := messaging.NewPort(m.comp, 4, 4, "Cache.Bottom")
+		(&ccNoopConn{}).PlugIn(bottomPort)
+		m.comp.DeclarePort("Bottom")
+		m.comp.AssignPort("Bottom", bottomPort)
 
 		m.comp.State = initialState
 		next := &m.comp.State
@@ -98,16 +92,10 @@ var _ = Describe("Flusher", func() {
 			cache: m,
 		}
 
-		f = &flusher{pipeline: m, ctrlPort: controlPort}
-	})
-
-	AfterEach(func() {
-		mockCtrl.Finish()
+		f = &flusher{pipeline: m}
 	})
 
 	It("should do nothing if no request", func() {
-		controlPort.EXPECT().PeekIncoming().Return(nil)
-
 		ret := f.Tick()
 		Expect(ret).To(BeFalse())
 	})
@@ -120,8 +108,7 @@ var _ = Describe("Flusher", func() {
 			req := mem.ControlReq{Command: mem.CmdFlush}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.TrafficClass = "mem.ControlReq"
-			controlPort.EXPECT().PeekIncoming().Return(req)
-			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
+			controlPort.Deliver(req)
 
 			ret := f.Tick()
 
@@ -175,18 +162,14 @@ var _ = Describe("Flusher", func() {
 			next := &m.comp.State
 			next.CacheState = int(cacheStateFlushing)
 			next.HasProcessingFlush = true
+			flushID := timing.GetIDGenerator().Generate()
 			next.ProcessingFlush = flushReqState{
 				MsgMeta: messaging.MsgMeta{
-					ID: timing.GetIDGenerator().Generate(),
+					ID:  flushID,
+					Src: messaging.RemotePort("Agent"),
 				},
 			}
 			next.FlusherBlockToEvictRefs = []blockRef{}
-
-			controlPort.EXPECT().CanSend().Return(true)
-			controlPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg messaging.Msg) {
-					Expect(msg.Meta().RspTo).To(Equal(next.ProcessingFlush.MsgMeta.ID))
-				})
 
 			ret := f.Tick()
 
@@ -195,6 +178,10 @@ var _ = Describe("Flusher", func() {
 			Expect(next.HasProcessingFlush).To(BeFalse())
 			// Flush returns the cache to paused (its prior, legal state).
 			Expect(cacheState(next.CacheState)).To(Equal(cacheStatePaused))
+
+			out := controlPort.RetrieveOutgoing()
+			Expect(out).NotTo(BeNil())
+			Expect(out.Meta().RspTo).To(Equal(flushID))
 		})
 	})
 
@@ -207,9 +194,7 @@ var _ = Describe("Flusher", func() {
 			req.ID = timing.GetIDGenerator().Generate()
 			req.TrafficClass = "mem.ControlReq"
 
-			controlPort.EXPECT().PeekIncoming().Return(req)
-			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
-			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
+			controlPort.Deliver(req)
 
 			ret := f.Tick()
 

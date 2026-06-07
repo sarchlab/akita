@@ -20,10 +20,13 @@ func TestControlContract(t *testing.T) {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		comp := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			Build("MMUCache")
+
+		assignDefaultPorts(reg, comp)
 
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			(&noopConn{}).PlugIn(comp.GetPortByName(name))

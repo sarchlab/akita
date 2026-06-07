@@ -1,23 +1,19 @@
 package mmuCache
 
 import (
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 // defaultSpec provides the default configuration for mmuCache components.
 var defaultSpec = Spec{
-	Freq:                  1 * timing.GHz,
-	NumReqPerCycle:        4,
-	NumLevels:             5,
-	NumBlocks:             1,
-	PageSize:              4096,
-	LatencyPerLevel:       100,
-	Log2PageSize:          12,
-	TopPortBufferSize:     16,
-	BottomPortBufferSize:  16,
-	ControlPortBufferSize: 16,
+	Freq:            1 * timing.GHz,
+	NumReqPerCycle:  4,
+	NumLevels:       5,
+	NumBlocks:       1,
+	PageSize:        4096,
+	LatencyPerLevel: 100,
+	Log2PageSize:    12,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -28,7 +24,9 @@ func DefaultSpec() Spec {
 
 // A Builder builds mmuCache components. Configuration is supplied as a whole
 // through WithSpec; wiring is supplied through WithRegistrar and WithResources.
-// The component creates its own ports.
+// The component declares its "Top", "Bottom", and "Control" ports; the port
+// instances are supplied externally after Build with AssignPort (the caller
+// chooses the buffer sizes).
 type Builder struct {
 	registrar modeling.Registrar
 	spec      Spec
@@ -63,8 +61,8 @@ func (b Builder) WithResources(r Resources) Builder {
 	return b
 }
 
-// Build creates a new mmuCache. It creates the component's Top, Bottom, and
-// Control ports.
+// Build builds a new mmuCache. It declares the component's "Top", "Bottom", and
+// "Control" ports; assign the port instances after Build with AssignPort.
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("mmuCache: WithRegistrar is required")
@@ -90,25 +88,15 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 	modelComp.State = initialState
 
-	topPort := messaging.NewPort(
-		modelComp, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
-	modelComp.AddPort("Top", topPort)
-
-	bottomPort := messaging.NewPort(
-		modelComp, spec.BottomPortBufferSize, spec.BottomPortBufferSize,
-		name+".Bottom")
-	modelComp.AddPort("Bottom", bottomPort)
-
-	controlPort := messaging.NewPort(
-		modelComp, spec.ControlPortBufferSize, spec.ControlPortBufferSize,
-		name+".Control")
-	modelComp.AddPort("Control", controlPort)
-
 	ctrlMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(ctrlMW)
 
 	cacheMW := &mmuCacheMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cacheMW)
+
+	modelComp.DeclarePort("Top")
+	modelComp.DeclarePort("Bottom")
+	modelComp.DeclarePort("Control")
 
 	b.registrar.RegisterComponent(modelComp)
 

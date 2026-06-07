@@ -22,10 +22,6 @@ type Spec struct {
 	MSHRSize       int         `json:"mshr_size"`
 	Latency        int         `json:"latency"`
 	PipelineWidth  int         `json:"pipeline_width"`
-
-	TopPortBufferSize    int `json:"top_port_buffer_size"`
-	BottomPortBufferSize int `json:"bottom_port_buffer_size"`
-	CtrlPortBufferSize   int `json:"ctrl_port_buffer_size"`
 }
 
 // Resources holds the external objects wired into the TLB. The translation

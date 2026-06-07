@@ -32,8 +32,9 @@ var _ = Describe("TLB", func() {
 		spec.NumWays = 32
 		spec.Log2PageSize = 12
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		tlbComp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
@@ -42,6 +43,7 @@ var _ = Describe("TLB", func() {
 			}).
 			Build("TLB")
 
+		assignDefaultPorts(reg, tlbComp)
 		plugNoopConn(tlbComp)
 
 		topPort = tlbComp.GetPortByName("Top")
@@ -492,8 +494,9 @@ var _ = Describe("TLB Integration", func() {
 		lowModule = newIdealEndpoint("LowModule")
 		agent = newIdealEndpoint("Agent")
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		tlbComp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(DefaultSpec()).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
@@ -501,6 +504,8 @@ var _ = Describe("TLB Integration", func() {
 				},
 			}).
 			Build("TLB")
+
+		assignDefaultPorts(reg, tlbComp)
 
 		connection.PlugIn(agent.port)
 		connection.PlugIn(lowModule.port)

@@ -36,18 +36,18 @@ func (s *respondStage) Tick() bool {
 func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 	dr := mem.DataReadyRsp{}
 	dr.ID = timing.GetIDGenerator().Generate()
-	dr.Src = s.cache.topPort.AsRemote()
+	dr.Src = s.cache.topPort().AsRemote()
 	dr.Dst = trans.ReadMeta.Src
 	dr.RspTo = trans.ReadMeta.ID
 	dr.Data = trans.Data
 	dr.TrafficBytes = len(trans.Data) + 4
 	dr.TrafficClass = "rsp"
 
-	if !s.cache.topPort.CanSend() {
+	if !s.cache.topPort().CanSend() {
 		return false
 	}
 
-	s.cache.topPort.Send(dr)
+	s.cache.topPort().Send(dr)
 
 	trans.Removed = true
 
@@ -66,17 +66,17 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
 	done := mem.WriteDoneRsp{}
 	done.ID = timing.GetIDGenerator().Generate()
-	done.Src = s.cache.topPort.AsRemote()
+	done.Src = s.cache.topPort().AsRemote()
 	done.Dst = trans.WriteMeta.Src
 	done.RspTo = trans.WriteMeta.ID
 	done.TrafficBytes = 4
 	done.TrafficClass = "rsp"
 
-	if !s.cache.topPort.CanSend() {
+	if !s.cache.topPort().CanSend() {
 		return false
 	}
 
-	s.cache.topPort.Send(done)
+	s.cache.topPort().Send(done)
 
 	trans.Removed = true
 

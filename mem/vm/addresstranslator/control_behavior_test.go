@@ -33,7 +33,6 @@ var _ = Describe("Address Translator control behavior", func() {
 		spec := DefaultSpec()
 		spec.Log2PageSize = 12
 		spec.Freq = 1
-		spec.TopPortBufferSize = 16
 
 		resources := Resources{
 			MemProviderMapper: &mem.SinglePortMapper{
@@ -44,11 +43,14 @@ var _ = Describe("Address Translator control behavior", func() {
 			},
 		}
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		t = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			WithResources(resources).
 			Build("AddressTranslator")
+
+		assignPorts(reg, t, 16)
 
 		topPort = t.GetPortByName("Top")
 		bottomPort = t.GetPortByName("Bottom")

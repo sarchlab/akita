@@ -57,15 +57,22 @@ sw := switches.MakeBuilder().
     WithResources(switches.Resources{RoutingTable: rt}).
     Build("Switch0")
 
-switches.MakeSwitchPortAdder(sw).
-    WithPorts(localPort, remotePort).
+// The switch declares a "Port" group; each call mints a local port (named
+// "Port[i]"), registers it, builds the internal port complex toward the remote
+// peer, and returns the new local port to connect.
+swPort := switches.MakeSwitchPortAdder(sw).
+    WithRegistrar(reg).
+    WithRemotePort(remotePort). // an endpoint's NetworkPort or another switch's port
     WithLatency(1).
     WithNumInputChannel(1).
     WithNumOutputChannel(1).
-    AddPort()
+    Add()
 ```
 
 `WithRegistrar` and a non-nil `RoutingTable` are required — `Build` panics
-otherwise. `MakeSwitchPortAdder` defaults to one input/output channel and a
-latency of 1; `WithPorts` takes the switch-side local port and the remote port
-it connects to (an endpoint's or another switch's port).
+otherwise. `MakeSwitchPortAdder` defaults to one input/output channel, a latency
+of 1, and buffer size 1; `Add` mints the switch-side local port and wires it to
+the remote peer you supply. For a switch-to-switch link — where both local ports
+must exist before either route can resolve — add each side with `Add` and then
+call `switches.SetPortRemote(sw, localPort, remotePort)` for the side whose peer
+was not yet known when its port was added.

@@ -35,8 +35,9 @@ Up to `NumReqPerCycle` translations and responses are handled each tick.
 
 ## Key Types
 
-- `Spec` — immutable configuration: frequency, `Log2PageSize`, `DeviceID`,
-  `NumReqPerCycle`, and the four port buffer sizes.
+- `Spec` — immutable configuration: frequency, `Log2PageSize`, `DeviceID`, and
+  `NumReqPerCycle`. Port buffer sizes are chosen by the caller when the port
+  instances are built and assigned, not in the `Spec`.
 - `State` — mutable runtime data: the in-flight translation transactions, the
   requests forwarded to the bottom port awaiting responses, and the flushing
   flag.
@@ -67,6 +68,30 @@ at := addresstranslator.MakeBuilder().
 | `WithResources(Resources{...})` | External wiring (memory and translation provider mappers) |
 
 ## Ports
+
+`Build` declares the component's ports by logical name; it does not create the
+port instances. After `Build`, the caller builds each port with
+`modeling.MakePortBuilder` (choosing the buffer size) and attaches it with
+`AssignPort`. The same `modeling.Registrar` passed to the builder is used to
+build the ports. Every declared port must be assigned before the component is
+ticked.
+
+```go
+at := addresstranslator.MakeBuilder().
+    WithRegistrar(sim).
+    WithSpec(spec).
+    WithResources(res).
+    Build("AddressTranslator")
+
+for _, name := range []string{"Top", "Bottom", "Translation", "Control"} {
+    p := modeling.MakePortBuilder().
+        WithRegistrar(sim).
+        WithComponent(at).
+        WithSpec(modeling.PortSpec{BufSize: 4}).
+        Build(name)
+    at.AssignPort(name, p)
+}
+```
 
 - **Top**: accepts `mem.ReadReq` / `mem.WriteReq` (virtual addresses), returns
   `mem.DataReadyRsp` / `mem.WriteDoneRsp`.

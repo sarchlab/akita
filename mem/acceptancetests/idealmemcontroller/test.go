@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 
@@ -49,6 +50,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		WithRegistrar(s).
 		WithSpec(agentSpec).
 		Build("MemAccessAgent")
+	assignPorts(s, agent, "Mem")
 	if monitor := s.GetMonitor(); monitor != nil {
 		agent.CreateProgressBars(monitor.CreateProgressBar)
 	}
@@ -62,6 +64,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		WithRegistrar(s).
 		WithSpec(dramSpec).
 		Build("DRAM")
+	assignPorts(s, dram, "Top", "Control")
 
 	agent.LowModule = dram.GetPortByName("Top")
 
@@ -69,6 +72,23 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 	conn.PlugIn(dram.GetPortByName("Top"))
 
 	return s, engine, agent
+}
+
+// assignPorts builds a port for each declared name on the component and assigns
+// it, choosing a default buffer size.
+func assignPorts(
+	s *simulation.Simulation,
+	comp messaging.Component,
+	names ...string,
+) {
+	for _, name := range names {
+		p := modeling.MakePortBuilder().
+			WithRegistrar(s).
+			WithComponent(comp).
+			WithSpec(modeling.PortSpec{BufSize: 16}).
+			Build(name)
+		comp.AssignPort(name, p)
+	}
 }
 
 func main() {

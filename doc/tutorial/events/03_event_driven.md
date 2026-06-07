@@ -41,9 +41,7 @@ The source is in `examples/ping/`.
 Same shape as before:
 
 ```go
-type Spec struct {
-    OutPortBufferSize int `json:"out_port_buffer_size"`
-}
+type Spec struct{}
 
 type State struct {
     StartTimes       []timing.VTimeInPicoSec
@@ -56,8 +54,9 @@ type Comp = modeling.EventDrivenComponent[Spec, State, modeling.None]
 ```
 
 Notice the alias points at `modeling.EventDrivenComponent` rather than
-`modeling.Component`. The Spec is simpler — no `Freq`, because there is
-no tick.
+`modeling.Component`. The Spec is empty here — no `Freq` (there is no tick),
+and no port-buffer size: the builder declares the `Out` port and the instance
+is supplied externally during wiring (below).
 
 ## The Processor
 
@@ -132,7 +131,17 @@ engine := timing.NewSerialEngine()
 registrar := modeling.NewStandaloneRegistrar(engine)
 
 agentA := MakeBuilder().WithRegistrar(registrar).Build("AgentA")
+agentA.AssignPort("Out", modeling.MakePortBuilder().
+    WithRegistrar(registrar).
+    WithComponent(agentA).
+    WithSpec(modeling.PortSpec{BufSize: 4}).
+    Build("Out"))
 agentB := MakeBuilder().WithRegistrar(registrar).Build("AgentB")
+agentB.AssignPort("Out", modeling.MakePortBuilder().
+    WithRegistrar(registrar).
+    WithComponent(agentB).
+    WithSpec(modeling.PortSpec{BufSize: 4}).
+    Build("Out"))
 
 conn := directconnection.MakeBuilder().
     WithRegistrar(registrar).

@@ -35,8 +35,8 @@ Two middlewares run each tick:
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, latency, width, cache-line size,
-  capacity, port buffer sizes, and the address-conversion fields used for
-  interleaved multi-controller setups.
+  capacity, and the address-conversion fields used for interleaved
+  multi-controller setups.
 - `State` — mutable runtime data: the list of inflight transactions and the
   current control state (`"enable"`, `"pause"`, or `"drain"`).
 - `Resources` — shared wiring; holds the backing `*mem.Storage`.
@@ -50,9 +50,6 @@ type Spec struct {
     CacheLineSize int         // Access granularity in bytes
     Capacity      uint64      // Backing-storage size when built internally
     StorageRef    string      // Storage resource name (set by Build)
-
-    TopPortBufferSize  int
-    CtrlPortBufferSize int
 
     // Address conversion for interleaved multi-controller setups.
     AddrConvKind            string
@@ -69,8 +66,10 @@ Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec
 to `WithSpec`. Wiring comes from `WithRegistrar` (which provides the engine and
 registers the component) and `WithResources` (the shared backing storage). When
 `WithResources` is omitted, the controller builds its own storage sized by
-`Spec.Capacity`. The `Top` and `Control` ports are created internally by
-`Build`.
+`Spec.Capacity`. `Build` declares the `Top` and `Control` ports but does not
+create their instances. Build each port with `modeling.MakePortBuilder` (which
+registers the port with the simulation) and attach it with `AssignPort`,
+choosing the buffer size.
 
 ```go
 spec := idealmemcontroller.DefaultSpec()
@@ -82,7 +81,21 @@ ctrl := idealmemcontroller.MakeBuilder().
     WithResources(idealmemcontroller.Resources{Storage: storage}).
     Build("IdealMem")
 
-topPort := ctrl.GetPortByName("Top")
+topPort := modeling.MakePortBuilder().
+    WithRegistrar(sim).
+    WithComponent(ctrl).
+    WithSpec(modeling.PortSpec{BufSize: 16}).
+    Build("Top")
+ctrl.AssignPort("Top", topPort)
+
+ctrlPort := modeling.MakePortBuilder().
+    WithRegistrar(sim).
+    WithComponent(ctrl).
+    WithSpec(modeling.PortSpec{BufSize: 16}).
+    Build("Control")
+ctrl.AssignPort("Control", ctrlPort)
+
+topPort = ctrl.GetPortByName("Top")
 ```
 
 | Method | Description |

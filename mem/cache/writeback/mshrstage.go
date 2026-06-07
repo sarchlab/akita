@@ -43,7 +43,7 @@ func (s *mshrStage) Reset() {
 }
 
 func (s *mshrStage) processOneReq() bool {
-	if !s.cache.topPort.CanSend() {
+	if !s.cache.topPort().CanSend() {
 		return false
 	}
 
@@ -104,13 +104,13 @@ func (s *mshrStage) respondRead(
 	respondData := data[offset : offset+trans.ReadAccessByteSize]
 	dataReady := mem.DataReadyRsp{}
 	dataReady.ID = timing.GetIDGenerator().Generate()
-	dataReady.Src = s.cache.topPort.AsRemote()
+	dataReady.Src = s.cache.topPort().AsRemote()
 	dataReady.Dst = trans.ReadMeta.Src
 	dataReady.RspTo = trans.ReadMeta.ID
 	dataReady.Data = respondData
 	dataReady.TrafficBytes = len(respondData) + 4
 	dataReady.TrafficClass = "mem.DataReadyRsp"
-	s.cache.topPort.Send(dataReady)
+	s.cache.topPort().Send(dataReady)
 
 	tracing.TraceReqComplete(s.cache.comp, trans.ReadMeta)
 }
@@ -118,12 +118,12 @@ func (s *mshrStage) respondRead(
 func (s *mshrStage) respondWrite(trans *transactionState) {
 	writeDoneRsp := mem.WriteDoneRsp{}
 	writeDoneRsp.ID = timing.GetIDGenerator().Generate()
-	writeDoneRsp.Src = s.cache.topPort.AsRemote()
+	writeDoneRsp.Src = s.cache.topPort().AsRemote()
 	writeDoneRsp.Dst = trans.WriteMeta.Src
 	writeDoneRsp.RspTo = trans.WriteMeta.ID
 	writeDoneRsp.TrafficBytes = 4
 	writeDoneRsp.TrafficClass = "mem.WriteDoneRsp"
-	s.cache.topPort.Send(writeDoneRsp)
+	s.cache.topPort().Send(writeDoneRsp)
 
 	tracing.TraceReqComplete(s.cache.comp, trans.WriteMeta)
 }

@@ -14,7 +14,7 @@ type bottomParser struct {
 }
 
 func (p *bottomParser) Tick() bool {
-	itemI := p.cache.bottomPort.PeekIncoming()
+	itemI := p.cache.bottomPort().PeekIncoming()
 	if itemI == nil {
 		return false
 	}
@@ -33,7 +33,7 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 	next := &p.cache.comp.State
 	transIdx := p.findTransactionByWriteToBottomID(msg.Meta().RspTo)
 	if transIdx < 0 {
-		p.cache.bottomPort.RetrieveIncoming()
+		p.cache.bottomPort().RetrieveIncoming()
 		return true
 	}
 
@@ -45,7 +45,7 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 		tracing.EndTask(p.cache.comp, tracing.TaskEnd{ID: trans.ID})
 	}
 
-	p.cache.bottomPort.RetrieveIncoming()
+	p.cache.bottomPort().RetrieveIncoming()
 
 	// Reconstruct writeToBottom for tracing
 	writeToBottom := mem.WriteReq{
@@ -63,7 +63,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 	next := &p.cache.comp.State
 	transIdx := p.findTransactionByReadToBottomID(msg.Meta().RspTo)
 	if transIdx < 0 {
-		p.cache.bottomPort.RetrieveIncoming()
+		p.cache.bottomPort().RetrieveIncoming()
 		return true
 	}
 
@@ -107,7 +107,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 	p.finalizeMSHRTransExcept(next, entryTransIdxs, blockTag, data, transIdx)
 	cache.MSHRRemove(&next.MSHRState, pid, cachelineID)
 
-	p.cache.bottomPort.RetrieveIncoming()
+	p.cache.bottomPort().RetrieveIncoming()
 
 	// Reconstruct readToBottom for tracing
 	readToBottom := mem.ReadReq{

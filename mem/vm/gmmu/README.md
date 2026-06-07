@@ -30,8 +30,7 @@ remembered remote request, and relays a `vm.TranslationRsp` back up on `Top`.
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, `DeviceID`, `Log2PageSize`, walk
-  `Latency`, `MaxRequestsInFlight`, the `LowModule` remote port, and port buffer
-  sizes.
+  `Latency`, `MaxRequestsInFlight`, and the `LowModule` remote port.
 - `State` — mutable runtime data: in-flight walks, the map of remote memory
   requests awaiting responses, and per-device page-access tracking.
 - `Resources` — shared wiring; holds the `vm.PageTable`. If none is supplied the
@@ -39,6 +38,15 @@ remembered remote request, and relays a `vm.TranslationRsp` back up on `Top`.
 - `Comp` — `modeling.Component[Spec, State, Resources]`.
 
 ## Builder Pattern
+
+Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec
+to `WithSpec`. Wiring comes from `WithRegistrar` (which provides the engine and
+registers the component) and `WithResources` (the shared page table). When
+`WithResources` is omitted, the GMMU builds its own page table sized by
+`Spec.Log2PageSize`. `Build` declares the `Top`, `Bottom`, and `Control` ports
+but does not create their instances. Build each port with
+`modeling.MakePortBuilder` (which registers the port with the simulation) and
+attach it with `AssignPort`, choosing the buffer size.
 
 ```go
 spec := gmmu.DefaultSpec()
@@ -50,6 +58,15 @@ g := gmmu.MakeBuilder().
     WithSpec(spec).
     WithResources(gmmu.Resources{PageTable: pageTable}).
     Build("GMMU")
+
+for _, name := range []string{"Top", "Bottom", "Control"} {
+    p := modeling.MakePortBuilder().
+        WithRegistrar(sim).
+        WithComponent(g).
+        WithSpec(modeling.PortSpec{BufSize: 16}).
+        Build(name)
+    g.AssignPort(name, p)
+}
 ```
 
 | Method | Description |
@@ -63,3 +80,5 @@ g := gmmu.MakeBuilder().
 - **Top**: accepts `vm.TranslationReq`, returns `vm.TranslationRsp`.
 - **Bottom**: forwards `vm.TranslationReq` for remote pages, receives
   `vm.TranslationRsp`.
+- **Control**: accepts `mem.ControlReq` (enable / pause / drain / reset),
+  returns `mem.ControlRsp`.

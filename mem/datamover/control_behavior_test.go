@@ -32,13 +32,12 @@ var _ = Describe("DataMover control behavior", func() {
 		spec.BufferSize = 2048
 		spec.InsideByteGranularity = 64
 		spec.OutsideByteGranularity = 64
-		spec.CtrlPortBufferSize = 1024
-		spec.InsidePortBufferSize = 64
-		spec.OutsidePortBufferSize = 64
+
+		reg := modeling.NewStandaloneRegistrar(engine)
 
 		insideRemote = messaging.RemotePort("InsideMem")
 		dataMover = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			WithResources(Resources{
 				InsideMapper: &mem.SinglePortMapper{Port: insideRemote},
@@ -48,10 +47,20 @@ var _ = Describe("DataMover control behavior", func() {
 			}).
 			Build("DataMover")
 
-		topPort = dataMover.GetPortByName("Top")
-		ctrlPort = dataMover.GetPortByName("Control")
-		insidePort = dataMover.GetPortByName("Inside")
-		outsidePort = dataMover.GetPortByName("Outside")
+		assign := func(name string, bufSize int) messaging.Port {
+			p := modeling.MakePortBuilder().
+				WithRegistrar(reg).
+				WithComponent(dataMover).
+				WithSpec(modeling.PortSpec{BufSize: bufSize}).
+				Build(name)
+			dataMover.AssignPort(name, p)
+			return p
+		}
+
+		topPort = assign("Top", 16)
+		insidePort = assign("Inside", 64)
+		outsidePort = assign("Outside", 64)
+		ctrlPort = assign("Control", 1024)
 		for _, p := range []messaging.Port{
 			topPort, ctrlPort, insidePort, outsidePort,
 		} {

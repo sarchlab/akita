@@ -11,8 +11,11 @@ import (
 )
 
 type respondMW struct {
-	comp    *modeling.Component[Spec, State, Resources]
-	topPort messaging.Port
+	comp *modeling.Component[Spec, State, Resources]
+}
+
+func (m *respondMW) topPort() messaging.Port {
+	return m.comp.GetPortByName("Top")
 }
 
 // Tick runs the respond stage twice (matching original execution
@@ -78,17 +81,17 @@ func (m *respondMW) finalizeWriteTrans(
 
 	writeDone := mem.WriteDoneRsp{}
 	writeDone.ID = timing.GetIDGenerator().Generate()
-	writeDone.Src = m.topPort.AsRemote()
+	writeDone.Src = m.topPort().AsRemote()
 	writeDone.Dst = t.WriteMsg.Src
 	writeDone.RspTo = t.WriteMsg.ID
 	writeDone.TrafficBytes = 4
 	writeDone.TrafficClass = "mem.WriteDoneRsp"
 
-	if !m.topPort.CanSend() {
+	if !m.topPort().CanSend() {
 		return false
 	}
 
-	m.topPort.Send(writeDone)
+	m.topPort().Send(writeDone)
 	state.TotalWriteLatencyCycles += state.TickCount - t.ArrivalTick
 	state.BytesWritten += uint64(len(t.WriteMsg.Data))
 	state.CompletedWrites++
@@ -109,18 +112,18 @@ func (m *respondMW) finalizeReadTrans(
 
 	dataReady := mem.DataReadyRsp{}
 	dataReady.ID = timing.GetIDGenerator().Generate()
-	dataReady.Src = m.topPort.AsRemote()
+	dataReady.Src = m.topPort().AsRemote()
 	dataReady.Dst = t.ReadMsg.Src
 	dataReady.Data = data
 	dataReady.RspTo = t.ReadMsg.ID
 	dataReady.TrafficBytes = len(data) + 4
 	dataReady.TrafficClass = "mem.DataReadyRsp"
 
-	if !m.topPort.CanSend() {
+	if !m.topPort().CanSend() {
 		return false
 	}
 
-	m.topPort.Send(dataReady)
+	m.topPort().Send(dataReady)
 	state.TotalReadLatencyCycles += state.TickCount - t.ArrivalTick
 	state.BytesRead += t.ReadMsg.AccessByteSize
 	state.CompletedReads++

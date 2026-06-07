@@ -6,6 +6,7 @@
 // whole through WithSpec (start from DefaultSpec()), the engine and registration
 // come from WithRegistrar, and shared/external wiring (storage, the
 // address-to-port mapper, and remote ports) is injected through WithResources.
-// The component creates its own Top, Bottom, and Control ports, sized by the
-// corresponding *PortBufferSize fields in Spec.
+// Build declares the component's Top, Bottom, and Control ports; the port
+// instances are built with modeling.MakePortBuilder and attached after Build
+// with AssignPort, so the caller chooses the buffer sizes.
 package writethroughcache

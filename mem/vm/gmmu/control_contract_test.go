@@ -20,10 +20,13 @@ func TestControlContract(t *testing.T) {
 		spec.Latency = 1
 		spec.LowModule = messaging.RemotePort("LowModule")
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		comp := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			Build("GMMU")
+
+		assignDefaultPorts(reg, comp)
 
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			(&noopConn{}).PlugIn(comp.GetPortByName(name))

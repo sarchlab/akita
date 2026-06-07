@@ -29,11 +29,14 @@ func TestControlContract(t *testing.T) {
 			},
 		}
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		comp := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			WithResources(resources).
 			Build("AddressTranslator")
+
+		assignPorts(reg, comp, topBufSize)
 
 		for _, name := range []string{"Top", "Bottom", "Translation", "Control"} {
 			conn := &noopConn{}

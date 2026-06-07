@@ -15,7 +15,13 @@ import (
 // Control port's incoming queue for the flusher to pick up.
 type ctrlMiddleware struct {
 	pipeline *pipelineMW
-	ctrlPort messaging.Port
+}
+
+// ctrlPort resolves the "Control" port by name. The port instance is assigned
+// externally after Build, so it is resolved lazily on every use rather than
+// cached at build time.
+func (m *ctrlMiddleware) ctrlPort() messaging.Port {
+	return m.pipeline.comp.GetPortByName("Control")
 }
 
 func (m *ctrlMiddleware) Tick() bool {
@@ -46,11 +52,11 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 		return false
 	}
 
-	if !m.ctrlPort.CanSend() {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdDrain,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdDrain,
 		next.CurrentCmdSrc, next.CurrentCmdID, true, ""))
 	next.CacheState = int(cacheStatePaused)
 	next.CurrentCmdID = 0
@@ -84,7 +90,7 @@ func cacheIsQuiescent(state *State) bool {
 }
 
 func (m *ctrlMiddleware) handleIncoming() bool {
-	msg := m.ctrlPort.PeekIncoming()
+	msg := m.ctrlPort().PeekIncoming()
 	if msg == nil {
 		return false
 	}
@@ -126,7 +132,7 @@ func (m *ctrlMiddleware) handleInvalidate(req mem.ControlReq) bool {
 	if cacheState(next.CacheState) != cacheStatePaused {
 		return m.rejectMustBePaused(req)
 	}
-	if !m.ctrlPort.CanSend() {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
@@ -134,21 +140,21 @@ func (m *ctrlMiddleware) handleInvalidate(req mem.ControlReq) bool {
 	blockSize := uint64(1) << spec.Log2BlockSize
 	invalidateBlocks(next, blockSize, req.Addresses, req.PID)
 
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdInvalidate,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdInvalidate,
 		req.Src, req.ID, true, ""))
-	m.ctrlPort.RetrieveIncoming()
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
 // rejectMustBePaused responds that a conditional verb is illegal while
 // the cache is Running (Enabled).
 func (m *ctrlMiddleware) rejectMustBePaused(req mem.ControlReq) bool {
-	if !m.ctrlPort.CanSend() {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, req.Command,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), req.Command,
 		req.Src, req.ID, false, control.ErrMustBePausedOrDrained))
-	m.ctrlPort.RetrieveIncoming()
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
@@ -190,14 +196,14 @@ func invalidateBlocks(
 }
 
 func (m *ctrlMiddleware) handlePause(req mem.ControlReq) bool {
-	if !m.ctrlPort.CanSend() {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
 	next := &m.pipeline.comp.State
 	next.CacheState = int(cacheStatePaused)
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdPause,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdPause,
 		req.Src, req.ID, true, ""))
-	m.ctrlPort.RetrieveIncoming()
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
@@ -206,21 +212,21 @@ func (m *ctrlMiddleware) handleDrain(req mem.ControlReq) bool {
 	next.CacheState = int(cacheStateDraining)
 	next.CurrentCmdID = req.ID
 	next.CurrentCmdSrc = req.Src
-	m.ctrlPort.RetrieveIncoming()
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
 func (m *ctrlMiddleware) handleEnable(req mem.ControlReq) bool {
-	if !m.ctrlPort.CanSend() {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
 	// Enable resumes from Paused; it must not discard traffic queued while
 	// paused (e.g. bottom responses for frozen in-flight transactions),
 	// which the pipeline processes once it runs again.
 	m.pipeline.comp.State.CacheState = int(cacheStateRunning)
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdEnable,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdEnable,
 		req.Src, req.ID, true, ""))
-	m.ctrlPort.RetrieveIncoming()
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
@@ -230,7 +236,7 @@ func (m *ctrlMiddleware) handleEnable(req mem.ControlReq) bool {
 // per the resolved-decision policy ("Invalidate-on-dirty: drop
 // silently" generalized to Reset).
 func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
-	if !m.ctrlPort.CanSend() {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
@@ -252,12 +258,12 @@ func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
 	next.CurrentCmdSrc = ""
 	next.CacheState = int(cacheStateRunning)
 
-	clearPort(m.pipeline.topPort)
-	clearPort(m.pipeline.bottomPort)
+	clearPort(m.pipeline.topPort())
+	clearPort(m.pipeline.bottomPort())
 
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, mem.CmdReset,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdReset,
 		req.Src, req.ID, true, ""))
-	m.ctrlPort.RetrieveIncoming()
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
@@ -297,12 +303,12 @@ func clearCachePipelinesAndBuffers(next *State) {
 }
 
 func (m *ctrlMiddleware) handleUnsupported(req mem.ControlReq) bool {
-	if !m.ctrlPort.CanSend() {
+	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	m.ctrlPort.Send(makeCtrlRsp(m.ctrlPort, req.Command,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), req.Command,
 		req.Src, req.ID, false, control.ErrUnsupported))
-	m.ctrlPort.RetrieveIncoming()
+	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 

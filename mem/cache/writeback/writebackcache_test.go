@@ -42,8 +42,8 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
 
-		agentPort = messaging.NewPort(nil, 8, 8, "AgentPort")
-		controlAgentPort = messaging.NewPort(nil, 8, 8, "ControlAgentPort")
+		agentPort = messaging.NewPort(nil, 8, 8, "Agent.Top")
+		controlAgentPort = messaging.NewPort(nil, 8, 8, "Agent.Control")
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dramSpec := idealmemcontroller.DefaultSpec()
@@ -55,6 +55,10 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 			WithSpec(dramSpec).
 			Build("DRAM")
+		dram.AssignPort("Top",
+			messaging.NewPort(dram, 16, 16, dram.Name()+".Top"))
+		dram.AssignPort("Control",
+			messaging.NewPort(dram, 16, 16, dram.Name()+".Control"))
 
 		addressToPortMapper = &mem.SinglePortMapper{
 			Port: dram.GetPortByName("Top").AsRemote(),
@@ -71,6 +75,12 @@ var _ = Describe("Write-Back Cache Integration", func() {
 				AddressToPortMapper: addressToPortMapper,
 			}).
 			Build("Cache")
+		// Build only declares the cache's ports; assign the instances and
+		// choose their buffer sizes here.
+		for _, name := range []string{"Top", "Bottom", "Control"} {
+			cacheComp.AssignPort(name,
+				messaging.NewPort(cacheComp, 8, 8, cacheComp.Name()+"."+name))
+		}
 		for _, mw := range cacheComp.Middlewares() {
 			if p, ok := mw.(*pipelineMW); ok {
 				m = p

@@ -109,10 +109,6 @@ type Spec struct {
 	TransactionQueueSize int `json:"transaction_queue_size"`
 	CommandQueueCapacity int `json:"command_queue_capacity"`
 
-	// Port buffer sizes
-	TopPortBufferSize  int `json:"top_port_buffer_size"`
-	CtrlPortBufferSize int `json:"ctrl_port_buffer_size"`
-
 	// Read/Write queue separation
 	ReadQueueSize      int `json:"read_queue_size"`
 	WriteQueueSize     int `json:"write_queue_size"`

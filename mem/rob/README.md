@@ -41,8 +41,8 @@ type Comp = modeling.Component[Spec, State, modeling.None]
 ```
 
 - **Spec** — immutable config: `Freq`, `BufferSize` (max in-flight
-  transactions), `NumReqPerCycle`, the `BottomUnit` remote port every shadow
-  request targets, and the three `*PortBufferSize` fields.
+  transactions), `NumReqPerCycle`, and the `BottomUnit` remote port every shadow
+  request targets.
 - **State** — mutable runtime: the FIFO `Transactions` list and an `IsFlushing`
   flag. Each `transactionState` remembers the original request's ID and source,
   the shadow request's ID, whether it is a read, and the buffered response data.
@@ -53,8 +53,10 @@ and exposes no `WithResources`.
 ## Builder Pattern
 
 Configuration is supplied as a whole through `WithSpec` (start from
-`DefaultSpec()`); the engine and registration come from `WithRegistrar`. The
-component creates its own `Top`, `Bottom`, and `Control` ports.
+`DefaultSpec()`); the engine and registration come from `WithRegistrar`. `Build`
+declares the component's `Top`, `Bottom`, and `Control` ports; the port
+instances are built and attached externally after `Build` with `AssignPort`, so
+the caller chooses the buffer sizes.
 
 ```go
 spec := rob.DefaultSpec()
@@ -65,6 +67,15 @@ reorderBuffer := rob.MakeBuilder().
     WithRegistrar(sim).
     WithSpec(spec).
     Build("ROB")
+
+for _, name := range []string{"Top", "Bottom", "Control"} {
+    p := modeling.MakePortBuilder().
+        WithRegistrar(sim).
+        WithComponent(reorderBuffer).
+        WithSpec(modeling.PortSpec{BufSize: 8}).
+        Build(name)
+    reorderBuffer.AssignPort(name, p)
+}
 
 topPort := reorderBuffer.GetPortByName("Top")
 ```

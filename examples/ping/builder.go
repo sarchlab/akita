@@ -7,9 +7,7 @@ import (
 )
 
 // defaultSpec provides the default configuration for a ping component.
-var defaultSpec = Spec{
-	OutPortBufferSize: 4,
-}
+var defaultSpec = Spec{}
 
 // DefaultSpec returns a copy of the default configuration. Callers obtain it,
 // tweak the fields they care about, and pass it to WithSpec.
@@ -18,8 +16,9 @@ func DefaultSpec() Spec {
 }
 
 // Builder builds ping components. Configuration is supplied as a whole through
-// WithSpec; wiring is supplied through WithRegistrar. The component creates its
-// own Out port.
+// WithSpec; wiring is supplied through WithRegistrar. The component declares
+// its "Out" port; the port instance is supplied externally after Build with
+// AssignPort (the caller chooses the buffer size).
 type Builder struct {
 	spec      Spec
 	registrar modeling.Registrar
@@ -44,8 +43,8 @@ func (b Builder) WithSpec(spec Spec) Builder {
 	return b
 }
 
-// Build creates a new ping component with the given name. It creates the
-// component's Out port.
+// Build creates a new ping component with the given name. It declares the
+// component's "Out" port; assign the port instance after Build with AssignPort.
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("ping: WithRegistrar is required")
@@ -57,9 +56,7 @@ func (b Builder) Build(name string) *Comp {
 		WithProcessor(&pingProcessor{}).
 		Build(name)
 
-	outPort := messaging.NewPort(
-		comp, b.spec.OutPortBufferSize, b.spec.OutPortBufferSize, name+".Out")
-	comp.AddPort("Out", outPort)
+	comp.DeclarePort("Out")
 
 	b.registrar.RegisterComponent(comp)
 

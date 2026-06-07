@@ -56,8 +56,13 @@ func msgMetaToFlits(
 type outgoingMW struct {
 	comp             *modeling.Component[Spec, State, modeling.None]
 	devicePorts      []messaging.Port
-	networkPort      messaging.Port
 	defaultSwitchDst messaging.RemotePort
+}
+
+// networkPort resolves the endpoint's network port by name. The instance is
+// assigned externally after Build, so it is resolved lazily.
+func (m *outgoingMW) networkPort() messaging.Port {
+	return m.comp.GetPortByName("NetworkPort")
 }
 
 // Tick runs the outgoing stages.
@@ -85,11 +90,11 @@ func (m *outgoingMW) sendFlitOut() bool {
 
 		flit := state.FlitsToSend[numSent]
 
-		if !m.networkPort.CanSend() {
+		if !m.networkPort().CanSend() {
 			break
 		}
 
-		m.networkPort.Send(flit)
+		m.networkPort().Send(flit)
 		numSent++
 		madeProgress = true
 	}
@@ -145,7 +150,7 @@ func (m *outgoingMW) prepareFlits() bool {
 	madeProgress := false
 	spec := m.comp.Spec()
 	state := &m.comp.State
-	networkPortRemote := m.networkPort.AsRemote()
+	networkPortRemote := m.networkPort().AsRemote()
 
 	for {
 		if len(state.MsgOutBuf) == 0 {

@@ -26,12 +26,19 @@ func TestControlContract(t *testing.T) {
 		engine := timing.NewSerialEngine()
 		storage := mem.NewStorage(1 * mem.MB)
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		comp := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithResources(Resources{Storage: storage}).
 			Build("DRAM")
 
 		for _, name := range []string{"Top", "Control"} {
+			p := modeling.MakePortBuilder().
+				WithRegistrar(reg).
+				WithComponent(comp).
+				WithSpec(modeling.PortSpec{BufSize: 16}).
+				Build(name)
+			comp.AssignPort(name, p)
 			(&noopConn{}).PlugIn(comp.GetPortByName(name))
 		}
 

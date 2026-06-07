@@ -15,6 +15,7 @@ type Registrar interface {
 	RegisterComponent(c naming.Named)
 	RegisterConnection(c naming.Named)
 	RegisterResource(c naming.Named)
+	RegisterPort(p naming.Named)
 }
 
 // standaloneRegistrar adapts a bare engine into a Registrar whose registration
@@ -39,3 +40,4 @@ func (r *standaloneRegistrar) GetEngine() timing.Engine          { return r.engi
 func (r *standaloneRegistrar) RegisterComponent(_ naming.Named)  {}
 func (r *standaloneRegistrar) RegisterConnection(_ naming.Named) {}
 func (r *standaloneRegistrar) RegisterResource(_ naming.Named)   {}
+func (r *standaloneRegistrar) RegisterPort(_ naming.Named)       {}

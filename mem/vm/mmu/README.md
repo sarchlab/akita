@@ -34,9 +34,9 @@ final `vm.TranslationRsp` is sent on `Top`.
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, walk `Latency`,
-  `MaxRequestsInFlight`, `MigrationQueueSize`, `AutoPageAllocation`,
-  `Log2PageSize`, the `MigrationServiceProvider` remote port, and port buffer
-  sizes.
+  `MaxRequestsInFlight`, `AutoPageAllocation`, and `Log2PageSize`. Port buffer
+  sizes are no longer part of the spec; they are chosen by the caller when the
+  port instances are built.
 - `State` — mutable runtime data: in-flight walks, the migration queue, the
   current on-demand migration, per-page device-access tracking, and the next
   physical page to allocate.
@@ -46,17 +46,29 @@ final `vm.TranslationRsp` is sent on `Top`.
 
 ## Builder Pattern
 
+`Build` declares the component's `Top` and `Control` ports but does not create
+the port instances. The caller builds each port with `modeling.MakePortBuilder`
+(choosing the buffer size) and attaches it with `AssignPort`.
+
 ```go
 spec := mmu.DefaultSpec()
 spec.Latency = 100
 spec.AutoPageAllocation = true
-spec.MigrationServiceProvider = driverPort
 
 m := mmu.MakeBuilder().
     WithRegistrar(sim).
     WithSpec(spec).
     WithResources(mmu.Resources{PageTable: pageTable}).
     Build("MMU")
+
+for _, name := range []string{"Top", "Control"} {
+    p := modeling.MakePortBuilder().
+        WithRegistrar(sim).
+        WithComponent(m).
+        WithSpec(modeling.PortSpec{BufSize: 16}).
+        Build(name)
+    m.AssignPort(name, p)
+}
 ```
 
 | Method | Description |
@@ -67,6 +79,8 @@ m := mmu.MakeBuilder().
 
 ## Ports
 
+`Build` declares these ports; the caller assigns the instances after `Build`.
+
 - **Top**: accepts `vm.TranslationReq`, returns `vm.TranslationRsp`.
-- **Migration**: sends `vm.PageMigrationReqToDriver`, receives the migration
-  response from the driver.
+- **Control**: accepts `mem.ControlReq` (Pause, Drain, Enable, Reset), returns
+  `mem.ControlRsp`.

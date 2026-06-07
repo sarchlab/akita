@@ -8,7 +8,6 @@ import (
 
 // Spec is the immutable configuration for a ping component.
 type Spec struct {
-	OutPortBufferSize int `json:"out_port_buffer_size"`
 }
 
 type scheduledPing struct {

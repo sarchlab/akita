@@ -127,7 +127,8 @@ func buildAgent(reg modeling.Registrar, name string) *Comp {
 		WithSpec(agentSpec{Freq: 1 * timing.GHz}).
 		Build(name)
 	c.AddMiddleware(&agentMW{comp: c})
-	c.AddPort("Out", messaging.NewPort(c, 4, 4, name+".Out"))
+	c.DeclarePort("Out")
+	c.AssignPort("Out", messaging.NewPort(c, 4, 4, name+".Out"))
 	reg.RegisterComponent(c)
 	return c
 }

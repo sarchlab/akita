@@ -18,7 +18,7 @@ func (p *topParser) Tick() bool {
 		return false
 	}
 
-	msg := p.cache.topPort.PeekIncoming()
+	msg := p.cache.topPort().PeekIncoming()
 	if msg == nil {
 		return false
 	}
@@ -54,7 +54,7 @@ func (p *topParser) Tick() bool {
 
 	tracing.TraceReqReceive(p.cache.comp, msg)
 
-	p.cache.topPort.RetrieveIncoming()
+	p.cache.topPort().RetrieveIncoming()
 
 	return true
 }

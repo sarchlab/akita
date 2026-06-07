@@ -243,33 +243,49 @@ func (t *treeTracer) print() {
 
 // --- Wiring ---
 
+func buildClient(engine timing.Engine, reg modeling.Registrar) *ClientComp {
+	c := modeling.NewBuilder[modeling.None, clientState, modeling.None]().
+		WithEngine(engine).WithFreq(1 * timing.GHz).Build("Client")
+	c.AddMiddleware(&clientMW{comp: c, inFlight: map[uint64]readReq{}})
+	c.DeclarePort("Out")
+	c.AssignPort("Out", messaging.NewPort(c, 4, 4, "Client.Out"))
+	reg.RegisterComponent(c)
+
+	return c
+}
+
+func buildCache(engine timing.Engine, reg modeling.Registrar, name string) *CacheComp {
+	c := modeling.NewBuilder[modeling.None, cacheState, modeling.None]().
+		WithEngine(engine).WithFreq(1 * timing.GHz).Build(name)
+	c.AddMiddleware(&cacheMW{comp: c, txns: map[uint64]cacheTxn{}})
+	c.DeclarePort("Top")
+	c.AssignPort("Top", messaging.NewPort(c, 4, 4, name+".Top"))
+	c.DeclarePort("Bottom")
+	c.AssignPort("Bottom", messaging.NewPort(c, 4, 4, name+".Bottom"))
+	reg.RegisterComponent(c)
+
+	return c
+}
+
+func buildMemory(engine timing.Engine, reg modeling.Registrar) *MemComp {
+	mem := modeling.NewBuilder[modeling.None, modeling.None, modeling.None]().
+		WithEngine(engine).WithFreq(1 * timing.GHz).Build("Memory")
+	mem.AddMiddleware(&memMW{comp: mem})
+	mem.DeclarePort("Top")
+	mem.AssignPort("Top", messaging.NewPort(mem, 4, 4, "Memory.Top"))
+	reg.RegisterComponent(mem)
+
+	return mem
+}
+
 func main() {
 	engine := timing.NewSerialEngine()
 	reg := modeling.NewStandaloneRegistrar(engine)
 
-	client := modeling.NewBuilder[modeling.None, clientState, modeling.None]().
-		WithEngine(engine).WithFreq(1 * timing.GHz).Build("Client")
-	client.AddMiddleware(&clientMW{comp: client, inFlight: map[uint64]readReq{}})
-	client.AddPort("Out", messaging.NewPort(client, 4, 4, "Client.Out"))
-	reg.RegisterComponent(client)
-
-	newCache := func(name string) *CacheComp {
-		c := modeling.NewBuilder[modeling.None, cacheState, modeling.None]().
-			WithEngine(engine).WithFreq(1 * timing.GHz).Build(name)
-		c.AddMiddleware(&cacheMW{comp: c, txns: map[uint64]cacheTxn{}})
-		c.AddPort("Top", messaging.NewPort(c, 4, 4, name+".Top"))
-		c.AddPort("Bottom", messaging.NewPort(c, 4, 4, name+".Bottom"))
-		reg.RegisterComponent(c)
-		return c
-	}
-	l1 := newCache("L1")
-	l2 := newCache("L2")
-
-	mem := modeling.NewBuilder[modeling.None, modeling.None, modeling.None]().
-		WithEngine(engine).WithFreq(1 * timing.GHz).Build("Memory")
-	mem.AddMiddleware(&memMW{comp: mem})
-	mem.AddPort("Top", messaging.NewPort(mem, 4, 4, "Memory.Top"))
-	reg.RegisterComponent(mem)
+	client := buildClient(engine, reg)
+	l1 := buildCache(engine, reg, "L1")
+	l2 := buildCache(engine, reg, "L2")
+	mem := buildMemory(engine, reg)
 
 	connect := func(name string, a, b messaging.Port) {
 		conn := directconnection.MakeBuilder().WithRegistrar(reg).Build(name)

@@ -41,13 +41,17 @@ var _ = Describe("Ideal Memory Controller", func() {
 		spec.Width = 1
 		spec.Latency = 10
 		spec.CacheLineSize = 64
-		spec.TopPortBufferSize = topBufSize
 
 		memController = MakeBuilder().
 			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 			WithResources(Resources{Storage: storage}).
 			WithSpec(spec).
 			Build("MemCtrl")
+
+		memController.AssignPort("Top", messaging.NewPort(
+			memController, topBufSize, topBufSize, memController.Name()+".Top"))
+		memController.AssignPort("Control",
+			messaging.NewPort(memController, 16, 16, memController.Name()+".Control"))
 
 		topPort = memController.GetPortByName("Top")
 		conn := &noopConn{}

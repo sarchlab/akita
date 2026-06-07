@@ -2,19 +2,15 @@ package gmmu
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 // defaultSpec provides the default configuration for GMMU components.
 var defaultSpec = Spec{
-	Freq:                 1 * timing.GHz,
-	Log2PageSize:         12,
-	MaxRequestsInFlight:  16,
-	TopPortBufferSize:    16,
-	BottomPortBufferSize: 16,
-	CtrlPortBufferSize:   4,
+	Freq:                1 * timing.GHz,
+	Log2PageSize:        12,
+	MaxRequestsInFlight: 16,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -25,7 +21,9 @@ func DefaultSpec() Spec {
 
 // Builder builds GMMU components. Configuration is supplied as a whole through
 // WithSpec; wiring is supplied through WithRegistrar and WithResources. The
-// component creates its own ports.
+// component declares its "Top", "Bottom", and "Control" ports; the port
+// instances are supplied externally after Build with AssignPort (the caller
+// chooses the buffer sizes).
 type Builder struct {
 	spec      Spec
 	registrar modeling.Registrar
@@ -59,7 +57,8 @@ func (b Builder) WithResources(r Resources) Builder {
 	return b
 }
 
-// Build returns a new GMMU. It creates the component's Top and Bottom ports.
+// Build returns a new GMMU. It declares the component's "Top", "Bottom", and
+// "Control" ports; assign the port instances after Build with AssignPort.
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("gmmu: WithRegistrar is required")
@@ -80,7 +79,9 @@ func (b Builder) Build(name string) *Comp {
 		RemoteMemReqs: make(map[uint64]transactionState),
 	}
 
-	b.createPorts(modelComp, name, spec)
+	modelComp.DeclarePort("Top")
+	modelComp.DeclarePort("Bottom")
+	modelComp.DeclarePort("Control")
 
 	cMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cMW)
@@ -112,23 +113,4 @@ func (b Builder) resolvePageTable(name string, spec Spec) vm.PageTable {
 		WithLog2PageSize(spec.Log2PageSize).
 		WithSimulation(b.registrar).
 		Build(name + ".PageTable")
-}
-
-// createPorts creates the Top and Bottom ports sized by the spec and attaches
-// them to the component.
-func (b Builder) createPorts(modelComp *Comp, name string, spec Spec) {
-	topPort := messaging.NewPort(
-		modelComp, spec.TopPortBufferSize, spec.TopPortBufferSize,
-		name+".Top")
-	modelComp.AddPort("Top", topPort)
-
-	bottomPort := messaging.NewPort(
-		modelComp, spec.BottomPortBufferSize, spec.BottomPortBufferSize,
-		name+".Bottom")
-	modelComp.AddPort("Bottom", bottomPort)
-
-	ctrlPort := messaging.NewPort(
-		modelComp, spec.CtrlPortBufferSize, spec.CtrlPortBufferSize,
-		name+".Control")
-	modelComp.AddPort("Control", ctrlPort)
 }

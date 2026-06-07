@@ -694,7 +694,8 @@ func newPortedComponent(name string) *portedComponent {
 		PortOwnerBase: messaging.NewPortOwnerBase(),
 		name:          name,
 	}
-	c.AddPort("p", messaging.NewPort(c, 4, 4, name+".p"))
+	c.DeclarePort("p")
+	c.AssignPort("p", messaging.NewPort(c, 4, 4, name+".p"))
 
 	return c
 }

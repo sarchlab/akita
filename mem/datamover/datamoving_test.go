@@ -27,7 +27,7 @@ var _ = Describe("DataMover", func() {
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
 
-		srcPort = messaging.NewPort(nil, 4, 4, "SrcPort")
+		srcPort = messaging.NewPort(nil, 4, 4, "Src.Top")
 
 		memSpec := idealmemcontroller.DefaultSpec()
 		memSpec.Latency = 100
@@ -40,23 +40,29 @@ var _ = Describe("DataMover", func() {
 			WithSpec(memSpec).
 			WithResources(idealmemcontroller.Resources{Storage: insideStorage}).
 			Build("InsideMem")
+		insideMem.AssignPort("Top",
+			messaging.NewPort(insideMem, 16, 16, insideMem.Name()+".Top"))
+		insideMem.AssignPort("Control",
+			messaging.NewPort(insideMem, 16, 16, insideMem.Name()+".Control"))
 		outsideStorage = mem.NewStorage(1 * mem.MB)
 		outsideMem = idealmemcontroller.MakeBuilder().
 			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 			WithSpec(memSpec).
 			WithResources(idealmemcontroller.Resources{Storage: outsideStorage}).
 			Build("OutsideMem")
+		outsideMem.AssignPort("Top",
+			messaging.NewPort(outsideMem, 16, 16, outsideMem.Name()+".Top"))
+		outsideMem.AssignPort("Control",
+			messaging.NewPort(outsideMem, 16, 16, outsideMem.Name()+".Control"))
 
 		dmSpec := DefaultSpec()
 		dmSpec.BufferSize = 2048
 		dmSpec.InsideByteGranularity = 64
 		dmSpec.OutsideByteGranularity = 256
-		dmSpec.CtrlPortBufferSize = 40960000
-		dmSpec.InsidePortBufferSize = 64
-		dmSpec.OutsidePortBufferSize = 64
 
+		dmReg := modeling.NewStandaloneRegistrar(engine)
 		dataMover = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(dmReg).
 			WithSpec(dmSpec).
 			WithResources(Resources{
 				InsideMapper: &mem.SinglePortMapper{
@@ -67,6 +73,19 @@ var _ = Describe("DataMover", func() {
 				},
 			}).
 			Build("DataMover")
+
+		assignDM := func(name string, bufSize int) {
+			p := modeling.MakePortBuilder().
+				WithRegistrar(dmReg).
+				WithComponent(dataMover).
+				WithSpec(modeling.PortSpec{BufSize: bufSize}).
+				Build(name)
+			dataMover.AssignPort(name, p)
+		}
+		assignDM("Top", 16)
+		assignDM("Inside", 64)
+		assignDM("Outside", 64)
+		assignDM("Control", 40960000)
 
 		conn = directconnection.MakeBuilder().
 			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).

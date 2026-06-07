@@ -182,11 +182,18 @@ func buildDriver(reg modeling.Registrar, lowModule messaging.Port) *driver {
 		PendingWrite: make(map[uint64]int),
 		PendingRead:  make(map[uint64]int),
 	}
+	modelComp.DeclarePort("Mem")
 
 	d := &driver{Component: modelComp, lowModule: lowModule}
 	modelComp.AddMiddleware(&driverMW{d: d})
-	modelComp.AddPort("Mem", messaging.NewPort(d, 4, 4, "Driver.Mem"))
 	reg.RegisterComponent(d)
+
+	memPort := modeling.MakePortBuilder().
+		WithRegistrar(reg).
+		WithComponent(d).
+		WithSpec(modeling.PortSpec{BufSize: 4}).
+		Build("Mem")
+	d.AssignPort("Mem", memPort)
 
 	return d
 }

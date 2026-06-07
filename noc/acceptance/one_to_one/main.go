@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
 
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
@@ -68,6 +69,14 @@ func createNetwork(s *simulation.Simulation, test *acceptance.Test) {
 		WithSpec(epSpec).
 		WithResources(endpoint.Resources{DevicePorts: agents[1].AgentPorts}).
 		Build("EP2")
+
+	for _, ep := range []*endpoint.Comp{ep1, ep2} {
+		ep.SetNetworkPort(modeling.MakePortBuilder().
+			WithRegistrar(s).
+			WithComponent(ep).
+			WithSpec(modeling.PortSpec{BufSize: 4}).
+			Build("NetworkPort"))
+	}
 
 	ep1.SetDefaultSwitchDst(ep2.NetworkPort().AsRemote())
 	ep2.SetDefaultSwitchDst(ep1.NetworkPort().AsRemote())

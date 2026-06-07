@@ -13,21 +13,18 @@ import (
 
 // defaultSpec provides default configuration for the writeback cache.
 var defaultSpec = Spec{
-	Freq:                  1 * timing.GHz,
-	NumReqPerCycle:        1,
-	Log2BlockSize:         6,
-	BankLatency:           10,
-	WayAssociativity:      4,
-	NumBanks:              1,
-	NumMSHREntry:          16,
-	TotalByteSize:         512 * mem.KB,
-	WriteBufferCapacity:   1024,
-	MaxInflightFetch:      128,
-	MaxInflightEviction:   128,
-	InterleavingSize:      4096,
-	TopPortBufferSize:     8,
-	BottomPortBufferSize:  8,
-	ControlPortBufferSize: 8,
+	Freq:                1 * timing.GHz,
+	NumReqPerCycle:      1,
+	Log2BlockSize:       6,
+	BankLatency:         10,
+	WayAssociativity:    4,
+	NumBanks:            1,
+	NumMSHREntry:        16,
+	TotalByteSize:       512 * mem.KB,
+	WriteBufferCapacity: 1024,
+	MaxInflightFetch:    128,
+	MaxInflightEviction: 128,
+	InterleavingSize:    4096,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -38,7 +35,9 @@ func DefaultSpec() Spec {
 
 // A Builder can build writeback caches. Configuration is supplied as a whole
 // through WithSpec; wiring is supplied through WithRegistrar and WithResources.
-// The component creates its own ports.
+// The component declares its "Top", "Bottom", and "Control" ports; the port
+// instances are supplied externally after Build with AssignPort (the caller
+// chooses the buffer sizes).
 type Builder struct {
 	spec      Spec
 	registrar modeling.Registrar
@@ -72,8 +71,9 @@ func (b Builder) WithResources(r Resources) Builder {
 	return b
 }
 
-// Build creates a usable writeback cache. It creates the component's Top,
-// Bottom, and Control ports.
+// Build creates a usable writeback cache. It declares the component's "Top",
+// "Bottom", and "Control" ports; assign the port instances after Build with
+// AssignPort.
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("writeback: WithRegistrar is required")
@@ -107,9 +107,13 @@ func (b Builder) Build(name string) *Comp {
 
 	comp.State = initialState
 
-	pmw := b.buildPipelineMW(comp, name, spec, laneWidth)
-	cmw := b.buildControlMW(comp, name, spec, pmw)
-	ucmw := &ctrlMiddleware{pipeline: pmw, ctrlPort: comp.GetPortByName("Control")}
+	comp.DeclarePort("Top")
+	comp.DeclarePort("Bottom")
+	comp.DeclarePort("Control")
+
+	pmw := b.buildPipelineMW(comp, laneWidth)
+	cmw := b.buildControlMW(comp, pmw)
+	ucmw := &ctrlMiddleware{pipeline: pmw}
 
 	// Control runs before the data pipeline so a Pause/Drain/Reset takes
 	// effect this tick before any Top/Bottom traffic or in-flight operation
@@ -235,15 +239,11 @@ func (b Builder) resolveAddressMapper() (
 
 func (b Builder) buildPipelineMW(
 	comp *modeling.Component[Spec, State, Resources],
-	name string,
-	spec Spec,
 	laneWidth int,
 ) *pipelineMW {
 	m := &pipelineMW{
 		comp: comp,
 	}
-
-	b.createPipelinePorts(m, comp, name, spec)
 
 	m.storage = comp.Resources().Storage
 
@@ -254,18 +254,10 @@ func (b Builder) buildPipelineMW(
 
 func (b Builder) buildControlMW(
 	comp *modeling.Component[Spec, State, Resources],
-	name string,
-	spec Spec,
 	pmw *pipelineMW,
 ) *controlMW {
-	controlPort := messaging.NewPort(
-		comp, spec.ControlPortBufferSize, spec.ControlPortBufferSize,
-		name+".Control")
-	comp.AddPort("Control", controlPort)
-
 	f := &flusher{
 		pipeline: pmw,
-		ctrlPort: controlPort,
 	}
 
 	cmw := &controlMW{
@@ -274,22 +266,6 @@ func (b Builder) buildControlMW(
 	}
 
 	return cmw
-}
-
-func (b Builder) createPipelinePorts(
-	m *pipelineMW,
-	comp *modeling.Component[Spec, State, Resources],
-	name string,
-	spec Spec,
-) {
-	m.topPort = messaging.NewPort(
-		comp, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
-	comp.AddPort("Top", m.topPort)
-
-	m.bottomPort = messaging.NewPort(
-		comp, spec.BottomPortBufferSize, spec.BottomPortBufferSize,
-		name+".Bottom")
-	comp.AddPort("Bottom", m.bottomPort)
 }
 
 func (b Builder) createInternalStages(m *pipelineMW, laneWidth int) {

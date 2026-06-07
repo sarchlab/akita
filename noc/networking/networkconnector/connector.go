@@ -84,6 +84,7 @@ func (r engineRegistrar) GetEngine() timing.Engine {
 func (r engineRegistrar) RegisterComponent(_ naming.Named)  {}
 func (r engineRegistrar) RegisterConnection(_ naming.Named) {}
 func (r engineRegistrar) RegisterResource(_ naming.Named)   {}
+func (r engineRegistrar) RegisterPort(_ naming.Named)       {}
 
 // Connector can build complex network topologies.
 type Connector struct {
@@ -314,6 +315,7 @@ func (c *Connector) createEndPointWithName(
 		param.DeviceEndParam.IncomingBufSize,
 		param.DeviceEndParam.OutgoingBufSize,
 		endPoint.Name()+".NetworkPort")
+	c.registrar.RegisterPort(epPort)
 	endPoint.SetNetworkPort(epPort)
 
 	epNode := &deviceNode{
@@ -342,17 +344,15 @@ func (c *Connector) connectEndPointWithSwitch(
 	sw := swNode.sw
 	epPort := endPoint.NetworkPort()
 
-	swPort := c.portFactory(sw,
-		param.SwitchEndParam.IncomingBufSize,
-		param.SwitchEndParam.OutgoingBufSize,
-		fmt.Sprintf("%s.Port[%d]", sw.Name(), len(swNode.remotes)))
-	endPoint.SetDefaultSwitchDst(swPort.AsRemote())
-	switches.MakeSwitchPortAdder(sw).
-		WithPorts(swPort, epPort).
+	swPort := switches.MakeSwitchPortAdder(sw).
+		WithRegistrar(c.registrar).
+		WithRemotePort(epPort).
+		WithBufferSize(param.SwitchEndParam.OutgoingBufSize).
 		WithLatency(param.SwitchEndParam.Latency).
 		WithNumInputChannel(param.SwitchEndParam.NumInputChannel).
 		WithNumOutputChannel(param.SwitchEndParam.NumOutputChannel).
-		AddPort()
+		Add()
+	endPoint.SetDefaultSwitchDst(swPort.AsRemote())
 
 	conn := c.connectPorts(epPort, swPort, param.LinkParam)
 
@@ -422,45 +422,30 @@ func (c *Connector) ConnectSwitches(
 ) (leftPort, rightPort messaging.Port) {
 	leftNode := c.switches[leftSwitchID]
 	leftSwitch := leftNode.sw
-	leftPortName := leftSwitch.Name() + "." + param.LeftEndParam.PortName
-
-	if param.LeftEndParam.PortName == "" {
-		leftPortName = fmt.Sprintf("%s.Port%d",
-			leftSwitch.Name(), len(leftNode.remotes))
-	}
-
-	leftPort = c.portFactory(leftSwitch,
-		param.LeftEndParam.IncomingBufSize,
-		param.LeftEndParam.OutgoingBufSize,
-		leftPortName)
-
 	rightNode := c.switches[rightSwitchID]
 	rightSwitch := rightNode.sw
-	rightPortName := rightSwitch.Name() + "." + param.RightEndParam.PortName
 
-	if param.RightEndParam.PortName == "" {
-		rightPortName = fmt.Sprintf("%s.Port%d",
-			rightSwitch.Name(), len(rightNode.remotes))
-	}
-
-	rightPort = c.portFactory(rightSwitch,
-		param.RightEndParam.IncomingBufSize,
-		param.RightEndParam.OutgoingBufSize,
-		rightPortName)
-
-	switches.MakeSwitchPortAdder(leftSwitch).
-		WithPorts(leftPort, rightPort).
+	// Switch-to-switch link: mint the left port first (its remote is the right
+	// port, which does not exist yet), then the right port (remote = left), then
+	// wire the left port's remote once both exist.
+	leftPort = switches.MakeSwitchPortAdder(leftSwitch).
+		WithRegistrar(c.registrar).
+		WithBufferSize(param.LeftEndParam.OutgoingBufSize).
 		WithLatency(param.LeftEndParam.Latency).
 		WithNumInputChannel(param.LeftEndParam.NumInputChannel).
 		WithNumOutputChannel(param.LeftEndParam.NumOutputChannel).
-		AddPort()
+		Add()
 
-	switches.MakeSwitchPortAdder(rightSwitch).
-		WithPorts(rightPort, leftPort).
+	rightPort = switches.MakeSwitchPortAdder(rightSwitch).
+		WithRegistrar(c.registrar).
+		WithRemotePort(leftPort).
+		WithBufferSize(param.RightEndParam.OutgoingBufSize).
 		WithLatency(param.RightEndParam.Latency).
 		WithNumInputChannel(param.RightEndParam.NumInputChannel).
 		WithNumOutputChannel(param.RightEndParam.NumOutputChannel).
-		AddPort()
+		Add()
+
+	switches.SetPortRemote(leftSwitch, leftPort, rightPort)
 
 	conn := c.connectPorts(leftPort, rightPort, param.LinkParam)
 

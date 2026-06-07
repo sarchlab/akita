@@ -61,13 +61,22 @@ func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
 	engine := timing.NewSerialEngine()
 	remote := messaging.RemotePort("MMU")
 
+	reg := modeling.NewStandaloneRegistrar(engine)
 	comp := tlb.MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithRegistrar(reg).
 		WithSpec(tlb.DefaultSpec()).
 		WithResources(tlb.Resources{
 			TranslationProviderMapper: &mem.SinglePortMapper{Port: remote},
 		}).
 		Build("TLB")
+
+	for _, name := range []string{"Top", "Bottom", "Control"} {
+		comp.AssignPort(name, modeling.MakePortBuilder().
+			WithRegistrar(reg).
+			WithComponent(comp).
+			WithSpec(modeling.PortSpec{BufSize: 16}).
+			Build(name))
+	}
 
 	top := comp.GetPortByName("Top")
 	bottom := comp.GetPortByName("Bottom")
@@ -345,12 +354,10 @@ func buildWritebackForSequence(
 	spec.Log2BlockSize = 6
 	spec.BankLatency = 1
 	spec.DirLatency = 1
-	spec.TopPortBufferSize = 16
-	spec.BottomPortBufferSize = 16
-	spec.ControlPortBufferSize = 16
 
+	reg := modeling.NewStandaloneRegistrar(engine)
 	comp := writeback.MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithRegistrar(reg).
 		WithSpec(spec).
 		WithResources(writeback.Resources{
 			Storage: storage,
@@ -359,6 +366,14 @@ func buildWritebackForSequence(
 			},
 		}).
 		Build("L1Cache")
+
+	for _, name := range []string{"Top", "Bottom", "Control"} {
+		comp.AssignPort(name, modeling.MakePortBuilder().
+			WithRegistrar(reg).
+			WithComponent(comp).
+			WithSpec(modeling.PortSpec{BufSize: 16}).
+			Build(name))
+	}
 
 	bottom := comp.GetPortByName("Bottom")
 	ctrl := comp.GetPortByName("Control")

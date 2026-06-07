@@ -33,8 +33,7 @@ are tracked by the shared `mshr` package.
 
 ## Key Types
 
-- `Spec` — immutable configuration (frequency, geometry, latency, MSHR size,
-  port buffer sizes).
+- `Spec` — immutable configuration (frequency, geometry, latency, MSHR size).
 - `State` — mutable runtime data: per-set blocks and LRU order, MSHR entries, the
   request pipeline, and flush bookkeeping. The TLB runs a small state machine:
   `enable`, `drain`, `pause`, and `flush`.
@@ -67,6 +66,23 @@ t := tlb.MakeBuilder().
 | `WithResources(Resources{...})` | External wiring (the translation provider mapper) |
 
 ## Ports
+
+`Build` declares the ports below by logical name; it does not create the port
+instances. After `Build`, the caller builds each port with
+`modeling.MakePortBuilder()` (choosing the buffer size) and attaches it with
+`comp.AssignPort(name, port)`:
+
+```go
+t := tlb.MakeBuilder().WithRegistrar(sim).Build("L2TLB")
+for _, name := range []string{"Top", "Bottom", "Control"} {
+    p := modeling.MakePortBuilder().
+        WithRegistrar(sim).
+        WithComponent(t).
+        WithSpec(modeling.PortSpec{BufSize: 4}).
+        Build(name)
+    t.AssignPort(name, p)
+}
+```
 
 - **Top**: accepts `vm.TranslationReq`, returns `vm.TranslationRsp`.
 - **Bottom**: forwards `vm.TranslationReq` on a miss, receives `vm.TranslationRsp`.

@@ -27,10 +27,12 @@ var _ = Describe("Respond Stage", func() {
 
 		// topPort is a real, single-slot port (owned by the component) so the
 		// "cannot send" cases can be forced by pre-filling its outgoing buffer.
+		// The pipeline resolves it lazily via GetPortByName("Top"), so it is
+		// declared and assigned a real port.
 		topPort = messaging.NewPort(mw.comp, 1, 1, "Cache.Top")
 		(&noopConn{}).PlugIn(topPort)
-		mw.topPort = topPort
-		mw.comp.AddPort("Top", topPort)
+		mw.comp.DeclarePort("Top")
+		mw.comp.AssignPort("Top", topPort)
 
 		s = &respondStage{cache: mw}
 	})

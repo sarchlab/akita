@@ -82,7 +82,8 @@ var _ = Describe("Switch", func() {
 			PipelineWidth:    1,
 		}
 		rfsMWLocal := routeForwardSendMiddleware(sw)
-		addPort(rfsMWLocal.comp, &rfsMWLocal.ports, rfsMWLocal.portIndex,
+		sw.AssignPortToGroup("Port", port1)
+		addPort(rfsMWLocal.comp, rfsMWLocal.portIndex,
 			port1, remote1.AsRemote(), pcs1)
 
 		pcs2 := portComplexState{
@@ -93,13 +94,9 @@ var _ = Describe("Switch", func() {
 			Latency:          1,
 			PipelineWidth:    1,
 		}
-		addPort(rfsMWLocal.comp, &rfsMWLocal.ports, rfsMWLocal.portIndex,
+		sw.AssignPortToGroup("Port", port2)
+		addPort(rfsMWLocal.comp, rfsMWLocal.portIndex,
 			port2, remote2.AsRemote(), pcs2)
-
-		// Keep rpMW in sync
-		rpMWLocal := sw.Middlewares()[1].(*receivePipelineMW)
-		rpMWLocal.ports = rfsMWLocal.ports
-		rpMWLocal.portIndex = rfsMWLocal.portIndex
 
 		rfsMW = sw.Middlewares()[0].(*routeForwardSendMW)
 		rpMW = sw.Middlewares()[1].(*receivePipelineMW)

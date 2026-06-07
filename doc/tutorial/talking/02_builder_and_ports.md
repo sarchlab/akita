@@ -38,9 +38,7 @@ func (b Builder) Build(name string) *Comp {
     comp.AddMiddleware(&sendMW{comp: comp})
     comp.AddMiddleware(&receiveProcessMW{comp: comp})
 
-    outPort := messaging.NewPort(
-        comp, b.spec.OutPortBufferSize, b.spec.OutPortBufferSize, name+".Out")
-    comp.AddPort("Out", outPort)
+    comp.DeclarePort("Out")
 
     b.registrar.RegisterComponent(comp)
 
@@ -51,20 +49,40 @@ func (b Builder) Build(name string) *Comp {
 Things to notice:
 
 - The builder returns a `*Comp` — the same alias from the previous page.
-- The builder **creates the port internally** — callers do not pass ports
-  in. They access it later through `comp.GetPortByName("Out")`.
+- The builder **declares the port** with `DeclarePort` but does not create the
+  instance. Setup code builds the instance with a port builder and attaches it
+  after `Build` (shown next); the component still reaches it by name with
+  `comp.GetPortByName("Out")`.
 - Middlewares are added in order; the first one added runs first.
 - The component is **registered with the registrar**, which integrates it
   with the engine and the broader simulation.
 - The `MakeBuilder` → `WithX` → `Build(name)` shape is universal across
   Akita components and connections.
 
+The port instance is supplied after `Build` — a port builder creates it and
+registers it with the simulation, and `AssignPort` attaches it to the component:
+
+```go
+agent := tickingping.MakeBuilder().WithRegistrar(sim).Build("AgentA")
+
+out := modeling.MakePortBuilder().
+    WithRegistrar(sim).
+    WithComponent(agent).
+    WithSpec(modeling.PortSpec{BufSize: 4}).
+    Build("Out")
+agent.AssignPort("Out", out)
+```
+
+This keeps the component agnostic to how its port is built (buffer size,
+instrumentation) while the component still owns which ports exist. The next page
+wires two agents together this way.
+
 ## Why a Custom Builder?
 
 In *Create a Component* the walker had no ports and a single middleware, so we
 built it inline with `modeling.NewBuilder` right in `main`. Assembling this
-component is more work: create the `Out` port at the configured buffer size,
-add two middlewares in the right order, and register with the registrar.
+component is more work: declare the `Out` port, add two middlewares in the
+right order, and register with the registrar.
 Repeating all of that at every call site — and we build two agents — would be
 verbose and easy to get wrong.
 
@@ -76,8 +94,8 @@ Wrapping construction in a per-package builder buys three things:
 - **Easy instances.** `MakeBuilder().WithSpec(spec).Build(name)` stamps out an
   agent on demand — we call it twice, for AgentA and AgentB — and
   `DefaultSpec()` gives a base configuration to tweak.
-- **A clean surface.** The `modeling.NewBuilder` generics and the ports are
-  written once, inside `Build`; callers only ever see
+- **A clean surface.** The `modeling.NewBuilder` generics and the port
+  declarations are written once, inside `Build`; callers only ever see
   `MakeBuilder → WithX → Build`. This is the per-package builder that the
   *Create a Component* section's builder-pattern callout pointed ahead to.
 

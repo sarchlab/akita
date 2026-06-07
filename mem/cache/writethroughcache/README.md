@@ -52,7 +52,8 @@ type Comp = modeling.Component[Spec, State, Resources]
 - **Spec** — immutable config: `Freq`, `Log2BlockSize`, `WayAssociativity`,
   `NumSets` (derived from `TotalByteSize`), `NumBanks`, `NumMSHREntry`,
   `NumReqPerCycle`, `MaxNumConcurrentTrans`, `BankLatency`, `DirLatency`,
-  `WritePolicyType`, the address-mapper fields, and the `*PortBufferSize` fields.
+  `WritePolicyType`, and the address-mapper fields. (Port buffer sizes are no
+  longer part of Spec — the caller chooses them when assigning each port.)
 - **State** — mutable runtime: `cache.DirectoryState`, `cache.MSHRState`, the
   flat `Transactions` list, the directory/bank `queueing.Buffer`/`Pipeline`
   stages, the pause flag, and the in-progress flush request.
@@ -64,8 +65,10 @@ type Comp = modeling.Component[Spec, State, Resources]
 
 Configuration is supplied as a whole through `WithSpec` (start from
 `DefaultSpec()`); the engine and registration come from `WithRegistrar`; storage
-and the address-to-port mapping come from `WithResources`. The component creates
-its own `Top`, `Bottom`, and `Control` ports.
+and the address-to-port mapping come from `WithResources`. `Build` declares the
+component's `Top`, `Bottom`, and `Control` ports; the port instances are built
+with `modeling.MakePortBuilder` and attached after `Build` with `AssignPort`, so
+the caller chooses each port's buffer size.
 
 ```go
 spec := writethroughcache.DefaultSpec()
@@ -80,6 +83,15 @@ cache := writethroughcache.MakeBuilder().
         AddressMapper: &mem.SinglePortMapper{Port: dramPort},
     }).
     Build("L2Cache")
+
+for _, name := range []string{"Top", "Bottom", "Control"} {
+    p := modeling.MakePortBuilder().
+        WithRegistrar(sim).
+        WithComponent(cache).
+        WithSpec(modeling.PortSpec{BufSize: 16}).
+        Build(name)
+    cache.AssignPort(name, p)
+}
 
 topPort := cache.GetPortByName("Top")
 ```

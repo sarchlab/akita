@@ -132,7 +132,7 @@ func (wb *writeBufferStage) fetchFromBottom(
 		return false
 	}
 
-	if !wb.cache.bottomPort.CanSend() {
+	if !wb.cache.bottomPort().CanSend() {
 		return false
 	}
 
@@ -140,14 +140,14 @@ func (wb *writeBufferStage) fetchFromBottom(
 	lowModulePort := wb.cache.findPort(trans.FetchAddress)
 	read := mem.ReadReq{}
 	read.ID = timing.GetIDGenerator().Generate()
-	read.Src = wb.cache.bottomPort.AsRemote()
+	read.Src = wb.cache.bottomPort().AsRemote()
 	read.Dst = lowModulePort
 	read.PID = trans.FetchPID
 	read.Address = trans.FetchAddress
 	read.AccessByteSize = 1 << spec.Log2BlockSize
 	read.TrafficBytes = 12
 	read.TrafficClass = "mem.ReadReq"
-	wb.cache.bottomPort.Send(read)
+	wb.cache.bottomPort().Send(read)
 
 	trans.HasFetchReadReq = true
 	trans.FetchReadReqMeta = read.MsgMeta
@@ -238,14 +238,14 @@ func (wb *writeBufferStage) write() bool {
 		return false
 	}
 
-	if !wb.cache.bottomPort.CanSend() {
+	if !wb.cache.bottomPort().CanSend() {
 		return false
 	}
 
 	lowModulePort := wb.cache.findPort(trans.EvictingAddr)
 	write := mem.WriteReq{}
 	write.ID = timing.GetIDGenerator().Generate()
-	write.Src = wb.cache.bottomPort.AsRemote()
+	write.Src = wb.cache.bottomPort().AsRemote()
 	write.Dst = lowModulePort
 	write.PID = trans.EvictingPID
 	write.Address = trans.EvictingAddr
@@ -253,7 +253,7 @@ func (wb *writeBufferStage) write() bool {
 	write.DirtyMask = trans.EvictingDirtyMask
 	write.TrafficBytes = len(trans.EvictingData) + 12
 	write.TrafficClass = "mem.WriteReq"
-	wb.cache.bottomPort.Send(write)
+	wb.cache.bottomPort().Send(write)
 
 	trans.HasEvictionWriteReq = true
 	trans.EvictionWriteReqMeta = write.MsgMeta
@@ -268,7 +268,7 @@ func (wb *writeBufferStage) write() bool {
 }
 
 func (wb *writeBufferStage) processReturnRsp() bool {
-	msg := wb.cache.bottomPort.PeekIncoming()
+	msg := wb.cache.bottomPort().PeekIncoming()
 	if msg == nil {
 		return false
 	}
@@ -293,7 +293,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	if !found {
 		// Orphaned response: the fetch it answers was discarded by a Reset
 		// issued while it was still in flight. Drop it rather than crash.
-		wb.cache.bottomPort.RetrieveIncoming()
+		wb.cache.bottomPort().RetrieveIncoming()
 		return true
 	}
 	trans := &next.Transactions[transIdx]
@@ -330,7 +330,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	bankBuf.PushTyped(transIdx)
 
 	wb.removeInflightFetch(transIdx)
-	wb.cache.bottomPort.RetrieveIncoming()
+	wb.cache.bottomPort().RetrieveIncoming()
 
 	tracing.TraceReqFinalize(wb.cache.comp, trans.FetchReadReqMeta)
 
@@ -425,7 +425,7 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 				e.Removed = true
 			}
 
-			wb.cache.bottomPort.RetrieveIncoming()
+			wb.cache.bottomPort().RetrieveIncoming()
 			tracing.TraceReqFinalize(wb.cache.comp, e.EvictionWriteReqMeta)
 
 			return true
@@ -435,7 +435,7 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 	// Orphaned eviction ack: the eviction it answers was discarded by a Reset
 	// issued while the write-back was still in flight. Drop it rather than
 	// crash.
-	wb.cache.bottomPort.RetrieveIncoming()
+	wb.cache.bottomPort().RetrieveIncoming()
 	return true
 }
 

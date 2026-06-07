@@ -46,12 +46,10 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		spec.DirLatency = 1
 		spec.TotalByteSize = 64 * 1024
 		spec.MaxNumConcurrentTrans = 16
-		spec.TopPortBufferSize = 16
-		spec.BottomPortBufferSize = 16
-		spec.ControlPortBufferSize = 16
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		comp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			WithResources(Resources{
 				Storage: storage,
@@ -60,6 +58,18 @@ var _ = Describe("Writethrough cache control behavior", func() {
 				},
 			}).
 			Build("L1Cache")
+
+		// Build declares the ports; assign every declared port instance
+		// (the caller now chooses the buffer sizes) before the component
+		// is ticked.
+		for _, name := range []string{"Top", "Bottom", "Control"} {
+			p := modeling.MakePortBuilder().
+				WithRegistrar(reg).
+				WithComponent(comp).
+				WithSpec(modeling.PortSpec{BufSize: 16}).
+				Build(name)
+			comp.AssignPort(name, p)
+		}
 
 		topPort = comp.GetPortByName("Top")
 		bottomPort = comp.GetPortByName("Bottom")
