@@ -41,6 +41,11 @@ type MsgMeta struct {
 Embed `MsgMeta` (or hold one) so a message satisfies `Msg`. `meta.IsRsp()`
 reports whether `RspTo` is set.
 
+**Checkpointing:** a message buffered in a port is serialized when the simulation
+is checkpointed, so each concrete message type must be registered with
+`RegisterMsg(MyReq{})` in an `init()` (and `RegisterEvent` for events). No custom
+marshalling is needed. See [`doc/checkpointing.md`](../doc/checkpointing.md).
+
 ### Port
 
 ```go

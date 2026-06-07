@@ -139,10 +139,19 @@ setup rebuilds; put cursors and counters in `State`.
   (every event with time ≤ `t`), unlike `Run` (drains everything) or `Pause`
   (stops at a non-reproducible point) — useful for taking a mid-transaction
   checkpoint.
+- **Register your message and event types.** A port can hold any `messaging.Msg`
+  and the engine queue any `timing.Event`; each concrete type must be registered
+  with `messaging.RegisterMsg` / `timing.RegisterEvent` in an `init()` so a
+  checkpoint that captures it can be decoded. A forgotten registration fails
+  loudly at load.
 - An entity package becomes checkpointable by implementing the structural
   `Checkpointable` interface (`SaveCheckpoint(io.Writer)` / `LoadCheckpoint(io.Reader)`);
   it never imports `simulation`. `modeling.Component`/`EventDrivenComponent`,
   ports, `mem.Storage`, and `vm.PageTable` already do.
+
+**Writing your own checkpointable messages, events, and components:** see
+[`doc/checkpointing.md`](../doc/checkpointing.md) for the full checklists, a
+worked example, and the gotchas.
 
 See `examples/checkpointdemo` for a runnable save/load demo and
 `mem/acceptancetests/checkpointresume` for a mid-transaction resume oracle.
