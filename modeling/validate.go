@@ -1,9 +1,33 @@
 package modeling
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 )
+
+// jsonMarshalerType is the reflect.Type of json.Marshaler, used to exempt types
+// that customize their own JSON from the structural and data-loss checks.
+var jsonMarshalerType = reflect.TypeOf((*json.Marshaler)(nil)).Elem()
+
+// validateForCheckpoint checks a component's Spec and State so a mis-modeled
+// component fails loudly at construction rather than silently producing a wrong
+// resume. It panics — like the other builder misconfiguration guards — because a
+// non-serializable Spec/State is a programming error, not a runtime condition.
+func validateForCheckpoint[S, T any](name string, spec S) {
+	if err := ValidateSpec(spec); err != nil {
+		panic(fmt.Sprintf(
+			"modeling: component %q has a Spec that cannot be checkpointed: %v",
+			name, err))
+	}
+
+	var zeroState T
+	if err := ValidateState(zeroState); err != nil {
+		panic(fmt.Sprintf(
+			"modeling: component %q has a State that cannot be checkpointed: %v",
+			name, err))
+	}
+}
 
 // ValidateSpec checks that the given value is a struct containing only
 // primitive fields (bool, int*, uint*, float*, string), slices of primitives,
@@ -29,32 +53,11 @@ func validateValue(v reflect.Value, path string, allowNestedStructs bool) error 
 
 	t := v.Type()
 
-	switch t.Kind() {
-	case reflect.Struct:
-		return validateStruct(v, path, allowNestedStructs)
-	default:
+	if t.Kind() != reflect.Struct {
 		return fmt.Errorf("%s: expected struct, got %s", path, t.Kind())
 	}
-}
 
-func validateStruct(v reflect.Value, path string, allowNestedStructs bool) error {
-	t := v.Type()
-
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-
-		if tag := field.Tag.Get("json"); tag == "-" {
-			continue
-		}
-
-		fieldPath := fmt.Sprintf("%s.%s", path, field.Name)
-
-		if err := validateFieldType(field.Type, fieldPath, allowNestedStructs); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return validateStructType(t, path, allowNestedStructs)
 }
 
 func validateFieldType(t reflect.Type, path string, allowNestedStructs bool) error {
@@ -140,6 +143,24 @@ func validateMapValue(elem reflect.Type, path string, allowNestedStructs bool) e
 }
 
 func validateStructType(t reflect.Type, path string, allowNestedStructs bool) error {
+	// A type that customizes its own JSON is trusted: it round-trips on its own
+	// terms, so neither the structural rules nor the data-loss guard apply.
+	if t.Implements(jsonMarshalerType) {
+		return nil
+	}
+
+	// Data-loss guard: a struct whose state is entirely unexported, with no
+	// MarshalJSON, serializes as {} and silently drops its contents across a
+	// checkpoint (the lruset.Set class of bug). Catch it at validation time
+	// instead of as a wrong resume.
+	if serializesToEmpty(t) {
+		return fmt.Errorf(
+			"%s: type %s has unexported state but no MarshalJSON, so it "+
+				"serializes as {} and would silently lose that state across a "+
+				"checkpoint; add MarshalJSON/UnmarshalJSON or export the fields",
+			path, t)
+	}
+
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 
@@ -155,4 +176,26 @@ func validateStructType(t reflect.Type, path string, allowNestedStructs bool) er
 	}
 
 	return nil
+}
+
+// serializesToEmpty reports whether a struct type holds unexported fields yet
+// marshals to an empty JSON object — meaning encoding/json silently drops all of
+// it. Types that implement json.Marshaler are handled by the caller and never
+// reach here. The partial case (some exported, some unexported fields) is
+// deliberately not flagged: an unexported field there may be intentional
+// rebuilt-on-load scratch, which is ambiguous, so it stays a review concern.
+func serializesToEmpty(t reflect.Type) bool {
+	hasUnexported := false
+	for i := 0; i < t.NumField(); i++ {
+		if t.Field(i).PkgPath != "" { // unexported field
+			hasUnexported = true
+			break
+		}
+	}
+	if !hasUnexported {
+		return false
+	}
+
+	data, err := json.Marshal(reflect.New(t).Elem().Interface())
+	return err == nil && string(data) == "{}"
 }
