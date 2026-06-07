@@ -1,6 +1,6 @@
 package timing
 
-import "github.com/sarchlab/akita/v5/codec"
+import "github.com/sarchlab/akita/v5/internal/codec"
 
 // eventCodec decodes the polymorphic events held in the engine's queues across a
 // checkpoint. Each concrete event type is registered with RegisterEvent; the

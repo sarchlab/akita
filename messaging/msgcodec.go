@@ -1,6 +1,6 @@
 package messaging
 
-import "github.com/sarchlab/akita/v5/codec"
+import "github.com/sarchlab/akita/v5/internal/codec"
 
 // msgCodec decodes the polymorphic messages held in port buffers across a
 // checkpoint. Each concrete message type is registered with RegisterMsg; the
