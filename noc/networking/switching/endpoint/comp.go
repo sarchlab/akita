@@ -62,18 +62,17 @@ func (c *Comp) incomingMW() *incomingMW {
 	return c.Middlewares()[1].(*incomingMW)
 }
 
-// NetworkPort returns the network port of the endpoint.
+// NetworkPort returns the network port of the endpoint. It panics if the port
+// has not been assigned yet (see SetNetworkPort).
 func (c *Comp) NetworkPort() messaging.Port {
-	return c.outgoingMW().networkPort
+	return c.GetPortByName("NetworkPort")
 }
 
-// SetNetworkPort sets the network port of the endpoint. It is load-bearing as a
-// post-build setter: callers (e.g. the network connector) create the real
-// network port from the built endpoint component itself, so the port does not
-// exist at build time.
+// SetNetworkPort assigns the endpoint's network-port instance. The endpoint
+// declares the "NetworkPort" in Build; callers (e.g. the network connector)
+// create the real port from the built endpoint and assign it here.
 func (c *Comp) SetNetworkPort(p messaging.Port) {
-	c.outgoingMW().networkPort = p
-	c.incomingMW().networkPort = p
+	c.AssignPort("NetworkPort", p)
 }
 
 // SetDefaultSwitchDst sets the default switch destination. Prefer the

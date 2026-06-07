@@ -15,6 +15,7 @@ import (
 // instances (choosing buffer sizes, implementations, etc.).
 type PortOwnerBase struct {
 	declared map[string]struct{}
+	groups   map[string][]Port
 	ports    map[string]Port
 }
 
@@ -22,6 +23,7 @@ type PortOwnerBase struct {
 func NewPortOwnerBase() *PortOwnerBase {
 	return &PortOwnerBase{
 		declared: make(map[string]struct{}),
+		groups:   make(map[string][]Port),
 		ports:    make(map[string]Port),
 	}
 }
@@ -34,7 +36,54 @@ func (po *PortOwnerBase) DeclarePort(name string) {
 		panic(fmt.Sprintf("port %q already declared", name))
 	}
 
+	if _, found := po.groups[name]; found {
+		panic(fmt.Sprintf("%q is already declared as a port group", name))
+	}
+
 	po.declared[name] = struct{}{}
+}
+
+// DeclarePortGroup declares that the component has a dynamically-sized group of
+// ports under the given name (e.g. a switch with an arbitrary number of links).
+// Members are added with AssignPortToGroup and keyed "name[0]", "name[1]", ...
+// It panics if the name is already declared as a port or a group.
+func (po *PortOwnerBase) DeclarePortGroup(name string) {
+	if _, found := po.declared[name]; found {
+		panic(fmt.Sprintf("%q is already declared as a port", name))
+	}
+
+	if _, found := po.groups[name]; found {
+		panic(fmt.Sprintf("port group %q already declared", name))
+	}
+
+	po.groups[name] = nil
+}
+
+// AssignPortToGroup appends a port instance to a previously declared port group
+// and returns the indexed name it is stored under ("name[i]"). It panics if the
+// group was not declared.
+func (po *PortOwnerBase) AssignPortToGroup(group string, port Port) string {
+	members, declared := po.groups[group]
+	if !declared {
+		panic(fmt.Sprintf(
+			"port group %q is not declared by this component", group))
+	}
+
+	name := fmt.Sprintf("%s[%d]", group, len(members))
+	po.groups[group] = append(members, port)
+	po.ports[name] = port
+
+	return name
+}
+
+// NumPortsInGroup returns the number of ports currently assigned to the group.
+func (po PortOwnerBase) NumPortsInGroup(group string) int {
+	return len(po.groups[group])
+}
+
+// PortsInGroup returns the ports assigned to the group, in insertion order.
+func (po PortOwnerBase) PortsInGroup(group string) []Port {
+	return po.groups[group]
 }
 
 // AssignPort assigns a port instance to a previously declared port name. It
