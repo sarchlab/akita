@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -19,31 +20,14 @@ func TestMsgRegistryRoundTrip(t *testing.T) {
 	msg.Dst = "B"
 	msg.TrafficClass = "test"
 
-	tp, err := EncodeMsg(msg)
-	if err != nil {
-		t.Fatalf("EncodeMsg: %v", err)
-	}
-	if tp.Type != "messaging.registryTestMsg" {
-		t.Fatalf("type tag = %q", tp.Type)
-	}
-
-	got, err := DecodeMsg(tp)
-	if err != nil {
-		t.Fatalf("DecodeMsg: %v", err)
-	}
-
-	gm, ok := got.(registryTestMsg)
-	if !ok {
-		t.Fatalf("decoded type = %T, want registryTestMsg", got)
-	}
-	if gm.Value != 42 || gm.ID != 7 || gm.Src != "A" || gm.Dst != "B" ||
-		gm.TrafficClass != "test" {
-		t.Fatalf("decoded message mismatch: %+v", gm)
+	if err := CheckRoundTrip(msg); err != nil {
+		t.Fatalf("CheckRoundTrip: %v", err)
 	}
 }
 
 func TestMsgRegistryUnknownType(t *testing.T) {
-	_, err := DecodeMsg(TypedPayload{Type: "nonexistent.Type", Payload: []byte("{}")})
+	_, err := msgCodec.DecodeSlice(
+		json.RawMessage(`[{"type":"nonexistent.Type","payload":{}}]`))
 	if err == nil || !strings.Contains(err.Error(), "unknown message type") {
 		t.Fatalf("expected unknown-type error, got %v", err)
 	}

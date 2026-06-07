@@ -1,24 +1,11 @@
 package timing
 
-import (
-	"encoding/json"
-	"fmt"
-	"reflect"
-	"sync"
-)
+import "github.com/sarchlab/akita/v5/codec"
 
-// TypedPayload is the serialized form of a polymorphic event: a type tag plus
-// the JSON encoding of the concrete event. It lets the engine's event queue be
-// checkpointed and decoded back to the right concrete event types.
-type TypedPayload struct {
-	Type    string          `json:"type"`
-	Payload json.RawMessage `json:"payload"`
-}
-
-var (
-	eventRegistryMu sync.RWMutex
-	eventRegistry   = map[string]reflect.Type{}
-)
+// eventCodec decodes the polymorphic events held in the engine's queues across a
+// checkpoint. Each concrete event type is registered with RegisterEvent; the
+// wire format and reflection machinery live in package codec.
+var eventCodec = codec.NewRegistry[Event]("event")
 
 // init registers the built-in EventBase so a checkpoint can round-trip a plain
 // event scheduled via MakeEventBase. Concrete events that embed EventBase
@@ -27,68 +14,21 @@ func init() {
 	RegisterEvent(EventBase{})
 }
 
-// RegisterEvent registers a concrete event type so it can be encoded and decoded
-// for checkpoints. Call it from an init() with a zero value of each event type.
-// Events may be value types (e.g. modeling.TickEvent) or pointers; the tag is
-// derived from the Go type either way. Registering the same type twice is
-// harmless.
+// RegisterEvent registers a concrete event type so a checkpoint that captured it
+// in the engine queue can be decoded. Call it from an init() with a zero value
+// of each event type. Events may be value types (e.g. modeling.TickEvent) or
+// pointers; the tag is derived from the Go type either way. Registering the same
+// type twice is harmless.
+//
+// A forgotten registration fails loudly at load time: decoding a checkpoint that
+// holds an unregistered event reports an unknown-event-type error.
 func RegisterEvent(evt Event) {
-	t := reflect.TypeOf(evt)
-	if t == nil {
-		panic("timing: RegisterEvent requires a non-nil event")
-	}
-
-	eventRegistryMu.Lock()
-	eventRegistry[t.String()] = t
-	eventRegistryMu.Unlock()
+	eventCodec.Register(evt)
 }
 
-// EncodeEvent encodes an event into a TypedPayload.
-func EncodeEvent(evt Event) (TypedPayload, error) {
-	payload, err := json.Marshal(evt)
-	if err != nil {
-		return TypedPayload{}, fmt.Errorf("timing: encode %T: %w", evt, err)
-	}
-
-	return TypedPayload{
-		Type:    reflect.TypeOf(evt).String(),
-		Payload: payload,
-	}, nil
-}
-
-// DecodeEvent decodes a TypedPayload back into an event of its registered type.
-func DecodeEvent(tp TypedPayload) (Event, error) {
-	eventRegistryMu.RLock()
-	t, ok := eventRegistry[tp.Type]
-	eventRegistryMu.RUnlock()
-	if !ok {
-		return nil, fmt.Errorf(
-			"timing: unknown event type %q (call timing.RegisterEvent for it)",
-			tp.Type)
-	}
-
-	// Allocate a *Concrete to unmarshal into, regardless of whether the event
-	// was registered as a value or pointer type.
-	elem := t
-	if t.Kind() == reflect.Ptr {
-		elem = t.Elem()
-	}
-	ptr := reflect.New(elem)
-
-	if err := json.Unmarshal(tp.Payload, ptr.Interface()); err != nil {
-		return nil, fmt.Errorf("timing: decode %s: %w", tp.Type, err)
-	}
-
-	// Return the same value/pointer form the type was registered as.
-	result := ptr.Interface()
-	if t.Kind() != reflect.Ptr {
-		result = ptr.Elem().Interface()
-	}
-
-	evt, ok := result.(Event)
-	if !ok {
-		return nil, fmt.Errorf("timing: %s does not implement Event", tp.Type)
-	}
-
-	return evt, nil
+// CheckRoundTrip verifies that evt encodes and decodes back to an equal event of
+// the same type. It is a test aid for an event-defining package to confirm its
+// types are registered and serialize losslessly.
+func CheckRoundTrip(evt Event) error {
+	return eventCodec.CheckRoundTrip(evt)
 }

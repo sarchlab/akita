@@ -7,14 +7,14 @@ import (
 )
 
 // portCheckpoint is the serialized form of a port: the buffer capacities (a
-// shape check) plus the in-flight messages in each buffer, encoded as typed
-// payloads so their concrete types survive the round trip. Hooks and the owning
-// component/connection are rebuilt by setup and not serialized.
+// shape check) plus the in-flight messages in each buffer, encoded through the
+// message codec so their concrete types survive the round trip. Hooks and the
+// owning component/connection are rebuilt by setup and not serialized.
 type portCheckpoint struct {
-	IncomingCapacity int            `json:"incoming_capacity"`
-	OutgoingCapacity int            `json:"outgoing_capacity"`
-	Incoming         []TypedPayload `json:"incoming"`
-	Outgoing         []TypedPayload `json:"outgoing"`
+	IncomingCapacity int             `json:"incoming_capacity"`
+	OutgoingCapacity int             `json:"outgoing_capacity"`
+	Incoming         json.RawMessage `json:"incoming"`
+	Outgoing         json.RawMessage `json:"outgoing"`
 }
 
 // SaveCheckpoint writes the port's buffer capacities and contents. Message types
@@ -23,11 +23,11 @@ func (p *defaultPort) SaveCheckpoint(w io.Writer) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	incoming, err := encodeMsgs(p.incomingBuf.Elements())
+	incoming, err := msgCodec.EncodeSlice(p.incomingBuf.Elements())
 	if err != nil {
 		return fmt.Errorf("messaging: port %q incoming: %w", p.name, err)
 	}
-	outgoing, err := encodeMsgs(p.outgoingBuf.Elements())
+	outgoing, err := msgCodec.EncodeSlice(p.outgoingBuf.Elements())
 	if err != nil {
 		return fmt.Errorf("messaging: port %q outgoing: %w", p.name, err)
 	}
@@ -63,11 +63,11 @@ func (p *defaultPort) LoadCheckpoint(r io.Reader) error {
 			p.name, dto.OutgoingCapacity, got)
 	}
 
-	incoming, err := decodeMsgs(dto.Incoming)
+	incoming, err := msgCodec.DecodeSlice(dto.Incoming)
 	if err != nil {
 		return fmt.Errorf("messaging: port %q incoming: %w", p.name, err)
 	}
-	outgoing, err := decodeMsgs(dto.Outgoing)
+	outgoing, err := msgCodec.DecodeSlice(dto.Outgoing)
 	if err != nil {
 		return fmt.Errorf("messaging: port %q outgoing: %w", p.name, err)
 	}
@@ -76,30 +76,4 @@ func (p *defaultPort) LoadCheckpoint(r io.Reader) error {
 	p.outgoingBuf.Restore(outgoing)
 
 	return nil
-}
-
-func encodeMsgs(msgs []Msg) ([]TypedPayload, error) {
-	out := make([]TypedPayload, len(msgs))
-	for i, m := range msgs {
-		tp, err := EncodeMsg(m)
-		if err != nil {
-			return nil, err
-		}
-		out[i] = tp
-	}
-
-	return out, nil
-}
-
-func decodeMsgs(payloads []TypedPayload) ([]Msg, error) {
-	out := make([]Msg, len(payloads))
-	for i, tp := range payloads {
-		m, err := DecodeMsg(tp)
-		if err != nil {
-			return nil, err
-		}
-		out[i] = m
-	}
-
-	return out, nil
 }

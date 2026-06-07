@@ -17,23 +17,8 @@ func TestVMProtocolMessagesRoundTrip(t *testing.T) {
 	rsp.ID = 6
 
 	for _, msg := range []messaging.Msg{req, rsp} {
-		tp, err := messaging.EncodeMsg(msg)
-		if err != nil {
-			t.Fatalf("EncodeMsg %T: %v", msg, err)
+		if err := messaging.CheckRoundTrip(msg); err != nil {
+			t.Fatalf("round trip %T (is it registered and lossless?): %v", msg, err)
 		}
-		got, err := messaging.DecodeMsg(tp)
-		if err != nil {
-			t.Fatalf("DecodeMsg %T (is it registered?): %v", msg, err)
-		}
-		if got.Meta().ID != msg.Meta().ID {
-			t.Fatalf("%T: ID = %d, want %d", msg, got.Meta().ID, msg.Meta().ID)
-		}
-	}
-
-	// A concrete field survives the round trip.
-	tp, _ := messaging.EncodeMsg(rsp)
-	got, _ := messaging.DecodeMsg(tp)
-	if got.(vm.TranslationRsp).Page.PAddr != 0x4000 {
-		t.Fatalf("TranslationRsp.Page.PAddr not preserved: %+v", got)
 	}
 }

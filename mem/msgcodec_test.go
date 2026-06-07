@@ -22,26 +22,13 @@ func TestProtocolMessagesRoundTrip(t *testing.T) {
 	ctrlRsp := mem.ControlRsp{}
 	ctrlRsp.ID = 10
 
+	// CheckRoundTrip encodes, decodes, and compares for equality, so it covers
+	// both "is this type registered?" and "does every field survive?".
 	for _, msg := range []messaging.Msg{
 		read, write, dataReady, writeDone, ctrlReq, ctrlRsp,
 	} {
-		tp, err := messaging.EncodeMsg(msg)
-		if err != nil {
-			t.Fatalf("encode %T: %v", msg, err)
+		if err := messaging.CheckRoundTrip(msg); err != nil {
+			t.Fatalf("round trip %T (is it registered and lossless?): %v", msg, err)
 		}
-		got, err := messaging.DecodeMsg(tp)
-		if err != nil {
-			t.Fatalf("decode %T (is it registered?): %v", msg, err)
-		}
-		if got.Meta().ID != msg.Meta().ID {
-			t.Fatalf("%T: ID = %d, want %d", msg, got.Meta().ID, msg.Meta().ID)
-		}
-	}
-
-	// A concrete field survives the round trip.
-	tp, _ := messaging.EncodeMsg(read)
-	got, _ := messaging.DecodeMsg(tp)
-	if got.(mem.ReadReq).Address != 0x100 {
-		t.Fatalf("ReadReq.Address not preserved: %+v", got)
 	}
 }
