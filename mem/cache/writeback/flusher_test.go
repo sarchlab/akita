@@ -63,15 +63,18 @@ var _ = Describe("Flusher", func() {
 		// but Top/Bottom are declared so the pipeline can resolve them too.
 		controlPort = messaging.NewPort(m.comp, 4, 4, "Cache.Control")
 		(&ccNoopConn{}).PlugIn(controlPort)
-		m.comp.AddPort("Control", controlPort)
+		m.comp.DeclarePort("Control")
+		m.comp.AssignPort("Control", controlPort)
 
 		topPort := messaging.NewPort(m.comp, 4, 4, "Cache.Top")
 		(&ccNoopConn{}).PlugIn(topPort)
-		m.comp.AddPort("Top", topPort)
+		m.comp.DeclarePort("Top")
+		m.comp.AssignPort("Top", topPort)
 
 		bottomPort := messaging.NewPort(m.comp, 4, 4, "Cache.Bottom")
 		(&ccNoopConn{}).PlugIn(bottomPort)
-		m.comp.AddPort("Bottom", bottomPort)
+		m.comp.DeclarePort("Bottom")
+		m.comp.AssignPort("Bottom", bottomPort)
 
 		m.comp.State = initialState
 		next := &m.comp.State

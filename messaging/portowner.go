@@ -100,19 +100,6 @@ func (po *PortOwnerBase) AssignPort(name string, port Port) {
 	po.ports[name] = port
 }
 
-// AddPort declares and assigns a port in one step. It is the legacy path for
-// components that still create their own ports in Build; new components should
-// declare ports (DeclarePort) and have setup code assign instances
-// (AssignPort). It panics if a port with the name already exists.
-func (po *PortOwnerBase) AddPort(name string, port Port) {
-	if _, found := po.ports[name]; found {
-		panic("port already exist")
-	}
-
-	po.declared[name] = struct{}{}
-	po.ports[name] = port
-}
-
 // GetPortByName returns the port with the given logical name. It panics if the
 // name is not a port of this component, or if the port was declared but no
 // instance has been assigned yet.

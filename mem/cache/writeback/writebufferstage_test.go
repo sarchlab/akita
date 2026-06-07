@@ -65,7 +65,8 @@ var _ = Describe("WriteBufferStage", func() {
 		// real port (owned by the component) and plugs a noop connection.
 		bottomPort = messaging.NewPort(m.comp, 4, 4, "Cache.Bottom")
 		(&ccNoopConn{}).PlugIn(bottomPort)
-		m.comp.AddPort("Bottom", bottomPort)
+		m.comp.DeclarePort("Bottom")
+		m.comp.AssignPort("Bottom", bottomPort)
 
 		m.comp.State = initialState
 

@@ -206,7 +206,8 @@ func main() {
 		WithSpec(clientSpec{Freq: 1 * timing.GHz}).
 		Build("Client")
 	client.AddMiddleware(&clientMW{comp: client, inFlight: make(map[uint64]readReq)})
-	client.AddPort("Out", messaging.NewPort(client, 4, 4, "Client.Out"))
+	client.DeclarePort("Out")
+	client.AssignPort("Out", messaging.NewPort(client, 4, 4, "Client.Out"))
 	registrar.RegisterComponent(client)
 
 	server := modeling.NewBuilder[serverSpec, serverState, modeling.None]().
@@ -215,7 +216,8 @@ func main() {
 		WithSpec(serverSpec{Freq: 1 * timing.GHz, Latency: 4}).
 		Build("Server")
 	server.AddMiddleware(&serverMW{comp: server})
-	server.AddPort("Out", messaging.NewPort(server, 4, 4, "Server.Out"))
+	server.DeclarePort("Out")
+	server.AssignPort("Out", messaging.NewPort(server, 4, 4, "Server.Out"))
 	registrar.RegisterComponent(server)
 
 	conn := directconnection.MakeBuilder().WithRegistrar(registrar).Build("Conn")

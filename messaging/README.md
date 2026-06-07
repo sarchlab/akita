@@ -118,7 +118,6 @@ type Component interface {
 type PortOwner interface {
     DeclarePort(name string)
     AssignPort(name string, port Port)
-    AddPort(name string, port Port)
     GetPortByName(name string) Port
     Ports() []Port
 }
@@ -127,18 +126,14 @@ type PortOwner interface {
 Embed `PortOwnerBase` (via `NewPortOwnerBase`) to manage a named set of ports.
 A component owns its port topology: it declares its ports with `DeclarePort`
 (typically in its builder), and setup code supplies the instances with
-`AssignPort`. `AddPort` is the legacy one-step path that declares and assigns
-together, used by components that still create their own ports. `GetPortByName`
-panics with a helpful message if the name is unknown or was declared but not
-yet assigned.
+`AssignPort`. `GetPortByName` panics with a helpful message if the name is
+unknown or was declared but not yet assigned.
 
 ## How It Works
 
 1. A component declares its ports with `DeclarePort`; setup code builds each
    port with `modeling.MakePortBuilder` (which registers it with the
-   simulation) — or the low-level `NewPort` — and attaches it with `AssignPort`
-   (components not yet migrated still create and add their ports in one step
-   with `AddPort`).
+   simulation) — or the low-level `NewPort` — and attaches it with `AssignPort`.
 2. A connection is plugged into the ports with `PlugIn`, and each port's
    connection is set with `SetConnection`.
 3. To send, a component builds a message with `Src`/`Dst` remote port names and

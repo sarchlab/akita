@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 
@@ -50,32 +51,10 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 		WithRegistrar(s).
 		WithSpec(agentSpec).
 		Build("MemAccessAgent")
-	agentMem := modeling.MakePortBuilder().
-		WithRegistrar(s).
-		WithComponent(agent).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Mem")
-	agent.AssignPort("Mem", agentMem)
+	assignPorts(s, agent, "Mem")
 	createProgressBars(s, agent)
 
-	dramSpec := idealmemcontroller.DefaultSpec()
-	dramSpec.Capacity = 4 * mem.GB
-	dram := idealmemcontroller.MakeBuilder().
-		WithRegistrar(s).
-		WithSpec(dramSpec).
-		Build("DRAM")
-	dramTop := modeling.MakePortBuilder().
-		WithRegistrar(s).
-		WithComponent(dram).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Top")
-	dram.AssignPort("Top", dramTop)
-	dramCtrl := modeling.MakePortBuilder().
-		WithRegistrar(s).
-		WithComponent(dram).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Control")
-	dram.AssignPort("Control", dramCtrl)
+	dram := buildDRAM(s)
 
 	addressToPortMapper := new(mem.SinglePortMapper)
 	addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()
@@ -93,24 +72,7 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 			AddressToPortMapper: addressToPortMapper,
 		}).
 		Build("Cache")
-	cacheTop := modeling.MakePortBuilder().
-		WithRegistrar(s).
-		WithComponent(writeBackCache).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Top")
-	writeBackCache.AssignPort("Top", cacheTop)
-	cacheBottom := modeling.MakePortBuilder().
-		WithRegistrar(s).
-		WithComponent(writeBackCache).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Bottom")
-	writeBackCache.AssignPort("Bottom", cacheBottom)
-	cacheControl := modeling.MakePortBuilder().
-		WithRegistrar(s).
-		WithComponent(writeBackCache).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Control")
-	writeBackCache.AssignPort("Control", cacheControl)
+	assignPorts(s, writeBackCache, "Top", "Bottom", "Control")
 
 	agent.LowModule = writeBackCache.GetPortByName("Top")
 
@@ -120,6 +82,36 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 	conn.PlugIn(dram.GetPortByName("Top"))
 
 	return s, engine, agent
+}
+
+// buildDRAM builds and registers the backing ideal memory controller.
+func buildDRAM(s *simulation.Simulation) *idealmemcontroller.Comp {
+	dramSpec := idealmemcontroller.DefaultSpec()
+	dramSpec.Capacity = 4 * mem.GB
+	dram := idealmemcontroller.MakeBuilder().
+		WithRegistrar(s).
+		WithSpec(dramSpec).
+		Build("DRAM")
+	assignPorts(s, dram, "Top", "Control")
+
+	return dram
+}
+
+// assignPorts builds a port for each declared name on the component and assigns
+// it, choosing a default buffer size.
+func assignPorts(
+	s *simulation.Simulation,
+	comp messaging.Component,
+	names ...string,
+) {
+	for _, name := range names {
+		p := modeling.MakePortBuilder().
+			WithRegistrar(s).
+			WithComponent(comp).
+			WithSpec(modeling.PortSpec{BufSize: 16}).
+			Build(name)
+		comp.AssignPort(name, p)
+	}
 }
 
 func createProgressBars(

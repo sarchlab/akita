@@ -68,7 +68,8 @@ var _ = Describe("MSHR Stage", func() {
 		// single-slot port (owned by the component) and plugs a noop connection.
 		topPort = messaging.NewPort(m.comp, 1, 1, "Cache.Top")
 		(&ccNoopConn{}).PlugIn(topPort)
-		m.comp.AddPort("Top", topPort)
+		m.comp.DeclarePort("Top")
+		m.comp.AssignPort("Top", topPort)
 
 		m.comp.State = initialState
 

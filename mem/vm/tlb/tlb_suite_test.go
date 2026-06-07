@@ -94,7 +94,8 @@ func newIdealEndpoint(name string) *idealEndpoint {
 		PortOwnerBase: messaging.NewPortOwnerBase(),
 	}
 	ep.port = messaging.NewPort(ep, 4, 4, name+".Port")
-	ep.AddPort("Port", ep.port)
+	ep.DeclarePort("Port")
+	ep.AssignPort("Port", ep.port)
 
 	return ep
 }

@@ -109,10 +109,6 @@ func (s *Simulation) RegisterComponent(c naming.Named) {
 	if s.monitor != nil {
 		s.monitor.RegisterComponent(c)
 	}
-
-	for _, p := range componentPorts(c) {
-		s.registerPort(p)
-	}
 }
 
 // RegisterPort registers a port with the simulation so it can be resolved by

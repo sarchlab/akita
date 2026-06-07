@@ -48,7 +48,7 @@ func newFakeComp(name string, matrix control.VerbSupport, asyncDelay int) *fakeC
 		ports:      map[string]messaging.Port{},
 	}
 	port := messaging.NewPort(c, 4, 4, name+".Control")
-	c.AddPort("Control", port)
+	c.AssignPort("Control", port)
 	conn := &noopConn{}
 	conn.PlugIn(port)
 	return c
@@ -57,9 +57,6 @@ func newFakeComp(name string, matrix control.VerbSupport, asyncDelay int) *fakeC
 func (c *fakeComp) Name() string         { return c.name }
 func (c *fakeComp) DeclarePort(_ string) {}
 func (c *fakeComp) AssignPort(name string, p messaging.Port) {
-	c.AddPort(name, p)
-}
-func (c *fakeComp) AddPort(name string, p messaging.Port) {
 	c.ports[name] = p
 	p.SetComponent(c)
 }

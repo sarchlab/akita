@@ -109,7 +109,8 @@ func newTestAgent(name string) *testAgent {
 	}
 
 	a.port = messaging.NewPort(a, 4, 4, fmt.Sprintf("%s.Port", name))
-	a.AddPort("Port", a.port)
+	a.DeclarePort("Port")
+	a.AssignPort("Port", a.port)
 
 	return a
 }
@@ -161,7 +162,8 @@ func newBandwidthAgent(name string) *bandwidthAgent {
 	}
 
 	a.port = messaging.NewPort(a, 8, 8, fmt.Sprintf("%s.Port", name))
-	a.AddPort("Port", a.port)
+	a.DeclarePort("Port")
+	a.AssignPort("Port", a.port)
 
 	return a
 }

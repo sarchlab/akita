@@ -87,31 +87,6 @@ func (c testComponent) Ports() []Port {
 	return c.ports
 }
 
-type compatiblePort interface {
-	Port
-	compatiblePort()
-}
-
-type compatibleTestPort struct {
-	testPort
-}
-
-func (p compatibleTestPort) compatiblePort() {
-}
-
-type compatiblePortComponent struct {
-	name  string
-	ports []compatiblePort
-}
-
-func (c compatiblePortComponent) Name() string {
-	return c.name
-}
-
-func (c compatiblePortComponent) Ports() []compatiblePort {
-	return c.ports
-}
-
 var _ = Describe("Simulation", func() {
 	var (
 		simulation *Simulation
@@ -133,6 +108,7 @@ var _ = Describe("Simulation", func() {
 
 	It("should register a component", func() {
 		simulation.RegisterComponent(comp)
+		simulation.RegisterPort(port)
 
 		Expect(simulation.GetComponentByName("comp")).To(Equal(comp))
 		Expect(simulation.GetPortByName("port")).To(Equal(port))
@@ -150,13 +126,12 @@ var _ = Describe("Simulation", func() {
 	})
 
 	It("should reject duplicate port names", func() {
-		simulation.RegisterComponent(comp)
+		simulation.RegisterPort(port)
 
 		dupPort := testPort{name: "port"}
-		dupComp := testComponent{name: "other", ports: []Port{dupPort}}
 
 		Expect(func() {
-			simulation.RegisterComponent(dupComp)
+			simulation.RegisterPort(dupPort)
 		}).To(PanicWith(ContainSubstring("already registered")))
 	})
 
@@ -166,18 +141,6 @@ var _ = Describe("Simulation", func() {
 		comps := simulation.Components()
 		Expect(comps).To(HaveLen(1))
 		Expect(comps[0]).To(Equal(comp))
-	})
-
-	It("should register ports from compatible port slices", func() {
-		port := compatibleTestPort{testPort: testPort{name: "port"}}
-		comp := compatiblePortComponent{
-			name:  "comp",
-			ports: []compatiblePort{port},
-		}
-
-		simulation.RegisterComponent(comp)
-
-		Expect(simulation.GetPortByName("port")).To(Equal(port))
 	})
 
 	It("should register shared state resources directly", func() {
@@ -225,6 +188,7 @@ var _ = Describe("Simulation", func() {
 		connection := newTestConnection("conn")
 
 		simulation.RegisterComponent(comp)
+		simulation.RegisterPort(port)
 		simulation.RegisterConnection(connection)
 		simulation.RegisterResource(resource)
 

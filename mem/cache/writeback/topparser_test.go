@@ -57,7 +57,8 @@ var _ = Describe("TopParser", func() {
 		// port (owned by the component) and plugs a noop connection.
 		topPort = messaging.NewPort(m.comp, 4, 4, "Cache.Top")
 		(&ccNoopConn{}).PlugIn(topPort)
-		m.comp.AddPort("Top", topPort)
+		m.comp.DeclarePort("Top")
+		m.comp.AssignPort("Top", topPort)
 
 		m.comp.State = initialState
 

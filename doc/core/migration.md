@@ -770,9 +770,7 @@ for _, name := range []string{"Top", "Bottom", "Control"} {
 The port builder takes the registrar and registers the port with the
 simulation, exactly as `RegisterComponent` registers a component. `AssignPort`
 then panics if the name was not declared or is already assigned, so a typo or a
-forgotten port fails fast. (Components not yet migrated to this model still
-create, attach, and register their ports in one step inside `Build` with
-`AddPort`.)
+forgotten port fails fast.
 
 ### SetComponent
 

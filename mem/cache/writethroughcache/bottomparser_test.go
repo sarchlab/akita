@@ -54,10 +54,11 @@ var _ = Describe("Bottom Parser", func() {
 		// bottomPort is a real port with no owning component, so Deliver does
 		// not try to schedule a tick on the engine-less comp. The bottomParser
 		// resolves it lazily via GetPortByName("Bottom"), so it is still
-		// attached with AddPort (declare + assign in one step).
+		// declared and assigned a real port.
 		bottomPort = messaging.NewPort(nil, 4, 4, "Cache.Bottom")
 		(&noopConn{}).PlugIn(bottomPort)
-		c.comp.AddPort("Bottom", bottomPort)
+		c.comp.DeclarePort("Bottom")
+		c.comp.AssignPort("Bottom", bottomPort)
 
 		// Initialize directoryState before SetState so both buffers match
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
