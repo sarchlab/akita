@@ -83,7 +83,7 @@ var _ = Describe("MMU", func() {
 		It("should process translation request", func() {
 			translationReq := vm.TranslationReq{}
 			translationReq.ID = timing.GetIDGenerator().Generate()
-			translationReq.Src = messaging.RemotePort("Agent")
+			translationReq.Src = messaging.RemotePort("Agent.Top")
 			translationReq.Dst = topPort.AsRemote()
 			translationReq.PID = 1
 			translationReq.VAddr = 0x100000100
@@ -146,7 +146,7 @@ var _ = Describe("MMU", func() {
 				WalkingTranslations: []transactionState{
 					{
 						ReqID:     timing.GetIDGenerator().Generate(),
-						ReqSrc:    messaging.RemotePort("Agent"),
+						ReqSrc:    messaging.RemotePort("Agent.Top"),
 						ReqDst:    topPort.AsRemote(),
 						PID:       1,
 						VAddr:     0x1000,
@@ -183,7 +183,7 @@ var _ = Describe("MMU", func() {
 
 			dummy := vm.TranslationRsp{}
 			dummy.Src = topPort.AsRemote()
-			dummy.Dst = messaging.RemotePort("Agent")
+			dummy.Dst = messaging.RemotePort("Agent.Top")
 			dummy.TrafficClass = "vm.TranslationRsp"
 			topPort.Send(dummy)
 
@@ -191,7 +191,7 @@ var _ = Describe("MMU", func() {
 				WalkingTranslations: []transactionState{
 					{
 						ReqID:     timing.GetIDGenerator().Generate(),
-						ReqSrc:    messaging.RemotePort("Agent"),
+						ReqSrc:    messaging.RemotePort("Agent.Top"),
 						ReqDst:    topPort.AsRemote(),
 						PID:       1,
 						VAddr:     0x1000,
@@ -235,7 +235,7 @@ var _ = Describe("MMU Integration", func() {
 		assignPort(reg, mmuComp, "Control", 4)
 		(&noopConn{}).PlugIn(topPort)
 
-		agentPort = messaging.NewPort(nil, 4, 4, "Agent")
+		agentPort = messaging.NewPort(nil, 4, 4, "Agent.Top")
 		(&noopConn{}).PlugIn(agentPort)
 	})
 

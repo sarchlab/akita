@@ -26,7 +26,7 @@ var _ = Describe("Connector", func() {
 		connector.AddSwitch()
 
 		for i := 0; i < 2; i++ {
-			port := messaging.NewPort(nil, 1, 1, fmt.Sprintf("Port%d", i))
+			port := messaging.NewPort(nil, 1, 1, fmt.Sprintf("Device[%d].Port", i))
 			connector.ConnectDevice(0, []messaging.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{
@@ -65,7 +65,7 @@ var _ = Describe("Connector", func() {
 		}
 
 		for i := 0; i < 2; i++ {
-			port := messaging.NewPort(nil, 1, 1, fmt.Sprintf("Port%d", i))
+			port := messaging.NewPort(nil, 1, 1, fmt.Sprintf("Device[%d].Port", i))
 			connector.ConnectDevice(1+i, []messaging.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{
@@ -131,7 +131,7 @@ var _ = Describe("Connector", func() {
 		}
 
 		for i := 0; i < 8; i++ {
-			port := messaging.NewPort(nil, 1, 1, fmt.Sprintf("Port%d", i))
+			port := messaging.NewPort(nil, 1, 1, fmt.Sprintf("Device[%d].Port", i))
 			connector.ConnectDevice(8+i, []messaging.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{

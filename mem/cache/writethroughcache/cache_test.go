@@ -48,7 +48,7 @@ var _ = Describe("Cache", func() {
 		// cuPort is a real, component-less port that stands in for the compute
 		// unit. It is plugged into the connection so the cache's responses land
 		// in its incoming buffer, which the tests then drain and inspect.
-		cuPort = messaging.NewPort(nil, 16, 16, "cuPort")
+		cuPort = messaging.NewPort(nil, 16, 16, "CU.Top")
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dram = idealmemcontroller.MakeBuilder().

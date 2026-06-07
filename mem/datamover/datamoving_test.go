@@ -27,7 +27,7 @@ var _ = Describe("DataMover", func() {
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
 
-		srcPort = messaging.NewPort(nil, 4, 4, "SrcPort")
+		srcPort = messaging.NewPort(nil, 4, 4, "Src.Top")
 
 		memSpec := idealmemcontroller.DefaultSpec()
 		memSpec.Latency = 100

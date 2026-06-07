@@ -122,6 +122,12 @@ func (s *Simulation) RegisterPort(p naming.Named) {
 			p.Name())
 	}
 
+	if _, dup := s.portNameIndex[port.Name()]; dup {
+		panic("simulation: port " + port.Name() + " already registered " +
+			"(duplicate port name) — port names must be globally unique; " +
+			"use hierarchical names like \"ComponentName.PortName\"")
+	}
+
 	s.registerPort(port)
 
 	if s.monitor != nil {

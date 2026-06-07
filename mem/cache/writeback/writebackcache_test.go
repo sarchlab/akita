@@ -42,8 +42,8 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
 
-		agentPort = messaging.NewPort(nil, 8, 8, "AgentPort")
-		controlAgentPort = messaging.NewPort(nil, 8, 8, "ControlAgentPort")
+		agentPort = messaging.NewPort(nil, 8, 8, "Agent.Top")
+		controlAgentPort = messaging.NewPort(nil, 8, 8, "Agent.Control")
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dramSpec := idealmemcontroller.DefaultSpec()

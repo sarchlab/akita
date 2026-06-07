@@ -99,7 +99,7 @@ var _ = Describe("DRAM Statistics", func() {
 		}
 
 		topPort := dramComp.GetPortByName("Top")
-		srcPort := messaging.NewPort(nil, 1024, 1024, "SrcPort")
+		srcPort := messaging.NewPort(nil, 1024, 1024, "Src.Top")
 		conn.PlugIn(topPort)
 		conn.PlugIn(srcPort)
 
