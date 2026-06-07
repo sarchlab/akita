@@ -26,6 +26,32 @@ func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
 
+// assignPort builds a port with the given buffer size using the same registrar
+// the component was built with, and assigns it to the component's declared port
+// of the same name.
+func assignPort(
+	reg modeling.Registrar,
+	comp *Comp,
+	name string,
+	bufSize int,
+) messaging.Port {
+	p := modeling.MakePortBuilder().
+		WithRegistrar(reg).
+		WithComponent(comp).
+		WithSpec(modeling.PortSpec{BufSize: bufSize}).
+		Build(name)
+	comp.AssignPort(name, p)
+	return p
+}
+
+// assignDefaultPorts assigns the GMMU's three declared ports (Top, Bottom,
+// Control) with the historical default buffer sizes.
+func assignDefaultPorts(reg modeling.Registrar, comp *Comp) {
+	assignPort(reg, comp, "Top", 16)
+	assignPort(reg, comp, "Bottom", 16)
+	assignPort(reg, comp, "Control", 4)
+}
+
 var _ = Describe("GMMU", func() {
 	var (
 		engine     timing.Engine
@@ -49,11 +75,14 @@ var _ = Describe("GMMU", func() {
 		spec.Latency = 1
 		spec.LowModule = lowModulePort
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		gmmuComp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(spec).
 			Build("MMU")
+
+		assignDefaultPorts(reg, gmmuComp)
 
 		mw = gmmuComp.Middlewares()[1].(*walkMW)
 

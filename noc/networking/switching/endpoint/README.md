@@ -15,13 +15,12 @@ configures conversion and channel behavior:
 
 ```go
 type Spec struct {
-    Freq                  timing.Freq
-    NumInputChannels      int                  // flits ejected per tick
-    NumOutputChannels     int                  // flits injected per tick
-    FlitByteSize          int                  // bytes per flit
-    EncodingOverhead      float64              // extra bytes fraction
-    DefaultSwitchDst      messaging.RemotePort // first-hop switch port
-    NetworkPortBufferSize int
+    Freq              timing.Freq
+    NumInputChannels  int                  // flits ejected per tick
+    NumOutputChannels int                  // flits injected per tick
+    FlitByteSize      int                  // bytes per flit
+    EncodingOverhead  float64              // extra bytes fraction
+    DefaultSwitchDst  messaging.RemotePort // first-hop switch port
 }
 
 type Resources struct {

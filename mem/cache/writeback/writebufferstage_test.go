@@ -9,25 +9,16 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
-	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("WriteBufferStage", func() {
 	var (
-		mockCtrl   *gomock.Controller
 		m          *pipelineMW
 		wb         *writeBufferStage
-		bottomPort *MockPort
+		bottomPort messaging.Port
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
-		bottomPort = NewMockPort(mockCtrl)
-		bottomPort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("BottomPort")).
-			AnyTimes()
-
 		initialState := State{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
@@ -52,11 +43,9 @@ var _ = Describe("WriteBufferStage", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &pipelineMW{
-			bottomPort: bottomPort,
-		}
+		m = &pipelineMW{}
 		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(nil).
+			WithEngine(timing.NewSerialEngine()).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:       6,
@@ -72,6 +61,13 @@ var _ = Describe("WriteBufferStage", func() {
 			}).
 			Build("Cache")
 
+		// The stage resolves the "Bottom" port by name, so the test assigns a
+		// real port (owned by the component) and plugs a noop connection.
+		bottomPort = messaging.NewPort(m.comp, 4, 4, "Cache.Bottom")
+		(&ccNoopConn{}).PlugIn(bottomPort)
+		m.comp.DeclarePort("Bottom")
+		m.comp.AssignPort("Bottom", bottomPort)
+
 		m.comp.State = initialState
 
 		wb = &writeBufferStage{
@@ -80,13 +76,7 @@ var _ = Describe("WriteBufferStage", func() {
 		m.writeBuffer = wb
 	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
-
 	It("should do nothing if no transactions", func() {
-		bottomPort.EXPECT().PeekIncoming().Return(nil)
-
 		ret := wb.Tick()
 
 		Expect(ret).To(BeFalse())
@@ -114,15 +104,14 @@ var _ = Describe("WriteBufferStage", func() {
 			next.WriteBufferBuf.Clear()
 			next.WriteBufferBuf.PushTyped(0)
 
-			bottomPort.EXPECT().PeekIncoming().Return(nil)
-			bottomPort.EXPECT().CanSend().Return(true)
-			bottomPort.EXPECT().Send(gomock.Any())
-
 			ret := wb.Tick()
 
 			Expect(ret).To(BeTrue())
 			next = &m.comp.State
 			Expect(next.InflightFetchIndices).To(HaveLen(1))
+
+			out := bottomPort.RetrieveOutgoing()
+			Expect(out).NotTo(BeNil())
 		})
 
 		It("should stall fetch if too many inflight fetches", func() {
@@ -143,11 +132,10 @@ var _ = Describe("WriteBufferStage", func() {
 			next.WriteBufferBuf.Clear()
 			next.WriteBufferBuf.PushTyped(0)
 
-			bottomPort.EXPECT().PeekIncoming().Return(nil)
-
 			ret := wb.Tick()
 
 			Expect(ret).To(BeFalse())
+			Expect(bottomPort.PeekOutgoing()).To(BeNil())
 		})
 	})
 
@@ -169,16 +157,15 @@ var _ = Describe("WriteBufferStage", func() {
 			next.Transactions = []transactionState{trans}
 			next.PendingEvictionIndices = []int{0}
 
-			bottomPort.EXPECT().PeekIncoming().Return(nil)
-			bottomPort.EXPECT().CanSend().Return(true)
-			bottomPort.EXPECT().Send(gomock.Any())
-
 			ret := wb.Tick()
 
 			Expect(ret).To(BeTrue())
 			next = &m.comp.State
 			Expect(next.PendingEvictionIndices).To(HaveLen(0))
 			Expect(next.InflightEvictionIndices).To(HaveLen(1))
+
+			out := bottomPort.RetrieveOutgoing()
+			Expect(out).NotTo(BeNil())
 		})
 
 		It("should stall if too many inflight evictions", func() {
@@ -187,11 +174,10 @@ var _ = Describe("WriteBufferStage", func() {
 			next.PendingEvictionIndices = []int{0}
 			next.Transactions = []transactionState{{}}
 
-			bottomPort.EXPECT().PeekIncoming().Return(nil)
-
 			ret := wb.Tick()
 
 			Expect(ret).To(BeFalse())
+			Expect(bottomPort.PeekOutgoing()).To(BeNil())
 		})
 	})
 
@@ -220,14 +206,14 @@ var _ = Describe("WriteBufferStage", func() {
 			rsp.RspTo = 9001
 			rsp.TrafficClass = "mem.WriteDoneRsp"
 
-			bottomPort.EXPECT().PeekIncoming().Return(rsp)
-			bottomPort.EXPECT().RetrieveIncoming().Return(rsp)
+			bottomPort.Deliver(rsp)
 
 			ret := wb.Tick()
 
 			Expect(ret).To(BeTrue())
 			next = &m.comp.State
 			Expect(next.InflightEvictionIndices).To(HaveLen(0))
+			Expect(bottomPort.PeekIncoming()).To(BeNil())
 		})
 	})
 })

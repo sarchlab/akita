@@ -18,10 +18,17 @@ func TestValidateState(t *testing.T) {
 func buildTestMMU(engine timing.Engine, name string) *Comp {
 	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
-	return MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+
+	reg := modeling.NewStandaloneRegistrar(engine)
+	comp := MakeBuilder().
+		WithRegistrar(reg).
 		WithSpec(spec).
 		Build(name)
+
+	assignPort(reg, comp, "Top", 4096)
+	assignPort(reg, comp, "Control", 4)
+
+	return comp
 }
 
 func makeTestState(reqID uint64) State {

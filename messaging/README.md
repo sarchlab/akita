@@ -76,6 +76,11 @@ Create a port with `NewPort`:
 port := messaging.NewPort(comp, incomingCap, outgoingCap, "MyComp.Top")
 ```
 
+In assembly, prefer `modeling.MakePortBuilder` — it wraps `NewPort` and
+registers the port with the simulation (and the monitor) through the registrar,
+mirroring how component and connection builders register themselves. `NewPort`
+is the low-level constructor it builds on.
+
 `Send` pushes onto the outgoing buffer (returning a `*SendError` if full) and,
 when the buffer transitions from empty, notifies the connection via
 `NotifySend`. `Deliver` pushes onto the incoming buffer and notifies the owning
@@ -111,18 +116,24 @@ type Component interface {
 }
 
 type PortOwner interface {
-    AddPort(name string, port Port)
+    DeclarePort(name string)
+    AssignPort(name string, port Port)
     GetPortByName(name string) Port
     Ports() []Port
 }
 ```
 
 Embed `PortOwnerBase` (via `NewPortOwnerBase`) to manage a named set of ports.
-`GetPortByName` panics with a helpful list if the name is unknown.
+A component owns its port topology: it declares its ports with `DeclarePort`
+(typically in its builder), and setup code supplies the instances with
+`AssignPort`. `GetPortByName` panics with a helpful message if the name is
+unknown or was declared but not yet assigned.
 
 ## How It Works
 
-1. A component creates ports with `NewPort` and registers them with `AddPort`.
+1. A component declares its ports with `DeclarePort`; setup code builds each
+   port with `modeling.MakePortBuilder` (which registers it with the
+   simulation) — or the low-level `NewPort` — and attaches it with `AssignPort`.
 2. A connection is plugged into the ports with `PlugIn`, and each port's
    connection is set with `SetConnection`.
 3. To send, a component builds a message with `Src`/`Dst` remote port names and

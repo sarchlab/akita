@@ -6,8 +6,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
-
-	"github.com/sarchlab/akita/v5/messaging"
 )
 
 var defaultSpec = Spec{
@@ -47,8 +45,6 @@ var defaultSpec = Spec{
 	NumCol:               1024,
 	TransactionQueueSize: 32,
 	CommandQueueCapacity: 8,
-	TopPortBufferSize:    1024,
-	CtrlPortBufferSize:   4,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -59,7 +55,9 @@ func DefaultSpec() Spec {
 
 // Builder can build new memory controllers. Configuration is supplied as a
 // whole through WithSpec; wiring is supplied through WithRegistrar and
-// WithResources. The component creates its own ports.
+// WithResources. The component declares its "Top" and "Control" ports; the
+// port instances are supplied externally after Build with AssignPort (the
+// caller chooses the buffer sizes).
 type Builder struct {
 	registrar modeling.Registrar
 	spec      Spec
@@ -95,7 +93,8 @@ func (b Builder) WithResources(r Resources) Builder {
 	return b
 }
 
-// Build builds a new MemController. It creates the component's Top port.
+// Build builds a new MemController. It declares the component's "Top" and
+// "Control" ports; assign the port instances after Build with AssignPort.
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("dram: WithRegistrar is required")
@@ -129,17 +128,8 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 	modelComp.State = initialState
 
-	topPort := messaging.NewPort(
-		modelComp, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
-	modelComp.AddPort("Top", topPort)
-
-	ctrlBuf := spec.CtrlPortBufferSize
-	if ctrlBuf == 0 {
-		ctrlBuf = 4
-	}
-	ctrlPort := messaging.NewPort(
-		modelComp, ctrlBuf, ctrlBuf, name+".Control")
-	modelComp.AddPort("Control", ctrlPort)
+	modelComp.DeclarePort("Top")
+	modelComp.DeclarePort("Control")
 
 	b.addMiddlewares(modelComp, timing, cmdCycles)
 
@@ -182,14 +172,11 @@ func (b Builder) addMiddlewares(
 	modelComp *modeling.Component[Spec, State, Resources],
 	timing dramTiming, cmdCycles map[commandKind]int,
 ) {
-	topPort := modelComp.GetPortByName("Top")
-
 	cMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cMW)
 
 	rMW := &respondMW{
-		comp:    modelComp,
-		topPort: topPort,
+		comp: modelComp,
 	}
 	modelComp.AddMiddleware(rMW)
 
@@ -201,8 +188,7 @@ func (b Builder) addMiddlewares(
 	modelComp.AddMiddleware(btMW)
 
 	ptMW := &parseTopMW{
-		comp:    modelComp,
-		topPort: topPort,
+		comp: modelComp,
 	}
 	modelComp.AddMiddleware(ptMW)
 }

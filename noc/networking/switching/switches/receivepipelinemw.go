@@ -11,8 +11,13 @@ import (
 
 type receivePipelineMW struct {
 	comp      *modeling.Component[Spec, State, modeling.None]
-	ports     []messaging.Port
 	portIndex map[messaging.RemotePort]int
+}
+
+// ports returns the switch's local ports, in index order aligned with
+// State.PortComplexes.
+func (m *receivePipelineMW) ports() []messaging.Port {
+	return m.comp.PortsInGroup("Port")
 }
 
 // Tick runs movePipeline → startProcessing.
@@ -32,7 +37,7 @@ func (m *receivePipelineMW) flitParentTaskID(flit packetization.Flit) uint64 {
 func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 	state := &m.comp.State
 
-	for i, port := range m.ports {
+	for i, port := range m.ports() {
 		pcs := &state.PortComplexes[i]
 
 		for j := 0; j < pcs.NumInputChannel; j++ {
@@ -81,7 +86,7 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 func (m *receivePipelineMW) movePipeline() (madeProgress bool) {
 	state := &m.comp.State
 
-	for i := range m.ports {
+	for i := range m.ports() {
 		pcs := &state.PortComplexes[i]
 		if pcs.Latency == 0 {
 			continue

@@ -232,7 +232,7 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 
 	writeToBottom := mem.WriteReq{}
 	writeToBottom.ID = timing.GetIDGenerator().Generate()
-	writeToBottom.Src = d.cache.bottomPort.AsRemote()
+	writeToBottom.Src = d.cache.bottomPort().AsRemote()
 	// Route by cache-line ID so the write-through write and the
 	// corresponding read-fill always target the same lower-memory port,
 	// preserving per-line ordering.
@@ -244,11 +244,11 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 	writeToBottom.TrafficBytes = len(trans.WriteData) + 12
 	writeToBottom.TrafficClass = "req"
 
-	if !d.cache.bottomPort.CanSend() {
+	if !d.cache.bottomPort().CanSend() {
 		return false
 	}
 
-	d.cache.bottomPort.Send(writeToBottom)
+	d.cache.bottomPort().Send(writeToBottom)
 
 	trans.HasWriteToBottom = true
 	trans.WriteToBottomMeta = writeToBottom.MsgMeta
@@ -280,15 +280,15 @@ func (d *directory) fetchFromBottom(
 		AccessByteSize: blockSize,
 	}
 	readToBottom.ID = timing.GetIDGenerator().Generate()
-	readToBottom.Src = d.cache.bottomPort.AsRemote()
+	readToBottom.Src = d.cache.bottomPort().AsRemote()
 	readToBottom.Dst = bottomModule
 	readToBottom.TrafficBytes, readToBottom.TrafficClass = 12, "req"
 
-	if !d.cache.bottomPort.CanSend() {
+	if !d.cache.bottomPort().CanSend() {
 		return false
 	}
 
-	d.cache.bottomPort.Send(readToBottom)
+	d.cache.bottomPort().Send(readToBottom)
 
 	tracing.TraceReqInitiate(d.cache.comp, readToBottom, trans.ID)
 

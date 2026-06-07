@@ -43,7 +43,6 @@ var DDR4Spec = Spec{
 	NumChannel:           1,
 	TransactionQueueSize: 32,
 	CommandQueueCapacity: 8,
-	TopPortBufferSize:    1024,
 }
 
 // DDR5Spec provides a predefined Spec for DDR5-4800.
@@ -85,7 +84,6 @@ var DDR5Spec = Spec{
 	NumChannel:           1,
 	TransactionQueueSize: 32,
 	CommandQueueCapacity: 8,
-	TopPortBufferSize:    1024,
 }
 
 // HBM2Spec provides a predefined Spec for HBM2-2Gbps.
@@ -126,7 +124,6 @@ var HBM2Spec = Spec{
 	NumChannel:           1,
 	TransactionQueueSize: 32,
 	CommandQueueCapacity: 8,
-	TopPortBufferSize:    1024,
 }
 
 // HBM3Spec provides a predefined Spec for HBM3-6.4Gbps.
@@ -167,7 +164,6 @@ var HBM3Spec = Spec{
 	NumChannel:           1,
 	TransactionQueueSize: 32,
 	CommandQueueCapacity: 8,
-	TopPortBufferSize:    1024,
 }
 
 // GDDR6Spec provides a predefined Spec for GDDR6-14Gbps.
@@ -208,5 +204,4 @@ var GDDR6Spec = Spec{
 	NumChannel:           1,
 	TransactionQueueSize: 32,
 	CommandQueueCapacity: 8,
-	TopPortBufferSize:    1024,
 }

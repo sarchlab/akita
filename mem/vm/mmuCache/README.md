@@ -33,8 +33,7 @@ levels.
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, `NumBlocks` (ways per level),
-  `NumLevels`, `Log2PageSize`, `NumReqPerCycle`, `LatencyPerLevel`, and port
-  buffer sizes.
+  `NumLevels`, `Log2PageSize`, `NumReqPerCycle`, and `LatencyPerLevel`.
 - `State` — mutable runtime data: the per-level table (blocks plus `lruset.Set`),
   the current state, and inflight-flush bookkeeping.
 - `Resources` — external wiring; holds `LowModulePort` (downstream provider) and
@@ -42,6 +41,14 @@ levels.
 - `Comp` — `modeling.Component[Spec, State, Resources]`.
 
 ## Builder Pattern
+
+Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec
+to `WithSpec`. Wiring comes from `WithRegistrar` (which provides the engine and
+registers the component) and `WithResources` (the low- and up-module remote
+ports). `Build` declares the `Top`, `Bottom`, and `Control` ports but does not
+create their instances. Build each port with `modeling.MakePortBuilder` (which
+registers the port with the simulation) and attach it with `AssignPort`,
+choosing the buffer size.
 
 ```go
 spec := mmuCache.DefaultSpec()
@@ -57,6 +64,15 @@ c := mmuCache.MakeBuilder().
         UpModulePort:  tlbPort,
     }).
     Build("MMUCache")
+
+for _, name := range []string{"Top", "Bottom", "Control"} {
+    p := modeling.MakePortBuilder().
+        WithRegistrar(sim).
+        WithComponent(c).
+        WithSpec(modeling.PortSpec{BufSize: 16}).
+        Build(name)
+    c.AssignPort(name, p)
+}
 ```
 
 | Method | Description |

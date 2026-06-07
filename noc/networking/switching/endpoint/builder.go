@@ -1,19 +1,17 @@
 package endpoint
 
 import (
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 // defaultSpec provides the default configuration for endpoint components.
 var defaultSpec = Spec{
-	Freq:                  1 * timing.GHz,
-	NumInputChannels:      1,
-	NumOutputChannels:     1,
-	FlitByteSize:          32,
-	EncodingOverhead:      0.25,
-	NetworkPortBufferSize: 4,
+	Freq:              1 * timing.GHz,
+	NumInputChannels:  1,
+	NumOutputChannels: 1,
+	FlitByteSize:      32,
+	EncodingOverhead:  0.25,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers obtain it,
@@ -24,7 +22,8 @@ func DefaultSpec() Spec {
 
 // Builder builds End Points. Configuration is supplied as a whole through
 // WithSpec; wiring is supplied through WithRegistrar and WithResources. The
-// component creates its own network port.
+// component declares a "NetworkPort"; the instance is assigned externally after
+// Build (e.g. with SetNetworkPort / AssignPort).
 type Builder struct {
 	registrar modeling.Registrar
 	spec      Spec
@@ -60,7 +59,8 @@ func (b Builder) WithResources(r Resources) Builder {
 	return b
 }
 
-// Build creates a new End Point. It creates the component's network port.
+// Build creates a new End Point. It declares the component's "NetworkPort"; the
+// instance is assigned externally after Build (see SetNetworkPort).
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("endpoint: WithRegistrar is required")
@@ -79,23 +79,19 @@ func (b Builder) Build(name string) *Comp {
 		Component: modelComp,
 	}
 
-	networkPort := messaging.NewPort(
-		ep, spec.NetworkPortBufferSize, spec.NetworkPortBufferSize,
-		name+".NetworkPort")
-
 	outMW := &outgoingMW{
 		comp:             modelComp,
-		networkPort:      networkPort,
 		defaultSwitchDst: spec.DefaultSwitchDst,
 	}
 
 	inMW := &incomingMW{
-		comp:        modelComp,
-		networkPort: networkPort,
+		comp: modelComp,
 	}
 
 	ep.AddMiddleware(outMW)
 	ep.AddMiddleware(inMW)
+
+	ep.DeclarePort("NetworkPort")
 
 	for _, dp := range b.resources.DevicePorts {
 		ep.PlugIn(dp)

@@ -5,6 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -20,14 +21,17 @@ func TestControlContract(t *testing.T) {
 		spec.Width = 1
 		spec.Latency = 10
 		spec.CacheLineSize = 64
-		spec.TopPortBufferSize = 16
-		spec.CtrlPortBufferSize = 16
 
 		comp := MakeBuilder().
 			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 			WithResources(Resources{Storage: storage}).
 			WithSpec(spec).
 			Build("MemCtrl")
+
+		comp.AssignPort("Top",
+			messaging.NewPort(comp, 16, 16, comp.Name()+".Top"))
+		comp.AssignPort("Control",
+			messaging.NewPort(comp, 16, 16, comp.Name()+".Control"))
 
 		ctrl := comp.GetPortByName("Control")
 		conn := &noopConn{}

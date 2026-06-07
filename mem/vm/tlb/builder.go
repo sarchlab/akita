@@ -1,7 +1,6 @@
 package tlb
 
 import (
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
@@ -9,17 +8,14 @@ import (
 
 // defaultSpec provides the default configuration for TLB components.
 var defaultSpec = Spec{
-	Freq:                 1 * timing.GHz,
-	NumReqPerCycle:       4,
-	NumSets:              1,
-	NumWays:              32,
-	Log2PageSize:         12,
-	PageSize:             4096,
-	MSHRSize:             4,
-	Latency:              4,
-	TopPortBufferSize:    4,
-	BottomPortBufferSize: 4,
-	CtrlPortBufferSize:   1,
+	Freq:           1 * timing.GHz,
+	NumReqPerCycle: 4,
+	NumSets:        1,
+	NumWays:        32,
+	Log2PageSize:   12,
+	PageSize:       4096,
+	MSHRSize:       4,
+	Latency:        4,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -30,7 +26,9 @@ func DefaultSpec() Spec {
 
 // A Builder can build TLBs. Configuration is supplied as a whole through
 // WithSpec; wiring is supplied through WithRegistrar and WithResources. The
-// component creates its own ports.
+// component declares its "Top", "Bottom", and "Control" ports; the port
+// instances are supplied externally after Build with AssignPort (the caller
+// chooses the buffer sizes).
 type Builder struct {
 	spec      Spec
 	registrar modeling.Registrar
@@ -66,8 +64,9 @@ func (b Builder) WithResources(r Resources) Builder {
 	return b
 }
 
-// Build creates a new TLB. It creates the component's Top, Bottom, and Control
-// ports.
+// Build creates a new TLB. It declares the component's Top, Bottom, and Control
+// ports and registers the component; the port instances are assigned externally
+// after Build with AssignPort (the caller chooses the buffer sizes).
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("tlb: WithRegistrar is required")
@@ -100,25 +99,15 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 	modelComp.State = initialState
 
-	topPort := messaging.NewPort(
-		modelComp, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
-	modelComp.AddPort("Top", topPort)
-
-	bottomPort := messaging.NewPort(
-		modelComp, spec.BottomPortBufferSize, spec.BottomPortBufferSize,
-		name+".Bottom")
-	modelComp.AddPort("Bottom", bottomPort)
-
-	ctrlPort := messaging.NewPort(
-		modelComp, spec.CtrlPortBufferSize, spec.CtrlPortBufferSize,
-		name+".Control")
-	modelComp.AddPort("Control", ctrlPort)
-
 	ctrlMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(ctrlMW)
 
 	tlbMW := &tlbMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(tlbMW)
+
+	modelComp.DeclarePort("Top")
+	modelComp.DeclarePort("Bottom")
+	modelComp.DeclarePort("Control")
 
 	b.registrar.RegisterComponent(modelComp)
 

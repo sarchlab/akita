@@ -1,7 +1,6 @@
 package addresstranslator
 
 import (
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -12,11 +11,6 @@ var defaultSpec = Spec{
 	NumReqPerCycle: 4,
 	Log2PageSize:   12,
 	DeviceID:       1,
-
-	TopPortBufferSize:         4,
-	BottomPortBufferSize:      4,
-	TranslationPortBufferSize: 4,
-	CtrlPortBufferSize:        1,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -27,7 +21,9 @@ func DefaultSpec() Spec {
 
 // Builder builds address translator components. Configuration is supplied as a
 // whole through WithSpec; wiring is supplied through WithRegistrar and
-// WithResources. The component creates its own ports.
+// WithResources. The component declares its "Top", "Bottom", "Translation",
+// and "Control" ports; the port instances are supplied externally after Build
+// with AssignPort (the caller chooses the buffer sizes).
 type Builder struct {
 	spec      Spec
 	registrar modeling.Registrar
@@ -62,8 +58,9 @@ func (b Builder) WithResources(r Resources) Builder {
 	return b
 }
 
-// Build returns a new AddressTranslator. It creates the component's Top,
-// Bottom, Translation, and Control ports.
+// Build returns a new AddressTranslator. It declares the component's "Top",
+// "Bottom", "Translation", and "Control" ports; assign the port instances
+// after Build with AssignPort.
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("addresstranslator: WithRegistrar is required")
@@ -87,31 +84,12 @@ func (b Builder) Build(name string) *Comp {
 	rpMW := &respondPipelineMW{comp: modelComp}
 	modelComp.AddMiddleware(rpMW)
 
-	b.createPorts(modelComp, spec, name)
+	modelComp.DeclarePort("Top")
+	modelComp.DeclarePort("Bottom")
+	modelComp.DeclarePort("Translation")
+	modelComp.DeclarePort("Control")
 
 	b.registrar.RegisterComponent(modelComp)
 
 	return modelComp
-}
-
-func (b Builder) createPorts(modelComp *Comp, spec Spec, name string) {
-	topPort := messaging.NewPort(
-		modelComp, spec.TopPortBufferSize, spec.TopPortBufferSize,
-		name+".Top")
-	modelComp.AddPort("Top", topPort)
-
-	bottomPort := messaging.NewPort(
-		modelComp, spec.BottomPortBufferSize, spec.BottomPortBufferSize,
-		name+".Bottom")
-	modelComp.AddPort("Bottom", bottomPort)
-
-	translationPort := messaging.NewPort(
-		modelComp, spec.TranslationPortBufferSize,
-		spec.TranslationPortBufferSize, name+".Translation")
-	modelComp.AddPort("Translation", translationPort)
-
-	ctrlPort := messaging.NewPort(
-		modelComp, spec.CtrlPortBufferSize, spec.CtrlPortBufferSize,
-		name+".Control")
-	modelComp.AddPort("Control", ctrlPort)
 }

@@ -13,10 +13,22 @@ func Example_pingWithEvents() {
 	agentA := MakeBuilder().
 		WithRegistrar(registrar).
 		Build("AgentA")
+	agentAOut := modeling.MakePortBuilder().
+		WithRegistrar(registrar).
+		WithComponent(agentA).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Out")
+	agentA.AssignPort("Out", agentAOut)
 
 	agentB := MakeBuilder().
 		WithRegistrar(registrar).
 		Build("AgentB")
+	agentBOut := modeling.MakePortBuilder().
+		WithRegistrar(registrar).
+		WithComponent(agentB).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build("Out")
+	agentB.AssignPort("Out", agentBOut)
 
 	conn := directconnection.MakeBuilder().
 		WithRegistrar(registrar).

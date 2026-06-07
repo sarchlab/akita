@@ -28,9 +28,6 @@ var defaultSpec = Spec{
 	DirLatency:            2,
 	InterleavingSize:      4096,
 	WritePolicyType:       "write-around",
-	TopPortBufferSize:     4,
-	BottomPortBufferSize:  4,
-	ControlPortBufferSize: 4,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -41,7 +38,9 @@ func DefaultSpec() Spec {
 
 // A Builder can build a writethroughcache cache. Configuration is supplied as a
 // whole through WithSpec; wiring is supplied through WithRegistrar and
-// WithResources. The component creates its own ports.
+// WithResources. The component declares its "Top", "Bottom", and "Control"
+// ports; the port instances are supplied externally after Build with AssignPort
+// (the caller chooses the buffer sizes).
 type Builder struct {
 	spec      Spec
 	registrar modeling.Registrar
@@ -75,8 +74,9 @@ func (b Builder) WithResources(r Resources) Builder {
 	return b
 }
 
-// Build returns a new cache component. It creates the component's Top, Bottom,
-// and Control ports.
+// Build returns a new cache component. It declares the component's "Top",
+// "Bottom", and "Control" ports; assign the port instances after Build with
+// AssignPort.
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("writethroughcache: WithRegistrar is required")
@@ -106,19 +106,19 @@ func (b Builder) Build(name string) *Comp {
 
 	comp.State = initialState
 
-	pmw := b.buildPipelineMW(comp, spec, name)
+	pmw := b.buildPipelineMW(comp)
 	b.buildStages(pmw, spec)
 
-	controlPort := messaging.NewPort(
-		comp, spec.ControlPortBufferSize, spec.ControlPortBufferSize,
-		name+".Control")
-	comp.AddPort("Control", controlPort)
-	ucmw := &ctrlMiddleware{pipeline: pmw, ctrlPort: controlPort}
+	ucmw := &ctrlMiddleware{pipeline: pmw}
 
 	// Control runs before the data pipeline so a Pause/Drain/Reset takes
 	// effect this tick before any Top/Bottom traffic advances.
 	comp.AddMiddleware(ucmw) // index 0: control verbs
 	comp.AddMiddleware(pmw)  // index 1: data pipeline
+
+	comp.DeclarePort("Top")
+	comp.DeclarePort("Bottom")
+	comp.DeclarePort("Control")
 
 	b.registrar.RegisterComponent(comp)
 
@@ -230,21 +230,10 @@ func (b *Builder) buildInitialState(
 
 func (b *Builder) buildPipelineMW(
 	comp *modeling.Component[Spec, State, Resources],
-	spec Spec,
-	name string,
 ) *pipelineMW {
 	m := &pipelineMW{
 		comp: comp,
 	}
-
-	m.topPort = messaging.NewPort(
-		comp, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
-	comp.AddPort("Top", m.topPort)
-
-	m.bottomPort = messaging.NewPort(
-		comp, spec.BottomPortBufferSize, spec.BottomPortBufferSize,
-		name+".Bottom")
-	comp.AddPort("Bottom", m.bottomPort)
 
 	m.storage = comp.Resources().Storage
 

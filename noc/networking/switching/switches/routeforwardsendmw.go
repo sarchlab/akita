@@ -33,10 +33,15 @@ func GetRoutingTable(c *modeling.Component[Spec, State, modeling.None]) routing.
 
 type routeForwardSendMW struct {
 	comp         *modeling.Component[Spec, State, modeling.None]
-	ports        []messaging.Port
 	portIndex    map[messaging.RemotePort]int // remotePort → index in State.PortComplexes
 	routingTable routing.Table
 	nextArbPort  int
+}
+
+// ports returns the switch's local ports, in index order aligned with
+// State.PortComplexes.
+func (m *routeForwardSendMW) ports() []messaging.Port {
+	return m.comp.PortsInGroup("Port")
 }
 
 // Tick runs sendOut → forward → route.
@@ -53,7 +58,7 @@ func (m *routeForwardSendMW) Tick() bool {
 func (m *routeForwardSendMW) route() (madeProgress bool) {
 	state := &m.comp.State
 
-	for i := range m.ports {
+	for i := range m.ports() {
 		pcs := &state.PortComplexes[i]
 
 		for j := 0; j < pcs.NumInputChannel; j++ {
@@ -96,10 +101,10 @@ func (m *routeForwardSendMW) resolveOutputBufIdx(msgDst messaging.RemotePort) in
 
 func (m *routeForwardSendMW) forward() (madeProgress bool) {
 	state := &m.comp.State
-	occupiedOutputPort := make([]bool, len(m.ports))
+	occupiedOutputPort := make([]bool, len(m.ports()))
 
-	for offset := 0; offset < len(m.ports); offset++ {
-		i := (m.nextArbPort + offset) % len(m.ports)
+	for offset := 0; offset < len(m.ports()); offset++ {
+		i := (m.nextArbPort + offset) % len(m.ports())
 		pcs := &state.PortComplexes[i]
 
 		for pcs.ForwardBuffer.Size() > 0 {
@@ -125,7 +130,7 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 		}
 	}
 
-	m.nextArbPort = (m.nextArbPort + 1) % len(m.ports)
+	m.nextArbPort = (m.nextArbPort + 1) % len(m.ports())
 
 	return madeProgress
 }
@@ -133,7 +138,7 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 	state := &m.comp.State
 
-	for i, port := range m.ports {
+	for i, port := range m.ports() {
 		pcs := &state.PortComplexes[i]
 
 		for j := 0; j < pcs.NumOutputChannel; j++ {

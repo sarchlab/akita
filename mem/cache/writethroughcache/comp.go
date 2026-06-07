@@ -32,11 +32,6 @@ type Spec struct {
 	AddressMapperType string   `json:"address_mapper_type"`
 	RemotePortNames   []string `json:"remote_port_names"`
 	InterleavingSize  uint64   `json:"interleaving_size"`
-
-	// Port buffer sizes.
-	TopPortBufferSize     int `json:"top_port_buffer_size"`
-	BottomPortBufferSize  int `json:"bottom_port_buffer_size"`
-	ControlPortBufferSize int `json:"control_port_buffer_size"`
 }
 
 // State contains mutable runtime data for the writethroughcache.

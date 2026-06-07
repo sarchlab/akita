@@ -16,10 +16,6 @@ type Spec struct {
 	Latency             int                  `json:"latency"`
 	MaxRequestsInFlight int                  `json:"max_requests_in_flight"`
 	LowModule           messaging.RemotePort `json:"low_module"`
-
-	TopPortBufferSize    int `json:"top_port_buffer_size"`
-	BottomPortBufferSize int `json:"bottom_port_buffer_size"`
-	CtrlPortBufferSize   int `json:"ctrl_port_buffer_size"`
 }
 
 // pageState captures vm.Page fields in a serializable form.

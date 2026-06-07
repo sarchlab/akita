@@ -15,10 +15,13 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 	// Create MMU with auto page allocation enabled
 	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
+	reg := modeling.NewStandaloneRegistrar(engine)
 	mmu := MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithRegistrar(reg).
 		WithSpec(spec).
 		Build("TestMMU")
+	assignPort(reg, mmu, "Top", 4096)
+	assignPort(reg, mmu, "Control", 4)
 
 	mw := mmu.Middlewares()[1].(*translationMW)
 
@@ -75,10 +78,13 @@ func TestPhysicalPageAllocator(t *testing.T) {
 	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
 	spec.Log2PageSize = 12 // 4KB pages
+	reg := modeling.NewStandaloneRegistrar(engine)
 	mmu := MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithRegistrar(reg).
 		WithSpec(spec).
 		Build("TestMMU")
+	assignPort(reg, mmu, "Top", 4096)
+	assignPort(reg, mmu, "Control", 4)
 
 	mw := mmu.Middlewares()[1].(*translationMW)
 
@@ -113,10 +119,13 @@ func TestAutoPageAllocationDisabled(t *testing.T) {
 	engine := timing.NewSerialEngine()
 
 	// Create MMU with auto page allocation disabled (default)
+	reg := modeling.NewStandaloneRegistrar(engine)
 	mmu := MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithRegistrar(reg).
 		WithSpec(DefaultSpec()).
 		Build("TestMMU")
+	assignPort(reg, mmu, "Top", 4096)
+	assignPort(reg, mmu, "Control", 4)
 
 	if mmu.Spec().AutoPageAllocation {
 		t.Error("Auto page allocation should be disabled by default")
@@ -130,10 +139,13 @@ func TestAutoPageAllocationEnabled(t *testing.T) {
 	// Create MMU with auto page allocation enabled
 	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
+	reg := modeling.NewStandaloneRegistrar(engine)
 	mmu := MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithRegistrar(reg).
 		WithSpec(spec).
 		Build("TestMMU")
+	assignPort(reg, mmu, "Top", 4096)
+	assignPort(reg, mmu, "Control", 4)
 
 	if !mmu.Spec().AutoPageAllocation {
 		t.Error("Auto page allocation should be enabled when set")

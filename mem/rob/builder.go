@@ -1,18 +1,14 @@
 package rob
 
 import (
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 var defaultSpec = Spec{
-	Freq:                  1 * timing.GHz,
-	BufferSize:            128,
-	NumReqPerCycle:        4,
-	TopPortBufferSize:     8,
-	BottomPortBufferSize:  8,
-	ControlPortBufferSize: 1,
+	Freq:           1 * timing.GHz,
+	BufferSize:     128,
+	NumReqPerCycle: 4,
 }
 
 // DefaultSpec returns a copy of the default reorder-buffer configuration.
@@ -24,7 +20,9 @@ func DefaultSpec() Spec {
 
 // Builder constructs reorder-buffer components. Configuration is supplied as a
 // whole through WithSpec; wiring is supplied through WithRegistrar. The reorder
-// buffer references no shared resources, so no WithResources is exposed.
+// buffer references no shared resources, so no WithResources is exposed. The
+// component declares its "Top", "Bottom", and "Control" ports; the port
+// instances are supplied externally after Build with AssignPort.
 type Builder struct {
 	spec      Spec
 	registrar modeling.Registrar
@@ -49,8 +47,10 @@ func (b Builder) WithSpec(spec Spec) Builder {
 	return b
 }
 
-// Build creates a reorder buffer with the given name. It creates the
-// component's Top, Bottom, and Control ports and registers the component.
+// Build creates a reorder buffer with the given name. It declares the
+// component's Top, Bottom, and Control ports and registers the component; the
+// port instances are assigned externally after Build with AssignPort (the
+// caller chooses the buffer sizes).
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("rob: WithRegistrar is required")
@@ -67,19 +67,9 @@ func (b Builder) Build(name string) *Comp {
 	comp.State = State{}
 	comp.AddMiddleware(&middleware{comp: comp})
 
-	topPort := messaging.NewPort(
-		comp, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
-	comp.AddPort("Top", topPort)
-
-	bottomPort := messaging.NewPort(
-		comp, spec.BottomPortBufferSize, spec.BottomPortBufferSize,
-		name+".Bottom")
-	comp.AddPort("Bottom", bottomPort)
-
-	ctrlPort := messaging.NewPort(
-		comp, spec.ControlPortBufferSize, spec.ControlPortBufferSize,
-		name+".Control")
-	comp.AddPort("Control", ctrlPort)
+	comp.DeclarePort("Top")
+	comp.DeclarePort("Bottom")
+	comp.DeclarePort("Control")
 
 	b.registrar.RegisterComponent(comp)
 

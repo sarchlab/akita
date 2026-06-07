@@ -48,23 +48,41 @@ var _ = Describe("Cache", func() {
 		// cuPort is a real, component-less port that stands in for the compute
 		// unit. It is plugged into the connection so the cache's responses land
 		// in its incoming buffer, which the tests then drain and inspect.
-		cuPort = messaging.NewPort(nil, 16, 16, "cuPort")
+		cuPort = messaging.NewPort(nil, 16, 16, "CU.Top")
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dram = idealmemcontroller.MakeBuilder().
 			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 			Build("DRAM")
+		dram.AssignPort("Top",
+			messaging.NewPort(dram, 16, 16, dram.Name()+".Top"))
+		dram.AssignPort("Control",
+			messaging.NewPort(dram, 16, 16, dram.Name()+".Control"))
 		addressToPortMapper = &mem.SinglePortMapper{
 			Port: dram.GetPortByName("Top").AsRemote(),
 		}
 
+		cacheReg := modeling.NewStandaloneRegistrar(engine)
 		c = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(cacheReg).
 			WithResources(Resources{
 				AddressMapper: addressToPortMapper,
 			}).
 			Build("Cache")
+
+		// Build declares the cache's ports; assign every declared port
+		// instance (the caller now chooses the buffer sizes). Control is
+		// unused here but must still be assigned so the first tick can
+		// resolve it.
+		for _, name := range []string{"Top", "Bottom", "Control"} {
+			p := modeling.MakePortBuilder().
+				WithRegistrar(cacheReg).
+				WithComponent(c).
+				WithSpec(modeling.PortSpec{BufSize: 4}).
+				Build(name)
+			c.AssignPort(name, p)
+		}
 
 		connection.PlugIn(dram.GetPortByName("Top"))
 		connection.PlugIn(c.GetPortByName("Top"))

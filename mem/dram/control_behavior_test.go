@@ -24,10 +24,20 @@ var _ = Describe("DRAM control behavior", func() {
 	)
 
 	build := func() {
+		reg := modeling.NewStandaloneRegistrar(engine)
 		comp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithResources(Resources{Storage: storage}).
 			Build("DRAM")
+
+		for _, name := range []string{"Top", "Control"} {
+			p := modeling.MakePortBuilder().
+				WithRegistrar(reg).
+				WithComponent(comp).
+				WithSpec(modeling.PortSpec{BufSize: 16}).
+				Build(name)
+			comp.AssignPort(name, p)
+		}
 
 		topPort = comp.GetPortByName("Top")
 		ctrlPort = comp.GetPortByName("Control")

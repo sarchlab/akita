@@ -3,7 +3,6 @@ package idealmemcontroller
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/control"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -11,13 +10,11 @@ import (
 // defaultSpec provides the default configuration for the ideal memory
 // controller.
 var defaultSpec = Spec{
-	Freq:               1 * timing.GHz,
-	Latency:            100,
-	Width:              1,
-	CacheLineSize:      64,
-	Capacity:           4 * mem.GB,
-	TopPortBufferSize:  16,
-	CtrlPortBufferSize: 16,
+	Freq:          1 * timing.GHz,
+	Latency:       100,
+	Width:         1,
+	CacheLineSize: 64,
+	Capacity:      4 * mem.GB,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -28,7 +25,9 @@ func DefaultSpec() Spec {
 
 // Builder builds ideal memory controller components. Configuration is supplied
 // as a whole through WithSpec; wiring is supplied through WithRegistrar and
-// WithResources. The component creates its own ports.
+// WithResources. The component declares its "Top" and "Control" ports; the
+// port instances are supplied externally after Build with AssignPort (the
+// caller chooses the buffer sizes).
 type Builder struct {
 	spec      Spec
 	registrar modeling.Registrar
@@ -62,7 +61,8 @@ func (b Builder) WithResources(r Resources) Builder {
 	return b
 }
 
-// Build builds a new Comp. It creates the component's Top and Control ports.
+// Build builds a new Comp. It declares the component's "Top" and "Control"
+// ports; assign the port instances after Build with AssignPort.
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
 		panic("idealmemcontroller: WithRegistrar is required")
@@ -84,13 +84,8 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.AddMiddleware(&ctrlMiddleware{comp: modelComp})
 	modelComp.AddMiddleware(&memMiddleware{comp: modelComp})
 
-	topPort := messaging.NewPort(
-		modelComp, spec.TopPortBufferSize, spec.TopPortBufferSize, name+".Top")
-	modelComp.AddPort("Top", topPort)
-	ctrlPort := messaging.NewPort(
-		modelComp, spec.CtrlPortBufferSize, spec.CtrlPortBufferSize,
-		name+".Control")
-	modelComp.AddPort("Control", ctrlPort)
+	modelComp.DeclarePort("Top")
+	modelComp.DeclarePort("Control")
 
 	b.registrar.RegisterComponent(modelComp)
 

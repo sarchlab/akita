@@ -22,9 +22,6 @@ var _ = Describe("Bottom Parser", func() {
 	)
 
 	BeforeEach(func() {
-		bottomPort = messaging.NewPort(nil, 4, 4, "Cache.Bottom")
-		(&noopConn{}).PlugIn(bottomPort)
-
 		initialState := State{
 			DirBuf: queueing.NewBuffer[int]("Cache.DirBuf", 4),
 			BankBufs: []queueing.Buffer[int]{
@@ -40,9 +37,7 @@ var _ = Describe("Bottom Parser", func() {
 			},
 		}
 
-		c = &pipelineMW{
-			bottomPort: bottomPort,
-		}
+		c = &pipelineMW{}
 		c.comp = modeling.NewBuilder[Spec, State, Resources]().
 			WithEngine(nil).
 			WithFreq(1 * timing.GHz).
@@ -55,6 +50,15 @@ var _ = Describe("Bottom Parser", func() {
 				WritePolicyType:  "write-around",
 			}).
 			Build("Cache")
+
+		// bottomPort is a real port with no owning component, so Deliver does
+		// not try to schedule a tick on the engine-less comp. The bottomParser
+		// resolves it lazily via GetPortByName("Bottom"), so it is still
+		// declared and assigned a real port.
+		bottomPort = messaging.NewPort(nil, 4, 4, "Cache.Bottom")
+		(&noopConn{}).PlugIn(bottomPort)
+		c.comp.DeclarePort("Bottom")
+		c.comp.AssignPort("Bottom", bottomPort)
 
 		// Initialize directoryState before SetState so both buffers match
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)

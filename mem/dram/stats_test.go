@@ -77,19 +77,29 @@ var _ = Describe("DRAM Statistics", func() {
 	// Integration test: verify stats accumulate during real simulation
 	It("should accumulate statistics during simulation", func() {
 		engine := timing.NewSerialEngine()
+		reg := modeling.NewStandaloneRegistrar(engine)
 		conn := directconnection.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			Build("StatsConn")
 
 		spec := dram.DefaultSpec()
 		spec.Freq = 1 * timing.GHz
 		dramComp := dram.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			Build("StatsDRAM")
 
+		for _, name := range []string{"Top", "Control"} {
+			p := modeling.MakePortBuilder().
+				WithRegistrar(reg).
+				WithComponent(dramComp).
+				WithSpec(modeling.PortSpec{BufSize: 1024}).
+				Build(name)
+			dramComp.AssignPort(name, p)
+		}
+
 		topPort := dramComp.GetPortByName("Top")
-		srcPort := messaging.NewPort(nil, 1024, 1024, "SrcPort")
+		srcPort := messaging.NewPort(nil, 1024, 1024, "Src.Top")
 		conn.PlugIn(topPort)
 		conn.PlugIn(srcPort)
 

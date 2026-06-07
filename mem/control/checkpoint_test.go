@@ -81,6 +81,10 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 		WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 		WithSpec(dramSpec).
 		Build("DRAM")
+	dram.AssignPort("Top",
+		messaging.NewPort(dram, 16, 16, dram.Name()+".Top"))
+	dram.AssignPort("Control",
+		messaging.NewPort(dram, 16, 16, dram.Name()+".Control"))
 	dramTop := dram.GetPortByName("Top")
 
 	cacheSpec := writeback.DefaultSpec()
@@ -89,9 +93,6 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 	cacheSpec.WayAssociativity = 4
 	cacheSpec.NumMSHREntry = 8
 	cacheSpec.NumReqPerCycle = 4
-	cacheSpec.TopPortBufferSize = 256
-	cacheSpec.BottomPortBufferSize = 256
-	cacheSpec.ControlPortBufferSize = 16
 	cache := writeback.MakeBuilder().
 		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 		WithSpec(cacheSpec).
@@ -102,6 +103,12 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 			},
 		}).
 		Build("Cache")
+	cache.AssignPort("Top",
+		messaging.NewPort(cache, 256, 256, cache.Name()+".Top"))
+	cache.AssignPort("Bottom",
+		messaging.NewPort(cache, 256, 256, cache.Name()+".Bottom"))
+	cache.AssignPort("Control",
+		messaging.NewPort(cache, 16, 16, cache.Name()+".Control"))
 
 	h := &cacheOverDRAM{
 		cache:       cache,

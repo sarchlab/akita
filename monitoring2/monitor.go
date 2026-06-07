@@ -103,6 +103,13 @@ func (m *Monitor) RegisterComponent(c Component) {
 	m.registerBuffers(c)
 }
 
+// RegisterPort registers a port's incoming and outgoing buffers with the
+// monitor. Used for ports created and registered after their component (e.g.
+// through a port builder), which RegisterComponent's eager walk does not see.
+func (m *Monitor) RegisterPort(p monitorPort) {
+	m.registerPortBuffers(p)
+}
+
 // RegisterVisTracer registers a visualization tracer with the monitor.
 func (m *Monitor) RegisterVisTracer(tr *tracing.DBTracer) {
 	m.visTracer = tr

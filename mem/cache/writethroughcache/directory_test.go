@@ -72,11 +72,13 @@ var _ = Describe("Directory", func() {
 
 		// bottomPort is a real, single-slot port owned by the component.
 		// Success cases read the sent request back via RetrieveOutgoing;
-		// failure cases pre-fill the slot.
+		// failure cases pre-fill the slot. The directory stage resolves it
+		// lazily via GetPortByName("Bottom"), so it is declared and assigned a
+		// real port.
 		bottomPort = messaging.NewPort(c.comp, 1, 1, "Cache.Bottom")
 		(&noopConn{}).PlugIn(bottomPort)
-		c.bottomPort = bottomPort
-		c.comp.AddPort("Bottom", bottomPort)
+		c.comp.DeclarePort("Bottom")
+		c.comp.AssignPort("Bottom", bottomPort)
 
 		c.comp.State = initialState
 

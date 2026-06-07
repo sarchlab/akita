@@ -3,18 +3,16 @@ package memaccessagent
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 // defaultSpec provides the default configuration for the memory access agent.
 var defaultSpec = Spec{
-	Freq:              1 * timing.GHz,
-	MaxAddress:        1024 * 1024,
-	WriteLeft:         1000,
-	ReadLeft:          1000,
-	MemPortBufferSize: 1,
+	Freq:       1 * timing.GHz,
+	MaxAddress: 1024 * 1024,
+	WriteLeft:  1000,
+	ReadLeft:   1000,
 }
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -25,7 +23,9 @@ func DefaultSpec() Spec {
 
 // Builder constructs MemAccessAgent instances. Configuration is supplied as a
 // whole through WithSpec; wiring is supplied through WithRegistrar and
-// WithResources. The component creates its own ports.
+// WithResources. The component declares its "Mem" port; the port instance is
+// supplied externally after Build with AssignPort (the caller chooses the
+// buffer size).
 type Builder struct {
 	spec      Spec
 	registrar modeling.Registrar
@@ -60,8 +60,8 @@ func (b Builder) WithResources(r Resources) Builder {
 	return b
 }
 
-// Build creates a new MemAccessAgent with the given name. It creates the
-// agent's Mem port internally.
+// Build creates a new MemAccessAgent with the given name. It declares the
+// agent's "Mem" port; assign the port instance after Build with AssignPort.
 func (b Builder) Build(name string) *MemAccessAgent {
 	if b.registrar == nil {
 		panic("memaccessagent: WithRegistrar is required")
@@ -95,9 +95,7 @@ func (b Builder) Build(name string) *MemAccessAgent {
 	mw := &agentMiddleware{agent: agent}
 	modelComp.AddMiddleware(mw)
 
-	memPort := messaging.NewPort(
-		agent, spec.MemPortBufferSize, spec.MemPortBufferSize, name+".Mem")
-	modelComp.AddPort("Mem", memPort)
+	modelComp.DeclarePort("Mem")
 
 	b.registrar.RegisterComponent(agent)
 

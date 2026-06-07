@@ -16,7 +16,12 @@ import (
 type incomingMW struct {
 	comp        *modeling.Component[Spec, State, modeling.None]
 	devicePorts []messaging.Port
-	networkPort messaging.Port
+}
+
+// networkPort resolves the endpoint's network port by name. The instance is
+// assigned externally after Build, so it is resolved lazily.
+func (m *incomingMW) networkPort() messaging.Port {
+	return m.comp.GetPortByName("NetworkPort")
 }
 
 // Tick runs the incoming stages.
@@ -36,7 +41,7 @@ func (m *incomingMW) recv() bool {
 	state := &m.comp.State
 
 	for i := 0; i < spec.NumInputChannels; i++ {
-		receivedI := m.networkPort.PeekIncoming()
+		receivedI := m.networkPort().PeekIncoming()
 		if receivedI == nil {
 			return madeProgress
 		}
@@ -67,7 +72,7 @@ func (m *incomingMW) recv() bool {
 			state.AssemblingMsgs[assemblingIdx].NumFlitArrived++
 		}
 
-		m.networkPort.RetrieveIncoming()
+		m.networkPort().RetrieveIncoming()
 
 		m.logFlitE2ETaskFromFlit(flit, true)
 

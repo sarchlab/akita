@@ -32,8 +32,9 @@ var _ = Describe("TLB control behavior", func() {
 	build := func() {
 		spec := DefaultSpec()
 
+		reg := modeling.NewStandaloneRegistrar(engine)
 		tlbComp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithRegistrar(reg).
 			WithSpec(spec).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
@@ -41,6 +42,8 @@ var _ = Describe("TLB control behavior", func() {
 				},
 			}).
 			Build("TLB")
+
+		assignDefaultPorts(reg, tlbComp)
 
 		topPort = tlbComp.GetPortByName("Top")
 		bottomPort = tlbComp.GetPortByName("Bottom")

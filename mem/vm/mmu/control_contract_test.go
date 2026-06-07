@@ -14,14 +14,15 @@ import (
 func TestControlContract(t *testing.T) {
 	build := func() *control.Harness {
 		engine := timing.NewSerialEngine()
-		spec := DefaultSpec()
-		spec.TopPortBufferSize = 16
-		spec.CtrlPortBufferSize = 4
+		reg := modeling.NewStandaloneRegistrar(engine)
 
 		comp := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
-			WithSpec(spec).
+			WithRegistrar(reg).
+			WithSpec(DefaultSpec()).
 			Build("MMU")
+
+		assignPort(reg, comp, "Top", 16)
+		assignPort(reg, comp, "Control", 4)
 
 		for _, name := range []string{"Top", "Control"} {
 			(&noopConn{}).PlugIn(comp.GetPortByName(name))
