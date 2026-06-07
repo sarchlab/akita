@@ -9,13 +9,12 @@ import (
 
 // Spec contains immutable configuration for the endpoint.
 type Spec struct {
-	Freq                  timing.Freq          `json:"freq"`
-	NumInputChannels      int                  `json:"num_input_channels"`
-	NumOutputChannels     int                  `json:"num_output_channels"`
-	FlitByteSize          int                  `json:"flit_byte_size"`
-	EncodingOverhead      float64              `json:"encoding_overhead"`
-	DefaultSwitchDst      messaging.RemotePort `json:"default_switch_dst"`
-	NetworkPortBufferSize int                  `json:"network_port_buffer_size"`
+	Freq              timing.Freq          `json:"freq"`
+	NumInputChannels  int                  `json:"num_input_channels"`
+	NumOutputChannels int                  `json:"num_output_channels"`
+	FlitByteSize      int                  `json:"flit_byte_size"`
+	EncodingOverhead  float64              `json:"encoding_overhead"`
+	DefaultSwitchDst  messaging.RemotePort `json:"default_switch_dst"`
 }
 
 // Resources holds the external wiring referenced by the endpoint, namely the
