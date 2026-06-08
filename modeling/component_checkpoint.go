@@ -11,40 +11,49 @@ import (
 )
 
 // componentCheckpoint is the serialized form of a generic component: a spec hash
-// for compatibility checking plus the mutable State. Resources and ports are
-// rebuilt by setup, not serialized. The tick-scheduler guard is not serialized:
-// it is derived from the restored event queue in AfterCheckpointLoad, since the
-// queue (not the live guard, which can be stale) is the authoritative record of
-// whether a tick is pending.
+// for compatibility checking, the mutable State, and the tick-scheduler guard.
+// Resources and ports are rebuilt by setup, not serialized. The guard is saved
+// directly — alongside the engine's matching tick event — so load is a single
+// pass with no post-load reconciliation against the queue.
 type componentCheckpoint struct {
-	SpecHash string          `json:"spec_hash"`
-	State    json.RawMessage `json:"state"`
+	SpecHash  string            `json:"spec_hash"`
+	State     json.RawMessage   `json:"state"`
+	Scheduler schedulerSnapshot `json:"scheduler"`
 }
 
-// pendingEventQuerier is implemented by engines that can report the next
-// scheduled event time for a handler. After a checkpoint is restored, the event
-// queue is authoritative, so a scheduler reconciles its guard against it.
-type pendingEventQuerier interface {
-	NextEventTimeForHandler(handlerID string) (timing.VTimeInPicoSec, bool)
+// schedulerSnapshot is the serialized tick-scheduler dedup guard: whether a tick
+// is pending and at what time.
+type schedulerSnapshot struct {
+	HasScheduledTick bool                  `json:"has_scheduled_tick"`
+	NextTickTime     timing.VTimeInPicoSec `json:"next_tick_time"`
 }
 
-// SaveCheckpoint writes the component's spec hash and State as JSON. It
-// implements the structural checkpoint.Checkpointable contract without the
-// modeling package importing checkpoint.
+// SaveCheckpoint writes the component's spec hash, State, and scheduler guard as
+// JSON. It implements the structural Checkpointable contract without the
+// modeling package importing the simulation package.
 func (c *Component[S, T, R]) SaveCheckpoint(w io.Writer) error {
 	state, err := json.Marshal(c.State)
 	if err != nil {
 		return fmt.Errorf("modeling: marshal state: %w", err)
 	}
 
-	return json.NewEncoder(w).Encode(componentCheckpoint{
+	dto := componentCheckpoint{
 		SpecHash: c.specHash(),
 		State:    state,
-	})
+	}
+	if c.TickingComponent != nil && c.TickScheduler != nil {
+		next, scheduled := c.TickScheduler.snapshot()
+		dto.Scheduler = schedulerSnapshot{
+			HasScheduledTick: scheduled,
+			NextTickTime:     next,
+		}
+	}
+
+	return json.NewEncoder(w).Encode(dto)
 }
 
-// LoadCheckpoint restores State after verifying that the saved spec hash matches
-// the rebuilt component's.
+// LoadCheckpoint restores State and the scheduler guard after verifying that the
+// saved spec hash matches the rebuilt component's.
 func (c *Component[S, T, R]) LoadCheckpoint(r io.Reader) error {
 	var dto componentCheckpoint
 	if err := json.NewDecoder(r).Decode(&dto); err != nil {
@@ -63,41 +72,12 @@ func (c *Component[S, T, R]) LoadCheckpoint(r io.Reader) error {
 	}
 	c.State = state
 
-	return nil
-}
-
-// AfterCheckpointLoad reconciles the tick-scheduler guard with the restored
-// event queue. It runs after every entity — including the engine — has loaded
-// its raw state, so the queue is fully restored and authoritative.
-func (c *Component[S, T, R]) AfterCheckpointLoad() error {
 	if c.TickingComponent != nil && c.TickScheduler != nil {
-		c.TickScheduler.restoreGuardFromQueue()
+		c.TickScheduler.restore(
+			dto.Scheduler.NextTickTime, dto.Scheduler.HasScheduledTick)
 	}
 
 	return nil
-}
-
-// restoreGuardFromQueue sets the tick-scheduler guard to agree with the restored
-// event queue: a tick is considered pending iff the engine holds an event for
-// this handler, and nextTickTime is that event's time. This reproduces the
-// guard state of an uninterrupted run, so a stimulus arriving before the pending
-// tick fires does not schedule a duplicate.
-func (t *TickScheduler) restoreGuardFromQueue() {
-	querier, ok := t.engine.(pendingEventQuerier)
-	if !ok {
-		return
-	}
-
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	if when, has := querier.NextEventTimeForHandler(t.handlerID); has {
-		t.nextTickTime = when
-		t.hasScheduledTick = true
-	} else {
-		t.nextTickTime = 0
-		t.hasScheduledTick = false
-	}
 }
 
 // specHash is a deterministic fingerprint of the component's immutable Spec, used
