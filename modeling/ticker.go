@@ -125,6 +125,26 @@ func (t *TickScheduler) CurrentTime() timing.VTimeInPicoSec {
 	return t.engine.CurrentTime()
 }
 
+// snapshot returns the scheduler's dedup guard: whether a tick is pending and at
+// what time. It is serialized in the component checkpoint so the guard can be
+// restored directly, with no post-load reconciliation against the event queue.
+func (t *TickScheduler) snapshot() (nextTickTime timing.VTimeInPicoSec, scheduled bool) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	return t.nextTickTime, t.hasScheduledTick
+}
+
+// restore sets the scheduler's dedup guard from a checkpoint. The matching tick
+// event is restored separately by the engine, so the two stay consistent.
+func (t *TickScheduler) restore(nextTickTime timing.VTimeInPicoSec, scheduled bool) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	t.nextTickTime = nextTickTime
+	t.hasScheduledTick = scheduled
+}
+
 // TickingComponent is a type of component that update states from cycle to
 // cycle. A programmer would only need to program a tick function for a ticking
 // component.

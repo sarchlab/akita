@@ -617,7 +617,7 @@ func buildTickCountSim() (
 }
 
 var _ = Describe("Tick scheduler guard restore", func() {
-	It("derives the guard from the restored queue so a stimulus before the "+
+	It("restores the guard from the checkpoint so a stimulus before the "+
 		"pending tick fires schedules no duplicate", func() {
 		path := filepath.Join(GinkgoT().TempDir(), "ck.tar.gz")
 		const buildID = "test-build"
@@ -632,9 +632,8 @@ var _ = Describe("Tick scheduler guard restore", func() {
 		srcC.TickLater()
 		Expect(srcSim.SaveCheckpoint(path, buildID)).To(Succeed())
 
-		// Restore into a fresh sim. A freshly rebuilt component's guard says
-		// "no pending tick"; AfterCheckpointLoad must derive it from the
-		// restored queue so it agrees that a tick is already scheduled.
+		// Restore into a fresh sim. The component's guard is restored directly
+		// from the checkpoint, so it already agrees that a tick is scheduled.
 		dstSim, dstC := buildTickCountSim()
 		defer func() {
 			dstSim.Terminate()
@@ -643,14 +642,14 @@ var _ = Describe("Tick scheduler guard restore", func() {
 		Expect(dstSim.LoadCheckpoint(path, buildID)).To(Succeed())
 
 		// A stimulus (what NotifyRecv does) arrives before the pending tick
-		// fires. With the guard derived, this is recognized as redundant and
+		// fires. With the guard restored, this is recognized as redundant and
 		// schedules no second tick at the same cycle.
 		dstC.TickLater()
 
 		engine := dstSim.GetEngine().(*timing.SerialEngine)
 		Expect(engine.Run()).To(Succeed())
 
-		// Exactly one tick fired. Without the derivation the stimulus would
+		// Exactly one tick fired. Without the restored guard the stimulus would
 		// have scheduled a duplicate (Ticks == 2); a dropped pending tick
 		// would be 0.
 		Expect(dstC.State.Ticks).To(Equal(1))
@@ -693,7 +692,7 @@ func buildWakeSim() (
 }
 
 var _ = Describe("Event-driven wakeup guard restore", func() {
-	It("derives the wakeup guard from the restored queue so a redundant "+
+	It("restores the wakeup guard from the checkpoint so a redundant "+
 		"wakeup request after restore schedules no duplicate", func() {
 		path := filepath.Join(GinkgoT().TempDir(), "ck.tar.gz")
 		const buildID = "test-build"
@@ -708,8 +707,8 @@ var _ = Describe("Event-driven wakeup guard restore", func() {
 		srcC.ScheduleWakeAt(wakeTime)
 		Expect(srcSim.SaveCheckpoint(path, buildID)).To(Succeed())
 
-		// Restore into a fresh sim, whose wakeup guard starts empty until
-		// AfterCheckpointLoad derives it from the restored queue.
+		// Restore into a fresh sim, whose wakeup guard is restored directly from
+		// the checkpoint.
 		dstSim, dstC := buildWakeSim()
 		defer func() {
 			dstSim.Terminate()
@@ -718,13 +717,13 @@ var _ = Describe("Event-driven wakeup guard restore", func() {
 		Expect(dstSim.LoadCheckpoint(path, buildID)).To(Succeed())
 
 		// A redundant request for a wakeup at the already-pending time. With the
-		// guard derived, it is recognized as redundant and queues no duplicate.
+		// guard restored, it is recognized as redundant and queues no duplicate.
 		dstC.ScheduleWakeAt(wakeTime)
 
 		engine := dstSim.GetEngine().(*timing.SerialEngine)
 		Expect(engine.Run()).To(Succeed())
 
-		// Exactly one wakeup fired. Without the derivation the redundant
+		// Exactly one wakeup fired. Without the restored guard the redundant
 		// request would have queued a duplicate (Wakeups == 2).
 		Expect(dstC.State.Wakeups).To(Equal(1))
 	})
