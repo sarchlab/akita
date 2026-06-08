@@ -70,3 +70,31 @@ func TestValidateState_AllowsNormalAndEmptyStructs(t *testing.T) {
 		t.Fatalf("None (zero-field struct) should pass: %v", err)
 	}
 }
+
+// nestedCollectionState exercises element types that are themselves collections
+// — all JSON-serializable, so all valid. map[K][]V is the MemAccessAgent case
+// that regressed CI when element validation was not recursive.
+type nestedCollectionState struct {
+	MapOfSlices  map[uint64][]uint32      `json:"map_of_slices"`
+	SliceOfSlice [][]int                  `json:"slice_of_slice"`
+	Array        [4]byte                  `json:"array"`
+	MapOfStructs map[string][]normalState `json:"map_of_structs"`
+}
+
+func TestValidateState_AllowsNestedCollections(t *testing.T) {
+	if err := ValidateState(nestedCollectionState{}); err != nil {
+		t.Fatalf("nested collections should pass: %v", err)
+	}
+}
+
+// badNestedState hides a pointer inside a collection; the recursion must still
+// reject it.
+type badNestedState struct {
+	MapOfPtrs map[string]*normalState `json:"map_of_ptrs"`
+}
+
+func TestValidateState_RejectsPointerInNestedCollection(t *testing.T) {
+	if err := ValidateState(badNestedState{}); err == nil {
+		t.Fatalf("a pointer nested in a map value should still be rejected")
+	}
+}

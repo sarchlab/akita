@@ -69,8 +69,8 @@ func validateFieldType(t reflect.Type, path string, allowNestedStructs bool) err
 		reflect.String:
 		return nil
 
-	case reflect.Slice:
-		return validateSliceElement(t.Elem(), path, allowNestedStructs)
+	case reflect.Slice, reflect.Array:
+		return validateFieldType(t.Elem(), path+"[]", allowNestedStructs)
 
 	case reflect.Map:
 		k := t.Key().Kind()
@@ -80,7 +80,7 @@ func validateFieldType(t reflect.Type, path string, allowNestedStructs bool) err
 			return fmt.Errorf("%s: map key must be string or integer, got %s", path, k)
 		}
 
-		return validateMapValue(t.Elem(), path, allowNestedStructs)
+		return validateFieldType(t.Elem(), path+"[value]", allowNestedStructs)
 
 	case reflect.Struct:
 		if !allowNestedStructs {
@@ -95,50 +95,6 @@ func validateFieldType(t reflect.Type, path string, allowNestedStructs bool) err
 
 	default:
 		return fmt.Errorf("%s: unsupported kind %s", path, t.Kind())
-	}
-}
-
-func validateSliceElement(elem reflect.Type, path string, allowNestedStructs bool) error {
-	switch elem.Kind() {
-	case reflect.Bool,
-		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Float32, reflect.Float64,
-		reflect.String:
-		return nil
-
-	case reflect.Struct:
-		if !allowNestedStructs {
-			return fmt.Errorf("%s: slice of structs not allowed in spec", path)
-		}
-
-		return validateStructType(elem, path+"[]", allowNestedStructs)
-
-	default:
-		return fmt.Errorf("%s: slice element must be a primitive (or struct in state), got %s",
-			path, elem.Kind())
-	}
-}
-
-func validateMapValue(elem reflect.Type, path string, allowNestedStructs bool) error {
-	switch elem.Kind() {
-	case reflect.Bool,
-		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Float32, reflect.Float64,
-		reflect.String:
-		return nil
-
-	case reflect.Struct:
-		if !allowNestedStructs {
-			return fmt.Errorf("%s: map of structs not allowed in spec", path)
-		}
-
-		return validateStructType(elem, path+"[value]", allowNestedStructs)
-
-	default:
-		return fmt.Errorf("%s: map value must be a primitive (or struct in state), got %s",
-			path, elem.Kind())
 	}
 }
 
