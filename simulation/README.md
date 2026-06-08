@@ -150,7 +150,7 @@ setup rebuilds; put cursors and counters in `State`.
   ports, `mem.Storage`, and `vm.PageTable` already do.
 
 **Writing your own checkpointable messages, events, and components:** see
-[`doc/checkpointing.md`](../doc/checkpointing.md) for the full checklists, a
+[`doc/core/checkpointing.md`](../doc/core/checkpointing.md) for the full checklists, a
 worked example, and the gotchas.
 
 See `examples/checkpointdemo` for a runnable save/load demo and

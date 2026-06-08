@@ -67,7 +67,7 @@ fmt.Println(inbox.Size(), inbox.Capacity())
 full contents are captured when a component's `State` is checkpointed — no extra
 work is needed as long as the element type `T` itself serializes. For background
 on making a component, message, or event checkpointable, see
-[`doc/checkpointing.md`](../doc/checkpointing.md).
+[`doc/core/checkpointing.md`](../doc/core/checkpointing.md).
 
 ## Pipeline[T]
 
