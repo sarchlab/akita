@@ -44,7 +44,7 @@ reports whether `RspTo` is set.
 **Checkpointing:** a message buffered in a port is serialized when the simulation
 is checkpointed, so each concrete message type must be registered with
 `RegisterMsg(MyReq{})` in an `init()` (and `RegisterEvent` for events). No custom
-marshalling is needed. See [`doc/core/checkpointing.md`](../doc/core/checkpointing.md).
+marshalling is needed. See [`doc/tutorial/checkpointing.md`](../doc/tutorial/checkpointing.md).
 
 ### Port
 

@@ -1,3 +1,7 @@
+---
+sidebar_position: 8
+---
+
 # How to Enable "Magic" in Akita V5
 
 This guide is for **researchers** who need a simulator to do something

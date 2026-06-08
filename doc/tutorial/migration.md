@@ -1,3 +1,7 @@
+---
+sidebar_position: 7
+---
+
 # V4 → V5 Migration Guide
 
 This guide covers all breaking changes between Akita V4 and V5. Each section

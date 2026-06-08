@@ -1,6 +1,6 @@
 ---
-slug: /
-sidebar_position: 1
+title: Akita
+hide_table_of_contents: true
 ---
 
 # Akita
@@ -31,11 +31,14 @@ observe and record what a simulation does.
   - **[mem](/packages/mem/)** — the memory hierarchy: caches, DRAM
     controllers, TLBs, and MMUs. Built on top of `noc`.
 
-- **Reference** — guides that sit outside the tutorial flow:
-  - **[Migration (V4 → V5)](/migration)** — the breaking changes between
-    Akita V4 and V5.
-  - **[Magic Guide](/magic_guide)** — shortcuts for making a simulator do
-    something without modeling every detail.
+- **Reference** — guides that sit outside the tutorial flow (under the Tutorial
+  tab):
+  - **[Migration (V4 → V5)](/tutorial/migration)** — the breaking changes
+    between Akita V4 and V5.
+  - **[Magic Guide](/tutorial/magic_guide)** — shortcuts for making a simulator
+    do something without modeling every detail.
+  - **[Writing Checkpointable Code](/tutorial/checkpointing)** — how to make
+    messages, events, and components survive checkpoint/resume.
 
 - **Tools** — **[Daisen](/tools/daisen/)** visualizes recorded traces, and
   **[Akita RTM](/tools/akita-rtm/)** monitors a running simulation live.
