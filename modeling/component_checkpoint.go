@@ -18,12 +18,12 @@ import (
 type componentCheckpoint struct {
 	SpecHash  string            `json:"spec_hash"`
 	State     json.RawMessage   `json:"state"`
-	Scheduler schedulerSnapshot `json:"scheduler"`
+	Scheduler schedulerCheckpoint `json:"scheduler"`
 }
 
-// schedulerSnapshot is the serialized tick-scheduler dedup guard: whether a tick
+// schedulerCheckpoint is the serialized tick-scheduler dedup guard: whether a tick
 // is pending and at what time.
-type schedulerSnapshot struct {
+type schedulerCheckpoint struct {
 	HasScheduledTick bool                  `json:"has_scheduled_tick"`
 	NextTickTime     timing.VTimeInPicoSec `json:"next_tick_time"`
 }
@@ -43,7 +43,7 @@ func (c *Component[S, T, R]) SaveCheckpoint(w io.Writer) error {
 	}
 	if c.TickingComponent != nil && c.TickScheduler != nil {
 		next, scheduled := c.TickScheduler.snapshot()
-		dto.Scheduler = schedulerSnapshot{
+		dto.Scheduler = schedulerCheckpoint{
 			HasScheduledTick: scheduled,
 			NextTickTime:     next,
 		}
