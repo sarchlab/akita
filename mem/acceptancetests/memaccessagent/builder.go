@@ -95,7 +95,7 @@ func (b Builder) Build(name string) *MemAccessAgent {
 	mw := &agentMiddleware{agent: agent}
 	modelComp.AddMiddleware(mw)
 
-	modelComp.DeclarePort("Mem")
+	modelComp.DeclarePort("Mem", mem.Requester)
 
 	b.registrar.RegisterComponent(agent)
 

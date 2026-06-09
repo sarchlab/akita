@@ -56,7 +56,7 @@ func (b Builder) Build(name string) *Comp {
 		WithProcessor(&pingProcessor{}).
 		Build(name)
 
-	comp.DeclarePort("Out")
+	comp.DeclarePort("Out", pingPeer)
 
 	b.registrar.RegisterComponent(comp)
 

@@ -84,8 +84,8 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.AddMiddleware(&ctrlMiddleware{comp: modelComp})
 	modelComp.AddMiddleware(&memMiddleware{comp: modelComp})
 
-	modelComp.DeclarePort("Top")
-	modelComp.DeclarePort("Control")
+	modelComp.DeclarePort("Top", mem.Responder)
+	modelComp.DeclarePort("Control", mem.ControlResponder)
 
 	b.registrar.RegisterComponent(modelComp)
 

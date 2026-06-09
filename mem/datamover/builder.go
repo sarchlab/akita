@@ -84,10 +84,10 @@ func (b Builder) Build(name string) *Comp {
 	dataMW := &dataTransferMW{comp: modelComp}
 	modelComp.AddMiddleware(dataMW)
 
-	modelComp.DeclarePort("Top")
-	modelComp.DeclarePort("Inside")
-	modelComp.DeclarePort("Outside")
-	modelComp.DeclarePort("Control")
+	modelComp.DeclarePort("Top", Responder)
+	modelComp.DeclarePort("Inside", mem.Requester)
+	modelComp.DeclarePort("Outside", mem.Requester)
+	modelComp.DeclarePort("Control", mem.ControlResponder)
 
 	b.registrar.RegisterComponent(modelComp)
 

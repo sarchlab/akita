@@ -54,8 +54,8 @@ func newFakeComp(name string, matrix control.VerbSupport, asyncDelay int) *fakeC
 	return c
 }
 
-func (c *fakeComp) Name() string         { return c.name }
-func (c *fakeComp) DeclarePort(_ string) {}
+func (c *fakeComp) Name() string                               { return c.name }
+func (c *fakeComp) DeclarePort(_ string, _ ...*messaging.Role) {}
 func (c *fakeComp) AssignPort(name string, p messaging.Port) {
 	c.ports[name] = p
 	p.SetComponent(c)

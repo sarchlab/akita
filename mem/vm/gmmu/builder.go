@@ -1,6 +1,7 @@
 package gmmu
 
 import (
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -79,9 +80,9 @@ func (b Builder) Build(name string) *Comp {
 		RemoteMemReqs: make(map[uint64]transactionState),
 	}
 
-	modelComp.DeclarePort("Top")
-	modelComp.DeclarePort("Bottom")
-	modelComp.DeclarePort("Control")
+	modelComp.DeclarePort("Top", vm.Responder)
+	modelComp.DeclarePort("Bottom", vm.Requester)
+	modelComp.DeclarePort("Control", mem.ControlResponder)
 
 	cMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cMW)

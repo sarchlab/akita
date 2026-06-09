@@ -61,7 +61,7 @@ func (b Builder) Build(name string) *Comp {
 	comp.AddMiddleware(&sendMW{comp: comp})
 	comp.AddMiddleware(&receiveProcessMW{comp: comp})
 
-	comp.DeclarePort("Out")
+	comp.DeclarePort("Out", pingPeer)
 
 	b.registrar.RegisterComponent(comp)
 

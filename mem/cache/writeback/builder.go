@@ -107,9 +107,9 @@ func (b Builder) Build(name string) *Comp {
 
 	comp.State = initialState
 
-	comp.DeclarePort("Top")
-	comp.DeclarePort("Bottom")
-	comp.DeclarePort("Control")
+	comp.DeclarePort("Top", mem.Responder)
+	comp.DeclarePort("Bottom", mem.Requester)
+	comp.DeclarePort("Control", mem.ControlResponder)
 
 	pmw := b.buildPipelineMW(comp, laneWidth)
 	cmw := b.buildControlMW(comp, pmw)

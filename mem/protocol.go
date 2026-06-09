@@ -5,6 +5,36 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 )
 
+// Protocol is the memory access protocol: requesters issue reads and writes,
+// responders (caches, memory controllers) answer with data-ready and
+// write-done responses. Defining the protocol registers every message type it
+// carries with the checkpoint codec. The Info field on these messages is
+// tagged json:"-" and is not checkpointed.
+var (
+	Protocol = messaging.DefineProtocol("mem",
+		messaging.RoleDef{Name: "requester",
+			Sends: []messaging.Msg{ReadReq{}, WriteReq{}}},
+		messaging.RoleDef{Name: "responder",
+			Sends: []messaging.Msg{DataReadyRsp{}, WriteDoneRsp{}}},
+	)
+	Requester = Protocol.Role("requester")
+	Responder = Protocol.Role("responder")
+)
+
+// ControlProtocol is the uniform control protocol for memory agents: a
+// requester (the simulation driver) issues control verbs over a component's
+// "Control" port and the component responds. See mem/CONTROL_PROTOCOL.md.
+var (
+	ControlProtocol = messaging.DefineProtocol("mem.control",
+		messaging.RoleDef{Name: "requester",
+			Sends: []messaging.Msg{ControlReq{}}},
+		messaging.RoleDef{Name: "responder",
+			Sends: []messaging.Msg{ControlRsp{}}},
+	)
+	ControlRequester = ControlProtocol.Role("requester")
+	ControlResponder = ControlProtocol.Role("responder")
+)
+
 // AccessReq abstracts read and write requests sent to cache modules or memory
 // controllers.
 type AccessReq interface {

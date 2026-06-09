@@ -2,6 +2,7 @@ package endpoint
 
 import (
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -91,7 +92,7 @@ func (b Builder) Build(name string) *Comp {
 	ep.AddMiddleware(outMW)
 	ep.AddMiddleware(inMW)
 
-	ep.DeclarePort("NetworkPort")
+	ep.DeclarePort("NetworkPort", packetization.Link)
 
 	for _, dp := range b.resources.DevicePorts {
 		ep.PlugIn(dp)

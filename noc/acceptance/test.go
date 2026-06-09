@@ -12,6 +12,17 @@ type TrafficMsg struct {
 	messaging.MsgMeta
 }
 
+// Protocol is the acceptance traffic protocol: test agents exchange traffic
+// messages symmetrically, so the protocol has a single role. Defining the
+// protocol registers the message type with the checkpoint codec.
+var (
+	Protocol = messaging.DefineProtocol("noc.acceptance",
+		messaging.RoleDef{Name: "agent",
+			Sends: []messaging.Msg{TrafficMsg{}}},
+	)
+	AgentRole = Protocol.Role("agent")
+)
+
 // Test is a test case.
 type Test struct {
 	agents            []*Agent

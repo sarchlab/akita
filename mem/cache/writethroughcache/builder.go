@@ -116,9 +116,9 @@ func (b Builder) Build(name string) *Comp {
 	comp.AddMiddleware(ucmw) // index 0: control verbs
 	comp.AddMiddleware(pmw)  // index 1: data pipeline
 
-	comp.DeclarePort("Top")
-	comp.DeclarePort("Bottom")
-	comp.DeclarePort("Control")
+	comp.DeclarePort("Top", mem.Responder)
+	comp.DeclarePort("Bottom", mem.Requester)
+	comp.DeclarePort("Control", mem.ControlResponder)
 
 	b.registrar.RegisterComponent(comp)
 

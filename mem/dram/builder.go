@@ -128,8 +128,8 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 	modelComp.State = initialState
 
-	modelComp.DeclarePort("Top")
-	modelComp.DeclarePort("Control")
+	modelComp.DeclarePort("Top", mem.Responder)
+	modelComp.DeclarePort("Control", mem.ControlResponder)
 
 	b.addMiddlewares(modelComp, timing, cmdCycles)
 

@@ -132,7 +132,7 @@ var _ = Describe("End Point", func() {
 		networkPort.EXPECT().PeekIncoming().Return(nil).Times(3)
 		networkPort.EXPECT().RetrieveIncoming().Times(2)
 		devicePort.EXPECT().CanDeliver().Return(true)
-		devicePort.EXPECT().Deliver(msg)
+		devicePort.EXPECT().Deliver(AssembledMsg{MsgMeta: msg})
 		devicePort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 
 		madeProgress := endPoint.Tick()
