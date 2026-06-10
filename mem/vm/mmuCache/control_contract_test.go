@@ -3,13 +3,13 @@ package mmuCache
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 func TestControlContract(t *testing.T) {
-	build := func() *control.Harness {
+	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
 
 		spec := DefaultSpec()
@@ -32,7 +32,7 @@ func TestControlContract(t *testing.T) {
 			(&noopConn{}).PlugIn(comp.GetPortByName(name))
 		}
 
-		return &control.Harness{
+		return &memcontrolprotocol.Harness{
 			Comp: comp,
 			Ctrl: comp.GetPortByName("Control"),
 			IsQuiescent: func() bool {
@@ -43,7 +43,7 @@ func TestControlContract(t *testing.T) {
 
 	// An mmuCache caches translations (never dirty), so it supports
 	// Invalidate but not Flush.
-	control.RunContract(t, "mmuCache", build, control.TranslationCacheLike())
+	memcontrolprotocol.RunContract(t, "mmuCache", build, memcontrolprotocol.TranslationCacheLike())
 }
 
-var _ control.Controllable = (*Comp)(nil)
+var _ memcontrolprotocol.Controllable = (*Comp)(nil)

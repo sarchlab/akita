@@ -35,12 +35,9 @@ const config = {
       'classic',
       /** @type {import('@docusaurus/preset-classic').Options} */
       ({
-        docs: {
-          path: '../doc/core',
-          routeBasePath: '/',
-          sidebarPath: './sidebars-core.js',
-          editUrl: 'https://github.com/sarchlab/akita/blob/main/doc/core/',
-        },
+        // The site root is a standalone landing page (src/pages/index.md), not a
+        // docs group — so the classic preset's docs instance is disabled.
+        docs: false,
         blog: false,
         theme: {
           customCss: './src/css/custom.css',

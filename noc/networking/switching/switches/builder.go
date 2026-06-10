@@ -94,7 +94,7 @@ func (b Builder) Build(name string) *Comp {
 
 	// The switch has a dynamic number of ports, added later with
 	// MakeSwitchPortAdder. They live in the "Port" group.
-	modelComp.DeclarePortGroup("Port")
+	modelComp.DeclarePortGroup("Port", packetization.Link)
 
 	b.registrar.RegisterComponent(modelComp)
 

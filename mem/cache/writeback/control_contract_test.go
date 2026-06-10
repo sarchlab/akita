@@ -5,7 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -22,7 +22,7 @@ func (c *ccNoopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *ccNoopConn) NotifySend()                      {}
 
 func TestControlContract(t *testing.T) {
-	build := func() *control.Harness {
+	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
 		storage := mem.NewStorage(1 * mem.MB)
 
@@ -55,7 +55,7 @@ func TestControlContract(t *testing.T) {
 			(&ccNoopConn{}).PlugIn(comp.GetPortByName(name))
 		}
 
-		return &control.Harness{
+		return &memcontrolprotocol.Harness{
 			Comp: comp,
 			Ctrl: comp.GetPortByName("Control"),
 			IsQuiescent: func() bool {
@@ -67,8 +67,8 @@ func TestControlContract(t *testing.T) {
 	// Phase 3 adds Invalidate and the address/PID filter on Flush, so the
 	// writeback cache now satisfies the full cache-like matrix: the four
 	// universal verbs plus the two conditional verbs (Invalidate, Flush).
-	matrix := control.CacheLike()
-	control.RunContract(t, "writeback", build, matrix)
+	matrix := memcontrolprotocol.CacheLike()
+	memcontrolprotocol.RunContract(t, "writeback", build, matrix)
 }
 
-var _ control.Controllable = (*Comp)(nil)
+var _ memcontrolprotocol.Controllable = (*Comp)(nil)

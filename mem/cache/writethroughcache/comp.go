@@ -69,19 +69,19 @@ const (
 type transactionState struct {
 	ID uint64 `json:"id"`
 
-	// Read request fields (flattened from mem.ReadReq)
+	// Read request fields (flattened from memprotocol.ReadReq)
 	HasRead            bool              `json:"has_read"`
 	ReadMeta           messaging.MsgMeta `json:"read_meta"`
 	ReadAddress        uint64            `json:"read_address"`
 	ReadAccessByteSize uint64            `json:"read_access_byte_size"`
 	ReadPID            vm.PID            `json:"read_pid"`
 
-	// ReadToBottom fields (flattened from mem.ReadReq)
+	// ReadToBottom fields (flattened from memprotocol.ReadReq)
 	HasReadToBottom  bool              `json:"has_read_to_bottom"`
 	ReadToBottomMeta messaging.MsgMeta `json:"read_to_bottom_meta"`
 	ReadToBottomPID  vm.PID            `json:"read_to_bottom_pid"`
 
-	// Write request fields (flattened from mem.WriteReq)
+	// Write request fields (flattened from memprotocol.WriteReq)
 	HasWrite       bool              `json:"has_write"`
 	WriteMeta      messaging.MsgMeta `json:"write_meta"`
 	WriteAddress   uint64            `json:"write_address"`
@@ -89,7 +89,7 @@ type transactionState struct {
 	WriteDirtyMask []bool            `json:"write_dirty_mask"`
 	WritePID       vm.PID            `json:"write_pid"`
 
-	// WriteToBottom fields (flattened from mem.WriteReq)
+	// WriteToBottom fields (flattened from memprotocol.WriteReq)
 	HasWriteToBottom       bool              `json:"has_write_to_bottom"`
 	WriteToBottomMeta      messaging.MsgMeta `json:"write_to_bottom_meta"`
 	WriteToBottomPID       vm.PID            `json:"write_to_bottom_pid"`

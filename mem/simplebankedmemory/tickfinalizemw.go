@@ -4,7 +4,8 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -21,7 +22,7 @@ func (m *tickFinalizeMW) topPort() messaging.Port {
 }
 
 func (m *tickFinalizeMW) Tick() bool {
-	if m.comp.State.ControlState == control.StatePaused {
+	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
 	madeProgress := m.finalizeBanks()
@@ -90,14 +91,14 @@ func (m *tickFinalizeMW) finalizeRead(
 		return false
 	}
 
-	rsp := mem.DataReadyRsp{}
+	rsp := memprotocol.DataReadyRsp{}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = readReq.Src
 	rsp.RspTo = readReq.ID
 	rsp.Data = item.ReadData
 	rsp.TrafficBytes = len(item.ReadData) + 4
-	rsp.TrafficClass = "mem.DataReadyRsp"
+	rsp.TrafficClass = "memprotocol.DataReadyRsp"
 
 	m.topPort().Send(rsp)
 
@@ -151,13 +152,13 @@ func (m *tickFinalizeMW) finalizeWrite(
 		return false
 	}
 
-	rsp := mem.WriteDoneRsp{}
+	rsp := memprotocol.WriteDoneRsp{}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = writeReq.Src
 	rsp.RspTo = writeReq.ID
 	rsp.TrafficBytes = 4
-	rsp.TrafficClass = "mem.WriteDoneRsp"
+	rsp.TrafficClass = "memprotocol.WriteDoneRsp"
 
 	m.topPort().Send(rsp)
 

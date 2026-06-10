@@ -46,6 +46,12 @@ type portComplexState struct {
 // State contains mutable runtime data for the switch.
 type State struct {
 	PortComplexes []portComplexState `json:"port_complexes"`
+
+	// NextArbPort is the round-robin arbitration cursor for forwarding. It is
+	// runtime state (not topology), so it lives in State to be checkpointed;
+	// otherwise a resumed switch would restart arbitration from port 0 and
+	// diverge from an uninterrupted run.
+	NextArbPort int `json:"next_arb_port"`
 }
 
 // Comp is the switch component.

@@ -1,6 +1,8 @@
 package rob
 
 import (
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -67,9 +69,9 @@ func (b Builder) Build(name string) *Comp {
 	comp.State = State{}
 	comp.AddMiddleware(&middleware{comp: comp})
 
-	comp.DeclarePort("Top")
-	comp.DeclarePort("Bottom")
-	comp.DeclarePort("Control")
+	comp.DeclarePort("Top", memprotocol.Responder)
+	comp.DeclarePort("Bottom", memprotocol.Requester)
+	comp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	b.registrar.RegisterComponent(comp)
 

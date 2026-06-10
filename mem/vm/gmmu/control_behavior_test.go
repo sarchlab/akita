@@ -4,9 +4,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -19,7 +19,7 @@ import (
 //
 // All translation requests target locally-MAPPED pages (page.DeviceID equal to
 // the GMMU's spec.DeviceID), so each walk self-completes via finalizePageWalk
-// and emits a *vm.TranslationRsp on Top without ever sending a remote memory
+// and emits a *vmprotocol.TranslationRsp on Top without ever sending a remote memory
 // request out Bottom. That keeps RemoteMemReqs empty and lets Drain reach
 // quiescence purely on the local walk path.
 var _ = Describe("GMMU control behavior", func() {
@@ -73,24 +73,24 @@ var _ = Describe("GMMU control behavior", func() {
 		})
 	}
 
-	makeTranslationReq := func(vAddr uint64) vm.TranslationReq {
-		req := vm.TranslationReq{}
+	makeTranslationReq := func(vAddr uint64) vmprotocol.TranslationReq {
+		req := vmprotocol.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = agentPort
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
 		req.VAddr = vAddr
 		req.DeviceID = deviceID
-		req.TrafficClass = "vm.TranslationReq"
+		req.TrafficClass = "vmprotocol.TranslationReq"
 		return req
 	}
 
-	makeCtrlReq := func(cmd mem.ControlCommand) mem.ControlReq {
-		req := mem.ControlReq{Command: cmd}
+	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
+		req := memcontrolprotocol.Req{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
-		req.TrafficClass = "mem.ControlReq"
+		req.TrafficClass = "memcontrolprotocol.Req"
 		return req
 	}
 
@@ -116,11 +116,11 @@ var _ = Describe("GMMU control behavior", func() {
 		}
 		Expect(comp.State.WalkingTranslations).To(HaveLen(n))
 
-		drain := makeCtrlReq(mem.CmdDrain)
+		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		ctrlPort.Deliver(drain)
 
 		completed := 0
-		var drainRsp mem.ControlRsp
+		var drainRsp memcontrolprotocol.Rsp
 		gotDrainRsp := false
 		for i := 0; i < 4096 && !gotDrainRsp; i++ {
 			comp.Tick()
@@ -129,13 +129,13 @@ var _ = Describe("GMMU control behavior", func() {
 				if out == nil {
 					break
 				}
-				if _, ok := out.(vm.TranslationRsp); ok {
+				if _, ok := out.(vmprotocol.TranslationRsp); ok {
 					completed++
 				}
 			}
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(mem.ControlRsp); ok &&
-					rsp.Command == mem.CmdDrain {
+				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
 					gotDrainRsp = true
 				}
@@ -150,11 +150,11 @@ var _ = Describe("GMMU control behavior", func() {
 		Expect(completed).To(Equal(n))
 		Expect(comp.State.WalkingTranslations).To(BeEmpty())
 		Expect(comp.State.RemoteMemReqs).To(HaveLen(0))
-		Expect(comp.State.ControlState).To(Equal(control.StatePaused))
+		Expect(comp.State.ControlState).To(Equal(memcontrolprotocol.StatePaused))
 	})
 
 	It("freezes incoming translations while paused", func() {
-		comp.State.ControlState = control.StatePaused
+		comp.State.ControlState = memcontrolprotocol.StatePaused
 
 		insertLocalPage(0x0)
 		topPort.Deliver(makeTranslationReq(0x0))
@@ -171,7 +171,7 @@ var _ = Describe("GMMU control behavior", func() {
 	})
 
 	DescribeTable("Reset wipes in-flight state from any control state",
-		func(startState control.State) {
+		func(startState memcontrolprotocol.State) {
 			insertLocalPage(0x0)
 			topPort.Deliver(makeTranslationReq(0x0))
 
@@ -184,20 +184,20 @@ var _ = Describe("GMMU control behavior", func() {
 
 			comp.State.ControlState = startState
 
-			reset := makeCtrlReq(mem.CmdReset)
+			reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp mem.ControlRsp
+			var rsp memcontrolprotocol.Rsp
 			gotRsp := false
 			for i := 0; i < 64 && !gotRsp; i++ {
 				comp.Tick()
 				if out := ctrlPort.RetrieveOutgoing(); out != nil {
-					rsp, gotRsp = out.(mem.ControlRsp)
+					rsp, gotRsp = out.(memcontrolprotocol.Rsp)
 				}
 			}
 
 			Expect(gotRsp).To(BeTrue())
-			Expect(rsp.Command).To(Equal(mem.CmdReset))
+			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			Expect(comp.State.WalkingTranslations).To(BeEmpty())
@@ -207,10 +207,10 @@ var _ = Describe("GMMU control behavior", func() {
 			// next remote walk.
 			Expect(comp.State.RemoteMemReqs).ToNot(BeNil())
 			Expect(comp.State.ControlState).
-				To(Equal(control.StateEnabled))
+				To(Equal(memcontrolprotocol.StateEnabled))
 		},
-		Entry("from Enabled", control.StateEnabled),
-		Entry("from Paused", control.StatePaused),
+		Entry("from Enabled", memcontrolprotocol.StateEnabled),
+		Entry("from Paused", memcontrolprotocol.StatePaused),
 		// The Draining case is covered by the dedicated test below: control
 		// commands are serialized with no preemption, so a Reset issued while
 		// draining is not serviced until the in-progress Drain acks first.
@@ -221,16 +221,16 @@ var _ = Describe("GMMU control behavior", func() {
 		// acks the Drain. Control commands are serialized with no preemption,
 		// so a Reset queued behind the drain is serviced only after the Drain
 		// acks.
-		comp.State.ControlState = control.StateDraining
+		comp.State.ControlState = memcontrolprotocol.StateDraining
 		comp.State.CurrentCmdID = 999
 		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 		comp.State.WalkingTranslations = nil
 		comp.State.RemoteMemReqs = nil
 
-		reset := makeCtrlReq(mem.CmdReset)
+		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		ctrlPort.Deliver(reset)
 
-		var rsps []mem.ControlRsp
+		var rsps []memcontrolprotocol.Rsp
 		for range 16 {
 			comp.Tick()
 			for {
@@ -238,17 +238,17 @@ var _ = Describe("GMMU control behavior", func() {
 				if out == nil {
 					break
 				}
-				if r, ok := out.(mem.ControlRsp); ok {
+				if r, ok := out.(memcontrolprotocol.Rsp); ok {
 					rsps = append(rsps, r)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+		Expect(rsps[0].Command).To(Equal(memcontrolprotocol.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+		Expect(rsps[1].Command).To(Equal(memcontrolprotocol.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
-		Expect(comp.State.ControlState).To(Equal(control.StateEnabled))
+		Expect(comp.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 	})
 })

@@ -2,7 +2,7 @@ package idealmemcontroller
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -40,10 +40,10 @@ type inflightTransaction struct {
 
 // State contains mutable runtime data for the ideal memory controller.
 type State struct {
-	InflightTransactions []inflightTransaction `json:"inflight_transactions"`
-	ControlState         control.State         `json:"control_state"`
-	CurrentCmdID         uint64                `json:"current_cmd_id"`
-	CurrentCmdSrc        messaging.RemotePort  `json:"current_cmd_src"`
+	InflightTransactions []inflightTransaction    `json:"inflight_transactions"`
+	ControlState         memcontrolprotocol.State `json:"control_state"`
+	CurrentCmdID         uint64                   `json:"current_cmd_id"`
+	CurrentCmdSrc        messaging.RemotePort     `json:"current_cmd_src"`
 }
 
 // Resources holds the shared resources referenced by the memory controller.

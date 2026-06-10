@@ -5,7 +5,8 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -68,11 +69,11 @@ type reqToBottomState struct {
 
 // State contains mutable runtime data for the AddressTranslator.
 type State struct {
-	ControlState        control.State        `json:"control_state"`
-	CurrentCmdID        uint64               `json:"current_cmd_id"`
-	CurrentCmdSrc       messaging.RemotePort `json:"current_cmd_src"`
-	Transactions        []transactionState   `json:"transactions"`
-	InflightReqToBottom []reqToBottomState   `json:"inflight_req_to_bottom"`
+	ControlState        memcontrolprotocol.State `json:"control_state"`
+	CurrentCmdID        uint64                   `json:"current_cmd_id"`
+	CurrentCmdSrc       messaging.RemotePort     `json:"current_cmd_src"`
+	Transactions        []transactionState       `json:"transactions"`
+	InflightReqToBottom []reqToBottomState       `json:"inflight_req_to_bottom"`
 }
 
 // Helper functions
@@ -92,12 +93,12 @@ func msgToIncomingReqState(msg messaging.Msg) incomingReqState {
 	}
 
 	switch req := msg.(type) {
-	case mem.ReadReq:
+	case memprotocol.ReadReq:
 		s.Address = req.Address
 		s.AccessByteSize = req.AccessByteSize
 		s.PID = req.PID
 		s.CanWaitForCoalesce = req.CanWaitForCoalesce
-	case mem.WriteReq:
+	case memprotocol.WriteReq:
 		s.Address = req.Address
 		s.PID = req.PID
 		s.Data = req.Data
@@ -121,8 +122,8 @@ func createTranslatedReq(
 	addr := page.PAddr + offset
 
 	switch reqState.Type {
-	case "mem.ReadReq":
-		clone := mem.ReadReq{}
+	case "memprotocol.ReadReq":
+		clone := memprotocol.ReadReq{}
 		clone.ID = timing.GetIDGenerator().Generate()
 		clone.Src = bottomPortRemote
 		clone.Dst = memProviderMapper.Find(addr)
@@ -130,11 +131,11 @@ func createTranslatedReq(
 		clone.AccessByteSize = reqState.AccessByteSize
 		clone.PID = 0
 		clone.TrafficBytes = 12
-		clone.TrafficClass = "mem.ReadReq"
+		clone.TrafficClass = "memprotocol.ReadReq"
 		clone.CanWaitForCoalesce = reqState.CanWaitForCoalesce
 		return clone
-	case "mem.WriteReq":
-		clone := mem.WriteReq{}
+	case "memprotocol.WriteReq":
+		clone := memprotocol.WriteReq{}
 		clone.ID = timing.GetIDGenerator().Generate()
 		clone.Src = bottomPortRemote
 		clone.Dst = memProviderMapper.Find(addr)
@@ -143,7 +144,7 @@ func createTranslatedReq(
 		clone.Address = addr
 		clone.PID = 0
 		clone.TrafficBytes = len(reqState.Data) + 12
-		clone.TrafficClass = "mem.WriteReq"
+		clone.TrafficClass = "memprotocol.WriteReq"
 		clone.CanWaitForCoalesce = reqState.CanWaitForCoalesce
 		return clone
 	default:
@@ -160,10 +161,10 @@ func restoreMemMsg(
 ) messaging.Msg {
 	meta := messaging.MsgMeta{ID: id, Src: src, Dst: dst, RspTo: rspTo}
 	switch typ {
-	case "mem.WriteReq":
-		return mem.WriteReq{MsgMeta: meta}
+	case "memprotocol.WriteReq":
+		return memprotocol.WriteReq{MsgMeta: meta}
 	default:
-		return mem.ReadReq{MsgMeta: meta}
+		return memprotocol.ReadReq{MsgMeta: meta}
 	}
 }
 

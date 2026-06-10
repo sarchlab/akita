@@ -20,6 +20,17 @@ type pingRsp struct {
 	SeqID int
 }
 
+// pingProtocol is the ping protocol: ping agents are symmetric peers, each
+// sending requests and answering with responses on the same port. Defining
+// the protocol registers the message types with the checkpoint codec.
+var (
+	pingProtocol = messaging.DefineProtocol("examples.ping",
+		messaging.RoleDef{Name: "peer",
+			Sends: []messaging.Msg{pingReq{}, pingRsp{}}},
+	)
+	pingPeer = pingProtocol.Role("peer")
+)
+
 // pingProcessor implements modeling.EventProcessor[Spec, State, modeling.None].
 type pingProcessor struct{}
 

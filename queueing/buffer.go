@@ -118,3 +118,25 @@ func (b *Buffer[T]) Pop() T {
 func (b *Buffer[T]) Clear() {
 	b.elements = nil
 }
+
+// Elements returns a copy of the buffer's contents, front to back. It is
+// intended for inspection and checkpointing; mutating the returned slice has no
+// effect on the buffer.
+func (b *Buffer[T]) Elements() []T {
+	out := make([]T, len(b.elements))
+	copy(out, b.elements)
+
+	return out
+}
+
+// Restore replaces the buffer's contents with the given elements (front to
+// back) without firing hooks. It is used to rebuild a buffer from a checkpoint
+// and panics if the elements exceed the buffer's capacity.
+func (b *Buffer[T]) Restore(elements []T) {
+	if len(elements) > b.cap {
+		log.Panicf("buffer restore overflow: %d elements, capacity %d",
+			len(elements), b.cap)
+	}
+
+	b.elements = append([]T(nil), elements...)
+}

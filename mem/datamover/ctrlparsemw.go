@@ -4,7 +4,8 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/timing"
@@ -19,7 +20,7 @@ type ctrlParseMW struct {
 }
 
 // topPort is the workload-request port the data mover listens on for
-// DataMoveRequest messages. (It was historically named "Control" but
+// datamoverprotocol.DataMoveRequest messages. (It was historically named "Control" but
 // that name is now reserved for the uniform control protocol.)
 func (m *ctrlParseMW) topPort() messaging.Port {
 	return m.comp.GetPortByName("Top")
@@ -29,14 +30,14 @@ func (m *ctrlParseMW) topPort() messaging.Port {
 // freeze entirely; draining ones finish the current transaction but
 // don't accept new ones.
 func (m *ctrlParseMW) Tick() bool {
-	if m.comp.State.ControlState == control.StatePaused {
+	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
 
 	madeProgress := false
 
 	madeProgress = m.finishTransaction() || madeProgress
-	if m.comp.State.ControlState == control.StateEnabled {
+	if m.comp.State.ControlState == memcontrolprotocol.StateEnabled {
 		madeProgress = m.parseFromCP() || madeProgress
 	}
 
@@ -50,7 +51,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		return false
 	}
 
-	req, ok := reqI.(DataMoveRequest)
+	req, ok := reqI.(datamoverprotocol.DataMoveRequest)
 	if !ok {
 		log.Panicf("can't process request of type %s", reflect.TypeOf(reqI))
 	}
@@ -119,7 +120,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		return false
 	}
 
-	rsp := DataMoveResponse{
+	rsp := datamoverprotocol.DataMoveResponse{
 		MsgMeta: messaging.MsgMeta{
 			ID:    timing.GetIDGenerator().Generate(),
 			Src:   trans.ReqDst,

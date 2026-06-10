@@ -78,6 +78,32 @@ def run_test(name, cmd, cwd):
         return True
 
 
+def run_go_test(name, pkg, env=None):
+    """Run a `go test` package as part of the acceptance suite. Output is not
+    suppressed, so a failure shows the failing assertion. The optional env dict
+    scales the test up (e.g. CHECKPOINT_NUM_OPS)."""
+    # -count=1 disables the go test cache, whose key does not include the env
+    # vars this test reads, so the acceptance run always executes at full scale.
+    cmd = "go test -count=1 " + pkg
+
+    suffix = (" " + " ".join("%s=%s" % kv for kv in env.items())) if env else ""
+    print(cmd + suffix)
+
+    test_env = os.environ.copy()
+    if env:
+        test_env.update(env)
+
+    p = subprocess.Popen(cmd, shell=True, env=test_env)
+    p.wait()
+
+    if p.returncode == 0:
+        print(colors.fg.green + name + " Passed." + colors.reset)
+        return False
+    else:
+        print(colors.fg.red + name + " Failed." + colors.reset)
+        return True
+
+
 def main():
     error = False
 
@@ -313,6 +339,16 @@ def main():
         "Virtual Memory test 8",
         "./virtualmem -max-address=10485760 -parallel -num-access=10000",
         "acceptancetests/virtualmem",
+    )
+
+    # Checkpoint/resume oracle over the full virtual-memory hierarchy: run to
+    # completion must equal run-to-checkpoint, restore, run-to-completion. Run at
+    # acceptance scale so the checkpoints capture deep in-flight state and TLB
+    # eviction across the boundary.
+    error |= run_go_test(
+        "Virtual Memory checkpoint/resume",
+        "./acceptancetests/virtualmemcheckpoint/",
+        {"CHECKPOINT_NUM_OPS": "2000"},
     )
 
     if error:

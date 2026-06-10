@@ -1,828 +1,538 @@
-# Checkpoint Redesign Plan
+# Checkpointing Plan
 
-## Summary
+## Goal
 
-Akita checkpointing should evolve from a quiescent component-state dump into an
-explicit simulator runtime snapshot. Setup code keeps rebuilding the object
-graph; a checkpoint only restores the runtime facts that can change future
-execution.
+Phase A is merged. The repository now has a runtime inventory of named entities,
+but no persistence code. Phase B should turn that inventory into a transparent
+checkpoint/restore system for `SerialEngine`.
 
-Design goals:
-
-- Serialize all runtime state that affects future simulated behavior; never
-  serialize observers or setup choices (tracers, hooks, monitors, visualizers,
-  output handles).
-- Let each owner serialize itself. Do not auto-expose internal fields just to
-  satisfy JSON. (A separate, deliberate `GetStateByName` access backdoor exists
-  for cross-entity access; see Unified Entity Model.)
-- Treat every registered runtime object uniformly as an entity. The simulation
-  core is type-agnostic for storage and serialization; type-specific behavior
-  lives at the registration boundary and in optional capability interfaces.
-- Make checkpoint completeness auditable and strict by default.
-- Scope the first non-quiescent implementation to `SerialEngine`.
-- Do not target long-term backward compatibility. A checkpoint is consumed by
-  the same executable that produced it; compatibility is a build-identity
-  equality check, not a version-migration system.
-
-## Current State
-
-`simulation.Save` today writes:
-
-- `metadata.json`: engine time and global ID generator state.
-- `components/<component>.json`: each component's generic `Spec` and `State`.
-- `resources/<resource>.bin`: shared-state payloads (currently `mem.Storage`).
-
-This works for phase-boundary checkpoints when the simulation is quiescent but
-is not a transparent snapshot of the full simulator process.
-
-Already done (commit `1e5003d`, "Add checkpoint manifest scaffolding"):
-
-- Map-presence duplicate-name checks for components, ports, connections, and
-  resources (replacing the `index != 0` sentinel that let the first name be
-  duplicated).
-- A `manifest.json` inventory plus a common `Entity` view, connection and
-  resource registration, and minimal local `Component`/`Port`/`Connection`
-  interfaces. Missing/extra manifest entries are validated, not silently skipped.
-
-Still open:
-
-- Port buffers must be empty; their contents are not saved.
-- The event queue is not saved.
-- Tick scheduler pending state is not saved.
-- Event-driven wakeup guards are reset after load instead of restored.
-- Runtime fields outside component `State` are not saved.
-- Interface values (`messaging.Msg`, `timing.Event`) do not round-trip through
-  generic JSON without type metadata.
-- Component `Spec` is restored from the checkpoint instead of being treated as a
-  compatibility contract against rebuilt setup.
-- Some shared-state resources are binary and may be too large for JSON as the
-  default payload format.
-
-## Setup vs Runtime Boundary
-
-Rebuilt from setup code:
-
-- Component construction; port construction and attachment; connection topology.
-- Handler registration.
-- Tracers, hooks, monitors, visualizers, data recorders, output files.
-- Build-time parameters and high-level configuration.
-
-Restored from checkpoint:
-
-- Engine current time, queued events, and same-time ordering metadata.
-- Global ID generator state and generator kind.
-- Component runtime state.
-- Port incoming and outgoing buffers.
-- Connection runtime state (round-robin cursors, in-flight transfer state).
-- Shared program resources (memory contents, page tables, allocation metadata,
-  and other non-timing state shared across components).
-- Tick scheduler pending state and event-driven pending wakeup state.
-
-Not restored by default:
-
-- Observability state.
-- Random generator state, unless a runtime owner explicitly declares RNG
-  continuity as part of its checkpoint contract.
-
-Rule of thumb: if changing a value can change future simulated behavior, it is
-runtime state and belongs in the checkpoint, unless the design explicitly makes
-it a user-provided continuation input such as a restart RNG seed.
-
-## Unified Entity Model
-
-The simulation acts as a global state manager. Every registered runtime object
-is stored uniformly as an entity, and the core never branches on
-component/port/connection/resource for storage or serialization. Type
-distinctions live only at the edges:
-
-- **Typed registration is the boundary.** `RegisterComponent`,
-  `RegisterConnection`, and `RegisterResource` may do type-specific work (attach
-  tracing, register with the monitor, pull in a component's ports and resources,
-  dedup resources by identity), but each lands the object in one entity store.
-- **Type-specific runtime behavior lives in optional capability interfaces**
-  that callers assert for, not in the registry. The existing
-  `tracing.NamedHookable`, `ResourceOwner`, and `WakeupResetter` checks are
-  already this pattern; quiescence checks, port ownership, and post-load wiring
-  should follow the same "ask the entity what it can do" idiom.
-
-The simulation package defines minimal local interfaces so it need not import
-`messaging`:
-
-```go
-type Component interface {
-    Name() string
-}
-
-type Port interface {
-    Name() string
-    NumIncoming() int
-    NumOutgoing() int
-}
-
-type Connection interface {
-    Name() string
-}
-```
-
-Concrete `messaging` values satisfy these structurally. Because Go slice return
-types are not covariant, components returning `Ports() []messaging.Port` are
-adapted at registration time rather than forcing a `messaging` import.
-
-An entity has a name and knows how to serialize itself. The uniform contract is
-self-serialization (`Checkpointable`, see Serialization Interfaces), not a plain
-`State()` data accessor — so interface values and large binary payloads work,
-and owners never expose internals just to satisfy JSON. `Kind`/`Type` survive as
-metadata for the manifest, grouping, and debugging, but do not drive registry
-logic. Each entity serializes to its own archive entry in its own format; the
-save loop is flat. The load path is not flat (see Save and Load Safety).
-
-This entity layer is a reference layer, not a replacement for the concrete
-component, port, connection, or resource APIs: the simulation keeps typed
-registries for lookups that need concrete methods, while the entity inventory
-gives validation, manifest generation, and debugging one vocabulary.
-
-### Global State Access Backdoor
-
-The simulation exposes a deliberate `GetStateByName(name)` backdoor for
-cross-entity access, analogous to Unity's `GetComponent`/`Find`. This is a
-wanted feature: a "magic" component such as a magic address translator can reach
-the globally registered page table or memory directly. Breaking encapsulation
-here is an accepted trade-off; the programmer takes the risk.
-
-Guidance:
-
-- Resolve the handle once at setup and cache it. Do not call `GetStateByName` on
-  a hot path; it is a name lookup, not a free pointer dereference (this mirrors
-  why Unity discourages `Find` in `Update`).
-- The natural targets are designed shared state — exactly the `Resource` concept
-  (page tables, memory, allocators). Reaching arbitrary component internals by
-  name is allowed but is action-at-a-distance; prefer resources for shared data.
-- Magic access bypasses the timing model by design. It is safe under
-  `SerialEngine`; under a future parallel engine it is a data race and ordering
-  hazard, and must be revisited there.
-- Keep `GetStateByName` (live access) and `SaveCheckpoint` (serialization) as
-  separate contracts even when they point at the same data, so the on-disk
-  format is not coupled to the public access API.
-
-### Naming and the Runtime Registry
-
-Checkpoint entries are keyed by stable, user-controlled names. Generated
-topologies use dot-delimited hierarchical tokens with bracketed indices:
+The correctness oracle is:
 
 ```text
-GPU[1]
-GPU[1].SA[1]
-GPU[1].SA[1].CU[2]
-GPU[1].SA[1].CU[2].MemoryPort
+run from t0 to done == run from t0 to checkpoint, restore, then run to done
 ```
 
-Port names extend the owning component name with another token. Names must be
-unique across the simulation registry, and name generation must be deterministic
-(no map-iteration order), so the same topology rebuilds to the same names.
+This must hold when the checkpoint is taken mid-run, with queued events,
+scheduled ticks, messages in ports, connection state, component state, and shared
+resources all live.
 
-Persistent runtime owners and shared-state resources are registered globally. A
-connection is created and plugged in by setup code, but if it affects runtime
-behavior it must be registered as a persistent runtime owner and appear in the
-manifest. Shared state (memory, page tables) is registered as a resource, with
-components holding references rather than embedding payloads. Rebuilt setup
-objects, observability objects, and purely derived wiring stay out of these
-registries.
+## Current Baseline
+
+The merged Phase A baseline is:
+
+- `simulation.Simulation` owns typed registries for components, ports,
+  connections, and resources, plus a private flat entity inventory.
+- Engine and ID generator are registered singleton entities named `Engine` and
+  `IDGenerator`.
+- Components are `modeling.Component[Spec, State, Resources]` or
+  `modeling.EventDrivenComponent[Spec, State, Resources]`.
+- Component `Spec` and `Resources` are private construction-time fields exposed by
+  accessors. `State` is public so middleware can mutate it.
+- Shared resources are registered explicitly by setup. `ResourceOwner`
+  auto-registration is gone.
+- Ports are discovered during component registration. Existing messaging
+  components are adapted with reflection because `Ports() []messaging.Port` is
+  not assignable to `[]simulation.Port`.
+- `messaging.Msg` and `timing.Event` are immutable **value** types, constructed
+  once and used once. `Msg.Meta()` returns `MsgMeta` by value; `MsgMeta` carries
+  no task-ID fields. Tracing keeps receiver task IDs in a side-table keyed by
+  (domain, message ID), so messages are never mutated in flight.
+- Ports use the `CanSend`/`CanDeliver` convention: `Send`/`Deliver` panic on
+  overflow, so callers check capacity first.
+- `queueing.Buffer` and `queueing.Pipeline` are encapsulated value types and now
+  serialize their full contents through `MarshalJSON`/`UnmarshalJSON`.
+- The old quiescent `Save`/`Load` code was removed. Phase B starts fresh.
+
+There is currently no public `GetStateByName`, no public `Entities()` accessor,
+and no checkpoint archive writer/loader.
+
+## Non-Goals
+
+- No cross-version migration. A checkpoint is consumed by the same executable that
+  produced it.
+- No `ParallelEngine` checkpoint support in Phase B. Save/load must reject it.
+- No serialization of observers or setup choices: hooks, tracers, monitors, data
+  recorders, visualizers, output handles, and HTTP state are rebuilt or omitted.
+  This includes tracing's global receiver-task-ID side-table: it is observer
+  state, so it is not checkpointed and traces do not span a checkpoint boundary.
+  One caveat: that table generates task IDs from the global ID generator when
+  tracing is active, so it perturbs the ID-generator counter that *is*
+  checkpointed. For a deterministic resume oracle (byte-exact counter), run
+  checkpointable simulations with tracing off, or treat tracing's ID consumption
+  as outside the determinism guarantee.
+- No arbitrary pointer-graph checkpointing. Runtime references cross the boundary
+  by stable names, IDs, or explicit typed payloads.
+- No rollback guarantee after a payload-level load failure. Load should check the
+  build identity and coverage before mutation, but callers should load into a
+  freshly rebuilt simulation and discard it on failure.
+
+## Full Support Definition
+
+Phase B is complete when Akita can:
+
+- Save a single archive while a serial simulation is paused or otherwise stopped
+  outside an event handler.
+- Restore into a freshly rebuilt simulation with the same topology and build
+  identity.
+- Preserve engine time, event queues, event ordering, ID generator state,
+  component state, tick scheduler state, event-driven wakeup guards, port
+  buffers, connection runtime state, queueing containers, and registered shared
+  resources.
+- Decode polymorphic `messaging.Msg` and `timing.Event` values through explicit
+  registries.
+- Fail loudly on missing, extra, duplicated, unknown, unsupported, or mismatched
+  entries.
+- Pass integration tests that compare uninterrupted execution against
+  checkpoint/resume execution.
+
+## Core Decisions
+
+### Setup rebuilds shape; checkpoint restores runtime
+
+Setup code rebuilds components, ports, resources, connection topology, handlers,
+and observers. The checkpoint restores only values that can change future
+simulation behavior.
+
+Saved runtime values:
+
+- Engine current time and queued events.
+- ID generator kind and next counter.
+- Component `State`.
+- Ticking scheduler private state.
+- Event-driven pending wakeup guard.
+- Port incoming and outgoing buffers.
+- Connection runtime state, such as round-robin cursors.
+- Shared resources, such as memory contents and page tables.
+
+Compared, not blindly restored:
+
+- Component `Spec` (via a spec hash carried in the component's own payload).
+- Resource shape metadata, such as memory capacity or page size.
+- Rebuilt topology (via the saved-vs-rebuilt name-set comparison).
+
+Not restored:
+
+- `Resources` references; setup reinjects them.
+- Port objects and connection plug-in lists; setup rebuilds them.
+- Hooks, monitors, tracers, and recorders.
+
+### The event queue is the source of truth for future work
+
+Pending work exists in several places: the engine event queue, tick scheduler
+guards, event-driven wakeup guards, and messages in port buffers. To avoid double
+scheduling, the restored event queue is authoritative.
+
+Load should restore raw port buffers and scheduler/wakeup guards without calling
+behavioral APIs such as `Send`, `Deliver`, `NotifyRecv`, `NotifyPortFree`,
+`TickNow`, or `TickLater`. Post-load hooks may validate consistency, but they
+must not schedule duplicate work unless the design explicitly proves the restored
+queue lacks that work.
+
+### Strict is the default
 
 Strict load fails when:
 
-- A saved persistent entry has no rebuilt runtime owner.
-- A rebuilt persistent runtime owner has no saved entry.
-- A checkpoint contains unknown extra entries.
-- A runtime owner or resource name is duplicated.
+- The build identity does not match.
+- A saved entity is not present in the rebuilt simulation.
+- A rebuilt runtime entity is missing from the checkpoint.
+- An archive entry is neither the build identity nor a known entity payload.
+- A payload type tag cannot be decoded.
+- A rebuilt spec or topology does not match the saved compatibility hash.
 
-An opt-in override for extra entries may be added later, but strict is the
-default.
+An opt-in relaxed mode for extra entries can be considered later, but Phase B
+should ship strict-only first.
 
-## Component and Resource Model
+## Archive Format
 
-This section captures the v5 component-authoring model and resource-ownership
-decisions. They are breaking changes (acceptable for v5) and are the next
-implementation milestone after the global state manager.
-
-### A component is Spec + State + Resources
-
-Every component is `modeling.Component[Spec, State, Resources]` (and likewise
-`EventDrivenComponent[S, T, R]`). The three parts map exactly onto the runtime
-categories:
-
-| Part | Meaning | Serialized? | Rebuilt by |
-|------|---------|-------------|------------|
-| `Spec` | immutable configuration | as spec/compat hash | setup |
-| `State` | mutable runtime data | **yes** — the serializable unit (`StateRef`) | — |
-| `Resources` | typed references to shared resources | **no** — wiring | setup |
-
-`modeling.None` (an exported zero-size `struct{}`) is the sentinel for components
-with no resources: `Component[Spec, State, modeling.None]`. The third type
-parameter is **mandatory and uniform** — every component visibly declares all
-three categories rather than a terse two-parameter default. This was chosen over
-a generic-alias shortcut so the model is the same everywhere a user (or
-downstream) writes a component.
-
-The typed `Resources` slot **supersedes per-field checkpoint tags** for
-resources: a reference structurally lives in `Resources`, not in `State`, so no
-`checkpoint:"resource"` annotation is needed (see Field Classification).
-
-### No hand-written component struct
-
-A user defines only: `Spec`, `State`, and `Resources` data structs plus their
-`Middleware` structs (where the behavior lives). The component *is*
-`modeling.Component[Spec, State, Resources]` — there is no per-component wrapper
-struct and no accessor methods.
-
-- Middlewares hold a single `*modeling.Component[Spec, State, Resources]` and
-  reach everything through it: `comp.Spec`, `comp.State`, `comp.Resources`
-  (`comp.Resources.Storage`), `comp.GetPortByName(...)`. The reference fields
-  previously duplicated onto middlewares (e.g. a separate `storage`) go away.
-- Former accessors (`GetStorage()`, `StorageName()`) become field access
-  (`comp.Resources.Storage`, `comp.Spec.StorageRef`).
-- The residual a user writes is: three data structs + middleware structs + a thin
-  builder/setup call through a generic `NewBuilder[S, T, R]`.
-
-Open item: ports are *not* part of Spec/State/Resources/Middlewares but a
-component still needs ports created and attached. Decide whether ports become a
-declared part of the component or remain a builder/setup concern.
-
-### The simulation owns shared resources
-
-Shared resources (memory contents, page tables, allocator state) are owned by the
-simulation — the global state manager — not by any component. They are top-level
-entities, peers of components, reachable by name through `GetStateByName`. A
-component never embeds a resource payload in its `State`; it holds only a
-reference.
-
-- The durable identifier is the resource's **name** (kept in `Spec`); the
-  `Resources` field holds the cached pointer for fast access. The pointer is
-  wiring, rebuilt by setup; the resource's contents are restored into the one
-  canonical resource object.
-- Setup constructs the resource, gives it **one canonical name**, registers it
-  once with `RegisterResource`, and injects the reference into the components
-  that use it.
-
-### `ResourceOwner` is dropped
-
-The `ResourceOwner` / `component.Resources()` auto-registration is removed. It
-made each holder name and register the resource, so a single shared object could
-end up registered under multiple names (`A.Storage`, `B.Storage`). Registration
-becomes explicit and setup-owned under a canonical name.
-
-- The identity-based dedup in `registerResource` is removed; the global
-  name-uniqueness check in `registerEntity` already detects duplicates.
-- `Resource` slims toward just `Entity` (drop `Identity()`, and `Kind()` if it is
-  dead). A resource is "an entity that happens to be shared state," distinguished
-  only by living in the resource registry for enumeration.
-
-### Implementation order
-
-1. `modeling`: add the `R` parameter, the `Resources` field, and `None` to
-   `Component` and `EventDrivenComponent` and their builders
-   (`NewBuilder[S, T, R]`, `NewEventDrivenBuilder[S, T, R]`).
-2. Sweep the ~92 instantiation sites across `mem`/`noc`/`examples`/tests to add
-   `, modeling.None`.
-3. Convert `idealmemcontroller`/`simplebankedmemory`/`dram` to a `Resources`
-   struct, update their middlewares to read `comp.Resources`, drop
-   `ResourceOwner` and the wrapper accessors, and slim `Resource` /
-   `registerResource`.
-
-## Checkpoint Format
-
-The checkpoint is a single `tar.gz` archive. Consistent with the type-agnostic
-core, every entity is one entry; there are no per-kind sections. The logical
-entry layout (not loose files on disk) is:
+Use one `tar.gz` archive written through a temporary path and renamed on success:
 
 ```text
-checkpoint/
-  manifest.json
-  entities/<encoded-entity-name>.json
-  entities/<encoded-entity-name>.bin
+checkpoint.tar.gz
+  build_id
+  entities/<encoded-name>
 ```
 
-Raw simulation names are not used directly as entry names; use a stable escaping
-or hashing scheme that is reversible where practical and immune to path
-separators.
+There is no manifest. The only central datum is the build identity, written as a
+lone `build_id` entry; the set of `entities/<name>` payload files is itself the
+inventory. Each entity owns its own payload bytes (JSON or binary). Archive paths
+are escaped so entity names never become direct filesystem paths, and entries are
+sorted by name for reproducibility.
 
-The manifest is a flat, auditable inventory of entities; load validates it
-before mutating any runtime state. There are no typed buckets — `Kind` on each
-entry already distinguishes entity types, and adding a new kind does not change
-the manifest struct.
+Coverage is checked by the simulation, which compares the saved name set against
+its rebuilt entity inventory. Anything finer-grained (per-entity spec hash,
+content checksum, type tag) is pushed into the entity's own payload if and when
+that entity needs it, never carried centrally. Cross-binary divergence is caught
+by the build identity; topology divergence from the same binary (e.g. a different
+GPU count from a parameterized setup) is caught by the name-set comparison.
+
+## API Shape
+
+Add checkpoint orchestration on `simulation.Simulation`:
 
 ```go
-type CheckpointManifest struct {
-    Version   int                      `json:"version"`
-    CreatedBy string                   `json:"created_by"`
-    BuildID   string                   `json:"build_id"`
-    Entities  map[string]ManifestEntry `json:"entities"` // keyed by stable entity name
-}
-
-type ManifestEntry struct {
-    Kind       string `json:"kind"`   // component | port | connection | resource | engine | id-generator
-    Path       string `json:"path"`   // encoded archive entry name
-    Format     string `json:"format"`
-    SpecHash   string `json:"spec_hash,omitempty"`   // components only
-    ContentSHA string `json:"content_sha,omitempty"`
-}
-
-type Entity struct {
-    Kind EntityKind // component | port | connection | resource | engine | id-generator
-    Name string
-    Type string     // optional type metadata, e.g. "mem.Storage" for resources
-}
+func (s *Simulation) SaveCheckpoint(path, buildID string) error
+func (s *Simulation) LoadCheckpoint(path, buildID string) error
 ```
 
-The engine and the ID generator are entities like any other: singletons with
-reserved names (e.g. `"engine"`, `"id-generator"`) and their own kinds. Neither
-gets a special top-level manifest field, and the ID generator is its own entity
-rather than being folded into the engine — the point of the refactor is to have
-no special cases. Validation requires exactly one entity of each singleton kind.
+`buildID` overrides the build identity (mainly for tests); pass `""` to use the
+default. `SaveCheckpoint` is low-level: it assumes the simulation uses a
+`SerialEngine` and is stopped outside an event handler.
 
-Because the inventory is one flat map keyed by name, entity names must be
-**globally unique across all kinds**, including the reserved singleton names.
-This is already a goal (names unique across the simulation registry); the flat
-manifest makes it a hard requirement. The map key is the raw stable name; `Path`
-is the encoded archive entry.
-
-`BuildID` is a build-identity fingerprint of the producing executable. Because
-checkpoints are not meant to outlive that executable, load requires `BuildID` to
-match the current binary and fails loudly otherwise. This replaces version
-migrations with a single equality check: a mismatched checkpoint fails fast
-instead of silently corrupting restored state. `Version` gates only the manifest
-format, not content migration.
-
-## Serialization Interfaces
-
-Serialization is explicit and owned by each runtime state owner.
+Use a small leaf package, `checkpoint`, for the archive read/write helpers, the
+build identity, and the entity capability interface. That avoids import cycles
+while letting `modeling`, `messaging`, `timing`, `mem`, and `simulation` share one
+interface:
 
 ```go
 type Checkpointable interface {
-    CheckpointName() string
-    CheckpointKind() string
-    SaveCheckpoint(ctx SaveContext, w io.Writer) error
-    LoadCheckpoint(ctx LoadContext, r io.Reader) error
-}
-
-type AfterCheckpointLoad interface {
-    AfterCheckpointLoad(ctx LoadContext) error
+    SaveCheckpoint(w io.Writer) error
+    LoadCheckpoint(r io.Reader) error
 }
 ```
 
-`AfterCheckpointLoad` restores derived wiring that cannot be stored directly,
-resets guards, and schedules required wakeups — after all raw state is loaded.
-Raw load functions must not call behavioral APIs (`Send`, `Deliver`,
-`NotifyRecv`, `NotifyPortFree`); those can trigger new events while the restored
-graph is incomplete.
+An entity owns its own bytes, so this is the only interface the foundation needs.
+A load context for cross-entity lookups (by name, handler ID, message ID) and a
+post-load hook are added later, by extending the load signature when an entity
+actually needs them — there are no implementers yet, so that change is free. The
+simulation infers entity kind from its typed registries, so the core entity
+interface stays `Name() string`. Every registered runtime entity must implement
+`Checkpointable`, or save/load fails loudly.
 
-Generic component `Spec`/`State` JSON remains as a compatibility layer, with
-changed load semantics (see Spec Compatibility). Long term, each component can
-define a runtime checkpoint DTO that includes unexported details without making
-them public API.
+## Triggering (future work)
 
-### Field Classification
+Phase B saves at an explicit boundary: the caller holds a `SerialEngine` that is
+stopped outside an event handler, then calls `SaveCheckpoint`. Automatic triggers
+and the engine coordination they need are deferred to a later phase. The intended
+shape, kept short here so it does not drive the foundation design:
 
-Components must not carry unclassified mutable fields outside `Spec`, `State`,
-ports, and declared runtime resources. Wrapper components and middleware may hold
-handles to ports, shared resources, processors, or derived wiring, but every
-such field declares a checkpoint policy:
+- **Use cases**: wall-clock interval (fault tolerance), virtual-time interval
+  (deterministic snapshots), semantic milestone (e.g. kernel completion), and
+  operator/manual request.
+- **Determinism**: virtual-time and semantic triggers should be handled inline by
+  the engine's between-events check, so they need no concurrency. Only wall-clock
+  triggers are inherently real-time and would need an asynchronous coordinator
+  plus a `SerialEngine` boundary-pause handshake (let the running handler return,
+  pause before popping the next event, save, then resume or stop). A handler must
+  only *request* a checkpoint and return; it can never block waiting for its own
+  boundary.
+- **Placement**: a checkpoint requester is control-plane wiring. Put it at the
+  behavior boundary that knows the trigger (a middleware or wrapper), never in the
+  generic `modeling.Component` or in `Spec`/`State`/`Resources`. On restore, setup
+  rebuilds it like any other control handle; it is not serialized.
 
-- `checkpoint:"port"` — rebuilt by setup; buffers checkpointed by the port owner.
-- `checkpoint:"resource"` — handle to a registered shared resource; checkpointed
-  once by the resource registry.
-- `checkpoint:"derived"` — rebuilt by `AfterCheckpointLoad`.
-- `checkpoint:"observer"` — tracing, monitoring, recorders; never affects
-  simulation behavior.
-- `checkpoint:"external"` — continuation input supplied by the user at restart,
-  such as an RNG seed.
+None of this is needed for the foundation or quiescent milestones, which save only
+at an already-stopped boundary.
 
-Untagged extra fields fail validation. Validation inspects both wrapper component
-structs and middleware structs, since shared-resource handles may live in
-middleware.
+## Implementation Work
 
-Note: under the v5 component model (see Component and Resource Model), resource
-references live in the typed `Resources` slot rather than as
-`checkpoint:"resource"`-tagged fields, so that policy is subsumed by structural
-classification — `Spec` is config, `State` is serialized, `Resources` is wiring.
+### 0. Preflight cleanup
 
-### Spec Compatibility
+- Fix documentation that still describes removed APIs or default JSON support
+  that no longer exists (`simulation/README.md`, `queueing/README.md`, and the
+  checkpoint-related parts of `doc/component_guide.md`).
+- Fix checkpoint-adjacent runtime invariants before using them as test oracles:
+  `datamover` must not pop a control request while busy, storage must reject
+  invalid unit sizes, and queueing should enforce `Accept`/capacity invariants.
+- Add focused tests for deterministic entity names and globally unique singleton
+  names.
 
-Setup rebuilds the simulator; a checkpoint must not blindly replace rebuilt setup
-with saved setup.
+### 1. Checkpoint package and archive
 
-- Save component specs (or canonical spec hashes) and component kind for
-  compatibility checking.
-- On load, compare rebuilt spec against checkpoint spec, and restore only runtime
-  state.
-- Fail with a clear error on mismatch. There is no migration fallback (see
-  no-backward-compatibility goal).
+- Add the `Checkpointable` interface, entity-path escaping, the build-identity
+  helper, and the archive read/write helpers (build_id entry plus per-entity
+  payloads, sorted and reproducible).
+- Compute build identity from Go build info plus VCS revision and dirty status
+  when available; provide a `buildID` override for tests.
+- Add archive tests for sorted output, unknown-entry rejection, empty/duplicate
+  guards, and round trips.
 
-The spec-hash check is the fine-grained counterpart to the coarse `BuildID`
-check: `BuildID` rejects a different executable; the spec hash catches topology
-or configuration drift within the same executable.
+### 2. Simulation orchestration
 
-## Interface Values: Message and Event Registries
+- Implement `SaveCheckpoint` as a flat deterministic loop over the entity
+  inventory: ask each entity for its payload bytes and write the archive with the
+  build identity.
+- Implement `LoadCheckpoint` as staged work:
+  1. Read the archive and check the build identity.
+  2. Validate coverage: saved names == rebuilt names.
+  3. Hand each entity its payload bytes (no behavioral calls).
+  4. Run post-load validation hooks if/when entities implement them.
+- Save only under `SerialEngine`. Detecting "inside an event handler" needs engine
+  support and is deferred with triggering; until then `SaveCheckpoint` is a
+  caller-discipline boundary.
+- Keep the flat inventory private; tests validate through public registries and
+  save/load behavior.
 
-Ports contain `messaging.Msg` values; engine queues contain `timing.Event`
-values. Because Go has no sum types and cannot reconstruct a concrete type from
-JSON through an interface, polymorphic decode requires type tags plus a
-constructor registry. This is inherent to Go, not a design preference.
+### 3. Generic component checkpointing
 
-### When a registry is needed
+- Implement checkpoint methods for `modeling.Component[S, T, R]`.
+- Save a JSON DTO containing name, type, spec hash, state, and ticking scheduler
+  snapshot.
+- On load, compare the rebuilt spec hash and unmarshal only `State` and scheduler
+  runtime fields.
+- Do not serialize `Resources`; setup restores those references.
+- Run `ValidateSpec` and `ValidateState` as part of checkpoint validation, with
+  explicit exemptions for types that implement custom JSON.
 
-A constructor registry is needed for exactly one situation: an interface-typed
-value that **setup does not rebuild**, so it must be reconstructed from
-checkpoint data alone.
+### 4. Event-driven component checkpointing
 
-| Kind | Rebuilt by setup? | Needs constructor registry? |
-|------|-------------------|------------------------------|
-| Message in a port buffer | no (transient) | **Yes** |
-| Event in the engine queue | no (transient) | **Yes** |
-| Component, Port, Connection, Resource | yes | No |
-| Event handler reference | yes (it is a component) | No |
+- Implement checkpoint methods for `modeling.EventDrivenComponent[S, T, R]`.
+- Save name, type, spec hash, state, and `pendingWakeup`.
+- Restore `pendingWakeup` without scheduling a new event.
+- Validate that restored `TimerFiredEvent` queue entries and the wakeup guard are
+  consistent.
 
-Setup-rebuilt objects already exist at load time: load looks the instance up by
-name and calls `LoadCheckpoint` to fill it in place; the instance knows its own
-type. For them, the entity name-to-instance map *is* the registry, and handlers
-are resolved by string ID against that map. Only messages and events have no
-pre-existing instance, so only they need a constructor registry. This is a direct
-consequence of the setup-vs-runtime split — rebuilding from setup confines
-registries to two transient interface types instead of one per component type.
+### 5. Queueing containers
 
-### Registries live low; the core stays decoupled
+- Add explicit JSON DTOs or `MarshalJSON`/`UnmarshalJSON` implementations for
+  `queueing.Buffer[T]` and `queueing.Pipeline[T]`.
+- Preserve buffer name, capacity, FIFO contents, pipeline width, stage count, lane,
+  stage, item, and cycle-left fields.
+- Do not serialize `HookableBase`; hooks are observers and are rebuilt.
+- Validate capacities, widths, lane bounds, stage bounds, and item count on load.
 
-The simulation core never imports `messaging` or `mem` and never touches a
-`messaging.Msg`. Each interface-value owner serializes itself and uses a registry
-that lives in its own package:
+### 6. Message registry
 
-- The **message-codec registry lives in `messaging`**. `mem`, `mem/vm`,
-  `mem/datamover`, `noc/packetization`, and user packages already import
-  `messaging`, so they register without an import cycle. The `Port` (in
-  `messaging`) uses it to serialize its own buffers.
-- The **event-codec registry lives in `timing`**. The engine (in `timing`) uses
-  it to serialize its own queues. Built-in tick/timer/secondary events are
-  registered by the framework; custom events register here too.
-
-The core only orchestrates opaque `Checkpointable` entities that hand it bytes,
-so it stays type-agnostic and free of concrete `messaging`/`timing` imports.
-
-### Registration mechanism
-
-```go
-type TypedPayload struct {
-    Type    string          `json:"type"`
-    Payload json.RawMessage `json:"payload"`
-}
-
-// in messaging
-func RegisterMsg(construct func() Msg) { /* key derived from %T of construct() */ }
-
-// in mem
-func init() { messaging.RegisterMsg(func() messaging.Msg { return &ReadReq{} }) }
-```
-
-- Common case: one line per message type; the default codec is
-  `json.Marshal`/`Unmarshal`. Custom codecs only for types with non-serializable
-  fields.
-- `init()` registration gives a coverage guarantee: if a `*mem.ReadReq` can
-  appear at runtime, then `mem` is linked, so its `init()` ran, so its codec is
-  registered. The only failure mode is a package author forgetting to register a
-  type they defined — caught by the unknown-type error at first checkpoint.
-- Because checkpoints are consumed by the same executable, the registry key can
-  be derived from `fmt.Sprintf("%T", ...)`; no hand-maintained stable names, no
-  rename drift, no per-payload version.
-- Unknown type tags are load errors, never silent drops.
-- For scale, a `go:generate` tool can emit registrations for all types embedding
-  `messaging.MsgMeta`, reducing the per-type burden to zero.
-
-This registry replaces, rather than adds to, existing complexity: today
-`mem/vm/addresstranslator/state.go` hand-writes a `%T` switch that copies message
-fields by hand; the default JSON codec subsumes that.
-
-### References are by name/ID, not pointer
-
-Akita already expresses cross-object references as stable names: message
-`Src`/`Dst` are `messaging.RemotePort` (a string), and events reference handlers
-by `HandlerID` (a string). Serialization stores IDs and re-links by lookup in the
-post-load phase; there is no pointer graph to rebuild. The unifying rule:
-everything crosses the boundary as a stable name/ID, never as a pointer.
-
-The only violator is raw `interface{}` fields such as `mem.ReadReq.Info` /
-`mem.WriteReq.Info` (`json:"-"`), which hold transient back-references to
-sender-owned state:
-
-- Initial: a codec rejects checkpointing when such a field is non-nil and the
-  type defines no explicit encoding. Fail loud; never drop.
-- Later: treat `Info` as derived wiring re-linked in the post-load phase by
-  matching message ID against the sender's checkpointed inflight table.
-  Per-component work, not a global registry concern.
-
-### Writer burden
-
-- Messages: many, user-defined → the one-line registration (or codegen) is the
-  only recurring tax, and only for non-quiescent checkpoints.
-- Events: few, mostly framework-provided → low burden.
-- Components, ports, connections, resources: zero registry, zero per-type
-  registration; they self-serialize in place.
-
-## Per-Entity Checkpointing
-
-### Ports
-
-Ports hold `messaging.Msg` values and have send/receive side effects, so they
-use a raw DTO:
-
-```go
-type PortCheckpoint struct {
-    Name             string         `json:"name"`
-    IncomingCapacity int            `json:"incoming_capacity"`
-    OutgoingCapacity int            `json:"outgoing_capacity"`
-    Incoming         []TypedPayload `json:"incoming"`
-    Outgoing         []TypedPayload `json:"outgoing"`
-}
-```
-
-Save snapshots buffer contents without popping. Load validates capacities against
-the rebuilt port, recreates buffers directly, preserves FIFO order, and defers
-all notifications to the post-load phase. The post-load phase schedules the same
-future work that was possible before checkpointing (incoming messages wake the
-owning component; outgoing messages wake the connection) — see Load Ordering for
-how this avoids double-scheduling.
-
-### Connections
-
-Topology is rebuilt by setup; connection runtime state is restored. Example:
-`DirectConnection` has a round-robin cursor (`NextPortID`) that affects delivery
-order. Switching-network endpoints and switches may have buffers/pipelines that
-are already component state but still need manifest coverage. Avoid saving a
-connection both as a component and as a separate runtime owner: each persistent
-runtime owner has exactly one manifest entry.
-
-### Engine
-
-The engine checkpoint includes current time, the primary and secondary event
-queues, and same-time ordering metadata. Initial support is `SerialEngine` only;
-parallel engines are rejected.
-
-Event queues currently order only by time, so deterministic replay needs a
-tie-breaker. Options:
-
-- Expose event IDs from `EventBase` via an optional interface and restore by
-  `(time, secondary, event_id)`.
-- Add an engine-local insertion sequence number and checkpoint it.
-
-Whichever is chosen, the **live engine must use the same deterministic ordering**
-so resume matches uninterrupted execution. The engine provides explicit
-snapshot/restore APIs rather than exposing queue internals, and load validates
-that every restored event has a registered handler.
-
-### Tick and Wakeup State
-
-Scheduled work must not be silently lost. For `modeling.TickScheduler`, the
-checkpoint needs handler ID, frequency, secondary-event mode, whether a tick is
-scheduled, and the scheduled tick time. For `modeling.EventDrivenComponent`,
-resetting the pending wakeup guard is not enough once the event queue is
-restored; the pending wakeup is restored or reconstructed from restored
-`TimerFiredEvent` entries. See Load Ordering for the single-source-of-truth rule.
-
-### Shared Resources
-
-Shared resources are non-timing program state referenced by multiple components.
-`mem.Storage` is one kind; the model also covers `vm.PageTable`, process
-metadata, allocator state, and loaded program metadata. The simulation package
-knows only the generic contract and does not import concrete resource packages;
-concrete packages adapt to it.
-
-The resource interface is the slim, access-side contract (serialization methods
-were removed with Phase B; each resource type defines its own serializer when
-Phase B is rebuilt — see below):
-
-```go
-type Resource interface {
-    Entity         // Name() string
-    Kind() string  // candidate for removal; slims toward just Entity
-    Identity() string
-}
-```
-
-The simulation keeps a global registry of resources and **owns** them; components
-hold references (see Component and Resource Model). `ResourceOwner` and the
-auto-registration through `RegisterComponent` are **dropped** — setup constructs
-each shared resource, names it canonically, and registers it once with
-`RegisterResource`. The saved unit is the shared resource, not the component
-field pointing to it.
-
-- `mem.Storage` stays binary (contents may be too large for JSON; the binary
-  format already captures capacity, unit size, and allocated units). Sort storage
-  map keys before writing for byte-for-byte reproducibility.
-- `vm.PageTable` uses an explicit JSON DTO, sorted by `(PID, VAddr)` for
-  deterministic files; rebuild internal maps/lists from the DTO on load.
+- Add a `messaging` codec registry for `messaging.Msg` values.
+- Encode messages as typed payloads:
 
   ```go
-  type PageTableCheckpoint struct {
-      Log2PageSize uint64    `json:"log2_page_size"`
-      Pages        []vm.Page `json:"pages"`
+  type TypedPayload struct {
+      Type    string          `json:"type"`
+      Payload json.RawMessage `json:"payload"`
   }
   ```
 
-Resource metadata (name, kind, payload path, format, kind-specific fields such as
-capacity/unit size, optional content hash) is JSON in the manifest. Compression
-and chunking can be reconsidered after the format stabilizes.
+- Use `%T`-derived keys for same-binary checkpoints. Messages are value types, so
+  register the value (`messaging.RegisterMsg(mem.ReadReq{})`); the codec
+  reconstructs the same value (or pointer) form from the tag.
+- Each message-defining package registers its types in an `init()` (see
+  `mem/msgcodec.go`). A forgotten registration fails loud at checkpoint time.
+- Because messages are now immutable value snapshots that no longer carry
+  task-ID fields, default JSON captures the whole message — the old concern about
+  in-transit metadata mutation or non-serializable task IDs no longer applies. A
+  transient `Info interface{}` field stays `json:"-"`; it is data-plane scratch
+  that is empty for a buffered message.
 
-## Save and Load Safety
+### 7. Port checkpointing
 
-### Save preconditions
+- Implement checkpoint support in `messaging.defaultPort`.
+- Save incoming and outgoing capacities plus buffer contents through the message
+  registry.
+- Restore buffers directly with `Buffer.Restore`, never `Send`/`Deliver` (which
+  now panic on overflow under the `CanSend`/`CanDeliver` convention) and never
+  `RetrieveIncoming`/`RetrieveOutgoing`. Restoring directly also fires no hooks
+  and notifies no connection.
+- A restored full outgoing buffer is consistent: on resume the owner's
+  `CanSend` check sees it full and retries, exactly as before the checkpoint.
+- Preserve FIFO order and validate `Src`/`Dst` names against rebuilt ports.
+- Leave hooks and connection/component pointers untouched; setup rebuilt them.
 
-Transparent non-quiescent checkpointing needs an atomic view of the simulator.
-The initial design requires:
+### 8. Event registry and serial engine snapshot
 
-- `SerialEngine` only.
-- Save only while the engine is stopped or paused outside an event handler.
-- No concurrent component, port, connection, or resource mutation during save.
-- A defined lock ordering for snapshot collection to avoid deadlock.
+- Add a `timing` event codec registry for `timing.Event` values.
+- Add built-in codecs for `modeling.TickEvent` and
+  `modeling.TimerFiredEvent`. Custom event producers register their event types.
+- Change live `SerialEngine` ordering to deterministic same-time ordering. The
+  cleanest path is to store an engine-local sequence number with each scheduled
+  event and order by `(time, sequence)` inside primary and secondary queues.
+- Save current time, primary queue, secondary queue, and next schedule sequence.
+- Restore queues without invoking handlers.
+- Validate each restored event's `HandlerID` against the rebuilt handler registry.
+- Reject `ParallelEngine` checkpoints.
 
-### Atomicity and packaging
+### 9. Tick scheduler and wakeup state
 
-The checkpoint is one `tar.gz` archive. A large simulation can have tens of
-thousands of entities (ports especially), so loose per-entity files create real
-inode/IO pressure; write entity payloads directly into the archive stream rather
-than materializing a directory and taring it afterward. Write
-`checkpoint.tar.gz.tmp` and rename on success for atomicity. Incompressible
-binary payloads (memory dumps) may be stored uncompressed to save CPU.
+- Add snapshot/restore methods for `modeling.TickScheduler` private fields:
+  handler ID, frequency, secondary mode, next tick time, and scheduled flag.
+- Ensure restored scheduler state matches restored queued tick events.
+- Remove any blanket reset behavior for full checkpoints; reset is only valid for
+  partial or phase-boundary restart modes.
 
-### Load ordering
+### 10. ID generator entity
 
-Save is a flat loop; load is staged because entities have inter-dependencies:
+- Save generator kind and next counter.
+- Restore before loading entities that may validate message/event IDs.
+- Reject parallel ID generator checkpoints unless deterministic semantics are
+  added.
 
-1. Validate the manifest and the `BuildID` equality check before mutating any
-   runtime state. A checkpoint from a different executable fails fast.
-2. Restore all raw state with no behavioral calls.
-3. Re-link references by name/ID (`Src`/`Dst`, `HandlerID`, `Info`) against the
-   entity map; an unresolved ID is a strict error.
-4. Run `AfterCheckpointLoad` for derived wiring, guards, and wakeups.
+### 11. Shared resources
 
-**Single source of truth for pending work.** The restored event queue,
-scheduler/wakeup guards, and port post-load notifications all describe future
-work and must not overlap. The restored event queue is authoritative;
-scheduler/wakeup guards are reconstructed to match it rather than re-scheduling,
-and port post-load notifications only fire for work the queue does not already
-represent. Nothing is double-scheduled or dropped.
+- Implement `mem.Storage` checkpointing as binary or binary-plus-metadata:
+  capacity, unit size, and allocated units. Sort unit addresses before writing.
+- Add validation for zero unit size and capacity bounds.
+- Implement `vm.PageTable` checkpointing with an explicit JSON DTO sorted by
+  `(PID, VAddr)`, then rebuild internal maps/lists on load.
+- Add resource-level spec/shape compatibility checks so rebuilt resources cannot
+  silently accept incompatible payloads.
 
-Parallel-engine checkpointing is rejected until deterministic queue capture,
-worker state, and concurrent mutation semantics are defined.
+### 12. Connections and network state
 
-## Migration Phases
+- Implement checkpoint methods for registered persistent connections.
+- `noc/directconnection` can serialize its embedded component state, especially
+  `State.NextPortID`, while treating the plug-in port list as rebuilt topology.
+- Add DTOs for switching endpoints/switches when runtime state is not already in
+  their component `State`.
+- Ensure every persistent connection has exactly one archive entry and is not
+  also saved as a separate component unless that is its registered runtime owner.
 
-The work splits into two phases with very different risk profiles. Phase A is a
-structural refactor whose oracle is "the simulation still runs bit-identically."
-Phase B is serialization, whose oracle is "resume equals uninterrupted
-execution." Phase A also ships value on its own (state inspection, monitoring,
-the `GetStateByName` backdoor), which makes the split low-regret.
+### 13. Load validation and post-load hooks
 
-Why non-quiescent is required, not optional: Akita is event-driven, so an empty
-event queue means the simulation is complete — there is no mid-run moment with an
-empty queue. Today's quiescent checkpoint only works because the driver
-re-injects the next kernel's events; that fails for a single multi-day kernel,
-whose pending ticks and timers *are* the simulation. Serializing the event queue
-is mandatory for any resume that is not "start the next kernel."
+- Add a load context (extending the `LoadCheckpoint` signature) with lookup by
+  entity name, port name, handler ID, message ID, and resource name.
+- Validate unresolved names/IDs as strict errors.
+- Run post-load hooks only after all raw state is loaded.
+- Use post-load hooks for consistency checks and derived caches, not for normal
+  scheduling.
 
-### Phase A — Global State Manager (no persistence)
-
-Make the entire mutable runtime state enumerable, named, classified, and
-reachable, without serializing anything yet.
-
-- Collapse the typed registries and the entity view into one entity inventory;
-  make the engine and the ID generator entities too (each a singleton with a
-  reserved name).
-- Define the `Entity` contract and `GetStateByName`. Reserve the
-  `SaveCheckpoint`/`LoadCheckpoint` method slots now (stubbed) so Phase B does not
-  force a contract rework; keep `GetStateByName` distinct from serialization.
-- Classify every component and middleware field with a checkpoint policy and add
-  field-shape validation. Use the exact tags Phase B consumes.
-- Move shared state (page tables, memory) into registered resources where it is
-  not already.
-- Lock in deterministic naming plus a regression test.
-- Add encoded archive entry names and add `BuildID` to the manifest (enforced on
-  load in Phase B).
-
-**Exit criterion:** every piece of mutable runtime state can be enumerated,
-named, classified, and reached; the simulation runs identically to before the
-refactor; nothing is serialized.
-
-### Phase B — Serialization
-
-Add persistence to the entities the state manager already exposes.
-
-1. **Component and shared-resource serialization** — implement the reserved
-   `SaveCheckpoint`/`LoadCheckpoint` slots; stop overwriting rebuilt specs
-   (compare spec/spec hash); keep `mem.Storage` binary; add `vm.PageTable` as a
-   JSON resource; enforce the `BuildID` check before mutating state.
-2. **Engine snapshot for `SerialEngine`** — save/restore time and both queues;
-   add deterministic same-time ordering (applied to the live engine too); add the
-   `timing` event-codec registry with built-in codecs; reject parallel engines.
-3. **Message registry and port buffers** — add the `messaging` message-codec
-   registry (`init()` registration, default JSON codec); save/restore port
-   buffers without side effects; reject non-nil non-serializable fields such as
-   `Info`.
-4. **Scheduler and wakeup state** — serialize or reconstruct `TickScheduler` and
-   event-driven pending wakeups; remove the blanket `ResetWakeup` for full
-   snapshots.
-5. **Connection runtime state** — register persistent connections; add DTOs;
-   exactly one manifest entry per runtime owner.
-6. **Load ordering** — implement the staged load and the single-source-of-truth
-   rule for pending work.
-7. **Full non-quiescent resume** — enforce save preconditions; compare
-   uninterrupted vs checkpoint/resume execution; treat missing/extra/unsupported
-   entries as errors.
-8. **Packaging and coverage** — `tar.gz` archive streaming with `.tmp`+rename;
-   more built-in codecs (consider `go:generate`); store incompressible payloads
-   uncompressed.
-9. **Deferred: parallel engine** — define deterministic queue capture and
-   worker-state semantics first.
-
-## Testing Plan
+### 14. Tests
 
 Unit tests:
 
-- Name-registry duplicate detection (including the first registered entry) and
-  deterministic name generation across repeated rebuilds.
-- `GetStateByName` resolution: hit, miss (clear error), and handle validity
-  across save/load (load mutates in place).
-- `BuildID` equality: matching build loads, mismatched build fails fast.
-- Archive round trip (pack/unpack `tar.gz`).
-- Manifest read/write, path encoding, strict validation; missing, extra,
-  duplicate, and unsupported entries.
-- Component DTO round trips; spec compatibility success and mismatch failure.
-- Shared-resource metadata, storage binary payload, and page-table JSON round
-  trips.
-- Component and middleware field-shape validation.
-- Port buffer round trips with multiple concrete message types.
-- Message/event codec rejection for unknown types and unsupported
-  non-serializable fields.
-- Event queue round trips (primary, secondary, same-time, tick, timer, custom).
-- Tick scheduler and event-driven wakeup restoration.
-- Connection runtime state round trips.
+- Entity-path escaping, sorted archive output, unknown-entry rejection, and
+  coverage checks (missing and extra entities).
+- Build ID success and mismatch failure.
+- Generic component state round trip and spec mismatch failure.
+- Event-driven component pending wakeup round trip.
+- Buffer and pipeline JSON round trips.
+- Message and event codec success, unknown type failure, and unsupported field
+  failure.
+- Port buffer round trips with multiple message types.
+- Serial engine event queue round trips, including same-time ordering and
+  secondary events.
+- Tick scheduler snapshot consistency.
+- ID generator round trip.
+- Storage and page-table resource round trips.
+- DirectConnection round-robin cursor round trip.
 
 Integration tests:
 
-- Keep the current quiescent save/load determinism test.
-- Non-quiescent checkpoint with messages in port buffers.
-- Pending ticks survive load; pending event-driven wakeups survive load.
-- Direct-connection round-robin cursor survives load.
-- Memory-hierarchy test comparing uninterrupted vs checkpoint/resume execution.
+- Keep a simple phase-boundary save/load test as a smoke test.
+- Checkpoint with non-empty port incoming and outgoing buffers.
+- Checkpoint with pending tick events and event-driven timer events.
+- Checkpoint with same-time primary and secondary events.
+- Checkpoint in the middle of a memory transaction and compare uninterrupted vs
+  resumed execution.
+- Checkpoint a memory hierarchy with registered storage and page table resources.
 
 Negative tests:
 
-- Missing component/port/connection/engine/id-generator/resource entry.
-- Unknown message type; unknown event type.
-- Rebuilt topology missing a saved port/component/connection.
-- Spec mismatch; `BuildID` mismatch.
-- Non-quiescent save on an unsupported parallel engine.
-- Checkpoint while a message has unsupported non-serializable fields.
+- Save while using `ParallelEngine`.
+- Load into missing or extra entities.
+- Load with mismatched topology, spec hash, resource shape, build ID, message
+  type, or event type.
+- Load with corrupted archive payloads.
+
+## Milestones
+
+Phase B progressed non-linearly — the foundation, the polymorphic codecs, and the
+queue machinery landed early to de-risk — so the original linear list no longer
+maps cleanly. This section records what is done and defines the milestones that
+remain.
+
+### Done
+
+- **Foundation**: the archive format (a build-id entry plus per-entity payloads,
+  no manifest), build identity, simulation `SaveCheckpoint`/`LoadCheckpoint`
+  orchestration, and saved-vs-rebuilt coverage validation.
+- **Quiescent serializers**: generic components (`State` + spec hash), the ID
+  generator, and `mem.Storage`, with strict spec/shape compatibility checks.
+- **Queues and polymorphism**: `queueing.Buffer`/`Pipeline` JSON, the
+  `messaging.Msg` and `timing.Event` codec registries, and non-empty port
+  buffers serialized through the message registry.
+- **Serial engine (partial)**: deterministic same-time event ordering by
+  `(time, sequence)`, and the serial-engine event-queue snapshot.
+- **Resume oracle (partial)**: a mid-transaction checkpoint/resume for a
+  port-less component (a pending tick in the queue) matches the uninterrupted
+  run.
+- **Scheduler and wakeup consistency (Milestone A)**: after restore, each
+  component reconciles its scheduler/wakeup guard with the restored queue —
+  `timing.SerialEngine.NextEventTimeForHandler` reports the earliest scheduled
+  event for a handler, and `simulation.LoadCheckpoint` runs a post-load pass
+  calling `AfterCheckpointLoad`. `Component` derives its `TickScheduler` guard;
+  `EventDrivenComponent` (now itself checkpointable) derives `pendingWakeup` the
+  same way. Two regression tests assert no duplicate/missed tick or wakeup.
+- **Page table serializer**: `vm.PageTable` saves its shape (log2 page size)
+  plus, per process and sorted by PID, the pages in list order; load validates
+  the shape and rebuilds the per-process tables. The last quiescent resource.
+- **Mid-transaction resume oracle (Milestone B gate)**: a deterministic driver
+  and an ideal memory controller over a direct connection. `RunUntil` (a new
+  deterministic engine boundary) stops the source run with requests in flight;
+  a fresh sim loads the checkpoint and runs to completion with the same
+  reads-verified count, no data mismatch, and the same end time as an
+  uninterrupted reference. This exercises non-empty port buffers, the
+  controller's in-flight transactions, pending primary/secondary ticks, the
+  `directconnection` round-robin cursor, and the Milestone A guard derivation
+  together — proving the *direct*-connection path end-to-end. (Switched networks
+  built via `networkconnector` are a separate, still-open gap — see below.)
+  Tracing is off (its task-ID side-table consumes the global ID generator).
+- **Hardening (Milestone C)**: negative tests (corrupted/truncated archive,
+  saved-not-rebuilt entity; spec-hash / build-id / shape mismatch and unknown
+  codec tags were already covered); focused connection and switch round-trip
+  tests; and a multi-boundary determinism regression (seven boundaries across
+  both phases all resume identically). Auditing the NoC for checkpoint surfaced
+  and fixed a real bug — the switch's round-robin arbitration cursor lived on a
+  middleware, not in `State`, so it was not checkpointed; it now round-trips.
+  The checkpoint/resume contract and the "all runtime state in `State`" rule are
+  documented in `simulation/README.md`.
+
+**The Phase B core is complete**: a simulation can be checkpointed mid-transaction
+and resumed deterministically, validated by an oracle across many boundaries, with
+hardening and docs in place.
+
+### Remaining (optional)
+
+**B (stretch). Hierarchy resume oracle** — *done.* The full virtualmem assembly
+(address translator → write-through L1 → write-back L2 → ideal controller, with a
+TLB → L2TLB → MMU → page-table translation path over 7 connections) is
+checkpointed mid-transaction and resumed deterministically across many
+boundaries, driven by a deterministic generator in place of the RNG-based
+`MemAccessAgent` (`mem/acceptancetests/virtualmemcheckpoint`). As anticipated, it
+surfaced a real hidden-state bug: `lruset.Set` (the LRU used by the TLB and
+mmuCache) had only unexported fields and no JSON methods, so it serialized as an
+empty object — a restored TLB had an empty visit list and crashed on the first
+eviction (`failed to evict`). Fixed by adding round-trip JSON to `lruset.Set`.
+This validates the `vm.PageTable` serializer and the cache/TLB/MMU/AT state in a
+live assembly.
+
+**C (stretch). Switched-network checkpoint coverage**
+- Known gap (raised in PR review): networks built via `networkconnector` are
+  **outside the checkpoint inventory**. The connector registers components only
+  with its monitor (`engineRegistrar.RegisterComponent` is a no-op), and the
+  network ports that hold in-flight flits are added *after* construction
+  (endpoint `NetworkPort` via `SetNetworkPort`; switch ports via
+  `SwitchPortAdder.AddPort`) without being registered as entities. A checkpoint
+  taken with a flit in one of those buffers silently drops it. The archive is
+  entity-only, so closing this means registering the connector's components,
+  connections, and dynamically-added ports with the simulation. The focused
+  switch test round-trips the arbitration cursor, but a full network (endpoints
+  + routing + flit traffic) resume oracle is needed to prove the path the way
+  the memory oracle proves the controller.
+- Built-in message coverage: `mem` and `mem/vm` protocol messages now register
+  themselves for port serialization; a sweep of the remaining message-defining
+  packages (so any port that can hold them round-trips) belongs with the
+  hierarchy/network oracles.
 
 ## Open Questions
 
-- Should strict load allow an opt-in mode that ignores extra checkpoint entries?
-- Which runtime owners may declare external continuation inputs (e.g. RNG seed)
-  instead of checkpointing internal state? (Note: the default of not restoring
-  RNG state is in tension with the runtime-state rule of thumb; revisit.)
-- What exactly constitutes `BuildID`, and how is it computed deterministically?
-- Should the post-load `Info` re-link (per-component, by message ID) ship in the
-  initial non-quiescent milestone, or stay deferred behind reject-if-non-nil?
-- In the v5 component model, are ports a declared part of a component (alongside
-  Spec/State/Resources/Middlewares) or do they remain a builder/setup concern?
+- Should `simulation` expose a read-only public entity inventory, or should
+  checkpointing remain an internal `Simulation` capability?
+- Should message/event codec keys always be `%T`, or should packages be able to
+  opt into explicit stable names for readability?
+- How strict should post-load pending-work validation be for components that
+  intentionally leave messages buffered without a scheduled tick?
+- Is build identity based only on VCS/build info enough, or should it also include
+  a hash of registered checkpoint codec keys?
 
-## Resolved Decisions
-
-- No cross-version migration; checkpoints are consumed by the same executable,
-  enforced by a `BuildID` equality check that fails loudly on mismatch.
-- The artifact is a single `tar.gz`, not a directory of loose files.
-- The simulation is a global state manager: one uniform entity store, typed
-  registration at the boundary, and a deliberate `GetStateByName` backdoor;
-  breaking encapsulation through it is accepted.
-- Polymorphic decode uses constructor registries only for transient interface
-  values setup does not rebuild: messages (registry in `messaging`) and events
-  (registry in `timing`). Setup-rebuilt objects self-load in place. Registration
-  is `init()`-based with a default JSON codec and `%T`-derived keys; unknown type
-  tags are hard errors.
-- The work proceeds as Phase A (global state manager) then Phase B
-  (serialization).
-- Phase A (global state manager) is implemented; Phase B serialization code was
-  removed so the codebase represents only Phase A. Phase B will be rebuilt fresh.
-- v5 component model: a component is `Component[Spec, State, Resources]` with a
-  mandatory third type parameter (`modeling.None` when unused). The simulation
-  owns shared resources; components hold references; `ResourceOwner` is dropped.
-  Users define Spec/State/Resources/Middlewares with no per-component wrapper
-  struct. (See Component and Resource Model.)
+(The earlier question about non-nil `Info` / per-component relinking by message
+ID is resolved: messages are now immutable value snapshots that carry no
+task-ID fields, so a buffered message round-trips completely and needs no
+relinking.)
 
 ## Recommendation
 
-Do Phase A first as a self-contained milestone: a structural refactor with a
-simple oracle (the simulation still runs identically) that ships value on its own
-through state inspection and the `GetStateByName` backdoor. Its product is a
-runtime whose entire mutable state is enumerable, named, and classified.
-
-Then do Phase B, treating event queues, port buffers, scheduler state, connection
-state, and load ordering as one coordinated non-quiescent milestone, since they
-depend on each other for correct resume. Shape Phase A's entity contract around
-Phase B's known requirements so the split stays clean rather than speculative.
+Start Phase B with the foundation and quiescent-state milestones, but design every
+interface around non-quiescent restore from day one. The hard part is not JSON;
+the hard part is making event queues, port buffers, scheduler guards, connection
+state, and shared resources agree about the same future. Keep the event queue
+authoritative, make all unsupported cases fail loudly, and use the
+uninterrupted-vs-resumed tests as the merge gate for full support.

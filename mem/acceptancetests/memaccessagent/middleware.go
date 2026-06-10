@@ -4,8 +4,7 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/sarchlab/akita/v5/mem"
-
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -48,7 +47,7 @@ func (m *agentMiddleware) processMsgRsp() bool {
 	state := &m.agent.State
 
 	switch msg := msgI.(type) {
-	case mem.WriteDoneRsp:
+	case memprotocol.WriteDoneRsp:
 		if dumpLog {
 			write := state.PendingWriteReq[msg.RspTo]
 			log.Printf("%d, agent, write complete, 0x%X\n",
@@ -64,7 +63,7 @@ func (m *agentMiddleware) processMsgRsp() bool {
 		}
 
 		return true
-	case mem.DataReadyRsp:
+	case memprotocol.DataReadyRsp:
 		req := state.PendingReadReq[msg.RspTo]
 
 		if dumpLog {
@@ -90,8 +89,8 @@ func (m *agentMiddleware) processMsgRsp() bool {
 }
 
 func (m *agentMiddleware) checkReadResult(
-	read mem.ReadReq,
-	dataReady mem.DataReadyRsp,
+	read memprotocol.ReadReq,
+	dataReady memprotocol.DataReadyRsp,
 	state *State,
 ) {
 	found := false
@@ -166,7 +165,7 @@ func (m *agentMiddleware) doRead() bool {
 		return false
 	}
 
-	readReq := mem.ReadReq{}
+	readReq := memprotocol.ReadReq{}
 	readReq.ID = timing.GetIDGenerator().Generate()
 	readReq.Src = m.memPort().AsRemote()
 	readReq.Dst = m.agent.LowModule.AsRemote()
@@ -174,7 +173,7 @@ func (m *agentMiddleware) doRead() bool {
 	readReq.AccessByteSize = 4
 	readReq.PID = 1
 	readReq.TrafficBytes = 12
-	readReq.TrafficClass = "mem.ReadReq"
+	readReq.TrafficClass = "memprotocol.ReadReq"
 
 	if !m.memPort().CanSend() {
 		return false
@@ -249,7 +248,7 @@ func (m *agentMiddleware) doWrite() bool {
 	}
 
 	writeData := uint32ToBytes(data)
-	writeReq := mem.WriteReq{}
+	writeReq := memprotocol.WriteReq{}
 	writeReq.ID = timing.GetIDGenerator().Generate()
 	writeReq.Src = m.memPort().AsRemote()
 	writeReq.Dst = m.agent.LowModule.AsRemote()
@@ -257,7 +256,7 @@ func (m *agentMiddleware) doWrite() bool {
 	writeReq.PID = 1
 	writeReq.Data = writeData
 	writeReq.TrafficBytes = len(writeData) + 12
-	writeReq.TrafficClass = "mem.WriteReq"
+	writeReq.TrafficClass = "memprotocol.WriteReq"
 
 	if !m.memPort().CanSend() {
 		return false

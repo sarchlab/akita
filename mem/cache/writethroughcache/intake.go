@@ -4,8 +4,7 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/sarchlab/akita/v5/mem"
-
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -63,7 +62,7 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 
 	var t transactionState
 	switch m := msg.(type) {
-	case mem.ReadReq:
+	case memprotocol.ReadReq:
 		t = transactionState{
 			ID:                 timing.GetIDGenerator().Generate(),
 			HasRead:            true,
@@ -80,7 +79,7 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 			What:     "read",
 			Location: s.cache.comp.Name() + ".Local",
 		})
-	case mem.WriteReq:
+	case memprotocol.WriteReq:
 		t = transactionState{
 			ID:             timing.GetIDGenerator().Generate(),
 			HasWrite:       true,

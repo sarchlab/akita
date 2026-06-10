@@ -16,6 +16,7 @@ import (
 type PortOwnerBase struct {
 	declared map[string]struct{}
 	groups   map[string][]Port
+	roles    map[string][]*Role
 	ports    map[string]Port
 }
 
@@ -24,14 +25,17 @@ func NewPortOwnerBase() *PortOwnerBase {
 	return &PortOwnerBase{
 		declared: make(map[string]struct{}),
 		groups:   make(map[string][]Port),
+		roles:    make(map[string][]*Role),
 		ports:    make(map[string]Port),
 	}
 }
 
 // DeclarePort declares that the component has a port with the given logical
-// name. The instance is supplied later with AssignPort. It panics if the name
-// is already declared.
-func (po *PortOwnerBase) DeclarePort(name string) {
+// name, optionally binding the protocol role(s) the port speaks (more than one
+// when the port multiplexes protocols). The instance is supplied later with
+// AssignPort. It panics if the name is already declared. A port declared with
+// no role is untyped; PortRoles reports nil for it.
+func (po *PortOwnerBase) DeclarePort(name string, roles ...*Role) {
 	if _, found := po.declared[name]; found {
 		panic(fmt.Sprintf("port %q already declared", name))
 	}
@@ -41,13 +45,15 @@ func (po *PortOwnerBase) DeclarePort(name string) {
 	}
 
 	po.declared[name] = struct{}{}
+	po.roles[name] = roles
 }
 
 // DeclarePortGroup declares that the component has a dynamically-sized group of
 // ports under the given name (e.g. a switch with an arbitrary number of links).
-// Members are added with AssignPortToGroup and keyed "name[0]", "name[1]", ...
+// All members of the group speak the given role(s). Members are added with
+// AssignPortToGroup and keyed "name[0]", "name[1]", ...
 // It panics if the name is already declared as a port or a group.
-func (po *PortOwnerBase) DeclarePortGroup(name string) {
+func (po *PortOwnerBase) DeclarePortGroup(name string, roles ...*Role) {
 	if _, found := po.declared[name]; found {
 		panic(fmt.Sprintf("%q is already declared as a port", name))
 	}
@@ -57,6 +63,22 @@ func (po *PortOwnerBase) DeclarePortGroup(name string) {
 	}
 
 	po.groups[name] = nil
+	po.roles[name] = roles
+}
+
+// PortRoles returns the protocol roles bound to the named port or port group
+// when it was declared, in declaration order. It returns nil for an untyped
+// port. It panics if the name is neither a declared port nor a port group.
+func (po PortOwnerBase) PortRoles(name string) []*Role {
+	_, isPort := po.declared[name]
+	_, isGroup := po.groups[name]
+
+	if !isPort && !isGroup {
+		panic(fmt.Sprintf(
+			"port or port group %q is not declared by this component", name))
+	}
+
+	return po.roles[name]
 }
 
 // AssignPortToGroup appends a port instance to a previously declared port group

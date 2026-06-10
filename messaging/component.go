@@ -9,7 +9,7 @@ import (
 // A component declares the ports it has with DeclarePort and receives their
 // instances externally through AssignPort.
 type PortOwner interface {
-	DeclarePort(name string)
+	DeclarePort(name string, roles ...*Role)
 	AssignPort(name string, port Port)
 	GetPortByName(name string) Port
 	Ports() []Port

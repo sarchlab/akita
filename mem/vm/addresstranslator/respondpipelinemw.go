@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
-	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/timing"
@@ -37,7 +37,7 @@ func (m *respondPipelineMW) translationPort() messaging.Port {
 // transactions; draining and enabled agents do, so a Drain can
 // converge.
 func (m *respondPipelineMW) Tick() bool {
-	if m.comp.State.ControlState == control.StatePaused {
+	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
 
@@ -62,7 +62,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 		return false
 	}
 
-	rsp := rspI.(vm.TranslationRsp)
+	rsp := rspI.(vmprotocol.TranslationRsp)
 	nextState := &m.comp.State
 	transIdx := findTransactionByReqID(nextState.Transactions, rsp.RspTo)
 
@@ -126,7 +126,7 @@ func (m *respondPipelineMW) traceTranslationComplete(
 		What:   "translation",
 	})
 
-	fakeTransReq := vm.TranslationReq{
+	fakeTransReq := vmprotocol.TranslationReq{
 		MsgMeta: messaging.MsgMeta{
 			ID:  trans.TranslationReqID,
 			Src: trans.TranslationReqSrc,
@@ -155,18 +155,18 @@ func (m *respondPipelineMW) respond() bool {
 	reqInBottom := false
 
 	switch rsp := rspI.(type) {
-	case mem.DataReadyRsp:
+	case memprotocol.DataReadyRsp:
 		reqInBottom = isReqInBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 		if reqInBottom {
 			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
-			rspToTop = mem.DataReadyRsp{
+			rspToTop = memprotocol.DataReadyRsp{
 				MsgMeta: messaging.MsgMeta{
 					ID:           timing.GetIDGenerator().Generate(),
 					Src:          m.topPort().AsRemote(),
 					Dst:          reqFromTopState.ReqFromTopSrc,
 					RspTo:        reqFromTopState.ReqFromTopID,
 					TrafficBytes: len(rsp.Data) + 4,
-					TrafficClass: "mem.DataReadyRsp",
+					TrafficClass: "memprotocol.DataReadyRsp",
 				},
 				Data: rsp.Data,
 			}
@@ -182,18 +182,18 @@ func (m *respondPipelineMW) respond() bool {
 				What:   "data",
 			})
 		}
-	case mem.WriteDoneRsp:
+	case memprotocol.WriteDoneRsp:
 		reqInBottom = isReqInBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 		if reqInBottom {
 			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
-			rspToTop = mem.WriteDoneRsp{
+			rspToTop = memprotocol.WriteDoneRsp{
 				MsgMeta: messaging.MsgMeta{
 					ID:           timing.GetIDGenerator().Generate(),
 					Src:          m.topPort().AsRemote(),
 					Dst:          reqFromTopState.ReqFromTopSrc,
 					RspTo:        reqFromTopState.ReqFromTopID,
 					TrafficBytes: 4,
-					TrafficClass: "mem.WriteDoneRsp",
+					TrafficClass: "memprotocol.WriteDoneRsp",
 				},
 			}
 

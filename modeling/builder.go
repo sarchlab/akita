@@ -47,6 +47,8 @@ func (b Builder[S, T, R]) WithResources(resources R) Builder[S, T, R] {
 
 // Build creates the Component with the given name.
 func (b Builder[S, T, R]) Build(name string) *Component[S, T, R] {
+	validateForCheckpoint[S, T](name, b.spec)
+
 	comp := &Component[S, T, R]{
 		spec:      b.spec,
 		resources: b.resources,

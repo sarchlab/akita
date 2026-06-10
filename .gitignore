@@ -57,6 +57,7 @@ __debug_bin*
 /pcie_p2p
 /pcie_random
 /three_agent_one_switch
+/checkpointdemo
 
 # Mock files
 mock_*_test.go

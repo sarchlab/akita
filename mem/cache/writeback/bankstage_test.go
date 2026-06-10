@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -23,7 +24,7 @@ var _ = Describe("Bank Stage", func() {
 	// fillTop pre-fills topPort's single outgoing slot so the next CanSend
 	// returns false, simulating a busy port.
 	fillTop := func() {
-		dummy := mem.DataReadyRsp{}
+		dummy := memprotocol.DataReadyRsp{}
 		dummy.Src = topPort.AsRemote()
 		dummy.Dst = messaging.RemotePort("SomeSrc")
 		dummy.TrafficClass = "rsp"
@@ -103,13 +104,13 @@ var _ = Describe("Bank Stage", func() {
 
 			storage.Write(0x40, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 
-			read := mem.ReadReq{}
+			read := memprotocol.ReadReq{}
 			read.ID = timing.GetIDGenerator().Generate()
 			read.Src = messaging.RemotePort("Agent")
 			read.Address = 0x104
 			read.AccessByteSize = 4
 			read.TrafficBytes = 12
-			read.TrafficClass = "mem.ReadReq"
+			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				HasRead:            true,
 				ReadMeta:           read.MsgMeta,
@@ -149,7 +150,7 @@ var _ = Describe("Bank Stage", func() {
 			Expect(next.BankInflightTransCounts[0]).To(Equal(0))
 
 			out := topPort.RetrieveOutgoing()
-			dr := out.(mem.DataReadyRsp)
+			dr := out.(memprotocol.DataReadyRsp)
 			Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 		})
 	})
@@ -162,13 +163,13 @@ var _ = Describe("Bank Stage", func() {
 			block.ReadCount = 1
 			block.IsLocked = true
 
-			write := mem.WriteReq{}
+			write := memprotocol.WriteReq{}
 			write.ID = timing.GetIDGenerator().Generate()
 			write.Src = messaging.RemotePort("Agent")
 			write.Address = 0x104
 			write.Data = []byte{5, 6, 7, 8}
 			write.TrafficBytes = len([]byte{5, 6, 7, 8}) + 12
-			write.TrafficClass = "mem.WriteReq"
+			write.TrafficClass = "memprotocol.WriteReq"
 			trans := transactionState{
 				HasWrite:     true,
 				WriteMeta:    write.MsgMeta,

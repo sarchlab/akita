@@ -3,9 +3,9 @@ package mmuCache
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -58,29 +58,29 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 	})
 
 	It("should restart and drain ports", func() {
-		req := mem.ControlReq{Command: mem.CmdReset}
+		req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
-		req.TrafficClass = "mem.ControlReq"
+		req.TrafficClass = "memcontrolprotocol.Req"
 
-		topMsg := vm.TranslationReq{}
+		topMsg := vmprotocol.TranslationReq{}
 		topMsg.ID = timing.GetIDGenerator().Generate()
 		topMsg.Src = messaging.RemotePort("Requester")
 		topMsg.Dst = topPort.AsRemote()
 		topMsg.PID = 1
 		topMsg.VAddr = 0x1000
 		topMsg.DeviceID = 1
-		topMsg.TrafficClass = "vm.TranslationReq"
+		topMsg.TrafficClass = "vmprotocol.TranslationReq"
 		topPort.Deliver(topMsg)
 
-		bottomMsg := vm.TranslationRsp{
+		bottomMsg := vmprotocol.TranslationRsp{
 			Page: vm.Page{},
 		}
 		bottomMsg.ID = timing.GetIDGenerator().Generate()
 		bottomMsg.Src = messaging.RemotePort("LowModule")
 		bottomMsg.Dst = bottomPort.AsRemote()
 		bottomMsg.RspTo = timing.GetIDGenerator().Generate()
-		bottomMsg.TrafficClass = "vm.TranslationRsp"
+		bottomMsg.TrafficClass = "vmprotocol.TranslationRsp"
 		bottomPort.Deliver(bottomMsg)
 
 		madeProgress := ctrl.handleReset(req)
@@ -92,28 +92,28 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		Expect(bottomPort.PeekIncoming()).To(BeNil())
 
 		rsp := controlPort.RetrieveOutgoing()
-		ctrlRsp, ok := rsp.(mem.ControlRsp)
+		ctrlRsp, ok := rsp.(memcontrolprotocol.Rsp)
 		Expect(ok).To(BeTrue())
-		Expect(ctrlRsp.Command).To(Equal(mem.CmdReset))
+		Expect(ctrlRsp.Command).To(Equal(memcontrolprotocol.CmdReset))
 		Expect(ctrlRsp.Success).To(BeTrue())
 		Expect(ctrlRsp.Dst).To(Equal(messaging.RemotePort("Requester")))
 		Expect(ctrlRsp.Src).To(Equal(controlPort.AsRemote()))
 	})
 
 	It("should reject Flush as unsupported", func() {
-		req := mem.ControlReq{Command: mem.CmdFlush}
+		req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = controlPort.AsRemote()
-		req.TrafficClass = "mem.ControlReq"
+		req.TrafficClass = "memcontrolprotocol.Req"
 		controlPort.Deliver(req)
 
 		Expect(ctrl.handleIncomingCommands()).To(BeTrue())
 
-		rsp := controlPort.RetrieveOutgoing().(mem.ControlRsp)
-		Expect(rsp.Command).To(Equal(mem.CmdFlush))
+		rsp := controlPort.RetrieveOutgoing().(memcontrolprotocol.Rsp)
+		Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdFlush))
 		Expect(rsp.Success).To(BeFalse())
-		Expect(rsp.Error).To(Equal(control.ErrUnsupported))
+		Expect(rsp.Error).To(Equal(memcontrolprotocol.ErrUnsupported))
 	})
 
 	It("should invalidate cached segments when paused", func() {
@@ -131,11 +131,11 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		_, found := setLookup(&next.Table[0], pid, seg)
 		Expect(found).To(BeTrue())
 
-		req := mem.ControlReq{Command: mem.CmdInvalidate}
+		req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = controlPort.AsRemote()
-		req.TrafficClass = "mem.ControlReq"
+		req.TrafficClass = "memcontrolprotocol.Req"
 		controlPort.Deliver(req)
 
 		Expect(ctrl.handleIncomingCommands()).To(BeTrue())
@@ -143,8 +143,8 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		_, found = setLookup(&next.Table[0], pid, seg)
 		Expect(found).To(BeFalse())
 
-		rsp := controlPort.RetrieveOutgoing().(mem.ControlRsp)
-		Expect(rsp.Command).To(Equal(mem.CmdInvalidate))
+		rsp := controlPort.RetrieveOutgoing().(memcontrolprotocol.Rsp)
+		Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
 		Expect(rsp.Success).To(BeTrue())
 	})
 
@@ -152,19 +152,19 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		next := &comp.State
 		next.CurrentState = mmuCacheStateEnable
 
-		req := mem.ControlReq{Command: mem.CmdInvalidate}
+		req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = controlPort.AsRemote()
-		req.TrafficClass = "mem.ControlReq"
+		req.TrafficClass = "memcontrolprotocol.Req"
 		controlPort.Deliver(req)
 
 		Expect(ctrl.handleIncomingCommands()).To(BeTrue())
 
-		rsp := controlPort.RetrieveOutgoing().(mem.ControlRsp)
-		Expect(rsp.Command).To(Equal(mem.CmdInvalidate))
+		rsp := controlPort.RetrieveOutgoing().(memcontrolprotocol.Rsp)
+		Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
 		Expect(rsp.Success).To(BeFalse())
-		Expect(rsp.Error).To(Equal(control.ErrMustBePausedOrDrained))
+		Expect(rsp.Error).To(Equal(memcontrolprotocol.ErrMustBePausedOrDrained))
 	})
 
 	It("invalidates only entries matching the PID filter", func() {
@@ -200,11 +200,11 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		setUpdate(&next.Table[0], 1, vm.PID(2), segB)
 		setVisit(&next.Table[0], 1)
 
-		req := mem.ControlReq{Command: mem.CmdInvalidate, PID: 1}
+		req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate, PID: 1}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = control2.AsRemote()
-		req.TrafficClass = "mem.ControlReq"
+		req.TrafficClass = "memcontrolprotocol.Req"
 		control2.Deliver(req)
 
 		Expect(ctrl2.handleIncomingCommands()).To(BeTrue())
@@ -215,8 +215,8 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		_, foundB := setLookup(&next.Table[0], vm.PID(2), segB)
 		Expect(foundB).To(BeTrue())
 
-		rsp := control2.RetrieveOutgoing().(mem.ControlRsp)
-		Expect(rsp.Command).To(Equal(mem.CmdInvalidate))
+		rsp := control2.RetrieveOutgoing().(memcontrolprotocol.Rsp)
+		Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
 		Expect(rsp.Success).To(BeTrue())
 	})
 
@@ -227,14 +227,14 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 			Table:        initSets(spec.NumLevels, spec.NumBlocks),
 		}
 
-		msg := mem.ControlReq{
-			Command: mem.CmdPause,
+		msg := memcontrolprotocol.Req{
+			Command: memcontrolprotocol.CmdPause,
 		}
 		msg.ID = timing.GetIDGenerator().Generate()
 		msg.Src = messaging.RemotePort("Requester")
 		msg.Dst = controlPort.AsRemote()
 		msg.TrafficBytes = 4
-		msg.TrafficClass = "mem.ControlReq"
+		msg.TrafficClass = "memcontrolprotocol.Req"
 		controlPort.Deliver(msg)
 
 		madeProgress := ctrl.handleIncomingCommands()

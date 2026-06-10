@@ -8,7 +8,12 @@ buffer to another port's incoming buffer.
 ## Key Concepts
 
 - A **message** (`Msg`) is any value carrying a `*MsgMeta` with routing and
-  identification metadata.
+  identification metadata. Bare `MsgMeta` is the envelope, not a message — it
+  belongs to no protocol.
+- A **protocol** (`Protocol`) is a named set of message types organized into
+  **roles** (`Role`). Defining a protocol with `DefineProtocol` registers
+  every message type it carries with the checkpoint codec; ports declare the
+  role(s) they speak in `DeclarePort`.
 - A **port** is owned by a component and holds an incoming and an outgoing
   buffer. Components `Send`/`RetrieveIncoming` on their side; connections
   `Deliver`/`RetrieveOutgoing` on theirs.
@@ -40,6 +45,33 @@ type MsgMeta struct {
 
 Embed `MsgMeta` (or hold one) so a message satisfies `Msg`. `meta.IsRsp()`
 reports whether `RspTo` is set.
+
+**Checkpointing:** a message buffered in a port is serialized when the simulation
+is checkpointed, so each concrete message type must be registered. The
+recommended way is to declare the package's protocol once:
+
+```go
+var (
+    Protocol  = messaging.DefineProtocol("mem",
+        messaging.RoleDef{Name: "requester",
+            Sends: []messaging.Msg{ReadReq{}, WriteReq{}}},
+        messaging.RoleDef{Name: "responder",
+            Sends: []messaging.Msg{DataReadyRsp{}, WriteDoneRsp{}}},
+    )
+    Requester = Protocol.Role("requester")
+    Responder = Protocol.Role("responder")
+)
+```
+
+and bind ports to roles where they are declared:
+`comp.DeclarePort("Top", memprotocol.Responder)`. Each protocol lives in its
+own package (e.g. `mem/memprotocol`, `mem/memcontrolprotocol`, `mem/vm/vmprotocol`)
+that owns the message types and the protocol definition. A
+registration-coverage audit
+(`protocolaudit_test.go`) fails CI for any message type in the module that is
+not registered. `RegisterMsg(MyReq{})` in an `init()` remains as the low-level
+primitive (and `RegisterEvent` for events). No custom marshalling is needed.
+See [`doc/tutorial/checkpointing.md`](../doc/tutorial/checkpointing.md).
 
 ### Port
 
@@ -116,7 +148,7 @@ type Component interface {
 }
 
 type PortOwner interface {
-    DeclarePort(name string)
+    DeclarePort(name string, roles ...*Role)
     AssignPort(name string, port Port)
     GetPortByName(name string) Port
     Ports() []Port

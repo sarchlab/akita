@@ -4,7 +4,8 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -20,7 +21,7 @@ func (m *dispatchMW) topPort() messaging.Port {
 }
 
 func (m *dispatchMW) Tick() bool {
-	if m.comp.State.ControlState != control.StateEnabled {
+	if m.comp.State.ControlState != memcontrolprotocol.StateEnabled {
 		return false
 	}
 	return m.dispatchFromTopPort()
@@ -37,7 +38,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 			break
 		}
 
-		msg, ok := msgI.(mem.AccessReq)
+		msg, ok := msgI.(memprotocol.AccessReq)
 		if !ok {
 			log.Panicf("simplebankedmemory: unsupported message type %T", msgI)
 		}
@@ -75,12 +76,12 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 
 func (m *dispatchMW) msgToItem(msg messaging.Msg) bankPipelineItemState {
 	switch r := msg.(type) {
-	case mem.ReadReq:
+	case memprotocol.ReadReq:
 		return bankPipelineItemState{
 			IsRead:  true,
 			ReadMsg: r,
 		}
-	case mem.WriteReq:
+	case memprotocol.WriteReq:
 		return bankPipelineItemState{
 			IsRead:   false,
 			WriteMsg: r,

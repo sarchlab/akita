@@ -1,7 +1,7 @@
 package rob
 
 import (
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -53,10 +53,10 @@ type transactionState struct {
 
 // State contains mutable runtime data for a reorder buffer.
 type State struct {
-	Transactions  []transactionState   `json:"transactions"`
-	ControlState  control.State        `json:"control_state"`
-	CurrentCmdID  uint64               `json:"current_cmd_id"`
-	CurrentCmdSrc messaging.RemotePort `json:"current_cmd_src"`
+	Transactions  []transactionState       `json:"transactions"`
+	ControlState  memcontrolprotocol.State `json:"control_state"`
+	CurrentCmdID  uint64                   `json:"current_cmd_id"`
+	CurrentCmdSrc messaging.RemotePort     `json:"current_cmd_src"`
 }
 
 // Comp is a reorder buffer component.

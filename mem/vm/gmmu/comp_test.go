@@ -6,6 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -96,15 +97,15 @@ var _ = Describe("GMMU", func() {
 		(&noopConn{}).PlugIn(gmmuComp.GetPortByName("Control"))
 	}
 
-	makeTranslationReq := func(vAddr uint64) vm.TranslationReq {
-		req := vm.TranslationReq{}
+	makeTranslationReq := func(vAddr uint64) vmprotocol.TranslationReq {
+		req := vmprotocol.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = agentPort
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
 		req.VAddr = vAddr
 		req.DeviceID = 0
-		req.TrafficClass = "vm.TranslationReq"
+		req.TrafficClass = "vmprotocol.TranslationReq"
 		return req
 	}
 
@@ -154,7 +155,7 @@ var _ = Describe("GMMU", func() {
 
 			rspI := topPort.RetrieveOutgoing()
 			Expect(rspI).NotTo(BeNil())
-			rsp := rspI.(vm.TranslationRsp)
+			rsp := rspI.(vmprotocol.TranslationRsp)
 			Expect(rsp.Page).To(Equal(page))
 			Expect(rsp.Page.PID).To(Equal(vm.PID(1)))
 		})
@@ -179,7 +180,7 @@ var _ = Describe("GMMU", func() {
 
 			reqI := bottomPort.RetrieveOutgoing()
 			Expect(reqI).NotTo(BeNil())
-			req := reqI.(vm.TranslationReq)
+			req := reqI.(vmprotocol.TranslationReq)
 			Expect(req.Dst).To(Equal(lowModulePort))
 			Expect(req.VAddr).To(Equal(uint64(0x10000000)))
 		})
@@ -204,17 +205,17 @@ var _ = Describe("GMMU", func() {
 
 			reqI := bottomPort.RetrieveOutgoing()
 			Expect(reqI).NotTo(BeNil())
-			sentReqToBottom := reqI.(vm.TranslationReq)
+			sentReqToBottom := reqI.(vmprotocol.TranslationReq)
 
 			// Deliver the response from the bottom (remote page table).
-			rsp := vm.TranslationRsp{
+			rsp := vmprotocol.TranslationRsp{
 				Page: page,
 			}
 			rsp.ID = timing.GetIDGenerator().Generate()
 			rsp.Src = lowModulePort
 			rsp.Dst = bottomPort.AsRemote()
 			rsp.RspTo = sentReqToBottom.ID
-			rsp.TrafficClass = "vm.TranslationRsp"
+			rsp.TrafficClass = "vmprotocol.TranslationRsp"
 			bottomPort.Deliver(rsp)
 
 			// Tick: fetchFromBottom receives response, sends to top.
@@ -222,7 +223,7 @@ var _ = Describe("GMMU", func() {
 
 			rspToTopI := topPort.RetrieveOutgoing()
 			Expect(rspToTopI).NotTo(BeNil())
-			rspToTop := rspToTopI.(vm.TranslationRsp)
+			rspToTop := rspToTopI.(vmprotocol.TranslationRsp)
 			Expect(rspToTop.Page).To(Equal(page))
 			Expect(rspToTop.Page.PID).To(Equal(vm.PID(1)))
 		})

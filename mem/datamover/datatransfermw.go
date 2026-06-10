@@ -3,8 +3,8 @@ package datamover
 import (
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/timing"
@@ -87,7 +87,7 @@ func (m *dataTransferMW) findDstPort(addr uint64) messaging.RemotePort {
 // draining data movers continue to let the current transaction
 // complete so a drain can converge.
 func (m *dataTransferMW) Tick() bool {
-	if m.comp.State.ControlState == control.StatePaused {
+	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
 
@@ -124,7 +124,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 
 	srcP := m.srcPort()
 
-	req := mem.ReadReq{}
+	req := memprotocol.ReadReq{}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Address = addr
 	req.Src = srcP.AsRemote()
@@ -132,7 +132,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 	req.AccessByteSize = state.SrcByteGranularity
 	req.PID = 0
 	req.TrafficBytes = 12
-	req.TrafficClass = "mem.ReadReq"
+	req.TrafficClass = "memprotocol.ReadReq"
 
 	if !srcP.CanSend() {
 		return false
@@ -167,7 +167,7 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 		return false
 	}
 
-	rsp, ok := rspI.(mem.DataReadyRsp)
+	rsp, ok := rspI.(memprotocol.DataReadyRsp)
 	if !ok {
 		// it can be write done rsp if src and dst is the same side. So ignore.
 		return false
@@ -189,7 +189,7 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 	srcP.RetrieveIncoming()
 
 	// Create a temporary msg for tracing
-	traceReq := mem.ReadReq{}
+	traceReq := memprotocol.ReadReq{}
 	traceReq.ID = originalReq.ID
 	traceReq.Src = originalReq.Src
 	traceReq.Dst = originalReq.Dst
@@ -215,7 +215,7 @@ func (m *dataTransferMW) writeToDst() bool {
 
 	dstP := m.dstPort()
 
-	req := mem.WriteReq{}
+	req := memprotocol.WriteReq{}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Address = trans.NextWriteAddr
 	req.Data = data
@@ -223,7 +223,7 @@ func (m *dataTransferMW) writeToDst() bool {
 	req.Dst = m.findDstPort(trans.NextWriteAddr)
 	req.PID = 0
 	req.TrafficBytes = len(data) + 12
-	req.TrafficClass = "mem.WriteReq"
+	req.TrafficClass = "memprotocol.WriteReq"
 
 	if !dstP.CanSend() {
 		return false
@@ -260,7 +260,7 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 		return false
 	}
 
-	rsp, ok := rspI.(mem.WriteDoneRsp)
+	rsp, ok := rspI.(memprotocol.WriteDoneRsp)
 	if !ok {
 		return false
 	}
@@ -278,7 +278,7 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 	dstP.RetrieveIncoming()
 
 	// Create a temporary msg for tracing
-	traceReq := mem.WriteReq{}
+	traceReq := memprotocol.WriteReq{}
 	traceReq.ID = originalReq.ID
 	traceReq.Src = originalReq.Src
 	traceReq.Dst = originalReq.Dst

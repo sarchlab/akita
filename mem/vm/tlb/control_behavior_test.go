@@ -4,7 +4,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -17,7 +19,7 @@ import (
 //
 // The TLB is downstream-dependent: a lookup miss creates an MSHR entry and
 // forwards a request out the "Bottom" port; the request does not complete
-// until a matching vm.TranslationRsp is fed back on "Bottom". The Drain test
+// until a matching vmprotocol.TranslationRsp is fed back on "Bottom". The Drain test
 // below drives real completion through that handshake.
 var _ = Describe("TLB control behavior", func() {
 	var (
@@ -53,45 +55,45 @@ var _ = Describe("TLB control behavior", func() {
 		}
 	}
 
-	makeLookup := func(vAddr uint64) vm.TranslationReq {
-		req := vm.TranslationReq{}
+	makeLookup := func(vAddr uint64) vmprotocol.TranslationReq {
+		req := vmprotocol.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
 		req.VAddr = vAddr
 		req.DeviceID = 1
-		req.TrafficClass = "vm.TranslationReq"
+		req.TrafficClass = "vmprotocol.TranslationReq"
 		return req
 	}
 
-	makeCtrlReq := func(cmd mem.ControlCommand) mem.ControlReq {
-		req := mem.ControlReq{Command: cmd}
+	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
+		req := memcontrolprotocol.Req{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = controlPort.AsRemote()
-		req.TrafficClass = "mem.ControlReq"
+		req.TrafficClass = "memcontrolprotocol.Req"
 		return req
 	}
 
-	// makeBottomRsp builds the vm.TranslationRsp that retires the MSHR entry
+	// makeBottomRsp builds the vmprotocol.TranslationRsp that retires the MSHR entry
 	// for the forwarded bottom request. parseBottom matches the response to an
 	// MSHR entry by the resolved page's PID/VAddr, so those must equal the
 	// request's PID/VAddr; RspTo is set to the forwarded request's ID to mirror
 	// the real downstream handshake.
-	makeBottomRsp := func(req vm.TranslationReq) vm.TranslationRsp {
+	makeBottomRsp := func(req vmprotocol.TranslationReq) vmprotocol.TranslationRsp {
 		page := vm.Page{
 			PID:   req.PID,
 			VAddr: req.VAddr,
 			PAddr: req.VAddr + 0x10000,
 			Valid: true,
 		}
-		rsp := vm.TranslationRsp{Page: page}
+		rsp := vmprotocol.TranslationRsp{Page: page}
 		rsp.ID = timing.GetIDGenerator().Generate()
 		rsp.Src = remotePort
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = req.ID
-		rsp.TrafficClass = "vm.TranslationRsp"
+		rsp.TrafficClass = "vmprotocol.TranslationRsp"
 		return rsp
 	}
 
@@ -105,7 +107,7 @@ var _ = Describe("TLB control behavior", func() {
 
 		// Deliver N distinct-VAddr lookups that all miss (fresh TLB, distinct
 		// pages so each gets its own MSHR entry).
-		lookups := []vm.TranslationReq{
+		lookups := []vmprotocol.TranslationReq{
 			makeLookup(0x0),
 			makeLookup(0x1000),
 		}
@@ -115,7 +117,7 @@ var _ = Describe("TLB control behavior", func() {
 
 		// Tick until both misses are in flight: 2 MSHR entries created and 2
 		// requests forwarded out Bottom. Capture the forwarded request IDs.
-		var bottomReqs []vm.TranslationReq
+		var bottomReqs []vmprotocol.TranslationReq
 		for i := 0; i < 64 &&
 			(len(tlbComp.State.MSHREntries) < n || len(bottomReqs) < n); i++ {
 			tlbComp.Tick()
@@ -124,7 +126,7 @@ var _ = Describe("TLB control behavior", func() {
 				if out == nil {
 					break
 				}
-				bottomReqs = append(bottomReqs, out.(vm.TranslationReq))
+				bottomReqs = append(bottomReqs, out.(vmprotocol.TranslationReq))
 			}
 		}
 
@@ -134,17 +136,17 @@ var _ = Describe("TLB control behavior", func() {
 		Expect(mshrIsEmpty(tlbComp.State.MSHREntries)).To(BeFalse())
 
 		// Issue Drain.
-		drain := makeCtrlReq(mem.CmdDrain)
+		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		controlPort.Deliver(drain)
 
 		// Negative phase: without feeding responses, Drain must NOT complete.
-		var drainRsp mem.ControlRsp
+		var drainRsp memcontrolprotocol.Rsp
 		drainFound := false
 		for range 5 {
 			tlbComp.Tick()
 			if out := controlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(mem.ControlRsp); ok &&
-					rsp.Command == mem.CmdDrain {
+				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
 					drainFound = true
 				}
@@ -170,13 +172,13 @@ var _ = Describe("TLB control behavior", func() {
 				if out == nil {
 					break
 				}
-				if _, ok := out.(vm.TranslationRsp); ok {
+				if _, ok := out.(vmprotocol.TranslationRsp); ok {
 					completed++
 				}
 			}
 			if out := controlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(mem.ControlRsp); ok &&
-					rsp.Command == mem.CmdDrain {
+				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
 					drainFound = true
 				}
@@ -198,19 +200,19 @@ var _ = Describe("TLB control behavior", func() {
 	It("does not admit new Top traffic while draining", func() {
 		// Get a miss in flight so Drain has something to wait for.
 		topPort.Deliver(makeLookup(0x0))
-		var bottomReq vm.TranslationReq
+		var bottomReq vmprotocol.TranslationReq
 		got := false
 		for i := 0; i < 64 && !got; i++ {
 			tlbComp.Tick()
 			if out := bottomPort.RetrieveOutgoing(); out != nil {
-				bottomReq, got = out.(vm.TranslationReq)
+				bottomReq, got = out.(vmprotocol.TranslationReq)
 			}
 		}
 		Expect(got).To(BeTrue())
 		Expect(mshrIsEmpty(tlbComp.State.MSHREntries)).To(BeFalse())
 
 		// Drain, and let it take effect.
-		drain := makeCtrlReq(mem.CmdDrain)
+		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		controlPort.Deliver(drain)
 		for i := 0; i < 8 && tlbComp.State.TLBState != tlbStateDrain; i++ {
 			tlbComp.Tick()
@@ -240,8 +242,8 @@ var _ = Describe("TLB control behavior", func() {
 				}
 			}
 			if out := controlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(mem.ControlRsp); ok &&
-					rsp.Command == mem.CmdDrain {
+				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainFound = true
 				}
 			}
@@ -254,25 +256,25 @@ var _ = Describe("TLB control behavior", func() {
 	It("drops a stale bottom translation that arrives after Reset", func() {
 		// First lookup misses and forwards a bottom request (MSHR entry A).
 		topPort.Deliver(makeLookup(0x100))
-		var reqA vm.TranslationReq
+		var reqA vmprotocol.TranslationReq
 		gotA := false
 		for i := 0; i < 64 && !gotA; i++ {
 			tlbComp.Tick()
 			if out := bottomPort.RetrieveOutgoing(); out != nil {
-				reqA, gotA = out.(vm.TranslationReq)
+				reqA, gotA = out.(vmprotocol.TranslationReq)
 			}
 		}
 		Expect(gotA).To(BeTrue())
 
 		// Reset discards the outstanding walk and the TLB contents.
-		rst := makeCtrlReq(mem.CmdReset)
+		rst := makeCtrlReq(memcontrolprotocol.CmdReset)
 		controlPort.Deliver(rst)
 		acked := false
 		for i := 0; i < 64 && !acked; i++ {
 			tlbComp.Tick()
 			if out := controlPort.RetrieveOutgoing(); out != nil {
-				if r, ok := out.(mem.ControlRsp); ok &&
-					r.Command == mem.CmdReset {
+				if r, ok := out.(memcontrolprotocol.Rsp); ok &&
+					r.Command == memcontrolprotocol.CmdReset {
 					acked = true
 				}
 			}
@@ -282,12 +284,12 @@ var _ = Describe("TLB control behavior", func() {
 		// A new lookup for the SAME address misses and forwards a fresh bottom
 		// request (MSHR entry B) with a different ID.
 		topPort.Deliver(makeLookup(0x100))
-		var reqB vm.TranslationReq
+		var reqB vmprotocol.TranslationReq
 		gotB := false
 		for i := 0; i < 64 && !gotB; i++ {
 			tlbComp.Tick()
 			if out := bottomPort.RetrieveOutgoing(); out != nil {
-				reqB, gotB = out.(vm.TranslationReq)
+				reqB, gotB = out.(vmprotocol.TranslationReq)
 			}
 		}
 		Expect(gotB).To(BeTrue())
@@ -309,7 +311,7 @@ var _ = Describe("TLB control behavior", func() {
 		for i := 0; i < 64 && !answered; i++ {
 			tlbComp.Tick()
 			if out := topPort.RetrieveOutgoing(); out != nil {
-				if _, ok := out.(vm.TranslationRsp); ok {
+				if _, ok := out.(vmprotocol.TranslationRsp); ok {
 					answered = true
 				}
 			}
@@ -343,20 +345,20 @@ var _ = Describe("TLB control behavior", func() {
 
 			tlbComp.State.TLBState = startState
 
-			reset := makeCtrlReq(mem.CmdReset)
+			reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 			controlPort.Deliver(reset)
 
-			var rsp mem.ControlRsp
+			var rsp memcontrolprotocol.Rsp
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				tlbComp.Tick()
 				if out := controlPort.RetrieveOutgoing(); out != nil {
-					rsp, found = out.(mem.ControlRsp)
+					rsp, found = out.(memcontrolprotocol.Rsp)
 				}
 			}
 
 			Expect(found).To(BeTrue())
-			Expect(rsp.Command).To(Equal(mem.CmdReset))
+			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			// Reset is a hard reset: the in-flight MSHR entry is discarded
@@ -381,10 +383,10 @@ var _ = Describe("TLB control behavior", func() {
 		tlbComp.State.CurrentCmdID = 999
 		tlbComp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 
-		reset := makeCtrlReq(mem.CmdReset)
+		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		controlPort.Deliver(reset)
 
-		var rsps []mem.ControlRsp
+		var rsps []memcontrolprotocol.Rsp
 		for range 32 {
 			tlbComp.Tick()
 			for {
@@ -392,16 +394,16 @@ var _ = Describe("TLB control behavior", func() {
 				if out == nil {
 					break
 				}
-				if r, ok := out.(mem.ControlRsp); ok {
+				if r, ok := out.(memcontrolprotocol.Rsp); ok {
 					rsps = append(rsps, r)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+		Expect(rsps[0].Command).To(Equal(memcontrolprotocol.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+		Expect(rsps[1].Command).To(Equal(memcontrolprotocol.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(tlbComp.State.TLBState).To(Equal(tlbStateEnable))
 	})
