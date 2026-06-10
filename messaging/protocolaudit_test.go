@@ -21,7 +21,6 @@ import (
 	_ "github.com/sarchlab/akita/v5/mem/memprotocol"
 	_ "github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	_ "github.com/sarchlab/akita/v5/noc/acceptance"
-	_ "github.com/sarchlab/akita/v5/noc/networking/switching/endpointprotocol"
 	_ "github.com/sarchlab/akita/v5/noc/packetization"
 )
 

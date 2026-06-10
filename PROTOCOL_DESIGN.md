@@ -102,7 +102,6 @@ needs it (see below).
 - The same concrete message type listed in two roles of one protocol → panic
   ("every message is sent by exactly one role" is an invariant, not an
   assumption).
-- Bare `messaging.MsgMeta` in a `Sends` list → panic (see the MsgMeta ban).
 - A concrete type *may* belong to two different protocols; re-registration with
   the codec is harmless and the audit only needs membership in at least one.
 
@@ -147,8 +146,9 @@ The framework's protocol packages:
 - `mem/vm/vmprotocol` — `TranslationReq`/`TranslationRsp` (page-table types
   stay in `vm`).
 - `mem/datamoverprotocol` — `DataMoveRequest`/`DataMoveResponse`.
-- `noc/packetization` — already a pure protocol package (`Flit`).
-- `noc/networking/switching/endpointprotocol` — `AssembledMsg` delivery.
+- `noc/packetization` — already a pure protocol package; it owns both the
+  `link` role (`Flit`) and the `delivery` role (`AssembledMsg`, the
+  reassembled product of de-packetization).
 
 ## Bare MsgMeta belongs to no protocol (decision)
 
@@ -163,8 +163,9 @@ That design-level stance is sufficient; there is **no runtime enforcement** (no
   buffer would fail at load like any unregistered type.
 - The NoC endpoint gains a concrete wrapper type — `AssembledMsg
   {messaging.MsgMeta}` — delivered in place of the bare envelope, registered
-  through the endpoint's delivery protocol. Receivers under the traffic-only
-  network model only ever consumed `Meta()`, so behavior is unchanged. This
+  through the packetization protocol's delivery role. Receivers under the
+  traffic-only network model only ever consumed `Meta()`, so behavior is
+  unchanged. This
   replaces the earlier idea of a "base protocol" inside `messaging`, which
   would have grown `messaging`'s public surface and enshrined the envelope as
   legitimate traffic.
@@ -259,8 +260,9 @@ same binary via the build id.)
   (`mem/datamoverprotocol`) — each requester/responder.
 - **Transport**: `packetization` — single `link` role sending `Flit` (flits are
   symmetric link traffic).
-- **Endpoint delivery**: the `endpointprotocol.AssembledMsg` wrapper under a
-  single-role delivery protocol (replaces bare `MsgMeta`; see above).
+- **Endpoint delivery**: the `packetization.AssembledMsg` wrapper under the
+  packetization protocol's `delivery` role (replaces bare `MsgMeta`; see
+  above).
 - **Test harness**: `noc/acceptance.TrafficMsg` is defined in an importable
   non-test package, so it gets its own protocol — the harness dogfoods the
   convention instead of living on an allowlist.
@@ -306,7 +308,8 @@ same binary via the build id.)
 - Role-aware protocols; audit-only enforcement; design note first.
 - **Each protocol lives in its own distinctly-named package** that owns the
   message types and the definition (user decision): `memprotocol`,
-  `control`, `vmprotocol`, `datamoverprotocol`, `endpointprotocol`.
+  `control`, `vmprotocol`, `datamoverprotocol`, `packetization` (which owns
+  both the link and delivery roles of the transport).
 - Bare `MsgMeta` belongs to no protocol; **no runtime enforcement** (user
   decision) — the endpoint delivers a concrete `AssembledMsg` wrapper, and the
   audit lists `MsgMeta` as intentionally unregistered.

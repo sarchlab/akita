@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/noc/networking/switching/endpointprotocol"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 
 	"github.com/sarchlab/akita/v5/tracing"
@@ -144,7 +143,7 @@ func (m *incomingMW) tryDeliver() bool {
 			panic(fmt.Sprintf("no dst port found for %s", dst))
 		}
 
-		msg := endpointprotocol.AssembledMsg{MsgMeta: meta}
+		msg := packetization.AssembledMsg{MsgMeta: meta}
 
 		if !dstPort.CanDeliver() {
 			break
