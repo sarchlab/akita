@@ -2,8 +2,8 @@ package datamover
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -90,7 +90,7 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.DeclarePort("Top", datamoverprotocol.Responder)
 	modelComp.DeclarePort("Inside", memprotocol.Requester)
 	modelComp.DeclarePort("Outside", memprotocol.Requester)
-	modelComp.DeclarePort("Control", control.Responder)
+	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	b.registrar.RegisterComponent(modelComp)
 

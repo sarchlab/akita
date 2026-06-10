@@ -3,7 +3,7 @@ package mmuCache
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
@@ -181,14 +181,14 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		}
 
 		ctrl := &ctrlMiddleware{comp: comp}
-		req := control.Req{
-			Command:   control.CmdInvalidate,
+		req := memcontrolprotocol.Req{
+			Command:   memcontrolprotocol.CmdInvalidate,
 			Addresses: []uint64{dropAddr},
 		}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = controlPort.AsRemote()
-		req.TrafficClass = "control.Req"
+		req.TrafficClass = "memcontrolprotocol.Req"
 		controlPort.Deliver(req)
 
 		Expect(ctrl.handleIncomingCommands()).To(BeTrue())
@@ -204,8 +204,8 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		_, keepFound := setLookup(&next.Table[0], pid, keepSeg0)
 		Expect(keepFound).To(BeTrue())
 
-		sentRsp := controlPort.RetrieveOutgoing().(control.Rsp)
-		Expect(sentRsp.Command).To(Equal(control.CmdInvalidate))
+		sentRsp := controlPort.RetrieveOutgoing().(memcontrolprotocol.Rsp)
+		Expect(sentRsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
 		Expect(sentRsp.Success).To(BeTrue())
 		Expect(sentRsp.Dst).To(Equal(messaging.RemotePort("Requester")))
 		Expect(sentRsp.Src).To(Equal(controlPort.AsRemote()))

@@ -4,7 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -77,12 +77,12 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		return req
 	}
 
-	makeCtrlReq := func(cmd control.Command) control.Req {
-		req := control.Req{Command: cmd}
+	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
+		req := memcontrolprotocol.Req{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
-		req.TrafficClass = "control.Req"
+		req.TrafficClass = "memcontrolprotocol.Req"
 		return req
 	}
 
@@ -105,9 +105,9 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 	}
 
 	makeFilteredCtrlReq := func(
-		cmd control.Command,
+		cmd memcontrolprotocol.Command,
 		addresses []uint64,
-	) control.Req {
+	) memcontrolprotocol.Req {
 		req := makeCtrlReq(cmd)
 		req.Addresses = addresses
 		return req
@@ -173,7 +173,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		Expect(cacheIsQuiescent(&comp.State)).To(BeFalse())
 
 		// Issue Drain.
-		drain := makeCtrlReq(control.CmdDrain)
+		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		ctrlPort.Deliver(drain)
 
 		// Tick a small window WITHOUT answering Bottom. Drain must wait: no
@@ -181,8 +181,8 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		for range 5 {
 			comp.Tick()
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(control.Rsp); ok {
-					Expect(rsp.Command).ToNot(Equal(control.CmdDrain),
+				if rsp, ok := out.(memcontrolprotocol.Rsp); ok {
+					Expect(rsp.Command).ToNot(Equal(memcontrolprotocol.CmdDrain),
 						"Drain must not ack before in-flight misses finish")
 				}
 			}
@@ -198,7 +198,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		// Tick while counting completed Top responses and watching Control for
 		// the async Drain ack.
 		completed := 0
-		var drainRsp control.Rsp
+		var drainRsp memcontrolprotocol.Rsp
 		gotDrainRsp := false
 		for i := 0; i < 4096 && !gotDrainRsp; i++ {
 			comp.Tick()
@@ -212,8 +212,8 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 				}
 			}
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(control.Rsp); ok &&
-					rsp.Command == control.CmdDrain {
+				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
 					gotDrainRsp = true
 				}
@@ -235,7 +235,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		comp.State.HasProcessingFlush = true
 		comp.State.Transactions = []transactionState{{}}
 
-		pause := makeCtrlReq(control.CmdPause)
+		pause := makeCtrlReq(memcontrolprotocol.CmdPause)
 		ctrlPort.Deliver(pause)
 
 		// Control commands are serialized: while the flush is in progress the
@@ -279,20 +279,20 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 
 			comp.State.CacheState = int(startState)
 
-			reset := makeCtrlReq(control.CmdReset)
+			reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp control.Rsp
+			var rsp memcontrolprotocol.Rsp
 			gotRsp := false
 			for i := 0; i < 64 && !gotRsp; i++ {
 				comp.Tick()
 				if out := ctrlPort.RetrieveOutgoing(); out != nil {
-					rsp, gotRsp = out.(control.Rsp)
+					rsp, gotRsp = out.(memcontrolprotocol.Rsp)
 				}
 			}
 
 			Expect(gotRsp).To(BeTrue())
-			Expect(rsp.Command).To(Equal(control.CmdReset))
+			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			Expect(comp.State.Transactions).To(BeEmpty())
@@ -314,10 +314,10 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		comp.State.CurrentCmdID = 999
 		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 
-		reset := makeCtrlReq(control.CmdReset)
+		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		ctrlPort.Deliver(reset)
 
-		var rsps []control.Rsp
+		var rsps []memcontrolprotocol.Rsp
 		for range 16 {
 			comp.Tick()
 			for {
@@ -325,16 +325,16 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 				if out == nil {
 					break
 				}
-				if r, ok := out.(control.Rsp); ok {
+				if r, ok := out.(memcontrolprotocol.Rsp); ok {
 					rsps = append(rsps, r)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(control.CmdDrain))
+		Expect(rsps[0].Command).To(Equal(memcontrolprotocol.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(control.CmdReset))
+		Expect(rsps[1].Command).To(Equal(memcontrolprotocol.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(cacheState(comp.State.CacheState)).To(Equal(cacheStateRunning))
 	})
@@ -356,20 +356,20 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		// Pause: Invalidate is only legal once paused.
 		comp.State.CacheState = int(cacheStatePaused)
 
-		inv := makeFilteredCtrlReq(control.CmdInvalidate, []uint64{addrDrop})
+		inv := makeFilteredCtrlReq(memcontrolprotocol.CmdInvalidate, []uint64{addrDrop})
 		ctrlPort.Deliver(inv)
 
-		var rsp control.Rsp
+		var rsp memcontrolprotocol.Rsp
 		gotRsp := false
 		for i := 0; i < 64 && !gotRsp; i++ {
 			comp.Tick()
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				rsp, gotRsp = out.(control.Rsp)
+				rsp, gotRsp = out.(memcontrolprotocol.Rsp)
 			}
 		}
 
 		Expect(gotRsp).To(BeTrue())
-		Expect(rsp.Command).To(Equal(control.CmdInvalidate))
+		Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
 		Expect(rsp.Success).To(BeTrue())
 		Expect(rsp.RspTo).To(Equal(inv.ID))
 
@@ -393,22 +393,22 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 			Expect(cacheState(comp.State.CacheState)).
 				To(Equal(cacheStateRunning))
 
-			inv := makeCtrlReq(control.CmdInvalidate)
+			inv := makeCtrlReq(memcontrolprotocol.CmdInvalidate)
 			ctrlPort.Deliver(inv)
 
-			var rsp control.Rsp
+			var rsp memcontrolprotocol.Rsp
 			gotRsp := false
 			for i := 0; i < 64 && !gotRsp; i++ {
 				comp.Tick()
 				if out := ctrlPort.RetrieveOutgoing(); out != nil {
-					rsp, gotRsp = out.(control.Rsp)
+					rsp, gotRsp = out.(memcontrolprotocol.Rsp)
 				}
 			}
 
 			Expect(gotRsp).To(BeTrue())
-			Expect(rsp.Command).To(Equal(control.CmdInvalidate))
+			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
 			Expect(rsp.Success).To(BeFalse())
-			Expect(rsp.Error).To(Equal(control.ErrMustBePausedOrDrained))
+			Expect(rsp.Error).To(Equal(memcontrolprotocol.ErrMustBePausedOrDrained))
 
 			// The block is untouched because the verb was rejected.
 			Expect(comp.State.DirectoryState.Sets[0].Blocks[0].IsValid).
@@ -427,14 +427,14 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		// Pause so Flush is legal.
 		comp.State.CacheState = int(cacheStatePaused)
 
-		flush := makeFilteredCtrlReq(control.CmdFlush, []uint64{addrFlush})
+		flush := makeFilteredCtrlReq(memcontrolprotocol.CmdFlush, []uint64{addrFlush})
 		ctrlPort.Deliver(flush)
 
 		// Drive to completion, capturing every Bottom write-back and the
 		// async Flush ack. The lower memory must answer write-backs with a
 		// WriteDoneRsp or the flush never finishes.
 		botWrites := []memprotocol.WriteReq{}
-		var flushRsp control.Rsp
+		var flushRsp memcontrolprotocol.Rsp
 		gotFlushRsp := false
 		for i := 0; i < 4096 && !gotFlushRsp; i++ {
 			comp.Tick()
@@ -455,8 +455,8 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 				}
 			}
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if r, ok := out.(control.Rsp); ok &&
-					r.Command == control.CmdFlush {
+				if r, ok := out.(memcontrolprotocol.Rsp); ok &&
+					r.Command == memcontrolprotocol.CmdFlush {
 					flushRsp = r
 					gotFlushRsp = true
 				}

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -14,7 +14,7 @@ import (
 // the uniform control protocol. The component supports the four
 // universal verbs; Invalidate and Flush must return "unsupported".
 func TestControlContract(t *testing.T) {
-	build := func() *control.Harness {
+	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
 		storage := mem.NewStorage(1 * mem.MB)
 		spec := DefaultSpec()
@@ -38,7 +38,7 @@ func TestControlContract(t *testing.T) {
 		conn.PlugIn(comp.GetPortByName("Top"))
 		conn.PlugIn(ctrl)
 
-		return &control.Harness{
+		return &memcontrolprotocol.Harness{
 			Comp: comp,
 			Ctrl: ctrl,
 			IsQuiescent: func() bool {
@@ -47,9 +47,9 @@ func TestControlContract(t *testing.T) {
 		}
 	}
 
-	control.RunContract(t, "idealmemcontroller", build, control.Universal())
+	memcontrolprotocol.RunContract(t, "idealmemcontroller", build, memcontrolprotocol.Universal())
 }
 
 // Compile-time guard: the contract harness needs the component's Tick
-// to satisfy control.Controllable.
-var _ control.Controllable = (*Comp)(nil)
+// to satisfy memcontrolprotocol.Controllable.
+var _ memcontrolprotocol.Controllable = (*Comp)(nil)

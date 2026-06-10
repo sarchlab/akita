@@ -65,7 +65,7 @@ var (
 
 and bind ports to roles where they are declared:
 `comp.DeclarePort("Top", memprotocol.Responder)`. Each protocol lives in its
-own package (e.g. `mem/memprotocol`, `mem/control`, `mem/vm/vmprotocol`)
+own package (e.g. `mem/memprotocol`, `mem/memcontrolprotocol`, `mem/vm/vmprotocol`)
 that owns the message types and the protocol definition. A
 registration-coverage audit
 (`protocolaudit_test.go`) fails CI for any message type in the module that is

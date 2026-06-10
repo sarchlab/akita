@@ -1,7 +1,7 @@
 package gmmu
 
 import (
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -83,7 +83,7 @@ func (b Builder) Build(name string) *Comp {
 
 	modelComp.DeclarePort("Top", vmprotocol.Responder)
 	modelComp.DeclarePort("Bottom", vmprotocol.Requester)
-	modelComp.DeclarePort("Control", control.Responder)
+	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	cMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cMW)

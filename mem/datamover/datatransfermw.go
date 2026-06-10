@@ -3,7 +3,7 @@ package datamover
 import (
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -87,7 +87,7 @@ func (m *dataTransferMW) findDstPort(addr uint64) messaging.RemotePort {
 // draining data movers continue to let the current transaction
 // complete so a drain can converge.
 func (m *dataTransferMW) Tick() bool {
-	if m.comp.State.ControlState == control.StatePaused {
+	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
 

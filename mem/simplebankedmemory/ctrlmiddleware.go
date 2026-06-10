@@ -1,7 +1,7 @@
 package simplebankedmemory
 
 import (
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -25,7 +25,7 @@ func (m *ctrlMiddleware) Tick() bool {
 	// Control commands are processed serially: while an async verb (Drain) is
 	// in progress, the next command is not accepted — it stays queued on the
 	// Control port and is handled once the component settles.
-	if m.comp.State.ControlState != control.StateDraining {
+	if m.comp.State.ControlState != memcontrolprotocol.StateDraining {
 		madeProgress = m.handleIncoming() || madeProgress
 	}
 	return madeProgress
@@ -36,7 +36,7 @@ func (m *ctrlMiddleware) Tick() bool {
 // post-pipeline buffer is empty.
 func (m *ctrlMiddleware) completePendingDrain() bool {
 	state := &m.comp.State
-	if state.ControlState != control.StateDraining {
+	if state.ControlState != memcontrolprotocol.StateDraining {
 		return false
 	}
 
@@ -50,9 +50,9 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 		return false
 	}
 
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), control.CmdDrain,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdDrain,
 		state.CurrentCmdSrc, state.CurrentCmdID, true, ""))
-	state.ControlState = control.StatePaused
+	state.ControlState = memcontrolprotocol.StatePaused
 	return true
 }
 
@@ -66,51 +66,51 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 		return false
 	}
 
-	req, ok := msg.(control.Req)
+	req, ok := msg.(memcontrolprotocol.Req)
 	if !ok {
 		m.ctrlPort().RetrieveIncoming()
 		return true
 	}
 
 	switch req.Command {
-	case control.CmdPause:
+	case memcontrolprotocol.CmdPause:
 		return m.handlePause(req)
-	case control.CmdDrain:
+	case memcontrolprotocol.CmdDrain:
 		return m.handleDrain(req)
-	case control.CmdEnable:
+	case memcontrolprotocol.CmdEnable:
 		return m.handleEnable(req)
-	case control.CmdReset:
+	case memcontrolprotocol.CmdReset:
 		return m.handleReset(req)
 	default:
 		return m.handleUnsupported(req)
 	}
 }
 
-func (m *ctrlMiddleware) handlePause(req control.Req) bool {
+func (m *ctrlMiddleware) handlePause(req memcontrolprotocol.Req) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	m.comp.State.ControlState = control.StatePaused
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), control.CmdPause,
+	m.comp.State.ControlState = memcontrolprotocol.StatePaused
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdPause,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
-func (m *ctrlMiddleware) handleEnable(req control.Req) bool {
+func (m *ctrlMiddleware) handleEnable(req memcontrolprotocol.Req) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	m.comp.State.ControlState = control.StateEnabled
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), control.CmdEnable,
+	m.comp.State.ControlState = memcontrolprotocol.StateEnabled
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdEnable,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
-func (m *ctrlMiddleware) handleDrain(req control.Req) bool {
+func (m *ctrlMiddleware) handleDrain(req memcontrolprotocol.Req) bool {
 	state := &m.comp.State
-	state.ControlState = control.StateDraining
+	state.ControlState = memcontrolprotocol.StateDraining
 	state.CurrentCmdID = req.ID
 	state.CurrentCmdSrc = req.Src
 	m.ctrlPort().RetrieveIncoming()
@@ -119,7 +119,7 @@ func (m *ctrlMiddleware) handleDrain(req control.Req) bool {
 
 // handleReset rebuilds the bank pipelines back to freshly-built shape
 // and clears the Top port queue.
-func (m *ctrlMiddleware) handleReset(req control.Req) bool {
+func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
@@ -128,36 +128,36 @@ func (m *ctrlMiddleware) handleReset(req control.Req) bool {
 	state.Banks = buildInitialBanks(m.comp.Spec())
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
-	state.ControlState = control.StateEnabled
+	state.ControlState = memcontrolprotocol.StateEnabled
 
 	for m.topPort().RetrieveIncoming() != nil {
 	}
 
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), control.CmdReset,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdReset,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
-func (m *ctrlMiddleware) handleUnsupported(req control.Req) bool {
+func (m *ctrlMiddleware) handleUnsupported(req memcontrolprotocol.Req) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
 	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), req.Command,
-		req.Src, req.ID, false, control.ErrUnsupported))
+		req.Src, req.ID, false, memcontrolprotocol.ErrUnsupported))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
 func makeCtrlRsp(
 	port messaging.Port,
-	cmd control.Command,
+	cmd memcontrolprotocol.Command,
 	dst messaging.RemotePort,
 	rspTo uint64,
 	success bool,
 	errStr string,
-) control.Rsp {
-	rsp := control.Rsp{
+) memcontrolprotocol.Rsp {
+	rsp := memcontrolprotocol.Rsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,
@@ -166,6 +166,6 @@ func makeCtrlRsp(
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
-	rsp.TrafficClass = "control.Rsp"
+	rsp.TrafficClass = "memcontrolprotocol.Rsp"
 	return rsp
 }

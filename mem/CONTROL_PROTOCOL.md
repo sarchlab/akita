@@ -8,7 +8,7 @@ type on one well-known port.
 
 The protocol primitives live in `mem/protocol.go`. The reusable state
 enum, support matrix, and a `*testing.T` conformance harness live in
-`mem/control/` (see [`mem/control/README.md`](control/README.md)).
+`mem/memcontrolprotocol/` (see [`mem/memcontrolprotocol/README.md`](control/README.md)).
 
 Every memory agent implements its supported subset of the protocol. The
 support matrix and the [per-component behavior](#per-component-behavior)
@@ -17,8 +17,8 @@ below describe the implemented state.
 ## TL;DR
 
 - Every memory agent exposes a port named `Control`.
-- That port carries `control.Req` in and `control.Rsp` out (by
-  value, not pointers — handlers type-assert `msg.(control.Req)`).
+- That port carries `memcontrolprotocol.Req` in and `memcontrolprotocol.Rsp` out (by
+  value, not pointers — handlers type-assert `msg.(memcontrolprotocol.Req)`).
 - The request's `Command` field is one of six verbs.
 - The component runs the verb and replies on the same port.
 - Whether the reply is same-tick (sync) or whenever-the-work-finishes
@@ -70,24 +70,24 @@ The primitives compose. The protocol stays small.
 ## Conventions
 
 1. **One control port per component.** Every memory agent exposes a
-   port named `Control`. It carries `control.Req` in and
-   `control.Rsp` out (by value). Workload requests (reads, writes,
+   port named `Control`. It carries `memcontrolprotocol.Req` in and
+   `memcontrolprotocol.Rsp` out (by value). Workload requests (reads, writes,
    translations, data-move requests) use other ports (`Top`,
    `Bottom`, `Inside`, `Outside`, etc.), never `Control`.
 2. **One control state per component.** Every agent holds a
-   `control.State` value in its own state struct. Values are
+   `memcontrolprotocol.State` value in its own state struct. Values are
    `StateEnabled`, `StatePausing`, `StatePaused`, `StateDraining`,
    `StateFlushing`. Reset and Invalidate are operations within these
    states, not separate states; Reset always lands the component in
    `StateEnabled`.
 3. **Unsupported verbs always reply.** A component that does not
    implement a verb sends `Rsp{Command: <verb>, Success:
-   false, Error: control.ErrUnsupported}`. It never panics on a
+   false, Error: memcontrolprotocol.ErrUnsupported}`. It never panics on a
    well-formed verb.
 4. **Illegal-state verbs reply with a reason.** Invalidate and Flush
    require the component to be in `StatePaused` or `StateDraining`.
    Issuing them while `StateEnabled` returns `Success: false,
-   Error: control.ErrMustBePausedOrDrained`.
+   Error: memcontrolprotocol.ErrMustBePausedOrDrained`.
 5. **Control commands are processed serially.** A component handles one
    control command at a time, to completion, before it dequeues the next.
    While an async verb (Drain or Flush) is in progress the component does
@@ -132,8 +132,8 @@ type Rsp struct {
     messaging.MsgMeta
     Command Command
     Success bool
-    Error   string // Empty on success. control.ErrUnsupported or
-                   // control.ErrMustBePausedOrDrained on failure.
+    Error   string // Empty on success. memcontrolprotocol.ErrUnsupported or
+                   // memcontrolprotocol.ErrMustBePausedOrDrained on failure.
 }
 ```
 
@@ -162,14 +162,14 @@ does no work; **—** = unsupported (replies `Success: false,
 Error: "unsupported"`).
 
 The matrix corresponds directly to the `VerbSupport` each component
-declares to `control.RunContract`:
+declares to `memcontrolprotocol.RunContract`:
 
-- `cache/writeback`, `cache/writethroughcache` → `control.CacheLike()`
+- `cache/writeback`, `cache/writethroughcache` → `memcontrolprotocol.CacheLike()`
   (Universal + Invalidate + Flush).
-- `vm/tlb`, `vm/mmuCache` → `control.TranslationCacheLike()`
+- `vm/tlb`, `vm/mmuCache` → `memcontrolprotocol.TranslationCacheLike()`
   (Universal + Invalidate; Flush is **not** supported because
   translations are never dirty).
-- everyone else → `control.Universal()` (Pause, Drain, Enable, Reset).
+- everyone else → `memcontrolprotocol.Universal()` (Pause, Drain, Enable, Reset).
 
 `mshr` is not in the matrix — it is a substructure of a cache, not a
 component. Its state is part of the enclosing cache and is wiped by the
@@ -208,7 +208,7 @@ Error: "must be paused or drained"`.
 ### Memory controllers
 
 **`idealmemcontroller`** — `Universal`; state in `State.ControlState`
-(`control.State`).
+(`memcontrolprotocol.State`).
 - Drain acks once `len(State.InflightTransactions) == 0`.
 - Reset discards `InflightTransactions`.
 
@@ -302,26 +302,26 @@ pipeline.
 - Reset wipes the current transaction and the data buffer and drains the
   Top/Inside/Outside ports.
 
-## Helpers in `mem/control`
+## Helpers in `mem/memcontrolprotocol`
 
 ```go
-import "github.com/sarchlab/akita/v5/mem/control"
+import "github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 
 // State enum used by every component for its control bookkeeping.
-control.State            // StateEnabled, StatePausing, StatePaused, ...
+memcontrolprotocol.State            // StateEnabled, StatePausing, StatePaused, ...
 
 // Per-component declaration of which verbs are supported.
-control.VerbSupport{...}
-control.Universal()                  // {Pause, Drain, Enable, Reset}
-control.CacheLike()                  // Universal + Invalidate + Flush
-control.TranslationCacheLike()       // Universal + Invalidate
+memcontrolprotocol.VerbSupport{...}
+memcontrolprotocol.Universal()                  // {Pause, Drain, Enable, Reset}
+memcontrolprotocol.CacheLike()                  // Universal + Invalidate + Flush
+memcontrolprotocol.TranslationCacheLike()       // Universal + Invalidate
 
 // Verb classification.
-control.IsSyncVerb(control.CmdPause)     // true
+memcontrolprotocol.IsSyncVerb(memcontrolprotocol.CmdPause)     // true
 
 // Error string constants on Rsp.
-control.ErrUnsupported
-control.ErrMustBePausedOrDrained
+memcontrolprotocol.ErrUnsupported
+memcontrolprotocol.ErrMustBePausedOrDrained
 ```
 
 ## Implementing the protocol in a new component
@@ -338,20 +338,20 @@ control.ErrMustBePausedOrDrained
        WithSpec(modeling.PortSpec{BufSize: ctrlBufSize}).
        Build("Control"))
    ```
-2. Add a `control.State` field to the component's `State` struct so
+2. Add a `memcontrolprotocol.State` field to the component's `State` struct so
    the control bookkeeping is uniform and serializable.
 3. Add a control middleware that peeks the `Control` port, dispatches
    on `req.Command`, mutates `State.ControlState`, and sends the
    response per the sync/async timing rules.
 4. For any verb you do not implement, reply with
-   `Rsp{Success: false, Error: control.ErrUnsupported}`.
+   `Rsp{Success: false, Error: memcontrolprotocol.ErrUnsupported}`.
 5. Declare the component's support matrix via a `VerbSupport` helper
    (`Universal()`, `CacheLike()`, or a literal).
-6. Add one test that calls `control.RunContract`:
+6. Add one test that calls `memcontrolprotocol.RunContract`:
    ```go
    func TestControlContract(t *testing.T) {
-       control.RunContract(t, "mycomp", buildMyComp,
-           control.Universal())
+       memcontrolprotocol.RunContract(t, "mycomp", buildMyComp,
+           memcontrolprotocol.Universal())
    }
    ```
 7. Add component-specific behavior tests separately — the contract
@@ -361,14 +361,14 @@ control.ErrMustBePausedOrDrained
    dirty data, etc. Those are component-internal invariants and belong
    in the component's own test file.
 
-## Conformance harness: `control.RunContract`
+## Conformance harness: `memcontrolprotocol.RunContract`
 
 ```go
 func RunContract(
     t *testing.T,
     name string,
-    build control.BuildFunc, // func() *control.Harness
-    matrix control.VerbSupport,
+    build memcontrolprotocol.BuildFunc, // func() *memcontrolprotocol.Harness
+    matrix memcontrolprotocol.VerbSupport,
 )
 
 type Harness struct {
@@ -395,7 +395,7 @@ points at exactly which verb the component handles wrong.
 ## See also
 
 - `mem/protocol.go` — the request/response type definitions.
-- [`mem/control/README.md`](control/README.md) — the `control` package
+- [`mem/memcontrolprotocol/README.md`](control/README.md) — the `control` package
   overview (State, VerbSupport, errors, `RunContract`).
-- `mem/control/state.go` — `State` enum, `VerbSupport`, helpers.
-- `mem/control/contract.go` — the `RunContract` harness.
+- `mem/memcontrolprotocol/state.go` — `State` enum, `VerbSupport`, helpers.
+- `mem/memcontrolprotocol/contract.go` — the `RunContract` harness.

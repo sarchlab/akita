@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -21,7 +21,7 @@ func (m *dispatchMW) topPort() messaging.Port {
 }
 
 func (m *dispatchMW) Tick() bool {
-	if m.comp.State.ControlState != control.StateEnabled {
+	if m.comp.State.ControlState != memcontrolprotocol.StateEnabled {
 		return false
 	}
 	return m.dispatchFromTopPort()

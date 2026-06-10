@@ -5,7 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -111,7 +111,7 @@ func (b Builder) Build(name string) *Comp {
 
 	comp.DeclarePort("Top", memprotocol.Responder)
 	comp.DeclarePort("Bottom", memprotocol.Requester)
-	comp.DeclarePort("Control", control.Responder)
+	comp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	pmw := b.buildPipelineMW(comp, laneWidth)
 	cmw := b.buildControlMW(comp, pmw)

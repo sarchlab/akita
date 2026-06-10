@@ -1,8 +1,8 @@
-# mem/control
+# mem/memcontrolprotocol
 
 The protocol package for the uniform memory-agent control protocol. It
-defines the protocol (`control.Protocol` with requester/responder roles),
-its messages and verbs (`control.Req`, `control.Rsp`, `control.Command`),
+defines the protocol (`memcontrolprotocol.Protocol` with requester/responder roles),
+its messages and verbs (`memcontrolprotocol.Req`, `memcontrolprotocol.Rsp`, `memcontrolprotocol.Command`),
 the shared control-lifecycle types, and the conformance harness every
 memory agent and its tests share.
 
@@ -66,15 +66,15 @@ Each component package adds one test that builds the component and calls
 
 ```go
 func TestControlContract(t *testing.T) {
-    build := func() *control.Harness {
+    build := func() *memcontrolprotocol.Harness {
         comp := MakeBuilder(). /* ... */ .Build("MyComp")
-        return &control.Harness{
+        return &memcontrolprotocol.Harness{
             Comp: comp,
             Ctrl: comp.GetPortByName("Control"),
         }
     }
 
-    control.RunContract(t, "mycomp", build, control.Universal())
+    memcontrolprotocol.RunContract(t, "mycomp", build, memcontrolprotocol.Universal())
 }
 ```
 

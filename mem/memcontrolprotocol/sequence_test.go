@@ -1,11 +1,11 @@
-package control_test
+package memcontrolprotocol_test
 
 import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
@@ -30,30 +30,30 @@ func driveCtrl(
 	t *testing.T,
 	comp ticker,
 	ctrl messaging.Port,
-	cmd control.Command,
+	cmd memcontrolprotocol.Command,
 	addrs []uint64,
 	pid vm.PID,
-) control.Rsp {
+) memcontrolprotocol.Rsp {
 	t.Helper()
 
-	req := control.Req{Command: cmd, Addresses: addrs, PID: pid}
+	req := memcontrolprotocol.Req{Command: cmd, Addresses: addrs, PID: pid}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = messaging.RemotePort("Cmd")
 	req.Dst = ctrl.AsRemote()
-	req.TrafficClass = "control.Req"
+	req.TrafficClass = "memcontrolprotocol.Req"
 	ctrl.Deliver(req)
 
 	for range 256 {
 		comp.Tick()
 		if out := ctrl.RetrieveOutgoing(); out != nil {
-			if rsp, ok := out.(control.Rsp); ok && rsp.Command == cmd {
+			if rsp, ok := out.(memcontrolprotocol.Rsp); ok && rsp.Command == cmd {
 				return rsp
 			}
 		}
 	}
 
 	t.Fatalf("no ack received for %v", cmd)
-	return control.Rsp{}
+	return memcontrolprotocol.Rsp{}
 }
 
 // TestTLBSequence_PauseInvalidateEnable exercises the canonical TLB control
@@ -101,15 +101,15 @@ func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
 	}
 
 	// Pause -> Invalidate(0x1000) -> Enable.
-	if rsp := driveCtrl(t, comp, ctrl, control.CmdPause, nil, 0); !rsp.Success {
+	if rsp := driveCtrl(t, comp, ctrl, memcontrolprotocol.CmdPause, nil, 0); !rsp.Success {
 		t.Fatalf("Pause failed: %q", rsp.Error)
 	}
 	if rsp := driveCtrl(
-		t, comp, ctrl, control.CmdInvalidate, []uint64{0x1000}, pid,
+		t, comp, ctrl, memcontrolprotocol.CmdInvalidate, []uint64{0x1000}, pid,
 	); !rsp.Success {
 		t.Fatalf("Invalidate failed: %q", rsp.Error)
 	}
-	if rsp := driveCtrl(t, comp, ctrl, control.CmdEnable, nil, 0); !rsp.Success {
+	if rsp := driveCtrl(t, comp, ctrl, memcontrolprotocol.CmdEnable, nil, 0); !rsp.Success {
 		t.Fatalf("Enable failed: %q", rsp.Error)
 	}
 
@@ -215,7 +215,7 @@ func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
 	setB := installDirtyBlock(t, comp, storage, 0x40, 0xBB)
 
 	// 1. Drain: the cache holds no in-flight work, so it quiesces and acks.
-	if rsp := driveCtrl(t, comp, ctrl, control.CmdDrain, nil, 0); !rsp.Success {
+	if rsp := driveCtrl(t, comp, ctrl, memcontrolprotocol.CmdDrain, nil, 0); !rsp.Success {
 		t.Fatalf("Drain failed: %q", rsp.Error)
 	}
 
@@ -238,7 +238,7 @@ func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
 	}
 
 	// 3. Invalidate (no filter): every block is dropped, with no write-back.
-	if rsp := driveCtrl(t, comp, ctrl, control.CmdInvalidate, nil, 0); !rsp.Success {
+	if rsp := driveCtrl(t, comp, ctrl, memcontrolprotocol.CmdInvalidate, nil, 0); !rsp.Success {
 		t.Fatalf("Invalidate failed: %q", rsp.Error)
 	}
 	if comp.State.DirectoryState.Sets[setA].Blocks[0].IsValid ||
@@ -250,7 +250,7 @@ func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
 	}
 
 	// 4. Reset: back to a freshly-built shape (no in-flight transactions).
-	if rsp := driveCtrl(t, comp, ctrl, control.CmdReset, nil, 0); !rsp.Success {
+	if rsp := driveCtrl(t, comp, ctrl, memcontrolprotocol.CmdReset, nil, 0); !rsp.Success {
 		t.Fatalf("Reset failed: %q", rsp.Error)
 	}
 	if len(comp.State.Transactions) != 0 {
@@ -285,11 +285,11 @@ func driveFlushAll(
 ) map[byte]bool {
 	t.Helper()
 
-	flush := control.Req{Command: control.CmdFlush}
+	flush := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
 	flush.ID = timing.GetIDGenerator().Generate()
 	flush.Src = messaging.RemotePort("Cmd")
 	flush.Dst = ctrl.AsRemote()
-	flush.TrafficClass = "control.Req"
+	flush.TrafficClass = "memcontrolprotocol.Req"
 	ctrl.Deliver(flush)
 
 	writtenBack := map[byte]bool{}
@@ -297,8 +297,8 @@ func driveFlushAll(
 		comp.Tick()
 		answerWriteBacks(bottom, writtenBack)
 		if out := ctrl.RetrieveOutgoing(); out != nil {
-			rsp, ok := out.(control.Rsp)
-			if ok && rsp.Command == control.CmdFlush {
+			rsp, ok := out.(memcontrolprotocol.Rsp)
+			if ok && rsp.Command == memcontrolprotocol.CmdFlush {
 				if !rsp.Success {
 					t.Fatalf("Flush failed: %q", rsp.Error)
 				}

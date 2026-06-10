@@ -1,4 +1,4 @@
-// Package control is the protocol package for the uniform control protocol
+// Package memcontrolprotocol is the protocol package for the uniform control protocol
 // every memory agent in Akita speaks over its "Control" port. It defines the
 // protocol itself (Protocol, with Requester/Responder roles), its messages
 // (Req, Rsp) and verbs (Command, the Cmd* constants), the shared control
@@ -19,4 +19,4 @@
 //
 // See mem/CONTROL_PROTOCOL.md for the verb definitions, response timing,
 // support matrix, and per-component behavior.
-package control
+package memcontrolprotocol

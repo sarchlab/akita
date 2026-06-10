@@ -4,7 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
@@ -67,12 +67,12 @@ var _ = Describe("TLB control behavior", func() {
 		return req
 	}
 
-	makeCtrlReq := func(cmd control.Command) control.Req {
-		req := control.Req{Command: cmd}
+	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
+		req := memcontrolprotocol.Req{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = controlPort.AsRemote()
-		req.TrafficClass = "control.Req"
+		req.TrafficClass = "memcontrolprotocol.Req"
 		return req
 	}
 
@@ -136,17 +136,17 @@ var _ = Describe("TLB control behavior", func() {
 		Expect(mshrIsEmpty(tlbComp.State.MSHREntries)).To(BeFalse())
 
 		// Issue Drain.
-		drain := makeCtrlReq(control.CmdDrain)
+		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		controlPort.Deliver(drain)
 
 		// Negative phase: without feeding responses, Drain must NOT complete.
-		var drainRsp control.Rsp
+		var drainRsp memcontrolprotocol.Rsp
 		drainFound := false
 		for range 5 {
 			tlbComp.Tick()
 			if out := controlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(control.Rsp); ok &&
-					rsp.Command == control.CmdDrain {
+				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
 					drainFound = true
 				}
@@ -177,8 +177,8 @@ var _ = Describe("TLB control behavior", func() {
 				}
 			}
 			if out := controlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(control.Rsp); ok &&
-					rsp.Command == control.CmdDrain {
+				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
 					drainFound = true
 				}
@@ -212,7 +212,7 @@ var _ = Describe("TLB control behavior", func() {
 		Expect(mshrIsEmpty(tlbComp.State.MSHREntries)).To(BeFalse())
 
 		// Drain, and let it take effect.
-		drain := makeCtrlReq(control.CmdDrain)
+		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		controlPort.Deliver(drain)
 		for i := 0; i < 8 && tlbComp.State.TLBState != tlbStateDrain; i++ {
 			tlbComp.Tick()
@@ -242,8 +242,8 @@ var _ = Describe("TLB control behavior", func() {
 				}
 			}
 			if out := controlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(control.Rsp); ok &&
-					rsp.Command == control.CmdDrain {
+				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainFound = true
 				}
 			}
@@ -267,14 +267,14 @@ var _ = Describe("TLB control behavior", func() {
 		Expect(gotA).To(BeTrue())
 
 		// Reset discards the outstanding walk and the TLB contents.
-		rst := makeCtrlReq(control.CmdReset)
+		rst := makeCtrlReq(memcontrolprotocol.CmdReset)
 		controlPort.Deliver(rst)
 		acked := false
 		for i := 0; i < 64 && !acked; i++ {
 			tlbComp.Tick()
 			if out := controlPort.RetrieveOutgoing(); out != nil {
-				if r, ok := out.(control.Rsp); ok &&
-					r.Command == control.CmdReset {
+				if r, ok := out.(memcontrolprotocol.Rsp); ok &&
+					r.Command == memcontrolprotocol.CmdReset {
 					acked = true
 				}
 			}
@@ -345,20 +345,20 @@ var _ = Describe("TLB control behavior", func() {
 
 			tlbComp.State.TLBState = startState
 
-			reset := makeCtrlReq(control.CmdReset)
+			reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 			controlPort.Deliver(reset)
 
-			var rsp control.Rsp
+			var rsp memcontrolprotocol.Rsp
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				tlbComp.Tick()
 				if out := controlPort.RetrieveOutgoing(); out != nil {
-					rsp, found = out.(control.Rsp)
+					rsp, found = out.(memcontrolprotocol.Rsp)
 				}
 			}
 
 			Expect(found).To(BeTrue())
-			Expect(rsp.Command).To(Equal(control.CmdReset))
+			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			// Reset is a hard reset: the in-flight MSHR entry is discarded
@@ -383,10 +383,10 @@ var _ = Describe("TLB control behavior", func() {
 		tlbComp.State.CurrentCmdID = 999
 		tlbComp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 
-		reset := makeCtrlReq(control.CmdReset)
+		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		controlPort.Deliver(reset)
 
-		var rsps []control.Rsp
+		var rsps []memcontrolprotocol.Rsp
 		for range 32 {
 			tlbComp.Tick()
 			for {
@@ -394,16 +394,16 @@ var _ = Describe("TLB control behavior", func() {
 				if out == nil {
 					break
 				}
-				if r, ok := out.(control.Rsp); ok {
+				if r, ok := out.(memcontrolprotocol.Rsp); ok {
 					rsps = append(rsps, r)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(control.CmdDrain))
+		Expect(rsps[0].Command).To(Equal(memcontrolprotocol.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(control.CmdReset))
+		Expect(rsps[1].Command).To(Equal(memcontrolprotocol.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(tlbComp.State.TLBState).To(Equal(tlbStateEnable))
 	})

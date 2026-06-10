@@ -2,7 +2,7 @@ package simplebankedmemory
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
@@ -96,7 +96,7 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.AddMiddleware(dMW)
 
 	modelComp.DeclarePort("Top", memprotocol.Responder)
-	modelComp.DeclarePort("Control", control.Responder)
+	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	b.registrar.RegisterComponent(modelComp)
 

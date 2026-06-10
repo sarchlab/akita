@@ -4,7 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -50,12 +50,12 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		return makeReadReq(messaging.RemotePort("Agent"), topPort.AsRemote(), index)
 	}
 
-	makeCtrlReq := func(cmd control.Command) control.Req {
-		req := control.Req{Command: cmd}
+	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
+		req := memcontrolprotocol.Req{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
-		req.TrafficClass = "control.Req"
+		req.TrafficClass = "memcontrolprotocol.Req"
 		return req
 	}
 
@@ -87,11 +87,11 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		comp.Tick()
 		Expect(allBanksQuiescent()).To(BeFalse())
 
-		drain := makeCtrlReq(control.CmdDrain)
+		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		ctrlPort.Deliver(drain)
 
 		completed := 0
-		var drainRsp control.Rsp
+		var drainRsp memcontrolprotocol.Rsp
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
 			comp.Tick()
@@ -105,8 +105,8 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 				}
 			}
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(control.Rsp); ok &&
-					rsp.Command == control.CmdDrain {
+				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
 					drainFound = true
 				}
@@ -121,11 +121,11 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		// moment proves Drain did not ack early.
 		Expect(completed).To(Equal(n))
 		Expect(allBanksQuiescent()).To(BeTrue())
-		Expect(comp.State.ControlState).To(Equal(control.StatePaused))
+		Expect(comp.State.ControlState).To(Equal(memcontrolprotocol.StatePaused))
 	})
 
 	It("freezes incoming traffic while paused", func() {
-		comp.State.ControlState = control.StatePaused
+		comp.State.ControlState = memcontrolprotocol.StatePaused
 		topPort.Deliver(makeRead(0))
 
 		for range 5 {
@@ -140,7 +140,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 	})
 
 	DescribeTable("Reset wipes in-flight state from any control state",
-		func(startState control.State) {
+		func(startState memcontrolprotocol.State) {
 			topPort.Deliver(makeRead(0))
 			comp.Tick()
 			comp.Tick()
@@ -148,15 +148,15 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 
 			comp.State.ControlState = startState
 
-			reset := makeCtrlReq(control.CmdReset)
+			reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp control.Rsp
+			var rsp memcontrolprotocol.Rsp
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				comp.Tick()
 				if out := ctrlPort.RetrieveOutgoing(); out != nil {
-					if r, ok := out.(control.Rsp); ok {
+					if r, ok := out.(memcontrolprotocol.Rsp); ok {
 						rsp = r
 						found = true
 					}
@@ -164,12 +164,12 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 			}
 
 			Expect(found).To(BeTrue())
-			Expect(rsp.Command).To(Equal(control.CmdReset))
+			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			// Reset rebuilds the banks, so all in-flight work is gone.
 			Expect(allBanksQuiescent()).To(BeTrue())
-			Expect(comp.State.ControlState).To(Equal(control.StateEnabled))
+			Expect(comp.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 
 			// No leftover completion is produced from the wiped-out read.
 			completion := false
@@ -187,8 +187,8 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 			}
 			Expect(completion).To(BeFalse())
 		},
-		Entry("from Enabled", control.StateEnabled),
-		Entry("from Paused", control.StatePaused),
+		Entry("from Enabled", memcontrolprotocol.StateEnabled),
+		Entry("from Paused", memcontrolprotocol.StatePaused),
 		// The Draining case is covered separately by the test below, since
 		// control commands are serialized: a Reset queued while draining is
 		// serviced only after the pending Drain acks (no preemption).
@@ -199,14 +199,14 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		// acks the Drain. Control commands are serialized with no preemption,
 		// so a Reset queued behind the drain is serviced only after the Drain
 		// acks.
-		comp.State.ControlState = control.StateDraining
+		comp.State.ControlState = memcontrolprotocol.StateDraining
 		comp.State.CurrentCmdID = 999
 		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 
-		reset := makeCtrlReq(control.CmdReset)
+		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		ctrlPort.Deliver(reset)
 
-		var rsps []control.Rsp
+		var rsps []memcontrolprotocol.Rsp
 		for range 16 {
 			comp.Tick()
 			for {
@@ -214,17 +214,17 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 				if out == nil {
 					break
 				}
-				if r, ok := out.(control.Rsp); ok {
+				if r, ok := out.(memcontrolprotocol.Rsp); ok {
 					rsps = append(rsps, r)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(control.CmdDrain))
+		Expect(rsps[0].Command).To(Equal(memcontrolprotocol.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(control.CmdReset))
+		Expect(rsps[1].Command).To(Equal(memcontrolprotocol.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
-		Expect(comp.State.ControlState).To(Equal(control.StateEnabled))
+		Expect(comp.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 	})
 })

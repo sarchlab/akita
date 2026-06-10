@@ -1,7 +1,7 @@
 package dram
 
 import (
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -23,7 +23,7 @@ func (m *respondMW) topPort() messaging.Port {
 // in-flight transactions can finish and the drain can converge.
 func (m *respondMW) Tick() bool {
 	next := &m.comp.State
-	if next.ControlState == control.StatePaused {
+	if next.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
 	spec := m.comp.Spec()

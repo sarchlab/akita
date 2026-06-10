@@ -4,7 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/hooking"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -189,11 +189,11 @@ var _ = Describe("Reorder Buffer", func() {
 		})
 
 		It("panics on unsupported top-port traffic", func() {
-			req := control.Req{Command: control.CmdFlush}
+			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.Src = topRemote
 			req.Dst = topPort.AsRemote()
-			req.TrafficClass = "control.Req"
+			req.TrafficClass = "memcontrolprotocol.Req"
 			topPort.Deliver(req)
 
 			Expect(func() { rob.Tick() }).To(Panic())
@@ -240,11 +240,11 @@ var _ = Describe("Reorder Buffer", func() {
 		})
 
 		It("drops unsupported bottom-port traffic", func() {
-			req := control.Req{Command: control.CmdFlush}
+			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.Src = bottomUnitRemote
 			req.Dst = bottomPort.AsRemote()
-			req.TrafficClass = "control.Req"
+			req.TrafficClass = "memcontrolprotocol.Req"
 			bottomPort.Deliver(req)
 
 			progress := rob.Tick()
@@ -390,30 +390,30 @@ var _ = Describe("Reorder Buffer", func() {
 			bottomPort.RetrieveOutgoing()
 			Expect(rob.State.Transactions).To(HaveLen(1))
 
-			req := control.Req{
-				Command: control.CmdReset,
+			req := memcontrolprotocol.Req{
+				Command: memcontrolprotocol.CmdReset,
 			}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.Src = messaging.RemotePort("Cmd")
 			req.Dst = ctrlPort.AsRemote()
-			req.TrafficClass = "control.Req"
+			req.TrafficClass = "memcontrolprotocol.Req"
 			ctrlPort.Deliver(req)
 
 			rob.Tick()
 
 			Expect(rob.State.Transactions).To(BeEmpty())
-			Expect(rob.State.ControlState).To(Equal(control.StateEnabled))
+			Expect(rob.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 
 			ack := ctrlPort.RetrieveOutgoing()
-			Expect(ack).To(BeAssignableToTypeOf(control.Rsp{}))
-			rsp := ack.(control.Rsp)
-			Expect(rsp.Command).To(Equal(control.CmdReset))
+			Expect(ack).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
+			rsp := ack.(memcontrolprotocol.Rsp)
+			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(req.ID))
 		})
 
 		It("freezes the data pipeline while paused", func() {
-			rob.State.ControlState = control.StatePaused
+			rob.State.ControlState = memcontrolprotocol.StatePaused
 			topPort.Deliver(makeRead(0))
 
 			progress := rob.Tick()
@@ -424,7 +424,7 @@ var _ = Describe("Reorder Buffer", func() {
 		})
 
 		It("resumes on CmdEnable, draining incoming traffic", func() {
-			rob.State.ControlState = control.StatePaused
+			rob.State.ControlState = memcontrolprotocol.StatePaused
 
 			// Stale traffic that should be cleared on resume.
 			topPort.Deliver(makeRead(0))
@@ -436,30 +436,30 @@ var _ = Describe("Reorder Buffer", func() {
 			stray.TrafficClass = "memprotocol.DataReadyRsp"
 			bottomPort.Deliver(stray)
 
-			req := control.Req{Command: control.CmdEnable}
+			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdEnable}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.Src = messaging.RemotePort("Cmd")
 			req.Dst = ctrlPort.AsRemote()
-			req.TrafficClass = "control.Req"
+			req.TrafficClass = "memcontrolprotocol.Req"
 			ctrlPort.Deliver(req)
 
 			rob.Tick()
 
-			Expect(rob.State.ControlState).To(Equal(control.StateEnabled))
+			Expect(rob.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 			Expect(topPort.PeekIncoming()).To(BeNil())
 			Expect(bottomPort.PeekIncoming()).To(BeNil())
 
 			ack := ctrlPort.RetrieveOutgoing()
-			Expect(ack).To(BeAssignableToTypeOf(control.Rsp{}))
-			Expect(ack.(control.Rsp).Command).To(Equal(control.CmdEnable))
+			Expect(ack).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
+			Expect(ack.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdEnable))
 		})
 
-		makeCtrlReq := func(cmd control.Command) control.Req {
-			req := control.Req{Command: cmd}
+		makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
+			req := memcontrolprotocol.Req{Command: cmd}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.Src = messaging.RemotePort("Cmd")
 			req.Dst = ctrlPort.AsRemote()
-			req.TrafficClass = "control.Req"
+			req.TrafficClass = "memcontrolprotocol.Req"
 			return req
 		}
 
@@ -479,14 +479,14 @@ var _ = Describe("Reorder Buffer", func() {
 			for bottomPort.RetrieveOutgoing() != nil {
 			}
 
-			drain := makeCtrlReq(control.CmdDrain)
+			drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 			ctrlPort.Deliver(drain)
 
 			// While transactions are still in flight (no bottom responses
 			// fed yet), Drain must stay pending and emit no ack.
 			for range 5 {
 				rob.Tick()
-				Expect(rob.State.ControlState).To(Equal(control.StateDraining))
+				Expect(rob.State.ControlState).To(Equal(memcontrolprotocol.StateDraining))
 				Expect(ctrlPort.RetrieveOutgoing()).To(BeNil())
 			}
 			Expect(rob.State.Transactions).To(HaveLen(n))
@@ -503,7 +503,7 @@ var _ = Describe("Reorder Buffer", func() {
 			}
 
 			completed := 0
-			var drainRsp control.Rsp
+			var drainRsp memcontrolprotocol.Rsp
 			drainFound := false
 			for i := 0; i < 64 && !drainFound; i++ {
 				rob.Tick()
@@ -517,8 +517,8 @@ var _ = Describe("Reorder Buffer", func() {
 					}
 				}
 				if out := ctrlPort.RetrieveOutgoing(); out != nil {
-					if rsp, ok := out.(control.Rsp); ok &&
-						rsp.Command == control.CmdDrain {
+					if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+						rsp.Command == memcontrolprotocol.CmdDrain {
 						drainRsp = rsp
 						drainFound = true
 					}
@@ -531,38 +531,38 @@ var _ = Describe("Reorder Buffer", func() {
 			// All in-flight reads finished before the async Drain ack.
 			Expect(completed).To(Equal(n))
 			Expect(rob.State.Transactions).To(BeEmpty())
-			Expect(rob.State.ControlState).To(Equal(control.StatePaused))
+			Expect(rob.State.ControlState).To(Equal(memcontrolprotocol.StatePaused))
 		})
 
 		DescribeTable("Reset wipes in-flight transactions from any state",
-			func(startState control.State) {
+			func(startState memcontrolprotocol.State) {
 				topPort.Deliver(makeRead(0))
 				rob.Tick()
 				Expect(rob.State.Transactions).To(HaveLen(1))
 
 				rob.State.ControlState = startState
 
-				reset := makeCtrlReq(control.CmdReset)
+				reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 				ctrlPort.Deliver(reset)
 
-				var rsp control.Rsp
+				var rsp memcontrolprotocol.Rsp
 				found := false
 				for i := 0; i < 64 && !found; i++ {
 					rob.Tick()
 					if out := ctrlPort.RetrieveOutgoing(); out != nil {
-						rsp, found = out.(control.Rsp)
+						rsp, found = out.(memcontrolprotocol.Rsp)
 					}
 				}
 
 				Expect(found).To(BeTrue())
-				Expect(rsp.Command).To(Equal(control.CmdReset))
+				Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
 				Expect(rsp.Success).To(BeTrue())
 				Expect(rsp.RspTo).To(Equal(reset.ID))
 				Expect(rob.State.Transactions).To(BeEmpty())
-				Expect(rob.State.ControlState).To(Equal(control.StateEnabled))
+				Expect(rob.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 			},
-			Entry("from Enabled", control.StateEnabled),
-			Entry("from Paused", control.StatePaused),
+			Entry("from Enabled", memcontrolprotocol.StateEnabled),
+			Entry("from Paused", memcontrolprotocol.StatePaused),
 			// The draining case is covered separately by the test below, since
 			// control commands are serialized: a Reset queued behind an
 			// in-progress Drain is only serviced after the Drain acks.
@@ -573,15 +573,15 @@ var _ = Describe("Reorder Buffer", func() {
 			// completePendingDrain acks the Drain. Control commands are
 			// serialized with no preemption, so a Reset queued behind the
 			// drain is serviced only after the Drain acks.
-			rob.State.ControlState = control.StateDraining
+			rob.State.ControlState = memcontrolprotocol.StateDraining
 			rob.State.CurrentCmdID = 999
 			rob.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 			rob.State.Transactions = nil
 
-			reset := makeCtrlReq(control.CmdReset)
+			reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsps []control.Rsp
+			var rsps []memcontrolprotocol.Rsp
 			for range 16 {
 				rob.Tick()
 				for {
@@ -589,18 +589,18 @@ var _ = Describe("Reorder Buffer", func() {
 					if out == nil {
 						break
 					}
-					if r, ok := out.(control.Rsp); ok {
+					if r, ok := out.(memcontrolprotocol.Rsp); ok {
 						rsps = append(rsps, r)
 					}
 				}
 			}
 
 			Expect(rsps).To(HaveLen(2))
-			Expect(rsps[0].Command).To(Equal(control.CmdDrain))
+			Expect(rsps[0].Command).To(Equal(memcontrolprotocol.CmdDrain))
 			Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-			Expect(rsps[1].Command).To(Equal(control.CmdReset))
+			Expect(rsps[1].Command).To(Equal(memcontrolprotocol.CmdReset))
 			Expect(rsps[1].RspTo).To(Equal(reset.ID))
-			Expect(rob.State.ControlState).To(Equal(control.StateEnabled))
+			Expect(rob.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 		})
 	})
 })

@@ -1,4 +1,4 @@
-package control
+package memcontrolprotocol
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"

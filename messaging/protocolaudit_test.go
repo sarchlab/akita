@@ -16,8 +16,8 @@ import (
 	// message saying to add the import.
 	_ "github.com/sarchlab/akita/v5/examples/ping"
 	_ "github.com/sarchlab/akita/v5/examples/tickingping"
-	_ "github.com/sarchlab/akita/v5/mem/control"
 	_ "github.com/sarchlab/akita/v5/mem/datamoverprotocol"
+	_ "github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	_ "github.com/sarchlab/akita/v5/mem/memprotocol"
 	_ "github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	_ "github.com/sarchlab/akita/v5/noc/acceptance"

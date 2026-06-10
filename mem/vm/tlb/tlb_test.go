@@ -4,7 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
@@ -277,15 +277,15 @@ var _ = Describe("TLB", func() {
 			setUpdate(&next.Sets[0], 1, page)
 			setVisit(&next.Sets[0], 1)
 
-			invReq := control.Req{
-				Command:   control.CmdInvalidate,
+			invReq := memcontrolprotocol.Req{
+				Command:   memcontrolprotocol.CmdInvalidate,
 				Addresses: []uint64{0x1000},
 				PID:       1,
 			}
 			invReq.ID = timing.GetIDGenerator().Generate()
 			invReq.Src = messaging.RemotePort("Agent")
 			invReq.Dst = controlPort.AsRemote()
-			invReq.TrafficClass = "control.Req"
+			invReq.TrafficClass = "memcontrolprotocol.Req"
 
 			controlPort.Deliver(invReq)
 
@@ -296,9 +296,9 @@ var _ = Describe("TLB", func() {
 			Expect(found && gotPage.Valid).To(BeFalse())
 
 			rspMsg := controlPort.RetrieveOutgoing()
-			Expect(rspMsg).To(BeAssignableToTypeOf(control.Rsp{}))
-			rsp := rspMsg.(control.Rsp)
-			Expect(rsp.Command).To(Equal(control.CmdInvalidate))
+			Expect(rspMsg).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
+			rsp := rspMsg.(memcontrolprotocol.Rsp)
+			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
 			Expect(rsp.Success).To(BeTrue())
 		})
 
@@ -306,19 +306,19 @@ var _ = Describe("TLB", func() {
 			next := &tlbComp.State
 			next.TLBState = tlbStateEnable
 
-			invReq := control.Req{Command: control.CmdInvalidate}
+			invReq := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate}
 			invReq.ID = timing.GetIDGenerator().Generate()
 			invReq.Src = messaging.RemotePort("Agent")
 			invReq.Dst = controlPort.AsRemote()
-			invReq.TrafficClass = "control.Req"
+			invReq.TrafficClass = "memcontrolprotocol.Req"
 
 			controlPort.Deliver(invReq)
 			Expect(tlbCtrlMW.handleIncomingCommands()).To(BeTrue())
 
 			rspMsg := controlPort.RetrieveOutgoing()
-			rsp := rspMsg.(control.Rsp)
+			rsp := rspMsg.(memcontrolprotocol.Rsp)
 			Expect(rsp.Success).To(BeFalse())
-			Expect(rsp.Error).To(Equal(control.ErrMustBePausedOrDrained))
+			Expect(rsp.Error).To(Equal(memcontrolprotocol.ErrMustBePausedOrDrained))
 		})
 
 		It("invalidates only entries matching the PID filter", func() {
@@ -332,11 +332,11 @@ var _ = Describe("TLB", func() {
 			setUpdate(&next.Sets[0], 1, pageB)
 			setVisit(&next.Sets[0], 1)
 
-			invReq := control.Req{Command: control.CmdInvalidate, PID: 1}
+			invReq := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate, PID: 1}
 			invReq.ID = timing.GetIDGenerator().Generate()
 			invReq.Src = messaging.RemotePort("Agent")
 			invReq.Dst = controlPort.AsRemote()
-			invReq.TrafficClass = "control.Req"
+			invReq.TrafficClass = "memcontrolprotocol.Req"
 			controlPort.Deliver(invReq)
 
 			Expect(tlbCtrlMW.handleIncomingCommands()).To(BeTrue())
@@ -345,8 +345,8 @@ var _ = Describe("TLB", func() {
 			Expect(next.Sets[0].Blocks[0].Page.Valid).To(BeFalse())
 			Expect(next.Sets[0].Blocks[1].Page.Valid).To(BeTrue())
 
-			rsp := controlPort.RetrieveOutgoing().(control.Rsp)
-			Expect(rsp.Command).To(Equal(control.CmdInvalidate))
+			rsp := controlPort.RetrieveOutgoing().(memcontrolprotocol.Rsp)
+			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
 			Expect(rsp.Success).To(BeTrue())
 		})
 
@@ -356,11 +356,11 @@ var _ = Describe("TLB", func() {
 			setUpdate(&next.Sets[0], 0, page)
 			setVisit(&next.Sets[0], 0)
 
-			resetReq := control.Req{Command: control.CmdReset}
+			resetReq := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
 			resetReq.ID = timing.GetIDGenerator().Generate()
 			resetReq.Src = messaging.RemotePort("Agent")
 			resetReq.Dst = controlPort.AsRemote()
-			resetReq.TrafficClass = "control.Req"
+			resetReq.TrafficClass = "memcontrolprotocol.Req"
 			controlPort.Deliver(resetReq)
 
 			Expect(tlbCtrlMW.handleIncomingCommands()).To(BeTrue())
@@ -369,17 +369,17 @@ var _ = Describe("TLB", func() {
 			_, gotPage, found := setLookup(&next.Sets[0], 1, 0x1000)
 			Expect(found && gotPage.Valid).To(BeFalse())
 
-			rsp := controlPort.RetrieveOutgoing().(control.Rsp)
-			Expect(rsp.Command).To(Equal(control.CmdReset))
+			rsp := controlPort.RetrieveOutgoing().(memcontrolprotocol.Rsp)
+			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 		})
 
 		It("should handle restart request", func() {
-			restartReq := control.Req{Command: control.CmdReset}
+			restartReq := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
 			restartReq.ID = timing.GetIDGenerator().Generate()
 			restartReq.Src = messaging.RemotePort("Agent")
 			restartReq.Dst = controlPort.AsRemote()
-			restartReq.TrafficClass = "control.Req"
+			restartReq.TrafficClass = "memcontrolprotocol.Req"
 			controlPort.Deliver(restartReq)
 
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
@@ -387,20 +387,20 @@ var _ = Describe("TLB", func() {
 			Expect(madeProgress).To(BeTrue())
 
 			rsp := controlPort.RetrieveOutgoing()
-			Expect(rsp).To(BeAssignableToTypeOf(control.Rsp{}))
+			Expect(rsp).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
 		})
 	})
 
 	Context("other control signals", func() {
 		It("should handle pause ctrl msg", func() {
-			pauseMsg := control.Req{
-				Command: control.CmdPause,
+			pauseMsg := memcontrolprotocol.Req{
+				Command: memcontrolprotocol.CmdPause,
 			}
 			pauseMsg.ID = timing.GetIDGenerator().Generate()
 			pauseMsg.Src = messaging.RemotePort("Agent")
 			pauseMsg.Dst = controlPort.AsRemote()
 			pauseMsg.TrafficBytes = 4
-			pauseMsg.TrafficClass = "control.Req"
+			pauseMsg.TrafficClass = "memcontrolprotocol.Req"
 
 			controlPort.Deliver(pauseMsg)
 
@@ -412,14 +412,14 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should handle enable ctrl msg after pause", func() {
-			pause := control.Req{
-				Command: control.CmdPause,
+			pause := memcontrolprotocol.Req{
+				Command: memcontrolprotocol.CmdPause,
 			}
 			pause.ID = timing.GetIDGenerator().Generate()
 			pause.Src = messaging.RemotePort("Agent")
 			pause.Dst = controlPort.AsRemote()
 			pause.TrafficBytes = 4
-			pause.TrafficClass = "control.Req"
+			pause.TrafficClass = "memcontrolprotocol.Req"
 
 			controlPort.Deliver(pause)
 
@@ -432,16 +432,16 @@ var _ = Describe("TLB", func() {
 			// Drain the Pause ack so the next ack has room in the
 			// single-slot control port outgoing buffer.
 			Expect(controlPort.RetrieveOutgoing()).
-				To(BeAssignableToTypeOf(control.Rsp{}))
+				To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
 
-			enable := control.Req{
-				Command: control.CmdEnable,
+			enable := memcontrolprotocol.Req{
+				Command: memcontrolprotocol.CmdEnable,
 			}
 			enable.ID = timing.GetIDGenerator().Generate()
 			enable.Src = messaging.RemotePort("Agent")
 			enable.Dst = controlPort.AsRemote()
 			enable.TrafficBytes = 4
-			enable.TrafficClass = "control.Req"
+			enable.TrafficClass = "memcontrolprotocol.Req"
 
 			controlPort.Deliver(enable)
 
@@ -452,14 +452,14 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should handle drain ctrl msg", func() {
-			drainMsg := control.Req{
-				Command: control.CmdDrain,
+			drainMsg := memcontrolprotocol.Req{
+				Command: memcontrolprotocol.CmdDrain,
 			}
 			drainMsg.ID = timing.GetIDGenerator().Generate()
 			drainMsg.Src = messaging.RemotePort("Agent")
 			drainMsg.Dst = controlPort.AsRemote()
 			drainMsg.TrafficBytes = 4
-			drainMsg.TrafficClass = "control.Req"
+			drainMsg.TrafficClass = "memcontrolprotocol.Req"
 
 			controlPort.Deliver(drainMsg)
 

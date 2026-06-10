@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -30,7 +30,7 @@ func (m *respondMW) bottomPort() messaging.Port {
 
 // Tick runs the respond stage. Paused GMMUs make no progress.
 func (m *respondMW) Tick() bool {
-	if m.comp.State.ControlState == control.StatePaused {
+	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
 	return m.fetchFromBottom()

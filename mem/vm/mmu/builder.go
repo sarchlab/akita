@@ -1,7 +1,7 @@
 package mmu
 
 import (
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -82,7 +82,7 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 
 	modelComp.DeclarePort("Top", vmprotocol.Responder)
-	modelComp.DeclarePort("Control", control.Responder)
+	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	cmw := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cmw)

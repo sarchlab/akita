@@ -26,7 +26,7 @@ requests with `GetAddress()`, `GetByteSize()`, and `GetPID()`.
 
 ### Control Messages
 
-`control.Req` and `control.Rsp` (package `mem/control`) carry the uniform
+`memcontrolprotocol.Req` and `memcontrolprotocol.Rsp` (package `mem/memcontrolprotocol`) carry the uniform
 control protocol used by every memory agent: Pause, Drain, Enable, Reset,
 Invalidate, Flush. Each component exposes a `Control` port that carries
 these messages and only these messages.
@@ -34,7 +34,7 @@ these messages and only these messages.
 See [`CONTROL_PROTOCOL.md`](CONTROL_PROTOCOL.md) for verb definitions,
 response timing, the support matrix, and how to implement and test the
 protocol in a new component. The reusable state enum and conformance
-harness live in `mem/control/` (see
+harness live in `mem/memcontrolprotocol/` (see
 [`control/README.md`](control/README.md)).
 
 ## Storage

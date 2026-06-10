@@ -4,7 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -60,12 +60,12 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		return req
 	}
 
-	makeCtrlReq := func(cmd control.Command) control.Req {
-		req := control.Req{Command: cmd}
+	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
+		req := memcontrolprotocol.Req{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
-		req.TrafficClass = "control.Req"
+		req.TrafficClass = "memcontrolprotocol.Req"
 		return req
 	}
 
@@ -83,11 +83,11 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		memController.Tick()
 		Expect(memController.State.InflightTransactions).To(HaveLen(n))
 
-		drain := makeCtrlReq(control.CmdDrain)
+		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		ctrlPort.Deliver(drain)
 
 		completed := 0
-		var drainRsp control.Rsp
+		var drainRsp memcontrolprotocol.Rsp
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
 			memController.Tick()
@@ -101,8 +101,8 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 				}
 			}
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(control.Rsp); ok &&
-					rsp.Command == control.CmdDrain {
+				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
 					drainFound = true
 				}
@@ -116,11 +116,11 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		// async Drain ack is sent.
 		Expect(completed).To(Equal(n))
 		Expect(memController.State.InflightTransactions).To(BeEmpty())
-		Expect(memController.State.ControlState).To(Equal(control.StatePaused))
+		Expect(memController.State.ControlState).To(Equal(memcontrolprotocol.StatePaused))
 	})
 
 	It("freezes incoming traffic while paused", func() {
-		memController.State.ControlState = control.StatePaused
+		memController.State.ControlState = memcontrolprotocol.StatePaused
 		topPort.Deliver(makeRead(0))
 
 		for range 5 {
@@ -135,22 +135,22 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 	})
 
 	DescribeTable("Reset wipes in-flight state from any control state",
-		func(startState control.State) {
+		func(startState memcontrolprotocol.State) {
 			topPort.Deliver(makeRead(0))
 			memController.Tick()
 			Expect(memController.State.InflightTransactions).ToNot(BeEmpty())
 
 			memController.State.ControlState = startState
 
-			reset := makeCtrlReq(control.CmdReset)
+			reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp control.Rsp
+			var rsp memcontrolprotocol.Rsp
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				memController.Tick()
 				if out := ctrlPort.RetrieveOutgoing(); out != nil {
-					if r, ok := out.(control.Rsp); ok {
+					if r, ok := out.(memcontrolprotocol.Rsp); ok {
 						rsp = r
 						found = true
 					}
@@ -158,15 +158,15 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 			}
 
 			Expect(found).To(BeTrue())
-			Expect(rsp.Command).To(Equal(control.CmdReset))
+			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			Expect(memController.State.InflightTransactions).To(BeEmpty())
 			Expect(memController.State.ControlState).
-				To(Equal(control.StateEnabled))
+				To(Equal(memcontrolprotocol.StateEnabled))
 		},
-		Entry("from Enabled", control.StateEnabled),
-		Entry("from Paused", control.StatePaused),
+		Entry("from Enabled", memcontrolprotocol.StateEnabled),
+		Entry("from Paused", memcontrolprotocol.StatePaused),
 		// The Draining case is covered separately by the "completes a pending
 		// Drain before servicing a queued Reset" test below, because control
 		// commands are now strictly serialized: a Reset queued while draining is
@@ -178,15 +178,15 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		// completePendingDrain acks the Drain. Control commands are serialized
 		// with no preemption, so a Reset queued behind the drain is serviced
 		// only after the Drain acks.
-		memController.State.ControlState = control.StateDraining
+		memController.State.ControlState = memcontrolprotocol.StateDraining
 		memController.State.CurrentCmdID = 999
 		memController.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 		memController.State.InflightTransactions = nil
 
-		reset := makeCtrlReq(control.CmdReset)
+		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		ctrlPort.Deliver(reset)
 
-		var rsps []control.Rsp
+		var rsps []memcontrolprotocol.Rsp
 		for range 16 {
 			memController.Tick()
 			for {
@@ -194,24 +194,24 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 				if out == nil {
 					break
 				}
-				if r, ok := out.(control.Rsp); ok {
+				if r, ok := out.(memcontrolprotocol.Rsp); ok {
 					rsps = append(rsps, r)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(control.CmdDrain))
+		Expect(rsps[0].Command).To(Equal(memcontrolprotocol.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(control.CmdReset))
+		Expect(rsps[1].Command).To(Equal(memcontrolprotocol.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
-		Expect(memController.State.ControlState).To(Equal(control.StateEnabled))
+		Expect(memController.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 	})
 
 	It("drops Top traffic queued at Reset", func() {
 		// Queue a read on Top while paused, so it sits unconsumed in the Top
 		// port's incoming queue.
-		memController.State.ControlState = control.StatePaused
+		memController.State.ControlState = memcontrolprotocol.StatePaused
 		topPort.Deliver(makeRead(0))
 		for range 3 {
 			memController.Tick()
@@ -223,14 +223,14 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		// (the control middleware runs before the memory middleware) was
 		// consumed in the same tick the controller returned to Enabled,
 		// producing a stale response.
-		reset := makeCtrlReq(control.CmdReset)
+		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		ctrlPort.Deliver(reset)
 		found := false
 		for i := 0; i < 64 && !found; i++ {
 			memController.Tick()
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(control.Rsp); ok &&
-					rsp.Command == control.CmdReset {
+				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+					rsp.Command == memcontrolprotocol.CmdReset {
 					Expect(rsp.Success).To(BeTrue())
 					found = true
 				}

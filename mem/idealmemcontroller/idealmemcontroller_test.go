@@ -5,7 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -251,6 +251,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should use State for current state", func() {
 		state := memController.State
-		Expect(state.ControlState).To(Equal(control.StateEnabled))
+		Expect(state.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 	})
 })

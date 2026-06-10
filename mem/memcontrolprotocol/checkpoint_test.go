@@ -1,4 +1,4 @@
-package control_test
+package memcontrolprotocol_test
 
 import (
 	"bytes"
@@ -6,8 +6,8 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
-	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -175,26 +175,26 @@ func (h *cacheOverDRAM) read(t *testing.T, addr uint64, size uint64) []byte {
 }
 
 // control issues a control verb and ticks until its ack, returning it.
-func (h *cacheOverDRAM) control(t *testing.T, cmd control.Command) control.Rsp {
+func (h *cacheOverDRAM) control(t *testing.T, cmd memcontrolprotocol.Command) memcontrolprotocol.Rsp {
 	t.Helper()
 
-	req := control.Req{Command: cmd}
+	req := memcontrolprotocol.Req{Command: cmd}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = h.agent
 	req.Dst = h.ctrl.AsRemote()
-	req.TrafficClass = "control.Req"
+	req.TrafficClass = "memcontrolprotocol.Req"
 	h.ctrl.Deliver(req)
 
 	for range 4096 {
 		h.tick()
 		if out := h.ctrl.RetrieveOutgoing(); out != nil {
-			if rsp, ok := out.(control.Rsp); ok && rsp.Command == cmd {
+			if rsp, ok := out.(memcontrolprotocol.Rsp); ok && rsp.Command == cmd {
 				return rsp
 			}
 		}
 	}
 	t.Fatalf("control verb %v never acked", cmd)
-	return control.Rsp{}
+	return memcontrolprotocol.Rsp{}
 }
 
 func TestCheckpoint_DrainFlushReset_PersistsAndServesCorrectData(t *testing.T) {
@@ -212,10 +212,10 @@ func TestCheckpoint_DrainFlushReset_PersistsAndServesCorrectData(t *testing.T) {
 	}
 
 	// Quiesce, then persist all dirty data to the backing memory.
-	if rsp := h.control(t, control.CmdDrain); !rsp.Success {
+	if rsp := h.control(t, memcontrolprotocol.CmdDrain); !rsp.Success {
 		t.Fatalf("Drain failed: %q", rsp.Error)
 	}
-	if rsp := h.control(t, control.CmdFlush); !rsp.Success {
+	if rsp := h.control(t, memcontrolprotocol.CmdFlush); !rsp.Success {
 		t.Fatalf("Flush failed: %q", rsp.Error)
 	}
 
@@ -233,7 +233,7 @@ func TestCheckpoint_DrainFlushReset_PersistsAndServesCorrectData(t *testing.T) {
 	}
 
 	// Reset to a clean slate and confirm the directory is actually empty.
-	if rsp := h.control(t, control.CmdReset); !rsp.Success {
+	if rsp := h.control(t, memcontrolprotocol.CmdReset); !rsp.Success {
 		t.Fatalf("Reset failed: %q", rsp.Error)
 	}
 	for si := range h.cache.State.DirectoryState.Sets {
@@ -270,16 +270,16 @@ func TestFlush_DoesNotStrandTransactions_AllowingLaterDrain(t *testing.T) {
 	}
 
 	// Pause, then Flush every dirty block back to the backing memory.
-	if rsp := h.control(t, control.CmdPause); !rsp.Success {
+	if rsp := h.control(t, memcontrolprotocol.CmdPause); !rsp.Success {
 		t.Fatalf("Pause failed: %q", rsp.Error)
 	}
-	if rsp := h.control(t, control.CmdFlush); !rsp.Success {
+	if rsp := h.control(t, memcontrolprotocol.CmdFlush); !rsp.Success {
 		t.Fatalf("Flush failed: %q", rsp.Error)
 	}
 
 	// Resume and run a fresh workload so the following Drain has real work
 	// in addition to whatever the flush left behind.
-	if rsp := h.control(t, control.CmdEnable); !rsp.Success {
+	if rsp := h.control(t, memcontrolprotocol.CmdEnable); !rsp.Success {
 		t.Fatalf("Enable failed: %q", rsp.Error)
 	}
 	for i := range n {
@@ -289,7 +289,7 @@ func TestFlush_DoesNotStrandTransactions_AllowingLaterDrain(t *testing.T) {
 	// The regression: with flush transactions stranded in the table the
 	// cache could never reach quiescence, so this Drain hung (control()
 	// would fail "never acked"). It must ack now.
-	if rsp := h.control(t, control.CmdDrain); !rsp.Success {
+	if rsp := h.control(t, memcontrolprotocol.CmdDrain); !rsp.Success {
 		t.Fatalf("Drain after Flush failed: %q", rsp.Error)
 	}
 }
@@ -324,18 +324,18 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 	}
 
 	// Reset while the fetch is outstanding (this clears the inflight indices).
-	rst := control.Req{Command: control.CmdReset}
+	rst := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
 	rst.ID = timing.GetIDGenerator().Generate()
 	rst.Src = h.agent
 	rst.Dst = h.ctrl.AsRemote()
-	rst.TrafficClass = "control.Req"
+	rst.TrafficClass = "memcontrolprotocol.Req"
 	h.ctrl.Deliver(rst)
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
 		h.cache.Tick()
 		if out := h.ctrl.RetrieveOutgoing(); out != nil {
-			if rsp, ok := out.(control.Rsp); ok &&
-				rsp.Command == control.CmdReset {
+			if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+				rsp.Command == memcontrolprotocol.CmdReset {
 				acked = true
 			}
 		}

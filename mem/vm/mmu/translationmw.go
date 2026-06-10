@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -44,14 +44,14 @@ func (m *translationMW) pageTable() vm.PageTable {
 // Tick runs the translation stages. Paused MMUs make no progress;
 // draining MMUs continue walks but accept no new requests.
 func (m *translationMW) Tick() bool {
-	if m.comp.State.ControlState == control.StatePaused {
+	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
 
 	madeProgress := false
 
 	madeProgress = m.walkPageTable() || madeProgress
-	if m.comp.State.ControlState == control.StateEnabled {
+	if m.comp.State.ControlState == memcontrolprotocol.StateEnabled {
 		madeProgress = m.parseFromTop() || madeProgress
 	}
 

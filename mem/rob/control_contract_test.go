@@ -3,14 +3,14 @@ package rob
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 func TestControlContract(t *testing.T) {
-	build := func() *control.Harness {
+	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
 
 		spec := DefaultSpec()
@@ -33,7 +33,7 @@ func TestControlContract(t *testing.T) {
 			(&noopConn{}).PlugIn(comp.GetPortByName(name))
 		}
 
-		return &control.Harness{
+		return &memcontrolprotocol.Harness{
 			Comp: comp,
 			Ctrl: comp.GetPortByName("Control"),
 			IsQuiescent: func() bool {
@@ -42,7 +42,7 @@ func TestControlContract(t *testing.T) {
 		}
 	}
 
-	control.RunContract(t, "rob", build, control.Universal())
+	memcontrolprotocol.RunContract(t, "rob", build, memcontrolprotocol.Universal())
 }
 
-var _ control.Controllable = (*Comp)(nil)
+var _ memcontrolprotocol.Controllable = (*Comp)(nil)

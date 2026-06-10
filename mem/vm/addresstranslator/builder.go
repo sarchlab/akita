@@ -1,7 +1,7 @@
 package addresstranslator
 
 import (
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -90,7 +90,7 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.DeclarePort("Top", memprotocol.Responder)
 	modelComp.DeclarePort("Bottom", memprotocol.Requester)
 	modelComp.DeclarePort("Translation", vmprotocol.Requester)
-	modelComp.DeclarePort("Control", control.Responder)
+	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	b.registrar.RegisterComponent(modelComp)
 

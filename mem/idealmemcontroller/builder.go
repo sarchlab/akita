@@ -2,7 +2,7 @@ package idealmemcontroller
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -80,13 +80,13 @@ func (b Builder) Build(name string) *Comp {
 		WithSpec(spec).
 		WithResources(Resources{Storage: storage}).
 		Build(name)
-	modelComp.State = State{ControlState: control.StateEnabled}
+	modelComp.State = State{ControlState: memcontrolprotocol.StateEnabled}
 
 	modelComp.AddMiddleware(&ctrlMiddleware{comp: modelComp})
 	modelComp.AddMiddleware(&memMiddleware{comp: modelComp})
 
 	modelComp.DeclarePort("Top", memprotocol.Responder)
-	modelComp.DeclarePort("Control", control.Responder)
+	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	b.registrar.RegisterComponent(modelComp)
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -37,7 +37,7 @@ func (m *respondPipelineMW) translationPort() messaging.Port {
 // transactions; draining and enabled agents do, so a Drain can
 // converge.
 func (m *respondPipelineMW) Tick() bool {
-	if m.comp.State.ControlState == control.StatePaused {
+	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
 

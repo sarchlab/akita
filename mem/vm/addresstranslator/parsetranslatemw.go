@@ -1,7 +1,7 @@
 package addresstranslator
 
 import (
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
@@ -31,7 +31,7 @@ func (m *parseTranslateMW) translationPort() messaging.Port {
 func (m *parseTranslateMW) Tick() bool {
 	madeProgress := false
 
-	if m.comp.State.ControlState == control.StateEnabled {
+	if m.comp.State.ControlState == memcontrolprotocol.StateEnabled {
 		spec := m.comp.Spec()
 		for range spec.NumReqPerCycle {
 			madeProgress = m.translate() || madeProgress

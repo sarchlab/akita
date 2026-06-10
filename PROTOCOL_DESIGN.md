@@ -138,11 +138,11 @@ The framework's protocol packages:
 
 - `mem/memprotocol` — `ReadReq`/`WriteReq`/`DataReadyRsp`/`WriteDoneRsp` and
   the `AccessReq`/`AccessRsp` interfaces.
-- `mem/control` — the control protocol is **separate** from the data protocol
-  (control ports are physically distinct ports bound independently of the
-  data path). The messages move into the existing control-contract package as
-  `control.Req`/`control.Rsp`/`control.Command`, making it a true protocol
-  package (protocol + state model + conformance harness).
+- `mem/memcontrolprotocol` — the control protocol is **separate** from the
+  data protocol (control ports are physically distinct ports bound
+  independently of the data path). The former `mem/control` contract package
+  absorbs the messages as `Req`/`Rsp`/`Command` and is renamed, making it a
+  true protocol package (protocol + state model + conformance harness).
 - `mem/vm/vmprotocol` — `TranslationReq`/`TranslationRsp` (page-table types
   stay in `vm`).
 - `mem/datamoverprotocol` — `DataMoveRequest`/`DataMoveResponse`.
@@ -184,7 +184,7 @@ func (po *PortOwnerBase) DeclarePortGroup(name string, roles ...*messaging.Role)
 ```go
 // mem/idealmemcontroller/builder.go
 modelComp.DeclarePort("Top", memprotocol.Responder) // serves read/write
-modelComp.DeclarePort("Control", control.Responder)
+modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 ```
 
 The port owner records `name -> []*Role`, readable through
@@ -256,7 +256,7 @@ same binary via the build id.)
 ## Scope of the message surface
 
 - **Application protocols**: `mem` (`mem/memprotocol`), `mem.control`
-  (`mem/control`), `vm` (`mem/vm/vmprotocol`), `datamover`
+  (`mem/memcontrolprotocol`), `vm` (`mem/vm/vmprotocol`), `datamover`
   (`mem/datamoverprotocol`) — each requester/responder.
 - **Transport**: `packetization` — single `link` role sending `Flit` (flits are
   symmetric link traffic).

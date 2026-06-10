@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
@@ -505,8 +505,8 @@ var _ = Describe("Address Translator", func() {
 			writeFromTop  memprotocol.WriteReq
 			readToBottom  memprotocol.ReadReq
 			writeToBottom memprotocol.WriteReq
-			flushReq      control.Req
-			restartReq    control.Req
+			flushReq      memcontrolprotocol.Req
+			restartReq    memcontrolprotocol.Req
 		)
 
 		BeforeEach(func() {
@@ -532,22 +532,22 @@ var _ = Describe("Address Translator", func() {
 			writeToBottom.Address = 0x10040
 			writeToBottom.TrafficBytes = 12
 			writeToBottom.TrafficClass = "memprotocol.WriteReq"
-			flushReq = control.Req{
-				Command: control.CmdFlush,
+			flushReq = memcontrolprotocol.Req{
+				Command: memcontrolprotocol.CmdFlush,
 			}
 			flushReq.ID = timing.GetIDGenerator().Generate()
 			flushReq.Src = messaging.RemotePort("Agent")
 			flushReq.Dst = ctrlPort.AsRemote()
 			flushReq.TrafficBytes = 4
-			flushReq.TrafficClass = "control.Req"
-			restartReq = control.Req{
-				Command: control.CmdReset,
+			flushReq.TrafficClass = "memcontrolprotocol.Req"
+			restartReq = memcontrolprotocol.Req{
+				Command: memcontrolprotocol.CmdReset,
 			}
 			restartReq.ID = timing.GetIDGenerator().Generate()
 			restartReq.Src = messaging.RemotePort("Agent")
 			restartReq.Dst = ctrlPort.AsRemote()
 			restartReq.TrafficBytes = 4
-			restartReq.TrafficClass = "control.Req"
+			restartReq.TrafficClass = "memcontrolprotocol.Req"
 
 			nextState := &t.State
 			nextState.InflightReqToBottom = []reqToBottomState{
@@ -581,10 +581,10 @@ var _ = Describe("Address Translator", func() {
 
 			Expect(madeProgress).To(BeTrue())
 			rspMsg := ctrlPort.RetrieveOutgoing()
-			Expect(rspMsg).To(BeAssignableToTypeOf(control.Rsp{}))
-			rsp := rspMsg.(control.Rsp)
+			Expect(rspMsg).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
+			rsp := rspMsg.(memcontrolprotocol.Rsp)
 			Expect(rsp.Success).To(BeFalse())
-			Expect(rsp.Error).To(Equal(control.ErrUnsupported))
+			Expect(rsp.Error).To(Equal(memcontrolprotocol.ErrUnsupported))
 		})
 
 		It("clears in-flight state on Reset", func() {
@@ -594,11 +594,11 @@ var _ = Describe("Address Translator", func() {
 
 			Expect(madeProgress).To(BeTrue())
 			rspMsg := ctrlPort.RetrieveOutgoing()
-			Expect(rspMsg).To(BeAssignableToTypeOf(control.Rsp{}))
-			rsp := rspMsg.(control.Rsp)
+			Expect(rspMsg).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
+			rsp := rspMsg.(memcontrolprotocol.Rsp)
 			Expect(rsp.Success).To(BeTrue())
 			updatedState := &t.State
-			Expect(updatedState.ControlState).To(Equal(control.StateEnabled))
+			Expect(updatedState.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 			Expect(updatedState.InflightReqToBottom).To(BeEmpty())
 		})
 

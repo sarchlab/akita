@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -22,7 +22,7 @@ func (m *tickFinalizeMW) topPort() messaging.Port {
 }
 
 func (m *tickFinalizeMW) Tick() bool {
-	if m.comp.State.ControlState == control.StatePaused {
+	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
 	madeProgress := m.finalizeBanks()

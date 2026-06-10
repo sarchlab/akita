@@ -2,7 +2,7 @@ package simplebankedmemory
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -46,10 +46,10 @@ type bankState struct {
 
 // State contains mutable runtime data for the simple banked memory.
 type State struct {
-	ControlState  control.State        `json:"control_state"`
-	CurrentCmdID  uint64               `json:"current_cmd_id"`
-	CurrentCmdSrc messaging.RemotePort `json:"current_cmd_src"`
-	Banks         []bankState          `json:"banks"`
+	ControlState  memcontrolprotocol.State `json:"control_state"`
+	CurrentCmdID  uint64                   `json:"current_cmd_id"`
+	CurrentCmdSrc messaging.RemotePort     `json:"current_cmd_src"`
+	Banks         []bankState              `json:"banks"`
 }
 
 // Resources holds the shared resources referenced by the memory.

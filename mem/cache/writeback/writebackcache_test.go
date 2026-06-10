@@ -14,8 +14,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/timing"
 
@@ -371,25 +371,25 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		Expect(controlAgentPort.RetrieveIncoming()).To(BeNil())
 
 		// Flush is a conditional verb: pause first so it is legal.
-		pause := control.Req{Command: control.CmdPause}
+		pause := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdPause}
 		pause.ID = timing.GetIDGenerator().Generate()
 		pause.Src = controlAgentPort.AsRemote()
 		pause.Dst = cacheComp.GetPortByName("Control").AsRemote()
-		pause.TrafficClass = "control.Req"
+		pause.TrafficClass = "memcontrolprotocol.Req"
 		cacheComp.GetPortByName("Control").Deliver(pause)
 
 		engine.Run()
 
 		pauseRsp := controlAgentPort.RetrieveIncoming()
 		Expect(pauseRsp).NotTo(BeNil())
-		Expect(pauseRsp.(control.Rsp).Command).To(Equal(control.CmdPause))
-		Expect(pauseRsp.(control.Rsp).Success).To(BeTrue())
+		Expect(pauseRsp.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdPause))
+		Expect(pauseRsp.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 
-		flush := control.Req{Command: control.CmdFlush}
+		flush := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
 		flush.ID = timing.GetIDGenerator().Generate()
 		flush.Src = controlAgentPort.AsRemote()
 		flush.Dst = cacheComp.GetPortByName("Control").AsRemote()
-		flush.TrafficClass = "control.Req"
+		flush.TrafficClass = "memcontrolprotocol.Req"
 		cacheComp.GetPortByName("Control").Deliver(flush)
 
 		engine.Run()
@@ -397,7 +397,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		rsp := controlAgentPort.RetrieveIncoming()
 		Expect(rsp).NotTo(BeNil())
 		Expect(rsp.Meta().RspTo).To(Equal(flush.ID))
-		Expect(rsp.(control.Rsp).Success).To(BeTrue())
+		Expect(rsp.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 
 		// The dirty block's data reached DRAM.
 		flushed, err := dramStorage.Read(0x100000, 4)

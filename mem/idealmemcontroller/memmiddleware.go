@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -32,7 +32,7 @@ func (m *memMiddleware) Tick() bool {
 
 func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 	state := &m.comp.State
-	if state.ControlState != control.StateEnabled {
+	if state.ControlState != memcontrolprotocol.StateEnabled {
 		return false
 	}
 
@@ -92,7 +92,7 @@ func (m *memMiddleware) msgToInflightTransaction(msg messaging.Msg) inflightTran
 
 func (m *memMiddleware) processCountdowns() bool {
 	state := &m.comp.State
-	if state.ControlState == control.StatePaused {
+	if state.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
 

@@ -1,4 +1,4 @@
-package control
+package memcontrolprotocol
 
 // State enumerates the control lifecycle states every memory agent moves
 // through. Reset and Invalidate are operations within these states, not

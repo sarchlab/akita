@@ -3,7 +3,7 @@ package mmuCache
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
@@ -19,7 +19,7 @@ import (
 // The mmuCache differs from the idealmemcontroller reference in two ways:
 //   - Its control state is a STRING field comp.State.CurrentState with values
 //     mmuCacheStateEnable / mmuCacheStatePause / mmuCacheStateDrain (not the
-//     control.State enum).
+//     memcontrolprotocol.State enum).
 //   - It is a stateless forwarder with no MSHR: a Top lookup is forwarded down
 //     the Bottom port (an empty cache always misses), and it does not emit a
 //     Top response on its own. So "completion" for the Drain test is the
@@ -75,12 +75,12 @@ var _ = Describe("MMUCache control behavior", func() {
 		return req
 	}
 
-	makeCtrlReq := func(cmd control.Command) control.Req {
-		req := control.Req{Command: cmd}
+	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
+		req := memcontrolprotocol.Req{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = controlPort.AsRemote()
-		req.TrafficClass = "control.Req"
+		req.TrafficClass = "memcontrolprotocol.Req"
 		return req
 	}
 
@@ -129,7 +129,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		Expect(forwarded).To(HaveLen(n))
 		Expect(comp.State.OutstandingBottomReqs).To(HaveLen(n))
 
-		drain := makeCtrlReq(control.CmdDrain)
+		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		controlPort.Deliver(drain)
 
 		// Let the Drain take effect.
@@ -157,7 +157,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		// Now the cache can quiesce: every walk is answered up the Top port
 		// and only then is the async Drain acked.
 		upResponses := 0
-		var drainRsp control.Rsp
+		var drainRsp memcontrolprotocol.Rsp
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
 			comp.Tick()
@@ -171,8 +171,8 @@ var _ = Describe("MMUCache control behavior", func() {
 				}
 			}
 			if out := controlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(control.Rsp); ok &&
-					rsp.Command == control.CmdDrain {
+				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
 					drainFound = true
 				}
@@ -205,14 +205,14 @@ var _ = Describe("MMUCache control behavior", func() {
 		Expect(comp.State.OutstandingBottomReqs).To(HaveLen(1))
 
 		// Reset discards the outstanding walk.
-		reset := makeCtrlReq(control.CmdReset)
+		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		controlPort.Deliver(reset)
 		resetAcked := false
 		for i := 0; i < 64 && !resetAcked; i++ {
 			comp.Tick()
 			if out := controlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(control.Rsp); ok &&
-					rsp.Command == control.CmdReset {
+				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+					rsp.Command == memcontrolprotocol.CmdReset {
 					resetAcked = true
 				}
 			}
@@ -249,20 +249,20 @@ var _ = Describe("MMUCache control behavior", func() {
 			topPort.Deliver(makeTranslationReq(0x1000))
 			comp.State.CurrentState = startState
 
-			reset := makeCtrlReq(control.CmdReset)
+			reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 			controlPort.Deliver(reset)
 
-			var rsp control.Rsp
+			var rsp memcontrolprotocol.Rsp
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				comp.Tick()
 				if out := controlPort.RetrieveOutgoing(); out != nil {
-					rsp, found = out.(control.Rsp)
+					rsp, found = out.(memcontrolprotocol.Rsp)
 				}
 			}
 
 			Expect(found).To(BeTrue())
-			Expect(rsp.Command).To(Equal(control.CmdReset))
+			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			Expect(comp.State.CurrentState).To(Equal(mmuCacheStateEnable))
@@ -284,10 +284,10 @@ var _ = Describe("MMUCache control behavior", func() {
 		comp.State.CurrentCmdID = 999
 		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 
-		reset := makeCtrlReq(control.CmdReset)
+		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		controlPort.Deliver(reset)
 
-		var rsps []control.Rsp
+		var rsps []memcontrolprotocol.Rsp
 		for range 32 {
 			comp.Tick()
 			for {
@@ -295,16 +295,16 @@ var _ = Describe("MMUCache control behavior", func() {
 				if out == nil {
 					break
 				}
-				if r, ok := out.(control.Rsp); ok {
+				if r, ok := out.(memcontrolprotocol.Rsp); ok {
 					rsps = append(rsps, r)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(control.CmdDrain))
+		Expect(rsps[0].Command).To(Equal(memcontrolprotocol.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(control.CmdReset))
+		Expect(rsps[1].Command).To(Equal(memcontrolprotocol.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(comp.State.CurrentState).To(Equal(mmuCacheStateEnable))
 	})
