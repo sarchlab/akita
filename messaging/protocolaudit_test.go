@@ -62,20 +62,7 @@ func TestEveryMsgTypeIsRegistered(t *testing.T) {
 		t.Skip("loads and type-checks the whole module")
 	}
 
-	cfg := &packages.Config{
-		Mode: packages.NeedName | packages.NeedTypes | packages.NeedDeps,
-		Dir:  "..",
-	}
-
-	pkgs, err := packages.Load(cfg, "./...")
-	if err != nil {
-		t.Fatalf("loading module packages: %v", err)
-	}
-
-	if n := packages.PrintErrors(pkgs); n > 0 {
-		t.Fatalf("%d packages failed to load", n)
-	}
-
+	pkgs := loadModulePackages(t)
 	msgIface := lookupMsgInterface(t, pkgs)
 
 	registered := map[string]bool{}
@@ -138,6 +125,46 @@ func auditMsgType(t *testing.T, tag string, registered map[string]bool) {
 		"make sure that package is blank-imported by this audit", tag)
 }
 
+// loadModulePackages loads and type-checks every package in the module,
+// excluding documentation-site build output: a local Docusaurus build leaves
+// broken .go sample files under doc-site/ (gitignored, so CI never sees
+// them), and they must not fail the audit. Load errors in any real package
+// are fatal — a package that fails to type-check would silently escape the
+// audit otherwise.
+func loadModulePackages(t *testing.T) []*packages.Package {
+	t.Helper()
+
+	cfg := &packages.Config{
+		Mode: packages.NeedName | packages.NeedTypes | packages.NeedDeps,
+		Dir:  "..",
+	}
+
+	pkgs, err := packages.Load(cfg, "./...")
+	if err != nil {
+		t.Fatalf("loading module packages: %v", err)
+	}
+
+	kept := pkgs[:0]
+
+	for _, pkg := range pkgs {
+		if strings.Contains(pkg.PkgPath, "/doc-site/") {
+			continue
+		}
+
+		for _, e := range pkg.Errors {
+			t.Errorf("package %s failed to load: %v", pkg.PkgPath, e)
+		}
+
+		kept = append(kept, pkg)
+	}
+
+	if t.Failed() {
+		t.FailNow()
+	}
+
+	return kept
+}
+
 // lookupMsgInterface finds the messaging.Msg interface in the loaded packages.
 func lookupMsgInterface(
 	t *testing.T,
@@ -196,16 +223,7 @@ func TestMainPackagesAreOutsideAuditScope(t *testing.T) {
 		t.Skip("loads and type-checks the whole module")
 	}
 
-	cfg := &packages.Config{
-		Mode: packages.NeedName | packages.NeedTypes | packages.NeedDeps,
-		Dir:  "..",
-	}
-
-	pkgs, err := packages.Load(cfg, "./...")
-	if err != nil {
-		t.Fatalf("loading module packages: %v", err)
-	}
-
+	pkgs := loadModulePackages(t)
 	msgIface := lookupMsgInterface(t, pkgs)
 
 	for _, pkg := range pkgs {

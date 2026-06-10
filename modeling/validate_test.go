@@ -62,6 +62,33 @@ func TestValidateState_AllowsCustomJSONMarshaler(t *testing.T) {
 	}
 }
 
+// marshalOnly customizes the save direction but not the load direction: a
+// checkpoint saves its custom payload and then silently restores zero values,
+// because the default decoder cannot set the unexported field.
+type marshalOnly struct {
+	values []int
+}
+
+func (m marshalOnly) MarshalJSON() ([]byte, error) { return json.Marshal(m.values) }
+
+type stateWithMarshalOnly struct {
+	Count int         `json:"count"`
+	LRU   marshalOnly `json:"lru"`
+}
+
+func TestValidateState_RejectsMarshalerWithoutUnmarshaler(t *testing.T) {
+	err := ValidateState(marshalOnly{})
+	if err == nil || !strings.Contains(err.Error(), "no UnmarshalJSON") {
+		t.Fatalf("expected missing-UnmarshalJSON error, got %v", err)
+	}
+
+	err = ValidateState(stateWithMarshalOnly{})
+	if err == nil || !strings.Contains(err.Error(), "no UnmarshalJSON") {
+		t.Fatalf("expected missing-UnmarshalJSON error for nested field, got %v",
+			err)
+	}
+}
+
 func TestValidateState_AllowsNormalAndEmptyStructs(t *testing.T) {
 	if err := ValidateState(normalState{}); err != nil {
 		t.Fatalf("normal state should pass: %v", err)
