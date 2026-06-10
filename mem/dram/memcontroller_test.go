@@ -3,7 +3,7 @@ package dram
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
@@ -47,7 +47,7 @@ var _ = Describe("Transaction Splitting", func() {
 		spec := &Spec{Log2AccessUnitSize: 6} // 64 bytes
 		trans := &transactionState{
 			HasRead: true,
-			ReadMsg: mem.ReadReq{},
+			ReadMsg: memprotocol.ReadReq{},
 		}
 		trans.ReadMsg.Address = 0x100
 		trans.ReadMsg.AccessByteSize = 128
@@ -63,7 +63,7 @@ var _ = Describe("Transaction Splitting", func() {
 		spec := &Spec{Log2AccessUnitSize: 6} // 64 bytes
 		trans := &transactionState{
 			HasRead: true,
-			ReadMsg: mem.ReadReq{},
+			ReadMsg: memprotocol.ReadReq{},
 		}
 		trans.ReadMsg.Address = 0x110 // Not aligned
 		trans.ReadMsg.AccessByteSize = 4
@@ -263,23 +263,23 @@ var _ = Describe("DRAM Integration", func() {
 		conn.PlugIn(srcPort)
 
 		writeData := []byte{1, 2, 3, 4}
-		write := mem.WriteReq{}
+		write := memprotocol.WriteReq{}
 		write.ID = timing.GetIDGenerator().Generate()
 		write.Address = 0x40
 		write.Data = writeData
 		write.Src = srcPort.AsRemote()
 		write.Dst = topPort.AsRemote()
 		write.TrafficBytes = len(writeData) + 12
-		write.TrafficClass = "mem.WriteReq"
+		write.TrafficClass = "memprotocol.WriteReq"
 
-		read := mem.ReadReq{}
+		read := memprotocol.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Address = 0x40
 		read.AccessByteSize = 4
 		read.Src = srcPort.AsRemote()
 		read.Dst = topPort.AsRemote()
 		read.TrafficBytes = 12
-		read.TrafficClass = "mem.ReadReq"
+		read.TrafficClass = "memprotocol.ReadReq"
 
 		srcPort.Send(write)
 		srcPort.Send(read)
@@ -287,8 +287,8 @@ var _ = Describe("DRAM Integration", func() {
 		engine.Run()
 
 		// Collect responses
-		var writeDone mem.WriteDoneRsp
-		var dataReady mem.DataReadyRsp
+		var writeDone memprotocol.WriteDoneRsp
+		var dataReady memprotocol.DataReadyRsp
 		var gotWriteDone, gotDataReady bool
 
 		for {
@@ -297,10 +297,10 @@ var _ = Describe("DRAM Integration", func() {
 				break
 			}
 			switch m := msg.(type) {
-			case mem.WriteDoneRsp:
+			case memprotocol.WriteDoneRsp:
 				writeDone = m
 				gotWriteDone = true
-			case mem.DataReadyRsp:
+			case memprotocol.DataReadyRsp:
 				dataReady = m
 				gotDataReady = true
 			}
@@ -502,7 +502,7 @@ var _ = Describe("Open Page Policy", func() {
 			Transactions: []transactionState{
 				{
 					HasRead: true,
-					ReadMsg: mem.ReadReq{},
+					ReadMsg: memprotocol.ReadReq{},
 					SubTransactions: []subTransState{
 						{
 							ID:               10,
@@ -514,7 +514,7 @@ var _ = Describe("Open Page Policy", func() {
 				},
 				{
 					HasWrite: true,
-					WriteMsg: mem.WriteReq{},
+					WriteMsg: memprotocol.WriteReq{},
 					SubTransactions: []subTransState{
 						{
 							ID:               20,

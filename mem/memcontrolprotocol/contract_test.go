@@ -1,11 +1,10 @@
-package control_test
+package memcontrolprotocol_test
 
 import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/hooking"
-	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -20,7 +19,7 @@ type fakeComp struct {
 	hooking.HookableBase
 
 	name       string
-	matrix     control.VerbSupport
+	matrix     memcontrolprotocol.VerbSupport
 	asyncDelay int
 	ports      map[string]messaging.Port
 
@@ -34,13 +33,13 @@ type fakeComp struct {
 }
 
 type pendingReq struct {
-	cmd       mem.ControlCommand
+	cmd       memcontrolprotocol.Command
 	src       messaging.RemotePort
 	id        uint64
 	ticksLeft int
 }
 
-func newFakeComp(name string, matrix control.VerbSupport, asyncDelay int) *fakeComp {
+func newFakeComp(name string, matrix memcontrolprotocol.VerbSupport, asyncDelay int) *fakeComp {
 	c := &fakeComp{
 		name:       name,
 		matrix:     matrix,
@@ -54,8 +53,8 @@ func newFakeComp(name string, matrix control.VerbSupport, asyncDelay int) *fakeC
 	return c
 }
 
-func (c *fakeComp) Name() string         { return c.name }
-func (c *fakeComp) DeclarePort(_ string) {}
+func (c *fakeComp) Name() string                               { return c.name }
+func (c *fakeComp) DeclarePort(_ string, _ ...*messaging.Role) {}
 func (c *fakeComp) AssignPort(name string, p messaging.Port) {
 	c.ports[name] = p
 	p.SetComponent(c)
@@ -78,7 +77,7 @@ func (c *fakeComp) Tick() bool {
 	if c.pending != nil {
 		c.pending.ticksLeft--
 		if c.pending.ticksLeft <= 0 && port.CanSend() {
-			if c.pending.cmd == mem.CmdDrain {
+			if c.pending.cmd == memcontrolprotocol.CmdDrain {
 				c.paused = true
 			}
 			port.Send(c.makeRsp(c.pending.cmd, c.pending.src,
@@ -90,7 +89,7 @@ func (c *fakeComp) Tick() bool {
 
 	if c.pending == nil {
 		if msg := port.PeekIncoming(); msg != nil {
-			if req, ok := msg.(mem.ControlReq); ok {
+			if req, ok := msg.(memcontrolprotocol.Req); ok {
 				port.RetrieveIncoming()
 				made = c.handleReq(port, req) || made
 			}
@@ -100,25 +99,25 @@ func (c *fakeComp) Tick() bool {
 	return made
 }
 
-func (c *fakeComp) handleReq(port messaging.Port, req mem.ControlReq) bool {
+func (c *fakeComp) handleReq(port messaging.Port, req memcontrolprotocol.Req) bool {
 	if !c.matrix.Supports(req.Command) {
-		return c.respond(port, req, false, control.ErrUnsupported)
+		return c.respond(port, req, false, memcontrolprotocol.ErrUnsupported)
 	}
 
 	// Conditional verbs are only legal while paused or drained.
-	if (req.Command == mem.CmdInvalidate || req.Command == mem.CmdFlush) &&
+	if (req.Command == memcontrolprotocol.CmdInvalidate || req.Command == memcontrolprotocol.CmdFlush) &&
 		!c.paused {
-		return c.respond(port, req, false, control.ErrMustBePausedOrDrained)
+		return c.respond(port, req, false, memcontrolprotocol.ErrMustBePausedOrDrained)
 	}
 
 	switch req.Command {
-	case mem.CmdPause:
+	case memcontrolprotocol.CmdPause:
 		c.paused = true
-	case mem.CmdEnable, mem.CmdReset:
+	case memcontrolprotocol.CmdEnable, memcontrolprotocol.CmdReset:
 		c.paused = false
 	}
 
-	if control.IsSyncVerb(req.Command) {
+	if memcontrolprotocol.IsSyncVerb(req.Command) {
 		return c.respond(port, req, true, "")
 	}
 
@@ -133,7 +132,7 @@ func (c *fakeComp) handleReq(port messaging.Port, req mem.ControlReq) bool {
 
 func (c *fakeComp) respond(
 	port messaging.Port,
-	req mem.ControlReq,
+	req memcontrolprotocol.Req,
 	success bool,
 	errStr string,
 ) bool {
@@ -145,14 +144,14 @@ func (c *fakeComp) respond(
 }
 
 func (c *fakeComp) makeRsp(
-	cmd mem.ControlCommand,
+	cmd memcontrolprotocol.Command,
 	dst messaging.RemotePort,
 	rspTo uint64,
 	success bool,
 	errStr string,
-) mem.ControlRsp {
+) memcontrolprotocol.Rsp {
 	port := c.ports["Control"]
-	rsp := mem.ControlRsp{
+	rsp := memcontrolprotocol.Rsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,
@@ -161,7 +160,7 @@ func (c *fakeComp) makeRsp(
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
-	rsp.TrafficClass = "mem.ControlRsp"
+	rsp.TrafficClass = "memcontrolprotocol.Rsp"
 	return rsp
 }
 
@@ -181,10 +180,10 @@ func (c *noopConn) NotifySend()                      {}
 
 // buildFake produces a BuildFunc that constructs a fresh fakeComp for
 // each verb subtest.
-func buildFake(matrix control.VerbSupport, asyncDelay int) control.BuildFunc {
-	return func() *control.Harness {
+func buildFake(matrix memcontrolprotocol.VerbSupport, asyncDelay int) memcontrolprotocol.BuildFunc {
+	return func() *memcontrolprotocol.Harness {
 		c := newFakeComp("Fake", matrix, asyncDelay)
-		return &control.Harness{
+		return &memcontrolprotocol.Harness{
 			Comp:        c,
 			Ctrl:        c.GetPortByName("Control"),
 			IsQuiescent: func() bool { return c.pending == nil },
@@ -193,41 +192,41 @@ func buildFake(matrix control.VerbSupport, asyncDelay int) control.BuildFunc {
 }
 
 func TestRunContract_AllSupported(t *testing.T) {
-	matrix := control.CacheLike()
-	control.RunContract(t, "all-supported", buildFake(matrix, 1), matrix)
+	matrix := memcontrolprotocol.CacheLike()
+	memcontrolprotocol.RunContract(t, "all-supported", buildFake(matrix, 1), matrix)
 }
 
 func TestRunContract_OnlyUniversal(t *testing.T) {
-	matrix := control.Universal()
-	control.RunContract(t, "universal-only", buildFake(matrix, 1), matrix)
+	matrix := memcontrolprotocol.Universal()
+	memcontrolprotocol.RunContract(t, "universal-only", buildFake(matrix, 1), matrix)
 }
 
 func TestRunContract_AsyncBudget(t *testing.T) {
 	// Async verbs should be allowed many ticks, but the budget is
 	// finite. A delay just under asyncMaxTicks must still pass.
-	matrix := control.CacheLike()
+	matrix := memcontrolprotocol.CacheLike()
 	// 100 < asyncMaxTicks (4096). Comfortably within budget but well
 	// past the sync budget of 64.
-	control.RunContract(t, "slow-async", buildFake(matrix, 100), matrix)
+	memcontrolprotocol.RunContract(t, "slow-async", buildFake(matrix, 100), matrix)
 }
 
 func TestRunContract_NothingSupported(t *testing.T) {
-	matrix := control.VerbSupport{}
-	control.RunContract(t, "nothing-supported", buildFake(matrix, 1), matrix)
+	matrix := memcontrolprotocol.VerbSupport{}
+	memcontrolprotocol.RunContract(t, "nothing-supported", buildFake(matrix, 1), matrix)
 }
 
 func TestVerbSupport_Supports(t *testing.T) {
-	v := control.VerbSupport{Pause: true, Drain: true, Enable: true, Reset: true}
+	v := memcontrolprotocol.VerbSupport{Pause: true, Drain: true, Enable: true, Reset: true}
 	cases := []struct {
-		cmd  mem.ControlCommand
+		cmd  memcontrolprotocol.Command
 		want bool
 	}{
-		{mem.CmdPause, true},
-		{mem.CmdDrain, true},
-		{mem.CmdEnable, true},
-		{mem.CmdReset, true},
-		{mem.CmdInvalidate, false},
-		{mem.CmdFlush, false},
+		{memcontrolprotocol.CmdPause, true},
+		{memcontrolprotocol.CmdDrain, true},
+		{memcontrolprotocol.CmdEnable, true},
+		{memcontrolprotocol.CmdReset, true},
+		{memcontrolprotocol.CmdInvalidate, false},
+		{memcontrolprotocol.CmdFlush, false},
 	}
 	for _, tc := range cases {
 		if got := v.Supports(tc.cmd); got != tc.want {
@@ -238,18 +237,18 @@ func TestVerbSupport_Supports(t *testing.T) {
 
 func TestIsSyncVerb(t *testing.T) {
 	cases := []struct {
-		cmd  mem.ControlCommand
+		cmd  memcontrolprotocol.Command
 		sync bool
 	}{
-		{mem.CmdPause, true},
-		{mem.CmdEnable, true},
-		{mem.CmdReset, true},
-		{mem.CmdInvalidate, true},
-		{mem.CmdDrain, false},
-		{mem.CmdFlush, false},
+		{memcontrolprotocol.CmdPause, true},
+		{memcontrolprotocol.CmdEnable, true},
+		{memcontrolprotocol.CmdReset, true},
+		{memcontrolprotocol.CmdInvalidate, true},
+		{memcontrolprotocol.CmdDrain, false},
+		{memcontrolprotocol.CmdFlush, false},
 	}
 	for _, tc := range cases {
-		if got := control.IsSyncVerb(tc.cmd); got != tc.sync {
+		if got := memcontrolprotocol.IsSyncVerb(tc.cmd); got != tc.sync {
 			t.Errorf("IsSyncVerb(%v) = %v, want %v", tc.cmd, got, tc.sync)
 		}
 	}
@@ -257,14 +256,14 @@ func TestIsSyncVerb(t *testing.T) {
 
 func TestState_String(t *testing.T) {
 	cases := []struct {
-		s    control.State
+		s    memcontrolprotocol.State
 		want string
 	}{
-		{control.StateEnabled, "enabled"},
-		{control.StatePausing, "pausing"},
-		{control.StatePaused, "paused"},
-		{control.StateDraining, "draining"},
-		{control.StateFlushing, "flushing"},
+		{memcontrolprotocol.StateEnabled, "enabled"},
+		{memcontrolprotocol.StatePausing, "pausing"},
+		{memcontrolprotocol.StatePaused, "paused"},
+		{memcontrolprotocol.StateDraining, "draining"},
+		{memcontrolprotocol.StateFlushing, "flushing"},
 	}
 	for _, tc := range cases {
 		if got := tc.s.String(); got != tc.want {

@@ -2,6 +2,8 @@ package dram
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/timing"
@@ -128,8 +130,8 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 	modelComp.State = initialState
 
-	modelComp.DeclarePort("Top")
-	modelComp.DeclarePort("Control")
+	modelComp.DeclarePort("Top", memprotocol.Responder)
+	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	b.addMiddlewares(modelComp, timing, cmdCycles)
 

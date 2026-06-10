@@ -3,8 +3,9 @@ package mmuCache
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -54,14 +55,14 @@ var _ = Describe("MMUCacheMiddleware", func() {
 	})
 
 	It("should send full latency on miss", func() {
-		req := vm.TranslationReq{}
+		req := vmprotocol.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("UpModule")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
 		req.VAddr = 0x2000
 		req.DeviceID = 3
-		req.TrafficClass = "vm.TranslationReq"
+		req.TrafficClass = "vmprotocol.TranslationReq"
 		topPort.Deliver(req)
 
 		madeProgress := mw.lookup()
@@ -69,7 +70,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		Expect(madeProgress).To(BeTrue())
 
 		sent := bottomPort.RetrieveOutgoing()
-		sentReq, ok := sent.(vm.TranslationReq)
+		sentReq, ok := sent.(vmprotocol.TranslationReq)
 		Expect(ok).To(BeTrue())
 		Expect(sentReq.TransLatency).To(Equal(uint64(200)))
 		Expect(sentReq.Dst).To(Equal(messaging.RemotePort("LowModule")))
@@ -81,14 +82,14 @@ var _ = Describe("MMUCacheMiddleware", func() {
 	})
 
 	It("should reduce latency on upper-level hit", func() {
-		req := vm.TranslationReq{}
+		req := vmprotocol.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("UpModule")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
 		req.VAddr = 0x3000
 		req.DeviceID = 2
-		req.TrafficClass = "vm.TranslationReq"
+		req.TrafficClass = "vmprotocol.TranslationReq"
 
 		// Compute seg and wayID for level 1
 		spec := comp.Spec()
@@ -106,7 +107,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		Expect(madeProgress).To(BeTrue())
 
 		sent := bottomPort.RetrieveOutgoing()
-		sentReq, ok := sent.(vm.TranslationReq)
+		sentReq, ok := sent.(vmprotocol.TranslationReq)
 		Expect(ok).To(BeTrue())
 		Expect(sentReq.TransLatency).To(Equal(uint64(100)))
 	})
@@ -118,14 +119,14 @@ var _ = Describe("MMUCacheMiddleware", func() {
 			PAddr: 0x5000,
 			Valid: true,
 		}
-		rsp := vm.TranslationRsp{
+		rsp := vmprotocol.TranslationRsp{
 			Page: page,
 		}
 		rsp.ID = timing.GetIDGenerator().Generate()
 		rsp.Src = messaging.RemotePort("LowModule")
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = timing.GetIDGenerator().Generate()
-		rsp.TrafficClass = "vm.TranslationRsp"
+		rsp.TrafficClass = "vmprotocol.TranslationRsp"
 		bottomPort.Deliver(rsp)
 
 		// Mark the response's request as outstanding, as a real forward would.
@@ -138,7 +139,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		Expect(madeProgress).To(BeTrue())
 
 		sent := topPort.RetrieveOutgoing()
-		sentRsp, ok := sent.(vm.TranslationRsp)
+		sentRsp, ok := sent.(vmprotocol.TranslationRsp)
 		Expect(ok).To(BeTrue())
 		Expect(sentRsp.Dst).To(Equal(messaging.RemotePort("UpModule")))
 		Expect(sentRsp.Src).To(Equal(topPort.AsRemote()))
@@ -180,14 +181,14 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		}
 
 		ctrl := &ctrlMiddleware{comp: comp}
-		req := mem.ControlReq{
-			Command:   mem.CmdInvalidate,
+		req := memcontrolprotocol.Req{
+			Command:   memcontrolprotocol.CmdInvalidate,
 			Addresses: []uint64{dropAddr},
 		}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = controlPort.AsRemote()
-		req.TrafficClass = "mem.ControlReq"
+		req.TrafficClass = "memcontrolprotocol.Req"
 		controlPort.Deliver(req)
 
 		Expect(ctrl.handleIncomingCommands()).To(BeTrue())
@@ -203,8 +204,8 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		_, keepFound := setLookup(&next.Table[0], pid, keepSeg0)
 		Expect(keepFound).To(BeTrue())
 
-		sentRsp := controlPort.RetrieveOutgoing().(mem.ControlRsp)
-		Expect(sentRsp.Command).To(Equal(mem.CmdInvalidate))
+		sentRsp := controlPort.RetrieveOutgoing().(memcontrolprotocol.Rsp)
+		Expect(sentRsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
 		Expect(sentRsp.Success).To(BeTrue())
 		Expect(sentRsp.Dst).To(Equal(messaging.RemotePort("Requester")))
 		Expect(sentRsp.Src).To(Equal(controlPort.AsRemote()))

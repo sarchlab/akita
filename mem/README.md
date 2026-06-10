@@ -6,8 +6,9 @@ mapping utilities, and implementations of caches, DRAM, and virtual memory.
 
 ## Protocol
 
-The memory protocol defines request/response messages between memory
-components (caches, memory controllers, compute units).
+The memory protocol (package `mem/memprotocol`) defines request/response
+messages between memory components (caches, memory controllers, compute
+units), with `requester`/`responder` roles that ports bind to.
 
 ### Access Messages
 
@@ -20,20 +21,20 @@ components (caches, memory controllers, compute units).
 
 All messages embed `messaging.MsgMeta` for routing (Src, Dst, ID, RspTo).
 
-The `AccessReq` interface unifies read/write requests with `GetAddress()`,
-`GetByteSize()`, and `GetPID()`.
+The `AccessReq` interface (also in `mem/memprotocol`) unifies read/write
+requests with `GetAddress()`, `GetByteSize()`, and `GetPID()`.
 
 ### Control Messages
 
-`ControlReq` and `ControlRsp` carry the uniform control protocol used by
-every memory agent: Pause, Drain, Enable, Reset, Invalidate, Flush. Each
-component exposes a `Control` port that carries these messages and only
-these messages.
+`memcontrolprotocol.Req` and `memcontrolprotocol.Rsp` (package `mem/memcontrolprotocol`) carry the uniform
+control protocol used by every memory agent: Pause, Drain, Enable, Reset,
+Invalidate, Flush. Each component exposes a `Control` port that carries
+these messages and only these messages.
 
 See [`CONTROL_PROTOCOL.md`](CONTROL_PROTOCOL.md) for verb definitions,
 response timing, the support matrix, and how to implement and test the
 protocol in a new component. The reusable state enum and conformance
-harness live in `mem/control/` (see
+harness live in `mem/memcontrolprotocol/` (see
 [`control/README.md`](control/README.md)).
 
 ## Storage

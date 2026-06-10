@@ -13,7 +13,7 @@ components. The whole user-facing surface is small:
 
 | You want to… | You write |
 | --- | --- |
-| make a message checkpointable | `messaging.RegisterMsg(MyReq{})` in an `init()` |
+| make messages checkpointable | a protocol: `messaging.DefineProtocol(...)` as a package-level `var` |
 | make an event checkpointable | `timing.RegisterEvent(MyEvent{})` in an `init()` |
 | make a component checkpointable | split it into `Spec` / `State` / `Resources` (the `modeling.Component` machinery does the rest) |
 | take / restore a checkpoint | `sim.SaveCheckpoint(path, "")` / `sim.LoadCheckpoint(path, "")` |
@@ -43,18 +43,20 @@ tables) that setup rebuilds; put cursors, counters, and in-flight tables in
 
 ## Messages
 
-A message becomes checkpointable with **one line** of registration. The decoder
-needs it because Go cannot reconstruct a concrete type from a name on its own; a
-forgotten registration fails loudly at load time, never silently.
+Message types are declared as part of a **protocol** — a named set of message
+types organized into roles. Defining the protocol registers every message type
+it carries with the checkpoint decoder (which needs the registration because Go
+cannot reconstruct a concrete type from a name on its own).
 
 Checklist:
 
 1. Embed `messaging.MsgMeta` and keep every routing/payload field **exported**
-   and JSON-serializable.
+   and JSON-serializable. Bare `MsgMeta` is the envelope, not a message — it
+   belongs to no protocol.
 2. Tag any transient, non-serializable scratch field `json:"-"` (e.g. the
    `Info interface{}` data-plane field).
-3. Register the type in an `init()` (a non-test file, so it runs in production
-   builds).
+3. List the type in your package's protocol (a package-level `var` in a
+   non-test file, so it runs in production builds).
 
 ```go
 // in your package
@@ -64,13 +66,34 @@ type MyReq struct {
 	Info    interface{} `json:"-"` // transient scratch — excluded
 }
 
-func init() {
-	messaging.RegisterMsg(MyReq{}) // messages are value types; register the value
+type MyRsp struct {
+	messaging.MsgMeta
 }
+
+var (
+	Protocol = messaging.DefineProtocol("mypkg",
+		messaging.RoleDef{Name: "requester", Sends: []messaging.Msg{MyReq{}}},
+		messaging.RoleDef{Name: "responder", Sends: []messaging.Msg{MyRsp{}}},
+	)
+	Requester = Protocol.Role("requester")
+	Responder = Protocol.Role("responder")
+)
 ```
 
-If you forget the registration and a checkpoint captures that message in a port
-buffer, the load fails with `unknown message type "yourpkg.MyReq"`.
+Components then declare which role each port speaks, right where they declare
+the port:
+
+```go
+comp.DeclarePort("Top", mypkg.Responder)
+```
+
+Adding a new message is one type definition plus one entry in a `Sends` list.
+(`messaging.RegisterMsg(MyReq{})` in an `init()` remains as the low-level
+primitive, but protocols are the recommended path.) A registration-coverage
+audit in `messaging` fails CI for any message type in the Akita module that
+belongs to no protocol, and the load itself fails loudly — never silently —
+with `unknown message type "yourpkg.MyReq"` if an unregistered message was
+captured in a port buffer.
 
 ## Events
 
@@ -170,9 +193,11 @@ and be registered with `sim.RegisterResource`.
 
 ## Testing your types
 
-You usually do not need a dedicated test: a forgotten `RegisterMsg`/`RegisterEvent`
-fails loudly when a checkpoint that captured the type is loaded, and a
-non-serializable `State` panics at `Build`. For end-to-end confidence, take and
+You usually do not need a dedicated test: a message type that belongs to no
+protocol fails the registration-coverage audit in `messaging` at CI time, a
+forgotten `RegisterEvent` fails loudly when a checkpoint that captured the
+event is loaded, and a non-serializable `State` panics at `Build`. For
+end-to-end confidence, take and
 restore a checkpoint in a test and assert the resumed run matches an
 uninterrupted one — see the resume oracles under `mem/acceptancetests` for the
 pattern.

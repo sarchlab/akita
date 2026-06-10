@@ -2,7 +2,7 @@
 package memaccessagent
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -73,8 +73,8 @@ func (b Builder) Build(name string) *MemAccessAgent {
 		WriteLeft:       spec.WriteLeft,
 		ReadLeft:        spec.ReadLeft,
 		KnownMemValue:   make(map[uint64][]uint32),
-		PendingReadReq:  make(map[uint64]mem.ReadReq),
-		PendingWriteReq: make(map[uint64]mem.WriteReq),
+		PendingReadReq:  make(map[uint64]memprotocol.ReadReq),
+		PendingWriteReq: make(map[uint64]memprotocol.WriteReq),
 	}
 
 	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
@@ -95,7 +95,7 @@ func (b Builder) Build(name string) *MemAccessAgent {
 	mw := &agentMiddleware{agent: agent}
 	modelComp.AddMiddleware(mw)
 
-	modelComp.DeclarePort("Mem")
+	modelComp.DeclarePort("Mem", memprotocol.Requester)
 
 	b.registrar.RegisterComponent(agent)
 

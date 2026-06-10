@@ -1,8 +1,7 @@
 package writethroughcache
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
-
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -34,7 +33,7 @@ func (s *respondStage) Tick() bool {
 }
 
 func (s *respondStage) respondReadTrans(trans *transactionState) bool {
-	dr := mem.DataReadyRsp{}
+	dr := memprotocol.DataReadyRsp{}
 	dr.ID = timing.GetIDGenerator().Generate()
 	dr.Src = s.cache.topPort().AsRemote()
 	dr.Dst = trans.ReadMeta.Src
@@ -52,7 +51,7 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 	trans.Removed = true
 
 	// Reconstruct read for tracing
-	read := mem.ReadReq{
+	read := memprotocol.ReadReq{
 		MsgMeta:        trans.ReadMeta,
 		Address:        trans.ReadAddress,
 		AccessByteSize: trans.ReadAccessByteSize,
@@ -64,7 +63,7 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 }
 
 func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
-	done := mem.WriteDoneRsp{}
+	done := memprotocol.WriteDoneRsp{}
 	done.ID = timing.GetIDGenerator().Generate()
 	done.Src = s.cache.topPort().AsRemote()
 	done.Dst = trans.WriteMeta.Src
@@ -81,7 +80,7 @@ func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
 	trans.Removed = true
 
 	// Reconstruct write for tracing
-	write := mem.WriteReq{
+	write := memprotocol.WriteReq{
 		MsgMeta:   trans.WriteMeta,
 		Address:   trans.WriteAddress,
 		Data:      trans.WriteData,

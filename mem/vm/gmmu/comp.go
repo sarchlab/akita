@@ -1,7 +1,7 @@
 package gmmu
 
 import (
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -52,7 +52,7 @@ type devicePageAccess struct {
 
 // State contains mutable runtime data for the GMMU.
 type State struct {
-	ControlState           control.State               `json:"control_state"`
+	ControlState           memcontrolprotocol.State    `json:"control_state"`
 	CurrentCmdID           uint64                      `json:"current_cmd_id"`
 	CurrentCmdSrc          messaging.RemotePort        `json:"current_cmd_src"`
 	WalkingTranslations    []transactionState          `json:"walking_translations"`

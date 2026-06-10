@@ -1,8 +1,8 @@
 package dram
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -23,7 +23,7 @@ func (m *respondMW) topPort() messaging.Port {
 // in-flight transactions can finish and the drain can converge.
 func (m *respondMW) Tick() bool {
 	next := &m.comp.State
-	if next.ControlState == control.StatePaused {
+	if next.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
 	spec := m.comp.Spec()
@@ -79,13 +79,13 @@ func (m *respondMW) finalizeWriteTrans(
 		panic(err)
 	}
 
-	writeDone := mem.WriteDoneRsp{}
+	writeDone := memprotocol.WriteDoneRsp{}
 	writeDone.ID = timing.GetIDGenerator().Generate()
 	writeDone.Src = m.topPort().AsRemote()
 	writeDone.Dst = t.WriteMsg.Src
 	writeDone.RspTo = t.WriteMsg.ID
 	writeDone.TrafficBytes = 4
-	writeDone.TrafficClass = "mem.WriteDoneRsp"
+	writeDone.TrafficClass = "memprotocol.WriteDoneRsp"
 
 	if !m.topPort().CanSend() {
 		return false
@@ -110,14 +110,14 @@ func (m *respondMW) finalizeReadTrans(
 		panic(err)
 	}
 
-	dataReady := mem.DataReadyRsp{}
+	dataReady := memprotocol.DataReadyRsp{}
 	dataReady.ID = timing.GetIDGenerator().Generate()
 	dataReady.Src = m.topPort().AsRemote()
 	dataReady.Dst = t.ReadMsg.Src
 	dataReady.Data = data
 	dataReady.RspTo = t.ReadMsg.ID
 	dataReady.TrafficBytes = len(data) + 4
-	dataReady.TrafficClass = "mem.DataReadyRsp"
+	dataReady.TrafficClass = "memprotocol.DataReadyRsp"
 
 	if !m.topPort().CanSend() {
 		return false

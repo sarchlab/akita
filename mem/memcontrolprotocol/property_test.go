@@ -1,11 +1,12 @@
-package control_test
+package memcontrolprotocol_test
 
 import (
 	"bytes"
 	"math/rand"
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -39,8 +40,8 @@ type fuzzer struct {
 	model   map[uint64][]byte // expected value a read should return
 	flushed map[uint64][]byte // value currently in the backing memory
 	pending map[uint64]fuzzReq
-	busy    map[uint64]bool               // address has an outstanding request
-	ctrlIDs map[uint64]mem.ControlCommand // control reqs issued, awaiting ack
+	busy    map[uint64]bool                       // address has an outstanding request
+	ctrlIDs map[uint64]memcontrolprotocol.Command // control reqs issued, awaiting ack
 	paused  bool
 }
 
@@ -61,7 +62,7 @@ func newFuzzer(t *testing.T, seed int64) *fuzzer {
 		flushed: map[uint64][]byte{},
 		pending: map[uint64]fuzzReq{},
 		busy:    map[uint64]bool{},
-		ctrlIDs: map[uint64]mem.ControlCommand{},
+		ctrlIDs: map[uint64]memcontrolprotocol.Command{},
 	}
 	for i := range 6 {
 		addr := uint64(i) * cpBlockSize
@@ -99,12 +100,12 @@ func (f *fuzzer) handleWorkloadRsp(out messaging.Msg) {
 	}
 
 	switch r := out.(type) {
-	case mem.DataReadyRsp:
+	case memprotocol.DataReadyRsp:
 		if !bytes.Equal(r.Data, f.model[req.addr]) {
 			f.t.Fatalf("read %#x = %v, want %v",
 				req.addr, r.Data, f.model[req.addr])
 		}
-	case mem.WriteDoneRsp:
+	case memprotocol.WriteDoneRsp:
 		// model[addr] was set to the written value at issue time.
 	default:
 		f.t.Fatalf("unexpected workload response %T", out)
@@ -115,7 +116,7 @@ func (f *fuzzer) handleWorkloadRsp(out messaging.Msg) {
 }
 
 func (f *fuzzer) handleControlRsp(out messaging.Msg) {
-	rsp, ok := out.(mem.ControlRsp)
+	rsp, ok := out.(memcontrolprotocol.Rsp)
 	if !ok {
 		f.t.Fatalf("non-ControlRsp %T on control port", out)
 	}
@@ -126,16 +127,16 @@ func (f *fuzzer) handleControlRsp(out messaging.Msg) {
 	if !rsp.Success {
 		f.t.Fatalf("control %v failed unexpectedly: %q", rsp.Command, rsp.Error)
 	}
-	if rsp.Command == mem.CmdDrain && !f.cacheQuiescent() {
+	if rsp.Command == memcontrolprotocol.CmdDrain && !f.cacheQuiescent() {
 		f.t.Fatalf("Drain acked but cache is not quiescent")
 	}
 
 	// Track the lifecycle state from acks (not optimistically): Drain is
 	// async, so the cache is only paused once its ack arrives.
 	switch rsp.Command {
-	case mem.CmdPause, mem.CmdDrain:
+	case memcontrolprotocol.CmdPause, memcontrolprotocol.CmdDrain:
 		f.paused = true
-	case mem.CmdEnable, mem.CmdReset:
+	case memcontrolprotocol.CmdEnable, memcontrolprotocol.CmdReset:
 		f.paused = false
 	}
 }
@@ -184,11 +185,11 @@ func (f *fuzzer) issueWrite() {
 		byte(f.rng.Intn(256)), byte(f.rng.Intn(256)),
 		byte(f.rng.Intn(256)), byte(f.rng.Intn(256)),
 	}
-	req := mem.WriteReq{Address: addr, Data: data}
+	req := memprotocol.WriteReq{Address: addr, Data: data}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = f.h.agent
 	req.Dst = f.h.top.AsRemote()
-	req.TrafficClass = "mem.WriteReq"
+	req.TrafficClass = "memprotocol.WriteReq"
 	f.h.top.Deliver(req)
 
 	f.busy[addr] = true
@@ -201,23 +202,23 @@ func (f *fuzzer) issueRead() {
 	if !ok {
 		return
 	}
-	req := mem.ReadReq{Address: addr, AccessByteSize: 4}
+	req := memprotocol.ReadReq{Address: addr, AccessByteSize: 4}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = f.h.agent
 	req.Dst = f.h.top.AsRemote()
-	req.TrafficClass = "mem.ReadReq"
+	req.TrafficClass = "memprotocol.ReadReq"
 	f.h.top.Deliver(req)
 
 	f.busy[addr] = true
 	f.pending[req.ID] = fuzzReq{addr: addr}
 }
 
-func (f *fuzzer) issueControl(cmd mem.ControlCommand) {
-	req := mem.ControlReq{Command: cmd}
+func (f *fuzzer) issueControl(cmd memcontrolprotocol.Command) {
+	req := memcontrolprotocol.Req{Command: cmd}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = f.h.agent
 	req.Dst = f.h.ctrl.AsRemote()
-	req.TrafficClass = "mem.ControlReq"
+	req.TrafficClass = "memcontrolprotocol.Req"
 	f.h.ctrl.Deliver(req)
 	f.ctrlIDs[req.ID] = cmd
 }
@@ -234,9 +235,9 @@ func (f *fuzzer) pickControl() {
 
 	if !f.paused {
 		if f.rng.Intn(2) == 0 {
-			f.issueControl(mem.CmdPause)
+			f.issueControl(memcontrolprotocol.CmdPause)
 		} else {
-			f.issueControl(mem.CmdDrain)
+			f.issueControl(memcontrolprotocol.CmdDrain)
 		}
 		return
 	}
@@ -244,7 +245,7 @@ func (f *fuzzer) pickControl() {
 	// Paused. If workload is still outstanding, resume to let it drain
 	// rather than mutating cache contents underneath it.
 	if len(f.pending) != 0 {
-		f.issueControl(mem.CmdEnable)
+		f.issueControl(memcontrolprotocol.CmdEnable)
 		return
 	}
 
@@ -252,23 +253,23 @@ func (f *fuzzer) pickControl() {
 	case 0:
 		// Flush persists every dirty block: the backing store now matches
 		// the model.
-		f.issueControl(mem.CmdFlush)
+		f.issueControl(memcontrolprotocol.CmdFlush)
 		for a := range f.model {
 			f.flushed[a] = append([]byte(nil), f.model[a]...)
 		}
 	case 1:
 		// Invalidate/Reset drop the cache without writeback: reads now come
 		// from the backing store, so the model reverts to the flushed view.
-		cmd := mem.CmdInvalidate
+		cmd := memcontrolprotocol.CmdInvalidate
 		if f.rng.Intn(2) == 0 {
-			cmd = mem.CmdReset
+			cmd = memcontrolprotocol.CmdReset
 		}
 		f.issueControl(cmd)
 		for a := range f.model {
 			f.model[a] = append([]byte(nil), f.flushed[a]...)
 		}
 	default:
-		f.issueControl(mem.CmdEnable)
+		f.issueControl(memcontrolprotocol.CmdEnable)
 	}
 }
 
@@ -315,7 +316,7 @@ func (f *fuzzer) run(iterations int) {
 	// Resume so queued workload can finish, then confirm nothing was lost
 	// or stuck.
 	if f.paused {
-		f.issueControl(mem.CmdEnable)
+		f.issueControl(memcontrolprotocol.CmdEnable)
 	}
 	f.tickUntil(func() bool {
 		return len(f.pending) == 0 && len(f.ctrlIDs) == 0
@@ -324,7 +325,7 @@ func (f *fuzzer) run(iterations int) {
 		f.t.Fatalf("%d workload requests never completed", len(f.pending))
 	}
 	if len(f.ctrlIDs) != 0 {
-		stuck := make([]mem.ControlCommand, 0, len(f.ctrlIDs))
+		stuck := make([]memcontrolprotocol.Command, 0, len(f.ctrlIDs))
 		for _, cmd := range f.ctrlIDs {
 			stuck = append(stuck, cmd)
 		}

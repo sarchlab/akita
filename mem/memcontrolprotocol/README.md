@@ -1,10 +1,10 @@
-# mem/control
+# mem/memcontrolprotocol
 
-Shared control-lifecycle types and a conformance harness for the uniform
-memory-agent control protocol. The protocol verbs themselves
-(`mem.ControlCommand`, `mem.ControlReq`, `mem.ControlRsp`) live in package
-`mem`; this package adds the reusable pieces every memory agent and its
-tests share.
+The protocol package for the uniform memory-agent control protocol. It
+defines the protocol (`memcontrolprotocol.Protocol` with requester/responder roles),
+its messages and verbs (`memcontrolprotocol.Req`, `memcontrolprotocol.Rsp`, `memcontrolprotocol.Command`),
+the shared control-lifecycle types, and the conformance harness every
+memory agent and its tests share.
 
 See [`../CONTROL_PROTOCOL.md`](../CONTROL_PROTOCOL.md) for the full
 protocol reference.
@@ -20,7 +20,7 @@ protocol reference.
   and `TranslationCacheLike()`, plus `Supports(cmd)`.
 - **Error strings** — `ErrUnsupported` (`"unsupported"`) and
   `ErrMustBePausedOrDrained` (`"must be paused or drained"`), the
-  conventional `ControlRsp.Error` values.
+  conventional `Rsp.Error` values.
 - **`IsSyncVerb(cmd)`** — reports whether a verb is acked synchronously.
 - **`RunContract`** — a `*testing.T` harness that drives every verb
   against a built component over its real `Control` port and asserts the
@@ -66,20 +66,20 @@ Each component package adds one test that builds the component and calls
 
 ```go
 func TestControlContract(t *testing.T) {
-    build := func() *control.Harness {
+    build := func() *memcontrolprotocol.Harness {
         comp := MakeBuilder(). /* ... */ .Build("MyComp")
-        return &control.Harness{
+        return &memcontrolprotocol.Harness{
             Comp: comp,
             Ctrl: comp.GetPortByName("Control"),
         }
     }
 
-    control.RunContract(t, "mycomp", build, control.Universal())
+    memcontrolprotocol.RunContract(t, "mycomp", build, memcontrolprotocol.Universal())
 }
 ```
 
-The harness rebuilds the component per verb, delivers each `ControlReq`,
-ticks until the `ControlRsp` arrives (or the tick budget expires), and
+The harness rebuilds the component per verb, delivers each `Req`,
+ticks until the `Rsp` arrives (or the tick budget expires), and
 checks `Command`, `RspTo`, `Success`, and `Error`. It enforces only the
 protocol surface — component-internal effects (directory cleared after
 Reset, dirty data written back after Flush, etc.) belong in the

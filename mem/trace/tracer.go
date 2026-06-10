@@ -3,7 +3,7 @@ package trace
 
 import (
 	"github.com/sarchlab/akita/v5/datarecording"
-	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -53,7 +53,7 @@ func NewDBTracer(dataRecorder datarecording.DataRecorder) tracing.Tracer {
 
 // StartTask marks the start of a memory transaction
 func (t *dbTracer) StartTask(task tracing.TaskStart) {
-	req, ok := task.Detail.(mem.AccessReq)
+	req, ok := task.Detail.(memprotocol.AccessReq)
 	if !ok {
 		return
 	}

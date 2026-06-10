@@ -2,6 +2,7 @@ package tlb
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -66,7 +67,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 			break
 		}
 
-		msg := msgI.(vm.TranslationReq)
+		msg := msgI.(vmprotocol.TranslationReq)
 		// Dwell one extra cycle at stage 0 to preserve the same per-stage
 		// latency as the original hand-coded pipeline.
 		next.Pipeline.AcceptWithDelay(pipelineTLBReqState{Msg: msg}, 1)
@@ -160,14 +161,14 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	mshrEntry := &next.RespondingMSHRData
 	page := mshrEntry.Page
 	reqMsg := mshrEntry.Requests[0]
-	rspToTop := vm.TranslationRsp{
+	rspToTop := vmprotocol.TranslationRsp{
 		Page: page,
 	}
 	rspToTop.ID = timing.GetIDGenerator().Generate()
 	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = reqMsg.Src
 	rspToTop.RspTo = reqMsg.ID
-	rspToTop.TrafficClass = "vm.TranslationRsp"
+	rspToTop.TrafficClass = "vmprotocol.TranslationRsp"
 
 	if !m.topPort().CanSend() {
 		return false
@@ -191,7 +192,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	return true
 }
 
-func (m *tlbMiddleware) lookup(msg vm.TranslationReq) bool {
+func (m *tlbMiddleware) lookup(msg vmprotocol.TranslationReq) bool {
 	spec := m.comp.Spec()
 	next := &m.comp.State
 
@@ -210,7 +211,7 @@ func (m *tlbMiddleware) lookup(msg vm.TranslationReq) bool {
 }
 
 func (m *tlbMiddleware) handleTranslationHit(
-	msg vm.TranslationReq,
+	msg vmprotocol.TranslationReq,
 	setID, wayID int,
 	page vm.Page,
 ) bool {
@@ -238,7 +239,7 @@ func (m *tlbMiddleware) handleTranslationHit(
 	return true
 }
 
-func (m *tlbMiddleware) handleTranslationMiss(msg vm.TranslationReq) bool {
+func (m *tlbMiddleware) handleTranslationMiss(msg vmprotocol.TranslationReq) bool {
 	next := &m.comp.State
 	spec := m.comp.Spec()
 
@@ -270,17 +271,17 @@ func vAddrToSetID(vAddr uint64, spec Spec) (setID int) {
 }
 
 func (m *tlbMiddleware) sendRspToTop(
-	msg vm.TranslationReq,
+	msg vmprotocol.TranslationReq,
 	page vm.Page,
 ) bool {
-	rsp := vm.TranslationRsp{
+	rsp := vmprotocol.TranslationRsp{
 		Page: page,
 	}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.RspTo = msg.ID
-	rsp.TrafficClass = "vm.TranslationRsp"
+	rsp.TrafficClass = "vmprotocol.TranslationRsp"
 
 	if !m.topPort().CanSend() {
 		return false
@@ -296,7 +297,7 @@ func (m *tlbMiddleware) sendRspToTop(
 }
 
 func (m *tlbMiddleware) processTLBMSHRHit(
-	msg vm.TranslationReq,
+	msg vmprotocol.TranslationReq,
 ) bool {
 	next := &m.comp.State
 	idx, found := mshrGetEntry(next.MSHREntries, msg.PID, msg.VAddr)
@@ -314,18 +315,18 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 	return true
 }
 
-func (m *tlbMiddleware) fetchBottom(msg vm.TranslationReq) bool {
+func (m *tlbMiddleware) fetchBottom(msg vmprotocol.TranslationReq) bool {
 	spec := m.comp.Spec()
 	mapper := m.comp.Resources().TranslationProviderMapper
 
-	fetchBottom := vm.TranslationReq{}
+	fetchBottom := vmprotocol.TranslationReq{}
 	fetchBottom.ID = timing.GetIDGenerator().Generate()
 	fetchBottom.Src = m.bottomPort().AsRemote()
 	fetchBottom.Dst = findTranslationPort(mapper, msg.VAddr)
 	fetchBottom.PID = msg.PID
 	fetchBottom.VAddr = msg.VAddr
 	fetchBottom.DeviceID = msg.DeviceID
-	fetchBottom.TrafficClass = "vm.TranslationReq"
+	fetchBottom.TrafficClass = "vmprotocol.TranslationReq"
 
 	if !m.bottomPort().CanSend() {
 		return false
@@ -362,7 +363,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 		return false
 	}
 
-	item := itemI.(vm.TranslationRsp)
+	item := itemI.(vmprotocol.TranslationRsp)
 	spec := m.comp.Spec()
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: tracing.MsgIDAtReceiver(item, m.comp),

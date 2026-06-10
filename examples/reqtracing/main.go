@@ -36,6 +36,20 @@ type readRsp struct {
 	Seq int
 }
 
+// readProtocol is the read protocol: the client requests reads and the server
+// responds. Defining the protocol registers the message types with the
+// checkpoint codec.
+var (
+	readProtocol = messaging.DefineProtocol("examples.reqtracing",
+		messaging.RoleDef{Name: "requester",
+			Sends: []messaging.Msg{readReq{}}},
+		messaging.RoleDef{Name: "responder",
+			Sends: []messaging.Msg{readRsp{}}},
+	)
+	readRequester = readProtocol.Role("requester")
+	readResponder = readProtocol.Role("responder")
+)
+
 // --- Client ---
 
 type clientSpec struct {
@@ -206,7 +220,7 @@ func main() {
 		WithSpec(clientSpec{Freq: 1 * timing.GHz}).
 		Build("Client")
 	client.AddMiddleware(&clientMW{comp: client, inFlight: make(map[uint64]readReq)})
-	client.DeclarePort("Out")
+	client.DeclarePort("Out", readRequester)
 	client.AssignPort("Out", messaging.NewPort(client, 4, 4, "Client.Out"))
 	registrar.RegisterComponent(client)
 
@@ -216,7 +230,7 @@ func main() {
 		WithSpec(serverSpec{Freq: 1 * timing.GHz, Latency: 4}).
 		Build("Server")
 	server.AddMiddleware(&serverMW{comp: server})
-	server.DeclarePort("Out")
+	server.DeclarePort("Out", readResponder)
 	server.AssignPort("Out", messaging.NewPort(server, 4, 4, "Server.Out"))
 	registrar.RegisterComponent(server)
 

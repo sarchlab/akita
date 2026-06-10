@@ -2,6 +2,9 @@ package datamover
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -84,10 +87,10 @@ func (b Builder) Build(name string) *Comp {
 	dataMW := &dataTransferMW{comp: modelComp}
 	modelComp.AddMiddleware(dataMW)
 
-	modelComp.DeclarePort("Top")
-	modelComp.DeclarePort("Inside")
-	modelComp.DeclarePort("Outside")
-	modelComp.DeclarePort("Control")
+	modelComp.DeclarePort("Top", datamoverprotocol.Responder)
+	modelComp.DeclarePort("Inside", memprotocol.Requester)
+	modelComp.DeclarePort("Outside", memprotocol.Requester)
+	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	b.registrar.RegisterComponent(modelComp)
 

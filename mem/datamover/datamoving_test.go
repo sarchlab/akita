@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -105,7 +106,7 @@ var _ = Describe("DataMover", func() {
 		}
 		outsideStorage.Write(0, data)
 
-		req := DataMoveRequest{}
+		req := datamoverprotocol.DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
@@ -114,7 +115,7 @@ var _ = Describe("DataMover", func() {
 		req.DstAddress = 0
 		req.DstSide = "inside"
 		req.ByteSize = 4096
-		req.TrafficClass = "datamover.DataMoveRequest"
+		req.TrafficClass = "datamoverprotocol.datamoverprotocol.DataMoveRequest"
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
@@ -122,7 +123,7 @@ var _ = Describe("DataMover", func() {
 
 		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
 		Expect(srcPort.RetrieveIncoming()).To(
-			BeAssignableToTypeOf(DataMoveResponse{}))
+			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 
 	It("should move data inside to outside", func() {
@@ -132,7 +133,7 @@ var _ = Describe("DataMover", func() {
 		}
 		insideStorage.Write(0, data)
 
-		req := DataMoveRequest{}
+		req := datamoverprotocol.DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
@@ -141,7 +142,7 @@ var _ = Describe("DataMover", func() {
 		req.DstAddress = 0
 		req.DstSide = "outside"
 		req.ByteSize = 4096
-		req.TrafficClass = "datamover.DataMoveRequest"
+		req.TrafficClass = "datamoverprotocol.datamoverprotocol.DataMoveRequest"
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
@@ -149,7 +150,7 @@ var _ = Describe("DataMover", func() {
 
 		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
 		Expect(srcPort.RetrieveIncoming()).To(
-			BeAssignableToTypeOf(DataMoveResponse{}))
+			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 
 	It("should move on difference addresses", func() {
@@ -159,7 +160,7 @@ var _ = Describe("DataMover", func() {
 		}
 		insideStorage.Write(0, data)
 
-		req := DataMoveRequest{}
+		req := datamoverprotocol.DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
@@ -168,7 +169,7 @@ var _ = Describe("DataMover", func() {
 		req.DstAddress = 4096
 		req.DstSide = "outside"
 		req.ByteSize = 4096
-		req.TrafficClass = "datamover.DataMoveRequest"
+		req.TrafficClass = "datamoverprotocol.datamoverprotocol.DataMoveRequest"
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
@@ -176,7 +177,7 @@ var _ = Describe("DataMover", func() {
 
 		Expect(outsideStorage.Read(4096, 4096)).To(Equal(data))
 		Expect(srcPort.RetrieveIncoming()).To(
-			BeAssignableToTypeOf(DataMoveResponse{}))
+			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 
 	It("should move partial data", func() {
@@ -186,7 +187,7 @@ var _ = Describe("DataMover", func() {
 		}
 		outsideStorage.Write(0, data)
 
-		req := DataMoveRequest{}
+		req := datamoverprotocol.DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
@@ -195,7 +196,7 @@ var _ = Describe("DataMover", func() {
 		req.DstAddress = 512
 		req.DstSide = "inside"
 		req.ByteSize = 512
-		req.TrafficClass = "datamover.DataMoveRequest"
+		req.TrafficClass = "datamoverprotocol.datamoverprotocol.DataMoveRequest"
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
@@ -204,11 +205,11 @@ var _ = Describe("DataMover", func() {
 		expected := data[:512]
 		Expect(insideStorage.Read(512, 512)).To(Equal(expected))
 		Expect(srcPort.RetrieveIncoming()).To(
-			BeAssignableToTypeOf(DataMoveResponse{}))
+			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 
 	It("should handle zero-size transfers", func() {
-		req := DataMoveRequest{}
+		req := datamoverprotocol.DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
@@ -217,7 +218,7 @@ var _ = Describe("DataMover", func() {
 		req.DstAddress = 0
 		req.DstSide = "outside"
 		req.ByteSize = 0
-		req.TrafficClass = "datamover.DataMoveRequest"
+		req.TrafficClass = "datamoverprotocol.datamoverprotocol.DataMoveRequest"
 
 		Expect(func() {
 			dataMover.GetPortByName("Top").Deliver(req)
@@ -231,7 +232,7 @@ var _ = Describe("DataMover", func() {
 		}
 		insideStorage.Write(0, data)
 
-		req := DataMoveRequest{}
+		req := datamoverprotocol.DataMoveRequest{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
@@ -240,7 +241,7 @@ var _ = Describe("DataMover", func() {
 		req.DstAddress = 512
 		req.DstSide = "inside"
 		req.ByteSize = 512
-		req.TrafficClass = "datamover.DataMoveRequest"
+		req.TrafficClass = "datamoverprotocol.datamoverprotocol.DataMoveRequest"
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
@@ -249,6 +250,6 @@ var _ = Describe("DataMover", func() {
 		expected := append(data[:512], data[:512]...)
 		Expect(insideStorage.Read(0, 1024)).To(Equal(expected))
 		Expect(srcPort.RetrieveIncoming()).To(
-			BeAssignableToTypeOf(DataMoveResponse{}))
+			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 })

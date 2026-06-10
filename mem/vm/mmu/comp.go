@@ -1,7 +1,7 @@
 package mmu
 
 import (
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -33,12 +33,12 @@ type transactionState struct {
 
 // State contains mutable runtime data for the MMU.
 type State struct {
-	ControlState        control.State        `json:"control_state"`
-	CurrentCmdID        uint64               `json:"current_cmd_id"`
-	CurrentCmdSrc       messaging.RemotePort `json:"current_cmd_src"`
-	WalkingTranslations []transactionState   `json:"walking_translations"`
-	NextPhysicalPage    uint64               `json:"next_physical_page"`
-	ToRemoveFromPTW     []int                `json:"to_remove_from_ptw"`
+	ControlState        memcontrolprotocol.State `json:"control_state"`
+	CurrentCmdID        uint64                   `json:"current_cmd_id"`
+	CurrentCmdSrc       messaging.RemotePort     `json:"current_cmd_src"`
+	WalkingTranslations []transactionState       `json:"walking_translations"`
+	NextPhysicalPage    uint64                   `json:"next_physical_page"`
+	ToRemoveFromPTW     []int                    `json:"to_remove_from_ptw"`
 }
 
 // Resources holds the shared resources referenced by the MMU. The page table is

@@ -1,10 +1,9 @@
-package control
+package memcontrolprotocol
 
 import (
 	"fmt"
 	"testing"
 
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -87,15 +86,15 @@ func RunContract(
 	t.Helper()
 
 	verbs := []struct {
-		cmd   mem.ControlCommand
+		cmd   Command
 		label string
 	}{
-		{mem.CmdPause, "Pause"},
-		{mem.CmdDrain, "Drain"},
-		{mem.CmdEnable, "Enable"},
-		{mem.CmdReset, "Reset"},
-		{mem.CmdInvalidate, "Invalidate"},
-		{mem.CmdFlush, "Flush"},
+		{CmdPause, "Pause"},
+		{CmdDrain, "Drain"},
+		{CmdEnable, "Enable"},
+		{CmdReset, "Reset"},
+		{CmdInvalidate, "Invalidate"},
+		{CmdFlush, "Flush"},
 	}
 
 	for _, v := range verbs {
@@ -151,8 +150,8 @@ func runLifecycleInvariants(
 		t.Run(name+"/idempotent-pause", func(t *testing.T) {
 			h := build()
 			defer teardown(h)
-			driveExpectSuccess(t, h, mem.CmdPause)
-			driveExpectSuccess(t, h, mem.CmdPause)
+			driveExpectSuccess(t, h, CmdPause)
+			driveExpectSuccess(t, h, CmdPause)
 		})
 	}
 
@@ -160,8 +159,8 @@ func runLifecycleInvariants(
 		t.Run(name+"/idempotent-enable", func(t *testing.T) {
 			h := build()
 			defer teardown(h)
-			driveExpectSuccess(t, h, mem.CmdEnable)
-			driveExpectSuccess(t, h, mem.CmdEnable)
+			driveExpectSuccess(t, h, CmdEnable)
+			driveExpectSuccess(t, h, CmdEnable)
 		})
 	}
 
@@ -169,8 +168,8 @@ func runLifecycleInvariants(
 		t.Run(name+"/reset-from-paused", func(t *testing.T) {
 			h := build()
 			defer teardown(h)
-			driveExpectSuccess(t, h, mem.CmdPause)
-			driveExpectSuccess(t, h, mem.CmdReset)
+			driveExpectSuccess(t, h, CmdPause)
+			driveExpectSuccess(t, h, CmdReset)
 			if h.IsQuiescent != nil && !h.IsQuiescent() {
 				t.Errorf("component not quiescent after Reset from Paused")
 			}
@@ -186,7 +185,7 @@ func teardown(h *Harness) {
 
 // driveExpectSuccess delivers one verb and asserts a Success ack returns
 // within the verb's tick budget.
-func driveExpectSuccess(t *testing.T, h *Harness, cmd mem.ControlCommand) {
+func driveExpectSuccess(t *testing.T, h *Harness, cmd Command) {
 	t.Helper()
 
 	req := newControlReq(h.Ctrl, cmd)
@@ -208,8 +207,8 @@ func driveExpectSuccess(t *testing.T, h *Harness, cmd mem.ControlCommand) {
 
 // isConditionalVerb reports whether the verb requires the component to be
 // paused or drained before it is legal.
-func isConditionalVerb(cmd mem.ControlCommand) bool {
-	return cmd == mem.CmdInvalidate || cmd == mem.CmdFlush
+func isConditionalVerb(cmd Command) bool {
+	return cmd == CmdInvalidate || cmd == CmdFlush
 }
 
 // pauseForConditionalVerb drives the component to a paused state so a
@@ -217,11 +216,11 @@ func isConditionalVerb(cmd mem.ControlCommand) bool {
 func pauseForConditionalVerb(t *testing.T, h *Harness) {
 	t.Helper()
 
-	req := newControlReq(h.Ctrl, mem.CmdPause)
+	req := newControlReq(h.Ctrl, CmdPause)
 	h.Ctrl.Deliver(req)
 
 	rsp, ok := drainForRsp(h, maxTicks)
-	if !ok || rsp.Command != mem.CmdPause || !rsp.Success {
+	if !ok || rsp.Command != CmdPause || !rsp.Success {
 		t.Fatalf("could not pause before conditional verb; got %+v", rsp)
 	}
 }
@@ -231,7 +230,7 @@ func pauseForConditionalVerb(t *testing.T, h *Harness) {
 func checkConditionalIllegalState(
 	t *testing.T,
 	h *Harness,
-	cmd mem.ControlCommand,
+	cmd Command,
 ) {
 	t.Helper()
 
@@ -260,7 +259,7 @@ func checkConditionalIllegalState(
 func checkVerb(
 	t *testing.T,
 	h *Harness,
-	cmd mem.ControlCommand,
+	cmd Command,
 	supported bool,
 ) {
 	t.Helper()
@@ -303,7 +302,7 @@ func checkVerb(
 		// built (quiescent) state. Enforce it when the component supplies
 		// a probe.
 		if h.IsQuiescent != nil &&
-			(cmd == mem.CmdDrain || cmd == mem.CmdReset) &&
+			(cmd == CmdDrain || cmd == CmdReset) &&
 			!h.IsQuiescent() {
 			t.Errorf("%v acked but component is not quiescent", cmd)
 		}
@@ -324,13 +323,13 @@ func checkVerb(
 // Control port from a fixed pseudo-source "ContractAgent".
 func newControlReq(
 	ctrl messaging.Port,
-	cmd mem.ControlCommand,
-) mem.ControlReq {
-	req := mem.ControlReq{Command: cmd}
+	cmd Command,
+) Req {
+	req := Req{Command: cmd}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = messaging.RemotePort("ContractAgent")
 	req.Dst = ctrl.AsRemote()
-	req.TrafficClass = "mem.ControlReq"
+	req.TrafficClass = "Req"
 	return req
 }
 
@@ -338,10 +337,10 @@ func newControlReq(
 // ControlRsp to appear on the Control port's outgoing queue. It returns
 // the first such Rsp and true, or a zero Rsp and false if the budget is
 // exhausted.
-func drainForRsp(h *Harness, budget int) (mem.ControlRsp, bool) {
+func drainForRsp(h *Harness, budget int) (Rsp, bool) {
 	for range budget {
 		if msg := h.Ctrl.RetrieveOutgoing(); msg != nil {
-			if rsp, ok := msg.(mem.ControlRsp); ok {
+			if rsp, ok := msg.(Rsp); ok {
 				return rsp, true
 			}
 		}
@@ -350,9 +349,9 @@ func drainForRsp(h *Harness, budget int) (mem.ControlRsp, bool) {
 
 	// One last sweep in case the final tick produced the Rsp.
 	if msg := h.Ctrl.RetrieveOutgoing(); msg != nil {
-		if rsp, ok := msg.(mem.ControlRsp); ok {
+		if rsp, ok := msg.(Rsp); ok {
 			return rsp, true
 		}
 	}
-	return mem.ControlRsp{}, false
+	return Rsp{}, false
 }

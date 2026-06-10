@@ -4,7 +4,8 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -205,9 +206,9 @@ type dramTiming struct {
 
 // State contains mutable runtime data for the DRAM memory controller.
 type State struct {
-	ControlState  control.State        `json:"control_state"`
-	CurrentCmdID  uint64               `json:"current_cmd_id"`
-	CurrentCmdSrc messaging.RemotePort `json:"current_cmd_src"`
+	ControlState  memcontrolprotocol.State `json:"control_state"`
+	CurrentCmdID  uint64                   `json:"current_cmd_id"`
+	CurrentCmdSrc messaging.RemotePort     `json:"current_cmd_src"`
 
 	Transactions  []transactionState `json:"transactions"`
 	SubTransQueue subTransQueueState `json:"sub_trans_queue"`
@@ -257,13 +258,13 @@ type subTransState struct {
 
 // transactionState is a serializable representation of a Transaction.
 type transactionState struct {
-	HasRead         bool            `json:"has_read"`
-	HasWrite        bool            `json:"has_write"`
-	ReadMsg         mem.ReadReq     `json:"read_msg"`
-	WriteMsg        mem.WriteReq    `json:"write_msg"`
-	InternalAddress uint64          `json:"internal_address"`
-	SubTransactions []subTransState `json:"sub_transactions"`
-	ArrivalTick     uint64          `json:"arrival_tick"`
+	HasRead         bool                 `json:"has_read"`
+	HasWrite        bool                 `json:"has_write"`
+	ReadMsg         memprotocol.ReadReq  `json:"read_msg"`
+	WriteMsg        memprotocol.WriteReq `json:"write_msg"`
+	InternalAddress uint64               `json:"internal_address"`
+	SubTransactions []subTransState      `json:"sub_transactions"`
+	ArrivalTick     uint64               `json:"arrival_tick"`
 }
 
 // commandState is a serializable representation of a Command.

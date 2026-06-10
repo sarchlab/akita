@@ -5,7 +5,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -58,15 +59,15 @@ var _ = Describe("Ideal Memory Controller", func() {
 		conn.PlugIn(topPort)
 	}
 
-	makeReadReq := func() mem.ReadReq {
-		req := mem.ReadReq{}
+	makeReadReq := func() memprotocol.ReadReq {
+		req := memprotocol.ReadReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = 0
 		req.AccessByteSize = 4
 		req.TrafficBytes = 12
-		req.TrafficClass = "mem.ReadReq"
+		req.TrafficClass = "memprotocol.ReadReq"
 		return req
 	}
 
@@ -90,7 +91,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should accept write request and add to inflight transactions", func() {
-		writeReq := mem.WriteReq{}
+		writeReq := memprotocol.WriteReq{}
 		writeReq.ID = timing.GetIDGenerator().Generate()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
@@ -98,7 +99,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		writeReq.Data = []byte{0, 1, 2, 3}
 		writeReq.DirtyMask = []bool{false, false, true, false}
 		writeReq.TrafficBytes = len(writeReq.Data) + 12
-		writeReq.TrafficClass = "mem.WriteReq"
+		writeReq.TrafficClass = "memprotocol.WriteReq"
 		topPort.Deliver(writeReq)
 
 		madeProgress := memController.Tick()
@@ -131,18 +132,18 @@ var _ = Describe("Ideal Memory Controller", func() {
 		Expect(state.InflightTransactions).To(HaveLen(0))
 
 		rsp := topPort.RetrieveOutgoing()
-		Expect(rsp).To(BeAssignableToTypeOf(mem.DataReadyRsp{}))
+		Expect(rsp).To(BeAssignableToTypeOf(memprotocol.DataReadyRsp{}))
 	})
 
 	It("should send write response after latency ticks", func() {
-		writeReq := mem.WriteReq{}
+		writeReq := memprotocol.WriteReq{}
 		writeReq.ID = timing.GetIDGenerator().Generate()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0
 		writeReq.Data = []byte{0, 1, 2, 3}
 		writeReq.TrafficBytes = len(writeReq.Data) + 12
-		writeReq.TrafficClass = "mem.WriteReq"
+		writeReq.TrafficClass = "memprotocol.WriteReq"
 		topPort.Deliver(writeReq)
 
 		// Tick 1: take request, CycleLeft: 10 → 9
@@ -160,7 +161,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		Expect(state.InflightTransactions).To(HaveLen(0))
 
 		rsp := topPort.RetrieveOutgoing()
-		Expect(rsp).To(BeAssignableToTypeOf(mem.WriteDoneRsp{}))
+		Expect(rsp).To(BeAssignableToTypeOf(memprotocol.WriteDoneRsp{}))
 
 		// Verify data was written to storage
 		data, err := storage.Read(0, 4)
@@ -174,10 +175,10 @@ var _ = Describe("Ideal Memory Controller", func() {
 		build(1)
 
 		// Pre-fill the outgoing buffer so the controller's response Send fails.
-		dummy := mem.WriteDoneRsp{}
+		dummy := memprotocol.WriteDoneRsp{}
 		dummy.Src = topPort.AsRemote()
 		dummy.Dst = messaging.RemotePort("Agent")
-		dummy.TrafficClass = "mem.WriteDoneRsp"
+		dummy.TrafficClass = "memprotocol.WriteDoneRsp"
 		topPort.Send(dummy)
 
 		topPort.Deliver(makeReadReq())
@@ -214,7 +215,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		err := storage.Write(0, []byte{10, 20, 30, 40})
 		Expect(err).ToNot(HaveOccurred())
 
-		writeReq := mem.WriteReq{}
+		writeReq := memprotocol.WriteReq{}
 		writeReq.ID = timing.GetIDGenerator().Generate()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
@@ -222,7 +223,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		writeReq.Data = []byte{0, 1, 2, 3}
 		writeReq.DirtyMask = []bool{false, false, true, false}
 		writeReq.TrafficBytes = len(writeReq.Data) + 12
-		writeReq.TrafficClass = "mem.WriteReq"
+		writeReq.TrafficClass = "memprotocol.WriteReq"
 		topPort.Deliver(writeReq)
 
 		// Tick 1: take request
@@ -250,6 +251,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should use State for current state", func() {
 		state := memController.State
-		Expect(state.ControlState).To(Equal(control.StateEnabled))
+		Expect(state.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 	})
 })

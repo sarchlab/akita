@@ -52,6 +52,36 @@ func NewRegistry[T any](label string) *Registry[T] {
 	}
 }
 
+// Tag returns the wire tag the registry uses for the concrete type of v. It is
+// the full import path plus the type name (e.g.
+// "github.com/sarchlab/akita/v5/mem/memprotocol.ReadReq"), with a "*" prefix
+// for pointer forms, so same-named types in different packages cannot collide.
+// Exposed so audits can compute the tag a value would be stored under.
+func Tag(v any) string {
+	t := reflect.TypeOf(v)
+	if t == nil {
+		panic("codec: Tag requires a non-nil value")
+	}
+
+	return tagOf(t)
+}
+
+// tagOf derives the wire tag from a reflect.Type. It must be used identically
+// on the register and encode paths.
+func tagOf(t reflect.Type) string {
+	if t.Kind() == reflect.Ptr {
+		return "*" + tagOf(t.Elem())
+	}
+
+	if t.PkgPath() == "" {
+		// Unnamed or predeclared types have no import path; fall back to the
+		// short name (e.g. for tests using local anonymous helpers).
+		return t.String()
+	}
+
+	return t.PkgPath() + "." + t.Name()
+}
+
 // Register records a concrete type so it can be decoded later. Pass a zero value
 // of the concrete type, in the value or pointer form it will be encoded as; the
 // tag is derived from the Go type. Registering the same type twice is harmless.
@@ -62,8 +92,22 @@ func (r *Registry[T]) Register(v T) {
 	}
 
 	r.mu.Lock()
-	r.types[t.String()] = t
+	r.types[tagOf(t)] = t
 	r.mu.Unlock()
+}
+
+// Tags returns the wire tags of all registered types, in no particular order.
+// It exists for coverage audits; it is not used on the checkpoint path.
+func (r *Registry[T]) Tags() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	tags := make([]string, 0, len(r.types))
+	for tag := range r.types {
+		tags = append(tags, tag)
+	}
+
+	return tags
 }
 
 // EncodeSlice encodes a slice of T into a JSON array of typed payloads. Encoding
@@ -77,7 +121,7 @@ func (r *Registry[T]) EncodeSlice(vs []T) (json.RawMessage, error) {
 			return nil, fmt.Errorf("codec: encode %s %T: %w", r.label, v, err)
 		}
 		payloads[i] = typedPayload{
-			Type:    reflect.TypeOf(v).String(),
+			Type:    tagOf(reflect.TypeOf(v)),
 			Payload: raw,
 		}
 	}

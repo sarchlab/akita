@@ -3,8 +3,8 @@ package dram_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/dram"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
@@ -104,25 +104,25 @@ var _ = Describe("DRAM Statistics", func() {
 		conn.PlugIn(srcPort)
 
 		// Send a write request
-		write := mem.WriteReq{}
+		write := memprotocol.WriteReq{}
 		write.ID = timing.GetIDGenerator().Generate()
 		write.Address = 0x40
 		write.Data = []byte{1, 2, 3, 4}
 		write.Src = srcPort.AsRemote()
 		write.Dst = topPort.AsRemote()
 		write.TrafficBytes = len(write.Data) + 12
-		write.TrafficClass = "mem.WriteReq"
+		write.TrafficClass = "memprotocol.WriteReq"
 		srcPort.Send(write)
 
 		// Send a read request
-		read := mem.ReadReq{}
+		read := memprotocol.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Address = 0x40
 		read.AccessByteSize = 4
 		read.Src = srcPort.AsRemote()
 		read.Dst = topPort.AsRemote()
 		read.TrafficBytes = 12
-		read.TrafficClass = "mem.ReadReq"
+		read.TrafficClass = "memprotocol.ReadReq"
 		srcPort.Send(read)
 
 		engine.Run()

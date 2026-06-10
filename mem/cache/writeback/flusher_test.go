@@ -3,8 +3,8 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -105,9 +105,9 @@ var _ = Describe("Flusher", func() {
 			// Flush is a conditional verb: it is only legal once paused.
 			m.comp.State.CacheState = int(cacheStatePaused)
 
-			req := mem.ControlReq{Command: mem.CmdFlush}
+			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
 			req.ID = timing.GetIDGenerator().Generate()
-			req.TrafficClass = "mem.ControlReq"
+			req.TrafficClass = "memcontrolprotocol.Req"
 			controlPort.Deliver(req)
 
 			ret := f.Tick()
@@ -190,9 +190,9 @@ var _ = Describe("Flusher", func() {
 			// Flush is a conditional verb: it is only legal once paused.
 			m.comp.State.CacheState = int(cacheStatePaused)
 
-			req := mem.ControlReq{Command: mem.CmdFlush}
+			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
 			req.ID = timing.GetIDGenerator().Generate()
-			req.TrafficClass = "mem.ControlReq"
+			req.TrafficClass = "memcontrolprotocol.Req"
 
 			controlPort.Deliver(req)
 

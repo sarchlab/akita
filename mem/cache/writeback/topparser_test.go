@@ -3,7 +3,7 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -81,12 +81,12 @@ var _ = Describe("TopParser", func() {
 	})
 
 	It("should parse read from top", func() {
-		read := mem.ReadReq{}
+		read := memprotocol.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Address = 0x100
 		read.AccessByteSize = 64
 		read.TrafficBytes = 12
-		read.TrafficClass = "mem.ReadReq"
+		read.TrafficClass = "memprotocol.ReadReq"
 
 		topPort.Deliver(read)
 
@@ -101,11 +101,11 @@ var _ = Describe("TopParser", func() {
 	})
 
 	It("should parse write from top", func() {
-		write := mem.WriteReq{}
+		write := memprotocol.WriteReq{}
 		write.ID = timing.GetIDGenerator().Generate()
 		write.Address = 0x100
 		write.TrafficBytes = 12
-		write.TrafficClass = "mem.WriteReq"
+		write.TrafficClass = "memprotocol.WriteReq"
 
 		topPort.Deliver(write)
 

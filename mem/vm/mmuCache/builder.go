@@ -1,6 +1,8 @@
 package mmuCache
 
 import (
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -94,9 +96,9 @@ func (b Builder) Build(name string) *Comp {
 	cacheMW := &mmuCacheMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cacheMW)
 
-	modelComp.DeclarePort("Top")
-	modelComp.DeclarePort("Bottom")
-	modelComp.DeclarePort("Control")
+	modelComp.DeclarePort("Top", vmprotocol.Responder)
+	modelComp.DeclarePort("Bottom", vmprotocol.Requester)
+	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	b.registrar.RegisterComponent(modelComp)
 

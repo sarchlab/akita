@@ -4,7 +4,8 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -31,7 +32,7 @@ func (m *memMiddleware) Tick() bool {
 
 func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 	state := &m.comp.State
-	if state.ControlState != control.StateEnabled {
+	if state.ControlState != memcontrolprotocol.StateEnabled {
 		return false
 	}
 
@@ -61,7 +62,7 @@ func (m *memMiddleware) msgToInflightTransaction(msg messaging.Msg) inflightTran
 	recvTaskID := tracing.MsgIDAtReceiver(msg, m.comp)
 
 	switch payload := msg.(type) {
-	case mem.ReadReq:
+	case memprotocol.ReadReq:
 		return inflightTransaction{
 			CycleLeft:      spec.Latency,
 			Address:        payload.Address,
@@ -71,7 +72,7 @@ func (m *memMiddleware) msgToInflightTransaction(msg messaging.Msg) inflightTran
 			IsRead:         true,
 			Src:            payload.Src,
 		}
-	case mem.WriteReq:
+	case memprotocol.WriteReq:
 		return inflightTransaction{
 			CycleLeft:      spec.Latency,
 			Address:        payload.Address,
@@ -91,7 +92,7 @@ func (m *memMiddleware) msgToInflightTransaction(msg messaging.Msg) inflightTran
 
 func (m *memMiddleware) processCountdowns() bool {
 	state := &m.comp.State
-	if state.ControlState == control.StatePaused {
+	if state.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
 
@@ -143,14 +144,14 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 		log.Panic(err)
 	}
 
-	rsp := mem.DataReadyRsp{}
+	rsp := memprotocol.DataReadyRsp{}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
 	rsp.RspTo = tx.ReqID
 	rsp.Data = data
 	rsp.TrafficBytes = len(data) + 4
-	rsp.TrafficClass = "mem.DataReadyRsp"
+	rsp.TrafficClass = "memprotocol.DataReadyRsp"
 
 	if !m.topPort().CanSend() {
 		return false
@@ -164,13 +165,13 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 }
 
 func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
-	rsp := mem.WriteDoneRsp{}
+	rsp := memprotocol.WriteDoneRsp{}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
 	rsp.RspTo = tx.ReqID
 	rsp.TrafficBytes = 4
-	rsp.TrafficClass = "mem.WriteDoneRsp"
+	rsp.TrafficClass = "memprotocol.WriteDoneRsp"
 
 	if !m.topPort().CanSend() {
 		return false

@@ -143,14 +143,7 @@ func (m *incomingMW) tryDeliver() bool {
 			panic(fmt.Sprintf("no dst port found for %s", dst))
 		}
 
-		msg := messaging.MsgMeta{
-			ID:           meta.ID,
-			Src:          meta.Src,
-			Dst:          meta.Dst,
-			RspTo:        meta.RspTo,
-			TrafficClass: meta.TrafficClass,
-			TrafficBytes: meta.TrafficBytes,
-		}
+		msg := packetization.AssembledMsg{MsgMeta: meta}
 
 		if !dstPort.CanDeliver() {
 			break
