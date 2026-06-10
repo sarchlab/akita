@@ -5,6 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -193,7 +194,7 @@ func bufferMoveOffsetForwardTo(bs *bufferState, newOffset uint64) {
 }
 
 // resolveByteGranularity returns the byte granularity for a given port side.
-func resolveByteGranularity(spec Spec, side DataMovePort) uint64 {
+func resolveByteGranularity(spec Spec, side datamoverprotocol.DataMovePort) uint64 {
 	switch side {
 	case "inside":
 		return spec.InsideByteGranularity
@@ -205,16 +206,16 @@ func resolveByteGranularity(spec Spec, side DataMovePort) uint64 {
 	}
 }
 
-// transactionAsMsg creates a temporary DataMoveRequest for tracing purposes.
+// transactionAsMsg creates a temporary datamoverprotocol.DataMoveRequest for tracing purposes.
 func transactionAsMsg(
 	trans *dataMoverTransactionState,
-) DataMoveRequest {
-	req := DataMoveRequest{
+) datamoverprotocol.DataMoveRequest {
+	req := datamoverprotocol.DataMoveRequest{
 		SrcAddress: trans.SrcAddress,
 		DstAddress: trans.DstAddress,
 		ByteSize:   trans.ByteSize,
-		SrcSide:    DataMovePort(trans.SrcSide),
-		DstSide:    DataMovePort(trans.DstSide),
+		SrcSide:    datamoverprotocol.DataMovePort(trans.SrcSide),
+		DstSide:    datamoverprotocol.DataMovePort(trans.DstSide),
 	}
 	req.ID = trans.ReqID
 	req.Src = trans.ReqSrc

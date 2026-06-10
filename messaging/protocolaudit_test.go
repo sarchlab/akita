@@ -16,11 +16,12 @@ import (
 	// message saying to add the import.
 	_ "github.com/sarchlab/akita/v5/examples/ping"
 	_ "github.com/sarchlab/akita/v5/examples/tickingping"
-	_ "github.com/sarchlab/akita/v5/mem"
-	_ "github.com/sarchlab/akita/v5/mem/datamover"
-	_ "github.com/sarchlab/akita/v5/mem/vm"
+	_ "github.com/sarchlab/akita/v5/mem/control"
+	_ "github.com/sarchlab/akita/v5/mem/datamoverprotocol"
+	_ "github.com/sarchlab/akita/v5/mem/memprotocol"
+	_ "github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	_ "github.com/sarchlab/akita/v5/noc/acceptance"
-	_ "github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
+	_ "github.com/sarchlab/akita/v5/noc/networking/switching/endpointprotocol"
 	_ "github.com/sarchlab/akita/v5/noc/packetization"
 )
 
@@ -37,6 +38,8 @@ var todoUnregistered = map[string]string{}
 // todoUnregistered, these entries are permanent and each needs a strong
 // justification.
 var intentionallyUnregistered = map[string]string{
+	modulePath + "/messaging.MsgMeta": "the message envelope every message " +
+		"embeds; it belongs to no protocol and is not itself wire traffic",
 	modulePath + "/noc/networking/switching/switches.routedFlit": "internal " +
 		"switch pipeline state held in typed buffers and serialized " +
 		"concretely inside State; never sent through a Port, so the codec " +
@@ -117,15 +120,6 @@ func TestEveryMsgTypeIsRegistered(t *testing.T) {
 // may be registered in value or pointer form.
 func auditMsgType(t *testing.T, tag string, registered map[string]bool) {
 	t.Helper()
-
-	if tag == modulePath+"/messaging.MsgMeta" {
-		if registered[tag] || registered["*"+tag] {
-			t.Errorf("bare messaging.MsgMeta is the envelope, not a message, "+
-				"and must not be registered (tag %s)", tag)
-		}
-
-		return
-	}
 
 	if registered[tag] || registered["*"+tag] {
 		return

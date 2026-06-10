@@ -1,8 +1,7 @@
 package writeback
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
-
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -102,27 +101,27 @@ func (s *mshrStage) respondRead(
 ) {
 	_, offset := getCacheLineID(trans.ReadAddress, log2BlockSize)
 	respondData := data[offset : offset+trans.ReadAccessByteSize]
-	dataReady := mem.DataReadyRsp{}
+	dataReady := memprotocol.DataReadyRsp{}
 	dataReady.ID = timing.GetIDGenerator().Generate()
 	dataReady.Src = s.cache.topPort().AsRemote()
 	dataReady.Dst = trans.ReadMeta.Src
 	dataReady.RspTo = trans.ReadMeta.ID
 	dataReady.Data = respondData
 	dataReady.TrafficBytes = len(respondData) + 4
-	dataReady.TrafficClass = "mem.DataReadyRsp"
+	dataReady.TrafficClass = "memprotocol.DataReadyRsp"
 	s.cache.topPort().Send(dataReady)
 
 	tracing.TraceReqComplete(s.cache.comp, trans.ReadMeta)
 }
 
 func (s *mshrStage) respondWrite(trans *transactionState) {
-	writeDoneRsp := mem.WriteDoneRsp{}
+	writeDoneRsp := memprotocol.WriteDoneRsp{}
 	writeDoneRsp.ID = timing.GetIDGenerator().Generate()
 	writeDoneRsp.Src = s.cache.topPort().AsRemote()
 	writeDoneRsp.Dst = trans.WriteMeta.Src
 	writeDoneRsp.RspTo = trans.WriteMeta.ID
 	writeDoneRsp.TrafficBytes = 4
-	writeDoneRsp.TrafficClass = "mem.WriteDoneRsp"
+	writeDoneRsp.TrafficClass = "memprotocol.WriteDoneRsp"
 	s.cache.topPort().Send(writeDoneRsp)
 
 	tracing.TraceReqComplete(s.cache.comp, trans.WriteMeta)

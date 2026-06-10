@@ -1,8 +1,8 @@
 package writethroughcache
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
@@ -20,9 +20,9 @@ func (p *bottomParser) Tick() bool {
 	}
 
 	switch itemI.(type) {
-	case mem.WriteDoneRsp:
+	case memprotocol.WriteDoneRsp:
 		return p.processDoneRsp(itemI)
-	case mem.DataReadyRsp:
+	case memprotocol.DataReadyRsp:
 		return p.processDataReady(itemI)
 	default:
 		panic("cannot process response")
@@ -48,7 +48,7 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 	p.cache.bottomPort().RetrieveIncoming()
 
 	// Reconstruct writeToBottom for tracing
-	writeToBottom := mem.WriteReq{
+	writeToBottom := memprotocol.WriteReq{
 		MsgMeta:   trans.WriteToBottomMeta,
 		Data:      trans.WriteToBottomData,
 		DirtyMask: trans.WriteToBottomDirtyMask,
@@ -78,7 +78,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 	addr := trans.Address()
 	spec := p.cache.comp.Spec()
 	cachelineID := (addr >> spec.Log2BlockSize) << spec.Log2BlockSize
-	drMsg := msg.(mem.DataReadyRsp)
+	drMsg := msg.(memprotocol.DataReadyRsp)
 	data := drMsg.Data
 	dirtyMask := make([]bool, 1<<spec.Log2BlockSize)
 
@@ -110,7 +110,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 	p.cache.bottomPort().RetrieveIncoming()
 
 	// Reconstruct readToBottom for tracing
-	readToBottom := mem.ReadReq{
+	readToBottom := memprotocol.ReadReq{
 		MsgMeta: trans.ReadToBottomMeta,
 		PID:     trans.ReadToBottomPID,
 	}

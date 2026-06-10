@@ -5,6 +5,8 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/queueing"
@@ -116,9 +118,9 @@ func (b Builder) Build(name string) *Comp {
 	comp.AddMiddleware(ucmw) // index 0: control verbs
 	comp.AddMiddleware(pmw)  // index 1: data pipeline
 
-	comp.DeclarePort("Top", mem.Responder)
-	comp.DeclarePort("Bottom", mem.Requester)
-	comp.DeclarePort("Control", mem.ControlResponder)
+	comp.DeclarePort("Top", memprotocol.Responder)
+	comp.DeclarePort("Bottom", memprotocol.Requester)
+	comp.DeclarePort("Control", control.Responder)
 
 	b.registrar.RegisterComponent(comp)
 

@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/control"
-	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/timing"
@@ -47,7 +47,7 @@ func (m *respondMW) fetchFromBottom() bool {
 	}
 
 	switch rsp := rspI.(type) {
-	case vm.TranslationRsp:
+	case vmprotocol.TranslationRsp:
 		tracing.TraceReqReceive(m.comp, rsp)
 		return m.handleTranslationRsp(rsp)
 	default:
@@ -57,7 +57,7 @@ func (m *respondMW) fetchFromBottom() bool {
 	}
 }
 
-func (m *respondMW) handleTranslationRsp(rsp vm.TranslationRsp) bool {
+func (m *respondMW) handleTranslationRsp(rsp vmprotocol.TranslationRsp) bool {
 	state := &m.comp.State
 
 	reqTransaction, exists := state.RemoteMemReqs[rsp.RspTo]
@@ -73,14 +73,14 @@ func (m *respondMW) handleTranslationRsp(rsp vm.TranslationRsp) bool {
 		return false
 	}
 
-	rspToTop := vm.TranslationRsp{
+	rspToTop := vmprotocol.TranslationRsp{
 		Page: rsp.Page,
 	}
 	rspToTop.ID = timing.GetIDGenerator().Generate()
 	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = reqTransaction.ReqSrc
 	rspToTop.RspTo = rsp.ID
-	rspToTop.TrafficClass = "vm.TranslationRsp"
+	rspToTop.TrafficClass = "vmprotocol.TranslationRsp"
 
 	m.topPort().Send(rspToTop)
 

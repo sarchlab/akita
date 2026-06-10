@@ -3,7 +3,7 @@ package messaging
 // Msg is the interface for all messages transferred between components.
 //
 // Messages are value types: a message is constructed as a struct value (e.g.
-// `mem.ReadReq{...}`) and passed by value through ports. Once a message has
+// `memprotocol.ReadReq{...}`) and passed by value through ports. Once a message has
 // been handed to a port, it is single-use, immutable data — callers must not
 // mutate the value after Send/Deliver.
 type Msg interface {

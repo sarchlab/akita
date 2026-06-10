@@ -5,8 +5,11 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
+	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -27,30 +30,30 @@ func driveCtrl(
 	t *testing.T,
 	comp ticker,
 	ctrl messaging.Port,
-	cmd mem.ControlCommand,
+	cmd control.Command,
 	addrs []uint64,
 	pid vm.PID,
-) mem.ControlRsp {
+) control.Rsp {
 	t.Helper()
 
-	req := mem.ControlReq{Command: cmd, Addresses: addrs, PID: pid}
+	req := control.Req{Command: cmd, Addresses: addrs, PID: pid}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = messaging.RemotePort("Cmd")
 	req.Dst = ctrl.AsRemote()
-	req.TrafficClass = "mem.ControlReq"
+	req.TrafficClass = "control.Req"
 	ctrl.Deliver(req)
 
 	for range 256 {
 		comp.Tick()
 		if out := ctrl.RetrieveOutgoing(); out != nil {
-			if rsp, ok := out.(mem.ControlRsp); ok && rsp.Command == cmd {
+			if rsp, ok := out.(control.Rsp); ok && rsp.Command == cmd {
 				return rsp
 			}
 		}
 	}
 
 	t.Fatalf("no ack received for %v", cmd)
-	return mem.ControlRsp{}
+	return control.Rsp{}
 }
 
 // TestTLBSequence_PauseInvalidateEnable exercises the canonical TLB control
@@ -98,15 +101,15 @@ func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
 	}
 
 	// Pause -> Invalidate(0x1000) -> Enable.
-	if rsp := driveCtrl(t, comp, ctrl, mem.CmdPause, nil, 0); !rsp.Success {
+	if rsp := driveCtrl(t, comp, ctrl, control.CmdPause, nil, 0); !rsp.Success {
 		t.Fatalf("Pause failed: %q", rsp.Error)
 	}
 	if rsp := driveCtrl(
-		t, comp, ctrl, mem.CmdInvalidate, []uint64{0x1000}, pid,
+		t, comp, ctrl, control.CmdInvalidate, []uint64{0x1000}, pid,
 	); !rsp.Success {
 		t.Fatalf("Invalidate failed: %q", rsp.Error)
 	}
-	if rsp := driveCtrl(t, comp, ctrl, mem.CmdEnable, nil, 0); !rsp.Success {
+	if rsp := driveCtrl(t, comp, ctrl, control.CmdEnable, nil, 0); !rsp.Success {
 		t.Fatalf("Enable failed: %q", rsp.Error)
 	}
 
@@ -132,12 +135,12 @@ func resolveTranslation(
 
 	top.Deliver(makeTransReq(top, vAddr, pid))
 
-	var botReq vm.TranslationReq
+	var botReq vmprotocol.TranslationReq
 	botFound := false
 	for i := 0; i < 64 && !botFound; i++ {
 		comp.Tick()
 		if out := bottom.RetrieveOutgoing(); out != nil {
-			if r, ok := out.(vm.TranslationReq); ok {
+			if r, ok := out.(vmprotocol.TranslationReq); ok {
 				botReq = r
 				botFound = true
 			}
@@ -147,20 +150,20 @@ func resolveTranslation(
 		t.Fatalf("TLB did not forward a miss for %#x to Bottom", vAddr)
 	}
 
-	rsp := vm.TranslationRsp{Page: vm.Page{
+	rsp := vmprotocol.TranslationRsp{Page: vm.Page{
 		PID: pid, VAddr: vAddr, PAddr: vAddr + 0x10000, Valid: true,
 	}}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = remote
 	rsp.Dst = bottom.AsRemote()
 	rsp.RspTo = botReq.ID
-	rsp.TrafficClass = "vm.TranslationRsp"
+	rsp.TrafficClass = "vmprotocol.TranslationRsp"
 	bottom.Deliver(rsp)
 
 	for range 64 {
 		comp.Tick()
 		if out := top.RetrieveOutgoing(); out != nil {
-			if _, ok := out.(vm.TranslationRsp); ok {
+			if _, ok := out.(vmprotocol.TranslationRsp); ok {
 				return
 			}
 		}
@@ -184,12 +187,12 @@ func lookupMisses(
 	for range 64 {
 		comp.Tick()
 		if out := bottom.RetrieveOutgoing(); out != nil {
-			if _, ok := out.(vm.TranslationReq); ok {
+			if _, ok := out.(vmprotocol.TranslationReq); ok {
 				return true
 			}
 		}
 		if out := top.RetrieveOutgoing(); out != nil {
-			if _, ok := out.(vm.TranslationRsp); ok {
+			if _, ok := out.(vmprotocol.TranslationRsp); ok {
 				return false
 			}
 		}
@@ -212,7 +215,7 @@ func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
 	setB := installDirtyBlock(t, comp, storage, 0x40, 0xBB)
 
 	// 1. Drain: the cache holds no in-flight work, so it quiesces and acks.
-	if rsp := driveCtrl(t, comp, ctrl, mem.CmdDrain, nil, 0); !rsp.Success {
+	if rsp := driveCtrl(t, comp, ctrl, control.CmdDrain, nil, 0); !rsp.Success {
 		t.Fatalf("Drain failed: %q", rsp.Error)
 	}
 
@@ -235,7 +238,7 @@ func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
 	}
 
 	// 3. Invalidate (no filter): every block is dropped, with no write-back.
-	if rsp := driveCtrl(t, comp, ctrl, mem.CmdInvalidate, nil, 0); !rsp.Success {
+	if rsp := driveCtrl(t, comp, ctrl, control.CmdInvalidate, nil, 0); !rsp.Success {
 		t.Fatalf("Invalidate failed: %q", rsp.Error)
 	}
 	if comp.State.DirectoryState.Sets[setA].Blocks[0].IsValid ||
@@ -247,7 +250,7 @@ func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
 	}
 
 	// 4. Reset: back to a freshly-built shape (no in-flight transactions).
-	if rsp := driveCtrl(t, comp, ctrl, mem.CmdReset, nil, 0); !rsp.Success {
+	if rsp := driveCtrl(t, comp, ctrl, control.CmdReset, nil, 0); !rsp.Success {
 		t.Fatalf("Reset failed: %q", rsp.Error)
 	}
 	if len(comp.State.Transactions) != 0 {
@@ -260,15 +263,15 @@ func makeTransReq(
 	top messaging.Port,
 	vAddr uint64,
 	pid vm.PID,
-) vm.TranslationReq {
-	req := vm.TranslationReq{}
+) vmprotocol.TranslationReq {
+	req := vmprotocol.TranslationReq{}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = messaging.RemotePort("Agent")
 	req.Dst = top.AsRemote()
 	req.PID = pid
 	req.VAddr = vAddr
 	req.DeviceID = 1
-	req.TrafficClass = "vm.TranslationReq"
+	req.TrafficClass = "vmprotocol.TranslationReq"
 	return req
 }
 
@@ -282,11 +285,11 @@ func driveFlushAll(
 ) map[byte]bool {
 	t.Helper()
 
-	flush := mem.ControlReq{Command: mem.CmdFlush}
+	flush := control.Req{Command: control.CmdFlush}
 	flush.ID = timing.GetIDGenerator().Generate()
 	flush.Src = messaging.RemotePort("Cmd")
 	flush.Dst = ctrl.AsRemote()
-	flush.TrafficClass = "mem.ControlReq"
+	flush.TrafficClass = "control.Req"
 	ctrl.Deliver(flush)
 
 	writtenBack := map[byte]bool{}
@@ -294,8 +297,8 @@ func driveFlushAll(
 		comp.Tick()
 		answerWriteBacks(bottom, writtenBack)
 		if out := ctrl.RetrieveOutgoing(); out != nil {
-			rsp, ok := out.(mem.ControlRsp)
-			if ok && rsp.Command == mem.CmdFlush {
+			rsp, ok := out.(control.Rsp)
+			if ok && rsp.Command == control.CmdFlush {
 				if !rsp.Success {
 					t.Fatalf("Flush failed: %q", rsp.Error)
 				}
@@ -317,19 +320,19 @@ func answerWriteBacks(bottom messaging.Port, writtenBack map[byte]bool) {
 		if out == nil {
 			return
 		}
-		w, ok := out.(mem.WriteReq)
+		w, ok := out.(memprotocol.WriteReq)
 		if !ok {
 			continue
 		}
 		if len(w.Data) > 0 {
 			writtenBack[w.Data[0]] = true
 		}
-		done := mem.WriteDoneRsp{}
+		done := memprotocol.WriteDoneRsp{}
 		done.ID = timing.GetIDGenerator().Generate()
 		done.Src = messaging.RemotePort("LowerCache")
 		done.Dst = bottom.AsRemote()
 		done.RspTo = w.ID
-		done.TrafficClass = "mem.WriteDoneRsp"
+		done.TrafficClass = "memprotocol.WriteDoneRsp"
 		bottom.Deliver(done)
 	}
 }

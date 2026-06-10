@@ -1,7 +1,5 @@
 package control
 
-import "github.com/sarchlab/akita/v5/mem"
-
 // State enumerates the control lifecycle states every memory agent moves
 // through. Reset and Invalidate are operations within these states, not
 // states themselves; they leave the resulting state unchanged (except
@@ -65,19 +63,19 @@ type VerbSupport struct {
 }
 
 // Supports reports whether the given command is in the support set.
-func (v VerbSupport) Supports(cmd mem.ControlCommand) bool {
+func (v VerbSupport) Supports(cmd Command) bool {
 	switch cmd {
-	case mem.CmdPause:
+	case CmdPause:
 		return v.Pause
-	case mem.CmdDrain:
+	case CmdDrain:
 		return v.Drain
-	case mem.CmdEnable:
+	case CmdEnable:
 		return v.Enable
-	case mem.CmdReset:
+	case CmdReset:
 		return v.Reset
-	case mem.CmdInvalidate:
+	case CmdInvalidate:
 		return v.Invalidate
-	case mem.CmdFlush:
+	case CmdFlush:
 		return v.Flush
 	default:
 		return false
@@ -131,11 +129,11 @@ const (
 // (Pause, Enable, Reset, Invalidate) versus asynchronously on
 // completion (Drain, Flush). Used by the contract harness to know
 // whether to expect a Rsp within one tick or to keep ticking.
-func IsSyncVerb(cmd mem.ControlCommand) bool {
+func IsSyncVerb(cmd Command) bool {
 	switch cmd {
-	case mem.CmdPause, mem.CmdEnable, mem.CmdReset, mem.CmdInvalidate:
+	case CmdPause, CmdEnable, CmdReset, CmdInvalidate:
 		return true
-	case mem.CmdDrain, mem.CmdFlush:
+	case CmdDrain, CmdFlush:
 		return false
 	default:
 		return true

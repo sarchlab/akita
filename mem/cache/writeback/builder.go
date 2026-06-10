@@ -5,6 +5,8 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
@@ -107,9 +109,9 @@ func (b Builder) Build(name string) *Comp {
 
 	comp.State = initialState
 
-	comp.DeclarePort("Top", mem.Responder)
-	comp.DeclarePort("Bottom", mem.Requester)
-	comp.DeclarePort("Control", mem.ControlResponder)
+	comp.DeclarePort("Top", memprotocol.Responder)
+	comp.DeclarePort("Bottom", memprotocol.Requester)
+	comp.DeclarePort("Control", control.Responder)
 
 	pmw := b.buildPipelineMW(comp, laneWidth)
 	cmw := b.buildControlMW(comp, pmw)

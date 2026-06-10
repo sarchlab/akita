@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/noc/networking/switching/endpointprotocol"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -132,7 +133,7 @@ var _ = Describe("End Point", func() {
 		networkPort.EXPECT().PeekIncoming().Return(nil).Times(3)
 		networkPort.EXPECT().RetrieveIncoming().Times(2)
 		devicePort.EXPECT().CanDeliver().Return(true)
-		devicePort.EXPECT().Deliver(AssembledMsg{MsgMeta: msg})
+		devicePort.EXPECT().Deliver(endpointprotocol.AssembledMsg{MsgMeta: msg})
 		devicePort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 
 		madeProgress := endPoint.Tick()

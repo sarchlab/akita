@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -65,39 +66,39 @@ var _ = Describe("Address Translator control behavior", func() {
 		}
 	}
 
-	makeRead := func(addr uint64) mem.ReadReq {
-		req := mem.ReadReq{}
+	makeRead := func(addr uint64) memprotocol.ReadReq {
+		req := memprotocol.ReadReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = addr
 		req.AccessByteSize = 4
 		req.TrafficBytes = 12
-		req.TrafficClass = "mem.ReadReq"
+		req.TrafficClass = "memprotocol.ReadReq"
 		return req
 	}
 
-	makeCtrlReq := func(cmd mem.ControlCommand) mem.ControlReq {
-		req := mem.ControlReq{Command: cmd}
+	makeCtrlReq := func(cmd control.Command) control.Req {
+		req := control.Req{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
-		req.TrafficClass = "mem.ControlReq"
+		req.TrafficClass = "control.Req"
 		return req
 	}
 
 	// makeBottomReq builds the read the translator would itself have sent out
 	// the Bottom port, with Src = Bottom and Dst = the memory provider, exactly
 	// as createTranslatedReq does.
-	makeBottomReq := func(addr uint64) mem.ReadReq {
-		req := mem.ReadReq{}
+	makeBottomReq := func(addr uint64) memprotocol.ReadReq {
+		req := memprotocol.ReadReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = bottomPort.AsRemote()
 		req.Dst = messaging.RemotePort("MemPort")
 		req.Address = addr
 		req.AccessByteSize = 4
 		req.TrafficBytes = 12
-		req.TrafficClass = "mem.ReadReq"
+		req.TrafficClass = "memprotocol.ReadReq"
 		return req
 	}
 
@@ -105,7 +106,7 @@ var _ = Describe("Address Translator control behavior", func() {
 	// top-side read and bottom-side read, mirroring the Reset test's direct
 	// state fabrication. It returns the bottom-side ReqToBottomID so the test
 	// can later feed a matching response that retires the entry.
-	injectInflight := func(fromTop, toBottom mem.ReadReq) uint64 {
+	injectInflight := func(fromTop, toBottom memprotocol.ReadReq) uint64 {
 		t.State.InflightReqToBottom = append(t.State.InflightReqToBottom,
 			reqToBottomState{
 				ReqFromTopID:    fromTop.ID,
@@ -124,13 +125,13 @@ var _ = Describe("Address Translator control behavior", func() {
 	// RspTo matches an in-flight ReqToBottomID. respond() recognises it, sends a
 	// DataReadyRsp out Top, and removes the in-flight entry.
 	feedBottomDataReady := func(rspTo uint64) {
-		dataReady := mem.DataReadyRsp{}
+		dataReady := memprotocol.DataReadyRsp{}
 		dataReady.ID = timing.GetIDGenerator().Generate()
 		dataReady.Src = messaging.RemotePort("MemPort")
 		dataReady.Dst = bottomPort.AsRemote()
 		dataReady.RspTo = rspTo
 		dataReady.TrafficBytes = 4
-		dataReady.TrafficClass = "mem.DataReadyRsp"
+		dataReady.TrafficClass = "memprotocol.DataReadyRsp"
 		bottomPort.Deliver(dataReady)
 	}
 
@@ -154,7 +155,7 @@ var _ = Describe("Address Translator control behavior", func() {
 		// Teeth: in-flight bottom work is genuinely present.
 		Expect(t.State.InflightReqToBottom).To(HaveLen(2))
 
-		drain := makeCtrlReq(mem.CmdDrain)
+		drain := makeCtrlReq(control.CmdDrain)
 		ctrlPort.Deliver(drain)
 
 		// Negative phase: tick a window WITHOUT feeding any bottom response.
@@ -163,8 +164,8 @@ var _ = Describe("Address Translator control behavior", func() {
 		for range 8 {
 			t.Tick()
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(mem.ControlRsp); ok &&
-					rsp.Command == mem.CmdDrain {
+				if rsp, ok := out.(control.Rsp); ok &&
+					rsp.Command == control.CmdDrain {
 					Fail("Drain acked while bottom requests still in flight")
 				}
 			}
@@ -177,7 +178,7 @@ var _ = Describe("Address Translator control behavior", func() {
 		feedBottomDataReady(id1)
 		feedBottomDataReady(id2)
 
-		var drainRsp mem.ControlRsp
+		var drainRsp control.Rsp
 		drainFound := false
 		topResponses := 0
 		for i := 0; i < 64 && !drainFound; i++ {
@@ -187,13 +188,13 @@ var _ = Describe("Address Translator control behavior", func() {
 				if out == nil {
 					break
 				}
-				if _, ok := out.(mem.DataReadyRsp); ok {
+				if _, ok := out.(memprotocol.DataReadyRsp); ok {
 					topResponses++
 				}
 			}
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(mem.ControlRsp); ok &&
-					rsp.Command == mem.CmdDrain {
+				if rsp, ok := out.(control.Rsp); ok &&
+					rsp.Command == control.CmdDrain {
 					drainRsp = rsp
 					drainFound = true
 				}
@@ -236,20 +237,20 @@ var _ = Describe("Address Translator control behavior", func() {
 
 			t.State.ControlState = startState
 
-			reset := makeCtrlReq(mem.CmdReset)
+			reset := makeCtrlReq(control.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp mem.ControlRsp
+			var rsp control.Rsp
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				t.Tick()
 				if out := ctrlPort.RetrieveOutgoing(); out != nil {
-					rsp, found = out.(mem.ControlRsp)
+					rsp, found = out.(control.Rsp)
 				}
 			}
 
 			Expect(found).To(BeTrue())
-			Expect(rsp.Command).To(Equal(mem.CmdReset))
+			Expect(rsp.Command).To(Equal(control.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			Expect(t.State.Transactions).To(BeEmpty())
@@ -273,10 +274,10 @@ var _ = Describe("Address Translator control behavior", func() {
 		t.State.Transactions = nil
 		t.State.InflightReqToBottom = nil
 
-		reset := makeCtrlReq(mem.CmdReset)
+		reset := makeCtrlReq(control.CmdReset)
 		ctrlPort.Deliver(reset)
 
-		var rsps []mem.ControlRsp
+		var rsps []control.Rsp
 		for range 16 {
 			t.Tick()
 			for {
@@ -284,16 +285,16 @@ var _ = Describe("Address Translator control behavior", func() {
 				if out == nil {
 					break
 				}
-				if r, ok := out.(mem.ControlRsp); ok {
+				if r, ok := out.(control.Rsp); ok {
 					rsps = append(rsps, r)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+		Expect(rsps[0].Command).To(Equal(control.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+		Expect(rsps[1].Command).To(Equal(control.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(t.State.ControlState).To(Equal(control.StateEnabled))
 	})

@@ -3,8 +3,9 @@ package mmuCache
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -62,31 +63,31 @@ var _ = Describe("MMUCache control behavior", func() {
 		}
 	}
 
-	makeTranslationReq := func(vAddr uint64) vm.TranslationReq {
-		req := vm.TranslationReq{}
+	makeTranslationReq := func(vAddr uint64) vmprotocol.TranslationReq {
+		req := vmprotocol.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
 		req.VAddr = vAddr
 		req.DeviceID = 1
-		req.TrafficClass = "vm.TranslationReq"
+		req.TrafficClass = "vmprotocol.TranslationReq"
 		return req
 	}
 
-	makeCtrlReq := func(cmd mem.ControlCommand) mem.ControlReq {
-		req := mem.ControlReq{Command: cmd}
+	makeCtrlReq := func(cmd control.Command) control.Req {
+		req := control.Req{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = controlPort.AsRemote()
-		req.TrafficClass = "mem.ControlReq"
+		req.TrafficClass = "control.Req"
 		return req
 	}
 
 	// makeBottomRsp fabricates the low module's response to a forwarded
 	// lookup, so the test can let an outstanding walk complete.
-	makeBottomRsp := func(fwd vm.TranslationReq) vm.TranslationRsp {
-		rsp := vm.TranslationRsp{
+	makeBottomRsp := func(fwd vmprotocol.TranslationReq) vmprotocol.TranslationRsp {
+		rsp := vmprotocol.TranslationRsp{
 			Page: vm.Page{
 				PID: fwd.PID, VAddr: fwd.VAddr, PAddr: 0x5000, Valid: true,
 			},
@@ -95,7 +96,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		rsp.Src = messaging.RemotePort("LowModule")
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = fwd.ID
-		rsp.TrafficClass = "vm.TranslationRsp"
+		rsp.TrafficClass = "vmprotocol.TranslationRsp"
 		return rsp
 	}
 
@@ -112,7 +113,7 @@ var _ = Describe("MMUCache control behavior", func() {
 
 		// Forward every lookup down the Bottom port while still enabled (Drain
 		// itself admits no new Top traffic).
-		forwarded := []vm.TranslationReq{}
+		forwarded := []vmprotocol.TranslationReq{}
 		for i := 0; i < 256 && len(forwarded) < n; i++ {
 			comp.Tick()
 			for {
@@ -120,7 +121,7 @@ var _ = Describe("MMUCache control behavior", func() {
 				if out == nil {
 					break
 				}
-				if r, ok := out.(vm.TranslationReq); ok {
+				if r, ok := out.(vmprotocol.TranslationReq); ok {
 					forwarded = append(forwarded, r)
 				}
 			}
@@ -128,7 +129,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		Expect(forwarded).To(HaveLen(n))
 		Expect(comp.State.OutstandingBottomReqs).To(HaveLen(n))
 
-		drain := makeCtrlReq(mem.CmdDrain)
+		drain := makeCtrlReq(control.CmdDrain)
 		controlPort.Deliver(drain)
 
 		// Let the Drain take effect.
@@ -156,7 +157,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		// Now the cache can quiesce: every walk is answered up the Top port
 		// and only then is the async Drain acked.
 		upResponses := 0
-		var drainRsp mem.ControlRsp
+		var drainRsp control.Rsp
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
 			comp.Tick()
@@ -165,13 +166,13 @@ var _ = Describe("MMUCache control behavior", func() {
 				if out == nil {
 					break
 				}
-				if _, ok := out.(vm.TranslationRsp); ok {
+				if _, ok := out.(vmprotocol.TranslationRsp); ok {
 					upResponses++
 				}
 			}
 			if out := controlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(mem.ControlRsp); ok &&
-					rsp.Command == mem.CmdDrain {
+				if rsp, ok := out.(control.Rsp); ok &&
+					rsp.Command == control.CmdDrain {
 					drainRsp = rsp
 					drainFound = true
 				}
@@ -192,26 +193,26 @@ var _ = Describe("MMUCache control behavior", func() {
 	It("drops a late bottom response that arrives after Reset", func() {
 		// Forward a lookup so a bottom request is outstanding.
 		topPort.Deliver(makeTranslationReq(0x1000))
-		var fwd vm.TranslationReq
+		var fwd vmprotocol.TranslationReq
 		gotFwd := false
 		for i := 0; i < 64 && !gotFwd; i++ {
 			comp.Tick()
 			if out := bottomPort.RetrieveOutgoing(); out != nil {
-				fwd, gotFwd = out.(vm.TranslationReq)
+				fwd, gotFwd = out.(vmprotocol.TranslationReq)
 			}
 		}
 		Expect(gotFwd).To(BeTrue())
 		Expect(comp.State.OutstandingBottomReqs).To(HaveLen(1))
 
 		// Reset discards the outstanding walk.
-		reset := makeCtrlReq(mem.CmdReset)
+		reset := makeCtrlReq(control.CmdReset)
 		controlPort.Deliver(reset)
 		resetAcked := false
 		for i := 0; i < 64 && !resetAcked; i++ {
 			comp.Tick()
 			if out := controlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(mem.ControlRsp); ok &&
-					rsp.Command == mem.CmdReset {
+				if rsp, ok := out.(control.Rsp); ok &&
+					rsp.Command == control.CmdReset {
 					resetAcked = true
 				}
 			}
@@ -248,20 +249,20 @@ var _ = Describe("MMUCache control behavior", func() {
 			topPort.Deliver(makeTranslationReq(0x1000))
 			comp.State.CurrentState = startState
 
-			reset := makeCtrlReq(mem.CmdReset)
+			reset := makeCtrlReq(control.CmdReset)
 			controlPort.Deliver(reset)
 
-			var rsp mem.ControlRsp
+			var rsp control.Rsp
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				comp.Tick()
 				if out := controlPort.RetrieveOutgoing(); out != nil {
-					rsp, found = out.(mem.ControlRsp)
+					rsp, found = out.(control.Rsp)
 				}
 			}
 
 			Expect(found).To(BeTrue())
-			Expect(rsp.Command).To(Equal(mem.CmdReset))
+			Expect(rsp.Command).To(Equal(control.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			Expect(comp.State.CurrentState).To(Equal(mmuCacheStateEnable))
@@ -283,10 +284,10 @@ var _ = Describe("MMUCache control behavior", func() {
 		comp.State.CurrentCmdID = 999
 		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 
-		reset := makeCtrlReq(mem.CmdReset)
+		reset := makeCtrlReq(control.CmdReset)
 		controlPort.Deliver(reset)
 
-		var rsps []mem.ControlRsp
+		var rsps []control.Rsp
 		for range 32 {
 			comp.Tick()
 			for {
@@ -294,16 +295,16 @@ var _ = Describe("MMUCache control behavior", func() {
 				if out == nil {
 					break
 				}
-				if r, ok := out.(mem.ControlRsp); ok {
+				if r, ok := out.(control.Rsp); ok {
 					rsps = append(rsps, r)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+		Expect(rsps[0].Command).To(Equal(control.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+		Expect(rsps[1].Command).To(Equal(control.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(comp.State.CurrentState).To(Equal(mmuCacheStateEnable))
 	})

@@ -1,9 +1,8 @@
-// Package control defines the uniform control state model used by every
-// memory agent in Akita and provides a reusable conformance harness for
-// the mem.ControlReq/ControlRsp protocol.
-//
-// The protocol verbs themselves live in package mem (mem.ControlCommand,
-// mem.ControlReq, mem.ControlRsp). This package adds:
+// Package control is the protocol package for the uniform control protocol
+// every memory agent in Akita speaks over its "Control" port. It defines the
+// protocol itself (Protocol, with Requester/Responder roles), its messages
+// (Req, Rsp) and verbs (Command, the Cmd* constants), the shared control
+// state model, and a reusable conformance harness:
 //
 //   - State, the shared enumeration of where a memory agent sits in its
 //     control lifecycle. Components hold a value of this type in their
@@ -11,7 +10,7 @@
 //
 //   - VerbSupport, a per-component declaration of which verbs the
 //     component implements. Verbs that are not declared supported must
-//     respond with ControlRsp{Success: false, Error: "unsupported"}.
+//     respond with Rsp{Success: false, Error: "unsupported"}.
 //
 //   - RunContract, a *testing.T-based harness that exercises every verb
 //     against a built component over its real Control port. Each

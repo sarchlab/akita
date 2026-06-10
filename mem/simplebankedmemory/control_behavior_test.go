@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -45,16 +46,16 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		}
 	}
 
-	makeRead := func(index int) mem.ReadReq {
+	makeRead := func(index int) memprotocol.ReadReq {
 		return makeReadReq(messaging.RemotePort("Agent"), topPort.AsRemote(), index)
 	}
 
-	makeCtrlReq := func(cmd mem.ControlCommand) mem.ControlReq {
-		req := mem.ControlReq{Command: cmd}
+	makeCtrlReq := func(cmd control.Command) control.Req {
+		req := control.Req{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
-		req.TrafficClass = "mem.ControlReq"
+		req.TrafficClass = "control.Req"
 		return req
 	}
 
@@ -86,11 +87,11 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		comp.Tick()
 		Expect(allBanksQuiescent()).To(BeFalse())
 
-		drain := makeCtrlReq(mem.CmdDrain)
+		drain := makeCtrlReq(control.CmdDrain)
 		ctrlPort.Deliver(drain)
 
 		completed := 0
-		var drainRsp mem.ControlRsp
+		var drainRsp control.Rsp
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
 			comp.Tick()
@@ -99,13 +100,13 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 				if out == nil {
 					break
 				}
-				if _, ok := out.(mem.DataReadyRsp); ok {
+				if _, ok := out.(memprotocol.DataReadyRsp); ok {
 					completed++
 				}
 			}
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(mem.ControlRsp); ok &&
-					rsp.Command == mem.CmdDrain {
+				if rsp, ok := out.(control.Rsp); ok &&
+					rsp.Command == control.CmdDrain {
 					drainRsp = rsp
 					drainFound = true
 				}
@@ -147,15 +148,15 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 
 			comp.State.ControlState = startState
 
-			reset := makeCtrlReq(mem.CmdReset)
+			reset := makeCtrlReq(control.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp mem.ControlRsp
+			var rsp control.Rsp
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				comp.Tick()
 				if out := ctrlPort.RetrieveOutgoing(); out != nil {
-					if r, ok := out.(mem.ControlRsp); ok {
+					if r, ok := out.(control.Rsp); ok {
 						rsp = r
 						found = true
 					}
@@ -163,7 +164,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 			}
 
 			Expect(found).To(BeTrue())
-			Expect(rsp.Command).To(Equal(mem.CmdReset))
+			Expect(rsp.Command).To(Equal(control.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			// Reset rebuilds the banks, so all in-flight work is gone.
@@ -179,7 +180,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 					if out == nil {
 						break
 					}
-					if _, ok := out.(mem.DataReadyRsp); ok {
+					if _, ok := out.(memprotocol.DataReadyRsp); ok {
 						completion = true
 					}
 				}
@@ -202,10 +203,10 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		comp.State.CurrentCmdID = 999
 		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 
-		reset := makeCtrlReq(mem.CmdReset)
+		reset := makeCtrlReq(control.CmdReset)
 		ctrlPort.Deliver(reset)
 
-		var rsps []mem.ControlRsp
+		var rsps []control.Rsp
 		for range 16 {
 			comp.Tick()
 			for {
@@ -213,16 +214,16 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 				if out == nil {
 					break
 				}
-				if r, ok := out.(mem.ControlRsp); ok {
+				if r, ok := out.(control.Rsp); ok {
 					rsps = append(rsps, r)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+		Expect(rsps[0].Command).To(Equal(control.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+		Expect(rsps[1].Command).To(Equal(control.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(comp.State.ControlState).To(Equal(control.StateEnabled))
 	})

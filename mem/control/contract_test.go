@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/hooking"
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
@@ -34,7 +33,7 @@ type fakeComp struct {
 }
 
 type pendingReq struct {
-	cmd       mem.ControlCommand
+	cmd       control.Command
 	src       messaging.RemotePort
 	id        uint64
 	ticksLeft int
@@ -78,7 +77,7 @@ func (c *fakeComp) Tick() bool {
 	if c.pending != nil {
 		c.pending.ticksLeft--
 		if c.pending.ticksLeft <= 0 && port.CanSend() {
-			if c.pending.cmd == mem.CmdDrain {
+			if c.pending.cmd == control.CmdDrain {
 				c.paused = true
 			}
 			port.Send(c.makeRsp(c.pending.cmd, c.pending.src,
@@ -90,7 +89,7 @@ func (c *fakeComp) Tick() bool {
 
 	if c.pending == nil {
 		if msg := port.PeekIncoming(); msg != nil {
-			if req, ok := msg.(mem.ControlReq); ok {
+			if req, ok := msg.(control.Req); ok {
 				port.RetrieveIncoming()
 				made = c.handleReq(port, req) || made
 			}
@@ -100,21 +99,21 @@ func (c *fakeComp) Tick() bool {
 	return made
 }
 
-func (c *fakeComp) handleReq(port messaging.Port, req mem.ControlReq) bool {
+func (c *fakeComp) handleReq(port messaging.Port, req control.Req) bool {
 	if !c.matrix.Supports(req.Command) {
 		return c.respond(port, req, false, control.ErrUnsupported)
 	}
 
 	// Conditional verbs are only legal while paused or drained.
-	if (req.Command == mem.CmdInvalidate || req.Command == mem.CmdFlush) &&
+	if (req.Command == control.CmdInvalidate || req.Command == control.CmdFlush) &&
 		!c.paused {
 		return c.respond(port, req, false, control.ErrMustBePausedOrDrained)
 	}
 
 	switch req.Command {
-	case mem.CmdPause:
+	case control.CmdPause:
 		c.paused = true
-	case mem.CmdEnable, mem.CmdReset:
+	case control.CmdEnable, control.CmdReset:
 		c.paused = false
 	}
 
@@ -133,7 +132,7 @@ func (c *fakeComp) handleReq(port messaging.Port, req mem.ControlReq) bool {
 
 func (c *fakeComp) respond(
 	port messaging.Port,
-	req mem.ControlReq,
+	req control.Req,
 	success bool,
 	errStr string,
 ) bool {
@@ -145,14 +144,14 @@ func (c *fakeComp) respond(
 }
 
 func (c *fakeComp) makeRsp(
-	cmd mem.ControlCommand,
+	cmd control.Command,
 	dst messaging.RemotePort,
 	rspTo uint64,
 	success bool,
 	errStr string,
-) mem.ControlRsp {
+) control.Rsp {
 	port := c.ports["Control"]
-	rsp := mem.ControlRsp{
+	rsp := control.Rsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,
@@ -161,7 +160,7 @@ func (c *fakeComp) makeRsp(
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
-	rsp.TrafficClass = "mem.ControlRsp"
+	rsp.TrafficClass = "control.Rsp"
 	return rsp
 }
 
@@ -219,15 +218,15 @@ func TestRunContract_NothingSupported(t *testing.T) {
 func TestVerbSupport_Supports(t *testing.T) {
 	v := control.VerbSupport{Pause: true, Drain: true, Enable: true, Reset: true}
 	cases := []struct {
-		cmd  mem.ControlCommand
+		cmd  control.Command
 		want bool
 	}{
-		{mem.CmdPause, true},
-		{mem.CmdDrain, true},
-		{mem.CmdEnable, true},
-		{mem.CmdReset, true},
-		{mem.CmdInvalidate, false},
-		{mem.CmdFlush, false},
+		{control.CmdPause, true},
+		{control.CmdDrain, true},
+		{control.CmdEnable, true},
+		{control.CmdReset, true},
+		{control.CmdInvalidate, false},
+		{control.CmdFlush, false},
 	}
 	for _, tc := range cases {
 		if got := v.Supports(tc.cmd); got != tc.want {
@@ -238,15 +237,15 @@ func TestVerbSupport_Supports(t *testing.T) {
 
 func TestIsSyncVerb(t *testing.T) {
 	cases := []struct {
-		cmd  mem.ControlCommand
+		cmd  control.Command
 		sync bool
 	}{
-		{mem.CmdPause, true},
-		{mem.CmdEnable, true},
-		{mem.CmdReset, true},
-		{mem.CmdInvalidate, true},
-		{mem.CmdDrain, false},
-		{mem.CmdFlush, false},
+		{control.CmdPause, true},
+		{control.CmdEnable, true},
+		{control.CmdReset, true},
+		{control.CmdInvalidate, true},
+		{control.CmdDrain, false},
+		{control.CmdFlush, false},
 	}
 	for _, tc := range cases {
 		if got := control.IsSyncVerb(tc.cmd); got != tc.sync {

@@ -3,8 +3,8 @@ package dram
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -41,10 +41,10 @@ func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
 	ts := transactionState{}
 
 	switch msg := msgI.(type) {
-	case mem.ReadReq:
+	case memprotocol.ReadReq:
 		ts.HasRead = true
 		ts.ReadMsg = msg
-	case mem.WriteReq:
+	case memprotocol.WriteReq:
 		ts.HasWrite = true
 		ts.WriteMsg = msg
 	default:

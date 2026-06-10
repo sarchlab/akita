@@ -4,9 +4,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -19,7 +19,7 @@ import (
 //
 // All translation requests target locally-MAPPED pages (page.DeviceID equal to
 // the GMMU's spec.DeviceID), so each walk self-completes via finalizePageWalk
-// and emits a *vm.TranslationRsp on Top without ever sending a remote memory
+// and emits a *vmprotocol.TranslationRsp on Top without ever sending a remote memory
 // request out Bottom. That keeps RemoteMemReqs empty and lets Drain reach
 // quiescence purely on the local walk path.
 var _ = Describe("GMMU control behavior", func() {
@@ -73,24 +73,24 @@ var _ = Describe("GMMU control behavior", func() {
 		})
 	}
 
-	makeTranslationReq := func(vAddr uint64) vm.TranslationReq {
-		req := vm.TranslationReq{}
+	makeTranslationReq := func(vAddr uint64) vmprotocol.TranslationReq {
+		req := vmprotocol.TranslationReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = agentPort
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
 		req.VAddr = vAddr
 		req.DeviceID = deviceID
-		req.TrafficClass = "vm.TranslationReq"
+		req.TrafficClass = "vmprotocol.TranslationReq"
 		return req
 	}
 
-	makeCtrlReq := func(cmd mem.ControlCommand) mem.ControlReq {
-		req := mem.ControlReq{Command: cmd}
+	makeCtrlReq := func(cmd control.Command) control.Req {
+		req := control.Req{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
-		req.TrafficClass = "mem.ControlReq"
+		req.TrafficClass = "control.Req"
 		return req
 	}
 
@@ -116,11 +116,11 @@ var _ = Describe("GMMU control behavior", func() {
 		}
 		Expect(comp.State.WalkingTranslations).To(HaveLen(n))
 
-		drain := makeCtrlReq(mem.CmdDrain)
+		drain := makeCtrlReq(control.CmdDrain)
 		ctrlPort.Deliver(drain)
 
 		completed := 0
-		var drainRsp mem.ControlRsp
+		var drainRsp control.Rsp
 		gotDrainRsp := false
 		for i := 0; i < 4096 && !gotDrainRsp; i++ {
 			comp.Tick()
@@ -129,13 +129,13 @@ var _ = Describe("GMMU control behavior", func() {
 				if out == nil {
 					break
 				}
-				if _, ok := out.(vm.TranslationRsp); ok {
+				if _, ok := out.(vmprotocol.TranslationRsp); ok {
 					completed++
 				}
 			}
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(mem.ControlRsp); ok &&
-					rsp.Command == mem.CmdDrain {
+				if rsp, ok := out.(control.Rsp); ok &&
+					rsp.Command == control.CmdDrain {
 					drainRsp = rsp
 					gotDrainRsp = true
 				}
@@ -184,20 +184,20 @@ var _ = Describe("GMMU control behavior", func() {
 
 			comp.State.ControlState = startState
 
-			reset := makeCtrlReq(mem.CmdReset)
+			reset := makeCtrlReq(control.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp mem.ControlRsp
+			var rsp control.Rsp
 			gotRsp := false
 			for i := 0; i < 64 && !gotRsp; i++ {
 				comp.Tick()
 				if out := ctrlPort.RetrieveOutgoing(); out != nil {
-					rsp, gotRsp = out.(mem.ControlRsp)
+					rsp, gotRsp = out.(control.Rsp)
 				}
 			}
 
 			Expect(gotRsp).To(BeTrue())
-			Expect(rsp.Command).To(Equal(mem.CmdReset))
+			Expect(rsp.Command).To(Equal(control.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			Expect(comp.State.WalkingTranslations).To(BeEmpty())
@@ -227,10 +227,10 @@ var _ = Describe("GMMU control behavior", func() {
 		comp.State.WalkingTranslations = nil
 		comp.State.RemoteMemReqs = nil
 
-		reset := makeCtrlReq(mem.CmdReset)
+		reset := makeCtrlReq(control.CmdReset)
 		ctrlPort.Deliver(reset)
 
-		var rsps []mem.ControlRsp
+		var rsps []control.Rsp
 		for range 16 {
 			comp.Tick()
 			for {
@@ -238,16 +238,16 @@ var _ = Describe("GMMU control behavior", func() {
 				if out == nil {
 					break
 				}
-				if r, ok := out.(mem.ControlRsp); ok {
+				if r, ok := out.(control.Rsp); ok {
 					rsps = append(rsps, r)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+		Expect(rsps[0].Command).To(Equal(control.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+		Expect(rsps[1].Command).To(Equal(control.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(comp.State.ControlState).To(Equal(control.StateEnabled))
 	})

@@ -162,8 +162,6 @@ func (p *defaultPort) CanDeliver() bool {
 // the port has capacity with CanDeliver before calling Deliver; delivering
 // into a full incoming buffer is a programming error and will panic.
 func (p *defaultPort) Deliver(msg Msg) {
-	mustNotBeBareMsgMeta(msg)
-
 	p.lock.Lock()
 
 	if !p.incomingBuf.CanPush() {
@@ -304,7 +302,6 @@ func NewPort(
 }
 
 func (p *defaultPort) msgMustBeValid(msg Msg) {
-	mustNotBeBareMsgMeta(msg)
 	portMustBeMsgSrc(p, msg)
 	dstMustNotBeEmpty(msg.Meta().Dst)
 	srcDstMustNotBeTheSame(msg)

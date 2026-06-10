@@ -6,6 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/timing"
@@ -61,7 +62,7 @@ func (m *walkMW) parseFromTop() bool {
 	}
 
 	switch req := reqI.(type) {
-	case vm.TranslationReq:
+	case vmprotocol.TranslationReq:
 		tracing.TraceReqReceive(m.comp, req)
 		m.startWalking(req)
 	default:
@@ -72,7 +73,7 @@ func (m *walkMW) parseFromTop() bool {
 	return true
 }
 
-func (m *walkMW) startWalking(req vm.TranslationReq) {
+func (m *walkMW) startWalking(req vmprotocol.TranslationReq) {
 	spec := m.comp.Spec()
 	state := &m.comp.State
 
@@ -161,14 +162,14 @@ func (m *walkMW) processRemoteMemReq(
 	spec := m.comp.Spec()
 	walking := state.WalkingTranslations[walkingIndex]
 
-	req := vm.TranslationReq{}
+	req := vmprotocol.TranslationReq{}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = m.bottomPort().AsRemote()
 	req.Dst = spec.LowModule
 	req.PID = vm.PID(walking.PID)
 	req.VAddr = walking.VAddr
 	req.DeviceID = walking.DeviceID
-	req.TrafficClass = "vm.TranslationReq"
+	req.TrafficClass = "vmprotocol.TranslationReq"
 
 	state.RemoteMemReqs[req.ID] = walking
 
@@ -203,14 +204,14 @@ func (m *walkMW) doPageWalkHit(
 	}
 	walking := state.WalkingTranslations[walkingIndex]
 
-	rsp := vm.TranslationRsp{
+	rsp := vmprotocol.TranslationRsp{
 		Page: pageFromPageState(walking.Page),
 	}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = walking.ReqSrc
 	rsp.RspTo = walking.ReqID
-	rsp.TrafficClass = "vm.TranslationRsp"
+	rsp.TrafficClass = "vmprotocol.TranslationRsp"
 
 	m.topPort().Send(rsp)
 
@@ -218,7 +219,7 @@ func (m *walkMW) doPageWalkHit(
 
 	tracing.TraceReqComplete(
 		m.comp,
-		vm.TranslationReq{
+		vmprotocol.TranslationReq{
 			MsgMeta: messaging.MsgMeta{
 				ID:  walking.ReqID,
 				Src: walking.ReqSrc,

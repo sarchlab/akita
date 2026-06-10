@@ -52,7 +52,7 @@ func (suite *TracerTestSuite) TearDownTest() {
 	}
 }
 
-// MockAccessReq implements mem.AccessReq for testing
+// MockAccessReq implements memprotocol.AccessReq for testing
 type MockAccessReq struct {
 	messaging.MsgMeta
 	address  uint64

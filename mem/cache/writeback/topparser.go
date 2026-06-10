@@ -1,8 +1,7 @@
 package writeback
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
-
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -32,13 +31,13 @@ func (p *topParser) Tick() bool {
 	}
 
 	switch msg := msg.(type) {
-	case mem.ReadReq:
+	case memprotocol.ReadReq:
 		trans.HasRead = true
 		trans.ReadMeta = msg.MsgMeta
 		trans.ReadAddress = msg.Address
 		trans.ReadAccessByteSize = msg.AccessByteSize
 		trans.ReadPID = msg.PID
-	case mem.WriteReq:
+	case memprotocol.WriteReq:
 		trans.HasWrite = true
 		trans.WriteMeta = msg.MsgMeta
 		trans.WriteAddress = msg.Address

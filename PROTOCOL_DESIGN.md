@@ -109,11 +109,14 @@ needs it (see below).
 `RegisterMsg` stays as the low-level primitive; `DefineProtocol` becomes the
 recommended path and replaces the hand-written `msgcodec.go` files.
 
-### Protocol package example
+### Protocol packages (decision: one package per protocol)
+
+Every protocol lives in its **own, distinctly-named package** that owns the
+message types and the protocol definition — a package *is* a protocol:
 
 ```go
-// mem/protocol.go  (package mem already exists and is distinctly named)
-package mem
+// mem/memprotocol/protocol.go
+package memprotocol
 
 import "github.com/sarchlab/akita/v5/messaging"
 
@@ -132,29 +135,39 @@ var (
 This one declaration registers every message type listed across the roles.
 Adding a new message = define the type + add one entry to a `Sends` list.
 
-Control messages (`ControlReq`/`ControlRsp`) become a **separate protocol**
-(`mem.control`, also defined in package `mem` where the types live) rather than
-a third role pair inside `mem`: control ports are physically distinct ports
-bound independently of the data path, and a separate protocol keeps each
-protocol's role pair complementary.
+The framework's protocol packages:
 
-## Bare MsgMeta is forbidden on the wire (decision)
+- `mem/memprotocol` — `ReadReq`/`WriteReq`/`DataReadyRsp`/`WriteDoneRsp` and
+  the `AccessReq`/`AccessRsp` interfaces.
+- `mem/control` — the control protocol is **separate** from the data protocol
+  (control ports are physically distinct ports bound independently of the
+  data path). The messages move into the existing control-contract package as
+  `control.Req`/`control.Rsp`/`control.Command`, making it a true protocol
+  package (protocol + state model + conformance harness).
+- `mem/vm/vmprotocol` — `TranslationReq`/`TranslationRsp` (page-table types
+  stay in `vm`).
+- `mem/datamoverprotocol` — `DataMoveRequest`/`DataMoveResponse`.
+- `noc/packetization` — already a pure protocol package (`Flit`).
+- `noc/networking/switching/endpointprotocol` — `AssembledMsg` delivery.
+
+## Bare MsgMeta belongs to no protocol (decision)
 
 `MsgMeta` is the envelope, not a message. Sending it bare was only ever done by
 the NoC endpoint's traffic-only delivery path, and it is exactly the case that
 produced review finding #6 — there is no protocol it could honestly belong to.
-We forbid it outright:
+That design-level stance is sufficient; there is **no runtime enforcement** (no
+`Send`/`Deliver`/registration check):
 
-- `Port.Send` and `Port.Deliver` panic if the concrete message is `MsgMeta` or
-  `*MsgMeta` (a type assertion; no measurable hot-path cost).
-- `RegisterMsg` and `DefineProtocol` reject it at init time.
-- The NoC endpoint gains a concrete wrapper type in the `endpoint` package —
-  `AssembledMsg{messaging.MsgMeta}` — delivered in place of the bare envelope.
-  Receivers under the traffic-only network model only ever consumed `Meta()`,
-  so behavior is unchanged; the wrapper is registered through the endpoint's
-  delivery protocol. This replaces the earlier idea of a "base protocol" inside
-  `messaging`, which would have grown `messaging`'s public surface and
-  enshrined the envelope as legitimate traffic.
+- `MsgMeta` is simply not part of any protocol, so the coverage audit lists it
+  as intentionally unregistered. A bare `MsgMeta` captured in a checkpointed
+  buffer would fail at load like any unregistered type.
+- The NoC endpoint gains a concrete wrapper type — `AssembledMsg
+  {messaging.MsgMeta}` — delivered in place of the bare envelope, registered
+  through the endpoint's delivery protocol. Receivers under the traffic-only
+  network model only ever consumed `Meta()`, so behavior is unchanged. This
+  replaces the earlier idea of a "base protocol" inside `messaging`, which
+  would have grown `messaging`'s public surface and enshrined the envelope as
+  legitimate traffic.
 
 ## Port → role binding (requirement: where a port declares its protocol)
 
@@ -169,8 +182,8 @@ func (po *PortOwnerBase) DeclarePortGroup(name string, roles ...*messaging.Role)
 
 ```go
 // mem/idealmemcontroller/builder.go
-modelComp.DeclarePort("Top", mem.Responder)        // serves read/write
-modelComp.DeclarePort("Control", mem.ControlResponder)
+modelComp.DeclarePort("Top", memprotocol.Responder) // serves read/write
+modelComp.DeclarePort("Control", control.Responder)
 ```
 
 The port owner records `name -> []*Role`, readable through
@@ -241,14 +254,13 @@ same binary via the build id.)
 
 ## Scope of the message surface
 
-- **Application protocols**: `mem` (requester/responder), `mem.control`
-  (requester/responder, defined in package `mem`), `vm`
-  (requester/responder), `datamover` (requester/responder).
+- **Application protocols**: `mem` (`mem/memprotocol`), `mem.control`
+  (`mem/control`), `vm` (`mem/vm/vmprotocol`), `datamover`
+  (`mem/datamoverprotocol`) — each requester/responder.
 - **Transport**: `packetization` — single `link` role sending `Flit` (flits are
   symmetric link traffic).
-- **Endpoint delivery**: the new `endpoint.AssembledMsg` wrapper under a
-  single-role endpoint delivery protocol (replaces bare `MsgMeta`; see the ban
-  above).
+- **Endpoint delivery**: the `endpointprotocol.AssembledMsg` wrapper under a
+  single-role delivery protocol (replaces bare `MsgMeta`; see above).
 - **Test harness**: `noc/acceptance.TrafficMsg` is defined in an importable
   non-test package, so it gets its own protocol — the harness dogfoods the
   convention instead of living on an allowlist.
@@ -292,8 +304,12 @@ same binary via the build id.)
 ## Decisions captured
 
 - Role-aware protocols; audit-only enforcement; design note first.
-- Bare `MsgMeta` on the wire is **forbidden** (user decision); the endpoint
-  delivers a concrete `AssembledMsg` wrapper instead.
+- **Each protocol lives in its own distinctly-named package** that owns the
+  message types and the definition (user decision): `memprotocol`,
+  `control`, `vmprotocol`, `datamoverprotocol`, `endpointprotocol`.
+- Bare `MsgMeta` belongs to no protocol; **no runtime enforcement** (user
+  decision) — the endpoint delivers a concrete `AssembledMsg` wrapper, and the
+  audit lists `MsgMeta` as intentionally unregistered.
 - Audit checks the live registry, not `DefineProtocol` call sites.
 - Control is a separate protocol (`mem.control`), not a role pair inside `mem`.
 - `RoleDef` struct (not a fluent builder) — matches the declarative one-shot

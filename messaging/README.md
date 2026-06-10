@@ -9,7 +9,7 @@ buffer to another port's incoming buffer.
 
 - A **message** (`Msg`) is any value carrying a `*MsgMeta` with routing and
   identification metadata. Bare `MsgMeta` is the envelope, not a message — it
-  cannot be sent or delivered.
+  belongs to no protocol.
 - A **protocol** (`Protocol`) is a named set of message types organized into
   **roles** (`Role`). Defining a protocol with `DefineProtocol` registers
   every message type it carries with the checkpoint codec; ports declare the
@@ -64,7 +64,10 @@ var (
 ```
 
 and bind ports to roles where they are declared:
-`comp.DeclarePort("Top", mem.Responder)`. A registration-coverage audit
+`comp.DeclarePort("Top", memprotocol.Responder)`. Each protocol lives in its
+own package (e.g. `mem/memprotocol`, `mem/control`, `mem/vm/vmprotocol`)
+that owns the message types and the protocol definition. A
+registration-coverage audit
 (`protocolaudit_test.go`) fails CI for any message type in the module that is
 not registered. `RegisterMsg(MyReq{})` in an `init()` remains as the low-level
 primitive (and `RegisterEvent` for events). No custom marshalling is needed.
@@ -145,7 +148,7 @@ type Component interface {
 }
 
 type PortOwner interface {
-    DeclarePort(name string)
+    DeclarePort(name string, roles ...*Role)
     AssignPort(name string, port Port)
     GetPortByName(name string) Port
     Ports() []Port

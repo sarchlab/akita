@@ -1,7 +1,6 @@
 package writeback
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
 
@@ -165,12 +164,12 @@ func (f *flusher) extractFromPort() bool {
 		return false
 	}
 
-	req, ok := msg.(mem.ControlReq)
+	req, ok := msg.(control.Req)
 	if !ok {
 		return false
 	}
 
-	if req.Command != mem.CmdFlush {
+	if req.Command != control.CmdFlush {
 		return false
 	}
 
@@ -186,19 +185,19 @@ func (f *flusher) extractFromPort() bool {
 }
 
 // rejectFlush replies that Flush is illegal while the cache is Running.
-func (f *flusher) rejectFlush(msg mem.ControlReq) bool {
+func (f *flusher) rejectFlush(msg control.Req) bool {
 	if !f.ctrlPort().CanSend() {
 		return false
 	}
 
-	f.ctrlPort().Send(makeCtrlRsp(f.ctrlPort(), mem.CmdFlush,
+	f.ctrlPort().Send(makeCtrlRsp(f.ctrlPort(), control.CmdFlush,
 		msg.Src, msg.ID, false, control.ErrMustBePausedOrDrained))
 	f.ctrlPort().RetrieveIncoming()
 
 	return true
 }
 
-func (f *flusher) startProcessingFlush(msg mem.ControlReq) bool {
+func (f *flusher) startProcessingFlush(msg control.Req) bool {
 	next := &f.pipeline.comp.State
 
 	next.HasProcessingFlush = true
@@ -231,12 +230,12 @@ func (f *flusher) finalizeFlushing() bool {
 		return false
 	}
 
-	rsp := mem.ControlRsp{Command: mem.CmdFlush, Success: true}
+	rsp := control.Rsp{Command: control.CmdFlush, Success: true}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = f.ctrlPort().AsRemote()
 	rsp.Dst = next.ProcessingFlush.MsgMeta.Src
 	rsp.RspTo = next.ProcessingFlush.MsgMeta.ID
-	rsp.TrafficClass = "mem.ControlRsp"
+	rsp.TrafficClass = "control.Rsp"
 	f.ctrlPort().Send(rsp)
 
 	// Per protocol, Flush leaves clean entries valid: only the blocks that

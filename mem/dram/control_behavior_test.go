@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -46,24 +47,24 @@ var _ = Describe("DRAM control behavior", func() {
 		}
 	}
 
-	makeRead := func(addr uint64) mem.ReadReq {
-		req := mem.ReadReq{}
+	makeRead := func(addr uint64) memprotocol.ReadReq {
+		req := memprotocol.ReadReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = addr
 		req.AccessByteSize = 4
 		req.TrafficBytes = 12
-		req.TrafficClass = "mem.ReadReq"
+		req.TrafficClass = "memprotocol.ReadReq"
 		return req
 	}
 
-	makeCtrlReq := func(cmd mem.ControlCommand) mem.ControlReq {
-		req := mem.ControlReq{Command: cmd}
+	makeCtrlReq := func(cmd control.Command) control.Req {
+		req := control.Req{Command: cmd}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
-		req.TrafficClass = "mem.ControlReq"
+		req.TrafficClass = "control.Req"
 		return req
 	}
 
@@ -90,11 +91,11 @@ var _ = Describe("DRAM control behavior", func() {
 		const n = 3
 		acceptReads(n)
 
-		drain := makeCtrlReq(mem.CmdDrain)
+		drain := makeCtrlReq(control.CmdDrain)
 		ctrlPort.Deliver(drain)
 
 		completed := 0
-		var drainRsp mem.ControlRsp
+		var drainRsp control.Rsp
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
 			comp.Tick()
@@ -103,13 +104,13 @@ var _ = Describe("DRAM control behavior", func() {
 				if out == nil {
 					break
 				}
-				if _, ok := out.(mem.DataReadyRsp); ok {
+				if _, ok := out.(memprotocol.DataReadyRsp); ok {
 					completed++
 				}
 			}
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if rsp, ok := out.(mem.ControlRsp); ok &&
-					rsp.Command == mem.CmdDrain {
+				if rsp, ok := out.(control.Rsp); ok &&
+					rsp.Command == control.CmdDrain {
 					drainRsp = rsp
 					drainFound = true
 				}
@@ -150,7 +151,7 @@ var _ = Describe("DRAM control behavior", func() {
 		Expect(comp.State.Transactions).ToNot(BeEmpty())
 
 		// Begin draining while work is still in flight.
-		drain := makeCtrlReq(mem.CmdDrain)
+		drain := makeCtrlReq(control.CmdDrain)
 		ctrlPort.Deliver(drain)
 		comp.Tick()
 		Expect(comp.State.ControlState).To(Equal(control.StateDraining))
@@ -158,7 +159,7 @@ var _ = Describe("DRAM control behavior", func() {
 		// A Pause arrives mid-drain. Control commands are serialized, so the
 		// Pause stays queued until the drain finishes; it must not freeze the
 		// controller and strand the drain.
-		pause := makeCtrlReq(mem.CmdPause)
+		pause := makeCtrlReq(control.CmdPause)
 		ctrlPort.Deliver(pause)
 
 		drainAcked, pauseAcked := false, false
@@ -169,15 +170,15 @@ var _ = Describe("DRAM control behavior", func() {
 				if out == nil {
 					break
 				}
-				r, ok := out.(mem.ControlRsp)
+				r, ok := out.(control.Rsp)
 				if !ok {
 					continue
 				}
 				switch r.Command {
-				case mem.CmdDrain:
+				case control.CmdDrain:
 					drainAcked = true
 					Expect(r.RspTo).To(Equal(drain.ID))
-				case mem.CmdPause:
+				case control.CmdPause:
 					pauseAcked = true
 				}
 			}
@@ -197,7 +198,7 @@ var _ = Describe("DRAM control behavior", func() {
 		comp.State.CurrentCmdSrc = messaging.RemotePort("Drainer")
 		comp.State.Transactions = nil
 
-		pause := makeCtrlReq(mem.CmdPause)
+		pause := makeCtrlReq(control.CmdPause)
 		ctrlPort.Deliver(pause)
 
 		drainAcked, pauseAcked := false, false
@@ -208,15 +209,15 @@ var _ = Describe("DRAM control behavior", func() {
 				if out == nil {
 					break
 				}
-				r, ok := out.(mem.ControlRsp)
+				r, ok := out.(control.Rsp)
 				if !ok {
 					continue
 				}
 				switch r.Command {
-				case mem.CmdDrain:
+				case control.CmdDrain:
 					drainAcked = true
 					Expect(r.RspTo).To(Equal(uint64(777)))
-				case mem.CmdPause:
+				case control.CmdPause:
 					pauseAcked = true
 				}
 			}
@@ -236,10 +237,10 @@ var _ = Describe("DRAM control behavior", func() {
 		// A Reset is queued in the same window. Control commands are serialized
 		// with no preemption: the in-flight Drain finishes and acks first, then
 		// the queued Reset runs.
-		reset := makeCtrlReq(mem.CmdReset)
+		reset := makeCtrlReq(control.CmdReset)
 		ctrlPort.Deliver(reset)
 
-		var rsps []mem.ControlRsp
+		var rsps []control.Rsp
 		for range 4 {
 			comp.Tick()
 			for {
@@ -247,7 +248,7 @@ var _ = Describe("DRAM control behavior", func() {
 				if out == nil {
 					break
 				}
-				if r, ok := out.(mem.ControlRsp); ok {
+				if r, ok := out.(control.Rsp); ok {
 					rsps = append(rsps, r)
 				}
 			}
@@ -255,9 +256,9 @@ var _ = Describe("DRAM control behavior", func() {
 
 		// Two acks, in order: the Drain completion (RspTo 999) then the Reset.
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(mem.CmdDrain))
+		Expect(rsps[0].Command).To(Equal(control.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(mem.CmdReset))
+		Expect(rsps[1].Command).To(Equal(control.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(comp.State.ControlState).To(Equal(control.StateEnabled))
 	})
@@ -270,14 +271,14 @@ var _ = Describe("DRAM control behavior", func() {
 		comp.State.BytesRead = 640
 		comp.State.TotalWriteLatencyCycles = 42
 
-		reset := makeCtrlReq(mem.CmdReset)
+		reset := makeCtrlReq(control.CmdReset)
 		ctrlPort.Deliver(reset)
 		found := false
 		for i := 0; i < 8 && !found; i++ {
 			comp.Tick()
 			if out := ctrlPort.RetrieveOutgoing(); out != nil {
-				if r, ok := out.(mem.ControlRsp); ok &&
-					r.Command == mem.CmdReset {
+				if r, ok := out.(control.Rsp); ok &&
+					r.Command == control.CmdReset {
 					found = true
 				}
 			}
@@ -302,15 +303,15 @@ var _ = Describe("DRAM control behavior", func() {
 
 			comp.State.ControlState = startState
 
-			reset := makeCtrlReq(mem.CmdReset)
+			reset := makeCtrlReq(control.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp mem.ControlRsp
+			var rsp control.Rsp
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				comp.Tick()
 				if out := ctrlPort.RetrieveOutgoing(); out != nil {
-					if r, ok := out.(mem.ControlRsp); ok {
+					if r, ok := out.(control.Rsp); ok {
 						rsp = r
 						found = true
 					}
@@ -318,7 +319,7 @@ var _ = Describe("DRAM control behavior", func() {
 			}
 
 			Expect(found).To(BeTrue())
-			Expect(rsp.Command).To(Equal(mem.CmdReset))
+			Expect(rsp.Command).To(Equal(control.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			Expect(comp.State.Transactions).To(BeEmpty())

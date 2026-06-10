@@ -54,9 +54,9 @@ func NewRegistry[T any](label string) *Registry[T] {
 
 // Tag returns the wire tag the registry uses for the concrete type of v. It is
 // the full import path plus the type name (e.g.
-// "github.com/sarchlab/akita/v5/mem.ReadReq"), with a "*" prefix for pointer
-// forms, so same-named types in different packages cannot collide. Exposed so
-// audits can compute the tag a value would be stored under.
+// "github.com/sarchlab/akita/v5/mem/memprotocol.ReadReq"), with a "*" prefix
+// for pointer forms, so same-named types in different packages cannot collide.
+// Exposed so audits can compute the tag a value would be stored under.
 func Tag(v any) string {
 	t := reflect.TypeOf(v)
 	if t == nil {

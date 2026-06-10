@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -98,12 +98,12 @@ func (m *driverMW) processResponse() bool {
 
 	st := &m.d.State
 	switch rsp := msg.(type) {
-	case mem.WriteDoneRsp:
+	case memprotocol.WriteDoneRsp:
 		if _, ok := st.PendingWrite[rsp.RspTo]; ok {
 			delete(st.PendingWrite, rsp.RspTo)
 			st.WritesAcked++
 		}
-	case mem.DataReadyRsp:
+	case memprotocol.DataReadyRsp:
 		if idx, ok := st.PendingRead[rsp.RspTo]; ok {
 			delete(st.PendingRead, rsp.RspTo)
 			if bytesToUint32(rsp.Data) != valueForOp(idx) {
@@ -127,7 +127,7 @@ func (m *driverMW) sendNext() bool {
 			return false
 		}
 		idx := st.WritesSent
-		req := mem.WriteReq{}
+		req := memprotocol.WriteReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = port.AsRemote()
 		req.Dst = m.d.lowModule.AsRemote()
@@ -135,7 +135,7 @@ func (m *driverMW) sendNext() bool {
 		req.PID = pid
 		req.Data = uint32ToBytes(valueForOp(idx))
 		req.TrafficBytes = len(req.Data) + 12
-		req.TrafficClass = "mem.WriteReq"
+		req.TrafficClass = "memprotocol.WriteReq"
 		port.Send(req)
 		st.PendingWrite[req.ID] = idx
 		st.WritesSent++
@@ -153,7 +153,7 @@ func (m *driverMW) sendNext() bool {
 			return false
 		}
 		idx := st.ReadsSent
-		req := mem.ReadReq{}
+		req := memprotocol.ReadReq{}
 		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = port.AsRemote()
 		req.Dst = m.d.lowModule.AsRemote()
@@ -161,7 +161,7 @@ func (m *driverMW) sendNext() bool {
 		req.AccessByteSize = 4
 		req.PID = pid
 		req.TrafficBytes = 12
-		req.TrafficClass = "mem.ReadReq"
+		req.TrafficClass = "memprotocol.ReadReq"
 		port.Send(req)
 		st.PendingRead[req.ID] = idx
 		st.ReadsSent++

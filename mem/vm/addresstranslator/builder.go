@@ -1,8 +1,9 @@
 package addresstranslator
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -86,10 +87,10 @@ func (b Builder) Build(name string) *Comp {
 	rpMW := &respondPipelineMW{comp: modelComp}
 	modelComp.AddMiddleware(rpMW)
 
-	modelComp.DeclarePort("Top", mem.Responder)
-	modelComp.DeclarePort("Bottom", mem.Requester)
-	modelComp.DeclarePort("Translation", vm.Requester)
-	modelComp.DeclarePort("Control", mem.ControlResponder)
+	modelComp.DeclarePort("Top", memprotocol.Responder)
+	modelComp.DeclarePort("Bottom", memprotocol.Requester)
+	modelComp.DeclarePort("Translation", vmprotocol.Requester)
+	modelComp.DeclarePort("Control", control.Responder)
 
 	b.registrar.RegisterComponent(modelComp)
 

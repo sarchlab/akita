@@ -1,4 +1,7 @@
-package endpoint
+// Package endpointprotocol defines the endpoint delivery protocol: the
+// concrete message type a network endpoint delivers to device ports under the
+// traffic-only network model.
+package endpointprotocol
 
 import "github.com/sarchlab/akita/v5/messaging"
 
@@ -6,9 +9,9 @@ import "github.com/sarchlab/akita/v5/messaging"
 // original message. The network is a traffic-only model: the endpoint strips
 // an outgoing message down to its metadata, carries the metadata in flits,
 // and reassembles it at the far end. Receivers under this model only ever see
-// the metadata. Bare MsgMeta may not travel as a message (it is the
-// envelope), so the reassembled metadata is delivered in this concrete
-// wrapper.
+// the metadata. Bare MsgMeta is the envelope and belongs to no protocol, so
+// the reassembled metadata is delivered in this concrete wrapper, which the
+// delivery protocol registers for checkpointing.
 type AssembledMsg struct {
 	messaging.MsgMeta
 }

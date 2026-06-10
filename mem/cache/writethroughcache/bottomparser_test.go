@@ -1,8 +1,8 @@
 package writethroughcache
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 
@@ -102,7 +102,7 @@ var _ = Describe("Bottom Parser", func() {
 				},
 			)
 
-			done := mem.WriteDoneRsp{}
+			done := memprotocol.WriteDoneRsp{}
 			done.ID = timing.GetIDGenerator().Generate()
 			done.RspTo = writeToBottomMeta.ID
 			done.TrafficBytes = 4
@@ -152,7 +152,7 @@ var _ = Describe("Bottom Parser", func() {
 				},
 			)
 
-			done := mem.WriteDoneRsp{}
+			done := memprotocol.WriteDoneRsp{}
 			done.ID = timing.GetIDGenerator().Generate()
 			done.RspTo = writeToBottomMeta.ID
 			done.TrafficBytes = 4
@@ -174,7 +174,7 @@ var _ = Describe("Bottom Parser", func() {
 	Context("data ready", func() {
 		var (
 			readToBottomMeta       messaging.MsgMeta
-			dataReady              mem.DataReadyRsp
+			dataReady              memprotocol.DataReadyRsp
 			blockSetID, blockWayID int
 		)
 
@@ -197,7 +197,7 @@ var _ = Describe("Bottom Parser", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}
-			dataReady = mem.DataReadyRsp{}
+			dataReady = memprotocol.DataReadyRsp{}
 			dataReady.ID = timing.GetIDGenerator().Generate()
 			dataReady.RspTo = readToBottomMeta.ID
 			dataReady.Data = drData

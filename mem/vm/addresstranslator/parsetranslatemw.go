@@ -1,9 +1,9 @@
 package addresstranslator
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/control"
-	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -47,19 +47,19 @@ func (m *parseTranslateMW) translate() bool {
 		return false
 	}
 
-	item := itemI.(mem.AccessReq)
+	item := itemI.(memprotocol.AccessReq)
 	vAddr := item.GetAddress()
 	spec := m.comp.Spec()
 	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
 
-	transReq := vm.TranslationReq{}
+	transReq := vmprotocol.TranslationReq{}
 	transReq.ID = timing.GetIDGenerator().Generate()
 	transReq.Src = m.translationPort().AsRemote()
 	transReq.Dst = m.comp.Resources().TranslationProviderMapper.Find(vAddr)
 	transReq.PID = item.GetPID()
 	transReq.VAddr = vPageID
 	transReq.DeviceID = spec.DeviceID
-	transReq.TrafficClass = "vm.TranslationReq"
+	transReq.TrafficClass = "vmprotocol.TranslationReq"
 
 	if !m.translationPort().CanSend() {
 		return false

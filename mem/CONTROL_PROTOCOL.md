@@ -17,8 +17,8 @@ below describe the implemented state.
 ## TL;DR
 
 - Every memory agent exposes a port named `Control`.
-- That port carries `mem.ControlReq` in and `mem.ControlRsp` out (by
-  value, not pointers — handlers type-assert `msg.(mem.ControlReq)`).
+- That port carries `control.Req` in and `control.Rsp` out (by
+  value, not pointers — handlers type-assert `msg.(control.Req)`).
 - The request's `Command` field is one of six verbs.
 - The component runs the verb and replies on the same port.
 - Whether the reply is same-tick (sync) or whenever-the-work-finishes
@@ -54,7 +54,7 @@ state support them.
 
 ### Why no `PauseAfter`/`InvalidateAfter`/`DiscardInflight`
 
-The old `ControlReq` carried modifier flags that encoded compound
+The old `Req` carried modifier flags that encoded compound
 operations: "Flush, then pause", "Flush, then invalidate", "Flush, but
 discard in-flight rather than wait for it." These are now sequenced by
 the caller:
@@ -70,8 +70,8 @@ The primitives compose. The protocol stays small.
 ## Conventions
 
 1. **One control port per component.** Every memory agent exposes a
-   port named `Control`. It carries `mem.ControlReq` in and
-   `mem.ControlRsp` out (by value). Workload requests (reads, writes,
+   port named `Control`. It carries `control.Req` in and
+   `control.Rsp` out (by value). Workload requests (reads, writes,
    translations, data-move requests) use other ports (`Top`,
    `Bottom`, `Inside`, `Outside`, etc.), never `Control`.
 2. **One control state per component.** Every agent holds a
@@ -81,7 +81,7 @@ The primitives compose. The protocol stays small.
    states, not separate states; Reset always lands the component in
    `StateEnabled`.
 3. **Unsupported verbs always reply.** A component that does not
-   implement a verb sends `ControlRsp{Command: <verb>, Success:
+   implement a verb sends `Rsp{Command: <verb>, Success:
    false, Error: control.ErrUnsupported}`. It never panics on a
    well-formed verb.
 4. **Illegal-state verbs reply with a reason.** Invalidate and Flush
@@ -110,10 +110,10 @@ The primitives compose. The protocol stays small.
 ## Wire format
 
 ```go
-type ControlCommand int
+type Command int
 
 const (
-    CmdPause ControlCommand = iota
+    CmdPause Command = iota
     CmdDrain
     CmdEnable
     CmdReset
@@ -121,16 +121,16 @@ const (
     CmdFlush
 )
 
-type ControlReq struct {
+type Req struct {
     messaging.MsgMeta
-    Command   ControlCommand
+    Command   Command
     Addresses []uint64 // Invalidate / Flush filter; empty = all entries.
     PID       vm.PID   // Invalidate / Flush filter; zero = all PIDs.
 }
 
-type ControlRsp struct {
+type Rsp struct {
     messaging.MsgMeta
-    Command ControlCommand
+    Command Command
     Success bool
     Error   string // Empty on success. control.ErrUnsupported or
                    // control.ErrMustBePausedOrDrained on failure.
@@ -317,9 +317,9 @@ control.CacheLike()                  // Universal + Invalidate + Flush
 control.TranslationCacheLike()       // Universal + Invalidate
 
 // Verb classification.
-control.IsSyncVerb(mem.CmdPause)     // true
+control.IsSyncVerb(control.CmdPause)     // true
 
-// Error string constants on ControlRsp.
+// Error string constants on Rsp.
 control.ErrUnsupported
 control.ErrMustBePausedOrDrained
 ```
@@ -344,7 +344,7 @@ control.ErrMustBePausedOrDrained
    on `req.Command`, mutates `State.ControlState`, and sends the
    response per the sync/async timing rules.
 4. For any verb you do not implement, reply with
-   `ControlRsp{Success: false, Error: control.ErrUnsupported}`.
+   `Rsp{Success: false, Error: control.ErrUnsupported}`.
 5. Declare the component's support matrix via a `VerbSupport` helper
    (`Universal()`, `CacheLike()`, or a literal).
 6. Add one test that calls `control.RunContract`:
@@ -382,8 +382,8 @@ For each of the six verbs the harness:
 
 - rebuilds the component fresh (verb tests are independent of each
   other),
-- delivers a `ControlReq` for that verb to `Ctrl`,
-- ticks the component until a `ControlRsp` comes out (or a tick budget
+- delivers a `Req` for that verb to `Ctrl`,
+- ticks the component until a `Rsp` comes out (or a tick budget
   expires — 64 ticks for sync verbs and unsupported verbs, 4096 ticks
   for async verbs),
 - asserts `Command`, `RspTo`, `Success`, and `Error` match the protocol

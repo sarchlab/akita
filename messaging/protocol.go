@@ -101,10 +101,10 @@ var (
 //	    Responder = Protocol.Role("responder")
 //	)
 //
-// It panics on a duplicate protocol name, a duplicate role name, a message
-// type listed in more than one role of the same protocol, or a bare MsgMeta
-// (the envelope is not a message). A message type may belong to more than one
-// protocol; re-registration with the codec is harmless.
+// It panics on a duplicate protocol name, a duplicate role name, or a message
+// type listed in more than one role of the same protocol. A message type may
+// belong to more than one protocol; re-registration with the codec is
+// harmless.
 func DefineProtocol(name string, roles ...RoleDef) *Protocol {
 	if name == "" {
 		panic("protocol name must not be empty")
@@ -139,8 +139,6 @@ func DefineProtocol(name string, roles ...RoleDef) *Protocol {
 		seenRoles[def.Name] = true
 
 		for _, msg := range def.Sends {
-			mustNotBeBareMsgMeta(msg)
-
 			t := reflect.TypeOf(msg)
 			if otherRole, seen := seenMsgTypes[t]; seen {
 				panic(fmt.Sprintf(
@@ -164,15 +162,4 @@ func DefineProtocol(name string, roles ...RoleDef) *Protocol {
 	}
 
 	return p
-}
-
-// mustNotBeBareMsgMeta panics if the message is a bare MsgMeta. MsgMeta is the
-// envelope every message embeds, not a message: it carries no protocol
-// meaning, so it may not be sent, delivered, or registered as one.
-func mustNotBeBareMsgMeta(msg Msg) {
-	switch msg.(type) {
-	case MsgMeta, *MsgMeta:
-		panic("bare messaging.MsgMeta is the message envelope, not a " +
-			"message; define a concrete message type embedding MsgMeta")
-	}
 }

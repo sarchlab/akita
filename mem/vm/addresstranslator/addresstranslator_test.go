@@ -8,7 +8,9 @@ import (
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/control"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -128,11 +130,11 @@ var _ = Describe("Address Translator", func() {
 
 	Context("translate stage", func() {
 		var (
-			req mem.ReadReq
+			req memprotocol.ReadReq
 		)
 
 		BeforeEach(func() {
-			req = mem.ReadReq{}
+			req = memprotocol.ReadReq{}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.Src = messaging.RemotePort("Agent")
 			req.Dst = topPort.AsRemote()
@@ -140,7 +142,7 @@ var _ = Describe("Address Translator", func() {
 			req.AccessByteSize = 4
 			req.PID = 1
 			req.TrafficBytes = 12
-			req.TrafficClass = "mem.ReadReq"
+			req.TrafficClass = "memprotocol.ReadReq"
 		})
 
 		It("should do nothing if there is no request", func() {
@@ -159,8 +161,8 @@ var _ = Describe("Address Translator", func() {
 			Expect(updatedState.Transactions).To(HaveLen(1))
 
 			sent := translationPort.RetrieveOutgoing()
-			Expect(sent).To(BeAssignableToTypeOf(vm.TranslationReq{}))
-			transReq := sent.(vm.TranslationReq)
+			Expect(sent).To(BeAssignableToTypeOf(vmprotocol.TranslationReq{}))
+			transReq := sent.(vmprotocol.TranslationReq)
 			Expect(updatedState.Transactions[0].TranslationReqID).
 				To(Equal(transReq.ID))
 		})
@@ -180,22 +182,22 @@ var _ = Describe("Address Translator", func() {
 
 	Context("parse translation", func() {
 		var (
-			transReq1, transReq2 vm.TranslationReq
+			transReq1, transReq2 vmprotocol.TranslationReq
 		)
 
 		BeforeEach(func() {
-			transReq1 = vm.TranslationReq{}
+			transReq1 = vmprotocol.TranslationReq{}
 			transReq1.ID = timing.GetIDGenerator().Generate()
 			transReq1.PID = 1
 			transReq1.VAddr = 0x100
 			transReq1.DeviceID = 1
-			transReq1.TrafficClass = "vm.TranslationReq"
-			transReq2 = vm.TranslationReq{}
+			transReq1.TrafficClass = "vmprotocol.TranslationReq"
+			transReq2 = vmprotocol.TranslationReq{}
 			transReq2.ID = timing.GetIDGenerator().Generate()
 			transReq2.PID = 1
 			transReq2.VAddr = 0x100
 			transReq2.DeviceID = 1
-			transReq2.TrafficClass = "vm.TranslationReq"
+			transReq2.TrafficClass = "vmprotocol.TranslationReq"
 
 			t.State = State{
 				Transactions: []transactionState{
@@ -211,13 +213,13 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should stall if send failed", func() {
-			req := mem.ReadReq{}
+			req := memprotocol.ReadReq{}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.Address = 0x10040
 			req.AccessByteSize = 4
 			req.TrafficBytes = 12
-			req.TrafficClass = "mem.ReadReq"
-			translationRsp := vm.TranslationRsp{
+			req.TrafficClass = "memprotocol.ReadReq"
+			translationRsp := vmprotocol.TranslationRsp{
 				Page: vm.Page{
 					PID:   1,
 					VAddr: 0x10000,
@@ -226,7 +228,7 @@ var _ = Describe("Address Translator", func() {
 			}
 			translationRsp.ID = timing.GetIDGenerator().Generate()
 			translationRsp.RspTo = transReq1.ID
-			translationRsp.TrafficClass = "vm.TranslationRsp"
+			translationRsp.TrafficClass = "vmprotocol.TranslationRsp"
 
 			t.State = State{
 				Transactions: []transactionState{
@@ -251,13 +253,13 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should forward read request", func() {
-			req := mem.ReadReq{}
+			req := memprotocol.ReadReq{}
 			req.ID = timing.GetIDGenerator().Generate()
 			req.Address = 0x10040
 			req.AccessByteSize = 4
 			req.TrafficBytes = 12
-			req.TrafficClass = "mem.ReadReq"
-			translationRsp := vm.TranslationRsp{
+			req.TrafficClass = "memprotocol.ReadReq"
+			translationRsp := vmprotocol.TranslationRsp{
 				Page: vm.Page{
 					PID:   1,
 					VAddr: 0x10000,
@@ -266,7 +268,7 @@ var _ = Describe("Address Translator", func() {
 			}
 			translationRsp.ID = timing.GetIDGenerator().Generate()
 			translationRsp.RspTo = transReq1.ID
-			translationRsp.TrafficClass = "vm.TranslationRsp"
+			translationRsp.TrafficClass = "vmprotocol.TranslationRsp"
 
 			t.State = State{
 				Transactions: []transactionState{
@@ -288,7 +290,7 @@ var _ = Describe("Address Translator", func() {
 			Expect(madeProgress).To(BeTrue())
 
 			sent := bottomPort.RetrieveOutgoing()
-			read := sent.(mem.ReadReq)
+			read := sent.(memprotocol.ReadReq)
 			Expect(read.PID).To(Equal(vm.PID(0)))
 			Expect(read.Address).To(Equal(uint64(0x20040)))
 			Expect(read.AccessByteSize).To(Equal(uint64(4)))
@@ -309,14 +311,14 @@ var _ = Describe("Address Translator", func() {
 		It("should forward write request", func() {
 			data := []byte{1, 2, 3, 4}
 			dirty := []bool{false, true, false, true}
-			write := mem.WriteReq{}
+			write := memprotocol.WriteReq{}
 			write.ID = timing.GetIDGenerator().Generate()
 			write.Address = 0x10040
 			write.Data = data
 			write.DirtyMask = dirty
 			write.TrafficBytes = len(data) + 12
-			write.TrafficClass = "mem.WriteReq"
-			translationRsp := vm.TranslationRsp{
+			write.TrafficClass = "memprotocol.WriteReq"
+			translationRsp := vmprotocol.TranslationRsp{
 				Page: vm.Page{
 					PID:   1,
 					VAddr: 0x10000,
@@ -325,7 +327,7 @@ var _ = Describe("Address Translator", func() {
 			}
 			translationRsp.ID = timing.GetIDGenerator().Generate()
 			translationRsp.RspTo = transReq1.ID
-			translationRsp.TrafficClass = "vm.TranslationRsp"
+			translationRsp.TrafficClass = "vmprotocol.TranslationRsp"
 
 			t.State = State{
 				Transactions: []transactionState{
@@ -347,7 +349,7 @@ var _ = Describe("Address Translator", func() {
 			Expect(madeProgress).To(BeTrue())
 
 			sent := bottomPort.RetrieveOutgoing()
-			writeMsg := sent.(mem.WriteReq)
+			writeMsg := sent.(memprotocol.WriteReq)
 			Expect(writeMsg.PID).To(Equal(vm.PID(0)))
 			Expect(writeMsg.Address).To(Equal(uint64(0x20040)))
 			Expect(writeMsg.Src).To(Equal(bottomPort.AsRemote()))
@@ -361,43 +363,43 @@ var _ = Describe("Address Translator", func() {
 
 	Context("respond", func() {
 		var (
-			readFromTop   mem.ReadReq
-			writeFromTop  mem.WriteReq
-			readToBottom  mem.ReadReq
-			writeToBottom mem.WriteReq
+			readFromTop   memprotocol.ReadReq
+			writeFromTop  memprotocol.WriteReq
+			readToBottom  memprotocol.ReadReq
+			writeToBottom memprotocol.WriteReq
 		)
 
 		BeforeEach(func() {
-			readFromTop = mem.ReadReq{}
+			readFromTop = memprotocol.ReadReq{}
 			readFromTop.ID = timing.GetIDGenerator().Generate()
 			readFromTop.Src = messaging.RemotePort("Agent")
 			readFromTop.Dst = topPort.AsRemote()
 			readFromTop.Address = 0x10040
 			readFromTop.AccessByteSize = 4
 			readFromTop.TrafficBytes = 12
-			readFromTop.TrafficClass = "mem.ReadReq"
-			readToBottom = mem.ReadReq{}
+			readFromTop.TrafficClass = "memprotocol.ReadReq"
+			readToBottom = memprotocol.ReadReq{}
 			readToBottom.ID = timing.GetIDGenerator().Generate()
 			readToBottom.Src = bottomPort.AsRemote()
 			readToBottom.Dst = messaging.RemotePort("MemPort")
 			readToBottom.Address = 0x20040
 			readToBottom.AccessByteSize = 4
 			readToBottom.TrafficBytes = 12
-			readToBottom.TrafficClass = "mem.ReadReq"
-			writeFromTop = mem.WriteReq{}
+			readToBottom.TrafficClass = "memprotocol.ReadReq"
+			writeFromTop = memprotocol.WriteReq{}
 			writeFromTop.ID = timing.GetIDGenerator().Generate()
 			writeFromTop.Src = messaging.RemotePort("Agent")
 			writeFromTop.Dst = topPort.AsRemote()
 			writeFromTop.Address = 0x10040
 			writeFromTop.TrafficBytes = 12
-			writeFromTop.TrafficClass = "mem.WriteReq"
-			writeToBottom = mem.WriteReq{}
+			writeFromTop.TrafficClass = "memprotocol.WriteReq"
+			writeToBottom = memprotocol.WriteReq{}
 			writeToBottom.ID = timing.GetIDGenerator().Generate()
 			writeToBottom.Src = bottomPort.AsRemote()
 			writeToBottom.Dst = messaging.RemotePort("MemPort")
 			writeToBottom.Address = 0x10040
 			writeToBottom.TrafficBytes = 12
-			writeToBottom.TrafficClass = "mem.WriteReq"
+			writeToBottom.TrafficClass = "memprotocol.WriteReq"
 
 			t.State = State{
 				InflightReqToBottom: []reqToBottomState{
@@ -431,11 +433,11 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should respond data ready", func() {
-			dataReady := mem.DataReadyRsp{}
+			dataReady := memprotocol.DataReadyRsp{}
 			dataReady.ID = timing.GetIDGenerator().Generate()
 			dataReady.RspTo = readToBottom.ID
 			dataReady.TrafficBytes = 4
-			dataReady.TrafficClass = "mem.DataReadyRsp"
+			dataReady.TrafficClass = "memprotocol.DataReadyRsp"
 			bottomPort.Deliver(dataReady)
 
 			madeProgress := tRespondPipeMW.respond()
@@ -443,7 +445,7 @@ var _ = Describe("Address Translator", func() {
 			Expect(madeProgress).To(BeTrue())
 
 			sent := topPort.RetrieveOutgoing()
-			dr := sent.(mem.DataReadyRsp)
+			dr := sent.(memprotocol.DataReadyRsp)
 			Expect(dr.RspTo).To(Equal(readFromTop.ID))
 			Expect(dr.Data).To(Equal(dataReady.Data))
 
@@ -452,11 +454,11 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should respond write done", func() {
-			done := mem.WriteDoneRsp{}
+			done := memprotocol.WriteDoneRsp{}
 			done.ID = timing.GetIDGenerator().Generate()
 			done.RspTo = writeToBottom.ID
 			done.TrafficBytes = 4
-			done.TrafficClass = "mem.WriteDoneRsp"
+			done.TrafficClass = "memprotocol.WriteDoneRsp"
 			bottomPort.Deliver(done)
 
 			madeProgress := tRespondPipeMW.respond()
@@ -464,7 +466,7 @@ var _ = Describe("Address Translator", func() {
 			Expect(madeProgress).To(BeTrue())
 
 			sent := topPort.RetrieveOutgoing()
-			doneMsg := sent.(mem.WriteDoneRsp)
+			doneMsg := sent.(memprotocol.WriteDoneRsp)
 			Expect(doneMsg.RspTo).To(Equal(writeFromTop.ID))
 
 			updatedState := &t.State
@@ -472,11 +474,11 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should stall if TopPort is busy", func() {
-			dataReady := mem.DataReadyRsp{}
+			dataReady := memprotocol.DataReadyRsp{}
 			dataReady.ID = timing.GetIDGenerator().Generate()
 			dataReady.RspTo = readToBottom.ID
 			dataReady.TrafficBytes = 4
-			dataReady.TrafficClass = "mem.DataReadyRsp"
+			dataReady.TrafficClass = "memprotocol.DataReadyRsp"
 
 			// Fill the top port's outgoing buffer so Send fails.
 			fillOutgoing(topPort, topBufSize)
@@ -499,53 +501,53 @@ var _ = Describe("Address Translator", func() {
 
 	Context("when handling control messages", func() {
 		var (
-			readFromTop   mem.ReadReq
-			writeFromTop  mem.WriteReq
-			readToBottom  mem.ReadReq
-			writeToBottom mem.WriteReq
-			flushReq      mem.ControlReq
-			restartReq    mem.ControlReq
+			readFromTop   memprotocol.ReadReq
+			writeFromTop  memprotocol.WriteReq
+			readToBottom  memprotocol.ReadReq
+			writeToBottom memprotocol.WriteReq
+			flushReq      control.Req
+			restartReq    control.Req
 		)
 
 		BeforeEach(func() {
-			readFromTop = mem.ReadReq{}
+			readFromTop = memprotocol.ReadReq{}
 			readFromTop.ID = timing.GetIDGenerator().Generate()
 			readFromTop.Address = 0x10040
 			readFromTop.AccessByteSize = 4
 			readFromTop.TrafficBytes = 12
-			readFromTop.TrafficClass = "mem.ReadReq"
-			readToBottom = mem.ReadReq{}
+			readFromTop.TrafficClass = "memprotocol.ReadReq"
+			readToBottom = memprotocol.ReadReq{}
 			readToBottom.ID = timing.GetIDGenerator().Generate()
 			readToBottom.Address = 0x20040
 			readToBottom.AccessByteSize = 4
 			readToBottom.TrafficBytes = 12
-			readToBottom.TrafficClass = "mem.ReadReq"
-			writeFromTop = mem.WriteReq{}
+			readToBottom.TrafficClass = "memprotocol.ReadReq"
+			writeFromTop = memprotocol.WriteReq{}
 			writeFromTop.ID = timing.GetIDGenerator().Generate()
 			writeFromTop.Address = 0x10040
 			writeFromTop.TrafficBytes = 12
-			writeFromTop.TrafficClass = "mem.WriteReq"
-			writeToBottom = mem.WriteReq{}
+			writeFromTop.TrafficClass = "memprotocol.WriteReq"
+			writeToBottom = memprotocol.WriteReq{}
 			writeToBottom.ID = timing.GetIDGenerator().Generate()
 			writeToBottom.Address = 0x10040
 			writeToBottom.TrafficBytes = 12
-			writeToBottom.TrafficClass = "mem.WriteReq"
-			flushReq = mem.ControlReq{
-				Command: mem.CmdFlush,
+			writeToBottom.TrafficClass = "memprotocol.WriteReq"
+			flushReq = control.Req{
+				Command: control.CmdFlush,
 			}
 			flushReq.ID = timing.GetIDGenerator().Generate()
 			flushReq.Src = messaging.RemotePort("Agent")
 			flushReq.Dst = ctrlPort.AsRemote()
 			flushReq.TrafficBytes = 4
-			flushReq.TrafficClass = "mem.ControlReq"
-			restartReq = mem.ControlReq{
-				Command: mem.CmdReset,
+			flushReq.TrafficClass = "control.Req"
+			restartReq = control.Req{
+				Command: control.CmdReset,
 			}
 			restartReq.ID = timing.GetIDGenerator().Generate()
 			restartReq.Src = messaging.RemotePort("Agent")
 			restartReq.Dst = ctrlPort.AsRemote()
 			restartReq.TrafficBytes = 4
-			restartReq.TrafficClass = "mem.ControlReq"
+			restartReq.TrafficClass = "control.Req"
 
 			nextState := &t.State
 			nextState.InflightReqToBottom = []reqToBottomState{
@@ -579,8 +581,8 @@ var _ = Describe("Address Translator", func() {
 
 			Expect(madeProgress).To(BeTrue())
 			rspMsg := ctrlPort.RetrieveOutgoing()
-			Expect(rspMsg).To(BeAssignableToTypeOf(mem.ControlRsp{}))
-			rsp := rspMsg.(mem.ControlRsp)
+			Expect(rspMsg).To(BeAssignableToTypeOf(control.Rsp{}))
+			rsp := rspMsg.(control.Rsp)
 			Expect(rsp.Success).To(BeFalse())
 			Expect(rsp.Error).To(Equal(control.ErrUnsupported))
 		})
@@ -592,8 +594,8 @@ var _ = Describe("Address Translator", func() {
 
 			Expect(madeProgress).To(BeTrue())
 			rspMsg := ctrlPort.RetrieveOutgoing()
-			Expect(rspMsg).To(BeAssignableToTypeOf(mem.ControlRsp{}))
-			rsp := rspMsg.(mem.ControlRsp)
+			Expect(rspMsg).To(BeAssignableToTypeOf(control.Rsp{}))
+			rsp := rspMsg.(control.Rsp)
 			Expect(rsp.Success).To(BeTrue())
 			updatedState := &t.State
 			Expect(updatedState.ControlState).To(Equal(control.StateEnabled))
@@ -608,11 +610,11 @@ var _ = Describe("Address Translator", func() {
 // validation) and is sent to a distinct destination.
 func fillOutgoing(p messaging.Port, n int) {
 	for i := 0; i < n; i++ {
-		dummy := mem.WriteDoneRsp{}
+		dummy := memprotocol.WriteDoneRsp{}
 		dummy.ID = timing.GetIDGenerator().Generate()
 		dummy.Src = p.AsRemote()
 		dummy.Dst = messaging.RemotePort("Dummy")
-		dummy.TrafficClass = "mem.WriteDoneRsp"
+		dummy.TrafficClass = "memprotocol.WriteDoneRsp"
 		Expect(p.CanSend()).To(BeTrue())
 		p.Send(dummy)
 	}

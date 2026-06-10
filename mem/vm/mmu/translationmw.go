@@ -6,6 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/timing"
@@ -118,14 +119,14 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	state := &m.comp.State
 	walking := state.WalkingTranslations[walkingIndex]
 
-	rsp := vm.TranslationRsp{
+	rsp := vmprotocol.TranslationRsp{
 		Page: walking.Page,
 	}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = walking.ReqSrc
 	rsp.RspTo = walking.ReqID
-	rsp.TrafficClass = "vm.TranslationRsp"
+	rsp.TrafficClass = "vmprotocol.TranslationRsp"
 
 	m.topPort().Send(rsp)
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
@@ -149,7 +150,7 @@ func (m *translationMW) parseFromTop() bool {
 	}
 
 	switch req := reqI.(type) {
-	case vm.TranslationReq:
+	case vmprotocol.TranslationReq:
 		tracing.TraceReqReceive(m.comp, req)
 		m.startWalking(req)
 	default:
@@ -160,7 +161,7 @@ func (m *translationMW) parseFromTop() bool {
 	return true
 }
 
-func (m *translationMW) startWalking(req vm.TranslationReq) {
+func (m *translationMW) startWalking(req vmprotocol.TranslationReq) {
 	spec := m.comp.Spec()
 	state := &m.comp.State
 

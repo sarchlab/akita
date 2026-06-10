@@ -1,7 +1,6 @@
 package tlb
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
@@ -53,7 +52,7 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 		return false
 	}
 
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), mem.CmdDrain,
+	m.controlPort().Send(makeCtrlRsp(m.controlPort(), control.CmdDrain,
 		state.CurrentCmdSrc, state.CurrentCmdID, true, ""))
 	state.PendingDrainRsp = false
 	state.CurrentCmdID = 0
@@ -67,7 +66,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 		return false
 	}
 
-	ctrlReq, ok := msg.(mem.ControlReq)
+	ctrlReq, ok := msg.(control.Req)
 	if !ok {
 		// Drop unexpected message types so the Control port does not stall.
 		m.controlPort().RetrieveIncoming()
@@ -75,17 +74,17 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	}
 
 	switch ctrlReq.Command {
-	case mem.CmdEnable:
+	case control.CmdEnable:
 		return m.performCtrlEnable(ctrlReq)
-	case mem.CmdDrain:
+	case control.CmdDrain:
 		return m.performCtrlDrain(ctrlReq)
-	case mem.CmdPause:
+	case control.CmdPause:
 		return m.performCtrlPause(ctrlReq)
-	case mem.CmdReset:
+	case control.CmdReset:
 		return m.handleReset(ctrlReq)
-	case mem.CmdInvalidate:
+	case control.CmdInvalidate:
 		return m.handleInvalidate(ctrlReq)
-	case mem.CmdFlush:
+	case control.CmdFlush:
 		// A TLB holds no dirty data, so Flush is not meaningful; callers
 		// drop entries with Invalidate instead.
 		return m.handleUnsupported(ctrlReq)
@@ -94,14 +93,14 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	}
 }
 
-func (m *ctrlMiddleware) performCtrlEnable(msg mem.ControlReq) bool {
+func (m *ctrlMiddleware) performCtrlEnable(msg control.Req) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
 	state := &m.comp.State
 	state.TLBState = tlbStateEnable
 
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), mem.CmdEnable,
+	m.controlPort().Send(makeCtrlRsp(m.controlPort(), control.CmdEnable,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
 	tracing.AddMilestone(m.comp, tracing.Milestone{
@@ -114,7 +113,7 @@ func (m *ctrlMiddleware) performCtrlEnable(msg mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) performCtrlDrain(msg mem.ControlReq) bool {
+func (m *ctrlMiddleware) performCtrlDrain(msg control.Req) bool {
 	state := &m.comp.State
 	state.TLBState = tlbStateDrain
 	state.PendingDrainRsp = true
@@ -132,14 +131,14 @@ func (m *ctrlMiddleware) performCtrlDrain(msg mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) performCtrlPause(msg mem.ControlReq) bool {
+func (m *ctrlMiddleware) performCtrlPause(msg control.Req) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
 	state := &m.comp.State
 	state.TLBState = tlbStatePause
 
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), mem.CmdPause,
+	m.controlPort().Send(makeCtrlRsp(m.controlPort(), control.CmdPause,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
 	tracing.AddMilestone(m.comp, tracing.Milestone{
@@ -156,7 +155,7 @@ func (m *ctrlMiddleware) performCtrlPause(msg mem.ControlReq) bool {
 // address/PID filter (empty address list = all addresses, zero PID = all
 // PIDs). Invalidate is a synchronous verb but is only legal once the TLB
 // is paused or drained; issued while Enabled it is rejected.
-func (m *ctrlMiddleware) handleInvalidate(msg mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleInvalidate(msg control.Req) bool {
 	state := &m.comp.State
 	// Invalidate is only legal once the TLB is fully paused. While it is
 	// still draining, in-flight bottom responses can still be parsed into
@@ -170,7 +169,7 @@ func (m *ctrlMiddleware) handleInvalidate(msg mem.ControlReq) bool {
 
 	invalidateEntries(state, m.comp.Spec(), msg.Addresses, msg.PID)
 
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), mem.CmdInvalidate,
+	m.controlPort().Send(makeCtrlRsp(m.controlPort(), control.CmdInvalidate,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
 	tracing.AddMilestone(m.comp, tracing.Milestone{
@@ -185,7 +184,7 @@ func (m *ctrlMiddleware) handleInvalidate(msg mem.ControlReq) bool {
 
 // rejectMustBePaused responds that a conditional verb is illegal while the
 // component is Enabled.
-func (m *ctrlMiddleware) rejectMustBePaused(msg mem.ControlReq) bool {
+func (m *ctrlMiddleware) rejectMustBePaused(msg control.Req) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
@@ -226,12 +225,12 @@ func invalidateEntries(
 	}
 }
 
-func (m *ctrlMiddleware) handleReset(msg mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleReset(msg control.Req) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
 
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), mem.CmdReset,
+	m.controlPort().Send(makeCtrlRsp(m.controlPort(), control.CmdReset,
 		msg.Src, msg.ID, true, ""))
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
@@ -268,7 +267,7 @@ func (m *ctrlMiddleware) handleReset(msg mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleUnsupported(msg mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleUnsupported(msg control.Req) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
@@ -280,13 +279,13 @@ func (m *ctrlMiddleware) handleUnsupported(msg mem.ControlReq) bool {
 
 func makeCtrlRsp(
 	port messaging.Port,
-	cmd mem.ControlCommand,
+	cmd control.Command,
 	dst messaging.RemotePort,
 	rspTo uint64,
 	success bool,
 	errStr string,
-) mem.ControlRsp {
-	rsp := mem.ControlRsp{
+) control.Rsp {
+	rsp := control.Rsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,
@@ -295,6 +294,6 @@ func makeCtrlRsp(
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
-	rsp.TrafficClass = "mem.ControlRsp"
+	rsp.TrafficClass = "control.Rsp"
 	return rsp
 }

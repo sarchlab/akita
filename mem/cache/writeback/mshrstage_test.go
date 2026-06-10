@@ -3,7 +3,7 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -21,7 +21,7 @@ var _ = Describe("MSHR Stage", func() {
 	// fillTop pre-fills topPort's single outgoing slot so the next CanSend
 	// returns false, simulating a busy port.
 	fillTop := func() {
-		dummy := mem.DataReadyRsp{}
+		dummy := memprotocol.DataReadyRsp{}
 		dummy.Src = topPort.AsRemote()
 		dummy.Dst = messaging.RemotePort("SomeSrc")
 		dummy.TrafficClass = "rsp"
@@ -85,12 +85,12 @@ var _ = Describe("MSHR Stage", func() {
 	})
 
 	It("should stall if topSender is busy", func() {
-		read := mem.ReadReq{}
+		read := memprotocol.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Address = 0x104
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
-		read.TrafficClass = "mem.ReadReq"
+		read.TrafficClass = "memprotocol.ReadReq"
 		trans := transactionState{
 			HasRead:            true,
 			ReadMeta:           read.MsgMeta,
@@ -130,13 +130,13 @@ var _ = Describe("MSHR Stage", func() {
 	})
 
 	It("should send data ready to top", func() {
-		read := mem.ReadReq{}
+		read := memprotocol.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = messaging.RemotePort("Agent")
 		read.Address = 0x104
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
-		read.TrafficClass = "mem.ReadReq"
+		read.TrafficClass = "memprotocol.ReadReq"
 		trans := transactionState{
 			HasRead:            true,
 			ReadMeta:           read.MsgMeta,
@@ -172,7 +172,7 @@ var _ = Describe("MSHR Stage", func() {
 		Expect(next.Transactions[0].Removed).To(BeTrue())
 
 		out := topPort.RetrieveOutgoing()
-		dr := out.(mem.DataReadyRsp)
+		dr := out.(memprotocol.DataReadyRsp)
 		Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 	})
 

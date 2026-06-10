@@ -1,7 +1,6 @@
 package mmu
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -48,7 +47,7 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 		return false
 	}
 
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdDrain,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), control.CmdDrain,
 		state.CurrentCmdSrc, state.CurrentCmdID, true, ""))
 	state.ControlState = control.StatePaused
 
@@ -61,49 +60,49 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 		return false
 	}
 
-	req, ok := msg.(mem.ControlReq)
+	req, ok := msg.(control.Req)
 	if !ok {
 		m.ctrlPort().RetrieveIncoming()
 		return true
 	}
 
 	switch req.Command {
-	case mem.CmdPause:
+	case control.CmdPause:
 		return m.handlePause(req)
-	case mem.CmdDrain:
+	case control.CmdDrain:
 		return m.handleDrain(req)
-	case mem.CmdEnable:
+	case control.CmdEnable:
 		return m.handleEnable(req)
-	case mem.CmdReset:
+	case control.CmdReset:
 		return m.handleReset(req)
 	default:
 		return m.handleUnsupported(req)
 	}
 }
 
-func (m *ctrlMiddleware) handlePause(req mem.ControlReq) bool {
+func (m *ctrlMiddleware) handlePause(req control.Req) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
 	m.comp.State.ControlState = control.StatePaused
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdPause,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), control.CmdPause,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
-func (m *ctrlMiddleware) handleEnable(req mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleEnable(req control.Req) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
 	m.comp.State.ControlState = control.StateEnabled
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdEnable,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), control.CmdEnable,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
-func (m *ctrlMiddleware) handleDrain(req mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleDrain(req control.Req) bool {
 	state := &m.comp.State
 	state.ControlState = control.StateDraining
 	state.CurrentCmdID = req.ID
@@ -116,7 +115,7 @@ func (m *ctrlMiddleware) handleDrain(req mem.ControlReq) bool {
 // state. Shared page-table state lives in the simulation and is not
 // touched here; per the checkpointing model the MMU only owns local
 // walk state.
-func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleReset(req control.Req) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
@@ -131,13 +130,13 @@ func (m *ctrlMiddleware) handleReset(req mem.ControlReq) bool {
 	for m.topPort().RetrieveIncoming() != nil {
 	}
 
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), mem.CmdReset,
+	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), control.CmdReset,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
-func (m *ctrlMiddleware) handleUnsupported(req mem.ControlReq) bool {
+func (m *ctrlMiddleware) handleUnsupported(req control.Req) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
@@ -149,13 +148,13 @@ func (m *ctrlMiddleware) handleUnsupported(req mem.ControlReq) bool {
 
 func makeCtrlRsp(
 	port messaging.Port,
-	cmd mem.ControlCommand,
+	cmd control.Command,
 	dst messaging.RemotePort,
 	rspTo uint64,
 	success bool,
 	errStr string,
-) mem.ControlRsp {
-	rsp := mem.ControlRsp{
+) control.Rsp {
+	rsp := control.Rsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,
@@ -164,6 +163,6 @@ func makeCtrlRsp(
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
-	rsp.TrafficClass = "mem.ControlRsp"
+	rsp.TrafficClass = "control.Rsp"
 	return rsp
 }

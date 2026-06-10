@@ -52,7 +52,7 @@ Checklist:
 
 1. Embed `messaging.MsgMeta` and keep every routing/payload field **exported**
    and JSON-serializable. Bare `MsgMeta` is the envelope, not a message — it
-   cannot be sent.
+   belongs to no protocol.
 2. Tag any transient, non-serializable scratch field `json:"-"` (e.g. the
    `Info interface{}` data-plane field).
 3. List the type in your package's protocol (a package-level `var` in a

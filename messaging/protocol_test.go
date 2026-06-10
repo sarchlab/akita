@@ -3,8 +3,6 @@ package messaging
 import (
 	"strings"
 	"testing"
-
-	"github.com/sarchlab/akita/v5/internal/codec"
 )
 
 type protoTestReq struct {
@@ -100,11 +98,6 @@ func TestDefineProtocolPanics(t *testing.T) {
 			RoleDef{Name: "b", Sends: []Msg{protoTestReq{}}})
 	})
 
-	mustPanic(t, "envelope", func() {
-		DefineProtocol("test.baremeta",
-			RoleDef{Name: "only", Sends: []Msg{MsgMeta{}}})
-	})
-
 	p := DefineProtocol("test.unknownrole",
 		RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
 	mustPanic(t, "does not define role", func() {
@@ -117,35 +110,6 @@ func TestMsgTypeMayBelongToTwoProtocols(t *testing.T) {
 		RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
 	DefineProtocol("test.shared.b",
 		RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
-}
-
-func TestBareMsgMetaIsRejected(t *testing.T) {
-	mustPanic(t, "envelope", func() {
-		RegisterMsg(MsgMeta{})
-	})
-
-	mustPanic(t, "envelope", func() {
-		RegisterMsg(&MsgMeta{})
-	})
-
-	port := NewPort(nil, 1, 1, "BanTestPort")
-
-	mustPanic(t, "envelope", func() {
-		port.Send(MsgMeta{Src: "BanTestPort", Dst: "Elsewhere"})
-	})
-
-	mustPanic(t, "envelope", func() {
-		port.Deliver(MsgMeta{Src: "Elsewhere", Dst: "BanTestPort"})
-	})
-}
-
-func TestMsgMetaIsNotRegistered(t *testing.T) {
-	bareTag := codec.Tag(MsgMeta{})
-	for _, tag := range msgCodec.Tags() {
-		if tag == bareTag {
-			t.Fatalf("bare MsgMeta is registered with the codec")
-		}
-	}
 }
 
 func TestPortRoles(t *testing.T) {

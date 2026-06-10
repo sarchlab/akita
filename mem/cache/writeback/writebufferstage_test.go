@@ -3,7 +3,7 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -84,9 +84,9 @@ var _ = Describe("WriteBufferStage", func() {
 
 	Context("processing new writeBufferFetch transactions", func() {
 		It("should fetch from bottom", func() {
-			read := mem.ReadReq{}
+			read := memprotocol.ReadReq{}
 			read.ID = timing.GetIDGenerator().Generate()
-			read.TrafficClass = "mem.ReadReq"
+			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				Action:       writeBufferFetch,
 				FetchAddress: 0x100,
@@ -118,9 +118,9 @@ var _ = Describe("WriteBufferStage", func() {
 			next := &m.comp.State
 			next.InflightFetchIndices = []int{10, 11, 12, 13}
 
-			read := mem.ReadReq{}
+			read := memprotocol.ReadReq{}
 			read.ID = timing.GetIDGenerator().Generate()
-			read.TrafficClass = "mem.ReadReq"
+			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				Action:       writeBufferFetch,
 				FetchAddress: 0x100,
@@ -141,9 +141,9 @@ var _ = Describe("WriteBufferStage", func() {
 
 	Context("writing evictions", func() {
 		It("should send eviction to bottom", func() {
-			read := mem.ReadReq{}
+			read := memprotocol.ReadReq{}
 			read.ID = timing.GetIDGenerator().Generate()
-			read.TrafficClass = "mem.ReadReq"
+			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				EvictingAddr: 0x200,
 				EvictingPID:  2,
@@ -183,13 +183,13 @@ var _ = Describe("WriteBufferStage", func() {
 
 	Context("processing responses", func() {
 		It("should process write done response", func() {
-			evictWrite := mem.WriteReq{}
+			evictWrite := memprotocol.WriteReq{}
 			evictWrite.ID = 9001
-			evictWrite.TrafficClass = "mem.WriteReq"
+			evictWrite.TrafficClass = "memprotocol.WriteReq"
 
-			read := mem.ReadReq{}
+			read := memprotocol.ReadReq{}
 			read.ID = timing.GetIDGenerator().Generate()
-			read.TrafficClass = "mem.ReadReq"
+			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				HasEvictionWriteReq:  true,
 				EvictionWriteReqMeta: evictWrite.MsgMeta,
@@ -202,9 +202,9 @@ var _ = Describe("WriteBufferStage", func() {
 			next.Transactions = []transactionState{trans}
 			next.InflightEvictionIndices = []int{0}
 
-			rsp := mem.WriteDoneRsp{}
+			rsp := memprotocol.WriteDoneRsp{}
 			rsp.RspTo = 9001
-			rsp.TrafficClass = "mem.WriteDoneRsp"
+			rsp.TrafficClass = "memprotocol.WriteDoneRsp"
 
 			bottomPort.Deliver(rsp)
 

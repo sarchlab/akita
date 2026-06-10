@@ -13,13 +13,11 @@ var msgCodec = codec.NewRegistry[Msg]("message")
 // definition registers every message type it carries in one declaration.
 // Messages are value types, so register the value (a pointer also works). The
 // tag is derived from the Go type, so checkpoints are restored by the same
-// binary. Registering the same type twice is harmless. Bare MsgMeta is the
-// message envelope, not a message, and is rejected.
+// binary. Registering the same type twice is harmless.
 //
 // A forgotten registration fails loudly at load time, not silently: decoding a
 // checkpoint that holds an unregistered message reports an unknown-message-type
 // error.
 func RegisterMsg(msg Msg) {
-	mustNotBeBareMsgMeta(msg)
 	msgCodec.Register(msg)
 }

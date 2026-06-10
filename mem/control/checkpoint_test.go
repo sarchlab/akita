@@ -6,7 +6,9 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
+	"github.com/sarchlab/akita/v5/mem/control"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -130,17 +132,17 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 func (h *cacheOverDRAM) write(t *testing.T, addr uint64, data []byte) {
 	t.Helper()
 
-	req := mem.WriteReq{Address: addr, Data: data}
+	req := memprotocol.WriteReq{Address: addr, Data: data}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = h.agent
 	req.Dst = h.top.AsRemote()
-	req.TrafficClass = "mem.WriteReq"
+	req.TrafficClass = "memprotocol.WriteReq"
 	h.top.Deliver(req)
 
 	for range 4096 {
 		h.tick()
 		if out := h.top.RetrieveOutgoing(); out != nil {
-			if _, ok := out.(mem.WriteDoneRsp); ok {
+			if _, ok := out.(memprotocol.WriteDoneRsp); ok {
 				return
 			}
 		}
@@ -153,17 +155,17 @@ func (h *cacheOverDRAM) write(t *testing.T, addr uint64, data []byte) {
 func (h *cacheOverDRAM) read(t *testing.T, addr uint64, size uint64) []byte {
 	t.Helper()
 
-	req := mem.ReadReq{Address: addr, AccessByteSize: size}
+	req := memprotocol.ReadReq{Address: addr, AccessByteSize: size}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = h.agent
 	req.Dst = h.top.AsRemote()
-	req.TrafficClass = "mem.ReadReq"
+	req.TrafficClass = "memprotocol.ReadReq"
 	h.top.Deliver(req)
 
 	for range 4096 {
 		h.tick()
 		if out := h.top.RetrieveOutgoing(); out != nil {
-			if rsp, ok := out.(mem.DataReadyRsp); ok {
+			if rsp, ok := out.(memprotocol.DataReadyRsp); ok {
 				return rsp.Data
 			}
 		}
@@ -173,26 +175,26 @@ func (h *cacheOverDRAM) read(t *testing.T, addr uint64, size uint64) []byte {
 }
 
 // control issues a control verb and ticks until its ack, returning it.
-func (h *cacheOverDRAM) control(t *testing.T, cmd mem.ControlCommand) mem.ControlRsp {
+func (h *cacheOverDRAM) control(t *testing.T, cmd control.Command) control.Rsp {
 	t.Helper()
 
-	req := mem.ControlReq{Command: cmd}
+	req := control.Req{Command: cmd}
 	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = h.agent
 	req.Dst = h.ctrl.AsRemote()
-	req.TrafficClass = "mem.ControlReq"
+	req.TrafficClass = "control.Req"
 	h.ctrl.Deliver(req)
 
 	for range 4096 {
 		h.tick()
 		if out := h.ctrl.RetrieveOutgoing(); out != nil {
-			if rsp, ok := out.(mem.ControlRsp); ok && rsp.Command == cmd {
+			if rsp, ok := out.(control.Rsp); ok && rsp.Command == cmd {
 				return rsp
 			}
 		}
 	}
 	t.Fatalf("control verb %v never acked", cmd)
-	return mem.ControlRsp{}
+	return control.Rsp{}
 }
 
 func TestCheckpoint_DrainFlushReset_PersistsAndServesCorrectData(t *testing.T) {
@@ -210,10 +212,10 @@ func TestCheckpoint_DrainFlushReset_PersistsAndServesCorrectData(t *testing.T) {
 	}
 
 	// Quiesce, then persist all dirty data to the backing memory.
-	if rsp := h.control(t, mem.CmdDrain); !rsp.Success {
+	if rsp := h.control(t, control.CmdDrain); !rsp.Success {
 		t.Fatalf("Drain failed: %q", rsp.Error)
 	}
-	if rsp := h.control(t, mem.CmdFlush); !rsp.Success {
+	if rsp := h.control(t, control.CmdFlush); !rsp.Success {
 		t.Fatalf("Flush failed: %q", rsp.Error)
 	}
 
@@ -231,7 +233,7 @@ func TestCheckpoint_DrainFlushReset_PersistsAndServesCorrectData(t *testing.T) {
 	}
 
 	// Reset to a clean slate and confirm the directory is actually empty.
-	if rsp := h.control(t, mem.CmdReset); !rsp.Success {
+	if rsp := h.control(t, control.CmdReset); !rsp.Success {
 		t.Fatalf("Reset failed: %q", rsp.Error)
 	}
 	for si := range h.cache.State.DirectoryState.Sets {
@@ -268,16 +270,16 @@ func TestFlush_DoesNotStrandTransactions_AllowingLaterDrain(t *testing.T) {
 	}
 
 	// Pause, then Flush every dirty block back to the backing memory.
-	if rsp := h.control(t, mem.CmdPause); !rsp.Success {
+	if rsp := h.control(t, control.CmdPause); !rsp.Success {
 		t.Fatalf("Pause failed: %q", rsp.Error)
 	}
-	if rsp := h.control(t, mem.CmdFlush); !rsp.Success {
+	if rsp := h.control(t, control.CmdFlush); !rsp.Success {
 		t.Fatalf("Flush failed: %q", rsp.Error)
 	}
 
 	// Resume and run a fresh workload so the following Drain has real work
 	// in addition to whatever the flush left behind.
-	if rsp := h.control(t, mem.CmdEnable); !rsp.Success {
+	if rsp := h.control(t, control.CmdEnable); !rsp.Success {
 		t.Fatalf("Enable failed: %q", rsp.Error)
 	}
 	for i := range n {
@@ -287,7 +289,7 @@ func TestFlush_DoesNotStrandTransactions_AllowingLaterDrain(t *testing.T) {
 	// The regression: with flush transactions stranded in the table the
 	// cache could never reach quiescence, so this Drain hung (control()
 	// would fail "never acked"). It must ack now.
-	if rsp := h.control(t, mem.CmdDrain); !rsp.Success {
+	if rsp := h.control(t, control.CmdDrain); !rsp.Success {
 		t.Fatalf("Drain after Flush failed: %q", rsp.Error)
 	}
 }
@@ -302,19 +304,19 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 
 	// A read miss makes the cache issue a fetch out the Bottom port. Tick only
 	// the cache (no ferry) and capture that fetch so it stays "outstanding".
-	read := mem.ReadReq{Address: 0, AccessByteSize: 4}
+	read := memprotocol.ReadReq{Address: 0, AccessByteSize: 4}
 	read.ID = timing.GetIDGenerator().Generate()
 	read.Src = h.agent
 	read.Dst = h.top.AsRemote()
-	read.TrafficClass = "mem.ReadReq"
+	read.TrafficClass = "memprotocol.ReadReq"
 	h.top.Deliver(read)
 
-	var fetch mem.ReadReq
+	var fetch memprotocol.ReadReq
 	gotFetch := false
 	for i := 0; i < 4096 && !gotFetch; i++ {
 		h.cache.Tick()
 		if out := h.bottom.RetrieveOutgoing(); out != nil {
-			fetch, gotFetch = out.(mem.ReadReq)
+			fetch, gotFetch = out.(memprotocol.ReadReq)
 		}
 	}
 	if !gotFetch {
@@ -322,18 +324,18 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 	}
 
 	// Reset while the fetch is outstanding (this clears the inflight indices).
-	rst := mem.ControlReq{Command: mem.CmdReset}
+	rst := control.Req{Command: control.CmdReset}
 	rst.ID = timing.GetIDGenerator().Generate()
 	rst.Src = h.agent
 	rst.Dst = h.ctrl.AsRemote()
-	rst.TrafficClass = "mem.ControlReq"
+	rst.TrafficClass = "control.Req"
 	h.ctrl.Deliver(rst)
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
 		h.cache.Tick()
 		if out := h.ctrl.RetrieveOutgoing(); out != nil {
-			if rsp, ok := out.(mem.ControlRsp); ok &&
-				rsp.Command == mem.CmdReset {
+			if rsp, ok := out.(control.Rsp); ok &&
+				rsp.Command == control.CmdReset {
 				acked = true
 			}
 		}
@@ -343,12 +345,12 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 	}
 
 	// The lower memory's now-orphaned response arrives after the reset.
-	rsp := mem.DataReadyRsp{Data: make([]byte, cpBlockSize)}
+	rsp := memprotocol.DataReadyRsp{Data: make([]byte, cpBlockSize)}
 	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = h.dramTop.AsRemote()
 	rsp.Dst = h.bottom.AsRemote()
 	rsp.RspTo = fetch.ID
-	rsp.TrafficClass = "mem.DataReadyRsp"
+	rsp.TrafficClass = "memprotocol.DataReadyRsp"
 	h.bottom.Deliver(rsp)
 
 	// Processing the orphan must not panic; it is simply dropped.

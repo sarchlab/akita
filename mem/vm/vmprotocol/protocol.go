@@ -1,7 +1,10 @@
-// Package vm provides the models for address translations
-package vm
+// Package vmprotocol defines the address translation protocol: the message
+// types exchanged between translation requesters (TLBs, address translators)
+// and responders (TLBs, MMUs), and the protocol roles ports bind to.
+package vmprotocol
 
 import (
+	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 )
 
@@ -24,7 +27,7 @@ var (
 type TranslationReq struct {
 	messaging.MsgMeta
 	VAddr        uint64
-	PID          PID
+	PID          vm.PID
 	DeviceID     uint64
 	TransLatency uint64
 }
@@ -32,5 +35,5 @@ type TranslationReq struct {
 // TranslationRsp is a translation response carrying the physical address.
 type TranslationRsp struct {
 	messaging.MsgMeta
-	Page Page
+	Page vm.Page
 }

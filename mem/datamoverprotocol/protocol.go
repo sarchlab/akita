@@ -1,4 +1,7 @@
-package datamover
+// Package datamoverprotocol defines the data move protocol: the message types
+// a requester uses to ask a data mover to copy a byte range, and the protocol
+// roles ports bind to.
+package datamoverprotocol
 
 import (
 	"github.com/sarchlab/akita/v5/messaging"

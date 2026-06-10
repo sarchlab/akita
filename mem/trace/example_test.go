@@ -28,7 +28,7 @@ func (t *SimpleTimeTeller) AdvanceTime(duration timing.VTimeInPicoSec) {
 	t.currentTime += duration
 }
 
-// ExampleReadReq implements mem.AccessReq for example
+// ExampleReadReq implements memprotocol.AccessReq for example
 type ExampleReadReq struct {
 	messaging.MsgMeta
 	address  uint64
