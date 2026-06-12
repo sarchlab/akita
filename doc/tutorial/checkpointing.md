@@ -1,5 +1,5 @@
 ---
-sidebar_position: 9
+sidebar_position: 10
 ---
 
 # Writing Checkpointable Code
@@ -43,8 +43,8 @@ tables) that setup rebuilds; put cursors, counters, and in-flight tables in
 
 ## Messages
 
-Message types are declared as part of a **protocol** — a named set of message
-types organized into roles (see the *Protocols* page in the talking-components
+The recommended way to make message types checkpointable is a **protocol** — a
+named set of message types organized into roles (see the *Protocols*
 tutorial). Defining the protocol registers every message type it carries with
 the checkpoint decoder (which needs the registration because Go cannot
 reconstruct a concrete type from a name on its own).

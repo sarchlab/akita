@@ -31,20 +31,6 @@ type readRsp struct {
 	messaging.MsgMeta
 }
 
-// readProtocol is the read protocol: clients and caches request reads from
-// the level below, which responds. Defining the protocol registers the
-// message types with the checkpoint codec.
-var (
-	readProtocol = messaging.DefineProtocol("examples.tasktree",
-		messaging.RoleDef{Name: "requester",
-			Sends: []messaging.Msg{readReq{}}},
-		messaging.RoleDef{Name: "responder",
-			Sends: []messaging.Msg{readRsp{}}},
-	)
-	readRequester = readProtocol.Role("requester")
-	readResponder = readProtocol.Role("responder")
-)
-
 func newReq(src, dst messaging.RemotePort) readReq {
 	return readReq{MsgMeta: messaging.MsgMeta{
 		ID: timing.GetIDGenerator().Generate(), Src: src, Dst: dst}}
@@ -261,7 +247,7 @@ func buildClient(engine timing.Engine, reg modeling.Registrar) *ClientComp {
 	c := modeling.NewBuilder[modeling.None, clientState, modeling.None]().
 		WithEngine(engine).WithFreq(1 * timing.GHz).Build("Client")
 	c.AddMiddleware(&clientMW{comp: c, inFlight: map[uint64]readReq{}})
-	c.DeclarePort("Out", readRequester)
+	c.DeclarePort("Out")
 	c.AssignPort("Out", messaging.NewPort(c, 4, 4, "Client.Out"))
 	reg.RegisterComponent(c)
 
@@ -272,9 +258,9 @@ func buildCache(engine timing.Engine, reg modeling.Registrar, name string) *Cach
 	c := modeling.NewBuilder[modeling.None, cacheState, modeling.None]().
 		WithEngine(engine).WithFreq(1 * timing.GHz).Build(name)
 	c.AddMiddleware(&cacheMW{comp: c, txns: map[uint64]cacheTxn{}})
-	c.DeclarePort("Top", readResponder)
+	c.DeclarePort("Top")
 	c.AssignPort("Top", messaging.NewPort(c, 4, 4, name+".Top"))
-	c.DeclarePort("Bottom", readRequester)
+	c.DeclarePort("Bottom")
 	c.AssignPort("Bottom", messaging.NewPort(c, 4, 4, name+".Bottom"))
 	reg.RegisterComponent(c)
 
@@ -285,7 +271,7 @@ func buildMemory(engine timing.Engine, reg modeling.Registrar) *MemComp {
 	mem := modeling.NewBuilder[modeling.None, modeling.None, modeling.None]().
 		WithEngine(engine).WithFreq(1 * timing.GHz).Build("Memory")
 	mem.AddMiddleware(&memMW{comp: mem})
-	mem.DeclarePort("Top", readResponder)
+	mem.DeclarePort("Top")
 	mem.AssignPort("Top", messaging.NewPort(mem, 4, 4, "Memory.Top"))
 	reg.RegisterComponent(mem)
 

@@ -38,7 +38,7 @@ func (b Builder) Build(name string) *Comp {
     comp.AddMiddleware(&sendMW{comp: comp})
     comp.AddMiddleware(&receiveProcessMW{comp: comp})
 
-    comp.DeclarePort("Out", pingPeer)
+    comp.DeclarePort("Out")
 
     b.registrar.RegisterComponent(comp)
 
@@ -53,9 +53,6 @@ Things to notice:
   instance. Setup code builds the instance with a port builder and attaches it
   after `Build` (shown next); the component still reaches it by name with
   `comp.GetPortByName("Out")`.
-- `DeclarePort` also binds the **protocol role** the port speaks (`pingPeer`
-  here) — the *Protocols* page at the end of this section explains the
-  declaration.
 - Middlewares are added in order; the first one added runs first.
 - The component is **registered with the registrar**, which integrates it
   with the engine and the broader simulation.

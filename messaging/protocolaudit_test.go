@@ -14,8 +14,6 @@ import (
 	// definitions run. The list is self-enforcing: a message type defined in a
 	// package that is not imported here fails the registry check below with a
 	// message saying to add the import.
-	_ "github.com/sarchlab/akita/v5/examples/ping"
-	_ "github.com/sarchlab/akita/v5/examples/tickingping"
 	_ "github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	_ "github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	_ "github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -46,17 +44,19 @@ var intentionallyUnregistered = map[string]string{
 }
 
 // TestEveryMsgTypeIsRegistered is the registration-coverage audit: every
-// concrete type in the module that implements messaging.Msg must be
+// concrete library type in the module that implements messaging.Msg must be
 // registered with the checkpoint codec (normally by belonging to a protocol
 // defined with DefineProtocol). A type that is not registered would make
 // LoadCheckpoint fail with "unknown message type" whenever a checkpoint
 // happens to capture it in a port buffer — a latent bug this test turns into
 // a CI failure.
 //
-// Scope: non-test files of importable packages. Test-file types live only
-// inside one test binary. Package main (the examples) cannot be imported by
-// this test, so its types are reported as skipped; examples still define
-// protocols by convention.
+// Scope: non-test files of importable library packages. Test-file types live
+// only inside one test binary. Package main cannot be imported by this test.
+// The examples tree is deliberately out of scope: protocol-less messages are
+// fully supported (registration only matters for checkpointing), and the
+// examples stay on the simple path; TestPackagesOutsideAuditScope lists what
+// is skipped so the gap stays visible.
 func TestEveryMsgTypeIsRegistered(t *testing.T) {
 	if testing.Short() {
 		t.Skip("loads and type-checks the whole module")
@@ -73,7 +73,7 @@ func TestEveryMsgTypeIsRegistered(t *testing.T) {
 	foundMsgTypes := 0
 
 	for _, pkg := range pkgs {
-		if pkg.Types.Name() == "main" {
+		if outsideAuditScope(pkg) {
 			continue
 		}
 
@@ -214,11 +214,20 @@ func namedConcreteType(obj types.Object) (*types.Named, bool) {
 	return named, true
 }
 
-// TestMainPackagesAreOutsideAuditScope documents which package-main message
-// types the runtime audit cannot cover (a test cannot import package main).
-// Examples define protocols by convention; this test lists them so the gap is
-// visible rather than silent.
-func TestMainPackagesAreOutsideAuditScope(t *testing.T) {
+// outsideAuditScope reports whether a package's message types are exempt from
+// the registration requirement. Package main cannot be imported by this test.
+// The examples tree is exempt by design: protocol-less messages are fully
+// supported — registration only matters when a checkpoint can capture the
+// message — and the examples stay on the simple path.
+func outsideAuditScope(pkg *packages.Package) bool {
+	return pkg.Types.Name() == "main" ||
+		strings.HasPrefix(pkg.PkgPath, modulePath+"/examples/")
+}
+
+// TestPackagesOutsideAuditScope documents which message types the audit
+// deliberately does not cover (package main and the examples tree), so the
+// gap stays visible rather than silent.
+func TestPackagesOutsideAuditScope(t *testing.T) {
 	if testing.Short() {
 		t.Skip("loads and type-checks the whole module")
 	}
@@ -227,7 +236,7 @@ func TestMainPackagesAreOutsideAuditScope(t *testing.T) {
 	msgIface := lookupMsgInterface(t, pkgs)
 
 	for _, pkg := range pkgs {
-		if pkg.Types == nil || pkg.Types.Name() != "main" {
+		if pkg.Types == nil || !outsideAuditScope(pkg) {
 			continue
 		}
 
@@ -247,8 +256,8 @@ func TestMainPackagesAreOutsideAuditScope(t *testing.T) {
 		}
 
 		if len(msgTypes) > 0 {
-			t.Logf("package main %s defines message types outside audit "+
-				"scope: %s", pkg.PkgPath, strings.Join(msgTypes, ", "))
+			t.Logf("package %s defines message types outside audit scope: %s",
+				pkg.PkgPath, strings.Join(msgTypes, ", "))
 		}
 	}
 }
