@@ -94,6 +94,12 @@ func (t *DBTracer) StartTask(task TaskStart) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	// Ignore task activity after termination. Terminate() sets tracingTasks
+	// to nil, so writing to the map below would panic.
+	if t.terminated {
+		return
+	}
+
 	t.startingTaskMustBeValid(task)
 
 	// A task may first be mentioned by a tag or a milestone.
@@ -138,6 +144,10 @@ func (t *DBTracer) AddTaskTag(tag TaskTag) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	if t.terminated {
+		return
+	}
+
 	task, found := t.tracingTasks[tag.TaskID]
 	if !found {
 		task = &runningTask{}
@@ -152,6 +162,10 @@ func (t *DBTracer) AddTaskTag(tag TaskTag) {
 func (t *DBTracer) AddMilestone(milestone Milestone) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
+	if t.terminated {
+		return
+	}
 
 	task, found := t.tracingTasks[milestone.TaskID]
 	if !found {
@@ -182,6 +196,10 @@ func sameMilestone(a, b Milestone) bool {
 func (t *DBTracer) EndTask(task TaskEnd) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
+	if t.terminated {
+		return
+	}
 
 	originalTask, ok := t.tracingTasks[task.ID]
 	if !ok {
