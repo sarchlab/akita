@@ -16,4 +16,4 @@ jobs:
       - name: Push to sarchlab/akita v5 branch
         run: |
           git remote add upstream https://x-access-token:${{ secrets.AKITA_PAT }}@github.com/sarchlab/akita.git
-          git push upstream main:refs/heads/v5 --force
+          git push upstream main:refs/heads/v5
