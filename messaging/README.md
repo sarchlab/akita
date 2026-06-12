@@ -86,12 +86,12 @@ type Port interface {
 
     // For the component side
     CanSend() bool
-    Send(msg Msg) *SendError
+    Send(msg Msg)
     PeekIncoming() Msg
     RetrieveIncoming() Msg
 
     // For the connection side
-    Deliver(msg Msg) *SendError
+    Deliver(msg Msg)
     PeekOutgoing() Msg
     RetrieveOutgoing() Msg
     NotifyAvailable()
@@ -115,9 +115,10 @@ registers the port with the simulation (and the monitor) through the registrar,
 mirroring how component and connection builders register themselves. `NewPort`
 is the low-level constructor it builds on.
 
-`Send` pushes onto the outgoing buffer (returning a `*SendError` if full) and,
-when the buffer transitions from empty, notifies the connection via
-`NotifySend`. `Deliver` pushes onto the incoming buffer and notifies the owning
+`Send` pushes onto the outgoing buffer — callers must check `CanSend` first;
+sending into a full buffer panics — and, when the buffer transitions from
+empty, notifies the connection via `NotifySend`. `Deliver` pushes onto the
+incoming buffer (guarded by `CanDeliver` the same way) and notifies the owning
 component via `NotifyRecv`.
 
 ### Connection
