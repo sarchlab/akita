@@ -78,6 +78,22 @@ Wakeups are scheduled via:
 Port notifications (`NotifyRecv`, `NotifyPortFree`) automatically schedule
 wakeups.
 
+### Domain
+
+A named bundle of components that exposes selected internal ports at its
+boundary. Domains nest — components form a domain (e.g., a shader array),
+and domains compose into larger domains (e.g., a GPU) — with hierarchical
+names following the `Domain.Domain.Component` convention.
+
+```go
+gpu := modeling.NewDomain("GPU[0]")
+gpu.DeclarePort("Top")
+gpu.AssignPort("Top", commandProcessor.GetPortByName("ToDriver"))
+
+// Outside code addresses the domain, not its internals.
+port := gpu.GetPortByName("Top")
+```
+
 ## Builder Pattern
 
 | Builder | Creates | Key Settings |
