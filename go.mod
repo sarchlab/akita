@@ -56,10 +56,13 @@ toolchain go1.26.2
 
 // Retained dependency-security guard: removing this lets golang.org/x/net@v0.47.0
 // select golang.org/x/crypto@v0.44.0 even though this module does not import it.
-// See DEPENDENCY_SECURITY_VALIDATION.md for repro/removal criteria.
+// Re-verify by deleting the exclude and running `go list -m golang.org/x/crypto`;
+// remove the guard once the graph selects a later version on its own.
 exclude golang.org/x/crypto v0.44.0
 
 // Retained dependency-security guard: removing this makes go mod tidy -diff
 // request the stale gopkg.in/yaml.v2 v2.2.2 go.mod checksum through an older
-// testify path. See DEPENDENCY_SECURITY_VALIDATION.md for repro/removal criteria.
+// testify path (tebeka/atexit -> testify v1.5.1). Re-verify by deleting the
+// exclude and running `go mod tidy -diff`; remove the guard once no dependency
+// path requests yaml.v2 v2.2.2.
 exclude gopkg.in/yaml.v2 v2.2.2
