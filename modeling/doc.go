@@ -7,6 +7,7 @@
 //   - Middleware pipeline for tick-based components
 //   - EventDrivenComponent[S, T] for event-driven components
 //   - Validation helpers for Spec and State types
+//   - Domain for bundling components and exposing ports at a boundary
 //
 // The timing package provides the simulation kernel. The messaging package
 // provides ports and connections. The modeling package provides the
