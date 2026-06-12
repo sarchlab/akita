@@ -29,17 +29,6 @@ type pingRsp struct {
 	SeqID int
 }
 
-// pingProtocol is the ping protocol: agents are symmetric peers, each sending
-// requests and answering with responses on the same port. Defining the
-// protocol registers the message types with the checkpoint codec.
-var (
-	pingProtocol = messaging.DefineProtocol("examples.hooks",
-		messaging.RoleDef{Name: "peer",
-			Sends: []messaging.Msg{pingReq{}, pingRsp{}}},
-	)
-	pingPeer = pingProtocol.Role("peer")
-)
-
 // --- Component ---
 
 type agentSpec struct {
@@ -138,7 +127,7 @@ func buildAgent(reg modeling.Registrar, name string) *Comp {
 		WithSpec(agentSpec{Freq: 1 * timing.GHz}).
 		Build(name)
 	c.AddMiddleware(&agentMW{comp: c})
-	c.DeclarePort("Out", pingPeer)
+	c.DeclarePort("Out")
 	c.AssignPort("Out", messaging.NewPort(c, 4, 4, name+".Out"))
 	reg.RegisterComponent(c)
 	return c

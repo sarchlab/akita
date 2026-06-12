@@ -13,7 +13,9 @@ buffer to another port's incoming buffer.
 - A **protocol** (`Protocol`) is a named set of message types organized into
   **roles** (`Role`). Defining a protocol with `DefineProtocol` registers
   every message type it carries with the checkpoint codec; ports declare the
-  role(s) they speak in `DeclarePort`.
+  role(s) they speak in `DeclarePort`. Protocols are **opt-in**: messages
+  flow without one, and registration only matters when a checkpoint can
+  capture the message.
 - A **port** is owned by a component and holds an incoming and an outgoing
   buffer. Components `Send`/`RetrieveIncoming` on their side; connections
   `Deliver`/`RetrieveOutgoing` on theirs.
