@@ -78,6 +78,12 @@ metadata. Its fields are `ID`, `Src`, `Dst`, `TrafficClass`,
 whose `Meta() MsgMeta` method returns that metadata by value. The `SeqID`
 field is the payload you actually care about.
 
+The two types together form the example's **protocol** — a declared set of
+message types that travel over a port. The declaration
+(`messaging.DefineProtocol`) and what it buys you are covered in
+*Protocols*, the last page of this section; for now just know the message
+types are declared as a pair, not in isolation.
+
 ## Ports
 
 A **port** is how a component sends and receives messages. A component

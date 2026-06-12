@@ -44,9 +44,10 @@ tables) that setup rebuilds; put cursors, counters, and in-flight tables in
 ## Messages
 
 Message types are declared as part of a **protocol** — a named set of message
-types organized into roles. Defining the protocol registers every message type
-it carries with the checkpoint decoder (which needs the registration because Go
-cannot reconstruct a concrete type from a name on its own).
+types organized into roles (see the *Protocols* page in the talking-components
+tutorial). Defining the protocol registers every message type it carries with
+the checkpoint decoder (which needs the registration because Go cannot
+reconstruct a concrete type from a name on its own).
 
 Checklist:
 
