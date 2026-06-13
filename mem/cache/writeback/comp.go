@@ -93,10 +93,23 @@ type State struct {
 // instead of growing with every request ever issued.
 func (s *State) allocTransaction(t transactionState) int {
 	for i := range s.Transactions {
-		if s.Transactions[i].Removed {
-			s.Transactions[i] = t
-			return i
+		if !s.Transactions[i].Removed {
+			continue
 		}
+
+		// The MSHR stage drains the waiter list of the transaction at
+		// ProcessingMSHREntryIdx across multiple ticks. That owner
+		// transaction is itself one of its waiters, so it is commonly marked
+		// Removed before the list is fully drained — yet its
+		// MSHRTransactionIndices must stay intact until the stage releases it.
+		// Skip its slot so a later top request in the same tick (topParser
+		// runs after mshrStage) cannot overwrite the pending waiter list.
+		if s.HasProcessingMSHREntry && i == s.ProcessingMSHREntryIdx {
+			continue
+		}
+
+		s.Transactions[i] = t
+		return i
 	}
 
 	s.Transactions = append(s.Transactions, t)
