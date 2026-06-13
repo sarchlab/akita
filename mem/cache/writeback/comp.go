@@ -85,6 +85,24 @@ type State struct {
 	ProcessingFlush         flushReqState `json:"processing_flush"`
 }
 
+// allocTransaction stores t in the Transactions slice and returns its index.
+// Completed transactions are marked Removed but their slots are never deleted
+// (other stages hold indices into the slice via the various buffers and the
+// MSHR, so indices must stay stable). Reuse a Removed slot when one is
+// available so the slice stays bounded by the number of active transactions
+// instead of growing with every request ever issued.
+func (s *State) allocTransaction(t transactionState) int {
+	for i := range s.Transactions {
+		if s.Transactions[i].Removed {
+			s.Transactions[i] = t
+			return i
+		}
+	}
+
+	s.Transactions = append(s.Transactions, t)
+	return len(s.Transactions) - 1
+}
+
 // flushReqState is a serializable representation of a flush control request.
 type flushReqState struct {
 	MsgMeta messaging.MsgMeta `json:"msg_meta"`

@@ -110,6 +110,23 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 		return -1
 	}
 
+	return s.allocTransaction(next, t)
+}
+
+// allocTransaction stores t in the Transactions slice and returns its index.
+// Completed transactions are marked Removed but their slots are never deleted
+// (other stages hold indices into the slice via DirBuf/BankBufs/MSHR, so
+// indices must stay stable). Reuse a Removed slot when one is available so the
+// slice stays bounded by the number of active transactions instead of growing
+// with every request ever issued.
+func (s *intake) allocTransaction(next *State, t transactionState) int {
+	for i := range next.Transactions {
+		if next.Transactions[i].Removed {
+			next.Transactions[i] = t
+			return i
+		}
+	}
+
 	next.Transactions = append(next.Transactions, t)
 	return len(next.Transactions) - 1
 }
