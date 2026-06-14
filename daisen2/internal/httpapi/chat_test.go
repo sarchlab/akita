@@ -133,6 +133,37 @@ func TestResolveProviderConfigAllowsKeylessClientEndpoint(t *testing.T) {
 	}
 }
 
+func TestGuardLLMURLBlocksInternalHosts(t *testing.T) {
+	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "")
+
+	blocked := []string{
+		"http://127.0.0.1:11434/v1/chat/completions",
+		"http://localhost:11434/v1/chat/completions",
+		"http://169.254.169.254/latest/meta-data/", // cloud metadata
+		"http://10.1.2.3/v1/chat/completions",
+		"http://192.168.0.5/v1",
+	}
+	for _, u := range blocked {
+		if err := guardLLMURL(u); err == nil {
+			t.Errorf("guardLLMURL(%q) = nil, want blocked", u)
+		}
+	}
+}
+
+func TestGuardLLMURLAllowsPublicHost(t *testing.T) {
+	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "")
+	if err := guardLLMURL("https://8.8.8.8/v1/chat/completions"); err != nil {
+		t.Errorf("guardLLMURL(public) = %v, want nil", err)
+	}
+}
+
+func TestGuardLLMURLOptInAllowsPrivate(t *testing.T) {
+	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1")
+	if err := guardLLMURL("http://localhost:11434/v1/chat/completions"); err != nil {
+		t.Errorf("guardLLMURL(opt-in) = %v, want nil", err)
+	}
+}
+
 func TestNewChatProviderRejectsUnknown(t *testing.T) {
 	if _, err := newChatProvider(ProviderOpenAICompatible); err != nil {
 		t.Fatalf("openai-compatible should be supported: %v", err)

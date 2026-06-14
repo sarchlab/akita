@@ -41,3 +41,8 @@ The API key sent from the app travels in the `X-Llm-Api-Key` request header
 deployment, the server-side `.env` key is only ever sent to the server's own
 endpoint — a request that points `baseURL` at a different endpoint must carry
 its own key, so the server's key can't be redirected to another host.
+
+To prevent the server from being used to reach internal services, base URLs
+that resolve to private, loopback, or link-local addresses are rejected by
+default. When running Daisen for yourself with a local model server (Ollama,
+LM Studio, vLLM), set `DAISEN_ALLOW_PRIVATE_LLM_URL=1` to allow them.

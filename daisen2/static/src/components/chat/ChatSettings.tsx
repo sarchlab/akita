@@ -39,7 +39,8 @@ export default function ChatSettings({
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
 
   const loadModels = useCallback(async () => {
-    if (!settings.baseURL.trim()) {
+    const overrideServer = settings.configured || settings.apiKey.trim() !== "";
+    if (overrideServer && !settings.baseURL.trim()) {
       setModelsError("Set a base URL first.");
       return;
     }
@@ -49,10 +50,18 @@ export default function ChatSettings({
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (settings.apiKey.trim()) headers["X-Llm-Api-Key"] = settings.apiKey.trim();
 
+      // When the user hasn't configured a provider, list the server default's
+      // models rather than forcing the UI's preset endpoint.
+      const modelsBody: Record<string, unknown> = {};
+      if (overrideServer) {
+        modelsBody.provider = settings.provider;
+        modelsBody.baseURL = settings.baseURL;
+      }
+
       const response = await fetch("/api/models", {
         method: "POST",
         headers,
-        body: JSON.stringify({ provider: settings.provider, baseURL: settings.baseURL }),
+        body: JSON.stringify(modelsBody),
       });
       if (!response.ok) {
         setModels([]);
@@ -66,7 +75,7 @@ export default function ChatSettings({
     } finally {
       setModelsLoading(false);
     }
-  }, [settings.apiKey, settings.baseURL, settings.provider]);
+  }, [settings.apiKey, settings.baseURL, settings.provider, settings.configured]);
 
   // Load the model list when the panel opens or the provider preset changes, but
   // only once a key is available (most endpoints require one to list models) so
@@ -84,17 +93,24 @@ export default function ChatSettings({
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (settings.apiKey.trim()) headers["X-Llm-Api-Key"] = settings.apiKey.trim();
 
+      const requestBody: Record<string, unknown> = {
+        messages: [{ role: "user", content: [{ type: "text", text: "ping" }] }],
+        traceInfo: { selected: 0, startTime: 0, endTime: 0, selectedComponentNameList: [] },
+        selectedGitHubRoutineKeys: [],
+      };
+      // Match the chat path: only override the server's .env defaults once the
+      // user has configured a provider (or supplied a key), so Test connection
+      // exercises the same endpoint a real chat would use.
+      if (settings.configured || settings.apiKey.trim()) {
+        requestBody.provider = settings.provider;
+        requestBody.baseURL = settings.baseURL;
+        requestBody.model = settings.model;
+      }
+
       const response = await fetch("/api/gpt", {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          messages: [{ role: "user", content: [{ type: "text", text: "ping" }] }],
-          traceInfo: { selected: 0, startTime: 0, endTime: 0, selectedComponentNameList: [] },
-          selectedGitHubRoutineKeys: [],
-          provider: settings.provider,
-          baseURL: settings.baseURL,
-          model: settings.model,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (response.ok) {

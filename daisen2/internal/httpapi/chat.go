@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -84,6 +86,11 @@ func (s *Server) httpChatProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := guardLLMURL(cfg.BaseURL); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
 	provider, err := newChatProvider(cfg.Provider)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -140,6 +147,56 @@ func resolveEndpointKey(headerKey, reqBaseURL string) (baseURL, apiKey string, o
 		return "", "", false
 	}
 	return baseURL, apiKey, true
+}
+
+// allowPrivateLLMHosts reports whether the operator has opted into letting the
+// LLM endpoint be a private/loopback host. This is needed for local providers
+// (Ollama, LM Studio, vLLM) but unsafe on a shared instance, so it is off by
+// default and enabled with DAISEN_ALLOW_PRIVATE_LLM_URL=1.
+func allowPrivateLLMHosts() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("DAISEN_ALLOW_PRIVATE_LLM_URL"))) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+func isInternalIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
+}
+
+// guardLLMURL rejects endpoints that resolve to private, loopback, or
+// link-local addresses, so a shared Daisen instance can't be turned into an
+// SSRF tool against internal services or cloud metadata endpoints (e.g.
+// 169.254.169.254). Set DAISEN_ALLOW_PRIVATE_LLM_URL=1 to permit local
+// endpoints when running Daisen for yourself.
+func guardLLMURL(rawURL string) error {
+	if allowPrivateLLMHosts() {
+		return nil
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid base URL: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("unsupported base URL scheme %q", u.Scheme)
+	}
+
+	host := u.Hostname()
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return fmt.Errorf("cannot resolve base URL host %q: %w", host, err)
+	}
+	for _, ip := range ips {
+		if isInternalIP(ip) {
+			return fmt.Errorf("base URL host %q resolves to a private/loopback address; "+
+				"set DAISEN_ALLOW_PRIVATE_LLM_URL=1 to allow local endpoints", host)
+		}
+	}
+	return nil
 }
 
 // resolveProviderConfig builds a ProviderConfig from the request, falling back
@@ -383,6 +440,10 @@ func (s *Server) httpListModels(w http.ResponseWriter, r *http.Request) {
 	baseURL, apiKey, ok := resolveEndpointKey(r.Header.Get("X-Llm-Api-Key"), body.BaseURL)
 	if !ok {
 		http.Error(w, "No base URL configured", http.StatusBadRequest)
+		return
+	}
+	if err := guardLLMURL(baseURL); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 	cfg := ProviderConfig{
