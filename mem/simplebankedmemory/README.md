@@ -35,8 +35,7 @@ requests can occupy different banks while earlier ones are still in flight.
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, bank geometry, pipeline shape,
-  post-pipeline buffer depth, capacity, bank-selection, and address-conversion
-  fields.
+  post-pipeline buffer depth, capacity, and bank selection.
 - `State` — mutable runtime data: the per-bank pipelines and post-pipeline
   buffers.
 - `Resources` — shared wiring; holds the backing `*mem.Storage`.
@@ -54,16 +53,13 @@ type Spec struct {
     StorageRef          string      // Storage resource name (set by Build)
 
     BankSelectorKind               string // "interleaved"
-    BankSelectorLog2InterleaveSize uint64 // log2 of the interleave stride
-
-    // Address conversion for interleaved multi-controller setups.
-    AddrConvKind            string
-    AddrInterleavingSize    uint64
-    AddrTotalNumOfElements  int
-    AddrCurrentElementIndex int
-    AddrOffset              uint64
+    BankSelectorLog2InterleaveSize uint64 // log2 of the bank interleave stride
 }
 ```
+
+The memory uses **global storage**: a request's address indexes the backing
+store directly, with no per-controller address conversion. Bank selection also
+runs on the request's (global) address.
 
 ## Builder Pattern
 
@@ -124,6 +120,42 @@ topPort = memCtrl.GetPortByName("Top")
 | Post-pipeline buffer | 1 |
 | Storage capacity | 4 GB |
 | Bank selector | `"interleaved"`, 64 B stride (log2 = 6) |
+
+## Bank selection across interleaved controllers
+
+A common deployment places several of these controllers behind an interleaved
+address mapper (the sender's destination map), all sharing one global
+`mem.Storage`. Banking is then **two-level**: the upstream mapper selects the
+controller (level 1) and each controller's bank selector spreads its traffic
+across banks (level 2). Storage is global, so a request's address indexes the
+shared store directly regardless of which controller serves it.
+
+The one rule that makes the two levels compose correctly is that their
+**address-bit ranges must not overlap**. Every request reaching a controller
+carries the inter-controller interleave bits fixed to that controller's index;
+if the bank selector picks bits that overlap those, bank selection aliases and
+only a fraction of the banks is ever used (data stays correct; only timing is
+wrong, and silently so). For example, 16 controllers interleaved at 128 B
+(controller bits `[7:11)`) feeding 16-bank memories with a 64 B bank stride
+(bank bits `[6:10)`) reach only 2 of the 16 banks per controller — an ~8×
+bandwidth loss.
+
+Fix it by choosing `BankSelectorLog2InterleaveSize` so the bank bits sit
+**above** the controller bits — at least `log2(upstream_stride ×
+num_controllers)`:
+
+```go
+spec := simplebankedmemory.DefaultSpec()
+spec.NumBanks = 16
+// Upstream: 16 controllers interleaved at 128 B -> controller bits [7:11).
+// Put the bank bits above them: log2(128 * 16) = 11.
+spec.BankSelectorLog2InterleaveSize = 11 // bank bits [11:15)
+```
+
+With non-overlapping ranges, every controller spreads across all 16 banks. The
+only constraint is that bank striping cannot be finer-grained than the
+inter-controller stride; for a simple banked memory that is an acceptable
+limit — use `mem/dram` if you need detailed bank/row timing.
 
 ## Ports
 

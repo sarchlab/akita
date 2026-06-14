@@ -1,29 +1,10 @@
 package dram
 
-// convertExternalToInternal converts a global physical address to a
-// DRAM-internal physical address using interleaving parameters from Spec.
-func convertExternalToInternal(spec *Spec, addr uint64) uint64 {
-	if !spec.HasAddrConverter {
-		return addr
-	}
-
-	unitSize := spec.InterleavingSize
-	totalUnits := uint64(spec.TotalNumOfElements)
-	currentIdx := uint64(spec.CurrentElementIndex)
-	offset := spec.Offset
-
-	// InterleavingConverter logic:
-	// externalAddr = offset + highBits*totalUnits*unitSize + currentIdx*unitSize + lowBits
-	// internalAddr = highBits*unitSize + lowBits
-	addrAfterOffset := addr - offset
-	lowBits := addrAfterOffset % unitSize
-	highBits := (addrAfterOffset - currentIdx*unitSize - lowBits) / (totalUnits * unitSize)
-
-	return highBits*unitSize + lowBits
-}
-
-// mapAddress maps an internal address to a Location (channel, rank, etc.)
-// using the address mapping parameters in Spec.
+// mapAddress decomposes a global physical address into a Location (channel,
+// rank, bank group, bank, row, column) using the position/mask parameters in
+// Spec. Storage is global, so this operates directly on the request address;
+// when several controllers are interleaved, choose the channel/rank/bank bit
+// positions so they sit above the upstream controller-select bits.
 func mapAddress(spec *Spec, addr uint64) location {
 	l := location{}
 

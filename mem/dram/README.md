@@ -143,7 +143,14 @@ topPort = ctrl.GetPortByName("Top")
 | `BusWidth` / `BurstLength` | Data bus width (bits) and burst transfer length |
 | `PagePolicy` | `PagePolicyOpen` or `PagePolicyClose` |
 | `TransactionQueueSize` / `CommandQueueCapacity` | Queue depths |
-| `HasAddrConverter` / `InterleavingSize` / ... | Address interleaving for multi-controller setups |
+| `ChannelPos`/`Mask`, `RankPos`/`Mask`, `BankPos`/`Mask`, `RowPos`/`Mask`, ... | Address-bit positions for channel/rank/bank/row/column decode |
+
+Storage is **global**: a request's address indexes the backing store directly,
+and `mapAddress` decodes that same global address into a channel/rank/bank/row/
+column location. There is no per-controller address conversion. When several
+controllers are interleaved over one shared storage, the sender's destination
+map selects the controller; choose the channel/rank/bank bit positions so they
+sit above the upstream controller-select bits.
 
 ## Statistics
 

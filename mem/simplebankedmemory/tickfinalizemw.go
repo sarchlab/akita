@@ -3,7 +3,6 @@ package simplebankedmemory
 import (
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -65,17 +64,11 @@ func (m *tickFinalizeMW) finalizeRead(
 	b *bankState,
 	item *bankPipelineItemState,
 ) bool {
-	spec := m.comp.Spec()
 	readReq := &item.ReadMsg
 
 	if !item.Committed {
-		addr := mem.ConvertAddress(
-			spec.AddrConvKind, spec.AddrOffset,
-			spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
-			spec.AddrCurrentElementIndex, readReq.Address,
-		)
-
-		data, err := m.comp.Resources().Storage.Read(addr, readReq.AccessByteSize)
+		data, err := m.comp.Resources().Storage.Read(
+			readReq.Address, readReq.AccessByteSize)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -113,15 +106,10 @@ func (m *tickFinalizeMW) finalizeWrite(
 	b *bankState,
 	item *bankPipelineItemState,
 ) bool {
-	spec := m.comp.Spec()
 	writeReq := &item.WriteMsg
 
 	if !item.Committed {
-		addr := mem.ConvertAddress(
-			spec.AddrConvKind, spec.AddrOffset,
-			spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
-			spec.AddrCurrentElementIndex, writeReq.Address,
-		)
+		addr := writeReq.Address
 
 		if writeReq.DirtyMask == nil {
 			if err := m.comp.Resources().Storage.Write(addr, writeReq.Data); err != nil {

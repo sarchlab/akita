@@ -116,13 +116,6 @@ type Spec struct {
 	WriteHighWatermark int `json:"write_high_watermark"`
 	WriteLowWatermark  int `json:"write_low_watermark"`
 
-	// Address converter params
-	HasAddrConverter    bool   `json:"has_addr_converter"`
-	InterleavingSize    uint64 `json:"interleaving_size"`
-	TotalNumOfElements  int    `json:"total_num_of_elements"`
-	CurrentElementIndex int    `json:"current_element_index"`
-	Offset              uint64 `json:"offset"`
-
 	// Address mapping: position/mask pairs
 	ChannelPos    int    `json:"channel_pos"`
 	ChannelMask   uint64 `json:"channel_mask"`
@@ -262,7 +255,6 @@ type transactionState struct {
 	HasWrite        bool                 `json:"has_write"`
 	ReadMsg         memprotocol.ReadReq  `json:"read_msg"`
 	WriteMsg        memprotocol.WriteReq `json:"write_msg"`
-	InternalAddress uint64               `json:"internal_address"`
 	SubTransactions []subTransState      `json:"sub_transactions"`
 	ArrivalTick     uint64               `json:"arrival_tick"`
 }
