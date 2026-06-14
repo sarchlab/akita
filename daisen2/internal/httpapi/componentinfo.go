@@ -563,6 +563,7 @@ FROM trace t
 JOIN location loc ON t.Location = loc.ID
 WHERE ` + whereClause + `
 AND ` + timeClause + fmt.Sprintf(`
+ORDER BY t.StartTime, t.ID
 LIMIT %d`, maxTraceContextRows)
 }
 

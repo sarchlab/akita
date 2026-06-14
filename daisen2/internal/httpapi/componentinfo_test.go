@@ -186,3 +186,16 @@ func TestFormatTraceRowsCapsAtMaxRows(t *testing.T) {
 		t.Error("expected a truncation note when the cap is hit")
 	}
 }
+
+func TestBuildTraceSQLOrdersBeforeLimiting(t *testing.T) {
+	sql := buildTraceSQL([]string{"A"}, 0, 100)
+
+	order := strings.Index(sql, "ORDER BY t.StartTime, t.ID")
+	limit := strings.Index(sql, "LIMIT")
+	if order == -1 {
+		t.Fatalf("expected a stable ORDER BY in trace SQL:\n%s", sql)
+	}
+	if limit == -1 || order > limit {
+		t.Errorf("ORDER BY must precede LIMIT so the cap keeps the earliest events:\n%s", sql)
+	}
+}
