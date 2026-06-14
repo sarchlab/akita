@@ -487,14 +487,22 @@ func isGeneralChatModel(id string) bool {
 }
 
 // deriveModelsURL maps an OpenAI-compatible chat-completions URL to its model
-// listing URL: ".../v1/chat/completions" -> ".../v1/models". A URL that does not
-// end in /chat/completions just gets "/models" appended.
+// listing URL: ".../v1/chat/completions" -> ".../v1/models". It rewrites the
+// path only, preserving the scheme, host, and any query string (e.g. Azure's
+// ?api-version=...). A path that does not end in /chat/completions just gets
+// "/models" appended.
 func deriveModelsURL(chatURL string) string {
-	trimmed := strings.TrimRight(strings.TrimSpace(chatURL), "/")
-	if strings.HasSuffix(trimmed, "/chat/completions") {
-		return strings.TrimSuffix(trimmed, "/chat/completions") + "/models"
+	u, err := url.Parse(strings.TrimSpace(chatURL))
+	if err != nil {
+		return chatURL // best effort; the request will surface the real error
 	}
-	return trimmed + "/models"
+	path := strings.TrimRight(u.Path, "/")
+	if strings.HasSuffix(path, "/chat/completions") {
+		u.Path = strings.TrimSuffix(path, "/chat/completions") + "/models"
+	} else {
+		u.Path = path + "/models"
+	}
+	return u.String()
 }
 
 // httpListModels proxies the provider's model-discovery endpoint so the frontend

@@ -324,6 +324,8 @@ func TestDeriveModelsURL(t *testing.T) {
 		"http://localhost:11434/v1/chat/completions":  "http://localhost:11434/v1/models",
 		"https://api.openai.com/v1":                   "https://api.openai.com/v1/models",
 		"https://api.openai.com/v1/chat/completions/": "https://api.openai.com/v1/models",
+		// Query strings (e.g. Azure's api-version) are preserved on the path rewrite.
+		"https://host/v1/chat/completions?api-version=2024-08-01": "https://host/v1/models?api-version=2024-08-01",
 	}
 	for in, want := range cases {
 		if got := deriveModelsURL(in); got != want {
