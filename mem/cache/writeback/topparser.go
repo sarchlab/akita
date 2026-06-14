@@ -46,9 +46,7 @@ func (p *topParser) Tick() bool {
 		trans.WritePID = msg.PID
 	}
 
-	next.Transactions = append(next.Transactions, trans)
-
-	idx := len(next.Transactions) - 1
+	idx := next.allocTransaction(trans)
 	next.DirStageBuf.PushTyped(idx)
 
 	tracing.TraceReqReceive(p.cache.comp, msg)

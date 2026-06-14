@@ -146,8 +146,7 @@ func (f *flusher) processFlush() bool {
 		HasBlock:           true,
 	}
 
-	next.Transactions = append(next.Transactions, trans)
-	transIdx := len(next.Transactions) - 1
+	transIdx := next.allocTransaction(trans)
 	bankBuf.PushTyped(transIdx)
 
 	next.FlusherBlockToEvictRefs = next.FlusherBlockToEvictRefs[1:]

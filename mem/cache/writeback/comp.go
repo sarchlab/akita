@@ -85,6 +85,37 @@ type State struct {
 	ProcessingFlush         flushReqState `json:"processing_flush"`
 }
 
+// allocTransaction stores t in the Transactions slice and returns its index.
+// Completed transactions are marked Removed but their slots are never deleted
+// (other stages hold indices into the slice via the various buffers and the
+// MSHR, so indices must stay stable). Reuse a Removed slot when one is
+// available so the slice stays bounded by the number of active transactions
+// instead of growing with every request ever issued.
+func (s *State) allocTransaction(t transactionState) int {
+	for i := range s.Transactions {
+		if !s.Transactions[i].Removed {
+			continue
+		}
+
+		// The MSHR stage drains the waiter list of the transaction at
+		// ProcessingMSHREntryIdx across multiple ticks. That owner
+		// transaction is itself one of its waiters, so it is commonly marked
+		// Removed before the list is fully drained — yet its
+		// MSHRTransactionIndices must stay intact until the stage releases it.
+		// Skip its slot so a later top request in the same tick (topParser
+		// runs after mshrStage) cannot overwrite the pending waiter list.
+		if s.HasProcessingMSHREntry && i == s.ProcessingMSHREntryIdx {
+			continue
+		}
+
+		s.Transactions[i] = t
+		return i
+	}
+
+	s.Transactions = append(s.Transactions, t)
+	return len(s.Transactions) - 1
+}
+
 // flushReqState is a serializable representation of a flush control request.
 type flushReqState struct {
 	MsgMeta messaging.MsgMeta `json:"msg_meta"`
