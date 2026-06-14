@@ -3,7 +3,6 @@ package simplebankedmemory
 import (
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -47,14 +46,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 			log.Panic("simplebankedmemory: no banks configured")
 		}
 
-		addr := msg.GetAddress()
-		addr = mem.ConvertAddress(
-			spec.AddrConvKind, spec.AddrOffset,
-			spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
-			spec.AddrCurrentElementIndex, addr,
-		)
-
-		bankID := selectBank(spec, addr)
+		bankID := selectBank(spec, bankSelectionAddress(spec, msg.GetAddress()))
 		if bankID < 0 || bankID >= spec.NumBanks {
 			log.Panicf("simplebankedmemory: bank selector returned %d", bankID)
 		}
