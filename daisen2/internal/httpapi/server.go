@@ -97,7 +97,7 @@ func (s *Server) setupRoutes() *http.ServeMux {
 }
 
 // RegisterReplayRoutes registers all replay/trace routes on the provided mux.
-// This includes the mode endpoint, trace endpoints, GPT proxy, and static
+// This includes the mode endpoint, trace endpoints, chat/LLM proxy, and static
 // assets. Used by the replay server itself.
 func (s *Server) RegisterReplayRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/mode", s.apiMode)
@@ -115,10 +115,10 @@ func (s *Server) RegisterTraceAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/compinfo", s.httpComponentInfo)
 	mux.HandleFunc("/api/segments", s.httpSegments)
 
-	// GPT proxy endpoints
-	mux.HandleFunc("/api/gpt", s.httpGPTProxy)
-	mux.HandleFunc("/api/githubisavailable", s.httpGithubIsAvailableProxy)
-	mux.HandleFunc("/api/checkenv", s.httpCheckEnvFile)
+	// Chat / LLM proxy endpoints. The LLM provider is configured entirely from
+	// the frontend; the server holds no credentials.
+	mux.HandleFunc("/api/gpt", s.httpChatProxy)
+	mux.HandleFunc("/api/models", s.httpListModels)
 }
 
 // RegisterTraceRoutes registers trace/data routes and Daisen's replay SPA

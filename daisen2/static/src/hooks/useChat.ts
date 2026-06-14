@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import type { ChatMessage, TraceInformation, UnitContent, UploadedFile } from "../types/chat";
+import type { ChatMessage, LLMSettings, TraceInformation, UnitContent, UploadedFile } from "../types/chat";
 
 const INITIAL_MESSAGE: ChatMessage = {
   role: "assistant",
@@ -80,11 +80,7 @@ export function useChat() {
   );
 
   const sendMessage = useCallback(
-    async (
-      content: UnitContent[],
-      traceInfo: TraceInformation,
-      selectedGitHubRoutineKeys: string[],
-    ) => {
+    async (content: UnitContent[], traceInfo: TraceInformation, llm: LLMSettings) => {
       const userMessage: ChatMessage = { role: "user", content };
       const nextMessages = [...messages, userMessage];
       setMessages(nextMessages);
@@ -92,13 +88,20 @@ export function useChat() {
       setError(null);
 
       try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        // The key travels in a header (not the body) so it stays out of request
+        // logs. It may be omitted for keyless local servers.
+        if (llm.apiKey.trim()) headers["X-Llm-Api-Key"] = llm.apiKey.trim();
+
         const response = await fetch("/api/gpt", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({
             messages: nextMessages,
             traceInfo,
-            selectedGitHubRoutineKeys,
+            provider: llm.provider,
+            baseURL: llm.baseURL,
+            model: llm.model,
           }),
         });
         const data = response.ok ? await response.json() : { choices: [{ message: { content: await response.text() } }] };
