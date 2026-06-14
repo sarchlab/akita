@@ -50,10 +50,11 @@ export interface LLMSettings {
   apiKey: string;
   // remember persists the API key to localStorage instead of sessionStorage.
   remember: boolean;
-  // configured is true once the user has actually touched the provider settings.
-  // Until then we send no endpoint/model overrides so the server's .env defaults
-  // apply unchanged.
-  configured: boolean;
+  // endpointConfigured is true once the user explicitly chooses an endpoint
+  // (provider / base URL / model) — not merely entering an API key. It gates
+  // whether a request overrides the server's .env endpoint and model, so a user
+  // who only supplies a key keeps using the server's configured endpoint.
+  endpointConfigured: boolean;
 }
 
 export interface LLMCapabilities {

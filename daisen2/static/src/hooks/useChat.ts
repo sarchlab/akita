@@ -85,6 +85,7 @@ export function useChat() {
       traceInfo: TraceInformation,
       selectedGitHubRoutineKeys: string[],
       llm: LLMSettings,
+      overrideEndpoint: boolean,
     ) => {
       const userMessage: ChatMessage = { role: "user", content };
       const nextMessages = [...messages, userMessage];
@@ -103,10 +104,11 @@ export function useChat() {
           traceInfo,
           selectedGitHubRoutineKeys,
         };
-        // Only override the server's .env defaults once the user has actually
-        // configured a provider (or supplied a key); otherwise let the server
-        // decide the endpoint so an .env-only deployment keeps its own defaults.
-        if (llm.configured || llm.apiKey.trim()) {
+        // The endpoint/model are sent only when the caller says to override the
+        // server default (the user chose an endpoint, or there is no server
+        // default). The key is independent and always travels in the header, so
+        // supplying only a key uses the user's key with the server's endpoint.
+        if (overrideEndpoint) {
           body.provider = llm.provider;
           body.baseURL = llm.baseURL;
           body.model = llm.model;

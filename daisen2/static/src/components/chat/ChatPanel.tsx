@@ -118,7 +118,10 @@ export default function ChatPanel() {
       .forEach((file) => content.push({ type: "image_url", image_url: { url: file.content } }));
 
     setInput("");
-    await sendMessage(content, traceInfo, [], settings);
+    // Override the server's endpoint/model only when the user picked one, or
+    // when the server has no default to fall back to.
+    const overrideEndpoint = settings.endpointConfigured || !capabilities.hasServerDefault;
+    await sendMessage(content, traceInfo, [], settings, overrideEndpoint);
     clearUploadedFiles();
   }
 

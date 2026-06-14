@@ -13,6 +13,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -106,7 +107,7 @@ func (s *Server) httpChatProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := http.DefaultClient.Do(outReq)
+	resp, err := guardedLLMClient.Do(outReq)
 	if err != nil {
 		http.Error(w, "Failed to contact LLM provider: "+err.Error(),
 			http.StatusBadGateway)
@@ -197,6 +198,48 @@ func guardLLMURL(rawURL string) error {
 		}
 	}
 	return nil
+}
+
+// guardedDialContext resolves the target, rejects it if any address is internal,
+// and then dials a vetted IP literal directly. Validating at dial time (rather
+// than only up front) closes two SSRF gaps that an up-front URL check misses:
+// HTTP redirects to an internal Location (each redirect dials through here) and
+// DNS rebinding (the kernel never re-resolves the hostname, so it can't be
+// pointed at an internal address between check and connect). Opt out for local
+// providers with DAISEN_ALLOW_PRIVATE_LLM_URL=1.
+func guardedDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	dialer := &net.Dialer{Timeout: 30 * time.Second}
+	if allowPrivateLLMHosts() {
+		return dialer.DialContext(ctx, network, addr)
+	}
+
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+	if err != nil {
+		return nil, err
+	}
+	for _, ip := range ips {
+		if isInternalIP(ip) {
+			return nil, fmt.Errorf("refusing to connect to internal address %s for host %q", ip, host)
+		}
+	}
+	// Dial the already-vetted IP, not the hostname, so there is no second
+	// resolution that could rebind to an internal address.
+	return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].String(), port))
+}
+
+// guardedLLMClient is the single HTTP client used for all outbound LLM calls
+// (chat and model listing). TLS still verifies against the request hostname
+// (SNI), while connections are pinned to vetted public IPs by the dialer.
+var guardedLLMClient = &http.Client{
+	Transport: &http.Transport{
+		DialContext:         guardedDialContext,
+		TLSHandshakeTimeout: 10 * time.Second,
+		ForceAttemptHTTP2:   true,
+	},
 }
 
 // resolveProviderConfig builds a ProviderConfig from the request, falling back
@@ -358,7 +401,7 @@ func (openAICompatibleProvider) ListModels(ctx context.Context, cfg ProviderConf
 		req.Header.Set("Authorization", bearerToken(cfg.APIKey))
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := guardedLLMClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

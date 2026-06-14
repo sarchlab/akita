@@ -164,6 +164,38 @@ func TestGuardLLMURLOptInAllowsPrivate(t *testing.T) {
 	}
 }
 
+func TestGuardedLLMClientBlocksInternalServer(t *testing.T) {
+	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	// The dialer (not just the up-front URL check) must refuse the connection,
+	// which is what closes the redirect and DNS-rebinding gaps.
+	req, _ := http.NewRequest("GET", srv.URL, nil)
+	resp, err := guardedLLMClient.Do(req)
+	if err == nil {
+		_ = resp.Body.Close()
+		t.Fatal("expected the guarded client to refuse a connection to 127.0.0.1")
+	}
+}
+
+func TestGuardedLLMClientAllowsWithOptIn(t *testing.T) {
+	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	req, _ := http.NewRequest("GET", srv.URL, nil)
+	resp, err := guardedLLMClient.Do(req)
+	if err != nil {
+		t.Fatalf("guarded client with opt-in: %v", err)
+	}
+	_ = resp.Body.Close()
+}
+
 func TestNewChatProviderRejectsUnknown(t *testing.T) {
 	if _, err := newChatProvider(ProviderOpenAICompatible); err != nil {
 		t.Fatalf("openai-compatible should be supported: %v", err)
@@ -273,6 +305,7 @@ func TestDeriveModelsURL(t *testing.T) {
 }
 
 func TestListModelsParsesAndSorts(t *testing.T) {
+	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1") // the test server runs on 127.0.0.1
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/models" {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -330,6 +363,7 @@ func TestIsGeneralChatModel(t *testing.T) {
 }
 
 func TestListModelsReportsHTTPError(t *testing.T) {
+	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1") // the test server runs on 127.0.0.1
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 	}))

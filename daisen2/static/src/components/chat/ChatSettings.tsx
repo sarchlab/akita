@@ -39,8 +39,8 @@ export default function ChatSettings({
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
 
   const loadModels = useCallback(async () => {
-    const overrideServer = settings.configured || settings.apiKey.trim() !== "";
-    if (overrideServer && !settings.baseURL.trim()) {
+    const overrideEndpoint = settings.endpointConfigured || !capabilities.hasServerDefault;
+    if (overrideEndpoint && !settings.baseURL.trim()) {
       setModelsError("Set a base URL first.");
       return;
     }
@@ -50,10 +50,10 @@ export default function ChatSettings({
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (settings.apiKey.trim()) headers["X-Llm-Api-Key"] = settings.apiKey.trim();
 
-      // When the user hasn't configured a provider, list the server default's
+      // When the user hasn't chosen an endpoint, list the server default's
       // models rather than forcing the UI's preset endpoint.
       const modelsBody: Record<string, unknown> = {};
-      if (overrideServer) {
+      if (overrideEndpoint) {
         modelsBody.provider = settings.provider;
         modelsBody.baseURL = settings.baseURL;
       }
@@ -75,7 +75,7 @@ export default function ChatSettings({
     } finally {
       setModelsLoading(false);
     }
-  }, [settings.apiKey, settings.baseURL, settings.provider, settings.configured]);
+  }, [settings.apiKey, settings.baseURL, settings.provider, settings.endpointConfigured, capabilities.hasServerDefault]);
 
   // Load the model list when the panel opens or the provider preset changes, but
   // only once a key is available (most endpoints require one to list models) so
@@ -98,10 +98,10 @@ export default function ChatSettings({
         traceInfo: { selected: 0, startTime: 0, endTime: 0, selectedComponentNameList: [] },
         selectedGitHubRoutineKeys: [],
       };
-      // Match the chat path: only override the server's .env defaults once the
-      // user has configured a provider (or supplied a key), so Test connection
+      // Match the chat path: override the server's endpoint/model only when the
+      // user picked one (or the server has no default), so Test connection
       // exercises the same endpoint a real chat would use.
-      if (settings.configured || settings.apiKey.trim()) {
+      if (settings.endpointConfigured || !capabilities.hasServerDefault) {
         requestBody.provider = settings.provider;
         requestBody.baseURL = settings.baseURL;
         requestBody.model = settings.model;
