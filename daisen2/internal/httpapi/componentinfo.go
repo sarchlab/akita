@@ -1,19 +1,14 @@
 package httpapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/joho/godotenv"
 )
 
 // TimeValue represents a data point with a time and a value.
@@ -534,6 +529,12 @@ func extractLocations(selectedComponentNameList []interface{}) []string {
 	return locations
 }
 
+// maxTraceContextRows caps how many trace events get embedded in the chat
+// context. The full trace can be hundreds of thousands of rows, which both pegs
+// the server (building the string) and overruns the model's context window, so
+// we send only a bounded sample.
+const maxTraceContextRows = 500
+
 func buildTraceSQL(locations []string, startTime, endTime float64) string {
 	quoted := make([]string, 0, len(locations))
 	for _, loc := range locations {
@@ -557,7 +558,9 @@ SELECT
 FROM trace t
 JOIN location loc ON t.Location = loc.ID
 WHERE ` + whereClause + `
-AND ` + timeClause
+AND ` + timeClause + fmt.Sprintf(`
+ORDER BY t.StartTime, t.ID
+LIMIT %d`, maxTraceContextRows)
 }
 
 func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
@@ -574,7 +577,12 @@ func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
 		return ""
 	}
 
-	header := "[Reference Akita Trace File]\n" + strings.Join(columns, ",") + "\n"
+	var b strings.Builder
+	b.WriteString("[Reference Akita Trace File]\n")
+	b.WriteString(strings.Join(columns, ","))
+	b.WriteByte('\n')
+
+	rowCount := 0
 	for rows.Next() {
 		values := make([]interface{}, len(columns))
 		valuePtrs := make([]interface{}, len(columns))
@@ -598,290 +606,17 @@ func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
 				rowStrs = append(rowStrs, fmt.Sprintf("%v", v))
 			}
 		}
-		header += strings.Join(rowStrs, ",") + "\n"
-	}
-	header += "[End Akita Trace File]\n"
-	return header
-}
-
-func buildCombinedRepoHeader(ctx context.Context, urlList []string) string {
-	combinedRepoHeader := ""
-	for _, url := range urlList {
-		content := httpGithubRaw(ctx, url)
-		if content == "" {
-			continue
-		}
-		fileName := url
-		if idx := strings.Index(url, "sarchlab/"); idx != -1 {
-			fileName = url[idx:]
-		}
-		combinedRepoHeader += "[Reference File " + fileName + "]\n"
-		combinedRepoHeader += content + "\n"
-		combinedRepoHeader += "[End " + fileName + "]\n"
-	}
-	return combinedRepoHeader
-}
-
-func getRoutineURLList(routineFile string, selectedKeys []string) ([]string, error) {
-	data, err := os.ReadFile(routineFile)
-	if err != nil {
-		return nil, err
-	}
-	var routineMap map[string][]string
-	if err := json.Unmarshal(data, &routineMap); err != nil {
-		return nil, err
-	}
-	urlSet := make(map[string]struct{})
-	for _, key := range selectedKeys {
-		if urls, ok := routineMap[key]; ok {
-			for _, u := range urls {
-				urlSet[u] = struct{}{}
-			}
-		}
-	}
-	urlList := make([]string, 0, len(urlSet))
-	for u := range urlSet {
-		urlList = append(urlList, u)
-	}
-	sort.Strings(urlList)
-	return urlList, nil
-}
-
-func buildOpenAIPayload(
-	ctx context.Context,
-	model string,
-	messages []map[string]interface{},
-	traceInfo map[string]interface{},
-	selectedGitHubRoutineKeys []string,
-	traceReader *SQLiteTraceReader,
-) ([]byte, error) {
-	combinedTraceHeader := buildAkitaTraceHeader(traceReader, traceInfo)
-	routineFile := "componentgithubroutine.json"
-	urlList, err := getRoutineURLList(routineFile, selectedGitHubRoutineKeys)
-	if err != nil {
-		log.Println("Failed to get routine URL list:", err)
-		return nil, err
-	}
-	combinedRepoHeader := buildCombinedRepoHeader(ctx, urlList)
-
-	if len(messages) > 0 {
-		if contentArr, ok := messages[len(messages)-1]["content"].([]interface{}); ok && len(contentArr) > 0 {
-			if firstContent, ok := contentArr[0].(map[string]interface{}); ok {
-				firstText, _ := firstContent["text"].(string)
-				firstContent["text"] = combinedTraceHeader + combinedRepoHeader + firstText
-			}
-		}
+		b.WriteString(strings.Join(rowStrs, ","))
+		b.WriteByte('\n')
+		rowCount++
 	}
 
-	if len(messages) == 0 || messages[0]["role"] != "system" {
-		loadedTextBytes, err := os.ReadFile("beforehandprompt.txt")
-		if err != nil {
-			log.Println("Failed to read beforehandprompt.txt:", err)
-			return nil, err
-		}
-		loadedText := string(loadedTextBytes)
-		systemMsg := map[string]interface{}{
-			"role": "system",
-			"content": []interface{}{
-				map[string]interface{}{
-					"type": "text",
-					"text": loadedText,
-				},
-			},
-		}
-		messages = append([]map[string]interface{}{systemMsg}, messages...)
+	if rowCount >= maxTraceContextRows {
+		b.WriteString(fmt.Sprintf(
+			"[Note: trace truncated to the first %d events]\n", maxTraceContextRows))
 	}
-
-	payload := map[string]interface{}{
-		"model":       model,
-		"messages":    messages,
-		"temperature": 0.7,
-	}
-	return json.Marshal(payload)
-}
-
-func sendOpenAIRequest(ctx context.Context, apiKey, url string, payloadBytes []byte) (*http.Response, error) {
-	openaiReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payloadBytes))
-	if err != nil {
-		return nil, err
-	}
-	openaiReq.Header.Set("Content-Type", "application/json")
-	openaiReq.Header.Set("Authorization", apiKey)
-	return http.DefaultClient.Do(openaiReq)
-}
-
-func httpGithubRaw(ctx context.Context, url string) string {
-	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
-	client := &http.Client{}
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		log.Println("Failed to create GitHub raw request:", err)
-		return ""
-	}
-	if githubPAT != "" {
-		req.Header.Set("Authorization", githubPAT)
-	}
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != 200 {
-		log.Printf("Failed to fetch raw GitHub file: %s, err: %v\n", url, err)
-		return ""
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Println("Failed to read GitHub raw response body:", err)
-		return ""
-	}
-	return string(body)
-}
-
-func (s *Server) httpGPTProxy(w http.ResponseWriter, r *http.Request) {
-	_ = godotenv.Load(".env")
-	openaiApiKey := os.Getenv("OPENAI_API_KEY")
-	openaiURL := os.Getenv("OPENAI_URL")
-	openaiModel := os.Getenv("OPENAI_MODEL")
-	if openaiApiKey == "" || openaiURL == "" || openaiModel == "" {
-		http.Error(
-			w,
-			"[Error: \".env\" not found or OpenAI-related variable missing] "+
-				"Please create or update file "+
-				"\"akita/daisen/.env\" and write these contents (example):\n"+
-				"```\n"+
-				"OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
-				"OPENAI_MODEL=\"gpt-4o\"\n"+
-				"OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
-				"GITHUB_PERSONAL_ACCESS_TOKEN=\"Bearer ghp_XXXXXXXXXXXX\"\n"+
-				"```\n",
-			http.StatusInternalServerError,
-		)
-		return
-	}
-	var req struct {
-		Messages                  []map[string]interface{} `json:"messages"`
-		TraceInfo                 map[string]interface{}   `json:"traceInfo"`
-		SelectedGitHubRoutineKeys []string                 `json:"selectedGitHubRoutineKeys"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	payloadBytes, err := buildOpenAIPayload(
-		r.Context(), openaiModel, req.Messages, req.TraceInfo,
-		req.SelectedGitHubRoutineKeys, s.traceReader)
-	if err != nil {
-		http.Error(w, "Failed to marshal payload: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	resp, err := sendOpenAIRequest(r.Context(), openaiApiKey, openaiURL, payloadBytes)
-	if err != nil {
-		http.Error(
-			w,
-			"Failed to contact OpenAI: "+err.Error(),
-			http.StatusBadGateway,
-		)
-		return
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	w.Write(body)
-}
-
-func (s *Server) httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
-	_ = godotenv.Load(".env")
-	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
-	if githubPAT == "" {
-		http.Error(
-			w,
-			"\n[Error: \".env\" not found or GitHub-related variable missing]\n"+
-				"Please create or update file "+
-				"\"akita/daisen/.env\" and write these contents (example):\n"+
-				"```\n"+
-				"OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
-				"OPENAI_MODEL=\"gpt-4o\"\n"+
-				"OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
-				"GITHUB_PERSONAL_ACCESS_TOKEN=\"Bearer ghp_XXXXXXXXXXXX\"\n"+
-				"Please refer to "+
-				"https://github.com/sarchlab/akita/tree/main/daisen#readme "+
-				"for more details.```\n",
-			http.StatusInternalServerError,
-		)
-		return
-	}
-	client := &http.Client{}
-	req, err := http.NewRequestWithContext(r.Context(), "GET", "https://api.github.com/user", nil)
-	if err != nil {
-		http.Error(w, "Failed to create GitHub request: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", githubPAT)
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != 200 {
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]interface{}{
-			"available":    0,
-			"routine_keys": []string{},
-		}); err != nil {
-			http.Error(w, "Failed to encode JSON: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		return
-	}
-	defer resp.Body.Close()
-	routineKeys := []string{}
-	routineFile := "componentgithubroutine.json"
-	data, err := os.ReadFile(routineFile)
-	if err == nil {
-		var routineMap map[string]interface{}
-		if err := json.Unmarshal(data, &routineMap); err == nil {
-			for k := range routineMap {
-				routineKeys = append(routineKeys, k)
-			}
-		}
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"available":    1,
-		"routine_keys": routineKeys,
-	}); err != nil {
-		http.Error(w, "Failed to encode JSON: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
-
-// httpCheckEnvFile handles the API endpoint to check if .env file exists
-func (s *Server) httpCheckEnvFile(w http.ResponseWriter, r *http.Request) {
-	// Set CORS headers
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	w.Header().Set("Content-Type", "application/json")
-
-	// Handle preflight requests
-	if r.Method == "OPTIONS" {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	// Check if .env file exists
-	envFileExists := false
-	if _, err := os.Stat(".env"); err == nil {
-		envFileExists = true
-	}
-
-	// Create response JSON
-	response := map[string]interface{}{
-		"exists": envFileExists,
-	}
-
-	// Encode and send response
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-		return
-	}
+	b.WriteString("[End Akita Trace File]\n")
+	return b.String()
 }
 
 func (s *Server) fetchTasksForMilestones(ctx context.Context, compName string, startTime, endTime float64) []Task {
