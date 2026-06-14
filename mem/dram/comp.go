@@ -1,8 +1,6 @@
 package dram
 
 import (
-	"fmt"
-
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -215,6 +213,12 @@ type State struct {
 	CommandQueues commandQueueState  `json:"command_queues"`
 	BankStates    bankStatesFlat     `json:"bank_states"`
 
+	// PendingCompletions tracks issued read/write commands whose data/response
+	// will become ready at a future tick. This timeline is decoupled from bank
+	// occupancy: a bank can accept further (pipelined) column commands per the
+	// timing table while earlier reads/writes are still returning data.
+	PendingCompletions []pendingCompletion `json:"pending_completions"`
+
 	// TickCount tracks the global cycle counter for tFAW enforcement.
 	TickCount uint64 `json:"tick_count"`
 
@@ -241,23 +245,34 @@ type State struct {
 	BytesWritten            uint64 `json:"bytes_written"`
 }
 
-// subTransRef identifies a SubTransaction by its parent transaction index
-// and its position within that transaction's SubTransactions slice.
+// subTransRef identifies a SubTransaction by its parent transaction's stable
+// ID and its position within that transaction's SubTransactions slice. Using a
+// stable ID (rather than a slice index) means removing a transaction never
+// requires re-indexing the references held by queues, commands, or pending
+// completions.
 type subTransRef struct {
-	TransIndex int `json:"trans_index"`
-	SubIndex   int `json:"sub_index"`
+	TxID     uint64 `json:"tx_id"`
+	SubIndex int    `json:"sub_index"`
 }
 
 // subTransState is a serializable representation of a SubTransaction.
 type subTransState struct {
-	ID               uint64 `json:"id"`
-	Address          uint64 `json:"address"`
-	Completed        bool   `json:"completed"`
-	TransactionIndex int    `json:"transaction_index"`
+	ID        uint64 `json:"id"`
+	Address   uint64 `json:"address"`
+	Completed bool   `json:"completed"`
+}
+
+// pendingCompletion records that the read/write for a sub-transaction will have
+// its data/response ready at CompletionTick. Stored in State, decoupled from
+// the bank state machine.
+type pendingCompletion struct {
+	CompletionTick uint64      `json:"completion_tick"`
+	Ref            subTransRef `json:"ref"`
 }
 
 // transactionState is a serializable representation of a Transaction.
 type transactionState struct {
+	ID              uint64               `json:"id"`
 	HasRead         bool                 `json:"has_read"`
 	HasWrite        bool                 `json:"has_write"`
 	ReadMsg         memprotocol.ReadReq  `json:"read_msg"`
@@ -285,13 +300,18 @@ type bankEntry struct {
 	Data      bankState `json:"data"`
 }
 
-// bankState is a serializable representation of a Bank.
+// bankState is a serializable representation of a Bank. It holds only the
+// open/closed state machine and the per-next-command timing gaps. Bank
+// occupancy is NOT tracked here: command eligibility is driven entirely by
+// CyclesToCmdAvailable (the timing table) plus the state machine and tFAW.
+// Data-return latency lives separately in State.PendingCompletions.
 type bankState struct {
-	State                int            `json:"state"`
-	OpenRow              uint64         `json:"open_row"`
-	HasCurrentCmd        bool           `json:"has_current_cmd"`
-	CurrentCmd           commandState   `json:"current_cmd"`
-	CyclesToCmdAvailable map[string]int `json:"cycles_to_cmd_available"`
+	State   int    `json:"state"`
+	OpenRow uint64 `json:"open_row"`
+
+	// CyclesToCmdAvailable[k] is the number of cycles before a command of kind
+	// k may be issued to this bank. Indexed directly by commandKind.
+	CyclesToCmdAvailable [numCmdKind]int `json:"cycles_to_cmd_available"`
 }
 
 // rankActivateHistory stores the last 4 activate timestamps for a rank.
@@ -361,12 +381,9 @@ func transactionAccessByteSize(t *transactionState) uint64 {
 	return uint64(len(t.WriteMsg.Data))
 }
 
-// cmdKindToString converts a commandKind int to string key.
-func cmdKindToString(k commandKind) string {
-	return fmt.Sprintf("%d", int(k))
-}
-
 // initBankStatesFlat creates initial bank states for all banks (all closed).
+// Entries are laid out rank-major, then bank-group, then bank, so a bank's
+// position is computable directly (see bankFlatIndex) without a linear scan.
 func initBankStatesFlat(numRanks, numBankGroups, numBanks int) bankStatesFlat {
 	histories := make([]rankActivateHistory, numRanks)
 	for i := range numRanks {
@@ -389,8 +406,7 @@ func initBankStatesFlat(numRanks, numBankGroups, numBanks int) bankStatesFlat {
 					BankGroup: j,
 					BankIndex: k,
 					Data: bankState{
-						State:                int(bankStateClosed),
-						CyclesToCmdAvailable: make(map[string]int),
+						State: int(bankStateClosed),
 					},
 				})
 			}
@@ -400,12 +416,30 @@ func initBankStatesFlat(numRanks, numBankGroups, numBanks int) bankStatesFlat {
 	return flat
 }
 
-// findBankState returns a pointer to the bankState for the given indices.
+// bankFlatIndex returns the index into bankStatesFlat.Entries for the bank at
+// the given (rank, bankGroup, bank) coordinates, matching the layout produced
+// by initBankStatesFlat.
+func bankFlatIndex(flat *bankStatesFlat, rank, bankGroup, bank int) int {
+	return (rank*flat.NumBankGroups+bankGroup)*flat.NumBanks + bank
+}
+
+// findBankState returns a pointer to the bankState for the given indices, or
+// nil if the coordinates are out of range. O(1) — direct index, no scan.
 func findBankState(flat *bankStatesFlat, rank, bankGroup, bank int) *bankState {
-	for i := range flat.Entries {
-		e := &flat.Entries[i]
-		if e.Rank == rank && e.BankGroup == bankGroup && e.BankIndex == bank {
-			return &e.Data
+	idx := bankFlatIndex(flat, rank, bankGroup, bank)
+	if idx < 0 || idx >= len(flat.Entries) {
+		return nil
+	}
+	return &flat.Entries[idx].Data
+}
+
+// findTransaction returns the transaction with the given stable ID, or nil if
+// it is not present (e.g. already completed and removed). The transaction list
+// is bounded by TransactionQueueSize, so the scan is short.
+func findTransaction(state *State, txID uint64) *transactionState {
+	for i := range state.Transactions {
+		if state.Transactions[i].ID == txID {
+			return &state.Transactions[i]
 		}
 	}
 	return nil

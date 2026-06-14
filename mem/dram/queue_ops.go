@@ -9,7 +9,6 @@ import (
 func splitTransaction(
 	spec *Spec,
 	trans *transactionState,
-	transIdx int,
 ) {
 	addr := transactionGlobalAddress(trans)
 	size := transactionAccessByteSize(trans)
@@ -32,10 +31,9 @@ func splitTransaction(
 
 	for a := alignedAddr; a < alignedEnd; a += unitSize {
 		st := subTransState{
-			ID:               timing.GetIDGenerator().Generate(),
-			Address:          a,
-			Completed:        false,
-			TransactionIndex: transIdx,
+			ID:        timing.GetIDGenerator().Generate(),
+			Address:   a,
+			Completed: false,
 		}
 		trans.SubTransactions = append(trans.SubTransactions, st)
 	}
@@ -50,13 +48,13 @@ func canPushSubTrans(state *State, n int, capacity int) bool {
 }
 
 // pushSubTrans adds all subtransactions of a transaction to the sub-transaction
-// queue.
+// queue, referenced by the transaction's stable ID.
 func pushSubTrans(state *State, transIdx int) {
 	trans := &state.Transactions[transIdx]
 	for i := range trans.SubTransactions {
 		state.SubTransQueue.Entries = append(
 			state.SubTransQueue.Entries,
-			subTransRef{TransIndex: transIdx, SubIndex: i},
+			subTransRef{TxID: trans.ID, SubIndex: i},
 		)
 	}
 }
@@ -93,19 +91,16 @@ func createClosePageCommand(
 	state *State,
 	ref subTransRef,
 ) *commandState {
-	st := &state.Transactions[ref.TransIndex].SubTransactions[ref.SubIndex]
+	trans := findTransaction(state, ref.TxID)
+	st := &trans.SubTransactions[ref.SubIndex]
 
 	cmd := &commandState{
-		ID:      timing.GetIDGenerator().Generate(),
-		Address: st.Address,
-		SubTransRef: subTransRef{
-			TransIndex: ref.TransIndex,
-			SubIndex:   ref.SubIndex,
-		},
+		ID:          timing.GetIDGenerator().Generate(),
+		Address:     st.Address,
+		SubTransRef: ref,
 	}
 
 	// Close-page: read => ReadPrecharge, write => WritePrecharge
-	trans := &state.Transactions[ref.TransIndex]
 	if isTransactionRead(trans) {
 		cmd.Kind = int(cmdKindReadPrecharge)
 	} else {
@@ -126,19 +121,16 @@ func createOpenPageCommand(
 	state *State,
 	ref subTransRef,
 ) *commandState {
-	st := &state.Transactions[ref.TransIndex].SubTransactions[ref.SubIndex]
+	trans := findTransaction(state, ref.TxID)
+	st := &trans.SubTransactions[ref.SubIndex]
 
 	cmd := &commandState{
-		ID:      timing.GetIDGenerator().Generate(),
-		Address: st.Address,
-		SubTransRef: subTransRef{
-			TransIndex: ref.TransIndex,
-			SubIndex:   ref.SubIndex,
-		},
+		ID:          timing.GetIDGenerator().Generate(),
+		Address:     st.Address,
+		SubTransRef: ref,
 	}
 
 	// Open-page: read => Read, write => Write (no auto-precharge)
-	trans := &state.Transactions[ref.TransIndex]
 	if isTransactionRead(trans) {
 		cmd.Kind = int(cmdKindRead)
 	} else {

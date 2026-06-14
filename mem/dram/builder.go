@@ -146,6 +146,7 @@ func (b Builder) Build(name string) *Comp {
 
 // normalizeSpec computes the derived timing fields from the configured spec.
 func (b *Builder) normalizeSpec() {
+	b.channelCountMustBeOne()
 	b.calculateBurstCycle()
 	b.spec.TRL = b.spec.TAL + b.spec.TCL
 	b.spec.TWL = b.spec.TAL + b.spec.TCWL
@@ -597,6 +598,18 @@ func (b *Builder) calculateBurstCycle() {
 func (b *Builder) burstLengthMustNotBeZero() {
 	if b.spec.BurstLength == 0 {
 		panic("burst length cannot be 0")
+	}
+}
+
+// channelCountMustBeOne enforces the one-component-per-channel model. The
+// address decode produces a Channel field that the single-channel controller
+// does not act on, so NumChannel > 1 would silently alias all channels onto the
+// same banks. Multi-channel is a first-class feature deferred to a later phase;
+// until then, instantiate one dram.Comp per channel.
+func (b *Builder) channelCountMustBeOne() {
+	if b.spec.NumChannel > 1 {
+		panic("dram: NumChannel > 1 is not supported; " +
+			"instantiate one dram.Comp per channel")
 	}
 }
 

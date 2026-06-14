@@ -23,7 +23,10 @@ func (m *bankTickMW) Tick() bool {
 	next.TickCount++
 	next.TotalCycles++
 
-	progress := tickBanks(&spec, m.cmdCycles, next)
+	// Retire reads/writes whose data/response is now ready, then advance the
+	// per-bank timing gaps.
+	progress := processPendingCompletions(next)
+	progress = tickBanks(next) || progress
 
 	// Handle periodic refresh
 	refreshActive := m.handleRefresh(&spec, next)
@@ -35,6 +38,13 @@ func (m *bankTickMW) Tick() bool {
 	}
 
 	progress = tickSubTransQueue(&spec, next) || progress
+
+	// Keep ticking while reads/writes are still in flight, even on cycles when
+	// no timing gap counted down — otherwise a pending completion with no other
+	// activity would never be retired.
+	if len(next.PendingCompletions) > 0 {
+		progress = true
+	}
 
 	return progress
 }
