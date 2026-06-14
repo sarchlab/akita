@@ -74,7 +74,8 @@ func (m *respondMW) finalizeWriteTrans(
 	t *transactionState,
 	i int,
 ) bool {
-	err := m.comp.Resources().Storage.Write(t.InternalAddress, t.WriteMsg.Data)
+	err := m.comp.Resources().Storage.Write(
+		transactionGlobalAddress(t), t.WriteMsg.Data)
 	if err != nil {
 		panic(err)
 	}
@@ -105,7 +106,7 @@ func (m *respondMW) finalizeReadTrans(
 	i int,
 ) bool {
 	data, err := m.comp.Resources().Storage.Read(
-		t.InternalAddress, t.ReadMsg.AccessByteSize)
+		transactionGlobalAddress(t), t.ReadMsg.AccessByteSize)
 	if err != nil {
 		panic(err)
 	}

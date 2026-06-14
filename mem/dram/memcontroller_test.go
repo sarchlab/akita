@@ -11,27 +11,6 @@ import (
 )
 
 var _ = Describe("Address Operations", func() {
-	It("should convert external to internal without converter", func() {
-		spec := &Spec{HasAddrConverter: false}
-		Expect(convertExternalToInternal(spec, 0x1000)).To(
-			Equal(uint64(0x1000)))
-	})
-
-	It("should convert external to internal with interleaving", func() {
-		spec := &Spec{
-			HasAddrConverter:    true,
-			InterleavingSize:    4096,
-			TotalNumOfElements:  8,
-			CurrentElementIndex: 3,
-			Offset:              0,
-		}
-		// addr = 0 + highBits*8*4096 + 3*4096 + lowBits
-		// For addr = 3*4096 = 12288: highBits=0, lowBits=0
-		// internal = 0*4096 + 0 = 0
-		Expect(convertExternalToInternal(spec, 3*4096)).To(
-			Equal(uint64(0)))
-	})
-
 	It("should map address", func() {
 		b := MakeBuilder()
 		spec := b.buildSpec()

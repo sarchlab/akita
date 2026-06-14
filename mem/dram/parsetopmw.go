@@ -52,10 +52,6 @@ func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
 		panic(fmt.Sprintf("dram parseTop: unsupported message type %T", msgI))
 	}
 
-	// Assign internal address
-	globalAddr := transactionGlobalAddress(&ts)
-	ts.InternalAddress = convertExternalToInternal(spec, globalAddr)
-
 	// Split into sub-transactions
 	transIdx := len(next.Transactions)
 	splitTransaction(spec, &ts)

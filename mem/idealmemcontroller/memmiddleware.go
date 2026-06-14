@@ -3,7 +3,6 @@ package idealmemcontroller
 import (
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -132,14 +131,7 @@ func (m *memMiddleware) sendResponse(tx *inflightTransaction) bool {
 }
 
 func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
-	spec := m.comp.Spec()
-	addr := mem.ConvertAddress(
-		spec.AddrConvKind, spec.AddrOffset,
-		spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
-		spec.AddrCurrentElementIndex, tx.Address,
-	)
-
-	data, err := m.comp.Resources().Storage.Read(addr, tx.AccessByteSize)
+	data, err := m.comp.Resources().Storage.Read(tx.Address, tx.AccessByteSize)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -179,12 +171,7 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 
 	m.topPort().Send(rsp)
 
-	spec := m.comp.Spec()
-	addr := mem.ConvertAddress(
-		spec.AddrConvKind, spec.AddrOffset,
-		spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
-		spec.AddrCurrentElementIndex, tx.Address,
-	)
+	addr := tx.Address
 
 	if tx.DirtyMask == nil {
 		err := m.comp.Resources().Storage.Write(addr, tx.Data)
