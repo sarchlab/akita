@@ -143,7 +143,20 @@ topPort = ctrl.GetPortByName("Top")
 | `BusWidth` / `BurstLength` | Data bus width (bits) and burst transfer length |
 | `PagePolicy` | `PagePolicyOpen` or `PagePolicyClose` |
 | `TransactionQueueSize` / `CommandQueueCapacity` | Queue depths |
-| `HasAddrConverter` / `InterleavingSize` / ... | Address interleaving for multi-controller setups |
+| `ChannelPos`/`Mask`, `RankPos`/`Mask`, `BankPos`/`Mask`, `RowPos`/`Mask`, ... | Address-bit positions for channel/rank/bank/row/column decode — **computed by `Build` from the geometry** (`NumChannel`/`NumRank`/`NumBank`/`NumRow`/`NumCol`, bus/burst); values passed via `WithSpec` are overwritten |
+
+Storage is **global**: a request's address indexes the backing store directly,
+and `mapAddress` decodes that same global address into a channel/rank/bank/row/
+column location. There is no per-controller address conversion.
+
+The decode bit positions are derived from the geometry by `Build`, not set by
+the caller. As a result this model is intended for **standalone / single
+controller** use (all presets are standalone). It does not currently support
+being one of several finely-interleaved controllers over shared storage: decode
+runs on the global address with builder-derived positions, so an upstream
+inter-controller interleave finer than the decode layout would alias. For a
+multi-controller memory system, use `mem/simplebankedmemory` (whose bank
+selector has an explicit bank-selection address conversion).
 
 ## Statistics
 
