@@ -237,18 +237,51 @@ func guardedDialContext(ctx context.Context, network, addr string) (net.Conn, er
 			return nil, fmt.Errorf("refusing to connect to internal address %s for host %q", ip, host)
 		}
 	}
-	// Dial the already-vetted IP, not the hostname, so there is no second
-	// resolution that could rebind to an internal address.
-	return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].String(), port))
+	// All addresses are vetted; dial them by IP (not the hostname, so there is no
+	// second resolution that could rebind), falling back across addresses like
+	// the default dialer when one is unreachable.
+	var lastErr error
+	for _, ip := range ips {
+		conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+		if err == nil {
+			return conn, nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no addresses found for host %q", host)
+	}
+	return nil, lastErr
+}
+
+// llmProxyFromEnvironment is the proxy resolver (a variable so tests can inject
+// a decision without depending on http.ProxyFromEnvironment's process-wide
+// caching of the environment).
+var llmProxyFromEnvironment = http.ProxyFromEnvironment
+
+// proxyForLLMRequest applies the standard HTTP(S)_PROXY rules. For a request
+// that will be proxied, the proxy performs its own DNS resolution and connection
+// — the dialer can't pin the IP — so the target host is re-validated here before
+// proxying. This narrows the rebinding window; final egress control for proxied
+// requests is delegated to the proxy.
+func proxyForLLMRequest(req *http.Request) (*url.URL, error) {
+	proxyURL, err := llmProxyFromEnvironment(req)
+	if err != nil || proxyURL == nil {
+		return proxyURL, err // direct request — the dialer validates and pins
+	}
+	if err := guardLLMURL(req.URL.String()); err != nil {
+		return nil, err
+	}
+	return proxyURL, nil
 }
 
 // guardedLLMClient is the single HTTP client used for all outbound LLM calls
 // (chat and model listing). It honors HTTP(S)_PROXY, pins direct connections to
-// vetted public IPs via the dialer, and re-validates every redirect target. TLS
-// still verifies against the request hostname (SNI).
+// vetted public IPs via the dialer, re-validates proxied and redirect targets,
+// and verifies TLS against the request hostname (SNI).
 var guardedLLMClient = &http.Client{
 	Transport: &http.Transport{
-		Proxy:               http.ProxyFromEnvironment,
+		Proxy:               proxyForLLMRequest,
 		DialContext:         guardedDialContext,
 		TLSHandshakeTimeout: 10 * time.Second,
 		ForceAttemptHTTP2:   true,

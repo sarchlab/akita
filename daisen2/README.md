@@ -32,6 +32,11 @@ device** to persist it in `localStorage` instead.
 
 To stop the server from being used to reach internal services (SSRF), base URLs
 that resolve to private, loopback, or link-local addresses are rejected by
-default. When running Daisen for yourself with a local model server (Ollama,
-LM Studio, vLLM), set `DAISEN_ALLOW_PRIVATE_LLM_URL=1` to allow them. Outbound
-requests honor the standard `HTTP_PROXY`/`HTTPS_PROXY` environment variables.
+default, and direct connections are pinned to the validated address. When
+running Daisen for yourself with a local model server (Ollama, LM Studio, vLLM),
+set `DAISEN_ALLOW_PRIVATE_LLM_URL=1` to allow them.
+
+Outbound requests honor the standard `HTTP_PROXY`/`HTTPS_PROXY` environment
+variables. When a request is routed through a proxy, the proxy performs the final
+DNS resolution and connection, so egress filtering for proxied requests is
+enforced by the proxy — point Daisen at a proxy you trust.

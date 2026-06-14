@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 )
 
@@ -174,6 +175,26 @@ func TestGuardedLLMClientValidatesDirectDialWhenProxyNotUsed(t *testing.T) {
 	if err == nil {
 		_ = resp.Body.Close()
 		t.Fatal("a direct dial to 127.0.0.1 must be blocked even when a proxy is configured for other requests")
+	}
+}
+
+func TestProxyForLLMRequestRevalidatesProxiedTarget(t *testing.T) {
+	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "")
+	orig := llmProxyFromEnvironment
+	defer func() { llmProxyFromEnvironment = orig }()
+	// Pretend every request is proxied (bypasses ProxyFromEnvironment caching).
+	llmProxyFromEnvironment = func(*http.Request) (*url.URL, error) {
+		return &url.URL{Scheme: "http", Host: "proxy.example:3128"}, nil
+	}
+
+	internal, _ := http.NewRequest("GET", "http://127.0.0.1:9/v1/models", nil)
+	if _, err := proxyForLLMRequest(internal); err == nil {
+		t.Error("a proxied request to an internal target must be rejected before proxying")
+	}
+
+	public, _ := http.NewRequest("GET", "https://8.8.8.8/v1/chat/completions", nil)
+	if _, err := proxyForLLMRequest(public); err != nil {
+		t.Errorf("a proxied request to a public target should be allowed: %v", err)
 	}
 }
 
