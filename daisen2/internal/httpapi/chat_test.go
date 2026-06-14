@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -175,6 +176,24 @@ func TestGuardedLLMClientValidatesDirectDialWhenProxyNotUsed(t *testing.T) {
 	if err == nil {
 		_ = resp.Body.Close()
 		t.Fatal("a direct dial to 127.0.0.1 must be blocked even when a proxy is configured for other requests")
+	}
+}
+
+func TestRelayResponseCapsBody(t *testing.T) {
+	orig := maxChatResponseBytes
+	defer func() { maxChatResponseBytes = orig }()
+	maxChatResponseBytes = 5
+
+	rec := httptest.NewRecorder()
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader("0123456789")),
+	}
+	if err := (openAICompatibleProvider{}).RelayResponse(rec, resp); err != nil {
+		t.Fatalf("RelayResponse: %v", err)
+	}
+	if rec.Body.Len() != 5 {
+		t.Errorf("relayed %d bytes, want the 5-byte cap", rec.Body.Len())
 	}
 }
 

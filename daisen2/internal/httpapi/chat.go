@@ -275,16 +275,29 @@ func proxyForLLMRequest(req *http.Request) (*url.URL, error) {
 	return proxyURL, nil
 }
 
+// Bounds on untrusted, client-selected provider responses (vars so tests can
+// shrink them).
+var (
+	// maxChatResponseBytes caps the relayed chat response so a hostile endpoint
+	// can't exhaust server memory with an unbounded body.
+	maxChatResponseBytes int64 = 32 << 20 // 32 MiB
+	// maxModelsResponseBytes caps the model-list response before unmarshalling.
+	maxModelsResponseBytes int64 = 8 << 20 // 8 MiB
+)
+
 // guardedLLMClient is the single HTTP client used for all outbound LLM calls
 // (chat and model listing). It honors HTTP(S)_PROXY, pins direct connections to
 // vetted public IPs via the dialer, re-validates proxied and redirect targets,
-// and verifies TLS against the request hostname (SNI).
+// verifies TLS against the request hostname (SNI), and bounds how long an
+// untrusted endpoint can stall the request.
 var guardedLLMClient = &http.Client{
+	Timeout: 10 * time.Minute, // overall ceiling for a single provider call
 	Transport: &http.Transport{
-		Proxy:               proxyForLLMRequest,
-		DialContext:         guardedDialContext,
-		TLSHandshakeTimeout: 10 * time.Second,
-		ForceAttemptHTTP2:   true,
+		Proxy:                 proxyForLLMRequest,
+		DialContext:           guardedDialContext,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 2 * time.Minute, // bound "accepts but never replies"
+		ForceAttemptHTTP2:     true,
 	},
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
@@ -393,13 +406,11 @@ func (openAICompatibleProvider) BuildRequest(
 }
 
 func (openAICompatibleProvider) RelayResponse(w http.ResponseWriter, resp *http.Response) error {
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
-	_, err = w.Write(body)
+	// Stream straight through with a ceiling so a hostile endpoint can't make us
+	// buffer (or relay) an unbounded body.
+	_, err := io.Copy(w, io.LimitReader(resp.Body, maxChatResponseBytes))
 	return err
 }
 
@@ -418,7 +429,7 @@ func (openAICompatibleProvider) ListModels(ctx context.Context, cfg ProviderConf
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxModelsResponseBytes))
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("models endpoint returned %d: %s",
 			resp.StatusCode, strings.TrimSpace(string(body)))
