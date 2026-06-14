@@ -154,6 +154,29 @@ func TestGuardedLLMClientHonorsProxyEnv(t *testing.T) {
 	}
 }
 
+func TestGuardedLLMClientValidatesDirectDialWhenProxyNotUsed(t *testing.T) {
+	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "")
+	// A proxy is configured, but it is not this target (and it is for https while
+	// the test server is http), so this request is dialed directly — the dialer
+	// must still reject the internal address rather than skipping the check.
+	t.Setenv("HTTPS_PROXY", "http://proxy.example:3128")
+	for _, k := range []string{"HTTP_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"} {
+		t.Setenv(k, "")
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	req, _ := http.NewRequest("GET", srv.URL, nil)
+	resp, err := guardedLLMClient.Do(req)
+	if err == nil {
+		_ = resp.Body.Close()
+		t.Fatal("a direct dial to 127.0.0.1 must be blocked even when a proxy is configured for other requests")
+	}
+}
+
 func TestNewChatProviderRejectsUnknown(t *testing.T) {
 	if _, err := newChatProvider(ProviderOpenAICompatible); err != nil {
 		t.Fatalf("openai-compatible should be supported: %v", err)

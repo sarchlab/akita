@@ -141,13 +141,31 @@ func allowPrivateLLMHosts() bool {
 	}
 }
 
-// hasProxyEnv reports whether an outbound HTTP proxy is configured. When it is,
-// the dialer connects to the proxy (often on a private network) rather than the
-// LLM endpoint, so the dialer-level address check is skipped — the endpoint
-// itself is still validated up front by guardLLMURL and on each redirect.
-func hasProxyEnv() bool {
+// dialTargetIsProxy reports whether addr (the host:port being dialed) is one of
+// the configured HTTP(S) proxies. When the transport routes a request through a
+// proxy it dials the proxy — which may legitimately be on a private network — so
+// that dial is allowed without the private-IP check; anything else is a direct
+// connection to the LLM endpoint and is still validated. This is decided per
+// dial so that a proxy which applies to some requests but not this one (NO_PROXY
+// match, scheme mismatch) does not disable validation for the direct request.
+func dialTargetIsProxy(addr string) bool {
+	aHost, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		aHost = addr
+	}
 	for _, k := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"} {
-		if os.Getenv(k) != "" {
+		v := strings.TrimSpace(os.Getenv(k))
+		if v == "" {
+			continue
+		}
+		if !strings.Contains(v, "://") {
+			v = "http://" + v
+		}
+		pu, err := url.Parse(v)
+		if err != nil {
+			continue
+		}
+		if pu.Host == addr || (pu.Hostname() != "" && pu.Hostname() == aHost) {
 			return true
 		}
 	}
@@ -196,12 +214,13 @@ func guardLLMURL(rawURL string) error {
 // than only up front) closes two SSRF gaps an up-front URL check misses: HTTP
 // redirects to an internal Location (each redirect dials through here) and DNS
 // rebinding (the kernel never re-resolves the hostname, so it can't be pointed at
-// an internal address between check and connect). Skipped when a proxy is in use
-// (this dials the proxy, not the endpoint) or for local providers via
-// DAISEN_ALLOW_PRIVATE_LLM_URL=1.
+// an internal address between check and connect). The check is skipped only when
+// this dial targets a configured proxy (a direct dial to the endpoint is always
+// validated, even if a proxy is set for other requests) or for local providers
+// via DAISEN_ALLOW_PRIVATE_LLM_URL=1.
 func guardedDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	dialer := &net.Dialer{Timeout: 30 * time.Second}
-	if allowPrivateLLMHosts() || hasProxyEnv() {
+	if allowPrivateLLMHosts() || dialTargetIsProxy(addr) {
 		return dialer.DialContext(ctx, network, addr)
 	}
 
