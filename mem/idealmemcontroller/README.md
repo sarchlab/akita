@@ -35,8 +35,7 @@ Two middlewares run each tick:
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, latency, width, cache-line size,
-  capacity, and the address-conversion fields used for interleaved
-  multi-controller setups.
+  and capacity.
 - `State` — mutable runtime data: the list of inflight transactions and the
   current control state (`"enable"`, `"pause"`, or `"drain"`).
 - `Resources` — shared wiring; holds the backing `*mem.Storage`.
@@ -50,15 +49,14 @@ type Spec struct {
     CacheLineSize int         // Access granularity in bytes
     Capacity      uint64      // Backing-storage size when built internally
     StorageRef    string      // Storage resource name (set by Build)
-
-    // Address conversion for interleaved multi-controller setups.
-    AddrConvKind            string
-    AddrInterleavingSize    uint64
-    AddrTotalNumOfElements  int
-    AddrCurrentElementIndex int
-    AddrOffset              uint64
 }
 ```
+
+The controller uses **global storage**: a request's address indexes the backing
+store directly, with no per-controller address conversion. When several
+controllers are interleaved over one shared `mem.Storage`, the sender's
+destination map selects the controller; each controller simply reads and writes
+the shared store at the request's global address.
 
 ## Builder Pattern
 

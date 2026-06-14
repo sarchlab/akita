@@ -21,11 +21,6 @@ type Spec struct {
 	Capacity                       uint64      `json:"capacity"`
 	BankSelectorKind               string      `json:"bank_selector_kind"`
 	BankSelectorLog2InterleaveSize uint64      `json:"bank_selector_log2_interleave_size"`
-	AddrConvKind                   string      `json:"addr_conv_kind"`
-	AddrInterleavingSize           uint64      `json:"addr_interleaving_size"`
-	AddrTotalNumOfElements         int         `json:"addr_total_num_of_elements"`
-	AddrCurrentElementIndex        int         `json:"addr_current_element_index"`
-	AddrOffset                     uint64      `json:"addr_offset"`
 	StorageRef                     string      `json:"storage_ref"`
 }
 
@@ -105,6 +100,13 @@ func bufferPop(bank *bankState) {
 	bank.PostPipelineBuf.Pop()
 }
 
+// selectBank chooses the bank for an address. The address is the request's
+// address as received; bank selection deliberately operates on the global
+// address (there is no per-controller address conversion). When this memory is
+// one of several interleaved controllers, choose BankSelectorLog2InterleaveSize
+// so the bank-select bits sit above the upstream controller-select bits (i.e.
+// at least log2(upstream_stride x num_controllers)); otherwise the two
+// interleavings overlap and accesses collapse onto a fraction of the banks.
 func selectBank(spec Spec, addr uint64) int {
 	interleaveSize := uint64(1) << spec.BankSelectorLog2InterleaveSize
 	if interleaveSize == 0 {
