@@ -156,6 +156,13 @@ func TestGuardedLLMClientHonorsProxyEnv(t *testing.T) {
 	}
 }
 
+func TestGuardedLLMClientBoundsIdleConns(t *testing.T) {
+	tr := guardedLLMClient.Transport.(*http.Transport)
+	if tr.IdleConnTimeout == 0 || tr.MaxIdleConns == 0 {
+		t.Fatal("guarded transport must bound idle connections (IdleConnTimeout/MaxIdleConns)")
+	}
+}
+
 func TestGuardedLLMClientValidatesDirectDialWhenProxyNotUsed(t *testing.T) {
 	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "")
 	// A proxy is configured, but it is not this target (and it is for https while

@@ -293,10 +293,17 @@ var (
 var guardedLLMClient = &http.Client{
 	Timeout: 10 * time.Minute, // overall ceiling for a single provider call
 	Transport: &http.Transport{
-		Proxy:                 proxyForLLMRequest,
-		DialContext:           guardedDialContext,
+		Proxy:       proxyForLLMRequest,
+		DialContext: guardedDialContext,
+		// Bound idle keep-alive sockets the way http.DefaultTransport does, so
+		// cycling through many client-selected hosts can't accumulate idle
+		// connections without limit.
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   2,
+		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 2 * time.Minute, // bound "accepts but never replies"
+		ExpectContinueTimeout: 1 * time.Second,
 		ForceAttemptHTTP2:     true,
 	},
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
