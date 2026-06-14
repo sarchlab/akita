@@ -371,51 +371,45 @@ var _ = Describe("SimpleBankedMemory", func() {
 		Expect(committed).To(Equal(newData))
 	})
 
-	It("should use converted address for storage access", func() {
-		// Use the interleaving converter: InterleavingSize=256, 2 elements,
-		// index 0. External address 0x0 maps to internal address 0x0. External
-		// address 0x200 maps to internal address 0x100.
+	It("accesses storage at the global request address (identity)", func() {
+		// Storage is global: a request's address indexes the backing store
+		// directly, with no per-controller conversion.
 		spec := DefaultSpec()
 		spec.NumBanks = 2
 		spec.StageLatency = 2
-		spec.AddrConvKind = "interleaving"
-		spec.AddrInterleavingSize = 256
-		spec.AddrTotalNumOfElements = 2
-		spec.AddrCurrentElementIndex = 0
-		spec.AddrOffset = 0
 
 		reg := modeling.NewStandaloneRegistrar(engine)
 		memComp = MakeBuilder().
 			WithRegistrar(reg).
 			WithSpec(spec).
-			Build("MemConv")
+			Build("MemGlobal")
 
 		assignPort(reg, memComp, "Top", 4)
 		assignPort(reg, memComp, "Control", 16)
 
 		topPort := memComp.GetPortByName("Top")
-		agent = newTestAgent("AgentConv")
-		conn = newLoopbackConnection("ConnConv")
+		agent = newTestAgent("AgentGlobal")
+		conn = newLoopbackConnection("ConnGlobal")
 		conn.PlugIn(topPort)
 		conn.PlugIn(agent.port)
 
-		// Write 4 bytes at external address 0x0 → internal 0x0.
-		convWriteData := []byte{1, 2, 3, 4}
+		// Write 4 bytes at a non-zero global address.
+		writeData := []byte{1, 2, 3, 4}
 		write := memprotocol.WriteReq{}
 		write.ID = timing.GetIDGenerator().Generate()
 		write.Src = agent.port.AsRemote()
 		write.Dst = topPort.AsRemote()
-		write.Address = 0x0
-		write.Data = convWriteData
-		write.TrafficBytes = len(convWriteData) + 12
+		write.Address = 0x200
+		write.Data = writeData
+		write.TrafficBytes = len(writeData) + 12
 		write.TrafficClass = "memprotocol.WriteReq"
 
-		// Read 4 bytes at external address 0x0 → internal 0x0.
+		// Read the same global address back.
 		read := memprotocol.ReadReq{}
 		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = agent.port.AsRemote()
 		read.Dst = topPort.AsRemote()
-		read.Address = 0x0
+		read.Address = 0x200
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
 		read.TrafficClass = "memprotocol.ReadReq"
