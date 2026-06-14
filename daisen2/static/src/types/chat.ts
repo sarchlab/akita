@@ -25,10 +25,29 @@ export interface TraceInformation {
 export interface GPTRequest {
   messages: ChatMessage[];
   traceInfo: TraceInformation;
-  selectedGitHubRoutineKeys: string[];
+  provider?: string;
+  baseURL?: string;
+  model?: string;
+  temperature?: number;
 }
 
 export interface GPTResponse {
   content: string;
   totalTokens: number;
+}
+
+// LLMSettings is the user-configured provider connection. The LLM config lives
+// entirely in the browser — the server holds no credentials. The API key is
+// persisted separately from the non-secret fields (see useLLMSettings) so it can
+// follow a more conservative storage policy.
+export interface LLMSettings {
+  // provider is the wire protocol. Only "openai-compatible" is supported today.
+  provider: string;
+  // presetId tracks which UI preset is selected (or "custom").
+  presetId: string;
+  baseURL: string;
+  model: string;
+  apiKey: string;
+  // remember persists the API key to localStorage instead of sessionStorage.
+  remember: boolean;
 }
