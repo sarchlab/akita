@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, ImagePlus, Paperclip, Plus, Send, X } from "lucide-react";
+import { Bot, ImagePlus, Paperclip, Plus, Send, Settings, X } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
@@ -7,6 +7,8 @@ import { Alert, AlertDescription } from "../ui/alert";
 import { useChat } from "../../hooks/useChat";
 import { useComponentNames } from "../../hooks/useComponentNames";
 import { useSimulationRange } from "../../hooks/useSimulationRange";
+import { useLLMSettings } from "../../hooks/useLLMSettings";
+import { useLLMCapabilities } from "../../hooks/useLLMCapabilities";
 import type { TraceInformation, UploadedFile, UnitContent } from "../../types/chat";
 import {
   FILE_UPLOAD_ACCEPT,
@@ -15,6 +17,7 @@ import {
   validateUploadedFile,
 } from "../../utils/uploadValidation";
 import MessageBubble from "./MessageBubble";
+import ChatSettings from "./ChatSettings";
 
 function humanSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -42,12 +45,15 @@ function readFileAsText(file: File) {
 
 export default function ChatPanel() {
   const [open, setOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [input, setInput] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const { names } = useComponentNames();
   const { startTime, endTime } = useSimulationRange();
+  const { settings, update, applyPreset, clearKey } = useLLMSettings();
+  const { capabilities } = useLLMCapabilities();
   const {
     messages,
     loading,
@@ -112,7 +118,7 @@ export default function ChatPanel() {
       .forEach((file) => content.push({ type: "image_url", image_url: { url: file.content } }));
 
     setInput("");
-    await sendMessage(content, traceInfo, []);
+    await sendMessage(content, traceInfo, [], settings);
     clearUploadedFiles();
   }
 
@@ -130,6 +136,15 @@ export default function ChatPanel() {
             Daisen Bot
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="icon"
+              variant={showSettings ? "secondary" : "ghost"}
+              onClick={() => setShowSettings((value) => !value)}
+              aria-label="Model and provider settings"
+            >
+              <Settings />
+            </Button>
             <Button type="button" size="sm" variant="outline" onClick={newChat}>
               <Plus />
               New
@@ -140,75 +155,88 @@ export default function ChatPanel() {
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
-          {messages.map((message, index) => (
-            <MessageBubble key={index} message={message} />
-          ))}
-          {loading ? <div className="text-sm text-muted-foreground">Daisen Bot is thinking...</div> : null}
-        </div>
-
-        {error ? <div className="border-t bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div> : null}
-
-        {uploadError ? (
-          <div className="border-t px-3 py-2">
-            <Alert variant="destructive" className="pr-9">
-              <AlertDescription>{uploadError}</AlertDescription>
-              <button
-                type="button"
-                className="absolute right-3 top-3 text-destructive/70 hover:text-destructive"
-                onClick={() => setUploadError(null)}
-                aria-label="Dismiss upload error"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </Alert>
-          </div>
-        ) : null}
-
-        {uploadedFiles.length ? (
-          <div className="flex flex-wrap gap-2 border-t px-3 py-2">
-            {uploadedFiles.map((file) => (
-              <span key={file.id} className="inline-flex items-center gap-2 rounded-md border bg-muted px-2 py-1 text-xs">
-                {file.name} ({file.size})
-                <button type="button" onClick={() => removeUploadedFile(file.id)} className="text-muted-foreground hover:text-foreground">
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        ) : null}
-
-        <footer className="space-y-2 border-t p-3">
-          <Textarea
-            value={input}
-            disabled={loading}
-            placeholder="Ask about this trace..."
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                void submit();
-              }
-            }}
+        {showSettings ? (
+          <ChatSettings
+            settings={settings}
+            update={update}
+            applyPreset={applyPreset}
+            clearKey={clearKey}
+            capabilities={capabilities}
+            onClose={() => setShowSettings(false)}
           />
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Input ref={fileInputRef} className="hidden" type="file" multiple accept={FILE_UPLOAD_ACCEPT} onChange={(event) => void handleFiles(event.target.files, "file")} />
-              <Input ref={imageInputRef} className="hidden" type="file" multiple accept={IMAGE_UPLOAD_ACCEPT} onChange={(event) => void handleFiles(event.target.files, "image")} />
-              <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-                <Paperclip />
-                File
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => imageInputRef.current?.click()}>
-                <ImagePlus />
-                Image
-              </Button>
+        ) : (
+          <>
+            <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
+              {messages.map((message, index) => (
+                <MessageBubble key={index} message={message} />
+              ))}
+              {loading ? <div className="text-sm text-muted-foreground">Daisen Bot is thinking...</div> : null}
             </div>
-            <Button type="button" disabled={loading || (!input.trim() && !uploadedFiles.length)} onClick={() => void submit()}>
-              <Send />
-              Send
-            </Button>
-          </div>
-        </footer>
+
+            {error ? <div className="border-t bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div> : null}
+
+            {uploadError ? (
+              <div className="border-t px-3 py-2">
+                <Alert variant="destructive" className="pr-9">
+                  <AlertDescription>{uploadError}</AlertDescription>
+                  <button
+                    type="button"
+                    className="absolute right-3 top-3 text-destructive/70 hover:text-destructive"
+                    onClick={() => setUploadError(null)}
+                    aria-label="Dismiss upload error"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </Alert>
+              </div>
+            ) : null}
+
+            {uploadedFiles.length ? (
+              <div className="flex flex-wrap gap-2 border-t px-3 py-2">
+                {uploadedFiles.map((file) => (
+                  <span key={file.id} className="inline-flex items-center gap-2 rounded-md border bg-muted px-2 py-1 text-xs">
+                    {file.name} ({file.size})
+                    <button type="button" onClick={() => removeUploadedFile(file.id)} className="text-muted-foreground hover:text-foreground">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            <footer className="space-y-2 border-t p-3">
+              <Textarea
+                value={input}
+                disabled={loading}
+                placeholder="Ask about this trace..."
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                    void submit();
+                  }
+                }}
+              />
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Input ref={fileInputRef} className="hidden" type="file" multiple accept={FILE_UPLOAD_ACCEPT} onChange={(event) => void handleFiles(event.target.files, "file")} />
+                  <Input ref={imageInputRef} className="hidden" type="file" multiple accept={IMAGE_UPLOAD_ACCEPT} onChange={(event) => void handleFiles(event.target.files, "image")} />
+                  <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                    <Paperclip />
+                    File
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => imageInputRef.current?.click()}>
+                    <ImagePlus />
+                    Image
+                  </Button>
+                </div>
+                <Button type="button" disabled={loading || (!input.trim() && !uploadedFiles.length)} onClick={() => void submit()}>
+                  <Send />
+                  Send
+                </Button>
+              </div>
+            </footer>
+          </>
+        )}
       </aside>
     </>
   );

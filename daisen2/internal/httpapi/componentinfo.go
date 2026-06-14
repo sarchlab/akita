@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -534,6 +533,12 @@ func extractLocations(selectedComponentNameList []interface{}) []string {
 	return locations
 }
 
+// maxTraceContextRows caps how many trace events get embedded in the chat
+// context. The full trace can be hundreds of thousands of rows, which both pegs
+// the server (building the string) and overruns the model's context window, so
+// we send only a bounded sample.
+const maxTraceContextRows = 500
+
 func buildTraceSQL(locations []string, startTime, endTime float64) string {
 	quoted := make([]string, 0, len(locations))
 	for _, loc := range locations {
@@ -557,7 +562,8 @@ SELECT
 FROM trace t
 JOIN location loc ON t.Location = loc.ID
 WHERE ` + whereClause + `
-AND ` + timeClause
+AND ` + timeClause + fmt.Sprintf(`
+LIMIT %d`, maxTraceContextRows)
 }
 
 func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
@@ -574,7 +580,12 @@ func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
 		return ""
 	}
 
-	header := "[Reference Akita Trace File]\n" + strings.Join(columns, ",") + "\n"
+	var b strings.Builder
+	b.WriteString("[Reference Akita Trace File]\n")
+	b.WriteString(strings.Join(columns, ","))
+	b.WriteByte('\n')
+
+	rowCount := 0
 	for rows.Next() {
 		values := make([]interface{}, len(columns))
 		valuePtrs := make([]interface{}, len(columns))
@@ -598,10 +609,17 @@ func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
 				rowStrs = append(rowStrs, fmt.Sprintf("%v", v))
 			}
 		}
-		header += strings.Join(rowStrs, ",") + "\n"
+		b.WriteString(strings.Join(rowStrs, ","))
+		b.WriteByte('\n')
+		rowCount++
 	}
-	header += "[End Akita Trace File]\n"
-	return header
+
+	if rowCount >= maxTraceContextRows {
+		b.WriteString(fmt.Sprintf(
+			"[Note: trace truncated to the first %d events]\n", maxTraceContextRows))
+	}
+	b.WriteString("[End Akita Trace File]\n")
+	return b.String()
 }
 
 func buildCombinedRepoHeader(ctx context.Context, urlList []string) string {
@@ -647,69 +665,6 @@ func getRoutineURLList(routineFile string, selectedKeys []string) ([]string, err
 	return urlList, nil
 }
 
-func buildOpenAIPayload(
-	ctx context.Context,
-	model string,
-	messages []map[string]interface{},
-	traceInfo map[string]interface{},
-	selectedGitHubRoutineKeys []string,
-	traceReader *SQLiteTraceReader,
-) ([]byte, error) {
-	combinedTraceHeader := buildAkitaTraceHeader(traceReader, traceInfo)
-	routineFile := "componentgithubroutine.json"
-	urlList, err := getRoutineURLList(routineFile, selectedGitHubRoutineKeys)
-	if err != nil {
-		log.Println("Failed to get routine URL list:", err)
-		return nil, err
-	}
-	combinedRepoHeader := buildCombinedRepoHeader(ctx, urlList)
-
-	if len(messages) > 0 {
-		if contentArr, ok := messages[len(messages)-1]["content"].([]interface{}); ok && len(contentArr) > 0 {
-			if firstContent, ok := contentArr[0].(map[string]interface{}); ok {
-				firstText, _ := firstContent["text"].(string)
-				firstContent["text"] = combinedTraceHeader + combinedRepoHeader + firstText
-			}
-		}
-	}
-
-	if len(messages) == 0 || messages[0]["role"] != "system" {
-		loadedTextBytes, err := os.ReadFile("beforehandprompt.txt")
-		if err != nil {
-			log.Println("Failed to read beforehandprompt.txt:", err)
-			return nil, err
-		}
-		loadedText := string(loadedTextBytes)
-		systemMsg := map[string]interface{}{
-			"role": "system",
-			"content": []interface{}{
-				map[string]interface{}{
-					"type": "text",
-					"text": loadedText,
-				},
-			},
-		}
-		messages = append([]map[string]interface{}{systemMsg}, messages...)
-	}
-
-	payload := map[string]interface{}{
-		"model":       model,
-		"messages":    messages,
-		"temperature": 0.7,
-	}
-	return json.Marshal(payload)
-}
-
-func sendOpenAIRequest(ctx context.Context, apiKey, url string, payloadBytes []byte) (*http.Response, error) {
-	openaiReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payloadBytes))
-	if err != nil {
-		return nil, err
-	}
-	openaiReq.Header.Set("Content-Type", "application/json")
-	openaiReq.Header.Set("Authorization", apiKey)
-	return http.DefaultClient.Do(openaiReq)
-}
-
 func httpGithubRaw(ctx context.Context, url string) string {
 	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
 	client := &http.Client{}
@@ -733,60 +688,6 @@ func httpGithubRaw(ctx context.Context, url string) string {
 		return ""
 	}
 	return string(body)
-}
-
-func (s *Server) httpGPTProxy(w http.ResponseWriter, r *http.Request) {
-	_ = godotenv.Load(".env")
-	openaiApiKey := os.Getenv("OPENAI_API_KEY")
-	openaiURL := os.Getenv("OPENAI_URL")
-	openaiModel := os.Getenv("OPENAI_MODEL")
-	if openaiApiKey == "" || openaiURL == "" || openaiModel == "" {
-		http.Error(
-			w,
-			"[Error: \".env\" not found or OpenAI-related variable missing] "+
-				"Please create or update file "+
-				"\"akita/daisen/.env\" and write these contents (example):\n"+
-				"```\n"+
-				"OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
-				"OPENAI_MODEL=\"gpt-4o\"\n"+
-				"OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
-				"GITHUB_PERSONAL_ACCESS_TOKEN=\"Bearer ghp_XXXXXXXXXXXX\"\n"+
-				"```\n",
-			http.StatusInternalServerError,
-		)
-		return
-	}
-	var req struct {
-		Messages                  []map[string]interface{} `json:"messages"`
-		TraceInfo                 map[string]interface{}   `json:"traceInfo"`
-		SelectedGitHubRoutineKeys []string                 `json:"selectedGitHubRoutineKeys"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	payloadBytes, err := buildOpenAIPayload(
-		r.Context(), openaiModel, req.Messages, req.TraceInfo,
-		req.SelectedGitHubRoutineKeys, s.traceReader)
-	if err != nil {
-		http.Error(w, "Failed to marshal payload: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	resp, err := sendOpenAIRequest(r.Context(), openaiApiKey, openaiURL, payloadBytes)
-	if err != nil {
-		http.Error(
-			w,
-			"Failed to contact OpenAI: "+err.Error(),
-			http.StatusBadGateway,
-		)
-		return
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	w.Write(body)
 }
 
 func (s *Server) httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {

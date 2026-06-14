@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import type { ChatMessage, TraceInformation, UnitContent, UploadedFile } from "../types/chat";
+import type { ChatMessage, LLMSettings, TraceInformation, UnitContent, UploadedFile } from "../types/chat";
 
 const INITIAL_MESSAGE: ChatMessage = {
   role: "assistant",
@@ -84,6 +84,7 @@ export function useChat() {
       content: UnitContent[],
       traceInfo: TraceInformation,
       selectedGitHubRoutineKeys: string[],
+      llm: LLMSettings,
     ) => {
       const userMessage: ChatMessage = { role: "user", content };
       const nextMessages = [...messages, userMessage];
@@ -92,13 +93,21 @@ export function useChat() {
       setError(null);
 
       try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        // The key travels in a header (not the body) so it stays out of request
+        // logs; the server falls back to its .env when the header is absent.
+        if (llm.apiKey.trim()) headers["X-LLM-Api-Key"] = llm.apiKey.trim();
+
         const response = await fetch("/api/gpt", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({
             messages: nextMessages,
             traceInfo,
             selectedGitHubRoutineKeys,
+            provider: llm.provider,
+            baseURL: llm.baseURL,
+            model: llm.model,
           }),
         });
         const data = response.ok ? await response.json() : { choices: [{ message: { content: await response.text() } }] };

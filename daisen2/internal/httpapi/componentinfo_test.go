@@ -2,8 +2,10 @@ package httpapi
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -152,5 +154,35 @@ func TestListTasksLoadsMilestonesOnlyWhenRequested(t *testing.T) {
 	tasks = reader.ListTasks(context.Background(), TaskQuery{Where: "A", EnableMilestones: true})
 	if len(tasks[0].Steps) != 1 {
 		t.Fatalf("expected one milestone, got %+v", tasks[0].Steps)
+	}
+}
+
+func TestFormatTraceRowsCapsAtMaxRows(t *testing.T) {
+	reader := newTestTraceReader(t)
+
+	if _, err := reader.Exec(`INSERT INTO location (ID, Locale) VALUES (1, 'A')`); err != nil {
+		t.Fatalf("insert location: %v", err)
+	}
+	// Insert more than the cap so the query's LIMIT is what bounds the output.
+	insert := fmt.Sprintf(`INSERT INTO trace
+		(ID, ParentID, Kind, What, Location, StartTime, EndTime)
+		WITH RECURSIVE seq(n) AS (
+			SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n < %d
+		)
+		SELECT n, 0, 'k', 'w', 1, 0, 1 FROM seq`, maxTraceContextRows+100)
+	if _, err := reader.Exec(insert); err != nil {
+		t.Fatalf("insert trace rows: %v", err)
+	}
+
+	out := formatTraceRows(reader, buildTraceSQL([]string{"A"}, -1, 2))
+
+	// Lines = header marker + column header + N data rows + truncation note +
+	// end marker, so data rows = total newline count - 4.
+	dataRows := strings.Count(out, "\n") - 4
+	if dataRows != maxTraceContextRows {
+		t.Errorf("data rows = %d, want %d (cap)", dataRows, maxTraceContextRows)
+	}
+	if !strings.Contains(out, "truncated to the first") {
+		t.Error("expected a truncation note when the cap is hit")
 	}
 }
