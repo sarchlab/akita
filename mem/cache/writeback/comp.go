@@ -108,12 +108,54 @@ func (s *State) allocTransaction(t transactionState) int {
 			continue
 		}
 
+		// Do not reuse a slot still referenced by an in-flight bottom-port
+		// transaction. Eviction write-backs and line fetches are matched to
+		// their lower-memory responses by the request ID stored in the
+		// transaction slot; overwriting the slot before the response returns
+		// makes that response an unrecognized "orphan" (silently dropped) and
+		// leaves the eviction/fetch permanently in the in-flight list, so a
+		// later Flush/Drain never reaches quiescence and the simulation
+		// deadlocks. A slot can be both Removed and in-flight: e.g.
+		// writeBufferEvictAndWrite reuses one transaction for a bank write-hit
+		// (which marks it Removed) and the victim write-back (which stays in
+		// InflightEvictionIndices until its WriteDoneRsp lands).
+		if s.indexHasInflightBottomTransaction(i) {
+			continue
+		}
+
 		s.Transactions[i] = t
 		return i
 	}
 
 	s.Transactions = append(s.Transactions, t)
 	return len(s.Transactions) - 1
+}
+
+// indexHasInflightBottomTransaction reports whether transaction slot i is still
+// referenced by a pending or in-flight bottom-port transaction (an eviction
+// write-back or a line fetch). Such slots must not be reused, because the
+// matching bottom-port response is correlated by the request ID held in the
+// slot.
+func (s *State) indexHasInflightBottomTransaction(i int) bool {
+	for _, idx := range s.InflightEvictionIndices {
+		if idx == i {
+			return true
+		}
+	}
+
+	for _, idx := range s.PendingEvictionIndices {
+		if idx == i {
+			return true
+		}
+	}
+
+	for _, idx := range s.InflightFetchIndices {
+		if idx == i {
+			return true
+		}
+	}
+
+	return false
 }
 
 // flushReqState is a serializable representation of a flush control request.
