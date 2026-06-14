@@ -38,7 +38,7 @@ func TestResolveProviderConfigPrefersRequestOverEnv(t *testing.T) {
 		Temperature: &temp,
 	}
 	r := httptest.NewRequest("POST", "/api/gpt", nil)
-	r.Header.Set("X-LLM-Api-Key", "req-key")
+	r.Header.Set("X-Llm-Api-Key", "req-key")
 
 	cfg, ok := resolveProviderConfig(r, body)
 	if !ok {
@@ -92,6 +92,44 @@ func TestResolveProviderConfigMissingIsNotOK(t *testing.T) {
 	r := httptest.NewRequest("POST", "/api/gpt", nil)
 	if _, ok := resolveProviderConfig(r, chatRequest{}); ok {
 		t.Fatal("expected ok=false when no config is available")
+	}
+}
+
+func TestResolveProviderConfigNeverPairsServerKeyWithClientURL(t *testing.T) {
+	t.Setenv("OPENAI_URL", "https://api.openai.com/v1/chat/completions")
+	t.Setenv("OPENAI_MODEL", "gpt-4o")
+	t.Setenv("OPENAI_API_KEY", "server-secret")
+
+	// A client points baseURL at its own server but provides no key.
+	body := chatRequest{BaseURL: "https://attacker.example/v1/chat/completions", Model: "x"}
+	r := httptest.NewRequest("POST", "/api/gpt", nil) // no X-Llm-Api-Key header
+
+	cfg, ok := resolveProviderConfig(r, body)
+	if ok && cfg.APIKey == "server-secret" {
+		t.Fatalf("server key leaked to client URL %q", cfg.BaseURL)
+	}
+	if cfg.APIKey == "server-secret" {
+		t.Error("the server key must never be attached to a client-supplied URL")
+	}
+}
+
+func TestResolveProviderConfigAllowsKeylessClientEndpoint(t *testing.T) {
+	t.Setenv("OPENAI_URL", "")
+	t.Setenv("OPENAI_MODEL", "")
+	t.Setenv("OPENAI_API_KEY", "")
+
+	body := chatRequest{BaseURL: "http://localhost:11434/v1/chat/completions", Model: "llama3"}
+	r := httptest.NewRequest("POST", "/api/gpt", nil)
+
+	cfg, ok := resolveProviderConfig(r, body)
+	if !ok {
+		t.Fatal("expected ok=true for a keyless local endpoint")
+	}
+	if cfg.APIKey != "" {
+		t.Errorf("APIKey = %q, want empty (keyless)", cfg.APIKey)
+	}
+	if cfg.BaseURL != "http://localhost:11434/v1/chat/completions" {
+		t.Errorf("BaseURL = %q, want the client endpoint", cfg.BaseURL)
 	}
 }
 
@@ -170,6 +208,22 @@ func TestOpenAICompatibleBuildRequestOmitsTemperatureWhenUnset(t *testing.T) {
 	}
 	if _, ok := payload["temperature"]; ok {
 		t.Error("temperature must be omitted from the payload when unset")
+	}
+}
+
+func TestOpenAICompatibleBuildRequestOmitsAuthWhenNoKey(t *testing.T) {
+	cfg := ProviderConfig{
+		Provider: ProviderOpenAICompatible,
+		BaseURL:  "https://api.example/v1/chat/completions",
+		Model:    "llama3",
+	}
+
+	req, err := openAICompatibleProvider{}.BuildRequest(context.Background(), cfg, nil)
+	if err != nil {
+		t.Fatalf("BuildRequest: %v", err)
+	}
+	if got := req.Header.Get("Authorization"); got != "" {
+		t.Errorf("Authorization = %q, want empty when no key is set", got)
 	}
 }
 

@@ -96,19 +96,26 @@ export function useChat() {
         const headers: Record<string, string> = { "Content-Type": "application/json" };
         // The key travels in a header (not the body) so it stays out of request
         // logs; the server falls back to its .env when the header is absent.
-        if (llm.apiKey.trim()) headers["X-LLM-Api-Key"] = llm.apiKey.trim();
+        if (llm.apiKey.trim()) headers["X-Llm-Api-Key"] = llm.apiKey.trim();
+
+        const body: Record<string, unknown> = {
+          messages: nextMessages,
+          traceInfo,
+          selectedGitHubRoutineKeys,
+        };
+        // Only override the server's .env defaults once the user has actually
+        // configured a provider (or supplied a key); otherwise let the server
+        // decide the endpoint so an .env-only deployment keeps its own defaults.
+        if (llm.configured || llm.apiKey.trim()) {
+          body.provider = llm.provider;
+          body.baseURL = llm.baseURL;
+          body.model = llm.model;
+        }
 
         const response = await fetch("/api/gpt", {
           method: "POST",
           headers,
-          body: JSON.stringify({
-            messages: nextMessages,
-            traceInfo,
-            selectedGitHubRoutineKeys,
-            provider: llm.provider,
-            baseURL: llm.baseURL,
-            model: llm.model,
-          }),
+          body: JSON.stringify(body),
         });
         const data = response.ok ? await response.json() : { choices: [{ message: { content: await response.text() } }] };
         const assistantText = data?.choices?.[0]?.message?.content ?? "No response from Daisen Bot.";

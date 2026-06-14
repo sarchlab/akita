@@ -36,5 +36,8 @@ precedence over the server defaults.
 
    The key may be given with or without a leading `Bearer `.
 
-The API key sent from the app travels in the `X-LLM-Api-Key` request header
-(not the request body) and is never persisted on the server.
+The API key sent from the app travels in the `X-Llm-Api-Key` request header
+(not the request body) and is never persisted on the server. On a shared
+deployment, the server-side `.env` key is only ever sent to the server's own
+endpoint — a request that points `baseURL` at a different endpoint must carry
+its own key, so the server's key can't be redirected to another host.

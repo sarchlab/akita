@@ -41,6 +41,7 @@ const DEFAULT_SETTINGS: LLMSettings = {
   model: "gpt-4o",
   apiKey: "",
   remember: false,
+  configured: false,
 };
 
 function safeGet(storage: Storage, key: string): string | null {
@@ -80,6 +81,7 @@ function loadInitialSettings(): LLMSettings {
         baseURL: parsed.baseURL ?? settings.baseURL,
         model: parsed.model ?? settings.model,
         remember: parsed.remember ?? settings.remember,
+        configured: parsed.configured ?? settings.configured,
       });
     } catch {
       /* corrupt config; fall back to defaults */
@@ -117,8 +119,10 @@ export function useLLMSettings() {
     }
   }, [settings]);
 
+  // Any explicit change marks the settings as configured, which tells the chat
+  // request it may override the server's .env defaults.
   const update = useCallback((partial: Partial<LLMSettings>) => {
-    setSettings((current) => ({ ...current, ...partial }));
+    setSettings((current) => ({ ...current, ...partial, configured: true }));
   }, []);
 
   const applyPreset = useCallback((presetId: string) => {
@@ -126,8 +130,8 @@ export function useLLMSettings() {
     if (!preset) return;
     setSettings((current) =>
       preset.id === "custom"
-        ? { ...current, presetId }
-        : { ...current, presetId, baseURL: preset.baseURL, model: preset.model },
+        ? { ...current, presetId, configured: true }
+        : { ...current, presetId, baseURL: preset.baseURL, model: preset.model, configured: true },
     );
   }, []);
 

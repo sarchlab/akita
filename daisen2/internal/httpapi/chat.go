@@ -44,7 +44,7 @@ type ProviderConfig struct {
 }
 
 // chatRequest is the JSON body of POST /api/gpt. The provider override fields
-// are optional; the API key is read from the X-LLM-Api-Key header (not the
+// are optional; the API key is read from the X-Llm-Api-Key header (not the
 // body) so it stays out of request logs.
 type chatRequest struct {
 	Messages                  []map[string]interface{} `json:"messages"`
@@ -112,22 +112,58 @@ func (s *Server) httpChatProxy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// resolveEndpointKey decides the base URL and API key for an outbound request
+// and enforces one invariant for shared deployments: the server's default key
+// (from .env) is only ever sent to the server's own endpoint, never to a
+// client-supplied URL — otherwise a user could point baseURL at a server they
+// control and capture the server's secret. A client endpoint with no client key
+// is sent keyless (works for local no-auth servers; an endpoint that needs a key
+// answers 401).
+func resolveEndpointKey(headerKey, reqBaseURL string) (baseURL, apiKey string, ok bool) {
+	serverURL := os.Getenv("OPENAI_URL")
+	serverKey := os.Getenv("OPENAI_API_KEY")
+
+	switch {
+	case headerKey != "":
+		// A client key pairs with the client endpoint (or the server's if unset).
+		baseURL, apiKey = firstNonEmpty(reqBaseURL, serverURL), headerKey
+	case reqBaseURL == "" || reqBaseURL == serverURL:
+		// The server's own endpoint: the server key may be used here.
+		baseURL, apiKey = serverURL, serverKey
+	default:
+		// A different, client-supplied endpoint with no key: never attach the
+		// server key to it.
+		baseURL, apiKey = reqBaseURL, ""
+	}
+
+	if baseURL == "" {
+		return "", "", false
+	}
+	return baseURL, apiKey, true
+}
+
 // resolveProviderConfig builds a ProviderConfig from the request, falling back
-// to the server-side .env for any field the request omits. It returns ok=false
-// when the resulting config is missing an endpoint, model, or key.
+// to the server-side .env. The API key arrives in the X-Llm-Api-Key header; the
+// endpoint/key pairing rules live in resolveEndpointKey. It returns ok=false
+// when no usable endpoint or model can be determined.
 func resolveProviderConfig(r *http.Request, body chatRequest) (ProviderConfig, bool) {
 	_ = godotenv.Load(".env")
+
+	baseURL, apiKey, ok := resolveEndpointKey(r.Header.Get("X-Llm-Api-Key"), body.BaseURL)
+	if !ok {
+		return ProviderConfig{}, false
+	}
 
 	cfg := ProviderConfig{
 		Provider: ProviderKind(firstNonEmpty(
 			body.Provider, os.Getenv("LLM_PROVIDER"), string(ProviderOpenAICompatible))),
-		BaseURL:     firstNonEmpty(body.BaseURL, os.Getenv("OPENAI_URL")),
+		BaseURL:     baseURL,
 		Model:       firstNonEmpty(body.Model, os.Getenv("OPENAI_MODEL")),
-		APIKey:      firstNonEmpty(r.Header.Get("X-LLM-Api-Key"), os.Getenv("OPENAI_API_KEY")),
+		APIKey:      apiKey,
 		Temperature: body.Temperature,
 	}
 
-	if cfg.BaseURL == "" || cfg.Model == "" || cfg.APIKey == "" {
+	if cfg.Model == "" {
 		return cfg, false
 	}
 	return cfg, true
@@ -239,7 +275,9 @@ func (openAICompatibleProvider) BuildRequest(
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", bearerToken(cfg.APIKey))
+	if cfg.APIKey != "" {
+		req.Header.Set("Authorization", bearerToken(cfg.APIKey))
+	}
 	return req, nil
 }
 
@@ -333,7 +371,7 @@ func deriveModelsURL(chatURL string) string {
 // httpListModels proxies the provider's model-discovery endpoint so the frontend
 // can populate a model picker without cross-origin issues. The base URL and
 // provider come from the request (falling back to .env), the key from the
-// X-LLM-Api-Key header.
+// X-Llm-Api-Key header, with the same key/endpoint safety rules as chat.
 func (s *Server) httpListModels(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Provider string `json:"provider"`
@@ -342,15 +380,16 @@ func (s *Server) httpListModels(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
 	_ = godotenv.Load(".env")
+	baseURL, apiKey, ok := resolveEndpointKey(r.Header.Get("X-Llm-Api-Key"), body.BaseURL)
+	if !ok {
+		http.Error(w, "No base URL configured", http.StatusBadRequest)
+		return
+	}
 	cfg := ProviderConfig{
 		Provider: ProviderKind(firstNonEmpty(
 			body.Provider, os.Getenv("LLM_PROVIDER"), string(ProviderOpenAICompatible))),
-		BaseURL: firstNonEmpty(body.BaseURL, os.Getenv("OPENAI_URL")),
-		APIKey:  firstNonEmpty(r.Header.Get("X-LLM-Api-Key"), os.Getenv("OPENAI_API_KEY")),
-	}
-	if cfg.BaseURL == "" {
-		http.Error(w, "No base URL configured", http.StatusBadRequest)
-		return
+		BaseURL: baseURL,
+		APIKey:  apiKey,
 	}
 
 	provider, err := newChatProvider(cfg.Provider)

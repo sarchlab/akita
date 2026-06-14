@@ -47,7 +47,7 @@ export default function ChatSettings({
     setModelsError(null);
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (settings.apiKey.trim()) headers["X-LLM-Api-Key"] = settings.apiKey.trim();
+      if (settings.apiKey.trim()) headers["X-Llm-Api-Key"] = settings.apiKey.trim();
 
       const response = await fetch("/api/models", {
         method: "POST",
@@ -82,7 +82,7 @@ export default function ChatSettings({
     setTestResult(null);
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (settings.apiKey.trim()) headers["X-LLM-Api-Key"] = settings.apiKey.trim();
+      if (settings.apiKey.trim()) headers["X-Llm-Api-Key"] = settings.apiKey.trim();
 
       const response = await fetch("/api/gpt", {
         method: "POST",
