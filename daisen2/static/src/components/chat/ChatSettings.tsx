@@ -10,14 +10,13 @@ import {
   SelectValue,
 } from "../ui/select";
 import { PROVIDER_PRESETS } from "../../hooks/useLLMSettings";
-import type { LLMCapabilities, LLMSettings } from "../../types/chat";
+import type { LLMSettings } from "../../types/chat";
 
 interface ChatSettingsProps {
   settings: LLMSettings;
   update: (partial: Partial<LLMSettings>) => void;
   applyPreset: (presetId: string) => void;
   clearKey: () => void;
-  capabilities: LLMCapabilities;
   onClose: () => void;
 }
 
@@ -28,7 +27,6 @@ export default function ChatSettings({
   update,
   applyPreset,
   clearKey,
-  capabilities,
   onClose,
 }: ChatSettingsProps) {
   const [testing, setTesting] = useState(false);
@@ -39,8 +37,7 @@ export default function ChatSettings({
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
 
   const loadModels = useCallback(async () => {
-    const overrideEndpoint = settings.endpointConfigured || !capabilities.hasServerDefault;
-    if (overrideEndpoint && !settings.baseURL.trim()) {
+    if (!settings.baseURL.trim()) {
       setModelsError("Set a base URL first.");
       return;
     }
@@ -50,18 +47,10 @@ export default function ChatSettings({
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (settings.apiKey.trim()) headers["X-Llm-Api-Key"] = settings.apiKey.trim();
 
-      // When the user hasn't chosen an endpoint, list the server default's
-      // models rather than forcing the UI's preset endpoint.
-      const modelsBody: Record<string, unknown> = {};
-      if (overrideEndpoint) {
-        modelsBody.provider = settings.provider;
-        modelsBody.baseURL = settings.baseURL;
-      }
-
       const response = await fetch("/api/models", {
         method: "POST",
         headers,
-        body: JSON.stringify(modelsBody),
+        body: JSON.stringify({ provider: settings.provider, baseURL: settings.baseURL }),
       });
       if (!response.ok) {
         setModels([]);
@@ -75,7 +64,7 @@ export default function ChatSettings({
     } finally {
       setModelsLoading(false);
     }
-  }, [settings.apiKey, settings.baseURL, settings.provider, settings.endpointConfigured, capabilities.hasServerDefault]);
+  }, [settings.apiKey, settings.baseURL, settings.provider]);
 
   // Load the model list when the panel opens or the provider preset changes, but
   // only once a key is available (most endpoints require one to list models) so
@@ -93,24 +82,16 @@ export default function ChatSettings({
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (settings.apiKey.trim()) headers["X-Llm-Api-Key"] = settings.apiKey.trim();
 
-      const requestBody: Record<string, unknown> = {
-        messages: [{ role: "user", content: [{ type: "text", text: "ping" }] }],
-        traceInfo: { selected: 0, startTime: 0, endTime: 0, selectedComponentNameList: [] },
-        selectedGitHubRoutineKeys: [],
-      };
-      // Match the chat path: override the server's endpoint/model only when the
-      // user picked one (or the server has no default), so Test connection
-      // exercises the same endpoint a real chat would use.
-      if (settings.endpointConfigured || !capabilities.hasServerDefault) {
-        requestBody.provider = settings.provider;
-        requestBody.baseURL = settings.baseURL;
-        requestBody.model = settings.model;
-      }
-
       const response = await fetch("/api/gpt", {
         method: "POST",
         headers,
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({
+          messages: [{ role: "user", content: [{ type: "text", text: "ping" }] }],
+          traceInfo: { selected: 0, startTime: 0, endTime: 0, selectedComponentNameList: [] },
+          provider: settings.provider,
+          baseURL: settings.baseURL,
+          model: settings.model,
+        }),
       });
 
       if (response.ok) {
@@ -144,17 +125,10 @@ export default function ChatSettings({
         </Button>
       </div>
 
-      {capabilities.hasServerDefault ? (
-        <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-          The server has a default model configured
-          {capabilities.defaultModel ? ` (${capabilities.defaultModel})` : ""}. Leave the key blank
-          to use it, or override it below.
-        </p>
-      ) : (
-        <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-          No server-side model is configured. Enter a provider, model, and API key to use Daisen Bot.
-        </p>
-      )}
+      <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+        Pick a provider and model, and enter an API key (left blank for keyless local
+        servers). These stay in your browser — the server keeps no credentials.
+      </p>
 
       <label className="block space-y-1">
         <span className="text-xs font-medium text-muted-foreground">Provider</span>

@@ -80,13 +80,7 @@ export function useChat() {
   );
 
   const sendMessage = useCallback(
-    async (
-      content: UnitContent[],
-      traceInfo: TraceInformation,
-      selectedGitHubRoutineKeys: string[],
-      llm: LLMSettings,
-      overrideEndpoint: boolean,
-    ) => {
+    async (content: UnitContent[], traceInfo: TraceInformation, llm: LLMSettings) => {
       const userMessage: ChatMessage = { role: "user", content };
       const nextMessages = [...messages, userMessage];
       setMessages(nextMessages);
@@ -96,28 +90,19 @@ export function useChat() {
       try {
         const headers: Record<string, string> = { "Content-Type": "application/json" };
         // The key travels in a header (not the body) so it stays out of request
-        // logs; the server falls back to its .env when the header is absent.
+        // logs. It may be omitted for keyless local servers.
         if (llm.apiKey.trim()) headers["X-Llm-Api-Key"] = llm.apiKey.trim();
-
-        const body: Record<string, unknown> = {
-          messages: nextMessages,
-          traceInfo,
-          selectedGitHubRoutineKeys,
-        };
-        // The endpoint/model are sent only when the caller says to override the
-        // server default (the user chose an endpoint, or there is no server
-        // default). The key is independent and always travels in the header, so
-        // supplying only a key uses the user's key with the server's endpoint.
-        if (overrideEndpoint) {
-          body.provider = llm.provider;
-          body.baseURL = llm.baseURL;
-          body.model = llm.model;
-        }
 
         const response = await fetch("/api/gpt", {
           method: "POST",
           headers,
-          body: JSON.stringify(body),
+          body: JSON.stringify({
+            messages: nextMessages,
+            traceInfo,
+            provider: llm.provider,
+            baseURL: llm.baseURL,
+            model: llm.model,
+          }),
         });
         const data = response.ok ? await response.json() : { choices: [{ message: { content: await response.text() } }] };
         const assistantText = data?.choices?.[0]?.message?.content ?? "No response from Daisen Bot.";

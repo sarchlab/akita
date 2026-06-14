@@ -8,7 +8,6 @@ import { useChat } from "../../hooks/useChat";
 import { useComponentNames } from "../../hooks/useComponentNames";
 import { useSimulationRange } from "../../hooks/useSimulationRange";
 import { useLLMSettings } from "../../hooks/useLLMSettings";
-import { useLLMCapabilities } from "../../hooks/useLLMCapabilities";
 import type { TraceInformation, UploadedFile, UnitContent } from "../../types/chat";
 import {
   FILE_UPLOAD_ACCEPT,
@@ -53,7 +52,6 @@ export default function ChatPanel() {
   const { names } = useComponentNames();
   const { startTime, endTime } = useSimulationRange();
   const { settings, update, applyPreset, clearKey } = useLLMSettings();
-  const { capabilities } = useLLMCapabilities();
   const {
     messages,
     loading,
@@ -118,10 +116,7 @@ export default function ChatPanel() {
       .forEach((file) => content.push({ type: "image_url", image_url: { url: file.content } }));
 
     setInput("");
-    // Override the server's endpoint/model only when the user picked one, or
-    // when the server has no default to fall back to.
-    const overrideEndpoint = settings.endpointConfigured || !capabilities.hasServerDefault;
-    await sendMessage(content, traceInfo, [], settings, overrideEndpoint);
+    await sendMessage(content, traceInfo, settings);
     clearUploadedFiles();
   }
 
@@ -164,7 +159,6 @@ export default function ChatPanel() {
             update={update}
             applyPreset={applyPreset}
             clearKey={clearKey}
-            capabilities={capabilities}
             onClose={() => setShowSettings(false)}
           />
         ) : (

@@ -4,15 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/joho/godotenv"
 )
 
 // TimeValue represents a data point with a time and a value.
@@ -621,169 +617,6 @@ func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
 	}
 	b.WriteString("[End Akita Trace File]\n")
 	return b.String()
-}
-
-func buildCombinedRepoHeader(ctx context.Context, urlList []string) string {
-	combinedRepoHeader := ""
-	for _, url := range urlList {
-		content := httpGithubRaw(ctx, url)
-		if content == "" {
-			continue
-		}
-		fileName := url
-		if idx := strings.Index(url, "sarchlab/"); idx != -1 {
-			fileName = url[idx:]
-		}
-		combinedRepoHeader += "[Reference File " + fileName + "]\n"
-		combinedRepoHeader += content + "\n"
-		combinedRepoHeader += "[End " + fileName + "]\n"
-	}
-	return combinedRepoHeader
-}
-
-func getRoutineURLList(routineFile string, selectedKeys []string) ([]string, error) {
-	data, err := os.ReadFile(routineFile)
-	if err != nil {
-		return nil, err
-	}
-	var routineMap map[string][]string
-	if err := json.Unmarshal(data, &routineMap); err != nil {
-		return nil, err
-	}
-	urlSet := make(map[string]struct{})
-	for _, key := range selectedKeys {
-		if urls, ok := routineMap[key]; ok {
-			for _, u := range urls {
-				urlSet[u] = struct{}{}
-			}
-		}
-	}
-	urlList := make([]string, 0, len(urlSet))
-	for u := range urlSet {
-		urlList = append(urlList, u)
-	}
-	sort.Strings(urlList)
-	return urlList, nil
-}
-
-func httpGithubRaw(ctx context.Context, url string) string {
-	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
-	client := &http.Client{}
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		log.Println("Failed to create GitHub raw request:", err)
-		return ""
-	}
-	if githubPAT != "" {
-		req.Header.Set("Authorization", githubPAT)
-	}
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != 200 {
-		log.Printf("Failed to fetch raw GitHub file: %s, err: %v\n", url, err)
-		return ""
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Println("Failed to read GitHub raw response body:", err)
-		return ""
-	}
-	return string(body)
-}
-
-func (s *Server) httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
-	_ = godotenv.Load(".env")
-	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
-	if githubPAT == "" {
-		http.Error(
-			w,
-			"\n[Error: \".env\" not found or GitHub-related variable missing]\n"+
-				"Please create or update file "+
-				"\"akita/daisen/.env\" and write these contents (example):\n"+
-				"```\n"+
-				"OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
-				"OPENAI_MODEL=\"gpt-4o\"\n"+
-				"OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
-				"GITHUB_PERSONAL_ACCESS_TOKEN=\"Bearer ghp_XXXXXXXXXXXX\"\n"+
-				"Please refer to "+
-				"https://github.com/sarchlab/akita/tree/main/daisen#readme "+
-				"for more details.```\n",
-			http.StatusInternalServerError,
-		)
-		return
-	}
-	client := &http.Client{}
-	req, err := http.NewRequestWithContext(r.Context(), "GET", "https://api.github.com/user", nil)
-	if err != nil {
-		http.Error(w, "Failed to create GitHub request: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", githubPAT)
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != 200 {
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]interface{}{
-			"available":    0,
-			"routine_keys": []string{},
-		}); err != nil {
-			http.Error(w, "Failed to encode JSON: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		return
-	}
-	defer resp.Body.Close()
-	routineKeys := []string{}
-	routineFile := "componentgithubroutine.json"
-	data, err := os.ReadFile(routineFile)
-	if err == nil {
-		var routineMap map[string]interface{}
-		if err := json.Unmarshal(data, &routineMap); err == nil {
-			for k := range routineMap {
-				routineKeys = append(routineKeys, k)
-			}
-		}
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"available":    1,
-		"routine_keys": routineKeys,
-	}); err != nil {
-		http.Error(w, "Failed to encode JSON: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
-
-// httpCheckEnvFile handles the API endpoint to check if .env file exists
-func (s *Server) httpCheckEnvFile(w http.ResponseWriter, r *http.Request) {
-	// Set CORS headers
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	w.Header().Set("Content-Type", "application/json")
-
-	// Handle preflight requests
-	if r.Method == "OPTIONS" {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	// Check if .env file exists
-	envFileExists := false
-	if _, err := os.Stat(".env"); err == nil {
-		envFileExists = true
-	}
-
-	// Create response JSON
-	response := map[string]interface{}{
-		"exists": envFileExists,
-	}
-
-	// Encode and send response
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-		return
-	}
 }
 
 func (s *Server) fetchTasksForMilestones(ctx context.Context, compName string, startTime, endTime float64) []Task {

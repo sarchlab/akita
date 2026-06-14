@@ -115,12 +115,10 @@ func (s *Server) RegisterTraceAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/compinfo", s.httpComponentInfo)
 	mux.HandleFunc("/api/segments", s.httpSegments)
 
-	// Chat / LLM proxy endpoints
+	// Chat / LLM proxy endpoints. The LLM provider is configured entirely from
+	// the frontend; the server holds no credentials.
 	mux.HandleFunc("/api/gpt", s.httpChatProxy)
-	mux.HandleFunc("/api/llm-capabilities", s.httpLLMCapabilities)
 	mux.HandleFunc("/api/models", s.httpListModels)
-	mux.HandleFunc("/api/githubisavailable", s.httpGithubIsAvailableProxy)
-	mux.HandleFunc("/api/checkenv", s.httpCheckEnvFile)
 }
 
 // RegisterTraceRoutes registers trace/data routes and Daisen's replay SPA

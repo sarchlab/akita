@@ -41,11 +41,7 @@ const DEFAULT_SETTINGS: LLMSettings = {
   model: "gpt-4o",
   apiKey: "",
   remember: false,
-  endpointConfigured: false,
 };
-
-// Settings keys whose change means the user has explicitly chosen an endpoint.
-const ENDPOINT_KEYS: (keyof LLMSettings)[] = ["provider", "presetId", "baseURL", "model"];
 
 function safeGet(storage: Storage, key: string): string | null {
   try {
@@ -84,7 +80,6 @@ function loadInitialSettings(): LLMSettings {
         baseURL: parsed.baseURL ?? settings.baseURL,
         model: parsed.model ?? settings.model,
         remember: parsed.remember ?? settings.remember,
-        endpointConfigured: parsed.endpointConfigured ?? settings.endpointConfigured,
       });
     } catch {
       /* corrupt config; fall back to defaults */
@@ -122,18 +117,8 @@ export function useLLMSettings() {
     }
   }, [settings]);
 
-  // Changing an endpoint field marks the endpoint as user-configured (which lets
-  // the request override the server's .env endpoint); changing only the key or
-  // the remember toggle does not.
   const update = useCallback((partial: Partial<LLMSettings>) => {
-    setSettings((current) => {
-      const touchesEndpoint = ENDPOINT_KEYS.some((key) => key in partial);
-      return {
-        ...current,
-        ...partial,
-        endpointConfigured: current.endpointConfigured || touchesEndpoint,
-      };
-    });
+    setSettings((current) => ({ ...current, ...partial }));
   }, []);
 
   const applyPreset = useCallback((presetId: string) => {
@@ -141,8 +126,8 @@ export function useLLMSettings() {
     if (!preset) return;
     setSettings((current) =>
       preset.id === "custom"
-        ? { ...current, presetId, endpointConfigured: true }
-        : { ...current, presetId, baseURL: preset.baseURL, model: preset.model, endpointConfigured: true },
+        ? { ...current, presetId }
+        : { ...current, presetId, baseURL: preset.baseURL, model: preset.model },
     );
   }, []);
 

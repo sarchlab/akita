@@ -24,12 +24,7 @@ func TestBearerTokenNormalizesRawAndPrefixedKeys(t *testing.T) {
 	}
 }
 
-func TestResolveProviderConfigPrefersRequestOverEnv(t *testing.T) {
-	t.Setenv("OPENAI_URL", "https://env.example/v1/chat/completions")
-	t.Setenv("OPENAI_MODEL", "env-model")
-	t.Setenv("OPENAI_API_KEY", "env-key")
-	t.Setenv("LLM_PROVIDER", "")
-
+func TestResolveProviderConfigUsesRequest(t *testing.T) {
 	temp := 0.2
 	body := chatRequest{
 		Provider:    "openai-compatible",
@@ -45,91 +40,42 @@ func TestResolveProviderConfigPrefersRequestOverEnv(t *testing.T) {
 		t.Fatal("expected ok=true")
 	}
 	if cfg.BaseURL != "https://req.example/v1/chat/completions" {
-		t.Errorf("BaseURL = %q, want request value", cfg.BaseURL)
+		t.Errorf("BaseURL = %q", cfg.BaseURL)
 	}
 	if cfg.Model != "req-model" {
 		t.Errorf("Model = %q, want req-model", cfg.Model)
 	}
 	if cfg.APIKey != "req-key" {
-		t.Errorf("APIKey = %q, want header value", cfg.APIKey)
+		t.Errorf("APIKey = %q, want the header value", cfg.APIKey)
 	}
 	if cfg.Temperature == nil || *cfg.Temperature != 0.2 {
 		t.Errorf("Temperature = %v, want 0.2", cfg.Temperature)
 	}
 }
 
-func TestResolveProviderConfigFallsBackToEnv(t *testing.T) {
-	t.Setenv("OPENAI_URL", "https://env.example/v1/chat/completions")
-	t.Setenv("OPENAI_MODEL", "env-model")
-	t.Setenv("OPENAI_API_KEY", "env-key")
-	t.Setenv("LLM_PROVIDER", "")
-
-	r := httptest.NewRequest("POST", "/api/gpt", nil)
-
-	cfg, ok := resolveProviderConfig(r, chatRequest{})
-	if !ok {
-		t.Fatal("expected ok=true")
-	}
-	if cfg.Provider != ProviderOpenAICompatible {
-		t.Errorf("Provider = %q, want default openai-compatible", cfg.Provider)
-	}
-	if cfg.BaseURL != "https://env.example/v1/chat/completions" {
-		t.Errorf("BaseURL = %q, want env value", cfg.BaseURL)
-	}
-	if cfg.Model != "env-model" || cfg.APIKey != "env-key" {
-		t.Errorf("Model/APIKey = %q/%q, want env values", cfg.Model, cfg.APIKey)
-	}
-	if cfg.Temperature != nil {
-		t.Errorf("Temperature = %v, want nil (omitted) when unset", cfg.Temperature)
-	}
-}
-
-func TestResolveProviderConfigMissingIsNotOK(t *testing.T) {
-	t.Setenv("OPENAI_URL", "")
-	t.Setenv("OPENAI_MODEL", "")
-	t.Setenv("OPENAI_API_KEY", "")
-
+func TestResolveProviderConfigRequiresEndpointAndModel(t *testing.T) {
 	r := httptest.NewRequest("POST", "/api/gpt", nil)
 	if _, ok := resolveProviderConfig(r, chatRequest{}); ok {
-		t.Fatal("expected ok=false when no config is available")
+		t.Fatal("expected ok=false when no endpoint/model is provided")
+	}
+	if _, ok := resolveProviderConfig(r, chatRequest{BaseURL: "https://x/v1/chat/completions"}); ok {
+		t.Fatal("expected ok=false when the model is missing")
 	}
 }
 
-func TestResolveProviderConfigNeverPairsServerKeyWithClientURL(t *testing.T) {
-	t.Setenv("OPENAI_URL", "https://api.openai.com/v1/chat/completions")
-	t.Setenv("OPENAI_MODEL", "gpt-4o")
-	t.Setenv("OPENAI_API_KEY", "server-secret")
-
-	// A client points baseURL at its own server but provides no key.
-	body := chatRequest{BaseURL: "https://attacker.example/v1/chat/completions", Model: "x"}
-	r := httptest.NewRequest("POST", "/api/gpt", nil) // no X-Llm-Api-Key header
-
-	cfg, ok := resolveProviderConfig(r, body)
-	if ok && cfg.APIKey == "server-secret" {
-		t.Fatalf("server key leaked to client URL %q", cfg.BaseURL)
-	}
-	if cfg.APIKey == "server-secret" {
-		t.Error("the server key must never be attached to a client-supplied URL")
-	}
-}
-
-func TestResolveProviderConfigAllowsKeylessClientEndpoint(t *testing.T) {
-	t.Setenv("OPENAI_URL", "")
-	t.Setenv("OPENAI_MODEL", "")
-	t.Setenv("OPENAI_API_KEY", "")
-
+func TestResolveProviderConfigAllowsKeylessEndpoint(t *testing.T) {
 	body := chatRequest{BaseURL: "http://localhost:11434/v1/chat/completions", Model: "llama3"}
-	r := httptest.NewRequest("POST", "/api/gpt", nil)
+	r := httptest.NewRequest("POST", "/api/gpt", nil) // no key header
 
 	cfg, ok := resolveProviderConfig(r, body)
 	if !ok {
-		t.Fatal("expected ok=true for a keyless local endpoint")
+		t.Fatal("expected ok=true for a keyless endpoint")
 	}
 	if cfg.APIKey != "" {
 		t.Errorf("APIKey = %q, want empty (keyless)", cfg.APIKey)
 	}
 	if cfg.BaseURL != "http://localhost:11434/v1/chat/completions" {
-		t.Errorf("BaseURL = %q, want the client endpoint", cfg.BaseURL)
+		t.Errorf("BaseURL = %q", cfg.BaseURL)
 	}
 }
 
@@ -166,6 +112,11 @@ func TestGuardLLMURLOptInAllowsPrivate(t *testing.T) {
 
 func TestGuardedLLMClientBlocksInternalServer(t *testing.T) {
 	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "")
+	// Clear proxy env so the dialer guard applies (a proxy would route the dial
+	// to the proxy, not the test server).
+	for _, k := range []string{"HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"} {
+		t.Setenv(k, "")
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	}))
@@ -194,6 +145,13 @@ func TestGuardedLLMClientAllowsWithOptIn(t *testing.T) {
 		t.Fatalf("guarded client with opt-in: %v", err)
 	}
 	_ = resp.Body.Close()
+}
+
+func TestGuardedLLMClientHonorsProxyEnv(t *testing.T) {
+	tr, ok := guardedLLMClient.Transport.(*http.Transport)
+	if !ok || tr.Proxy == nil {
+		t.Fatal("guarded client must honor HTTP(S)_PROXY via Transport.Proxy")
+	}
 }
 
 func TestNewChatProviderRejectsUnknown(t *testing.T) {

@@ -14,8 +14,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/joho/godotenv"
 )
 
 // ProviderKind identifies the wire protocol used to talk to an LLM endpoint.
@@ -32,27 +30,25 @@ const (
 	ProviderOpenAICompatible ProviderKind = "openai-compatible"
 )
 
-// ProviderConfig is the endpoint configuration resolved for a single chat
-// request. Each field is taken from the request when present and otherwise
-// falls back to the server-side .env, so existing .env-only setups keep working.
+// ProviderConfig is the endpoint configuration for a single chat request. It is
+// built entirely from the request: Daisen holds no server-side credentials.
 type ProviderConfig struct {
 	Provider ProviderKind
 	BaseURL  string
 	Model    string
-	APIKey   string // raw key; auth-header formatting is the provider's job
+	APIKey   string // raw key; may be empty for keyless local servers
 	// Temperature is nil unless the request set one explicitly. We omit it from
 	// the payload when nil so the provider applies its own default — some models
 	// (e.g. OpenAI reasoning models) reject any non-default temperature.
 	Temperature *float64
 }
 
-// chatRequest is the JSON body of POST /api/gpt. The provider override fields
-// are optional; the API key is read from the X-Llm-Api-Key header (not the
+// chatRequest is the JSON body of POST /api/gpt. The provider/base URL/model
+// come from the body; the API key is read from the X-Llm-Api-Key header (not the
 // body) so it stays out of request logs.
 type chatRequest struct {
-	Messages                  []map[string]interface{} `json:"messages"`
-	TraceInfo                 map[string]interface{}   `json:"traceInfo"`
-	SelectedGitHubRoutineKeys []string                 `json:"selectedGitHubRoutineKeys"`
+	Messages  []map[string]interface{} `json:"messages"`
+	TraceInfo map[string]interface{}   `json:"traceInfo"`
 
 	Provider    string   `json:"provider"`
 	BaseURL     string   `json:"baseURL"`
@@ -60,20 +56,13 @@ type chatRequest struct {
 	Temperature *float64 `json:"temperature"`
 }
 
-const providerConfigHelp = "[Daisen Bot is not configured] No model, endpoint, or " +
-	"API key was provided.\n" +
-	"Open Settings (the gear in the chat panel) to enter your provider, model, " +
-	"base URL, and API key, or create a \".env\" next to the server with:\n" +
-	"```\n" +
-	"OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n" +
-	"OPENAI_MODEL=\"gpt-4o\"\n" +
-	"OPENAI_API_KEY=\"sk-proj-XXXXXXXXXXXX\"\n" +
-	"```\n"
+const providerConfigHelp = "[Daisen Bot is not configured] No model or endpoint was provided.\n" +
+	"Open Settings (the gear in the chat panel) and enter your provider, model, " +
+	"base URL, and API key.\n"
 
-// httpChatProxy proxies a chat request to the configured LLM provider. It
-// resolves the provider config (request overrides .env), assembles the
-// trace/repo/system context, then lets the selected provider build the
-// outbound request and relay the response.
+// httpChatProxy proxies a chat request to the configured LLM provider. It reads
+// the provider config from the request, assembles the trace/system context, then
+// lets the selected provider build the outbound request and relay the response.
 func (s *Server) httpChatProxy(w http.ResponseWriter, r *http.Request) {
 	var body chatRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -98,7 +87,7 @@ func (s *Server) httpChatProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	messages := assembleMessages(r.Context(), body, s.traceReader)
+	messages := assembleMessages(body, s.traceReader)
 
 	outReq, err := provider.BuildRequest(r.Context(), cfg, messages)
 	if err != nil {
@@ -120,34 +109,23 @@ func (s *Server) httpChatProxy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// resolveEndpointKey decides the base URL and API key for an outbound request
-// and enforces one invariant for shared deployments: the server's default key
-// (from .env) is only ever sent to the server's own endpoint, never to a
-// client-supplied URL — otherwise a user could point baseURL at a server they
-// control and capture the server's secret. A client endpoint with no client key
-// is sent keyless (works for local no-auth servers; an endpoint that needs a key
-// answers 401).
-func resolveEndpointKey(headerKey, reqBaseURL string) (baseURL, apiKey string, ok bool) {
-	serverURL := os.Getenv("OPENAI_URL")
-	serverKey := os.Getenv("OPENAI_API_KEY")
-
-	switch {
-	case headerKey != "":
-		// A client key pairs with the client endpoint (or the server's if unset).
-		baseURL, apiKey = firstNonEmpty(reqBaseURL, serverURL), headerKey
-	case reqBaseURL == "" || reqBaseURL == serverURL:
-		// The server's own endpoint: the server key may be used here.
-		baseURL, apiKey = serverURL, serverKey
-	default:
-		// A different, client-supplied endpoint with no key: never attach the
-		// server key to it.
-		baseURL, apiKey = reqBaseURL, ""
+// resolveProviderConfig builds a ProviderConfig from the request. The endpoint,
+// model, and provider come from the body; the API key comes from the
+// X-Llm-Api-Key header. The key may be empty (keyless local servers); the
+// endpoint and model are required.
+func resolveProviderConfig(r *http.Request, body chatRequest) (ProviderConfig, bool) {
+	cfg := ProviderConfig{
+		Provider:    ProviderKind(firstNonEmpty(body.Provider, string(ProviderOpenAICompatible))),
+		BaseURL:     body.BaseURL,
+		Model:       body.Model,
+		APIKey:      r.Header.Get("X-Llm-Api-Key"),
+		Temperature: body.Temperature,
 	}
 
-	if baseURL == "" {
-		return "", "", false
+	if cfg.BaseURL == "" || cfg.Model == "" {
+		return cfg, false
 	}
-	return baseURL, apiKey, true
+	return cfg, true
 }
 
 // allowPrivateLLMHosts reports whether the operator has opted into letting the
@@ -161,6 +139,19 @@ func allowPrivateLLMHosts() bool {
 	default:
 		return false
 	}
+}
+
+// hasProxyEnv reports whether an outbound HTTP proxy is configured. When it is,
+// the dialer connects to the proxy (often on a private network) rather than the
+// LLM endpoint, so the dialer-level address check is skipped — the endpoint
+// itself is still validated up front by guardLLMURL and on each redirect.
+func hasProxyEnv() bool {
+	for _, k := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"} {
+		if os.Getenv(k) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func isInternalIP(ip net.IP) bool {
@@ -202,14 +193,15 @@ func guardLLMURL(rawURL string) error {
 
 // guardedDialContext resolves the target, rejects it if any address is internal,
 // and then dials a vetted IP literal directly. Validating at dial time (rather
-// than only up front) closes two SSRF gaps that an up-front URL check misses:
-// HTTP redirects to an internal Location (each redirect dials through here) and
-// DNS rebinding (the kernel never re-resolves the hostname, so it can't be
-// pointed at an internal address between check and connect). Opt out for local
-// providers with DAISEN_ALLOW_PRIVATE_LLM_URL=1.
+// than only up front) closes two SSRF gaps an up-front URL check misses: HTTP
+// redirects to an internal Location (each redirect dials through here) and DNS
+// rebinding (the kernel never re-resolves the hostname, so it can't be pointed at
+// an internal address between check and connect). Skipped when a proxy is in use
+// (this dials the proxy, not the endpoint) or for local providers via
+// DAISEN_ALLOW_PRIVATE_LLM_URL=1.
 func guardedDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	dialer := &net.Dialer{Timeout: 30 * time.Second}
-	if allowPrivateLLMHosts() {
+	if allowPrivateLLMHosts() || hasProxyEnv() {
 		return dialer.DialContext(ctx, network, addr)
 	}
 
@@ -232,69 +224,36 @@ func guardedDialContext(ctx context.Context, network, addr string) (net.Conn, er
 }
 
 // guardedLLMClient is the single HTTP client used for all outbound LLM calls
-// (chat and model listing). TLS still verifies against the request hostname
-// (SNI), while connections are pinned to vetted public IPs by the dialer.
+// (chat and model listing). It honors HTTP(S)_PROXY, pins direct connections to
+// vetted public IPs via the dialer, and re-validates every redirect target. TLS
+// still verifies against the request hostname (SNI).
 var guardedLLMClient = &http.Client{
 	Transport: &http.Transport{
+		Proxy:               http.ProxyFromEnvironment,
 		DialContext:         guardedDialContext,
 		TLSHandshakeTimeout: 10 * time.Second,
 		ForceAttemptHTTP2:   true,
 	},
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("stopped after %d redirects", len(via))
+		}
+		return guardLLMURL(req.URL.String())
+	},
 }
 
-// resolveProviderConfig builds a ProviderConfig from the request, falling back
-// to the server-side .env. The API key arrives in the X-Llm-Api-Key header; the
-// endpoint/key pairing rules live in resolveEndpointKey. It returns ok=false
-// when no usable endpoint or model can be determined.
-func resolveProviderConfig(r *http.Request, body chatRequest) (ProviderConfig, bool) {
-	_ = godotenv.Load(".env")
-
-	baseURL, apiKey, ok := resolveEndpointKey(r.Header.Get("X-Llm-Api-Key"), body.BaseURL)
-	if !ok {
-		return ProviderConfig{}, false
-	}
-
-	cfg := ProviderConfig{
-		Provider: ProviderKind(firstNonEmpty(
-			body.Provider, os.Getenv("LLM_PROVIDER"), string(ProviderOpenAICompatible))),
-		BaseURL:     baseURL,
-		Model:       firstNonEmpty(body.Model, os.Getenv("OPENAI_MODEL")),
-		APIKey:      apiKey,
-		Temperature: body.Temperature,
-	}
-
-	if cfg.Model == "" {
-		return cfg, false
-	}
-	return cfg, true
-}
-
-// assembleMessages prepends the trace-context CSV, GitHub routine files, and the
-// system prompt to the conversation. The result is provider-independent; each
-// provider serializes it into its own wire format. Missing optional context
-// files (componentgithubroutine.json, beforehandprompt.txt) degrade gracefully
-// rather than failing the request.
-func assembleMessages(
-	ctx context.Context,
-	body chatRequest,
-	traceReader *SQLiteTraceReader,
-) []map[string]interface{} {
-	combinedTraceHeader := buildAkitaTraceHeader(traceReader, body.TraceInfo)
-
-	combinedRepoHeader := ""
-	urlList, err := getRoutineURLList("componentgithubroutine.json", body.SelectedGitHubRoutineKeys)
-	if err != nil {
-		log.Println("Skipping GitHub routine context:", err)
-	} else {
-		combinedRepoHeader = buildCombinedRepoHeader(ctx, urlList)
-	}
+// assembleMessages prepends the trace-context CSV and the system prompt to the
+// conversation. A missing beforehandprompt.txt degrades gracefully rather than
+// failing the request.
+func assembleMessages(body chatRequest, traceReader *SQLiteTraceReader) []map[string]interface{} {
+	traceHeader := buildAkitaTraceHeader(traceReader, body.TraceInfo)
 
 	messages := body.Messages
 	if len(messages) > 0 {
 		if contentArr, ok := messages[len(messages)-1]["content"].([]interface{}); ok && len(contentArr) > 0 {
 			if firstContent, ok := contentArr[0].(map[string]interface{}); ok {
 				firstText, _ := firstContent["text"].(string)
-				firstContent["text"] = combinedTraceHeader + combinedRepoHeader + firstText
+				firstContent["text"] = traceHeader + firstText
 			}
 		}
 	}
@@ -469,9 +428,8 @@ func deriveModelsURL(chatURL string) string {
 }
 
 // httpListModels proxies the provider's model-discovery endpoint so the frontend
-// can populate a model picker without cross-origin issues. The base URL and
-// provider come from the request (falling back to .env), the key from the
-// X-Llm-Api-Key header, with the same key/endpoint safety rules as chat.
+// can populate a model picker without cross-origin issues. The endpoint/provider
+// come from the request body, the key from the X-Llm-Api-Key header.
 func (s *Server) httpListModels(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Provider string `json:"provider"`
@@ -479,21 +437,18 @@ func (s *Server) httpListModels(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
-	_ = godotenv.Load(".env")
-	baseURL, apiKey, ok := resolveEndpointKey(r.Header.Get("X-Llm-Api-Key"), body.BaseURL)
-	if !ok {
+	if body.BaseURL == "" {
 		http.Error(w, "No base URL configured", http.StatusBadRequest)
 		return
 	}
-	if err := guardLLMURL(baseURL); err != nil {
+	if err := guardLLMURL(body.BaseURL); err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 	cfg := ProviderConfig{
-		Provider: ProviderKind(firstNonEmpty(
-			body.Provider, os.Getenv("LLM_PROVIDER"), string(ProviderOpenAICompatible))),
-		BaseURL: baseURL,
-		APIKey:  apiKey,
+		Provider: ProviderKind(firstNonEmpty(body.Provider, string(ProviderOpenAICompatible))),
+		BaseURL:  body.BaseURL,
+		APIKey:   r.Header.Get("X-Llm-Api-Key"),
 	}
 
 	provider, err := newChatProvider(cfg.Provider)
@@ -514,30 +469,8 @@ func (s *Server) httpListModels(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// httpLLMCapabilities reports whether the server has a usable .env default and,
-// if so, the default model/base URL, so the frontend knows whether the user
-// must supply credentials. It never returns the API key itself.
-func (s *Server) httpLLMCapabilities(w http.ResponseWriter, _ *http.Request) {
-	_ = godotenv.Load(".env")
-
-	baseURL := os.Getenv("OPENAI_URL")
-	model := os.Getenv("OPENAI_MODEL")
-	hasServerDefault := os.Getenv("OPENAI_API_KEY") != "" && baseURL != "" && model != ""
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"hasServerDefault": hasServerDefault,
-		"defaultModel":     model,
-		"defaultBaseURL":   baseURL,
-		"providers":        []string{string(ProviderOpenAICompatible)},
-	}); err != nil {
-		http.Error(w, "Failed to encode JSON: "+err.Error(), http.StatusInternalServerError)
-	}
-}
-
-// bearerToken formats a raw API key as an Authorization header value. It accepts
-// keys that already carry the "Bearer " prefix (as the legacy .env did) and adds
-// it otherwise, so raw keys from the frontend and prefixed .env keys both work.
+// bearerToken formats a raw API key as an Authorization header value, adding the
+// "Bearer " prefix only when the key does not already carry it.
 func bearerToken(key string) string {
 	k := strings.TrimSpace(key)
 	if strings.HasPrefix(strings.ToLower(k), "bearer ") {

@@ -12,37 +12,26 @@ time range — to an LLM through the Daisen server.
 
 ### Configuring a model
 
-There are two ways to provide an LLM endpoint; the in-app settings take
-precedence over the server defaults.
+The LLM provider is configured entirely in the browser — **the server stores no
+credentials.** Open the chat panel, click the gear icon, and choose a provider
+preset (OpenAI, OpenRouter, Groq, Ollama, or Custom), then enter the base URL,
+model, and API key. Any endpoint that implements the OpenAI `/chat/completions`
+API works, including local servers such as Ollama, LM Studio, and vLLM (leave
+the key blank for keyless local servers).
 
-1. **In the app (recommended).** Open the chat panel, click the gear icon, and
-   choose a provider preset (OpenAI, OpenRouter, Groq, Ollama, or Custom), then
-   enter the base URL, model, and API key. Any endpoint that implements the
-   OpenAI `/chat/completions` API works, including local servers such as Ollama,
-   LM Studio, and vLLM. The model field is backed by the provider's model list
-   (fetched via the server from `{baseURL}/models`); use the refresh button to
-   load it, then pick a model or type your own. By default the API key is kept
-   in `sessionStorage` and cleared when the tab closes; tick **Remember key on
-   this device** to persist it in `localStorage` instead.
+The model field is backed by the provider's model list (fetched via the server
+from `{baseURL}/models`); use the refresh button to load it, then pick a model
+or type your own.
 
-2. **Server-side default (`.env`).** Create a `.env` next to the server to set a
-   fallback used whenever the app does not supply its own values:
+The API key is sent on each request in the `X-Llm-Api-Key` header (not the body)
+and is never written to disk on the server. In the browser it is kept in
+`sessionStorage` and cleared when the tab closes; tick **Remember key on this
+device** to persist it in `localStorage` instead.
 
-   ```
-   OPENAI_URL="https://api.openai.com/v1/chat/completions"
-   OPENAI_MODEL="gpt-4o"
-   OPENAI_API_KEY="sk-proj-XXXXXXXXXXXX"
-   ```
+### Reaching internal model servers
 
-   The key may be given with or without a leading `Bearer `.
-
-The API key sent from the app travels in the `X-Llm-Api-Key` request header
-(not the request body) and is never persisted on the server. On a shared
-deployment, the server-side `.env` key is only ever sent to the server's own
-endpoint — a request that points `baseURL` at a different endpoint must carry
-its own key, so the server's key can't be redirected to another host.
-
-To prevent the server from being used to reach internal services, base URLs
+To stop the server from being used to reach internal services (SSRF), base URLs
 that resolve to private, loopback, or link-local addresses are rejected by
 default. When running Daisen for yourself with a local model server (Ollama,
-LM Studio, vLLM), set `DAISEN_ALLOW_PRIVATE_LLM_URL=1` to allow them.
+LM Studio, vLLM), set `DAISEN_ALLOW_PRIVATE_LLM_URL=1` to allow them. Outbound
+requests honor the standard `HTTP_PROXY`/`HTTPS_PROXY` environment variables.
