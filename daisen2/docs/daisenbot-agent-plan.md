@@ -116,15 +116,153 @@ mechanism, and a navigable trail at once. Default-on, collapsible.
 
 ---
 
-## 4. Phase roadmap
+## 4. Agent loop & investigation strategy
+
+§3.1 gave the *mechanical* loop (call → tool_calls → repeat). This section gives the
+**control structure** and **reasoning strategy** on top of it — the part that decides
+whether the agent investigates competently or just wanders.
+
+### 4.1 Control structure
+
+One **hypothesis-driven investigation loop**, a single agent. We impose a light
+investigative shape rather than a free ReAct loop (which over-queries, stops early,
+or loops forever) — but **not** a manager-of-subagents (latency, cost, complexity,
+against the simplicity bar).
+
+```
+Front door (implicit triage — no separate model):
+  trivial / definitional   → answer directly (0 tools, or 1 lookup)
+  ambiguous                → ask ONE focused clarifying question
+  investigative            → enter the loop ↓
+
+Investigation loop:
+  1. Orient     — cheap "vital-signs" sweep over the in-scope components/window
+  2. Hypothesize— emit a RANKED candidate-cause list (seeded by the catalog, §4.4)
+  3. Test       — gather the minimal evidence that distinguishes the top hypothesis
+  4. Iterate    — next hypothesis / refine; stop on support or budget (§4.6)
+  5. Report     — text answer + the tour (links/thumbnails) of what was checked
+```
+
+### 4.2 Front door / triage
+
+**Implicit, not a separate router LLM.** Native tool-calling already lets the model
+answer directly when it needs no tool, so a simple question short-circuits the loop
+with zero tool round-trips. The system prompt authorizes three outcomes so trivial
+*and* ambiguous cases never spiral into tool calls:
+
+- **Direct answer** — definitional/summary questions ("what does the `read-miss`
+  Kind mean?", "summarize this view"). Answerable from the primed trace-context
+  header (kept from today, §1) or one lookup.
+- **Clarifying question** — underspecified asks ("why is it slow?" with no component
+  or baseline). Ask ONE focused question; default the scope to the current view's
+  selected components + time window when reasonable rather than always asking.
+- **Investigate** — enter the loop.
+
+An *explicit* router LLM is deferred (§4.7); it earns its keep only at volume (cost
+control), for explicit mode selection, or for abuse rejection.
+
+### 4.3 The investigation loop
+
+- **Orient.** Before hypothesizing, run a cheap vital-signs sweep (§4.5) to get the
+  lay of the land — grounds hypotheses in the actual trace, not priors.
+- **Hypothesize.** Emit a ranked candidate-cause list (§4.4) as an explicit
+  *structured* artifact, not free-form prose. Rank by prior-likelihood ×
+  cheapness-to-test.
+- **Test.** Take the top hypothesis; collect the *minimal distinguishing* evidence
+  (§4.5); confirm or refute. One hypothesis at a time keeps the tour legible.
+- **Iterate.** Move to the next hypothesis or refine. Stop when one is supported with
+  evidence, or budgets are hit (§4.6).
+- **Report.** Text answer citing the supporting evidence, with the visible tour
+  (§3.5). If nothing is conclusive, say so and report what was *ruled out* — never
+  fabricate a cause.
+
+### 4.4 Hypothesis generation & the failure-mode catalog
+
+**The agent generates hypotheses — seeded by a curated catalog of known Akita
+bottleneck patterns.** A general model free-forming causes misses arch-specific
+failure modes; the catalog is the single highest-leverage quality lever, and it is
+just content (a prompt section or a `list_known_failure_modes` retrieval).
+
+The hypothesis list is a **structured, schema-enforced artifact** (`id`,
+`description`, `catalog_pattern`, `evidence_to_collect`, `status ∈ {untested,
+supported, refuted}`). Benefits: auditable, drives the tour, and yields a natural
+stopping criterion (top-K tested).
+
+**Catalog schema:** `pattern · symptom-in-trace · distinguishing-evidence-to-collect`.
+
+**Starter set — seeded from general computer-architecture / memory-system knowledge.
+⚠️ DOMAIN REVIEW NEEDED (owner: Yifan) to validate and expand against Akita's actual
+components and milestone vocabulary:**
+
+| Pattern | Symptom in trace | Distinguishing evidence |
+|---|---|---|
+| Cache capacity/conflict thrashing | high miss rate; working set > capacity | miss ratio over time; reuse distance; set-conflict skew |
+| MSHR / outstanding-request exhaustion | misses queue though the cache isn't "busy" | in-flight miss count vs. MSHR limit; wait-for-MSHR time |
+| Queue backpressure / buffer-full | upstream stalls while downstream is full | buffer occupancy over time; stall edges to the full buffer |
+| DRAM bank conflicts | serialized accesses to the same bank | per-bank access timeline; same-bank back-to-back gaps |
+| Row-buffer thrashing | frequent activate/precharge; low hit rate | row-buffer hit ratio; activate frequency |
+| Bandwidth saturation | a link/port at ~100% utilization | per-port utilization; queueing delay vs. service time |
+| Head-of-line blocking | one slow request stalls others behind it in a FIFO | per-entry wait vs. service; FIFO depth at stall |
+| TLB miss / page-walk stalls | translation stalls precede the access | TLB-miss timeline; page-walk durations |
+| Arbitration/contention | requests wait for grant at a shared arbiter | grant latency; requesters-per-cycle at the arbiter |
+| Load imbalance | one component hot while peers idle | per-component utilization spread |
+| Latency not hidden (low MLP/ILP) | stalls despite spare resources | outstanding-work count vs. stall time |
+
+### 4.5 Evidence-gathering policy
+
+- **Vital-signs first** (the Orient pass), computed as aggregates in SQL/Python —
+  never raw rows:
+  - per-component task count, busy/idle time, utilization;
+  - per-`Kind` duration distribution (p50/p95/max);
+  - in-flight concurrency over time (start/end overlap);
+  - dependency wait gaps (child blocked on parent / upstream component);
+  - time-in-milestone breakdown.
+- **Hypothesis-driven drill-down.** Each subsequent query is chosen to confirm/refute
+  a specific hypothesis; collect the minimum that distinguishes candidates, not
+  everything. Drill coarse → suspicious region/component, following `ParentID` up/down
+  to the thing a stalled component waits on (the data today's single-shot bot can't
+  reach).
+- **Viz is evidence too.** Some patterns (bursts, periodicity, gaps) are easier to
+  *see* via `daisen_view` than to express in SQL.
+- **Budgeted.** Row/byte caps per query; summarize in Python so raw data never
+  reaches the LLM (§2).
+
+### 4.6 Loop control, budgets & termination
+
+- **Caps:** max iterations, max tool calls, an overall wall-clock ceiling (build on
+  the existing 10-min client ceiling), and a token budget.
+- **Stopping criteria:** a hypothesis is supported with evidence; OR the top-K
+  hypotheses are all refuted; OR a budget is hit.
+- **Graceful degradation:** on exhaustion, report the best-supported partial finding
+  and what was ruled out — never loop silently or fabricate. Surface that a limit was
+  hit (no silent truncation, per the visible-tour principle).
+
+### 4.7 Deferred (and when to add)
+
+- **Explicit router LLM** — when request volume makes loading full context on trivial
+  questions costly, or when distinct modes need distinct loops.
+- **Manager + worker fan-out** — for genuinely parallel work (compare N components,
+  broad audits): a planner dispatches one worker per component/hypothesis and
+  synthesizes. Reserved for when a single loop is demonstrably too serial.
+
+### 4.8 Phasing
+
+The strategy lands incrementally: **Phase 2** introduces the front door + the
+Orient→Hypothesize→Test loop using the `data` tool and a first catalog; **Phases 3–5**
+add evidence tools (code, python, viz); **Phase 6** hardens budgets/termination and
+the degradation matrix.
+
+---
+
+## 5. Phase roadmap
 
 Each phase is decomposed into workstreams (A–E style) when we reach it; Phase 1 is
-detailed in §5.
+detailed in §6.
 
 | Phase | Title | Summary | Depends on |
 |---|---|---|---|
 | **1** | View-URL contract + render-ready signal | Make every view losslessly reconstructable from its URL, and expose a programmatic "view is fully rendered" signal. Renderer-agnostic; independently useful as better link-sharing. | — |
-| **2** | Agent-loop skeleton + tool-calling + `data` tool | Turn `httpChatProxy` into a streamed multi-step tool-calling loop; land the guarded read-only `data_query`; add capability-gating with single-shot fallback. A working "agent that can query the trace" — the biggest single value jump. | — |
+| **2** | Agent-loop skeleton + tool-calling + `data` tool | Turn `httpChatProxy` into a streamed multi-step tool-calling loop; land the guarded read-only `data_query`; add capability-gating with single-shot fallback. Includes the front door + Orient→Hypothesize→Test loop (§4) and a first failure-mode catalog. A working "agent that can query the trace" — the biggest single value jump. | — |
 | **3** | `code` tool | `code_search` + `code_read` over Akita source so the agent can interpret Kinds/milestones. | 2 |
 | **4** | Python sandbox tool | Sandboxed `run_python` for summarizing data without shipping raw rows. Isolated as its own phase for the runtime/isolation decision. | 2 |
 | **5** | Viz-perception tool + visual tour | `daisen_view`: frontend off-screen render → image observation; clickable links + thumbnails. Extends gating to require a vision model. | 1, 2 |
@@ -137,7 +275,7 @@ and it ships value on its own.
 
 ---
 
-## 5. Phase 1 — detailed
+## 6. Phase 1 — detailed
 
 **Goal:** every meaningful view is fully reconstructable from its URL alone, and a
 programmatic "this view has finished rendering" signal exists.
@@ -224,7 +362,7 @@ This is where Phase 1 produces a reusable building block for Phase 5's
 
 ---
 
-## 6. Open questions / to audit
+## 7. Open questions / to audit
 
 1. **Multi-select / large selections** — repeated query params get unwieldy.
    Acceptable, or do we want a server-side `view-id → state` table for big
@@ -242,10 +380,17 @@ This is where Phase 1 produces a reusable building block for Phase 5's
 7. **Capture fidelity** (Phase 5) — SVG-serialize is more faithful than
    `html2canvas` for the charts; confirm it covers all view types (or where
    `html2canvas` is the needed fallback).
+8. **Triage** (§4.2/§4.7) — stay implicit, or add an explicit router LLM? If
+   explicit, at what volume/cost threshold, and what modes would it route to?
+9. **Failure-mode catalog** (§4.4) — domain input needed: validate and expand the
+   starter set against Akita's real components and milestone vocabulary. Who owns it,
+   and does it live in the prompt or behind a `list_known_failure_modes` tool?
+10. **Hypothesis artifact** (§4.4) — confirm a structured, schema-enforced hypothesis
+    list (vs. free-form prose) is the right contract, and the fields to enforce.
 
 ---
 
-## 7. Non-goals
+## 8. Non-goals
 
 - No headless/server-side rendering (Chromium) — the live frontend is the renderer.
 - No bespoke charting (matplotlib/plotly) for agent perception — Daisen renders.
@@ -268,3 +413,6 @@ This is where Phase 1 produces a reusable building block for Phase 5's
 | Guarded read-only `data_query` with hard caps | Powerful over a small fixed schema; SELECT-only + LIMIT + timeout bounds risk; computing in SQL avoids token-arithmetic hallucination. |
 | Python sandbox for summarization | Keeps raw data off the LLM wire and makes numeric analysis reliable. |
 | Capability-gate on tool-calling (+ vision for viz) | Free-text model ids mean capabilities aren't guaranteed; degrade to single-shot. |
+| Single hypothesis-driven loop; implicit triage; router/manager deferred (§4) | Matches how trace debugging actually works; avoids multi-agent latency/cost; native tool-calling already short-circuits trivial questions. |
+| Hypotheses generated by the agent, seeded by a curated failure-mode catalog, emitted as a structured ranked artifact (§4.4) | A general model misses arch-specific causes; the catalog is the top quality lever; structure makes it auditable and gives a stopping criterion. |
+| Evidence is hypothesis-driven, vital-signs-first, budgeted (§4.5) | Minimizes tokens/latency and keeps raw data off the LLM wire. |
