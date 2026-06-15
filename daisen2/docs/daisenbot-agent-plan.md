@@ -1,6 +1,6 @@
 # DaisenBot Agentic Upgrade — Design & Implementation Plan
 
-**Status:** Draft for review · Phase 1 Workstreams A–C implemented (ComponentPage write-path deferred) · **Last updated:** 2026-06-15
+**Status:** Draft for review · Phase 1 Workstreams A–E implemented (ComponentPage write-path + in-browser SVG check land in Phase 5) · **Last updated:** 2026-06-15
 
 This document captures the design decisions and phased plan for turning DaisenBot
 from a single-shot Q&A proxy into a tool-using agent that can *investigate* an
@@ -418,6 +418,18 @@ validated with the app running (alongside Workstream D / a manual smoke test).
 - Await `document.fonts.ready` before signaling — SVG text metrics depend on fonts;
   keeps captures deterministic.
 
+**Status (2026-06-15): implemented.** `src/utils/renderReady.mjs` (pure, node-tested)
+counts in-flight work via `beginRenderWork()`; `hooks/useRenderReady.ts` wires it into
+all five data hooks (`useTraceData`, `useCompInfo`, `useComponentNames`, `useSegments`,
+`useSimulationRange`), so every page- and widget-level fetch is tracked. When the count
+returns to zero it waits one frame + `document.fonts.ready`, then sets
+`window.__daisenViewReady = true` and `<html data-daisen-ready="ok|error">`;
+`useRenderReadyOnNavigation()` (in Layout) clears it on route change. Simplification: a
+rendered empty view settles as `ready-ok` (not a distinct `ready-empty`) — only
+"settled vs in-flight" matters for capture, and `error` is still surfaced. Verified by
+`tests/render-ready.test.mjs` (7 cases) + `tsc` + `vite build`; exact capture frame-timing
+is finalized with the running app in Phase 5.
+
 ### Workstream E — Off-screen render + verification harness
 
 This is where Phase 1 produces a reusable building block for Phase 5's
@@ -430,6 +442,27 @@ This is where Phase 1 produces a reusable building block for Phase 5's
 - Pure unit test: `parseView(encodeView(s)) === s` for representative states.
 - In-browser test: load N representative URLs, await `data-daisen-ready`, assert
   non-empty SVG.
+
+**Status (2026-06-15): automated portions landed; in-browser SVG assertion folded into
+Phase 5.**
+- ✅ Pure unit test — `parseView(encodeView(s)) === s` (`tests/view-state.test.mjs`).
+- ✅ Signal lifecycle — `tests/render-ready.test.mjs` proves ready flips correctly
+  (false on work/navigation, true on settle, `error` status, idempotent end).
+- ⏭ Off-screen mount of a real view + "non-empty SVG" assertion needs a browser and is
+  *the same mechanism as Phase 5's frontend capture* (mount a URL off-screen → await
+  `data-daisen-ready` → read the SVG), so it is built and tested there rather than
+  duplicated. Until then, use the manual smoke checklist.
+
+**Manual smoke checklist** (run `daisen2` against a trace):
+1. Visiting `/` redirects to `/dashboard`.
+2. Dashboard: zoom/pan and change filter/axes/page → URL updates; reload reproduces the
+   exact view; back/forward works.
+3. A widget's focus control → `/dashboard?widget=<name>` shows only that chart; "Show all"
+   returns to the grid.
+4. Task page: set a Kind filter and select a task → `kind`/`sel` appear in the URL and
+   reload restores them; the Gantt highlight matches the detail pane.
+5. Console: `window.__daisenViewReady` is `false` while a view loads, `true` once settled;
+   `<html>` carries `data-daisen-ready`.
 
 ### Sequencing & acceptance
 

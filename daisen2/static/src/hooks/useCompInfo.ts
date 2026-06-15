@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useRenderReady } from "./useRenderReady";
 
 export interface TimeValue {
   time: number;
@@ -55,6 +56,8 @@ export function useCompInfo(
 
     return () => controller.abort();
   }, [compName, infoType, startTime, endTime, numDots]);
+
+  useRenderReady(loading, error !== null);
 
   return { info, loading, error };
 }

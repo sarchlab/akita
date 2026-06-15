@@ -2,12 +2,15 @@ import { Link, Outlet } from "react-router-dom";
 import { Bot } from "lucide-react";
 import ChatPanel from "./chat/ChatPanel";
 import { Button } from "./ui/button";
+import { useRenderReadyOnNavigation } from "../hooks/useRenderReady";
 
 export default function Layout() {
+  useRenderReadyOnNavigation();
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <nav className="daisen-top-nav">
-        <Link to="/" className="daisen-brand">
+        <Link to="/dashboard" className="daisen-brand">
           Daisen
         </Link>
         <Button

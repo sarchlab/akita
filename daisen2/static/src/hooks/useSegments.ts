@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { SegmentsResponse } from "../types/task";
+import { useRenderReady } from "./useRenderReady";
 
 export function useSegments() {
   const [data, setData] = useState<SegmentsResponse | null>(null);
@@ -26,6 +27,8 @@ export function useSegments() {
       cancelled = true;
     };
   }, []);
+
+  useRenderReady(loading, error !== null);
 
   return { data, loading, error };
 }

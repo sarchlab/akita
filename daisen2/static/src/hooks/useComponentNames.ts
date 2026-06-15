@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useRenderReady } from "./useRenderReady";
 
 function naturalCompare(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
@@ -30,6 +31,8 @@ export function useComponentNames() {
       cancelled = true;
     };
   }, []);
+
+  useRenderReady(loading, error !== null);
 
   return { names, loading, error };
 }

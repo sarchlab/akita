@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Task } from "../types/task";
+import { useRenderReady } from "./useRenderReady";
 
 export interface TraceQuery {
   id?: string;
@@ -56,6 +57,8 @@ export function useTraceData(query: TraceQuery) {
     void fetchTasks(query, controller.signal);
     return () => controller.abort();
   }, [fetchTasks, query.id, query.kind, query.where, query.parentId, query.startTime, query.endTime]);
+
+  useRenderReady(loading, error !== null);
 
   return { tasks, loading, error, refetch: (q?: TraceQuery) => fetchTasks(q ?? query) };
 }
