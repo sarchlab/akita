@@ -59,6 +59,11 @@ type Spec struct {
 	// Page policy
 	PagePolicy PagePolicy `json:"page_policy"`
 
+	// Strategy selection (registry keys; "" selects the default). The row
+	// policy is selected from PagePolicy. See plugins.go.
+	Scheduler  string `json:"scheduler"`
+	AddrMapper string `json:"addr_mapper"`
+
 	// Timing params
 	TAL        int `json:"t_al"`
 	TCL        int `json:"t_cl"`
@@ -149,6 +154,35 @@ const (
 	cmdKindSRefExit
 	numCmdKind
 )
+
+// String returns the JEDEC-style mnemonic for a command kind. It labels the
+// command-issue milestone on a sub-transaction's trace task.
+func (k commandKind) String() string {
+	switch k {
+	case cmdKindRead:
+		return "RD"
+	case cmdKindReadPrecharge:
+		return "RDA"
+	case cmdKindWrite:
+		return "WR"
+	case cmdKindWritePrecharge:
+		return "WRA"
+	case cmdKindActivate:
+		return "ACT"
+	case cmdKindPrecharge:
+		return "PRE"
+	case cmdKindRefreshBank:
+		return "REFb"
+	case cmdKindRefresh:
+		return "REF"
+	case cmdKindSRefEnter:
+		return "SREFE"
+	case cmdKindSRefExit:
+		return "SREFX"
+	default:
+		return "UNKNOWN"
+	}
+}
 
 // location determines where to find the data to access.
 type location struct {

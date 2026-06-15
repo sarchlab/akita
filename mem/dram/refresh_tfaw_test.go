@@ -180,17 +180,13 @@ var _ = Describe("tFAW and Refresh", func() {
 		})
 
 		It("should trigger refresh after TREFI ticks and stall for TRFC", func() {
-			mw := &bankTickMW{
-				cmdCycles: map[commandKind]int{},
-			}
-
 			// Simulate the countdown
 			Expect(state.RefreshInProgress).To(BeFalse())
 
 			// After TREFI ticks, refresh should trigger
 			for i := range spec.TREFI {
 				_ = i
-				progress := mw.handleRefresh(&spec, state)
+				progress := runFakeStallRefresh(&spec, state)
 				if i < spec.TREFI-1 {
 					Expect(state.RefreshInProgress).To(BeFalse())
 				}
@@ -208,14 +204,10 @@ var _ = Describe("tFAW and Refresh", func() {
 			state.RefreshCyclesRemaining = spec.TRFC
 			state.RefreshCycleCounter = 0
 
-			mw := &bankTickMW{
-				cmdCycles: map[commandKind]int{},
-			}
-
 			// Tick TRFC times
 			for range spec.TRFC {
 				Expect(state.RefreshInProgress).To(BeTrue())
-				mw.handleRefresh(&spec, state)
+				runFakeStallRefresh(&spec, state)
 			}
 
 			// After TRFC ticks, refresh should be complete
@@ -225,12 +217,8 @@ var _ = Describe("tFAW and Refresh", func() {
 		It("should not trigger refresh when TREFI is 0", func() {
 			spec.TREFI = 0
 
-			mw := &bankTickMW{
-				cmdCycles: map[commandKind]int{},
-			}
-
 			for range 100 {
-				mw.handleRefresh(&spec, state)
+				runFakeStallRefresh(&spec, state)
 			}
 
 			Expect(state.RefreshInProgress).To(BeFalse())

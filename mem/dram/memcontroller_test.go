@@ -144,9 +144,9 @@ var _ = Describe("Bank Operations", func() {
 			},
 		}
 
-		progress := processPendingCompletions(state)
+		completed := processPendingCompletions(state)
 
-		Expect(progress).To(BeTrue())
+		Expect(completed).NotTo(BeEmpty())
 		Expect(state.PendingCompletions).To(BeEmpty())
 		Expect(state.Transactions[0].SubTransactions[0].Completed).To(BeTrue())
 	})

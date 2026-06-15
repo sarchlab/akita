@@ -64,6 +64,25 @@ jobs:
       - name: Run tests
         run: ginkgo -r
 
+  dram_validation:
+    # Self-contained DRAM validation gate — runs the whole tier ladder for the
+    # mem/dram package: Tier 1 (timing-formula cross-validation), Tier 2
+    # (single-request latency), Tier 3 (tCCD/tRRD/tFAW microbenchmarks), Tier 4
+    # (bandwidth sanity) — all in-process — plus Tier 5 (full-trace command
+    # counts vs DRAMSim3 & Ramulator2) and Tier 6 (read latency within 15%),
+    # which compare against the committed reference data in mem/dram/validation/.
+    # No C++ oracle build needed; mem/dram has no generated mocks.
+    runs-on: self-hosted
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.26.2
+      - name: Run DRAM validation (Tiers 1-6)
+        run: go test ./mem/dram/ -count=1
+
   noc_acceptance_test:
     runs-on: self-hosted
     timeout-minutes: 60

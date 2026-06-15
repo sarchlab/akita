@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
 // p0Harness wires a DRAM controller to a source port through a direct
@@ -19,7 +20,7 @@ type p0Harness struct {
 	top    messaging.Port
 }
 
-func newP0Harness(spec Spec) *p0Harness {
+func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 	engine := timing.NewSerialEngine()
 	reg := modeling.NewStandaloneRegistrar(engine)
 
@@ -27,6 +28,9 @@ func newP0Harness(spec Spec) *p0Harness {
 		WithRegistrar(reg).
 		WithSpec(spec).
 		Build("P0DRAM")
+	for _, t := range tracers {
+		tracing.CollectTrace(dramComp, t)
+	}
 
 	for _, name := range []string{"Top", "Control"} {
 		p := modeling.MakePortBuilder().
