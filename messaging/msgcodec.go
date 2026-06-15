@@ -12,39 +12,24 @@ import (
 var msgCodec = codec.NewRegistry[Msg]("message")
 
 // EncodeMsg encodes a single message into a self-describing JSON payload that
-// preserves its concrete type, so DecodeMsg can reconstruct it. A nil message
-// encodes as JSON null. It is a thin single-value wrapper over the same
-// type-tagged slice encoding used for port-buffer checkpoints (a present
-// message encodes as a one-element list), for callers that carry one
-// polymorphic message inside an otherwise plain-JSON structure (e.g. a flit
-// payload, or an endpoint's reassembly state). The concrete type must be
-// registered (see RegisterMsg / DefineProtocol) for DecodeMsg to restore it.
+// preserves its concrete type, so DecodeMsg can reconstruct it. It is the public
+// entry point for callers that carry one polymorphic message inside an otherwise
+// plain-JSON structure (e.g. a flit payload, or an endpoint's reassembly state),
+// so they need not depend on package codec directly. A nil message encodes as
+// JSON null; that policy lives in codec.Encode, shared by every interface, so
+// this is a thin delegate. The concrete type must be registered (see RegisterMsg
+// / DefineProtocol) for DecodeMsg to restore it.
 func EncodeMsg(msg Msg) (json.RawMessage, error) {
-	if msg == nil {
-		return json.RawMessage("null"), nil
-	}
-
-	return msgCodec.EncodeSlice([]Msg{msg})
+	return codec.Encode(msg)
 }
 
-// DecodeMsg reverses EncodeMsg. A null or empty payload decodes to a nil
-// message. A payload whose concrete type was never registered fails loudly with
-// an unknown-message-type error, matching the port-buffer checkpoint path.
+// DecodeMsg reverses EncodeMsg, resolving the message's concrete type through the
+// message registry — which is why, unlike EncodeMsg, it cannot be a free
+// function. A null or empty payload decodes to a nil message. A payload whose
+// concrete type was never registered fails loudly with an unknown-message-type
+// error, matching the port-buffer checkpoint path.
 func DecodeMsg(data json.RawMessage) (Msg, error) {
-	if len(data) == 0 || string(data) == "null" {
-		return nil, nil
-	}
-
-	msgs, err := msgCodec.DecodeSlice(data)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(msgs) == 0 {
-		return nil, nil
-	}
-
-	return msgs[0], nil
+	return msgCodec.Decode(data)
 }
 
 // RegisterMsg registers a concrete message type so a checkpoint that captured it
