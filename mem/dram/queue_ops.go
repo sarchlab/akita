@@ -59,88 +59,39 @@ func pushSubTrans(state *State, transIdx int) {
 	}
 }
 
-// tickSubTransQueue tries to move one sub-transaction from the queue into
-// the command queue. Returns true if progress was made.
+// tickSubTransQueue tries to move one sub-transaction from the queue into the
+// command queue using the default plugin set. Returns true if progress was
+// made. Production drives this through the component's configured controller
+// (see controller.fillCommandQueue); this package-level shim builds the default
+// controller so tests can exercise the path directly.
 func tickSubTransQueue(spec *Spec, state *State) bool {
-	for i, ref := range state.SubTransQueue.Entries {
-		var cmd *commandState
-		if spec.PagePolicy == PagePolicyOpen {
-			cmd = createOpenPageCommand(spec, state, ref)
-		} else {
-			cmd = createClosePageCommand(spec, state, ref)
-		}
-
-		if canAcceptCommand(state, cmd, spec) {
-			acceptCommand(state, cmd)
-			// Remove from queue
-			state.SubTransQueue.Entries = append(
-				state.SubTransQueue.Entries[:i],
-				state.SubTransQueue.Entries[i+1:]...,
-			)
-			return true
-		}
-	}
-
-	return false
+	return newDefaultController(spec).fillCommandQueue(spec, state)
 }
 
 // createClosePageCommand creates a command for a sub-transaction using
-// close-page policy.
+// close-page policy (auto-precharge). Thin wrapper over the row policy, kept
+// for direct testing.
 func createClosePageCommand(
 	spec *Spec,
 	state *State,
 	ref subTransRef,
 ) *commandState {
-	trans := findTransaction(state, ref.TxID)
-	st := &trans.SubTransactions[ref.SubIndex]
-
-	cmd := &commandState{
-		ID:          timing.GetIDGenerator().Generate(),
-		Address:     st.Address,
-		SubTransRef: ref,
-	}
-
-	// Close-page: read => ReadPrecharge, write => WritePrecharge
-	if isTransactionRead(trans) {
-		cmd.Kind = int(cmdKindReadPrecharge)
-	} else {
-		cmd.Kind = int(cmdKindWritePrecharge)
-	}
-
-	loc := mapAddress(spec, st.Address)
-	cmd.Location = loc
-
-	return cmd
+	st := subTransByRef(state, ref)
+	return closePageRowPolicy{}.CommandFor(
+		spec, state, ref, mapAddress(spec, st.Address))
 }
 
 // createOpenPageCommand creates a command for a sub-transaction using
-// open-page policy. Unlike close-page, it uses plain Read/Write commands
-// (not ReadPrecharge/WritePrecharge), leaving the row buffer open.
+// open-page policy (plain Read/Write, leaving the row buffer open). Thin
+// wrapper over the row policy, kept for direct testing.
 func createOpenPageCommand(
 	spec *Spec,
 	state *State,
 	ref subTransRef,
 ) *commandState {
-	trans := findTransaction(state, ref.TxID)
-	st := &trans.SubTransactions[ref.SubIndex]
-
-	cmd := &commandState{
-		ID:          timing.GetIDGenerator().Generate(),
-		Address:     st.Address,
-		SubTransRef: ref,
-	}
-
-	// Open-page: read => Read, write => Write (no auto-precharge)
-	if isTransactionRead(trans) {
-		cmd.Kind = int(cmdKindRead)
-	} else {
-		cmd.Kind = int(cmdKindWrite)
-	}
-
-	loc := mapAddress(spec, st.Address)
-	cmd.Location = loc
-
-	return cmd
+	st := subTransByRef(state, ref)
+	return openPageRowPolicy{}.CommandFor(
+		spec, state, ref, mapAddress(spec, st.Address))
 }
 
 // getQueueIndex returns the command queue index for a command (by rank).

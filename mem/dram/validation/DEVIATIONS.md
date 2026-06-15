@@ -12,6 +12,7 @@ deviation listed here is a *known, accepted* gap — not a silent one.
 | D3 | Close-page read/write data latency | Sub-transaction completes `readDelay`/`writeDelay` cycles after the column command, including the `ReadPrecharge`/`WritePrecharge` auto-precharge variants (`buildCmdCycles`); the trailing precharge is enforced by the bank timing table | Data returns `tRL/tWL + burst` after the column command; precharge follows | **Resolved in P0** — completion timeline now uses the data-return latency for the auto-precharge variants instead of `tRP` |
 | D4 | Channels | One `dram.Comp` models exactly one channel; `NumChannel > 1` is rejected at build time | Both references model multiple channels internally | Intentional for now — first-class channels are roadmap **P1** |
 | D5 | Address mapping | Single fixed bit-decode scheme | DRAMSim3 12-field permutation; Ramulator2 named + XOR + RIT | Known gap — configurable mapping is roadmap **P3** |
+| D6 | Auto-precharge command accounting | A close-page access is one `ReadPrecharge`/`WritePrecharge` column command; the precharge is implicit, so `TotalPrecharges` does **not** count it (matches Ramulator2's `RDA`/`WRA`) | DRAMSim3 folds the auto-precharge into `num_pre_cmds` | Accounting-only divergence — the Tier-5 diff compares `activates` and column `reads`/`writes` (faithful across all three) and does **not** compare precharge counts directly |
 
 ## Notes on the P0 timing model
 

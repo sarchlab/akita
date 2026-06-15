@@ -1,0 +1,126 @@
+{
+  "canonical": {
+    "protocol": "DDR4",
+    "bankgroups": 4,
+    "banks_per_group": 4,
+    "ranks": 1,
+    "rows": 32768,
+    "columns": 1024,
+    "device_width": 8,
+    "bus_width": 64,
+    "BL": 8,
+    "tCK_ns": 0.833,
+    "CL": 16,
+    "CWL": 12,
+    "AL": 0,
+    "tRCD": 16,
+    "tRP": 16,
+    "tRAS": 39,
+    "tRRD_S": 5,
+    "tRRD_L": 7,
+    "tFAW": 28,
+    "tCCD_S": 4,
+    "tCCD_L": 6,
+    "tWTR_S": 4,
+    "tWTR_L": 9,
+    "tWR": 18,
+    "tRTP": 9,
+    "tRFC": 312,
+    "tREFI": 9360,
+    "tRTRS": 2,
+    "cmd_queue_size": 8,
+    "trans_queue_size": 32
+  },
+  "scenarios": [
+    {
+      "name": "cp_read_64",
+      "page_policy": "close",
+      "pattern": {
+        "op": "read",
+        "count": 64,
+        "stride": "0x20000"
+      },
+      "counts_check": "enforced",
+      "latency_check": "off"
+    },
+    {
+      "name": "cp_read_256",
+      "page_policy": "close",
+      "pattern": {
+        "op": "read",
+        "count": 256,
+        "stride": "0x20000"
+      },
+      "counts_check": "enforced",
+      "latency_check": "off"
+    },
+    {
+      "name": "cp_write_64",
+      "page_policy": "close",
+      "pattern": {
+        "op": "write",
+        "count": 64,
+        "stride": "0x20000"
+      },
+      "counts_check": "enforced",
+      "latency_check": "off"
+    },
+    {
+      "name": "cp_write_256",
+      "page_policy": "close",
+      "pattern": {
+        "op": "write",
+        "count": 256,
+        "stride": "0x20000"
+      },
+      "counts_check": "enforced",
+      "latency_check": "off"
+    },
+    {
+      "name": "op_seq_64B",
+      "page_policy": "open",
+      "pattern": {
+        "op": "read",
+        "count": 512,
+        "stride": "0x40"
+      },
+      "counts_check": "off",
+      "latency_check": "enforced"
+    },
+    {
+      "name": "op_stride_128K",
+      "page_policy": "open",
+      "pattern": {
+        "op": "read",
+        "count": 512,
+        "stride": "0x20000"
+      },
+      "counts_check": "off",
+      "latency_check": "enforced"
+    },
+    {
+      "name": "op_stride_8K",
+      "page_policy": "open",
+      "pattern": {
+        "op": "read",
+        "count": 512,
+        "stride": "0x2000"
+      },
+      "counts_check": "off",
+      "latency_check": "known_gap",
+      "gap_reason": "configurable address mapping (roadmap P3)"
+    },
+    {
+      "name": "op_stride_16K",
+      "page_policy": "open",
+      "pattern": {
+        "op": "read",
+        "count": 512,
+        "stride": "0x4000"
+      },
+      "counts_check": "off",
+      "latency_check": "known_gap",
+      "gap_reason": "configurable address mapping (roadmap P3)"
+    }
+  ]
+}

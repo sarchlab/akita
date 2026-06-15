@@ -29,41 +29,47 @@ func tickBank(bs *bankState) bool {
 
 // processPendingCompletions marks every sub-transaction whose read/write data
 // has become ready (its CompletionTick has been reached) as completed, then
-// drops those entries. Returns true if any sub-transaction completed.
+// drops those entries. It returns the IDs of the sub-transactions that just
+// completed, so the caller can end their trace tasks.
 //
 // This is the data-return timeline, decoupled from bank occupancy: multiple
 // reads/writes may be in flight on the same bank, each completing on its own
 // schedule, while the bank accepts further column commands per the timing table.
-func processPendingCompletions(state *State) bool {
+func processPendingCompletions(state *State) []uint64 {
 	if len(state.PendingCompletions) == 0 {
-		return false
+		return nil
 	}
 
-	progress := false
+	var completed []uint64
 	kept := state.PendingCompletions[:0]
 	for _, pc := range state.PendingCompletions {
 		if pc.CompletionTick <= state.TickCount {
-			markSubTransCompleted(state, pc.Ref)
-			progress = true
+			if id, ok := markSubTransCompleted(state, pc.Ref); ok {
+				completed = append(completed, id)
+			}
 			continue
 		}
 		kept = append(kept, pc)
 	}
 	state.PendingCompletions = kept
 
-	return progress
+	return completed
 }
 
-// markSubTransCompleted flags the referenced sub-transaction as completed. A
-// stale reference (parent transaction already removed) is a safe no-op.
-func markSubTransCompleted(state *State, ref subTransRef) {
+// markSubTransCompleted flags the referenced sub-transaction as completed and
+// returns its (trace task) ID. A stale reference (parent transaction already
+// removed) is a safe no-op that reports ok=false.
+func markSubTransCompleted(state *State, ref subTransRef) (uint64, bool) {
 	t := findTransaction(state, ref.TxID)
 	if t == nil {
-		return
+		return 0, false
 	}
 	if ref.SubIndex >= 0 && ref.SubIndex < len(t.SubTransactions) {
-		t.SubTransactions[ref.SubIndex].Completed = true
+		sub := &t.SubTransactions[ref.SubIndex]
+		sub.Completed = true
+		return sub.ID, true
 	}
+	return 0, false
 }
 
 // isReadOrWrite returns true if the command kind is a read/write variant.

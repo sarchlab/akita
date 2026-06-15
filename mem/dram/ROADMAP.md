@@ -164,11 +164,16 @@ test infrastructure *first* so every later phase has an oracle.
 
 ---
 
-### Phase 1 — Pluggable controller architecture + channels — **L**
+### Phase 1 — Pluggable controller architecture + channels — **L** — ◐
 
 Refactor the baked-in controller into config-selectable components, mirroring
 Ramulator2's interface/implementation/factory pattern, using Akita's
 builder+Spec+middleware idiom.
+
+> Increment status: **P1.1 (scaffolding + extract defaults) — done.** P1.2
+> (`PER_BANK` queues) and P1.3 (channel model) — not started. Channel direction
+> decided: keep one-per-channel (Option A); `AddrMapper` returns a full
+> `location` so first-class channels remain possible without an interface change.
 
 **Interfaces** (sketch — names illustrative)
 
@@ -198,17 +203,26 @@ type CommandHook interface {
 
 **Deliverables**
 
-- A registry keyed by config string (e.g. `spec.Scheduler = "FRFCFS"`), plus
-  builder overrides (`WithScheduler`, `WithRefreshManager`, `WithPlugin`, …).
-- Reimplement today's behavior as the default plugins: `FRFCFS` scheduler,
-  `Open`/`Close` row policies, the current address mapper. **No behavior change.**
-- Command-queue structure option (`PER_RANK` default, add `PER_BANK`).
-- Resolve the channel model (first-class channels *or* enforced one-per-channel).
+- ☑ A registry keyed by config string (e.g. `spec.Scheduler = "FRFCFS"`), plus
+  builder overrides (`WithScheduler`, `WithRowPolicy`, `WithRefreshManager`,
+  `WithAddrMapper`, `WithPlugin`). See `plugins.go`.
+- ☑ Reimplement today's behavior as the default plugins: `FRFCFS` scheduler,
+  `open`/`close` row policies, `fakestall` refresh, the `default` address
+  mapper, plus a no-op `null` command hook. **No behavior change** — the
+  defaults delegate to the existing functions and the full pre-existing suite
+  passes unmodified.
+- ☐ Command-queue structure option (`PER_RANK` default, add `PER_BANK`). *(P1.2)*
+- ☑ Resolve the channel model: enforced one-per-channel retained (Option A);
+  the `AddrMapper` interface returns a full `location` for forward-compat. First-
+  class channels remain a possible future P1.3 if needed.
 
 **Acceptance**
 
-- All P0 tests + Tier 5 differential unchanged (bit-for-bit on command counts).
-- A no-op "null" plugin proves the hook path works without altering results.
+- ☑ All P0 tests unchanged; new `plugins_test.go` covers registry selection,
+  builder overrides, the unknown-key panic, and the hook path. *(Tier 5
+  differential still blocked on oracle vendoring, as in P0.)*
+- ☑ A no-op "null" plugin (and a counting hook) prove the hook path works
+  without altering results.
 
 ---
 
