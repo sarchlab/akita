@@ -11,23 +11,23 @@ import (
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
-// p0Harness wires a DRAM controller to a source port through a direct
+// dramHarness wires a DRAM controller to a source port through a direct
 // connection so a test can drive requests and collect responses end-to-end.
-type p0Harness struct {
+type dramHarness struct {
 	engine timing.Engine
 	dram   *Comp
 	src    messaging.Port
 	top    messaging.Port
 }
 
-func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
+func newDramHarness(spec Spec, tracers ...tracing.Tracer) *dramHarness {
 	engine := timing.NewSerialEngine()
 	reg := modeling.NewStandaloneRegistrar(engine)
 
 	dramComp := MakeBuilder().
 		WithRegistrar(reg).
 		WithSpec(spec).
-		Build("P0DRAM")
+		Build("TestDRAM")
 	for _, t := range tracers {
 		tracing.CollectTrace(dramComp, t)
 	}
@@ -50,10 +50,10 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 	conn.PlugIn(top)
 	conn.PlugIn(src)
 
-	return &p0Harness{engine: engine, dram: dramComp, src: src, top: top}
+	return &dramHarness{engine: engine, dram: dramComp, src: src, top: top}
 }
 
-func (h *p0Harness) read(addr uint64) memprotocol.ReadReq {
+func (h *dramHarness) read(addr uint64) memprotocol.ReadReq {
 	r := memprotocol.ReadReq{}
 	r.ID = timing.GetIDGenerator().Generate()
 	r.Address = addr
@@ -65,7 +65,7 @@ func (h *p0Harness) read(addr uint64) memprotocol.ReadReq {
 	return r
 }
 
-func (h *p0Harness) write(addr uint64, data []byte) memprotocol.WriteReq {
+func (h *dramHarness) write(addr uint64, data []byte) memprotocol.WriteReq {
 	w := memprotocol.WriteReq{}
 	w.ID = timing.GetIDGenerator().Generate()
 	w.Address = addr
@@ -77,7 +77,7 @@ func (h *p0Harness) write(addr uint64, data []byte) memprotocol.WriteReq {
 	return w
 }
 
-func (h *p0Harness) collect() (
+func (h *dramHarness) collect() (
 	reads []memprotocol.DataReadyRsp,
 	writes []memprotocol.WriteDoneRsp,
 ) {
@@ -102,7 +102,7 @@ func (h *p0Harness) collect() (
 // addresses that differ only in bits [6,12] hit the same bank+row, while a
 // change in bit [17] is a same-bank row conflict.
 
-var _ = Describe("P0: open-page panic regression", func() {
+var _ = Describe("open-page panic regression", func() {
 	openPageSpec := func() Spec {
 		spec := DefaultSpec()
 		spec.PagePolicy = PagePolicyOpen
@@ -110,7 +110,7 @@ var _ = Describe("P0: open-page panic regression", func() {
 	}
 
 	It("should not panic on back-to-back same-row reads (the original bug)", func() {
-		h := newP0Harness(openPageSpec())
+		h := newDramHarness(openPageSpec())
 
 		// Two reads to the same bank+row (columns 0x40 and 0x80). The second is
 		// a row-buffer hit issued while the first read's data is still in
@@ -126,7 +126,7 @@ var _ = Describe("P0: open-page panic regression", func() {
 	})
 
 	It("should handle same-bank row conflicts in open-page mode", func() {
-		h := newP0Harness(openPageSpec())
+		h := newDramHarness(openPageSpec())
 
 		// Same bank and rank, different rows (bit 17) → the controller must
 		// precharge and re-activate between the two reads.
@@ -140,7 +140,7 @@ var _ = Describe("P0: open-page panic regression", func() {
 	})
 
 	It("should pipeline many same-row reads without panic", func() {
-		h := newP0Harness(openPageSpec())
+		h := newDramHarness(openPageSpec())
 
 		const n = 8
 		for i := range n {
@@ -157,7 +157,7 @@ var _ = Describe("P0: open-page panic regression", func() {
 	})
 
 	It("should preserve write-then-read data in open-page mode", func() {
-		h := newP0Harness(openPageSpec())
+		h := newDramHarness(openPageSpec())
 
 		data := []byte{9, 8, 7, 6}
 
@@ -175,7 +175,7 @@ var _ = Describe("P0: open-page panic regression", func() {
 	})
 })
 
-var _ = Describe("P0: close-page completion latency", func() {
+var _ = Describe("close-page completion latency", func() {
 	// Regression for the auto-precharge completion bug: under the default
 	// close-page policy, reads/writes are emitted as ReadPrecharge/WritePrecharge.
 	// Their data/response must become ready after ReadDelay/WriteDelay (the data
@@ -218,7 +218,7 @@ var _ = Describe("P0: close-page completion latency", func() {
 	})
 })
 
-var _ = Describe("P0: channel guard", func() {
+var _ = Describe("channel guard", func() {
 	build := func(numChannel int) func() {
 		return func() {
 			engine := timing.NewSerialEngine()

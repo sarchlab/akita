@@ -5,7 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// P1.2 — PER_BANK command-queue structure.
+// PER_BANK command-queue structure.
 //
 // Today the controller uses one command queue per rank (PER_RANK): all of a
 // rank's banks share a single queue of CommandQueueCapacity entries, so a burst
@@ -20,7 +20,7 @@ func cmdAt(rank, bankGroup, bank uint64) *commandState {
 	}
 }
 
-var _ = Describe("P1.2: PER_BANK command queues", func() {
+var _ = Describe("PER_BANK command queues", func() {
 	It("maps different banks of a rank to different queues (PER_BANK)", func() {
 		spec := DefaultSpec()
 		spec.QueueStructure = QueueStructurePerBank
@@ -53,7 +53,7 @@ var _ = Describe("P1.2: PER_BANK command queues", func() {
 		spec.TransactionQueueSize = 32
 		spec.CommandQueueCapacity = 8
 
-		h := newP0Harness(spec)
+		h := newDramHarness(spec)
 		banks := spec.NumRank * spec.NumBankGroup * spec.NumBank
 		Expect(h.dram.State.CommandQueues.NumQueues).To(Equal(banks))
 	})

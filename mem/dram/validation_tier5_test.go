@@ -24,12 +24,13 @@ import (
 //
 //   Tier 6 — average read latency, open-page stream scenarios, compared against
 //            DRAMSim3 within a 15% tolerance. Some of these deliberately probe a
-//            feature Akita does NOT support (configurable address mapping, P3):
+//            feature Akita does NOT support (configurable address mapping):
 //            when bank parallelism depends on the mapping, Akita's fixed map
 //            diverges far past 15%. Those scenarios are marked "known_gap" and
 //            the suite asserts the gap is *currently* large (a tracked,
-//            executable record). When P3 lands and the gap closes, the
-//            characterization assertion will fail — flip it to "enforced" then.
+//            executable record). When configurable address mapping lands and the
+//            gap closes, the characterization assertion will fail — flip it to
+//            "enforced" then.
 
 const (
 	tier5ScenariosPath = "validation/traces/scenarios.json"
@@ -96,7 +97,7 @@ func runAkita(scn tier5Scenario) akitaResult {
 	spec.CommandQueueCapacity = 8
 	spec.TREFI = 0 // refresh off, matching the oracle reference runs
 
-	h := newP0Harness(spec)
+	h := newDramHarness(spec)
 	data := []byte{1, 2, 3, 4}
 	for _, op := range scn.ops() {
 		if op[0] == 1 {
