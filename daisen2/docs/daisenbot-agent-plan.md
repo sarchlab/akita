@@ -1,6 +1,6 @@
 # DaisenBot Agentic Upgrade — Design & Implementation Plan
 
-**Status:** Draft for review · Phase 1 / Workstream A (view-state audit) complete · **Last updated:** 2026-06-15
+**Status:** Draft for review · Phase 1 Workstreams A–C implemented (ComponentPage write-path deferred) · **Last updated:** 2026-06-15
 
 This document captures the design decisions and phased plan for turning DaisenBot
 from a single-shot Q&A proxy into a tool-using agent that can *investigate* an
@@ -394,6 +394,17 @@ This **resolves open questions #1, #3, and #5** (see §7).
   only that component's `DashboardWidget` full-view (grid/pagination/filter suppressed);
   add a per-widget "focus" control that sets the param. Reuses the existing widget; the
   same `starttime`/`endtime`/`primary`/`secondary` params apply.
+
+**Status (2026-06-15): implemented except the ComponentPage `replaceState` conversion.**
+Landed: `viewState.mjs` `encodeSearchParams` + `mergeParams`; `/`→`/dashboard` redirect;
+DashboardPage URL-encodes filter/page/primary/secondary/range + single-widget mode +
+per-widget focus; DashboardWidget `onFocus`; GanttChart controlled selection;
+TaskChartPage lifts `kind`/`sel` and no longer clobbers params on component change.
+Verified with `tsc --noEmit`, 35 `node --test` cases, and `vite build` (all green).
+**Deferred:** ComponentPage already reconstructs its view from the URL on load (mount
+init reads `name`/`taskid`/`starttime`/`endtime`); converting its live `replaceState`
+writes to react-router touches the sim-range-follow / resync state machine, so it is best
+validated with the app running (alongside Workstream D / a manual smoke test).
 
 ### Workstream D — Render-ready signal
 
