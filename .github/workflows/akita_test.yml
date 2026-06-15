@@ -77,10 +77,8 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: 1.26.2
-      - name: Install mockgen
-        run: go install go.uber.org/mock/mockgen@v0.6.0
-      - name: Generate mocks
-        run: go generate ./...
+      # No mockgen / go generate needed: mem/dram has no generated mocks and
+      # compiles standalone (unlike the repo-wide `ginkgo -r` job).
       - name: Run DRAM differential validation (Tier 5 + Tier 6)
         run: go test ./mem/dram/ -count=1 --ginkgo.focus="Tier 5|Tier 6"
 
