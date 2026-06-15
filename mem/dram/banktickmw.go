@@ -29,12 +29,15 @@ func (m *bankTickMW) Tick() bool {
 	progress := processPendingCompletions(next)
 	progress = tickBanks(next) || progress
 
-	// Handle periodic refresh
+	// Advance refresh. The manager's return is the issue-stall gate for this
+	// cycle (per the RefreshManager contract), so a custom manager controls
+	// command issue purely through Tick — not by mutating a specific State
+	// field. The default fakestall manager returns true exactly while a refresh
+	// is active.
 	refreshActive := m.ctrl.refresh.Tick(&spec, next)
 	progress = refreshActive || progress
 
-	// Only issue new commands if refresh is not in progress
-	if !next.RefreshInProgress {
+	if !refreshActive {
 		progress = m.issue(&spec, next) || progress
 	}
 

@@ -176,15 +176,21 @@ var (
 	tier5Ref, tier5OKRef  = loadReference()
 )
 
-func skipIfNoReference() {
-	if !tier5OKScn || !tier5OKRef {
-		Skip("validation reference data not present; run " +
-			"mem/dram/validation/run_oracles.py to (re)generate it")
-	}
+// requireReference fails (not skips): the fixtures are committed and required,
+// so a missing or malformed file is a breakage CI must catch, not silently pass.
+func requireReference() {
+	Expect(tier5OKScn).To(BeTrue(), "committed %s missing or malformed "+
+		"(required; regenerate with validation/run_oracles.py)", tier5ScenariosPath)
+	Expect(tier5OKRef).To(BeTrue(), "committed %s missing or malformed "+
+		"(required; regenerate with validation/run_oracles.py)", tier5ReferencePath)
 }
 
+// countOracles is the set of oracles every enforced count scenario must be
+// compared against (both must be present in reference.csv).
+var countOracles = []string{"dramsim3", "ramulator2"}
+
 var _ = Describe("Tier 5: command counts vs DRAMSim3 & Ramulator2", func() {
-	BeforeEach(skipIfNoReference)
+	BeforeEach(requireReference)
 
 	It("matches the committed oracle command counts exactly", func() {
 		checked := 0
@@ -193,7 +199,11 @@ var _ = Describe("Tier 5: command counts vs DRAMSim3 & Ramulator2", func() {
 				continue
 			}
 			akita := runAkita(scn)
-			for sim, want := range tier5Ref[scn.Name] {
+			ref := tier5Ref[scn.Name]
+			for _, sim := range countOracles {
+				want, ok := ref[sim]
+				Expect(ok).To(BeTrue(),
+					"%s: missing %s row in reference.csv", scn.Name, sim)
 				Expect(akita.activates).To(Equal(want.activates),
 					"%s: activates vs %s", scn.Name, sim)
 				Expect(akita.reads).To(Equal(want.reads),
@@ -208,7 +218,7 @@ var _ = Describe("Tier 5: command counts vs DRAMSim3 & Ramulator2", func() {
 })
 
 var _ = Describe("Tier 6: read latency vs DRAMSim3 (15% tolerance)", func() {
-	BeforeEach(skipIfNoReference)
+	BeforeEach(requireReference)
 
 	It("matches DRAMSim3 read latency where Akita's model is faithful", func() {
 		checked := 0
