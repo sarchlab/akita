@@ -64,6 +64,26 @@ jobs:
       - name: Run tests
         run: ginkgo -r
 
+  dram_differential_validation:
+    # Grounded DRAM validation: drives the same workloads as DRAMSim3 and
+    # Ramulator2 (committed reference data in mem/dram/validation/) through
+    # Akita and checks command counts exactly and read latency within 15%.
+    # Runs in-process against the committed CSV — no C++ oracle build needed.
+    runs-on: self-hosted
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.26.2
+      - name: Install mockgen
+        run: go install go.uber.org/mock/mockgen@v0.6.0
+      - name: Generate mocks
+        run: go generate ./...
+      - name: Run DRAM differential validation (Tier 5 + Tier 6)
+        run: go test ./mem/dram/ -count=1 --ginkgo.focus="Tier 5|Tier 6"
+
   noc_acceptance_test:
     runs-on: self-hosted
     timeout-minutes: 60

@@ -3,6 +3,7 @@ package dram
 import (
 	"encoding/csv"
 	"encoding/json"
+	"math"
 	"os"
 	"strconv"
 
@@ -10,65 +11,90 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// Tier 5 — full-trace differential validation against DRAMSim3 and Ramulator2.
+// Tier 5/6 — differential validation against DRAMSim3 and Ramulator2.
 //
 // The committed reference data (validation/data/reference.csv) was produced by
 // running both oracles at pinned commits over the workload in
-// validation/traces/scenarios.json (see validation/run_oracles.py). This test
-// drives the *same* workload through Akita's dram.Comp and asserts the command
-// counts match the reference exactly.
+// validation/traces/scenarios.json (see validation/run_oracles.py). These tests
+// drive the *same* workload through Akita's dram.Comp and compare:
 //
-// For these pure close-page scenarios the command counts (activates == #ops,
-// reads/writes == #ops of that type) are config- and address-map-independent,
-// so they are a faithful cross-simulator quantity and are compared exactly.
-// Latency alignment is a later increment (see validation/oracles/README.md).
+//   Tier 5 — command counts (activates/reads/writes), close-page count
+//            scenarios, compared EXACTLY against both oracles. These quantities
+//            are config- and address-map-independent, so exact match is fair.
+//
+//   Tier 6 — average read latency, open-page stream scenarios, compared against
+//            DRAMSim3 within a 15% tolerance. Some of these deliberately probe a
+//            feature Akita does NOT support (configurable address mapping, P3):
+//            when bank parallelism depends on the mapping, Akita's fixed map
+//            diverges far past 15%. Those scenarios are marked "known_gap" and
+//            the suite asserts the gap is *currently* large (a tracked,
+//            executable record). When P3 lands and the gap closes, the
+//            characterization assertion will fail — flip it to "enforced" then.
 
 const (
 	tier5ScenariosPath = "validation/traces/scenarios.json"
 	tier5ReferencePath = "validation/data/reference.csv"
+	latencyTolerance   = 0.15
 )
 
 type tier5Scenario struct {
-	Name       string     `json:"name"`
-	PagePolicy string     `json:"page_policy"`
-	Ops        [][]uint64 `json:"ops"` // each op: [is_write, address]
+	Name         string     `json:"name"`
+	PagePolicy   string     `json:"page_policy"`
+	Ops          [][]uint64 `json:"ops"` // each op: [is_write, address]
+	CountsCheck  string     `json:"counts_check"`
+	LatencyCheck string     `json:"latency_check"`
+	GapReason    string     `json:"gap_reason"`
 }
 
 type tier5Scenarios struct {
 	Scenarios []tier5Scenario `json:"scenarios"`
 }
 
-type oracleCounts struct {
+type oracleResult struct {
 	activates, reads, writes int
+	avgReadLatency           float64 // NaN when not recorded by that oracle
 }
 
-// akitaCounts runs the scenario through a close-page DDR4 dram.Comp and returns
-// the issued command counts.
-func akitaCounts(scn tier5Scenario) oracleCounts {
+type akitaResult struct {
+	activates, reads, writes int
+	avgReadLatency           float64
+}
+
+// runAkita drives the scenario through a dram.Comp configured to match the
+// canonical oracle config (DDR4, refresh off, given page policy) and returns
+// the issued command counts and the average read latency in DRAM cycles.
+func runAkita(scn tier5Scenario) akitaResult {
 	spec := DDR4Spec
-	spec.PagePolicy = PagePolicyClose
-	// DDR4Spec carries timing+geometry but not queue sizes; use the canonical
-	// queue sizes the oracle configs use.
+	if scn.PagePolicy == "open" {
+		spec.PagePolicy = PagePolicyOpen
+	} else {
+		spec.PagePolicy = PagePolicyClose
+	}
 	spec.TransactionQueueSize = 32
 	spec.CommandQueueCapacity = 8
+	spec.TREFI = 0 // refresh off, matching the oracle reference runs
 
 	h := newP0Harness(spec)
 	data := []byte{1, 2, 3, 4}
 	for _, op := range scn.Ops {
-		isWrite, addr := op[0], op[1]
-		if isWrite == 1 {
-			h.src.Send(h.write(addr, data))
+		if op[0] == 1 {
+			h.src.Send(h.write(op[1], data))
 		} else {
-			h.src.Send(h.read(addr))
+			h.src.Send(h.read(op[1]))
 		}
 	}
 	h.engine.Run()
 
 	st := &h.dram.State
-	return oracleCounts{
-		activates: int(st.TotalActivates),
-		reads:     int(st.TotalReadCommands),
-		writes:    int(st.TotalWriteCommands),
+	lat := math.NaN()
+	if st.CompletedReads > 0 {
+		lat = float64(st.TotalReadLatencyCycles) / float64(st.CompletedReads)
+	}
+	return akitaResult{
+		activates:      int(st.TotalActivates),
+		reads:          int(st.TotalReadCommands),
+		writes:         int(st.TotalWriteCommands),
+		avgReadLatency: lat,
 	}
 }
 
@@ -84,8 +110,8 @@ func loadTier5Scenarios() ([]tier5Scenario, bool) {
 	return s.Scenarios, true
 }
 
-// loadReference returns reference counts keyed by scenario then simulator.
-func loadReference() (map[string]map[string]oracleCounts, bool) {
+// loadReference returns reference results keyed by scenario then simulator.
+func loadReference() (map[string]map[string]oracleResult, bool) {
 	f, err := os.Open(tier5ReferencePath)
 	if err != nil {
 		return nil, false
@@ -101,44 +127,51 @@ func loadReference() (map[string]map[string]oracleCounts, bool) {
 		col[name] = i
 	}
 
-	out := map[string]map[string]oracleCounts{}
+	out := map[string]map[string]oracleResult{}
 	for _, row := range records[1:] {
 		scn := row[col["scenario"]]
 		sim := row[col["simulator"]]
 		atoi := func(k string) int { v, _ := strconv.Atoi(row[col[k]]); return v }
-		if out[scn] == nil {
-			out[scn] = map[string]oracleCounts{}
+		lat := math.NaN()
+		if s := row[col["avg_read_latency_cycles"]]; s != "" {
+			lat, _ = strconv.ParseFloat(s, 64)
 		}
-		out[scn][sim] = oracleCounts{
-			activates: atoi("activates"),
-			reads:     atoi("reads"),
-			writes:    atoi("writes"),
+		if out[scn] == nil {
+			out[scn] = map[string]oracleResult{}
+		}
+		out[scn][sim] = oracleResult{
+			activates:      atoi("activates"),
+			reads:          atoi("reads"),
+			writes:         atoi("writes"),
+			avgReadLatency: lat,
 		}
 	}
 	return out, true
 }
 
-var _ = Describe("Tier 5: differential vs DRAMSim3 & Ramulator2", func() {
-	scenarios, okScn := loadTier5Scenarios()
-	reference, okRef := loadReference()
+var (
+	tier5Scen, tier5OKScn = loadTier5Scenarios()
+	tier5Ref, tier5OKRef  = loadReference()
+)
 
-	BeforeEach(func() {
-		if !okScn || !okRef {
-			Skip("validation reference data not present; run " +
-				"mem/dram/validation/run_oracles.py to (re)generate it")
-		}
-	})
+func skipIfNoReference() {
+	if !tier5OKScn || !tier5OKRef {
+		Skip("validation reference data not present; run " +
+			"mem/dram/validation/run_oracles.py to (re)generate it")
+	}
+}
+
+var _ = Describe("Tier 5: command counts vs DRAMSim3 & Ramulator2", func() {
+	BeforeEach(skipIfNoReference)
 
 	It("matches the committed oracle command counts exactly", func() {
-		Expect(scenarios).NotTo(BeEmpty())
-
-		for _, scn := range scenarios {
-			ref, ok := reference[scn.Name]
-			Expect(ok).To(BeTrue(), "no reference rows for %s", scn.Name)
-
-			akita := akitaCounts(scn)
-
-			for sim, want := range ref {
+		checked := 0
+		for _, scn := range tier5Scen {
+			if scn.CountsCheck != "enforced" {
+				continue
+			}
+			akita := runAkita(scn)
+			for sim, want := range tier5Ref[scn.Name] {
 				Expect(akita.activates).To(Equal(want.activates),
 					"%s: activates vs %s", scn.Name, sim)
 				Expect(akita.reads).To(Equal(want.reads),
@@ -146,6 +179,50 @@ var _ = Describe("Tier 5: differential vs DRAMSim3 & Ramulator2", func() {
 				Expect(akita.writes).To(Equal(want.writes),
 					"%s: writes vs %s", scn.Name, sim)
 			}
+			checked++
+		}
+		Expect(checked).To(BeNumerically(">", 0))
+	})
+})
+
+var _ = Describe("Tier 6: read latency vs DRAMSim3 (15% tolerance)", func() {
+	BeforeEach(skipIfNoReference)
+
+	It("matches DRAMSim3 read latency where Akita's model is faithful", func() {
+		checked := 0
+		for _, scn := range tier5Scen {
+			if scn.LatencyCheck != "enforced" {
+				continue
+			}
+			ref := tier5Ref[scn.Name]["dramsim3"].avgReadLatency
+			akita := runAkita(scn).avgReadLatency
+			relErr := math.Abs(akita-ref) / ref
+			Expect(relErr).To(BeNumerically("<=", latencyTolerance),
+				"%s: Akita %.1f vs DRAMSim3 %.1f cyc (%.0f%% off)",
+				scn.Name, akita, ref, relErr*100)
+			checked++
+		}
+		Expect(checked).To(BeNumerically(">", 0))
+	})
+
+	// KNOWN GAPS — these probe a feature Akita does not yet support. The suite
+	// records that the divergence is currently large; when the feature lands and
+	// the gap closes (relErr <= 15%), this spec FAILS — that is the signal to
+	// move the scenario to latency_check="enforced".
+	It("records the known feature gaps (currently exceeding 15%)", func() {
+		for _, scn := range tier5Scen {
+			if scn.LatencyCheck != "known_gap" {
+				continue
+			}
+			ref := tier5Ref[scn.Name]["dramsim3"].avgReadLatency
+			akita := runAkita(scn).avgReadLatency
+			relErr := math.Abs(akita-ref) / ref
+			GinkgoWriter.Printf(
+				"KNOWN GAP %-16s Akita %.1f vs DRAMSim3 %.1f cyc (%.0f%% off) — %s\n",
+				scn.Name, akita, ref, relErr*100, scn.GapReason)
+			Expect(relErr).To(BeNumerically(">", latencyTolerance),
+				"%s gap closed (now %.0f%% off) — promote to latency_check=enforced",
+				scn.Name, relErr*100)
 		}
 	})
 })

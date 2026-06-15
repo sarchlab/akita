@@ -43,12 +43,39 @@ config+trace, runs them, and writes `data/reference.csv`.
 
 ## Current coverage
 
-| Axis | Scenarios | Metric | Status |
-|---|---|---|---|
-| Close-page, pure read/write | `cp_read_64/256`, `cp_write_64/256` | `activates`, `reads`, `writes` (exact) | ✅ DRAMSim3 + Ramulator2 agree; Akita matches |
-| Mixed read/write | — | command counts | ☐ needs Ramulator2 drain fix (see below) |
-| Open-page (locality) | — | row-hit-dependent counts | ☐ needs aligned per-oracle address encoders |
-| Latency / bandwidth | recorded (DRAMSim3) | aggregate | ☐ informational only; timing not yet bit-aligned |
+| Tier | Scenarios | Metric | Tol. | Status |
+|---|---|---|---|---|
+| 5 — counts | `cp_read_64/256`, `cp_write_64/256` (close-page) | `activates`/`reads`/`writes` | exact | ✅ both oracles agree; Akita matches |
+| 6 — latency (enforced) | `op_seq_64B`, `op_stride_128K` (open-page) | avg read latency vs DRAMSim3 | 15% | ✅ Akita within 8% / 0.1% |
+| 6 — latency (known gap) | `op_stride_8K`, `op_stride_16K` (open-page) | avg read latency vs DRAMSim3 | 15% | ⚠️ **gap 54–63%** — see Findings |
+
+### Findings so far
+
+1. **Single-request latency: +1 cycle** (Akita 38 vs DRAMSim3 37). Accepted — a
+   fixed offset within tolerance, likely a latency-measurement boundary.
+2. **Address-mapping performance gap (KNOWN GAP, roadmap P3).** Akita has a
+   single fixed address map and cannot be configured to match the references'.
+   When a stride serializes to one bank (`op_seq_64B`, `op_stride_128K`) Akita
+   matches DRAMSim3. When bank parallelism depends on the mapping
+   (`op_stride_8K`, `op_stride_16K`) Akita's fixed map spreads accesses across
+   bank groups that DRAMSim3's `rochrababgco` does not, so Akita is **54–63%
+   faster** for the same nominal config. The Tier-6 suite asserts this gap is
+   *currently* large; when P3 lands and it closes, the characterization spec
+   fails — that is the cue to flip the scenario to `latency_check: enforced`.
+3. **Row-buffer-hit-rate statistic is broken (bug, not a feature gap).**
+   `RowBufferHits`/`RowBufferMisses` count every issued read as a hit and every
+   activate as a miss (because by the time a read issues its bank is always
+   open), so the rate is meaningless — e.g. 512 "hits" for 512 all-miss
+   accesses. `RowBufferHitRate` should not be trusted or used as a metric until
+   fixed. Surfaced by the open-page sweep against DRAMSim3's row-hit counts.
+
+### Still to do
+
+| Axis | Why deferred |
+|---|---|
+| Mixed read/write counts | needs the Ramulator2 drain fix (tail-subtraction is single-type) |
+| Ramulator2 latency/bandwidth | its trace frontend never drains memory |
+| Open-page count comparison | needs aligned per-oracle address encoders |
 
 ### Two method notes (so the numbers are trustworthy)
 

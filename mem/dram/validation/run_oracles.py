@@ -77,17 +77,47 @@ REFRESH_OFF_TREFI = 100000000
 def _seq(n, writes):
     return [[1 if writes else 0, i * ROW_STRIDE] for i in range(n)]
 
-# First slice: pure-read and pure-write close-page scenarios. Command counts
-# (activates == #ops, reads/writes == #ops of that type) are config- and
-# mapping-independent here, so they compare exactly across all three
-# simulators. Mixed-op and open-page (locality-dependent) scenarios are the
-# next increment — they need either the upstream drain fix or aligned address
-# encoders, tracked in the README.
+
+def _stream(n, stride):
+    return [[0, i * stride] for i in range(n)]
+
+
+# Scenarios split into two groups:
+#
+#  * Count scenarios (close-page, pure read/write): command counts are config-
+#    and mapping-independent, compared *exactly* against both oracles (Tier 5).
+#
+#  * Performance scenarios (open-page read streams at various strides):
+#    average read latency is compared against DRAMSim3 within 15% (Tier 6).
+#    These deliberately probe a feature Akita does NOT support — configurable
+#    address mapping (roadmap P3). When a stride serializes to a single bank
+#    (0x40 sequential, 0x20000 same-bank) Akita matches DRAMSim3, so those are
+#    *enforced*. When bank parallelism depends on the address map (0x2000,
+#    0x4000) Akita's fixed map diverges 50-60% from DRAMSim3's `rochrababgco`;
+#    those are *known gaps* that the suite tracks until P3 lands.
+#
+# latency_check: "off" | "enforced" | "known_gap"; counts_check: "enforced"|"off"
+PERF_N = 512
 SCENARIOS = [
-    {"name": "cp_read_64",   "page_policy": "close", "ops": _seq(64, False)},
-    {"name": "cp_read_256",  "page_policy": "close", "ops": _seq(256, False)},
-    {"name": "cp_write_64",  "page_policy": "close", "ops": _seq(64, True)},
-    {"name": "cp_write_256", "page_policy": "close", "ops": _seq(256, True)},
+    {"name": "cp_read_64",   "page_policy": "close", "ops": _seq(64, False),
+     "counts_check": "enforced", "latency_check": "off"},
+    {"name": "cp_read_256",  "page_policy": "close", "ops": _seq(256, False),
+     "counts_check": "enforced", "latency_check": "off"},
+    {"name": "cp_write_64",  "page_policy": "close", "ops": _seq(64, True),
+     "counts_check": "enforced", "latency_check": "off"},
+    {"name": "cp_write_256", "page_policy": "close", "ops": _seq(256, True),
+     "counts_check": "enforced", "latency_check": "off"},
+
+    {"name": "op_seq_64B",      "page_policy": "open", "ops": _stream(PERF_N, 0x40),
+     "counts_check": "off", "latency_check": "enforced"},
+    {"name": "op_stride_128K",  "page_policy": "open", "ops": _stream(PERF_N, 0x20000),
+     "counts_check": "off", "latency_check": "enforced"},
+    {"name": "op_stride_8K",    "page_policy": "open", "ops": _stream(PERF_N, 0x2000),
+     "counts_check": "off", "latency_check": "known_gap",
+     "gap_reason": "configurable address mapping (roadmap P3)"},
+    {"name": "op_stride_16K",   "page_policy": "open", "ops": _stream(PERF_N, 0x4000),
+     "counts_check": "off", "latency_check": "known_gap",
+     "gap_reason": "configurable address mapping (roadmap P3)"},
 ]
 
 
@@ -289,19 +319,24 @@ def main():
     rows = []
     for scn in SCENARIOS:
         exp = expected_counts(scn)
-        for sim, runner, binary in (
-            ("dramsim3", run_dramsim3, args.dramsim3),
-            ("ramulator2", run_ramulator2, args.ramulator2),
-        ):
+        # DRAMSim3 runs every scenario (clean counts and latency). Ramulator2
+        # runs only the count scenarios (its trace frontend does not drain, so
+        # latency is unavailable and counts need pure close-page tail-subtraction).
+        sims = [("dramsim3", run_dramsim3, args.dramsim3)]
+        if scn.get("counts_check") == "enforced":
+            sims.append(("ramulator2", run_ramulator2, args.ramulator2))
+
+        for sim, runner, binary in sims:
             if not os.path.exists(binary):
                 print(f"!! {sim} binary not found: {binary}\n"
                       f"   build it with oracles/build_oracles.sh", file=sys.stderr)
                 return 2
             got = runner(binary, scn, work)
-            for k in ("activates", "reads", "writes"):
-                if got[k] != exp[k]:
-                    print(f"WARN {sim}/{scn['name']}: {k} {got[k]} != expected "
-                          f"{exp[k]}", file=sys.stderr)
+            if scn.get("counts_check") == "enforced":
+                for k in ("activates", "reads", "writes"):
+                    if got[k] != exp[k]:
+                        print(f"WARN {sim}/{scn['name']}: {k} {got[k]} != expected "
+                              f"{exp[k]}", file=sys.stderr)
             lat = got["avg_read_latency"]
             rows.append({
                 "scenario": scn["name"], "simulator": sim,
@@ -310,7 +345,7 @@ def main():
                 "writes": got["writes"],
                 "avg_read_latency_cycles": "" if lat is None else round(lat, 3),
             })
-            print(f"ok  {sim:11s} {scn['name']:12s} "
+            print(f"ok  {sim:11s} {scn['name']:13s} "
                   f"ACT={got['activates']} RD={got['reads']} WR={got['writes']} "
                   f"lat={'n/a' if lat is None else f'{lat:.2f}'}")
 
