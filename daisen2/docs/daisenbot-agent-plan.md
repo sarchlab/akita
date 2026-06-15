@@ -1,6 +1,6 @@
 # DaisenBot Agentic Upgrade — Design & Implementation Plan
 
-**Status:** Draft for review · **Last updated:** 2026-06-15
+**Status:** Draft for review · Phase 1 / Workstream A (view-state audit) complete · **Last updated:** 2026-06-15
 
 This document captures the design decisions and phased plan for turning DaisenBot
 from a single-shot Q&A proxy into a tool-using agent that can *investigate* an
@@ -290,26 +290,85 @@ Enumerate every route/page and, for each, list **all state that affects what is
 drawn**, classifying each field as `in-URL` / `react-state-only (gap)` /
 `derived (no-op)`.
 
-Preliminary inventory (to be completed by reading every page):
+**Status: completed 2026-06-15** (audited `daisen2/static/src`). Routing is
+react-router v6 (`<Routes>` / `useSearchParams`); all parameterization is via query
+string — no path params. Full route set:
 
-| Route / Page | State field | Current source | Action |
-|---|---|---|---|
-| `/component` (ComponentPage) | `name`, `taskid`, `starttime`, `endtime` | URL (`ComponentPage.tsx:699-703`; writes `:762/:882`) | keep / canonicalize |
-| `/component` | selected sub-task, visible metrics/series, gantt zoom-pan beyond start/end, expanded rows | **likely react-state — audit** | lift to URL if view-defining |
-| `/task` (TaskChartPage) | `id`, `where` | URL (`TaskChartPage.tsx:22-23`) | keep |
-| `/task` | time range / zoom | **audit** | lift if missing |
-| `/dashboard` (DashboardPage) | selected component(s), widget set, time range, grouping/metric | **audit (multi-select likely react-state)** | lift / decide |
+| Route | Page | URL state today |
+|---|---|---|
+| `/` **and** `/dashboard` | DashboardPage | **none** — reads/writes no params |
+| `/component` | ComponentPage | `name`, `taskid`, `starttime`, `endtime` |
+| `/task` | TaskChartPage | `id`, `where` |
 
-Method: read each page + its hooks (`useTraceData`, `useCompInfo`) + the chart
-components (`GanttChart`, `TimeSeriesChart`, `DashboardWidget`), tracing where
-`useState`/context drives rendering vs. where `searchParams` does.
-**Deliverable: the completed table.**
+**`/component` (ComponentPage)** — params read at `:699-703`, but writes use raw
+`window.history.replaceState` (`:762-766`, `:882-885`), bypassing react-router; the
+range write is debounced 1 s.
+
+| Field | Source | Action |
+|---|---|---|
+| component `name` | URL | keep — route write through `viewState`/`setSearchParams` |
+| selected `taskid` | URL-seeded state | keep — same fix |
+| view range `starttime`/`endtime` | URL-seeded state | keep — **fix the `replaceState` bypass**; keep 1 s debounce |
+| hoveredTask, highlightedKey, selectedTaskSeed, measured `size`, drag refs | react-state / refs | **ephemeral — do not encode** |
+| metric type (`"ConcurrentTask"`, `:722`) | hardcoded | n/a — no selector to encode |
+
+**`/task` (TaskChartPage)** — `id`,`where` read at `:22-23`; uses real
+`setSearchParams`. No time-range/zoom control (always full sim range).
+
+| Field | Source | Action |
+|---|---|---|
+| task `id` | URL | keep |
+| component filter `where` | URL | keep — **fix:** selecting `where` clobbers all params incl. `id` (`:87`) |
+| kind filter `kind` | react-state (`:26`) | **lift** → new `kind` param |
+| selected task (detail pane) | react-state (`:27`) | **lift** → optional `sel` param (browse-mode selection) |
+| GanttChart `selectedId` | chart-local (`GanttChart.tsx:54`) | **fix:** unify with page `selectedTask`; encode via `sel` |
+| taskInput draft (`:24`) | react-state | ephemeral — do not encode |
+
+**`/dashboard` (DashboardPage)** — **reads and writes no URL params at all**; the
+entire view is react-state. Biggest gap.
+
+| Field | Source | Action |
+|---|---|---|
+| view range `starttime`/`endtime` (`:71`) | react-state | **lift** |
+| filter text (`:74`) | react-state | **lift** → `filter` |
+| pagination `page` (`:75`) | react-state | **lift** → `page` |
+| primary axis metric (`:76`) | react-state | **lift** → `primary` |
+| secondary axis metric (`:77`) | react-state | **lift** → `secondary` |
+| measured grid `size` (`:78`) | viewport-derived | ephemeral (function of window size) — do not encode |
+| `/` vs `/dashboard` (`App.tsx:11-12`) | routing | **canonicalize** to one route |
+
+**Cross-cutting:** simulation range, segments, and component-name list are server
+hooks (`useSimulationRange` / `useSegments` / `useComponentNames`) — reconstruct from
+the server, not the URL (no-op). There is **no React context / store / global**
+holding view state, and **no multi-selection anywhere** (all selections single-valued).
+
+**Resulting canonical schema (input to Workstream B):**
+
+```
+/dashboard : starttime? endtime? filter? page? primary? secondary?
+/component : name  taskid?  starttime?  endtime?
+/task      : id?  where?  kind?  sel?
+```
+
+All single-value params; the existing names (`name`, `taskid`, `starttime`,
+`endtime`, `id`, `where`) are preserved for link back-compat — only new params are added.
+
+**Decisions surfaced (confirm before Workstream B):**
+1. **Dashboard scope** — encode `filter`, `page`, `primary`, `secondary`?
+   (Recommend yes — all change what is shown.)
+2. **`/` vs `/dashboard`** — pick the canonical route (recommend `/dashboard`,
+   redirect `/`).
+3. **Fix the `replaceState` bypass** on ComponentPage so URL↔state round-trips
+   through react-router — *required* for the agent to load a URL and have it render
+   deterministically.
+
+This **resolves open questions #1, #3, and #5** (see §7).
 
 ### Workstream B — Canonical URL schema (the contract)
 
-- Per-route param vocabulary, names, formats (time as ns float; component as
-  full-name string; multi-select as repeated param vs. comma-list — *decision
-  needed*; zoom expressible via start/end).
+- Per-route param vocabulary, names, formats per the schema established in
+  Workstream A (time as ns float; component as full-name string; all single-value —
+  no multi-select exists today; zoom expressible via start/end).
 - **Normalization** so identical views → identical canonical URLs (param order,
   defaults, rounding) — needed later for render caching/dedup.
 - **Validation** rules — the Go backend reuses these to validate LLM-generated
@@ -364,17 +423,20 @@ This is where Phase 1 produces a reusable building block for Phase 5's
 
 ## 7. Open questions / to audit
 
-1. **Multi-select / large selections** — repeated query params get unwieldy.
-   Acceptable, or do we want a server-side `view-id → state` table for big
-   selections (keeps URLs shareable)?
+1. ~~**Multi-select / large selections**~~ — **Resolved (Workstream A):** no
+   multi-selection exists in any page; single-value params suffice. Revisit only if
+   multi-select is ever added.
 2. **Centralization refactor** — OK to introduce `viewState.ts` and route all
    pages through it, or prefer minimal per-page edits to limit blast radius?
-3. **Scope line** — confirm which state is "view-defining" vs "ephemeral" (e.g.,
-   does dashboard widget *layout* need encoding, or is it fixed?).
+3. ~~**Scope line**~~ — **Resolved (Workstream A):** ephemeral =
+   hover / legend-highlight / measured-size / draft-text / drag-refs; dashboard grid
+   layout is viewport-derived (not encoded). View-defining set is the §6 per-page
+   tables.
 4. **URL back-compat** — if param names change, existing shared links break. Keep
    aliases?
-5. **Inventory completeness** — are `/dashboard`, `/component`, `/task` the full
-   set of agent-relevant views, or is one missing?
+5. ~~**Inventory completeness**~~ — **Resolved (Workstream A):** confirmed
+   `/component`, `/task`, `/dashboard` are the only content routes; plus a
+   `/`↔`/dashboard` canonicalization item.
 6. **Python sandbox runtime** (Phase 4 decision) — bubblewrap / container / WASM
    as the safe default, with a subprocess fast-path for single-user local mode.
 7. **Capture fidelity** (Phase 5) — SVG-serialize is more faithful than
