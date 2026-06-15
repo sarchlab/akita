@@ -66,14 +66,6 @@ type Builder struct {
 	resources Resources
 
 	tracers []tracing.Tracer
-
-	// Plugin overrides. When set, they take precedence over the registry
-	// selection driven by the corresponding Spec fields.
-	scheduler  Scheduler
-	rowPolicy  RowPolicy
-	refresh    RefreshManager
-	addrMapper AddrMapper
-	hooks      []CommandHook
 }
 
 // MakeBuilder creates a builder with default configuration.
@@ -103,40 +95,12 @@ func (b Builder) WithResources(r Resources) Builder {
 	return b
 }
 
-// WithScheduler overrides the command scheduler, taking precedence over
-// Spec.Scheduler. Pass an implementation of the Scheduler interface.
-func (b Builder) WithScheduler(s Scheduler) Builder {
-	b.scheduler = s
-	return b
-}
-
-// WithRowPolicy overrides the row (page) policy, taking precedence over the
-// policy derived from Spec.PagePolicy.
-func (b Builder) WithRowPolicy(p RowPolicy) Builder {
-	b.rowPolicy = p
-	return b
-}
-
-// WithRefreshManager overrides the refresh manager, taking precedence over
-// Spec.RefreshManager.
-func (b Builder) WithRefreshManager(r RefreshManager) Builder {
-	b.refresh = r
-	return b
-}
-
-// WithAddrMapper overrides the address mapper, taking precedence over
-// Spec.AddrMapper.
-func (b Builder) WithAddrMapper(m AddrMapper) Builder {
-	b.addrMapper = m
-	return b
-}
-
-// WithPlugin registers a CommandHook that observes every issued command.
-// Multiple hooks may be registered; they fire in registration order.
-func (b Builder) WithPlugin(h CommandHook) Builder {
-	b.hooks = append(b.hooks, h)
-	return b
-}
+// Strategy and behavior selection is by configuration, not by injecting
+// objects: the scheduler and address mapper are chosen by the Spec.Scheduler /
+// Spec.AddrMapper registry keys, the row policy by Spec.PagePolicy, and refresh
+// is a middleware added by Build. New strategies/behaviors are added in-tree and
+// registered — the model the reference simulators use. Command observers attach
+// to the built component with AcceptHook (see hook.go).
 
 // Build builds a new MemController. It declares the component's "Top" and
 // "Control" ports; assign the port instances after Build with AssignPort.
@@ -226,6 +190,10 @@ func (b Builder) addMiddlewares(
 	}
 	modelComp.AddMiddleware(rMW)
 
+	// Refresh runs ahead of the bank-tick middleware so its stall flag
+	// (State.RefreshInProgress) is set before the issue step reads it.
+	modelComp.AddMiddleware(&refreshMiddleware{comp: modelComp})
+
 	btMW := &bankTickMW{
 		comp:      modelComp,
 		timing:    timing,
@@ -281,52 +249,26 @@ func (b Builder) buildCmdCycles() map[commandKind]int {
 	return cmdCycles
 }
 
-// buildController assembles the pluggable behaviors for the component. Explicit
-// overrides (WithScheduler, …) win; otherwise the plugin is selected from the
-// corresponding Spec field (the row policy is derived from Spec.PagePolicy).
+// buildController selects the controller strategies from configuration: the
+// scheduler and address mapper from their Spec registry keys, the row policy
+// from Spec.PagePolicy.
 func (b Builder) buildController() *controller {
 	return &controller{
-		scheduler:  b.resolveScheduler(),
+		scheduler:  newScheduler(b.spec.Scheduler),
 		rowPolicy:  b.resolveRowPolicy(),
-		refresh:    b.resolveRefreshManager(),
-		addrMapper: b.resolveAddrMapper(),
-		hooks:      b.hooks,
+		addrMapper: newAddrMapper(b.spec.AddrMapper),
 	}
 }
 
-func (b Builder) resolveScheduler() Scheduler {
-	if b.scheduler != nil {
-		return b.scheduler
-	}
-	return newScheduler(b.spec.Scheduler)
-}
-
-func (b Builder) resolveRowPolicy() RowPolicy {
-	if b.rowPolicy != nil {
-		return b.rowPolicy
-	}
+func (b Builder) resolveRowPolicy() rowPolicy {
 	if b.spec.PagePolicy == PagePolicyOpen {
 		return openPageRowPolicy{}
 	}
 	return closePageRowPolicy{}
 }
 
-func (b Builder) resolveRefreshManager() RefreshManager {
-	if b.refresh != nil {
-		return b.refresh
-	}
-	return newRefreshManager(b.spec.RefreshManager)
-}
-
-func (b Builder) resolveAddrMapper() AddrMapper {
-	if b.addrMapper != nil {
-		return b.addrMapper
-	}
-	return newAddrMapper(b.spec.AddrMapper)
-}
-
-// newDefaultController builds the default plugin set for a spec, with no
-// overrides. It backs the package-level helpers that tests exercise directly.
+// newDefaultController builds the controller strategies for a spec. It backs the
+// package-level helpers that tests exercise directly.
 func newDefaultController(spec *Spec) *controller {
 	return Builder{spec: *spec}.buildController()
 }

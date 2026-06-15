@@ -3,37 +3,38 @@ package dram
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/hooking"
 )
 
-// countingHook is a CommandHook that records the kind of every issued command.
-// It only observes — it must not change scheduling results.
+// countingHook is an Akita hook that records issued commands via the
+// HookPosCmdIssued hook point. It only observes — it must not change results.
 type countingHook struct {
 	count    int
-	byKind   map[commandKind]int
+	byKind   map[string]int
 	lastTick uint64
 }
 
 func newCountingHook() *countingHook {
-	return &countingHook{byKind: map[commandKind]int{}}
+	return &countingHook{byKind: map[string]int{}}
 }
 
-func (*countingHook) Name() string { return "counting" }
-
-func (h *countingHook) OnIssue(_ *Spec, _ *State, cmd *commandState, now uint64) {
+func (h *countingHook) Func(ctx hooking.HookCtx) {
+	if ctx.Pos != HookPosCmdIssued {
+		return
+	}
+	ev := ctx.Item.(CommandEvent)
 	h.count++
-	h.byKind[commandKind(cmd.Kind)]++
-	h.lastTick = now
+	h.byKind[ev.Kind]++
+	h.lastTick = ev.Tick
 }
 
-var _ = Describe("P1: plugin selection", func() {
-	It("selects the default plugins from a default spec", func() {
+var _ = Describe("P1: strategy selection", func() {
+	It("selects the default strategies from a default spec", func() {
 		spec := DefaultSpec()
 		ctrl := newDefaultController(&spec)
 
 		Expect(ctrl.scheduler.Name()).To(Equal("FRFCFS"))
-		Expect(ctrl.refresh.Name()).To(Equal("fakestall"))
 		Expect(ctrl.addrMapper.Name()).To(Equal("default"))
-		Expect(ctrl.hooks).To(BeEmpty())
 	})
 
 	It("derives the row policy from PagePolicy", func() {
@@ -46,18 +47,10 @@ var _ = Describe("P1: plugin selection", func() {
 		Expect(newDefaultController(&closed).rowPolicy.Name()).To(Equal("close"))
 	})
 
-	It("lets builder overrides win over the spec selection", func() {
+	It("selects a scheduler by its Spec registry key", func() {
 		spec := DefaultSpec()
-		spec.PagePolicy = PagePolicyClose
-
-		ctrl := MakeBuilder().
-			WithSpec(spec).
-			WithRowPolicy(openPageRowPolicy{}).
-			WithPlugin(nullCommandHook{}).
-			buildController()
-
-		Expect(ctrl.rowPolicy.Name()).To(Equal("open"))
-		Expect(ctrl.hooks).To(HaveLen(1))
+		spec.Scheduler = "FRFCFS"
+		Expect(newDefaultController(&spec).scheduler.Name()).To(Equal("FRFCFS"))
 	})
 
 	It("panics on an unknown registry key", func() {
@@ -67,7 +60,7 @@ var _ = Describe("P1: plugin selection", func() {
 	})
 })
 
-var _ = Describe("P1: command hooks", func() {
+var _ = Describe("P1: command-issued hook", func() {
 	It("observes issued commands without changing results", func() {
 		spec := DefaultSpec()
 		hook := newCountingHook()
@@ -87,9 +80,9 @@ var _ = Describe("P1: command hooks", func() {
 		plain.engine.Run()
 		plainReads, plainWrites := plain.collect()
 
-		// The hook saw real command activity (at least ACT + column commands).
+		// The hook saw real command activity (at least an ACT + column commands).
 		Expect(hook.count).To(BeNumerically(">", 0))
-		Expect(hook.byKind[cmdKindActivate]).To(BeNumerically(">", 0))
+		Expect(hook.byKind["ACT"]).To(BeNumerically(">", 0))
 		Expect(hook.lastTick).To(BeNumerically(">", 0))
 
 		// Results are identical to the no-hook run.

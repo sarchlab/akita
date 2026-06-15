@@ -1,6 +1,7 @@
 package dram
 
 import (
+	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 )
@@ -12,9 +13,10 @@ type bankTickMW struct {
 	ctrl      *controller
 }
 
-// Tick runs tickBanks, issue, and the command-queue fill. Paused DRAM
-// freezes the timing pipeline so in-flight transactions stay where
-// they are; draining DRAM continues so the drain can converge.
+// Tick advances per-bank timing, issues a command, and refills the command
+// queue. Refresh runs in a separate middleware ahead of this one and stalls
+// issue via State.RefreshInProgress. Paused DRAM freezes the timing pipeline;
+// draining DRAM continues so the drain can converge.
 func (m *bankTickMW) Tick() bool {
 	next := &m.comp.State
 	if next.ControlState == memcontrolprotocol.StatePaused {
@@ -29,15 +31,9 @@ func (m *bankTickMW) Tick() bool {
 	progress := processPendingCompletions(next)
 	progress = tickBanks(next) || progress
 
-	// Advance refresh. The manager's return is the issue-stall gate for this
-	// cycle (per the RefreshManager contract), so a custom manager controls
-	// command issue purely through Tick — not by mutating a specific State
-	// field. The default fakestall manager returns true exactly while a refresh
-	// is active.
-	refreshActive := m.ctrl.refresh.Tick(&spec, next)
-	progress = refreshActive || progress
-
-	if !refreshActive {
+	// Only issue new commands when refresh (a separate middleware) is not
+	// holding the stall flag.
+	if !next.RefreshInProgress {
 		progress = m.issue(&spec, next) || progress
 	}
 
@@ -53,42 +49,6 @@ func (m *bankTickMW) Tick() bool {
 	return progress
 }
 
-// handleRefresh delegates to the fake-stall refresh routine. It is retained so
-// tests can drive refresh scheduling directly; production goes through the
-// configured RefreshManager (see controller).
-func (*bankTickMW) handleRefresh(spec *Spec, next *State) bool {
-	return runFakeStallRefresh(spec, next)
-}
-
-// runFakeStallRefresh implements periodic refresh scheduling: it stalls command
-// issuance for tRFC cycles every tREFI interval, without issuing real refresh
-// commands or closing rows (deviation D2).
-func runFakeStallRefresh(spec *Spec, next *State) bool {
-	if spec.TREFI <= 0 {
-		return false
-	}
-
-	// If refresh is in progress, count down
-	if next.RefreshInProgress {
-		next.RefreshCyclesRemaining--
-		if next.RefreshCyclesRemaining <= 0 {
-			next.RefreshInProgress = false
-		}
-		return true
-	}
-
-	// Countdown to next refresh
-	next.RefreshCycleCounter++
-	if next.RefreshCycleCounter >= spec.TREFI {
-		next.RefreshInProgress = true
-		next.RefreshCyclesRemaining = spec.TRFC
-		next.RefreshCycleCounter = 0
-		return true
-	}
-
-	return false
-}
-
 func (m *bankTickMW) issue(spec *Spec, next *State) bool {
 	cmd := m.ctrl.scheduler.Pick(spec, next, &m.timing)
 	if cmd == nil {
@@ -102,7 +62,21 @@ func (m *bankTickMW) issue(spec *Spec, next *State) bool {
 
 	startCommand(m.cmdCycles, next, bs, cmd)
 	updateTiming(m.timing, next, cmd)
-	m.ctrl.onIssue(spec, next, cmd, next.TickCount)
+	m.fireCmdIssued(cmd, next.TickCount)
 
 	return true
+}
+
+// fireCmdIssued notifies observers (counters, energy, tracing) that a command
+// was issued, via the Akita hook mechanism. Guarded by NumHooks so the hot path
+// allocates nothing when no observer is attached.
+func (m *bankTickMW) fireCmdIssued(cmd *commandState, tick uint64) {
+	if m.comp.NumHooks() == 0 {
+		return
+	}
+	m.comp.InvokeHook(hooking.HookCtx{
+		Domain: m.comp,
+		Pos:    HookPosCmdIssued,
+		Item:   commandEventFor(cmd, tick),
+	})
 }

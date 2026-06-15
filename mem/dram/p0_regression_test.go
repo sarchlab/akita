@@ -3,6 +3,7 @@ package dram
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -19,17 +20,17 @@ type p0Harness struct {
 	top    messaging.Port
 }
 
-func newP0Harness(spec Spec, hooks ...CommandHook) *p0Harness {
+func newP0Harness(spec Spec, hooks ...hooking.Hook) *p0Harness {
 	engine := timing.NewSerialEngine()
 	reg := modeling.NewStandaloneRegistrar(engine)
 
-	builder := MakeBuilder().
+	dramComp := MakeBuilder().
 		WithRegistrar(reg).
-		WithSpec(spec)
+		WithSpec(spec).
+		Build("P0DRAM")
 	for _, h := range hooks {
-		builder = builder.WithPlugin(h)
+		dramComp.AcceptHook(h)
 	}
-	dramComp := builder.Build("P0DRAM")
 
 	for _, name := range []string{"Top", "Control"} {
 		p := modeling.MakePortBuilder().

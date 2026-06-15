@@ -59,11 +59,10 @@ type Spec struct {
 	// Page policy
 	PagePolicy PagePolicy `json:"page_policy"`
 
-	// Pluggable component selection (registry keys; "" selects the default).
-	// The row policy is selected from PagePolicy. See plugins.go.
-	Scheduler      string `json:"scheduler"`
-	RefreshManager string `json:"refresh_manager"`
-	AddrMapper     string `json:"addr_mapper"`
+	// Strategy selection (registry keys; "" selects the default). The row
+	// policy is selected from PagePolicy. See plugins.go.
+	Scheduler  string `json:"scheduler"`
+	AddrMapper string `json:"addr_mapper"`
 
 	// Timing params
 	TAL        int `json:"t_al"`
