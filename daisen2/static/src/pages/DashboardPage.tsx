@@ -108,7 +108,12 @@ export default function DashboardPage() {
   // Mirror the (debounced) range into the URL, omitting it when it equals the
   // simulation range so a fresh dashboard URL stays "/dashboard".
   useEffect(() => {
-    const atSim = dataRange.startTime === startTime && dataRange.endTime === endTime;
+    // "Not zoomed" counts as at-sim even while the debounced dataRange is still
+    // catching up to a just-loaded sim range, so the URL never transiently carries
+    // the pre-load default (0..1e-6) range.
+    const atSim =
+      (dataRange.startTime === startTime && dataRange.endTime === endTime) ||
+      (viewRange.startTime === startTime && viewRange.endTime === endTime);
     setSearchParams(
       (prev) => {
         const next = mergeParams("/dashboard", prev, {
@@ -120,7 +125,15 @@ export default function DashboardPage() {
       },
       { replace: true },
     );
-  }, [dataRange.startTime, dataRange.endTime, startTime, endTime, setSearchParams]);
+  }, [
+    dataRange.startTime,
+    dataRange.endTime,
+    viewRange.startTime,
+    viewRange.endTime,
+    startTime,
+    endTime,
+    setSearchParams,
+  ]);
 
   const { ref, size } = useElementSize<HTMLDivElement>();
 
