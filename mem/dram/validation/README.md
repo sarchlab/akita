@@ -4,11 +4,13 @@ This directory hosts the trace-driven differential validation of Akita's
 `mem/dram` model against **DRAMSim3** and **Ramulator2**, as described in
 [`../ROADMAP.md`](../ROADMAP.md) §5.
 
-> **Status: skeleton.** The directory structure and the documented-deviation
-> ledger exist. The external reference oracles are **not yet vendored**, so the
-> full-trace differential runs (roadmap Tier 5) are **not yet wired up**. This is
-> the next increment of Phase 0 — it requires network access to fetch and build
-> the two C++ simulators, which is a separate, build-heavy task.
+> **Status: live for close-page command counts.** Both oracles build and run at
+> pinned commits (`oracles/`), and `run_oracles.py` produces the committed
+> reference data in `data/reference.csv`. The Akita-side Tier-5 comparison runs
+> in CI as `../validation_tier5_test.go` (no C++ build needed — it reads the
+> committed CSV). The first scenario family (pure close-page read/write) is
+> wired end-to-end; mixed-op, open-page (locality), and latency-aligned
+> comparisons are the next increments (see "Current coverage" below).
 
 ## Layout
 
@@ -20,6 +22,47 @@ validation/
   diff/      metric-comparison tooling
   DEVIATIONS.md   accepted, documented divergences from the references
 ```
+
+## Recreating the experiment
+
+```bash
+# 1. Build the pinned reference simulators (host toolchain or Docker):
+oracles/build_oracles.sh                    # -> oracles/.oracles/...
+
+# 2. Run both oracles over every scenario and (re)write the committed data:
+python3 run_oracles.py                      # -> data/reference.csv, traces/scenarios.json
+
+# 3. Check Akita against the committed reference (fast, no C++):
+go test ./mem/dram/ --ginkgo.focus="Tier 5"
+```
+
+`run_oracles.py` is the single source of truth: it defines the canonical DDR4
+parameters and the scenarios (dumped to `traces/scenarios.json`, which the Go
+test reads so both sides drive the identical workload), emits each oracle's
+config+trace, runs them, and writes `data/reference.csv`.
+
+## Current coverage
+
+| Axis | Scenarios | Metric | Status |
+|---|---|---|---|
+| Close-page, pure read/write | `cp_read_64/256`, `cp_write_64/256` | `activates`, `reads`, `writes` (exact) | ✅ DRAMSim3 + Ramulator2 agree; Akita matches |
+| Mixed read/write | — | command counts | ☐ needs Ramulator2 drain fix (see below) |
+| Open-page (locality) | — | row-hit-dependent counts | ☐ needs aligned per-oracle address encoders |
+| Latency / bandwidth | recorded (DRAMSim3) | aggregate | ☐ informational only; timing not yet bit-aligned |
+
+### Two method notes (so the numbers are trustworthy)
+
+- **Refresh is disabled for these count scenarios** (`tREFI` pushed out of
+  range). DRAMSim3 runs the full `-c` cycle budget and idles long after the
+  trace drains, firing many refreshes (one boundary even adds a stray
+  activate); refresh is a separate axis (P2). Akita command counts are
+  refresh-independent regardless.
+- **Ramulator2 does not drain memory** — `src/main.cpp` stops the moment the
+  frontend has *injected* every request (the frontend source even marks this
+  `TODO: FIXME`), so queued commands go uncounted. We recover exact counts by
+  **tail-subtraction**: append a long type-matched drain suffix so the real ops
+  fully drain, then subtract a suffix-only run (the identical trailing deficit
+  cancels). This needs single-type scenarios, which is why mixed-op is deferred.
 
 ## How the differential method will work
 
