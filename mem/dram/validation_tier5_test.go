@@ -37,13 +37,35 @@ const (
 	latencyTolerance   = 0.15
 )
 
+// tier5Pattern is the compact workload generator stored in scenarios.json.
+type tier5Pattern struct {
+	Op     string `json:"op"`     // "read" | "write"
+	Count  int    `json:"count"`  // number of accesses
+	Stride string `json:"stride"` // hex address stride, e.g. "0x2000"
+}
+
 type tier5Scenario struct {
-	Name         string     `json:"name"`
-	PagePolicy   string     `json:"page_policy"`
-	Ops          [][]uint64 `json:"ops"` // each op: [is_write, address]
-	CountsCheck  string     `json:"counts_check"`
-	LatencyCheck string     `json:"latency_check"`
-	GapReason    string     `json:"gap_reason"`
+	Name         string       `json:"name"`
+	PagePolicy   string       `json:"page_policy"`
+	Pattern      tier5Pattern `json:"pattern"`
+	CountsCheck  string       `json:"counts_check"`
+	LatencyCheck string       `json:"latency_check"`
+	GapReason    string       `json:"gap_reason"`
+}
+
+// ops expands the scenario's pattern into [is_write, address] pairs, matching
+// run_oracles.build_ops so Akita drives the exact workload the oracles saw.
+func (s tier5Scenario) ops() [][2]uint64 {
+	stride, _ := strconv.ParseUint(s.Pattern.Stride, 0, 64)
+	var isWrite uint64
+	if s.Pattern.Op == "write" {
+		isWrite = 1
+	}
+	out := make([][2]uint64, s.Pattern.Count)
+	for i := range out {
+		out[i] = [2]uint64{isWrite, uint64(i) * stride}
+	}
+	return out
 }
 
 type tier5Scenarios struct {
@@ -76,7 +98,7 @@ func runAkita(scn tier5Scenario) akitaResult {
 
 	h := newP0Harness(spec)
 	data := []byte{1, 2, 3, 4}
-	for _, op := range scn.Ops {
+	for _, op := range scn.ops() {
 		if op[0] == 1 {
 			h.src.Send(h.write(op[1], data))
 		} else {

@@ -64,7 +64,6 @@ def _channel_size_mb():
 # Each op is [is_write(0/1), address]. Close-page (auto-precharge) makes
 # activates == #ops and reads/writes == the obvious split, independent of
 # address mapping, so these are exact across all three simulators.
-ROW_STRIDE = 0x20000   # 128 KiB: distinct rows in every mapping
 
 # Refresh is a separate validation axis (roadmap P2) and a confound for command
 # counts: DRAMSim3 idles for the full -c budget after the trace drains, firing
@@ -74,12 +73,15 @@ ROW_STRIDE = 0x20000   # 128 KiB: distinct rows in every mapping
 # cancels refresh; Akita's command counts are refresh-independent.)
 REFRESH_OFF_TREFI = 100000000
 
-def _seq(n, writes):
-    return [[1 if writes else 0, i * ROW_STRIDE] for i in range(n)]
-
-
-def _stream(n, stride):
-    return [[0, i * stride] for i in range(n)]
+def build_ops(pattern):
+    """Expand a compact pattern {op, count, stride} into [[is_write, addr], ...].
+    Both this script and the Go test reconstruct ops from the pattern, so the
+    committed scenarios.json stays small (patterns, not thousands of ops)."""
+    stride = pattern["stride"]
+    if isinstance(stride, str):
+        stride = int(stride, 0)
+    is_write = 1 if pattern["op"] == "write" else 0
+    return [[is_write, i * stride] for i in range(pattern["count"])]
 
 
 # Scenarios split into two groups:
@@ -96,29 +98,43 @@ def _stream(n, stride):
 #    0x4000) Akita's fixed map diverges 50-60% from DRAMSim3's `rochrababgco`;
 #    those are *known gaps* that the suite tracks until P3 lands.
 #
-# latency_check: "off" | "enforced" | "known_gap"; counts_check: "enforced"|"off"
-PERF_N = 512
+# Each scenario carries a compact `pattern` (op/count/stride); ops are expanded
+# by build_ops. latency_check: "off"|"enforced"|"known_gap"; counts_check:
+# "enforced"|"off".
 SCENARIOS = [
-    {"name": "cp_read_64",   "page_policy": "close", "ops": _seq(64, False),
+    {"name": "cp_read_64",   "page_policy": "close",
+     "pattern": {"op": "read",  "count": 64,  "stride": "0x20000"},
      "counts_check": "enforced", "latency_check": "off"},
-    {"name": "cp_read_256",  "page_policy": "close", "ops": _seq(256, False),
+    {"name": "cp_read_256",  "page_policy": "close",
+     "pattern": {"op": "read",  "count": 256, "stride": "0x20000"},
      "counts_check": "enforced", "latency_check": "off"},
-    {"name": "cp_write_64",  "page_policy": "close", "ops": _seq(64, True),
+    {"name": "cp_write_64",  "page_policy": "close",
+     "pattern": {"op": "write", "count": 64,  "stride": "0x20000"},
      "counts_check": "enforced", "latency_check": "off"},
-    {"name": "cp_write_256", "page_policy": "close", "ops": _seq(256, True),
+    {"name": "cp_write_256", "page_policy": "close",
+     "pattern": {"op": "write", "count": 256, "stride": "0x20000"},
      "counts_check": "enforced", "latency_check": "off"},
 
-    {"name": "op_seq_64B",      "page_policy": "open", "ops": _stream(PERF_N, 0x40),
+    {"name": "op_seq_64B",     "page_policy": "open",
+     "pattern": {"op": "read", "count": 512, "stride": "0x40"},
      "counts_check": "off", "latency_check": "enforced"},
-    {"name": "op_stride_128K",  "page_policy": "open", "ops": _stream(PERF_N, 0x20000),
+    {"name": "op_stride_128K", "page_policy": "open",
+     "pattern": {"op": "read", "count": 512, "stride": "0x20000"},
      "counts_check": "off", "latency_check": "enforced"},
-    {"name": "op_stride_8K",    "page_policy": "open", "ops": _stream(PERF_N, 0x2000),
+    {"name": "op_stride_8K",   "page_policy": "open",
+     "pattern": {"op": "read", "count": 512, "stride": "0x2000"},
      "counts_check": "off", "latency_check": "known_gap",
      "gap_reason": "configurable address mapping (roadmap P3)"},
-    {"name": "op_stride_16K",   "page_policy": "open", "ops": _stream(PERF_N, 0x4000),
+    {"name": "op_stride_16K",  "page_policy": "open",
+     "pattern": {"op": "read", "count": 512, "stride": "0x4000"},
      "counts_check": "off", "latency_check": "known_gap",
      "gap_reason": "configurable address mapping (roadmap P3)"},
 ]
+
+# Expand ops once so the rest of the script can use scn["ops"] directly; the
+# JSON dump (see main) strips them back out to keep the committed file compact.
+for _scn in SCENARIOS:
+    _scn["ops"] = build_ops(_scn["pattern"])
 
 
 def expected_counts(scn):
@@ -313,8 +329,11 @@ def main():
 
     # Dump the shared workload so the Go test drives the identical scenarios.
     (HERE / "traces").mkdir(exist_ok=True)
+    # Dump compact scenarios (patterns, not expanded ops) so the file stays
+    # small; the Go test reconstructs ops from the pattern the same way.
+    compact = [{k: v for k, v in s.items() if k != "ops"} for s in SCENARIOS]
     (HERE / "traces" / "scenarios.json").write_text(
-        json.dumps({"canonical": CANONICAL, "scenarios": SCENARIOS}, indent=2) + "\n")
+        json.dumps({"canonical": CANONICAL, "scenarios": compact}, indent=2) + "\n")
 
     rows = []
     for scn in SCENARIOS:
