@@ -66,6 +66,14 @@ type Builder struct {
 	resources Resources
 
 	tracers []tracing.Tracer
+
+	// Plugin overrides. When set, they take precedence over the registry
+	// selection driven by the corresponding Spec fields.
+	scheduler  Scheduler
+	rowPolicy  RowPolicy
+	refresh    RefreshManager
+	addrMapper AddrMapper
+	hooks      []CommandHook
 }
 
 // MakeBuilder creates a builder with default configuration.
@@ -92,6 +100,41 @@ func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
 // from the geometry spec.
 func (b Builder) WithResources(r Resources) Builder {
 	b.resources = r
+	return b
+}
+
+// WithScheduler overrides the command scheduler, taking precedence over
+// Spec.Scheduler. Pass an implementation of the Scheduler interface.
+func (b Builder) WithScheduler(s Scheduler) Builder {
+	b.scheduler = s
+	return b
+}
+
+// WithRowPolicy overrides the row (page) policy, taking precedence over the
+// policy derived from Spec.PagePolicy.
+func (b Builder) WithRowPolicy(p RowPolicy) Builder {
+	b.rowPolicy = p
+	return b
+}
+
+// WithRefreshManager overrides the refresh manager, taking precedence over
+// Spec.RefreshManager.
+func (b Builder) WithRefreshManager(r RefreshManager) Builder {
+	b.refresh = r
+	return b
+}
+
+// WithAddrMapper overrides the address mapper, taking precedence over
+// Spec.AddrMapper.
+func (b Builder) WithAddrMapper(m AddrMapper) Builder {
+	b.addrMapper = m
+	return b
+}
+
+// WithPlugin registers a CommandHook that observes every issued command.
+// Multiple hooks may be registered; they fire in registration order.
+func (b Builder) WithPlugin(h CommandHook) Builder {
+	b.hooks = append(b.hooks, h)
 	return b
 }
 
@@ -133,7 +176,7 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.DeclarePort("Top", memprotocol.Responder)
 	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
-	b.addMiddlewares(modelComp, timing, cmdCycles)
+	b.addMiddlewares(modelComp, timing, cmdCycles, b.buildController())
 
 	for _, tracer := range b.tracers {
 		tracing.CollectTrace(modelComp, tracer)
@@ -173,7 +216,7 @@ func (b Builder) resolveStorage(name string) *mem.Storage {
 
 func (b Builder) addMiddlewares(
 	modelComp *modeling.Component[Spec, State, Resources],
-	timing dramTiming, cmdCycles map[commandKind]int,
+	timing dramTiming, cmdCycles map[commandKind]int, ctrl *controller,
 ) {
 	cMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cMW)
@@ -187,6 +230,7 @@ func (b Builder) addMiddlewares(
 		comp:      modelComp,
 		timing:    timing,
 		cmdCycles: cmdCycles,
+		ctrl:      ctrl,
 	}
 	modelComp.AddMiddleware(btMW)
 
@@ -235,6 +279,56 @@ func (b Builder) buildCmdCycles() map[commandKind]int {
 	}
 
 	return cmdCycles
+}
+
+// buildController assembles the pluggable behaviors for the component. Explicit
+// overrides (WithScheduler, …) win; otherwise the plugin is selected from the
+// corresponding Spec field (the row policy is derived from Spec.PagePolicy).
+func (b Builder) buildController() *controller {
+	return &controller{
+		scheduler:  b.resolveScheduler(),
+		rowPolicy:  b.resolveRowPolicy(),
+		refresh:    b.resolveRefreshManager(),
+		addrMapper: b.resolveAddrMapper(),
+		hooks:      b.hooks,
+	}
+}
+
+func (b Builder) resolveScheduler() Scheduler {
+	if b.scheduler != nil {
+		return b.scheduler
+	}
+	return newScheduler(b.spec.Scheduler)
+}
+
+func (b Builder) resolveRowPolicy() RowPolicy {
+	if b.rowPolicy != nil {
+		return b.rowPolicy
+	}
+	if b.spec.PagePolicy == PagePolicyOpen {
+		return openPageRowPolicy{}
+	}
+	return closePageRowPolicy{}
+}
+
+func (b Builder) resolveRefreshManager() RefreshManager {
+	if b.refresh != nil {
+		return b.refresh
+	}
+	return newRefreshManager(b.spec.RefreshManager)
+}
+
+func (b Builder) resolveAddrMapper() AddrMapper {
+	if b.addrMapper != nil {
+		return b.addrMapper
+	}
+	return newAddrMapper(b.spec.AddrMapper)
+}
+
+// newDefaultController builds the default plugin set for a spec, with no
+// overrides. It backs the package-level helpers that tests exercise directly.
+func newDefaultController(spec *Spec) *controller {
+	return Builder{spec: *spec}.buildController()
 }
 
 func (b Builder) applyAddrMapping(spec *Spec, m addrMappingResult) {

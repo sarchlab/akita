@@ -19,14 +19,17 @@ type p0Harness struct {
 	top    messaging.Port
 }
 
-func newP0Harness(spec Spec) *p0Harness {
+func newP0Harness(spec Spec, hooks ...CommandHook) *p0Harness {
 	engine := timing.NewSerialEngine()
 	reg := modeling.NewStandaloneRegistrar(engine)
 
-	dramComp := MakeBuilder().
+	builder := MakeBuilder().
 		WithRegistrar(reg).
-		WithSpec(spec).
-		Build("P0DRAM")
+		WithSpec(spec)
+	for _, h := range hooks {
+		builder = builder.WithPlugin(h)
+	}
+	dramComp := builder.Build("P0DRAM")
 
 	for _, name := range []string{"Top", "Control"} {
 		p := modeling.MakePortBuilder().

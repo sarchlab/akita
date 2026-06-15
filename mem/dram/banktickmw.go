@@ -9,9 +9,10 @@ type bankTickMW struct {
 	comp      *modeling.Component[Spec, State, Resources]
 	timing    dramTiming
 	cmdCycles map[commandKind]int
+	ctrl      *controller
 }
 
-// Tick runs tickBanks, issue, and tickSubTransQueue. Paused DRAM
+// Tick runs tickBanks, issue, and the command-queue fill. Paused DRAM
 // freezes the timing pipeline so in-flight transactions stay where
 // they are; draining DRAM continues so the drain can converge.
 func (m *bankTickMW) Tick() bool {
@@ -29,7 +30,7 @@ func (m *bankTickMW) Tick() bool {
 	progress = tickBanks(next) || progress
 
 	// Handle periodic refresh
-	refreshActive := m.handleRefresh(&spec, next)
+	refreshActive := m.ctrl.refresh.Tick(&spec, next)
 	progress = refreshActive || progress
 
 	// Only issue new commands if refresh is not in progress
@@ -37,7 +38,7 @@ func (m *bankTickMW) Tick() bool {
 		progress = m.issue(&spec, next) || progress
 	}
 
-	progress = tickSubTransQueue(&spec, next) || progress
+	progress = m.ctrl.fillCommandQueue(&spec, next) || progress
 
 	// Keep ticking while reads/writes are still in flight, even on cycles when
 	// no timing gap counted down — otherwise a pending completion with no other
@@ -49,9 +50,17 @@ func (m *bankTickMW) Tick() bool {
 	return progress
 }
 
-// handleRefresh implements periodic refresh scheduling.
-// It stalls command issuance for tRFC cycles every tREFI interval.
-func (m *bankTickMW) handleRefresh(spec *Spec, next *State) bool {
+// handleRefresh delegates to the fake-stall refresh routine. It is retained so
+// tests can drive refresh scheduling directly; production goes through the
+// configured RefreshManager (see controller).
+func (*bankTickMW) handleRefresh(spec *Spec, next *State) bool {
+	return runFakeStallRefresh(spec, next)
+}
+
+// runFakeStallRefresh implements periodic refresh scheduling: it stalls command
+// issuance for tRFC cycles every tREFI interval, without issuing real refresh
+// commands or closing rows (deviation D2).
+func runFakeStallRefresh(spec *Spec, next *State) bool {
 	if spec.TREFI <= 0 {
 		return false
 	}
@@ -78,7 +87,7 @@ func (m *bankTickMW) handleRefresh(spec *Spec, next *State) bool {
 }
 
 func (m *bankTickMW) issue(spec *Spec, next *State) bool {
-	cmd := getCommandToIssue(spec, next)
+	cmd := m.ctrl.scheduler.Pick(spec, next, &m.timing)
 	if cmd == nil {
 		return false
 	}
@@ -90,6 +99,7 @@ func (m *bankTickMW) issue(spec *Spec, next *State) bool {
 
 	startCommand(m.cmdCycles, next, bs, cmd)
 	updateTiming(m.timing, next, cmd)
+	m.ctrl.onIssue(spec, next, cmd, next.TickCount)
 
 	return true
 }
