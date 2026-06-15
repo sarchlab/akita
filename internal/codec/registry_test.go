@@ -75,6 +75,48 @@ func TestRegistry_EmptySliceRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRegistry_SingleValueRoundTrip(t *testing.T) {
+	r := NewRegistry[shape]("shape")
+	r.Register(square{})
+	r.Register(&rect{})
+
+	encodedVal, err := r.Encode(square{Side: 3})
+	if err != nil {
+		t.Fatalf("Encode(value): %v", err)
+	}
+	gotVal, err := r.Decode(encodedVal)
+	if err != nil {
+		t.Fatalf("Decode(value): %v", err)
+	}
+	if _, ok := gotVal.(square); !ok {
+		t.Fatalf("decoded %T, want square (value form preserved)", gotVal)
+	}
+	if gotVal.area() != 9 {
+		t.Fatalf("area = %d, want 9", gotVal.area())
+	}
+
+	encodedPtr, err := r.Encode(&rect{W: 2, H: 5})
+	if err != nil {
+		t.Fatalf("Encode(pointer): %v", err)
+	}
+	gotPtr, err := r.Decode(encodedPtr)
+	if err != nil {
+		t.Fatalf("Decode(pointer): %v", err)
+	}
+	if _, ok := gotPtr.(*rect); !ok {
+		t.Fatalf("decoded %T, want *rect (pointer form preserved)", gotPtr)
+	}
+}
+
+func TestRegistry_DecodeUnknownSingleType(t *testing.T) {
+	r := NewRegistry[shape]("shape")
+
+	_, err := r.Decode(json.RawMessage(`{"type":"codec.square","payload":{}}`))
+	if err == nil || !strings.Contains(err.Error(), "unknown shape type") {
+		t.Fatalf("expected unknown-type error, got %v", err)
+	}
+}
+
 func TestRegistry_UnknownType(t *testing.T) {
 	r := NewRegistry[shape]("shape")
 

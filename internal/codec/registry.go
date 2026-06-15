@@ -150,6 +150,36 @@ func (r *Registry[T]) DecodeSlice(data json.RawMessage) ([]T, error) {
 	return out, nil
 }
 
+// Encode encodes a single polymorphic value into a typed payload: a type tag
+// plus the JSON encoding of the concrete value. It is the single-value
+// counterpart to EncodeSlice, for callers that carry one value of T inside an
+// otherwise plain-JSON structure. Encoding needs no prior registration;
+// Decode does.
+func (r *Registry[T]) Encode(v T) (json.RawMessage, error) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("codec: encode %s %T: %w", r.label, v, err)
+	}
+
+	return json.Marshal(typedPayload{
+		Type:    tagOf(reflect.TypeOf(v)),
+		Payload: raw,
+	})
+}
+
+// Decode decodes a single typed payload produced by Encode back into a concrete
+// value of its registered type, in the same value or pointer form its type was
+// registered as.
+func (r *Registry[T]) Decode(data json.RawMessage) (T, error) {
+	var tp typedPayload
+	if err := json.Unmarshal(data, &tp); err != nil {
+		var zero T
+		return zero, fmt.Errorf("codec: decode %s: %w", r.label, err)
+	}
+
+	return r.decodeOne(tp)
+}
+
 func (r *Registry[T]) decodeOne(tp typedPayload) (T, error) {
 	var zero T
 

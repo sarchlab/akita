@@ -24,25 +24,50 @@ type Resources struct {
 	DevicePorts []messaging.Port `json:"-"`
 }
 
-// assemblingMsgState is a serializable representation of a message being
-// assembled from flits.
-type assemblingMsgState struct {
-	MsgID           uint64               `json:"msg_id"`
-	Src             messaging.RemotePort `json:"src"`
-	Dst             messaging.RemotePort `json:"dst"`
-	RspTo           uint64               `json:"rsp_to"`
-	TrafficClass    string               `json:"traffic_class"`
-	TrafficBytes    int                  `json:"traffic_bytes"`
-	NumFlitRequired int                  `json:"num_flit_required"`
-	NumFlitArrived  int                  `json:"num_flit_arrived"`
+// msgHolder carries one polymorphic messaging.Msg inside the endpoint's
+// otherwise plain-JSON State. A bare interface field cannot be checkpointed —
+// the JSON decoder cannot reconstruct the concrete type — so the holder encodes
+// the message through the message codec (the same machinery that checkpoints
+// in-flight messages in port buffers). A nil message round-trips as nil.
+type msgHolder struct {
+	Msg messaging.Msg
 }
 
-// State contains mutable runtime data for the endpoint.
+// MarshalJSON encodes the held message through the message codec.
+func (h msgHolder) MarshalJSON() ([]byte, error) {
+	return messaging.EncodeMsg(h.Msg)
+}
+
+// UnmarshalJSON decodes the held message through the message codec.
+func (h *msgHolder) UnmarshalJSON(data []byte) error {
+	msg, err := messaging.DecodeMsg(data)
+	if err != nil {
+		return err
+	}
+
+	h.Msg = msg
+
+	return nil
+}
+
+// assemblingMsgState is a serializable record of a message being reassembled
+// from flits. Arrival progress is tracked by message ID; the carried concrete
+// message is captured once the flit bearing it (the final flit) arrives.
+type assemblingMsgState struct {
+	MsgID           uint64    `json:"msg_id"`
+	NumFlitRequired int       `json:"num_flit_required"`
+	NumFlitArrived  int       `json:"num_flit_arrived"`
+	Payload         msgHolder `json:"payload"`
+}
+
+// State contains mutable runtime data for the endpoint. The message-bearing
+// buffers carry concrete messages (wrapped in msgHolder so they checkpoint),
+// so a payload-bearing protocol survives the network crossing.
 type State struct {
-	MsgOutBuf      []messaging.MsgMeta  `json:"msg_out_buf"`
+	MsgOutBuf      []msgHolder          `json:"msg_out_buf"`
 	FlitsToSend    []packetization.Flit `json:"flits_to_send"`
 	AssemblingMsgs []assemblingMsgState `json:"assembling_msgs"`
-	AssembledMsgs  []messaging.MsgMeta  `json:"assembled_msgs"`
+	AssembledMsgs  []msgHolder          `json:"assembled_msgs"`
 }
 
 // Comp is an akita component(Endpoint) that delegates sending and receiving
