@@ -110,23 +110,62 @@ func (r *Registry[T]) Tags() []string {
 	return tags
 }
 
+// Encode encodes a single value of T into one typed payload: a type tag plus
+// the JSON encoding of the concrete value. It is the single-value primitive;
+// EncodeSlice is the same operation mapped over many values. Encoding needs no
+// prior registration; decoding does.
+func (r *Registry[T]) Encode(v T) (json.RawMessage, error) {
+	tp, err := r.encodeOne(v)
+	if err != nil {
+		return nil, err
+	}
+
+	return json.Marshal(tp)
+}
+
 // EncodeSlice encodes a slice of T into a JSON array of typed payloads. Encoding
 // needs no prior registration: each element is tagged with its concrete type and
 // marshalled with the default JSON encoding.
 func (r *Registry[T]) EncodeSlice(vs []T) (json.RawMessage, error) {
 	payloads := make([]typedPayload, len(vs))
 	for i, v := range vs {
-		raw, err := json.Marshal(v)
+		tp, err := r.encodeOne(v)
 		if err != nil {
-			return nil, fmt.Errorf("codec: encode %s %T: %w", r.label, v, err)
+			return nil, err
 		}
-		payloads[i] = typedPayload{
-			Type:    tagOf(reflect.TypeOf(v)),
-			Payload: raw,
-		}
+		payloads[i] = tp
 	}
 
 	return json.Marshal(payloads)
+}
+
+// encodeOne builds the typed payload for a single value: the concrete type's tag
+// plus its JSON. Encode and EncodeSlice both build on it, so the per-element wire
+// format is defined in exactly one place.
+func (r *Registry[T]) encodeOne(v T) (typedPayload, error) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return typedPayload{}, fmt.Errorf("codec: encode %s %T: %w", r.label, v, err)
+	}
+
+	return typedPayload{
+		Type:    tagOf(reflect.TypeOf(v)),
+		Payload: raw,
+	}, nil
+}
+
+// Decode decodes a single typed payload produced by Encode back into a concrete
+// value of its registered type, in the same value or pointer form its type was
+// registered as. It is the single-value counterpart to DecodeSlice; both build
+// on decodeOne.
+func (r *Registry[T]) Decode(data json.RawMessage) (T, error) {
+	var tp typedPayload
+	if err := json.Unmarshal(data, &tp); err != nil {
+		var zero T
+		return zero, fmt.Errorf("codec: decode %s: %w", r.label, err)
+	}
+
+	return r.decodeOne(tp)
 }
 
 // DecodeSlice decodes a JSON array produced by EncodeSlice back into concrete

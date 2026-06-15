@@ -13,18 +13,18 @@ var msgCodec = codec.NewRegistry[Msg]("message")
 
 // EncodeMsg encodes a single message into a self-describing JSON payload that
 // preserves its concrete type, so DecodeMsg can reconstruct it. A nil message
-// encodes as JSON null. It is a thin single-value wrapper over the same
-// type-tagged slice encoding used for port-buffer checkpoints (a present
-// message encodes as a one-element list), for callers that carry one
-// polymorphic message inside an otherwise plain-JSON structure (e.g. a flit
-// payload, or an endpoint's reassembly state). The concrete type must be
-// registered (see RegisterMsg / DefineProtocol) for DecodeMsg to restore it.
+// encodes as JSON null. It is a thin nil-aware delegate over the message
+// codec's single-value primitive — the Msg-specific part is only the
+// nil-is-an-absent-payload policy — for callers that carry one polymorphic
+// message inside an otherwise plain-JSON structure (e.g. a flit payload, or an
+// endpoint's reassembly state). The concrete type must be registered (see
+// RegisterMsg / DefineProtocol) for DecodeMsg to restore it.
 func EncodeMsg(msg Msg) (json.RawMessage, error) {
 	if msg == nil {
 		return json.RawMessage("null"), nil
 	}
 
-	return msgCodec.EncodeSlice([]Msg{msg})
+	return msgCodec.Encode(msg)
 }
 
 // DecodeMsg reverses EncodeMsg. A null or empty payload decodes to a nil
@@ -35,16 +35,7 @@ func DecodeMsg(data json.RawMessage) (Msg, error) {
 		return nil, nil
 	}
 
-	msgs, err := msgCodec.DecodeSlice(data)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(msgs) == 0 {
-		return nil, nil
-	}
-
-	return msgs[0], nil
+	return msgCodec.Decode(data)
 }
 
 // RegisterMsg registers a concrete message type so a checkpoint that captured it
