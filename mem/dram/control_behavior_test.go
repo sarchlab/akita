@@ -297,6 +297,34 @@ var _ = Describe("DRAM control behavior", func() {
 		Expect(comp.State.TotalCycles).To(BeNumerically("<", 100))
 	})
 
+	It("clears in-flight pending completions on Reset", func() {
+		// Seed a pending read/write completion with an absolute completion tick
+		// in the future and a high tick count, as if reset arrived mid-flight.
+		comp.State.TickCount = 500
+		comp.State.PendingCompletions = []pendingCompletion{
+			{CompletionTick: 1000, Ref: subTransRef{TxID: 1, SubIndex: 0}},
+		}
+
+		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
+		ctrlPort.Deliver(reset)
+		found := false
+		for i := 0; i < 8 && !found; i++ {
+			comp.Tick()
+			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if r, ok := out.(memcontrolprotocol.Rsp); ok &&
+					r.Command == memcontrolprotocol.CmdReset {
+					found = true
+				}
+			}
+		}
+
+		Expect(found).To(BeTrue())
+		// Without clearing, the stale entry would keep bankTickMW reporting
+		// progress (len(PendingCompletions) > 0) until TickCount climbed back to
+		// 1000, spinning a freshly-reset controller on pre-reset work.
+		Expect(comp.State.PendingCompletions).To(BeEmpty())
+	})
+
 	DescribeTable("Reset wipes in-flight state from any control state",
 		func(startState memcontrolprotocol.State) {
 			acceptReads(1)

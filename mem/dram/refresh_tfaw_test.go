@@ -64,8 +64,7 @@ var _ = Describe("tFAW and Refresh", func() {
 			bs := findBankState(&state.BankStates, 0, 0, 1)
 			// First close this bank so it can accept an activate
 			bs.State = int(bankStateClosed)
-			bs.HasCurrentCmd = false
-			bs.CyclesToCmdAvailable = make(map[string]int) // clear timing
+			bs.CyclesToCmdAvailable = [numCmdKind]int{} // clear timing
 
 			cmd := &commandState{
 				Kind: int(cmdKindRead),
@@ -108,8 +107,7 @@ var _ = Describe("tFAW and Refresh", func() {
 
 			bs := findBankState(&state.BankStates, 0, 0, 1)
 			bs.State = int(bankStateClosed)
-			bs.HasCurrentCmd = false
-			bs.CyclesToCmdAvailable = make(map[string]int)
+			bs.CyclesToCmdAvailable = [numCmdKind]int{}
 
 			cmd := &commandState{
 				Kind: int(cmdKindRead),
@@ -151,8 +149,7 @@ var _ = Describe("tFAW and Refresh", func() {
 			state.TickCount = 4
 			bs := findBankState(&state.BankStates, 0, 0, 1)
 			bs.State = int(bankStateClosed)
-			bs.HasCurrentCmd = false
-			bs.CyclesToCmdAvailable = make(map[string]int)
+			bs.CyclesToCmdAvailable = [numCmdKind]int{}
 
 			cmd := &commandState{
 				Kind: int(cmdKindRead),

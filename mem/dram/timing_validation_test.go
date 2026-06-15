@@ -51,7 +51,7 @@ var _ = Describe("Timing Validation", func() {
 	})
 
 	Describe("TestActivateOpensBank", func() {
-		It("should open the bank and set CycleLeft to tRCD", func() {
+		It("should open the bank and require tRCD before a Read", func() {
 			bs := findBankState(&state.BankStates, 0, 0, 0)
 			Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
 
@@ -66,12 +66,13 @@ var _ = Describe("Timing Validation", func() {
 			}
 
 			startCommand(cmdCycles, state, bs, cmd)
+			updateTiming(timing, state, cmd)
 
 			// Bank should now be open with the correct row.
 			Expect(bankStateKind(bs.State)).To(Equal(bankStateOpen))
 			Expect(bs.OpenRow).To(Equal(uint64(42)))
-			// CycleLeft for Activate = tRCD - tAL = 16 - 0 = 16
-			Expect(bs.CurrentCmd.CycleLeft).To(Equal(16))
+			// Activate→Read gap = tRCD - tAL = 16 - 0 = 16
+			Expect(bs.CyclesToCmdAvailable[cmdKindRead]).To(Equal(16))
 		})
 	})
 
@@ -94,19 +95,16 @@ var _ = Describe("Timing Validation", func() {
 
 			// After Activate, the SameBank timing for Activate→Read
 			// should be tRCD - tAL = 16.
-			readKey := cmdKindToString(cmdKindRead)
+			readKey := cmdKindRead
 			Expect(bs.CyclesToCmdAvailable[readKey]).To(Equal(16))
 
 			// Tick 16 cycles to drain the timing constraint.
 			for range 16 {
-				tickBank(state, bs)
+				tickBank(bs)
 			}
 
 			// After 16 ticks the Read constraint should be 0.
 			Expect(bs.CyclesToCmdAvailable[readKey]).To(Equal(0))
-
-			// The bank command should also have completed (CycleLeft went 16→0).
-			Expect(bs.HasCurrentCmd).To(BeFalse())
 
 			// Now a Read command should be ready.
 			readCmd := &commandState{
@@ -142,7 +140,7 @@ var _ = Describe("Timing Validation", func() {
 
 			// Tick until Activate completes.
 			for range 16 {
-				tickBanks(&DDR4Spec, cmdCycles, state)
+				tickBanks(state)
 			}
 
 			// Issue a Read on bank (0,0,0).
@@ -159,7 +157,7 @@ var _ = Describe("Timing Validation", func() {
 			updateTiming(timing, state, readCmd)
 
 			// Same bank: Read→Read constraint should be tCCDL = 6
-			readKey := cmdKindToString(cmdKindRead)
+			readKey := cmdKindRead
 			Expect(bs00.CyclesToCmdAvailable[readKey]).To(Equal(6))
 
 			// Other bank in same bank group (e.g., bank index 1 in group 0):
@@ -197,7 +195,7 @@ var _ = Describe("Timing Validation", func() {
 			updateTiming(timing, state, prechargeCmd)
 
 			// Precharge→Activate constraint should be tRP = 16.
-			activateKey := cmdKindToString(cmdKindActivate)
+			activateKey := cmdKindActivate
 			Expect(bs.CyclesToCmdAvailable[activateKey]).To(Equal(16))
 
 			// Bank should now be closed.
@@ -205,7 +203,7 @@ var _ = Describe("Timing Validation", func() {
 
 			// Tick 16 cycles to drain the constraint.
 			for range 16 {
-				tickBanks(&DDR4Spec, cmdCycles, state)
+				tickBanks(state)
 			}
 
 			// Now Activate should be ready (constraint == 0).
@@ -248,7 +246,7 @@ var _ = Describe("Timing Validation", func() {
 
 			// Complete the Activate.
 			for range 16 {
-				tickBanks(&DDR4Spec, cmdCycles, state)
+				tickBanks(state)
 			}
 
 			Expect(bankStateKind(bs.State)).To(Equal(bankStateOpen))

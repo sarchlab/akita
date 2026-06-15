@@ -31,7 +31,7 @@ var _ = Describe("Transaction Splitting", func() {
 		trans.ReadMsg.Address = 0x100
 		trans.ReadMsg.AccessByteSize = 128
 
-		splitTransaction(spec, trans, 0)
+		splitTransaction(spec, trans)
 		// 128 bytes at 64-byte units = 2 sub-transactions
 		Expect(trans.SubTransactions).To(HaveLen(2))
 		Expect(trans.SubTransactions[0].Address).To(Equal(uint64(0x100)))
@@ -47,7 +47,7 @@ var _ = Describe("Transaction Splitting", func() {
 		trans.ReadMsg.Address = 0x110 // Not aligned
 		trans.ReadMsg.AccessByteSize = 4
 
-		splitTransaction(spec, trans, 0)
+		splitTransaction(spec, trans)
 		Expect(trans.SubTransactions).To(HaveLen(1))
 		Expect(trans.SubTransactions[0].Address).To(Equal(uint64(0x100)))
 	})
@@ -57,7 +57,7 @@ var _ = Describe("Bank Operations", func() {
 	It("should get required command kind for closed bank", func() {
 		bs := &bankState{
 			State:                int(bankStateClosed),
-			CyclesToCmdAvailable: make(map[string]int),
+			CyclesToCmdAvailable: [numCmdKind]int{},
 		}
 		cmd := &commandState{
 			Kind:     int(cmdKindReadPrecharge),
@@ -72,7 +72,7 @@ var _ = Describe("Bank Operations", func() {
 		bs := &bankState{
 			State:                int(bankStateOpen),
 			OpenRow:              10,
-			CyclesToCmdAvailable: make(map[string]int),
+			CyclesToCmdAvailable: [numCmdKind]int{},
 		}
 		cmd := &commandState{
 			Kind:     int(cmdKindReadPrecharge),
@@ -87,7 +87,7 @@ var _ = Describe("Bank Operations", func() {
 		bs := &bankState{
 			State:                int(bankStateOpen),
 			OpenRow:              5,
-			CyclesToCmdAvailable: make(map[string]int),
+			CyclesToCmdAvailable: [numCmdKind]int{},
 		}
 		cmd := &commandState{
 			Kind:     int(cmdKindReadPrecharge),
@@ -98,11 +98,7 @@ var _ = Describe("Bank Operations", func() {
 		Expect(requiredKind).To(Equal(cmdKindPrecharge))
 	})
 
-	It("should tick banks and count down", func() {
-		spec := &Spec{}
-		cmdCycles := map[commandKind]int{
-			cmdKindActivate: 5,
-		}
+	It("should tick banks and count down timing gaps", func() {
 		state := &State{
 			BankStates: bankStatesFlat{
 				NumRanks:      1,
@@ -112,14 +108,9 @@ var _ = Describe("Bank Operations", func() {
 					{
 						Rank: 0, BankGroup: 0, BankIndex: 0,
 						Data: bankState{
-							State:         int(bankStateClosed),
-							HasCurrentCmd: true,
-							CurrentCmd: commandState{
-								Kind:      int(cmdKindActivate),
-								CycleLeft: 2,
-							},
-							CyclesToCmdAvailable: map[string]int{
-								cmdKindToString(cmdKindRead): 3,
+							State: int(bankStateClosed),
+							CyclesToCmdAvailable: [numCmdKind]int{
+								cmdKindRead: 3,
 							},
 						},
 					},
@@ -127,51 +118,36 @@ var _ = Describe("Bank Operations", func() {
 			},
 		}
 
-		_ = cmdCycles // cmdCycles used by startCommand, not tickBanks
-		progress := tickBanks(spec, cmdCycles, state)
+		progress := tickBanks(state)
 		Expect(progress).To(BeTrue())
 		bs := &state.BankStates.Entries[0].Data
-		Expect(bs.CurrentCmd.CycleLeft).To(Equal(1))
-		Expect(bs.CyclesToCmdAvailable[cmdKindToString(cmdKindRead)]).To(
-			Equal(2))
+		Expect(bs.CyclesToCmdAvailable[cmdKindRead]).To(Equal(2))
 	})
 
-	It("should complete command and mark subtrans done", func() {
+	It("should complete pending reads/writes and mark subtrans done", func() {
 		state := &State{
+			TickCount: 100,
 			Transactions: []transactionState{
 				{
+					ID:      7,
 					HasRead: true,
 					SubTransactions: []subTransState{
 						{ID: 1, Completed: false},
 					},
 				},
 			},
-			BankStates: bankStatesFlat{
-				Entries: []bankEntry{
-					{
-						Data: bankState{
-							State:         int(bankStateOpen),
-							HasCurrentCmd: true,
-							CurrentCmd: commandState{
-								Kind:      int(cmdKindReadPrecharge),
-								CycleLeft: 1,
-								SubTransRef: subTransRef{
-									TransIndex: 0,
-									SubIndex:   0,
-								},
-							},
-							CyclesToCmdAvailable: make(map[string]int),
-						},
-					},
+			PendingCompletions: []pendingCompletion{
+				{
+					CompletionTick: 100,
+					Ref:            subTransRef{TxID: 7, SubIndex: 0},
 				},
 			},
 		}
 
-		spec := &Spec{}
-		cmdCycles := map[commandKind]int{}
-		tickBanks(spec, cmdCycles, state)
+		progress := processPendingCompletions(state)
 
-		Expect(state.BankStates.Entries[0].Data.HasCurrentCmd).To(BeFalse())
+		Expect(progress).To(BeTrue())
+		Expect(state.PendingCompletions).To(BeEmpty())
 		Expect(state.Transactions[0].SubTransactions[0].Completed).To(BeTrue())
 	})
 })
@@ -205,7 +181,7 @@ var _ = Describe("Queue Operations", func() {
 		pushSubTrans(state, 0)
 		Expect(state.SubTransQueue.Entries).To(HaveLen(2))
 		Expect(state.SubTransQueue.Entries[0]).To(Equal(
-			subTransRef{TransIndex: 0, SubIndex: 0}))
+			subTransRef{TxID: 0, SubIndex: 0}))
 	})
 })
 
@@ -480,26 +456,26 @@ var _ = Describe("Open Page Policy", func() {
 		state = &State{
 			Transactions: []transactionState{
 				{
+					ID:      0,
 					HasRead: true,
 					ReadMsg: memprotocol.ReadReq{},
 					SubTransactions: []subTransState{
 						{
-							ID:               10,
-							Address:          0x0,
-							Completed:        false,
-							TransactionIndex: 0,
+							ID:        10,
+							Address:   0x0,
+							Completed: false,
 						},
 					},
 				},
 				{
+					ID:       1,
 					HasWrite: true,
 					WriteMsg: memprotocol.WriteReq{},
 					SubTransactions: []subTransState{
 						{
-							ID:               20,
-							Address:          0x0,
-							Completed:        false,
-							TransactionIndex: 1,
+							ID:        20,
+							Address:   0x0,
+							Completed: false,
 						},
 					},
 				},
@@ -517,7 +493,7 @@ var _ = Describe("Open Page Policy", func() {
 	It("should create open page command with Read kind", func() {
 		spec.PagePolicy = PagePolicyOpen
 
-		ref := subTransRef{TransIndex: 0, SubIndex: 0}
+		ref := subTransRef{TxID: 0, SubIndex: 0}
 		cmd := createOpenPageCommand(spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
@@ -527,7 +503,7 @@ var _ = Describe("Open Page Policy", func() {
 	It("should create open page command with Write kind", func() {
 		spec.PagePolicy = PagePolicyOpen
 
-		ref := subTransRef{TransIndex: 1, SubIndex: 0}
+		ref := subTransRef{TxID: 1, SubIndex: 0}
 		cmd := createOpenPageCommand(spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
@@ -537,7 +513,7 @@ var _ = Describe("Open Page Policy", func() {
 	It("should create close page command with ReadPrecharge kind", func() {
 		spec.PagePolicy = PagePolicyClose
 
-		ref := subTransRef{TransIndex: 0, SubIndex: 0}
+		ref := subTransRef{TxID: 0, SubIndex: 0}
 		cmd := createClosePageCommand(spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
@@ -547,7 +523,7 @@ var _ = Describe("Open Page Policy", func() {
 	It("should create close page command with WritePrecharge kind", func() {
 		spec.PagePolicy = PagePolicyClose
 
-		ref := subTransRef{TransIndex: 1, SubIndex: 0}
+		ref := subTransRef{TxID: 1, SubIndex: 0}
 		cmd := createClosePageCommand(spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
@@ -641,7 +617,7 @@ var _ = Describe("Open Page Policy", func() {
 		// Test with open-page policy
 		spec.PagePolicy = PagePolicyOpen
 		state.SubTransQueue.Entries = []subTransRef{
-			{TransIndex: 0, SubIndex: 0},
+			{TxID: 0, SubIndex: 0},
 		}
 
 		progress := tickSubTransQueue(spec, state)
@@ -656,7 +632,7 @@ var _ = Describe("Open Page Policy", func() {
 	It("should use close-page commands when PagePolicyClose in tickSubTransQueue", func() {
 		spec.PagePolicy = PagePolicyClose
 		state.SubTransQueue.Entries = []subTransRef{
-			{TransIndex: 0, SubIndex: 0},
+			{TxID: 0, SubIndex: 0},
 		}
 
 		progress := tickSubTransQueue(spec, state)
@@ -671,7 +647,7 @@ var _ = Describe("Open Page Policy", func() {
 	It("should use Write for write transaction with open-page in tickSubTransQueue", func() {
 		spec.PagePolicy = PagePolicyOpen
 		state.SubTransQueue.Entries = []subTransRef{
-			{TransIndex: 1, SubIndex: 0},
+			{TxID: 1, SubIndex: 0},
 		}
 
 		progress := tickSubTransQueue(spec, state)
@@ -685,7 +661,7 @@ var _ = Describe("Open Page Policy", func() {
 	It("should use WritePrecharge for write transaction with close-page in tickSubTransQueue", func() {
 		spec.PagePolicy = PagePolicyClose
 		state.SubTransQueue.Entries = []subTransRef{
-			{TransIndex: 1, SubIndex: 0},
+			{TxID: 1, SubIndex: 0},
 		}
 
 		progress := tickSubTransQueue(spec, state)
@@ -724,7 +700,7 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 		bs0 := findBankState(&state.BankStates, 0, 0, 0)
 		bs0.State = int(bankStateOpen)
 		bs0.OpenRow = 5
-		bs0.CyclesToCmdAvailable = make(map[string]int)
+		bs0.CyclesToCmdAvailable = [numCmdKind]int{}
 
 		// Command A: targets row 10 on bank 0 (miss — needs precharge)
 		cmdA := commandState{
@@ -758,9 +734,9 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 	It("should use FCFS when no row-buffer hits", func() {
 		// Both banks closed — no row-buffer hits possible
 		bs0 := findBankState(&state.BankStates, 0, 0, 0)
-		bs0.CyclesToCmdAvailable = make(map[string]int)
+		bs0.CyclesToCmdAvailable = [numCmdKind]int{}
 		bs1 := findBankState(&state.BankStates, 0, 0, 1)
-		bs1.CyclesToCmdAvailable = make(map[string]int)
+		bs1.CyclesToCmdAvailable = [numCmdKind]int{}
 
 		cmdA := commandState{
 			ID:   102,
@@ -799,11 +775,11 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 
 	It("should return nil when all commands have timing constraints", func() {
 		bs0 := findBankState(&state.BankStates, 0, 0, 0)
-		bs0.CyclesToCmdAvailable = map[string]int{
-			cmdKindToString(cmdKindActivate):      5,
-			cmdKindToString(cmdKindReadPrecharge): 5,
-			cmdKindToString(cmdKindRead):          5,
-			cmdKindToString(cmdKindPrecharge):     5,
+		bs0.CyclesToCmdAvailable = [numCmdKind]int{
+			cmdKindActivate:      5,
+			cmdKindReadPrecharge: 5,
+			cmdKindRead:          5,
+			cmdKindPrecharge:     5,
 		}
 
 		cmd := commandState{
@@ -872,7 +848,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			bs := findBankState(&state.BankStates, 0, 0, i)
 			bs.State = int(bankStateOpen)
 			bs.OpenRow = uint64(i)
-			bs.CyclesToCmdAvailable = make(map[string]int)
+			bs.CyclesToCmdAvailable = [numCmdKind]int{}
 		}
 
 		// Add 4 write commands (hits high watermark of 4)
@@ -906,12 +882,12 @@ var _ = Describe("Read/Write Queue Separation", func() {
 		bs0 := findBankState(&state.BankStates, 0, 0, 0)
 		bs0.State = int(bankStateOpen)
 		bs0.OpenRow = 1
-		bs0.CyclesToCmdAvailable = make(map[string]int)
+		bs0.CyclesToCmdAvailable = [numCmdKind]int{}
 
 		bs1 := findBankState(&state.BankStates, 0, 0, 1)
 		bs1.State = int(bankStateOpen)
 		bs1.OpenRow = 2
-		bs1.CyclesToCmdAvailable = make(map[string]int)
+		bs1.CyclesToCmdAvailable = [numCmdKind]int{}
 
 		state.CommandQueues.Entries = []queueEntry{
 			{

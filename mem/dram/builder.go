@@ -146,6 +146,7 @@ func (b Builder) Build(name string) *Comp {
 
 // normalizeSpec computes the derived timing fields from the configured spec.
 func (b *Builder) normalizeSpec() {
+	b.channelCountMustBeOne()
 	b.calculateBurstCycle()
 	b.spec.TRL = b.spec.TAL + b.spec.TCL
 	b.spec.TWL = b.spec.TAL + b.spec.TCWL
@@ -211,11 +212,16 @@ func (b Builder) buildSpec() Spec {
 func (b Builder) buildCmdCycles() map[commandKind]int {
 	proto := protocol(b.spec.Protocol)
 
+	// cmdCycles is the data-return (completion) timeline used by startCommand:
+	// how long after a column command its read data / write response is ready.
+	// For the auto-precharge variants the data still returns ReadDelay/WriteDelay
+	// after the column command — the trailing precharge is enforced separately by
+	// the bank timing table, so it must NOT shorten the completion to TRP.
 	cmdCycles := map[commandKind]int{
 		cmdKindRead:           b.spec.ReadDelay,
-		cmdKindReadPrecharge:  b.spec.TRP,
+		cmdKindReadPrecharge:  b.spec.ReadDelay,
 		cmdKindWrite:          b.spec.WriteDelay,
-		cmdKindWritePrecharge: b.spec.TRP,
+		cmdKindWritePrecharge: b.spec.WriteDelay,
 		cmdKindActivate:       b.spec.TRCD - b.spec.TAL,
 		cmdKindPrecharge:      b.spec.TRP,
 		cmdKindRefreshBank:    1,
@@ -597,6 +603,18 @@ func (b *Builder) calculateBurstCycle() {
 func (b *Builder) burstLengthMustNotBeZero() {
 	if b.spec.BurstLength == 0 {
 		panic("burst length cannot be 0")
+	}
+}
+
+// channelCountMustBeOne enforces the one-component-per-channel model. The
+// address decode produces a Channel field that the single-channel controller
+// does not act on, so NumChannel > 1 would silently alias all channels onto the
+// same banks. Multi-channel is a first-class feature deferred to a later phase;
+// until then, instantiate one dram.Comp per channel.
+func (b *Builder) channelCountMustBeOne() {
+	if b.spec.NumChannel > 1 {
+		panic("dram: NumChannel > 1 is not supported; " +
+			"instantiate one dram.Comp per channel")
 	}
 }
 

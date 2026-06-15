@@ -130,6 +130,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	}
 	state.BankStates = initBankStatesFlat(
 		spec.NumRank, spec.NumBankGroup, spec.NumBank)
+	state.PendingCompletions = nil
 	state.TickCount = 0
 	state.RefreshCycleCounter = 0
 	state.RefreshInProgress = false
