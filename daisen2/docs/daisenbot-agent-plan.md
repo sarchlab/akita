@@ -1,0 +1,270 @@
+# DaisenBot Agentic Upgrade — Design & Implementation Plan
+
+**Status:** Draft for review · **Last updated:** 2026-06-15
+
+This document captures the design decisions and phased plan for turning DaisenBot
+from a single-shot Q&A proxy into a tool-using agent that can *investigate* an
+Akita simulation trace.
+
+---
+
+## 1. Goal
+
+Let DaisenBot **investigate** a trace instead of merely summarizing a CSV it was
+handed: query the trace data, read the simulator source to interpret it, run code
+to summarize data, and look at Daisen's own visualizations — then answer in text,
+with a visible, navigable record of what it did.
+
+**Where we are today** (post-PR #381, `daisen2/internal/httpapi/chat.go`):
+DaisenBot is a single-shot, OpenAI-compatible `/chat/completions` proxy. For one
+turn it prepends a trace-CSV header (`buildAkitaTraceHeader`) plus a
+`beforehandprompt.txt` system prompt to the user's message, makes one model call,
+and relays the response. Provider/model/key are supplied by the frontend; the
+backend holds no credentials.
+
+**The ceiling we are removing:** the current bottleneck is *data access*, not
+reasoning. The model only sees the CSV of the user's pre-selected window and
+cannot fetch more — if the answer lives in a parent task, an upstream component,
+or a wider time range, it is blind. No amount of "think step by step" recovers
+data that was never put in context. This plan makes the model pull what it needs.
+
+---
+
+## 2. Core principles
+
+1. **Tools are inputs; text is the only output.** The agent pulls *data*, *code*,
+   and *visualizations* in as observations and emits only a text answer to the user.
+2. **Raw data never crosses into the LLM.** Tools return summaries, schemas,
+   samples, and images — never row dumps. Heavy data stays server-side (SQL row
+   caps; Python summarization).
+3. **Daisen is the visualization engine.** Every view is URL-encoded. The agent
+   "draws" by generating a URL; the **frontend** renders it — as a clickable link
+   for the human, and as an off-screen capture for the agent. No bespoke charting,
+   no server-side rendering.
+4. **Simplicity over generality.** Agents are always triggered from the chat
+   panel, so a live browser is always present. We use it as the renderer and drop
+   headless/server-side rendering entirely.
+
+---
+
+## 3. Architecture
+
+### 3.1 The agent loop
+
+Backend-orchestrated, streamed over SSE. `httpChatProxy` evolves from a one-shot
+relay into a loop:
+
+```
+call provider with tool schemas
+  → receive tool_calls
+  → execute tools, append observations
+  → repeat until the model returns a final answer
+  → stream the final text to the user
+```
+
+**Lifecycle:** the loop is bound to the chat session's SSE connection. If the
+user closes the tab (the connection drops), the backend **cancels** the loop; the
+user re-triggers it. This is what lets the frontend be the renderer (§3.2) without
+a fallback.
+
+### 3.2 Tools (all inputs)
+
+| Tool | Executes in | Returns | Guardrails |
+|---|---|---|---|
+| `data_query(sql, limit)` | backend (read-only SQLite) | capped rows / counts / stats | SELECT-only · forced `LIMIT` · row+byte cap · statement timeout · block `ATTACH`/`PRAGMA`/writes |
+| `code_search` / `code_read` | backend | Akita source text | scoped to the akita repo · version-matched to the trace's commit if recorded · reuses the existing SSRF-guarded fetch |
+| `run_python(code)` | backend sandbox | stdout summary (+ emitted artifacts) | isolated runtime · read-only trace handle · library allowlist · no network · CPU/mem/wall limits |
+| `daisen_view(url)` | **frontend** (off-screen) | rendered PNG observation + user-facing link | URL validated/normalized against the view schema · render-ready gate before capture |
+
+`daisen_view` is the **only** tool whose execution delegates to the frontend: the
+backend pushes a render request down the SSE channel, the frontend renders the
+view off-screen, captures it (SVG-serialize preferred; `html2canvas` fallback),
+and POSTs the PNG back, correlated by a request id. All other tools execute in the
+backend.
+
+### 3.3 Data flow
+
+```
+LLM (needs tool-calling; + vision for daisen_view)
+  │   raw trace data NEVER crosses this line — only summaries & images do
+  ├─ data_query(sql, limit)   → capped rows / counts / stats        (text)
+  ├─ code_search / read       → Akita source                        (text)
+  ├─ run_python(code)         → stdout summary                      (text)
+  └─ daisen_view(url)         → off-screen frontend render          (image)
+                                 (+ clickable link to the human)
+  → final text answer
+```
+
+The Python sandbox is the hub: it can read the trace (read-only handle), compute
+aggregates reliably *in code* (not token-by-token), and keep large data off the
+wire to the LLM.
+
+### 3.4 Model capability gating
+
+Agent mode requires a model that supports **tool-calling**; `daisen_view`
+additionally requires **vision**. Daisen allows any OpenAI-compatible endpoint and
+free-text model id, so these capabilities are not guaranteed. When absent,
+**degrade gracefully**: fall back to today's single-shot chat, and/or drop the
+viz tool. The model picker advertises which mode is available.
+
+### 3.5 Visible thinking ("the tour")
+
+Each step streams into the chat as a record: the tool used, a one-line rationale,
+and — for `daisen_view` — a **thumbnail + clickable link** that jumps the user's
+own browser to that exact view. This is the visible-reasoning feature, a trust
+mechanism, and a navigable trail at once. Default-on, collapsible.
+
+---
+
+## 4. Phase roadmap
+
+Each phase is decomposed into workstreams (A–E style) when we reach it; Phase 1 is
+detailed in §5.
+
+| Phase | Title | Summary | Depends on |
+|---|---|---|---|
+| **1** | View-URL contract + render-ready signal | Make every view losslessly reconstructable from its URL, and expose a programmatic "view is fully rendered" signal. Renderer-agnostic; independently useful as better link-sharing. | — |
+| **2** | Agent-loop skeleton + tool-calling + `data` tool | Turn `httpChatProxy` into a streamed multi-step tool-calling loop; land the guarded read-only `data_query`; add capability-gating with single-shot fallback. A working "agent that can query the trace" — the biggest single value jump. | — |
+| **3** | `code` tool | `code_search` + `code_read` over Akita source so the agent can interpret Kinds/milestones. | 2 |
+| **4** | Python sandbox tool | Sandboxed `run_python` for summarizing data without shipping raw rows. Isolated as its own phase for the runtime/isolation decision. | 2 |
+| **5** | Viz-perception tool + visual tour | `daisen_view`: frontend off-screen render → image observation; clickable links + thumbnails. Extends gating to require a vision model. | 1, 2 |
+| **6** | Hardening | Loop bounds (max iters / wall-clock), cross-tool context budgeting/pagination, graceful-degradation matrix (model caps × installed runtimes), answer-quality eval harness. | 2–5 |
+
+**Parallelism:** Phases 1 (frontend) and 2 (backend) touch different subsystems
+and can proceed in parallel. We start with Phase 1 because the view-URL contract
+is the prerequisite for *both* human links and the agent's perception (Phase 5),
+and it ships value on its own.
+
+---
+
+## 5. Phase 1 — detailed
+
+**Goal:** every meaningful view is fully reconstructable from its URL alone, and a
+programmatic "this view has finished rendering" signal exists.
+
+**Non-goals (Phase 1):** no LLM/agent loop, no capture/round-trip wiring, no
+Python sandbox. Only: lossless URL encoding + the render-ready signal. (Both are
+independently useful for plain link-sharing.)
+
+### Workstream A — View-state inventory & gap audit *(the artifact to review)*
+
+Enumerate every route/page and, for each, list **all state that affects what is
+drawn**, classifying each field as `in-URL` / `react-state-only (gap)` /
+`derived (no-op)`.
+
+Preliminary inventory (to be completed by reading every page):
+
+| Route / Page | State field | Current source | Action |
+|---|---|---|---|
+| `/component` (ComponentPage) | `name`, `taskid`, `starttime`, `endtime` | URL (`ComponentPage.tsx:699-703`; writes `:762/:882`) | keep / canonicalize |
+| `/component` | selected sub-task, visible metrics/series, gantt zoom-pan beyond start/end, expanded rows | **likely react-state — audit** | lift to URL if view-defining |
+| `/task` (TaskChartPage) | `id`, `where` | URL (`TaskChartPage.tsx:22-23`) | keep |
+| `/task` | time range / zoom | **audit** | lift if missing |
+| `/dashboard` (DashboardPage) | selected component(s), widget set, time range, grouping/metric | **audit (multi-select likely react-state)** | lift / decide |
+
+Method: read each page + its hooks (`useTraceData`, `useCompInfo`) + the chart
+components (`GanttChart`, `TimeSeriesChart`, `DashboardWidget`), tracing where
+`useState`/context drives rendering vs. where `searchParams` does.
+**Deliverable: the completed table.**
+
+### Workstream B — Canonical URL schema (the contract)
+
+- Per-route param vocabulary, names, formats (time as ns float; component as
+  full-name string; multi-select as repeated param vs. comma-list — *decision
+  needed*; zoom expressible via start/end).
+- **Normalization** so identical views → identical canonical URLs (param order,
+  defaults, rounding) — needed later for render caching/dedup.
+- **Validation** rules — the Go backend reuses these to validate LLM-generated
+  URLs before rendering or before handing a link to a user.
+- **Single source of truth:** a small TS module `viewState.ts` exposing
+  `encodeView(state) → string` and `parseView(searchParams) → state`, replacing
+  today's scattered `searchParams.get(...)` calls.
+
+### Workstream C — Close the gaps
+
+- Lift each gap from A into the URL via `viewState.ts` + `setSearchParams`, with
+  two-way sync (UI→URL, and URL→UI on load/back/forward).
+- Use `replace` (not `push`) and **debounce** for continuous interactions
+  (drag-zoom, pan) so history isn't spammed. Encode only state that changes "what
+  view is shown," not transient hover/tooltip state.
+
+### Workstream D — Render-ready signal
+
+- One source of truth for "data loaded **and** SVG committed." Each loading hook
+  registers in-flight; when all settle and the chart has painted (post-commit
+  frame), set `window.__daisenViewReady = true` **and** `data-daisen-ready="true"`
+  on a root node.
+- **Reset to false** when a navigation/param change starts a new fetch.
+- **Terminal states:** flip ready on empty and error too
+  (`ready-ok` / `ready-empty` / `ready-error`) so the off-screen capture never hangs.
+- Await `document.fonts.ready` before signaling — SVG text metrics depend on fonts;
+  keeps captures deterministic.
+
+### Workstream E — Off-screen render + verification harness
+
+This is where Phase 1 produces a reusable building block for Phase 5's
+`daisen_view`:
+
+- Build a hidden render path: given a Daisen URL, mount the view in an off-screen
+  container with real layout, wait for the render-ready signal, and confirm a
+  non-empty SVG is present. (Capture + backend round-trip come in Phase 5; here we
+  prove the view renders headlessly-in-the-tab and signals correctly.)
+- Pure unit test: `parseView(encodeView(s)) === s` for representative states.
+- In-browser test: load N representative URLs, await `data-daisen-ready`, assert
+  non-empty SVG.
+
+### Sequencing & acceptance
+
+- Order: **A → B → (C ∥ D) → E.**
+- **Done when:** every view-state field is in-URL or explicitly documented as
+  intentionally-ephemeral; round-trip test green; any canonical URL reproduces the
+  exact view incl. back/forward; the ready signal reliably flips (incl. empty/
+  error) and resets on navigation; the off-screen harness reaches ready with a
+  non-empty SVG on all sample URLs.
+
+---
+
+## 6. Open questions / to audit
+
+1. **Multi-select / large selections** — repeated query params get unwieldy.
+   Acceptable, or do we want a server-side `view-id → state` table for big
+   selections (keeps URLs shareable)?
+2. **Centralization refactor** — OK to introduce `viewState.ts` and route all
+   pages through it, or prefer minimal per-page edits to limit blast radius?
+3. **Scope line** — confirm which state is "view-defining" vs "ephemeral" (e.g.,
+   does dashboard widget *layout* need encoding, or is it fixed?).
+4. **URL back-compat** — if param names change, existing shared links break. Keep
+   aliases?
+5. **Inventory completeness** — are `/dashboard`, `/component`, `/task` the full
+   set of agent-relevant views, or is one missing?
+6. **Python sandbox runtime** (Phase 4 decision) — bubblewrap / container / WASM
+   as the safe default, with a subprocess fast-path for single-user local mode.
+7. **Capture fidelity** (Phase 5) — SVG-serialize is more faithful than
+   `html2canvas` for the charts; confirm it covers all view types (or where
+   `html2canvas` is the needed fallback).
+
+---
+
+## 7. Non-goals
+
+- No headless/server-side rendering (Chromium) — the live frontend is the renderer.
+- No bespoke charting (matplotlib/plotly) for agent perception — Daisen renders.
+- No persistent server-side credentials — keys remain frontend-supplied per request.
+- No support for agents running with no browser session attached
+  (background/scheduled agents) — out of scope by the simplicity decision.
+
+---
+
+## Appendix — Decisions log
+
+| Decision | Rationale |
+|---|---|
+| Build a tool-using agent, not just prompted CoT / a reasoning model | The ceiling is data access, not reasoning; the agent must fetch its own data. |
+| data / code / viz = inputs; text = output | Clarifies the tool model; viz is perception, not UI actuation. |
+| Backend-orchestrated loop over SSE | Owns the SQLite reader and SSRF-guarded fetch; one place for limits; key already arrives per-request. |
+| `daisen_view` renders in the frontend, not headless Chromium | Agents always launch from the chat panel ⇒ a live browser is guaranteed. No Chromium dependency; the agent sees what the user sees. Tab close ⇒ cancel the loop. |
+| Daisen views are URL-encoded; the agent generates URLs | Reuses 100% of Daisen's viz; the URL is a shareable, replayable artifact for both human and agent. |
+| Show the thinking process (links + thumbnails) | Visible reasoning + trust + a navigable trail, near-free over SSE. |
+| Guarded read-only `data_query` with hard caps | Powerful over a small fixed schema; SELECT-only + LIMIT + timeout bounds risk; computing in SQL avoids token-arithmetic hallucination. |
+| Python sandbox for summarization | Keeps raw data off the LLM wire and makes numeric analysis reliable. |
+| Capability-gate on tool-calling (+ vision for viz) | Free-text model ids mean capabilities aren't guaranteed; degrade to single-shot. |
