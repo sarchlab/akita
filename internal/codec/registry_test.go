@@ -108,6 +108,39 @@ func TestRegistry_SingleValueRoundTrip(t *testing.T) {
 	}
 }
 
+// TestRegistry_NilRoundTrip locks the single-value nil policy: a nil value
+// encodes as JSON null and decodes back to a nil T, so an absent optional
+// payload (e.g. a flit with no message) survives a checkpoint without each
+// caller guarding nil itself.
+func TestRegistry_NilRoundTrip(t *testing.T) {
+	r := NewRegistry[shape]("shape")
+
+	encoded, err := Encode[shape](nil)
+	if err != nil {
+		t.Fatalf("Encode(nil): %v", err)
+	}
+	if string(encoded) != "null" {
+		t.Fatalf("Encode(nil) = %q, want null", encoded)
+	}
+
+	got, err := r.Decode(encoded)
+	if err != nil {
+		t.Fatalf("Decode(null): %v", err)
+	}
+	if got != nil {
+		t.Fatalf("Decode(null) = %v, want nil", got)
+	}
+
+	// An empty payload (an absent field) is treated the same as null.
+	got, err = r.Decode(nil)
+	if err != nil {
+		t.Fatalf("Decode(empty): %v", err)
+	}
+	if got != nil {
+		t.Fatalf("Decode(empty) = %v, want nil", got)
+	}
+}
+
 // TestRegistry_EncodeIsSliceElement guards the invariant that Encode and
 // EncodeSlice share one per-element wire format: a single Encode must equal the
 // lone element of the corresponding one-element EncodeSlice.

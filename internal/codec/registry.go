@@ -115,7 +115,17 @@ func (r *Registry[T]) Tags() []string {
 // stateless — only decoding consults a Registry's type map — so Encode is a
 // plain generic function, not a Registry method. EncodeSlice is the same
 // operation over many values.
+//
+// A nil value (an absent optional payload, e.g. a flit that carries no message)
+// encodes as JSON null, and Decode maps null back to the zero T. This policy
+// lives here rather than in the messaging/timing wrappers because an optional
+// polymorphic value is common to every interface the codec serves. Only this
+// single-value path is nil-tolerant; see EncodeSlice.
 func Encode[T any](v T) (json.RawMessage, error) {
+	if any(v) == nil {
+		return json.RawMessage("null"), nil
+	}
+
 	tp, err := encodeOne(v)
 	if err != nil {
 		return nil, err
@@ -126,7 +136,9 @@ func Encode[T any](v T) (json.RawMessage, error) {
 
 // EncodeSlice encodes a slice of T into a JSON array of typed payloads. Like
 // Encode it needs no Registry: each element is tagged with its concrete type and
-// marshalled with the default JSON encoding.
+// marshalled with the default JSON encoding. Unlike Encode it does not
+// special-case a nil element; the collections it serializes (port buffers, the
+// event queue) never contain one.
 func EncodeSlice[T any](vs []T) (json.RawMessage, error) {
 	payloads := make([]typedPayload, len(vs))
 	for i, v := range vs {
@@ -160,10 +172,18 @@ func encodeOne[T any](v T) (typedPayload, error) {
 // registered as. Unlike Encode it is a Registry method: decoding resolves the
 // type tag through the registry's map. It is the single-value counterpart to
 // DecodeSlice; both build on decodeOne.
+//
+// Reversing Encode's nil policy, a null or empty payload is an absent optional
+// value and decodes to the zero T (nil for an interface type).
 func (r *Registry[T]) Decode(data json.RawMessage) (T, error) {
+	var zero T
+
+	if len(data) == 0 || string(data) == "null" {
+		return zero, nil
+	}
+
 	var tp typedPayload
 	if err := json.Unmarshal(data, &tp); err != nil {
-		var zero T
 		return zero, fmt.Errorf("codec: decode %s: %w", r.label, err)
 	}
 
