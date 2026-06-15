@@ -94,8 +94,12 @@ func createOpenPageCommand(
 		spec, state, ref, mapAddress(spec, st.Address))
 }
 
-// getQueueIndex returns the command queue index for a command (by rank).
-func getQueueIndex(cmd *commandState) int {
+// getQueueIndex returns the command-queue index for a command. The mapping is
+// meant to depend on the configured queue structure (PER_RANK groups a rank's
+// banks into one queue; PER_BANK gives each bank its own queue), but only
+// PER_RANK is implemented so far — PER_BANK is the subject of the failing tests
+// in perbank_queue_test.go.
+func getQueueIndex(spec *Spec, cmd *commandState) int {
 	return int(cmd.Location.Rank)
 }
 
@@ -113,7 +117,7 @@ func canAcceptCommand(
 	cmd *commandState,
 	spec *Spec,
 ) bool {
-	queueIdx := getQueueIndex(cmd)
+	queueIdx := getQueueIndex(spec, cmd)
 	isWrite := isWriteCommand(cmd)
 
 	// If R/W queue separation is configured (sizes > 0), use separate limits
@@ -141,8 +145,8 @@ func canAcceptCommand(
 }
 
 // acceptCommand adds a command to the command queue.
-func acceptCommand(state *State, cmd *commandState) {
-	queueIdx := getQueueIndex(cmd)
+func acceptCommand(state *State, cmd *commandState, spec *Spec) {
+	queueIdx := getQueueIndex(spec, cmd)
 	state.CommandQueues.Entries = append(
 		state.CommandQueues.Entries,
 		queueEntry{
