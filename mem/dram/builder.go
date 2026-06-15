@@ -212,11 +212,16 @@ func (b Builder) buildSpec() Spec {
 func (b Builder) buildCmdCycles() map[commandKind]int {
 	proto := protocol(b.spec.Protocol)
 
+	// cmdCycles is the data-return (completion) timeline used by startCommand:
+	// how long after a column command its read data / write response is ready.
+	// For the auto-precharge variants the data still returns ReadDelay/WriteDelay
+	// after the column command — the trailing precharge is enforced separately by
+	// the bank timing table, so it must NOT shorten the completion to TRP.
 	cmdCycles := map[commandKind]int{
 		cmdKindRead:           b.spec.ReadDelay,
-		cmdKindReadPrecharge:  b.spec.TRP,
+		cmdKindReadPrecharge:  b.spec.ReadDelay,
 		cmdKindWrite:          b.spec.WriteDelay,
-		cmdKindWritePrecharge: b.spec.TRP,
+		cmdKindWritePrecharge: b.spec.WriteDelay,
 		cmdKindActivate:       b.spec.TRCD - b.spec.TAL,
 		cmdKindPrecharge:      b.spec.TRP,
 		cmdKindRefreshBank:    1,

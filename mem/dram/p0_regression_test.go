@@ -171,6 +171,49 @@ var _ = Describe("P0: open-page panic regression", func() {
 	})
 })
 
+var _ = Describe("P0: close-page completion latency", func() {
+	// Regression for the auto-precharge completion bug: under the default
+	// close-page policy, reads/writes are emitted as ReadPrecharge/WritePrecharge.
+	// Their data/response must become ready after ReadDelay/WriteDelay (the data
+	// return latency), NOT after TRP — the trailing precharge is enforced by the
+	// bank timing table, not by the completion timeline.
+	var cmdCycles map[commandKind]int
+
+	BeforeEach(func() {
+		_, cmdCycles = buildDDR4TimingAndCycles()
+	})
+
+	It("maps the read variants to ReadDelay, not TRP", func() {
+		// Precondition: the bug is only observable when the two differ.
+		Expect(DDR4Spec.TRP).NotTo(Equal(cmdCycles[cmdKindRead]))
+
+		Expect(cmdCycles[cmdKindReadPrecharge]).
+			To(Equal(cmdCycles[cmdKindRead]))
+	})
+
+	It("maps the write variants to WriteDelay, not TRP", func() {
+		Expect(cmdCycles[cmdKindWritePrecharge]).
+			To(Equal(cmdCycles[cmdKindWrite]))
+	})
+
+	It("schedules a ReadPrecharge completion at ReadDelay", func() {
+		state := newDDR4State()
+		bs := findBankState(&state.BankStates, 0, 0, 0)
+		bs.State = int(bankStateOpen)
+		bs.OpenRow = 0
+
+		cmd := &commandState{
+			Kind:     int(cmdKindReadPrecharge),
+			Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 0},
+		}
+		startCommand(cmdCycles, state, bs, cmd)
+
+		Expect(state.PendingCompletions).To(HaveLen(1))
+		Expect(state.PendingCompletions[0].CompletionTick).
+			To(Equal(state.TickCount + uint64(cmdCycles[cmdKindRead])))
+	})
+})
+
 var _ = Describe("P0: channel guard", func() {
 	build := func(numChannel int) func() {
 		return func() {
