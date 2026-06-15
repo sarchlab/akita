@@ -25,36 +25,27 @@ export const DASHBOARD_DEFAULTS = {
 };
 
 /**
- * @typedef {Object} DashboardView
- * @property {"dashboard"} route
- * @property {number} [startTime]
- * @property {number} [endTime]
- * @property {string} [filter]
- * @property {number} [page]       0-indexed grid page
- * @property {string} [primary]    primary Y-axis metric
- * @property {string} [secondary]  secondary Y-axis metric
- * @property {string} [widget]     when set: render ONLY this component's chart
+ * A view across all routes. A single permissive shape (rather than a discriminated
+ * union) so the TSX pages — which each already know their route — can read any
+ * field and build patches without union-narrowing ceremony. The functions below
+ * only ever read the fields relevant to `route`.
+ *
+ * @typedef {Object} ViewState
+ * @property {"dashboard"|"component"|"task"} route
+ * @property {string} [name]       component: component name
+ * @property {string} [taskId]     component: selected task id
+ * @property {string} [id]         task: active task id
+ * @property {string} [where]      task: component filter
+ * @property {string} [kind]       task: kind filter
+ * @property {string} [sel]        task: selected task (browse mode)
+ * @property {string} [filter]     dashboard: component-name filter
+ * @property {number} [page]       dashboard: 0-indexed grid page
+ * @property {string} [primary]    dashboard: primary Y-axis metric
+ * @property {string} [secondary]  dashboard: secondary Y-axis metric
+ * @property {string} [widget]     dashboard: when set, render ONLY this component's chart
+ * @property {number} [startTime]  dashboard/component: view range start
+ * @property {number} [endTime]    dashboard/component: view range end
  */
-
-/**
- * @typedef {Object} ComponentView
- * @property {"component"} route
- * @property {string} name
- * @property {string} [taskId]
- * @property {number} [startTime]
- * @property {number} [endTime]
- */
-
-/**
- * @typedef {Object} TaskView
- * @property {"task"} route
- * @property {string} [id]
- * @property {string} [where]
- * @property {string} [kind]
- * @property {string} [sel]
- */
-
-/** @typedef {DashboardView | ComponentView | TaskView} ViewState */
 
 const isFiniteNum = (v) => typeof v === "number" && Number.isFinite(v);
 
@@ -82,7 +73,14 @@ const setNum = (params, key, value) => {
  * @param {ViewState} view
  * @returns {string}
  */
-export function encodeView(view) {
+/**
+ * Build the canonical path + URLSearchParams for a view (shared by encodeView
+ * and encodeSearchParams). Empty / default fields are omitted; keys are emitted
+ * in a fixed per-route order.
+ * @param {ViewState} view
+ * @returns {{ path: string, params: URLSearchParams }}
+ */
+function buildView(view) {
   const params = new URLSearchParams();
   let path;
 
@@ -124,8 +122,45 @@ export function encodeView(view) {
       break;
   }
 
+  return { path, params };
+}
+
+/**
+ * Encode a view to a canonical "/path?query" string. Empty / default fields are
+ * omitted, and keys are emitted in a fixed per-route order, so two equal views
+ * always produce the identical URL (needed for link sharing and render dedup).
+ * @param {ViewState} view
+ * @returns {string}
+ */
+export function encodeView(view) {
+  const { path, params } = buildView(view);
   const search = params.toString();
   return search ? `${path}?${search}` : path;
+}
+
+/**
+ * Encode a view to a URLSearchParams (the query part only), for react-router's
+ * setSearchParams. Same canonical rules as encodeView.
+ * @param {ViewState} view
+ * @returns {URLSearchParams}
+ */
+export function encodeSearchParams(view) {
+  return buildView(view).params;
+}
+
+/**
+ * Parse the view from `query`, apply a shallow `patch` (keys override; a key set
+ * to undefined is dropped), and re-encode canonically. Convenience for
+ * react-router's functional setSearchParams:
+ *   setSearchParams((prev) => mergeParams("/dashboard", prev, { filter, page: 0 }), { replace: true })
+ * @param {string} pathname
+ * @param {string|URLSearchParams} query
+ * @param {Object} patch
+ * @returns {URLSearchParams}
+ */
+export function mergeParams(pathname, query, patch) {
+  const base = parseView(pathname, query);
+  return encodeSearchParams({ ...base, ...patch });
 }
 
 /**

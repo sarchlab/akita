@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Maximize2 } from "lucide-react";
 import { useCompInfo } from "../hooks/useCompInfo";
 import type { Segment } from "../types/task";
 import TimeSeriesChart from "./charts/TimeSeriesChart";
@@ -17,6 +18,9 @@ interface DashboardWidgetProps {
   segments: Segment[];
   segmentsEnabled: boolean;
   onTimeRangeChange: (range: { startTime: number; endTime: number }) => void;
+  // When provided, renders a "focus" control that asks the parent to show only
+  // this widget (sets the dashboard's `widget` URL param).
+  onFocus?: (name: string) => void;
 }
 
 export default function DashboardWidget({
@@ -33,6 +37,7 @@ export default function DashboardWidget({
   segments,
   segmentsEnabled,
   onTimeRangeChange,
+  onFocus,
 }: DashboardWidgetProps) {
   const primary = useCompInfo(name, primaryAxis, dataStartTime, dataEndTime);
   const secondary = useCompInfo(name, secondaryAxis, dataStartTime, dataEndTime);
@@ -49,6 +54,21 @@ export default function DashboardWidget({
         <span className="min-w-0 flex-1 truncate hover:text-primary" title={name}>
           {name}
         </span>
+        {onFocus ? (
+          <button
+            type="button"
+            className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            title="Focus this widget"
+            aria-label={`Focus ${name}`}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onFocus(name);
+            }}
+          >
+            <Maximize2 className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
         {dataUpdating ? (
           <span
             className="daisen-widget-update-indicator"

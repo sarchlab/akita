@@ -5,6 +5,7 @@ import {
   ROUTES,
   DASHBOARD_DEFAULTS,
   encodeView,
+  encodeSearchParams,
   parseView,
   routeForPath,
   isSingleWidget,
@@ -123,6 +124,21 @@ test("isSingleWidget reflects the widget param", () => {
 
 test("leading '?' in query is tolerated", () => {
   assert.deepEqual(parseView("/task", "?id=t1"), { route: "task", id: "t1" });
+});
+
+test("encodeSearchParams matches the query part of encodeView", () => {
+  for (const view of roundTripCases) {
+    const url = encodeView(view);
+    const expectedSearch = url.includes("?") ? url.split("?")[1] : "";
+    assert.equal(encodeSearchParams(view).toString(), expectedSearch);
+  }
+});
+
+test("encodeSearchParams returns a usable URLSearchParams for setSearchParams", () => {
+  const params = encodeSearchParams({ route: "task", id: "t1", kind: "read" });
+  assert.equal(params.get("id"), "t1");
+  assert.equal(params.get("kind"), "read");
+  assert.equal(params.get("where"), null);
 });
 
 test("ROUTES are the expected canonical paths", () => {
