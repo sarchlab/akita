@@ -30,7 +30,7 @@ func TestRegistry_ValueAndPointerRoundTrip(t *testing.T) {
 
 	in := []shape{square{Side: 3}, &rect{W: 2, H: 5}}
 
-	encoded, err := r.EncodeSlice(in)
+	encoded, err := EncodeSlice(in)
 	if err != nil {
 		t.Fatalf("EncodeSlice: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestRegistry_ValueAndPointerRoundTrip(t *testing.T) {
 func TestRegistry_EmptySliceRoundTrip(t *testing.T) {
 	r := NewRegistry[shape]("shape")
 
-	encoded, err := r.EncodeSlice(nil)
+	encoded, err := EncodeSlice[shape](nil)
 	if err != nil {
 		t.Fatalf("EncodeSlice(nil): %v", err)
 	}
@@ -80,7 +80,7 @@ func TestRegistry_SingleValueRoundTrip(t *testing.T) {
 	r.Register(square{})
 	r.Register(&rect{})
 
-	encodedVal, err := r.Encode(square{Side: 3})
+	encodedVal, err := Encode(square{Side: 3})
 	if err != nil {
 		t.Fatalf("Encode(value): %v", err)
 	}
@@ -95,7 +95,7 @@ func TestRegistry_SingleValueRoundTrip(t *testing.T) {
 		t.Fatalf("area = %d, want 9", gotVal.area())
 	}
 
-	encodedPtr, err := r.Encode(&rect{W: 2, H: 5})
+	encodedPtr, err := Encode(&rect{W: 2, H: 5})
 	if err != nil {
 		t.Fatalf("Encode(pointer): %v", err)
 	}
@@ -112,15 +112,14 @@ func TestRegistry_SingleValueRoundTrip(t *testing.T) {
 // EncodeSlice share one per-element wire format: a single Encode must equal the
 // lone element of the corresponding one-element EncodeSlice.
 func TestRegistry_EncodeIsSliceElement(t *testing.T) {
-	r := NewRegistry[shape]("shape")
-	r.Register(square{})
-
-	single, err := r.Encode(square{Side: 4})
+	// Encode needs no registry — encoding is registration-free — so this calls
+	// the free functions directly, without constructing a Registry.
+	single, err := Encode[shape](square{Side: 4})
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
 	}
 
-	slice, err := r.EncodeSlice([]shape{square{Side: 4}})
+	slice, err := EncodeSlice([]shape{square{Side: 4}})
 	if err != nil {
 		t.Fatalf("EncodeSlice: %v", err)
 	}

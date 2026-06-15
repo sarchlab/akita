@@ -111,11 +111,12 @@ func (r *Registry[T]) Tags() []string {
 }
 
 // Encode encodes a single value of T into one typed payload: a type tag plus
-// the JSON encoding of the concrete value. It is the single-value primitive;
-// EncodeSlice is the same operation mapped over many values. Encoding needs no
-// prior registration; decoding does.
-func (r *Registry[T]) Encode(v T) (json.RawMessage, error) {
-	tp, err := r.encodeOne(v)
+// the JSON encoding of the concrete value. Encoding is registration-free and
+// stateless — only decoding consults a Registry's type map — so Encode is a
+// plain generic function, not a Registry method. EncodeSlice is the same
+// operation over many values.
+func Encode[T any](v T) (json.RawMessage, error) {
+	tp, err := encodeOne(v)
 	if err != nil {
 		return nil, err
 	}
@@ -123,13 +124,13 @@ func (r *Registry[T]) Encode(v T) (json.RawMessage, error) {
 	return json.Marshal(tp)
 }
 
-// EncodeSlice encodes a slice of T into a JSON array of typed payloads. Encoding
-// needs no prior registration: each element is tagged with its concrete type and
+// EncodeSlice encodes a slice of T into a JSON array of typed payloads. Like
+// Encode it needs no Registry: each element is tagged with its concrete type and
 // marshalled with the default JSON encoding.
-func (r *Registry[T]) EncodeSlice(vs []T) (json.RawMessage, error) {
+func EncodeSlice[T any](vs []T) (json.RawMessage, error) {
 	payloads := make([]typedPayload, len(vs))
 	for i, v := range vs {
-		tp, err := r.encodeOne(v)
+		tp, err := encodeOne(v)
 		if err != nil {
 			return nil, err
 		}
@@ -142,10 +143,10 @@ func (r *Registry[T]) EncodeSlice(vs []T) (json.RawMessage, error) {
 // encodeOne builds the typed payload for a single value: the concrete type's tag
 // plus its JSON. Encode and EncodeSlice both build on it, so the per-element wire
 // format is defined in exactly one place.
-func (r *Registry[T]) encodeOne(v T) (typedPayload, error) {
+func encodeOne[T any](v T) (typedPayload, error) {
 	raw, err := json.Marshal(v)
 	if err != nil {
-		return typedPayload{}, fmt.Errorf("codec: encode %s %T: %w", r.label, v, err)
+		return typedPayload{}, fmt.Errorf("codec: encode %T: %w", v, err)
 	}
 
 	return typedPayload{
@@ -156,8 +157,9 @@ func (r *Registry[T]) encodeOne(v T) (typedPayload, error) {
 
 // Decode decodes a single typed payload produced by Encode back into a concrete
 // value of its registered type, in the same value or pointer form its type was
-// registered as. It is the single-value counterpart to DecodeSlice; both build
-// on decodeOne.
+// registered as. Unlike Encode it is a Registry method: decoding resolves the
+// type tag through the registry's map. It is the single-value counterpart to
+// DecodeSlice; both build on decodeOne.
 func (r *Registry[T]) Decode(data json.RawMessage) (T, error) {
 	var tp typedPayload
 	if err := json.Unmarshal(data, &tp); err != nil {
@@ -232,7 +234,7 @@ func (r *Registry[T]) decodeOne(tp typedPayload) (T, error) {
 // the same concrete type. It is a test aid for confirming a type is registered
 // and serializes losslessly; it is not used on the checkpoint hot path.
 func (r *Registry[T]) CheckRoundTrip(v T) error {
-	encoded, err := r.EncodeSlice([]T{v})
+	encoded, err := EncodeSlice([]T{v})
 	if err != nil {
 		return err
 	}

@@ -13,18 +13,18 @@ var msgCodec = codec.NewRegistry[Msg]("message")
 
 // EncodeMsg encodes a single message into a self-describing JSON payload that
 // preserves its concrete type, so DecodeMsg can reconstruct it. A nil message
-// encodes as JSON null. It is a thin nil-aware delegate over the message
-// codec's single-value primitive — the Msg-specific part is only the
-// nil-is-an-absent-payload policy — for callers that carry one polymorphic
-// message inside an otherwise plain-JSON structure (e.g. a flit payload, or an
-// endpoint's reassembly state). The concrete type must be registered (see
-// RegisterMsg / DefineProtocol) for DecodeMsg to restore it.
+// encodes as JSON null. Encoding is registration-free, so this delegates to the
+// generic codec.Encode; the only Msg-specific part is the nil-is-an-absent-
+// payload policy. It is for callers that carry one polymorphic message inside an
+// otherwise plain-JSON structure (e.g. a flit payload, or an endpoint's
+// reassembly state). The concrete type must be registered (see RegisterMsg /
+// DefineProtocol) for DecodeMsg to restore it.
 func EncodeMsg(msg Msg) (json.RawMessage, error) {
 	if msg == nil {
 		return json.RawMessage("null"), nil
 	}
 
-	return msgCodec.Encode(msg)
+	return codec.Encode(msg)
 }
 
 // DecodeMsg reverses EncodeMsg. A null or empty payload decodes to a nil
