@@ -1,9 +1,9 @@
 package dram
 
 import (
-	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type bankTickMW struct {
@@ -26,9 +26,11 @@ func (m *bankTickMW) Tick() bool {
 	next.TickCount++
 	next.TotalCycles++
 
-	// Retire reads/writes whose data/response is now ready, then advance the
-	// per-bank timing gaps.
-	progress := processPendingCompletions(next)
+	// Retire reads/writes whose data/response is now ready (ending their trace
+	// tasks), then advance the per-bank timing gaps.
+	completed := processPendingCompletions(next)
+	m.endSubTransTasks(completed)
+	progress := len(completed) > 0
 	progress = tickBanks(next) || progress
 
 	// Only issue new commands when refresh (a separate middleware) is not
@@ -62,21 +64,37 @@ func (m *bankTickMW) issue(spec *Spec, next *State) bool {
 
 	startCommand(m.cmdCycles, next, bs, cmd)
 	updateTiming(m.timing, next, cmd)
-	m.fireCmdIssued(cmd, next.TickCount)
+	m.traceCmdIssue(next, cmd)
 
 	return true
 }
 
-// fireCmdIssued notifies observers (counters, energy, tracing) that a command
-// was issued, via the Akita hook mechanism. Guarded by NumHooks so the hot path
-// allocates nothing when no observer is attached.
-func (m *bankTickMW) fireCmdIssued(cmd *commandState, tick uint64) {
+// traceCmdIssue records the command as a milestone on its sub-transaction's
+// trace task — each ACT/RD/PRE the controller issues for a sub-transaction is a
+// point on that task's timeline. Guarded by NumHooks so the hot path does
+// nothing when no tracer is attached.
+func (m *bankTickMW) traceCmdIssue(next *State, cmd *commandState) {
 	if m.comp.NumHooks() == 0 {
 		return
 	}
-	m.comp.InvokeHook(hooking.HookCtx{
-		Domain: m.comp,
-		Pos:    HookPosCmdIssued,
-		Item:   commandEventFor(cmd, tick),
+	sub := subTransByRef(next, cmd.SubTransRef)
+	if sub == nil {
+		return
+	}
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: sub.ID,
+		Kind:   tracing.MilestoneKindHardwareResource,
+		What:   commandKind(cmd.Kind).String(),
 	})
+}
+
+// endSubTransTasks ends the trace task of every sub-transaction that just
+// completed (its data/response became ready).
+func (m *bankTickMW) endSubTransTasks(ids []uint64) {
+	if m.comp.NumHooks() == 0 {
+		return
+	}
+	for _, id := range ids {
+		tracing.EndTask(m.comp, tracing.TaskEnd{ID: id})
+	}
 }

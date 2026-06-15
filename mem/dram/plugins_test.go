@@ -3,29 +3,31 @@ package dram
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/hooking"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
-// countingHook is an Akita hook that records issued commands via the
-// HookPosCmdIssued hook point. It only observes — it must not change results.
-type countingHook struct {
+// cmdTracer is a Tracer that counts the command-issue milestones recorded on
+// sub-transaction tasks. It only observes — it must not change results.
+type cmdTracer struct {
+	tracing.NopTracer
 	count    int
 	byKind   map[string]int
-	lastTick uint64
+	subTasks int
 }
 
-func newCountingHook() *countingHook {
-	return &countingHook{byKind: map[string]int{}}
+func newCmdTracer() *cmdTracer {
+	return &cmdTracer{byKind: map[string]int{}}
 }
 
-func (h *countingHook) Func(ctx hooking.HookCtx) {
-	if ctx.Pos != HookPosCmdIssued {
-		return
+func (t *cmdTracer) StartTask(ts tracing.TaskStart) {
+	if ts.Kind == "sub-trans" {
+		t.subTasks++
 	}
-	ev := ctx.Item.(CommandEvent)
-	h.count++
-	h.byKind[ev.Kind]++
-	h.lastTick = ev.Tick
+}
+
+func (t *cmdTracer) AddMilestone(m tracing.Milestone) {
+	t.count++
+	t.byKind[m.What]++
 }
 
 var _ = Describe("P1: strategy selection", func() {
@@ -60,18 +62,18 @@ var _ = Describe("P1: strategy selection", func() {
 	})
 })
 
-var _ = Describe("P1: command-issued hook", func() {
-	It("observes issued commands without changing results", func() {
+var _ = Describe("P1: command tracing", func() {
+	It("records command milestones without changing results", func() {
 		spec := DefaultSpec()
-		hook := newCountingHook()
+		tracer := newCmdTracer()
 
-		// Same workload, with and without the hook.
-		withHook := newP0Harness(spec, hook)
-		withHook.src.Send(withHook.write(0x40, []byte{1, 2, 3, 4}))
-		withHook.engine.Run()
-		withHook.src.Send(withHook.read(0x40))
-		withHook.engine.Run()
-		hookedReads, hookedWrites := withHook.collect()
+		// Same workload, with and without the tracer.
+		traced := newP0Harness(spec, tracer)
+		traced.src.Send(traced.write(0x40, []byte{1, 2, 3, 4}))
+		traced.engine.Run()
+		traced.src.Send(traced.read(0x40))
+		traced.engine.Run()
+		tracedReads, tracedWrites := traced.collect()
 
 		plain := newP0Harness(spec)
 		plain.src.Send(plain.write(0x40, []byte{1, 2, 3, 4}))
@@ -80,15 +82,16 @@ var _ = Describe("P1: command-issued hook", func() {
 		plain.engine.Run()
 		plainReads, plainWrites := plain.collect()
 
-		// The hook saw real command activity (at least an ACT + column commands).
-		Expect(hook.count).To(BeNumerically(">", 0))
-		Expect(hook.byKind["ACT"]).To(BeNumerically(">", 0))
-		Expect(hook.lastTick).To(BeNumerically(">", 0))
+		// The tracer saw sub-transaction tasks and command milestones (at least
+		// an ACT plus column commands) on them.
+		Expect(tracer.subTasks).To(BeNumerically(">", 0))
+		Expect(tracer.count).To(BeNumerically(">", 0))
+		Expect(tracer.byKind["ACT"]).To(BeNumerically(">", 0))
 
-		// Results are identical to the no-hook run.
-		Expect(hookedWrites).To(HaveLen(len(plainWrites)))
-		Expect(hookedReads).To(HaveLen(len(plainReads)))
-		Expect(hookedReads).To(HaveLen(1))
-		Expect(hookedReads[0].Data[:4]).To(Equal([]byte{1, 2, 3, 4}))
+		// Results are identical to the untraced run.
+		Expect(tracedWrites).To(HaveLen(len(plainWrites)))
+		Expect(tracedReads).To(HaveLen(len(plainReads)))
+		Expect(tracedReads).To(HaveLen(1))
+		Expect(tracedReads[0].Data[:4]).To(Equal([]byte{1, 2, 3, 4}))
 	})
 })

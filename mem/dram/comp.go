@@ -155,6 +155,35 @@ const (
 	numCmdKind
 )
 
+// String returns the JEDEC-style mnemonic for a command kind. It labels the
+// command-issue milestone on a sub-transaction's trace task.
+func (k commandKind) String() string {
+	switch k {
+	case cmdKindRead:
+		return "RD"
+	case cmdKindReadPrecharge:
+		return "RDA"
+	case cmdKindWrite:
+		return "WR"
+	case cmdKindWritePrecharge:
+		return "WRA"
+	case cmdKindActivate:
+		return "ACT"
+	case cmdKindPrecharge:
+		return "PRE"
+	case cmdKindRefreshBank:
+		return "REFb"
+	case cmdKindRefresh:
+		return "REF"
+	case cmdKindSRefEnter:
+		return "SREFE"
+	case cmdKindSRefExit:
+		return "SREFX"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 // location determines where to find the data to access.
 type location struct {
 	Channel   uint64 `json:"channel"`
