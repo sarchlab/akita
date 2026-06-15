@@ -2,4 +2,6 @@
 oracles/.oracles/
 # Raw per-run oracle output (parsed into data/reference.csv, which IS committed).
 data/raw/
+# Python bytecode cache.
+__pycache__/
 *.tmp
