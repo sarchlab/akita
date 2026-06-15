@@ -217,6 +217,19 @@ var _ = Describe("Tier 5: command counts vs DRAMSim3 & Ramulator2", func() {
 	})
 })
 
+// dramsim3RefLatency returns the DRAMSim3 reference read latency for a
+// scenario, failing if the row is missing or not a positive finite value — so a
+// dropped/misspelled oracle row can't silently turn the relative-error check
+// into +Inf (which would pass the known-gap assertion).
+func dramsim3RefLatency(scnName string) float64 {
+	row, ok := tier5Ref[scnName]["dramsim3"]
+	Expect(ok).To(BeTrue(), "%s: missing dramsim3 row in reference.csv", scnName)
+	ref := row.avgReadLatency
+	Expect(math.IsNaN(ref)).To(BeFalse(), "%s: dramsim3 latency is not recorded", scnName)
+	Expect(ref).To(BeNumerically(">", 0), "%s: dramsim3 latency must be positive", scnName)
+	return ref
+}
+
 var _ = Describe("Tier 6: read latency vs DRAMSim3 (15% tolerance)", func() {
 	BeforeEach(requireReference)
 
@@ -226,7 +239,7 @@ var _ = Describe("Tier 6: read latency vs DRAMSim3 (15% tolerance)", func() {
 			if scn.LatencyCheck != "enforced" {
 				continue
 			}
-			ref := tier5Ref[scn.Name]["dramsim3"].avgReadLatency
+			ref := dramsim3RefLatency(scn.Name)
 			akita := runAkita(scn).avgReadLatency
 			relErr := math.Abs(akita-ref) / ref
 			Expect(relErr).To(BeNumerically("<=", latencyTolerance),
@@ -242,11 +255,12 @@ var _ = Describe("Tier 6: read latency vs DRAMSim3 (15% tolerance)", func() {
 	// the gap closes (relErr <= 15%), this spec FAILS — that is the signal to
 	// move the scenario to latency_check="enforced".
 	It("records the known feature gaps (currently exceeding 15%)", func() {
+		checked := 0
 		for _, scn := range tier5Scen {
 			if scn.LatencyCheck != "known_gap" {
 				continue
 			}
-			ref := tier5Ref[scn.Name]["dramsim3"].avgReadLatency
+			ref := dramsim3RefLatency(scn.Name)
 			akita := runAkita(scn).avgReadLatency
 			relErr := math.Abs(akita-ref) / ref
 			GinkgoWriter.Printf(
@@ -255,6 +269,9 @@ var _ = Describe("Tier 6: read latency vs DRAMSim3 (15% tolerance)", func() {
 			Expect(relErr).To(BeNumerically(">", latencyTolerance),
 				"%s gap closed (now %.0f%% off) — promote to latency_check=enforced",
 				scn.Name, relErr*100)
+			checked++
 		}
+		Expect(checked).To(BeNumerically(">", 0),
+			"no known_gap scenarios ran — if all gaps are fixed, delete this spec")
 	})
 })
