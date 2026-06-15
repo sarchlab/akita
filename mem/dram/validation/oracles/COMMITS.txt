@@ -1,0 +1,13 @@
+# Pinned reference-oracle commits.
+#
+# These are the exact upstream commits the committed reference data in
+# ../data/ was generated from. Do NOT bump casually: changing a commit can
+# change the numbers, which silently invalidates the diff against Akita.
+# When you deliberately update an oracle, re-run ../run_oracles.sh and
+# regenerate ../data/reference.csv in the same change.
+
+DRAMSIM3_REPO=https://github.com/umd-memsys/DRAMsim3
+DRAMSIM3_COMMIT=29817593b3389f1337235d63cac515024ab8fd6e
+
+RAMULATOR2_REPO=https://github.com/CMU-SAFARI/ramulator2
+RAMULATOR2_COMMIT=be93be78055d922aa1d4d33e15bcc8f2b0c61a9d
