@@ -132,58 +132,14 @@ func (m *respondMW) finalizeReadTrans(
 	return true
 }
 
-// removeTransaction removes a transaction and remaps all references.
+// removeTransaction removes a fully-completed transaction from the list. No
+// reference re-indexing is needed: queues, commands, and pending completions
+// all refer to transactions by stable ID, and a completed transaction has no
+// outstanding references (its sub-transactions were drained from the queues and
+// retired from the pending-completion list before it could be finalized).
 func (m *respondMW) removeTransaction(state *State, idx int) {
-	// Remove the transaction
 	state.Transactions = append(
 		state.Transactions[:idx],
 		state.Transactions[idx+1:]...,
 	)
-
-	// Remap sub-trans queue references
-	newEntries := state.SubTransQueue.Entries[:0]
-	for _, ref := range state.SubTransQueue.Entries {
-		if ref.TransIndex == idx {
-			continue // remove refs to deleted transaction
-		}
-		if ref.TransIndex > idx {
-			ref.TransIndex--
-		}
-		newEntries = append(newEntries, ref)
-	}
-	state.SubTransQueue.Entries = newEntries
-
-	// Remap command queue references
-	newCmdEntries := state.CommandQueues.Entries[:0]
-	for _, e := range state.CommandQueues.Entries {
-		if e.Command.SubTransRef.TransIndex == idx {
-			continue
-		}
-		if e.Command.SubTransRef.TransIndex > idx {
-			e.Command.SubTransRef.TransIndex--
-		}
-		newCmdEntries = append(newCmdEntries, e)
-	}
-	state.CommandQueues.Entries = newCmdEntries
-
-	// Remap bank current command references
-	for i := range state.BankStates.Entries {
-		bs := &state.BankStates.Entries[i].Data
-		if bs.HasCurrentCmd {
-			if bs.CurrentCmd.SubTransRef.TransIndex == idx {
-				// The transaction is done, so this cmd should already
-				// be completed. But just in case, update.
-				bs.CurrentCmd.SubTransRef.TransIndex = -1
-			} else if bs.CurrentCmd.SubTransRef.TransIndex > idx {
-				bs.CurrentCmd.SubTransRef.TransIndex--
-			}
-		}
-	}
-
-	// Also update TransactionIndex in SubTransactions
-	for ti := range state.Transactions {
-		for si := range state.Transactions[ti].SubTransactions {
-			state.Transactions[ti].SubTransactions[si].TransactionIndex = ti
-		}
-	}
 }
