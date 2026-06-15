@@ -110,11 +110,14 @@ export default function DashboardPage() {
   useEffect(() => {
     const atSim = dataRange.startTime === startTime && dataRange.endTime === endTime;
     setSearchParams(
-      (prev) =>
-        mergeParams("/dashboard", prev, {
+      (prev) => {
+        const next = mergeParams("/dashboard", prev, {
           startTime: atSim ? undefined : dataRange.startTime,
           endTime: atSim ? undefined : dataRange.endTime,
-        }),
+        });
+        // No-op when nothing changed, so this can never churn history or re-trigger.
+        return next.toString() === prev.toString() ? prev : next;
+      },
       { replace: true },
     );
   }, [dataRange.startTime, dataRange.endTime, startTime, endTime, setSearchParams]);
