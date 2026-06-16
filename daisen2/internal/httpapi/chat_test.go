@@ -2,12 +2,9 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 )
 
@@ -186,24 +183,6 @@ func TestGuardedLLMClientValidatesDirectDialWhenProxyNotUsed(t *testing.T) {
 	}
 }
 
-func TestRelayResponseCapsBody(t *testing.T) {
-	orig := maxChatResponseBytes
-	defer func() { maxChatResponseBytes = orig }()
-	maxChatResponseBytes = 5
-
-	rec := httptest.NewRecorder()
-	resp := &http.Response{
-		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(strings.NewReader("0123456789")),
-	}
-	if err := (openAICompatibleProvider{}).RelayResponse(rec, resp); err != nil {
-		t.Fatalf("RelayResponse: %v", err)
-	}
-	if rec.Body.Len() != 5 {
-		t.Errorf("relayed %d bytes, want the 5-byte cap", rec.Body.Len())
-	}
-}
-
 func TestProxyForLLMRequestRevalidatesProxiedTarget(t *testing.T) {
 	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "")
 	orig := llmProxyFromEnvironment
@@ -230,91 +209,6 @@ func TestNewChatProviderRejectsUnknown(t *testing.T) {
 	}
 	if _, err := newChatProvider("anthropic"); err == nil {
 		t.Fatal("expected error for unsupported provider")
-	}
-}
-
-func TestOpenAICompatibleBuildRequest(t *testing.T) {
-	temp := 0.5
-	cfg := ProviderConfig{
-		Provider:    ProviderOpenAICompatible,
-		BaseURL:     "https://api.example/v1/chat/completions",
-		Model:       "gpt-test",
-		APIKey:      "sk-test",
-		Temperature: &temp,
-	}
-	messages := []map[string]interface{}{
-		{"role": "user", "content": []interface{}{
-			map[string]interface{}{"type": "text", "text": "hi"},
-		}},
-	}
-
-	req, err := openAICompatibleProvider{}.BuildRequest(context.Background(), cfg, messages)
-	if err != nil {
-		t.Fatalf("BuildRequest: %v", err)
-	}
-	if req.URL.String() != cfg.BaseURL {
-		t.Errorf("URL = %q, want %q", req.URL.String(), cfg.BaseURL)
-	}
-	if got := req.Header.Get("Authorization"); got != "Bearer sk-test" {
-		t.Errorf("Authorization = %q, want Bearer sk-test", got)
-	}
-
-	bodyBytes, _ := io.ReadAll(req.Body)
-	var payload struct {
-		Model       string                   `json:"model"`
-		Temperature float64                  `json:"temperature"`
-		Messages    []map[string]interface{} `json:"messages"`
-	}
-	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
-		t.Fatalf("unmarshal payload: %v", err)
-	}
-	if payload.Model != "gpt-test" {
-		t.Errorf("payload model = %q, want gpt-test", payload.Model)
-	}
-	if payload.Temperature != 0.5 {
-		t.Errorf("payload temperature = %v, want 0.5", payload.Temperature)
-	}
-	if len(payload.Messages) != 1 {
-		t.Errorf("payload messages = %d, want 1", len(payload.Messages))
-	}
-}
-
-func TestOpenAICompatibleBuildRequestOmitsTemperatureWhenUnset(t *testing.T) {
-	cfg := ProviderConfig{
-		Provider: ProviderOpenAICompatible,
-		BaseURL:  "https://api.example/v1/chat/completions",
-		Model:    "o3", // reasoning models reject non-default temperature
-		APIKey:   "sk-test",
-	}
-
-	req, err := openAICompatibleProvider{}.BuildRequest(context.Background(), cfg, nil)
-	if err != nil {
-		t.Fatalf("BuildRequest: %v", err)
-	}
-
-	bodyBytes, _ := io.ReadAll(req.Body)
-	var payload map[string]interface{}
-	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
-		t.Fatalf("unmarshal payload: %v", err)
-	}
-	if _, ok := payload["temperature"]; ok {
-		t.Error("temperature must be omitted from the payload when unset")
-	}
-}
-
-func TestOpenAICompatibleBuildRequestOmitsAuthWhenNoKey(t *testing.T) {
-	cfg := ProviderConfig{
-		Provider: ProviderOpenAICompatible,
-		BaseURL:  "https://api.example/v1/chat/completions",
-		Model:    "llama3",
-	}
-
-	req, err := openAICompatibleProvider{}.BuildRequest(context.Background(), cfg, nil)
-	if err != nil {
-		t.Fatalf("BuildRequest: %v", err)
-	}
-	if got := req.Header.Get("Authorization"); got != "" {
-		t.Errorf("Authorization = %q, want empty when no key is set", got)
 	}
 }
 

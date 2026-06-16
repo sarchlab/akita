@@ -536,6 +536,11 @@ failure-mode catalog, multi-agent, the off-screen capture.
   the backend falls back to single-shot if the provider rejects `tools`.
 - Seed a **small** failure-mode catalog in the system prompt (a few Akita bottleneck
   patterns) to ground hypotheses; the full catalog is deferred (needs domain input).
+- **Domain knowledge** lives in the hardcoded `agentSystemPrompt` (`agentloop.go`) for now —
+  edit it to expand the catalog or add schema/SQL hints. The legacy `beforehandprompt.txt`
+  is **removed**. A modular **skills** mechanism (retrievable per-question domain notes /
+  playbooks the agent pulls in on demand) is the planned successor, landing alongside the
+  Phase 3 code/doc-reading tools.
 
 ### Workstream E — Verification
 
