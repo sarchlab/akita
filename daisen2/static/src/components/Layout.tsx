@@ -34,12 +34,14 @@ export default function Layout() {
         </Button>
       </nav>
       {/* The chat docks beside the content and narrows it (no overlay), so the
-          visualizations reflow to the new width via their ResizeObservers. */}
+          visualizations reflow to the new width via their ResizeObservers. The
+          panel stays mounted while closed (hidden via CSS) so closing and
+          reopening does not discard the conversation or an in-flight answer. */}
       <div className="flex min-h-0 flex-1">
         <main className="daisen-main min-w-0 flex-1">
           <Outlet />
         </main>
-        {chatOpen ? <ChatPanel onClose={() => setChatOpen(false)} /> : null}
+        <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
       </div>
     </div>
   );

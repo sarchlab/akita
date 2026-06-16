@@ -17,6 +17,7 @@ import {
 } from "../../utils/uploadValidation";
 import MessageBubble from "./MessageBubble";
 import ChatSettings from "./ChatSettings";
+import { cn } from "../../lib/utils";
 
 function humanSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -42,7 +43,7 @@ function readFileAsText(file: File) {
   });
 }
 
-export default function ChatPanel({ onClose }: { onClose: () => void }) {
+export default function ChatPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [showSettings, setShowSettings] = useState(false);
   const [input, setInput] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -115,7 +116,12 @@ export default function ChatPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <>
-      <aside className="flex h-full w-[min(560px,42vw)] shrink-0 flex-col border-l bg-white">
+      <aside
+        className={cn(
+          "flex h-full w-[min(560px,42vw)] shrink-0 flex-col border-l bg-white",
+          !open && "hidden",
+        )}
+      >
         <header className="flex h-14 items-center justify-between border-b px-3">
           <div className="flex items-center gap-2 font-semibold">
             <Bot className="h-5 w-5 text-primary" />

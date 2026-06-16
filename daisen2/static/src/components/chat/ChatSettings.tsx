@@ -82,16 +82,13 @@ export default function ChatSettings({
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (settings.apiKey.trim()) headers["X-Llm-Api-Key"] = settings.apiKey.trim();
 
-      const response = await fetch("/api/gpt", {
+      // Validate the connection via /api/models, which returns a real HTTP status
+      // (the chat endpoint is a streamed agent that always replies 200 and reports
+      // provider failures as SSE error events, so it can't signal pass/fail here).
+      const response = await fetch("/api/models", {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          messages: [{ role: "user", content: [{ type: "text", text: "ping" }] }],
-          traceInfo: { selected: 0, startTime: 0, endTime: 0, selectedComponentNameList: [] },
-          provider: settings.provider,
-          baseURL: settings.baseURL,
-          model: settings.model,
-        }),
+        body: JSON.stringify({ provider: settings.provider, baseURL: settings.baseURL }),
       });
 
       if (response.ok) {

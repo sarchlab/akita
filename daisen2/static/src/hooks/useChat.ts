@@ -93,7 +93,10 @@ export function useChat() {
           method: "POST",
           headers,
           body: JSON.stringify({
-            messages: nextMessages,
+            // Send only valid chat-completions fields. `steps` is UI-only metadata
+            // (the agent trail) that the server forwards verbatim to the provider,
+            // and some providers reject unknown message fields.
+            messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
             traceInfo,
             provider: llm.provider,
             baseURL: llm.baseURL,

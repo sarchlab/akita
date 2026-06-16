@@ -21,8 +21,9 @@ import (
 // ---- Loop bounds (§4.6) ----
 
 const (
-	maxAgentIterations = 8  // model turns before we force a final answer
-	maxAgentToolCalls  = 24 // total tool executions across the whole loop
+	maxAgentIterations = 8                // model turns before we force a final answer
+	maxAgentToolCalls  = 24               // total tool executions across the whole loop
+	maxAgentWallClock  = 10 * time.Minute // overall budget for one agent run (vs. iterations × per-call ceiling)
 )
 
 // ---- Tool framework ----
@@ -230,6 +231,19 @@ func runAgentLoop(
 		// makes the provider reject the request (unanswered tool_call_id).
 		var imageParts []interface{}
 		for _, tc := range toolCalls {
+			// Respect the overall tool-call budget even within a single batched
+			// turn (a model can emit many tool_calls at once). We must still answer
+			// every tool_call_id with a tool message or the next provider request is
+			// invalid, so reply with a stub instead of executing real work.
+			if toolCallCount >= maxAgentToolCalls {
+				emit(agentEvent{Type: "observation", Tool: tc.Function.Name, Observation: "tool-call budget exhausted; skipped"})
+				messages = append(messages, map[string]interface{}{
+					"role":         "tool",
+					"tool_call_id": tc.ID,
+					"content":      "Skipped: tool-call budget exhausted. Answer with the evidence gathered so far.",
+				})
+				continue
+			}
 			toolCallCount++
 			emit(agentEvent{Type: "step", Tool: tc.Function.Name, Args: tc.Function.Arguments})
 
@@ -336,9 +350,11 @@ func dataQueryTool(reader *SQLiteTraceReader) agentTool {
 
 var limitClausePattern = regexp.MustCompile(`(?i)\blimit\s+\d`)
 
-// sanitizeReadonlySQL enforces single-statement read-only SQL and injects a row
-// limit when none is present. Requiring a SELECT/WITH prefix with no embedded
-// statement separator structurally blocks writes, PRAGMA, ATTACH, and DDL.
+// sanitizeReadonlySQL enforces single-statement SQL with a SELECT/WITH prefix and
+// injects a row limit when none is present. This is a first-line filter; the
+// authoritative read-only guarantee is the PRAGMA query_only connection in
+// runDataQuery, since a prefix check alone can be bypassed by a write smuggled
+// through a CTE (e.g. `WITH x AS (...) DELETE ... RETURNING`).
 func sanitizeReadonlySQL(query string, rowCap int) (string, error) {
 	q := strings.TrimSpace(query)
 	q = strings.TrimRight(q, "; \t\n\r")
@@ -370,7 +386,23 @@ func runDataQuery(ctx context.Context, reader *SQLiteTraceReader, query string) 
 	qctx, cancel := context.WithTimeout(ctx, dataQueryTimeout)
 	defer cancel()
 
-	rows, err := reader.QueryContext(qctx, safe)
+	// Engine-level read-only guard. The replay server opens a writable connection
+	// (Init), and sanitizeReadonlySQL's SELECT/WITH prefix check can be bypassed by
+	// a write smuggled through a CTE (e.g. `WITH x AS (...) DELETE ... RETURNING`).
+	// PRAGMA query_only makes SQLite itself reject any write on this connection, so
+	// model-influenced SQL can only observe the trace. Reset it before the
+	// connection returns to the pool.
+	conn, err := reader.DB.Conn(qctx)
+	if err != nil {
+		return "", fmt.Errorf("query failed: %w", err)
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(qctx, "PRAGMA query_only = ON"); err != nil {
+		return "", fmt.Errorf("query failed: %w", err)
+	}
+	defer func() { _, _ = conn.ExecContext(context.Background(), "PRAGMA query_only = OFF") }()
+
+	rows, err := conn.QueryContext(qctx, safe)
 	if err != nil {
 		return "", fmt.Errorf("query failed: %w", err)
 	}
@@ -394,7 +426,7 @@ func formatRows(rows *sql.Rows, rowCap, byteCap int) (string, error) {
 	n := 0
 	truncated := false
 	for rows.Next() {
-		if n >= rowCap || body.Len() >= byteCap {
+		if n >= rowCap {
 			truncated = true
 			break
 		}
@@ -410,7 +442,15 @@ func formatRows(rows *sql.Rows, rowCap, byteCap int) (string, error) {
 		for i, v := range vals {
 			cells[i] = cellToString(v)
 		}
-		body.WriteString(strings.Join(cells, ","))
+		line := strings.Join(cells, ",")
+		// Enforce the byte cap *before* writing the row. cellToString bounds a
+		// single cell; this bounds the whole result, so an oversized row (e.g.
+		// SELECT hex(zeroblob(1e8))) cannot blow past the cap into the LLM context.
+		if body.Len()+len(line)+1 > byteCap {
+			truncated = true
+			break
+		}
+		body.WriteString(line)
 		body.WriteString("\n")
 		n++
 	}
@@ -425,7 +465,19 @@ func formatRows(rows *sql.Rows, rowCap, byteCap int) (string, error) {
 	return summary + "\n" + body.String(), nil
 }
 
+// dataQueryMaxCellBytes bounds a single cell so one huge value (a big blob/text
+// column) is truncated rather than flooding the result and the model context.
+const dataQueryMaxCellBytes = 4096
+
 func cellToString(v interface{}) string {
+	s := rawCellToString(v)
+	if len(s) > dataQueryMaxCellBytes {
+		return s[:dataQueryMaxCellBytes] + "…"
+	}
+	return s
+}
+
+func rawCellToString(v interface{}) string {
 	switch t := v.(type) {
 	case nil:
 		return ""
@@ -507,7 +559,12 @@ func (s *Server) runAgentSSE(
 		daisenViewTool(capture),
 		screenshotTool(capture),
 	}
-	if err := runAgentLoop(r.Context(), cfg, messages, tools, emit); err != nil {
+	// The replay server has no per-request deadline and the per-call ceiling is
+	// per provider call, so a slow provider could otherwise hold this handler for
+	// maxAgentIterations × that ceiling. Bound the whole run to a fixed budget.
+	ctx, cancel := context.WithTimeout(r.Context(), maxAgentWallClock)
+	defer cancel()
+	if err := runAgentLoop(ctx, cfg, messages, tools, emit); err != nil {
 		emit(agentEvent{Type: "error", Error: err.Error()})
 	}
 	emit(agentEvent{Type: "done"})

@@ -81,6 +81,64 @@ func TestRunDataQuery(t *testing.T) {
 	}
 }
 
+// TestRunDataQueryRejectsCTEWrite guards the P1: a write smuggled through a CTE
+// passes the SELECT/WITH prefix check but must be rejected by the read-only
+// connection (PRAGMA query_only) without mutating the trace.
+func TestRunDataQueryRejectsCTEWrite(t *testing.T) {
+	reader := newTestTraceReader(t)
+	seedAgentTrace(t, reader)
+
+	var before int
+	if err := reader.QueryRow("SELECT COUNT(*) FROM trace").Scan(&before); err != nil {
+		t.Fatalf("count before: %v", err)
+	}
+
+	// Starts with WITH, so it slips past the prefix filter, but it is a DELETE.
+	if _, err := runDataQuery(context.Background(), reader,
+		"WITH x AS (SELECT 1) DELETE FROM trace RETURNING ID"); err == nil {
+		t.Error("expected CTE-wrapped DELETE to be rejected")
+	}
+
+	var after int
+	if err := reader.QueryRow("SELECT COUNT(*) FROM trace").Scan(&after); err != nil {
+		t.Fatalf("count after: %v", err)
+	}
+	if after != before {
+		t.Errorf("trace was mutated: %d rows before, %d after", before, after)
+	}
+
+	// A normal read still works after the read-only guard reset the connection.
+	if _, err := runDataQuery(context.Background(), reader, "SELECT COUNT(*) FROM trace"); err != nil {
+		t.Errorf("read query after guard failed: %v", err)
+	}
+}
+
+// TestFormatRowsByteCap guards the P2: a single oversized cell must not blow past
+// the byte cap into the model context.
+func TestFormatRowsByteCap(t *testing.T) {
+	reader := newTestTraceReader(t)
+	seedAgentTrace(t, reader)
+
+	const byteCap = 2048
+	rows, err := reader.QueryContext(context.Background(),
+		"SELECT hex(zeroblob(1000000))")
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	defer rows.Close()
+
+	out, err := formatRows(rows, dataQueryRowCap, byteCap)
+	if err != nil {
+		t.Fatalf("formatRows: %v", err)
+	}
+	if len(out) > byteCap+dataQueryMaxCellBytes+256 {
+		t.Errorf("output exceeded cap: %d bytes", len(out))
+	}
+	if !strings.Contains(out, "truncated") {
+		t.Errorf("expected a truncation notice, got:\n%s", out[:min(len(out), 200)])
+	}
+}
+
 // TestRunAgentLoop_MockProvider is the end-to-end "preview": a scripted mock LLM
 // drives the real loop against a real trace DB. Turn 1 asks for a data_query;
 // the loop runs the SQL; turn 2 returns the final answer from the observation.
