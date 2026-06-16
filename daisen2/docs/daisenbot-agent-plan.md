@@ -1,6 +1,6 @@
 # DaisenBot Agentic Upgrade — Design & Implementation Plan
 
-**Status:** Draft for review · Phase 1 Workstreams A–E implemented (ComponentPage write-path + in-browser SVG check land in Phase 5) · **Last updated:** 2026-06-15
+**Status:** Phase 1 merged (#387) · Phase 2 in progress (agent loop + `data_query`, §7) · **Last updated:** 2026-06-15
 
 This document captures the design decisions and phased plan for turning DaisenBot
 from a single-shot Q&A proxy into a tool-using agent that can *investigate* an
@@ -368,7 +368,7 @@ All single-value params; the existing names (`name`, `taskid`, `starttime`,
    agent's natural single-chart perception unit for `daisen_view` (§3.2), and it is
    also user-shareable. A per-widget "focus" affordance sets the param. ✅
 
-This **resolves open questions #1, #3, and #5** (see §7).
+This **resolves open questions #1, #3, and #5** (see §8).
 
 ### Workstream B — Canonical URL schema (the contract)
 
@@ -479,7 +479,86 @@ Phase 5.**
 
 ---
 
-## 7. Open questions / to audit
+## 7. Phase 2 — detailed
+
+**Goal:** turn `httpChatProxy` from a single-shot relay into a **streamed, multi-step
+tool-calling agent** that can query the trace through a guarded `data_query` tool, with
+a front door for simple questions and hard loop bounds. Outcome: *"an agent that can
+query the trace."*
+
+**Builds on:** the merged provider/SSRF layer (`daisen2/internal/httpapi/chat.go`) and
+`SQLiteTraceReader` (the `trace` ⨝ `location` + `milestone` schema) — both verified
+working on the `mem/acceptancetests/virtualmem` trace.
+
+**Non-goals (Phase 2):** the code / Python / viz tools (Phases 3–5), the full
+failure-mode catalog, multi-agent, the off-screen capture.
+
+### Workstream A — Agent loop & tool dispatch (backend)
+
+- New `agentloop.go`: `runAgentLoop(ctx, provider, cfg, messages, tools, emit)`.
+- Each turn: call the provider **with `tools`**; if `choices[0].message.tool_calls` is
+  present → execute each tool, append `role:"tool"` results, repeat; otherwise stream
+  the final assistant text and stop.
+- **Bounds (the §4.6 caps, shipped here):** `maxIterations`, `maxToolCalls`, a wall-clock
+  ceiling via the request `context`, and response-size caps. On exhaustion, make one
+  final no-tools call asking the model to answer from the evidence so far (graceful, no
+  infinite loop).
+- The `ChatProvider` seam gains tool-calling: build a request carrying `tools`, parse
+  `tool_calls`, build the follow-up turn. `RelayResponse` stays for the single-shot
+  fallback.
+
+### Workstream B — `data_query` tool (guarded read-only SQL)
+
+- Schema: `data_query(sql: string)`; the trace schema is documented in the tool
+  description (`trace`(ID,ParentID,Kind,What,Location,StartTime,EndTime) ⨝
+  `location`(ID,Locale); `milestone`).
+- **Guards:** `SELECT`/`WITH`-only (reject writes / DDL / `PRAGMA` / `ATTACH`), single
+  statement, injected/clamped `LIMIT`, per-query timeout, and a byte cap on the
+  serialized result.
+- Execute via `traceReader.QueryContext`; format as compact rows + a row-count /
+  truncation note. (Review note §8: returns *capped* rows — bulk summarization is the
+  Phase 4 Python tool; the guarantee here is "no *bulk* raw data".)
+
+### Workstream C — Endpoint + SSE streaming
+
+- Agent mode is requested in the body (`agent: true`); the frontend offers it when the
+  model supports tools, otherwise the existing single-shot JSON path is used.
+- Stream Server-Sent Events: `step` (tool + args), `observation` (result summary),
+  `message` (final answer), `error`, `done`. The visible-thinking trail (§3.5) is built
+  from these.
+- Keep `/api/gpt`: agent mode responds `text/event-stream`; single-shot stays JSON.
+
+### Workstream D — Front door, capability gating & catalog seed
+
+- **Front door (implicit):** the system prompt authorizes a direct answer or one
+  clarifying question; investigative questions use the tools. No separate router.
+- **Capability gating:** the frontend enables agent mode only for tool-capable models;
+  the backend falls back to single-shot if the provider rejects `tools`.
+- Seed a **small** failure-mode catalog in the system prompt (a few Akita bottleneck
+  patterns) to ground hypotheses; the full catalog is deferred (needs domain input).
+
+### Workstream E — Verification
+
+- **Unit:** `data_query` guard tests (reject writes / `PRAGMA` / multi-statement; `LIMIT`
+  clamping; byte cap).
+- **Loop (the "preview"):** an `httptest` **mock provider** that scripts `tool_calls`,
+  driven against a real SQLite trace → asserts the loop runs the query, feeds the result
+  back, and produces the final answer. Deterministic, **no API key needed**.
+- **Frontend:** build + an SSE-parser unit test.
+- **Live demo:** optional local mock-LLM so a human can watch the tour in the browser, or
+  plug in a real tool-capable model.
+
+### Decisions to confirm
+
+- `data_query`: guarded raw SQL (chosen for v1) vs. structured tools.
+- Agent-mode trigger: explicit request flag (chosen) vs. auto-detect.
+- The SSE event shape above.
+- How much of the Orient→Hypothesize→Test structure (§4.3) to encode in the v1 system
+  prompt (lean minimal).
+
+---
+
+## 8. Open questions / to audit
 
 1. ~~**Multi-select / large selections**~~ — **Resolved (Workstream A):** no
    multi-selection exists in any page; single-value params suffice. Revisit only if
@@ -529,7 +608,7 @@ Phase 5.**
 
 ---
 
-## 8. Non-goals
+## 9. Non-goals
 
 - No headless/server-side rendering (Chromium) — the live frontend is the renderer.
 - No bespoke charting (matplotlib/plotly) for agent perception — Daisen renders.
