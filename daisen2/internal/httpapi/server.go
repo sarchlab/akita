@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/sarchlab/akita/v5/daisen2/static"
@@ -21,6 +22,11 @@ type Server struct {
 	traceReader *SQLiteTraceReader
 	fs          http.FileSystem
 	httpServer  *http.Server
+
+	// captures correlates a pending agent capture request (keyed by id) with the
+	// browser that will POST the image back to /api/agent/capture (Phase 5).
+	captures   map[string]chan string
+	capturesMu sync.Mutex
 }
 
 // NewReplayServer creates a new Server in replay mode. It reads trace data
@@ -119,6 +125,8 @@ func (s *Server) RegisterTraceAPIRoutes(mux *http.ServeMux) {
 	// the frontend; the server holds no credentials.
 	mux.HandleFunc("/api/gpt", s.httpChatProxy)
 	mux.HandleFunc("/api/models", s.httpListModels)
+	// The browser POSTs agent view captures (screenshots / off-screen renders) here.
+	mux.HandleFunc("/api/agent/capture", s.httpAgentCapture)
 }
 
 // RegisterTraceRoutes registers trace/data routes and Daisen's replay SPA

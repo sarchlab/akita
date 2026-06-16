@@ -76,6 +76,9 @@ export default function MessageBubble({ message }: { message: ChatMessage }) {
                         {step.observation}
                       </pre>
                     )}
+                    {step.image && (
+                      <img src={step.image} alt="captured view" className="mt-1 max-h-56 rounded-md border" />
+                    )}
                   </div>
                 );
               })}

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import type { AgentStep, ChatMessage, LLMSettings, TraceInformation, UnitContent, UploadedFile } from "../types/chat";
+import { captureCurrentView, captureUrl } from "../utils/captureView";
 
 function contentTitle(content: UnitContent[]) {
   const firstText = content.find((unit) => unit.type === "text");
@@ -137,6 +138,32 @@ export function useChat() {
         };
 
         let working = render();
+
+        // Phase 5: the backend asks the browser to capture an image (a screenshot
+        // of the current view, or an off-screen render of a Daisen URL); we capture
+        // it, show it in the trail, and POST it back so the loop can resume.
+        const handleRender = async (captureId: string, kind: string, url: string, stepIdx: number) => {
+          let image = "";
+          try {
+            image = kind === "view" ? await captureUrl(url) : await captureCurrentView();
+          } catch {
+            image = "";
+          }
+          if (image && steps[stepIdx]) {
+            steps[stepIdx].image = image;
+            working = render();
+          }
+          try {
+            await fetch("/api/agent/capture", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: captureId, image }),
+            });
+          } catch {
+            // The backend times out and the loop continues without the image.
+          }
+        };
+
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -147,7 +174,17 @@ export function useChat() {
             buffer = buffer.slice(sep + 2);
             const dataLine = rawEvent.split("\n").find((l) => l.startsWith("data:"));
             if (!dataLine) continue;
-            let ev: { type: string; tool?: string; args?: string; observation?: string; text?: string; error?: string };
+            let ev: {
+              type: string;
+              tool?: string;
+              args?: string;
+              observation?: string;
+              text?: string;
+              error?: string;
+              captureId?: string;
+              renderKind?: string;
+              url?: string;
+            };
             try {
               ev = JSON.parse(dataLine.slice(5).trim());
             } catch {
@@ -160,6 +197,9 @@ export function useChat() {
               if (last && last.tool) last.observation = ev.observation;
             } else if (ev.type === "message") finalText = ev.text ?? finalText;
             else if (ev.type === "error") finalText = (finalText ? finalText + "\n\n" : "") + "Error: " + (ev.error ?? "unknown");
+            else if (ev.type === "render") {
+              void handleRender(ev.captureId ?? "", ev.renderKind ?? "screenshot", ev.url ?? "", steps.length - 1);
+            }
             working = render();
           }
         }

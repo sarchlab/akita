@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -26,12 +27,20 @@ const (
 
 // ---- Tool framework ----
 
+// toolResult is what a tool returns: a text result (becomes the tool message)
+// plus any images to attach as a follow-up multimodal user message — a tool
+// message can't carry image content in the OpenAI schema.
+type toolResult struct {
+	text   string
+	images []string // data URLs
+}
+
 // agentTool is a capability the model can invoke during the loop.
 type agentTool struct {
 	name        string
 	description string
 	parameters  map[string]interface{} // JSON Schema for the arguments
-	run         func(ctx context.Context, args map[string]interface{}) (string, error)
+	run         func(ctx context.Context, args map[string]interface{}) (toolResult, error)
 }
 
 func (t agentTool) spec() map[string]interface{} {
@@ -49,12 +58,18 @@ func (t agentTool) spec() map[string]interface{} {
 
 // agentEvent is one event streamed to the client during the loop.
 type agentEvent struct {
-	Type        string `json:"type"` // thinking | step | observation | message | error | done
+	Type        string `json:"type"` // thinking | step | observation | message | error | done | render
 	Tool        string `json:"tool,omitempty"`
 	Args        string `json:"args,omitempty"`
 	Observation string `json:"observation,omitempty"`
 	Text        string `json:"text,omitempty"`
 	Error       string `json:"error,omitempty"`
+	// Type=="render": the backend asks the browser to capture an image and POST it
+	// back to /api/agent/capture with this CaptureID. RenderKind is "screenshot"
+	// (the current page) or "view" (render URL off-screen first).
+	CaptureID  string `json:"captureId,omitempty"`
+	RenderKind string `json:"renderKind,omitempty"`
+	URL        string `json:"url,omitempty"`
 }
 
 type emitFunc func(agentEvent)
@@ -212,12 +227,26 @@ func runAgentLoop(
 			emit(agentEvent{Type: "step", Tool: tc.Function.Name, Args: tc.Function.Arguments})
 
 			result := dispatchTool(ctx, toolByName, tc)
-			emit(agentEvent{Type: "observation", Tool: tc.Function.Name, Observation: clip(result, 600)})
+			emit(agentEvent{Type: "observation", Tool: tc.Function.Name, Observation: clip(result.text, 600)})
 			messages = append(messages, map[string]interface{}{
 				"role":         "tool",
 				"tool_call_id": tc.ID,
-				"content":      result,
+				"content":      result.text,
 			})
+			// An image observation can't ride in a tool message; attach it as a
+			// follow-up user message (needs a vision-capable model).
+			if len(result.images) > 0 {
+				parts := []interface{}{
+					map[string]interface{}{"type": "text", "text": "Rendered view (image):"},
+				}
+				for _, img := range result.images {
+					parts = append(parts, map[string]interface{}{
+						"type":      "image_url",
+						"image_url": map[string]interface{}{"url": img},
+					})
+				}
+				messages = append(messages, map[string]interface{}{"role": "user", "content": parts})
+			}
 		}
 	}
 
@@ -230,20 +259,20 @@ func runAgentLoop(
 	return nil
 }
 
-func dispatchTool(ctx context.Context, byName map[string]agentTool, tc oaiToolCall) string {
+func dispatchTool(ctx context.Context, byName map[string]agentTool, tc oaiToolCall) toolResult {
 	tool, ok := byName[tc.Function.Name]
 	if !ok {
-		return "Error: unknown tool " + tc.Function.Name
+		return toolResult{text: "Error: unknown tool " + tc.Function.Name}
 	}
 	var args map[string]interface{}
 	if strings.TrimSpace(tc.Function.Arguments) != "" {
 		if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
-			return "Error: could not parse tool arguments: " + err.Error()
+			return toolResult{text: "Error: could not parse tool arguments: " + err.Error()}
 		}
 	}
 	out, err := tool.run(ctx, args)
 	if err != nil {
-		return "Error: " + err.Error()
+		return toolResult{text: "Error: " + err.Error()}
 	}
 	return out
 }
@@ -290,9 +319,10 @@ func dataQueryTool(reader *SQLiteTraceReader) agentTool {
 			},
 			"required": []string{"reason", "sql"},
 		},
-		run: func(ctx context.Context, args map[string]interface{}) (string, error) {
+		run: func(ctx context.Context, args map[string]interface{}) (toolResult, error) {
 			query, _ := args["sql"].(string)
-			return runDataQuery(ctx, reader, query)
+			out, err := runDataQuery(ctx, reader, query)
+			return toolResult{text: out}, err
 		},
 	}
 }
@@ -411,6 +441,11 @@ You can call the data_query tool to run read-only SQL over the trace. Use it to 
 
 You do NOT have the trace rows in your context. For any question about the trace's contents, timings, counts, or behavior, you MUST gather the facts with data_query first — do not answer such questions from memory or assumption, and never invent task IDs, durations, or counts. Run at least one query before making a quantitative claim.
 
+You can also SEE Daisen's visualizations:
+- screenshot_current_view: capture what the user is currently looking at on screen, and look at it.
+- daisen_view: render a specific Daisen view off-screen by its URL and look at it. URL scheme: "/dashboard?widget=<component>&starttime=<t>&endtime=<t>&primary=<metric>&secondary=<metric>"; "/component?name=<component>&taskid=<id>&starttime=<t>&endtime=<t>"; "/task?id=<taskid>&where=<component>&kind=<kind>". Times are raw trace values.
+Use these when a question is about visual patterns (timelines, bursts, periodicity, occupancy shapes) that are easier to see than to query. Both take a one-sentence "reason".
+
 Front door:
 - If a question is a simple definition or can be answered from the provided context, answer directly without tools.
 - If a question is ambiguous (e.g. which component, which time range), ask ONE concise clarifying question.
@@ -459,9 +494,167 @@ func (s *Server) runAgentSSE(
 		}
 	}
 
-	tools := []agentTool{dataQueryTool(s.traceReader)}
+	capture := s.newCaptureRequester(emit)
+	tools := []agentTool{
+		dataQueryTool(s.traceReader),
+		daisenViewTool(capture),
+		screenshotTool(capture),
+	}
 	if err := runAgentLoop(r.Context(), cfg, messages, tools, emit); err != nil {
 		emit(agentEvent{Type: "error", Error: err.Error()})
 	}
 	emit(agentEvent{Type: "done"})
+}
+
+// ---- Viz perception: browser capture round-trip (Phase 5) ----
+//
+// The loop runs server-side, but rendering and capturing a view happen in the
+// browser. A capture tool emits a "render" SSE event carrying a CaptureID, blocks
+// until the browser POSTs the image to /api/agent/capture with that id, then
+// returns the image as a multimodal observation.
+
+const (
+	captureTimeout  = 30 * time.Second
+	maxCaptureBytes = 24 << 20 // 24 MiB image data URL
+)
+
+var captureCounter int64
+
+func nextCaptureID() string {
+	return fmt.Sprintf("cap-%d", atomic.AddInt64(&captureCounter, 1))
+}
+
+// captureRequester asks the browser to capture an image (kind "screenshot" for
+// the current page, or "view" to render url off-screen first) and returns the
+// resulting data URL.
+type captureRequester func(ctx context.Context, kind, url string) (string, error)
+
+func (s *Server) registerCapture(id string) chan string {
+	ch := make(chan string, 1)
+	s.capturesMu.Lock()
+	if s.captures == nil {
+		s.captures = make(map[string]chan string)
+	}
+	s.captures[id] = ch
+	s.capturesMu.Unlock()
+	return ch
+}
+
+func (s *Server) unregisterCapture(id string) {
+	s.capturesMu.Lock()
+	delete(s.captures, id)
+	s.capturesMu.Unlock()
+}
+
+// resolveCapture delivers an image to a waiting capture request; returns false if
+// none is waiting (already timed out / unknown id).
+func (s *Server) resolveCapture(id, image string) bool {
+	s.capturesMu.Lock()
+	ch, ok := s.captures[id]
+	if ok {
+		delete(s.captures, id)
+	}
+	s.capturesMu.Unlock()
+	if !ok {
+		return false
+	}
+	ch <- image
+	return true
+}
+
+func (s *Server) newCaptureRequester(emit emitFunc) captureRequester {
+	return func(ctx context.Context, kind, url string) (string, error) {
+		id := nextCaptureID()
+		ch := s.registerCapture(id)
+		defer s.unregisterCapture(id)
+
+		emit(agentEvent{Type: "render", CaptureID: id, RenderKind: kind, URL: url})
+
+		select {
+		case img := <-ch:
+			if strings.TrimSpace(img) == "" {
+				return "", fmt.Errorf("the browser returned an empty capture")
+			}
+			return img, nil
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(captureTimeout):
+			return "", fmt.Errorf("timed out waiting for the browser to capture the view")
+		}
+	}
+}
+
+// httpAgentCapture receives a captured image from the browser and hands it to the
+// waiting tool, keyed by the capture id.
+func (s *Server) httpAgentCapture(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ID    string `json:"id"`
+		Image string `json:"image"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxCaptureBytes)).Decode(&body); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	if body.ID == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+	s.resolveCapture(body.ID, body.Image)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func screenshotTool(capture captureRequester) agentTool {
+	return agentTool{
+		name:        "screenshot_current_view",
+		description: "Capture a screenshot of what the user is currently looking at on screen in Daisen, and see it. Use this to ground your analysis in the user's current view.",
+		parameters: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"reason": map[string]interface{}{
+					"type":        "string",
+					"description": "One sentence: why you want to see the current screen. Shown to the user.",
+				},
+			},
+			"required": []string{"reason"},
+		},
+		run: func(ctx context.Context, _ map[string]interface{}) (toolResult, error) {
+			img, err := capture(ctx, "screenshot", "")
+			if err != nil {
+				return toolResult{}, err
+			}
+			return toolResult{text: "Captured the current screen.", images: []string{img}}, nil
+		},
+	}
+}
+
+func daisenViewTool(capture captureRequester) agentTool {
+	return agentTool{
+		name:        "daisen_view",
+		description: "Render a specific Daisen view off-screen by its URL and see it as an image. Examples: \"/component?name=L2Cache&starttime=0&endtime=379102000\", \"/dashboard?widget=L2Cache\", \"/task?id=<taskid>\". Use it to inspect a chart or timeline you have not been shown.",
+		parameters: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"reason": map[string]interface{}{
+					"type":        "string",
+					"description": "One sentence: what you want to see and why. Shown to the user.",
+				},
+				"url": map[string]interface{}{
+					"type":        "string",
+					"description": "A Daisen path + query, e.g. /component?name=L2Cache&starttime=0&endtime=379102000",
+				},
+			},
+			"required": []string{"reason", "url"},
+		},
+		run: func(ctx context.Context, args map[string]interface{}) (toolResult, error) {
+			url, _ := args["url"].(string)
+			if strings.TrimSpace(url) == "" {
+				return toolResult{}, fmt.Errorf("a url is required")
+			}
+			img, err := capture(ctx, "view", url)
+			if err != nil {
+				return toolResult{}, err
+			}
+			return toolResult{text: "Rendered the view: " + url, images: []string{img}}, nil
+		},
+	}
 }

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -203,5 +204,95 @@ func TestHTTPChatProxyAgentSSE(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("SSE stream missing %q\nstream:\n%s", want, out)
 		}
+	}
+}
+
+// TestAgentCaptureRoundTrip exercises the Phase 5 viz round-trip end-to-end: the
+// model asks for daisen_view, the loop emits a `render` event, the test (playing
+// the browser) POSTs an image to /api/agent/capture, and the loop resumes with
+// the image as a multimodal observation and produces the final answer.
+func TestAgentCaptureRoundTrip(t *testing.T) {
+	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1")
+	reader := newTestTraceReader(t)
+	seedAgentTrace(t, reader)
+
+	calls := 0
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if !bytes.Contains(raw, []byte("image_url")) {
+			// Turn 1: ask to render a view.
+			io.WriteString(w, `{"choices":[{"message":{"role":"assistant","tool_calls":[`+
+				`{"id":"c1","type":"function","function":{"name":"daisen_view",`+
+				`"arguments":"{\"reason\":\"see L2 timeline\",\"url\":\"/component?name=L2Cache\"}"}}]}}]}`)
+			return
+		}
+		// Turn 2: the image is now in the conversation — answer.
+		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"The L2 timeline looks steady."}}]}`)
+	}))
+	defer llm.Close()
+
+	s := &Server{traceReader: reader}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/gpt", s.httpChatProxy)
+	mux.HandleFunc("/api/agent/capture", s.httpAgentCapture)
+	daisen := httptest.NewServer(mux)
+	defer daisen.Close()
+
+	reqBody, _ := json.Marshal(map[string]interface{}{
+		"provider": "openai-compatible",
+		"baseURL":  llm.URL,
+		"model":    "mock",
+		"messages": []map[string]interface{}{
+			{"role": "user", "content": []map[string]interface{}{{"type": "text", "text": "look at L2Cache"}}},
+		},
+	})
+	resp, err := http.Post(daisen.URL+"/api/gpt", "application/json", bytes.NewReader(reqBody))
+	if err != nil {
+		t.Fatalf("POST /api/gpt: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var sawRender, sawMessage bool
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		var ev map[string]interface{}
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &ev); err != nil {
+			continue
+		}
+		switch ev["type"] {
+		case "render":
+			sawRender = true
+			id, _ := ev["captureId"].(string)
+			if ev["renderKind"] != "view" || ev["url"] != "/component?name=L2Cache" {
+				t.Errorf("unexpected render event: %v", ev)
+			}
+			// Play the browser: POST a (fake) captured image.
+			cap, _ := json.Marshal(map[string]string{"id": id, "image": "data:image/png;base64,AAAA"})
+			if _, err := http.Post(daisen.URL+"/api/agent/capture", "application/json", bytes.NewReader(cap)); err != nil {
+				t.Errorf("POST capture: %v", err)
+			}
+		case "message":
+			sawMessage = true
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("reading SSE: %v", err)
+	}
+
+	if !sawRender {
+		t.Error("expected a render event")
+	}
+	if !sawMessage {
+		t.Error("expected a final message after the capture")
+	}
+	if calls != 2 {
+		t.Errorf("expected 2 provider calls (render turn + answer turn), got %d", calls)
 	}
 }

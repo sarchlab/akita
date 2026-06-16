@@ -9,6 +9,7 @@ export interface AgentStep {
   args?: string;
   observation?: string;
   thinking?: string;
+  image?: string; // data URL of a captured view (daisen_view / screenshot)
 }
 
 export interface ChatMessage {
