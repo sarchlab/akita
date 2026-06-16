@@ -66,18 +66,20 @@ export default function TaskChartPage() {
     setTaskInput(taskId);
   }, [taskId]);
 
-  // In detail mode, the main task drives the detail pane.
+  // Restore the selected task (the `sel` param) once its data has loaded — in both
+  // browse mode (from the matching tasks) and detail mode (from main/parent/child).
+  // With no `sel`, detail mode defaults to the main task.
   useEffect(() => {
-    if (mainTask) setSelectedTask(mainTask);
-  }, [mainTask?.id]);
-
-  // In browse mode, restore the selected task from the `sel` param once the
-  // matching task data has loaded.
-  useEffect(() => {
-    if (taskId || !sel) return;
-    const found = browseTasks.find((task) => String(task.id) === sel);
-    if (found) setSelectedTask((current) => (current && String(current.id) === sel ? current : found));
-  }, [sel, taskId, browseTasks]);
+    if (sel) {
+      const pool = taskId ? [mainTask, parentTask, ...childTasks] : browseTasks;
+      const found = pool.find((task) => task && String(task.id) === sel);
+      if (found) {
+        setSelectedTask((current) => (current && String(current.id) === sel ? current : found));
+        return;
+      }
+    }
+    if (taskId && mainTask) setSelectedTask(mainTask);
+  }, [sel, taskId, mainTask?.id, parentTask?.id, childTasks, browseTasks]);
 
   const selectTask = useCallback(
     (task: Task) => {
@@ -89,7 +91,9 @@ export default function TaskChartPage() {
 
   const navigateToTask = useCallback(
     (id: string) => {
-      setSearchParams((prev) => mergeParams("/task", prev, { id, sel: undefined }));
+      // Entering task-detail mode: keep only the task id; drop browse-only filters
+      // and selection so the URL carries no params that don't affect the view.
+      setSearchParams((prev) => mergeParams("/task", prev, { id, where: undefined, kind: undefined, sel: undefined }));
       setSelectedTask(null);
     },
     [setSearchParams],
@@ -135,7 +139,11 @@ export default function TaskChartPage() {
             className="w-44"
             placeholder="Kind filter"
             value={kind}
-            onChange={(event) => replaceParams({ kind: event.target.value || undefined })}
+            onChange={(event) =>
+              // The kind filter only applies to browse mode; typing it leaves
+              // task-detail mode rather than adding a param with no effect.
+              replaceParams({ kind: event.target.value || undefined, id: undefined, sel: undefined })
+            }
           />
           {(mainLoading || browseLoading) && <span className="text-sm text-muted-foreground">Loading...</span>}
         </form>

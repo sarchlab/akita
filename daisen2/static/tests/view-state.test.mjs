@@ -37,6 +37,14 @@ const roundTripCases = [
     page: 2,
     primary: "BufferPressure",
     secondary: "PendingReqOut",
+  },
+  {
+    // single-widget view: no grid filter/page
+    route: "dashboard",
+    startTime: 10,
+    endTime: 20,
+    primary: "BufferPressure",
+    secondary: "PendingReqOut",
     widget: "GPU[0].DRAM",
   },
   { route: "dashboard" },
@@ -51,10 +59,10 @@ for (const view of roundTripCases) {
 }
 
 test("encodeView uses canonical fixed key order regardless of object key order", () => {
-  const a = { route: "dashboard", widget: "X", filter: "f", startTime: 1, endTime: 2 };
-  const b = { route: "dashboard", endTime: 2, startTime: 1, filter: "f", widget: "X" };
+  const a = { route: "dashboard", page: 3, filter: "f", startTime: 1, endTime: 2 };
+  const b = { route: "dashboard", endTime: 2, startTime: 1, filter: "f", page: 3 };
   assert.equal(encodeView(a), encodeView(b));
-  assert.equal(encodeView(a), "/dashboard?starttime=1&endtime=2&filter=f&widget=X");
+  assert.equal(encodeView(a), "/dashboard?starttime=1&endtime=2&filter=f&page=3");
 });
 
 test("dashboard defaults are omitted from the URL and recovered as undefined", () => {
@@ -75,6 +83,17 @@ test("non-default axis metrics are encoded; defaults are not", () => {
     secondary: DASHBOARD_DEFAULTS.secondary,
   });
   assert.equal(url, "/dashboard?primary=AvgLatency");
+});
+
+test("grid-only filter/page are omitted in single-widget mode", () => {
+  const url = encodeView({
+    route: "dashboard",
+    widget: "L2Cache",
+    filter: "ignored",
+    page: 3,
+    primary: "AvgLatency",
+  });
+  assert.equal(url, "/dashboard?primary=AvgLatency&widget=L2Cache");
 });
 
 test('"/" and "/dashboard" both parse to the dashboard route', () => {

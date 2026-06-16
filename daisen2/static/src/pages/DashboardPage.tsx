@@ -71,6 +71,14 @@ export default function DashboardPage() {
   const { startTime, endTime } = useSimulationRange();
   const { data: segmentsData } = useSegments();
   const [searchParams, setSearchParams] = useSearchParams();
+  // The range string we last wrote to the URL, so the adopt-from-URL effect can
+  // tell our own debounced writes from external navigation.
+  const lastWrittenRangeRef = useRef<string | null>(null);
+  // Whether there is a deliberate, non-sim range to reflect in the URL (set by a
+  // user zoom/pan or an adopted external range; cleared by Reset Zoom). Avoids
+  // relying on a viewRange==sim comparison, which lags by a render while the sim
+  // range loads and would otherwise leak the default range into the URL.
+  const userRangeRef = useRef(false);
 
   // The URL is the source of truth for the discrete view fields.
   const view = parseView("/dashboard", searchParams);
@@ -82,6 +90,12 @@ export default function DashboardPage() {
 
   const patchView = (patch: Record<string, string | number | undefined>) => {
     setSearchParams((prev) => mergeParams("/dashboard", prev, patch), { replace: true });
+  };
+
+  // A user zoom/pan is a deliberate range; remember that so the mirror writes it.
+  const handleRangeChange = (range: TimeRange) => {
+    userRangeRef.current = true;
+    setViewRange(range);
   };
 
   // The time range stays local for smooth zoom/pan; it is seeded from the URL at
@@ -108,12 +122,14 @@ export default function DashboardPage() {
   // Mirror the (debounced) range into the URL, omitting it when it equals the
   // simulation range so a fresh dashboard URL stays "/dashboard".
   useEffect(() => {
-    // "Not zoomed" counts as at-sim even while the debounced dataRange is still
-    // catching up to a just-loaded sim range, so the URL never transiently carries
-    // the pre-load default (0..1e-6) range.
+    // Only write a range when the user (or an adopted link) has a deliberate non-sim
+    // range, and it isn't exactly the sim range. This avoids leaking the pre-load
+    // default range into the URL during the render where the sim range first loads
+    // (viewRange follows it only on the next render).
     const atSim =
-      (dataRange.startTime === startTime && dataRange.endTime === endTime) ||
+      !userRangeRef.current ||
       (viewRange.startTime === startTime && viewRange.endTime === endTime);
+    lastWrittenRangeRef.current = atSim ? "" : `${dataRange.startTime}|${dataRange.endTime}`;
     setSearchParams(
       (prev) => {
         const next = mergeParams("/dashboard", prev, {
@@ -134,6 +150,20 @@ export default function DashboardPage() {
     endTime,
     setSearchParams,
   ]);
+
+  // Adopt an externally-set range (shared/tour links or back/forward that change
+  // only the query string) without reverting an in-progress local zoom — guarded by
+  // the range we last wrote ourselves.
+  useEffect(() => {
+    if (view.startTime === undefined || view.endTime === undefined) return;
+    const key = `${view.startTime}|${view.endTime}`;
+    if (key === lastWrittenRangeRef.current) return;
+    lastWrittenRangeRef.current = key;
+    userRangeRef.current = true; // an adopted explicit range is deliberate — keep it
+    const next = { startTime: view.startTime, endTime: view.endTime };
+    setViewRange((cur) => (cur.startTime === next.startTime && cur.endTime === next.endTime ? cur : next));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const { ref, size } = useElementSize<HTMLDivElement>();
 
@@ -168,7 +198,13 @@ export default function DashboardPage() {
         className="flex min-h-12 flex-wrap items-center gap-3 border-b bg-white px-4 py-2"
         onSubmit={(event) => event.preventDefault()}
       >
-        <Button type="button" onClick={() => setViewRange({ startTime, endTime })}>
+        <Button
+          type="button"
+          onClick={() => {
+            userRangeRef.current = false;
+            setViewRange({ startTime, endTime });
+          }}
+        >
           <RotateCcw />
           Reset Zoom
         </Button>
@@ -252,7 +288,7 @@ export default function DashboardPage() {
             secondaryAxis={secondaryAxis}
             segments={segmentsData?.segments ?? []}
             segmentsEnabled={segmentsData?.enabled ?? false}
-            onTimeRangeChange={setViewRange}
+            onTimeRangeChange={handleRangeChange}
           />
         ) : (
           <div
@@ -274,7 +310,7 @@ export default function DashboardPage() {
                 secondaryAxis={secondaryAxis}
                 segments={segmentsData?.segments ?? []}
                 segmentsEnabled={segmentsData?.enabled ?? false}
-                onTimeRangeChange={setViewRange}
+                onTimeRangeChange={handleRangeChange}
                 onFocus={(focused) => patchView({ widget: focused })}
               />
             ))}

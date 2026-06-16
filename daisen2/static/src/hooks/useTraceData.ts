@@ -49,7 +49,11 @@ export function useTraceData(query: TraceQuery) {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : String(err));
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        // A superseded (aborted) request must not clear loading for the request
+        // that replaced it — that would flip render-ready true while data is stale.
+        if (!signal?.aborted) setLoading(false);
+      });
   }, []);
 
   useEffect(() => {

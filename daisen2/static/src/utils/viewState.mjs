@@ -102,13 +102,18 @@ function buildView(view) {
       break;
 
     case "dashboard":
-    default:
+    default: {
       path = ROUTES.dashboard;
+      const singleWidget = typeof view.widget === "string" && view.widget !== "";
       setNum(params, "starttime", view.startTime);
       setNum(params, "endtime", view.endTime);
-      setStr(params, "filter", view.filter);
-      if (isFiniteNum(view.page) && view.page > 0) {
-        params.set("page", String(Math.trunc(view.page)));
+      // filter + page only apply to the grid; omit them in single-widget mode so
+      // equal single-widget views encode identically.
+      if (!singleWidget) {
+        setStr(params, "filter", view.filter);
+        if (isFiniteNum(view.page) && view.page > 0) {
+          params.set("page", String(Math.trunc(view.page)));
+        }
       }
       if (typeof view.primary === "string" && view.primary !== "" &&
           view.primary !== DASHBOARD_DEFAULTS.primary) {
@@ -120,6 +125,7 @@ function buildView(view) {
       }
       setStr(params, "widget", view.widget);
       break;
+    }
   }
 
   return { path, params };

@@ -230,7 +230,10 @@ components and milestone vocabulary:**
 ### 4.6 Loop control, budgets & termination
 
 - **Caps:** max iterations, max tool calls, an overall wall-clock ceiling (build on
-  the existing 10-min client ceiling), and a token budget.
+  the existing 10-min client ceiling), and a token budget. **These basic caps ship
+  with Phase 2** (the first multi-step loop) rather than waiting for Phase 6 — an
+  uncooperative model must not be able to loop unbounded the moment the loop exists.
+  Phase 6 adds the richer budgeting/pagination on top.
 - **Stopping criteria:** a hypothesis is supported with evidence; OR the top-K
   hypotheses are all refuted; OR a budget is hit.
 - **Graceful degradation:** on exhaustion, report the best-supported partial finding
@@ -370,7 +373,8 @@ This **resolves open questions #1, #3, and #5** (see §7).
 ### Workstream B — Canonical URL schema (the contract)
 
 - Per-route param vocabulary, names, formats per the schema established in
-  Workstream A (time as ns float; component as full-name string; all single-value —
+  Workstream A (time params carry the **raw trace value** — lossless `String()`/
+  `Number()`, not unit-converted; component as full-name string; all single-value —
   no multi-select exists today; zoom expressible via start/end).
 - **Normalization** so identical views → identical canonical URLs (param order,
   defaults, rounding) — needed later for render caching/dedup.
@@ -503,6 +507,25 @@ Phase 5.**
    and does it live in the prompt or behind a `list_known_failure_modes` tool?
 10. **Hypothesis artifact** (§4.4) — confirm a structured, schema-enforced hypothesis
     list (vs. free-form prose) is the right contract, and the fields to enforce.
+
+### Review notes (from Codex review, for later phases)
+
+- **`data_query` vs "no raw data"** — appending capped rows still puts raw data on the
+  LLM wire. Either tighten the contract (return counts/stats/samples, or route bulk
+  through `run_python`) or scope the guarantee to "no *bulk* raw data." (§3.2)
+- **Cap `run_python` output** — the LLM authors the code over a read-only trace handle;
+  bound stdout (row/byte cap, result-shaping) before returning observations. (§4.5)
+- **Go-side URL validator** — `viewState.mjs` is the TS source of truth, but the
+  LLM-URL validator (Phase 5) lives in Go and can't import it; define a
+  language-agnostic schema or a small Go validator kept in sync. (§3.2)
+- **Pagination is viewport-dependent** — `page` selects different widgets at different
+  widths, so it isn't a deterministic view descriptor for the off-screen renderer;
+  consider encoding the component offset/set instead, or pinning the grid size. (§6)
+- **Multimodal observation format** — feeding a rendered view back to an
+  OpenAI-compatible model needs the `image_url` content-part format, not a text append. (§3.3)
+- **Primed trace CSV in agent mode** — a direct answer that uses today's
+  `buildAkitaTraceHeader` CSV still ships raw rows; in agent mode prefer a summarized
+  header. (§4.2)
 
 ---
 
