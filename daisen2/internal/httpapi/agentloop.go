@@ -207,7 +207,7 @@ func runAgentLoop(
 			msg, toolCalls, content, err = callProvider(ctx, cfg, messages, nil, false)
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("agent loop failed on turn %d (%d tool calls so far): %w", iter+1, toolCallCount, err)
 		}
 
 		if len(toolCalls) == 0 {
@@ -222,6 +222,13 @@ func runAgentLoop(
 		}
 
 		messages = append(messages, msg)
+
+		// Every tool_call in the assistant message must be answered by a tool
+		// message immediately after it, before any other role. So append ALL tool
+		// responses first, then attach any captured images as a single follow-up
+		// user message — inserting the image user message between tool responses
+		// makes the provider reject the request (unanswered tool_call_id).
+		var imageParts []interface{}
 		for _, tc := range toolCalls {
 			toolCallCount++
 			emit(agentEvent{Type: "step", Tool: tc.Function.Name, Args: tc.Function.Arguments})
@@ -233,27 +240,27 @@ func runAgentLoop(
 				"tool_call_id": tc.ID,
 				"content":      result.text,
 			})
-			// An image observation can't ride in a tool message; attach it as a
-			// follow-up user message (needs a vision-capable model).
-			if len(result.images) > 0 {
-				parts := []interface{}{
-					map[string]interface{}{"type": "text", "text": "Rendered view (image):"},
-				}
-				for _, img := range result.images {
-					parts = append(parts, map[string]interface{}{
-						"type":      "image_url",
-						"image_url": map[string]interface{}{"url": img},
-					})
-				}
-				messages = append(messages, map[string]interface{}{"role": "user", "content": parts})
+			for _, img := range result.images {
+				imageParts = append(imageParts, map[string]interface{}{
+					"type":      "image_url",
+					"image_url": map[string]interface{}{"url": img},
+				})
 			}
+		}
+		// Images can't ride in a tool message (OpenAI schema), so attach them after
+		// all tool responses as one multimodal user message (needs a vision model).
+		if len(imageParts) > 0 {
+			content := append([]interface{}{
+				map[string]interface{}{"type": "text", "text": "Captured view(s):"},
+			}, imageParts...)
+			messages = append(messages, map[string]interface{}{"role": "user", "content": content})
 		}
 	}
 
 	// Iteration budget exhausted: force a final answer from the evidence so far.
 	_, _, content, err := callProvider(ctx, cfg, messages, nil, false)
 	if err != nil {
-		return err
+		return fmt.Errorf("agent loop failed on the final turn: %w", err)
 	}
 	emit(agentEvent{Type: "message", Text: content})
 	return nil

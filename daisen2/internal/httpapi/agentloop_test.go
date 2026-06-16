@@ -296,3 +296,72 @@ func TestAgentCaptureRoundTrip(t *testing.T) {
 		t.Errorf("expected 2 provider calls (render turn + answer turn), got %d", calls)
 	}
 }
+
+// TestAgentLoopMultiToolImageOrdering guards the fix for the OpenAI 400: when one
+// assistant turn makes several tool calls and one returns an image, every tool
+// response must immediately follow the assistant message — the image user message
+// must come AFTER all tool responses, not between them.
+func TestAgentLoopMultiToolImageOrdering(t *testing.T) {
+	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1")
+	reader := newTestTraceReader(t)
+	seedAgentTrace(t, reader)
+
+	var turn2 []interface{}
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if calls == 1 {
+			io.WriteString(w, `{"choices":[{"message":{"role":"assistant","tool_calls":[`+
+				`{"id":"c1","type":"function","function":{"name":"snap","arguments":"{}"}},`+
+				`{"id":"c2","type":"function","function":{"name":"data_query","arguments":"{\"reason\":\"r\",\"sql\":\"SELECT 1\"}"}}`+
+				`]}}]}`)
+			return
+		}
+		turn2, _ = req["messages"].([]interface{})
+		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"done"}}]}`)
+	}))
+	defer srv.Close()
+
+	snap := agentTool{
+		name:        "snap",
+		description: "snap",
+		parameters:  map[string]interface{}{"type": "object", "properties": map[string]interface{}{}},
+		run: func(_ context.Context, _ map[string]interface{}) (toolResult, error) {
+			return toolResult{text: "snapped", images: []string{"data:image/png;base64,AAAA"}}, nil
+		},
+	}
+
+	cfg := ProviderConfig{Provider: ProviderOpenAICompatible, BaseURL: srv.URL, Model: "mock"}
+	msgs := []map[string]interface{}{{"role": "user", "content": "snap and query"}}
+	if err := runAgentLoop(context.Background(), cfg, msgs, []agentTool{snap, dataQueryTool(reader)}, func(agentEvent) {}); err != nil {
+		t.Fatalf("runAgentLoop: %v", err)
+	}
+
+	role := func(i int) string {
+		m, _ := turn2[i].(map[string]interface{})
+		s, _ := m["role"].(string)
+		return s
+	}
+	ai := -1
+	for i := range turn2 {
+		m, _ := turn2[i].(map[string]interface{})
+		if m["role"] == "assistant" {
+			if _, ok := m["tool_calls"]; ok {
+				ai = i
+			}
+		}
+	}
+	if ai < 0 || ai+3 >= len(turn2) {
+		t.Fatalf("unexpected turn-2 message shape (len %d, assistant idx %d)", len(turn2), ai)
+	}
+	// Expected: assistant(tool_calls) -> tool(c1) -> tool(c2) -> user(image).
+	if role(ai+1) != "tool" || role(ai+2) != "tool" {
+		t.Errorf("both tool responses must immediately follow the assistant tool_calls; got %q,%q", role(ai+1), role(ai+2))
+	}
+	if role(ai+3) != "user" {
+		t.Errorf("the image must be a user message after the tool responses; got %q", role(ai+3))
+	}
+}
