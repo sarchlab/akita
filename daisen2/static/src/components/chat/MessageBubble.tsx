@@ -21,6 +21,7 @@ export default function MessageBubble({ message }: { message: ChatMessage }) {
   }, [html]);
 
   const steps = message.role === "assistant" ? message.steps : undefined;
+  const toolCount = steps?.filter((s) => s.tool).length ?? 0;
 
   return (
     <div className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
@@ -28,24 +29,30 @@ export default function MessageBubble({ message }: { message: ChatMessage }) {
         {steps && steps.length > 0 && (
           <details className="rounded-xl border bg-background/60 px-2.5 py-1.5 text-xs">
             <summary className="cursor-pointer select-none text-muted-foreground">
-              {steps.length} tool step{steps.length > 1 ? "s" : ""}
+              {toolCount > 0 ? `${toolCount} tool call${toolCount > 1 ? "s" : ""}` : "reasoning"}
             </summary>
             <div className="mt-1.5 space-y-2">
-              {steps.map((step, i) => (
-                <div key={i} className="space-y-0.5">
-                  <div className="font-medium text-foreground">{step.tool}</div>
-                  {step.args && (
-                    <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted px-1.5 py-1 font-mono text-[11px]">
-                      {step.args}
-                    </pre>
-                  )}
-                  {step.observation && (
-                    <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px] text-muted-foreground">
-                      {step.observation}
-                    </pre>
-                  )}
-                </div>
-              ))}
+              {steps.map((step, i) =>
+                step.thinking ? (
+                  <div key={i} className="whitespace-pre-wrap break-words italic text-muted-foreground">
+                    {step.thinking}
+                  </div>
+                ) : (
+                  <div key={i} className="space-y-0.5">
+                    <div className="font-medium text-foreground">{step.tool}</div>
+                    {step.args && (
+                      <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted px-1.5 py-1 font-mono text-[11px]">
+                        {step.args}
+                      </pre>
+                    )}
+                    {step.observation && (
+                      <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px] text-muted-foreground">
+                        {step.observation}
+                      </pre>
+                    )}
+                  </div>
+                ),
+              )}
             </div>
           </details>
         )}

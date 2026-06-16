@@ -49,7 +49,7 @@ func (t agentTool) spec() map[string]interface{} {
 
 // agentEvent is one event streamed to the client during the loop.
 type agentEvent struct {
-	Type        string `json:"type"` // step | observation | message | error | done
+	Type        string `json:"type"` // thinking | step | observation | message | error | done
 	Tool        string `json:"tool,omitempty"`
 	Args        string `json:"args,omitempty"`
 	Observation string `json:"observation,omitempty"`
@@ -198,6 +198,12 @@ func runAgentLoop(
 		if len(toolCalls) == 0 {
 			emit(agentEvent{Type: "message", Text: content})
 			return nil
+		}
+
+		// The model often explains its reasoning alongside the tool calls — surface
+		// that intermediate "thinking" so the user sees why each query is run.
+		if strings.TrimSpace(content) != "" {
+			emit(agentEvent{Type: "thinking", Text: content})
 		}
 
 		messages = append(messages, msg)

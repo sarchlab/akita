@@ -99,8 +99,9 @@ func TestRunAgentLoop_MockProvider(t *testing.T) {
 			if _, ok := req["tools"]; !ok {
 				t.Error("expected tools to be offered on the first turn")
 			}
-			io.WriteString(w, `{"choices":[{"message":{"role":"assistant","tool_calls":[`+
-				`{"id":"c1","type":"function","function":{"name":"data_query",`+
+			io.WriteString(w, `{"choices":[{"message":{"role":"assistant",`+
+				`"content":"Let me check the per-component task counts.",`+
+				`"tool_calls":[{"id":"c1","type":"function","function":{"name":"data_query",`+
 				`"arguments":"{\"sql\":\"SELECT loc.Locale, COUNT(*) AS n FROM trace t JOIN location loc ON t.Location=loc.ID GROUP BY loc.Locale\"}"}}]}}]}`)
 			return
 		}
@@ -119,9 +120,13 @@ func TestRunAgentLoop_MockProvider(t *testing.T) {
 		t.Fatalf("runAgentLoop: %v", err)
 	}
 
-	var sawStep, sawObs, sawMsg bool
+	var sawThinking, sawStep, sawObs, sawMsg bool
 	for _, ev := range events {
 		switch ev.Type {
+		case "thinking":
+			if strings.Contains(ev.Text, "per-component") {
+				sawThinking = true
+			}
 		case "step":
 			if ev.Tool == "data_query" {
 				sawStep = true
@@ -135,6 +140,9 @@ func TestRunAgentLoop_MockProvider(t *testing.T) {
 				sawMsg = true
 			}
 		}
+	}
+	if !sawThinking {
+		t.Error("expected a thinking event (model reasoning alongside the tool call)")
 	}
 	if !sawStep {
 		t.Error("expected a data_query step event")

@@ -158,9 +158,11 @@ export function useChat() {
             } catch {
               continue;
             }
-            if (ev.type === "step") steps.push({ tool: ev.tool ?? "tool", args: ev.args });
+            if (ev.type === "thinking") steps.push({ thinking: ev.text });
+            else if (ev.type === "step") steps.push({ tool: ev.tool ?? "tool", args: ev.args });
             else if (ev.type === "observation") {
-              if (steps.length) steps[steps.length - 1].observation = ev.observation;
+              const last = steps[steps.length - 1];
+              if (last && last.tool) last.observation = ev.observation;
             } else if (ev.type === "message") finalText = ev.text ?? finalText;
             else if (ev.type === "error") finalText = (finalText ? finalText + "\n\n" : "") + "Error: " + (ev.error ?? "unknown");
             working = render();
