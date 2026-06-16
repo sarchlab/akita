@@ -23,14 +23,12 @@ import (
 //            are config- and address-map-independent, so exact match is fair.
 //
 //   Tier 6 — average read latency, open-page stream scenarios, compared against
-//            DRAMSim3 within a 15% tolerance. Some of these deliberately probe a
-//            feature Akita does NOT support (configurable address mapping):
-//            when bank parallelism depends on the mapping, Akita's fixed map
-//            diverges far past 15%. Those scenarios are marked "known_gap" and
-//            the suite asserts the gap is *currently* large (a tracked,
-//            executable record). When configurable address mapping lands and the
-//            gap closes, the characterization assertion will fail — flip it to
-//            "enforced" then.
+//            DRAMSim3 within a 15% tolerance. Akita is configured to PER_BANK to
+//            match the reference's queue_structure, so any remaining divergence
+//            is the address mapping (Akita's single fixed map vs DRAMSim3's
+//            `rochrababgco`). "enforced" scenarios match; "inaccuracy" scenarios
+//            do NOT yet and are recorded as a FAILING test (they go green when
+//            the address mapping is made configurable). "off" = no reads.
 
 const (
 	tier5ScenariosPath = "validation/traces/scenarios.json"
@@ -96,6 +94,10 @@ func runAkita(scn tier5Scenario) akitaResult {
 	spec.TransactionQueueSize = 32
 	spec.CommandQueueCapacity = 8
 	spec.TREFI = 0 // refresh off, matching the oracle reference runs
+	// Match the reference's queue_structure = PER_BANK so the comparison is
+	// apples-to-apples and any remaining latency gap is the address mapping, not
+	// the queue structure.
+	spec.QueueStructure = QueueStructurePerBank
 
 	h := newDramHarness(spec)
 	data := []byte{1, 2, 3, 4}
@@ -251,28 +253,27 @@ var _ = Describe("Tier 6: read latency vs DRAMSim3 (15% tolerance)", func() {
 		Expect(checked).To(BeNumerically(">", 0))
 	})
 
-	// KNOWN GAPS — these probe a feature Akita does not yet support. The suite
-	// records that the divergence is currently large; when the feature lands and
-	// the gap closes (relErr <= 15%), this spec FAILS — that is the signal to
-	// move the scenario to latency_check="enforced".
-	It("records the known feature gaps (currently exceeding 15%)", func() {
+	// RECORDED INACCURACY — Akita is configured to PER_BANK to match the
+	// reference's queue structure, so the remaining latency divergence is the
+	// address mapping (Akita's single fixed map vs DRAMSim3's `rochrababgco`).
+	// These scenarios SHOULD match within 15% but currently do not; this spec
+	// FAILS on purpose to keep the inaccuracy visible and tracked. It goes green
+	// when Akita's address mapping is made configurable to match the reference.
+	It("matches DRAMSim3 read latency for recorded-inaccuracy scenarios", func() {
 		checked := 0
 		for _, scn := range tier5Scen {
-			if scn.LatencyCheck != "known_gap" {
+			if scn.LatencyCheck != "inaccuracy" {
 				continue
 			}
 			ref := dramsim3RefLatency(scn.Name)
 			akita := runAkita(scn).avgReadLatency
 			relErr := math.Abs(akita-ref) / ref
-			GinkgoWriter.Printf(
-				"KNOWN GAP %-16s Akita %.1f vs DRAMSim3 %.1f cyc (%.0f%% off) — %s\n",
-				scn.Name, akita, ref, relErr*100, scn.GapReason)
-			Expect(relErr).To(BeNumerically(">", latencyTolerance),
-				"%s gap closed (now %.0f%% off) — promote to latency_check=enforced",
-				scn.Name, relErr*100)
+			Expect(relErr).To(BeNumerically("<=", latencyTolerance),
+				"%s: Akita %.1f vs DRAMSim3 %.1f cyc (%.0f%% off) — recorded "+
+					"inaccuracy: %s", scn.Name, akita, ref, relErr*100, scn.GapReason)
 			checked++
 		}
 		Expect(checked).To(BeNumerically(">", 0),
-			"no known_gap scenarios ran — if all gaps are fixed, delete this spec")
+			"no inaccuracy scenarios ran — if all are fixed, delete this spec")
 	})
 })

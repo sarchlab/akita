@@ -121,14 +121,16 @@ SCENARIOS = [
     {"name": "op_stride_128K", "page_policy": "open",
      "pattern": {"op": "read", "count": 512, "stride": "0x20000"},
      "counts_check": "off", "latency_check": "enforced"},
+    # At matched queue structure (Akita configured to PER_BANK), op_stride_16K
+    # now matches DRAMSim3; op_stride_8K is still ~19% off — the residual
+    # address-mapping inaccuracy, recorded as a FAILING test.
     {"name": "op_stride_8K",   "page_policy": "open",
      "pattern": {"op": "read", "count": 512, "stride": "0x2000"},
-     "counts_check": "off", "latency_check": "known_gap",
-     "gap_reason": "configurable address mapping"},
+     "counts_check": "off", "latency_check": "inaccuracy",
+     "gap_reason": "address mapping (Akita's fixed map vs DRAMSim3 rochrababgco)"},
     {"name": "op_stride_16K",  "page_policy": "open",
      "pattern": {"op": "read", "count": 512, "stride": "0x4000"},
-     "counts_check": "off", "latency_check": "known_gap",
-     "gap_reason": "configurable address mapping"},
+     "counts_check": "off", "latency_check": "enforced"},
 ]
 
 # Expand ops once so the rest of the script can use scn["ops"] directly; the
