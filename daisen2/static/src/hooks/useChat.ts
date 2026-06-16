@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import type { ChatMessage, LLMSettings, TraceInformation, UnitContent, UploadedFile } from "../types/chat";
+import type { AgentStep, ChatMessage, LLMSettings, TraceInformation, UnitContent, UploadedFile } from "../types/chat";
 
 const INITIAL_MESSAGE: ChatMessage = {
   role: "assistant",
@@ -102,17 +102,71 @@ export function useChat() {
             provider: llm.provider,
             baseURL: llm.baseURL,
             model: llm.model,
+            // Agent mode: the server runs a streamed tool-calling loop and replies
+            // with Server-Sent Events. It falls back to a single answer internally
+            // for models without tool support.
+            agent: true,
           }),
         });
-        const data = response.ok ? await response.json() : { choices: [{ message: { content: await response.text() } }] };
-        const assistantText = data?.choices?.[0]?.message?.content ?? "No response from Daisen Bot.";
-        const assistantMessage: ChatMessage = {
-          role: "assistant",
-          content: [{ type: "text", text: assistantText }],
+
+        const isStream = response.ok && response.body &&
+          (response.headers.get("content-type") ?? "").includes("text/event-stream");
+
+        if (!isStream) {
+          // Error or a non-streamed body — surface it as the assistant message.
+          const text = await response.text();
+          const finalMessages: ChatMessage[] = [
+            ...nextMessages,
+            { role: "assistant", content: [{ type: "text", text: text || "No response from Daisen Bot." }] },
+          ];
+          setMessages(finalMessages);
+          saveCurrent(finalMessages);
+          return;
+        }
+
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        const steps: AgentStep[] = [];
+        let finalText = "";
+
+        const render = (): ChatMessage[] => {
+          const assistantMessage: ChatMessage = {
+            role: "assistant",
+            content: [{ type: "text", text: finalText }],
+            steps: steps.length ? steps.map((s) => ({ ...s })) : undefined,
+          };
+          const working = [...nextMessages, assistantMessage];
+          setMessages(working);
+          return working;
         };
-        const finalMessages = [...nextMessages, assistantMessage];
-        setMessages(finalMessages);
-        saveCurrent(finalMessages);
+
+        let working = render();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let sep: number;
+          while ((sep = buffer.indexOf("\n\n")) !== -1) {
+            const rawEvent = buffer.slice(0, sep);
+            buffer = buffer.slice(sep + 2);
+            const dataLine = rawEvent.split("\n").find((l) => l.startsWith("data:"));
+            if (!dataLine) continue;
+            let ev: { type: string; tool?: string; args?: string; observation?: string; text?: string; error?: string };
+            try {
+              ev = JSON.parse(dataLine.slice(5).trim());
+            } catch {
+              continue;
+            }
+            if (ev.type === "step") steps.push({ tool: ev.tool ?? "tool", args: ev.args });
+            else if (ev.type === "observation") {
+              if (steps.length) steps[steps.length - 1].observation = ev.observation;
+            } else if (ev.type === "message") finalText = ev.text ?? finalText;
+            else if (ev.type === "error") finalText = (finalText ? finalText + "\n\n" : "") + "Error: " + (ev.error ?? "unknown");
+            working = render();
+          }
+        }
+        saveCurrent(working);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {

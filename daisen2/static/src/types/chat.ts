@@ -2,9 +2,18 @@ export type UnitContent =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
 
+// AgentStep is one tool invocation in the agent loop (Phase 2), shown as the
+// visible "thinking" trail under an assistant message.
+export interface AgentStep {
+  tool: string;
+  args?: string;
+  observation?: string;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: UnitContent[];
+  steps?: AgentStep[];
 }
 
 export interface UploadedFile {

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -146,5 +147,53 @@ func TestRunAgentLoop_MockProvider(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Errorf("expected 2 provider calls (tool turn + answer turn), got %d", calls)
+	}
+}
+
+// TestHTTPChatProxyAgentSSE drives the whole endpoint (httpChatProxy with
+// agent=true) against a mock provider and asserts the SSE stream carries the
+// step → observation (real queried data) → message → done sequence.
+func TestHTTPChatProxyAgentSSE(t *testing.T) {
+	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1")
+	reader := newTestTraceReader(t)
+	seedAgentTrace(t, reader)
+
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if calls == 1 {
+			io.WriteString(w, `{"choices":[{"message":{"role":"assistant","tool_calls":[`+
+				`{"id":"c1","type":"function","function":{"name":"data_query",`+
+				`"arguments":"{\"sql\":\"SELECT loc.Locale, COUNT(*) AS n FROM trace t JOIN location loc ON t.Location=loc.ID GROUP BY loc.Locale\"}"}}]}}]}`)
+			return
+		}
+		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"L2Cache handled 2 tasks."}}]}`)
+	}))
+	defer srv.Close()
+
+	s := &Server{traceReader: reader}
+	reqBody, _ := json.Marshal(map[string]interface{}{
+		"agent":    true,
+		"provider": "openai-compatible",
+		"baseURL":  srv.URL,
+		"model":    "mock",
+		"messages": []map[string]interface{}{
+			{"role": "user", "content": []map[string]interface{}{{"type": "text", "text": "tasks per component?"}}},
+		},
+	})
+	req := httptest.NewRequest("POST", "/api/gpt", bytes.NewReader(reqBody))
+	rec := httptest.NewRecorder()
+
+	s.httpChatProxy(rec, req)
+
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "text/event-stream") {
+		t.Fatalf("expected SSE content-type, got %q\nbody: %s", ct, rec.Body.String())
+	}
+	out := rec.Body.String()
+	for _, want := range []string{`"type":"step"`, "data_query", "L2Cache", `"type":"message"`, `"type":"done"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("SSE stream missing %q\nstream:\n%s", want, out)
+		}
 	}
 }
