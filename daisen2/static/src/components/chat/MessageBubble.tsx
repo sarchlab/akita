@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import DOMPurify from "dompurify";
 import type { ChatMessage, UnitContent } from "../../types/chat";
-import { renderChatMarkdown, renderMathInElement } from "../../utils/chatMarkdown";
+import { renderChatMarkdown } from "../../utils/chatMarkdown.mjs";
 import { cn } from "../../lib/utils";
 
 // Pull a friendly rationale + query out of a tool call's JSON arguments, falling
@@ -19,8 +19,6 @@ function parseToolArgs(args?: string): { reason?: string; query?: string } {
 }
 
 export default function MessageBubble({ message }: { message: ChatMessage }) {
-  const ref = useRef<HTMLDivElement | null>(null);
-
   const images = message.content.filter(
     (u): u is Extract<UnitContent, { type: "image_url" }> => u.type === "image_url",
   );
@@ -30,14 +28,10 @@ export default function MessageBubble({ message }: { message: ChatMessage }) {
     .join("\n");
 
   // Model output is untrusted (any configured provider, including local/unknown
-  // models), so sanitize the generated HTML before injecting it. DOMPurify keeps
-  // the safe markup we emit — including the `.math` spans KaTeX fills in below —
-  // while stripping scripts, event handlers, and other injection vectors.
+  // models), so sanitize the markdown-generated HTML before injecting it.
+  // DOMPurify keeps the safe markup markdown-it emits while stripping scripts,
+  // event handlers, and other injection vectors.
   const html = useMemo(() => DOMPurify.sanitize(renderChatMarkdown(text)), [text]);
-
-  useEffect(() => {
-    if (ref.current) renderMathInElement(ref.current);
-  }, [html]);
 
   const steps = message.role === "assistant" ? message.steps : undefined;
   const toolCount = steps?.filter((s) => s.tool).length ?? 0;
@@ -101,7 +95,6 @@ export default function MessageBubble({ message }: { message: ChatMessage }) {
 
         {text && (
           <div
-            ref={ref}
             className={cn(
               "chat-markdown rounded-2xl px-3 py-2 text-sm leading-relaxed",
               message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
