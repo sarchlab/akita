@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent, WheelEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
+import { SidePanel } from "../components/ui/side-panel";
 import type { ComponentInfo } from "../hooks/useCompInfo";
 import { useCompInfo } from "../hooks/useCompInfo";
 import { useSegments } from "../hooks/useSegments";
@@ -11,8 +12,19 @@ import { useTraceData } from "../hooks/useTraceData";
 import type { Segment, Task } from "../types/task";
 import { buildColorMap, lookupColor, taskColorKey } from "../utils/taskColorCoder";
 import { smartString } from "../utils/smartValue";
+import { cn } from "../lib/utils";
 
 const TOP_AXIS_HEIGHT = 200;
+// In component mode (no task selected) the parent/current/sub-task lanes are
+// empty, so the top section collapses to just a thin time axis and the component
+// timeline takes the freed vertical space.
+const TOP_AXIS_COMPACT_HEIGHT = 28;
+// The bottom metric line chart occupies a fixed share of the whole left region
+// height (see lineChartHeight); these reserve room for the x-axis and the gap
+// between the task bars and the line band.
+const COMPONENT_LINE_HEIGHT_RATIO = 0.2;
+const COMPONENT_X_AXIS_RESERVE = 25;
+const COMPONENT_TASK_LINE_GAP = 16;
 const SIDE_COLUMN_WIDTH = 350;
 const DATA_RANGE_DEBOUNCE_MS = 1000;
 const NUM_DOTS = 40;
@@ -256,14 +268,14 @@ function assignDimensions(root: LayoutTask, initialDim: TaskDim) {
   }
 }
 
-function buildComponentTaskLayout(tasks: Task[], width: number, height: number, startTime: number, endTime: number) {
+function buildComponentTaskLayout(tasks: Task[], width: number, regionHeight: number, startTime: number, endTime: number) {
   const clonedTasks = cloneTasks(tasks);
   const root = buildTaskTree(clonedTasks);
   assignDimensions(root, {
     x: 0,
     y: 0,
     width,
-    height: (2 * (height - 5 - 20 - 50)) / 3,
+    height: regionHeight,
     startTime,
     endTime,
   });
@@ -312,6 +324,7 @@ interface ComponentTimelineProps {
   segmentsEnabled: boolean;
   range: TimeRange;
   size: Size;
+  lineChartHeight: number;
   colorMap: Record<string, string>;
   highlightedKey: string | null;
   highlightedTaskId: string | null;
@@ -327,6 +340,7 @@ function ComponentTimeline({
   segmentsEnabled,
   range,
   size,
+  lineChartHeight,
   colorMap,
   highlightedKey,
   highlightedTaskId,
@@ -338,16 +352,22 @@ function ComponentTimeline({
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
   const xAxisY = Math.max(0, height - 20);
+  // The metric line sits in a fixed band at the bottom (a fixed share of the
+  // whole left region, passed in as lineChartHeight); the task bars fill the
+  // space above it. Clamp so a tiny viewport still leaves room for both.
+  const lineBand = Math.max(1, Math.min(lineChartHeight, height - COMPONENT_X_AXIS_RESERVE - 30));
+  const lineTop = height - COMPONENT_X_AXIS_RESERVE - lineBand;
+  const taskRegionHeight = Math.max(1, lineTop - COMPONENT_TASK_LINE_GAP);
   const yScale = d3
     .scaleLinear()
     .domain(yDomain(info))
-    .range([height - 25, 5 + (2 * (height - 30 - 5)) / 3 - 15]);
+    .range([height - COMPONENT_X_AXIS_RESERVE, lineTop]);
   const linePath = d3
     .line<{ time: number; value: number }>()
     .x((point) => safeScale(xScale, point.time))
     .y((point) => safeScale(yScale, point.value))
     .curve(d3.curveCatmullRom.alpha(0.5))(info?.data ?? []);
-  const taskLayout = buildComponentTaskLayout(tasks, width, height, range.startTime, range.endTime);
+  const taskLayout = buildComponentTaskLayout(tasks, width, taskRegionHeight, range.startTime, range.endTime);
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
   const yTicks = yScale.ticks(5);
 
@@ -619,29 +639,52 @@ function ComponentTaskView({
   );
 }
 
-function TaskTooltip({ task }: { task: Task | null }) {
-  if (!task) return <div className="daisen1-current-task-info" />;
+// A small uppercase section heading shared by the side-panel sections.
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</div>
+  );
+}
+
+function SelectedTaskSection({ task }: { task: Task | null }) {
+  if (!task) {
+    return (
+      <section>
+        <SectionLabel>Selected task</SectionLabel>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Hover or click a task in the chart to see its details.
+        </p>
+      </section>
+    );
+  }
+
+  const rows: [string, string][] = [
+    ["ID", String(task.id)],
+    ["Kind", task.kind],
+    ["What", task.what],
+    ["Where", task.location || "-"],
+    ["Start", smartString(task.start_time)],
+    ["End", smartString(task.end_time)],
+    ["Duration", smartString(task.end_time - task.start_time)],
+  ];
 
   return (
-    <div className="daisen1-current-task-info showing">
-      <div className="daisen1-current-task-title">{task.kind} - {task.what}</div>
-      <dl>
-        <dt>ID</dt>
-        <dd>{String(task.id)}</dd>
-        <dt>Kind</dt>
-        <dd>{task.kind}</dd>
-        <dt>What</dt>
-        <dd>{task.what}</dd>
-        <dt>Where</dt>
-        <dd>{task.location || "-"}</dd>
-        <dt>Start</dt>
-        <dd>{smartString(task.start_time)}</dd>
-        <dt>End</dt>
-        <dd>{smartString(task.end_time)}</dd>
-        <dt>Duration</dt>
-        <dd>{smartString(task.end_time - task.start_time)}</dd>
-      </dl>
-    </div>
+    <section>
+      <SectionLabel>Selected task</SectionLabel>
+      <div className="mt-2 rounded-lg border bg-muted/30 p-3">
+        <div className="mb-2 break-all text-sm font-semibold">
+          {task.kind} · {task.what}
+        </div>
+        <dl className="space-y-1.5 text-xs">
+          {rows.map(([label, value]) => (
+            <div key={label} className="grid grid-cols-[4.5rem_1fr] gap-x-3">
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="break-all font-medium tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </section>
   );
 }
 
@@ -655,35 +698,38 @@ function ComponentLegend({
   onHighlight: (key: string | null) => void;
 }) {
   const entries = Object.entries(colorMap);
-  const height = entries.length * 28 + 30;
+  if (entries.length === 0) return null;
 
   return (
-    <div className="daisen1-legend">
-      <svg width="100%" height={height}>
-        {entries.map(([key, color], index) => {
-          const highlighted = highlightedKey === null || highlightedKey === key;
+    <section>
+      <SectionLabel>Legend</SectionLabel>
+      <ul className="mt-2 space-y-0.5">
+        {entries.map(([key, color]) => {
+          const dimmed = highlightedKey !== null && highlightedKey !== key;
           return (
-            <g
-              key={key}
-              transform={`translate(5, ${index * 28 + 30})`}
-              opacity={highlighted ? 1 : 0.45}
-              className="daisen1-legend-row"
-              onMouseEnter={() => onHighlight(key)}
-              onMouseLeave={() => onHighlight(null)}
-              onFocus={() => onHighlight(key)}
-              onBlur={() => onHighlight(null)}
-              role="button"
-              tabIndex={0}
-            >
-              <rect y={-4} width={30} height={10} stroke="black" fill={color} />
-              <text x={40} alignmentBaseline="middle">
-                {key}
-              </text>
-            </g>
+            <li key={key}>
+              <button
+                type="button"
+                className={cn(
+                  "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
+                  dimmed && "opacity-40",
+                )}
+                onMouseEnter={() => onHighlight(key)}
+                onMouseLeave={() => onHighlight(null)}
+                onFocus={() => onHighlight(key)}
+                onBlur={() => onHighlight(null)}
+              >
+                <span
+                  className="h-3 w-5 shrink-0 rounded-sm border border-black/30"
+                  style={{ backgroundColor: color }}
+                />
+                <span className="truncate">{key}</span>
+              </button>
+            </li>
           );
         })}
-      </svg>
-    </div>
+      </ul>
+    </section>
   );
 }
 
@@ -778,7 +824,11 @@ export default function ComponentPage() {
     return map;
   }, [childTasks, currentTask, parentTask, tasks]);
   const leftWidth = Math.max(1, size.width - SIDE_COLUMN_WIDTH - 1);
-  const componentHeight = Math.max(120, size.height - TOP_AXIS_HEIGHT);
+  const topHeight = currentTask ? TOP_AXIS_HEIGHT : TOP_AXIS_COMPACT_HEIGHT;
+  const componentHeight = Math.max(120, size.height - topHeight);
+  // The bottom metric line chart is a fixed 20% of the whole left region height,
+  // regardless of whether a task is selected.
+  const lineChartHeight = Math.round(size.height * COMPONENT_LINE_HEIGHT_RATIO);
   const dataPending = viewRange.startTime !== dataRange.startTime || viewRange.endTime !== dataRange.endTime;
 
   const shiftRange = (nextRange: TimeRange) => {
@@ -909,7 +959,7 @@ export default function ComponentPage() {
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       >
-        <div className="daisen1-task-view" style={{ height: TOP_AXIS_HEIGHT }}>
+        <div className="daisen1-task-view" style={{ height: topHeight }}>
           <ComponentTaskView
             mainTask={currentTask}
             parentTask={parentTask}
@@ -918,10 +968,12 @@ export default function ComponentPage() {
             segmentsEnabled={segmentsData?.enabled ?? false}
             range={viewRange}
             width={leftWidth}
-            height={TOP_AXIS_HEIGHT}
+            height={topHeight}
             colorMap={colorMap}
             highlightedKey={highlightedKey}
-            highlightedTaskId={hoveredTask ? String(hoveredTask.id) : selectedTaskId}
+            // Task view (parent/current/sub) highlights only on hover, not the
+            // selected task, to match the component-tasks behavior.
+            highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
             onHoverTask={setHoveredTask}
             onSelectTask={selectTask}
           />
@@ -935,23 +987,32 @@ export default function ComponentPage() {
             segmentsEnabled={segmentsData?.enabled ?? false}
             range={viewRange}
             size={{ width: leftWidth, height: componentHeight }}
+            lineChartHeight={lineChartHeight}
             colorMap={colorMap}
             highlightedKey={highlightedKey}
-            highlightedTaskId={hoveredTask ? String(hoveredTask.id) : selectedTaskId}
+            // Component tasks highlight only on hover — not for the selected task,
+            // which would otherwise dim every other task in the component.
+            highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
             onHoverTask={setHoveredTask}
             onSelectTask={selectTask}
           />
         </div>
       </div>
 
-      <aside className="daisen1-side-column" style={{ width: SIDE_COLUMN_WIDTH }}>
-        <div className="daisen1-location-label">{componentName}</div>
-        {(dataPending || infoLoading || tasksLoading || selectedTaskLoading || parentTaskLoading || childTasksLoading) && (
-          <div className="daisen1-data-status">Updating component data...</div>
-        )}
-        <TaskTooltip task={hoveredTask} />
-        <ComponentLegend colorMap={colorMap} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} />
-      </aside>
+      <SidePanel className="flex select-none flex-col" style={{ width: SIDE_COLUMN_WIDTH }}>
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
+          <h2 className="break-all text-lg font-bold leading-tight">{componentName}</h2>
+          {(dataPending || infoLoading || tasksLoading || selectedTaskLoading || parentTaskLoading || childTasksLoading) && (
+            <span className="shrink-0 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+              Updating…
+            </span>
+          )}
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4">
+          <SelectedTaskSection task={hoveredTask} />
+          <ComponentLegend colorMap={colorMap} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} />
+        </div>
+      </SidePanel>
     </div>
   );
 }
