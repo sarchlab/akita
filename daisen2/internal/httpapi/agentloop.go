@@ -409,6 +409,8 @@ const agentSystemPrompt = `You are DaisenBot, an assistant that investigates Aki
 
 You can call the data_query tool to run read-only SQL over the trace. Use it to gather evidence before answering questions about behavior, bottlenecks, or specific tasks. Every data_query call must include a one-sentence "reason" describing what you are checking — it is shown to the user as your reasoning, so make it clear.
 
+You do NOT have the trace rows in your context. For any question about the trace's contents, timings, counts, or behavior, you MUST gather the facts with data_query first — do not answer such questions from memory or assumption, and never invent task IDs, durations, or counts. Run at least one query before making a quantitative claim.
+
 Front door:
 - If a question is a simple definition or can be answered from the provided context, answer directly without tools.
 - If a question is ambiguous (e.g. which component, which time range), ask ONE concise clarifying question.
@@ -418,28 +420,17 @@ Common Akita bottleneck patterns to consider (seed list — not exhaustive): cac
 
 Be concise and concrete. When you are uncertain, say so and report what you ruled out.`
 
-// assembleAgentMessages builds the message list for an agent-mode request: the
-// agent system prompt, then the user's conversation with the trace-context CSV
-// prepended to the latest message (same context the single-shot path uses).
-func assembleAgentMessages(body chatRequest, reader *SQLiteTraceReader) []map[string]interface{} {
-	traceHeader := buildAkitaTraceHeader(reader, body.TraceInfo)
-
+// assembleAgentMessages builds the message list for an agent-mode request: just
+// the agent system prompt followed by the user's conversation, verbatim. Nothing
+// else is prepended — the agent fetches whatever trace data it needs with
+// data_query rather than being handed context up front.
+func assembleAgentMessages(body chatRequest) []map[string]interface{} {
 	messages := make([]map[string]interface{}, 0, len(body.Messages)+1)
 	messages = append(messages, map[string]interface{}{
 		"role":    "system",
 		"content": agentSystemPrompt,
 	})
-
-	user := body.Messages
-	if traceHeader != "" && len(user) > 0 {
-		if contentArr, ok := user[len(user)-1]["content"].([]interface{}); ok && len(contentArr) > 0 {
-			if firstContent, ok := contentArr[0].(map[string]interface{}); ok {
-				firstText, _ := firstContent["text"].(string)
-				firstContent["text"] = traceHeader + firstText
-			}
-		}
-	}
-	messages = append(messages, user...)
+	messages = append(messages, body.Messages...)
 	return messages
 }
 

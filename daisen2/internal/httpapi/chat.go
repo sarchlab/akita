@@ -84,7 +84,7 @@ func (s *Server) httpChatProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.runAgentSSE(w, r, cfg, assembleAgentMessages(body, s.traceReader))
+	s.runAgentSSE(w, r, cfg, assembleAgentMessages(body))
 }
 
 // resolveProviderConfig builds a ProviderConfig from the request. The endpoint,
