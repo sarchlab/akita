@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useRenderReady } from "./useRenderReady";
 
 export interface TimeValue {
   time: number;
@@ -51,10 +52,16 @@ export function useCompInfo(
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : String(err));
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        // A superseded (aborted) request must not clear loading for the request
+        // that replaced it — that would flip render-ready true while data is stale.
+        if (!controller.signal.aborted) setLoading(false);
+      });
 
     return () => controller.abort();
   }, [compName, infoType, startTime, endTime, numDots]);
+
+  useRenderReady(loading, error !== null);
 
   return { info, loading, error };
 }

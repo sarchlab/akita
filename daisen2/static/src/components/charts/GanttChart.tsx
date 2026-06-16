@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import * as d3 from "d3";
 import type { Segment, Task } from "../../types/task";
 import { assignYIndices } from "../../utils/taskYIndexAssigner";
@@ -11,6 +11,9 @@ interface GanttChartProps {
   parentTask?: Task | null;
   segments?: Segment[];
   segmentsEnabled?: boolean;
+  // Controlled selection: the parent owns which task is highlighted, so the
+  // Gantt's highlight can't drift from the page's selected task / the URL.
+  selectedId?: string | number | null;
   onSelectTask?: (task: Task) => void;
   onOpenTask?: (task: Task) => void;
 }
@@ -48,11 +51,10 @@ export default function GanttChart({
   parentTask = null,
   segments = [],
   segmentsEnabled = false,
+  selectedId = null,
   onSelectTask,
   onOpenTask,
 }: GanttChartProps) {
-  const [selectedId, setSelectedId] = useState<string | number | null>(null);
-
   const layout = useMemo(() => {
     const rows: Task[] = [];
     if (parentTask) rows.push({ ...parentTask, isParentTask: true });
@@ -143,15 +145,12 @@ export default function GanttChart({
         {layout.map((task) => {
           const x = safeScale(xScale, task.start_time);
           const w = Math.max(1, safeScale(xScale, task.end_time) - x);
-          const selected = selectedId === task.id;
+          const selected = selectedId != null && String(selectedId) === String(task.id);
           return (
             <g
               key={`${task.id}-${task.isParentTask ? "parent" : task.isMainTask ? "main" : "task"}`}
               className="cursor-pointer"
-              onClick={() => {
-                setSelectedId(task.id);
-                onSelectTask?.(task);
-              }}
+              onClick={() => onSelectTask?.(task)}
               onDoubleClick={() => onOpenTask?.(task)}
               onKeyDown={(event) => {
                 if ((event.key === "Enter" || event.key === " ") && onOpenTask) {

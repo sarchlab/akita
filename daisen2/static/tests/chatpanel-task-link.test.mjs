@@ -12,5 +12,7 @@ test("task navigation uses same-origin task links", async () => {
   const source = await readFile(new URL("../src/pages/TaskChartPage.tsx", import.meta.url), "utf8");
 
   assert.doesNotMatch(source, new RegExp(escapeRegExp(LOCALHOST_TASK_URL)));
-  assert.match(source, /setSearchParams\(\{\s*id\s*\}\)/);
+  // Task navigation stays same-origin: it sets the `id` param via react-router's
+  // setSearchParams (through the viewState mergeParams helper), never a full URL.
+  assert.match(source, /setSearchParams\(\(prev\) => mergeParams\("\/task", prev, \{ id/);
 });

@@ -16,18 +16,24 @@ import { useSegments } from "../hooks/useSegments";
 import { useSimulationRange } from "../hooks/useSimulationRange";
 import { useTraceData } from "../hooks/useTraceData";
 import type { Task } from "../types/task";
+import { mergeParams } from "../utils/viewState.mjs";
 
 export default function TaskChartPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  // URL is the source of truth for the filters; selectedTask is local because the
+  // detail pane needs the full Task object (its id is mirrored to the `sel` param).
   const taskId = searchParams.get("id") ?? "";
-  const urlComponent = searchParams.get("where") ?? "";
+  const component = searchParams.get("where") ?? "";
+  const kind = searchParams.get("kind") ?? "";
+  const sel = searchParams.get("sel") ?? "";
   const [taskInput, setTaskInput] = useState(taskId);
-  const [component, setComponent] = useState(urlComponent);
-  const [kind, setKind] = useState("");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const { names } = useComponentNames();
   const { startTime, endTime } = useSimulationRange();
   const { data: segmentsData } = useSegments();
+
+  const replaceParams = (patch: Record<string, string | undefined>) =>
+    setSearchParams((prev) => mergeParams("/task", prev, patch), { replace: true });
 
   const mainQuery = useMemo(() => (taskId ? { id: taskId } : {}), [taskId]);
   const { tasks: mainTasks, loading: mainLoading } = useTraceData(mainQuery);
@@ -54,18 +60,46 @@ export default function TaskChartPage() {
 
   const displayTasks = taskId ? childTasks : browseTasks;
 
+  // Keep the task-id input box in sync when the active task changes (e.g. via
+  // back/forward or an external link).
   useEffect(() => {
-    if (mainTask) setSelectedTask(mainTask);
-  }, [mainTask?.id]);
+    setTaskInput(taskId);
+  }, [taskId]);
+
+  // Restore the selected task (the `sel` param) once its data has loaded — in both
+  // browse mode (from the matching tasks) and detail mode (from main/parent/child).
+  // With no `sel`, detail mode defaults to the main task.
+  useEffect(() => {
+    if (sel) {
+      const pool = taskId ? [mainTask, parentTask, ...childTasks] : browseTasks;
+      const found = pool.find((task) => task && String(task.id) === sel);
+      if (found) {
+        setSelectedTask((current) => (current && String(current.id) === sel ? current : found));
+        return;
+      }
+    }
+    if (taskId && mainTask) setSelectedTask(mainTask);
+  }, [sel, taskId, mainTask?.id, parentTask?.id, childTasks, browseTasks]);
+
+  const selectTask = useCallback(
+    (task: Task) => {
+      setSelectedTask(task);
+      setSearchParams((prev) => mergeParams("/task", prev, { sel: String(task.id) }), { replace: true });
+    },
+    [setSearchParams],
+  );
 
   const navigateToTask = useCallback(
     (id: string) => {
-      setSearchParams({ id });
-      setTaskInput(id);
+      // Entering task-detail mode: keep only the task id; drop browse-only filters
+      // and selection so the URL carries no params that don't affect the view.
+      setSearchParams((prev) => mergeParams("/task", prev, { id, where: undefined, kind: undefined, sel: undefined }));
       setSelectedTask(null);
     },
     [setSearchParams],
   );
+
+  const selectedId = selectedTask?.id ?? (sel || null);
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -83,8 +117,9 @@ export default function TaskChartPage() {
             value={component || "__all__"}
             onValueChange={(value) => {
               const next = value === "__all__" ? "" : value;
-              setComponent(next);
-              setSearchParams(next ? { where: next } : {});
+              // Switch to browse mode for the chosen component: drop the active
+              // task id and selection, but keep the kind filter.
+              replaceParams({ where: next || undefined, id: undefined, sel: undefined });
               setSelectedTask(null);
             }}
           >
@@ -100,7 +135,16 @@ export default function TaskChartPage() {
               ))}
             </SelectContent>
           </Select>
-          <Input className="w-44" placeholder="Kind filter" value={kind} onChange={(event) => setKind(event.target.value)} />
+          <Input
+            className="w-44"
+            placeholder="Kind filter"
+            value={kind}
+            onChange={(event) =>
+              // The kind filter only applies to browse mode; typing it leaves
+              // task-detail mode rather than adding a param with no effect.
+              replaceParams({ kind: event.target.value || undefined, id: undefined, sel: undefined })
+            }
+          />
           {(mainLoading || browseLoading) && <span className="text-sm text-muted-foreground">Loading...</span>}
         </form>
 
@@ -111,7 +155,8 @@ export default function TaskChartPage() {
             parentTask={taskId ? parentTask : null}
             segments={segmentsData?.segments ?? []}
             segmentsEnabled={segmentsData?.enabled ?? false}
-            onSelectTask={setSelectedTask}
+            selectedId={selectedId}
+            onSelectTask={selectTask}
             onOpenTask={(task) => navigateToTask(String(task.id))}
           />
         </div>
@@ -127,7 +172,7 @@ export default function TaskChartPage() {
                 key={task.id}
                 type="button"
                 className="block w-full rounded-md border bg-white p-2 text-left text-xs hover:bg-muted"
-                onClick={() => setSelectedTask(task)}
+                onClick={() => selectTask(task)}
                 onDoubleClick={() => navigateToTask(String(task.id))}
               >
                 <div className="font-medium">{task.kind}</div>
