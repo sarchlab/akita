@@ -215,6 +215,83 @@
   .chat-markdown pre code {
     @apply bg-transparent p-0 text-slate-100;
   }
+
+  .chat-markdown table {
+    @apply my-2 block w-max max-w-full border-collapse overflow-x-auto text-xs;
+  }
+
+  .chat-markdown th,
+  .chat-markdown td {
+    @apply border border-border px-2 py-1 text-left align-top;
+  }
+
+  .chat-markdown thead th {
+    @apply bg-muted font-semibold;
+  }
+
+  .chat-markdown tbody tr:nth-child(even) {
+    @apply bg-muted/40;
+  }
+
+  /* markdown-it emits semantic block elements; Tailwind's preflight strips their
+     default styling, so restore readable spacing/markers for the chat. */
+  .chat-markdown p {
+    @apply my-1.5;
+  }
+
+  .chat-markdown h1,
+  .chat-markdown h2,
+  .chat-markdown h3,
+  .chat-markdown h4,
+  .chat-markdown h5,
+  .chat-markdown h6 {
+    @apply mb-1 mt-2 font-semibold;
+  }
+
+  .chat-markdown h1 {
+    @apply text-base;
+  }
+
+  .chat-markdown h2 {
+    @apply text-[0.95rem];
+  }
+
+  .chat-markdown ul,
+  .chat-markdown ol {
+    @apply my-1.5 ps-5;
+  }
+
+  .chat-markdown ul {
+    @apply list-disc;
+  }
+
+  .chat-markdown ol {
+    @apply list-decimal;
+  }
+
+  .chat-markdown li {
+    @apply my-0.5;
+  }
+
+  .chat-markdown blockquote {
+    @apply my-2 border-l-2 border-border ps-3 text-muted-foreground;
+  }
+
+  .chat-markdown a {
+    @apply font-medium text-primary underline underline-offset-2;
+  }
+
+  .chat-markdown hr {
+    @apply my-3 border-border;
+  }
+
+  .chat-markdown :first-child {
+    @apply mt-0;
+  }
+
+  .chat-markdown :last-child {
+    @apply mb-0;
+  }
 }
 
 @keyframes daisen-widget-spin {

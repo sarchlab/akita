@@ -498,37 +498,6 @@ func calculateTimeWeightedBins( //nolint:funlen
 	return data
 }
 
-// buildAkitaTraceHeader builds a CSV header from trace data for GPT context.
-func buildAkitaTraceHeader(traceReader *SQLiteTraceReader, traceInfo map[string]interface{}) string {
-	if traceReader == nil {
-		return ""
-	}
-
-	selected, _ := traceInfo["selected"].(float64)
-	if selected == 0 {
-		return ""
-	}
-	startTime, _ := traceInfo["startTime"].(float64)
-	endTime, _ := traceInfo["endTime"].(float64)
-	selectedComponentNameList, _ := traceInfo["selectedComponentNameList"].([]interface{})
-	locations := extractLocations(selectedComponentNameList)
-	if len(locations) == 0 {
-		return ""
-	}
-	sqlStr := buildTraceSQL(locations, startTime, endTime)
-	return formatTraceRows(traceReader, sqlStr)
-}
-
-func extractLocations(selectedComponentNameList []interface{}) []string {
-	locations := make([]string, 0, len(selectedComponentNameList))
-	for _, v := range selectedComponentNameList {
-		if s, ok := v.(string); ok {
-			locations = append(locations, s)
-		}
-	}
-	return locations
-}
-
 // maxTraceContextRows caps how many trace events get embedded in the chat
 // context. The full trace can be hundreds of thousands of rows, which both pegs
 // the server (building the string) and overruns the model's context window, so

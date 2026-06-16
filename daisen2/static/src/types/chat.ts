@@ -2,9 +2,20 @@ export type UnitContent =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
 
+// AgentStep is one entry in the agent's visible trail (Phase 2): either a tool
+// invocation (tool/args/observation) or an intermediate reasoning note (thinking).
+export interface AgentStep {
+  tool?: string;
+  args?: string;
+  observation?: string;
+  thinking?: string;
+  image?: string; // data URL of a captured view (daisen_view / screenshot)
+}
+
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: UnitContent[];
+  steps?: AgentStep[];
 }
 
 export interface UploadedFile {

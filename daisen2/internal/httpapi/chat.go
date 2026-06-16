@@ -1,12 +1,10 @@
 package httpapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -60,9 +58,9 @@ const providerConfigHelp = "[Daisen Bot is not configured] No model or endpoint 
 	"Open Settings (the gear in the chat panel) and enter your provider, model, " +
 	"base URL, and API key.\n"
 
-// httpChatProxy proxies a chat request to the configured LLM provider. It reads
-// the provider config from the request, assembles the trace/system context, then
-// lets the selected provider build the outbound request and relay the response.
+// httpChatProxy runs DaisenBot's streamed, multi-step tool-calling loop. It reads
+// the provider config from the request, assembles the agent system prompt + trace
+// context, and streams the loop's steps and answer back as Server-Sent Events.
 func (s *Server) httpChatProxy(w http.ResponseWriter, r *http.Request) {
 	var body chatRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -81,32 +79,12 @@ func (s *Server) httpChatProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	provider, err := newChatProvider(cfg.Provider)
-	if err != nil {
+	if _, err := newChatProvider(cfg.Provider); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	messages := assembleMessages(body, s.traceReader)
-
-	outReq, err := provider.BuildRequest(r.Context(), cfg, messages)
-	if err != nil {
-		http.Error(w, "Failed to build provider request: "+err.Error(),
-			http.StatusInternalServerError)
-		return
-	}
-
-	resp, err := guardedLLMClient.Do(outReq)
-	if err != nil {
-		http.Error(w, "Failed to contact LLM provider: "+err.Error(),
-			http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
-	if err := provider.RelayResponse(w, resp); err != nil {
-		log.Println("Failed to relay LLM response:", err)
-	}
+	s.runAgentSSE(w, r, cfg, assembleAgentMessages(body))
 }
 
 // resolveProviderConfig builds a ProviderConfig from the request. The endpoint,
@@ -314,51 +292,10 @@ var guardedLLMClient = &http.Client{
 	},
 }
 
-// assembleMessages prepends the trace-context CSV and the system prompt to the
-// conversation. A missing beforehandprompt.txt degrades gracefully rather than
-// failing the request.
-func assembleMessages(body chatRequest, traceReader *SQLiteTraceReader) []map[string]interface{} {
-	traceHeader := buildAkitaTraceHeader(traceReader, body.TraceInfo)
-
-	messages := body.Messages
-	if len(messages) > 0 {
-		if contentArr, ok := messages[len(messages)-1]["content"].([]interface{}); ok && len(contentArr) > 0 {
-			if firstContent, ok := contentArr[0].(map[string]interface{}); ok {
-				firstText, _ := firstContent["text"].(string)
-				firstContent["text"] = traceHeader + firstText
-			}
-		}
-	}
-
-	if len(messages) == 0 || messages[0]["role"] != "system" {
-		if loadedTextBytes, err := os.ReadFile("beforehandprompt.txt"); err != nil {
-			log.Println("Skipping system prompt:", err)
-		} else {
-			systemMsg := map[string]interface{}{
-				"role": "system",
-				"content": []interface{}{
-					map[string]interface{}{
-						"type": "text",
-						"text": string(loadedTextBytes),
-					},
-				},
-			}
-			messages = append([]map[string]interface{}{systemMsg}, messages...)
-		}
-	}
-
-	return messages
-}
-
-// ChatProvider serializes assembled messages into a provider-specific HTTP
-// request and relays the provider's response to the client. OpenAI-compatible
-// is the only implementation today; adding Anthropic is a new ChatProvider, not
-// a change to the handler or context assembly.
+// ChatProvider discovers the models an endpoint advertises. OpenAI-compatible is
+// the only implementation today; the agent loop itself speaks the OpenAI
+// /chat/completions protocol directly (see callProvider in agentloop.go).
 type ChatProvider interface {
-	BuildRequest(
-		ctx context.Context, cfg ProviderConfig, messages []map[string]interface{},
-	) (*http.Request, error)
-	RelayResponse(w http.ResponseWriter, resp *http.Response) error
 	// ListModels returns the model IDs the endpoint advertises, or an error if
 	// discovery is unsupported or fails.
 	ListModels(ctx context.Context, cfg ProviderConfig) ([]string, error)
@@ -383,43 +320,6 @@ func (e *unsupportedProviderError) Error() string {
 // openAICompatibleProvider talks to any endpoint that implements the OpenAI
 // /chat/completions API.
 type openAICompatibleProvider struct{}
-
-func (openAICompatibleProvider) BuildRequest(
-	ctx context.Context, cfg ProviderConfig, messages []map[string]interface{},
-) (*http.Request, error) {
-	payload := map[string]interface{}{
-		"model":    cfg.Model,
-		"messages": messages,
-	}
-	// Only send temperature when explicitly set; otherwise let the model use its
-	// default (reasoning models reject anything but the default).
-	if cfg.Temperature != nil {
-		payload["temperature"] = *cfg.Temperature
-	}
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", cfg.BaseURL, bytes.NewReader(payloadBytes))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if cfg.APIKey != "" {
-		req.Header.Set("Authorization", bearerToken(cfg.APIKey))
-	}
-	return req, nil
-}
-
-func (openAICompatibleProvider) RelayResponse(w http.ResponseWriter, resp *http.Response) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	// Stream straight through with a ceiling so a hostile endpoint can't make us
-	// buffer (or relay) an unbounded body.
-	_, err := io.Copy(w, io.LimitReader(resp.Body, maxChatResponseBytes))
-	return err
-}
 
 func (openAICompatibleProvider) ListModels(ctx context.Context, cfg ProviderConfig) ([]string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", deriveModelsURL(cfg.BaseURL), nil)

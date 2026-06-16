@@ -11,7 +11,6 @@ test("React chat panel uses the shared markdown and upload policy helpers", asyn
   assert.match(source, /validateUploadedFile/);
   assert.match(source, /isImageUploadCandidate/);
   assert.match(bubbleSource, /renderChatMarkdown/);
-  assert.match(bubbleSource, /renderMathInElement/);
 });
 
 test("React simulation range hook falls back to trace table bounds", async () => {

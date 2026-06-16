@@ -1,10 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
-import type { ChatMessage, LLMSettings, TraceInformation, UnitContent, UploadedFile } from "../types/chat";
-
-const INITIAL_MESSAGE: ChatMessage = {
-  role: "assistant",
-  content: [{ type: "text", text: "Hello! What can I help you with today?" }],
-};
+import type { AgentStep, ChatMessage, LLMSettings, TraceInformation, UnitContent, UploadedFile } from "../types/chat";
+import { captureCurrentView, captureUrl } from "../utils/captureView";
 
 function contentTitle(content: UnitContent[]) {
   const firstText = content.find((unit) => unit.type === "text");
@@ -14,10 +10,10 @@ function contentTitle(content: UnitContent[]) {
 }
 
 export function useChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_MESSAGE]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatHistory, setChatHistory] = useState<
     { id: string; title: string; messages: ChatMessage[]; timestamp: number }[]
-  >([{ id: "chat_1", title: "New Chat", messages: [INITIAL_MESSAGE], timestamp: Date.now() }]);
+  >([{ id: "chat_1", title: "New Chat", messages: [], timestamp: Date.now() }]);
   const [currentChatId, setCurrentChatId] = useState("chat_1");
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -46,10 +42,10 @@ export function useChat() {
   const newChat = useCallback(() => {
     saveCurrent();
     const id = `chat_${Date.now()}`;
-    const chat = { id, title: "New Chat", messages: [INITIAL_MESSAGE], timestamp: Date.now() };
+    const chat = { id, title: "New Chat", messages: [], timestamp: Date.now() };
     setChatHistory((history) => [...history, chat]);
     setCurrentChatId(id);
-    setMessages([INITIAL_MESSAGE]);
+    setMessages([]);
   }, [saveCurrent]);
 
   const loadChat = useCallback(
@@ -68,7 +64,7 @@ export function useChat() {
       setChatHistory((history) => {
         const remaining = history.filter((entry) => entry.id !== id);
         if (id === currentChatId) {
-          const next = remaining[0] ?? { id: "chat_1", title: "New Chat", messages: [INITIAL_MESSAGE], timestamp: Date.now() };
+          const next = remaining[0] ?? { id: "chat_1", title: "New Chat", messages: [], timestamp: Date.now() };
           setCurrentChatId(next.id);
           setMessages(next.messages);
           return remaining.length ? remaining : [next];
@@ -97,22 +93,120 @@ export function useChat() {
           method: "POST",
           headers,
           body: JSON.stringify({
-            messages: nextMessages,
+            // Send only valid chat-completions fields. `steps` is UI-only metadata
+            // (the agent trail) that the server forwards verbatim to the provider,
+            // and some providers reject unknown message fields.
+            messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
             traceInfo,
             provider: llm.provider,
             baseURL: llm.baseURL,
             model: llm.model,
+            // Agent mode: the server runs a streamed tool-calling loop and replies
+            // with Server-Sent Events. It falls back to a single answer internally
+            // for models without tool support.
+            agent: true,
           }),
         });
-        const data = response.ok ? await response.json() : { choices: [{ message: { content: await response.text() } }] };
-        const assistantText = data?.choices?.[0]?.message?.content ?? "No response from Daisen Bot.";
-        const assistantMessage: ChatMessage = {
-          role: "assistant",
-          content: [{ type: "text", text: assistantText }],
+
+        const isStream = response.ok && response.body &&
+          (response.headers.get("content-type") ?? "").includes("text/event-stream");
+
+        if (!isStream) {
+          // Error or a non-streamed body — surface it as the assistant message.
+          const text = await response.text();
+          const finalMessages: ChatMessage[] = [
+            ...nextMessages,
+            { role: "assistant", content: [{ type: "text", text: text || "No response from Daisen Bot." }] },
+          ];
+          setMessages(finalMessages);
+          saveCurrent(finalMessages);
+          return;
+        }
+
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        const steps: AgentStep[] = [];
+        let finalText = "";
+
+        const render = (): ChatMessage[] => {
+          const assistantMessage: ChatMessage = {
+            role: "assistant",
+            content: [{ type: "text", text: finalText }],
+            steps: steps.length ? steps.map((s) => ({ ...s })) : undefined,
+          };
+          const working = [...nextMessages, assistantMessage];
+          setMessages(working);
+          return working;
         };
-        const finalMessages = [...nextMessages, assistantMessage];
-        setMessages(finalMessages);
-        saveCurrent(finalMessages);
+
+        let working = render();
+
+        // Phase 5: the backend asks the browser to capture an image (a screenshot
+        // of the current view, or an off-screen render of a Daisen URL); we capture
+        // it, show it in the trail, and POST it back so the loop can resume.
+        const handleRender = async (captureId: string, kind: string, url: string, stepIdx: number) => {
+          let image = "";
+          try {
+            image = kind === "view" ? await captureUrl(url) : await captureCurrentView();
+          } catch {
+            image = "";
+          }
+          if (image && steps[stepIdx]) {
+            steps[stepIdx].image = image;
+            working = render();
+          }
+          try {
+            await fetch("/api/agent/capture", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: captureId, image }),
+            });
+          } catch {
+            // The backend times out and the loop continues without the image.
+          }
+        };
+
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let sep: number;
+          while ((sep = buffer.indexOf("\n\n")) !== -1) {
+            const rawEvent = buffer.slice(0, sep);
+            buffer = buffer.slice(sep + 2);
+            const dataLine = rawEvent.split("\n").find((l) => l.startsWith("data:"));
+            if (!dataLine) continue;
+            let ev: {
+              type: string;
+              tool?: string;
+              args?: string;
+              observation?: string;
+              text?: string;
+              error?: string;
+              captureId?: string;
+              renderKind?: string;
+              url?: string;
+            };
+            try {
+              ev = JSON.parse(dataLine.slice(5).trim());
+            } catch {
+              continue;
+            }
+            if (ev.type === "thinking") steps.push({ thinking: ev.text });
+            else if (ev.type === "step") steps.push({ tool: ev.tool ?? "tool", args: ev.args });
+            else if (ev.type === "observation") {
+              const last = steps[steps.length - 1];
+              if (last && last.tool) last.observation = ev.observation;
+            } else if (ev.type === "message") finalText = ev.text ?? finalText;
+            else if (ev.type === "error") finalText = (finalText ? finalText + "\n\n" : "") + "Error: " + (ev.error ?? "unknown");
+            else if (ev.type === "render") {
+              void handleRender(ev.captureId ?? "", ev.renderKind ?? "screenshot", ev.url ?? "", steps.length - 1);
+            }
+            working = render();
+          }
+        }
+        saveCurrent(working);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
