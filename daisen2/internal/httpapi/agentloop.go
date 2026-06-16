@@ -159,13 +159,20 @@ func callProvider(
 	}
 
 	m := parsed.Choices[0].Message
+	return assistantMessageFromOAI(m.Role, m.Content, m.ToolCalls), m.ToolCalls, m.Content, nil
+}
+
+// assistantMessageFromOAI converts a parsed OpenAI assistant message into the map
+// we append to the conversation, preserving any tool_calls so the next request is
+// well-formed.
+func assistantMessageFromOAI(_ string, content string, toolCalls []oaiToolCall) map[string]interface{} {
 	msg := map[string]interface{}{"role": "assistant"}
-	if m.Content != "" {
-		msg["content"] = m.Content
+	if content != "" {
+		msg["content"] = content
 	}
-	if len(m.ToolCalls) > 0 {
-		tcs := make([]interface{}, len(m.ToolCalls))
-		for i, tc := range m.ToolCalls {
+	if len(toolCalls) > 0 {
+		tcs := make([]interface{}, len(toolCalls))
+		for i, tc := range toolCalls {
 			tcs[i] = map[string]interface{}{
 				"id":   tc.ID,
 				"type": "function",
@@ -177,7 +184,7 @@ func callProvider(
 		}
 		msg["tool_calls"] = tcs
 	}
-	return msg, m.ToolCalls, m.Content, nil
+	return msg
 }
 
 // runAgentLoop drives the multi-step tool-calling loop, emitting events as it
@@ -223,52 +230,7 @@ func runAgentLoop(
 		}
 
 		messages = append(messages, msg)
-
-		// Every tool_call in the assistant message must be answered by a tool
-		// message immediately after it, before any other role. So append ALL tool
-		// responses first, then attach any captured images as a single follow-up
-		// user message — inserting the image user message between tool responses
-		// makes the provider reject the request (unanswered tool_call_id).
-		var imageParts []interface{}
-		for _, tc := range toolCalls {
-			// Respect the overall tool-call budget even within a single batched
-			// turn (a model can emit many tool_calls at once). We must still answer
-			// every tool_call_id with a tool message or the next provider request is
-			// invalid, so reply with a stub instead of executing real work.
-			if toolCallCount >= maxAgentToolCalls {
-				emit(agentEvent{Type: "observation", Tool: tc.Function.Name, Observation: "tool-call budget exhausted; skipped"})
-				messages = append(messages, map[string]interface{}{
-					"role":         "tool",
-					"tool_call_id": tc.ID,
-					"content":      "Skipped: tool-call budget exhausted. Answer with the evidence gathered so far.",
-				})
-				continue
-			}
-			toolCallCount++
-			emit(agentEvent{Type: "step", Tool: tc.Function.Name, Args: tc.Function.Arguments})
-
-			result := dispatchTool(ctx, toolByName, tc)
-			emit(agentEvent{Type: "observation", Tool: tc.Function.Name, Observation: clip(result.text, 600)})
-			messages = append(messages, map[string]interface{}{
-				"role":         "tool",
-				"tool_call_id": tc.ID,
-				"content":      result.text,
-			})
-			for _, img := range result.images {
-				imageParts = append(imageParts, map[string]interface{}{
-					"type":      "image_url",
-					"image_url": map[string]interface{}{"url": img},
-				})
-			}
-		}
-		// Images can't ride in a tool message (OpenAI schema), so attach them after
-		// all tool responses as one multimodal user message (needs a vision model).
-		if len(imageParts) > 0 {
-			content := append([]interface{}{
-				map[string]interface{}{"type": "text", "text": "Captured view(s):"},
-			}, imageParts...)
-			messages = append(messages, map[string]interface{}{"role": "user", "content": content})
-		}
+		messages = runToolCalls(ctx, toolByName, toolCalls, &toolCallCount, emit, messages)
 	}
 
 	// Iteration budget exhausted: force a final answer from the evidence so far.
@@ -278,6 +240,64 @@ func runAgentLoop(
 	}
 	emit(agentEvent{Type: "message", Text: content})
 	return nil
+}
+
+// runToolCalls executes one assistant turn's batch of tool calls, appending the
+// resulting messages to messages and returning the extended slice. Every tool_call
+// in the assistant message must be answered by a tool message immediately after it,
+// before any other role. So it appends ALL tool responses first, then attaches any
+// captured images as a single follow-up user message — inserting the image user
+// message between tool responses makes the provider reject the request (unanswered
+// tool_call_id). toolCallCount is incremented in place as the budget is consumed.
+func runToolCalls(
+	ctx context.Context,
+	toolByName map[string]agentTool,
+	toolCalls []oaiToolCall,
+	toolCallCount *int,
+	emit emitFunc,
+	messages []map[string]interface{},
+) []map[string]interface{} {
+	var imageParts []interface{}
+	for _, tc := range toolCalls {
+		// Respect the overall tool-call budget even within a single batched
+		// turn (a model can emit many tool_calls at once). We must still answer
+		// every tool_call_id with a tool message or the next provider request is
+		// invalid, so reply with a stub instead of executing real work.
+		if *toolCallCount >= maxAgentToolCalls {
+			emit(agentEvent{Type: "observation", Tool: tc.Function.Name, Observation: "tool-call budget exhausted; skipped"})
+			messages = append(messages, map[string]interface{}{
+				"role":         "tool",
+				"tool_call_id": tc.ID,
+				"content":      "Skipped: tool-call budget exhausted. Answer with the evidence gathered so far.",
+			})
+			continue
+		}
+		*toolCallCount++
+		emit(agentEvent{Type: "step", Tool: tc.Function.Name, Args: tc.Function.Arguments})
+
+		result := dispatchTool(ctx, toolByName, tc)
+		emit(agentEvent{Type: "observation", Tool: tc.Function.Name, Observation: clip(result.text, 600)})
+		messages = append(messages, map[string]interface{}{
+			"role":         "tool",
+			"tool_call_id": tc.ID,
+			"content":      result.text,
+		})
+		for _, img := range result.images {
+			imageParts = append(imageParts, map[string]interface{}{
+				"type":      "image_url",
+				"image_url": map[string]interface{}{"url": img},
+			})
+		}
+	}
+	// Images can't ride in a tool message (OpenAI schema), so attach them after
+	// all tool responses as one multimodal user message (needs a vision model).
+	if len(imageParts) > 0 {
+		content := append([]interface{}{
+			map[string]interface{}{"type": "text", "text": "Captured view(s):"},
+		}, imageParts...)
+		messages = append(messages, map[string]interface{}{"role": "user", "content": content})
+	}
+	return messages
 }
 
 func dispatchTool(ctx context.Context, byName map[string]agentTool, tc oaiToolCall) toolResult {
@@ -313,14 +333,16 @@ const (
 	dataQueryTimeout = 15 * time.Second
 )
 
-const dataQueryDescription = `Run a single read-only SQL query (SELECT or WITH only) over the Akita trace and get the rows back as CSV.
+const dataQueryDescription = `Run a single read-only SQL query (SELECT or WITH only) over the Akita trace
+and get the rows back as CSV.
 
 Schema:
 - trace(ID, ParentID, Kind, What, Location, StartTime, EndTime) — one row per task/event. Location is an interned id.
 - location(ID, Locale) — Locale is the human-readable component name; join trace.Location = location.ID.
 - milestone(...) — sub-events attached to tasks (may be absent in some traces).
 
-Notes: times are raw trace values; results are capped at 1000 rows. Prefer aggregates (COUNT, AVG, MIN, MAX, GROUP BY) over dumping rows.`
+Notes: times are raw trace values; results are capped at 1000 rows. Prefer aggregates
+(COUNT, AVG, MIN, MAX, GROUP BY) over dumping rows.`
 
 func dataQueryTool(reader *SQLiteTraceReader) agentTool {
 	return agentTool{
@@ -400,7 +422,7 @@ func runDataQuery(ctx context.Context, reader *SQLiteTraceReader, query string) 
 	if _, err := conn.ExecContext(qctx, "PRAGMA query_only = ON"); err != nil {
 		return "", fmt.Errorf("query failed: %w", err)
 	}
-	defer func() { _, _ = conn.ExecContext(context.Background(), "PRAGMA query_only = OFF") }()
+	defer func() { _, _ = conn.ExecContext(qctx, "PRAGMA query_only = OFF") }()
 
 	rows, err := conn.QueryContext(qctx, safe)
 	if err != nil {
@@ -494,23 +516,37 @@ func rawCellToString(v interface{}) string {
 
 // ---- Agent system prompt & message assembly ----
 
-const agentSystemPrompt = `You are DaisenBot, an assistant that investigates Akita computer-architecture simulation traces.
+const agentSystemPrompt = `You are DaisenBot, an assistant that investigates Akita
+computer-architecture simulation traces.
 
-You can call the data_query tool to run read-only SQL over the trace. Use it to gather evidence before answering questions about behavior, bottlenecks, or specific tasks. Every data_query call must include a one-sentence "reason" describing what you are checking — it is shown to the user as your reasoning, so make it clear.
+You can call the data_query tool to run read-only SQL over the trace. Use it to gather evidence
+before answering questions about behavior, bottlenecks, or specific tasks. Every data_query call
+must include a one-sentence "reason" describing what you are checking — it is shown to the user
+as your reasoning, so make it clear.
 
-You do NOT have the trace rows in your context. For any question about the trace's contents, timings, counts, or behavior, you MUST gather the facts with data_query first — do not answer such questions from memory or assumption, and never invent task IDs, durations, or counts. Run at least one query before making a quantitative claim.
+You do NOT have the trace rows in your context. For any question about the trace's contents,
+timings, counts, or behavior, you MUST gather the facts with data_query first — do not answer
+such questions from memory or assumption, and never invent task IDs, durations, or counts. Run
+at least one query before making a quantitative claim.
 
 You can also SEE Daisen's visualizations:
 - screenshot_current_view: capture what the user is currently looking at on screen, and look at it.
-- daisen_view: render a specific Daisen view off-screen by its URL and look at it. URL scheme: "/dashboard?widget=<component>&starttime=<t>&endtime=<t>&primary=<metric>&secondary=<metric>"; "/component?name=<component>&taskid=<id>&starttime=<t>&endtime=<t>"; "/task?id=<taskid>&where=<component>&kind=<kind>". Times are raw trace values.
-Use these when a question is about visual patterns (timelines, bursts, periodicity, occupancy shapes) that are easier to see than to query. Both take a one-sentence "reason".
+- daisen_view: render a specific Daisen view off-screen by its URL and look at it. URL scheme:
+"/dashboard?widget=<component>&starttime=<t>&endtime=<t>&primary=<metric>&secondary=<metric>";
+"/component?name=<component>&taskid=<id>&starttime=<t>&endtime=<t>";
+"/task?id=<taskid>&where=<component>&kind=<kind>". Times are raw trace values.
+Use these when a question is about visual patterns (timelines, bursts, periodicity, occupancy
+shapes) that are easier to see than to query. Both take a one-sentence "reason".
 
 Front door:
 - If a question is a simple definition or can be answered from the provided context, answer directly without tools.
 - If a question is ambiguous (e.g. which component, which time range), ask ONE concise clarifying question.
-- Otherwise, investigate: form a hypothesis, run targeted data_query calls to confirm or refute it, then answer with the evidence (cite the numbers you found). Prefer aggregates over dumping rows.
+- Otherwise, investigate: form a hypothesis, run targeted data_query calls to confirm or refute it,
+then answer with the evidence (cite the numbers you found). Prefer aggregates over dumping rows.
 
-Common Akita bottleneck patterns to consider (seed list — not exhaustive): cache miss/thrashing, queue backpressure / buffer-full stalls, limited outstanding requests (MSHRs), DRAM bank conflicts, bandwidth saturation, head-of-line blocking, and address-translation (TLB) stalls.
+Common Akita bottleneck patterns to consider (seed list — not exhaustive): cache miss/thrashing,
+queue backpressure / buffer-full stalls, limited outstanding requests (MSHRs), DRAM bank conflicts,
+bandwidth saturation, head-of-line blocking, and address-translation (TLB) stalls.
 
 Be concise and concrete. When you are uncertain, say so and report what you ruled out.`
 
@@ -669,8 +705,9 @@ func (s *Server) httpAgentCapture(w http.ResponseWriter, r *http.Request) {
 
 func screenshotTool(capture captureRequester) agentTool {
 	return agentTool{
-		name:        "screenshot_current_view",
-		description: "Capture a screenshot of what the user is currently looking at on screen in Daisen, and see it. Use this to ground your analysis in the user's current view.",
+		name: "screenshot_current_view",
+		description: "Capture a screenshot of what the user is currently looking at on screen in Daisen, " +
+			"and see it. Use this to ground your analysis in the user's current view.",
 		parameters: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -693,8 +730,10 @@ func screenshotTool(capture captureRequester) agentTool {
 
 func daisenViewTool(capture captureRequester) agentTool {
 	return agentTool{
-		name:        "daisen_view",
-		description: "Render a specific Daisen view off-screen by its URL and see it as an image. Examples: \"/component?name=L2Cache&starttime=0&endtime=379102000\", \"/dashboard?widget=L2Cache\", \"/task?id=<taskid>\". Use it to inspect a chart or timeline you have not been shown.",
+		name: "daisen_view",
+		description: "Render a specific Daisen view off-screen by its URL and see it as an image. Examples: " +
+			"\"/component?name=L2Cache&starttime=0&endtime=379102000\", \"/dashboard?widget=L2Cache\", " +
+			"\"/task?id=<taskid>\". Use it to inspect a chart or timeline you have not been shown.",
 		parameters: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{

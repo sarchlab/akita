@@ -53,7 +53,8 @@ func TestSanitizeReadonlySQL(t *testing.T) {
 		t.Errorf("expected injected LIMIT, got %q", got)
 	}
 
-	if got, _ := sanitizeReadonlySQL("SELECT * FROM trace LIMIT 5", 100); strings.Count(strings.ToUpper(got), "LIMIT") != 1 {
+	got, _ := sanitizeReadonlySQL("SELECT * FROM trace LIMIT 5", 100)
+	if strings.Count(strings.ToUpper(got), "LIMIT") != 1 {
 		t.Errorf("must not double-inject LIMIT: %q", got)
 	}
 
@@ -67,7 +68,8 @@ func TestRunDataQuery(t *testing.T) {
 	seedAgentTrace(t, reader)
 
 	out, err := runDataQuery(context.Background(), reader,
-		"SELECT loc.Locale, COUNT(*) AS n FROM trace t JOIN location loc ON t.Location = loc.ID GROUP BY loc.Locale ORDER BY loc.Locale")
+		"SELECT loc.Locale, COUNT(*) AS n FROM trace t JOIN location loc ON t.Location = loc.ID "+
+			"GROUP BY loc.Locale ORDER BY loc.Locale")
 	if err != nil {
 		t.Fatalf("data_query: %v", err)
 	}
@@ -142,7 +144,7 @@ func TestFormatRowsByteCap(t *testing.T) {
 // TestRunAgentLoop_MockProvider is the end-to-end "preview": a scripted mock LLM
 // drives the real loop against a real trace DB. Turn 1 asks for a data_query;
 // the loop runs the SQL; turn 2 returns the final answer from the observation.
-func TestRunAgentLoop_MockProvider(t *testing.T) {
+func TestRunAgentLoop_MockProvider(t *testing.T) { //nolint:funlen // end-to-end test with scripted mock server
 	// Allow the loopback httptest server through the SSRF-guarded dialer.
 	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1")
 	reader := newTestTraceReader(t)
@@ -161,11 +163,13 @@ func TestRunAgentLoop_MockProvider(t *testing.T) {
 			io.WriteString(w, `{"choices":[{"message":{"role":"assistant",`+
 				`"content":"Let me check the per-component task counts.",`+
 				`"tool_calls":[{"id":"c1","type":"function","function":{"name":"data_query",`+
-				`"arguments":"{\"sql\":\"SELECT loc.Locale, COUNT(*) AS n FROM trace t JOIN location loc ON t.Location=loc.ID GROUP BY loc.Locale\"}"}}]}}]}`)
+				`"arguments":"{\"sql\":\"SELECT loc.Locale, COUNT(*) AS n FROM trace t `+
+				`JOIN location loc ON t.Location=loc.ID GROUP BY loc.Locale\"}"}}]}}]}`)
 			return
 		}
 		// Second turn: the conversation now carries the tool result.
-		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"L2Cache handled 2 tasks; L1Cache handled 1."}}]}`)
+		io.WriteString(w, `{"choices":[{"message":{"role":"assistant",`+
+			`"content":"L2Cache handled 2 tasks; L1Cache handled 1."}}]}`)
 	}))
 	defer srv.Close()
 
@@ -232,7 +236,8 @@ func TestHTTPChatProxyAgentSSE(t *testing.T) {
 		if calls == 1 {
 			io.WriteString(w, `{"choices":[{"message":{"role":"assistant","tool_calls":[`+
 				`{"id":"c1","type":"function","function":{"name":"data_query",`+
-				`"arguments":"{\"sql\":\"SELECT loc.Locale, COUNT(*) AS n FROM trace t JOIN location loc ON t.Location=loc.ID GROUP BY loc.Locale\"}"}}]}}]}`)
+				`"arguments":"{\"sql\":\"SELECT loc.Locale, COUNT(*) AS n FROM trace t `+
+				`JOIN location loc ON t.Location=loc.ID GROUP BY loc.Locale\"}"}}]}}]}`)
 			return
 		}
 		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"L2Cache handled 2 tasks."}}]}`)
@@ -240,7 +245,7 @@ func TestHTTPChatProxyAgentSSE(t *testing.T) {
 	defer srv.Close()
 
 	s := &Server{traceReader: reader}
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, err := json.Marshal(map[string]interface{}{
 		"agent":    true,
 		"provider": "openai-compatible",
 		"baseURL":  srv.URL,
@@ -249,6 +254,9 @@ func TestHTTPChatProxyAgentSSE(t *testing.T) {
 			{"role": "user", "content": []map[string]interface{}{{"type": "text", "text": "tasks per component?"}}},
 		},
 	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
 	req := httptest.NewRequest("POST", "/api/gpt", bytes.NewReader(reqBody))
 	rec := httptest.NewRecorder()
 
@@ -269,7 +277,7 @@ func TestHTTPChatProxyAgentSSE(t *testing.T) {
 // model asks for daisen_view, the loop emits a `render` event, the test (playing
 // the browser) POSTs an image to /api/agent/capture, and the loop resumes with
 // the image as a multimodal observation and produces the final answer.
-func TestAgentCaptureRoundTrip(t *testing.T) {
+func TestAgentCaptureRoundTrip(t *testing.T) { //nolint:funlen // end-to-end test with scripted mock server
 	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1")
 	reader := newTestTraceReader(t)
 	seedAgentTrace(t, reader)
@@ -298,7 +306,7 @@ func TestAgentCaptureRoundTrip(t *testing.T) {
 	daisen := httptest.NewServer(mux)
 	defer daisen.Close()
 
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, err := json.Marshal(map[string]interface{}{
 		"provider": "openai-compatible",
 		"baseURL":  llm.URL,
 		"model":    "mock",
@@ -306,6 +314,9 @@ func TestAgentCaptureRoundTrip(t *testing.T) {
 			{"role": "user", "content": []map[string]interface{}{{"type": "text", "text": "look at L2Cache"}}},
 		},
 	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
 	resp, err := http.Post(daisen.URL+"/api/gpt", "application/json", bytes.NewReader(reqBody))
 	if err != nil {
 		t.Fatalf("POST /api/gpt: %v", err)
@@ -332,10 +343,17 @@ func TestAgentCaptureRoundTrip(t *testing.T) {
 				t.Errorf("unexpected render event: %v", ev)
 			}
 			// Play the browser: POST a (fake) captured image.
-			cap, _ := json.Marshal(map[string]string{"id": id, "image": "data:image/png;base64,AAAA"})
-			if _, err := http.Post(daisen.URL+"/api/agent/capture", "application/json", bytes.NewReader(cap)); err != nil {
-				t.Errorf("POST capture: %v", err)
+			capBody, err := json.Marshal(map[string]string{"id": id, "image": "data:image/png;base64,AAAA"})
+			if err != nil {
+				t.Errorf("marshal capture: %v", err)
+				continue
 			}
+			capResp, err := http.Post(daisen.URL+"/api/agent/capture", "application/json", bytes.NewReader(capBody))
+			if err != nil {
+				t.Errorf("POST capture: %v", err)
+				continue
+			}
+			capResp.Body.Close()
 		case "message":
 			sawMessage = true
 		}
@@ -359,7 +377,7 @@ func TestAgentCaptureRoundTrip(t *testing.T) {
 // assistant turn makes several tool calls and one returns an image, every tool
 // response must immediately follow the assistant message — the image user message
 // must come AFTER all tool responses, not between them.
-func TestAgentLoopMultiToolImageOrdering(t *testing.T) {
+func TestAgentLoopMultiToolImageOrdering(t *testing.T) { //nolint:funlen // end-to-end test with scripted mock server
 	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1")
 	reader := newTestTraceReader(t)
 	seedAgentTrace(t, reader)
@@ -374,7 +392,8 @@ func TestAgentLoopMultiToolImageOrdering(t *testing.T) {
 		if calls == 1 {
 			io.WriteString(w, `{"choices":[{"message":{"role":"assistant","tool_calls":[`+
 				`{"id":"c1","type":"function","function":{"name":"snap","arguments":"{}"}},`+
-				`{"id":"c2","type":"function","function":{"name":"data_query","arguments":"{\"reason\":\"r\",\"sql\":\"SELECT 1\"}"}}`+
+				`{"id":"c2","type":"function","function":{"name":"data_query",`+
+				`"arguments":"{\"reason\":\"r\",\"sql\":\"SELECT 1\"}"}}`+
 				`]}}]}`)
 			return
 		}
@@ -394,7 +413,8 @@ func TestAgentLoopMultiToolImageOrdering(t *testing.T) {
 
 	cfg := ProviderConfig{Provider: ProviderOpenAICompatible, BaseURL: srv.URL, Model: "mock"}
 	msgs := []map[string]interface{}{{"role": "user", "content": "snap and query"}}
-	if err := runAgentLoop(context.Background(), cfg, msgs, []agentTool{snap, dataQueryTool(reader)}, func(agentEvent) {}); err != nil {
+	tools := []agentTool{snap, dataQueryTool(reader)}
+	if err := runAgentLoop(context.Background(), cfg, msgs, tools, func(agentEvent) {}); err != nil {
 		t.Fatalf("runAgentLoop: %v", err)
 	}
 
