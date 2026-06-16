@@ -54,6 +54,9 @@ type chatRequest struct {
 	BaseURL     string   `json:"baseURL"`
 	Model       string   `json:"model"`
 	Temperature *float64 `json:"temperature"`
+	// Agent requests the streamed, multi-step tool-calling loop (Phase 2) instead
+	// of the single-shot relay. The response is then text/event-stream.
+	Agent bool `json:"agent"`
 }
 
 const providerConfigHelp = "[Daisen Bot is not configured] No model or endpoint was provided.\n" +
@@ -84,6 +87,13 @@ func (s *Server) httpChatProxy(w http.ResponseWriter, r *http.Request) {
 	provider, err := newChatProvider(cfg.Provider)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Agent mode (Phase 2): run the streamed tool-calling loop instead of relaying
+	// a single completion.
+	if body.Agent {
+		s.runAgentSSE(w, r, cfg, assembleAgentMessages(body, s.traceReader))
 		return
 	}
 
