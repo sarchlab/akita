@@ -279,12 +279,16 @@ func dataQueryTool(reader *SQLiteTraceReader) agentTool {
 		parameters: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
+				"reason": map[string]interface{}{
+					"type":        "string",
+					"description": "One sentence: what you are checking and why. Shown to the user as your reasoning for this step.",
+				},
 				"sql": map[string]interface{}{
 					"type":        "string",
 					"description": "A single read-only SQL SELECT/WITH statement over the trace schema.",
 				},
 			},
-			"required": []string{"sql"},
+			"required": []string{"reason", "sql"},
 		},
 		run: func(ctx context.Context, args map[string]interface{}) (string, error) {
 			query, _ := args["sql"].(string)
@@ -403,7 +407,7 @@ func cellToString(v interface{}) string {
 
 const agentSystemPrompt = `You are DaisenBot, an assistant that investigates Akita computer-architecture simulation traces.
 
-You can call the data_query tool to run read-only SQL over the trace. Use it to gather evidence before answering questions about behavior, bottlenecks, or specific tasks.
+You can call the data_query tool to run read-only SQL over the trace. Use it to gather evidence before answering questions about behavior, bottlenecks, or specific tasks. Every data_query call must include a one-sentence "reason" describing what you are checking — it is shown to the user as your reasoning, so make it clear.
 
 Front door:
 - If a question is a simple definition or can be answered from the provided context, answer directly without tools.

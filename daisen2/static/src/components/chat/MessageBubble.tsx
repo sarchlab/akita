@@ -1,13 +1,32 @@
 import { useEffect, useMemo, useRef } from "react";
 import DOMPurify from "dompurify";
-import type { ChatMessage } from "../../types/chat";
+import type { ChatMessage, UnitContent } from "../../types/chat";
 import { renderChatMarkdown, renderMathInElement } from "../../utils/chatMarkdown";
 import { cn } from "../../lib/utils";
 
+// Pull a friendly rationale + query out of a tool call's JSON arguments, falling
+// back to the raw string when it isn't the shape we expect.
+function parseToolArgs(args?: string): { reason?: string; query?: string } {
+  if (!args) return {};
+  try {
+    const o = JSON.parse(args) as Record<string, unknown>;
+    const reason = typeof o.reason === "string" ? o.reason : undefined;
+    const sql = typeof o.sql === "string" ? o.sql : undefined;
+    return { reason, query: sql ?? args };
+  } catch {
+    return { query: args };
+  }
+}
+
 export default function MessageBubble({ message }: { message: ChatMessage }) {
   const ref = useRef<HTMLDivElement | null>(null);
+
+  const images = message.content.filter(
+    (u): u is Extract<UnitContent, { type: "image_url" }> => u.type === "image_url",
+  );
   const text = message.content
-    .map((unit) => (unit.type === "text" ? unit.text : "[image]"))
+    .filter((u): u is Extract<UnitContent, { type: "text" }> => u.type === "text")
+    .map((u) => u.text)
     .join("\n");
 
   // Model output is untrusted (any configured provider, including local/unknown
@@ -32,17 +51,24 @@ export default function MessageBubble({ message }: { message: ChatMessage }) {
               {toolCount > 0 ? `${toolCount} tool call${toolCount > 1 ? "s" : ""}` : "reasoning"}
             </summary>
             <div className="mt-1.5 space-y-2">
-              {steps.map((step, i) =>
-                step.thinking ? (
-                  <div key={i} className="whitespace-pre-wrap break-words italic text-muted-foreground">
-                    {step.thinking}
-                  </div>
-                ) : (
+              {steps.map((step, i) => {
+                if (step.thinking) {
+                  return (
+                    <div key={i} className="whitespace-pre-wrap break-words italic text-muted-foreground">
+                      {step.thinking}
+                    </div>
+                  );
+                }
+                const { reason, query } = parseToolArgs(step.args);
+                return (
                   <div key={i} className="space-y-0.5">
                     <div className="font-medium text-foreground">{step.tool}</div>
-                    {step.args && (
+                    {reason && (
+                      <div className="whitespace-pre-wrap break-words italic text-muted-foreground">{reason}</div>
+                    )}
+                    {query && (
                       <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted px-1.5 py-1 font-mono text-[11px]">
-                        {step.args}
+                        {query}
                       </pre>
                     )}
                     {step.observation && (
@@ -51,19 +77,35 @@ export default function MessageBubble({ message }: { message: ChatMessage }) {
                       </pre>
                     )}
                   </div>
-                ),
-              )}
+                );
+              })}
             </div>
           </details>
         )}
-        <div
-          ref={ref}
-          className={cn(
-            "chat-markdown rounded-2xl px-3 py-2 text-sm leading-relaxed",
-            message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
-          )}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
+
+        {images.length > 0 && (
+          <div className={cn("flex flex-wrap gap-1.5", message.role === "user" ? "justify-end" : "justify-start")}>
+            {images.map((img, i) => (
+              <img
+                key={i}
+                src={img.image_url.url}
+                alt="attachment sent to the model"
+                className="max-h-44 rounded-lg border object-contain"
+              />
+            ))}
+          </div>
+        )}
+
+        {text && (
+          <div
+            ref={ref}
+            className={cn(
+              "chat-markdown rounded-2xl px-3 py-2 text-sm leading-relaxed",
+              message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
+            )}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        )}
       </div>
     </div>
   );
