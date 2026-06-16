@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link, Outlet } from "react-router-dom";
 import { Bot } from "lucide-react";
 import ChatPanel from "./chat/ChatPanel";
@@ -6,6 +7,14 @@ import { useRenderReadyOnNavigation } from "../hooks/useRenderReady";
 
 export default function Layout() {
   useRenderReadyOnNavigation();
+  const [chatOpen, setChatOpen] = useState(false);
+
+  // Other parts of the app can still open the chat via this window event.
+  useEffect(() => {
+    const openHandler = () => setChatOpen(true);
+    window.addEventListener("daisen:open-chat", openHandler);
+    return () => window.removeEventListener("daisen:open-chat", openHandler);
+  }, []);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -16,17 +25,22 @@ export default function Layout() {
         <Button
           type="button"
           size="sm"
+          variant={chatOpen ? "secondary" : "default"}
           className="ml-auto"
-          onClick={() => window.dispatchEvent(new CustomEvent("daisen:open-chat"))}
+          onClick={() => setChatOpen((value) => !value)}
         >
           <Bot />
           Daisen Bot
         </Button>
       </nav>
-      <main className="daisen-main">
-        <Outlet />
-      </main>
-      <ChatPanel />
+      {/* The chat docks beside the content and narrows it (no overlay), so the
+          visualizations reflow to the new width via their ResizeObservers. */}
+      <div className="flex min-h-0 flex-1">
+        <main className="daisen-main min-w-0 flex-1">
+          <Outlet />
+        </main>
+        {chatOpen ? <ChatPanel onClose={() => setChatOpen(false)} /> : null}
+      </div>
     </div>
   );
 }

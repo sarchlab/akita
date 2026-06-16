@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Bot, ImagePlus, Paperclip, Plus, Send, Settings, X } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -42,8 +42,7 @@ function readFileAsText(file: File) {
   });
 }
 
-export default function ChatPanel() {
-  const [open, setOpen] = useState(false);
+export default function ChatPanel({ onClose }: { onClose: () => void }) {
   const [showSettings, setShowSettings] = useState(false);
   const [input, setInput] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -63,12 +62,6 @@ export default function ChatPanel() {
     sendMessage,
     newChat,
   } = useChat();
-
-  useEffect(() => {
-    const openHandler = () => setOpen(true);
-    window.addEventListener("daisen:open-chat", openHandler);
-    return () => window.removeEventListener("daisen:open-chat", openHandler);
-  }, []);
 
   const traceInfo: TraceInformation = useMemo(
     () => ({
@@ -122,12 +115,7 @@ export default function ChatPanel() {
 
   return (
     <>
-      <aside
-        className={[
-          "fixed bottom-0 right-0 top-14 z-50 flex w-[min(600px,100vw)] flex-col border-l bg-white shadow-xl transition-transform duration-200",
-          open ? "translate-x-0" : "translate-x-full",
-        ].join(" ")}
-      >
+      <aside className="flex h-full w-[min(560px,42vw)] shrink-0 flex-col border-l bg-white">
         <header className="flex h-14 items-center justify-between border-b px-3">
           <div className="flex items-center gap-2 font-semibold">
             <Bot className="h-5 w-5 text-primary" />
@@ -147,7 +135,7 @@ export default function ChatPanel() {
               <Plus />
               New
             </Button>
-            <Button type="button" size="icon" variant="ghost" onClick={() => setOpen(false)}>
+            <Button type="button" size="icon" variant="ghost" onClick={onClose}>
               <X />
             </Button>
           </div>
@@ -164,6 +152,9 @@ export default function ChatPanel() {
         ) : (
           <>
             <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
+              <div className="text-center text-xs text-muted-foreground/70">
+                {settings.model.trim() ? `Using ${settings.model}` : "No model selected — open settings (gear icon)"}
+              </div>
               {messages.map((message, index) => (
                 <MessageBubble key={index} message={message} />
               ))}

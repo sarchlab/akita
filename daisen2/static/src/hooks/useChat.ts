@@ -1,11 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import type { AgentStep, ChatMessage, LLMSettings, TraceInformation, UnitContent, UploadedFile } from "../types/chat";
 
-const INITIAL_MESSAGE: ChatMessage = {
-  role: "assistant",
-  content: [{ type: "text", text: "Hello! What can I help you with today?" }],
-};
-
 function contentTitle(content: UnitContent[]) {
   const firstText = content.find((unit) => unit.type === "text");
   if (!firstText || firstText.type !== "text") return "New Chat";
@@ -14,10 +9,10 @@ function contentTitle(content: UnitContent[]) {
 }
 
 export function useChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_MESSAGE]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatHistory, setChatHistory] = useState<
     { id: string; title: string; messages: ChatMessage[]; timestamp: number }[]
-  >([{ id: "chat_1", title: "New Chat", messages: [INITIAL_MESSAGE], timestamp: Date.now() }]);
+  >([{ id: "chat_1", title: "New Chat", messages: [], timestamp: Date.now() }]);
   const [currentChatId, setCurrentChatId] = useState("chat_1");
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -46,10 +41,10 @@ export function useChat() {
   const newChat = useCallback(() => {
     saveCurrent();
     const id = `chat_${Date.now()}`;
-    const chat = { id, title: "New Chat", messages: [INITIAL_MESSAGE], timestamp: Date.now() };
+    const chat = { id, title: "New Chat", messages: [], timestamp: Date.now() };
     setChatHistory((history) => [...history, chat]);
     setCurrentChatId(id);
-    setMessages([INITIAL_MESSAGE]);
+    setMessages([]);
   }, [saveCurrent]);
 
   const loadChat = useCallback(
@@ -68,7 +63,7 @@ export function useChat() {
       setChatHistory((history) => {
         const remaining = history.filter((entry) => entry.id !== id);
         if (id === currentChatId) {
-          const next = remaining[0] ?? { id: "chat_1", title: "New Chat", messages: [INITIAL_MESSAGE], timestamp: Date.now() };
+          const next = remaining[0] ?? { id: "chat_1", title: "New Chat", messages: [], timestamp: Date.now() };
           setCurrentChatId(next.id);
           setMessages(next.messages);
           return remaining.length ? remaining : [next];
