@@ -117,7 +117,8 @@
   }
 
   .daisen1-task-view,
-  .daisen1-component-view {
+  .daisen1-component-view,
+  .daisen1-metric-view {
     width: 100%;
     overflow: hidden;
   }
