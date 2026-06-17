@@ -1063,7 +1063,10 @@ export default function ComponentPage() {
           </div>
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4">
-          <SelectedTaskSection task={hoveredTask} />
+          {/* Show the hovered task while hovering, otherwise fall back to the
+              selected/current task so a task selected via click or arrived at
+              via /component?...&taskid=... stays visible in the panel. */}
+          <SelectedTaskSection task={hoveredTask ?? currentTask} />
           <ComponentLegend colorMap={colorMap} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} />
         </div>
       </SidePanel>
