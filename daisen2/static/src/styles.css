@@ -93,10 +93,6 @@
     animation: daisen-widget-spin 0.8s linear infinite;
   }
 
-  .daisen-side-column {
-    @apply m-3 h-[calc(100%-1.5rem)] overflow-auto rounded-xl border border-slate-300 bg-slate-100 p-4 shadow-sm;
-  }
-
   .daisen-status-bar {
     @apply h-5 shrink-0 border-t bg-white px-2 text-xs text-slate-600;
   }
@@ -121,7 +117,8 @@
   }
 
   .daisen1-task-view,
-  .daisen1-component-view {
+  .daisen1-component-view,
+  .daisen1-metric-view {
     width: 100%;
     overflow: hidden;
   }
@@ -132,66 +129,6 @@
       1px -1px 0 #ffffff,
       -1px 1px 0 #ffffff,
       1px 1px 0 #ffffff;
-  }
-
-  .daisen1-side-column {
-    @apply m-3 shrink-0 select-none overflow-auto rounded-xl border border-[#dddddd] bg-[#eeeeee] p-4 shadow-sm;
-    height: calc(100% - 1.5rem);
-  }
-
-  .daisen1-location-label {
-    @apply break-all text-xl font-bold text-black;
-  }
-
-  .daisen1-data-status {
-    @apply mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700;
-  }
-
-  .daisen1-current-task-info {
-    width: 100%;
-    min-height: 20px;
-    background: #d9d9d9;
-    display: none;
-    border-radius: 4px;
-    box-shadow: 0 1px 6px -6px #dddddd;
-    padding: 8px;
-  }
-
-  .daisen1-current-task-info.showing {
-    display: block;
-    font-size: 16px;
-  }
-
-  .daisen1-current-task-title {
-    font-size: 1.5rem;
-    line-height: 1.2;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-  }
-
-  .daisen1-current-task-info dl {
-    display: grid;
-    grid-template-columns: 25% 75%;
-    row-gap: 0;
-    margin-bottom: 0;
-  }
-
-  .daisen1-current-task-info dt {
-    font-weight: 700;
-  }
-
-  .daisen1-current-task-info dd {
-    min-width: 0;
-    margin-bottom: 0;
-    overflow-wrap: anywhere;
-  }
-
-  .daisen1-legend {
-    width: 100%;
-  }
-
-  .daisen1-legend-row {
-    cursor: pointer;
   }
 
   .chart-axis text {

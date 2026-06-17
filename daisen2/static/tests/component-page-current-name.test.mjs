@@ -11,9 +11,9 @@ test("component page tracks the selected task's component", async () => {
   // The component in view is derived from the selected task's location.
   assert.match(source, /const componentName = selectedTask\?\.location \|\| name;/);
 
-  // The side-column label shows the derived component, not the raw URL name.
-  assert.match(source, /daisen1-location-label">\{componentName\}/);
-  assert.doesNotMatch(source, /daisen1-location-label">\{name\}/);
+  // The side-panel header shows the derived component, not the raw URL name.
+  assert.match(source, /<h2[^>]*>\{componentName\}<\/h2>/);
+  assert.doesNotMatch(source, /<h2[^>]*>\{name\}<\/h2>/);
 
   // Component-scoped data (metric line and timeline query) uses the derived name.
   assert.match(source, /useCompInfo\(componentName,/);

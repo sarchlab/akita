@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import GanttChart from "../components/charts/GanttChart";
 import TaskDetail from "../components/TaskDetail";
 import { Button } from "../components/ui/button";
+import { SidePanel } from "../components/ui/side-panel";
 import { Input } from "../components/ui/input";
 import {
   Select,
@@ -162,7 +163,7 @@ export default function TaskChartPage() {
         </div>
       </div>
 
-      <aside className="daisen-side-column w-96 shrink-0">
+      <SidePanel className="w-96 overflow-auto p-4">
         <TaskDetail task={selectedTask} onNavigateToTask={navigateToTask} />
         {!taskId && browseTasks.length > 0 ? (
           <div className="mt-4 space-y-1">
@@ -181,7 +182,7 @@ export default function TaskChartPage() {
             ))}
           </div>
         ) : null}
-      </aside>
+      </SidePanel>
     </div>
   );
 }

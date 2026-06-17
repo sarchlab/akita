@@ -17,6 +17,7 @@ import {
 } from "../../utils/uploadValidation";
 import MessageBubble from "./MessageBubble";
 import ChatSettings from "./ChatSettings";
+import { SidePanel } from "../ui/side-panel";
 import { cn } from "../../lib/utils";
 
 function humanSize(bytes: number) {
@@ -116,12 +117,7 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
 
   return (
     <>
-      <aside
-        className={cn(
-          "flex h-full w-[min(560px,42vw)] shrink-0 flex-col border-l bg-white",
-          !open && "hidden",
-        )}
-      >
+      <SidePanel className={cn("flex w-[min(560px,42vw)] flex-col", !open && "hidden")}>
         <header className="flex h-14 items-center justify-between border-b px-3">
           <div className="flex items-center gap-2 font-semibold">
             <Bot className="h-5 w-5 text-primary" />
@@ -231,7 +227,7 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
             </footer>
           </>
         )}
-      </aside>
+      </SidePanel>
     </>
   );
 }

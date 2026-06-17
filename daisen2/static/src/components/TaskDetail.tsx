@@ -1,5 +1,7 @@
+import { Link } from "react-router-dom";
 import type { Task } from "../types/task";
 import { smartString } from "../utils/smartValue";
+import { encodeView } from "../utils/viewState.mjs";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
@@ -17,6 +19,22 @@ export default function TaskDetail({ task, onNavigateToTask }: TaskDetailProps) 
     );
   }
 
+  // Link back to the component view for this task's location, focused on the
+  // task's time window (with padding) and with the task pre-selected. Without a
+  // location there is no component to open.
+  const duration = task.end_time - task.start_time;
+  const padding = duration > 0 ? duration * 0.2 : 0;
+  const componentHref = task.location
+    ? encodeView({
+        route: "component",
+        name: task.location,
+        taskId: String(task.id),
+        ...(duration > 0
+          ? { startTime: task.start_time - padding, endTime: task.end_time + padding }
+          : {}),
+      })
+    : null;
+
   return (
     <Card className="m-3 rounded-md shadow-none">
       <CardHeader className="pb-2">
@@ -29,7 +47,20 @@ export default function TaskDetail({ task, onNavigateToTask }: TaskDetailProps) 
           <dt className="text-muted-foreground">What</dt>
           <dd className="break-all">{task.what || "-"}</dd>
           <dt className="text-muted-foreground">Location</dt>
-          <dd className="break-all">{task.location || "-"}</dd>
+          <dd className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 break-all">{task.location || "-"}</span>
+            {componentHref ? (
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="h-6 shrink-0 px-2 py-0 text-xs"
+                title="Open this component in the component view"
+              >
+                <Link to={componentHref}>View</Link>
+              </Button>
+            ) : null}
+          </dd>
           <dt className="text-muted-foreground">Start</dt>
           <dd>{smartString(task.start_time)}</dd>
           <dt className="text-muted-foreground">End</dt>
