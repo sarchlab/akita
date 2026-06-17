@@ -44,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           go-version: 1.26.2
           # Self-hosted runner: GOMODCACHE/GOCACHE persist on local disk
@@ -82,7 +82,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           go-version: 1.26.2
           # Self-hosted runner: GOMODCACHE/GOCACHE persist on local disk
@@ -100,7 +100,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           go-version: 1.26.2
           # Self-hosted runner: GOMODCACHE/GOCACHE persist on local disk
@@ -127,7 +127,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           go-version: 1.26.2
           # Self-hosted runner: GOMODCACHE/GOCACHE persist on local disk
