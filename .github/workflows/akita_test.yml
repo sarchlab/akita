@@ -43,10 +43,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.26.2
       - name: Install mockgen
         run: go install go.uber.org/mock/mockgen@v0.6.0
       - name: Install ginkgo
@@ -76,10 +72,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.26.2
       - name: Run DRAM validation (Tiers 1-6)
         run: go test ./mem/dram/ -count=1
 
@@ -89,10 +81,6 @@ jobs:
     needs: [akita_build_lint_test]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.26.2
       - name: Ensure Python3
         run: python3 --version || (sudo dnf install -y python3 || sudo apt-get install -y python3)
       - name: Install mockgen
@@ -111,10 +99,6 @@ jobs:
     needs: [akita_build_lint_test]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.26.2
       - name: Ensure Python3
         run: python3 --version || (sudo dnf install -y python3 || sudo apt-get install -y python3)
       - name: Install mockgen
