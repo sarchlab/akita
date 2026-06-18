@@ -8,6 +8,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -151,6 +153,7 @@ func (s *Server) RegisterTraceAPIRoutes(mux *http.ServeMux) {
 	// Trace endpoints
 	mux.HandleFunc("/api/trace", s.httpTrace)
 	mux.HandleFunc("/api/trace_range", s.httpTraceTimeRange)
+	mux.HandleFunc("/api/trace_info", s.httpTraceInfo)
 	mux.HandleFunc("/api/compnames", s.httpComponentNames)
 	mux.HandleFunc("/api/compinfo", s.httpComponentInfo)
 	mux.HandleFunc("/api/segments", s.httpSegments)
@@ -195,6 +198,20 @@ func (s *Server) startReplayServer(mux *http.ServeMux) {
 func (s *Server) apiMode(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprintf(w, `{"mode":%q}`, s.mode)
+}
+
+// httpTraceInfo returns a stable identifier for the loaded trace, used by the
+// frontend to scope browser-stored DaisenBot conversations to this trace. It is
+// read-only: the id is derived from the trace file name and the trace contents
+// are never touched.
+func (s *Server) httpTraceInfo(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	id := ""
+	if s.traceReader != nil {
+		base := filepath.Base(s.traceReader.filename)
+		id = strings.TrimSuffix(base, filepath.Ext(base))
+	}
+	fmt.Fprintf(w, `{"traceId":%q}`, id)
 }
 
 func (s *Server) serveIndex(w http.ResponseWriter, _ *http.Request) {

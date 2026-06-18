@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentStep, ChatMessage, LLMSettings, TraceInformation, UnitContent, UploadedFile } from "../types/chat";
 import { captureCurrentView, captureUrl } from "../utils/captureView";
+import { loadConversations, saveConversations } from "../utils/conversationStore.mjs";
 
 function contentTitle(content: UnitContent[]) {
   const firstText = content.find((unit) => unit.type === "text");
@@ -9,7 +10,14 @@ function contentTitle(content: UnitContent[]) {
   return words.join(" ") + (words.length === 6 ? "..." : "");
 }
 
-export function useChat() {
+// Title a conversation from its first user message, falling back to the existing
+// title (e.g. "New Chat") until one is sent.
+function titleFor(messages: ChatMessage[], fallback: string) {
+  const firstUser = messages.find((message) => message.role === "user");
+  return firstUser ? contentTitle(firstUser.content) : fallback;
+}
+
+export function useChat(traceId: string | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatHistory, setChatHistory] = useState<
     { id: string; title: string; messages: ChatMessage[]; timestamp: number }[]
@@ -19,24 +27,27 @@ export function useChat() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Persist a specific conversation's messages into the history list. Uses a
+  // functional update with an explicit id, so it is safe to call right after
+  // allocating a new conversation (no stale currentChatId closure).
+  const saveTo = useCallback((id: string, nextMessages: ChatMessage[]) => {
+    setChatHistory((history) =>
+      history.map((chat) =>
+        chat.id === id
+          ? {
+              ...chat,
+              messages: nextMessages,
+              title: titleFor(nextMessages, chat.title),
+              timestamp: Date.now(),
+            }
+          : chat,
+      ),
+    );
+  }, []);
+
   const saveCurrent = useCallback(
-    (nextMessages = messages) => {
-      setChatHistory((history) =>
-        history.map((chat) =>
-          chat.id === currentChatId
-            ? {
-                ...chat,
-                messages: nextMessages,
-                title: nextMessages.some((m) => m.role === "user")
-                  ? contentTitle(nextMessages.find((m) => m.role === "user")?.content ?? [])
-                  : chat.title,
-                timestamp: Date.now(),
-              }
-            : chat,
-        ),
-      );
-    },
-    [currentChatId, messages],
+    (nextMessages: ChatMessage[] = messages) => saveTo(currentChatId, nextMessages),
+    [currentChatId, messages, saveTo],
   );
 
   const newChat = useCallback(() => {
@@ -76,9 +87,31 @@ export function useChat() {
   );
 
   const sendMessage = useCallback(
-    async (content: UnitContent[], traceInfo: TraceInformation, llm: LLMSettings) => {
+    async (
+      content: UnitContent[],
+      traceInfo: TraceInformation,
+      llm: LLMSettings,
+      opts: { newConversation?: boolean } = {},
+    ) => {
+      // Sending from the conversation selector starts a fresh conversation rather
+      // than appending to whatever was last active. Allocate it here and thread the
+      // id locally so the saves below are unaffected by stale state closures.
+      let chatId = currentChatId;
+      let baseMessages = messages;
+      if (opts.newConversation) {
+        saveCurrent();
+        chatId = `chat_${Date.now()}`;
+        baseMessages = [];
+        setChatHistory((history) => [
+          ...history,
+          { id: chatId, title: "New Chat", messages: [], timestamp: Date.now() },
+        ]);
+        setCurrentChatId(chatId);
+        setMessages([]);
+      }
+
       const userMessage: ChatMessage = { role: "user", content };
-      const nextMessages = [...messages, userMessage];
+      const nextMessages = [...baseMessages, userMessage];
       setMessages(nextMessages);
       setLoading(true);
       setError(null);
@@ -119,7 +152,7 @@ export function useChat() {
             { role: "assistant", content: [{ type: "text", text: text || "No response from Daisen Bot." }] },
           ];
           setMessages(finalMessages);
-          saveCurrent(finalMessages);
+          saveTo(chatId, finalMessages);
           return;
         }
 
@@ -206,14 +239,14 @@ export function useChat() {
             working = render();
           }
         }
-        saveCurrent(working);
+        saveTo(chatId, working);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
         setLoading(false);
       }
     },
-    [messages, saveCurrent],
+    [messages, currentChatId, saveCurrent, saveTo],
   );
 
   const addUploadedFiles = useCallback((files: UploadedFile[]) => {
@@ -225,6 +258,33 @@ export function useChat() {
   }, []);
 
   const clearUploadedFiles = useCallback(() => setUploadedFiles([]), []);
+
+  // Load this trace's persisted conversations once its id is known. Guarded with a
+  // ref so it runs only once, even under React StrictMode's double-invoke.
+  const [loaded, setLoaded] = useState(false);
+  const loadedRef = useRef(false);
+  useEffect(() => {
+    if (!traceId || loadedRef.current) return;
+    loadedRef.current = true;
+    const stored = loadConversations(traceId) as typeof chatHistory;
+    const fresh = {
+      id: `chat_${Date.now()}`,
+      title: "New Chat",
+      messages: [] as ChatMessage[],
+      timestamp: Date.now(),
+    };
+    setChatHistory(stored.length ? [...stored, fresh] : [fresh]);
+    setCurrentChatId(fresh.id);
+    setMessages([]);
+    setLoaded(true);
+  }, [traceId]);
+
+  // Persist conversations after the initial load, scoped to the trace. Gating on
+  // `loaded` avoids clobbering stored data with the empty default before load runs.
+  useEffect(() => {
+    if (!traceId || !loaded) return;
+    saveConversations(traceId, chatHistory);
+  }, [traceId, loaded, chatHistory]);
 
   return useMemo(
     () => ({
