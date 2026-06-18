@@ -1,6 +1,6 @@
 # DaisenBot Agentic Upgrade — Design & Implementation Plan
 
-**Status:** Phases 1–2 merged (#387, #392) · Phase 5 (viz perception) merged with #392 · **Phase 3 in progress — Workstream A (source recording) implemented; query tools (B–E) pending — §8** · **Last updated:** 2026-06-17
+**Status:** Phases 1–2 merged (#387, #392) · Phase 5 (viz perception) merged with #392 · **Phase 3 in progress — Workstreams A (source recording) + B (daisen2 source reader) implemented; tools C–E pending — §8** · **Last updated:** 2026-06-17
 
 This document captures the design decisions and phased plan for turning DaisenBot
 from a single-shot Q&A proxy into a tool-using agent that can *investigate* an
@@ -651,6 +651,22 @@ the same interface without touching the tools.
   in-memory **read-only** `fs.FS` (`codeSource`). Absent ⇒ empty `codeSource` with a clear
   "no source recorded for this trace" capability note surfaced to the agent (and the tools are
   still offered but report the gap rather than erroring).
+
+**Status (2026-06-18): implemented.**
+- `sourcefs.OpenTraceSource(db *sql.DB) (*Source, error)` reads the `source` table, base64-decodes
+  + un-tars each root via `ReadArchive`, and returns a read-only `fs.FS` (paths `<root>/<file>`)
+  plus `Roots` / `Files`. A missing/empty `source` table is **not** an error — it returns an empty
+  `Source` — so pre-Phase-3 traces load fine. (`database/sql`-only, so it's reusable outside
+  daisen2.)
+- daisen2 `Server` loads it once on startup (`loadCodeSource`) into `s.codeSource` and exposes
+  `CodeSource()` for the tools. Startup logs coverage, e.g.
+  `DaisenBot: recorded source available — 268 files across [github.com/sarchlab/akita/v5]`, or
+  `no source recorded in this trace`.
+- Verified: `OpenTraceSource` unit tests (populated table + reads a file back; missing table →
+  empty); running daisen2 against the recorded virtualmem trace logs the 268-file coverage.
+  `go build ./...`, `sourcefs` + `daisen2/internal/httpapi` suites, gofmt, vet all green.
+- **Next (Workstreams C/D):** `code_search` / `code_read` tools over `Server.CodeSource().FS()`,
+  registered in the `runAgentSSE` tool slice.
 
 ### Workstream C — `code_search` (regex content search)
 
