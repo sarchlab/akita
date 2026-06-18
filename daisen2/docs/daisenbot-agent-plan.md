@@ -1,6 +1,6 @@
 # DaisenBot Agentic Upgrade — Design & Implementation Plan
 
-**Status:** Phases 1–2 merged (#387, #392) · Phase 5 (viz perception) merged with #392 · **Phase 3 in progress — Workstreams A (source recording), B (daisen2 reader), C/D (`code_search`/`code_read` tools) implemented; E (system-prompt update) pending — §8** · **Last updated:** 2026-06-17
+**Status:** Phases 1–2 merged (#387, #392) · Phase 5 (viz perception) merged with #392 · **Phase 3 complete — Workstreams A (source recording), B (daisen2 reader), C/D (`code_search`/`code_read` tools), E (embedded system prompt) all implemented. Follow-up: the tutorial/component-doc recommendation for `WithSourceFS` (decision #2). — §8** · **Last updated:** 2026-06-17
 
 This document captures the design decisions and phased plan for turning DaisenBot
 from a single-shot Q&A proxy into a tool-using agent that can *investigate* an
@@ -719,6 +719,22 @@ the same interface without touching the tools.
   mock-provider end-to-end `TestAgentCodeToolsSSE` that scripts `code_search` → `code_read` →
   final answer and asserts the SSE `step` → `observation` → `message` sequence — deterministic,
   **no API key**.
+
+**Status (2026-06-18): implemented.** (Loop wiring landed with C/D; verification noted there.)
+- The system prompt is now authored as markdown in `daisen2/internal/httpapi/prompts/agent_system.md`
+  and **embedded via `//go:embed`** (`prompt.go`), replacing the hardcoded Go `const` — so the
+  prompt can use real markdown (code spans, lists) and is edited without touching Go. The Go
+  raw-string `const` couldn't even contain backticks.
+- It documents all five tools (`data_query`, `code_search`, `code_read`, `screenshot_current_view`,
+  `daisen_view`), the front door, the **"read the source before guessing"** rule, the source map
+  (paths are module-prefixed, e.g. `github.com/sarchlab/akita/v5/mem/cache/…`), the seed bottleneck
+  catalog, and an **evidence policy**: when proving a hypothesis, *attempt* to corroborate it from
+  all three sources (trace data + source code + a visualization), proceeding honestly and naming the
+  missing leg when one isn't available (e.g. no recorded source). Per-trace availability is
+  tool-reported (no runtime prompt templating), per the §8 decision.
+- Verified: `TestAgentSystemPromptEmbedded` (embed wired; all five tools documented); the existing
+  agent SSE tests now run against the embedded prompt; `go build ./...`, `daisen2/internal/httpapi`
+  suite, gofmt, vet green.
 
 ### (Optional) skills
 
