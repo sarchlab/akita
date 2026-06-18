@@ -218,6 +218,28 @@
     @apply font-medium text-primary underline underline-offset-2;
   }
 
+  /* DaisenBot inline visual evidence: a view thumbnail + caption link emitted by
+     chatMarkdown's custom image rule. The thumbnail src is filled in by React. */
+  .chat-markdown .daisen-evidence-figure {
+    @apply my-2 flex w-fit max-w-full flex-col items-start gap-1;
+  }
+
+  .chat-markdown img.daisen-evidence {
+    @apply max-h-56 max-w-full cursor-zoom-in rounded-md border bg-muted/40 object-contain;
+  }
+
+  .chat-markdown img.daisen-evidence.daisen-evidence-loading {
+    @apply h-12 w-40 animate-pulse;
+  }
+
+  .chat-markdown img.daisen-evidence.daisen-evidence-failed {
+    @apply hidden;
+  }
+
+  .chat-markdown a.daisen-evidence-link {
+    @apply text-xs;
+  }
+
   .chat-markdown hr {
     @apply my-3 border-border;
   }

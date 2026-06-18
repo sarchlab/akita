@@ -252,3 +252,40 @@ export function isSingleWidget(view) {
   return !!view && view.route === "dashboard" &&
     typeof view.widget === "string" && view.widget !== "";
 }
+
+/** The concrete Daisen view paths (no "/" alias) — matches captureView's allow-list. */
+const VIEW_PATHS = new Set([ROUTES.dashboard, ROUTES.component, ROUTES.task]);
+
+/**
+ * Whether `raw` is a root-relative, same-origin Daisen view path
+ * (/dashboard, /component, or /task, with an optional query/fragment). Pure (no
+ * `window`) so it is usable in markdown rendering and node tests. Rejects
+ * absolute/protocol-relative URLs and any scheme (javascript:, data:, http:),
+ * since those do not start with a single "/". This is the *tagging* gate; the
+ * authoritative security check for rendering/navigation is captureView's
+ * toSafeDaisenUrl, applied again at capture/click time.
+ * @param {string} raw
+ * @returns {boolean}
+ */
+export function isDaisenViewPath(raw) {
+  if (typeof raw !== "string" || raw === "") return false;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return false;
+  const pathname = raw.split(/[?#]/)[0];
+  if (/[\s\\]/.test(pathname)) return false;
+  return VIEW_PATHS.has(pathname);
+}
+
+/**
+ * Canonicalize a Daisen view path to "/path?query" via parseView→encodeView, so two
+ * URLs describing the same view compare equal (param order, defaults, and unknown
+ * params are all normalized away). Returns null when `raw` is not a Daisen view path.
+ * Used to key captured-view images by URL and match a cited URL to a render.
+ * @param {string} raw
+ * @returns {string|null}
+ */
+export function canonicalViewUrl(raw) {
+  if (!isDaisenViewPath(raw)) return null;
+  const [pathname, rest = ""] = raw.split("?");
+  const query = rest.split("#")[0];
+  return encodeView(parseView(pathname, query));
+}

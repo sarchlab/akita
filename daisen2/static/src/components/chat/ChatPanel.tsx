@@ -18,6 +18,7 @@ import {
 import MessageBubble from "./MessageBubble";
 import ChatSettings from "./ChatSettings";
 import { SidePanel } from "../ui/side-panel";
+import Lightbox, { type LightboxImage } from "./Lightbox";
 import { cn } from "../../lib/utils";
 
 function humanSize(bytes: number) {
@@ -46,6 +47,7 @@ function readFileAsText(file: File) {
 
 export default function ChatPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [showSettings, setShowSettings] = useState(false);
+  const [lightbox, setLightbox] = useState<LightboxImage | null>(null);
   const [input, setInput] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -158,7 +160,7 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
                 {settings.model.trim() ? `Using ${settings.model}` : "No model selected — open settings (gear icon)"}
               </div>
               {messages.map((message, index) => (
-                <MessageBubble key={index} message={message} />
+                <MessageBubble key={index} message={message} onEnlarge={setLightbox} />
               ))}
               {loading ? <div className="text-sm text-muted-foreground">Daisen Bot is thinking...</div> : null}
             </div>
@@ -228,6 +230,7 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
           </>
         )}
       </SidePanel>
+      <Lightbox image={lightbox} onClose={() => setLightbox(null)} />
     </>
   );
 }

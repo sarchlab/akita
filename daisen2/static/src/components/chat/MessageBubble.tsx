@@ -1,8 +1,12 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import DOMPurify from "dompurify";
 import type { ChatMessage, UnitContent } from "../../types/chat";
 import { renderChatMarkdown } from "../../utils/chatMarkdown.mjs";
+import { canonicalViewUrl } from "../../utils/viewState.mjs";
+import { captureUrl } from "../../utils/captureView";
 import { cn } from "../../lib/utils";
+import type { LightboxImage } from "./Lightbox";
 
 // Pull a friendly rationale + query out of a tool call's JSON arguments, falling
 // back to the raw string when it isn't the shape we expect.
@@ -18,7 +22,13 @@ function parseToolArgs(args?: string): { reason?: string; query?: string } {
   }
 }
 
-export default function MessageBubble({ message }: { message: ChatMessage }) {
+export default function MessageBubble({
+  message,
+  onEnlarge,
+}: {
+  message: ChatMessage;
+  onEnlarge?: (image: LightboxImage) => void;
+}) {
   const images = message.content.filter(
     (u): u is Extract<UnitContent, { type: "image_url" }> => u.type === "image_url",
   );
@@ -30,11 +40,92 @@ export default function MessageBubble({ message }: { message: ChatMessage }) {
   // Model output is untrusted (any configured provider, including local/unknown
   // models), so sanitize the markdown-generated HTML before injecting it.
   // DOMPurify keeps the safe markup markdown-it emits while stripping scripts,
-  // event handlers, and other injection vectors.
-  const html = useMemo(() => DOMPurify.sanitize(renderChatMarkdown(text)), [text]);
+  // event handlers, and other injection vectors. ADD_ATTR keeps the data-view-url
+  // marker our chatMarkdown image rule puts on inline view-evidence figures.
+  const html = useMemo(
+    () => DOMPurify.sanitize(renderChatMarkdown(text), { ADD_ATTR: ["data-view-url"] }),
+    [text],
+  );
 
   const steps = message.role === "assistant" ? message.steps : undefined;
   const toolCount = steps?.filter((s) => s.tool).length ?? 0;
+
+  // Map a canonical Daisen view URL → the image the agent already captured for it
+  // (its daisen_view steps), so inline citations of those views show their thumbnail
+  // with no extra render.
+  const renderedViews = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const step of steps ?? []) {
+      if (step.tool !== "daisen_view" || !step.image || !step.args) continue;
+      try {
+        const url = (JSON.parse(step.args) as { url?: string }).url;
+        const canon = url ? canonicalViewUrl(url) : null;
+        if (canon) map.set(canon, step.image);
+      } catch {
+        // Non-JSON args — skip; the view simply won't have a pre-captured image.
+      }
+    }
+    return map;
+  }, [steps]);
+
+  // Thumbnails lazily captured for cited views the agent did not render itself,
+  // memoized across re-renders so a streaming update doesn't re-capture them.
+  const lazyImages = useRef(new Map<string, string>());
+  const proseRef = useRef<HTMLDivElement>(null);
+
+  // After the answer HTML is injected, fill each inline view-evidence thumbnail's
+  // src from the captured image (or lazy-capture it off-screen), then leave click →
+  // enlarge to the delegated handler below.
+  useEffect(() => {
+    const root = proseRef.current;
+    if (!root) return;
+    let cancelled = false;
+    const figures = root.querySelectorAll<HTMLImageElement>("img.daisen-evidence[data-view-url]");
+    figures.forEach((img) => {
+      const viewUrl = img.getAttribute("data-view-url") ?? "";
+      if (!viewUrl) return;
+      const ready = renderedViews.get(viewUrl) ?? lazyImages.current.get(viewUrl);
+      if (ready) {
+        img.src = ready;
+        return;
+      }
+      if (img.dataset.capturing) return;
+      img.dataset.capturing = "1";
+      img.classList.add("daisen-evidence-loading");
+      captureUrl(viewUrl)
+        .then((data) => {
+          if (cancelled || !data) return;
+          lazyImages.current.set(viewUrl, data);
+          img.src = data;
+          img.classList.remove("daisen-evidence-failed");
+        })
+        .catch(() => {
+          // The view could not be rendered — drop the thumbnail, keep the caption link.
+          if (!cancelled) img.classList.add("daisen-evidence-failed");
+        })
+        .finally(() => {
+          if (cancelled) return;
+          img.classList.remove("daisen-evidence-loading");
+          delete img.dataset.capturing;
+        });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [html, renderedViews]);
+
+  // Clicking a thumbnail (not its caption link) opens the lightbox.
+  const handleProseClick = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      const img = (event.target as HTMLElement).closest(
+        "img.daisen-evidence",
+      ) as HTMLImageElement | null;
+      if (!img || !img.src) return;
+      event.preventDefault();
+      onEnlarge?.({ src: img.src, viewUrl: img.getAttribute("data-view-url") ?? "" });
+    },
+    [onEnlarge],
+  );
 
   return (
     <div className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
@@ -95,6 +186,8 @@ export default function MessageBubble({ message }: { message: ChatMessage }) {
 
         {text && (
           <div
+            ref={proseRef}
+            onClick={handleProseClick}
             className={cn(
               "chat-markdown rounded-2xl px-3 py-2 text-sm leading-relaxed",
               message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
