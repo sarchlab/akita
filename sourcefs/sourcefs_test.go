@@ -58,25 +58,47 @@ func TestWriteArchiveDeterministic(t *testing.T) {
 
 func TestArchiveFS(t *testing.T) {
 	fsys := fstest.MapFS{
-		"pkg/file.go": {Data: []byte("package pkg\n")},
-		"top.go":      {Data: []byte("package main\n")},
+		"pkg/file.go":      {Data: []byte("package pkg\n")},
+		"top.go":           {Data: []byte("package main\n")},
+		"go.mod":           {Data: []byte("module example.com/m\n")},
+		"pkg/file_test.go": {Data: []byte("package pkg\n")}, // excluded: test file
+		"README.md":        {Data: []byte("# readme\n")},    // excluded: not source
+		"vendor/dep/d.go":  {Data: []byte("package dep\n")}, // excluded: vendored
+		"testdata/x.go":    {Data: []byte("package x\n")},   // excluded: fixtures
 	}
 
 	gz, err := ArchiveFS(fsys)
 	if err != nil {
 		t.Fatalf("ArchiveFS: %v", err)
 	}
-
 	out, err := ReadArchive(gz)
 	if err != nil {
 		t.Fatalf("ReadArchive: %v", err)
 	}
 
-	if got := string(out["pkg/file.go"]); got != "package pkg\n" {
-		t.Errorf("pkg/file.go = %q", got)
+	for _, want := range []string{"pkg/file.go", "top.go", "go.mod"} {
+		if _, ok := out[want]; !ok {
+			t.Errorf("expected %q to be recorded", want)
+		}
 	}
-	if got := string(out["top.go"]); got != "package main\n" {
-		t.Errorf("top.go = %q", got)
+	for _, excluded := range []string{
+		"pkg/file_test.go", "README.md", "vendor/dep/d.go", "testdata/x.go",
+	} {
+		if _, ok := out[excluded]; ok {
+			t.Errorf("expected %q to be excluded by source filtering", excluded)
+		}
+	}
+}
+
+func TestReadArchiveRejectsOversizedEntry(t *testing.T) {
+	// gzip of a long repeated byte is tiny, so this stays cheap.
+	big := bytes.Repeat([]byte("a"), maxArchiveFileBytes+1)
+	var buf bytes.Buffer
+	if err := WriteArchive(&buf, map[string][]byte{"big.go": big}); err != nil {
+		t.Fatalf("WriteArchive: %v", err)
+	}
+	if _, err := ReadArchive(buf.Bytes()); err == nil {
+		t.Error("expected ReadArchive to reject an oversized entry")
 	}
 }
 

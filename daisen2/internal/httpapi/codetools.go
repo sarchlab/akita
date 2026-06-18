@@ -84,13 +84,10 @@ func runCodeSearch(src *sourcefs.Source, query, filter string) (string, error) {
 	}
 
 	fsys := src.FS()
-	paths := sortedFilePaths(fsys)
-
 	var body strings.Builder
 	matches := 0
 	truncated := false
-
-	for _, p := range paths {
+	for _, p := range sortedFilePaths(fsys) {
 		if filter != "" && !strings.Contains(p, filter) {
 			continue
 		}
@@ -98,47 +95,55 @@ func runCodeSearch(src *sourcefs.Source, query, filter string) (string, error) {
 		if err != nil {
 			continue
 		}
-
-		scanner := bufio.NewScanner(bytes.NewReader(data))
-		scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
-		lineNo := 0
-		for scanner.Scan() {
-			lineNo++
-			line := scanner.Text()
-			if !re.MatchString(line) {
-				continue
-			}
-			if matches >= codeSearchMaxMatches {
-				truncated = true
-				break
-			}
-			entry := fmt.Sprintf("%s:%d: %s\n", p, lineNo, clipLine(strings.TrimSpace(line)))
-			if body.Len()+len(entry) > codeSearchMaxBytes {
-				truncated = true
-				break
-			}
-			body.WriteString(entry)
-			matches++
-		}
-		if truncated {
+		if appendFileMatches(re, p, data, &body, &matches) {
+			truncated = true
 			break
 		}
 	}
+	return formatSearchResult(query, filter, body.String(), matches, truncated), nil
+}
 
+// appendFileMatches appends "path:line: snippet" for each regex match in data, up
+// to the match and byte caps. It returns true if a cap was hit (so the caller
+// stops searching further files).
+func appendFileMatches(
+	re *regexp.Regexp, p string, data []byte, body *strings.Builder, matches *int,
+) bool {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := scanner.Text()
+		if !re.MatchString(line) {
+			continue
+		}
+		if *matches >= codeSearchMaxMatches {
+			return true
+		}
+		entry := fmt.Sprintf("%s:%d: %s\n", p, lineNo, clipLine(strings.TrimSpace(line)))
+		if body.Len()+len(entry) > codeSearchMaxBytes {
+			return true
+		}
+		body.WriteString(entry)
+		*matches++
+	}
+	return false
+}
+
+func formatSearchResult(query, filter, body string, matches int, truncated bool) string {
 	if matches == 0 {
 		scope := ""
 		if filter != "" {
 			scope = fmt.Sprintf(" in paths containing %q", filter)
 		}
-		return fmt.Sprintf("No matches for %q%s.", query, scope), nil
+		return fmt.Sprintf("No matches for %q%s.", query, scope)
 	}
-
-	header := fmt.Sprintf("%d match(es):\n", matches)
-	footer := ""
+	out := fmt.Sprintf("%d match(es):\n%s", matches, body)
 	if truncated {
-		footer = "[truncated — refine the query or pass path_contains]\n"
+		out += "[truncated — refine the query or pass path_contains]\n"
 	}
-	return header + body.String() + footer, nil
+	return out
 }
 
 func codeReadTool(src *sourcefs.Source) agentTool {
@@ -193,10 +198,22 @@ func runCodeRead(src *sourcefs.Source, p string, start, end int) (string, error)
 	}
 
 	lines := splitLines(data)
-	total := len(lines)
-	ranged := start > 0 || end > 0
+	if len(lines) == 0 {
+		return fmt.Sprintf("%s is empty (0 lines).", clean), nil
+	}
+	from, to, msg := resolveReadWindow(clean, start, end, len(lines))
+	if msg != "" {
+		return msg, nil
+	}
+	return renderReadWindow(clean, lines, from, to), nil
+}
 
-	from, to := 1, total
+// resolveReadWindow computes the 1-based [from, to] line window to show, honoring
+// the requested range, the default window, and the max-lines cap. A non-empty msg
+// means return it instead (e.g. start_line past the end of the file).
+func resolveReadWindow(clean string, start, end, total int) (from, to int, msg string) {
+	from, to = 1, total
+	ranged := start > 0 || end > 0
 	if start > 0 {
 		from = start
 	}
@@ -206,13 +223,10 @@ func runCodeRead(src *sourcefs.Source, p string, start, end int) (string, error)
 		to = codeReadDefaultLines
 	}
 
-	if total == 0 {
-		return fmt.Sprintf("%s is empty (0 lines).", clean), nil
-	}
 	from = max(from, 1)
 	to = min(to, total)
 	if from > total {
-		return fmt.Sprintf("%s has %d lines; start_line %d is past the end.", clean, total, start), nil
+		return 0, 0, fmt.Sprintf("%s has %d lines; start_line %d is past the end.", clean, total, start)
 	}
 	if to < from {
 		to = from
@@ -220,7 +234,13 @@ func runCodeRead(src *sourcefs.Source, p string, start, end int) (string, error)
 	if to-from+1 > codeReadMaxLines {
 		to = min(from+codeReadMaxLines-1, total)
 	}
+	return from, to, ""
+}
 
+// renderReadWindow formats lines[from-1:to] with line numbers, bounded by the
+// per-read byte cap, with a footer noting truncation or remaining lines.
+func renderReadWindow(clean string, lines []string, from, to int) string {
+	total := len(lines)
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s (lines %d-%d of %d):\n", clean, from, to, total)
 	width := len(strconv.Itoa(to))
@@ -240,7 +260,7 @@ func runCodeRead(src *sourcefs.Source, p string, start, end int) (string, error)
 	case to < total:
 		fmt.Fprintf(&b, "[%d more lines; pass start_line/end_line to read further]\n", total-to)
 	}
-	return b.String(), nil
+	return b.String()
 }
 
 func sortedFilePaths(fsys fs.FS) []string {

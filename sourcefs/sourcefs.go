@@ -16,6 +16,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -23,6 +24,14 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+)
+
+const (
+	// maxArchiveFileBytes / maxArchiveTotalBytes bound a single decompressed file
+	// and a whole archive when reading back, so a malformed or oversized source
+	// row (e.g. a gzip bomb in a shared trace) can't exhaust memory at load time.
+	maxArchiveFileBytes  = 8 << 20  // 8 MiB per recorded file
+	maxArchiveTotalBytes = 96 << 20 // 96 MiB total decompressed per archive
 )
 
 // ModulePath is Akita's Go module path — the natural root label when recording
@@ -135,9 +144,12 @@ func ArchiveDir(dir string) ([]byte, error) {
 	return packArchive(files)
 }
 
-// ArchiveFS reads every regular file from fsys and returns a gzip-compressed
-// tar. The caller is responsible for filtering — fsys should contain only what
-// should be recorded (e.g. a //go:embed of the wanted .go files).
+// ArchiveFS reads the recordable source files (non-test .go plus go.mod) from
+// fsys and returns a gzip-compressed tar, applying the same filtering as
+// ArchiveDir (skip _test.go, and prune .git/.claude/vendor/node_modules/
+// testdata/dist). This way a broad fs.FS — an embed or os.DirFS that includes
+// more than source — never records secrets, fixtures, generated artifacts, or
+// vendored code into the trace.
 func ArchiveFS(fsys fs.FS) ([]byte, error) {
 	files := map[string][]byte{}
 	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
@@ -145,6 +157,12 @@ func ArchiveFS(fsys fs.FS) ([]byte, error) {
 			return err
 		}
 		if d.IsDir() {
+			if p != "." && skipDirs[d.Name()] {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !isSourceFile(d.Name()) {
 			return nil
 		}
 		content, err := fs.ReadFile(fsys, p)
@@ -214,6 +232,7 @@ func ReadArchive(gztar []byte) (map[string][]byte, error) {
 
 	tr := tar.NewReader(gz)
 	files := map[string][]byte{}
+	total := 0
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -225,9 +244,18 @@ func ReadArchive(gztar []byte) (map[string][]byte, error) {
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
-		content, err := io.ReadAll(tr)
+		// Bound per-file and total decompressed size so a malformed or oversized
+		// archive can't exhaust memory before the code tools' output caps apply.
+		content, err := io.ReadAll(io.LimitReader(tr, maxArchiveFileBytes+1))
 		if err != nil {
 			return nil, err
+		}
+		if len(content) > maxArchiveFileBytes {
+			return nil, fmt.Errorf("source archive entry %q exceeds %d bytes", hdr.Name, maxArchiveFileBytes)
+		}
+		total += len(content)
+		if total > maxArchiveTotalBytes {
+			return nil, fmt.Errorf("source archive exceeds %d bytes decompressed", maxArchiveTotalBytes)
 		}
 		files[hdr.Name] = content
 	}

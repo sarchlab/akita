@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io/fs"
+	"path"
 	"sort"
 	"testing/fstest"
 )
@@ -106,7 +107,14 @@ func OpenTraceSource(db *sql.DB) (*Source, error) {
 		}
 
 		for p, data := range files {
-			mapFS[root+"/"+p] = &fstest.MapFile{Data: data}
+			// path.Join normalizes empty/"." roots; fs.ValidPath rejects anything
+			// that would be an invalid MapFS key (absolute, "..", etc.) and would
+			// otherwise crash the walk when opening an externally-produced trace.
+			key := path.Join(root, p)
+			if !fs.ValidPath(key) {
+				continue
+			}
+			mapFS[key] = &fstest.MapFile{Data: data}
 		}
 		rootSet[root] = struct{}{}
 	}
