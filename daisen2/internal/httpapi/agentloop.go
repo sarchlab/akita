@@ -592,6 +592,8 @@ func (s *Server) runAgentSSE(
 	capture := s.newCaptureRequester(emit)
 	tools := []agentTool{
 		dataQueryTool(s.traceReader),
+		codeSearchTool(s.codeSource),
+		codeReadTool(s.codeSource),
 		daisenViewTool(capture),
 		screenshotTool(capture),
 	}

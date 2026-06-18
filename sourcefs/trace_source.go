@@ -38,6 +38,33 @@ func (s *Source) IsEmpty() bool {
 	return s == nil || s.Files == 0
 }
 
+// NewSource builds a Source from an arbitrary read-only fs.FS (an in-memory tree
+// or, in future, an on-disk --code-root), walking it to count files. roots is
+// the list of recorded module roots, for reporting; it may be nil.
+func NewSource(fsys fs.FS, roots []string) (*Source, error) {
+	rs := append([]string(nil), roots...)
+	sort.Strings(rs)
+	if fsys == nil {
+		return &Source{Roots: rs}, nil
+	}
+
+	files := 0
+	err := fs.WalkDir(fsys, ".", func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			files++
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &Source{fsys: fsys, Roots: rs, Files: files}, nil
+}
+
 // OpenTraceSource reads the recorded `source` table from a trace database and
 // returns it as a read-only file tree. A missing or empty table is not an
 // error — it returns an empty Source — so traces recorded before source
@@ -91,9 +118,8 @@ func OpenTraceSource(db *sql.DB) (*Source, error) {
 	for r := range rootSet {
 		roots = append(roots, r)
 	}
-	sort.Strings(roots)
 
-	return &Source{fsys: mapFS, Roots: roots, Files: len(mapFS)}, nil
+	return NewSource(mapFS, roots)
 }
 
 func hasTable(db *sql.DB, name string) (bool, error) {

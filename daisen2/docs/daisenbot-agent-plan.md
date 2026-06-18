@@ -1,6 +1,6 @@
 # DaisenBot Agentic Upgrade — Design & Implementation Plan
 
-**Status:** Phases 1–2 merged (#387, #392) · Phase 5 (viz perception) merged with #392 · **Phase 3 in progress — Workstreams A (source recording) + B (daisen2 source reader) implemented; tools C–E pending — §8** · **Last updated:** 2026-06-17
+**Status:** Phases 1–2 merged (#387, #392) · Phase 5 (viz perception) merged with #392 · **Phase 3 in progress — Workstreams A (source recording), B (daisen2 reader), C/D (`code_search`/`code_read` tools) implemented; E (system-prompt update) pending — §8** · **Last updated:** 2026-06-17
 
 This document captures the design decisions and phased plan for turning DaisenBot
 from a single-shot Q&A proxy into a tool-using agent that can *investigate* an
@@ -682,6 +682,24 @@ the same interface without touching the tools.
   **required `reason`**. A large file with no range ⇒ first window + a "request a range" note.
   Per-read byte/line cap. Path is normalized (reject `..` / absolute); with the in-DB/read-only
   FS, traversal escape is structurally impossible (no symlinks, no parent dirs).
+
+**Status (2026-06-18): C + D implemented.**
+- `daisen2/internal/httpapi/codetools.go`: `code_search` (RE2 regex over
+  `Server.CodeSource().FS()`, optional `path_contains` substring filter, capped matches/bytes/
+  line-length with a truncation note) and `code_read` (FS-relative path, optional
+  `start_line`/`end_line`, numbered lines, default window + "more lines" note, per-read
+  line/byte caps, `fs.ValidPath` guard). Both require `reason`; an empty `codeSource` returns a
+  "no source recorded" observation rather than erroring. Registered in the `runAgentSSE` tool
+  slice — no frontend changes (the SSE step trail already renders arbitrary tools).
+- Added `sourcefs.NewSource(fsys, roots)` so the tools — and a future on-disk `--code-root`
+  override — build over any `fs.FS`.
+- Note: `path_contains` (substring) replaces the planned `path_glob`; `path.Match` can't span
+  `/`, so it's useless on deep module paths. Search returns match lines only; the agent uses
+  `code_read` for surrounding context (the natural search→read flow).
+- Verified: unit tests (search match / filter / no-match / invalid-regex / caps / empty; read
+  window / range / not-found / traversal-reject / long-file) and an end-to-end mock-provider SSE
+  test driving `code_search → code_read → answer`. `daisen2/internal/httpapi`, `sourcefs`,
+  `simulation` suites + `go build ./...` + vet green.
 
 ### Workstream E — system prompt, loop wiring & verification
 
