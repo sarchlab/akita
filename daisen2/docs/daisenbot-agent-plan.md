@@ -1,6 +1,6 @@
 # DaisenBot Agentic Upgrade — Design & Implementation Plan
 
-**Status:** Phase 1 merged (#387) · Phase 2 in progress (agent loop + `data_query`, §7) · **Last updated:** 2026-06-15
+**Status:** Phases 1–2 merged (#387, #392) · Phase 5 (viz perception) merged with #392 · **Phase 3 complete — Workstreams A (source recording), B (daisen2 reader), C/D (`code_search`/`code_read` tools), E (embedded system prompt) all implemented. Follow-up: the tutorial/component-doc recommendation for `WithSourceFS` (decision #2). — §8** · **Last updated:** 2026-06-17
 
 This document captures the design decisions and phased plan for turning DaisenBot
 from a single-shot Q&A proxy into a tool-using agent that can *investigate* an
@@ -72,7 +72,7 @@ a fallback.
 | Tool | Executes in | Returns | Guardrails |
 |---|---|---|---|
 | `data_query(sql, limit)` | backend (read-only SQLite) | capped rows / counts / stats | SELECT-only · forced `LIMIT` · row+byte cap · statement timeout · block `ATTACH`/`PRAGMA`/writes |
-| `code_search` / `code_read` | backend | Akita source text | scoped to the akita repo · version-matched to the trace's commit if recorded · reuses the existing SSRF-guarded fetch |
+| `code_search` / `code_read` | backend | Akita (+ opt-in sim) source text | reads source **recorded into the trace** (akita by default; component author opts in) · read-only `fs.FS` · result byte/line/match caps · see §8 |
 | `run_python(code)` | backend sandbox | stdout summary (+ emitted artifacts) | isolated runtime · read-only trace handle · library allowlist · no network · CPU/mem/wall limits |
 | `daisen_view(url)` | **frontend** (off-screen) | rendered PNG observation + user-facing link | URL validated/normalized against the view schema · render-ready gate before capture |
 
@@ -266,7 +266,7 @@ detailed in §6.
 |---|---|---|---|
 | **1** | View-URL contract + render-ready signal | Make every view losslessly reconstructable from its URL, and expose a programmatic "view is fully rendered" signal. Renderer-agnostic; independently useful as better link-sharing. | — |
 | **2** | Agent-loop skeleton + tool-calling + `data` tool | Turn `httpChatProxy` into a streamed multi-step tool-calling loop; land the guarded read-only `data_query`; add capability-gating with single-shot fallback. Includes the front door + Orient→Hypothesize→Test loop (§4) and a first failure-mode catalog. A working "agent that can query the trace" — the biggest single value jump. | — |
-| **3** | `code` tool | `code_search` + `code_read` over Akita source so the agent can interpret Kinds/milestones. | 2 |
+| **3** | `code` tool | `code_search` + `code_read` over source **recorded into the trace** (akita by default; component author opts in) so the agent can interpret Kinds/milestones. Detailed in §8. | 2 |
 | **4** | Python sandbox tool | Sandboxed `run_python` for summarizing data without shipping raw rows. Isolated as its own phase for the runtime/isolation decision. | 2 |
 | **5** | Viz-perception tool + visual tour | `daisen_view`: frontend off-screen render → image observation; clickable links + thumbnails. Extends gating to require a vision model. | 1, 2 |
 | **6** | Hardening | Loop bounds (max iters / wall-clock), cross-tool context budgeting/pagination, graceful-degradation matrix (model caps × installed runtimes), answer-quality eval harness. | 2–5 |
@@ -368,7 +368,7 @@ All single-value params; the existing names (`name`, `taskid`, `starttime`,
    agent's natural single-chart perception unit for `daisen_view` (§3.2), and it is
    also user-shareable. A per-widget "focus" affordance sets the param. ✅
 
-This **resolves open questions #1, #3, and #5** (see §8).
+This **resolves open questions #1, #3, and #5** (see §9).
 
 ### Workstream B — Canonical URL schema (the contract)
 
@@ -516,7 +516,7 @@ failure-mode catalog, multi-agent, the off-screen capture.
   statement, injected/clamped `LIMIT`, per-query timeout, and a byte cap on the
   serialized result.
 - Execute via `traceReader.QueryContext`; format as compact rows + a row-count /
-  truncation note. (Review note §8: returns *capped* rows — bulk summarization is the
+  truncation note. (Review note §9: returns *capped* rows — bulk summarization is the
   Phase 4 Python tool; the guarantee here is "no *bulk* raw data".)
 
 ### Workstream C — Endpoint + SSE streaming
@@ -563,7 +563,212 @@ failure-mode catalog, multi-agent, the off-screen capture.
 
 ---
 
-## 8. Open questions / to audit
+## 8. Phase 3 — detailed
+
+**Goal:** give the agent `code_search` + `code_read` over the Akita (and, opt-in, the
+downstream simulator's) source, so it can interpret what a `Kind`, `milestone`, `What`
+type, or component actually *means* in the simulator — turning opaque trace labels into
+architecturally-grounded explanations instead of guesses. Outcome: *"an agent that can
+read the code that produced the trace."*
+
+**Builds on:** the Phase 2 agent-loop / tool-dispatch seam (`agentloop.go`; a tool is just
+an `agentTool` entry in the `runAgentSSE` tool slice, dispatched by `runToolCalls`) and the
+`datarecording` writer (`CreateTable`/`InsertData`/`Flush`) that already records `exec_info`
+(`simulation/meta_recorder.go`).
+
+**Non-goals (Phase 3):** the Python sandbox (Phase 4); symbol-level / semantic indexing
+(`go/packages`) — plain regex search is v1; remote source fetch from GitHub.
+
+### Source provenance — the key decision (accepted 2026-06-17)
+
+daisen2 is **offline replay** (`daisen2 -sqlite <file>`, `cmd/daisen2/main.go`): by the time
+it runs, the simulator process has exited, so a `//go:embed` *in the sim binary* is
+unreachable. Also `//go:embed` only reaches a package's own subtree, and `daisen2/` is a
+*sibling* of `mem/`, `tracing/`, `noc/`, … so daisen2 cannot embed akita's source directly
+either. Therefore the source must **travel in the trace**: it is recorded at generation time
+and read back by daisen2.
+
+- **akita's own source — recorded by default, read from disk at record time.** The recorder
+  locates akita's source on disk (the Go module cache, a `replace` path, or the working tree
+  when akita is the main module) via the compiled-in path of an akita source file, and writes
+  it into the trace automatically; the library user does nothing. **Disk-read is the default
+  because Daisen's user iterates on a concrete simulator** — edit, rebuild, run — and Go
+  requires a rebuild to run changed code, so the source on disk *is* what the binary was built
+  from. No generated/embedded artifact to regenerate, and the recorded source always matches
+  the run.
+- **The component author's source — recommended, opt-in.** A simulator built on akita registers
+  its own tree with `sim.WithSourceFS(root, fsys)` (typically a `//go:embed`); the recorder
+  folds it into the same source table. **Documented as a recommendation in the tutorial and
+  component-authoring docs** so authors opt in. If they don't, DaisenBot has akita-only source
+  and *says so* for unknown components (graceful degradation, per §3.4) — it never fabricates.
+- **Transport:** source lives **in the SQLite trace** (gzipped-tar per root, base64 in a row),
+  one self-contained artifact per simulation, so it can never get separated from the trace.
+- **Degradation:** when akita source is *not* on disk — a `-trimpath` build, or a prebuilt
+  binary moved to a source-less machine — the recorder records nothing for akita (no guessing);
+  daisen2 then reports no source and the agent says so. The iterative local developer (plain
+  `go build`/`go run`/`go test`) always has it.
+
+This **supersedes** the §3.2 sketch ("scoped to the akita repo · version-matched to the
+trace's commit · SSRF-guarded remote fetch"). `code_search` / `code_read` operate over a
+`codeSource` `fs.FS` materialized from the recorded source; the tool surface is identical
+regardless of provenance, so a future live/in-process mode or `--code-root` override can feed
+the same interface without touching the tools.
+
+### Workstream A — disk source locator + recorder
+
+- `sourcefs` locates akita's source on disk from the compiled-in path of its own file
+  (`runtime.Caller` → walk up to the `go.mod` declaring the akita module), so it resolves akita
+  as a module-cache dependency, a `replace` target, or the main module. It also serializes a
+  directory or an `fs.FS` to a gzip-tar (non-test `.go` + `go.mod`, pruning
+  `.git`/`.claude`/`vendor`/`node_modules`/`testdata`/`dist`).
+- The simulation recorder writes a `source` table, akita-source by default (from disk);
+  `sim.WithSourceFS(root, fsys)` adds author roots. Reuses `datarecording`
+  (`CreateTable`/`InsertData`/`Flush`). `WithoutSourceRecording()` opts out.
+
+**Status (2026-06-18): implemented (disk-based).**
+- `sourcefs` package: `AkitaSourceDir()` (disk locator), `ArchiveDir`/`ArchiveFS` +
+  `WriteArchive`/`ReadArchive` (the gzip-tar format, shared with daisen2's future reader). No
+  `//go:embed`, no generated blob, no `go generate` — so nothing to keep in sync.
+- `simulation` records a `source(Root, Format, Content)` table — one row per source root.
+  `Content` is **base64(gzip-tar)** stored as TEXT: the data recorder accepts only scalar
+  struct fields (`isAllowedType` rejects `[]byte`), so no BLOB column is available (~+33% over
+  raw gzip; a later `datarecording` BLOB column could drop it).
+- Builder: `WithSourceFS(root, fs)` adds author roots (opt-in), `WithoutSourceRecording()`
+  opts out. Recording is **gated on `WithVisTracingOnStart`** so only traces meant for DaisenBot
+  carry source; untraced sim DBs stay minimal.
+- Verified: a traced virtualmem run records akita source from disk (1.31 MB → ~1.61 MB,
+  **+~292 KB**); the row base64-decodes → gunzips → untars to real source (268 files incl.
+  `mem/mshr/mshr.go`, `tracing/tracer.go`), and the sim binary carries **no** embedded blob.
+  Unit tests: archive round-trip/determinism, `ArchiveFS`, `AkitaSourceDir`, `ArchiveDir`
+  filtering; `recordSourceArchives` akita-from-disk + author rows. `simulation` +
+  `datarecording` suites green.
+- **Next (Workstream B):** daisen2 reads the `source` table into a `codeSource` `fs.FS` (reusing
+  `sourcefs.ReadArchive`).
+
+### Workstream B — daisen2 reads source from the trace
+
+- On load, daisen2 reads the recorded source blob from the SQLite trace and exposes it as an
+  in-memory **read-only** `fs.FS` (`codeSource`). Absent ⇒ empty `codeSource` with a clear
+  "no source recorded for this trace" capability note surfaced to the agent (and the tools are
+  still offered but report the gap rather than erroring).
+
+**Status (2026-06-18): implemented.**
+- `sourcefs.OpenTraceSource(db *sql.DB) (*Source, error)` reads the `source` table, base64-decodes
+  + un-tars each root via `ReadArchive`, and returns a read-only `fs.FS` (paths `<root>/<file>`)
+  plus `Roots` / `Files`. A missing/empty `source` table is **not** an error — it returns an empty
+  `Source` — so pre-Phase-3 traces load fine. (`database/sql`-only, so it's reusable outside
+  daisen2.)
+- daisen2 `Server` loads it once on startup (`loadCodeSource`) into `s.codeSource` and exposes
+  `CodeSource()` for the tools. Startup logs coverage, e.g.
+  `DaisenBot: recorded source available — 268 files across [github.com/sarchlab/akita/v5]`, or
+  `no source recorded in this trace`.
+- Verified: `OpenTraceSource` unit tests (populated table + reads a file back; missing table →
+  empty); running daisen2 against the recorded virtualmem trace logs the 268-file coverage.
+  `go build ./...`, `sourcefs` + `daisen2/internal/httpapi` suites, gofmt, vet all green.
+- **Next (Workstreams C/D):** `code_search` / `code_read` tools over `Server.CodeSource().FS()`,
+  registered in the `runAgentSSE` tool slice.
+
+### Workstream C — `code_search` (regex content search)
+
+- In-Go regex (RE2, `regexp`) content search over `codeSource`: returns capped `path:line` +
+  surrounding-context matches; optional `path_glob` to scope; **required `reason`** (same
+  pattern as `data_query`, surfaced in the step trail). Caps on files scanned / matches
+  returned / total bytes / per-match context lines, with an explicit truncation note. No
+  external `rg` dependency.
+
+### Workstream D — `code_read` (windowed file read)
+
+- Read a file by FS-relative path, optional `[start_line, end_line]`, returns numbered lines;
+  **required `reason`**. A large file with no range ⇒ first window + a "request a range" note.
+  Per-read byte/line cap. Path is normalized (reject `..` / absolute); with the in-DB/read-only
+  FS, traversal escape is structurally impossible (no symlinks, no parent dirs).
+
+**Status (2026-06-18): C + D implemented.**
+- `daisen2/internal/httpapi/codetools.go`: `code_search` (RE2 regex over
+  `Server.CodeSource().FS()`, optional `path_contains` substring filter, capped matches/bytes/
+  line-length with a truncation note) and `code_read` (FS-relative path, optional
+  `start_line`/`end_line`, numbered lines, default window + "more lines" note, per-read
+  line/byte caps, `fs.ValidPath` guard). Both require `reason`; an empty `codeSource` returns a
+  "no source recorded" observation rather than erroring. Registered in the `runAgentSSE` tool
+  slice — no frontend changes (the SSE step trail already renders arbitrary tools).
+- Added `sourcefs.NewSource(fsys, roots)` so the tools — and a future on-disk `--code-root`
+  override — build over any `fs.FS`.
+- Note: `path_contains` (substring) replaces the planned `path_glob`; `path.Match` can't span
+  `/`, so it's useless on deep module paths. Search returns match lines only; the agent uses
+  `code_read` for surrounding context (the natural search→read flow).
+- Verified: unit tests (search match / filter / no-match / invalid-regex / caps / empty; read
+  window / range / not-found / traversal-reject / long-file) and an end-to-end mock-provider SSE
+  test driving `code_search → code_read → answer`. `daisen2/internal/httpapi`, `sourcefs`,
+  `simulation` suites + `go build ./...` + vet green.
+
+### Workstream E — system prompt, loop wiring & verification
+
+- **Wiring (trivial):** register `codeSearchTool(src)` / `codeReadTool(src)` in the
+  `runAgentSSE` tool slice. They return text-only `toolResult`s; `runToolCalls` and the SSE
+  `step`/`observation` events already handle arbitrary tools, so the visible trail renders for
+  free. **No frontend changes** (unlike `daisen_view`).
+- **System prompt:** document the two tools and *when* to use them ("when a Kind / milestone /
+  `What` type / component is unfamiliar, read the source to ground the interpretation before
+  explaining it — do not guess"), plus a short **source map** (akita:
+  `mem/{cache,dram,mshr,rob,vm}`, `noc/`, `messaging/`, `queueing/`, `tracing/`, `simulation/`)
+  so searches are targeted. Tie back to the bottleneck catalog (§4.4): confirm a hypothesized
+  mechanism by reading the component's source.
+- **Verification** (mirrors `agentloop_test.go`): guard/cap units (path normalization, byte/
+  line/match caps, regex over a fixture FS); real-source integration (`code_search` finds
+  `type ReadReq`; `code_read` returns its definition) over a seeded source blob; and a
+  mock-provider end-to-end `TestAgentCodeToolsSSE` that scripts `code_search` → `code_read` →
+  final answer and asserts the SSE `step` → `observation` → `message` sequence — deterministic,
+  **no API key**.
+
+**Status (2026-06-18): implemented.** (Loop wiring landed with C/D; verification noted there.)
+- The system prompt is now authored as markdown in `daisen2/internal/httpapi/prompts/agent_system.md`
+  and **embedded via `//go:embed`** (`prompt.go`), replacing the hardcoded Go `const` — so the
+  prompt can use real markdown (code spans, lists) and is edited without touching Go. The Go
+  raw-string `const` couldn't even contain backticks.
+- It documents all five tools (`data_query`, `code_search`, `code_read`, `screenshot_current_view`,
+  `daisen_view`), the front door, the **"read the source before guessing"** rule, the source map
+  (paths are module-prefixed, e.g. `github.com/sarchlab/akita/v5/mem/cache/…`), the seed bottleneck
+  catalog, and an **evidence policy**: when proving a hypothesis, *attempt* to corroborate it from
+  all three sources (trace data + source code + a visualization), proceeding honestly and naming the
+  missing leg when one isn't available (e.g. no recorded source). Per-trace availability is
+  tool-reported (no runtime prompt templating), per the §8 decision.
+- Verified: `TestAgentSystemPromptEmbedded` (embed wired; all five tools documented); the existing
+  agent SSE tests now run against the embedded prompt; `go build ./...`, `daisen2/internal/httpapi`
+  suite, gofmt, vet green.
+
+### (Optional) skills
+
+Once `code_read` exists over an `fs.FS`, a minimal **skills** feature (the §7-D successor to
+the hardcoded prompt) is nearly free: embed `daisen2/skills/*.md` playbooks the agent can read,
+or add a thin `list_skills` / `read_skill` pair (literally `code_*` pointed at a `skills/`
+dir). Land it after the code tools if there is appetite; not required for Phase 3.
+
+### Decisions (accepted 2026-06-17)
+
+1. **Source travels in the trace**, recorded at generation time — daisen2 is replay-only and
+   `//go:embed` can reach neither the sim binary nor akita's sibling dirs. ✅
+2. **akita source recorded by default; component-author source recommended + opt-in**, and
+   documented in the tutorial/component docs. Graceful degradation when the author's source is
+   absent — never fabricate. ✅
+3. **In-DB**, stored in the trace (gzip-tar per root), not a sidecar — one self-contained
+   artifact per simulation. ✅
+4. **akita source read from disk at record time** (module cache / `replace` / working tree),
+   *not* an embedded blob. Chosen over embedding because Daisen's user iterates on a concrete
+   simulator: disk-read always matches the rebuilt binary and has no artifact to regenerate.
+   Trade-off: a `-trimpath` build or a binary moved off the build machine has no source on
+   disk → record nothing for akita (graceful). ✅ *(supersedes the earlier embed/`go generate`
+   approach)*
+5. v1 search is **plain regex**, not a `go/packages` symbol index. ✅
+6. **Stored as base64 TEXT**, not a BLOB — the data recorder accepts scalar struct fields only,
+   so the gzip-tar is base64-wrapped (~+33%; akita ≈242 KB gz → ≈322 KB base64). Native BLOB
+   support in `datarecording` is a possible later cleanup to drop the overhead. ✅
+7. **Recorded only for traced sims** (gated on `WithVisTracingOnStart`); the trace is the
+   consumer, so untraced sim DBs stay minimal. `WithoutSourceRecording()` opts out;
+   `WithSourceFS(root, fs)` adds author roots. ✅
+
+---
+
+## 9. Open questions / to audit
 
 1. ~~**Multi-select / large selections**~~ — **Resolved (Workstream A):** no
    multi-selection exists in any page; single-value params suffice. Revisit only if
@@ -613,7 +818,7 @@ failure-mode catalog, multi-agent, the off-screen capture.
 
 ---
 
-## 9. Non-goals
+## 10. Non-goals
 
 - No headless/server-side rendering (Chromium) — the live frontend is the renderer.
 - No bespoke charting (matplotlib/plotly) for agent perception — Daisen renders.
@@ -641,3 +846,8 @@ failure-mode catalog, multi-agent, the off-screen capture.
 | Evidence is hypothesis-driven, vital-signs-first, budgeted (§4.5) | Minimizes tokens/latency and keeps raw data off the LLM wire. |
 | Canonical dashboard route `/dashboard` (redirect `/`) | One canonical URL per view; required for shareable links and deterministic agent rendering. |
 | Single-widget URL mode `/dashboard?widget=<component>` | A single focused chart is the agent's natural perception unit for `daisen_view`; also user-shareable. |
+| Phase 3 source travels *in the trace*, recorded at generation time | daisen2 is offline-replay, so a sim-binary `//go:embed` is unreachable, and `//go:embed` can't cross sibling dirs (`daisen2/` ↔ `mem/`). Recording into the trace is self-contained and version-matched by construction. |
+| akita source recorded by default; component-author source recommended + opt-in (documented) | akita-level components are always interpretable; authors opt in for custom components, with graceful degradation (and no fabrication) when absent. |
+| Source stored in-DB as one gzipped blob, not a sidecar | One self-contained artifact per simulation; the source can't get separated from the trace. |
+| akita source read from disk at record time (not embedded) | Daisen's user iterates on a concrete simulator (edit→rebuild→run); disk-read always matches the rebuilt binary and needs no regenerated/embedded artifact. Degrades gracefully (records nothing) under `-trimpath` or a moved binary. Supersedes the embed/`go generate` approach. |
+| v1 `code` search is plain regex, not a symbol index | Regex over recorded source is simple and dependency-free; `go/packages` indexing needs the code to compile and adds build deps — deferred. |

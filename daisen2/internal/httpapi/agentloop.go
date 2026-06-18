@@ -514,41 +514,13 @@ func rawCellToString(v interface{}) string {
 	}
 }
 
-// ---- Agent system prompt & message assembly ----
-
-const agentSystemPrompt = `You are DaisenBot, an assistant that investigates Akita
-computer-architecture simulation traces.
-
-You can call the data_query tool to run read-only SQL over the trace. Use it to gather evidence
-before answering questions about behavior, bottlenecks, or specific tasks. Every data_query call
-must include a one-sentence "reason" describing what you are checking — it is shown to the user
-as your reasoning, so make it clear.
-
-You do NOT have the trace rows in your context. For any question about the trace's contents,
-timings, counts, or behavior, you MUST gather the facts with data_query first — do not answer
-such questions from memory or assumption, and never invent task IDs, durations, or counts. Run
-at least one query before making a quantitative claim.
-
-You can also SEE Daisen's visualizations:
-- screenshot_current_view: capture what the user is currently looking at on screen, and look at it.
-- daisen_view: render a specific Daisen view off-screen by its URL and look at it. URL scheme:
-"/dashboard?widget=<component>&starttime=<t>&endtime=<t>&primary=<metric>&secondary=<metric>";
-"/component?name=<component>&taskid=<id>&starttime=<t>&endtime=<t>";
-"/task?id=<taskid>&where=<component>&kind=<kind>". Times are raw trace values.
-Use these when a question is about visual patterns (timelines, bursts, periodicity, occupancy
-shapes) that are easier to see than to query. Both take a one-sentence "reason".
-
-Front door:
-- If a question is a simple definition or can be answered from the provided context, answer directly without tools.
-- If a question is ambiguous (e.g. which component, which time range), ask ONE concise clarifying question.
-- Otherwise, investigate: form a hypothesis, run targeted data_query calls to confirm or refute it,
-then answer with the evidence (cite the numbers you found). Prefer aggregates over dumping rows.
-
-Common Akita bottleneck patterns to consider (seed list — not exhaustive): cache miss/thrashing,
-queue backpressure / buffer-full stalls, limited outstanding requests (MSHRs), DRAM bank conflicts,
-bandwidth saturation, head-of-line blocking, and address-translation (TLB) stalls.
-
-Be concise and concrete. When you are uncertain, say so and report what you ruled out.`
+// ---- Agent message assembly ----
+//
+// The agent system prompt is authored as markdown in prompts/agent_system.md and
+// embedded via //go:embed (see prompt.go) so it can use real markdown (code spans,
+// lists) and be edited without touching Go. It documents the data_query, code_search,
+// code_read, screenshot_current_view, and daisen_view tools, the front door, the
+// evidence policy, and the seed bottleneck catalog.
 
 // assembleAgentMessages builds the message list for an agent-mode request: just
 // the agent system prompt followed by the user's conversation, verbatim. Nothing
@@ -592,6 +564,8 @@ func (s *Server) runAgentSSE(
 	capture := s.newCaptureRequester(emit)
 	tools := []agentTool{
 		dataQueryTool(s.traceReader),
+		codeSearchTool(s.codeSource),
+		codeReadTool(s.codeSource),
 		daisenViewTool(capture),
 		screenshotTool(capture),
 	}

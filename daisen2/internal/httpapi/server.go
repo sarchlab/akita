@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sarchlab/akita/v5/daisen2/static"
+	"github.com/sarchlab/akita/v5/sourcefs"
 )
 
 // Server is the Daisen replay server. It reads trace data from a SQLite file
@@ -22,6 +23,11 @@ type Server struct {
 	traceReader *SQLiteTraceReader
 	fs          http.FileSystem
 	httpServer  *http.Server
+
+	// codeSource is the simulator source recorded in the loaded trace, read once
+	// on startup. The code-reading tools (code_search / code_read) search it.
+	// Non-nil; IsEmpty reports when the trace carries no source.
+	codeSource *sourcefs.Source
 
 	// captures correlates a pending agent capture request (keyed by id) with the
 	// browser that will POST the image back to /api/agent/capture (Phase 5).
@@ -44,6 +50,7 @@ func NewReplayServer(sqliteFile, addr string) *Server {
 		addr:        addr,
 		traceReader: reader,
 		fs:          static.GetAssets(),
+		codeSource:  loadCodeSource(reader),
 	}
 }
 
@@ -61,7 +68,34 @@ func NewReplayServerReadOnly(sqliteFile string) *Server {
 		mode:        "replay",
 		traceReader: reader,
 		fs:          static.GetAssets(),
+		codeSource:  loadCodeSource(reader),
 	}
+}
+
+// loadCodeSource reads the source recorded in the trace (if any) and logs what
+// is available. It never fails the server: an unreadable or missing source
+// table yields an empty Source, and DaisenBot reports the gap rather than
+// erroring.
+func loadCodeSource(reader *SQLiteTraceReader) *sourcefs.Source {
+	src, err := sourcefs.OpenTraceSource(reader.DB)
+	if err != nil {
+		log.Printf("DaisenBot: could not read recorded source from trace: %v", err)
+		return &sourcefs.Source{}
+	}
+	if src.IsEmpty() {
+		log.Printf("DaisenBot: no source recorded in this trace")
+	} else {
+		log.Printf("DaisenBot: recorded source available — %d files across %v",
+			src.Files, src.Roots)
+	}
+	return src
+}
+
+// CodeSource returns the simulator source recorded in the loaded trace, for the
+// code-reading tools. It is non-nil; use IsEmpty to detect a trace with no
+// recorded source.
+func (s *Server) CodeSource() *sourcefs.Source {
+	return s.codeSource
 }
 
 // Start starts the HTTP server in replay mode. It listens on the configured
