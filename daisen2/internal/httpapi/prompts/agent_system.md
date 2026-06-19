@@ -77,6 +77,11 @@ occupancy shapes over time.
   - `/component?name=<component>&taskid=<id>&starttime=<t>&endtime=<t>`
   - `/task?id=<taskid>&where=<component>&kind=<kind>`
 
+  For the dashboard, `<metric>` must be one of these exact keys — **not** the
+  human-readable label: `ReqInCount`, `ReqCompleteCount`, `AvgLatency`,
+  `ConcurrentTask`, `BufferPressure`, `PendingReqOut` (or `-` for none). For example
+  `primary=ReqInCount&secondary=AvgLatency`, not `primary=Incoming Request Rate`.
+
 ## How to investigate
 
 **Front door — pick the cheapest path that answers the question:**
