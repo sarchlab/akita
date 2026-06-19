@@ -88,6 +88,27 @@ occupancy shapes over time.
   `ParentID`). Use the URL spelling in `daisen_view` URLs and the column spelling in
   `data_query` SQL — do not write `start_time` in a URL.
 
+  **Reading the component view (`/component`).** The chart stacks each in-flight task
+  as a band on the y-axis, so the **height of the stack at a given time is that
+  component's concurrency** — how many tasks it is handling at once. When a component
+  holds the **same level of concurrency across the whole window with no gaps** (the
+  stack never drops toward zero), that is a strong sign it is **working at full
+  capacity**: it always has as much work in flight as it can hold, which makes it a
+  likely bottleneck. Dips and gaps down toward zero mean it is intermittently idle or
+  under-subscribed.
+
+  **Select a task in the component view** with `taskid` —
+  `/component?name=<component>&taskid=<id>` (`name` is optional when a `taskid` is given;
+  the view resolves the task's own component). This is one of the most useful and most
+  **underused** views: it highlights that single task inside the component's concurrent
+  activity, and adds a panel showing the task together with its **parent task** (the
+  upstream request that caused it) and its **child tasks** (the sub-requests it issued),
+  all time-aligned. Reach for it to see **what a component is doing while a specific task
+  is in flight**, and to walk the dependency chain (`ParentID`) up and down visually —
+  e.g. to find what a stalled task is waiting on, or how one request fans out into
+  sub-work. Whenever you are explaining a *specific task's* behavior, prefer this
+  task-selected view over the plain component view.
+
 ## How to investigate
 
 **Front door — pick the cheapest path that answers the question:**
@@ -104,6 +125,28 @@ iterate to the next hypothesis or refine → then answer, citing the specific ev
 you found. Work one hypothesis at a time so your reasoning stays legible. To *refute*
 or narrow a hypothesis, reach for whichever source is cheapest. If nothing is
 conclusive, say so and report what you ruled out — never fabricate a cause.
+
+**For "why is this task like this" questions, ask why it could not start earlier or end
+earlier.** Decompose the task's timing into two gaps: (1) *why it did not start earlier* —
+what it waited on before its `StartTime` (its parent/upstream task not yet done; a busy or
+full resource — queue, buffer, MSHR; arbitration for a shared resource; an unmet
+dependency); and (2) *why it did not end earlier* — what stretched it between `StartTime`
+and `EndTime` (its own service/processing time, or waiting on its subtasks in downstream
+components to return). The two gaps have different causes and point at different places to
+look: the start gap is usually upstream or at a contended resource, the duration is usually
+the component's own work or downstream. Attribute the time using milestones, the parent's
+`EndTime` vs this task's `StartTime`, and the subtask spans — then say which gap dominates
+and why.
+
+**Parent/subtask questions span components.** A task's `Location` is the component it
+ran in, and `ParentID` links a subtask to the task that spawned it. A task's **parent**
+runs in the *upstream* component that issued the request; its **subtasks** run in the
+*downstream* components it forwarded the work to. So when the user asks about a task's
+parent/subtask relationship, do **not** look only at the task's own component — pull the
+parent task from the **upstream** component and the child tasks from the **downstream**
+components. Use `data_query` to join on `ParentID` and read each task's `Location`, and
+use the task-selected component view (`/component?...&taskid=<id>`, above), which lays
+out the parent and subtasks and lets you click through to their components.
 
 **When proving a hypothesis, attempt to corroborate it from all three sources.**
 Before presenting a hypothesis as *the cause*, try to gather:
@@ -143,6 +186,16 @@ requests (MSHR exhaustion); DRAM bank conflicts and row-buffer thrashing; bandwi
 saturation; head-of-line blocking in FIFOs; address-translation (TLB) miss /
 page-walk stalls; arbitration contention at shared resources; load imbalance across
 peer components.
+
+**Consider implementation bugs, not just hardware behavior.** A phenomenon in the
+trace can be an artifact of a **simulator implementation bug** rather than realistic
+hardware behavior — a miscounted resource, an off-by-one in a queue, a slot that is
+never released, a milestone emitted at the wrong time. Always keep "the simulator's
+code is wrong here" on your hypothesis list alongside the architectural patterns above,
+and use `code_search` / `code_read` to check whether the mechanism the code actually
+implements matches what a correct component would do. When the data is physically
+implausible for the modeled hardware (e.g. a latency or concurrency level that should
+not be possible), suspect the model before the hardware.
 
 ## Style
 
