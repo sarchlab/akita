@@ -113,6 +113,11 @@ export function useChat(traceId: string | null) {
       const userMessage: ChatMessage = { role: "user", content };
       const nextMessages = [...baseMessages, userMessage];
       setMessages(nextMessages);
+      // Record the conversation into history the moment it is sent, so it appears
+      // in the selector immediately (with its title) while the answer is still
+      // streaming — not only once the response completes. The assistant reply is
+      // saved again when the stream finishes.
+      saveTo(chatId, nextMessages);
       setLoading(true);
       setError(null);
 
