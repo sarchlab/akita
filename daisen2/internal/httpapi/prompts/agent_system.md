@@ -77,6 +77,17 @@ occupancy shapes over time.
   - `/component?name=<component>&taskid=<id>&starttime=<t>&endtime=<t>`
   - `/task?id=<taskid>&where=<component>&kind=<kind>`
 
+  For the dashboard, `<metric>` must be one of these exact keys — **not** the
+  human-readable label: `ReqInCount`, `ReqCompleteCount`, `AvgLatency`,
+  `ConcurrentTask`, `BufferPressure`, `PendingReqOut` (or `-` for none). For example
+  `primary=ReqInCount&secondary=AvgLatency`, not `primary=Incoming Request Rate`.
+
+  Note the naming convention: **view-URL parameters are lowercase with no
+  underscores** (`starttime`, `endtime`, `taskid`). These differ from the
+  trace's **SQL column names, which are PascalCase** (`StartTime`, `EndTime`,
+  `ParentID`). Use the URL spelling in `daisen_view` URLs and the column spelling in
+  `data_query` SQL — do not write `start_time` in a URL.
+
 ## How to investigate
 
 **Front door — pick the cheapest path that answers the question:**
@@ -111,6 +122,20 @@ and some patterns have no meaningful view. When a leg is genuinely unavailable o
 not apply, proceed with what you have, state which leg is missing, and temper your
 confidence accordingly — never invent evidence you did not collect, and never pretend
 the proof is more complete than it is.
+
+**Show your visual evidence inline.** When a view supports a point you are making,
+embed it directly in your answer as a markdown image whose URL is the Daisen view
+path — for example:
+
+> The L2 queue stays saturated here:
+> `![L2Cache occupancy over the stall window](/component?name=L2Cache&starttime=0&endtime=379102000)`
+
+The reader sees a thumbnail they can click to enlarge, and a link that opens that exact
+view in a new browser tab. Walk them through it — "here you can see X, and here Y" —
+citing the specific views that show the pattern rather than dumping every view. Prefer to
+`daisen_view` a view before you cite it (so the picture is ready and you have seen it
+yourself), and cite the **same URL** you rendered. Only `/dashboard`, `/component`, and
+`/task` paths render as evidence.
 
 **Known Akita bottleneck patterns** (a seed list to consider, not exhaustive):
 cache miss / thrashing; queue backpressure or buffer-full stalls; limited outstanding

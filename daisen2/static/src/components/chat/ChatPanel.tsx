@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Bot, ImagePlus, Paperclip, Plus, Send, Settings, X } from "lucide-react";
+import { ArrowLeft, Bot, ImagePlus, Paperclip, Send, Settings, Trash2, X } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
@@ -8,6 +8,7 @@ import { useChat } from "../../hooks/useChat";
 import { useComponentNames } from "../../hooks/useComponentNames";
 import { useSimulationRange } from "../../hooks/useSimulationRange";
 import { useLLMSettings } from "../../hooks/useLLMSettings";
+import { useTraceId } from "../../hooks/useTraceId";
 import type { TraceInformation, UploadedFile, UnitContent } from "../../types/chat";
 import {
   FILE_UPLOAD_ACCEPT,
@@ -18,12 +19,22 @@ import {
 import MessageBubble from "./MessageBubble";
 import ChatSettings from "./ChatSettings";
 import { SidePanel } from "../ui/side-panel";
+import Lightbox, { type LightboxImage } from "./Lightbox";
 import { cn } from "../../lib/utils";
 
 function humanSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatWhen(timestamp: number) {
+  return new Date(timestamp).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function readFileAsDataUrl(file: File) {
@@ -44,17 +55,21 @@ function readFileAsText(file: File) {
   });
 }
 
-export default function ChatPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function ChatPanel({ open }: { open: boolean }) {
   const [showSettings, setShowSettings] = useState(false);
+  const [lightbox, setLightbox] = useState<LightboxImage | null>(null);
+  const [view, setView] = useState<"list" | "chat">("list");
   const [input, setInput] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const traceId = useTraceId();
   const { names } = useComponentNames();
   const { startTime, endTime } = useSimulationRange();
   const { settings, update, applyPreset, clearKey } = useLLMSettings();
   const {
     messages,
+    chatHistory,
     loading,
     error,
     uploadedFiles,
@@ -62,8 +77,18 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
     removeUploadedFile,
     clearUploadedFiles,
     sendMessage,
-    newChat,
-  } = useChat();
+    loadChat,
+    deleteChat,
+  } = useChat(traceId);
+
+  // Past conversations for the selector: those with a message, newest first.
+  const conversations = useMemo(
+    () =>
+      chatHistory
+        .filter((chat) => chat.messages.some((message) => message.role === "user"))
+        .sort((a, b) => b.timestamp - a.timestamp),
+    [chatHistory],
+  );
 
   const traceInfo: TraceInformation = useMemo(
     () => ({
@@ -110,8 +135,10 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
       .filter((file) => file.type === "image" || file.type === "image-screenshot")
       .forEach((file) => content.push({ type: "image_url", image_url: { url: file.content } }));
 
+    const startNew = view === "list";
     setInput("");
-    await sendMessage(content, traceInfo, settings);
+    if (startNew) setView("chat");
+    await sendMessage(content, traceInfo, settings, { newConversation: startNew });
     clearUploadedFiles();
   }
 
@@ -120,6 +147,17 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
       <SidePanel className={cn("flex w-[min(560px,42vw)] flex-col", !open && "hidden")}>
         <header className="flex h-14 items-center justify-between border-b px-3">
           <div className="flex items-center gap-2 font-semibold">
+            {view === "chat" && !showSettings ? (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                onClick={() => setView("list")}
+                aria-label="Back to conversations"
+              >
+                <ArrowLeft />
+              </Button>
+            ) : null}
             <Bot className="h-5 w-5 text-primary" />
             Daisen Bot
           </div>
@@ -132,13 +170,6 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
               aria-label="Model and provider settings"
             >
               <Settings />
-            </Button>
-            <Button type="button" size="sm" variant="outline" onClick={newChat}>
-              <Plus />
-              New
-            </Button>
-            <Button type="button" size="icon" variant="ghost" onClick={onClose}>
-              <X />
             </Button>
           </div>
         </header>
@@ -154,13 +185,53 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
         ) : (
           <>
             <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
-              <div className="text-center text-xs text-muted-foreground/70">
-                {settings.model.trim() ? `Using ${settings.model}` : "No model selected — open settings (gear icon)"}
-              </div>
-              {messages.map((message, index) => (
-                <MessageBubble key={index} message={message} />
-              ))}
-              {loading ? <div className="text-sm text-muted-foreground">Daisen Bot is thinking...</div> : null}
+              {view === "list" ? (
+                <div className="space-y-1.5">
+                  <div className="px-1 pb-1 text-xs font-medium text-muted-foreground">Conversations</div>
+                  {conversations.length === 0 ? (
+                    <div className="px-1 py-8 text-center text-sm text-muted-foreground">
+                      No conversations yet. Type below to start one.
+                    </div>
+                  ) : (
+                    conversations.map((chat) => (
+                      <div
+                        key={chat.id}
+                        className="group flex items-center gap-2 rounded-lg border bg-background/60 px-3 py-2 hover:bg-accent"
+                      >
+                        <button
+                          type="button"
+                          className="flex min-w-0 flex-1 flex-col items-start text-left"
+                          onClick={() => {
+                            loadChat(chat.id);
+                            setView("chat");
+                          }}
+                        >
+                          <span className="w-full truncate text-sm font-medium">{chat.title}</span>
+                          <span className="text-xs text-muted-foreground">{formatWhen(chat.timestamp)}</span>
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Delete conversation"
+                          className="text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:text-destructive"
+                          onClick={() => deleteChat(chat.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="text-center text-xs text-muted-foreground/70">
+                    {settings.model.trim() ? `Using ${settings.model}` : "No model selected — open settings (gear icon)"}
+                  </div>
+                  {messages.map((message, index) => (
+                    <MessageBubble key={index} message={message} onEnlarge={setLightbox} />
+                  ))}
+                  {loading ? <div className="text-sm text-muted-foreground">Daisen Bot is thinking...</div> : null}
+                </>
+              )}
             </div>
 
             {error ? <div className="border-t bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div> : null}
@@ -228,6 +299,7 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
           </>
         )}
       </SidePanel>
+      <Lightbox image={lightbox} onClose={() => setLightbox(null)} />
     </>
   );
 }

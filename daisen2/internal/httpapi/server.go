@@ -4,10 +4,13 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -151,6 +154,7 @@ func (s *Server) RegisterTraceAPIRoutes(mux *http.ServeMux) {
 	// Trace endpoints
 	mux.HandleFunc("/api/trace", s.httpTrace)
 	mux.HandleFunc("/api/trace_range", s.httpTraceTimeRange)
+	mux.HandleFunc("/api/trace_info", s.httpTraceInfo)
 	mux.HandleFunc("/api/compnames", s.httpComponentNames)
 	mux.HandleFunc("/api/compinfo", s.httpComponentInfo)
 	mux.HandleFunc("/api/segments", s.httpSegments)
@@ -195,6 +199,29 @@ func (s *Server) startReplayServer(mux *http.ServeMux) {
 func (s *Server) apiMode(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprintf(w, `{"mode":%q}`, s.mode)
+}
+
+// httpTraceInfo returns a stable identifier for the loaded trace, used by the
+// frontend to scope browser-stored DaisenBot conversations to this trace. It is
+// read-only: the id is derived from the trace file name and the trace contents
+// are never touched.
+func (s *Server) httpTraceInfo(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	id := ""
+	if s.traceReader != nil {
+		path := s.traceReader.filename
+		base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		// Suffix a short hash of the absolute path so two different traces that share
+		// a basename (e.g. repeated experiment outputs named trace.sqlite in separate
+		// directories) get distinct ids and don't share browser-stored conversations.
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			abs = path
+		}
+		sum := sha256.Sum256([]byte(abs))
+		id = fmt.Sprintf("%s-%x", base, sum[:4])
+	}
+	fmt.Fprintf(w, `{"traceId":%q}`, id)
 }
 
 func (s *Server) serveIndex(w http.ResponseWriter, _ *http.Request) {

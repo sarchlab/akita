@@ -10,6 +10,7 @@ import { useCompInfo } from "../hooks/useCompInfo";
 import { useSegments } from "../hooks/useSegments";
 import { useSimulationRange } from "../hooks/useSimulationRange";
 import { useTraceData } from "../hooks/useTraceData";
+import { useRenderReady } from "../hooks/useRenderReady";
 import type { Segment, Task } from "../types/task";
 import { buildColorMap, lookupColor, taskColorKey } from "../utils/taskColorCoder";
 import { smartString } from "../utils/smartValue";
@@ -853,6 +854,11 @@ export default function ComponentPage() {
   const metricLineHeight = Math.round(size.height * COMPONENT_LINE_HEIGHT_RATIO);
   const timelineHeight = Math.max(60, size.height - taskViewHeight - metricLineHeight);
   const dataPending = viewRange.startTime !== dataRange.startTime || viewRange.endTime !== dataRange.endTime;
+
+  // Count the debounced data-range update as in-flight render work so the off-screen
+  // capture (which waits on the render-ready signal) does not snapshot an empty view
+  // during the debounce window, before the real-range data is fetched.
+  useRenderReady(dataPending);
 
   const shiftRange = (nextRange: TimeRange) => {
     if (!Number.isFinite(nextRange.startTime) || !Number.isFinite(nextRange.endTime)) return;
