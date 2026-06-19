@@ -126,6 +126,18 @@ you found. Work one hypothesis at a time so your reasoning stays legible. To *re
 or narrow a hypothesis, reach for whichever source is cheapest. If nothing is
 conclusive, say so and report what you ruled out — never fabricate a cause.
 
+**For "why is this task like this" questions, ask why it could not start earlier or end
+earlier.** Decompose the task's timing into two gaps: (1) *why it did not start earlier* —
+what it waited on before its `StartTime` (its parent/upstream task not yet done; a busy or
+full resource — queue, buffer, MSHR; arbitration for a shared resource; an unmet
+dependency); and (2) *why it did not end earlier* — what stretched it between `StartTime`
+and `EndTime` (its own service/processing time, or waiting on its subtasks in downstream
+components to return). The two gaps have different causes and point at different places to
+look: the start gap is usually upstream or at a contended resource, the duration is usually
+the component's own work or downstream. Attribute the time using milestones, the parent's
+`EndTime` vs this task's `StartTime`, and the subtask spans — then say which gap dominates
+and why.
+
 **Parent/subtask questions span components.** A task's `Location` is the component it
 ran in, and `ParentID` links a subtask to the task that spawned it. A task's **parent**
 runs in the *upstream* component that issued the request; its **subtasks** run in the
