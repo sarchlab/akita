@@ -162,6 +162,28 @@ test("encodeSearchParams returns a usable URLSearchParams for setSearchParams", 
   assert.equal(params.get("where"), null);
 });
 
+test("parseView tolerates underscore/case variants for the time range and taskid", () => {
+  // snake_case (the data-API / agent-habit spelling) is still understood...
+  assert.deepEqual(parseView("/component", "name=C&start_time=10&end_time=20"), {
+    route: "component",
+    name: "C",
+    startTime: 10,
+    endTime: 20,
+  });
+  // ...as is camelCase, on the dashboard route.
+  assert.deepEqual(parseView("/dashboard", "startTime=5&endTime=9"), {
+    route: "dashboard",
+    startTime: 5,
+    endTime: 9,
+  });
+  assert.equal(parseView("/component", "name=C&task_id=t1").taskId, "t1");
+  // but the canonical name always wins on re-encode (lenient parse, strict encode).
+  assert.equal(
+    encodeView({ route: "component", name: "C", startTime: 10, endTime: 20 }),
+    "/component?name=C&starttime=10&endtime=20",
+  );
+});
+
 test("ROUTES are the expected canonical paths", () => {
   assert.equal(ROUTES.dashboard, "/dashboard");
   assert.equal(ROUTES.component, "/component");

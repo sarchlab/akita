@@ -59,6 +59,24 @@ const paramToNum = (s) => {
   return Number.isFinite(n) ? n : undefined;
 };
 
+/**
+ * Read a param by its canonical name, tolerating spelling variants a hand-written
+ * or agent-generated link might use: the trace's SQL columns are PascalCase
+ * (`StartTime`) and the internal data API uses snake_case (`start_time`), so a URL
+ * author may reach for either. We still parse it; encodeView always emits the
+ * canonical (first) name.
+ * @param {URLSearchParams} params
+ * @param {...string} names
+ * @returns {string|null}
+ */
+const getParam = (params, ...names) => {
+  for (const name of names) {
+    const value = params.get(name);
+    if (value != null && value !== "") return value;
+  }
+  return null;
+};
+
 const setStr = (params, key, value) => {
   if (typeof value === "string" && value !== "") params.set(key, value);
 };
@@ -198,11 +216,11 @@ export function parseView(pathname, query) {
     case "component": {
       /** @type {ComponentView} */
       const v = { route: "component", name: params.get("name") ?? "" };
-      const taskId = params.get("taskid");
+      const taskId = getParam(params, "taskid", "task_id", "taskId");
       if (taskId) v.taskId = taskId;
-      const s = paramToNum(params.get("starttime"));
+      const s = paramToNum(getParam(params, "starttime", "start_time", "startTime"));
       if (s !== undefined) v.startTime = s;
-      const e = paramToNum(params.get("endtime"));
+      const e = paramToNum(getParam(params, "endtime", "end_time", "endTime"));
       if (e !== undefined) v.endTime = e;
       return v;
     }
@@ -224,9 +242,9 @@ export function parseView(pathname, query) {
     default: {
       /** @type {DashboardView} */
       const v = { route: "dashboard" };
-      const s = paramToNum(params.get("starttime"));
+      const s = paramToNum(getParam(params, "starttime", "start_time", "startTime"));
       if (s !== undefined) v.startTime = s;
-      const e = paramToNum(params.get("endtime"));
+      const e = paramToNum(getParam(params, "endtime", "end_time", "endTime"));
       if (e !== undefined) v.endTime = e;
       const filter = params.get("filter");
       if (filter) v.filter = filter;
