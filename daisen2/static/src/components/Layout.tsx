@@ -41,7 +41,7 @@ export default function Layout() {
         <main className="daisen-main min-w-0 flex-1">
           <Outlet />
         </main>
-        <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
+        <ChatPanel open={chatOpen} />
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import {
 import { useComponentNames } from "../hooks/useComponentNames";
 import { useSegments } from "../hooks/useSegments";
 import { useSimulationRange } from "../hooks/useSimulationRange";
+import { useRenderReady } from "../hooks/useRenderReady";
 import { parseView, mergeParams, DASHBOARD_DEFAULTS } from "../utils/viewState.mjs";
 
 const AXIS_OPTIONS = [
@@ -25,6 +26,18 @@ const AXIS_OPTIONS = [
   { value: "PendingReqOut", label: "Pending Request Out" },
   { value: "-", label: " - " },
 ];
+
+// Resolve a URL axis param to a known metric key. Accepts the metric key or its
+// human-readable label (shared/agent-generated links sometimes carry the label),
+// and falls back to `fallback` for anything unrecognized so the chart shows the
+// default metric instead of rendering empty.
+function resolveAxis(raw: string | undefined, fallback: string): string {
+  if (!raw) return fallback;
+  const match = AXIS_OPTIONS.find(
+    (option) => option.value === raw || option.label.trim() === raw.trim(),
+  );
+  return match ? match.value : fallback;
+}
 
 const DATA_RANGE_DEBOUNCE_MS = 1000;
 
@@ -84,8 +97,8 @@ export default function DashboardPage() {
   const view = parseView("/dashboard", searchParams);
   const filter = view.filter ?? "";
   const page = view.page ?? 0;
-  const primaryAxis = view.primary ?? DASHBOARD_DEFAULTS.primary;
-  const secondaryAxis = view.secondary ?? DASHBOARD_DEFAULTS.secondary;
+  const primaryAxis = resolveAxis(view.primary, DASHBOARD_DEFAULTS.primary);
+  const secondaryAxis = resolveAxis(view.secondary, DASHBOARD_DEFAULTS.secondary);
   const widget = view.widget ?? "";
 
   const patchView = (patch: Record<string, string | number | undefined>) => {
@@ -118,6 +131,12 @@ export default function DashboardPage() {
   const dataRange = useDebouncedValue(viewRange, DATA_RANGE_DEBOUNCE_MS);
   const dataPending =
     viewRange.startTime !== dataRange.startTime || viewRange.endTime !== dataRange.endTime;
+
+  // Count the debounced data-range update as in-flight render work, so the
+  // render-ready signal (and the off-screen capture that waits on it) does not
+  // fire during the debounce window — otherwise a view rendered from a URL captures
+  // an empty chart before the real-range data has been fetched.
+  useRenderReady(dataPending);
 
   // Mirror the (debounced) range into the URL, omitting it when it equals the
   // simulation range so a fresh dashboard URL stays "/dashboard".

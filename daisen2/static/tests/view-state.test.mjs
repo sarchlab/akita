@@ -9,6 +9,8 @@ import {
   parseView,
   routeForPath,
   isSingleWidget,
+  isDaisenViewPath,
+  canonicalViewUrl,
 } from "../src/utils/viewState.mjs";
 
 // Round-trip: parse(encode(v)) === v for fully-specified, non-default views.
@@ -160,8 +162,59 @@ test("encodeSearchParams returns a usable URLSearchParams for setSearchParams", 
   assert.equal(params.get("where"), null);
 });
 
+test("parseView tolerates underscore/case variants for the time range and taskid", () => {
+  // snake_case (the data-API / agent-habit spelling) is still understood...
+  assert.deepEqual(parseView("/component", "name=C&start_time=10&end_time=20"), {
+    route: "component",
+    name: "C",
+    startTime: 10,
+    endTime: 20,
+  });
+  // ...as is camelCase, on the dashboard route.
+  assert.deepEqual(parseView("/dashboard", "startTime=5&endTime=9"), {
+    route: "dashboard",
+    startTime: 5,
+    endTime: 9,
+  });
+  assert.equal(parseView("/component", "name=C&task_id=t1").taskId, "t1");
+  // but the canonical name always wins on re-encode (lenient parse, strict encode).
+  assert.equal(
+    encodeView({ route: "component", name: "C", startTime: 10, endTime: 20 }),
+    "/component?name=C&starttime=10&endtime=20",
+  );
+});
+
 test("ROUTES are the expected canonical paths", () => {
   assert.equal(ROUTES.dashboard, "/dashboard");
   assert.equal(ROUTES.component, "/component");
   assert.equal(ROUTES.task, "/task");
+});
+
+test("isDaisenViewPath accepts the three view paths and rejects everything else", () => {
+  assert.equal(isDaisenViewPath("/component?name=L2Cache"), true);
+  assert.equal(isDaisenViewPath("/dashboard?widget=L2Cache"), true);
+  assert.equal(isDaisenViewPath("/task?id=t1"), true);
+  assert.equal(isDaisenViewPath("/component"), true);
+
+  assert.equal(isDaisenViewPath("/etc/passwd"), false); // other root path
+  assert.equal(isDaisenViewPath("//evil.com/component"), false); // protocol-relative
+  assert.equal(isDaisenViewPath("https://daisen/component"), false); // absolute
+  assert.equal(isDaisenViewPath("javascript:alert(1)"), false); // scheme
+  assert.equal(isDaisenViewPath("component?name=x"), false); // not rooted
+  assert.equal(isDaisenViewPath(""), false);
+  assert.equal(isDaisenViewPath(null), false);
+});
+
+test("canonicalViewUrl normalizes equivalent view urls and rejects non-views", () => {
+  assert.equal(
+    canonicalViewUrl("/component?endtime=20&name=C&starttime=10&bogus=1"),
+    "/component?name=C&starttime=10&endtime=20",
+  );
+  assert.equal(
+    canonicalViewUrl("/component?name=C&starttime=10&endtime=20"),
+    canonicalViewUrl("/component?starttime=10&endtime=20&name=C"),
+  );
+  assert.equal(canonicalViewUrl("/task?id=t1#frag"), "/task?id=t1"); // fragment ignored
+  assert.equal(canonicalViewUrl("/etc/passwd"), null);
+  assert.equal(canonicalViewUrl("https://x/component"), null);
 });

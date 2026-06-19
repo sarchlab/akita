@@ -59,6 +59,24 @@ const paramToNum = (s) => {
   return Number.isFinite(n) ? n : undefined;
 };
 
+/**
+ * Read a param by its canonical name, tolerating spelling variants a hand-written
+ * or agent-generated link might use: the trace's SQL columns are PascalCase
+ * (`StartTime`) and the internal data API uses snake_case (`start_time`), so a URL
+ * author may reach for either. We still parse it; encodeView always emits the
+ * canonical (first) name.
+ * @param {URLSearchParams} params
+ * @param {...string} names
+ * @returns {string|null}
+ */
+const getParam = (params, ...names) => {
+  for (const name of names) {
+    const value = params.get(name);
+    if (value != null && value !== "") return value;
+  }
+  return null;
+};
+
 const setStr = (params, key, value) => {
   if (typeof value === "string" && value !== "") params.set(key, value);
 };
@@ -198,11 +216,11 @@ export function parseView(pathname, query) {
     case "component": {
       /** @type {ComponentView} */
       const v = { route: "component", name: params.get("name") ?? "" };
-      const taskId = params.get("taskid");
+      const taskId = getParam(params, "taskid", "task_id", "taskId");
       if (taskId) v.taskId = taskId;
-      const s = paramToNum(params.get("starttime"));
+      const s = paramToNum(getParam(params, "starttime", "start_time", "startTime"));
       if (s !== undefined) v.startTime = s;
-      const e = paramToNum(params.get("endtime"));
+      const e = paramToNum(getParam(params, "endtime", "end_time", "endTime"));
       if (e !== undefined) v.endTime = e;
       return v;
     }
@@ -224,9 +242,9 @@ export function parseView(pathname, query) {
     default: {
       /** @type {DashboardView} */
       const v = { route: "dashboard" };
-      const s = paramToNum(params.get("starttime"));
+      const s = paramToNum(getParam(params, "starttime", "start_time", "startTime"));
       if (s !== undefined) v.startTime = s;
-      const e = paramToNum(params.get("endtime"));
+      const e = paramToNum(getParam(params, "endtime", "end_time", "endTime"));
       if (e !== undefined) v.endTime = e;
       const filter = params.get("filter");
       if (filter) v.filter = filter;
@@ -251,4 +269,41 @@ export function parseView(pathname, query) {
 export function isSingleWidget(view) {
   return !!view && view.route === "dashboard" &&
     typeof view.widget === "string" && view.widget !== "";
+}
+
+/** The concrete Daisen view paths (no "/" alias) — matches captureView's allow-list. */
+const VIEW_PATHS = new Set([ROUTES.dashboard, ROUTES.component, ROUTES.task]);
+
+/**
+ * Whether `raw` is a root-relative, same-origin Daisen view path
+ * (/dashboard, /component, or /task, with an optional query/fragment). Pure (no
+ * `window`) so it is usable in markdown rendering and node tests. Rejects
+ * absolute/protocol-relative URLs and any scheme (javascript:, data:, http:),
+ * since those do not start with a single "/". This is the *tagging* gate; the
+ * authoritative security check for rendering/navigation is captureView's
+ * toSafeDaisenUrl, applied again at capture/click time.
+ * @param {string} raw
+ * @returns {boolean}
+ */
+export function isDaisenViewPath(raw) {
+  if (typeof raw !== "string" || raw === "") return false;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return false;
+  const pathname = raw.split(/[?#]/)[0];
+  if (/[\s\\]/.test(pathname)) return false;
+  return VIEW_PATHS.has(pathname);
+}
+
+/**
+ * Canonicalize a Daisen view path to "/path?query" via parseView→encodeView, so two
+ * URLs describing the same view compare equal (param order, defaults, and unknown
+ * params are all normalized away). Returns null when `raw` is not a Daisen view path.
+ * Used to key captured-view images by URL and match a cited URL to a render.
+ * @param {string} raw
+ * @returns {string|null}
+ */
+export function canonicalViewUrl(raw) {
+  if (!isDaisenViewPath(raw)) return null;
+  const [pathname, rest = ""] = raw.split("?");
+  const query = rest.split("#")[0];
+  return encodeView(parseView(pathname, query));
 }

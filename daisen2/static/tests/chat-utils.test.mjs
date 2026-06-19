@@ -71,6 +71,41 @@ test("renderChatMarkdown opens links in a new tab with a safe rel", () => {
   assert.match(html, /rel="noopener noreferrer"/);
 });
 
+test("renderChatMarkdown renders a Daisen view image as an evidence figure", () => {
+  const html = renderChatMarkdown(
+    "See it: ![L2 occupancy](/component?name=L2Cache&starttime=0&endtime=379102000)",
+  );
+
+  // A thumbnail carrying the canonical view url and NO src (filled in by React),
+  // plus a caption that links to the same view in a new tab.
+  assert.match(
+    html,
+    /<img class="daisen-evidence" data-view-url="\/component\?name=L2Cache&amp;starttime=0&amp;endtime=379102000" alt="L2 occupancy">/,
+  );
+  assert.match(
+    html,
+    /<a class="daisen-evidence-link" data-view-url="[^"]+" href="\/component\?name=L2Cache[^"]*" target="_blank" rel="noopener noreferrer">L2 occupancy ↗<\/a>/,
+  );
+  assert.doesNotMatch(html, /class="daisen-evidence"[^>]*\ssrc=/); // no src on the thumbnail
+});
+
+test("renderChatMarkdown canonicalizes the cited view url (param order, unknowns)", () => {
+  const html = renderChatMarkdown("![x](/component?endtime=20&name=C&starttime=10&bogus=1)");
+
+  assert.match(html, /data-view-url="\/component\?name=C&amp;starttime=10&amp;endtime=20"/);
+  assert.doesNotMatch(html, /bogus/);
+});
+
+test("renderChatMarkdown leaves non-Daisen and unsafe images as plain markdown", () => {
+  const external = renderChatMarkdown("![pic](https://example.com/p.png)");
+  assert.doesNotMatch(external, /daisen-evidence/);
+  assert.match(external, /<img src="https:\/\/example\.com\/p\.png" alt="pic">/);
+
+  // root-relative but not a view path, and protocol-relative — neither is tagged.
+  assert.doesNotMatch(renderChatMarkdown("![x](/etc/passwd)"), /daisen-evidence/);
+  assert.doesNotMatch(renderChatMarkdown("![x](//evil.com/component)"), /daisen-evidence/);
+});
+
 test("validateUploadedFile enforces legacy file extension and size limits", () => {
   assert.equal(validateUploadedFile({ name: "trace.csv", size: 8 * 1024 }, "file").valid, true);
   assert.equal(FILE_UPLOAD_ACCEPT, ".sqlite,.sqlite3,.csv,.txt,.json,.py,.js,.c,.cpp,.java");
