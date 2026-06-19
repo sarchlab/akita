@@ -12,6 +12,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/cache/writethroughcache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/mem/rob"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addresstranslator"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -70,6 +71,10 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		Build("AT")
 	assignPorts(s, at, "Top", "Bottom", "Translation", "Control")
 
+	// Insert a reorder buffer between the agent and the address translator so
+	// the trace exercises the ROB instrumentation end-to-end.
+	robComp := buildROB(s, at.GetPortByName("Top").AsRemote())
+
 	agentSpec := memaccessagent.DefaultSpec()
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.ReadLeft = *numAccessFlag
@@ -78,7 +83,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		WithRegistrar(s).
 		WithSpec(agentSpec).
 		WithResources(memaccessagent.Resources{
-			LowModule: at.GetPortByName("Top"),
+			LowModule: robComp.GetPortByName("Top"),
 		}).
 		Build("MemAccessAgent")
 	assignPorts(s, agent, "Mem")
@@ -86,11 +91,26 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		agent.CreateProgressBars(monitor.CreateProgressBar)
 	}
 
-	setupConnection(s, agent,
+	setupConnection(s, agent, robComp,
 		at, tlb, l2TLB, ioMMU,
 		l1Cache, l2Cache, memCtrl)
 
 	return s, engine, agent
+}
+
+// buildROB builds a reorder buffer that forwards every access to bottomUnit
+// (the address translator's Top port) and reorders the responses back.
+func buildROB(s *simulation.Simulation, bottomUnit messaging.RemotePort) *rob.Comp {
+	robSpec := rob.DefaultSpec()
+	robSpec.NumReqPerCycle = 4
+	robSpec.BottomUnit = bottomUnit
+	robComp := rob.MakeBuilder().
+		WithRegistrar(s).
+		WithSpec(robSpec).
+		Build("ROB")
+	assignPorts(s, robComp, "Top", "Bottom", "Control")
+
+	return robComp
 }
 
 func buildMemoryHierarchy(s *simulation.Simulation) (
@@ -251,10 +271,14 @@ func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {
 func setupConnection(
 	s *simulation.Simulation,
 	agent *memaccessagent.MemAccessAgent,
-	AT, TLB, L2TLB, IoMMU, L1Cache, L2Cache, memCtrl messaging.Component,
+	ROB, AT, TLB, L2TLB, IoMMU, L1Cache, L2Cache, memCtrl messaging.Component,
 ) {
 	connect(s, "Conn1",
 		agent.GetPortByName("Mem"),
+		ROB.GetPortByName("Top"),
+	)
+	connect(s, "ConnROB",
+		ROB.GetPortByName("Bottom"),
 		AT.GetPortByName("Top"),
 	)
 	connect(s, "Conn2",

@@ -130,6 +130,11 @@ func (s *Simulation) RegisterPort(p naming.Named) {
 
 	s.registerPort(port)
 
+	// Attach incoming-buffer queueing tracing, mirroring how RegisterComponent
+	// attaches CollectTrace. The resulting tasks flow to the component tracer,
+	// so they only materialize for components that are themselves traced.
+	tracing.CollectIncomingQueueTrace(p)
+
 	if s.monitor != nil {
 		s.monitor.RegisterPort(port)
 	}
