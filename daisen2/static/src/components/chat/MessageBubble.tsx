@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import DOMPurify from "dompurify";
 import type { ChatMessage, UnitContent } from "../../types/chat";
@@ -73,20 +73,22 @@ export default function MessageBubble({
   const lazyImages = useRef(new Map<string, string>());
   const proseRef = useRef<HTMLDivElement>(null);
 
-  // After the answer HTML is injected, fill each inline view-evidence thumbnail's
-  // src from the captured image (or lazy-capture it off-screen), then leave click →
-  // enlarge to the delegated handler below.
-  useEffect(() => {
+  // Resolve each inline view-evidence thumbnail's src from the captured image (or
+  // lazy-capture it off-screen). This runs after EVERY commit (no deps) and re-asserts
+  // the src, because the src lives on a node inside dangerouslySetInnerHTML — outside
+  // React's control — so any re-render that re-applies the prose HTML (e.g. when the
+  // lightbox opens) would otherwise drop it and the image would fall back to its alt.
+  // A layout effect re-applies it before paint, so the thumbnail never flickers to broken.
+  useLayoutEffect(() => {
+    if (!html.includes("daisen-evidence")) return;
     const root = proseRef.current;
     if (!root) return;
-    let cancelled = false;
-    const figures = root.querySelectorAll<HTMLImageElement>("img.daisen-evidence[data-view-url]");
-    figures.forEach((img) => {
+    root.querySelectorAll<HTMLImageElement>("img.daisen-evidence[data-view-url]").forEach((img) => {
       const viewUrl = img.getAttribute("data-view-url") ?? "";
       if (!viewUrl) return;
       const ready = renderedViews.get(viewUrl) ?? lazyImages.current.get(viewUrl);
       if (ready) {
-        img.src = ready;
+        if (img.getAttribute("src") !== ready) img.src = ready;
         return;
       }
       if (img.dataset.capturing) return;
@@ -94,25 +96,21 @@ export default function MessageBubble({
       img.classList.add("daisen-evidence-loading");
       captureUrl(viewUrl)
         .then((data) => {
-          if (cancelled || !data) return;
+          if (!data) return;
           lazyImages.current.set(viewUrl, data);
           img.src = data;
           img.classList.remove("daisen-evidence-failed");
         })
         .catch(() => {
           // The view could not be rendered — drop the thumbnail, keep the caption link.
-          if (!cancelled) img.classList.add("daisen-evidence-failed");
+          img.classList.add("daisen-evidence-failed");
         })
         .finally(() => {
-          if (cancelled) return;
           img.classList.remove("daisen-evidence-loading");
           delete img.dataset.capturing;
         });
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [html, renderedViews]);
+  });
 
   // Clicking a thumbnail (not its caption link) opens the lightbox.
   const handleProseClick = useCallback(
