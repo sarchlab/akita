@@ -8,6 +8,12 @@ import { captureUrl } from "../../utils/captureView";
 import { cn } from "../../lib/utils";
 import type { LightboxImage } from "./Lightbox";
 
+// A 1x1 transparent PNG used as an evidence thumbnail's src while its view renders
+// off-screen, so the browser shows a pulsing placeholder (via CSS) instead of a
+// broken-image icon — e.g. on chat load, where the persisted message stored no image.
+const LOADING_PLACEHOLDER =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
 // Pull a friendly rationale + query out of a tool call's JSON arguments, falling
 // back to the raw string when it isn't the shape we expect.
 function parseToolArgs(args?: string): { reason?: string; query?: string } {
@@ -89,10 +95,14 @@ export default function MessageBubble({
       const ready = renderedViews.get(viewUrl) ?? lazyImages.current.get(viewUrl);
       if (ready) {
         if (img.getAttribute("src") !== ready) img.src = ready;
+        img.classList.remove("daisen-evidence-loading");
         return;
       }
       if (img.dataset.capturing) return;
       img.dataset.capturing = "1";
+      // Show a gentle pulsing placeholder (transparent src → no broken-image icon)
+      // while the view renders off-screen.
+      if (!img.getAttribute("src")) img.src = LOADING_PLACEHOLDER;
       img.classList.add("daisen-evidence-loading");
       captureUrl(viewUrl)
         .then((data) => {

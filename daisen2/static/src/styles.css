@@ -228,8 +228,10 @@
     @apply max-h-56 max-w-full cursor-zoom-in rounded-md border bg-muted/40 object-contain;
   }
 
+  /* While the view renders off-screen the thumbnail carries a transparent
+     placeholder src; show a gentle pulsing box instead of a broken-image icon. */
   .chat-markdown img.daisen-evidence.daisen-evidence-loading {
-    @apply h-12 w-40 animate-pulse;
+    @apply h-24 w-56 animate-pulse border-dashed bg-muted;
   }
 
   .chat-markdown img.daisen-evidence.daisen-evidence-failed {
