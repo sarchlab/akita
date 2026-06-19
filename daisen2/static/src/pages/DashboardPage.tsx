@@ -14,6 +14,7 @@ import {
 import { useComponentNames } from "../hooks/useComponentNames";
 import { useSegments } from "../hooks/useSegments";
 import { useSimulationRange } from "../hooks/useSimulationRange";
+import { useRenderReady } from "../hooks/useRenderReady";
 import { parseView, mergeParams, DASHBOARD_DEFAULTS } from "../utils/viewState.mjs";
 
 const AXIS_OPTIONS = [
@@ -130,6 +131,12 @@ export default function DashboardPage() {
   const dataRange = useDebouncedValue(viewRange, DATA_RANGE_DEBOUNCE_MS);
   const dataPending =
     viewRange.startTime !== dataRange.startTime || viewRange.endTime !== dataRange.endTime;
+
+  // Count the debounced data-range update as in-flight render work, so the
+  // render-ready signal (and the off-screen capture that waits on it) does not
+  // fire during the debounce window — otherwise a view rendered from a URL captures
+  // an empty chart before the real-range data has been fetched.
+  useRenderReady(dataPending);
 
   // Mirror the (debounced) range into the URL, omitting it when it equals the
   // simulation range so a fresh dashboard URL stays "/dashboard".
