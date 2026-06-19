@@ -228,10 +228,20 @@
     @apply max-h-56 max-w-full cursor-zoom-in rounded-md border bg-muted/40 object-contain;
   }
 
-  /* While the view renders off-screen the thumbnail carries a transparent
-     placeholder src; show a gentle pulsing box instead of a broken-image icon. */
+  /* While the view renders off-screen the thumbnail carries a transparent placeholder
+     src. Show a chart skeleton — a soft muted card with a faint baseline axis and a
+     slow sheen sweeping across — instead of a broken-image icon. */
   .chat-markdown img.daisen-evidence.daisen-evidence-loading {
-    @apply h-24 w-56 animate-pulse border-dashed bg-muted;
+    @apply h-28 w-56 cursor-progress rounded-md;
+    border: 1px solid hsl(var(--border));
+    background-color: hsl(var(--muted));
+    background-image:
+      linear-gradient(100deg, transparent 28%, hsl(var(--foreground) / 0.07) 50%, transparent 72%),
+      linear-gradient(hsl(var(--muted-foreground) / 0.3), hsl(var(--muted-foreground) / 0.3));
+    background-repeat: no-repeat;
+    background-size: 220% 100%, calc(100% - 24px) 1px;
+    background-position: -60% 0, 12px calc(100% - 14px);
+    animation: daisen-evidence-shimmer 1.5s ease-in-out infinite;
   }
 
   .chat-markdown img.daisen-evidence.daisen-evidence-failed {
@@ -258,5 +268,18 @@
 @keyframes daisen-widget-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes daisen-evidence-shimmer {
+  to {
+    background-position: 160% 0, 12px calc(100% - 14px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-markdown img.daisen-evidence.daisen-evidence-loading {
+    animation: none;
+    background-position: 50% 0, 12px calc(100% - 14px);
   }
 }

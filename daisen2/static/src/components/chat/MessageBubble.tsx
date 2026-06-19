@@ -128,7 +128,8 @@ export default function MessageBubble({
       const img = (event.target as HTMLElement).closest(
         "img.daisen-evidence",
       ) as HTMLImageElement | null;
-      if (!img || !img.src) return;
+      // Not while it's still the loading placeholder (a transparent src is truthy).
+      if (!img || !img.src || img.classList.contains("daisen-evidence-loading")) return;
       event.preventDefault();
       onEnlarge?.({ src: img.src, viewUrl: img.getAttribute("data-view-url") ?? "" });
     },
