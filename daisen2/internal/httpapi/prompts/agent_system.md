@@ -97,6 +97,18 @@ occupancy shapes over time.
   likely bottleneck. Dips and gaps down toward zero mean it is intermittently idle or
   under-subscribed.
 
+  **Select a task in the component view** with `taskid` —
+  `/component?name=<component>&taskid=<id>` (`name` is optional when a `taskid` is given;
+  the view resolves the task's own component). This is one of the most useful and most
+  **underused** views: it highlights that single task inside the component's concurrent
+  activity, and adds a panel showing the task together with its **parent task** (the
+  upstream request that caused it) and its **child tasks** (the sub-requests it issued),
+  all time-aligned. Reach for it to see **what a component is doing while a specific task
+  is in flight**, and to walk the dependency chain (`ParentID`) up and down visually —
+  e.g. to find what a stalled task is waiting on, or how one request fans out into
+  sub-work. Whenever you are explaining a *specific task's* behavior, prefer this
+  task-selected view over the plain component view.
+
 ## How to investigate
 
 **Front door — pick the cheapest path that answers the question:**
