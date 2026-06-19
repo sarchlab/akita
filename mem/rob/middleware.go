@@ -73,12 +73,15 @@ func (m *middleware) runPipeline() bool {
 // topDown pulls a request from the top, forwards a shadow request to the
 // bottom, and records the transaction in FIFO order. Skipped while not
 // Enabled so Drain and Pause stop accepting new traffic.
+//
+// The req_in task opens when the request first reaches the head of the Top
+// buffer (the earliest the ROB can act on it), not when it is admitted: the
+// peek happens before the buffer-slot and bottom-port checks, so the time
+// spent blocked on those resources is counted as part of the request's
+// processing rather than hidden in the upstream queue.
 func (m *middleware) topDown() bool {
 	state := &m.comp.State
 	if state.ControlState != memcontrolprotocol.StateEnabled {
-		return false
-	}
-	if len(state.Transactions) >= m.comp.Spec().BufferSize {
 		return false
 	}
 
@@ -90,6 +93,15 @@ func (m *middleware) topDown() bool {
 	req, ok := msg.(memprotocol.AccessReq)
 	if !ok {
 		panic("rob: unsupported top-port message type")
+	}
+
+	if state.HeadReqID != req.Meta().ID {
+		state.HeadReqID = req.Meta().ID
+		tracing.TraceReqReceive(m.comp, req)
+	}
+
+	if len(state.Transactions) >= m.comp.Spec().BufferSize {
+		return false
 	}
 
 	shadow, isRead := m.buildShadowReq(
@@ -108,8 +120,8 @@ func (m *middleware) topDown() bool {
 		IsRead:        isRead,
 	})
 	m.topPort().RetrieveIncoming()
+	state.HeadReqID = 0
 
-	tracing.TraceReqReceive(m.comp, req)
 	tracing.TraceReqInitiate(m.comp, shadow,
 		tracing.MsgIDAtReceiver(req, m.comp))
 
@@ -400,6 +412,12 @@ func (m *middleware) handleReset(req memcontrolprotocol.Req) bool {
 
 	state := &m.comp.State
 	m.forgetInflightReceiverIDs()
+	if state.HeadReqID != 0 {
+		// A req_in was opened for the head request still waiting to be admitted;
+		// it is dropped with the drained traffic, so release its registry entry.
+		tracing.ForgetMsgIDAtReceiver(state.HeadReqID, m.comp)
+		state.HeadReqID = 0
+	}
 	state.Transactions = state.Transactions[:0]
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""

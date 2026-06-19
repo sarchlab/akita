@@ -10,24 +10,35 @@ import (
 )
 
 // IncomingQueueTaskKind is the Kind of the task that records the time a message
-// spends waiting in a port's incoming buffer, between the moment the connection
-// delivers it to the port and the moment the owning component takes it out.
+// spends waiting *behind other messages* in a port's incoming buffer — from the
+// moment the connection delivers it until it reaches the head of the buffer and
+// becomes reachable by the owning component. Once it is at the head, any further
+// delay is the component's own (it can see the message but cannot yet admit it),
+// so it belongs to the component's processing task, not here.
 const IncomingQueueTaskKind = "incoming_queue"
 
 // incomingQueueHook records, for each message delivered to a port, a task that
-// spans the message's stay in the port's incoming buffer. The task is a child
-// of the message's req_out task — the request's own ID, or, for a response, the
-// ID it responds to — so it nests inside the round trip as a sibling of the
-// component's processing (req_in) task.
+// spans the message's wait behind earlier messages in the incoming buffer. The
+// task is a child of the message's req_out task (the request's own ID, or, for a
+// response, the ID it responds to). It is located at the receiving port and
+// emitted on the port's owning component, so it flows to that component's
+// tracers.
 //
-// Start and end are driven by the port's own hook positions:
-// HookPosPortMsgRecvd fires when the connection delivers the message, and
-// HookPosPortMsgRetrieveIncoming fires when the component retrieves it. The two
-// are paired by message ID. Tasks are emitted on the port's owning component,
-// so they flow to whatever tracers are collecting from that component.
+// The task opens on HookPosPortMsgRecvd (delivery) and closes when the message
+// reaches the head of the buffer:
+//   - immediately, if it is delivered into an empty buffer; or
+//   - when the message ahead of it is retrieved (HookPosPortMsgRetrieveIncoming
+//     exposes it as the new head).
+//
+// HookPosPortMsgRecvd fires while the port holds its lock, so the hook must not
+// call back into the port there. It tracks the buffer depth itself (depth) to
+// tell whether a freshly delivered message is already at the head. The incoming
+// buffer is FIFO and the only push/pop paths are Deliver/RetrieveIncoming, both
+// of which fire these hooks, so the mirrored depth stays exact.
 type incomingQueueHook struct {
 	mu      sync.Mutex
-	taskIDs map[uint64]uint64 // message ID -> queueing task ID
+	taskIDs map[uint64]uint64 // message ID -> open queueing task ID
+	depth   int               // messages currently in the port's incoming buffer
 }
 
 // Func implements hooking.Hook.
@@ -42,23 +53,23 @@ func (h *incomingQueueHook) Func(ctx hooking.HookCtx) {
 		return
 	}
 
-	msg, ok := ctx.Item.(messaging.Msg)
-	if !ok {
-		return
-	}
-
 	switch ctx.Pos {
 	case messaging.HookPosPortMsgRecvd:
-		h.startQueueTask(domain, port, msg)
+		msg, ok := ctx.Item.(messaging.Msg)
+		if !ok {
+			return
+		}
+		h.onDeliver(domain, port, msg)
 	case messaging.HookPosPortMsgRetrieveIncoming:
-		h.endQueueTask(domain, msg)
+		h.onRetrieve(domain, port)
 	}
 }
 
-// startQueueTask opens the queueing task when a message is delivered. It records
-// nothing — and generates no ID — when the component is not being traced, so
-// untraced runs pay only the cost of the NumHooks check.
-func (h *incomingQueueHook) startQueueTask(
+// onDeliver opens the queueing task. A message delivered into an empty buffer is
+// already at the head, so its behind-others interval is zero and the task is
+// closed at once. Records nothing — and generates no ID — when the component is
+// not being traced.
+func (h *incomingQueueHook) onDeliver(
 	domain NamedHookable,
 	port messaging.Port,
 	msg messaging.Msg,
@@ -78,11 +89,10 @@ func (h *incomingQueueHook) startQueueTask(
 
 	h.mu.Lock()
 	h.taskIDs[meta.ID] = id
+	atHead := h.depth == 0
+	h.depth++
 	h.mu.Unlock()
 
-	// Located at the port, not the owning component: the wait happens in this
-	// specific port's incoming buffer, so a per-port location is more precise
-	// than the component name StartTask would otherwise default to.
 	StartTask(domain, TaskStart{
 		ID:       id,
 		ParentID: parentID,
@@ -90,17 +100,35 @@ func (h *incomingQueueHook) startQueueTask(
 		What:     msgTypeName(msg),
 		Location: port.Name(),
 	})
+
+	if atHead {
+		h.endByMsgID(domain, meta.ID)
+	}
 }
 
-// endQueueTask closes the queueing task when the component retrieves the
-// message. Unmatched retrievals (e.g. a message delivered before tracing began)
-// are ignored.
-func (h *incomingQueueHook) endQueueTask(
-	domain NamedHookable,
-	msg messaging.Msg,
-) {
-	msgID := msg.Meta().ID
+// onRetrieve removes the just-retrieved head and closes the queueing task of
+// whatever message is now exposed at the head — it has stopped waiting behind
+// others. The retrieve hook runs after the port releases its lock, so peeking
+// the new head here is safe.
+func (h *incomingQueueHook) onRetrieve(domain NamedHookable, port messaging.Port) {
+	h.mu.Lock()
+	if h.depth > 0 {
+		h.depth--
+	}
+	h.mu.Unlock()
 
+	newHead := port.PeekIncoming()
+	if newHead == nil {
+		return
+	}
+
+	h.endByMsgID(domain, newHead.Meta().ID)
+}
+
+// endByMsgID closes the queueing task for the message, if one is open. It is
+// idempotent: a message whose task was already closed (e.g. it reached the head
+// at delivery) is ignored.
+func (h *incomingQueueHook) endByMsgID(domain NamedHookable, msgID uint64) {
 	h.mu.Lock()
 	id, found := h.taskIDs[msgID]
 	delete(h.taskIDs, msgID)

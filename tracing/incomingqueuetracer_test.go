@@ -59,28 +59,42 @@ var _ = Describe("Incoming queue tracer", func() {
 		CollectIncomingQueueTrace(port)
 	})
 
-	It("records a queueing task from delivery to retrieval, parented to the "+
-		"request and located at the receiving port", func() {
-		req := iqTestMsg{messaging.MsgMeta{ID: 7, Dst: "Comp.Top"}}
-
+	It("ends a message's queueing when it reaches the head: zero for a "+
+		"message delivered to an empty buffer, and spanning the wait for one "+
+		"delivered behind another", func() {
+		// A lands in an empty buffer => immediately at the head.
+		a := iqTestMsg{messaging.MsgMeta{ID: 7, Dst: "Comp.Top"}}
 		comp.time = 100
-		port.Deliver(req)
+		port.Deliver(a)
 
-		Expect(tracer.starts).To(HaveLen(1))
-		start := tracer.starts[0]
-		Expect(start.Kind).To(Equal(IncomingQueueTaskKind))
-		Expect(start.ParentID).To(Equal(uint64(7)))
-		Expect(start.What).To(Equal("iqTestMsg"))
-		Expect(start.Location).To(Equal("Comp.Top"))
-		Expect(start.Time).To(Equal(timing.VTimeInPicoSec(100)))
-		Expect(start.ID).NotTo(BeZero())
+		// B lands behind A => waits until A is retrieved.
+		b := iqTestMsg{messaging.MsgMeta{ID: 8, Dst: "Comp.Top"}}
+		comp.time = 110
+		port.Deliver(b)
 
+		Expect(tracer.starts).To(HaveLen(2))
+		startA := tracer.starts[0]
+		Expect(startA.Kind).To(Equal(IncomingQueueTaskKind))
+		Expect(startA.ParentID).To(Equal(uint64(7)))
+		Expect(startA.What).To(Equal("iqTestMsg"))
+		Expect(startA.Location).To(Equal("Comp.Top"))
+		Expect(startA.Time).To(Equal(timing.VTimeInPicoSec(100)))
+		startB := tracer.starts[1]
+		Expect(startB.ParentID).To(Equal(uint64(8)))
+		Expect(startB.Time).To(Equal(timing.VTimeInPicoSec(110)))
+
+		// A's task already closed at delivery (it was at the head).
+		Expect(tracer.ends).To(HaveLen(1))
+		Expect(tracer.ends[0].ID).To(Equal(startA.ID))
+		Expect(tracer.ends[0].Time).To(Equal(timing.VTimeInPicoSec(100)))
+
+		// Retrieving A exposes B at the head, closing B's queueing.
 		comp.time = 150
 		Expect(port.RetrieveIncoming()).NotTo(BeNil())
 
-		Expect(tracer.ends).To(HaveLen(1))
-		Expect(tracer.ends[0].ID).To(Equal(start.ID))
-		Expect(tracer.ends[0].Time).To(Equal(timing.VTimeInPicoSec(150)))
+		Expect(tracer.ends).To(HaveLen(2))
+		Expect(tracer.ends[1].ID).To(Equal(startB.ID))
+		Expect(tracer.ends[1].Time).To(Equal(timing.VTimeInPicoSec(150)))
 	})
 
 	It("parents a response's queueing task to the task it responds to", func() {

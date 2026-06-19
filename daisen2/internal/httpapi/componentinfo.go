@@ -618,71 +618,59 @@ func collectMilestoneKinds(tasks []Task) []string {
 
 func generateStackedTimeData(tasks []Task, kinds []string, startTime, endTime float64, numDots int) []StackedTimeValue {
 	data := make([]StackedTimeValue, 0, numDots)
-	totalDuration := endTime - startTime
-	binDuration := totalDuration / float64(numDots)
+	binDuration := (endTime - startTime) / float64(numDots)
 
 	for i := 0; i < numDots; i++ {
-		binStartTime := float64(i)*binDuration + startTime
-		binEndTime := float64(i+1)*binDuration + startTime
-		kindCounts := countConcurrentTasksByKind(tasks, kinds, binStartTime, binEndTime)
-
-		stv := StackedTimeValue{
-			Time:   binStartTime + 0.5*binDuration,
-			Values: kindCounts,
-		}
-		data = append(data, stv)
+		// Sample at the center of each bin and count, at that instant, how many
+		// in-flight tasks are blocked by each reason.
+		sampleTime := startTime + (float64(i)+0.5)*binDuration
+		data = append(data, StackedTimeValue{
+			Time:   sampleTime,
+			Values: countBlockedTasksByKind(tasks, kinds, sampleTime),
+		})
 	}
 	return data
 }
 
-func countConcurrentTasksByKind(tasks []Task, kinds []string, binStartTime, binEndTime float64) map[string]float64 {
-	kindCounts := make(map[string]float64)
+// countBlockedTasksByKind counts, at sampleTime, how many in-flight tasks are
+// blocked by each reason.
+func countBlockedTasksByKind(tasks []Task, kinds []string, sampleTime float64) map[string]float64 {
+	kindCounts := make(map[string]float64, len(kinds))
 	for _, kind := range kinds {
 		kindCounts[kind] = 0
 	}
 
 	for _, task := range tasks {
-		if !isTaskRunningInBin(task, binStartTime, binEndTime) {
+		if float64(task.StartTime) > sampleTime || float64(task.EndTime) < sampleTime {
 			continue
 		}
-
-		currentKind := findTaskMilestoneKind(task, binStartTime)
-		if currentKind != "" {
-			kindCounts[currentKind]++
+		if kind := findTaskBlockingKind(task, sampleTime); kind != "" {
+			kindCounts[kind]++
 		}
 	}
 	return kindCounts
 }
 
-func isTaskRunningInBin(task Task, binStartTime, binEndTime float64) bool {
-	return !(float64(task.EndTime) < binStartTime || float64(task.StartTime) > binEndTime)
-}
+// findTaskBlockingKind returns the reason the task is blocked on at time t: the
+// kind of the first milestone at or after t (the next blocking reason to be
+// released). A milestone marks the moment a reason is released, so the interval
+// before it is time blocked on that reason. Returns "" when no milestone
+// remains — the task is running to completion, not blocked.
+func findTaskBlockingKind(task Task, t float64) string {
+	best := ""
+	bestTime := 0.0
+	found := false
 
-func findTaskMilestoneKind(task Task, binStartTime float64) string {
-	var currentKind string
-	var latestTime float64 = -1
-
-	// Find the most recent milestone before or at the bin start time
 	for _, step := range task.Steps {
 		stepTime := float64(step.Time)
-		if stepTime <= binStartTime && stepTime > latestTime {
-			latestTime = stepTime
-			currentKind = step.Kind
+		if stepTime >= t && (!found || stepTime < bestTime) {
+			best = step.Kind
+			bestTime = stepTime
+			found = true
 		}
 	}
 
-	// If no milestone found before this bin, use the first milestone of the task
-	if currentKind == "" && len(task.Steps) > 0 {
-		firstStep := task.Steps[0]
-		for _, step := range task.Steps {
-			if float64(step.Time) < float64(firstStep.Time) {
-				firstStep = step
-			}
-		}
-		currentKind = firstStep.Kind
-	}
-
-	return currentKind
+	return best
 }
 
 func (s *Server) calculateConcurrentTaskMilestones(
