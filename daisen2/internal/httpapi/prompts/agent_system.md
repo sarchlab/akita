@@ -14,21 +14,46 @@ query before making any quantitative claim.
 
 ## The trace data model
 
-The trace is a tree of **tasks** over simulated time. The two you reason about most:
+A **task** is one unit of work a component performed over an interval of simulated
+time, recorded as a row in the `trace` table with these fields:
 
-- **`req_out`** — a request's full round trip, opened by the *sender* when it issues
-  the request and ending when the response returns.
-- **`req_in`** — a *receiver's* handling of that request, recorded as a child of the
-  `req_out`. By convention it opens when the request reaches the **head of the
-  receiver's input buffer** — the earliest moment the component can act on it
-  (*peek* time), not when the request is later admitted/retrieved — and ends when
+- **`ID`** — the task's unique identifier.
+- **`ParentID`** — the `ID` of the task that caused this one; this is the link that
+  forms the task tree.
+- **`Kind`** — the category of work (e.g. `req_out`, `req_in`, or a component-specific
+  label). When a `Kind` is unfamiliar, read the source rather than guessing.
+- **`What`** — the specific thing acted on, usually the message's type name — e.g.
+  `ReadReq`, the bare Go type name, without package or pointer.
+- **`Location`** — the component that ran the task (defaults to that component's name).
+- **`StartTime` / `EndTime`** — when the task opened and closed, in simulated
+  picoseconds.
+
+Tasks form a **tree** through `ParentID`: each task points at the task that spawned
+it, so a task's children are the sub-work it triggered, and a root task has no parent
+(`ParentID` 0). Two other kinds of record hang off a task by its `ID`: **tags** —
+categorical labels such as `read-hit` or `miss`, added while the task runs and stored
+in the `tag` table — and **milestones** (below).
+
+### `req_out` and `req_in` — a message's two halves
+
+Two `Kind`s are special: they model the two ends of a message's journey and are how
+the task tree spans component boundaries.
+
+- **`req_out`** — opened by the *sender* when it issues a request and ended when the
+  response returns, so it covers the request's full round trip. Its `ID` is the
+  message's own ID, and its `ParentID` is whatever task the sender was working on when
+  it sent the request.
+- **`req_in`** — the *receiver's* handling of that same request. Its `ParentID` is the
+  message's ID — i.e. the sender's `req_out` task — so every `req_in` is a child of the
+  `req_out` that produced it. By convention it opens when the request reaches the
+  **head of the receiver's input buffer** — the earliest moment the component can act
+  on it (*peek* time), not when the request is later admitted/retrieved — and ends when
   handling completes. Its duration is the receiver's service time, including time it
   spent blocked on internal resources.
 
-Other task `Kind`s are component-specific — e.g. `incoming_queue` for the time a
-message waits *behind other messages* in a port's input buffer before it reaches the
-head. When a `Kind` is unfamiliar, read the source rather than guessing. Tasks may
-also carry **tags**: categorical labels such as `read-hit` or `miss`.
+This `req_out` → `req_in` parent link is what stitches a request's path across
+components into a single tree: a receiver's `req_in` is in turn the parent of any
+`req_out`s the receiver issues downstream while handling it.
 
 ### Milestones & blocking reasons
 
@@ -38,7 +63,7 @@ start — is time the task spent **blocked on that reason**, named by the milest
 `Kind` (e.g. `hardware_resource`, `network_busy`, `queue`, `data`, `dependency`,
 `translation`, `subtask`). So at any instant a task is blocked on the reason of its
 *next* milestone; after its last milestone it is running, not blocked. Milestones
-live in the `milestone` table (`task_id`, `time`, `kind`); not every task records
+live in the `milestone` table (`TaskID`, `Time`, `Kind`); not every task records
 them.
 
 ## Visualizations
@@ -56,6 +81,11 @@ the URLs are raw trace values.
 - **Component view** — `/component?name=<component>&taskid=<id>&starttime=<t>&endtime=<t>`:
   the main blocking-reason view. A shared color identifies each reason (also shown in
   the side-panel "Blocking reasons" legend):
+  - **Task tree (top, when `taskid` is set)** — passing `&taskid=<id>` adds a panel
+    that shows the selected task together with its parent and its sub-tasks, laid out
+    on the **same time axis** as the two panels below. Use it to see what the component
+    was doing while that task executed — and just before and after it — so you can tie a
+    specific task's lifecycle to the blocking reasons and occupancy shown beneath it.
   - **Wavy lines under the Current Task bar** — one per blocking interval of the
     selected task, colored by its reason; a long wave is a long stall, and the node
     at its right end is the milestone (the release point).
@@ -96,8 +126,8 @@ the Akita library by default, and possibly the specific simulator's own componen
 Use it to learn what a trace label actually *means*:
 
 - **`code_search`** — regex search across the recorded source. Find where a `Kind`,
-  a milestone name, a `What` type (e.g. `*mem.ReadReq`), or a component is defined
-  and used.
+  a milestone name, the Go type behind a `What` value (e.g. `ReadReq`), or a
+  component is defined and used.
 - **`code_read`** — read a file, or a line range, to study the logic around a match.
 
 Reach for these whenever a `Kind`, milestone, message type, or component in the
@@ -161,8 +191,9 @@ Before presenting a hypothesis as *the cause*, try to gather:
    that show the symptom.
 2. **Source code** — the mechanism in the simulator that produces it, from
    `code_search` / `code_read`.
-3. **A visualization** — the pattern made visible via `daisen_view` or
-   `screenshot_current_view`.
+3. **Visualizations** — the pattern made visible via `daisen_view` or
+   `screenshot_current_view`. Use a chain of visualizations to better show the 
+   evidence.
 
 The strongest finding is one where all three agree — the numbers show the symptom,
 the code explains the mechanism, and the view confirms the pattern — so always make
@@ -192,6 +223,8 @@ requests (MSHR exhaustion); DRAM bank conflicts and row-buffer thrashing; bandwi
 saturation; head-of-line blocking in FIFOs; address-translation (TLB) miss /
 page-walk stalls; arbitration contention at shared resources; load imbalance across
 peer components.
+
+**Always consider simulator bug as a hypothesis**
 
 ## Style
 
