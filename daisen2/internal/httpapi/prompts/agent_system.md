@@ -79,16 +79,25 @@ the URLs are raw trace values.
   `ConcurrentTask`, `BufferPressure`, `PendingReqOut` (or `-` for none) — e.g.
   `primary=ReqInCount&secondary=AvgLatency`.
 - **Component view** — `/component?name=<component>&taskid=<id>&starttime=<t>&endtime=<t>`:
-  the main blocking-reason view. A shared color identifies each reason (also shown in
-  the side-panel "Blocking reasons" legend):
-  - **Task tree (top, when `taskid` is set)** — passing `&taskid=<id>` adds a panel
-    that shows the selected task together with its parent and its sub-tasks, laid out
-    on the **same time axis** as the two panels below. Use it to see what the component
-    was doing while that task executed — and just before and after it — so you can tie a
-    specific task's lifecycle to the blocking reasons and occupancy shown beneath it.
-  - **Wavy lines under the Current Task bar** — one per blocking interval of the
-    selected task, colored by its reason; a long wave is a long stall, and the node
-    at its right end is the milestone (the release point).
+  the main per-component view. It stacks each in-flight task as a band over time, so the
+  **height of the stack at a given time is that component's concurrency** — how many tasks
+  it is handling at once. A stack that holds the same level across the whole window with no
+  gaps (never dropping toward zero) is a strong sign the component is **working at full
+  capacity**, a likely bottleneck; dips toward zero mean it is intermittently idle.
+
+  Passing **`&taskid=<id>`** (then `name` is optional — the view resolves the task's own
+  component) selects a task: it highlights that task within the concurrent activity and
+  adds a panel showing it together with its **parent** (the upstream request that caused
+  it) and its **child/sub-tasks** (the downstream sub-requests it issued), all on the
+  **same time axis** as the panels below. This is one of the most useful — and most
+  underused — views: reach for it to see what the component is doing while a specific task
+  is in flight, and to walk the `ParentID` dependency chain up and down visually (what a
+  stalled task waits on; how a request fans out). Whenever you are explaining a *specific
+  task's* behavior, prefer this task-selected view. Within it, a shared color identifies
+  each blocking reason (also in the side-panel "Blocking reasons" legend):
+  - **Wavy lines under the selected task's bar** — one per blocking interval, colored by
+    reason; a long wave is a long stall, and the node at its right end is the milestone
+    (the release point).
   - **Stacked bar chart at the bottom** — at each of 40 samples across the visible
     time range, how many in-flight tasks are blocked by each reason, stacked and
     colored by reason. The **total bar height is the number of milestone-recording
@@ -184,6 +193,28 @@ you found. Work one hypothesis at a time so your reasoning stays legible. To *re
 or narrow a hypothesis, reach for whichever source is cheapest. If nothing is
 conclusive, say so and report what you ruled out — never fabricate a cause.
 
+**For "why is this task like this" questions, ask why it could not start earlier or end
+earlier.** Decompose the task's timing into two gaps: (1) *why it did not start earlier* —
+what it waited on before its `StartTime` (its parent/upstream task not yet done; a busy or
+full resource — queue, buffer, MSHR; arbitration for a shared resource; an unmet
+dependency); and (2) *why it did not end earlier* — what stretched it between `StartTime`
+and `EndTime` (its own service/processing time, or waiting on its subtasks in downstream
+components to return). The two gaps have different causes and point at different places to
+look: the start gap is usually upstream or at a contended resource, the duration is usually
+the component's own work or downstream. Attribute the time using milestones, the parent's
+`EndTime` vs this task's `StartTime`, and the subtask spans — then say which gap dominates
+and why.
+
+**Parent/subtask questions span components.** A task's `Location` is the component it
+ran in, and `ParentID` links a subtask to the task that spawned it. A task's **parent**
+runs in the *upstream* component that issued the request; its **subtasks** run in the
+*downstream* components it forwarded the work to. So when the user asks about a task's
+parent/subtask relationship, do **not** look only at the task's own component — pull the
+parent task from the **upstream** component and the child tasks from the **downstream**
+components. Use `data_query` to join on `ParentID` and read each task's `Location`, and
+use the task-selected component view (`/component?...&taskid=<id>`, above), which lays
+out the parent and subtasks and lets you click through to their components.
+
 **When proving a hypothesis, attempt to corroborate it from all three sources.**
 Before presenting a hypothesis as *the cause*, try to gather:
 
@@ -224,7 +255,15 @@ saturation; head-of-line blocking in FIFOs; address-translation (TLB) miss /
 page-walk stalls; arbitration contention at shared resources; load imbalance across
 peer components.
 
-**Always consider simulator bug as a hypothesis**
+**Consider implementation bugs, not just hardware behavior.** A phenomenon in the
+trace can be an artifact of a **simulator implementation bug** rather than realistic
+hardware behavior — a miscounted resource, an off-by-one in a queue, a slot that is
+never released, a milestone emitted at the wrong time. Always keep "the simulator's
+code is wrong here" on your hypothesis list alongside the architectural patterns above,
+and use `code_search` / `code_read` to check whether the mechanism the code actually
+implements matches what a correct component would do. When the data is physically
+implausible for the modeled hardware (e.g. a latency or concurrency level that should
+not be possible), suspect the model before the hardware.
 
 ## Style
 
