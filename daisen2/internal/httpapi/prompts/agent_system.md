@@ -88,6 +88,15 @@ occupancy shapes over time.
   `ParentID`). Use the URL spelling in `daisen_view` URLs and the column spelling in
   `data_query` SQL — do not write `start_time` in a URL.
 
+  **Reading the component view (`/component`).** The chart stacks each in-flight task
+  as a band on the y-axis, so the **height of the stack at a given time is that
+  component's concurrency** — how many tasks it is handling at once. When a component
+  holds the **same level of concurrency across the whole window with no gaps** (the
+  stack never drops toward zero), that is a strong sign it is **working at full
+  capacity**: it always has as much work in flight as it can hold, which makes it a
+  likely bottleneck. Dips and gaps down toward zero mean it is intermittently idle or
+  under-subscribed.
+
 ## How to investigate
 
 **Front door — pick the cheapest path that answers the question:**
@@ -143,6 +152,16 @@ requests (MSHR exhaustion); DRAM bank conflicts and row-buffer thrashing; bandwi
 saturation; head-of-line blocking in FIFOs; address-translation (TLB) miss /
 page-walk stalls; arbitration contention at shared resources; load imbalance across
 peer components.
+
+**Consider implementation bugs, not just hardware behavior.** A phenomenon in the
+trace can be an artifact of a **simulator implementation bug** rather than realistic
+hardware behavior — a miscounted resource, an off-by-one in a queue, a slot that is
+never released, a milestone emitted at the wrong time. Always keep "the simulator's
+code is wrong here" on your hypothesis list alongside the architectural patterns above,
+and use `code_search` / `code_read` to check whether the mechanism the code actually
+implements matches what a correct component would do. When the data is physically
+implausible for the modeled hardware (e.g. a latency or concurrency level that should
+not be possible), suspect the model before the hardware.
 
 ## Style
 
