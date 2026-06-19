@@ -4,6 +4,7 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
@@ -208,8 +209,17 @@ func (s *Server) httpTraceInfo(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	id := ""
 	if s.traceReader != nil {
-		base := filepath.Base(s.traceReader.filename)
-		id = strings.TrimSuffix(base, filepath.Ext(base))
+		path := s.traceReader.filename
+		base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		// Suffix a short hash of the absolute path so two different traces that share
+		// a basename (e.g. repeated experiment outputs named trace.sqlite in separate
+		// directories) get distinct ids and don't share browser-stored conversations.
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			abs = path
+		}
+		sum := sha256.Sum256([]byte(abs))
+		id = fmt.Sprintf("%s-%x", base, sum[:4])
 	}
 	fmt.Fprintf(w, `{"traceId":%q}`, id)
 }

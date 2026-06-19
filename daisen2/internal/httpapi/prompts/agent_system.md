@@ -83,7 +83,7 @@ occupancy shapes over time.
   `primary=ReqInCount&secondary=AvgLatency`, not `primary=Incoming Request Rate`.
 
   Note the naming convention: **view-URL parameters are lowercase with no
-  underscores** (`starttime`, `endtime`, `taskid`, `parentid`). These differ from the
+  underscores** (`starttime`, `endtime`, `taskid`). These differ from the
   trace's **SQL column names, which are PascalCase** (`StartTime`, `EndTime`,
   `ParentID`). Use the URL spelling in `daisen_view` URLs and the column spelling in
   `data_query` SQL — do not write `start_time` in a URL.

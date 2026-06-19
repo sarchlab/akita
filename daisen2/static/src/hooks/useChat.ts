@@ -68,6 +68,7 @@ export function useChat(traceId: string | null) {
     const chat = { id, title: "New Chat", messages: [], timestamp: Date.now() };
     setChatHistory((history) => [...history, chat]);
     setCurrentChatId(id);
+    currentChatIdRef.current = id;
     setMessages([]);
   }, [saveCurrent]);
 
@@ -77,6 +78,10 @@ export function useChat(traceId: string | null) {
       const chat = chatHistory.find((entry) => entry.id === id);
       if (!chat) return;
       setCurrentChatId(id);
+      // Sync the ref now (not just via the effect below): a queued SSE chunk from a
+      // still-streaming conversation can run before the effect fires and would
+      // otherwise still see the old id and overwrite the conversation we just opened.
+      currentChatIdRef.current = id;
       setMessages(chat.messages);
     },
     [chatHistory, saveCurrent],
@@ -84,18 +89,18 @@ export function useChat(traceId: string | null) {
 
   const deleteChat = useCallback(
     (id: string) => {
-      setChatHistory((history) => {
-        const remaining = history.filter((entry) => entry.id !== id);
-        if (id === currentChatId) {
-          const next = remaining[0] ?? { id: "chat_1", title: "New Chat", messages: [], timestamp: Date.now() };
-          setCurrentChatId(next.id);
-          setMessages(next.messages);
-          return remaining.length ? remaining : [next];
-        }
-        return remaining;
-      });
+      const remaining = chatHistory.filter((entry) => entry.id !== id);
+      if (id === currentChatId) {
+        const next = remaining[0] ?? { id: "chat_1", title: "New Chat", messages: [], timestamp: Date.now() };
+        currentChatIdRef.current = next.id;
+        setCurrentChatId(next.id);
+        setMessages(next.messages);
+        setChatHistory(remaining.length ? remaining : [next]);
+      } else {
+        setChatHistory(remaining);
+      }
     },
-    [currentChatId],
+    [chatHistory, currentChatId],
   );
 
   const sendMessage = useCallback(
@@ -285,16 +290,31 @@ export function useChat(traceId: string | null) {
     if (!traceId || loadedRef.current) return;
     loadedRef.current = true;
     const stored = loadConversations(traceId) as typeof chatHistory;
-    const fresh = {
-      id: nextChatId(),
-      title: "New Chat",
-      messages: [] as ChatMessage[],
-      timestamp: Date.now(),
-    };
-    setChatHistory(stored.length ? [...stored, fresh] : [fresh]);
-    setCurrentChatId(fresh.id);
-    setMessages([]);
+    const alreadyStarted = chatHistory.some((c) => c.messages.some((m) => m.role === "user"));
+    if (!alreadyStarted && messages.length === 0) {
+      // Nothing was started before the id resolved: adopt stored history + a fresh chat.
+      const fresh = {
+        id: nextChatId(),
+        title: "New Chat",
+        messages: [] as ChatMessage[],
+        timestamp: Date.now(),
+      };
+      setChatHistory(stored.length ? [...stored, fresh] : [fresh]);
+      setCurrentChatId(fresh.id);
+      currentChatIdRef.current = fresh.id;
+      setMessages([]);
+    } else {
+      // A conversation was already started before the id arrived (slow endpoint or the
+      // "default" fallback). Keep it and its in-flight stream; just merge the stored
+      // conversations in (dedup by id) rather than replacing everything and losing it.
+      setChatHistory((cur) => {
+        const curIds = new Set(cur.map((c) => c.id));
+        const extra = stored.filter((s) => !curIds.has(s.id));
+        return extra.length ? [...extra, ...cur] : cur;
+      });
+    }
     setLoaded(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [traceId]);
 
   // Persist conversations after the initial load, scoped to the trace. Gating on

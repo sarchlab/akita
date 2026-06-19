@@ -13,6 +13,29 @@ import type { LightboxImage } from "./Lightbox";
 // an opaque pixel) — e.g. on chat load, where the persisted message stored no image.
 const LOADING_PLACEHOLDER = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
 
+// Bound how many evidence views render off-screen at once. Each lazy capture spins up
+// an iframe + html2canvas, so a restored chat (images were stripped) or an answer that
+// cites many views could otherwise launch a flood of concurrent renders and stall the
+// UI/API. Funnel lazy captures through a small global queue.
+const MAX_CONCURRENT_CAPTURES = 2;
+let activeCaptures = 0;
+const pendingCaptures: Array<() => void> = [];
+function queuedCapture(viewUrl: string): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const start = () => {
+      activeCaptures += 1;
+      captureUrl(viewUrl)
+        .then(resolve, reject)
+        .finally(() => {
+          activeCaptures -= 1;
+          pendingCaptures.shift()?.();
+        });
+    };
+    if (activeCaptures < MAX_CONCURRENT_CAPTURES) start();
+    else pendingCaptures.push(start);
+  });
+}
+
 // Pull a friendly rationale + query out of a tool call's JSON arguments, falling
 // back to the raw string when it isn't the shape we expect.
 function parseToolArgs(args?: string): { reason?: string; query?: string } {
@@ -103,7 +126,7 @@ export default function MessageBubble({
       // while the view renders off-screen.
       if (!img.getAttribute("src")) img.src = LOADING_PLACEHOLDER;
       img.classList.add("daisen-evidence-loading");
-      captureUrl(viewUrl)
+      queuedCapture(viewUrl)
         .then((data) => {
           if (!data) return;
           lazyImages.current.set(viewUrl, data);
