@@ -8,11 +8,10 @@ import { captureUrl } from "../../utils/captureView";
 import { cn } from "../../lib/utils";
 import type { LightboxImage } from "./Lightbox";
 
-// A 1x1 transparent PNG used as an evidence thumbnail's src while its view renders
-// off-screen, so the browser shows a pulsing placeholder (via CSS) instead of a
-// broken-image icon — e.g. on chat load, where the persisted message stored no image.
-const LOADING_PLACEHOLDER =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+// A 1x1 transparent GIF used as an evidence thumbnail's src while its view renders
+// off-screen, so the browser shows the CSS skeleton (not a broken-image icon, and not
+// an opaque pixel) — e.g. on chat load, where the persisted message stored no image.
+const LOADING_PLACEHOLDER = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
 
 // Pull a friendly rationale + query out of a tool call's JSON arguments, falling
 // back to the raw string when it isn't the shape we expect.
