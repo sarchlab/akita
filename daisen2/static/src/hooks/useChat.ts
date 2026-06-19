@@ -10,6 +10,14 @@ function contentTitle(content: UnitContent[]) {
   return words.join(" ") + (words.length === 6 ? "..." : "");
 }
 
+// Collision-proof conversation ids. Date.now() alone can repeat within a
+// millisecond, which would make two conversations share an id (and a list row).
+let chatIdSeq = 0;
+function nextChatId() {
+  chatIdSeq += 1;
+  return `chat_${Date.now()}_${chatIdSeq}`;
+}
+
 // Title a conversation from its first user message, falling back to the existing
 // title (e.g. "New Chat") until one is sent.
 function titleFor(messages: ChatMessage[], fallback: string) {
@@ -23,6 +31,10 @@ export function useChat(traceId: string | null) {
     { id: string; title: string; messages: ChatMessage[]; timestamp: number }[]
   >([{ id: "chat_1", title: "New Chat", messages: [], timestamp: Date.now() }]);
   const [currentChatId, setCurrentChatId] = useState("chat_1");
+  // The displayed conversation, mirrored into a ref for async stream callbacks: a
+  // stream only writes to the visible `messages` while its conversation is still
+  // active, so streaming one conversation never clobbers another the user switched to.
+  const currentChatIdRef = useRef(currentChatId);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +64,7 @@ export function useChat(traceId: string | null) {
 
   const newChat = useCallback(() => {
     saveCurrent();
-    const id = `chat_${Date.now()}`;
+    const id = nextChatId();
     const chat = { id, title: "New Chat", messages: [], timestamp: Date.now() };
     setChatHistory((history) => [...history, chat]);
     setCurrentChatId(id);
@@ -100,13 +112,14 @@ export function useChat(traceId: string | null) {
       let baseMessages = messages;
       if (opts.newConversation) {
         saveCurrent();
-        chatId = `chat_${Date.now()}`;
+        chatId = nextChatId();
         baseMessages = [];
         setChatHistory((history) => [
           ...history,
           { id: chatId, title: "New Chat", messages: [], timestamp: Date.now() },
         ]);
         setCurrentChatId(chatId);
+        currentChatIdRef.current = chatId;
         setMessages([]);
       }
 
@@ -156,7 +169,7 @@ export function useChat(traceId: string | null) {
             ...nextMessages,
             { role: "assistant", content: [{ type: "text", text: text || "No response from Daisen Bot." }] },
           ];
-          setMessages(finalMessages);
+          if (currentChatIdRef.current === chatId) setMessages(finalMessages);
           saveTo(chatId, finalMessages);
           return;
         }
@@ -174,7 +187,7 @@ export function useChat(traceId: string | null) {
             steps: steps.length ? steps.map((s) => ({ ...s })) : undefined,
           };
           const working = [...nextMessages, assistantMessage];
-          setMessages(working);
+          if (currentChatIdRef.current === chatId) setMessages(working);
           return working;
         };
 
@@ -273,7 +286,7 @@ export function useChat(traceId: string | null) {
     loadedRef.current = true;
     const stored = loadConversations(traceId) as typeof chatHistory;
     const fresh = {
-      id: `chat_${Date.now()}`,
+      id: nextChatId(),
       title: "New Chat",
       messages: [] as ChatMessage[],
       timestamp: Date.now(),
@@ -290,6 +303,12 @@ export function useChat(traceId: string | null) {
     if (!traceId || !loaded) return;
     saveConversations(traceId, chatHistory);
   }, [traceId, loaded, chatHistory]);
+
+  // Keep the active-conversation ref in sync after navigation (loadChat / back),
+  // so an in-flight stream stops writing to `messages` once you switch away.
+  useEffect(() => {
+    currentChatIdRef.current = currentChatId;
+  }, [currentChatId]);
 
   return useMemo(
     () => ({
