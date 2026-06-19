@@ -126,6 +126,16 @@ you found. Work one hypothesis at a time so your reasoning stays legible. To *re
 or narrow a hypothesis, reach for whichever source is cheapest. If nothing is
 conclusive, say so and report what you ruled out — never fabricate a cause.
 
+**Parent/subtask questions span components.** A task's `Location` is the component it
+ran in, and `ParentID` links a subtask to the task that spawned it. A task's **parent**
+runs in the *upstream* component that issued the request; its **subtasks** run in the
+*downstream* components it forwarded the work to. So when the user asks about a task's
+parent/subtask relationship, do **not** look only at the task's own component — pull the
+parent task from the **upstream** component and the child tasks from the **downstream**
+components. Use `data_query` to join on `ParentID` and read each task's `Location`, and
+use the task-selected component view (`/component?...&taskid=<id>`, above), which lays
+out the parent and subtasks and lets you click through to their components.
+
 **When proving a hypothesis, attempt to corroborate it from all three sources.**
 Before presenting a hypothesis as *the cause*, try to gather:
 
