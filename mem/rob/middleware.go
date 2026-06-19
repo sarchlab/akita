@@ -413,9 +413,18 @@ func (m *middleware) handleReset(req memcontrolprotocol.Req) bool {
 	state := &m.comp.State
 	m.forgetInflightReceiverIDs()
 	if state.HeadReqID != 0 {
-		// A req_in was opened for the head request still waiting to be admitted;
-		// it is dropped with the drained traffic, so release its registry entry.
-		tracing.ForgetMsgIDAtReceiver(state.HeadReqID, m.comp)
+		// A req_in was opened for the head request still waiting to be admitted.
+		// It is dropped with the drained traffic, so end the task (which also
+		// releases its registry entry) instead of leaving it open and leaking
+		// tracing state. The request is still at the head of the Top buffer here,
+		// so complete it from there; fall back to forgetting the registry entry
+		// if it is somehow no longer present.
+		if head := m.topPort().PeekIncoming(); head != nil &&
+			head.Meta().ID == state.HeadReqID {
+			tracing.TraceReqComplete(m.comp, head)
+		} else {
+			tracing.ForgetMsgIDAtReceiver(state.HeadReqID, m.comp)
+		}
 		state.HeadReqID = 0
 	}
 	state.Transactions = state.Transactions[:0]

@@ -604,6 +604,11 @@ func collectMilestoneKinds(tasks []Task) []string {
 	kindSet := make(map[string]bool)
 	for _, task := range tasks {
 		for _, step := range task.Steps {
+			// Tags are merged into Steps with Kind "tag" (see trace.go); they are
+			// categorical labels, not blocking reasons, so skip them.
+			if step.Kind == "tag" {
+				continue
+			}
 			kindSet[step.Kind] = true
 		}
 	}
@@ -662,6 +667,11 @@ func findTaskBlockingKind(task Task, t float64) string {
 	found := false
 
 	for _, step := range task.Steps {
+		// Tags are merged into Steps with Kind "tag" (see trace.go); they are not
+		// blocking reasons, so they never count as the task's next milestone.
+		if step.Kind == "tag" {
+			continue
+		}
 		stepTime := float64(step.Time)
 		if stepTime >= t && (!found || stepTime < bestTime) {
 			best = step.Kind

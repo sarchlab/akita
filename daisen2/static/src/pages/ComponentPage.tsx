@@ -13,7 +13,7 @@ import { useTraceData } from "../hooks/useTraceData";
 import { useRenderReady } from "../hooks/useRenderReady";
 import type { Segment, Task } from "../types/task";
 import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskColorCoder";
-import { blockingKindAt, wavyPath } from "../utils/milestoneViz";
+import { blockingKindAt, milestonesOf, wavyPath } from "../utils/milestoneViz";
 import { smartString } from "../utils/smartValue";
 import { cn } from "../lib/utils";
 
@@ -699,7 +699,7 @@ function ComponentTaskView({
         // Render each milestone as a curve over the interval it closes — from
         // the task start (or the previous milestone) up to the milestone — so
         // the curve shows how long, and on what reason, the task was blocked.
-        const steps = [...(mainTask.steps ?? [])].sort((a, b) => a.time - b.time);
+        const steps = milestonesOf(mainTask.steps).sort((a, b) => a.time - b.time);
         const barTop = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 2 + TASK_VIEW_LARGE_TASK_HEIGHT;
         const centerY = barTop + TASK_VIEW_LARGE_TASK_HEIGHT + 6;
         return steps.map((step, index) => {
@@ -947,7 +947,7 @@ export default function ComponentPage() {
   // all distinct and colored by the same mechanism.
   const colorMap = useMemo(() => {
     const taskKeys = [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks].map(taskColorKey);
-    const reasonKeys = [...(stackedInfo?.kinds ?? []), ...(currentTask?.steps ?? []).map((step) => step.kind)];
+    const reasonKeys = [...(stackedInfo?.kinds ?? []), ...milestonesOf(currentTask?.steps).map((step) => step.kind)];
     return buildColorMapFromKeys([...taskKeys, ...reasonKeys]);
   }, [childTasks, currentTask, parentTask, tasks, stackedInfo]);
 
@@ -985,7 +985,7 @@ export default function ComponentPage() {
   // milestones (the wavy lines), so the legend covers both.
   const blockingReasons = useMemo(() => {
     const set = new Set<string>(stackedInfo?.kinds ?? []);
-    for (const step of currentTask?.steps ?? []) {
+    for (const step of milestonesOf(currentTask?.steps)) {
       set.add(step.kind);
     }
     return Array.from(set).sort();

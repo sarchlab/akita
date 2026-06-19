@@ -3,7 +3,7 @@ import * as d3 from "d3";
 import type { Segment, Task } from "../../types/task";
 import { assignYIndices } from "../../utils/taskYIndexAssigner";
 import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../../utils/taskColorCoder";
-import { wavyPath } from "../../utils/milestoneViz";
+import { milestonesOf, wavyPath } from "../../utils/milestoneViz";
 import { smartString } from "../../utils/smartValue";
 
 interface GanttChartProps {
@@ -75,8 +75,7 @@ export default function GanttChart({
   // blocking reason; the interval before it (from the task start or the previous
   // milestone) is rendered as a curve colored by that reason.
   const milestoneSteps = useMemo(() => {
-    const steps = mainTask?.steps ?? [];
-    return [...steps].sort((a, b) => a.time - b.time);
+    return milestonesOf(mainTask?.steps).sort((a, b) => a.time - b.time);
   }, [mainTask]);
   const milestoneBand = milestoneSteps.length ? MILESTONE_BAND : 0;
 

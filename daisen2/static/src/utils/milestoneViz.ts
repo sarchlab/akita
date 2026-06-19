@@ -38,6 +38,17 @@ export function wavyPath(
   return d;
 }
 
+// The trace reader merges a task's tags into its steps with this kind (see
+// trace.go). Tags are categorical labels, not blocking reasons, so milestone
+// logic must skip them.
+export const TAG_STEP_KIND = "tag";
+
+// milestonesOf returns a task's steps with tag entries removed — i.e. only the
+// real milestones.
+export function milestonesOf(steps: TaskStep[] | null | undefined): TaskStep[] {
+  return (steps ?? []).filter((step) => step.kind !== TAG_STEP_KIND);
+}
+
 // blockingKindAt returns the reason a task is blocked on at time t — the kind of
 // the first milestone at or after t (the next one to be released). Mirrors the
 // backend's findTaskBlockingKind. Returns "" when no milestone remains (the task
@@ -46,6 +57,7 @@ export function blockingKindAt(steps: TaskStep[] | null | undefined, t: number):
   let best = "";
   let bestTime = Infinity;
   for (const step of steps ?? []) {
+    if (step.kind === TAG_STEP_KIND) continue;
     if (step.time >= t && step.time < bestTime) {
       bestTime = step.time;
       best = step.kind;
