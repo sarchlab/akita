@@ -2,6 +2,37 @@ package cache
 
 import "github.com/sarchlab/akita/v5/mem/vm"
 
+// DirectorySetID maps a cache-line-aligned address to a set index.
+//
+// A plain `blockID % numSets` indexes on contiguous low-order block-address
+// bits. When an upstream bank/channel interleaver selects the cache slice using
+// some of those same low bits, those bits are constant within a slice, so only
+// a fraction of the sets are ever reachable and the slice's effective capacity
+// collapses (e.g. a 256 KB, 16-way slice behind a 128 B 16-way interleave can
+// reach only 16 of its 256 sets -> ~1/16 of capacity).
+//
+// To keep every set reachable regardless of which low bits the interleaver
+// consumed, the block id is run through the splitmix64 finalizer (an avalanche
+// hash: each input bit affects every output bit) before the modulo. A simple
+// XOR fold of a couple of fixed shift amounts is not enough — for wide
+// directories the injected entropy aliases bits that are themselves part of the
+// index, so a slice still collapses (a 4 MB, 16-way, 64 B slice -> 4096 sets
+// behind a 128 B 16-way interleave reaches only 2048 of them, and the loss
+// grows with the set count). The full-avalanche mix has no such residual: it
+// reaches 100% of the sets for every interleave stride / slice count / set
+// count. The stored tag is the full address, so lookups remain correct; only
+// the set distribution changes.
+func DirectorySetID(addr uint64, blockSize, numSets int) int {
+	h := addr / uint64(blockSize)
+	h ^= h >> 33
+	h *= 0xff51afd7ed558ccd
+	h ^= h >> 33
+	h *= 0xc4ceb9fe1a85ec53
+	h ^= h >> 33
+
+	return int(h % uint64(numSets))
+}
+
 // DirectoryLookup finds the block matching pid+addr in DirectoryState.
 // addr should already be cache-line aligned.
 // Returns (setID, wayID, found).
@@ -12,7 +43,7 @@ func DirectoryLookup(
 	pid vm.PID,
 	addr uint64,
 ) (int, int, bool) {
-	setID := int(addr / uint64(blockSize) % uint64(numSets))
+	setID := DirectorySetID(addr, blockSize, numSets)
 	set := &ds.Sets[setID]
 
 	for wayID, block := range set.Blocks {
@@ -36,7 +67,7 @@ func DirectoryFindVictim(
 	blockSize int,
 	addr uint64,
 ) (int, int) {
-	setID := int(addr / uint64(blockSize) % uint64(numSets))
+	setID := DirectorySetID(addr, blockSize, numSets)
 	set := &ds.Sets[setID]
 
 	for _, wayID := range set.LRUOrder {
