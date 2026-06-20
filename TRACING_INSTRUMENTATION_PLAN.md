@@ -28,27 +28,53 @@ a milestone is the time the task was blocked on that reason. Milestone kinds:
 by `(Kind, What)` keeping the first, and drops same-timestamp duplicates — so
 retried emissions and zero-duration stalls collapse automatically.
 
+**Buffer task / `req_in` boundary (convention).** The incoming-**buffer** task
+spans a message's whole residency in a port's incoming buffer — from delivery
+until the component retrieves (admits) it — and the `req_in` processing task
+begins at that same retrieve. The two are adjacent: no gap, no overlap. The
+buffer task carries a `queue` "reached head" milestone (emitted by the port hook
+the instant the message becomes the head of the buffer, so it is exact — a
+component that peeks the head only on its own tick would mark it late) plus the
+component's **admission** milestones (the resources that kept it from admitting:
+a free slot, a free downstream port). `req_in` carries only the **post-admission
+processing** milestones. The component addresses the buffer task to hang
+admission milestones on it via `MsgIDAtIncomingBuffer`. (Earlier the buffer task
+stopped at head-of-buffer; a `req_in` that started at peek then double-counted
+the at-head time, and one that started at retrieve — the AT — left it in an
+unattributed gap. The retrieve boundary fixes both.)
+
 Reference conventions: the TLB records rich milestones + tags; the address
 translator and DRAM record milestones.
 
 ---
 
-## Step 0 — Incoming-buffer queueing subtask (#2 + #5) — DONE
+## Step 0 — Incoming-buffer task (#2 + #5) — DONE
 
-Reusable port hook that opens an `incoming_queue` task on `HookPosPortMsgRecvd`
-and closes it on `HookPosPortMsgRetrieveIncoming`, parented to the `req_out`
-task (`msg.ID`, or `RspTo` for responses). Emitted on the port's owning
-component so it flows to that component's tracers; no-op when untraced.
+Reusable port hook that opens an `incoming_buffer` task on `HookPosPortMsgRecvd`
+and closes it on `HookPosPortMsgRetrieveIncoming` (admission), parented to the
+`req_out` task (`msg.ID`, or `RspTo` for responses). Emitted on the port's owning
+component so it flows to that component's tracers; no-op when untraced. The hook
+emits the `queue` "reached head" milestone when the message becomes the head of
+the buffer, and exposes the task ID via `MsgIDAtIncomingBuffer` so the component
+can hang its admission milestones on it (see the boundary convention above).
 
-- `tracing/incomingqueuetracer.go` — `incomingQueueHook` + `CollectIncomingQueueTrace`.
+- `tracing/incomingbuffertracer.go` — `incomingBufferHook` +
+  `CollectIncomingBufferTrace`; `tracing/registry.go` + `api.go` —
+  `MsgIDAtIncomingBuffer`/`ForgetMsgIDAtIncomingBuffer`.
 - `simulation/simulation.go` — wired into `RegisterPort` (global, mirrors how
   `RegisterComponent` attaches `CollectTrace`).
-- Tests: `tracing/incomingqueuetracer_test.go`.
+- Tests: `tracing/incomingbuffertracer_test.go`.
 
-**Verified** on a traced `virtualmem` run: 440 `incoming_queue` tasks, clean
-durations, 95% parented to `req_out`, exact retrieval-time alignment with
-`req_in` at non-pipelined components (the TLB pipeline gap is correct). Captures
-both the request side (#2) and, for free, the response side (#5).
+**Verified** on a traced `virtualmem` run: `incoming_buffer` tasks span to
+retrieve with the buffer end aligned exactly to the sibling `req_in` start
+(400/400 at the AT, zero overlap); the AT carries `network_busy`/Translation and
+the ROB `hardware_resource`/buffer admission milestones on the buffer task.
+Captures both the request side (#2) and, for free, the response side (#5).
+
+**Update (buffer/`req_in` boundary).** Originally the task stopped at
+head-of-buffer with admission time pushed into `req_in` (peek-start). It now
+spans to retrieve with the admission milestones on the buffer task, and `req_in`
+starts at retrieve. The AT and ROB were migrated to this convention together.
 
 ---
 
@@ -57,15 +83,22 @@ both the request side (#2) and, for free, the response side (#5).
 **Objective.** Give the ROB the milestone/tag coverage every other data-path
 component should have. This is the original goal that started this work.
 
-The `req_in` task now records, in order:
+The ROB records, in order (the first two are **admission** waits and now live on
+the incoming-buffer task per the boundary convention; the rest are processing
+waits on `req_in`):
 
-| Milestone | Kind | Where | `What` | Marks |
-|---|---|---|---|---|
-| buffer slot acquired | `hardware_resource` | `topDown` | `<rob>.buffer` | waited for a free ROB entry |
-| shadow req sent | `network_busy` (Bottom) | `topDown` | Bottom port | waited to send downstream |
-| bottom response arrived | `data` (read) / `subtask` (write) | `parseBottom` | Bottom port | waited on the bottom unit |
-| reached head of reorder buffer | `dependency` | `bottomUp` | `<rob>.reorder` | waited behind older transactions |
-| response sent | `network_busy` (Top) | `bottomUp` | Top port | waited to send to top |
+| Milestone | Kind | Task | Where | `What` | Marks |
+|---|---|---|---|---|---|
+| reached head of Top buffer | `queue` | buffer | port hook | Top port | waited behind earlier requests |
+| buffer slot acquired | `hardware_resource` | buffer | `topDown` | `<rob>.buffer` | waited for a free ROB entry |
+| shadow req sent | `network_busy` (Bottom) | buffer | `topDown` | Bottom port | waited to send downstream |
+| bottom response arrived | `data` (read) / `subtask` (write) | `req_in` | `parseBottom` | Bottom port | waited on the bottom unit |
+| reached head of reorder buffer | `dependency` | `req_in` | `bottomUp` | `<rob>.reorder` | waited behind older transactions |
+| response sent | `network_busy` (Top) | `req_in` | `bottomUp` | Top port | waited to send to top |
+
+(The `buffer slot acquired` and `shadow req sent` milestones originally lived on
+`req_in` with a peek-time start; they moved to the buffer task when the AT and
+ROB adopted the retrieve boundary.)
 
 Plus a `read`/`write` tag, emitted once when the `req_in` opens (keyed off the
 request's concrete type).
