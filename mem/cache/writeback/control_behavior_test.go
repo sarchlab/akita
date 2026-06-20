@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
@@ -118,7 +119,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 	// a later flush write-back can be identified by its payload. It returns
 	// the block's set ID so the test can inspect it after the verb.
 	residentDirtyBlock := func(addr uint64, fill byte) int {
-		setID := int(addr / uint64(blockSize) % uint64(comp.Spec().NumSets))
+		setID := cache.DirectorySetID(addr, blockSize, comp.Spec().NumSets)
 		block := &comp.State.DirectoryState.Sets[setID].Blocks[0]
 		block.Tag = addr
 		block.PID = 0
