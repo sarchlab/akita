@@ -566,6 +566,7 @@ func (s *Server) runAgentSSE(
 		dataQueryTool(s.traceReader),
 		codeSearchTool(s.codeSource),
 		codeReadTool(s.codeSource),
+		codeLsTool(s.codeSource),
 		daisenViewTool(capture),
 		screenshotTool(capture),
 	}

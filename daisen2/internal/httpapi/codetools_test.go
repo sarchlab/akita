@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -140,6 +141,86 @@ func TestCodeReadDefaultWindowTruncates(t *testing.T) {
 	}
 	if !strings.Contains(out, "more lines; pass start_line/end_line") {
 		t.Errorf("expected a 'more lines' note for a long file:\n%s", out[:min(len(out), 300)])
+	}
+}
+
+func TestCodeLs(t *testing.T) {
+	src := testSource(t, map[string]string{
+		"example.com/m/mem/cache/cache.go": "package cache\ntype Cache struct{}\n",
+		"example.com/m/mem/read.go":        "package mem\ntype ReadReq struct{}\n\nfunc handle() {}\n",
+		"example.com/m/mem/write.go":       "package mem\ntype WriteReq struct{}\n",
+		"example.com/m/noc/conn.go":        "package noc\n",
+	})
+
+	// Empty path lists the recorded module roots, not the github.com/... chain.
+	out, err := runCodeLs(src, "")
+	if err != nil {
+		t.Fatalf("runCodeLs root: %v", err)
+	}
+	if !strings.Contains(out, "example.com/m/") {
+		t.Errorf("root listing should show the recorded root:\n%s", out)
+	}
+
+	// Listing a directory shows sub-directories (trailing /) and files with counts.
+	out, err = runCodeLs(src, "example.com/m/mem")
+	if err != nil {
+		t.Fatalf("runCodeLs dir: %v", err)
+	}
+	if !strings.Contains(out, "cache/") {
+		t.Errorf("expected sub-directory cache/ marked as a directory:\n%s", out)
+	}
+	if !strings.Contains(out, "read.go\t4 lines, ") || !strings.Contains(out, "write.go\t2 lines, ") {
+		t.Errorf("expected files annotated with line counts:\n%s", out)
+	}
+	// Directories sort before files.
+	if strings.Index(out, "cache/") > strings.Index(out, "read.go") {
+		t.Errorf("directories should be listed before files:\n%s", out)
+	}
+
+	// A file path is reported (not an error), steering to code_read.
+	out, _ = runCodeLs(src, "example.com/m/mem/read.go")
+	if !strings.Contains(out, "is a file") {
+		t.Errorf("expected file-not-a-directory message:\n%s", out)
+	}
+
+	// A missing directory is reported, not an error.
+	out, _ = runCodeLs(src, "example.com/m/nope")
+	if !strings.Contains(out, "not found") {
+		t.Errorf("expected not-found message:\n%s", out)
+	}
+
+	// Invalid traversal path is rejected.
+	if _, err := runCodeLs(src, "../escape"); err == nil {
+		t.Errorf("expected error for traversal path")
+	}
+}
+
+func TestCodeLsCapsEntries(t *testing.T) {
+	files := map[string]string{}
+	for i := 0; i < codeLsMaxEntries+50; i++ {
+		files[fmt.Sprintf("example.com/m/big/f%04d.go", i)] = "package big\n"
+	}
+	src := testSource(t, files)
+
+	out, err := runCodeLs(src, "example.com/m/big")
+	if err != nil {
+		t.Fatalf("runCodeLs: %v", err)
+	}
+	if !strings.Contains(out, "truncated") {
+		t.Errorf("expected truncation note for a flood of entries:\n%s", out[:min(len(out), 400)])
+	}
+	if got := strings.Count(out, ".go\t"); got > codeLsMaxEntries {
+		t.Errorf("listed %d files, want <= %d", got, codeLsMaxEntries)
+	}
+}
+
+func TestCodeLsEmptySource(t *testing.T) {
+	out, err := runCodeLs(&sourcefs.Source{}, "")
+	if err != nil {
+		t.Fatalf("runCodeLs: %v", err)
+	}
+	if !strings.Contains(out, "No simulator source is recorded") {
+		t.Errorf("expected no-source message, got:\n%s", out)
 	}
 }
 
