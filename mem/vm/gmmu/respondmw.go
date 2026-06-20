@@ -37,14 +37,26 @@ func (m *respondMW) Tick() bool {
 }
 
 func (m *respondMW) fetchFromBottom() bool {
+	rspI := m.bottomPort().PeekIncoming()
+	if rspI == nil {
+		return false
+	}
+
 	if !m.topPort().CanSend() {
 		return false
 	}
 
-	rspI := m.bottomPort().RetrieveIncoming()
-	if rspI == nil {
-		return false
-	}
+	// The upstream Top port is free: the at-head wait to forward this
+	// response on it — counted on the incoming-buffer task since the response
+	// reached the head of the Bottom buffer — is over. The req_in opened at
+	// retrieve covers only the processing that follows.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtIncomingBuffer(rspI, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.topPort().Name(),
+	})
+
+	m.bottomPort().RetrieveIncoming()
 
 	switch rsp := rspI.(type) {
 	case vmprotocol.TranslationRsp:

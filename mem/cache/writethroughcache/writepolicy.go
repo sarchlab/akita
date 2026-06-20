@@ -247,6 +247,11 @@ func (d *directory) writethroughWriteHit(
 
 	bankBuf.PushTyped(postCoalesceIdx)
 
+	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+		TaskID: trans.ID,
+		What:   "write-hit",
+	})
+
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
 

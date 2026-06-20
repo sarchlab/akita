@@ -293,6 +293,14 @@ func (m *ctrlMiddleware) handleReset(msg memcontrolprotocol.Req) bool {
 	// eventually arrive; handleRsp drops responses whose ID is no longer here.
 	state.OutstandingBottomReqs = map[uint64]bool{}
 
+	// The dropped walks also leave their req_in tracing tasks open: release the
+	// receiver-task registry entries the data path allocated for each in-flight
+	// Top request so they do not outlive the reset (mirrors how handleRsp would
+	// have completed them). The req_out tasks are sender-side (keyed by the
+	// message ID, no registry entry), so dropping the table suffices for them.
+	m.forgetInflightReceiverIDs()
+	state.InflightReqs = map[uint64]inflightReqState{}
+
 	// Reset is a hard reset: drop the cached page-walk entries so the
 	// component matches its freshly-built (empty) table.
 	spec := m.comp.Spec()
@@ -308,6 +316,16 @@ func (m *ctrlMiddleware) handleReset(msg memcontrolprotocol.Req) bool {
 
 	m.controlPort().RetrieveIncoming()
 	return true
+}
+
+// forgetInflightReceiverIDs releases the tracing receiver-task registry entries
+// that the data path allocated for each in-flight Top request. Control paths
+// that drop the in-flight table (Reset) call this so the entries do not outlive
+// the walks they describe.
+func (m *ctrlMiddleware) forgetInflightReceiverIDs() {
+	for _, inflight := range m.comp.State.InflightReqs {
+		tracing.ForgetMsgIDAtReceiver(inflight.TopReqID, m.comp)
+	}
 }
 
 func (m *ctrlMiddleware) handleUnsupported(msg memcontrolprotocol.Req) bool {

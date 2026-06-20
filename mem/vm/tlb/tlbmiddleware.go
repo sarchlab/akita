@@ -58,19 +58,49 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 	next := &m.comp.State
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
+		// Peek the head before the pipeline-slot gate so the admission milestone
+		// can be attributed to the head message's buffer task on the tick the
+		// slot frees.
+		headI := m.topPort().PeekIncoming()
+		if headI == nil {
+			break
+		}
+
 		if !next.Pipeline.CanAccept() {
 			break
 		}
 
-		msgI := m.topPort().RetrieveIncoming()
-		if msgI == nil {
-			break
-		}
+		// A pipeline slot is free: the hardware-resource wait the request spent at
+		// the head of the Top buffer is over. This admission wait belongs to the
+		// incoming-buffer task; req_in (opened at retrieve, below) covers only the
+		// processing that follows.
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: tracing.MsgIDAtIncomingBuffer(headI, m.comp),
+			Kind:   tracing.MilestoneKindHardwareResource,
+			What:   m.comp.Name() + ".pipeline",
+		})
 
+		msgI := m.topPort().RetrieveIncoming()
 		msg := msgI.(vmprotocol.TranslationReq)
+
+		// Admit the request: open req_in at retrieve, then open the pipeline
+		// subtask as a child of req_in so the pipeline latency is attributed
+		// rather than left as a gap between the buffer task and the post-lookup
+		// milestones.
+		tracing.TraceReqReceive(m.comp, msg)
+
+		pid := timing.GetIDGenerator().Generate()
+		tracing.StartTask(m.comp, tracing.TaskStart{
+			ID:       pid,
+			ParentID: tracing.MsgIDAtReceiver(msg, m.comp),
+			Kind:     tracing.PipelineTaskKind,
+			What:     m.comp.Name() + ".pipeline",
+		})
+
 		// Dwell one extra cycle at stage 0 to preserve the same per-stage
 		// latency as the original hand-coded pipeline.
-		next.Pipeline.AcceptWithDelay(pipelineTLBReqState{Msg: msg}, 1)
+		next.Pipeline.AcceptWithDelay(
+			pipelineTLBReqState{Msg: msg, PipelineTaskID: pid}, 1)
 
 		madeProgress = true
 	}
@@ -94,6 +124,9 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 		ok := m.lookup(msg)
 		if ok {
 			next.BufferItems.Pop()
+			// The request has left the pipeline (it is now being looked up):
+			// close the pipeline subtask opened at admission.
+			tracing.EndTask(m.comp, tracing.TaskEnd{ID: item.PipelineTaskID})
 			madeProgress = true
 		} else {
 			break
@@ -229,7 +262,6 @@ func (m *tlbMiddleware) handleTranslationHit(
 		What:   m.comp.Name() + ".Sets",
 	})
 
-	tracing.TraceReqReceive(m.comp, msg)
 	tracing.AddTaskTag(m.comp, tracing.TaskTag{
 		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
 		What:   "hit",
@@ -255,7 +287,6 @@ func (m *tlbMiddleware) handleTranslationMiss(msg vmprotocol.TranslationReq) boo
 
 	fetched := m.fetchBottom(msg)
 	if fetched {
-		tracing.TraceReqReceive(m.comp, msg)
 		tracing.AddTaskTag(m.comp, tracing.TaskTag{
 			TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
 			What:   "miss",
@@ -306,7 +337,6 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 	}
 	next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, msg)
 
-	tracing.TraceReqReceive(m.comp, msg)
 	tracing.AddTaskTag(m.comp, tracing.TaskTag{
 		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
 		What:   "mshr-hit",

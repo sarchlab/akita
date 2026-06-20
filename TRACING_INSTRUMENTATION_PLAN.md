@@ -43,6 +43,15 @@ stopped at head-of-buffer; a `req_in` that started at peek then double-counted
 the at-head time, and one that started at retrieve — the AT — left it in an
 unattributed gap. The retrieve boundary fixes both.)
 
+**Pipeline subtask (convention).** A component with a latency pipeline between
+retrieve and processing (the TLB, the caches' directory pipeline) records the
+traversal as a `pipeline` subtask (`tracing.PipelineTaskKind`) **parented to
+`req_in`**, opened at pipeline entry (the tick `req_in` opens, at retrieve) and
+closed at pipeline exit. Without it there is an unattributed gap between the
+buffer task (ends at retrieve) and the first post-pipeline `req_in` milestone —
+the pipelined component must still open `req_in` at retrieve, not at the pipeline
+exit. The subtask id is carried in the pipeline item state.
+
 Reference conventions: the TLB records rich milestones + tags; the address
 translator and DRAM record milestones.
 
@@ -207,9 +216,12 @@ receiver registry afterward.
 
 ## Step 4 — Per-component lifecycle bug fixes (SEV-1)
 
-These corrupt or miss data on **normal** runs, independent of reset.
+These corrupt or miss data on **normal** runs, independent of reset. **Items 1
+(mmuCache data-path tracing) and 3 (datamover wrong-key `req_in` close) were
+fixed as part of the Step 5 rollout.** Item 2 (gmmu remote-path) and item 4
+(endpoint `msg_e2e`) remain.
 
-1. **mmuCache — no data-path tracing.** `mmucachemiddleware.go` opens no
+1. **mmuCache — no data-path tracing.** — DONE (Step 5 rollout). `mmucachemiddleware.go` opens no
    `req_in` and initiates no `req_out` for the downstream `TranslationReq`; its
    only tracing is control-path milestones (`ctrlmiddleware.go:115,133,153,184,277`)
    that attach to **phantom tasks** (`MsgIDAtReceiver` with no `TraceReqReceive`).
@@ -240,10 +252,36 @@ balanced, non-orphaned tasks.
 
 ---
 
-## Step 5 — Milestone & tag coverage rollout
+## Step 5 — Milestone & tag coverage rollout — DONE
 
-**Objective.** Extend the milestone convention to the data-path components that
-record none, so blocked-time is attributable end-to-end.
+**Delivered.** The buffer/`req_in` convention was rolled out to every data-path
+mem component (one PR, parallel per-component changes), each with a new
+`milestone_test.go`:
+
+| Component | Admission milestone(s) on the buffer task | Pipeline subtask | Other |
+|---|---|---|---|
+| TLB | `hardware_resource`/`.pipeline` | yes (`req_in` moved to retrieve; the 3 late `TraceReqReceive` removed) | — |
+| writeback | `hardware_resource`/`.dir_stage_buf` | yes (`.dir_pipeline`) | fixed unconditional `write-mshr-hit` tag |
+| writethroughcache | `hardware_resource`/`.trans`, `/.dir_buf` | yes (`.dir_pipeline`) | added missing `write-hit` tag |
+| MMU | `hardware_resource`/`.walk` | — | — |
+| gMMU | Top `hardware_resource`/`.walk`; Bottom `network_busy`/Top-port | — | — |
+| DRAM | `queue`/`.SubTransQueue` | — | refresh stall now `hardware_resource`/`.refresh` on the sub-trans |
+| simplebankedmemory | `hardware_resource`/`.bank<N>` | — | — |
+| datamover | `hardware_resource`/`.transaction` | — | fixed `req_in` close-key leak; retrieve-after-gate so blocked reqs wait |
+| mmuCache | Top & Bottom `network_busy` | — | added the whole `req_in`/`req_out` lifecycle (Step 4 item 1); reset cleanup |
+| idealmemcontroller | — (unbounded, no admission gate) | — | — |
+
+**Verified** on a traced `virtualmem` run: 2,549 `pipeline` subtasks (each starts
+at its `req_in` start and ends within it), buffer-task admission coverage up from
+1,200 → 3,680 tasks, the TLB retrieve→lookup gap now filled by its pipeline
+subtask, and 0 orphan `req_in` / 0 phantom milestones / 0 unended tasks.
+
+Remaining (not in this rollout): cache *internal* MSHR/write-buffer-full waits as
+`req_in` milestones, response-side buffer admission milestones, and the gMMU/mmu
+remote-fetch `data`/`dependency` processing milestones — incremental polish.
+
+**Original objective.** Extend the milestone convention to the data-path
+components that record none, so blocked-time is attributable end-to-end.
 
 **Scope / high-value milestones.**
 - **Caches** (writeback, writethroughcache): `hardware_resource` (MSHR full,

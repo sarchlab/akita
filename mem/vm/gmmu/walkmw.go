@@ -52,14 +52,26 @@ func (m *walkMW) parseFromTop() bool {
 	spec := m.comp.Spec()
 	state := &m.comp.State
 
+	reqI := m.topPort().PeekIncoming()
+	if reqI == nil {
+		return false
+	}
+
 	if len(state.WalkingTranslations) >= spec.MaxRequestsInFlight {
 		return false
 	}
 
-	reqI := m.topPort().RetrieveIncoming()
-	if reqI == nil {
-		return false
-	}
+	// A walk slot is free: the at-head wait for one — counted on the
+	// incoming-buffer task since the request reached the head of the Top
+	// buffer — is over. The req_in opened at retrieve covers only the walk
+	// processing that follows.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtIncomingBuffer(reqI, m.comp),
+		Kind:   tracing.MilestoneKindHardwareResource,
+		What:   m.comp.Name() + ".walk",
+	})
+
+	m.topPort().RetrieveIncoming()
 
 	switch req := reqI.(type) {
 	case vmprotocol.TranslationReq:

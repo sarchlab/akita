@@ -61,6 +61,16 @@ func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
 		return false
 	}
 
+	// A free sub-transaction-queue slot opened: the at-head wait the message
+	// spent blocked on the SubTransQueue is over. This admission wait belongs to
+	// the incoming-buffer task; req_in (opened at retrieve, below) covers only
+	// the processing that follows.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtIncomingBuffer(msgI, m.comp),
+		Kind:   tracing.MilestoneKindQueue,
+		What:   m.comp.Name() + ".SubTransQueue",
+	})
+
 	ts.ArrivalTick = next.TickCount
 	next.Transactions = append(next.Transactions, ts)
 	pushSubTrans(next, transIdx)

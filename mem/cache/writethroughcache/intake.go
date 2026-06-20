@@ -31,10 +31,28 @@ func (s *intake) Tick() bool {
 		return false
 	}
 
+	// A concurrent-transaction slot is free: the hardware-resource wait the
+	// request spent at the head of the Top buffer is over. This admission wait
+	// belongs to the incoming-buffer task; req_in (opened at retrieve, below)
+	// covers only the processing that follows.
+	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtIncomingBuffer(msg, s.cache.comp),
+		Kind:   tracing.MilestoneKindHardwareResource,
+		What:   s.cache.comp.Name() + ".trans",
+	})
+
 	dirBuf := &next.DirBuf
 	if !dirBuf.CanPush() {
 		return false
 	}
+
+	// The directory buffer has room: the at-head wait for a free dirBuf slot is
+	// over (also on the incoming-buffer task).
+	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtIncomingBuffer(msg, s.cache.comp),
+		Kind:   tracing.MilestoneKindHardwareResource,
+		What:   s.cache.comp.Name() + ".dir_buf",
+	})
 
 	transIdx := s.createTransaction(msg)
 

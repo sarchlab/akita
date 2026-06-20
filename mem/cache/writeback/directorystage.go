@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -77,6 +78,7 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 			if !next.DirPostPipelineBuf.CanPush() {
 				break
 			}
+			ds.startDirPipeline(transIdx)
 			next.DirPostPipelineBuf.PushTyped(transIdx)
 			next.DirStageBuf.Pop()
 			madeProgress = true
@@ -84,6 +86,7 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 			if !next.DirPipeline.CanAccept() {
 				break
 			}
+			ds.startDirPipeline(transIdx)
 			next.DirPipeline.Accept(transIdx)
 			next.DirStageBuf.Pop()
 			madeProgress = true
@@ -216,10 +219,12 @@ func (ds *directoryStage) doWrite(transIdx int, trans *transactionState) bool {
 		&next.MSHRState, trans.WritePID, cachelineID)
 	if found {
 		ok := ds.doWriteMSHRHit(transIdx, trans, mshrIdx)
-		tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-			TaskID: tracing.MsgIDAtReceiver(&trans.WriteMeta, ds.cache.comp),
-			What:   "write-mshr-hit",
-		})
+		if ok {
+			tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
+				TaskID: tracing.MsgIDAtReceiver(&trans.WriteMeta, ds.cache.comp),
+				What:   "write-mshr-hit",
+			})
+		}
 
 		return ok
 	}
@@ -627,10 +632,39 @@ func (ds *directoryStage) needEviction(victim *cache.BlockState) bool {
 	return victim.IsValid && victim.IsDirty
 }
 
-// popDirPostBuf removes the first element from the directory post-pipeline buffer.
+// startDirPipeline opens a pipeline subtask, parented to the request's req_in
+// task, that covers the transaction's traversal of the directory stage (the
+// directory pipeline latency plus the wait in the post-pipeline buffer). The
+// subtask id is stored on the transaction and the task is ended in
+// popDirPostBuf when the transaction leaves the directory stage.
+func (ds *directoryStage) startDirPipeline(transIdx int) {
+	trans := &ds.cache.comp.State.Transactions[transIdx]
+
+	pid := timing.GetIDGenerator().Generate()
+	trans.DirPipelinePID = pid
+
+	tracing.StartTask(ds.cache.comp, tracing.TaskStart{
+		ID:       pid,
+		ParentID: tracing.MsgIDAtReceiver(trans.reqMeta(), ds.cache.comp),
+		Kind:     tracing.PipelineTaskKind,
+		What:     ds.cache.comp.Name() + ".dir_pipeline",
+	})
+}
+
+// popDirPostBuf removes the first element from the directory post-pipeline
+// buffer and closes the directory-pipeline subtask opened in startDirPipeline.
 func (ds *directoryStage) popDirPostBuf() {
 	next := &ds.cache.comp.State
-	if next.DirPostPipelineBuf.Size() > 0 {
-		next.DirPostPipelineBuf.Pop()
+	if next.DirPostPipelineBuf.Size() == 0 {
+		return
 	}
+
+	idx := next.DirPostPipelineBuf.Peek()
+	trans := &next.Transactions[idx]
+	if trans.DirPipelinePID != 0 {
+		tracing.EndTask(ds.cache.comp, tracing.TaskEnd{ID: trans.DirPipelinePID})
+		trans.DirPipelinePID = 0
+	}
+
+	next.DirPostPipelineBuf.Pop()
 }

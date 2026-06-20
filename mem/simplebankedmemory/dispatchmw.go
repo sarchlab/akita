@@ -1,6 +1,7 @@
 package simplebankedmemory
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
@@ -54,6 +55,16 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		if !pipelineCanAccept(next.Banks[bankID], spec) {
 			break
 		}
+
+		// The selected bank's pipeline has room: the at-head wait the message
+		// spent blocked on this bank's resources is over. This admission wait
+		// belongs to the incoming-buffer task; req_in (opened at retrieve, below)
+		// covers only the processing that follows.
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: tracing.MsgIDAtIncomingBuffer(msgI, m.comp),
+			Kind:   tracing.MilestoneKindHardwareResource,
+			What:   fmt.Sprintf("%s.bank%d", m.comp.Name(), bankID),
+		})
 
 		m.topPort().RetrieveIncoming()
 		tracing.TraceReqReceive(m.comp, msg)

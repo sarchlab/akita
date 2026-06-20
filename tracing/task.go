@@ -24,6 +24,14 @@ type TaskEnd struct {
 	Time timing.VTimeInPicoSec
 }
 
+// PipelineTaskKind is the Kind of a task that records a request's traversal of a
+// component-internal latency pipeline. A pipelined component opens it as a
+// subtask of its req_in task at pipeline entry (the same tick req_in opens, at
+// retrieve) and closes it at pipeline exit. This attributes the pipeline latency
+// that would otherwise be an unaccounted gap between the buffer task (which ends
+// at retrieve) and the post-pipeline processing milestones on req_in.
+const PipelineTaskKind = "pipeline"
+
 // A TaskTag is a categorical label attached to a task while it is processed,
 // for example "read-hit" or "write-miss". Tags inherit their location from the
 // owning task.

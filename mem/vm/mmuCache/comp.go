@@ -3,6 +3,7 @@ package mmuCache
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/lruset"
+	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -47,6 +48,29 @@ type State struct {
 	// ID is absent here is orphaned — e.g. its request was dropped by a Reset
 	// issued mid-walk — and must be discarded rather than repopulate the table.
 	OutstandingBottomReqs map[uint64]bool `json:"outstanding_bottom_reqs"`
+
+	// InflightReqs records, keyed by the forwarded (Bottom) request ID, the
+	// identity of the original Top request that triggered the walk. The
+	// tracing completion path only retains message IDs — not the message
+	// values — so it reconstructs the original Top request from this state to
+	// finalize the req_out and complete the req_in when the Bottom response
+	// returns. Entries are added when a walk is forwarded and removed when its
+	// response is forwarded upstream (or dropped on Reset).
+	InflightReqs map[uint64]inflightReqState `json:"inflight_reqs"`
+}
+
+// inflightReqState is the serializable identity of a forwarded translation,
+// retaining both the original Top request and the forwarded Bottom request so
+// the tracing req_in/req_out tasks can be reconstructed when the Bottom
+// response arrives.
+type inflightReqState struct {
+	TopReqID  uint64               `json:"top_req_id"`
+	TopReqSrc messaging.RemotePort `json:"top_req_src"`
+	TopReqDst messaging.RemotePort `json:"top_req_dst"`
+
+	BottomReqID  uint64               `json:"bottom_req_id"`
+	BottomReqSrc messaging.RemotePort `json:"bottom_req_src"`
+	BottomReqDst messaging.RemotePort `json:"bottom_req_dst"`
 }
 
 // blockState is a serializable snapshot of a single cache block.
@@ -109,6 +133,18 @@ func initSets(numLevels, numBlocks int) []setState {
 		sets[i] = s
 	}
 	return sets
+}
+
+// restoreTransReq reconstructs a TranslationReq carrying only the metadata the
+// tracing API keys on (ID/Src/Dst). It is used to reconstruct the original Top
+// request and the forwarded Bottom request when the Bottom response returns, so
+// req_in/req_out tasks can be completed without retaining the live messages.
+func restoreTransReq(
+	id uint64, src, dst messaging.RemotePort,
+) vmprotocol.TranslationReq {
+	return vmprotocol.TranslationReq{
+		MsgMeta: messaging.MsgMeta{ID: id, Src: src, Dst: dst},
+	}
 }
 
 // Comp is the mmuCache component.

@@ -31,6 +31,21 @@ func (d *directory) Tick() (madeProgress bool) {
 		}
 
 		transIdx := dirBuf.Pop()
+
+		// Open the directory pipeline subtask as a child of the request's
+		// req_in task so the directory latency is attributed rather than left
+		// as a gap between the buffer task and the post-lookup milestones. It
+		// is closed when the transaction leaves the post-pipeline buffer.
+		trans := &next.Transactions[transIdx]
+		pid := timing.GetIDGenerator().Generate()
+		trans.DirPipelineTaskID = pid
+		tracing.StartTask(d.cache.comp, tracing.TaskStart{
+			ID:       pid,
+			ParentID: d.reqInTaskID(trans),
+			Kind:     tracing.PipelineTaskKind,
+			What:     d.cache.comp.Name() + ".dir_pipeline",
+		})
+
 		dirPipeline.Accept(transIdx)
 
 		madeProgress = true
@@ -59,10 +74,28 @@ func (d *directory) Tick() (madeProgress bool) {
 			break
 		}
 
+		// The transaction has left the post-pipeline buffer: close the
+		// directory pipeline subtask opened at accept.
+		tracing.EndTask(d.cache.comp, tracing.TaskEnd{ID: trans.DirPipelineTaskID})
+
 		madeProgress = true
 	}
 
 	return madeProgress
+}
+
+// reqInTaskID returns the ID of the transaction's req_in task, used to parent
+// the directory pipeline subtask. The req_in task is keyed by the original
+// request's message ID at the cache (see tracing.TraceReqReceive in intake),
+// so reconstructing a message carrying that meta recovers the same ID.
+func (d *directory) reqInTaskID(trans *transactionState) uint64 {
+	if trans.HasRead {
+		return tracing.MsgIDAtReceiver(
+			memprotocol.ReadReq{MsgMeta: trans.ReadMeta}, d.cache.comp)
+	}
+
+	return tracing.MsgIDAtReceiver(
+		memprotocol.WriteReq{MsgMeta: trans.WriteMeta}, d.cache.comp)
 }
 
 func (d *directory) processRead(trans *transactionState, transIdx int) bool {

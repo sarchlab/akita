@@ -34,9 +34,13 @@ func (m *bankTickMW) Tick() bool {
 	progress = tickBanks(next) || progress
 
 	// Only issue new commands when refresh (a separate middleware) is not
-	// holding the stall flag.
+	// holding the stall flag. While refresh holds the stall, remember that the
+	// issue step was blocked so the first command to issue afterward can be
+	// charged a refresh milestone for the stall window.
 	if !next.RefreshInProgress {
 		progress = m.issue(&spec, next) || progress
+	} else {
+		next.RefreshBlockedIssue = true
 	}
 
 	progress = m.ctrl.fillCommandQueue(&spec, next) || progress
@@ -66,7 +70,36 @@ func (m *bankTickMW) issue(spec *Spec, next *State) bool {
 	updateTiming(m.timing, next, cmd)
 	m.traceCmdIssue(next, cmd)
 
+	// This command is the first to issue after a refresh stall window: charge
+	// its sub-transaction the refresh wait, then clear the flag so later
+	// commands in the same window are not double-charged.
+	if next.RefreshBlockedIssue {
+		m.traceRefreshStall(next, cmd)
+		next.RefreshBlockedIssue = false
+	}
+
 	return true
+}
+
+// traceRefreshStall records a refresh stall as a hardware_resource milestone on
+// the command's sub-transaction trace task. The fake global tRFC stall
+// (deviation D2) holds the issue step for tRFC cycles without issuing real
+// refresh commands, so without this the refresh window would be invisible in
+// the trace; attributing it to the first command that issues afterward charges
+// the wait to the sub-transaction that was actually held off.
+func (m *bankTickMW) traceRefreshStall(next *State, cmd *commandState) {
+	if m.comp.NumHooks() == 0 {
+		return
+	}
+	sub := subTransByRef(next, cmd.SubTransRef)
+	if sub == nil {
+		return
+	}
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: sub.ID,
+		Kind:   tracing.MilestoneKindHardwareResource,
+		What:   m.comp.Name() + ".refresh",
+	})
 }
 
 // traceCmdIssue records the command as a milestone on its sub-transaction's
