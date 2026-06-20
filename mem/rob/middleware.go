@@ -98,11 +98,20 @@ func (m *middleware) topDown() bool {
 	if state.HeadReqID != req.Meta().ID {
 		state.HeadReqID = req.Meta().ID
 		tracing.TraceReqReceive(m.comp, req)
+		m.tagReadWrite(req)
 	}
 
 	if len(state.Transactions) >= m.comp.Spec().BufferSize {
 		return false
 	}
+
+	// A reorder-buffer entry is free: the hardware-resource wait that began when
+	// the request reached the head of the Top buffer is over.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(req, m.comp),
+		Kind:   tracing.MilestoneKindHardwareResource,
+		What:   m.comp.Name() + ".buffer",
+	})
 
 	shadow, isRead := m.buildShadowReq(
 		req, m.bottomPort().AsRemote(), m.comp.Spec().BottomUnit)
@@ -112,6 +121,14 @@ func (m *middleware) topDown() bool {
 	}
 
 	m.bottomPort().Send(shadow)
+
+	// The shadow request is on its way downstream: the wait to send on the
+	// Bottom port is over.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(req, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.bottomPort().Name(),
+	})
 
 	state.Transactions = append(state.Transactions, transactionState{
 		ReqFromTopID:  req.Meta().ID,
@@ -149,6 +166,12 @@ func (m *middleware) parseBottom() bool {
 		trans := &m.comp.State.Transactions[idx]
 		trans.HasRsp = true
 		trans.RspData = dataRsp.Data
+		// The bottom unit returned the data this transaction was waiting on.
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: m.reqInTaskID(*trans),
+			Kind:   tracing.MilestoneKindData,
+			What:   m.bottomPort().Name(),
+		})
 		tracing.TraceReqFinalize(m.comp, m.shadowReqTraceMsg(*trans))
 		return true
 	case memprotocol.WriteDoneRsp:
@@ -161,6 +184,13 @@ func (m *middleware) parseBottom() bool {
 
 		trans := &m.comp.State.Transactions[idx]
 		trans.HasRsp = true
+		// The bottom unit acknowledged the write subtask this transaction
+		// dispatched.
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: m.reqInTaskID(*trans),
+			Kind:   tracing.MilestoneKindSubTask,
+			What:   m.bottomPort().Name(),
+		})
 		tracing.TraceReqFinalize(m.comp, m.shadowReqTraceMsg(*trans))
 		return true
 	default:
@@ -182,6 +212,18 @@ func (m *middleware) bottomUp() bool {
 		return false
 	}
 
+	// The head transaction has its response and may now retire. The interval
+	// since its bottom response arrived is the time it spent blocked behind
+	// older, not-yet-retired transactions (in-order commit). Emitted before the
+	// CanSend retry and the response-sent milestone so this more meaningful
+	// reason wins a same-tick tie; the (Kind, What) dedup keeps the first
+	// emission across retries and a zero-length head-of-line wait collapses.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: m.reqInTaskID(head),
+		Kind:   tracing.MilestoneKindDependency,
+		What:   m.comp.Name() + ".reorder",
+	})
+
 	rsp := m.buildTopRsp(head, m.topPort().AsRemote())
 
 	if !m.topPort().CanSend() {
@@ -191,6 +233,14 @@ func (m *middleware) bottomUp() bool {
 	m.topPort().Send(rsp)
 
 	state.Transactions = state.Transactions[1:]
+
+	// The response is on its way to the requester: the wait to send on the Top
+	// port is over.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: m.reqInTaskID(head),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.topPort().Name(),
+	})
 
 	tracing.TraceReqComplete(m.comp, m.topReqTraceMsg(head))
 
@@ -298,6 +348,29 @@ func (m *middleware) topReqTraceMsg(trans transactionState) messaging.Msg {
 	req.Src = trans.ReqFromTopSrc
 	req.Dst = m.topPort().AsRemote()
 	return req
+}
+
+// reqInTaskID returns the receiver-side (req_in) task ID for a transaction's
+// original top-side request — the subject of the ROB's processing milestones.
+// The registry entry was created by TraceReqReceive in topDown and lives until
+// TraceReqComplete in bottomUp, so this resolves to the live task throughout.
+func (m *middleware) reqInTaskID(trans transactionState) uint64 {
+	return tracing.MsgIDAtReceiver(m.topReqTraceMsg(trans), m.comp)
+}
+
+// tagReadWrite labels the req_in task as a "read" or a "write" so traces can be
+// filtered by access type. Called once, when the request first becomes the head
+// of the Top buffer and its req_in task opens.
+func (m *middleware) tagReadWrite(req memprotocol.AccessReq) {
+	what := "write"
+	if _, ok := req.(memprotocol.ReadReq); ok {
+		what = "read"
+	}
+
+	tracing.AddTaskTag(m.comp, tracing.TaskTag{
+		TaskID: tracing.MsgIDAtReceiver(req, m.comp),
+		What:   what,
+	})
 }
 
 // processControlMsg handles the universal control verbs and finalizes

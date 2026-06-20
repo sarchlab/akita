@@ -52,38 +52,47 @@ both the request side (#2) and, for free, the response side (#5).
 
 ---
 
-## Step 1 — ROB processing-phase milestones + tags
+## Step 1 — ROB processing-phase milestones + tags — DONE
 
 **Objective.** Give the ROB the milestone/tag coverage every other data-path
 component should have. This is the original goal that started this work.
 
-**Scope.** `mem/rob/middleware.go` (and a tag/`What` constant or two).
+The `req_in` task now records, in order:
 
-**Approach.** A `req_in` task in the ROB should record, in order:
+| Milestone | Kind | Where | `What` | Marks |
+|---|---|---|---|---|
+| buffer slot acquired | `hardware_resource` | `topDown` | `<rob>.buffer` | waited for a free ROB entry |
+| shadow req sent | `network_busy` (Bottom) | `topDown` | Bottom port | waited to send downstream |
+| bottom response arrived | `data` (read) / `subtask` (write) | `parseBottom` | Bottom port | waited on the bottom unit |
+| reached head of reorder buffer | `dependency` | `bottomUp` | `<rob>.reorder` | waited behind older transactions |
+| response sent | `network_busy` (Top) | `bottomUp` | Top port | waited to send to top |
 
-| Milestone | Kind | Where | Marks |
-|---|---|---|---|
-| buffer slot acquired | `hardware_resource` | `topDown` | waited for a free ROB entry |
-| shadow req sent | `network_busy` (Bottom) | `topDown` | waited to send downstream |
-| bottom response arrived | `data` (read) / `subtask` (write) | `parseBottom` | waited on the bottom unit |
-| reached head of reorder buffer | `dependency` | `bottomUp` | waited behind older transactions |
-| response sent | `network_busy` (Top) | `bottomUp` | waited to send to top |
+Plus a `read`/`write` tag, emitted once when the `req_in` opens (keyed off the
+request's concrete type).
 
-Plus `read`/`write` tags from the existing `IsRead` flag.
+- `mem/rob/middleware.go` — five `AddMilestone` calls + the tag, with two small
+  helpers (`reqInTaskID`, `tagReadWrite`). All milestones address the same
+  `req_in` task (the top request's receiver-side ID), resolved via
+  `MsgIDAtReceiver` of a reconstructed top request so `parseBottom`/`bottomUp`
+  reach the live task before `TraceReqComplete` forgets it.
+- The `dependency` milestone is emitted in `bottomUp` **after the `HasRsp`
+  check, before `CanSend`** — no per-transaction flag: the `DBTracer`
+  `(Kind, What)` dedup keeps the first emission across the `CanSend` retry, and
+  the same-timestamp rule both lets the more-meaningful `dependency` win a
+  same-tick tie over the response-sent milestone and collapses zero-length
+  head-of-line waits.
+- Tests: `tracing/incomingqueuetracer_test.go` unchanged; new
+  `mem/rob/milestone_test.go` drives read and write round trips through a
+  recording tracer and asserts the exact ordered set of kinds, the `What`
+  labels, the shared non-zero task ID, the `read`/`write` tags, and that
+  `dependency` precedes the response-sent milestone.
 
-- The `dependency` milestone is the ROB's signature stall (in-order commit) and
-  must be emitted in `bottomUp` after the `HasRsp` check. **No per-transaction
-  flag is needed** — the `DBTracer` `(Kind, What)` dedup keeps only the first
-  emission, so the `CanSend` retry loop does not re-stamp it, and a zero-length
-  head-of-line wait collapses naturally.
-- Emit order within a tick matters (first wins on same-timestamp), so emit the
-  more meaningful milestone first.
+**Verified** by the new unit tests (`go test ./mem/rob/...`, golangci-lint
+clean). Remaining integration check: a traced `virtualmem`/MGPUSim run, querying
+the `milestone` table for the five ROB kinds and confirming `dependency`
+intervals are ~zero with no reorder penalty and positive when there is one.
 
-**Verification.** Traced `virtualmem`/MGPUSim run; query the `milestone` table
-for the five ROB kinds; confirm `dependency` intervals are zero when there is no
-reorder penalty and positive when there is.
-
-**Severity/effort.** Feature; small. Depends on nothing.
+**Severity/effort.** Feature; small. Depended on nothing.
 
 ---
 
@@ -222,9 +231,9 @@ only at true source/destination; or (b) connection-level hooks. Decide scope
 
 ## Suggested order
 
-1. **Step 1** (ROB milestones) — the active goal; self-contained.
-2. **Step 2** (AT stale-pointer) — quick, confirmed correctness win; improves
-   the quality of every translation trace including the ROB's.
+1. **Step 1** (ROB milestones) — **DONE**; the original goal, self-contained.
+2. **Step 2** (AT stale-pointer) — *next*; quick, confirmed correctness win;
+   improves the quality of every translation trace including the ROB's.
 3. **Step 3** (reset-leak helper) — highest leverage; one shared fix for 11
    components.
 4. **Step 4** (per-component SEV-1) — normal-run correctness.
