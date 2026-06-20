@@ -96,26 +96,48 @@ intervals are ~zero with no reorder penalty and positive when there is one.
 
 ---
 
-## Step 2 — Fix the address-translator stale-pointer finalize bug
+## Step 2 — Fix the address-translator stale-pointer finalize bug — DONE
 
-**Objective.** Stop orphaning TLB child tasks (empirically 11 per short run).
+**Objective.** Stop orphaning TLB child tasks (empirically 11 per short run),
+and make the AT fully and correctly instrumented.
 
-**Scope.** `mem/vm/addresstranslator/respondpipelinemw.go`, `comp.go`.
+**Scope.** `mem/vm/addresstranslator/respondpipelinemw.go`.
 
-**Problem.** `removeTransaction` (`comp.go:180`, an `append`-shift) runs at
-`respondpipelinemw.go:97` **before** `traceTranslationComplete` reads
-`trans.TranslationReqID` through the now-stale pointer (`:100`/`:129`). When the
-completing transaction is not last in the queue, `TraceReqFinalize` ends the
-**wrong** translation `req_out`; the correct one never ends, never gets written,
-and its TLB `req_in`/`incoming_queue` children are orphaned. Tracing-only — the
-functional path already uses local copies.
+**Problem.** `removeTransaction` (`comp.go:180`, an `append`-shift) ran
+**before** `traceTranslationComplete` read `trans.TranslationReqID` through the
+now-stale pointer. When the completing transaction is not last in the queue,
+`TraceReqFinalize` ended the **wrong** translation `req_out`; the correct one
+never ended, never got written, and its TLB `req_in`/`incoming_queue` children
+were orphaned. (When it *was* last the old value lingered in the backing array,
+so only non-last completions corrupted.) Tracing-only — the functional path
+already uses local copies.
 
-**Approach.** Capture `TranslationReqID/Src/Dst` (or build `fakeTransReq`) into
-locals **before** `removeTransaction`, or reorder so the trace read precedes the
-removal.
+**Second defect (found making the AT fully instrumented).** The bottom-send
+`network_busy` milestone was keyed off `MsgIDAtReceiver(translatedReq)`, but the
+AT *sends* `translatedReq`, so that receiver-side ID is a **phantom task** (no
+`TraceReqReceive` ever opens it) and leaked a registry entry per translation.
 
-**Verification.** Re-run the orphan query — `req_in`@TLB with a missing parent
-should drop to 0 (modulo any genuinely-untraced paths).
+**Fix.**
+- Reordered so `traceTranslationComplete` runs **before** `removeTransaction`.
+- Moved the bottom-send milestone onto the **top `req_in`**, matching the ROB
+  convention (Step 1) and the symmetric top-send milestone in `respond()`. The
+  AT `req_in` now records, in order: `translation`, `network_busy` (Bottom),
+  `data`/`subtask`, `network_busy` (Top). With the `req_out`/`req_in` lifecycle
+  and the global `incoming_queue` subtask (Step 0), the AT data path is now
+  fully instrumented.
+- Tests: new `mem/vm/addresstranslator/milestone_test.go` drives read/write
+  round trips through a recording tracer, asserting the ordered milestone set on
+  one shared `req_in` task and that completing a non-last transaction finalizes
+  its **own** translation `req_out`. Both assertions fail against the pre-fix
+  code.
+
+**Verified** by the new unit tests (`go test ./mem/vm/addresstranslator/...`,
+`go vet`, golangci-lint clean). Remaining integration check: re-run the orphan
+query — `req_in`@TLB with a missing parent should drop to 0 (modulo any
+genuinely-untraced paths).
+
+**Note.** The AT `handleReset` task leak is the AT instance of Step 3 (systemic,
+shared helper) and is intentionally deferred there, not fixed here.
 
 **Severity/effort.** SEV-1 (normal-run corruption), confirmed; small.
 
@@ -232,18 +254,19 @@ only at true source/destination; or (b) connection-level hooks. Decide scope
 ## Suggested order
 
 1. **Step 1** (ROB milestones) — **DONE**; the original goal, self-contained.
-2. **Step 2** (AT stale-pointer) — *next*; quick, confirmed correctness win;
-   improves the quality of every translation trace including the ROB's.
-3. **Step 3** (reset-leak helper) — highest leverage; one shared fix for 11
-   components.
+2. **Step 2** (AT stale-pointer + phantom milestone) — **DONE**; quick,
+   confirmed correctness win; improves the quality of every translation trace
+   including the ROB's.
+3. **Step 3** (reset-leak helper) — *next*; highest leverage; one shared fix for
+   11 components (includes the deferred AT `handleReset` leak).
 4. **Step 4** (per-component SEV-1) — normal-run correctness.
 5. **Step 5** (milestone/tag rollout) — coverage, incremental.
 6. **Step 6** (network-transfer subtask) — the remaining architectural phase.
 
 ## Confidence notes
 
-- Step 0 (#2) and Step 2 (AT bug) are **empirically confirmed** on a traced
-  `virtualmem` run.
+- Step 0 (#2) and the Step 2 (AT bug) diagnosis are **empirically confirmed** on
+  a traced `virtualmem` run; Step 2 is now fixed and covered by unit tests.
 - The reset-leak *pattern* is confirmed where exercised; the mmuCache/gmmu/
   datamover bugs (Step 4) are **high-confidence static findings** —
   `virtualmem`'s hierarchy does not instantiate those components, so confirm
