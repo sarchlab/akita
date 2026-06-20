@@ -93,37 +93,52 @@ func (m *respondPipelineMW) parseTranslation() bool {
 		nextState.InflightReqToBottom, reqToBot)
 	nextTrans.IncomingReqs = nextTrans.IncomingReqs[1:]
 
+	// Trace before removeTransaction. traceTranslationComplete reads the
+	// translation identity through nextTrans; removeTransaction's
+	// append-shift would leave nextTrans pointing at a different (or no)
+	// transaction, finalizing the wrong translation req_out and orphaning
+	// the correct one's children.
+	m.traceTranslationComplete(nextTrans, reqState, translatedReq)
+
 	if len(nextTrans.IncomingReqs) == 0 {
 		removeTransaction(nextState, transIdx)
 	}
-
-	m.traceTranslationComplete(nextTrans, reqState, translatedReq)
 
 	m.translationPort().RetrieveIncoming()
 
 	return true
 }
 
-// traceTranslationComplete records tracing milestones for a completed
-// translation and initiates the downstream request trace.
+// traceTranslationComplete records, on the top req_in task, the milestones
+// for a completed translation (the translation resolving, then the
+// network-busy wait to push the translated request downstream), finalizes
+// the translation req_out, and initiates the downstream (translated)
+// req_out parented to the top req_in. trans must still be live in
+// State.Transactions — the caller invokes this before removeTransaction so
+// the translation identity reads from the correct transaction.
 func (m *respondPipelineMW) traceTranslationComplete(
 	trans *transactionState,
 	reqState incomingReqState,
 	translatedReq messaging.Msg,
 ) {
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(translatedReq, m.comp),
-		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.bottomPort().Name(),
-	})
-
 	fakeFromTop := restoreMemMsg(reqState.ID, reqState.Src, reqState.Dst,
 		reqState.RspTo, reqState.Type)
+	topTaskID := tracing.MsgIDAtReceiver(fakeFromTop, m.comp)
 
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
+		TaskID: topTaskID,
 		Kind:   tracing.MilestoneKindTranslation,
 		What:   "translation",
+	})
+
+	// The translated request leaves through the Bottom port; this
+	// network-busy wait belongs to the top req_in, not to the downstream
+	// req_out (which this component sends, so its receiver-side ID would
+	// be a phantom task).
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: topTaskID,
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.bottomPort().Name(),
 	})
 
 	fakeTransReq := vmprotocol.TranslationReq{
@@ -134,8 +149,7 @@ func (m *respondPipelineMW) traceTranslationComplete(
 		},
 	}
 	tracing.TraceReqFinalize(m.comp, fakeTransReq)
-	tracing.TraceReqInitiate(m.comp, translatedReq,
-		tracing.MsgIDAtReceiver(fakeFromTop, m.comp))
+	tracing.TraceReqInitiate(m.comp, translatedReq, topTaskID)
 }
 
 //nolint:funlen,gocyclo
