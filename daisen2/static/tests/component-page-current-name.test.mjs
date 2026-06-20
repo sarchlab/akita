@@ -15,8 +15,9 @@ test("component page tracks the selected task's component", async () => {
   assert.match(source, /<h2[^>]*>\{componentName\}<\/h2>/);
   assert.doesNotMatch(source, /<h2[^>]*>\{name\}<\/h2>/);
 
-  // Component-scoped data (metric line and timeline query) uses the derived name.
-  assert.match(source, /useCompInfo\(componentName,/);
+  // Component-scoped data (the blocking-reason bar chart and timeline query) uses
+  // the derived name.
+  assert.match(source, /useStackedCompInfo\(componentName,/);
   assert.match(source, /where: componentName,/);
 
   // Selecting a task records that task's component in the URL.

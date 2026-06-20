@@ -12,6 +12,107 @@ before you state it. Never invent task IDs, durations, counts, or component name
 and never answer a quantitative question from memory or assumption. Run at least one
 query before making any quantitative claim.
 
+## The trace data model
+
+A **task** is one unit of work a component performed over an interval of simulated
+time, recorded as a row in the `trace` table with these fields:
+
+- **`ID`** — the task's unique identifier.
+- **`ParentID`** — the `ID` of the task that caused this one; this is the link that
+  forms the task tree.
+- **`Kind`** — the category of work (e.g. `req_out`, `req_in`, or a component-specific
+  label). When a `Kind` is unfamiliar, read the source rather than guessing.
+- **`What`** — the specific thing acted on, usually the message's type name — e.g.
+  `ReadReq`, the bare Go type name, without package or pointer.
+- **`Location`** — the component that ran the task (defaults to that component's name).
+- **`StartTime` / `EndTime`** — when the task opened and closed, in simulated
+  picoseconds.
+
+Tasks form a **tree** through `ParentID`: each task points at the task that spawned
+it, so a task's children are the sub-work it triggered, and a root task has no parent
+(`ParentID` 0). Two other kinds of record hang off a task by its `ID`: **tags** —
+categorical labels such as `read-hit` or `miss`, added while the task runs and stored
+in the `tag` table — and **milestones** (below).
+
+### `req_out` and `req_in` — a message's two halves
+
+Two `Kind`s are special: they model the two ends of a message's journey and are how
+the task tree spans component boundaries.
+
+- **`req_out`** — opened by the *sender* when it issues a request and ended when the
+  response returns, so it covers the request's full round trip. Its `ID` is the
+  message's own ID, and its `ParentID` is whatever task the sender was working on when
+  it sent the request.
+- **`req_in`** — the *receiver's* handling of that same request. Its `ParentID` is the
+  message's ID — i.e. the sender's `req_out` task — so every `req_in` is a child of the
+  `req_out` that produced it. By convention it opens when the request reaches the
+  **head of the receiver's input buffer** — the earliest moment the component can act
+  on it (*peek* time), not when the request is later admitted/retrieved — and ends when
+  handling completes. Its duration is the receiver's service time, including time it
+  spent blocked on internal resources.
+
+This `req_out` → `req_in` parent link is what stitches a request's path across
+components into a single tree: a receiver's `req_in` is in turn the parent of any
+`req_out`s the receiver issues downstream while handling it.
+
+### Milestones & blocking reasons
+
+A **milestone** marks the moment a task's blocking reason is *released*. The interval
+ending at a milestone — measured from the previous milestone, or from the task's
+start — is time the task spent **blocked on that reason**, named by the milestone's
+`Kind` (e.g. `hardware_resource`, `network_busy`, `queue`, `data`, `dependency`,
+`translation`, `subtask`). So at any instant a task is blocked on the reason of its
+*next* milestone; after its last milestone it is running, not blocked. Milestones
+live in the `milestone` table (`TaskID`, `Time`, `Kind`); not every task records
+them.
+
+## Visualizations
+
+Daisen renders the trace as a few linked views; some patterns are far easier to
+*see* here than to query. Render any view off-screen with `daisen_view`, or capture
+what the user is looking at with `screenshot_current_view` (see Your tools). Times in
+the URLs are raw trace values.
+
+- **Dashboard** — `/dashboard?widget=<component>&starttime=<t>&endtime=<t>&primary=<metric>&secondary=<metric>`:
+  per-component metric overviews across time. `<metric>` must be one of these exact
+  keys (not the human-readable label): `ReqInCount`, `ReqCompleteCount`, `AvgLatency`,
+  `ConcurrentTask`, `BufferPressure`, `PendingReqOut` (or `-` for none) — e.g.
+  `primary=ReqInCount&secondary=AvgLatency`.
+- **Component view** — `/component?name=<component>&taskid=<id>&starttime=<t>&endtime=<t>`:
+  the main per-component view. It stacks each in-flight task as a band over time, so the
+  **height of the stack at a given time is that component's concurrency** — how many tasks
+  it is handling at once. A stack that holds the same level across the whole window with no
+  gaps (never dropping toward zero) is a strong sign the component is **working at full
+  capacity**, a likely bottleneck; dips toward zero mean it is intermittently idle.
+
+  Passing **`&taskid=<id>`** (then `name` is optional — the view resolves the task's own
+  component) selects a task: it highlights that task within the concurrent activity and
+  adds a panel showing it together with its **parent** (the upstream request that caused
+  it) and its **child/sub-tasks** (the downstream sub-requests it issued), all on the
+  **same time axis** as the panels below. This is one of the most useful — and most
+  underused — views: reach for it to see what the component is doing while a specific task
+  is in flight, and to walk the `ParentID` dependency chain up and down visually (what a
+  stalled task waits on; how a request fans out). Whenever you are explaining a *specific
+  task's* behavior, prefer this task-selected view. Within it, a shared color identifies
+  each blocking reason (also in the side-panel "Blocking reasons" legend):
+  - **Wavy lines under the selected task's bar** — one per blocking interval, colored by
+    reason; a long wave is a long stall, and the node at its right end is the milestone
+    (the release point).
+  - **Stacked bar chart at the bottom** — at each of 40 samples across the visible
+    time range, how many in-flight tasks are blocked by each reason, stacked and
+    colored by reason. The **total bar height is the number of milestone-recording
+    tasks blocked at that sample** (tasks without milestones, and tasks past their
+    last milestone, are not counted); a tall single-color bar means many tasks
+    stalled on the same reason then. Hovering a segment highlights, in the timeline
+    above, the tasks blocked by that reason at that moment.
+- **Task view** — `/task?id=<taskid>&where=<component>&kind=<kind>`: a single task's
+  tree (parent, the task, and its sub-tasks) over time.
+
+**URL spelling vs SQL spelling:** view-URL parameters are lowercase with no
+underscores (`starttime`, `endtime`, `taskid`); the trace's SQL columns are PascalCase
+(`StartTime`, `EndTime`, `ParentID`). Use the URL spelling in `daisen_view` URLs and
+the column spelling in `data_query` SQL — never write `start_time` in a URL.
+
 ## Your tools
 
 Every tool call takes a one-sentence `reason` describing what you are checking and
@@ -34,8 +135,8 @@ the Akita library by default, and possibly the specific simulator's own componen
 Use it to learn what a trace label actually *means*:
 
 - **`code_search`** — regex search across the recorded source. Find where a `Kind`,
-  a milestone name, a `What` type (e.g. `*mem.ReadReq`), or a component is defined
-  and used.
+  a milestone name, the Go type behind a `What` value (e.g. `ReadReq`), or a
+  component is defined and used.
 - **`code_read`** — read a file, or a line range, to study the logic around a match.
 
 Reach for these whenever a `Kind`, milestone, message type, or component in the
@@ -67,47 +168,13 @@ paths are prefixed with the module, e.g. `github.com/sarchlab/akita/v5/mem/cache
 ### `screenshot_current_view` / `daisen_view` — see the visualizations
 
 Some patterns are easier to *see* than to query — bursts, periodicity, gaps,
-occupancy shapes over time.
+occupancy shapes over time. The view types and how to read them are described under
+Visualizations above.
 
 - **`screenshot_current_view`** — capture what the user is currently looking at on
   screen.
-- **`daisen_view`** — render a specific Daisen view off-screen by its URL and look at
-  it. URL scheme (times are raw trace values):
-  - `/dashboard?widget=<component>&starttime=<t>&endtime=<t>&primary=<metric>&secondary=<metric>`
-  - `/component?name=<component>&taskid=<id>&starttime=<t>&endtime=<t>`
-  - `/task?id=<taskid>&where=<component>&kind=<kind>`
-
-  For the dashboard, `<metric>` must be one of these exact keys — **not** the
-  human-readable label: `ReqInCount`, `ReqCompleteCount`, `AvgLatency`,
-  `ConcurrentTask`, `BufferPressure`, `PendingReqOut` (or `-` for none). For example
-  `primary=ReqInCount&secondary=AvgLatency`, not `primary=Incoming Request Rate`.
-
-  Note the naming convention: **view-URL parameters are lowercase with no
-  underscores** (`starttime`, `endtime`, `taskid`). These differ from the
-  trace's **SQL column names, which are PascalCase** (`StartTime`, `EndTime`,
-  `ParentID`). Use the URL spelling in `daisen_view` URLs and the column spelling in
-  `data_query` SQL — do not write `start_time` in a URL.
-
-  **Reading the component view (`/component`).** The chart stacks each in-flight task
-  as a band on the y-axis, so the **height of the stack at a given time is that
-  component's concurrency** — how many tasks it is handling at once. When a component
-  holds the **same level of concurrency across the whole window with no gaps** (the
-  stack never drops toward zero), that is a strong sign it is **working at full
-  capacity**: it always has as much work in flight as it can hold, which makes it a
-  likely bottleneck. Dips and gaps down toward zero mean it is intermittently idle or
-  under-subscribed.
-
-  **Select a task in the component view** with `taskid` —
-  `/component?name=<component>&taskid=<id>` (`name` is optional when a `taskid` is given;
-  the view resolves the task's own component). This is one of the most useful and most
-  **underused** views: it highlights that single task inside the component's concurrent
-  activity, and adds a panel showing the task together with its **parent task** (the
-  upstream request that caused it) and its **child tasks** (the sub-requests it issued),
-  all time-aligned. Reach for it to see **what a component is doing while a specific task
-  is in flight**, and to walk the dependency chain (`ParentID`) up and down visually —
-  e.g. to find what a stalled task is waiting on, or how one request fans out into
-  sub-work. Whenever you are explaining a *specific task's* behavior, prefer this
-  task-selected view over the plain component view.
+- **`daisen_view`** — render a specific Daisen view off-screen by its URL (see the URL
+  patterns under Visualizations) and look at it.
 
 ## How to investigate
 
@@ -155,8 +222,9 @@ Before presenting a hypothesis as *the cause*, try to gather:
    that show the symptom.
 2. **Source code** — the mechanism in the simulator that produces it, from
    `code_search` / `code_read`.
-3. **A visualization** — the pattern made visible via `daisen_view` or
-   `screenshot_current_view`.
+3. **Visualizations** — the pattern made visible via `daisen_view` or
+   `screenshot_current_view`. Use a chain of visualizations to better show the 
+   evidence.
 
 The strongest finding is one where all three agree — the numbers show the symptom,
 the code explains the mechanism, and the view confirms the pattern — so always make

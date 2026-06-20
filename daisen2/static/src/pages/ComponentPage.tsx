@@ -5,14 +5,15 @@ import { Link, useSearchParams } from "react-router-dom";
 import { X } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { SidePanel } from "../components/ui/side-panel";
-import type { ComponentInfo } from "../hooks/useCompInfo";
-import { useCompInfo } from "../hooks/useCompInfo";
+import type { StackedComponentInfo } from "../hooks/useCompInfo";
+import { useStackedCompInfo } from "../hooks/useCompInfo";
 import { useSegments } from "../hooks/useSegments";
 import { useSimulationRange } from "../hooks/useSimulationRange";
 import { useTraceData } from "../hooks/useTraceData";
 import { useRenderReady } from "../hooks/useRenderReady";
 import type { Segment, Task } from "../types/task";
-import { buildColorMap, lookupColor, taskColorKey } from "../utils/taskColorCoder";
+import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskColorCoder";
+import { blockingKindAt, milestonesOf, wavyPath } from "../utils/milestoneViz";
 import { smartString } from "../utils/smartValue";
 import { cn } from "../lib/utils";
 
@@ -32,6 +33,9 @@ const TASK_VIEW_MARGIN_TOP = 20;
 const TASK_VIEW_MARGIN_BOTTOM = 20;
 const TASK_VIEW_GROUP_GAP = 10;
 const TASK_VIEW_LARGE_TASK_HEIGHT = 15;
+// Vertical room reserved below the Current Task bar for the blocking-reason
+// wavy lines (only when the task has milestones).
+const TASK_VIEW_MILESTONE_BAND = 18;
 
 interface TimeRange {
   startTime: number;
@@ -290,11 +294,6 @@ function buildComponentTaskLayout(tasks: Task[], width: number, regionHeight: nu
     });
 }
 
-function yDomain(info: ComponentInfo | null) {
-  const max = d3.max(info?.data ?? [], (point) => point.value) ?? 0;
-  return [0, max || 1] as [number, number];
-}
-
 function ComponentTopAxis({ width, height, range }: { width: number; height: number; range: TimeRange }) {
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
@@ -325,6 +324,7 @@ interface ComponentTimelineProps {
   colorMap: Record<string, string>;
   highlightedKey: string | null;
   highlightedTaskId: string | null;
+  highlightedTaskIds: Set<string> | null;
   onHoverTask: (task: Task | null) => void;
   onSelectTask: (task: Task) => void;
 }
@@ -339,6 +339,7 @@ function ComponentTimeline({
   colorMap,
   highlightedKey,
   highlightedTaskId,
+  highlightedTaskIds,
   onHoverTask,
   onSelectTask,
 }: ComponentTimelineProps) {
@@ -377,8 +378,15 @@ function ComponentTimeline({
           const key = taskColorKey(task);
           const taskHighlighted = highlightedTaskId === String(task.id);
           const keyHighlighted = highlightedKey === key;
-          const hasHighlight = highlightedTaskId !== null || highlightedKey !== null;
-          const highlighted = highlightedTaskId !== null ? taskHighlighted : highlightedKey !== null ? keyHighlighted : true;
+          const hasHighlight = highlightedTaskIds !== null || highlightedTaskId !== null || highlightedKey !== null;
+          const highlighted =
+            highlightedTaskIds !== null
+              ? highlightedTaskIds.has(String(task.id))
+              : highlightedTaskId !== null
+                ? taskHighlighted
+                : highlightedKey !== null
+                  ? keyHighlighted
+                  : true;
           return (
             <rect
               key={String(task.id)}
@@ -428,36 +436,44 @@ function ComponentTimeline({
   );
 }
 
-// ComponentMetricLine is the bottom region: the component's concurrent-task
-// metric drawn as a line chart, with its own value axis (left) and time axis
-// (bottom). It is a fixed share of the window height (COMPONENT_LINE_HEIGHT_RATIO).
-function ComponentMetricLine({
+// ComponentMilestoneBars is the bottom region: a stacked bar chart of blocking
+// reasons. At each sample the bar's segments show how many in-flight tasks are
+// blocked by each reason (milestone kind), colored to match the wavy lines.
+function ComponentMilestoneBars({
   info,
   range,
   width,
   height,
+  colorMap,
+  onHoverSegment,
 }: {
-  info: ComponentInfo | null;
+  info: StackedComponentInfo | null;
   range: TimeRange;
   width: number;
   height: number;
+  colorMap: Record<string, string>;
+  onHoverSegment: (segment: { kind: string; time: number } | null) => void;
 }) {
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
   const xAxisY = Math.max(0, height - 20);
-  const yScale = d3.scaleLinear().domain(yDomain(info)).range([Math.max(1, xAxisY - 4), 6]);
-  const linePath = d3
-    .line<{ time: number; value: number }>()
-    .x((point) => safeScale(xScale, point.time))
-    .y((point) => safeScale(yScale, point.value))
-    .curve(d3.curveCatmullRom.alpha(0.5))(info?.data ?? []);
-  const yTicks = yScale.ticks(4);
+
+  const data = info?.data ?? [];
+  const kinds = info?.kinds ?? [];
+  const maxTotal =
+    d3.max(data, (point) => kinds.reduce((sum, kind) => sum + (point.values[kind] ?? 0), 0)) ?? 0;
+  const yScale = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([Math.max(1, xAxisY - 4), 6]);
+  const yTicks = yScale.ticks(Math.min(4, Math.max(1, maxTotal))).filter((tick) => Number.isInteger(tick));
+  const barWidth =
+    data.length > 1
+      ? Math.max(1, (safeScale(xScale, data[1].time) - safeScale(xScale, data[0].time)) * 0.8)
+      : 8;
 
   return (
     <svg width={width} height={height} className="block">
       {ticks.map((tick) => (
         <g key={tick} pointerEvents="none">
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={xAxisY} stroke="#000" strokeDasharray="3,3" opacity={0.5} />
+          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={xAxisY} stroke="#000" strokeDasharray="3,3" opacity={0.3} />
           <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={xAxisY} y2={xAxisY + 5} stroke="#000" />
           <text x={safeScale(xScale, tick)} y={height - 4} textAnchor="middle" fontSize="12" fill="#000">
             {formatAxisTick(tick)}
@@ -471,13 +487,46 @@ function ComponentMetricLine({
           <g key={tick}>
             <line x1={0} x2={width - 40} y1={safeScale(yScale, tick)} y2={safeScale(yScale, tick)} stroke="#ccc" strokeDasharray="3,3" opacity={0.5} />
             <text x={-8} y={safeScale(yScale, tick)} dy="0.32em" textAnchor="end" fontSize="10" fill="#4b5563">
-              {d3.format(".1e")(tick)}
+              {tick}
             </text>
           </g>
         ))}
       </g>
 
-      {linePath ? <path d={linePath} fill="none" stroke="#2c7bb6" pointerEvents="none" /> : null}
+      {data.map((point, index) => {
+        const cx = safeScale(xScale, point.time);
+        let acc = 0;
+        return (
+          <g key={index}>
+            {kinds.map((kind) => {
+              const value = point.values[kind] ?? 0;
+              if (value <= 0) return null;
+              const yTop = safeScale(yScale, acc + value);
+              const yBottom = safeScale(yScale, acc);
+              acc += value;
+              return (
+                <rect
+                  key={kind}
+                  x={cx - barWidth / 2}
+                  y={yTop}
+                  width={barWidth}
+                  height={Math.max(0, yBottom - yTop)}
+                  fill={colorMap[kind] ?? "#9ca3af"}
+                  stroke="#ffffff"
+                  strokeWidth={0.3}
+                  className="cursor-pointer"
+                  onMouseEnter={() => onHoverSegment({ kind, time: point.time })}
+                  onMouseLeave={() => onHoverSegment(null)}
+                >
+                  <title>
+                    {kind}: {value} blocked at {formatAxisTick(point.time)}
+                  </title>
+                </rect>
+              );
+            })}
+          </g>
+        );
+      })}
     </svg>
   );
 }
@@ -488,11 +537,12 @@ function buildTopTaskRows(
   childTasks: Task[],
   xScale: d3.ScaleLinear<number, number>,
   height: number,
+  milestoneBand: number,
 ) {
   const childLayout = childTasks.map((task) => ({ ...task, subTasks: [], level: 0 }) as LayoutTask);
   const maxYIndex = assignYIndices(childLayout);
   const barRegionHeight = height - TASK_VIEW_MARGIN_BOTTOM - TASK_VIEW_MARGIN_TOP;
-  const nonSubTaskRegionHeight = TASK_VIEW_GROUP_GAP * 4 + TASK_VIEW_LARGE_TASK_HEIGHT * 2;
+  const nonSubTaskRegionHeight = TASK_VIEW_GROUP_GAP * 4 + TASK_VIEW_LARGE_TASK_HEIGHT * 2 + milestoneBand;
   const subTaskRegionHeight = Math.max(1, barRegionHeight - nonSubTaskRegionHeight);
   const childBarHeight = Math.min(10, subTaskRegionHeight / Math.max(1, maxYIndex));
   const rows: TaskViewRow[] = [];
@@ -518,7 +568,7 @@ function buildTopTaskRows(
     TASK_VIEW_LARGE_TASK_HEIGHT,
   );
 
-  const subTaskBaseY = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 3 + TASK_VIEW_LARGE_TASK_HEIGHT * 2;
+  const subTaskBaseY = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 3 + TASK_VIEW_LARGE_TASK_HEIGHT * 2 + milestoneBand;
   for (const task of childLayout) {
     pushTask(task, subTaskBaseY + (task.yIndex ?? 0) * childBarHeight, childBarHeight * 0.75);
   }
@@ -561,13 +611,14 @@ function ComponentTaskView({
 
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
-  const rows = buildTopTaskRows(mainTask, parentTask, childTasks, xScale, height);
+  const milestoneBand = (mainTask.steps?.length ?? 0) > 0 ? TASK_VIEW_MILESTONE_BAND : 0;
+  const rows = buildTopTaskRows(mainTask, parentTask, childTasks, xScale, height, milestoneBand);
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
   const divider1Y = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 1.5 + TASK_VIEW_LARGE_TASK_HEIGHT;
-  const divider2Y = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 2.5 + TASK_VIEW_LARGE_TASK_HEIGHT * 2;
+  const divider2Y = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 2.5 + TASK_VIEW_LARGE_TASK_HEIGHT * 2 + milestoneBand;
   const parentLabelY = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP + 15;
   const currentLabelY = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 2 + TASK_VIEW_LARGE_TASK_HEIGHT + 16;
-  const subTasksLabelY = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 3 + TASK_VIEW_LARGE_TASK_HEIGHT * 2 + 16;
+  const subTasksLabelY = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 3 + TASK_VIEW_LARGE_TASK_HEIGHT * 2 + 16 + milestoneBand;
 
   return (
     <svg width={width} height={height} className="block">
@@ -644,21 +695,39 @@ function ComponentTaskView({
         <line x1={0} x2={width} y1={divider2Y} y2={divider2Y} stroke="#000000" strokeDasharray="4" />
       </g>
 
-      {mainTask.steps?.map((step, index) => (
-        <circle
-          key={`${step.kind}-${step.what}-${index}`}
-          cx={safeScale(xScale, step.time)}
-          cy={TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 2 + TASK_VIEW_LARGE_TASK_HEIGHT + TASK_VIEW_LARGE_TASK_HEIGHT / 2}
-          r={3}
-          fill="#ff0000"
-          stroke="#ffffff"
-          pointerEvents="none"
-        >
-          <title>
-            {step.kind}: {step.what} at {smartString(step.time)}
-          </title>
-        </circle>
-      ))}
+      {(() => {
+        // Render each milestone as a curve over the interval it closes — from
+        // the task start (or the previous milestone) up to the milestone — so
+        // the curve shows how long, and on what reason, the task was blocked.
+        const steps = milestonesOf(mainTask.steps).sort((a, b) => a.time - b.time);
+        const barTop = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 2 + TASK_VIEW_LARGE_TASK_HEIGHT;
+        const centerY = barTop + TASK_VIEW_LARGE_TASK_HEIGHT + 6;
+        return steps.map((step, index) => {
+          const intervalStart = index === 0 ? mainTask.start_time : steps[index - 1].time;
+          const x0 = safeScale(xScale, intervalStart);
+          const x1 = safeScale(xScale, step.time);
+          const color = colorMap[step.kind] ?? "#9ca3af";
+          const blockedFor = step.time - intervalStart;
+          const d = wavyPath(x0, x1, centerY);
+          const tip = `blocked on ${step.kind} (${step.what}) for ${smartString(blockedFor)}`;
+          return (
+            <g key={`milestone-${index}-${step.kind}`}>
+              {x1 - x0 >= 2 && (
+                <>
+                  <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" pointerEvents="none" />
+                  {/* Wide transparent overlay so the thin wave is easy to hover. */}
+                  <path d={d} fill="none" stroke="transparent" strokeWidth={12} pointerEvents="stroke">
+                    <title>{tip}</title>
+                  </path>
+                </>
+              )}
+              <circle cx={x1} cy={centerY} r={3} fill={color} stroke="#ffffff" strokeWidth={0.75}>
+                <title>{`${tip} — released at ${smartString(step.time)}`}</title>
+              </circle>
+            </g>
+          );
+        });
+      })()}
     </svg>
   );
 }
@@ -713,46 +782,83 @@ function SelectedTaskSection({ task }: { task: Task | null }) {
 }
 
 function ComponentLegend({
+  taskKeys,
   colorMap,
+  blockingReasons,
   highlightedKey,
   onHighlight,
 }: {
+  taskKeys: string[];
   colorMap: Record<string, string>;
+  blockingReasons: string[];
   highlightedKey: string | null;
   onHighlight: (key: string | null) => void;
 }) {
-  const entries = Object.entries(colorMap);
-  if (entries.length === 0) return null;
+  if (taskKeys.length === 0 && blockingReasons.length === 0) return null;
 
   return (
     <section>
-      <SectionLabel>Legend</SectionLabel>
-      <ul className="mt-2 space-y-0.5">
-        {entries.map(([key, color]) => {
-          const dimmed = highlightedKey !== null && highlightedKey !== key;
-          return (
-            <li key={key}>
-              <button
-                type="button"
-                className={cn(
-                  "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
-                  dimmed && "opacity-40",
-                )}
-                onMouseEnter={() => onHighlight(key)}
-                onMouseLeave={() => onHighlight(null)}
-                onFocus={() => onHighlight(key)}
-                onBlur={() => onHighlight(null)}
-              >
-                <span
-                  className="h-3 w-5 shrink-0 rounded-sm border border-black/30"
-                  style={{ backgroundColor: color }}
-                />
-                <span className="truncate">{key}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      {taskKeys.length > 0 && (
+        <>
+          <SectionLabel>Tasks</SectionLabel>
+          <ul className="mb-3 mt-2 space-y-0.5">
+            {taskKeys.map((key) => {
+              const dimmed = highlightedKey !== null && highlightedKey !== key;
+              return (
+                <li key={key}>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
+                      dimmed && "opacity-40",
+                    )}
+                    onMouseEnter={() => onHighlight(key)}
+                    onMouseLeave={() => onHighlight(null)}
+                    onFocus={() => onHighlight(key)}
+                    onBlur={() => onHighlight(null)}
+                  >
+                    <span
+                      className="h-3 w-5 shrink-0 rounded-sm border border-black/30"
+                      style={{ backgroundColor: colorMap[key] ?? "#9ca3af" }}
+                    />
+                    <span className="truncate">{key}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+
+      {blockingReasons.length > 0 && (
+        <>
+          <SectionLabel>Blocking reasons</SectionLabel>
+          <ul className="mt-2 space-y-0.5">
+            {blockingReasons.map((kind) => {
+              const color = colorMap[kind] ?? "#9ca3af";
+              return (
+                <li key={kind} className="flex items-center gap-2 px-1.5 py-1 text-xs">
+                  {/* Two glyphs: the wavy line (task view) and a borderless block
+                      (stacked bar chart), both colored by the reason. */}
+                  <span className="flex shrink-0 items-center gap-1">
+                    <svg width="22" height="12" aria-hidden="true">
+                      <path
+                        d={wavyPath(1, 21, 6, 3, 3)}
+                        fill="none"
+                        stroke={color}
+                        strokeWidth={1.5}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <span className="inline-block h-3 w-4 rounded-sm" style={{ backgroundColor: color }} />
+                  </span>
+                  <span className="truncate">{kind}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
     </section>
   );
 }
@@ -789,7 +895,7 @@ export default function ComponentPage() {
   // task or subtask navigates to that task's component (issue #156).
   const componentName = selectedTask?.location || name;
 
-  const { info, loading: infoLoading } = useCompInfo(componentName, "ConcurrentTask", dataRange.startTime, dataRange.endTime, NUM_DOTS);
+  const { info: stackedInfo, loading: infoLoading } = useStackedCompInfo(componentName, "ConcurrentTaskMilestones", dataRange.startTime, dataRange.endTime, NUM_DOTS);
   const query = useMemo(
     () => (componentName ? { where: componentName, startTime: dataRange.startTime, endTime: dataRange.endTime } : {}),
     [dataRange.endTime, dataRange.startTime, componentName],
@@ -836,10 +942,24 @@ export default function ComponentPage() {
     window.history.replaceState(null, "", `/component?${params.toString()}`);
   }, [dataRange.endTime, dataRange.startTime, componentName]);
 
-  const colorMap = useMemo(
-    () => buildColorMap([...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks]),
-    [childTasks, currentTask, parentTask, tasks],
-  );
+  // One global palette over every key that needs a color in this view — task
+  // "kind-what" keys and blocking-reason kinds — so task bars and reasons are
+  // all distinct and colored by the same mechanism.
+  const colorMap = useMemo(() => {
+    const taskKeys = [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks].map(taskColorKey);
+    const reasonKeys = [...(stackedInfo?.kinds ?? []), ...milestonesOf(currentTask?.steps).map((step) => step.kind)];
+    return buildColorMapFromKeys([...taskKeys, ...reasonKeys]);
+  }, [childTasks, currentTask, parentTask, tasks, stackedInfo]);
+
+  // The task "kind-what" keys for the legend's Tasks subsection (distinct from
+  // the blocking-reason kinds, so reasons no longer leak into the task legend).
+  const taskColorKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const task of [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks]) {
+      keys.add(taskColorKey(task));
+    }
+    return Array.from(keys).sort();
+  }, [childTasks, currentTask, parentTask, tasks]);
   const selectableTaskById = useMemo(() => {
     const map = new Map<string, Task>();
     for (const task of [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks]) {
@@ -859,6 +979,36 @@ export default function ComponentPage() {
   // capture (which waits on the render-ready signal) does not snapshot an empty view
   // during the debounce window, before the real-range data is fetched.
   useRenderReady(dataPending);
+
+  // Blocking reasons shown in this view, for the side-panel legend: the union of
+  // the stacked bar chart's kinds (component-wide) and the current task's
+  // milestones (the wavy lines), so the legend covers both.
+  const blockingReasons = useMemo(() => {
+    const set = new Set<string>(stackedInfo?.kinds ?? []);
+    for (const step of milestonesOf(currentTask?.steps)) {
+      set.add(step.kind);
+    }
+    return Array.from(set).sort();
+  }, [stackedInfo, currentTask]);
+
+  // The stacked-bar segment currently hovered, and the tasks blocked by its
+  // reason at that sample time — highlighted in the timeline. The timeline tasks
+  // carry milestones, so we recompute the membership here (matching the backend's
+  // per-reason counting) rather than threading IDs through the chart data.
+  const [hoveredSegment, setHoveredSegment] = useState<{ kind: string; time: number } | null>(null);
+  const highlightedTaskIds = useMemo(() => {
+    if (!hoveredSegment) return null;
+    const ids = new Set<string>();
+    for (const task of tasks) {
+      if (task.start_time > hoveredSegment.time || task.end_time < hoveredSegment.time) {
+        continue;
+      }
+      if (blockingKindAt(task.steps, hoveredSegment.time) === hoveredSegment.kind) {
+        ids.add(String(task.id));
+      }
+    }
+    return ids;
+  }, [hoveredSegment, tasks]);
 
   const shiftRange = (nextRange: TimeRange) => {
     if (!Number.isFinite(nextRange.startTime) || !Number.isFinite(nextRange.endTime)) return;
@@ -1035,12 +1185,13 @@ export default function ComponentPage() {
             colorMap={colorMap}
             highlightedKey={highlightedKey}
             highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
+            highlightedTaskIds={highlightedTaskIds}
             onHoverTask={setHoveredTask}
             onSelectTask={selectTask}
           />
         </div>
         <div className="daisen1-metric-view border-t border-slate-200" style={{ height: metricLineHeight }}>
-          <ComponentMetricLine info={info} range={viewRange} width={leftWidth} height={metricLineHeight} />
+          <ComponentMilestoneBars info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} onHoverSegment={setHoveredSegment} />
         </div>
       </div>
 
@@ -1073,7 +1224,7 @@ export default function ComponentPage() {
               selected/current task so a task selected via click or arrived at
               via /component?...&taskid=... stays visible in the panel. */}
           <SelectedTaskSection task={hoveredTask ?? currentTask} />
-          <ComponentLegend colorMap={colorMap} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} />
+          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} />
         </div>
       </SidePanel>
     </div>

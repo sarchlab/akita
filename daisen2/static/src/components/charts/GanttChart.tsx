@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import * as d3 from "d3";
 import type { Segment, Task } from "../../types/task";
 import { assignYIndices } from "../../utils/taskYIndexAssigner";
-import { buildColorMap, lookupColor } from "../../utils/taskColorCoder";
+import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../../utils/taskColorCoder";
+import { milestonesOf, wavyPath } from "../../utils/milestoneViz";
 import { smartString } from "../../utils/smartValue";
 
 interface GanttChartProps {
@@ -21,6 +22,9 @@ interface GanttChartProps {
 const MARGIN = { top: 28, right: 12, bottom: 28, left: 8 };
 const ROW_HEIGHT = 14;
 const HEADER_ROW_HEIGHT = 22;
+// Vertical room reserved below the Current Task bar for the blocking-reason
+// curves (only when the task has milestones).
+const MILESTONE_BAND = 22;
 
 function safeScale(scale: d3.ScaleLinear<number, number>, value: number) {
   return scale(value) ?? 0;
@@ -67,17 +71,25 @@ export default function GanttChart({
     return rows;
   }, [tasks, mainTask, parentTask]);
 
+  // Milestones on the current task, in time order. Each is the release of a
+  // blocking reason; the interval before it (from the task start or the previous
+  // milestone) is rendered as a curve colored by that reason.
+  const milestoneSteps = useMemo(() => {
+    return milestonesOf(mainTask?.steps).sort((a, b) => a.time - b.time);
+  }, [mainTask]);
+  const milestoneBand = milestoneSteps.length ? MILESTONE_BAND : 0;
+
   const timeStart = layout.length ? Math.min(...layout.map((task) => task.start_time)) : 0;
   const timeEnd = layout.length ? Math.max(...layout.map((task) => task.end_time)) : 1;
   const padding = (timeEnd - timeStart) * 0.02 || 1e-12;
   const startTime = timeStart - padding;
   const endTime = timeEnd + padding;
   const laneCount = Math.max(1, Math.max(...layout.map((task) => task.yIndex ?? 0), 0) + 1);
-  const height = MARGIN.top + MARGIN.bottom + HEADER_ROW_HEIGHT * (parentTask ? 2 : mainTask ? 1 : 0) + laneCount * ROW_HEIGHT + 28;
+  const height = MARGIN.top + MARGIN.bottom + HEADER_ROW_HEIGHT * (parentTask ? 2 : mainTask ? 1 : 0) + milestoneBand + laneCount * ROW_HEIGHT + 28;
   const width = 1200;
   const innerWidth = width - MARGIN.left - MARGIN.right;
   const xScale = d3.scaleLinear().domain([startTime, endTime]).range([MARGIN.left, width - MARGIN.right]);
-  const colorMap = buildColorMap(layout);
+  const colorMap = buildColorMapFromKeys([...layout.map(taskColorKey), ...milestoneSteps.map((step) => step.kind)]);
   const xTicks = xScale.ticks(12);
   const gaps = segmentsEnabled ? gapSegments(segments, startTime, endTime) : [];
 
@@ -89,7 +101,7 @@ export default function GanttChart({
     }
     if (mainTask) {
       if (task.isMainTask) return y;
-      y += HEADER_ROW_HEIGHT + 8;
+      y += HEADER_ROW_HEIGHT + milestoneBand + 8;
     }
     return y + (task.yIndex ?? 0) * ROW_HEIGHT;
   };
@@ -98,8 +110,62 @@ export default function GanttChart({
     return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No tasks to display.</div>;
   }
 
+  // Blocking-reason curves for the current task. Each milestone closes an
+  // interval [previous milestone (or task start) -> milestone]; that interval is
+  // drawn as a downward arc colored by the released reason, with a node marking
+  // the release point.
+  const milestoneCenterY = mainTask ? yForTask({ ...mainTask, isMainTask: true }) + 18 + 6 : 0;
+  const milestoneMarks = mainTask
+    ? milestoneSteps.map((step, index) => {
+        const intervalStart = index === 0 ? mainTask.start_time : milestoneSteps[index - 1].time;
+        const x0 = safeScale(xScale, intervalStart);
+        const x1 = safeScale(xScale, step.time);
+        const color = colorMap[step.kind] ?? "#9ca3af";
+        const blockedFor = step.time - intervalStart;
+        const d = wavyPath(x0, x1, milestoneCenterY);
+        const tip = `blocked on ${step.kind} (${step.what}) for ${smartString(blockedFor)}`;
+        return (
+          <g key={`milestone-${index}-${step.kind}`}>
+            {x1 - x0 >= 2 && (
+              <>
+                <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" pointerEvents="none" />
+                {/* Wide transparent overlay so the thin wave is easy to hover. */}
+                <path d={d} fill="none" stroke="transparent" strokeWidth={12} pointerEvents="stroke">
+                  <title>{tip}</title>
+                </path>
+              </>
+            )}
+            <circle cx={x1} cy={milestoneCenterY} r={3} fill={color} stroke="#ffffff" strokeWidth={0.75}>
+              <title>{`${tip} — released at ${smartString(step.time)}`}</title>
+            </circle>
+          </g>
+        );
+      })
+    : null;
+
+  const reasons = Array.from(new Set(milestoneSteps.map((step) => step.kind)));
+
   return (
     <div className="h-full overflow-auto bg-white">
+      {reasons.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 pt-2 text-xs text-slate-600">
+          <span className="font-medium">Blocked on:</span>
+          {reasons.map((kind) => (
+            <span key={kind} className="inline-flex items-center gap-1">
+              <svg width="22" height="12" aria-hidden="true">
+                <path
+                  d={wavyPath(1, 21, 6, 3, 3)}
+                  fill="none"
+                  stroke={colorMap[kind] ?? "#9ca3af"}
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                />
+              </svg>
+              {kind}
+            </span>
+          ))}
+        </div>
+      )}
       <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="min-w-[760px]">
         <defs>
           <pattern id="gantt-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
@@ -138,7 +204,7 @@ export default function GanttChart({
             Current Task
           </text>
         )}
-        <text x={12} y={MARGIN.top + (parentTask ? HEADER_ROW_HEIGHT + 8 : 0) + (mainTask ? HEADER_ROW_HEIGHT + 8 : 0) + 16} fontSize="12" fontWeight="600" fill="#0f172a">
+        <text x={12} y={MARGIN.top + (parentTask ? HEADER_ROW_HEIGHT + 8 : 0) + (mainTask ? HEADER_ROW_HEIGHT + milestoneBand + 8 : 0) + 16} fontSize="12" fontWeight="600" fill="#0f172a">
           Tasks
         </text>
 
@@ -182,20 +248,7 @@ export default function GanttChart({
           );
         })}
 
-        {mainTask?.steps?.map((step, index) => (
-          <circle
-            key={`${step.kind}-${index}`}
-            cx={safeScale(xScale, step.time)}
-            cy={yForTask({ ...mainTask, isMainTask: true }) + 9}
-            r={3}
-            fill="#dc2626"
-            stroke="#ffffff"
-          >
-            <title>
-              {step.kind}: {step.what} at {smartString(step.time)}
-            </title>
-          </circle>
-        ))}
+        {milestoneMarks}
       </svg>
     </div>
   );
