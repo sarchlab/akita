@@ -252,6 +252,13 @@ type transactionState struct {
 	// attributed to a pipeline subtask.
 	DirPipelinePID uint64 `json:"dir_pipeline_pid"`
 
+	// BankPID is the tracing task ID of the bank (data-array) pipeline subtask
+	// (a child of the request's req_in). It is set when the transaction is
+	// accepted into the bank pipeline and consumed when the bank finalizes the
+	// access, pairing with the ".bank" work milestone so the bank latency shows
+	// as a child bar instead of an unexplained tail before the response.
+	BankPID uint64 `json:"bank_pid"`
+
 	// MSHR entry reference (into mshrState.Entries)
 	MSHREntryIndex int  `json:"mshr_entry_index"`
 	HasMSHREntry   bool `json:"has_mshr_entry"`
@@ -287,6 +294,14 @@ func (t *transactionState) reqMeta() messaging.MsgMeta {
 		return t.FlushMeta
 	}
 	panic("no request")
+}
+
+// hasReqMeta reports whether the transaction carries a primary request, i.e.
+// whether reqMeta is safe to call and there is a req_in task to attribute work
+// to. Every transaction that reaches the bank in a real run has one (it passed
+// through the directory); it guards against synthetic bank-only transactions.
+func (t *transactionState) hasReqMeta() bool {
+	return t.HasRead || t.HasWrite || t.HasFlush
 }
 
 // Resources holds the shared resources and wiring referenced by the writeback

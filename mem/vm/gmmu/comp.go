@@ -42,6 +42,12 @@ type transactionState struct {
 	DeviceID   uint64               `json:"device_id"`
 	Page       pageState            `json:"page"`
 	CycleLeft  int                  `json:"cycle_left"`
+	// WalkTaskID is the pipeline subtask that spans the local page-table-walk
+	// latency (the CycleLeft countdown), a child of the req_in. It pairs with
+	// the ".walk" work milestone so the walk renders as a child bar rather than
+	// a bare work interval; it is closed on both the local-hit and remote-fetch
+	// exits of the countdown.
+	WalkTaskID uint64 `json:"walk_task_id"`
 }
 
 // devicePageAccess records pages accessed by a single device.

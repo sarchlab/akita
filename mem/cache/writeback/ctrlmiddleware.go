@@ -270,12 +270,12 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 
 // endInflightTasks completes the req_in tracing task of every in-flight
 // transaction, finalizes its downstream fetch and eviction-writeback req_out
-// tasks, and closes its directory-pipeline subtask, so a hard Reset that drops
-// the transaction table leaves no started-never-ended task and no leaked
-// receiver-registry entry. A slot already marked Removed can still hold an
-// in-flight eviction (its req_in long since completed), so every slot is
+// tasks, and closes its directory-pipeline and bank subtasks, so a hard Reset
+// that drops the transaction table leaves no started-never-ended task and no
+// leaked receiver-registry entry. A slot already marked Removed can still hold
+// an in-flight eviction (its req_in long since completed), so every slot is
 // visited and the req_in end is idempotent. Mirrors bank/mshr-stage (req_in),
-// write-buffer stage (req_out), and the directory pipeline (subtask) completion.
+// write-buffer stage (req_out), and the directory/bank pipelines (subtasks).
 func (m *ctrlMiddleware) endInflightTasks() {
 	comp := m.pipeline.comp
 
@@ -296,6 +296,10 @@ func (m *ctrlMiddleware) endInflightTasks() {
 
 		if trans.DirPipelinePID != 0 {
 			tracing.EndTaskOnReset(comp, trans.DirPipelinePID)
+		}
+
+		if trans.BankPID != 0 {
+			tracing.EndTaskOnReset(comp, trans.BankPID)
 		}
 	}
 }

@@ -155,6 +155,12 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 func (m *ctrlMiddleware) endInflightTasks() {
 	for _, walking := range m.comp.State.WalkingTranslations {
 		tracing.EndReqInOnReset(m.comp, walking.ReqID)
+		// These walks have not yet reached an exit, so their walk subtask is
+		// still open. (Remote walks in RemoteMemReqs already closed theirs in
+		// processRemoteMemReq.)
+		if walking.WalkTaskID != 0 {
+			tracing.EndTaskOnReset(m.comp, walking.WalkTaskID)
+		}
 	}
 
 	for reqOutID, walking := range m.comp.State.RemoteMemReqs {
