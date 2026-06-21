@@ -8,16 +8,17 @@ const EMPTY_TOPOLOGY: Topology = { components: [], ports: [] };
 
 // Glyph geometry. Components are rounded rectangles; ports are horizontally
 // stretched hexagons sitting on the component's edges.
-const RECT_H = 30;
-const RECT_PAD = 14;
-const NAME_CW = 6.6;
-const PORT_H = 17;
-const PORT_PAD = 13;
-const PORT_CW = 5.4;
-const PORT_GAP = 6;
-const COL_GAP = 250;
-const ROW_GAP = 132;
-const MARGIN = 28;
+const RECT_H = 48;
+const RECT_PAD = 18;
+const RECT_SIDE_PAD = 22; // breathing room between the port row and the box ends
+const NAME_CW = 7.4;
+const PORT_H = 19;
+const PORT_PAD = 14;
+const PORT_CW = 5.6;
+const PORT_GAP = 8;
+const COL_GAP = 300;
+const ROW_GAP = 170;
+const MARGIN = 30;
 
 const NODE_COLOR = "#2c7bb6";
 const SELECTED_COLOR = "#f97316";
@@ -184,7 +185,14 @@ function buildLayout(topology: Topology): Layout {
       .map((p) => ({ ...p, short: shortPort(p.port), w: portWidth(shortPort(p.port)) }));
 
     const nameW = id.length * NAME_CW + RECT_PAD * 2;
-    const rectW = Math.max(nameW, 70);
+    // The box must contain its widest port row so every port sits on its edge
+    // rather than floating outside it.
+    const rectW = Math.max(
+      nameW,
+      rowWidth(top) + RECT_SIDE_PAD * 2,
+      rowWidth(bottom) + RECT_SIDE_PAD * 2,
+      90,
+    );
 
     const layRow = (
       row: { port: string; short: string; w: number; connection: string }[],
@@ -443,11 +451,11 @@ export default function TopologyWidget({ expandHref }: TopologyWidgetProps) {
                       y={b.cy - RECT_H / 2}
                       width={b.rectW}
                       height={RECT_H}
-                      rx={8}
-                      ry={8}
+                      rx={11}
+                      ry={11}
                       fill="#fff"
                       stroke={rectSelected ? SELECTED_COLOR : NODE_COLOR}
-                      strokeWidth={rectSelected ? 2.5 : 1.5}
+                      strokeWidth={rectSelected ? 2.5 : 1.75}
                       style={{ cursor: "pointer" }}
                       onClick={() =>
                         setSelected(
@@ -459,9 +467,9 @@ export default function TopologyWidget({ expandHref }: TopologyWidgetProps) {
                     />
                     <text
                       x={b.cx}
-                      y={b.cy + 4}
+                      y={b.cy + 5}
                       textAnchor="middle"
-                      fontSize={11}
+                      fontSize={13}
                       fontWeight={600}
                       fill="#1e293b"
                       pointerEvents="none"
@@ -503,7 +511,7 @@ export default function TopologyWidget({ expandHref }: TopologyWidgetProps) {
                             x={p.cx}
                             y={p.cy + 3}
                             textAnchor="middle"
-                            fontSize={8.5}
+                            fontSize={9}
                             fill={portSelected ? "#fff" : "#475569"}
                             pointerEvents="none"
                           >
