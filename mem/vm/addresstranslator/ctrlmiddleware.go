@@ -5,6 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type ctrlMiddleware struct {
@@ -125,6 +126,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	}
 
 	state := &m.comp.State
+	m.endInflightTasks()
 	state.Transactions = nil
 	state.InflightReqToBottom = nil
 	state.CurrentCmdID = 0
@@ -142,6 +144,29 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
+}
+
+// endInflightTasks completes the req_in tracing task of every in-flight request
+// and finalizes the req_out it currently owns, so a hard Reset that drops both
+// transaction tables leaves no started-never-ended task and no leaked
+// receiver-registry entry. A request awaiting translation (Transactions) holds a
+// translation req_out (TranslationReqID); one already translated and forwarded
+// (InflightReqToBottom) holds the downstream req_out (ReqToBottomID). The end is
+// idempotent for a req_out a response already finalized. Mirrors respond()
+// (req_in + downstream req_out) and traceTranslationComplete (translation
+// req_out) completion.
+func (m *ctrlMiddleware) endInflightTasks() {
+	for _, trans := range m.comp.State.Transactions {
+		for _, inc := range trans.IncomingReqs {
+			tracing.EndReqInOnReset(m.comp, inc.ID)
+		}
+		tracing.EndTaskOnReset(m.comp, trans.TranslationReqID)
+	}
+
+	for _, r := range m.comp.State.InflightReqToBottom {
+		tracing.EndReqInOnReset(m.comp, r.ReqFromTopID)
+		tracing.EndTaskOnReset(m.comp, r.ReqToBottomID)
+	}
 }
 
 func (m *ctrlMiddleware) handleUnsupported(req memcontrolprotocol.Req) bool {
