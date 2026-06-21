@@ -5,6 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type ctrlMiddleware struct {
@@ -125,6 +126,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	}
 
 	state := &m.comp.State
+	m.endInflightTasks()
 	state.Banks = buildInitialBanks(m.comp.Spec())
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
@@ -137,6 +139,37 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
+}
+
+// endInflightTasks completes the req_in tracing task and closes the open
+// pipeline subtask of every request still in a bank pipeline or post-pipeline
+// buffer, so a hard Reset that rebuilds the banks leaves no
+// started-never-ended task and no leaked receiver-registry entry. The memory is
+// a leaf, so there is no downstream req_out. Mirrors the completion in
+// tickFinalizeMW.finishPipeline + TraceReqComplete.
+func (m *ctrlMiddleware) endInflightTasks() {
+	for i := range m.comp.State.Banks {
+		bank := &m.comp.State.Banks[i]
+		for _, stage := range bank.Pipeline.Stages() {
+			m.endItemTasks(stage.Item)
+		}
+		for _, item := range bank.PostPipelineBuf.Elements() {
+			m.endItemTasks(item)
+		}
+	}
+}
+
+func (m *ctrlMiddleware) endItemTasks(item bankPipelineItemState) {
+	reqMsgID := item.WriteMsg.ID
+	if item.IsRead {
+		reqMsgID = item.ReadMsg.ID
+	}
+
+	tracing.EndReqInOnReset(m.comp, reqMsgID)
+
+	if item.PipelineTaskID != 0 {
+		tracing.EndTaskOnReset(m.comp, item.PipelineTaskID)
+	}
 }
 
 func (m *ctrlMiddleware) handleUnsupported(req memcontrolprotocol.Req) bool {

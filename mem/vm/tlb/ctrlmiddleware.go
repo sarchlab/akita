@@ -246,7 +246,9 @@ func (m *ctrlMiddleware) handleReset(msg memcontrolprotocol.Req) bool {
 	state.CurrentCmdSrc = ""
 
 	// Reset is a hard reset to the freshly-built shape: discard in-flight
-	// misses, the cached translations, and any staged pipeline work.
+	// misses, the cached translations, and any staged pipeline work. End their
+	// open tracing tasks first so the dropped work leaves none unended.
+	m.endInflightTasks()
 	state.MSHREntries = nil
 	state.HasRespondingMSHR = false
 	state.RespondingMSHRData = mshrEntryState{}
@@ -265,6 +267,52 @@ func (m *ctrlMiddleware) handleReset(msg memcontrolprotocol.Req) bool {
 
 	m.controlPort().RetrieveIncoming()
 	return true
+}
+
+// endInflightTasks completes the req_in tracing task of every request still in
+// flight — coalesced into an MSHR entry, draining from the responding MSHR, or
+// staged in the lookup pipeline/buffer — finalizes each MSHR's downstream fetch
+// req_out, and closes each staged request's pipeline subtask, so a hard Reset
+// that discards them leaves no started-never-ended task and no leaked
+// receiver-registry entry. The end is idempotent where a request appears in more
+// than one structure. Mirrors the respond path (req_in), the bottom fetch
+// (req_out), and finishPipeline (subtask) completion.
+func (m *ctrlMiddleware) endInflightTasks() {
+	state := &m.comp.State
+
+	for i := range state.MSHREntries {
+		m.endMSHREntryTasks(&state.MSHREntries[i])
+	}
+
+	if state.HasRespondingMSHR {
+		m.endMSHREntryTasks(&state.RespondingMSHRData)
+	}
+
+	for _, stage := range state.Pipeline.Stages() {
+		m.endPipelineItemTasks(stage.Item)
+	}
+
+	for _, item := range state.BufferItems.Elements() {
+		m.endPipelineItemTasks(item)
+	}
+}
+
+func (m *ctrlMiddleware) endMSHREntryTasks(entry *mshrEntryState) {
+	for i := range entry.Requests {
+		tracing.EndReqInOnReset(m.comp, entry.Requests[i].ID)
+	}
+
+	if entry.HasReqToBottom {
+		tracing.EndTaskOnReset(m.comp, entry.ReqToBottom.ID)
+	}
+}
+
+func (m *ctrlMiddleware) endPipelineItemTasks(item pipelineTLBReqState) {
+	tracing.EndReqInOnReset(m.comp, item.Msg.ID)
+
+	if item.PipelineTaskID != 0 {
+		tracing.EndTaskOnReset(m.comp, item.PipelineTaskID)
+	}
 }
 
 func (m *ctrlMiddleware) handleUnsupported(msg memcontrolprotocol.Req) bool {

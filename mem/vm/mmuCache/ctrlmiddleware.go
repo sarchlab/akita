@@ -298,7 +298,7 @@ func (m *ctrlMiddleware) handleReset(msg memcontrolprotocol.Req) bool {
 	// above), so end both tasks here — finalize the req_out and complete the
 	// req_in — mirroring the normal handleRsp completion so a mid-walk reset
 	// leaves no unended tasks rather than just an orphaned registry entry.
-	m.endInflightReqs()
+	m.endInflightTasks()
 	state.InflightReqs = map[uint64]inflightReqState{}
 
 	// Reset is a hard reset: drop the cached page-walk entries so the
@@ -318,20 +318,16 @@ func (m *ctrlMiddleware) handleReset(msg memcontrolprotocol.Req) bool {
 	return true
 }
 
-// endInflightReqs finalizes the forwarded req_out and completes the original
+// endInflightTasks finalizes the forwarded req_out and completes the original
 // req_in for every walk still in flight, so a hard Reset that drops the
-// in-flight table leaves no unended trace tasks. The matching responses are
-// discarded by handleRsp once OutstandingBottomReqs is cleared, so without this
-// the tasks would never close. Mirrors the completion path in handleRsp;
-// TraceReqComplete also releases the req_in receiver-task registry entry.
-func (m *ctrlMiddleware) endInflightReqs() {
+// in-flight table leaves no started-never-ended task and no leaked
+// receiver-registry entry. The matching responses are discarded by handleRsp
+// once OutstandingBottomReqs is cleared, so without this the tasks would never
+// close. Mirrors the completion path in handleRsp.
+func (m *ctrlMiddleware) endInflightTasks() {
 	for _, inflight := range m.comp.State.InflightReqs {
-		reqToBottom := restoreTransReq(
-			inflight.BottomReqID, inflight.BottomReqSrc, inflight.BottomReqDst)
-		topReq := restoreTransReq(
-			inflight.TopReqID, inflight.TopReqSrc, inflight.TopReqDst)
-		tracing.TraceReqFinalize(m.comp, reqToBottom)
-		tracing.TraceReqComplete(m.comp, topReq)
+		tracing.EndTaskOnReset(m.comp, inflight.BottomReqID)
+		tracing.EndReqInOnReset(m.comp, inflight.TopReqID)
 	}
 }
 
