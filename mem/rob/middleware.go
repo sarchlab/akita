@@ -471,9 +471,9 @@ func (m *middleware) handleEnable(req memcontrolprotocol.Req) bool {
 }
 
 // handleReset drops every in-flight transaction, drains stale port
-// traffic, and lands the ROB back in Enabled. The tracing receiver-task
-// registry entries that topDown allocated for each in-flight top-side
-// request are released so they do not outlive the transactions.
+// traffic, and lands the ROB back in Enabled. The req_in/req_out tracing tasks
+// that topDown opened for each in-flight transaction are ended (and their
+// receiver-registry entries released) so they do not outlive the transactions.
 func (m *middleware) handleReset(req memcontrolprotocol.Req) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
@@ -483,7 +483,7 @@ func (m *middleware) handleReset(req memcontrolprotocol.Req) bool {
 		req.Src, req.ID, true, ""))
 
 	state := &m.comp.State
-	m.forgetInflightReceiverIDs()
+	m.endInflightTasks()
 	state.Transactions = state.Transactions[:0]
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
@@ -536,13 +536,17 @@ func drainIncoming(p messaging.Port) {
 	}
 }
 
-// forgetInflightReceiverIDs releases the tracing receiver-task registry
-// entries that topDown allocated for each in-flight top-side request. Control
-// paths that drop the transaction table call this so the entries do not
-// outlive the transactions they describe.
-func (m *middleware) forgetInflightReceiverIDs() {
+// endInflightTasks completes the top-side req_in tracing task and finalizes the
+// shadow req_out task for each in-flight transaction, so a control path that
+// drops the transaction table leaves no started-never-ended task and no leaked
+// receiver-registry entry. topDown opens both tasks together when it admits a
+// request, so both are open until the transaction retires; the end is
+// idempotent if the shadow's response already finalized its req_out. Mirrors
+// bottomUp (req_in) and parseBottom (req_out) completion.
+func (m *middleware) endInflightTasks() {
 	for _, trans := range m.comp.State.Transactions {
-		tracing.ForgetMsgIDAtReceiver(trans.ReqFromTopID, m.comp)
+		tracing.EndReqInOnReset(m.comp, trans.ReqFromTopID)
+		tracing.EndTaskOnReset(m.comp, trans.ReqToBottomID)
 	}
 }
 

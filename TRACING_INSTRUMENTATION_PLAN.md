@@ -185,7 +185,7 @@ shared helper) and is intentionally deferred there, not fixed here.
 
 ---
 
-## Step 3 — Systemic fix: stop `handleReset` leaking in-flight tasks
+## Step 3 — Systemic fix: stop `handleReset` leaking in-flight tasks — DONE
 
 **Objective.** Eliminate the most widespread defect: every stateful component
 clears its in-flight container on Reset without ending open `req_in`/`req_out`
@@ -193,22 +193,49 @@ clears its in-flight container on Reset without ending open `req_in`/`req_out`
 started-never-ended tasks and slow registry growth whenever a Reset races
 traffic. (Drain paths are already clean — they let work finish.)
 
-**Scope (11 components).** `handleReset` in:
-`mem/rob/middleware.go:393`, `mem/vm/tlb/ctrlmiddleware.go:228`,
-`mem/vm/addresstranslator/ctrlmiddleware.go`, `mem/cache/writeback/ctrlmiddleware.go:237`,
-`mem/cache/writethroughcache/ctrlmiddleware.go:140`, `mem/datamover/ctrlmiddleware.go:124`,
-`mem/vm/mmu/ctrlmiddleware.go:124`, `mem/vm/gmmu/ctrlmiddleware.go`,
-`mem/dram/ctrlmiddleware.go:125`, `mem/idealmemcontroller/ctrlmiddleware.go:123`,
-`mem/simplebankedmemory/ctrlmiddleware.go:128`.
+**Delivered.** Two shared helpers in the tracing package converge all sites on
+one pattern:
 
-**Approach.** Before clearing state, iterate the in-flight work and
-`EndTask` + `ForgetMsgIDAtReceiver` each open task (mirroring the normal
-completion path). Prefer a small shared helper so all 11 sites converge on one
-correct pattern rather than 11 hand-rolled versions.
+- `tracing.EndReqInOnReset(domain, reqMsgID)` — resolves the receiver-side
+  (`req_in`) task ID for the request's message ID via a new lookup-only registry
+  accessor (`receiverTaskIDByMsgID`, no create), then `EndTask` + forgets the
+  entry. Mirrors `TraceReqComplete` but takes the message ID, which is all a
+  reset path retains. No-op when untraced or no task is registered.
+- `tracing.EndTaskOnReset(domain, taskID)` — `EndTask` by literal task ID, for
+  every task keyed on its own ID rather than the receiver registry: a downstream
+  `req_out` (like `TraceReqFinalize`), a DRAM sub-trans, a writethrough
+  `cache_transaction`, or a pipeline subtask. The `DBTracer` ignores ends for
+  IDs it never saw start, so a caller may blanket-end every task a transaction
+  could hold without tracking which were actually opened.
 
-**Verification.** A control-contract-style test that issues `Reset` with
-in-flight traffic and asserts the `DBTracer` has no unended tasks and an empty
-receiver registry afterward.
+Each component grew an `endInflightTasks()` method, called in `handleReset`
+**before** the in-flight container is cleared. Because `RecvTaskID ==
+MsgIDAtReceiver(reqMsgID)` (same registry key), even the components that store
+the task ID directly (mmu/gmmu/ideal) use the message-ID form, so all 11 are
+uniform.
+
+**Applied to all 12 sites** (`endInflightTasks` in each): `mem/rob/middleware.go`
+(replaced the old forget-only `forgetInflightReceiverIDs`, which never `EndTask`ed
+the `req_in` nor finalized the shadow `req_out`), `mem/vm/tlb`,
+`mem/vm/addresstranslator`, `mem/cache/writeback`, `mem/cache/writethroughcache`,
+`mem/datamover`, `mem/vm/mmu`, `mem/vm/gmmu`, `mem/dram`, `mem/idealmemcontroller`,
+`mem/simplebankedmemory`, and `mem/vm/mmuCache` (its existing `endInflightReqs`
+refactored onto the shared helpers, dropping the throwaway-message
+reconstruction). Beyond the plan's `req_in`/`req_out`/sub-trans, the rollout also
+ends the **subtask tiers** the cross-component audit surfaced: TLB/writeback/
+simplebanked pipeline subtasks and the writethrough `cache_transaction`.
+
+**Verified.** A `TestResetEndsInflightTracingTasks` in every component drives a
+request into flight (response withheld), issues `Reset`, and asserts a
+`tracingtest.LeakRecorder` (new shared helper) shows zero started-never-ended
+tasks. Several were negative-control checked (neutering `endInflightTasks` makes
+the test fail with the exact leaked kinds). Coverage spans every shape: leaf
+`req_in` (mmu/ideal), `req_in`+`req_out` (rob/datamover/AT/mmuCache/gmmu —
+gmmu reaches the remote-fetch path), sub-trans (dram), pipeline subtask
+(simplebanked/tlb), and the three-tier writethrough (`req_in` +
+`cache_transaction` + `req_out`). Plus `tracing/reset_test.go` unit-tests the two
+helpers directly. `go test ./tracing/... ./mem/...`, `go vet`, golangci-lint all
+clean.
 
 **Severity/effort.** SEV-2 (rare trigger) but highest leverage; medium.
 
@@ -328,17 +355,20 @@ only at true source/destination; or (b) connection-level hooks. Decide scope
 2. **Step 2** (AT stale-pointer + phantom milestone) — **DONE**; quick,
    confirmed correctness win; improves the quality of every translation trace
    including the ROB's.
-3. **Step 3** (reset-leak helper) — *next*; highest leverage; one shared fix for
-   11 components (includes the deferred AT `handleReset` leak).
-4. **Step 4** (per-component SEV-1) — normal-run correctness.
-5. **Step 5** (milestone/tag rollout) — coverage, incremental.
+3. **Step 3** (reset-leak helper) — **DONE**; highest leverage; one shared fix
+   across all 12 sites (includes the deferred AT `handleReset` leak).
+4. **Step 4** (per-component SEV-1) — *next*; normal-run correctness. Items 1 & 3
+   shipped in Step 5; the gmmu remote-path and endpoint `msg_e2e` defects remain.
+5. **Step 5** (milestone/tag rollout) — **DONE**; coverage, incremental.
 6. **Step 6** (network-transfer subtask) — the remaining architectural phase.
 
 ## Confidence notes
 
 - Step 0 (#2) and the Step 2 (AT bug) diagnosis are **empirically confirmed** on
   a traced `virtualmem` run; Step 2 is now fixed and covered by unit tests.
-- The reset-leak *pattern* is confirmed where exercised; the mmuCache/gmmu/
-  datamover bugs (Step 4) are **high-confidence static findings** —
-  `virtualmem`'s hierarchy does not instantiate those components, so confirm
-  with a scenario that does before/after fixing.
+- The reset-leak fix (Step 3) is now **verified per component** by a
+  `TestResetEndsInflightTracingTasks` that resets mid-flight traffic and asserts
+  no unended tasks (several negative-control checked).
+- The mmuCache/gmmu/datamover bugs (Step 4) are **high-confidence static
+  findings** — `virtualmem`'s hierarchy does not instantiate those components, so
+  confirm with a scenario that does before/after fixing.

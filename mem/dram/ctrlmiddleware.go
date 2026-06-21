@@ -5,6 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type ctrlMiddleware struct {
@@ -122,6 +123,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	state := &m.comp.State
 	spec := m.comp.Spec()
 
+	m.endInflightTasks()
 	state.Transactions = nil
 	state.SubTransQueue = subTransQueueState{Entries: []subTransRef{}}
 	state.CommandQueues = commandQueueState{
@@ -169,6 +171,30 @@ func resetStatistics(state *State) {
 	state.CompletedWrites = 0
 	state.BytesRead = 0
 	state.BytesWritten = 0
+}
+
+// endInflightTasks completes the req_in tracing task of every admitted
+// transaction and closes each of its not-yet-completed sub-trans subtasks, so a
+// hard Reset that drops the transaction table leaves no started-never-ended
+// task and no leaked receiver-registry entry. DRAM is a leaf, so there is no
+// downstream req_out. Mirrors respondMW.finalizeTransaction (req_in) and
+// bankTickMW.endSubTransTasks (sub-trans).
+func (m *ctrlMiddleware) endInflightTasks() {
+	for i := range m.comp.State.Transactions {
+		t := &m.comp.State.Transactions[i]
+
+		reqMsgID := t.WriteMsg.ID
+		if t.HasRead {
+			reqMsgID = t.ReadMsg.ID
+		}
+		tracing.EndReqInOnReset(m.comp, reqMsgID)
+
+		for _, sub := range t.SubTransactions {
+			if !sub.Completed {
+				tracing.EndTaskOnReset(m.comp, sub.ID)
+			}
+		}
+	}
 }
 
 func (m *ctrlMiddleware) handleUnsupported(req memcontrolprotocol.Req) bool {

@@ -38,6 +38,24 @@ func lookupOrCreateReceiverTaskID(msg messaging.Msg, domain NamedHookable) uint6
 	return id
 }
 
+// receiverTaskIDByMsgID returns the receiver-side task ID registered for the
+// message ID at the domain, and whether one exists. Unlike
+// lookupOrCreateReceiverTaskID it never creates an entry, so a reset path can
+// resolve an in-flight task's ID to end it without resurrecting an entry that
+// was already forgotten.
+func receiverTaskIDByMsgID(
+	msgID uint64, domain NamedHookable,
+) (uint64, bool) {
+	key := receiverTaskKey{domain: domain.Name(), msgID: msgID}
+
+	receiverTaskIDsMu.Lock()
+	defer receiverTaskIDsMu.Unlock()
+
+	id, ok := receiverTaskIDs[key]
+
+	return id, ok
+}
+
 func forgetReceiverTaskID(msg messaging.Msg, domain NamedHookable) {
 	forgetReceiverTaskIDByMsgID(msg.Meta().ID, domain)
 }

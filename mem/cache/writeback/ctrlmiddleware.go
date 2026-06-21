@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
 // ctrlMiddleware owns every control verb except CmdFlush, which is
@@ -245,6 +246,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	cache.DirectoryReset(
 		&next.DirectoryState, spec.NumSets, spec.WayAssociativity, blockSize)
 	next.MSHRState = cache.MSHRState{}
+	m.endInflightTasks()
 	next.Transactions = nil
 	next.EvictingList = map[uint64]bool{}
 
@@ -264,6 +266,38 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
+}
+
+// endInflightTasks completes the req_in tracing task of every in-flight
+// transaction, finalizes its downstream fetch and eviction-writeback req_out
+// tasks, and closes its directory-pipeline subtask, so a hard Reset that drops
+// the transaction table leaves no started-never-ended task and no leaked
+// receiver-registry entry. A slot already marked Removed can still hold an
+// in-flight eviction (its req_in long since completed), so every slot is
+// visited and the req_in end is idempotent. Mirrors bank/mshr-stage (req_in),
+// write-buffer stage (req_out), and the directory pipeline (subtask) completion.
+func (m *ctrlMiddleware) endInflightTasks() {
+	comp := m.pipeline.comp
+
+	for i := range comp.State.Transactions {
+		trans := &comp.State.Transactions[i]
+
+		if trans.HasRead || trans.HasWrite || trans.HasFlush {
+			tracing.EndReqInOnReset(comp, trans.reqMeta().ID)
+		}
+
+		if trans.HasFetchReadReq {
+			tracing.EndTaskOnReset(comp, trans.FetchReadReqMeta.ID)
+		}
+
+		if trans.HasEvictionWriteReq {
+			tracing.EndTaskOnReset(comp, trans.EvictionWriteReqMeta.ID)
+		}
+
+		if trans.DirPipelinePID != 0 {
+			tracing.EndTaskOnReset(comp, trans.DirPipelinePID)
+		}
+	}
 }
 
 // clearCachePipelinesAndBuffers empties every stage buffer, pipeline, and

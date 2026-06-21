@@ -5,6 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type ctrlMiddleware struct {
@@ -120,6 +121,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	}
 
 	state := &m.comp.State
+	m.endInflightTasks()
 	state.InflightTransactions = nil
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
@@ -138,6 +140,17 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
+}
+
+// endInflightTasks completes the req_in tracing task of every in-flight access
+// so a hard Reset that drops InflightTransactions leaves no
+// started-never-ended task and no leaked receiver-registry entry. The ideal
+// memory controller is a leaf, so there is no downstream req_out to finalize.
+// Mirrors the completion in memMiddleware.traceReqComplete.
+func (m *ctrlMiddleware) endInflightTasks() {
+	for _, tx := range m.comp.State.InflightTransactions {
+		tracing.EndReqInOnReset(m.comp, tx.ReqID)
+	}
 }
 
 func (m *ctrlMiddleware) handleUnsupported(req memcontrolprotocol.Req) bool {

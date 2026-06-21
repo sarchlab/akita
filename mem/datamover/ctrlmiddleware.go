@@ -5,6 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type ctrlMiddleware struct {
@@ -127,6 +128,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	}
 
 	state := &m.comp.State
+	m.endInflightTasks()
 	state.CurrentTransaction = dataMoverTransactionState{
 		PendingRead:  map[uint64]pendingReadState{},
 		PendingWrite: map[uint64]pendingWriteState{},
@@ -147,6 +149,28 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
+}
+
+// endInflightTasks completes the req_in tracing task of the in-flight move (when
+// one is active) and finalizes the req_out task of every outstanding downstream
+// read and write, so a hard Reset that wipes the transaction leaves no
+// started-never-ended task and no leaked receiver-registry entry. The pending
+// maps are keyed by the downstream message's own ID, which is the req_out task
+// ID. Mirrors ctrlParseMW (req_in) and dataTransferMW (req_out) completion.
+func (m *ctrlMiddleware) endInflightTasks() {
+	trans := &m.comp.State.CurrentTransaction
+
+	if trans.Active {
+		tracing.EndReqInOnReset(m.comp, trans.ReqID)
+	}
+
+	for id := range trans.PendingRead {
+		tracing.EndTaskOnReset(m.comp, id)
+	}
+
+	for id := range trans.PendingWrite {
+		tracing.EndTaskOnReset(m.comp, id)
+	}
 }
 
 func (m *ctrlMiddleware) handleUnsupported(req memcontrolprotocol.Req) bool {
