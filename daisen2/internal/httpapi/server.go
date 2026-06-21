@@ -158,6 +158,8 @@ func (s *Server) RegisterTraceAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/compnames", s.httpComponentNames)
 	mux.HandleFunc("/api/compinfo", s.httpComponentInfo)
 	mux.HandleFunc("/api/segments", s.httpSegments)
+	mux.HandleFunc("/api/sim_info", s.httpSimInfo)
+	mux.HandleFunc("/api/topology", s.httpTopology)
 
 	// Chat / LLM proxy endpoints. The LLM provider is configured entirely from
 	// the frontend; the server holds no credentials.
