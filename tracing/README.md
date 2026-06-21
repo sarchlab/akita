@@ -45,7 +45,41 @@ Each milestone carries a `MilestoneKind`:
 `MilestoneKindWork` is the exception to the "milestone = blocking resolved"
 reading: it marks the end of an interval the component spent doing productive
 work rather than waiting — e.g. traversing an internal latency pipeline. The
-interval up to a `work` milestone is time spent working, not blocked.
+interval up to a `work` milestone is time spent working, not blocked. Per the
+coverage principles below, a `work` (or `subtask`) milestone must be paired with
+a child subtask that spans the interval.
+
+## Coverage principles
+
+A `req_in` processing task's milestones and subtasks must, together, account for
+the task's **entire** lifetime. Two rules keep traces honest — a reviewer should
+never have to ask "why is the bar still running with no reason?" or "what work is
+this, and why so long?".
+
+**P1 — Full coverage (no unexplained gaps).** Every interval between a task's
+start and end is attributed: the span ending at each milestone is the time the
+task spent on that milestone's reason, so consecutive milestones tile the whole
+lifetime. In particular the *last* milestone must land at (within ~one cycle of)
+the task end. A gap between the last milestone and the end means a processing
+phase is going unrecorded — the bar runs on with no reason. Emit a milestone for
+that phase (or open a subtask for it, per P2).
+
+**P2 — Work is a subtask (`work`/`subtask` ⇒ child subtask).** A `work` or
+`subtask` milestone asserts the task spent that interval doing internal work
+rather than blocked. Such an interval must be backed by a **child subtask** — a
+`StartTask` parented to the `req_in`, normally `PipelineTaskKind` — that spans
+it, so the trace shows *what* the work was, not merely that time elapsed. A bare
+`work`/`subtask` milestone with no corresponding child subtask is a violation:
+either open the subtask, or — if the interval was really a wait — reclassify the
+milestone (`data`, `dependency`, `hardware_resource`, …).
+
+So a pipelined component pairs each internal-latency phase with **both** a
+subtask bar (the child) and a `work` milestone (on the parent) at the phase's
+end — see *Pipeline subtasks*. The write-through cache is the reference
+implementation: its directory-lookup and data-array (bank) latencies each open a
+`pipeline` subtask under the `req_in` and close with a matching `work` milestone,
+so they render as labelled child bars instead of unexplained gaps, and the only
+bare spans left are the inherent single-cycle buffer-admission and response ticks.
 
 ## Emit API
 
