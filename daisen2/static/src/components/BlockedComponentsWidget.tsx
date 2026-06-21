@@ -33,21 +33,23 @@ export default function BlockedComponentsWidget({
       expandHref={expandHref}
       contentClassName="p-2"
     >
-      {loading ? (
-        <div className="text-sm text-muted-foreground">Loading…</div>
-      ) : error ? (
-        <div className="text-sm text-destructive">{error}</div>
-      ) : top.length === 0 ? (
-        <div className="text-sm text-muted-foreground">
-          No blocking recorded in this trace.
-        </div>
-      ) : (
-        <div
-          ref={ref}
-          className="flex h-full min-h-0 flex-col"
-          style={{ gap: GAP }}
-        >
-          {top.map((c) => (
+      {/* The ref must be on an always-mounted element so the ResizeObserver
+          attaches on mount; otherwise the charts keep their default width. */}
+      <div
+        ref={ref}
+        className="flex h-full min-h-0 flex-col"
+        style={{ gap: GAP }}
+      >
+        {loading ? (
+          <div className="text-sm text-muted-foreground">Loading…</div>
+        ) : error ? (
+          <div className="text-sm text-destructive">{error}</div>
+        ) : top.length === 0 ? (
+          <div className="text-sm text-muted-foreground">
+            No blocking recorded in this trace.
+          </div>
+        ) : (
+          top.map((c) => (
             <DashboardWidget
               key={c.component}
               name={c.component}
@@ -64,9 +66,9 @@ export default function BlockedComponentsWidget({
               segmentsEnabled={segments?.enabled ?? false}
               onTimeRangeChange={() => {}}
             />
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
     </WidgetCard>
   );
 }
