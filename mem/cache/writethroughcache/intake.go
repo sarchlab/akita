@@ -89,14 +89,6 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 			ReadAccessByteSize: m.AccessByteSize,
 			ReadPID:            m.PID,
 		}
-
-		tracing.StartTask(s.cache.comp, tracing.TaskStart{
-			ID:       t.ID,
-			ParentID: tracing.MsgIDAtReceiver(m, s.cache.comp),
-			Kind:     "cache_transaction",
-			What:     "read",
-			Location: s.cache.comp.Name() + ".Local",
-		})
 	case memprotocol.WriteReq:
 		t = transactionState{
 			ID:             timing.GetIDGenerator().Generate(),
@@ -114,14 +106,6 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 				t.WriteDirtyMask[i] = true
 			}
 		}
-
-		tracing.StartTask(s.cache.comp, tracing.TaskStart{
-			ID:       t.ID,
-			ParentID: tracing.MsgIDAtReceiver(m, s.cache.comp),
-			Kind:     "cache_transaction",
-			What:     "write",
-			Location: s.cache.comp.Name() + ".Local",
-		})
 	default:
 		log.Panicf("cannot process request of type %s\n",
 			reflect.TypeOf(msg))
