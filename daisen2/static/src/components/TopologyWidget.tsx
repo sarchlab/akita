@@ -416,6 +416,11 @@ export default function TopologyWidget({ expandHref, bare }: TopologyWidgetProps
             >
               Reset
             </button>
+            {!selected ? (
+              <div className="pointer-events-none absolute left-3 top-3 z-10 text-xs text-muted-foreground">
+                Click a component for its spec, or a port for its connection.
+              </div>
+            ) : null}
             <svg
               ref={svgRef}
               viewBox={`${layout.minX} ${layout.minY} ${layout.width} ${layout.height}`}
@@ -529,21 +534,22 @@ export default function TopologyWidget({ expandHref, bare }: TopologyWidgetProps
             </svg>
           </div>
 
-          <aside className="w-72 shrink-0 overflow-auto border-l p-3">
-            {selected?.kind === "component" ? (
-              <ComponentDetail component={selComponent} name={selected.component} />
-            ) : selected?.kind === "port" && portInfo ? (
-              <PortDetail
-                component={selected.component}
-                port={selected.port}
-                peer={portInfo}
-              />
-            ) : (
-              <div className="text-sm text-muted-foreground">
-                Click a component for its spec, or a port for its connection.
-              </div>
-            )}
-          </aside>
+          {selected ? (
+            <aside className="w-72 shrink-0 overflow-auto border-l p-3">
+              {selected.kind === "component" ? (
+                <ComponentDetail
+                  component={selComponent}
+                  name={selected.component}
+                />
+              ) : portInfo ? (
+                <PortDetail
+                  component={selected.component}
+                  port={selected.port}
+                  peer={portInfo}
+                />
+              ) : null}
+            </aside>
+          ) : null}
         </div>
       )}
     </WidgetCard>
