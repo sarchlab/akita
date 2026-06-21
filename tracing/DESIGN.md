@@ -1,6 +1,17 @@
 # Tracing API Refactoring — Design
 
-**Status:** Agreed plan, ready to implement
+> **Status: COMPLETED and shipped.** All phases of this refactor — the struct
+> emit API, the step→tag rename, caller-supplied (then domain-clock) time, the
+> location-interned DB schema, and the daisen reader lockstep — have landed.
+> This document is kept as a **historical design record**; it is not a current
+> API reference, and some code blocks below show pre-revision signatures that
+> the prose later revokes (e.g. the `TraceReq*(…, now)` forms were dropped). For
+> the current API, see [`README.md`](./README.md). Features added since this
+> design (the `MilestoneKind` taxonomy, the incoming-buffer task, pipeline
+> subtasks, and the reset-teardown helpers) are documented in the README, not
+> here.
+
+**Original status:** Agreed plan, ready to implement
 **Branch:** `worktree-improve-tracing-api`
 **Scope:** the `tracing` package, its ~100 call sites across the repo, the
 `datarecording` location feature, and daisen's trace reader.
