@@ -121,6 +121,17 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 		item := next.BufferItems.Peek()
 		msg := item.Msg
 
+		// The pipeline traversal is done; the request is now being looked up.
+		// Mark that interval as work (not a blocking reason) before lookup, so
+		// it is not absorbed by a same-tick MSHR/hit milestone emitted inside
+		// lookup. Re-emitted on lookup retries; the (Kind, What) dedup keeps the
+		// first.
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
+			Kind:   tracing.MilestoneKindWork,
+			What:   m.comp.Name() + ".pipeline",
+		})
+
 		ok := m.lookup(msg)
 		if ok {
 			next.BufferItems.Pop()
@@ -395,11 +406,6 @@ func (m *tlbMiddleware) parseBottom() bool {
 
 	item := itemI.(vmprotocol.TranslationRsp)
 	spec := m.comp.Spec()
-	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(item, m.comp),
-		Kind:   tracing.MilestoneKindData,
-		What:   m.bottomPort().Name(),
-	})
 	page := item.Page
 
 	mshrIdx, found := mshrGetEntry(next.MSHREntries, page.PID, page.VAddr)
@@ -411,6 +417,18 @@ func (m *tlbMiddleware) parseBottom() bool {
 		// filling the reset TLB and satisfying a fresh request.
 		m.bottomPort().RetrieveIncoming()
 		return true
+	}
+
+	// The downstream translation arrived for every request coalesced on this
+	// MSHR entry: the translation wait (the time their downstream req_out was in
+	// flight) is over for each req_in. network_busy is charged only later, when
+	// the response is actually sent upstream in respondMSHREntry.
+	for _, req := range next.MSHREntries[mshrIdx].Requests {
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: tracing.MsgIDAtReceiver(req, m.comp),
+			Kind:   tracing.MilestoneKindTranslation,
+			What:   "translation",
+		})
 	}
 
 	setID := vAddrToSetID(page.VAddr, spec)

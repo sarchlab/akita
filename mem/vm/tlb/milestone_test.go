@@ -207,6 +207,11 @@ var _ = Describe("TLB milestones", func() {
 		}
 		Expect(pipeEnded).To(BeTrue())
 
+		// The pipeline traversal is recorded as work on req_in — not a blocking
+		// reason and not the data/MSHR milestone.
+		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindWork,
+			tlbComp.Name()+".pipeline")).To(BeTrue())
+
 		// (c) The post-lookup data milestone and the hit tag attach to req_in.
 		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindData,
 			tlbComp.Name()+".Sets")).To(BeTrue())
@@ -247,14 +252,54 @@ var _ = Describe("TLB milestones", func() {
 		// (b) Pipeline subtask parented to req_in.
 		Expect(pipeStart.ParentID).To(Equal(reqInID))
 
+		// The pipeline traversal is recorded as work on req_in, not the MSHR.
+		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindWork,
+			tlbComp.Name()+".pipeline")).To(BeTrue())
+
 		// (c) The post-lookup MSHR hardware_resource and the bottom-port
-		// network_busy milestones now attach to the already-open req_in, and the
-		// miss tag is on req_in.
+		// network_busy milestones attach to the already-open req_in; the miss tag
+		// is on req_in.
 		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindHardwareResource,
 			tlbComp.Name()+".MSHR")).To(BeTrue())
 		bottomPort := tlbComp.GetPortByName("Bottom")
 		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindNetworkBusy,
 			bottomPort.Name())).To(BeTrue())
 		Expect(rec.tagsOn(reqInID)).To(ContainElement("miss"))
+
+		// (d) Drive the downstream fetch response back. The translation wait (the
+		// time the req_out was in flight) is recorded as a translation milestone
+		// on req_in, and the response-send network_busy on the Top port comes
+		// only afterwards — not during the req_out.
+		fetch := bottomPort.RetrieveOutgoing().(vmprotocol.TranslationReq)
+		rsp := vmprotocol.TranslationRsp{
+			Page: vm.Page{PID: 1, VAddr: 0x100, PAddr: 0x200, Valid: true},
+		}
+		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.Src = remotePort
+		rsp.Dst = bottomPort.AsRemote()
+		rsp.RspTo = fetch.ID
+		rsp.TrafficClass = "vmprotocol.TranslationRsp"
+		bottomPort.Deliver(rsp)
+		drive(20)
+
+		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindTranslation,
+			"translation")).To(BeTrue())
+		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindNetworkBusy,
+			topPort.Name())).To(BeTrue())
+
+		reqMs := rec.milestonesOn(reqInID)
+		transIdx, topIdx := -1, -1
+		for i, ms := range reqMs {
+			switch {
+			case ms.Kind == tracing.MilestoneKindTranslation:
+				transIdx = i
+			case ms.Kind == tracing.MilestoneKindNetworkBusy &&
+				ms.What == topPort.Name():
+				topIdx = i
+			}
+		}
+		Expect(transIdx).To(BeNumerically(">=", 0))
+		Expect(topIdx).To(BeNumerically(">=", 0))
+		Expect(transIdx).To(BeNumerically("<", topIdx))
 	})
 })

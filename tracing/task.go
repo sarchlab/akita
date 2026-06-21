@@ -55,6 +55,11 @@ const (
 	MilestoneKindOther            MilestoneKind = "other"
 	MilestoneKindTranslation      MilestoneKind = "translation"
 	MilestoneKindSubTask          MilestoneKind = "subtask"
+	// MilestoneKindWork marks the end of an interval the component spent doing
+	// productive work rather than blocked on a resource — e.g. traversing an
+	// internal latency pipeline. The interval from the previous milestone (or
+	// task start) to a work milestone is time the task was working, not waiting.
+	MilestoneKindWork MilestoneKind = "work"
 )
 
 // Milestone represents a point in time where a task's blocking status is
