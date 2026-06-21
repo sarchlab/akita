@@ -295,9 +295,10 @@ type Selection =
 
 interface TopologyWidgetProps {
   expandHref?: string;
+  bare?: boolean;
 }
 
-export default function TopologyWidget({ expandHref }: TopologyWidgetProps) {
+export default function TopologyWidget({ expandHref, bare }: TopologyWidgetProps) {
   const { data, loading, error } = useTopology();
   const topology = data ?? EMPTY_TOPOLOGY;
   const [selected, setSelected] = useState<Selection>(null);
@@ -384,6 +385,7 @@ export default function TopologyWidget({ expandHref }: TopologyWidgetProps) {
     <WidgetCard
       title="Topology"
       expandHref={expandHref}
+      bare={bare}
       contentClassName="overflow-hidden p-0"
       headerRight={
         <span className="text-xs text-muted-foreground">

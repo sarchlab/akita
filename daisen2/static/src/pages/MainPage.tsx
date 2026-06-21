@@ -12,7 +12,7 @@ export default function MainPage() {
     <div className="grid h-full grid-cols-2 grid-rows-2 gap-3 overflow-hidden bg-white p-3">
       <SimulationInfoWidget expandHref="/view/siminfo" />
       <TopologyWidget expandHref="/view/topology" />
-      <BlockedComponentsWidget expandHref="/view/blocked" />
+      <BlockedComponentsWidget expandHref="/dashboard" />
       <CodeBrowserWidget expandHref="/view/code" />
     </div>
   );

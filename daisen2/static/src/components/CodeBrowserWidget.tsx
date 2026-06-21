@@ -18,11 +18,15 @@ function formatBytes(n?: number): string {
 
 interface CodeBrowserWidgetProps {
   expandHref?: string;
+  bare?: boolean;
 }
 
 // CodeBrowserWidget browses the simulator source recorded in the trace: a
 // directory listing that drills into folders and a viewer for file contents.
-export default function CodeBrowserWidget({ expandHref }: CodeBrowserWidgetProps) {
+export default function CodeBrowserWidget({
+  expandHref,
+  bare,
+}: CodeBrowserWidgetProps) {
   const [dir, setDir] = useState("");
   const [file, setFile] = useState<string | null>(null);
   const ls = useCodeLs(dir);
@@ -61,6 +65,7 @@ export default function CodeBrowserWidget({ expandHref }: CodeBrowserWidgetProps
     <WidgetCard
       title="Source code"
       expandHref={expandHref}
+      bare={bare}
       contentClassName="flex flex-col p-0"
     >
       <div className="flex items-center gap-2 border-b px-3 py-1.5 text-xs">

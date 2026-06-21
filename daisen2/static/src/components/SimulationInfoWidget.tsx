@@ -31,10 +31,12 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 
 interface SimulationInfoWidgetProps {
   expandHref?: string;
+  bare?: boolean;
 }
 
 export default function SimulationInfoWidget({
   expandHref,
+  bare,
 }: SimulationInfoWidgetProps) {
   const { data, loading, error } = useSimInfo();
   const { data: topology } = useTopology();
@@ -56,7 +58,7 @@ export default function SimulationInfoWidget({
     startWall && endWall ? formatWallClockDuration(startWall, endWall) : null;
 
   return (
-    <WidgetCard title="Simulation" expandHref={expandHref}>
+    <WidgetCard title="Simulation" expandHref={expandHref} bare={bare}>
       {loading ? (
         <div className="text-sm text-muted-foreground">Loading…</div>
       ) : error ? (
