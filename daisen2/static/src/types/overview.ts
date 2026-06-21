@@ -26,3 +26,30 @@ export interface Topology {
   components: TopologyComponent[];
   ports: TopologyPort[];
 }
+
+/** A component ranked by how long its tasks spent blocked (virtual time). */
+export interface BlockedComponent {
+  component: string;
+  blocked_time: number;
+}
+
+/** One directory entry of the recorded source tree. */
+export interface CodeEntry {
+  name: string;
+  is_dir: boolean;
+  size?: number;
+}
+
+/** Listing of a directory of recorded source ({@link Topology}-style empty-safe). */
+export interface CodeLsResponse {
+  path: string;
+  roots: string[];
+  entries: CodeEntry[];
+}
+
+/** Contents of a recorded source file. */
+export interface CodeReadResponse {
+  path: string;
+  content: string;
+  lines: number;
+}

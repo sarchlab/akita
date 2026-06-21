@@ -160,6 +160,9 @@ func (s *Server) RegisterTraceAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/segments", s.httpSegments)
 	mux.HandleFunc("/api/sim_info", s.httpSimInfo)
 	mux.HandleFunc("/api/topology", s.httpTopology)
+	mux.HandleFunc("/api/blocked", s.httpBlocked)
+	mux.HandleFunc("/api/code/ls", s.httpCodeLs)
+	mux.HandleFunc("/api/code/read", s.httpCodeRead)
 
 	// Chat / LLM proxy endpoints. The LLM provider is configured entirely from
 	// the frontend; the server holds no credentials.
@@ -179,6 +182,9 @@ func (s *Server) RegisterTraceRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/dashboard", s.serveIndex)
 	mux.HandleFunc("/component", s.serveIndex)
 	mux.HandleFunc("/task", s.serveIndex)
+	// Enlarged single-widget pages (/view/<widget>). A trailing-slash pattern
+	// matches the whole subtree so a hard refresh serves the SPA shell.
+	mux.HandleFunc("/view/", s.serveIndex)
 	mux.Handle("/", fServer)
 }
 

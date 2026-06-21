@@ -2,19 +2,14 @@ import { Link } from "react-router-dom";
 import { LayoutDashboard } from "lucide-react";
 import SimulationInfoWidget from "../components/SimulationInfoWidget";
 import TopologyWidget from "../components/TopologyWidget";
+import BlockedComponentsWidget from "../components/BlockedComponentsWidget";
+import CodeBrowserWidget from "../components/CodeBrowserWidget";
 import { Button } from "../components/ui/button";
-import { useTopology } from "../hooks/useTopology";
-import type { Topology } from "../types/overview";
-
-const EMPTY_TOPOLOGY: Topology = { components: [], ports: [] };
 
 // MainPage is Daisen's landing page (route "/"): an at-a-glance overview of the
-// loaded simulation — basic run info plus its component/connection topology —
-// from which the user can drill into the dashboard.
+// loaded simulation — run info, component/connection topology, the most blocked
+// components, and the recorded source — each widget enlargeable to its own page.
 export default function MainPage() {
-  const { data, loading, error } = useTopology();
-  const topology = data ?? EMPTY_TOPOLOGY;
-
   return (
     <div className="flex h-full flex-col gap-3 overflow-hidden bg-white p-3">
       <div className="flex items-center justify-between">
@@ -27,9 +22,17 @@ export default function MainPage() {
         </Button>
       </div>
 
-      <SimulationInfoWidget componentCount={data ? topology.components.length : undefined} />
+      <div className="shrink-0">
+        <SimulationInfoWidget expandHref="/view/siminfo" />
+      </div>
 
-      <TopologyWidget topology={topology} loading={loading} error={error} />
+      <div className="flex min-h-0 flex-1 gap-3">
+        <TopologyWidget expandHref="/view/topology" />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+          <BlockedComponentsWidget expandHref="/view/blocked" />
+          <CodeBrowserWidget expandHref="/view/code" />
+        </div>
+      </div>
     </div>
   );
 }

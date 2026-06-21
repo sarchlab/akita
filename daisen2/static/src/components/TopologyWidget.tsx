@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import WidgetCard from "./WidgetCard";
+import { useTopology } from "../hooks/useTopology";
 import type { Topology, TopologyComponent, TopologyPort } from "../types/overview";
+
+const EMPTY_TOPOLOGY: Topology = { components: [], ports: [] };
 
 const COL_GAP = 210;
 const ROW_GAP = 82;
@@ -157,16 +160,12 @@ function membersByConnection(
 }
 
 interface TopologyWidgetProps {
-  topology: Topology;
-  loading?: boolean;
-  error?: string | null;
+  expandHref?: string;
 }
 
-export default function TopologyWidget({
-  topology,
-  loading,
-  error,
-}: TopologyWidgetProps) {
+export default function TopologyWidget({ expandHref }: TopologyWidgetProps) {
+  const { data, loading, error } = useTopology();
+  const topology = data ?? EMPTY_TOPOLOGY;
   const [selected, setSelected] = useState<string | null>(null);
 
   const { nodes, edges, width, height } = useMemo(
@@ -198,35 +197,37 @@ export default function TopologyWidget({
   const isEmpty = !loading && !error && nodes.length === 0;
 
   return (
-    <Card className="flex min-h-0 flex-1 flex-col">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle>Topology</CardTitle>
+    <WidgetCard
+      title="Topology"
+      expandHref={expandHref}
+      contentClassName="overflow-hidden p-0"
+      headerRight={
         <span className="text-xs text-muted-foreground">
           {nodes.length} components · {members.size} connections
         </span>
-      </CardHeader>
-      <CardContent className="min-h-0 flex-1 p-0">
-        {loading ? (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            Loading topology…
-          </div>
-        ) : error ? (
-          <div className="flex h-full items-center justify-center text-sm text-destructive">
-            {error}
-          </div>
-        ) : isEmpty ? (
-          <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
-            No topology recorded in this trace.
-          </div>
-        ) : (
-          <div className="flex h-full min-h-0">
-            <div className="min-h-0 flex-1 overflow-auto p-2">
-              <svg
-                viewBox={`0 0 ${width} ${height}`}
-                width="100%"
-                height="100%"
-                preserveAspectRatio="xMidYMid meet"
-              >
+      }
+    >
+      {loading ? (
+        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+          Loading topology…
+        </div>
+      ) : error ? (
+        <div className="flex h-full items-center justify-center text-sm text-destructive">
+          {error}
+        </div>
+      ) : isEmpty ? (
+        <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+          No topology recorded in this trace.
+        </div>
+      ) : (
+        <div className="flex h-full min-h-0">
+          <div className="min-h-0 flex-1 overflow-auto p-2">
+            <svg
+              viewBox={`0 0 ${width} ${height}`}
+              width="100%"
+              height="100%"
+              preserveAspectRatio="xMidYMid meet"
+            >
                 {edges.map((e, i) => {
                   const s = nodeById.get(e.source);
                   const t = nodeById.get(e.target);
@@ -350,8 +351,7 @@ export default function TopologyWidget({
             </aside>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </WidgetCard>
   );
 }
 

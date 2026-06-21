@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Layout from "./components/Layout";
 import MainPage from "./pages/MainPage";
+import WidgetPage from "./pages/WidgetPage";
 import DashboardPage from "./pages/DashboardPage";
 import TaskChartPage from "./pages/TaskChartPage";
 import ComponentPage from "./pages/ComponentPage";
@@ -17,6 +18,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<MainPage />} />
+        <Route path="view/:widget" element={<WidgetPage />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="task" element={<TaskChartPage />} />
         <Route path="component" element={<ComponentPage />} />
