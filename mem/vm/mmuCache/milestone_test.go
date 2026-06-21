@@ -241,6 +241,32 @@ var _ = Describe("MMUCache milestones", func() {
 		Expect(bottomBufMs[1].What).To(Equal(topPort.Name()))
 	})
 
+	It("charges the downstream walk-fetch wait to the req_in as a "+
+		"translation milestone", func() {
+		driveRoundTrip(0x2000)
+
+		// req_in opens at retrieve and is completed when the downstream response
+		// returns. Its ID is read from the recorded start because the completion
+		// path has already forgotten the receiver-task registry entry by now.
+		reqInStart, ok := rec.firstStart("req_in")
+		Expect(ok).To(BeTrue())
+
+		// The in-flight wait on the forwarded walk is charged to the original
+		// req_in as a translation milestone when the response returns.
+		reqInMs := rec.milestonesOn(reqInStart.ID)
+		Expect(reqInMs).ToNot(BeEmpty())
+
+		var translationMs *tracing.Milestone
+		for i := range reqInMs {
+			if reqInMs[i].Kind == tracing.MilestoneKindTranslation {
+				translationMs = &reqInMs[i]
+				break
+			}
+		}
+		Expect(translationMs).ToNot(BeNil())
+		Expect(translationMs.What).To(Equal("translation"))
+	})
+
 	It("ends the in-flight req_in and req_out on a mid-walk reset so no "+
 		"tasks are left unended", func() {
 		req := makeTopReq(0x2000)

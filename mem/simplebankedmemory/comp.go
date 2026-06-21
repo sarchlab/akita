@@ -50,6 +50,11 @@ type bankPipelineItemState struct {
 	WriteMsg  memprotocol.WriteReq `json:"write_msg"`
 	Committed bool                 `json:"committed"`
 	ReadData  []byte               `json:"read_data"`
+	// PipelineTaskID is the ID of the PipelineTaskKind subtask opened on the
+	// req_in at dispatch (pipeline entry) and closed at finalize (pipeline
+	// exit). It travels with the item through the bank pipeline so the exit
+	// side can close the same task it opened. Zero when tracing is disabled.
+	PipelineTaskID uint64 `json:"pipeline_task_id"`
 }
 
 // bankState captures one bank pipeline + buffer contents.

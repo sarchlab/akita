@@ -218,6 +218,58 @@ var _ = Describe("DataMover milestones", func() {
 		Expect(rec.endedIDs()).To(ContainElement(reqInID))
 	})
 
+	It("charges the in-flight src-read and dst-write waits to the req_in "+
+		"as data and subtask milestones", func() {
+		data := make([]byte, 4096)
+		for i := range 4096 {
+			data[i] = byte(i)
+		}
+		outsideStorage.Write(0, data)
+
+		req := datamoverprotocol.DataMoveRequest{}
+		req.ID = timing.GetIDGenerator().Generate()
+		req.Src = srcPort.AsRemote()
+		req.Dst = topPort.AsRemote()
+		req.SrcAddress = 0
+		req.SrcSide = "outside"
+		req.DstAddress = 0
+		req.DstSide = "inside"
+		req.ByteSize = 4096
+		req.TrafficClass = "datamoverprotocol.DataMoveRequest"
+
+		topPort.Deliver(req)
+
+		engine.Run()
+
+		// The move completed end-to-end, so reads and writes were issued and
+		// acknowledged.
+		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
+		Expect(srcPort.RetrieveIncoming()).To(
+			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
+
+		reqInID := rec.taskID("req_in")
+		Expect(reqInID).ToNot(BeZero())
+
+		reqInMs := rec.milestonesOn(reqInID)
+
+		// The src-read waits are charged as data milestones on the src port.
+		var hasData, hasSubTask bool
+		for _, ms := range reqInMs {
+			if ms.Kind == tracing.MilestoneKindData &&
+				ms.What == dataMover.GetPortByName("Outside").Name() {
+				hasData = true
+			}
+			if ms.Kind == tracing.MilestoneKindSubTask &&
+				ms.What == dataMover.GetPortByName("Inside").Name() {
+				hasSubTask = true
+			}
+		}
+		Expect(hasData).To(BeTrue(),
+			"req_in should carry a data milestone for the src read wait")
+		Expect(hasSubTask).To(BeTrue(),
+			"req_in should carry a subtask milestone for the dst write wait")
+	})
+
 	It("waits at the head and admits a request that arrives while a "+
 		"transaction is running, instead of dropping it", func() {
 		data := make([]byte, 4096)

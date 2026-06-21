@@ -96,6 +96,24 @@ func (m *respondMW) handleTranslationRsp(rsp vmprotocol.TranslationRsp) bool {
 
 	m.topPort().Send(rspToTop)
 
+	// The remote walk is complete. Close the downstream req_out subtask
+	// (rsp.RspTo is the downstream request's ID, the key under which the
+	// transaction was stored in RemoteMemReqs) and record, on the original
+	// req_in, the dependency wait spent while that remote response was in
+	// flight. RecvTaskID is the original req_in id; do not key this to the
+	// response message.
+	tracing.TraceReqFinalize(
+		m.comp,
+		vmprotocol.TranslationReq{
+			MsgMeta: messaging.MsgMeta{ID: rsp.RspTo},
+		},
+	)
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: reqTransaction.RecvTaskID,
+		Kind:   tracing.MilestoneKindTranslation,
+		What:   "translation",
+	})
+
 	delete(state.RemoteMemReqs, rsp.RspTo)
 
 	return true

@@ -43,6 +43,19 @@ func (ds *directoryStage) processTransaction() bool {
 		idx := next.DirPostPipelineBuf.Peek()
 		trans := &next.Transactions[idx]
 
+		// The directory pipeline traversal is done; the transaction is now being
+		// processed. Mark that interval as work (not a blocking reason) before the
+		// EvictingList gate and before doRead/doWrite, so it is not absorbed by a
+		// same-tick MSHR/hit/bank milestone. Emitted even on the evicting
+		// early-break path so a transaction parked behind an in-flight eviction
+		// still gets its pipeline interval marked work. Re-emitted on retries; the
+		// (Kind, What) dedup keeps the first.
+		tracing.AddMilestone(ds.cache.comp, tracing.Milestone{
+			TaskID: tracing.MsgIDAtReceiver(trans.reqMeta(), ds.cache.comp),
+			Kind:   tracing.MilestoneKindWork,
+			What:   ds.cache.comp.Name() + ".dir_pipeline",
+		})
+
 		addr := trans.accessReqAddress()
 		cacheLineID, _ := getCacheLineID(addr, spec.Log2BlockSize)
 

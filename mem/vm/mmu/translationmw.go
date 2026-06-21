@@ -131,6 +131,15 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	m.topPort().Send(rsp)
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
+	// The page walk is fully local (a CycleLeft countdown, no downstream
+	// req_out): label that latency interval as work on the req_in, instead of
+	// leaving it an unattributed gap. walking.RecvTaskID is the req_in id.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: walking.RecvTaskID,
+		Kind:   tracing.MilestoneKindWork,
+		What:   m.comp.Name() + ".walk",
+	})
+
 	m.traceReqComplete(walking.RecvTaskID, walking.ReqID)
 
 	return true

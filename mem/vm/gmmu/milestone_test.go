@@ -18,11 +18,16 @@ import (
 type milestoneRecorder struct {
 	tracing.NopTracer
 	starts     []tracing.TaskStart
+	ends       []tracing.TaskEnd
 	milestones []tracing.Milestone
 }
 
 func (r *milestoneRecorder) StartTask(s tracing.TaskStart) {
 	r.starts = append(r.starts, s)
+}
+
+func (r *milestoneRecorder) EndTask(e tracing.TaskEnd) {
+	r.ends = append(r.ends, e)
 }
 
 func (r *milestoneRecorder) AddMilestone(m tracing.Milestone) {
@@ -49,6 +54,29 @@ func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 	}
 
 	return ms
+}
+
+func (r *milestoneRecorder) hasMilestone(
+	taskID uint64, kind tracing.MilestoneKind, what string,
+) bool {
+	for _, m := range r.milestonesOn(taskID) {
+		if m.Kind == kind && m.What == what {
+			return true
+		}
+	}
+
+	return false
+}
+
+// taskStart returns the first recorded task start of the given kind.
+func (r *milestoneRecorder) taskStart(kind string) (tracing.TaskStart, bool) {
+	for _, s := range r.starts {
+		if s.Kind == kind {
+			return s, true
+		}
+	}
+
+	return tracing.TaskStart{}, false
 }
 
 var _ = Describe("GMMU milestones", func() {
@@ -199,5 +227,100 @@ var _ = Describe("GMMU milestones", func() {
 		Expect(bufMs[0].What).To(Equal(bottomPort.Name()))
 		Expect(bufMs[1].Kind).To(Equal(tracing.MilestoneKindNetworkBusy))
 		Expect(bufMs[1].What).To(Equal(topPort.Name()))
+	})
+
+	It("records the local page-walk latency as a work milestone on req_in "+
+		"for a local hit", func() {
+		// Page resident on this device -> the fast local-walk path.
+		page := vm.Page{
+			PID:      1,
+			VAddr:    0x1000,
+			PAddr:    0x2000,
+			DeviceID: 0,
+			Valid:    true,
+		}
+		pageTable.Insert(page)
+
+		topPort.Deliver(makeReq(0x1000))
+
+		// Tick 1: parseFromTop admits the request (opens req_in).
+		// Tick 2: walkPageTable decrements CycleLeft (latency=1 -> 0).
+		// Tick 3: CycleLeft==0, local hit completes and responds upstream.
+		gmmuComp.Tick()
+		gmmuComp.Tick()
+		gmmuComp.Tick()
+
+		reqInID := rec.taskID("req_in")
+		Expect(reqInID).ToNot(BeZero())
+
+		// The local walk's processing latency is recorded as work on req_in.
+		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindWork,
+			gmmuComp.Name()+".walk")).To(BeTrue())
+	})
+
+	It("opens the remote req_out under req_in and records the in-flight wait "+
+		"as a translation milestone on req_in for a remote walk", func() {
+		// Page resident on a different device -> the remote-walk path: the GMMU
+		// sends a downstream req_out on Bottom and waits for the response.
+		page := vm.Page{
+			PID:      1,
+			VAddr:    0x1000,
+			PAddr:    0x2000,
+			DeviceID: 1,
+			Valid:    true,
+		}
+		pageTable.Insert(page)
+
+		topPort.Deliver(makeReq(0x1000))
+
+		// Tick 1: parseFromTop admits the request (opens req_in).
+		// Tick 2: walkPageTable decrements CycleLeft (latency=1 -> 0).
+		// Tick 3: CycleLeft==0, page is remote, sends downstream req_out.
+		gmmuComp.Tick()
+		gmmuComp.Tick()
+		gmmuComp.Tick()
+
+		reqI := bottomPort.RetrieveOutgoing()
+		Expect(reqI).ToNot(BeNil())
+		downstream := reqI.(vmprotocol.TranslationReq)
+
+		reqInID := rec.taskID("req_in")
+		Expect(reqInID).ToNot(BeZero())
+
+		// (a) The downstream req_out is a child task of req_in.
+		reqOut, hasReqOut := rec.taskStart("req_out")
+		Expect(hasReqOut).To(BeTrue())
+		Expect(reqOut.ID).To(Equal(downstream.ID))
+		Expect(reqOut.ParentID).To(Equal(reqInID))
+
+		// Deliver the remote response.
+		rsp := vmprotocol.TranslationRsp{Page: page}
+		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.Src = lowModulePort
+		rsp.Dst = bottomPort.AsRemote()
+		rsp.RspTo = downstream.ID
+		rsp.TrafficClass = "vmprotocol.TranslationRsp"
+		bottomPort.Deliver(rsp)
+
+		// Tick: fetchFromBottom forwards upstream and finalizes the walk.
+		gmmuComp.Tick()
+
+		rspToTopI := topPort.RetrieveOutgoing()
+		Expect(rspToTopI).ToNot(BeNil())
+
+		// (b) The remote-walk in-flight wait is recorded as a translation
+		// milestone on the ORIGINAL req_in.
+		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindTranslation,
+			"translation")).To(BeTrue())
+
+		// (c) The downstream req_out subtask is finalized when the response
+		// returns.
+		var reqOutEnded bool
+		for _, e := range rec.ends {
+			if e.ID == downstream.ID {
+				reqOutEnded = true
+			}
+		}
+		Expect(reqOutEnded).To(BeTrue())
 	})
 })

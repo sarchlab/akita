@@ -204,6 +204,52 @@ var _ = Describe("Cache milestones", func() {
 		Expect(pipeStart.ParentID).ToNot(Equal(ctStart.ID))
 	})
 
+	It("records the dir_pipeline work and bottom data milestones on req_in "+
+		"for a read miss driven through the downstream fetch response", func() {
+		buildCache("write-around")
+
+		dramStorage.Write(0x100, []byte{1, 2, 3, 4})
+		read := memprotocol.ReadReq{Address: 0x100, AccessByteSize: 4}
+		read.ID = timing.GetIDGenerator().Generate()
+		read.Src = cuPort.AsRemote()
+		read.Dst = c.GetPortByName("Top").AsRemote()
+		read.TrafficBytes = 12
+		read.TrafficClass = "req"
+		c.GetPortByName("Top").Deliver(read)
+
+		// Run to quiescence: the read miss fetches from the lower memory and the
+		// DataReadyRsp comes back, filling the line and completing the request.
+		engine.Run()
+
+		rsps := drainResponses()
+		Expect(rsps).To(HaveLen(1))
+		Expect(rsps[0].(memprotocol.DataReadyRsp).Data).
+			To(Equal([]byte{1, 2, 3, 4}))
+
+		reqInStart, ok := rec.firstStart("req_in")
+		Expect(ok).To(BeTrue())
+		Expect(reqInStart.ID).ToNot(BeZero())
+
+		// WORK milestone: emitted on the req_in at the directory pipeline exit,
+		// before the lookup's same-tick processing milestones.
+		Expect(rec.hasMilestone(reqInStart.ID, "Cache.dir_pipeline")).
+			To(BeTrue())
+		for _, m := range rec.milestonesOn(reqInStart.ID) {
+			if m.What == "Cache.dir_pipeline" {
+				Expect(m.Kind).To(Equal(tracing.MilestoneKindWork))
+			}
+		}
+
+		// DATA milestone: emitted on the req_in when the downstream read fill
+		// (DataReadyRsp) arrives, keyed to the req_in, not the response.
+		Expect(rec.hasMilestone(reqInStart.ID, "Cache.Bottom")).To(BeTrue())
+		for _, m := range rec.milestonesOn(reqInStart.ID) {
+			if m.What == "Cache.Bottom" {
+				Expect(m.Kind).To(Equal(tracing.MilestoneKindData))
+			}
+		}
+	})
+
 	It("tags a write-through write hit with write-hit", func() {
 		buildCache("write-through")
 
@@ -258,5 +304,17 @@ var _ = Describe("Cache milestones", func() {
 			}
 		}
 		Expect(found).To(BeTrue())
+
+		// The write-through write dispatched a downstream WriteReq whose
+		// WriteDoneRsp came back during this run. processDoneRsp records a
+		// dependency milestone on the write's req_in (not the ack).
+		reqInStart, ok := rec.firstStart("req_in")
+		Expect(ok).To(BeTrue())
+		Expect(rec.hasMilestone(reqInStart.ID, "Cache.Bottom")).To(BeTrue())
+		for _, m := range rec.milestonesOn(reqInStart.ID) {
+			if m.What == "Cache.Bottom" {
+				Expect(m.Kind).To(Equal(tracing.MilestoneKindDependency))
+			}
+		}
 	})
 })

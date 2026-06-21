@@ -187,6 +187,11 @@ func (m *walkMW) processRemoteMemReq(
 
 	m.bottomPort().Send(req)
 
+	// Open the downstream req_out as a child task of the original req_in so the
+	// remote walk shows up as a proper subtask; it is finalized in
+	// handleTranslationRsp when the remote response returns.
+	tracing.TraceReqInitiate(m.comp, req, walking.RecvTaskID)
+
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
 	return true
@@ -228,6 +233,14 @@ func (m *walkMW) doPageWalkHit(
 	m.topPort().Send(rsp)
 
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
+
+	// The local page walk counted down CycleLeft before reaching here; record
+	// that processing latency as work on the original req_in.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: walking.RecvTaskID,
+		Kind:   tracing.MilestoneKindWork,
+		What:   m.comp.Name() + ".walk",
+	})
 
 	tracing.TraceReqComplete(
 		m.comp,

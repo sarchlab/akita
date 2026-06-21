@@ -264,6 +264,17 @@ func (m *mmuCacheMiddleware) handleRsp(rsp vmprotocol.TranslationRsp) bool {
 		topReq := restoreTransReq(
 			inflight.TopReqID, inflight.TopReqSrc, inflight.TopReqDst)
 		tracing.TraceReqFinalize(m.comp, reqToBottom)
+
+		// The downstream walk-fetch the original Top request waited on has
+		// returned: charge that in-flight wait to the original req_in (this is
+		// the reconstructed original request, not a phantom — its receiver task
+		// is the req_in opened at retrieve in sendReqToBottom).
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: tracing.MsgIDAtReceiver(topReq, m.comp),
+			Kind:   tracing.MilestoneKindTranslation,
+			What:   "translation",
+		})
+
 		tracing.TraceReqComplete(m.comp, topReq)
 		delete(next.InflightReqs, rsp.RspTo)
 	}

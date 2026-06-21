@@ -199,4 +199,67 @@ var _ = Describe("Write-Back Cache milestones", func() {
 			Expect(pipeStarts[0].ParentID).To(Equal(reqInID))
 			Expect(pipeStarts[0].What).To(Equal(cacheComp.Name() + ".dir_pipeline"))
 		})
+
+	It("records the dir-pipeline work milestone and the downstream-fetch "+
+		"data milestone on req_in for a read miss",
+		func() {
+			dramStorage.Write(0x10000, []byte{
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+			})
+
+			read := memprotocol.ReadReq{}
+			read.ID = timing.GetIDGenerator().Generate()
+			read.Src = agentPort.AsRemote()
+			read.Dst = topPort.AsRemote()
+			read.Address = 0x10004
+			read.AccessByteSize = 4
+			read.TrafficBytes = 12
+			read.TrafficClass = "memprotocol.ReadReq"
+			topPort.Deliver(read)
+
+			engine.Run()
+
+			// Drive the read miss all the way through the downstream fetch
+			// response: the agent must have received the data.
+			rsp := agentPort.RetrieveIncoming()
+			dr := rsp.(memprotocol.DataReadyRsp)
+			Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
+			Expect(dr.RspTo).To(Equal(read.ID))
+
+			reqInID := rec.taskID("req_in")
+			Expect(reqInID).ToNot(BeZero())
+
+			ms := rec.milestonesOn(reqInID)
+
+			// (a) The directory-pipeline-exit work milestone lands on req_in,
+			// marking the post-pipeline processing interval as work.
+			haveWork := false
+			for _, m := range ms {
+				if m.Kind == tracing.MilestoneKindWork &&
+					m.What == cacheComp.Name()+".dir_pipeline" {
+					haveWork = true
+				}
+			}
+			Expect(haveWork).To(BeTrue(),
+				"expected a work/.dir_pipeline milestone on req_in")
+
+			// (b) The downstream fetch response charges a data milestone on
+			// req_in, marking the data-wait resolved at fetch-response arrival.
+			haveData := false
+			for _, m := range ms {
+				if m.Kind == tracing.MilestoneKindData &&
+					m.What == cacheComp.Name()+".Bottom" {
+					haveData = true
+				}
+			}
+			Expect(haveData).To(BeTrue(),
+				"expected a data/.Bottom milestone on req_in after the fetch response")
+		})
 })

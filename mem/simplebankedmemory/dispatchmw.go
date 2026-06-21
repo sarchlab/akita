@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -67,9 +68,24 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		})
 
 		m.topPort().RetrieveIncoming()
+
+		// Admit the request: open req_in at retrieve, then open the pipeline
+		// subtask as a child of req_in so the bank-pipeline latency is attributed
+		// rather than left as a gap between the buffer task (which ends at
+		// retrieve) and the post-pipeline finalize milestones on req_in. The task
+		// ID rides on the item through the pipeline and is closed at finalize.
 		tracing.TraceReqReceive(m.comp, msg)
 
+		pipelineTaskID := timing.GetIDGenerator().Generate()
+		tracing.StartTask(m.comp, tracing.TaskStart{
+			ID:       pipelineTaskID,
+			ParentID: tracing.MsgIDAtReceiver(msg, m.comp),
+			Kind:     tracing.PipelineTaskKind,
+			What:     m.comp.Name() + ".pipeline",
+		})
+
 		item := m.msgToItem(msg)
+		item.PipelineTaskID = pipelineTaskID
 		pipelineAccept(&next.Banks[bankID], spec, item)
 		madeProgress = true
 	}

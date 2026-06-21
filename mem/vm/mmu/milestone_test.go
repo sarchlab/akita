@@ -124,6 +124,54 @@ var _ = Describe("MMU milestones", func() {
 		Expect(bufMs[1].What).To(Equal(mmuComp.Name() + ".walk"))
 	})
 
+	It("labels the local page-walk latency as work on the req_in when the "+
+		"walk completes", func() {
+		// The page must already be mapped: with AutoPageAllocation off (the
+		// default), finalizePageWalk panics on a missing page.
+		pageTable.Insert(vm.Page{
+			PID:      1,
+			VAddr:    0x1000,
+			PAddr:    0x5000,
+			PageSize: 1 << 12,
+			Valid:    true,
+		})
+
+		req := makeReq(0x1000)
+		topPort.Deliver(req)
+
+		// Admit the request (opens req_in and starts the walk), then drive the
+		// CycleLeft countdown to completion so doPageWalkHit sends the response
+		// and emits the walk milestone.
+		Expect(mw.parseFromTop()).To(BeTrue())
+
+		sent := false
+		for i := 0; i < 64 && !sent; i++ {
+			mw.Tick()
+			if out := topPort.RetrieveOutgoing(); out != nil {
+				if _, ok := out.(vmprotocol.TranslationRsp); ok {
+					sent = true
+				}
+			}
+		}
+		Expect(sent).To(BeTrue())
+
+		// The walk milestone lands on the req_in (walking.RecvTaskID ==
+		// MsgIDAtReceiver(req)), labelling the local-walk latency as work.
+		reqInID := rec.taskID("req_in")
+		Expect(reqInID).ToNot(BeZero())
+
+		reqInMs := rec.milestonesOn(reqInID)
+		var workMs *tracing.Milestone
+		for i := range reqInMs {
+			if reqInMs[i].Kind == tracing.MilestoneKindWork {
+				workMs = &reqInMs[i]
+				break
+			}
+		}
+		Expect(workMs).ToNot(BeNil())
+		Expect(workMs.What).To(Equal(mmuComp.Name() + ".walk"))
+	})
+
 	It("does not admit (and emits no admission milestone) while servicing "+
 		"the max in-flight requests", func() {
 		mmuComp.State = State{
