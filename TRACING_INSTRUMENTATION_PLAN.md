@@ -255,12 +255,20 @@ fixed as part of the Step 5 rollout.** Item 2 (gmmu remote-path) and item 4
    → Add `TraceReqReceive`/`TraceReqComplete` for Top requests and
    `TraceReqInitiate`/`TraceReqFinalize` for the Bottom fetch; only then are the
    control milestones meaningful.
-2. **gmmu — three remote-path defects** (`walkmw.go`, `respondmw.go`):
-   downstream `req_out` never initiated (`walkmw.go:176`); a spurious `req_in`
-   opened **on the response** (`respondmw.go:51`); the original top `req_in`
-   leaked on remote completion (`respondmw.go:60-90`). → Initiate/finalize the
-   downstream req, drop the response-side `TraceReqReceive`, complete the top
-   `req_in` when the remote response returns.
+2. **gmmu — remote-path defects** (`walkmw.go`, `respondmw.go`). Partially
+   addressed by the buffer-convention/reset rollout; **two of the three original
+   defects remain** (re-verified against current code):
+   - *Fixed:* the downstream `req_out` is now initiated (`walkmw.go:193`,
+     `TraceReqInitiate`) and finalized (`respondmw.go:105`, `TraceReqFinalize`).
+   - *Remaining:* a spurious `req_in` is still opened **on the response**
+     (`respondmw.go:63`, `TraceReqReceive(rsp)`) and never completed — a leak.
+   - *Remaining:* the original top `req_in` is **not completed on the remote
+     path** — `handleTranslationRsp` adds a `translation` milestone on
+     `RecvTaskID` (`respondmw.go:111`) but never calls `TraceReqComplete`, so the
+     top `req_in` leaks when the remote response returns (only the local
+     `doPageWalkHit` path completes it, `walkmw.go:245`).
+   → Drop the response-side `TraceReqReceive` and complete the top `req_in` when
+   the remote response returns.
 3. **datamover — wrong-key `req_in` close.** Opens on `DataMoveRequest.ID`
    (`ctrlparsemw.go:97`), closes on a fresh `DataMoveResponse.ID` (`:148`), so
    the `req_in` never ends and leaks a registry entry every transaction. → Close

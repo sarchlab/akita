@@ -124,8 +124,9 @@ cd tracing && go run main.go
 
 A worker plus a hand-written `maxDurationTracer` that implements the
 `tracing.Tracer` interface (real `StartTask`/`EndTask`, no-op
-`StepTask`/`AddMilestone`) and reports the longest job. Attached the same way
-as a built-in tracer, with `tracing.CollectTrace`.
+`AddTaskTag`/`AddMilestone` via the embedded `tracing.NopTracer`) and reports
+the longest job. Attached the same way as a built-in tracer, with
+`tracing.CollectTrace`.
 
 **Key concepts**: the `tracing.Tracer` interface, holding state across
 `StartTask`/`EndTask`, reading a `timing.TimeTeller`.
