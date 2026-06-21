@@ -23,8 +23,29 @@ e.g. `"read-hit"`, `"write-miss"`. (Tags were previously called "steps".)
 ### Milestones
 
 A `Milestone` records when a blocking condition is resolved during task
-processing. Milestones carry a `Kind` (e.g. `MilestoneKindNetworkTransfer`,
-`MilestoneKindQueue`). A milestone's location is inherited from its task.
+processing — the interval from the previous milestone (or the task start) to a
+milestone is the time the task spent blocked on that reason. A milestone's
+location is inherited from its task.
+
+Each milestone carries a `MilestoneKind`:
+
+| Kind | Marks the resolution of |
+|------|-------------------------|
+| `MilestoneKindHardwareResource` | a wait for a hardware resource (buffer slot, bank, MSHR) |
+| `MilestoneKindNetworkTransfer` | a network transfer of the message |
+| `MilestoneKindNetworkBusy` | a wait to send on a busy port |
+| `MilestoneKindQueue` | a wait behind other messages in a queue/buffer |
+| `MilestoneKindData` | a wait for a data response |
+| `MilestoneKindDependency` | a wait on an ordering/dependency (e.g. in-order commit) |
+| `MilestoneKindTranslation` | a wait for an address translation |
+| `MilestoneKindSubTask` | a wait on a child subtask |
+| `MilestoneKindWork` | the end of a **working** (not blocked) interval — see below |
+| `MilestoneKindOther` | anything else |
+
+`MilestoneKindWork` is the exception to the "milestone = blocking resolved"
+reading: it marks the end of an interval the component spent doing productive
+work rather than waiting — e.g. traversing an internal latency pipeline. The
+interval up to a `work` milestone is time spent working, not blocked.
 
 ## Emit API
 
@@ -46,7 +67,9 @@ tracing.EndTask(domain, tracing.TaskEnd{ID: id})
 ```
 
 `TaskStart.Location` is optional and defaults to `domain.Name()`; set it
-explicitly for network tracing.
+explicitly for network tracing. `StartTask` requires a non-empty `ID`, `Kind`,
+and `What` (and a named domain) or it panics; tag and milestone `ID`s are
+auto-generated when left zero.
 
 ### Message Tracing Helpers
 
@@ -61,6 +84,52 @@ tracing.TraceReqFinalize(domain, msg)               // sender gets response
 
 The receiver-side task ID is derived from the message without mutating it, via
 `MsgIDAtReceiver(msg, domain)` / `ForgetMsgIDAtReceiver(msgID, domain)`.
+
+### Tearing down in-flight tasks on reset
+
+A component that drops in-flight work on `Reset` (whose responses will never
+arrive) must end the open tasks itself, or they leak as started-never-ended
+tasks (and the receiver registry grows). Two helpers do this, taking the IDs a
+reset path still has on hand:
+
+```go
+tracing.EndReqInOnReset(domain, reqMsgID) // ends the req_in + forgets its registry entry
+tracing.EndTaskOnReset(domain, taskID)    // ends any task keyed on its own ID
+```
+
+`EndReqInOnReset` mirrors `TraceReqComplete` but resolves the `req_in` task by
+the request's message ID. `EndTaskOnReset` ends any task whose ID is its own ID
+rather than a receiver-registry entry — a forwarded `req_out`, a DRAM
+sub-transaction, a cache transaction, or a pipeline subtask. Both are no-ops
+when there are no hooks or no such task, so a reset path may end every task a
+transaction could hold without tracking which were actually opened.
+
+### Incoming-buffer tracing
+
+`CollectIncomingBufferTrace(port)` attaches a port hook that opens an
+`incoming_buffer`-kind task spanning a message's residency in the port's
+incoming buffer — from delivery until the component retrieves (admits) it —
+parented to the message's `req_out` task. It emits a `MilestoneKindQueue`
+"reached head" milestone the instant the message becomes the head of the buffer.
+The owning component hangs its **admission** milestones (the resources that kept
+it from admitting the message) on the same task via
+`MsgIDAtIncomingBuffer(msg, domain)` / `ForgetMsgIDAtIncomingBuffer(msgID,
+domain)`. It is a no-op unless the port's owning component is itself traced via
+`CollectTrace`.
+
+The buffer task ends at **retrieve**, and the component's `req_in` processing
+task begins at that same retrieve — the two are adjacent, no gap, no overlap.
+The buffer task carries the admission milestones; `req_in` carries only the
+post-admission processing milestones.
+
+### Pipeline subtasks
+
+A component with an internal latency pipeline between retrieve and processing
+(e.g. the TLB or a cache directory pipeline) records the traversal as a subtask
+of kind `PipelineTaskKind` (`"pipeline"`), parented to its `req_in`, opened at
+pipeline entry (the tick `req_in` opens, at retrieve) and closed at pipeline
+exit. Without it the pipeline latency would be an unattributed gap between the
+buffer task (ends at retrieve) and the first post-pipeline `req_in` milestone.
 
 ## Tracer Interface
 
@@ -114,13 +183,21 @@ tracer.Terminate()
 ```
 
 Only tasks that overlap an active tracing window are recorded. `DBTracer` keeps
-a `TimeTeller` solely to time-stamp the tracing-window segments. It writes three
-data tables plus a segments table:
+a `TimeTeller` solely to time-stamp the tracing-window segments. It writes four
+tables:
 
 - `trace` — one row per task. `Location` is dictionary-encoded via the shared
   `location` table (`akita_data:"location"`) to keep the largest table small.
 - `milestone` — one row per milestone (no location; inherited from the task).
 - `tag` — one row per tag (no location; inherited from the task).
+- `daisen$segments` — one row per `StartTracing`/`StopTracing` window, so a
+  reader knows which time ranges were captured.
+
+**Milestone de-duplication.** When recording, `DBTracer` keeps only the *first*
+milestone for a given `(Kind, What)` on a task, and drops any later milestone
+whose timestamp equals one already recorded on that task. This collapses retried
+emissions and zero-duration stalls automatically — so a milestone you emit may
+not appear in the DB if an equivalent one is already there.
 
 ## Hook Positions
 
