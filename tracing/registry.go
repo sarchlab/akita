@@ -109,3 +109,46 @@ func forgetIncomingBufferTaskIDByMsgID(msgID uint64, domain NamedHookable) {
 	delete(incomingBufferTaskIDs, key)
 	incomingBufferTaskIDsMu.Unlock()
 }
+
+// The outgoing-buffer task ID registry maps (domain, message-ID) to the task ID
+// of the buffer task that tracks a message's residency in a port's outgoing
+// buffer (from send until the connection drains it). It is kept separate from
+// the incoming-buffer registry so that a message which is both received and
+// re-sent by the same component (same domain name, same message ID) gets a
+// distinct task on each side.
+
+type outgoingBufferTaskKey struct {
+	domain string
+	msgID  uint64
+}
+
+var (
+	outgoingBufferTaskIDs   = make(map[outgoingBufferTaskKey]uint64)
+	outgoingBufferTaskIDsMu sync.Mutex
+)
+
+func lookupOrCreateOutgoingBufferTaskID(
+	msg messaging.Msg, domain NamedHookable,
+) uint64 {
+	key := outgoingBufferTaskKey{domain: domain.Name(), msgID: msg.Meta().ID}
+
+	outgoingBufferTaskIDsMu.Lock()
+	defer outgoingBufferTaskIDsMu.Unlock()
+
+	if id, ok := outgoingBufferTaskIDs[key]; ok {
+		return id
+	}
+
+	id := timing.GetIDGenerator().Generate()
+	outgoingBufferTaskIDs[key] = id
+
+	return id
+}
+
+func forgetOutgoingBufferTaskIDByMsgID(msgID uint64, domain NamedHookable) {
+	key := outgoingBufferTaskKey{domain: domain.Name(), msgID: msgID}
+
+	outgoingBufferTaskIDsMu.Lock()
+	delete(outgoingBufferTaskIDs, key)
+	outgoingBufferTaskIDsMu.Unlock()
+}
