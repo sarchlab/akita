@@ -14,7 +14,7 @@ func TestAgentSystemPromptEmbedded(t *testing.T) {
 	// The prompt must document every tool the agent is offered so the model knows
 	// they exist and when to reach for them.
 	for _, want := range []string{
-		"DaisenBot", "data_query", "code_search", "code_read",
+		"DaisenBot", "data_query", "code_search", "code_read", "code_ls",
 		"daisen_view", "screenshot_current_view",
 	} {
 		if !strings.Contains(agentSystemPrompt, want) {

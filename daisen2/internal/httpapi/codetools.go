@@ -29,6 +29,9 @@ const (
 	codeReadDefaultLines = 200
 	codeReadMaxLines     = 400
 	codeReadMaxBytes     = 24 << 10
+
+	codeLsMaxEntries = 300
+	codeLsMaxBytes   = 16 << 10
 )
 
 const noSourceRecorded = "No simulator source is recorded in this trace, so code " +
@@ -261,6 +264,187 @@ func renderReadWindow(clean string, lines []string, from, to int) string {
 		fmt.Fprintf(&b, "[%d more lines; pass start_line/end_line to read further]\n", total-to)
 	}
 	return b.String()
+}
+
+func codeLsTool(src *sourcefs.Source) agentTool {
+	return agentTool{
+		name: "code_ls",
+		description: "Browse the directory tree of the simulator source recorded in this trace: " +
+			"list the immediate sub-directories and files under a directory. Call with an empty " +
+			"path to see the recorded module roots, then pass a path (as shown by code_search or " +
+			"a previous code_ls) to list one directory. Directories end with \"/\"; files show " +
+			"their line and byte counts. Use this to discover what exists and learn the layout " +
+			"before reading, instead of guessing paths.",
+		parameters: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"reason": map[string]interface{}{
+					"type":        "string",
+					"description": "One sentence: what you are looking for and why. Shown to the user.",
+				},
+				"path": map[string]interface{}{
+					"type": "string",
+					"description": "Optional directory to list (FS-relative, as shown by code_search " +
+						"or code_ls). Empty or omitted lists the recorded module roots.",
+				},
+			},
+			"required": []string{"reason"},
+		},
+		run: func(_ context.Context, args map[string]interface{}) (toolResult, error) {
+			p, _ := args["path"].(string)
+			out, err := runCodeLs(src, p)
+			return toolResult{text: out}, err
+		},
+	}
+}
+
+func runCodeLs(src *sourcefs.Source, p string) (string, error) {
+	if src.IsEmpty() {
+		return noSourceRecorded, nil
+	}
+
+	p = strings.TrimSpace(p)
+	p = strings.TrimPrefix(p, "./")
+	p = strings.TrimSuffix(p, "/")
+
+	fsys := src.FS()
+	if p == "" || p == "." {
+		// The recorded FS is a deep single-child chain (github.com/sarchlab/…), so
+		// listing "." literally would just show "github.com/". Surface the recorded
+		// module roots directly — that is what "the top-level directories" means here.
+		if roots := nonEmptyRoots(src.Roots); len(roots) > 0 {
+			return formatRootListing(roots), nil
+		}
+		return listDir(fsys, "."), nil // roots unknown/blank: fall back to the real root
+	}
+
+	clean := path.Clean(p)
+	if !fs.ValidPath(clean) {
+		return "", fmt.Errorf("invalid path %q", p)
+	}
+
+	info, err := fs.Stat(fsys, clean)
+	if err != nil {
+		return fmt.Sprintf("Directory not found: %q. Use code_search to find a path, or call "+
+			"code_ls with no path to see the recorded roots (%v).", p, src.Roots), nil
+	}
+	if !info.IsDir() {
+		return fmt.Sprintf("%s is a file, not a directory. Use code_read to read it.", clean), nil
+	}
+	return listDir(fsys, clean), nil
+}
+
+// listDir renders the immediate entries under dir: directories first (trailing
+// "/"), then files annotated with line and byte counts, bounded by the entry and
+// byte caps so a large directory can never flood the model context.
+func listDir(fsys fs.FS, dir string) string {
+	entries, err := fs.ReadDir(fsys, dir)
+	if err != nil {
+		return fmt.Sprintf("Could not list %s: %v.", dir, err)
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		di, dj := entries[i].IsDir(), entries[j].IsDir()
+		if di != dj {
+			return di // directories before files
+		}
+		return entries[i].Name() < entries[j].Name()
+	})
+
+	totalDirs, totalFiles := 0, 0
+	for _, e := range entries {
+		if e.IsDir() {
+			totalDirs++
+		} else {
+			totalFiles++
+		}
+	}
+
+	var body strings.Builder
+	truncated := false
+	shown := 0
+	for _, e := range entries {
+		if shown >= codeLsMaxEntries {
+			truncated = true
+			break
+		}
+		var line string
+		if e.IsDir() {
+			line = e.Name() + "/\n"
+		} else {
+			line = fmt.Sprintf("%s\t%s\n", e.Name(), fileAnnotation(fsys, path.Join(dir, e.Name())))
+		}
+		if body.Len()+len(line) > codeLsMaxBytes {
+			truncated = true
+			break
+		}
+		body.WriteString(line)
+		shown++
+	}
+
+	label := dir
+	if label == "." {
+		label = "(root)"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s — %d dir(s), %d file(s):\n", label, totalDirs, totalFiles)
+	b.WriteString(body.String())
+	if truncated {
+		b.WriteString("[truncated — list a sub-directory to narrow]\n")
+	}
+	return b.String()
+}
+
+// fileAnnotation returns "<n> lines, <size>" for a file, reading it once. A read
+// error degrades to "?" rather than failing the whole listing.
+func fileAnnotation(fsys fs.FS, p string) string {
+	data, err := fs.ReadFile(fsys, p)
+	if err != nil {
+		return "?"
+	}
+	return fmt.Sprintf("%d lines, %s", countLines(data), humanBytes(len(data)))
+}
+
+func formatRootListing(roots []string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Recorded module root(s) — %d; pass one as the path to browse it:\n", len(roots))
+	for _, r := range roots {
+		fmt.Fprintf(&b, "%s/\n", r)
+	}
+	return b.String()
+}
+
+func nonEmptyRoots(roots []string) []string {
+	out := make([]string, 0, len(roots))
+	for _, r := range roots {
+		if strings.TrimSpace(r) != "" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// countLines counts lines the same way splitLines does: a trailing newline does
+// not add a phantom final line.
+func countLines(data []byte) int {
+	if len(data) == 0 {
+		return 0
+	}
+	n := bytes.Count(data, []byte{'\n'})
+	if data[len(data)-1] != '\n' {
+		n++ // last line has no trailing newline
+	}
+	return n
+}
+
+func humanBytes(n int) string {
+	switch {
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
 }
 
 func sortedFilePaths(fsys fs.FS) []string {
