@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { select, zoom, zoomIdentity } from "d3";
 import WidgetCard from "./WidgetCard";
 import { useTopology } from "../hooks/useTopology";
 import type { Topology, TopologyComponent } from "../types/overview";
@@ -296,6 +297,54 @@ export default function TopologyWidget({ expandHref }: TopologyWidgetProps) {
   const layout = useMemo(() => buildLayout(topology), [topology]);
   const members = useMemo(() => membersByConnection(topology), [topology]);
 
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const viewportRef = useRef<SVGGElement | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const zoomRef = useRef<any>(null);
+
+  const ready = !loading && !error && layout.boxes.length > 0;
+
+  // Wire up wheel-zoom (toward the cursor) and drag-pan via d3-zoom, which also
+  // preserves clicks (a small movement still selects). Re-runs when the svg
+  // (re)mounts after data loads.
+  useEffect(() => {
+    const svg = svgRef.current;
+    const viewport = viewportRef.current;
+    if (!svg || !viewport) return undefined;
+
+    const behavior = zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.2, 8])
+      .clickDistance(4)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .on("zoom", (event: any) => {
+        viewport.setAttribute("transform", event.transform.toString());
+      });
+    zoomRef.current = behavior;
+
+    const sel = select(svg);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    sel.call(behavior as any).on("dblclick.zoom", null);
+
+    return () => {
+      sel.on(".zoom", null);
+    };
+  }, [ready]);
+
+  // Reset the view whenever the topology changes.
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (svg && zoomRef.current) {
+      select(svg).call(zoomRef.current.transform, zoomIdentity);
+    }
+  }, [layout]);
+
+  const resetView = () => {
+    const svg = svgRef.current;
+    if (svg && zoomRef.current) {
+      select(svg).call(zoomRef.current.transform, zoomIdentity);
+    }
+  };
+
   const selComponent =
     selected?.kind === "component" || selected?.kind === "port"
       ? topology.components.find((c) => c.name === selected.component) ?? null
@@ -348,13 +397,24 @@ export default function TopologyWidget({ expandHref }: TopologyWidgetProps) {
         </div>
       ) : (
         <div className="flex h-full min-h-0">
-          <div className="min-h-0 flex-1 overflow-auto p-2">
+          <div className="relative min-h-0 flex-1 overflow-hidden p-2">
+            <button
+              type="button"
+              onClick={resetView}
+              className="absolute right-3 top-3 z-10 rounded border bg-white/90 px-2 py-0.5 text-xs text-muted-foreground shadow-sm hover:text-foreground"
+              title="Reset view"
+            >
+              Reset
+            </button>
             <svg
+              ref={svgRef}
               viewBox={`${layout.minX} ${layout.minY} ${layout.width} ${layout.height}`}
               width="100%"
               height="100%"
               preserveAspectRatio="xMidYMid meet"
+              style={{ cursor: "grab", touchAction: "none" }}
             >
+              <g ref={viewportRef}>
               {layout.edges.map((e, i) => {
                 const active =
                   selected?.component === e.a || selected?.component === e.b;
@@ -455,6 +515,7 @@ export default function TopologyWidget({ expandHref }: TopologyWidgetProps) {
                   </g>
                 );
               })}
+              </g>
             </svg>
           </div>
 
