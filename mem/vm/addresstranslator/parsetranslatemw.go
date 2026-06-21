@@ -67,6 +67,16 @@ func (m *parseTranslateMW) translate() bool {
 
 	m.translationPort().Send(transReq)
 
+	// The translation request is on its way: the at-head wait to send it on the
+	// Translation port — counted on the incoming-buffer task since the request
+	// reached the head of the Top buffer — is over. The req_in opened just below
+	// starts at retrieve and covers only the processing that follows.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtIncomingBuffer(itemI, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.translationPort().Name(),
+	})
+
 	incoming := msgToIncomingReqState(itemI)
 
 	nextState := &m.comp.State

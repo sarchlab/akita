@@ -44,9 +44,18 @@ func (m *ctrlParseMW) Tick() bool {
 	return madeProgress
 }
 
-// parseFromCP retrieves Msg from ctrlPort.
+// parseFromCP admits the head request from topPort. The data mover runs a
+// single transaction at a time, so a request that arrives while one is already
+// running must wait at the head of the buffer rather than be retrieved and
+// dropped. The head is therefore peeked first; the message is only retrieved
+// (and admitted) once the single transaction slot is free.
 func (m *ctrlParseMW) parseFromCP() bool {
-	reqI := m.topPort().RetrieveIncoming()
+	state := &m.comp.State
+	if state.CurrentTransaction.Active {
+		return false
+	}
+
+	reqI := m.topPort().PeekIncoming()
 	if reqI == nil {
 		return false
 	}
@@ -56,10 +65,16 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		log.Panicf("can't process request of type %s", reflect.TypeOf(reqI))
 	}
 
-	state := &m.comp.State
-	if state.CurrentTransaction.Active {
-		return false
-	}
+	// The slot is free and this request is being admitted. Attribute the
+	// at-head admission wait to the buffer task (which the port hook closes at
+	// retrieve), keyed by the peeked message so it matches the hook's key.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtIncomingBuffer(req, m.comp),
+		Kind:   tracing.MilestoneKindHardwareResource,
+		What:   m.comp.Name() + ".transaction",
+	})
+
+	m.topPort().RetrieveIncoming()
 
 	spec := m.comp.Spec()
 
@@ -135,6 +150,12 @@ func (m *ctrlParseMW) finishTransaction() bool {
 
 	m.topPort().Send(rsp)
 
+	// Reconstruct the original request before the transaction is reset. req_in
+	// was opened (in parseFromCP) on the DataMoveRequest, keyed by its ID, so it
+	// must be closed on that same request — not on the freshly minted response,
+	// which carries a different ID and would leak the req_in task.
+	reqMsg := transactionAsMsg(trans)
+
 	// Reset transaction
 	state.CurrentTransaction = dataMoverTransactionState{
 		PendingRead:  make(map[uint64]pendingReadState),
@@ -145,7 +166,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		Granularity: state.SrcByteGranularity,
 	}
 
-	tracing.TraceReqComplete(m.comp, rsp)
+	tracing.TraceReqComplete(m.comp, reqMsg)
 
 	return true
 }

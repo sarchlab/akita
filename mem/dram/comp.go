@@ -255,6 +255,12 @@ type State struct {
 	RefreshInProgress bool `json:"refresh_in_progress"`
 	// RefreshCyclesRemaining counts remaining cycles of the current refresh.
 	RefreshCyclesRemaining int `json:"refresh_cycles_remaining"`
+	// RefreshBlockedIssue is set while a refresh window is holding off the issue
+	// step (deviation D2: a global tRFC stall). It is cleared by the first
+	// command that issues once the window ends, so that command's
+	// sub-transaction can be charged a hardware_resource (refresh) milestone for
+	// the otherwise-invisible stall.
+	RefreshBlockedIssue bool `json:"refresh_blocked_issue"`
 
 	// Statistics
 	TotalReadCommands       uint64 `json:"total_read_commands"`

@@ -57,14 +57,6 @@ type State struct {
 	ControlState  memcontrolprotocol.State `json:"control_state"`
 	CurrentCmdID  uint64                   `json:"current_cmd_id"`
 	CurrentCmdSrc messaging.RemotePort     `json:"current_cmd_src"`
-
-	// HeadReqID is the ID of the top-port request currently at the head of the
-	// incoming buffer for which a req_in task has already been opened. It guards
-	// against re-opening that task while the request waits (it is peeked every
-	// cycle) for a free buffer slot or the bottom port. It is reset to zero once
-	// the request is admitted, or dropped on Reset, so the next head opens a
-	// fresh task.
-	HeadReqID uint64 `json:"head_req_id"`
 }
 
 // Comp is a reorder buffer component.

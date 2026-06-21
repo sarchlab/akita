@@ -245,6 +245,13 @@ type transactionState struct {
 	HasEvictionWriteReq  bool              `json:"has_eviction_write_req"`
 	EvictionWriteReqMeta messaging.MsgMeta `json:"eviction_write_req_meta"`
 
+	// DirPipelinePID is the tracing task ID of the directory-pipeline subtask
+	// (a child of the request's req_in). It is set when the transaction enters
+	// the directory pipeline stage and consumed when the transaction leaves the
+	// directory post-pipeline buffer, so the retrieve->directory latency gap is
+	// attributed to a pipeline subtask.
+	DirPipelinePID uint64 `json:"dir_pipeline_pid"`
+
 	// MSHR entry reference (into mshrState.Entries)
 	MSHREntryIndex int  `json:"mshr_entry_index"`
 	HasMSHREntry   bool `json:"has_mshr_entry"`

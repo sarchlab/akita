@@ -135,6 +135,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	state.RefreshCycleCounter = 0
 	state.RefreshInProgress = false
 	state.RefreshCyclesRemaining = 0
+	state.RefreshBlockedIssue = false
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 	state.ControlState = memcontrolprotocol.StateEnabled

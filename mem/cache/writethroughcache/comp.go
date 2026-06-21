@@ -108,6 +108,12 @@ type transactionState struct {
 	BottomWriteDone bool `json:"bottom_write_done"`
 	BankDone        bool `json:"bank_done"`
 
+	// DirPipelineTaskID is the ID of the pipeline subtask that records the
+	// transaction's traversal of the directory latency pipeline. It is a child
+	// of the request's req_in task, opened when the transaction enters the
+	// directory pipeline and closed when it leaves the post-pipeline buffer.
+	DirPipelineTaskID uint64 `json:"dir_pipeline_task_id"`
+
 	// WaitForMSHRFill / MSHRFillDone / MSHRFillFetcherIdx track an
 	// MSHR-coalesced write whose data is merged into another transaction's
 	// fetched line. The coalesced write never visits the bank itself, so

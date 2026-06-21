@@ -80,6 +80,7 @@ func (b Builder) Build(name string) *Comp {
 		CurrentState:          mmuCacheStateEnable,
 		Table:                 initSets(spec.NumLevels, spec.NumBlocks),
 		OutstandingBottomReqs: map[uint64]bool{},
+		InflightReqs:          map[uint64]inflightReqState{},
 	}
 
 	modelComp := modeling.NewBuilder[Spec, State, Resources]().

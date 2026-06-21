@@ -49,3 +49,45 @@ func forgetReceiverTaskIDByMsgID(msgID uint64, domain NamedHookable) {
 	delete(receiverTaskIDs, key)
 	receiverTaskIDsMu.Unlock()
 }
+
+// The incoming-buffer task ID registry maps (domain, message-ID) to the task ID
+// of the buffer task that tracks a message's residency in a port's incoming
+// buffer (from delivery until it is retrieved). The port hook that opens the
+// task and the component that hangs admission milestones on it both derive the
+// same ID from the message, without mutating the message.
+
+type incomingBufferTaskKey struct {
+	domain string
+	msgID  uint64
+}
+
+var (
+	incomingBufferTaskIDs   = make(map[incomingBufferTaskKey]uint64)
+	incomingBufferTaskIDsMu sync.Mutex
+)
+
+func lookupOrCreateIncomingBufferTaskID(
+	msg messaging.Msg, domain NamedHookable,
+) uint64 {
+	key := incomingBufferTaskKey{domain: domain.Name(), msgID: msg.Meta().ID}
+
+	incomingBufferTaskIDsMu.Lock()
+	defer incomingBufferTaskIDsMu.Unlock()
+
+	if id, ok := incomingBufferTaskIDs[key]; ok {
+		return id
+	}
+
+	id := timing.GetIDGenerator().Generate()
+	incomingBufferTaskIDs[key] = id
+
+	return id
+}
+
+func forgetIncomingBufferTaskIDByMsgID(msgID uint64, domain NamedHookable) {
+	key := incomingBufferTaskKey{domain: domain.Name(), msgID: msgID}
+
+	incomingBufferTaskIDsMu.Lock()
+	delete(incomingBufferTaskIDs, key)
+	incomingBufferTaskIDsMu.Unlock()
+}

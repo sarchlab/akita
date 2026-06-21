@@ -188,6 +188,15 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 	delete(trans.PendingRead, rsp.RspTo)
 	srcP.RetrieveIncoming()
 
+	// Charge the in-flight src-read wait to the req_in opened for this move
+	// transaction (same key used as the parent of the read req_out's
+	// TraceReqInitiate), so the dominant latency of a move is attributed.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(transactionAsMsg(trans), m.comp),
+		Kind:   tracing.MilestoneKindData,
+		What:   m.srcPort().Name(),
+	})
+
 	// Create a temporary msg for tracing
 	traceReq := memprotocol.ReadReq{}
 	traceReq.ID = originalReq.ID
@@ -276,6 +285,15 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 
 	delete(trans.PendingWrite, rsp.RspTo)
 	dstP.RetrieveIncoming()
+
+	// Charge the in-flight dst-write wait to the req_in opened for this move
+	// transaction (same key used as the parent of the write req_out's
+	// TraceReqInitiate), so the dominant latency of a move is attributed.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(transactionAsMsg(trans), m.comp),
+		Kind:   tracing.MilestoneKindSubTask,
+		What:   m.dstPort().Name(),
+	})
 
 	// Create a temporary msg for tracing
 	traceReq := memprotocol.WriteReq{}

@@ -11,13 +11,19 @@ import (
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
-// milestoneRecorder captures the milestones and tags the ROB emits, in
-// emission order and without the DBTracer's same-key/same-time dedup, so a
-// test can assert the full set and the order of the blocking reasons.
+// milestoneRecorder captures the task starts, milestones, and tags the ROB
+// emits, in emission order and without the DBTracer's same-key/same-time dedup,
+// so a test can assert the full ordered set of blocking reasons and the task
+// (buffer vs req_in) each one is attributed to.
 type milestoneRecorder struct {
 	tracing.NopTracer
+	starts     []tracing.TaskStart
 	milestones []tracing.Milestone
 	tags       []tracing.TaskTag
+}
+
+func (r *milestoneRecorder) StartTask(s tracing.TaskStart) {
+	r.starts = append(r.starts, s)
 }
 
 func (r *milestoneRecorder) AddMilestone(m tracing.Milestone) {
@@ -28,9 +34,32 @@ func (r *milestoneRecorder) AddTaskTag(t tracing.TaskTag) {
 	r.tags = append(r.tags, t)
 }
 
-func (r *milestoneRecorder) kinds() []tracing.MilestoneKind {
-	ks := make([]tracing.MilestoneKind, len(r.milestones))
-	for i, m := range r.milestones {
+// taskID returns the ID of the first recorded task start of the given kind.
+func (r *milestoneRecorder) taskID(kind string) uint64 {
+	for _, s := range r.starts {
+		if s.Kind == kind {
+			return s.ID
+		}
+	}
+
+	return 0
+}
+
+func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
+	var ms []tracing.Milestone
+	for _, m := range r.milestones {
+		if m.TaskID == taskID {
+			ms = append(ms, m)
+		}
+	}
+
+	return ms
+}
+
+func (r *milestoneRecorder) kindsOn(taskID uint64) []tracing.MilestoneKind {
+	ms := r.milestonesOn(taskID)
+	ks := make([]tracing.MilestoneKind, len(ms))
+	for i, m := range ms {
 		ks[i] = m.Kind
 	}
 
@@ -82,6 +111,9 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 		rec = &milestoneRecorder{}
 		tracing.CollectTrace(rob, rec)
+		// The admission milestones now land on the Top-port buffer task, so the
+		// test needs the buffer task to exist.
+		tracing.CollectIncomingBufferTrace(topPort)
 	})
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
@@ -126,7 +158,8 @@ var _ = Describe("Reorder Buffer milestones", func() {
 		rob.Tick() // bottomUp retires the head and responds
 	}
 
-	It("emits the five processing milestones and a read tag for a read", func() {
+	It("records admission milestones on the buffer task and processing "+
+		"milestones on req_in, plus a read tag, for a read", func() {
 		rsp := memprotocol.DataReadyRsp{Data: []byte{1, 2, 3, 4}}
 		rsp.ID = timing.GetIDGenerator().Generate()
 		rsp.Src = bottomUnitRemote
@@ -135,30 +168,38 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 		driveRoundTrip(makeRead(0), rsp)
 
-		Expect(rec.kinds()).To(Equal([]tracing.MilestoneKind{
+		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
+		reqInID := rec.taskID("req_in")
+		Expect(bufID).ToNot(BeZero())
+		Expect(reqInID).ToNot(BeZero())
+		Expect(bufID).ToNot(Equal(reqInID))
+
+		// The buffer task owns the pre-admission story: reached the head of the
+		// Top buffer, then waited for a free reorder slot, then to send the shadow.
+		Expect(rec.kindsOn(bufID)).To(Equal([]tracing.MilestoneKind{
+			tracing.MilestoneKindQueue,
 			tracing.MilestoneKindHardwareResource,
 			tracing.MilestoneKindNetworkBusy,
+		}))
+		bufMs := rec.milestonesOn(bufID)
+		Expect(bufMs[0].What).To(Equal(topPort.Name()))
+		Expect(bufMs[1].What).To(Equal(rob.Name() + ".buffer"))
+		Expect(bufMs[2].What).To(Equal(bottomPort.Name()))
+
+		// req_in owns only the post-admission processing.
+		Expect(rec.kindsOn(reqInID)).To(Equal([]tracing.MilestoneKind{
 			tracing.MilestoneKindData,
 			tracing.MilestoneKindDependency,
 			tracing.MilestoneKindNetworkBusy,
 		}))
-
-		Expect(rec.milestones[0].What).To(Equal(rob.Name() + ".buffer"))
-		Expect(rec.milestones[1].What).To(Equal(bottomPort.Name()))
-		Expect(rec.milestones[2].What).To(Equal(bottomPort.Name()))
-		Expect(rec.milestones[3].What).To(Equal(rob.Name() + ".reorder"))
-		Expect(rec.milestones[4].What).To(Equal(topPort.Name()))
-
-		// Every milestone (and the tag) addresses the same, non-zero req_in task.
-		taskID := rec.milestones[0].TaskID
-		Expect(taskID).ToNot(BeZero())
-		for _, m := range rec.milestones {
-			Expect(m.TaskID).To(Equal(taskID))
-		}
+		reqMs := rec.milestonesOn(reqInID)
+		Expect(reqMs[0].What).To(Equal(bottomPort.Name()))
+		Expect(reqMs[1].What).To(Equal(rob.Name() + ".reorder"))
+		Expect(reqMs[2].What).To(Equal(topPort.Name()))
 
 		Expect(rec.tags).To(HaveLen(1))
 		Expect(rec.tags[0].What).To(Equal("read"))
-		Expect(rec.tags[0].TaskID).To(Equal(taskID))
+		Expect(rec.tags[0].TaskID).To(Equal(reqInID))
 	})
 
 	It("distinguishes a write with a subtask milestone and a write tag", func() {
@@ -170,9 +211,8 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 		driveRoundTrip(makeWrite(64, []byte{1, 2, 3, 4}), rsp)
 
-		Expect(rec.kinds()).To(Equal([]tracing.MilestoneKind{
-			tracing.MilestoneKindHardwareResource,
-			tracing.MilestoneKindNetworkBusy,
+		reqInID := rec.taskID("req_in")
+		Expect(rec.kindsOn(reqInID)).To(Equal([]tracing.MilestoneKind{
 			tracing.MilestoneKindSubTask,
 			tracing.MilestoneKindDependency,
 			tracing.MilestoneKindNetworkBusy,

@@ -95,20 +95,16 @@ func (m *middleware) topDown() bool {
 		panic("rob: unsupported top-port message type")
 	}
 
-	if state.HeadReqID != req.Meta().ID {
-		state.HeadReqID = req.Meta().ID
-		tracing.TraceReqReceive(m.comp, req)
-		m.tagReadWrite(req)
-	}
-
 	if len(state.Transactions) >= m.comp.Spec().BufferSize {
 		return false
 	}
 
-	// A reorder-buffer entry is free: the hardware-resource wait that began when
-	// the request reached the head of the Top buffer is over.
+	// A reorder-buffer entry is free: the hardware-resource wait the request
+	// spent at the head of the Top buffer is over. This admission wait belongs
+	// to the incoming-buffer task; req_in (opened at retrieve, below) covers
+	// only the processing that follows.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(req, m.comp),
+		TaskID: tracing.MsgIDAtIncomingBuffer(req, m.comp),
 		Kind:   tracing.MilestoneKindHardwareResource,
 		What:   m.comp.Name() + ".buffer",
 	})
@@ -122,13 +118,17 @@ func (m *middleware) topDown() bool {
 
 	m.bottomPort().Send(shadow)
 
-	// The shadow request is on its way downstream: the wait to send on the
-	// Bottom port is over.
+	// The shadow request is on its way downstream: the at-head wait to send on
+	// the Bottom port is over (also on the incoming-buffer task).
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(req, m.comp),
+		TaskID: tracing.MsgIDAtIncomingBuffer(req, m.comp),
 		Kind:   tracing.MilestoneKindNetworkBusy,
 		What:   m.bottomPort().Name(),
 	})
+
+	// Admit the request: open req_in at retrieve and record the transaction.
+	tracing.TraceReqReceive(m.comp, req)
+	m.tagReadWrite(req)
 
 	state.Transactions = append(state.Transactions, transactionState{
 		ReqFromTopID:  req.Meta().ID,
@@ -137,7 +137,6 @@ func (m *middleware) topDown() bool {
 		IsRead:        isRead,
 	})
 	m.topPort().RetrieveIncoming()
-	state.HeadReqID = 0
 
 	tracing.TraceReqInitiate(m.comp, shadow,
 		tracing.MsgIDAtReceiver(req, m.comp))
@@ -359,8 +358,8 @@ func (m *middleware) reqInTaskID(trans transactionState) uint64 {
 }
 
 // tagReadWrite labels the req_in task as a "read" or a "write" so traces can be
-// filtered by access type. Called once, when the request first becomes the head
-// of the Top buffer and its req_in task opens.
+// filtered by access type. Called once, when the request is admitted (retrieved)
+// and its req_in task opens.
 func (m *middleware) tagReadWrite(req memprotocol.AccessReq) {
 	what := "write"
 	if _, ok := req.(memprotocol.ReadReq); ok {
@@ -485,26 +484,15 @@ func (m *middleware) handleReset(req memcontrolprotocol.Req) bool {
 
 	state := &m.comp.State
 	m.forgetInflightReceiverIDs()
-	if state.HeadReqID != 0 {
-		// A req_in was opened for the head request still waiting to be admitted.
-		// It is dropped with the drained traffic, so end the task (which also
-		// releases its registry entry) instead of leaving it open and leaking
-		// tracing state. The request is still at the head of the Top buffer here,
-		// so complete it from there; fall back to forgetting the registry entry
-		// if it is somehow no longer present.
-		if head := m.topPort().PeekIncoming(); head != nil &&
-			head.Meta().ID == state.HeadReqID {
-			tracing.TraceReqComplete(m.comp, head)
-		} else {
-			tracing.ForgetMsgIDAtReceiver(state.HeadReqID, m.comp)
-		}
-		state.HeadReqID = 0
-	}
 	state.Transactions = state.Transactions[:0]
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 	state.ControlState = memcontrolprotocol.StateEnabled
 
+	// Buffer tasks for messages still queued on the Top/Bottom ports are closed
+	// by the drains below: each RetrieveIncoming fires the retrieve hook, which
+	// ends the buffer task. No pre-admission req_in exists to clean up — req_in
+	// now opens only at retrieve.
 	drainIncoming(m.topPort())
 	drainIncoming(m.bottomPort())
 

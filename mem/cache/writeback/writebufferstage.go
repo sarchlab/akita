@@ -324,6 +324,20 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	copy(trans.MSHRData, mshrEntry.Data)
 	trans.MSHRTransactionIndices = wb.resolveEntryTransactionIndices(mshrEntry)
 
+	// The downstream fetch landed: the data wait is over for every request
+	// coalesced on this MSHR entry. Charge a data milestone on each coalesced
+	// transaction's req_in at response arrival (keyed to the original request,
+	// not the DataReadyRsp), so a waiter that fetched and a waiter that merely
+	// coalesced both get their data-arrival point marked.
+	for _, coalescedIdx := range trans.MSHRTransactionIndices {
+		coalesced := &next.Transactions[coalescedIdx]
+		tracing.AddMilestone(wb.cache.comp, tracing.Milestone{
+			TaskID: tracing.MsgIDAtReceiver(coalesced.reqMeta(), wb.cache.comp),
+			Kind:   tracing.MilestoneKindData,
+			What:   wb.cache.comp.Name() + ".Bottom",
+		})
+	}
+
 	cache.MSHRRemove(&next.MSHRState,
 		vm.PID(mshrEntry.PID), mshrEntry.Address)
 
@@ -424,6 +438,16 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 			if e.Action == writeBufferFlush {
 				e.Removed = true
 			}
+
+			// The downstream write-back ack arrived: the eviction the original
+			// request was blocked behind is done. Charge a dependency-class
+			// milestone on the request's req_in (keyed to the original request,
+			// not the WriteDoneRsp) so the eviction wait is marked resolved.
+			tracing.AddMilestone(wb.cache.comp, tracing.Milestone{
+				TaskID: tracing.MsgIDAtReceiver(e.reqMeta(), wb.cache.comp),
+				Kind:   tracing.MilestoneKindData,
+				What:   wb.cache.comp.Name() + ".evict",
+			})
 
 			wb.cache.bottomPort().RetrieveIncoming()
 			tracing.TraceReqFinalize(wb.cache.comp, e.EvictionWriteReqMeta)

@@ -131,6 +131,15 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	m.topPort().Send(rsp)
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
+	// The page walk is fully local (a CycleLeft countdown, no downstream
+	// req_out): label that latency interval as work on the req_in, instead of
+	// leaving it an unattributed gap. walking.RecvTaskID is the req_in id.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: walking.RecvTaskID,
+		Kind:   tracing.MilestoneKindWork,
+		What:   m.comp.Name() + ".walk",
+	})
+
 	m.traceReqComplete(walking.RecvTaskID, walking.ReqID)
 
 	return true
@@ -140,14 +149,26 @@ func (m *translationMW) parseFromTop() bool {
 	spec := m.comp.Spec()
 	state := &m.comp.State
 
+	reqI := m.topPort().PeekIncoming()
+	if reqI == nil {
+		return false
+	}
+
 	if len(state.WalkingTranslations) >= spec.MaxRequestsInFlight {
 		return false
 	}
 
-	reqI := m.topPort().RetrieveIncoming()
-	if reqI == nil {
-		return false
-	}
+	// A walk slot is free: the at-head wait for one — counted on the
+	// incoming-buffer task since the request reached the head of the Top
+	// buffer — is over. The req_in opened at retrieve covers only the walk
+	// processing that follows.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtIncomingBuffer(reqI, m.comp),
+		Kind:   tracing.MilestoneKindHardwareResource,
+		What:   m.comp.Name() + ".walk",
+	})
+
+	m.topPort().RetrieveIncoming()
 
 	switch req := reqI.(type) {
 	case vmprotocol.TranslationReq:

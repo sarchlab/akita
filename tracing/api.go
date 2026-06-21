@@ -163,6 +163,32 @@ func ForgetMsgIDAtReceiver(msgID uint64, domain NamedHookable) {
 	forgetReceiverTaskIDByMsgID(msgID, domain)
 }
 
+// MsgIDAtIncomingBuffer returns the task ID of the buffer task that tracks a
+// message's residency in the receiving port's incoming buffer. The ID lives in
+// a tracing-local registry keyed by (domain, msg.Meta().ID), so the port hook
+// that opens the task and the component that adds admission milestones to it
+// derive the same ID without mutating the message. When the domain has no
+// hooks the ID is unused, so this returns 0 without touching the registry.
+func MsgIDAtIncomingBuffer(msg messaging.Msg, domain NamedHookable) uint64 {
+	if domain.NumHooks() == 0 {
+		return 0
+	}
+
+	return lookupOrCreateIncomingBufferTaskID(msg, domain)
+}
+
+// ForgetMsgIDAtIncomingBuffer releases the registry entry created by
+// [MsgIDAtIncomingBuffer] for the message identified by msgID. The port hook
+// calls this when the buffer task ends (the message is retrieved). When the
+// domain has no hooks no entry was ever inserted, so this is a no-op.
+func ForgetMsgIDAtIncomingBuffer(msgID uint64, domain NamedHookable) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
+	forgetIncomingBufferTaskIDByMsgID(msgID, domain)
+}
+
 // TraceReqInitiate marks a task starting at the sender of a message. The
 // task ID is the message's own ID, which is fixed at message construction.
 // The task kind is "req_out".
