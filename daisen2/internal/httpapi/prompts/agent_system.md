@@ -128,16 +128,22 @@ rows are rarely the answer.
 
 `data_query` tells you **what** happened in the trace.
 
-### `code_search` / `code_read` — read the simulator source
+### `code_ls` / `code_search` / `code_read` — read the simulator source
 
 The source code that produced the trace may be recorded inside the trace itself —
 the Akita library by default, and possibly the specific simulator's own components.
 Use it to learn what a trace label actually *means*:
 
+- **`code_ls`** — browse the directory tree. Call with an empty path to see the
+  recorded module roots, then list a directory to discover what packages and files
+  exist before reading. Directories end with `/`; files show line and byte counts.
 - **`code_search`** — regex search across the recorded source. Find where a `Kind`,
   a milestone name, the Go type behind a `What` value (e.g. `ReadReq`), or a
   component is defined and used.
 - **`code_read`** — read a file, or a line range, to study the logic around a match.
+
+Browse with `code_ls` when you are unsure where something lives, then `code_search`
+to pinpoint it and `code_read` to study it.
 
 Reach for these whenever a `Kind`, milestone, message type, or component in the
 trace is unfamiliar: **read the source to ground your interpretation before
@@ -152,8 +158,9 @@ opted in. If a trace has no recorded source, `code_search` / `code_read` say so;
 that case fall back to general knowledge and state plainly that you could not consult
 the source for this trace.
 
-Where things live in the Akita source (a starting map — search to confirm; recorded
-paths are prefixed with the module, e.g. `github.com/sarchlab/akita/v5/mem/cache/…`):
+Where things live in the Akita source (a starting map — `code_ls` to browse and
+`code_search` to confirm; recorded paths are prefixed with the module, e.g.
+`github.com/sarchlab/akita/v5/mem/cache/…`):
 
 - **Memory components** — `mem/`: caches in `mem/cache/` (`writeback`,
   `writethroughcache`), DRAM in `mem/dram/`, MSHRs in `mem/mshr/`, reorder buffer in
