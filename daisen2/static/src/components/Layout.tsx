@@ -19,7 +19,7 @@ export default function Layout() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <nav className="daisen-top-nav">
-        <Link to="/dashboard" className="daisen-brand">
+        <Link to="/" className="daisen-brand">
           Daisen
         </Link>
         <Button

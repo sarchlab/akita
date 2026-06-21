@@ -106,6 +106,7 @@ func (b Builder) Build() *Simulation {
 	b.createIDGenerator(s)
 	b.createMetaRecorder(s)
 	b.createSourceRecorder(s)
+	b.createTopologyRecorder(s)
 	b.createVisTracer(s)
 	b.createServer(s)
 
@@ -123,6 +124,17 @@ func (b Builder) createSourceRecorder(s *Simulation) {
 	if err := recordSourceArchives(s.dataRecorder, b.sourceFSes); err != nil {
 		panic(err)
 	}
+}
+
+// createTopologyRecorder records the static structure of the simulation — each
+// component's spec and the port-level connection graph — into the data
+// recording, making it self-describing for tools such as Daisen's index page.
+// Like the meta recorder it always runs, independent of visualization tracing,
+// so the structure is captured for every simulation that produces a recording.
+// The data itself is written at Terminate, once every component, port, and
+// connection has been registered.
+func (b Builder) createTopologyRecorder(s *Simulation) {
+	s.topologyRecorder = newTopologyRecorder(s.dataRecorder)
 }
 
 func (b Builder) createSimulation() *Simulation {
