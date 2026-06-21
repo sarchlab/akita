@@ -92,6 +92,13 @@ func (p *defaultPort) SetConnection(conn Connection) {
 	p.conn = conn
 }
 
+// Connection returns the connection plugged in to this port, or nil if the port
+// is not connected. It is the read-side counterpart of SetConnection and lets
+// the topology recorder reconstruct the component graph from the port side.
+func (p *defaultPort) Connection() Connection {
+	return p.conn
+}
+
 // Component returns the owner component of the port.
 func (p *defaultPort) Component() Component {
 	return p.comp

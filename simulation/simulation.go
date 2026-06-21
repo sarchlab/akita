@@ -10,13 +10,14 @@ import (
 )
 
 type Simulation struct {
-	id           string
-	outputPath   string
-	engine       timing.Engine
-	dataRecorder datarecording.DataRecorder
-	visTracer    *tracing.DBTracer
-	metaRecorder *metaRecorder
-	monitor      *monitoring2.Monitor
+	id               string
+	outputPath       string
+	engine           timing.Engine
+	dataRecorder     datarecording.DataRecorder
+	visTracer        *tracing.DBTracer
+	metaRecorder     *metaRecorder
+	topologyRecorder *topologyRecorder
+	monitor          *monitoring2.Monitor
 
 	components    []Component
 	compNameIndex map[string]int
@@ -167,6 +168,13 @@ func (s *Simulation) Connections() []Connection {
 	return append([]Connection(nil), s.connections...)
 }
 
+// Ports returns a copy of the registered ports, in registration order. It is
+// the symmetric counterpart of Components and Connections, and lets the
+// topology recorder reconstruct the connection graph from the port side.
+func (s *Simulation) Ports() []Port {
+	return append([]Port(nil), s.ports...)
+}
+
 // RegisterResource registers non-timing program state that can be referenced by
 // multiple components and reached by name through the global state manager. The
 // simulation owns the resource; components hold references to it. Setup
@@ -221,6 +229,10 @@ func (s *Simulation) Terminate() {
 
 	if s.metaRecorder != nil {
 		s.metaRecorder.End()
+	}
+
+	if s.topologyRecorder != nil {
+		s.topologyRecorder.Record(s.components, s.ports)
 	}
 
 	s.dataRecorder.Close()
