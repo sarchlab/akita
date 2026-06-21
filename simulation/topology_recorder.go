@@ -117,7 +117,14 @@ func reflectSpec(c Component) (any, bool) {
 		return nil, false
 	}
 
-	return m.Call(nil)[0].Interface(), true
+	spec := m.Call(nil)[0].Interface()
+	if spec == nil {
+		// A nil interface spec would make reflect.TypeOf(spec).String() panic
+		// in the Terminate teardown path; treat it as "no spec".
+		return nil, false
+	}
+
+	return spec, true
 }
 
 // reflectName calls a no-argument accessor (e.g. "Connection" or "Component")

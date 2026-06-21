@@ -2,11 +2,17 @@ package httpapi
 
 import (
 	"encoding/json"
+	"io"
 	"io/fs"
 	"net/http"
 	"path"
 	"sort"
 )
+
+// maxCodeReadBytes caps how much of a recorded source file /api/code/read will
+// load, so a trace carrying a huge or generated source blob cannot exhaust
+// server memory. Real source files are far smaller.
+const maxCodeReadBytes = 4 << 20 // 4 MiB
 
 // CodeEntry is one directory entry of the recorded source tree.
 type CodeEntry struct {
@@ -103,9 +109,22 @@ func (s *Server) httpCodeRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := fs.ReadFile(s.codeSource.FS(), clean)
+	f, err := s.codeSource.FS().Open(clean)
 	if err != nil {
 		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+
+	// Read at most maxCodeReadBytes+1 so an oversized file is detected without
+	// pulling the whole thing into memory.
+	data, err := io.ReadAll(io.LimitReader(f, maxCodeReadBytes+1))
+	if err != nil {
+		http.Error(w, "read error", http.StatusInternalServerError)
+		return
+	}
+	if len(data) > maxCodeReadBytes {
+		http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
 		return
 	}
 

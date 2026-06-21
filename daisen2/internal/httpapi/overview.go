@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 )
 
@@ -32,6 +33,9 @@ func (r *SQLiteTraceReader) ListExecInfo(ctx context.Context) []SimInfoEntry {
 		}
 		entries = append(entries, e)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("exec_info query: %v", err)
+	}
 
 	return entries
 }
@@ -42,12 +46,7 @@ func (s *Server) httpSimInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rsp, err := json.Marshal(s.traceReader.ListExecInfo(r.Context()))
-	dieOnErr(err)
-
-	w.Header().Set("Content-Type", "application/json")
-	_, err = w.Write(rsp)
-	dieOnErr(err)
+	writeJSON(w, s.traceReader.ListExecInfo(r.Context()))
 }
 
 // TopologyComponent is one component with its spec. Spec is the recorded spec
@@ -112,6 +111,9 @@ func (r *SQLiteTraceReader) listComponentSpecs(
 
 		components = append(components, c)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("component_spec query: %v", err)
+	}
 
 	return components
 }
@@ -132,6 +134,9 @@ func (r *SQLiteTraceReader) listPorts(ctx context.Context) []TopologyPort {
 		}
 		ports = append(ports, p)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("port query: %v", err)
+	}
 
 	return ports
 }
@@ -142,10 +147,5 @@ func (s *Server) httpTopology(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rsp, err := json.Marshal(s.traceReader.ReadTopology(r.Context()))
-	dieOnErr(err)
-
-	w.Header().Set("Content-Type", "application/json")
-	_, err = w.Write(rsp)
-	dieOnErr(err)
+	writeJSON(w, s.traceReader.ReadTopology(r.Context()))
 }

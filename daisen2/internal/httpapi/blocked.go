@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"database/sql"
+	"log"
 	"net/http"
 )
 
@@ -51,6 +52,11 @@ func (r *SQLiteTraceReader) MostBlocked(ctx context.Context) []BlockedComponent 
 		}
 		c.BlockedTime = blocked.Float64
 		result = append(result, c)
+	}
+	if err := rows.Err(); err != nil {
+		// A mid-iteration error means the ranking may be truncated; surface it
+		// in the log rather than presenting a partial result as complete.
+		log.Printf("blocked-component query: %v", err)
 	}
 
 	return result
