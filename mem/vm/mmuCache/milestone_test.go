@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
@@ -238,5 +239,52 @@ var _ = Describe("MMUCache milestones", func() {
 		bottomBufMs := rec.milestonesOn(bottomBufID)
 		Expect(bottomBufMs[0].What).To(Equal(bottomPort.Name()))
 		Expect(bottomBufMs[1].What).To(Equal(topPort.Name()))
+	})
+
+	It("ends the in-flight req_in and req_out on a mid-walk reset so no "+
+		"tasks are left unended", func() {
+		req := makeTopReq(0x2000)
+		topPort.Deliver(req)
+		Expect(mw.lookup()).To(BeTrue())
+		sent := bottomPort.RetrieveOutgoing().(vmprotocol.TranslationReq)
+		bottomReqID := sent.ID
+
+		// The walk is in flight: req_in and req_out are open but not yet ended,
+		// and the response has not returned.
+		Expect(comp.State.InflightReqs).To(HaveLen(1))
+		reqInStart, ok := rec.firstStart("req_in")
+		Expect(ok).To(BeTrue())
+		reqOutStart, ok := rec.firstStart("req_out")
+		Expect(ok).To(BeTrue())
+		Expect(reqOutStart.ID).To(Equal(bottomReqID))
+		Expect(rec.hasEnd(reqInStart.ID)).To(BeFalse())
+		Expect(rec.hasEnd(reqOutStart.ID)).To(BeFalse())
+
+		// Reset while the walk is in flight.
+		reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
+		reset.ID = timing.GetIDGenerator().Generate()
+		reset.Src = messaging.RemotePort("CtrlAgent")
+		reset.Dst = comp.GetPortByName("Control").AsRemote()
+		reset.TrafficClass = "memcontrolprotocol.Req"
+		comp.GetPortByName("Control").Deliver(reset)
+
+		acked := false
+		for i := 0; i < 64 && !acked; i++ {
+			comp.Tick()
+			if out := comp.GetPortByName("Control").RetrieveOutgoing(); out != nil {
+				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
+					rsp.Command == memcontrolprotocol.CmdReset {
+					acked = true
+				}
+			}
+		}
+		Expect(acked).To(BeTrue())
+
+		// The reset ended both tasks (finalize req_out, complete req_in) instead
+		// of merely forgetting the registry entry, so no task is left unended and
+		// the in-flight table is empty.
+		Expect(rec.hasEnd(reqInStart.ID)).To(BeTrue())
+		Expect(rec.hasEnd(reqOutStart.ID)).To(BeTrue())
+		Expect(comp.State.InflightReqs).To(BeEmpty())
 	})
 })

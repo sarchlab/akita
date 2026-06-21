@@ -35,11 +35,14 @@ func (m *bankTickMW) Tick() bool {
 
 	// Only issue new commands when refresh (a separate middleware) is not
 	// holding the stall flag. While refresh holds the stall, remember that the
-	// issue step was blocked so the first command to issue afterward can be
-	// charged a refresh milestone for the stall window.
+	// issue step was blocked — but only when a command was actually ready to
+	// issue, so the first command afterward can be charged a refresh milestone.
+	// Latching unconditionally would charge a refresh wait to an unrelated
+	// later command on cycles where nothing was eligible (e.g. the queues are
+	// empty while pending completions keep the DRAM ticking).
 	if !next.RefreshInProgress {
 		progress = m.issue(&spec, next) || progress
-	} else {
+	} else if m.ctrl.scheduler.Pick(&spec, next, &m.timing) != nil {
 		next.RefreshBlockedIssue = true
 	}
 

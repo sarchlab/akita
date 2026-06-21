@@ -293,12 +293,12 @@ func (m *ctrlMiddleware) handleReset(msg memcontrolprotocol.Req) bool {
 	// eventually arrive; handleRsp drops responses whose ID is no longer here.
 	state.OutstandingBottomReqs = map[uint64]bool{}
 
-	// The dropped walks also leave their req_in tracing tasks open: release the
-	// receiver-task registry entries the data path allocated for each in-flight
-	// Top request so they do not outlive the reset (mirrors how handleRsp would
-	// have completed them). The req_out tasks are sender-side (keyed by the
-	// message ID, no registry entry), so dropping the table suffices for them.
-	m.forgetInflightReceiverIDs()
+	// The dropped walks leave their req_in and forwarded req_out tracing tasks
+	// open, and their responses are discarded (OutstandingBottomReqs was cleared
+	// above), so end both tasks here — finalize the req_out and complete the
+	// req_in — mirroring the normal handleRsp completion so a mid-walk reset
+	// leaves no unended tasks rather than just an orphaned registry entry.
+	m.endInflightReqs()
 	state.InflightReqs = map[uint64]inflightReqState{}
 
 	// Reset is a hard reset: drop the cached page-walk entries so the
@@ -318,13 +318,20 @@ func (m *ctrlMiddleware) handleReset(msg memcontrolprotocol.Req) bool {
 	return true
 }
 
-// forgetInflightReceiverIDs releases the tracing receiver-task registry entries
-// that the data path allocated for each in-flight Top request. Control paths
-// that drop the in-flight table (Reset) call this so the entries do not outlive
-// the walks they describe.
-func (m *ctrlMiddleware) forgetInflightReceiverIDs() {
+// endInflightReqs finalizes the forwarded req_out and completes the original
+// req_in for every walk still in flight, so a hard Reset that drops the
+// in-flight table leaves no unended trace tasks. The matching responses are
+// discarded by handleRsp once OutstandingBottomReqs is cleared, so without this
+// the tasks would never close. Mirrors the completion path in handleRsp;
+// TraceReqComplete also releases the req_in receiver-task registry entry.
+func (m *ctrlMiddleware) endInflightReqs() {
 	for _, inflight := range m.comp.State.InflightReqs {
-		tracing.ForgetMsgIDAtReceiver(inflight.TopReqID, m.comp)
+		reqToBottom := restoreTransReq(
+			inflight.BottomReqID, inflight.BottomReqSrc, inflight.BottomReqDst)
+		topReq := restoreTransReq(
+			inflight.TopReqID, inflight.TopReqSrc, inflight.TopReqDst)
+		tracing.TraceReqFinalize(m.comp, reqToBottom)
+		tracing.TraceReqComplete(m.comp, topReq)
 	}
 }
 
