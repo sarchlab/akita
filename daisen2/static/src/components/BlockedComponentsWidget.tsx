@@ -1,72 +1,71 @@
 import WidgetCard from "./WidgetCard";
+import DashboardWidget from "./DashboardWidget";
 import { useBlocked } from "../hooks/useBlocked";
-import { formatVirtualTime } from "../lib/time";
-import { cn } from "../lib/utils";
+import { useSimulationRange } from "../hooks/useSimulationRange";
+import { useSegments } from "../hooks/useSegments";
+import { useElementSize } from "../hooks/useElementSize";
+import { DASHBOARD_DEFAULTS } from "../utils/viewState.mjs";
 
-const TOP_COLOR = "#f97316"; // accent orange — the two most blocked
-const REST_COLOR = "#94a3b8";
+const GAP = 8;
 
 interface BlockedComponentsWidgetProps {
   expandHref?: string;
 }
 
-// BlockedComponentsWidget ranks components by the time their tasks spent blocked
-// (waiting on a hardware resource, the network, a translation, etc.), with the
-// two most blocked highlighted.
+// BlockedComponentsWidget shows the two components whose tasks spent the most
+// time blocked, each as a full dashboard chart — so enlarging the widget is, in
+// effect, the dashboard focused on the worst offenders.
 export default function BlockedComponentsWidget({
   expandHref,
 }: BlockedComponentsWidgetProps) {
   const { data, loading, error } = useBlocked();
-  const ranked = (data ?? []).filter((c) => c.blocked_time > 0);
-  const max = ranked.length > 0 ? ranked[0].blocked_time : 1;
+  const { startTime, endTime } = useSimulationRange();
+  const { data: segments } = useSegments();
+  const { ref, size } = useElementSize<HTMLDivElement>();
+
+  const top = (data ?? []).filter((c) => c.blocked_time > 0).slice(0, 2);
+  const widgetWidth = Math.max(160, size.width);
+  const widgetHeight = Math.max(120, (size.height - GAP) / 2);
 
   return (
     <WidgetCard
       title="Most blocked components"
       expandHref={expandHref}
-      contentClassName="overflow-auto p-3"
+      contentClassName="p-2"
     >
       {loading ? (
         <div className="text-sm text-muted-foreground">Loading…</div>
       ) : error ? (
         <div className="text-sm text-destructive">{error}</div>
-      ) : ranked.length === 0 ? (
+      ) : top.length === 0 ? (
         <div className="text-sm text-muted-foreground">
           No blocking recorded in this trace.
         </div>
       ) : (
-        <ul className="flex flex-col gap-2.5">
-          {ranked.map((c, i) => {
-            const top = i < 2;
-            const pct = Math.max(2, (c.blocked_time / max) * 100);
-            return (
-              <li key={c.component} className="flex flex-col gap-1">
-                <div className="flex items-baseline justify-between gap-2 text-xs">
-                  <span
-                    className={cn(
-                      "truncate",
-                      top ? "font-semibold text-foreground" : "text-muted-foreground",
-                    )}
-                  >
-                    {i + 1}. {c.component}
-                  </span>
-                  <span className="shrink-0 tabular-nums text-muted-foreground">
-                    {formatVirtualTime(c.blocked_time)}
-                  </span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded bg-muted">
-                  <div
-                    className="h-full rounded"
-                    style={{
-                      width: `${pct}%`,
-                      backgroundColor: top ? TOP_COLOR : REST_COLOR,
-                    }}
-                  />
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <div
+          ref={ref}
+          className="flex h-full min-h-0 flex-col"
+          style={{ gap: GAP }}
+        >
+          {top.map((c) => (
+            <DashboardWidget
+              key={c.component}
+              name={c.component}
+              width={widgetWidth}
+              height={widgetHeight}
+              startTime={startTime}
+              endTime={endTime}
+              dataStartTime={startTime}
+              dataEndTime={endTime}
+              dataPending={false}
+              primaryAxis={DASHBOARD_DEFAULTS.primary}
+              secondaryAxis={DASHBOARD_DEFAULTS.secondary}
+              segments={segments?.segments ?? []}
+              segmentsEnabled={segments?.enabled ?? false}
+              onTimeRangeChange={() => {}}
+            />
+          ))}
+        </div>
       )}
     </WidgetCard>
   );

@@ -1,8 +1,13 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowUp, File, Folder } from "lucide-react";
+import hljs from "highlight.js/lib/core";
+import go from "highlight.js/lib/languages/go";
+import "highlight.js/styles/github.css";
 import WidgetCard from "./WidgetCard";
 import { useCodeLs, useCodeRead } from "../hooks/useCode";
 import type { CodeEntry } from "../types/overview";
+
+hljs.registerLanguage("go", go);
 
 function formatBytes(n?: number): string {
   if (!n) return "";
@@ -79,6 +84,7 @@ export default function CodeBrowserWidget({ expandHref }: CodeBrowserWidgetProps
             loading={read.loading}
             error={read.error}
             content={read.data?.content ?? ""}
+            path={file}
           />
         ) : (
           <DirView
@@ -148,24 +154,38 @@ function FileView({
   loading,
   error,
   content,
+  path,
 }: {
   loading: boolean;
   error: string | null;
   content: string;
+  path: string;
 }) {
+  const highlighted = useMemo(() => {
+    if (!path.endsWith(".go")) return null;
+    return hljs.highlight(content, { language: "go" }).value;
+  }, [content, path]);
+
   if (loading) {
     return <div className="p-3 text-sm text-muted-foreground">Loading…</div>;
   }
   if (error) {
     return <div className="p-3 text-sm text-destructive">{error}</div>;
   }
-  const lines = content.split("\n");
+  const lineCount = content.split("\n").length;
   return (
     <pre className="flex min-w-full text-xs leading-relaxed">
-      <code className="select-none border-r bg-muted/40 px-2 py-2 text-right text-muted-foreground">
-        {lines.map((_, i) => `${i + 1}\n`)}
+      <code className="select-none whitespace-pre border-r bg-muted/40 px-2 py-2 text-right text-muted-foreground">
+        {Array.from({ length: lineCount }, (_, i) => `${i + 1}\n`)}
       </code>
-      <code className="overflow-auto px-3 py-2 font-mono">{content}</code>
+      {highlighted ? (
+        <code
+          className="hljs whitespace-pre px-3 py-2 font-mono"
+          dangerouslySetInnerHTML={{ __html: highlighted }}
+        />
+      ) : (
+        <code className="whitespace-pre px-3 py-2 font-mono">{content}</code>
+      )}
     </pre>
   );
 }
