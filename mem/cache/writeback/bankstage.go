@@ -113,11 +113,48 @@ func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
 }
 
 func (s *bankStage) acceptIntoPipeline(next *State, spec Spec, transIdx int) {
+	trans := &next.Transactions[transIdx]
+
+	// Open the bank subtask spanning this data-array pipeline traversal, a child
+	// of the req_in, so the ".bank" work milestone has a corresponding child bar
+	// and the bank latency is not an unexplained tail before the response. A
+	// transaction that visits the bank more than once (e.g. evict then fill)
+	// opens one subtask per visit, each closed in finishBank.
+	if trans.hasReqMeta() {
+		pid := timing.GetIDGenerator().Generate()
+		trans.BankPID = pid
+		tracing.StartTask(s.cache.comp, tracing.TaskStart{
+			ID:       pid,
+			ParentID: tracing.MsgIDAtReceiver(trans.reqMeta(), s.cache.comp),
+			Kind:     tracing.PipelineTaskKind,
+			What:     s.cache.comp.Name() + ".bank",
+		})
+	}
+
 	if spec.BankLatency > 0 {
 		next.BankPipelines[s.bankID].Accept(transIdx)
 	} else {
 		// Bypass pipeline: put directly in post-pipeline buffer
 		next.BankPostPipelineBufs[s.bankID].PushTyped(transIdx)
+	}
+}
+
+// finishBank closes the transaction's current bank subtask and records the bank
+// access as work on its req_in, so the bank-pipeline traversal renders as a
+// child bar paired with a work milestone (per the tracing coverage principles).
+func (s *bankStage) finishBank(trans *transactionState) {
+	if !trans.hasReqMeta() {
+		return
+	}
+
+	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtReceiver(trans.reqMeta(), s.cache.comp),
+		Kind:   tracing.MilestoneKindWork,
+		What:   s.cache.comp.Name() + ".bank",
+	})
+	if trans.BankPID != 0 {
+		tracing.EndTask(s.cache.comp, tracing.TaskEnd{ID: trans.BankPID})
+		trans.BankPID = 0
 	}
 }
 
@@ -187,6 +224,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	dataReady.TrafficClass = "memprotocol.DataReadyRsp"
 	s.cache.topPort().Send(dataReady)
 
+	s.finishBank(trans)
 	tracing.TraceReqComplete(s.cache.comp, trans.ReadMeta)
 
 	return true
@@ -224,6 +262,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 	done.TrafficClass = "memprotocol.WriteDoneRsp"
 	s.cache.topPort().Send(done)
 
+	s.finishBank(trans)
 	tracing.TraceReqComplete(s.cache.comp, trans.WriteMeta)
 
 	return true
@@ -286,6 +325,8 @@ func (s *bankStage) finalizeBankWriteFetched(
 
 	next.BankInflightTransCounts[s.bankID]--
 
+	s.finishBank(trans)
+
 	return true
 }
 
@@ -330,6 +371,8 @@ func (s *bankStage) finalizeBankEviction(
 
 	next.BankInflightTransCounts[s.bankID]--
 	next.BankDownwardInflightTransCounts[s.bankID]--
+
+	s.finishBank(trans)
 
 	return true
 }

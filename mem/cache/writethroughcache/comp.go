@@ -114,6 +114,13 @@ type transactionState struct {
 	// directory pipeline and closed when it leaves the post-pipeline buffer.
 	DirPipelineTaskID uint64 `json:"dir_pipeline_task_id"`
 
+	// BankTaskID is the ID of the pipeline subtask that records the
+	// transaction's traversal of the bank (data-array) pipeline — the bank
+	// read/write work. Like DirPipelineTaskID it is a child of the request's
+	// req_in task, opened when the transaction is accepted into the bank
+	// pipeline and closed when the bank finalizes the access.
+	BankTaskID uint64 `json:"bank_task_id"`
+
 	// WaitForMSHRFill / MSHRFillDone / MSHRFillFetcherIdx track an
 	// MSHR-coalesced write whose data is merged into another transaction's
 	// fetched line. The coalesced write never visits the bank itself, so

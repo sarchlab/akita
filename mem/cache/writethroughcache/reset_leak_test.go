@@ -14,12 +14,11 @@ import (
 )
 
 // TestResetEndsInflightTracingTasks drives a read miss into the writethrough
-// cache so the transaction has all three tiers of tracing tasks open — the
-// req_in for the top request, the cache_transaction, and the downstream
-// req_out for the bottom fetch — then issues a Reset and asserts every task is
-// ended. A mid-flight Reset drops the transaction table, so each started task
-// must be ended by endInflightTasks or it leaks (and, for a req_in, leaks a
-// receiver-registry entry too).
+// cache so the transaction has both of its tracing tasks open — the req_in for
+// the top request and the downstream req_out for the bottom fetch — then issues
+// a Reset and asserts every task is ended. A mid-flight Reset drops the
+// transaction table, so each started task must be ended by endInflightTasks or
+// it leaks (and, for a req_in, leaks a receiver-registry entry too).
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	storage := mem.NewStorage(4 * mem.GB)
@@ -67,9 +66,9 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	rec := &tracingtest.LeakRecorder{}
 	tracing.CollectTrace(comp, rec)
 
-	// Admit a read miss. intake opens the req_in and the cache_transaction
-	// task; the directory then issues a bottom fetch (req_out) that is never
-	// answered, leaving the transaction in flight with all three tiers open.
+	// Admit a read miss. intake opens the req_in; the directory then issues a
+	// bottom fetch (req_out) that is never answered, leaving the transaction in
+	// flight with both its req_in and req_out tracing tasks open.
 	read := memprotocol.ReadReq{Address: 0, AccessByteSize: 4}
 	read.ID = timing.GetIDGenerator().Generate()
 	read.Src = messaging.RemotePort("Agent")
@@ -108,11 +107,11 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		t.Fatal("expected an in-flight transaction with a bottom read")
 	}
 
-	// req_in + cache_transaction + req_out.
-	if rec.NumStarted() < 3 {
-		t.Fatalf("expected req_in, cache_transaction and req_out to be "+
-			"opened, got %d task starts: %s",
-			rec.NumStarted(), rec.OpenSummary())
+	// Before the Reset the transaction's req_in and its downstream req_out are
+	// open (the dir_pipeline subtask already closed when the fetch was issued).
+	if open := rec.OpenTasks(); len(open) < 2 {
+		t.Fatalf("expected req_in and req_out to be open, got %d: %s",
+			len(open), rec.OpenSummary())
 	}
 
 	// Reset while the transaction is in flight.

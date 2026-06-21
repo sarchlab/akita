@@ -191,17 +191,18 @@ var _ = Describe("Cache milestones", func() {
 		Expect(ok).To(BeTrue())
 		Expect(reqInStart.ID).ToNot(BeZero())
 
-		// The directory pipeline subtask exists and is parented to req_in
-		// (not to the cache_transaction task), per the buffer-task convention.
+		// The directory pipeline subtask exists and is parented to req_in,
+		// per the buffer-task convention.
 		pipeStart, ok := rec.firstStart(tracing.PipelineTaskKind)
 		Expect(ok).To(BeTrue())
 		Expect(pipeStart.What).To(Equal("Cache.dir_pipeline"))
 		Expect(pipeStart.ParentID).To(Equal(reqInStart.ID))
 
-		// The cache_transaction task is distinct from the pipeline subtask.
-		ctStart, ok := rec.firstStart("cache_transaction")
-		Expect(ok).To(BeTrue())
-		Expect(pipeStart.ParentID).ToNot(Equal(ctStart.ID))
+		// The cache no longer opens a separate cache_transaction task: the
+		// req_in is the single task that carries the request's tags, its
+		// processing milestones, and its downstream req_out children.
+		_, ok = rec.firstStart("cache_transaction")
+		Expect(ok).To(BeFalse())
 	})
 
 	It("records the dir_pipeline work and bottom data milestones on req_in "+
@@ -287,19 +288,22 @@ var _ = Describe("Cache milestones", func() {
 		engine.Run()
 		Expect(drainResponses()).To(HaveLen(1))
 
-		// The partial write hit opened exactly one cache_transaction; the
-		// write-hit tag the directory now emits on writethroughWriteHit must
-		// hang off that transaction.
-		ctStart, ok := rec.firstStart("cache_transaction")
+		// The req_in is now the cache's single task for the request, so the
+		// write-hit tag the directory emits on writethroughWriteHit hangs off
+		// the req_in — there is no separate cache_transaction.
+		reqInStart, ok := rec.firstStart("req_in")
 		Expect(ok).To(BeTrue())
-		Expect(ctStart.What).To(Equal("write"))
+		Expect(reqInStart.What).To(Equal("WriteReq"))
+
+		_, ctOK := rec.firstStart("cache_transaction")
+		Expect(ctOK).To(BeFalse())
 
 		writeHitTags := rec.tagsWith("write-hit")
 		Expect(writeHitTags).ToNot(BeEmpty())
 
 		found := false
 		for _, t := range writeHitTags {
-			if t.TaskID == ctStart.ID {
+			if t.TaskID == reqInStart.ID {
 				found = true
 			}
 		}
@@ -308,12 +312,95 @@ var _ = Describe("Cache milestones", func() {
 		// The write-through write dispatched a downstream WriteReq whose
 		// WriteDoneRsp came back during this run. processDoneRsp records a
 		// dependency milestone on the write's req_in (not the ack).
-		reqInStart, ok := rec.firstStart("req_in")
-		Expect(ok).To(BeTrue())
 		Expect(rec.hasMilestone(reqInStart.ID, "Cache.Bottom")).To(BeTrue())
 		for _, m := range rec.milestonesOn(reqInStart.ID) {
 			if m.What == "Cache.Bottom" {
 				Expect(m.Kind).To(Equal(tracing.MilestoneKindDependency))
+			}
+		}
+	})
+
+	It("tags a write-through full-line write miss with write-miss only", func() {
+		buildCache("write-through")
+
+		// A full-line write to a cold line is a write miss handled by the
+		// full-line fast path, which installs a victim way and writes it. That
+		// install must not also stamp a write-hit tag: the transaction is a
+		// miss and the visualization shows one categorical label, not two
+		// contradictory ones.
+		fullLine := make([]byte, 64)
+		for i := range fullLine {
+			fullLine[i] = byte(i)
+		}
+		miss := memprotocol.WriteReq{Address: 0x100, Data: fullLine}
+		miss.ID = timing.GetIDGenerator().Generate()
+		miss.Src = cuPort.AsRemote()
+		miss.Dst = c.GetPortByName("Top").AsRemote()
+		miss.TrafficBytes = 64 + 12
+		miss.TrafficClass = "req"
+		c.GetPortByName("Top").Deliver(miss)
+		engine.Run()
+		Expect(drainResponses()).To(HaveLen(1))
+
+		reqInStart, ok := rec.firstStart("req_in")
+		Expect(ok).To(BeTrue())
+		Expect(reqInStart.What).To(Equal("WriteReq"))
+
+		// The req_in (the cache's single task for the request) carries
+		// write-miss...
+		missTagged := false
+		for _, t := range rec.tagsWith("write-miss") {
+			if t.TaskID == reqInStart.ID {
+				missTagged = true
+			}
+		}
+		Expect(missTagged).To(BeTrue())
+
+		// ...and must NOT also carry write-hit.
+		for _, t := range rec.tagsWith("write-hit") {
+			Expect(t.TaskID).ToNot(Equal(reqInStart.ID))
+		}
+	})
+
+	It("records the bank access as a subtask parented to req_in, paired "+
+		"with a work milestone", func() {
+		buildCache("write-through")
+
+		// A full-line write to a cold line installs a victim way and writes
+		// the bank, so the transaction traverses the bank pipeline and must
+		// open a bank subtask.
+		fullLine := make([]byte, 64)
+		w := memprotocol.WriteReq{Address: 0x100, Data: fullLine}
+		w.ID = timing.GetIDGenerator().Generate()
+		w.Src = cuPort.AsRemote()
+		w.Dst = c.GetPortByName("Top").AsRemote()
+		w.TrafficBytes = 64 + 12
+		w.TrafficClass = "req"
+		c.GetPortByName("Top").Deliver(w)
+		engine.Run()
+		Expect(drainResponses()).To(HaveLen(1))
+
+		reqInStart, ok := rec.firstStart("req_in")
+		Expect(ok).To(BeTrue())
+
+		// The bank access is a pipeline subtask (What ".bank") parented to the
+		// req_in: every "work" interval has a corresponding child bar.
+		var bankStart tracing.TaskStart
+		found := false
+		for _, s := range rec.starts {
+			if s.Kind == tracing.PipelineTaskKind && s.What == "Cache.bank" {
+				bankStart = s
+				found = true
+			}
+		}
+		Expect(found).To(BeTrue())
+		Expect(bankStart.ParentID).To(Equal(reqInStart.ID))
+
+		// The req_in still carries the matching work milestone for that bar.
+		Expect(rec.hasMilestone(reqInStart.ID, "Cache.bank")).To(BeTrue())
+		for _, m := range rec.milestonesOn(reqInStart.ID) {
+			if m.What == "Cache.bank" {
+				Expect(m.Kind).To(Equal(tracing.MilestoneKindWork))
 			}
 		}
 	})

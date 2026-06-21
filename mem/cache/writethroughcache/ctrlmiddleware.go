@@ -175,14 +175,13 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 }
 
 // endInflightTasks completes the req_in tracing task of every in-flight
-// transaction, ends its cache_transaction task, finalizes its downstream
-// read/write req_out tasks, and closes its directory-pipeline subtask, so a hard
-// Reset that drops the transaction table leaves no started-never-ended task and
-// no leaked receiver-registry entry. A slot already marked Removed can still
-// hold a downstream write whose response will be ignored, so every slot is
-// visited and the already-ended req_in/cache_transaction ends are idempotent.
-// Mirrors respondStage (req_in), bankstage/bottomparser (cache_transaction),
-// bottomparser (req_out), and the directory pipeline (subtask) completion.
+// transaction, finalizes its downstream read/write req_out tasks, and closes
+// its directory-pipeline and bank subtasks, so a hard Reset that drops the
+// transaction table leaves no started-never-ended task and no leaked
+// receiver-registry entry. A slot already marked Removed can still hold a
+// downstream write whose response will be ignored, so every slot is visited and
+// the already-ended req_in end is idempotent. Mirrors respondStage (req_in),
+// bottomparser (req_out), and the directory/bank pipelines (subtasks).
 func (m *ctrlMiddleware) endInflightTasks() {
 	comp := m.pipeline.comp
 
@@ -196,8 +195,6 @@ func (m *ctrlMiddleware) endInflightTasks() {
 			tracing.EndReqInOnReset(comp, trans.WriteMeta.ID)
 		}
 
-		tracing.EndTaskOnReset(comp, trans.ID)
-
 		if trans.HasReadToBottom {
 			tracing.EndTaskOnReset(comp, trans.ReadToBottomMeta.ID)
 		}
@@ -208,6 +205,10 @@ func (m *ctrlMiddleware) endInflightTasks() {
 
 		if trans.DirPipelineTaskID != 0 {
 			tracing.EndTaskOnReset(comp, trans.DirPipelineTaskID)
+		}
+
+		if trans.BankTaskID != 0 {
+			tracing.EndTaskOnReset(comp, trans.BankTaskID)
 		}
 	}
 }

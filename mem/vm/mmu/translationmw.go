@@ -132,13 +132,16 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
 	// The page walk is fully local (a CycleLeft countdown, no downstream
-	// req_out): label that latency interval as work on the req_in, instead of
-	// leaving it an unattributed gap. walking.RecvTaskID is the req_in id.
+	// req_out): label that latency interval as work on the req_in and close the
+	// walk subtask that spanned it, so the work milestone has a corresponding
+	// child bar instead of an unattributed gap. walking.RecvTaskID is the
+	// req_in id.
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: walking.RecvTaskID,
 		Kind:   tracing.MilestoneKindWork,
 		What:   m.comp.Name() + ".walk",
 	})
+	tracing.EndTask(m.comp, tracing.TaskEnd{ID: walking.WalkTaskID})
 
 	m.traceReqComplete(walking.RecvTaskID, walking.ReqID)
 
@@ -186,9 +189,12 @@ func (m *translationMW) startWalking(req vmprotocol.TranslationReq) {
 	spec := m.comp.Spec()
 	state := &m.comp.State
 
+	recvTaskID := tracing.MsgIDAtReceiver(req, m.comp)
+	walkTaskID := timing.GetIDGenerator().Generate()
+
 	ts := transactionState{
 		ReqID:        req.ID,
-		RecvTaskID:   tracing.MsgIDAtReceiver(req, m.comp),
+		RecvTaskID:   recvTaskID,
 		ReqSrc:       req.Src,
 		ReqDst:       req.Dst,
 		PID:          uint32(req.PID),
@@ -196,7 +202,18 @@ func (m *translationMW) startWalking(req vmprotocol.TranslationReq) {
 		DeviceID:     req.DeviceID,
 		TransLatency: req.TransLatency,
 		CycleLeft:    spec.Latency,
+		WalkTaskID:   walkTaskID,
 	}
+
+	// Open the walk subtask spanning the page-table-walk latency, a child of the
+	// req_in, so the ".walk" work milestone emitted at walk completion has a
+	// corresponding bar (no bare work interval).
+	tracing.StartTask(m.comp, tracing.TaskStart{
+		ID:       walkTaskID,
+		ParentID: recvTaskID,
+		Kind:     tracing.PipelineTaskKind,
+		What:     m.comp.Name() + ".walk",
+	})
 
 	state.WalkingTranslations = append(state.WalkingTranslations, ts)
 }
