@@ -32,7 +32,6 @@ const COMPONENT_LINE_HEIGHT_RATIO = 0.2;
 const TOP_AXIS_COMPACT_HEIGHT = 28;
 const SIDE_COLUMN_WIDTH = 350;
 const DATA_RANGE_DEBOUNCE_MS = 1000;
-const NUM_DOTS = 40;
 // Above this many tasks in the visible range, the per-task timeline (one SVG
 // element per task) becomes the page's dominant cost, so we switch to the
 // server-aggregated density view instead. Zooming in until the count drops below
@@ -704,10 +703,12 @@ function AggregatedTimeline({
   );
 }
 
-// ComponentMilestoneBars is the bottom region: a stacked bar chart of blocking
-// reasons. At each sample the bar's segments show how many in-flight tasks are
-// blocked by each reason (milestone kind), colored to match the wavy lines.
-function ComponentMilestoneBars({
+// ComponentMilestoneAreas is the bottom region: a stacked-area chart of blocking
+// reasons over the same bins as the task-count chart above it. At each bin the
+// stacked height shows how many in-flight tasks are blocked by each reason
+// (milestone kind), colored to match the wavy lines. Drawn as one <path> per
+// reason (not a rect per bin) so it stays cheap at the task chart's ~900 bins.
+function ComponentMilestoneAreas({
   info,
   range,
   width,
@@ -732,10 +733,24 @@ function ComponentMilestoneBars({
     d3.max(data, (point) => kinds.reduce((sum, kind) => sum + (point.values[kind] ?? 0), 0)) ?? 0;
   const yScale = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([Math.max(1, xAxisY - 4), 6]);
   const yTicks = yScale.ticks(Math.min(4, Math.max(1, maxTotal))).filter((tick) => Number.isInteger(tick));
-  const barWidth =
-    data.length > 1
-      ? Math.max(1, (safeScale(xScale, data[1].time) - safeScale(xScale, data[0].time)) * 0.8)
-      : 8;
+
+  // One stacked-area band per reason: trace the cumulative top edge left-to-right,
+  // then the band's base edge right-to-left, and close. Each bin is placed by its
+  // absolute center time so the bands line up with the shared axis during a pan.
+  const areas = kinds.map((kind, ki) => {
+    const tops: string[] = [];
+    const bots: string[] = [];
+    for (const point of data) {
+      let base = 0;
+      for (let k = 0; k < ki; k++) base += point.values[kinds[k]] ?? 0;
+      const top = base + (point.values[kind] ?? 0);
+      const x = safeScale(xScale, point.time);
+      tops.push(`${x},${safeScale(yScale, top)}`);
+      bots.push(`${x},${safeScale(yScale, base)}`);
+    }
+    bots.reverse();
+    return { kind, d: tops.length ? `M${tops.join("L")}L${bots.join("L")}Z` : "" };
+  });
 
   return (
     <svg width={width} height={height} className="block">
@@ -761,40 +776,28 @@ function ComponentMilestoneBars({
         ))}
       </g>
 
-      {data.map((point, index) => {
-        const cx = safeScale(xScale, point.time);
-        let acc = 0;
-        return (
-          <g key={index}>
-            {kinds.map((kind) => {
-              const value = point.values[kind] ?? 0;
-              if (value <= 0) return null;
-              const yTop = safeScale(yScale, acc + value);
-              const yBottom = safeScale(yScale, acc);
-              acc += value;
-              return (
-                <rect
-                  key={kind}
-                  x={cx - barWidth / 2}
-                  y={yTop}
-                  width={barWidth}
-                  height={Math.max(0, yBottom - yTop)}
-                  fill={colorMap[kind] ?? "#9ca3af"}
-                  stroke="#ffffff"
-                  strokeWidth={0.3}
-                  className="cursor-pointer"
-                  onMouseEnter={() => onHoverSegment({ kind, time: point.time })}
-                  onMouseLeave={() => onHoverSegment(null)}
-                >
-                  <title>
-                    {kind}: {value} blocked at {formatAxisTick(point.time)}
-                  </title>
-                </rect>
-              );
-            })}
-          </g>
-        );
-      })}
+      {areas.map(({ kind, d }) =>
+        d ? (
+          <path
+            key={kind}
+            d={d}
+            fill={colorMap[kind] ?? "#9ca3af"}
+            opacity={0.9}
+            className="cursor-pointer"
+            // Report the reason + time under the cursor so hovering a band
+            // highlights the tasks blocked by that reason in the view above.
+            onMouseMove={(event) => {
+              const svg = event.currentTarget.ownerSVGElement;
+              if (!svg) return;
+              const rect = svg.getBoundingClientRect();
+              onHoverSegment({ kind, time: xScale.invert(event.clientX - rect.left) });
+            }}
+            onMouseLeave={() => onHoverSegment(null)}
+          >
+            <title>{kind}</title>
+          </path>
+        ) : null,
+      )}
     </svg>
   );
 }
@@ -1188,12 +1191,14 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     setSearchParams(params);
   };
 
-  const { info: stackedInfo, loading: infoLoading } = useStackedCompInfo(componentName, "ConcurrentTaskMilestones", dataRange.startTime, dataRange.endTime, NUM_DOTS);
+  // Quantize the bin count so a pixel-by-pixel resize does not refetch. Both the
+  // task-count and blocking-reason charts bin over the same range with the same
+  // count, so their stacked areas line up bin-for-bin.
+  const numBins = Math.max(100, Math.min(1200, Math.round((size.width - SIDE_COLUMN_WIDTH) / 100) * 100));
+  const { info: stackedInfo, loading: infoLoading } = useStackedCompInfo(componentName, "ConcurrentTaskMilestones", dataRange.startTime, dataRange.endTime, numBins);
 
   // Level-of-detail: always fetch the cheap aggregated summary first. Its `total`
   // (tasks overlapping the range) decides whether the per-task view is affordable.
-  // Quantize the bin count so a pixel-by-pixel resize does not refetch.
-  const numBins = Math.max(100, Math.min(1200, Math.round((size.width - SIDE_COLUMN_WIDTH) / 100) * 100));
   const { data: agg, loading: aggLoading } = useComponentTimeline(componentName, dataRange.startTime, dataRange.endTime, numBins);
   // Only fetch the raw tasks once the summary for THIS range confirms the count is
   // affordable. useComponentTimeline keeps the previous summary while a new range
@@ -1545,7 +1550,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
         </div>
         {/* Blocking reasons — always shown. */}
         <div className="daisen1-metric-view border-t border-slate-200" style={{ height: metricLineHeight }}>
-          <ComponentMilestoneBars info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} onHoverSegment={setHoveredSegment} />
+          <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} onHoverSegment={setHoveredSegment} />
         </div>
       </div>
 
