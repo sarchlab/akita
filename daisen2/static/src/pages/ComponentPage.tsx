@@ -608,6 +608,61 @@ function ComponentTimeline({
   );
 }
 
+// formatCount renders an axis count compactly: 60000 -> "60k", 1500000 -> "1.5M".
+function formatCount(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return `${+(n / 1e9).toFixed(1)}B`;
+  if (abs >= 1e6) return `${+(n / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `${+(n / 1e3).toFixed(1)}k`;
+  return String(n);
+}
+
+// Roughly one repeated y-value label per this many pixels of chart width.
+const Y_LABEL_SPACING = 450;
+
+// YAxisOverlay draws horizontal value gridlines for a count chart, repeating the
+// value label across the width — one column roughly every Y_LABEL_SPACING px, both
+// edges included — and paints it ON TOP of the chart with a white halo so the value
+// stays readable over the filled areas of a wide chart. Shared by the task-count
+// and blocking-reason charts so they get identical treatment.
+function YAxisOverlay({ yScale, width }: { yScale: d3.ScaleLinear<number, number>; width: number }) {
+  const left = 5;
+  const right = Math.max(left + 1, width - 5);
+  const intervals = Math.max(1, Math.round((right - left) / Y_LABEL_SPACING));
+  const columns = Array.from({ length: intervals + 1 }, (_, i) => left + (i / intervals) * (right - left));
+  // Skip the 0 baseline (it's implicit at the axis) and any non-integer ticks a
+  // tiny range would produce.
+  const ticks = yScale.ticks(4).filter((tick) => Number.isInteger(tick) && tick > 0);
+  return (
+    <g pointerEvents="none">
+      {ticks.map((tick) => {
+        const y = safeScale(yScale, tick);
+        const labelY = Math.max(9, y - 3);
+        return (
+          <g key={tick}>
+            <line x1={left} x2={right} y1={y} y2={y} stroke="#94a3b8" strokeDasharray="3,3" opacity={0.45} />
+            {columns.map((cx, i) => (
+              <text
+                key={i}
+                x={cx}
+                y={labelY}
+                textAnchor={i === 0 ? "start" : i === columns.length - 1 ? "end" : "middle"}
+                fontSize="10"
+                fill="#475569"
+                stroke="#ffffff"
+                strokeWidth={2.5}
+                paintOrder="stroke"
+              >
+                {formatCount(tick)}
+              </text>
+            ))}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
 // AggregatedTimeline is the level-of-detail replacement for ComponentTimeline
 // when the visible range holds too many tasks to draw one element each. It draws
 // a stacked-area density chart from the server's per-bin, per-"Kind-What" counts:
@@ -629,8 +684,10 @@ function AggregatedTimeline({
   colorMap: Record<string, string>;
   highlightedKey: string | null;
   // Hovering a band highlights its "kind-what": the band and its legend row stay
-  // lit while the rest dim, and the matching tasks light up in the per-task gantt.
-  onHoverKey: (key: string | null) => void;
+  // lit while the rest dim, and the tasks of that kind active at the cursor's time
+  // light up in the per-task gantt. The time lets the parent scope the gantt
+  // highlight to that moment instead of every task of the kind.
+  onHoverKey: (key: string | null, time: number | null) => void;
   // When the per-task gantt is not shown, hint that zooming in reveals it.
   showZoomHint: boolean;
 }) {
@@ -684,8 +741,16 @@ function AggregatedTimeline({
           stroke="none"
           opacity={hasHighlight ? (highlightedKey === key ? 1 : 0.12) : 0.9}
           className="cursor-pointer"
-          onMouseMove={() => onHoverKey(key)}
-          onMouseLeave={() => onHoverKey(null)}
+          onMouseMove={(event) => {
+            const svg = event.currentTarget.ownerSVGElement;
+            if (!svg) {
+              onHoverKey(key, null);
+              return;
+            }
+            const rect = svg.getBoundingClientRect();
+            onHoverKey(key, xScale.invert(event.clientX - rect.left));
+          }}
+          onMouseLeave={() => onHoverKey(null, null)}
         >
           <title>{key}</title>
         </path>
@@ -705,7 +770,9 @@ function AggregatedTimeline({
         />
       ))}
 
-      <text x={8} y={15} fontSize="11" fill="#475569" pointerEvents="none">
+      <YAxisOverlay yScale={yScale} width={width} />
+
+      <text x={8} y={15} fontSize="11" fill="#475569" pointerEvents="none" stroke="#ffffff" strokeWidth={2.5} paintOrder="stroke">
         Task count · {data.total.toLocaleString()} tasks{showZoomHint ? " · zoom in for individual tasks" : ""}
       </text>
     </svg>
@@ -744,7 +811,6 @@ function ComponentMilestoneAreas({
   const maxTotal =
     d3.max(data, (point) => kinds.reduce((sum, kind) => sum + (point.values[kind] ?? 0), 0)) ?? 0;
   const yScale = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([Math.max(1, xAxisY - 4), 6]);
-  const yTicks = yScale.ticks(Math.min(4, Math.max(1, maxTotal))).filter((tick) => Number.isInteger(tick));
 
   // One stacked-area band per reason: trace the cumulative top edge left-to-right,
   // then the band's base edge right-to-left, and close. Each bin is placed by its
@@ -779,17 +845,6 @@ function ComponentMilestoneAreas({
       ))}
       <line x1={5} x2={width - 5} y1={xAxisY} y2={xAxisY} stroke="#000" pointerEvents="none" />
 
-      <g transform="translate(40, 0)" pointerEvents="none">
-        {yTicks.map((tick) => (
-          <g key={tick}>
-            <line x1={0} x2={width - 40} y1={safeScale(yScale, tick)} y2={safeScale(yScale, tick)} stroke="#ccc" strokeDasharray="3,3" opacity={0.5} />
-            <text x={-8} y={safeScale(yScale, tick)} dy="0.32em" textAnchor="end" fontSize="10" fill="#4b5563">
-              {tick}
-            </text>
-          </g>
-        ))}
-      </g>
-
       {areas.map(({ kind, d }) =>
         d ? (
           <path
@@ -812,6 +867,8 @@ function ComponentMilestoneAreas({
           </path>
         ) : null,
       )}
+
+      <YAxisOverlay yScale={yScale} width={width} />
     </svg>
   );
 }
@@ -1369,27 +1426,35 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     return Array.from(set).sort();
   }, [stackedInfo, currentTask]);
 
-  // The stacked-bar segment currently hovered, and the tasks blocked by its
-  // reason at that sample time — highlighted in the timeline. The timeline tasks
-  // carry milestones, so we recompute the membership here (matching the backend's
-  // per-reason counting) rather than threading IDs through the chart data.
+  // What's hovered over the two stacked charts, with the time under the cursor:
+  // a blocking-reason band (highlight the tasks blocked by that reason at that
+  // moment) or a task-count band (highlight the tasks of that kind active at that
+  // moment). Both scope the gantt highlight to the cursor's time rather than every
+  // task of the kind — the timeline tasks carry milestones, so we recompute the
+  // membership here rather than threading IDs through the chart data.
   const [hoveredSegment, setHoveredSegment] = useState<{ kind: string; time: number } | null>(null);
+  const [hoveredCount, setHoveredCount] = useState<{ key: string; time: number } | null>(null);
   const highlightedTaskIds = useMemo(() => {
-    // Per-task highlighting from the milestone bars only applies when the per-task
+    // Per-task highlighting from the stacked charts only applies when the per-task
     // gantt is shown.
     if (!rawEnabled) return null;
-    if (!hoveredSegment) return null;
     const ids = new Set<string>();
-    for (const task of tasks) {
-      if (task.start_time > hoveredSegment.time || task.end_time < hoveredSegment.time) {
-        continue;
+    if (hoveredSegment) {
+      for (const task of tasks) {
+        if (task.start_time > hoveredSegment.time || task.end_time < hoveredSegment.time) continue;
+        if (blockingKindAt(task.steps, hoveredSegment.time) === hoveredSegment.kind) ids.add(String(task.id));
       }
-      if (blockingKindAt(task.steps, hoveredSegment.time) === hoveredSegment.kind) {
-        ids.add(String(task.id));
-      }
+      return ids;
     }
-    return ids;
-  }, [hoveredSegment, tasks, rawEnabled]);
+    if (hoveredCount) {
+      for (const task of tasks) {
+        if (task.start_time > hoveredCount.time || task.end_time < hoveredCount.time) continue;
+        if (taskColorKey(task) === hoveredCount.key) ids.add(String(task.id));
+      }
+      return ids;
+    }
+    return null;
+  }, [hoveredSegment, hoveredCount, tasks, rawEnabled]);
 
   const shiftRange = (nextRange: TimeRange) => {
     if (!Number.isFinite(nextRange.startTime) || !Number.isFinite(nextRange.endTime)) return;
@@ -1594,7 +1659,13 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               size={{ width: leftWidth, height: countHeight }}
               colorMap={colorMap}
               highlightedKey={highlightedKey}
-              onHoverKey={setHighlightedKey}
+              onHoverKey={(key, time) => {
+                // Dim the other bands + legend rows via the key, but scope the gantt
+                // highlight to the tasks present at the cursor's time (not all of the
+                // kind) — highlightedTaskIds takes precedence over highlightedKey.
+                setHighlightedKey(key);
+                setHoveredCount(key !== null && time !== null ? { key, time } : null);
+              }}
               showZoomHint={!showGantt}
             />
           ) : (
