@@ -242,7 +242,12 @@ function hasConflict(task: LayoutTask, row?: LayoutTask[]) {
 }
 
 function padTaskHeight(height: number) {
-  return height > 10 ? height * 0.8 : height * 0.6;
+  // Fill most of the row, leaving a small vertical gap between stacked bars. The
+  // gap shrinks to nothing as the rows get tight (dense concurrency) so the bars
+  // stay visible instead of vanishing into the gap. Subtasks nest within the
+  // returned band, so this is the parent bar's height, not half of it.
+  const gap = Math.min(4, Math.max(0, (height - 6) * 0.5));
+  return Math.max(1, height - gap);
 }
 
 function assignDimensionLevel(root: LayoutTask, parentLevelHeight: number, depth: number) {
@@ -260,7 +265,7 @@ function assignDimensionLevel(root: LayoutTask, parentLevelHeight: number, depth
   if (globalMaxY === -1) return 0;
 
   const taskHeight = parentLevelHeight / (globalMaxY + 1);
-  const paddedTaskHeight = padTaskHeight(taskHeight) / 2;
+  const paddedTaskHeight = padTaskHeight(taskHeight);
 
   for (const task of levelTasks) {
     if (!task.dim) continue;
@@ -326,7 +331,7 @@ function buildComponentTaskLayout(
       return true;
     });
 
-  return { layout, contentHeight };
+  return { layout, contentHeight, topRows };
 }
 
 function ComponentTopAxis({ width, height, range }: { width: number; height: number; range: TimeRange }) {
@@ -392,7 +397,7 @@ function ComponentTimeline({
   // Row height is the vertical zoom: taller rows = bigger bars, a taller chart that
   // scrolls. The chart grows past its region and is navigated by dragging/scrolling.
   const [rowHeight, setRowHeight] = useState(ROW_HEIGHT);
-  const { layout: taskLayout, contentHeight } = buildComponentTaskLayout(tasks, width, height, range.startTime, range.endTime, rowHeight);
+  const { layout: taskLayout, contentHeight, topRows } = buildComponentTaskLayout(tasks, width, height, range.startTime, range.endTime, rowHeight);
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
 
   const taskById = useMemo(() => {
@@ -491,6 +496,8 @@ function ComponentTimeline({
   // On-screen zoom controls: horizontal (time) and vertical (row height).
   const zoomTimeBy = (dir: number) => onZoom(dir * 160, 0, 0.5); // +1 out, -1 in
   const zoomRowsBy = (dir: number) => setRowHeight((h) => Math.min(80, Math.max(6, h + dir * 4)));
+  // Shrink rows so every concurrency row fits in the visible region at once.
+  const zoomRowsAll = () => setRowHeight(Math.max(2, Math.min(80, Math.floor(height / Math.max(1, topRows)))));
   const btnClass = "rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-primary";
 
   return (
@@ -515,6 +522,9 @@ function ComponentTimeline({
         </button>
         <button type="button" className={btnClass} title="Taller rows (Alt+scroll)" onClick={() => zoomRowsBy(1)}>
           <Plus className="h-4 w-4" />
+        </button>
+        <button type="button" className={`${btnClass} px-1 text-[10px] font-medium`} title="Fit all rows" onClick={zoomRowsAll}>
+          all
         </button>
       </div>
       <div className="pointer-events-none absolute bottom-1 left-2 z-10 rounded bg-white/75 px-1.5 py-0.5 text-[10px] text-muted-foreground shadow-sm">
@@ -663,12 +673,44 @@ function YAxisOverlay({ yScale, width }: { yScale: d3.ScaleLinear<number, number
   );
 }
 
+// GapShading hatches the time ranges where no trace was collected, matching the
+// component gantt's treatment so the overview charts read consistently. Drawn on
+// top of the filled areas (it is faint) so a gap is visible even over a band.
+function GapShading({
+  gaps,
+  xScale,
+  height,
+  patternId,
+}: {
+  gaps: Segment[];
+  xScale: d3.ScaleLinear<number, number>;
+  height: number;
+  patternId: string;
+}) {
+  if (gaps.length === 0) return null;
+  return (
+    <>
+      <defs>
+        <pattern id={patternId} patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
+          <rect width="8" height="8" fill="rgba(128, 128, 128, 0.15)" />
+          <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(128, 128, 128, 0.3)" strokeWidth="4" />
+        </pattern>
+      </defs>
+      {gaps.map((gap, index) => {
+        const x = safeScale(xScale, gap.start_time);
+        const w = Math.max(0, safeScale(xScale, gap.end_time) - x);
+        return <rect key={index} x={x} y={0} width={w} height={height} fill={`url(#${patternId})`} pointerEvents="none" />;
+      })}
+    </>
+  );
+}
+
 // AggregatedTimeline is the level-of-detail replacement for ComponentTimeline
 // when the visible range holds too many tasks to draw one element each. It draws
 // a stacked-area density chart from the server's per-bin, per-"Kind-What" counts:
 // a handful of <path>s instead of hundreds of thousands of <rect>s. Individual
-// tasks are not hoverable/clickable here (zoom in for that), but hovering a key
-// in the legend still highlights that kind's band.
+// tasks are not hoverable/clickable here (zoom in for that), but hovering a band
+// highlights it and the tasks of that kind at the cursor's time in the gantt.
 function AggregatedTimeline({
   data,
   range,
@@ -676,18 +718,21 @@ function AggregatedTimeline({
   colorMap,
   highlightedKey,
   onHoverKey,
+  segments,
+  segmentsEnabled,
   showZoomHint,
 }: {
-  data: ComponentTimelineData;
+  data: ComponentTimelineData | null;
   range: TimeRange;
   size: Size;
   colorMap: Record<string, string>;
   highlightedKey: string | null;
-  // Hovering a band highlights its "kind-what": the band and its legend row stay
-  // lit while the rest dim, and the tasks of that kind active at the cursor's time
-  // light up in the per-task gantt. The time lets the parent scope the gantt
-  // highlight to that moment instead of every task of the kind.
+  // Hovering a band lights it (dimming the rest) and lights the tasks of that kind
+  // active at the cursor's time in the gantt. It deliberately does NOT touch the
+  // side-panel legend — legend hover still drives the highlight the other way.
   onHoverKey: (key: string | null, time: number | null) => void;
+  segments: Segment[];
+  segmentsEnabled: boolean;
   // When the per-task gantt is not shown, hint that zooming in reveals it.
   showZoomHint: boolean;
 }) {
@@ -695,6 +740,28 @@ function AggregatedTimeline({
   const height = Math.max(1, size.height);
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
+  // Hovered band is local so it dims this chart only; the legend never reacts to a
+  // chart hover. (highlightedKey, set by legend hover, still dims the bands.)
+  const [hoveredBand, setHoveredBand] = useState<string | null>(null);
+  const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
+
+  const gridlines = ticks.map((tick) => (
+    <line key={tick} x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.4} pointerEvents="none" />
+  ));
+
+  // Before the summary lands, still draw the time marks (and any uncollected-range
+  // shading) so the region keeps its axis instead of collapsing to a "loading" box.
+  if (!data) {
+    return (
+      <svg width={width} height={height} className="block">
+        {gridlines}
+        <GapShading gaps={gaps} xScale={xScale} height={height} patternId="count-gap-pattern" />
+        <text x={8} y={15} fontSize="11" fill="#94a3b8" pointerEvents="none">
+          Task count · loading…
+        </text>
+      </svg>
+    );
+  }
 
   const { keys, bins } = data;
   const numBins = bins.length;
@@ -729,7 +796,8 @@ function AggregatedTimeline({
     return { key, d: `M${tops.join("L")}L${bots.join("L")}Z` };
   });
 
-  const hasHighlight = highlightedKey !== null;
+  const activeKey = hoveredBand ?? highlightedKey;
+  const hasHighlight = activeKey !== null;
 
   return (
     <svg width={width} height={height} className="block">
@@ -739,9 +807,10 @@ function AggregatedTimeline({
           d={d}
           fill={colorMap[key] ?? "#999999"}
           stroke="none"
-          opacity={hasHighlight ? (highlightedKey === key ? 1 : 0.12) : 0.9}
+          opacity={hasHighlight ? (activeKey === key ? 1 : 0.12) : 0.9}
           className="cursor-pointer"
           onMouseMove={(event) => {
+            setHoveredBand(key);
             const svg = event.currentTarget.ownerSVGElement;
             if (!svg) {
               onHoverKey(key, null);
@@ -750,25 +819,18 @@ function AggregatedTimeline({
             const rect = svg.getBoundingClientRect();
             onHoverKey(key, xScale.invert(event.clientX - rect.left));
           }}
-          onMouseLeave={() => onHoverKey(null, null)}
+          onMouseLeave={() => {
+            setHoveredBand(null);
+            onHoverKey(null, null);
+          }}
         >
           <title>{key}</title>
         </path>
       ))}
 
-      {ticks.map((tick) => (
-        <line
-          key={tick}
-          x1={safeScale(xScale, tick)}
-          x2={safeScale(xScale, tick)}
-          y1={0}
-          y2={height}
-          stroke="#000"
-          strokeDasharray="3,3"
-          opacity={0.4}
-          pointerEvents="none"
-        />
-      ))}
+      {gridlines}
+
+      <GapShading gaps={gaps} xScale={xScale} height={height} patternId="count-gap-pattern" />
 
       <YAxisOverlay yScale={yScale} width={width} />
 
@@ -791,6 +853,8 @@ function ComponentMilestoneAreas({
   height,
   colorMap,
   highlightedKey,
+  segments,
+  segmentsEnabled,
   onHoverSegment,
 }: {
   info: StackedComponentInfo | null;
@@ -800,11 +864,14 @@ function ComponentMilestoneAreas({
   colorMap: Record<string, string>;
   // A reason hovered in the legend; its band stays opaque while the rest dim.
   highlightedKey: string | null;
+  segments: Segment[];
+  segmentsEnabled: boolean;
   onHoverSegment: (segment: { kind: string; time: number } | null) => void;
 }) {
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
   const xAxisY = Math.max(0, height - 20);
+  const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
 
   const data = info?.data ?? [];
   const kinds = info?.kinds ?? [];
@@ -867,6 +934,8 @@ function ComponentMilestoneAreas({
           </path>
         ) : null,
       )}
+
+      <GapShading gaps={gaps} xScale={xScale} height={xAxisY} patternId="blocking-gap-pattern" />
 
       <YAxisOverlay yScale={yScale} width={width} />
     </svg>
@@ -1664,25 +1733,23 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           style={{ height: countHeight }}
           onWheel={handleOverviewWheel}
         >
-          {agg ? (
-            <AggregatedTimeline
-              data={agg}
-              range={viewRange}
-              size={{ width: leftWidth, height: countHeight }}
-              colorMap={colorMap}
-              highlightedKey={highlightedKey}
-              onHoverKey={(key, time) => {
-                // Dim the other bands + legend rows via the key, but scope the gantt
-                // highlight to the tasks present at the cursor's time (not all of the
-                // kind) — highlightedTaskIds takes precedence over highlightedKey.
-                setHighlightedKey(key);
-                setHoveredCount(key !== null && time !== null ? { key, time } : null);
-              }}
-              showZoomHint={!showGantt}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">loading task count…</div>
-          )}
+          {/* Rendered even while agg is null so the time marks stay put during load. */}
+          <AggregatedTimeline
+            data={agg}
+            range={viewRange}
+            size={{ width: leftWidth, height: countHeight }}
+            colorMap={colorMap}
+            highlightedKey={highlightedKey}
+            onHoverKey={(key, time) => {
+              // Scope the gantt highlight to the tasks present at the cursor's time
+              // (not all of the kind); the band dims itself locally and the legend
+              // is intentionally left untouched on a chart hover.
+              setHoveredCount(key !== null && time !== null ? { key, time } : null);
+            }}
+            segments={segmentsData?.segments ?? []}
+            segmentsEnabled={segmentsData?.enabled ?? false}
+            showZoomHint={!showGantt}
+          />
         </div>
         {/* Blocking reasons — always shown. Like the task-count chart: plain scroll
             is inert, a modifier/pinch (Ctrl/⌘+scroll) zooms time. */}
@@ -1691,7 +1758,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           style={{ height: metricLineHeight }}
           onWheel={handleOverviewWheel}
         >
-          <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={highlightedReason} onHoverSegment={setHoveredSegment} />
+          <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={highlightedReason} segments={segmentsData?.segments ?? []} segmentsEnabled={segmentsData?.enabled ?? false} onHoverSegment={setHoveredSegment} />
         </div>
       </div>
 
