@@ -1650,8 +1650,14 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             />
           </div>
         )}
-        {/* Task count (occupancy density by kind) — always shown. */}
-        <div className="daisen1-count-view border-t border-slate-200" style={{ height: countHeight }}>
+        {/* Task count (occupancy density by kind) — always shown. The overview
+            charts are not zoom targets: stop the wheel from reaching the panel's
+            zoom handler so scrolling over them does nothing (zoom via the gantt). */}
+        <div
+          className="daisen1-count-view border-t border-slate-200"
+          style={{ height: countHeight }}
+          onWheel={(event) => event.stopPropagation()}
+        >
           {agg ? (
             <AggregatedTimeline
               data={agg}
@@ -1672,8 +1678,13 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             <div className="flex h-full items-center justify-center text-xs text-muted-foreground">loading task count…</div>
           )}
         </div>
-        {/* Blocking reasons — always shown. */}
-        <div className="daisen1-metric-view border-t border-slate-200" style={{ height: metricLineHeight }}>
+        {/* Blocking reasons — always shown. Like the task-count chart, not a zoom
+            target: swallow the wheel so scrolling over it does not zoom. */}
+        <div
+          className="daisen1-metric-view border-t border-slate-200"
+          style={{ height: metricLineHeight }}
+          onWheel={(event) => event.stopPropagation()}
+        >
           <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={highlightedReason} onHoverSegment={setHoveredSegment} />
         </div>
       </div>

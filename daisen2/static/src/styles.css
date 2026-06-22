@@ -36,6 +36,9 @@
   body,
   #root {
     height: 100%;
+    /* No bounce/overscroll, so a horizontal trackpad swipe at the edge does not
+       trigger browser back/forward navigation while panning a trace. */
+    overscroll-behavior: none;
   }
 
   body {
