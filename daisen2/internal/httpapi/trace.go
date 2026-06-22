@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	_ "github.com/glebarez/go-sqlite"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -155,7 +155,7 @@ func NewSQLiteTraceReader(filename string) *SQLiteTraceReader {
 
 // Init establishes a connection to the database.
 func (r *SQLiteTraceReader) Init() {
-	db, err := sql.Open("sqlite", r.filename)
+	db, err := sql.Open("sqlite3", r.filename)
 	if err != nil {
 		panic(err)
 	}
@@ -171,7 +171,7 @@ func (r *SQLiteTraceReader) Init() {
 
 // InitReadOnly establishes a read-only connection to the database with WAL mode.
 func (r *SQLiteTraceReader) InitReadOnly() {
-	db, err := sql.Open("sqlite", r.filename+"?mode=ro")
+	db, err := sql.Open("sqlite3", r.filename+"?mode=ro")
 	if err != nil {
 		panic(err)
 	}
@@ -384,17 +384,32 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 
 	// Build a map for quick task lookup
 	taskMap := make(map[uint64]*Task)
-	taskIDs := make([]interface{}, 0, len(tasks))
+	taskIDs := make([]uint64, 0, len(tasks))
 	for i := range tasks {
 		taskMap[tasks[i].ID] = &tasks[i]
 		taskIDs = append(taskIDs, tasks[i].ID)
 	}
 
-	// Query milestones for all tasks using parameterized query
-	placeholders := strings.Repeat("?,", len(taskIDs))
-	if len(placeholders) > 0 {
-		placeholders = placeholders[:len(placeholders)-1] // remove trailing comma
+	// SQLite caps the number of bound parameters in one statement
+	// (SQLITE_MAX_VARIABLE_NUMBER, ~32k). A component can have far more tasks than
+	// that, so query in batches — a single IN list with one placeholder per task
+	// would make the statement fail and silently drop every milestone for big
+	// components (which left the blocking-reason chart blank when zoomed out).
+	const batchSize = 10000
+	for start := 0; start < len(taskIDs); start += batchSize {
+		end := min(start+batchSize, len(taskIDs))
+		r.loadMilestoneBatch(taskMap, taskIDs[start:end])
 	}
+}
+
+// loadMilestoneBatch loads milestones for one batch of task ids into taskMap.
+func (r *SQLiteTraceReader) loadMilestoneBatch(taskMap map[uint64]*Task, ids []uint64) {
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
 
 	// A milestone's location is inherited from its task, so the milestone
 	// table no longer stores it; we read the remaining columns only.
@@ -404,7 +419,7 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 		WHERE TaskID IN (%s)
 		ORDER BY TaskID, Time`, placeholders)
 
-	rows, err := r.Query(sqlStr, taskIDs...)
+	rows, err := r.Query(sqlStr, args...)
 	if err != nil {
 		// If milestone table doesn't exist, just return without error
 		return
@@ -443,16 +458,29 @@ func (r *SQLiteTraceReader) loadTagsForTasks(tasks []Task) {
 	}
 
 	taskMap := make(map[uint64]*Task)
-	taskIDs := make([]interface{}, 0, len(tasks))
+	taskIDs := make([]uint64, 0, len(tasks))
 	for i := range tasks {
 		taskMap[tasks[i].ID] = &tasks[i]
 		taskIDs = append(taskIDs, tasks[i].ID)
 	}
 
-	placeholders := strings.Repeat("?,", len(taskIDs))
-	if len(placeholders) > 0 {
-		placeholders = placeholders[:len(placeholders)-1] // remove trailing comma
+	// Batch like loadMilestonesForTasks: one placeholder per task overflows
+	// SQLite's bound-parameter limit for large components.
+	const batchSize = 10000
+	for start := 0; start < len(taskIDs); start += batchSize {
+		end := min(start+batchSize, len(taskIDs))
+		r.loadTagBatch(taskMap, taskIDs[start:end])
 	}
+}
+
+// loadTagBatch loads tags for one batch of task ids into taskMap.
+func (r *SQLiteTraceReader) loadTagBatch(taskMap map[uint64]*Task, ids []uint64) {
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
 
 	sqlStr := fmt.Sprintf(`
 		SELECT TaskID, Time, What
@@ -460,7 +488,7 @@ func (r *SQLiteTraceReader) loadTagsForTasks(tasks []Task) {
 		WHERE TaskID IN (%s)
 		ORDER BY TaskID, Time`, placeholders)
 
-	rows, err := r.Query(sqlStr, taskIDs...)
+	rows, err := r.Query(sqlStr, args...)
 	if err != nil {
 		// If the tag table doesn't exist, just return without error.
 		return
