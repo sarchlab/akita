@@ -5,7 +5,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import { X, ChevronRight, Plus, Minus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { SidePanel } from "../components/ui/side-panel";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import type { StackedComponentInfo } from "../hooks/useCompInfo";
 import { useStackedCompInfo } from "../hooks/useCompInfo";
 import { useSegments } from "../hooks/useSegments";
@@ -20,7 +19,7 @@ import { blockingKindAt, milestonesOf, wavyPath } from "../utils/milestoneViz";
 import { smartString } from "../utils/smartValue";
 import { cn } from "../lib/utils";
 import { useComponentNames } from "../hooks/useComponentNames";
-import { buildLocationTree, breadcrumbSegments, findNode, isLeafNode, type LocationNode } from "../utils/locationTree";
+import { buildLocationTree, breadcrumbSegments, findNode, type LocationNode } from "../utils/locationTree";
 
 // The left column stacks three regions: the parent/current/sub task view (top),
 // the component-task timeline (middle), and the metric line chart (bottom). The
@@ -1303,6 +1302,44 @@ function sanitizeRange(startTime: number, endTime: number): TimeRange {
 // a leaf (a real task row) shows just its tasks; an internal node (e.g. "ROB")
 // aggregates every task beneath it but looks identical. The location tree powers
 // the header breadcrumb (collapse up) and the drill-into control (descend).
+// LocationSubtree renders the whole tree of locations beneath a scope, fully
+// expanded, with every row clickable to jump into that location. Shown in place
+// of the single-level drill-down so the entire structure under a scope is visible.
+function LocationSubtree({
+  nodes,
+  depth,
+  onNavigate,
+}: {
+  nodes: LocationNode[];
+  depth: number;
+  onNavigate: (path: string) => void;
+}) {
+  return (
+    <ul>
+      {nodes.map((node) => {
+        const isBranch = node.children.length > 0;
+        return (
+          <li key={node.path}>
+            <button
+              type="button"
+              className={cn(
+                "flex w-full items-center rounded px-1 py-0.5 text-left text-xs hover:bg-muted hover:text-primary",
+                isBranch ? "font-medium text-foreground" : "text-muted-foreground",
+              )}
+              style={{ paddingLeft: `${depth * 14 + 4}px` }}
+              onClick={() => onNavigate(node.path)}
+              title={node.path}
+            >
+              <span className="truncate">{node.name}</span>
+            </button>
+            {isBranch && <LocationSubtree nodes={node.children} depth={depth + 1} onNavigate={onNavigate} />}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function ComponentDetailView({ root }: { root: LocationNode }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const name = searchParams.get("name") ?? "";
@@ -1809,23 +1846,14 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               ) : null}
             </div>
           </div>
-          {/* Drill into a child location (descend the hierarchy). Hidden for leaves. */}
+          {/* For a scope, show the full expanded tree of locations beneath it; each
+              row jumps into that location. Hidden for leaves. */}
           {scopeChildren.length > 0 && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>Drill into</span>
-              <Select value="" onValueChange={navigateToLocation}>
-                <SelectTrigger className="h-7 w-44 text-xs">
-                  <SelectValue placeholder="child location…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {scopeChildren.map((child) => (
-                    <SelectItem key={child.path} value={child.path}>
-                      {child.name}
-                      {isLeafNode(child) ? "" : " ›"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+              <span>Locations under this scope</span>
+              <div className="max-h-48 overflow-auto rounded border bg-muted/20 py-1">
+                <LocationSubtree nodes={scopeChildren} depth={0} onNavigate={navigateToLocation} />
+              </div>
             </div>
           )}
         </div>
