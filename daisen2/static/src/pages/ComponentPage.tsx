@@ -10,6 +10,8 @@ import { useStackedCompInfo } from "../hooks/useCompInfo";
 import { useSegments } from "../hooks/useSegments";
 import { useSimulationRange } from "../hooks/useSimulationRange";
 import { useTraceData } from "../hooks/useTraceData";
+import { useComponentTimeline } from "../hooks/useComponentTimeline";
+import type { ComponentTimelineData } from "../hooks/useComponentTimeline";
 import { useRenderReady } from "../hooks/useRenderReady";
 import type { Segment, Task } from "../types/task";
 import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskColorCoder";
@@ -28,6 +30,11 @@ const TOP_AXIS_COMPACT_HEIGHT = 28;
 const SIDE_COLUMN_WIDTH = 350;
 const DATA_RANGE_DEBOUNCE_MS = 1000;
 const NUM_DOTS = 40;
+// Above this many tasks in the visible range, the per-task timeline (one SVG
+// element per task) becomes the page's dominant cost, so we switch to the
+// server-aggregated density view instead. Zooming in until the count drops below
+// the threshold brings the individual, interactive task bars back.
+const RAW_TASK_THRESHOLD = 5000;
 const MIN_RANGE = 1e-12;
 const TASK_VIEW_MARGIN_TOP = 20;
 const TASK_VIEW_MARGIN_BOTTOM = 20;
@@ -432,6 +439,98 @@ function ComponentTimeline({
           pointerEvents="none"
         />
       ))}
+    </svg>
+  );
+}
+
+// AggregatedTimeline is the level-of-detail replacement for ComponentTimeline
+// when the visible range holds too many tasks to draw one element each. It draws
+// a stacked-area density chart from the server's per-bin, per-"Kind-What" counts:
+// a handful of <path>s instead of hundreds of thousands of <rect>s. Individual
+// tasks are not hoverable/clickable here (zoom in for that), but hovering a key
+// in the legend still highlights that kind's band.
+function AggregatedTimeline({
+  data,
+  range,
+  size,
+  colorMap,
+  highlightedKey,
+}: {
+  data: ComponentTimelineData;
+  range: TimeRange;
+  size: Size;
+  colorMap: Record<string, string>;
+  highlightedKey: string | null;
+}) {
+  const width = Math.max(1, size.width);
+  const height = Math.max(1, size.height);
+  const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
+  const ticks = xScale.ticks(12);
+
+  const { keys, bins } = data;
+  const numBins = bins.length;
+  const padTop = 22;
+  const padBottom = 4;
+
+  let maxTotal = 0;
+  for (const row of bins) {
+    let sum = 0;
+    for (const v of row) sum += v;
+    if (sum > maxTotal) maxTotal = sum;
+  }
+  const yScale = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([height - padBottom, padTop]);
+
+  // Each bin covers an equal slice of the range the summary was computed over;
+  // place it by its absolute center time so it lines up with the shared axis even
+  // mid-pan (just like the per-task bars are placed by their absolute times).
+  const binCenter = (i: number) => data.start_time + ((i + 0.5) / numBins) * (data.end_time - data.start_time);
+
+  const areas = keys.map((key, ki) => {
+    const tops: string[] = [];
+    const bots: string[] = [];
+    for (let i = 0; i < numBins; i++) {
+      let base = 0;
+      for (let k = 0; k < ki; k++) base += bins[i][k];
+      const top = base + bins[i][ki];
+      const x = safeScale(xScale, binCenter(i));
+      tops.push(`${x},${yScale(top)}`);
+      bots.push(`${x},${yScale(base)}`);
+    }
+    bots.reverse();
+    return { key, d: `M${tops.join("L")}L${bots.join("L")}Z` };
+  });
+
+  const hasHighlight = highlightedKey !== null;
+
+  return (
+    <svg width={width} height={height} className="block">
+      {areas.map(({ key, d }) => (
+        <path
+          key={key}
+          d={d}
+          fill={colorMap[key] ?? "#999999"}
+          stroke="none"
+          opacity={hasHighlight ? (highlightedKey === key ? 1 : 0.12) : 0.9}
+        />
+      ))}
+
+      {ticks.map((tick) => (
+        <line
+          key={tick}
+          x1={safeScale(xScale, tick)}
+          x2={safeScale(xScale, tick)}
+          y1={0}
+          y2={height}
+          stroke="#000"
+          strokeDasharray="3,3"
+          opacity={0.4}
+          pointerEvents="none"
+        />
+      ))}
+
+      <text x={8} y={15} fontSize="11" fill="#475569" pointerEvents="none">
+        Aggregated overview · {data.total.toLocaleString()} tasks · zoom in for individual tasks
+      </text>
     </svg>
   );
 }
@@ -896,9 +995,28 @@ export default function ComponentPage() {
   const componentName = selectedTask?.location || name;
 
   const { info: stackedInfo, loading: infoLoading } = useStackedCompInfo(componentName, "ConcurrentTaskMilestones", dataRange.startTime, dataRange.endTime, NUM_DOTS);
+
+  // Level-of-detail: always fetch the cheap aggregated summary first. Its `total`
+  // (tasks overlapping the range) decides whether the per-task view is affordable.
+  // Quantize the bin count so a pixel-by-pixel resize does not refetch.
+  const numBins = Math.max(100, Math.min(1200, Math.round((size.width - SIDE_COLUMN_WIDTH) / 100) * 100));
+  const { data: agg, loading: aggLoading } = useComponentTimeline(componentName, dataRange.startTime, dataRange.endTime, numBins);
+  const aggregated = !!agg && agg.total > RAW_TASK_THRESHOLD;
+  // Only fetch the raw tasks once the summary for THIS range confirms the count is
+  // affordable. useComponentTimeline keeps the previous summary while a new range
+  // loads, so we must also require the summary to cover the current range —
+  // otherwise a stale, small total from a sparse range would green-light the huge
+  // raw fetch for a freshly-selected dense range, defeating the level-of-detail
+  // guard this whole path exists to provide. The echoed start/end round-trip
+  // exactly, so the equality check is safe.
+  const rawEnabled =
+    !!agg &&
+    agg.start_time === dataRange.startTime &&
+    agg.end_time === dataRange.endTime &&
+    agg.total <= RAW_TASK_THRESHOLD;
   const query = useMemo(
-    () => (componentName ? { where: componentName, startTime: dataRange.startTime, endTime: dataRange.endTime } : {}),
-    [dataRange.endTime, dataRange.startTime, componentName],
+    () => (componentName && rawEnabled ? { where: componentName, startTime: dataRange.startTime, endTime: dataRange.endTime } : {}),
+    [dataRange.endTime, dataRange.startTime, componentName, rawEnabled],
   );
   const { tasks, loading: tasksLoading } = useTraceData(query);
   const selectedTaskFromComponent = useMemo(
@@ -947,19 +1065,23 @@ export default function ComponentPage() {
   // all distinct and colored by the same mechanism.
   const colorMap = useMemo(() => {
     const taskKeys = [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks].map(taskColorKey);
+    const aggKeys = agg?.keys ?? [];
     const reasonKeys = [...(stackedInfo?.kinds ?? []), ...milestonesOf(currentTask?.steps).map((step) => step.kind)];
-    return buildColorMapFromKeys([...taskKeys, ...reasonKeys]);
-  }, [childTasks, currentTask, parentTask, tasks, stackedInfo]);
+    return buildColorMapFromKeys([...taskKeys, ...aggKeys, ...reasonKeys]);
+  }, [childTasks, currentTask, parentTask, tasks, stackedInfo, agg]);
 
   // The task "kind-what" keys for the legend's Tasks subsection (distinct from
   // the blocking-reason kinds, so reasons no longer leak into the task legend).
   const taskColorKeys = useMemo(() => {
+    // In aggregated mode there are no individual tasks to derive keys from, so the
+    // legend reflects the kinds the summary reports (still hover-to-highlight).
+    if (aggregated && agg) return agg.keys;
     const keys = new Set<string>();
     for (const task of [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks]) {
       keys.add(taskColorKey(task));
     }
     return Array.from(keys).sort();
-  }, [childTasks, currentTask, parentTask, tasks]);
+  }, [childTasks, currentTask, parentTask, tasks, aggregated, agg]);
   const selectableTaskById = useMemo(() => {
     const map = new Map<string, Task>();
     for (const task of [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks]) {
@@ -997,6 +1119,9 @@ export default function ComponentPage() {
   // per-reason counting) rather than threading IDs through the chart data.
   const [hoveredSegment, setHoveredSegment] = useState<{ kind: string; time: number } | null>(null);
   const highlightedTaskIds = useMemo(() => {
+    // No individual tasks are loaded in aggregated mode, so per-task highlighting
+    // from the milestone bars is disabled there.
+    if (aggregated) return null;
     if (!hoveredSegment) return null;
     const ids = new Set<string>();
     for (const task of tasks) {
@@ -1008,7 +1133,7 @@ export default function ComponentPage() {
       }
     }
     return ids;
-  }, [hoveredSegment, tasks]);
+  }, [hoveredSegment, tasks, aggregated]);
 
   const shiftRange = (nextRange: TimeRange) => {
     if (!Number.isFinite(nextRange.startTime) || !Number.isFinite(nextRange.endTime)) return;
@@ -1175,20 +1300,30 @@ export default function ComponentPage() {
           />
         </div>
         <div className="daisen1-component-view border-t border-slate-200" style={{ height: timelineHeight }}>
-          <ComponentTimeline
-            name={componentName}
-            tasks={tasks}
-            segments={segmentsData?.segments ?? []}
-            segmentsEnabled={segmentsData?.enabled ?? false}
-            range={viewRange}
-            size={{ width: leftWidth, height: timelineHeight }}
-            colorMap={colorMap}
-            highlightedKey={highlightedKey}
-            highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
-            highlightedTaskIds={highlightedTaskIds}
-            onHoverTask={setHoveredTask}
-            onSelectTask={selectTask}
-          />
+          {aggregated && agg ? (
+            <AggregatedTimeline
+              data={agg}
+              range={viewRange}
+              size={{ width: leftWidth, height: timelineHeight }}
+              colorMap={colorMap}
+              highlightedKey={highlightedKey}
+            />
+          ) : (
+            <ComponentTimeline
+              name={componentName}
+              tasks={tasks}
+              segments={segmentsData?.segments ?? []}
+              segmentsEnabled={segmentsData?.enabled ?? false}
+              range={viewRange}
+              size={{ width: leftWidth, height: timelineHeight }}
+              colorMap={colorMap}
+              highlightedKey={highlightedKey}
+              highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
+              highlightedTaskIds={highlightedTaskIds}
+              onHoverTask={setHoveredTask}
+              onSelectTask={selectTask}
+            />
+          )}
         </div>
         <div className="daisen1-metric-view border-t border-slate-200" style={{ height: metricLineHeight }}>
           <ComponentMilestoneBars info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} onHoverSegment={setHoveredSegment} />
@@ -1199,7 +1334,7 @@ export default function ComponentPage() {
         <div className="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
           <h2 className="min-w-0 break-all text-lg font-bold leading-tight">{componentName}</h2>
           <div className="flex shrink-0 items-center gap-2">
-            {(dataPending || infoLoading || tasksLoading || selectedTaskLoading || parentTaskLoading || childTasksLoading) && (
+            {(dataPending || infoLoading || tasksLoading || aggLoading || selectedTaskLoading || parentTaskLoading || childTasksLoading) && (
               <span className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
                 Updating…
               </span>
