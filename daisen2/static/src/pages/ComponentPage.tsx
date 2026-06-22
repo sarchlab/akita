@@ -42,6 +42,14 @@ const RAW_TASK_THRESHOLD = 5000;
 // a divided region (which made bars 1px when many overlapped); the chart grows
 // past its region and is navigated by dragging / scroll buttons instead.
 const ROW_HEIGHT = 22;
+
+// A location is within a scope when it is the scope itself or nested under it in
+// the dotted hierarchy ("ROB" contains "ROB.Top.incoming"). Used so selecting a
+// task that already lives in the current scope keeps the scope, instead of
+// drilling down to the task's exact leaf location.
+function isWithinScope(location: string, scope: string): boolean {
+  return location === scope || location.startsWith(scope + ".");
+}
 const MIN_RANGE = 1e-12;
 const TASK_VIEW_MARGIN_TOP = 20;
 const TASK_VIEW_MARGIN_BOTTOM = 20;
@@ -1156,9 +1164,11 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   const selectedTaskFromFetch = selectedTaskMatches.find((task) => String(task.id) === selectedTaskId) ?? null;
   const selectedTaskFromSeed = selectedTaskSeed && String(selectedTaskSeed.id) === selectedTaskId ? selectedTaskSeed : null;
   const selectedTask = selectedTaskFromFetch ?? selectedTaskFromSeed;
-  // The component in view tracks the selected task's location; clicking a parent
-  // task or subtask navigates to that task's component (issue #156).
-  const componentName = selectedTask?.location || name;
+  // The view follows a selected task to a *different* component (issue #156), but
+  // stays in the current scope when the task already lives within it — clicking a
+  // task in ROB.Top.incoming while viewing ROB keeps you at ROB.
+  const selectedLocation = selectedTask?.location;
+  const componentName = selectedLocation && !isWithinScope(selectedLocation, name) ? selectedLocation : name;
 
   // Location hierarchy for the header: breadcrumb ancestors (collapse up) and the
   // current node's children (drill down). The view's data is scoped to this
@@ -1168,6 +1178,12 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   const navigateToLocation = (path: string) => {
     const params = new URLSearchParams(searchParams);
     params.set("name", path);
+    // Carry the *current* view range across the move. The zoom-to-URL sync uses
+    // replaceState, which doesn't update React Router's searchParams, so reading
+    // viewRange (not searchParams) is what keeps a zoomed-in range from snapping
+    // back to the URL's stale/absent range on navigation.
+    params.set("starttime", String(viewRange.startTime));
+    params.set("endtime", String(viewRange.endTime));
     params.delete("taskid");
     setSearchParams(params);
   };
@@ -1423,7 +1439,9 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     setViewRange(focusRangeForTask(task));
 
     const params = new URLSearchParams(window.location.search);
-    params.set("name", task.location || name);
+    // Stay in the current scope if the task lives within it; only walk to the
+    // task's own location when it falls outside (e.g. a parent task elsewhere).
+    params.set("name", task.location && !isWithinScope(task.location, name) ? task.location : name);
     params.set("taskid", taskId);
     window.history.replaceState(null, "", `/component?${params.toString()}`);
   };
