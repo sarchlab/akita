@@ -620,6 +620,7 @@ function AggregatedTimeline({
   size,
   colorMap,
   highlightedKey,
+  onHoverKey,
   showZoomHint,
 }: {
   data: ComponentTimelineData;
@@ -627,6 +628,9 @@ function AggregatedTimeline({
   size: Size;
   colorMap: Record<string, string>;
   highlightedKey: string | null;
+  // Hovering a band highlights its "kind-what": the band and its legend row stay
+  // lit while the rest dim, and the matching tasks light up in the per-task gantt.
+  onHoverKey: (key: string | null) => void;
   // When the per-task gantt is not shown, hint that zooming in reveals it.
   showZoomHint: boolean;
 }) {
@@ -679,7 +683,12 @@ function AggregatedTimeline({
           fill={colorMap[key] ?? "#999999"}
           stroke="none"
           opacity={hasHighlight ? (highlightedKey === key ? 1 : 0.12) : 0.9}
-        />
+          className="cursor-pointer"
+          onMouseMove={() => onHoverKey(key)}
+          onMouseLeave={() => onHoverKey(null)}
+        >
+          <title>{key}</title>
+        </path>
       ))}
 
       {ticks.map((tick) => (
@@ -1568,6 +1577,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               size={{ width: leftWidth, height: countHeight }}
               colorMap={colorMap}
               highlightedKey={highlightedKey}
+              onHoverKey={setHighlightedKey}
               showZoomHint={!showGantt}
             />
           ) : (
