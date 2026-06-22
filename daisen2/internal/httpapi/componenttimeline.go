@@ -29,13 +29,16 @@ type ComponentTimelineResponse struct {
 	Bins [][]int `json:"bins"`
 }
 
-// ComponentTimeline bins the tasks at a component over [start, end) into numBins
-// columns, reporting per-bin occupancy (active task count) per "Kind-What" key.
-// Total is the number of tasks overlapping the range — the same set the per-task
-// view would draw — which the client uses to pick between the two views.
+// ComponentTimeline bins the tasks in a location scope over [start, end) into
+// numBins columns, reporting per-bin occupancy (active task count) per
+// "Kind-What" key. The scope is a location subtree — the exact location plus
+// everything dotted beneath it — so an internal node (e.g. "ROB") aggregates all
+// of "ROB.req_in", "ROB.Top.incoming", … while a leaf matches only itself. Total
+// is the number of tasks overlapping the range — the same set the per-task view
+// would draw — which the client uses to pick between the two views.
 func (r *SQLiteTraceReader) ComponentTimeline(
 	ctx context.Context,
-	where string,
+	scope string,
 	start, end float64,
 	numBins int,
 ) ComponentTimelineResponse {
@@ -94,14 +97,14 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 			FROM trace t
 			JOIN location loc ON t.Location = loc.ID
 			CROSS JOIN (SELECT 1 AS delta UNION ALL SELECT -1 AS delta) d
-			WHERE loc.Locale = ?
+			WHERE (loc.Locale = ? OR loc.Locale LIKE ? ESCAPE '\')
 				AND t.EndTime > ` + s + ` AND t.StartTime < ` + e + `
 		)
 		SELECT bin, k, delta, COUNT(*) AS c
 		FROM events
 		GROUP BY bin, k, delta`
 
-	rows, err := r.QueryContext(ctx, sqlStr, where)
+	rows, err := r.QueryContext(ctx, sqlStr, scope, escapeLikePrefix(scope)+`.%`)
 	if err != nil {
 		return resp
 	}
@@ -179,7 +182,7 @@ func (s *Server) httpComponentTimeline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	where := r.FormValue("where")
+	scope := r.FormValue("scope")
 	start, err := strconv.ParseFloat(r.FormValue("starttime"), 64)
 	if err != nil {
 		http.Error(w, "invalid starttime", http.StatusBadRequest)
@@ -204,5 +207,5 @@ func (s *Server) httpComponentTimeline(w http.ResponseWriter, r *http.Request) {
 		numBins = 2000
 	}
 
-	writeJSON(w, s.traceReader.ComponentTimeline(r.Context(), where, start, end, numBins))
+	writeJSON(w, s.traceReader.ComponentTimeline(r.Context(), scope, start, end, numBins))
 }

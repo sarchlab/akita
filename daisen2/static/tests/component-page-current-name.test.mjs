@@ -8,17 +8,18 @@ import test from "node:test";
 test("component page tracks the selected task's component", async () => {
   const source = await readFile(new URL("../src/pages/ComponentPage.tsx", import.meta.url), "utf8");
 
-  // The component in view is derived from the selected task's location.
+  // The location in view is derived from the selected task's location.
   assert.match(source, /const componentName = selectedTask\?\.location \|\| name;/);
 
-  // The side-panel header shows the derived component, not the raw URL name.
-  assert.match(source, /<h2[^>]*>\{componentName\}<\/h2>/);
-  assert.doesNotMatch(source, /<h2[^>]*>\{name\}<\/h2>/);
+  // The side-panel header breadcrumb is built from the derived location, not the
+  // raw URL name.
+  assert.match(source, /breadcrumbSegments\(componentName\)/);
 
-  // Component-scoped data (the blocking-reason bar chart and timeline query) uses
-  // the derived name.
+  // The location-scoped data sources (blocking-reason bars, occupancy timeline,
+  // and raw-task query) are all scoped to the derived location's subtree.
   assert.match(source, /useStackedCompInfo\(componentName,/);
-  assert.match(source, /where: componentName,/);
+  assert.match(source, /useComponentTimeline\(componentName,/);
+  assert.match(source, /scope: componentName,/);
 
   // Selecting a task records that task's component in the URL.
   assert.match(source, /params\.set\("name", task\.location \|\| name\)/);

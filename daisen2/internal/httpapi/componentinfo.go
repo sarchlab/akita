@@ -91,8 +91,14 @@ func (s *Server) httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 		compInfo = s.calculateConcurrentTask(
 			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
 	case "ConcurrentTaskMilestones":
+		// The blocking-reason chart is the one metric the (scoped) detail view
+		// uses, so it honors a location subtree. A leaf scope matches only itself.
+		scope := r.FormValue("scope")
+		if scope == "" {
+			scope = compName
+		}
 		stackedInfo := s.calculateConcurrentTaskMilestones(
-			r.Context(), compName, infoType, startTime, endTime, int(numDots))
+			r.Context(), scope, infoType, startTime, endTime, int(numDots))
 		rsp, err := json.Marshal(stackedInfo)
 		dieOnErr(err)
 		_, err = w.Write(rsp)
@@ -588,9 +594,9 @@ func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
 	return b.String()
 }
 
-func (s *Server) fetchTasksForMilestones(ctx context.Context, compName string, startTime, endTime float64) []Task {
+func (s *Server) fetchTasksForMilestones(ctx context.Context, scope string, startTime, endTime float64) []Task {
 	query := TaskQuery{
-		Where:            compName,
+		Scope:            scope,
 		EnableTimeRange:  true,
 		StartTime:        startTime,
 		EndTime:          endTime,
@@ -685,19 +691,19 @@ func findTaskBlockingKind(task Task, t float64) string {
 
 func (s *Server) calculateConcurrentTaskMilestones(
 	ctx context.Context,
-	compName, infoType string,
+	scope, infoType string,
 	startTime, endTime float64,
 	numDots int,
 ) *StackedComponentInfo {
 	info := &StackedComponentInfo{
-		Name:      compName,
+		Name:      scope,
 		InfoType:  infoType,
 		StartTime: startTime,
 		EndTime:   endTime,
 		Kinds:     []string{},
 	}
 
-	tasks := s.fetchTasksForMilestones(ctx, compName, startTime, endTime)
+	tasks := s.fetchTasksForMilestones(ctx, scope, startTime, endTime)
 	info.Kinds = collectMilestoneKinds(tasks)
 	info.Data = generateStackedTimeData(tasks, info.Kinds, startTime, endTime, numDots)
 

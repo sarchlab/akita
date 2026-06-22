@@ -1,10 +1,11 @@
 import * as d3 from "d3";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent, WheelEvent } from "react";
+import type { PointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { X } from "lucide-react";
+import { X, ChevronRight, Plus, Minus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { SidePanel } from "../components/ui/side-panel";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import type { StackedComponentInfo } from "../hooks/useCompInfo";
 import { useStackedCompInfo } from "../hooks/useCompInfo";
 import { useSegments } from "../hooks/useSegments";
@@ -19,8 +20,7 @@ import { blockingKindAt, milestonesOf, wavyPath } from "../utils/milestoneViz";
 import { smartString } from "../utils/smartValue";
 import { cn } from "../lib/utils";
 import { useComponentNames } from "../hooks/useComponentNames";
-import { buildLocationTree, isInternalNode } from "../utils/locationTree";
-import ComponentScopeView from "./ComponentScopeView";
+import { buildLocationTree, breadcrumbSegments, findNode, isLeafNode, type LocationNode } from "../utils/locationTree";
 
 // The left column stacks three regions: the parent/current/sub task view (top),
 // the component-task timeline (middle), and the metric line chart (bottom). The
@@ -38,6 +38,10 @@ const NUM_DOTS = 40;
 // server-aggregated density view instead. Zooming in until the count drops below
 // the threshold brings the individual, interactive task bars back.
 const RAW_TASK_THRESHOLD = 5000;
+// Fixed height of one concurrency row in the per-task gantt. Rows no longer share
+// a divided region (which made bars 1px when many overlapped); the chart grows
+// past its region and is navigated by dragging / scroll buttons instead.
+const ROW_HEIGHT = 22;
 const MIN_RANGE = 1e-12;
 const TASK_VIEW_MARGIN_TOP = 20;
 const TASK_VIEW_MARGIN_BOTTOM = 20;
@@ -281,19 +285,31 @@ function assignDimensions(root: LayoutTask, initialDim: TaskDim) {
   }
 }
 
-function buildComponentTaskLayout(tasks: Task[], width: number, regionHeight: number, startTime: number, endTime: number) {
+function buildComponentTaskLayout(
+  tasks: Task[],
+  width: number,
+  regionHeight: number,
+  startTime: number,
+  endTime: number,
+  rowHeight: number,
+) {
   const clonedTasks = cloneTasks(tasks);
   const root = buildTaskTree(clonedTasks);
+  // Give each top-level concurrency row a fixed rowHeight so bars stay legible no
+  // matter how many overlap; the chart then grows past its region and scrolls.
+  // When few rows are needed, fall back to filling the region (no wasted space).
+  const topRows = assignYIndices(root.subTasks) + 1;
+  const contentHeight = Math.max(regionHeight, topRows * rowHeight);
   assignDimensions(root, {
     x: 0,
     y: 0,
     width,
-    height: regionHeight,
+    height: contentHeight,
     startTime,
     endTime,
   });
 
-  return clonedTasks
+  const layout = clonedTasks
     .sort((a, b) => a.level - b.level)
     .filter((task) => {
       if (task.level === 1) return true;
@@ -302,6 +318,8 @@ function buildComponentTaskLayout(tasks: Task[], width: number, regionHeight: nu
       if (task.dim.height < 1) return false;
       return true;
     });
+
+  return { layout, contentHeight };
 }
 
 function ComponentTopAxis({ width, height, range }: { width: number; height: number; range: TimeRange }) {
@@ -337,6 +355,11 @@ interface ComponentTimelineProps {
   highlightedTaskIds: Set<string> | null;
   onHoverTask: (task: Task | null) => void;
   onSelectTask: (task: Task) => void;
+  // Zoom the time range from a wheel/pinch over the gantt. pointerRatio is the
+  // cursor's fractional x within the chart, so the zoom is anchored at the pointer.
+  onZoom: (deltaY: number, deltaX: number, pointerRatio: number) => void;
+  // Set the visible time range (used by horizontal drag-panning).
+  onRangeChange: (range: TimeRange) => void;
 }
 
 function ComponentTimeline({
@@ -352,33 +375,168 @@ function ComponentTimeline({
   highlightedTaskIds,
   onHoverTask,
   onSelectTask,
+  onZoom,
+  onRangeChange,
 }: ComponentTimelineProps) {
   const width = Math.max(1, size.width);
   const height = Math.max(1, size.height);
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
-  // The task bars fill the whole middle region; the metric line and the time-axis
-  // labels live in the separate ComponentMetricLine region below.
-  const taskLayout = buildComponentTaskLayout(tasks, width, height, range.startTime, range.endTime);
+  // Row height is the vertical zoom: taller rows = bigger bars, a taller chart that
+  // scrolls. The chart grows past its region and is navigated by dragging/scrolling.
+  const [rowHeight, setRowHeight] = useState(ROW_HEIGHT);
+  const { layout: taskLayout, contentHeight } = buildComponentTaskLayout(tasks, width, height, range.startTime, range.endTime, rowHeight);
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
 
+  const taskById = useMemo(() => {
+    const map = new Map<string, Task>();
+    for (const task of tasks) map.set(String(task.id), task);
+    return map;
+  }, [tasks]);
+
+  // Latest values for the imperative wheel / pointer handlers.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const onZoomRef = useRef(onZoom);
+  onZoomRef.current = onZoom;
+  const onRangeChangeRef = useRef(onRangeChange);
+  onRangeChangeRef.current = onRangeChange;
+  const onSelectTaskRef = useRef(onSelectTask);
+  onSelectTaskRef.current = onSelectTask;
+  const rangeRef = useRef(range);
+  rangeRef.current = range;
+  const widthRef = useRef(width);
+  widthRef.current = width;
+  const taskByIdRef = useRef(taskById);
+  taskByIdRef.current = taskById;
+
+  // Wheel handling on a non-passive native listener (React's onWheel is passive, so
+  // preventDefault is ignored there). Plain scroll PANS — horizontal moves the time
+  // range, vertical scrolls the rows. Ctrl/⌘+scroll — and a trackpad pinch, which
+  // the browser delivers as a ctrl+wheel — zooms the TIME axis (anchored at the
+  // cursor). Row (vertical) zoom is on Alt+scroll, kept off ctrl so it never
+  // collides with pinch. We always stopPropagation so the parent's region wheel
+  // handler never double-fires.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return undefined;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const bounds = el.getBoundingClientRect();
+      const ratio = bounds.width > 0 ? Math.min(Math.max(event.clientX - bounds.left, 0), bounds.width) / bounds.width : 0.5;
+      if (event.altKey) {
+        setRowHeight((h) => Math.min(80, Math.max(6, h - event.deltaY * 0.04)));
+      } else if (event.ctrlKey || event.metaKey) {
+        const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+        onZoomRef.current(delta, 0, ratio);
+      } else {
+        if (event.deltaX !== 0) onZoomRef.current(0, event.deltaX, ratio);
+        if (event.deltaY !== 0) el.scrollTop += event.deltaY;
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // Drag pans in both directions: horizontal moves the time range, vertical scrolls
+  // through the concurrency rows. A press with no movement selects the task.
+  const dragRef = useRef<{ id: number; x: number; y: number; range: TimeRange; scrollTop: number; pending: Task | null; moved: boolean } | null>(null);
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    let pending: Task | null = null;
+    if (event.target instanceof Element) {
+      const taskId = event.target.closest("[data-task-id]")?.getAttribute("data-task-id");
+      pending = taskId ? (taskByIdRef.current.get(taskId) ?? null) : null;
+    }
+    dragRef.current = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      range: rangeRef.current,
+      scrollTop: scrollRef.current?.scrollTop ?? 0,
+      pending,
+      moved: false,
+    };
+  };
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.id !== event.pointerId) return;
+    event.stopPropagation();
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) drag.moved = true;
+    const duration = drag.range.endTime - drag.range.startTime;
+    const timeDelta = (duration / Math.max(1, widthRef.current)) * dx;
+    onRangeChangeRef.current({ startTime: drag.range.startTime - timeDelta, endTime: drag.range.endTime - timeDelta });
+    if (scrollRef.current) scrollRef.current.scrollTop = drag.scrollTop - dy;
+  };
+  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.id !== event.pointerId) return;
+    event.stopPropagation();
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    dragRef.current = null;
+    if (!drag.moved && drag.pending) onSelectTaskRef.current(drag.pending);
+  };
+
+  // On-screen zoom controls: horizontal (time) and vertical (row height).
+  const zoomTimeBy = (dir: number) => onZoom(dir * 160, 0, 0.5); // +1 out, -1 in
+  const zoomRowsBy = (dir: number) => setRowHeight((h) => Math.min(80, Math.max(6, h + dir * 4)));
+  const btnClass = "rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-primary";
+
   return (
-    <svg width={width} height={height} className="block">
-      <defs>
-        <pattern id="component-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
-          <rect width="8" height="8" fill="rgba(128, 128, 128, 0.15)" />
-          <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(128, 128, 128, 0.3)" strokeWidth="4" />
-        </pattern>
-      </defs>
+    <div className="relative h-full w-full">
+      {/* stopPropagation so a click on the toolbar doesn't reach the gantt/parent
+          drag handlers (which capture the pointer and would swallow the click). */}
+      <div
+        className="absolute right-2 top-1 z-10 flex items-center gap-0.5 rounded border bg-white/90 px-1 py-0.5 shadow-sm"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <span className="select-none px-0.5 text-[10px] font-medium text-muted-foreground">time</span>
+        <button type="button" className={btnClass} title="Zoom time out" onClick={() => zoomTimeBy(1)}>
+          <Minus className="h-4 w-4" />
+        </button>
+        <button type="button" className={btnClass} title="Zoom time in" onClick={() => zoomTimeBy(-1)}>
+          <Plus className="h-4 w-4" />
+        </button>
+        <span className="mx-0.5 h-4 w-px bg-border" />
+        <span className="select-none px-0.5 text-[10px] font-medium text-muted-foreground">rows</span>
+        <button type="button" className={btnClass} title="Shorter rows (Alt+scroll)" onClick={() => zoomRowsBy(-1)}>
+          <Minus className="h-4 w-4" />
+        </button>
+        <button type="button" className={btnClass} title="Taller rows (Alt+scroll)" onClick={() => zoomRowsBy(1)}>
+          <Plus className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="pointer-events-none absolute bottom-1 left-2 z-10 rounded bg-white/75 px-1.5 py-0.5 text-[10px] text-muted-foreground shadow-sm">
+        Scroll/drag to pan · pinch or ⌘/Ctrl+scroll to zoom time · Alt+scroll for rows
+      </div>
+      <div
+        ref={scrollRef}
+        className="h-full w-full cursor-grab overflow-y-auto overflow-x-hidden active:cursor-grabbing"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      >
+        <svg width={width} height={contentHeight} className="block">
+          <defs>
+            <pattern id="component-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
+              <rect width="8" height="8" fill="rgba(128, 128, 128, 0.15)" />
+              <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(128, 128, 128, 0.3)" strokeWidth="4" />
+            </pattern>
+          </defs>
 
-      {gaps.map((gap, index) => {
-        const x = safeScale(xScale, gap.start_time);
-        const w = Math.max(0, safeScale(xScale, gap.end_time) - x);
-        return <rect key={index} x={x} y={0} width={w} height={height} fill="url(#component-gap-pattern)" pointerEvents="none" />;
-      })}
+          {gaps.map((gap, index) => {
+            const x = safeScale(xScale, gap.start_time);
+            const w = Math.max(0, safeScale(xScale, gap.end_time) - x);
+            return <rect key={index} x={x} y={0} width={w} height={contentHeight} fill="url(#component-gap-pattern)" pointerEvents="none" />;
+          })}
 
-      <g className="task-bar">
-        {taskLayout.map((task) => {
+          <g className="task-bar">
+            {taskLayout.map((task) => {
           const dim = task.dim ?? {
             x: safeScale(xScale, task.start_time),
             y: 0,
@@ -409,13 +567,8 @@ function ComponentTimeline({
               stroke="#000000"
               strokeOpacity={hasHighlight && highlighted ? 0.8 : 0.2}
               opacity={highlighted ? 1 : 0.4}
-              className="cursor-pointer"
               onMouseEnter={() => onHoverTask(task)}
               onMouseLeave={() => onHoverTask(null)}
-              onClick={(event) => {
-                event.preventDefault();
-                onSelectTask(task);
-              }}
             >
               <title>
                 {task.kind} - {task.what}
@@ -427,22 +580,24 @@ function ComponentTimeline({
             </rect>
           );
         })}
-      </g>
+          </g>
 
-      {ticks.map((tick) => (
-        <line
-          key={tick}
-          x1={safeScale(xScale, tick)}
-          x2={safeScale(xScale, tick)}
-          y1={0}
-          y2={height}
-          stroke="#000"
-          strokeDasharray="3,3"
-          opacity={0.5}
-          pointerEvents="none"
-        />
-      ))}
-    </svg>
+          {ticks.map((tick) => (
+            <line
+              key={tick}
+              x1={safeScale(xScale, tick)}
+              x2={safeScale(xScale, tick)}
+              y1={0}
+              y2={contentHeight}
+              stroke="#000"
+              strokeDasharray="3,3"
+              opacity={0.5}
+              pointerEvents="none"
+            />
+          ))}
+        </svg>
+      </div>
+    </div>
   );
 }
 
@@ -458,12 +613,15 @@ function AggregatedTimeline({
   size,
   colorMap,
   highlightedKey,
+  showZoomHint,
 }: {
   data: ComponentTimelineData;
   range: TimeRange;
   size: Size;
   colorMap: Record<string, string>;
   highlightedKey: string | null;
+  // When the per-task gantt is not shown, hint that zooming in reveals it.
+  showZoomHint: boolean;
 }) {
   const width = Math.max(1, size.width);
   const height = Math.max(1, size.height);
@@ -532,7 +690,7 @@ function AggregatedTimeline({
       ))}
 
       <text x={8} y={15} fontSize="11" fill="#475569" pointerEvents="none">
-        Aggregated overview · {data.total.toLocaleString()} tasks · zoom in for individual tasks
+        Task count · {data.total.toLocaleString()} tasks{showZoomHint ? " · zoom in for individual tasks" : ""}
       </text>
     </svg>
   );
@@ -972,11 +1130,12 @@ function sanitizeRange(startTime: number, endTime: number): TimeRange {
   return { startTime: 0, endTime: 0.000001 };
 }
 
-// ComponentDetailView is the single-component view: one component's task
-// timeline, task detail, and milestone bars. It renders for a leaf location
-// (a real task row). Internal nodes are handled by ComponentScopeView via the
-// ComponentPage wrapper below.
-function ComponentDetailView() {
+// ComponentDetailView is the single-location view: a task timeline, task detail,
+// and milestone bars, scoped to a location subtree. It renders for any node —
+// a leaf (a real task row) shows just its tasks; an internal node (e.g. "ROB")
+// aggregates every task beneath it but looks identical. The location tree powers
+// the header breadcrumb (collapse up) and the drill-into control (descend).
+function ComponentDetailView({ root }: { root: LocationNode }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const name = searchParams.get("name") ?? "";
   const urlTaskId = searchParams.get("taskid");
@@ -1001,6 +1160,18 @@ function ComponentDetailView() {
   // task or subtask navigates to that task's component (issue #156).
   const componentName = selectedTask?.location || name;
 
+  // Location hierarchy for the header: breadcrumb ancestors (collapse up) and the
+  // current node's children (drill down). The view's data is scoped to this
+  // location's subtree, so an internal node aggregates everything beneath it.
+  const crumbs = useMemo(() => breadcrumbSegments(componentName), [componentName]);
+  const scopeChildren = useMemo(() => findNode(root, componentName)?.children ?? [], [root, componentName]);
+  const navigateToLocation = (path: string) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("name", path);
+    params.delete("taskid");
+    setSearchParams(params);
+  };
+
   const { info: stackedInfo, loading: infoLoading } = useStackedCompInfo(componentName, "ConcurrentTaskMilestones", dataRange.startTime, dataRange.endTime, NUM_DOTS);
 
   // Level-of-detail: always fetch the cheap aggregated summary first. Its `total`
@@ -1008,7 +1179,6 @@ function ComponentDetailView() {
   // Quantize the bin count so a pixel-by-pixel resize does not refetch.
   const numBins = Math.max(100, Math.min(1200, Math.round((size.width - SIDE_COLUMN_WIDTH) / 100) * 100));
   const { data: agg, loading: aggLoading } = useComponentTimeline(componentName, dataRange.startTime, dataRange.endTime, numBins);
-  const aggregated = !!agg && agg.total > RAW_TASK_THRESHOLD;
   // Only fetch the raw tasks once the summary for THIS range confirms the count is
   // affordable. useComponentTimeline keeps the previous summary while a new range
   // loads, so we must also require the summary to cover the current range —
@@ -1022,7 +1192,7 @@ function ComponentDetailView() {
     agg.end_time === dataRange.endTime &&
     agg.total <= RAW_TASK_THRESHOLD;
   const query = useMemo(
-    () => (componentName && rawEnabled ? { where: componentName, startTime: dataRange.startTime, endTime: dataRange.endTime } : {}),
+    () => (componentName && rawEnabled ? { scope: componentName, startTime: dataRange.startTime, endTime: dataRange.endTime } : {}),
     [dataRange.endTime, dataRange.startTime, componentName, rawEnabled],
   );
   const { tasks, loading: tasksLoading } = useTraceData(query);
@@ -1080,15 +1250,15 @@ function ComponentDetailView() {
   // The task "kind-what" keys for the legend's Tasks subsection (distinct from
   // the blocking-reason kinds, so reasons no longer leak into the task legend).
   const taskColorKeys = useMemo(() => {
-    // In aggregated mode there are no individual tasks to derive keys from, so the
-    // legend reflects the kinds the summary reports (still hover-to-highlight).
-    if (aggregated && agg) return agg.keys;
+    // The always-on task-count view colors by the summary's kinds, so the legend
+    // reflects those whenever the summary is loaded (still hover-to-highlight).
+    if (agg) return agg.keys;
     const keys = new Set<string>();
     for (const task of [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks]) {
       keys.add(taskColorKey(task));
     }
     return Array.from(keys).sort();
-  }, [childTasks, currentTask, parentTask, tasks, aggregated, agg]);
+  }, [childTasks, currentTask, parentTask, tasks, agg]);
   const selectableTaskById = useMemo(() => {
     const map = new Map<string, Task>();
     for (const task of [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks]) {
@@ -1097,11 +1267,17 @@ function ComponentDetailView() {
     return map;
   }, [childTasks, currentTask, parentTask, tasks]);
   const leftWidth = Math.max(1, size.width - SIDE_COLUMN_WIDTH - 1);
-  // Three stacked regions sized as shares of the window: task view (20%, or a thin
-  // axis in component mode), metric line (20%), and the timeline filling the rest.
+  // Up to four stacked regions: the selected-task view (optional — a thin axis when
+  // no task is selected), the per-task gantt (optional — only when few enough tasks
+  // are in range), the task-count density chart (always), and the blocking-reason
+  // bars (always). Task view and blocking take fixed shares; the middle is split
+  // between the gantt and the count, or given wholly to the count when no gantt.
   const taskViewHeight = currentTask ? Math.round(size.height * TASK_VIEW_HEIGHT_RATIO) : TOP_AXIS_COMPACT_HEIGHT;
   const metricLineHeight = Math.round(size.height * COMPONENT_LINE_HEIGHT_RATIO);
-  const timelineHeight = Math.max(60, size.height - taskViewHeight - metricLineHeight);
+  const middleHeight = Math.max(120, size.height - taskViewHeight - metricLineHeight);
+  const showGantt = rawEnabled;
+  const countHeight = showGantt ? Math.min(220, Math.max(90, Math.round(middleHeight * 0.3))) : middleHeight;
+  const ganttHeight = showGantt ? Math.max(80, middleHeight - countHeight) : 0;
   const dataPending = viewRange.startTime !== dataRange.startTime || viewRange.endTime !== dataRange.endTime;
 
   // Count the debounced data-range update as in-flight render work so the off-screen
@@ -1126,9 +1302,9 @@ function ComponentDetailView() {
   // per-reason counting) rather than threading IDs through the chart data.
   const [hoveredSegment, setHoveredSegment] = useState<{ kind: string; time: number } | null>(null);
   const highlightedTaskIds = useMemo(() => {
-    // No individual tasks are loaded in aggregated mode, so per-task highlighting
-    // from the milestone bars is disabled there.
-    if (aggregated) return null;
+    // Per-task highlighting from the milestone bars only applies when the per-task
+    // gantt is shown.
+    if (!rawEnabled) return null;
     if (!hoveredSegment) return null;
     const ids = new Set<string>();
     for (const task of tasks) {
@@ -1140,7 +1316,7 @@ function ComponentDetailView() {
       }
     }
     return ids;
-  }, [hoveredSegment, tasks, aggregated]);
+  }, [hoveredSegment, tasks, rawEnabled]);
 
   const shiftRange = (nextRange: TimeRange) => {
     if (!Number.isFinite(nextRange.startTime) || !Number.isFinite(nextRange.endTime)) return;
@@ -1148,31 +1324,37 @@ function ComponentDetailView() {
     setViewRange(nextRange);
   };
 
-  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
-    event.preventDefault();
+  // Horizontal time-zoom (anchored under the cursor) plus horizontal pan, shared
+  // by the parent wheel handler (task/metric regions) and the gantt's Ctrl/⌘+wheel.
+  const zoomTimeRange = (deltaY: number, deltaX: number, pointerRatio: number) => {
     const duration = viewRange.endTime - viewRange.startTime;
     if (duration <= 0) return;
 
     let nextStartTime = viewRange.startTime;
     let nextEndTime = viewRange.endTime;
 
-    if (event.deltaY !== 0) {
-      const bounds = event.currentTarget.getBoundingClientRect();
-      const pointerX = Math.min(Math.max(event.clientX - bounds.left, 0), bounds.width);
-      const pointerRatio = bounds.width > 0 ? pointerX / bounds.width : 0.5;
-      const scale = Math.pow(1.001, event.deltaY);
+    if (deltaY !== 0) {
+      const scale = Math.pow(1.001, deltaY);
       const pointerTime = viewRange.startTime + duration * pointerRatio;
       nextStartTime = pointerTime - (pointerTime - viewRange.startTime) * scale;
       nextEndTime = pointerTime + (viewRange.endTime - pointerTime) * scale;
     }
 
-    if (event.deltaX !== 0) {
-      const shift = (nextEndTime - nextStartTime) * event.deltaX * 0.001;
+    if (deltaX !== 0) {
+      const shift = (nextEndTime - nextStartTime) * deltaX * 0.001;
       nextStartTime += shift;
       nextEndTime += shift;
     }
 
     shiftRange({ startTime: nextStartTime, endTime: nextEndTime });
+  };
+
+  const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const pointerX = Math.min(Math.max(event.clientX - bounds.left, 0), bounds.width);
+    const pointerRatio = bounds.width > 0 ? pointerX / bounds.width : 0.5;
+    zoomTimeRange(event.deltaY, event.deltaX, pointerRatio);
   };
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -1306,60 +1488,115 @@ function ComponentDetailView() {
             onSelectTask={selectTask}
           />
         </div>
-        <div className="daisen1-component-view border-t border-slate-200" style={{ height: timelineHeight }}>
-          {aggregated && agg ? (
-            <AggregatedTimeline
-              data={agg}
-              range={viewRange}
-              size={{ width: leftWidth, height: timelineHeight }}
-              colorMap={colorMap}
-              highlightedKey={highlightedKey}
-            />
-          ) : (
+        {/* Component tasks (per-task gantt) — optional: only when the range holds
+            few enough tasks to draw each one. */}
+        {showGantt && (
+          <div className="daisen1-component-view border-t border-slate-200" style={{ height: ganttHeight }}>
             <ComponentTimeline
               name={componentName}
               tasks={tasks}
               segments={segmentsData?.segments ?? []}
               segmentsEnabled={segmentsData?.enabled ?? false}
               range={viewRange}
-              size={{ width: leftWidth, height: timelineHeight }}
+              size={{ width: leftWidth, height: ganttHeight }}
               colorMap={colorMap}
               highlightedKey={highlightedKey}
               highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
               highlightedTaskIds={highlightedTaskIds}
               onHoverTask={setHoveredTask}
               onSelectTask={selectTask}
+              onZoom={zoomTimeRange}
+              onRangeChange={shiftRange}
             />
+          </div>
+        )}
+        {/* Task count (occupancy density by kind) — always shown. */}
+        <div className="daisen1-count-view border-t border-slate-200" style={{ height: countHeight }}>
+          {agg ? (
+            <AggregatedTimeline
+              data={agg}
+              range={viewRange}
+              size={{ width: leftWidth, height: countHeight }}
+              colorMap={colorMap}
+              highlightedKey={highlightedKey}
+              showZoomHint={!showGantt}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">loading task count…</div>
           )}
         </div>
+        {/* Blocking reasons — always shown. */}
         <div className="daisen1-metric-view border-t border-slate-200" style={{ height: metricLineHeight }}>
           <ComponentMilestoneBars info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} onHoverSegment={setHoveredSegment} />
         </div>
       </div>
 
       <SidePanel className="flex select-none flex-col" style={{ width: SIDE_COLUMN_WIDTH }}>
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
-          <h2 className="min-w-0 break-all text-lg font-bold leading-tight">{componentName}</h2>
-          <div className="flex shrink-0 items-center gap-2">
-            {(dataPending || infoLoading || tasksLoading || aggLoading || selectedTaskLoading || parentTaskLoading || childTasksLoading) && (
-              <span className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-                Updating…
-              </span>
-            )}
-            {selectedTaskId ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs"
-                onClick={deselectTask}
-                title="Clear the selected task and return to the component overview"
-              >
-                <X className="h-3.5 w-3.5" />
-                Deselect task
-              </Button>
-            ) : null}
+        <div className="flex shrink-0 flex-col gap-2 border-b px-4 py-3">
+          <div className="flex items-start justify-between gap-2">
+            {/* Breadcrumb: ancestors are clickable (collapse up); the last is the
+                current location. */}
+            <nav className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-base font-bold leading-tight">
+              {crumbs.map((crumb, index) => {
+                const isLast = index === crumbs.length - 1;
+                return (
+                  <span key={crumb.path} className="flex min-w-0 items-center gap-1">
+                    {index > 0 && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                    {isLast ? (
+                      <span className="break-all">{crumb.label}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="break-all font-normal text-muted-foreground hover:text-primary"
+                        onClick={() => navigateToLocation(crumb.path)}
+                      >
+                        {crumb.label}
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+            </nav>
+            <div className="flex shrink-0 items-center gap-2">
+              {(dataPending || infoLoading || tasksLoading || aggLoading || selectedTaskLoading || parentTaskLoading || childTasksLoading) && (
+                <span className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                  Updating…
+                </span>
+              )}
+              {selectedTaskId ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                  onClick={deselectTask}
+                  title="Clear the selected task and return to the component overview"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Deselect task
+                </Button>
+              ) : null}
+            </div>
           </div>
+          {/* Drill into a child location (descend the hierarchy). Hidden for leaves. */}
+          {scopeChildren.length > 0 && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Drill into</span>
+              <Select value="" onValueChange={navigateToLocation}>
+                <SelectTrigger className="h-7 w-44 text-xs">
+                  <SelectValue placeholder="child location…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {scopeChildren.map((child) => (
+                    <SelectItem key={child.path} value={child.path}>
+                      {child.name}
+                      {isLeafNode(child) ? "" : " ›"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4">
           {/* Show the hovered task while hovering, otherwise fall back to the
@@ -1373,15 +1610,13 @@ function ComponentDetailView() {
   );
 }
 
-// ComponentPage routes between the scoped drill-down and the single-component
-// detail view based on the location hierarchy. A dotted name with descendants
-// (e.g. "TLB", which owns "TLB.req_in", "TLB.Top.incoming", …) is an internal
-// node, so it renders ComponentScopeView; a leaf location renders the detail
-// view. The hierarchy is derived from the flat /api/compnames list by splitting
-// names on ".".
+// ComponentPage renders the single detail view for any location. The name may be
+// a leaf (e.g. "TLB.req_in") or an internal node (e.g. "TLB", which owns
+// "TLB.req_in", "TLB.Top.incoming", …); the detail view scopes its data to the
+// location subtree, so an internal node looks just like a leaf but aggregates
+// every task beneath it. The hierarchy — used for the breadcrumb and the
+// drill-into control — is derived from the flat /api/compnames list, split on ".".
 export default function ComponentPage() {
-  const [searchParams] = useSearchParams();
-  const name = searchParams.get("name") ?? "";
   const { names, loading } = useComponentNames();
   const root = useMemo(() => buildLocationTree(names), [names]);
 
@@ -1389,9 +1624,5 @@ export default function ComponentPage() {
     return <div className="flex h-full items-center justify-center text-muted-foreground">Loading…</div>;
   }
 
-  if (name && isInternalNode(root, name)) {
-    return <ComponentScopeView root={root} scope={name} />;
-  }
-
-  return <ComponentDetailView />;
+  return <ComponentDetailView root={root} />;
 }

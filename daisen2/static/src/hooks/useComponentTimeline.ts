@@ -17,7 +17,7 @@ export interface ComponentTimelineData {
 }
 
 export function useComponentTimeline(
-  where: string,
+  scope: string,
   startTime: number,
   endTime: number,
   numBins: number,
@@ -27,14 +27,14 @@ export function useComponentTimeline(
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!where || !(endTime > startTime) || numBins < 1) {
+    if (!scope || !(endTime > startTime) || numBins < 1) {
       setData(null);
       return undefined;
     }
 
     const controller = new AbortController();
     const params = new URLSearchParams({
-      where,
+      scope,
       starttime: String(startTime),
       endtime: String(endTime),
       num_bins: String(numBins),
@@ -57,7 +57,7 @@ export function useComponentTimeline(
       });
 
     return () => controller.abort();
-  }, [where, startTime, endTime, numBins]);
+  }, [scope, startTime, endTime, numBins]);
 
   useRenderReady(loading, error !== null);
 
