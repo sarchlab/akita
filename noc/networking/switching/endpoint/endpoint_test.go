@@ -126,13 +126,16 @@ var _ = Describe("End Point", func() {
 		flit1.SeqID = 1
 		flit1.NumFlitInMsg = 2
 		flit1.Msg = msg
+		// The concrete message rides on the final flit; the endpoint delivers it
+		// intact rather than a metadata-only stand-in.
+		flit1.Payload = msg
 
 		networkPort.EXPECT().PeekIncoming().Return(flit0)
 		networkPort.EXPECT().PeekIncoming().Return(flit1)
 		networkPort.EXPECT().PeekIncoming().Return(nil).Times(3)
 		networkPort.EXPECT().RetrieveIncoming().Times(2)
 		devicePort.EXPECT().CanDeliver().Return(true)
-		devicePort.EXPECT().Deliver(packetization.AssembledMsg{MsgMeta: msg})
+		devicePort.EXPECT().Deliver(msg)
 		devicePort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 
 		madeProgress := endPoint.Tick()

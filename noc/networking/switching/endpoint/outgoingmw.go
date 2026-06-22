@@ -9,16 +9,22 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 
-	// msgMetaToFlits converts a MsgMeta into a slice of packetization.Flit entries.
 	"github.com/sarchlab/akita/v5/messaging"
 )
 
-func msgMetaToFlits(
-	meta messaging.MsgMeta,
+// msgToFlits splits a message into the flits that carry it across the network.
+// The flit count is derived from the message's TrafficBytes (so traffic and
+// timing are modeled), every flit carries the message's routing metadata in
+// Msg, and the concrete message itself rides on the final flit so it is carried
+// exactly once and delivered intact on reassembly.
+func msgToFlits(
+	msg messaging.Msg,
 	spec Spec,
 	networkPortRemote messaging.RemotePort,
 	defaultSwitchDst messaging.RemotePort,
 ) []packetization.Flit {
+	meta := msg.Meta()
+
 	numFlit := 1
 	if meta.TrafficBytes > 0 {
 		trafficByte := meta.TrafficBytes
@@ -37,16 +43,11 @@ func msgMetaToFlits(
 			},
 			SeqID:        i,
 			NumFlitInMsg: numFlit,
-			Msg: messaging.MsgMeta{
-				ID:           meta.ID,
-				Src:          meta.Src,
-				Dst:          meta.Dst,
-				RspTo:        meta.RspTo,
-				TrafficClass: meta.TrafficClass,
-				TrafficBytes: meta.TrafficBytes,
-			},
+			Msg:          meta,
 		}
 	}
+
+	flits[numFlit-1].Payload = msg
 
 	return flits
 }
@@ -134,7 +135,7 @@ func (m *outgoingMW) prepareMsg() bool {
 		}
 
 		msg := port.RetrieveOutgoing()
-		state.MsgOutBuf = append(state.MsgOutBuf, msg.Meta())
+		state.MsgOutBuf = append(state.MsgOutBuf, msgHolder{Msg: msg})
 
 		madeProgress = true
 	}
@@ -163,9 +164,10 @@ func (m *outgoingMW) prepareFlits() bool {
 			return madeProgress
 		}
 
-		meta := state.MsgOutBuf[0]
+		msg := state.MsgOutBuf[0].Msg
 		state.MsgOutBuf = state.MsgOutBuf[1:]
-		flits := msgMetaToFlits(meta, spec, networkPortRemote, m.defaultSwitchDst)
+		meta := msg.Meta()
+		flits := msgToFlits(msg, spec, networkPortRemote, m.defaultSwitchDst)
 
 		state.FlitsToSend = append(state.FlitsToSend, flits...)
 

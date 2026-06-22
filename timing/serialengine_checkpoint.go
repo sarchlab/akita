@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/sarchlab/akita/v5/internal/codec"
 )
 
 // serialEngineCheckpoint is the serialized form of the engine: its current time
@@ -17,11 +19,11 @@ type serialEngineCheckpoint struct {
 
 // SaveCheckpoint writes the engine's current time and queued events.
 func (e *SerialEngine) SaveCheckpoint(w io.Writer) error {
-	primary, err := eventCodec.EncodeSlice(e.queue.snapshot())
+	primary, err := codec.EncodeSlice(e.queue.snapshot())
 	if err != nil {
 		return err
 	}
-	secondary, err := eventCodec.EncodeSlice(e.secondaryQueue.snapshot())
+	secondary, err := codec.EncodeSlice(e.secondaryQueue.snapshot())
 	if err != nil {
 		return err
 	}

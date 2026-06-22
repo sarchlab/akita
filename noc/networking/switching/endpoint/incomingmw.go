@@ -47,11 +47,11 @@ func (m *incomingMW) recv() bool {
 		}
 
 		flit := receivedI.(packetization.Flit)
-		msg := &flit.Msg
+		meta := &flit.Msg
 
 		var assemblingIdx int = -1
 		for j, a := range state.AssemblingMsgs {
-			if a.MsgID == msg.ID {
+			if a.MsgID == meta.ID {
 				assemblingIdx = j
 				break
 			}
@@ -59,17 +59,19 @@ func (m *incomingMW) recv() bool {
 
 		if assemblingIdx < 0 {
 			state.AssemblingMsgs = append(state.AssemblingMsgs, assemblingMsgState{
-				MsgID:           msg.ID,
-				Src:             msg.Src,
-				Dst:             msg.Dst,
-				RspTo:           msg.RspTo,
-				TrafficClass:    msg.TrafficClass,
-				TrafficBytes:    msg.TrafficBytes,
+				MsgID:           meta.ID,
 				NumFlitRequired: flit.NumFlitInMsg,
 				NumFlitArrived:  1,
+				Payload:         msgHolder{Msg: flit.Payload},
 			})
 		} else {
-			state.AssemblingMsgs[assemblingIdx].NumFlitArrived++
+			a := &state.AssemblingMsgs[assemblingIdx]
+			a.NumFlitArrived++
+			// The concrete message rides on a single flit; capture it whenever
+			// that flit is the one arriving, regardless of flit order.
+			if flit.Payload != nil {
+				a.Payload = msgHolder{Msg: flit.Payload}
+			}
 		}
 
 		m.networkPort().RetrieveIncoming()
@@ -103,15 +105,12 @@ func (m *incomingMW) assemble() bool {
 			continue
 		}
 
-		assembled := messaging.MsgMeta{
-			ID:           a.MsgID,
-			Src:          a.Src,
-			Dst:          a.Dst,
-			RspTo:        a.RspTo,
-			TrafficClass: a.TrafficClass,
-			TrafficBytes: a.TrafficBytes,
+		if a.Payload.Msg == nil {
+			panic(fmt.Sprintf(
+				"message %d reassembled without a payload-bearing flit", a.MsgID))
 		}
-		state.AssembledMsgs = append(state.AssembledMsgs, assembled)
+
+		state.AssembledMsgs = append(state.AssembledMsgs, a.Payload)
 		madeProgress = true
 	}
 
@@ -127,8 +126,8 @@ func (m *incomingMW) tryDeliver() bool {
 	numDelivered := 0
 
 	for i := 0; i < len(state.AssembledMsgs); i++ {
-		meta := state.AssembledMsgs[i]
-		dst := meta.Dst
+		msg := state.AssembledMsgs[i].Msg
+		dst := msg.Meta().Dst
 
 		var dstPort messaging.Port
 
@@ -142,8 +141,6 @@ func (m *incomingMW) tryDeliver() bool {
 		if dstPort == nil {
 			panic(fmt.Sprintf("no dst port found for %s", dst))
 		}
-
-		msg := packetization.AssembledMsg{MsgMeta: meta}
 
 		if !dstPort.CanDeliver() {
 			break

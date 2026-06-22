@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/sarchlab/akita/v5/internal/codec"
 	"github.com/sarchlab/akita/v5/queueing"
 )
 
@@ -70,7 +71,7 @@ func (p *defaultPort) LoadCheckpoint(r io.Reader) error {
 func saveBuffer(
 	buf *queueing.Buffer[Msg], portName, label string,
 ) (bufferCheckpoint, error) {
-	elements, err := msgCodec.EncodeSlice(buf.Elements())
+	elements, err := codec.EncodeSlice(buf.Elements())
 	if err != nil {
 		return bufferCheckpoint{}, fmt.Errorf(
 			"messaging: port %q %s: %w", portName, label, err)

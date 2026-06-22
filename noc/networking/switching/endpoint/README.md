@@ -29,7 +29,10 @@ type Resources struct {
 ```
 
 `State` holds the message-out buffer, the flits queued for sending, and the
-per-message reassembly records (`AssemblingMsgs`, `AssembledMsgs`).
+per-message reassembly records (`AssemblingMsgs`, `AssembledMsgs`). The
+message-bearing buffers carry the concrete messages (wrapped in a small
+codec-backed holder so they checkpoint), so a payload-bearing protocol survives
+the network crossing rather than being reduced to its metadata.
 
 `Comp` implements `messaging.Connection`: device ports use the endpoint as their
 connection (`PlugIn` calls `SetConnection`), and `NotifySend`/`NotifyAvailable`
@@ -44,11 +47,12 @@ wake the component. Key methods:
 Each tick two middlewares run. The outgoing path (`device → network`) retrieves
 messages from device ports, converts each into one or more `packetization.Flit`
 values — flit count derived from `TrafficBytes`, `EncodingOverhead`, and
-`FlitByteSize` — and sends them out the network port with `Dst` set to the
-default switch. The incoming path (`network → device`) receives flits, groups
-them by message ID, and once `NumFlitInMsg` flits have arrived, reassembles the
-`messaging.MsgMeta` and delivers it to the matching device port. Buffers apply
-backpressure to keep the serializable state bounded.
+`FlitByteSize`, with the original message attached to the final flit as its
+`Payload` — and sends them out the network port with `Dst` set to the default
+switch. The incoming path (`network → device`) receives flits, groups them by
+message ID, and once `NumFlitInMsg` flits have arrived, delivers the carried
+original message to the matching device port. Buffers apply backpressure to keep
+the serializable state bounded.
 
 ## Builder Pattern
 

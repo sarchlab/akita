@@ -13,11 +13,12 @@ type Msg interface {
 // MsgMeta contains routing and identification metadata. All fields are set at
 // construction time and must not change once the message is in flight.
 type MsgMeta struct {
-	ID           uint64
-	Src, Dst     RemotePort
-	TrafficClass string
-	TrafficBytes int
-	RspTo        uint64
+	ID           uint64     `json:"id"`
+	Src          RemotePort `json:"src"`
+	Dst          RemotePort `json:"dst"`
+	TrafficClass string     `json:"traffic_class"`
+	TrafficBytes int        `json:"traffic_bytes"`
+	RspTo        uint64     `json:"rsp_to"`
 }
 
 // Meta returns the message metadata.
