@@ -206,7 +206,7 @@ var _ = Describe("MMUCache milestones", func() {
 	bufTaskID := func(portName string) uint64 {
 		for _, s := range rec.starts {
 			if s.Kind == tracing.IncomingBufferTaskKind &&
-				s.Location == portName {
+				s.Location == portName+".incoming" {
 				return s.ID
 			}
 		}

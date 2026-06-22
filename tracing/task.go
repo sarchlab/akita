@@ -13,7 +13,7 @@ type TaskStart struct {
 	ParentID uint64
 	Kind     string
 	What     string
-	Location string // optional; defaults to the domain name when empty
+	Location string // optional; when empty, derived by singleKindLocation
 	Time     timing.VTimeInPicoSec
 	Detail   any
 }
@@ -30,7 +30,21 @@ type TaskEnd struct {
 // retrieve) and closes it at pipeline exit. This attributes the pipeline latency
 // that would otherwise be an unaccounted gap between the buffer task (which ends
 // at retrieve) and the post-pipeline processing milestones on req_in.
+//
+// A pipeline subtask's What is "<component>.<stage>" (e.g. "L2Cache.bank"); that
+// already-qualified name becomes its location, so each stage is its own
+// single-kind row (see "One location, one kind" in README.md).
 const PipelineTaskKind = "pipeline"
+
+// ReqInTaskKind is the Kind of the receiver-side task that spans a component's
+// handling of an incoming request, from admission to completion. It is opened by
+// [TraceReqReceive] and located at "<component>.req_in".
+const ReqInTaskKind = "req_in"
+
+// ReqOutTaskKind is the Kind of the sender-side task that spans a request a
+// component has issued, from send until the response arrives. It is opened by
+// [TraceReqInitiate] and located at "<component>.req_out".
+const ReqOutTaskKind = "req_out"
 
 // A TaskTag is a categorical label attached to a task while it is processed,
 // for example "read-hit" or "write-miss". Tags inherit their location from the

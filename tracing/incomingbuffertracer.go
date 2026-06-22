@@ -103,7 +103,10 @@ func (h *incomingBufferHook) onDeliver(
 		ParentID: parentID,
 		Kind:     IncomingBufferTaskKind,
 		What:     msgTypeName(msg),
-		Location: port.Name(),
+		// A port holds both an incoming and an outgoing buffer, so the
+		// direction qualifies the location — one location, one kind (see
+		// README.md). The incoming buffer is "<port>.incoming".
+		Location: port.Name() + ".incoming",
 	})
 
 	if atHead {
