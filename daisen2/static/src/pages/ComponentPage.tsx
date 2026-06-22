@@ -1495,6 +1495,13 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     zoomTimeRange(event.deltaY, event.deltaX, pointerRatio);
   };
 
+  // The overview charts (task count, blocking reasons) are not zoom targets on a
+  // plain scroll, but a modifier or trackpad pinch (Ctrl/⌘+scroll) should still
+  // zoom the time axis — let only those through to the panel's wheel handler.
+  const handleOverviewWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (!event.ctrlKey && !event.metaKey) event.stopPropagation();
+  };
+
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -1650,13 +1657,12 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             />
           </div>
         )}
-        {/* Task count (occupancy density by kind) — always shown. The overview
-            charts are not zoom targets: stop the wheel from reaching the panel's
-            zoom handler so scrolling over them does nothing (zoom via the gantt). */}
+        {/* Task count (occupancy density by kind) — always shown. A plain scroll
+            here does nothing; only a modifier/pinch (Ctrl/⌘+scroll) zooms time. */}
         <div
           className="daisen1-count-view border-t border-slate-200"
           style={{ height: countHeight }}
-          onWheel={(event) => event.stopPropagation()}
+          onWheel={handleOverviewWheel}
         >
           {agg ? (
             <AggregatedTimeline
@@ -1678,12 +1684,12 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             <div className="flex h-full items-center justify-center text-xs text-muted-foreground">loading task count…</div>
           )}
         </div>
-        {/* Blocking reasons — always shown. Like the task-count chart, not a zoom
-            target: swallow the wheel so scrolling over it does not zoom. */}
+        {/* Blocking reasons — always shown. Like the task-count chart: plain scroll
+            is inert, a modifier/pinch (Ctrl/⌘+scroll) zooms time. */}
         <div
           className="daisen1-metric-view border-t border-slate-200"
           style={{ height: metricLineHeight }}
-          onWheel={(event) => event.stopPropagation()}
+          onWheel={handleOverviewWheel}
         >
           <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={highlightedReason} onHoverSegment={setHoveredSegment} />
         </div>
