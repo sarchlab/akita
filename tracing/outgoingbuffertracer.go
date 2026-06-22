@@ -101,7 +101,10 @@ func (h *outgoingBufferHook) onSend(
 		ParentID: parentID,
 		Kind:     OutgoingBufferTaskKind,
 		What:     msgTypeName(msg),
-		Location: port.Name(),
+		// A port holds both an incoming and an outgoing buffer, so the
+		// direction qualifies the location — one location, one kind (see
+		// README.md). The outgoing buffer is "<port>.outgoing".
+		Location: port.Name() + ".outgoing",
 	})
 
 	if atHead {

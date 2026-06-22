@@ -9,8 +9,8 @@ structured traces without modifying component logic.
 ### Tasks
 
 A `Task` is the aggregate record a stateful tracer builds from the stream of
-trace events. It has a start and end time, a location (the component name), an
-optional parent, and lists of tags and milestones.
+trace events. It has a start and end time, a location (see [Locations](#locations)),
+an optional parent, and lists of tags and milestones.
 
 Components do not build a `Task` directly. They emit lightweight event structs;
 the emit functions stamp the event time from the domain's clock and fire a hook.
@@ -48,6 +48,32 @@ work rather than waiting — e.g. traversing an internal latency pipeline. The
 interval up to a `work` milestone is time spent working, not blocked. Per the
 coverage principles below, a `work` (or `subtask`) milestone must be paired with
 a child subtask that spans the interval.
+
+## Locations
+
+**One location, one kind.** A location is the row a viewer (Daisen) draws tasks
+on, and a row is read as a single sequential timeline. So every location must
+host exactly **one** Kind of task. When a single component or port runs more than
+one kind, the kinds overlap in time on one row and the timeline becomes
+ambiguous — therefore the location string is qualified to separate them:
+
+| Kind | Location | Example |
+|------|----------|---------|
+| `req_in` | `<component>.req_in` | `L2Cache.req_in` |
+| `req_out` | `<component>.req_out` | `L2Cache.req_out` |
+| `pipeline` | `<component>.<stage>` (the task's `What`) | `L2Cache.dir_pipeline`, `L2Cache.bank` |
+| `incoming_buffer` | `<port>.incoming` | `L2Cache.Top.incoming` |
+| `outgoing_buffer` | `<port>.outgoing` | `L2Cache.Bottom.outgoing` |
+
+The rule of thumb: a **component** disambiguates by *stage* (the request side it
+is on, or the named pipeline stage); a **port** disambiguates by *direction*
+(incoming vs outgoing buffer). This holds for every task: `StartTask` derives the
+location from the Kind (see `singleKindLocation`) when a caller leaves `Location`
+empty, the buffer hooks append the direction, and all of these strings are
+interned into the trace's `location` table.
+
+When you add a new task Kind to a component or port that already emits another
+kind, qualify its location the same way — never let two kinds share one location.
 
 ## Coverage principles
 
@@ -100,9 +126,12 @@ tracing.AddMilestone(domain, tracing.Milestone{
 tracing.EndTask(domain, tracing.TaskEnd{ID: id})
 ```
 
-`TaskStart.Location` is optional and defaults to `domain.Name()`; set it
-explicitly for network tracing. `StartTask` requires a non-empty `ID`, `Kind`,
-and `What` (and a named domain) or it panics; tag and milestone `ID`s are
+`TaskStart.Location` is optional: when left empty `StartTask` derives a
+single-kind location from the Kind (`singleKindLocation` — see
+[Locations](#locations)), so `req_in`/`req_out`/`pipeline` are each placed on
+their own row. Set it explicitly to override (e.g. network tracing, or the port
+buffer hooks that append a direction). `StartTask` requires a non-empty `ID`,
+`Kind`, and `What` (and a named domain) or it panics; tag and milestone `ID`s are
 auto-generated when left zero.
 
 ### Message Tracing Helpers

@@ -29,7 +29,8 @@ var (
 )
 
 // StartTask notifies the hooks that hook to the domain about the start of a
-// task. When the task's Location is empty it defaults to the domain name.
+// task. When the task's Location is empty it is derived by [singleKindLocation]
+// so that each location hosts exactly one Kind of task.
 func StartTask(domain NamedHookable, t TaskStart) {
 	if domain.NumHooks() == 0 {
 		return
@@ -39,7 +40,7 @@ func StartTask(domain NamedHookable, t TaskStart) {
 	domainMustHaveName(domain)
 
 	if t.Location == "" {
-		t.Location = domain.Name()
+		t.Location = singleKindLocation(domain.Name(), t.Kind, t.What)
 	}
 
 	t.Time = domain.CurrentTime()
@@ -49,6 +50,29 @@ func StartTask(domain NamedHookable, t TaskStart) {
 		Item:   t,
 		Pos:    HookPosTaskStart,
 	})
+}
+
+// singleKindLocation derives a task's location so that one location only ever
+// holds one Kind of task — the invariant that keeps a Daisen row sequential and
+// unambiguous (see "One location, one kind" in README.md). It is consulted only
+// when the caller leaves Location empty; callers that qualify the location
+// themselves (the port buffer hooks append a direction) keep their own value.
+//
+//   - req_in and req_out share a component, so they are split by appending the
+//     kind: "<component>.req_in" and "<component>.req_out".
+//   - a pipeline subtask already names its stage in What as "<component>.<stage>"
+//     (e.g. "L2Cache.dir_pipeline"), so that name is the location and each stage
+//     is its own row.
+//   - any other kind keeps the bare component name.
+func singleKindLocation(componentName, kind, what string) string {
+	switch kind {
+	case ReqInTaskKind, ReqOutTaskKind:
+		return componentName + "." + kind
+	case PipelineTaskKind:
+		return what
+	default:
+		return componentName
+	}
 }
 
 func allRequiredFieldsMustBeNotEmpty(
@@ -231,7 +255,7 @@ func TraceReqInitiate(
 	StartTask(domain, TaskStart{
 		ID:       msg.Meta().ID,
 		ParentID: taskParentID,
-		Kind:     "req_out",
+		Kind:     ReqOutTaskKind,
 		What:     msgTypeName(msg),
 		Detail:   msg,
 	})
@@ -251,7 +275,7 @@ func TraceReqReceive(
 	StartTask(domain, TaskStart{
 		ID:       MsgIDAtReceiver(msg, domain),
 		ParentID: msg.Meta().ID,
-		Kind:     "req_in",
+		Kind:     ReqInTaskKind,
 		What:     msgTypeName(msg),
 		Detail:   msg,
 	})

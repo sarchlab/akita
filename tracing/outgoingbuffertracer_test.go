@@ -91,7 +91,7 @@ var _ = Describe("Outgoing buffer tracer", func() {
 		Expect(startA.Kind).To(Equal(OutgoingBufferTaskKind))
 		Expect(startA.ParentID).To(Equal(uint64(7)))
 		Expect(startA.What).To(Equal("obTestMsg"))
-		Expect(startA.Location).To(Equal("Comp.Bottom"))
+		Expect(startA.Location).To(Equal("Comp.Bottom.outgoing"))
 		Expect(startA.Time).To(Equal(timing.VTimeInPicoSec(100)))
 		startB := tracer.starts[1]
 		Expect(startB.ParentID).To(Equal(uint64(8)))
