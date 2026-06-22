@@ -594,101 +594,6 @@ func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
 	return b.String()
 }
 
-func (s *Server) fetchTasksForMilestones(ctx context.Context, scope string, startTime, endTime float64) []Task {
-	query := TaskQuery{
-		Scope:            scope,
-		EnableTimeRange:  true,
-		StartTime:        startTime,
-		EndTime:          endTime,
-		EnableParentTask: true,
-		EnableMilestones: true,
-	}
-	return s.traceReader.ListTasks(ctx, query)
-}
-
-func collectMilestoneKinds(tasks []Task) []string {
-	kindSet := make(map[string]bool)
-	for _, task := range tasks {
-		for _, step := range task.Steps {
-			// Tags are merged into Steps with Kind "tag" (see trace.go); they are
-			// categorical labels, not blocking reasons, so skip them.
-			if step.Kind == "tag" {
-				continue
-			}
-			kindSet[step.Kind] = true
-		}
-	}
-
-	kinds := make([]string, 0, len(kindSet))
-	for kind := range kindSet {
-		kinds = append(kinds, kind)
-	}
-	sort.Strings(kinds)
-	return kinds
-}
-
-func generateStackedTimeData(tasks []Task, kinds []string, startTime, endTime float64, numDots int) []StackedTimeValue {
-	data := make([]StackedTimeValue, 0, numDots)
-	binDuration := (endTime - startTime) / float64(numDots)
-
-	for i := 0; i < numDots; i++ {
-		// Sample at the center of each bin and count, at that instant, how many
-		// in-flight tasks are blocked by each reason.
-		sampleTime := startTime + (float64(i)+0.5)*binDuration
-		data = append(data, StackedTimeValue{
-			Time:   sampleTime,
-			Values: countBlockedTasksByKind(tasks, kinds, sampleTime),
-		})
-	}
-	return data
-}
-
-// countBlockedTasksByKind counts, at sampleTime, how many in-flight tasks are
-// blocked by each reason.
-func countBlockedTasksByKind(tasks []Task, kinds []string, sampleTime float64) map[string]float64 {
-	kindCounts := make(map[string]float64, len(kinds))
-	for _, kind := range kinds {
-		kindCounts[kind] = 0
-	}
-
-	for _, task := range tasks {
-		if float64(task.StartTime) > sampleTime || float64(task.EndTime) < sampleTime {
-			continue
-		}
-		if kind := findTaskBlockingKind(task, sampleTime); kind != "" {
-			kindCounts[kind]++
-		}
-	}
-	return kindCounts
-}
-
-// findTaskBlockingKind returns the reason the task is blocked on at time t: the
-// kind of the first milestone at or after t (the next blocking reason to be
-// released). A milestone marks the moment a reason is released, so the interval
-// before it is time blocked on that reason. Returns "" when no milestone
-// remains — the task is running to completion, not blocked.
-func findTaskBlockingKind(task Task, t float64) string {
-	best := ""
-	bestTime := 0.0
-	found := false
-
-	for _, step := range task.Steps {
-		// Tags are merged into Steps with Kind "tag" (see trace.go); they are not
-		// blocking reasons, so they never count as the task's next milestone.
-		if step.Kind == "tag" {
-			continue
-		}
-		stepTime := float64(step.Time)
-		if stepTime >= t && (!found || stepTime < bestTime) {
-			best = step.Kind
-			bestTime = stepTime
-			found = true
-		}
-	}
-
-	return best
-}
-
 func (s *Server) calculateConcurrentTaskMilestones(
 	ctx context.Context,
 	scope, infoType string,
@@ -701,11 +606,32 @@ func (s *Server) calculateConcurrentTaskMilestones(
 		StartTime: startTime,
 		EndTime:   endTime,
 		Kinds:     []string{},
+		Data:      []StackedTimeValue{},
 	}
 
-	tasks := s.fetchTasksForMilestones(ctx, scope, startTime, endTime)
-	info.Kinds = collectMilestoneKinds(tasks)
-	info.Data = generateStackedTimeData(tasks, info.Kinds, startTime, endTime, numDots)
+	if numDots < 1 || endTime <= startTime {
+		return info
+	}
+
+	// Same occupancy binning as the task-count chart, grouped by blocking reason
+	// (milestone kind) instead of task kind — computed in SQL, no per-task fetch.
+	keys, bins := s.traceReader.BlockingReasonOccupancy(ctx, scope, startTime, endTime, numDots)
+	info.Kinds = keys
+
+	binWidth := (endTime - startTime) / float64(numDots)
+	data := make([]StackedTimeValue, 0, len(bins))
+	for b, row := range bins {
+		values := make(map[string]float64, len(keys))
+		for ki, k := range keys {
+			values[k] = float64(row[ki])
+		}
+		data = append(data, StackedTimeValue{
+			// Keep the bin-center sample time the bar chart already plots against.
+			Time:   startTime + (float64(b)+0.5)*binWidth,
+			Values: values,
+		})
+	}
+	info.Data = data
 
 	return info
 }

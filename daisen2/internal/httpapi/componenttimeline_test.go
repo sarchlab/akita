@@ -99,3 +99,55 @@ func TestComponentTimelineRespectsHalfOpenBins(t *testing.T) {
 		t.Fatalf("bin 1 occupancy = %d, want 1 (only B; A must not bleed past its boundary)", got)
 	}
 }
+
+// TestBlockingReasonOccupancyBinsMilestoneIntervals verifies the blocking-reason
+// chart uses the same occupancy binning as the task-count chart, but over each
+// task's per-milestone intervals: a milestone marks the release of a blocking
+// reason, so the interval ending at it (from the previous milestone, or the
+// task's start) is time spent blocked on that milestone's kind. It also confirms
+// the scope aggregates the location subtree and excludes a sibling like "ROBOT".
+func TestBlockingReasonOccupancyBinsMilestoneIntervals(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
+	reader := NewSQLiteTraceReader(dbPath)
+	reader.Init()
+	defer reader.Close()
+
+	exec := func(q string) {
+		if _, err := reader.Exec(q); err != nil {
+			t.Fatalf("exec %q: %v", q, err)
+		}
+	}
+	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO location (ID, Locale) VALUES (1, 'ROB.req_in'), (2, 'ROBOT.x')`)
+	exec(`CREATE TABLE trace (
+		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
+		Location INTEGER, StartTime REAL, EndTime REAL)`)
+	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+		(1, 0, 'req_in', 'ReadReq', 1, 0, 20),
+		(2, 0, 'misc',   'Other',   2, 0, 20)`)
+	exec(`CREATE TABLE milestone (ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
+	// Task 1 (in scope): blocked on "queue" until t=10, then on "data" until t=20.
+	// Task 2 (sibling ROBOT.x): must be excluded from scope "ROB".
+	exec(`INSERT INTO milestone (ID, TaskID, Time, Kind, What) VALUES
+		(1, 1, 10, 'queue', ''),
+		(2, 1, 20, 'data',  ''),
+		(3, 2, 10, 'queue', '')`)
+
+	keys, bins := reader.BlockingReasonOccupancy(context.Background(), "ROB", 0, 20, 2)
+
+	if len(keys) != 2 || keys[0] != "data" || keys[1] != "queue" {
+		t.Fatalf("keys = %v, want [data queue]", keys)
+	}
+	di, qi := 0, 1 // keys are sorted: data, queue
+
+	// Over [0,20) with 2 bins (each 10 wide):
+	//   queue interval (0,10]  -> active in bin 0 only.
+	//   data  interval (10,20] -> active in bin 1 only.
+	// The sibling ROBOT.x "queue" milestone must not lift bin 0's queue above 1.
+	if bins[0][qi] != 1 || bins[0][di] != 0 {
+		t.Fatalf("bin 0 = {data:%d queue:%d}, want {data:0 queue:1}", bins[0][di], bins[0][qi])
+	}
+	if bins[1][di] != 1 || bins[1][qi] != 0 {
+		t.Fatalf("bin 1 = {data:%d queue:%d}, want {data:1 queue:0}", bins[1][di], bins[1][qi])
+	}
+}
