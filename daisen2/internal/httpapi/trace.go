@@ -57,6 +57,7 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 		ParentID:         queryParentID,
 		Kind:             r.FormValue("kind"),
 		Where:            r.FormValue("where"),
+		Scope:            r.FormValue("scope"),
 		StartTime:        startTime,
 		EndTime:          endTime,
 		EnableTimeRange:  useTimeRange,
@@ -85,8 +86,15 @@ type TaskQuery struct {
 	// Use Kind to select all the tasks that are of a kind.
 	Kind string
 
-	// Use Where to select all the tasks that are executed at a location.
+	// Use Where to select all the tasks that are executed at a location
+	// (exact match on the full location string).
 	Where string
+
+	// Use Scope to select all the tasks at a location subtree: the scope
+	// itself plus every location nested under it. Location names are dotted,
+	// so Scope="TLB" matches "TLB", "TLB.req_in", "TLB.Top.incoming", etc.
+	// This drives the dashboard's click-a-component drill-down.
+	Scope string
 
 	// Enable time range selection.
 	EnableTimeRange bool
@@ -251,9 +259,9 @@ func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
 
 // ListTasks returns a list of tasks in the trace according to the given query.
 func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Task {
-	sqlStr := r.prepareTaskQueryStr(query)
+	sqlStr, args := r.prepareTaskQueryStr(query)
 
-	rows, err := r.QueryContext(ctx, sqlStr)
+	rows, err := r.QueryContext(ctx, sqlStr, args...)
 	if err != nil {
 		panic(err)
 	}
@@ -590,7 +598,7 @@ func (r *SQLiteTraceReader) scanTaskWithoutParent(rows *sql.Rows, t *Task) {
 	t.EndTime = timing.VTimeInPicoSec(uint64(endTime))
 }
 
-func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) string {
+func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) (string, []any) {
 	// Location is stored as an integer id that references the shared location
 	// table; join it back to the component name string.
 	sqlStr := `
@@ -630,15 +638,17 @@ func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) string {
 		`
 	}
 
-	sqlStr = r.addQueryConditionsToQueryStr(sqlStr, query)
+	sqlStr, args := r.addQueryConditionsToQueryStr(sqlStr, query)
 
-	return sqlStr
+	return sqlStr, args
 }
 
 func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 	sqlStr string,
 	query TaskQuery,
-) string {
+) (string, []any) {
+	args := []any{}
+
 	sqlStr += `
 		WHERE 1=1
 	`
@@ -667,6 +677,18 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 		`
 	}
 
+	if query.Scope != "" {
+		// Select the scope component and everything nested under it. Locations
+		// are dotted, so the subtree is the exact name plus the "scope." prefix.
+		// The LIKE pattern is escaped (with '\' as ESCAPE) so '%'/'_' inside a
+		// location name — e.g. "req_in" — stay literal. Parameterized to keep
+		// the user-routable scope value out of the SQL text.
+		sqlStr += `
+			AND (loc.Locale = ? OR loc.Locale LIKE ? ESCAPE '\')
+		`
+		args = append(args, query.Scope, escapeLikePrefix(query.Scope)+`.%`)
+	}
+
 	if query.EnableTimeRange {
 		sqlStr += fmt.Sprintf(
 			"AND t.EndTime > %.15f AND t.StartTime < %.15f",
@@ -674,7 +696,17 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 			query.EndTime)
 	}
 
-	return sqlStr
+	return sqlStr, args
+}
+
+// escapeLikePrefix escapes the SQLite LIKE metacharacters ('%', '_', and the
+// '\' escape char itself) in a scope name so it is matched literally by a
+// "scope.%" prefix pattern that uses ESCAPE '\'.
+func escapeLikePrefix(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
 }
 
 // Segment represents a time segment where traces were collected

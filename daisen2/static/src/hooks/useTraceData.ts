@@ -6,6 +6,9 @@ export interface TraceQuery {
   id?: string;
   kind?: string;
   where?: string;
+  // scope selects a location subtree: the scope plus every dotted location
+  // nested under it (e.g. scope "TLB" matches TLB.req_in, TLB.Top.incoming, ...).
+  scope?: string;
   parentId?: string;
   startTime?: number;
   endTime?: number;
@@ -25,6 +28,7 @@ export function useTraceData(query: TraceQuery) {
     if (q.id) params.set("id", q.id);
     if (q.kind) params.set("kind", q.kind);
     if (q.where) params.set("where", q.where);
+    if (q.scope) params.set("scope", q.scope);
     if (q.parentId) params.set("parentid", q.parentId);
     if (q.startTime != null) params.set("starttime", String(q.startTime));
     if (q.endTime != null) params.set("endtime", String(q.endTime));
@@ -60,7 +64,7 @@ export function useTraceData(query: TraceQuery) {
     const controller = new AbortController();
     void fetchTasks(query, controller.signal);
     return () => controller.abort();
-  }, [fetchTasks, query.id, query.kind, query.where, query.parentId, query.startTime, query.endTime]);
+  }, [fetchTasks, query.id, query.kind, query.where, query.scope, query.parentId, query.startTime, query.endTime]);
 
   useRenderReady(loading, error !== null);
 

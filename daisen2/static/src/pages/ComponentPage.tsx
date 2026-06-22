@@ -18,6 +18,9 @@ import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskC
 import { blockingKindAt, milestonesOf, wavyPath } from "../utils/milestoneViz";
 import { smartString } from "../utils/smartValue";
 import { cn } from "../lib/utils";
+import { useComponentNames } from "../hooks/useComponentNames";
+import { buildLocationTree, isInternalNode } from "../utils/locationTree";
+import ComponentScopeView from "./ComponentScopeView";
 
 // The left column stacks three regions: the parent/current/sub task view (top),
 // the component-task timeline (middle), and the metric line chart (bottom). The
@@ -969,7 +972,11 @@ function sanitizeRange(startTime: number, endTime: number): TimeRange {
   return { startTime: 0, endTime: 0.000001 };
 }
 
-export default function ComponentPage() {
+// ComponentDetailView is the single-component view: one component's task
+// timeline, task detail, and milestone bars. It renders for a leaf location
+// (a real task row). Internal nodes are handled by ComponentScopeView via the
+// ComponentPage wrapper below.
+function ComponentDetailView() {
   const [searchParams, setSearchParams] = useSearchParams();
   const name = searchParams.get("name") ?? "";
   const urlTaskId = searchParams.get("taskid");
@@ -1364,4 +1371,27 @@ export default function ComponentPage() {
       </SidePanel>
     </div>
   );
+}
+
+// ComponentPage routes between the scoped drill-down and the single-component
+// detail view based on the location hierarchy. A dotted name with descendants
+// (e.g. "TLB", which owns "TLB.req_in", "TLB.Top.incoming", …) is an internal
+// node, so it renders ComponentScopeView; a leaf location renders the detail
+// view. The hierarchy is derived from the flat /api/compnames list by splitting
+// names on ".".
+export default function ComponentPage() {
+  const [searchParams] = useSearchParams();
+  const name = searchParams.get("name") ?? "";
+  const { names, loading } = useComponentNames();
+  const root = useMemo(() => buildLocationTree(names), [names]);
+
+  if (loading && names.length === 0) {
+    return <div className="flex h-full items-center justify-center text-muted-foreground">Loading…</div>;
+  }
+
+  if (name && isInternalNode(root, name)) {
+    return <ComponentScopeView root={root} scope={name} />;
+  }
+
+  return <ComponentDetailView />;
 }
