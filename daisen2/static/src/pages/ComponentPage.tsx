@@ -1002,9 +1002,18 @@ export default function ComponentPage() {
   const numBins = Math.max(100, Math.min(1200, Math.round((size.width - SIDE_COLUMN_WIDTH) / 100) * 100));
   const { data: agg, loading: aggLoading } = useComponentTimeline(componentName, dataRange.startTime, dataRange.endTime, numBins);
   const aggregated = !!agg && agg.total > RAW_TASK_THRESHOLD;
-  // Only fetch the raw tasks once the summary confirms the count is affordable —
-  // this is what prevents pulling hundreds of thousands of tasks for a busy view.
-  const rawEnabled = !!agg && agg.total <= RAW_TASK_THRESHOLD;
+  // Only fetch the raw tasks once the summary for THIS range confirms the count is
+  // affordable. useComponentTimeline keeps the previous summary while a new range
+  // loads, so we must also require the summary to cover the current range —
+  // otherwise a stale, small total from a sparse range would green-light the huge
+  // raw fetch for a freshly-selected dense range, defeating the level-of-detail
+  // guard this whole path exists to provide. The echoed start/end round-trip
+  // exactly, so the equality check is safe.
+  const rawEnabled =
+    !!agg &&
+    agg.start_time === dataRange.startTime &&
+    agg.end_time === dataRange.endTime &&
+    agg.total <= RAW_TASK_THRESHOLD;
   const query = useMemo(
     () => (componentName && rawEnabled ? { where: componentName, startTime: dataRange.startTime, endTime: dataRange.endTime } : {}),
     [dataRange.endTime, dataRange.startTime, componentName, rawEnabled],
