@@ -1238,11 +1238,13 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // raw fetch for a freshly-selected dense range, defeating the level-of-detail
   // guard this whole path exists to provide. The echoed start/end round-trip
   // exactly, so the equality check is safe.
-  const rawEnabled =
-    !!agg &&
-    agg.start_time === dataRange.startTime &&
-    agg.end_time === dataRange.endTime &&
-    agg.total <= RAW_TASK_THRESHOLD;
+  // A summary describes the CURRENT range only once its echoed start/end match —
+  // the hooks keep the previous range's data on screen while a new one loads, so
+  // an unchecked summary would be answering the range we just zoomed away from.
+  const aggMatchesRange = !!agg && agg.start_time === dataRange.startTime && agg.end_time === dataRange.endTime;
+  const stackedMatchesRange =
+    !!stackedInfo && stackedInfo.start_time === dataRange.startTime && stackedInfo.end_time === dataRange.endTime;
+  const rawEnabled = aggMatchesRange && (agg?.total ?? Infinity) <= RAW_TASK_THRESHOLD;
   const query = useMemo(
     () => (componentName && rawEnabled ? { scope: componentName, startTime: dataRange.startTime, endTime: dataRange.endTime } : {}),
     [dataRange.endTime, dataRange.startTime, componentName, rawEnabled],
@@ -1293,15 +1295,31 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     window.history.replaceState(null, "", `/component?${params.toString()}`);
   }, [dataRange.endTime, dataRange.startTime, componentName]);
 
+  // Commit the per-task gantt's visibility only when the summary describes the
+  // current range. While a zoom's new summary loads we keep the previous decision,
+  // so the gantt stays put instead of collapsing (and the task-count chart growing
+  // to fill the gap) and then snapping back. We re-decide once the new summary lands.
+  const [showGantt, setShowGantt] = useState(false);
+  useEffect(() => {
+    if (aggMatchesRange) setShowGantt((agg?.total ?? Infinity) <= RAW_TASK_THRESHOLD);
+  }, [aggMatchesRange, agg?.total]);
+
   // One global palette over every key that needs a color in this view — task
-  // "kind-what" keys and blocking-reason kinds — so task bars and reasons are
-  // all distinct and colored by the same mechanism.
+  // "kind-what" keys and blocking-reason kinds — so task bars and reasons are all
+  // distinct and colored by the same mechanism. Assign it only once BOTH always-on
+  // summaries for the current range are in, so the palette spans the whole key set
+  // and never depends on which chart loaded first. Keep the previous assignment
+  // through every transition: the first load shows gray until colors are ready (the
+  // brief gap between the two summaries arriving), and a zoom never reshuffles.
+  const colorMapRef = useRef<Record<string, string>>({});
   const colorMap = useMemo(() => {
+    if (!aggMatchesRange || !stackedMatchesRange) return colorMapRef.current;
     const taskKeys = [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks].map(taskColorKey);
-    const aggKeys = agg?.keys ?? [];
     const reasonKeys = [...(stackedInfo?.kinds ?? []), ...milestonesOf(currentTask?.steps).map((step) => step.kind)];
-    return buildColorMapFromKeys([...taskKeys, ...aggKeys, ...reasonKeys]);
-  }, [childTasks, currentTask, parentTask, tasks, stackedInfo, agg]);
+    const next = buildColorMapFromKeys([...taskKeys, ...(agg?.keys ?? []), ...reasonKeys]);
+    colorMapRef.current = next;
+    return next;
+  }, [aggMatchesRange, stackedMatchesRange, childTasks, currentTask, parentTask, tasks, stackedInfo, agg]);
 
   // The task "kind-what" keys for the legend's Tasks subsection (distinct from
   // the blocking-reason kinds, so reasons no longer leak into the task legend).
@@ -1331,7 +1349,6 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   const taskViewHeight = currentTask ? Math.round(size.height * TASK_VIEW_HEIGHT_RATIO) : TOP_AXIS_COMPACT_HEIGHT;
   const metricLineHeight = Math.round(size.height * COMPONENT_LINE_HEIGHT_RATIO);
   const middleHeight = Math.max(120, size.height - taskViewHeight - metricLineHeight);
-  const showGantt = rawEnabled;
   const countHeight = showGantt ? Math.min(220, Math.max(90, Math.round(middleHeight * 0.3))) : middleHeight;
   const ganttHeight = showGantt ? Math.max(80, middleHeight - countHeight) : 0;
   const dataPending = viewRange.startTime !== dataRange.startTime || viewRange.endTime !== dataRange.endTime;
