@@ -57,23 +57,37 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 	// fires tasks in bursts look spiky (tall spikes at the bursts, empty valleys
 	// in between) even while it stays busy with long, still-running tasks.
 	//
-	// Occupancy is computed as a difference array: emit +1 at a task's start bin
-	// and -1 just past its end bin, then prefix-sum. The cross join fans each task
-	// out into its two events in a single table scan; -1 events past the last bin
-	// (tasks still running at range end) are simply dropped.
+	// Occupancy is computed as a difference array: emit +1 at the bin a task starts
+	// in and -1 at the first bin after it ends, then prefix-sum. The end event uses
+	// the ceiling of the end position, not floor+1, so a task whose EndTime lands
+	// exactly on a bin boundary is not counted into the next bin (its interval is
+	// half-open). The cross join fans each task into its two events in a single
+	// table scan; -1 events past the last bin (tasks still running at range end)
+	// are simply dropped.
 	nb := strconv.Itoa(numBins)
 	s := strconv.FormatFloat(start, 'f', -1, 64)
 	e := strconv.FormatFloat(end, 'f', -1, 64)
-	binOf := func(col string) string {
-		return "CAST((" + col + " - " + s + ") * " + nb + " / (" + e + " - " + s + ") AS INTEGER)"
+	// posOf is the fractional bin position of a timestamp. SQLite's CAST truncates
+	// toward zero (floor, since positions here are non-negative); it has no ceil()
+	// without the math extension, so ceilOf is floor(x) plus 1 when x has a
+	// fractional part.
+	posOf := func(col string) string {
+		return "((" + col + " - " + s + ") * " + nb + " / (" + e + " - " + s + "))"
+	}
+	floorOf := func(col string) string {
+		return "CAST(" + posOf(col) + " AS INTEGER)"
+	}
+	ceilOf := func(col string) string {
+		p := posOf(col)
+		return "(CAST(" + p + " AS INTEGER) + (" + p + " > CAST(" + p + " AS INTEGER)))"
 	}
 
 	sqlStr := `
 		WITH events AS (
 			SELECT
 				CASE WHEN d.delta = 1
-					THEN MAX(0, MIN(` + nb + ` - 1, ` + binOf("t.StartTime") + `))
-					ELSE ` + binOf("t.EndTime") + ` + 1
+					THEN MAX(0, MIN(` + nb + ` - 1, ` + floorOf("t.StartTime") + `))
+					ELSE ` + ceilOf("t.EndTime") + `
 				END AS bin,
 				t.Kind || '-' || t.What AS k,
 				d.delta AS delta

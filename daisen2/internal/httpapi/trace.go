@@ -172,8 +172,9 @@ func (r *SQLiteTraceReader) Init() {
 // InitReadOnly establishes a read-only connection to the database. It is used to
 // read a trace concurrently while a DBTracer writes it; the writer already puts
 // the database in WAL mode, and a read-only connection must not set the journal
-// mode itself — with the native driver "mode=ro" is a true read-only open, so a
-// "PRAGMA journal_mode=WAL" here would fail on any non-WAL file and panic.
+// mode itself. With the native driver "mode=ro" is a true read-only open, so
+// setting WAL here would fail on any non-WAL file and panic — hence no such
+// pragma below.
 func (r *SQLiteTraceReader) InitReadOnly() {
 	db, err := sql.Open("sqlite3", r.filename+"?mode=ro")
 	if err != nil {
