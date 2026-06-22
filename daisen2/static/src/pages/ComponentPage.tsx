@@ -714,6 +714,7 @@ function ComponentMilestoneAreas({
   width,
   height,
   colorMap,
+  highlightedKey,
   onHoverSegment,
 }: {
   info: StackedComponentInfo | null;
@@ -721,6 +722,8 @@ function ComponentMilestoneAreas({
   width: number;
   height: number;
   colorMap: Record<string, string>;
+  // A reason hovered in the legend; its band stays opaque while the rest dim.
+  highlightedKey: string | null;
   onHoverSegment: (segment: { kind: string; time: number } | null) => void;
 }) {
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
@@ -752,6 +755,8 @@ function ComponentMilestoneAreas({
     return { kind, d: tops.length ? `M${tops.join("L")}L${bots.join("L")}Z` : "" };
   });
 
+  const hasHighlight = highlightedKey !== null;
+
   return (
     <svg width={width} height={height} className="block">
       {ticks.map((tick) => (
@@ -782,7 +787,7 @@ function ComponentMilestoneAreas({
             key={kind}
             d={d}
             fill={colorMap[kind] ?? "#9ca3af"}
-            opacity={0.9}
+            opacity={hasHighlight ? (highlightedKey === kind ? 1 : 0.12) : 0.9}
             className="cursor-pointer"
             // Report the reason + time under the cursor so hovering a band
             // highlights the tasks blocked by that reason in the view above.
@@ -1058,12 +1063,16 @@ function ComponentLegend({
   blockingReasons,
   highlightedKey,
   onHighlight,
+  highlightedReason,
+  onHighlightReason,
 }: {
   taskKeys: string[];
   colorMap: Record<string, string>;
   blockingReasons: string[];
   highlightedKey: string | null;
   onHighlight: (key: string | null) => void;
+  highlightedReason: string | null;
+  onHighlightReason: (kind: string | null) => void;
 }) {
   if (taskKeys.length === 0 && blockingReasons.length === 0) return null;
 
@@ -1107,23 +1116,36 @@ function ComponentLegend({
           <ul className="mt-2 space-y-0.5">
             {blockingReasons.map((kind) => {
               const color = colorMap[kind] ?? "#9ca3af";
+              const dimmed = highlightedReason !== null && highlightedReason !== kind;
               return (
-                <li key={kind} className="flex items-center gap-2 px-1.5 py-1 text-xs">
-                  {/* Two glyphs: the wavy line (task view) and a borderless block
-                      (stacked bar chart), both colored by the reason. */}
-                  <span className="flex shrink-0 items-center gap-1">
-                    <svg width="22" height="12" aria-hidden="true">
-                      <path
-                        d={wavyPath(1, 21, 6, 3, 3)}
-                        fill="none"
-                        stroke={color}
-                        strokeWidth={1.5}
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <span className="inline-block h-3 w-4 rounded-sm" style={{ backgroundColor: color }} />
-                  </span>
-                  <span className="truncate">{kind}</span>
+                <li key={kind}>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
+                      dimmed && "opacity-40",
+                    )}
+                    onMouseEnter={() => onHighlightReason(kind)}
+                    onMouseLeave={() => onHighlightReason(null)}
+                    onFocus={() => onHighlightReason(kind)}
+                    onBlur={() => onHighlightReason(null)}
+                  >
+                    {/* Two glyphs: the wavy line (task view) and a borderless block
+                        (stacked area chart), both colored by the reason. */}
+                    <span className="flex shrink-0 items-center gap-1">
+                      <svg width="22" height="12" aria-hidden="true">
+                        <path
+                          d={wavyPath(1, 21, 6, 3, 3)}
+                          fill="none"
+                          stroke={color}
+                          strokeWidth={1.5}
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      <span className="inline-block h-3 w-4 rounded-sm" style={{ backgroundColor: color }} />
+                    </span>
+                    <span className="truncate">{kind}</span>
+                  </button>
                 </li>
               );
             })}
@@ -1239,6 +1261,10 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   );
   const [hoveredTask, setHoveredTask] = useState<Task | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
+  // Separate from highlightedKey (task "kind-what" keys): hovering a blocking
+  // reason in the legend highlights its band without dimming the task charts,
+  // whose keys live in a different namespace.
+  const [highlightedReason, setHighlightedReason] = useState<string | null>(null);
   const dragRef = useRef<{ pointerId: number; x: number; range: TimeRange } | null>(null);
   const didDragRef = useRef(false);
   const pendingSelectTaskRef = useRef<Task | null>(null);
@@ -1550,7 +1576,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
         </div>
         {/* Blocking reasons — always shown. */}
         <div className="daisen1-metric-view border-t border-slate-200" style={{ height: metricLineHeight }}>
-          <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} onHoverSegment={setHoveredSegment} />
+          <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={highlightedReason} onHoverSegment={setHoveredSegment} />
         </div>
       </div>
 
@@ -1626,7 +1652,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               selected/current task so a task selected via click or arrived at
               via /component?...&taskid=... stays visible in the panel. */}
           <SelectedTaskSection task={hoveredTask ?? currentTask} />
-          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} />
+          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={highlightedReason} onHighlightReason={setHighlightedReason} />
         </div>
       </SidePanel>
     </div>
