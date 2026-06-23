@@ -418,12 +418,17 @@ export default function DashboardPage() {
       ) : error ? (
         <div className="flex flex-1 items-center justify-center text-destructive">{error}</div>
       ) : singleWidget ? (
-        <div className="min-h-0 flex-1 overflow-hidden bg-white p-[5px]">
+        // Same callback ref as the grid: only one of the two is mounted at a time,
+        // so the observer follows whichever is on screen. Without this the expanded
+        // widget would inherit the grid's width (full width minus the sidebar) and
+        // leave a sidebar-wide gap on the right. contentRect already excludes the
+        // p-[5px], so the widget fills it exactly.
+        <div ref={ref} className="min-h-0 flex-1 overflow-hidden bg-white p-[5px]">
           <DashboardWidget
             key={widget}
             name={widget}
-            width={Math.max(180, size.width - 10)}
-            height={Math.max(120, size.height - 10)}
+            width={Math.max(180, size.width)}
+            height={Math.max(120, size.height)}
             startTime={viewRange.startTime}
             endTime={viewRange.endTime}
             dataStartTime={dataRange.startTime}
