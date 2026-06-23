@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { RotateCcw, X, ChevronRight, ChevronDown, Search } from "lucide-react";
 import DashboardWidget from "../components/DashboardWidget";
+import { MetricsHelp } from "../components/HelpTopics";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import {
@@ -407,6 +408,7 @@ export default function DashboardPage() {
         )}
         {axisSelect("Primary Y-Axis", primaryAxis, (value) => patchView({ primary: value }))}
         {axisSelect("Secondary Y-Axis", secondaryAxis, (value) => patchView({ secondary: value }))}
+        <MetricsHelp className="h-5 w-5" />
       </form>
 
       {loading ? (

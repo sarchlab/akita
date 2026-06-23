@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import WidgetCard from "./WidgetCard";
 import DashboardWidget from "./DashboardWidget";
+import { ComponentsOverviewHelp } from "./HelpTopics";
 import { useComponents } from "../hooks/useComponents";
 import { useComponentNames } from "../hooks/useComponentNames";
 import { useSimulationRange } from "../hooks/useSimulationRange";
@@ -52,7 +53,7 @@ export default function ComponentsWidget({ expandHref }: ComponentsWidgetProps) 
   const cellHeight = Math.max(120, (size.height - GAP) / 2);
 
   return (
-    <WidgetCard title="Components" expandHref={expandHref} contentClassName="p-2">
+    <WidgetCard title="Components" expandHref={expandHref} info={<ComponentsOverviewHelp />} contentClassName="p-2">
       {/* The ref must be on an always-mounted element so the ResizeObserver
           attaches on mount; otherwise the charts keep their default width. */}
       <div

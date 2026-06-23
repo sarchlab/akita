@@ -5,6 +5,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { X, ChevronRight, Plus, Minus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { SidePanel } from "../components/ui/side-panel";
+import { BlockingReasonsHelp, TaskColoringHelp } from "../components/HelpTopics";
 import type { StackedComponentInfo } from "../hooks/useCompInfo";
 import { useStackedCompInfo } from "../hooks/useCompInfo";
 import { useSegments } from "../hooks/useSegments";
@@ -1225,7 +1226,10 @@ function ComponentLegend({
       {taskKeys.length > 0 && (
         <>
           <div className="flex items-center justify-between gap-2">
-            <SectionLabel>Tasks</SectionLabel>
+            <div className="flex items-center gap-1.5">
+              <SectionLabel>Tasks</SectionLabel>
+              <TaskColoringHelp />
+            </div>
             {/* Color/group tasks by kind alone or the finer kind-what pair. Drives
                 both these swatches and the task-count chart's bands. */}
             <div className="inline-flex shrink-0 overflow-hidden rounded border text-[10px] font-medium" role="group" aria-label="Color tasks by">
@@ -1279,7 +1283,10 @@ function ComponentLegend({
 
       {blockingReasons.length > 0 && (
         <>
-          <SectionLabel>Blocking reasons</SectionLabel>
+          <div className="flex items-center gap-1.5">
+            <SectionLabel>Blocking reasons</SectionLabel>
+            <BlockingReasonsHelp />
+          </div>
           <ul className="mt-2 space-y-0.5">
             {blockingReasons.map((kind) => {
               const color = colorMap[kind] ?? "#9ca3af";
