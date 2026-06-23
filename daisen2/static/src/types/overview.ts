@@ -27,10 +27,10 @@ export interface Topology {
   ports: TopologyPort[];
 }
 
-/** A component ranked by how long its tasks spent blocked (virtual time). */
-export interface BlockedComponent {
+/** A component ranked by the total in-flight time of its tasks (virtual time). */
+export interface ComponentResidency {
   component: string;
-  blocked_time: number;
+  task_time: number;
 }
 
 /** One directory entry of the recorded source tree. */
