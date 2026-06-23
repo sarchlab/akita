@@ -108,6 +108,7 @@
   }
 
   .daisen1-component-left {
+    position: relative;
     display: inline-block;
     height: 100%;
     overflow: hidden;

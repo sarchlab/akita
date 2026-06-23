@@ -1,6 +1,6 @@
 import * as d3 from "d3";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent, WheelEvent as ReactWheelEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, PointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { X, ChevronRight, Plus, Minus } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -15,6 +15,7 @@ import type { ComponentTimelineData } from "../hooks/useComponentTimeline";
 import { useRenderReady } from "../hooks/useRenderReady";
 import type { Segment, Task } from "../types/task";
 import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskColorCoder";
+import type { ColorMode } from "../utils/taskColorCoder";
 import { blockingKindAt, milestonesOf, wavyPath } from "../utils/milestoneViz";
 import { smartString } from "../utils/smartValue";
 import { cn } from "../lib/utils";
@@ -361,6 +362,7 @@ interface ComponentTimelineProps {
   range: TimeRange;
   size: Size;
   colorMap: Record<string, string>;
+  colorMode: ColorMode;
   highlightedKey: string | null;
   highlightedTaskId: string | null;
   highlightedTaskIds: Set<string> | null;
@@ -381,6 +383,7 @@ function ComponentTimeline({
   range,
   size,
   colorMap,
+  colorMode,
   highlightedKey,
   highlightedTaskId,
   highlightedTaskIds,
@@ -559,7 +562,7 @@ function ComponentTimeline({
             width: Math.max(1, safeScale(xScale, task.end_time) - safeScale(xScale, task.start_time)),
             height: 8,
           };
-          const key = taskColorKey(task);
+          const key = taskColorKey(task, colorMode);
           const taskHighlighted = highlightedTaskId === String(task.id);
           const keyHighlighted = highlightedKey === key;
           const hasHighlight = highlightedTaskIds !== null || highlightedTaskId !== null || highlightedKey !== null;
@@ -579,7 +582,7 @@ function ComponentTimeline({
               y={dim.y}
               width={Math.max(1, dim.width)}
               height={Math.max(1, dim.height)}
-              fill={lookupColor(colorMap, task)}
+              fill={lookupColor(colorMap, task, colorMode)}
               stroke="#000000"
               strokeOpacity={hasHighlight && highlighted ? 0.8 : 0.2}
               opacity={highlighted ? 1 : 0.4}
@@ -726,9 +729,9 @@ function AggregatedTimeline({
   size: Size;
   colorMap: Record<string, string>;
   highlightedKey: string | null;
-  // Hovering a band lights it (dimming the rest) and lights the tasks of that kind
-  // active at the cursor's time in the gantt. It deliberately does NOT touch the
-  // side-panel legend — legend hover still drives the highlight the other way.
+  // Hovering a band reports the kind + cursor time so the parent can light the
+  // matching legend row, dim the other bands, and light that kind's tasks at the
+  // cursor time in the gantt. Legend hover drives the same highlight in reverse.
   onHoverKey: (key: string | null, time: number | null) => void;
   segments: Segment[];
   segmentsEnabled: boolean;
@@ -739,9 +742,6 @@ function AggregatedTimeline({
   const height = Math.max(1, size.height);
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
-  // Hovered band is local so it dims this chart only; the legend never reacts to a
-  // chart hover. (highlightedKey, set by legend hover, still dims the bands.)
-  const [hoveredBand, setHoveredBand] = useState<string | null>(null);
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
 
   const gridlines = ticks.map((tick) => (
@@ -795,8 +795,7 @@ function AggregatedTimeline({
     return { key, d: `M${tops.join("L")}L${bots.join("L")}Z` };
   });
 
-  const activeKey = hoveredBand ?? highlightedKey;
-  const hasHighlight = activeKey !== null;
+  const hasHighlight = highlightedKey !== null;
 
   return (
     <svg width={width} height={height} className="block">
@@ -806,10 +805,9 @@ function AggregatedTimeline({
           d={d}
           fill={colorMap[key] ?? "#999999"}
           stroke="none"
-          opacity={hasHighlight ? (activeKey === key ? 1 : 0.12) : 0.9}
+          opacity={hasHighlight ? (highlightedKey === key ? 1 : 0.12) : 0.9}
           className="cursor-pointer"
           onMouseMove={(event) => {
-            setHoveredBand(key);
             const svg = event.currentTarget.ownerSVGElement;
             if (!svg) {
               onHoverKey(key, null);
@@ -818,10 +816,7 @@ function AggregatedTimeline({
             const rect = svg.getBoundingClientRect();
             onHoverKey(key, xScale.invert(event.clientX - rect.left));
           }}
-          onMouseLeave={() => {
-            setHoveredBand(null);
-            onHoverKey(null, null);
-          }}
+          onMouseLeave={() => onHoverKey(null, null)}
         >
           <title>{key}</title>
         </path>
@@ -855,17 +850,21 @@ function ComponentMilestoneAreas({
   segments,
   segmentsEnabled,
   onHoverSegment,
+  onHoverReason,
 }: {
   info: StackedComponentInfo | null;
   range: TimeRange;
   width: number;
   height: number;
   colorMap: Record<string, string>;
-  // A reason hovered in the legend; its band stays opaque while the rest dim.
+  // The highlighted reason (from a legend hover or a band hover): its band stays
+  // opaque while the rest dim.
   highlightedKey: string | null;
   segments: Segment[];
   segmentsEnabled: boolean;
   onHoverSegment: (segment: { kind: string; time: number } | null) => void;
+  // Hovering a band also highlights it (and the matching legend reason); null clears.
+  onHoverReason: (kind: string | null) => void;
 }) {
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
@@ -919,15 +918,20 @@ function ComponentMilestoneAreas({
             fill={colorMap[kind] ?? "#9ca3af"}
             opacity={hasHighlight ? (highlightedKey === kind ? 1 : 0.12) : 0.9}
             className="cursor-pointer"
-            // Report the reason + time under the cursor so hovering a band
-            // highlights the tasks blocked by that reason in the view above.
+            // Report the reason + time under the cursor: highlight this band (and
+            // the matching legend reason), and light the tasks blocked by that
+            // reason at the cursor time in the view above.
             onMouseMove={(event) => {
+              onHoverReason(kind);
               const svg = event.currentTarget.ownerSVGElement;
               if (!svg) return;
               const rect = svg.getBoundingClientRect();
               onHoverSegment({ kind, time: xScale.invert(event.clientX - rect.left) });
             }}
-            onMouseLeave={() => onHoverSegment(null)}
+            onMouseLeave={() => {
+              onHoverReason(null);
+              onHoverSegment(null);
+            }}
           >
             <title>{kind}</title>
           </path>
@@ -996,6 +1000,7 @@ function ComponentTaskView({
   width,
   height,
   colorMap,
+  colorMode,
   highlightedKey,
   highlightedTaskId,
   onHoverTask,
@@ -1010,6 +1015,7 @@ function ComponentTaskView({
   width: number;
   height: number;
   colorMap: Record<string, string>;
+  colorMode: ColorMode;
   highlightedKey: string | null;
   highlightedTaskId: string | null;
   onHoverTask: (task: Task | null) => void;
@@ -1046,7 +1052,7 @@ function ComponentTaskView({
       })}
 
       {rows.map((row) => {
-        const key = taskColorKey(row.task);
+        const key = taskColorKey(row.task, colorMode);
         const taskHighlighted = highlightedTaskId === String(row.task.id);
         const keyHighlighted = highlightedKey === key;
         const hasHighlight = highlightedTaskId !== null || highlightedKey !== null;
@@ -1059,7 +1065,7 @@ function ComponentTaskView({
             y={row.y}
             width={row.width}
             height={Math.max(1, row.height)}
-            fill={lookupColor(colorMap, row.task)}
+            fill={lookupColor(colorMap, row.task, colorMode)}
             stroke="#000000"
             strokeOpacity={hasHighlight && highlighted ? 0.8 : 0.2}
             opacity={highlighted ? 1 : 0.4}
@@ -1194,6 +1200,8 @@ function SelectedTaskSection({ task }: { task: Task | null }) {
 function ComponentLegend({
   taskKeys,
   colorMap,
+  colorMode,
+  onColorMode,
   blockingReasons,
   highlightedKey,
   onHighlight,
@@ -1202,6 +1210,8 @@ function ComponentLegend({
 }: {
   taskKeys: string[];
   colorMap: Record<string, string>;
+  colorMode: ColorMode;
+  onColorMode: (mode: ColorMode) => void;
   blockingReasons: string[];
   highlightedKey: string | null;
   onHighlight: (key: string | null) => void;
@@ -1214,16 +1224,39 @@ function ComponentLegend({
     <section>
       {taskKeys.length > 0 && (
         <>
-          <SectionLabel>Tasks</SectionLabel>
+          <div className="flex items-center justify-between gap-2">
+            <SectionLabel>Tasks</SectionLabel>
+            {/* Color/group tasks by kind alone or the finer kind-what pair. Drives
+                both these swatches and the task-count chart's bands. */}
+            <div className="inline-flex shrink-0 overflow-hidden rounded border text-[10px] font-medium" role="group" aria-label="Color tasks by">
+              {(["kind", "kind-what"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => onColorMode(mode)}
+                  aria-pressed={colorMode === mode}
+                  className={cn(
+                    "px-1.5 py-0.5 transition-colors",
+                    mode === "kind-what" && "border-l",
+                    colorMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {mode === "kind" ? "Kind" : "Kind-What"}
+                </button>
+              ))}
+            </div>
+          </div>
           <ul className="mb-3 mt-2 space-y-0.5">
             {taskKeys.map((key) => {
-              const dimmed = highlightedKey !== null && highlightedKey !== key;
+              const active = highlightedKey === key;
+              const dimmed = highlightedKey !== null && !active;
               return (
                 <li key={key}>
                   <button
                     type="button"
                     className={cn(
                       "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
+                      active && "bg-primary/10",
                       dimmed && "opacity-40",
                     )}
                     onMouseEnter={() => onHighlight(key)}
@@ -1250,13 +1283,15 @@ function ComponentLegend({
           <ul className="mt-2 space-y-0.5">
             {blockingReasons.map((kind) => {
               const color = colorMap[kind] ?? "#9ca3af";
-              const dimmed = highlightedReason !== null && highlightedReason !== kind;
+              const active = highlightedReason === kind;
+              const dimmed = highlightedReason !== null && !active;
               return (
                 <li key={kind}>
                   <button
                     type="button"
                     className={cn(
                       "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
+                      active && "bg-primary/10",
                       dimmed && "opacity-40",
                     )}
                     onMouseEnter={() => onHighlightReason(kind)}
@@ -1394,9 +1429,14 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   const numBins = Math.max(100, Math.min(1200, Math.round((size.width - SIDE_COLUMN_WIDTH) / 100) * 100));
   const { info: stackedInfo, loading: infoLoading } = useStackedCompInfo(componentName, "ConcurrentTaskMilestones", dataRange.startTime, dataRange.endTime, numBins);
 
+  // How tasks are grouped for coloring and for the task-count bands. The same
+  // mode drives the server's grouping (below) and every taskColorKey here, so a
+  // band's key always resolves to a color. Toggled from the legend.
+  const [colorMode, setColorMode] = useState<ColorMode>("kind-what");
+
   // Level-of-detail: always fetch the cheap aggregated summary first. Its `total`
   // (tasks overlapping the range) decides whether the per-task view is affordable.
-  const { data: agg, loading: aggLoading } = useComponentTimeline(componentName, dataRange.startTime, dataRange.endTime, numBins);
+  const { data: agg, loading: aggLoading } = useComponentTimeline(componentName, dataRange.startTime, dataRange.endTime, numBins, colorMode);
   // Only fetch the raw tasks once the summary for THIS range confirms the count is
   // affordable. useComponentTimeline keeps the previous summary while a new range
   // loads, so we must also require the summary to cover the current range —
@@ -1480,12 +1520,12 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   const colorMapRef = useRef<Record<string, string>>({});
   const colorMap = useMemo(() => {
     if (!aggMatchesRange || !stackedMatchesRange) return colorMapRef.current;
-    const taskKeys = [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks].map(taskColorKey);
+    const taskKeys = [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks].map((t) => taskColorKey(t, colorMode));
     const reasonKeys = [...(stackedInfo?.kinds ?? []), ...milestonesOf(currentTask?.steps).map((step) => step.kind)];
     const next = buildColorMapFromKeys([...taskKeys, ...(agg?.keys ?? []), ...reasonKeys]);
     colorMapRef.current = next;
     return next;
-  }, [aggMatchesRange, stackedMatchesRange, childTasks, currentTask, parentTask, tasks, stackedInfo, agg]);
+  }, [aggMatchesRange, stackedMatchesRange, childTasks, currentTask, parentTask, tasks, stackedInfo, agg, colorMode]);
 
   // The task "kind-what" keys for the legend's Tasks subsection (distinct from
   // the blocking-reason kinds, so reasons no longer leak into the task legend).
@@ -1495,10 +1535,10 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     if (agg) return agg.keys;
     const keys = new Set<string>();
     for (const task of [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks]) {
-      keys.add(taskColorKey(task));
+      keys.add(taskColorKey(task, colorMode));
     }
     return Array.from(keys).sort();
-  }, [childTasks, currentTask, parentTask, tasks, agg]);
+  }, [childTasks, currentTask, parentTask, tasks, agg, colorMode]);
   const selectableTaskById = useMemo(() => {
     const map = new Map<string, Task>();
     for (const task of [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks]) {
@@ -1543,6 +1583,20 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // membership here rather than threading IDs through the chart data.
   const [hoveredSegment, setHoveredSegment] = useState<{ kind: string; time: number } | null>(null);
   const [hoveredCount, setHoveredCount] = useState<{ key: string; time: number } | null>(null);
+  // A vertical guide line spanning the stacked charts, for reading off the same
+  // time across them. Positioned via a ref (GPU transform) rather than state so a
+  // mousemove doesn't re-render the whole chart stack on every pixel.
+  const crosshairRef = useRef<HTMLDivElement | null>(null);
+  const moveCrosshair = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const line = crosshairRef.current;
+    if (!line) return;
+    const x = event.clientX - event.currentTarget.getBoundingClientRect().left;
+    line.style.transform = `translateX(${Math.round(x)}px)`;
+    line.style.opacity = "1";
+  };
+  const hideCrosshair = () => {
+    if (crosshairRef.current) crosshairRef.current.style.opacity = "0";
+  };
   const highlightedTaskIds = useMemo(() => {
     // Per-task highlighting from the stacked charts only applies when the per-task
     // gantt is shown.
@@ -1558,12 +1612,12 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     if (hoveredCount) {
       for (const task of tasks) {
         if (task.start_time > hoveredCount.time || task.end_time < hoveredCount.time) continue;
-        if (taskColorKey(task) === hoveredCount.key) ids.add(String(task.id));
+        if (taskColorKey(task, colorMode) === hoveredCount.key) ids.add(String(task.id));
       }
       return ids;
     }
     return null;
-  }, [hoveredSegment, hoveredCount, tasks, rawEnabled]);
+  }, [hoveredSegment, hoveredCount, tasks, rawEnabled, colorMode]);
 
   const shiftRange = (nextRange: TimeRange) => {
     if (!Number.isFinite(nextRange.startTime) || !Number.isFinite(nextRange.endTime)) return;
@@ -1726,6 +1780,8 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
+        onMouseMove={moveCrosshair}
+        onMouseLeave={hideCrosshair}
       >
         {/* Three stacked regions. highlightedTaskId follows hover only (not the
             selected task), so selecting a task never dims the rest. Subtle
@@ -1741,6 +1797,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             width={leftWidth}
             height={taskViewHeight}
             colorMap={colorMap}
+            colorMode={colorMode}
             highlightedKey={highlightedKey}
             highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
             onHoverTask={setHoveredTask}
@@ -1759,6 +1816,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               range={viewRange}
               size={{ width: leftWidth, height: ganttHeight }}
               colorMap={colorMap}
+              colorMode={colorMode}
               highlightedKey={highlightedKey}
               highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
               highlightedTaskIds={highlightedTaskIds}
@@ -1784,9 +1842,10 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             colorMap={colorMap}
             highlightedKey={highlightedKey}
             onHoverKey={(key, time) => {
-              // Scope the gantt highlight to the tasks present at the cursor's time
-              // (not all of the kind); the band dims itself locally and the legend
-              // is intentionally left untouched on a chart hover.
+              // Light the matching legend row and dim the other bands, and scope the
+              // gantt highlight to the tasks present at the cursor's time (not all of
+              // the kind).
+              setHighlightedKey(key);
               setHoveredCount(key !== null && time !== null ? { key, time } : null);
             }}
             segments={segmentsData?.segments ?? []}
@@ -1801,8 +1860,17 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           style={{ height: metricLineHeight }}
           onWheel={handleOverviewWheel}
         >
-          <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={highlightedReason} segments={segmentsData?.segments ?? []} segmentsEnabled={segmentsData?.enabled ?? false} onHoverSegment={setHoveredSegment} />
+          <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={highlightedReason} segments={segmentsData?.segments ?? []} segmentsEnabled={segmentsData?.enabled ?? false} onHoverSegment={setHoveredSegment} onHoverReason={setHighlightedReason} />
         </div>
+        {/* Crosshair: a vertical guide at the cursor's x, spanning all the stacked
+            charts so a feature can be read off at the same time across them. Solid
+            (the gridlines are dashed) and click-through. */}
+        <div
+          ref={crosshairRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 z-10 w-px bg-slate-700/70 opacity-0"
+          style={{ transform: "translateX(-1px)", willChange: "transform" }}
+        />
       </div>
 
       <SidePanel className="flex select-none flex-col" style={{ width: SIDE_COLUMN_WIDTH }}>
@@ -1868,7 +1936,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               selected/current task so a task selected via click or arrived at
               via /component?...&taskid=... stays visible in the panel. */}
           <SelectedTaskSection task={hoveredTask ?? currentTask} />
-          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={highlightedReason} onHighlightReason={setHighlightedReason} />
+          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} colorMode={colorMode} onColorMode={setColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={highlightedReason} onHighlightReason={setHighlightedReason} />
         </div>
       </SidePanel>
     </div>

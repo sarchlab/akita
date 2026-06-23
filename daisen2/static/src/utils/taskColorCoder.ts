@@ -3,8 +3,17 @@ import type { Task } from "../types/task";
 
 export type ColorMap = Record<string, string>;
 
-export function taskColorKey(task: Pick<Task, "kind" | "what">): string {
-  return `${task.kind}-${task.what}`;
+// How tasks are grouped for coloring (and for the task-count chart's bands):
+// by their kind alone, or by the finer "kind-what" pair. Must stay in sync with
+// the server's component_timeline `group` param so a band's key matches the key
+// a task computes here.
+export type ColorMode = "kind" | "kind-what";
+
+export function taskColorKey(
+  task: Pick<Task, "kind" | "what">,
+  mode: ColorMode = "kind-what",
+): string {
+  return mode === "kind" ? task.kind : `${task.kind}-${task.what}`;
 }
 
 // buildColorMapFromKeys assigns each distinct key a color from a single
@@ -21,9 +30,13 @@ export function buildColorMapFromKeys(keys: string[]): ColorMap {
 }
 
 export function buildColorMap(tasks: Task[]): ColorMap {
-  return buildColorMapFromKeys(tasks.map(taskColorKey));
+  return buildColorMapFromKeys(tasks.map((task) => taskColorKey(task)));
 }
 
-export function lookupColor(map: ColorMap, task: Task): string {
-  return map[taskColorKey(task)] ?? "#999999";
+export function lookupColor(
+  map: ColorMap,
+  task: Task,
+  mode: ColorMode = "kind-what",
+): string {
+  return map[taskColorKey(task, mode)] ?? "#999999";
 }

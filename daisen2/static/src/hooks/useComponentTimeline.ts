@@ -21,20 +21,26 @@ export function useComponentTimeline(
   startTime: number,
   endTime: number,
   numBins: number,
+  // "kind" | "kind-what" — how the server groups tasks into bands. Must match the
+  // client's taskColorKey so a band's key resolves to the same color.
+  group: string = "kind-what",
 ) {
   const [data, setData] = useState<ComponentTimelineData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const lastScopeRef = useRef(scope);
+  const lastKeyRef = useRef(`${scope}\n${group}`);
 
   useEffect(() => {
-    // A new scope's summary is not comparable to the previous scope's. Drop the
-    // stale data when the scope changes so a small old `total` can't green-light a
-    // huge raw-task fetch for a dense new scope at the same time range — the very
-    // level-of-detail guard the caller relies on. A range-only change keeps the
-    // previous data for a smooth, flicker-free zoom.
-    if (lastScopeRef.current !== scope) {
-      lastScopeRef.current = scope;
+    // Drop stale data when the scope OR the grouping (color mode) changes. A new
+    // scope's summary is not comparable to the previous one's — a small old `total`
+    // must not green-light a huge raw-task fetch for a dense new scope — and toggling
+    // the color mode re-buckets the bands, so keeping the old grouping would leave the
+    // count bands and legend out of sync with the task bars (or stuck on the old mode
+    // if the new fetch is slow or fails). A range-only change keeps the previous data
+    // for a smooth, flicker-free zoom.
+    const key = `${scope}\n${group}`;
+    if (lastKeyRef.current !== key) {
+      lastKeyRef.current = key;
       setData(null);
     }
 
@@ -49,6 +55,7 @@ export function useComponentTimeline(
       starttime: String(startTime),
       endtime: String(endTime),
       num_bins: String(numBins),
+      group,
     });
 
     setLoading(true);
@@ -68,7 +75,7 @@ export function useComponentTimeline(
       });
 
     return () => controller.abort();
-  }, [scope, startTime, endTime, numBins]);
+  }, [scope, startTime, endTime, numBins, group]);
 
   useRenderReady(loading, error !== null);
 
