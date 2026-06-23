@@ -35,6 +35,36 @@ func TestComponentsByResidencyRanksByTaskTime(t *testing.T) {
 	}
 }
 
+func TestComponentsByResidencyAggregatesToScope(t *testing.T) {
+	reader := newTestReader(t)
+	exec := func(q string) {
+		if _, err := reader.Exec(q); err != nil {
+			t.Fatalf("exec %q: %v", q, err)
+		}
+	}
+	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
+	// Two facets of one component (AT) and one facet of another (L1Cache).
+	exec(`INSERT INTO location VALUES (1, 'AT.req_in'), (2, 'AT.req_out'), (3, 'L1Cache.bank')`)
+	exec(`CREATE TABLE trace (
+		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
+		Location INTEGER, StartTime REAL, EndTime REAL)`)
+	// AT facets: 30 + 40 = 70. L1Cache: 90 -> L1Cache ranks first by scope total.
+	exec(`INSERT INTO trace VALUES (1, 0, 'req_in', 'R', 1, 0, 30)`)
+	exec(`INSERT INTO trace VALUES (2, 0, 'req_out', 'R', 2, 0, 40)`)
+	exec(`INSERT INTO trace VALUES (3, 0, 'task', 'R', 3, 10, 100)`)
+
+	ranked := reader.ComponentsByResidency(context.Background())
+	if len(ranked) != 2 {
+		t.Fatalf("expected 2 component scopes (AT, L1Cache), got %d (%+v)", len(ranked), ranked)
+	}
+	if ranked[0].Component != "L1Cache" || ranked[0].TaskTime != 90 {
+		t.Fatalf("expected L1Cache=90 first, got %+v", ranked[0])
+	}
+	if ranked[1].Component != "AT" || ranked[1].TaskTime != 70 {
+		t.Fatalf("expected AT=70 (facets summed), got %+v", ranked[1])
+	}
+}
+
 func TestComponentsByResidencyMissingTables(t *testing.T) {
 	reader := newTestReader(t)
 	ranked := reader.ComponentsByResidency(context.Background())
