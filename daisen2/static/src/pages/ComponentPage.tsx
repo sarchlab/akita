@@ -1679,7 +1679,10 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     const params = new URLSearchParams(window.location.search);
     // Stay in the current scope if the task lives within it; only walk to the
     // task's own location when it falls outside (e.g. a parent task elsewhere).
-    params.set("name", task.location && !isWithinScope(task.location, name) ? task.location : name);
+    // Compare against the live scope (componentName), not the URL's `name`, which
+    // is stale once the view has already followed a task out of the URL scope
+    // (selectTask syncs via replaceState, which doesn't update searchParams).
+    params.set("name", task.location && !isWithinScope(task.location, componentName) ? task.location : componentName);
     params.set("taskid", taskId);
     window.history.replaceState(null, "", `/component?${params.toString()}`);
   };

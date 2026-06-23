@@ -172,14 +172,15 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 			FROM trace t
 			JOIN location loc ON t.Location = loc.ID
 			CROSS JOIN (SELECT 1 AS delta UNION ALL SELECT -1 AS delta) d
-			WHERE (loc.Locale = ? OR loc.Locale LIKE ? ESCAPE '\')
+			WHERE (loc.Locale = ? OR (loc.Locale >= ? AND loc.Locale < ?))
 				AND t.EndTime > ` + be.startStr + ` AND t.StartTime < ` + be.endStr + `
 		)
 		SELECT bin, k, delta, COUNT(*) AS c
 		FROM events
 		GROUP BY bin, k, delta`
 
-	rows, err := r.QueryContext(ctx, sqlStr, scope, escapeLikePrefix(scope)+`.%`)
+	lo, hi := scopePrefixBounds(scope)
+	rows, err := r.QueryContext(ctx, sqlStr, scope, lo, hi)
 	if err != nil {
 		return resp
 	}
@@ -213,7 +214,7 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy(
 	// order to satisfy the window's PARTITION and probes the trace table 13M times.
 	sqlStr := `
 		WITH scope_locs AS (
-			SELECT ID FROM location WHERE Locale = ? OR Locale LIKE ? ESCAPE '\'
+			SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?)
 		),
 		ivals AS MATERIALIZED (
 			SELECT
@@ -244,7 +245,8 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy(
 		FROM events
 		GROUP BY bin, k, delta`
 
-	rows, err := r.QueryContext(ctx, sqlStr, scope, escapeLikePrefix(scope)+`.%`)
+	lo, hi := scopePrefixBounds(scope)
+	rows, err := r.QueryContext(ctx, sqlStr, scope, lo, hi)
 	if err != nil {
 		return []string{}, [][]int{}
 	}
@@ -261,6 +263,12 @@ func (s *Server) httpComponentTimeline(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scope := r.FormValue("scope")
+	if scope == "" {
+		// Fall back to the legacy `where` param so an older client (or cached
+		// bundle) that has not learned `scope` yet still gets a real summary
+		// instead of zero tasks (which would defeat the level-of-detail guard).
+		scope = r.FormValue("where")
+	}
 	start, err := strconv.ParseFloat(r.FormValue("starttime"), 64)
 	if err != nil {
 		http.Error(w, "invalid starttime", http.StatusBadRequest)

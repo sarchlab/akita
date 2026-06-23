@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRenderReady } from "./useRenderReady";
 
 // A downsampled, level-of-detail view of a component's tasks: tasks binned by
@@ -25,8 +25,19 @@ export function useComponentTimeline(
   const [data, setData] = useState<ComponentTimelineData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const lastScopeRef = useRef(scope);
 
   useEffect(() => {
+    // A new scope's summary is not comparable to the previous scope's. Drop the
+    // stale data when the scope changes so a small old `total` can't green-light a
+    // huge raw-task fetch for a dense new scope at the same time range — the very
+    // level-of-detail guard the caller relies on. A range-only change keeps the
+    // previous data for a smooth, flicker-free zoom.
+    if (lastScopeRef.current !== scope) {
+      lastScopeRef.current = scope;
+      setData(null);
+    }
+
     if (!scope || !(endTime > startTime) || numBins < 1) {
       setData(null);
       return undefined;

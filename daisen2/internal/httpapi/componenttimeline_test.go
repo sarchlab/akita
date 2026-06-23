@@ -151,3 +151,33 @@ func TestBlockingReasonOccupancyBinsMilestoneIntervals(t *testing.T) {
 		t.Fatalf("bin 1 = {data:%d queue:%d}, want {data:1 queue:0}", bins[1][di], bins[1][qi])
 	}
 }
+
+// TestComponentTimelineScopeIsCaseSensitive verifies the scope subtree match is
+// case-sensitive, matching the case-sensitive location tree and exact `=` lookup.
+// A case-insensitive LIKE would pull a differently-cased sibling (here lowercase
+// "tlb.req_in") into scope "TLB" and show counts for the wrong component.
+func TestComponentTimelineScopeIsCaseSensitive(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
+	reader := NewSQLiteTraceReader(dbPath)
+	reader.Init()
+	defer reader.Close()
+
+	exec := func(q string) {
+		if _, err := reader.Exec(q); err != nil {
+			t.Fatalf("exec %q: %v", q, err)
+		}
+	}
+	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO location (ID, Locale) VALUES (1, 'TLB.req_in'), (2, 'tlb.req_in')`)
+	exec(`CREATE TABLE trace (
+		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
+		Location INTEGER, StartTime REAL, EndTime REAL)`)
+	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+		(1, 0, 'req_in', 'ReadReq', 1, 0, 10),
+		(2, 0, 'req_in', 'ReadReq', 2, 0, 10)`)
+
+	resp := reader.ComponentTimeline(context.Background(), "TLB", 0, 10, 1)
+	if resp.Total != 1 {
+		t.Fatalf("scope TLB Total = %d, want 1 (case-sensitive: excludes tlb.req_in)", resp.Total)
+	}
+}

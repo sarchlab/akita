@@ -23,6 +23,7 @@ test("component page follows out-of-scope tasks but stays in scope otherwise", a
   assert.match(source, /useComponentTimeline\(componentName,/);
   assert.match(source, /scope: componentName,/);
 
-  // Selecting a task keeps the scope unless the task is outside it.
-  assert.match(source, /params\.set\("name", task\.location && !isWithinScope\(task\.location, name\) \? task\.location : name\)/);
+  // Selecting a task keeps the active scope (componentName, not the stale URL
+  // `name`) unless the task is outside it.
+  assert.match(source, /params\.set\("name", task\.location && !isWithinScope\(task\.location, componentName\) \? task\.location : componentName\)/);
 });

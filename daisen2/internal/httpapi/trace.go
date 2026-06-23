@@ -680,13 +680,16 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 	if query.Scope != "" {
 		// Select the scope component and everything nested under it. Locations
 		// are dotted, so the subtree is the exact name plus the "scope." prefix.
-		// The LIKE pattern is escaped (with '\' as ESCAPE) so '%'/'_' inside a
-		// location name — e.g. "req_in" — stay literal. Parameterized to keep
-		// the user-routable scope value out of the SQL text.
+		// Match the exact location or anything nested under it. A case-sensitive
+		// range ([scope+".", scope+"/")) is used instead of LIKE because SQLite's
+		// LIKE is ASCII case-insensitive while the location tree and the exact `=`
+		// check are case-sensitive — LIKE would pull in a differently-cased sibling
+		// subtree. Parameterized to keep the scope value out of the SQL text.
+		lo, hi := scopePrefixBounds(query.Scope)
 		sqlStr += `
-			AND (loc.Locale = ? OR loc.Locale LIKE ? ESCAPE '\')
+			AND (loc.Locale = ? OR (loc.Locale >= ? AND loc.Locale < ?))
 		`
-		args = append(args, query.Scope, escapeLikePrefix(query.Scope)+`.%`)
+		args = append(args, query.Scope, lo, hi)
 	}
 
 	if query.EnableTimeRange {
@@ -699,14 +702,13 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 	return sqlStr, args
 }
 
-// escapeLikePrefix escapes the SQLite LIKE metacharacters ('%', '_', and the
-// '\' escape char itself) in a scope name so it is matched literally by a
-// "scope.%" prefix pattern that uses ESCAPE '\'.
-func escapeLikePrefix(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `%`, `\%`)
-	s = strings.ReplaceAll(s, `_`, `\_`)
-	return s
+// scopePrefixBounds returns the half-open [lo, hi) Locale range that selects
+// every location nested under scope ("scope." followed by anything), in SQLite's
+// case-sensitive BINARY ordering. "/" (0x2F) is the byte right after "." (0x2E),
+// so every "scope." string sorts below it and no other prefix slips in. Pair it
+// with an exact `Locale = scope` check to also include the scope's own location.
+func scopePrefixBounds(scope string) (lo, hi string) {
+	return scope + ".", scope + "/"
 }
 
 // Segment represents a time segment where traces were collected
