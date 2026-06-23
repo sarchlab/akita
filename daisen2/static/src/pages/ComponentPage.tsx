@@ -1,6 +1,6 @@
 import * as d3 from "d3";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent, WheelEvent as ReactWheelEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, PointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { X, ChevronRight, Plus, Minus } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -1583,6 +1583,20 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // membership here rather than threading IDs through the chart data.
   const [hoveredSegment, setHoveredSegment] = useState<{ kind: string; time: number } | null>(null);
   const [hoveredCount, setHoveredCount] = useState<{ key: string; time: number } | null>(null);
+  // A vertical guide line spanning the stacked charts, for reading off the same
+  // time across them. Positioned via a ref (GPU transform) rather than state so a
+  // mousemove doesn't re-render the whole chart stack on every pixel.
+  const crosshairRef = useRef<HTMLDivElement | null>(null);
+  const moveCrosshair = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const line = crosshairRef.current;
+    if (!line) return;
+    const x = event.clientX - event.currentTarget.getBoundingClientRect().left;
+    line.style.transform = `translateX(${Math.round(x)}px)`;
+    line.style.opacity = "1";
+  };
+  const hideCrosshair = () => {
+    if (crosshairRef.current) crosshairRef.current.style.opacity = "0";
+  };
   const highlightedTaskIds = useMemo(() => {
     // Per-task highlighting from the stacked charts only applies when the per-task
     // gantt is shown.
@@ -1766,6 +1780,8 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
+        onMouseMove={moveCrosshair}
+        onMouseLeave={hideCrosshair}
       >
         {/* Three stacked regions. highlightedTaskId follows hover only (not the
             selected task), so selecting a task never dims the rest. Subtle
@@ -1846,6 +1862,15 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
         >
           <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={highlightedReason} segments={segmentsData?.segments ?? []} segmentsEnabled={segmentsData?.enabled ?? false} onHoverSegment={setHoveredSegment} onHoverReason={setHighlightedReason} />
         </div>
+        {/* Crosshair: a vertical guide at the cursor's x, spanning all the stacked
+            charts so a feature can be read off at the same time across them. Solid
+            (the gridlines are dashed) and click-through. */}
+        <div
+          ref={crosshairRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 z-10 w-px bg-slate-700/70 opacity-0"
+          style={{ transform: "translateX(-1px)", willChange: "transform" }}
+        />
       </div>
 
       <SidePanel className="flex select-none flex-col" style={{ width: SIDE_COLUMN_WIDTH }}>
