@@ -56,7 +56,9 @@ export default function DashboardWidget({
   const hasActiveAxis = primaryAxis !== "-" || secondaryAxis !== "-";
   const dataUpdating = (dataPending && hasActiveAxis) || primary.loading || secondary.loading;
   const chartHeight = Math.max(70, height - HEADER_HEIGHT);
-  const chartWidth = Math.max(160, width - 14);
+  // Card border (2) + the chart row's px-1 (8); a couple px of slack avoids a
+  // sub-pixel horizontal scrollbar while still filling the card.
+  const chartWidth = Math.max(160, width - 12);
 
   const href = `/component?name=${encodeURIComponent(name)}&starttime=${startTime}&endtime=${endTime}`;
 

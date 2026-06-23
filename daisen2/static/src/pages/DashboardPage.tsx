@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { RotateCcw, X, ChevronRight, Search } from "lucide-react";
 import DashboardWidget from "../components/DashboardWidget";
@@ -49,16 +49,21 @@ interface TimeRange {
 }
 
 function useElementSize<T extends HTMLElement>() {
-  const ref = useRef<T | null>(null);
   const [size, setSize] = useState({ width: 1200, height: 720 });
+  const observerRef = useRef<ResizeObserver | null>(null);
 
-  useEffect(() => {
-    if (!ref.current) return;
+  // A callback ref so the observer (re)attaches whenever the measured node mounts.
+  // The grid only renders after the components finish loading, so a mount-time
+  // effect would run while the node doesn't exist yet and never observe it —
+  // leaving `size` stuck at the default and the charts narrower than their cards.
+  const ref = useCallback((node: T | null) => {
+    observerRef.current?.disconnect();
+    if (!node) return;
     const observer = new ResizeObserver(([entry]) => {
       setSize({ width: entry.contentRect.width, height: entry.contentRect.height });
     });
-    observer.observe(ref.current);
-    return () => observer.disconnect();
+    observer.observe(node);
+    observerRef.current = observer;
   }, []);
 
   return { ref, size };
@@ -279,7 +284,9 @@ export default function DashboardPage() {
   // narrow — so each figure has room to breathe.
   const columns = size.width >= 1400 ? 3 : size.width >= 720 ? 2 : 1;
   const rows = Math.max(1, Math.ceil(gridNames.length / columns));
-  const widgetWidth = Math.max(180, Math.floor((size.width - (columns + 1) * 5) / columns));
+  // The grid has a 5px gap between cards (no outer gap), so a card is the area
+  // minus the (columns-1) inner gaps, split evenly.
+  const widgetWidth = Math.max(180, Math.floor((size.width - (columns - 1) * 5) / columns));
   const widgetHeight = Math.min(380, Math.max(220, Math.floor((size.height - (rows + 1) * 5) / Math.min(rows, 3))));
 
   const singleWidget = widget !== "";
