@@ -4,6 +4,7 @@ import { useCompInfo } from "../hooks/useCompInfo";
 import type { Segment } from "../types/task";
 import TimeSeriesChart from "./charts/TimeSeriesChart";
 import { Card } from "./ui/card";
+import { axisLabel } from "../utils/metrics";
 
 interface DashboardWidgetProps {
   name: string;
@@ -27,9 +28,16 @@ interface DashboardWidgetProps {
   // the number of leaf facets summed, shown for context.
   aggregated?: boolean;
   facetCount?: number;
+  // When set, render a compact legend under the chart naming the two metrics
+  // (their labels can differ per chart, e.g. auto-selected in the components
+  // widget). The dashboard grid leaves it off — its axis menus are the legend.
+  showLegend?: boolean;
 }
 
 const HEADER_HEIGHT = 30;
+const LEGEND_HEIGHT = 18;
+const PRIMARY_COLOR = "#d7191c";
+const SECONDARY_COLOR = "#2c7bb6";
 const iconButton =
   "shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -50,12 +58,13 @@ export default function DashboardWidget({
   onFocus,
   aggregated,
   facetCount,
+  showLegend,
 }: DashboardWidgetProps) {
   const primary = useCompInfo(name, primaryAxis, dataStartTime, dataEndTime);
   const secondary = useCompInfo(name, secondaryAxis, dataStartTime, dataEndTime);
   const hasActiveAxis = primaryAxis !== "-" || secondaryAxis !== "-";
   const dataUpdating = (dataPending && hasActiveAxis) || primary.loading || secondary.loading;
-  const chartHeight = Math.max(70, height - HEADER_HEIGHT);
+  const chartHeight = Math.max(70, height - HEADER_HEIGHT - (showLegend ? LEGEND_HEIGHT : 0));
   // Card border (2) + the chart row's px-1 (8); a couple px of slack avoids a
   // sub-pixel horizontal scrollbar while still filling the card.
   const chartWidth = Math.max(160, width - 12);
@@ -114,11 +123,28 @@ export default function DashboardWidget({
           segmentsEnabled={segmentsEnabled}
           onTimeRangeChange={onTimeRangeChange}
           series={[
-            { info: primaryAxis === "-" ? null : primary.info, color: "#d7191c", side: "left" },
-            { info: secondaryAxis === "-" ? null : secondary.info, color: "#2c7bb6", side: "right" },
+            { info: primaryAxis === "-" ? null : primary.info, color: PRIMARY_COLOR, side: "left" },
+            { info: secondaryAxis === "-" ? null : secondary.info, color: SECONDARY_COLOR, side: "right" },
           ]}
         />
       </div>
+
+      {showLegend ? (
+        <div className="flex h-[18px] shrink-0 items-center gap-3 overflow-hidden border-t px-2 text-[10px] leading-none text-muted-foreground">
+          {primaryAxis !== "-" ? (
+            <span className="flex min-w-0 items-center gap-1">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: PRIMARY_COLOR }} />
+              <span className="truncate">{axisLabel(primaryAxis)}</span>
+            </span>
+          ) : null}
+          {secondaryAxis !== "-" ? (
+            <span className="flex min-w-0 items-center gap-1">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: SECONDARY_COLOR }} />
+              <span className="truncate">{axisLabel(secondaryAxis)}</span>
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       {(primary.error || secondary.error) && (
         <div className="truncate px-2 pb-1 text-xs text-destructive">{primary.error ?? secondary.error}</div>

@@ -18,17 +18,7 @@ import { useRenderReady } from "../hooks/useRenderReady";
 import { parseView, mergeParams, DASHBOARD_DEFAULTS } from "../utils/viewState.mjs";
 import { buildLocationTree, findNode, leafCount, breadcrumbSegments, type LocationNode } from "../utils/locationTree";
 import { cn } from "../lib/utils";
-
-const AXIS_OPTIONS = [
-  { value: "ReqInCount", label: "Incoming Request Rate" },
-  { value: "ReqCompleteCount", label: "Request Complete Rate" },
-  { value: "AvgLatency", label: "Average Request Latency" },
-  { value: "ConcurrentTask", label: "Number Concurrent Task" },
-  { value: "RequestBufferPressure", label: "Request Buffer Pressure" },
-  { value: "ResponseBufferPressure", label: "Response Buffer Pressure" },
-  { value: "PendingReqOut", label: "Pending Request Out" },
-  { value: "-", label: " - " },
-];
+import { AXIS_OPTIONS } from "../utils/metrics";
 
 // Resolve a URL axis param to a known metric key. Accepts the metric key or its
 // human-readable label (shared/agent-generated links sometimes carry the label),

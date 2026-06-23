@@ -7,7 +7,6 @@ import { useSimulationRange } from "../hooks/useSimulationRange";
 import { useSegments } from "../hooks/useSegments";
 import { useElementSize } from "../hooks/useElementSize";
 import { buildLocationTree, findNode, leafCount } from "../utils/locationTree";
-import { DASHBOARD_DEFAULTS } from "../utils/viewState.mjs";
 
 const GAP = 8;
 const COUNT = 4;
@@ -16,10 +15,23 @@ interface ComponentsWidgetProps {
   expandHref?: string;
 }
 
+// pickMetrics auto-selects the two metrics most informative for a component.
+// Components that serve requests (have a req_in port) chart their incoming request
+// rate; pure clients that only issue requests (e.g. the mem agent) have no incoming
+// requests, so chart the response backlog they accumulate instead. Average latency
+// is meaningful either way.
+function pickMetrics(component: string, names: string[]): { primary: string; secondary: string } {
+  const servesRequests = names.some((n) => n.startsWith(`${component}.`) && n.endsWith(".req_in"));
+  return {
+    primary: servesRequests ? "ReqInCount" : "ResponseBufferPressure",
+    secondary: "AvgLatency",
+  };
+}
+
 // ComponentsWidget shows the components that hold the most total task time
-// (residency) — the busiest / most-contended components — each as a full
-// dashboard chart, in a 2x2 grid. Enlarging the widget is, in effect, the
-// dashboard focused on the hottest components.
+// (residency) — the busiest / most-contended components — in a 2x2 grid. Each
+// chart's two metrics are auto-selected to suit that component (see pickMetrics)
+// and named in a small per-chart legend. Enlarging the widget opens the dashboard.
 export default function ComponentsWidget({ expandHref }: ComponentsWidgetProps) {
   const { data, loading, error } = useComponents();
   const { names } = useComponentNames();
@@ -55,6 +67,7 @@ export default function ComponentsWidget({ expandHref }: ComponentsWidgetProps) 
           top.map((c) => {
             const node = findNode(root, c.component);
             const aggregated = !!node && node.children.length > 0;
+            const { primary, secondary } = pickMetrics(c.component, names ?? []);
             return (
               <DashboardWidget
                 key={c.component}
@@ -66,13 +79,14 @@ export default function ComponentsWidget({ expandHref }: ComponentsWidgetProps) 
                 dataStartTime={startTime}
                 dataEndTime={endTime}
                 dataPending={false}
-                primaryAxis={DASHBOARD_DEFAULTS.primary}
-                secondaryAxis={DASHBOARD_DEFAULTS.secondary}
+                primaryAxis={primary}
+                secondaryAxis={secondary}
                 segments={segments?.segments ?? []}
                 segmentsEnabled={segments?.enabled ?? false}
                 onTimeRangeChange={() => {}}
                 aggregated={aggregated}
                 facetCount={aggregated && node ? leafCount(node) : undefined}
+                showLegend
               />
             );
           })
