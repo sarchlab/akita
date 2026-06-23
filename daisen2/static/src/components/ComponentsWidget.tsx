@@ -1,43 +1,40 @@
 import WidgetCard from "./WidgetCard";
 import DashboardWidget from "./DashboardWidget";
-import { useBlocked } from "../hooks/useBlocked";
+import { useComponents } from "../hooks/useComponents";
 import { useSimulationRange } from "../hooks/useSimulationRange";
 import { useSegments } from "../hooks/useSegments";
 import { useElementSize } from "../hooks/useElementSize";
 import { DASHBOARD_DEFAULTS } from "../utils/viewState.mjs";
 
 const GAP = 8;
+const COUNT = 4;
 
-interface BlockedComponentsWidgetProps {
+interface ComponentsWidgetProps {
   expandHref?: string;
 }
 
-// BlockedComponentsWidget shows the two components whose tasks spent the most
-// time blocked, each as a full dashboard chart — so enlarging the widget is, in
-// effect, the dashboard focused on the worst offenders.
-export default function BlockedComponentsWidget({
-  expandHref,
-}: BlockedComponentsWidgetProps) {
-  const { data, loading, error } = useBlocked();
+// ComponentsWidget shows the components that hold the most total task time
+// (residency) — the busiest / most-contended components — each as a full
+// dashboard chart, in a 2x2 grid. Enlarging the widget is, in effect, the
+// dashboard focused on the hottest components.
+export default function ComponentsWidget({ expandHref }: ComponentsWidgetProps) {
+  const { data, loading, error } = useComponents();
   const { startTime, endTime } = useSimulationRange();
   const { data: segments } = useSegments();
   const { ref, size } = useElementSize<HTMLDivElement>();
 
-  const top = (data ?? []).filter((c) => c.blocked_time > 0).slice(0, 2);
-  const widgetWidth = Math.max(160, size.width);
-  const widgetHeight = Math.max(120, (size.height - GAP) / 2);
+  const top = (data ?? []).filter((c) => c.task_time > 0).slice(0, COUNT);
+  // 2x2 grid: half the width and half the height per chart (minus the gaps).
+  const cellWidth = Math.max(160, (size.width - GAP) / 2);
+  const cellHeight = Math.max(120, (size.height - GAP) / 2);
 
   return (
-    <WidgetCard
-      title="Most blocked components"
-      expandHref={expandHref}
-      contentClassName="p-2"
-    >
+    <WidgetCard title="Components" expandHref={expandHref} contentClassName="p-2">
       {/* The ref must be on an always-mounted element so the ResizeObserver
           attaches on mount; otherwise the charts keep their default width. */}
       <div
         ref={ref}
-        className="flex h-full min-h-0 flex-col"
+        className="grid h-full min-h-0 grid-cols-2 content-start"
         style={{ gap: GAP }}
       >
         {loading ? (
@@ -45,16 +42,14 @@ export default function BlockedComponentsWidget({
         ) : error ? (
           <div className="text-sm text-destructive">{error}</div>
         ) : top.length === 0 ? (
-          <div className="text-sm text-muted-foreground">
-            No blocking recorded in this trace.
-          </div>
+          <div className="text-sm text-muted-foreground">No tasks recorded in this trace.</div>
         ) : (
           top.map((c) => (
             <DashboardWidget
               key={c.component}
               name={c.component}
-              width={widgetWidth}
-              height={widgetHeight}
+              width={cellWidth}
+              height={cellHeight}
               startTime={startTime}
               endTime={endTime}
               dataStartTime={startTime}
