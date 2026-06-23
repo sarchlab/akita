@@ -104,7 +104,9 @@ export function useStackedCompInfo(
 
     const controller = new AbortController();
     const params = new URLSearchParams({
-      where: compName,
+      // The stacked "ConcurrentTaskMilestones" metric is scope-aware on the
+      // backend, so the scoped detail view aggregates a whole location subtree.
+      scope: compName,
       info_type: infoType,
       start_time: String(startTime),
       end_time: String(endTime),
