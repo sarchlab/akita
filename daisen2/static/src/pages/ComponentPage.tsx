@@ -738,10 +738,6 @@ function AggregatedTimeline({
   // When the per-task gantt is not shown, hint that zooming in reveals it.
   showZoomHint: boolean;
 }) {
-  // The selected band's flat baseline (task-count units) and which band it is for,
-  // recorded once per selection so re-baselining centres the band on the pointer
-  // where it was grabbed and then holds still while it stays selected.
-  const anchorRef = useRef<{ key: string; baseValue: number } | null>(null);
   const width = Math.max(1, size.width);
   const height = Math.max(1, size.height);
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
@@ -777,93 +773,39 @@ function AggregatedTimeline({
     for (const v of row) sum += v;
     if (sum > maxTotal) maxTotal = sum;
   }
-  // Which band is hovered (from this chart or the legend); -1 when none. When a
-  // band is selected we re-baseline the stack so its bottom is a flat line, with
-  // the bands above it growing upward and the bands below it growing downward.
-  const selIdx = highlightedKey !== null ? keys.indexOf(highlightedKey) : -1;
-  const rebaseline = selIdx >= 0;
-
-  // Cumulative height below the selected band, per bin; subtracting it pins that
-  // band's bottom to a flat baseline. Zero everywhere when nothing is selected.
-  const offsets = new Array<number>(numBins).fill(0);
-  if (rebaseline) {
-    for (let i = 0; i < numBins; i++) {
-      let below = 0;
-      for (let k = 0; k < selIdx; k++) below += bins[i][k];
-      offsets[i] = below;
-    }
-  }
-
   const yScale = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([height - padBottom, padTop]);
-
-  // The selected band's flat bottom, in task-count units. It is anchored so the
-  // band is centred on the pointer at the bin it was grabbed in (recorded in the
-  // hit layer's onMouseMove), so the band never jumps out from under the cursor.
-  // With no pointer over the chart (a legend hover) it centres in the view.
-  let baseValue = 0;
-  if (rebaseline) {
-    if (anchorRef.current && anchorRef.current.key === keys[selIdx]) {
-      baseValue = anchorRef.current.baseValue;
-    } else {
-      let meanThickness = 0;
-      for (let i = 0; i < numBins; i++) meanThickness += bins[i][selIdx];
-      meanThickness /= numBins;
-      baseValue = yScale.invert((padTop + height - padBottom) / 2) - meanThickness / 2;
-    }
-  }
 
   // Each bin covers an equal slice of the range the summary was computed over;
   // place it by its absolute center time so it lines up with the shared axis even
   // mid-pan (just like the per-task bars are placed by their absolute times).
   const binCenter = (i: number) => data.start_time + ((i + 0.5) / numBins) * (data.end_time - data.start_time);
 
-  // shifted: re-baseline so the selected band sits on the flat `baseValue` line —
-  // bands above grow up, bands below grow down. Un-shifted is the plain stack used
-  // for the invisible hit layer, so the cursor's band is judged on the original
-  // layout and the selection stays put while the visible bands move.
-  const buildArea = (ki: number, shifted: boolean) => {
+  const areas = keys.map((key, ki) => {
     const tops: string[] = [];
     const bots: string[] = [];
     for (let i = 0; i < numBins; i++) {
       let base = 0;
       for (let k = 0; k < ki; k++) base += bins[i][k];
-      if (shifted) base += baseValue - offsets[i];
       const top = base + bins[i][ki];
       const x = safeScale(xScale, binCenter(i));
-      tops.push(`${x},${safeScale(yScale, top)}`);
-      bots.push(`${x},${safeScale(yScale, base)}`);
+      tops.push(`${x},${yScale(top)}`);
+      bots.push(`${x},${yScale(base)}`);
     }
     bots.reverse();
-    return `M${tops.join("L")}L${bots.join("L")}Z`;
-  };
+    return { key, d: `M${tops.join("L")}L${bots.join("L")}Z` };
+  });
 
-  const baselineY = rebaseline ? safeScale(yScale, baseValue) : null;
+  const hasHighlight = highlightedKey !== null;
 
   return (
     <svg width={width} height={height} className="block">
-      {/* Visible bands: re-baselined around the selected one, or the plain stack
-          when nothing is selected. Not interactive — the hit layer below (on the
-          original layout) drives hovering so the selection stays put as bands shift. */}
-      {keys.map((key, ki) => (
+      {areas.map(({ key, d }) => (
         <path
           key={key}
-          d={buildArea(ki, rebaseline)}
+          d={d}
           fill={colorMap[key] ?? "#999999"}
           stroke="none"
-          opacity={rebaseline ? (ki === selIdx ? 1 : 0.5) : 0.9}
-          pointerEvents="none"
-        />
-      ))}
-
-      {baselineY !== null && (
-        <line x1={5} x2={width - 5} y1={baselineY} y2={baselineY} stroke="#475569" strokeWidth={1} opacity={0.7} pointerEvents="none" />
-      )}
-
-      {keys.map((key, ki) => (
-        <path
-          key={`hit-${key}`}
-          d={buildArea(ki, false)}
-          fill="transparent"
+          opacity={hasHighlight ? (highlightedKey === key ? 1 : 0.12) : 0.9}
           className="cursor-pointer"
           onMouseMove={(event) => {
             const svg = event.currentTarget.ownerSVGElement;
@@ -872,21 +814,9 @@ function AggregatedTimeline({
               return;
             }
             const rect = svg.getBoundingClientRect();
-            const time = xScale.invert(event.clientX - rect.left);
-            // Centre this band on the pointer at the bin under it, recorded once
-            // per selection so the flat baseline holds still while it stays hovered.
-            if (!anchorRef.current || anchorRef.current.key !== key) {
-              const frac = (time - data.start_time) / Math.max(1e-9, data.end_time - data.start_time);
-              const bi = Math.min(numBins - 1, Math.max(0, Math.floor(frac * numBins)));
-              const cursorVal = yScale.invert(event.clientY - rect.top);
-              anchorRef.current = { key, baseValue: cursorVal - bins[bi][ki] / 2 };
-            }
-            onHoverKey(key, time);
+            onHoverKey(key, xScale.invert(event.clientX - rect.left));
           }}
-          onMouseLeave={() => {
-            anchorRef.current = null;
-            onHoverKey(null, null);
-          }}
+          onMouseLeave={() => onHoverKey(null, null)}
         >
           <title>{key}</title>
         </path>
@@ -936,9 +866,6 @@ function ComponentMilestoneAreas({
   // Hovering a band also highlights it (and the matching legend reason); null clears.
   onHoverReason: (kind: string | null) => void;
 }) {
-  // The selected reason's flat baseline and which reason it is for, recorded once
-  // per selection so re-baselining centres the band on the pointer and holds still.
-  const anchorRef = useRef<{ key: string; baseValue: number } | null>(null);
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
   const xAxisY = Math.max(0, height - 20);
@@ -948,61 +875,27 @@ function ComponentMilestoneAreas({
   const kinds = info?.kinds ?? [];
   const maxTotal =
     d3.max(data, (point) => kinds.reduce((sum, kind) => sum + (point.values[kind] ?? 0), 0)) ?? 0;
-  // Which reason is hovered (from this chart or the legend); -1 when none. When a
-  // reason is selected we re-baseline the stack so its band's bottom is a flat
-  // line, with bands above growing upward and below growing downward.
-  const selIdx = highlightedKey !== null ? kinds.indexOf(highlightedKey) : -1;
-  const rebaseline = selIdx >= 0;
-
-  // Cumulative height below the selected reason, per bin; subtracting it pins that
-  // band's bottom to a flat baseline. Zero everywhere when nothing is selected.
-  const offsets = data.map((point) => {
-    if (!rebaseline) return 0;
-    let below = 0;
-    for (let k = 0; k < selIdx; k++) below += point.values[kinds[k]] ?? 0;
-    return below;
-  });
-
   const yScale = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([Math.max(1, xAxisY - 4), 6]);
-
-  // The selected band's flat bottom, anchored so the band is centred on the
-  // pointer at the bin it was grabbed in (recorded in the hit layer's onMouseMove),
-  // so it never jumps out from under the cursor. A legend hover centres it in view.
-  let baseValue = 0;
-  if (rebaseline) {
-    if (anchorRef.current && anchorRef.current.key === kinds[selIdx]) {
-      baseValue = anchorRef.current.baseValue;
-    } else {
-      let meanThickness = 0;
-      data.forEach((point) => {
-        meanThickness += point.values[kinds[selIdx]] ?? 0;
-      });
-      meanThickness = data.length ? meanThickness / data.length : 0;
-      baseValue = yScale.invert((6 + Math.max(1, xAxisY - 4)) / 2) - meanThickness / 2;
-    }
-  }
 
   // One stacked-area band per reason: trace the cumulative top edge left-to-right,
   // then the band's base edge right-to-left, and close. Each bin is placed by its
   // absolute center time so the bands line up with the shared axis during a pan.
-  // shifted re-baselines onto `baseValue`; un-shifted is the plain stack for the hit layer.
-  const buildArea = (ki: number, shifted: boolean) => {
+  const areas = kinds.map((kind, ki) => {
     const tops: string[] = [];
     const bots: string[] = [];
-    data.forEach((point, idx) => {
+    for (const point of data) {
       let base = 0;
       for (let k = 0; k < ki; k++) base += point.values[kinds[k]] ?? 0;
-      if (shifted) base += baseValue - offsets[idx];
-      const top = base + (point.values[kinds[ki]] ?? 0);
+      const top = base + (point.values[kind] ?? 0);
       const x = safeScale(xScale, point.time);
       tops.push(`${x},${safeScale(yScale, top)}`);
       bots.push(`${x},${safeScale(yScale, base)}`);
-    });
+    }
     bots.reverse();
-    return tops.length ? `M${tops.join("L")}L${bots.join("L")}Z` : "";
-  };
+    return { kind, d: tops.length ? `M${tops.join("L")}L${bots.join("L")}Z` : "" };
+  });
 
-  const baselineY = rebaseline ? safeScale(yScale, baseValue) : null;
+  const hasHighlight = highlightedKey !== null;
 
   return (
     <svg width={width} height={height} className="block">
@@ -1017,34 +910,13 @@ function ComponentMilestoneAreas({
       ))}
       <line x1={5} x2={width - 5} y1={xAxisY} y2={xAxisY} stroke="#000" pointerEvents="none" />
 
-      {/* Visible bands: re-baselined around the selected reason, or the plain
-          stack otherwise. Not interactive — the hit layer below drives hovering. */}
-      {kinds.map((kind, ki) => {
-        const d = buildArea(ki, rebaseline);
-        return d ? (
+      {areas.map(({ kind, d }) =>
+        d ? (
           <path
             key={kind}
             d={d}
             fill={colorMap[kind] ?? "#9ca3af"}
-            opacity={rebaseline ? (ki === selIdx ? 1 : 0.5) : 0.9}
-            pointerEvents="none"
-          />
-        ) : null;
-      })}
-
-      {baselineY !== null && (
-        <line x1={5} x2={width - 5} y1={baselineY} y2={baselineY} stroke="#475569" strokeWidth={1} opacity={0.7} pointerEvents="none" />
-      )}
-
-      {/* Invisible hit layer on the original layout, so the selection stays put
-          while the visible bands re-baseline. */}
-      {kinds.map((kind, ki) => {
-        const d = buildArea(ki, false);
-        return d ? (
-          <path
-            key={`hit-${kind}`}
-            d={d}
-            fill="transparent"
+            opacity={hasHighlight ? (highlightedKey === kind ? 1 : 0.12) : 0.9}
             className="cursor-pointer"
             // Report the reason + time under the cursor: highlight this band (and
             // the matching legend reason), and light the tasks blocked by that
@@ -1054,31 +926,17 @@ function ComponentMilestoneAreas({
               const svg = event.currentTarget.ownerSVGElement;
               if (!svg) return;
               const rect = svg.getBoundingClientRect();
-              const time = xScale.invert(event.clientX - rect.left);
-              // Centre this band on the pointer at the bin under it, recorded once
-              // per selection so the flat baseline holds still while hovered.
-              if (!anchorRef.current || anchorRef.current.key !== kind) {
-                let bi = 0;
-                if (data.length > 1) {
-                  const span = data[data.length - 1].time - data[0].time;
-                  const frac = span > 0 ? (time - data[0].time) / span : 0;
-                  bi = Math.min(data.length - 1, Math.max(0, Math.round(frac * (data.length - 1))));
-                }
-                const cursorVal = yScale.invert(event.clientY - rect.top);
-                anchorRef.current = { key: kind, baseValue: cursorVal - (data[bi]?.values[kind] ?? 0) / 2 };
-              }
-              onHoverSegment({ kind, time });
+              onHoverSegment({ kind, time: xScale.invert(event.clientX - rect.left) });
             }}
             onMouseLeave={() => {
-              anchorRef.current = null;
               onHoverReason(null);
               onHoverSegment(null);
             }}
           >
             <title>{kind}</title>
           </path>
-        ) : null;
-      })}
+        ) : null,
+      )}
 
       <GapShading gaps={gaps} xScale={xScale} height={xAxisY} patternId="blocking-gap-pattern" />
 
