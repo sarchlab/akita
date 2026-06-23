@@ -15,15 +15,18 @@ interface ComponentsWidgetProps {
   expandHref?: string;
 }
 
-// pickMetrics auto-selects the two metrics most informative for a component.
-// Components that serve requests (have a req_in port) chart their incoming request
-// rate; pure clients that only issue requests (e.g. the mem agent) have no incoming
-// requests, so chart the response backlog they accumulate instead. Average latency
-// is meaningful either way.
+// pickMetrics auto-selects the two metrics most informative for a component. The
+// default is the incoming request rate; only a pure client — one that issues
+// requests (has a req_out port) but serves none (no req_in port) — switches to the
+// response backlog it accumulates instead (e.g. the mem agent). Defaulting to
+// request-serving keeps hot servers on ReqInCount even on traces that record req_in
+// at the component's own location rather than a ".req_in" child. Average latency is
+// meaningful either way.
 function pickMetrics(component: string, names: string[]): { primary: string; secondary: string } {
-  const servesRequests = names.some((n) => n.startsWith(`${component}.`) && n.endsWith(".req_in"));
+  const hasFacet = (kind: string) => names.some((n) => n.startsWith(`${component}.`) && n.endsWith(`.${kind}`));
+  const pureClient = hasFacet("req_out") && !hasFacet("req_in");
   return {
-    primary: servesRequests ? "ReqInCount" : "ResponseBufferPressure",
+    primary: pureClient ? "ResponseBufferPressure" : "ReqInCount",
     secondary: "AvgLatency",
   };
 }

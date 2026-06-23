@@ -290,12 +290,13 @@ func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Ta
 // need nothing but the intervals — one (covering) index scan rather than hydrating
 // every Task. The scope is the named location plus anything nested under it, so a
 // component name aggregates its whole subtree while a leaf matches only itself. An
-// empty kind matches every kind; an empty whatLike matches every What, otherwise it
-// is a SQL LIKE pattern on the What column (e.g. "%Req"). Each returned Task has
-// only StartTime and EndTime set.
+// empty kind matches every kind; empty whatLikes matches every What, otherwise the
+// What must match at least one of the SQL LIKE patterns (e.g. "%Req", "%Request").
+// Each returned Task has only StartTime and EndTime set.
 func (r *SQLiteTraceReader) listTaskIntervals(
 	ctx context.Context,
-	location, kind, whatLike string,
+	location, kind string,
+	whatLikes []string,
 	start, end float64,
 ) []Task {
 	q := `
@@ -310,9 +311,13 @@ func (r *SQLiteTraceReader) listTaskIntervals(
 		q += "\n\t\t\tAND Kind = ?"
 		args = append(args, kind)
 	}
-	if whatLike != "" {
-		q += "\n\t\t\tAND What LIKE ?"
-		args = append(args, whatLike)
+	if len(whatLikes) > 0 {
+		clauses := make([]string, len(whatLikes))
+		for i, pattern := range whatLikes {
+			clauses[i] = "What LIKE ?"
+			args = append(args, pattern)
+		}
+		q += "\n\t\t\tAND (" + strings.Join(clauses, " OR ") + ")"
 	}
 
 	rows, err := r.QueryContext(ctx, q, args...)

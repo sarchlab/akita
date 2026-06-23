@@ -20,12 +20,20 @@ import { buildLocationTree, findNode, leafCount, breadcrumbSegments, type Locati
 import { cn } from "../lib/utils";
 import { AXIS_OPTIONS, axisColor } from "../utils/metrics";
 
-// Resolve a URL axis param to a known metric key. Accepts the metric key or its
-// human-readable label (shared/agent-generated links sometimes carry the label),
-// and falls back to `fallback` for anything unrecognized so the chart shows the
-// default metric instead of rendering empty.
+// Back-compat aliases for metric keys that have since been renamed/split, so a
+// saved or agent-generated link still resolves instead of falling back to default.
+const AXIS_ALIASES: Record<string, string> = {
+  // Pre-split, buffer pressure was a single metric; map it to the request side.
+  BufferPressure: "RequestBufferPressure",
+};
+
+// Resolve a URL axis param to a known metric key. Accepts the metric key (or a
+// retired alias) or its human-readable label (shared/agent-generated links
+// sometimes carry the label), and falls back to `fallback` for anything
+// unrecognized so the chart shows the default metric instead of rendering empty.
 function resolveAxis(raw: string | undefined, fallback: string): string {
   if (!raw) return fallback;
+  if (AXIS_ALIASES[raw]) return AXIS_ALIASES[raw];
   const match = AXIS_OPTIONS.find(
     (option) => option.value === raw || option.label.trim() === raw.trim(),
   );
@@ -89,12 +97,17 @@ function keepForSearch(root: LocationNode, search: string): Set<string> | null {
 }
 
 // flatMatches lists the nodes whose own path matches the search (used to drive the
-// grid in search mode: jump straight to the matching components' charts).
+// grid in search mode: jump straight to the matching components' charts). A matched
+// node already aggregates its whole subtree, so we stop descending once a node
+// matches — otherwise searching "AT" would also mount a chart for every AT.* facet.
 function flatMatches(root: LocationNode, search: string): string[] {
   const q = search.toLowerCase();
   const out: string[] = [];
   const walk = (node: LocationNode) => {
-    if (node.path && node.path.toLowerCase().includes(q)) out.push(node.path);
+    if (node.path && node.path.toLowerCase().includes(q)) {
+      out.push(node.path);
+      return;
+    }
     node.children.forEach(walk);
   };
   root.children.forEach(walk);

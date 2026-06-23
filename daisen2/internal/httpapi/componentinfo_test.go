@@ -171,23 +171,27 @@ func TestBufferOccupancyFromPortTasks(t *testing.T) {
 		}
 	}
 	exec(`INSERT INTO location (ID, Locale) VALUES (10, 'D.Top.incoming'), (11, 'D.req_out')`)
-	// One buffered request (ReadReq) and one buffered response (DataReadyRsp) in the
-	// incoming buffer, plus one outgoing request still awaiting its response.
+	// Buffered requests/responses in the incoming buffer, using both the short
+	// ("*Req"/"*Rsp") and the long ("*Request"/"*Response") message-type naming, plus
+	// one outgoing request still awaiting its response.
 	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
-		(200, 0, 'incoming_buffer', 'ReadReq',      10, 0, 15),
-		(201, 0, 'incoming_buffer', 'DataReadyRsp', 10, 5, 20),
-		(202, 0, 'req_out',         'ReadReq',      11, 0, 10)`)
+		(200, 0, 'incoming_buffer', 'ReadReq',          10, 0, 15),
+		(201, 0, 'incoming_buffer', 'DataReadyRsp',     10, 5, 20),
+		(203, 0, 'incoming_buffer', 'DataMoveRequest',  10, 0, 5),
+		(204, 0, 'incoming_buffer', 'DataMoveResponse', 10, 15, 20),
+		(202, 0, 'req_out',         'ReadReq',          11, 0, 10)`)
 	server := &Server{traceReader: reader}
 
-	// Request buffer pressure: only the ReadReq incoming_buffer task [0,15).
+	// Request buffer pressure: ReadReq [0,15) plus the long-form DataMoveRequest [0,5).
 	requestBP := server.calculateRequestBufferPressure(
 		context.Background(), nil, "D", "RequestBufferPressure", 0, 20, 4)
-	assertValues(t, requestBP.Data, []float64{1, 1, 1, 0})
+	assertValues(t, requestBP.Data, []float64{2, 1, 1, 0})
 
-	// Response buffer pressure: only the DataReadyRsp incoming_buffer task [5,20).
+	// Response buffer pressure: DataReadyRsp [5,20) plus the long-form
+	// DataMoveResponse [15,20).
 	responseBP := server.calculateResponseBufferPressure(
 		context.Background(), nil, "D", "ResponseBufferPressure", 0, 20, 4)
-	assertValues(t, responseBP.Data, []float64{0, 1, 1, 1})
+	assertValues(t, responseBP.Data, []float64{0, 1, 1, 2})
 
 	// Pending request out: the req_out task [0,10).
 	pendingReqOut := server.calculatePendingReqOut(
@@ -199,7 +203,7 @@ func TestListTaskIntervalsLeanFetch(t *testing.T) {
 	reader := newTestTraceReader(t)
 	insertTraceRows(t, reader)
 
-	intervals := reader.listTaskIntervals(context.Background(), "A", "", "", 0, 20)
+	intervals := reader.listTaskIntervals(context.Background(), "A", "", nil, 0, 20)
 	if len(intervals) == 0 {
 		t.Fatal("expected intervals for location A")
 	}
