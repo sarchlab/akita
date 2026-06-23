@@ -21,6 +21,9 @@ export function useComponentTimeline(
   startTime: number,
   endTime: number,
   numBins: number,
+  // "kind" | "kind-what" — how the server groups tasks into bands. Must match the
+  // client's taskColorKey so a band's key resolves to the same color.
+  group: string = "kind-what",
 ) {
   const [data, setData] = useState<ComponentTimelineData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -49,6 +52,7 @@ export function useComponentTimeline(
       starttime: String(startTime),
       endtime: String(endTime),
       num_bins: String(numBins),
+      group,
     });
 
     setLoading(true);
@@ -68,7 +72,7 @@ export function useComponentTimeline(
       });
 
     return () => controller.abort();
-  }, [scope, startTime, endTime, numBins]);
+  }, [scope, startTime, endTime, numBins, group]);
 
   useRenderReady(loading, error !== null);
 

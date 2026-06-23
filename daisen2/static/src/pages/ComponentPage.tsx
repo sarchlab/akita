@@ -15,6 +15,7 @@ import type { ComponentTimelineData } from "../hooks/useComponentTimeline";
 import { useRenderReady } from "../hooks/useRenderReady";
 import type { Segment, Task } from "../types/task";
 import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskColorCoder";
+import type { ColorMode } from "../utils/taskColorCoder";
 import { blockingKindAt, milestonesOf, wavyPath } from "../utils/milestoneViz";
 import { smartString } from "../utils/smartValue";
 import { cn } from "../lib/utils";
@@ -361,6 +362,7 @@ interface ComponentTimelineProps {
   range: TimeRange;
   size: Size;
   colorMap: Record<string, string>;
+  colorMode: ColorMode;
   highlightedKey: string | null;
   highlightedTaskId: string | null;
   highlightedTaskIds: Set<string> | null;
@@ -381,6 +383,7 @@ function ComponentTimeline({
   range,
   size,
   colorMap,
+  colorMode,
   highlightedKey,
   highlightedTaskId,
   highlightedTaskIds,
@@ -559,7 +562,7 @@ function ComponentTimeline({
             width: Math.max(1, safeScale(xScale, task.end_time) - safeScale(xScale, task.start_time)),
             height: 8,
           };
-          const key = taskColorKey(task);
+          const key = taskColorKey(task, colorMode);
           const taskHighlighted = highlightedTaskId === String(task.id);
           const keyHighlighted = highlightedKey === key;
           const hasHighlight = highlightedTaskIds !== null || highlightedTaskId !== null || highlightedKey !== null;
@@ -579,7 +582,7 @@ function ComponentTimeline({
               y={dim.y}
               width={Math.max(1, dim.width)}
               height={Math.max(1, dim.height)}
-              fill={lookupColor(colorMap, task)}
+              fill={lookupColor(colorMap, task, colorMode)}
               stroke="#000000"
               strokeOpacity={hasHighlight && highlighted ? 0.8 : 0.2}
               opacity={highlighted ? 1 : 0.4}
@@ -997,6 +1000,7 @@ function ComponentTaskView({
   width,
   height,
   colorMap,
+  colorMode,
   highlightedKey,
   highlightedTaskId,
   onHoverTask,
@@ -1011,6 +1015,7 @@ function ComponentTaskView({
   width: number;
   height: number;
   colorMap: Record<string, string>;
+  colorMode: ColorMode;
   highlightedKey: string | null;
   highlightedTaskId: string | null;
   onHoverTask: (task: Task | null) => void;
@@ -1047,7 +1052,7 @@ function ComponentTaskView({
       })}
 
       {rows.map((row) => {
-        const key = taskColorKey(row.task);
+        const key = taskColorKey(row.task, colorMode);
         const taskHighlighted = highlightedTaskId === String(row.task.id);
         const keyHighlighted = highlightedKey === key;
         const hasHighlight = highlightedTaskId !== null || highlightedKey !== null;
@@ -1060,7 +1065,7 @@ function ComponentTaskView({
             y={row.y}
             width={row.width}
             height={Math.max(1, row.height)}
-            fill={lookupColor(colorMap, row.task)}
+            fill={lookupColor(colorMap, row.task, colorMode)}
             stroke="#000000"
             strokeOpacity={hasHighlight && highlighted ? 0.8 : 0.2}
             opacity={highlighted ? 1 : 0.4}
@@ -1195,6 +1200,8 @@ function SelectedTaskSection({ task }: { task: Task | null }) {
 function ComponentLegend({
   taskKeys,
   colorMap,
+  colorMode,
+  onColorMode,
   blockingReasons,
   highlightedKey,
   onHighlight,
@@ -1203,6 +1210,8 @@ function ComponentLegend({
 }: {
   taskKeys: string[];
   colorMap: Record<string, string>;
+  colorMode: ColorMode;
+  onColorMode: (mode: ColorMode) => void;
   blockingReasons: string[];
   highlightedKey: string | null;
   onHighlight: (key: string | null) => void;
@@ -1215,7 +1224,28 @@ function ComponentLegend({
     <section>
       {taskKeys.length > 0 && (
         <>
-          <SectionLabel>Tasks</SectionLabel>
+          <div className="flex items-center justify-between gap-2">
+            <SectionLabel>Tasks</SectionLabel>
+            {/* Color/group tasks by kind alone or the finer kind-what pair. Drives
+                both these swatches and the task-count chart's bands. */}
+            <div className="inline-flex shrink-0 overflow-hidden rounded border text-[10px] font-medium" role="group" aria-label="Color tasks by">
+              {(["kind", "kind-what"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => onColorMode(mode)}
+                  aria-pressed={colorMode === mode}
+                  className={cn(
+                    "px-1.5 py-0.5 transition-colors",
+                    mode === "kind-what" && "border-l",
+                    colorMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {mode === "kind" ? "Kind" : "Kind-What"}
+                </button>
+              ))}
+            </div>
+          </div>
           <ul className="mb-3 mt-2 space-y-0.5">
             {taskKeys.map((key) => {
               const active = highlightedKey === key;
@@ -1399,9 +1429,14 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   const numBins = Math.max(100, Math.min(1200, Math.round((size.width - SIDE_COLUMN_WIDTH) / 100) * 100));
   const { info: stackedInfo, loading: infoLoading } = useStackedCompInfo(componentName, "ConcurrentTaskMilestones", dataRange.startTime, dataRange.endTime, numBins);
 
+  // How tasks are grouped for coloring and for the task-count bands. The same
+  // mode drives the server's grouping (below) and every taskColorKey here, so a
+  // band's key always resolves to a color. Toggled from the legend.
+  const [colorMode, setColorMode] = useState<ColorMode>("kind-what");
+
   // Level-of-detail: always fetch the cheap aggregated summary first. Its `total`
   // (tasks overlapping the range) decides whether the per-task view is affordable.
-  const { data: agg, loading: aggLoading } = useComponentTimeline(componentName, dataRange.startTime, dataRange.endTime, numBins);
+  const { data: agg, loading: aggLoading } = useComponentTimeline(componentName, dataRange.startTime, dataRange.endTime, numBins, colorMode);
   // Only fetch the raw tasks once the summary for THIS range confirms the count is
   // affordable. useComponentTimeline keeps the previous summary while a new range
   // loads, so we must also require the summary to cover the current range —
@@ -1485,12 +1520,12 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   const colorMapRef = useRef<Record<string, string>>({});
   const colorMap = useMemo(() => {
     if (!aggMatchesRange || !stackedMatchesRange) return colorMapRef.current;
-    const taskKeys = [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks].map(taskColorKey);
+    const taskKeys = [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks].map((t) => taskColorKey(t, colorMode));
     const reasonKeys = [...(stackedInfo?.kinds ?? []), ...milestonesOf(currentTask?.steps).map((step) => step.kind)];
     const next = buildColorMapFromKeys([...taskKeys, ...(agg?.keys ?? []), ...reasonKeys]);
     colorMapRef.current = next;
     return next;
-  }, [aggMatchesRange, stackedMatchesRange, childTasks, currentTask, parentTask, tasks, stackedInfo, agg]);
+  }, [aggMatchesRange, stackedMatchesRange, childTasks, currentTask, parentTask, tasks, stackedInfo, agg, colorMode]);
 
   // The task "kind-what" keys for the legend's Tasks subsection (distinct from
   // the blocking-reason kinds, so reasons no longer leak into the task legend).
@@ -1500,10 +1535,10 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     if (agg) return agg.keys;
     const keys = new Set<string>();
     for (const task of [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks]) {
-      keys.add(taskColorKey(task));
+      keys.add(taskColorKey(task, colorMode));
     }
     return Array.from(keys).sort();
-  }, [childTasks, currentTask, parentTask, tasks, agg]);
+  }, [childTasks, currentTask, parentTask, tasks, agg, colorMode]);
   const selectableTaskById = useMemo(() => {
     const map = new Map<string, Task>();
     for (const task of [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks]) {
@@ -1563,12 +1598,12 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     if (hoveredCount) {
       for (const task of tasks) {
         if (task.start_time > hoveredCount.time || task.end_time < hoveredCount.time) continue;
-        if (taskColorKey(task) === hoveredCount.key) ids.add(String(task.id));
+        if (taskColorKey(task, colorMode) === hoveredCount.key) ids.add(String(task.id));
       }
       return ids;
     }
     return null;
-  }, [hoveredSegment, hoveredCount, tasks, rawEnabled]);
+  }, [hoveredSegment, hoveredCount, tasks, rawEnabled, colorMode]);
 
   const shiftRange = (nextRange: TimeRange) => {
     if (!Number.isFinite(nextRange.startTime) || !Number.isFinite(nextRange.endTime)) return;
@@ -1746,6 +1781,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             width={leftWidth}
             height={taskViewHeight}
             colorMap={colorMap}
+            colorMode={colorMode}
             highlightedKey={highlightedKey}
             highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
             onHoverTask={setHoveredTask}
@@ -1764,6 +1800,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               range={viewRange}
               size={{ width: leftWidth, height: ganttHeight }}
               colorMap={colorMap}
+              colorMode={colorMode}
               highlightedKey={highlightedKey}
               highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
               highlightedTaskIds={highlightedTaskIds}
@@ -1874,7 +1911,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               selected/current task so a task selected via click or arrived at
               via /component?...&taskid=... stays visible in the panel. */}
           <SelectedTaskSection task={hoveredTask ?? currentTask} />
-          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={highlightedReason} onHighlightReason={setHighlightedReason} />
+          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} colorMode={colorMode} onColorMode={setColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={highlightedReason} onHighlightReason={setHighlightedReason} />
         </div>
       </SidePanel>
     </div>

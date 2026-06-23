@@ -142,6 +142,7 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 	scope string,
 	start, end float64,
 	numBins int,
+	groupByKind bool,
 ) ComponentTimelineResponse {
 	resp := ComponentTimelineResponse{
 		StartTime: start,
@@ -159,6 +160,13 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 	// its start and end, emitting +1 at its start bin and -1 just past its end bin
 	// (ceiling, so a task ending on a bin boundary is not counted into the next
 	// bin). The cross join fans each task into its two events in one table scan.
+	// The color key groups tasks either by kind alone or by the finer kind-what
+	// pair, mirroring the client's taskColorKey so a band lines up with the tasks
+	// it represents.
+	keyExpr := "t.Kind || '-' || t.What"
+	if groupByKind {
+		keyExpr = "t.Kind"
+	}
 	be := newBinExpr(numBins, start, end)
 	sqlStr := `
 		WITH events AS (
@@ -167,7 +175,7 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 					THEN MAX(0, MIN(` + be.numBins + ` - 1, ` + be.floorOf("t.StartTime") + `))
 					ELSE ` + be.ceilOf("t.EndTime") + `
 				END AS bin,
-				t.Kind || '-' || t.What AS k,
+				` + keyExpr + ` AS k,
 				d.delta AS delta
 			FROM trace t
 			JOIN location loc ON t.Location = loc.ID
@@ -293,5 +301,9 @@ func (s *Server) httpComponentTimeline(w http.ResponseWriter, r *http.Request) {
 		numBins = 2000
 	}
 
-	writeJSON(w, s.traceReader.ComponentTimeline(r.Context(), scope, start, end, numBins))
+	// group=kind colors by task kind alone; anything else (default) keeps the
+	// finer kind-what grouping.
+	groupByKind := r.FormValue("group") == "kind"
+
+	writeJSON(w, s.traceReader.ComponentTimeline(r.Context(), scope, start, end, numBins, groupByKind))
 }
