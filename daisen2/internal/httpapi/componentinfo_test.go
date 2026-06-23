@@ -139,6 +139,40 @@ func TestComponentInfoUsesSweepForTimeWeightedCounts(t *testing.T) {
 	assertValues(t, bufferPressure.Data, []float64{1, 1, 0, 0})
 }
 
+func TestListTaskIntervalsLeanFetch(t *testing.T) {
+	reader := newTestTraceReader(t)
+	insertTraceRows(t, reader)
+
+	intervals := reader.listTaskIntervals(context.Background(), "A", 0, 20)
+	if len(intervals) == 0 {
+		t.Fatal("expected intervals for location A")
+	}
+
+	// Count matches the exact-location, overlapping-range set (not a subtree, and
+	// only tasks that overlap [0, 20)).
+	var want int
+	row := reader.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM trace
+			WHERE Location = (SELECT ID FROM location WHERE Locale = 'A')
+				AND EndTime > 0 AND StartTime < 20`)
+	if err := row.Scan(&want); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if len(intervals) != want {
+		t.Fatalf("got %d intervals, want %d", len(intervals), want)
+	}
+
+	for _, task := range intervals {
+		if task.EndTime <= 0 || task.StartTime >= 20 {
+			t.Fatalf("interval does not overlap [0,20): %+v", task)
+		}
+		// The lean fetch leaves everything but the interval unset.
+		if task.Kind != "" || task.What != "" || task.Location != "" {
+			t.Fatalf("lean fetch should populate only Start/End, got %+v", task)
+		}
+	}
+}
+
 func TestListTasksLoadsMilestonesOnlyWhenRequested(t *testing.T) {
 	reader := newTestTraceReader(t)
 	insertTraceRows(t, reader)
