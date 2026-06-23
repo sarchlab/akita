@@ -24,7 +24,8 @@ const AXIS_OPTIONS = [
   { value: "ReqCompleteCount", label: "Request Complete Rate" },
   { value: "AvgLatency", label: "Average Request Latency" },
   { value: "ConcurrentTask", label: "Number Concurrent Task" },
-  { value: "BufferPressure", label: "Buffer Pressure" },
+  { value: "RequestBufferPressure", label: "Request Buffer Pressure" },
+  { value: "ResponseBufferPressure", label: "Response Buffer Pressure" },
   { value: "PendingReqOut", label: "Pending Request Out" },
   { value: "-", label: " - " },
 ];

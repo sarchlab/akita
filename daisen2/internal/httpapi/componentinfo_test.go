@@ -159,9 +159,10 @@ func TestComponentInfoUsesSweepForTimeWeightedCounts(t *testing.T) {
 	assertValues(t, concurrent.Data, []float64{1, 2, 2, 1})
 }
 
-// TestBufferOccupancyFromPortTasks verifies that buffer pressure is the occupancy
-// of the per-port "incoming_buffer" tasks and pending request out is the occupancy
-// of "req_out" tasks, both filtered by kind and aggregated across the subtree.
+// TestBufferOccupancyFromPortTasks verifies that the incoming-buffer occupancy is
+// split into request vs response buffer pressure by the message What ("*Req" /
+// "*Rsp"), and that pending request out is the occupancy of "req_out" tasks — all
+// filtered by kind/what and aggregated across the subtree.
 func TestBufferOccupancyFromPortTasks(t *testing.T) {
 	reader := newTestTraceReader(t)
 	exec := func(q string) {
@@ -170,36 +171,35 @@ func TestBufferOccupancyFromPortTasks(t *testing.T) {
 		}
 	}
 	exec(`INSERT INTO location (ID, Locale) VALUES (10, 'D.Top.incoming'), (11, 'D.req_out')`)
-	// Two incoming-buffer tasks (buffer pressure) and one req_out task (pending
-	// request out) under component D.
+	// One buffered request (ReadReq) and one buffered response (DataReadyRsp) in the
+	// incoming buffer, plus one outgoing request still awaiting its response.
 	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
-		(200, 0, 'incoming_buffer', 'R', 10, 0, 15),
-		(201, 0, 'incoming_buffer', 'R', 10, 5, 20),
-		(202, 0, 'req_out', 'R', 11, 0, 10)`)
+		(200, 0, 'incoming_buffer', 'ReadReq',      10, 0, 15),
+		(201, 0, 'incoming_buffer', 'DataReadyRsp', 10, 5, 20),
+		(202, 0, 'req_out',         'ReadReq',      11, 0, 10)`)
 	server := &Server{traceReader: reader}
 
-	// Incoming-buffer occupancy over [0,20) in 4 bins of width 5:
-	// [0,5): t200; [5,10): t200+t201; [10,15): t200+t201; [15,20): t201.
-	bufferPressure := server.calculateBufferPressure(
-		context.Background(), nil, "D", "BufferPressure", 0, 20, 4)
-	assertValues(t, bufferPressure.Data, []float64{1, 2, 2, 1})
+	// Request buffer pressure: only the ReadReq incoming_buffer task [0,15).
+	requestBP := server.calculateRequestBufferPressure(
+		context.Background(), nil, "D", "RequestBufferPressure", 0, 20, 4)
+	assertValues(t, requestBP.Data, []float64{1, 1, 1, 0})
 
-	// req_out occupancy: t202 spans [0,10) only.
+	// Response buffer pressure: only the DataReadyRsp incoming_buffer task [5,20).
+	responseBP := server.calculateResponseBufferPressure(
+		context.Background(), nil, "D", "ResponseBufferPressure", 0, 20, 4)
+	assertValues(t, responseBP.Data, []float64{0, 1, 1, 1})
+
+	// Pending request out: the req_out task [0,10).
 	pendingReqOut := server.calculatePendingReqOut(
 		context.Background(), nil, "D", "PendingReqOut", 0, 20, 4)
 	assertValues(t, pendingReqOut.Data, []float64{1, 1, 0, 0})
-
-	// The kind filter holds: the req_out location carries no incoming_buffer tasks.
-	leaf := server.calculateBufferPressure(
-		context.Background(), nil, "D.req_out", "BufferPressure", 0, 20, 4)
-	assertValues(t, leaf.Data, []float64{0, 0, 0, 0})
 }
 
 func TestListTaskIntervalsLeanFetch(t *testing.T) {
 	reader := newTestTraceReader(t)
 	insertTraceRows(t, reader)
 
-	intervals := reader.listTaskIntervals(context.Background(), "A", "", 0, 20)
+	intervals := reader.listTaskIntervals(context.Background(), "A", "", "", 0, 20)
 	if len(intervals) == 0 {
 		t.Fatal("expected intervals for location A")
 	}

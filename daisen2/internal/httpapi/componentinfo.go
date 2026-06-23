@@ -93,8 +93,11 @@ func (s *Server) httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 	case "ConcurrentTaskMilestones":
 		s.httpConcurrentTaskMilestones(w, r, compName, infoType, startTime, endTime, int(numDots))
 		return
-	case "BufferPressure":
-		compInfo = s.calculateBufferPressure(
+	case "RequestBufferPressure":
+		compInfo = s.calculateRequestBufferPressure(
+			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
+	case "ResponseBufferPressure":
+		compInfo = s.calculateResponseBufferPressure(
 			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
 	case "PendingReqOut":
 		compInfo = s.calculatePendingReqOut(
@@ -155,7 +158,7 @@ func (s *Server) calculateConcurrentTask(
 	// index scan) instead of hydrating every Task via ListTasks, then run the same
 	// time-weighted bin sweep. Drops this metric from ~2s to ~0.1s on a large
 	// component by avoiding the per-task struct/parent hydration.
-	tasks := s.traceReader.listTaskIntervals(ctx, compName, "", startTime, endTime)
+	tasks := s.traceReader.listTaskIntervals(ctx, compName, "", "", startTime, endTime)
 	binDuration := totalDuration / float64(numDots)
 	compInfo.Data = calculateTimeWeightedBins(
 		tasks, startTime, endTime, binDuration, int(numDots),
@@ -167,19 +170,34 @@ func (s *Server) calculateConcurrentTask(
 	return compInfo
 }
 
-func (s *Server) calculateBufferPressure(
+func (s *Server) calculateRequestBufferPressure(
 	ctx context.Context,
 	compInfo *ComponentInfo,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
-	// With one-location-one-kind tracing, a request waiting in an incoming port
-	// buffer is its own "incoming_buffer" task, so buffer pressure is just how many
-	// of those are in flight over time across the scope's ports — a direct measure
-	// rather than the old "req_in vs. its parent's start" proxy.
+	// An incoming port buffer holds both the requests a component receives and the
+	// responses to requests it sent out (e.g. a pure client like the mem agent only
+	// ever buffers responses). akita names messages "*Req" / "*Rsp", so split the
+	// incoming_buffer occupancy by that: the requests waiting to be served.
 	compInfo = s.calculateKindOccupancy(
-		ctx, compName, infoType, "incoming_buffer", startTime, endTime, numDots)
+		ctx, compName, infoType, "incoming_buffer", "%Req", startTime, endTime, numDots)
+
+	return compInfo
+}
+
+func (s *Server) calculateResponseBufferPressure(
+	ctx context.Context,
+	compInfo *ComponentInfo,
+	compName, infoType string,
+	startTime, endTime float64,
+	numDots int64,
+) *ComponentInfo {
+	// The other half of the incoming buffer: responses returning for requests this
+	// component sent downstream.
+	compInfo = s.calculateKindOccupancy(
+		ctx, compName, infoType, "incoming_buffer", "%Rsp", startTime, endTime, numDots)
 
 	return compInfo
 }
@@ -197,18 +215,19 @@ func (s *Server) calculatePendingReqOut(
 	// poor proxy here: a request usually leaves the port the instant it is accepted,
 	// so those tasks are near-zero duration.)
 	compInfo = s.calculateKindOccupancy(
-		ctx, compName, infoType, "req_out", startTime, endTime, numDots)
+		ctx, compName, infoType, "req_out", "", startTime, endTime, numDots)
 
 	return compInfo
 }
 
 // calculateKindOccupancy bins the time-weighted count of in-flight tasks of one
-// kind over the scope's subtree. Like calculateConcurrentTask it fetches only the
-// intervals — one covering-index scan, no per-task hydration — and runs the shared
-// bin sweep, so it is cheap even on a busy component.
+// kind (optionally narrowed to a What LIKE pattern) over the scope's subtree. Like
+// calculateConcurrentTask it fetches only the intervals — one index-driven scan, no
+// per-task hydration — and runs the shared bin sweep, so it is cheap even on a busy
+// component.
 func (s *Server) calculateKindOccupancy(
 	ctx context.Context,
-	compName, infoType, kind string,
+	compName, infoType, kind, whatLike string,
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
@@ -228,7 +247,7 @@ func (s *Server) calculateKindOccupancy(
 	// kind-filtered interval scan without touching the trace table.
 	_, _ = s.traceReader.ExecContext(ctx, metricCoveringIndex)
 
-	tasks := s.traceReader.listTaskIntervals(ctx, compName, kind, startTime, endTime)
+	tasks := s.traceReader.listTaskIntervals(ctx, compName, kind, whatLike, startTime, endTime)
 	binDuration := totalDuration / float64(numDots)
 	compInfo.Data = calculateTimeWeightedBins(
 		tasks, startTime, endTime, binDuration, int(numDots),
