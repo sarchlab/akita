@@ -284,6 +284,49 @@ func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Ta
 	return tasks
 }
 
+// listTaskIntervals fetches only the [StartTime, EndTime) intervals of the tasks
+// at an exact location that overlap [start, end). It is the lean alternative to
+// ListTasks for occupancy-style metrics that need nothing but the intervals — one
+// (covering) index scan rather than hydrating every Task. Each returned Task has
+// only StartTime and EndTime set.
+func (r *SQLiteTraceReader) listTaskIntervals(
+	ctx context.Context,
+	location string,
+	start, end float64,
+) []Task {
+	const q = `
+		SELECT StartTime, EndTime
+		FROM trace
+		WHERE Location = (SELECT ID FROM location WHERE Locale = ?)
+			AND EndTime > ? AND StartTime < ?`
+
+	rows, err := r.QueryContext(ctx, q, location, start, end)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		panic(err)
+	}
+	defer rows.Close()
+
+	tasks := []Task{}
+	for rows.Next() {
+		var s, e float64
+		if err := rows.Scan(&s, &e); err != nil {
+			if ctx.Err() != nil {
+				return tasks
+			}
+			panic(err)
+		}
+		tasks = append(tasks, Task{
+			StartTime: timing.VTimeInPicoSec(s),
+			EndTime:   timing.VTimeInPicoSec(e),
+		})
+	}
+
+	return tasks
+}
+
 // sortTaskSteps orders each task's Steps by time, so milestones and tags loaded
 // from separate tables form one coherent timeline.
 func sortTaskSteps(tasks []Task) {
