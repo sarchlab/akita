@@ -285,10 +285,12 @@ func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Ta
 }
 
 // listTaskIntervals fetches only the [StartTime, EndTime) intervals of the tasks
-// at an exact location that overlap [start, end). It is the lean alternative to
+// in a location scope that overlap [start, end). It is the lean alternative to
 // ListTasks for occupancy-style metrics that need nothing but the intervals — one
-// (covering) index scan rather than hydrating every Task. Each returned Task has
-// only StartTime and EndTime set.
+// (covering) index scan rather than hydrating every Task. The scope is the named
+// location plus anything nested under it, so a component name aggregates its whole
+// subtree while a leaf matches only itself. Each returned Task has only StartTime
+// and EndTime set.
 func (r *SQLiteTraceReader) listTaskIntervals(
 	ctx context.Context,
 	location string,
@@ -297,10 +299,11 @@ func (r *SQLiteTraceReader) listTaskIntervals(
 	const q = `
 		SELECT StartTime, EndTime
 		FROM trace
-		WHERE Location = (SELECT ID FROM location WHERE Locale = ?)
+		WHERE Location IN (SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?))
 			AND EndTime > ? AND StartTime < ?`
 
-	rows, err := r.QueryContext(ctx, q, location, start, end)
+	lo, hi := scopePrefixBounds(location)
+	rows, err := r.QueryContext(ctx, q, location, lo, hi, start, end)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil

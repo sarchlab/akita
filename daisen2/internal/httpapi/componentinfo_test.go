@@ -121,6 +121,34 @@ func TestComponentInfoBinsReqMetricsWithSQLAggregation(t *testing.T) {
 	assertValues(t, avgLatency.Data, []float64{0, 0, 10, 0})
 }
 
+func TestComponentInfoAggregatesSubtree(t *testing.T) {
+	reader := newTestTraceReader(t)
+	exec := func(q string) {
+		if _, err := reader.Exec(q); err != nil {
+			t.Fatalf("exec %q: %v", q, err)
+		}
+	}
+	exec(`INSERT INTO location (ID, Locale) VALUES (10, 'C.in'), (11, 'C.out'), (12, 'Cousin.in')`)
+	// C.in: 2 req_in, C.out: 1 req_in (all start in bin 0). Cousin.in: 2 — a
+	// differently-prefixed sibling that scope "C" must NOT pull in.
+	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+		(1, 0, 'req_in', 'R', 10, 1, 5),
+		(2, 0, 'req_in', 'R', 10, 2, 6),
+		(3, 0, 'req_in', 'R', 11, 3, 7),
+		(4, 0, 'req_in', 'R', 12, 1, 5),
+		(5, 0, 'req_in', 'R', 12, 1, 5)`)
+	server := &Server{traceReader: reader}
+
+	// scope "C" aggregates C.in + C.out = 3 req_in tasks in bin 0 (3/binDuration =
+	// 0.3), excluding the sibling "Cousin.in".
+	agg := server.calculateReqIn(context.Background(), "C", 0, 40, 4)
+	assertValues(t, agg.Data, []float64{0.3, 0, 0, 0})
+
+	// A leaf scope still matches only itself.
+	leaf := server.calculateReqIn(context.Background(), "C.in", 0, 40, 4)
+	assertValues(t, leaf.Data, []float64{0.2, 0, 0, 0})
+}
+
 func TestComponentInfoUsesSweepForTimeWeightedCounts(t *testing.T) {
 	reader := newTestTraceReader(t)
 	insertTraceRows(t, reader)

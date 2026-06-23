@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { RotateCcw, X } from "lucide-react";
+import { RotateCcw, X, ChevronRight, Search } from "lucide-react";
 import DashboardWidget from "../components/DashboardWidget";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -16,6 +16,8 @@ import { useSegments } from "../hooks/useSegments";
 import { useSimulationRange } from "../hooks/useSimulationRange";
 import { useRenderReady } from "../hooks/useRenderReady";
 import { parseView, mergeParams, DASHBOARD_DEFAULTS } from "../utils/viewState.mjs";
+import { buildLocationTree, findNode, breadcrumbSegments, type LocationNode } from "../utils/locationTree";
+import { cn } from "../lib/utils";
 
 const AXIS_OPTIONS = [
   { value: "ReqInCount", label: "Incoming Request Rate" },
@@ -53,10 +55,7 @@ function useElementSize<T extends HTMLElement>() {
   useEffect(() => {
     if (!ref.current) return;
     const observer = new ResizeObserver(([entry]) => {
-      setSize({
-        width: entry.contentRect.width,
-        height: entry.contentRect.height,
-      });
+      setSize({ width: entry.contentRect.width, height: entry.contentRect.height });
     });
     observer.observe(ref.current);
     return () => observer.disconnect();
@@ -67,16 +66,93 @@ function useElementSize<T extends HTMLElement>() {
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debouncedValue, setDebouncedValue] = useState(value);
-
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDebouncedValue(value);
-    }, delayMs);
-
+    const timeout = window.setTimeout(() => setDebouncedValue(value), delayMs);
     return () => window.clearTimeout(timeout);
   }, [delayMs, value]);
-
   return debouncedValue;
+}
+
+// keepForSearch returns the set of node paths to show when filtering the tree: a
+// node is kept if its path matches OR it has a descendant that does, so the path
+// down to every match stays navigable.
+function keepForSearch(root: LocationNode, search: string): Set<string> | null {
+  if (!search) return null;
+  const q = search.toLowerCase();
+  const keep = new Set<string>();
+  const walk = (node: LocationNode): boolean => {
+    let any = node.path.toLowerCase().includes(q);
+    for (const child of node.children) {
+      if (walk(child)) any = true;
+    }
+    if (any && node.path) keep.add(node.path);
+    return any;
+  };
+  for (const child of root.children) walk(child);
+  return keep;
+}
+
+// flatMatches lists the nodes whose own path matches the search (used to drive the
+// grid in search mode: jump straight to the matching components' charts).
+function flatMatches(root: LocationNode, search: string): string[] {
+  const q = search.toLowerCase();
+  const out: string[] = [];
+  const walk = (node: LocationNode) => {
+    if (node.path && node.path.toLowerCase().includes(q)) out.push(node.path);
+    node.children.forEach(walk);
+  };
+  root.children.forEach(walk);
+  return out;
+}
+
+// DashboardTree is the sidebar navigator: the location hierarchy, every node
+// clickable to scope the grid to its children. The current scope is highlighted.
+function DashboardTree({
+  nodes,
+  scope,
+  onScope,
+  depth,
+  keep,
+}: {
+  nodes: LocationNode[];
+  scope: string;
+  onScope: (path: string) => void;
+  depth: number;
+  keep: Set<string> | null;
+}) {
+  const visible = keep ? nodes.filter((n) => keep.has(n.path)) : nodes;
+  if (visible.length === 0) return null;
+  return (
+    <ul className="space-y-0.5">
+      {visible.map((node) => {
+        const isBranch = node.children.length > 0;
+        const isCurrent = node.path === scope;
+        return (
+          <li key={node.path}>
+            <button
+              type="button"
+              onClick={() => onScope(node.path)}
+              title={node.path}
+              className={cn(
+                "flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
+                isCurrent ? "bg-primary/10 font-medium text-primary" : isBranch ? "text-foreground" : "text-muted-foreground",
+              )}
+              style={{ paddingLeft: `${depth * 12 + 6}px` }}
+            >
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 shrink-0 rounded-full",
+                  isBranch ? "bg-primary/70" : "border border-muted-foreground/50",
+                )}
+              />
+              <span className="truncate">{node.name}</span>
+            </button>
+            {isBranch && <DashboardTree nodes={node.children} scope={scope} onScope={onScope} depth={depth + 1} keep={keep} />}
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 export default function DashboardPage() {
@@ -88,15 +164,13 @@ export default function DashboardPage() {
   // tell our own debounced writes from external navigation.
   const lastWrittenRangeRef = useRef<string | null>(null);
   // Whether there is a deliberate, non-sim range to reflect in the URL (set by a
-  // user zoom/pan or an adopted external range; cleared by Reset Zoom). Avoids
-  // relying on a viewRange==sim comparison, which lags by a render while the sim
-  // range loads and would otherwise leak the default range into the URL.
+  // user zoom/pan or an adopted external range; cleared by Reset Zoom).
   const userRangeRef = useRef(false);
 
   // The URL is the source of truth for the discrete view fields.
   const view = parseView("/dashboard", searchParams);
   const filter = view.filter ?? "";
-  const page = view.page ?? 0;
+  const scope = view.scope ?? "";
   const primaryAxis = resolveAxis(view.primary, DASHBOARD_DEFAULTS.primary);
   const secondaryAxis = resolveAxis(view.secondary, DASHBOARD_DEFAULTS.secondary);
   const widget = view.widget ?? "";
@@ -133,18 +207,12 @@ export default function DashboardPage() {
     viewRange.startTime !== dataRange.startTime || viewRange.endTime !== dataRange.endTime;
 
   // Count the debounced data-range update as in-flight render work, so the
-  // render-ready signal (and the off-screen capture that waits on it) does not
-  // fire during the debounce window — otherwise a view rendered from a URL captures
-  // an empty chart before the real-range data has been fetched.
+  // render-ready signal does not fire during the debounce window.
   useRenderReady(dataPending);
 
   // Mirror the (debounced) range into the URL, omitting it when it equals the
   // simulation range so a fresh dashboard URL stays "/dashboard".
   useEffect(() => {
-    // Only write a range when the user (or an adopted link) has a deliberate non-sim
-    // range, and it isn't exactly the sim range. This avoids leaking the pre-load
-    // default range into the URL during the render where the sim range first loads
-    // (viewRange follows it only on the next render).
     const atSim =
       !userRangeRef.current ||
       (viewRange.startTime === startTime && viewRange.endTime === endTime);
@@ -155,7 +223,6 @@ export default function DashboardPage() {
           startTime: atSim ? undefined : dataRange.startTime,
           endTime: atSim ? undefined : dataRange.endTime,
         });
-        // No-op when nothing changed, so this can never churn history or re-trigger.
         return next.toString() === prev.toString() ? prev : next;
       },
       { replace: true },
@@ -170,46 +237,66 @@ export default function DashboardPage() {
     setSearchParams,
   ]);
 
-  // Adopt an externally-set range (shared/tour links or back/forward that change
-  // only the query string) without reverting an in-progress local zoom — guarded by
-  // the range we last wrote ourselves.
+  // Adopt an externally-set range (shared/tour links or back/forward) without
+  // reverting an in-progress local zoom — guarded by the range we last wrote.
   useEffect(() => {
     if (view.startTime === undefined || view.endTime === undefined) return;
     const key = `${view.startTime}|${view.endTime}`;
     if (key === lastWrittenRangeRef.current) return;
     lastWrittenRangeRef.current = key;
-    userRangeRef.current = true; // an adopted explicit range is deliberate — keep it
+    userRangeRef.current = true;
     const next = { startTime: view.startTime, endTime: view.endTime };
     setViewRange((cur) => (cur.startTime === next.startTime && cur.endTime === next.endTime ? cur : next));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  const root = useMemo(() => buildLocationTree(names), [names]);
+  const keep = useMemo(() => keepForSearch(root, filter), [root, filter]);
+  const crumbs = useMemo(() => breadcrumbSegments(scope), [scope]);
+
+  // What the grid shows: when searching, the matching components (flat); otherwise
+  // the current scope's children — the top-level components at the root, the
+  // facets one level down, and so on. A leaf scope shows its own chart.
+  const gridNames = useMemo(() => {
+    if (filter) return flatMatches(root, filter);
+    const node = findNode(root, scope) ?? root;
+    if (node.children.length > 0) return node.children.map((c) => c.path);
+    return scope ? [scope] : [];
+  }, [root, scope, filter]);
+
   const { ref, size } = useElementSize<HTMLDivElement>();
-
-  const columns = size.width >= 1500 ? 4 : size.width >= 1000 ? 3 : 2;
-  const rows = 4;
-  const widgetsPerPage = columns * rows;
+  const columns = size.width >= 1200 ? 4 : size.width >= 760 ? 3 : 2;
+  const rows = Math.max(1, Math.ceil(gridNames.length / columns));
   const widgetWidth = Math.max(180, Math.floor((size.width - (columns + 1) * 5) / columns));
-  const widgetHeight = Math.max(120, Math.floor((size.height - 58 - (rows + 1) * 5) / rows));
-
-  const filteredNames = useMemo(() => {
-    if (!filter) return names;
-    try {
-      const regex = new RegExp(filter);
-      return names.filter((name) => regex.test(name));
-    } catch {
-      return names.filter((name) => name.includes(filter));
-    }
-  }, [filter, names]);
-
-  const totalWidgetCount = filteredNames.length;
-  const pageCount = Math.max(1, Math.ceil(totalWidgetCount / widgetsPerPage));
-  const currentPage = Math.min(page, pageCount - 1);
-  const pageStart = currentPage * widgetsPerPage;
-  const pageEnd = pageStart + widgetsPerPage;
-  const visibleNames = filteredNames.slice(pageStart, pageEnd);
+  const widgetHeight = Math.min(320, Math.max(170, Math.floor((size.height - (rows + 1) * 5) / Math.min(rows, 3))));
 
   const singleWidget = widget !== "";
+
+  const axisSelect = (
+    label: string,
+    dot: string,
+    value: string,
+    onChange: (v: string) => void,
+  ) => (
+    <div className="flex min-w-64 items-center gap-2">
+      <span className="flex items-center gap-1 text-sm font-medium">
+        <span className="h-2.5 w-2.5 rounded-full" style={{ background: dot }} />
+        {label}
+      </span>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="w-52">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {AXIS_OPTIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -239,60 +326,39 @@ export default function DashboardPage() {
             </Button>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-muted-foreground">Filter</span>
-            <Input
-              className="w-56"
-              value={filter}
-              placeholder="Component Name"
-              onChange={(event) => patchView({ filter: event.target.value || undefined, page: undefined })}
-            />
-          </div>
+          // Breadcrumb of the current scope; click an ancestor to collapse back up.
+          <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1 gap-y-0.5 text-sm">
+            <button
+              type="button"
+              className={cn("rounded px-1 hover:text-primary", scope === "" ? "font-semibold" : "text-muted-foreground")}
+              onClick={() => patchView({ scope: undefined, filter: undefined })}
+            >
+              All components
+            </button>
+            {crumbs.map((crumb, index) => (
+              <span key={crumb.path} className="flex items-center gap-1">
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <button
+                  type="button"
+                  className={cn("truncate rounded px-1 hover:text-primary", index === crumbs.length - 1 ? "font-semibold" : "text-muted-foreground")}
+                  onClick={() => patchView({ scope: crumb.path, filter: undefined })}
+                >
+                  {crumb.label}
+                </button>
+              </span>
+            ))}
+          </nav>
         )}
-        <div className="flex min-w-72 items-center gap-2">
-          <span className="flex items-center gap-1 text-sm font-medium">
-            <span className="h-2.5 w-2.5 rounded-full bg-[#d7191c]" />
-            Primary Y-Axis
-          </span>
-          <Select value={primaryAxis} onValueChange={(value) => patchView({ primary: value })}>
-            <SelectTrigger className="w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {AXIS_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex min-w-72 items-center gap-2">
-          <span className="flex items-center gap-1 text-sm font-medium">
-            <span className="h-2.5 w-2.5 rounded-full bg-[#2c7bb6]" />
-            Secondary Y-Axis
-          </span>
-          <Select value={secondaryAxis} onValueChange={(value) => patchView({ secondary: value })}>
-            <SelectTrigger className="w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {AXIS_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {axisSelect("Primary Y-Axis", "#d7191c", primaryAxis, (value) => patchView({ primary: value }))}
+        {axisSelect("Secondary Y-Axis", "#2c7bb6", secondaryAxis, (value) => patchView({ secondary: value }))}
       </form>
 
-      <div ref={ref} className="min-h-0 flex-1 overflow-hidden bg-white p-[5px]">
-        {loading ? (
-          <div className="flex h-full items-center justify-center text-muted-foreground">Loading components...</div>
-        ) : error ? (
-          <div className="flex h-full items-center justify-center text-destructive">{error}</div>
-        ) : singleWidget ? (
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center text-muted-foreground">Loading components...</div>
+      ) : error ? (
+        <div className="flex flex-1 items-center justify-center text-destructive">{error}</div>
+      ) : singleWidget ? (
+        <div className="min-h-0 flex-1 overflow-hidden bg-white p-[5px]">
           <DashboardWidget
             key={widget}
             name={widget}
@@ -309,45 +375,68 @@ export default function DashboardPage() {
             segmentsEnabled={segmentsData?.enabled ?? false}
             onTimeRangeChange={handleRangeChange}
           />
-        ) : (
-          <div
-            className="daisen-dashboard-grid"
-            style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridAutoRows: `${widgetHeight}px` }}
-          >
-            {visibleNames.map((name) => (
-              <DashboardWidget
-                key={name}
-                name={name}
-                width={widgetWidth}
-                height={widgetHeight}
-                startTime={viewRange.startTime}
-                endTime={viewRange.endTime}
-                dataStartTime={dataRange.startTime}
-                dataEndTime={dataRange.endTime}
-                dataPending={dataPending}
-                primaryAxis={primaryAxis}
-                secondaryAxis={secondaryAxis}
-                segments={segmentsData?.segments ?? []}
-                segmentsEnabled={segmentsData?.enabled ?? false}
-                onTimeRangeChange={handleRangeChange}
-                onFocus={(focused) => patchView({ widget: focused })}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1">
+          {/* Sidebar: the location tree + search. Click a node to scope the grid. */}
+          <aside className="flex w-60 shrink-0 flex-col border-r bg-white">
+            <div className="border-b p-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="h-8 pl-7 text-xs"
+                  value={filter}
+                  placeholder="Search components"
+                  onChange={(event) => patchView({ filter: event.target.value || undefined })}
+                />
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-1">
+              <button
+                type="button"
+                className={cn("mb-0.5 flex w-full items-center rounded px-1.5 py-1 text-left text-xs hover:bg-muted", scope === "" && !filter ? "bg-primary/10 font-medium text-primary" : "text-foreground")}
+                onClick={() => patchView({ scope: undefined, filter: undefined })}
+              >
+                All components
+              </button>
+              <DashboardTree nodes={root.children} scope={scope} onScope={(path) => patchView({ scope: path || undefined, filter: undefined })} depth={0} keep={keep} />
+            </div>
+          </aside>
 
-      {singleWidget ? null : (
-        <div className="flex h-14 shrink-0 items-center justify-center gap-4 border-t bg-white px-4 text-sm">
-          <Button type="button" variant="outline" size="sm" disabled={currentPage <= 0} onClick={() => patchView({ page: currentPage - 1 })}>
-            Previous
-          </Button>
-          <span className="text-primary">
-            Page {currentPage + 1} of {pageCount} ({filteredNames.length} components)
-          </span>
-          <Button type="button" variant="outline" size="sm" disabled={currentPage + 1 >= pageCount} onClick={() => patchView({ page: currentPage + 1 })}>
-            Next
-          </Button>
+          {/* Grid of the scope's children (or search matches), each chart aggregating
+              its own subtree. */}
+          <div ref={ref} className="min-h-0 flex-1 overflow-auto bg-white p-[5px]">
+            {gridNames.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                {filter ? "No components match the search." : "No components to show."}
+              </div>
+            ) : (
+              <div
+                className="daisen-dashboard-grid"
+                style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridAutoRows: `${widgetHeight}px` }}
+              >
+                {gridNames.map((name) => (
+                  <DashboardWidget
+                    key={name}
+                    name={name}
+                    width={widgetWidth}
+                    height={widgetHeight}
+                    startTime={viewRange.startTime}
+                    endTime={viewRange.endTime}
+                    dataStartTime={dataRange.startTime}
+                    dataEndTime={dataRange.endTime}
+                    dataPending={dataPending}
+                    primaryAxis={primaryAxis}
+                    secondaryAxis={secondaryAxis}
+                    segments={segmentsData?.segments ?? []}
+                    segmentsEnabled={segmentsData?.enabled ?? false}
+                    onTimeRangeChange={handleRangeChange}
+                    onFocus={(focused) => patchView({ widget: focused })}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
