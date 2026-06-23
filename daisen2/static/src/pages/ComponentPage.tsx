@@ -773,39 +773,91 @@ function AggregatedTimeline({
     for (const v of row) sum += v;
     if (sum > maxTotal) maxTotal = sum;
   }
-  const yScale = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([height - padBottom, padTop]);
+  // Which band is hovered (from this chart or the legend); -1 when none. When a
+  // band is selected we re-baseline the stack so its bottom is a flat line, with
+  // the bands above it growing upward and the bands below it growing downward.
+  const selIdx = highlightedKey !== null ? keys.indexOf(highlightedKey) : -1;
+  const rebaseline = selIdx >= 0;
+
+  // Cumulative height below the selected band, per bin; subtracting it pins that
+  // band's bottom to a flat baseline. Zero everywhere when nothing is selected.
+  const offsets = new Array<number>(numBins).fill(0);
+  if (rebaseline) {
+    for (let i = 0; i < numBins; i++) {
+      let below = 0;
+      for (let k = 0; k < selIdx; k++) below += bins[i][k];
+      offsets[i] = below;
+    }
+  }
+
+  // The un-shifted 0..maxTotal scale drives the invisible hit layer, so which
+  // band the cursor is over is judged on the original layout — re-baselining
+  // never slides a different band under the pointer (which would flicker).
+  const yScaleOrig = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([height - padBottom, padTop]);
+
+  // When a band is selected, fit the shifted stack from -maxBelow to +maxAbove,
+  // with the flat baseline at 0.
+  let renderScale = yScaleOrig;
+  if (rebaseline) {
+    let maxBelow = 0;
+    let maxAbove = 0;
+    for (let i = 0; i < numBins; i++) {
+      let total = 0;
+      for (const v of bins[i]) total += v;
+      if (offsets[i] > maxBelow) maxBelow = offsets[i];
+      if (total - offsets[i] > maxAbove) maxAbove = total - offsets[i];
+    }
+    renderScale = d3.scaleLinear().domain([-maxBelow, Math.max(1, maxAbove)]).range([height - padBottom, padTop]);
+  }
 
   // Each bin covers an equal slice of the range the summary was computed over;
   // place it by its absolute center time so it lines up with the shared axis even
   // mid-pan (just like the per-task bars are placed by their absolute times).
   const binCenter = (i: number) => data.start_time + ((i + 0.5) / numBins) * (data.end_time - data.start_time);
 
-  const areas = keys.map((key, ki) => {
+  const buildArea = (ki: number, scale: d3.ScaleLinear<number, number>, shifted: boolean) => {
     const tops: string[] = [];
     const bots: string[] = [];
     for (let i = 0; i < numBins; i++) {
       let base = 0;
       for (let k = 0; k < ki; k++) base += bins[i][k];
+      if (shifted) base -= offsets[i];
       const top = base + bins[i][ki];
       const x = safeScale(xScale, binCenter(i));
-      tops.push(`${x},${yScale(top)}`);
-      bots.push(`${x},${yScale(base)}`);
+      tops.push(`${x},${safeScale(scale, top)}`);
+      bots.push(`${x},${safeScale(scale, base)}`);
     }
     bots.reverse();
-    return { key, d: `M${tops.join("L")}L${bots.join("L")}Z` };
-  });
+    return `M${tops.join("L")}L${bots.join("L")}Z`;
+  };
 
-  const hasHighlight = highlightedKey !== null;
+  const baselineY = rebaseline ? safeScale(renderScale, 0) : null;
 
   return (
     <svg width={width} height={height} className="block">
-      {areas.map(({ key, d }) => (
+      {/* Visible bands: re-baselined around the selected one, or the plain stack
+          when nothing is selected. Not interactive — the hit layer below (on the
+          original layout) drives hovering so the selection stays put as bands shift. */}
+      {keys.map((key, ki) => (
         <path
           key={key}
-          d={d}
+          d={buildArea(ki, renderScale, rebaseline)}
           fill={colorMap[key] ?? "#999999"}
           stroke="none"
-          opacity={hasHighlight ? (highlightedKey === key ? 1 : 0.12) : 0.9}
+          opacity={rebaseline ? (ki === selIdx ? 1 : 0.5) : 0.9}
+          pointerEvents="none"
+        />
+      ))}
+
+      {baselineY !== null && (
+        <line x1={5} x2={width - 5} y1={baselineY} y2={baselineY} stroke="#475569" strokeWidth={1} opacity={0.7} pointerEvents="none" />
+      )}
+
+      {keys.map((key, ki) => (
+        <path
+          key={`hit-${key}`}
+          d={buildArea(ki, yScaleOrig, false)}
+          fill="transparent"
           className="cursor-pointer"
           onMouseMove={(event) => {
             const svg = event.currentTarget.ownerSVGElement;
@@ -826,7 +878,7 @@ function AggregatedTimeline({
 
       <GapShading gaps={gaps} xScale={xScale} height={height} patternId="count-gap-pattern" />
 
-      <YAxisOverlay yScale={yScale} width={width} />
+      <YAxisOverlay yScale={renderScale} width={width} />
 
       <text x={8} y={15} fontSize="11" fill="#475569" pointerEvents="none" stroke="#ffffff" strokeWidth={2.5} paintOrder="stroke">
         Task count · {data.total.toLocaleString()} tasks{showZoomHint ? " · zoom in for individual tasks" : ""}
@@ -875,27 +927,58 @@ function ComponentMilestoneAreas({
   const kinds = info?.kinds ?? [];
   const maxTotal =
     d3.max(data, (point) => kinds.reduce((sum, kind) => sum + (point.values[kind] ?? 0), 0)) ?? 0;
-  const yScale = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([Math.max(1, xAxisY - 4), 6]);
+  // Which reason is hovered (from this chart or the legend); -1 when none. When a
+  // reason is selected we re-baseline the stack so its band's bottom is a flat
+  // line, with bands above growing upward and below growing downward.
+  const selIdx = highlightedKey !== null ? kinds.indexOf(highlightedKey) : -1;
+  const rebaseline = selIdx >= 0;
+
+  // Cumulative height below the selected reason, per bin; subtracting it pins that
+  // band's bottom to a flat baseline. Zero everywhere when nothing is selected.
+  const offsets = data.map((point) => {
+    if (!rebaseline) return 0;
+    let below = 0;
+    for (let k = 0; k < selIdx; k++) below += point.values[kinds[k]] ?? 0;
+    return below;
+  });
+
+  // The un-shifted scale drives the invisible hit layer, so the hovered band is
+  // judged on the original layout and re-baselining never flickers.
+  const yScaleOrig = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([Math.max(1, xAxisY - 4), 6]);
+
+  let renderScale = yScaleOrig;
+  if (rebaseline) {
+    let maxBelow = 0;
+    let maxAbove = 0;
+    data.forEach((point, idx) => {
+      let total = 0;
+      for (const kind of kinds) total += point.values[kind] ?? 0;
+      if (offsets[idx] > maxBelow) maxBelow = offsets[idx];
+      if (total - offsets[idx] > maxAbove) maxAbove = total - offsets[idx];
+    });
+    renderScale = d3.scaleLinear().domain([-maxBelow, Math.max(1, maxAbove)]).range([Math.max(1, xAxisY - 4), 6]);
+  }
 
   // One stacked-area band per reason: trace the cumulative top edge left-to-right,
   // then the band's base edge right-to-left, and close. Each bin is placed by its
   // absolute center time so the bands line up with the shared axis during a pan.
-  const areas = kinds.map((kind, ki) => {
+  const buildArea = (ki: number, scale: d3.ScaleLinear<number, number>, shifted: boolean) => {
     const tops: string[] = [];
     const bots: string[] = [];
-    for (const point of data) {
+    data.forEach((point, idx) => {
       let base = 0;
       for (let k = 0; k < ki; k++) base += point.values[kinds[k]] ?? 0;
-      const top = base + (point.values[kind] ?? 0);
+      if (shifted) base -= offsets[idx];
+      const top = base + (point.values[kinds[ki]] ?? 0);
       const x = safeScale(xScale, point.time);
-      tops.push(`${x},${safeScale(yScale, top)}`);
-      bots.push(`${x},${safeScale(yScale, base)}`);
-    }
+      tops.push(`${x},${safeScale(scale, top)}`);
+      bots.push(`${x},${safeScale(scale, base)}`);
+    });
     bots.reverse();
-    return { kind, d: tops.length ? `M${tops.join("L")}L${bots.join("L")}Z` : "" };
-  });
+    return tops.length ? `M${tops.join("L")}L${bots.join("L")}Z` : "";
+  };
 
-  const hasHighlight = highlightedKey !== null;
+  const baselineY = rebaseline ? safeScale(renderScale, 0) : null;
 
   return (
     <svg width={width} height={height} className="block">
@@ -910,13 +993,34 @@ function ComponentMilestoneAreas({
       ))}
       <line x1={5} x2={width - 5} y1={xAxisY} y2={xAxisY} stroke="#000" pointerEvents="none" />
 
-      {areas.map(({ kind, d }) =>
-        d ? (
+      {/* Visible bands: re-baselined around the selected reason, or the plain
+          stack otherwise. Not interactive — the hit layer below drives hovering. */}
+      {kinds.map((kind, ki) => {
+        const d = buildArea(ki, renderScale, rebaseline);
+        return d ? (
           <path
             key={kind}
             d={d}
             fill={colorMap[kind] ?? "#9ca3af"}
-            opacity={hasHighlight ? (highlightedKey === kind ? 1 : 0.12) : 0.9}
+            opacity={rebaseline ? (ki === selIdx ? 1 : 0.5) : 0.9}
+            pointerEvents="none"
+          />
+        ) : null;
+      })}
+
+      {baselineY !== null && (
+        <line x1={5} x2={width - 5} y1={baselineY} y2={baselineY} stroke="#475569" strokeWidth={1} opacity={0.7} pointerEvents="none" />
+      )}
+
+      {/* Invisible hit layer on the original layout, so the selection stays put
+          while the visible bands re-baseline. */}
+      {kinds.map((kind, ki) => {
+        const d = buildArea(ki, yScaleOrig, false);
+        return d ? (
+          <path
+            key={`hit-${kind}`}
+            d={d}
+            fill="transparent"
             className="cursor-pointer"
             // Report the reason + time under the cursor: highlight this band (and
             // the matching legend reason), and light the tasks blocked by that
@@ -935,12 +1039,12 @@ function ComponentMilestoneAreas({
           >
             <title>{kind}</title>
           </path>
-        ) : null,
-      )}
+        ) : null;
+      })}
 
       <GapShading gaps={gaps} xScale={xScale} height={xAxisY} patternId="blocking-gap-pattern" />
 
-      <YAxisOverlay yScale={yScale} width={width} />
+      <YAxisOverlay yScale={renderScale} width={width} />
     </svg>
   );
 }
