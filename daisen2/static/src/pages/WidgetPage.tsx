@@ -5,7 +5,7 @@ import TopologyWidget from "../components/TopologyWidget";
 import CodeBrowserWidget from "../components/CodeBrowserWidget";
 
 // The overview widgets that have their own enlarged page, keyed by the id used
-// in /view/<id>. (The blocked-components widget expands to /dashboard instead.)
+// in /view/<id>. (The components widget expands to /dashboard instead.)
 // Each is self-contained, so it renders the same enlarged or in a card; the
 // enlarged form is rendered "bare" — full-bleed, with no card frame.
 const WIDGETS: Record<string, ComponentType<{ bare?: boolean }>> = {

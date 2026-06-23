@@ -161,7 +161,7 @@ func (s *Server) RegisterTraceAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/segments", s.httpSegments)
 	mux.HandleFunc("/api/sim_info", s.httpSimInfo)
 	mux.HandleFunc("/api/topology", s.httpTopology)
-	mux.HandleFunc("/api/blocked", s.httpBlocked)
+	mux.HandleFunc("/api/components", s.httpComponents)
 	mux.HandleFunc("/api/code/ls", s.httpCodeLs)
 	mux.HandleFunc("/api/code/read", s.httpCodeRead)
 
