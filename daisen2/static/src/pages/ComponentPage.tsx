@@ -726,9 +726,9 @@ function AggregatedTimeline({
   size: Size;
   colorMap: Record<string, string>;
   highlightedKey: string | null;
-  // Hovering a band lights it (dimming the rest) and lights the tasks of that kind
-  // active at the cursor's time in the gantt. It deliberately does NOT touch the
-  // side-panel legend — legend hover still drives the highlight the other way.
+  // Hovering a band reports the kind + cursor time so the parent can light the
+  // matching legend row, dim the other bands, and light that kind's tasks at the
+  // cursor time in the gantt. Legend hover drives the same highlight in reverse.
   onHoverKey: (key: string | null, time: number | null) => void;
   segments: Segment[];
   segmentsEnabled: boolean;
@@ -739,9 +739,6 @@ function AggregatedTimeline({
   const height = Math.max(1, size.height);
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
-  // Hovered band is local so it dims this chart only; the legend never reacts to a
-  // chart hover. (highlightedKey, set by legend hover, still dims the bands.)
-  const [hoveredBand, setHoveredBand] = useState<string | null>(null);
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
 
   const gridlines = ticks.map((tick) => (
@@ -795,8 +792,7 @@ function AggregatedTimeline({
     return { key, d: `M${tops.join("L")}L${bots.join("L")}Z` };
   });
 
-  const activeKey = hoveredBand ?? highlightedKey;
-  const hasHighlight = activeKey !== null;
+  const hasHighlight = highlightedKey !== null;
 
   return (
     <svg width={width} height={height} className="block">
@@ -806,10 +802,9 @@ function AggregatedTimeline({
           d={d}
           fill={colorMap[key] ?? "#999999"}
           stroke="none"
-          opacity={hasHighlight ? (activeKey === key ? 1 : 0.12) : 0.9}
+          opacity={hasHighlight ? (highlightedKey === key ? 1 : 0.12) : 0.9}
           className="cursor-pointer"
           onMouseMove={(event) => {
-            setHoveredBand(key);
             const svg = event.currentTarget.ownerSVGElement;
             if (!svg) {
               onHoverKey(key, null);
@@ -818,10 +813,7 @@ function AggregatedTimeline({
             const rect = svg.getBoundingClientRect();
             onHoverKey(key, xScale.invert(event.clientX - rect.left));
           }}
-          onMouseLeave={() => {
-            setHoveredBand(null);
-            onHoverKey(null, null);
-          }}
+          onMouseLeave={() => onHoverKey(null, null)}
         >
           <title>{key}</title>
         </path>
@@ -855,17 +847,21 @@ function ComponentMilestoneAreas({
   segments,
   segmentsEnabled,
   onHoverSegment,
+  onHoverReason,
 }: {
   info: StackedComponentInfo | null;
   range: TimeRange;
   width: number;
   height: number;
   colorMap: Record<string, string>;
-  // A reason hovered in the legend; its band stays opaque while the rest dim.
+  // The highlighted reason (from a legend hover or a band hover): its band stays
+  // opaque while the rest dim.
   highlightedKey: string | null;
   segments: Segment[];
   segmentsEnabled: boolean;
   onHoverSegment: (segment: { kind: string; time: number } | null) => void;
+  // Hovering a band also highlights it (and the matching legend reason); null clears.
+  onHoverReason: (kind: string | null) => void;
 }) {
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
@@ -919,15 +915,20 @@ function ComponentMilestoneAreas({
             fill={colorMap[kind] ?? "#9ca3af"}
             opacity={hasHighlight ? (highlightedKey === kind ? 1 : 0.12) : 0.9}
             className="cursor-pointer"
-            // Report the reason + time under the cursor so hovering a band
-            // highlights the tasks blocked by that reason in the view above.
+            // Report the reason + time under the cursor: highlight this band (and
+            // the matching legend reason), and light the tasks blocked by that
+            // reason at the cursor time in the view above.
             onMouseMove={(event) => {
+              onHoverReason(kind);
               const svg = event.currentTarget.ownerSVGElement;
               if (!svg) return;
               const rect = svg.getBoundingClientRect();
               onHoverSegment({ kind, time: xScale.invert(event.clientX - rect.left) });
             }}
-            onMouseLeave={() => onHoverSegment(null)}
+            onMouseLeave={() => {
+              onHoverReason(null);
+              onHoverSegment(null);
+            }}
           >
             <title>{kind}</title>
           </path>
@@ -1217,13 +1218,15 @@ function ComponentLegend({
           <SectionLabel>Tasks</SectionLabel>
           <ul className="mb-3 mt-2 space-y-0.5">
             {taskKeys.map((key) => {
-              const dimmed = highlightedKey !== null && highlightedKey !== key;
+              const active = highlightedKey === key;
+              const dimmed = highlightedKey !== null && !active;
               return (
                 <li key={key}>
                   <button
                     type="button"
                     className={cn(
                       "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
+                      active && "bg-primary/10",
                       dimmed && "opacity-40",
                     )}
                     onMouseEnter={() => onHighlight(key)}
@@ -1250,13 +1253,15 @@ function ComponentLegend({
           <ul className="mt-2 space-y-0.5">
             {blockingReasons.map((kind) => {
               const color = colorMap[kind] ?? "#9ca3af";
-              const dimmed = highlightedReason !== null && highlightedReason !== kind;
+              const active = highlightedReason === kind;
+              const dimmed = highlightedReason !== null && !active;
               return (
                 <li key={kind}>
                   <button
                     type="button"
                     className={cn(
                       "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
+                      active && "bg-primary/10",
                       dimmed && "opacity-40",
                     )}
                     onMouseEnter={() => onHighlightReason(kind)}
@@ -1784,9 +1789,10 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             colorMap={colorMap}
             highlightedKey={highlightedKey}
             onHoverKey={(key, time) => {
-              // Scope the gantt highlight to the tasks present at the cursor's time
-              // (not all of the kind); the band dims itself locally and the legend
-              // is intentionally left untouched on a chart hover.
+              // Light the matching legend row and dim the other bands, and scope the
+              // gantt highlight to the tasks present at the cursor's time (not all of
+              // the kind).
+              setHighlightedKey(key);
               setHoveredCount(key !== null && time !== null ? { key, time } : null);
             }}
             segments={segmentsData?.segments ?? []}
@@ -1801,7 +1807,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           style={{ height: metricLineHeight }}
           onWheel={handleOverviewWheel}
         >
-          <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={highlightedReason} segments={segmentsData?.segments ?? []} segmentsEnabled={segmentsData?.enabled ?? false} onHoverSegment={setHoveredSegment} />
+          <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={highlightedReason} segments={segmentsData?.segments ?? []} segmentsEnabled={segmentsData?.enabled ?? false} onHoverSegment={setHoveredSegment} onHoverReason={setHighlightedReason} />
         </div>
       </div>
 
