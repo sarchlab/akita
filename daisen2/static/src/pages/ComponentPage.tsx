@@ -1305,17 +1305,9 @@ function sanitizeRange(startTime: number, endTime: number): TimeRange {
 // LocationSubtree renders the whole tree of locations beneath a scope, fully
 // expanded, with every row clickable to jump into that location. Shown in place
 // of the single-level drill-down so the entire structure under a scope is visible.
-function LocationSubtree({
-  nodes,
-  depth,
-  onNavigate,
-}: {
-  nodes: LocationNode[];
-  depth: number;
-  onNavigate: (path: string) => void;
-}) {
+function LocationSubtree({ nodes, onNavigate }: { nodes: LocationNode[]; onNavigate: (path: string) => void }) {
   return (
-    <ul>
+    <ul className="space-y-0.5">
       {nodes.map((node) => {
         const isBranch = node.children.length > 0;
         return (
@@ -1323,16 +1315,27 @@ function LocationSubtree({
             <button
               type="button"
               className={cn(
-                "flex w-full items-center rounded px-1 py-0.5 text-left text-xs hover:bg-muted hover:text-primary",
+                "flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted hover:text-primary",
                 isBranch ? "font-medium text-foreground" : "text-muted-foreground",
               )}
-              style={{ paddingLeft: `${depth * 14 + 4}px` }}
               onClick={() => onNavigate(node.path)}
               title={node.path}
             >
+              {/* A filled dot marks a scope you can descend into, a hollow dot a leaf. */}
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 shrink-0 rounded-full",
+                  isBranch ? "bg-primary/70" : "border border-muted-foreground/50",
+                )}
+              />
               <span className="truncate">{node.name}</span>
             </button>
-            {isBranch && <LocationSubtree nodes={node.children} depth={depth + 1} onNavigate={onNavigate} />}
+            {/* Indent guide: a left border ties each child row back to its parent. */}
+            {isBranch && (
+              <div className="ml-2 border-l border-border pl-1.5">
+                <LocationSubtree nodes={node.children} onNavigate={onNavigate} />
+              </div>
+            )}
           </li>
         );
       })}
@@ -1851,8 +1854,8 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           {scopeChildren.length > 0 && (
             <div className="flex flex-col gap-1 text-xs text-muted-foreground">
               <span>Locations under this scope</span>
-              <div className="max-h-48 overflow-auto rounded border bg-muted/20 py-1">
-                <LocationSubtree nodes={scopeChildren} depth={0} onNavigate={navigateToLocation} />
+              <div className="max-h-56 overflow-auto rounded-md border bg-muted/20 p-1.5">
+                <LocationSubtree nodes={scopeChildren} onNavigate={navigateToLocation} />
               </div>
             </div>
           )}
