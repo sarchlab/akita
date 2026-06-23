@@ -59,7 +59,7 @@
   }
 
   .daisen-brand {
-    @apply mr-5 select-none text-lg font-semibold tracking-normal;
+    @apply mr-5 flex flex-col justify-center select-none text-lg font-semibold tracking-normal;
   }
 
   .daisen-main {

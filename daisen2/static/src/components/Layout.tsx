@@ -4,10 +4,15 @@ import { Bot } from "lucide-react";
 import ChatPanel from "./chat/ChatPanel";
 import { Button } from "./ui/button";
 import { useRenderReadyOnNavigation } from "../hooks/useRenderReady";
+import { useSimInfo } from "../hooks/useSimInfo";
 
 export default function Layout() {
   useRenderReadyOnNavigation();
   const [chatOpen, setChatOpen] = useState(false);
+  // The command that produced this trace (from the exec_info table), shown as a
+  // subtitle under the brand so it is always clear which run is being viewed.
+  const { data: simInfo } = useSimInfo();
+  const command = simInfo?.find((entry) => entry.property === "Command")?.value;
 
   // Other parts of the app can still open the chat via this window event.
   useEffect(() => {
@@ -20,7 +25,15 @@ export default function Layout() {
     <div className="flex h-full flex-col overflow-hidden">
       <nav className="daisen-top-nav">
         <Link to="/" className="daisen-brand">
-          Daisen
+          <span className="leading-none">Daisen</span>
+          {command ? (
+            <span
+              className="mt-0.5 max-w-[45vw] truncate font-mono text-[11px] font-normal leading-none text-slate-400"
+              title={command}
+            >
+              {command}
+            </span>
+          ) : null}
         </Link>
         <Button
           type="button"
