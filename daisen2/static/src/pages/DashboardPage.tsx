@@ -18,7 +18,7 @@ import { useRenderReady } from "../hooks/useRenderReady";
 import { parseView, mergeParams, DASHBOARD_DEFAULTS } from "../utils/viewState.mjs";
 import { buildLocationTree, findNode, leafCount, breadcrumbSegments, type LocationNode } from "../utils/locationTree";
 import { cn } from "../lib/utils";
-import { AXIS_OPTIONS } from "../utils/metrics";
+import { AXIS_OPTIONS, axisColor } from "../utils/metrics";
 
 // Resolve a URL axis param to a known metric key. Accepts the metric key or its
 // human-readable label (shared/agent-generated links sometimes carry the label),
@@ -318,13 +318,12 @@ export default function DashboardPage() {
 
   const axisSelect = (
     label: string,
-    dot: string,
     value: string,
     onChange: (v: string) => void,
   ) => (
     <div className="flex min-w-64 items-center gap-2">
       <span className="flex items-center gap-1 text-sm font-medium">
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: dot }} />
+        <span className="h-2.5 w-2.5 rounded-full" style={{ background: axisColor(value) }} />
         {label}
       </span>
       <Select value={value} onValueChange={onChange}>
@@ -393,8 +392,8 @@ export default function DashboardPage() {
             ))}
           </nav>
         )}
-        {axisSelect("Primary Y-Axis", "#d7191c", primaryAxis, (value) => patchView({ primary: value }))}
-        {axisSelect("Secondary Y-Axis", "#2c7bb6", secondaryAxis, (value) => patchView({ secondary: value }))}
+        {axisSelect("Primary Y-Axis", primaryAxis, (value) => patchView({ primary: value }))}
+        {axisSelect("Secondary Y-Axis", secondaryAxis, (value) => patchView({ secondary: value }))}
       </form>
 
       {loading ? (

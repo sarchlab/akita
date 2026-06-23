@@ -4,7 +4,7 @@ import { useCompInfo } from "../hooks/useCompInfo";
 import type { Segment } from "../types/task";
 import TimeSeriesChart from "./charts/TimeSeriesChart";
 import { Card } from "./ui/card";
-import { axisLabel } from "../utils/metrics";
+import { axisLabel, axisColor } from "../utils/metrics";
 
 interface DashboardWidgetProps {
   name: string;
@@ -36,8 +36,6 @@ interface DashboardWidgetProps {
 
 const HEADER_HEIGHT = 30;
 const LEGEND_HEIGHT = 18;
-const PRIMARY_COLOR = "#d7191c";
-const SECONDARY_COLOR = "#2c7bb6";
 const iconButton =
   "shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -68,6 +66,8 @@ export default function DashboardWidget({
   // Card border (2) + the chart row's px-1 (8); a couple px of slack avoids a
   // sub-pixel horizontal scrollbar while still filling the card.
   const chartWidth = Math.max(160, width - 12);
+  const primaryColor = axisColor(primaryAxis);
+  const secondaryColor = axisColor(secondaryAxis);
 
   const href = `/component?name=${encodeURIComponent(name)}&starttime=${startTime}&endtime=${endTime}`;
 
@@ -123,8 +123,8 @@ export default function DashboardWidget({
           segmentsEnabled={segmentsEnabled}
           onTimeRangeChange={onTimeRangeChange}
           series={[
-            { info: primaryAxis === "-" ? null : primary.info, color: PRIMARY_COLOR, side: "left" },
-            { info: secondaryAxis === "-" ? null : secondary.info, color: SECONDARY_COLOR, side: "right" },
+            { info: primaryAxis === "-" ? null : primary.info, color: primaryColor, side: "left" },
+            { info: secondaryAxis === "-" ? null : secondary.info, color: secondaryColor, side: "right" },
           ]}
         />
       </div>
@@ -133,13 +133,13 @@ export default function DashboardWidget({
         <div className="flex h-[18px] shrink-0 items-center gap-3 overflow-hidden border-t px-2 text-[10px] leading-none text-muted-foreground">
           {primaryAxis !== "-" ? (
             <span className="flex min-w-0 items-center gap-1">
-              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: PRIMARY_COLOR }} />
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: primaryColor }} />
               <span className="truncate">{axisLabel(primaryAxis)}</span>
             </span>
           ) : null}
           {secondaryAxis !== "-" ? (
             <span className="flex min-w-0 items-center gap-1">
-              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: SECONDARY_COLOR }} />
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: secondaryColor }} />
               <span className="truncate">{axisLabel(secondaryAxis)}</span>
             </span>
           ) : null}
