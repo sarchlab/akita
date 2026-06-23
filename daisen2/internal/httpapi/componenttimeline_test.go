@@ -33,7 +33,7 @@ func TestComponentTimelineScopeAggregatesSubtree(t *testing.T) {
 		(3, 0, 'misc',    'Other',   3, 0, 10)`)
 
 	// scope "ROB" aggregates its two children but NOT the sibling "ROBOT.x".
-	sub := reader.ComponentTimeline(context.Background(), "ROB", 0, 10, 1)
+	sub := reader.ComponentTimeline(context.Background(), "ROB", 0, 10, 1, false)
 	if sub.Total != 2 {
 		t.Fatalf("scope ROB Total = %d, want 2 (req_in + req_out, not ROBOT.x)", sub.Total)
 	}
@@ -42,9 +42,52 @@ func TestComponentTimelineScopeAggregatesSubtree(t *testing.T) {
 	}
 
 	// A leaf scope matches only itself.
-	leaf := reader.ComponentTimeline(context.Background(), "ROB.req_in", 0, 10, 1)
+	leaf := reader.ComponentTimeline(context.Background(), "ROB.req_in", 0, 10, 1, false)
 	if leaf.Total != 1 {
 		t.Fatalf("scope ROB.req_in Total = %d, want 1", leaf.Total)
+	}
+}
+
+// TestComponentTimelineGroupByKind verifies that groupByKind collapses tasks that
+// share a kind but differ in what into one band, while the default kind-what
+// grouping keeps them distinct.
+func TestComponentTimelineGroupByKind(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
+	reader := NewSQLiteTraceReader(dbPath)
+	reader.Init()
+	defer reader.Close()
+
+	exec := func(q string) {
+		if _, err := reader.Exec(q); err != nil {
+			t.Fatalf("exec %q: %v", q, err)
+		}
+	}
+	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO location (ID, Locale) VALUES (1, 'L1.bank')`)
+	exec(`CREATE TABLE trace (
+		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
+		Location INTEGER, StartTime REAL, EndTime REAL)`)
+	// Two req_in tasks differing only in What, plus one req_out.
+	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+		(1, 0, 'req_in',  'ReadReq',  1, 0, 10),
+		(2, 0, 'req_in',  'WriteReq', 1, 0, 10),
+		(3, 0, 'req_out', 'ReadReq',  1, 0, 10)`)
+
+	kindWhat := reader.ComponentTimeline(context.Background(), "L1.bank", 0, 10, 1, false)
+	if len(kindWhat.Keys) != 3 {
+		t.Fatalf("kind-what keys = %v, want 3 distinct", kindWhat.Keys)
+	}
+
+	byKind := reader.ComponentTimeline(context.Background(), "L1.bank", 0, 10, 1, true)
+	if len(byKind.Keys) != 2 {
+		t.Fatalf("by-kind keys = %v, want 2 (req_in, req_out)", byKind.Keys)
+	}
+	if byKind.Keys[0] != "req_in" || byKind.Keys[1] != "req_out" {
+		t.Fatalf("by-kind keys = %v, want [req_in req_out]", byKind.Keys)
+	}
+	// Occupancy is preserved: both groupings cover the same three tasks.
+	if byKind.Total != 3 || kindWhat.Total != 3 {
+		t.Fatalf("Total mismatch: byKind=%d kindWhat=%d, want 3 each", byKind.Total, kindWhat.Total)
 	}
 }
 
@@ -76,7 +119,7 @@ func TestComponentTimelineRespectsHalfOpenBins(t *testing.T) {
 		(1, 0, 'req_in', 'ReadReq', 1, 0, 10),
 		(2, 0, 'req_in', 'ReadReq', 1, 0, 20)`)
 
-	resp := reader.ComponentTimeline(context.Background(), "ROB", 0, 20, 2)
+	resp := reader.ComponentTimeline(context.Background(), "ROB", 0, 20, 2, false)
 
 	if resp.Total != 2 {
 		t.Fatalf("Total = %d, want 2", resp.Total)
@@ -176,7 +219,7 @@ func TestComponentTimelineScopeIsCaseSensitive(t *testing.T) {
 		(1, 0, 'req_in', 'ReadReq', 1, 0, 10),
 		(2, 0, 'req_in', 'ReadReq', 2, 0, 10)`)
 
-	resp := reader.ComponentTimeline(context.Background(), "TLB", 0, 10, 1)
+	resp := reader.ComponentTimeline(context.Background(), "TLB", 0, 10, 1, false)
 	if resp.Total != 1 {
 		t.Fatalf("scope TLB Total = %d, want 1 (case-sensitive: excludes tlb.req_in)", resp.Total)
 	}

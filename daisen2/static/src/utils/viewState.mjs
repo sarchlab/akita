@@ -39,7 +39,8 @@ export const DASHBOARD_DEFAULTS = {
  * @property {string} [kind]       task: kind filter
  * @property {string} [sel]        task: selected task (browse mode)
  * @property {string} [filter]     dashboard: component-name filter
- * @property {number} [page]       dashboard: 0-indexed grid page
+ * @property {string} [scope]      dashboard: drill-down location (grid shows its children)
+ * @property {number} [page]       dashboard: 0-indexed grid page (legacy)
  * @property {string} [primary]    dashboard: primary Y-axis metric
  * @property {string} [secondary]  dashboard: secondary Y-axis metric
  * @property {string} [widget]     dashboard: when set, render ONLY this component's chart
@@ -129,6 +130,9 @@ function buildView(view) {
       // equal single-widget views encode identically.
       if (!singleWidget) {
         setStr(params, "filter", view.filter);
+        // scope is the drill-down location whose children the grid shows (empty =
+        // the top-level components). Replaces the old page-based pagination.
+        setStr(params, "scope", view.scope);
         if (isFiniteNum(view.page) && view.page > 0) {
           params.set("page", String(Math.trunc(view.page)));
         }
@@ -248,6 +252,8 @@ export function parseView(pathname, query) {
       if (e !== undefined) v.endTime = e;
       const filter = params.get("filter");
       if (filter) v.filter = filter;
+      const scope = params.get("scope");
+      if (scope) v.scope = scope;
       const page = paramToNum(params.get("page"));
       if (page !== undefined && page > 0) v.page = Math.trunc(page);
       const primary = params.get("primary");

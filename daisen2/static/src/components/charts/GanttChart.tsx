@@ -89,7 +89,7 @@ export default function GanttChart({
   const width = 1200;
   const innerWidth = width - MARGIN.left - MARGIN.right;
   const xScale = d3.scaleLinear().domain([startTime, endTime]).range([MARGIN.left, width - MARGIN.right]);
-  const colorMap = buildColorMapFromKeys([...layout.map(taskColorKey), ...milestoneSteps.map((step) => step.kind)]);
+  const colorMap = buildColorMapFromKeys([...layout.map((task) => taskColorKey(task)), ...milestoneSteps.map((step) => step.kind)]);
   const xTicks = xScale.ticks(12);
   const gaps = segmentsEnabled ? gapSegments(segments, startTime, endTime) : [];
 

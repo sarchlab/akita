@@ -7,11 +7,12 @@ import (
 	"net/http"
 )
 
-// ComponentResidency ranks a component by the total in-flight time of its tasks
-// (Σ EndTime − StartTime). It is a cheap, milestone-free proxy for "where the
-// simulation spends time", so the busiest / most-contended components rank first.
+// ComponentResidency ranks a component scope by the total in-flight time of its
+// tasks (Σ EndTime − StartTime), summed over every location beneath that scope. It
+// is a cheap, milestone-free proxy for "where the simulation spends time", so the
+// busiest / most-contended components rank first.
 type ComponentResidency struct {
-	Component string  `json:"component"`
+	Component string  `json:"component"` // component scope (first dotted segment)
 	TaskTime  float64 `json:"task_time"`
 }
 
@@ -21,18 +22,29 @@ type ComponentResidency struct {
 const residencyIndex = `
 CREATE INDEX IF NOT EXISTS idx_trace_loc_times ON trace(Location, StartTime, EndTime)`
 
-// residencyQuery sums each component's total task time. It groups by the integer
-// Location first (one covering-index scan) and joins the handful of location
-// names afterward, keeping the heavy work on the index.
+// residencyQuery sums task time per location and rolls it up to the component
+// scope — the first dotted segment of the location name (e.g. "AT.Bottom.incoming"
+// -> "AT") — so the ranking is by whole components (matching the dashboard's
+// top-level grouping) rather than individual one-kind location facets. It groups
+// by the integer Location first (one covering-index scan) and joins the handful of
+// location names afterward, keeping the heavy work on the index; the cheap outer
+// GROUP BY then rolls those per-location sums up to their scope.
 const residencyQuery = `
-SELECT loc.Locale AS component, g.task_time
+SELECT
+    CASE
+        WHEN instr(loc.Locale, '.') > 0
+        THEN substr(loc.Locale, 1, instr(loc.Locale, '.') - 1)
+        ELSE loc.Locale
+    END AS component,
+    SUM(g.task_time) AS task_time
 FROM (
     SELECT Location, SUM(EndTime - StartTime) AS task_time
     FROM trace
     GROUP BY Location
 ) g
 JOIN location loc ON g.Location = loc.ID
-ORDER BY g.task_time DESC`
+GROUP BY component
+ORDER BY task_time DESC`
 
 // ComponentsByResidency returns components ranked by total task time, most first.
 // A trace without a trace/location table (or one the query cannot run on) yields

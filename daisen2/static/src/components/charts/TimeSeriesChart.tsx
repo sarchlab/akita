@@ -3,7 +3,8 @@ import { useRef } from "react";
 import type { MouseEvent, PointerEvent, WheelEvent } from "react";
 import type { ComponentInfo } from "../../hooks/useCompInfo";
 import type { Segment } from "../../types/task";
-import { smartString } from "../../utils/smartValue";
+import { formatSI } from "../../utils/siFormat";
+import { formatVirtualTime } from "../../lib/time";
 
 interface Series {
   info: ComponentInfo | null;
@@ -193,7 +194,7 @@ export default function TimeSeriesChart({
             <g key={tick} transform={`translate(0, ${safeScale(leftScale, tick)})`}>
               <line x1="-4" x2="0" stroke="#94a3b8" />
               <text x="-8" dy="0.32em" textAnchor="end">
-                {d3.format(".1e")(tick)}
+                {formatSI(tick)}
               </text>
             </g>
           ))}
@@ -201,7 +202,7 @@ export default function TimeSeriesChart({
             <g key={tick} transform={`translate(${innerWidth}, ${safeScale(rightScale, tick)})`}>
               <line x1="0" x2="4" stroke="#94a3b8" />
               <text x="8" dy="0.32em">
-                {d3.format(".1e")(tick)}
+                {formatSI(tick)}
               </text>
             </g>
           ))}
@@ -209,7 +210,7 @@ export default function TimeSeriesChart({
             <g key={tick} transform={`translate(${safeScale(xScale, tick)}, ${innerHeight})`}>
               <line y2="4" stroke="#94a3b8" />
               <text y="17" textAnchor="middle">
-                {smartString(tick)}
+                {formatVirtualTime(tick)}
               </text>
             </g>
           ))}

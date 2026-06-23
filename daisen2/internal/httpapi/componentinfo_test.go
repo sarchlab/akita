@@ -121,6 +121,34 @@ func TestComponentInfoBinsReqMetricsWithSQLAggregation(t *testing.T) {
 	assertValues(t, avgLatency.Data, []float64{0, 0, 10, 0})
 }
 
+func TestComponentInfoAggregatesSubtree(t *testing.T) {
+	reader := newTestTraceReader(t)
+	exec := func(q string) {
+		if _, err := reader.Exec(q); err != nil {
+			t.Fatalf("exec %q: %v", q, err)
+		}
+	}
+	exec(`INSERT INTO location (ID, Locale) VALUES (10, 'C.in'), (11, 'C.out'), (12, 'Cousin.in')`)
+	// C.in: 2 req_in, C.out: 1 req_in (all start in bin 0). Cousin.in: 2 — a
+	// differently-prefixed sibling that scope "C" must NOT pull in.
+	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+		(1, 0, 'req_in', 'R', 10, 1, 5),
+		(2, 0, 'req_in', 'R', 10, 2, 6),
+		(3, 0, 'req_in', 'R', 11, 3, 7),
+		(4, 0, 'req_in', 'R', 12, 1, 5),
+		(5, 0, 'req_in', 'R', 12, 1, 5)`)
+	server := &Server{traceReader: reader}
+
+	// scope "C" aggregates C.in + C.out = 3 req_in tasks in bin 0 (3/binDuration =
+	// 0.3), excluding the sibling "Cousin.in".
+	agg := server.calculateReqIn(context.Background(), "C", 0, 40, 4)
+	assertValues(t, agg.Data, []float64{0.3, 0, 0, 0})
+
+	// A leaf scope still matches only itself.
+	leaf := server.calculateReqIn(context.Background(), "C.in", 0, 40, 4)
+	assertValues(t, leaf.Data, []float64{0.2, 0, 0, 0})
+}
+
 func TestComponentInfoUsesSweepForTimeWeightedCounts(t *testing.T) {
 	reader := newTestTraceReader(t)
 	insertTraceRows(t, reader)
@@ -129,21 +157,53 @@ func TestComponentInfoUsesSweepForTimeWeightedCounts(t *testing.T) {
 	concurrent := server.calculateConcurrentTask(
 		context.Background(), nil, "A", "ConcurrentTask", 0, 20, 4)
 	assertValues(t, concurrent.Data, []float64{1, 2, 2, 1})
+}
 
+// TestBufferOccupancyFromPortTasks verifies that the incoming-buffer occupancy is
+// split into request vs response buffer pressure by the message What ("*Req" /
+// "*Rsp"), and that pending request out is the occupancy of "req_out" tasks — all
+// filtered by kind/what and aggregated across the subtree.
+func TestBufferOccupancyFromPortTasks(t *testing.T) {
+	reader := newTestTraceReader(t)
+	exec := func(q string) {
+		if _, err := reader.Exec(q); err != nil {
+			t.Fatalf("exec %q: %v", q, err)
+		}
+	}
+	exec(`INSERT INTO location (ID, Locale) VALUES (10, 'D.Top.incoming'), (11, 'D.req_out')`)
+	// Buffered requests/responses in the incoming buffer, using both the short
+	// ("*Req"/"*Rsp") and the long ("*Request"/"*Response") message-type naming, plus
+	// one outgoing request still awaiting its response.
+	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+		(200, 0, 'incoming_buffer', 'ReadReq',          10, 0, 15),
+		(201, 0, 'incoming_buffer', 'DataReadyRsp',     10, 5, 20),
+		(203, 0, 'incoming_buffer', 'DataMoveRequest',  10, 0, 5),
+		(204, 0, 'incoming_buffer', 'DataMoveResponse', 10, 15, 20),
+		(202, 0, 'req_out',         'ReadReq',          11, 0, 10)`)
+	server := &Server{traceReader: reader}
+
+	// Request buffer pressure: ReadReq [0,15) plus the long-form DataMoveRequest [0,5).
+	requestBP := server.calculateRequestBufferPressure(
+		context.Background(), nil, "D", "RequestBufferPressure", 0, 20, 4)
+	assertValues(t, requestBP.Data, []float64{2, 1, 1, 0})
+
+	// Response buffer pressure: DataReadyRsp [5,20) plus the long-form
+	// DataMoveResponse [15,20).
+	responseBP := server.calculateResponseBufferPressure(
+		context.Background(), nil, "D", "ResponseBufferPressure", 0, 20, 4)
+	assertValues(t, responseBP.Data, []float64{0, 1, 1, 2})
+
+	// Pending request out: the req_out task [0,10).
 	pendingReqOut := server.calculatePendingReqOut(
-		context.Background(), nil, "A", "PendingReqOut", 0, 20, 4)
-	assertValues(t, pendingReqOut.Data, []float64{1, 2, 1, 0})
-
-	bufferPressure := server.calculateBufferPressure(
-		context.Background(), nil, "C", "BufferPressure", 0, 20, 4)
-	assertValues(t, bufferPressure.Data, []float64{1, 1, 0, 0})
+		context.Background(), nil, "D", "PendingReqOut", 0, 20, 4)
+	assertValues(t, pendingReqOut.Data, []float64{1, 1, 0, 0})
 }
 
 func TestListTaskIntervalsLeanFetch(t *testing.T) {
 	reader := newTestTraceReader(t)
 	insertTraceRows(t, reader)
 
-	intervals := reader.listTaskIntervals(context.Background(), "A", 0, 20)
+	intervals := reader.listTaskIntervals(context.Background(), "A", "", nil, 0, 20)
 	if len(intervals) == 0 {
 		t.Fatal("expected intervals for location A")
 	}

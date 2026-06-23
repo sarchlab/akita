@@ -73,6 +73,13 @@ export function findNode(root: LocationNode, path: string): LocationNode | null 
   return node;
 }
 
+// leafCount is the number of leaf facets under a node — what a component chart's
+// aggregate is summed over, surfaced on the widget's "aggregated" badge.
+export function leafCount(node: LocationNode): number {
+  if (node.children.length === 0) return 1;
+  return node.children.reduce((sum, child) => sum + leafCount(child), 0);
+}
+
 // isInternalNode reports whether the path names a node that has children, i.e. a
 // component/port to drill into rather than a single task row.
 export function isInternalNode(root: LocationNode, path: string): boolean {
