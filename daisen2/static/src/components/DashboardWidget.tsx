@@ -1,8 +1,9 @@
 import { Link } from "react-router-dom";
-import { Maximize2 } from "lucide-react";
+import { Maximize2, ExternalLink } from "lucide-react";
 import { useCompInfo } from "../hooks/useCompInfo";
 import type { Segment } from "../types/task";
 import TimeSeriesChart from "./charts/TimeSeriesChart";
+import { Card } from "./ui/card";
 
 interface DashboardWidgetProps {
   name: string;
@@ -18,10 +19,19 @@ interface DashboardWidgetProps {
   segments: Segment[];
   segmentsEnabled: boolean;
   onTimeRangeChange: (range: { startTime: number; endTime: number }) => void;
-  // When provided, renders a "focus" control that asks the parent to show only
+  // When provided, renders an "expand" control that asks the parent to show only
   // this widget (sets the dashboard's `widget` URL param).
   onFocus?: (name: string) => void;
+  // When the chart sums a multi-facet subtree (an internal node), mark it so the
+  // reader knows the curve is an aggregate, not a single location. facetCount is
+  // the number of leaf facets summed, shown for context.
+  aggregated?: boolean;
+  facetCount?: number;
 }
+
+const HEADER_HEIGHT = 30;
+const iconButton =
+  "shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export default function DashboardWidget({
   name,
@@ -38,50 +48,61 @@ export default function DashboardWidget({
   segmentsEnabled,
   onTimeRangeChange,
   onFocus,
+  aggregated,
+  facetCount,
 }: DashboardWidgetProps) {
   const primary = useCompInfo(name, primaryAxis, dataStartTime, dataEndTime);
   const secondary = useCompInfo(name, secondaryAxis, dataStartTime, dataEndTime);
   const hasActiveAxis = primaryAxis !== "-" || secondaryAxis !== "-";
   const dataUpdating = (dataPending && hasActiveAxis) || primary.loading || secondary.loading;
-  const chartHeight = Math.max(70, height - 28);
-  const chartWidth = Math.max(160, width - 18);
+  const chartHeight = Math.max(70, height - HEADER_HEIGHT);
+  const chartWidth = Math.max(160, width - 14);
 
   const href = `/component?name=${encodeURIComponent(name)}&starttime=${startTime}&endtime=${endTime}`;
 
   return (
-    <Link className="daisen-widget block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" style={{ height }} to={href}>
-      <div className="daisen-widget-title">
-        <span className="min-w-0 flex-1 truncate hover:text-primary" title={name}>
+    <Card className="flex flex-col overflow-hidden border-slate-300 p-0" style={{ height }}>
+      {/* Header: name + (aggregate marker / updating) on the left, actions right. */}
+      <div className="flex h-[30px] shrink-0 items-center gap-1.5 border-b px-2">
+        <span className="min-w-0 truncate text-sm font-semibold" title={name}>
           {name}
         </span>
-        {onFocus ? (
-          <button
-            type="button"
-            className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            title="Focus this widget"
-            aria-label={`Focus ${name}`}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onFocus(name);
-            }}
+        {aggregated ? (
+          <span
+            className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary"
+            title={`Aggregated: summed over ${facetCount ?? "all"} leaf facets in the ${name} subtree`}
           >
-            <Maximize2 className="h-3.5 w-3.5" />
-          </button>
+            {facetCount ? `Σ ${facetCount} facets` : "aggregated"}
+          </span>
         ) : null}
         {dataUpdating ? (
           <span
             className="daisen-widget-update-indicator"
             title={dataPending ? "Waiting to refresh chart data" : "Refreshing chart data"}
-            aria-label={dataPending ? "Waiting to refresh chart data" : "Refreshing chart data"}
             aria-live="polite"
           >
             <span className="daisen-widget-update-spinner" aria-hidden="true" />
             Updating
           </span>
         ) : null}
+        <span className="flex-1" />
+        <Link to={href} className={iconButton} title="Open the detailed component view" aria-label={`Open ${name} detail view`}>
+          <ExternalLink className="h-3.5 w-3.5" />
+        </Link>
+        {onFocus ? (
+          <button
+            type="button"
+            className={iconButton}
+            title="Expand this chart to fill the dashboard"
+            aria-label={`Expand ${name}`}
+            onClick={() => onFocus(name)}
+          >
+            <Maximize2 className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
       </div>
-      <div data-widget-name={name}>
+
+      <div className="min-h-0 flex-1 px-1" data-widget-name={name}>
         <TimeSeriesChart
           width={chartWidth}
           height={chartHeight}
@@ -96,9 +117,10 @@ export default function DashboardWidget({
           ]}
         />
       </div>
+
       {(primary.error || secondary.error) && (
-        <div className="truncate text-xs text-destructive">{primary.error ?? secondary.error}</div>
+        <div className="truncate px-2 pb-1 text-xs text-destructive">{primary.error ?? secondary.error}</div>
       )}
-    </Link>
+    </Card>
   );
 }

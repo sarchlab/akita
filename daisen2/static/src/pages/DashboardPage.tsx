@@ -105,6 +105,13 @@ function flatMatches(root: LocationNode, search: string): string[] {
   return out;
 }
 
+// leafCount is the number of leaf facets under a node — what a component chart's
+// aggregate is summed over, surfaced on the widget's "aggregated" badge.
+function leafCount(node: LocationNode): number {
+  if (node.children.length === 0) return 1;
+  return node.children.reduce((sum, child) => sum + leafCount(child), 0);
+}
+
 // DashboardTree is the sidebar navigator: the location hierarchy, every node
 // clickable to scope the grid to its children. The current scope is highlighted.
 function DashboardTree({
@@ -264,6 +271,9 @@ export default function DashboardPage() {
     return scope ? [scope] : [];
   }, [root, scope, filter]);
 
+  const widgetNode = widget ? findNode(root, widget) : null;
+  const widgetAggregated = !!widgetNode && widgetNode.children.length > 0;
+
   const { ref, size } = useElementSize<HTMLDivElement>();
   // Fewer, larger charts: 3 across on a wide screen, 2 on a medium one, 1 when
   // narrow — so each figure has room to breathe.
@@ -376,6 +386,8 @@ export default function DashboardPage() {
             segments={segmentsData?.segments ?? []}
             segmentsEnabled={segmentsData?.enabled ?? false}
             onTimeRangeChange={handleRangeChange}
+            aggregated={widgetAggregated}
+            facetCount={widgetAggregated && widgetNode ? leafCount(widgetNode) : undefined}
           />
         </div>
       ) : (
@@ -417,25 +429,31 @@ export default function DashboardPage() {
                 className="daisen-dashboard-grid"
                 style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridAutoRows: `${widgetHeight}px` }}
               >
-                {gridNames.map((name) => (
-                  <DashboardWidget
-                    key={name}
-                    name={name}
-                    width={widgetWidth}
-                    height={widgetHeight}
-                    startTime={viewRange.startTime}
-                    endTime={viewRange.endTime}
-                    dataStartTime={dataRange.startTime}
-                    dataEndTime={dataRange.endTime}
-                    dataPending={dataPending}
-                    primaryAxis={primaryAxis}
-                    secondaryAxis={secondaryAxis}
-                    segments={segmentsData?.segments ?? []}
-                    segmentsEnabled={segmentsData?.enabled ?? false}
-                    onTimeRangeChange={handleRangeChange}
-                    onFocus={(focused) => patchView({ widget: focused })}
-                  />
-                ))}
+                {gridNames.map((name) => {
+                  const node = findNode(root, name);
+                  const aggregated = !!node && node.children.length > 0;
+                  return (
+                    <DashboardWidget
+                      key={name}
+                      name={name}
+                      width={widgetWidth}
+                      height={widgetHeight}
+                      startTime={viewRange.startTime}
+                      endTime={viewRange.endTime}
+                      dataStartTime={dataRange.startTime}
+                      dataEndTime={dataRange.endTime}
+                      dataPending={dataPending}
+                      primaryAxis={primaryAxis}
+                      secondaryAxis={secondaryAxis}
+                      segments={segmentsData?.segments ?? []}
+                      segmentsEnabled={segmentsData?.enabled ?? false}
+                      onTimeRangeChange={handleRangeChange}
+                      onFocus={(focused) => patchView({ widget: focused })}
+                      aggregated={aggregated}
+                      facetCount={aggregated && node ? leafCount(node) : undefined}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>
