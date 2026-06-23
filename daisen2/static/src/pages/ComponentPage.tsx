@@ -738,6 +738,10 @@ function AggregatedTimeline({
   // When the per-task gantt is not shown, hint that zooming in reveals it.
   showZoomHint: boolean;
 }) {
+  // The selected band's flat baseline (task-count units) and which band it is for,
+  // recorded once per selection so re-baselining centres the band on the pointer
+  // where it was grabbed and then holds still while it stays selected.
+  const anchorRef = useRef<{ key: string; baseValue: number } | null>(null);
   const width = Math.max(1, size.width);
   const height = Math.max(1, size.height);
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
@@ -790,24 +794,22 @@ function AggregatedTimeline({
     }
   }
 
-  // The un-shifted 0..maxTotal scale drives the invisible hit layer, so which
-  // band the cursor is over is judged on the original layout — re-baselining
-  // never slides a different band under the pointer (which would flicker).
-  const yScaleOrig = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([height - padBottom, padTop]);
+  const yScale = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([height - padBottom, padTop]);
 
-  // When a band is selected, fit the shifted stack from -maxBelow to +maxAbove,
-  // with the flat baseline at 0.
-  let renderScale = yScaleOrig;
+  // The selected band's flat bottom, in task-count units. It is anchored so the
+  // band is centred on the pointer at the bin it was grabbed in (recorded in the
+  // hit layer's onMouseMove), so the band never jumps out from under the cursor.
+  // With no pointer over the chart (a legend hover) it centres in the view.
+  let baseValue = 0;
   if (rebaseline) {
-    let maxBelow = 0;
-    let maxAbove = 0;
-    for (let i = 0; i < numBins; i++) {
-      let total = 0;
-      for (const v of bins[i]) total += v;
-      if (offsets[i] > maxBelow) maxBelow = offsets[i];
-      if (total - offsets[i] > maxAbove) maxAbove = total - offsets[i];
+    if (anchorRef.current && anchorRef.current.key === keys[selIdx]) {
+      baseValue = anchorRef.current.baseValue;
+    } else {
+      let meanThickness = 0;
+      for (let i = 0; i < numBins; i++) meanThickness += bins[i][selIdx];
+      meanThickness /= numBins;
+      baseValue = yScale.invert((padTop + height - padBottom) / 2) - meanThickness / 2;
     }
-    renderScale = d3.scaleLinear().domain([-maxBelow, Math.max(1, maxAbove)]).range([height - padBottom, padTop]);
   }
 
   // Each bin covers an equal slice of the range the summary was computed over;
@@ -815,23 +817,27 @@ function AggregatedTimeline({
   // mid-pan (just like the per-task bars are placed by their absolute times).
   const binCenter = (i: number) => data.start_time + ((i + 0.5) / numBins) * (data.end_time - data.start_time);
 
-  const buildArea = (ki: number, scale: d3.ScaleLinear<number, number>, shifted: boolean) => {
+  // shifted: re-baseline so the selected band sits on the flat `baseValue` line —
+  // bands above grow up, bands below grow down. Un-shifted is the plain stack used
+  // for the invisible hit layer, so the cursor's band is judged on the original
+  // layout and the selection stays put while the visible bands move.
+  const buildArea = (ki: number, shifted: boolean) => {
     const tops: string[] = [];
     const bots: string[] = [];
     for (let i = 0; i < numBins; i++) {
       let base = 0;
       for (let k = 0; k < ki; k++) base += bins[i][k];
-      if (shifted) base -= offsets[i];
+      if (shifted) base += baseValue - offsets[i];
       const top = base + bins[i][ki];
       const x = safeScale(xScale, binCenter(i));
-      tops.push(`${x},${safeScale(scale, top)}`);
-      bots.push(`${x},${safeScale(scale, base)}`);
+      tops.push(`${x},${safeScale(yScale, top)}`);
+      bots.push(`${x},${safeScale(yScale, base)}`);
     }
     bots.reverse();
     return `M${tops.join("L")}L${bots.join("L")}Z`;
   };
 
-  const baselineY = rebaseline ? safeScale(renderScale, 0) : null;
+  const baselineY = rebaseline ? safeScale(yScale, baseValue) : null;
 
   return (
     <svg width={width} height={height} className="block">
@@ -841,7 +847,7 @@ function AggregatedTimeline({
       {keys.map((key, ki) => (
         <path
           key={key}
-          d={buildArea(ki, renderScale, rebaseline)}
+          d={buildArea(ki, rebaseline)}
           fill={colorMap[key] ?? "#999999"}
           stroke="none"
           opacity={rebaseline ? (ki === selIdx ? 1 : 0.5) : 0.9}
@@ -856,7 +862,7 @@ function AggregatedTimeline({
       {keys.map((key, ki) => (
         <path
           key={`hit-${key}`}
-          d={buildArea(ki, yScaleOrig, false)}
+          d={buildArea(ki, false)}
           fill="transparent"
           className="cursor-pointer"
           onMouseMove={(event) => {
@@ -866,9 +872,21 @@ function AggregatedTimeline({
               return;
             }
             const rect = svg.getBoundingClientRect();
-            onHoverKey(key, xScale.invert(event.clientX - rect.left));
+            const time = xScale.invert(event.clientX - rect.left);
+            // Centre this band on the pointer at the bin under it, recorded once
+            // per selection so the flat baseline holds still while it stays hovered.
+            if (!anchorRef.current || anchorRef.current.key !== key) {
+              const frac = (time - data.start_time) / Math.max(1e-9, data.end_time - data.start_time);
+              const bi = Math.min(numBins - 1, Math.max(0, Math.floor(frac * numBins)));
+              const cursorVal = yScale.invert(event.clientY - rect.top);
+              anchorRef.current = { key, baseValue: cursorVal - bins[bi][ki] / 2 };
+            }
+            onHoverKey(key, time);
           }}
-          onMouseLeave={() => onHoverKey(null, null)}
+          onMouseLeave={() => {
+            anchorRef.current = null;
+            onHoverKey(null, null);
+          }}
         >
           <title>{key}</title>
         </path>
@@ -878,7 +896,7 @@ function AggregatedTimeline({
 
       <GapShading gaps={gaps} xScale={xScale} height={height} patternId="count-gap-pattern" />
 
-      <YAxisOverlay yScale={renderScale} width={width} />
+      <YAxisOverlay yScale={yScale} width={width} />
 
       <text x={8} y={15} fontSize="11" fill="#475569" pointerEvents="none" stroke="#ffffff" strokeWidth={2.5} paintOrder="stroke">
         Task count · {data.total.toLocaleString()} tasks{showZoomHint ? " · zoom in for individual tasks" : ""}
@@ -918,6 +936,9 @@ function ComponentMilestoneAreas({
   // Hovering a band also highlights it (and the matching legend reason); null clears.
   onHoverReason: (kind: string | null) => void;
 }) {
+  // The selected reason's flat baseline and which reason it is for, recorded once
+  // per selection so re-baselining centres the band on the pointer and holds still.
+  const anchorRef = useRef<{ key: string; baseValue: number } | null>(null);
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
   const xAxisY = Math.max(0, height - 20);
@@ -942,43 +963,46 @@ function ComponentMilestoneAreas({
     return below;
   });
 
-  // The un-shifted scale drives the invisible hit layer, so the hovered band is
-  // judged on the original layout and re-baselining never flickers.
-  const yScaleOrig = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([Math.max(1, xAxisY - 4), 6]);
+  const yScale = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([Math.max(1, xAxisY - 4), 6]);
 
-  let renderScale = yScaleOrig;
+  // The selected band's flat bottom, anchored so the band is centred on the
+  // pointer at the bin it was grabbed in (recorded in the hit layer's onMouseMove),
+  // so it never jumps out from under the cursor. A legend hover centres it in view.
+  let baseValue = 0;
   if (rebaseline) {
-    let maxBelow = 0;
-    let maxAbove = 0;
-    data.forEach((point, idx) => {
-      let total = 0;
-      for (const kind of kinds) total += point.values[kind] ?? 0;
-      if (offsets[idx] > maxBelow) maxBelow = offsets[idx];
-      if (total - offsets[idx] > maxAbove) maxAbove = total - offsets[idx];
-    });
-    renderScale = d3.scaleLinear().domain([-maxBelow, Math.max(1, maxAbove)]).range([Math.max(1, xAxisY - 4), 6]);
+    if (anchorRef.current && anchorRef.current.key === kinds[selIdx]) {
+      baseValue = anchorRef.current.baseValue;
+    } else {
+      let meanThickness = 0;
+      data.forEach((point) => {
+        meanThickness += point.values[kinds[selIdx]] ?? 0;
+      });
+      meanThickness = data.length ? meanThickness / data.length : 0;
+      baseValue = yScale.invert((6 + Math.max(1, xAxisY - 4)) / 2) - meanThickness / 2;
+    }
   }
 
   // One stacked-area band per reason: trace the cumulative top edge left-to-right,
   // then the band's base edge right-to-left, and close. Each bin is placed by its
   // absolute center time so the bands line up with the shared axis during a pan.
-  const buildArea = (ki: number, scale: d3.ScaleLinear<number, number>, shifted: boolean) => {
+  // shifted re-baselines onto `baseValue`; un-shifted is the plain stack for the hit layer.
+  const buildArea = (ki: number, shifted: boolean) => {
     const tops: string[] = [];
     const bots: string[] = [];
     data.forEach((point, idx) => {
       let base = 0;
       for (let k = 0; k < ki; k++) base += point.values[kinds[k]] ?? 0;
-      if (shifted) base -= offsets[idx];
+      if (shifted) base += baseValue - offsets[idx];
       const top = base + (point.values[kinds[ki]] ?? 0);
       const x = safeScale(xScale, point.time);
-      tops.push(`${x},${safeScale(scale, top)}`);
-      bots.push(`${x},${safeScale(scale, base)}`);
+      tops.push(`${x},${safeScale(yScale, top)}`);
+      bots.push(`${x},${safeScale(yScale, base)}`);
     });
     bots.reverse();
     return tops.length ? `M${tops.join("L")}L${bots.join("L")}Z` : "";
   };
 
-  const baselineY = rebaseline ? safeScale(renderScale, 0) : null;
+  const baselineY = rebaseline ? safeScale(yScale, baseValue) : null;
 
   return (
     <svg width={width} height={height} className="block">
@@ -996,7 +1020,7 @@ function ComponentMilestoneAreas({
       {/* Visible bands: re-baselined around the selected reason, or the plain
           stack otherwise. Not interactive — the hit layer below drives hovering. */}
       {kinds.map((kind, ki) => {
-        const d = buildArea(ki, renderScale, rebaseline);
+        const d = buildArea(ki, rebaseline);
         return d ? (
           <path
             key={kind}
@@ -1015,7 +1039,7 @@ function ComponentMilestoneAreas({
       {/* Invisible hit layer on the original layout, so the selection stays put
           while the visible bands re-baseline. */}
       {kinds.map((kind, ki) => {
-        const d = buildArea(ki, yScaleOrig, false);
+        const d = buildArea(ki, false);
         return d ? (
           <path
             key={`hit-${kind}`}
@@ -1030,9 +1054,23 @@ function ComponentMilestoneAreas({
               const svg = event.currentTarget.ownerSVGElement;
               if (!svg) return;
               const rect = svg.getBoundingClientRect();
-              onHoverSegment({ kind, time: xScale.invert(event.clientX - rect.left) });
+              const time = xScale.invert(event.clientX - rect.left);
+              // Centre this band on the pointer at the bin under it, recorded once
+              // per selection so the flat baseline holds still while hovered.
+              if (!anchorRef.current || anchorRef.current.key !== kind) {
+                let bi = 0;
+                if (data.length > 1) {
+                  const span = data[data.length - 1].time - data[0].time;
+                  const frac = span > 0 ? (time - data[0].time) / span : 0;
+                  bi = Math.min(data.length - 1, Math.max(0, Math.round(frac * (data.length - 1))));
+                }
+                const cursorVal = yScale.invert(event.clientY - rect.top);
+                anchorRef.current = { key: kind, baseValue: cursorVal - (data[bi]?.values[kind] ?? 0) / 2 };
+              }
+              onHoverSegment({ kind, time });
             }}
             onMouseLeave={() => {
+              anchorRef.current = null;
               onHoverReason(null);
               onHoverSegment(null);
             }}
@@ -1044,7 +1082,7 @@ function ComponentMilestoneAreas({
 
       <GapShading gaps={gaps} xScale={xScale} height={xAxisY} patternId="blocking-gap-pattern" />
 
-      <YAxisOverlay yScale={renderScale} width={width} />
+      <YAxisOverlay yScale={yScale} width={width} />
     </svg>
   );
 }
