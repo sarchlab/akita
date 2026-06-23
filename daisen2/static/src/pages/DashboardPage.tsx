@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { RotateCcw, X, ChevronRight, Search } from "lucide-react";
+import { RotateCcw, X, ChevronRight, ChevronDown, Search } from "lucide-react";
 import DashboardWidget from "../components/DashboardWidget";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -117,18 +117,24 @@ function leafCount(node: LocationNode): number {
   return node.children.reduce((sum, child) => sum + leafCount(child), 0);
 }
 
-// DashboardTree is the sidebar navigator: the location hierarchy, every node
-// clickable to scope the grid to its children. The current scope is highlighted.
+// DashboardTree is the sidebar navigator: the location hierarchy, collapsed by
+// default. The chevron expands/collapses a branch in place; clicking the name
+// scopes the grid to that node's children (and the parent keeps the path to the
+// current scope, plus any search matches, expanded).
 function DashboardTree({
   nodes,
   scope,
+  expanded,
   onScope,
+  onToggle,
   depth,
   keep,
 }: {
   nodes: LocationNode[];
   scope: string;
+  expanded: Set<string>;
   onScope: (path: string) => void;
+  onToggle: (path: string) => void;
   depth: number;
   keep: Set<string> | null;
 }) {
@@ -139,27 +145,42 @@ function DashboardTree({
       {visible.map((node) => {
         const isBranch = node.children.length > 0;
         const isCurrent = node.path === scope;
+        const open = isBranch && expanded.has(node.path);
         return (
           <li key={node.path}>
-            <button
-              type="button"
-              onClick={() => onScope(node.path)}
-              title={node.path}
-              className={cn(
-                "flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
-                isCurrent ? "bg-primary/10 font-medium text-primary" : isBranch ? "text-foreground" : "text-muted-foreground",
-              )}
-              style={{ paddingLeft: `${depth * 12 + 6}px` }}
+            <div
+              className={cn("flex items-center rounded", isCurrent && "bg-primary/10")}
+              style={{ paddingLeft: `${depth * 14}px` }}
             >
-              <span
+              {isBranch ? (
+                <button
+                  type="button"
+                  className="flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-primary"
+                  onClick={() => onToggle(node.path)}
+                  aria-label={open ? `Collapse ${node.name}` : `Expand ${node.name}`}
+                >
+                  {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                </button>
+              ) : (
+                <span className="flex h-6 w-5 shrink-0 items-center justify-center" aria-hidden="true">
+                  <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => onScope(node.path)}
+                title={node.path}
                 className={cn(
-                  "h-1.5 w-1.5 shrink-0 rounded-full",
-                  isBranch ? "bg-primary/70" : "border border-muted-foreground/50",
+                  "min-w-0 flex-1 truncate rounded px-1 py-1 text-left text-xs transition-colors hover:text-primary",
+                  isCurrent ? "font-medium text-primary" : isBranch ? "text-foreground" : "text-muted-foreground",
                 )}
-              />
-              <span className="truncate">{node.name}</span>
-            </button>
-            {isBranch && <DashboardTree nodes={node.children} scope={scope} onScope={onScope} depth={depth + 1} keep={keep} />}
+              >
+                {node.name}
+              </button>
+            </div>
+            {isBranch && open && (
+              <DashboardTree nodes={node.children} scope={scope} expanded={expanded} onScope={onScope} onToggle={onToggle} depth={depth + 1} keep={keep} />
+            )}
           </li>
         );
       })}
@@ -279,6 +300,26 @@ export default function DashboardPage() {
   const widgetNode = widget ? findNode(root, widget) : null;
   const widgetAggregated = !!widgetNode && widgetNode.children.length > 0;
 
+  // The sidebar tree is collapsed by default; this tracks the branches the user
+  // expanded with the chevrons.
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(() => new Set());
+  const toggleNode = (path: string) =>
+    setExpandedNodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  // What renders expanded: while searching, the matched subtree; otherwise the
+  // user's expansions plus the path down to the current scope, so drilling into a
+  // component reveals where you are.
+  const effectiveExpanded = useMemo(() => {
+    if (keep) return keep;
+    const open = new Set(expandedNodes);
+    for (const crumb of breadcrumbSegments(scope)) open.add(crumb.path);
+    return open;
+  }, [keep, expandedNodes, scope]);
+
   const { ref, size } = useElementSize<HTMLDivElement>();
   // Fewer, larger charts: 3 across on a wide screen, 2 on a medium one, 1 when
   // narrow — so each figure has room to breathe.
@@ -287,7 +328,7 @@ export default function DashboardPage() {
   // The grid has a 5px gap between cards (no outer gap), so a card is the area
   // minus the (columns-1) inner gaps, split evenly.
   const widgetWidth = Math.max(180, Math.floor((size.width - (columns - 1) * 5) / columns));
-  const widgetHeight = Math.min(380, Math.max(220, Math.floor((size.height - (rows + 1) * 5) / Math.min(rows, 3))));
+  const widgetHeight = Math.min(260, Math.max(160, Math.floor((size.height - (rows + 1) * 5) / Math.min(rows, 4))));
 
   const singleWidget = widget !== "";
 
@@ -420,7 +461,15 @@ export default function DashboardPage() {
               >
                 All components
               </button>
-              <DashboardTree nodes={root.children} scope={scope} onScope={(path) => patchView({ scope: path || undefined, filter: undefined })} depth={0} keep={keep} />
+              <DashboardTree
+                nodes={root.children}
+                scope={scope}
+                expanded={effectiveExpanded}
+                onScope={(path) => patchView({ scope: path || undefined, filter: undefined })}
+                onToggle={toggleNode}
+                depth={0}
+                keep={keep}
+              />
             </div>
           </aside>
 
