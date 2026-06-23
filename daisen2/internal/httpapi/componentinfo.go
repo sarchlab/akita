@@ -91,18 +91,7 @@ func (s *Server) httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 		compInfo = s.calculateConcurrentTask(
 			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
 	case "ConcurrentTaskMilestones":
-		// The blocking-reason chart is the one metric the (scoped) detail view
-		// uses, so it honors a location subtree. A leaf scope matches only itself.
-		scope := r.FormValue("scope")
-		if scope == "" {
-			scope = compName
-		}
-		stackedInfo := s.calculateConcurrentTaskMilestones(
-			r.Context(), scope, infoType, startTime, endTime, int(numDots))
-		rsp, err := json.Marshal(stackedInfo)
-		dieOnErr(err)
-		_, err = w.Write(rsp)
-		dieOnErr(err)
+		s.httpConcurrentTaskMilestones(w, r, compName, infoType, startTime, endTime, int(numDots))
 		return
 	case "BufferPressure":
 		compInfo = s.calculateBufferPressure(
@@ -117,6 +106,28 @@ func (s *Server) httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 	rsp, err := json.Marshal(compInfo)
 	dieOnErr(err)
 
+	_, err = w.Write(rsp)
+	dieOnErr(err)
+}
+
+// httpConcurrentTaskMilestones writes the blocking-reason chart — the one metric
+// the scoped detail view uses, so it honors a location subtree. The scope falls
+// back to the component name, and a leaf scope matches only itself.
+func (s *Server) httpConcurrentTaskMilestones(
+	w http.ResponseWriter,
+	r *http.Request,
+	compName, infoType string,
+	startTime, endTime float64,
+	numDots int,
+) {
+	scope := r.FormValue("scope")
+	if scope == "" {
+		scope = compName
+	}
+	stackedInfo := s.calculateConcurrentTaskMilestones(
+		r.Context(), scope, infoType, startTime, endTime, numDots)
+	rsp, err := json.Marshal(stackedInfo)
+	dieOnErr(err)
 	_, err = w.Write(rsp)
 	dieOnErr(err)
 }
