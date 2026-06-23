@@ -155,7 +155,7 @@ func (s *Server) calculateConcurrentTask(
 	// index scan) instead of hydrating every Task via ListTasks, then run the same
 	// time-weighted bin sweep. Drops this metric from ~2s to ~0.1s on a large
 	// component by avoiding the per-task struct/parent hydration.
-	tasks := s.traceReader.listTaskIntervals(ctx, compName, startTime, endTime)
+	tasks := s.traceReader.listTaskIntervals(ctx, compName, "", startTime, endTime)
 	binDuration := totalDuration / float64(numDots)
 	compInfo.Data = calculateTimeWeightedBins(
 		tasks, startTime, endTime, binDuration, int(numDots),
@@ -174,18 +174,12 @@ func (s *Server) calculateBufferPressure(
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
-	compInfo = s.calculateTimeWeightedTaskCount(
-		ctx, compName, infoType,
-		startTime, endTime, int(numDots),
-		true,
-		taskIsReqIn,
-		func(t Task) float64 {
-			return float64(t.ParentTask.StartTime)
-		},
-		func(t Task) float64 {
-			return float64(t.StartTime)
-		},
-	)
+	// With one-location-one-kind tracing, a request waiting in an incoming port
+	// buffer is its own "incoming_buffer" task, so buffer pressure is just how many
+	// of those are in flight over time across the scope's ports — a direct measure
+	// rather than the old "req_in vs. its parent's start" proxy.
+	compInfo = s.calculateKindOccupancy(
+		ctx, compName, infoType, "incoming_buffer", startTime, endTime, numDots)
 
 	return compInfo
 }
@@ -197,20 +191,53 @@ func (s *Server) calculatePendingReqOut(
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
-	compInfo = s.calculateTimeWeightedTaskCount(
-		ctx, compName, infoType,
-		startTime, endTime, int(numDots),
-		false,
-		func(t Task) bool { return t.Kind == "req_out" },
+	// A "req_out" task spans an outgoing request from issue to its response, so the
+	// number in flight is how many requests the component still has pending
+	// downstream — the pending-request-out level. (The outgoing-buffer tasks are a
+	// poor proxy here: a request usually leaves the port the instant it is accepted,
+	// so those tasks are near-zero duration.)
+	compInfo = s.calculateKindOccupancy(
+		ctx, compName, infoType, "req_out", startTime, endTime, numDots)
+
+	return compInfo
+}
+
+// calculateKindOccupancy bins the time-weighted count of in-flight tasks of one
+// kind over the scope's subtree. Like calculateConcurrentTask it fetches only the
+// intervals — one covering-index scan, no per-task hydration — and runs the shared
+// bin sweep, so it is cheap even on a busy component.
+func (s *Server) calculateKindOccupancy(
+	ctx context.Context,
+	compName, infoType, kind string,
+	startTime, endTime float64,
+	numDots int64,
+) *ComponentInfo {
+	compInfo := &ComponentInfo{
+		Name:      compName,
+		InfoType:  infoType,
+		StartTime: startTime,
+		EndTime:   endTime,
+	}
+
+	totalDuration := endTime - startTime
+	if numDots <= 0 || totalDuration <= 0 {
+		return compInfo
+	}
+
+	// The (Location, Kind, StartTime, EndTime) covering index answers the scoped,
+	// kind-filtered interval scan without touching the trace table.
+	_, _ = s.traceReader.ExecContext(ctx, metricCoveringIndex)
+
+	tasks := s.traceReader.listTaskIntervals(ctx, compName, kind, startTime, endTime)
+	binDuration := totalDuration / float64(numDots)
+	compInfo.Data = calculateTimeWeightedBins(
+		tasks, startTime, endTime, binDuration, int(numDots),
+		func(t Task) bool { return true },
 		func(t Task) float64 { return float64(t.StartTime) },
 		func(t Task) float64 { return float64(t.EndTime) },
 	)
 
 	return compInfo
-}
-
-func taskIsReqIn(t Task) bool {
-	return t.Kind == "req_in" && t.ParentTask != nil
 }
 
 func (s *Server) calculateReqIn(
@@ -436,46 +463,6 @@ func safeTraceTimeColumn(column string) string {
 
 type taskFilter func(t Task) bool
 type taskTime func(t Task) float64
-
-func (s *Server) calculateTimeWeightedTaskCount(
-	ctx context.Context,
-	compName, infoType string,
-	startTime, endTime float64,
-	numDots int,
-	enableParentTask bool,
-	filter taskFilter,
-	increaseTime, decreaseTime taskTime,
-) *ComponentInfo {
-	info := &ComponentInfo{
-		Name:      compName,
-		InfoType:  infoType,
-		StartTime: startTime,
-		EndTime:   endTime,
-	}
-
-	// Scope (subtree) rather than exact location, so a component name aggregates
-	// its whole subtree; a leaf scope still matches only itself.
-	query := TaskQuery{
-		Scope:            compName,
-		EnableTimeRange:  true,
-		StartTime:        startTime,
-		EndTime:          endTime,
-		EnableParentTask: enableParentTask,
-	}
-	tasks := s.traceReader.ListTasks(ctx, query)
-
-	totalDuration := endTime - startTime
-	if numDots <= 0 || totalDuration <= 0 {
-		return info
-	}
-
-	binDuration := totalDuration / float64(numDots)
-	info.Data = calculateTimeWeightedBins(
-		tasks, startTime, endTime, binDuration, numDots,
-		filter, increaseTime, decreaseTime)
-
-	return info
-}
 
 type countEvent struct {
 	time  float64
