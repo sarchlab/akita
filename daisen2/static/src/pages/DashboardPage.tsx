@@ -265,10 +265,12 @@ export default function DashboardPage() {
   }, [root, scope, filter]);
 
   const { ref, size } = useElementSize<HTMLDivElement>();
-  const columns = size.width >= 1200 ? 4 : size.width >= 760 ? 3 : 2;
+  // Fewer, larger charts: 3 across on a wide screen, 2 on a medium one, 1 when
+  // narrow — so each figure has room to breathe.
+  const columns = size.width >= 1400 ? 3 : size.width >= 720 ? 2 : 1;
   const rows = Math.max(1, Math.ceil(gridNames.length / columns));
   const widgetWidth = Math.max(180, Math.floor((size.width - (columns + 1) * 5) / columns));
-  const widgetHeight = Math.min(320, Math.max(170, Math.floor((size.height - (rows + 1) * 5) / Math.min(rows, 3))));
+  const widgetHeight = Math.min(380, Math.max(220, Math.floor((size.height - (rows + 1) * 5) / Math.min(rows, 3))));
 
   const singleWidget = widget !== "";
 
