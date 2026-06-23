@@ -16,7 +16,7 @@ import { useSegments } from "../hooks/useSegments";
 import { useSimulationRange } from "../hooks/useSimulationRange";
 import { useRenderReady } from "../hooks/useRenderReady";
 import { parseView, mergeParams, DASHBOARD_DEFAULTS } from "../utils/viewState.mjs";
-import { buildLocationTree, findNode, breadcrumbSegments, type LocationNode } from "../utils/locationTree";
+import { buildLocationTree, findNode, leafCount, breadcrumbSegments, type LocationNode } from "../utils/locationTree";
 import { cn } from "../lib/utils";
 
 const AXIS_OPTIONS = [
@@ -108,13 +108,6 @@ function flatMatches(root: LocationNode, search: string): string[] {
   };
   root.children.forEach(walk);
   return out;
-}
-
-// leafCount is the number of leaf facets under a node — what a component chart's
-// aggregate is summed over, surfaced on the widget's "aggregated" badge.
-function leafCount(node: LocationNode): number {
-  if (node.children.length === 0) return 1;
-  return node.children.reduce((sum, child) => sum + leafCount(child), 0);
 }
 
 // DashboardTree is the sidebar navigator: the location hierarchy, collapsed by
