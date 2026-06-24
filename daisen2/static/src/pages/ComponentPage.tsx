@@ -5,6 +5,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { X, ChevronRight, Plus, Minus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { SidePanel } from "../components/ui/side-panel";
+import { BlockingReasonsHelp, ComponentTasksHelp, TaskHierarchyHelp } from "../components/HelpTopics";
 import type { StackedComponentInfo } from "../hooks/useCompInfo";
 import { useStackedCompInfo } from "../hooks/useCompInfo";
 import { useSegments } from "../hooks/useSegments";
@@ -32,6 +33,12 @@ const COMPONENT_LINE_HEIGHT_RATIO = 0.2;
 const TOP_AXIS_COMPACT_HEIGHT = 28;
 const SIDE_COLUMN_WIDTH = 350;
 const DATA_RANGE_DEBOUNCE_MS = 1000;
+// A help button tucked into a chart region's bottom-right corner. The wrapper stops
+// pointer events so clicking it never starts a pan/drag on the timeline underneath;
+// the button gets a translucent background so it stays legible over the chart.
+const CHART_HELP_CORNER = "absolute bottom-2 right-2 z-20";
+const CHART_HELP_BUTTON =
+  "bg-white/85 p-1 shadow-sm ring-1 ring-slate-200 backdrop-blur-sm hover:bg-white";
 // Above this many tasks in the visible range, the per-task timeline (one SVG
 // element per task) becomes the page's dominant cost, so we switch to the
 // server-aggregated density view instead. Zooming in until the count drops below
@@ -1156,31 +1163,27 @@ function SectionLabel({ children }: { children: string }) {
 }
 
 function SelectedTaskSection({ task }: { task: Task | null }) {
-  if (!task) {
-    return (
-      <section>
-        <SectionLabel>Selected task</SectionLabel>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Hover or click a task in the chart to see its details.
-        </p>
-      </section>
-    );
-  }
-
-  const rows: [string, string][] = [
-    ["ID", String(task.id)],
-    ["Kind", task.kind],
-    ["What", task.what],
-    ["Where", task.location || "-"],
-    ["Start", smartString(task.start_time)],
-    ["End", smartString(task.end_time)],
-    ["Duration", smartString(task.end_time - task.start_time)],
-  ];
+  const rows: [string, string][] = task
+    ? [
+        ["ID", String(task.id)],
+        ["Kind", task.kind],
+        ["What", task.what],
+        ["Where", task.location || "-"],
+        ["Start", smartString(task.start_time)],
+        ["End", smartString(task.end_time)],
+        ["Duration", smartString(task.end_time - task.start_time)],
+      ]
+    : [];
 
   return (
     <section>
       <SectionLabel>Selected task</SectionLabel>
-      <div className="mt-2 rounded-lg border bg-muted/30 p-3">
+      {!task ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Hover or click a task in the chart to see its details.
+        </p>
+      ) : (
+        <div className="mt-2 rounded-lg border bg-muted/30 p-3">
         <div className="mb-2 break-all text-sm font-semibold">
           {task.kind} · {task.what}
         </div>
@@ -1193,6 +1196,7 @@ function SelectedTaskSection({ task }: { task: Task | null }) {
           ))}
         </dl>
       </div>
+      )}
     </section>
   );
 }
@@ -1786,7 +1790,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
         {/* Three stacked regions. highlightedTaskId follows hover only (not the
             selected task), so selecting a task never dims the rest. Subtle
             border-t dividers separate the regions. */}
-        <div className="daisen1-task-view" style={{ height: taskViewHeight }}>
+        <div className="daisen1-task-view relative" style={{ height: taskViewHeight }}>
           <ComponentTaskView
             mainTask={currentTask}
             parentTask={parentTask}
@@ -1803,6 +1807,12 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             onHoverTask={setHoveredTask}
             onSelectTask={selectTask}
           />
+          {/* Help opens only when a task is selected — that's when the hierarchy exists. */}
+          {currentTask && (
+            <div className={CHART_HELP_CORNER} onPointerDown={(e) => e.stopPropagation()}>
+              <TaskHierarchyHelp className={CHART_HELP_BUTTON} />
+            </div>
+          )}
         </div>
         {/* Component tasks (per-task gantt) — optional: only when the range holds
             few enough tasks to draw each one. */}
@@ -1830,7 +1840,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
         {/* Task count (occupancy density by kind) — always shown. A plain scroll
             here does nothing; only a modifier/pinch (Ctrl/⌘+scroll) zooms time. */}
         <div
-          className="daisen1-count-view border-t border-slate-200"
+          className="daisen1-count-view relative border-t border-slate-200"
           style={{ height: countHeight }}
           onWheel={handleOverviewWheel}
         >
@@ -1852,15 +1862,21 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             segmentsEnabled={segmentsData?.enabled ?? false}
             showZoomHint={!showGantt}
           />
+          <div className={CHART_HELP_CORNER} onPointerDown={(e) => e.stopPropagation()}>
+            <ComponentTasksHelp className={CHART_HELP_BUTTON} />
+          </div>
         </div>
         {/* Blocking reasons — always shown. Like the task-count chart: plain scroll
             is inert, a modifier/pinch (Ctrl/⌘+scroll) zooms time. */}
         <div
-          className="daisen1-metric-view border-t border-slate-200"
+          className="daisen1-metric-view relative border-t border-slate-200"
           style={{ height: metricLineHeight }}
           onWheel={handleOverviewWheel}
         >
           <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={highlightedReason} segments={segmentsData?.segments ?? []} segmentsEnabled={segmentsData?.enabled ?? false} onHoverSegment={setHoveredSegment} onHoverReason={setHighlightedReason} />
+          <div className={CHART_HELP_CORNER} onPointerDown={(e) => e.stopPropagation()}>
+            <BlockingReasonsHelp className={CHART_HELP_BUTTON} />
+          </div>
         </div>
         {/* Crosshair: a vertical guide at the cursor's x, spanning all the stacked
             charts so a feature can be read off at the same time across them. Solid
