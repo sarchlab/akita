@@ -341,6 +341,41 @@ def main():
         "acceptancetests/virtualmem",
     )
 
+    # Four memory-access agents, each with a private ROB/AT/L1/L1TLB, sharing one
+    # L2 cache, L2 TLB, memory controller, and MMU. -max-address is the per-agent
+    # range; the four agents occupy disjoint slices of the combined address space.
+    error |= compile_test("acceptancetests/sharedl2vm")
+    error |= run_test(
+        "Shared L2 VM test 1",
+        "./sharedl2vm -max-address=64 -num-access=10000",
+        "acceptancetests/sharedl2vm",
+    )
+    error |= run_test(
+        "Shared L2 VM test 2",
+        "./sharedl2vm -max-address=1024 -num-access=10000",
+        "acceptancetests/sharedl2vm",
+    )
+    error |= run_test(
+        "Shared L2 VM test 3",
+        "./sharedl2vm -max-address=1048576 -num-access=10000",
+        "acceptancetests/sharedl2vm",
+    )
+    error |= run_test(
+        "Shared L2 VM test 4",
+        "./sharedl2vm -max-address=64 -parallel -num-access=10000",
+        "acceptancetests/sharedl2vm",
+    )
+    error |= run_test(
+        "Shared L2 VM test 5",
+        "./sharedl2vm -max-address=1024 -parallel -num-access=10000",
+        "acceptancetests/sharedl2vm",
+    )
+    error |= run_test(
+        "Shared L2 VM test 6",
+        "./sharedl2vm -max-address=1048576 -parallel -num-access=10000",
+        "acceptancetests/sharedl2vm",
+    )
+
     # Checkpoint/resume oracle over the full virtual-memory hierarchy: run to
     # completion must equal run-to-checkpoint, restore, run-to-completion. Run at
     # acceptance scale so the checkpoints capture deep in-flight state and TLB
