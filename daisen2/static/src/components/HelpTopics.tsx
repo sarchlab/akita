@@ -3,6 +3,7 @@ import metricsImg from "../assets/help/metrics.png";
 import componentsImg from "../assets/help/components.png";
 import tasksImg from "../assets/help/tasks.png";
 import blockingImg from "../assets/help/blocking.png";
+import taskTreeImg from "../assets/help/task-tree.png";
 
 // HelpTopics are ready-made InfoButtons for the concepts that are hard to grasp at
 // a glance, so a view just drops in e.g. <MetricsHelp /> next to the thing it
@@ -49,6 +50,20 @@ export function ComponentsOverviewHelp({ className }: { className?: string }) {
       <p>The components with the highest <strong>residency</strong> — the total time their tasks spend in flight, summed across the run. It is a cheap proxy for where the simulation spends time, so the busiest / most-contended components rank first.</p>
       <p>Each chart's two metrics are <strong>auto-selected</strong> for that component: components that serve requests show <strong>Incoming Request Rate</strong>; pure clients (which only issue requests) show <strong>Response Buffer Pressure</strong>. The other line is always <strong>Average Request Latency</strong>. The colored dots below each chart name them.</p>
       <p>A <strong>Σ N facets</strong> badge means the chart sums the component's whole subtree — its N <em>one-location-one-kind</em> facets (e.g. <code>AT.req_in</code>, <code>AT.Top.incoming</code>, …). Open a chart to drill into the component.</p>
+    </InfoButton>
+  );
+}
+
+// ComponentTasksHelp explains the per-task view: the task bars, selecting a task,
+// and the parent / sub-task tree shown for a selection.
+export function ComponentTasksHelp({ className }: { className?: string }) {
+  return (
+    <InfoButton title="Component tasks" className={className}>
+      <Figure src={taskTreeImg} alt="A selected task shown with its parent task and sub-tasks on one time axis" />
+      <p>This view shows the component's <strong>tasks</strong> over time — each one a unit of work, e.g. handling a request, a buffer wait, or a pipeline stage.</p>
+      <p><strong>Zoom in</strong> (⌘/Ctrl + scroll, or drag-select a time range) to resolve individual <strong>task bars</strong>; zoomed out they collapse into a density chart. Hover a bar for details, and <strong>click</strong> one to select it.</p>
+      <p>A selected task fills the side panel and adds the rows shown above: the task with its <strong>parent</strong> (the upstream request that caused it) and its <strong>sub-tasks</strong> (the downstream requests it issued), all on the <strong>same time axis</strong> — so you can walk the task tree and see what it was doing while it ran.</p>
+      <p>The wavy line under the selected task's bar marks its <strong>blocking intervals</strong> (see Blocking reasons).</p>
     </InfoButton>
   );
 }

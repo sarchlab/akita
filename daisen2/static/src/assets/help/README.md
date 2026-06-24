@@ -10,6 +10,7 @@ stay faithful to the actual UI.
 | `components.png` | `/` (index) | the Components widget grid (`[data-widget-name]`'s nearest `.grid`) |
 | `tasks.png` | `/component?name=<component>` | the task-count chart (`.daisen1-count-view`) |
 | `blocking.png` | `/component?name=<component>` | the blocking-reasons chart (`.daisen1-metric-view`) — use a component that has blocking reasons, e.g. `L1Cache.Top.incoming` |
+| `task-tree.png` | `/component?name=<c>&taskid=<id>&starttime=<t>&endtime=<t>` | the selected-task panel (`.daisen1-task-view`) — pick a `req_in` task that has a parent and sub-tasks, and a window spanning them |
 
 ## Re-capturing
 

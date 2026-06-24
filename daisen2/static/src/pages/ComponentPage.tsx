@@ -5,7 +5,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { X, ChevronRight, Plus, Minus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { SidePanel } from "../components/ui/side-panel";
-import { BlockingReasonsHelp, TaskColoringHelp } from "../components/HelpTopics";
+import { BlockingReasonsHelp, ComponentTasksHelp, TaskColoringHelp } from "../components/HelpTopics";
 import type { StackedComponentInfo } from "../hooks/useCompInfo";
 import { useStackedCompInfo } from "../hooks/useCompInfo";
 import { useSegments } from "../hooks/useSegments";
@@ -1157,31 +1157,30 @@ function SectionLabel({ children }: { children: string }) {
 }
 
 function SelectedTaskSection({ task }: { task: Task | null }) {
-  if (!task) {
-    return (
-      <section>
-        <SectionLabel>Selected task</SectionLabel>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Hover or click a task in the chart to see its details.
-        </p>
-      </section>
-    );
-  }
-
-  const rows: [string, string][] = [
-    ["ID", String(task.id)],
-    ["Kind", task.kind],
-    ["What", task.what],
-    ["Where", task.location || "-"],
-    ["Start", smartString(task.start_time)],
-    ["End", smartString(task.end_time)],
-    ["Duration", smartString(task.end_time - task.start_time)],
-  ];
+  const rows: [string, string][] = task
+    ? [
+        ["ID", String(task.id)],
+        ["Kind", task.kind],
+        ["What", task.what],
+        ["Where", task.location || "-"],
+        ["Start", smartString(task.start_time)],
+        ["End", smartString(task.end_time)],
+        ["Duration", smartString(task.end_time - task.start_time)],
+      ]
+    : [];
 
   return (
     <section>
-      <SectionLabel>Selected task</SectionLabel>
-      <div className="mt-2 rounded-lg border bg-muted/30 p-3">
+      <div className="flex items-center gap-1.5">
+        <SectionLabel>Selected task</SectionLabel>
+        <ComponentTasksHelp />
+      </div>
+      {!task ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Hover or click a task in the chart to see its details.
+        </p>
+      ) : (
+        <div className="mt-2 rounded-lg border bg-muted/30 p-3">
         <div className="mb-2 break-all text-sm font-semibold">
           {task.kind} · {task.what}
         </div>
@@ -1194,6 +1193,7 @@ function SelectedTaskSection({ task }: { task: Task | null }) {
           ))}
         </dl>
       </div>
+      )}
     </section>
   );
 }
