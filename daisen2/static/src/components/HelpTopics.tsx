@@ -82,25 +82,56 @@ export function ComponentsOverviewHelp({ className }: { className?: string }) {
   );
 }
 
-// ComponentTasksHelp explains the per-task view itself: all of a component's tasks,
-// the task-count summary when zoomed out, and the individual task bars when zoomed in.
-export function ComponentTasksHelp({ className }: { className?: string }) {
+// ComponentTaskViewHelp explains the per-task gantt (the "component task view"):
+// every task drawn as its own bar, shown when the range holds few enough tasks.
+export function ComponentTaskViewHelp({ className }: { className?: string }) {
   return (
-    <InfoButton title="Component tasks" className={className}>
-      <p>This view shows <strong>all of the component's tasks</strong> over the visible time range. A task is one unit of work the component did — serving an incoming request (<code>req_in</code>), a request it sent out (<code>req_out</code>), the time a message spent in a buffer (<code>incoming_buffer</code> / <code>outgoing_buffer</code>), a pipeline stage, and so on.</p>
-      <Figure
-        src={tasksImg}
-        alt="The task-count chart: in-flight tasks stacked and colored over time"
-        caption="Zoomed out — the task-count chart: how many tasks are in flight at each moment."
-      />
-      <p>When many tasks fall in the range they are summarized as a <strong>task-count chart</strong>: at each time it stacks how many tasks are in flight, so the stack height is the component's <strong>concurrency</strong>. A stack that stays high with no dips means the component is working at full capacity.</p>
+    <InfoButton title="Component task view" className={className}>
       <Figure
         src={componentTasksImg}
         alt="The per-task gantt: each task drawn as its own bar across time"
-        caption="Zoomed in — each task becomes its own bar. Hover for details; click to select."
+        caption="Each task is its own bar; the stacked rows are tasks in flight at the same time."
       />
-      <p><strong>Zoom in</strong> (⌘/Ctrl + scroll, pinch, or drag-select a range) until few enough tasks remain that each is drawn as its own <strong>bar</strong>. Hover a bar for its details, and <strong>click</strong> one to select it — that opens its <em>task hierarchy</em> above and its full details in the side panel. Scroll or drag to pan.</p>
-      <p>The legend's <strong>Kind / Kind-What</strong> toggle controls the coloring — by task kind alone, or split further by the message type (e.g. <code>incoming_buffer · ReadReq</code> vs <code>· WriteReq</code>). It recolors both these bars and the task-count bands.</p>
+      <p>This view draws <strong>each of the component's tasks as its own bar</strong> across time. A task is one unit of work — serving an incoming request (<code>req_in</code>), a request it sent out (<code>req_out</code>), the time a message spent in a buffer (<code>incoming_buffer</code> / <code>outgoing_buffer</code>), a pipeline stage, and so on (see <em>Task types</em>).</p>
+      <p>Overlapping tasks are stacked into <strong>rows</strong> so they don't hide each other — the number of rows in use at a moment is the component's <strong>concurrency</strong>. <strong>Hover</strong> a bar for its details and <strong>click</strong> one to select it: that opens its <em>task hierarchy</em> above and its full details in the side panel.</p>
+      <p>It appears only when the visible range holds <strong>few enough tasks</strong> to draw each one. With more, it is replaced by the <em>Task count</em> chart below — <strong>zoom in</strong> (⌘/Ctrl+scroll, pinch, or drag-select a range) to bring the bars back. Scroll or drag to pan; <strong>Alt+scroll</strong> (or the <em>rows</em> buttons) makes the rows taller or shorter.</p>
+    </InfoButton>
+  );
+}
+
+// TaskCountHelp explains the task-count density chart: the level-of-detail summary
+// shown when too many tasks fall in the range to draw each one individually.
+export function TaskCountHelp({ className }: { className?: string }) {
+  return (
+    <InfoButton title="Task count" className={className}>
+      <Figure
+        src={tasksImg}
+        alt="The task-count chart: in-flight tasks stacked and colored over time"
+        caption="At each time, how many tasks are in flight — stacked and colored by kind."
+      />
+      <p>The task-count chart is a <strong>summary</strong> of the component's tasks, shown when the range holds too many to draw individually. At each time it stacks <strong>how many tasks are in flight</strong>, so the stack height is the component's <strong>concurrency</strong>, and the colored bands break that down by task kind.</p>
+      <p>A stack that stays high with no dips means the component is working at <strong>full capacity</strong>; dips mean it idled. Hover a band to highlight that kind. The legend's <strong>Kind / Kind-What</strong> toggle controls the coloring — by task kind alone, or split further by the message type (e.g. <code>incoming_buffer · ReadReq</code> vs <code>· WriteReq</code>) — recoloring both these bands and the per-task bars.</p>
+      <p><strong>Zoom in</strong> (⌘/Ctrl+scroll, pinch, or drag-select a range) until few enough tasks remain that each becomes its own bar in the <em>Component task view</em> above.</p>
+    </InfoButton>
+  );
+}
+
+// TaskTypesHelp explains the task kinds listed in the side-panel Tasks legend —
+// the buffer/processing tasks a request flows through (incoming_buffer, req_in,
+// req_out, outgoing_buffer, pipeline).
+export function TaskTypesHelp({ className }: { className?: string }) {
+  return (
+    <InfoButton title="Task types" className={className}>
+      <p>Each colored row is one <strong>kind</strong> of task this component records. A task is one unit of work spanning a stretch of time; the legend's <strong>Kind / Kind-What</strong> toggle splits a kind further by the message it handled (e.g. <code>req_in · ReadReq</code> vs <code>· WriteReq</code>).</p>
+      <p>A request flows through a component as a few paired tasks:</p>
+      <ul className="space-y-1.5">
+        <Term label="incoming_buffer">how long a message waited in a port's <strong>input</strong> buffer — from the moment the connection delivered it until the component admitted (retrieved) it. This time is queueing delay <em>before</em> the component begins working.</Term>
+        <Term label="req_in">the component <strong>serving an incoming request</strong>, from admission until completion. This is the component's own processing of that request, and it begins where the <code>incoming_buffer</code> wait ends.</Term>
+        <Term label="req_out">a request the component <strong>issued downstream</strong>, from the moment it is sent until the response returns. Serving a <code>req_in</code> typically spawns one or more <code>req_out</code> sub-requests to other components.</Term>
+        <Term label="outgoing_buffer">how long a message waited in a port's <strong>output</strong> buffer — from when the component sent it until the connection drained it onto the link. This time is mostly waiting for the link to be free.</Term>
+        <Term label="pipeline">a request's traversal of a component-internal <strong>latency pipeline</strong> (e.g. <code>L2Cache.bank</code>), recorded as a sub-task of <code>req_in</code> so the pipeline time is accounted for instead of left as an unexplained gap.</Term>
+      </ul>
+      <p>Read together they tell a request's story: it sits in <code>incoming_buffer</code>, is served as <code>req_in</code> (often traversing a <code>pipeline</code> and issuing <code>req_out</code> sub-requests), and its replies leave through <code>outgoing_buffer</code>.</p>
     </InfoButton>
   );
 }
@@ -131,6 +162,18 @@ export function BlockingReasonsHelp({ className }: { className?: string }) {
       <p>A task is <strong>blocked</strong> whenever it is waiting on something — a buffer slot, a data response, an address translation, an ordering dependency, and so on. Each wait is recorded as a <strong>milestone</strong> that marks the moment the wait ended; the span leading up to it is time spent blocked on that reason.</p>
       <p>The <strong>blocking-reasons chart</strong> (bottom) shows, at each sampled time, how many in-flight tasks are blocked by each reason — stacked and colored by reason. A tall single-color band means many tasks stalled on the same thing at that moment.</p>
       <p>The colors match the wavy lines drawn under a selected task's bar (each wave is one blocking interval, ending at its milestone). Hover a band to highlight, in the timeline above, the tasks blocked by that reason at that time.</p>
+      <p className="font-medium text-foreground">Common reasons</p>
+      <ul className="space-y-1.5">
+        <Term label="queue">waiting behind other messages in a queue or buffer — the message is in line, not yet at the head.</Term>
+        <Term label="hardware_resource">waiting for a hardware resource to free up — a buffer slot, a cache bank, an MSHR, or a pipeline stage.</Term>
+        <Term label="network_busy">waiting to send on a busy port — the message is ready but the outgoing link/connection is occupied.</Term>
+        <Term label="network_transfer">the message is in transit across the network between components.</Term>
+        <Term label="data">waiting for a data response to return from a downstream component (e.g. a cache or memory read).</Term>
+        <Term label="translation">waiting for an address translation (a TLB lookup or page-table walk) to resolve.</Term>
+        <Term label="dependency">waiting on an ordering or data dependency — e.g. an in-order commit that cannot proceed until an earlier request does.</Term>
+        <Term label="subtask">waiting on a child sub-task to finish — work this task handed off and now depends on.</Term>
+        <Term label="work"><em>not</em> a wait: the interval was spent doing productive internal work (backed by a sub-task showing what), so it is time working rather than blocked.</Term>
+      </ul>
     </InfoButton>
   );
 }
