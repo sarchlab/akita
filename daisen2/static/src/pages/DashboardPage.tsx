@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { RotateCcw, X, ChevronRight, ChevronDown, Search } from "lucide-react";
 import DashboardWidget from "../components/DashboardWidget";
-import { MetricsHelp } from "../components/HelpTopics";
+import { ComponentSelectorHelp, MetricsHelp } from "../components/HelpTopics";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import {
@@ -445,8 +445,8 @@ export default function DashboardPage() {
         <div className="flex min-h-0 flex-1">
           {/* Sidebar: the location tree + search. Click a node to scope the grid. */}
           <aside className="flex w-60 shrink-0 flex-col border-r bg-white">
-            <div className="border-b p-2">
-              <div className="relative">
+            <div className="flex items-center gap-1.5 border-b p-2">
+              <div className="relative flex-1">
                 <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   className="h-8 pl-7 text-xs"
@@ -455,6 +455,7 @@ export default function DashboardPage() {
                   onChange={(event) => patchView({ filter: event.target.value || undefined })}
                 />
               </div>
+              <ComponentSelectorHelp className="h-5 w-5" />
             </div>
             <div className="min-h-0 flex-1 overflow-auto p-1">
               <button

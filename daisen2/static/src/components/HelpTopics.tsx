@@ -5,6 +5,7 @@ import tasksImg from "../assets/help/tasks.png";
 import blockingImg from "../assets/help/blocking.png";
 import taskTreeImg from "../assets/help/task-tree.png";
 import componentTasksImg from "../assets/help/component-tasks.png";
+import selectorImg from "../assets/help/selector.png";
 
 // HelpTopics are ready-made InfoButtons for the concepts that are hard to grasp at
 // a glance, so a view just drops in e.g. <MetricsHelp /> next to the thing it
@@ -41,6 +42,24 @@ export function MetricsHelp({ className }: { className?: string }) {
         <Term label="Response Buffer Pressure">how many incoming <strong>responses</strong> (to requests the component itself sent) are waiting in its input buffers. A pure client that only issues requests has request pressure ≈ 0 but accumulates responses.</Term>
         <Term label="Pending Request Out">how many requests the component has issued downstream and is still awaiting responses for — its outstanding requests.</Term>
       </ul>
+    </InfoButton>
+  );
+}
+
+// ComponentSelectorHelp explains the dashboard sidebar: the search box and the
+// component-hierarchy tree used to choose what the grid shows.
+export function ComponentSelectorHelp({ className }: { className?: string }) {
+  return (
+    <InfoButton title="Choosing components" className={className}>
+      <Figure src={selectorImg} alt="The dashboard sidebar: a search box above the component-hierarchy tree" />
+      <p>The sidebar chooses <strong>which components the dashboard grid shows</strong> — the grid draws one chart per component at the level you pick.</p>
+      <p>The tree is the simulation's <strong>component hierarchy</strong>. Each row is a component or a group of them:</p>
+      <ul className="space-y-1.5">
+        <Term label="Click a name">scopes the grid to that node — the grid switches to its children and the breadcrumb above the grid tracks where you are. Click a breadcrumb, or <strong>All components</strong>, to go back up.</Term>
+        <Term label="Triangle">expands or collapses a branch in the tree without changing the grid. A leaf (small dot) is a single <em>one-location-one-kind</em> facet and has nothing to expand.</Term>
+      </ul>
+      <p>A node with children <strong>aggregates its whole subtree</strong> into one chart — the <strong>Σ N facets</strong> badge on the chart counts the leaf locations summed into it. Scope into the node to break it apart, or open a single chart to drill into just that component.</p>
+      <p>The <strong>search box</strong> filters the tree to matching components and jumps the grid straight to their charts — handy when you know a component's name but not where it sits in the hierarchy.</p>
     </InfoButton>
   );
 }
