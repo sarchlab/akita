@@ -9,7 +9,8 @@ interface InfoButtonProps {
   title: string;
   // The help content (paragraphs, lists, definition rows).
   children: ReactNode;
-  // Extra classes for the icon button (e.g. sizing/color in a dense header).
+  // Extra classes for the icon button (e.g. sizing/color in a dense header, or a
+  // translucent background + padding when overlaid in a chart corner).
   className?: string;
 }
 
@@ -33,7 +34,7 @@ export default function InfoButton({ title, children, className }: InfoButtonPro
       <button
         type="button"
         className={cn(
-          "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "inline-flex shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           className,
         )}
         title={`What is this? — ${title}`}
@@ -45,7 +46,7 @@ export default function InfoButton({ title, children, className }: InfoButtonPro
           setOpen(true);
         }}
       >
-        <Info className="h-full w-full" />
+        <Info className="h-4 w-4" />
       </button>
 
       {open

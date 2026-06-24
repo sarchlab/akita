@@ -4,6 +4,7 @@ import componentsImg from "../assets/help/components.png";
 import tasksImg from "../assets/help/tasks.png";
 import blockingImg from "../assets/help/blocking.png";
 import taskTreeImg from "../assets/help/task-tree.png";
+import componentTasksImg from "../assets/help/component-tasks.png";
 
 // HelpTopics are ready-made InfoButtons for the concepts that are hard to grasp at
 // a glance, so a view just drops in e.g. <MetricsHelp /> next to the thing it
@@ -17,9 +18,12 @@ const Term = ({ label, children }: { label: string; children: React.ReactNode })
   </li>
 );
 
-// Figure shows an illustrating screenshot at the top of a help modal.
-const Figure = ({ src, alt }: { src: string; alt: string }) => (
-  <img src={src} alt={alt} className="mb-2 w-full rounded border border-slate-200" loading="lazy" />
+// Figure shows an illustrating screenshot in a help modal, optionally captioned.
+const Figure = ({ src, alt, caption }: { src: string; alt: string; caption?: string }) => (
+  <figure className="mb-2">
+    <img src={src} alt={alt} className="w-full rounded border border-slate-200" loading="lazy" />
+    {caption ? <figcaption className="mt-1 text-xs italic text-muted-foreground">{caption}</figcaption> : null}
+  </figure>
 );
 
 // MetricsHelp explains the per-component Y-axis metrics (dashboard / widgets).
@@ -54,16 +58,43 @@ export function ComponentsOverviewHelp({ className }: { className?: string }) {
   );
 }
 
-// ComponentTasksHelp explains the per-task view: the task bars, selecting a task,
-// and the parent / sub-task tree shown for a selection.
+// ComponentTasksHelp explains the per-task view itself: all of a component's tasks,
+// the task-count summary when zoomed out, and the individual task bars when zoomed in.
 export function ComponentTasksHelp({ className }: { className?: string }) {
   return (
     <InfoButton title="Component tasks" className={className}>
+      <p>This view shows <strong>all of the component's tasks</strong> over the visible time range. A task is one unit of work the component did — serving an incoming request (<code>req_in</code>), a request it sent out (<code>req_out</code>), the time a message spent in a buffer (<code>incoming_buffer</code> / <code>outgoing_buffer</code>), a pipeline stage, and so on.</p>
+      <Figure
+        src={tasksImg}
+        alt="The task-count chart: in-flight tasks stacked and colored over time"
+        caption="Zoomed out — the task-count chart: how many tasks are in flight at each moment."
+      />
+      <p>When many tasks fall in the range they are summarized as a <strong>task-count chart</strong>: at each time it stacks how many tasks are in flight, so the stack height is the component's <strong>concurrency</strong>. A stack that stays high with no dips means the component is working at full capacity.</p>
+      <Figure
+        src={componentTasksImg}
+        alt="The per-task gantt: each task drawn as its own bar across time"
+        caption="Zoomed in — each task becomes its own bar. Hover for details; click to select."
+      />
+      <p><strong>Zoom in</strong> (⌘/Ctrl + scroll, pinch, or drag-select a range) until few enough tasks remain that each is drawn as its own <strong>bar</strong>. Hover a bar for its details, and <strong>click</strong> one to select it — that opens its <em>task hierarchy</em> above and its full details in the side panel. Scroll or drag to pan.</p>
+      <p>The legend's <strong>Kind / Kind-What</strong> toggle controls the coloring — by task kind alone, or split further by the message type (e.g. <code>incoming_buffer · ReadReq</code> vs <code>· WriteReq</code>). It recolors both these bars and the task-count bands.</p>
+    </InfoButton>
+  );
+}
+
+// TaskHierarchyHelp explains the selected-task panel: a task shown together with its
+// parent task and sub-tasks on one time axis (the task tree).
+export function TaskHierarchyHelp({ className }: { className?: string }) {
+  return (
+    <InfoButton title="Task hierarchy" className={className}>
       <Figure src={taskTreeImg} alt="A selected task shown with its parent task and sub-tasks on one time axis" />
-      <p>This view shows the component's <strong>tasks</strong> over time — each one a unit of work, e.g. handling a request, a buffer wait, or a pipeline stage.</p>
-      <p><strong>Zoom in</strong> (⌘/Ctrl + scroll, or drag-select a time range) to resolve individual <strong>task bars</strong>; zoomed out they collapse into a density chart. Hover a bar for details, and <strong>click</strong> one to select it.</p>
-      <p>A selected task fills the side panel and adds the rows shown above: the task with its <strong>parent</strong> (the upstream request that caused it) and its <strong>sub-tasks</strong> (the downstream requests it issued), all on the <strong>same time axis</strong> — so you can walk the task tree and see what it was doing while it ran.</p>
-      <p>The wavy line under the selected task's bar marks its <strong>blocking intervals</strong> (see Blocking reasons).</p>
+      <p>Every task is part of a tree. A component serves a request (a task) by issuing its own downstream requests (sub-tasks), which other components serve in turn — so the work fans out and comes back.</p>
+      <p>When you <strong>select a task</strong> — click it in the timeline, or open a task link — this panel shows that task in the middle (<strong>Current task</strong>) together with:</p>
+      <ul className="space-y-1.5">
+        <Term label="Parent task">the upstream request that caused it — the work that was waiting on this task to finish.</Term>
+        <Term label="Sub-tasks">the downstream requests this task issued while serving its own — what it, in turn, waited on.</Term>
+      </ul>
+      <p>All three rows share <strong>one time axis</strong>, so you can see when the task started relative to its parent, and which sub-task it was waiting on at any moment. Click the parent or a sub-task to walk up or down the tree.</p>
+      <p>The wavy line under the current task marks its <strong>blocking intervals</strong> — see Blocking reasons.</p>
     </InfoButton>
   );
 }
@@ -76,21 +107,6 @@ export function BlockingReasonsHelp({ className }: { className?: string }) {
       <p>A task is <strong>blocked</strong> whenever it is waiting on something — a buffer slot, a data response, an address translation, an ordering dependency, and so on. Each wait is recorded as a <strong>milestone</strong> that marks the moment the wait ended; the span leading up to it is time spent blocked on that reason.</p>
       <p>The <strong>blocking-reasons chart</strong> (bottom) shows, at each sampled time, how many in-flight tasks are blocked by each reason — stacked and colored by reason. A tall single-color band means many tasks stalled on the same thing at that moment.</p>
       <p>The colors match the wavy lines drawn under a selected task's bar (each wave is one blocking interval, ending at its milestone). Hover a band to highlight, in the timeline above, the tasks blocked by that reason at that time.</p>
-    </InfoButton>
-  );
-}
-
-// TaskColoringHelp explains the task-count chart and the kind / kind-what coloring.
-export function TaskColoringHelp({ className }: { className?: string }) {
-  return (
-    <InfoButton title="Tasks &amp; coloring" className={className}>
-      <Figure src={tasksImg} alt="The task-count chart: in-flight tasks stacked and colored over time" />
-      <p>The <strong>task-count chart</strong> shows, at each time, how many of the component's tasks are in flight, stacked and colored. The stack height is the component's concurrency; a stack that stays high with no dips suggests the component is working at full capacity.</p>
-      <p>Choose how the tasks (and these bands) are colored:</p>
-      <ul className="space-y-1.5">
-        <Term label="Kind">color by task kind alone — <code>req_in</code>, <code>req_out</code>, <code>incoming_buffer</code>, …</Term>
-        <Term label="Kind-What">also split each kind by the message type, e.g. <code>incoming_buffer · ReadReq</code> vs <code>· WriteReq</code>.</Term>
-      </ul>
     </InfoButton>
   );
 }
