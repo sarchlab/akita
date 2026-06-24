@@ -21,6 +21,13 @@ type Spec struct {
 	MaxAddress uint64      `json:"max_address"`
 	WriteLeft  int         `json:"write_left"`
 	ReadLeft   int         `json:"read_left"`
+
+	// AddressOffset is added to every generated address. It lets several
+	// agents that share a downstream memory exercise disjoint address ranges:
+	// configure agent i with AddressOffset = i*MaxAddress so that each agent
+	// only ever touches [AddressOffset, AddressOffset+MaxAddress). Defaults to
+	// 0, which keeps single-agent tests unchanged.
+	AddressOffset uint64 `json:"address_offset"`
 }
 
 // Resources holds the external wiring referenced by the MemAccessAgent. The
