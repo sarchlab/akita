@@ -57,6 +57,10 @@ export default function InfoButton({ title, children, className }: InfoButtonPro
               aria-modal="true"
               aria-label={title}
               onClick={() => setOpen(false)}
+              // The portal keeps the trigger's React ancestors, so without this a wheel
+              // inside the modal bubbles to a chart's onWheel (which preventDefaults to
+              // zoom) — breaking modal scroll and zooming the chart behind it.
+              onWheel={(event) => event.stopPropagation()}
             >
               <div
                 className="flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-lg border bg-white shadow-xl"
