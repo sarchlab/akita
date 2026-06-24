@@ -2,10 +2,10 @@ import * as d3 from "d3";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { X, ChevronRight, Plus, Minus } from "lucide-react";
+import { X, ChevronRight, ChevronDown, ChevronUp, Plus, Minus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { SidePanel } from "../components/ui/side-panel";
-import { BlockingReasonsHelp, ComponentTasksHelp, TaskHierarchyHelp } from "../components/HelpTopics";
+import { BlockingReasonsHelp, ComponentTaskViewHelp, TaskCountHelp, TaskHierarchyHelp, TaskTypesHelp } from "../components/HelpTopics";
 import type { StackedComponentInfo } from "../hooks/useCompInfo";
 import { useStackedCompInfo } from "../hooks/useCompInfo";
 import { useSegments } from "../hooks/useSegments";
@@ -61,6 +61,10 @@ const TASK_VIEW_MARGIN_TOP = 20;
 const TASK_VIEW_MARGIN_BOTTOM = 20;
 const TASK_VIEW_GROUP_GAP = 10;
 const TASK_VIEW_LARGE_TASK_HEIGHT = 15;
+// Height of one subtask row in the task view (the cap used when laying out the
+// subtask bars). Also drives the dynamic task-view height so the region shrinks to
+// the number of subtask rows instead of leaving a fixed empty band.
+const TASK_VIEW_SUBTASK_BAR_HEIGHT = 10;
 // Vertical room reserved below the Current Task bar for the blocking-reason
 // wavy lines (only when the task has milestones).
 const TASK_VIEW_MILESTONE_BAND = 18;
@@ -345,19 +349,51 @@ function ComponentTopAxis({ width, height, range }: { width: number; height: num
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
 
+  // Top axis: tick labels sit at the top (above the baseline), mirroring the bottom
+  // chart's axis whose labels sit below its baseline. The baseline + ticks + the
+  // gridlines hang below the labels, toward the content.
   return (
     <svg width={width} height={height} className="block">
       {ticks.map((tick) => (
         <g key={tick}>
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.5} />
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={5} y2={11} stroke="#000" />
-          <text x={safeScale(xScale, tick)} y={18} textAnchor="middle" fontSize="12" fill="#000">
+          <text x={safeScale(xScale, tick)} y={11} textAnchor="middle" fontSize="12" fill="#000">
             {formatAxisTick(tick)}
           </text>
+          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.5} />
+          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={22} stroke="#000" />
         </g>
       ))}
-      <line x1={5} x2={width - 5} y1={5} y2={5} stroke="#000" />
+      <line x1={5} x2={width - 5} y1={16} y2={16} stroke="#000" />
     </svg>
+  );
+}
+
+// Zoom toolbar button styling, shared by the global time-zoom control and the
+// gantt's row-zoom control so both toolbars read identically.
+const ZOOM_BTN_CLASS = "rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-primary";
+
+// TimeZoomControls is the horizontal (time-axis) zoom widget. It is rendered once
+// at the page level so time zoom is always available — independent of whether the
+// per-task gantt is shown. onZoom(dir) zooms out for dir > 0 and in for dir < 0.
+function TimeZoomControls({ onZoom, className }: { onZoom: (dir: number) => void; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "z-10 flex items-center gap-0.5 rounded border bg-white/90 px-1 py-0.5 shadow-sm",
+        className,
+      )}
+      // stopPropagation so a click on the toolbar doesn't reach the left column's
+      // pan/drag handlers (which capture the pointer and would swallow the click).
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <span className="select-none px-0.5 text-[10px] font-medium text-muted-foreground">time</span>
+      <button type="button" className={ZOOM_BTN_CLASS} title="Zoom time out" onClick={() => onZoom(1)}>
+        <Minus className="h-4 w-4" />
+      </button>
+      <button type="button" className={ZOOM_BTN_CLASS} title="Zoom time in" onClick={() => onZoom(-1)}>
+        <Plus className="h-4 w-4" />
+      </button>
+    </div>
   );
 }
 
@@ -406,6 +442,10 @@ function ComponentTimeline({
   // Row height is the vertical zoom: taller rows = bigger bars, a taller chart that
   // scrolls. The chart grows past its region and is navigated by dragging/scrolling.
   const [rowHeight, setRowHeight] = useState(ROW_HEIGHT);
+  // Whether more task rows sit above/below the visible area (and roughly how many),
+  // so we can show "scroll for more" affordances at each end. Both stay hidden when
+  // everything fits; the top one also hides at the very top, the bottom at the end.
+  const [scrollHint, setScrollHint] = useState({ canUp: false, hiddenAbove: 0, canDown: false, hiddenBelow: 0 });
   const { layout: taskLayout, contentHeight, topRows } = buildComponentTaskLayout(tasks, width, height, range.startTime, range.endTime, rowHeight);
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
 
@@ -459,6 +499,22 @@ function ComponentTimeline({
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
+  // Recompute the scroll hint from the container: how far is left below the fold,
+  // and roughly how many rows that is. Driven by the scroll handler and re-run when
+  // the layout changes (row height / content height / region height / task count).
+  const updateScrollHint = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const above = el.scrollTop;
+    const below = el.scrollHeight - el.clientHeight - el.scrollTop;
+    const rows = (px: number) => Math.max(0, Math.ceil(px / Math.max(1, rowHeight)));
+    setScrollHint({ canUp: above > 1, hiddenAbove: rows(above), canDown: below > 1, hiddenBelow: rows(below) });
+  };
+  useEffect(() => {
+    updateScrollHint();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentHeight, height, rowHeight, tasks.length]);
+
   // Drag pans in both directions: horizontal moves the time range, vertical scrolls
   // through the concurrency rows. A press with no movement selects the task.
   const dragRef = useRef<{ id: number; x: number; y: number; range: TimeRange; scrollTop: number; pending: Task | null; moved: boolean } | null>(null);
@@ -502,42 +558,32 @@ function ComponentTimeline({
     if (!drag.moved && drag.pending) onSelectTaskRef.current(drag.pending);
   };
 
-  // On-screen zoom controls: horizontal (time) and vertical (row height).
-  const zoomTimeBy = (dir: number) => onZoom(dir * 160, 0, 0.5); // +1 out, -1 in
+  // On-screen vertical (row height) zoom controls. Horizontal/time zoom lives in
+  // the always-on page-level toolbar (TimeZoomControls), since it applies to every
+  // view; row zoom is specific to the per-task gantt and stays here. The gantt
+  // still zooms time on Ctrl/⌘+scroll via onZoom (see the wheel handler above).
   const zoomRowsBy = (dir: number) => setRowHeight((h) => Math.min(80, Math.max(6, h + dir * 4)));
   // Shrink rows so every concurrency row fits in the visible region at once.
   const zoomRowsAll = () => setRowHeight(Math.max(2, Math.min(80, Math.floor(height / Math.max(1, topRows)))));
-  const btnClass = "rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-primary";
 
   return (
     <div className="relative h-full w-full">
       {/* stopPropagation so a click on the toolbar doesn't reach the gantt/parent
           drag handlers (which capture the pointer and would swallow the click). */}
       <div
-        className="absolute right-2 top-1 z-10 flex items-center gap-0.5 rounded border bg-white/90 px-1 py-0.5 shadow-sm"
+        className="absolute right-2 top-1 z-20 flex items-center gap-0.5 rounded border bg-white/90 px-1 py-0.5 shadow-sm"
         onPointerDown={(event) => event.stopPropagation()}
       >
-        <span className="select-none px-0.5 text-[10px] font-medium text-muted-foreground">time</span>
-        <button type="button" className={btnClass} title="Zoom time out" onClick={() => zoomTimeBy(1)}>
-          <Minus className="h-4 w-4" />
-        </button>
-        <button type="button" className={btnClass} title="Zoom time in" onClick={() => zoomTimeBy(-1)}>
-          <Plus className="h-4 w-4" />
-        </button>
-        <span className="mx-0.5 h-4 w-px bg-border" />
         <span className="select-none px-0.5 text-[10px] font-medium text-muted-foreground">rows</span>
-        <button type="button" className={btnClass} title="Shorter rows (Alt+scroll)" onClick={() => zoomRowsBy(-1)}>
+        <button type="button" className={ZOOM_BTN_CLASS} title="Shorter rows (Alt+scroll)" onClick={() => zoomRowsBy(-1)}>
           <Minus className="h-4 w-4" />
         </button>
-        <button type="button" className={btnClass} title="Taller rows (Alt+scroll)" onClick={() => zoomRowsBy(1)}>
+        <button type="button" className={ZOOM_BTN_CLASS} title="Taller rows (Alt+scroll)" onClick={() => zoomRowsBy(1)}>
           <Plus className="h-4 w-4" />
         </button>
-        <button type="button" className={`${btnClass} px-1 text-[10px] font-medium`} title="Fit all rows" onClick={zoomRowsAll}>
+        <button type="button" className={`${ZOOM_BTN_CLASS} px-1 text-[10px] font-medium`} title="Fit all rows" onClick={zoomRowsAll}>
           all
         </button>
-      </div>
-      <div className="pointer-events-none absolute bottom-1 left-2 z-10 rounded bg-white/75 px-1.5 py-0.5 text-[10px] text-muted-foreground shadow-sm">
-        Scroll/drag to pan · pinch or ⌘/Ctrl+scroll to zoom time · Alt+scroll for rows
       </div>
       <div
         ref={scrollRef}
@@ -546,6 +592,7 @@ function ComponentTimeline({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
+        onScroll={updateScrollHint}
       >
         <svg width={width} height={contentHeight} className="block">
           <defs>
@@ -621,8 +668,53 @@ function ComponentTimeline({
               pointerEvents="none"
             />
           ))}
+
+          {/* Y-axis: the stacked rows are concurrency levels, so label the row index
+              the same repeated way as the task-count / blocking-reason charts. It
+              lives inside the scrolling SVG, so the numbers track the rows as you
+              scroll. */}
+          <YAxisOverlay
+            yScale={d3.scaleLinear().domain([0, Math.max(1, topRows)]).range([0, contentHeight])}
+            width={width}
+            // One label roughly every ~120px of the (tall, scrolling) chart, so some
+            // are always in view rather than 50 rows apart and mostly off-screen.
+            tickCount={Math.max(4, Math.round(contentHeight / 120))}
+          />
         </svg>
       </div>
+      {/* "More rows above/below" affordances: a fade plus a clickable chevron pill at
+          each end, shown only while the gantt can scroll that way. The fades are
+          click-through so they never block dragging the bars beneath them; each pill
+          scrolls a page in its direction. They disappear at that end of the scroll
+          (and entirely when every row already fits). */}
+      {scrollHint.canUp && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-14 items-start justify-center bg-gradient-to-b from-white via-white/70 to-transparent">
+          <button
+            type="button"
+            className="pointer-events-auto mt-1.5 flex items-center gap-1 rounded-full border bg-white/95 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm transition-colors hover:text-primary"
+            title="Scroll up to see earlier task rows"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => scrollRef.current?.scrollBy({ top: -Math.max(1, height * 0.8), behavior: "smooth" })}
+          >
+            <ChevronUp className="h-3.5 w-3.5" />
+            {scrollHint.hiddenAbove} more row{scrollHint.hiddenAbove === 1 ? "" : "s"} above
+          </button>
+        </div>
+      )}
+      {scrollHint.canDown && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex h-14 items-end justify-center bg-gradient-to-t from-white via-white/70 to-transparent">
+          <button
+            type="button"
+            className="pointer-events-auto mb-1.5 flex items-center gap-1 rounded-full border bg-white/95 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm transition-colors hover:text-primary"
+            title="Scroll down to see more task rows"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => scrollRef.current?.scrollBy({ top: Math.max(1, height * 0.8), behavior: "smooth" })}
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+            {scrollHint.hiddenBelow} more row{scrollHint.hiddenBelow === 1 ? "" : "s"} below
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -642,16 +734,17 @@ const Y_LABEL_SPACING = 450;
 // YAxisOverlay draws horizontal value gridlines for a count chart, repeating the
 // value label across the width — one column roughly every Y_LABEL_SPACING px, both
 // edges included — and paints it ON TOP of the chart with a white halo so the value
-// stays readable over the filled areas of a wide chart. Shared by the task-count
-// and blocking-reason charts so they get identical treatment.
-function YAxisOverlay({ yScale, width }: { yScale: d3.ScaleLinear<number, number>; width: number }) {
+// stays readable over the filled areas of a wide chart. Shared by the task-count and
+// blocking-reason charts (tickCount left at the default) and the per-task gantt,
+// which passes a larger tickCount so labels stay visible in its tall, scrolling SVG.
+function YAxisOverlay({ yScale, width, tickCount = 4 }: { yScale: d3.ScaleLinear<number, number>; width: number; tickCount?: number }) {
   const left = 5;
   const right = Math.max(left + 1, width - 5);
   const intervals = Math.max(1, Math.round((right - left) / Y_LABEL_SPACING));
   const columns = Array.from({ length: intervals + 1 }, (_, i) => left + (i / intervals) * (right - left));
   // Skip the 0 baseline (it's implicit at the axis) and any non-integer ticks a
   // tiny range would produce.
-  const ticks = yScale.ticks(4).filter((tick) => Number.isInteger(tick) && tick > 0);
+  const ticks = yScale.ticks(tickCount).filter((tick) => Number.isInteger(tick) && tick > 0);
   return (
     <g pointerEvents="none">
       {ticks.map((tick) => {
@@ -965,7 +1058,7 @@ function buildTopTaskRows(
   const barRegionHeight = height - TASK_VIEW_MARGIN_BOTTOM - TASK_VIEW_MARGIN_TOP;
   const nonSubTaskRegionHeight = TASK_VIEW_GROUP_GAP * 4 + TASK_VIEW_LARGE_TASK_HEIGHT * 2 + milestoneBand;
   const subTaskRegionHeight = Math.max(1, barRegionHeight - nonSubTaskRegionHeight);
-  const childBarHeight = Math.min(10, subTaskRegionHeight / Math.max(1, maxYIndex));
+  const childBarHeight = Math.min(TASK_VIEW_SUBTASK_BAR_HEIGHT, subTaskRegionHeight / Math.max(1, maxYIndex));
   const rows: TaskViewRow[] = [];
 
   const pushTask = (task: Task, y: number, rowHeight: number) => {
@@ -1095,14 +1188,14 @@ function ComponentTaskView({
 
       {ticks.map((tick) => (
         <g key={tick} pointerEvents="none">
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.5} />
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={5} y2={11} stroke="#000" />
-          <text x={safeScale(xScale, tick)} y={18} textAnchor="middle" fontSize="12" fill="#000">
+          <text x={safeScale(xScale, tick)} y={11} textAnchor="middle" fontSize="12" fill="#000">
             {formatAxisTick(tick)}
           </text>
+          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.5} />
+          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={22} stroke="#000" />
         </g>
       ))}
-      <line x1={5} x2={width - 5} y1={5} y2={5} stroke="#000" pointerEvents="none" />
+      <line x1={5} x2={width - 5} y1={16} y2={16} stroke="#000" pointerEvents="none" />
 
       <g className="daisen1-task-view-dividers" pointerEvents="none">
         <text x={5} y={parentLabelY} fontSize={20} textAnchor="start">
@@ -1229,7 +1322,10 @@ function ComponentLegend({
       {taskKeys.length > 0 && (
         <>
           <div className="flex items-center justify-between gap-2">
-            <SectionLabel>Tasks</SectionLabel>
+            <div className="flex items-center gap-1">
+              <SectionLabel>Tasks</SectionLabel>
+              <TaskTypesHelp />
+            </div>
             {/* Color/group tasks by kind alone or the finer kind-what pair. Drives
                 both these swatches and the task-count chart's bands. */}
             <div className="inline-flex shrink-0 overflow-hidden rounded border text-[10px] font-medium" role="group" aria-label="Color tasks by">
@@ -1283,7 +1379,10 @@ function ComponentLegend({
 
       {blockingReasons.length > 0 && (
         <>
-          <SectionLabel>Blocking reasons</SectionLabel>
+          <div className="flex items-center gap-1">
+            <SectionLabel>Blocking reasons</SectionLabel>
+            <BlockingReasonsHelp />
+          </div>
           <ul className="mt-2 space-y-0.5">
             {blockingReasons.map((kind) => {
               const color = colorMap[kind] ?? "#9ca3af";
@@ -1556,7 +1655,26 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // are in range), the task-count density chart (always), and the blocking-reason
   // bars (always). Task view and blocking take fixed shares; the middle is split
   // between the gantt and the count, or given wholly to the count when no gantt.
-  const taskViewHeight = currentTask ? Math.round(size.height * TASK_VIEW_HEIGHT_RATIO) : TOP_AXIS_COMPACT_HEIGHT;
+  // Size the task view to its content — the parent/current rows plus one row per
+  // subtask concurrency level — capped at the fixed ratio, so a task with only a
+  // few subtasks doesn't leave a big empty band below them. Collapses to a thin
+  // axis when no task is selected.
+  const subtaskRowCount = useMemo(() => {
+    if (!currentTask || childTasks.length === 0) return 0;
+    const layout = childTasks.map((task) => ({ ...task, subTasks: [], level: 0 }) as LayoutTask);
+    return assignYIndices(layout) + 1;
+  }, [childTasks, currentTask]);
+  const taskViewMilestoneBand = (currentTask?.steps?.length ?? 0) > 0 ? TASK_VIEW_MILESTONE_BAND : 0;
+  const desiredTaskViewHeight =
+    TASK_VIEW_MARGIN_TOP +
+    TASK_VIEW_MARGIN_BOTTOM +
+    TASK_VIEW_GROUP_GAP * 4 +
+    TASK_VIEW_LARGE_TASK_HEIGHT * 2 +
+    taskViewMilestoneBand +
+    subtaskRowCount * TASK_VIEW_SUBTASK_BAR_HEIGHT;
+  const taskViewHeight = currentTask
+    ? Math.min(Math.round(size.height * TASK_VIEW_HEIGHT_RATIO), desiredTaskViewHeight)
+    : TOP_AXIS_COMPACT_HEIGHT;
   const metricLineHeight = Math.round(size.height * COMPONENT_LINE_HEIGHT_RATIO);
   const middleHeight = Math.max(120, size.height - taskViewHeight - metricLineHeight);
   const countHeight = showGantt ? Math.min(220, Math.max(90, Math.round(middleHeight * 0.3))) : middleHeight;
@@ -1787,6 +1905,10 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
         onMouseMove={moveCrosshair}
         onMouseLeave={hideCrosshair}
       >
+        {/* Global horizontal (time) zoom — always available, independent of whether
+            the per-task gantt is shown. Vertical/row zoom is gantt-specific and
+            lives on the gantt's own toolbar instead. */}
+        <TimeZoomControls onZoom={(dir) => zoomTimeRange(dir * 160, 0, 0.5)} className="absolute right-2 top-1" />
         {/* Three stacked regions. highlightedTaskId follows hover only (not the
             selected task), so selecting a task never dims the rest. Subtle
             border-t dividers separate the regions. */}
@@ -1817,7 +1939,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
         {/* Component tasks (per-task gantt) — optional: only when the range holds
             few enough tasks to draw each one. */}
         {showGantt && (
-          <div className="daisen1-component-view border-t border-slate-200" style={{ height: ganttHeight }}>
+          <div className="daisen1-component-view relative border-t border-slate-200" style={{ height: ganttHeight }}>
             <ComponentTimeline
               name={componentName}
               tasks={tasks}
@@ -1835,6 +1957,9 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               onZoom={zoomTimeRange}
               onRangeChange={shiftRange}
             />
+            <div className={CHART_HELP_CORNER} onPointerDown={(e) => e.stopPropagation()}>
+              <ComponentTaskViewHelp className={CHART_HELP_BUTTON} />
+            </div>
           </div>
         )}
         {/* Task count (occupancy density by kind) — always shown. A plain scroll
@@ -1863,7 +1988,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             showZoomHint={!showGantt}
           />
           <div className={CHART_HELP_CORNER} onPointerDown={(e) => e.stopPropagation()}>
-            <ComponentTasksHelp className={CHART_HELP_BUTTON} />
+            <TaskCountHelp className={CHART_HELP_BUTTON} />
           </div>
         </div>
         {/* Blocking reasons — always shown. Like the task-count chart: plain scroll
@@ -1877,6 +2002,13 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           <div className={CHART_HELP_CORNER} onPointerDown={(e) => e.stopPropagation()}>
             <BlockingReasonsHelp className={CHART_HELP_BUTTON} />
           </div>
+        </div>
+        {/* Page-level navigation hint, bottom-left of the whole left column so it
+            applies to every region (not just the gantt). The row-zoom tip only
+            appears when the per-task gantt is shown, since that's the only region
+            with rows. */}
+        <div className="pointer-events-none absolute bottom-7 left-2 z-10 rounded bg-white/75 px-1.5 py-0.5 text-[10px] text-muted-foreground shadow-sm">
+          Scroll/drag to pan · pinch or ⌘/Ctrl+scroll to zoom time{showGantt ? " · Alt+scroll for rows" : ""}
         </div>
         {/* Crosshair: a vertical guide at the cursor's x, spanning all the stacked
             charts so a feature can be read off at the same time across them. Solid
