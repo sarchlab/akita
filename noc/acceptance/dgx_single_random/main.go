@@ -14,6 +14,7 @@ import (
 	"github.com/sarchlab/akita/v5/noc/networking/nvlink"
 
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/tebeka/atexit"
 )
@@ -37,10 +38,11 @@ func main() {
 
 	rand.Seed(1)
 
-	engine := timing.NewSerialEngine()
+	sim := acceptance.NewSimulation()
+	engine := sim.GetEngine()
 	t := acceptance.NewTest()
 
-	agents := createNetwork(engine, t)
+	agents := createNetwork(sim, t)
 	for _, agent := range agents {
 		t.RegisterAgent(agent)
 	}
@@ -55,17 +57,18 @@ func main() {
 	t.MustHaveReceivedAllMsgs()
 	t.ReportBandwidthAchieved(engine.CurrentTime())
 
+	sim.Terminate()
 	atexit.Exit(0)
 }
 
 func createNetwork(
-	engine timing.EventScheduler,
+	sim *simulation.Simulation,
 	test *acceptance.Test,
 ) []*acceptance.Agent {
-	agents := createAgents(engine, test)
+	agents := createAgents(sim, test)
 
 	connector := nvlink.NewConnector().
-		WithEngine(engine).
+		WithRegistrar(sim).
 		WithPCIeVersion(3, 16)
 	connector.CreateNetwork("Network")
 
@@ -78,7 +81,7 @@ func createNetwork(
 }
 
 func createAgents(
-	engine timing.EventScheduler,
+	sim *simulation.Simulation,
 	test *acceptance.Test,
 ) []*acceptance.Agent {
 	freq := 1.0 * timing.GHz
@@ -90,7 +93,7 @@ func createAgents(
 		ports := []messaging.Port{
 			messaging.NewPort(nil, 1, 1, name+".Port0"),
 		}
-		agent := acceptance.NewAgent(engine, freq, name, ports, test)
+		agent := acceptance.NewAgent(sim, freq, name, ports, test)
 		agent.TickLater()
 		agents = append(agents, agent)
 	}

@@ -20,9 +20,10 @@ type Agent struct {
 	recvBytes  uint64
 }
 
-// NewAgent creates a new agent.
+// NewAgent creates a new agent and registers it (and its ports) with the
+// registrar, so the agent appears in the simulation's topology and trace.
 func NewAgent(
-	engine timing.EventScheduler,
+	reg modeling.Registrar,
 	freq timing.Freq,
 	name string,
 	ports []messaging.Port,
@@ -30,10 +31,12 @@ func NewAgent(
 ) *Agent {
 	a := &Agent{}
 	a.test = test
-	a.TickingComponent = modeling.NewTickingComponent(name, engine, freq, a)
+	a.TickingComponent = modeling.NewTickingComponent(name, reg.GetEngine(), freq, a)
+	reg.RegisterComponent(a)
 
 	for _, p := range ports {
 		p.SetComponent(a)
+		reg.RegisterPort(p)
 		a.AgentPorts = append(a.AgentPorts, p)
 	}
 

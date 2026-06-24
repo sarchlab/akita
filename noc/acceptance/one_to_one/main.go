@@ -20,7 +20,7 @@ func main() {
 	flag.Parse()
 	rand.Seed(1)
 
-	s := simulation.MakeBuilder().WithoutMonitoring().Build()
+	s := acceptance.NewSimulation()
 	engine := s.GetEngine()
 	t := acceptance.NewTest()
 
@@ -34,11 +34,11 @@ func main() {
 
 	t.MustHaveReceivedAllMsgs()
 	t.ReportBandwidthAchieved(engine.CurrentTime())
+	s.Terminate()
 	atexit.Exit(0)
 }
 
 func createNetwork(s *simulation.Simulation, test *acceptance.Test) {
-	engine := s.GetEngine()
 	freq := 1.0 * timing.GHz
 
 	var agents []*acceptance.Agent
@@ -49,7 +49,7 @@ func createNetwork(s *simulation.Simulation, test *acceptance.Test) {
 		for j := 0; j < 5; j++ {
 			ports[j] = messaging.NewPort(nil, 1, 1, fmt.Sprintf("%s.Port%d", name, j))
 		}
-		agent := acceptance.NewAgent(engine, freq, name, ports, test)
+		agent := acceptance.NewAgent(s, freq, name, ports, test)
 		agent.TickLater()
 		agents = append(agents, agent)
 	}
