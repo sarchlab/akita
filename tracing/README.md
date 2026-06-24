@@ -185,6 +185,21 @@ task begins at that same retrieve — the two are adjacent, no gap, no overlap.
 The buffer task carries the admission milestones; `req_in` carries only the
 post-admission processing milestones.
 
+### Outgoing-buffer tracing
+
+`CollectOutgoingBufferTrace(port)` is the send-side mirror. It opens an
+`outgoing_buffer`-kind task spanning a message's residency in the port's
+**outgoing** buffer — from the moment the owning component sends (enqueues) it
+until the connection retrieves (drains) it onto the link — parented to the
+message's `req_out` task (for a response, the `req_out` it responds to). It is
+located at `<port>.outgoing`. Like the incoming side it emits a
+`MilestoneKindQueue` "reached head" milestone the instant the message becomes the
+head of the buffer: the interval up to it is time spent waiting behind earlier
+messages, and the remaining time at the head is the wait for the link to become
+free. Follow-on state can be hung on the task via
+`MsgIDAtOutgoingBuffer(msg, domain)` / `ForgetMsgIDAtOutgoingBuffer(msgID, domain)`.
+It too is a no-op unless the port's owning component is traced via `CollectTrace`.
+
 ### Pipeline subtasks
 
 A component with an internal latency pipeline between retrieve and processing

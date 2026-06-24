@@ -5,11 +5,12 @@
 // # Model
 //
 // A [Task] is the aggregate record a stateful tracer builds from a stream of
-// events: it has a start and end time, a location (the component name), an
+// events: it has a start and end time, a location (a kind-qualified component
+// path — one location holds one kind, e.g. "L1.req_in", "L1.Top.incoming"), an
 // optional parent, and lists of [TaskTag]s (categorical labels) and
-// [Milestone]s (points where a blocking condition resolved). Components never
-// build a Task directly — they emit lightweight event structs and the emit
-// functions stamp the time from the domain clock and fire a hook.
+// [Milestone]s (notable points, such as the resolution of a blocking condition).
+// Components never build a Task directly — they emit lightweight event structs
+// and the emit functions stamp the time from the domain clock and fire a hook.
 //
 // # Emitting
 //
@@ -22,10 +23,11 @@
 //
 // # Collecting
 //
-// Attach a [Tracer] to a domain with [CollectTrace]; attach incoming-buffer
-// tracing to a port with [CollectIncomingBufferTrace]. Built-in tracers include
-// [AverageTimeTracer], [TotalTimeTracer], [BusyTimeTracer], [TagCountTracer],
-// [BackTraceTracer], and [DBTracer] (which persists to a DataRecorder).
+// Attach a [Tracer] to a domain with [CollectTrace]; attach incoming- and
+// outgoing-buffer tracing to a port with [CollectIncomingBufferTrace] and
+// [CollectOutgoingBufferTrace]. Built-in tracers include [AverageTimeTracer],
+// [TotalTimeTracer], [BusyTimeTracer], [TagCountTracer], [BackTraceTracer], and
+// [DBTracer] (which persists to a DataRecorder).
 //
 // See README.md in this package for a fuller guide, including the milestone
 // kinds, the buffer/req_in retrieve boundary, pipeline subtasks, and the
