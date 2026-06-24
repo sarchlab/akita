@@ -24,7 +24,11 @@ time, recorded as a row in the `trace` table with these fields:
   label). When a `Kind` is unfamiliar, read the source rather than guessing.
 - **`What`** — the specific thing acted on, usually the message's type name — e.g.
   `ReadReq`, the bare Go type name, without package or pointer.
-- **`Location`** — the component that ran the task (defaults to that component's name).
+- **`Location`** — where the task ran, as a dotted, kind-qualified path (one location
+  holds one kind): a component's handling lives at `<component>.req_in` / `.req_out`,
+  its pipeline stages at `<component>.<stage>`, and a port's buffered messages at
+  `<port>.incoming` / `.outgoing` — e.g. `L1Cache.req_in`, `L1Cache.Top.incoming`. This
+  is what Daisen's component drill-down groups on.
 - **`StartTime` / `EndTime`** — when the task opened and closed, in simulated
   picoseconds.
 
@@ -45,11 +49,11 @@ the task tree spans component boundaries.
   it sent the request.
 - **`req_in`** — the *receiver's* handling of that same request. Its `ParentID` is the
   message's ID — i.e. the sender's `req_out` task — so every `req_in` is a child of the
-  `req_out` that produced it. By convention it opens when the request reaches the
-  **head of the receiver's input buffer** — the earliest moment the component can act
-  on it (*peek* time), not when the request is later admitted/retrieved — and ends when
-  handling completes. Its duration is the receiver's service time, including time it
-  spent blocked on internal resources.
+  `req_out` that produced it. By convention it opens when the receiver **retrieves
+  (admits) the request from its input buffer** to begin handling, and ends when handling
+  completes. Its duration is the receiver's service time, including time it spent
+  blocked on internal resources. The earlier wait in the input buffer — from arrival to
+  retrieve — is recorded separately as an `incoming_buffer` task at the receiving port.
 
 This `req_out` → `req_in` parent link is what stitches a request's path across
 components into a single tree: a receiver's `req_in` is in turn the parent of any
@@ -61,7 +65,8 @@ A **milestone** marks the moment a task's blocking reason is *released*. The int
 ending at a milestone — measured from the previous milestone, or from the task's
 start — is time the task spent **blocked on that reason**, named by the milestone's
 `Kind` (e.g. `hardware_resource`, `network_busy`, `queue`, `data`, `dependency`,
-`translation`, `subtask`). So at any instant a task is blocked on the reason of its
+`translation`, `subtask`, or `work` — the last marking a span of active work rather
+than a block). So at any instant a task is blocked on the reason of its
 *next* milestone; after its last milestone it is running, not blocked. Milestones
 live in the `milestone` table (`TaskID`, `Time`, `Kind`); not every task records
 them.
