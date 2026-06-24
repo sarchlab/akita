@@ -211,13 +211,17 @@ attached to every component records each task's kind, parent, and location,
 then prints them by parent link:
 
 ```
-req_out @ Client
-  req_in @ L1
-    req_out @ L1
-      req_in @ L2
-        req_out @ L2
-          req_in @ Memory
+req_out @ Client.req_out
+  req_in @ L1.req_in
+    req_out @ L1.req_out
+      req_in @ L2.req_in
+        req_out @ L2.req_out
+          req_in @ Memory.req_in
 ```
+
+(Each location is suffixed with the task's kind: a component's `req_in`/`req_out`
+tasks live at `<component>.req_in`/`.req_out`. This "one location, one kind" scheme
+is what lets Daisen group a component's tasks — see chapter 7.)
 
 That tree is the whole story of one request: the client's outbound task
 parents L1's handling task, which parents L1's downstream task, and so on

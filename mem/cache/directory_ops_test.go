@@ -6,14 +6,56 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 )
 
+// TestDirectorySetID_FullCoverageBehindInterleaver is the regression test for
+// issue #402: a cache placed behind a low-bit interleaver must still reach
+// every one of its sets. For each geometry it walks the addresses an
+// InterleavedAddressPortMapper would route to a single slice (those with
+// address/stripe % numSlices == 0) across the footprint needed to fill that
+// slice, and asserts the set index covers all numSets. A naive low-bit index —
+// or a fixed-shift XOR fold — leaves a fraction of the sets unreachable here.
+func TestDirectorySetID_FullCoverageBehindInterleaver(t *testing.T) {
+	const blockSize = 64
+
+	cases := []struct {
+		numSets   int
+		ways      int
+		numSlices int
+		stripe    uint64
+	}{
+		{256, 16, 16, 128},  // the issue's 256 KB/16-way slice
+		{4096, 16, 16, 128}, // 4 MB slice — where a fixed-shift fold halves capacity
+		{8192, 16, 16, 64},  // 8 MB slice, 64 B stripe
+		{4096, 16, 8, 64},   // fewer/finer slices
+		{1024, 16, 32, 256}, // more slices, coarser stripe
+	}
+
+	for _, c := range cases {
+		footprint := uint64(c.numSets*c.ways*blockSize) * uint64(c.numSlices)
+		seen := make(map[int]struct{}, c.numSets)
+
+		for addr := uint64(0); addr < footprint; addr += blockSize {
+			if (addr/c.stripe)%uint64(c.numSlices) != 0 {
+				continue // routed to another slice
+			}
+			seen[DirectorySetID(addr, blockSize, c.numSets)] = struct{}{}
+		}
+
+		if len(seen) != c.numSets {
+			t.Errorf("numSets=%d ways=%d slices=%d stripe=%d: reached %d/%d sets",
+				c.numSets, c.ways, c.numSlices, c.stripe, len(seen), c.numSets)
+		}
+	}
+}
+
 func TestDirectoryLookup_Found(t *testing.T) {
 	var ds DirectoryState
 	DirectoryReset(&ds, 4, 2, 64)
 
-	// Place a valid block at set 1, way 0
-	ds.Sets[1].Blocks[0].IsValid = true
-	ds.Sets[1].Blocks[0].Tag = 64 // addr=64, blockSize=64, setID = (64/64)%4 = 1
-	ds.Sets[1].Blocks[0].PID = uint32(vm.PID(5))
+	// Place a valid block at the set addr=64 maps to, way 0.
+	wantSet := DirectorySetID(64, 64, 4)
+	ds.Sets[wantSet].Blocks[0].IsValid = true
+	ds.Sets[wantSet].Blocks[0].Tag = 64
+	ds.Sets[wantSet].Blocks[0].PID = uint32(vm.PID(5))
 
 	setID, wayID, found := DirectoryLookup(&ds, 4, 64, vm.PID(5), 64)
 
@@ -21,8 +63,8 @@ func TestDirectoryLookup_Found(t *testing.T) {
 		t.Fatal("expected to find block")
 	}
 
-	if setID != 1 {
-		t.Errorf("setID: got %d, want 1", setID)
+	if setID != wantSet {
+		t.Errorf("setID: got %d, want %d", setID, wantSet)
 	}
 
 	if wayID != 0 {
@@ -40,8 +82,8 @@ func TestDirectoryLookup_NotFound(t *testing.T) {
 		t.Fatal("expected not to find block")
 	}
 
-	if setID != 1 {
-		t.Errorf("setID: got %d, want 1", setID)
+	if setID != DirectorySetID(64, 64, 4) {
+		t.Errorf("setID: got %d, want %d", setID, DirectorySetID(64, 64, 4))
 	}
 
 	if wayID != -1 {
@@ -53,9 +95,10 @@ func TestDirectoryLookup_WrongPID(t *testing.T) {
 	var ds DirectoryState
 	DirectoryReset(&ds, 4, 2, 64)
 
-	ds.Sets[1].Blocks[0].IsValid = true
-	ds.Sets[1].Blocks[0].Tag = 64
-	ds.Sets[1].Blocks[0].PID = uint32(vm.PID(5))
+	wantSet := DirectorySetID(64, 64, 4)
+	ds.Sets[wantSet].Blocks[0].IsValid = true
+	ds.Sets[wantSet].Blocks[0].Tag = 64
+	ds.Sets[wantSet].Blocks[0].PID = uint32(vm.PID(5))
 
 	_, _, found := DirectoryLookup(&ds, 4, 64, vm.PID(99), 64)
 
@@ -69,9 +112,10 @@ func TestDirectoryLookup_InvalidBlock(t *testing.T) {
 	DirectoryReset(&ds, 4, 2, 64)
 
 	// Block matches tag+PID but is invalid
-	ds.Sets[1].Blocks[0].IsValid = false
-	ds.Sets[1].Blocks[0].Tag = 64
-	ds.Sets[1].Blocks[0].PID = uint32(vm.PID(5))
+	wantSet := DirectorySetID(64, 64, 4)
+	ds.Sets[wantSet].Blocks[0].IsValid = false
+	ds.Sets[wantSet].Blocks[0].Tag = 64
+	ds.Sets[wantSet].Blocks[0].PID = uint32(vm.PID(5))
 
 	_, _, found := DirectoryLookup(&ds, 4, 64, vm.PID(5), 64)
 
@@ -87,8 +131,8 @@ func TestDirectoryFindVictim(t *testing.T) {
 	// Default LRU order: [0, 1], so victim should be way 0
 	setID, wayID := DirectoryFindVictim(&ds, 4, 64, 64)
 
-	if setID != 1 {
-		t.Errorf("setID: got %d, want 1", setID)
+	if setID != DirectorySetID(64, 64, 4) {
+		t.Errorf("setID: got %d, want %d", setID, DirectorySetID(64, 64, 4))
 	}
 
 	if wayID != 0 {
@@ -101,7 +145,7 @@ func TestDirectoryFindVictim_AfterVisit(t *testing.T) {
 	DirectoryReset(&ds, 4, 2, 64)
 
 	// Visit way 0 so it becomes MRU; way 1 becomes LRU
-	DirectoryVisit(&ds, 1, 0)
+	DirectoryVisit(&ds, DirectorySetID(64, 64, 4), 0)
 
 	_, wayID := DirectoryFindVictim(&ds, 4, 64, 64)
 
@@ -115,8 +159,9 @@ func TestDirectoryFindVictim_SkipsLocked(t *testing.T) {
 	DirectoryReset(&ds, 4, 4, 64)
 
 	// LRUOrder starts [0,1,2,3]. Lock way 0, busy-read way 1.
-	ds.Sets[1].Blocks[0].IsLocked = true
-	ds.Sets[1].Blocks[1].ReadCount = 1
+	wantSet := DirectorySetID(64, 64, 4)
+	ds.Sets[wantSet].Blocks[0].IsLocked = true
+	ds.Sets[wantSet].Blocks[1].ReadCount = 1
 
 	_, wayID := DirectoryFindVictim(&ds, 4, 64, 64)
 
@@ -130,14 +175,15 @@ func TestDirectoryFindVictim_AllBusyFallsBackToLRU(t *testing.T) {
 	DirectoryReset(&ds, 4, 2, 64)
 
 	// Every way busy — caller still gets LRUOrder[0] so it can stall.
-	ds.Sets[1].Blocks[0].IsLocked = true
-	ds.Sets[1].Blocks[1].ReadCount = 1
+	wantSet := DirectorySetID(64, 64, 4)
+	ds.Sets[wantSet].Blocks[0].IsLocked = true
+	ds.Sets[wantSet].Blocks[1].ReadCount = 1
 
 	_, wayID := DirectoryFindVictim(&ds, 4, 64, 64)
 
-	if wayID != ds.Sets[1].LRUOrder[0] {
+	if wayID != ds.Sets[wantSet].LRUOrder[0] {
 		t.Errorf("wayID: got %d, want %d (LRU fallback)",
-			wayID, ds.Sets[1].LRUOrder[0])
+			wayID, ds.Sets[wantSet].LRUOrder[0])
 	}
 }
 

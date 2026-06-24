@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	_ "github.com/glebarez/go-sqlite"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -57,6 +57,7 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 		ParentID:         queryParentID,
 		Kind:             r.FormValue("kind"),
 		Where:            r.FormValue("where"),
+		Scope:            r.FormValue("scope"),
 		StartTime:        startTime,
 		EndTime:          endTime,
 		EnableTimeRange:  useTimeRange,
@@ -85,8 +86,15 @@ type TaskQuery struct {
 	// Use Kind to select all the tasks that are of a kind.
 	Kind string
 
-	// Use Where to select all the tasks that are executed at a location.
+	// Use Where to select all the tasks that are executed at a location
+	// (exact match on the full location string).
 	Where string
+
+	// Use Scope to select all the tasks at a location subtree: the scope
+	// itself plus every location nested under it. Location names are dotted,
+	// so Scope="TLB" matches "TLB", "TLB.req_in", "TLB.Top.incoming", etc.
+	// This drives the dashboard's click-a-component drill-down.
+	Scope string
 
 	// Enable time range selection.
 	EnableTimeRange bool
@@ -155,7 +163,7 @@ func NewSQLiteTraceReader(filename string) *SQLiteTraceReader {
 
 // Init establishes a connection to the database.
 func (r *SQLiteTraceReader) Init() {
-	db, err := sql.Open("sqlite", r.filename)
+	db, err := sql.Open("sqlite3", r.filename)
 	if err != nil {
 		panic(err)
 	}
@@ -169,15 +177,14 @@ func (r *SQLiteTraceReader) Init() {
 	r.DB = db
 }
 
-// InitReadOnly establishes a read-only connection to the database with WAL mode.
+// InitReadOnly establishes a read-only connection to the database. It is used to
+// read a trace concurrently while a DBTracer writes it; the writer already puts
+// the database in WAL mode, and a read-only connection must not set the journal
+// mode itself. With the native driver "mode=ro" is a true read-only open, so
+// setting WAL here would fail on any non-WAL file and panic — hence no such
+// pragma below.
 func (r *SQLiteTraceReader) InitReadOnly() {
-	db, err := sql.Open("sqlite", r.filename+"?mode=ro")
-	if err != nil {
-		panic(err)
-	}
-
-	// Enable WAL mode for concurrent read access.
-	_, err = db.Exec("PRAGMA journal_mode=WAL")
+	db, err := sql.Open("sqlite3", r.filename+"?mode=ro")
 	if err != nil {
 		panic(err)
 	}
@@ -252,9 +259,9 @@ func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
 
 // ListTasks returns a list of tasks in the trace according to the given query.
 func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Task {
-	sqlStr := r.prepareTaskQueryStr(query)
+	sqlStr, args := r.prepareTaskQueryStr(query)
 
-	rows, err := r.QueryContext(ctx, sqlStr)
+	rows, err := r.QueryContext(ctx, sqlStr, args...)
 	if err != nil {
 		panic(err)
 	}
@@ -272,6 +279,69 @@ func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Ta
 		r.loadMilestonesForTasks(tasks)
 		r.loadTagsForTasks(tasks)
 		sortTaskSteps(tasks)
+	}
+
+	return tasks
+}
+
+// listTaskIntervals fetches only the [StartTime, EndTime) intervals of the tasks
+// in a location scope that overlap [start, end), optionally restricted to a single
+// Kind. It is the lean alternative to ListTasks for occupancy-style metrics that
+// need nothing but the intervals — one (covering) index scan rather than hydrating
+// every Task. The scope is the named location plus anything nested under it, so a
+// component name aggregates its whole subtree while a leaf matches only itself. An
+// empty kind matches every kind; empty whatLikes matches every What, otherwise the
+// What must match at least one of the SQL LIKE patterns (e.g. "%Req", "%Request").
+// Each returned Task has only StartTime and EndTime set.
+func (r *SQLiteTraceReader) listTaskIntervals(
+	ctx context.Context,
+	location, kind string,
+	whatLikes []string,
+	start, end float64,
+) []Task {
+	q := `
+		SELECT StartTime, EndTime
+		FROM trace
+		WHERE Location IN (SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?))
+			AND EndTime > ? AND StartTime < ?`
+
+	lo, hi := scopePrefixBounds(location)
+	args := []any{location, lo, hi, start, end}
+	if kind != "" {
+		q += "\n\t\t\tAND Kind = ?"
+		args = append(args, kind)
+	}
+	if len(whatLikes) > 0 {
+		clauses := make([]string, len(whatLikes))
+		for i, pattern := range whatLikes {
+			clauses[i] = "What LIKE ?"
+			args = append(args, pattern)
+		}
+		q += "\n\t\t\tAND (" + strings.Join(clauses, " OR ") + ")"
+	}
+
+	rows, err := r.QueryContext(ctx, q, args...)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		panic(err)
+	}
+	defer rows.Close()
+
+	tasks := []Task{}
+	for rows.Next() {
+		var s, e float64
+		if err := rows.Scan(&s, &e); err != nil {
+			if ctx.Err() != nil {
+				return tasks
+			}
+			panic(err)
+		}
+		tasks = append(tasks, Task{
+			StartTime: timing.VTimeInPicoSec(s),
+			EndTime:   timing.VTimeInPicoSec(e),
+		})
 	}
 
 	return tasks
@@ -384,17 +454,32 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 
 	// Build a map for quick task lookup
 	taskMap := make(map[uint64]*Task)
-	taskIDs := make([]interface{}, 0, len(tasks))
+	taskIDs := make([]uint64, 0, len(tasks))
 	for i := range tasks {
 		taskMap[tasks[i].ID] = &tasks[i]
 		taskIDs = append(taskIDs, tasks[i].ID)
 	}
 
-	// Query milestones for all tasks using parameterized query
-	placeholders := strings.Repeat("?,", len(taskIDs))
-	if len(placeholders) > 0 {
-		placeholders = placeholders[:len(placeholders)-1] // remove trailing comma
+	// SQLite caps the number of bound parameters in one statement
+	// (SQLITE_MAX_VARIABLE_NUMBER, ~32k). A component can have far more tasks than
+	// that, so query in batches — a single IN list with one placeholder per task
+	// would make the statement fail and silently drop every milestone for big
+	// components (which left the blocking-reason chart blank when zoomed out).
+	const batchSize = 10000
+	for start := 0; start < len(taskIDs); start += batchSize {
+		end := min(start+batchSize, len(taskIDs))
+		r.loadMilestoneBatch(taskMap, taskIDs[start:end])
 	}
+}
+
+// loadMilestoneBatch loads milestones for one batch of task ids into taskMap.
+func (r *SQLiteTraceReader) loadMilestoneBatch(taskMap map[uint64]*Task, ids []uint64) {
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
 
 	// A milestone's location is inherited from its task, so the milestone
 	// table no longer stores it; we read the remaining columns only.
@@ -404,7 +489,7 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 		WHERE TaskID IN (%s)
 		ORDER BY TaskID, Time`, placeholders)
 
-	rows, err := r.Query(sqlStr, taskIDs...)
+	rows, err := r.Query(sqlStr, args...)
 	if err != nil {
 		// If milestone table doesn't exist, just return without error
 		return
@@ -443,16 +528,29 @@ func (r *SQLiteTraceReader) loadTagsForTasks(tasks []Task) {
 	}
 
 	taskMap := make(map[uint64]*Task)
-	taskIDs := make([]interface{}, 0, len(tasks))
+	taskIDs := make([]uint64, 0, len(tasks))
 	for i := range tasks {
 		taskMap[tasks[i].ID] = &tasks[i]
 		taskIDs = append(taskIDs, tasks[i].ID)
 	}
 
-	placeholders := strings.Repeat("?,", len(taskIDs))
-	if len(placeholders) > 0 {
-		placeholders = placeholders[:len(placeholders)-1] // remove trailing comma
+	// Batch like loadMilestonesForTasks: one placeholder per task overflows
+	// SQLite's bound-parameter limit for large components.
+	const batchSize = 10000
+	for start := 0; start < len(taskIDs); start += batchSize {
+		end := min(start+batchSize, len(taskIDs))
+		r.loadTagBatch(taskMap, taskIDs[start:end])
 	}
+}
+
+// loadTagBatch loads tags for one batch of task ids into taskMap.
+func (r *SQLiteTraceReader) loadTagBatch(taskMap map[uint64]*Task, ids []uint64) {
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
 
 	sqlStr := fmt.Sprintf(`
 		SELECT TaskID, Time, What
@@ -460,7 +558,7 @@ func (r *SQLiteTraceReader) loadTagsForTasks(tasks []Task) {
 		WHERE TaskID IN (%s)
 		ORDER BY TaskID, Time`, placeholders)
 
-	rows, err := r.Query(sqlStr, taskIDs...)
+	rows, err := r.Query(sqlStr, args...)
 	if err != nil {
 		// If the tag table doesn't exist, just return without error.
 		return
@@ -563,7 +661,7 @@ func (r *SQLiteTraceReader) scanTaskWithoutParent(rows *sql.Rows, t *Task) {
 	t.EndTime = timing.VTimeInPicoSec(uint64(endTime))
 }
 
-func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) string {
+func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) (string, []any) {
 	// Location is stored as an integer id that references the shared location
 	// table; join it back to the component name string.
 	sqlStr := `
@@ -603,15 +701,17 @@ func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) string {
 		`
 	}
 
-	sqlStr = r.addQueryConditionsToQueryStr(sqlStr, query)
+	sqlStr, args := r.addQueryConditionsToQueryStr(sqlStr, query)
 
-	return sqlStr
+	return sqlStr, args
 }
 
 func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 	sqlStr string,
 	query TaskQuery,
-) string {
+) (string, []any) {
+	args := []any{}
+
 	sqlStr += `
 		WHERE 1=1
 	`
@@ -640,6 +740,21 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 		`
 	}
 
+	if query.Scope != "" {
+		// Select the scope component and everything nested under it. Locations
+		// are dotted, so the subtree is the exact name plus the "scope." prefix.
+		// Match the exact location or anything nested under it. A case-sensitive
+		// range ([scope+".", scope+"/")) is used instead of LIKE because SQLite's
+		// LIKE is ASCII case-insensitive while the location tree and the exact `=`
+		// check are case-sensitive — LIKE would pull in a differently-cased sibling
+		// subtree. Parameterized to keep the scope value out of the SQL text.
+		lo, hi := scopePrefixBounds(query.Scope)
+		sqlStr += `
+			AND (loc.Locale = ? OR (loc.Locale >= ? AND loc.Locale < ?))
+		`
+		args = append(args, query.Scope, lo, hi)
+	}
+
 	if query.EnableTimeRange {
 		sqlStr += fmt.Sprintf(
 			"AND t.EndTime > %.15f AND t.StartTime < %.15f",
@@ -647,7 +762,16 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 			query.EndTime)
 	}
 
-	return sqlStr
+	return sqlStr, args
+}
+
+// scopePrefixBounds returns the half-open [lo, hi) Locale range that selects
+// every location nested under scope ("scope." followed by anything), in SQLite's
+// case-sensitive BINARY ordering. "/" (0x2F) is the byte right after "." (0x2E),
+// so every "scope." string sorts below it and no other prefix slips in. Pair it
+// with an exact `Locale = scope` check to also include the scope's own location.
+func scopePrefixBounds(scope string) (lo, hi string) {
+	return scope + ".", scope + "/"
 }
 
 // Segment represents a time segment where traces were collected

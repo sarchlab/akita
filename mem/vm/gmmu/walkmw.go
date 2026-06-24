@@ -52,14 +52,26 @@ func (m *walkMW) parseFromTop() bool {
 	spec := m.comp.Spec()
 	state := &m.comp.State
 
+	reqI := m.topPort().PeekIncoming()
+	if reqI == nil {
+		return false
+	}
+
 	if len(state.WalkingTranslations) >= spec.MaxRequestsInFlight {
 		return false
 	}
 
-	reqI := m.topPort().RetrieveIncoming()
-	if reqI == nil {
-		return false
-	}
+	// A walk slot is free: the at-head wait for one — counted on the
+	// incoming-buffer task since the request reached the head of the Top
+	// buffer — is over. The req_in opened at retrieve covers only the walk
+	// processing that follows.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtIncomingBuffer(reqI, m.comp),
+		Kind:   tracing.MilestoneKindHardwareResource,
+		What:   m.comp.Name() + ".walk",
+	})
+
+	m.topPort().RetrieveIncoming()
 
 	switch req := reqI.(type) {
 	case vmprotocol.TranslationReq:
@@ -77,16 +89,31 @@ func (m *walkMW) startWalking(req vmprotocol.TranslationReq) {
 	spec := m.comp.Spec()
 	state := &m.comp.State
 
+	recvTaskID := tracing.MsgIDAtReceiver(req, m.comp)
+	walkTaskID := timing.GetIDGenerator().Generate()
+
 	ts := transactionState{
 		ReqID:      req.ID,
-		RecvTaskID: tracing.MsgIDAtReceiver(req, m.comp),
+		RecvTaskID: recvTaskID,
 		ReqSrc:     req.Src,
 		ReqDst:     req.Dst,
 		PID:        uint64(req.PID),
 		VAddr:      req.VAddr,
 		DeviceID:   req.DeviceID,
 		CycleLeft:  spec.Latency,
+		WalkTaskID: walkTaskID,
 	}
+
+	// Open the walk subtask spanning the page-table-walk latency, a child of the
+	// req_in, so the ".walk" work milestone has a corresponding bar. It is closed
+	// on the local-hit (doPageWalkHit) and remote-fetch (processRemoteMemReq)
+	// exits.
+	tracing.StartTask(m.comp, tracing.TaskStart{
+		ID:       walkTaskID,
+		ParentID: recvTaskID,
+		Kind:     tracing.PipelineTaskKind,
+		What:     m.comp.Name() + ".walk",
+	})
 
 	state.WalkingTranslations = append(
 		state.WalkingTranslations, ts)
@@ -175,6 +202,21 @@ func (m *walkMW) processRemoteMemReq(
 
 	m.bottomPort().Send(req)
 
+	// Open the downstream req_out as a child task of the original req_in so the
+	// remote walk shows up as a proper subtask; it is finalized in
+	// handleTranslationRsp when the remote response returns.
+	tracing.TraceReqInitiate(m.comp, req, walking.RecvTaskID)
+
+	// The local walk countdown finished and the page is remote: attribute the
+	// countdown as work on the req_in and close the walk subtask that spanned
+	// it. The downstream req_out (opened above) then covers the remote fetch.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: walking.RecvTaskID,
+		Kind:   tracing.MilestoneKindWork,
+		What:   m.comp.Name() + ".walk",
+	})
+	tracing.EndTask(m.comp, tracing.TaskEnd{ID: walking.WalkTaskID})
+
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
 	return true
@@ -216,6 +258,16 @@ func (m *walkMW) doPageWalkHit(
 	m.topPort().Send(rsp)
 
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
+
+	// The local page walk counted down CycleLeft before reaching here; record
+	// that processing latency as work on the original req_in and close the walk
+	// subtask that spanned it, so the work milestone has a corresponding bar.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: walking.RecvTaskID,
+		Kind:   tracing.MilestoneKindWork,
+		What:   m.comp.Name() + ".walk",
+	})
+	tracing.EndTask(m.comp, tracing.TaskEnd{ID: walking.WalkTaskID})
 
 	tracing.TraceReqComplete(
 		m.comp,

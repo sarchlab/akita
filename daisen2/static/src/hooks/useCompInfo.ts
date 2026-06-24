@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useRenderReady } from "./useRenderReady";
 
 export interface TimeValue {
   time: number;
@@ -51,10 +52,87 @@ export function useCompInfo(
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : String(err));
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        // A superseded (aborted) request must not clear loading for the request
+        // that replaced it — that would flip render-ready true while data is stale.
+        if (!controller.signal.aborted) setLoading(false);
+      });
 
     return () => controller.abort();
   }, [compName, infoType, startTime, endTime, numDots]);
+
+  useRenderReady(loading, error !== null);
+
+  return { info, loading, error };
+}
+
+// A sample point carrying a per-reason (milestone kind) count.
+export interface StackedTimeValue {
+  time: number;
+  values: Record<string, number>;
+}
+
+export interface StackedComponentInfo {
+  name: string;
+  info_type: string;
+  start_time: number;
+  end_time: number;
+  data: StackedTimeValue[];
+  kinds: string[];
+}
+
+// useStackedCompInfo fetches a per-reason stacked time series (e.g.
+// "ConcurrentTaskMilestones": at each of numDots samples, how many in-flight
+// tasks are blocked by each reason). Mirrors useCompInfo but for the stacked
+// response shape.
+export function useStackedCompInfo(
+  compName: string,
+  infoType: string,
+  startTime: number,
+  endTime: number,
+  numDots = 40,
+) {
+  const [info, setInfo] = useState<StackedComponentInfo | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!compName || !infoType || infoType === "-" || startTime >= endTime) {
+      setInfo(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      // The stacked "ConcurrentTaskMilestones" metric is scope-aware on the
+      // backend, so the scoped detail view aggregates a whole location subtree.
+      scope: compName,
+      info_type: infoType,
+      start_time: String(startTime),
+      end_time: String(endTime),
+      num_dots: String(numDots),
+    });
+
+    setLoading(true);
+    setError(null);
+    fetch(`/api/compinfo?${params.toString()}`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((json: StackedComponentInfo) => setInfo(json))
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [compName, infoType, startTime, endTime, numDots]);
+
+  useRenderReady(loading, error !== null);
 
   return { info, loading, error };
 }

@@ -14,6 +14,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
@@ -104,7 +105,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		state := m.comp.State
 		spec := m.comp.Spec()
 		blockSize := 1 << spec.Log2BlockSize
-		setID := int(0x10000 / uint64(blockSize) % uint64(spec.NumSets))
+		setID := cache.DirectorySetID(0x10000, blockSize, spec.NumSets)
 		block := &state.DirectoryState.Sets[setID].Blocks[0]
 		block.Tag = 0x10000
 		block.PID = 0
@@ -143,7 +144,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		state := m.comp.State
 		spec := m.comp.Spec()
 		blockSize := 1 << spec.Log2BlockSize
-		setID := int(0x10000 / uint64(blockSize) % uint64(spec.NumSets))
+		setID := cache.DirectorySetID(0x10000, blockSize, spec.NumSets)
 		block := &state.DirectoryState.Sets[setID].Blocks[0]
 		block.Tag = 0x10000
 		block.PID = 0
@@ -319,7 +320,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		state := m.comp.State
 		spec := m.comp.Spec()
 		blockSize := 1 << spec.Log2BlockSize
-		setID := int(0x10000 / uint64(blockSize) % uint64(spec.NumSets))
+		setID := cache.DirectorySetID(0x10000, blockSize, spec.NumSets)
 		for i := 0; i < spec.WayAssociativity; i++ {
 			block := &state.DirectoryState.Sets[setID].Blocks[i]
 			block.IsValid = true

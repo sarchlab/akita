@@ -1,192 +1,55 @@
-import katex from "katex";
+import MarkdownIt from "markdown-it";
+import { canonicalViewUrl } from "./viewState.mjs";
 
-const escapeHtml = (value) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+// DaisenBot chat messages are rendered as GitHub-flavored markdown: tables,
+// lists, code fences, inline code, bold/italic, blockquotes, headings, and
+// autolinked URLs. We delegate to markdown-it instead of hand-rolling a parser.
+//
+// Safety: the model output is untrusted (any user-configured provider), so we
+// disable raw-HTML passthrough here (`html: false`) AND the caller sanitizes the
+// generated HTML with DOMPurify (see MessageBubble) as defense in depth.
+const md = new MarkdownIt({
+  html: false, // never render raw HTML embedded in the markdown source
+  linkify: true, // turn bare URLs into links
+  breaks: true, // a single newline becomes <br>, matching chat expectations
+});
 
-export const renderMathToString = (expression, displayMode) =>
-  katex.renderToString(expression.trim(), {
-    displayMode,
-    throwOnError: false,
-  });
-
-const renderMath = renderMathToString;
-
-export const parseMarkdown = (input) => {
-  const tokens = [];
-
-  const addToken = (html, block = false) => {
-    const tokenIndex = tokens.push({ html, block }) - 1;
-    return `@@TOKEN_${tokenIndex}@@`;
-  };
-
-  let source = input;
-
-  source = source.replace(/```([\s\S]*?)```/g, (_, code) => {
-    const codeHtml = `<pre class="bg-dark text-light p-2 rounded mb-2" style="overflow-x:auto;"><code>${escapeHtml(
-      code.trim(),
-    )}</code></pre>`;
-    return `\n${addToken(codeHtml, true)}\n`;
-  });
-
-  source = source.replace(/\$\$([\s\S]+?)\$\$/g, (_, expression) => {
-    const html = renderMath(expression, true);
-    return `\n${addToken(`<div class="my-2 overflow-auto">${html}</div>`, true)}\n`;
-  });
-
-  source = source.replace(/\\\[([\s\S]+?)\\\]/g, (_, expression) => {
-    const html = renderMath(expression, true);
-    return `\n${addToken(`<div class="my-2 overflow-auto">${html}</div>`, true)}\n`;
-  });
-
-  source = source.replace(/\\\(([\s\S]+?)\\\)/g, (_, expression) =>
-    addToken(renderMath(expression, false)),
-  );
-
-  source = source.replace(/\$([^$\n]+?)\$/g, (_, expression) =>
-    addToken(renderMath(expression, false)),
-  );
-
-  source = escapeHtml(source);
-
-  const replaceTokens = (text) =>
-    text.replace(/@@TOKEN_(\d+)@@/g, (_, indexText) => {
-      const index = Number(indexText);
-      return tokens[index]?.html ?? "";
-    });
-
-  const applyInlineFormatting = (text) => {
-    let formatted = replaceTokens(text);
-    formatted = formatted.replace(/`([^`]+)`/g, "<code>$1</code>");
-    formatted = formatted.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-    formatted = formatted.replace(/\*([^*]+)\*/g, "<em>$1</em>");
-    return replaceTokens(formatted);
-  };
-
-  const lines = source.split(/\r?\n/);
-  const htmlLines = [];
-  let inList = false;
-
-  const closeList = () => {
-    if (!inList) return;
-    htmlLines.push("</ul>");
-    inList = false;
-  };
-
-  for (const rawLine of lines) {
-    const trimmed = rawLine.trim();
-    if (trimmed.length === 0) {
-      closeList();
-      continue;
-    }
-
-    const tokenMatch = trimmed.match(/^@@TOKEN_(\d+)@@$/);
-    if (tokenMatch) {
-      const tokenIndex = Number(tokenMatch[1]);
-      const token = tokens[tokenIndex];
-      if (token?.block) {
-        closeList();
-        htmlLines.push(token.html);
-        continue;
-      }
-    }
-
-    if (trimmed.startsWith("## ")) {
-      closeList();
-      htmlLines.push(`<h6 class="mb-1">${applyInlineFormatting(trimmed.slice(3))}</h6>`);
-      continue;
-    }
-
-    if (trimmed.startsWith("# ")) {
-      closeList();
-      htmlLines.push(`<h5 class="mb-1">${applyInlineFormatting(trimmed.slice(2))}</h5>`);
-      continue;
-    }
-
-    const listMatch = trimmed.match(/^[-*]\s+(.*)$/);
-    if (listMatch) {
-      if (!inList) {
-        htmlLines.push('<ul class="mb-1 ps-3">');
-        inList = true;
-      }
-
-      htmlLines.push(`<li>${applyInlineFormatting(listMatch[1])}</li>`);
-      continue;
-    }
-
-    closeList();
-    htmlLines.push(`<p class="mb-1">${applyInlineFormatting(trimmed)}</p>`);
-  }
-
-  closeList();
-  return htmlLines.join("");
+// Open links in a new tab and drop the opener reference, since responses may
+// link out to arbitrary documentation.
+const defaultLinkOpen =
+  md.renderer.rules.link_open ||
+  ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  tokens[idx].attrSet("target", "_blank");
+  tokens[idx].attrSet("rel", "noopener noreferrer");
+  return defaultLinkOpen(tokens, idx, options, env, self);
 };
 
-export function autoWrapMath(text) {
-  return text.replace(
-    /^(?!\\\[)([0-9\.\+\-\*/\(\)\s×÷]+=[0-9\.\+\-\*/\(\)\s×÷]+)(?!\\\])$/gm,
-    "\\[$1\\]",
+// Daisen view evidence: a markdown image whose URL is a Daisen view path (e.g.
+// `![what you see](/component?name=L2Cache&starttime=0&endtime=379102000)`) renders
+// as an evidence figure — a thumbnail the reader can click to enlarge, plus a caption
+// that links to the live view in a new tab. The thumbnail's `src` is filled in by
+// MessageBubble after sanitize (from the agent's captured render, or lazily), so big
+// data URLs stay out of the sanitized HTML. Non-view images fall through unchanged.
+const defaultImage =
+  md.renderer.rules.image ||
+  ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+md.renderer.rules.image = (tokens, idx, options, env, self) => {
+  const token = tokens[idx];
+  const viewUrl = canonicalViewUrl(token.attrGet("src") ?? "");
+  if (!viewUrl) {
+    return defaultImage(tokens, idx, options, env, self);
+  }
+  const altAttr = md.utils.escapeHtml(self.renderInlineAsText(token.children ?? [], options, env));
+  const urlAttr = md.utils.escapeHtml(viewUrl);
+  const caption = altAttr || "Open this view";
+  return (
+    `<span class="daisen-evidence-figure">` +
+    `<img class="daisen-evidence" data-view-url="${urlAttr}" alt="${altAttr}">` +
+    `<a class="daisen-evidence-link" data-view-url="${urlAttr}" href="${urlAttr}"` +
+    ` target="_blank" rel="noopener noreferrer">${caption} ↗</a>` +
+    `</span>`
   );
-}
+};
 
-export function convertMarkdownToHTML(text) {
-  text = text.replace(/```html\n([\s\S]*?)```/g, (_match, code) => {
-    let trimmed = code.replace(/^\s*\n+/, "").replace(/\n+\s*$/, "").replace(/(<br>\s*){1,}/g, "<br>");
-    trimmed = trimmed.replace(/(<\/h[1-6]>|<\/hr>|<\/p>|<\/table>|<\/ul>|<\/ol>|<\/pre>|<\/div>|<\/span>)(<br>)+/g, "$1");
-    trimmed = trimmed.replace(/(<br>\s*)+(<table)/g, "$2");
-    trimmed = trimmed.replace(/^(<br>\s*)+/, "");
-    return trimmed;
-  });
-
-  text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_match, lang, code) => {
-    const trimmed = code.replace(/^\s*\n+/, "").replace(/\n+\s*$/, "");
-    const escaped = trimmed.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    return `<pre class="code-block"><code${lang ? ` class="language-${lang}"` : ""}>${escaped}</code></pre>`;
-  });
-
-  text = text.replace(/`([^`]+)`/g, (_match, code) => {
-    const escaped = code.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    return `<code class="inline-code">${escaped}</code>`;
-  });
-
-  text = text.replace(/^### (.+)$/gm, (_match, p1) => `<h5>${p1}</h5>`);
-  text = text.replace(/^## (.+)$/gm, (_match, p1) => `<h4>${p1}</h4>`);
-  text = text.replace(/^# (.+)$/gm, (_match, p1) => `<h3>${p1}</h3>`);
-  text = text.replace(/^-{3,}$/gm, () => "<hr>");
-  text = text.replace(/\*\*(.+?)\*\*/g, (_match, p1) => `<b>${p1}</b>`);
-  text = text.replace(/\*(.+?)\*/g, (_match, p1) => `<i>${p1}</i>`);
-  text = text.replace(/\\\[(.+?)\\\]/gs, (_match, p1) => {
-    const clean = p1.replace(/\\\[|\\\]/g, "").trim();
-    return `<span class="math" data-display="block">${clean}</span>`;
-  });
-  text = text.replace(/\\\((.+?)\\\)/gs, (_match, p1) =>
-    `<span class="math" data-display="inline">${p1}</span>`,
-  );
-  text = text.replace(/\n/g, "<br>");
-  text = text.replace(/(<br>)*\\\](<br>)*/g, "");
-  text = text.replace(/(<br>)*\\\[(<br>)*/g, "");
-  text = text.replace(/(<br>\s*){2,}/g, "<br>");
-  text = text.replace(/(<\/h[1-6]>|<\/hr>|<\/p>|<\/table>|<\/ul>|<\/ol>|<\/pre>|<\/div>|<\/span>)(<br>)+/g, "$1");
-  text = text.replace(/(<br>\s*)+(<table)/g, "$2");
-  text = text.replace(/^(<br>\s*)+/, "");
-  return text;
-}
-
-export const renderChatMarkdown = (text) => convertMarkdownToHTML(autoWrapMath(text));
-
-export function renderMathInElement(root) {
-  root.querySelectorAll(".math").forEach((el) => {
-    try {
-      const tex = el.textContent || "";
-      const displayMode = el.getAttribute("data-display") === "block";
-      el.innerHTML = katex.renderToString(tex, { displayMode });
-    } catch (e) {
-      el.innerHTML = "<span style='color:red'>Invalid math</span>";
-      console.log("KaTeX error:", e, "for tex:", el.textContent);
-    }
-  });
-}
+export const renderChatMarkdown = (text) => md.render(text ?? "");

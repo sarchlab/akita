@@ -115,7 +115,7 @@ func (d *directory) writearoundWriteHit(
 	bankBuf.PushTyped(postCoalesceIdx)
 
 	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-		TaskID: trans.ID,
+		TaskID: d.reqInTaskID(trans),
 		What:   "write-hit",
 	})
 
@@ -131,7 +131,7 @@ func (d *directory) writearoundWriteMiss(
 ) bool {
 	if ok := d.writeBottom(trans); ok {
 		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-			TaskID: trans.ID,
+			TaskID: d.reqInTaskID(trans),
 			What:   "write-miss",
 		})
 
@@ -174,7 +174,7 @@ func (d *directory) writeevictWriteHit(
 	nextBlock.IsValid = false
 
 	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-		TaskID: trans.ID,
+		TaskID: d.reqInTaskID(trans),
 		What:   "write-hit",
 	})
 
@@ -190,7 +190,7 @@ func (d *directory) writeevictWriteMiss(
 ) bool {
 	if ok := d.writeBottom(trans); ok {
 		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-			TaskID: trans.ID,
+			TaskID: d.reqInTaskID(trans),
 			What:   "write-miss",
 		})
 
@@ -207,6 +207,30 @@ func (d *directory) writeevictWriteMiss(
 // --- write-through policy ---
 
 func (d *directory) writethroughWriteHit(
+	trans *transactionState,
+	setID, wayID int,
+	postCoalesceIdx int,
+) bool {
+	if !d.writethroughInstallLine(trans, setID, wayID, postCoalesceIdx) {
+		return false
+	}
+
+	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
+		TaskID: d.reqInTaskID(trans),
+		What:   "write-hit",
+	})
+
+	return true
+}
+
+// writethroughInstallLine installs the write's line into (setID, wayID) and
+// dispatches the bank write, popping the directory post-buffer on success. It
+// emits no hit/miss tag: the caller owns that, because the same install backs
+// both a genuine write hit and the full-line write-miss fast path (which
+// allocates a victim way and writes it as if hit). Returns false without
+// mutating state when the block is busy, the bank buffer is full, or the
+// write-through to lower memory cannot be issued.
+func (d *directory) writethroughInstallLine(
 	trans *transactionState,
 	setID, wayID int,
 	postCoalesceIdx int,
@@ -264,7 +288,7 @@ func (d *directory) writethroughWriteMiss(
 	ok := d.writethroughFullLineWriteMiss(trans, postCoalesceIdx)
 	if ok {
 		tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-			TaskID: trans.ID,
+			TaskID: d.reqInTaskID(trans),
 			What:   "write-miss",
 		})
 	}
@@ -333,7 +357,7 @@ func (d *directory) writethroughPartialWriteMiss(
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
 	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
-		TaskID: trans.ID,
+		TaskID: d.reqInTaskID(trans),
 		What:   "write-miss",
 	})
 
@@ -353,7 +377,10 @@ func (d *directory) writethroughFullLineWriteMiss(
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
 		&next.DirectoryState, spec.NumSets, int(blockSize), cacheLineID)
 
-	_ = next // suppress unused warning
-
-	return d.writethroughWriteHit(trans, victimSetID, victimWayID, postCoalesceIdx)
+	// Install the line via the shared core, not writethroughWriteHit: this is a
+	// miss, so writethroughWriteMiss owns the write-miss tag. Calling the hit
+	// handler here would also stamp a contradictory write-hit tag on the same
+	// transaction.
+	return d.writethroughInstallLine(
+		trans, victimSetID, victimWayID, postCoalesceIdx)
 }

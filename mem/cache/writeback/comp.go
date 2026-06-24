@@ -85,6 +85,79 @@ type State struct {
 	ProcessingFlush         flushReqState `json:"processing_flush"`
 }
 
+// allocTransaction stores t in the Transactions slice and returns its index.
+// Completed transactions are marked Removed but their slots are never deleted
+// (other stages hold indices into the slice via the various buffers and the
+// MSHR, so indices must stay stable). Reuse a Removed slot when one is
+// available so the slice stays bounded by the number of active transactions
+// instead of growing with every request ever issued.
+func (s *State) allocTransaction(t transactionState) int {
+	for i := range s.Transactions {
+		if !s.Transactions[i].Removed {
+			continue
+		}
+
+		// The MSHR stage drains the waiter list of the transaction at
+		// ProcessingMSHREntryIdx across multiple ticks. That owner
+		// transaction is itself one of its waiters, so it is commonly marked
+		// Removed before the list is fully drained — yet its
+		// MSHRTransactionIndices must stay intact until the stage releases it.
+		// Skip its slot so a later top request in the same tick (topParser
+		// runs after mshrStage) cannot overwrite the pending waiter list.
+		if s.HasProcessingMSHREntry && i == s.ProcessingMSHREntryIdx {
+			continue
+		}
+
+		// Do not reuse a slot still referenced by an in-flight bottom-port
+		// transaction. Eviction write-backs and line fetches are matched to
+		// their lower-memory responses by the request ID stored in the
+		// transaction slot; overwriting the slot before the response returns
+		// makes that response an unrecognized "orphan" (silently dropped) and
+		// leaves the eviction/fetch permanently in the in-flight list, so a
+		// later Flush/Drain never reaches quiescence and the simulation
+		// deadlocks. A slot can be both Removed and in-flight: e.g.
+		// writeBufferEvictAndWrite reuses one transaction for a bank write-hit
+		// (which marks it Removed) and the victim write-back (which stays in
+		// InflightEvictionIndices until its WriteDoneRsp lands).
+		if s.indexHasInflightBottomTransaction(i) {
+			continue
+		}
+
+		s.Transactions[i] = t
+		return i
+	}
+
+	s.Transactions = append(s.Transactions, t)
+	return len(s.Transactions) - 1
+}
+
+// indexHasInflightBottomTransaction reports whether transaction slot i is still
+// referenced by a pending or in-flight bottom-port transaction (an eviction
+// write-back or a line fetch). Such slots must not be reused, because the
+// matching bottom-port response is correlated by the request ID held in the
+// slot.
+func (s *State) indexHasInflightBottomTransaction(i int) bool {
+	for _, idx := range s.InflightEvictionIndices {
+		if idx == i {
+			return true
+		}
+	}
+
+	for _, idx := range s.PendingEvictionIndices {
+		if idx == i {
+			return true
+		}
+	}
+
+	for _, idx := range s.InflightFetchIndices {
+		if idx == i {
+			return true
+		}
+	}
+
+	return false
+}
+
 // flushReqState is a serializable representation of a flush control request.
 type flushReqState struct {
 	MsgMeta messaging.MsgMeta `json:"msg_meta"`
@@ -172,6 +245,20 @@ type transactionState struct {
 	HasEvictionWriteReq  bool              `json:"has_eviction_write_req"`
 	EvictionWriteReqMeta messaging.MsgMeta `json:"eviction_write_req_meta"`
 
+	// DirPipelinePID is the tracing task ID of the directory-pipeline subtask
+	// (a child of the request's req_in). It is set when the transaction enters
+	// the directory pipeline stage and consumed when the transaction leaves the
+	// directory post-pipeline buffer, so the retrieve->directory latency gap is
+	// attributed to a pipeline subtask.
+	DirPipelinePID uint64 `json:"dir_pipeline_pid"`
+
+	// BankPID is the tracing task ID of the bank (data-array) pipeline subtask
+	// (a child of the request's req_in). It is set when the transaction is
+	// accepted into the bank pipeline and consumed when the bank finalizes the
+	// access, pairing with the ".bank" work milestone so the bank latency shows
+	// as a child bar instead of an unexplained tail before the response.
+	BankPID uint64 `json:"bank_pid"`
+
 	// MSHR entry reference (into mshrState.Entries)
 	MSHREntryIndex int  `json:"mshr_entry_index"`
 	HasMSHREntry   bool `json:"has_mshr_entry"`
@@ -207,6 +294,14 @@ func (t *transactionState) reqMeta() messaging.MsgMeta {
 		return t.FlushMeta
 	}
 	panic("no request")
+}
+
+// hasReqMeta reports whether the transaction carries a primary request, i.e.
+// whether reqMeta is safe to call and there is a req_in task to attribute work
+// to. Every transaction that reaches the bank in a real run has one (it passed
+// through the directory); it guards against synthetic bank-only transactions.
+func (t *transactionState) hasReqMeta() bool {
+	return t.HasRead || t.HasWrite || t.HasFlush
 }
 
 // Resources holds the shared resources and wiring referenced by the writeback

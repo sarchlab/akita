@@ -2,9 +2,50 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 )
+
+// TestInitReadOnlyReadsNonWALTrace is a regression test: a read-only connection
+// must not try to set the journal mode. With the native driver "mode=ro" is a
+// true read-only open, so the old "PRAGMA journal_mode=WAL" in InitReadOnly
+// failed on any non-WAL trace file and panicked.
+func TestInitReadOnlyReadsNonWALTrace(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
+
+	// Create the trace in the default rollback-journal mode (not WAL), so any
+	// attempt by the read-only connection to change the journal mode would fail.
+	writeDB, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("open writer: %v", err)
+	}
+	if _, err := writeDB.Exec(`CREATE TABLE trace (
+		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
+		Location TEXT, StartTime REAL, EndTime REAL)`); err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	if _, err := writeDB.Exec(`INSERT INTO trace
+		(ID, ParentID, Kind, What, Location, StartTime, EndTime)
+		VALUES (1, 0, 'req_in', 'ReadReq', 'DRAM', 1000, 9000)`); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	if err := writeDB.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	reader := NewSQLiteTraceReader(dbPath)
+	reader.InitReadOnly() // must not panic
+	defer reader.Close()
+
+	timeRange, ok := reader.TimeRange(context.Background())
+	if !ok {
+		t.Fatal("expected a trace time range from the read-only reader")
+	}
+	if timeRange.StartTime != 1000 || timeRange.EndTime != 9000 {
+		t.Fatalf("unexpected time range: %+v", timeRange)
+	}
+}
 
 func TestSQLiteTraceReaderTimeRange(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")

@@ -35,8 +35,7 @@ requests can occupy different banks while earlier ones are still in flight.
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, bank geometry, pipeline shape,
-  post-pipeline buffer depth, capacity, bank-selection, and address-conversion
-  fields.
+  post-pipeline buffer depth, capacity, and bank selection.
 - `State` — mutable runtime data: the per-bank pipelines and post-pipeline
   buffers.
 - `Resources` — shared wiring; holds the backing `*mem.Storage`.
@@ -54,16 +53,22 @@ type Spec struct {
     StorageRef          string      // Storage resource name (set by Build)
 
     BankSelectorKind               string // "interleaved"
-    BankSelectorLog2InterleaveSize uint64 // log2 of the interleave stride
+    BankSelectorLog2InterleaveSize uint64 // log2 of the bank interleave stride
 
-    // Address conversion for interleaved multi-controller setups.
-    AddrConvKind            string
-    AddrInterleavingSize    uint64
-    AddrTotalNumOfElements  int
-    AddrCurrentElementIndex int
-    AddrOffset              uint64
+    // Optional bank-selection address conversion (bank selection only;
+    // storage is always global). Empty kind = identity. See "Bank selection
+    // across interleaved controllers" below.
+    BankAddrConvKind            string
+    BankAddrInterleavingSize    uint64
+    BankAddrTotalNumOfElements  int
+    BankAddrCurrentElementIndex int
+    BankAddrOffset              uint64
 }
 ```
+
+The memory uses **global storage**: a request's address indexes the backing
+store directly, with no storage address conversion. Bank selection, by default,
+also runs on the request's global address.
 
 ## Builder Pattern
 
@@ -124,6 +129,49 @@ topPort = memCtrl.GetPortByName("Top")
 | Post-pipeline buffer | 1 |
 | Storage capacity | 4 GB |
 | Bank selector | `"interleaved"`, 64 B stride (log2 = 6) |
+
+## Bank selection across interleaved controllers
+
+A common deployment places several of these controllers behind an interleaved
+address mapper (the sender's destination map), all sharing one global
+`mem.Storage`. Banking is then **two-level**: the upstream mapper selects the
+controller (level 1) and each controller's bank selector spreads its traffic
+across banks (level 2). Storage is global, so a request's address indexes the
+shared store directly regardless of which controller serves it.
+
+Every request reaching a controller carries the inter-controller interleave
+bits fixed to that controller's index. The bank selector is a contiguous-bit
+modulo, so running it on the **global** address makes those fixed bits overlap
+the bank-select bits: bank selection aliases and only a fraction of the banks
+is ever used (data stays correct; only timing is wrong, and silently so). For
+example, 16 controllers interleaved at 128 B feeding 16-bank memories with a
+64 B bank stride reach only 2 of the 16 banks per controller — an ~8× bandwidth
+loss.
+
+Fix it with the **bank-selection conversion**: set the `BankAddrConv*` fields to
+strip the inter-controller interleaving, so bank selection runs on a contiguous
+**controller-local** address and stripes finely across all banks. Storage stays
+global (these fields never affect storage):
+
+```go
+spec := simplebankedmemory.DefaultSpec()
+spec.NumBanks = 16
+spec.BankSelectorLog2InterleaveSize = 6 // 64 B bank stride
+
+// This controller is element i of 16, interleaved at 128 B. Strip that
+// interleaving for bank selection only.
+spec.BankAddrConvKind = "interleaving"
+spec.BankAddrInterleavingSize = 128
+spec.BankAddrTotalNumOfElements = 16
+spec.BankAddrCurrentElementIndex = i
+```
+
+Now consecutive controller-local cache lines land on consecutive banks: all 16
+banks are used, with full 64 B-granular striping (e.g. element-i lines that were
+the two halves of a 128 B block now hit different banks). Only needed when this
+memory is one of several interleaved controllers; a standalone memory leaves
+`BankAddrConvKind` empty and selects banks on the request address directly. Use
+`mem/dram` if you need detailed bank/row timing.
 
 ## Ports
 

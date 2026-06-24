@@ -1,0 +1,853 @@
+# DaisenBot Agentic Upgrade — Design & Implementation Plan
+
+**Status:** Phases 1–2 merged (#387, #392) · Phase 5 (viz perception) merged with #392 · **Phase 3 complete — Workstreams A (source recording), B (daisen2 reader), C/D (`code_search`/`code_read` tools), E (embedded system prompt) all implemented. Follow-up: the tutorial/component-doc recommendation for `WithSourceFS` (decision #2). — §8** · **Last updated:** 2026-06-17
+
+This document captures the design decisions and phased plan for turning DaisenBot
+from a single-shot Q&A proxy into a tool-using agent that can *investigate* an
+Akita simulation trace.
+
+---
+
+## 1. Goal
+
+Let DaisenBot **investigate** a trace instead of merely summarizing a CSV it was
+handed: query the trace data, read the simulator source to interpret it, run code
+to summarize data, and look at Daisen's own visualizations — then answer in text,
+with a visible, navigable record of what it did.
+
+**Where we are today** (post-PR #381, `daisen2/internal/httpapi/chat.go`):
+DaisenBot is a single-shot, OpenAI-compatible `/chat/completions` proxy. For one
+turn it prepends a trace-CSV header (`buildAkitaTraceHeader`) plus a
+`beforehandprompt.txt` system prompt to the user's message, makes one model call,
+and relays the response. Provider/model/key are supplied by the frontend; the
+backend holds no credentials.
+
+**The ceiling we are removing:** the current bottleneck is *data access*, not
+reasoning. The model only sees the CSV of the user's pre-selected window and
+cannot fetch more — if the answer lives in a parent task, an upstream component,
+or a wider time range, it is blind. No amount of "think step by step" recovers
+data that was never put in context. This plan makes the model pull what it needs.
+
+---
+
+## 2. Core principles
+
+1. **Tools are inputs; text is the only output.** The agent pulls *data*, *code*,
+   and *visualizations* in as observations and emits only a text answer to the user.
+2. **Raw data never crosses into the LLM.** Tools return summaries, schemas,
+   samples, and images — never row dumps. Heavy data stays server-side (SQL row
+   caps; Python summarization).
+3. **Daisen is the visualization engine.** Every view is URL-encoded. The agent
+   "draws" by generating a URL; the **frontend** renders it — as a clickable link
+   for the human, and as an off-screen capture for the agent. No bespoke charting,
+   no server-side rendering.
+4. **Simplicity over generality.** Agents are always triggered from the chat
+   panel, so a live browser is always present. We use it as the renderer and drop
+   headless/server-side rendering entirely.
+
+---
+
+## 3. Architecture
+
+### 3.1 The agent loop
+
+Backend-orchestrated, streamed over SSE. `httpChatProxy` evolves from a one-shot
+relay into a loop:
+
+```
+call provider with tool schemas
+  → receive tool_calls
+  → execute tools, append observations
+  → repeat until the model returns a final answer
+  → stream the final text to the user
+```
+
+**Lifecycle:** the loop is bound to the chat session's SSE connection. If the
+user closes the tab (the connection drops), the backend **cancels** the loop; the
+user re-triggers it. This is what lets the frontend be the renderer (§3.2) without
+a fallback.
+
+### 3.2 Tools (all inputs)
+
+| Tool | Executes in | Returns | Guardrails |
+|---|---|---|---|
+| `data_query(sql, limit)` | backend (read-only SQLite) | capped rows / counts / stats | SELECT-only · forced `LIMIT` · row+byte cap · statement timeout · block `ATTACH`/`PRAGMA`/writes |
+| `code_search` / `code_read` | backend | Akita (+ opt-in sim) source text | reads source **recorded into the trace** (akita by default; component author opts in) · read-only `fs.FS` · result byte/line/match caps · see §8 |
+| `run_python(code)` | backend sandbox | stdout summary (+ emitted artifacts) | isolated runtime · read-only trace handle · library allowlist · no network · CPU/mem/wall limits |
+| `daisen_view(url)` | **frontend** (off-screen) | rendered PNG observation + user-facing link | URL validated/normalized against the view schema · render-ready gate before capture |
+
+`daisen_view` is the **only** tool whose execution delegates to the frontend: the
+backend pushes a render request down the SSE channel, the frontend renders the
+view off-screen, captures it (SVG-serialize preferred; `html2canvas` fallback),
+and POSTs the PNG back, correlated by a request id. All other tools execute in the
+backend.
+
+### 3.3 Data flow
+
+```
+LLM (needs tool-calling; + vision for daisen_view)
+  │   raw trace data NEVER crosses this line — only summaries & images do
+  ├─ data_query(sql, limit)   → capped rows / counts / stats        (text)
+  ├─ code_search / read       → Akita source                        (text)
+  ├─ run_python(code)         → stdout summary                      (text)
+  └─ daisen_view(url)         → off-screen frontend render          (image)
+                                 (+ clickable link to the human)
+  → final text answer
+```
+
+The Python sandbox is the hub: it can read the trace (read-only handle), compute
+aggregates reliably *in code* (not token-by-token), and keep large data off the
+wire to the LLM.
+
+### 3.4 Model capability gating
+
+Agent mode requires a model that supports **tool-calling**; `daisen_view`
+additionally requires **vision**. Daisen allows any OpenAI-compatible endpoint and
+free-text model id, so these capabilities are not guaranteed. When absent,
+**degrade gracefully**: fall back to today's single-shot chat, and/or drop the
+viz tool. The model picker advertises which mode is available.
+
+### 3.5 Visible thinking ("the tour")
+
+Each step streams into the chat as a record: the tool used, a one-line rationale,
+and — for `daisen_view` — a **thumbnail + clickable link** that jumps the user's
+own browser to that exact view. This is the visible-reasoning feature, a trust
+mechanism, and a navigable trail at once. Default-on, collapsible.
+
+---
+
+## 4. Agent loop & investigation strategy
+
+§3.1 gave the *mechanical* loop (call → tool_calls → repeat). This section gives the
+**control structure** and **reasoning strategy** on top of it — the part that decides
+whether the agent investigates competently or just wanders.
+
+### 4.1 Control structure
+
+One **hypothesis-driven investigation loop**, a single agent. We impose a light
+investigative shape rather than a free ReAct loop (which over-queries, stops early,
+or loops forever) — but **not** a manager-of-subagents (latency, cost, complexity,
+against the simplicity bar).
+
+```
+Front door (implicit triage — no separate model):
+  trivial / definitional   → answer directly (0 tools, or 1 lookup)
+  ambiguous                → ask ONE focused clarifying question
+  investigative            → enter the loop ↓
+
+Investigation loop:
+  1. Orient     — cheap "vital-signs" sweep over the in-scope components/window
+  2. Hypothesize— emit a RANKED candidate-cause list (seeded by the catalog, §4.4)
+  3. Test       — gather the minimal evidence that distinguishes the top hypothesis
+  4. Iterate    — next hypothesis / refine; stop on support or budget (§4.6)
+  5. Report     — text answer + the tour (links/thumbnails) of what was checked
+```
+
+### 4.2 Front door / triage
+
+**Implicit, not a separate router LLM.** Native tool-calling already lets the model
+answer directly when it needs no tool, so a simple question short-circuits the loop
+with zero tool round-trips. The system prompt authorizes three outcomes so trivial
+*and* ambiguous cases never spiral into tool calls:
+
+- **Direct answer** — definitional/summary questions ("what does the `read-miss`
+  Kind mean?", "summarize this view"). Answerable from the primed trace-context
+  header (kept from today, §1) or one lookup.
+- **Clarifying question** — underspecified asks ("why is it slow?" with no component
+  or baseline). Ask ONE focused question; default the scope to the current view's
+  selected components + time window when reasonable rather than always asking.
+- **Investigate** — enter the loop.
+
+An *explicit* router LLM is deferred (§4.7); it earns its keep only at volume (cost
+control), for explicit mode selection, or for abuse rejection.
+
+### 4.3 The investigation loop
+
+- **Orient.** Before hypothesizing, run a cheap vital-signs sweep (§4.5) to get the
+  lay of the land — grounds hypotheses in the actual trace, not priors.
+- **Hypothesize.** Emit a ranked candidate-cause list (§4.4) as an explicit
+  *structured* artifact, not free-form prose. Rank by prior-likelihood ×
+  cheapness-to-test.
+- **Test.** Take the top hypothesis; collect the *minimal distinguishing* evidence
+  (§4.5); confirm or refute. One hypothesis at a time keeps the tour legible.
+- **Iterate.** Move to the next hypothesis or refine. Stop when one is supported with
+  evidence, or budgets are hit (§4.6).
+- **Report.** Text answer citing the supporting evidence, with the visible tour
+  (§3.5). If nothing is conclusive, say so and report what was *ruled out* — never
+  fabricate a cause.
+
+### 4.4 Hypothesis generation & the failure-mode catalog
+
+**The agent generates hypotheses — seeded by a curated catalog of known Akita
+bottleneck patterns.** A general model free-forming causes misses arch-specific
+failure modes; the catalog is the single highest-leverage quality lever, and it is
+just content (a prompt section or a `list_known_failure_modes` retrieval).
+
+The hypothesis list is a **structured, schema-enforced artifact** (`id`,
+`description`, `catalog_pattern`, `evidence_to_collect`, `status ∈ {untested,
+supported, refuted}`). Benefits: auditable, drives the tour, and yields a natural
+stopping criterion (top-K tested).
+
+**Catalog schema:** `pattern · symptom-in-trace · distinguishing-evidence-to-collect`.
+
+**Starter set — seeded from general computer-architecture / memory-system knowledge.
+⚠️ DOMAIN REVIEW NEEDED (owner: Yifan) to validate and expand against Akita's actual
+components and milestone vocabulary:**
+
+| Pattern | Symptom in trace | Distinguishing evidence |
+|---|---|---|
+| Cache capacity/conflict thrashing | high miss rate; working set > capacity | miss ratio over time; reuse distance; set-conflict skew |
+| MSHR / outstanding-request exhaustion | misses queue though the cache isn't "busy" | in-flight miss count vs. MSHR limit; wait-for-MSHR time |
+| Queue backpressure / buffer-full | upstream stalls while downstream is full | buffer occupancy over time; stall edges to the full buffer |
+| DRAM bank conflicts | serialized accesses to the same bank | per-bank access timeline; same-bank back-to-back gaps |
+| Row-buffer thrashing | frequent activate/precharge; low hit rate | row-buffer hit ratio; activate frequency |
+| Bandwidth saturation | a link/port at ~100% utilization | per-port utilization; queueing delay vs. service time |
+| Head-of-line blocking | one slow request stalls others behind it in a FIFO | per-entry wait vs. service; FIFO depth at stall |
+| TLB miss / page-walk stalls | translation stalls precede the access | TLB-miss timeline; page-walk durations |
+| Arbitration/contention | requests wait for grant at a shared arbiter | grant latency; requesters-per-cycle at the arbiter |
+| Load imbalance | one component hot while peers idle | per-component utilization spread |
+| Latency not hidden (low MLP/ILP) | stalls despite spare resources | outstanding-work count vs. stall time |
+
+### 4.5 Evidence-gathering policy
+
+- **Vital-signs first** (the Orient pass), computed as aggregates in SQL/Python —
+  never raw rows:
+  - per-component task count, busy/idle time, utilization;
+  - per-`Kind` duration distribution (p50/p95/max);
+  - in-flight concurrency over time (start/end overlap);
+  - dependency wait gaps (child blocked on parent / upstream component);
+  - time-in-milestone breakdown.
+- **Hypothesis-driven drill-down.** Each subsequent query is chosen to confirm/refute
+  a specific hypothesis; collect the minimum that distinguishes candidates, not
+  everything. Drill coarse → suspicious region/component, following `ParentID` up/down
+  to the thing a stalled component waits on (the data today's single-shot bot can't
+  reach).
+- **Viz is evidence too.** Some patterns (bursts, periodicity, gaps) are easier to
+  *see* via `daisen_view` than to express in SQL.
+- **Budgeted.** Row/byte caps per query; summarize in Python so raw data never
+  reaches the LLM (§2).
+
+### 4.6 Loop control, budgets & termination
+
+- **Caps:** max iterations, max tool calls, an overall wall-clock ceiling (build on
+  the existing 10-min client ceiling), and a token budget. **These basic caps ship
+  with Phase 2** (the first multi-step loop) rather than waiting for Phase 6 — an
+  uncooperative model must not be able to loop unbounded the moment the loop exists.
+  Phase 6 adds the richer budgeting/pagination on top.
+- **Stopping criteria:** a hypothesis is supported with evidence; OR the top-K
+  hypotheses are all refuted; OR a budget is hit.
+- **Graceful degradation:** on exhaustion, report the best-supported partial finding
+  and what was ruled out — never loop silently or fabricate. Surface that a limit was
+  hit (no silent truncation, per the visible-tour principle).
+
+### 4.7 Deferred (and when to add)
+
+- **Explicit router LLM** — when request volume makes loading full context on trivial
+  questions costly, or when distinct modes need distinct loops.
+- **Manager + worker fan-out** — for genuinely parallel work (compare N components,
+  broad audits): a planner dispatches one worker per component/hypothesis and
+  synthesizes. Reserved for when a single loop is demonstrably too serial.
+
+### 4.8 Phasing
+
+The strategy lands incrementally: **Phase 2** introduces the front door + the
+Orient→Hypothesize→Test loop using the `data` tool and a first catalog; **Phases 3–5**
+add evidence tools (code, python, viz); **Phase 6** hardens budgets/termination and
+the degradation matrix.
+
+---
+
+## 5. Phase roadmap
+
+Each phase is decomposed into workstreams (A–E style) when we reach it; Phase 1 is
+detailed in §6.
+
+| Phase | Title | Summary | Depends on |
+|---|---|---|---|
+| **1** | View-URL contract + render-ready signal | Make every view losslessly reconstructable from its URL, and expose a programmatic "view is fully rendered" signal. Renderer-agnostic; independently useful as better link-sharing. | — |
+| **2** | Agent-loop skeleton + tool-calling + `data` tool | Turn `httpChatProxy` into a streamed multi-step tool-calling loop; land the guarded read-only `data_query`; add capability-gating with single-shot fallback. Includes the front door + Orient→Hypothesize→Test loop (§4) and a first failure-mode catalog. A working "agent that can query the trace" — the biggest single value jump. | — |
+| **3** | `code` tool | `code_search` + `code_read` over source **recorded into the trace** (akita by default; component author opts in) so the agent can interpret Kinds/milestones. Detailed in §8. | 2 |
+| **4** | Python sandbox tool | Sandboxed `run_python` for summarizing data without shipping raw rows. Isolated as its own phase for the runtime/isolation decision. | 2 |
+| **5** | Viz-perception tool + visual tour | `daisen_view`: frontend off-screen render → image observation; clickable links + thumbnails. Extends gating to require a vision model. | 1, 2 |
+| **6** | Hardening | Loop bounds (max iters / wall-clock), cross-tool context budgeting/pagination, graceful-degradation matrix (model caps × installed runtimes), answer-quality eval harness. | 2–5 |
+
+**Parallelism:** Phases 1 (frontend) and 2 (backend) touch different subsystems
+and can proceed in parallel. We start with Phase 1 because the view-URL contract
+is the prerequisite for *both* human links and the agent's perception (Phase 5),
+and it ships value on its own.
+
+---
+
+## 6. Phase 1 — detailed
+
+**Goal:** every meaningful view is fully reconstructable from its URL alone, and a
+programmatic "this view has finished rendering" signal exists.
+
+**Non-goals (Phase 1):** no LLM/agent loop, no capture/round-trip wiring, no
+Python sandbox. Only: lossless URL encoding + the render-ready signal. (Both are
+independently useful for plain link-sharing.)
+
+### Workstream A — View-state inventory & gap audit *(the artifact to review)*
+
+Enumerate every route/page and, for each, list **all state that affects what is
+drawn**, classifying each field as `in-URL` / `react-state-only (gap)` /
+`derived (no-op)`.
+
+**Status: completed 2026-06-15** (audited `daisen2/static/src`). Routing is
+react-router v6 (`<Routes>` / `useSearchParams`); all parameterization is via query
+string — no path params. Full route set:
+
+| Route | Page | URL state today |
+|---|---|---|
+| `/` **and** `/dashboard` | DashboardPage | **none** — reads/writes no params |
+| `/component` | ComponentPage | `name`, `taskid`, `starttime`, `endtime` |
+| `/task` | TaskChartPage | `id`, `where` |
+
+**`/component` (ComponentPage)** — params read at `:699-703`, but writes use raw
+`window.history.replaceState` (`:762-766`, `:882-885`), bypassing react-router; the
+range write is debounced 1 s.
+
+| Field | Source | Action |
+|---|---|---|
+| component `name` | URL | keep — route write through `viewState`/`setSearchParams` |
+| selected `taskid` | URL-seeded state | keep — same fix |
+| view range `starttime`/`endtime` | URL-seeded state | keep — **fix the `replaceState` bypass**; keep 1 s debounce |
+| hoveredTask, highlightedKey, selectedTaskSeed, measured `size`, drag refs | react-state / refs | **ephemeral — do not encode** |
+| metric type (`"ConcurrentTask"`, `:722`) | hardcoded | n/a — no selector to encode |
+
+**`/task` (TaskChartPage)** — `id`,`where` read at `:22-23`; uses real
+`setSearchParams`. No time-range/zoom control (always full sim range).
+
+| Field | Source | Action |
+|---|---|---|
+| task `id` | URL | keep |
+| component filter `where` | URL | keep — **fix:** selecting `where` clobbers all params incl. `id` (`:87`) |
+| kind filter `kind` | react-state (`:26`) | **lift** → new `kind` param |
+| selected task (detail pane) | react-state (`:27`) | **lift** → optional `sel` param (browse-mode selection) |
+| GanttChart `selectedId` | chart-local (`GanttChart.tsx:54`) | **fix:** unify with page `selectedTask`; encode via `sel` |
+| taskInput draft (`:24`) | react-state | ephemeral — do not encode |
+
+**`/dashboard` (DashboardPage)** — **reads and writes no URL params at all**; the
+entire view is react-state. Biggest gap.
+
+| Field | Source | Action |
+|---|---|---|
+| view range `starttime`/`endtime` (`:71`) | react-state | **lift** |
+| filter text (`:74`) | react-state | **lift** → `filter` |
+| pagination `page` (`:75`) | react-state | **lift** → `page` |
+| primary axis metric (`:76`) | react-state | **lift** → `primary` |
+| secondary axis metric (`:77`) | react-state | **lift** → `secondary` |
+| single-widget focus | NEW | **add** `widget=<component>` → render only that chart full-view (agent's single-chart unit) |
+| measured grid `size` (`:78`) | viewport-derived | ephemeral (function of window size) — do not encode |
+| `/` vs `/dashboard` (`App.tsx:11-12`) | routing | **canonicalize** to `/dashboard` (redirect `/`) |
+
+**Cross-cutting:** simulation range, segments, and component-name list are server
+hooks (`useSimulationRange` / `useSegments` / `useComponentNames`) — reconstruct from
+the server, not the URL (no-op). There is **no React context / store / global**
+holding view state, and **no multi-selection anywhere** (all selections single-valued).
+
+**Resulting canonical schema (input to Workstream B):**
+
+```
+/dashboard : starttime? endtime? filter? page? primary? secondary?
+             widget?        # when set: render ONLY that component's chart, full-view
+/component : name  taskid?  starttime?  endtime?
+/task      : id?  where?  kind?  sel?
+```
+
+All single-value params; the existing names (`name`, `taskid`, `starttime`,
+`endtime`, `id`, `where`) are preserved for link back-compat — only new params are added.
+
+**Decisions (accepted 2026-06-15):**
+1. **Dashboard scope** — encode `filter`, `page`, `primary`, `secondary`. ✅
+2. **Canonical route `/dashboard`**, redirect `/` → `/dashboard`. ✅
+3. **Fix the `replaceState` bypass** on ComponentPage so URL↔state round-trips
+   through react-router (required for deterministic URL→render). ✅
+4. **Single-widget URL mode** — `/dashboard?widget=<component>` renders only that
+   component's chart, full-view; the grid collapses to one widget. This is the
+   agent's natural single-chart perception unit for `daisen_view` (§3.2), and it is
+   also user-shareable. A per-widget "focus" affordance sets the param. ✅
+
+This **resolves open questions #1, #3, and #5** (see §9).
+
+### Workstream B — Canonical URL schema (the contract)
+
+- Per-route param vocabulary, names, formats per the schema established in
+  Workstream A (time params carry the **raw trace value** — lossless `String()`/
+  `Number()`, not unit-converted; component as full-name string; all single-value —
+  no multi-select exists today; zoom expressible via start/end).
+- **Normalization** so identical views → identical canonical URLs (param order,
+  defaults, rounding) — needed later for render caching/dedup.
+- **Validation** rules — the Go backend reuses these to validate LLM-generated
+  URLs before rendering or before handing a link to a user.
+- **Single source of truth:** a small TS module `viewState.ts` exposing
+  `encodeView(state) → string` and `parseView(searchParams) → state`, replacing
+  today's scattered `searchParams.get(...)` calls.
+
+### Workstream C — Close the gaps
+
+- Lift each gap from A into the URL via `viewState.ts` + `setSearchParams`, with
+  two-way sync (UI→URL, and URL→UI on load/back/forward).
+- Use `replace` (not `push`) and **debounce** for continuous interactions
+  (drag-zoom, pan) so history isn't spammed. Encode only state that changes "what
+  view is shown," not transient hover/tooltip state.
+- **Canonicalize** the dashboard route to `/dashboard` and redirect `/` → `/dashboard`.
+- **Fix the ComponentPage `replaceState` bypass** — route URL writes through
+  react-router (`setSearchParams`) so URL↔state stay in sync and a loaded URL renders.
+- **Single-widget mode** — when `widget=<component>` is present, DashboardPage renders
+  only that component's `DashboardWidget` full-view (grid/pagination/filter suppressed);
+  add a per-widget "focus" control that sets the param. Reuses the existing widget; the
+  same `starttime`/`endtime`/`primary`/`secondary` params apply.
+
+**Status (2026-06-15): implemented except the ComponentPage `replaceState` conversion.**
+Landed: `viewState.mjs` `encodeSearchParams` + `mergeParams`; `/`→`/dashboard` redirect;
+DashboardPage URL-encodes filter/page/primary/secondary/range + single-widget mode +
+per-widget focus; DashboardWidget `onFocus`; GanttChart controlled selection;
+TaskChartPage lifts `kind`/`sel` and no longer clobbers params on component change.
+Verified with `tsc --noEmit`, 35 `node --test` cases, and `vite build` (all green).
+**Deferred:** ComponentPage already reconstructs its view from the URL on load (mount
+init reads `name`/`taskid`/`starttime`/`endtime`); converting its live `replaceState`
+writes to react-router touches the sim-range-follow / resync state machine, so it is best
+validated with the app running (alongside Workstream D / a manual smoke test).
+
+### Workstream D — Render-ready signal
+
+- One source of truth for "data loaded **and** SVG committed." Each loading hook
+  registers in-flight; when all settle and the chart has painted (post-commit
+  frame), set `window.__daisenViewReady = true` **and** `data-daisen-ready="true"`
+  on a root node.
+- **Reset to false** when a navigation/param change starts a new fetch.
+- **Terminal states:** flip ready on empty and error too
+  (`ready-ok` / `ready-empty` / `ready-error`) so the off-screen capture never hangs.
+- Await `document.fonts.ready` before signaling — SVG text metrics depend on fonts;
+  keeps captures deterministic.
+
+**Status (2026-06-15): implemented.** `src/utils/renderReady.mjs` (pure, node-tested)
+counts in-flight work via `beginRenderWork()`; `hooks/useRenderReady.ts` wires it into
+all five data hooks (`useTraceData`, `useCompInfo`, `useComponentNames`, `useSegments`,
+`useSimulationRange`), so every page- and widget-level fetch is tracked. When the count
+returns to zero it waits one frame + `document.fonts.ready`, then sets
+`window.__daisenViewReady = true` and `<html data-daisen-ready="ok|error">`;
+`useRenderReadyOnNavigation()` (in Layout) clears it on route change. Simplification: a
+rendered empty view settles as `ready-ok` (not a distinct `ready-empty`) — only
+"settled vs in-flight" matters for capture, and `error` is still surfaced. Verified by
+`tests/render-ready.test.mjs` (7 cases) + `tsc` + `vite build`; exact capture frame-timing
+is finalized with the running app in Phase 5.
+
+### Workstream E — Off-screen render + verification harness
+
+This is where Phase 1 produces a reusable building block for Phase 5's
+`daisen_view`:
+
+- Build a hidden render path: given a Daisen URL, mount the view in an off-screen
+  container with real layout, wait for the render-ready signal, and confirm a
+  non-empty SVG is present. (Capture + backend round-trip come in Phase 5; here we
+  prove the view renders headlessly-in-the-tab and signals correctly.)
+- Pure unit test: `parseView(encodeView(s)) === s` for representative states.
+- In-browser test: load N representative URLs, await `data-daisen-ready`, assert
+  non-empty SVG.
+
+**Status (2026-06-15): automated portions landed; in-browser SVG assertion folded into
+Phase 5.**
+- ✅ Pure unit test — `parseView(encodeView(s)) === s` (`tests/view-state.test.mjs`).
+- ✅ Signal lifecycle — `tests/render-ready.test.mjs` proves ready flips correctly
+  (false on work/navigation, true on settle, `error` status, idempotent end).
+- ⏭ Off-screen mount of a real view + "non-empty SVG" assertion needs a browser and is
+  *the same mechanism as Phase 5's frontend capture* (mount a URL off-screen → await
+  `data-daisen-ready` → read the SVG), so it is built and tested there rather than
+  duplicated. Until then, use the manual smoke checklist.
+
+**Manual smoke checklist** (run `daisen2` against a trace):
+1. Visiting `/` redirects to `/dashboard`.
+2. Dashboard: zoom/pan and change filter/axes/page → URL updates; reload reproduces the
+   exact view; back/forward works.
+3. A widget's focus control → `/dashboard?widget=<name>` shows only that chart; "Show all"
+   returns to the grid.
+4. Task page: set a Kind filter and select a task → `kind`/`sel` appear in the URL and
+   reload restores them; the Gantt highlight matches the detail pane.
+5. Console: `window.__daisenViewReady` is `false` while a view loads, `true` once settled;
+   `<html>` carries `data-daisen-ready`.
+
+### Sequencing & acceptance
+
+- Order: **A → B → (C ∥ D) → E.**
+- **Done when:** every view-state field is in-URL or explicitly documented as
+  intentionally-ephemeral; round-trip test green; any canonical URL reproduces the
+  exact view incl. back/forward; the ready signal reliably flips (incl. empty/
+  error) and resets on navigation; the off-screen harness reaches ready with a
+  non-empty SVG on all sample URLs.
+
+---
+
+## 7. Phase 2 — detailed
+
+**Goal:** turn `httpChatProxy` from a single-shot relay into a **streamed, multi-step
+tool-calling agent** that can query the trace through a guarded `data_query` tool, with
+a front door for simple questions and hard loop bounds. Outcome: *"an agent that can
+query the trace."*
+
+**Builds on:** the merged provider/SSRF layer (`daisen2/internal/httpapi/chat.go`) and
+`SQLiteTraceReader` (the `trace` ⨝ `location` + `milestone` schema) — both verified
+working on the `mem/acceptancetests/virtualmem` trace.
+
+**Non-goals (Phase 2):** the code / Python / viz tools (Phases 3–5), the full
+failure-mode catalog, multi-agent, the off-screen capture.
+
+### Workstream A — Agent loop & tool dispatch (backend)
+
+- New `agentloop.go`: `runAgentLoop(ctx, provider, cfg, messages, tools, emit)`.
+- Each turn: call the provider **with `tools`**; if `choices[0].message.tool_calls` is
+  present → execute each tool, append `role:"tool"` results, repeat; otherwise stream
+  the final assistant text and stop.
+- **Bounds (the §4.6 caps, shipped here):** `maxIterations`, `maxToolCalls`, a wall-clock
+  ceiling via the request `context`, and response-size caps. On exhaustion, make one
+  final no-tools call asking the model to answer from the evidence so far (graceful, no
+  infinite loop).
+- The `ChatProvider` seam gains tool-calling: build a request carrying `tools`, parse
+  `tool_calls`, build the follow-up turn. `RelayResponse` stays for the single-shot
+  fallback.
+
+### Workstream B — `data_query` tool (guarded read-only SQL)
+
+- Schema: `data_query(sql: string)`; the trace schema is documented in the tool
+  description (`trace`(ID,ParentID,Kind,What,Location,StartTime,EndTime) ⨝
+  `location`(ID,Locale); `milestone`).
+- **Guards:** `SELECT`/`WITH`-only (reject writes / DDL / `PRAGMA` / `ATTACH`), single
+  statement, injected/clamped `LIMIT`, per-query timeout, and a byte cap on the
+  serialized result.
+- Execute via `traceReader.QueryContext`; format as compact rows + a row-count /
+  truncation note. (Review note §9: returns *capped* rows — bulk summarization is the
+  Phase 4 Python tool; the guarantee here is "no *bulk* raw data".)
+
+### Workstream C — Endpoint + SSE streaming
+
+- Agent mode is requested in the body (`agent: true`); the frontend offers it when the
+  model supports tools, otherwise the existing single-shot JSON path is used.
+- Stream Server-Sent Events: `step` (tool + args), `observation` (result summary),
+  `message` (final answer), `error`, `done`. The visible-thinking trail (§3.5) is built
+  from these.
+- Keep `/api/gpt`: agent mode responds `text/event-stream`; single-shot stays JSON.
+
+### Workstream D — Front door, capability gating & catalog seed
+
+- **Front door (implicit):** the system prompt authorizes a direct answer or one
+  clarifying question; investigative questions use the tools. No separate router.
+- **Capability gating:** the frontend enables agent mode only for tool-capable models;
+  the backend falls back to single-shot if the provider rejects `tools`.
+- Seed a **small** failure-mode catalog in the system prompt (a few Akita bottleneck
+  patterns) to ground hypotheses; the full catalog is deferred (needs domain input).
+- **Domain knowledge** lives in the hardcoded `agentSystemPrompt` (`agentloop.go`) for now —
+  edit it to expand the catalog or add schema/SQL hints. The legacy `beforehandprompt.txt`
+  is **removed**. A modular **skills** mechanism (retrievable per-question domain notes /
+  playbooks the agent pulls in on demand) is the planned successor, landing alongside the
+  Phase 3 code/doc-reading tools.
+
+### Workstream E — Verification
+
+- **Unit:** `data_query` guard tests (reject writes / `PRAGMA` / multi-statement; `LIMIT`
+  clamping; byte cap).
+- **Loop (the "preview"):** an `httptest` **mock provider** that scripts `tool_calls`,
+  driven against a real SQLite trace → asserts the loop runs the query, feeds the result
+  back, and produces the final answer. Deterministic, **no API key needed**.
+- **Frontend:** build + an SSE-parser unit test.
+- **Live demo:** optional local mock-LLM so a human can watch the tour in the browser, or
+  plug in a real tool-capable model.
+
+### Decisions to confirm
+
+- `data_query`: guarded raw SQL (chosen for v1) vs. structured tools.
+- Agent-mode trigger: explicit request flag (chosen) vs. auto-detect.
+- The SSE event shape above.
+- How much of the Orient→Hypothesize→Test structure (§4.3) to encode in the v1 system
+  prompt (lean minimal).
+
+---
+
+## 8. Phase 3 — detailed
+
+**Goal:** give the agent `code_search` + `code_read` over the Akita (and, opt-in, the
+downstream simulator's) source, so it can interpret what a `Kind`, `milestone`, `What`
+type, or component actually *means* in the simulator — turning opaque trace labels into
+architecturally-grounded explanations instead of guesses. Outcome: *"an agent that can
+read the code that produced the trace."*
+
+**Builds on:** the Phase 2 agent-loop / tool-dispatch seam (`agentloop.go`; a tool is just
+an `agentTool` entry in the `runAgentSSE` tool slice, dispatched by `runToolCalls`) and the
+`datarecording` writer (`CreateTable`/`InsertData`/`Flush`) that already records `exec_info`
+(`simulation/meta_recorder.go`).
+
+**Non-goals (Phase 3):** the Python sandbox (Phase 4); symbol-level / semantic indexing
+(`go/packages`) — plain regex search is v1; remote source fetch from GitHub.
+
+### Source provenance — the key decision (accepted 2026-06-17)
+
+daisen2 is **offline replay** (`daisen2 -sqlite <file>`, `cmd/daisen2/main.go`): by the time
+it runs, the simulator process has exited, so a `//go:embed` *in the sim binary* is
+unreachable. Also `//go:embed` only reaches a package's own subtree, and `daisen2/` is a
+*sibling* of `mem/`, `tracing/`, `noc/`, … so daisen2 cannot embed akita's source directly
+either. Therefore the source must **travel in the trace**: it is recorded at generation time
+and read back by daisen2.
+
+- **akita's own source — recorded by default, read from disk at record time.** The recorder
+  locates akita's source on disk (the Go module cache, a `replace` path, or the working tree
+  when akita is the main module) via the compiled-in path of an akita source file, and writes
+  it into the trace automatically; the library user does nothing. **Disk-read is the default
+  because Daisen's user iterates on a concrete simulator** — edit, rebuild, run — and Go
+  requires a rebuild to run changed code, so the source on disk *is* what the binary was built
+  from. No generated/embedded artifact to regenerate, and the recorded source always matches
+  the run.
+- **The component author's source — recommended, opt-in.** A simulator built on akita registers
+  its own tree with `sim.WithSourceFS(root, fsys)` (typically a `//go:embed`); the recorder
+  folds it into the same source table. **Documented as a recommendation in the tutorial and
+  component-authoring docs** so authors opt in. If they don't, DaisenBot has akita-only source
+  and *says so* for unknown components (graceful degradation, per §3.4) — it never fabricates.
+- **Transport:** source lives **in the SQLite trace** (gzipped-tar per root, base64 in a row),
+  one self-contained artifact per simulation, so it can never get separated from the trace.
+- **Degradation:** when akita source is *not* on disk — a `-trimpath` build, or a prebuilt
+  binary moved to a source-less machine — the recorder records nothing for akita (no guessing);
+  daisen2 then reports no source and the agent says so. The iterative local developer (plain
+  `go build`/`go run`/`go test`) always has it.
+
+This **supersedes** the §3.2 sketch ("scoped to the akita repo · version-matched to the
+trace's commit · SSRF-guarded remote fetch"). `code_search` / `code_read` operate over a
+`codeSource` `fs.FS` materialized from the recorded source; the tool surface is identical
+regardless of provenance, so a future live/in-process mode or `--code-root` override can feed
+the same interface without touching the tools.
+
+### Workstream A — disk source locator + recorder
+
+- `sourcefs` locates akita's source on disk from the compiled-in path of its own file
+  (`runtime.Caller` → walk up to the `go.mod` declaring the akita module), so it resolves akita
+  as a module-cache dependency, a `replace` target, or the main module. It also serializes a
+  directory or an `fs.FS` to a gzip-tar (non-test `.go` + `go.mod`, pruning
+  `.git`/`.claude`/`vendor`/`node_modules`/`testdata`/`dist`).
+- The simulation recorder writes a `source` table, akita-source by default (from disk);
+  `sim.WithSourceFS(root, fsys)` adds author roots. Reuses `datarecording`
+  (`CreateTable`/`InsertData`/`Flush`). `WithoutSourceRecording()` opts out.
+
+**Status (2026-06-18): implemented (disk-based).**
+- `sourcefs` package: `AkitaSourceDir()` (disk locator), `ArchiveDir`/`ArchiveFS` +
+  `WriteArchive`/`ReadArchive` (the gzip-tar format, shared with daisen2's future reader). No
+  `//go:embed`, no generated blob, no `go generate` — so nothing to keep in sync.
+- `simulation` records a `source(Root, Format, Content)` table — one row per source root.
+  `Content` is **base64(gzip-tar)** stored as TEXT: the data recorder accepts only scalar
+  struct fields (`isAllowedType` rejects `[]byte`), so no BLOB column is available (~+33% over
+  raw gzip; a later `datarecording` BLOB column could drop it).
+- Builder: `WithSourceFS(root, fs)` adds author roots (opt-in), `WithoutSourceRecording()`
+  opts out. Recording is **gated on `WithVisTracingOnStart`** so only traces meant for DaisenBot
+  carry source; untraced sim DBs stay minimal.
+- Verified: a traced virtualmem run records akita source from disk (1.31 MB → ~1.61 MB,
+  **+~292 KB**); the row base64-decodes → gunzips → untars to real source (268 files incl.
+  `mem/mshr/mshr.go`, `tracing/tracer.go`), and the sim binary carries **no** embedded blob.
+  Unit tests: archive round-trip/determinism, `ArchiveFS`, `AkitaSourceDir`, `ArchiveDir`
+  filtering; `recordSourceArchives` akita-from-disk + author rows. `simulation` +
+  `datarecording` suites green.
+- **Next (Workstream B):** daisen2 reads the `source` table into a `codeSource` `fs.FS` (reusing
+  `sourcefs.ReadArchive`).
+
+### Workstream B — daisen2 reads source from the trace
+
+- On load, daisen2 reads the recorded source blob from the SQLite trace and exposes it as an
+  in-memory **read-only** `fs.FS` (`codeSource`). Absent ⇒ empty `codeSource` with a clear
+  "no source recorded for this trace" capability note surfaced to the agent (and the tools are
+  still offered but report the gap rather than erroring).
+
+**Status (2026-06-18): implemented.**
+- `sourcefs.OpenTraceSource(db *sql.DB) (*Source, error)` reads the `source` table, base64-decodes
+  + un-tars each root via `ReadArchive`, and returns a read-only `fs.FS` (paths `<root>/<file>`)
+  plus `Roots` / `Files`. A missing/empty `source` table is **not** an error — it returns an empty
+  `Source` — so pre-Phase-3 traces load fine. (`database/sql`-only, so it's reusable outside
+  daisen2.)
+- daisen2 `Server` loads it once on startup (`loadCodeSource`) into `s.codeSource` and exposes
+  `CodeSource()` for the tools. Startup logs coverage, e.g.
+  `DaisenBot: recorded source available — 268 files across [github.com/sarchlab/akita/v5]`, or
+  `no source recorded in this trace`.
+- Verified: `OpenTraceSource` unit tests (populated table + reads a file back; missing table →
+  empty); running daisen2 against the recorded virtualmem trace logs the 268-file coverage.
+  `go build ./...`, `sourcefs` + `daisen2/internal/httpapi` suites, gofmt, vet all green.
+- **Next (Workstreams C/D):** `code_search` / `code_read` tools over `Server.CodeSource().FS()`,
+  registered in the `runAgentSSE` tool slice.
+
+### Workstream C — `code_search` (regex content search)
+
+- In-Go regex (RE2, `regexp`) content search over `codeSource`: returns capped `path:line` +
+  surrounding-context matches; optional `path_glob` to scope; **required `reason`** (same
+  pattern as `data_query`, surfaced in the step trail). Caps on files scanned / matches
+  returned / total bytes / per-match context lines, with an explicit truncation note. No
+  external `rg` dependency.
+
+### Workstream D — `code_read` (windowed file read)
+
+- Read a file by FS-relative path, optional `[start_line, end_line]`, returns numbered lines;
+  **required `reason`**. A large file with no range ⇒ first window + a "request a range" note.
+  Per-read byte/line cap. Path is normalized (reject `..` / absolute); with the in-DB/read-only
+  FS, traversal escape is structurally impossible (no symlinks, no parent dirs).
+
+**Status (2026-06-18): C + D implemented.**
+- `daisen2/internal/httpapi/codetools.go`: `code_search` (RE2 regex over
+  `Server.CodeSource().FS()`, optional `path_contains` substring filter, capped matches/bytes/
+  line-length with a truncation note) and `code_read` (FS-relative path, optional
+  `start_line`/`end_line`, numbered lines, default window + "more lines" note, per-read
+  line/byte caps, `fs.ValidPath` guard). Both require `reason`; an empty `codeSource` returns a
+  "no source recorded" observation rather than erroring. Registered in the `runAgentSSE` tool
+  slice — no frontend changes (the SSE step trail already renders arbitrary tools).
+- Added `sourcefs.NewSource(fsys, roots)` so the tools — and a future on-disk `--code-root`
+  override — build over any `fs.FS`.
+- Note: `path_contains` (substring) replaces the planned `path_glob`; `path.Match` can't span
+  `/`, so it's useless on deep module paths. Search returns match lines only; the agent uses
+  `code_read` for surrounding context (the natural search→read flow).
+- Verified: unit tests (search match / filter / no-match / invalid-regex / caps / empty; read
+  window / range / not-found / traversal-reject / long-file) and an end-to-end mock-provider SSE
+  test driving `code_search → code_read → answer`. `daisen2/internal/httpapi`, `sourcefs`,
+  `simulation` suites + `go build ./...` + vet green.
+
+### Workstream E — system prompt, loop wiring & verification
+
+- **Wiring (trivial):** register `codeSearchTool(src)` / `codeReadTool(src)` in the
+  `runAgentSSE` tool slice. They return text-only `toolResult`s; `runToolCalls` and the SSE
+  `step`/`observation` events already handle arbitrary tools, so the visible trail renders for
+  free. **No frontend changes** (unlike `daisen_view`).
+- **System prompt:** document the two tools and *when* to use them ("when a Kind / milestone /
+  `What` type / component is unfamiliar, read the source to ground the interpretation before
+  explaining it — do not guess"), plus a short **source map** (akita:
+  `mem/{cache,dram,mshr,rob,vm}`, `noc/`, `messaging/`, `queueing/`, `tracing/`, `simulation/`)
+  so searches are targeted. Tie back to the bottleneck catalog (§4.4): confirm a hypothesized
+  mechanism by reading the component's source.
+- **Verification** (mirrors `agentloop_test.go`): guard/cap units (path normalization, byte/
+  line/match caps, regex over a fixture FS); real-source integration (`code_search` finds
+  `type ReadReq`; `code_read` returns its definition) over a seeded source blob; and a
+  mock-provider end-to-end `TestAgentCodeToolsSSE` that scripts `code_search` → `code_read` →
+  final answer and asserts the SSE `step` → `observation` → `message` sequence — deterministic,
+  **no API key**.
+
+**Status (2026-06-18): implemented.** (Loop wiring landed with C/D; verification noted there.)
+- The system prompt is now authored as markdown in `daisen2/internal/httpapi/prompts/agent_system.md`
+  and **embedded via `//go:embed`** (`prompt.go`), replacing the hardcoded Go `const` — so the
+  prompt can use real markdown (code spans, lists) and is edited without touching Go. The Go
+  raw-string `const` couldn't even contain backticks.
+- It documents all five tools (`data_query`, `code_search`, `code_read`, `screenshot_current_view`,
+  `daisen_view`), the front door, the **"read the source before guessing"** rule, the source map
+  (paths are module-prefixed, e.g. `github.com/sarchlab/akita/v5/mem/cache/…`), the seed bottleneck
+  catalog, and an **evidence policy**: when proving a hypothesis, *attempt* to corroborate it from
+  all three sources (trace data + source code + a visualization), proceeding honestly and naming the
+  missing leg when one isn't available (e.g. no recorded source). Per-trace availability is
+  tool-reported (no runtime prompt templating), per the §8 decision.
+- Verified: `TestAgentSystemPromptEmbedded` (embed wired; all five tools documented); the existing
+  agent SSE tests now run against the embedded prompt; `go build ./...`, `daisen2/internal/httpapi`
+  suite, gofmt, vet green.
+
+### (Optional) skills
+
+Once `code_read` exists over an `fs.FS`, a minimal **skills** feature (the §7-D successor to
+the hardcoded prompt) is nearly free: embed `daisen2/skills/*.md` playbooks the agent can read,
+or add a thin `list_skills` / `read_skill` pair (literally `code_*` pointed at a `skills/`
+dir). Land it after the code tools if there is appetite; not required for Phase 3.
+
+### Decisions (accepted 2026-06-17)
+
+1. **Source travels in the trace**, recorded at generation time — daisen2 is replay-only and
+   `//go:embed` can reach neither the sim binary nor akita's sibling dirs. ✅
+2. **akita source recorded by default; component-author source recommended + opt-in**, and
+   documented in the tutorial/component docs. Graceful degradation when the author's source is
+   absent — never fabricate. ✅
+3. **In-DB**, stored in the trace (gzip-tar per root), not a sidecar — one self-contained
+   artifact per simulation. ✅
+4. **akita source read from disk at record time** (module cache / `replace` / working tree),
+   *not* an embedded blob. Chosen over embedding because Daisen's user iterates on a concrete
+   simulator: disk-read always matches the rebuilt binary and has no artifact to regenerate.
+   Trade-off: a `-trimpath` build or a binary moved off the build machine has no source on
+   disk → record nothing for akita (graceful). ✅ *(supersedes the earlier embed/`go generate`
+   approach)*
+5. v1 search is **plain regex**, not a `go/packages` symbol index. ✅
+6. **Stored as base64 TEXT**, not a BLOB — the data recorder accepts scalar struct fields only,
+   so the gzip-tar is base64-wrapped (~+33%; akita ≈242 KB gz → ≈322 KB base64). Native BLOB
+   support in `datarecording` is a possible later cleanup to drop the overhead. ✅
+7. **Recorded only for traced sims** (gated on `WithVisTracingOnStart`); the trace is the
+   consumer, so untraced sim DBs stay minimal. `WithoutSourceRecording()` opts out;
+   `WithSourceFS(root, fs)` adds author roots. ✅
+
+---
+
+## 9. Open questions / to audit
+
+1. ~~**Multi-select / large selections**~~ — **Resolved (Workstream A):** no
+   multi-selection exists in any page; single-value params suffice. Revisit only if
+   multi-select is ever added.
+2. **Centralization refactor** — OK to introduce `viewState.ts` and route all
+   pages through it, or prefer minimal per-page edits to limit blast radius?
+3. ~~**Scope line**~~ — **Resolved (Workstream A):** ephemeral =
+   hover / legend-highlight / measured-size / draft-text / drag-refs; dashboard grid
+   layout is viewport-derived (not encoded). View-defining set is the §6 per-page
+   tables.
+4. **URL back-compat** — if param names change, existing shared links break. Keep
+   aliases?
+5. ~~**Inventory completeness**~~ — **Resolved (Workstream A):** confirmed
+   `/component`, `/task`, `/dashboard` are the only content routes; plus a
+   `/`↔`/dashboard` canonicalization item.
+6. **Python sandbox runtime** (Phase 4 decision) — bubblewrap / container / WASM
+   as the safe default, with a subprocess fast-path for single-user local mode.
+7. **Capture fidelity** (Phase 5) — SVG-serialize is more faithful than
+   `html2canvas` for the charts; confirm it covers all view types (or where
+   `html2canvas` is the needed fallback).
+8. **Triage** (§4.2/§4.7) — stay implicit, or add an explicit router LLM? If
+   explicit, at what volume/cost threshold, and what modes would it route to?
+9. **Failure-mode catalog** (§4.4) — domain input needed: validate and expand the
+   starter set against Akita's real components and milestone vocabulary. Who owns it,
+   and does it live in the prompt or behind a `list_known_failure_modes` tool?
+10. **Hypothesis artifact** (§4.4) — confirm a structured, schema-enforced hypothesis
+    list (vs. free-form prose) is the right contract, and the fields to enforce.
+
+### Review notes (from Codex review, for later phases)
+
+- **`data_query` vs "no raw data"** — appending capped rows still puts raw data on the
+  LLM wire. Either tighten the contract (return counts/stats/samples, or route bulk
+  through `run_python`) or scope the guarantee to "no *bulk* raw data." (§3.2)
+- **Cap `run_python` output** — the LLM authors the code over a read-only trace handle;
+  bound stdout (row/byte cap, result-shaping) before returning observations. (§4.5)
+- **Go-side URL validator** — `viewState.mjs` is the TS source of truth, but the
+  LLM-URL validator (Phase 5) lives in Go and can't import it; define a
+  language-agnostic schema or a small Go validator kept in sync. (§3.2)
+- **Pagination is viewport-dependent** — `page` selects different widgets at different
+  widths, so it isn't a deterministic view descriptor for the off-screen renderer;
+  consider encoding the component offset/set instead, or pinning the grid size. (§6)
+- **Multimodal observation format** — feeding a rendered view back to an
+  OpenAI-compatible model needs the `image_url` content-part format, not a text append. (§3.3)
+- **Primed trace CSV in agent mode** — a direct answer that uses today's
+  `buildAkitaTraceHeader` CSV still ships raw rows; in agent mode prefer a summarized
+  header. (§4.2)
+
+---
+
+## 10. Non-goals
+
+- No headless/server-side rendering (Chromium) — the live frontend is the renderer.
+- No bespoke charting (matplotlib/plotly) for agent perception — Daisen renders.
+- No persistent server-side credentials — keys remain frontend-supplied per request.
+- No support for agents running with no browser session attached
+  (background/scheduled agents) — out of scope by the simplicity decision.
+
+---
+
+## Appendix — Decisions log
+
+| Decision | Rationale |
+|---|---|
+| Build a tool-using agent, not just prompted CoT / a reasoning model | The ceiling is data access, not reasoning; the agent must fetch its own data. |
+| data / code / viz = inputs; text = output | Clarifies the tool model; viz is perception, not UI actuation. |
+| Backend-orchestrated loop over SSE | Owns the SQLite reader and SSRF-guarded fetch; one place for limits; key already arrives per-request. |
+| `daisen_view` renders in the frontend, not headless Chromium | Agents always launch from the chat panel ⇒ a live browser is guaranteed. No Chromium dependency; the agent sees what the user sees. Tab close ⇒ cancel the loop. |
+| Daisen views are URL-encoded; the agent generates URLs | Reuses 100% of Daisen's viz; the URL is a shareable, replayable artifact for both human and agent. |
+| Show the thinking process (links + thumbnails) | Visible reasoning + trust + a navigable trail, near-free over SSE. |
+| Guarded read-only `data_query` with hard caps | Powerful over a small fixed schema; SELECT-only + LIMIT + timeout bounds risk; computing in SQL avoids token-arithmetic hallucination. |
+| Python sandbox for summarization | Keeps raw data off the LLM wire and makes numeric analysis reliable. |
+| Capability-gate on tool-calling (+ vision for viz) | Free-text model ids mean capabilities aren't guaranteed; degrade to single-shot. |
+| Single hypothesis-driven loop; implicit triage; router/manager deferred (§4) | Matches how trace debugging actually works; avoids multi-agent latency/cost; native tool-calling already short-circuits trivial questions. |
+| Hypotheses generated by the agent, seeded by a curated failure-mode catalog, emitted as a structured ranked artifact (§4.4) | A general model misses arch-specific causes; the catalog is the top quality lever; structure makes it auditable and gives a stopping criterion. |
+| Evidence is hypothesis-driven, vital-signs-first, budgeted (§4.5) | Minimizes tokens/latency and keeps raw data off the LLM wire. |
+| Canonical dashboard route `/dashboard` (redirect `/`) | One canonical URL per view; required for shareable links and deterministic agent rendering. |
+| Single-widget URL mode `/dashboard?widget=<component>` | A single focused chart is the agent's natural perception unit for `daisen_view`; also user-shareable. |
+| Phase 3 source travels *in the trace*, recorded at generation time | daisen2 is offline-replay, so a sim-binary `//go:embed` is unreachable, and `//go:embed` can't cross sibling dirs (`daisen2/` ↔ `mem/`). Recording into the trace is self-contained and version-matched by construction. |
+| akita source recorded by default; component-author source recommended + opt-in (documented) | akita-level components are always interpretable; authors opt in for custom components, with graceful degradation (and no fabrication) when absent. |
+| Source stored in-DB as one gzipped blob, not a sidecar | One self-contained artifact per simulation; the source can't get separated from the trace. |
+| akita source read from disk at record time (not embedded) | Daisen's user iterates on a concrete simulator (edit→rebuild→run); disk-read always matches the rebuilt binary and needs no regenerated/embedded artifact. Degrades gracefully (records nothing) under `-trimpath` or a moved binary. Supersedes the embed/`go generate` approach. |
+| v1 `code` search is plain regex, not a symbol index | Regex over recorded source is simple and dependency-free; `go/packages` indexing needs the code to compile and adds build deps — deferred. |

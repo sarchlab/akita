@@ -13,6 +13,35 @@ type bottomParser struct {
 	cache *pipelineMW
 }
 
+// reqInTaskID returns the ID of the transaction's req_in task. The req_in task
+// is keyed by the original request's message ID at the cache (see
+// tracing.TraceReqReceive in intake), so reconstructing a message carrying that
+// meta recovers the same ID. Mirrors directory.reqInTaskID.
+func (p *bottomParser) reqInTaskID(trans *transactionState) uint64 {
+	if trans.HasRead {
+		return tracing.MsgIDAtReceiver(
+			memprotocol.ReadReq{MsgMeta: trans.ReadMeta}, p.cache.comp)
+	}
+
+	return tracing.MsgIDAtReceiver(
+		memprotocol.WriteReq{MsgMeta: trans.WriteMeta}, p.cache.comp)
+}
+
+// chargeFillDataMilestone records the data dependency at fill-response arrival
+// on each coalesced waiter's req_in (not keyed to the DataReadyRsp), so every
+// request the single fill satisfies records the data milestone.
+func (p *bottomParser) chargeFillDataMilestone(entryTransIdxs []int) {
+	next := &p.cache.comp.State
+	for _, idx := range entryTransIdxs {
+		waiter := &next.Transactions[idx]
+		tracing.AddMilestone(p.cache.comp, tracing.Milestone{
+			TaskID: p.reqInTaskID(waiter),
+			Kind:   tracing.MilestoneKindData,
+			What:   p.cache.comp.Name() + ".Bottom",
+		})
+	}
+}
+
 func (p *bottomParser) Tick() bool {
 	itemI := p.cache.bottomPort().PeekIncoming()
 	if itemI == nil {
@@ -40,9 +69,17 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 	trans := &next.Transactions[transIdx]
 	trans.BottomWriteDone = true
 
+	// The lower memory acknowledged the write-through this req_in dispatched.
+	// Charge the dependency at response-arrival, keyed to the req_in (not the
+	// WriteDoneRsp).
+	tracing.AddMilestone(p.cache.comp, tracing.Milestone{
+		TaskID: p.reqInTaskID(trans),
+		Kind:   tracing.MilestoneKindDependency,
+		What:   p.cache.comp.Name() + ".Bottom",
+	})
+
 	if !trans.Done && writeTransIsReady(trans) {
 		trans.Done = true
-		tracing.EndTask(p.cache.comp, tracing.TaskEnd{ID: trans.ID})
 	}
 
 	p.cache.bottomPort().RetrieveIncoming()
@@ -92,6 +129,11 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 
 	// Resolve entry transactions before any removals
 	entryTransIdxs := append([]int(nil), entry.TransactionIndices...)
+
+	// The lower memory returned the fill data this MSHR entry was waiting on:
+	// charge the data dependency on each coalesced waiter's req_in.
+	p.chargeFillDataMilestone(entryTransIdxs)
+
 	p.mergeMSHRData(next, entryTransIdxs, blockTag, data, dirtyMask)
 
 	// Set up trans for bank processing and push BEFORE any removals
@@ -162,7 +204,6 @@ func (p *bottomParser) finalizeMSHRTransExcept(
 			offset := trans.ReadAddress - blockTag
 			trans.Data = data[offset : offset+trans.ReadAccessByteSize]
 			trans.Done = true
-			tracing.EndTask(p.cache.comp, tracing.TaskEnd{ID: trans.ID})
 			continue
 		}
 
@@ -171,7 +212,6 @@ func (p *bottomParser) finalizeMSHRTransExcept(
 		// satisfied (e.g. WriteDoneRsp landed first).
 		if !trans.Done && writeTransIsReady(trans) {
 			trans.Done = true
-			tracing.EndTask(p.cache.comp, tracing.TaskEnd{ID: trans.ID})
 		}
 	}
 }

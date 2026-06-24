@@ -13,7 +13,7 @@ type TaskStart struct {
 	ParentID uint64
 	Kind     string
 	What     string
-	Location string // optional; defaults to the domain name when empty
+	Location string // optional; when empty, derived by singleKindLocation
 	Time     timing.VTimeInPicoSec
 	Detail   any
 }
@@ -23,6 +23,28 @@ type TaskEnd struct {
 	ID   uint64
 	Time timing.VTimeInPicoSec
 }
+
+// PipelineTaskKind is the Kind of a task that records a request's traversal of a
+// component-internal latency pipeline. A pipelined component opens it as a
+// subtask of its req_in task at pipeline entry (the same tick req_in opens, at
+// retrieve) and closes it at pipeline exit. This attributes the pipeline latency
+// that would otherwise be an unaccounted gap between the buffer task (which ends
+// at retrieve) and the post-pipeline processing milestones on req_in.
+//
+// A pipeline subtask's What is "<component>.<stage>" (e.g. "L2Cache.bank"); that
+// already-qualified name becomes its location, so each stage is its own
+// single-kind row (see "One location, one kind" in README.md).
+const PipelineTaskKind = "pipeline"
+
+// ReqInTaskKind is the Kind of the receiver-side task that spans a component's
+// handling of an incoming request, from admission to completion. It is opened by
+// [TraceReqReceive] and located at "<component>.req_in".
+const ReqInTaskKind = "req_in"
+
+// ReqOutTaskKind is the Kind of the sender-side task that spans a request a
+// component has issued, from send until the response arrives. It is opened by
+// [TraceReqInitiate] and located at "<component>.req_out".
+const ReqOutTaskKind = "req_out"
 
 // A TaskTag is a categorical label attached to a task while it is processed,
 // for example "read-hit" or "write-miss". Tags inherit their location from the
@@ -46,7 +68,22 @@ const (
 	MilestoneKindDependency       MilestoneKind = "dependency"
 	MilestoneKindOther            MilestoneKind = "other"
 	MilestoneKindTranslation      MilestoneKind = "translation"
-	MilestoneKindSubTask          MilestoneKind = "subtask"
+	// MilestoneKindSubTask marks a wait on a child subtask. Like
+	// MilestoneKindWork it asserts internal activity, so it requires a
+	// corresponding child subtask to exist (see "Coverage principles" in the
+	// package README).
+	MilestoneKindSubTask MilestoneKind = "subtask"
+	// MilestoneKindWork marks the end of an interval the component spent doing
+	// productive work rather than blocked on a resource — e.g. traversing an
+	// internal latency pipeline. The interval from the previous milestone (or
+	// task start) to a work milestone is time the task was working, not waiting.
+	//
+	// Coverage principle: a work milestone must be paired with a child subtask
+	// (parented to the req_in, e.g. PipelineTaskKind) spanning the same interval,
+	// so the trace shows what the work was instead of leaving an unexplained gap.
+	// A bare work milestone with no subtask is a convention violation. See
+	// "Coverage principles" in the package README.
+	MilestoneKindWork MilestoneKind = "work"
 )
 
 // Milestone represents a point in time where a task's blocking status is

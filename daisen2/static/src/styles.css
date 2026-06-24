@@ -36,6 +36,9 @@
   body,
   #root {
     height: 100%;
+    /* No bounce/overscroll, so a horizontal trackpad swipe at the edge does not
+       trigger browser back/forward navigation while panning a trace. */
+    overscroll-behavior: none;
   }
 
   body {
@@ -56,7 +59,7 @@
   }
 
   .daisen-brand {
-    @apply mr-5 select-none text-lg font-semibold tracking-normal;
+    @apply mr-5 flex flex-col justify-center select-none text-lg font-semibold tracking-normal;
   }
 
   .daisen-main {
@@ -93,10 +96,6 @@
     animation: daisen-widget-spin 0.8s linear infinite;
   }
 
-  .daisen-side-column {
-    @apply m-3 h-[calc(100%-1.5rem)] overflow-auto rounded-xl border border-slate-300 bg-slate-100 p-4 shadow-sm;
-  }
-
   .daisen-status-bar {
     @apply h-5 shrink-0 border-t bg-white px-2 text-xs text-slate-600;
   }
@@ -109,6 +108,7 @@
   }
 
   .daisen1-component-left {
+    position: relative;
     display: inline-block;
     height: 100%;
     overflow: hidden;
@@ -121,7 +121,8 @@
   }
 
   .daisen1-task-view,
-  .daisen1-component-view {
+  .daisen1-component-view,
+  .daisen1-metric-view {
     width: 100%;
     overflow: hidden;
   }
@@ -132,66 +133,6 @@
       1px -1px 0 #ffffff,
       -1px 1px 0 #ffffff,
       1px 1px 0 #ffffff;
-  }
-
-  .daisen1-side-column {
-    @apply m-3 shrink-0 select-none overflow-auto rounded-xl border border-[#dddddd] bg-[#eeeeee] p-4 shadow-sm;
-    height: calc(100% - 1.5rem);
-  }
-
-  .daisen1-location-label {
-    @apply break-all text-xl font-bold text-black;
-  }
-
-  .daisen1-data-status {
-    @apply mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700;
-  }
-
-  .daisen1-current-task-info {
-    width: 100%;
-    min-height: 20px;
-    background: #d9d9d9;
-    display: none;
-    border-radius: 4px;
-    box-shadow: 0 1px 6px -6px #dddddd;
-    padding: 8px;
-  }
-
-  .daisen1-current-task-info.showing {
-    display: block;
-    font-size: 16px;
-  }
-
-  .daisen1-current-task-title {
-    font-size: 1.5rem;
-    line-height: 1.2;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-  }
-
-  .daisen1-current-task-info dl {
-    display: grid;
-    grid-template-columns: 25% 75%;
-    row-gap: 0;
-    margin-bottom: 0;
-  }
-
-  .daisen1-current-task-info dt {
-    font-weight: 700;
-  }
-
-  .daisen1-current-task-info dd {
-    min-width: 0;
-    margin-bottom: 0;
-    overflow-wrap: anywhere;
-  }
-
-  .daisen1-legend {
-    width: 100%;
-  }
-
-  .daisen1-legend-row {
-    cursor: pointer;
   }
 
   .chart-axis text {
@@ -215,10 +156,135 @@
   .chat-markdown pre code {
     @apply bg-transparent p-0 text-slate-100;
   }
+
+  .chat-markdown table {
+    @apply my-2 block w-max max-w-full border-collapse overflow-x-auto text-xs;
+  }
+
+  .chat-markdown th,
+  .chat-markdown td {
+    @apply border border-border px-2 py-1 text-left align-top;
+  }
+
+  .chat-markdown thead th {
+    @apply bg-muted font-semibold;
+  }
+
+  .chat-markdown tbody tr:nth-child(even) {
+    @apply bg-muted/40;
+  }
+
+  /* markdown-it emits semantic block elements; Tailwind's preflight strips their
+     default styling, so restore readable spacing/markers for the chat. */
+  .chat-markdown p {
+    @apply my-1.5;
+  }
+
+  .chat-markdown h1,
+  .chat-markdown h2,
+  .chat-markdown h3,
+  .chat-markdown h4,
+  .chat-markdown h5,
+  .chat-markdown h6 {
+    @apply mb-1 mt-2 font-semibold;
+  }
+
+  .chat-markdown h1 {
+    @apply text-base;
+  }
+
+  .chat-markdown h2 {
+    @apply text-[0.95rem];
+  }
+
+  .chat-markdown ul,
+  .chat-markdown ol {
+    @apply my-1.5 ps-5;
+  }
+
+  .chat-markdown ul {
+    @apply list-disc;
+  }
+
+  .chat-markdown ol {
+    @apply list-decimal;
+  }
+
+  .chat-markdown li {
+    @apply my-0.5;
+  }
+
+  .chat-markdown blockquote {
+    @apply my-2 border-l-2 border-border ps-3 text-muted-foreground;
+  }
+
+  .chat-markdown a {
+    @apply font-medium text-primary underline underline-offset-2;
+  }
+
+  /* DaisenBot inline visual evidence: a view thumbnail + caption link emitted by
+     chatMarkdown's custom image rule. The thumbnail src is filled in by React. */
+  .chat-markdown .daisen-evidence-figure {
+    @apply my-2 flex w-fit max-w-full flex-col items-start gap-1;
+  }
+
+  .chat-markdown img.daisen-evidence {
+    @apply max-h-56 max-w-full cursor-zoom-in rounded-md border bg-muted/40 object-contain;
+  }
+
+  /* While the view renders off-screen the thumbnail carries a transparent placeholder
+     src. Show a chart skeleton — a card with a faint bar-chart (gridlines + bars +
+     baseline, drawn as an inline SVG) and a sheen sweeping across — instead of a
+     broken-image icon. The white card contrasts with the muted chat bubble. */
+  .chat-markdown img.daisen-evidence.daisen-evidence-loading {
+    @apply h-28 w-56 cursor-progress rounded-md;
+    border: 1px solid hsl(var(--border));
+    background-color: hsl(var(--card));
+    background-image:
+      linear-gradient(100deg, transparent 38%, rgba(255, 255, 255, 0.85) 50%, transparent 62%),
+      url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'224'%20height%3D'112'%20viewBox%3D'0%200%20224%20112'%20preserveAspectRatio%3D'none'%3E%3Cg%20stroke%3D'rgba(100%2C116%2C139%2C0.10)'%20stroke-width%3D'1'%3E%3Cline%20x1%3D'14'%20y1%3D'30'%20x2%3D'210'%20y2%3D'30'%2F%3E%3Cline%20x1%3D'14'%20y1%3D'56'%20x2%3D'210'%20y2%3D'56'%2F%3E%3Cline%20x1%3D'14'%20y1%3D'82'%20x2%3D'210'%20y2%3D'82'%2F%3E%3C%2Fg%3E%3Cg%20fill%3D'rgba(100%2C116%2C139%2C0.20)'%3E%3Crect%20x%3D'30'%20y%3D'60'%20width%3D'22'%20height%3D'36'%20rx%3D'3'%2F%3E%3Crect%20x%3D'68'%20y%3D'44'%20width%3D'22'%20height%3D'52'%20rx%3D'3'%2F%3E%3Crect%20x%3D'106'%20y%3D'70'%20width%3D'22'%20height%3D'26'%20rx%3D'3'%2F%3E%3Crect%20x%3D'144'%20y%3D'34'%20width%3D'22'%20height%3D'62'%20rx%3D'3'%2F%3E%3Crect%20x%3D'182'%20y%3D'52'%20width%3D'22'%20height%3D'44'%20rx%3D'3'%2F%3E%3C%2Fg%3E%3Cline%20x1%3D'14'%20y1%3D'96'%20x2%3D'210'%20y2%3D'96'%20stroke%3D'rgba(100%2C116%2C139%2C0.32)'%20stroke-width%3D'1.5'%2F%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-size: 220% 100%, 100% 100%;
+    background-position: -60% 0, center;
+    animation: daisen-evidence-shimmer 1.5s ease-in-out infinite;
+  }
+
+  .chat-markdown img.daisen-evidence.daisen-evidence-failed {
+    @apply hidden;
+  }
+
+  .chat-markdown a.daisen-evidence-link {
+    @apply text-xs;
+  }
+
+  .chat-markdown hr {
+    @apply my-3 border-border;
+  }
+
+  .chat-markdown :first-child {
+    @apply mt-0;
+  }
+
+  .chat-markdown :last-child {
+    @apply mb-0;
+  }
 }
 
 @keyframes daisen-widget-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes daisen-evidence-shimmer {
+  to {
+    background-position: 160% 0, center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-markdown img.daisen-evidence.daisen-evidence-loading {
+    animation: none;
+    background-position: 50% 0, center;
   }
 }

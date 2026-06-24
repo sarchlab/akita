@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
 // ctrlMiddleware owns every control verb: the universal verbs (Pause,
@@ -153,6 +154,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 		&next.DirectoryState, spec.NumSets, spec.WayAssociativity,
 		int(1<<spec.Log2BlockSize))
 	next.MSHRState = cache.MSHRState{}
+	m.endInflightTasks()
 	next.Transactions = nil
 	next.IsPaused = false
 	next.IsDraining = false
@@ -170,6 +172,45 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
+}
+
+// endInflightTasks completes the req_in tracing task of every in-flight
+// transaction, finalizes its downstream read/write req_out tasks, and closes
+// its directory-pipeline and bank subtasks, so a hard Reset that drops the
+// transaction table leaves no started-never-ended task and no leaked
+// receiver-registry entry. A slot already marked Removed can still hold a
+// downstream write whose response will be ignored, so every slot is visited and
+// the already-ended req_in end is idempotent. Mirrors respondStage (req_in),
+// bottomparser (req_out), and the directory/bank pipelines (subtasks).
+func (m *ctrlMiddleware) endInflightTasks() {
+	comp := m.pipeline.comp
+
+	for i := range comp.State.Transactions {
+		trans := &comp.State.Transactions[i]
+
+		switch {
+		case trans.HasRead:
+			tracing.EndReqInOnReset(comp, trans.ReadMeta.ID)
+		case trans.HasWrite:
+			tracing.EndReqInOnReset(comp, trans.WriteMeta.ID)
+		}
+
+		if trans.HasReadToBottom {
+			tracing.EndTaskOnReset(comp, trans.ReadToBottomMeta.ID)
+		}
+
+		if trans.HasWriteToBottom {
+			tracing.EndTaskOnReset(comp, trans.WriteToBottomMeta.ID)
+		}
+
+		if trans.DirPipelineTaskID != 0 {
+			tracing.EndTaskOnReset(comp, trans.DirPipelineTaskID)
+		}
+
+		if trans.BankTaskID != 0 {
+			tracing.EndTaskOnReset(comp, trans.BankTaskID)
+		}
+	}
 }
 
 // handleInvalidate drops directory blocks matching the request's

@@ -24,8 +24,9 @@ func (d *roundTripDomain) CurrentTime() timing.VTimeInPicoSec { return d.now }
 
 // TestDBTracerLocationRoundTrip writes a trace through the real DBTracer and
 // reads it back with the same SQL shape daisen uses, confirming that the
-// interned location id resolves to the component name and that milestones and
-// tags inherit the task's location.
+// interned location id resolves to the task's single-kind location (a req_in
+// task lands at "<component>.req_in") and that milestones and tags inherit the
+// task's location.
 func TestDBTracerLocationRoundTrip(t *testing.T) {
 	dbFile := writeRoundTripTrace(t)
 
@@ -74,7 +75,7 @@ func writeRoundTripTrace(t *testing.T) string {
 }
 
 // assertTaskLocation checks that trace.Location (an interned id) joins back to
-// the component name and that the task times round-trip.
+// the task's single-kind location and that the task times round-trip.
 func assertTaskLocation(t *testing.T, db *sql.DB) {
 	t.Helper()
 
@@ -88,8 +89,8 @@ func assertTaskLocation(t *testing.T, db *sql.DB) {
 	if err != nil {
 		t.Fatalf("query trace: %v", err)
 	}
-	if location != "GPU[0].L1Cache" {
-		t.Fatalf("location = %q, want GPU[0].L1Cache", location)
+	if location != "GPU[0].L1Cache.req_in" {
+		t.Fatalf("location = %q, want GPU[0].L1Cache.req_in", location)
 	}
 	if start != 10 || end != 20 {
 		t.Fatalf("times = (%v,%v), want (10,20)", start, end)

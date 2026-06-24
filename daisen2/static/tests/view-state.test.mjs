@@ -1,0 +1,220 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  ROUTES,
+  DASHBOARD_DEFAULTS,
+  encodeView,
+  encodeSearchParams,
+  parseView,
+  routeForPath,
+  isSingleWidget,
+  isDaisenViewPath,
+  canonicalViewUrl,
+} from "../src/utils/viewState.mjs";
+
+// Round-trip: parse(encode(v)) === v for fully-specified, non-default views.
+const roundTripCases = [
+  {
+    route: "component",
+    name: "GPU[0].L2Cache",
+    taskId: "abc123",
+    startTime: 300.000000123,
+    endTime: 500.5,
+  },
+  { route: "component", name: "Simple" },
+  {
+    route: "task",
+    id: "d240btg3fvio1hp2d3eg",
+    where: "GPU[1].CU[3]",
+    kind: "read",
+    sel: "child42",
+  },
+  { route: "task" },
+  {
+    route: "dashboard",
+    startTime: 10,
+    endTime: 20,
+    filter: "L2",
+    page: 2,
+    primary: "BufferPressure",
+    secondary: "PendingReqOut",
+  },
+  {
+    // single-widget view: no grid filter/page
+    route: "dashboard",
+    startTime: 10,
+    endTime: 20,
+    primary: "BufferPressure",
+    secondary: "PendingReqOut",
+    widget: "GPU[0].DRAM",
+  },
+  { route: "dashboard" },
+];
+
+for (const view of roundTripCases) {
+  test(`round-trip: ${encodeView(view)}`, () => {
+    const url = encodeView(view);
+    const [pathname, search = ""] = url.split("?");
+    assert.deepEqual(parseView(pathname, search), view);
+  });
+}
+
+test("encodeView uses canonical fixed key order regardless of object key order", () => {
+  const a = { route: "dashboard", page: 3, filter: "f", startTime: 1, endTime: 2 };
+  const b = { route: "dashboard", endTime: 2, startTime: 1, filter: "f", page: 3 };
+  assert.equal(encodeView(a), encodeView(b));
+  assert.equal(encodeView(a), "/dashboard?starttime=1&endtime=2&filter=f&page=3");
+});
+
+test("dashboard defaults are omitted from the URL and recovered as undefined", () => {
+  const url = encodeView({
+    route: "dashboard",
+    primary: DASHBOARD_DEFAULTS.primary,
+    secondary: DASHBOARD_DEFAULTS.secondary,
+    page: 0,
+  });
+  assert.equal(url, "/dashboard");
+  assert.deepEqual(parseView("/dashboard"), { route: "dashboard" });
+});
+
+test("non-default axis metrics are encoded; defaults are not", () => {
+  const url = encodeView({
+    route: "dashboard",
+    primary: "AvgLatency",
+    secondary: DASHBOARD_DEFAULTS.secondary,
+  });
+  assert.equal(url, "/dashboard?primary=AvgLatency");
+});
+
+test("grid-only filter/page are omitted in single-widget mode", () => {
+  const url = encodeView({
+    route: "dashboard",
+    widget: "L2Cache",
+    filter: "ignored",
+    page: 3,
+    primary: "AvgLatency",
+  });
+  assert.equal(url, "/dashboard?primary=AvgLatency&widget=L2Cache");
+});
+
+test('"/" and "/dashboard" both parse to the dashboard route', () => {
+  assert.equal(routeForPath("/"), "dashboard");
+  assert.equal(routeForPath("/dashboard"), "dashboard");
+  assert.equal(routeForPath("/dashboard/"), "dashboard");
+  assert.deepEqual(parseView("/", "filter=mem"), { route: "dashboard", filter: "mem" });
+});
+
+test("encodeView canonicalizes the dashboard route to /dashboard", () => {
+  assert.equal(encodeView({ route: "dashboard" }), "/dashboard");
+});
+
+test("component name with special characters round-trips through URL encoding", () => {
+  const view = { route: "component", name: "GPU[0].L2$Cache (main)" };
+  const url = encodeView(view);
+  const [pathname, search = ""] = url.split("?");
+  assert.deepEqual(parseView(pathname, search), view);
+});
+
+test("high-precision time round-trips exactly", () => {
+  const view = { route: "component", name: "C", startTime: 0.000000000123456, endTime: 1234.56789 };
+  const [pathname, search = ""] = encodeView(view).split("?");
+  const parsed = parseView(pathname, search);
+  assert.equal(parsed.startTime, view.startTime);
+  assert.equal(parsed.endTime, view.endTime);
+});
+
+test("page <= 0 is omitted; page > 0 is kept (0-indexed)", () => {
+  assert.equal(encodeView({ route: "dashboard", page: 0 }), "/dashboard");
+  assert.equal(encodeView({ route: "dashboard", page: -1 }), "/dashboard");
+  assert.equal(encodeView({ route: "dashboard", page: 3 }), "/dashboard?page=3");
+  assert.equal(parseView("/dashboard", "page=0").page, undefined);
+  assert.equal(parseView("/dashboard", "page=3").page, 3);
+});
+
+test("empty component name parses to name='' and encodes to bare /component", () => {
+  assert.deepEqual(parseView("/component", ""), { route: "component", name: "" });
+  assert.equal(encodeView({ route: "component", name: "" }), "/component");
+});
+
+test("isSingleWidget reflects the widget param", () => {
+  assert.equal(isSingleWidget(parseView("/dashboard", "widget=GPU[0].DRAM")), true);
+  assert.equal(isSingleWidget(parseView("/dashboard", "")), false);
+  assert.equal(isSingleWidget(parseView("/component", "name=X")), false);
+});
+
+test("leading '?' in query is tolerated", () => {
+  assert.deepEqual(parseView("/task", "?id=t1"), { route: "task", id: "t1" });
+});
+
+test("encodeSearchParams matches the query part of encodeView", () => {
+  for (const view of roundTripCases) {
+    const url = encodeView(view);
+    const expectedSearch = url.includes("?") ? url.split("?")[1] : "";
+    assert.equal(encodeSearchParams(view).toString(), expectedSearch);
+  }
+});
+
+test("encodeSearchParams returns a usable URLSearchParams for setSearchParams", () => {
+  const params = encodeSearchParams({ route: "task", id: "t1", kind: "read" });
+  assert.equal(params.get("id"), "t1");
+  assert.equal(params.get("kind"), "read");
+  assert.equal(params.get("where"), null);
+});
+
+test("parseView tolerates underscore/case variants for the time range and taskid", () => {
+  // snake_case (the data-API / agent-habit spelling) is still understood...
+  assert.deepEqual(parseView("/component", "name=C&start_time=10&end_time=20"), {
+    route: "component",
+    name: "C",
+    startTime: 10,
+    endTime: 20,
+  });
+  // ...as is camelCase, on the dashboard route.
+  assert.deepEqual(parseView("/dashboard", "startTime=5&endTime=9"), {
+    route: "dashboard",
+    startTime: 5,
+    endTime: 9,
+  });
+  assert.equal(parseView("/component", "name=C&task_id=t1").taskId, "t1");
+  // but the canonical name always wins on re-encode (lenient parse, strict encode).
+  assert.equal(
+    encodeView({ route: "component", name: "C", startTime: 10, endTime: 20 }),
+    "/component?name=C&starttime=10&endtime=20",
+  );
+});
+
+test("ROUTES are the expected canonical paths", () => {
+  assert.equal(ROUTES.dashboard, "/dashboard");
+  assert.equal(ROUTES.component, "/component");
+  assert.equal(ROUTES.task, "/task");
+});
+
+test("isDaisenViewPath accepts the three view paths and rejects everything else", () => {
+  assert.equal(isDaisenViewPath("/component?name=L2Cache"), true);
+  assert.equal(isDaisenViewPath("/dashboard?widget=L2Cache"), true);
+  assert.equal(isDaisenViewPath("/task?id=t1"), true);
+  assert.equal(isDaisenViewPath("/component"), true);
+
+  assert.equal(isDaisenViewPath("/etc/passwd"), false); // other root path
+  assert.equal(isDaisenViewPath("//evil.com/component"), false); // protocol-relative
+  assert.equal(isDaisenViewPath("https://daisen/component"), false); // absolute
+  assert.equal(isDaisenViewPath("javascript:alert(1)"), false); // scheme
+  assert.equal(isDaisenViewPath("component?name=x"), false); // not rooted
+  assert.equal(isDaisenViewPath(""), false);
+  assert.equal(isDaisenViewPath(null), false);
+});
+
+test("canonicalViewUrl normalizes equivalent view urls and rejects non-views", () => {
+  assert.equal(
+    canonicalViewUrl("/component?endtime=20&name=C&starttime=10&bogus=1"),
+    "/component?name=C&starttime=10&endtime=20",
+  );
+  assert.equal(
+    canonicalViewUrl("/component?name=C&starttime=10&endtime=20"),
+    canonicalViewUrl("/component?starttime=10&endtime=20&name=C"),
+  );
+  assert.equal(canonicalViewUrl("/task?id=t1#frag"), "/task?id=t1"); // fragment ignored
+  assert.equal(canonicalViewUrl("/etc/passwd"), null);
+  assert.equal(canonicalViewUrl("https://x/component"), null);
+});

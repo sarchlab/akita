@@ -73,12 +73,15 @@ func (m *middleware) runPipeline() bool {
 // topDown pulls a request from the top, forwards a shadow request to the
 // bottom, and records the transaction in FIFO order. Skipped while not
 // Enabled so Drain and Pause stop accepting new traffic.
+//
+// The req_in task opens when the request first reaches the head of the Top
+// buffer (the earliest the ROB can act on it), not when it is admitted: the
+// peek happens before the buffer-slot and bottom-port checks, so the time
+// spent blocked on those resources is counted as part of the request's
+// processing rather than hidden in the upstream queue.
 func (m *middleware) topDown() bool {
 	state := &m.comp.State
 	if state.ControlState != memcontrolprotocol.StateEnabled {
-		return false
-	}
-	if len(state.Transactions) >= m.comp.Spec().BufferSize {
 		return false
 	}
 
@@ -92,6 +95,20 @@ func (m *middleware) topDown() bool {
 		panic("rob: unsupported top-port message type")
 	}
 
+	if len(state.Transactions) >= m.comp.Spec().BufferSize {
+		return false
+	}
+
+	// A reorder-buffer entry is free: the hardware-resource wait the request
+	// spent at the head of the Top buffer is over. This admission wait belongs
+	// to the incoming-buffer task; req_in (opened at retrieve, below) covers
+	// only the processing that follows.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtIncomingBuffer(req, m.comp),
+		Kind:   tracing.MilestoneKindHardwareResource,
+		What:   m.comp.Name() + ".buffer",
+	})
+
 	shadow, isRead := m.buildShadowReq(
 		req, m.bottomPort().AsRemote(), m.comp.Spec().BottomUnit)
 
@@ -101,6 +118,18 @@ func (m *middleware) topDown() bool {
 
 	m.bottomPort().Send(shadow)
 
+	// The shadow request is on its way downstream: the at-head wait to send on
+	// the Bottom port is over (also on the incoming-buffer task).
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtIncomingBuffer(req, m.comp),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.bottomPort().Name(),
+	})
+
+	// Admit the request: open req_in at retrieve and record the transaction.
+	tracing.TraceReqReceive(m.comp, req)
+	m.tagReadWrite(req)
+
 	state.Transactions = append(state.Transactions, transactionState{
 		ReqFromTopID:  req.Meta().ID,
 		ReqFromTopSrc: req.Meta().Src,
@@ -109,7 +138,6 @@ func (m *middleware) topDown() bool {
 	})
 	m.topPort().RetrieveIncoming()
 
-	tracing.TraceReqReceive(m.comp, req)
 	tracing.TraceReqInitiate(m.comp, shadow,
 		tracing.MsgIDAtReceiver(req, m.comp))
 
@@ -137,6 +165,12 @@ func (m *middleware) parseBottom() bool {
 		trans := &m.comp.State.Transactions[idx]
 		trans.HasRsp = true
 		trans.RspData = dataRsp.Data
+		// The bottom unit returned the data this transaction was waiting on.
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: m.reqInTaskID(*trans),
+			Kind:   tracing.MilestoneKindData,
+			What:   m.bottomPort().Name(),
+		})
 		tracing.TraceReqFinalize(m.comp, m.shadowReqTraceMsg(*trans))
 		return true
 	case memprotocol.WriteDoneRsp:
@@ -149,6 +183,13 @@ func (m *middleware) parseBottom() bool {
 
 		trans := &m.comp.State.Transactions[idx]
 		trans.HasRsp = true
+		// The bottom unit acknowledged the write subtask this transaction
+		// dispatched.
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: m.reqInTaskID(*trans),
+			Kind:   tracing.MilestoneKindSubTask,
+			What:   m.bottomPort().Name(),
+		})
 		tracing.TraceReqFinalize(m.comp, m.shadowReqTraceMsg(*trans))
 		return true
 	default:
@@ -170,6 +211,18 @@ func (m *middleware) bottomUp() bool {
 		return false
 	}
 
+	// The head transaction has its response and may now retire. The interval
+	// since its bottom response arrived is the time it spent blocked behind
+	// older, not-yet-retired transactions (in-order commit). Emitted before the
+	// CanSend retry and the response-sent milestone so this more meaningful
+	// reason wins a same-tick tie; the (Kind, What) dedup keeps the first
+	// emission across retries and a zero-length head-of-line wait collapses.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: m.reqInTaskID(head),
+		Kind:   tracing.MilestoneKindDependency,
+		What:   m.comp.Name() + ".reorder",
+	})
+
 	rsp := m.buildTopRsp(head, m.topPort().AsRemote())
 
 	if !m.topPort().CanSend() {
@@ -179,6 +232,14 @@ func (m *middleware) bottomUp() bool {
 	m.topPort().Send(rsp)
 
 	state.Transactions = state.Transactions[1:]
+
+	// The response is on its way to the requester: the wait to send on the Top
+	// port is over.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: m.reqInTaskID(head),
+		Kind:   tracing.MilestoneKindNetworkBusy,
+		What:   m.topPort().Name(),
+	})
 
 	tracing.TraceReqComplete(m.comp, m.topReqTraceMsg(head))
 
@@ -288,6 +349,29 @@ func (m *middleware) topReqTraceMsg(trans transactionState) messaging.Msg {
 	return req
 }
 
+// reqInTaskID returns the receiver-side (req_in) task ID for a transaction's
+// original top-side request — the subject of the ROB's processing milestones.
+// The registry entry was created by TraceReqReceive in topDown and lives until
+// TraceReqComplete in bottomUp, so this resolves to the live task throughout.
+func (m *middleware) reqInTaskID(trans transactionState) uint64 {
+	return tracing.MsgIDAtReceiver(m.topReqTraceMsg(trans), m.comp)
+}
+
+// tagReadWrite labels the req_in task as a "read" or a "write" so traces can be
+// filtered by access type. Called once, when the request is admitted (retrieved)
+// and its req_in task opens.
+func (m *middleware) tagReadWrite(req memprotocol.AccessReq) {
+	what := "write"
+	if _, ok := req.(memprotocol.ReadReq); ok {
+		what = "read"
+	}
+
+	tracing.AddTaskTag(m.comp, tracing.TaskTag{
+		TaskID: tracing.MsgIDAtReceiver(req, m.comp),
+		What:   what,
+	})
+}
+
 // processControlMsg handles the universal control verbs and finalizes
 // a pending Drain when in-flight transactions have settled.
 func (m *middleware) processControlMsg() bool {
@@ -387,9 +471,9 @@ func (m *middleware) handleEnable(req memcontrolprotocol.Req) bool {
 }
 
 // handleReset drops every in-flight transaction, drains stale port
-// traffic, and lands the ROB back in Enabled. The tracing receiver-task
-// registry entries that topDown allocated for each in-flight top-side
-// request are released so they do not outlive the transactions.
+// traffic, and lands the ROB back in Enabled. The req_in/req_out tracing tasks
+// that topDown opened for each in-flight transaction are ended (and their
+// receiver-registry entries released) so they do not outlive the transactions.
 func (m *middleware) handleReset(req memcontrolprotocol.Req) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
@@ -399,12 +483,16 @@ func (m *middleware) handleReset(req memcontrolprotocol.Req) bool {
 		req.Src, req.ID, true, ""))
 
 	state := &m.comp.State
-	m.forgetInflightReceiverIDs()
+	m.endInflightTasks()
 	state.Transactions = state.Transactions[:0]
 	state.CurrentCmdID = 0
 	state.CurrentCmdSrc = ""
 	state.ControlState = memcontrolprotocol.StateEnabled
 
+	// Buffer tasks for messages still queued on the Top/Bottom ports are closed
+	// by the drains below: each RetrieveIncoming fires the retrieve hook, which
+	// ends the buffer task. No pre-admission req_in exists to clean up — req_in
+	// now opens only at retrieve.
 	drainIncoming(m.topPort())
 	drainIncoming(m.bottomPort())
 
@@ -448,13 +536,17 @@ func drainIncoming(p messaging.Port) {
 	}
 }
 
-// forgetInflightReceiverIDs releases the tracing receiver-task registry
-// entries that topDown allocated for each in-flight top-side request. Control
-// paths that drop the transaction table call this so the entries do not
-// outlive the transactions they describe.
-func (m *middleware) forgetInflightReceiverIDs() {
+// endInflightTasks completes the top-side req_in tracing task and finalizes the
+// shadow req_out task for each in-flight transaction, so a control path that
+// drops the transaction table leaves no started-never-ended task and no leaked
+// receiver-registry entry. topDown opens both tasks together when it admits a
+// request, so both are open until the transaction retires; the end is
+// idempotent if the shadow's response already finalized its req_out. Mirrors
+// bottomUp (req_in) and parseBottom (req_out) completion.
+func (m *middleware) endInflightTasks() {
 	for _, trans := range m.comp.State.Transactions {
-		tracing.ForgetMsgIDAtReceiver(trans.ReqFromTopID, m.comp)
+		tracing.EndReqInOnReset(m.comp, trans.ReqFromTopID)
+		tracing.EndTaskOnReset(m.comp, trans.ReqToBottomID)
 	}
 }
 

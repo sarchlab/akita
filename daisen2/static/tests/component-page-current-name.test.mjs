@@ -2,23 +2,28 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-// Regression for issue #156: the current component name (and the component view)
-// must follow the selected task's location, so clicking a parent task or subtask
-// navigates to that task's component instead of staying on the original one.
-test("component page tracks the selected task's component", async () => {
+// Issue #156 + scope behavior: the view follows a selected task to a *different*
+// component, but stays in the current scope when the task already lives within it
+// (clicking a task in ROB.Top.incoming while viewing ROB keeps you at ROB).
+test("component page follows out-of-scope tasks but stays in scope otherwise", async () => {
   const source = await readFile(new URL("../src/pages/ComponentPage.tsx", import.meta.url), "utf8");
 
-  // The component in view is derived from the selected task's location.
-  assert.match(source, /const componentName = selectedTask\?\.location \|\| name;/);
+  // A scope-containment helper drives the decision.
+  assert.match(source, /function isWithinScope\(location: string, scope: string\)/);
 
-  // The side-column label shows the derived component, not the raw URL name.
-  assert.match(source, /daisen1-location-label">\{componentName\}/);
-  assert.doesNotMatch(source, /daisen1-location-label">\{name\}/);
+  // The location in view follows the task only when it falls outside the scope.
+  assert.match(source, /const componentName = selectedLocation && !isWithinScope\(selectedLocation, name\) \? selectedLocation : name;/);
+  assert.doesNotMatch(source, /const componentName = selectedTask\?\.location \|\| name;/);
 
-  // Component-scoped data (metric line and timeline query) uses the derived name.
-  assert.match(source, /useCompInfo\(componentName,/);
-  assert.match(source, /where: componentName,/);
+  // The side-panel header breadcrumb is built from the derived location.
+  assert.match(source, /breadcrumbSegments\(componentName\)/);
 
-  // Selecting a task records that task's component in the URL.
-  assert.match(source, /params\.set\("name", task\.location \|\| name\)/);
+  // The location-scoped data sources are all scoped to the derived location's subtree.
+  assert.match(source, /useStackedCompInfo\(componentName,/);
+  assert.match(source, /useComponentTimeline\(componentName,/);
+  assert.match(source, /scope: componentName,/);
+
+  // Selecting a task keeps the active scope (componentName, not the stale URL
+  // `name`) unless the task is outside it.
+  assert.match(source, /params\.set\("name", task\.location && !isWithinScope\(task\.location, componentName\) \? task\.location : componentName\)/);
 });

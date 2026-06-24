@@ -1,6 +1,7 @@
 package writethroughcache
 
 import (
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -54,6 +55,21 @@ func (s *bankStage) extractFromBuf() bool {
 	}
 
 	transIdx := bankBuf.Pop()
+	trans := &next.Transactions[transIdx]
+
+	// Open the bank subtask: the transaction is entering the bank (data-array)
+	// pipeline, so its bank read/write gets its own child bar under the req_in,
+	// mirroring the directory pipeline subtask. The bank latency then shows as
+	// real work rather than an unexplained gap before completion.
+	pid := timing.GetIDGenerator().Generate()
+	trans.BankTaskID = pid
+	tracing.StartTask(s.cache.comp, tracing.TaskStart{
+		ID:       pid,
+		ParentID: reqInTaskIDOf(s.cache.comp, trans),
+		Kind:     tracing.PipelineTaskKind,
+		What:     s.cache.comp.Name() + ".bank",
+	})
+
 	bankPipeline.Accept(transIdx)
 
 	return true
@@ -104,7 +120,7 @@ func (s *bankStage) finalizeReadHitTrans(
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 	bankPostBuf.Pop()
 
-	tracing.EndTask(s.cache.comp, tracing.TaskEnd{ID: trans.ID})
+	s.finishBank(trans)
 
 	return true
 }
@@ -141,10 +157,10 @@ func (s *bankStage) finalizeWriteTrans(
 	bankPostBuf.Pop()
 
 	trans.BankDone = true
+	s.finishBank(trans)
 
 	if !trans.Done && writeTransIsReady(trans) {
 		trans.Done = true
-		tracing.EndTask(s.cache.comp, tracing.TaskEnd{ID: trans.ID})
 	}
 
 	return true
@@ -167,6 +183,8 @@ func (s *bankStage) finalizeWriteFetchedTrans(
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 	bankPostBuf.Pop()
 
+	s.finishBank(trans)
+
 	// The merged line is now in storage. Any MSHR-coalesced write whose
 	// data was folded into this fill can be considered "fill-done"; if
 	// its bottom WriteDoneRsp has also arrived, finalize it here.
@@ -178,7 +196,6 @@ func (s *bankStage) finalizeWriteFetchedTrans(
 		offset := trans.ReadAddress - nextBlock.Tag
 		trans.Data = trans.Data[offset : offset+trans.ReadAccessByteSize]
 		trans.Done = true
-		tracing.EndTask(s.cache.comp, tracing.TaskEnd{ID: trans.ID})
 		return true
 	}
 
@@ -187,7 +204,6 @@ func (s *bankStage) finalizeWriteFetchedTrans(
 	trans.BankDone = true
 	if !trans.Done && writeTransIsReady(trans) {
 		trans.Done = true
-		tracing.EndTask(s.cache.comp, tracing.TaskEnd{ID: trans.ID})
 	}
 
 	return true
@@ -210,9 +226,34 @@ func (s *bankStage) completeMSHRFillWaiters(fetcherIdx int) {
 
 		waiter.MSHRFillDone = true
 
+		// The waiter coalesced onto the fetcher and never visits the bank
+		// itself; its merged data reached storage via the fetcher's bank
+		// write. That is a dependency it was blocked on — not its own work —
+		// so it gets a dependency milestone, not the bank subtask.
+		tracing.AddMilestone(s.cache.comp, tracing.Milestone{
+			TaskID: reqInTaskIDOf(s.cache.comp, waiter),
+			Kind:   tracing.MilestoneKindDependency,
+			What:   s.cache.comp.Name() + ".fill",
+		})
+
 		if writeTransIsReady(waiter) {
 			waiter.Done = true
-			tracing.EndTask(s.cache.comp, tracing.TaskEnd{ID: waiter.ID})
 		}
 	}
+}
+
+// finishBank closes the transaction's bank subtask and records the bank access
+// as work on the request's req_in task. The subtask is the child bar for the
+// bank (data-array) pipeline traversal; the milestone marks, on the request's
+// own task, that the bank read/write — the cache's last processing phase before
+// it responds — is done. Keeping both mirrors the directory pipeline, which
+// also pairs a subtask with a work milestone, so every "work" interval on the
+// req_in has a corresponding child bar.
+func (s *bankStage) finishBank(trans *transactionState) {
+	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
+		TaskID: reqInTaskIDOf(s.cache.comp, trans),
+		Kind:   tracing.MilestoneKindWork,
+		What:   s.cache.comp.Name() + ".bank",
+	})
+	tracing.EndTask(s.cache.comp, tracing.TaskEnd{ID: trans.BankTaskID})
 }

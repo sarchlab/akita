@@ -12,9 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v4
         with:
-          node-version: 18.20.7
+          node-version: 22.12.0
       - name: npm install
         working-directory: ./daisen2/static
         run: npm install
@@ -28,9 +28,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v4
         with:
-          node-version: 18.20.7
+          node-version: 22.12.0
       - name: npm install
         working-directory: ./monitoring2/static
         run: npm install
@@ -44,9 +44,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           go-version: 1.26.2
+          # Self-hosted runner: GOMODCACHE/GOCACHE persist on local disk
+          # between jobs, so setup-go's dependency cache is redundant. It was
+          # also failing auth and burning ~20 min / ~2 GB restoring a stale
+          # archive at 1-2 MB/s. Disable it.
+          cache: false
       - name: Install mockgen
         run: go install go.uber.org/mock/mockgen@v0.6.0
       - name: Install ginkgo
@@ -64,6 +69,30 @@ jobs:
       - name: Run tests
         run: ginkgo -r
 
+  dram_validation:
+    # Self-contained DRAM validation gate — runs the whole tier ladder for the
+    # mem/dram package: Tier 1 (timing-formula cross-validation), Tier 2
+    # (single-request latency), Tier 3 (tCCD/tRRD/tFAW microbenchmarks), Tier 4
+    # (bandwidth sanity) — all in-process — plus Tier 5 (full-trace command
+    # counts vs DRAMSim3 & Ramulator2) and Tier 6 (read latency within 15%),
+    # which compare against the committed reference data in mem/dram/validation/.
+    # No C++ oracle build needed; mem/dram has no generated mocks.
+    runs-on: self-hosted
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: 1.26.2
+          # Self-hosted runner: GOMODCACHE/GOCACHE persist on local disk
+          # between jobs, so setup-go's dependency cache is redundant. It was
+          # also failing auth and burning ~20 min / ~2 GB restoring a stale
+          # archive at 1-2 MB/s. Disable it.
+          cache: false
+      - name: Run DRAM validation (Tiers 1-6)
+        run: go test ./mem/dram/ -count=1
+
   noc_acceptance_test:
     runs-on: self-hosted
     timeout-minutes: 60
@@ -71,9 +100,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           go-version: 1.26.2
+          # Self-hosted runner: GOMODCACHE/GOCACHE persist on local disk
+          # between jobs, so setup-go's dependency cache is redundant. It was
+          # also failing auth and burning ~20 min / ~2 GB restoring a stale
+          # archive at 1-2 MB/s. Disable it.
+          cache: false
       - name: Ensure Python3
         run: python3 --version || (sudo dnf install -y python3 || sudo apt-get install -y python3)
       - name: Install mockgen
@@ -93,9 +127,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           go-version: 1.26.2
+          # Self-hosted runner: GOMODCACHE/GOCACHE persist on local disk
+          # between jobs, so setup-go's dependency cache is redundant. It was
+          # also failing auth and burning ~20 min / ~2 GB restoring a stale
+          # archive at 1-2 MB/s. Disable it.
+          cache: false
       - name: Ensure Python3
         run: python3 --version || (sudo dnf install -y python3 || sudo apt-get install -y python3)
       - name: Install mockgen

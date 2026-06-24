@@ -10,13 +10,14 @@ import (
 )
 
 type Simulation struct {
-	id           string
-	outputPath   string
-	engine       timing.Engine
-	dataRecorder datarecording.DataRecorder
-	visTracer    *tracing.DBTracer
-	metaRecorder *metaRecorder
-	monitor      *monitoring2.Monitor
+	id               string
+	outputPath       string
+	engine           timing.Engine
+	dataRecorder     datarecording.DataRecorder
+	visTracer        *tracing.DBTracer
+	metaRecorder     *metaRecorder
+	topologyRecorder *topologyRecorder
+	monitor          *monitoring2.Monitor
 
 	components    []Component
 	compNameIndex map[string]int
@@ -130,6 +131,13 @@ func (s *Simulation) RegisterPort(p naming.Named) {
 
 	s.registerPort(port)
 
+	// Attach incoming- and outgoing-buffer tracing, mirroring how
+	// RegisterComponent attaches CollectTrace. The resulting tasks flow to the
+	// component tracer, so they only materialize for components that are
+	// themselves traced.
+	tracing.CollectIncomingBufferTrace(p)
+	tracing.CollectOutgoingBufferTrace(p)
+
 	if s.monitor != nil {
 		s.monitor.RegisterPort(port)
 	}
@@ -160,6 +168,13 @@ func (s *Simulation) RegisterConnection(c naming.Named) {
 // order.
 func (s *Simulation) Connections() []Connection {
 	return append([]Connection(nil), s.connections...)
+}
+
+// Ports returns a copy of the registered ports, in registration order. It is
+// the symmetric counterpart of Components and Connections, and lets the
+// topology recorder reconstruct the connection graph from the port side.
+func (s *Simulation) Ports() []Port {
+	return append([]Port(nil), s.ports...)
 }
 
 // RegisterResource registers non-timing program state that can be referenced by
@@ -216,6 +231,10 @@ func (s *Simulation) Terminate() {
 
 	if s.metaRecorder != nil {
 		s.metaRecorder.End()
+	}
+
+	if s.topologyRecorder != nil {
+		s.topologyRecorder.Record(s.components, s.ports)
 	}
 
 	s.dataRecorder.Close()

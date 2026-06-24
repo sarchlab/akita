@@ -1,35 +1,25 @@
 package dram
 
-// tickBanks updates all bank states: counts down timers and completes commands.
-// Returns true if any progress was made.
-func tickBanks(spec *Spec, cmdCycles map[commandKind]int, state *State) bool {
+// tickBanks counts down the per-next-command timing gaps on every bank.
+// Returns true if any gap was decremented.
+func tickBanks(state *State) bool {
 	madeProgress := false
 
 	for i := range state.BankStates.Entries {
 		bs := &state.BankStates.Entries[i].Data
-		madeProgress = tickBank(state, bs) || madeProgress
+		madeProgress = tickBank(bs) || madeProgress
 	}
 
 	return madeProgress
 }
 
-// tickBank updates a single bank's state.
-func tickBank(state *State, bs *bankState) bool {
+// tickBank counts down a single bank's timing constraints.
+func tickBank(bs *bankState) bool {
 	madeProgress := false
 
-	// Count down current command
-	if bs.HasCurrentCmd {
-		bs.CurrentCmd.CycleLeft--
-		if bs.CurrentCmd.CycleLeft <= 0 {
-			completeCommand(state, bs)
-		}
-		madeProgress = true
-	}
-
-	// Count down timing constraints
-	for k, v := range bs.CyclesToCmdAvailable {
-		if v > 0 {
-			bs.CyclesToCmdAvailable[k] = v - 1
+	for k := range bs.CyclesToCmdAvailable {
+		if bs.CyclesToCmdAvailable[k] > 0 {
+			bs.CyclesToCmdAvailable[k]--
 			madeProgress = true
 		}
 	}
@@ -37,27 +27,49 @@ func tickBank(state *State, bs *bankState) bool {
 	return madeProgress
 }
 
-// completeCommand finishes the current command on a bank.
-func completeCommand(state *State, bs *bankState) {
-	cmd := &bs.CurrentCmd
-	cmd.CycleLeft = 0
-
-	kind := commandKind(cmd.Kind)
-	if isReadOrWrite(kind) {
-		// Mark the sub-transaction as completed.
-		// The ref may have been invalidated (TransIndex == -1) if the
-		// parent transaction was already removed by respondMW. In that
-		// case there is nothing to mark.
-		ref := cmd.SubTransRef
-		if ref.TransIndex >= 0 && ref.TransIndex < len(state.Transactions) &&
-			ref.SubIndex >= 0 && ref.SubIndex < len(state.Transactions[ref.TransIndex].SubTransactions) {
-			state.Transactions[ref.TransIndex].
-				SubTransactions[ref.SubIndex].Completed = true
-		}
+// processPendingCompletions marks every sub-transaction whose read/write data
+// has become ready (its CompletionTick has been reached) as completed, then
+// drops those entries. It returns the IDs of the sub-transactions that just
+// completed, so the caller can end their trace tasks.
+//
+// This is the data-return timeline, decoupled from bank occupancy: multiple
+// reads/writes may be in flight on the same bank, each completing on its own
+// schedule, while the bank accepts further column commands per the timing table.
+func processPendingCompletions(state *State) []uint64 {
+	if len(state.PendingCompletions) == 0 {
+		return nil
 	}
 
-	bs.HasCurrentCmd = false
-	bs.CurrentCmd = commandState{}
+	var completed []uint64
+	kept := state.PendingCompletions[:0]
+	for _, pc := range state.PendingCompletions {
+		if pc.CompletionTick <= state.TickCount {
+			if id, ok := markSubTransCompleted(state, pc.Ref); ok {
+				completed = append(completed, id)
+			}
+			continue
+		}
+		kept = append(kept, pc)
+	}
+	state.PendingCompletions = kept
+
+	return completed
+}
+
+// markSubTransCompleted flags the referenced sub-transaction as completed and
+// returns its (trace task) ID. A stale reference (parent transaction already
+// removed) is a safe no-op that reports ok=false.
+func markSubTransCompleted(state *State, ref subTransRef) (uint64, bool) {
+	t := findTransaction(state, ref.TxID)
+	if t == nil {
+		return 0, false
+	}
+	if ref.SubIndex >= 0 && ref.SubIndex < len(t.SubTransactions) {
+		sub := &t.SubTransactions[ref.SubIndex]
+		sub.Completed = true
+		return sub.ID, true
+	}
+	return 0, false
 }
 
 // isReadOrWrite returns true if the command kind is a read/write variant.
@@ -74,8 +86,7 @@ func getReadyCommand(spec *Spec, state *State, bs *bankState, cmd *commandState)
 		return nil
 	}
 
-	key := cmdKindToString(requiredKind)
-	if bs.CyclesToCmdAvailable[key] == 0 {
+	if bs.CyclesToCmdAvailable[requiredKind] == 0 {
 		// Check tFAW for activate commands
 		if requiredKind == cmdKindActivate && spec.TFAW > 0 {
 			if !canActivateUnderTFAW(spec, state, int(cmd.Location.Rank)) {
@@ -107,14 +118,13 @@ func canActivateUnderTFAW(spec *Spec, state *State, rank int) bool {
 }
 
 // findActivateHistory returns a pointer to the rankActivateHistory for the
-// given rank, or nil if not found.
+// given rank, or nil if out of range. Histories are pre-allocated one per rank
+// (see initBankStatesFlat), so the rank is a direct index.
 func findActivateHistory(flat *bankStatesFlat, rank int) *rankActivateHistory {
-	for i := range flat.ActivateHistories {
-		if flat.ActivateHistories[i].Rank == rank {
-			return &flat.ActivateHistories[i]
-		}
+	if rank < 0 || rank >= len(flat.ActivateHistories) {
+		return nil
 	}
-	return nil
+	return &flat.ActivateHistories[rank]
 }
 
 // getRequiredCommandKind determines what command kind is actually needed
@@ -149,19 +159,24 @@ func getRequiredCommandKind(bs *bankState, cmd *commandState) commandKind {
 	}
 }
 
-// startCommand starts a command on a bank.
+// startCommand issues a command to a bank. It updates the bank state machine,
+// statistics, and — for column reads/writes — schedules the data/response to
+// become ready on the pending-completion timeline. It does NOT mark the bank
+// "busy": next-command eligibility is governed solely by the timing table
+// (CyclesToCmdAvailable), the state machine, and tFAW, which is what allows
+// pipelined column commands without conflating bus occupancy with data latency.
 func startCommand(cmdCycles map[commandKind]int, state *State, bs *bankState, cmd *commandState) {
-	if bs.HasCurrentCmd {
-		panic("previous cmd is not completed")
-	}
-
-	bs.HasCurrentCmd = true
-	bs.CurrentCmd = *cmd
-
 	kind := commandKind(cmd.Kind)
-	cycles, ok := cmdCycles[kind]
-	if ok {
-		bs.CurrentCmd.CycleLeft = cycles
+
+	if isReadOrWrite(kind) {
+		delay := cmdCycles[kind]
+		state.PendingCompletions = append(
+			state.PendingCompletions,
+			pendingCompletion{
+				CompletionTick: state.TickCount + uint64(delay),
+				Ref:            cmd.SubTransRef,
+			},
+		)
 	}
 
 	// Track statistics
@@ -241,12 +256,10 @@ func updateAllBankTiming(timing dramTiming, state *State, cmd *commandState) {
 
 		if int(kind) < len(timingTable) {
 			for _, te := range timingTable[kind] {
-				key := cmdKindToString(te.NextCmdKind)
-				if entry.Data.CyclesToCmdAvailable == nil {
-					entry.Data.CyclesToCmdAvailable = make(map[string]int)
-				}
-				if entry.Data.CyclesToCmdAvailable[key] < te.MinCycleInBetween {
-					entry.Data.CyclesToCmdAvailable[key] = te.MinCycleInBetween
+				if entry.Data.CyclesToCmdAvailable[te.NextCmdKind] <
+					te.MinCycleInBetween {
+					entry.Data.CyclesToCmdAvailable[te.NextCmdKind] =
+						te.MinCycleInBetween
 				}
 			}
 		}
@@ -254,16 +267,11 @@ func updateAllBankTiming(timing dramTiming, state *State, cmd *commandState) {
 }
 
 // recordActivateTimestamp records the current tick as an activate timestamp
-// for the given rank and keeps only the last 4.
+// for the given rank and keeps only the last 4 (the tFAW window).
 func recordActivateTimestamp(state *State, rank int) {
 	history := findActivateHistory(&state.BankStates, rank)
 	if history == nil {
-		// Extend the histories slice if needed
-		state.BankStates.ActivateHistories = append(
-			state.BankStates.ActivateHistories,
-			rankActivateHistory{Rank: rank},
-		)
-		history = &state.BankStates.ActivateHistories[len(state.BankStates.ActivateHistories)-1]
+		return
 	}
 	history.Timestamps = append(history.Timestamps, state.TickCount)
 	// Keep only the last 4

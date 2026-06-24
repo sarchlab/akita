@@ -5,6 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type ctrlMiddleware struct {
@@ -121,6 +122,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	}
 
 	state := &m.comp.State
+	m.endInflightTasks()
 	state.WalkingTranslations = nil
 	state.ToRemoveFromPTW = nil
 	state.CurrentCmdID = 0
@@ -134,6 +136,20 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
+}
+
+// endInflightTasks completes the req_in tracing task and the walk subtask of
+// every page walk still in flight, so a hard Reset that drops
+// WalkingTranslations leaves no started-never-ended task and no leaked
+// receiver-registry entry. The MMU walk is local, so there is no downstream
+// req_out to finalize. Mirrors the completion in translationMW.doPageWalkHit.
+func (m *ctrlMiddleware) endInflightTasks() {
+	for _, walking := range m.comp.State.WalkingTranslations {
+		tracing.EndReqInOnReset(m.comp, walking.ReqID)
+		if walking.WalkTaskID != 0 {
+			tracing.EndTaskOnReset(m.comp, walking.WalkTaskID)
+		}
+	}
 }
 
 func (m *ctrlMiddleware) handleUnsupported(req memcontrolprotocol.Req) bool {

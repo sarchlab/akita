@@ -9,7 +9,6 @@ import (
 func splitTransaction(
 	spec *Spec,
 	trans *transactionState,
-	transIdx int,
 ) {
 	addr := transactionGlobalAddress(trans)
 	size := transactionAccessByteSize(trans)
@@ -32,10 +31,9 @@ func splitTransaction(
 
 	for a := alignedAddr; a < alignedEnd; a += unitSize {
 		st := subTransState{
-			ID:               timing.GetIDGenerator().Generate(),
-			Address:          a,
-			Completed:        false,
-			TransactionIndex: transIdx,
+			ID:        timing.GetIDGenerator().Generate(),
+			Address:   a,
+			Completed: false,
 		}
 		trans.SubTransactions = append(trans.SubTransactions, st)
 	}
@@ -50,105 +48,50 @@ func canPushSubTrans(state *State, n int, capacity int) bool {
 }
 
 // pushSubTrans adds all subtransactions of a transaction to the sub-transaction
-// queue.
+// queue, referenced by the transaction's stable ID.
 func pushSubTrans(state *State, transIdx int) {
 	trans := &state.Transactions[transIdx]
 	for i := range trans.SubTransactions {
 		state.SubTransQueue.Entries = append(
 			state.SubTransQueue.Entries,
-			subTransRef{TransIndex: transIdx, SubIndex: i},
+			subTransRef{TxID: trans.ID, SubIndex: i},
 		)
 	}
 }
 
-// tickSubTransQueue tries to move one sub-transaction from the queue into
-// the command queue. Returns true if progress was made.
+// tickSubTransQueue tries to move one sub-transaction from the queue into the
+// command queue using the default plugin set. Returns true if progress was
+// made. Production drives this through the component's configured controller
+// (see controller.fillCommandQueue); this package-level shim builds the default
+// controller so tests can exercise the path directly.
 func tickSubTransQueue(spec *Spec, state *State) bool {
-	for i, ref := range state.SubTransQueue.Entries {
-		var cmd *commandState
-		if spec.PagePolicy == PagePolicyOpen {
-			cmd = createOpenPageCommand(spec, state, ref)
-		} else {
-			cmd = createClosePageCommand(spec, state, ref)
-		}
-
-		if canAcceptCommand(state, cmd, spec) {
-			acceptCommand(state, cmd)
-			// Remove from queue
-			state.SubTransQueue.Entries = append(
-				state.SubTransQueue.Entries[:i],
-				state.SubTransQueue.Entries[i+1:]...,
-			)
-			return true
-		}
-	}
-
-	return false
+	return newDefaultController(spec).fillCommandQueue(spec, state)
 }
 
 // createClosePageCommand creates a command for a sub-transaction using
-// close-page policy.
+// close-page policy (auto-precharge). Thin wrapper over the row policy, kept
+// for direct testing.
 func createClosePageCommand(
 	spec *Spec,
 	state *State,
 	ref subTransRef,
 ) *commandState {
-	st := &state.Transactions[ref.TransIndex].SubTransactions[ref.SubIndex]
-
-	cmd := &commandState{
-		ID:      timing.GetIDGenerator().Generate(),
-		Address: st.Address,
-		SubTransRef: subTransRef{
-			TransIndex: ref.TransIndex,
-			SubIndex:   ref.SubIndex,
-		},
-	}
-
-	// Close-page: read => ReadPrecharge, write => WritePrecharge
-	trans := &state.Transactions[ref.TransIndex]
-	if isTransactionRead(trans) {
-		cmd.Kind = int(cmdKindReadPrecharge)
-	} else {
-		cmd.Kind = int(cmdKindWritePrecharge)
-	}
-
-	loc := mapAddress(spec, st.Address)
-	cmd.Location = loc
-
-	return cmd
+	st := subTransByRef(state, ref)
+	return closePageRowPolicy{}.CommandFor(
+		spec, state, ref, mapAddress(spec, st.Address))
 }
 
 // createOpenPageCommand creates a command for a sub-transaction using
-// open-page policy. Unlike close-page, it uses plain Read/Write commands
-// (not ReadPrecharge/WritePrecharge), leaving the row buffer open.
+// open-page policy (plain Read/Write, leaving the row buffer open). Thin
+// wrapper over the row policy, kept for direct testing.
 func createOpenPageCommand(
 	spec *Spec,
 	state *State,
 	ref subTransRef,
 ) *commandState {
-	st := &state.Transactions[ref.TransIndex].SubTransactions[ref.SubIndex]
-
-	cmd := &commandState{
-		ID:      timing.GetIDGenerator().Generate(),
-		Address: st.Address,
-		SubTransRef: subTransRef{
-			TransIndex: ref.TransIndex,
-			SubIndex:   ref.SubIndex,
-		},
-	}
-
-	// Open-page: read => Read, write => Write (no auto-precharge)
-	trans := &state.Transactions[ref.TransIndex]
-	if isTransactionRead(trans) {
-		cmd.Kind = int(cmdKindRead)
-	} else {
-		cmd.Kind = int(cmdKindWrite)
-	}
-
-	loc := mapAddress(spec, st.Address)
-	cmd.Location = loc
-
-	return cmd
+	st := subTransByRef(state, ref)
+	return openPageRowPolicy{}.CommandFor(
+		spec, state, ref, mapAddress(spec, st.Address))
 }
 
 // getQueueIndex returns the command queue index for a command (by rank).

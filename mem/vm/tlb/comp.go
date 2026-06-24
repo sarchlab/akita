@@ -80,9 +80,12 @@ func (e mshrEntryState) GetPID() uint32 { return e.PID }
 // GetAddress returns the virtual address of the MSHR entry.
 func (e mshrEntryState) GetAddress() uint64 { return e.VAddr }
 
-// pipelineTLBReqState is a serializable pipeline item.
+// pipelineTLBReqState is a serializable pipeline item. PipelineTaskID is the ID
+// of the tracing pipeline subtask opened (as a child of req_in) when the request
+// enters the pipeline at retrieve and closed when it is popped at lookup.
 type pipelineTLBReqState struct {
-	Msg vmprotocol.TranslationReq `json:"msg"`
+	Msg            vmprotocol.TranslationReq `json:"msg"`
+	PipelineTaskID uint64                    `json:"pipeline_task_id"`
 }
 
 // --- Free functions for Set operations (delegating to lruset) ---

@@ -29,6 +29,11 @@ type transactionState struct {
 	TransLatency uint64               `json:"trans_latency"`
 	Page         vm.Page              `json:"page"`
 	CycleLeft    int                  `json:"cycle_left"`
+	// WalkTaskID is the pipeline subtask that spans the local page-table-walk
+	// latency (the CycleLeft countdown), a child of the req_in. It pairs with
+	// the ".walk" work milestone so the walk renders as a child bar rather than
+	// a bare work interval.
+	WalkTaskID uint64 `json:"walk_task_id"`
 }
 
 // State contains mutable runtime data for the MMU.

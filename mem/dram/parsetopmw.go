@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -38,7 +39,7 @@ func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
 		return false
 	}
 
-	ts := transactionState{}
+	ts := transactionState{ID: timing.GetIDGenerator().Generate()}
 
 	switch msg := msgI.(type) {
 	case memprotocol.ReadReq:
@@ -51,18 +52,24 @@ func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
 		panic(fmt.Sprintf("dram parseTop: unsupported message type %T", msgI))
 	}
 
-	// Assign internal address
-	globalAddr := transactionGlobalAddress(&ts)
-	ts.InternalAddress = convertExternalToInternal(spec, globalAddr)
-
 	// Split into sub-transactions
 	transIdx := len(next.Transactions)
-	splitTransaction(spec, &ts, transIdx)
+	splitTransaction(spec, &ts)
 
 	if !canPushSubTrans(next, len(ts.SubTransactions),
 		spec.TransactionQueueSize) {
 		return false
 	}
+
+	// A free sub-transaction-queue slot opened: the at-head wait the message
+	// spent blocked on the SubTransQueue is over. This admission wait belongs to
+	// the incoming-buffer task; req_in (opened at retrieve, below) covers only
+	// the processing that follows.
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtIncomingBuffer(msgI, m.comp),
+		Kind:   tracing.MilestoneKindQueue,
+		What:   m.comp.Name() + ".SubTransQueue",
+	})
 
 	ts.ArrivalTick = next.TickCount
 	next.Transactions = append(next.Transactions, ts)

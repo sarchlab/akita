@@ -150,7 +150,7 @@ var _ = Describe("Directory", func() {
 			)
 
 			// Set up a valid block in directory at the right set for address 0x100
-			setID := 4
+			setID := cache.DirectorySetID(0x100, 64, 16)
 			wayID := 0
 			next.DirectoryState.Sets[setID].Blocks[wayID].IsValid = true
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
@@ -189,7 +189,7 @@ var _ = Describe("Directory", func() {
 				},
 			)
 
-			setID := 4
+			setID := cache.DirectorySetID(0x100, 64, 16)
 			wayID := 0
 			next.DirectoryState.Sets[setID].Blocks[wayID].IsValid = true
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
@@ -223,7 +223,7 @@ var _ = Describe("Directory", func() {
 				},
 			)
 
-			setID := 4
+			setID := cache.DirectorySetID(0x100, 64, 16)
 			wayID := 0
 			next.DirectoryState.Sets[setID].Blocks[wayID].IsValid = true
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
@@ -304,7 +304,7 @@ var _ = Describe("Directory", func() {
 			)
 			next.DirPostBuf.PushTyped(0)
 
-			setID := 4 // (0x100 / 64) % 16 = 4
+			setID := cache.DirectorySetID(0x100, 64, 16)
 			for w := range next.DirectoryState.Sets[setID].Blocks {
 				next.DirectoryState.Sets[setID].Blocks[w].IsLocked = true
 			}
@@ -333,7 +333,7 @@ var _ = Describe("Directory", func() {
 			)
 			next.DirPostBuf.PushTyped(0)
 
-			setID := 4
+			setID := cache.DirectorySetID(0x100, 64, 16)
 			for w := range next.DirectoryState.Sets[setID].Blocks {
 				next.DirectoryState.Sets[setID].Blocks[w].ReadCount = 1
 			}
@@ -362,7 +362,7 @@ var _ = Describe("Directory", func() {
 			)
 			next.DirPostBuf.PushTyped(0)
 
-			setID := 4
+			setID := cache.DirectorySetID(0x100, 64, 16)
 			// Lock only the LRU-most way; other ways should still be picked.
 			lockedWay := next.DirectoryState.Sets[setID].LRUOrder[0]
 			next.DirectoryState.Sets[setID].Blocks[lockedWay].IsLocked = true
@@ -516,7 +516,7 @@ var _ = Describe("Directory", func() {
 			)
 
 			// Set up a valid block
-			setID := 4
+			setID := cache.DirectorySetID(0x100, 64, 16)
 			wayID := 0
 			next.DirectoryState.Sets[setID].Blocks[wayID].IsValid = true
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
@@ -557,7 +557,7 @@ var _ = Describe("Directory", func() {
 				},
 			)
 
-			setID := 4
+			setID := cache.DirectorySetID(0x100, 64, 16)
 			wayID := 0
 			next.DirectoryState.Sets[setID].Blocks[wayID].IsValid = true
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
@@ -589,7 +589,7 @@ var _ = Describe("Directory", func() {
 				},
 			)
 
-			setID := 4
+			setID := cache.DirectorySetID(0x100, 64, 16)
 			wayID := 0
 			next.DirectoryState.Sets[setID].Blocks[wayID].IsValid = true
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
@@ -621,7 +621,7 @@ var _ = Describe("Directory", func() {
 				},
 			)
 
-			setID := 4
+			setID := cache.DirectorySetID(0x100, 64, 16)
 			wayID := 0
 			next.DirectoryState.Sets[setID].Blocks[wayID].IsValid = true
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
@@ -654,7 +654,7 @@ var _ = Describe("Directory", func() {
 				},
 			)
 
-			setID := 4
+			setID := cache.DirectorySetID(0x100, 64, 16)
 			wayID := 0
 			next.DirectoryState.Sets[setID].Blocks[wayID].IsValid = true
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100

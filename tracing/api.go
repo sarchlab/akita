@@ -29,7 +29,8 @@ var (
 )
 
 // StartTask notifies the hooks that hook to the domain about the start of a
-// task. When the task's Location is empty it defaults to the domain name.
+// task. When the task's Location is empty it is derived by [singleKindLocation]
+// so that each location hosts exactly one Kind of task.
 func StartTask(domain NamedHookable, t TaskStart) {
 	if domain.NumHooks() == 0 {
 		return
@@ -39,7 +40,7 @@ func StartTask(domain NamedHookable, t TaskStart) {
 	domainMustHaveName(domain)
 
 	if t.Location == "" {
-		t.Location = domain.Name()
+		t.Location = singleKindLocation(domain.Name(), t.Kind, t.What)
 	}
 
 	t.Time = domain.CurrentTime()
@@ -49,6 +50,29 @@ func StartTask(domain NamedHookable, t TaskStart) {
 		Item:   t,
 		Pos:    HookPosTaskStart,
 	})
+}
+
+// singleKindLocation derives a task's location so that one location only ever
+// holds one Kind of task — the invariant that keeps a Daisen row sequential and
+// unambiguous (see "One location, one kind" in README.md). It is consulted only
+// when the caller leaves Location empty; callers that qualify the location
+// themselves (the port buffer hooks append a direction) keep their own value.
+//
+//   - req_in and req_out share a component, so they are split by appending the
+//     kind: "<component>.req_in" and "<component>.req_out".
+//   - a pipeline subtask already names its stage in What as "<component>.<stage>"
+//     (e.g. "L2Cache.dir_pipeline"), so that name is the location and each stage
+//     is its own row.
+//   - any other kind keeps the bare component name.
+func singleKindLocation(componentName, kind, what string) string {
+	switch kind {
+	case ReqInTaskKind, ReqOutTaskKind:
+		return componentName + "." + kind
+	case PipelineTaskKind:
+		return what
+	default:
+		return componentName
+	}
 }
 
 func allRequiredFieldsMustBeNotEmpty(
@@ -163,6 +187,59 @@ func ForgetMsgIDAtReceiver(msgID uint64, domain NamedHookable) {
 	forgetReceiverTaskIDByMsgID(msgID, domain)
 }
 
+// MsgIDAtIncomingBuffer returns the task ID of the buffer task that tracks a
+// message's residency in the receiving port's incoming buffer. The ID lives in
+// a tracing-local registry keyed by (domain, msg.Meta().ID), so the port hook
+// that opens the task and the component that adds admission milestones to it
+// derive the same ID without mutating the message. When the domain has no
+// hooks the ID is unused, so this returns 0 without touching the registry.
+func MsgIDAtIncomingBuffer(msg messaging.Msg, domain NamedHookable) uint64 {
+	if domain.NumHooks() == 0 {
+		return 0
+	}
+
+	return lookupOrCreateIncomingBufferTaskID(msg, domain)
+}
+
+// ForgetMsgIDAtIncomingBuffer releases the registry entry created by
+// [MsgIDAtIncomingBuffer] for the message identified by msgID. The port hook
+// calls this when the buffer task ends (the message is retrieved). When the
+// domain has no hooks no entry was ever inserted, so this is a no-op.
+func ForgetMsgIDAtIncomingBuffer(msgID uint64, domain NamedHookable) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
+	forgetIncomingBufferTaskIDByMsgID(msgID, domain)
+}
+
+// MsgIDAtOutgoingBuffer returns the task ID of the buffer task that tracks a
+// message's residency in the sending port's outgoing buffer. The ID lives in a
+// tracing-local registry keyed by (domain, msg.Meta().ID), so the port hook
+// that opens the task and the one that closes it derive the same ID without
+// mutating the message. When the domain has no hooks the ID is unused, so this
+// returns 0 without touching the registry.
+func MsgIDAtOutgoingBuffer(msg messaging.Msg, domain NamedHookable) uint64 {
+	if domain.NumHooks() == 0 {
+		return 0
+	}
+
+	return lookupOrCreateOutgoingBufferTaskID(msg, domain)
+}
+
+// ForgetMsgIDAtOutgoingBuffer releases the registry entry created by
+// [MsgIDAtOutgoingBuffer] for the message identified by msgID. The port hook
+// calls this when the buffer task ends (the message is drained by the
+// connection). When the domain has no hooks no entry was ever inserted, so this
+// is a no-op.
+func ForgetMsgIDAtOutgoingBuffer(msgID uint64, domain NamedHookable) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
+	forgetOutgoingBufferTaskIDByMsgID(msgID, domain)
+}
+
 // TraceReqInitiate marks a task starting at the sender of a message. The
 // task ID is the message's own ID, which is fixed at message construction.
 // The task kind is "req_out".
@@ -178,7 +255,7 @@ func TraceReqInitiate(
 	StartTask(domain, TaskStart{
 		ID:       msg.Meta().ID,
 		ParentID: taskParentID,
-		Kind:     "req_out",
+		Kind:     ReqOutTaskKind,
 		What:     msgTypeName(msg),
 		Detail:   msg,
 	})
@@ -198,7 +275,7 @@ func TraceReqReceive(
 	StartTask(domain, TaskStart{
 		ID:       MsgIDAtReceiver(msg, domain),
 		ParentID: msg.Meta().ID,
-		Kind:     "req_in",
+		Kind:     ReqInTaskKind,
 		What:     msgTypeName(msg),
 		Detail:   msg,
 	})
@@ -229,6 +306,46 @@ func TraceReqFinalize(
 	}
 
 	EndTask(domain, TaskEnd{ID: msg.Meta().ID})
+}
+
+// EndReqInOnReset ends the receiver-side (req_in) task for an in-flight request
+// whose message ID is reqMsgID and releases the registry entry held for it. A
+// reset that drops in-flight work — whose responses will be discarded — calls
+// this to tear the task down now, mirroring [TraceReqComplete], rather than
+// leaving it started-never-ended and its registry entry leaked. It resolves the
+// task ID by message ID (the receiver registry), since reset paths retain the
+// request's ID, not its message value. It is a no-op when the domain has no
+// hooks or no task is registered for the ID (the request never opened a req_in,
+// or already completed).
+func EndReqInOnReset(domain NamedHookable, reqMsgID uint64) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
+	id, ok := receiverTaskIDByMsgID(reqMsgID, domain)
+	if !ok {
+		return
+	}
+
+	EndTask(domain, TaskEnd{ID: id})
+	forgetReceiverTaskIDByMsgID(reqMsgID, domain)
+}
+
+// EndTaskOnReset ends an in-flight task by its task ID on a reset path that
+// drops the work the task tracks. Use it for every open task that is keyed on
+// its own ID rather than the receiver registry: a forwarded request's
+// sender-side req_out (task ID == the downstream message's own ID, like
+// [TraceReqFinalize]), a DRAM sub-transaction, a cache_transaction, or a
+// pipeline subtask. The req_in task is the only kind that also needs its
+// registry entry released — use [EndReqInOnReset] for that. It is a no-op when
+// the domain has no hooks or the task was never started, so a caller may end
+// every task a transaction could hold without tracking which were opened.
+func EndTaskOnReset(domain NamedHookable, taskID uint64) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
+	EndTask(domain, TaskEnd{ID: taskID})
 }
 
 // msgTypeName returns the Go type name of the message's underlying type,

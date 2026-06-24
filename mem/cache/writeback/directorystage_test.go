@@ -118,7 +118,7 @@ var _ = Describe("DirectoryStage", func() {
 		Context("hit", func() {
 			BeforeEach(func() {
 				next := &m.comp.State
-				setID := int(0x100 / uint64(64) % uint64(64))
+				setID := cache.DirectorySetID(0x100, 64, 64)
 				block := &next.DirectoryState.Sets[setID].Blocks[0]
 				block.Tag = 0x100
 				block.PID = 1
@@ -131,7 +131,7 @@ var _ = Describe("DirectoryStage", func() {
 
 				Expect(ret).To(BeTrue())
 				next := &m.comp.State
-				setID := int(0x100 / uint64(64) % uint64(64))
+				setID := cache.DirectorySetID(0x100, 64, 64)
 				block := &next.DirectoryState.Sets[setID].Blocks[0]
 				Expect(block.ReadCount).To(Equal(1))
 				Expect(next.Transactions[0].Action).To(Equal(bankReadHit))
@@ -152,7 +152,7 @@ var _ = Describe("DirectoryStage", func() {
 		Context("miss, mshr miss, need eviction", func() {
 			BeforeEach(func() {
 				next := &m.comp.State
-				setID := int(0x100 / uint64(64) % uint64(64))
+				setID := cache.DirectorySetID(0x100, 64, 64)
 				for i := range 4 {
 					block := &next.DirectoryState.Sets[setID].Blocks[i]
 					block.PID = 2
@@ -198,7 +198,7 @@ var _ = Describe("DirectoryStage", func() {
 		Context("hit", func() {
 			BeforeEach(func() {
 				next := &m.comp.State
-				setID := int(0x100 / uint64(64) % uint64(64))
+				setID := cache.DirectorySetID(0x100, 64, 64)
 				block := &next.DirectoryState.Sets[setID].Blocks[0]
 				block.Tag = 0x100
 				block.PID = 1

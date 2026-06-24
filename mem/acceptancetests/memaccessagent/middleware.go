@@ -203,7 +203,7 @@ func (m *agentMiddleware) randomReadAddress(state *State) uint64 {
 	var addr uint64
 
 	for {
-		addr = m.uint64() % (spec.MaxAddress / 4) * 4
+		addr = spec.AddressOffset + m.uint64()%(spec.MaxAddress/4)*4
 
 		if _, written := state.KnownMemValue[addr]; written {
 			return addr
@@ -239,7 +239,7 @@ func (m *agentMiddleware) doWrite() bool {
 	state := &m.agent.State
 	spec := m.agent.Spec()
 
-	address := m.uint64() % (spec.MaxAddress / 4) * 4
+	address := spec.AddressOffset + m.uint64()%(spec.MaxAddress/4)*4
 
 	data := m.uint32r()
 

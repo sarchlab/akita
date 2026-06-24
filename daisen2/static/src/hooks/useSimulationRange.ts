@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Task } from "../types/task";
+import { useRenderReady } from "./useRenderReady";
 
 export function useSimulationRange() {
   const [range, setRange] = useState({ startTime: 0, endTime: 0.000001 });
@@ -56,6 +57,8 @@ export function useSimulationRange() {
       cancelled = true;
     };
   }, []);
+
+  useRenderReady(loading);
 
   return { ...range, loading };
 }

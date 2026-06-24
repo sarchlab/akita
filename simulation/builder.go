@@ -1,6 +1,9 @@
 package simulation
 
 import (
+	"io/fs"
+	"maps"
+
 	"github.com/rs/xid"
 	"github.com/sarchlab/akita/v5/datarecording"
 
@@ -16,6 +19,8 @@ type Builder struct {
 	monitorPort       int
 	outputFileName    string
 	visTracingOnStart bool
+	recordSource      bool
+	sourceFSes        map[string]fs.FS
 }
 
 // MakeBuilder creates a new builder.
@@ -23,6 +28,7 @@ func MakeBuilder() Builder {
 	return Builder{
 		parallelEngine: false,
 		monitorOn:      true,
+		recordSource:   true,
 	}
 }
 
@@ -56,6 +62,33 @@ func (b Builder) WithVisTracingOnStart() Builder {
 	return b
 }
 
+// WithSourceFS registers an additional source tree to record into the trace
+// (e.g. a simulator's own components), keyed by a label such as its module
+// path. Akita's own source is recorded automatically; use this so DaisenBot can
+// also read your components' source. Typically called with a //go:embed FS:
+//
+//	//go:embed *.go cu/*.go
+//	var srcFS embed.FS
+//	sim := simulation.MakeBuilder().WithSourceFS("github.com/me/mysim", srcFS)
+//
+// Source is only recorded when vis tracing is enabled (the trace is meant for
+// DaisenBot). Repeated calls add multiple roots.
+func (b Builder) WithSourceFS(root string, fsys fs.FS) Builder {
+	next := make(map[string]fs.FS, len(b.sourceFSes)+1)
+	maps.Copy(next, b.sourceFSes)
+	next[root] = fsys
+	b.sourceFSes = next
+	return b
+}
+
+// WithoutSourceRecording disables recording source into the trace. Source
+// recording (Akita's source by default, plus any WithSourceFS roots) is on by
+// default for traced simulations; disable it to keep traces minimal.
+func (b Builder) WithoutSourceRecording() Builder {
+	b.recordSource = false
+	return b
+}
+
 func (b Builder) parametersMustBeValid() {
 	if !b.monitorOn && b.monitorPort != 0 {
 		panic("monitor port cannot be set when monitoring is disabled")
@@ -72,10 +105,36 @@ func (b Builder) Build() *Simulation {
 	b.createEngine(s)
 	b.createIDGenerator(s)
 	b.createMetaRecorder(s)
+	b.createSourceRecorder(s)
+	b.createTopologyRecorder(s)
 	b.createVisTracer(s)
 	b.createServer(s)
 
 	return s
+}
+
+// createSourceRecorder records the simulator source into the trace so it is
+// self-describing for DaisenBot. It runs only for traced simulations (the trace
+// is the consumer) and can be disabled with WithoutSourceRecording.
+func (b Builder) createSourceRecorder(s *Simulation) {
+	if !b.recordSource || !b.visTracingOnStart {
+		return
+	}
+
+	if err := recordSourceArchives(s.dataRecorder, b.sourceFSes); err != nil {
+		panic(err)
+	}
+}
+
+// createTopologyRecorder records the static structure of the simulation — each
+// component's spec and the port-level connection graph — into the data
+// recording, making it self-describing for tools such as Daisen's index page.
+// Like the meta recorder it always runs, independent of visualization tracing,
+// so the structure is captured for every simulation that produces a recording.
+// The data itself is written at Terminate, once every component, port, and
+// connection has been registered.
+func (b Builder) createTopologyRecorder(s *Simulation) {
+	s.topologyRecorder = newTopologyRecorder(s.dataRecorder)
 }
 
 func (b Builder) createSimulation() *Simulation {

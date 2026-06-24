@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  parseMarkdown,
-  renderChatMarkdown,
-  renderMathInElement,
-} from "../src/utils/chatMarkdown.mjs";
+import { renderChatMarkdown } from "../src/utils/chatMarkdown.mjs";
 import {
   FILE_UPLOAD_ACCEPT,
   IMAGE_UPLOAD_ACCEPT,
@@ -13,53 +9,101 @@ import {
   validateUploadedFile,
 } from "../src/utils/uploadValidation.mjs";
 
-test("parseMarkdown supports legacy inline \\( ... \\) delimiters", () => {
-  const html = parseMarkdown("Inline math: \\(x^2 + y^2\\).");
+test("renderChatMarkdown renders headings, bold, inline code, and rules", () => {
+  const html = renderChatMarkdown("# Title\n\n**bold** and `code`\n\n---");
 
-  assert.match(html, /katex/);
-  assert.doesNotMatch(html, /\\\(/);
-  assert.doesNotMatch(html, /\\\)/);
-});
-
-test("parseMarkdown supports legacy block \\[ ... \\] delimiters", () => {
-  const html = parseMarkdown("Before\n\\[x^2 + y^2 = z^2\\]\nAfter");
-
-  assert.match(html, /katex-display/);
-});
-
-test("parseMarkdown continues supporting dollar delimiters", () => {
-  const html = parseMarkdown("$x+1$");
-
-  assert.match(html, /katex/);
-});
-
-test("renderChatMarkdown preserves production markdown and math placeholders", () => {
-  const html = renderChatMarkdown("# Title\n**bold** and \\(x+1\\)\n---");
-
-  assert.match(html, /<h3>Title<\/h3>/);
-  assert.match(html, /<b>bold<\/b>/);
-  assert.match(html, /<span class="math" data-display="inline">x\+1<\/span>/);
+  assert.match(html, /<h1>Title<\/h1>/);
+  assert.match(html, /<strong>bold<\/strong>/);
+  assert.match(html, /<code>code<\/code>/);
   assert.match(html, /<hr>/);
 });
 
-test("renderChatMarkdown preserves trusted html code fences used by chat responses", () => {
-  const html = renderChatMarkdown("```html\n<table><tr><td>42</td></tr></table>\n```");
+test("renderChatMarkdown renders bullet lists", () => {
+  const html = renderChatMarkdown("- one\n- two");
 
-  assert.equal(html, "<table><tr><td>42</td></tr></table>");
+  assert.match(html, /<ul>/);
+  assert.match(html, /<li>one<\/li>/);
+  assert.match(html, /<li>two<\/li>/);
 });
 
-test("renderMathInElement renders production math placeholders with KaTeX", () => {
-  const inlineMath = {
-    textContent: "x+1",
-    innerHTML: "",
-    getAttribute: (name) => (name === "data-display" ? "inline" : null),
-  };
-  const root = { querySelectorAll: () => [inlineMath] };
+test("renderChatMarkdown renders a markdown pipe table", () => {
+  const html = renderChatMarkdown(
+    "| Component | Reqs |\n| --- | --- |\n| L1Cache | 128 |\n| L2Cache | 64 |",
+  );
 
-  renderMathInElement(root);
+  assert.match(html, /<table>/);
+  assert.match(html, /<thead>/);
+  assert.match(html, /<th>Component<\/th>/);
+  assert.match(html, /<th>Reqs<\/th>/);
+  assert.match(html, /<td>L1Cache<\/td>/);
+  assert.match(html, /<td>128<\/td>/);
+  assert.match(html, /<td>L2Cache<\/td>/);
+  assert.match(html, /<td>64<\/td>/);
+});
 
-  assert.match(inlineMath.innerHTML, /katex/);
-  assert.doesNotMatch(inlineMath.innerHTML, /x\+1<\/span>$/);
+test("renderChatMarkdown honors table column alignment and inline formatting", () => {
+  const html = renderChatMarkdown("| Name | Value |\n|:---|---:|\n| **a** | `1` |");
+
+  assert.match(html, /<th style="text-align:left">Name<\/th>/);
+  assert.match(html, /<th style="text-align:right">Value<\/th>/);
+  assert.match(html, /<td style="text-align:left"><strong>a<\/strong><\/td>/);
+  assert.match(html, /<td style="text-align:right"><code>1<\/code><\/td>/);
+});
+
+test("renderChatMarkdown leaves non-table pipe text alone", () => {
+  const html = renderChatMarkdown("a | b is not a table");
+
+  assert.doesNotMatch(html, /<table/);
+});
+
+test("renderChatMarkdown escapes raw HTML from the (untrusted) model", () => {
+  const html = renderChatMarkdown("<img src=x onerror=alert(1)>");
+
+  assert.doesNotMatch(html, /<img/);
+  assert.match(html, /&lt;img/);
+});
+
+test("renderChatMarkdown opens links in a new tab with a safe rel", () => {
+  const html = renderChatMarkdown("See [docs](https://example.com).");
+
+  assert.match(html, /<a [^>]*href="https:\/\/example\.com"[^>]*>docs<\/a>/);
+  assert.match(html, /target="_blank"/);
+  assert.match(html, /rel="noopener noreferrer"/);
+});
+
+test("renderChatMarkdown renders a Daisen view image as an evidence figure", () => {
+  const html = renderChatMarkdown(
+    "See it: ![L2 occupancy](/component?name=L2Cache&starttime=0&endtime=379102000)",
+  );
+
+  // A thumbnail carrying the canonical view url and NO src (filled in by React),
+  // plus a caption that links to the same view in a new tab.
+  assert.match(
+    html,
+    /<img class="daisen-evidence" data-view-url="\/component\?name=L2Cache&amp;starttime=0&amp;endtime=379102000" alt="L2 occupancy">/,
+  );
+  assert.match(
+    html,
+    /<a class="daisen-evidence-link" data-view-url="[^"]+" href="\/component\?name=L2Cache[^"]*" target="_blank" rel="noopener noreferrer">L2 occupancy ↗<\/a>/,
+  );
+  assert.doesNotMatch(html, /class="daisen-evidence"[^>]*\ssrc=/); // no src on the thumbnail
+});
+
+test("renderChatMarkdown canonicalizes the cited view url (param order, unknowns)", () => {
+  const html = renderChatMarkdown("![x](/component?endtime=20&name=C&starttime=10&bogus=1)");
+
+  assert.match(html, /data-view-url="\/component\?name=C&amp;starttime=10&amp;endtime=20"/);
+  assert.doesNotMatch(html, /bogus/);
+});
+
+test("renderChatMarkdown leaves non-Daisen and unsafe images as plain markdown", () => {
+  const external = renderChatMarkdown("![pic](https://example.com/p.png)");
+  assert.doesNotMatch(external, /daisen-evidence/);
+  assert.match(external, /<img src="https:\/\/example\.com\/p\.png" alt="pic">/);
+
+  // root-relative but not a view path, and protocol-relative — neither is tagged.
+  assert.doesNotMatch(renderChatMarkdown("![x](/etc/passwd)"), /daisen-evidence/);
+  assert.doesNotMatch(renderChatMarkdown("![x](//evil.com/component)"), /daisen-evidence/);
 });
 
 test("validateUploadedFile enforces legacy file extension and size limits", () => {

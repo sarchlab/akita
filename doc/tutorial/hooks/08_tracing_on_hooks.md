@@ -23,7 +23,9 @@ func StartTask(domain NamedHookable, t TaskStart) {
     }
 
     if t.Location == "" {
-        t.Location = domain.Name()
+        // Default to a kind-qualified location, e.g. "L1.req_in" — one location
+        // holds one kind, so a component's tasks group by kind.
+        t.Location = singleKindLocation(domain.Name(), t.Kind, t.What)
     }
     t.Time = domain.CurrentTime()
 

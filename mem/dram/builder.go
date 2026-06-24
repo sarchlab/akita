@@ -95,6 +95,13 @@ func (b Builder) WithResources(r Resources) Builder {
 	return b
 }
 
+// Strategy and behavior selection is by configuration, not by injecting
+// objects: the scheduler and address mapper are chosen by the Spec.Scheduler /
+// Spec.AddrMapper registry keys, the row policy by Spec.PagePolicy, and refresh
+// is a middleware added by Build. New strategies/behaviors are added in-tree and
+// registered — the model the reference simulators use. Command observers attach
+// to the built component with AcceptHook (see hook.go).
+
 // Build builds a new MemController. It declares the component's "Top" and
 // "Control" ports; assign the port instances after Build with AssignPort.
 func (b Builder) Build(name string) *Comp {
@@ -133,7 +140,7 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.DeclarePort("Top", memprotocol.Responder)
 	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
-	b.addMiddlewares(modelComp, timing, cmdCycles)
+	b.addMiddlewares(modelComp, timing, cmdCycles, b.buildController())
 
 	for _, tracer := range b.tracers {
 		tracing.CollectTrace(modelComp, tracer)
@@ -146,6 +153,7 @@ func (b Builder) Build(name string) *Comp {
 
 // normalizeSpec computes the derived timing fields from the configured spec.
 func (b *Builder) normalizeSpec() {
+	b.channelCountMustBeOne()
 	b.calculateBurstCycle()
 	b.spec.TRL = b.spec.TAL + b.spec.TCL
 	b.spec.TWL = b.spec.TAL + b.spec.TCWL
@@ -172,7 +180,7 @@ func (b Builder) resolveStorage(name string) *mem.Storage {
 
 func (b Builder) addMiddlewares(
 	modelComp *modeling.Component[Spec, State, Resources],
-	timing dramTiming, cmdCycles map[commandKind]int,
+	timing dramTiming, cmdCycles map[commandKind]int, ctrl *controller,
 ) {
 	cMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cMW)
@@ -182,10 +190,15 @@ func (b Builder) addMiddlewares(
 	}
 	modelComp.AddMiddleware(rMW)
 
+	// Refresh runs ahead of the bank-tick middleware so its stall flag
+	// (State.RefreshInProgress) is set before the issue step reads it.
+	modelComp.AddMiddleware(&refreshMiddleware{comp: modelComp})
+
 	btMW := &bankTickMW{
 		comp:      modelComp,
 		timing:    timing,
 		cmdCycles: cmdCycles,
+		ctrl:      ctrl,
 	}
 	modelComp.AddMiddleware(btMW)
 
@@ -211,11 +224,16 @@ func (b Builder) buildSpec() Spec {
 func (b Builder) buildCmdCycles() map[commandKind]int {
 	proto := protocol(b.spec.Protocol)
 
+	// cmdCycles is the data-return (completion) timeline used by startCommand:
+	// how long after a column command its read data / write response is ready.
+	// For the auto-precharge variants the data still returns ReadDelay/WriteDelay
+	// after the column command — the trailing precharge is enforced separately by
+	// the bank timing table, so it must NOT shorten the completion to TRP.
 	cmdCycles := map[commandKind]int{
 		cmdKindRead:           b.spec.ReadDelay,
-		cmdKindReadPrecharge:  b.spec.TRP,
+		cmdKindReadPrecharge:  b.spec.ReadDelay,
 		cmdKindWrite:          b.spec.WriteDelay,
-		cmdKindWritePrecharge: b.spec.TRP,
+		cmdKindWritePrecharge: b.spec.WriteDelay,
 		cmdKindActivate:       b.spec.TRCD - b.spec.TAL,
 		cmdKindPrecharge:      b.spec.TRP,
 		cmdKindRefreshBank:    1,
@@ -229,6 +247,30 @@ func (b Builder) buildCmdCycles() map[commandKind]int {
 	}
 
 	return cmdCycles
+}
+
+// buildController selects the controller strategies from configuration: the
+// scheduler and address mapper from their Spec registry keys, the row policy
+// from Spec.PagePolicy.
+func (b Builder) buildController() *controller {
+	return &controller{
+		scheduler:  newScheduler(b.spec.Scheduler),
+		rowPolicy:  b.resolveRowPolicy(),
+		addrMapper: newAddrMapper(b.spec.AddrMapper),
+	}
+}
+
+func (b Builder) resolveRowPolicy() rowPolicy {
+	if b.spec.PagePolicy == PagePolicyOpen {
+		return openPageRowPolicy{}
+	}
+	return closePageRowPolicy{}
+}
+
+// newDefaultController builds the controller strategies for a spec. It backs the
+// package-level helpers that tests exercise directly.
+func newDefaultController(spec *Spec) *controller {
+	return Builder{spec: *spec}.buildController()
 }
 
 func (b Builder) applyAddrMapping(spec *Spec, m addrMappingResult) {
@@ -597,6 +639,18 @@ func (b *Builder) calculateBurstCycle() {
 func (b *Builder) burstLengthMustNotBeZero() {
 	if b.spec.BurstLength == 0 {
 		panic("burst length cannot be 0")
+	}
+}
+
+// channelCountMustBeOne enforces the one-component-per-channel model. The
+// address decode produces a Channel field that the single-channel controller
+// does not act on, so NumChannel > 1 would silently alias all channels onto the
+// same banks. Multi-channel is a first-class feature deferred to a later phase;
+// until then, instantiate one dram.Comp per channel.
+func (b *Builder) channelCountMustBeOne() {
+	if b.spec.NumChannel > 1 {
+		panic("dram: NumChannel > 1 is not supported; " +
+			"instantiate one dram.Comp per channel")
 	}
 }
 

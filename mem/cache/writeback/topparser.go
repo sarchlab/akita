@@ -46,10 +46,17 @@ func (p *topParser) Tick() bool {
 		trans.WritePID = msg.PID
 	}
 
-	next.Transactions = append(next.Transactions, trans)
-
-	idx := len(next.Transactions) - 1
+	idx := next.allocTransaction(trans)
 	next.DirStageBuf.PushTyped(idx)
+
+	// Admission milestone on the incoming-buffer task: the message left the Top
+	// buffer because the directory stage buffer had room. The buffer task is
+	// keyed by the peeked message and ends at RetrieveIncoming below.
+	tracing.AddMilestone(p.cache.comp, tracing.Milestone{
+		TaskID: tracing.MsgIDAtIncomingBuffer(msg, p.cache.comp),
+		Kind:   tracing.MilestoneKindHardwareResource,
+		What:   p.cache.comp.Name() + ".dir_stage_buf",
+	})
 
 	tracing.TraceReqReceive(p.cache.comp, msg)
 

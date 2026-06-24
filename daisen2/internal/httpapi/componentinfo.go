@@ -1,19 +1,14 @@
 package httpapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/joho/godotenv"
 )
 
 // TimeValue represents a data point with a time and a value.
@@ -96,15 +91,13 @@ func (s *Server) httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 		compInfo = s.calculateConcurrentTask(
 			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
 	case "ConcurrentTaskMilestones":
-		stackedInfo := s.calculateConcurrentTaskMilestones(
-			r.Context(), compName, infoType, startTime, endTime, int(numDots))
-		rsp, err := json.Marshal(stackedInfo)
-		dieOnErr(err)
-		_, err = w.Write(rsp)
-		dieOnErr(err)
+		s.httpConcurrentTaskMilestones(w, r, compName, infoType, startTime, endTime, int(numDots))
 		return
-	case "BufferPressure":
-		compInfo = s.calculateBufferPressure(
+	case "RequestBufferPressure":
+		compInfo = s.calculateRequestBufferPressure(
+			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
+	case "ResponseBufferPressure":
+		compInfo = s.calculateResponseBufferPressure(
 			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
 	case "PendingReqOut":
 		compInfo = s.calculatePendingReqOut(
@@ -120,6 +113,28 @@ func (s *Server) httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 	dieOnErr(err)
 }
 
+// httpConcurrentTaskMilestones writes the blocking-reason chart — the one metric
+// the scoped detail view uses, so it honors a location subtree. The scope falls
+// back to the component name, and a leaf scope matches only itself.
+func (s *Server) httpConcurrentTaskMilestones(
+	w http.ResponseWriter,
+	r *http.Request,
+	compName, infoType string,
+	startTime, endTime float64,
+	numDots int,
+) {
+	scope := r.FormValue("scope")
+	if scope == "" {
+		scope = compName
+	}
+	stackedInfo := s.calculateConcurrentTaskMilestones(
+		r.Context(), scope, infoType, startTime, endTime, numDots)
+	rsp, err := json.Marshal(stackedInfo)
+	dieOnErr(err)
+	_, err = w.Write(rsp)
+	dieOnErr(err)
+}
+
 func (s *Server) calculateConcurrentTask(
 	ctx context.Context,
 	compInfo *ComponentInfo,
@@ -127,10 +142,26 @@ func (s *Server) calculateConcurrentTask(
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
-	compInfo = s.calculateTimeWeightedTaskCount(
-		ctx, compName, infoType,
-		startTime, endTime, int(numDots),
-		false,
+	compInfo = &ComponentInfo{
+		Name:      compName,
+		InfoType:  infoType,
+		StartTime: startTime,
+		EndTime:   endTime,
+	}
+
+	totalDuration := endTime - startTime
+	if numDots <= 0 || totalDuration <= 0 {
+		return compInfo
+	}
+
+	// Occupancy needs only the task intervals, so fetch just those (one covering
+	// index scan) instead of hydrating every Task via ListTasks, then run the same
+	// time-weighted bin sweep. Drops this metric from ~2s to ~0.1s on a large
+	// component by avoiding the per-task struct/parent hydration.
+	tasks := s.traceReader.listTaskIntervals(ctx, compName, "", nil, startTime, endTime)
+	binDuration := totalDuration / float64(numDots)
+	compInfo.Data = calculateTimeWeightedBins(
+		tasks, startTime, endTime, binDuration, int(numDots),
 		func(t Task) bool { return true },
 		func(t Task) float64 { return float64(t.StartTime) },
 		func(t Task) float64 { return float64(t.EndTime) },
@@ -139,25 +170,35 @@ func (s *Server) calculateConcurrentTask(
 	return compInfo
 }
 
-func (s *Server) calculateBufferPressure(
+func (s *Server) calculateRequestBufferPressure(
 	ctx context.Context,
 	compInfo *ComponentInfo,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
-	compInfo = s.calculateTimeWeightedTaskCount(
-		ctx, compName, infoType,
-		startTime, endTime, int(numDots),
-		true,
-		taskIsReqIn,
-		func(t Task) float64 {
-			return float64(t.ParentTask.StartTime)
-		},
-		func(t Task) float64 {
-			return float64(t.StartTime)
-		},
-	)
+	// An incoming port buffer holds both the requests a component receives and the
+	// responses to requests it sent out (e.g. a pure client like the mem agent only
+	// ever buffers responses). akita names message types "*Req"/"*Request" and
+	// "*Rsp"/"*Response", so split the incoming_buffer occupancy by that: the
+	// requests waiting to be served.
+	compInfo = s.calculateKindOccupancy(
+		ctx, compName, infoType, "incoming_buffer", []string{"%Req", "%Request"}, startTime, endTime, numDots)
+
+	return compInfo
+}
+
+func (s *Server) calculateResponseBufferPressure(
+	ctx context.Context,
+	compInfo *ComponentInfo,
+	compName, infoType string,
+	startTime, endTime float64,
+	numDots int64,
+) *ComponentInfo {
+	// The other half of the incoming buffer: responses returning for requests this
+	// component sent downstream.
+	compInfo = s.calculateKindOccupancy(
+		ctx, compName, infoType, "incoming_buffer", []string{"%Rsp", "%Response"}, startTime, endTime, numDots)
 
 	return compInfo
 }
@@ -169,20 +210,55 @@ func (s *Server) calculatePendingReqOut(
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
-	compInfo = s.calculateTimeWeightedTaskCount(
-		ctx, compName, infoType,
-		startTime, endTime, int(numDots),
-		false,
-		func(t Task) bool { return t.Kind == "req_out" },
+	// A "req_out" task spans an outgoing request from issue to its response, so the
+	// number in flight is how many requests the component still has pending
+	// downstream — the pending-request-out level. (The outgoing-buffer tasks are a
+	// poor proxy here: a request usually leaves the port the instant it is accepted,
+	// so those tasks are near-zero duration.)
+	compInfo = s.calculateKindOccupancy(
+		ctx, compName, infoType, "req_out", nil, startTime, endTime, numDots)
+
+	return compInfo
+}
+
+// calculateKindOccupancy bins the time-weighted count of in-flight tasks of one
+// kind (optionally narrowed to one of the What LIKE patterns) over the scope's
+// subtree. Like calculateConcurrentTask it fetches only the intervals — one
+// index-driven scan, no per-task hydration — and runs the shared bin sweep, so it
+// is cheap even on a busy component.
+func (s *Server) calculateKindOccupancy(
+	ctx context.Context,
+	compName, infoType, kind string,
+	whatLikes []string,
+	startTime, endTime float64,
+	numDots int64,
+) *ComponentInfo {
+	compInfo := &ComponentInfo{
+		Name:      compName,
+		InfoType:  infoType,
+		StartTime: startTime,
+		EndTime:   endTime,
+	}
+
+	totalDuration := endTime - startTime
+	if numDots <= 0 || totalDuration <= 0 {
+		return compInfo
+	}
+
+	// The (Location, Kind, StartTime, EndTime) covering index answers the scoped,
+	// kind-filtered interval scan without touching the trace table.
+	_, _ = s.traceReader.ExecContext(ctx, metricCoveringIndex)
+
+	tasks := s.traceReader.listTaskIntervals(ctx, compName, kind, whatLikes, startTime, endTime)
+	binDuration := totalDuration / float64(numDots)
+	compInfo.Data = calculateTimeWeightedBins(
+		tasks, startTime, endTime, binDuration, int(numDots),
+		func(t Task) bool { return true },
 		func(t Task) float64 { return float64(t.StartTime) },
 		func(t Task) float64 { return float64(t.EndTime) },
 	)
 
 	return compInfo
-}
-
-func taskIsReqIn(t Task) bool {
-	return t.Kind == "req_in" && t.ParentTask != nil
 }
 
 func (s *Server) calculateReqIn(
@@ -291,6 +367,13 @@ func buildEmptyTimeValues(startTime, binDuration float64, numDots int) []TimeVal
 	return data
 }
 
+// metricCoveringIndex covers the columns the scoped, kind-filtered metric queries
+// read, so a multi-facet component aggregate seeks straight to (Location, Kind)
+// and scans only the matching facet's rows from the index — turning a ~0.5s
+// subtree scan into ~0.02s. Built once (IF NOT EXISTS) on first metric query.
+const metricCoveringIndex = `
+CREATE INDEX IF NOT EXISTS idx_trace_loc_kind_times ON trace(Location, Kind, StartTime, EndTime)`
+
 func (s *Server) fillBinnedEventRate(
 	ctx context.Context,
 	data []TimeValue,
@@ -298,10 +381,17 @@ func (s *Server) fillBinnedEventRate(
 	startTime, endTime, binDuration float64,
 ) {
 	timeColumn = safeTraceTimeColumn(timeColumn)
+	// Best-effort: ensure the covering index (a no-op once it exists; ignored on a
+	// read-only connection — the query then just runs slower against the table).
+	_, _ = s.traceReader.ExecContext(ctx, metricCoveringIndex)
+	// Scope semantics: match the named location OR anything nested under it, so a
+	// component name (e.g. "AT") aggregates its whole subtree while a leaf row
+	// matches only itself.
+	lo, hi := scopePrefixBounds(compName)
 	query := fmt.Sprintf(`
 		SELECT CAST(((%s - ?) / ?) AS INTEGER) AS Bin, COUNT(*)
 		FROM trace
-		WHERE Location = (SELECT ID FROM location WHERE Locale = ?)
+		WHERE Location IN (SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?))
 			AND Kind = ? AND %s > ? AND %s < ?
 		GROUP BY Bin
 	`, timeColumn, timeColumn, timeColumn)
@@ -309,7 +399,7 @@ func (s *Server) fillBinnedEventRate(
 	rows, err := s.traceReader.QueryContext(
 		ctx, query,
 		startTime, binDuration,
-		compName, kind, startTime, endTime,
+		compName, lo, hi, kind, startTime, endTime,
 	)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -341,11 +431,15 @@ func (s *Server) fillBinnedAverageLatency(
 	compName string,
 	startTime, endTime, binDuration float64,
 ) {
+	_, _ = s.traceReader.ExecContext(ctx, metricCoveringIndex)
+	// Scope semantics: aggregate the named location's whole subtree (a leaf still
+	// matches only itself).
+	lo, hi := scopePrefixBounds(compName)
 	query := `
 		SELECT CAST(((EndTime - ?) / ?) AS INTEGER) AS Bin,
 			AVG(EndTime - StartTime)
 		FROM trace
-		WHERE Location = (SELECT ID FROM location WHERE Locale = ?)
+		WHERE Location IN (SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?))
 			AND Kind = 'req_in' AND EndTime > ? AND EndTime < ?
 		GROUP BY Bin
 	`
@@ -353,7 +447,7 @@ func (s *Server) fillBinnedAverageLatency(
 	rows, err := s.traceReader.QueryContext(
 		ctx, query,
 		startTime, binDuration,
-		compName, startTime, endTime,
+		compName, lo, hi, startTime, endTime,
 	)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -390,44 +484,6 @@ func safeTraceTimeColumn(column string) string {
 
 type taskFilter func(t Task) bool
 type taskTime func(t Task) float64
-
-func (s *Server) calculateTimeWeightedTaskCount(
-	ctx context.Context,
-	compName, infoType string,
-	startTime, endTime float64,
-	numDots int,
-	enableParentTask bool,
-	filter taskFilter,
-	increaseTime, decreaseTime taskTime,
-) *ComponentInfo {
-	info := &ComponentInfo{
-		Name:      compName,
-		InfoType:  infoType,
-		StartTime: startTime,
-		EndTime:   endTime,
-	}
-
-	query := TaskQuery{
-		Where:            compName,
-		EnableTimeRange:  true,
-		StartTime:        startTime,
-		EndTime:          endTime,
-		EnableParentTask: enableParentTask,
-	}
-	tasks := s.traceReader.ListTasks(ctx, query)
-
-	totalDuration := endTime - startTime
-	if numDots <= 0 || totalDuration <= 0 {
-		return info
-	}
-
-	binDuration := totalDuration / float64(numDots)
-	info.Data = calculateTimeWeightedBins(
-		tasks, startTime, endTime, binDuration, numDots,
-		filter, increaseTime, decreaseTime)
-
-	return info
-}
 
 type countEvent struct {
 	time  float64
@@ -503,36 +559,11 @@ func calculateTimeWeightedBins( //nolint:funlen
 	return data
 }
 
-// buildAkitaTraceHeader builds a CSV header from trace data for GPT context.
-func buildAkitaTraceHeader(traceReader *SQLiteTraceReader, traceInfo map[string]interface{}) string {
-	if traceReader == nil {
-		return ""
-	}
-
-	selected, _ := traceInfo["selected"].(float64)
-	if selected == 0 {
-		return ""
-	}
-	startTime, _ := traceInfo["startTime"].(float64)
-	endTime, _ := traceInfo["endTime"].(float64)
-	selectedComponentNameList, _ := traceInfo["selectedComponentNameList"].([]interface{})
-	locations := extractLocations(selectedComponentNameList)
-	if len(locations) == 0 {
-		return ""
-	}
-	sqlStr := buildTraceSQL(locations, startTime, endTime)
-	return formatTraceRows(traceReader, sqlStr)
-}
-
-func extractLocations(selectedComponentNameList []interface{}) []string {
-	locations := make([]string, 0, len(selectedComponentNameList))
-	for _, v := range selectedComponentNameList {
-		if s, ok := v.(string); ok {
-			locations = append(locations, s)
-		}
-	}
-	return locations
-}
+// maxTraceContextRows caps how many trace events get embedded in the chat
+// context. The full trace can be hundreds of thousands of rows, which both pegs
+// the server (building the string) and overruns the model's context window, so
+// we send only a bounded sample.
+const maxTraceContextRows = 500
 
 func buildTraceSQL(locations []string, startTime, endTime float64) string {
 	quoted := make([]string, 0, len(locations))
@@ -557,7 +588,9 @@ SELECT
 FROM trace t
 JOIN location loc ON t.Location = loc.ID
 WHERE ` + whereClause + `
-AND ` + timeClause
+AND ` + timeClause + fmt.Sprintf(`
+ORDER BY t.StartTime, t.ID
+LIMIT %d`, maxTraceContextRows)
 }
 
 func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
@@ -574,7 +607,12 @@ func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
 		return ""
 	}
 
-	header := "[Reference Akita Trace File]\n" + strings.Join(columns, ",") + "\n"
+	var b strings.Builder
+	b.WriteString("[Reference Akita Trace File]\n")
+	b.WriteString(strings.Join(columns, ","))
+	b.WriteByte('\n')
+
+	rowCount := 0
 	for rows.Next() {
 		values := make([]interface{}, len(columns))
 		valuePtrs := make([]interface{}, len(columns))
@@ -598,406 +636,57 @@ func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
 				rowStrs = append(rowStrs, fmt.Sprintf("%v", v))
 			}
 		}
-		header += strings.Join(rowStrs, ",") + "\n"
-	}
-	header += "[End Akita Trace File]\n"
-	return header
-}
-
-func buildCombinedRepoHeader(ctx context.Context, urlList []string) string {
-	combinedRepoHeader := ""
-	for _, url := range urlList {
-		content := httpGithubRaw(ctx, url)
-		if content == "" {
-			continue
-		}
-		fileName := url
-		if idx := strings.Index(url, "sarchlab/"); idx != -1 {
-			fileName = url[idx:]
-		}
-		combinedRepoHeader += "[Reference File " + fileName + "]\n"
-		combinedRepoHeader += content + "\n"
-		combinedRepoHeader += "[End " + fileName + "]\n"
-	}
-	return combinedRepoHeader
-}
-
-func getRoutineURLList(routineFile string, selectedKeys []string) ([]string, error) {
-	data, err := os.ReadFile(routineFile)
-	if err != nil {
-		return nil, err
-	}
-	var routineMap map[string][]string
-	if err := json.Unmarshal(data, &routineMap); err != nil {
-		return nil, err
-	}
-	urlSet := make(map[string]struct{})
-	for _, key := range selectedKeys {
-		if urls, ok := routineMap[key]; ok {
-			for _, u := range urls {
-				urlSet[u] = struct{}{}
-			}
-		}
-	}
-	urlList := make([]string, 0, len(urlSet))
-	for u := range urlSet {
-		urlList = append(urlList, u)
-	}
-	sort.Strings(urlList)
-	return urlList, nil
-}
-
-func buildOpenAIPayload(
-	ctx context.Context,
-	model string,
-	messages []map[string]interface{},
-	traceInfo map[string]interface{},
-	selectedGitHubRoutineKeys []string,
-	traceReader *SQLiteTraceReader,
-) ([]byte, error) {
-	combinedTraceHeader := buildAkitaTraceHeader(traceReader, traceInfo)
-	routineFile := "componentgithubroutine.json"
-	urlList, err := getRoutineURLList(routineFile, selectedGitHubRoutineKeys)
-	if err != nil {
-		log.Println("Failed to get routine URL list:", err)
-		return nil, err
-	}
-	combinedRepoHeader := buildCombinedRepoHeader(ctx, urlList)
-
-	if len(messages) > 0 {
-		if contentArr, ok := messages[len(messages)-1]["content"].([]interface{}); ok && len(contentArr) > 0 {
-			if firstContent, ok := contentArr[0].(map[string]interface{}); ok {
-				firstText, _ := firstContent["text"].(string)
-				firstContent["text"] = combinedTraceHeader + combinedRepoHeader + firstText
-			}
-		}
+		b.WriteString(strings.Join(rowStrs, ","))
+		b.WriteByte('\n')
+		rowCount++
 	}
 
-	if len(messages) == 0 || messages[0]["role"] != "system" {
-		loadedTextBytes, err := os.ReadFile("beforehandprompt.txt")
-		if err != nil {
-			log.Println("Failed to read beforehandprompt.txt:", err)
-			return nil, err
-		}
-		loadedText := string(loadedTextBytes)
-		systemMsg := map[string]interface{}{
-			"role": "system",
-			"content": []interface{}{
-				map[string]interface{}{
-					"type": "text",
-					"text": loadedText,
-				},
-			},
-		}
-		messages = append([]map[string]interface{}{systemMsg}, messages...)
+	if rowCount >= maxTraceContextRows {
+		b.WriteString(fmt.Sprintf(
+			"[Note: trace truncated to the first %d events]\n", maxTraceContextRows))
 	}
-
-	payload := map[string]interface{}{
-		"model":       model,
-		"messages":    messages,
-		"temperature": 0.7,
-	}
-	return json.Marshal(payload)
-}
-
-func sendOpenAIRequest(ctx context.Context, apiKey, url string, payloadBytes []byte) (*http.Response, error) {
-	openaiReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payloadBytes))
-	if err != nil {
-		return nil, err
-	}
-	openaiReq.Header.Set("Content-Type", "application/json")
-	openaiReq.Header.Set("Authorization", apiKey)
-	return http.DefaultClient.Do(openaiReq)
-}
-
-func httpGithubRaw(ctx context.Context, url string) string {
-	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
-	client := &http.Client{}
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		log.Println("Failed to create GitHub raw request:", err)
-		return ""
-	}
-	if githubPAT != "" {
-		req.Header.Set("Authorization", githubPAT)
-	}
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != 200 {
-		log.Printf("Failed to fetch raw GitHub file: %s, err: %v\n", url, err)
-		return ""
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Println("Failed to read GitHub raw response body:", err)
-		return ""
-	}
-	return string(body)
-}
-
-func (s *Server) httpGPTProxy(w http.ResponseWriter, r *http.Request) {
-	_ = godotenv.Load(".env")
-	openaiApiKey := os.Getenv("OPENAI_API_KEY")
-	openaiURL := os.Getenv("OPENAI_URL")
-	openaiModel := os.Getenv("OPENAI_MODEL")
-	if openaiApiKey == "" || openaiURL == "" || openaiModel == "" {
-		http.Error(
-			w,
-			"[Error: \".env\" not found or OpenAI-related variable missing] "+
-				"Please create or update file "+
-				"\"akita/daisen/.env\" and write these contents (example):\n"+
-				"```\n"+
-				"OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
-				"OPENAI_MODEL=\"gpt-4o\"\n"+
-				"OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
-				"GITHUB_PERSONAL_ACCESS_TOKEN=\"Bearer ghp_XXXXXXXXXXXX\"\n"+
-				"```\n",
-			http.StatusInternalServerError,
-		)
-		return
-	}
-	var req struct {
-		Messages                  []map[string]interface{} `json:"messages"`
-		TraceInfo                 map[string]interface{}   `json:"traceInfo"`
-		SelectedGitHubRoutineKeys []string                 `json:"selectedGitHubRoutineKeys"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	payloadBytes, err := buildOpenAIPayload(
-		r.Context(), openaiModel, req.Messages, req.TraceInfo,
-		req.SelectedGitHubRoutineKeys, s.traceReader)
-	if err != nil {
-		http.Error(w, "Failed to marshal payload: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	resp, err := sendOpenAIRequest(r.Context(), openaiApiKey, openaiURL, payloadBytes)
-	if err != nil {
-		http.Error(
-			w,
-			"Failed to contact OpenAI: "+err.Error(),
-			http.StatusBadGateway,
-		)
-		return
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	w.Write(body)
-}
-
-func (s *Server) httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
-	_ = godotenv.Load(".env")
-	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
-	if githubPAT == "" {
-		http.Error(
-			w,
-			"\n[Error: \".env\" not found or GitHub-related variable missing]\n"+
-				"Please create or update file "+
-				"\"akita/daisen/.env\" and write these contents (example):\n"+
-				"```\n"+
-				"OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
-				"OPENAI_MODEL=\"gpt-4o\"\n"+
-				"OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
-				"GITHUB_PERSONAL_ACCESS_TOKEN=\"Bearer ghp_XXXXXXXXXXXX\"\n"+
-				"Please refer to "+
-				"https://github.com/sarchlab/akita/tree/main/daisen#readme "+
-				"for more details.```\n",
-			http.StatusInternalServerError,
-		)
-		return
-	}
-	client := &http.Client{}
-	req, err := http.NewRequestWithContext(r.Context(), "GET", "https://api.github.com/user", nil)
-	if err != nil {
-		http.Error(w, "Failed to create GitHub request: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", githubPAT)
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != 200 {
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]interface{}{
-			"available":    0,
-			"routine_keys": []string{},
-		}); err != nil {
-			http.Error(w, "Failed to encode JSON: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		return
-	}
-	defer resp.Body.Close()
-	routineKeys := []string{}
-	routineFile := "componentgithubroutine.json"
-	data, err := os.ReadFile(routineFile)
-	if err == nil {
-		var routineMap map[string]interface{}
-		if err := json.Unmarshal(data, &routineMap); err == nil {
-			for k := range routineMap {
-				routineKeys = append(routineKeys, k)
-			}
-		}
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"available":    1,
-		"routine_keys": routineKeys,
-	}); err != nil {
-		http.Error(w, "Failed to encode JSON: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
-
-// httpCheckEnvFile handles the API endpoint to check if .env file exists
-func (s *Server) httpCheckEnvFile(w http.ResponseWriter, r *http.Request) {
-	// Set CORS headers
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	w.Header().Set("Content-Type", "application/json")
-
-	// Handle preflight requests
-	if r.Method == "OPTIONS" {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	// Check if .env file exists
-	envFileExists := false
-	if _, err := os.Stat(".env"); err == nil {
-		envFileExists = true
-	}
-
-	// Create response JSON
-	response := map[string]interface{}{
-		"exists": envFileExists,
-	}
-
-	// Encode and send response
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-		return
-	}
-}
-
-func (s *Server) fetchTasksForMilestones(ctx context.Context, compName string, startTime, endTime float64) []Task {
-	query := TaskQuery{
-		Where:            compName,
-		EnableTimeRange:  true,
-		StartTime:        startTime,
-		EndTime:          endTime,
-		EnableParentTask: true,
-		EnableMilestones: true,
-	}
-	return s.traceReader.ListTasks(ctx, query)
-}
-
-func collectMilestoneKinds(tasks []Task) []string {
-	kindSet := make(map[string]bool)
-	for _, task := range tasks {
-		for _, step := range task.Steps {
-			kindSet[step.Kind] = true
-		}
-	}
-
-	kinds := make([]string, 0, len(kindSet))
-	for kind := range kindSet {
-		kinds = append(kinds, kind)
-	}
-	sort.Strings(kinds)
-	return kinds
-}
-
-func generateStackedTimeData(tasks []Task, kinds []string, startTime, endTime float64, numDots int) []StackedTimeValue {
-	data := make([]StackedTimeValue, 0, numDots)
-	totalDuration := endTime - startTime
-	binDuration := totalDuration / float64(numDots)
-
-	for i := 0; i < numDots; i++ {
-		binStartTime := float64(i)*binDuration + startTime
-		binEndTime := float64(i+1)*binDuration + startTime
-		kindCounts := countConcurrentTasksByKind(tasks, kinds, binStartTime, binEndTime)
-
-		stv := StackedTimeValue{
-			Time:   binStartTime + 0.5*binDuration,
-			Values: kindCounts,
-		}
-		data = append(data, stv)
-	}
-	return data
-}
-
-func countConcurrentTasksByKind(tasks []Task, kinds []string, binStartTime, binEndTime float64) map[string]float64 {
-	kindCounts := make(map[string]float64)
-	for _, kind := range kinds {
-		kindCounts[kind] = 0
-	}
-
-	for _, task := range tasks {
-		if !isTaskRunningInBin(task, binStartTime, binEndTime) {
-			continue
-		}
-
-		currentKind := findTaskMilestoneKind(task, binStartTime)
-		if currentKind != "" {
-			kindCounts[currentKind]++
-		}
-	}
-	return kindCounts
-}
-
-func isTaskRunningInBin(task Task, binStartTime, binEndTime float64) bool {
-	return !(float64(task.EndTime) < binStartTime || float64(task.StartTime) > binEndTime)
-}
-
-func findTaskMilestoneKind(task Task, binStartTime float64) string {
-	var currentKind string
-	var latestTime float64 = -1
-
-	// Find the most recent milestone before or at the bin start time
-	for _, step := range task.Steps {
-		stepTime := float64(step.Time)
-		if stepTime <= binStartTime && stepTime > latestTime {
-			latestTime = stepTime
-			currentKind = step.Kind
-		}
-	}
-
-	// If no milestone found before this bin, use the first milestone of the task
-	if currentKind == "" && len(task.Steps) > 0 {
-		firstStep := task.Steps[0]
-		for _, step := range task.Steps {
-			if float64(step.Time) < float64(firstStep.Time) {
-				firstStep = step
-			}
-		}
-		currentKind = firstStep.Kind
-	}
-
-	return currentKind
+	b.WriteString("[End Akita Trace File]\n")
+	return b.String()
 }
 
 func (s *Server) calculateConcurrentTaskMilestones(
 	ctx context.Context,
-	compName, infoType string,
+	scope, infoType string,
 	startTime, endTime float64,
 	numDots int,
 ) *StackedComponentInfo {
 	info := &StackedComponentInfo{
-		Name:      compName,
+		Name:      scope,
 		InfoType:  infoType,
 		StartTime: startTime,
 		EndTime:   endTime,
 		Kinds:     []string{},
+		Data:      []StackedTimeValue{},
 	}
 
-	tasks := s.fetchTasksForMilestones(ctx, compName, startTime, endTime)
-	info.Kinds = collectMilestoneKinds(tasks)
-	info.Data = generateStackedTimeData(tasks, info.Kinds, startTime, endTime, numDots)
+	if numDots < 1 || endTime <= startTime {
+		return info
+	}
+
+	// Same occupancy binning as the task-count chart, grouped by blocking reason
+	// (milestone kind) instead of task kind — computed in SQL, no per-task fetch.
+	keys, bins := s.traceReader.BlockingReasonOccupancy(ctx, scope, startTime, endTime, numDots)
+	info.Kinds = keys
+
+	binWidth := (endTime - startTime) / float64(numDots)
+	data := make([]StackedTimeValue, 0, len(bins))
+	for b, row := range bins {
+		values := make(map[string]float64, len(keys))
+		for ki, k := range keys {
+			values[k] = float64(row[ki])
+		}
+		data = append(data, StackedTimeValue{
+			// Keep the bin-center sample time the bar chart already plots against.
+			Time:   startTime + (float64(b)+0.5)*binWidth,
+			Values: values,
+		})
+	}
+	info.Data = data
 
 	return info
 }
