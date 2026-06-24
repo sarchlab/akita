@@ -178,6 +178,14 @@ func (m *incomingMW) logFlitE2ETaskFromFlit(
 	}
 
 	if isEnd {
+		// The flit just arrived after traversing the network; the span since it
+		// was sent is its in-network transfer time (refined by the per-switch
+		// flit subtasks). Last milestone before the task ends.
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: flit.MsgMeta.ID,
+			Kind:   tracing.MilestoneKindNetworkTransfer,
+			What:   m.comp.Name() + ".NetworkPort",
+		})
 		tracing.EndTask(m.comp, tracing.TaskEnd{ID: flit.MsgMeta.ID})
 		return
 	}
@@ -210,6 +218,13 @@ func (m *incomingMW) logMsgE2ETask(msg messaging.Msg, isEnd bool) {
 func (m *incomingMW) logMsgReq(isEnd bool, msg messaging.Msg) {
 	taskID := tracing.MsgIDAtReceiver(msg, m.comp)
 	if isEnd {
+		// The message is now fully assembled and delivered to the device; the
+		// span since its first flit arrived is its reassembly/transfer time.
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: taskID,
+			Kind:   tracing.MilestoneKindNetworkTransfer,
+			What:   m.comp.Name() + ".NetworkPort",
+		})
 		tracing.EndTask(m.comp, tracing.TaskEnd{ID: taskID})
 		tracing.ForgetMsgIDAtReceiver(msg.Meta().ID, m.comp)
 	} else {
@@ -226,6 +241,13 @@ func (m *incomingMW) logMsgReq(isEnd bool, msg messaging.Msg) {
 func (m *incomingMW) logMsgRsp(isEnd bool, msg messaging.Msg) {
 	taskID := tracing.MsgIDAtReceiver(msg, m.comp)
 	if isEnd {
+		// The message is now fully assembled and delivered to the device; the
+		// span since its first flit arrived is its reassembly/transfer time.
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: taskID,
+			Kind:   tracing.MilestoneKindNetworkTransfer,
+			What:   m.comp.Name() + ".NetworkPort",
+		})
 		tracing.EndTask(m.comp, tracing.TaskEnd{ID: taskID})
 		tracing.ForgetMsgIDAtReceiver(msg.Meta().ID, m.comp)
 	} else {

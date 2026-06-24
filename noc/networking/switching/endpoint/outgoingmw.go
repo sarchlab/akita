@@ -95,6 +95,17 @@ func (m *outgoingMW) sendFlitOut() bool {
 		}
 
 		m.networkPort().Send(flit)
+
+		// The flit waited in FlitsToSend until the outgoing network port could
+		// accept it; charge that span to the flit_e2e task.
+		if m.comp.NumHooks() > 0 {
+			tracing.AddMilestone(m.comp, tracing.Milestone{
+				TaskID: flit.MsgMeta.ID,
+				Kind:   tracing.MilestoneKindNetworkBusy,
+				What:   m.comp.Name() + ".NetworkPort",
+			})
+		}
+
 		numSent++
 		madeProgress = true
 	}
