@@ -16,20 +16,21 @@ interface ComponentsWidgetProps {
   expandHref?: string;
 }
 
-// pickMetrics auto-selects the two metrics most informative for a component. The
-// default is the incoming request rate; only a pure client — one that issues
-// requests (has a req_out port) but serves none (no req_in port) — switches to the
-// response backlog it accumulates instead (e.g. the mem agent). Defaulting to
-// request-serving keeps hot servers on ReqInCount even on traces that record req_in
-// at the component's own location rather than a ".req_in" child. Average latency is
-// meaningful either way.
+// pickMetrics auto-selects the two metrics most informative for a component, by what
+// it fundamentally does:
+//   - Request-fulfilling components (caches, memory, translators — anything that
+//     serves incoming requests) -> incoming request rate + average request latency.
+//   - Task-executing components (cores and traffic agents — they run work and issue
+//     requests but serve none) -> concurrent task count + outstanding requests.
+// The signal is the req_in / req_out facets. Default to request-fulfilling so a
+// server that records req_in at its own location (no ".req_in" child) isn't mistaken
+// for an executor; only a component that issues requests yet serves none is one.
 function pickMetrics(component: string, names: string[]): { primary: string; secondary: string } {
   const hasFacet = (kind: string) => names.some((n) => n.startsWith(`${component}.`) && n.endsWith(`.${kind}`));
-  const pureClient = hasFacet("req_out") && !hasFacet("req_in");
-  return {
-    primary: pureClient ? "ResponseBufferPressure" : "ReqInCount",
-    secondary: "AvgLatency",
-  };
+  const taskExecuting = hasFacet("req_out") && !hasFacet("req_in");
+  return taskExecuting
+    ? { primary: "ConcurrentTask", secondary: "PendingReqOut" }
+    : { primary: "ReqInCount", secondary: "AvgLatency" };
 }
 
 // ComponentsWidget shows the components that hold the most total task time

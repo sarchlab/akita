@@ -71,7 +71,12 @@ export function ComponentsOverviewHelp({ className }: { className?: string }) {
     <InfoButton title="Components overview" className={className}>
       <Figure src={componentsImg} alt="The Components overview: four component charts with facet badges and per-chart legends" />
       <p>The components with the highest <strong>residency</strong> — the total time their tasks spend in flight, summed across the run. It is a cheap proxy for where the simulation spends time, so the busiest / most-contended components rank first.</p>
-      <p>Each chart's two metrics are <strong>auto-selected</strong> for that component: components that serve requests show <strong>Incoming Request Rate</strong>; pure clients (which only issue requests) show <strong>Response Buffer Pressure</strong>. The other line is always <strong>Average Request Latency</strong>. The colored dots below each chart name them.</p>
+      <p>Each chart's two metrics are <strong>auto-selected</strong> from what the component does:</p>
+      <ul className="space-y-1.5">
+        <Term label="Request-fulfilling components">caches, memory, translators — anything that serves incoming requests — show <strong>Incoming Request Rate</strong> and <strong>Average Request Latency</strong>.</Term>
+        <Term label="Task-executing components">cores and traffic agents — they run work and issue requests but serve none — show <strong>Number Concurrent Task</strong> and <strong>Pending Request Out</strong>.</Term>
+      </ul>
+      <p>The colored dots below each chart name its two metrics.</p>
       <p>A <strong>Σ N facets</strong> badge means the chart sums the component's whole subtree — its N <em>one-location-one-kind</em> facets (e.g. <code>AT.req_in</code>, <code>AT.Top.incoming</code>, …). Open a chart to drill into the component.</p>
     </InfoButton>
   );
