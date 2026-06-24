@@ -68,6 +68,12 @@ func (m *incomingMW) recv() bool {
 				NumFlitRequired: flit.NumFlitInMsg,
 				NumFlitArrived:  1,
 			})
+
+			// First flit of this message: open the receiver-side msg_e2e task
+			// that tryDeliver closes on delivery. It is keyed by the receiver
+			// registry (not msg.ID) so it never collides with the sender's own
+			// req_out task in an integrated simulation.
+			m.logMsgE2ETask(packetization.AssembledMsg{MsgMeta: *msg}, false)
 		} else {
 			state.AssemblingMsgs[assemblingIdx].NumFlitArrived++
 		}

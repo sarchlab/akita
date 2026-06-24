@@ -120,9 +120,10 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 			}
 
 			pcs.ForwardBuffer.Pop()
-			sendBuf.PushTyped(item.Flit)
-
-			tracing.EndTask(m.comp, tracing.TaskEnd{ID: item.TaskID})
+			// Push the whole routedFlit (carrying its TaskID) so the in-switch
+			// "flit" task can be ended in sendOut, once the flit actually
+			// leaves on the output link, rather than here.
+			sendBuf.PushTyped(item)
 
 			occupiedOutputPort[outIdx] = true
 			madeProgress = true
@@ -149,12 +150,18 @@ func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 				break
 			}
 
-			flit := pcs.SendOutBuffer.Peek()
+			item := pcs.SendOutBuffer.Peek()
+			flit := item.Flit
 			flit.Src = port.AsRemote()
 			flit.Dst = pcs.RemotePort
 
 			port.Send(flit)
 			pcs.SendOutBuffer.Pop()
+
+			// The flit has now left the switch; close the in-switch "flit"
+			// task that opened when it entered the receive pipeline.
+			tracing.EndTask(m.comp, tracing.TaskEnd{ID: item.TaskID})
+
 			madeProgress = true
 		}
 	}
