@@ -8,6 +8,8 @@ interface WidgetCardProps {
   title: string;
   /** When set, an expand button links to this widget's full page. */
   expandHref?: string;
+  /** Optional affordance shown right after the title (e.g. an InfoButton). */
+  info?: ReactNode;
   /** Optional extra content on the right of the header (e.g. a count). */
   headerRight?: ReactNode;
   /** Extra classes for the content area (e.g. "p-0" for edge-to-edge graphs). */
@@ -25,6 +27,7 @@ interface WidgetCardProps {
 export default function WidgetCard({
   title,
   expandHref,
+  info,
   headerRight,
   contentClassName,
   bare,
@@ -46,7 +49,10 @@ export default function WidgetCard({
   return (
     <Card className="flex min-h-0 min-w-0 flex-1 flex-col">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle>{title}</CardTitle>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <CardTitle>{title}</CardTitle>
+          {info}
+        </div>
         <div className="flex items-center gap-3">
           {headerRight}
           {expandHref ? (
