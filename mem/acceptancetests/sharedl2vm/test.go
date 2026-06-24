@@ -105,10 +105,22 @@ func setupTest(seed int64) (*simulation.Simulation, timing.Engine, []agentChain)
 	return s, engine, chains
 }
 
+// agentStride returns the per-agent address-range stride: the configured
+// per-agent range rounded up to a 4-byte boundary. Using it for both the agent
+// offset (index*stride) and the combined page-table range keeps every agent's
+// range disjoint while guaranteeing each agent starts at a 4-byte-aligned
+// address, so the agent's 4-byte accesses stay aligned even when -max-address
+// is not a multiple of 4. For aligned -max-address (every value the acceptance
+// suite uses) the stride equals -max-address, so behavior is unchanged.
+func agentStride() uint64 {
+	const wordSize = 4
+	return (*maxAddressFlag + wordSize - 1) / wordSize * wordSize
+}
+
 // buildSharedHierarchy builds the L2 cache, L2 TLB, memory controller, and MMU
 // that every agent shares, plus the page table backing the MMU.
 func buildSharedHierarchy(s *simulation.Simulation) sharedHierarchy {
-	combinedRange := uint64(numAgents) * *maxAddressFlag
+	combinedRange := uint64(numAgents) * agentStride()
 
 	memCtrl := buildMemCtrl(s, combinedRange)
 	l2Cache := buildL2Cache(s, memCtrl)
@@ -329,7 +341,7 @@ func buildAgent(
 ) *memaccessagent.MemAccessAgent {
 	agentSpec := memaccessagent.DefaultSpec()
 	agentSpec.MaxAddress = *maxAddressFlag
-	agentSpec.AddressOffset = uint64(index) * *maxAddressFlag
+	agentSpec.AddressOffset = uint64(index) * agentStride()
 	agentSpec.ReadLeft = *numAccessFlag
 	agentSpec.WriteLeft = *numAccessFlag
 	agent := memaccessagent.MakeBuilder().
