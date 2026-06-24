@@ -28,7 +28,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math/rand"
 	"os"
 	"time"
 
@@ -81,7 +80,7 @@ type agentChain struct {
 	l1TLB   messaging.Component
 }
 
-func setupTest() (*simulation.Simulation, timing.Engine, []agentChain) {
+func setupTest(seed int64) (*simulation.Simulation, timing.Engine, []agentChain) {
 	simBuilder := simulation.MakeBuilder()
 
 	if *parallelFlag {
@@ -98,7 +97,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, []agentChain) {
 
 	chains := make([]agentChain, numAgents)
 	for i := 0; i < numAgents; i++ {
-		chains[i] = buildAgentChain(s, i, shared)
+		chains[i] = buildAgentChain(s, i, shared, seed)
 	}
 
 	setupConnections(s, shared, chains)
@@ -214,6 +213,7 @@ func buildAgentChain(
 	s *simulation.Simulation,
 	index int,
 	shared sharedHierarchy,
+	seed int64,
 ) agentChain {
 	suffix := fmt.Sprintf("[%d]", index)
 
@@ -221,7 +221,7 @@ func buildAgentChain(
 	l1TLB := buildL1TLB(s, suffix, shared.l2TLB)
 	at := buildAddressTranslator(s, suffix, l1Cache, l1TLB)
 	robComp := buildROB(s, suffix, at)
-	agent := buildAgent(s, index, robComp)
+	agent := buildAgent(s, index, robComp, seed)
 
 	return agentChain{
 		agent:   agent,
@@ -325,6 +325,7 @@ func buildAgent(
 	s *simulation.Simulation,
 	index int,
 	robComp messaging.Component,
+	seed int64,
 ) *memaccessagent.MemAccessAgent {
 	agentSpec := memaccessagent.DefaultSpec()
 	agentSpec.MaxAddress = *maxAddressFlag
@@ -334,6 +335,7 @@ func buildAgent(
 	agent := memaccessagent.MakeBuilder().
 		WithRegistrar(s).
 		WithSpec(agentSpec).
+		WithRandSeed(seed + int64(index)).
 		WithResources(memaccessagent.Resources{
 			LowModule: robComp.GetPortByName("Top"),
 		}).
@@ -459,9 +461,8 @@ func main() {
 	}
 
 	fmt.Fprintf(os.Stderr, "Seed %d\n", seed)
-	rand.Seed(seed)
 
-	s, engine, chains := setupTest()
+	s, engine, chains := setupTest(seed)
 
 	for _, c := range chains {
 		c.agent.TickLater()

@@ -2,6 +2,8 @@
 package memaccessagent
 
 import (
+	"math/rand"
+
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -30,6 +32,7 @@ type Builder struct {
 	spec      Spec
 	registrar modeling.Registrar
 	resources Resources
+	randSeed  *int64
 }
 
 // MakeBuilder returns a new Builder seeded with the default spec.
@@ -57,6 +60,16 @@ func (b Builder) WithSpec(spec Spec) Builder {
 // requires it.
 func (b Builder) WithResources(r Resources) Builder {
 	b.resources = r
+	return b
+}
+
+// WithRandSeed makes the agent draw from a private RNG seeded with the given
+// value, so a run is reproducible from the seed. Without it, the agent uses the
+// global (auto-seeded) random source. This is the supported way to get a
+// deterministic access stream: math/rand.Seed has been a no-op since Go 1.24,
+// so seeding the global source no longer works.
+func (b Builder) WithRandSeed(seed int64) Builder {
+	b.randSeed = &seed
 	return b
 }
 
@@ -90,6 +103,10 @@ func (b Builder) Build(name string) *MemAccessAgent {
 
 	if b.resources.LowModule != nil {
 		agent.LowModule = b.resources.LowModule
+	}
+
+	if b.randSeed != nil {
+		agent.rng = rand.New(rand.NewSource(*b.randSeed))
 	}
 
 	mw := &agentMiddleware{agent: agent}
