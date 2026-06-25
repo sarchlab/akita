@@ -64,4 +64,7 @@ mock_*_test.go
 
 # Local databases and shell history
 *.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+*.sqlite3-journal
 .history

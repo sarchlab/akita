@@ -37,10 +37,13 @@ type portComplexState struct {
 	NumOutputChannel int                                 `json:"num_output_channel"`
 	Latency          int                                 `json:"latency"`
 	PipelineWidth    int                                 `json:"pipeline_width"`
-	Pipeline         queueing.Pipeline[routedFlit]       `json:"pipeline"`
-	RouteBuffer      queueing.Buffer[routedFlit]         `json:"route_buffer"`
-	ForwardBuffer    queueing.Buffer[routedFlit]         `json:"forward_buffer"`
-	SendOutBuffer    queueing.Buffer[packetization.Flit] `json:"send_out_buffer"`
+	Pipeline         queueing.Pipeline[routedFlit] `json:"pipeline"`
+	RouteBuffer      queueing.Buffer[routedFlit]   `json:"route_buffer"`
+	ForwardBuffer    queueing.Buffer[routedFlit]   `json:"forward_buffer"`
+	// SendOutBuffer holds routedFlits (not bare Flits) so the in-switch "flit"
+	// task can stay open until the flit is actually sent out the port, charging
+	// the time the flit waits here for the output link.
+	SendOutBuffer queueing.Buffer[routedFlit] `json:"send_out_buffer"`
 }
 
 // State contains mutable runtime data for the switch.
