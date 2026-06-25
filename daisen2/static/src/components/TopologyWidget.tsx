@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { LineChart, ListTree } from "lucide-react";
 import { select, zoom, zoomIdentity } from "d3";
 import WidgetCard from "./WidgetCard";
+import { Button } from "./ui/button";
 import { useTopology } from "../hooks/useTopology";
 import type { Topology, TopologyComponent } from "../types/overview";
 
@@ -535,7 +538,7 @@ export default function TopologyWidget({ expandHref, bare }: TopologyWidgetProps
           </div>
 
           {selected ? (
-            <aside className="w-72 shrink-0 overflow-auto border-l p-3">
+            <aside className="w-96 shrink-0 overflow-auto border-l p-3">
               {selected.kind === "component" ? (
                 <ComponentDetail
                   component={selComponent}
@@ -569,6 +572,20 @@ function ComponentDetail({
       <div className="font-mono text-xs text-muted-foreground">
         {component?.type || "no spec type"}
       </div>
+      <div className="flex flex-col gap-1.5">
+        <Button asChild variant="outline" size="sm" className="justify-start">
+          <Link to={`/dashboard?widget=${encodeURIComponent(name)}`}>
+            <LineChart />
+            View component metrics
+          </Link>
+        </Button>
+        <Button asChild variant="outline" size="sm" className="justify-start">
+          <Link to={`/component?name=${encodeURIComponent(name)}`}>
+            <ListTree />
+            View component tasks
+          </Link>
+        </Button>
+      </div>
       {component?.spec ? (
         <SpecTable spec={component.spec} />
       ) : (
@@ -590,8 +607,8 @@ function SpecTable({ spec }: { spec: Record<string, unknown> }) {
       <tbody>
         {entries.map(([key, value]) => (
           <tr key={key} className="border-b border-border/60 align-top">
-            <td className="py-1 pr-3 font-mono text-muted-foreground">{key}</td>
-            <td className="break-all py-1 text-right font-mono">
+            <td className="whitespace-nowrap py-1 pr-3 font-mono text-muted-foreground">{key}</td>
+            <td className="break-all py-1 text-left font-mono">
               {typeof value === "object"
                 ? JSON.stringify(value)
                 : String(value)}
