@@ -27,6 +27,12 @@ type Flit struct {
 	SeqID        int               `json:"seq_id"`
 	NumFlitInMsg int               `json:"num_flit_in_msg"`
 	Msg          messaging.MsgMeta `json:"msg"` // carried message metadata
+	// MsgTaskID is the tracing task ID of the carried message's end-to-end
+	// (msg_e2e) task. The sending endpoint generates it once per message (a
+	// unique ID, distinct from the message's own ID), stamps it on every flit,
+	// and parents each flit_e2e task to it; the receiving endpoint reads it back
+	// to close the msg_e2e task.
+	MsgTaskID uint64 `json:"msg_task_id"`
 }
 
 // AssembledMsg is what an endpoint delivers to a device port in place of the

@@ -28,6 +28,7 @@ type Resources struct {
 // assembled from flits.
 type assemblingMsgState struct {
 	MsgID           uint64               `json:"msg_id"`
+	MsgTaskID       uint64               `json:"msg_task_id"`
 	Src             messaging.RemotePort `json:"src"`
 	Dst             messaging.RemotePort `json:"dst"`
 	RspTo           uint64               `json:"rsp_to"`
