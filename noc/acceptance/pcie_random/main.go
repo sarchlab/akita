@@ -46,7 +46,7 @@ func createNetwork(sim *simulation.Simulation, test *acceptance.Test) {
 	var agents []*acceptance.Agent
 
 	for i := 0; i < numDevicePerSwitch*2+1; i++ {
-		name := fmt.Sprintf("Agent%d", i)
+		name := fmt.Sprintf("Agent[%d]", i)
 		ports := make([]messaging.Port, numPortPerDevice)
 		for j := 0; j < numPortPerDevice; j++ {
 			ports[j] = messaging.NewPort(nil, 1, 1,

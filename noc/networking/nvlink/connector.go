@@ -206,7 +206,7 @@ func (c *Connector) AddRootComplex(cpuPorts []messaging.Port) (switchID int) {
 // AddPCIeSwitch adds a new switch connecting from an existing switch.
 func (c *Connector) AddPCIeSwitch() (switchID int) {
 	switchID = c.connector.AddSwitchWithName(
-		fmt.Sprintf("PCIeSwitch%d", len(c.pcieSwitches)))
+		fmt.Sprintf("PCIeSwitch[%d]", len(c.pcieSwitches)))
 
 	c.pcieSwitches[switchID] = true
 
@@ -249,9 +249,9 @@ func (c *Connector) PlugInDevice(
 	deviceID = len(c.devices)
 
 	deviceSwitchID := c.connector.AddSwitchWithName(
-		fmt.Sprintf("DeviceSwitch%d", deviceID))
+		fmt.Sprintf("DeviceSwitch[%d]", deviceID))
 	nvlinkSwitchID := c.connector.AddSwitchWithName(
-		fmt.Sprintf("NVLinkSwitch%d", deviceID))
+		fmt.Sprintf("NVLinkSwitch[%d]", deviceID))
 
 	c.connectDeviceSwitchWithNVLinkSwitch(deviceSwitchID, nvlinkSwitchID)
 	c.connectDeviceSwitchWithPCIeSwitch(pcieSwitchID, deviceSwitchID)

@@ -92,7 +92,7 @@ func createAgents(
 	var agents []*acceptance.Agent
 
 	for i := 0; i < 9; i++ {
-		name := fmt.Sprintf("Agent%d", i)
+		name := fmt.Sprintf("Agent[%d]", i)
 		ports := []messaging.Port{
 			messaging.NewPort(nil, 1, 1, name+".Port0"),
 		}
