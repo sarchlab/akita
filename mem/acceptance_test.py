@@ -376,6 +376,50 @@ def main():
         "acceptancetests/sharedl2vm",
     )
 
+    # NUMA-style page migration. The physical address space is split across two
+    # memory devices; the L2 routes each address to the owning device, so remote
+    # access works without migration. A controller periodically migrates pages
+    # between the devices (drain -> flush -> data-mover copy -> repoint page
+    # table -> invalidate -> resume). The agents' value checks are the oracle:
+    # any non-transparent migration produces a read mismatch. Tests 1-2 confirm
+    # the NUMA baseline is correct with migration disabled; the rest stress the
+    # migration machinery with a short interval, serial and parallel.
+    error |= compile_test("acceptancetests/pagemigration")
+    error |= run_test(
+        "Page migration baseline (no migration) 1",
+        "./pagemigration -migrate=false -max-address=1024 -num-access=10000",
+        "acceptancetests/pagemigration",
+    )
+    error |= run_test(
+        "Page migration baseline (no migration) 2",
+        "./pagemigration -migrate=false -max-address=1048576 -num-access=10000",
+        "acceptancetests/pagemigration",
+    )
+    error |= run_test(
+        "Page migration 1",
+        "./pagemigration -migrate=true -max-address=1024 "
+        "-num-access=10000 -migrate-interval=500",
+        "acceptancetests/pagemigration",
+    )
+    error |= run_test(
+        "Page migration 2",
+        "./pagemigration -migrate=true -max-address=1048576 "
+        "-num-access=10000 -migrate-interval=500",
+        "acceptancetests/pagemigration",
+    )
+    error |= run_test(
+        "Page migration 3 (4 agents)",
+        "./pagemigration -migrate=true -num-agents=4 -max-address=1048576 "
+        "-num-access=10000 -migrate-interval=500",
+        "acceptancetests/pagemigration",
+    )
+    error |= run_test(
+        "Page migration 4 (parallel)",
+        "./pagemigration -migrate=true -parallel -max-address=1048576 "
+        "-num-access=10000 -migrate-interval=500",
+        "acceptancetests/pagemigration",
+    )
+
     # Checkpoint/resume oracle over the full virtual-memory hierarchy: run to
     # completion must equal run-to-checkpoint, restore, run-to-completion. Run at
     # acceptance scale so the checkpoints capture deep in-flight state and TLB
