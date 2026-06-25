@@ -112,8 +112,14 @@ func (m *dataTransferMW) readFromSrc() bool {
 	addr := alignAddress(trans.NextReadAddr, state.SrcByteGranularity)
 
 	spec := m.comp.Spec()
+	// The buffer is indexed in transaction-relative space (offsets measured from
+	// SrcAddress), and Buffer.Offset slides in that same relative space as data
+	// is written out. The read-window check must therefore use the relative
+	// address; comparing the absolute addr would wrongly reject every read of a
+	// transaction whose SrcAddress is at or beyond BufferSize.
+	relAddr := addr - trans.SrcAddress
 	bufEndAddr := state.Buffer.Offset + spec.BufferSize
-	if addr >= bufEndAddr {
+	if relAddr >= bufEndAddr {
 		return false
 	}
 

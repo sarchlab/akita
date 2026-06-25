@@ -126,6 +126,37 @@ var _ = Describe("DataMover", func() {
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 
+	It("should move data when SrcAddress is beyond BufferSize", func() {
+		// Regression: the read-window check must use the transaction-relative
+		// address. With a source address at or beyond BufferSize (2048 here),
+		// an absolute-address check would reject every read and the move would
+		// hang. Source and destination addresses also differ.
+		data := make([]byte, 2048)
+		for i := range 2048 {
+			data[i] = byte(i)
+		}
+		outsideStorage.Write(4096, data)
+
+		req := datamoverprotocol.DataMoveRequest{}
+		req.ID = timing.GetIDGenerator().Generate()
+		req.Src = srcPort.AsRemote()
+		req.Dst = dataMover.GetPortByName("Top").AsRemote()
+		req.SrcAddress = 4096
+		req.SrcSide = "outside"
+		req.DstAddress = 8192
+		req.DstSide = "inside"
+		req.ByteSize = 2048
+		req.TrafficClass = "datamoverprotocol.DataMoveRequest"
+
+		dataMover.GetPortByName("Top").Deliver(req)
+
+		engine.Run()
+
+		Expect(insideStorage.Read(8192, 2048)).To(Equal(data))
+		Expect(srcPort.RetrieveIncoming()).To(
+			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
+	})
+
 	It("should move data inside to outside", func() {
 		data := make([]byte, 4096)
 		for i := range 4096 {
