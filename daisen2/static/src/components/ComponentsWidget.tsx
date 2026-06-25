@@ -16,21 +16,23 @@ interface ComponentsWidgetProps {
   expandHref?: string;
 }
 
-// pickMetrics auto-selects the two metrics most informative for a component, by what
-// it fundamentally does:
-//   - Request-fulfilling components (caches, memory, translators — anything that
-//     serves incoming requests) -> incoming request rate + average request latency.
-//   - Task-executing components (cores and traffic agents — they run work and issue
-//     requests but serve none) -> concurrent task count + outstanding requests.
-// The signal is the req_in / req_out facets. Default to request-fulfilling so a
-// server that records req_in at its own location (no ".req_in" child) isn't mistaken
-// for an executor; only a component that issues requests yet serves none is one.
-function pickMetrics(component: string, names: string[]): { primary: string; secondary: string } {
-  const hasFacet = (kind: string) => names.some((n) => n.startsWith(`${component}.`) && n.endsWith(`.${kind}`));
-  const taskExecuting = hasFacet("req_out") && !hasFacet("req_in");
-  return taskExecuting
-    ? { primary: "ConcurrentTask", secondary: "PendingReqOut" }
-    : { primary: "ReqInCount", secondary: "AvgLatency" };
+// pickMetrics auto-selects the two metrics most informative for a component, by the
+// task kinds it actually produces:
+//   - Request-fulfilling (caches, memory, translators — anything that records a
+//     req_in) -> incoming request rate + average request latency.
+//   - Executors (cores, traffic agents — they issue req_out but serve none) ->
+//     concurrent task count + outstanding requests.
+//   - Network components (switches/endpoints — flit/flit_e2e/msg_e2e, and no req
+//     tasks) -> concurrent task count alone, since the request-based metrics would
+//     all read zero.
+// Keying on kinds (not location facets) correctly classifies a server that records
+// req_in at its own location with no ".req_in" child, and lets a network component
+// show a non-zero metric instead of empty request lines.
+function pickMetrics(kinds: string[]): { primary: string; secondary: string } {
+  const has = (k: string) => kinds.includes(k);
+  if (has("req_in")) return { primary: "ReqInCount", secondary: "AvgLatency" };
+  if (has("req_out")) return { primary: "ConcurrentTask", secondary: "PendingReqOut" };
+  return { primary: "ConcurrentTask", secondary: "-" };
 }
 
 // ComponentsWidget shows the components that hold the most total task time
@@ -72,7 +74,7 @@ export default function ComponentsWidget({ expandHref }: ComponentsWidgetProps) 
           top.map((c) => {
             const node = findNode(root, c.component);
             const aggregated = !!node && node.children.length > 0;
-            const { primary, secondary } = pickMetrics(c.component, names ?? []);
+            const { primary, secondary } = pickMetrics(c.kinds ?? []);
             return (
               <DashboardWidget
                 key={c.component}

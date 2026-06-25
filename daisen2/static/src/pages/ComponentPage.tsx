@@ -68,6 +68,9 @@ const TASK_VIEW_SUBTASK_BAR_HEIGHT = 10;
 // Vertical room reserved below the Current Task bar for the blocking-reason
 // wavy lines (only when the task has milestones).
 const TASK_VIEW_MILESTONE_BAND = 18;
+// Vertical strip (px) reserved at the top and bottom of a parent task so it
+// stays visible behind sub-tasks that span its full duration.
+const NEST_PAD = 3;
 
 interface TimeRange {
   startTime: number;
@@ -275,7 +278,14 @@ function assignDimensionLevel(root: LayoutTask, parentLevelHeight: number, depth
 
   if (globalMaxY === -1) return 0;
 
-  const taskHeight = parentLevelHeight / (globalMaxY + 1);
+  // Reserve a strip at the top and bottom of each parent task so it stays
+  // visible behind sub-tasks that span its full duration. depth 0's "parent" is
+  // the synthetic, undrawn root, so it needs no strip; the strip also shrinks on
+  // tight bands so the sub-tasks don't vanish.
+  const nestPad = depth === 0 ? 0 : Math.min(NEST_PAD, Math.max(0, (parentLevelHeight - 4) * 0.25));
+  const childBand = parentLevelHeight - 2 * nestPad;
+
+  const taskHeight = childBand / (globalMaxY + 1);
   const paddedTaskHeight = padTaskHeight(taskHeight);
 
   for (const task of levelTasks) {
@@ -288,7 +298,7 @@ function assignDimensionLevel(root: LayoutTask, parentLevelHeight: number, depth
         startTime: child.start_time,
         endTime: child.end_time,
         height: paddedTaskHeight,
-        y: taskHeight * (child.yIndex ?? 0) + task.dim.y + (taskHeight - paddedTaskHeight) / 2,
+        y: task.dim.y + nestPad + taskHeight * (child.yIndex ?? 0) + (taskHeight - paddedTaskHeight) / 2,
         width: duration * pixelPerSecond,
         x: offsetDuration * pixelPerSecond + task.dim.x,
       };
@@ -1105,6 +1115,7 @@ function ComponentTaskView({
   highlightedTaskId,
   onHoverTask,
   onSelectTask,
+  onHoverMilestone,
 }: {
   mainTask: Task | null;
   parentTask: Task | null;
@@ -1120,6 +1131,7 @@ function ComponentTaskView({
   highlightedTaskId: string | null;
   onHoverTask: (task: Task | null) => void;
   onSelectTask: (task: Task) => void;
+  onHoverMilestone: (milestone: HoveredMilestone | null) => void;
 }) {
   if (!mainTask) {
     return <ComponentTopAxis width={width} height={height} range={range} />;
@@ -1176,13 +1188,7 @@ function ComponentTaskView({
               event.preventDefault();
               onSelectTask(row.task);
             }}
-          >
-            <title>
-              {row.task.kind} - {row.task.what}
-              {"\n"}
-              {smartString(row.task.start_time)} to {smartString(row.task.end_time)}
-            </title>
-          </rect>
+          />
         );
       })}
 
@@ -1225,21 +1231,28 @@ function ComponentTaskView({
           const color = colorMap[step.kind] ?? "#9ca3af";
           const blockedFor = step.time - intervalStart;
           const d = wavyPath(x0, x1, centerY);
-          const tip = `blocked on ${step.kind} (${step.what}) for ${smartString(blockedFor)}`;
           return (
-            <g key={`milestone-${index}-${step.kind}`}>
+            <g
+              key={`milestone-${index}-${step.kind}`}
+              style={{ cursor: "pointer" }}
+              onMouseEnter={() =>
+                onHoverMilestone({
+                  kind: step.kind,
+                  what: step.what,
+                  time: step.time,
+                  blockedFor,
+                })
+              }
+              onMouseLeave={() => onHoverMilestone(null)}
+            >
               {x1 - x0 >= 2 && (
                 <>
                   <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" pointerEvents="none" />
                   {/* Wide transparent overlay so the thin wave is easy to hover. */}
-                  <path d={d} fill="none" stroke="transparent" strokeWidth={12} pointerEvents="stroke">
-                    <title>{tip}</title>
-                  </path>
+                  <path d={d} fill="none" stroke="transparent" strokeWidth={12} pointerEvents="stroke" />
                 </>
               )}
-              <circle cx={x1} cy={centerY} r={3} fill={color} stroke="#ffffff" strokeWidth={0.75}>
-                <title>{`${tip} — released at ${smartString(step.time)}`}</title>
-              </circle>
+              <circle cx={x1} cy={centerY} r={3} fill={color} stroke="#ffffff" strokeWidth={0.75} />
             </g>
           );
         });
@@ -1255,7 +1268,54 @@ function SectionLabel({ children }: { children: string }) {
   );
 }
 
-function SelectedTaskSection({ task }: { task: Task | null }) {
+// A blocking milestone the cursor is hovering, shown in the side panel in place
+// of the selected task (so no SVG tooltip is needed on the chart).
+interface HoveredMilestone {
+  kind: string;
+  what: string;
+  time: number;
+  blockedFor: number;
+}
+
+function SelectedTaskSection({
+  task,
+  milestone,
+  currentLocation,
+  onGoToLocation,
+}: {
+  task: Task | null;
+  milestone: HoveredMilestone | null;
+  currentLocation: string;
+  onGoToLocation: (location: string) => void;
+}) {
+  // A hovered milestone takes over the panel and shows its blocking details.
+  if (milestone) {
+    const milestoneRows: [string, string][] = [
+      ["Reason", milestone.kind],
+      ["What", milestone.what || "-"],
+      ["Released", smartString(milestone.time)],
+      ["Blocked for", smartString(milestone.blockedFor)],
+    ];
+    return (
+      <section>
+        <SectionLabel>Selected milestone</SectionLabel>
+        <div className="mt-2 rounded-lg border bg-muted/30 p-3">
+          <div className="mb-2 break-all text-sm font-semibold">
+            blocked on {milestone.kind}
+          </div>
+          <dl className="space-y-1.5 text-xs">
+            {milestoneRows.map(([label, value]) => (
+              <div key={label} className="grid grid-cols-[5.5rem_1fr] gap-x-3">
+                <dt className="text-muted-foreground">{label}</dt>
+                <dd className="break-all font-medium tabular-nums">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+    );
+  }
+
   const rows: [string, string][] = task
     ? [
         ["ID", String(task.id)],
@@ -1281,12 +1341,32 @@ function SelectedTaskSection({ task }: { task: Task | null }) {
           {task.kind} · {task.what}
         </div>
         <dl className="space-y-1.5 text-xs">
-          {rows.map(([label, value]) => (
-            <div key={label} className="grid grid-cols-[4.5rem_1fr] gap-x-3">
-              <dt className="text-muted-foreground">{label}</dt>
-              <dd className="break-all font-medium tabular-nums">{value}</dd>
-            </div>
-          ))}
+          {rows.map(([label, value]) => {
+            const canJump =
+              label === "Where" && !!task.location && task.location !== currentLocation;
+            return (
+              <div key={label} className="grid grid-cols-[4.5rem_1fr] gap-x-3">
+                <dt className="text-muted-foreground">{label}</dt>
+                <dd className="break-all font-medium tabular-nums">
+                  {canJump ? (
+                    <span className="flex items-start justify-between gap-2">
+                      <span className="break-all">{value}</span>
+                      <button
+                        type="button"
+                        onClick={() => onGoToLocation(task.location)}
+                        className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground hover:text-primary"
+                        title={`Make ${task.location} the current location`}
+                      >
+                        Go here
+                      </button>
+                    </span>
+                  ) : (
+                    value
+                  )}
+                </dd>
+              </div>
+            );
+          })}
         </dl>
       </div>
       )}
@@ -1440,38 +1520,60 @@ function sanitizeRange(startTime: number, endTime: number): TimeRange {
 // a leaf (a real task row) shows just its tasks; an internal node (e.g. "ROB")
 // aggregates every task beneath it but looks identical. The location tree powers
 // the header breadcrumb (collapse up) and the drill-into control (descend).
-// LocationSubtree renders the whole tree of locations beneath a scope, fully
-// expanded, with every row clickable to jump into that location. Shown in place
-// of the single-level drill-down so the entire structure under a scope is visible.
-function LocationSubtree({ nodes, onNavigate }: { nodes: LocationNode[]; onNavigate: (path: string) => void }) {
+// LocationSubtree renders the tree of locations beneath a scope, with every row
+// clickable to jump into that location. Branches are collapsible (chevron),
+// collapsed by default, so a deep scope stays compact instead of dumping its
+// whole subtree at once.
+function LocationSubtree({
+  nodes,
+  onNavigate,
+  expanded,
+  onToggle,
+}: {
+  nodes: LocationNode[];
+  onNavigate: (path: string) => void;
+  expanded: Set<string>;
+  onToggle: (path: string) => void;
+}) {
   return (
     <ul className="space-y-0.5">
       {nodes.map((node) => {
         const isBranch = node.children.length > 0;
+        const open = isBranch && expanded.has(node.path);
         return (
           <li key={node.path}>
-            <button
-              type="button"
-              className={cn(
-                "flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted hover:text-primary",
-                isBranch ? "font-medium text-foreground" : "text-muted-foreground",
+            <div className="flex items-center">
+              {isBranch ? (
+                <button
+                  type="button"
+                  className="flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-primary"
+                  onClick={() => onToggle(node.path)}
+                  aria-label={open ? `Collapse ${node.name}` : `Expand ${node.name}`}
+                >
+                  {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                </button>
+              ) : (
+                // A hollow dot marks a leaf (no children to expand).
+                <span className="flex h-6 w-5 shrink-0 items-center justify-center" aria-hidden="true">
+                  <span className="h-1.5 w-1.5 rounded-full border border-muted-foreground/50" />
+                </span>
               )}
-              onClick={() => onNavigate(node.path)}
-              title={node.path}
-            >
-              {/* A filled dot marks a scope you can descend into, a hollow dot a leaf. */}
-              <span
+              <button
+                type="button"
                 className={cn(
-                  "h-1.5 w-1.5 shrink-0 rounded-full",
-                  isBranch ? "bg-primary/70" : "border border-muted-foreground/50",
+                  "min-w-0 flex-1 truncate rounded px-1 py-1 text-left text-xs transition-colors hover:bg-muted hover:text-primary",
+                  isBranch ? "font-medium text-foreground" : "text-muted-foreground",
                 )}
-              />
-              <span className="truncate">{node.name}</span>
-            </button>
+                onClick={() => onNavigate(node.path)}
+                title={node.path}
+              >
+                {node.name}
+              </button>
+            </div>
             {/* Indent guide: a left border ties each child row back to its parent. */}
-            {isBranch && (
+            {isBranch && open && (
               <div className="ml-2 border-l border-border pl-1.5">
-                <LocationSubtree nodes={node.children} onNavigate={onNavigate} />
+                <LocationSubtree nodes={node.children} onNavigate={onNavigate} expanded={expanded} onToggle={onToggle} />
               </div>
             )}
           </li>
@@ -1525,6 +1627,16 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     params.delete("taskid");
     setSearchParams(params);
   };
+
+  // Collapsible "locations under this scope" tree; branches start collapsed.
+  const [expandedLocations, setExpandedLocations] = useState<Set<string>>(() => new Set());
+  const toggleLocation = (path: string) =>
+    setExpandedLocations((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
 
   // Quantize the bin count so a pixel-by-pixel resize does not refetch. Both the
   // task-count and blocking-reason charts bin over the same range with the same
@@ -1580,6 +1692,9 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     [childTaskMatches, currentTask?.id],
   );
   const [hoveredTask, setHoveredTask] = useState<Task | null>(null);
+  // A blocking milestone under the cursor; shown in the side panel instead of a
+  // chart tooltip, taking over the selected-task section while hovered.
+  const [hoveredMilestone, setHoveredMilestone] = useState<HoveredMilestone | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   // Separate from highlightedKey (task "kind-what" keys): hovering a blocking
   // reason in the legend highlights its band without dimming the task charts,
@@ -1642,6 +1757,23 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     }
     return Array.from(keys).sort();
   }, [childTasks, currentTask, parentTask, tasks, agg, colorMode]);
+
+  // Default the color grouping to "kind" once the finer "kind-what" grouping
+  // would produce more than 10 distinct pairs — too many to tell apart by color.
+  // One-way and only until the user picks a mode, so it doesn't fight the toggle
+  // or churn while zooming.
+  const userPickedColorModeRef = useRef(false);
+  const handleColorMode = (mode: ColorMode) => {
+    userPickedColorModeRef.current = true;
+    setColorMode(mode);
+  };
+  useEffect(() => {
+    if (userPickedColorModeRef.current) return;
+    if (colorMode === "kind-what" && taskColorKeys.length > 10) {
+      setColorMode("kind");
+    }
+  }, [colorMode, taskColorKeys]);
+
   const selectableTaskById = useMemo(() => {
     const map = new Map<string, Task>();
     for (const task of [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks]) {
@@ -1928,6 +2060,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
             onHoverTask={setHoveredTask}
             onSelectTask={selectTask}
+            onHoverMilestone={setHoveredMilestone}
           />
           {/* Help opens only when a task is selected — that's when the hierarchy exists. */}
           {currentTask && (
@@ -2074,7 +2207,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             <div className="flex flex-col gap-1 text-xs text-muted-foreground">
               <span>Locations under this scope</span>
               <div className="max-h-56 overflow-auto rounded-md border bg-muted/20 p-1.5">
-                <LocationSubtree nodes={scopeChildren} onNavigate={navigateToLocation} />
+                <LocationSubtree nodes={scopeChildren} onNavigate={navigateToLocation} expanded={expandedLocations} onToggle={toggleLocation} />
               </div>
             </div>
           )}
@@ -2083,8 +2216,14 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           {/* Show the hovered task while hovering, otherwise fall back to the
               selected/current task so a task selected via click or arrived at
               via /component?...&taskid=... stays visible in the panel. */}
-          <SelectedTaskSection task={hoveredTask ?? currentTask} />
-          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} colorMode={colorMode} onColorMode={setColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={highlightedReason} onHighlightReason={setHighlightedReason} />
+          <SelectedTaskSection
+            task={hoveredTask ?? currentTask}
+            milestone={hoveredMilestone}
+            currentLocation={componentName}
+            onGoToLocation={navigateToLocation}
+          />
+          <div className="-mx-4 border-t" />
+          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} colorMode={colorMode} onColorMode={handleColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={highlightedReason} onHighlightReason={setHighlightedReason} />
         </div>
       </SidePanel>
     </div>

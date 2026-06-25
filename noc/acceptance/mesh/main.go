@@ -28,11 +28,12 @@ func main() {
 	numMessages := 100
 
 	test := acceptance.NewTest()
-	engine := timing.NewSerialEngine()
+	sim := acceptance.NewSimulation()
+	engine := sim.GetEngine()
 
 	freq := 1 * timing.GHz
 	connector := mesh.NewConnector().
-		WithEngine(engine).
+		WithRegistrar(sim).
 		WithFreq(freq)
 
 	connector.CreateNetwork("Mesh")
@@ -43,7 +44,7 @@ func main() {
 			ports := []messaging.Port{
 				messaging.NewPort(nil, 1, 1, name+".Port0"),
 			}
-			agent := acceptance.NewAgent(engine, freq, name, ports, test)
+			agent := acceptance.NewAgent(sim, freq, name, ports, test)
 			agent.TickLater()
 
 			connector.AddTile([3]int{x, y, 0}, agent.AgentPorts)
@@ -62,5 +63,6 @@ func main() {
 
 	test.MustHaveReceivedAllMsgs()
 	test.ReportBandwidthAchieved(engine.CurrentTime())
+	sim.Terminate()
 	fmt.Println("passed!")
 }

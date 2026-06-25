@@ -75,6 +75,16 @@ func (m *routeForwardSendMW) route() (madeProgress bool) {
 
 			pcs.ForwardBuffer.PushTyped(item)
 
+			// The flit waited in the route buffer until a forward-buffer slot
+			// opened (behind other flits / for downstream credit).
+			if m.comp.NumHooks() > 0 {
+				tracing.AddMilestone(m.comp, tracing.Milestone{
+					TaskID: item.TaskID,
+					Kind:   tracing.MilestoneKindQueue,
+					What:   m.comp.Name() + ".RouteBuffer",
+				})
+			}
+
 			madeProgress = true
 		}
 	}
@@ -120,9 +130,20 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 			}
 
 			pcs.ForwardBuffer.Pop()
-			sendBuf.PushTyped(item.Flit)
+			// Push the whole routedFlit (carrying its TaskID) so the in-switch
+			// "flit" task can be ended in sendOut, once the flit actually
+			// leaves on the output link, rather than here.
+			sendBuf.PushTyped(item)
 
-			tracing.EndTask(m.comp, tracing.TaskEnd{ID: item.TaskID})
+			// The flit waited in the forward buffer for the output port to win
+			// arbitration and for a send-buffer slot downstream.
+			if m.comp.NumHooks() > 0 {
+				tracing.AddMilestone(m.comp, tracing.Milestone{
+					TaskID: item.TaskID,
+					Kind:   tracing.MilestoneKindNetworkBusy,
+					What:   m.comp.Name() + ".ForwardBuffer",
+				})
+			}
 
 			occupiedOutputPort[outIdx] = true
 			madeProgress = true
@@ -149,12 +170,28 @@ func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 				break
 			}
 
-			flit := pcs.SendOutBuffer.Peek()
+			item := pcs.SendOutBuffer.Peek()
+			flit := item.Flit
 			flit.Src = port.AsRemote()
 			flit.Dst = pcs.RemotePort
 
 			port.Send(flit)
 			pcs.SendOutBuffer.Pop()
+
+			// The flit waited in the send-out buffer for the output link to be
+			// free; this is the last milestone before the task ends.
+			if m.comp.NumHooks() > 0 {
+				tracing.AddMilestone(m.comp, tracing.Milestone{
+					TaskID: item.TaskID,
+					Kind:   tracing.MilestoneKindNetworkBusy,
+					What:   port.Name(),
+				})
+			}
+
+			// The flit has now left the switch; close the in-switch "flit"
+			// task that opened when it entered the receive pipeline.
+			tracing.EndTask(m.comp, tracing.TaskEnd{ID: item.TaskID})
+
 			madeProgress = true
 		}
 	}

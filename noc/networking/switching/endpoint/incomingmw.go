@@ -60,6 +60,7 @@ func (m *incomingMW) recv() bool {
 		if assemblingIdx < 0 {
 			state.AssemblingMsgs = append(state.AssemblingMsgs, assemblingMsgState{
 				MsgID:           msg.ID,
+				MsgTaskID:       flit.MsgTaskID,
 				Src:             msg.Src,
 				Dst:             msg.Dst,
 				RspTo:           msg.RspTo,
@@ -112,6 +113,11 @@ func (m *incomingMW) assemble() bool {
 			TrafficBytes: a.TrafficBytes,
 		}
 		state.AssembledMsgs = append(state.AssembledMsgs, assembled)
+
+		// The message is fully reassembled; close its msg_e2e task (the parent
+		// of all of this message's flit_e2e tasks).
+		m.logMsgE2EEnd(a.MsgTaskID)
+
 		madeProgress = true
 	}
 
@@ -151,8 +157,6 @@ func (m *incomingMW) tryDeliver() bool {
 
 		dstPort.Deliver(msg)
 
-		m.logMsgE2ETask(msg, true)
-
 		numDelivered++
 		madeProgress = true
 	}
@@ -172,6 +176,14 @@ func (m *incomingMW) logFlitE2ETaskFromFlit(
 	}
 
 	if isEnd {
+		// The flit just arrived after traversing the network; the span since it
+		// was sent is its in-network transfer time (refined by the per-switch
+		// flit subtasks). Last milestone before the task ends.
+		tracing.AddMilestone(m.comp, tracing.Milestone{
+			TaskID: flit.MsgMeta.ID,
+			Kind:   tracing.MilestoneKindNetworkTransfer,
+			What:   m.comp.Name() + ".NetworkPort",
+		})
 		tracing.EndTask(m.comp, tracing.TaskEnd{ID: flit.MsgMeta.ID})
 		return
 	}
@@ -186,49 +198,19 @@ func (m *incomingMW) logFlitE2ETaskFromFlit(
 	})
 }
 
-func (m *incomingMW) logMsgE2ETask(msg messaging.Msg, isEnd bool) {
+// logMsgE2EEnd closes the per-message msg_e2e task once the message is
+// reassembled, charging the whole span since it was sent to network transfer.
+// The task was opened by the sending endpoint (logMsgE2EStart) and is keyed by
+// the MsgTaskID carried in every flit.
+func (m *incomingMW) logMsgE2EEnd(msgTaskID uint64) {
 	if m.comp.NumHooks() == 0 {
 		return
 	}
 
-	meta := msg.Meta()
-
-	if meta.IsRsp() {
-		m.logMsgRsp(isEnd, msg)
-		return
-	}
-
-	m.logMsgReq(isEnd, msg)
-}
-
-func (m *incomingMW) logMsgReq(isEnd bool, msg messaging.Msg) {
-	taskID := tracing.MsgIDAtReceiver(msg, m.comp)
-	if isEnd {
-		tracing.EndTask(m.comp, tracing.TaskEnd{ID: taskID})
-		tracing.ForgetMsgIDAtReceiver(msg.Meta().ID, m.comp)
-	} else {
-		tracing.StartTask(m.comp, tracing.TaskStart{
-			ID:       taskID,
-			ParentID: msg.Meta().ID,
-			Kind:     "msg_e2e",
-			What:     "msg_e2e",
-			Detail:   msg,
-		})
-	}
-}
-
-func (m *incomingMW) logMsgRsp(isEnd bool, msg messaging.Msg) {
-	taskID := tracing.MsgIDAtReceiver(msg, m.comp)
-	if isEnd {
-		tracing.EndTask(m.comp, tracing.TaskEnd{ID: taskID})
-		tracing.ForgetMsgIDAtReceiver(msg.Meta().ID, m.comp)
-	} else {
-		tracing.StartTask(m.comp, tracing.TaskStart{
-			ID:       taskID,
-			ParentID: msg.Meta().ID,
-			Kind:     "msg_e2e",
-			What:     "msg_e2e",
-			Detail:   msg,
-		})
-	}
+	tracing.AddMilestone(m.comp, tracing.Milestone{
+		TaskID: msgTaskID,
+		Kind:   tracing.MilestoneKindNetworkTransfer,
+		What:   m.comp.Name() + ".NetworkPort",
+	})
+	tracing.EndTask(m.comp, tracing.TaskEnd{ID: msgTaskID})
 }

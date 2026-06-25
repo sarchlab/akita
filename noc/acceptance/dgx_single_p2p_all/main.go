@@ -14,6 +14,7 @@ import (
 	"github.com/sarchlab/akita/v5/noc/networking/nvlink"
 
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/tebeka/atexit"
 )
@@ -40,10 +41,11 @@ func main() {
 			fmt.Printf("Testing P2P between agent %v and agent %v\n", i, j)
 			rand.Seed(1)
 
-			engine := timing.NewSerialEngine()
+			sim := acceptance.NewSimulation()
+			engine := sim.GetEngine()
 			t := acceptance.NewTest()
 
-			agents := createNetwork(engine, t)
+			agents := createNetwork(sim, t)
 			t.RegisterAgent(agents[i])
 			t.RegisterAgent(agents[j])
 			t.GenerateMsgs(2000)
@@ -55,6 +57,7 @@ func main() {
 
 			t.MustHaveReceivedAllMsgs()
 			t.ReportBandwidthAchieved(engine.CurrentTime())
+			sim.Terminate()
 		}
 	}
 
@@ -62,13 +65,13 @@ func main() {
 }
 
 func createNetwork(
-	engine timing.EventScheduler,
+	sim *simulation.Simulation,
 	test *acceptance.Test,
 ) []*acceptance.Agent {
-	agents := createAgents(engine, test)
+	agents := createAgents(sim, test)
 
 	connector := nvlink.NewConnector().
-		WithEngine(engine).
+		WithRegistrar(sim).
 		WithPCIeVersion(3, 16)
 	connector.CreateNetwork("Network")
 
@@ -81,7 +84,7 @@ func createNetwork(
 }
 
 func createAgents(
-	engine timing.EventScheduler,
+	sim *simulation.Simulation,
 	test *acceptance.Test,
 ) []*acceptance.Agent {
 	freq := 1.0 * timing.GHz
@@ -89,11 +92,11 @@ func createAgents(
 	var agents []*acceptance.Agent
 
 	for i := 0; i < 9; i++ {
-		name := fmt.Sprintf("Agent%d", i)
+		name := fmt.Sprintf("Agent[%d]", i)
 		ports := []messaging.Port{
 			messaging.NewPort(nil, 1, 1, name+".Port0"),
 		}
-		agent := acceptance.NewAgent(engine, freq, name, ports, test)
+		agent := acceptance.NewAgent(sim, freq, name, ports, test)
 		agent.TickLater()
 		agents = append(agents, agent)
 	}

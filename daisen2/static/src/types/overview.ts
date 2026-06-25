@@ -31,6 +31,9 @@ export interface Topology {
 export interface ComponentResidency {
   component: string;
   task_time: number;
+  // Distinct task kinds present under this scope (e.g. "req_in", "req_out",
+  // "flit"/"flit_e2e"/"msg_e2e"), used to auto-select metrics that fit.
+  kinds?: string[];
 }
 
 /** One directory entry of the recorded source tree. */

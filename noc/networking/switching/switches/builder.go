@@ -133,7 +133,7 @@ func addPort(
 		pcs.LocalPortName+"RouteBuf", pcs.NumInputChannel)
 	pcs.ForwardBuffer = queueing.NewBuffer[routedFlit](
 		pcs.LocalPortName+"FwdBuf", pcs.NumInputChannel)
-	pcs.SendOutBuffer = queueing.NewBuffer[packetization.Flit](
+	pcs.SendOutBuffer = queueing.NewBuffer[routedFlit](
 		pcs.LocalPortName+"SendBuf", pcs.NumOutputChannel)
 	pcs.Pipeline = queueing.NewPipeline[routedFlit](
 		pcs.PipelineWidth, pcs.Latency)

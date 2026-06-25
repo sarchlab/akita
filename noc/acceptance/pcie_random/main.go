@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/noc/networking/pcie"
 
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/tebeka/atexit"
 )
@@ -20,11 +21,12 @@ func main() {
 	flag.Parse()
 	rand.Seed(1)
 
-	engine := timing.NewSerialEngine()
+	sim := acceptance.NewSimulation()
+	engine := sim.GetEngine()
 
 	t := acceptance.NewTest()
 
-	createNetwork(engine, t)
+	createNetwork(sim, t)
 	t.GenerateMsgs(10000)
 
 	err := engine.Run()
@@ -34,22 +36,23 @@ func main() {
 
 	t.MustHaveReceivedAllMsgs()
 	t.ReportBandwidthAchieved(engine.CurrentTime())
+	sim.Terminate()
 	atexit.Exit(0)
 }
 
-func createNetwork(engine timing.Engine, test *acceptance.Test) {
+func createNetwork(sim *simulation.Simulation, test *acceptance.Test) {
 	freq := 1.0 * timing.GHz
 
 	var agents []*acceptance.Agent
 
 	for i := 0; i < numDevicePerSwitch*2+1; i++ {
-		name := fmt.Sprintf("Agent%d", i)
+		name := fmt.Sprintf("Agent[%d]", i)
 		ports := make([]messaging.Port, numPortPerDevice)
 		for j := 0; j < numPortPerDevice; j++ {
 			ports[j] = messaging.NewPort(nil, 1, 1,
 				fmt.Sprintf("%s.Port%d", name, j))
 		}
-		agent := acceptance.NewAgent(engine, freq, name, ports, test)
+		agent := acceptance.NewAgent(sim, freq, name, ports, test)
 		agent.TickLater()
 		agents = append(agents, agent)
 		test.RegisterAgent(agent)
@@ -57,7 +60,7 @@ func createNetwork(engine timing.Engine, test *acceptance.Test) {
 
 	pcieConnector := pcie.NewConnector()
 	pcieConnector = pcieConnector.
-		WithEngine(engine).
+		WithRegistrar(sim).
 		WithFrequency(freq).
 		WithVersion(4, 16)
 
