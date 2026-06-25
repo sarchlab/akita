@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { RotateCcw, X, ChevronRight, ChevronDown, Search } from "lucide-react";
+import { RotateCcw, X, ChevronLeft, ChevronRight, ChevronDown, Search } from "lucide-react";
 import DashboardWidget from "../components/DashboardWidget";
 import { ComponentSelectorHelp, MetricsHelp } from "../components/HelpTopics";
 import { Button } from "../components/ui/button";
@@ -206,6 +206,14 @@ export default function DashboardPage() {
   const secondaryAxis = resolveAxis(view.secondary, DASHBOARD_DEFAULTS.secondary);
   const widget = view.widget ?? "";
 
+  // Which page of the widget grid is shown; pagination replaces grid scrolling so
+  // the mouse wheel is free to zoom the chart under it. Reset to the first page
+  // whenever the set of widgets changes (new scope or search).
+  const [page, setPage] = useState(0);
+  useEffect(() => {
+    setPage(0);
+  }, [scope, filter]);
+
   const patchView = (patch: Record<string, string | number | undefined>) => {
     setSearchParams((prev) => mergeParams("/dashboard", prev, patch), { replace: true });
   };
@@ -322,11 +330,23 @@ export default function DashboardPage() {
   // Fewer, larger charts: 3 across on a wide screen, 2 on a medium one, 1 when
   // narrow — so each figure has room to breathe.
   const columns = size.width >= 1400 ? 3 : size.width >= 720 ? 2 : 1;
-  const rows = Math.max(1, Math.ceil(gridNames.length / columns));
-  // The grid has a 5px gap between cards (no outer gap), so a card is the area
-  // minus the (columns-1) inner gaps, split evenly.
-  const widgetWidth = Math.max(180, Math.floor((size.width - (columns - 1) * 5) / columns));
-  const widgetHeight = Math.min(260, Math.max(160, Math.floor((size.height - (rows + 1) * 5) / Math.min(rows, 4))));
+  // The grid is paginated rather than scrolled: the mouse wheel zooms the chart
+  // under it, so a scrollable grid would fight that gesture. Pick how many rows of
+  // a comfortable height fit the grid area, fit that many rows of cards, and page
+  // through the rest.
+  const GAP = 5;
+  const TARGET_ROW_HEIGHT = 240;
+  const MIN_ROW_HEIGHT = 150;
+  const rowsPerPage = Math.max(1, Math.floor((size.height + GAP) / (TARGET_ROW_HEIGHT + GAP)));
+  const perPage = Math.max(1, columns * rowsPerPage);
+  const pageCount = Math.max(1, Math.ceil(gridNames.length / perPage));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageNames = gridNames.slice(currentPage * perPage, (currentPage + 1) * perPage);
+  // Rows used on this page (the last page may be short): size the cards to fill
+  // the height with however many rows this page actually needs.
+  const pageRows = Math.max(1, Math.min(rowsPerPage, Math.ceil(pageNames.length / columns)));
+  const widgetWidth = Math.max(180, Math.floor((size.width - (columns - 1) * GAP) / columns));
+  const widgetHeight = Math.max(MIN_ROW_HEIGHT, Math.floor((size.height - (pageRows - 1) * GAP) / pageRows));
 
   const singleWidget = widget !== "";
 
@@ -478,42 +498,71 @@ export default function DashboardPage() {
           </aside>
 
           {/* Grid of the scope's children (or search matches), each chart aggregating
-              its own subtree. */}
-          <div ref={ref} className="min-h-0 flex-1 overflow-auto bg-white p-[5px]">
-            {gridNames.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                {filter ? "No components match the search." : "No components to show."}
-              </div>
-            ) : (
-              <div
-                className="daisen-dashboard-grid"
-                style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridAutoRows: `${widgetHeight}px` }}
-              >
-                {gridNames.map((name) => {
-                  const node = findNode(root, name);
-                  const aggregated = !!node && node.children.length > 0;
-                  return (
-                    <DashboardWidget
-                      key={name}
-                      name={name}
-                      width={widgetWidth}
-                      height={widgetHeight}
-                      startTime={viewRange.startTime}
-                      endTime={viewRange.endTime}
-                      dataStartTime={dataRange.startTime}
-                      dataEndTime={dataRange.endTime}
-                      dataPending={dataPending}
-                      primaryAxis={primaryAxis}
-                      secondaryAxis={secondaryAxis}
-                      segments={segmentsData?.segments ?? []}
-                      segmentsEnabled={segmentsData?.enabled ?? false}
-                      onTimeRangeChange={handleRangeChange}
-                      onFocus={(focused) => patchView({ widget: focused })}
-                      aggregated={aggregated}
-                      facetCount={aggregated && node ? leafCount(node) : undefined}
-                    />
-                  );
-                })}
+              its own subtree. Paginated, not scrolled, so wheel-zoom is unambiguous. */}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div ref={ref} className="min-h-0 flex-1 overflow-hidden bg-white p-[5px]">
+              {gridNames.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  {filter ? "No components match the search." : "No components to show."}
+                </div>
+              ) : (
+                <div
+                  className="daisen-dashboard-grid"
+                  style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridAutoRows: `${widgetHeight}px` }}
+                >
+                  {pageNames.map((name) => {
+                    const node = findNode(root, name);
+                    const aggregated = !!node && node.children.length > 0;
+                    return (
+                      <DashboardWidget
+                        key={name}
+                        name={name}
+                        width={widgetWidth}
+                        height={widgetHeight}
+                        startTime={viewRange.startTime}
+                        endTime={viewRange.endTime}
+                        dataStartTime={dataRange.startTime}
+                        dataEndTime={dataRange.endTime}
+                        dataPending={dataPending}
+                        primaryAxis={primaryAxis}
+                        secondaryAxis={secondaryAxis}
+                        segments={segmentsData?.segments ?? []}
+                        segmentsEnabled={segmentsData?.enabled ?? false}
+                        onTimeRangeChange={handleRangeChange}
+                        onFocus={(focused) => patchView({ widget: focused })}
+                        aggregated={aggregated}
+                        facetCount={aggregated && node ? leafCount(node) : undefined}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            {pageCount > 1 && (
+              <div className="flex shrink-0 items-center justify-center gap-3 border-t bg-white px-4 py-1.5 text-sm">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage <= 0}
+                  onClick={() => setPage(currentPage - 1)}
+                >
+                  <ChevronLeft />
+                  Prev
+                </Button>
+                <span className="tabular-nums text-muted-foreground">
+                  Page {currentPage + 1} of {pageCount}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage >= pageCount - 1}
+                  onClick={() => setPage(currentPage + 1)}
+                >
+                  Next
+                  <ChevronRight />
+                </Button>
               </div>
             )}
           </div>
