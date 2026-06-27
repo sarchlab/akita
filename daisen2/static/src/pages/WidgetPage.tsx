@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import SimulationInfoWidget from "../components/SimulationInfoWidget";
 import TopologyWidget from "../components/TopologyWidget";
 import CodeBrowserWidget from "../components/CodeBrowserWidget";
+import DatabaseWidget from "../components/DatabaseWidget";
 
 // The overview widgets that have their own enlarged page, keyed by the id used
 // in /view/<id>. (The components widget expands to /dashboard instead.)
@@ -12,6 +13,7 @@ const WIDGETS: Record<string, ComponentType<{ bare?: boolean }>> = {
   siminfo: SimulationInfoWidget,
   topology: TopologyWidget,
   code: CodeBrowserWidget,
+  database: DatabaseWidget,
 };
 
 // WidgetPage renders a single overview widget as a full page (route

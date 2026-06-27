@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/sarchlab/akita/v5/timing"
@@ -150,12 +151,40 @@ type SQLiteTraceReader struct {
 	*sql.DB
 
 	filename string
+
+	// activity tracks in-flight DB operations (index builds, heavy queries) so the
+	// frontend can show what the database is doing. dbInfo caches the (expensive)
+	// schema-and-size overview computed from dbstat.
+	activity *DBActivityTracker
+	dbInfo   *dbInfoCache
+
+	// indexMu serializes on-demand CREATE INDEX so concurrent requests don't
+	// contend on the single SQLite writer (which made the build fail with
+	// "database is locked" and never persist). See ensureIndex.
+	indexMu sync.Mutex
+}
+
+// ensureIndex builds an index exactly once, on demand. It serializes builds (so
+// the 8 concurrent dashboard/component requests don't fight over the single
+// SQLite writer and abandon the build) and uses a background context (so a
+// client navigating away mid-build can't cancel and roll it back). Once the
+// index exists in the file it is a no-op (IF NOT EXISTS), so the cost is paid
+// once per trace, then every later request — including after a restart — is fast.
+func (r *SQLiteTraceReader) ensureIndex(activityLabel, ddl string) {
+	r.indexMu.Lock()
+	defer r.indexMu.Unlock()
+
+	id := r.activity.Begin("index", activityLabel, "covering index")
+	_, _ = r.ExecContext(context.Background(), ddl)
+	r.activity.End(id)
 }
 
 // NewSQLiteTraceReader creates a new SQLiteTraceReader.
 func NewSQLiteTraceReader(filename string) *SQLiteTraceReader {
 	r := &SQLiteTraceReader{
 		filename: filename,
+		activity: NewDBActivityTracker(),
+		dbInfo:   &dbInfoCache{},
 	}
 
 	return r

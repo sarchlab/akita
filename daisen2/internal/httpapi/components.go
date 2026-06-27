@@ -103,8 +103,13 @@ func (r *SQLiteTraceReader) ComponentsByResidency(ctx context.Context) []Compone
 
 	// Best-effort: build the covering index once (a no-op once it exists, thanks
 	// to IF NOT EXISTS). Ignored on a read-only connection — the query then just
-	// runs against the table, slower but correct.
-	_, _ = r.ExecContext(ctx, residencyIndex)
+	// runs against the table, slower but correct. The first build on a large trace
+	// can take minutes, so register it as a DB activity for the frontend.
+	r.ensureIndex("Building index idx_trace_loc_times", residencyIndex)
+
+	qID := r.activity.Begin("query",
+		"Ranking components by residency", "SUM(EndTime-StartTime) GROUP BY Location")
+	defer r.activity.End(qID)
 
 	rows, err := r.QueryContext(ctx, residencyQuery)
 	if err != nil {

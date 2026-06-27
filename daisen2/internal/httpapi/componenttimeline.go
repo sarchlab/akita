@@ -168,8 +168,23 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 		keyExpr = "t.Kind"
 	}
 	be := newBinExpr(numBins, start, end)
+
+	// Covering index over exactly the columns this query reads, so it runs as an
+	// index-only scan over the scope's locations instead of joining and fetching
+	// 76M trace rows. Built single-flight so it persists (see ensureIndex).
+	r.ensureIndex(
+		"Building index idx_trace_loc_time_kind_what",
+		`CREATE INDEX IF NOT EXISTS idx_trace_loc_time_kind_what `+
+			`ON trace(Location, StartTime, EndTime, Kind, What)`,
+	)
+
+	// Resolve the scope's location IDs first (the location table is tiny), then
+	// filter trace by those IDs so the covering index drives the scan.
 	sqlStr := `
-		WITH events AS (
+		WITH scope_locs AS (
+			SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?)
+		),
+		events AS (
 			SELECT
 				CASE WHEN d.delta = 1
 					THEN MAX(0, MIN(` + be.numBins + ` - 1, ` + be.floorOf("t.StartTime") + `))
@@ -178,9 +193,8 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 				` + keyExpr + ` AS k,
 				d.delta AS delta
 			FROM trace t
-			JOIN location loc ON t.Location = loc.ID
 			CROSS JOIN (SELECT 1 AS delta UNION ALL SELECT -1 AS delta) d
-			WHERE (loc.Locale = ? OR (loc.Locale >= ? AND loc.Locale < ?))
+			WHERE t.Location IN (SELECT ID FROM scope_locs)
 				AND t.EndTime > ` + be.startStr + ` AND t.StartTime < ` + be.endStr + `
 		)
 		SELECT bin, k, delta, COUNT(*) AS c
