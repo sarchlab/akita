@@ -817,6 +817,36 @@ function GapShading({
   );
 }
 
+// LoadingCurve is a pulsing placeholder silhouette shown while a chart's
+// occupancy data is still loading (those queries take a while on a large scope).
+// It is a deterministic mock density shape — not real data — so the panel
+// "breathes" instead of sitting blank.
+function LoadingCurve({ width, height }: { width: number; height: number }) {
+  const n = 64;
+  const pts: string[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    // A broad rise–plateau–fall hump with light ripples — a plausible mock shape.
+    const frac = Math.min(
+      1,
+      Math.max(
+        0,
+        0.12 +
+          0.9 *
+            Math.pow(Math.sin(Math.PI * t), 0.45) *
+            (1 + 0.06 * Math.sin(t * 47)),
+      ),
+    );
+    const x = 5 + t * (Math.max(1, width) - 10);
+    const y = Math.max(1, height) - 4 - frac * (Math.max(1, height) - 12);
+    pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+  }
+  const d = `M${pts.join("L")}L${(Math.max(1, width) - 5).toFixed(1)},${height} L5,${height} Z`;
+  return (
+    <path d={d} fill="#cbd5e1" className="animate-pulse" pointerEvents="none" />
+  );
+}
+
 // AggregatedTimeline is the level-of-detail replacement for ComponentTimeline
 // when the visible range holds too many tasks to draw one element each. It draws
 // a stacked-area density chart from the server's per-bin, per-"Kind-What" counts:
@@ -865,6 +895,7 @@ function AggregatedTimeline({
       <svg width={width} height={height} className="block">
         {gridlines}
         <GapShading gaps={gaps} xScale={xScale} height={height} patternId="count-gap-pattern" />
+        <LoadingCurve width={width} height={height} />
         <text x={8} y={15} fontSize="11" fill="#94a3b8" pointerEvents="none">
           Task count · loading…
         </text>
@@ -983,6 +1014,7 @@ function ComponentMilestoneAreas({
 
   const data = info?.data ?? [];
   const kinds = info?.kinds ?? [];
+  const loading = !info || data.length === 0;
   const maxTotal =
     d3.max(data, (point) => kinds.reduce((sum, kind) => sum + (point.values[kind] ?? 0), 0)) ?? 0;
   const yScale = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([Math.max(1, xAxisY - 4), 6]);
@@ -1019,6 +1051,8 @@ function ComponentMilestoneAreas({
         </g>
       ))}
       <line x1={5} x2={width - 5} y1={xAxisY} y2={xAxisY} stroke="#000" pointerEvents="none" />
+
+      {loading && <LoadingCurve width={width} height={xAxisY} />}
 
       {areas.map(({ kind, d }) =>
         d ? (
