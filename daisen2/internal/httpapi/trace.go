@@ -764,22 +764,36 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 	}
 
 	if query.Where != "" {
+		// Resolve the location id first, then probe `trace` by its Location index
+		// (see the Scope branch for why the joined-Locale filter is avoided).
+		// Parameterized, which also drops the value out of the SQL text.
 		sqlStr += `
-			AND loc.Locale = '` + query.Where + `'
+			AND t.Location IN (SELECT ID FROM location WHERE Locale = ?)
 		`
+		args = append(args, query.Where)
 	}
 
 	if query.Scope != "" {
 		// Select the scope component and everything nested under it. Locations
 		// are dotted, so the subtree is the exact name plus the "scope." prefix.
-		// Match the exact location or anything nested under it. A case-sensitive
-		// range ([scope+".", scope+"/")) is used instead of LIKE because SQLite's
-		// LIKE is ASCII case-insensitive while the location tree and the exact `=`
-		// check are case-sensitive — LIKE would pull in a differently-cased sibling
-		// subtree. Parameterized to keep the scope value out of the SQL text.
+		// A case-sensitive range ([scope+".", scope+"/")) is used instead of LIKE
+		// because SQLite's LIKE is ASCII case-insensitive while the location tree
+		// and the exact `=` check are case-sensitive — LIKE would pull in a
+		// differently-cased sibling subtree.
+		//
+		// Filter by the resolved location-id set (a sub-select over the small
+		// location table) rather than joining and filtering on loc.Locale: that
+		// lets SQLite resolve the handful of in-scope location ids first and probe
+		// `trace` by its (Location, StartTime, EndTime) index. The join form let
+		// the planner drive from a bare time-range index instead, scanning every
+		// task after StartTime — turning a 107-row leaf-scope query into a ~25s
+		// near-full scan. The outer JOIN stays only to fetch each task's Locale.
 		lo, hi := scopePrefixBounds(query.Scope)
 		sqlStr += `
-			AND (loc.Locale = ? OR (loc.Locale >= ? AND loc.Locale < ?))
+			AND t.Location IN (
+				SELECT ID FROM location
+				WHERE Locale = ? OR (Locale >= ? AND Locale < ?)
+			)
 		`
 		args = append(args, query.Scope, lo, hi)
 	}

@@ -187,3 +187,70 @@ func TestSQLiteTraceReaderTimeRangePrefersExecInfoVirtualTime(t *testing.T) {
 		t.Fatalf("unexpected time range: %+v", timeRange)
 	}
 }
+
+// TestListTasksScopeAggregatesSubtree verifies a Scope task query returns the
+// scope's own tasks plus everything nested under it (the dotted subtree), excludes
+// a same-prefix sibling like "ROBOT", and honors the time-range overlap filter.
+// This locks in the location-id sub-select form of the Scope/time predicate, which
+// keeps the query probing trace by its Location index instead of driving from a
+// time-range index (the latter scanned every task after StartTime — ~25s on a real
+// trace for what is a handful of in-scope rows).
+func TestListTasksScopeAggregatesSubtree(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
+	reader := NewSQLiteTraceReader(dbPath)
+	reader.Init()
+	defer reader.Close()
+
+	exec := func(q string) {
+		if _, err := reader.Exec(q); err != nil {
+			t.Fatalf("exec %q: %v", q, err)
+		}
+	}
+	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO location (ID, Locale) VALUES
+		(1, 'ROB'), (2, 'ROB.req_in'), (3, 'ROBOT.x')`)
+	exec(`CREATE TABLE trace (
+		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
+		Location INTEGER, StartTime REAL, EndTime REAL)`)
+	exec(`CREATE TABLE milestone (
+		ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
+	exec(`CREATE TABLE tag (ID INTEGER, TaskID INTEGER, Time REAL, What TEXT)`)
+	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+		(1, 0, 'k', 'a', 1, 0, 10),
+		(2, 0, 'k', 'b', 2, 0, 10),
+		(3, 0, 'k', 'c', 3, 0, 10),
+		(4, 0, 'k', 'd', 2, 100, 110)`)
+
+	tasks := reader.ListTasks(context.Background(), TaskQuery{
+		Scope:            "ROB",
+		StartTime:        0,
+		EndTime:          50,
+		EnableTimeRange:  true,
+		EnableMilestones: true,
+	})
+
+	// ROB + ROB.req_in overlapping [0,50): tasks 1 and 2. The sibling "ROBOT.x"
+	// (task 3) is excluded by the dot boundary; task 4 (ROB.req_in but at t=100)
+	// is excluded by the time window.
+	if len(tasks) != 2 {
+		t.Fatalf("scope ROB returned %d tasks, want 2 (ids 1,2)", len(tasks))
+	}
+	got := map[uint64]bool{}
+	for _, tk := range tasks {
+		got[tk.ID] = true
+	}
+	if !got[1] || !got[2] {
+		t.Fatalf("scope ROB task ids = %v, want {1,2}", got)
+	}
+
+	// A leaf scope matches only itself, not the subtree.
+	leaf := reader.ListTasks(context.Background(), TaskQuery{
+		Scope:           "ROB.req_in",
+		StartTime:       0,
+		EndTime:         50,
+		EnableTimeRange: true,
+	})
+	if len(leaf) != 1 || leaf[0].ID != 2 {
+		t.Fatalf("scope ROB.req_in = %+v, want exactly task id 2", leaf)
+	}
+}
