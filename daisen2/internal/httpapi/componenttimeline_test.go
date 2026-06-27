@@ -33,7 +33,7 @@ func TestComponentTimelineScopeAggregatesSubtree(t *testing.T) {
 		(3, 0, 'misc',    'Other',   3, 0, 10)`)
 
 	// scope "ROB" aggregates its two children but NOT the sibling "ROBOT.x".
-	sub := reader.ComponentTimeline(context.Background(), "ROB", 0, 10, 1, false)
+	sub := reader.ComponentTimeline(context.Background(), "ROB", 0, 10, 1, false, 1)
 	if sub.Total != 2 {
 		t.Fatalf("scope ROB Total = %d, want 2 (req_in + req_out, not ROBOT.x)", sub.Total)
 	}
@@ -42,7 +42,7 @@ func TestComponentTimelineScopeAggregatesSubtree(t *testing.T) {
 	}
 
 	// A leaf scope matches only itself.
-	leaf := reader.ComponentTimeline(context.Background(), "ROB.req_in", 0, 10, 1, false)
+	leaf := reader.ComponentTimeline(context.Background(), "ROB.req_in", 0, 10, 1, false, 1)
 	if leaf.Total != 1 {
 		t.Fatalf("scope ROB.req_in Total = %d, want 1", leaf.Total)
 	}
@@ -73,12 +73,12 @@ func TestComponentTimelineGroupByKind(t *testing.T) {
 		(2, 0, 'req_in',  'WriteReq', 1, 0, 10),
 		(3, 0, 'req_out', 'ReadReq',  1, 0, 10)`)
 
-	kindWhat := reader.ComponentTimeline(context.Background(), "L1.bank", 0, 10, 1, false)
+	kindWhat := reader.ComponentTimeline(context.Background(), "L1.bank", 0, 10, 1, false, 1)
 	if len(kindWhat.Keys) != 3 {
 		t.Fatalf("kind-what keys = %v, want 3 distinct", kindWhat.Keys)
 	}
 
-	byKind := reader.ComponentTimeline(context.Background(), "L1.bank", 0, 10, 1, true)
+	byKind := reader.ComponentTimeline(context.Background(), "L1.bank", 0, 10, 1, true, 1)
 	if len(byKind.Keys) != 2 {
 		t.Fatalf("by-kind keys = %v, want 2 (req_in, req_out)", byKind.Keys)
 	}
@@ -119,7 +119,7 @@ func TestComponentTimelineRespectsHalfOpenBins(t *testing.T) {
 		(1, 0, 'req_in', 'ReadReq', 1, 0, 10),
 		(2, 0, 'req_in', 'ReadReq', 1, 0, 20)`)
 
-	resp := reader.ComponentTimeline(context.Background(), "ROB", 0, 20, 2, false)
+	resp := reader.ComponentTimeline(context.Background(), "ROB", 0, 20, 2, false, 1)
 
 	if resp.Total != 2 {
 		t.Fatalf("Total = %d, want 2", resp.Total)
@@ -219,7 +219,7 @@ func TestComponentTimelineScopeIsCaseSensitive(t *testing.T) {
 		(1, 0, 'req_in', 'ReadReq', 1, 0, 10),
 		(2, 0, 'req_in', 'ReadReq', 2, 0, 10)`)
 
-	resp := reader.ComponentTimeline(context.Background(), "TLB", 0, 10, 1, false)
+	resp := reader.ComponentTimeline(context.Background(), "TLB", 0, 10, 1, false, 1)
 	if resp.Total != 1 {
 		t.Fatalf("scope TLB Total = %d, want 1 (case-sensitive: excludes tlb.req_in)", resp.Total)
 	}

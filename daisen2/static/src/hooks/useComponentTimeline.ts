@@ -8,6 +8,9 @@ export interface ComponentTimelineData {
   start_time: number;
   end_time: number;
   num_bins: number;
+  // 1-in-N task stride this view was computed with (1 = exact). While a coarse
+  // preview refines toward exact, this drops toward 1.
+  sample?: number;
   // Total tasks overlapping the range — how many the per-task view would render.
   total: number;
   // Distinct color keys, sorted; matches the column order of every bins row.
@@ -50,29 +53,49 @@ export function useComponentTimeline(
     }
 
     const controller = new AbortController();
-    const params = new URLSearchParams({
-      scope,
-      starttime: String(startTime),
-      endtime: String(endTime),
-      num_bins: String(numBins),
-      group,
-    });
-
     setLoading(true);
     setError(null);
-    fetch(`/api/component_timeline?${params.toString()}`, { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-      })
-      .then((d: ComponentTimelineData) => setData(d))
-      .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+
+    // Progressive refinement: a coarse 1-in-N task sample returns in a few
+    // seconds so the chart appears almost immediately, then we re-fetch with a
+    // finer sample (down to exact). The server scales sampled counts back up, so
+    // each pass is an unbiased estimate that sharpens. We stop blocking the
+    // "ready" signal after the first (coarse) pass; the rest refines in the
+    // background and aborts if the scope/range changes.
+    const schedule = [256, 8, 1];
+    let firstDone = false;
+
+    void (async () => {
+      for (const sample of schedule) {
+        const params = new URLSearchParams({
+          scope,
+          starttime: String(startTime),
+          endtime: String(endTime),
+          num_bins: String(numBins),
+          group,
+        });
+        if (sample > 1) params.set("sample", String(sample));
+        try {
+          const response = await fetch(
+            `/api/component_timeline?${params.toString()}`,
+            { signal: controller.signal },
+          );
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const d: ComponentTimelineData = await response.json();
+          if (controller.signal.aborted) return;
+          setData(d);
+          if (!firstDone) {
+            firstDone = true;
+            setLoading(false);
+          }
+        } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          setError(err instanceof Error ? err.message : String(err));
+          setLoading(false);
+          return;
+        }
+      }
+    })();
 
     return () => controller.abort();
   }, [scope, startTime, endTime, numBins, group]);

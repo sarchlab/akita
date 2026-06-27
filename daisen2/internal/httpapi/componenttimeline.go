@@ -18,6 +18,11 @@ type ComponentTimelineResponse struct {
 	StartTime float64 `json:"start_time"`
 	EndTime   float64 `json:"end_time"`
 	NumBins   int     `json:"num_bins"`
+	// Sample is the 1-in-N task stride used to compute this response. 1 is exact;
+	// a larger value is an approximation (each sampled task's count scaled by
+	// Sample) so a coarse preview returns fast and the client can refine by
+	// re-requesting with a smaller Sample.
+	Sample int `json:"sample"`
 	// Total is the number of tasks overlapping the range — i.e. how many the
 	// per-task view would have to render. The client uses it to decide between
 	// this aggregated view and the raw per-task view.
@@ -143,11 +148,16 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 	start, end float64,
 	numBins int,
 	groupByKind bool,
+	sample int,
 ) ComponentTimelineResponse {
+	if sample < 1 {
+		sample = 1
+	}
 	resp := ComponentTimelineResponse{
 		StartTime: start,
 		EndTime:   end,
 		NumBins:   numBins,
+		Sample:    sample,
 		Keys:      []string{},
 		Bins:      [][]int{},
 	}
@@ -178,6 +188,14 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 			`ON trace(Location, StartTime, EndTime, Kind, What)`,
 	)
 
+	// A 1-in-N task sample (on rowid, which the index leaf carries) makes a coarse
+	// preview return fast; each sampled task stands in for `sample` tasks, so its
+	// occupancy contribution is scaled back up by the same factor.
+	sampleFilter := ""
+	if sample > 1 {
+		sampleFilter = " AND (t.rowid % " + strconv.Itoa(sample) + ") = 0"
+	}
+
 	// Resolve the scope's location IDs first (the location table is tiny), then
 	// filter trace by those IDs so the covering index drives the scan.
 	sqlStr := `
@@ -195,9 +213,9 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 			FROM trace t
 			CROSS JOIN (SELECT 1 AS delta UNION ALL SELECT -1 AS delta) d
 			WHERE t.Location IN (SELECT ID FROM scope_locs)
-				AND t.EndTime > ` + be.startStr + ` AND t.StartTime < ` + be.endStr + `
+				AND t.EndTime > ` + be.startStr + ` AND t.StartTime < ` + be.endStr + sampleFilter + `
 		)
-		SELECT bin, k, delta, COUNT(*) AS c
+		SELECT bin, k, delta, COUNT(*) * ` + strconv.Itoa(sample) + ` AS c
 		FROM events
 		GROUP BY bin, k, delta`
 
@@ -319,5 +337,15 @@ func (s *Server) httpComponentTimeline(w http.ResponseWriter, r *http.Request) {
 	// finer kind-what grouping.
 	groupByKind := r.FormValue("group") == "kind"
 
-	writeJSON(w, s.traceReader.ComponentTimeline(r.Context(), scope, start, end, numBins, groupByKind))
+	// sample is a 1-in-N task stride for a fast, approximate preview (default 1 =
+	// exact). The client requests a coarse sample first and refines downward.
+	sample := 1
+	if v := r.FormValue("sample"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 1 {
+			sample = n
+		}
+	}
+
+	writeJSON(w, s.traceReader.ComponentTimeline(
+		r.Context(), scope, start, end, numBins, groupByKind, sample))
 }
