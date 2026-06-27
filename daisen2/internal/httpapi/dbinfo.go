@@ -135,6 +135,41 @@ type dbInfoCache struct {
 	mu        sync.Mutex
 	info      *DBInfo
 	computing bool
+	// dirty is set when invalidate() lands while a scan is in flight: that scan's
+	// result predates the change, so it is discarded rather than cached.
+	dirty bool
+}
+
+// invalidate drops the cached overview so the next /api/db_info recomputes it. A
+// scan already in flight is marked dirty so its (now-stale) result is discarded
+// when it finishes instead of being cached.
+func (c *dbInfoCache) invalidate() {
+	if c == nil {
+		return
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.info = nil
+	if c.computing {
+		c.dirty = true
+	}
+}
+
+// dbFileBytes is the database's live on-disk footprint: the main SQLite file
+// plus its WAL and shared-memory sidecars. In WAL mode a fresh, multi-GB index
+// can sit in <db>-wal until a checkpoint folds it into the main file, so stating
+// only the main file would report a size far smaller than the table/index bytes.
+func dbFileBytes(filename string) int64 {
+	var total int64
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		if st, err := os.Stat(filename + suffix); err == nil {
+			total += st.Size()
+		}
+	}
+
+	return total
 }
 
 // CollectDBInfo computes the schema-and-size overview directly (row counts via
@@ -148,9 +183,7 @@ func (r *SQLiteTraceReader) CollectDBInfo(ctx context.Context) DBInfo {
 	}
 
 	info.File = r.filename
-	if st, err := os.Stat(r.filename); err == nil {
-		info.FileBytes = st.Size()
-	}
+	info.FileBytes = dbFileBytes(r.filename)
 
 	// table name -> its index names, from the schema.
 	tableIndexes := r.tableIndexNames(ctx)
@@ -280,7 +313,14 @@ func (r *SQLiteTraceReader) dbInfoGet(ctx context.Context, refresh bool) (*DBInf
 		r.activity.End(id)
 
 		c.mu.Lock()
-		c.info = &info
+		if c.dirty {
+			// An index build landed mid-scan; this result may already be stale, so
+			// drop it and let the next poll recompute rather than caching it.
+			c.info = nil
+			c.dirty = false
+		} else {
+			c.info = &info
+		}
 		c.computing = false
 		c.mu.Unlock()
 	}()
