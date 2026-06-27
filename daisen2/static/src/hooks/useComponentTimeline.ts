@@ -58,13 +58,13 @@ export function useComponentTimeline(
     setLoading(true);
     setError(null);
 
-    // Progressive refinement: a coarse 1-in-N task sample returns in a few
-    // seconds so the chart appears almost immediately, then we re-fetch with a
-    // finer sample (down to exact). The server scales sampled counts back up, so
-    // each pass is an unbiased estimate that sharpens. We stop blocking the
-    // "ready" signal after the first (coarse) pass; the rest refines in the
-    // background and aborts if the scope/range changes.
-    const schedule = [256, 8, 1];
+    // Progressive sample: a coarse 1-in-N task sample paints fast, then one
+    // denser pass sharpens the counts. No exact (sample 1) pass — over a 76M-task
+    // scope it costs minutes for accuracy a density chart doesn't need; the scaled
+    // estimate is plenty. numBins is already pixel-appropriate, so it stays fixed.
+    // We stop blocking the "ready" signal after the first pass; the refinement
+    // runs in the background and aborts if the scope/range changes.
+    const schedule = [128, 8];
     let firstDone = false;
 
     void (async () => {

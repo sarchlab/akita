@@ -1638,10 +1638,11 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
       return next;
     });
 
-  // Quantize the bin count so a pixel-by-pixel resize does not refetch. Both the
-  // task-count and blocking-reason charts bin over the same range with the same
-  // count, so their stacked areas line up bin-for-bin.
-  const numBins = Math.max(100, Math.min(1200, Math.round((size.width - SIDE_COLUMN_WIDTH) / 100) * 100));
+  // Bin count, ~1 bin per 4px (a density chart gains nothing from sub-pixel bins,
+  // and fewer bins make the heavy occupancy queries much cheaper), quantized to
+  // 50 so a pixel-by-pixel resize does not refetch. Both the task-count and
+  // blocking-reason charts use this count so their stacked areas line up.
+  const numBins = Math.max(50, Math.min(300, Math.round((size.width - SIDE_COLUMN_WIDTH) / 4 / 50) * 50));
   const { info: stackedInfo, loading: infoLoading } = useStackedCompInfo(componentName, "ConcurrentTaskMilestones", dataRange.startTime, dataRange.endTime, numBins);
 
   // How tasks are grouped for coloring and for the task-count bands. The same

@@ -114,12 +114,11 @@ export function useStackedCompInfo(
     setLoading(true);
     setError(null);
 
-    // Progressive refinement (mirrors useComponentTimeline): the blocking-reason
-    // chart joins the milestone table over the scope's tasks, slow for a
-    // top-level scope. A coarse 1-in-N task sample returns fast and sharpens
-    // toward exact; the server scales sampled counts back up so each pass is an
-    // unbiased estimate. Refinement runs in the background and aborts on change.
-    const schedule = [256, 8, 1];
+    // Progressive sample (mirrors useComponentTimeline): a coarse 1-in-N pass
+    // paints fast, then one denser pass sharpens it. No exact (sample 1) pass —
+    // the blocking-reason chart joins the 68M-row milestone table over the
+    // scope's tasks, so exact costs minutes for accuracy the chart doesn't need.
+    const schedule = [128, 8];
     let firstDone = false;
 
     void (async () => {
