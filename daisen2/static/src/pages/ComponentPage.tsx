@@ -1773,7 +1773,12 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   const aggMatchesRange = !!agg && agg.start_time === dataRange.startTime && agg.end_time === dataRange.endTime;
   const stackedMatchesRange =
     !!stackedInfo && stackedInfo.start_time === dataRange.startTime && stackedInfo.end_time === dataRange.endTime;
-  const rawEnabled = aggMatchesRange && (agg?.total ?? Infinity) <= RAW_TASK_THRESHOLD;
+  // Only trust an EXACT total (sample === 1) for the raw/per-task decision. A
+  // sampled estimate can undercount a dense scope and prematurely green-light a
+  // full /api/trace fetch; the timeline hook runs an exact pass for any scope this
+  // small, so a true sub-threshold scope resolves to sample === 1 here.
+  const aggExact = aggMatchesRange && agg?.sample === 1;
+  const rawEnabled = aggExact && (agg?.total ?? Infinity) <= RAW_TASK_THRESHOLD;
   const query = useMemo(
     () => (componentName && rawEnabled ? { scope: componentName, startTime: dataRange.startTime, endTime: dataRange.endTime } : {}),
     [dataRange.endTime, dataRange.startTime, componentName, rawEnabled],
@@ -1833,8 +1838,8 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // to fill the gap) and then snapping back. We re-decide once the new summary lands.
   const [showGantt, setShowGantt] = useState(false);
   useEffect(() => {
-    if (aggMatchesRange) setShowGantt((agg?.total ?? Infinity) <= RAW_TASK_THRESHOLD);
-  }, [aggMatchesRange, agg?.total]);
+    if (aggMatchesRange) setShowGantt(aggExact && (agg?.total ?? Infinity) <= RAW_TASK_THRESHOLD);
+  }, [aggMatchesRange, aggExact, agg?.total]);
 
   // One global palette over every key that needs a color in this view — task
   // "kind-what" keys and blocking-reason kinds — so task bars and reasons are all

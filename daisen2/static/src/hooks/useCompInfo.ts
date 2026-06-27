@@ -115,42 +115,57 @@ export function useStackedCompInfo(
     setError(null);
 
     // Progressive sample (mirrors useComponentTimeline): a coarse 1-in-N pass
-    // paints fast, then one denser pass sharpens it. No exact (sample 1) pass —
-    // the blocking-reason chart joins the 68M-row milestone table over the
-    // scope's tasks, so exact costs minutes for accuracy the chart doesn't need.
+    // paints fast, then one denser pass sharpens it. The blocking-reason chart
+    // joins the 68M-row milestone table over the scope's tasks, so an exact pass
+    // costs minutes on a dense scope — but the deterministic rowid stride can miss
+    // every task in a sparse scope, so we fall back to exact only when the sampled
+    // passes found nothing (see below).
     const schedule = [128, 8];
     let firstDone = false;
+    let lastKinds = 0;
+
+    const runPass = async (sample: number): Promise<boolean> => {
+      const params = new URLSearchParams({
+        // The stacked "ConcurrentTaskMilestones" metric is scope-aware on the
+        // backend, so the scoped detail view aggregates a whole subtree.
+        scope: compName,
+        info_type: infoType,
+        start_time: String(startTime),
+        end_time: String(endTime),
+        num_dots: String(numDots),
+      });
+      if (sample > 1) params.set("sample", String(sample));
+      const response = await fetch(`/api/compinfo?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const json: StackedComponentInfo = await response.json();
+      if (controller.signal.aborted) return false;
+      setInfo(json);
+      lastKinds = json.kinds?.length ?? 0;
+      if (!firstDone) {
+        firstDone = true;
+        setLoading(false);
+      }
+
+      return true;
+    };
 
     void (async () => {
-      for (const sample of schedule) {
-        const params = new URLSearchParams({
-          // The stacked "ConcurrentTaskMilestones" metric is scope-aware on the
-          // backend, so the scoped detail view aggregates a whole subtree.
-          scope: compName,
-          info_type: infoType,
-          start_time: String(startTime),
-          end_time: String(endTime),
-          num_dots: String(numDots),
-        });
-        if (sample > 1) params.set("sample", String(sample));
-        try {
-          const response = await fetch(`/api/compinfo?${params.toString()}`, {
-            signal: controller.signal,
-          });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const json: StackedComponentInfo = await response.json();
-          if (controller.signal.aborted) return;
-          setInfo(json);
-          if (!firstDone) {
-            firstDone = true;
-            setLoading(false);
-          }
-        } catch (err) {
-          if (err instanceof DOMException && err.name === "AbortError") return;
-          setError(err instanceof Error ? err.message : String(err));
-          setLoading(false);
-          return;
+      try {
+        for (const sample of schedule) {
+          if (!(await runPass(sample))) return;
         }
+        // Sparse or modulo-skewed scope: the sampled stride matched no tasks, so
+        // the bands are blank (or a lone task is overstated ×sample). An exact pass
+        // over so few tasks is cheap and recovers the real breakdown.
+        if (lastKinds === 0) {
+          await runPass(1);
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setError(err instanceof Error ? err.message : String(err));
+        setLoading(false);
       }
     })();
 

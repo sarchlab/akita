@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useRenderReady } from "./useRenderReady";
 
+// Below this estimated task count, finish with an exact (sample=1) pass: the
+// scope is both cheap to count exactly and near the thresholds the page uses to
+// switch to the per-task view, so the scaled estimate must not be trusted. Above
+// it, the scope is far too dense for the per-task view and an exact pass would
+// cost minutes. Comfortably above ComponentPage's RAW_TASK_THRESHOLD (5000) to
+// absorb sampling error near that boundary.
+const EXACT_BELOW = 50_000;
+
 // A downsampled, level-of-detail view of a component's tasks: tasks binned by
 // start time and grouped by "Kind-What" color key. Lets the page draw a density
 // chart for busy components without fetching/rendering one element per task.
@@ -39,14 +47,12 @@ export function useComponentTimeline(
     // must not green-light a huge raw-task fetch for a dense new scope — and toggling
     // the color mode re-buckets the bands, so keeping the old grouping would leave the
     // count bands and legend out of sync with the task bars (or stuck on the old mode
-    // if the new fetch is slow or fails). A range-only change keeps the previous data
-    // for a smooth, flicker-free zoom.
-    // Only blank when the component (scope) itself changes. A range / bin-count /
-    // grouping change keeps the previous chart on screen while the new one loads,
-    // so the view never flickers to blank between progressive passes or when the
-    // measured width re-quantizes numBins after first paint.
-    if (lastKeyRef.current !== scope) {
-      lastKeyRef.current = scope;
+    // if the new fetch is slow or fails). A range / bin-count change keeps the previous
+    // chart on screen while the new one loads, so the view never flickers to blank
+    // between progressive passes or when the measured width re-quantizes numBins.
+    const cacheKey = `${scope}\n${group}`;
+    if (lastKeyRef.current !== cacheKey) {
+      lastKeyRef.current = cacheKey;
       setData(null);
     }
 
@@ -59,43 +65,58 @@ export function useComponentTimeline(
     setError(null);
 
     // Progressive sample: a coarse 1-in-N task sample paints fast, then one
-    // denser pass sharpens the counts. No exact (sample 1) pass — over a 76M-task
-    // scope it costs minutes for accuracy a density chart doesn't need; the scaled
-    // estimate is plenty. numBins is already pixel-appropriate, so it stays fixed.
-    // We stop blocking the "ready" signal after the first pass; the refinement
-    // runs in the background and aborts if the scope/range changes.
+    // denser pass sharpens the counts. numBins is already pixel-appropriate, so it
+    // stays fixed. We stop blocking the "ready" signal after the first pass; the
+    // refinement runs in the background and aborts if the scope/range changes.
     const schedule = [128, 8];
     let firstDone = false;
+    let lastTotal = Infinity;
+
+    const runPass = async (sample: number): Promise<boolean> => {
+      const params = new URLSearchParams({
+        scope,
+        starttime: String(startTime),
+        endtime: String(endTime),
+        num_bins: String(numBins),
+        group,
+      });
+      if (sample > 1) params.set("sample", String(sample));
+      const response = await fetch(
+        `/api/component_timeline?${params.toString()}`,
+        { signal: controller.signal },
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const d: ComponentTimelineData = await response.json();
+      if (controller.signal.aborted) return false;
+      setData(d);
+      lastTotal = d.total;
+      if (!firstDone) {
+        firstDone = true;
+        setLoading(false);
+      }
+
+      return true;
+    };
 
     void (async () => {
-      for (const sample of schedule) {
-        const params = new URLSearchParams({
-          scope,
-          starttime: String(startTime),
-          endtime: String(endTime),
-          num_bins: String(numBins),
-          group,
-        });
-        if (sample > 1) params.set("sample", String(sample));
-        try {
-          const response = await fetch(
-            `/api/component_timeline?${params.toString()}`,
-            { signal: controller.signal },
-          );
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const d: ComponentTimelineData = await response.json();
-          if (controller.signal.aborted) return;
-          setData(d);
-          if (!firstDone) {
-            firstDone = true;
-            setLoading(false);
-          }
-        } catch (err) {
-          if (err instanceof DOMException && err.name === "AbortError") return;
-          setError(err instanceof Error ? err.message : String(err));
-          setLoading(false);
-          return;
+      try {
+        for (const sample of schedule) {
+          if (!(await runPass(sample))) return;
         }
+        // The sampled passes use a deterministic rowid stride, so a sparse or
+        // modulo-skewed scope can return zero rows (chart stuck at 0), and any
+        // small scope's scaled estimate is too coarse exactly where the page
+        // switches to the per-task view (RAW_TASK_THRESHOLD). At this size an exact
+        // pass is cheap, so finish with sample=1. Above EXACT_BELOW the scope is far
+        // too dense for the per-task view and an exact pass would cost minutes, so
+        // we keep the scaled estimate.
+        if (lastTotal < EXACT_BELOW) {
+          await runPass(1);
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setError(err instanceof Error ? err.message : String(err));
+        setLoading(false);
       }
     })();
 

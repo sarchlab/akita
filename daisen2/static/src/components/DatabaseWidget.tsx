@@ -163,6 +163,12 @@ export default function DatabaseWidget({ expandHref, bare }: DatabaseWidgetProps
         <div className="text-sm text-muted-foreground">Loading…</div>
       ) : error && !data ? (
         <div className="text-sm text-destructive">{error}</div>
+      ) : computing && !data ? (
+        // Cold cache: /api/db_info returns {computing:true, info:null} while the
+        // background dbstat/COUNT scan runs. Show that it is measuring rather than
+        // "No tables found.", which on a large trace would otherwise persist for
+        // the whole scan.
+        <div className="text-sm text-muted-foreground">Measuring database…</div>
       ) : !data || data.tables.length === 0 ? (
         <div className="text-sm text-muted-foreground">No tables found.</div>
       ) : (
