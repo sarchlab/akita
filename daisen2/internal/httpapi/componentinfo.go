@@ -256,7 +256,7 @@ func (s *Server) calculateKindOccupancy(
 	// The (Location, Kind, StartTime, EndTime) covering index answers the scoped,
 	// kind-filtered interval scan without touching the trace table.
 	s.traceReader.ensureIndex(
-		"Building index idx_trace_loc_kind_times", metricCoveringIndex)
+		ctx, "Building index idx_trace_loc_kind_times", metricCoveringIndex)
 
 	tasks := s.traceReader.listTaskIntervals(ctx, compName, kind, whatLikes, startTime, endTime)
 	binDuration := totalDuration / float64(numDots)
@@ -393,7 +393,7 @@ func (s *Server) fillBinnedEventRate(
 	// Best-effort: ensure the covering index (a no-op once it exists; ignored on a
 	// read-only connection — the query then just runs slower against the table).
 	s.traceReader.ensureIndex(
-		"Building index idx_trace_loc_kind_times", metricCoveringIndex)
+		ctx, "Building index idx_trace_loc_kind_times", metricCoveringIndex)
 	// Scope semantics: match the named location OR anything nested under it, so a
 	// component name (e.g. "AT") aggregates its whole subtree while a leaf row
 	// matches only itself.
@@ -442,7 +442,7 @@ func (s *Server) fillBinnedAverageLatency(
 	startTime, endTime, binDuration float64,
 ) {
 	s.traceReader.ensureIndex(
-		"Building index idx_trace_loc_kind_times", metricCoveringIndex)
+		ctx, "Building index idx_trace_loc_kind_times", metricCoveringIndex)
 	// Scope semantics: aggregate the named location's whole subtree (a leaf still
 	// matches only itself).
 	lo, hi := scopePrefixBounds(compName)

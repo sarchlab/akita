@@ -166,16 +166,18 @@ type SQLiteTraceReader struct {
 
 // ensureIndex builds an index exactly once, on demand. It serializes builds (so
 // the 8 concurrent dashboard/component requests don't fight over the single
-// SQLite writer and abandon the build) and uses a background context (so a
-// client navigating away mid-build can't cancel and roll it back). Once the
-// index exists in the file it is a no-op (IF NOT EXISTS), so the cost is paid
-// once per trace, then every later request — including after a restart — is fast.
-func (r *SQLiteTraceReader) ensureIndex(activityLabel, ddl string) {
+// SQLite writer and abandon the build) and detaches from the request's
+// cancellation via context.WithoutCancel (so a client navigating away mid-build
+// can't cancel and roll it back, while still inheriting the request context's
+// values). Once the index exists in the file it is a no-op (IF NOT EXISTS), so
+// the cost is paid once per trace, then every later request — including after a
+// restart — is fast.
+func (r *SQLiteTraceReader) ensureIndex(ctx context.Context, activityLabel, ddl string) {
 	r.indexMu.Lock()
 	defer r.indexMu.Unlock()
 
 	id := r.activity.Begin("index", activityLabel, "covering index")
-	_, _ = r.ExecContext(context.Background(), ddl)
+	_, _ = r.ExecContext(context.WithoutCancel(ctx), ddl)
 	r.activity.End(id)
 }
 

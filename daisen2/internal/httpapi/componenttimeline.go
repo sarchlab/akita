@@ -142,7 +142,7 @@ func accumulateBins(rows *sql.Rows, numBins int) (keys []string, bins [][]int, t
 	return keys, bins, total
 }
 
-func (r *SQLiteTraceReader) ComponentTimeline(
+func (r *SQLiteTraceReader) ComponentTimeline( //nolint:funlen // one cohesive occupancy-binning SQL pipeline
 	ctx context.Context,
 	scope string,
 	start, end float64,
@@ -183,6 +183,7 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 	// index-only scan over the scope's locations instead of joining and fetching
 	// 76M trace rows. Built single-flight so it persists (see ensureIndex).
 	r.ensureIndex(
+		ctx,
 		"Building index idx_trace_loc_time_kind_what",
 		`CREATE INDEX IF NOT EXISTS idx_trace_loc_time_kind_what `+
 			`ON trace(Location, StartTime, EndTime, Kind, What)`,
@@ -236,7 +237,7 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 // milestone marks the release of a blocking condition, so the interval ending at
 // it (from the previous milestone, or the task's start) is time spent blocked on
 // that milestone's kind. Computed entirely in SQL, with no per-task materialization.
-func (r *SQLiteTraceReader) BlockingReasonOccupancy(
+func (r *SQLiteTraceReader) BlockingReasonOccupancy( //nolint:funlen // one cohesive occupancy-binning SQL pipeline
 	ctx context.Context,
 	scope string,
 	start, end float64,
@@ -262,6 +263,7 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy(
 	// Covering index that also carries ID, so the trace side of the trace×milestone
 	// join is index-only (no per-task table lookup just to read t.ID for the join).
 	r.ensureIndex(
+		ctx,
 		"Building index idx_trace_loc_time_id",
 		`CREATE INDEX IF NOT EXISTS idx_trace_loc_time_id `+
 			`ON trace(Location, StartTime, EndTime, ID)`,

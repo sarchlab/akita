@@ -259,7 +259,7 @@ func (r *SQLiteTraceReader) objectSizes(ctx context.Context) (map[string]int64, 
 // get returns the cached overview if present. When absent, it starts a
 // background computation (tracked as a DB activity) and reports computing=true so
 // the caller can return immediately. refresh forces a recompute.
-func (r *SQLiteTraceReader) dbInfoGet(refresh bool) (*DBInfo, bool) {
+func (r *SQLiteTraceReader) dbInfoGet(ctx context.Context, refresh bool) (*DBInfo, bool) {
 	c := r.dbInfo
 
 	c.mu.Lock()
@@ -276,7 +276,7 @@ func (r *SQLiteTraceReader) dbInfoGet(refresh bool) (*DBInfo, bool) {
 	go func() {
 		id := r.activity.Begin("info",
 			"Measuring table & index sizes", "scanning dbstat")
-		info := r.CollectDBInfo(context.Background())
+		info := r.CollectDBInfo(context.WithoutCancel(ctx))
 		r.activity.End(id)
 
 		c.mu.Lock()
@@ -300,7 +300,7 @@ func (s *Server) httpDBInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	info, computing := s.traceReader.dbInfoGet(r.URL.Query().Get("refresh") == "1")
+	info, computing := s.traceReader.dbInfoGet(r.Context(), r.URL.Query().Get("refresh") == "1")
 
 	writeJSON(w, struct {
 		Computing bool    `json:"computing"`
