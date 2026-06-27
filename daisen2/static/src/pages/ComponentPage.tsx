@@ -817,6 +817,94 @@ function GapShading({
   );
 }
 
+// LoadingCurve is a placeholder silhouette shown while a chart's occupancy data
+// is still loading (those queries take a while on a large scope). It is a
+// deterministic mock density shape — not real data — drawn in muted gray with a
+// bright highlight stripe that sweeps left→right (skeleton-shimmer style) so the
+// panel clearly reads as "loading" rather than sitting blank. `id` must be
+// unique per instance on the page (the clip path / gradient are referenced by id).
+function LoadingCurve({
+  width,
+  height,
+  id,
+}: {
+  width: number;
+  height: number;
+  id: string;
+}) {
+  const w = Math.max(1, width);
+  const h = Math.max(1, height);
+  const n = 96;
+  // A per-instance phase derived from the id, so the two charts' mock curves
+  // look different rather than identical twins. Deterministic (no Math.random)
+  // so the shape stays stable across re-renders instead of reshuffling.
+  let seed = 0;
+  for (let i = 0; i < id.length; i++) seed += id.charCodeAt(i) * (i + 1);
+  const ph = ((seed % 100) / 100) * Math.PI * 2;
+  const pts: string[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    // An irregular, lopsided density profile: a few non-harmonic sine components
+    // (so it never reads as periodic or mirror-symmetric) under a soft envelope
+    // that lifts it off the baseline and brings it back down at both ends.
+    const bumps =
+      0.5 +
+      0.22 * Math.sin(t * 6.0 + 0.6 + ph) +
+      0.13 * Math.sin(t * 11.3 + 2.1 + ph * 1.7) +
+      0.08 * Math.sin(t * 19.7 + 4.0 + ph * 0.6) +
+      0.05 * Math.sin(t * 31.1 + 1.2 + ph * 2.3);
+    const envelope = Math.pow(Math.sin(Math.PI * t), 0.35);
+    const frac = Math.min(
+      1,
+      Math.max(0, 0.06 + 0.92 * Math.max(0, bumps) * envelope),
+    );
+    const x = 5 + t * (w - 10);
+    const y = h - 4 - frac * (h - 12);
+    pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+  }
+  const d = `M${pts.join("L")}L${(w - 5).toFixed(1)},${h} L5,${h} Z`;
+  const clipId = `lc-clip-${id}`;
+  const gradId = `lc-grad-${id}`;
+  return (
+    <g pointerEvents="none">
+      <defs>
+        <clipPath id={clipId}>
+          <path d={d} />
+        </clipPath>
+        {/* A wide, soft, low-contrast highlight band — translating the rect that
+            carries it glides the band across the silhouette left→right, like the
+            skeleton shimmer shown while images load on the web. The base gray
+            stays steady; only this lighter band moves. */}
+        <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#fff" stopOpacity="0" />
+          <stop offset="25%" stopColor="#fff" stopOpacity="0" />
+          <stop offset="50%" stopColor="#fff" stopOpacity="0.55" />
+          <stop offset="75%" stopColor="#fff" stopOpacity="0" />
+          <stop offset="100%" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={d} fill="#cbd5e1" />
+      <g clipPath={`url(#${clipId})`}>
+        {/* The band enters just off the left edge and exits just off the right,
+            so the loop restart lands off-screen and the sweep reads as one
+            continuous, gently easing motion. */}
+        <rect x={0} y={0} width={w} height={h} fill={`url(#${gradId})`}>
+          <animate
+            attributeName="x"
+            from={-0.85 * w}
+            to={0.85 * w}
+            dur="1.8s"
+            calcMode="spline"
+            keyTimes="0;1"
+            keySplines="0.4 0 0.6 1"
+            repeatCount="indefinite"
+          />
+        </rect>
+      </g>
+    </g>
+  );
+}
+
 // AggregatedTimeline is the level-of-detail replacement for ComponentTimeline
 // when the visible range holds too many tasks to draw one element each. It draws
 // a stacked-area density chart from the server's per-bin, per-"Kind-What" counts:
@@ -865,6 +953,7 @@ function AggregatedTimeline({
       <svg width={width} height={height} className="block">
         {gridlines}
         <GapShading gaps={gaps} xScale={xScale} height={height} patternId="count-gap-pattern" />
+        <LoadingCurve width={width} height={height} id="count" />
         <text x={8} y={15} fontSize="11" fill="#94a3b8" pointerEvents="none">
           Task count · loading…
         </text>
@@ -983,6 +1072,7 @@ function ComponentMilestoneAreas({
 
   const data = info?.data ?? [];
   const kinds = info?.kinds ?? [];
+  const loading = !info || data.length === 0;
   const maxTotal =
     d3.max(data, (point) => kinds.reduce((sum, kind) => sum + (point.values[kind] ?? 0), 0)) ?? 0;
   const yScale = d3.scaleLinear().domain([0, Math.max(1, maxTotal)]).range([Math.max(1, xAxisY - 4), 6]);
@@ -1019,6 +1109,8 @@ function ComponentMilestoneAreas({
         </g>
       ))}
       <line x1={5} x2={width - 5} y1={xAxisY} y2={xAxisY} stroke="#000" pointerEvents="none" />
+
+      {loading && <LoadingCurve width={width} height={xAxisY} id="reason" />}
 
       {areas.map(({ kind, d }) =>
         d ? (
@@ -1624,7 +1716,22 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     // back to the URL's stale/absent range on navigation.
     params.set("starttime", String(viewRange.startTime));
     params.set("endtime", String(viewRange.endTime));
-    params.delete("taskid");
+    // Keep the current task selection when the destination scope still contains
+    // it, so collapsing up to a parent location (or descending into the branch
+    // that holds the task) doesn't lose the panel's selected task. The scope
+    // aggregates a whole subtree, so the task is in view when the target is an
+    // ancestor-or-equal of the current location (every breadcrumb "collapse up"),
+    // or when the selected task's own location is at/under the target (drill-down
+    // into its branch). Otherwise — a sibling branch that excludes the task — we
+    // drop it so the panel never points at a task outside the view.
+    const targetHoldsCurrent = componentName === path || componentName.startsWith(path + ".");
+    const taskLoc = selectedLocation;
+    const targetHoldsTask = !!taskLoc && (taskLoc === path || taskLoc.startsWith(path + "."));
+    if (selectedTaskId && (targetHoldsCurrent || targetHoldsTask)) {
+      params.set("taskid", selectedTaskId);
+    } else {
+      params.delete("taskid");
+    }
     setSearchParams(params);
   };
 
@@ -1638,10 +1745,11 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
       return next;
     });
 
-  // Quantize the bin count so a pixel-by-pixel resize does not refetch. Both the
-  // task-count and blocking-reason charts bin over the same range with the same
-  // count, so their stacked areas line up bin-for-bin.
-  const numBins = Math.max(100, Math.min(1200, Math.round((size.width - SIDE_COLUMN_WIDTH) / 100) * 100));
+  // Bin count, ~1 bin per 4px (a density chart gains nothing from sub-pixel bins,
+  // and fewer bins make the heavy occupancy queries much cheaper), quantized to
+  // 50 so a pixel-by-pixel resize does not refetch. Both the task-count and
+  // blocking-reason charts use this count so their stacked areas line up.
+  const numBins = Math.max(50, Math.min(300, Math.round((size.width - SIDE_COLUMN_WIDTH) / 4 / 50) * 50));
   const { info: stackedInfo, loading: infoLoading } = useStackedCompInfo(componentName, "ConcurrentTaskMilestones", dataRange.startTime, dataRange.endTime, numBins);
 
   // How tasks are grouped for coloring and for the task-count bands. The same
@@ -1665,7 +1773,12 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   const aggMatchesRange = !!agg && agg.start_time === dataRange.startTime && agg.end_time === dataRange.endTime;
   const stackedMatchesRange =
     !!stackedInfo && stackedInfo.start_time === dataRange.startTime && stackedInfo.end_time === dataRange.endTime;
-  const rawEnabled = aggMatchesRange && (agg?.total ?? Infinity) <= RAW_TASK_THRESHOLD;
+  // Only trust an EXACT total (sample === 1) for the raw/per-task decision. A
+  // sampled estimate can undercount a dense scope and prematurely green-light a
+  // full /api/trace fetch; the timeline hook runs an exact pass for any scope this
+  // small, so a true sub-threshold scope resolves to sample === 1 here.
+  const aggExact = aggMatchesRange && agg?.sample === 1;
+  const rawEnabled = aggExact && (agg?.total ?? Infinity) <= RAW_TASK_THRESHOLD;
   const query = useMemo(
     () => (componentName && rawEnabled ? { scope: componentName, startTime: dataRange.startTime, endTime: dataRange.endTime } : {}),
     [dataRange.endTime, dataRange.startTime, componentName, rawEnabled],
@@ -1725,8 +1838,8 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // to fill the gap) and then snapping back. We re-decide once the new summary lands.
   const [showGantt, setShowGantt] = useState(false);
   useEffect(() => {
-    if (aggMatchesRange) setShowGantt((agg?.total ?? Infinity) <= RAW_TASK_THRESHOLD);
-  }, [aggMatchesRange, agg?.total]);
+    if (aggMatchesRange) setShowGantt(aggExact && (agg?.total ?? Infinity) <= RAW_TASK_THRESHOLD);
+  }, [aggMatchesRange, aggExact, agg?.total]);
 
   // One global palette over every key that needs a color in this view — task
   // "kind-what" keys and blocking-reason kinds — so task bars and reasons are all

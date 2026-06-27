@@ -127,8 +127,16 @@ func (s *Server) httpConcurrentTaskMilestones(
 	if scope == "" {
 		scope = compName
 	}
+	// sample is a 1-in-N task stride for a fast, approximate preview (default 1 =
+	// exact), so the client can show a coarse blocking-reason chart immediately.
+	sample := 1
+	if v := r.FormValue("sample"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 1 {
+			sample = n
+		}
+	}
 	stackedInfo := s.calculateConcurrentTaskMilestones(
-		r.Context(), scope, infoType, startTime, endTime, numDots)
+		r.Context(), scope, infoType, startTime, endTime, numDots, sample)
 	rsp, err := json.Marshal(stackedInfo)
 	dieOnErr(err)
 	_, err = w.Write(rsp)
@@ -247,7 +255,8 @@ func (s *Server) calculateKindOccupancy(
 
 	// The (Location, Kind, StartTime, EndTime) covering index answers the scoped,
 	// kind-filtered interval scan without touching the trace table.
-	_, _ = s.traceReader.ExecContext(ctx, metricCoveringIndex)
+	s.traceReader.ensureIndex(
+		ctx, "Building index idx_trace_loc_kind_times", metricCoveringIndex)
 
 	tasks := s.traceReader.listTaskIntervals(ctx, compName, kind, whatLikes, startTime, endTime)
 	binDuration := totalDuration / float64(numDots)
@@ -383,7 +392,8 @@ func (s *Server) fillBinnedEventRate(
 	timeColumn = safeTraceTimeColumn(timeColumn)
 	// Best-effort: ensure the covering index (a no-op once it exists; ignored on a
 	// read-only connection — the query then just runs slower against the table).
-	_, _ = s.traceReader.ExecContext(ctx, metricCoveringIndex)
+	s.traceReader.ensureIndex(
+		ctx, "Building index idx_trace_loc_kind_times", metricCoveringIndex)
 	// Scope semantics: match the named location OR anything nested under it, so a
 	// component name (e.g. "AT") aggregates its whole subtree while a leaf row
 	// matches only itself.
@@ -431,7 +441,8 @@ func (s *Server) fillBinnedAverageLatency(
 	compName string,
 	startTime, endTime, binDuration float64,
 ) {
-	_, _ = s.traceReader.ExecContext(ctx, metricCoveringIndex)
+	s.traceReader.ensureIndex(
+		ctx, "Building index idx_trace_loc_kind_times", metricCoveringIndex)
 	// Scope semantics: aggregate the named location's whole subtree (a leaf still
 	// matches only itself).
 	lo, hi := scopePrefixBounds(compName)
@@ -653,7 +664,7 @@ func (s *Server) calculateConcurrentTaskMilestones(
 	ctx context.Context,
 	scope, infoType string,
 	startTime, endTime float64,
-	numDots int,
+	numDots, sample int,
 ) *StackedComponentInfo {
 	info := &StackedComponentInfo{
 		Name:      scope,
@@ -670,7 +681,8 @@ func (s *Server) calculateConcurrentTaskMilestones(
 
 	// Same occupancy binning as the task-count chart, grouped by blocking reason
 	// (milestone kind) instead of task kind — computed in SQL, no per-task fetch.
-	keys, bins := s.traceReader.BlockingReasonOccupancy(ctx, scope, startTime, endTime, numDots)
+	keys, bins := s.traceReader.BlockingReasonOccupancy(
+		ctx, scope, startTime, endTime, numDots, sample)
 	info.Kinds = keys
 
 	binWidth := (endTime - startTime) / float64(numDots)

@@ -33,7 +33,7 @@ func TestComponentTimelineScopeAggregatesSubtree(t *testing.T) {
 		(3, 0, 'misc',    'Other',   3, 0, 10)`)
 
 	// scope "ROB" aggregates its two children but NOT the sibling "ROBOT.x".
-	sub := reader.ComponentTimeline(context.Background(), "ROB", 0, 10, 1, false)
+	sub := reader.ComponentTimeline(context.Background(), "ROB", 0, 10, 1, false, 1)
 	if sub.Total != 2 {
 		t.Fatalf("scope ROB Total = %d, want 2 (req_in + req_out, not ROBOT.x)", sub.Total)
 	}
@@ -42,9 +42,58 @@ func TestComponentTimelineScopeAggregatesSubtree(t *testing.T) {
 	}
 
 	// A leaf scope matches only itself.
-	leaf := reader.ComponentTimeline(context.Background(), "ROB.req_in", 0, 10, 1, false)
+	leaf := reader.ComponentTimeline(context.Background(), "ROB.req_in", 0, 10, 1, false, 1)
 	if leaf.Total != 1 {
 		t.Fatalf("scope ROB.req_in Total = %d, want 1", leaf.Total)
+	}
+}
+
+// TestCountTasksInScope verifies the cheap exact count that guards the exact
+// occupancy scan: it counts tasks overlapping the range in a location subtree
+// (matching ComponentTimeline's Total), excludes a sibling prefix, and respects
+// the time bounds.
+func TestCountTasksInScope(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
+	reader := NewSQLiteTraceReader(dbPath)
+	reader.Init()
+	defer reader.Close()
+
+	exec := func(q string) {
+		if _, err := reader.Exec(q); err != nil {
+			t.Fatalf("exec %q: %v", q, err)
+		}
+	}
+	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO location (ID, Locale) VALUES
+		(1, 'ROB.req_in'), (2, 'ROB.req_out'), (3, 'ROBOT.x')`)
+	exec(`CREATE TABLE trace (
+		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
+		Location INTEGER, StartTime REAL, EndTime REAL)`)
+	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+		(1, 0, 'req_in',  'ReadReq', 1, 0, 10),
+		(2, 0, 'req_out', 'ReadReq', 2, 5, 20),
+		(3, 0, 'misc',    'Other',   3, 0, 10)`)
+
+	ctx := context.Background()
+
+	// Subtree scope counts both ROB children, excludes the sibling ROBOT.x, and
+	// matches ComponentTimeline's Total over the same range.
+	n, ok := reader.countTasksInScope(ctx, "ROB", 0, 30)
+	if !ok || n != 2 {
+		t.Fatalf("countTasksInScope(ROB) = %d, ok=%v, want 2", n, ok)
+	}
+	if got := reader.ComponentTimeline(ctx, "ROB", 0, 30, 4, false, 1).Total; got != n {
+		t.Fatalf("count %d disagrees with ComponentTimeline Total %d", n, got)
+	}
+
+	// A leaf scope matches only itself.
+	if n, ok := reader.countTasksInScope(ctx, "ROB.req_in", 0, 30); !ok || n != 1 {
+		t.Fatalf("countTasksInScope(ROB.req_in) = %d, ok=%v, want 1", n, ok)
+	}
+
+	// The time window [0, 4) excludes the task that starts at 5.
+	if n, ok := reader.countTasksInScope(ctx, "ROB", 0, 4); !ok || n != 1 {
+		t.Fatalf("countTasksInScope(ROB, 0..4) = %d, ok=%v, want 1", n, ok)
 	}
 }
 
@@ -73,12 +122,12 @@ func TestComponentTimelineGroupByKind(t *testing.T) {
 		(2, 0, 'req_in',  'WriteReq', 1, 0, 10),
 		(3, 0, 'req_out', 'ReadReq',  1, 0, 10)`)
 
-	kindWhat := reader.ComponentTimeline(context.Background(), "L1.bank", 0, 10, 1, false)
+	kindWhat := reader.ComponentTimeline(context.Background(), "L1.bank", 0, 10, 1, false, 1)
 	if len(kindWhat.Keys) != 3 {
 		t.Fatalf("kind-what keys = %v, want 3 distinct", kindWhat.Keys)
 	}
 
-	byKind := reader.ComponentTimeline(context.Background(), "L1.bank", 0, 10, 1, true)
+	byKind := reader.ComponentTimeline(context.Background(), "L1.bank", 0, 10, 1, true, 1)
 	if len(byKind.Keys) != 2 {
 		t.Fatalf("by-kind keys = %v, want 2 (req_in, req_out)", byKind.Keys)
 	}
@@ -119,7 +168,7 @@ func TestComponentTimelineRespectsHalfOpenBins(t *testing.T) {
 		(1, 0, 'req_in', 'ReadReq', 1, 0, 10),
 		(2, 0, 'req_in', 'ReadReq', 1, 0, 20)`)
 
-	resp := reader.ComponentTimeline(context.Background(), "ROB", 0, 20, 2, false)
+	resp := reader.ComponentTimeline(context.Background(), "ROB", 0, 20, 2, false, 1)
 
 	if resp.Total != 2 {
 		t.Fatalf("Total = %d, want 2", resp.Total)
@@ -176,7 +225,7 @@ func TestBlockingReasonOccupancyBinsMilestoneIntervals(t *testing.T) {
 		(2, 1, 20, 'data',  ''),
 		(3, 2, 10, 'queue', '')`)
 
-	keys, bins := reader.BlockingReasonOccupancy(context.Background(), "ROB", 0, 20, 2)
+	keys, bins := reader.BlockingReasonOccupancy(context.Background(), "ROB", 0, 20, 2, 1)
 
 	if len(keys) != 2 || keys[0] != "data" || keys[1] != "queue" {
 		t.Fatalf("keys = %v, want [data queue]", keys)
@@ -219,7 +268,7 @@ func TestComponentTimelineScopeIsCaseSensitive(t *testing.T) {
 		(1, 0, 'req_in', 'ReadReq', 1, 0, 10),
 		(2, 0, 'req_in', 'ReadReq', 2, 0, 10)`)
 
-	resp := reader.ComponentTimeline(context.Background(), "TLB", 0, 10, 1, false)
+	resp := reader.ComponentTimeline(context.Background(), "TLB", 0, 10, 1, false, 1)
 	if resp.Total != 1 {
 		t.Fatalf("scope TLB Total = %d, want 1 (case-sensitive: excludes tlb.req_in)", resp.Total)
 	}

@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/sarchlab/akita/v5/timing"
@@ -150,12 +151,103 @@ type SQLiteTraceReader struct {
 	*sql.DB
 
 	filename string
+
+	// activity tracks in-flight DB operations (index builds, heavy queries) so the
+	// frontend can show what the database is doing. dbInfo caches the (expensive)
+	// schema-and-size overview computed from dbstat.
+	activity *DBActivityTracker
+	dbInfo   *dbInfoCache
+
+	// indexMu serializes on-demand CREATE INDEX so concurrent requests don't
+	// contend on the single SQLite writer (which made the build fail with
+	// "database is locked" and never persist). See ensureIndex.
+	indexMu sync.Mutex
+
+	// builtIndexes records the names of indexes ensureIndex has confirmed exist
+	// this session. Repeat calls hit this set and return without taking indexMu,
+	// so a request whose index already exists is never blocked behind an unrelated
+	// index build holding the lock.
+	builtIndexes sync.Map
+}
+
+var indexNameRe = regexp.MustCompile(`(?i)CREATE\s+INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)`)
+
+// indexNameFromDDL extracts the index name from a CREATE INDEX statement, or ""
+// if it cannot be parsed (in which case ensureIndex falls back to always running
+// the DDL under the lock).
+func indexNameFromDDL(ddl string) string {
+	m := indexNameRe.FindStringSubmatch(ddl)
+	if len(m) < 2 {
+		return ""
+	}
+
+	return m[1]
+}
+
+// indexExists reports whether an index of the given name is already in the
+// schema. It is a plain read, so in WAL mode it runs concurrently with another
+// goroutine building a different index and never blocks on the write lock.
+func (r *SQLiteTraceReader) indexExists(ctx context.Context, name string) bool {
+	var one int
+	err := r.QueryRowContext(ctx,
+		`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ? LIMIT 1`,
+		name).Scan(&one)
+
+	return err == nil
+}
+
+// ensureIndex builds an index exactly once, on demand. It detaches from the
+// request's cancellation via context.WithoutCancel (so a client navigating away
+// mid-build can't cancel and roll it back, while still inheriting the request
+// context's values), and serializes real builds through indexMu (so the 8
+// concurrent dashboard/component requests don't fight over the single SQLite
+// writer and abandon the build).
+//
+// An index already known to exist — built earlier this session, or persisted
+// from a prior run — short-circuits without taking indexMu, so a request whose
+// index is present is never blocked behind an unrelated, minutes-long build.
+// Only a genuinely new build drops the cached db_info overview, since that is
+// the only case that changes the database's on-disk size.
+func (r *SQLiteTraceReader) ensureIndex(ctx context.Context, activityLabel, ddl string) {
+	name := indexNameFromDDL(ddl)
+	if name != "" {
+		if _, done := r.builtIndexes.Load(name); done {
+			return
+		}
+		if r.indexExists(ctx, name) {
+			r.builtIndexes.Store(name, struct{}{})
+			return
+		}
+	}
+
+	r.indexMu.Lock()
+	defer r.indexMu.Unlock()
+
+	// Re-check under the lock: another goroutine may have built it while we waited.
+	if name != "" {
+		if _, done := r.builtIndexes.Load(name); done {
+			return
+		}
+	}
+
+	id := r.activity.Begin("index", activityLabel, "covering index")
+	_, _ = r.ExecContext(context.WithoutCancel(ctx), ddl)
+	r.activity.End(id)
+
+	if name != "" {
+		r.builtIndexes.Store(name, struct{}{})
+	}
+	// The new index enlarged the trace file; drop the cached overview so the next
+	// /api/db_info reports the new sizes instead of stale ones until restart.
+	r.dbInfo.invalidate()
 }
 
 // NewSQLiteTraceReader creates a new SQLiteTraceReader.
 func NewSQLiteTraceReader(filename string) *SQLiteTraceReader {
 	r := &SQLiteTraceReader{
 		filename: filename,
+		activity: NewDBActivityTracker(),
+		dbInfo:   &dbInfoCache{},
 	}
 
 	return r
@@ -735,22 +827,36 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 	}
 
 	if query.Where != "" {
+		// Resolve the location id first, then probe `trace` by its Location index
+		// (see the Scope branch for why the joined-Locale filter is avoided).
+		// Parameterized, which also drops the value out of the SQL text.
 		sqlStr += `
-			AND loc.Locale = '` + query.Where + `'
+			AND t.Location IN (SELECT ID FROM location WHERE Locale = ?)
 		`
+		args = append(args, query.Where)
 	}
 
 	if query.Scope != "" {
 		// Select the scope component and everything nested under it. Locations
 		// are dotted, so the subtree is the exact name plus the "scope." prefix.
-		// Match the exact location or anything nested under it. A case-sensitive
-		// range ([scope+".", scope+"/")) is used instead of LIKE because SQLite's
-		// LIKE is ASCII case-insensitive while the location tree and the exact `=`
-		// check are case-sensitive — LIKE would pull in a differently-cased sibling
-		// subtree. Parameterized to keep the scope value out of the SQL text.
+		// A case-sensitive range ([scope+".", scope+"/")) is used instead of LIKE
+		// because SQLite's LIKE is ASCII case-insensitive while the location tree
+		// and the exact `=` check are case-sensitive — LIKE would pull in a
+		// differently-cased sibling subtree.
+		//
+		// Filter by the resolved location-id set (a sub-select over the small
+		// location table) rather than joining and filtering on loc.Locale: that
+		// lets SQLite resolve the handful of in-scope location ids first and probe
+		// `trace` by its (Location, StartTime, EndTime) index. The join form let
+		// the planner drive from a bare time-range index instead, scanning every
+		// task after StartTime — turning a 107-row leaf-scope query into a ~25s
+		// near-full scan. The outer JOIN stays only to fetch each task's Locale.
 		lo, hi := scopePrefixBounds(query.Scope)
 		sqlStr += `
-			AND (loc.Locale = ? OR (loc.Locale >= ? AND loc.Locale < ?))
+			AND t.Location IN (
+				SELECT ID FROM location
+				WHERE Locale = ? OR (Locale >= ? AND Locale < ?)
+			)
 		`
 		args = append(args, query.Scope, lo, hi)
 	}

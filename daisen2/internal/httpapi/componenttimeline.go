@@ -18,6 +18,11 @@ type ComponentTimelineResponse struct {
 	StartTime float64 `json:"start_time"`
 	EndTime   float64 `json:"end_time"`
 	NumBins   int     `json:"num_bins"`
+	// Sample is the 1-in-N task stride used to compute this response. 1 is exact;
+	// a larger value is an approximation (each sampled task's count scaled by
+	// Sample) so a coarse preview returns fast and the client can refine by
+	// re-requesting with a smaller Sample.
+	Sample int `json:"sample"`
 	// Total is the number of tasks overlapping the range — i.e. how many the
 	// per-task view would have to render. The client uses it to decide between
 	// this aggregated view and the raw per-task view.
@@ -137,17 +142,56 @@ func accumulateBins(rows *sql.Rows, numBins int) (keys []string, bins [][]int, t
 	return keys, bins, total
 }
 
-func (r *SQLiteTraceReader) ComponentTimeline(
+// exactScanTaskCap bounds an exact (sample=1) occupancy scan. Above this many
+// tasks the event fan-out and GROUP BY cost minutes, so an exact request for a
+// scope this large is declined — the true count is returned and the bins are left
+// empty, so the caller keeps its sampled view. The client only asks for exact
+// when its sampled estimate is small, so this trips solely when a dense scope was
+// deterministically missed by the rowid sample.
+const exactScanTaskCap = 200_000
+
+// countTasksInScope counts the tasks overlapping [start, end) in a location scope
+// via a plain index-only COUNT (no event fan-out, no GROUP BY), so it is far
+// cheaper than the occupancy aggregation and can guard it. The bool is false if
+// the count could not be run.
+func (r *SQLiteTraceReader) countTasksInScope(
+	ctx context.Context, scope string, start, end float64,
+) (int, bool) {
+	s := strconv.FormatFloat(start, 'f', -1, 64)
+	e := strconv.FormatFloat(end, 'f', -1, 64)
+	sqlStr := `
+		WITH scope_locs AS (
+			SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?)
+		)
+		SELECT COUNT(*) FROM trace t
+		WHERE t.Location IN (SELECT ID FROM scope_locs)
+			AND t.EndTime > ` + s + ` AND t.StartTime < ` + e
+
+	lo, hi := scopePrefixBounds(scope)
+	var n int
+	if err := r.QueryRowContext(ctx, sqlStr, scope, lo, hi).Scan(&n); err != nil {
+		return 0, false
+	}
+
+	return n, true
+}
+
+func (r *SQLiteTraceReader) ComponentTimeline( //nolint:funlen // one cohesive occupancy-binning SQL pipeline
 	ctx context.Context,
 	scope string,
 	start, end float64,
 	numBins int,
 	groupByKind bool,
+	sample int,
 ) ComponentTimelineResponse {
+	if sample < 1 {
+		sample = 1
+	}
 	resp := ComponentTimelineResponse{
 		StartTime: start,
 		EndTime:   end,
 		NumBins:   numBins,
+		Sample:    sample,
 		Keys:      []string{},
 		Bins:      [][]int{},
 	}
@@ -168,8 +212,43 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 		keyExpr = "t.Kind"
 	}
 	be := newBinExpr(numBins, start, end)
+
+	// Covering index over exactly the columns this query reads, so it runs as an
+	// index-only scan over the scope's locations instead of joining and fetching
+	// 76M trace rows. Built single-flight so it persists (see ensureIndex).
+	r.ensureIndex(
+		ctx,
+		"Building index idx_trace_loc_time_kind_what",
+		`CREATE INDEX IF NOT EXISTS idx_trace_loc_time_kind_what `+
+			`ON trace(Location, StartTime, EndTime, Kind, What)`,
+	)
+
+	// Guard the exact scan: a dense scope can be deterministically missed by the
+	// rowid sample, prompting the client to request an exact pass. A cheap COUNT
+	// confirms the scope is genuinely small before paying for the fan-out; if it is
+	// large, return the true count and leave the bins empty (caller keeps sampled).
+	if sample == 1 {
+		if n, ok := r.countTasksInScope(ctx, scope, start, end); ok && n > exactScanTaskCap {
+			resp.Total = n
+			return resp
+		}
+	}
+
+	// A 1-in-N task sample (on rowid, which the index leaf carries) makes a coarse
+	// preview return fast; each sampled task stands in for `sample` tasks, so its
+	// occupancy contribution is scaled back up by the same factor.
+	sampleFilter := ""
+	if sample > 1 {
+		sampleFilter = " AND (t.rowid % " + strconv.Itoa(sample) + ") = 0"
+	}
+
+	// Resolve the scope's location IDs first (the location table is tiny), then
+	// filter trace by those IDs so the covering index drives the scan.
 	sqlStr := `
-		WITH events AS (
+		WITH scope_locs AS (
+			SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?)
+		),
+		events AS (
 			SELECT
 				CASE WHEN d.delta = 1
 					THEN MAX(0, MIN(` + be.numBins + ` - 1, ` + be.floorOf("t.StartTime") + `))
@@ -178,12 +257,11 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 				` + keyExpr + ` AS k,
 				d.delta AS delta
 			FROM trace t
-			JOIN location loc ON t.Location = loc.ID
 			CROSS JOIN (SELECT 1 AS delta UNION ALL SELECT -1 AS delta) d
-			WHERE (loc.Locale = ? OR (loc.Locale >= ? AND loc.Locale < ?))
-				AND t.EndTime > ` + be.startStr + ` AND t.StartTime < ` + be.endStr + `
+			WHERE t.Location IN (SELECT ID FROM scope_locs)
+				AND t.EndTime > ` + be.startStr + ` AND t.StartTime < ` + be.endStr + sampleFilter + `
 		)
-		SELECT bin, k, delta, COUNT(*) AS c
+		SELECT bin, k, delta, COUNT(*) * ` + strconv.Itoa(sample) + ` AS c
 		FROM events
 		GROUP BY bin, k, delta`
 
@@ -204,17 +282,47 @@ func (r *SQLiteTraceReader) ComponentTimeline(
 // milestone marks the release of a blocking condition, so the interval ending at
 // it (from the previous milestone, or the task's start) is time spent blocked on
 // that milestone's kind. Computed entirely in SQL, with no per-task materialization.
-func (r *SQLiteTraceReader) BlockingReasonOccupancy(
+func (r *SQLiteTraceReader) BlockingReasonOccupancy( //nolint:funlen // one cohesive occupancy-binning SQL pipeline
 	ctx context.Context,
 	scope string,
 	start, end float64,
 	numBins int,
+	sample int,
 ) (keys []string, bins [][]int) {
 	if numBins < 1 || end <= start {
 		return []string{}, [][]int{}
 	}
+	if sample < 1 {
+		sample = 1
+	}
 
 	be := newBinExpr(numBins, start, end)
+	// A 1-in-N task sample (on rowid) shrinks the trace×milestone join so a coarse
+	// preview returns fast; each sampled task stands in for `sample` tasks, so its
+	// blocked-time counts are scaled back up by the same factor.
+	sampleFilter := ""
+	if sample > 1 {
+		sampleFilter = " AND (t.rowid % " + strconv.Itoa(sample) + ") = 0"
+	}
+
+	// Covering index that also carries ID, so the trace side of the trace×milestone
+	// join is index-only (no per-task table lookup just to read t.ID for the join).
+	r.ensureIndex(
+		ctx,
+		"Building index idx_trace_loc_time_id",
+		`CREATE INDEX IF NOT EXISTS idx_trace_loc_time_id `+
+			`ON trace(Location, StartTime, EndTime, ID)`,
+	)
+
+	// Guard the exact scan (see ComponentTimeline): the trace×milestone join is
+	// even costlier, so decline it for a scope the rowid sample only appeared to
+	// empty because it is dense and modulo-skewed.
+	if sample == 1 {
+		if n, ok := r.countTasksInScope(ctx, scope, start, end); ok && n > exactScanTaskCap {
+			return []string{}, [][]int{}
+		}
+	}
+
 	// Resolve the scope's location IDs first (the location table is tiny), then pull
 	// only the trace rows at those locations via idx_trace_Location and their
 	// milestones by TaskID. ivals is MATERIALIZED so the window runs over just the
@@ -235,7 +343,7 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy(
 			FROM trace t
 			JOIN milestone m ON m.TaskID = t.ID
 			WHERE t.Location IN (SELECT ID FROM scope_locs)
-				AND t.EndTime > ` + be.startStr + ` AND t.StartTime < ` + be.endStr + `
+				AND t.EndTime > ` + be.startStr + ` AND t.StartTime < ` + be.endStr + sampleFilter + `
 		),
 		events AS (
 			SELECT
@@ -249,7 +357,7 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy(
 			CROSS JOIN (SELECT 1 AS delta UNION ALL SELECT -1 AS delta) d
 			WHERE hi > ` + be.startStr + ` AND lo < ` + be.endStr + `
 		)
-		SELECT bin, k, delta, COUNT(*) AS c
+		SELECT bin, k, delta, COUNT(*) * ` + strconv.Itoa(sample) + ` AS c
 		FROM events
 		GROUP BY bin, k, delta`
 
@@ -305,5 +413,15 @@ func (s *Server) httpComponentTimeline(w http.ResponseWriter, r *http.Request) {
 	// finer kind-what grouping.
 	groupByKind := r.FormValue("group") == "kind"
 
-	writeJSON(w, s.traceReader.ComponentTimeline(r.Context(), scope, start, end, numBins, groupByKind))
+	// sample is a 1-in-N task stride for a fast, approximate preview (default 1 =
+	// exact). The client requests a coarse sample first and refines downward.
+	sample := 1
+	if v := r.FormValue("sample"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 1 {
+			sample = n
+		}
+	}
+
+	writeJSON(w, s.traceReader.ComponentTimeline(
+		r.Context(), scope, start, end, numBins, groupByKind, sample))
 }
