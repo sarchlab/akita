@@ -817,11 +817,23 @@ function GapShading({
   );
 }
 
-// LoadingCurve is a pulsing placeholder silhouette shown while a chart's
-// occupancy data is still loading (those queries take a while on a large scope).
-// It is a deterministic mock density shape — not real data — so the panel
-// "breathes" instead of sitting blank.
-function LoadingCurve({ width, height }: { width: number; height: number }) {
+// LoadingCurve is a placeholder silhouette shown while a chart's occupancy data
+// is still loading (those queries take a while on a large scope). It is a
+// deterministic mock density shape — not real data — drawn in muted gray with a
+// bright highlight stripe that sweeps left→right (skeleton-shimmer style) so the
+// panel clearly reads as "loading" rather than sitting blank. `id` must be
+// unique per instance on the page (the clip path / gradient are referenced by id).
+function LoadingCurve({
+  width,
+  height,
+  id,
+}: {
+  width: number;
+  height: number;
+  id: string;
+}) {
+  const w = Math.max(1, width);
+  const h = Math.max(1, height);
   const n = 64;
   const pts: string[] = [];
   for (let i = 0; i <= n; i++) {
@@ -837,13 +849,42 @@ function LoadingCurve({ width, height }: { width: number; height: number }) {
             (1 + 0.06 * Math.sin(t * 47)),
       ),
     );
-    const x = 5 + t * (Math.max(1, width) - 10);
-    const y = Math.max(1, height) - 4 - frac * (Math.max(1, height) - 12);
+    const x = 5 + t * (w - 10);
+    const y = h - 4 - frac * (h - 12);
     pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
   }
-  const d = `M${pts.join("L")}L${(Math.max(1, width) - 5).toFixed(1)},${height} L5,${height} Z`;
+  const d = `M${pts.join("L")}L${(w - 5).toFixed(1)},${h} L5,${h} Z`;
+  const clipId = `lc-clip-${id}`;
+  const gradId = `lc-grad-${id}`;
   return (
-    <path d={d} fill="#cbd5e1" className="animate-pulse" pointerEvents="none" />
+    <g pointerEvents="none">
+      <defs>
+        <clipPath id={clipId}>
+          <path d={d} />
+        </clipPath>
+        {/* A narrow bright band; translating the rect that carries it sweeps the
+            highlight across the silhouette from left to right. */}
+        <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#fff" stopOpacity="0" />
+          <stop offset="42%" stopColor="#fff" stopOpacity="0" />
+          <stop offset="50%" stopColor="#fff" stopOpacity="0.85" />
+          <stop offset="58%" stopColor="#fff" stopOpacity="0" />
+          <stop offset="100%" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={d} fill="#cbd5e1" />
+      <g clipPath={`url(#${clipId})`}>
+        <rect x={0} y={0} width={w} height={h} fill={`url(#${gradId})`}>
+          <animate
+            attributeName="x"
+            from={-w}
+            to={w}
+            dur="1.5s"
+            repeatCount="indefinite"
+          />
+        </rect>
+      </g>
+    </g>
   );
 }
 
@@ -895,7 +936,7 @@ function AggregatedTimeline({
       <svg width={width} height={height} className="block">
         {gridlines}
         <GapShading gaps={gaps} xScale={xScale} height={height} patternId="count-gap-pattern" />
-        <LoadingCurve width={width} height={height} />
+        <LoadingCurve width={width} height={height} id="count" />
         <text x={8} y={15} fontSize="11" fill="#94a3b8" pointerEvents="none">
           Task count · loading…
         </text>
@@ -1052,7 +1093,7 @@ function ComponentMilestoneAreas({
       ))}
       <line x1={5} x2={width - 5} y1={xAxisY} y2={xAxisY} stroke="#000" pointerEvents="none" />
 
-      {loading && <LoadingCurve width={width} height={xAxisY} />}
+      {loading && <LoadingCurve width={width} height={xAxisY} id="reason" />}
 
       {areas.map(({ kind, d }) =>
         d ? (
