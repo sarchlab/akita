@@ -142,6 +142,40 @@ func accumulateBins(rows *sql.Rows, numBins int) (keys []string, bins [][]int, t
 	return keys, bins, total
 }
 
+// exactScanTaskCap bounds an exact (sample=1) occupancy scan. Above this many
+// tasks the event fan-out and GROUP BY cost minutes, so an exact request for a
+// scope this large is declined — the true count is returned and the bins are left
+// empty, so the caller keeps its sampled view. The client only asks for exact
+// when its sampled estimate is small, so this trips solely when a dense scope was
+// deterministically missed by the rowid sample.
+const exactScanTaskCap = 200_000
+
+// countTasksInScope counts the tasks overlapping [start, end) in a location scope
+// via a plain index-only COUNT (no event fan-out, no GROUP BY), so it is far
+// cheaper than the occupancy aggregation and can guard it. The bool is false if
+// the count could not be run.
+func (r *SQLiteTraceReader) countTasksInScope(
+	ctx context.Context, scope string, start, end float64,
+) (int, bool) {
+	s := strconv.FormatFloat(start, 'f', -1, 64)
+	e := strconv.FormatFloat(end, 'f', -1, 64)
+	sqlStr := `
+		WITH scope_locs AS (
+			SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?)
+		)
+		SELECT COUNT(*) FROM trace t
+		WHERE t.Location IN (SELECT ID FROM scope_locs)
+			AND t.EndTime > ` + s + ` AND t.StartTime < ` + e
+
+	lo, hi := scopePrefixBounds(scope)
+	var n int
+	if err := r.QueryRowContext(ctx, sqlStr, scope, lo, hi).Scan(&n); err != nil {
+		return 0, false
+	}
+
+	return n, true
+}
+
 func (r *SQLiteTraceReader) ComponentTimeline( //nolint:funlen // one cohesive occupancy-binning SQL pipeline
 	ctx context.Context,
 	scope string,
@@ -188,6 +222,17 @@ func (r *SQLiteTraceReader) ComponentTimeline( //nolint:funlen // one cohesive o
 		`CREATE INDEX IF NOT EXISTS idx_trace_loc_time_kind_what `+
 			`ON trace(Location, StartTime, EndTime, Kind, What)`,
 	)
+
+	// Guard the exact scan: a dense scope can be deterministically missed by the
+	// rowid sample, prompting the client to request an exact pass. A cheap COUNT
+	// confirms the scope is genuinely small before paying for the fan-out; if it is
+	// large, return the true count and leave the bins empty (caller keeps sampled).
+	if sample == 1 {
+		if n, ok := r.countTasksInScope(ctx, scope, start, end); ok && n > exactScanTaskCap {
+			resp.Total = n
+			return resp
+		}
+	}
 
 	// A 1-in-N task sample (on rowid, which the index leaf carries) makes a coarse
 	// preview return fast; each sampled task stands in for `sample` tasks, so its
@@ -268,6 +313,15 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy( //nolint:funlen // one cohe
 		`CREATE INDEX IF NOT EXISTS idx_trace_loc_time_id `+
 			`ON trace(Location, StartTime, EndTime, ID)`,
 	)
+
+	// Guard the exact scan (see ComponentTimeline): the trace×milestone join is
+	// even costlier, so decline it for a scope the rowid sample only appeared to
+	// empty because it is dense and modulo-skewed.
+	if sample == 1 {
+		if n, ok := r.countTasksInScope(ctx, scope, start, end); ok && n > exactScanTaskCap {
+			return []string{}, [][]int{}
+		}
+	}
 
 	// Resolve the scope's location IDs first (the location table is tiny), then pull
 	// only the trace rows at those locations via idx_trace_Location and their

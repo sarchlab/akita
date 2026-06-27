@@ -48,6 +48,55 @@ func TestComponentTimelineScopeAggregatesSubtree(t *testing.T) {
 	}
 }
 
+// TestCountTasksInScope verifies the cheap exact count that guards the exact
+// occupancy scan: it counts tasks overlapping the range in a location subtree
+// (matching ComponentTimeline's Total), excludes a sibling prefix, and respects
+// the time bounds.
+func TestCountTasksInScope(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
+	reader := NewSQLiteTraceReader(dbPath)
+	reader.Init()
+	defer reader.Close()
+
+	exec := func(q string) {
+		if _, err := reader.Exec(q); err != nil {
+			t.Fatalf("exec %q: %v", q, err)
+		}
+	}
+	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO location (ID, Locale) VALUES
+		(1, 'ROB.req_in'), (2, 'ROB.req_out'), (3, 'ROBOT.x')`)
+	exec(`CREATE TABLE trace (
+		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
+		Location INTEGER, StartTime REAL, EndTime REAL)`)
+	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+		(1, 0, 'req_in',  'ReadReq', 1, 0, 10),
+		(2, 0, 'req_out', 'ReadReq', 2, 5, 20),
+		(3, 0, 'misc',    'Other',   3, 0, 10)`)
+
+	ctx := context.Background()
+
+	// Subtree scope counts both ROB children, excludes the sibling ROBOT.x, and
+	// matches ComponentTimeline's Total over the same range.
+	n, ok := reader.countTasksInScope(ctx, "ROB", 0, 30)
+	if !ok || n != 2 {
+		t.Fatalf("countTasksInScope(ROB) = %d, ok=%v, want 2", n, ok)
+	}
+	if got := reader.ComponentTimeline(ctx, "ROB", 0, 30, 4, false, 1).Total; got != n {
+		t.Fatalf("count %d disagrees with ComponentTimeline Total %d", n, got)
+	}
+
+	// A leaf scope matches only itself.
+	if n, ok := reader.countTasksInScope(ctx, "ROB.req_in", 0, 30); !ok || n != 1 {
+		t.Fatalf("countTasksInScope(ROB.req_in) = %d, ok=%v, want 1", n, ok)
+	}
+
+	// The time window [0, 4) excludes the task that starts at 5.
+	if n, ok := reader.countTasksInScope(ctx, "ROB", 0, 4); !ok || n != 1 {
+		t.Fatalf("countTasksInScope(ROB, 0..4) = %d, ok=%v, want 1", n, ok)
+	}
+}
+
 // TestComponentTimelineGroupByKind verifies that groupByKind collapses tasks that
 // share a kind but differ in what into one band, while the default kind-what
 // grouping keeps them distinct.
