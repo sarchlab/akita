@@ -176,7 +176,7 @@ func TestBlockingReasonOccupancyBinsMilestoneIntervals(t *testing.T) {
 		(2, 1, 20, 'data',  ''),
 		(3, 2, 10, 'queue', '')`)
 
-	keys, bins := reader.BlockingReasonOccupancy(context.Background(), "ROB", 0, 20, 2)
+	keys, bins := reader.BlockingReasonOccupancy(context.Background(), "ROB", 0, 20, 2, 1)
 
 	if len(keys) != 2 || keys[0] != "data" || keys[1] != "queue" {
 		t.Fatalf("keys = %v, want [data queue]", keys)

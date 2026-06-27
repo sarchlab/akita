@@ -41,14 +41,16 @@ export function useComponentTimeline(
     // count bands and legend out of sync with the task bars (or stuck on the old mode
     // if the new fetch is slow or fails). A range-only change keeps the previous data
     // for a smooth, flicker-free zoom.
-    const key = `${scope}\n${group}`;
-    if (lastKeyRef.current !== key) {
-      lastKeyRef.current = key;
+    // Only blank when the component (scope) itself changes. A range / bin-count /
+    // grouping change keeps the previous chart on screen while the new one loads,
+    // so the view never flickers to blank between progressive passes or when the
+    // measured width re-quantizes numBins after first paint.
+    if (lastKeyRef.current !== scope) {
+      lastKeyRef.current = scope;
       setData(null);
     }
 
     if (!scope || !(endTime > startTime) || numBins < 1) {
-      setData(null);
       return undefined;
     }
 

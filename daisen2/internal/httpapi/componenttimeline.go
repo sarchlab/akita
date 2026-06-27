@@ -241,12 +241,32 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy(
 	scope string,
 	start, end float64,
 	numBins int,
+	sample int,
 ) (keys []string, bins [][]int) {
 	if numBins < 1 || end <= start {
 		return []string{}, [][]int{}
 	}
+	if sample < 1 {
+		sample = 1
+	}
 
 	be := newBinExpr(numBins, start, end)
+	// A 1-in-N task sample (on rowid) shrinks the trace×milestone join so a coarse
+	// preview returns fast; each sampled task stands in for `sample` tasks, so its
+	// blocked-time counts are scaled back up by the same factor.
+	sampleFilter := ""
+	if sample > 1 {
+		sampleFilter = " AND (t.rowid % " + strconv.Itoa(sample) + ") = 0"
+	}
+
+	// Covering index that also carries ID, so the trace side of the trace×milestone
+	// join is index-only (no per-task table lookup just to read t.ID for the join).
+	r.ensureIndex(
+		"Building index idx_trace_loc_time_id",
+		`CREATE INDEX IF NOT EXISTS idx_trace_loc_time_id `+
+			`ON trace(Location, StartTime, EndTime, ID)`,
+	)
+
 	// Resolve the scope's location IDs first (the location table is tiny), then pull
 	// only the trace rows at those locations via idx_trace_Location and their
 	// milestones by TaskID. ivals is MATERIALIZED so the window runs over just the
@@ -267,7 +287,7 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy(
 			FROM trace t
 			JOIN milestone m ON m.TaskID = t.ID
 			WHERE t.Location IN (SELECT ID FROM scope_locs)
-				AND t.EndTime > ` + be.startStr + ` AND t.StartTime < ` + be.endStr + `
+				AND t.EndTime > ` + be.startStr + ` AND t.StartTime < ` + be.endStr + sampleFilter + `
 		),
 		events AS (
 			SELECT
@@ -281,7 +301,7 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy(
 			CROSS JOIN (SELECT 1 AS delta UNION ALL SELECT -1 AS delta) d
 			WHERE hi > ` + be.startStr + ` AND lo < ` + be.endStr + `
 		)
-		SELECT bin, k, delta, COUNT(*) AS c
+		SELECT bin, k, delta, COUNT(*) * ` + strconv.Itoa(sample) + ` AS c
 		FROM events
 		GROUP BY bin, k, delta`
 

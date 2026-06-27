@@ -127,8 +127,16 @@ func (s *Server) httpConcurrentTaskMilestones(
 	if scope == "" {
 		scope = compName
 	}
+	// sample is a 1-in-N task stride for a fast, approximate preview (default 1 =
+	// exact), so the client can show a coarse blocking-reason chart immediately.
+	sample := 1
+	if v := r.FormValue("sample"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 1 {
+			sample = n
+		}
+	}
 	stackedInfo := s.calculateConcurrentTaskMilestones(
-		r.Context(), scope, infoType, startTime, endTime, numDots)
+		r.Context(), scope, infoType, startTime, endTime, numDots, sample)
 	rsp, err := json.Marshal(stackedInfo)
 	dieOnErr(err)
 	_, err = w.Write(rsp)
@@ -656,7 +664,7 @@ func (s *Server) calculateConcurrentTaskMilestones(
 	ctx context.Context,
 	scope, infoType string,
 	startTime, endTime float64,
-	numDots int,
+	numDots, sample int,
 ) *StackedComponentInfo {
 	info := &StackedComponentInfo{
 		Name:      scope,
@@ -673,7 +681,8 @@ func (s *Server) calculateConcurrentTaskMilestones(
 
 	// Same occupancy binning as the task-count chart, grouped by blocking reason
 	// (milestone kind) instead of task kind — computed in SQL, no per-task fetch.
-	keys, bins := s.traceReader.BlockingReasonOccupancy(ctx, scope, startTime, endTime, numDots)
+	keys, bins := s.traceReader.BlockingReasonOccupancy(
+		ctx, scope, startTime, endTime, numDots, sample)
 	info.Kinds = keys
 
 	binWidth := (endTime - startTime) / float64(numDots)
