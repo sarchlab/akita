@@ -1716,7 +1716,22 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     // back to the URL's stale/absent range on navigation.
     params.set("starttime", String(viewRange.startTime));
     params.set("endtime", String(viewRange.endTime));
-    params.delete("taskid");
+    // Keep the current task selection when the destination scope still contains
+    // it, so collapsing up to a parent location (or descending into the branch
+    // that holds the task) doesn't lose the panel's selected task. The scope
+    // aggregates a whole subtree, so the task is in view when the target is an
+    // ancestor-or-equal of the current location (every breadcrumb "collapse up"),
+    // or when the selected task's own location is at/under the target (drill-down
+    // into its branch). Otherwise — a sibling branch that excludes the task — we
+    // drop it so the panel never points at a task outside the view.
+    const targetHoldsCurrent = componentName === path || componentName.startsWith(path + ".");
+    const taskLoc = selectedLocation;
+    const targetHoldsTask = !!taskLoc && (taskLoc === path || taskLoc.startsWith(path + "."));
+    if (selectedTaskId && (targetHoldsCurrent || targetHoldsTask)) {
+      params.set("taskid", selectedTaskId);
+    } else {
+      params.delete("taskid");
+    }
     setSearchParams(params);
   };
 
