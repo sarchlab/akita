@@ -1265,21 +1265,15 @@ function ComponentTaskView({
     return <ComponentTopAxis width={width} height={height} range={range} />;
   }
 
-  // Auto-scale to the selected task and its children (the focus), so the nested
-  // gantt always frames the task regardless of the component view's zoom — and
-  // selecting a task no longer needs to rescope the whole view. The parent, which
-  // can span far wider, is drawn clamped (see buildTopTaskRows).
-  const focusTasks = [mainTask, ...childTasks];
-  const focusStart = Math.min(...focusTasks.map((task) => task.start_time));
-  const focusEnd = Math.max(...focusTasks.map((task) => task.end_time));
-  const focusPad = (focusEnd - focusStart) * 0.05 || 1;
-  const domainStart = focusStart - focusPad;
-  const domainEnd = focusEnd + focusPad;
-  const xScale = d3.scaleLinear().domain([domainStart, domainEnd]).range([5, width - 5]);
+  // Shares the time axis (range) with the component view's other charts. selecting
+  // a task focuses this shared range on it (see selectTask), so the nested gantt
+  // frames it; the parent, which can span far wider, is drawn clamped to the chart
+  // (see buildTopTaskRows).
+  const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
   const milestoneBand = (mainTask.steps?.length ?? 0) > 0 ? TASK_VIEW_MILESTONE_BAND : 0;
   const rows = buildTopTaskRows(mainTask, parentTask, childTasks, xScale, height, milestoneBand);
-  const gaps = segmentsEnabled ? gapSegments(segments, domainStart, domainEnd) : [];
+  const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
   const divider1Y = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 1.5 + TASK_VIEW_LARGE_TASK_HEIGHT;
   const divider2Y = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 2.5 + TASK_VIEW_LARGE_TASK_HEIGHT * 2 + milestoneBand;
   const parentLabelY = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP + 15;
@@ -1937,6 +1931,13 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     }
   };
 
+  const focusRangeForTask = (task: Task) => {
+    const duration = task.end_time - task.start_time;
+    const fallbackPadding = Math.max(MIN_RANGE, (viewRange.endTime - viewRange.startTime) * 0.05);
+    const padding = duration > 0 ? duration * 0.2 : fallbackPadding;
+    return sanitizeRange(task.start_time - padding, task.end_time + padding);
+  };
+
   const navigate = useNavigate();
   const selectTask = (task: Task) => {
     if (didDragRef.current) {
@@ -1946,11 +1947,14 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     const taskId = String(task.id);
     setSelectedTaskId(taskId);
     setSelectedTaskSeed(task);
+    // Focus the shared time axis (all the component view's charts) on the task so
+    // the nested gantt frames it. This stays in the current component scope — it
+    // does NOT walk to the task's own location, so it is not a redirect to another
+    // component.
+    setViewRange(focusRangeForTask(task));
 
-    // Click only selects — it does not rescope or change the time range, matching
-    // the task view. Double-click (or the detail panel's magnifier) opens the
-    // task view, where the task's full hierarchy is shown.
     const params = new URLSearchParams(window.location.search);
+    params.set("name", componentName);
     params.set("taskid", taskId);
     window.history.replaceState(null, "", `/component?${params.toString()}`);
   };
