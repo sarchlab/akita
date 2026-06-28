@@ -21,6 +21,7 @@ import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskC
 import type { ColorMode } from "../utils/taskColorCoder";
 import { blockingKindAt, milestonesOf, wavyPath } from "../utils/milestoneViz";
 import { smartString } from "../utils/smartValue";
+import { formatSI } from "../utils/siFormat";
 import { cn } from "../lib/utils";
 import { useComponentNames } from "../hooks/useComponentNames";
 import { buildLocationTree, breadcrumbSegments, findNode, type LocationNode } from "../utils/locationTree";
@@ -144,7 +145,9 @@ function safeScale(scale: d3.ScaleLinear<number, number>, value: number) {
 }
 
 function formatAxisTick(value: number) {
-  return d3.format("~s")(value);
+  // Shared with the task view's gantt (see GanttChart) so both time axes read the
+  // same way.
+  return formatSI(value);
 }
 
 function gapSegments(segments: Segment[], startTime: number, endTime: number) {

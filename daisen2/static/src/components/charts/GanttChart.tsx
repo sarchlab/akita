@@ -5,6 +5,7 @@ import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../../utils/ta
 import type { ColorMode } from "../../utils/taskColorCoder";
 import { milestonesOf, wavyPath } from "../../utils/milestoneViz";
 import { smartString } from "../../utils/smartValue";
+import { formatSI } from "../../utils/siFormat";
 
 interface GanttChartProps {
   // Ancestors root-first: [root, …, immediate parent], stacked above the current
@@ -242,10 +243,10 @@ export default function GanttChart({
           <g key={tick}>
             <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={MARGIN.top} y2={height - MARGIN.bottom} stroke="#cbd5e1" strokeDasharray="3 3" />
             <text x={safeScale(xScale, tick)} y={18} textAnchor="middle" fontSize="10" fill="#475569">
-              {smartString(tick)}
+              {formatSI(tick)}
             </text>
             <text x={safeScale(xScale, tick)} y={height - 8} textAnchor="middle" fontSize="10" fill="#475569">
-              {smartString(tick)}
+              {formatSI(tick)}
             </text>
           </g>
         ))}
