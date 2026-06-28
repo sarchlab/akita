@@ -1940,13 +1940,6 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     }
   };
 
-  const focusRangeForTask = (task: Task) => {
-    const duration = task.end_time - task.start_time;
-    const fallbackPadding = Math.max(MIN_RANGE, (viewRange.endTime - viewRange.startTime) * 0.05);
-    const padding = duration > 0 ? duration * 0.2 : fallbackPadding;
-    return sanitizeRange(task.start_time - padding, task.end_time + padding);
-  };
-
   const navigate = useNavigate();
   const selectTask = (task: Task) => {
     if (didDragRef.current) {
@@ -1956,15 +1949,11 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     const taskId = String(task.id);
     setSelectedTaskId(taskId);
     setSelectedTaskSeed(task);
-    setViewRange(focusRangeForTask(task));
 
+    // Click only selects — it does not rescope or change the time range, matching
+    // the task view. Double-click (or the detail panel's magnifier) opens the
+    // task view, where the task's full hierarchy is shown.
     const params = new URLSearchParams(window.location.search);
-    // Stay in the current scope if the task lives within it; only walk to the
-    // task's own location when it falls outside (e.g. a parent task elsewhere).
-    // Compare against the live scope (componentName), not the URL's `name`, which
-    // is stale once the view has already followed a task out of the URL scope
-    // (selectTask syncs via replaceState, which doesn't update searchParams).
-    params.set("name", task.location && !isWithinScope(task.location, componentName) ? task.location : componentName);
     params.set("taskid", taskId);
     window.history.replaceState(null, "", `/component?${params.toString()}`);
   };
@@ -2195,11 +2184,10 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           )}
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4">
-          {/* Show the hovered task while hovering, otherwise fall back to the
-              selected/current task so a task selected via click or arrived at
-              via /component?...&taskid=... stays visible in the panel. */}
+          {/* The panel reflects the clicked/selected task (click-to-select),
+              matching the task view; hovering only highlights the bar. */}
           <SelectedTaskSection
-            task={hoveredTask ?? currentTask}
+            task={currentTask}
             milestone={hoveredMilestone}
           />
           <div className="-mx-4 border-t" />

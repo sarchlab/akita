@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Search } from "lucide-react";
 import type { Task } from "../types/task";
 import { smartString } from "../utils/smartValue";
 import { milestonesOf } from "../utils/milestoneViz";
@@ -40,8 +41,16 @@ export default function TaskDetail({ task }: TaskDetailProps) {
 
   return (
     <Card className="m-3 rounded-md shadow-none">
-      <CardHeader className="pb-2">
+      <CardHeader className="flex-row items-start justify-between gap-2 space-y-0 pb-2">
         <CardTitle className="break-all text-sm">{task.kind}</CardTitle>
+        <Link
+          to={encodeView({ route: "task", id: String(task.id) })}
+          className="shrink-0 rounded border p-1 text-muted-foreground hover:text-primary"
+          title="Open this task in the task view"
+          aria-label="Open this task in the task view"
+        >
+          <Search className="h-3.5 w-3.5" />
+        </Link>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <dl className="grid grid-cols-[6rem_1fr] gap-x-3 gap-y-2">
