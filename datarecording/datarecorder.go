@@ -196,8 +196,6 @@ func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 		` (` + "\n\t" + fields + "\n" + `);`
 	t.mustExecute(createTableSQL)
 
-	t.createIndexesForTable(tableName, sampleEntry)
-
 	hasLocTag := t.checkLocationTag(sampleEntry)
 	_, exists := t.tables["location"]
 
@@ -250,10 +248,6 @@ func (t *sqliteWriter) createLocationTable() {
 		` (` + "\n\t" + fields + "\n" + `);`
 	t.mustExecute(createTableSQL)
 
-	// Index the dictionary key so readers can resolve an interned id back to
-	// its string with an indexed lookup.
-	t.createIndex("location", "ID", true)
-
 	tableInfo := &table{
 		structType: reflect.TypeOf(sampleLoc),
 		entries:    []any{},
@@ -302,10 +296,8 @@ func (t *sqliteWriter) getFieldNames(entry any) []string {
 
 func (t *sqliteWriter) createIndexesForTable(
 	tableName string,
-	sampleEntry any,
+	sType reflect.Type,
 ) {
-	sType := reflect.TypeOf(sampleEntry)
-
 	for i := 0; i < sType.NumField(); i++ {
 		field := sType.Field(i)
 
@@ -514,8 +506,29 @@ func (t *sqliteWriter) mustExecute(query string) sql.Result {
 	return res
 }
 
+// buildIndexes creates every recorded table's indices in one bulk pass after
+// all rows have been written. Creating indices up front and maintaining them
+// on every insert turns each of the millions of rows a trace records into a
+// B-tree update (with random-ish key order causing page splits); a single
+// CREATE INDEX over the finished table is a one-shot sorted build instead. The
+// recorder never queries the data while writing, so nothing needs the indices
+// until now.
+func (t *sqliteWriter) buildIndexes() {
+	for tableName, tbl := range t.tables {
+		if tableName == "location" {
+			// The interned-id dictionary key: unique so a reader can resolve an
+			// id back to its string with an indexed lookup.
+			t.createIndex("location", "ID", true)
+			continue
+		}
+
+		t.createIndexesForTable(tableName, tbl.structType)
+	}
+}
+
 func (t *sqliteWriter) Close() error {
 	t.Flush()
+	t.buildIndexes()
 
 	err := t.DB.Close()
 	if err != nil {
