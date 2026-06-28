@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import GanttChart from "../components/charts/GanttChart";
 import Legend from "../components/Legend";
@@ -21,6 +21,9 @@ export default function TaskChartPage() {
   const taskId = searchParams.get("id") ?? "";
   const sel = searchParams.get("sel") ?? "";
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  // Gates the default-to-main selection to once per task id, so an explicit
+  // deselect (clicking the chart background) is not immediately undone.
+  const autoSelectedFor = useRef<string | null>(null);
   const { data: segmentsData } = useSegments();
 
   const mainQuery = useMemo(() => (taskId ? { id: taskId } : {}), [taskId]);
@@ -67,7 +70,10 @@ export default function TaskChartPage() {
         return;
       }
     }
-    if (taskId && mainTask) setSelectedTask(mainTask);
+    if (taskId && mainTask && autoSelectedFor.current !== taskId) {
+      autoSelectedFor.current = taskId;
+      setSelectedTask(mainTask);
+    }
   }, [sel, taskId, mainTask?.id, parentTask?.id, childTasks]);
 
   const selectTask = useCallback(
@@ -88,6 +94,14 @@ export default function TaskChartPage() {
     [setSearchParams],
   );
 
+  // Clear the selection when the chart background is clicked. Mark this task id
+  // as already auto-selected so the default-to-main effect leaves it cleared.
+  const deselect = useCallback(() => {
+    autoSelectedFor.current = taskId;
+    setSelectedTask(null);
+    setSearchParams((prev) => mergeParams("/task", prev, { sel: undefined }), { replace: true });
+  }, [setSearchParams, taskId]);
+
   const selectedId = selectedTask?.id ?? (sel || null);
 
   return (
@@ -104,6 +118,7 @@ export default function TaskChartPage() {
             selectedId={selectedId}
             onSelectTask={selectTask}
             onOpenTask={(task) => navigateToTask(String(task.id))}
+            onDeselect={deselect}
           />
         </div>
       </div>

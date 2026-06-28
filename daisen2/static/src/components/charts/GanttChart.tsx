@@ -20,6 +20,8 @@ interface GanttChartProps {
   selectedId?: string | number | null;
   onSelectTask?: (task: Task) => void;
   onOpenTask?: (task: Task) => void;
+  // Clicking the chart background (anywhere not on a bar) clears the selection.
+  onDeselect?: () => void;
 }
 
 const MARGIN = { top: 28, right: 12, bottom: 28, left: 8 };
@@ -62,6 +64,7 @@ export default function GanttChart({
   selectedId = null,
   onSelectTask,
   onOpenTask,
+  onDeselect,
 }: GanttChartProps) {
   const layout = useMemo(() => {
     const rows: Task[] = [];
@@ -149,7 +152,7 @@ export default function GanttChart({
 
   return (
     <div className="h-full overflow-auto bg-white">
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="min-w-[760px]">
+      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="min-w-[760px]" onClick={() => onDeselect?.()}>
         <defs>
           <pattern id="gantt-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
             <rect width="8" height="8" fill="rgba(148, 163, 184, 0.12)" />
@@ -198,8 +201,13 @@ export default function GanttChart({
           return (
             <g
               key={`${task.id}-${task.isParentTask ? "parent" : task.isMainTask ? "main" : "task"}`}
-              className="cursor-pointer"
-              onClick={() => onSelectTask?.(task)}
+              className="cursor-pointer focus:outline-none"
+              onClick={(event) => {
+                // Don't let the click reach the background handler (which clears
+                // the selection).
+                event.stopPropagation();
+                onSelectTask?.(task);
+              }}
               onDoubleClick={() => onOpenTask?.(task)}
               onKeyDown={(event) => {
                 if ((event.key === "Enter" || event.key === " ") && onOpenTask) {
