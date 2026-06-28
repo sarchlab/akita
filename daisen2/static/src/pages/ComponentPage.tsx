@@ -649,7 +649,7 @@ function ComponentTimeline({
             return <rect key={index} x={x} y={0} width={w} height={contentHeight} fill="url(#component-gap-pattern)" pointerEvents="none" />;
           })}
 
-          <g className="task-bar">
+          <g className="task-bar cursor-pointer">
             {taskLayout.map((task) => {
           const dim = task.dim ?? {
             x: safeScale(xScale, task.start_time),
