@@ -114,17 +114,26 @@ export function useStackedCompInfo(
     setLoading(true);
     setError(null);
 
-    // Progressive sample (mirrors useComponentTimeline): a coarse 1-in-N pass
-    // paints fast, then one denser pass sharpens it. The blocking-reason chart
-    // joins the 68M-row milestone table over the scope's tasks, so an exact pass
-    // costs minutes on a dense scope — but the deterministic rowid stride can miss
-    // every task in a sparse scope, so we fall back to exact only when the sampled
-    // passes found nothing (see below).
+    // A coarse 1-in-N pass paints fast, a denser pass sharpens it, then an exact
+    // pass corrects it. The deterministic rowid stride badly under-represents a
+    // small scope — it may catch only one of a handful of tasks (or none), so the
+    // bands can be blank or show the wrong single reason — and the blocking chart
+    // over a small scope is cheap to compute exactly. The server declines an exact
+    // scan for a scope too large to afford (it returns no rows); in that case we
+    // keep the sampled result rather than blanking the chart.
     const schedule = [128, 8];
     let firstDone = false;
-    let lastKinds = 0;
+    let sampledHadData = false;
 
-    const runPass = async (sample: number): Promise<boolean> => {
+    const commit = (json: StackedComponentInfo) => {
+      setInfo(json);
+      if (!firstDone) {
+        firstDone = true;
+        setLoading(false);
+      }
+    };
+
+    const fetchPass = async (sample: number): Promise<StackedComponentInfo | null> => {
       const params = new URLSearchParams({
         // The stacked "ConcurrentTaskMilestones" metric is scope-aware on the
         // backend, so the scoped detail view aggregates a whole subtree.
@@ -140,27 +149,26 @@ export function useStackedCompInfo(
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const json: StackedComponentInfo = await response.json();
-      if (controller.signal.aborted) return false;
-      setInfo(json);
-      lastKinds = json.kinds?.length ?? 0;
-      if (!firstDone) {
-        firstDone = true;
-        setLoading(false);
-      }
+      if (controller.signal.aborted) return null;
 
-      return true;
+      return json;
     };
 
     void (async () => {
       try {
         for (const sample of schedule) {
-          if (!(await runPass(sample))) return;
+          const json = await fetchPass(sample);
+          if (json === null) return;
+          if ((json.kinds?.length ?? 0) > 0) sampledHadData = true;
+          commit(json);
         }
-        // Sparse or modulo-skewed scope: the sampled stride matched no tasks, so
-        // the bands are blank (or a lone task is overstated ×sample). An exact pass
-        // over so few tasks is cheap and recovers the real breakdown.
-        if (lastKinds === 0) {
-          await runPass(1);
+        // Keep the exact result only if it has data, or if the sample was also
+        // empty (a genuinely empty scope). An empty exact result while the sample
+        // had data means the server declined exact for a too-large scope.
+        const exact = await fetchPass(1);
+        if (exact === null) return;
+        if ((exact.kinds?.length ?? 0) > 0 || !sampledHadData) {
+          commit(exact);
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
