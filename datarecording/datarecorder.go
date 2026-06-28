@@ -305,12 +305,14 @@ func (t *sqliteWriter) createIndexesForTable(
 			switch dbTag {
 			case "unique":
 				t.createIndex(tableName, field.Name, true)
-			case "index", "location":
-				// "location" columns store the interned integer id; index
-				// them so filtering by location stays fast even though the
-				// string lives in the shared location table.
+			case "index":
 				t.createIndex(tableName, field.Name, false)
 			}
+			// A "location" tag only interns the column into the shared location
+			// table; it is intentionally not indexed here. The interned-id column
+			// is filtered only alongside columns the reader covers with its own
+			// (Location-led) indexes, so a standalone index on it is dead weight —
+			// the reader builds whatever it actually needs.
 		}
 	}
 }

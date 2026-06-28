@@ -24,16 +24,25 @@ type runningTask struct {
 	toRecord bool
 }
 
+// No secondary indexes are declared on the trace/milestone/tag/segment columns
+// below. The simulation only *writes* this data — it never queries it — so
+// maintaining indexes during the run is pure overhead, and an audit of the
+// reader's (Daisen's) query plans showed most of these columns are only ever
+// filtered alongside Location (served by the reader's Location-led covering
+// indexes) or not at all. The reader builds exactly the few indexes its queries
+// use, on demand. Location keeps its tag because it drives string interning into
+// the shared location table, not just an index.
+
 // taskTableEntry is the table structure for storing task information.
 // All tasks are stored in a single "trace" table.
 type taskTableEntry struct {
-	ID        uint64  `json:"id" akita_data:"unique"`
-	ParentID  uint64  `json:"parent_id" akita_data:"index"`
-	Kind      string  `json:"kind" akita_data:"index"`
-	What      string  `json:"what" akita_data:"index"`
+	ID        uint64  `json:"id"`
+	ParentID  uint64  `json:"parent_id"`
+	Kind      string  `json:"kind"`
+	What      string  `json:"what"`
 	Location  string  `json:"location" akita_data:"location"`
-	StartTime float64 `json:"start_time" akita_data:"index"`
-	EndTime   float64 `json:"end_time" akita_data:"index"`
+	StartTime float64 `json:"start_time"`
+	EndTime   float64 `json:"end_time"`
 }
 
 // milestoneTableEntry is the table structure for storing milestone information.
@@ -41,28 +50,28 @@ type taskTableEntry struct {
 // location is inherited from its owning task (joined via TaskID), so it is not
 // stored here.
 type milestoneTableEntry struct {
-	ID     uint64  `json:"id" akita_data:"unique"`
-	TaskID uint64  `json:"task_id" akita_data:"index"`
-	Time   float64 `json:"time" akita_data:"index"`
-	Kind   string  `json:"kind" akita_data:"index"`
-	What   string  `json:"what" akita_data:"index"`
+	ID     uint64  `json:"id"`
+	TaskID uint64  `json:"task_id"`
+	Time   float64 `json:"time"`
+	Kind   string  `json:"kind"`
+	What   string  `json:"what"`
 }
 
 // tagTableEntry is the table structure for storing task tag information. All
 // tags are stored in a single "tag" table. Location is inherited from the
 // owning task.
 type tagTableEntry struct {
-	ID     uint64  `json:"id" akita_data:"unique"`
-	TaskID uint64  `json:"task_id" akita_data:"index"`
-	Time   float64 `json:"time" akita_data:"index"`
-	What   string  `json:"what" akita_data:"index"`
+	ID     uint64  `json:"id"`
+	TaskID uint64  `json:"task_id"`
+	Time   float64 `json:"time"`
+	What   string  `json:"what"`
 }
 
 // segmentTableEntry is the table structure for storing tracing segment information.
 // A segment represents a time period between StartTracing and StopTracing calls.
 type segmentTableEntry struct {
-	StartTime float64 `json:"start_time" akita_data:"index"`
-	EndTime   float64 `json:"end_time" akita_data:"index"`
+	StartTime float64 `json:"start_time"`
+	EndTime   float64 `json:"end_time"`
 }
 
 // DBTracer is a tracer that can store tasks into a database.
