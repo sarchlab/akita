@@ -350,7 +350,46 @@ func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
 }
 
 // ListTasks returns a list of tasks in the trace according to the given query.
+var (
+	// safeKindPattern restricts the Kind values a partial index may be built for
+	// to characters that appear in real task kinds, so the value can be embedded
+	// as a SQL literal in the index DDL with no injection risk.
+	safeKindPattern  = regexp.MustCompile(`^[A-Za-z0-9_ .\[\]\-]+$`)
+	kindIdentReplace = strings.NewReplacer(" ", "_", ".", "_", "[", "_", "]", "_", "-", "_")
+)
+
+// ensureTaskQueryIndexes builds, on demand, the secondary indexes a given task
+// query needs. The simulation writes the trace without any secondary indexes on
+// trace/milestone/tag (it never queries the data — see the entry structs in
+// akita's tracing.dbtracer), so the reader owns them and builds only what an
+// access pattern actually uses, once per trace.
+func (r *SQLiteTraceReader) ensureTaskQueryIndexes(ctx context.Context, query TaskQuery) {
+	if query.ID != 0 {
+		r.ensureIndex(ctx, "Building index idx_trace_ID",
+			"CREATE INDEX IF NOT EXISTS idx_trace_ID ON trace(ID)")
+	}
+	if query.ParentID != 0 {
+		r.ensureIndex(ctx, "Building index idx_trace_ParentID",
+			"CREATE INDEX IF NOT EXISTS idx_trace_ParentID ON trace(ParentID)")
+	}
+
+	// A global Kind lookup with no location scope — e.g. the startup
+	// "kind=Simulation" range probe — would otherwise full-scan the trace. Build a
+	// tiny PARTIAL index on just that Kind value rather than a full Kind index,
+	// which would be ~1 GB for a handful of distinct values.
+	if query.Kind != "" && query.Scope == "" && query.Where == "" &&
+		query.ID == 0 && query.ParentID == 0 && safeKindPattern.MatchString(query.Kind) {
+		ident := kindIdentReplace.Replace(query.Kind)
+		r.ensureIndex(ctx, "Building partial index idx_trace_kind_"+ident,
+			fmt.Sprintf(
+				"CREATE INDEX IF NOT EXISTS idx_trace_kind_%s ON trace(Kind) WHERE Kind = '%s'",
+				ident, query.Kind))
+	}
+}
+
 func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Task {
+	r.ensureTaskQueryIndexes(ctx, query)
+
 	sqlStr, args := r.prepareTaskQueryStr(query)
 
 	rows, err := r.QueryContext(ctx, sqlStr, args...)
@@ -368,8 +407,8 @@ func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Ta
 	}
 
 	if query.EnableMilestones {
-		r.loadMilestonesForTasks(tasks)
-		r.loadTagsForTasks(tasks)
+		r.loadMilestonesForTasks(ctx, tasks)
+		r.loadTagsForTasks(ctx, tasks)
 		sortTaskSteps(tasks)
 	}
 
@@ -539,10 +578,15 @@ func (s *Server) httpTraceTimeRange(w http.ResponseWriter, r *http.Request) {
 }
 
 // loadMilestonesForTasks loads milestones for the given tasks from the database.
-func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
+func (r *SQLiteTraceReader) loadMilestonesForTasks(ctx context.Context, tasks []Task) {
 	if len(tasks) == 0 {
 		return
 	}
+
+	// Built by the reader (the sim no longer indexes milestones). A composite
+	// (TaskID, Time) serves both the TaskID IN-filter and the ORDER BY TaskID,Time.
+	r.ensureIndex(ctx, "Building index idx_milestone_TaskID_Time",
+		"CREATE INDEX IF NOT EXISTS idx_milestone_TaskID_Time ON milestone(TaskID, Time)")
 
 	// Build a map for quick task lookup
 	taskMap := make(map[uint64]*Task)
@@ -614,10 +658,14 @@ func (r *SQLiteTraceReader) loadMilestoneBatch(taskMap map[uint64]*Task, ids []u
 // milestones. A tag's location is inherited from its task, so the tag table
 // stores none; tags also carry no Kind, so they are labelled "tag" to stay
 // distinguishable from milestones in the merged stream.
-func (r *SQLiteTraceReader) loadTagsForTasks(tasks []Task) {
+func (r *SQLiteTraceReader) loadTagsForTasks(ctx context.Context, tasks []Task) {
 	if len(tasks) == 0 {
 		return
 	}
+
+	// Built by the reader (the sim no longer indexes tags).
+	r.ensureIndex(ctx, "Building index idx_tag_TaskID_Time",
+		"CREATE INDEX IF NOT EXISTS idx_tag_TaskID_Time ON tag(TaskID, Time)")
 
 	taskMap := make(map[uint64]*Task)
 	taskIDs := make([]uint64, 0, len(tasks))
