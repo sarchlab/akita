@@ -6,6 +6,7 @@ import type { ColorMode } from "../../utils/taskColorCoder";
 import { milestonesOf, wavyPath } from "../../utils/milestoneViz";
 import { smartString } from "../../utils/smartValue";
 import { formatSI } from "../../utils/siFormat";
+import { useElementSize } from "../../hooks/useElementSize";
 
 interface GanttChartProps {
   // Ancestors root-first: [root, …, immediate parent], stacked above the current
@@ -44,7 +45,6 @@ const MILESTONE_BAND = 22;
 const LABEL_H = 18;
 const HEADER_BAR_H = 18;
 const DESC_BAR_H = 9;
-const WIDTH = 1200;
 
 function safeScale(scale: d3.ScaleLinear<number, number>, value: number) {
   return scale(value) ?? 0;
@@ -85,6 +85,11 @@ export default function GanttChart({
   expanding = false,
   onExpandNext,
 }: GanttChartProps) {
+  // Measure the scroll container so the chart can use pixel coordinates and fill
+  // the available width and height (rather than aspect-scaling a fixed viewBox,
+  // which left empty space below when there were few layers).
+  const { ref: containerRef, size } = useElementSize<HTMLDivElement>();
+  const W = Math.max(size.width || 1200, 760);
   const allTasks = [...ancestors, ...(mainTask ? [mainTask] : []), ...levels.flat()];
 
   const milestoneSteps = milestonesOf(mainTask?.steps).sort((a, b) => a.time - b.time);
@@ -100,7 +105,13 @@ export default function GanttChart({
   });
 
   if (allTasks.length === 0) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No tasks to display.</div>;
+    // Keep the same ref'd container so the ResizeObserver stays attached (and the
+    // measured size is ready) across the empty → loaded transition.
+    return (
+      <div ref={containerRef} className="h-full overflow-auto bg-white">
+        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No tasks to display.</div>
+      </div>
+    );
   }
 
   // Scale time to the current task and its descendants (the focus). Ancestors run
@@ -112,8 +123,8 @@ export default function GanttChart({
   const padding = (timeEnd - timeStart) * 0.02 || 1e-12;
   const startTime = timeStart - padding;
   const endTime = timeEnd + padding;
-  const innerWidth = WIDTH - MARGIN.left - MARGIN.right;
-  const xScale = d3.scaleLinear().domain([startTime, endTime]).range([MARGIN.left, WIDTH - MARGIN.right]);
+  const innerWidth = W - MARGIN.left - MARGIN.right;
+  const xScale = d3.scaleLinear().domain([startTime, endTime]).range([MARGIN.left, W - MARGIN.right]);
   const colorMap =
     colorMapProp ??
     buildColorMapFromKeys([...allTasks.map((task) => taskColorKey(task, colorMode)), ...milestoneSteps.map((step) => step.kind)]);
@@ -135,7 +146,18 @@ export default function GanttChart({
     cursor += lanes * ROW_HEIGHT + 6;
     return { index, tasks, labelTop, tasksTop };
   });
-  const height = cursor + MARGIN.bottom + 8;
+  const naturalHeight = cursor + MARGIN.bottom + 8;
+
+  // Fill the container: when the content is shorter than the available height,
+  // stretch the band layout (positions and bar heights, not label fonts) so the
+  // chart uses the full vertical space and the bottom axis sits at the bottom,
+  // matching the component view. Taller content scrolls at its natural size.
+  const topAnchor = MARGIN.top + 8;
+  const height = size.height > naturalHeight ? size.height : naturalHeight;
+  const innerNatural = Math.max(1, naturalHeight - topAnchor - MARGIN.bottom - 8);
+  const stretch = (height - topAnchor - MARGIN.bottom - 8) / innerNatural;
+  const sy = (y: number) => topAnchor + (y - topAnchor) * stretch;
+  const sh = (h: number) => h * stretch;
 
   const xTicks = xScale.ticks(12);
   const gaps = segmentsEnabled ? gapSegments(segments, startTime, endTime) : [];
@@ -143,7 +165,7 @@ export default function GanttChart({
   // Blocking-reason curves for the current task: each milestone closes an interval
   // [previous milestone (or task start) → milestone], drawn as a wavy arc colored
   // by the released reason with a node at the release point.
-  const milestoneCenterY = currentTop != null ? currentTop + HEADER_BAR_H + 6 : 0;
+  const milestoneCenterY = currentTop != null ? sy(currentTop + HEADER_BAR_H + 6) : 0;
   const milestoneMarks =
     mainTask && currentTop != null
       ? milestoneSteps.map((step, index) => {
@@ -176,7 +198,7 @@ export default function GanttChart({
     // Clamp to the chart so an ancestor spanning far beyond the focus window
     // renders as a full-width context bar instead of extreme off-screen coords.
     const x = Math.max(0, safeScale(xScale, task.start_time));
-    const w = Math.max(1, Math.min(WIDTH, safeScale(xScale, task.end_time)) - x);
+    const w = Math.max(1, Math.min(W, safeScale(xScale, task.end_time)) - x);
     const selected = selectedId != null && String(selectedId) === String(task.id);
     return (
       <g
@@ -225,8 +247,8 @@ export default function GanttChart({
   );
 
   return (
-    <div className="h-full overflow-auto bg-white">
-      <svg width="100%" viewBox={`0 0 ${WIDTH} ${height}`} className="min-w-[760px]" onClick={() => onDeselect?.()}>
+    <div ref={containerRef} className="h-full overflow-auto bg-white">
+      <svg width={W} height={height} className="block" onClick={() => onDeselect?.()}>
         <defs>
           <pattern id="gantt-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
             <rect width="8" height="8" fill="rgba(148, 163, 184, 0.12)" />
@@ -256,22 +278,22 @@ export default function GanttChart({
 
         {ancestorRows.map(({ task, top }) => (
           <g key={`anc-${task.id}`}>
-            {renderBar(task, top + (HEADER_ROW_HEIGHT - HEADER_BAR_H) / 2, HEADER_BAR_H, "anc")}
-            {sectionLabel(task.kind, 12, top + 13)}
+            {renderBar(task, sy(top + (HEADER_ROW_HEIGHT - HEADER_BAR_H) / 2), sh(HEADER_BAR_H), "anc")}
+            {sectionLabel(task.kind, 12, sy(top + 13))}
           </g>
         ))}
 
         {mainTask && currentTop != null && (
           <>
-            {sectionLabel("Current Task", 12, currentTop + 13)}
-            {renderBar(mainTask, currentTop + (HEADER_ROW_HEIGHT - HEADER_BAR_H) / 2, HEADER_BAR_H, "main")}
+            {sectionLabel("Current Task", 12, sy(currentTop + 13))}
+            {renderBar(mainTask, sy(currentTop + (HEADER_ROW_HEIGHT - HEADER_BAR_H) / 2), sh(HEADER_BAR_H), "main")}
           </>
         )}
 
         {levelRows.map(({ index, tasks, labelTop, tasksTop }) => (
           <g key={`lvl-${index}`}>
-            {sectionLabel(`Subtasks · L${index + 1}`, 12, labelTop + 12)}
-            {tasks.map((task) => renderBar(task, tasksTop + (task.yIndex ?? 0) * ROW_HEIGHT, DESC_BAR_H, `lvl${index}`))}
+            {sectionLabel(`Subtasks · L${index + 1}`, 12, sy(labelTop + 12))}
+            {tasks.map((task) => renderBar(task, sy(tasksTop + (task.yIndex ?? 0) * ROW_HEIGHT), sh(DESC_BAR_H), `lvl${index}`))}
           </g>
         ))}
 
