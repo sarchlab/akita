@@ -1961,13 +1961,6 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     }
   };
 
-  const focusRangeForTask = (task: Task) => {
-    const duration = task.end_time - task.start_time;
-    const fallbackPadding = Math.max(MIN_RANGE, (viewRange.endTime - viewRange.startTime) * 0.05);
-    const padding = duration > 0 ? duration * 0.2 : fallbackPadding;
-    return sanitizeRange(task.start_time - padding, task.end_time + padding);
-  };
-
   const navigate = useNavigate();
   const selectTask = (task: Task) => {
     if (didDragRef.current) {
@@ -1978,11 +1971,9 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     setSelectedTaskId(taskId);
     setSelectedTaskSeed(task);
     setSelectedMilestone(null);
-    // Focus the shared time axis (all the component view's charts) on the task so
-    // the nested gantt frames it. This stays in the current component scope — it
-    // does NOT walk to the task's own location, so it is not a redirect to another
-    // component.
-    setViewRange(focusRangeForTask(task));
+    // A click only selects — it does NOT move the shared time axis (no view jump).
+    // The range is framed on the task on arrival (the URL range) and is otherwise
+    // driven by the page's pan/zoom controls. Double-click opens the task view.
 
     const params = new URLSearchParams(window.location.search);
     params.set("name", componentName);
