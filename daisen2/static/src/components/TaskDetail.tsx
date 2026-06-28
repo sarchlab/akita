@@ -34,7 +34,9 @@ export default function TaskDetail({ task }: TaskDetailProps) {
         : {}),
     });
 
-  const milestones = milestonesOf(task.steps);
+  // Sorted by time so each milestone's "blocked for" interval — from the previous
+  // milestone (or the task start) to this one — is well defined.
+  const milestones = milestonesOf(task.steps).sort((a, b) => a.time - b.time);
 
   return (
     <Card className="m-3 rounded-md shadow-none">
@@ -80,13 +82,17 @@ export default function TaskDetail({ task }: TaskDetailProps) {
           <div>
             <div className="mb-2 font-medium">Milestones</div>
             <div className="space-y-2">
-              {milestones.map((step, index) => (
-                <div key={`${step.time}-${index}`} className="rounded-md border bg-muted/40 p-2">
-                  <div className="font-medium">{step.kind}</div>
-                  <div className="text-muted-foreground">{step.what}</div>
-                  <div className="text-xs text-muted-foreground">{smartString(step.time)}</div>
-                </div>
-              ))}
+              {milestones.map((step, index) => {
+                const intervalStart = index === 0 ? task.start_time : milestones[index - 1].time;
+                const blockedFor = step.time - intervalStart;
+                return (
+                  <div key={`${step.time}-${index}`} className="rounded-md border bg-muted/40 p-2">
+                    <div className="font-medium">{step.kind}</div>
+                    <div className="text-muted-foreground">{step.what}</div>
+                    <div className="text-xs text-muted-foreground">blocked for {smartString(blockedFor)}</div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ) : null}
