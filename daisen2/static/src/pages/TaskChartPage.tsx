@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import GanttChart from "../components/charts/GanttChart";
+import Legend from "../components/Legend";
 import TaskDetail from "../components/TaskDetail";
 import { SidePanel } from "../components/ui/side-panel";
 import { useSegments } from "../hooks/useSegments";
 import { useTraceData } from "../hooks/useTraceData";
 import type { Task } from "../types/task";
+import { buildColorMapFromKeys, taskColorKey } from "../utils/taskColorCoder";
+import { milestonesOf } from "../utils/milestoneViz";
 import { mergeParams } from "../utils/viewState.mjs";
 
 // The task view is a detail view, always reached with a task `id` (from the
@@ -28,6 +31,31 @@ export default function TaskChartPage() {
   const parentTask = parentTasks[0] ?? null;
   const childQuery = useMemo(() => (mainTask ? { parentId: String(mainTask.id) } : {}), [mainTask]);
   const { tasks: childTasks } = useTraceData(childQuery);
+
+  // Task color keys and blocking reasons present in the chart, and a color map
+  // over both — shared with GanttChart (so bars match) and the Legend (so swatches
+  // match). The key order mirrors GanttChart's own (parent, main, then children).
+  const taskKeys = useMemo(() => {
+    const keys: string[] = [];
+    const seen = new Set<string>();
+    for (const task of [parentTask, mainTask, ...childTasks]) {
+      if (!task) continue;
+      const key = taskColorKey(task);
+      if (!seen.has(key)) {
+        seen.add(key);
+        keys.push(key);
+      }
+    }
+    return keys;
+  }, [parentTask, mainTask, childTasks]);
+  const blockingReasons = useMemo(
+    () => Array.from(new Set(milestonesOf(mainTask?.steps).map((step) => step.kind))),
+    [mainTask],
+  );
+  const colorMap = useMemo(
+    () => buildColorMapFromKeys([...taskKeys, ...blockingReasons]),
+    [taskKeys, blockingReasons],
+  );
 
   // Restore the selected task (the `sel` param) once its data has loaded; with no
   // `sel`, default the detail panel to the main task.
@@ -72,6 +100,7 @@ export default function TaskChartPage() {
             parentTask={parentTask}
             segments={segmentsData?.segments ?? []}
             segmentsEnabled={segmentsData?.enabled ?? false}
+            colorMap={colorMap}
             selectedId={selectedId}
             onSelectTask={selectTask}
             onOpenTask={(task) => navigateToTask(String(task.id))}
@@ -80,7 +109,10 @@ export default function TaskChartPage() {
       </div>
 
       <SidePanel className="w-96 overflow-auto p-4">
-        <TaskDetail task={selectedTask} onNavigateToTask={navigateToTask} />
+        <TaskDetail task={selectedTask} />
+        <div className="mt-2 border-t px-3 pt-3">
+          <Legend taskKeys={taskKeys} colorMap={colorMap} blockingReasons={blockingReasons} />
+        </div>
       </SidePanel>
     </div>
   );

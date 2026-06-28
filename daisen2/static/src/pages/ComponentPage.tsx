@@ -5,7 +5,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { X, ChevronRight, ChevronDown, ChevronUp, Plus, Minus, Search } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { SidePanel } from "../components/ui/side-panel";
-import { BlockingReasonsHelp, ComponentTaskViewHelp, TaskCountHelp, TaskHierarchyHelp, TaskTypesHelp } from "../components/HelpTopics";
+import { BlockingReasonsHelp, ComponentTaskViewHelp, TaskCountHelp, TaskHierarchyHelp } from "../components/HelpTopics";
+import Legend from "../components/Legend";
 import type { StackedComponentInfo } from "../hooks/useCompInfo";
 import { useStackedCompInfo } from "../hooks/useCompInfo";
 import { useSegments } from "../hooks/useSegments";
@@ -1503,17 +1504,9 @@ function SelectedTaskSection({
   );
 }
 
-function ComponentLegend({
-  taskKeys,
-  colorMap,
-  colorMode,
-  onColorMode,
-  blockingReasons,
-  highlightedKey,
-  onHighlight,
-  highlightedReason,
-  onHighlightReason,
-}: {
+// ComponentLegend is the component view's binding of the shared Legend: the full
+// interactive variant, with the color-mode toggle and hover highlighting wired in.
+function ComponentLegend(props: {
   taskKeys: string[];
   colorMap: Record<string, string>;
   colorMode: ColorMode;
@@ -1524,117 +1517,7 @@ function ComponentLegend({
   highlightedReason: string | null;
   onHighlightReason: (kind: string | null) => void;
 }) {
-  if (taskKeys.length === 0 && blockingReasons.length === 0) return null;
-
-  return (
-    <section>
-      {taskKeys.length > 0 && (
-        <>
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              <SectionLabel>Tasks</SectionLabel>
-              <TaskTypesHelp />
-            </div>
-            {/* Color/group tasks by kind alone or the finer kind-what pair. Drives
-                both these swatches and the task-count chart's bands. */}
-            <div className="inline-flex shrink-0 overflow-hidden rounded border text-[10px] font-medium" role="group" aria-label="Color tasks by">
-              {(["kind", "kind-what"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => onColorMode(mode)}
-                  aria-pressed={colorMode === mode}
-                  className={cn(
-                    "px-1.5 py-0.5 transition-colors",
-                    mode === "kind-what" && "border-l",
-                    colorMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
-                  )}
-                >
-                  {mode === "kind" ? "Kind" : "Kind-What"}
-                </button>
-              ))}
-            </div>
-          </div>
-          <ul className="mb-3 mt-2 space-y-0.5">
-            {taskKeys.map((key) => {
-              const active = highlightedKey === key;
-              const dimmed = highlightedKey !== null && !active;
-              return (
-                <li key={key}>
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
-                      active && "bg-primary/10",
-                      dimmed && "opacity-40",
-                    )}
-                    onMouseEnter={() => onHighlight(key)}
-                    onMouseLeave={() => onHighlight(null)}
-                    onFocus={() => onHighlight(key)}
-                    onBlur={() => onHighlight(null)}
-                  >
-                    <span
-                      className="h-3 w-5 shrink-0 rounded-sm border border-black/30"
-                      style={{ backgroundColor: colorMap[key] ?? "#9ca3af" }}
-                    />
-                    <span className="truncate">{key}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
-
-      {blockingReasons.length > 0 && (
-        <>
-          <div className="flex items-center gap-1">
-            <SectionLabel>Blocking reasons</SectionLabel>
-            <BlockingReasonsHelp />
-          </div>
-          <ul className="mt-2 space-y-0.5">
-            {blockingReasons.map((kind) => {
-              const color = colorMap[kind] ?? "#9ca3af";
-              const active = highlightedReason === kind;
-              const dimmed = highlightedReason !== null && !active;
-              return (
-                <li key={kind}>
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
-                      active && "bg-primary/10",
-                      dimmed && "opacity-40",
-                    )}
-                    onMouseEnter={() => onHighlightReason(kind)}
-                    onMouseLeave={() => onHighlightReason(null)}
-                    onFocus={() => onHighlightReason(kind)}
-                    onBlur={() => onHighlightReason(null)}
-                  >
-                    {/* Two glyphs: the wavy line (task view) and a borderless block
-                        (stacked area chart), both colored by the reason. */}
-                    <span className="flex shrink-0 items-center gap-1">
-                      <svg width="22" height="12" aria-hidden="true">
-                        <path
-                          d={wavyPath(1, 21, 6, 3, 3)}
-                          fill="none"
-                          stroke={color}
-                          strokeWidth={1.5}
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                      <span className="inline-block h-3 w-4 rounded-sm" style={{ backgroundColor: color }} />
-                    </span>
-                    <span className="truncate">{kind}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
-    </section>
-  );
+  return <Legend {...props} />;
 }
 
 function sanitizeRange(startTime: number, endTime: number): TimeRange {

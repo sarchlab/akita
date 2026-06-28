@@ -12,6 +12,9 @@ interface GanttChartProps {
   parentTask?: Task | null;
   segments?: Segment[];
   segmentsEnabled?: boolean;
+  // Color map shared with the page's legend so bars and legend swatches match.
+  // When omitted, the chart builds its own from the tasks it is given.
+  colorMap?: Record<string, string>;
   // Controlled selection: the parent owns which task is highlighted, so the
   // Gantt's highlight can't drift from the page's selected task / the URL.
   selectedId?: string | number | null;
@@ -55,6 +58,7 @@ export default function GanttChart({
   parentTask = null,
   segments = [],
   segmentsEnabled = false,
+  colorMap: colorMapProp,
   selectedId = null,
   onSelectTask,
   onOpenTask,
@@ -89,7 +93,7 @@ export default function GanttChart({
   const width = 1200;
   const innerWidth = width - MARGIN.left - MARGIN.right;
   const xScale = d3.scaleLinear().domain([startTime, endTime]).range([MARGIN.left, width - MARGIN.right]);
-  const colorMap = buildColorMapFromKeys([...layout.map((task) => taskColorKey(task)), ...milestoneSteps.map((step) => step.kind)]);
+  const colorMap = colorMapProp ?? buildColorMapFromKeys([...layout.map((task) => taskColorKey(task)), ...milestoneSteps.map((step) => step.kind)]);
   const xTicks = xScale.ticks(12);
   const gaps = segmentsEnabled ? gapSegments(segments, startTime, endTime) : [];
 
@@ -143,29 +147,8 @@ export default function GanttChart({
       })
     : null;
 
-  const reasons = Array.from(new Set(milestoneSteps.map((step) => step.kind)));
-
   return (
     <div className="h-full overflow-auto bg-white">
-      {reasons.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 pt-2 text-xs text-slate-600">
-          <span className="font-medium">Blocked on:</span>
-          {reasons.map((kind) => (
-            <span key={kind} className="inline-flex items-center gap-1">
-              <svg width="22" height="12" aria-hidden="true">
-                <path
-                  d={wavyPath(1, 21, 6, 3, 3)}
-                  fill="none"
-                  stroke={colorMap[kind] ?? "#9ca3af"}
-                  strokeWidth={1.5}
-                  strokeLinecap="round"
-                />
-              </svg>
-              {kind}
-            </span>
-          ))}
-        </div>
-      )}
       <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="min-w-[760px]">
         <defs>
           <pattern id="gantt-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
@@ -234,8 +217,10 @@ export default function GanttChart({
                 height={task.isParentTask || task.isMainTask ? 18 : 9}
                 rx={2}
                 fill={lookupColor(colorMap, task)}
-                stroke={selected ? "#0f172a" : "rgba(15, 23, 42, 0.25)"}
-                strokeWidth={selected ? 2 : 1}
+                stroke="#000000"
+                strokeOpacity={selected ? 0.8 : 0.2}
+                strokeWidth={1}
+                opacity={selectedId == null || selected ? 1 : 0.6}
               />
               <title>
                 {task.kind} - {task.what}
