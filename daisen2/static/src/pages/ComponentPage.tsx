@@ -1,7 +1,7 @@
 import * as d3 from "d3";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent, WheelEvent as ReactWheelEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { X, ChevronRight, ChevronDown, ChevronUp, Plus, Minus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { SidePanel } from "../components/ui/side-panel";
@@ -21,7 +21,6 @@ import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskC
 import type { ColorMode } from "../utils/taskColorCoder";
 import { blockingKindAt, milestonesOf, wavyPath } from "../utils/milestoneViz";
 import { smartString } from "../utils/smartValue";
-import { encodeView } from "../utils/viewState.mjs";
 import { cn } from "../lib/utils";
 import { useComponentNames } from "../hooks/useComponentNames";
 import { buildLocationTree, breadcrumbSegments, findNode, type LocationNode } from "../utils/locationTree";
@@ -1406,8 +1405,21 @@ function ComponentTaskView({
               {x1 - x0 >= 2 && (
                 <>
                   {/* Invisible hit area so the thin wave is easy to click — no
-                      fill or border, purely to capture the pointer. */}
-                  <rect x={x0} y={centerY - 8} width={x1 - x0} height={16} fill="transparent" pointerEvents="all" />
+                      fill or border, purely to capture the pointer. Carries the
+                      milestone's details so the left column's pointer handler can
+                      resolve the click (its capture eats this <g>'s onClick). */}
+                  <rect
+                    x={x0}
+                    y={centerY - 8}
+                    width={x1 - x0}
+                    height={16}
+                    fill="transparent"
+                    pointerEvents="all"
+                    data-ms-kind={step.kind}
+                    data-ms-what={step.what}
+                    data-ms-time={step.time}
+                    data-ms-blocked={step.time - intervalStart}
+                  />
                   <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" pointerEvents="none" />
                 </>
               )}
@@ -1729,6 +1741,11 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   const dragRef = useRef<{ pointerId: number; x: number; range: TimeRange } | null>(null);
   const didDragRef = useRef(false);
   const pendingSelectTaskRef = useRef<Task | null>(null);
+  const pendingMilestoneRef = useRef<HoveredMilestone | null>(null);
+  // Click vs double-click timing for the left column. The pointer capture this
+  // column takes for drag-panning swallows the nested view's native
+  // click/dblclick, so select / make-current / deselect are resolved here instead.
+  const pageLastClickRef = useRef<{ id: string; time: number } | null>(null);
 
   useEffect(() => {
     setViewRange(urlRange);
@@ -1952,11 +1969,26 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     dragRef.current = { pointerId: event.pointerId, x: event.clientX, range: viewRange };
     didDragRef.current = false;
     pendingSelectTaskRef.current = null;
+    pendingMilestoneRef.current = null;
 
     if (event.target instanceof Element) {
       const taskElement = event.target.closest("[data-task-id]");
       const taskId = taskElement?.getAttribute("data-task-id");
-      pendingSelectTaskRef.current = taskId ? (selectableTaskById.get(taskId) ?? null) : null;
+      if (taskId) {
+        pendingSelectTaskRef.current = selectableTaskById.get(taskId) ?? null;
+      } else {
+        // A blocking-milestone hit area carries its details so the click can be
+        // resolved here (the column's pointer capture eats the wave's own onClick).
+        const ms = event.target.closest("[data-ms-kind]");
+        if (ms) {
+          pendingMilestoneRef.current = {
+            kind: ms.getAttribute("data-ms-kind") ?? "",
+            what: ms.getAttribute("data-ms-what") ?? "",
+            time: Number(ms.getAttribute("data-ms-time")),
+            blockedFor: Number(ms.getAttribute("data-ms-blocked")),
+          };
+        }
+      }
     }
   };
 
@@ -1986,9 +2018,31 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     }
     dragRef.current = null;
     const pendingTask = pendingSelectTaskRef.current;
+    const pendingMilestone = pendingMilestoneRef.current;
     pendingSelectTaskRef.current = null;
+    pendingMilestoneRef.current = null;
 
-    if (pendingTask && !didDragRef.current) {
+    if (didDragRef.current) return;
+    if (pendingMilestone) {
+      setSelectedMilestone(pendingMilestone);
+      return;
+    }
+    if (!pendingTask) {
+      // A click on empty space clears the selection.
+      deselectTask();
+      return;
+    }
+
+    // Single click selects; a second quick click on the same task makes it the
+    // new current task (re-centering the nested hierarchy on it).
+    const id = String(pendingTask.id);
+    const now = Date.now();
+    const last = pageLastClickRef.current;
+    if (last && last.id === id && now - last.time < 350) {
+      pageLastClickRef.current = null;
+      makeTaskCurrent(pendingTask);
+    } else {
+      pageLastClickRef.current = { id, time: now };
       selectTask(pendingTask);
     }
   };
@@ -2025,13 +2079,6 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     setSearchParams(params);
   };
 
-  // Double-clicking a task in the nested hierarchy view (a parent or a subtask of
-  // the current task) opens it in the task view — the place to inspect that task's
-  // own full hierarchy.
-  const navigate = useNavigate();
-  const openTaskView = (task: Task) => {
-    navigate(encodeView({ route: "task", id: String(task.id) }));
-  };
 
   const deselectTask = () => {
     // Clear the selected task (the detail panel). Keep `taskid` so the nested
@@ -2081,9 +2128,10 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
         <div
           className="daisen1-task-view relative"
           style={{ height: taskViewHeight }}
-          // No scroll-to-zoom over the nested hierarchy region: swallow the wheel
-          // so it never reaches the left column's time-zoom handler.
-          onWheel={(event) => event.stopPropagation()}
+          // Plain scroll over the nested hierarchy does nothing (no zoom), but a
+          // Ctrl/Cmd+scroll still zooms the time axis like the other regions —
+          // handleOverviewWheel only swallows the unmodified wheel.
+          onWheel={handleOverviewWheel}
         >
           <ComponentTaskView
             mainTask={currentTask}
@@ -2101,7 +2149,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             selectedTaskId={selectedTaskId}
             onHoverTask={setHoveredTask}
             onSelectTask={selectTask}
-            onOpenTask={openTaskView}
+            onOpenTask={makeTaskCurrent}
             onDeselect={deselectTask}
             onSelectMilestone={setSelectedMilestone}
           />
