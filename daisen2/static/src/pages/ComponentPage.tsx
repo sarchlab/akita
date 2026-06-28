@@ -1,12 +1,13 @@
 import * as d3 from "d3";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent, WheelEvent as ReactWheelEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { X, ChevronRight, ChevronDown, ChevronUp, Plus, Minus, Search } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { X, ChevronRight, ChevronDown, ChevronUp, Plus, Minus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { SidePanel } from "../components/ui/side-panel";
 import { BlockingReasonsHelp, ComponentTaskViewHelp, TaskCountHelp, TaskHierarchyHelp } from "../components/HelpTopics";
 import Legend from "../components/Legend";
+import TaskDetail from "../components/TaskDetail";
 import type { StackedComponentInfo } from "../hooks/useCompInfo";
 import { useStackedCompInfo } from "../hooks/useCompInfo";
 import { useSegments } from "../hooks/useSegments";
@@ -449,6 +450,7 @@ interface ComponentTimelineProps {
   highlightedTaskIds: Set<string> | null;
   onHoverTask: (task: Task | null) => void;
   onSelectTask: (task: Task) => void;
+  onOpenTask: (task: Task) => void;
   // Zoom the time range from a wheel/pinch over the gantt. pointerRatio is the
   // cursor's fractional x within the chart, so the zoom is anchored at the pointer.
   onZoom: (deltaY: number, deltaX: number, pointerRatio: number) => void;
@@ -470,6 +472,7 @@ function ComponentTimeline({
   highlightedTaskIds,
   onHoverTask,
   onSelectTask,
+  onOpenTask,
   onZoom,
   onRangeChange,
 }: ComponentTimelineProps) {
@@ -680,6 +683,7 @@ function ComponentTimeline({
               opacity={highlighted ? 1 : 0.4}
               onMouseEnter={() => onHoverTask(task)}
               onMouseLeave={() => onHoverTask(null)}
+              onDoubleClick={() => onOpenTask(task)}
             >
               <title>
                 {task.kind} - {task.what}
@@ -1235,6 +1239,7 @@ function ComponentTaskView({
   highlightedTaskId,
   onHoverTask,
   onSelectTask,
+  onOpenTask,
   onHoverMilestone,
 }: {
   mainTask: Task | null;
@@ -1251,6 +1256,7 @@ function ComponentTaskView({
   highlightedTaskId: string | null;
   onHoverTask: (task: Task | null) => void;
   onSelectTask: (task: Task) => void;
+  onOpenTask: (task: Task) => void;
   onHoverMilestone: (milestone: HoveredMilestone | null) => void;
 }) {
   if (!mainTask) {
@@ -1308,6 +1314,7 @@ function ComponentTaskView({
               event.preventDefault();
               onSelectTask(row.task);
             }}
+            onDoubleClick={() => onOpenTask(row.task)}
           />
         );
       })}
@@ -1400,13 +1407,9 @@ interface HoveredMilestone {
 function SelectedTaskSection({
   task,
   milestone,
-  currentLocation,
-  onGoToLocation,
 }: {
   task: Task | null;
   milestone: HoveredMilestone | null;
-  currentLocation: string;
-  onGoToLocation: (location: string) => void;
 }) {
   // A hovered milestone takes over the panel and shows its blocking details.
   if (milestone) {
@@ -1436,72 +1439,9 @@ function SelectedTaskSection({
     );
   }
 
-  const rows: [string, string][] = task
-    ? [
-        ["ID", String(task.id)],
-        ["Kind", task.kind],
-        ["What", task.what],
-        ["Where", task.location || "-"],
-        ["Start", smartString(task.start_time)],
-        ["End", smartString(task.end_time)],
-        ["Duration", smartString(task.end_time - task.start_time)],
-      ]
-    : [];
-
-  return (
-    <section>
-      <SectionLabel>Selected task</SectionLabel>
-      {!task ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          Hover or click a task in the chart to see its details.
-        </p>
-      ) : (
-        <div className="mt-2 rounded-lg border bg-muted/30 p-3">
-        <div className="mb-2 flex items-start justify-between gap-2">
-          <span className="break-all text-sm font-semibold">
-            {task.kind} · {task.what}
-          </span>
-          <Link
-            to={encodeView({ route: "task", id: String(task.id) })}
-            className="shrink-0 rounded border p-1 text-muted-foreground hover:text-primary"
-            title="Inspect this task in the task view"
-            aria-label="Inspect this task in the task view"
-          >
-            <Search className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-        <dl className="space-y-1.5 text-xs">
-          {rows.map(([label, value]) => {
-            const canJump =
-              label === "Where" && !!task.location && task.location !== currentLocation;
-            return (
-              <div key={label} className="grid grid-cols-[4.5rem_1fr] gap-x-3">
-                <dt className="text-muted-foreground">{label}</dt>
-                <dd className="break-all font-medium tabular-nums">
-                  {canJump ? (
-                    <span className="flex items-start justify-between gap-2">
-                      <span className="break-all">{value}</span>
-                      <button
-                        type="button"
-                        onClick={() => onGoToLocation(task.location)}
-                        className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground hover:text-primary"
-                        title={`Make ${task.location} the current location`}
-                      >
-                        Go here
-                      </button>
-                    </span>
-                  ) : (
-                    value
-                  )}
-                </dd>
-              </div>
-            );
-          })}
-        </dl>
-      </div>
-      )}
-    </section>
-  );
+  // The selected/hovered task uses the shared TaskDetail (same as the task view),
+  // so its location is clickable token-by-token.
+  return <TaskDetail task={task} />;
 }
 
 // ComponentLegend is the component view's binding of the shared Legend: the full
@@ -2007,6 +1947,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     return sanitizeRange(task.start_time - padding, task.end_time + padding);
   };
 
+  const navigate = useNavigate();
   const selectTask = (task: Task) => {
     if (didDragRef.current) {
       didDragRef.current = false;
@@ -2026,6 +1967,12 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     params.set("name", task.location && !isWithinScope(task.location, componentName) ? task.location : componentName);
     params.set("taskid", taskId);
     window.history.replaceState(null, "", `/component?${params.toString()}`);
+  };
+
+  // Double-click a task (anywhere on the component page) to open it in the task
+  // view — matching the task view's click-to-select / double-click-to-open.
+  const openTaskView = (task: Task) => {
+    navigate(encodeView({ route: "task", id: String(task.id) }));
   };
 
   const deselectTask = () => {
@@ -2093,6 +2040,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
             onHoverTask={setHoveredTask}
             onSelectTask={selectTask}
+            onOpenTask={openTaskView}
             onHoverMilestone={setHoveredMilestone}
           />
           {/* Help opens only when a task is selected — that's when the hierarchy exists. */}
@@ -2120,6 +2068,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               highlightedTaskIds={highlightedTaskIds}
               onHoverTask={setHoveredTask}
               onSelectTask={selectTask}
+              onOpenTask={openTaskView}
               onZoom={zoomTimeRange}
               onRangeChange={shiftRange}
             />
@@ -2252,8 +2201,6 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           <SelectedTaskSection
             task={hoveredTask ?? currentTask}
             milestone={hoveredMilestone}
-            currentLocation={componentName}
-            onGoToLocation={navigateToLocation}
           />
           <div className="-mx-4 border-t" />
           <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} colorMode={colorMode} onColorMode={handleColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={highlightedReason} onHighlightReason={setHighlightedReason} />

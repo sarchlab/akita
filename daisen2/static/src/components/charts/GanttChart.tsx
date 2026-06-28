@@ -2,6 +2,7 @@ import * as d3 from "d3";
 import type { Segment, Task } from "../../types/task";
 import { assignYIndices } from "../../utils/taskYIndexAssigner";
 import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../../utils/taskColorCoder";
+import type { ColorMode } from "../../utils/taskColorCoder";
 import { milestonesOf, wavyPath } from "../../utils/milestoneViz";
 import { smartString } from "../../utils/smartValue";
 
@@ -17,6 +18,9 @@ interface GanttChartProps {
   segmentsEnabled?: boolean;
   // Color map shared with the page's legend so bars and legend swatches match.
   colorMap?: Record<string, string>;
+  // Whether tasks are colored by kind alone or the finer kind-what pair; must
+  // match how `colorMap` was built so swatch and bar colors agree.
+  colorMode?: ColorMode;
   // Controlled selection: the parent owns which task is highlighted.
   selectedId?: string | number | null;
   onSelectTask?: (task: Task) => void;
@@ -71,6 +75,7 @@ export default function GanttChart({
   segments = [],
   segmentsEnabled = false,
   colorMap: colorMapProp,
+  colorMode = "kind-what",
   selectedId = null,
   onSelectTask,
   onOpenTask,
@@ -110,7 +115,7 @@ export default function GanttChart({
   const xScale = d3.scaleLinear().domain([startTime, endTime]).range([MARGIN.left, WIDTH - MARGIN.right]);
   const colorMap =
     colorMapProp ??
-    buildColorMapFromKeys([...allTasks.map((task) => taskColorKey(task)), ...milestoneSteps.map((step) => step.kind)]);
+    buildColorMapFromKeys([...allTasks.map((task) => taskColorKey(task, colorMode)), ...milestoneSteps.map((step) => step.kind)]);
 
   // Vertical layout, top → bottom: ancestor rows (root first), current task (with
   // its milestone band), then one labeled band per descendant level.
@@ -195,8 +200,7 @@ export default function GanttChart({
           y={top}
           width={w}
           height={barHeight}
-          rx={2}
-          fill={lookupColor(colorMap, task)}
+          fill={lookupColor(colorMap, task, colorMode)}
           stroke="#000000"
           strokeOpacity={selected ? 0.8 : 0.2}
           strokeWidth={1}

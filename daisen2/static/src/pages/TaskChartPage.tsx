@@ -8,6 +8,7 @@ import { useSegments } from "../hooks/useSegments";
 import { useTaskHierarchy } from "../hooks/useTaskHierarchy";
 import type { Task } from "../types/task";
 import { buildColorMapFromKeys, taskColorKey } from "../utils/taskColorCoder";
+import type { ColorMode } from "../utils/taskColorCoder";
 import { milestonesOf } from "../utils/milestoneViz";
 import { mergeParams } from "../utils/viewState.mjs";
 
@@ -20,6 +21,7 @@ export default function TaskChartPage() {
   const taskId = searchParams.get("id") ?? "";
   const sel = searchParams.get("sel") ?? "";
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [colorMode, setColorMode] = useState<ColorMode>("kind-what");
   // Gates the default-to-main selection to once per task id, so an explicit
   // deselect (clicking the chart background) is not immediately undone.
   const autoSelectedFor = useRef<string | null>(null);
@@ -38,14 +40,14 @@ export default function TaskChartPage() {
     const keys: string[] = [];
     const seen = new Set<string>();
     for (const task of allTasks) {
-      const key = taskColorKey(task);
+      const key = taskColorKey(task, colorMode);
       if (!seen.has(key)) {
         seen.add(key);
         keys.push(key);
       }
     }
     return keys;
-  }, [allTasks]);
+  }, [allTasks, colorMode]);
   const blockingReasons = useMemo(
     () => Array.from(new Set(milestonesOf(mainTask?.steps).map((step) => step.kind))),
     [mainTask],
@@ -110,6 +112,7 @@ export default function TaskChartPage() {
             segments={segmentsData?.segments ?? []}
             segmentsEnabled={segmentsData?.enabled ?? false}
             colorMap={colorMap}
+            colorMode={colorMode}
             selectedId={selectedId}
             onSelectTask={selectTask}
             onOpenTask={(task) => navigateToTask(String(task.id))}
@@ -124,7 +127,13 @@ export default function TaskChartPage() {
       <SidePanel className="w-96 overflow-auto p-4">
         <TaskDetail task={selectedTask} />
         <div className="mt-2 border-t px-3 pt-3">
-          <Legend taskKeys={taskKeys} colorMap={colorMap} blockingReasons={blockingReasons} />
+          <Legend
+            taskKeys={taskKeys}
+            colorMap={colorMap}
+            blockingReasons={blockingReasons}
+            colorMode={colorMode}
+            onColorMode={setColorMode}
+          />
         </div>
       </SidePanel>
     </div>
