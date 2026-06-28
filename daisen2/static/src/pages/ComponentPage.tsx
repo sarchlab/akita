@@ -504,6 +504,12 @@ function ComponentTimeline({
   onRangeChangeRef.current = onRangeChange;
   const onSelectTaskRef = useRef(onSelectTask);
   onSelectTaskRef.current = onSelectTask;
+  const onOpenTaskRef = useRef(onOpenTask);
+  onOpenTaskRef.current = onOpenTask;
+  // The pointer capture used for drag-panning swallows the bars' native dblclick,
+  // so detect a double-click manually: two clicks on the same task in quick
+  // succession open it in the task view.
+  const lastClickRef = useRef<{ id: string; time: number } | null>(null);
   const rangeRef = useRef(range);
   rangeRef.current = range;
   const widthRef = useRef(width);
@@ -596,7 +602,19 @@ function ComponentTimeline({
     event.stopPropagation();
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     dragRef.current = null;
-    if (!drag.moved && drag.pending) onSelectTaskRef.current(drag.pending);
+    if (drag.moved || !drag.pending) return;
+
+    const id = String(drag.pending.id);
+    const now = Date.now();
+    const last = lastClickRef.current;
+    if (last && last.id === id && now - last.time < 350) {
+      // Second quick click on the same task — open it in the task view.
+      lastClickRef.current = null;
+      onOpenTaskRef.current(drag.pending);
+    } else {
+      lastClickRef.current = { id, time: now };
+      onSelectTaskRef.current(drag.pending);
+    }
   };
 
   // On-screen vertical (row height) zoom controls. Horizontal/time zoom lives in
@@ -681,7 +699,6 @@ function ComponentTimeline({
               stroke="#000000"
               strokeOpacity={hasHighlight && highlighted ? 0.8 : 0.2}
               opacity={highlighted ? 1 : 0.4}
-              onDoubleClick={() => onOpenTask(task)}
             >
               <title>
                 {task.kind} - {task.what}
