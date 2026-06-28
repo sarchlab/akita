@@ -1261,6 +1261,7 @@ function ComponentTaskView({
   highlightedKey,
   highlightedTaskId,
   selectedTaskId,
+  selectedMilestone,
   onHoverTask,
   onSelectTask,
   onOpenTask,
@@ -1280,6 +1281,7 @@ function ComponentTaskView({
   highlightedKey: string | null;
   highlightedTaskId: string | null;
   selectedTaskId: string | null;
+  selectedMilestone: HoveredMilestone | null;
   onHoverTask: (task: Task | null) => void;
   onSelectTask: (task: Task) => void;
   onOpenTask: (task: Task) => void;
@@ -1388,6 +1390,11 @@ function ComponentTaskView({
           const x1 = safeScale(xScale, step.time);
           const color = colorMap[step.kind] ?? "#9ca3af";
           const d = wavyPath(x0, x1, centerY);
+          // Affordance for the selected milestone: it stays full strength with a
+          // thicker wave and a ringed dot, while the others dim.
+          const selected = selectedMilestone != null && selectedMilestone.kind === step.kind && selectedMilestone.time === step.time;
+          const dimmed = selectedMilestone != null && !selected;
+          const opacity = dimmed ? 0.25 : 1;
           return (
             <g
               key={`milestone-${index}-${step.kind}`}
@@ -1420,10 +1427,11 @@ function ComponentTaskView({
                     data-ms-time={step.time}
                     data-ms-blocked={step.time - intervalStart}
                   />
-                  <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" pointerEvents="none" />
+                  <path d={d} fill="none" stroke={color} strokeWidth={selected ? 3 : 1.5} strokeLinecap="round" opacity={opacity} pointerEvents="none" />
                 </>
               )}
-              <circle cx={x1} cy={centerY} r={3} fill={color} stroke="#ffffff" strokeWidth={0.75} pointerEvents="none" />
+              {selected && <circle cx={x1} cy={centerY} r={6} fill="none" stroke={color} strokeWidth={1.5} pointerEvents="none" />}
+              <circle cx={x1} cy={centerY} r={selected ? 3.5 : 3} fill={color} stroke="#ffffff" strokeWidth={0.75} opacity={opacity} pointerEvents="none" />
             </g>
           );
         });
@@ -1483,9 +1491,16 @@ function SelectedTaskSection({
     );
   }
 
-  // The selected/hovered task uses the shared TaskDetail (same as the task view),
-  // so its location is clickable token-by-token.
-  return <TaskDetail task={task} />;
+  // Nothing selected — just the inline prompt, no section heading.
+  if (!task) return <TaskDetail task={null} />;
+  // The selected task uses the shared TaskDetail (same as the task view), under a
+  // section heading that mirrors the "Selected milestone" panel above.
+  return (
+    <section>
+      <SectionLabel>Selected task</SectionLabel>
+      <TaskDetail task={task} />
+    </section>
+  );
 }
 
 // ComponentLegend is the component view's binding of the shared Legend: the full
@@ -2164,6 +2179,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             highlightedKey={highlightedKey}
             highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
             selectedTaskId={selectedTaskId}
+            selectedMilestone={selectedMilestone}
             onHoverTask={setHoveredTask}
             onSelectTask={selectTask}
             onOpenTask={makeTaskCurrent}
