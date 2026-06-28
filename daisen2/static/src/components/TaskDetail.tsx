@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { Search } from "lucide-react";
 import type { Task } from "../types/task";
 import { smartString } from "../utils/smartValue";
-import { milestonesOf } from "../utils/milestoneViz";
 import { breadcrumbSegments } from "../utils/locationTree";
 import { encodeView } from "../utils/viewState.mjs";
 
@@ -34,10 +33,6 @@ export default function TaskDetail({ task }: TaskDetailProps) {
         ? { startTime: task.start_time - padding, endTime: task.end_time + padding }
         : {}),
     });
-
-  // Sorted by time so each milestone's "blocked for" interval — from the previous
-  // milestone (or the task start) to this one — is well defined.
-  const milestones = milestonesOf(task.steps).sort((a, b) => a.time - b.time);
 
   const locationValue: ReactNode = task.location ? (
     <span className="inline-flex flex-wrap items-center">
@@ -89,25 +84,6 @@ export default function TaskDetail({ task }: TaskDetailProps) {
           </div>
         ))}
       </dl>
-
-      {milestones.length ? (
-        <div className="mt-3">
-          <div className="mb-1.5 text-xs font-medium">Milestones</div>
-          <div className="space-y-1.5">
-            {milestones.map((step, index) => {
-              const intervalStart = index === 0 ? task.start_time : milestones[index - 1].time;
-              const blockedFor = step.time - intervalStart;
-              return (
-                <div key={`${step.time}-${index}`} className="rounded-md border bg-background/60 p-2 text-xs">
-                  <div className="break-all font-medium">{step.kind}</div>
-                  <div className="break-all text-muted-foreground">{step.what}</div>
-                  <div className="text-muted-foreground">blocked for {smartString(blockedFor)}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
