@@ -161,21 +161,18 @@ func (t *DBTracer) AddMilestone(milestone Milestone) {
 	}
 
 	for _, existingMilestone := range task.Milestones {
-		if sameMilestone(existingMilestone, milestone) {
-			return
-		}
-
-		// Only record the first milestone if multiple milestones occur at the same time
+		// Keep at most one milestone per timestamp, but allow a repeated
+		// (kind, what) at a different time. A long-lived task (e.g. a wavefront
+		// that spans a whole kernel) recurs through the same blocking reasons
+		// many times; deduping on (kind, what) regardless of time would collapse
+		// its timeline to the first occurrence of each reason. Short-lived tasks
+		// hit each reason once, so they are unaffected.
 		if existingMilestone.Time == milestone.Time {
 			return
 		}
 	}
 
 	task.Milestones = append(task.Milestones, milestone)
-}
-
-func sameMilestone(a, b Milestone) bool {
-	return a.Kind == b.Kind && a.What == b.What
 }
 
 // EndTask marks the end of a task.
