@@ -1192,14 +1192,18 @@ function buildTopTaskRows(
   const subTaskRegionHeight = Math.max(1, barRegionHeight - nonSubTaskRegionHeight);
   const childBarHeight = Math.min(TASK_VIEW_SUBTASK_BAR_HEIGHT, subTaskRegionHeight / Math.max(1, maxYIndex));
   const rows: TaskViewRow[] = [];
+  const [rangeLeft, rangeRight] = xScale.range();
 
   const pushTask = (task: Task, y: number, rowHeight: number) => {
-    const x = safeScale(xScale, task.start_time);
+    // Clamp to the chart so the parent (which can span far beyond the focus
+    // window) renders as a full-width context bar instead of off-screen coords.
+    const x = Math.max(rangeLeft, safeScale(xScale, task.start_time));
+    const right = Math.min(rangeRight, safeScale(xScale, task.end_time));
     rows.push({
       task,
       x,
       y,
-      width: Math.max(1, safeScale(xScale, task.end_time) - x),
+      width: Math.max(1, right - x),
       height: rowHeight,
     });
   };
@@ -1261,11 +1265,21 @@ function ComponentTaskView({
     return <ComponentTopAxis width={width} height={height} range={range} />;
   }
 
-  const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
+  // Auto-scale to the selected task and its children (the focus), so the nested
+  // gantt always frames the task regardless of the component view's zoom — and
+  // selecting a task no longer needs to rescope the whole view. The parent, which
+  // can span far wider, is drawn clamped (see buildTopTaskRows).
+  const focusTasks = [mainTask, ...childTasks];
+  const focusStart = Math.min(...focusTasks.map((task) => task.start_time));
+  const focusEnd = Math.max(...focusTasks.map((task) => task.end_time));
+  const focusPad = (focusEnd - focusStart) * 0.05 || 1;
+  const domainStart = focusStart - focusPad;
+  const domainEnd = focusEnd + focusPad;
+  const xScale = d3.scaleLinear().domain([domainStart, domainEnd]).range([5, width - 5]);
   const ticks = xScale.ticks(12);
   const milestoneBand = (mainTask.steps?.length ?? 0) > 0 ? TASK_VIEW_MILESTONE_BAND : 0;
   const rows = buildTopTaskRows(mainTask, parentTask, childTasks, xScale, height, milestoneBand);
-  const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
+  const gaps = segmentsEnabled ? gapSegments(segments, domainStart, domainEnd) : [];
   const divider1Y = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 1.5 + TASK_VIEW_LARGE_TASK_HEIGHT;
   const divider2Y = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 2.5 + TASK_VIEW_LARGE_TASK_HEIGHT * 2 + milestoneBand;
   const parentLabelY = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP + 15;
