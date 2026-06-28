@@ -681,8 +681,6 @@ function ComponentTimeline({
               stroke="#000000"
               strokeOpacity={hasHighlight && highlighted ? 0.8 : 0.2}
               opacity={highlighted ? 1 : 0.4}
-              onMouseEnter={() => onHoverTask(task)}
-              onMouseLeave={() => onHoverTask(null)}
               onDoubleClick={() => onOpenTask(task)}
             >
               <title>
@@ -1308,8 +1306,6 @@ function ComponentTaskView({
             strokeOpacity={hasHighlight && highlighted ? 0.8 : 0.2}
             opacity={highlighted ? 1 : 0.4}
             className="cursor-pointer"
-            onMouseEnter={() => onHoverTask(row.task)}
-            onMouseLeave={() => onHoverTask(null)}
             onClick={(event) => {
               event.preventDefault();
               onSelectTask(row.task);
