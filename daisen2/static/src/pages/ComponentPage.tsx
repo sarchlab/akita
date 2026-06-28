@@ -1552,13 +1552,18 @@ function LocationSubtree({
 function ComponentDetailView({ root }: { root: LocationNode }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const name = searchParams.get("name") ?? "";
+  // `taskid` pins the nested hierarchy view (the task the page was opened on);
+  // `sel` is the lighter-weight detail-panel selection a click sets. Splitting
+  // them keeps a click from re-centering the hierarchy (see currentTask below) —
+  // the same id/sel split the task view uses.
   const urlTaskId = searchParams.get("taskid");
+  const urlSel = searchParams.get("sel");
   const { startTime: simStart, endTime: simEnd } = useSimulationRange();
   const urlStartTime = Number(searchParams.get("starttime") ?? simStart);
   const urlEndTime = Number(searchParams.get("endtime") ?? simEnd);
   const urlRange = sanitizeRange(urlStartTime, urlEndTime);
   const [viewRange, setViewRange] = useState<TimeRange>(urlRange);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(urlTaskId);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(urlSel ?? urlTaskId);
   const [selectedTaskSeed, setSelectedTaskSeed] = useState<Task | null>(null);
   const dataRange = useDebouncedValue(viewRange, DATA_RANGE_DEBOUNCE_MS);
   const { ref, size } = useElementSize<HTMLDivElement>();
@@ -1664,7 +1669,21 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     () => tasks.find((task) => String(task.id) === selectedTaskId) ?? null,
     [selectedTaskId, tasks],
   );
-  const currentTask = selectedTask ?? selectedTaskFromComponent;
+  // The detail panel follows the clicked task (the selection).
+  const panelTask = selectedTask ?? selectedTaskFromComponent;
+  // The nested hierarchy view (Parent / Current / Subtasks) is PINNED to the task
+  // the page was opened on (the URL `taskid`) — a click does not re-center it, so
+  // the hierarchy no longer jumps on every click. Double-click (open in the task
+  // view) is how you move focus to another task.
+  const inspectedTaskId = urlTaskId;
+  const inspectedTaskQuery = useMemo(() => (inspectedTaskId ? { id: inspectedTaskId } : {}), [inspectedTaskId]);
+  const { tasks: inspectedTaskMatches } = useTraceData(inspectedTaskQuery);
+  const inspectedTaskFromFetch = inspectedTaskMatches.find((task) => String(task.id) === inspectedTaskId) ?? null;
+  const inspectedTaskFromComponent = useMemo(
+    () => tasks.find((task) => String(task.id) === inspectedTaskId) ?? null,
+    [inspectedTaskId, tasks],
+  );
+  const currentTask = inspectedTaskFromFetch ?? inspectedTaskFromComponent;
   const parentTaskQuery = useMemo(
     () => (currentTask?.parent_id ? { id: String(currentTask.parent_id) } : {}),
     [currentTask?.parent_id],
@@ -1695,9 +1714,9 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
 
   useEffect(() => {
     setViewRange(urlRange);
-    setSelectedTaskId(urlTaskId);
+    setSelectedTaskId(urlSel ?? urlTaskId);
     setSelectedTaskSeed(null);
-  }, [urlRange.startTime, urlRange.endTime, name, urlTaskId]);
+  }, [urlRange.startTime, urlRange.endTime, name, urlTaskId, urlSel]);
 
   useEffect(() => {
     if (!componentName) return;
@@ -1966,13 +1985,12 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     setSelectedTaskId(taskId);
     setSelectedTaskSeed(task);
     setSelectedMilestone(null);
-    // A click only selects — it does NOT move the shared time axis (no view jump).
-    // The range is framed on the task on arrival (the URL range) and is otherwise
-    // driven by the page's pan/zoom controls. Double-click opens the task view.
-
+    // A click only selects: it updates the detail panel and the URL `sel`. It does
+    // NOT touch `taskid` (so the nested hierarchy view stays pinned to the opened
+    // task) and does not move the time axis — nothing in the layout jumps.
+    // Double-click opens the task view.
     const params = new URLSearchParams(window.location.search);
-    params.set("name", componentName);
-    params.set("taskid", taskId);
+    params.set("sel", taskId);
     window.history.replaceState(null, "", `/component?${params.toString()}`);
   };
 
@@ -2206,7 +2224,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           {/* The panel reflects the clicked/selected task (click-to-select),
               matching the task view; hovering only highlights the bar. */}
           <SelectedTaskSection
-            task={currentTask}
+            task={panelTask}
             milestone={selectedMilestone}
           />
           <div className="-mx-4 border-t" />
