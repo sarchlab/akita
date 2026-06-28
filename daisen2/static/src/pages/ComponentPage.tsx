@@ -1242,7 +1242,7 @@ function ComponentTaskView({
   onHoverTask,
   onSelectTask,
   onOpenTask,
-  onHoverMilestone,
+  onSelectMilestone,
 }: {
   mainTask: Task | null;
   parentTask: Task | null;
@@ -1259,7 +1259,7 @@ function ComponentTaskView({
   onHoverTask: (task: Task | null) => void;
   onSelectTask: (task: Task) => void;
   onOpenTask: (task: Task) => void;
-  onHoverMilestone: (milestone: HoveredMilestone | null) => void;
+  onSelectMilestone: (milestone: HoveredMilestone | null) => void;
 }) {
   if (!mainTask) {
     return <ComponentTopAxis width={width} height={height} range={range} />;
@@ -1362,15 +1362,28 @@ function ComponentTaskView({
           const color = colorMap[step.kind] ?? "#9ca3af";
           const d = wavyPath(x0, x1, centerY);
           return (
-            <g key={`milestone-${index}-${step.kind}`}>
+            <g
+              key={`milestone-${index}-${step.kind}`}
+              className="cursor-pointer"
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelectMilestone({
+                  kind: step.kind,
+                  what: step.what,
+                  time: step.time,
+                  blockedFor: step.time - intervalStart,
+                });
+              }}
+            >
               {x1 - x0 >= 2 && (
                 <>
+                  {/* White box behind the wave: a clear, easy-to-click target for
+                      the blocking interval (also doubles as the click hit area). */}
+                  <rect x={x0} y={centerY - 8} width={x1 - x0} height={16} fill="#ffffff" stroke="#e2e8f0" />
                   <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" pointerEvents="none" />
-                  {/* Wide transparent overlay so the thin wave is easy to hover. */}
-                  <path d={d} fill="none" stroke="transparent" strokeWidth={12} pointerEvents="stroke" />
                 </>
               )}
-              <circle cx={x1} cy={centerY} r={3} fill={color} stroke="#ffffff" strokeWidth={0.75} />
+              <circle cx={x1} cy={centerY} r={3} fill={color} stroke="#ffffff" strokeWidth={0.75} pointerEvents="none" />
             </g>
           );
         });
@@ -1656,9 +1669,9 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     [childTaskMatches, currentTask?.id],
   );
   const [hoveredTask, setHoveredTask] = useState<Task | null>(null);
-  // A blocking milestone under the cursor; shown in the side panel instead of a
-  // chart tooltip, taking over the selected-task section while hovered.
-  const [hoveredMilestone, setHoveredMilestone] = useState<HoveredMilestone | null>(null);
+  // A blocking milestone clicked on the current-task wavy line; shown in the side
+  // panel (taking over the selected-task section) until a task is selected.
+  const [selectedMilestone, setSelectedMilestone] = useState<HoveredMilestone | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   // Separate from highlightedKey (task "kind-what" keys): hovering a blocking
   // reason in the legend highlights its band without dimming the task charts,
@@ -1947,6 +1960,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     const taskId = String(task.id);
     setSelectedTaskId(taskId);
     setSelectedTaskSeed(task);
+    setSelectedMilestone(null);
     // Focus the shared time axis (all the component view's charts) on the task so
     // the nested gantt frames it. This stays in the current component scope — it
     // does NOT walk to the task's own location, so it is not a redirect to another
@@ -1974,6 +1988,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     // zoom range, just without a selected task.
     setSelectedTaskId(null);
     setSelectedTaskSeed(null);
+    setSelectedMilestone(null);
     const params = new URLSearchParams();
     params.set("name", componentName);
     params.set("starttime", String(viewRange.startTime));
@@ -2031,7 +2046,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             onHoverTask={setHoveredTask}
             onSelectTask={selectTask}
             onOpenTask={openTaskView}
-            onHoverMilestone={setHoveredMilestone}
+            onSelectMilestone={setSelectedMilestone}
           />
           {/* Help opens only when a task is selected — that's when the hierarchy exists. */}
           {currentTask && (
@@ -2189,7 +2204,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               matching the task view; hovering only highlights the bar. */}
           <SelectedTaskSection
             task={currentTask}
-            milestone={hoveredMilestone}
+            milestone={selectedMilestone}
           />
           <div className="-mx-4 border-t" />
           <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} colorMode={colorMode} onColorMode={handleColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={highlightedReason} onHighlightReason={setHighlightedReason} />
