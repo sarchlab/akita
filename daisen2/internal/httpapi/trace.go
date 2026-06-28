@@ -52,10 +52,12 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 	if pidStr := r.FormValue("parentid"); pidStr != "" {
 		queryParentID, _ = strconv.ParseUint(pidStr, 10, 64)
 	}
+	queryParentIDs := parseIDList(r.FormValue("parentids"))
 
 	query := TaskQuery{
 		ID:               queryID,
 		ParentID:         queryParentID,
+		ParentIDs:        queryParentIDs,
 		Kind:             r.FormValue("kind"),
 		Where:            r.FormValue("where"),
 		Scope:            r.FormValue("scope"),
@@ -75,6 +77,34 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 	dieOnErr(err)
 }
 
+// parseIDList parses a comma-separated list of non-zero unsigned ids (e.g. the
+// `parentids` query param), skipping blanks and unparseable entries.
+func parseIDList(s string) []uint64 {
+	if s == "" {
+		return nil
+	}
+
+	var ids []uint64
+	for _, part := range strings.Split(s, ",") {
+		if id, err := strconv.ParseUint(strings.TrimSpace(part), 10, 64); err == nil && id != 0 {
+			ids = append(ids, id)
+		}
+	}
+
+	return ids
+}
+
+// joinIDs renders ids as a comma-separated string for an SQL IN (…) list. The
+// values are uint64, so there is nothing to escape.
+func joinIDs(ids []uint64) string {
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = strconv.FormatUint(id, 10)
+	}
+
+	return strings.Join(parts, ",")
+}
+
 // TaskQuery is used to define the tasks to be queried. Not all the field has to
 // be set. If the fields are empty, the criteria is ignored.
 type TaskQuery struct {
@@ -83,6 +113,10 @@ type TaskQuery struct {
 
 	// Use ParentID to select all the tasks that are children of a task.
 	ParentID uint64
+
+	// Use ParentIDs to select the children of any of several parents in one
+	// query — used to load a whole subtree level at once.
+	ParentIDs []uint64
 
 	// Use Kind to select all the tasks that are of a kind.
 	Kind string
@@ -817,6 +851,12 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 	if query.ParentID != 0 {
 		sqlStr += `
 			AND t.ParentID = ` + strconv.FormatUint(query.ParentID, 10) + `
+		`
+	}
+
+	if len(query.ParentIDs) > 0 {
+		sqlStr += `
+			AND t.ParentID IN (` + joinIDs(query.ParentIDs) + `)
 		`
 	}
 

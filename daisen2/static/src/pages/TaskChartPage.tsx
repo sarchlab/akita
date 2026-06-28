@@ -5,17 +5,16 @@ import Legend from "../components/Legend";
 import TaskDetail from "../components/TaskDetail";
 import { SidePanel } from "../components/ui/side-panel";
 import { useSegments } from "../hooks/useSegments";
-import { useTraceData } from "../hooks/useTraceData";
+import { useTaskHierarchy } from "../hooks/useTaskHierarchy";
 import type { Task } from "../types/task";
 import { buildColorMapFromKeys, taskColorKey } from "../utils/taskColorCoder";
 import { milestonesOf } from "../utils/milestoneViz";
 import { mergeParams } from "../utils/viewState.mjs";
 
-// The task view is a detail view, always reached with a task `id` (from the
-// component view's inspect icon, "Open Parent", or opening a task from the
-// chart). `id` selects the task whose parent, children and milestones are
-// charted; `sel` is the task currently selected within that chart, shown in the
-// detail panel. A bare /task (no id) renders the chart's empty state.
+// The task view is a detail view, always reached with a task `id`. It charts the
+// task with its full ancestor chain above it and its descendant subtree below
+// (loaded level by level). `sel` is the task currently selected within the chart,
+// shown in the detail panel. A bare /task (no id) renders the empty state.
 export default function TaskChartPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const taskId = searchParams.get("id") ?? "";
@@ -25,24 +24,20 @@ export default function TaskChartPage() {
   // deselect (clicking the chart background) is not immediately undone.
   const autoSelectedFor = useRef<string | null>(null);
   const { data: segmentsData } = useSegments();
+  const { mainTask, ancestors, levels, atLeaves, loading, expanding, expandNext } = useTaskHierarchy(taskId);
 
-  const mainQuery = useMemo(() => (taskId ? { id: taskId } : {}), [taskId]);
-  const { tasks: mainTasks } = useTraceData(mainQuery);
-  const mainTask = mainTasks[0] ?? null;
-  const parentQuery = useMemo(() => (mainTask?.parent_id ? { id: String(mainTask.parent_id) } : {}), [mainTask?.parent_id]);
-  const { tasks: parentTasks } = useTraceData(parentQuery);
-  const parentTask = parentTasks[0] ?? null;
-  const childQuery = useMemo(() => (mainTask ? { parentId: String(mainTask.id) } : {}), [mainTask]);
-  const { tasks: childTasks } = useTraceData(childQuery);
+  const allTasks = useMemo(
+    () => [...ancestors, ...(mainTask ? [mainTask] : []), ...levels.flat()],
+    [ancestors, mainTask, levels],
+  );
 
   // Task color keys and blocking reasons present in the chart, and a color map
   // over both — shared with GanttChart (so bars match) and the Legend (so swatches
-  // match). The key order mirrors GanttChart's own (parent, main, then children).
+  // match).
   const taskKeys = useMemo(() => {
     const keys: string[] = [];
     const seen = new Set<string>();
-    for (const task of [parentTask, mainTask, ...childTasks]) {
-      if (!task) continue;
+    for (const task of allTasks) {
       const key = taskColorKey(task);
       if (!seen.has(key)) {
         seen.add(key);
@@ -50,7 +45,7 @@ export default function TaskChartPage() {
       }
     }
     return keys;
-  }, [parentTask, mainTask, childTasks]);
+  }, [allTasks]);
   const blockingReasons = useMemo(
     () => Array.from(new Set(milestonesOf(mainTask?.steps).map((step) => step.kind))),
     [mainTask],
@@ -61,10 +56,10 @@ export default function TaskChartPage() {
   );
 
   // Restore the selected task (the `sel` param) once its data has loaded; with no
-  // `sel`, default the detail panel to the main task.
+  // `sel`, default the detail panel to the main task (once per task id).
   useEffect(() => {
     if (sel) {
-      const found = [mainTask, parentTask, ...childTasks].find((task) => task && String(task.id) === sel);
+      const found = allTasks.find((task) => String(task.id) === sel);
       if (found) {
         setSelectedTask((current) => (current && String(current.id) === sel ? current : found));
         return;
@@ -74,7 +69,7 @@ export default function TaskChartPage() {
       autoSelectedFor.current = taskId;
       setSelectedTask(mainTask);
     }
-  }, [sel, taskId, mainTask?.id, parentTask?.id, childTasks]);
+  }, [sel, taskId, mainTask, allTasks]);
 
   const selectTask = useCallback(
     (task: Task) => {
@@ -84,8 +79,8 @@ export default function TaskChartPage() {
     [setSearchParams],
   );
 
-  // Open a different task by id (its parent, or a child), clearing the prior
-  // in-chart selection.
+  // Open a different task by id (an ancestor or a descendant), recentering the
+  // view on it and clearing the prior in-chart selection.
   const navigateToTask = useCallback(
     (id: string) => {
       setSearchParams((prev) => mergeParams("/task", prev, { id, sel: undefined }));
@@ -94,8 +89,7 @@ export default function TaskChartPage() {
     [setSearchParams],
   );
 
-  // Clear the selection when the chart background is clicked. Mark this task id
-  // as already auto-selected so the default-to-main effect leaves it cleared.
+  // Clear the selection when the chart background is clicked.
   const deselect = useCallback(() => {
     autoSelectedFor.current = taskId;
     setSelectedTask(null);
@@ -103,15 +97,16 @@ export default function TaskChartPage() {
   }, [setSearchParams, taskId]);
 
   const selectedId = selectedTask?.id ?? (sel || null);
+  const canExpand = !loading && !atLeaves && levels.length > 0;
 
   return (
     <div className="flex h-full overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="min-h-0 flex-1">
           <GanttChart
-            tasks={childTasks}
+            ancestors={ancestors}
             mainTask={mainTask}
-            parentTask={parentTask}
+            levels={levels}
             segments={segmentsData?.segments ?? []}
             segmentsEnabled={segmentsData?.enabled ?? false}
             colorMap={colorMap}
@@ -119,6 +114,9 @@ export default function TaskChartPage() {
             onSelectTask={selectTask}
             onOpenTask={(task) => navigateToTask(String(task.id))}
             onDeselect={deselect}
+            canExpand={canExpand}
+            expanding={expanding}
+            onExpandNext={expandNext}
           />
         </div>
       </div>
