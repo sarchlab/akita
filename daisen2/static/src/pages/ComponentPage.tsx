@@ -52,13 +52,6 @@ const RAW_TASK_THRESHOLD = 5000;
 // past its region and is navigated by dragging / scroll buttons instead.
 const ROW_HEIGHT = 22;
 
-// A location is within a scope when it is the scope itself or nested under it in
-// the dotted hierarchy ("ROB" contains "ROB.Top.incoming"). Used so selecting a
-// task that already lives in the current scope keeps the scope, instead of
-// drilling down to the task's exact leaf location.
-function isWithinScope(location: string, scope: string): boolean {
-  return location === scope || location.startsWith(scope + ".");
-}
 const MIN_RANGE = 1e-12;
 const TASK_VIEW_MARGIN_TOP = 20;
 const TASK_VIEW_MARGIN_BOTTOM = 20;
@@ -1577,11 +1570,13 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   const selectedTaskFromFetch = selectedTaskMatches.find((task) => String(task.id) === selectedTaskId) ?? null;
   const selectedTaskFromSeed = selectedTaskSeed && String(selectedTaskSeed.id) === selectedTaskId ? selectedTaskSeed : null;
   const selectedTask = selectedTaskFromFetch ?? selectedTaskFromSeed;
-  // The view follows a selected task to a *different* component (issue #156), but
-  // stays in the current scope when the task already lives within it — clicking a
-  // task in ROB.Top.incoming while viewing ROB keeps you at ROB.
+  // The component page stays scoped to its own component. Selecting a task only
+  // highlights it (in the nested hierarchy and the detail panel) — it never
+  // re-scopes the page to the task's own component, which read as the view
+  // "redirecting" on every click. Drilling into a task's component is what
+  // double-click (open in the task view) is for.
   const selectedLocation = selectedTask?.location;
-  const componentName = selectedLocation && !isWithinScope(selectedLocation, name) ? selectedLocation : name;
+  const componentName = name;
 
   // Location hierarchy for the header: breadcrumb ancestors (collapse up) and the
   // current node's children (drill down). The view's data is scoped to this
