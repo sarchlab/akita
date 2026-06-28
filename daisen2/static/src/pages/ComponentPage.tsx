@@ -1,7 +1,7 @@
 import * as d3 from "d3";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent, WheelEvent as ReactWheelEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { X, ChevronRight, ChevronDown, ChevronUp, Plus, Minus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { SidePanel } from "../components/ui/side-panel";
@@ -21,7 +21,6 @@ import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskC
 import type { ColorMode } from "../utils/taskColorCoder";
 import { blockingKindAt, milestonesOf, wavyPath } from "../utils/milestoneViz";
 import { smartString } from "../utils/smartValue";
-import { encodeView } from "../utils/viewState.mjs";
 import { cn } from "../lib/utils";
 import { useComponentNames } from "../hooks/useComponentNames";
 import { buildLocationTree, breadcrumbSegments, findNode, type LocationNode } from "../utils/locationTree";
@@ -441,9 +440,11 @@ interface ComponentTimelineProps {
   highlightedKey: string | null;
   highlightedTaskId: string | null;
   highlightedTaskIds: Set<string> | null;
+  selectedTaskId: string | null;
   onHoverTask: (task: Task | null) => void;
   onSelectTask: (task: Task) => void;
   onOpenTask: (task: Task) => void;
+  onDeselect: () => void;
   // Zoom the time range from a wheel/pinch over the gantt. pointerRatio is the
   // cursor's fractional x within the chart, so the zoom is anchored at the pointer.
   onZoom: (deltaY: number, deltaX: number, pointerRatio: number) => void;
@@ -463,9 +464,11 @@ function ComponentTimeline({
   highlightedKey,
   highlightedTaskId,
   highlightedTaskIds,
+  selectedTaskId,
   onHoverTask,
   onSelectTask,
   onOpenTask,
+  onDeselect,
   onZoom,
   onRangeChange,
 }: ComponentTimelineProps) {
@@ -499,6 +502,8 @@ function ComponentTimeline({
   onSelectTaskRef.current = onSelectTask;
   const onOpenTaskRef = useRef(onOpenTask);
   onOpenTaskRef.current = onOpenTask;
+  const onDeselectRef = useRef(onDeselect);
+  onDeselectRef.current = onDeselect;
   // The pointer capture used for drag-panning swallows the bars' native dblclick,
   // so detect a double-click manually: two clicks on the same task in quick
   // succession open it in the task view.
@@ -595,7 +600,12 @@ function ComponentTimeline({
     event.stopPropagation();
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     dragRef.current = null;
-    if (drag.moved || !drag.pending) return;
+    if (drag.moved) return;
+    if (!drag.pending) {
+      // A click that landed on empty space (no task) clears the selection.
+      onDeselectRef.current();
+      return;
+    }
 
     const id = String(drag.pending.id);
     const now = Date.now();
@@ -680,6 +690,7 @@ function ComponentTimeline({
                 : highlightedKey !== null
                   ? keyHighlighted
                   : true;
+          const selected = selectedTaskId != null && selectedTaskId === String(task.id);
           return (
             <rect
               key={String(task.id)}
@@ -690,8 +701,8 @@ function ComponentTimeline({
               height={Math.max(1, dim.height)}
               fill={lookupColor(colorMap, task, colorMode)}
               stroke="#000000"
-              strokeOpacity={hasHighlight && highlighted ? 0.8 : 0.2}
-              opacity={highlighted ? 1 : 0.4}
+              strokeOpacity={selected || (hasHighlight && highlighted) ? 0.8 : 0.2}
+              opacity={hasHighlight ? (highlighted ? 1 : 0.4) : selectedTaskId != null && !selected ? 0.6 : 1}
             >
               <title>
                 {task.kind} - {task.what}
@@ -1249,9 +1260,11 @@ function ComponentTaskView({
   colorMode,
   highlightedKey,
   highlightedTaskId,
+  selectedTaskId,
   onHoverTask,
   onSelectTask,
   onOpenTask,
+  onDeselect,
   onSelectMilestone,
 }: {
   mainTask: Task | null;
@@ -1266,9 +1279,11 @@ function ComponentTaskView({
   colorMode: ColorMode;
   highlightedKey: string | null;
   highlightedTaskId: string | null;
+  selectedTaskId: string | null;
   onHoverTask: (task: Task | null) => void;
   onSelectTask: (task: Task) => void;
   onOpenTask: (task: Task) => void;
+  onDeselect: () => void;
   onSelectMilestone: (milestone: HoveredMilestone | null) => void;
 }) {
   if (!mainTask) {
@@ -1291,7 +1306,7 @@ function ComponentTaskView({
   const subTasksLabelY = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 3 + TASK_VIEW_LARGE_TASK_HEIGHT * 2 + 16 + milestoneBand;
 
   return (
-    <svg width={width} height={height} className="block">
+    <svg width={width} height={height} className="block" onClick={() => onDeselect()}>
       <defs>
         <pattern id="task-view-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
           <rect width="8" height="8" fill="rgba(128, 128, 128, 0.15)" />
@@ -1311,6 +1326,7 @@ function ComponentTaskView({
         const keyHighlighted = highlightedKey === key;
         const hasHighlight = highlightedTaskId !== null || highlightedKey !== null;
         const highlighted = highlightedTaskId !== null ? taskHighlighted : highlightedKey !== null ? keyHighlighted : true;
+        const selected = selectedTaskId != null && selectedTaskId === String(row.task.id);
         return (
           <rect
             key={String(row.task.id)}
@@ -1321,11 +1337,12 @@ function ComponentTaskView({
             height={Math.max(1, row.height)}
             fill={lookupColor(colorMap, row.task, colorMode)}
             stroke="#000000"
-            strokeOpacity={hasHighlight && highlighted ? 0.8 : 0.2}
-            opacity={highlighted ? 1 : 0.4}
+            strokeOpacity={selected || (hasHighlight && highlighted) ? 0.8 : 0.2}
+            opacity={hasHighlight ? (highlighted ? 1 : 0.4) : selectedTaskId != null && !selected ? 0.6 : 1}
             className="cursor-pointer"
             onClick={(event) => {
               event.preventDefault();
+              event.stopPropagation();
               onSelectTask(row.task);
             }}
             onDoubleClick={() => onOpenTask(row.task)}
@@ -1975,7 +1992,6 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     }
   };
 
-  const navigate = useNavigate();
   const selectTask = (task: Task) => {
     if (didDragRef.current) {
       didDragRef.current = false;
@@ -1994,27 +2010,30 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     window.history.replaceState(null, "", `/component?${params.toString()}`);
   };
 
-  // Double-click a task (anywhere on the component page) to open it in the task
-  // view — matching the task view's click-to-select / double-click-to-open.
-  const openTaskView = (task: Task) => {
-    navigate(encodeView({ route: "task", id: String(task.id) }));
+  // Double-click a task (anywhere on the component page) to make it the current
+  // task — stay on the component page and re-center the nested hierarchy on it
+  // (set `taskid`), rather than leaving for the task view. Clearing `sel` lets the
+  // selection default back to the new current task. The visible range is carried
+  // across so the view does not snap.
+  const makeTaskCurrent = (task: Task) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("taskid", String(task.id));
+    params.delete("sel");
+    params.set("starttime", String(viewRange.startTime));
+    params.set("endtime", String(viewRange.endTime));
+    setSearchParams(params);
   };
 
   const deselectTask = () => {
-    // Clear the selected task and collapse the task panel back to the overview.
-    // Goes through react-router (not the raw replaceState that selectTask uses)
-    // so `name`/`searchParams` are re-synced: keep the component currently in
-    // view (componentName — which may differ from the URL's original `name`
-    // after walking to a parent/subtask in another component) and the current
-    // zoom range, just without a selected task.
+    // Clear the selected task (the detail panel). Keep `taskid` so the nested
+    // hierarchy view stays put, and use replaceState (not setSearchParams) so the
+    // navigation-reset effect does not immediately re-select the current task.
     setSelectedTaskId(null);
     setSelectedTaskSeed(null);
     setSelectedMilestone(null);
-    const params = new URLSearchParams();
-    params.set("name", componentName);
-    params.set("starttime", String(viewRange.startTime));
-    params.set("endtime", String(viewRange.endTime));
-    setSearchParams(params, { replace: true });
+    const params = new URLSearchParams(window.location.search);
+    params.delete("sel");
+    window.history.replaceState(null, "", `/component?${params.toString()}`);
   };
 
   if (!name) {
@@ -2064,9 +2083,11 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             colorMode={colorMode}
             highlightedKey={highlightedKey}
             highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
+            selectedTaskId={selectedTaskId}
             onHoverTask={setHoveredTask}
             onSelectTask={selectTask}
-            onOpenTask={openTaskView}
+            onOpenTask={makeTaskCurrent}
+            onDeselect={deselectTask}
             onSelectMilestone={setSelectedMilestone}
           />
           {/* Help opens only when a task is selected — that's when the hierarchy exists. */}
@@ -2092,9 +2113,11 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               highlightedKey={highlightedKey}
               highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
               highlightedTaskIds={highlightedTaskIds}
+              selectedTaskId={selectedTaskId}
               onHoverTask={setHoveredTask}
               onSelectTask={selectTask}
-              onOpenTask={openTaskView}
+              onOpenTask={makeTaskCurrent}
+              onDeselect={deselectTask}
               onZoom={zoomTimeRange}
               onRangeChange={shiftRange}
             />
