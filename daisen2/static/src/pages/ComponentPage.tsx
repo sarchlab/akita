@@ -102,6 +102,12 @@ interface TaskViewRow {
 type LayoutTask = Task & {
   subTasks: LayoutTask[];
   level: number;
+  // Subtree end: the latest end_time over this task and all its descendants.
+  // Concurrency packing uses this (not the task's own end) so a parent reserves
+  // its row for an out-running child — e.g. an L2 writeback that outlives the
+  // write request that spawned it — and nothing unrelated is packed into the row
+  // space that child draws over.
+  effEnd?: number;
   dim?: TaskDim;
 };
 
@@ -200,6 +206,7 @@ function buildTaskTree(tasks: LayoutTask[]) {
   for (const task of root.subTasks) {
     assignTaskLevel(task, 1);
   }
+  computeEffectiveEnd(root);
 
   return root;
 }
@@ -209,6 +216,19 @@ function assignTaskLevel(task: LayoutTask, level: number) {
   for (const child of task.subTasks) {
     assignTaskLevel(child, level + 1);
   }
+}
+
+// computeEffectiveEnd sets each task's effEnd to the latest end_time in its
+// subtree (itself plus all descendants), bottom-up, so concurrency packing can
+// reserve a row for a task's whole subtree rather than just its own span.
+function computeEffectiveEnd(task: LayoutTask): number {
+  let end = task.end_time;
+  for (const child of task.subTasks) {
+    end = Math.max(end, computeEffectiveEnd(child));
+  }
+  task.effEnd = end;
+
+  return end;
 }
 
 function tasksAtLevel(task: LayoutTask, depth: number, output: LayoutTask[]) {
@@ -246,11 +266,17 @@ function assignYIndices(tasks: LayoutTask[]) {
 function hasConflict(task: LayoutTask, row?: LayoutTask[]) {
   if (!row) return false;
 
+  // Pack by the subtree span [start_time, effEnd], not the task's own end, so a
+  // task reserves room for an out-running descendant and nothing unrelated is
+  // placed in the row space that descendant draws over.
+  const taskEnd = task.effEnd ?? task.end_time;
+
   return row.some((other) => {
-    if (other.start_time <= task.start_time && other.end_time > task.start_time) return true;
-    if (other.start_time < task.end_time && other.end_time >= task.end_time) return true;
-    if (task.start_time <= other.start_time && task.end_time >= other.end_time) return true;
-    if (task.start_time >= other.start_time && task.end_time <= other.end_time) return true;
+    const otherEnd = other.effEnd ?? other.end_time;
+    if (other.start_time <= task.start_time && otherEnd > task.start_time) return true;
+    if (other.start_time < taskEnd && otherEnd >= taskEnd) return true;
+    if (task.start_time <= other.start_time && taskEnd >= otherEnd) return true;
+    if (task.start_time >= other.start_time && taskEnd <= otherEnd) return true;
     return false;
   });
 }
