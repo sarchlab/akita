@@ -2,7 +2,7 @@ import * as d3 from "d3";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { X, ChevronRight, ChevronDown, ChevronUp, Plus, Minus } from "lucide-react";
+import { X, ChevronRight, ChevronDown, ChevronUp, Plus, Minus, Search } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { SidePanel } from "../components/ui/side-panel";
 import { BlockingReasonsHelp, ComponentTaskViewHelp, TaskCountHelp, TaskHierarchyHelp, TaskTypesHelp } from "../components/HelpTopics";
@@ -19,6 +19,7 @@ import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskC
 import type { ColorMode } from "../utils/taskColorCoder";
 import { blockingKindAt, milestonesOf, wavyPath } from "../utils/milestoneViz";
 import { smartString } from "../utils/smartValue";
+import { encodeView } from "../utils/viewState.mjs";
 import { cn } from "../lib/utils";
 import { useComponentNames } from "../hooks/useComponentNames";
 import { buildLocationTree, breadcrumbSegments, findNode, type LocationNode } from "../utils/locationTree";
@@ -1455,8 +1456,18 @@ function SelectedTaskSection({
         </p>
       ) : (
         <div className="mt-2 rounded-lg border bg-muted/30 p-3">
-        <div className="mb-2 break-all text-sm font-semibold">
-          {task.kind} · {task.what}
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <span className="break-all text-sm font-semibold">
+            {task.kind} · {task.what}
+          </span>
+          <Link
+            to={encodeView({ route: "task", id: String(task.id) })}
+            className="shrink-0 rounded border p-1 text-muted-foreground hover:text-primary"
+            title="Inspect this task in the task view"
+            aria-label="Inspect this task in the task view"
+          >
+            <Search className="h-3.5 w-3.5" />
+          </Link>
         </div>
         <dl className="space-y-1.5 text-xs">
           {rows.map(([label, value]) => {
