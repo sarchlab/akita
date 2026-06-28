@@ -1377,9 +1377,9 @@ function ComponentTaskView({
             >
               {x1 - x0 >= 2 && (
                 <>
-                  {/* White box behind the wave: a clear, easy-to-click target for
-                      the blocking interval (also doubles as the click hit area). */}
-                  <rect x={x0} y={centerY - 8} width={x1 - x0} height={16} fill="#ffffff" stroke="#e2e8f0" />
+                  {/* Invisible hit area so the thin wave is easy to click — no
+                      fill or border, purely to capture the pointer. */}
+                  <rect x={x0} y={centerY - 8} width={x1 - x0} height={16} fill="transparent" pointerEvents="all" />
                   <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" pointerEvents="none" />
                 </>
               )}
