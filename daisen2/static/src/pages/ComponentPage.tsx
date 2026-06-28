@@ -390,7 +390,7 @@ function ComponentTopAxis({ width, height, range }: { width: number; height: num
     <svg width={width} height={height} className="block">
       {ticks.map((tick) => (
         <g key={tick}>
-          <text x={safeScale(xScale, tick)} y={11} textAnchor="middle" fontSize="12" fill="#000">
+          <text x={safeScale(xScale, tick)} y={11} textAnchor="middle" fontSize="10" fill="#475569">
             {formatAxisTick(tick)}
           </text>
           <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.5} />
@@ -1157,7 +1157,7 @@ function ComponentMilestoneAreas({
         <g key={tick} pointerEvents="none">
           <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={xAxisY} stroke="#000" strokeDasharray="3,3" opacity={0.3} />
           <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={xAxisY} y2={xAxisY + 5} stroke="#000" />
-          <text x={safeScale(xScale, tick)} y={height - 4} textAnchor="middle" fontSize="12" fill="#000">
+          <text x={safeScale(xScale, tick)} y={height - 4} textAnchor="middle" fontSize="10" fill="#475569">
             {formatAxisTick(tick)}
           </text>
         </g>
@@ -1357,7 +1357,7 @@ function ComponentTaskView({
 
       {ticks.map((tick) => (
         <g key={tick} pointerEvents="none">
-          <text x={safeScale(xScale, tick)} y={11} textAnchor="middle" fontSize="12" fill="#000">
+          <text x={safeScale(xScale, tick)} y={11} textAnchor="middle" fontSize="10" fill="#475569">
             {formatAxisTick(tick)}
           </text>
           <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.5} />
