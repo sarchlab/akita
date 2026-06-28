@@ -1352,22 +1352,9 @@ function ComponentTaskView({
           const x0 = safeScale(xScale, intervalStart);
           const x1 = safeScale(xScale, step.time);
           const color = colorMap[step.kind] ?? "#9ca3af";
-          const blockedFor = step.time - intervalStart;
           const d = wavyPath(x0, x1, centerY);
           return (
-            <g
-              key={`milestone-${index}-${step.kind}`}
-              style={{ cursor: "pointer" }}
-              onMouseEnter={() =>
-                onHoverMilestone({
-                  kind: step.kind,
-                  what: step.what,
-                  time: step.time,
-                  blockedFor,
-                })
-              }
-              onMouseLeave={() => onHoverMilestone(null)}
-            >
+            <g key={`milestone-${index}-${step.kind}`}>
               {x1 - x0 >= 2 && (
                 <>
                   <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" pointerEvents="none" />
