@@ -1,7 +1,7 @@
 import * as d3 from "d3";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent, WheelEvent as ReactWheelEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { X, ChevronRight, ChevronDown, ChevronUp, Plus, Minus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { SidePanel } from "../components/ui/side-panel";
@@ -21,6 +21,7 @@ import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskC
 import type { ColorMode } from "../utils/taskColorCoder";
 import { blockingKindAt, milestonesOf, wavyPath } from "../utils/milestoneViz";
 import { smartString } from "../utils/smartValue";
+import { encodeView } from "../utils/viewState.mjs";
 import { cn } from "../lib/utils";
 import { useComponentNames } from "../hooks/useComponentNames";
 import { buildLocationTree, breadcrumbSegments, findNode, type LocationNode } from "../utils/locationTree";
@@ -2024,6 +2025,14 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     setSearchParams(params);
   };
 
+  // Double-clicking a task in the nested hierarchy view (a parent or a subtask of
+  // the current task) opens it in the task view — the place to inspect that task's
+  // own full hierarchy.
+  const navigate = useNavigate();
+  const openTaskView = (task: Task) => {
+    navigate(encodeView({ route: "task", id: String(task.id) }));
+  };
+
   const deselectTask = () => {
     // Clear the selected task (the detail panel). Keep `taskid` so the nested
     // hierarchy view stays put, and use replaceState (not setSearchParams) so the
@@ -2069,7 +2078,13 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
         {/* Three stacked regions. highlightedTaskId follows hover only (not the
             selected task), so selecting a task never dims the rest. Subtle
             border-t dividers separate the regions. */}
-        <div className="daisen1-task-view relative" style={{ height: taskViewHeight }}>
+        <div
+          className="daisen1-task-view relative"
+          style={{ height: taskViewHeight }}
+          // No scroll-to-zoom over the nested hierarchy region: swallow the wheel
+          // so it never reaches the left column's time-zoom handler.
+          onWheel={(event) => event.stopPropagation()}
+        >
           <ComponentTaskView
             mainTask={currentTask}
             parentTask={parentTask}
@@ -2086,7 +2101,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             selectedTaskId={selectedTaskId}
             onHoverTask={setHoveredTask}
             onSelectTask={selectTask}
-            onOpenTask={makeTaskCurrent}
+            onOpenTask={openTaskView}
             onDeselect={deselectTask}
             onSelectMilestone={setSelectedMilestone}
           />
