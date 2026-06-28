@@ -1738,6 +1738,10 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // reason in the legend highlights its band without dimming the task charts,
   // whose keys live in a different namespace.
   const [highlightedReason, setHighlightedReason] = useState<string | null>(null);
+  // What the blocking-reason chart and legend highlight: a hovered reason wins,
+  // otherwise the selected blocking reason (the clicked milestone) stays lit so
+  // selecting one keeps it highlighted.
+  const reasonHighlight = highlightedReason ?? selectedMilestone?.kind ?? null;
   const dragRef = useRef<{ pointerId: number; x: number; range: TimeRange } | null>(null);
   const didDragRef = useRef(false);
   const pendingSelectTaskRef = useRef<Task | null>(null);
@@ -2024,7 +2028,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
 
     if (didDragRef.current) return;
     if (pendingMilestone) {
-      setSelectedMilestone(pendingMilestone);
+      selectMilestone(pendingMilestone);
       return;
     }
     if (!pendingTask) {
@@ -2087,6 +2091,19 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     setSelectedTaskId(null);
     setSelectedTaskSeed(null);
     setSelectedMilestone(null);
+    const params = new URLSearchParams(window.location.search);
+    params.delete("sel");
+    window.history.replaceState(null, "", `/component?${params.toString()}`);
+  };
+
+  // Selecting a blocking reason (a milestone on the current task) takes over the
+  // detail panel from the task and highlights that reason in the blocking-reason
+  // chart and legend (see reasonHighlight). The task selection is cleared so the
+  // panel shows the reason instead of the task.
+  const selectMilestone = (milestone: HoveredMilestone) => {
+    setSelectedMilestone(milestone);
+    setSelectedTaskId(null);
+    setSelectedTaskSeed(null);
     const params = new URLSearchParams(window.location.search);
     params.delete("sel");
     window.history.replaceState(null, "", `/component?${params.toString()}`);
@@ -2225,7 +2242,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           style={{ height: metricLineHeight }}
           onWheel={handleOverviewWheel}
         >
-          <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={highlightedReason} segments={segmentsData?.segments ?? []} segmentsEnabled={segmentsData?.enabled ?? false} onHoverSegment={setHoveredSegment} onHoverReason={setHighlightedReason} />
+          <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={reasonHighlight} segments={segmentsData?.segments ?? []} segmentsEnabled={segmentsData?.enabled ?? false} onHoverSegment={setHoveredSegment} onHoverReason={setHighlightedReason} />
           <div className={CHART_HELP_CORNER} onPointerDown={(e) => e.stopPropagation()}>
             <BlockingReasonsHelp className={CHART_HELP_BUTTON} />
           </div>
@@ -2314,7 +2331,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             milestone={selectedMilestone}
           />
           <div className="-mx-4 border-t" />
-          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} colorMode={colorMode} onColorMode={handleColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={highlightedReason} onHighlightReason={setHighlightedReason} />
+          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} colorMode={colorMode} onColorMode={handleColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={reasonHighlight} onHighlightReason={setHighlightedReason} />
         </div>
       </SidePanel>
     </div>
