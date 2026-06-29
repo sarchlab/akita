@@ -160,5 +160,34 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 			task := tracer.tracingTasks[uint64(1)]
 			Expect(task.Milestones).To(HaveLen(1))
 		})
+
+		It("should keep a repeated (kind, what) at different times", func() {
+			tracer.StartTracing()
+
+			m1 := Milestone{
+				ID:     uint64(10),
+				TaskID: uint64(1),
+				Time:   100,
+				Kind:   MilestoneKindHardwareResource,
+				What:   "VALU",
+			}
+			m2 := Milestone{
+				ID:     uint64(11),
+				TaskID: uint64(1),
+				Time:   200,
+				Kind:   MilestoneKindHardwareResource,
+				What:   "VALU",
+			}
+
+			tracer.AddMilestone(m1)
+			// Same (kind, what) but a later time: a long-lived task recurs through
+			// the same reason, so this must be kept, not collapsed to the first.
+			tracer.AddMilestone(m2)
+
+			task := tracer.tracingTasks[uint64(1)]
+			Expect(task.Milestones).To(HaveLen(2))
+			Expect(task.Milestones[0].Time).To(Equal(timing.VTimeInPicoSec(100)))
+			Expect(task.Milestones[1].Time).To(Equal(timing.VTimeInPicoSec(200)))
+		})
 	})
 })
