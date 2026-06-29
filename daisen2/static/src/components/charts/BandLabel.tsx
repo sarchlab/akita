@@ -15,6 +15,7 @@ export default function BandLabel({ x, y, children }: { x: number; y: number; ch
       paintOrder="stroke"
       textAnchor="start"
       pointerEvents="none"
+      style={{ userSelect: "none" }}
     >
       {children}
     </text>

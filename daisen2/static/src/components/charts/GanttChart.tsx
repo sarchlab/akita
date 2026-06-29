@@ -48,7 +48,6 @@ interface GanttChartProps {
 
 const MARGIN = { top: 28, right: 12, bottom: 28, left: 8 };
 const ROW_HEIGHT = 14;
-const HEADER_ROW_HEIGHT = 22;
 // Vertical room reserved below the current task bar for the blocking-reason
 // curves (only when the task has milestones).
 // Bar/band heights aligned with the component view (TASK_VIEW_LARGE_TASK_HEIGHT
@@ -177,22 +176,30 @@ export default function GanttChart({
     colorMapProp ??
     buildColorMapFromKeys([...allTasks.map((task) => taskColorKey(task, colorMode)), ...milestoneSteps.map((step) => step.kind)]);
 
-  // Vertical layout, top → bottom: ancestor rows (root first), current task (with
-  // its milestone band), then one labeled band per descendant level.
+  // Vertical layout, top → bottom. Each task has a label row above its bar; tasks
+  // with milestones get a band below the bar for the blocking waves. Label-above
+  // and milestones-below keep both off the bar, so the bar stays clickable.
+  const ROW_GAP = 4;
+  const hasMilestones = (task: Task) => milestonesOf(task.steps).length > 0;
   let cursor = MARGIN.top + 8;
   const ancestorRows = ancestors.map((task) => {
-    const top = cursor;
-    cursor += HEADER_ROW_HEIGHT;
-    return { task, top };
+    const labelTop = cursor;
+    const barTop = cursor + LABEL_H;
+    const band = hasMilestones(task) ? MILESTONE_BAND : 0;
+    cursor += LABEL_H + DESC_BAR_H + band + ROW_GAP;
+    return { task, labelTop, barTop, band };
   });
-  const currentTop = mainTask ? cursor : null;
-  if (mainTask) cursor += HEADER_ROW_HEIGHT + milestoneBand;
+  const currentLabelTop = cursor;
+  const currentBarTop = cursor + LABEL_H;
+  if (mainTask) cursor += LABEL_H + HEADER_BAR_H + milestoneBand + ROW_GAP;
   const levelRows = levelLayouts.map(({ tasks, lanes }, index) => {
     const labelTop = cursor;
     cursor += LABEL_H;
     const tasksTop = cursor;
-    cursor += lanes * ROW_HEIGHT + 6;
-    return { index, tasks, labelTop, tasksTop };
+    const levelHasMs = tasks.some(hasMilestones);
+    const laneH = ROW_HEIGHT + (levelHasMs ? MILESTONE_BAND : 0);
+    cursor += lanes * laneH + 6;
+    return { index, tasks, labelTop, tasksTop, laneH, levelHasMs };
   });
   const naturalHeight = cursor + MARGIN.bottom + 8;
 
@@ -209,27 +216,6 @@ export default function GanttChart({
 
   const xTicks = xScale.ticks(AXIS_TICK_COUNT);
   const gaps = segmentsEnabled ? gapSegments(segments, startTime, endTime) : [];
-
-  // Blocking-reason curves for the current task: each milestone closes an interval
-  // [previous milestone (or task start) → milestone], drawn as a wavy arc colored
-  // by the released reason with a node at the release point.
-  const milestoneCenterY = currentTop != null ? sy(currentTop + HEADER_BAR_H + 6) : 0;
-  const milestoneMarks =
-    mainTask && currentTop != null ? (
-      <MilestoneMarks
-        steps={milestoneSteps}
-        taskStart={mainTask.start_time}
-        xScale={xScale}
-        centerY={milestoneCenterY}
-        colorMap={colorMap}
-        selectedMilestone={selectedMilestone}
-        highlightedReason={highlightedReason}
-        onSelect={(milestone) => {
-          if (didDragRef.current) return;
-          onSelectMilestone?.(milestone);
-        }}
-      />
-    ) : null;
 
   const renderBar = (task: Task, top: number, barHeight: number, keyPrefix: string) => {
     // Clamp to the chart so an ancestor spanning far beyond the focus window
@@ -293,7 +279,7 @@ export default function GanttChart({
   return (
     <div
       ref={containerRef}
-      className="h-full cursor-grab overflow-auto bg-white active:cursor-grabbing"
+      className="h-full cursor-grab select-none overflow-auto bg-white active:cursor-grabbing"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -326,32 +312,32 @@ export default function GanttChart({
         <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={MARGIN.top} y2={MARGIN.top} stroke={COLOR_GRID} />
         <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={height - MARGIN.bottom} y2={height - MARGIN.bottom} stroke={COLOR_GRID} />
 
-        {ancestorRows.map(({ task, top }) => (
+        {ancestorRows.map(({ task, labelTop, barTop, band }) => (
           <g key={`anc-${task.id}`}>
-            {renderBar(task, sy(top + (HEADER_ROW_HEIGHT - DESC_BAR_H) / 2), sh(DESC_BAR_H), "anc")}
-            <BandLabel x={12} y={sy(top + 13)}>{task.kind}</BandLabel>
-            {renderTaskMilestones(task, sy(top + HEADER_ROW_HEIGHT / 2), `anc-ms-${task.id}`)}
+            <BandLabel x={12} y={sy(labelTop + 12)}>{task.kind}</BandLabel>
+            {renderBar(task, sy(barTop), sh(DESC_BAR_H), "anc")}
+            {band > 0 && renderTaskMilestones(task, sy(barTop + DESC_BAR_H + MILESTONE_BAND / 2), `anc-ms-${task.id}`)}
           </g>
         ))}
 
-        {mainTask && currentTop != null && (
-          <>
-            <BandLabel x={12} y={sy(currentTop + 13)}>Current Task</BandLabel>
-            {renderBar(mainTask, sy(currentTop + (HEADER_ROW_HEIGHT - HEADER_BAR_H) / 2), sh(HEADER_BAR_H), "main")}
-          </>
+        {mainTask && (
+          <g>
+            <BandLabel x={12} y={sy(currentLabelTop + 12)}>Current Task</BandLabel>
+            {renderBar(mainTask, sy(currentBarTop), sh(HEADER_BAR_H), "main")}
+            {milestoneBand > 0 && renderTaskMilestones(mainTask, sy(currentBarTop + HEADER_BAR_H + MILESTONE_BAND / 2), "main-ms")}
+          </g>
         )}
 
-        {levelRows.map(({ index, tasks, labelTop, tasksTop }) => (
+        {levelRows.map(({ index, tasks, labelTop, tasksTop, laneH, levelHasMs }) => (
           <g key={`lvl-${index}`}>
             <BandLabel x={12} y={sy(labelTop + 12)}>{`Subtasks · L${index + 1}`}</BandLabel>
-            {tasks.map((task) => renderBar(task, sy(tasksTop + (task.yIndex ?? 0) * ROW_HEIGHT), sh(DESC_BAR_H), `lvl${index}`))}
-            {tasks.map((task) =>
-              renderTaskMilestones(task, sy(tasksTop + (task.yIndex ?? 0) * ROW_HEIGHT + DESC_BAR_H / 2), `lvl${index}-ms-${task.id}`),
-            )}
+            {tasks.map((task) => renderBar(task, sy(tasksTop + (task.yIndex ?? 0) * laneH), sh(DESC_BAR_H), `lvl${index}`))}
+            {levelHasMs &&
+              tasks.map((task) =>
+                renderTaskMilestones(task, sy(tasksTop + (task.yIndex ?? 0) * laneH + DESC_BAR_H + MILESTONE_BAND / 2), `lvl${index}-ms-${task.id}`),
+              )}
           </g>
         ))}
-
-        {milestoneMarks}
       </svg>
 
       {canExpand && (
