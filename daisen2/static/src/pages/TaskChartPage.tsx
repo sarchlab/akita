@@ -2,14 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import GanttChart from "../components/charts/GanttChart";
 import Legend from "../components/Legend";
-import TaskDetail from "../components/TaskDetail";
+import SelectedTaskSection from "../components/SelectedTaskSection";
 import { SidePanel } from "../components/ui/side-panel";
 import { useSegments } from "../hooks/useSegments";
 import { useTaskHierarchy } from "../hooks/useTaskHierarchy";
 import type { Task } from "../types/task";
 import { buildColorMapFromKeys, taskColorKey } from "../utils/taskColorCoder";
 import type { ColorMode } from "../utils/taskColorCoder";
-import { milestonesOf } from "../utils/milestoneViz";
+import { milestonesOf, type SelectedMilestone } from "../utils/milestoneViz";
 import { mergeParams } from "../utils/viewState.mjs";
 
 // The task view is a detail view, always reached with a task `id`. It charts the
@@ -21,7 +21,13 @@ export default function TaskChartPage() {
   const taskId = searchParams.get("id") ?? "";
   const sel = searchParams.get("sel") ?? "";
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  // A selected blocking milestone takes over the detail panel from the task
+  // (mirrors the component view).
+  const [selectedMilestone, setSelectedMilestone] = useState<SelectedMilestone | null>(null);
   const [colorMode, setColorMode] = useState<ColorMode>("kind-what");
+  // Legend hover highlights, shared with the chart (same as the component view).
+  const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
+  const [highlightedReason, setHighlightedReason] = useState<string | null>(null);
   // Gates the default-to-main selection to once per task id, so an explicit
   // deselect (clicking the chart background) is not immediately undone.
   const autoSelectedFor = useRef<string | null>(null);
@@ -76,9 +82,22 @@ export default function TaskChartPage() {
   const selectTask = useCallback(
     (task: Task) => {
       setSelectedTask(task);
+      setSelectedMilestone(null);
       setSearchParams((prev) => mergeParams("/task", prev, { sel: String(task.id) }), { replace: true });
     },
     [setSearchParams],
+  );
+
+  // Selecting a blocking milestone clears the task selection so the panel shows
+  // the reason instead, and (via reasonHighlight) keeps that reason lit.
+  const selectMilestone = useCallback(
+    (milestone: SelectedMilestone | null) => {
+      setSelectedMilestone(milestone);
+      setSelectedTask(null);
+      autoSelectedFor.current = taskId;
+      setSearchParams((prev) => mergeParams("/task", prev, { sel: undefined }), { replace: true });
+    },
+    [setSearchParams, taskId],
   );
 
   // Open a different task by id (an ancestor or a descendant), recentering the
@@ -87,6 +106,7 @@ export default function TaskChartPage() {
     (id: string) => {
       setSearchParams((prev) => mergeParams("/task", prev, { id, sel: undefined }));
       setSelectedTask(null);
+      setSelectedMilestone(null);
     },
     [setSearchParams],
   );
@@ -95,10 +115,13 @@ export default function TaskChartPage() {
   const deselect = useCallback(() => {
     autoSelectedFor.current = taskId;
     setSelectedTask(null);
+    setSelectedMilestone(null);
     setSearchParams((prev) => mergeParams("/task", prev, { sel: undefined }), { replace: true });
   }, [setSearchParams, taskId]);
 
   const selectedId = selectedTask?.id ?? (sel || null);
+  // A hovered reason wins; otherwise the selected milestone's reason stays lit.
+  const reasonHighlight = highlightedReason ?? selectedMilestone?.kind ?? null;
   const canExpand = !loading && !atLeaves && levels.length > 0;
 
   return (
@@ -113,9 +136,13 @@ export default function TaskChartPage() {
             segmentsEnabled={segmentsData?.enabled ?? false}
             colorMap={colorMap}
             colorMode={colorMode}
-            selectedId={selectedId}
+            selectedId={selectedMilestone ? null : selectedId}
+            selectedMilestone={selectedMilestone}
+            highlightedKey={highlightedKey}
+            highlightedReason={reasonHighlight}
             onSelectTask={selectTask}
             onOpenTask={(task) => navigateToTask(String(task.id))}
+            onSelectMilestone={selectMilestone}
             onDeselect={deselect}
             canExpand={canExpand}
             expanding={expanding}
@@ -125,7 +152,7 @@ export default function TaskChartPage() {
       </div>
 
       <SidePanel className="w-96 overflow-auto p-4">
-        <TaskDetail task={selectedTask} />
+        <SelectedTaskSection task={selectedTask} milestone={selectedMilestone} />
         <div className="mt-2 border-t px-3 pt-3">
           <Legend
             taskKeys={taskKeys}
@@ -133,6 +160,10 @@ export default function TaskChartPage() {
             blockingReasons={blockingReasons}
             colorMode={colorMode}
             onColorMode={setColorMode}
+            highlightedKey={highlightedKey}
+            onHighlight={setHighlightedKey}
+            highlightedReason={reasonHighlight}
+            onHighlightReason={setHighlightedReason}
           />
         </div>
       </SidePanel>

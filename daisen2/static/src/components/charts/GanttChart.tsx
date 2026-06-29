@@ -3,8 +3,7 @@ import type { Segment, Task } from "../../types/task";
 import { assignYIndices } from "../../utils/taskYIndexAssigner";
 import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../../utils/taskColorCoder";
 import type { ColorMode } from "../../utils/taskColorCoder";
-import { milestonesOf, wavyPath } from "../../utils/milestoneViz";
-import { smartString } from "../../utils/smartValue";
+import { milestonesOf, wavyPath, type SelectedMilestone } from "../../utils/milestoneViz";
 import { formatSI } from "../../utils/siFormat";
 import { useElementSize } from "../../hooks/useElementSize";
 
@@ -25,8 +24,14 @@ interface GanttChartProps {
   colorMode?: ColorMode;
   // Controlled selection: the parent owns which task is highlighted.
   selectedId?: string | number | null;
+  // The selected blocking milestone (mutually exclusive with a selected task) and
+  // legend-driven highlights — shared with the component view for consistency.
+  selectedMilestone?: SelectedMilestone | null;
+  highlightedKey?: string | null;
+  highlightedReason?: string | null;
   onSelectTask?: (task: Task) => void;
   onOpenTask?: (task: Task) => void;
+  onSelectMilestone?: (milestone: SelectedMilestone | null) => void;
   // Clicking the chart background (anywhere not on a bar) clears the selection.
   onDeselect?: () => void;
   // Show a button to load the next descendant level (a deeper subtree exists and
@@ -41,10 +46,12 @@ const ROW_HEIGHT = 14;
 const HEADER_ROW_HEIGHT = 22;
 // Vertical room reserved below the current task bar for the blocking-reason
 // curves (only when the task has milestones).
-const MILESTONE_BAND = 22;
+// Bar/band heights aligned with the component view (TASK_VIEW_LARGE_TASK_HEIGHT
+// 15, milestone band 18, subtask bar ~7) so the same rows read the same size.
+const MILESTONE_BAND = 18;
 const LABEL_H = 18;
-const HEADER_BAR_H = 18;
-const DESC_BAR_H = 9;
+const HEADER_BAR_H = 15;
+const DESC_BAR_H = 7;
 
 function safeScale(scale: d3.ScaleLinear<number, number>, value: number) {
   return scale(value) ?? 0;
@@ -78,8 +85,12 @@ export default function GanttChart({
   colorMap: colorMapProp,
   colorMode = "kind-what",
   selectedId = null,
+  selectedMilestone = null,
+  highlightedKey = null,
+  highlightedReason = null,
   onSelectTask,
   onOpenTask,
+  onSelectMilestone,
   onDeselect,
   canExpand = false,
   expanding = false,
@@ -173,22 +184,30 @@ export default function GanttChart({
           const x0 = safeScale(xScale, intervalStart);
           const x1 = safeScale(xScale, step.time);
           const color = colorMap[step.kind] ?? "#9ca3af";
-          const blockedFor = step.time - intervalStart;
           const d = wavyPath(x0, x1, milestoneCenterY);
-          const tip = `blocked on ${step.kind} (${step.what}) for ${smartString(blockedFor)}`;
+          // Click-to-select with the same affordance as the component view: the
+          // selected milestone thickens with a ringed dot; a selection or a
+          // highlighted reason dims the rest.
+          const selected = selectedMilestone != null && selectedMilestone.kind === step.kind && selectedMilestone.time === step.time;
+          const dimmed = (selectedMilestone != null && !selected) || (highlightedReason != null && highlightedReason !== step.kind);
+          const opacity = dimmed ? 0.25 : 1;
           return (
-            <g key={`milestone-${index}-${step.kind}`}>
+            <g
+              key={`milestone-${index}-${step.kind}`}
+              className="cursor-pointer"
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelectMilestone?.({ kind: step.kind, what: step.what, time: step.time, blockedFor: step.time - intervalStart });
+              }}
+            >
               {x1 - x0 >= 2 && (
                 <>
-                  <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" pointerEvents="none" />
-                  <path d={d} fill="none" stroke="transparent" strokeWidth={12} pointerEvents="stroke">
-                    <title>{tip}</title>
-                  </path>
+                  <rect x={x0} y={milestoneCenterY - 8} width={x1 - x0} height={16} fill="transparent" pointerEvents="all" />
+                  <path d={d} fill="none" stroke={color} strokeWidth={selected ? 3 : 1.5} strokeLinecap="round" opacity={opacity} pointerEvents="none" />
                 </>
               )}
-              <circle cx={x1} cy={milestoneCenterY} r={3} fill={color} stroke="#ffffff" strokeWidth={0.75}>
-                <title>{`${tip} — released at ${smartString(step.time)}`}</title>
-              </circle>
+              {selected && <circle cx={x1} cy={milestoneCenterY} r={6} fill="none" stroke={color} strokeWidth={1.5} pointerEvents="none" />}
+              <circle cx={x1} cy={milestoneCenterY} r={selected ? 3.5 : 3} fill={color} stroke="#ffffff" strokeWidth={0.75} opacity={opacity} pointerEvents="none" />
             </g>
           );
         })
@@ -199,24 +218,19 @@ export default function GanttChart({
     // renders as a full-width context bar instead of extreme off-screen coords.
     const x = Math.max(0, safeScale(xScale, task.start_time));
     const w = Math.max(1, Math.min(W, safeScale(xScale, task.end_time)) - x);
+    const key = taskColorKey(task, colorMode);
     const selected = selectedId != null && String(selectedId) === String(task.id);
+    const hasHighlight = highlightedKey != null;
+    const highlighted = hasHighlight && highlightedKey === key;
     return (
       <g
         key={`${keyPrefix}-${task.id}`}
-        className="cursor-pointer focus:outline-none"
+        className="cursor-pointer"
         onClick={(event) => {
           event.stopPropagation();
           onSelectTask?.(task);
         }}
         onDoubleClick={() => onOpenTask?.(task)}
-        onKeyDown={(event) => {
-          if ((event.key === "Enter" || event.key === " ") && onOpenTask) {
-            event.preventDefault();
-            onOpenTask(task);
-          }
-        }}
-        role={onOpenTask ? "link" : "button"}
-        tabIndex={0}
       >
         <rect
           x={x}
@@ -225,23 +239,18 @@ export default function GanttChart({
           height={barHeight}
           fill={lookupColor(colorMap, task, colorMode)}
           stroke="#000000"
-          strokeOpacity={selected ? 0.8 : 0.2}
+          strokeOpacity={selected || highlighted ? 0.8 : 0.2}
           strokeWidth={1}
-          opacity={selectedId == null || selected ? 1 : 0.6}
+          opacity={hasHighlight ? (highlighted ? 1 : 0.4) : selectedId != null && !selected ? 0.6 : 1}
         />
-        <title>
-          {task.kind} - {task.what}
-          {"\n"}
-          {task.location}
-          {"\n"}
-          {smartString(task.start_time)} to {smartString(task.end_time)}
-        </title>
       </g>
     );
   };
 
+  // Section labels use the component view's plain style (no bold, no halo) at the
+  // task view's smaller size, so both pages' row labels match.
   const sectionLabel = (text: string, x: number, y: number) => (
-    <text x={x} y={y} fontSize="12" fontWeight="600" fill="#0f172a" pointerEvents="none" stroke="#ffffff" strokeWidth={2.5} paintOrder="stroke">
+    <text x={x} y={y} fontSize="12" fill="#000" pointerEvents="none">
       {text}
     </text>
   );
@@ -251,8 +260,8 @@ export default function GanttChart({
       <svg width={W} height={height} className="block" onClick={() => onDeselect?.()}>
         <defs>
           <pattern id="gantt-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
-            <rect width="8" height="8" fill="rgba(148, 163, 184, 0.12)" />
-            <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(100, 116, 139, 0.28)" strokeWidth="3" />
+            <rect width="8" height="8" fill="rgba(128, 128, 128, 0.15)" />
+            <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(128, 128, 128, 0.3)" strokeWidth="4" />
           </pattern>
         </defs>
         {gaps.map((gap, index) => {
@@ -261,20 +270,25 @@ export default function GanttChart({
           return <rect key={index} x={x} y={MARGIN.top} width={w} height={height - MARGIN.top - MARGIN.bottom} fill="url(#gantt-gap-pattern)" />;
         })}
 
-        {xTicks.map((tick) => (
-          <g key={tick}>
-            <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={MARGIN.top} y2={height - MARGIN.bottom} stroke="#cbd5e1" strokeDasharray="3 3" />
-            <text x={safeScale(xScale, tick)} y={18} textAnchor="middle" fontSize="10" fill="#475569">
-              {formatSI(tick)}
-            </text>
-            <text x={safeScale(xScale, tick)} y={height - 8} textAnchor="middle" fontSize="10" fill="#475569">
-              {formatSI(tick)}
-            </text>
-          </g>
-        ))}
+        {xTicks.map((tick) => {
+          const tx = safeScale(xScale, tick);
+          return (
+            <g key={tick}>
+              <line x1={tx} x2={tx} y1={MARGIN.top} y2={height - MARGIN.bottom} stroke="#000" strokeDasharray="3,3" opacity={0.3} />
+              <line x1={tx} x2={tx} y1={MARGIN.top} y2={MARGIN.top + 5} stroke="#000" />
+              <line x1={tx} x2={tx} y1={height - MARGIN.bottom - 5} y2={height - MARGIN.bottom} stroke="#000" />
+              <text x={tx} y={18} textAnchor="middle" fontSize="10" fill="#475569">
+                {formatSI(tick)}
+              </text>
+              <text x={tx} y={height - 8} textAnchor="middle" fontSize="10" fill="#475569">
+                {formatSI(tick)}
+              </text>
+            </g>
+          );
+        })}
 
-        <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={MARGIN.top} y2={MARGIN.top} stroke="#94a3b8" />
-        <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={height - MARGIN.bottom} y2={height - MARGIN.bottom} stroke="#94a3b8" />
+        <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={MARGIN.top} y2={MARGIN.top} stroke="#000" />
+        <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={height - MARGIN.bottom} y2={height - MARGIN.bottom} stroke="#000" />
 
         {ancestorRows.map(({ task, top }) => (
           <g key={`anc-${task.id}`}>

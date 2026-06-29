@@ -7,7 +7,7 @@ import { Button } from "../components/ui/button";
 import { SidePanel } from "../components/ui/side-panel";
 import { BlockingReasonsHelp, ComponentTaskViewHelp, TaskCountHelp, TaskHierarchyHelp } from "../components/HelpTopics";
 import Legend from "../components/Legend";
-import TaskDetail from "../components/TaskDetail";
+import SelectedTaskSection from "../components/SelectedTaskSection";
 import type { StackedComponentInfo } from "../hooks/useCompInfo";
 import { useStackedCompInfo } from "../hooks/useCompInfo";
 import { useSegments } from "../hooks/useSegments";
@@ -20,7 +20,6 @@ import type { Segment, Task } from "../types/task";
 import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskColorCoder";
 import type { ColorMode } from "../utils/taskColorCoder";
 import { blockingKindAt, milestonesOf, wavyPath } from "../utils/milestoneViz";
-import { smartString } from "../utils/smartValue";
 import { formatSI } from "../utils/siFormat";
 import { cn } from "../lib/utils";
 import { useComponentNames } from "../hooks/useComponentNames";
@@ -706,15 +705,7 @@ function ComponentTimeline({
               stroke="#000000"
               strokeOpacity={selected || (hasHighlight && highlighted) ? 0.8 : 0.2}
               opacity={hasHighlight ? (highlighted ? 1 : 0.4) : selectedTaskId != null && !selected ? 0.6 : 1}
-            >
-              <title>
-                {task.kind} - {task.what}
-                {"\n"}
-                {name}
-                {"\n"}
-                {smartString(task.start_time)} to {smartString(task.end_time)}
-              </title>
-            </rect>
+            />
           );
         })}
           </g>
@@ -1056,7 +1047,7 @@ function AggregatedTimeline({
         <path
           key={key}
           d={d}
-          fill={colorMap[key] ?? "#999999"}
+          fill={colorMap[key] ?? "#9ca3af"}
           stroke="none"
           opacity={hasHighlight ? (highlightedKey === key ? 1 : 0.12) : 0.9}
           className="cursor-pointer"
@@ -1367,13 +1358,13 @@ function ComponentTaskView({
       <line x1={5} x2={width - 5} y1={16} y2={16} stroke="#000" pointerEvents="none" />
 
       <g className="daisen1-task-view-dividers" pointerEvents="none">
-        <text x={5} y={parentLabelY} fontSize={20} textAnchor="start">
+        <text x={5} y={parentLabelY} fontSize={12} textAnchor="start">
           Parent Task
         </text>
-        <text x={5} y={currentLabelY} fontSize={20} textAnchor="start">
+        <text x={5} y={currentLabelY} fontSize={12} textAnchor="start">
           Current Task
         </text>
-        <text x={5} y={subTasksLabelY} fontSize={20} textAnchor="start">
+        <text x={5} y={subTasksLabelY} fontSize={12} textAnchor="start">
           Subtasks
         </text>
         <line x1={0} x2={width} y1={divider1Y} y2={divider1Y} stroke="#000000" strokeDasharray="4" />
@@ -1443,13 +1434,6 @@ function ComponentTaskView({
   );
 }
 
-// A small uppercase section heading shared by the side-panel sections.
-function SectionLabel({ children }: { children: string }) {
-  return (
-    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</div>
-  );
-}
-
 // A blocking milestone the cursor is hovering, shown in the side panel in place
 // of the selected task (so no SVG tooltip is needed on the chart).
 interface HoveredMilestone {
@@ -1457,53 +1441,6 @@ interface HoveredMilestone {
   what: string;
   time: number;
   blockedFor: number;
-}
-
-function SelectedTaskSection({
-  task,
-  milestone,
-}: {
-  task: Task | null;
-  milestone: HoveredMilestone | null;
-}) {
-  // A hovered milestone takes over the panel and shows its blocking details.
-  if (milestone) {
-    const milestoneRows: [string, string][] = [
-      ["Reason", milestone.kind],
-      ["What", milestone.what || "-"],
-      ["Released", smartString(milestone.time)],
-      ["Blocked for", smartString(milestone.blockedFor)],
-    ];
-    return (
-      <section>
-        <SectionLabel>Selected milestone</SectionLabel>
-        <div className="mt-2 rounded-lg border bg-muted/30 p-3">
-          <div className="mb-2 break-all text-sm font-semibold">
-            blocked on {milestone.kind}
-          </div>
-          <dl className="space-y-1.5 text-xs">
-            {milestoneRows.map(([label, value]) => (
-              <div key={label} className="grid grid-cols-[5.5rem_1fr] gap-x-3">
-                <dt className="text-muted-foreground">{label}</dt>
-                <dd className="break-all font-medium tabular-nums">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </section>
-    );
-  }
-
-  // Nothing selected — just the inline prompt, no section heading.
-  if (!task) return <TaskDetail task={null} />;
-  // The selected task uses the shared TaskDetail (same as the task view), under a
-  // section heading that mirrors the "Selected milestone" panel above.
-  return (
-    <section>
-      <SectionLabel>Selected task</SectionLabel>
-      <TaskDetail task={task} />
-    </section>
-  );
 }
 
 // ComponentLegend is the component view's binding of the shared Legend: the full

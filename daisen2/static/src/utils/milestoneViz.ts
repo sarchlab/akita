@@ -1,5 +1,14 @@
 import type { TaskStep } from "../types/task";
 
+// A selected/inspected blocking milestone: the released reason, the location it
+// was released at, when it was released, and how long the task was blocked on it.
+export interface SelectedMilestone {
+  kind: string;
+  what: string;
+  time: number;
+  blockedFor: number;
+}
+
 // Shared rendering helpers for milestones (blocking reasons).
 //
 // A milestone marks the moment a blocking reason is released; the interval that
