@@ -22,17 +22,25 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	useTimeRange := true
-	if r.FormValue("starttime") == "" || r.FormValue("endtime") == "" {
-		useTimeRange = false
-	}
+	tasks := s.traceReader.ListTasks(r.Context(), buildTraceQuery(r))
 
-	var err error
+	rsp, err := json.Marshal(tasks)
+	dieOnErr(err)
+
+	_, err = w.Write(rsp)
+	dieOnErr(err)
+}
+
+// buildTraceQuery parses the /api/trace request parameters into a TaskQuery.
+func buildTraceQuery(r *http.Request) TaskQuery {
+	useTimeRange := r.FormValue("starttime") != "" && r.FormValue("endtime") != ""
 
 	startTime := 0.0
 	endTime := 0.0
 
 	if useTimeRange {
+		var err error
+
 		startTime, err = strconv.ParseFloat(r.FormValue("starttime"), 64)
 		if err != nil {
 			panic(err)
@@ -52,6 +60,7 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 	if pidStr := r.FormValue("parentid"); pidStr != "" {
 		queryParentID, _ = strconv.ParseUint(pidStr, 10, 64)
 	}
+	queryParentIDs := parseIDList(r.FormValue("parentids"))
 
 	// The startup range probe (useSimulationRange's /api/trace?kind=Simulation) is a
 	// bare global-Kind query with NO time range; it only needs the matched task's
@@ -63,9 +72,10 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 	rangeProbe := r.FormValue("kind") != "" && !useTimeRange && r.FormValue("scope") == "" &&
 		r.FormValue("where") == "" && queryID == 0 && queryParentID == 0
 
-	query := TaskQuery{
+	return TaskQuery{
 		ID:               queryID,
 		ParentID:         queryParentID,
+		ParentIDs:        queryParentIDs,
 		Kind:             r.FormValue("kind"),
 		Where:            r.FormValue("where"),
 		Scope:            r.FormValue("scope"),
@@ -75,14 +85,34 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 		EnableParentTask: false,
 		EnableMilestones: !rangeProbe,
 	}
+}
 
-	tasks := s.traceReader.ListTasks(r.Context(), query)
+// parseIDList parses a comma-separated list of non-zero unsigned ids (e.g. the
+// `parentids` query param), skipping blanks and unparseable entries.
+func parseIDList(s string) []uint64 {
+	if s == "" {
+		return nil
+	}
 
-	rsp, err := json.Marshal(tasks)
-	dieOnErr(err)
+	var ids []uint64
+	for _, part := range strings.Split(s, ",") {
+		if id, err := strconv.ParseUint(strings.TrimSpace(part), 10, 64); err == nil && id != 0 {
+			ids = append(ids, id)
+		}
+	}
 
-	_, err = w.Write(rsp)
-	dieOnErr(err)
+	return ids
+}
+
+// joinIDs renders ids as a comma-separated string for an SQL IN (…) list. The
+// values are uint64, so there is nothing to escape.
+func joinIDs(ids []uint64) string {
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = strconv.FormatUint(id, 10)
+	}
+
+	return strings.Join(parts, ",")
 }
 
 // TaskQuery is used to define the tasks to be queried. Not all the field has to
@@ -93,6 +123,10 @@ type TaskQuery struct {
 
 	// Use ParentID to select all the tasks that are children of a task.
 	ParentID uint64
+
+	// Use ParentIDs to select the children of any of several parents in one
+	// query — used to load a whole subtree level at once.
+	ParentIDs []uint64
 
 	// Use Kind to select all the tasks that are of a kind.
 	Kind string
@@ -876,6 +910,12 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 	if query.ParentID != 0 {
 		sqlStr += `
 			AND t.ParentID = ` + strconv.FormatUint(query.ParentID, 10) + `
+		`
+	}
+
+	if len(query.ParentIDs) > 0 {
+		sqlStr += `
+			AND t.ParentID IN (` + joinIDs(query.ParentIDs) + `)
 		`
 	}
 

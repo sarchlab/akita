@@ -110,8 +110,15 @@ the URLs are raw trace values.
     last milestone, are not counted); a tall single-color bar means many tasks
     stalled on the same reason then. Hovering a segment highlights, in the timeline
     above, the tasks blocked by that reason at that moment.
-- **Task view** — `/task?id=<taskid>&where=<component>&kind=<kind>`: a single task's
-  tree (parent, the task, and its sub-tasks) over time.
+- **Task view** — `/task?id=<taskid>`: a single task shown with its **full lineage** on
+  one shared time axis, framed on the task. Its **ancestor chain** is stacked above (root
+  at the top, down to the immediate parent) and its **descendant subtree** below (children,
+  grandchildren, … loaded level by level), so the whole `ParentID` chain — the upstream
+  causes and the downstream work it spawned — is laid out at once. Every task's row carries
+  its **blocking milestones** as wavy lines beneath the bar, colored by reason (same scheme
+  as the component view). Reach for this to trace one task end-to-end across components and
+  see where each task in its lineage blocked; the component view (above) is better for a
+  component's concurrency over time. (`id` is the only parameter the view reads.)
 
 **URL spelling vs SQL spelling:** view-URL parameters are lowercase with no
 underscores (`starttime`, `endtime`, `taskid`); the trace's SQL columns are PascalCase

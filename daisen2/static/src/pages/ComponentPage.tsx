@@ -4,8 +4,30 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent, WheelEvent as ReactWh
 import { Link, useSearchParams } from "react-router-dom";
 import { X, ChevronRight, ChevronDown, ChevronUp, Plus, Minus } from "lucide-react";
 import { Button } from "../components/ui/button";
-import { SidePanel } from "../components/ui/side-panel";
-import { BlockingReasonsHelp, ComponentTaskViewHelp, TaskCountHelp, TaskHierarchyHelp, TaskTypesHelp } from "../components/HelpTopics";
+import TraceChartLayout, { SIDE_PANEL_WIDTH } from "../components/TraceChartLayout";
+import { BlockingReasonsHelp, ComponentTaskViewHelp, TaskCountHelp, TaskHierarchyHelp } from "../components/HelpTopics";
+import Legend from "../components/Legend";
+import LocationSubtree from "../components/LocationSubtree";
+import SelectedTaskSection from "../components/SelectedTaskSection";
+import {
+  AXIS_LABEL_FONT_SIZE,
+  AXIS_TICK_COUNT,
+  barOpacity,
+  barStrokeOpacity,
+  COLOR_AXIS_LABEL,
+  COLOR_BAR_STROKE,
+  COLOR_GRID,
+  COLOR_TASK_FALLBACK,
+  gapSegments,
+  GRID_DASH,
+  GRID_OPACITY,
+  safeScale,
+} from "../components/charts/chartStyle";
+import BandLabel from "../components/charts/BandLabel";
+import { GapHatchDef, GapRects } from "../components/charts/GapHatch";
+import LoadingCurve from "../components/charts/LoadingCurve";
+import MilestoneMarks from "../components/charts/MilestoneMarks";
+import TimeTicks from "../components/charts/TimeTicks";
 import type { StackedComponentInfo } from "../hooks/useCompInfo";
 import { useStackedCompInfo } from "../hooks/useCompInfo";
 import { useSegments } from "../hooks/useSegments";
@@ -17,8 +39,8 @@ import { useRenderReady } from "../hooks/useRenderReady";
 import type { Segment, Task } from "../types/task";
 import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskColorCoder";
 import type { ColorMode } from "../utils/taskColorCoder";
-import { blockingKindAt, milestonesOf, wavyPath } from "../utils/milestoneViz";
-import { smartString } from "../utils/smartValue";
+import { blockingKindAt, milestonesOf } from "../utils/milestoneViz";
+import { formatSI } from "../utils/siFormat";
 import { cn } from "../lib/utils";
 import { useComponentNames } from "../hooks/useComponentNames";
 import { buildLocationTree, breadcrumbSegments, findNode, type LocationNode } from "../utils/locationTree";
@@ -31,7 +53,6 @@ import { buildLocationTree, breadcrumbSegments, findNode, type LocationNode } fr
 const TASK_VIEW_HEIGHT_RATIO = 0.2;
 const COMPONENT_LINE_HEIGHT_RATIO = 0.2;
 const TOP_AXIS_COMPACT_HEIGHT = 28;
-const SIDE_COLUMN_WIDTH = 350;
 const DATA_RANGE_DEBOUNCE_MS = 1000;
 // A help button tucked into a chart region's bottom-right corner. The wrapper stops
 // pointer events so clicking it never starts a pan/drag on the timeline underneath;
@@ -49,13 +70,6 @@ const RAW_TASK_THRESHOLD = 5000;
 // past its region and is navigated by dragging / scroll buttons instead.
 const ROW_HEIGHT = 22;
 
-// A location is within a scope when it is the scope itself or nested under it in
-// the dotted hierarchy ("ROB" contains "ROB.Top.incoming"). Used so selecting a
-// task that already lives in the current scope keeps the scope, instead of
-// drilling down to the task's exact leaf location.
-function isWithinScope(location: string, scope: string): boolean {
-  return location === scope || location.startsWith(scope + ".");
-}
 const MIN_RANGE = 1e-12;
 const TASK_VIEW_MARGIN_TOP = 20;
 const TASK_VIEW_MARGIN_BOTTOM = 20;
@@ -144,32 +158,6 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
   return debouncedValue;
 }
 
-function safeScale(scale: d3.ScaleLinear<number, number>, value: number) {
-  return scale(value) ?? 0;
-}
-
-function formatAxisTick(value: number) {
-  return d3.format("~s")(value);
-}
-
-function gapSegments(segments: Segment[], startTime: number, endTime: number) {
-  if (!segments.length) return [];
-  const sorted = [...segments].sort((a, b) => a.start_time - b.start_time);
-  const gaps: Segment[] = [];
-  if (sorted[0].start_time > startTime) {
-    gaps.push({ start_time: startTime, end_time: Math.min(sorted[0].start_time, endTime) });
-  }
-  for (let index = 0; index < sorted.length - 1; index++) {
-    const start = Math.max(sorted[index].end_time, startTime);
-    const end = Math.min(sorted[index + 1].start_time, endTime);
-    if (start < end) gaps.push({ start_time: start, end_time: end });
-  }
-  const last = sorted[sorted.length - 1];
-  if (last.end_time < endTime) {
-    gaps.push({ start_time: Math.max(last.end_time, startTime), end_time: endTime });
-  }
-  return gaps;
-}
 
 function cloneTasks(tasks: Task[]): LayoutTask[] {
   return tasks.map((task) => ({ ...task, subTasks: [], level: 0 }));
@@ -383,23 +371,15 @@ function buildComponentTaskLayout(
 
 function ComponentTopAxis({ width, height, range }: { width: number; height: number; range: TimeRange }) {
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
-  const ticks = xScale.ticks(12);
+  const ticks = xScale.ticks(AXIS_TICK_COUNT);
 
   // Top axis: tick labels sit at the top (above the baseline), mirroring the bottom
   // chart's axis whose labels sit below its baseline. The baseline + ticks + the
   // gridlines hang below the labels, toward the content.
   return (
     <svg width={width} height={height} className="block">
-      {ticks.map((tick) => (
-        <g key={tick}>
-          <text x={safeScale(xScale, tick)} y={11} textAnchor="middle" fontSize="12" fill="#000">
-            {formatAxisTick(tick)}
-          </text>
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.5} />
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={22} stroke="#000" />
-        </g>
-      ))}
-      <line x1={5} x2={width - 5} y1={16} y2={16} stroke="#000" />
+      <TimeTicks ticks={ticks} xScale={xScale} gridTop={16} gridBottom={height} topLabelY={11} tickMarks />
+      <line x1={5} x2={width - 5} y1={16} y2={16} stroke={COLOR_GRID} />
     </svg>
   );
 }
@@ -445,8 +425,11 @@ interface ComponentTimelineProps {
   highlightedKey: string | null;
   highlightedTaskId: string | null;
   highlightedTaskIds: Set<string> | null;
+  selectedTaskId: string | null;
   onHoverTask: (task: Task | null) => void;
   onSelectTask: (task: Task) => void;
+  onOpenTask: (task: Task) => void;
+  onDeselect: () => void;
   // Zoom the time range from a wheel/pinch over the gantt. pointerRatio is the
   // cursor's fractional x within the chart, so the zoom is anchored at the pointer.
   onZoom: (deltaY: number, deltaX: number, pointerRatio: number) => void;
@@ -466,15 +449,18 @@ function ComponentTimeline({
   highlightedKey,
   highlightedTaskId,
   highlightedTaskIds,
+  selectedTaskId,
   onHoverTask,
   onSelectTask,
+  onOpenTask,
+  onDeselect,
   onZoom,
   onRangeChange,
 }: ComponentTimelineProps) {
   const width = Math.max(1, size.width);
   const height = Math.max(1, size.height);
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
-  const ticks = xScale.ticks(12);
+  const ticks = xScale.ticks(AXIS_TICK_COUNT);
   // Row height is the vertical zoom: taller rows = bigger bars, a taller chart that
   // scrolls. The chart grows past its region and is navigated by dragging/scrolling.
   const [rowHeight, setRowHeight] = useState(ROW_HEIGHT);
@@ -499,6 +485,14 @@ function ComponentTimeline({
   onRangeChangeRef.current = onRangeChange;
   const onSelectTaskRef = useRef(onSelectTask);
   onSelectTaskRef.current = onSelectTask;
+  const onOpenTaskRef = useRef(onOpenTask);
+  onOpenTaskRef.current = onOpenTask;
+  const onDeselectRef = useRef(onDeselect);
+  onDeselectRef.current = onDeselect;
+  // The pointer capture used for drag-panning swallows the bars' native dblclick,
+  // so detect a double-click manually: two clicks on the same task in quick
+  // succession open it in the task view.
+  const lastClickRef = useRef<{ id: string; time: number } | null>(null);
   const rangeRef = useRef(range);
   rangeRef.current = range;
   const widthRef = useRef(width);
@@ -591,7 +585,24 @@ function ComponentTimeline({
     event.stopPropagation();
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     dragRef.current = null;
-    if (!drag.moved && drag.pending) onSelectTaskRef.current(drag.pending);
+    if (drag.moved) return;
+    if (!drag.pending) {
+      // A click that landed on empty space (no task) clears the selection.
+      onDeselectRef.current();
+      return;
+    }
+
+    const id = String(drag.pending.id);
+    const now = Date.now();
+    const last = lastClickRef.current;
+    if (last && last.id === id && now - last.time < 350) {
+      // Second quick click on the same task — open it in the task view.
+      lastClickRef.current = null;
+      onOpenTaskRef.current(drag.pending);
+    } else {
+      lastClickRef.current = { id, time: now };
+      onSelectTaskRef.current(drag.pending);
+    }
   };
 
   // On-screen vertical (row height) zoom controls. Horizontal/time zoom lives in
@@ -632,19 +643,12 @@ function ComponentTimeline({
       >
         <svg width={width} height={contentHeight} className="block">
           <defs>
-            <pattern id="component-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
-              <rect width="8" height="8" fill="rgba(128, 128, 128, 0.15)" />
-              <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(128, 128, 128, 0.3)" strokeWidth="4" />
-            </pattern>
+            <GapHatchDef id="component-gap-pattern" />
           </defs>
 
-          {gaps.map((gap, index) => {
-            const x = safeScale(xScale, gap.start_time);
-            const w = Math.max(0, safeScale(xScale, gap.end_time) - x);
-            return <rect key={index} x={x} y={0} width={w} height={contentHeight} fill="url(#component-gap-pattern)" pointerEvents="none" />;
-          })}
+          <GapRects gaps={gaps} xScale={xScale} patternId="component-gap-pattern" top={0} height={contentHeight} />
 
-          <g className="task-bar">
+          <g className="task-bar cursor-pointer">
             {taskLayout.map((task) => {
           const dim = task.dim ?? {
             x: safeScale(xScale, task.start_time),
@@ -664,6 +668,7 @@ function ComponentTimeline({
                 : highlightedKey !== null
                   ? keyHighlighted
                   : true;
+          const selected = selectedTaskId != null && selectedTaskId === String(task.id);
           return (
             <rect
               key={String(task.id)}
@@ -673,37 +678,15 @@ function ComponentTimeline({
               width={Math.max(1, dim.width)}
               height={Math.max(1, dim.height)}
               fill={lookupColor(colorMap, task, colorMode)}
-              stroke="#000000"
-              strokeOpacity={hasHighlight && highlighted ? 0.8 : 0.2}
-              opacity={highlighted ? 1 : 0.4}
-              onMouseEnter={() => onHoverTask(task)}
-              onMouseLeave={() => onHoverTask(null)}
-            >
-              <title>
-                {task.kind} - {task.what}
-                {"\n"}
-                {name}
-                {"\n"}
-                {smartString(task.start_time)} to {smartString(task.end_time)}
-              </title>
-            </rect>
+              stroke={COLOR_BAR_STROKE}
+              strokeOpacity={barStrokeOpacity({ selected, highlighted, hasHighlight })}
+              opacity={barOpacity({ selected, highlighted, hasHighlight, hasSelection: selectedTaskId != null })}
+            />
           );
         })}
           </g>
 
-          {ticks.map((tick) => (
-            <line
-              key={tick}
-              x1={safeScale(xScale, tick)}
-              x2={safeScale(xScale, tick)}
-              y1={0}
-              y2={contentHeight}
-              stroke="#000"
-              strokeDasharray="3,3"
-              opacity={0.5}
-              pointerEvents="none"
-            />
-          ))}
+          <TimeTicks ticks={ticks} xScale={xScale} gridTop={0} gridBottom={contentHeight} />
 
           {/* Y-axis: the stacked rows are concurrency levels, so label the row index
               the same repeated way as the task-count / blocking-reason charts. It
@@ -829,105 +812,10 @@ function GapShading({
   return (
     <>
       <defs>
-        <pattern id={patternId} patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
-          <rect width="8" height="8" fill="rgba(128, 128, 128, 0.15)" />
-          <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(128, 128, 128, 0.3)" strokeWidth="4" />
-        </pattern>
+        <GapHatchDef id={patternId} />
       </defs>
-      {gaps.map((gap, index) => {
-        const x = safeScale(xScale, gap.start_time);
-        const w = Math.max(0, safeScale(xScale, gap.end_time) - x);
-        return <rect key={index} x={x} y={0} width={w} height={height} fill={`url(#${patternId})`} pointerEvents="none" />;
-      })}
+      <GapRects gaps={gaps} xScale={xScale} patternId={patternId} top={0} height={height} />
     </>
-  );
-}
-
-// LoadingCurve is a placeholder silhouette shown while a chart's occupancy data
-// is still loading (those queries take a while on a large scope). It is a
-// deterministic mock density shape — not real data — drawn in muted gray with a
-// bright highlight stripe that sweeps left→right (skeleton-shimmer style) so the
-// panel clearly reads as "loading" rather than sitting blank. `id` must be
-// unique per instance on the page (the clip path / gradient are referenced by id).
-function LoadingCurve({
-  width,
-  height,
-  id,
-}: {
-  width: number;
-  height: number;
-  id: string;
-}) {
-  const w = Math.max(1, width);
-  const h = Math.max(1, height);
-  const n = 96;
-  // A per-instance phase derived from the id, so the two charts' mock curves
-  // look different rather than identical twins. Deterministic (no Math.random)
-  // so the shape stays stable across re-renders instead of reshuffling.
-  let seed = 0;
-  for (let i = 0; i < id.length; i++) seed += id.charCodeAt(i) * (i + 1);
-  const ph = ((seed % 100) / 100) * Math.PI * 2;
-  const pts: string[] = [];
-  for (let i = 0; i <= n; i++) {
-    const t = i / n;
-    // An irregular, lopsided density profile: a few non-harmonic sine components
-    // (so it never reads as periodic or mirror-symmetric) under a soft envelope
-    // that lifts it off the baseline and brings it back down at both ends.
-    const bumps =
-      0.5 +
-      0.22 * Math.sin(t * 6.0 + 0.6 + ph) +
-      0.13 * Math.sin(t * 11.3 + 2.1 + ph * 1.7) +
-      0.08 * Math.sin(t * 19.7 + 4.0 + ph * 0.6) +
-      0.05 * Math.sin(t * 31.1 + 1.2 + ph * 2.3);
-    const envelope = Math.pow(Math.sin(Math.PI * t), 0.35);
-    const frac = Math.min(
-      1,
-      Math.max(0, 0.06 + 0.92 * Math.max(0, bumps) * envelope),
-    );
-    const x = 5 + t * (w - 10);
-    const y = h - 4 - frac * (h - 12);
-    pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
-  }
-  const d = `M${pts.join("L")}L${(w - 5).toFixed(1)},${h} L5,${h} Z`;
-  const clipId = `lc-clip-${id}`;
-  const gradId = `lc-grad-${id}`;
-  return (
-    <g pointerEvents="none">
-      <defs>
-        <clipPath id={clipId}>
-          <path d={d} />
-        </clipPath>
-        {/* A wide, soft, low-contrast highlight band — translating the rect that
-            carries it glides the band across the silhouette left→right, like the
-            skeleton shimmer shown while images load on the web. The base gray
-            stays steady; only this lighter band moves. */}
-        <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#fff" stopOpacity="0" />
-          <stop offset="25%" stopColor="#fff" stopOpacity="0" />
-          <stop offset="50%" stopColor="#fff" stopOpacity="0.55" />
-          <stop offset="75%" stopColor="#fff" stopOpacity="0" />
-          <stop offset="100%" stopColor="#fff" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={d} fill="#cbd5e1" />
-      <g clipPath={`url(#${clipId})`}>
-        {/* The band enters just off the left edge and exits just off the right,
-            so the loop restart lands off-screen and the sweep reads as one
-            continuous, gently easing motion. */}
-        <rect x={0} y={0} width={w} height={h} fill={`url(#${gradId})`}>
-          <animate
-            attributeName="x"
-            from={-0.85 * w}
-            to={0.85 * w}
-            dur="1.8s"
-            calcMode="spline"
-            keyTimes="0;1"
-            keySplines="0.4 0 0.6 1"
-            repeatCount="indefinite"
-          />
-        </rect>
-      </g>
-    </g>
   );
 }
 
@@ -965,11 +853,11 @@ function AggregatedTimeline({
   const width = Math.max(1, size.width);
   const height = Math.max(1, size.height);
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
-  const ticks = xScale.ticks(12);
+  const ticks = xScale.ticks(AXIS_TICK_COUNT);
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
 
   const gridlines = ticks.map((tick) => (
-    <line key={tick} x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.4} pointerEvents="none" />
+    <line key={tick} x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={height} stroke={COLOR_GRID} strokeDasharray={GRID_DASH} opacity={GRID_OPACITY} pointerEvents="none" />
   ));
 
   // Before the summary lands, still draw the time marks (and any uncollected-range
@@ -1028,7 +916,7 @@ function AggregatedTimeline({
         <path
           key={key}
           d={d}
-          fill={colorMap[key] ?? "#999999"}
+          fill={colorMap[key] ?? COLOR_TASK_FALLBACK}
           stroke="none"
           opacity={hasHighlight ? (highlightedKey === key ? 1 : 0.12) : 0.9}
           className="cursor-pointer"
@@ -1092,7 +980,7 @@ function ComponentMilestoneAreas({
   onHoverReason: (kind: string | null) => void;
 }) {
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
-  const ticks = xScale.ticks(12);
+  const ticks = xScale.ticks(AXIS_TICK_COUNT);
   const xAxisY = Math.max(0, height - 20);
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
 
@@ -1127,14 +1015,14 @@ function ComponentMilestoneAreas({
     <svg width={width} height={height} className="block">
       {ticks.map((tick) => (
         <g key={tick} pointerEvents="none">
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={xAxisY} stroke="#000" strokeDasharray="3,3" opacity={0.3} />
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={xAxisY} y2={xAxisY + 5} stroke="#000" />
-          <text x={safeScale(xScale, tick)} y={height - 4} textAnchor="middle" fontSize="12" fill="#000">
-            {formatAxisTick(tick)}
+          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={xAxisY} stroke={COLOR_GRID} strokeDasharray={GRID_DASH} opacity={GRID_OPACITY} />
+          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={xAxisY} y2={xAxisY + 5} stroke={COLOR_GRID} />
+          <text x={safeScale(xScale, tick)} y={height - 4} textAnchor="middle" fontSize={AXIS_LABEL_FONT_SIZE} fill={COLOR_AXIS_LABEL}>
+            {formatSI(tick)}
           </text>
         </g>
       ))}
-      <line x1={5} x2={width - 5} y1={xAxisY} y2={xAxisY} stroke="#000" pointerEvents="none" />
+      <line x1={5} x2={width - 5} y1={xAxisY} y2={xAxisY} stroke={COLOR_GRID} pointerEvents="none" />
 
       {loading && <LoadingCurve width={width} height={xAxisY} id="reason" />}
 
@@ -1143,7 +1031,7 @@ function ComponentMilestoneAreas({
           <path
             key={kind}
             d={d}
-            fill={colorMap[kind] ?? "#9ca3af"}
+            fill={colorMap[kind] ?? COLOR_TASK_FALLBACK}
             opacity={hasHighlight ? (highlightedKey === kind ? 1 : 0.12) : 0.9}
             className="cursor-pointer"
             // Report the reason + time under the cursor: highlight this band (and
@@ -1188,14 +1076,18 @@ function buildTopTaskRows(
   const subTaskRegionHeight = Math.max(1, barRegionHeight - nonSubTaskRegionHeight);
   const childBarHeight = Math.min(TASK_VIEW_SUBTASK_BAR_HEIGHT, subTaskRegionHeight / Math.max(1, maxYIndex));
   const rows: TaskViewRow[] = [];
+  const [rangeLeft, rangeRight] = xScale.range();
 
   const pushTask = (task: Task, y: number, rowHeight: number) => {
-    const x = safeScale(xScale, task.start_time);
+    // Clamp to the chart so the parent (which can span far beyond the focus
+    // window) renders as a full-width context bar instead of off-screen coords.
+    const x = Math.max(rangeLeft, safeScale(xScale, task.start_time));
+    const right = Math.min(rangeRight, safeScale(xScale, task.end_time));
     rows.push({
       task,
       x,
       y,
-      width: Math.max(1, safeScale(xScale, task.end_time) - x),
+      width: Math.max(1, right - x),
       height: rowHeight,
     });
   };
@@ -1231,9 +1123,14 @@ function ComponentTaskView({
   colorMode,
   highlightedKey,
   highlightedTaskId,
+  selectedTaskId,
+  selectedMilestone,
+  reasonHighlight,
   onHoverTask,
   onSelectTask,
-  onHoverMilestone,
+  onOpenTask,
+  onDeselect,
+  onSelectMilestone,
 }: {
   mainTask: Task | null;
   parentTask: Task | null;
@@ -1247,16 +1144,25 @@ function ComponentTaskView({
   colorMode: ColorMode;
   highlightedKey: string | null;
   highlightedTaskId: string | null;
+  selectedTaskId: string | null;
+  selectedMilestone: HoveredMilestone | null;
+  reasonHighlight: string | null;
   onHoverTask: (task: Task | null) => void;
   onSelectTask: (task: Task) => void;
-  onHoverMilestone: (milestone: HoveredMilestone | null) => void;
+  onOpenTask: (task: Task) => void;
+  onDeselect: () => void;
+  onSelectMilestone: (milestone: HoveredMilestone | null) => void;
 }) {
   if (!mainTask) {
     return <ComponentTopAxis width={width} height={height} range={range} />;
   }
 
+  // Shares the time axis (range) with the component view's other charts. selecting
+  // a task focuses this shared range on it (see selectTask), so the nested gantt
+  // frames it; the parent, which can span far wider, is drawn clamped to the chart
+  // (see buildTopTaskRows).
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
-  const ticks = xScale.ticks(12);
+  const ticks = xScale.ticks(AXIS_TICK_COUNT);
   const milestoneBand = (mainTask.steps?.length ?? 0) > 0 ? TASK_VIEW_MILESTONE_BAND : 0;
   const rows = buildTopTaskRows(mainTask, parentTask, childTasks, xScale, height, milestoneBand);
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
@@ -1267,19 +1173,12 @@ function ComponentTaskView({
   const subTasksLabelY = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 3 + TASK_VIEW_LARGE_TASK_HEIGHT * 2 + 16 + milestoneBand;
 
   return (
-    <svg width={width} height={height} className="block">
+    <svg width={width} height={height} className="block" onClick={() => onDeselect()}>
       <defs>
-        <pattern id="task-view-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
-          <rect width="8" height="8" fill="rgba(128, 128, 128, 0.15)" />
-          <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(128, 128, 128, 0.3)" strokeWidth="4" />
-        </pattern>
+        <GapHatchDef id="task-view-gap-pattern" />
       </defs>
 
-      {gaps.map((gap, index) => {
-        const x = safeScale(xScale, gap.start_time);
-        const w = Math.max(0, safeScale(xScale, gap.end_time) - x);
-        return <rect key={index} x={x} y={TASK_VIEW_MARGIN_TOP} width={w} height={height - TASK_VIEW_MARGIN_BOTTOM} fill="url(#task-view-gap-pattern)" pointerEvents="none" />;
-      })}
+      <GapRects gaps={gaps} xScale={xScale} patternId="task-view-gap-pattern" top={TASK_VIEW_MARGIN_TOP} height={height - TASK_VIEW_MARGIN_BOTTOM} />
 
       {rows.map((row) => {
         const key = taskColorKey(row.task, colorMode);
@@ -1287,6 +1186,7 @@ function ComponentTaskView({
         const keyHighlighted = highlightedKey === key;
         const hasHighlight = highlightedTaskId !== null || highlightedKey !== null;
         const highlighted = highlightedTaskId !== null ? taskHighlighted : highlightedKey !== null ? keyHighlighted : true;
+        const selected = selectedTaskId != null && selectedTaskId === String(row.task.id);
         return (
           <rect
             key={String(row.task.id)}
@@ -1296,93 +1196,49 @@ function ComponentTaskView({
             width={row.width}
             height={Math.max(1, row.height)}
             fill={lookupColor(colorMap, row.task, colorMode)}
-            stroke="#000000"
-            strokeOpacity={hasHighlight && highlighted ? 0.8 : 0.2}
-            opacity={highlighted ? 1 : 0.4}
+            stroke={COLOR_BAR_STROKE}
+            strokeOpacity={barStrokeOpacity({ selected, highlighted, hasHighlight })}
+            opacity={barOpacity({ selected, highlighted, hasHighlight, hasSelection: selectedTaskId != null })}
             className="cursor-pointer"
-            onMouseEnter={() => onHoverTask(row.task)}
-            onMouseLeave={() => onHoverTask(null)}
             onClick={(event) => {
               event.preventDefault();
+              event.stopPropagation();
               onSelectTask(row.task);
             }}
+            onDoubleClick={() => onOpenTask(row.task)}
           />
         );
       })}
 
-      {ticks.map((tick) => (
-        <g key={tick} pointerEvents="none">
-          <text x={safeScale(xScale, tick)} y={11} textAnchor="middle" fontSize="12" fill="#000">
-            {formatAxisTick(tick)}
-          </text>
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.5} />
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={22} stroke="#000" />
-        </g>
-      ))}
-      <line x1={5} x2={width - 5} y1={16} y2={16} stroke="#000" pointerEvents="none" />
+      <TimeTicks ticks={ticks} xScale={xScale} gridTop={16} gridBottom={height} topLabelY={11} tickMarks />
+      <line x1={5} x2={width - 5} y1={16} y2={16} stroke={COLOR_GRID} pointerEvents="none" />
 
-      <g className="daisen1-task-view-dividers" pointerEvents="none">
-        <text x={5} y={parentLabelY} fontSize={20} textAnchor="start">
-          Parent Task
-        </text>
-        <text x={5} y={currentLabelY} fontSize={20} textAnchor="start">
-          Current Task
-        </text>
-        <text x={5} y={subTasksLabelY} fontSize={20} textAnchor="start">
-          Subtasks
-        </text>
-        <line x1={0} x2={width} y1={divider1Y} y2={divider1Y} stroke="#000000" strokeDasharray="4" />
-        <line x1={0} x2={width} y1={divider2Y} y2={divider2Y} stroke="#000000" strokeDasharray="4" />
+      <g pointerEvents="none">
+        <BandLabel x={5} y={parentLabelY}>Parent Task</BandLabel>
+        <BandLabel x={5} y={currentLabelY}>Current Task</BandLabel>
+        <BandLabel x={5} y={subTasksLabelY}>Subtasks</BandLabel>
+        <line x1={0} x2={width} y1={divider1Y} y2={divider1Y} stroke={COLOR_BAR_STROKE} strokeDasharray="4" />
+        <line x1={0} x2={width} y1={divider2Y} y2={divider2Y} stroke={COLOR_BAR_STROKE} strokeDasharray="4" />
       </g>
 
       {(() => {
-        // Render each milestone as a curve over the interval it closes — from
-        // the task start (or the previous milestone) up to the milestone — so
-        // the curve shows how long, and on what reason, the task was blocked.
         const steps = milestonesOf(mainTask.steps).sort((a, b) => a.time - b.time);
         const barTop = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 2 + TASK_VIEW_LARGE_TASK_HEIGHT;
         const centerY = barTop + TASK_VIEW_LARGE_TASK_HEIGHT + 6;
-        return steps.map((step, index) => {
-          const intervalStart = index === 0 ? mainTask.start_time : steps[index - 1].time;
-          const x0 = safeScale(xScale, intervalStart);
-          const x1 = safeScale(xScale, step.time);
-          const color = colorMap[step.kind] ?? "#9ca3af";
-          const blockedFor = step.time - intervalStart;
-          const d = wavyPath(x0, x1, centerY);
-          return (
-            <g
-              key={`milestone-${index}-${step.kind}`}
-              style={{ cursor: "pointer" }}
-              onMouseEnter={() =>
-                onHoverMilestone({
-                  kind: step.kind,
-                  what: step.what,
-                  time: step.time,
-                  blockedFor,
-                })
-              }
-              onMouseLeave={() => onHoverMilestone(null)}
-            >
-              {x1 - x0 >= 2 && (
-                <>
-                  <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" pointerEvents="none" />
-                  {/* Wide transparent overlay so the thin wave is easy to hover. */}
-                  <path d={d} fill="none" stroke="transparent" strokeWidth={12} pointerEvents="stroke" />
-                </>
-              )}
-              <circle cx={x1} cy={centerY} r={3} fill={color} stroke="#ffffff" strokeWidth={0.75} />
-            </g>
-          );
-        });
+        return (
+          <MilestoneMarks
+            steps={steps}
+            taskStart={mainTask.start_time}
+            xScale={xScale}
+            centerY={centerY}
+            colorMap={colorMap}
+            selectedMilestone={selectedMilestone}
+            highlightedReason={reasonHighlight}
+            onSelect={onSelectMilestone}
+          />
+        );
       })()}
     </svg>
-  );
-}
-
-// A small uppercase section heading shared by the side-panel sections.
-function SectionLabel({ children }: { children: string }) {
-  return (
-    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</div>
   );
 }
 
@@ -1395,114 +1251,9 @@ interface HoveredMilestone {
   blockedFor: number;
 }
 
-function SelectedTaskSection({
-  task,
-  milestone,
-  currentLocation,
-  onGoToLocation,
-}: {
-  task: Task | null;
-  milestone: HoveredMilestone | null;
-  currentLocation: string;
-  onGoToLocation: (location: string) => void;
-}) {
-  // A hovered milestone takes over the panel and shows its blocking details.
-  if (milestone) {
-    const milestoneRows: [string, string][] = [
-      ["Reason", milestone.kind],
-      ["What", milestone.what || "-"],
-      ["Released", smartString(milestone.time)],
-      ["Blocked for", smartString(milestone.blockedFor)],
-    ];
-    return (
-      <section>
-        <SectionLabel>Selected milestone</SectionLabel>
-        <div className="mt-2 rounded-lg border bg-muted/30 p-3">
-          <div className="mb-2 break-all text-sm font-semibold">
-            blocked on {milestone.kind}
-          </div>
-          <dl className="space-y-1.5 text-xs">
-            {milestoneRows.map(([label, value]) => (
-              <div key={label} className="grid grid-cols-[5.5rem_1fr] gap-x-3">
-                <dt className="text-muted-foreground">{label}</dt>
-                <dd className="break-all font-medium tabular-nums">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </section>
-    );
-  }
-
-  const rows: [string, string][] = task
-    ? [
-        ["ID", String(task.id)],
-        ["Kind", task.kind],
-        ["What", task.what],
-        ["Where", task.location || "-"],
-        ["Start", smartString(task.start_time)],
-        ["End", smartString(task.end_time)],
-        ["Duration", smartString(task.end_time - task.start_time)],
-      ]
-    : [];
-
-  return (
-    <section>
-      <SectionLabel>Selected task</SectionLabel>
-      {!task ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          Hover or click a task in the chart to see its details.
-        </p>
-      ) : (
-        <div className="mt-2 rounded-lg border bg-muted/30 p-3">
-        <div className="mb-2 break-all text-sm font-semibold">
-          {task.kind} · {task.what}
-        </div>
-        <dl className="space-y-1.5 text-xs">
-          {rows.map(([label, value]) => {
-            const canJump =
-              label === "Where" && !!task.location && task.location !== currentLocation;
-            return (
-              <div key={label} className="grid grid-cols-[4.5rem_1fr] gap-x-3">
-                <dt className="text-muted-foreground">{label}</dt>
-                <dd className="break-all font-medium tabular-nums">
-                  {canJump ? (
-                    <span className="flex items-start justify-between gap-2">
-                      <span className="break-all">{value}</span>
-                      <button
-                        type="button"
-                        onClick={() => onGoToLocation(task.location)}
-                        className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground hover:text-primary"
-                        title={`Make ${task.location} the current location`}
-                      >
-                        Go here
-                      </button>
-                    </span>
-                  ) : (
-                    value
-                  )}
-                </dd>
-              </div>
-            );
-          })}
-        </dl>
-      </div>
-      )}
-    </section>
-  );
-}
-
-function ComponentLegend({
-  taskKeys,
-  colorMap,
-  colorMode,
-  onColorMode,
-  blockingReasons,
-  highlightedKey,
-  onHighlight,
-  highlightedReason,
-  onHighlightReason,
-}: {
+// ComponentLegend is the component view's binding of the shared Legend: the full
+// interactive variant, with the color-mode toggle and hover highlighting wired in.
+function ComponentLegend(props: {
   taskKeys: string[];
   colorMap: Record<string, string>;
   colorMode: ColorMode;
@@ -1513,117 +1264,7 @@ function ComponentLegend({
   highlightedReason: string | null;
   onHighlightReason: (kind: string | null) => void;
 }) {
-  if (taskKeys.length === 0 && blockingReasons.length === 0) return null;
-
-  return (
-    <section>
-      {taskKeys.length > 0 && (
-        <>
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              <SectionLabel>Tasks</SectionLabel>
-              <TaskTypesHelp />
-            </div>
-            {/* Color/group tasks by kind alone or the finer kind-what pair. Drives
-                both these swatches and the task-count chart's bands. */}
-            <div className="inline-flex shrink-0 overflow-hidden rounded border text-[10px] font-medium" role="group" aria-label="Color tasks by">
-              {(["kind", "kind-what"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => onColorMode(mode)}
-                  aria-pressed={colorMode === mode}
-                  className={cn(
-                    "px-1.5 py-0.5 transition-colors",
-                    mode === "kind-what" && "border-l",
-                    colorMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
-                  )}
-                >
-                  {mode === "kind" ? "Kind" : "Kind-What"}
-                </button>
-              ))}
-            </div>
-          </div>
-          <ul className="mb-3 mt-2 space-y-0.5">
-            {taskKeys.map((key) => {
-              const active = highlightedKey === key;
-              const dimmed = highlightedKey !== null && !active;
-              return (
-                <li key={key}>
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
-                      active && "bg-primary/10",
-                      dimmed && "opacity-40",
-                    )}
-                    onMouseEnter={() => onHighlight(key)}
-                    onMouseLeave={() => onHighlight(null)}
-                    onFocus={() => onHighlight(key)}
-                    onBlur={() => onHighlight(null)}
-                  >
-                    <span
-                      className="h-3 w-5 shrink-0 rounded-sm border border-black/30"
-                      style={{ backgroundColor: colorMap[key] ?? "#9ca3af" }}
-                    />
-                    <span className="truncate">{key}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
-
-      {blockingReasons.length > 0 && (
-        <>
-          <div className="flex items-center gap-1">
-            <SectionLabel>Blocking reasons</SectionLabel>
-            <BlockingReasonsHelp />
-          </div>
-          <ul className="mt-2 space-y-0.5">
-            {blockingReasons.map((kind) => {
-              const color = colorMap[kind] ?? "#9ca3af";
-              const active = highlightedReason === kind;
-              const dimmed = highlightedReason !== null && !active;
-              return (
-                <li key={kind}>
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
-                      active && "bg-primary/10",
-                      dimmed && "opacity-40",
-                    )}
-                    onMouseEnter={() => onHighlightReason(kind)}
-                    onMouseLeave={() => onHighlightReason(null)}
-                    onFocus={() => onHighlightReason(kind)}
-                    onBlur={() => onHighlightReason(null)}
-                  >
-                    {/* Two glyphs: the wavy line (task view) and a borderless block
-                        (stacked area chart), both colored by the reason. */}
-                    <span className="flex shrink-0 items-center gap-1">
-                      <svg width="22" height="12" aria-hidden="true">
-                        <path
-                          d={wavyPath(1, 21, 6, 3, 3)}
-                          fill="none"
-                          stroke={color}
-                          strokeWidth={1.5}
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                      <span className="inline-block h-3 w-4 rounded-sm" style={{ backgroundColor: color }} />
-                    </span>
-                    <span className="truncate">{kind}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
-    </section>
-  );
+  return <Legend {...props} />;
 }
 
 function sanitizeRange(startTime: number, endTime: number): TimeRange {
@@ -1638,79 +1279,22 @@ function sanitizeRange(startTime: number, endTime: number): TimeRange {
 // a leaf (a real task row) shows just its tasks; an internal node (e.g. "ROB")
 // aggregates every task beneath it but looks identical. The location tree powers
 // the header breadcrumb (collapse up) and the drill-into control (descend).
-// LocationSubtree renders the tree of locations beneath a scope, with every row
-// clickable to jump into that location. Branches are collapsible (chevron),
-// collapsed by default, so a deep scope stays compact instead of dumping its
-// whole subtree at once.
-function LocationSubtree({
-  nodes,
-  onNavigate,
-  expanded,
-  onToggle,
-}: {
-  nodes: LocationNode[];
-  onNavigate: (path: string) => void;
-  expanded: Set<string>;
-  onToggle: (path: string) => void;
-}) {
-  return (
-    <ul className="space-y-0.5">
-      {nodes.map((node) => {
-        const isBranch = node.children.length > 0;
-        const open = isBranch && expanded.has(node.path);
-        return (
-          <li key={node.path}>
-            <div className="flex items-center">
-              {isBranch ? (
-                <button
-                  type="button"
-                  className="flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-primary"
-                  onClick={() => onToggle(node.path)}
-                  aria-label={open ? `Collapse ${node.name}` : `Expand ${node.name}`}
-                >
-                  {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                </button>
-              ) : (
-                // A hollow dot marks a leaf (no children to expand).
-                <span className="flex h-6 w-5 shrink-0 items-center justify-center" aria-hidden="true">
-                  <span className="h-1.5 w-1.5 rounded-full border border-muted-foreground/50" />
-                </span>
-              )}
-              <button
-                type="button"
-                className={cn(
-                  "min-w-0 flex-1 truncate rounded px-1 py-1 text-left text-xs transition-colors hover:bg-muted hover:text-primary",
-                  isBranch ? "font-medium text-foreground" : "text-muted-foreground",
-                )}
-                onClick={() => onNavigate(node.path)}
-                title={node.path}
-              >
-                {node.name}
-              </button>
-            </div>
-            {/* Indent guide: a left border ties each child row back to its parent. */}
-            {isBranch && open && (
-              <div className="ml-2 border-l border-border pl-1.5">
-                <LocationSubtree nodes={node.children} onNavigate={onNavigate} expanded={expanded} onToggle={onToggle} />
-              </div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
 
 function ComponentDetailView({ root }: { root: LocationNode }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const name = searchParams.get("name") ?? "";
+  // `taskid` pins the nested hierarchy view (the task the page was opened on);
+  // `sel` is the lighter-weight detail-panel selection a click sets. Splitting
+  // them keeps a click from re-centering the hierarchy (see currentTask below) —
+  // the same id/sel split the task view uses.
   const urlTaskId = searchParams.get("taskid");
+  const urlSel = searchParams.get("sel");
   const { startTime: simStart, endTime: simEnd } = useSimulationRange();
   const urlStartTime = Number(searchParams.get("starttime") ?? simStart);
   const urlEndTime = Number(searchParams.get("endtime") ?? simEnd);
   const urlRange = sanitizeRange(urlStartTime, urlEndTime);
   const [viewRange, setViewRange] = useState<TimeRange>(urlRange);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(urlTaskId);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(urlSel ?? urlTaskId);
   const [selectedTaskSeed, setSelectedTaskSeed] = useState<Task | null>(null);
   const dataRange = useDebouncedValue(viewRange, DATA_RANGE_DEBOUNCE_MS);
   const { ref, size } = useElementSize<HTMLDivElement>();
@@ -1722,11 +1306,13 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   const selectedTaskFromFetch = selectedTaskMatches.find((task) => String(task.id) === selectedTaskId) ?? null;
   const selectedTaskFromSeed = selectedTaskSeed && String(selectedTaskSeed.id) === selectedTaskId ? selectedTaskSeed : null;
   const selectedTask = selectedTaskFromFetch ?? selectedTaskFromSeed;
-  // The view follows a selected task to a *different* component (issue #156), but
-  // stays in the current scope when the task already lives within it — clicking a
-  // task in ROB.Top.incoming while viewing ROB keeps you at ROB.
+  // The component page stays scoped to its own component. Selecting a task only
+  // highlights it (in the nested hierarchy and the detail panel) — it never
+  // re-scopes the page to the task's own component, which read as the view
+  // "redirecting" on every click. Drilling into a task's component is what
+  // double-click (open in the task view) is for.
   const selectedLocation = selectedTask?.location;
-  const componentName = selectedLocation && !isWithinScope(selectedLocation, name) ? selectedLocation : name;
+  const componentName = name;
 
   // Location hierarchy for the header: breadcrumb ancestors (collapse up) and the
   // current node's children (drill down). The view's data is scoped to this
@@ -1775,7 +1361,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // and fewer bins make the heavy occupancy queries much cheaper), quantized to
   // 50 so a pixel-by-pixel resize does not refetch. Both the task-count and
   // blocking-reason charts use this count so their stacked areas line up.
-  const numBins = Math.max(50, Math.min(300, Math.round((size.width - SIDE_COLUMN_WIDTH) / 4 / 50) * 50));
+  const numBins = Math.max(50, Math.min(300, Math.round((size.width - SIDE_PANEL_WIDTH) / 4 / 50) * 50));
   const { info: stackedInfo, loading: infoLoading } = useStackedCompInfo(componentName, "ConcurrentTaskMilestones", dataRange.startTime, dataRange.endTime, numBins);
 
   // How tasks are grouped for coloring and for the task-count bands. The same
@@ -1814,7 +1400,21 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     () => tasks.find((task) => String(task.id) === selectedTaskId) ?? null,
     [selectedTaskId, tasks],
   );
-  const currentTask = selectedTask ?? selectedTaskFromComponent;
+  // The detail panel follows the clicked task (the selection).
+  const panelTask = selectedTask ?? selectedTaskFromComponent;
+  // The nested hierarchy view (Parent / Current / Subtasks) is PINNED to the task
+  // the page was opened on (the URL `taskid`) — a click does not re-center it, so
+  // the hierarchy no longer jumps on every click. Double-click (open in the task
+  // view) is how you move focus to another task.
+  const inspectedTaskId = urlTaskId;
+  const inspectedTaskQuery = useMemo(() => (inspectedTaskId ? { id: inspectedTaskId } : {}), [inspectedTaskId]);
+  const { tasks: inspectedTaskMatches } = useTraceData(inspectedTaskQuery);
+  const inspectedTaskFromFetch = inspectedTaskMatches.find((task) => String(task.id) === inspectedTaskId) ?? null;
+  const inspectedTaskFromComponent = useMemo(
+    () => tasks.find((task) => String(task.id) === inspectedTaskId) ?? null,
+    [inspectedTaskId, tasks],
+  );
+  const currentTask = inspectedTaskFromFetch ?? inspectedTaskFromComponent;
   const parentTaskQuery = useMemo(
     () => (currentTask?.parent_id ? { id: String(currentTask.parent_id) } : {}),
     [currentTask?.parent_id],
@@ -1831,23 +1431,32 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     [childTaskMatches, currentTask?.id],
   );
   const [hoveredTask, setHoveredTask] = useState<Task | null>(null);
-  // A blocking milestone under the cursor; shown in the side panel instead of a
-  // chart tooltip, taking over the selected-task section while hovered.
-  const [hoveredMilestone, setHoveredMilestone] = useState<HoveredMilestone | null>(null);
+  // A blocking milestone clicked on the current-task wavy line; shown in the side
+  // panel (taking over the selected-task section) until a task is selected.
+  const [selectedMilestone, setSelectedMilestone] = useState<HoveredMilestone | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   // Separate from highlightedKey (task "kind-what" keys): hovering a blocking
   // reason in the legend highlights its band without dimming the task charts,
   // whose keys live in a different namespace.
   const [highlightedReason, setHighlightedReason] = useState<string | null>(null);
+  // What the blocking-reason chart and legend highlight: a hovered reason wins,
+  // otherwise the selected blocking reason (the clicked milestone) stays lit so
+  // selecting one keeps it highlighted.
+  const reasonHighlight = highlightedReason ?? selectedMilestone?.kind ?? null;
   const dragRef = useRef<{ pointerId: number; x: number; range: TimeRange } | null>(null);
   const didDragRef = useRef(false);
   const pendingSelectTaskRef = useRef<Task | null>(null);
+  const pendingMilestoneRef = useRef<HoveredMilestone | null>(null);
+  // Click vs double-click timing for the left column. The pointer capture this
+  // column takes for drag-panning swallows the nested view's native
+  // click/dblclick, so select / make-current / deselect are resolved here instead.
+  const pageLastClickRef = useRef<{ id: string; time: number } | null>(null);
 
   useEffect(() => {
     setViewRange(urlRange);
-    setSelectedTaskId(urlTaskId);
+    setSelectedTaskId(urlSel ?? urlTaskId);
     setSelectedTaskSeed(null);
-  }, [urlRange.startTime, urlRange.endTime, name, urlTaskId]);
+  }, [urlRange.startTime, urlRange.endTime, name, urlTaskId, urlSel]);
 
   useEffect(() => {
     if (!componentName) return;
@@ -1920,7 +1529,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     }
     return map;
   }, [childTasks, currentTask, parentTask, tasks]);
-  const leftWidth = Math.max(1, size.width - SIDE_COLUMN_WIDTH - 1);
+  const leftWidth = Math.max(1, size.width - SIDE_PANEL_WIDTH - 1);
   // Up to four stacked regions: the selected-task view (optional — a thin axis when
   // no task is selected), the per-task gantt (optional — only when few enough tasks
   // are in range), the task-count density chart (always), and the blocking-reason
@@ -2065,11 +1674,26 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     dragRef.current = { pointerId: event.pointerId, x: event.clientX, range: viewRange };
     didDragRef.current = false;
     pendingSelectTaskRef.current = null;
+    pendingMilestoneRef.current = null;
 
     if (event.target instanceof Element) {
       const taskElement = event.target.closest("[data-task-id]");
       const taskId = taskElement?.getAttribute("data-task-id");
-      pendingSelectTaskRef.current = taskId ? (selectableTaskById.get(taskId) ?? null) : null;
+      if (taskId) {
+        pendingSelectTaskRef.current = selectableTaskById.get(taskId) ?? null;
+      } else {
+        // A blocking-milestone hit area carries its details so the click can be
+        // resolved here (the column's pointer capture eats the wave's own onClick).
+        const ms = event.target.closest("[data-ms-kind]");
+        if (ms) {
+          pendingMilestoneRef.current = {
+            kind: ms.getAttribute("data-ms-kind") ?? "",
+            what: ms.getAttribute("data-ms-what") ?? "",
+            time: Number(ms.getAttribute("data-ms-time")),
+            blockedFor: Number(ms.getAttribute("data-ms-blocked")),
+          };
+        }
+      }
     }
   };
 
@@ -2099,18 +1723,33 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     }
     dragRef.current = null;
     const pendingTask = pendingSelectTaskRef.current;
+    const pendingMilestone = pendingMilestoneRef.current;
     pendingSelectTaskRef.current = null;
+    pendingMilestoneRef.current = null;
 
-    if (pendingTask && !didDragRef.current) {
+    if (didDragRef.current) return;
+    if (pendingMilestone) {
+      selectMilestone(pendingMilestone);
+      return;
+    }
+    if (!pendingTask) {
+      // A click on empty space clears the selection.
+      deselectTask();
+      return;
+    }
+
+    // Single click selects; a second quick click on the same task makes it the
+    // new current task (re-centering the nested hierarchy on it).
+    const id = String(pendingTask.id);
+    const now = Date.now();
+    const last = pageLastClickRef.current;
+    if (last && last.id === id && now - last.time < 350) {
+      pageLastClickRef.current = null;
+      makeTaskCurrent(pendingTask);
+    } else {
+      pageLastClickRef.current = { id, time: now };
       selectTask(pendingTask);
     }
-  };
-
-  const focusRangeForTask = (task: Task) => {
-    const duration = task.end_time - task.start_time;
-    const fallbackPadding = Math.max(MIN_RANGE, (viewRange.endTime - viewRange.startTime) * 0.05);
-    const padding = duration > 0 ? duration * 0.2 : fallbackPadding;
-    return sanitizeRange(task.start_time - padding, task.end_time + padding);
   };
 
   const selectTask = (task: Task) => {
@@ -2121,33 +1760,58 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     const taskId = String(task.id);
     setSelectedTaskId(taskId);
     setSelectedTaskSeed(task);
-    setViewRange(focusRangeForTask(task));
-
+    setSelectedMilestone(null);
+    // A click only selects: it updates the detail panel and the URL `sel`. It does
+    // NOT touch `taskid` (so the nested hierarchy view stays pinned to the opened
+    // task) and does not move the time axis — nothing in the layout jumps.
+    // Double-click opens the task view.
     const params = new URLSearchParams(window.location.search);
-    // Stay in the current scope if the task lives within it; only walk to the
-    // task's own location when it falls outside (e.g. a parent task elsewhere).
-    // Compare against the live scope (componentName), not the URL's `name`, which
-    // is stale once the view has already followed a task out of the URL scope
-    // (selectTask syncs via replaceState, which doesn't update searchParams).
-    params.set("name", task.location && !isWithinScope(task.location, componentName) ? task.location : componentName);
-    params.set("taskid", taskId);
+    params.set("sel", taskId);
     window.history.replaceState(null, "", `/component?${params.toString()}`);
   };
 
+  // Double-click a task (anywhere on the component page) to make it the current
+  // task — stay on the component page and re-center the nested hierarchy on it
+  // (set `taskid`), rather than leaving for the task view. Clearing `sel` lets the
+  // selection default back to the new current task. The time axis re-frames so the
+  // task sits centered (symmetric padding), since making it current is a deliberate
+  // "focus on this" action.
+  const makeTaskCurrent = (task: Task) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("taskid", String(task.id));
+    params.delete("sel");
+    const duration = task.end_time - task.start_time;
+    const padding = duration > 0 ? duration * 0.2 : Math.max(MIN_RANGE, (viewRange.endTime - viewRange.startTime) * 0.05);
+    const focus = sanitizeRange(task.start_time - padding, task.end_time + padding);
+    params.set("starttime", String(focus.startTime));
+    params.set("endtime", String(focus.endTime));
+    setSearchParams(params);
+  };
+
+
   const deselectTask = () => {
-    // Clear the selected task and collapse the task panel back to the overview.
-    // Goes through react-router (not the raw replaceState that selectTask uses)
-    // so `name`/`searchParams` are re-synced: keep the component currently in
-    // view (componentName — which may differ from the URL's original `name`
-    // after walking to a parent/subtask in another component) and the current
-    // zoom range, just without a selected task.
+    // Clear the selected task (the detail panel). Keep `taskid` so the nested
+    // hierarchy view stays put, and use replaceState (not setSearchParams) so the
+    // navigation-reset effect does not immediately re-select the current task.
     setSelectedTaskId(null);
     setSelectedTaskSeed(null);
-    const params = new URLSearchParams();
-    params.set("name", componentName);
-    params.set("starttime", String(viewRange.startTime));
-    params.set("endtime", String(viewRange.endTime));
-    setSearchParams(params, { replace: true });
+    setSelectedMilestone(null);
+    const params = new URLSearchParams(window.location.search);
+    params.delete("sel");
+    window.history.replaceState(null, "", `/component?${params.toString()}`);
+  };
+
+  // Selecting a blocking reason (a milestone on the current task) takes over the
+  // detail panel from the task and highlights that reason in the blocking-reason
+  // chart and legend (see reasonHighlight). The task selection is cleared so the
+  // panel shows the reason instead of the task.
+  const selectMilestone = (milestone: HoveredMilestone | null) => {
+    setSelectedMilestone(milestone);
+    setSelectedTaskId(null);
+    setSelectedTaskSeed(null);
+    const params = new URLSearchParams(window.location.search);
+    params.delete("sel");
+    window.history.replaceState(null, "", `/component?${params.toString()}`);
   };
 
   if (!name) {
@@ -2163,8 +1827,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     );
   }
 
-  return (
-    <div ref={ref} className="daisen1-component-page">
+  const chartArea = (
       <div
         className="daisen1-component-left"
         style={{ width: leftWidth }}
@@ -2183,7 +1846,14 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
         {/* Three stacked regions. highlightedTaskId follows hover only (not the
             selected task), so selecting a task never dims the rest. Subtle
             border-t dividers separate the regions. */}
-        <div className="daisen1-task-view relative" style={{ height: taskViewHeight }}>
+        <div
+          className="daisen1-task-view relative"
+          style={{ height: taskViewHeight }}
+          // Plain scroll over the nested hierarchy does nothing (no zoom), but a
+          // Ctrl/Cmd+scroll still zooms the time axis like the other regions —
+          // handleOverviewWheel only swallows the unmodified wheel.
+          onWheel={handleOverviewWheel}
+        >
           <ComponentTaskView
             mainTask={currentTask}
             parentTask={parentTask}
@@ -2197,9 +1867,14 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             colorMode={colorMode}
             highlightedKey={highlightedKey}
             highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
+            selectedTaskId={selectedTaskId}
+            selectedMilestone={selectedMilestone}
+            reasonHighlight={reasonHighlight}
             onHoverTask={setHoveredTask}
             onSelectTask={selectTask}
-            onHoverMilestone={setHoveredMilestone}
+            onOpenTask={makeTaskCurrent}
+            onDeselect={deselectTask}
+            onSelectMilestone={selectMilestone}
           />
           {/* Help opens only when a task is selected — that's when the hierarchy exists. */}
           {currentTask && (
@@ -2224,8 +1899,11 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               highlightedKey={highlightedKey}
               highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
               highlightedTaskIds={highlightedTaskIds}
+              selectedTaskId={selectedTaskId}
               onHoverTask={setHoveredTask}
               onSelectTask={selectTask}
+              onOpenTask={makeTaskCurrent}
+              onDeselect={deselectTask}
               onZoom={zoomTimeRange}
               onRangeChange={shiftRange}
             />
@@ -2270,7 +1948,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           style={{ height: metricLineHeight }}
           onWheel={handleOverviewWheel}
         >
-          <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={highlightedReason} segments={segmentsData?.segments ?? []} segmentsEnabled={segmentsData?.enabled ?? false} onHoverSegment={setHoveredSegment} onHoverReason={setHighlightedReason} />
+          <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={reasonHighlight} segments={segmentsData?.segments ?? []} segmentsEnabled={segmentsData?.enabled ?? false} onHoverSegment={setHoveredSegment} onHoverReason={setHighlightedReason} />
           <div className={CHART_HELP_CORNER} onPointerDown={(e) => e.stopPropagation()}>
             <BlockingReasonsHelp className={CHART_HELP_BUTTON} />
           </div>
@@ -2292,8 +1970,10 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           style={{ transform: "translateX(-1px)", willChange: "transform" }}
         />
       </div>
+  );
 
-      <SidePanel className="flex select-none flex-col" style={{ width: SIDE_COLUMN_WIDTH }}>
+  const sidePanel = (
+    <>
         <div className="flex shrink-0 flex-col gap-2 border-b px-4 py-3">
           <div className="flex items-start justify-between gap-2">
             {/* Breadcrumb: ancestors are clickable (collapse up); the last is the
@@ -2352,20 +2032,22 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           )}
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4">
-          {/* Show the hovered task while hovering, otherwise fall back to the
-              selected/current task so a task selected via click or arrived at
-              via /component?...&taskid=... stays visible in the panel. */}
+          {/* The panel reflects the clicked/selected task (click-to-select),
+              matching the task view; hovering only highlights the bar. */}
           <SelectedTaskSection
-            task={hoveredTask ?? currentTask}
-            milestone={hoveredMilestone}
-            currentLocation={componentName}
-            onGoToLocation={navigateToLocation}
+            task={panelTask}
+            milestone={selectedMilestone}
           />
           <div className="-mx-4 border-t" />
-          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} colorMode={colorMode} onColorMode={handleColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={highlightedReason} onHighlightReason={setHighlightedReason} />
+          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} colorMode={colorMode} onColorMode={handleColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={reasonHighlight} onHighlightReason={setHighlightedReason} />
         </div>
-      </SidePanel>
-    </div>
+    </>
+  );
+
+  return (
+    <TraceChartLayout rootRef={ref} panel={sidePanel}>
+      {chartArea}
+    </TraceChartLayout>
   );
 }
 

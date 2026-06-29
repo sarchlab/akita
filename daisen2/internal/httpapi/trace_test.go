@@ -254,3 +254,48 @@ func TestListTasksScopeAggregatesSubtree(t *testing.T) {
 		t.Fatalf("scope ROB.req_in = %+v, want exactly task id 2", leaf)
 	}
 }
+
+// TestListTasksParentIDsSelectsChildrenOfManyParents verifies the parentids
+// query (used by the task view to load a whole subtree level at once) returns
+// the children of every listed parent, and that the single-parent form still
+// works.
+func TestListTasksParentIDsSelectsChildrenOfManyParents(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
+	reader := NewSQLiteTraceReader(dbPath)
+	reader.Init()
+	defer reader.Close()
+
+	exec := func(q string) {
+		if _, err := reader.Exec(q); err != nil {
+			t.Fatalf("exec %q: %v", q, err)
+		}
+	}
+	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO location (ID, Locale) VALUES (1, 'L')`)
+	exec(`CREATE TABLE trace (
+		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
+		Location INTEGER, StartTime REAL, EndTime REAL)`)
+	exec(`CREATE TABLE milestone (
+		ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
+	exec(`CREATE TABLE tag (ID INTEGER, TaskID INTEGER, Time REAL, What TEXT)`)
+	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+		(1, 0, 'p', 'a', 1, 0, 10),
+		(2, 0, 'p', 'b', 1, 0, 10),
+		(10, 1, 'c', 'a', 1, 0, 5),
+		(11, 1, 'c', 'b', 1, 0, 5),
+		(20, 2, 'c', 'c', 1, 0, 5),
+		(30, 3, 'c', 'd', 1, 0, 5)`)
+
+	tasks := reader.ListTasks(context.Background(), TaskQuery{ParentIDs: []uint64{1, 2}})
+	got := map[uint64]bool{}
+	for _, tk := range tasks {
+		got[tk.ID] = true
+	}
+	if len(tasks) != 3 || !got[10] || !got[11] || !got[20] {
+		t.Fatalf("ParentIDs{1,2} returned ids %v, want {10,11,20}", got)
+	}
+
+	if one := reader.ListTasks(context.Background(), TaskQuery{ParentID: 1}); len(one) != 2 {
+		t.Fatalf("ParentID 1 returned %d tasks, want 2", len(one))
+	}
+}

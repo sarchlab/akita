@@ -1,188 +1,183 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import GanttChart from "../components/charts/GanttChart";
-import TaskDetail from "../components/TaskDetail";
-import { Button } from "../components/ui/button";
-import { SidePanel } from "../components/ui/side-panel";
-import { Input } from "../components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
-import { useComponentNames } from "../hooks/useComponentNames";
+import { TaskGanttHelp } from "../components/HelpTopics";
+import Legend from "../components/Legend";
+import SelectedTaskSection from "../components/SelectedTaskSection";
+import TraceChartLayout from "../components/TraceChartLayout";
 import { useSegments } from "../hooks/useSegments";
-import { useSimulationRange } from "../hooks/useSimulationRange";
-import { useTraceData } from "../hooks/useTraceData";
+import { useTaskHierarchy } from "../hooks/useTaskHierarchy";
 import type { Task } from "../types/task";
+import { buildColorMapFromKeys, taskColorKey } from "../utils/taskColorCoder";
+import type { ColorMode } from "../utils/taskColorCoder";
+import { milestonesOf, type SelectedMilestone } from "../utils/milestoneViz";
 import { mergeParams } from "../utils/viewState.mjs";
 
+// The task view is a detail view, always reached with a task `id`. It charts the
+// task with its full ancestor chain above it and its descendant subtree below
+// (loaded level by level). `sel` is the task currently selected within the chart,
+// shown in the detail panel. A bare /task (no id) renders the empty state.
 export default function TaskChartPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  // URL is the source of truth for the filters; selectedTask is local because the
-  // detail pane needs the full Task object (its id is mirrored to the `sel` param).
   const taskId = searchParams.get("id") ?? "";
-  const component = searchParams.get("where") ?? "";
-  const kind = searchParams.get("kind") ?? "";
   const sel = searchParams.get("sel") ?? "";
-  const [taskInput, setTaskInput] = useState(taskId);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const { names } = useComponentNames();
-  const { startTime, endTime } = useSimulationRange();
+  // A selected blocking milestone takes over the detail panel from the task
+  // (mirrors the component view).
+  const [selectedMilestone, setSelectedMilestone] = useState<SelectedMilestone | null>(null);
+  const [colorMode, setColorMode] = useState<ColorMode>("kind-what");
+  // Legend hover highlights, shared with the chart (same as the component view).
+  const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
+  const [highlightedReason, setHighlightedReason] = useState<string | null>(null);
+  // Gates the default-to-main selection to once per task id, so an explicit
+  // deselect (clicking the chart background) is not immediately undone.
+  const autoSelectedFor = useRef<string | null>(null);
   const { data: segmentsData } = useSegments();
+  const { mainTask, ancestors, levels, atLeaves, loading, expanding, expandNext } = useTaskHierarchy(taskId);
 
-  const replaceParams = (patch: Record<string, string | undefined>) =>
-    setSearchParams((prev) => mergeParams("/task", prev, patch), { replace: true });
-
-  const mainQuery = useMemo(() => (taskId ? { id: taskId } : {}), [taskId]);
-  const { tasks: mainTasks, loading: mainLoading } = useTraceData(mainQuery);
-  const mainTask = mainTasks[0] ?? null;
-  const parentQuery = useMemo(() => (mainTask?.parent_id ? { id: String(mainTask.parent_id) } : {}), [mainTask?.parent_id]);
-  const { tasks: parentTasks } = useTraceData(parentQuery);
-  const parentTask = parentTasks[0] ?? null;
-  const childQuery = useMemo(() => (mainTask ? { parentId: String(mainTask.id) } : {}), [mainTask]);
-  const { tasks: childTasks } = useTraceData(childQuery);
-
-  const browseQuery = useMemo(
-    () =>
-      taskId
-        ? {}
-        : {
-            where: component || undefined,
-            kind: kind || undefined,
-            startTime,
-            endTime,
-          },
-    [component, endTime, kind, startTime, taskId],
+  const allTasks = useMemo(
+    () => [...ancestors, ...(mainTask ? [mainTask] : []), ...levels.flat()],
+    [ancestors, mainTask, levels],
   );
-  const { tasks: browseTasks, loading: browseLoading } = useTraceData(browseQuery);
 
-  const displayTasks = taskId ? childTasks : browseTasks;
+  // Task color keys and blocking reasons present in the chart, and a color map
+  // over both — shared with GanttChart (so bars match) and the Legend (so swatches
+  // match).
+  const taskKeys = useMemo(() => {
+    const keys: string[] = [];
+    const seen = new Set<string>();
+    for (const task of allTasks) {
+      const key = taskColorKey(task, colorMode);
+      if (!seen.has(key)) {
+        seen.add(key);
+        keys.push(key);
+      }
+    }
+    return keys;
+  }, [allTasks, colorMode]);
+  // Every rendered row (ancestors, the main task, and all descendant levels) draws
+  // its milestones, so gather reasons across all of them — otherwise a reason that
+  // only a parent or child has would fall back to gray and be missing from the legend.
+  const blockingReasons = useMemo(() => {
+    const reasons = new Set<string>();
+    for (const task of allTasks) {
+      for (const step of milestonesOf(task.steps)) reasons.add(step.kind);
+    }
+    return Array.from(reasons);
+  }, [allTasks]);
+  const colorMap = useMemo(
+    () => buildColorMapFromKeys([...taskKeys, ...blockingReasons]),
+    [taskKeys, blockingReasons],
+  );
 
-  // Keep the task-id input box in sync when the active task changes (e.g. via
-  // back/forward or an external link).
-  useEffect(() => {
-    setTaskInput(taskId);
-  }, [taskId]);
-
-  // Restore the selected task (the `sel` param) once its data has loaded — in both
-  // browse mode (from the matching tasks) and detail mode (from main/parent/child).
-  // With no `sel`, detail mode defaults to the main task.
+  // Restore the selected task (the `sel` param) once its data has loaded; with no
+  // `sel`, default the detail panel to the main task (once per task id).
   useEffect(() => {
     if (sel) {
-      const pool = taskId ? [mainTask, parentTask, ...childTasks] : browseTasks;
-      const found = pool.find((task) => task && String(task.id) === sel);
+      const found = allTasks.find((task) => String(task.id) === sel);
       if (found) {
         setSelectedTask((current) => (current && String(current.id) === sel ? current : found));
         return;
       }
     }
-    if (taskId && mainTask) setSelectedTask(mainTask);
-  }, [sel, taskId, mainTask?.id, parentTask?.id, childTasks, browseTasks]);
+    if (taskId && mainTask && autoSelectedFor.current !== taskId) {
+      autoSelectedFor.current = taskId;
+      setSelectedTask(mainTask);
+    }
+  }, [sel, taskId, mainTask, allTasks]);
 
   const selectTask = useCallback(
     (task: Task) => {
       setSelectedTask(task);
+      setSelectedMilestone(null);
       setSearchParams((prev) => mergeParams("/task", prev, { sel: String(task.id) }), { replace: true });
     },
     [setSearchParams],
   );
 
+  // Selecting a blocking milestone clears the task selection so the panel shows
+  // the reason instead, and (via reasonHighlight) keeps that reason lit.
+  const selectMilestone = useCallback(
+    (milestone: SelectedMilestone | null) => {
+      setSelectedMilestone(milestone);
+      setSelectedTask(null);
+      autoSelectedFor.current = taskId;
+      setSearchParams((prev) => mergeParams("/task", prev, { sel: undefined }), { replace: true });
+    },
+    [setSearchParams, taskId],
+  );
+
+  // Open a different task by id (an ancestor or a descendant), recentering the
+  // view on it and clearing the prior in-chart selection.
   const navigateToTask = useCallback(
     (id: string) => {
-      // Entering task-detail mode: keep only the task id; drop browse-only filters
-      // and selection so the URL carries no params that don't affect the view.
-      setSearchParams((prev) => mergeParams("/task", prev, { id, where: undefined, kind: undefined, sel: undefined }));
+      setSearchParams((prev) => mergeParams("/task", prev, { id, sel: undefined }));
       setSelectedTask(null);
+      setSelectedMilestone(null);
     },
     [setSearchParams],
   );
 
+  // Clear the selection when the chart background is clicked.
+  const deselect = useCallback(() => {
+    autoSelectedFor.current = taskId;
+    setSelectedTask(null);
+    setSelectedMilestone(null);
+    setSearchParams((prev) => mergeParams("/task", prev, { sel: undefined }), { replace: true });
+  }, [setSearchParams, taskId]);
+
   const selectedId = selectedTask?.id ?? (sel || null);
+  // A hovered reason wins; otherwise the selected milestone's reason stays lit.
+  const reasonHighlight = highlightedReason ?? selectedMilestone?.kind ?? null;
+  const canExpand = !loading && !atLeaves && levels.length > 0;
 
   return (
-    <div className="flex h-full overflow-hidden">
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <form
-          className="flex min-h-12 flex-wrap items-center gap-2 border-b bg-white px-3 py-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (taskInput.trim()) navigateToTask(taskInput.trim());
-          }}
-        >
-          <Input className="w-72" placeholder="Task ID" value={taskInput} onChange={(event) => setTaskInput(event.target.value)} />
-          <Button type="submit">Go</Button>
-          <Select
-            value={component || "__all__"}
-            onValueChange={(value) => {
-              const next = value === "__all__" ? "" : value;
-              // Switch to browse mode for the chosen component: drop the active
-              // task id and selection, but keep the kind filter.
-              replaceParams({ where: next || undefined, id: undefined, sel: undefined });
-              setSelectedTask(null);
-            }}
-          >
-            <SelectTrigger className="w-72">
-              <SelectValue placeholder="Component" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">All Components</SelectItem>
-              {names.map((name) => (
-                <SelectItem key={name} value={name}>
-                  {name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input
-            className="w-44"
-            placeholder="Kind filter"
-            value={kind}
-            onChange={(event) =>
-              // The kind filter only applies to browse mode; typing it leaves
-              // task-detail mode rather than adding a param with no effect.
-              replaceParams({ kind: event.target.value || undefined, id: undefined, sel: undefined })
-            }
-          />
-          {(mainLoading || browseLoading) && <span className="text-sm text-muted-foreground">Loading...</span>}
-        </form>
-
-        <div className="min-h-0 flex-1">
-          <GanttChart
-            tasks={displayTasks}
-            mainTask={taskId ? mainTask : null}
-            parentTask={taskId ? parentTask : null}
-            segments={segmentsData?.segments ?? []}
-            segmentsEnabled={segmentsData?.enabled ?? false}
-            selectedId={selectedId}
-            onSelectTask={selectTask}
-            onOpenTask={(task) => navigateToTask(String(task.id))}
+    <TraceChartLayout
+      panel={
+        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4">
+          <SelectedTaskSection task={selectedTask} milestone={selectedMilestone} />
+          <div className="-mx-4 border-t" />
+          <Legend
+            taskKeys={taskKeys}
+            colorMap={colorMap}
+            blockingReasons={blockingReasons}
+            colorMode={colorMode}
+            onColorMode={setColorMode}
+            highlightedKey={highlightedKey}
+            onHighlight={setHighlightedKey}
+            highlightedReason={reasonHighlight}
+            onHighlightReason={setHighlightedReason}
           />
         </div>
-      </div>
-
-      <SidePanel className="w-96 overflow-auto p-4">
-        <TaskDetail task={selectedTask} onNavigateToTask={navigateToTask} />
-        {!taskId && browseTasks.length > 0 ? (
-          <div className="mt-4 space-y-1">
-            <div className="text-sm font-semibold">Matching Tasks</div>
-            {browseTasks.slice(0, 60).map((task) => (
-              <button
-                key={task.id}
-                type="button"
-                className="block w-full rounded-md border bg-white p-2 text-left text-xs hover:bg-muted"
-                onClick={() => selectTask(task)}
-                onDoubleClick={() => navigateToTask(String(task.id))}
-              >
-                <div className="font-medium">{task.kind}</div>
-                <div className="truncate text-muted-foreground">{task.what}</div>
-              </button>
-            ))}
+      }
+    >
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="relative min-h-0 flex-1">
+          <GanttChart
+            ancestors={ancestors}
+            mainTask={mainTask}
+            levels={levels}
+            segments={segmentsData?.segments ?? []}
+            segmentsEnabled={segmentsData?.enabled ?? false}
+            colorMap={colorMap}
+            colorMode={colorMode}
+            selectedId={selectedMilestone ? null : selectedId}
+            selectedMilestone={selectedMilestone}
+            highlightedKey={highlightedKey}
+            highlightedReason={reasonHighlight}
+            onSelectTask={selectTask}
+            onOpenTask={(task) => navigateToTask(String(task.id))}
+            onSelectMilestone={selectMilestone}
+            onDeselect={deselect}
+            canExpand={canExpand}
+            expanding={expanding}
+            onExpandNext={expandNext}
+          />
+          <div className="absolute bottom-2 right-2 z-20" onPointerDown={(e) => e.stopPropagation()}>
+            <TaskGanttHelp className="bg-white/85 p-1 shadow-sm ring-1 ring-slate-200 backdrop-blur-sm hover:bg-white" />
           </div>
-        ) : null}
-      </SidePanel>
-    </div>
+        </div>
+      </div>
+    </TraceChartLayout>
   );
 }

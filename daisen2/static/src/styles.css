@@ -100,13 +100,6 @@
     @apply h-5 shrink-0 border-t bg-white px-2 text-xs text-slate-600;
   }
 
-  .daisen1-component-page {
-    display: flex;
-    height: 100%;
-    overflow: hidden;
-    background: #ffffff;
-  }
-
   .daisen1-component-left {
     position: relative;
     display: inline-block;
@@ -125,14 +118,6 @@
   .daisen1-metric-view {
     width: 100%;
     overflow: hidden;
-  }
-
-  .daisen1-task-view-dividers text {
-    text-shadow:
-      -1px -1px 0 #ffffff,
-      1px -1px 0 #ffffff,
-      -1px 1px 0 #ffffff,
-      1px 1px 0 #ffffff;
   }
 
   .chart-axis text {

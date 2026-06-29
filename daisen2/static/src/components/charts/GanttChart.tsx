@@ -1,255 +1,357 @@
-import { useMemo } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import * as d3 from "d3";
 import type { Segment, Task } from "../../types/task";
 import { assignYIndices } from "../../utils/taskYIndexAssigner";
 import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../../utils/taskColorCoder";
-import { milestonesOf, wavyPath } from "../../utils/milestoneViz";
-import { smartString } from "../../utils/smartValue";
+import type { ColorMode } from "../../utils/taskColorCoder";
+import { milestonesOf, type SelectedMilestone } from "../../utils/milestoneViz";
+import { useElementSize } from "../../hooks/useElementSize";
+import { AXIS_TICK_COUNT, barOpacity, barStrokeOpacity, COLOR_BAR_STROKE, COLOR_GRID, gapSegments, safeScale } from "./chartStyle";
+import BandLabel from "./BandLabel";
+import { GapHatchDef, GapRects } from "./GapHatch";
+import MilestoneMarks from "./MilestoneMarks";
+import TimeTicks from "./TimeTicks";
 
 interface GanttChartProps {
-  tasks: Task[];
+  // Ancestors root-first: [root, …, immediate parent], stacked above the current
+  // task. The current task's subtree descends in `levels`.
+  ancestors?: Task[];
   mainTask?: Task | null;
-  parentTask?: Task | null;
+  // Descendant levels: [children, grandchildren, …]; each is drawn as its own
+  // concurrency-packed band below the current task.
+  levels?: Task[][];
   segments?: Segment[];
   segmentsEnabled?: boolean;
-  // Controlled selection: the parent owns which task is highlighted, so the
-  // Gantt's highlight can't drift from the page's selected task / the URL.
+  // Color map shared with the page's legend so bars and legend swatches match.
+  colorMap?: Record<string, string>;
+  // Whether tasks are colored by kind alone or the finer kind-what pair; must
+  // match how `colorMap` was built so swatch and bar colors agree.
+  colorMode?: ColorMode;
+  // Controlled selection: the parent owns which task is highlighted.
   selectedId?: string | number | null;
+  // The selected blocking milestone (mutually exclusive with a selected task) and
+  // legend-driven highlights — shared with the component view for consistency.
+  selectedMilestone?: SelectedMilestone | null;
+  highlightedKey?: string | null;
+  highlightedReason?: string | null;
   onSelectTask?: (task: Task) => void;
   onOpenTask?: (task: Task) => void;
+  onSelectMilestone?: (milestone: SelectedMilestone | null) => void;
+  // Clicking the chart background (anywhere not on a bar) clears the selection.
+  onDeselect?: () => void;
+  // Show a button to load the next descendant level (a deeper subtree exists and
+  // was not auto-loaded). expanding disables it while a level loads.
+  canExpand?: boolean;
+  expanding?: boolean;
+  onExpandNext?: () => void;
 }
 
 const MARGIN = { top: 28, right: 12, bottom: 28, left: 8 };
 const ROW_HEIGHT = 14;
-const HEADER_ROW_HEIGHT = 22;
-// Vertical room reserved below the Current Task bar for the blocking-reason
+// Vertical room reserved below the current task bar for the blocking-reason
 // curves (only when the task has milestones).
-const MILESTONE_BAND = 22;
-
-function safeScale(scale: d3.ScaleLinear<number, number>, value: number) {
-  return scale(value) ?? 0;
-}
-
-function gapSegments(segments: Segment[], startTime: number, endTime: number) {
-  if (!segments.length) return [];
-  const sorted = [...segments].sort((a, b) => a.start_time - b.start_time);
-  const gaps: Segment[] = [];
-  if (sorted[0].start_time > startTime) {
-    gaps.push({ start_time: startTime, end_time: Math.min(sorted[0].start_time, endTime) });
-  }
-  for (let index = 0; index < sorted.length - 1; index++) {
-    const start = Math.max(sorted[index].end_time, startTime);
-    const end = Math.min(sorted[index + 1].start_time, endTime);
-    if (start < end) gaps.push({ start_time: start, end_time: end });
-  }
-  const last = sorted[sorted.length - 1];
-  if (last.end_time < endTime) {
-    gaps.push({ start_time: Math.max(last.end_time, startTime), end_time: endTime });
-  }
-  return gaps;
-}
+// Bar/band heights aligned with the component view (TASK_VIEW_LARGE_TASK_HEIGHT
+// 15, milestone band 18, subtask bar ~7) so the same rows read the same size.
+const MILESTONE_BAND = 18;
+const LABEL_H = 18;
+const HEADER_BAR_H = 15;
+const DESC_BAR_H = 7;
 
 export default function GanttChart({
-  tasks,
+  ancestors = [],
   mainTask = null,
-  parentTask = null,
+  levels = [],
   segments = [],
   segmentsEnabled = false,
+  colorMap: colorMapProp,
+  colorMode = "kind-what",
   selectedId = null,
+  selectedMilestone = null,
+  highlightedKey = null,
+  highlightedReason = null,
   onSelectTask,
   onOpenTask,
+  onSelectMilestone,
+  onDeselect,
+  canExpand = false,
+  expanding = false,
+  onExpandNext,
 }: GanttChartProps) {
-  const layout = useMemo(() => {
-    const rows: Task[] = [];
-    if (parentTask) rows.push({ ...parentTask, isParentTask: true });
-    if (mainTask) rows.push({ ...mainTask, isMainTask: true });
-    const ordinaryTasks = tasks
-      .filter((task) => task.id !== parentTask?.id && task.id !== mainTask?.id)
-      .map((task) => ({ ...task }));
-    assignYIndices(ordinaryTasks);
-    rows.push(...ordinaryTasks);
-    return rows;
-  }, [tasks, mainTask, parentTask]);
+  // Measure the scroll container so the chart can use pixel coordinates and fill
+  // the available width and height (rather than aspect-scaling a fixed viewBox,
+  // which left empty space below when there were few layers).
+  const { ref: containerRef, size } = useElementSize<HTMLDivElement>();
+  const W = Math.max(size.width || 1200, 760);
+  const allTasks = [...ancestors, ...(mainTask ? [mainTask] : []), ...levels.flat()];
 
-  // Milestones on the current task, in time order. Each is the release of a
-  // blocking reason; the interval before it (from the task start or the previous
-  // milestone) is rendered as a curve colored by that reason.
-  const milestoneSteps = useMemo(() => {
-    return milestonesOf(mainTask?.steps).sort((a, b) => a.time - b.time);
-  }, [mainTask]);
+  const milestoneSteps = milestonesOf(mainTask?.steps).sort((a, b) => a.time - b.time);
   const milestoneBand = milestoneSteps.length ? MILESTONE_BAND : 0;
 
-  const timeStart = layout.length ? Math.min(...layout.map((task) => task.start_time)) : 0;
-  const timeEnd = layout.length ? Math.max(...layout.map((task) => task.end_time)) : 1;
-  const padding = (timeEnd - timeStart) * 0.02 || 1e-12;
-  const startTime = timeStart - padding;
-  const endTime = timeEnd + padding;
-  const laneCount = Math.max(1, Math.max(...layout.map((task) => task.yIndex ?? 0), 0) + 1);
-  const height = MARGIN.top + MARGIN.bottom + HEADER_ROW_HEIGHT * (parentTask ? 2 : mainTask ? 1 : 0) + milestoneBand + laneCount * ROW_HEIGHT + 28;
-  const width = 1200;
-  const innerWidth = width - MARGIN.left - MARGIN.right;
-  const xScale = d3.scaleLinear().domain([startTime, endTime]).range([MARGIN.left, width - MARGIN.right]);
-  const colorMap = buildColorMapFromKeys([...layout.map((task) => taskColorKey(task)), ...milestoneSteps.map((step) => step.kind)]);
-  const xTicks = xScale.ticks(12);
-  const gaps = segmentsEnabled ? gapSegments(segments, startTime, endTime) : [];
+  // Lane-assign each descendant level independently (clones, so props aren't
+  // mutated). Each level is a set of siblings, so plain concurrency packing fits.
+  const levelLayouts = levels.map((level) => {
+    const tasks = level.map((task) => ({ ...task }));
+    assignYIndices(tasks);
+    const lanes = Math.max(1, Math.max(0, ...tasks.map((task) => task.yIndex ?? 0)) + 1);
+    return { tasks, lanes };
+  });
 
-  const yForTask = (task: Task) => {
-    let y = MARGIN.top + 8;
-    if (parentTask) {
-      if (task.isParentTask) return y;
-      y += HEADER_ROW_HEIGHT + 8;
-    }
-    if (mainTask) {
-      if (task.isMainTask) return y;
-      y += HEADER_ROW_HEIGHT + milestoneBand + 8;
-    }
-    return y + (task.yIndex ?? 0) * ROW_HEIGHT;
+  // Scale time to the current task and its descendants (the focus). Ancestors run
+  // far wider (the root spans the whole trace), so including them would squash the
+  // focus into a sliver; instead they are clamped to the chart as context bars.
+  const focusTasks = mainTask ? [mainTask, ...levels.flat()] : allTasks;
+  const timeStart = focusTasks.length ? Math.min(...focusTasks.map((task) => task.start_time)) : 0;
+  const timeEnd = focusTasks.length ? Math.max(...focusTasks.map((task) => task.end_time)) : 1;
+  const padding = (timeEnd - timeStart) * 0.02 || 1e-12;
+  const autoStart = timeStart - padding;
+  const autoEnd = timeEnd + padding;
+
+  // The visible time range starts at the auto-fit focus domain and resets when the
+  // focus task changes. Drag pans (and scrolls vertically) and Ctrl/Cmd+scroll
+  // zooms (anchored at the cursor) — matching the component view.
+  const [viewRange, setViewRange] = useState({ startTime: autoStart, endTime: autoEnd });
+  const rangeRef = useRef(viewRange);
+  rangeRef.current = viewRange;
+  const widthRef = useRef(W);
+  widthRef.current = W;
+  const dragRef = useRef<{ x: number; y: number; scrollTop: number; range: { startTime: number; endTime: number } } | null>(null);
+  const didDragRef = useRef(false);
+  const focusKey = mainTask?.id ?? "";
+  useEffect(() => {
+    setViewRange({ startTime: autoStart, endTime: autoEnd });
+  }, [focusKey, autoStart, autoEnd]);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const r = rangeRef.current;
+      const rect = el.getBoundingClientRect();
+      const inner = Math.max(1, widthRef.current - MARGIN.left - MARGIN.right);
+      const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left - MARGIN.left) / inner));
+      const dur = r.endTime - r.startTime;
+      const scale = Math.pow(1.0015, event.deltaY);
+      const anchor = r.startTime + dur * ratio;
+      setViewRange({ startTime: anchor - (anchor - r.startTime) * scale, endTime: anchor + (r.endTime - anchor) * scale });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [containerRef]);
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    dragRef.current = { x: event.clientX, y: event.clientY, scrollTop: containerRef.current?.scrollTop ?? 0, range: rangeRef.current };
+    didDragRef.current = false;
+  };
+  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didDragRef.current = true;
+    const dur = drag.range.endTime - drag.range.startTime;
+    const dt = (dur / Math.max(1, widthRef.current - MARGIN.left - MARGIN.right)) * dx;
+    setViewRange({ startTime: drag.range.startTime - dt, endTime: drag.range.endTime - dt });
+    if (containerRef.current) containerRef.current.scrollTop = drag.scrollTop - dy;
+  };
+  const handlePointerUp = () => {
+    dragRef.current = null;
   };
 
-  if (!layout.length) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No tasks to display.</div>;
+  if (allTasks.length === 0) {
+    // Keep the same ref'd container so the ResizeObserver stays attached (and the
+    // measured size is ready) across the empty → loaded transition.
+    return (
+      <div ref={containerRef} className="h-full overflow-auto bg-white">
+        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No tasks to display.</div>
+      </div>
+    );
   }
 
-  // Blocking-reason curves for the current task. Each milestone closes an
-  // interval [previous milestone (or task start) -> milestone]; that interval is
-  // drawn as a downward arc colored by the released reason, with a node marking
-  // the release point.
-  const milestoneCenterY = mainTask ? yForTask({ ...mainTask, isMainTask: true }) + 18 + 6 : 0;
-  const milestoneMarks = mainTask
-    ? milestoneSteps.map((step, index) => {
-        const intervalStart = index === 0 ? mainTask.start_time : milestoneSteps[index - 1].time;
-        const x0 = safeScale(xScale, intervalStart);
-        const x1 = safeScale(xScale, step.time);
-        const color = colorMap[step.kind] ?? "#9ca3af";
-        const blockedFor = step.time - intervalStart;
-        const d = wavyPath(x0, x1, milestoneCenterY);
-        const tip = `blocked on ${step.kind} (${step.what}) for ${smartString(blockedFor)}`;
-        return (
-          <g key={`milestone-${index}-${step.kind}`}>
-            {x1 - x0 >= 2 && (
-              <>
-                <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" pointerEvents="none" />
-                {/* Wide transparent overlay so the thin wave is easy to hover. */}
-                <path d={d} fill="none" stroke="transparent" strokeWidth={12} pointerEvents="stroke">
-                  <title>{tip}</title>
-                </path>
-              </>
-            )}
-            <circle cx={x1} cy={milestoneCenterY} r={3} fill={color} stroke="#ffffff" strokeWidth={0.75}>
-              <title>{`${tip} — released at ${smartString(step.time)}`}</title>
-            </circle>
-          </g>
-        );
-      })
-    : null;
+  const startTime = viewRange.startTime;
+  const endTime = viewRange.endTime;
+  const innerWidth = W - MARGIN.left - MARGIN.right;
+  const xScale = d3.scaleLinear().domain([startTime, endTime]).range([MARGIN.left, W - MARGIN.right]);
+  const colorMap =
+    colorMapProp ??
+    buildColorMapFromKeys([...allTasks.map((task) => taskColorKey(task, colorMode)), ...milestoneSteps.map((step) => step.kind)]);
 
-  const reasons = Array.from(new Set(milestoneSteps.map((step) => step.kind)));
+  // Vertical layout, top → bottom. Each task has a label row above its bar; tasks
+  // with milestones get a band below the bar for the blocking waves. Label-above
+  // and milestones-below keep both off the bar, so the bar stays clickable.
+  const ROW_GAP = 4;
+  const hasMilestones = (task: Task) => milestonesOf(task.steps).length > 0;
+  let cursor = MARGIN.top + 8;
+  const ancestorRows = ancestors.map((task) => {
+    const labelTop = cursor;
+    const barTop = cursor + LABEL_H;
+    const band = hasMilestones(task) ? MILESTONE_BAND : 0;
+    cursor += LABEL_H + DESC_BAR_H + band + ROW_GAP;
+    return { task, labelTop, barTop, band };
+  });
+  const currentLabelTop = cursor;
+  const currentBarTop = cursor + LABEL_H;
+  if (mainTask) cursor += LABEL_H + HEADER_BAR_H + milestoneBand + ROW_GAP;
+  const levelRows = levelLayouts.map(({ tasks, lanes }, index) => {
+    const labelTop = cursor;
+    cursor += LABEL_H;
+    const tasksTop = cursor;
+    const levelHasMs = tasks.some(hasMilestones);
+    const laneH = ROW_HEIGHT + (levelHasMs ? MILESTONE_BAND : 0);
+    cursor += lanes * laneH + 6;
+    return { index, tasks, labelTop, tasksTop, laneH, levelHasMs };
+  });
+  const naturalHeight = cursor + MARGIN.bottom + 8;
+
+  // Fill the container: when the content is shorter than the available height,
+  // stretch the band layout (positions and bar heights, not label fonts) so the
+  // chart uses the full vertical space and the bottom axis sits at the bottom,
+  // matching the component view. Taller content scrolls at its natural size.
+  const topAnchor = MARGIN.top + 8;
+  const height = size.height > naturalHeight ? size.height : naturalHeight;
+  const innerNatural = Math.max(1, naturalHeight - topAnchor - MARGIN.bottom - 8);
+  const stretch = (height - topAnchor - MARGIN.bottom - 8) / innerNatural;
+  const sy = (y: number) => topAnchor + (y - topAnchor) * stretch;
+  const sh = (h: number) => h * stretch;
+
+  const xTicks = xScale.ticks(AXIS_TICK_COUNT);
+  const gaps = segmentsEnabled ? gapSegments(segments, startTime, endTime) : [];
+
+  const renderBar = (task: Task, top: number, barHeight: number, keyPrefix: string) => {
+    // Clamp to the chart so an ancestor spanning far beyond the focus window
+    // renders as a full-width context bar instead of extreme off-screen coords.
+    const x = Math.max(0, safeScale(xScale, task.start_time));
+    const w = Math.max(1, Math.min(W, safeScale(xScale, task.end_time)) - x);
+    const key = taskColorKey(task, colorMode);
+    const selected = selectedId != null && String(selectedId) === String(task.id);
+    const hasHighlight = highlightedKey != null;
+    const highlighted = hasHighlight && highlightedKey === key;
+    return (
+      <g
+        key={`${keyPrefix}-${task.id}`}
+        className="cursor-pointer"
+        onClick={(event) => {
+          event.stopPropagation();
+          if (didDragRef.current) return;
+          onSelectTask?.(task);
+        }}
+        onDoubleClick={() => onOpenTask?.(task)}
+      >
+        <rect
+          x={x}
+          y={top}
+          width={w}
+          height={barHeight}
+          fill={lookupColor(colorMap, task, colorMode)}
+          stroke={COLOR_BAR_STROKE}
+          strokeWidth={1}
+          strokeOpacity={barStrokeOpacity({ selected, highlighted, hasHighlight })}
+          opacity={barOpacity({ selected, highlighted, hasHighlight, hasSelection: selectedId != null })}
+        />
+      </g>
+    );
+  };
+
+  // Milestone waves for any listed task, drawn centered on its bar. The current
+  // task gets its own dedicated band below the bar (milestoneMarks above); every
+  // other task shows its milestones over its bar so all blocking is visible.
+  const renderTaskMilestones = (task: Task, centerY: number, keyPrefix: string) => {
+    const steps = milestonesOf(task.steps).sort((a, b) => a.time - b.time);
+    if (!steps.length) return null;
+    return (
+      <MilestoneMarks
+        key={keyPrefix}
+        steps={steps}
+        taskStart={task.start_time}
+        xScale={xScale}
+        centerY={centerY}
+        colorMap={colorMap}
+        selectedMilestone={selectedMilestone}
+        highlightedReason={highlightedReason}
+        onSelect={(milestone) => {
+          if (didDragRef.current) return;
+          onSelectMilestone?.(milestone);
+        }}
+      />
+    );
+  };
 
   return (
-    <div className="h-full overflow-auto bg-white">
-      {reasons.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 pt-2 text-xs text-slate-600">
-          <span className="font-medium">Blocked on:</span>
-          {reasons.map((kind) => (
-            <span key={kind} className="inline-flex items-center gap-1">
-              <svg width="22" height="12" aria-hidden="true">
-                <path
-                  d={wavyPath(1, 21, 6, 3, 3)}
-                  fill="none"
-                  stroke={colorMap[kind] ?? "#9ca3af"}
-                  strokeWidth={1.5}
-                  strokeLinecap="round"
-                />
-              </svg>
-              {kind}
-            </span>
-          ))}
-        </div>
-      )}
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="min-w-[760px]">
+    <div
+      ref={containerRef}
+      className="h-full cursor-grab select-none overflow-auto bg-white active:cursor-grabbing"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
+    >
+      <svg
+        width={W}
+        height={height}
+        className="block"
+        onClick={() => {
+          if (didDragRef.current) return;
+          onDeselect?.();
+        }}
+      >
         <defs>
-          <pattern id="gantt-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
-            <rect width="8" height="8" fill="rgba(148, 163, 184, 0.12)" />
-            <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(100, 116, 139, 0.28)" strokeWidth="3" />
-          </pattern>
+          <GapHatchDef id="gantt-gap-pattern" />
         </defs>
-        {gaps.map((gap, index) => {
-          const x = safeScale(xScale, gap.start_time);
-          const w = Math.max(0, safeScale(xScale, gap.end_time) - x);
-          return <rect key={index} x={x} y={MARGIN.top} width={w} height={height - MARGIN.top - MARGIN.bottom} fill="url(#gantt-gap-pattern)" />;
-        })}
+        <GapRects gaps={gaps} xScale={xScale} patternId="gantt-gap-pattern" top={MARGIN.top} height={height - MARGIN.top - MARGIN.bottom} />
 
-        {xTicks.map((tick) => (
-          <g key={tick}>
-            <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={MARGIN.top} y2={height - MARGIN.bottom} stroke="#cbd5e1" strokeDasharray="3 3" />
-            <text x={safeScale(xScale, tick)} y={18} textAnchor="middle" fontSize="10" fill="#475569">
-              {smartString(tick)}
-            </text>
-            <text x={safeScale(xScale, tick)} y={height - 8} textAnchor="middle" fontSize="10" fill="#475569">
-              {smartString(tick)}
-            </text>
+        <TimeTicks
+          ticks={xTicks}
+          xScale={xScale}
+          gridTop={MARGIN.top}
+          gridBottom={height - MARGIN.bottom}
+          topLabelY={18}
+          bottomLabelY={height - 8}
+          tickMarks
+        />
+
+        <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={MARGIN.top} y2={MARGIN.top} stroke={COLOR_GRID} />
+        <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={height - MARGIN.bottom} y2={height - MARGIN.bottom} stroke={COLOR_GRID} />
+
+        {ancestorRows.map(({ task, labelTop, barTop, band }) => (
+          <g key={`anc-${task.id}`}>
+            <BandLabel x={12} y={sy(labelTop + 12)}>{task.kind}</BandLabel>
+            {renderBar(task, sy(barTop), sh(DESC_BAR_H), "anc")}
+            {band > 0 && renderTaskMilestones(task, sy(barTop + DESC_BAR_H + MILESTONE_BAND / 2), `anc-ms-${task.id}`)}
           </g>
         ))}
 
-        <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={MARGIN.top} y2={MARGIN.top} stroke="#94a3b8" />
-        <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={height - MARGIN.bottom} y2={height - MARGIN.bottom} stroke="#94a3b8" />
-
-        {parentTask && (
-          <text x={12} y={yForTask({ ...parentTask, isParentTask: true }) + 13} fontSize="12" fontWeight="600" fill="#0f172a">
-            Parent Task
-          </text>
-        )}
         {mainTask && (
-          <text x={12} y={yForTask({ ...mainTask, isMainTask: true }) + 13} fontSize="12" fontWeight="600" fill="#0f172a">
-            Current Task
-          </text>
+          <g>
+            <BandLabel x={12} y={sy(currentLabelTop + 12)}>Current Task</BandLabel>
+            {renderBar(mainTask, sy(currentBarTop), sh(HEADER_BAR_H), "main")}
+            {milestoneBand > 0 && renderTaskMilestones(mainTask, sy(currentBarTop + HEADER_BAR_H + MILESTONE_BAND / 2), "main-ms")}
+          </g>
         )}
-        <text x={12} y={MARGIN.top + (parentTask ? HEADER_ROW_HEIGHT + 8 : 0) + (mainTask ? HEADER_ROW_HEIGHT + milestoneBand + 8 : 0) + 16} fontSize="12" fontWeight="600" fill="#0f172a">
-          Tasks
-        </text>
 
-        {layout.map((task) => {
-          const x = safeScale(xScale, task.start_time);
-          const w = Math.max(1, safeScale(xScale, task.end_time) - x);
-          const selected = selectedId != null && String(selectedId) === String(task.id);
-          return (
-            <g
-              key={`${task.id}-${task.isParentTask ? "parent" : task.isMainTask ? "main" : "task"}`}
-              className="cursor-pointer"
-              onClick={() => onSelectTask?.(task)}
-              onDoubleClick={() => onOpenTask?.(task)}
-              onKeyDown={(event) => {
-                if ((event.key === "Enter" || event.key === " ") && onOpenTask) {
-                  event.preventDefault();
-                  onOpenTask(task);
-                }
-              }}
-              role={onOpenTask ? "link" : "button"}
-              tabIndex={0}
-            >
-              <rect
-                x={x}
-                y={yForTask(task)}
-                width={w}
-                height={task.isParentTask || task.isMainTask ? 18 : 9}
-                rx={2}
-                fill={lookupColor(colorMap, task)}
-                stroke={selected ? "#0f172a" : "rgba(15, 23, 42, 0.25)"}
-                strokeWidth={selected ? 2 : 1}
-              />
-              <title>
-                {task.kind} - {task.what}
-                {"\n"}
-                {task.location}
-                {"\n"}
-                {smartString(task.start_time)} to {smartString(task.end_time)}
-              </title>
-            </g>
-          );
-        })}
-
-        {milestoneMarks}
+        {levelRows.map(({ index, tasks, labelTop, tasksTop, laneH, levelHasMs }) => (
+          <g key={`lvl-${index}`}>
+            <BandLabel x={12} y={sy(labelTop + 12)}>{`Subtasks · L${index + 1}`}</BandLabel>
+            {tasks.map((task) => renderBar(task, sy(tasksTop + (task.yIndex ?? 0) * laneH), sh(DESC_BAR_H), `lvl${index}`))}
+            {levelHasMs &&
+              tasks.map((task) =>
+                renderTaskMilestones(task, sy(tasksTop + (task.yIndex ?? 0) * laneH + DESC_BAR_H + MILESTONE_BAND / 2), `lvl${index}-ms-${task.id}`),
+              )}
+          </g>
+        ))}
       </svg>
+
+      {canExpand && (
+        <div className="px-3 py-2">
+          <button
+            type="button"
+            onClick={() => onExpandNext?.()}
+            disabled={expanding}
+            className="rounded border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+          >
+            {expanding ? "Expanding…" : "Expand next level"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

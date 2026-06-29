@@ -1,16 +1,19 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { Search } from "lucide-react";
 import type { Task } from "../types/task";
 import { smartString } from "../utils/smartValue";
+import { breadcrumbSegments } from "../utils/locationTree";
 import { encodeView } from "../utils/viewState.mjs";
-import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 interface TaskDetailProps {
   task: Task | null;
-  onNavigateToTask?: (id: string) => void;
 }
 
-export default function TaskDetail({ task, onNavigateToTask }: TaskDetailProps) {
+// The selected-task panel. Shares the boxed "label + key/value rows" styling with
+// the selected-milestone panel (see SelectedTaskSection) so the two read as one
+// family. Each location token links to the component view at that level.
+export default function TaskDetail({ task }: TaskDetailProps) {
   if (!task) {
     return (
       <div className="p-4 text-sm text-muted-foreground">
@@ -19,84 +22,68 @@ export default function TaskDetail({ task, onNavigateToTask }: TaskDetailProps) 
     );
   }
 
-  // Link back to the component view for this task's location, focused on the
-  // task's time window (with padding) and with the task pre-selected. Without a
-  // location there is no component to open.
   const duration = task.end_time - task.start_time;
   const padding = duration > 0 ? duration * 0.2 : 0;
-  const componentHref = task.location
-    ? encodeView({
-        route: "component",
-        name: task.location,
-        taskId: String(task.id),
-        ...(duration > 0
-          ? { startTime: task.start_time - padding, endTime: task.end_time + padding }
-          : {}),
-      })
-    : null;
+  const componentHref = (location: string) =>
+    encodeView({
+      route: "component",
+      name: location,
+      taskId: String(task.id),
+      ...(duration > 0
+        ? { startTime: task.start_time - padding, endTime: task.end_time + padding }
+        : {}),
+    });
+
+  const locationValue: ReactNode = task.location ? (
+    <span className="inline-flex flex-wrap items-center">
+      {breadcrumbSegments(task.location).map((seg, index) => (
+        <span key={seg.path} className="inline-flex items-center">
+          {index > 0 ? <span className="mx-0.5 text-muted-foreground">.</span> : null}
+          <Link
+            to={componentHref(seg.path)}
+            className="rounded px-0.5 text-primary hover:underline"
+            title={`Open ${seg.path} in the component view`}
+          >
+            {seg.label}
+          </Link>
+        </span>
+      ))}
+    </span>
+  ) : (
+    "-"
+  );
+
+  // [label, value, numeric] — numeric values get tabular-nums for alignment.
+  const rows: [string, ReactNode, boolean][] = [
+    ["ID", task.id, true],
+    ["What", task.what || "-", false],
+    ["Location", locationValue, false],
+    ["Start", smartString(task.start_time), true],
+    ["End", smartString(task.end_time), true],
+    ["Duration", smartString(duration), true],
+  ];
 
   return (
-    <Card className="m-3 rounded-md shadow-none">
-      <CardHeader className="pb-2">
-        <CardTitle className="break-all text-sm">{task.kind}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        <dl className="grid grid-cols-[6rem_1fr] gap-x-3 gap-y-2">
-          <dt className="text-muted-foreground">ID</dt>
-          <dd className="break-all">{task.id}</dd>
-          <dt className="text-muted-foreground">What</dt>
-          <dd className="break-all">{task.what || "-"}</dd>
-          <dt className="text-muted-foreground">Location</dt>
-          <dd className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 break-all">{task.location || "-"}</span>
-            {componentHref ? (
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="h-6 shrink-0 px-2 py-0 text-xs"
-                title="Open this component in the component view"
-              >
-                <Link to={componentHref}>View</Link>
-              </Button>
-            ) : null}
-          </dd>
-          <dt className="text-muted-foreground">Start</dt>
-          <dd>{smartString(task.start_time)}</dd>
-          <dt className="text-muted-foreground">End</dt>
-          <dd>{smartString(task.end_time)}</dd>
-          <dt className="text-muted-foreground">Duration</dt>
-          <dd>{smartString(task.end_time - task.start_time)}</dd>
-          <dt className="text-muted-foreground">Parent</dt>
-          <dd className="break-all">{task.parent_id || "-"}</dd>
-        </dl>
-
-        {task.parent_id ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onNavigateToTask?.(String(task.parent_id))}
-          >
-            Open Parent
-          </Button>
-        ) : null}
-
-        {task.steps?.length ? (
-          <div>
-            <div className="mb-2 font-medium">Milestones</div>
-            <div className="space-y-2">
-              {task.steps.map((step, index) => (
-                <div key={`${step.time}-${index}`} className="rounded-md border bg-muted/40 p-2">
-                  <div className="font-medium">{step.kind}</div>
-                  <div className="text-muted-foreground">{step.what}</div>
-                  <div className="text-xs text-muted-foreground">{smartString(step.time)}</div>
-                </div>
-              ))}
-            </div>
+    <div className="mt-2 rounded-lg border bg-muted/30 p-3">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <span className="break-all text-sm font-semibold">{task.kind}</span>
+        <Link
+          to={encodeView({ route: "task", id: String(task.id) })}
+          className="shrink-0 rounded border bg-background p-1 text-muted-foreground hover:text-primary"
+          title="Open this task in the task view"
+          aria-label="Open this task in the task view"
+        >
+          <Search className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+      <dl className="space-y-1.5 text-xs">
+        {rows.map(([label, value, numeric]) => (
+          <div key={label} className="grid grid-cols-[5.5rem_1fr] gap-x-3">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className={`min-w-0 break-all font-medium${numeric ? " tabular-nums" : ""}`}>{value}</dd>
           </div>
-        ) : null}
-      </CardContent>
-    </Card>
+        ))}
+      </dl>
+    </div>
   );
 }
