@@ -53,6 +53,14 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 		queryParentID, _ = strconv.ParseUint(pidStr, 10, 64)
 	}
 
+	// A bare global-Kind probe (e.g. useSimulationRange's /api/trace?kind=Simulation)
+	// only needs the matched task's time span, not its steps. Loading milestones/tags
+	// for it would build the full (TaskID, Time) milestone+tag indexes at dashboard
+	// start — minutes on a large trace — for a task that typically has no steps. Skip
+	// step loading for it.
+	kindOnlyProbe := r.FormValue("kind") != "" && r.FormValue("scope") == "" &&
+		r.FormValue("where") == "" && queryID == 0 && queryParentID == 0
+
 	query := TaskQuery{
 		ID:               queryID,
 		ParentID:         queryParentID,
@@ -63,7 +71,7 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 		EndTime:          endTime,
 		EnableTimeRange:  useTimeRange,
 		EnableParentTask: false,
-		EnableMilestones: true,
+		EnableMilestones: !kindOnlyProbe,
 	}
 
 	tasks := s.traceReader.ListTasks(r.Context(), query)
