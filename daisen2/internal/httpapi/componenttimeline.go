@@ -314,6 +314,17 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy( //nolint:funlen // one cohe
 			`ON trace(Location, StartTime, EndTime, ID)`,
 	)
 
+	// The milestone side of the join (m.TaskID = t.ID, windowed by Time). The sim
+	// no longer indexes milestones, so build the (TaskID, Time) index here too —
+	// otherwise this chart, opened before any task click, scans the whole milestone
+	// table. Same index the per-task milestone loader builds (single-flight: at most
+	// one build across both paths).
+	r.ensureIndex(
+		ctx,
+		"Building index idx_milestone_TaskID_Time",
+		"CREATE INDEX IF NOT EXISTS idx_milestone_TaskID_Time ON milestone(TaskID, Time)",
+	)
+
 	// Guard the exact scan (see ComponentTimeline): the trace×milestone join is
 	// even costlier, so decline it for a scope the rowid sample only appeared to
 	// empty because it is dense and modulo-skewed.
