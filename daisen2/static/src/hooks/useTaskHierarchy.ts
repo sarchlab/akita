@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Task } from "../types/task";
+import { useRenderReady } from "./useRenderReady";
 
 // Auto-load descendant levels until this many descendants are loaded; past it,
 // each further level waits for an explicit "Expand next level" click so a huge
@@ -118,6 +119,11 @@ export function useTaskHierarchy(taskId: string): TaskHierarchy {
 
     return () => ctrl.abort();
   }, [taskId]);
+
+  // Hold render-readiness (e.g. headless/DaisenBot screenshots of /task?id=…)
+  // until the initial main task + auto-expanded levels have loaded, so a capture
+  // does not settle on the empty "No tasks to display" state.
+  useRenderReady(loading);
 
   const expandNext = useCallback(() => {
     const ctrl = controller.current;

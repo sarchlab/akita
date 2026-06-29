@@ -22,17 +22,25 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	useTimeRange := true
-	if r.FormValue("starttime") == "" || r.FormValue("endtime") == "" {
-		useTimeRange = false
-	}
+	tasks := s.traceReader.ListTasks(r.Context(), buildTraceQuery(r))
 
-	var err error
+	rsp, err := json.Marshal(tasks)
+	dieOnErr(err)
+
+	_, err = w.Write(rsp)
+	dieOnErr(err)
+}
+
+// buildTraceQuery parses the /api/trace request parameters into a TaskQuery.
+func buildTraceQuery(r *http.Request) TaskQuery {
+	useTimeRange := r.FormValue("starttime") != "" && r.FormValue("endtime") != ""
 
 	startTime := 0.0
 	endTime := 0.0
 
 	if useTimeRange {
+		var err error
+
 		startTime, err = strconv.ParseFloat(r.FormValue("starttime"), 64)
 		if err != nil {
 			panic(err)
@@ -64,7 +72,7 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 	rangeProbe := r.FormValue("kind") != "" && !useTimeRange && r.FormValue("scope") == "" &&
 		r.FormValue("where") == "" && queryID == 0 && queryParentID == 0
 
-	query := TaskQuery{
+	return TaskQuery{
 		ID:               queryID,
 		ParentID:         queryParentID,
 		ParentIDs:        queryParentIDs,
@@ -77,14 +85,6 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 		EnableParentTask: false,
 		EnableMilestones: !rangeProbe,
 	}
-
-	tasks := s.traceReader.ListTasks(r.Context(), query)
-
-	rsp, err := json.Marshal(tasks)
-	dieOnErr(err)
-
-	_, err = w.Write(rsp)
-	dieOnErr(err)
 }
 
 // parseIDList parses a comma-separated list of non-zero unsigned ids (e.g. the

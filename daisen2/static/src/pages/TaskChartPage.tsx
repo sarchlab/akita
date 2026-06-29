@@ -55,10 +55,16 @@ export default function TaskChartPage() {
     }
     return keys;
   }, [allTasks, colorMode]);
-  const blockingReasons = useMemo(
-    () => Array.from(new Set(milestonesOf(mainTask?.steps).map((step) => step.kind))),
-    [mainTask],
-  );
+  // Every rendered row (ancestors, the main task, and all descendant levels) draws
+  // its milestones, so gather reasons across all of them — otherwise a reason that
+  // only a parent or child has would fall back to gray and be missing from the legend.
+  const blockingReasons = useMemo(() => {
+    const reasons = new Set<string>();
+    for (const task of allTasks) {
+      for (const step of milestonesOf(task.steps)) reasons.add(step.kind);
+    }
+    return Array.from(reasons);
+  }, [allTasks]);
   const colorMap = useMemo(
     () => buildColorMapFromKeys([...taskKeys, ...blockingReasons]),
     [taskKeys, blockingReasons],
