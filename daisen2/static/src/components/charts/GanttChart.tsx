@@ -305,10 +305,10 @@ export default function GanttChart({
     );
   };
 
-  // Section labels use the component view's plain style (no bold, no halo) at the
-  // task view's smaller size, so both pages' row labels match.
+  // Section labels: 12px black with a white halo (paintOrder stroke) so they stay
+  // readable over bars — the same treatment as the component view's row labels.
   const sectionLabel = (text: string, x: number, y: number) => (
-    <text x={x} y={y} fontSize="12" fill="#000" pointerEvents="none">
+    <text x={x} y={y} fontSize="12" fill="#000" stroke="#ffffff" strokeWidth={3} paintOrder="stroke" pointerEvents="none">
       {text}
     </text>
   );

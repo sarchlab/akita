@@ -392,7 +392,7 @@ function ComponentTopAxis({ width, height, range }: { width: number; height: num
           <text x={safeScale(xScale, tick)} y={11} textAnchor="middle" fontSize="10" fill="#475569">
             {formatAxisTick(tick)}
           </text>
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.5} />
+          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.3} />
           <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={22} stroke="#000" />
         </g>
       ))}
@@ -719,7 +719,7 @@ function ComponentTimeline({
               y2={contentHeight}
               stroke="#000"
               strokeDasharray="3,3"
-              opacity={0.5}
+              opacity={0.3}
               pointerEvents="none"
             />
           ))}
@@ -988,7 +988,7 @@ function AggregatedTimeline({
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
 
   const gridlines = ticks.map((tick) => (
-    <line key={tick} x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.4} pointerEvents="none" />
+    <line key={tick} x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.3} pointerEvents="none" />
   ));
 
   // Before the summary lands, still draw the time marks (and any uncollected-range
@@ -1256,6 +1256,7 @@ function ComponentTaskView({
   highlightedTaskId,
   selectedTaskId,
   selectedMilestone,
+  reasonHighlight,
   onHoverTask,
   onSelectTask,
   onOpenTask,
@@ -1276,6 +1277,7 @@ function ComponentTaskView({
   highlightedTaskId: string | null;
   selectedTaskId: string | null;
   selectedMilestone: HoveredMilestone | null;
+  reasonHighlight: string | null;
   onHoverTask: (task: Task | null) => void;
   onSelectTask: (task: Task) => void;
   onOpenTask: (task: Task) => void;
@@ -1351,20 +1353,20 @@ function ComponentTaskView({
           <text x={safeScale(xScale, tick)} y={11} textAnchor="middle" fontSize="10" fill="#475569">
             {formatAxisTick(tick)}
           </text>
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.5} />
+          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.3} />
           <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={22} stroke="#000" />
         </g>
       ))}
       <line x1={5} x2={width - 5} y1={16} y2={16} stroke="#000" pointerEvents="none" />
 
       <g className="daisen1-task-view-dividers" pointerEvents="none">
-        <text x={5} y={parentLabelY} fontSize={12} textAnchor="start">
+        <text x={5} y={parentLabelY} fontSize={12} textAnchor="start" stroke="#ffffff" strokeWidth={3} paintOrder="stroke">
           Parent Task
         </text>
-        <text x={5} y={currentLabelY} fontSize={12} textAnchor="start">
+        <text x={5} y={currentLabelY} fontSize={12} textAnchor="start" stroke="#ffffff" strokeWidth={3} paintOrder="stroke">
           Current Task
         </text>
-        <text x={5} y={subTasksLabelY} fontSize={12} textAnchor="start">
+        <text x={5} y={subTasksLabelY} fontSize={12} textAnchor="start" stroke="#ffffff" strokeWidth={3} paintOrder="stroke">
           Subtasks
         </text>
         <line x1={0} x2={width} y1={divider1Y} y2={divider1Y} stroke="#000000" strokeDasharray="4" />
@@ -1387,7 +1389,7 @@ function ComponentTaskView({
           // Affordance for the selected milestone: it stays full strength with a
           // thicker wave and a ringed dot, while the others dim.
           const selected = selectedMilestone != null && selectedMilestone.kind === step.kind && selectedMilestone.time === step.time;
-          const dimmed = selectedMilestone != null && !selected;
+          const dimmed = (selectedMilestone != null && !selected) || (reasonHighlight != null && reasonHighlight !== step.kind);
           const opacity = dimmed ? 0.25 : 1;
           return (
             <g
@@ -2055,7 +2057,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // detail panel from the task and highlights that reason in the blocking-reason
   // chart and legend (see reasonHighlight). The task selection is cleared so the
   // panel shows the reason instead of the task.
-  const selectMilestone = (milestone: HoveredMilestone) => {
+  const selectMilestone = (milestone: HoveredMilestone | null) => {
     setSelectedMilestone(milestone);
     setSelectedTaskId(null);
     setSelectedTaskSeed(null);
@@ -2120,11 +2122,12 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
             selectedTaskId={selectedTaskId}
             selectedMilestone={selectedMilestone}
+            reasonHighlight={reasonHighlight}
             onHoverTask={setHoveredTask}
             onSelectTask={selectTask}
             onOpenTask={makeTaskCurrent}
             onDeselect={deselectTask}
-            onSelectMilestone={setSelectedMilestone}
+            onSelectMilestone={selectMilestone}
           />
           {/* Help opens only when a task is selected — that's when the hierarchy exists. */}
           {currentTask && (

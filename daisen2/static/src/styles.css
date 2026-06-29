@@ -127,14 +127,6 @@
     overflow: hidden;
   }
 
-  .daisen1-task-view-dividers text {
-    text-shadow:
-      -1px -1px 0 #ffffff,
-      1px -1px 0 #ffffff,
-      -1px 1px 0 #ffffff,
-      1px 1px 0 #ffffff;
-  }
-
   .chart-axis text {
     font-size: 10px;
     fill: #4b5563;
