@@ -4,7 +4,7 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent, WheelEvent as ReactWh
 import { Link, useSearchParams } from "react-router-dom";
 import { X, ChevronRight, ChevronDown, ChevronUp, Plus, Minus } from "lucide-react";
 import { Button } from "../components/ui/button";
-import { SidePanel } from "../components/ui/side-panel";
+import TraceChartLayout, { SIDE_PANEL_WIDTH } from "../components/TraceChartLayout";
 import { BlockingReasonsHelp, ComponentTaskViewHelp, TaskCountHelp, TaskHierarchyHelp } from "../components/HelpTopics";
 import Legend from "../components/Legend";
 import SelectedTaskSection from "../components/SelectedTaskSection";
@@ -33,7 +33,6 @@ import { buildLocationTree, breadcrumbSegments, findNode, type LocationNode } fr
 const TASK_VIEW_HEIGHT_RATIO = 0.2;
 const COMPONENT_LINE_HEIGHT_RATIO = 0.2;
 const TOP_AXIS_COMPACT_HEIGHT = 28;
-const SIDE_COLUMN_WIDTH = 350;
 const DATA_RANGE_DEBOUNCE_MS = 1000;
 // A help button tucked into a chart region's bottom-right corner. The wrapper stops
 // pointer events so clicking it never starts a pan/drag on the timeline underneath;
@@ -1617,7 +1616,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // and fewer bins make the heavy occupancy queries much cheaper), quantized to
   // 50 so a pixel-by-pixel resize does not refetch. Both the task-count and
   // blocking-reason charts use this count so their stacked areas line up.
-  const numBins = Math.max(50, Math.min(300, Math.round((size.width - SIDE_COLUMN_WIDTH) / 4 / 50) * 50));
+  const numBins = Math.max(50, Math.min(300, Math.round((size.width - SIDE_PANEL_WIDTH) / 4 / 50) * 50));
   const { info: stackedInfo, loading: infoLoading } = useStackedCompInfo(componentName, "ConcurrentTaskMilestones", dataRange.startTime, dataRange.endTime, numBins);
 
   // How tasks are grouped for coloring and for the task-count bands. The same
@@ -1785,7 +1784,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     }
     return map;
   }, [childTasks, currentTask, parentTask, tasks]);
-  const leftWidth = Math.max(1, size.width - SIDE_COLUMN_WIDTH - 1);
+  const leftWidth = Math.max(1, size.width - SIDE_PANEL_WIDTH - 1);
   // Up to four stacked regions: the selected-task view (optional — a thin axis when
   // no task is selected), the per-task gantt (optional — only when few enough tasks
   // are in range), the task-count density chart (always), and the blocking-reason
@@ -2079,8 +2078,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     );
   }
 
-  return (
-    <div ref={ref} className="daisen1-component-page">
+  const chartArea = (
       <div
         className="daisen1-component-left"
         style={{ width: leftWidth }}
@@ -2223,8 +2221,10 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           style={{ transform: "translateX(-1px)", willChange: "transform" }}
         />
       </div>
+  );
 
-      <SidePanel className="flex select-none flex-col" style={{ width: SIDE_COLUMN_WIDTH }}>
+  const sidePanel = (
+    <>
         <div className="flex shrink-0 flex-col gap-2 border-b px-4 py-3">
           <div className="flex items-start justify-between gap-2">
             {/* Breadcrumb: ancestors are clickable (collapse up); the last is the
@@ -2292,8 +2292,13 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           <div className="-mx-4 border-t" />
           <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} colorMode={colorMode} onColorMode={handleColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={reasonHighlight} onHighlightReason={setHighlightedReason} />
         </div>
-      </SidePanel>
-    </div>
+    </>
+  );
+
+  return (
+    <TraceChartLayout rootRef={ref} panel={sidePanel}>
+      {chartArea}
+    </TraceChartLayout>
   );
 }
 

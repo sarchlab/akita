@@ -100,13 +100,6 @@
     @apply h-5 shrink-0 border-t bg-white px-2 text-xs text-slate-600;
   }
 
-  .daisen1-component-page {
-    display: flex;
-    height: 100%;
-    overflow: hidden;
-    background: #ffffff;
-  }
-
   .daisen1-component-left {
     position: relative;
     display: inline-block;

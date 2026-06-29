@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import GanttChart from "../components/charts/GanttChart";
 import Legend from "../components/Legend";
 import SelectedTaskSection from "../components/SelectedTaskSection";
-import { SidePanel } from "../components/ui/side-panel";
+import TraceChartLayout from "../components/TraceChartLayout";
 import { useSegments } from "../hooks/useSegments";
 import { useTaskHierarchy } from "../hooks/useTaskHierarchy";
 import type { Task } from "../types/task";
@@ -125,7 +125,25 @@ export default function TaskChartPage() {
   const canExpand = !loading && !atLeaves && levels.length > 0;
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <TraceChartLayout
+      panel={
+        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4">
+          <SelectedTaskSection task={selectedTask} milestone={selectedMilestone} />
+          <div className="-mx-4 border-t" />
+          <Legend
+            taskKeys={taskKeys}
+            colorMap={colorMap}
+            blockingReasons={blockingReasons}
+            colorMode={colorMode}
+            onColorMode={setColorMode}
+            highlightedKey={highlightedKey}
+            onHighlight={setHighlightedKey}
+            highlightedReason={reasonHighlight}
+            onHighlightReason={setHighlightedReason}
+          />
+        </div>
+      }
+    >
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="min-h-0 flex-1">
           <GanttChart
@@ -150,23 +168,6 @@ export default function TaskChartPage() {
           />
         </div>
       </div>
-
-      <SidePanel className="w-96 overflow-auto p-4">
-        <SelectedTaskSection task={selectedTask} milestone={selectedMilestone} />
-        <div className="mt-2 border-t px-3 pt-3">
-          <Legend
-            taskKeys={taskKeys}
-            colorMap={colorMap}
-            blockingReasons={blockingReasons}
-            colorMode={colorMode}
-            onColorMode={setColorMode}
-            highlightedKey={highlightedKey}
-            onHighlight={setHighlightedKey}
-            highlightedReason={reasonHighlight}
-            onHighlightReason={setHighlightedReason}
-          />
-        </div>
-      </SidePanel>
-    </div>
+    </TraceChartLayout>
   );
 }
