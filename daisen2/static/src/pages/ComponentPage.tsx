@@ -8,6 +8,24 @@ import TraceChartLayout, { SIDE_PANEL_WIDTH } from "../components/TraceChartLayo
 import { BlockingReasonsHelp, ComponentTaskViewHelp, TaskCountHelp, TaskHierarchyHelp } from "../components/HelpTopics";
 import Legend from "../components/Legend";
 import SelectedTaskSection from "../components/SelectedTaskSection";
+import {
+  AXIS_LABEL_FONT_SIZE,
+  AXIS_TICK_COUNT,
+  barOpacity,
+  barStrokeOpacity,
+  COLOR_AXIS_LABEL,
+  COLOR_BAR_STROKE,
+  COLOR_GRID,
+  COLOR_TASK_FALLBACK,
+  gapSegments,
+  GRID_DASH,
+  GRID_OPACITY,
+  safeScale,
+} from "../components/charts/chartStyle";
+import BandLabel from "../components/charts/BandLabel";
+import { GapHatchDef, GapRects } from "../components/charts/GapHatch";
+import MilestoneMarks from "../components/charts/MilestoneMarks";
+import TimeTicks from "../components/charts/TimeTicks";
 import type { StackedComponentInfo } from "../hooks/useCompInfo";
 import { useStackedCompInfo } from "../hooks/useCompInfo";
 import { useSegments } from "../hooks/useSegments";
@@ -19,7 +37,7 @@ import { useRenderReady } from "../hooks/useRenderReady";
 import type { Segment, Task } from "../types/task";
 import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskColorCoder";
 import type { ColorMode } from "../utils/taskColorCoder";
-import { blockingKindAt, milestonesOf, wavyPath } from "../utils/milestoneViz";
+import { blockingKindAt, milestonesOf } from "../utils/milestoneViz";
 import { formatSI } from "../utils/siFormat";
 import { cn } from "../lib/utils";
 import { useComponentNames } from "../hooks/useComponentNames";
@@ -138,34 +156,6 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
   return debouncedValue;
 }
 
-function safeScale(scale: d3.ScaleLinear<number, number>, value: number) {
-  return scale(value) ?? 0;
-}
-
-function formatAxisTick(value: number) {
-  // Shared with the task view's gantt (see GanttChart) so both time axes read the
-  // same way.
-  return formatSI(value);
-}
-
-function gapSegments(segments: Segment[], startTime: number, endTime: number) {
-  if (!segments.length) return [];
-  const sorted = [...segments].sort((a, b) => a.start_time - b.start_time);
-  const gaps: Segment[] = [];
-  if (sorted[0].start_time > startTime) {
-    gaps.push({ start_time: startTime, end_time: Math.min(sorted[0].start_time, endTime) });
-  }
-  for (let index = 0; index < sorted.length - 1; index++) {
-    const start = Math.max(sorted[index].end_time, startTime);
-    const end = Math.min(sorted[index + 1].start_time, endTime);
-    if (start < end) gaps.push({ start_time: start, end_time: end });
-  }
-  const last = sorted[sorted.length - 1];
-  if (last.end_time < endTime) {
-    gaps.push({ start_time: Math.max(last.end_time, startTime), end_time: endTime });
-  }
-  return gaps;
-}
 
 function cloneTasks(tasks: Task[]): LayoutTask[] {
   return tasks.map((task) => ({ ...task, subTasks: [], level: 0 }));
@@ -379,23 +369,15 @@ function buildComponentTaskLayout(
 
 function ComponentTopAxis({ width, height, range }: { width: number; height: number; range: TimeRange }) {
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
-  const ticks = xScale.ticks(12);
+  const ticks = xScale.ticks(AXIS_TICK_COUNT);
 
   // Top axis: tick labels sit at the top (above the baseline), mirroring the bottom
   // chart's axis whose labels sit below its baseline. The baseline + ticks + the
   // gridlines hang below the labels, toward the content.
   return (
     <svg width={width} height={height} className="block">
-      {ticks.map((tick) => (
-        <g key={tick}>
-          <text x={safeScale(xScale, tick)} y={11} textAnchor="middle" fontSize="10" fill="#475569">
-            {formatAxisTick(tick)}
-          </text>
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.3} />
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={22} stroke="#000" />
-        </g>
-      ))}
-      <line x1={5} x2={width - 5} y1={16} y2={16} stroke="#000" />
+      <TimeTicks ticks={ticks} xScale={xScale} gridTop={16} gridBottom={height} topLabelY={11} tickMarks />
+      <line x1={5} x2={width - 5} y1={16} y2={16} stroke={COLOR_GRID} />
     </svg>
   );
 }
@@ -476,7 +458,7 @@ function ComponentTimeline({
   const width = Math.max(1, size.width);
   const height = Math.max(1, size.height);
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
-  const ticks = xScale.ticks(12);
+  const ticks = xScale.ticks(AXIS_TICK_COUNT);
   // Row height is the vertical zoom: taller rows = bigger bars, a taller chart that
   // scrolls. The chart grows past its region and is navigated by dragging/scrolling.
   const [rowHeight, setRowHeight] = useState(ROW_HEIGHT);
@@ -659,17 +641,10 @@ function ComponentTimeline({
       >
         <svg width={width} height={contentHeight} className="block">
           <defs>
-            <pattern id="component-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
-              <rect width="8" height="8" fill="rgba(128, 128, 128, 0.15)" />
-              <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(128, 128, 128, 0.3)" strokeWidth="4" />
-            </pattern>
+            <GapHatchDef id="component-gap-pattern" />
           </defs>
 
-          {gaps.map((gap, index) => {
-            const x = safeScale(xScale, gap.start_time);
-            const w = Math.max(0, safeScale(xScale, gap.end_time) - x);
-            return <rect key={index} x={x} y={0} width={w} height={contentHeight} fill="url(#component-gap-pattern)" pointerEvents="none" />;
-          })}
+          <GapRects gaps={gaps} xScale={xScale} patternId="component-gap-pattern" top={0} height={contentHeight} />
 
           <g className="task-bar cursor-pointer">
             {taskLayout.map((task) => {
@@ -701,27 +676,15 @@ function ComponentTimeline({
               width={Math.max(1, dim.width)}
               height={Math.max(1, dim.height)}
               fill={lookupColor(colorMap, task, colorMode)}
-              stroke="#000000"
-              strokeOpacity={selected || (hasHighlight && highlighted) ? 0.8 : 0.2}
-              opacity={hasHighlight ? (highlighted ? 1 : 0.4) : selectedTaskId != null && !selected ? 0.6 : 1}
+              stroke={COLOR_BAR_STROKE}
+              strokeOpacity={barStrokeOpacity({ selected, highlighted, hasHighlight })}
+              opacity={barOpacity({ selected, highlighted, hasHighlight, hasSelection: selectedTaskId != null })}
             />
           );
         })}
           </g>
 
-          {ticks.map((tick) => (
-            <line
-              key={tick}
-              x1={safeScale(xScale, tick)}
-              x2={safeScale(xScale, tick)}
-              y1={0}
-              y2={contentHeight}
-              stroke="#000"
-              strokeDasharray="3,3"
-              opacity={0.3}
-              pointerEvents="none"
-            />
-          ))}
+          <TimeTicks ticks={ticks} xScale={xScale} gridTop={0} gridBottom={contentHeight} />
 
           {/* Y-axis: the stacked rows are concurrency levels, so label the row index
               the same repeated way as the task-count / blocking-reason charts. It
@@ -847,16 +810,9 @@ function GapShading({
   return (
     <>
       <defs>
-        <pattern id={patternId} patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
-          <rect width="8" height="8" fill="rgba(128, 128, 128, 0.15)" />
-          <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(128, 128, 128, 0.3)" strokeWidth="4" />
-        </pattern>
+        <GapHatchDef id={patternId} />
       </defs>
-      {gaps.map((gap, index) => {
-        const x = safeScale(xScale, gap.start_time);
-        const w = Math.max(0, safeScale(xScale, gap.end_time) - x);
-        return <rect key={index} x={x} y={0} width={w} height={height} fill={`url(#${patternId})`} pointerEvents="none" />;
-      })}
+      <GapRects gaps={gaps} xScale={xScale} patternId={patternId} top={0} height={height} />
     </>
   );
 }
@@ -983,11 +939,11 @@ function AggregatedTimeline({
   const width = Math.max(1, size.width);
   const height = Math.max(1, size.height);
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
-  const ticks = xScale.ticks(12);
+  const ticks = xScale.ticks(AXIS_TICK_COUNT);
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
 
   const gridlines = ticks.map((tick) => (
-    <line key={tick} x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.3} pointerEvents="none" />
+    <line key={tick} x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={height} stroke={COLOR_GRID} strokeDasharray={GRID_DASH} opacity={GRID_OPACITY} pointerEvents="none" />
   ));
 
   // Before the summary lands, still draw the time marks (and any uncollected-range
@@ -1046,7 +1002,7 @@ function AggregatedTimeline({
         <path
           key={key}
           d={d}
-          fill={colorMap[key] ?? "#9ca3af"}
+          fill={colorMap[key] ?? COLOR_TASK_FALLBACK}
           stroke="none"
           opacity={hasHighlight ? (highlightedKey === key ? 1 : 0.12) : 0.9}
           className="cursor-pointer"
@@ -1110,7 +1066,7 @@ function ComponentMilestoneAreas({
   onHoverReason: (kind: string | null) => void;
 }) {
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
-  const ticks = xScale.ticks(12);
+  const ticks = xScale.ticks(AXIS_TICK_COUNT);
   const xAxisY = Math.max(0, height - 20);
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
 
@@ -1145,14 +1101,14 @@ function ComponentMilestoneAreas({
     <svg width={width} height={height} className="block">
       {ticks.map((tick) => (
         <g key={tick} pointerEvents="none">
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={xAxisY} stroke="#000" strokeDasharray="3,3" opacity={0.3} />
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={xAxisY} y2={xAxisY + 5} stroke="#000" />
-          <text x={safeScale(xScale, tick)} y={height - 4} textAnchor="middle" fontSize="10" fill="#475569">
-            {formatAxisTick(tick)}
+          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={0} y2={xAxisY} stroke={COLOR_GRID} strokeDasharray={GRID_DASH} opacity={GRID_OPACITY} />
+          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={xAxisY} y2={xAxisY + 5} stroke={COLOR_GRID} />
+          <text x={safeScale(xScale, tick)} y={height - 4} textAnchor="middle" fontSize={AXIS_LABEL_FONT_SIZE} fill={COLOR_AXIS_LABEL}>
+            {formatSI(tick)}
           </text>
         </g>
       ))}
-      <line x1={5} x2={width - 5} y1={xAxisY} y2={xAxisY} stroke="#000" pointerEvents="none" />
+      <line x1={5} x2={width - 5} y1={xAxisY} y2={xAxisY} stroke={COLOR_GRID} pointerEvents="none" />
 
       {loading && <LoadingCurve width={width} height={xAxisY} id="reason" />}
 
@@ -1161,7 +1117,7 @@ function ComponentMilestoneAreas({
           <path
             key={kind}
             d={d}
-            fill={colorMap[kind] ?? "#9ca3af"}
+            fill={colorMap[kind] ?? COLOR_TASK_FALLBACK}
             opacity={hasHighlight ? (highlightedKey === kind ? 1 : 0.12) : 0.9}
             className="cursor-pointer"
             // Report the reason + time under the cursor: highlight this band (and
@@ -1292,7 +1248,7 @@ function ComponentTaskView({
   // frames it; the parent, which can span far wider, is drawn clamped to the chart
   // (see buildTopTaskRows).
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
-  const ticks = xScale.ticks(12);
+  const ticks = xScale.ticks(AXIS_TICK_COUNT);
   const milestoneBand = (mainTask.steps?.length ?? 0) > 0 ? TASK_VIEW_MILESTONE_BAND : 0;
   const rows = buildTopTaskRows(mainTask, parentTask, childTasks, xScale, height, milestoneBand);
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
@@ -1305,17 +1261,10 @@ function ComponentTaskView({
   return (
     <svg width={width} height={height} className="block" onClick={() => onDeselect()}>
       <defs>
-        <pattern id="task-view-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
-          <rect width="8" height="8" fill="rgba(128, 128, 128, 0.15)" />
-          <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(128, 128, 128, 0.3)" strokeWidth="4" />
-        </pattern>
+        <GapHatchDef id="task-view-gap-pattern" />
       </defs>
 
-      {gaps.map((gap, index) => {
-        const x = safeScale(xScale, gap.start_time);
-        const w = Math.max(0, safeScale(xScale, gap.end_time) - x);
-        return <rect key={index} x={x} y={TASK_VIEW_MARGIN_TOP} width={w} height={height - TASK_VIEW_MARGIN_BOTTOM} fill="url(#task-view-gap-pattern)" pointerEvents="none" />;
-      })}
+      <GapRects gaps={gaps} xScale={xScale} patternId="task-view-gap-pattern" top={TASK_VIEW_MARGIN_TOP} height={height - TASK_VIEW_MARGIN_BOTTOM} />
 
       {rows.map((row) => {
         const key = taskColorKey(row.task, colorMode);
@@ -1333,9 +1282,9 @@ function ComponentTaskView({
             width={row.width}
             height={Math.max(1, row.height)}
             fill={lookupColor(colorMap, row.task, colorMode)}
-            stroke="#000000"
-            strokeOpacity={selected || (hasHighlight && highlighted) ? 0.8 : 0.2}
-            opacity={hasHighlight ? (highlighted ? 1 : 0.4) : selectedTaskId != null && !selected ? 0.6 : 1}
+            stroke={COLOR_BAR_STROKE}
+            strokeOpacity={barStrokeOpacity({ selected, highlighted, hasHighlight })}
+            opacity={barOpacity({ selected, highlighted, hasHighlight, hasSelection: selectedTaskId != null })}
             className="cursor-pointer"
             onClick={(event) => {
               event.preventDefault();
@@ -1347,89 +1296,33 @@ function ComponentTaskView({
         );
       })}
 
-      {ticks.map((tick) => (
-        <g key={tick} pointerEvents="none">
-          <text x={safeScale(xScale, tick)} y={11} textAnchor="middle" fontSize="10" fill="#475569">
-            {formatAxisTick(tick)}
-          </text>
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={height} stroke="#000" strokeDasharray="3,3" opacity={0.3} />
-          <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={16} y2={22} stroke="#000" />
-        </g>
-      ))}
-      <line x1={5} x2={width - 5} y1={16} y2={16} stroke="#000" pointerEvents="none" />
+      <TimeTicks ticks={ticks} xScale={xScale} gridTop={16} gridBottom={height} topLabelY={11} tickMarks />
+      <line x1={5} x2={width - 5} y1={16} y2={16} stroke={COLOR_GRID} pointerEvents="none" />
 
-      <g className="daisen1-task-view-dividers" pointerEvents="none">
-        <text x={5} y={parentLabelY} fontSize={12} textAnchor="start" stroke="#ffffff" strokeWidth={3} paintOrder="stroke">
-          Parent Task
-        </text>
-        <text x={5} y={currentLabelY} fontSize={12} textAnchor="start" stroke="#ffffff" strokeWidth={3} paintOrder="stroke">
-          Current Task
-        </text>
-        <text x={5} y={subTasksLabelY} fontSize={12} textAnchor="start" stroke="#ffffff" strokeWidth={3} paintOrder="stroke">
-          Subtasks
-        </text>
-        <line x1={0} x2={width} y1={divider1Y} y2={divider1Y} stroke="#000000" strokeDasharray="4" />
-        <line x1={0} x2={width} y1={divider2Y} y2={divider2Y} stroke="#000000" strokeDasharray="4" />
+      <g pointerEvents="none">
+        <BandLabel x={5} y={parentLabelY}>Parent Task</BandLabel>
+        <BandLabel x={5} y={currentLabelY}>Current Task</BandLabel>
+        <BandLabel x={5} y={subTasksLabelY}>Subtasks</BandLabel>
+        <line x1={0} x2={width} y1={divider1Y} y2={divider1Y} stroke={COLOR_BAR_STROKE} strokeDasharray="4" />
+        <line x1={0} x2={width} y1={divider2Y} y2={divider2Y} stroke={COLOR_BAR_STROKE} strokeDasharray="4" />
       </g>
 
       {(() => {
-        // Render each milestone as a curve over the interval it closes — from
-        // the task start (or the previous milestone) up to the milestone — so
-        // the curve shows how long, and on what reason, the task was blocked.
         const steps = milestonesOf(mainTask.steps).sort((a, b) => a.time - b.time);
         const barTop = TASK_VIEW_MARGIN_TOP + TASK_VIEW_GROUP_GAP * 2 + TASK_VIEW_LARGE_TASK_HEIGHT;
         const centerY = barTop + TASK_VIEW_LARGE_TASK_HEIGHT + 6;
-        return steps.map((step, index) => {
-          const intervalStart = index === 0 ? mainTask.start_time : steps[index - 1].time;
-          const x0 = safeScale(xScale, intervalStart);
-          const x1 = safeScale(xScale, step.time);
-          const color = colorMap[step.kind] ?? "#9ca3af";
-          const d = wavyPath(x0, x1, centerY);
-          // Affordance for the selected milestone: it stays full strength with a
-          // thicker wave and a ringed dot, while the others dim.
-          const selected = selectedMilestone != null && selectedMilestone.kind === step.kind && selectedMilestone.time === step.time;
-          const dimmed = (selectedMilestone != null && !selected) || (reasonHighlight != null && reasonHighlight !== step.kind);
-          const opacity = dimmed ? 0.25 : 1;
-          return (
-            <g
-              key={`milestone-${index}-${step.kind}`}
-              className="cursor-pointer"
-              onClick={(event) => {
-                event.stopPropagation();
-                onSelectMilestone({
-                  kind: step.kind,
-                  what: step.what,
-                  time: step.time,
-                  blockedFor: step.time - intervalStart,
-                });
-              }}
-            >
-              {x1 - x0 >= 2 && (
-                <>
-                  {/* Invisible hit area so the thin wave is easy to click — no
-                      fill or border, purely to capture the pointer. Carries the
-                      milestone's details so the left column's pointer handler can
-                      resolve the click (its capture eats this <g>'s onClick). */}
-                  <rect
-                    x={x0}
-                    y={centerY - 8}
-                    width={x1 - x0}
-                    height={16}
-                    fill="transparent"
-                    pointerEvents="all"
-                    data-ms-kind={step.kind}
-                    data-ms-what={step.what}
-                    data-ms-time={step.time}
-                    data-ms-blocked={step.time - intervalStart}
-                  />
-                  <path d={d} fill="none" stroke={color} strokeWidth={selected ? 3 : 1.5} strokeLinecap="round" opacity={opacity} pointerEvents="none" />
-                </>
-              )}
-              {selected && <circle cx={x1} cy={centerY} r={6} fill="none" stroke={color} strokeWidth={1.5} pointerEvents="none" />}
-              <circle cx={x1} cy={centerY} r={selected ? 3.5 : 3} fill={color} stroke="#ffffff" strokeWidth={0.75} opacity={opacity} pointerEvents="none" />
-            </g>
-          );
-        });
+        return (
+          <MilestoneMarks
+            steps={steps}
+            taskStart={mainTask.start_time}
+            xScale={xScale}
+            centerY={centerY}
+            colorMap={colorMap}
+            selectedMilestone={selectedMilestone}
+            highlightedReason={reasonHighlight}
+            onSelect={onSelectMilestone}
+          />
+        );
       })()}
     </svg>
   );

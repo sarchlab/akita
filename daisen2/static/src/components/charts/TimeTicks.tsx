@@ -35,8 +35,8 @@ export default function TimeTicks({
         return (
           <g key={tick} pointerEvents="none">
             <line x1={tx} x2={tx} y1={gridTop} y2={gridBottom} stroke={COLOR_GRID} strokeDasharray={GRID_DASH} opacity={GRID_OPACITY} />
-            {tickMarks && <line x1={tx} x2={tx} y1={gridTop} y2={gridTop + 5} stroke={COLOR_GRID} />}
-            {tickMarks && <line x1={tx} x2={tx} y1={gridBottom - 5} y2={gridBottom} stroke={COLOR_GRID} />}
+            {tickMarks && topLabelY != null && <line x1={tx} x2={tx} y1={gridTop} y2={gridTop + 5} stroke={COLOR_GRID} />}
+            {tickMarks && bottomLabelY != null && <line x1={tx} x2={tx} y1={gridBottom - 5} y2={gridBottom} stroke={COLOR_GRID} />}
             {topLabelY != null && (
               <text x={tx} y={topLabelY} textAnchor="middle" fontSize={AXIS_LABEL_FONT_SIZE} fill={COLOR_AXIS_LABEL}>
                 {formatSI(tick)}
