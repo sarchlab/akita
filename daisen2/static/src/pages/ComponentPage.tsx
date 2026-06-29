@@ -1773,14 +1773,18 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // Double-click a task (anywhere on the component page) to make it the current
   // task — stay on the component page and re-center the nested hierarchy on it
   // (set `taskid`), rather than leaving for the task view. Clearing `sel` lets the
-  // selection default back to the new current task. The visible range is carried
-  // across so the view does not snap.
+  // selection default back to the new current task. The time axis re-frames so the
+  // task sits centered (symmetric padding), since making it current is a deliberate
+  // "focus on this" action.
   const makeTaskCurrent = (task: Task) => {
     const params = new URLSearchParams(searchParams);
     params.set("taskid", String(task.id));
     params.delete("sel");
-    params.set("starttime", String(viewRange.startTime));
-    params.set("endtime", String(viewRange.endTime));
+    const duration = task.end_time - task.start_time;
+    const padding = duration > 0 ? duration * 0.2 : Math.max(MIN_RANGE, (viewRange.endTime - viewRange.startTime) * 0.05);
+    const focus = sanitizeRange(task.start_time - padding, task.end_time + padding);
+    params.set("starttime", String(focus.startTime));
+    params.set("endtime", String(focus.endTime));
     setSearchParams(params);
   };
 
