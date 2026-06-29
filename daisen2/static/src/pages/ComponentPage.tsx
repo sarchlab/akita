@@ -7,6 +7,7 @@ import { Button } from "../components/ui/button";
 import TraceChartLayout, { SIDE_PANEL_WIDTH } from "../components/TraceChartLayout";
 import { BlockingReasonsHelp, ComponentTaskViewHelp, TaskCountHelp, TaskHierarchyHelp } from "../components/HelpTopics";
 import Legend from "../components/Legend";
+import LocationSubtree from "../components/LocationSubtree";
 import SelectedTaskSection from "../components/SelectedTaskSection";
 import {
   AXIS_LABEL_FONT_SIZE,
@@ -24,6 +25,7 @@ import {
 } from "../components/charts/chartStyle";
 import BandLabel from "../components/charts/BandLabel";
 import { GapHatchDef, GapRects } from "../components/charts/GapHatch";
+import LoadingCurve from "../components/charts/LoadingCurve";
 import MilestoneMarks from "../components/charts/MilestoneMarks";
 import TimeTicks from "../components/charts/TimeTicks";
 import type { StackedComponentInfo } from "../hooks/useCompInfo";
@@ -817,94 +819,6 @@ function GapShading({
   );
 }
 
-// LoadingCurve is a placeholder silhouette shown while a chart's occupancy data
-// is still loading (those queries take a while on a large scope). It is a
-// deterministic mock density shape — not real data — drawn in muted gray with a
-// bright highlight stripe that sweeps left→right (skeleton-shimmer style) so the
-// panel clearly reads as "loading" rather than sitting blank. `id` must be
-// unique per instance on the page (the clip path / gradient are referenced by id).
-function LoadingCurve({
-  width,
-  height,
-  id,
-}: {
-  width: number;
-  height: number;
-  id: string;
-}) {
-  const w = Math.max(1, width);
-  const h = Math.max(1, height);
-  const n = 96;
-  // A per-instance phase derived from the id, so the two charts' mock curves
-  // look different rather than identical twins. Deterministic (no Math.random)
-  // so the shape stays stable across re-renders instead of reshuffling.
-  let seed = 0;
-  for (let i = 0; i < id.length; i++) seed += id.charCodeAt(i) * (i + 1);
-  const ph = ((seed % 100) / 100) * Math.PI * 2;
-  const pts: string[] = [];
-  for (let i = 0; i <= n; i++) {
-    const t = i / n;
-    // An irregular, lopsided density profile: a few non-harmonic sine components
-    // (so it never reads as periodic or mirror-symmetric) under a soft envelope
-    // that lifts it off the baseline and brings it back down at both ends.
-    const bumps =
-      0.5 +
-      0.22 * Math.sin(t * 6.0 + 0.6 + ph) +
-      0.13 * Math.sin(t * 11.3 + 2.1 + ph * 1.7) +
-      0.08 * Math.sin(t * 19.7 + 4.0 + ph * 0.6) +
-      0.05 * Math.sin(t * 31.1 + 1.2 + ph * 2.3);
-    const envelope = Math.pow(Math.sin(Math.PI * t), 0.35);
-    const frac = Math.min(
-      1,
-      Math.max(0, 0.06 + 0.92 * Math.max(0, bumps) * envelope),
-    );
-    const x = 5 + t * (w - 10);
-    const y = h - 4 - frac * (h - 12);
-    pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
-  }
-  const d = `M${pts.join("L")}L${(w - 5).toFixed(1)},${h} L5,${h} Z`;
-  const clipId = `lc-clip-${id}`;
-  const gradId = `lc-grad-${id}`;
-  return (
-    <g pointerEvents="none">
-      <defs>
-        <clipPath id={clipId}>
-          <path d={d} />
-        </clipPath>
-        {/* A wide, soft, low-contrast highlight band — translating the rect that
-            carries it glides the band across the silhouette left→right, like the
-            skeleton shimmer shown while images load on the web. The base gray
-            stays steady; only this lighter band moves. */}
-        <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#fff" stopOpacity="0" />
-          <stop offset="25%" stopColor="#fff" stopOpacity="0" />
-          <stop offset="50%" stopColor="#fff" stopOpacity="0.55" />
-          <stop offset="75%" stopColor="#fff" stopOpacity="0" />
-          <stop offset="100%" stopColor="#fff" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={d} fill="#cbd5e1" />
-      <g clipPath={`url(#${clipId})`}>
-        {/* The band enters just off the left edge and exits just off the right,
-            so the loop restart lands off-screen and the sweep reads as one
-            continuous, gently easing motion. */}
-        <rect x={0} y={0} width={w} height={h} fill={`url(#${gradId})`}>
-          <animate
-            attributeName="x"
-            from={-0.85 * w}
-            to={0.85 * w}
-            dur="1.8s"
-            calcMode="spline"
-            keyTimes="0;1"
-            keySplines="0.4 0 0.6 1"
-            repeatCount="indefinite"
-          />
-        </rect>
-      </g>
-    </g>
-  );
-}
-
 // AggregatedTimeline is the level-of-detail replacement for ComponentTimeline
 // when the visible range holds too many tasks to draw one element each. It draws
 // a stacked-area density chart from the server's per-bin, per-"Kind-What" counts:
@@ -1365,68 +1279,6 @@ function sanitizeRange(startTime: number, endTime: number): TimeRange {
 // a leaf (a real task row) shows just its tasks; an internal node (e.g. "ROB")
 // aggregates every task beneath it but looks identical. The location tree powers
 // the header breadcrumb (collapse up) and the drill-into control (descend).
-// LocationSubtree renders the tree of locations beneath a scope, with every row
-// clickable to jump into that location. Branches are collapsible (chevron),
-// collapsed by default, so a deep scope stays compact instead of dumping its
-// whole subtree at once.
-function LocationSubtree({
-  nodes,
-  onNavigate,
-  expanded,
-  onToggle,
-}: {
-  nodes: LocationNode[];
-  onNavigate: (path: string) => void;
-  expanded: Set<string>;
-  onToggle: (path: string) => void;
-}) {
-  return (
-    <ul className="space-y-0.5">
-      {nodes.map((node) => {
-        const isBranch = node.children.length > 0;
-        const open = isBranch && expanded.has(node.path);
-        return (
-          <li key={node.path}>
-            <div className="flex items-center">
-              {isBranch ? (
-                <button
-                  type="button"
-                  className="flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-primary"
-                  onClick={() => onToggle(node.path)}
-                  aria-label={open ? `Collapse ${node.name}` : `Expand ${node.name}`}
-                >
-                  {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                </button>
-              ) : (
-                // A hollow dot marks a leaf (no children to expand).
-                <span className="flex h-6 w-5 shrink-0 items-center justify-center" aria-hidden="true">
-                  <span className="h-1.5 w-1.5 rounded-full border border-muted-foreground/50" />
-                </span>
-              )}
-              <button
-                type="button"
-                className={cn(
-                  "min-w-0 flex-1 truncate rounded px-1 py-1 text-left text-xs transition-colors hover:bg-muted hover:text-primary",
-                  isBranch ? "font-medium text-foreground" : "text-muted-foreground",
-                )}
-                onClick={() => onNavigate(node.path)}
-                title={node.path}
-              >
-                {node.name}
-              </button>
-            </div>
-            {/* Indent guide: a left border ties each child row back to its parent. */}
-            {isBranch && open && (
-              <div className="ml-2 border-l border-border pl-1.5">
-                <LocationSubtree nodes={node.children} onNavigate={onNavigate} expanded={expanded} onToggle={onToggle} />
-              </div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
 
 function ComponentDetailView({ root }: { root: LocationNode }) {
   const [searchParams, setSearchParams] = useSearchParams();
