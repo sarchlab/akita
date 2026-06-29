@@ -266,6 +266,30 @@ export default function GanttChart({
     );
   };
 
+  // Milestone waves for any listed task, drawn centered on its bar. The current
+  // task gets its own dedicated band below the bar (milestoneMarks above); every
+  // other task shows its milestones over its bar so all blocking is visible.
+  const renderTaskMilestones = (task: Task, centerY: number, keyPrefix: string) => {
+    const steps = milestonesOf(task.steps).sort((a, b) => a.time - b.time);
+    if (!steps.length) return null;
+    return (
+      <MilestoneMarks
+        key={keyPrefix}
+        steps={steps}
+        taskStart={task.start_time}
+        xScale={xScale}
+        centerY={centerY}
+        colorMap={colorMap}
+        selectedMilestone={selectedMilestone}
+        highlightedReason={highlightedReason}
+        onSelect={(milestone) => {
+          if (didDragRef.current) return;
+          onSelectMilestone?.(milestone);
+        }}
+      />
+    );
+  };
+
   return (
     <div
       ref={containerRef}
@@ -304,8 +328,9 @@ export default function GanttChart({
 
         {ancestorRows.map(({ task, top }) => (
           <g key={`anc-${task.id}`}>
-            {renderBar(task, sy(top + (HEADER_ROW_HEIGHT - HEADER_BAR_H) / 2), sh(HEADER_BAR_H), "anc")}
+            {renderBar(task, sy(top + (HEADER_ROW_HEIGHT - DESC_BAR_H) / 2), sh(DESC_BAR_H), "anc")}
             <BandLabel x={12} y={sy(top + 13)}>{task.kind}</BandLabel>
+            {renderTaskMilestones(task, sy(top + HEADER_ROW_HEIGHT / 2), `anc-ms-${task.id}`)}
           </g>
         ))}
 
@@ -320,6 +345,9 @@ export default function GanttChart({
           <g key={`lvl-${index}`}>
             <BandLabel x={12} y={sy(labelTop + 12)}>{`Subtasks · L${index + 1}`}</BandLabel>
             {tasks.map((task) => renderBar(task, sy(tasksTop + (task.yIndex ?? 0) * ROW_HEIGHT), sh(DESC_BAR_H), `lvl${index}`))}
+            {tasks.map((task) =>
+              renderTaskMilestones(task, sy(tasksTop + (task.yIndex ?? 0) * ROW_HEIGHT + DESC_BAR_H / 2), `lvl${index}-ms-${task.id}`),
+            )}
           </g>
         ))}
 
