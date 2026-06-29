@@ -53,12 +53,14 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 		queryParentID, _ = strconv.ParseUint(pidStr, 10, 64)
 	}
 
-	// A bare global-Kind probe (e.g. useSimulationRange's /api/trace?kind=Simulation)
-	// only needs the matched task's time span, not its steps. Loading milestones/tags
-	// for it would build the full (TaskID, Time) milestone+tag indexes at dashboard
-	// start — minutes on a large trace — for a task that typically has no steps. Skip
-	// step loading for it.
-	kindOnlyProbe := r.FormValue("kind") != "" && r.FormValue("scope") == "" &&
+	// The startup range probe (useSimulationRange's /api/trace?kind=Simulation) is a
+	// bare global-Kind query with NO time range; it only needs the matched task's
+	// span, not its steps, so loading milestones/tags for it would needlessly build
+	// the full (TaskID, Time) milestone+tag indexes at dashboard start. The Task
+	// chart's kind-filter browse also sends a global Kind query, but WITH a time
+	// range, and uses the results' steps — so the no-time-range guard keeps
+	// milestones for it.
+	rangeProbe := r.FormValue("kind") != "" && !useTimeRange && r.FormValue("scope") == "" &&
 		r.FormValue("where") == "" && queryID == 0 && queryParentID == 0
 
 	query := TaskQuery{
@@ -71,7 +73,7 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 		EndTime:          endTime,
 		EnableTimeRange:  useTimeRange,
 		EnableParentTask: false,
-		EnableMilestones: !kindOnlyProbe,
+		EnableMilestones: !rangeProbe,
 	}
 
 	tasks := s.traceReader.ListTasks(r.Context(), query)
@@ -381,11 +383,12 @@ func (r *SQLiteTraceReader) ensureTaskQueryIndexes(ctx context.Context, query Ta
 			"CREATE INDEX IF NOT EXISTS idx_trace_ParentID ON trace(ParentID)")
 	}
 
-	// A global Kind lookup with no location scope — e.g. the startup
-	// "kind=Simulation" range probe — would otherwise full-scan the trace. Build a
-	// tiny PARTIAL index on just that Kind value rather than a full Kind index,
-	// which would be ~1 GB for a handful of distinct values.
-	if query.Kind != "" && query.Scope == "" && query.Where == "" &&
+	// Only the startup range probe — a global Kind lookup with NO time range — builds
+	// a partial Kind index (tiny, on just that value). The Task chart's kind-filter
+	// browse sends a global Kind query per keystroke WITH a time range; gating on
+	// !EnableTimeRange avoids spamming a partial index for every typed prefix (that
+	// browse scans instead, which is fine for an interactive, controlled filter).
+	if query.Kind != "" && !query.EnableTimeRange && query.Scope == "" && query.Where == "" &&
 		query.ID == 0 && query.ParentID == 0 && safeKindPattern.MatchString(query.Kind) {
 		ident := kindIdentReplace.Replace(query.Kind)
 		r.ensureIndex(ctx, "Building partial index idx_trace_kind_"+ident,
