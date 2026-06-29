@@ -4,9 +4,13 @@ import type { Segment, Task } from "../../types/task";
 import { assignYIndices } from "../../utils/taskYIndexAssigner";
 import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../../utils/taskColorCoder";
 import type { ColorMode } from "../../utils/taskColorCoder";
-import { milestonesOf, wavyPath, type SelectedMilestone } from "../../utils/milestoneViz";
-import { formatSI } from "../../utils/siFormat";
+import { milestonesOf, type SelectedMilestone } from "../../utils/milestoneViz";
 import { useElementSize } from "../../hooks/useElementSize";
+import { AXIS_TICK_COUNT, barOpacity, barStrokeOpacity, COLOR_BAR_STROKE, COLOR_GRID, gapSegments, safeScale } from "./chartStyle";
+import BandLabel from "./BandLabel";
+import { GapHatchDef, GapRects } from "./GapHatch";
+import MilestoneMarks from "./MilestoneMarks";
+import TimeTicks from "./TimeTicks";
 
 interface GanttChartProps {
   // Ancestors root-first: [root, …, immediate parent], stacked above the current
@@ -53,29 +57,6 @@ const MILESTONE_BAND = 18;
 const LABEL_H = 18;
 const HEADER_BAR_H = 15;
 const DESC_BAR_H = 7;
-
-function safeScale(scale: d3.ScaleLinear<number, number>, value: number) {
-  return scale(value) ?? 0;
-}
-
-function gapSegments(segments: Segment[], startTime: number, endTime: number) {
-  if (!segments.length) return [];
-  const sorted = [...segments].sort((a, b) => a.start_time - b.start_time);
-  const gaps: Segment[] = [];
-  if (sorted[0].start_time > startTime) {
-    gaps.push({ start_time: startTime, end_time: Math.min(sorted[0].start_time, endTime) });
-  }
-  for (let index = 0; index < sorted.length - 1; index++) {
-    const start = Math.max(sorted[index].end_time, startTime);
-    const end = Math.min(sorted[index + 1].start_time, endTime);
-    if (start < end) gaps.push({ start_time: start, end_time: end });
-  }
-  const last = sorted[sorted.length - 1];
-  if (last.end_time < endTime) {
-    gaps.push({ start_time: Math.max(last.end_time, startTime), end_time: endTime });
-  }
-  return gaps;
-}
 
 export default function GanttChart({
   ancestors = [],
@@ -226,7 +207,7 @@ export default function GanttChart({
   const sy = (y: number) => topAnchor + (y - topAnchor) * stretch;
   const sh = (h: number) => h * stretch;
 
-  const xTicks = xScale.ticks(12);
+  const xTicks = xScale.ticks(AXIS_TICK_COUNT);
   const gaps = segmentsEnabled ? gapSegments(segments, startTime, endTime) : [];
 
   // Blocking-reason curves for the current task: each milestone closes an interval
@@ -234,41 +215,21 @@ export default function GanttChart({
   // by the released reason with a node at the release point.
   const milestoneCenterY = currentTop != null ? sy(currentTop + HEADER_BAR_H + 6) : 0;
   const milestoneMarks =
-    mainTask && currentTop != null
-      ? milestoneSteps.map((step, index) => {
-          const intervalStart = index === 0 ? mainTask.start_time : milestoneSteps[index - 1].time;
-          const x0 = safeScale(xScale, intervalStart);
-          const x1 = safeScale(xScale, step.time);
-          const color = colorMap[step.kind] ?? "#9ca3af";
-          const d = wavyPath(x0, x1, milestoneCenterY);
-          // Click-to-select with the same affordance as the component view: the
-          // selected milestone thickens with a ringed dot; a selection or a
-          // highlighted reason dims the rest.
-          const selected = selectedMilestone != null && selectedMilestone.kind === step.kind && selectedMilestone.time === step.time;
-          const dimmed = (selectedMilestone != null && !selected) || (highlightedReason != null && highlightedReason !== step.kind);
-          const opacity = dimmed ? 0.25 : 1;
-          return (
-            <g
-              key={`milestone-${index}-${step.kind}`}
-              className="cursor-pointer"
-              onClick={(event) => {
-                event.stopPropagation();
-                if (didDragRef.current) return;
-                onSelectMilestone?.({ kind: step.kind, what: step.what, time: step.time, blockedFor: step.time - intervalStart });
-              }}
-            >
-              {x1 - x0 >= 2 && (
-                <>
-                  <rect x={x0} y={milestoneCenterY - 8} width={x1 - x0} height={16} fill="transparent" pointerEvents="all" />
-                  <path d={d} fill="none" stroke={color} strokeWidth={selected ? 3 : 1.5} strokeLinecap="round" opacity={opacity} pointerEvents="none" />
-                </>
-              )}
-              {selected && <circle cx={x1} cy={milestoneCenterY} r={6} fill="none" stroke={color} strokeWidth={1.5} pointerEvents="none" />}
-              <circle cx={x1} cy={milestoneCenterY} r={selected ? 3.5 : 3} fill={color} stroke="#ffffff" strokeWidth={0.75} opacity={opacity} pointerEvents="none" />
-            </g>
-          );
-        })
-      : null;
+    mainTask && currentTop != null ? (
+      <MilestoneMarks
+        steps={milestoneSteps}
+        taskStart={mainTask.start_time}
+        xScale={xScale}
+        centerY={milestoneCenterY}
+        colorMap={colorMap}
+        selectedMilestone={selectedMilestone}
+        highlightedReason={highlightedReason}
+        onSelect={(milestone) => {
+          if (didDragRef.current) return;
+          onSelectMilestone?.(milestone);
+        }}
+      />
+    ) : null;
 
   const renderBar = (task: Task, top: number, barHeight: number, keyPrefix: string) => {
     // Clamp to the chart so an ancestor spanning far beyond the focus window
@@ -296,22 +257,14 @@ export default function GanttChart({
           width={w}
           height={barHeight}
           fill={lookupColor(colorMap, task, colorMode)}
-          stroke="#000000"
-          strokeOpacity={selected || highlighted ? 0.8 : 0.2}
+          stroke={COLOR_BAR_STROKE}
           strokeWidth={1}
-          opacity={hasHighlight ? (highlighted ? 1 : 0.4) : selectedId != null && !selected ? 0.6 : 1}
+          strokeOpacity={barStrokeOpacity({ selected, highlighted, hasHighlight })}
+          opacity={barOpacity({ selected, highlighted, hasHighlight, hasSelection: selectedId != null })}
         />
       </g>
     );
   };
-
-  // Section labels: 12px black with a white halo (paintOrder stroke) so they stay
-  // readable over bars — the same treatment as the component view's row labels.
-  const sectionLabel = (text: string, x: number, y: number) => (
-    <text x={x} y={y} fontSize="12" fill="#000" stroke="#ffffff" strokeWidth={3} paintOrder="stroke" pointerEvents="none">
-      {text}
-    </text>
-  );
 
   return (
     <div
@@ -332,54 +285,40 @@ export default function GanttChart({
         }}
       >
         <defs>
-          <pattern id="gantt-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
-            <rect width="8" height="8" fill="rgba(128, 128, 128, 0.15)" />
-            <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(128, 128, 128, 0.3)" strokeWidth="4" />
-          </pattern>
+          <GapHatchDef id="gantt-gap-pattern" />
         </defs>
-        {gaps.map((gap, index) => {
-          const x = safeScale(xScale, gap.start_time);
-          const w = Math.max(0, safeScale(xScale, gap.end_time) - x);
-          return <rect key={index} x={x} y={MARGIN.top} width={w} height={height - MARGIN.top - MARGIN.bottom} fill="url(#gantt-gap-pattern)" />;
-        })}
+        <GapRects gaps={gaps} xScale={xScale} patternId="gantt-gap-pattern" top={MARGIN.top} height={height - MARGIN.top - MARGIN.bottom} />
 
-        {xTicks.map((tick) => {
-          const tx = safeScale(xScale, tick);
-          return (
-            <g key={tick}>
-              <line x1={tx} x2={tx} y1={MARGIN.top} y2={height - MARGIN.bottom} stroke="#000" strokeDasharray="3,3" opacity={0.3} />
-              <line x1={tx} x2={tx} y1={MARGIN.top} y2={MARGIN.top + 5} stroke="#000" />
-              <line x1={tx} x2={tx} y1={height - MARGIN.bottom - 5} y2={height - MARGIN.bottom} stroke="#000" />
-              <text x={tx} y={18} textAnchor="middle" fontSize="10" fill="#475569">
-                {formatSI(tick)}
-              </text>
-              <text x={tx} y={height - 8} textAnchor="middle" fontSize="10" fill="#475569">
-                {formatSI(tick)}
-              </text>
-            </g>
-          );
-        })}
+        <TimeTicks
+          ticks={xTicks}
+          xScale={xScale}
+          gridTop={MARGIN.top}
+          gridBottom={height - MARGIN.bottom}
+          topLabelY={18}
+          bottomLabelY={height - 8}
+          tickMarks
+        />
 
-        <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={MARGIN.top} y2={MARGIN.top} stroke="#000" />
-        <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={height - MARGIN.bottom} y2={height - MARGIN.bottom} stroke="#000" />
+        <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={MARGIN.top} y2={MARGIN.top} stroke={COLOR_GRID} />
+        <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={height - MARGIN.bottom} y2={height - MARGIN.bottom} stroke={COLOR_GRID} />
 
         {ancestorRows.map(({ task, top }) => (
           <g key={`anc-${task.id}`}>
             {renderBar(task, sy(top + (HEADER_ROW_HEIGHT - HEADER_BAR_H) / 2), sh(HEADER_BAR_H), "anc")}
-            {sectionLabel(task.kind, 12, sy(top + 13))}
+            <BandLabel x={12} y={sy(top + 13)}>{task.kind}</BandLabel>
           </g>
         ))}
 
         {mainTask && currentTop != null && (
           <>
-            {sectionLabel("Current Task", 12, sy(currentTop + 13))}
+            <BandLabel x={12} y={sy(currentTop + 13)}>Current Task</BandLabel>
             {renderBar(mainTask, sy(currentTop + (HEADER_ROW_HEIGHT - HEADER_BAR_H) / 2), sh(HEADER_BAR_H), "main")}
           </>
         )}
 
         {levelRows.map(({ index, tasks, labelTop, tasksTop }) => (
           <g key={`lvl-${index}`}>
-            {sectionLabel(`Subtasks · L${index + 1}`, 12, sy(labelTop + 12))}
+            <BandLabel x={12} y={sy(labelTop + 12)}>{`Subtasks · L${index + 1}`}</BandLabel>
             {tasks.map((task) => renderBar(task, sy(tasksTop + (task.yIndex ?? 0) * ROW_HEIGHT), sh(DESC_BAR_H), `lvl${index}`))}
           </g>
         ))}
