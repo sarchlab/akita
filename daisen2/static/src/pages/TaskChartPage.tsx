@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import GanttChart from "../components/charts/GanttChart";
+import { TaskGanttHelp } from "../components/HelpTopics";
 import Legend from "../components/Legend";
 import SelectedTaskSection from "../components/SelectedTaskSection";
 import TraceChartLayout from "../components/TraceChartLayout";
@@ -145,7 +146,7 @@ export default function TaskChartPage() {
       }
     >
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="min-h-0 flex-1">
+        <div className="relative min-h-0 flex-1">
           <GanttChart
             ancestors={ancestors}
             mainTask={mainTask}
@@ -166,6 +167,9 @@ export default function TaskChartPage() {
             expanding={expanding}
             onExpandNext={expandNext}
           />
+          <div className="absolute bottom-2 right-2 z-20" onPointerDown={(e) => e.stopPropagation()}>
+            <TaskGanttHelp className="bg-white/85 p-1 shadow-sm ring-1 ring-slate-200 backdrop-blur-sm hover:bg-white" />
+          </div>
         </div>
       </div>
     </TraceChartLayout>

@@ -6,6 +6,7 @@ import blockingImg from "../assets/help/blocking.png";
 import taskTreeImg from "../assets/help/task-tree.png";
 import componentTasksImg from "../assets/help/component-tasks.png";
 import selectorImg from "../assets/help/selector.png";
+import taskGanttImg from "../assets/help/task-gantt.png";
 
 // HelpTopics are ready-made InfoButtons for the concepts that are hard to grasp at
 // a glance, so a view just drops in e.g. <MetricsHelp /> next to the thing it
@@ -132,6 +133,35 @@ export function TaskTypesHelp({ className }: { className?: string }) {
         <Term label="pipeline">a request's traversal of a component-internal <strong>latency pipeline</strong> (e.g. <code>L2Cache.bank</code>), recorded as a sub-task of <code>req_in</code> so the pipeline time is accounted for instead of left as an unexplained gap.</Term>
       </ul>
       <p>Read together they tell a request's story: it sits in <code>incoming_buffer</code>, is served as <code>req_in</code> (often traversing a <code>pipeline</code> and issuing <code>req_out</code> sub-requests), and its replies leave through <code>outgoing_buffer</code>.</p>
+    </InfoButton>
+  );
+}
+
+// TaskGanttHelp explains the task view's main visualization: one task shown with
+// its full ancestor chain above and its descendant subtree below, on one time axis.
+export function TaskGanttHelp({ className }: { className?: string }) {
+  return (
+    <InfoButton title="Task view" className={className}>
+      <Figure
+        src={taskGanttImg}
+        alt="The task gantt: a current task with its ancestor chain stacked above and subtasks below, on one time axis"
+        caption="One task's whole lineage on a single time axis: ancestors above, the current task, subtasks below."
+      />
+      <p>This view follows <strong>one task through its whole lineage</strong> on a single time axis. The task you opened is the <strong>Current Task</strong> — the emphasized row in the middle. Above it, every <strong>ancestor</strong> is stacked as a thin context bar (root at the top, down to the immediate parent); below it, the task's <strong>descendant subtree</strong> is drawn one band per level (<strong>Subtasks · L1</strong>, <strong>L2</strong>, …), loaded level by level.</p>
+      <p>Each task occupies one row:</p>
+      <ul className="space-y-1.5">
+        <Term label="Label">the task's kind, drawn above its bar.</Term>
+        <Term label="Bar">the task's span on the time axis (focused on the current task's window; ancestors that run far wider are clamped to the chart as context).</Term>
+        <Term label="Wavy line below">the task's <strong>blocking intervals</strong>, colored by reason — drawn under any task that blocked (see <em>Blocking reasons</em>).</Term>
+      </ul>
+      <p>Interact with it directly:</p>
+      <ul className="space-y-1.5">
+        <Term label="Click a bar">select that task — its details fill the side panel and its kind is highlighted in the legend.</Term>
+        <Term label="Double-click a bar">re-center the view on that task, making it the new Current Task (its own ancestors and subtasks reload around it).</Term>
+        <Term label="Click a wavy line">inspect that blocking interval — its reason and how long the task waited.</Term>
+        <Term label="Drag / scroll">pan the time axis; <strong>⌘/Ctrl+scroll</strong> zooms it. <strong>Expand next level</strong> loads another layer of subtasks.</Term>
+      </ul>
+      <p>The side panel shows the selected task (or blocking reason), and the legend lists the task kinds (see <em>Task types</em>) and blocking reasons present, with the <strong>Kind / Kind-What</strong> coloring toggle.</p>
     </InfoButton>
   );
 }
