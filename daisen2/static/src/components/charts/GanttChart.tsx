@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import * as d3 from "d3";
 import type { Segment, Task } from "../../types/task";
 import { assignYIndices } from "../../utils/taskYIndexAssigner";
@@ -115,6 +116,68 @@ export default function GanttChart({
     return { tasks, lanes };
   });
 
+  // Scale time to the current task and its descendants (the focus). Ancestors run
+  // far wider (the root spans the whole trace), so including them would squash the
+  // focus into a sliver; instead they are clamped to the chart as context bars.
+  const focusTasks = mainTask ? [mainTask, ...levels.flat()] : allTasks;
+  const timeStart = focusTasks.length ? Math.min(...focusTasks.map((task) => task.start_time)) : 0;
+  const timeEnd = focusTasks.length ? Math.max(...focusTasks.map((task) => task.end_time)) : 1;
+  const padding = (timeEnd - timeStart) * 0.02 || 1e-12;
+  const autoStart = timeStart - padding;
+  const autoEnd = timeEnd + padding;
+
+  // The visible time range starts at the auto-fit focus domain and resets when the
+  // focus task changes. Drag pans (and scrolls vertically) and Ctrl/Cmd+scroll
+  // zooms (anchored at the cursor) — matching the component view.
+  const [viewRange, setViewRange] = useState({ startTime: autoStart, endTime: autoEnd });
+  const rangeRef = useRef(viewRange);
+  rangeRef.current = viewRange;
+  const widthRef = useRef(W);
+  widthRef.current = W;
+  const dragRef = useRef<{ x: number; y: number; scrollTop: number; range: { startTime: number; endTime: number } } | null>(null);
+  const didDragRef = useRef(false);
+  const focusKey = mainTask?.id ?? "";
+  useEffect(() => {
+    setViewRange({ startTime: autoStart, endTime: autoEnd });
+  }, [focusKey, autoStart, autoEnd]);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const r = rangeRef.current;
+      const rect = el.getBoundingClientRect();
+      const inner = Math.max(1, widthRef.current - MARGIN.left - MARGIN.right);
+      const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left - MARGIN.left) / inner));
+      const dur = r.endTime - r.startTime;
+      const scale = Math.pow(1.0015, event.deltaY);
+      const anchor = r.startTime + dur * ratio;
+      setViewRange({ startTime: anchor - (anchor - r.startTime) * scale, endTime: anchor + (r.endTime - anchor) * scale });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [containerRef]);
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    dragRef.current = { x: event.clientX, y: event.clientY, scrollTop: containerRef.current?.scrollTop ?? 0, range: rangeRef.current };
+    didDragRef.current = false;
+  };
+  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didDragRef.current = true;
+    const dur = drag.range.endTime - drag.range.startTime;
+    const dt = (dur / Math.max(1, widthRef.current - MARGIN.left - MARGIN.right)) * dx;
+    setViewRange({ startTime: drag.range.startTime - dt, endTime: drag.range.endTime - dt });
+    if (containerRef.current) containerRef.current.scrollTop = drag.scrollTop - dy;
+  };
+  const handlePointerUp = () => {
+    dragRef.current = null;
+  };
+
   if (allTasks.length === 0) {
     // Keep the same ref'd container so the ResizeObserver stays attached (and the
     // measured size is ready) across the empty → loaded transition.
@@ -125,15 +188,8 @@ export default function GanttChart({
     );
   }
 
-  // Scale time to the current task and its descendants (the focus). Ancestors run
-  // far wider (the root spans the whole trace), so including them would squash the
-  // focus into a sliver; instead they are clamped to the chart as context bars.
-  const focusTasks = mainTask ? [mainTask, ...levels.flat()] : allTasks;
-  const timeStart = Math.min(...focusTasks.map((task) => task.start_time));
-  const timeEnd = Math.max(...focusTasks.map((task) => task.end_time));
-  const padding = (timeEnd - timeStart) * 0.02 || 1e-12;
-  const startTime = timeStart - padding;
-  const endTime = timeEnd + padding;
+  const startTime = viewRange.startTime;
+  const endTime = viewRange.endTime;
   const innerWidth = W - MARGIN.left - MARGIN.right;
   const xScale = d3.scaleLinear().domain([startTime, endTime]).range([MARGIN.left, W - MARGIN.right]);
   const colorMap =
@@ -197,6 +253,7 @@ export default function GanttChart({
               className="cursor-pointer"
               onClick={(event) => {
                 event.stopPropagation();
+                if (didDragRef.current) return;
                 onSelectMilestone?.({ kind: step.kind, what: step.what, time: step.time, blockedFor: step.time - intervalStart });
               }}
             >
@@ -228,6 +285,7 @@ export default function GanttChart({
         className="cursor-pointer"
         onClick={(event) => {
           event.stopPropagation();
+          if (didDragRef.current) return;
           onSelectTask?.(task);
         }}
         onDoubleClick={() => onOpenTask?.(task)}
@@ -256,8 +314,23 @@ export default function GanttChart({
   );
 
   return (
-    <div ref={containerRef} className="h-full overflow-auto bg-white">
-      <svg width={W} height={height} className="block" onClick={() => onDeselect?.()}>
+    <div
+      ref={containerRef}
+      className="h-full cursor-grab overflow-auto bg-white active:cursor-grabbing"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
+    >
+      <svg
+        width={W}
+        height={height}
+        className="block"
+        onClick={() => {
+          if (didDragRef.current) return;
+          onDeselect?.();
+        }}
+      >
         <defs>
           <pattern id="gantt-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
             <rect width="8" height="8" fill="rgba(128, 128, 128, 0.15)" />
