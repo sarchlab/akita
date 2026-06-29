@@ -53,6 +53,16 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 		queryParentID, _ = strconv.ParseUint(pidStr, 10, 64)
 	}
 
+	// The startup range probe (useSimulationRange's /api/trace?kind=Simulation) is a
+	// bare global-Kind query with NO time range; it only needs the matched task's
+	// span, not its steps, so loading milestones/tags for it would needlessly build
+	// the full (TaskID, Time) milestone+tag indexes at dashboard start. The Task
+	// chart's kind-filter browse also sends a global Kind query, but WITH a time
+	// range, and uses the results' steps — so the no-time-range guard keeps
+	// milestones for it.
+	rangeProbe := r.FormValue("kind") != "" && !useTimeRange && r.FormValue("scope") == "" &&
+		r.FormValue("where") == "" && queryID == 0 && queryParentID == 0
+
 	query := TaskQuery{
 		ID:               queryID,
 		ParentID:         queryParentID,
@@ -63,7 +73,7 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 		EndTime:          endTime,
 		EnableTimeRange:  useTimeRange,
 		EnableParentTask: false,
-		EnableMilestones: true,
+		EnableMilestones: !rangeProbe,
 	}
 
 	tasks := s.traceReader.ListTasks(r.Context(), query)
@@ -350,7 +360,47 @@ func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
 }
 
 // ListTasks returns a list of tasks in the trace according to the given query.
+var (
+	// safeKindPattern restricts the Kind values a partial index may be built for
+	// to characters that appear in real task kinds, so the value can be embedded
+	// as a SQL literal in the index DDL with no injection risk.
+	safeKindPattern  = regexp.MustCompile(`^[A-Za-z0-9_ .\[\]\-]+$`)
+	kindIdentReplace = strings.NewReplacer(" ", "_", ".", "_", "[", "_", "]", "_", "-", "_")
+)
+
+// ensureTaskQueryIndexes builds, on demand, the secondary indexes a given task
+// query needs. The simulation writes the trace without any secondary indexes on
+// trace/milestone/tag (it never queries the data — see the entry structs in
+// akita's tracing.dbtracer), so the reader owns them and builds only what an
+// access pattern actually uses, once per trace.
+func (r *SQLiteTraceReader) ensureTaskQueryIndexes(ctx context.Context, query TaskQuery) {
+	if query.ID != 0 {
+		r.ensureIndex(ctx, "Building index idx_trace_ID",
+			"CREATE INDEX IF NOT EXISTS idx_trace_ID ON trace(ID)")
+	}
+	if query.ParentID != 0 {
+		r.ensureIndex(ctx, "Building index idx_trace_ParentID",
+			"CREATE INDEX IF NOT EXISTS idx_trace_ParentID ON trace(ParentID)")
+	}
+
+	// Only the startup range probe — a global Kind lookup with NO time range — builds
+	// a partial Kind index (tiny, on just that value). The Task chart's kind-filter
+	// browse sends a global Kind query per keystroke WITH a time range; gating on
+	// !EnableTimeRange avoids spamming a partial index for every typed prefix (that
+	// browse scans instead, which is fine for an interactive, controlled filter).
+	if query.Kind != "" && !query.EnableTimeRange && query.Scope == "" && query.Where == "" &&
+		query.ID == 0 && query.ParentID == 0 && safeKindPattern.MatchString(query.Kind) {
+		ident := kindIdentReplace.Replace(query.Kind)
+		r.ensureIndex(ctx, "Building partial index idx_trace_kind_"+ident,
+			fmt.Sprintf(
+				"CREATE INDEX IF NOT EXISTS idx_trace_kind_%s ON trace(Kind) WHERE Kind = '%s'",
+				ident, query.Kind))
+	}
+}
+
 func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Task {
+	r.ensureTaskQueryIndexes(ctx, query)
+
 	sqlStr, args := r.prepareTaskQueryStr(query)
 
 	rows, err := r.QueryContext(ctx, sqlStr, args...)
@@ -368,8 +418,8 @@ func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Ta
 	}
 
 	if query.EnableMilestones {
-		r.loadMilestonesForTasks(tasks)
-		r.loadTagsForTasks(tasks)
+		r.loadMilestonesForTasks(ctx, tasks)
+		r.loadTagsForTasks(ctx, tasks)
 		sortTaskSteps(tasks)
 	}
 
@@ -539,10 +589,15 @@ func (s *Server) httpTraceTimeRange(w http.ResponseWriter, r *http.Request) {
 }
 
 // loadMilestonesForTasks loads milestones for the given tasks from the database.
-func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
+func (r *SQLiteTraceReader) loadMilestonesForTasks(ctx context.Context, tasks []Task) {
 	if len(tasks) == 0 {
 		return
 	}
+
+	// Built by the reader (the sim no longer indexes milestones). A composite
+	// (TaskID, Time) serves both the TaskID IN-filter and the ORDER BY TaskID,Time.
+	r.ensureIndex(ctx, "Building index idx_milestone_TaskID_Time",
+		"CREATE INDEX IF NOT EXISTS idx_milestone_TaskID_Time ON milestone(TaskID, Time)")
 
 	// Build a map for quick task lookup
 	taskMap := make(map[uint64]*Task)
@@ -614,10 +669,14 @@ func (r *SQLiteTraceReader) loadMilestoneBatch(taskMap map[uint64]*Task, ids []u
 // milestones. A tag's location is inherited from its task, so the tag table
 // stores none; tags also carry no Kind, so they are labelled "tag" to stay
 // distinguishable from milestones in the merged stream.
-func (r *SQLiteTraceReader) loadTagsForTasks(tasks []Task) {
+func (r *SQLiteTraceReader) loadTagsForTasks(ctx context.Context, tasks []Task) {
 	if len(tasks) == 0 {
 		return
 	}
+
+	// Built by the reader (the sim no longer indexes tags).
+	r.ensureIndex(ctx, "Building index idx_tag_TaskID_Time",
+		"CREATE INDEX IF NOT EXISTS idx_tag_TaskID_Time ON tag(TaskID, Time)")
 
 	taskMap := make(map[uint64]*Task)
 	taskIDs := make([]uint64, 0, len(tasks))
