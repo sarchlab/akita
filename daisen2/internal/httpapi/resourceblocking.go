@@ -19,8 +19,11 @@ type ResourceTimelineResponse struct {
 	// (scaled back up) so a resource blocking hundreds of thousands of tasks still
 	// returns promptly.
 	Sample int `json:"sample"`
-	// Total is the distinct tasks that ever block on this resource (whole trace).
+	// Total is the distinct tasks blocked on this resource that overlap the queried
+	// window (so it tracks the zoom and drives the density-vs-gantt choice).
 	Total int `json:"total"`
+	// TotalAll is the distinct tasks that ever block on it (whole trace), for context.
+	TotalAll int `json:"total_all"`
 	// Bins holds the per-bin count of tasks blocked on the resource.
 	Bins []int `json:"bins"`
 }
@@ -50,10 +53,22 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 	r.ensureIndex(ctx, "Building index idx_milestone_TaskID_Time",
 		"CREATE INDEX IF NOT EXISTS idx_milestone_TaskID_Time ON milestone(TaskID, Time)")
 
-	var total int
+	startStr := strconv.FormatFloat(start, 'f', -1, 64)
+	endStr := strconv.FormatFloat(end, 'f', -1, 64)
+	// Whole-trace count (index-only), for context.
 	_ = r.QueryRowContext(ctx,
 		`SELECT COUNT(DISTINCT TaskID) FROM milestone WHERE Kind = 'hardware_resource' AND What = ?`,
-		what).Scan(&total)
+		what).Scan(&resp.TotalAll)
+	// Windowed count: tasks blocked on the resource that overlap the view range —
+	// this is what the density-vs-gantt choice keys on, so a deep zoom into a sparse
+	// window surfaces the per-task gantt even for a busy resource.
+	total := 0
+	_ = r.QueryRowContext(ctx, `
+		SELECT COUNT(DISTINCT m.TaskID)
+		FROM milestone m
+		JOIN trace t ON t.ID = m.TaskID
+		WHERE m.Kind = 'hardware_resource' AND m.What = ?
+			AND t.EndTime > `+startStr+` AND t.StartTime < `+endStr, what).Scan(&total)
 	resp.Total = total
 
 	if sample < 1 {

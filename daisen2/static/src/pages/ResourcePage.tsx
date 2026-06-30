@@ -225,8 +225,13 @@ export default function ResourcePage() {
       {data ? (
         <dl className="flex flex-col gap-3 text-sm">
           <div className="flex flex-col gap-0.5">
-            <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tasks blocked (total)</dt>
-            <dd className="tabular-nums">{data.total.toLocaleString()}</dd>
+            <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tasks blocked (in view)</dt>
+            <dd className="tabular-nums">
+              {data.total.toLocaleString()}
+              {data.total_all > data.total ? (
+                <span className="ml-1 text-xs text-muted-foreground">of {data.total_all.toLocaleString()} total</span>
+              ) : null}
+            </dd>
           </div>
           {data.sample > 1 ? (
             <div className="flex flex-col gap-0.5">

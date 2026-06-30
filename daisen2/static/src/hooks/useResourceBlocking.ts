@@ -8,8 +8,11 @@ export interface ResourceBlockingData {
   num_bins: number;
   // 1-in-N task stride the server used; >1 means the counts are estimates.
   sample: number;
-  // Distinct tasks that ever block on this resource (whole trace).
+  // Distinct tasks blocked on the resource within the queried window (drives the
+  // density-vs-gantt choice).
   total: number;
+  // Distinct tasks that ever block on it (whole trace), for context.
+  total_all: number;
   // Per-bin count of tasks blocked on the resource.
   bins: number[];
 }
