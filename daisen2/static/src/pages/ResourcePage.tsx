@@ -97,6 +97,18 @@ export default function ResourcePage() {
   const dataPending =
     viewRange.startTime !== dataRange.startTime || viewRange.endTime !== dataRange.endTime;
 
+  // Mirror the (debounced) range into the URL — like the component page — so the
+  // view is shareable and survives a refresh. replaceState avoids a history entry
+  // (and a re-render) per zoom step.
+  useEffect(() => {
+    if (!what) return;
+    const params = new URLSearchParams(window.location.search);
+    params.set("what", what);
+    params.set("starttime", dataRange.startTime.toString());
+    params.set("endtime", dataRange.endTime.toString());
+    window.history.replaceState(null, "", `/resource?${params.toString()}`);
+  }, [dataRange.startTime, dataRange.endTime, what]);
+
   const { ref, size } = useElementSize<HTMLDivElement>();
   const width = Math.max(size.width, 320);
   const height = Math.max(size.height, 200);
