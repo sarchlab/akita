@@ -5,6 +5,7 @@ import { TaskGanttHelp } from "../components/HelpTopics";
 import Legend from "../components/Legend";
 import SelectedTaskSection from "../components/SelectedTaskSection";
 import TraceChartLayout from "../components/TraceChartLayout";
+import { useAutoColorMode } from "../hooks/useAutoColorMode";
 import { useSegments } from "../hooks/useSegments";
 import { useTaskHierarchy } from "../hooks/useTaskHierarchy";
 import type { Task } from "../types/task";
@@ -26,6 +27,8 @@ export default function TaskChartPage() {
   // (mirrors the component view).
   const [selectedMilestone, setSelectedMilestone] = useState<SelectedMilestone | null>(null);
   const [colorMode, setColorMode] = useState<ColorMode>("kind-what");
+  // Blocking reasons toggle their coloring granularity independently of tasks.
+  const [milestoneColorMode, setMilestoneColorMode] = useState<ColorMode>("kind-what");
   // Legend hover highlights, shared with the chart (same as the component view).
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [highlightedReason, setHighlightedReason] = useState<string | null>(null);
@@ -61,14 +64,18 @@ export default function TaskChartPage() {
   const blockingReasons = useMemo(() => {
     const reasons = new Set<string>();
     for (const task of allTasks) {
-      for (const step of milestonesOf(task.steps)) reasons.add(step.kind);
+      for (const step of milestonesOf(task.steps)) reasons.add(taskColorKey(step, milestoneColorMode));
     }
     return Array.from(reasons);
-  }, [allTasks]);
-  const colorMap = useMemo(
-    () => buildColorMapFromKeys([...taskKeys, ...blockingReasons]),
-    [taskKeys, blockingReasons],
+  }, [allTasks, milestoneColorMode]);
+  // Tasks and blocking reasons draw from separate color families.
+  const colorMap = useMemo(() => buildColorMapFromKeys(taskKeys, "task"), [taskKeys]);
+  const milestoneColorMap = useMemo(
+    () => buildColorMapFromKeys(blockingReasons, "milestone"),
+    [blockingReasons],
   );
+  // Blocking reasons default to "kind" coloring once "kind-what" exceeds 8 reasons.
+  const handleMilestoneColorMode = useAutoColorMode(milestoneColorMode, setMilestoneColorMode, blockingReasons.length, 8);
 
   // Restore the selected task (the `sel` param) once its data has loaded; with no
   // `sel`, default the detail panel to the main task (once per task id).
@@ -128,7 +135,8 @@ export default function TaskChartPage() {
 
   const selectedId = selectedTask?.id ?? (sel || null);
   // A hovered reason wins; otherwise the selected milestone's reason stays lit.
-  const reasonHighlight = highlightedReason ?? selectedMilestone?.kind ?? null;
+  const reasonHighlight =
+    highlightedReason ?? (selectedMilestone ? taskColorKey(selectedMilestone, milestoneColorMode) : null);
   const canExpand = !loading && !atLeaves && levels.length > 0;
 
   return (
@@ -141,8 +149,11 @@ export default function TaskChartPage() {
             taskKeys={taskKeys}
             colorMap={colorMap}
             blockingReasons={blockingReasons}
+            milestoneColorMap={milestoneColorMap}
             colorMode={colorMode}
             onColorMode={setColorMode}
+            milestoneColorMode={milestoneColorMode}
+            onMilestoneColorMode={handleMilestoneColorMode}
             highlightedKey={highlightedKey}
             onHighlight={setHighlightedKey}
             highlightedReason={reasonHighlight}
@@ -161,6 +172,8 @@ export default function TaskChartPage() {
             segmentsEnabled={segmentsData?.enabled ?? false}
             colorMap={colorMap}
             colorMode={colorMode}
+            milestoneColorMap={milestoneColorMap}
+            milestoneColorMode={milestoneColorMode}
             selectedId={selectedMilestone ? null : selectedId}
             selectedMilestone={selectedMilestone}
             highlightedKey={highlightedKey}

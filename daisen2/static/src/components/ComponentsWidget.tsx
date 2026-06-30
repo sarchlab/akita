@@ -10,7 +10,15 @@ import { useElementSize } from "../hooks/useElementSize";
 import { buildLocationTree, findNode, leafCount } from "../utils/locationTree";
 
 const GAP = 8;
-const COUNT = 4;
+// Each sub-chart needs at least this much room to stay legible; the grid fits as
+// many whole MIN_W × MIN_H cells as the measured area allows. MIN_W is generous so
+// a narrow widget collapses to a single taller column rather than a cramped 2-wide
+// grid with a half-empty bottom.
+const MIN_W = 260;
+const MIN_H = 140;
+// A safety cap so a very large area does not mount an unreasonable number of
+// charts (each fetches two metric series).
+const MAX_CHARTS = 24;
 
 interface ComponentsWidgetProps {
   expandHref?: string;
@@ -36,9 +44,10 @@ function pickMetrics(kinds: string[]): { primary: string; secondary: string } {
 }
 
 // ComponentsWidget shows the components that hold the most total task time
-// (residency) — the busiest / most-contended components — in a 2x2 grid. Each
-// chart's two metrics are auto-selected to suit that component (see pickMetrics)
-// and named in a small per-chart legend. Enlarging the widget opens the dashboard.
+// (residency) — the busiest / most-contended components — in a grid whose chart
+// count follows the widget's measured size: as many whole MIN_W × MIN_H cells as
+// fit. Each chart's two metrics are auto-selected to suit that component (see
+// pickMetrics) and named in a small per-chart legend. Enlarging opens the dashboard.
 export default function ComponentsWidget({ expandHref }: ComponentsWidgetProps) {
   const { data, loading, error } = useComponents();
   const { names } = useComponentNames();
@@ -50,10 +59,21 @@ export default function ComponentsWidget({ expandHref }: ComponentsWidgetProps) 
   // locations summed into its chart) matches the dashboard's "Σ N facets" badge.
   const root = useMemo(() => buildLocationTree(names ?? []), [names]);
 
-  const top = (data ?? []).filter((c) => c.task_time > 0).slice(0, COUNT);
-  // 2x2 grid: half the width and half the height per chart (minus the gaps).
-  const cellWidth = Math.max(160, (size.width - GAP) / 2);
-  const cellHeight = Math.max(120, (size.height - GAP) / 2);
+  // How many whole MIN_W × MIN_H cells the measured area can hold, and how many
+  // charts we actually have to show (the busiest components, capped).
+  const cols = Math.max(1, Math.floor((size.width + GAP) / (MIN_W + GAP)));
+  const maxRows = Math.max(1, Math.floor((size.height + GAP) / (MIN_H + GAP)));
+  const available = (data ?? []).filter((c) => c.task_time > 0);
+  const count = Math.min(available.length, cols * maxRows, MAX_CHARTS);
+  const top = available.slice(0, count);
+
+  // Lay the charts out using only as many columns and rows as they actually fill,
+  // then divide the whole area evenly among them — so the grid always fills the
+  // full space (no empty band below) while each cell stays at/above the minimum.
+  const usedCols = Math.max(1, Math.min(cols, count || 1));
+  const usedRows = Math.max(1, Math.ceil((count || 1) / usedCols));
+  const cellWidth = (size.width - (usedCols - 1) * GAP) / usedCols;
+  const cellHeight = (size.height - (usedRows - 1) * GAP) / usedRows;
 
   return (
     <WidgetCard title="Components" expandHref={expandHref} info={<ComponentsOverviewHelp />} contentClassName="p-2">
@@ -61,8 +81,8 @@ export default function ComponentsWidget({ expandHref }: ComponentsWidgetProps) 
           attaches on mount; otherwise the charts keep their default width. */}
       <div
         ref={ref}
-        className="grid h-full min-h-0 grid-cols-2 content-start"
-        style={{ gap: GAP }}
+        className="grid h-full min-h-0 content-start"
+        style={{ gap: GAP, gridTemplateColumns: `repeat(${usedCols}, minmax(0, 1fr))` }}
       >
         {loading ? (
           <div className="text-sm text-muted-foreground">Loading…</div>

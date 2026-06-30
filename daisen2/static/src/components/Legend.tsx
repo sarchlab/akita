@@ -9,15 +9,54 @@ export function SectionLabel({ children }: { children: string }) {
   );
 }
 
+// A Kind / Kind-What segmented toggle, shared by the Tasks and Blocking-reasons
+// sections so each can switch its own coloring granularity independently.
+function ColorModeToggle({
+  mode,
+  onChange,
+  label,
+}: {
+  mode: ColorMode;
+  onChange: (mode: ColorMode) => void;
+  label: string;
+}) {
+  return (
+    <div className="inline-flex shrink-0 overflow-hidden rounded border text-[10px] font-medium" role="group" aria-label={label}>
+      {(["kind", "kind-what"] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          onClick={() => onChange(m)}
+          aria-pressed={mode === m}
+          className={cn(
+            "px-1.5 py-0.5 transition-colors",
+            m === "kind-what" && "border-l",
+            mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+          )}
+        >
+          {m === "kind" ? "Kind" : "Kind-What"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 interface LegendProps {
   taskKeys: string[];
   colorMap: Record<string, string>;
   blockingReasons: string[];
+  // The blocking-reason colors (a separate warm family from the task colors). Falls
+  // back to the task colorMap if not given.
+  milestoneColorMap?: Record<string, string>;
   // Task color-mode toggle (Kind / Kind-What). Rendered only when onColorMode is
   // given — the component view drives its task-count bands with it; the task view
   // has no such control.
   colorMode?: ColorMode;
   onColorMode?: (mode: ColorMode) => void;
+  // The independent blocking-reason color-mode toggle, shown in the Blocking
+  // reasons section when onMilestoneColorMode is given.
+  milestoneColorMode?: ColorMode;
+  onMilestoneColorMode?: (mode: ColorMode) => void;
   // Hover-highlight wiring. When omitted the swatches are a static key, with no
   // dimming and no chart highlight (the task view).
   highlightedKey?: string | null;
@@ -34,13 +73,17 @@ export default function Legend({
   taskKeys,
   colorMap,
   blockingReasons,
+  milestoneColorMap,
   colorMode,
   onColorMode,
+  milestoneColorMode,
+  onMilestoneColorMode,
   highlightedKey = null,
   onHighlight,
   highlightedReason = null,
   onHighlightReason,
 }: LegendProps) {
+  const reasonColorMap = milestoneColorMap ?? colorMap;
   if (taskKeys.length === 0 && blockingReasons.length === 0) return null;
 
   return (
@@ -53,23 +96,7 @@ export default function Legend({
               <TaskTypesHelp />
             </div>
             {onColorMode ? (
-              <div className="inline-flex shrink-0 overflow-hidden rounded border text-[10px] font-medium" role="group" aria-label="Color tasks by">
-                {(["kind", "kind-what"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => onColorMode(mode)}
-                    aria-pressed={colorMode === mode}
-                    className={cn(
-                      "px-1.5 py-0.5 transition-colors",
-                      mode === "kind-what" && "border-l",
-                      colorMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
-                    )}
-                  >
-                    {mode === "kind" ? "Kind" : "Kind-What"}
-                  </button>
-                ))}
-              </div>
+              <ColorModeToggle label="Color tasks by" mode={colorMode ?? "kind-what"} onChange={onColorMode} />
             ) : null}
           </div>
           <ul className="mb-3 mt-2 space-y-0.5">
@@ -105,13 +132,22 @@ export default function Legend({
 
       {blockingReasons.length > 0 && (
         <>
-          <div className="flex items-center gap-1">
-            <SectionLabel>Blocking reasons</SectionLabel>
-            <BlockingReasonsHelp />
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              <SectionLabel>Blocking reasons</SectionLabel>
+              <BlockingReasonsHelp />
+            </div>
+            {onMilestoneColorMode ? (
+              <ColorModeToggle
+                label="Color blocking reasons by"
+                mode={milestoneColorMode ?? "kind-what"}
+                onChange={onMilestoneColorMode}
+              />
+            ) : null}
           </div>
           <ul className="mt-2 space-y-0.5">
             {blockingReasons.map((kind) => {
-              const color = colorMap[kind] ?? "#9ca3af";
+              const color = reasonColorMap[kind] ?? "#9ca3af";
               const active = highlightedReason === kind;
               const dimmed = highlightedReason !== null && !active;
               return (

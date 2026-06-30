@@ -158,6 +158,7 @@ func (s *Server) RegisterTraceAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/compnames", s.httpComponentNames)
 	mux.HandleFunc("/api/compinfo", s.httpComponentInfo)
 	mux.HandleFunc("/api/component_timeline", s.httpComponentTimeline)
+	mux.HandleFunc("/api/top_blocking_resources", s.httpTopBlockingResources)
 	mux.HandleFunc("/api/segments", s.httpSegments)
 	mux.HandleFunc("/api/sim_info", s.httpSimInfo)
 	mux.HandleFunc("/api/topology", s.httpTopology)

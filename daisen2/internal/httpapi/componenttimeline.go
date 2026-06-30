@@ -288,12 +288,21 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy( //nolint:funlen // one cohe
 	start, end float64,
 	numBins int,
 	sample int,
+	groupByKind bool,
 ) (keys []string, bins [][]int) {
 	if numBins < 1 || end <= start {
 		return []string{}, [][]int{}
 	}
 	if sample < 1 {
 		sample = 1
+	}
+
+	// The reason key is the milestone's kind alone, or the finer "kind-what" pair
+	// (e.g. "hardware_resource-vmem-inflight") — mirroring the task-count chart's
+	// group param and the client's taskColorKey, so a band resolves to a color.
+	kindExpr := "m.Kind"
+	if !groupByKind {
+		kindExpr = "m.Kind || '-' || m.What"
 	}
 
 	be := newBinExpr(numBins, start, end)
@@ -345,7 +354,7 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy( //nolint:funlen // one cohe
 		),
 		ivals AS MATERIALIZED (
 			SELECT
-				m.Kind AS k,
+				` + kindExpr + ` AS k,
 				COALESCE(
 					LAG(m.Time) OVER (PARTITION BY m.TaskID ORDER BY m.Time),
 					t.StartTime

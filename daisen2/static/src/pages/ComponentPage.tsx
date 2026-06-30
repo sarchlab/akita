@@ -30,6 +30,7 @@ import MilestoneMarks from "../components/charts/MilestoneMarks";
 import TimeTicks from "../components/charts/TimeTicks";
 import type { StackedComponentInfo } from "../hooks/useCompInfo";
 import { useStackedCompInfo } from "../hooks/useCompInfo";
+import { useAutoColorMode } from "../hooks/useAutoColorMode";
 import { useSegments } from "../hooks/useSegments";
 import { useSimulationRange } from "../hooks/useSimulationRange";
 import { useTraceData } from "../hooks/useTraceData";
@@ -39,7 +40,7 @@ import { useRenderReady } from "../hooks/useRenderReady";
 import type { Segment, Task } from "../types/task";
 import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskColorCoder";
 import type { ColorMode } from "../utils/taskColorCoder";
-import { blockingKindAt, milestonesOf } from "../utils/milestoneViz";
+import { blockingReasonKeyAt, milestonesOf } from "../utils/milestoneViz";
 import { formatSI } from "../utils/siFormat";
 import { cn } from "../lib/utils";
 import { useComponentNames } from "../hooks/useComponentNames";
@@ -1121,6 +1122,8 @@ function ComponentTaskView({
   height,
   colorMap,
   colorMode,
+  milestoneColorMap,
+  milestoneColorMode,
   highlightedKey,
   highlightedTaskId,
   selectedTaskId,
@@ -1142,6 +1145,8 @@ function ComponentTaskView({
   height: number;
   colorMap: Record<string, string>;
   colorMode: ColorMode;
+  milestoneColorMap: Record<string, string>;
+  milestoneColorMode: ColorMode;
   highlightedKey: string | null;
   highlightedTaskId: string | null;
   selectedTaskId: string | null;
@@ -1231,7 +1236,8 @@ function ComponentTaskView({
             taskStart={mainTask.start_time}
             xScale={xScale}
             centerY={centerY}
-            colorMap={colorMap}
+            colorMap={milestoneColorMap}
+            colorMode={milestoneColorMode}
             selectedMilestone={selectedMilestone}
             highlightedReason={reasonHighlight}
             onSelect={onSelectMilestone}
@@ -1256,8 +1262,11 @@ interface HoveredMilestone {
 function ComponentLegend(props: {
   taskKeys: string[];
   colorMap: Record<string, string>;
+  milestoneColorMap: Record<string, string>;
   colorMode: ColorMode;
   onColorMode: (mode: ColorMode) => void;
+  milestoneColorMode: ColorMode;
+  onMilestoneColorMode: (mode: ColorMode) => void;
   blockingReasons: string[];
   highlightedKey: string | null;
   onHighlight: (key: string | null) => void;
@@ -1362,12 +1371,15 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // 50 so a pixel-by-pixel resize does not refetch. Both the task-count and
   // blocking-reason charts use this count so their stacked areas line up.
   const numBins = Math.max(50, Math.min(300, Math.round((size.width - SIDE_PANEL_WIDTH) / 4 / 50) * 50));
-  const { info: stackedInfo, loading: infoLoading } = useStackedCompInfo(componentName, "ConcurrentTaskMilestones", dataRange.startTime, dataRange.endTime, numBins);
-
-  // How tasks are grouped for coloring and for the task-count bands. The same
-  // mode drives the server's grouping (below) and every taskColorKey here, so a
-  // band's key always resolves to a color. Toggled from the legend.
+  // How tasks AND blocking reasons are grouped for coloring and for the stacked
+  // bands. The same mode drives the server's grouping (task-count and
+  // blocking-reason charts) and every taskColorKey here, so a band's key always
+  // resolves to a color. Toggled from the legend.
   const [colorMode, setColorMode] = useState<ColorMode>("kind-what");
+  // Blocking reasons get their own coloring granularity, toggled independently of
+  // tasks (it drives the server's blocking-reason grouping).
+  const [milestoneColorMode, setMilestoneColorMode] = useState<ColorMode>("kind-what");
+  const { info: stackedInfo, loading: infoLoading } = useStackedCompInfo(componentName, "ConcurrentTaskMilestones", dataRange.startTime, dataRange.endTime, numBins, milestoneColorMode);
 
   // Level-of-detail: always fetch the cheap aggregated summary first. Its `total`
   // (tasks overlapping the range) decides whether the per-task view is affordable.
@@ -1442,7 +1454,8 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // What the blocking-reason chart and legend highlight: a hovered reason wins,
   // otherwise the selected blocking reason (the clicked milestone) stays lit so
   // selecting one keeps it highlighted.
-  const reasonHighlight = highlightedReason ?? selectedMilestone?.kind ?? null;
+  const reasonHighlight =
+    highlightedReason ?? (selectedMilestone ? taskColorKey(selectedMilestone, milestoneColorMode) : null);
   const dragRef = useRef<{ pointerId: number; x: number; range: TimeRange } | null>(null);
   const didDragRef = useRef(false);
   const pendingSelectTaskRef = useRef<Task | null>(null);
@@ -1483,15 +1496,26 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // and never depends on which chart loaded first. Keep the previous assignment
   // through every transition: the first load shows gray until colors are ready (the
   // brief gap between the two summaries arriving), and a zoom never reshuffles.
+  // Tasks and blocking reasons draw from separate color families and are assigned
+  // independently — each side colors as soon as its own summary covers the range,
+  // so a slow blocking-reason load never holds back the task colors, or vice versa.
   const colorMapRef = useRef<Record<string, string>>({});
   const colorMap = useMemo(() => {
-    if (!aggMatchesRange || !stackedMatchesRange) return colorMapRef.current;
+    if (!aggMatchesRange) return colorMapRef.current;
     const taskKeys = [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks].map((t) => taskColorKey(t, colorMode));
-    const reasonKeys = [...(stackedInfo?.kinds ?? []), ...milestonesOf(currentTask?.steps).map((step) => step.kind)];
-    const next = buildColorMapFromKeys([...taskKeys, ...(agg?.keys ?? []), ...reasonKeys]);
+    const next = buildColorMapFromKeys([...taskKeys, ...(agg?.keys ?? [])], "task");
     colorMapRef.current = next;
     return next;
-  }, [aggMatchesRange, stackedMatchesRange, childTasks, currentTask, parentTask, tasks, stackedInfo, agg, colorMode]);
+  }, [aggMatchesRange, childTasks, currentTask, parentTask, tasks, agg, colorMode]);
+
+  const milestoneColorMapRef = useRef<Record<string, string>>({});
+  const milestoneColorMap = useMemo(() => {
+    if (!stackedMatchesRange) return milestoneColorMapRef.current;
+    const reasonKeys = [...(stackedInfo?.kinds ?? []), ...milestonesOf(currentTask?.steps).map((step) => taskColorKey(step, milestoneColorMode))];
+    const next = buildColorMapFromKeys(reasonKeys, "milestone");
+    milestoneColorMapRef.current = next;
+    return next;
+  }, [stackedMatchesRange, stackedInfo, currentTask, milestoneColorMode]);
 
   // The task "kind-what" keys for the legend's Tasks subsection (distinct from
   // the blocking-reason kinds, so reasons no longer leak into the task legend).
@@ -1506,21 +1530,10 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     return Array.from(keys).sort();
   }, [childTasks, currentTask, parentTask, tasks, agg, colorMode]);
 
-  // Default the color grouping to "kind" once the finer "kind-what" grouping
-  // would produce more than 10 distinct pairs — too many to tell apart by color.
-  // One-way and only until the user picks a mode, so it doesn't fight the toggle
-  // or churn while zooming.
-  const userPickedColorModeRef = useRef(false);
-  const handleColorMode = (mode: ColorMode) => {
-    userPickedColorModeRef.current = true;
-    setColorMode(mode);
-  };
-  useEffect(() => {
-    if (userPickedColorModeRef.current) return;
-    if (colorMode === "kind-what" && taskColorKeys.length > 10) {
-      setColorMode("kind");
-    }
-  }, [colorMode, taskColorKeys]);
+  // Default tasks to "kind" coloring once "kind-what" would produce more than 10
+  // distinct pairs (blocking reasons downgrade at 8, below) — too many to tell
+  // apart by color.
+  const handleColorMode = useAutoColorMode(colorMode, setColorMode, taskColorKeys.length, 10);
 
   const selectableTaskById = useMemo(() => {
     const map = new Map<string, Task>();
@@ -1572,10 +1585,14 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   const blockingReasons = useMemo(() => {
     const set = new Set<string>(stackedInfo?.kinds ?? []);
     for (const step of milestonesOf(currentTask?.steps)) {
-      set.add(step.kind);
+      set.add(taskColorKey(step, milestoneColorMode));
     }
     return Array.from(set).sort();
-  }, [stackedInfo, currentTask]);
+  }, [stackedInfo, currentTask, milestoneColorMode]);
+
+  // Blocking reasons default to "kind" coloring once "kind-what" exceeds 8 distinct
+  // reasons — too many resource colors to tell apart.
+  const handleMilestoneColorMode = useAutoColorMode(milestoneColorMode, setMilestoneColorMode, blockingReasons.length, 8);
 
   // What's hovered over the two stacked charts, with the time under the cursor:
   // a blocking-reason band (highlight the tasks blocked by that reason at that
@@ -1607,7 +1624,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     if (hoveredSegment) {
       for (const task of tasks) {
         if (task.start_time > hoveredSegment.time || task.end_time < hoveredSegment.time) continue;
-        if (blockingKindAt(task.steps, hoveredSegment.time) === hoveredSegment.kind) ids.add(String(task.id));
+        if (blockingReasonKeyAt(task.steps, hoveredSegment.time, milestoneColorMode) === hoveredSegment.kind) ids.add(String(task.id));
       }
       return ids;
     }
@@ -1619,7 +1636,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
       return ids;
     }
     return null;
-  }, [hoveredSegment, hoveredCount, tasks, rawEnabled, colorMode]);
+  }, [hoveredSegment, hoveredCount, tasks, rawEnabled, colorMode, milestoneColorMode]);
 
   const shiftRange = (nextRange: TimeRange) => {
     if (!Number.isFinite(nextRange.startTime) || !Number.isFinite(nextRange.endTime)) return;
@@ -1865,6 +1882,8 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             height={taskViewHeight}
             colorMap={colorMap}
             colorMode={colorMode}
+            milestoneColorMap={milestoneColorMap}
+            milestoneColorMode={milestoneColorMode}
             highlightedKey={highlightedKey}
             highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
             selectedTaskId={selectedTaskId}
@@ -1948,7 +1967,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           style={{ height: metricLineHeight }}
           onWheel={handleOverviewWheel}
         >
-          <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={colorMap} highlightedKey={reasonHighlight} segments={segmentsData?.segments ?? []} segmentsEnabled={segmentsData?.enabled ?? false} onHoverSegment={setHoveredSegment} onHoverReason={setHighlightedReason} />
+          <ComponentMilestoneAreas info={stackedInfo} range={viewRange} width={leftWidth} height={metricLineHeight} colorMap={milestoneColorMap} highlightedKey={reasonHighlight} segments={segmentsData?.segments ?? []} segmentsEnabled={segmentsData?.enabled ?? false} onHoverSegment={setHoveredSegment} onHoverReason={setHighlightedReason} />
           <div className={CHART_HELP_CORNER} onPointerDown={(e) => e.stopPropagation()}>
             <BlockingReasonsHelp className={CHART_HELP_BUTTON} />
           </div>
@@ -2039,7 +2058,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             milestone={selectedMilestone}
           />
           <div className="-mx-4 border-t" />
-          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} colorMode={colorMode} onColorMode={handleColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={reasonHighlight} onHighlightReason={setHighlightedReason} />
+          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} milestoneColorMap={milestoneColorMap} colorMode={colorMode} onColorMode={handleColorMode} milestoneColorMode={milestoneColorMode} onMilestoneColorMode={handleMilestoneColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={reasonHighlight} onHighlightReason={setHighlightedReason} />
         </div>
     </>
   );

@@ -1,4 +1,5 @@
 import type { TaskStep } from "../types/task";
+import { taskColorKey, type ColorMode } from "./taskColorCoder";
 
 // A selected/inspected blocking milestone: the released reason, the location it
 // was released at, when it was released, and how long the task was blocked on it.
@@ -58,19 +59,24 @@ export function milestonesOf(steps: TaskStep[] | null | undefined): TaskStep[] {
   return (steps ?? []).filter((step) => step.kind !== TAG_STEP_KIND);
 }
 
-// blockingKindAt returns the reason a task is blocked on at time t — the kind of
-// the first milestone at or after t (the next one to be released). Mirrors the
-// backend's findTaskBlockingKind. Returns "" when no milestone remains (the task
-// is running, not blocked).
-export function blockingKindAt(steps: TaskStep[] | null | undefined, t: number): string {
-  let best = "";
+// blockingReasonKeyAt returns the color key of the reason a task is blocked on at
+// time t — the first milestone at or after t (the next to be released), keyed by
+// kind or the finer kind-what to match the blocking-reason chart's bands so a
+// hovered band lights exactly the tasks it counts. Returns "" when no milestone
+// remains (the task is running, not blocked).
+export function blockingReasonKeyAt(
+  steps: TaskStep[] | null | undefined,
+  t: number,
+  mode: ColorMode = "kind-what",
+): string {
+  let best: TaskStep | null = null;
   let bestTime = Infinity;
   for (const step of steps ?? []) {
     if (step.kind === TAG_STEP_KIND) continue;
     if (step.time >= t && step.time < bestTime) {
       bestTime = step.time;
-      best = step.kind;
+      best = step;
     }
   }
-  return best;
+  return best ? taskColorKey(best, mode) : "";
 }
