@@ -159,6 +159,8 @@ func (s *Server) RegisterTraceAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/compinfo", s.httpComponentInfo)
 	mux.HandleFunc("/api/component_timeline", s.httpComponentTimeline)
 	mux.HandleFunc("/api/top_blocking_resources", s.httpTopBlockingResources)
+	mux.HandleFunc("/api/resource_blocking", s.httpResourceBlocking)
+	mux.HandleFunc("/api/resource_tasks", s.httpResourceTasks)
 	mux.HandleFunc("/api/segments", s.httpSegments)
 	mux.HandleFunc("/api/sim_info", s.httpSimInfo)
 	mux.HandleFunc("/api/topology", s.httpTopology)
@@ -186,6 +188,7 @@ func (s *Server) RegisterTraceRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/dashboard", s.serveIndex)
 	mux.HandleFunc("/component", s.serveIndex)
 	mux.HandleFunc("/task", s.serveIndex)
+	mux.HandleFunc("/resource", s.serveIndex)
 	// Enlarged single-widget pages (/view/<widget>). A trailing-slash pattern
 	// matches the whole subtree so a hard refresh serves the SPA shell.
 	mux.HandleFunc("/view/", s.serveIndex)

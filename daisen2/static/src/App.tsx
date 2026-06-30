@@ -6,6 +6,7 @@ import WidgetPage from "./pages/WidgetPage";
 import DashboardPage from "./pages/DashboardPage";
 import TaskChartPage from "./pages/TaskChartPage";
 import ComponentPage from "./pages/ComponentPage";
+import ResourcePage from "./pages/ResourcePage";
 
 // Redirect to the canonical /dashboard while preserving any query state, so
 // shared/back-compat links like /dashboard?widget=…&starttime=… are not discarded.
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="task" element={<TaskChartPage />} />
         <Route path="component" element={<ComponentPage />} />
+        <Route path="resource" element={<ResourcePage />} />
         <Route path="*" element={<RedirectToDashboard />} />
       </Route>
     </Routes>

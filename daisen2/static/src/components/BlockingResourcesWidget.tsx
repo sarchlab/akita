@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useTopBlockingResources } from "../hooks/useTopBlockingResources";
 import WidgetCard from "./WidgetCard";
 
@@ -35,25 +36,27 @@ export default function BlockingResourcesWidget({
         // the layout works at a third-width card or the enlarged page alike.
         <ol className="flex flex-col gap-1">
           {resources.map((resource, index) => (
-            <li
-              key={resource.what}
-              className="relative flex items-center gap-2 overflow-hidden rounded px-2 py-1 text-xs"
-              title={`${resource.count.toLocaleString()} blocking event${resource.count === 1 ? "" : "s"} across ${resource.task_count.toLocaleString()} task${resource.task_count === 1 ? "" : "s"}`}
-            >
-              <span
-                className="absolute inset-y-0 left-0 rounded bg-primary/15"
-                style={{ width: `${max > 0 ? (resource.count / max) * 100 : 0}%` }}
-                aria-hidden="true"
-              />
-              <span className="relative w-5 shrink-0 text-right tabular-nums text-muted-foreground">
-                {index + 1}
-              </span>
-              <span className="relative min-w-0 flex-1 truncate font-medium" title={resource.what}>
-                {resource.what}
-              </span>
-              <span className="relative shrink-0 tabular-nums text-muted-foreground">
-                {resource.count.toLocaleString()}
-              </span>
+            <li key={resource.what}>
+              <Link
+                to={`/resource?what=${encodeURIComponent(resource.what)}`}
+                className="relative flex items-center gap-2 overflow-hidden rounded px-2 py-1 text-xs transition-colors hover:bg-muted"
+                title={`${resource.count.toLocaleString()} blocking event${resource.count === 1 ? "" : "s"} across ${resource.task_count.toLocaleString()} task${resource.task_count === 1 ? "" : "s"} — open resource view`}
+              >
+                <span
+                  className="absolute inset-y-0 left-0 rounded bg-primary/15"
+                  style={{ width: `${max > 0 ? (resource.count / max) * 100 : 0}%` }}
+                  aria-hidden="true"
+                />
+                <span className="relative w-5 shrink-0 text-right tabular-nums text-muted-foreground">
+                  {index + 1}
+                </span>
+                <span className="relative min-w-0 flex-1 truncate font-medium" title={resource.what}>
+                  {resource.what}
+                </span>
+                <span className="relative shrink-0 tabular-nums text-muted-foreground">
+                  {resource.count.toLocaleString()}
+                </span>
+              </Link>
             </li>
           ))}
         </ol>
