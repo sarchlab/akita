@@ -10,9 +10,18 @@ import { useElementSize } from "../hooks/useElementSize";
 import TraceChartLayout from "../components/TraceChartLayout";
 import TimeTicks from "../components/charts/TimeTicks";
 import { SectionLabel } from "../components/Legend";
+import MilestoneMarks from "../components/charts/MilestoneMarks";
 import { milestonesOf } from "../utils/milestoneViz";
+import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskColorCoder";
 import type { Task } from "../types/task";
-import { AXIS_LABEL_FONT_SIZE, COLOR_AXIS_LABEL, COLOR_GRID, COLOR_TASK_FALLBACK } from "../components/charts/chartStyle";
+import {
+  AXIS_LABEL_FONT_SIZE,
+  COLOR_AXIS_LABEL,
+  COLOR_BAR_STROKE,
+  COLOR_GRID,
+  barOpacity,
+  barStrokeOpacity,
+} from "../components/charts/chartStyle";
 
 // When a resource blocks at most this many tasks, show a per-task gantt (each
 // task's wait for the resource highlighted) instead of the density area.
@@ -70,9 +79,16 @@ export default function ResourcePage() {
   const what = searchParams.get("what") ?? "";
   const { startTime: simStart, endTime: simEnd } = useSimulationRange();
 
-  const [viewRange, setViewRange] = useState<TimeRange>({ startTime: simStart, endTime: simEnd });
-  const [userZoomed, setUserZoomed] = useState(false);
-  // Follow the sim range until the user pans/zooms.
+  // An explicit ?starttime/&endtime pins the range (shareable / back-compat);
+  // otherwise the view follows the simulation range until the user pans/zooms.
+  const urlStart = Number(searchParams.get("starttime"));
+  const urlEnd = Number(searchParams.get("endtime"));
+  const urlHasRange =
+    searchParams.has("starttime") && Number.isFinite(urlStart) && Number.isFinite(urlEnd) && urlEnd > urlStart;
+  const [viewRange, setViewRange] = useState<TimeRange>(
+    urlHasRange ? { startTime: urlStart, endTime: urlEnd } : { startTime: simStart, endTime: simEnd },
+  );
+  const [userZoomed, setUserZoomed] = useState(urlHasRange);
   useEffect(() => {
     if (!userZoomed) setViewRange({ startTime: simStart, endTime: simEnd });
   }, [simStart, simEnd, userZoomed]);
@@ -92,6 +108,19 @@ export default function ResourcePage() {
   // Few tasks → per-task gantt; many → the density area.
   const showGantt = !!data && data.total > 0 && data.total <= GANTT_THRESHOLD;
   const { tasks } = useResourceTasks(what, dataRange.startTime, dataRange.endTime, showGantt);
+
+  // Color the gantt like the component/task views: cool task bars + warm milestone
+  // waves (separate palettes), with this resource's blocking reason highlighted.
+  const resourceKey = taskColorKey({ kind: HW_RESOURCE_KIND, what });
+  const { taskColorMap, milestoneColorMap } = useMemo(() => {
+    const taskKeys = tasks.map((t) => taskColorKey(t));
+    const reasonKeys: string[] = [];
+    for (const t of tasks) for (const step of milestonesOf(t.steps)) reasonKeys.push(taskColorKey(step));
+    return {
+      taskColorMap: buildColorMapFromKeys(taskKeys, "task"),
+      milestoneColorMap: buildColorMapFromKeys(reasonKeys, "milestone"),
+    };
+  }, [tasks]);
 
   // Pan/zoom: the range stays local for smooth interaction and drives the data
   // fetch (debounced). Refs keep the wheel listener reading the latest values.
@@ -256,27 +285,47 @@ export default function ResourcePage() {
 
               {showGantt
                 ? tasks.map((task, i) => {
+                    // Each task is a bar (cool task color) with its milestone waves
+                    // over it — the same primitives the component/task views use —
+                    // and this resource's reason highlighted (others dim).
                     const availH = height - MARGIN.top - MARGIN.bottom;
-                    const rowH = Math.min(26, Math.max(5, availH / Math.max(1, tasks.length)));
-                    const y = MARGIN.top + i * rowH;
-                    const barY = y + 2;
-                    const barH = Math.max(3, rowH - 6);
-                    const x0 = xScale(task.start_time);
-                    const x1 = xScale(task.end_time);
-                    const intervals = blockedIntervals(task, what);
-                    const blocked = intervals.reduce((sum, iv) => sum + (iv.hi - iv.lo), 0);
+                    const rowH = Math.min(26, Math.max(6, availH / Math.max(1, tasks.length)));
+                    const barH = Math.max(4, Math.min(10, rowH - 6));
+                    const barY = MARGIN.top + i * rowH + (rowH - barH) / 2;
+                    const centerY = barY + barH / 2;
+                    const left = MARGIN.left;
+                    const right = width - MARGIN.right;
+                    const x0 = Math.max(left, Math.min(right, xScale(task.start_time)));
+                    const x1 = Math.max(left, Math.min(right, xScale(task.end_time)));
+                    const steps = milestonesOf(task.steps).slice().sort((a, b) => a.time - b.time);
+                    const blocked = blockedIntervals(task, what).reduce((sum, iv) => sum + (iv.hi - iv.lo), 0);
                     return (
                       <g key={task.id}>
                         <title>{`${task.kind} ${task.what} @ ${task.location} — blocked ${blocked.toLocaleString()} on ${what}`}</title>
-                        {/* The whole task, muted. */}
-                        <rect x={x0} y={barY} width={Math.max(1, x1 - x0)} height={barH} rx={1} fill={COLOR_TASK_FALLBACK} opacity={0.3} />
-                        {/* The part it spent waiting for this resource, highlighted. */}
-                        {intervals.map((iv, k) => (
-                          <g key={k}>
-                            <rect x={xScale(iv.lo)} y={barY} width={Math.max(1, xScale(iv.hi) - xScale(iv.lo))} height={barH} rx={1} fill={FILL} fillOpacity={0.85} />
-                            <circle cx={xScale(iv.hi)} cy={barY + barH / 2} r={2.5} fill={STROKE} />
-                          </g>
-                        ))}
+                        <rect
+                          x={x0}
+                          y={barY}
+                          width={Math.max(1, x1 - x0)}
+                          height={barH}
+                          fill={lookupColor(taskColorMap, task)}
+                          stroke={COLOR_BAR_STROKE}
+                          strokeWidth={0.75}
+                          strokeOpacity={barStrokeOpacity({ selected: false, highlighted: false, hasHighlight: false })}
+                          opacity={barOpacity({ selected: false, highlighted: false, hasHighlight: false, hasSelection: false })}
+                        />
+                        {steps.length > 0 && (
+                          <MilestoneMarks
+                            steps={steps}
+                            taskStart={task.start_time}
+                            xScale={xScale}
+                            centerY={centerY}
+                            colorMap={milestoneColorMap}
+                            colorMode="kind-what"
+                            selectedMilestone={null}
+                            highlightedReason={resourceKey}
+                            onSelect={() => {}}
+                          />
+                        )}
                       </g>
                     );
                   })
