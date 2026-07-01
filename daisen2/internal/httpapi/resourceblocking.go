@@ -31,7 +31,7 @@ type ResourceTimelineResponse struct {
 // resourceBlockingTaskBudget bounds the tasks an auto-sampled occupancy scan
 // visits; a resource blocking more than this is strided 1-in-N so the scan stays
 // responsive.
-const resourceBlockingTaskBudget = 60_000
+const resourceBlockingTaskBudget = 20_000
 
 // ResourceBlockingOccupancy bins how many tasks are blocked on `what` (a
 // hardware_resource milestone's name) in each time bin. It finds the resource's
@@ -52,6 +52,11 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 		"CREATE INDEX IF NOT EXISTS idx_milestone_Kind_What ON milestone(Kind, What, TaskID)")
 	r.ensureIndex(ctx, "Building index idx_milestone_TaskID_Time",
 		"CREATE INDEX IF NOT EXISTS idx_milestone_TaskID_Time ON milestone(TaskID, Time)")
+	// Covering index so a task's time span is read from the index, not fetched from
+	// the 76M-row trace table per task — otherwise finding which of a resource's
+	// tasks overlap the window costs one random row fetch each (seconds).
+	r.ensureIndex(ctx, "Building index idx_trace_ID_time",
+		"CREATE INDEX IF NOT EXISTS idx_trace_ID_time ON trace(ID, StartTime, EndTime)")
 
 	startStr := strconv.FormatFloat(start, 'f', -1, 64)
 	endStr := strconv.FormatFloat(end, 'f', -1, 64)
@@ -89,7 +94,11 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 
 	sqlStr := `
 		WITH bx AS (
-			SELECT DISTINCT TaskID FROM milestone WHERE Kind = 'hardware_resource' AND What = ?
+			SELECT DISTINCT m.TaskID
+			FROM milestone m
+			JOIN trace t ON t.ID = m.TaskID
+			WHERE m.Kind = 'hardware_resource' AND m.What = ?
+				AND t.EndTime > ` + be.startStr + ` AND t.StartTime < ` + be.endStr + `
 		),
 		ivals AS MATERIALIZED (
 			SELECT
@@ -148,6 +157,8 @@ func (r *SQLiteTraceReader) TasksBlockingOn(
 	}
 	r.ensureIndex(ctx, "Building index idx_milestone_Kind_What",
 		"CREATE INDEX IF NOT EXISTS idx_milestone_Kind_What ON milestone(Kind, What, TaskID)")
+	r.ensureIndex(ctx, "Building index idx_trace_ID_time",
+		"CREATE INDEX IF NOT EXISTS idx_trace_ID_time ON trace(ID, StartTime, EndTime)")
 
 	s := strconv.FormatFloat(start, 'f', -1, 64)
 	e := strconv.FormatFloat(end, 'f', -1, 64)
