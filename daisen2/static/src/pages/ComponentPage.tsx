@@ -90,6 +90,14 @@ const TASK_VIEW_MILESTONE_BAND = 18;
 // stays visible behind sub-tasks that span its full duration.
 const NEST_PAD = 3;
 
+// Sibling-group dependency arrows. Tasks in this component that share a parent
+// living outside it (a request's phases at one port) are packed together and
+// linked by a small arrow that arcs above the bars. ARROW_TOP_PAD reserves room
+// above the top row so a row-0 arc is not clipped; ARROW_LIFT is how high the
+// arc bows over the bar tops.
+const ARROW_TOP_PAD = 14;
+const ARROW_LIFT = 9;
+
 interface TimeRange {
   startTime: number;
   endTime: number;
@@ -234,7 +242,19 @@ function tasksAtLevel(task: LayoutTask, depth: number, output: LayoutTask[]) {
   }
 }
 
-function assignYIndices(tasks: LayoutTask[]) {
+// Pack tasks into concurrency rows. When groupOf maps a task id to a group key
+// (siblings sharing an out-of-component parent — a request's phases at one
+// port), the members are packed together as one block that reserves its whole
+// time envelope, so they stay on adjacent rows (and, when disjoint in time, the
+// same row) with nothing unrelated slotted between them. Grouping only decides
+// which row a bar lands on, never its height: assignDimensionLevel gives every
+// top-level task the same height regardless, so a grouped bar looks identical
+// to an ungrouped one.
+function assignYIndices(tasks: LayoutTask[], groupOf?: Map<string, string> | null) {
+  if (groupOf && groupOf.size && tasks.some((task) => groupOf.has(String(task.id)))) {
+    return assignYIndicesGrouped(tasks, groupOf);
+  }
+
   const rows: LayoutTask[][] = [];
   let maxYIndex = -1;
   tasks.sort((a, b) => a.start_time - b.start_time);
@@ -250,6 +270,92 @@ function assignYIndices(tasks: LayoutTask[]) {
     rows[index].push(task);
     task.yIndex = index;
     maxYIndex = Math.max(maxYIndex, index);
+  }
+
+  return maxYIndex;
+}
+
+interface PackBlock {
+  start: number;
+  end: number;
+  height: number;
+  members: { task: LayoutTask; localY: number }[];
+}
+
+// Group-aware row packing. Each sibling group is packed internally (members keep
+// full height), then reserved as a bounding-box block that is dropped into the
+// lowest free row band; singletons are height-1 blocks. Result: a request's
+// phases occupy a contiguous block instead of being scattered across rows.
+function assignYIndicesGrouped(tasks: LayoutTask[], groupOf: Map<string, string>) {
+  const groups = new Map<string, LayoutTask[]>();
+  const blocks: PackBlock[] = [];
+
+  for (const task of tasks) {
+    const gid = groupOf.get(String(task.id));
+    if (gid == null) {
+      blocks.push({
+        start: task.start_time,
+        end: task.effEnd ?? task.end_time,
+        height: 1,
+        members: [{ task, localY: 0 }],
+      });
+      continue;
+    }
+    let members = groups.get(gid);
+    if (!members) {
+      members = [];
+      groups.set(gid, members);
+    }
+    members.push(task);
+  }
+
+  for (const members of groups.values()) {
+    // Pack members among themselves (plain packing, no group key), then reserve
+    // the group's bounding box across (localMax + 1) rows.
+    const localMax = assignYIndices(members);
+    let start = Infinity;
+    let end = -Infinity;
+    for (const task of members) {
+      start = Math.min(start, task.start_time);
+      end = Math.max(end, task.effEnd ?? task.end_time);
+    }
+    blocks.push({
+      start,
+      end,
+      height: localMax + 1,
+      members: members.map((task) => ({ task, localY: task.yIndex ?? 0 })),
+    });
+  }
+
+  blocks.sort((a, b) => a.start - b.start);
+  const rowIntervals: { start: number; end: number }[][] = [];
+  const rowFree = (r: number, start: number, end: number) => {
+    const row = rowIntervals[r];
+    if (!row) return true;
+    return !row.some((iv) => start < iv.end && iv.start < end);
+  };
+
+  let maxYIndex = -1;
+  for (const block of blocks) {
+    let base = 0;
+    for (;;) {
+      let fits = true;
+      for (let k = 0; k < block.height; k++) {
+        if (!rowFree(base + k, block.start, block.end)) {
+          fits = false;
+          break;
+        }
+      }
+      if (fits) break;
+      base++;
+    }
+    for (let k = 0; k < block.height; k++) {
+      (rowIntervals[base + k] ??= []).push({ start: block.start, end: block.end });
+    }
+    for (const { task, localY } of block.members) {
+      task.yIndex = base + localY;
+      maxYIndex = Math.max(maxYIndex, base + localY);
+    }
   }
 
   return maxYIndex;
@@ -282,16 +388,23 @@ function padTaskHeight(height: number) {
   return Math.max(1, height - gap);
 }
 
-function assignDimensionLevel(root: LayoutTask, parentLevelHeight: number, depth: number) {
+function assignDimensionLevel(
+  root: LayoutTask,
+  parentLevelHeight: number,
+  depth: number,
+  groupOf?: Map<string, string> | null,
+) {
   if (parentLevelHeight < 2) return 0;
 
   const levelTasks: LayoutTask[] = [];
   tasksAtLevel(root, depth, levelTasks);
   if (!levelTasks.length) return 0;
 
+  // groupOf only matches top-level ids, so it only affects depth 0 (root's
+  // children); deeper levels fall through to plain packing.
   let globalMaxY = -1;
   for (const task of levelTasks) {
-    globalMaxY = Math.max(globalMaxY, assignYIndices(task.subTasks));
+    globalMaxY = Math.max(globalMaxY, assignYIndices(task.subTasks, groupOf));
   }
 
   if (globalMaxY === -1) return 0;
@@ -326,14 +439,90 @@ function assignDimensionLevel(root: LayoutTask, parentLevelHeight: number, depth
   return paddedTaskHeight;
 }
 
-function assignDimensions(root: LayoutTask, initialDim: TaskDim) {
+function assignDimensions(root: LayoutTask, initialDim: TaskDim, groupOf?: Map<string, string> | null) {
   let taskHeight = initialDim.height;
   let depth = 0;
   root.dim = initialDim;
   while (taskHeight > 0) {
-    taskHeight = assignDimensionLevel(root, taskHeight, depth);
+    taskHeight = assignDimensionLevel(root, taskHeight, depth, groupOf);
     depth++;
   }
+}
+
+interface DepArrow {
+  from: string;
+  to: string;
+  // Source/target anchors are the top-center of each bar; the arrow arcs up
+  // between them so it reads left-to-right along the request's flow.
+  sx: number;
+  sy: number;
+  tx: number;
+  ty: number;
+}
+
+// Two tasks in this component that share a parent living OUTSIDE the component
+// are the same request's phases (e.g. a port's incoming_buffer + req_in under
+// one requester). buildTaskTree cannot nest them here (the parent is in another
+// component), so group them by that parent id for packing and a dependency
+// arrow. Parents that are in-component already nest their children, so they are
+// skipped; only a parent with >= 2 in-component children forms a group, so a
+// lone child never pays for an extra grouping row.
+function computeSiblingGroups(tasks: LayoutTask[]): Map<string, string> {
+  const inComponent = new Set(tasks.map((task) => String(task.id)));
+  const byParent = new Map<string, string[]>();
+  for (const task of tasks) {
+    const pid = String(task.parent_id ?? "");
+    if (!pid || inComponent.has(pid)) continue;
+    let ids = byParent.get(pid);
+    if (!ids) {
+      ids = [];
+      byParent.set(pid, ids);
+    }
+    ids.push(String(task.id));
+  }
+
+  const groupOf = new Map<string, string>();
+  for (const [pid, ids] of byParent) {
+    if (ids.length < 2) continue;
+    for (const id of ids) groupOf.set(id, pid);
+  }
+  return groupOf;
+}
+
+// One arrow per consecutive pair within each group, in time order, linking the
+// laid-out bars. Requires dims to be assigned first.
+function buildDependencyArrows(tasks: LayoutTask[], groupOf: Map<string, string>): DepArrow[] {
+  if (!groupOf.size) return [];
+
+  const byGroup = new Map<string, LayoutTask[]>();
+  for (const task of tasks) {
+    const gid = groupOf.get(String(task.id));
+    if (gid == null || !task.dim) continue;
+    let members = byGroup.get(gid);
+    if (!members) {
+      members = [];
+      byGroup.set(gid, members);
+    }
+    members.push(task);
+  }
+
+  const arrows: DepArrow[] = [];
+  for (const members of byGroup.values()) {
+    members.sort((a, b) => a.start_time - b.start_time || a.end_time - b.end_time);
+    for (let i = 0; i + 1 < members.length; i++) {
+      const a = members[i].dim!;
+      const b = members[i + 1].dim!;
+      arrows.push({
+        from: String(members[i].id),
+        to: String(members[i + 1].id),
+        sx: a.x + a.width / 2,
+        sy: a.y,
+        tx: b.x + b.width / 2,
+        ty: b.y,
+      });
+    }
+  }
+  return arrows;
 }
 
 function buildComponentTaskLayout(
@@ -344,21 +533,36 @@ function buildComponentTaskLayout(
   endTime: number,
   rowHeight: number,
 ) {
-  const clonedTasks = cloneTasks(tasks);
+  // Drop zero-duration tasks (e.g. an instantaneous outgoing_buffer enqueue):
+  // they would render as unclickable 1px slivers yet still consume a packing
+  // row, so they only add noise without conveying a span. Removed before the
+  // tree/packing so their rows are reclaimed too. (Nested sub-pixel bars are
+  // already filtered from `layout` below; this also covers top-level ones.)
+  const clonedTasks = cloneTasks(tasks.filter((task) => task.end_time > task.start_time));
   const root = buildTaskTree(clonedTasks);
+  const groupOf = computeSiblingGroups(clonedTasks);
   // Give each top-level concurrency row a fixed rowHeight so bars stay legible no
   // matter how many overlap; the chart then grows past its region and scrolls.
   // When few rows are needed, fall back to filling the region (no wasted space).
-  const topRows = assignYIndices(root.subTasks) + 1;
-  const contentHeight = Math.max(regionHeight, topRows * rowHeight);
-  assignDimensions(root, {
-    x: 0,
-    y: 0,
-    width,
-    height: contentHeight,
-    startTime,
-    endTime,
-  });
+  const topRows = assignYIndices(root.subTasks, groupOf) + 1;
+  // Reserve a strip above the top row for the arcs, but only when there is a
+  // group to draw one — components without sibling groups are laid out exactly
+  // as before (zero visual change).
+  const arrowTopPad = groupOf.size ? ARROW_TOP_PAD : 0;
+  const bandHeight = Math.max(regionHeight - arrowTopPad, topRows * rowHeight);
+  assignDimensions(
+    root,
+    {
+      x: 0,
+      y: arrowTopPad,
+      width,
+      height: bandHeight,
+      startTime,
+      endTime,
+    },
+    groupOf,
+  );
+  const contentHeight = bandHeight + arrowTopPad;
 
   const layout = clonedTasks
     .sort((a, b) => a.level - b.level)
@@ -370,7 +574,9 @@ function buildComponentTaskLayout(
       return true;
     });
 
-  return { layout, contentHeight, topRows };
+  const arrows = buildDependencyArrows(clonedTasks, groupOf);
+
+  return { layout, contentHeight, topRows, arrows };
 }
 
 function ComponentTopAxis({ width, height, range }: { width: number; height: number; range: TimeRange }) {
@@ -443,7 +649,7 @@ function ComponentTimeline({
   // so we can show "scroll for more" affordances at each end. Both stay hidden when
   // everything fits; the top one also hides at the very top, the bottom at the end.
   const [scrollHint, setScrollHint] = useState({ canUp: false, hiddenAbove: 0, canDown: false, hiddenBelow: 0 });
-  const { layout: taskLayout, contentHeight, topRows } = buildComponentTaskLayout(tasks, width, height, range.startTime, range.endTime, rowHeight);
+  const { layout: taskLayout, contentHeight, topRows, arrows: depArrows } = buildComponentTaskLayout(tasks, width, height, range.startTime, range.endTime, rowHeight);
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
 
   const taskById = useMemo(() => {
@@ -660,6 +866,36 @@ function ComponentTimeline({
           );
         })}
           </g>
+
+          {/* Sibling-dependency arrows: a small arc over the bars linking the
+              phases of one request (tasks sharing an out-of-component parent).
+              Subtle by default; emphasized when either endpoint is selected or
+              highlighted so following a request's flow is easy. */}
+          {depArrows.length > 0 && (
+            <g className="dep-arrow" pointerEvents="none">
+              {depArrows.map((arrow) => {
+                const active =
+                  selectedTaskId === arrow.from ||
+                  selectedTaskId === arrow.to ||
+                  highlightedTaskId === arrow.from ||
+                  highlightedTaskId === arrow.to;
+                const color = active ? "#0f172a" : "#64748b";
+                const opacity = active ? 1 : 0.4;
+                const strokeWidth = active ? 2 : 1.25;
+                const peakY = Math.max(2, Math.min(arrow.sy, arrow.ty) - ARROW_LIFT);
+                const d = `M ${arrow.sx} ${arrow.sy} C ${arrow.sx} ${peakY}, ${arrow.tx} ${peakY}, ${arrow.tx} ${arrow.ty}`;
+                return (
+                  <g key={`${arrow.from}-${arrow.to}`} opacity={opacity}>
+                    <path d={d} fill="none" stroke={color} strokeWidth={strokeWidth} />
+                    <path
+                      d={`M ${arrow.tx - 3.5} ${arrow.ty - 5.5} L ${arrow.tx + 3.5} ${arrow.ty - 5.5} L ${arrow.tx} ${arrow.ty} Z`}
+                      fill={color}
+                    />
+                  </g>
+                );
+              })}
+            </g>
+          )}
 
           <TimeTicks ticks={ticks} xScale={xScale} gridTop={0} gridBottom={contentHeight} />
 
@@ -1341,7 +1577,16 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   );
   const { tasks: childTaskMatches, loading: childTasksLoading } = useTraceData(childTaskQuery);
   const childTasks = useMemo(
-    () => (currentTask ? childTaskMatches.filter((task) => String(task.parent_id) === String(currentTask.id)) : []),
+    // Drop zero-duration children (e.g. instantaneous outgoing_buffer enqueues)
+    // for the same reason the main gantt does: in the Current Task band they
+    // render as unclickable 1px slivers. This keeps the subtask bars, their row
+    // count/height, and the color legend consistent with the gantt.
+    () =>
+      currentTask
+        ? childTaskMatches.filter(
+            (task) => String(task.parent_id) === String(currentTask.id) && task.end_time > task.start_time,
+          )
+        : [],
     [childTaskMatches, currentTask?.id],
   );
   const [hoveredTask, setHoveredTask] = useState<Task | null>(null);
