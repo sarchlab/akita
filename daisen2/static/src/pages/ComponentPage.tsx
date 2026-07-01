@@ -25,6 +25,9 @@ import {
 } from "../components/charts/chartStyle";
 import BandLabel from "../components/charts/BandLabel";
 import { GapHatchDef, GapRects } from "../components/charts/GapHatch";
+import GapShading from "../components/charts/GapShading";
+import TimeZoomControls, { ZOOM_BTN_CLASS } from "../components/charts/TimeZoomControls";
+import YAxisOverlay from "../components/charts/YAxisOverlay";
 import LoadingCurve from "../components/charts/LoadingCurve";
 import MilestoneMarks from "../components/charts/MilestoneMarks";
 import TimeTicks from "../components/charts/TimeTicks";
@@ -385,35 +388,6 @@ function ComponentTopAxis({ width, height, range }: { width: number; height: num
   );
 }
 
-// Zoom toolbar button styling, shared by the global time-zoom control and the
-// gantt's row-zoom control so both toolbars read identically.
-const ZOOM_BTN_CLASS = "rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-primary";
-
-// TimeZoomControls is the horizontal (time-axis) zoom widget. It is rendered once
-// at the page level so time zoom is always available — independent of whether the
-// per-task gantt is shown. onZoom(dir) zooms out for dir > 0 and in for dir < 0.
-function TimeZoomControls({ onZoom, className }: { onZoom: (dir: number) => void; className?: string }) {
-  return (
-    <div
-      className={cn(
-        "z-10 flex items-center gap-0.5 rounded border bg-white/90 px-1 py-0.5 shadow-sm",
-        className,
-      )}
-      // stopPropagation so a click on the toolbar doesn't reach the left column's
-      // pan/drag handlers (which capture the pointer and would swallow the click).
-      onPointerDown={(event) => event.stopPropagation()}
-    >
-      <span className="select-none px-0.5 text-[10px] font-medium text-muted-foreground">time</span>
-      <button type="button" className={ZOOM_BTN_CLASS} title="Zoom time out" onClick={() => onZoom(1)}>
-        <Minus className="h-4 w-4" />
-      </button>
-      <button type="button" className={ZOOM_BTN_CLASS} title="Zoom time in" onClick={() => onZoom(-1)}>
-        <Plus className="h-4 w-4" />
-      </button>
-    </div>
-  );
-}
-
 interface ComponentTimelineProps {
   name: string;
   tasks: Task[];
@@ -740,16 +714,6 @@ function ComponentTimeline({
 }
 
 // formatCount renders an axis count compactly: 60000 -> "60k", 1500000 -> "1.5M".
-function formatCount(n: number): string {
-  const abs = Math.abs(n);
-  if (abs >= 1e9) return `${+(n / 1e9).toFixed(1)}B`;
-  if (abs >= 1e6) return `${+(n / 1e6).toFixed(1)}M`;
-  if (abs >= 1e3) return `${+(n / 1e3).toFixed(1)}k`;
-  return String(n);
-}
-
-// Roughly one repeated y-value label per this many pixels of chart width.
-const Y_LABEL_SPACING = 450;
 
 // YAxisOverlay draws horizontal value gridlines for a count chart, repeating the
 // value label across the width — one column roughly every Y_LABEL_SPACING px, both
@@ -757,69 +721,6 @@ const Y_LABEL_SPACING = 450;
 // stays readable over the filled areas of a wide chart. Shared by the task-count and
 // blocking-reason charts (tickCount left at the default) and the per-task gantt,
 // which passes a larger tickCount so labels stay visible in its tall, scrolling SVG.
-function YAxisOverlay({ yScale, width, tickCount = 4 }: { yScale: d3.ScaleLinear<number, number>; width: number; tickCount?: number }) {
-  const left = 5;
-  const right = Math.max(left + 1, width - 5);
-  const intervals = Math.max(1, Math.round((right - left) / Y_LABEL_SPACING));
-  const columns = Array.from({ length: intervals + 1 }, (_, i) => left + (i / intervals) * (right - left));
-  // Skip the 0 baseline (it's implicit at the axis) and any non-integer ticks a
-  // tiny range would produce.
-  const ticks = yScale.ticks(tickCount).filter((tick) => Number.isInteger(tick) && tick > 0);
-  return (
-    <g pointerEvents="none">
-      {ticks.map((tick) => {
-        const y = safeScale(yScale, tick);
-        const labelY = Math.max(9, y - 3);
-        return (
-          <g key={tick}>
-            <line x1={left} x2={right} y1={y} y2={y} stroke="#94a3b8" strokeDasharray="3,3" opacity={0.45} />
-            {columns.map((cx, i) => (
-              <text
-                key={i}
-                x={cx}
-                y={labelY}
-                textAnchor={i === 0 ? "start" : i === columns.length - 1 ? "end" : "middle"}
-                fontSize="10"
-                fill="#475569"
-                stroke="#ffffff"
-                strokeWidth={2.5}
-                paintOrder="stroke"
-              >
-                {formatCount(tick)}
-              </text>
-            ))}
-          </g>
-        );
-      })}
-    </g>
-  );
-}
-
-// GapShading hatches the time ranges where no trace was collected, matching the
-// component gantt's treatment so the overview charts read consistently. Drawn on
-// top of the filled areas (it is faint) so a gap is visible even over a band.
-function GapShading({
-  gaps,
-  xScale,
-  height,
-  patternId,
-}: {
-  gaps: Segment[];
-  xScale: d3.ScaleLinear<number, number>;
-  height: number;
-  patternId: string;
-}) {
-  if (gaps.length === 0) return null;
-  return (
-    <>
-      <defs>
-        <GapHatchDef id={patternId} />
-      </defs>
-      <GapRects gaps={gaps} xScale={xScale} patternId={patternId} top={0} height={height} />
-    </>
-  );
-}
-
 // AggregatedTimeline is the level-of-detail replacement for ComponentTimeline
 // when the visible range holds too many tasks to draw one element each. It draws
 // a stacked-area density chart from the server's per-bin, per-"Kind-What" counts:
