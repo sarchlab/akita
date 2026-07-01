@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import * as d3 from "d3";
 import { useResourceBlocking } from "../hooks/useResourceBlocking";
 import { useResourceTasks } from "../hooks/useResourceTasks";
@@ -79,6 +79,7 @@ function blockedIntervals(task: Task, what: string): { lo: number; hi: number }[
 // a task shows its detail in the side panel.
 export default function ResourcePage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const what = searchParams.get("what") ?? "";
   const { startTime: simStart, endTime: simEnd } = useSimulationRange();
   const { data: segmentsData } = useSegments();
@@ -189,15 +190,16 @@ export default function ResourcePage() {
     [startTime, endTime, width],
   );
 
-  // Vertical layout: [top axis] [occupancy curve] [gantt (optional)] [bottom axis].
+  // Vertical layout: [top axis] [per-task gantt (optional)] [occupancy curve]
+  // [bottom axis] — gantt above the curve, matching the component view's order.
   const gridTop = AXIS_PAD;
   const gridBottom = height - AXIS_PAD;
   const contentH = Math.max(1, gridBottom - gridTop);
   const curveH = showGantt ? Math.min(Math.round(contentH * 0.4), 180) : contentH;
-  const curveTop = gridTop;
-  const curveBottom = gridTop + curveH;
-  const taskTop = curveBottom + GAP;
-  const taskH = showGantt ? Math.max(0, gridBottom - taskTop) : 0;
+  const curveTop = showGantt ? gridBottom - curveH : gridTop;
+  const curveBottom = gridBottom;
+  const taskTop = gridTop;
+  const taskH = showGantt ? Math.max(0, curveTop - GAP - taskTop) : 0;
 
   const { areaPath, linePath, yScale } = useMemo(() => {
     const bins = data?.bins ?? [];
@@ -280,8 +282,8 @@ export default function ResourcePage() {
                 tickMarks
               />
               <line x1={5} x2={width - 5} y1={gridTop} y2={gridTop} stroke={COLOR_GRID} />
-              <line x1={5} x2={width - 5} y1={curveBottom} y2={curveBottom} stroke={COLOR_GRID} />
-              {showGantt ? <line x1={5} x2={width - 5} y1={gridBottom} y2={gridBottom} stroke={COLOR_GRID} /> : null}
+              {showGantt ? <line x1={5} x2={width - 5} y1={curveTop} y2={curveTop} stroke={COLOR_GRID} /> : null}
+              <line x1={5} x2={width - 5} y1={gridBottom} y2={gridBottom} stroke={COLOR_GRID} />
 
               {/* Occupancy curve (always). */}
               <path d={areaPath} fill={FILL} fillOpacity={0.5} />
@@ -305,6 +307,18 @@ export default function ResourcePage() {
                       onClick={(event) => {
                         event.stopPropagation();
                         if (!didDragRef.current) setSelectedId(String(task.id));
+                      }}
+                      onDoubleClick={(event) => {
+                        event.stopPropagation();
+                        // Open the component view with this task as the current task,
+                        // keeping the current time window.
+                        const params = new URLSearchParams({
+                          name: task.location,
+                          taskid: String(task.id),
+                          starttime: String(viewRange.startTime),
+                          endtime: String(viewRange.endTime),
+                        });
+                        navigate(`/component?${params.toString()}`);
                       }}
                     >
                       <title>{`${task.kind} ${task.what} @ ${task.location} — blocked ${blocked.toLocaleString()} on ${what}`}</title>
