@@ -27,6 +27,10 @@ interface GanttChartProps {
   // Whether tasks are colored by kind alone or the finer kind-what pair; must
   // match how `colorMap` was built so swatch and bar colors agree.
   colorMode?: ColorMode;
+  // Blocking-reason milestones use their own color family and toggle, separate
+  // from the task ones.
+  milestoneColorMap?: Record<string, string>;
+  milestoneColorMode?: ColorMode;
   // Controlled selection: the parent owns which task is highlighted.
   selectedId?: string | number | null;
   // The selected blocking milestone (mutually exclusive with a selected task) and
@@ -65,6 +69,8 @@ export default function GanttChart({
   segmentsEnabled = false,
   colorMap: colorMapProp,
   colorMode = "kind-what",
+  milestoneColorMap: milestoneColorMapProp,
+  milestoneColorMode = "kind-what",
   selectedId = null,
   selectedMilestone = null,
   highlightedKey = null,
@@ -173,8 +179,10 @@ export default function GanttChart({
   const innerWidth = W - MARGIN.left - MARGIN.right;
   const xScale = d3.scaleLinear().domain([startTime, endTime]).range([MARGIN.left, W - MARGIN.right]);
   const colorMap =
-    colorMapProp ??
-    buildColorMapFromKeys([...allTasks.map((task) => taskColorKey(task, colorMode)), ...milestoneSteps.map((step) => step.kind)]);
+    colorMapProp ?? buildColorMapFromKeys(allTasks.map((task) => taskColorKey(task, colorMode)), "task");
+  const milestoneColorMap =
+    milestoneColorMapProp ??
+    buildColorMapFromKeys(milestoneSteps.map((step) => taskColorKey(step, milestoneColorMode)), "milestone");
 
   // Vertical layout, top → bottom. Each task has a label row above its bar; tasks
   // with milestones get a band below the bar for the blocking waves. Label-above
@@ -265,7 +273,8 @@ export default function GanttChart({
         taskStart={task.start_time}
         xScale={xScale}
         centerY={centerY}
-        colorMap={colorMap}
+        colorMap={milestoneColorMap}
+        colorMode={milestoneColorMode}
         selectedMilestone={selectedMilestone}
         highlightedReason={highlightedReason}
         onSelect={(milestone) => {

@@ -135,8 +135,12 @@ func (s *Server) httpConcurrentTaskMilestones(
 			sample = n
 		}
 	}
+	// group=kind colors blocking reasons by milestone kind alone; anything else
+	// (default) keeps the finer kind-what grouping, mirroring component_timeline so
+	// the legend matches the client's colorMode.
+	groupByKind := r.FormValue("group") == "kind"
 	stackedInfo := s.calculateConcurrentTaskMilestones(
-		r.Context(), scope, infoType, startTime, endTime, numDots, sample)
+		r.Context(), scope, infoType, startTime, endTime, numDots, sample, groupByKind)
 	rsp, err := json.Marshal(stackedInfo)
 	dieOnErr(err)
 	_, err = w.Write(rsp)
@@ -665,6 +669,7 @@ func (s *Server) calculateConcurrentTaskMilestones(
 	scope, infoType string,
 	startTime, endTime float64,
 	numDots, sample int,
+	groupByKind bool,
 ) *StackedComponentInfo {
 	info := &StackedComponentInfo{
 		Name:      scope,
@@ -680,9 +685,10 @@ func (s *Server) calculateConcurrentTaskMilestones(
 	}
 
 	// Same occupancy binning as the task-count chart, grouped by blocking reason
-	// (milestone kind) instead of task kind — computed in SQL, no per-task fetch.
+	// (milestone kind, or the finer kind-what) instead of task kind — computed in
+	// SQL, no per-task fetch.
 	keys, bins := s.traceReader.BlockingReasonOccupancy(
-		ctx, scope, startTime, endTime, numDots, sample)
+		ctx, scope, startTime, endTime, numDots, sample, groupByKind)
 	info.Kinds = keys
 
 	binWidth := (endTime - startTime) / float64(numDots)

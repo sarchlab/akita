@@ -128,6 +128,10 @@ type TaskQuery struct {
 	// query — used to load a whole subtree level at once.
 	ParentIDs []uint64
 
+	// Use IDs to hydrate a specific set of tasks by their IDs in one query —
+	// e.g. the tasks blocked on a hardware resource.
+	IDs []uint64
+
 	// Use Kind to select all the tasks that are of a kind.
 	Kind string
 
@@ -891,6 +895,24 @@ func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) (string, []any)
 	return sqlStr, args
 }
 
+// addIDFilters appends the t.ID / t.ParentID equality and IN(...) clauses. The
+// values are uint64, so they are inlined with nothing to escape.
+func addIDFilters(sqlStr string, query TaskQuery) string {
+	if query.ID != 0 {
+		sqlStr += "\n\t\t\tAND t.ID = " + strconv.FormatUint(query.ID, 10) + "\n"
+	}
+	if query.ParentID != 0 {
+		sqlStr += "\n\t\t\tAND t.ParentID = " + strconv.FormatUint(query.ParentID, 10) + "\n"
+	}
+	if len(query.ParentIDs) > 0 {
+		sqlStr += "\n\t\t\tAND t.ParentID IN (" + joinIDs(query.ParentIDs) + ")\n"
+	}
+	if len(query.IDs) > 0 {
+		sqlStr += "\n\t\t\tAND t.ID IN (" + joinIDs(query.IDs) + ")\n"
+	}
+	return sqlStr
+}
+
 func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 	sqlStr string,
 	query TaskQuery,
@@ -901,23 +923,7 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 		WHERE 1=1
 	`
 
-	if query.ID != 0 {
-		sqlStr += `
-			AND t.ID = ` + strconv.FormatUint(query.ID, 10) + `
-		`
-	}
-
-	if query.ParentID != 0 {
-		sqlStr += `
-			AND t.ParentID = ` + strconv.FormatUint(query.ParentID, 10) + `
-		`
-	}
-
-	if len(query.ParentIDs) > 0 {
-		sqlStr += `
-			AND t.ParentID IN (` + joinIDs(query.ParentIDs) + `)
-		`
-	}
+	sqlStr = addIDFilters(sqlStr, query)
 
 	if query.Kind != "" {
 		sqlStr += `

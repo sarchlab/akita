@@ -1,5 +1,6 @@
 import * as d3 from "d3";
 import type { TaskStep } from "../../types/task";
+import { taskColorKey, type ColorMode } from "../../utils/taskColorCoder";
 import { wavyPath, type SelectedMilestone } from "../../utils/milestoneViz";
 import {
   COLOR_HALO,
@@ -22,8 +23,12 @@ interface MilestoneMarksProps {
   xScale: d3.ScaleLinear<number, number>;
   centerY: number;
   colorMap: Record<string, string>;
+  // How a milestone is keyed for its color — by kind, or the finer kind-what pair
+  // (same toggle as tasks), so each resource within a kind can be its own color.
+  colorMode: ColorMode;
   selectedMilestone: SelectedMilestone | null;
-  // A hovered/selected blocking reason; non-matching waves dim.
+  // A hovered/selected blocking reason (a kind or kind-what key); non-matching
+  // waves dim.
   highlightedReason: string | null;
   // Caller decides what selecting a milestone does (and guards drags). The hit
   // rect also carries data-ms-* so a pointer-capturing container can resolve the
@@ -40,6 +45,7 @@ export default function MilestoneMarks({
   xScale,
   centerY,
   colorMap,
+  colorMode,
   selectedMilestone,
   highlightedReason,
   onSelect,
@@ -50,11 +56,15 @@ export default function MilestoneMarks({
         const intervalStart = index === 0 ? taskStart : steps[index - 1].time;
         const x0 = safeScale(xScale, intervalStart);
         const x1 = safeScale(xScale, step.time);
-        const color = colorMap[step.kind] ?? COLOR_TASK_FALLBACK;
+        const key = taskColorKey(step, colorMode);
+        const color = colorMap[key] ?? COLOR_TASK_FALLBACK;
         const d = wavyPath(x0, x1, centerY);
         const selected =
-          selectedMilestone != null && selectedMilestone.kind === step.kind && selectedMilestone.time === step.time;
-        const dimmed = (selectedMilestone != null && !selected) || (highlightedReason != null && highlightedReason !== step.kind);
+          selectedMilestone != null &&
+          selectedMilestone.kind === step.kind &&
+          selectedMilestone.what === step.what &&
+          selectedMilestone.time === step.time;
+        const dimmed = (selectedMilestone != null && !selected) || (highlightedReason != null && highlightedReason !== key);
         const opacity = dimmed ? OPACITY_DIM_MILESTONE : 1;
         return (
           <g

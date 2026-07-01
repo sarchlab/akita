@@ -91,6 +91,9 @@ export function useStackedCompInfo(
   startTime: number,
   endTime: number,
   numDots = 40,
+  // How reasons are grouped server-side: "kind" or the finer "kind-what" (matches
+  // the client's colorMode so the bands resolve to legend colors).
+  group = "kind-what",
 ) {
   const [info, setInfo] = useState<StackedComponentInfo | null>(null);
   const [loading, setLoading] = useState(false);
@@ -142,6 +145,7 @@ export function useStackedCompInfo(
         start_time: String(startTime),
         end_time: String(endTime),
         num_dots: String(numDots),
+        group,
       });
       if (sample > 1) params.set("sample", String(sample));
       const response = await fetch(`/api/compinfo?${params.toString()}`, {
@@ -178,7 +182,7 @@ export function useStackedCompInfo(
     })();
 
     return () => controller.abort();
-  }, [compName, infoType, startTime, endTime, numDots]);
+  }, [compName, infoType, startTime, endTime, numDots, group]);
 
   useRenderReady(loading, error !== null);
 
