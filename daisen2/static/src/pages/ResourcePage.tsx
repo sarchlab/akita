@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { X } from "lucide-react";
 import * as d3 from "d3";
 import { useResourceBlocking } from "../hooks/useResourceBlocking";
 import { useResourceTasks } from "../hooks/useResourceTasks";
@@ -13,6 +14,7 @@ import YAxisOverlay from "../components/charts/YAxisOverlay";
 import GapShading from "../components/charts/GapShading";
 import TimeZoomControls from "../components/charts/TimeZoomControls";
 import SelectedTaskSection from "../components/SelectedTaskSection";
+import { Button } from "../components/ui/button";
 import { SectionLabel } from "../components/Legend";
 import { milestonesOf } from "../utils/milestoneViz";
 import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskColorCoder";
@@ -30,6 +32,7 @@ import {
 const MIN_RANGE = 1e-12;
 const DEBOUNCE_MS = 400;
 const AXIS_PAD = 20; // room above/below for the top and bottom time-axis labels
+const CURVE_PAD_TOP = 18; // room at the top of the curve band for its label
 const GAP = 5;
 // Below this many tasks in view, draw the per-task gantt under the curve.
 const GANTT_THRESHOLD = 300;
@@ -201,17 +204,18 @@ export default function ResourcePage() {
   const taskTop = gridTop;
   const taskH = showGantt ? Math.max(0, curveTop - GAP - taskTop) : 0;
 
-  const { areaPath, linePath, yScale } = useMemo(() => {
+  const { areaPath, yScale } = useMemo(() => {
     const bins = data?.bins ?? [];
     const maxV = Math.max(1, d3.max(bins) ?? 1);
-    const y = d3.scaleLinear().domain([0, maxV]).nice().range([curveBottom, curveTop]);
+    // Leave CURVE_PAD_TOP at the top of the band for the label, matching the
+    // component page's task-count area (padTop above the peak).
+    const y = d3.scaleLinear().domain([0, maxV]).nice().range([curveBottom, curveTop + CURVE_PAD_TOP]);
     const dStart = data?.start_time ?? startTime;
     const n = data?.num_bins ?? bins.length;
     const binW = n > 0 ? ((data?.end_time ?? endTime) - dStart) / n : 0;
     const pts = bins.map((v, b) => ({ t: dStart + (b + 0.5) * binW, v }));
     const area = d3.area<{ t: number; v: number }>().x((p) => xScale(p.t)).y0(y(0)).y1((p) => y(p.v)).curve(d3.curveMonotoneX);
-    const line = d3.line<{ t: number; v: number }>().x((p) => xScale(p.t)).y((p) => y(p.v)).curve(d3.curveMonotoneX);
-    return { areaPath: area(pts) ?? "", linePath: line(pts) ?? "", yScale: y };
+    return { areaPath: area(pts) ?? "", yScale: y };
   }, [data, xScale, startTime, endTime, curveTop, curveBottom]);
 
   const gaps = segmentsData?.enabled ? gapSegments(segmentsData.segments, startTime, endTime) : [];
@@ -219,30 +223,56 @@ export default function ResourcePage() {
   const rowH = showGantt && tasks.length > 0 ? taskH / tasks.length : 0;
 
   const panel = (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
-      <SelectedTaskSection task={selectedTask} milestone={null} />
-      <div className="-mx-4 border-t" />
-      <div>
-        <SectionLabel>Hardware resource</SectionLabel>
-        <div className="mt-2 break-all rounded-lg border bg-muted/30 p-3 font-mono text-xs">{what || "—"}</div>
-      </div>
-      {data ? (
-        <div className="flex flex-col gap-0.5 text-sm">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tasks blocked (in view)</span>
-          <span className="tabular-nums">
-            {data.total.toLocaleString()}
-            {data.total_all > data.total ? (
-              <span className="ml-1 text-xs text-muted-foreground">of {data.total_all.toLocaleString()} total</span>
-            ) : null}
-            {data.sample > 1 ? <span className="ml-1 text-xs text-muted-foreground">(≈ 1-in-{data.sample} sample)</span> : null}
-          </span>
+    <>
+      {/* Header mirrors the component page: title on the left, the Updating…
+          pill and a Deselect-task action on the right. */}
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b px-4 py-3">
+        <div className="min-w-0">
+          <SectionLabel>Hardware resource</SectionLabel>
+          <div className="mt-0.5 break-all font-mono text-sm font-bold leading-tight">{what || "—"}</div>
         </div>
-      ) : null}
-      <p className="text-xs text-muted-foreground">
-        The curve is how many tasks are blocked waiting on this resource over time. When few are in view, each is drawn
-        below as a full task bar with its wait for this resource highlighted — click one for its detail.
-      </p>
-    </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {(dataPending || loading) && what ? (
+            <span className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+              Updating…
+            </span>
+          ) : null}
+          {selectedId ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              onClick={() => setSelectedId(null)}
+              title="Clear the selected task"
+            >
+              <X className="h-3.5 w-3.5" />
+              Deselect task
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4">
+        <SelectedTaskSection task={selectedTask} milestone={null} />
+        <div className="-mx-4 border-t" />
+        {data ? (
+          <div className="flex flex-col gap-0.5 text-sm">
+            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tasks blocked (in view)</span>
+            <span className="tabular-nums">
+              {data.total.toLocaleString()}
+              {data.total_all > data.total ? (
+                <span className="ml-1 text-xs text-muted-foreground">of {data.total_all.toLocaleString()} total</span>
+              ) : null}
+              {data.sample > 1 ? <span className="ml-1 text-xs text-muted-foreground">(≈ 1-in-{data.sample} sample)</span> : null}
+            </span>
+          </div>
+        ) : null}
+        <p className="text-xs text-muted-foreground">
+          The curve is how many tasks are blocked waiting on this resource over time. When few are in view, each is drawn
+          below as a full task bar with its wait for this resource highlighted — click one for its detail.
+        </p>
+      </div>
+    </>
   );
 
   return (
@@ -285,10 +315,24 @@ export default function ResourcePage() {
               {showGantt ? <line x1={5} x2={width - 5} y1={curveTop} y2={curveTop} stroke={COLOR_GRID} /> : null}
               <line x1={5} x2={width - 5} y1={gridBottom} y2={gridBottom} stroke={COLOR_GRID} />
 
-              {/* Occupancy curve (always). */}
-              <path d={areaPath} fill={FILL} fillOpacity={0.5} />
-              <path d={linePath} fill="none" stroke={STROKE} strokeWidth={1.5} />
+              {/* Occupancy curve (always) — a filled band only, matching the
+                  component page's task-count area (no outline, 0.9 opacity). */}
+              <path d={areaPath} fill={FILL} opacity={0.9} />
               <YAxisOverlay yScale={yScale} width={width} />
+              <text
+                x={8}
+                y={curveTop + 13}
+                fontSize="11"
+                fill="#475569"
+                stroke="#ffffff"
+                strokeWidth={2.5}
+                paintOrder="stroke"
+                pointerEvents="none"
+              >
+                {`Tasks blocked · ${data?.total.toLocaleString() ?? "—"}${
+                  data && !showGantt && data.total > 0 ? " · zoom in for individual tasks" : ""
+                }`}
+              </text>
 
               {/* Per-task gantt (when few in view): full bar + highlighted wait. */}
               {showGantt &&
@@ -355,14 +399,7 @@ export default function ResourcePage() {
           )}
         </div>
 
-        <div className="absolute right-3 top-2 flex items-center gap-2" onPointerDown={(e) => e.stopPropagation()}>
-          {(dataPending || loading) && what ? (
-            <span className="rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm ring-1 ring-slate-200">
-              Updating…
-            </span>
-          ) : null}
-          <TimeZoomControls onZoom={(dir) => zoomBy(dir > 0 ? 1.4 : 0.7)} />
-        </div>
+        <TimeZoomControls onZoom={(dir) => zoomBy(dir > 0 ? 1.4 : 0.7)} className="absolute right-2 top-1" />
       </div>
     </TraceChartLayout>
   );
