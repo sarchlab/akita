@@ -68,6 +68,15 @@ export default function TaskChartPage() {
     }
     return Array.from(reasons);
   }, [allTasks, milestoneColorMode]);
+  // The lineage's time span — passed to the legend so a resource link opens the
+  // resource page over the same window.
+  const resourceRange = useMemo(() => {
+    if (allTasks.length === 0) return undefined;
+    return {
+      startTime: Math.min(...allTasks.map((t) => t.start_time)),
+      endTime: Math.max(...allTasks.map((t) => t.end_time)),
+    };
+  }, [allTasks]);
   // Tasks and blocking reasons draw from separate color families.
   const colorMap = useMemo(() => buildColorMapFromKeys(taskKeys, "task"), [taskKeys]);
   const milestoneColorMap = useMemo(
@@ -158,6 +167,7 @@ export default function TaskChartPage() {
             onHighlight={setHighlightedKey}
             highlightedReason={reasonHighlight}
             onHighlightReason={setHighlightedReason}
+            resourceRange={resourceRange}
           />
         </div>
       }

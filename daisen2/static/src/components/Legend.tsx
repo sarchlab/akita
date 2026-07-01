@@ -69,6 +69,9 @@ interface LegendProps {
   onHighlight?: (key: string | null) => void;
   highlightedReason?: string | null;
   onHighlightReason?: (kind: string | null) => void;
+  // When set, a hardware_resource reason's link carries this time range so the
+  // resource page opens at the same window.
+  resourceRange?: { startTime: number; endTime: number };
 }
 
 // Legend is the shared task-type + blocking-reason key used by both the component
@@ -88,6 +91,7 @@ export default function Legend({
   onHighlight,
   highlightedReason = null,
   onHighlightReason,
+  resourceRange,
 }: LegendProps) {
   const reasonColorMap = milestoneColorMap ?? colorMap;
   if (taskKeys.length === 0 && blockingReasons.length === 0) return null;
@@ -160,6 +164,10 @@ export default function Legend({
               const resourceWhat = reason.startsWith(HW_RESOURCE_PREFIX)
                 ? reason.slice(HW_RESOURCE_PREFIX.length)
                 : null;
+              const resourceHref = resourceWhat
+                ? `/resource?what=${encodeURIComponent(resourceWhat)}` +
+                  (resourceRange ? `&starttime=${resourceRange.startTime}&endtime=${resourceRange.endTime}` : "")
+                : null;
               const rowClass = cn(
                 "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
                 active && "bg-primary/10",
@@ -186,9 +194,9 @@ export default function Legend({
               );
               return (
                 <li key={reason}>
-                  {resourceWhat ? (
+                  {resourceHref ? (
                     <Link
-                      to={`/resource?what=${encodeURIComponent(resourceWhat)}`}
+                      to={resourceHref}
                       className={cn(rowClass, "group")}
                       title={`Open the resource view for ${resourceWhat}`}
                       {...hover}

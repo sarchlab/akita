@@ -1173,6 +1173,7 @@ function ComponentLegend(props: {
   onHighlight: (key: string | null) => void;
   highlightedReason: string | null;
   onHighlightReason: (kind: string | null) => void;
+  resourceRange: { startTime: number; endTime: number };
 }) {
   return <Legend {...props} />;
 }
@@ -1959,7 +1960,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             milestone={selectedMilestone}
           />
           <div className="-mx-4 border-t" />
-          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} milestoneColorMap={milestoneColorMap} colorMode={colorMode} onColorMode={handleColorMode} milestoneColorMode={milestoneColorMode} onMilestoneColorMode={handleMilestoneColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={reasonHighlight} onHighlightReason={setHighlightedReason} />
+          <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} milestoneColorMap={milestoneColorMap} colorMode={colorMode} onColorMode={handleColorMode} milestoneColorMode={milestoneColorMode} onMilestoneColorMode={handleMilestoneColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={reasonHighlight} onHighlightReason={setHighlightedReason} resourceRange={viewRange} />
         </div>
     </>
   );
