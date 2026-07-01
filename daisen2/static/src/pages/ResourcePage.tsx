@@ -15,6 +15,7 @@ import GapShading from "../components/charts/GapShading";
 import TimeZoomControls from "../components/charts/TimeZoomControls";
 import SelectedTaskSection from "../components/SelectedTaskSection";
 import { Button } from "../components/ui/button";
+import { ResourceViewHelp } from "../components/HelpTopics";
 import { SectionLabel } from "../components/Legend";
 import { milestonesOf } from "../utils/milestoneViz";
 import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskColorCoder";
@@ -253,24 +254,9 @@ export default function ResourcePage() {
         </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4">
+        {/* What the view means moved into the chart-corner info modal
+            (ResourceViewHelp); the panel just reflects the selected task. */}
         <SelectedTaskSection task={selectedTask} milestone={null} />
-        <div className="-mx-4 border-t" />
-        {data ? (
-          <div className="flex flex-col gap-0.5 text-sm">
-            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tasks blocked (in view)</span>
-            <span className="tabular-nums">
-              {data.total.toLocaleString()}
-              {data.total_all > data.total ? (
-                <span className="ml-1 text-xs text-muted-foreground">of {data.total_all.toLocaleString()} total</span>
-              ) : null}
-              {data.sample > 1 ? <span className="ml-1 text-xs text-muted-foreground">(≈ 1-in-{data.sample} sample)</span> : null}
-            </span>
-          </div>
-        ) : null}
-        <p className="text-xs text-muted-foreground">
-          The curve is how many tasks are blocked waiting on this resource over time. When few are in view, each is drawn
-          below as a full task bar with its wait for this resource highlighted — click one for its detail.
-        </p>
       </div>
     </>
   );
@@ -330,8 +316,8 @@ export default function ResourcePage() {
                 pointerEvents="none"
               >
                 {`Tasks blocked · ${data?.total.toLocaleString() ?? "—"}${
-                  data && !showGantt && data.total > 0 ? " · zoom in for individual tasks" : ""
-                }`}
+                  data && data.sample > 1 ? ` · ≈1-in-${data.sample} sample` : ""
+                }${data && !showGantt && data.total > 0 ? " · zoom in for individual tasks" : ""}`}
               </text>
 
               {/* Per-task gantt (when few in view): full bar + highlighted wait. */}
@@ -400,6 +386,11 @@ export default function ResourcePage() {
         </div>
 
         <TimeZoomControls onZoom={(dir) => zoomBy(dir > 0 ? 1.4 : 0.7)} className="absolute right-2 top-1" />
+        {what ? (
+          <div className="absolute bottom-2 right-2 z-20" onPointerDown={(e) => e.stopPropagation()}>
+            <ResourceViewHelp className="bg-white/85 p-1 shadow-sm ring-1 ring-slate-200 backdrop-blur-sm hover:bg-white" />
+          </div>
+        ) : null}
       </div>
     </TraceChartLayout>
   );

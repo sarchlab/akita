@@ -207,3 +207,22 @@ export function BlockingReasonsHelp({ className }: { className?: string }) {
     </InfoButton>
   );
 }
+
+// ResourceViewHelp explains the resource view: one hardware resource's
+// blocking-occupancy curve and the per-task gantt of the tasks waiting on it.
+export function ResourceViewHelp({ className }: { className?: string }) {
+  return (
+    <InfoButton title="Resource view" className={className}>
+      <p>This view focuses on <strong>one hardware resource</strong> — a buffer slot, a cache bank, an MSHR, a pipeline stage — and the tasks that <strong>block waiting on it</strong>. A task is blocked on a resource whenever it is stalled until that resource frees up; each such wait is recorded as a <code>hardware_resource</code> milestone (see <em>Blocking reasons</em>).</p>
+      <p>The <strong>curve</strong> plots, over time, <strong>how many tasks are blocked</strong> waiting on this resource — a tall stretch means the resource is contended and many tasks are queued behind it. Its label reports the count in the current view (and notes when the curve is a sample of a very busy resource).</p>
+      <p>When <strong>few enough tasks</strong> fall in the visible range, a <strong>per-task gantt</strong> is drawn above the curve: each task is its own bar across time, with the stretch it spent <strong>waiting on this resource highlighted</strong>. With more tasks in view only the curve is shown — <strong>zoom in</strong> to bring the bars back.</p>
+      <p>Interact with it directly:</p>
+      <ul className="space-y-1.5">
+        <Term label="Click a task">select it — its timing, location, and milestones fill the side panel.</Term>
+        <Term label="Double-click a task">open it in the <em>component view</em> as the current task, keeping the same time window.</Term>
+        <Term label="Drag / scroll">pan the time axis; <strong>⌘/Ctrl+scroll</strong> (or the zoom buttons) zooms it.</Term>
+      </ul>
+      <p>You reach this view from a <strong>hardware_resource</strong> blocking reason in the component or task view's legend — following that link opens the resource here over the same time range.</p>
+    </InfoButton>
+  );
+}
