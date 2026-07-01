@@ -225,7 +225,7 @@ func TestBlockingReasonOccupancyBinsMilestoneIntervals(t *testing.T) {
 		(2, 1, 20, 'data',  ''),
 		(3, 2, 10, 'queue', '')`)
 
-	keys, bins := reader.BlockingReasonOccupancy(context.Background(), "ROB", 0, 20, 2, 1)
+	keys, bins := reader.BlockingReasonOccupancy(context.Background(), "ROB", 0, 20, 2, 1, true)
 
 	if len(keys) != 2 || keys[0] != "data" || keys[1] != "queue" {
 		t.Fatalf("keys = %v, want [data queue]", keys)
@@ -241,6 +241,40 @@ func TestBlockingReasonOccupancyBinsMilestoneIntervals(t *testing.T) {
 	}
 	if bins[1][di] != 1 || bins[1][qi] != 0 {
 		t.Fatalf("bin 1 = {data:%d queue:%d}, want {data:1 queue:0}", bins[1][di], bins[1][qi])
+	}
+}
+
+// TestBlockingReasonOccupancyGroupsByKindWhat verifies that with groupByKind=false
+// the reason key is the finer "kind-what" pair, matching the client's taskColorKey
+// so each resource within a kind gets its own band and color.
+func TestBlockingReasonOccupancyGroupsByKindWhat(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
+	reader := NewSQLiteTraceReader(dbPath)
+	reader.Init()
+	defer reader.Close()
+
+	exec := func(q string) {
+		if _, err := reader.Exec(q); err != nil {
+			t.Fatalf("exec %q: %v", q, err)
+		}
+	}
+	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO location (ID, Locale) VALUES (1, 'ROB.req_in')`)
+	exec(`CREATE TABLE trace (
+		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
+		Location INTEGER, StartTime REAL, EndTime REAL)`)
+	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+		(1, 0, 'req_in', 'ReadReq', 1, 0, 20)`)
+	exec(`CREATE TABLE milestone (ID INTEGER, TaskID INTEGER, Time REAL, Kind TEXT, What TEXT)`)
+	// Two hardware_resource blocks on different resources within the same kind.
+	exec(`INSERT INTO milestone (ID, TaskID, Time, Kind, What) VALUES
+		(1, 1, 10, 'hardware_resource', 'bankA'),
+		(2, 1, 20, 'hardware_resource', 'bankB')`)
+
+	keys, _ := reader.BlockingReasonOccupancy(context.Background(), "ROB", 0, 20, 2, 1, false)
+
+	if len(keys) != 2 || keys[0] != "hardware_resource-bankA" || keys[1] != "hardware_resource-bankB" {
+		t.Fatalf("keys = %v, want [hardware_resource-bankA hardware_resource-bankB]", keys)
 	}
 }
 
