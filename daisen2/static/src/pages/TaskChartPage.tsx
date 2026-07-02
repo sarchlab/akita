@@ -150,7 +150,7 @@ export default function TaskChartPage() {
     <TraceChartLayout
       panel={
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4">
-          <SelectedTaskSection task={selectedTask} milestone={selectedMilestone} />
+          <SelectedTaskSection task={selectedTask} milestone={selectedMilestone} resourceRange={resourceRange} />
           <div className="-mx-4 border-t" />
           <Legend
             taskKeys={taskKeys}

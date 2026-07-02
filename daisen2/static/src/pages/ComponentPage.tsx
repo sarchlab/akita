@@ -2167,6 +2167,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           <SelectedTaskSection
             task={panelTask}
             milestone={selectedMilestone}
+            resourceRange={viewRange}
           />
           <div className="-mx-4 border-t" />
           <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} milestoneColorMap={milestoneColorMap} colorMode={colorMode} onColorMode={handleColorMode} milestoneColorMode={milestoneColorMode} onMilestoneColorMode={handleMilestoneColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={reasonHighlight} onHighlightReason={setHighlightedReason} resourceRange={viewRange} />
