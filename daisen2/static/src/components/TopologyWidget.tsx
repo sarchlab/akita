@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { LineChart, ListTree } from "lucide-react";
+import { LineChart, ListCollapse, ListTree, RotateCcw } from "lucide-react";
 import { select, zoom, zoomIdentity, type D3ZoomEvent, type ZoomBehavior } from "d3";
 import WidgetCard from "./WidgetCard";
 import { Button } from "./ui/button";
@@ -814,7 +814,7 @@ export default function TopologyWidget({ expandHref, bare }: TopologyWidgetProps
       bare={bare}
       contentClassName="overflow-hidden p-0"
       headerRight={
-        <span className="text-xs text-muted-foreground">
+        <span className="whitespace-nowrap text-xs text-muted-foreground">
           {layout.boxes.length} components · {members.size} connections
         </span>
       }
@@ -833,40 +833,46 @@ export default function TopologyWidget({ expandHref, bare }: TopologyWidgetProps
         </div>
       ) : (
         <div className="flex h-full min-h-0">
-          <div className="relative min-h-0 flex-1 overflow-hidden p-2">
-            <div className="absolute right-3 top-3 z-10 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setExpanded(new Set())}
-                className="rounded border bg-white/90 px-2 py-0.5 text-xs text-muted-foreground shadow-sm hover:text-foreground"
-                title="Collapse every domain to the top level"
-              >
-                Collapse all
-              </button>
-              <button
-                type="button"
-                onClick={resetView}
-                className="rounded border bg-white/90 px-2 py-0.5 text-xs text-muted-foreground shadow-sm hover:text-foreground"
-                title="Reset pan/zoom"
-              >
-                Reset
-              </button>
-            </div>
-            {!selected ? (
-              <div className="pointer-events-none absolute left-3 top-3 z-10 text-xs text-muted-foreground">
-                Click a dashed domain (▸) to expand it; click a component for
-                its spec.
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-slate-50/80 px-3 py-2">
+              <div className="min-w-0 flex-1 text-xs leading-snug text-muted-foreground">
+                Dashed domains expand; click nodes or links for details.
               </div>
-            ) : null}
-            <svg
-              ref={svgRef}
-              viewBox={`${layout.minX} ${layout.minY} ${layout.width} ${layout.height}`}
-              width="100%"
-              height="100%"
-              preserveAspectRatio="xMidYMid meet"
-              style={{ cursor: "grab", touchAction: "none" }}
-            >
-              <g ref={viewportRef}>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setExpanded(new Set())}
+                  title="Collapse every domain to the top level"
+                >
+                  <ListCollapse className="h-3.5 w-3.5" />
+                  Collapse
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={resetView}
+                  title="Reset pan/zoom"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Reset
+                </Button>
+              </div>
+            </div>
+            <div className="relative min-h-0 flex-1 overflow-hidden p-2">
+              <svg
+                ref={svgRef}
+                viewBox={`${layout.minX} ${layout.minY} ${layout.width} ${layout.height}`}
+                width="100%"
+                height="100%"
+                preserveAspectRatio="xMidYMid meet"
+                style={{ cursor: "grab", touchAction: "none" }}
+              >
+                <g ref={viewportRef}>
               {layout.edges.map((e, i) => {
                 const active = isEdgeActive(e, selected);
                 // Bow the edge out of its row: leave each port perpendicular to
@@ -1054,8 +1060,9 @@ export default function TopologyWidget({ expandHref, bare }: TopologyWidgetProps
                       );
                     })
                 : null}
-              </g>
-            </svg>
+                </g>
+              </svg>
+            </div>
           </div>
 
           {selected ? (
