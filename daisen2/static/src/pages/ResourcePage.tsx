@@ -21,14 +21,18 @@ import { Button } from "../components/ui/button";
 import { ResourceViewHelp } from "../components/HelpTopics";
 import Legend from "../components/Legend";
 import { SectionLabel } from "../components/Legend";
-import { milestonesOf } from "../utils/milestoneViz";
+import { milestonesOf, wavyPath } from "../utils/milestoneViz";
 import { lookupColor, taskColorKey } from "../utils/taskColorCoder";
 import type { ColorMode } from "../utils/taskColorCoder";
 import type { Task } from "../types/task";
 import {
   AXIS_TICK_COUNT,
+  COLOR_HALO,
   COLOR_BAR_STROKE,
   COLOR_GRID,
+  MILESTONE_DOT_R,
+  MILESTONE_WAVE_WIDTH,
+  OPACITY_DIM_MILESTONE,
   barOpacity,
   barStrokeOpacity,
   gapSegments,
@@ -55,6 +59,10 @@ interface TimeRange {
 function sanitize(start: number, end: number): TimeRange {
   if (Number.isFinite(start) && Number.isFinite(end) && end > start) return { startTime: start, endTime: end };
   return { startTime: 0, endTime: MIN_RANGE };
+}
+
+function sameTime(a: number, b: number): boolean {
+  return Math.abs(a - b) <= Math.max(1e-9, Math.abs(b) * 1e-12);
 }
 
 // blockedIntervals returns each [lo, hi] span a task spent blocked on `what` — the
@@ -120,7 +128,12 @@ export default function ResourcePage() {
   const numBins = Math.max(60, Math.min(400, Math.round(innerWidth / 4)));
 
   const { data, loading } = useResourceBlocking(what, dataRange.startTime, dataRange.endTime, numBins);
-  const showGantt = !!data && data.total > 0 && data.total <= GANTT_THRESHOLD;
+  const dataFresh =
+    !!data &&
+    sameTime(data.start_time, viewRange.startTime) &&
+    sameTime(data.end_time, viewRange.endTime) &&
+    data.num_bins === numBins;
+  const showGantt = dataFresh && !!data && data.total > 0 && data.total <= GANTT_THRESHOLD;
   const { tasks, loading: tasksLoading } = useResourceTasks(
     what,
     dataRange.startTime,
@@ -232,17 +245,25 @@ export default function ResourcePage() {
     [startTime, endTime, width],
   );
 
-  // Vertical layout: [per-task gantt (optional)] [occupancy curve]. They are
-  // separate regions so the divider is the same subtle border used on the
-  // component page instead of a heavy in-SVG line.
-  const curveRegionHeight = showGantt ? Math.min(Math.round(height * 0.35), 190) : height;
-  const taskRegionHeight = showGantt ? Math.max(80, height - curveRegionHeight) : 0;
+  // Vertical layout when individual tasks are visible:
+  // [task usage bars] [resource-wait waves] [blocked-task occupancy curve].
+  // Usage and blocking are separate chart regions, divided with the same subtle
+  // border used by the component page instead of painting both in one gantt.
+  const curveRegionHeight = showGantt ? Math.min(Math.round(height * 0.28), 180) : height;
+  const ganttRegionHeight = showGantt ? Math.max(1, height - curveRegionHeight) : 0;
+  const taskRegionHeight = showGantt ? Math.max(1, Math.round(ganttRegionHeight * 0.5)) : 0;
+  const blockingRegionHeight = showGantt ? Math.max(1, ganttRegionHeight - taskRegionHeight) : 0;
   const taskGridTop = AXIS_PAD;
   const taskGridBottom = Math.max(taskGridTop + 1, taskRegionHeight);
+  const blockingGridTop = 0;
+  const blockingGridBottom = Math.max(1, blockingRegionHeight);
+  const blockingLabelTop = 16;
+  const blockingTaskTop = 20;
   const curveGridTop = showGantt ? 0 : AXIS_PAD;
   const curveGridBottom = Math.max(curveGridTop + 1, curveRegionHeight - AXIS_PAD);
   const taskTop = taskGridTop;
   const taskH = showGantt ? Math.max(0, taskGridBottom - GAP - taskTop) : 0;
+  const blockingTaskH = showGantt ? Math.max(0, blockingGridBottom - GAP - blockingTaskTop) : 0;
 
   const { areaPath, yScale } = useMemo(() => {
     const bins = data?.bins ?? [];
@@ -264,8 +285,10 @@ export default function ResourcePage() {
   }, [data, xScale, startTime, endTime, curveGridTop, curveGridBottom]);
 
   const gaps = segmentsData?.enabled ? gapSegments(segmentsData.segments, startTime, endTime) : [];
-  const hasData = (data?.bins.length ?? 0) > 0;
+  const hasData = dataFresh && (data?.bins.length ?? 0) > 0;
   const rowH = showGantt && tasks.length > 0 ? taskH / tasks.length : 0;
+  const blockingRowH = showGantt && tasks.length > 0 ? blockingTaskH / tasks.length : 0;
+  const chartUpdating = what && (dataPending || loading || !dataFresh);
 
   const panel = (
     <>
@@ -277,7 +300,7 @@ export default function ResourcePage() {
           <div className="mt-0.5 break-all font-mono text-sm font-bold leading-tight">{what || "—"}</div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {(dataPending || loading || tasksLoading) && what ? (
+          {(dataPending || loading || tasksLoading || (what && !dataFresh)) && what ? (
             <span className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
               Updating…
             </span>
@@ -345,8 +368,8 @@ export default function ResourcePage() {
         >
           {!what ? (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No resource selected.</div>
-          ) : loading && !data ? (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Computing…</div>
+          ) : chartUpdating ? (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Updating…</div>
           ) : !hasData ? (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
               No blocking recorded for this resource in range.
@@ -367,6 +390,19 @@ export default function ResourcePage() {
                     <line x1={5} x2={width - 5} y1={taskGridTop} y2={taskGridTop} stroke={COLOR_GRID} />
                     <GapShading gaps={gaps} xScale={xScale} height={taskRegionHeight} patternId="resource-task-gap" />
 
+                    <text
+                      x={8}
+                      y={taskGridTop + 13}
+                      fontSize="11"
+                      fill="#475569"
+                      stroke="#ffffff"
+                      strokeWidth={2.5}
+                      paintOrder="stroke"
+                      pointerEvents="none"
+                    >
+                      {`Task usage · ${tasks.length.toLocaleString()} tasks`}
+                    </text>
+
                     {tasks.map((task, i) => {
                       const barY = taskTop + i * rowH + Math.min(1, rowH * 0.15);
                       const barH = Math.max(1.5, rowH - Math.min(2, rowH * 0.3));
@@ -381,9 +417,6 @@ export default function ResourcePage() {
                           : highlightedKey !== null
                             ? highlightedKey === key
                             : true;
-                      const intervals = blockedIntervals(task, what);
-                      const blocked = intervals.reduce((s, iv) => s + (iv.hi - iv.lo), 0);
-                      const waitOpacity = hasHighlight ? (highlighted ? 0.95 : 0.12) : selectedId != null && !selected ? 0.3 : 0.9;
                       return (
                         <g
                           key={task.id}
@@ -405,7 +438,7 @@ export default function ResourcePage() {
                             navigate(`/component?${params.toString()}`);
                           }}
                         >
-                          <title>{`${task.kind} ${task.what} @ ${task.location} — blocked ${blocked.toLocaleString()} on ${what}`}</title>
+                          <title>{`${task.kind} ${task.what} @ ${task.location}`}</title>
                           {/* The whole task. */}
                           <rect
                             x={bx0}
@@ -418,20 +451,104 @@ export default function ResourcePage() {
                             strokeOpacity={barStrokeOpacity({ selected, highlighted, hasHighlight })}
                             opacity={barOpacity({ selected, highlighted, hasHighlight, hasSelection: selectedId != null })}
                           />
-                          {/* The part it spent waiting for this resource. */}
-                          {intervals.map((iv, k) => (
-                            <rect
-                              key={k}
-                              x={safeScale(xScale, iv.lo)}
-                              y={barY}
-                              width={Math.max(1, safeScale(xScale, iv.hi) - safeScale(xScale, iv.lo))}
-                              height={barH}
-                              fill={STROKE}
-                              fillOpacity={waitOpacity}
-                            />
-                          ))}
                         </g>
                       );
+                    })}
+                  </svg>
+                </div>
+              ) : null}
+              {showGantt ? (
+                <div className="daisen1-resource-blocking-view relative border-t border-slate-200" style={{ height: blockingRegionHeight }}>
+                  <svg width={width} height={blockingRegionHeight} className="block">
+                    <TimeTicks
+                      ticks={xScale.ticks(AXIS_TICK_COUNT)}
+                      xScale={xScale}
+                      gridTop={blockingGridTop}
+                      gridBottom={blockingGridBottom}
+                    />
+                    <GapShading gaps={gaps} xScale={xScale} height={blockingRegionHeight} patternId="resource-blocking-gap" />
+                    <text
+                      x={8}
+                      y={blockingLabelTop}
+                      fontSize="11"
+                      fill="#475569"
+                      stroke="#ffffff"
+                      strokeWidth={2.5}
+                      paintOrder="stroke"
+                      pointerEvents="none"
+                    >
+                      {`Resource waits · ${what}`}
+                    </text>
+
+                    {tasks.map((task, i) => {
+                      const centerY = blockingTaskTop + i * blockingRowH + blockingRowH / 2;
+                      const selected = selectedId === String(task.id);
+                      const key = taskColorKey(task, colorMode);
+                      const hasHighlight = highlightedTaskIds !== null || highlightedKey !== null;
+                      const highlighted =
+                        highlightedTaskIds !== null
+                          ? highlightedTaskIds.has(String(task.id))
+                          : highlightedKey !== null
+                            ? highlightedKey === key
+                            : true;
+                      const intervals = blockedIntervals(task, what);
+                      const opacity = hasHighlight && !highlighted ? OPACITY_DIM_MILESTONE : selectedId != null && !selected ? 0.35 : 1;
+                      const amplitude = Math.max(1, Math.min(3, blockingRowH * 0.22));
+                      const dotR = Math.max(1.2, Math.min(MILESTONE_DOT_R, blockingRowH * 0.35));
+                      return intervals.map((iv, k) => {
+                        const x0 = safeScale(xScale, iv.lo);
+                        const x1 = safeScale(xScale, iv.hi);
+                        if (x1 - x0 < 1) return null;
+                        return (
+                          <g
+                            key={`${task.id}-${k}`}
+                            className="cursor-pointer"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (!didDragRef.current) setSelectedId(String(task.id));
+                            }}
+                            onDoubleClick={(event) => {
+                              event.stopPropagation();
+                              const params = new URLSearchParams({
+                                name: task.location,
+                                taskid: String(task.id),
+                                starttime: String(viewRange.startTime),
+                                endtime: String(viewRange.endTime),
+                              });
+                              navigate(`/component?${params.toString()}`);
+                            }}
+                          >
+                            <title>{`${task.kind} ${task.what} @ ${task.location} — blocked ${(iv.hi - iv.lo).toLocaleString()} on ${what}`}</title>
+                            <rect
+                              x={x0}
+                              y={centerY - 8}
+                              width={x1 - x0}
+                              height={16}
+                              fill="transparent"
+                              pointerEvents="all"
+                            />
+                            <path
+                              d={wavyPath(x0, x1, centerY, amplitude, 3)}
+                              fill="none"
+                              stroke={STROKE}
+                              strokeWidth={MILESTONE_WAVE_WIDTH}
+                              strokeLinecap="round"
+                              opacity={opacity}
+                              pointerEvents="none"
+                            />
+                            <circle
+                              cx={x1}
+                              cy={centerY}
+                              r={dotR}
+                              fill={STROKE}
+                              stroke={COLOR_HALO}
+                              strokeWidth={0.75}
+                              opacity={opacity}
+                              pointerEvents="none"
+                            />
+                          </g>
+                        );
+                      });
                     })}
                   </svg>
                 </div>
