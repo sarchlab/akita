@@ -128,19 +128,33 @@ export default function ResourcePage() {
   const numBins = Math.max(60, Math.min(400, Math.round(innerWidth / 4)));
 
   const { data, loading } = useResourceBlocking(what, dataRange.startTime, dataRange.endTime, numBins);
-  const dataFresh =
+  const dataMatchesRange =
     !!data &&
-    sameTime(data.start_time, viewRange.startTime) &&
-    sameTime(data.end_time, viewRange.endTime) &&
+    sameTime(data.start_time, dataRange.startTime) &&
+    sameTime(data.end_time, dataRange.endTime) &&
     data.num_bins === numBins;
-  const showGantt = dataFresh && !!data && data.total > 0 && data.total <= GANTT_THRESHOLD;
-  const { tasks, loading: tasksLoading } = useResourceTasks(
+  const [showGantt, setShowGantt] = useState(false);
+  useEffect(() => {
+    setShowGantt(false);
+  }, [what]);
+  useEffect(() => {
+    if (dataMatchesRange) setShowGantt(!!data && data.total > 0 && data.total <= GANTT_THRESHOLD);
+  }, [dataMatchesRange, data?.total]);
+  const taskFetchEnabled = dataMatchesRange && showGantt;
+  const { tasks: fetchedTasks, loading: tasksLoading } = useResourceTasks(
     what,
     dataRange.startTime,
     dataRange.endTime,
-    showGantt,
+    taskFetchEnabled,
     GANTT_THRESHOLD,
   );
+  const [tasks, setTasks] = useState<Task[]>([]);
+  useEffect(() => {
+    setTasks([]);
+  }, [what]);
+  useEffect(() => {
+    if (taskFetchEnabled && !tasksLoading) setTasks(fetchedTasks);
+  }, [fetchedTasks, taskFetchEnabled, tasksLoading]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedTask = tasks.find((t) => String(t.id) === selectedId) ?? null;
@@ -293,10 +307,11 @@ export default function ResourcePage() {
   }, [data, xScale, startTime, endTime, curveGridTop, curveGridBottom]);
 
   const gaps = segmentsData?.enabled ? gapSegments(segmentsData.segments, startTime, endTime) : [];
-  const hasData = dataFresh && (data?.bins.length ?? 0) > 0;
+  const hasData = (data?.bins.length ?? 0) > 0;
   const rowH = showGantt && usageTasks.length > 0 ? taskH / usageTasks.length : 0;
   const blockingRowH = showGantt && blockedTasks.length > 0 ? blockingTaskH / blockedTasks.length : 0;
-  const chartUpdating = what && (dataPending || loading || (showGantt && tasksLoading) || !dataFresh);
+  const chartUpdating =
+    what && ((!hasData && loading) || (showGantt && taskFetchEnabled && tasks.length === 0));
 
   const panel = (
     <>
@@ -308,7 +323,7 @@ export default function ResourcePage() {
           <div className="mt-0.5 break-all font-mono text-sm font-bold leading-tight">{what || "—"}</div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {(dataPending || loading || tasksLoading || (what && !dataFresh)) && what ? (
+          {(dataPending || loading || tasksLoading || (what && data && !dataMatchesRange)) && what ? (
             <span className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
               Updating…
             </span>
