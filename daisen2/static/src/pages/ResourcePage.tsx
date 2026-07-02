@@ -148,6 +148,14 @@ export default function ResourcePage() {
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [hoveredResourceTime, setHoveredResourceTime] = useState<number | null>(null);
   const [highlightedResourceReason, setHighlightedResourceReason] = useState<string | null>(null);
+  // Tasks located at the resource are the work that consumes it (e.g. inst-VALU
+  // tasks at GPU[..].VALU). Other tasks carrying the resource milestone are the
+  // higher-level tasks blocked by it (e.g. wavefront tasks).
+  const usageTasks = useMemo(() => tasks.filter((task) => task.location === what), [tasks, what]);
+  const blockedTasks = useMemo(
+    () => tasks.filter((task) => task.location !== what && blockedIntervals(task, what).length > 0),
+    [tasks, what],
+  );
   const taskKeys = useMemo(() => {
     const keys = new Set<string>();
     for (const task of tasks) keys.add(taskColorKey(task, colorMode));
@@ -161,15 +169,15 @@ export default function ResourcePage() {
     [resourceReason],
   );
   const reasonHighlight = highlightedResourceReason ?? (hoveredResourceTime != null ? resourceReason : null);
-  const highlightedTaskIds = useMemo(() => {
+  const highlightedBlockedTaskIds = useMemo(() => {
     if (hoveredResourceTime == null || !showGantt) return null;
     const ids = new Set<string>();
-    for (const task of tasks) {
+    for (const task of blockedTasks) {
       if (task.start_time > hoveredResourceTime || task.end_time < hoveredResourceTime) continue;
       if (isBlockedOnResourceAt(task, what, hoveredResourceTime)) ids.add(String(task.id));
     }
     return ids;
-  }, [hoveredResourceTime, showGantt, tasks, what]);
+  }, [blockedTasks, hoveredResourceTime, showGantt, what]);
 
   // Pan/zoom state (kept in refs so the wheel listener reads the latest).
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -246,7 +254,7 @@ export default function ResourcePage() {
   );
 
   // Vertical layout when individual tasks are visible:
-  // [task usage bars] [resource-wait waves] [blocked-task occupancy curve].
+  // [resource usage tasks] [blocked tasks + wait waves] [blocked-task occupancy curve].
   // Usage and blocking are separate chart regions, divided with the same subtle
   // border used by the component page instead of painting both in one gantt.
   const curveRegionHeight = showGantt ? Math.min(Math.round(height * 0.28), 180) : height;
@@ -286,9 +294,9 @@ export default function ResourcePage() {
 
   const gaps = segmentsData?.enabled ? gapSegments(segmentsData.segments, startTime, endTime) : [];
   const hasData = dataFresh && (data?.bins.length ?? 0) > 0;
-  const rowH = showGantt && tasks.length > 0 ? taskH / tasks.length : 0;
-  const blockingRowH = showGantt && tasks.length > 0 ? blockingTaskH / tasks.length : 0;
-  const chartUpdating = what && (dataPending || loading || !dataFresh);
+  const rowH = showGantt && usageTasks.length > 0 ? taskH / usageTasks.length : 0;
+  const blockingRowH = showGantt && blockedTasks.length > 0 ? blockingTaskH / blockedTasks.length : 0;
+  const chartUpdating = what && (dataPending || loading || (showGantt && tasksLoading) || !dataFresh);
 
   const panel = (
     <>
@@ -390,33 +398,15 @@ export default function ResourcePage() {
                     <line x1={5} x2={width - 5} y1={taskGridTop} y2={taskGridTop} stroke={COLOR_GRID} />
                     <GapShading gaps={gaps} xScale={xScale} height={taskRegionHeight} patternId="resource-task-gap" />
 
-                    <text
-                      x={8}
-                      y={taskGridTop + 13}
-                      fontSize="11"
-                      fill="#475569"
-                      stroke="#ffffff"
-                      strokeWidth={2.5}
-                      paintOrder="stroke"
-                      pointerEvents="none"
-                    >
-                      {`Task usage · ${tasks.length.toLocaleString()} tasks`}
-                    </text>
-
-                    {tasks.map((task, i) => {
+                    {usageTasks.map((task, i) => {
                       const barY = taskTop + i * rowH + Math.min(1, rowH * 0.15);
                       const barH = Math.max(1.5, rowH - Math.min(2, rowH * 0.3));
                       const bx0 = Math.max(5, Math.min(width - 5, safeScale(xScale, task.start_time)));
                       const bx1 = Math.max(5, Math.min(width - 5, safeScale(xScale, task.end_time)));
                       const selected = selectedId === String(task.id);
                       const key = taskColorKey(task, colorMode);
-                      const hasHighlight = highlightedTaskIds !== null || highlightedKey !== null;
-                      const highlighted =
-                        highlightedTaskIds !== null
-                          ? highlightedTaskIds.has(String(task.id))
-                          : highlightedKey !== null
-                            ? highlightedKey === key
-                            : true;
+                      const hasHighlight = highlightedKey !== null;
+                      const highlighted = highlightedKey !== null ? highlightedKey === key : true;
                       return (
                         <g
                           key={task.id}
@@ -454,6 +444,19 @@ export default function ResourcePage() {
                         </g>
                       );
                     })}
+
+                    <text
+                      x={8}
+                      y={taskGridTop + 13}
+                      fontSize="11"
+                      fill="#475569"
+                      stroke="#ffffff"
+                      strokeWidth={2.5}
+                      paintOrder="stroke"
+                      pointerEvents="none"
+                    >
+                      {`Task usage · ${usageTasks.length.toLocaleString()} tasks`}
+                    </text>
                   </svg>
                 </div>
               ) : null}
@@ -467,6 +470,103 @@ export default function ResourcePage() {
                       gridBottom={blockingGridBottom}
                     />
                     <GapShading gaps={gaps} xScale={xScale} height={blockingRegionHeight} patternId="resource-blocking-gap" />
+                    {blockedTasks.map((task, i) => {
+                      const centerY = blockingTaskTop + i * blockingRowH + blockingRowH / 2;
+                      const barH = Math.max(1.5, blockingRowH - Math.min(2, blockingRowH * 0.3));
+                      const barY = centerY - barH / 2;
+                      const bx0 = Math.max(5, Math.min(width - 5, safeScale(xScale, task.start_time)));
+                      const bx1 = Math.max(5, Math.min(width - 5, safeScale(xScale, task.end_time)));
+                      const selected = selectedId === String(task.id);
+                      const key = taskColorKey(task, colorMode);
+                      const hasHighlight = highlightedBlockedTaskIds !== null || highlightedKey !== null;
+                      const highlighted =
+                        highlightedBlockedTaskIds !== null
+                          ? highlightedBlockedTaskIds.has(String(task.id))
+                          : highlightedKey !== null
+                            ? highlightedKey === key
+                            : true;
+                      const intervals = blockedIntervals(task, what);
+                      const opacity = hasHighlight && !highlighted ? OPACITY_DIM_MILESTONE : selectedId != null && !selected ? 0.35 : 1;
+                      const amplitude = Math.max(1, Math.min(3, blockingRowH * 0.22));
+                      const dotR = Math.max(1.2, Math.min(MILESTONE_DOT_R, blockingRowH * 0.35));
+                      const blocked = intervals.reduce((sum, iv) => sum + (iv.hi - iv.lo), 0);
+                      return (
+                        <g
+                          key={task.id}
+                          className="cursor-pointer"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (!didDragRef.current) setSelectedId(String(task.id));
+                          }}
+                          onDoubleClick={(event) => {
+                            event.stopPropagation();
+                            const params = new URLSearchParams({
+                              name: task.location,
+                              taskid: String(task.id),
+                              starttime: String(viewRange.startTime),
+                              endtime: String(viewRange.endTime),
+                            });
+                            navigate(`/component?${params.toString()}`);
+                          }}
+                        >
+                          <title>{`${task.kind} ${task.what} @ ${task.location} — blocked ${blocked.toLocaleString()} on ${what}`}</title>
+                          <rect
+                            x={bx0}
+                            y={barY}
+                            width={Math.max(1, bx1 - bx0)}
+                            height={barH}
+                            fill={lookupColor(taskColorMap, task, colorMode)}
+                            stroke={COLOR_BAR_STROKE}
+                            strokeWidth={0.5}
+                            strokeOpacity={barStrokeOpacity({ selected, highlighted, hasHighlight })}
+                            opacity={barOpacity({ selected, highlighted, hasHighlight, hasSelection: selectedId != null })}
+                          />
+                          {intervals.map((iv, k) => {
+                            const lo = Math.max(iv.lo, startTime);
+                            const hi = Math.min(iv.hi, endTime);
+                            if (hi <= lo) return null;
+                            const x0 = safeScale(xScale, lo);
+                            const x1 = safeScale(xScale, hi);
+                            if (x1 - x0 < 1) return null;
+                            const showRelease = iv.hi >= startTime && iv.hi <= endTime;
+                            return (
+                              <g key={`${task.id}-${k}`}>
+                                <rect
+                                  x={x0}
+                                  y={centerY - 8}
+                                  width={x1 - x0}
+                                  height={16}
+                                  fill="transparent"
+                                  pointerEvents="all"
+                                />
+                                <path
+                                  d={wavyPath(x0, x1, centerY, amplitude, 3)}
+                                  fill="none"
+                                  stroke={STROKE}
+                                  strokeWidth={MILESTONE_WAVE_WIDTH}
+                                  strokeLinecap="round"
+                                  opacity={opacity}
+                                  pointerEvents="none"
+                                />
+                                {showRelease ? (
+                                  <circle
+                                    cx={x1}
+                                    cy={centerY}
+                                    r={dotR}
+                                    fill={STROKE}
+                                    stroke={COLOR_HALO}
+                                    strokeWidth={0.75}
+                                    opacity={opacity}
+                                    pointerEvents="none"
+                                  />
+                                ) : null}
+                              </g>
+                            );
+                          })}
+                        </g>
+                      );
+                    })}
+
                     <text
                       x={8}
                       y={blockingLabelTop}
@@ -477,79 +577,8 @@ export default function ResourcePage() {
                       paintOrder="stroke"
                       pointerEvents="none"
                     >
-                      {`Resource waits · ${what}`}
+                      {`Resource waits · ${blockedTasks.length.toLocaleString()} tasks`}
                     </text>
-
-                    {tasks.map((task, i) => {
-                      const centerY = blockingTaskTop + i * blockingRowH + blockingRowH / 2;
-                      const selected = selectedId === String(task.id);
-                      const key = taskColorKey(task, colorMode);
-                      const hasHighlight = highlightedTaskIds !== null || highlightedKey !== null;
-                      const highlighted =
-                        highlightedTaskIds !== null
-                          ? highlightedTaskIds.has(String(task.id))
-                          : highlightedKey !== null
-                            ? highlightedKey === key
-                            : true;
-                      const intervals = blockedIntervals(task, what);
-                      const opacity = hasHighlight && !highlighted ? OPACITY_DIM_MILESTONE : selectedId != null && !selected ? 0.35 : 1;
-                      const amplitude = Math.max(1, Math.min(3, blockingRowH * 0.22));
-                      const dotR = Math.max(1.2, Math.min(MILESTONE_DOT_R, blockingRowH * 0.35));
-                      return intervals.map((iv, k) => {
-                        const x0 = safeScale(xScale, iv.lo);
-                        const x1 = safeScale(xScale, iv.hi);
-                        if (x1 - x0 < 1) return null;
-                        return (
-                          <g
-                            key={`${task.id}-${k}`}
-                            className="cursor-pointer"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              if (!didDragRef.current) setSelectedId(String(task.id));
-                            }}
-                            onDoubleClick={(event) => {
-                              event.stopPropagation();
-                              const params = new URLSearchParams({
-                                name: task.location,
-                                taskid: String(task.id),
-                                starttime: String(viewRange.startTime),
-                                endtime: String(viewRange.endTime),
-                              });
-                              navigate(`/component?${params.toString()}`);
-                            }}
-                          >
-                            <title>{`${task.kind} ${task.what} @ ${task.location} — blocked ${(iv.hi - iv.lo).toLocaleString()} on ${what}`}</title>
-                            <rect
-                              x={x0}
-                              y={centerY - 8}
-                              width={x1 - x0}
-                              height={16}
-                              fill="transparent"
-                              pointerEvents="all"
-                            />
-                            <path
-                              d={wavyPath(x0, x1, centerY, amplitude, 3)}
-                              fill="none"
-                              stroke={STROKE}
-                              strokeWidth={MILESTONE_WAVE_WIDTH}
-                              strokeLinecap="round"
-                              opacity={opacity}
-                              pointerEvents="none"
-                            />
-                            <circle
-                              cx={x1}
-                              cy={centerY}
-                              r={dotR}
-                              fill={STROKE}
-                              stroke={COLOR_HALO}
-                              strokeWidth={0.75}
-                              opacity={opacity}
-                              pointerEvents="none"
-                            />
-                          </g>
-                        );
-                      });
-                    })}
                   </svg>
                 </div>
               ) : null}

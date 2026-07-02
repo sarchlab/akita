@@ -217,11 +217,11 @@ export function ResourceViewHelp({ className }: { className?: string }) {
       <Figure
         src={resourceImg}
         alt="The resource view: task usage bars, resource-wait waves, and a blocked-task count curve"
-        caption="Usage bars show the tasks in time; the waves show when those tasks waited on this resource; the curve shows total blocked tasks over time."
+        caption="Usage bars show work running on the resource; blocked-task bars below show work waiting on it, with waves marking the wait intervals."
       />
       <p>This view focuses on <strong>one hardware resource</strong> — a buffer slot, a cache bank, an MSHR, a pipeline stage — and the tasks that <strong>block waiting on it</strong>. A task is blocked on a resource whenever it is stalled until that resource frees up; each such wait is recorded as a <code>hardware_resource</code> milestone (see <em>Blocking reasons</em>).</p>
       <p>The <strong>curve</strong> plots, over time, <strong>how many tasks are blocked</strong> waiting on this resource — a tall stretch means the resource is contended and many tasks are queued behind it. Its label reports the count in the current view (and notes when the curve is a sample of a very busy resource).</p>
-      <p>When <strong>few enough tasks</strong> fall in the visible range, two aligned per-task charts appear above the curve: <strong>Task usage</strong> draws each task as a solid bar, and <strong>Resource waits</strong> draws the intervals spent waiting on this resource as wavy lines with release dots. With more tasks in view only the curve is shown — <strong>zoom in</strong> to bring the per-task charts back.</p>
+      <p>When <strong>few enough tasks</strong> fall in the visible range, two aligned per-task charts appear above the curve: <strong>Task usage</strong> shows tasks located at this hardware resource, while <strong>Resource waits</strong> shows the higher-level tasks blocked by it, with wavy wait intervals and release dots overlaid on those task bars. With more tasks in view only the curve is shown — <strong>zoom in</strong> to bring the per-task charts back.</p>
       <p>Interact with it directly:</p>
       <ul className="space-y-1.5">
         <Term label="Click a task">select it — its timing, location, and milestones fill the side panel.</Term>
