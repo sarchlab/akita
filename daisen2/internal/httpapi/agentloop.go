@@ -330,7 +330,10 @@ func clip(s string, n int) string {
 const (
 	dataQueryRowCap  = 1000
 	dataQueryByteCap = 64 * 1024
-	dataQueryTimeout = 15 * time.Second
+	// Large traces can need a full-table aggregate or GROUP BY before the model
+	// learns which indexed slice to inspect next. The agent's wall-clock cap still
+	// bounds the whole run even when one exploratory query is slow.
+	dataQueryTimeout = 2 * time.Minute
 )
 
 const dataQueryDescription = `Run a single read-only SQL query (SELECT or WITH only) over the Akita trace
