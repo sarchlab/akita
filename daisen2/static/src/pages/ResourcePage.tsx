@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { X } from "lucide-react";
 import * as d3 from "d3";
@@ -9,7 +9,8 @@ import { useSimulationRange } from "../hooks/useSimulationRange";
 import { useSegments } from "../hooks/useSegments";
 import { useElementSize } from "../hooks/useElementSize";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
-import { useTaskColorMap } from "../hooks/useTaskColorMap";
+import { useAutoColorMode } from "../hooks/useAutoColorMode";
+import { useColorMapFromKeys } from "../hooks/useTaskColorMap";
 import TraceChartLayout from "../components/TraceChartLayout";
 import TimeTicks from "../components/charts/TimeTicks";
 import YAxisOverlay from "../components/charts/YAxisOverlay";
@@ -18,9 +19,11 @@ import TimeZoomControls from "../components/charts/TimeZoomControls";
 import SelectedTaskSection from "../components/SelectedTaskSection";
 import { Button } from "../components/ui/button";
 import { ResourceViewHelp } from "../components/HelpTopics";
+import Legend from "../components/Legend";
 import { SectionLabel } from "../components/Legend";
 import { milestonesOf } from "../utils/milestoneViz";
-import { lookupColor } from "../utils/taskColorCoder";
+import { lookupColor, taskColorKey } from "../utils/taskColorCoder";
+import type { ColorMode } from "../utils/taskColorCoder";
 import type { Task } from "../types/task";
 import {
   AXIS_TICK_COUNT,
@@ -66,6 +69,10 @@ function blockedIntervals(task: Task, what: string): { lo: number; hi: number }[
     }
   }
   return out;
+}
+
+function isBlockedOnResourceAt(task: Task, what: string, time: number): boolean {
+  return blockedIntervals(task, what).some((interval) => interval.lo <= time && time <= interval.hi);
 }
 
 // ResourcePage (/resource?what=<name>) shows one hardware resource like the
@@ -114,12 +121,42 @@ export default function ResourcePage() {
 
   const { data, loading } = useResourceBlocking(what, dataRange.startTime, dataRange.endTime, numBins);
   const showGantt = !!data && data.total > 0 && data.total <= GANTT_THRESHOLD;
-  const { tasks } = useResourceTasks(what, dataRange.startTime, dataRange.endTime, showGantt, GANTT_THRESHOLD);
+  const { tasks, loading: tasksLoading } = useResourceTasks(
+    what,
+    dataRange.startTime,
+    dataRange.endTime,
+    showGantt,
+    GANTT_THRESHOLD,
+  );
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedTask = tasks.find((t) => String(t.id) === selectedId) ?? null;
-
-  const taskColorMap = useTaskColorMap(tasks);
+  const [colorMode, setColorMode] = useState<ColorMode>("kind-what");
+  const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
+  const [hoveredResourceTime, setHoveredResourceTime] = useState<number | null>(null);
+  const [highlightedResourceReason, setHighlightedResourceReason] = useState<string | null>(null);
+  const taskKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const task of tasks) keys.add(taskColorKey(task, colorMode));
+    return Array.from(keys).sort();
+  }, [tasks, colorMode]);
+  const handleColorMode = useAutoColorMode(colorMode, setColorMode, taskKeys.length, 10);
+  const taskColorMap = useColorMapFromKeys(taskKeys, "task");
+  const resourceReason = what ? taskColorKey({ kind: HW_RESOURCE_KIND, what }, "kind-what") : "";
+  const resourceReasonColorMap = useMemo(
+    () => (resourceReason ? { [resourceReason]: STROKE } : {}),
+    [resourceReason],
+  );
+  const reasonHighlight = highlightedResourceReason ?? (hoveredResourceTime != null ? resourceReason : null);
+  const highlightedTaskIds = useMemo(() => {
+    if (hoveredResourceTime == null || !showGantt) return null;
+    const ids = new Set<string>();
+    for (const task of tasks) {
+      if (task.start_time > hoveredResourceTime || task.end_time < hoveredResourceTime) continue;
+      if (isBlockedOnResourceAt(task, what, hoveredResourceTime)) ids.add(String(task.id));
+    }
+    return ids;
+  }, [hoveredResourceTime, showGantt, tasks, what]);
 
   // Pan/zoom state (kept in refs so the wheel listener reads the latest).
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -176,6 +213,17 @@ export default function ResourcePage() {
   const onPointerUp = () => {
     dragRef.current = null;
   };
+  const crosshairRef = useRef<HTMLDivElement | null>(null);
+  const moveCrosshair = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const line = crosshairRef.current;
+    if (!line) return;
+    const x = event.clientX - event.currentTarget.getBoundingClientRect().left;
+    line.style.transform = `translateX(${Math.round(x)}px)`;
+    line.style.opacity = "1";
+  };
+  const hideCrosshair = () => {
+    if (crosshairRef.current) crosshairRef.current.style.opacity = "0";
+  };
 
   const startTime = viewRange.startTime;
   const endTime = viewRange.endTime;
@@ -184,23 +232,24 @@ export default function ResourcePage() {
     [startTime, endTime, width],
   );
 
-  // Vertical layout: [top axis] [per-task gantt (optional)] [occupancy curve]
-  // [bottom axis] — gantt above the curve, matching the component view's order.
-  const gridTop = AXIS_PAD;
-  const gridBottom = height - AXIS_PAD;
-  const contentH = Math.max(1, gridBottom - gridTop);
-  const curveH = showGantt ? Math.min(Math.round(contentH * 0.4), 180) : contentH;
-  const curveTop = showGantt ? gridBottom - curveH : gridTop;
-  const curveBottom = gridBottom;
-  const taskTop = gridTop;
-  const taskH = showGantt ? Math.max(0, curveTop - GAP - taskTop) : 0;
+  // Vertical layout: [per-task gantt (optional)] [occupancy curve]. They are
+  // separate regions so the divider is the same subtle border used on the
+  // component page instead of a heavy in-SVG line.
+  const curveRegionHeight = showGantt ? Math.min(Math.round(height * 0.35), 190) : height;
+  const taskRegionHeight = showGantt ? Math.max(80, height - curveRegionHeight) : 0;
+  const taskGridTop = AXIS_PAD;
+  const taskGridBottom = Math.max(taskGridTop + 1, taskRegionHeight);
+  const curveGridTop = showGantt ? 0 : AXIS_PAD;
+  const curveGridBottom = Math.max(curveGridTop + 1, curveRegionHeight - AXIS_PAD);
+  const taskTop = taskGridTop;
+  const taskH = showGantt ? Math.max(0, taskGridBottom - GAP - taskTop) : 0;
 
   const { areaPath, yScale } = useMemo(() => {
     const bins = data?.bins ?? [];
     const maxV = Math.max(1, d3.max(bins) ?? 1);
     // Leave CURVE_PAD_TOP at the top of the band for the label, matching the
     // component page's task-count area (padTop above the peak).
-    const y = d3.scaleLinear().domain([0, maxV]).nice().range([curveBottom, curveTop + CURVE_PAD_TOP]);
+    const y = d3.scaleLinear().domain([0, maxV]).nice().range([curveGridBottom, curveGridTop + CURVE_PAD_TOP]);
     const dStart = data?.start_time ?? startTime;
     const n = data?.num_bins ?? bins.length;
     const binW = n > 0 ? ((data?.end_time ?? endTime) - dStart) / n : 0;
@@ -212,7 +261,7 @@ export default function ResourcePage() {
       .y1((p) => safeScale(y, p.v))
       .curve(d3.curveMonotoneX);
     return { areaPath: area(pts) ?? "", yScale: y };
-  }, [data, xScale, startTime, endTime, curveTop, curveBottom]);
+  }, [data, xScale, startTime, endTime, curveGridTop, curveGridBottom]);
 
   const gaps = segmentsData?.enabled ? gapSegments(segmentsData.segments, startTime, endTime) : [];
   const hasData = (data?.bins.length ?? 0) > 0;
@@ -228,7 +277,7 @@ export default function ResourcePage() {
           <div className="mt-0.5 break-all font-mono text-sm font-bold leading-tight">{what || "—"}</div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {(dataPending || loading) && what ? (
+          {(dataPending || loading || tasksLoading) && what ? (
             <span className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
               Updating…
             </span>
@@ -252,13 +301,34 @@ export default function ResourcePage() {
         {/* What the view means moved into the chart-corner info modal
             (ResourceViewHelp); the panel just reflects the selected task. */}
         <SelectedTaskSection task={selectedTask} milestone={null} />
+        <div className="-mx-4 border-t" />
+        <Legend
+          taskKeys={taskKeys}
+          colorMap={taskColorMap}
+          blockingReasons={resourceReason ? [resourceReason] : []}
+          milestoneColorMap={resourceReasonColorMap}
+          colorMode={colorMode}
+          onColorMode={handleColorMode}
+          highlightedKey={highlightedKey}
+          onHighlight={setHighlightedKey}
+          highlightedReason={reasonHighlight}
+          onHighlightReason={setHighlightedResourceReason}
+          resourceRange={viewRange}
+        />
       </div>
     </>
   );
 
   return (
     <TraceChartLayout panel={panel}>
-      <div className="relative min-w-0 flex-1 bg-white">
+      <div
+        className="daisen1-component-left min-w-0 flex-1 bg-white"
+        onMouseMove={moveCrosshair}
+        onMouseLeave={() => {
+          hideCrosshair();
+          setHoveredResourceTime(null);
+        }}
+      >
         <div
           ref={(node) => {
             sizeRef(node);
@@ -282,101 +352,139 @@ export default function ResourcePage() {
               No blocking recorded for this resource in range.
             </div>
           ) : (
-            <svg width={width} height={height} className="block">
-              <TimeTicks
-                ticks={xScale.ticks(AXIS_TICK_COUNT)}
-                xScale={xScale}
-                gridTop={gridTop}
-                gridBottom={gridBottom}
-                topLabelY={12}
-                bottomLabelY={height - 6}
-                tickMarks
-              />
-              <line x1={5} x2={width - 5} y1={gridTop} y2={gridTop} stroke={COLOR_GRID} />
-              {showGantt ? <line x1={5} x2={width - 5} y1={curveTop} y2={curveTop} stroke={COLOR_GRID} /> : null}
-              <line x1={5} x2={width - 5} y1={gridBottom} y2={gridBottom} stroke={COLOR_GRID} />
+            <>
+              {showGantt ? (
+                <div className="daisen1-component-view relative" style={{ height: taskRegionHeight }}>
+                  <svg width={width} height={taskRegionHeight} className="block">
+                    <TimeTicks
+                      ticks={xScale.ticks(AXIS_TICK_COUNT)}
+                      xScale={xScale}
+                      gridTop={taskGridTop}
+                      gridBottom={taskGridBottom}
+                      topLabelY={12}
+                      tickMarks
+                    />
+                    <line x1={5} x2={width - 5} y1={taskGridTop} y2={taskGridTop} stroke={COLOR_GRID} />
+                    <GapShading gaps={gaps} xScale={xScale} height={taskRegionHeight} patternId="resource-task-gap" />
 
-              {/* Occupancy curve (always) — a filled band only, matching the
-                  component page's task-count area (no outline, 0.9 opacity). */}
-              <path d={areaPath} fill={FILL} opacity={0.9} />
-              <YAxisOverlay yScale={yScale} width={width} />
-              <text
-                x={8}
-                y={curveTop + 13}
-                fontSize="11"
-                fill="#475569"
-                stroke="#ffffff"
-                strokeWidth={2.5}
-                paintOrder="stroke"
-                pointerEvents="none"
+                    {tasks.map((task, i) => {
+                      const barY = taskTop + i * rowH + Math.min(1, rowH * 0.15);
+                      const barH = Math.max(1.5, rowH - Math.min(2, rowH * 0.3));
+                      const bx0 = Math.max(5, Math.min(width - 5, safeScale(xScale, task.start_time)));
+                      const bx1 = Math.max(5, Math.min(width - 5, safeScale(xScale, task.end_time)));
+                      const selected = selectedId === String(task.id);
+                      const key = taskColorKey(task, colorMode);
+                      const hasHighlight = highlightedTaskIds !== null || highlightedKey !== null;
+                      const highlighted =
+                        highlightedTaskIds !== null
+                          ? highlightedTaskIds.has(String(task.id))
+                          : highlightedKey !== null
+                            ? highlightedKey === key
+                            : true;
+                      const intervals = blockedIntervals(task, what);
+                      const blocked = intervals.reduce((s, iv) => s + (iv.hi - iv.lo), 0);
+                      const waitOpacity = hasHighlight ? (highlighted ? 0.95 : 0.12) : selectedId != null && !selected ? 0.3 : 0.9;
+                      return (
+                        <g
+                          key={task.id}
+                          className="cursor-pointer"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (!didDragRef.current) setSelectedId(String(task.id));
+                          }}
+                          onDoubleClick={(event) => {
+                            event.stopPropagation();
+                            // Open the component view with this task as the current task,
+                            // keeping the current time window.
+                            const params = new URLSearchParams({
+                              name: task.location,
+                              taskid: String(task.id),
+                              starttime: String(viewRange.startTime),
+                              endtime: String(viewRange.endTime),
+                            });
+                            navigate(`/component?${params.toString()}`);
+                          }}
+                        >
+                          <title>{`${task.kind} ${task.what} @ ${task.location} — blocked ${blocked.toLocaleString()} on ${what}`}</title>
+                          {/* The whole task. */}
+                          <rect
+                            x={bx0}
+                            y={barY}
+                            width={Math.max(1, bx1 - bx0)}
+                            height={barH}
+                            fill={lookupColor(taskColorMap, task, colorMode)}
+                            stroke={COLOR_BAR_STROKE}
+                            strokeWidth={0.5}
+                            strokeOpacity={barStrokeOpacity({ selected, highlighted, hasHighlight })}
+                            opacity={barOpacity({ selected, highlighted, hasHighlight, hasSelection: selectedId != null })}
+                          />
+                          {/* The part it spent waiting for this resource. */}
+                          {intervals.map((iv, k) => (
+                            <rect
+                              key={k}
+                              x={safeScale(xScale, iv.lo)}
+                              y={barY}
+                              width={Math.max(1, safeScale(xScale, iv.hi) - safeScale(xScale, iv.lo))}
+                              height={barH}
+                              fill={STROKE}
+                              fillOpacity={waitOpacity}
+                            />
+                          ))}
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
+              ) : null}
+              <div
+                className={`daisen1-metric-view relative${showGantt ? " border-t border-slate-200" : ""}`}
+                style={{ height: curveRegionHeight }}
               >
-                {`Tasks blocked · ${data?.total.toLocaleString() ?? "—"}${
-                  data && data.sample > 1 ? ` · ≈1-in-${data.sample} sample` : ""
-                }${data && !showGantt && data.total > 0 ? " · zoom in for individual tasks" : ""}`}
-              </text>
+                <svg
+                  width={width}
+                  height={curveRegionHeight}
+                  className="block"
+                  onMouseMove={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setHoveredResourceTime(xScale.invert(event.clientX - rect.left));
+                  }}
+                  onMouseLeave={() => setHoveredResourceTime(null)}
+                >
+                  <TimeTicks
+                    ticks={xScale.ticks(AXIS_TICK_COUNT)}
+                    xScale={xScale}
+                    gridTop={curveGridTop}
+                    gridBottom={curveGridBottom}
+                    topLabelY={showGantt ? undefined : 12}
+                    bottomLabelY={curveRegionHeight - 6}
+                    tickMarks
+                  />
+                  {!showGantt ? <line x1={5} x2={width - 5} y1={curveGridTop} y2={curveGridTop} stroke={COLOR_GRID} /> : null}
+                  <line x1={5} x2={width - 5} y1={curveGridBottom} y2={curveGridBottom} stroke={COLOR_GRID} />
 
-              {/* Per-task gantt (when few in view): full bar + highlighted wait. */}
-              {showGantt &&
-                tasks.map((task, i) => {
-                  const barY = taskTop + i * rowH + Math.min(1, rowH * 0.15);
-                  const barH = Math.max(1.5, rowH - Math.min(2, rowH * 0.3));
-                  const bx0 = Math.max(5, Math.min(width - 5, safeScale(xScale, task.start_time)));
-                  const bx1 = Math.max(5, Math.min(width - 5, safeScale(xScale, task.end_time)));
-                  const selected = selectedId === String(task.id);
-                  const intervals = blockedIntervals(task, what);
-                  const blocked = intervals.reduce((s, iv) => s + (iv.hi - iv.lo), 0);
-                  return (
-                    <g
-                      key={task.id}
-                      className="cursor-pointer"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (!didDragRef.current) setSelectedId(String(task.id));
-                      }}
-                      onDoubleClick={(event) => {
-                        event.stopPropagation();
-                        // Open the component view with this task as the current task,
-                        // keeping the current time window.
-                        const params = new URLSearchParams({
-                          name: task.location,
-                          taskid: String(task.id),
-                          starttime: String(viewRange.startTime),
-                          endtime: String(viewRange.endTime),
-                        });
-                        navigate(`/component?${params.toString()}`);
-                      }}
-                    >
-                      <title>{`${task.kind} ${task.what} @ ${task.location} — blocked ${blocked.toLocaleString()} on ${what}`}</title>
-                      {/* The whole task. */}
-                      <rect
-                        x={bx0}
-                        y={barY}
-                        width={Math.max(1, bx1 - bx0)}
-                        height={barH}
-                        fill={lookupColor(taskColorMap, task)}
-                        stroke={COLOR_BAR_STROKE}
-                        strokeWidth={0.5}
-                        strokeOpacity={barStrokeOpacity({ selected, highlighted: false, hasHighlight: false })}
-                        opacity={barOpacity({ selected, highlighted: false, hasHighlight: false, hasSelection: selectedId != null })}
-                      />
-                      {/* The part it spent waiting for this resource. */}
-                      {intervals.map((iv, k) => (
-                        <rect
-                          key={k}
-                          x={safeScale(xScale, iv.lo)}
-                          y={barY}
-                          width={Math.max(1, safeScale(xScale, iv.hi) - safeScale(xScale, iv.lo))}
-                          height={barH}
-                          fill={STROKE}
-                          fillOpacity={0.9}
-                        />
-                      ))}
-                    </g>
-                  );
-                })}
+                  {/* Occupancy curve (always) — a filled band only, matching the
+                      component page's task-count area (no outline, 0.9 opacity). */}
+                  <path d={areaPath} fill={FILL} opacity={0.9} />
+                  <YAxisOverlay yScale={yScale} width={width} />
+                  <text
+                    x={8}
+                    y={curveGridTop + 13}
+                    fontSize="11"
+                    fill="#475569"
+                    stroke="#ffffff"
+                    strokeWidth={2.5}
+                    paintOrder="stroke"
+                    pointerEvents="none"
+                  >
+                    {`Tasks blocked · ${data?.total.toLocaleString() ?? "—"}${
+                      data && data.sample > 1 ? ` · ≈1-in-${data.sample} sample` : ""
+                    }${data && !showGantt && data.total > 0 ? " · zoom in for individual tasks" : ""}`}
+                  </text>
 
-              <GapShading gaps={gaps} xScale={xScale} height={height} patternId="resource-gap" />
-            </svg>
+                  <GapShading gaps={gaps} xScale={xScale} height={curveGridBottom} patternId="resource-curve-gap" />
+                </svg>
+              </div>
+            </>
           )}
         </div>
 
@@ -386,6 +494,12 @@ export default function ResourcePage() {
             <ResourceViewHelp className="bg-white/85 p-1 shadow-sm ring-1 ring-slate-200 backdrop-blur-sm hover:bg-white" />
           </div>
         ) : null}
+        <div
+          ref={crosshairRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 z-10 w-px bg-slate-700/70 opacity-0"
+          style={{ transform: "translateX(-1px)", willChange: "transform" }}
+        />
       </div>
     </TraceChartLayout>
   );
