@@ -24,6 +24,7 @@ import { SectionLabel } from "../components/Legend";
 import { milestonesOf, wavyPath } from "../utils/milestoneViz";
 import { lookupColor, taskColorKey } from "../utils/taskColorCoder";
 import type { ColorMode } from "../utils/taskColorCoder";
+import { assignYIndices } from "../utils/taskYIndexAssigner";
 import type { Task } from "../types/task";
 import {
   AXIS_TICK_COUNT,
@@ -56,6 +57,11 @@ interface TimeRange {
   endTime: number;
 }
 
+interface PackedTasks {
+  tasks: Task[];
+  rows: number;
+}
+
 function sanitize(start: number, end: number): TimeRange {
   if (Number.isFinite(start) && Number.isFinite(end) && end > start) return { startTime: start, endTime: end };
   return { startTime: 0, endTime: MIN_RANGE };
@@ -81,6 +87,13 @@ function blockedIntervals(task: Task, what: string): { lo: number; hi: number }[
 
 function isBlockedOnResourceAt(task: Task, what: string, time: number): boolean {
   return blockedIntervals(task, what).some((interval) => interval.lo <= time && time <= interval.hi);
+}
+
+function packTasksUp(tasks: Task[]): PackedTasks {
+  const packed = tasks.filter((task) => task.end_time > task.start_time).map((task) => ({ ...task }));
+  if (packed.length === 0) return { tasks: [], rows: 0 };
+  const maxRow = assignYIndices(packed);
+  return { tasks: packed, rows: maxRow + 1 };
 }
 
 // ResourcePage (/resource?what=<name>) shows one hardware resource like the
@@ -170,6 +183,8 @@ export default function ResourcePage() {
     () => tasks.filter((task) => task.location !== what && blockedIntervals(task, what).length > 0),
     [tasks, what],
   );
+  const usageLayout = useMemo(() => packTasksUp(usageTasks), [usageTasks]);
+  const blockedLayout = useMemo(() => packTasksUp(blockedTasks), [blockedTasks]);
   const taskKeys = useMemo(() => {
     const keys = new Set<string>();
     for (const task of tasks) keys.add(taskColorKey(task, colorMode));
@@ -308,8 +323,8 @@ export default function ResourcePage() {
 
   const gaps = segmentsData?.enabled ? gapSegments(segmentsData.segments, startTime, endTime) : [];
   const hasData = (data?.bins.length ?? 0) > 0;
-  const rowH = showGantt && usageTasks.length > 0 ? taskH / usageTasks.length : 0;
-  const blockingRowH = showGantt && blockedTasks.length > 0 ? blockingTaskH / blockedTasks.length : 0;
+  const rowH = showGantt && usageLayout.rows > 0 ? taskH / usageLayout.rows : 0;
+  const blockingRowH = showGantt && blockedLayout.rows > 0 ? blockingTaskH / blockedLayout.rows : 0;
   const chartUpdating =
     what && ((!hasData && loading) || (showGantt && taskFetchEnabled && tasks.length === 0));
 
@@ -413,8 +428,8 @@ export default function ResourcePage() {
                     <line x1={5} x2={width - 5} y1={taskGridTop} y2={taskGridTop} stroke={COLOR_GRID} />
                     <GapShading gaps={gaps} xScale={xScale} height={taskRegionHeight} patternId="resource-task-gap" />
 
-                    {usageTasks.map((task, i) => {
-                      const barY = taskTop + i * rowH + Math.min(1, rowH * 0.15);
+                    {usageLayout.tasks.map((task) => {
+                      const barY = taskTop + (task.yIndex ?? 0) * rowH + Math.min(1, rowH * 0.15);
                       const barH = Math.max(1.5, rowH - Math.min(2, rowH * 0.3));
                       const bx0 = Math.max(5, Math.min(width - 5, safeScale(xScale, task.start_time)));
                       const bx1 = Math.max(5, Math.min(width - 5, safeScale(xScale, task.end_time)));
@@ -485,8 +500,8 @@ export default function ResourcePage() {
                       gridBottom={blockingGridBottom}
                     />
                     <GapShading gaps={gaps} xScale={xScale} height={blockingRegionHeight} patternId="resource-blocking-gap" />
-                    {blockedTasks.map((task, i) => {
-                      const centerY = blockingTaskTop + i * blockingRowH + blockingRowH / 2;
+                    {blockedLayout.tasks.map((task) => {
+                      const centerY = blockingTaskTop + (task.yIndex ?? 0) * blockingRowH + blockingRowH / 2;
                       const barH = Math.max(1.5, blockingRowH - Math.min(2, blockingRowH * 0.3));
                       const barY = centerY - barH / 2;
                       const bx0 = Math.max(5, Math.min(width - 5, safeScale(xScale, task.start_time)));
