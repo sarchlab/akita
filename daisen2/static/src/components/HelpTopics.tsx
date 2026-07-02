@@ -7,6 +7,7 @@ import taskTreeImg from "../assets/help/task-tree.png";
 import componentTasksImg from "../assets/help/component-tasks.png";
 import selectorImg from "../assets/help/selector.png";
 import taskGanttImg from "../assets/help/task-gantt.png";
+import resourceImg from "../assets/help/resource.png";
 
 // HelpTopics are ready-made InfoButtons for the concepts that are hard to grasp at
 // a glance, so a view just drops in e.g. <MetricsHelp /> next to the thing it
@@ -213,6 +214,11 @@ export function BlockingReasonsHelp({ className }: { className?: string }) {
 export function ResourceViewHelp({ className }: { className?: string }) {
   return (
     <InfoButton title="Resource view" className={className}>
+      <Figure
+        src={resourceImg}
+        alt="The resource view: tasks waiting on one hardware resource above a blocked-task count curve"
+        caption="Each bar is a task that waited on this resource; the curve below shows how many tasks were blocked over time."
+      />
       <p>This view focuses on <strong>one hardware resource</strong> — a buffer slot, a cache bank, an MSHR, a pipeline stage — and the tasks that <strong>block waiting on it</strong>. A task is blocked on a resource whenever it is stalled until that resource frees up; each such wait is recorded as a <code>hardware_resource</code> milestone (see <em>Blocking reasons</em>).</p>
       <p>The <strong>curve</strong> plots, over time, <strong>how many tasks are blocked</strong> waiting on this resource — a tall stretch means the resource is contended and many tasks are queued behind it. Its label reports the count in the current view (and notes when the curve is a sample of a very busy resource).</p>
       <p>When <strong>few enough tasks</strong> fall in the visible range, a <strong>per-task gantt</strong> is drawn above the curve: each task is its own bar across time, with the stretch it spent <strong>waiting on this resource highlighted</strong>. With more tasks in view only the curve is shown — <strong>zoom in</strong> to bring the bars back.</p>

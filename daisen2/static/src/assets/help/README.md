@@ -13,6 +13,7 @@ stay faithful to the actual UI.
 | `component-tasks.png` | `/component?name=<c>&starttime=<t>&endtime=<t>` | the per-task gantt (`.daisen1-component-view`) — "Component tasks" help, zoomed-in; use a narrow window so the gantt renders (few enough tasks) |
 | `blocking.png` | `/component?name=<component>` | the blocking-reasons chart (`.daisen1-metric-view`) — use a component that has blocking reasons, e.g. `L1Cache.Top.incoming` |
 | `task-tree.png` | `/component?name=<c>&taskid=<id>&starttime=<t>&endtime=<t>` | the selected-task panel (`.daisen1-task-view`) — "Task hierarchy" help; pick a `req_in` task that has a parent and sub-tasks, and a window spanning them |
+| `resource.png` | `/resource?what=<resource>&starttime=<t>&endtime=<t>` | the resource chart (`main .relative.min-w-0.flex-1.bg-white`) — "Resource view" help; use a hardware resource with visible per-task waits and a blocked-task curve |
 
 ## Re-capturing
 
