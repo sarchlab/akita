@@ -35,7 +35,7 @@
   },
   "devDependencies": {
     "@types/chroma-js": "^2.0.0",
-    "@types/d3": "^5.7.2",
+    "@types/d3": "^7.4.3",
     "@types/markdown-it": "^14.1.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

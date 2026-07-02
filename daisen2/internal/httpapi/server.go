@@ -21,7 +21,6 @@ import (
 // Server is the Daisen replay server. It reads trace data from a SQLite file
 // and serves it over HTTP for the Daisen dashboard.
 type Server struct {
-	mode        string
 	addr        string
 	traceReader *SQLiteTraceReader
 	fs          http.FileSystem
@@ -49,26 +48,7 @@ func NewReplayServer(sqliteFile, addr string) *Server {
 	reader.Init()
 
 	return &Server{
-		mode:        "replay",
 		addr:        addr,
-		traceReader: reader,
-		fs:          static.GetAssets(),
-		codeSource:  loadCodeSource(reader),
-	}
-}
-
-// NewReplayServerReadOnly creates a Server with a read-only SQLite connection.
-// Used for concurrent trace access while DBTracer writes.
-func NewReplayServerReadOnly(sqliteFile string) *Server {
-	if sqliteFile == "" {
-		panic("must specify a SQLite file")
-	}
-
-	reader := NewSQLiteTraceReader(sqliteFile)
-	reader.InitReadOnly()
-
-	return &Server{
-		mode:        "replay",
 		traceReader: reader,
 		fs:          static.GetAssets(),
 		codeSource:  loadCodeSource(reader),
@@ -94,23 +74,11 @@ func loadCodeSource(reader *SQLiteTraceReader) *sourcefs.Source {
 	return src
 }
 
-// CodeSource returns the simulator source recorded in the loaded trace, for the
-// code-reading tools. It is non-nil; use IsEmpty to detect a trace with no
-// recorded source.
-func (s *Server) CodeSource() *sourcefs.Source {
-	return s.codeSource
-}
-
 // Start starts the HTTP server in replay mode. It listens on the configured
 // address and blocks until the server is shut down.
 func (s *Server) Start() {
 	mux := s.setupRoutes()
 	s.startReplayServer(mux)
-}
-
-// StartServer starts the server (alias for Start).
-func (s *Server) StartServer() {
-	s.Start()
 }
 
 // Stop gracefully shuts down the HTTP server.
@@ -126,31 +94,9 @@ func (s *Server) Stop() {
 	}
 }
 
-// StopServer stops the server (alias for Stop).
-func (s *Server) StopServer() {
-	s.Stop()
-}
-
 func (s *Server) setupRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
 
-	s.RegisterReplayRoutes(mux)
-
-	return mux
-}
-
-// RegisterReplayRoutes registers all replay/trace routes on the provided mux.
-// This includes the mode endpoint, trace endpoints, chat/LLM proxy, and static
-// assets. Used by the replay server itself.
-func (s *Server) RegisterReplayRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/mode", s.apiMode)
-	s.RegisterTraceRoutes(mux)
-}
-
-// RegisterTraceAPIRoutes registers only the trace/data and assistant API routes
-// on the provided mux. It intentionally does not register static SPA routes, so
-// callers can serve their own frontend while reusing Daisen's trace APIs.
-func (s *Server) RegisterTraceAPIRoutes(mux *http.ServeMux) {
 	// Trace endpoints
 	mux.HandleFunc("/api/trace", s.httpTrace)
 	mux.HandleFunc("/api/trace_range", s.httpTraceTimeRange)
@@ -176,12 +122,6 @@ func (s *Server) RegisterTraceAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/models", s.httpListModels)
 	// The browser POSTs agent view captures (screenshots / off-screen renders) here.
 	mux.HandleFunc("/api/agent/capture", s.httpAgentCapture)
-}
-
-// RegisterTraceRoutes registers trace/data routes and Daisen's replay SPA
-// routes on the provided mux, excluding the /api/mode endpoint.
-func (s *Server) RegisterTraceRoutes(mux *http.ServeMux) {
-	s.RegisterTraceAPIRoutes(mux)
 
 	// Static assets / SPA fallback
 	fServer := http.FileServer(s.fs)
@@ -193,6 +133,8 @@ func (s *Server) RegisterTraceRoutes(mux *http.ServeMux) {
 	// matches the whole subtree so a hard refresh serves the SPA shell.
 	mux.HandleFunc("/view/", s.serveIndex)
 	mux.Handle("/", fServer)
+
+	return mux
 }
 
 func (s *Server) startReplayServer(mux *http.ServeMux) {
@@ -207,13 +149,6 @@ func (s *Server) startReplayServer(mux *http.ServeMux) {
 	if err != nil && err != http.ErrServerClosed {
 		dieOnErr(err)
 	}
-}
-
-// ---- Shared handlers ----
-
-func (s *Server) apiMode(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"mode":%q}`, s.mode)
 }
 
 // httpTraceInfo returns a stable identifier for the loaded trace, used by the
@@ -241,13 +176,20 @@ func (s *Server) httpTraceInfo(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) serveIndex(w http.ResponseWriter, _ *http.Request) {
 	f, err := s.fs.Open("index.html")
-	dieOnErr(err)
+	if err != nil {
+		http.Error(w, "index not found", http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
 
 	p, err := io.ReadAll(f)
-	dieOnErr(err)
+	if err != nil {
+		http.Error(w, "failed to read index", http.StatusInternalServerError)
+		return
+	}
 
-	_, err = w.Write(p)
-	dieOnErr(err)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(p)
 }
 
 func dieOnErr(err error) {

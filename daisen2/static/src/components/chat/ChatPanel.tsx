@@ -5,17 +5,15 @@ import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Alert, AlertDescription } from "../ui/alert";
 import { useChat } from "../../hooks/useChat";
-import { useComponentNames } from "../../hooks/useComponentNames";
-import { useSimulationRange } from "../../hooks/useSimulationRange";
 import { useLLMSettings } from "../../hooks/useLLMSettings";
 import { useTraceId } from "../../hooks/useTraceId";
-import type { TraceInformation, UploadedFile, UnitContent } from "../../types/chat";
+import type { UploadedFile, UnitContent } from "../../types/chat";
 import {
   FILE_UPLOAD_ACCEPT,
   IMAGE_UPLOAD_ACCEPT,
   isImageUploadCandidate,
   validateUploadedFile,
-} from "../../utils/uploadValidation";
+} from "../../utils/uploadValidation.mjs";
 import MessageBubble from "./MessageBubble";
 import ChatSettings from "./ChatSettings";
 import { SidePanel } from "../ui/side-panel";
@@ -64,8 +62,6 @@ export default function ChatPanel({ open }: { open: boolean }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const traceId = useTraceId();
-  const { names } = useComponentNames();
-  const { startTime, endTime } = useSimulationRange();
   const { settings, update, applyPreset, clearKey } = useLLMSettings();
   const {
     messages,
@@ -90,16 +86,6 @@ export default function ChatPanel({ open }: { open: boolean }) {
     [chatHistory],
   );
 
-  const traceInfo: TraceInformation = useMemo(
-    () => ({
-      selected: names.length,
-      startTime,
-      endTime,
-      selectedComponentNameList: names,
-    }),
-    [endTime, names, startTime],
-  );
-
   async function handleFiles(files: FileList | null, forcedType?: "file" | "image") {
     if (!files) return;
     setUploadError(null);
@@ -108,7 +94,7 @@ export default function ChatPanel({ open }: { open: boolean }) {
       const type = forcedType ?? (isImageUploadCandidate(file) ? "image" : "file");
       const validation = validateUploadedFile(file, type);
       if (validation.valid === false) {
-        setUploadError(validation.error);
+        setUploadError(validation.error ?? "Upload rejected.");
         continue;
       }
       const content = type === "image" ? await readFileAsDataUrl(file) : await readFileAsText(file);
@@ -138,7 +124,7 @@ export default function ChatPanel({ open }: { open: boolean }) {
     const startNew = view === "list";
     setInput("");
     if (startNew) setView("chat");
-    await sendMessage(content, traceInfo, settings, { newConversation: startNew });
+    await sendMessage(content, settings, { newConversation: startNew });
     clearUploadedFiles();
   }
 

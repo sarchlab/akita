@@ -8,8 +8,9 @@ import TraceChartLayout from "../components/TraceChartLayout";
 import { useAutoColorMode } from "../hooks/useAutoColorMode";
 import { useSegments } from "../hooks/useSegments";
 import { useTaskHierarchy } from "../hooks/useTaskHierarchy";
+import { useColorMapFromKeys } from "../hooks/useTaskColorMap";
 import type { Task } from "../types/task";
-import { buildColorMapFromKeys, taskColorKey } from "../utils/taskColorCoder";
+import { taskColorKey } from "../utils/taskColorCoder";
 import type { ColorMode } from "../utils/taskColorCoder";
 import { milestonesOf, type SelectedMilestone } from "../utils/milestoneViz";
 import { mergeParams } from "../utils/viewState.mjs";
@@ -78,11 +79,8 @@ export default function TaskChartPage() {
     };
   }, [allTasks]);
   // Tasks and blocking reasons draw from separate color families.
-  const colorMap = useMemo(() => buildColorMapFromKeys(taskKeys, "task"), [taskKeys]);
-  const milestoneColorMap = useMemo(
-    () => buildColorMapFromKeys(blockingReasons, "milestone"),
-    [blockingReasons],
-  );
+  const colorMap = useColorMapFromKeys(taskKeys, "task");
+  const milestoneColorMap = useColorMapFromKeys(blockingReasons, "milestone");
   // Blocking reasons default to "kind" coloring once "kind-what" exceeds 8 reasons.
   const handleMilestoneColorMode = useAutoColorMode(milestoneColorMode, setMilestoneColorMode, blockingReasons.length, 8);
 

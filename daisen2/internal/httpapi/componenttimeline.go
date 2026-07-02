@@ -80,7 +80,9 @@ func newBinExpr(numBins int, start, end float64) binExpr {
 // numBins-by-key occupancy matrix. Shared by the kind-what task count and the
 // blocking-reason count so both use the identical binning method. total counts the
 // +1 (start) events, i.e. the number of intervals.
-func accumulateBins(rows *sql.Rows, numBins int) (keys []string, bins [][]int, total int) {
+//
+//nolint:funlen // Single pass from event rows to a sorted occupancy matrix.
+func accumulateBins(rows *sql.Rows, numBins int) (keys []string, bins [][]int, total int, err error) {
 	type event struct {
 		bin   int
 		key   string
@@ -94,13 +96,16 @@ func accumulateBins(rows *sql.Rows, numBins int) (keys []string, bins [][]int, t
 		var bin, delta, count int
 		var key string
 		if err := rows.Scan(&bin, &key, &delta, &count); err != nil {
-			continue
+			return nil, nil, 0, err
 		}
 		events = append(events, event{bin, key, delta, count})
 		keySet[key] = struct{}{}
 		if delta == 1 {
 			total += count
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, 0, err
 	}
 
 	keys = make([]string, 0, len(keySet))
@@ -139,7 +144,7 @@ func accumulateBins(rows *sql.Rows, numBins int) (keys []string, bins [][]int, t
 		}
 		bins[b] = row
 	}
-	return keys, bins, total
+	return keys, bins, total, nil
 }
 
 // exactScanTaskCap bounds an exact (sample=1) occupancy scan. Above this many
@@ -157,19 +162,17 @@ const exactScanTaskCap = 200_000
 func (r *SQLiteTraceReader) countTasksInScope(
 	ctx context.Context, scope string, start, end float64,
 ) (int, bool) {
-	s := strconv.FormatFloat(start, 'f', -1, 64)
-	e := strconv.FormatFloat(end, 'f', -1, 64)
 	sqlStr := `
 		WITH scope_locs AS (
 			SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?)
 		)
 		SELECT COUNT(*) FROM trace t
 		WHERE t.Location IN (SELECT ID FROM scope_locs)
-			AND t.EndTime > ` + s + ` AND t.StartTime < ` + e
+			AND t.EndTime > ? AND t.StartTime < ?`
 
 	lo, hi := scopePrefixBounds(scope)
 	var n int
-	if err := r.QueryRowContext(ctx, sqlStr, scope, lo, hi).Scan(&n); err != nil {
+	if err := r.QueryRowContext(ctx, sqlStr, scope, lo, hi, start, end).Scan(&n); err != nil {
 		return 0, false
 	}
 
@@ -272,7 +275,10 @@ func (r *SQLiteTraceReader) ComponentTimeline( //nolint:funlen // one cohesive o
 	}
 	defer rows.Close()
 
-	resp.Keys, resp.Bins, resp.Total = accumulateBins(rows, numBins)
+	resp.Keys, resp.Bins, resp.Total, err = accumulateBins(rows, numBins)
+	if err != nil {
+		return ComponentTimelineResponse{Bins: [][]int{}}
+	}
 	return resp
 }
 
@@ -388,7 +394,10 @@ func (r *SQLiteTraceReader) BlockingReasonOccupancy( //nolint:funlen // one cohe
 	}
 	defer rows.Close()
 
-	keys, bins, _ = accumulateBins(rows, numBins)
+	keys, bins, _, err = accumulateBins(rows, numBins)
+	if err != nil {
+		return []string{}, [][]int{}
+	}
 	return keys, bins
 }
 

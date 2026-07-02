@@ -40,12 +40,14 @@ import { useTraceData } from "../hooks/useTraceData";
 import { useComponentTimeline } from "../hooks/useComponentTimeline";
 import type { ComponentTimelineData } from "../hooks/useComponentTimeline";
 import { useRenderReady } from "../hooks/useRenderReady";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useElementSize } from "../hooks/useElementSize";
+import { useColorMapFromKeys } from "../hooks/useTaskColorMap";
 import type { Segment, Task } from "../types/task";
-import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskColorCoder";
+import { lookupColor, taskColorKey } from "../utils/taskColorCoder";
 import type { ColorMode } from "../utils/taskColorCoder";
 import { blockingReasonKeyAt, milestonesOf } from "../utils/milestoneViz";
 import { formatSI } from "../utils/siFormat";
-import { cn } from "../lib/utils";
 import { useComponentNames } from "../hooks/useComponentNames";
 import { buildLocationTree, breadcrumbSegments, findNode, type LocationNode } from "../utils/locationTree";
 
@@ -136,40 +138,6 @@ type LayoutTask = Task & {
   effEnd?: number;
   dim?: TaskDim;
 };
-
-function useElementSize<T extends HTMLElement>() {
-  const ref = useRef<T | null>(null);
-  const [size, setSize] = useState<Size>({ width: 1000, height: 700 });
-
-  useEffect(() => {
-    if (!ref.current) return;
-    const observer = new ResizeObserver(([entry]) => {
-      setSize({
-        width: entry.contentRect.width,
-        height: entry.contentRect.height,
-      });
-    });
-    observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, []);
-
-  return { ref, size };
-}
-
-function useDebouncedValue<T>(value: T, delayMs: number) {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDebouncedValue(value);
-    }, delayMs);
-
-    return () => window.clearTimeout(timeout);
-  }, [delayMs, value]);
-
-  return debouncedValue;
-}
-
 
 function cloneTasks(tasks: Task[]): LayoutTask[] {
   return tasks.map((task) => ({ ...task, subTasks: [], level: 0 }));
@@ -595,7 +563,6 @@ function ComponentTopAxis({ width, height, range }: { width: number; height: num
 }
 
 interface ComponentTimelineProps {
-  name: string;
   tasks: Task[];
   segments: Segment[];
   segmentsEnabled: boolean;
@@ -607,7 +574,6 @@ interface ComponentTimelineProps {
   highlightedTaskId: string | null;
   highlightedTaskIds: Set<string> | null;
   selectedTaskId: string | null;
-  onHoverTask: (task: Task | null) => void;
   onSelectTask: (task: Task) => void;
   onOpenTask: (task: Task) => void;
   onDeselect: () => void;
@@ -619,7 +585,6 @@ interface ComponentTimelineProps {
 }
 
 function ComponentTimeline({
-  name,
   tasks,
   segments,
   segmentsEnabled,
@@ -631,7 +596,6 @@ function ComponentTimeline({
   highlightedTaskId,
   highlightedTaskIds,
   selectedTaskId,
-  onHoverTask,
   onSelectTask,
   onOpenTask,
   onDeselect,
@@ -1266,7 +1230,6 @@ function ComponentTaskView({
   selectedTaskId,
   selectedMilestone,
   reasonHighlight,
-  onHoverTask,
   onSelectTask,
   onOpenTask,
   onDeselect,
@@ -1289,7 +1252,6 @@ function ComponentTaskView({
   selectedTaskId: string | null;
   selectedMilestone: HoveredMilestone | null;
   reasonHighlight: string | null;
-  onHoverTask: (task: Task | null) => void;
   onSelectTask: (task: Task) => void;
   onOpenTask: (task: Task) => void;
   onDeselect: () => void;
@@ -1444,7 +1406,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(urlSel ?? urlTaskId);
   const [selectedTaskSeed, setSelectedTaskSeed] = useState<Task | null>(null);
   const dataRange = useDebouncedValue(viewRange, DATA_RANGE_DEBOUNCE_MS);
-  const { ref, size } = useElementSize<HTMLDivElement>();
+  const { ref, size } = useElementSize<HTMLDivElement>({ width: 1000, height: 700 });
   const { data: segmentsData } = useSegments();
   // Resolve the selected task independently of the component-scoped query, so the
   // component in view can follow it when navigating to a parent task or subtask.
@@ -1589,7 +1551,6 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
         : [],
     [childTaskMatches, currentTask?.id],
   );
-  const [hoveredTask, setHoveredTask] = useState<Task | null>(null);
   // A blocking milestone clicked on the current-task wavy line; shown in the side
   // panel (taking over the selected-task section) until a task is selected.
   const [selectedMilestone, setSelectedMilestone] = useState<HoveredMilestone | null>(null);
@@ -1646,23 +1607,29 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // Tasks and blocking reasons draw from separate color families and are assigned
   // independently — each side colors as soon as its own summary covers the range,
   // so a slow blocking-reason load never holds back the task colors, or vice versa.
+  const taskMapKeys = useMemo(() => {
+    const taskKeys = [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks].map((t) => taskColorKey(t, colorMode));
+    return [...taskKeys, ...(agg?.keys ?? [])];
+  }, [agg?.keys, childTasks, currentTask, parentTask, tasks, colorMode]);
+  const nextColorMap = useColorMapFromKeys(taskMapKeys, "task");
   const colorMapRef = useRef<Record<string, string>>({});
   const colorMap = useMemo(() => {
     if (!aggMatchesRange) return colorMapRef.current;
-    const taskKeys = [...tasks, ...(currentTask ? [currentTask] : []), ...(parentTask ? [parentTask] : []), ...childTasks].map((t) => taskColorKey(t, colorMode));
-    const next = buildColorMapFromKeys([...taskKeys, ...(agg?.keys ?? [])], "task");
-    colorMapRef.current = next;
-    return next;
-  }, [aggMatchesRange, childTasks, currentTask, parentTask, tasks, agg, colorMode]);
+    colorMapRef.current = nextColorMap;
+    return nextColorMap;
+  }, [aggMatchesRange, nextColorMap]);
 
+  const milestoneMapKeys = useMemo(
+    () => [...(stackedInfo?.kinds ?? []), ...milestonesOf(currentTask?.steps).map((step) => taskColorKey(step, milestoneColorMode))],
+    [stackedInfo?.kinds, currentTask, milestoneColorMode],
+  );
+  const nextMilestoneColorMap = useColorMapFromKeys(milestoneMapKeys, "milestone");
   const milestoneColorMapRef = useRef<Record<string, string>>({});
   const milestoneColorMap = useMemo(() => {
     if (!stackedMatchesRange) return milestoneColorMapRef.current;
-    const reasonKeys = [...(stackedInfo?.kinds ?? []), ...milestonesOf(currentTask?.steps).map((step) => taskColorKey(step, milestoneColorMode))];
-    const next = buildColorMapFromKeys(reasonKeys, "milestone");
-    milestoneColorMapRef.current = next;
-    return next;
-  }, [stackedMatchesRange, stackedInfo, currentTask, milestoneColorMode]);
+    milestoneColorMapRef.current = nextMilestoneColorMap;
+    return nextMilestoneColorMap;
+  }, [stackedMatchesRange, nextMilestoneColorMap]);
 
   // The task "kind-what" keys for the legend's Tasks subsection (distinct from
   // the blocking-reason kinds, so reasons no longer leak into the task legend).
@@ -2032,11 +1999,10 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             milestoneColorMap={milestoneColorMap}
             milestoneColorMode={milestoneColorMode}
             highlightedKey={highlightedKey}
-            highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
+            highlightedTaskId={null}
             selectedTaskId={selectedTaskId}
             selectedMilestone={selectedMilestone}
             reasonHighlight={reasonHighlight}
-            onHoverTask={setHoveredTask}
             onSelectTask={selectTask}
             onOpenTask={makeTaskCurrent}
             onDeselect={deselectTask}
@@ -2054,7 +2020,6 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
         {showGantt && (
           <div className="daisen1-component-view relative border-t border-slate-200" style={{ height: ganttHeight }}>
             <ComponentTimeline
-              name={componentName}
               tasks={tasks}
               segments={segmentsData?.segments ?? []}
               segmentsEnabled={segmentsData?.enabled ?? false}
@@ -2063,10 +2028,9 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               colorMap={colorMap}
               colorMode={colorMode}
               highlightedKey={highlightedKey}
-              highlightedTaskId={hoveredTask ? String(hoveredTask.id) : null}
+              highlightedTaskId={null}
               highlightedTaskIds={highlightedTaskIds}
               selectedTaskId={selectedTaskId}
-              onHoverTask={setHoveredTask}
               onSelectTask={selectTask}
               onOpenTask={makeTaskCurrent}
               onDeselect={deselectTask}

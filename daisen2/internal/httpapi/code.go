@@ -149,8 +149,10 @@ func (s *Server) sourceRoots() []string {
 
 func writeJSON(w http.ResponseWriter, v any) {
 	rsp, err := json.Marshal(v)
-	dieOnErr(err)
+	if err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_, err = w.Write(rsp)
-	dieOnErr(err)
+	_, _ = w.Write(rsp)
 }

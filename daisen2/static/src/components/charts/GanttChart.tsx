@@ -2,10 +2,11 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import * as d3 from "d3";
 import type { Segment, Task } from "../../types/task";
 import { assignYIndices } from "../../utils/taskYIndexAssigner";
-import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../../utils/taskColorCoder";
+import { lookupColor, taskColorKey } from "../../utils/taskColorCoder";
 import type { ColorMode } from "../../utils/taskColorCoder";
 import { milestonesOf, type SelectedMilestone } from "../../utils/milestoneViz";
 import { useElementSize } from "../../hooks/useElementSize";
+import { useTaskColorMap } from "../../hooks/useTaskColorMap";
 import { AXIS_TICK_COUNT, barOpacity, barStrokeOpacity, COLOR_BAR_STROKE, COLOR_GRID, gapSegments, safeScale } from "./chartStyle";
 import BandLabel from "./BandLabel";
 import { GapHatchDef, GapRects } from "./GapHatch";
@@ -86,12 +87,14 @@ export default function GanttChart({
   // Measure the scroll container so the chart can use pixel coordinates and fill
   // the available width and height (rather than aspect-scaling a fixed viewBox,
   // which left empty space below when there were few layers).
-  const { ref: containerRef, size } = useElementSize<HTMLDivElement>();
+  const { ref: containerRef, elementRef: containerElementRef, size } = useElementSize<HTMLDivElement>();
   const W = Math.max(size.width || 1200, 760);
   const allTasks = [...ancestors, ...(mainTask ? [mainTask] : []), ...levels.flat()];
 
   const milestoneSteps = milestonesOf(mainTask?.steps).sort((a, b) => a.time - b.time);
   const milestoneBand = milestoneSteps.length ? MILESTONE_BAND : 0;
+  const fallbackColorMap = useTaskColorMap(allTasks, colorMode, "task");
+  const fallbackMilestoneColorMap = useTaskColorMap(milestoneSteps, milestoneColorMode, "milestone");
 
   // Lane-assign each descendant level independently (clones, so props aren't
   // mutated). Each level is a set of siblings, so plain concurrency packing fits.
@@ -127,7 +130,7 @@ export default function GanttChart({
     setViewRange({ startTime: autoStart, endTime: autoEnd });
   }, [focusKey, autoStart, autoEnd]);
   useEffect(() => {
-    const el = containerRef.current;
+    const el = containerElementRef.current;
     if (!el) return;
     const onWheel = (event: WheelEvent) => {
       if (!event.ctrlKey && !event.metaKey) return;
@@ -143,10 +146,10 @@ export default function GanttChart({
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [containerRef]);
+  }, [containerElementRef]);
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
-    dragRef.current = { x: event.clientX, y: event.clientY, scrollTop: containerRef.current?.scrollTop ?? 0, range: rangeRef.current };
+    dragRef.current = { x: event.clientX, y: event.clientY, scrollTop: containerElementRef.current?.scrollTop ?? 0, range: rangeRef.current };
     didDragRef.current = false;
   };
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -158,7 +161,7 @@ export default function GanttChart({
     const dur = drag.range.endTime - drag.range.startTime;
     const dt = (dur / Math.max(1, widthRef.current - MARGIN.left - MARGIN.right)) * dx;
     setViewRange({ startTime: drag.range.startTime - dt, endTime: drag.range.endTime - dt });
-    if (containerRef.current) containerRef.current.scrollTop = drag.scrollTop - dy;
+    if (containerElementRef.current) containerElementRef.current.scrollTop = drag.scrollTop - dy;
   };
   const handlePointerUp = () => {
     dragRef.current = null;
@@ -178,11 +181,8 @@ export default function GanttChart({
   const endTime = viewRange.endTime;
   const innerWidth = W - MARGIN.left - MARGIN.right;
   const xScale = d3.scaleLinear().domain([startTime, endTime]).range([MARGIN.left, W - MARGIN.right]);
-  const colorMap =
-    colorMapProp ?? buildColorMapFromKeys(allTasks.map((task) => taskColorKey(task, colorMode)), "task");
-  const milestoneColorMap =
-    milestoneColorMapProp ??
-    buildColorMapFromKeys(milestoneSteps.map((step) => taskColorKey(step, milestoneColorMode)), "milestone");
+  const colorMap = colorMapProp ?? fallbackColorMap;
+  const milestoneColorMap = milestoneColorMapProp ?? fallbackMilestoneColorMap;
 
   // Vertical layout, top → bottom. Each task has a label row above its bar; tasks
   // with milestones get a band below the bar for the blocking waves. Label-above

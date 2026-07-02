@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -22,17 +21,17 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tasks := s.traceReader.ListTasks(r.Context(), buildTraceQuery(r))
+	query, err := buildTraceQuery(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-	rsp, err := json.Marshal(tasks)
-	dieOnErr(err)
-
-	_, err = w.Write(rsp)
-	dieOnErr(err)
+	writeJSON(w, s.traceReader.ListTasks(r.Context(), query))
 }
 
 // buildTraceQuery parses the /api/trace request parameters into a TaskQuery.
-func buildTraceQuery(r *http.Request) TaskQuery {
+func buildTraceQuery(r *http.Request) (TaskQuery, error) {
 	useTimeRange := r.FormValue("starttime") != "" && r.FormValue("endtime") != ""
 
 	startTime := 0.0
@@ -43,12 +42,12 @@ func buildTraceQuery(r *http.Request) TaskQuery {
 
 		startTime, err = strconv.ParseFloat(r.FormValue("starttime"), 64)
 		if err != nil {
-			panic(err)
+			return TaskQuery{}, fmt.Errorf("invalid starttime")
 		}
 
 		endTime, err = strconv.ParseFloat(r.FormValue("endtime"), 64)
 		if err != nil {
-			panic(err)
+			return TaskQuery{}, fmt.Errorf("invalid endtime")
 		}
 	}
 
@@ -82,9 +81,8 @@ func buildTraceQuery(r *http.Request) TaskQuery {
 		StartTime:        startTime,
 		EndTime:          endTime,
 		EnableTimeRange:  useTimeRange,
-		EnableParentTask: false,
 		EnableMilestones: !rangeProbe,
-	}
+	}, nil
 }
 
 // parseIDList parses a comma-separated list of non-zero unsigned ids (e.g. the
@@ -102,17 +100,6 @@ func parseIDList(s string) []uint64 {
 	}
 
 	return ids
-}
-
-// joinIDs renders ids as a comma-separated string for an SQL IN (…) list. The
-// values are uint64, so there is nothing to escape.
-func joinIDs(ids []uint64) string {
-	parts := make([]string, len(ids))
-	for i, id := range ids {
-		parts[i] = strconv.FormatUint(id, 10)
-	}
-
-	return strings.Join(parts, ",")
 }
 
 // TaskQuery is used to define the tasks to be queried. Not all the field has to
@@ -151,9 +138,6 @@ type TaskQuery struct {
 	// Use StartTime to select tasks that overlaps with the given task range.
 	StartTime, EndTime float64
 
-	// EnableParentTask will also query the parent task of the selected tasks.
-	EnableParentTask bool
-
 	// EnableMilestones will also query milestones for the selected tasks.
 	EnableMilestones bool
 }
@@ -167,25 +151,14 @@ type TaskStep struct {
 
 // Task represents a traced task.
 type Task struct {
-	ID         uint64                `json:"id"`
-	ParentID   uint64                `json:"parent_id"`
-	Kind       string                `json:"kind"`
-	What       string                `json:"what"`
-	Location   string                `json:"location"`
-	StartTime  timing.VTimeInPicoSec `json:"start_time"`
-	EndTime    timing.VTimeInPicoSec `json:"end_time"`
-	Steps      []TaskStep            `json:"steps"`
-	Detail     interface{}           `json:"-"`
-	ParentTask *Task                 `json:"-"`
-}
-
-// TraceReader can parse a trace file.
-type TraceReader interface {
-	// ListComponents returns all the locations used in the trace.
-	ListComponents(ctx context.Context) []string
-
-	// ListTasks queries tasks .
-	ListTasks(ctx context.Context, query TaskQuery) []Task
+	ID        uint64                `json:"id"`
+	ParentID  uint64                `json:"parent_id"`
+	Kind      string                `json:"kind"`
+	What      string                `json:"what"`
+	Location  string                `json:"location"`
+	StartTime timing.VTimeInPicoSec `json:"start_time"`
+	EndTime   timing.VTimeInPicoSec `json:"end_time"`
+	Steps     []TaskStep            `json:"steps"`
 }
 
 // TraceTimeRange is the full time span covered by the trace table.
@@ -218,7 +191,10 @@ type SQLiteTraceReader struct {
 	builtIndexes sync.Map
 }
 
-var indexNameRe = regexp.MustCompile(`(?i)CREATE\s+INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)`)
+var (
+	indexNameRe    = regexp.MustCompile(`(?i)CREATE\s+INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)`)
+	naturalChunkRe = regexp.MustCompile(`\d+|\D+`)
+)
 
 // indexNameFromDDL extracts the index name from a CREATE INDEX statement, or ""
 // if it cannot be parsed (in which case ensureIndex falls back to always running
@@ -333,9 +309,8 @@ func (r *SQLiteTraceReader) InitReadOnly() {
 }
 
 func naturalLess(a, b string) bool {
-	re := regexp.MustCompile(`\d+|\D+`)
-	as := re.FindAllString(a, -1)
-	bs := re.FindAllString(b, -1)
+	as := naturalChunkRe.FindAllString(a, -1)
+	bs := naturalChunkRe.FindAllString(b, -1)
 
 	for i := 0; i < len(as) && i < len(bs); i++ {
 		anum, aErr := strconv.Atoi(as[i])
@@ -388,6 +363,12 @@ func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
 		}
 
 		components = append(components, component)
+	}
+	if err := rows.Err(); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		panic(err)
 	}
 
 	sort.Slice(components, func(i, j int) bool {
@@ -451,8 +432,14 @@ func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Ta
 	tasks := []Task{}
 
 	for rows.Next() {
-		task := r.scanTaskFromRow(rows, query.EnableParentTask)
+		task := r.scanTaskFromRow(rows)
 		tasks = append(tasks, task)
+	}
+	if err := rows.Err(); err != nil {
+		if ctx.Err() != nil {
+			return tasks
+		}
+		panic(err)
 	}
 
 	if query.EnableMilestones {
@@ -522,6 +509,12 @@ func (r *SQLiteTraceReader) listTaskIntervals(
 			StartTime: timing.VTimeInPicoSec(s),
 			EndTime:   timing.VTimeInPicoSec(e),
 		})
+	}
+	if err := rows.Err(); err != nil {
+		if ctx.Err() != nil {
+			return tasks
+		}
+		panic(err)
 	}
 
 	return tasks
@@ -599,6 +592,9 @@ func (r *SQLiteTraceReader) execInfoTimeRange(ctx context.Context) (TraceTimeRan
 			hasEnd = true
 		}
 	}
+	if err := rows.Err(); err != nil {
+		return TraceTimeRange{}, false
+	}
 
 	if !hasStart || !hasEnd || timeRange.StartTime >= timeRange.EndTime {
 		return TraceTimeRange{}, false
@@ -619,11 +615,7 @@ func (s *Server) httpTraceTimeRange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rsp, err := json.Marshal(timeRange)
-	dieOnErr(err)
-
-	_, err = w.Write(rsp)
-	dieOnErr(err)
+	writeJSON(w, timeRange)
 }
 
 // loadMilestonesForTasks loads milestones for the given tasks from the database.
@@ -653,12 +645,12 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(ctx context.Context, tasks []
 	const batchSize = 10000
 	for start := 0; start < len(taskIDs); start += batchSize {
 		end := min(start+batchSize, len(taskIDs))
-		r.loadMilestoneBatch(taskMap, taskIDs[start:end])
+		r.loadMilestoneBatch(ctx, taskMap, taskIDs[start:end])
 	}
 }
 
 // loadMilestoneBatch loads milestones for one batch of task ids into taskMap.
-func (r *SQLiteTraceReader) loadMilestoneBatch(taskMap map[uint64]*Task, ids []uint64) {
+func (r *SQLiteTraceReader) loadMilestoneBatch(ctx context.Context, taskMap map[uint64]*Task, ids []uint64) {
 	args := make([]any, len(ids))
 	for i, id := range ids {
 		args[i] = id
@@ -674,10 +666,12 @@ func (r *SQLiteTraceReader) loadMilestoneBatch(taskMap map[uint64]*Task, ids []u
 		WHERE TaskID IN (%s)
 		ORDER BY TaskID, Time`, placeholders)
 
-	rows, err := r.Query(sqlStr, args...)
+	rows, err := r.QueryContext(ctx, sqlStr, args...)
 	if err != nil {
-		// If milestone table doesn't exist, just return without error
-		return
+		if ctx.Err() != nil || strings.Contains(err.Error(), "no such table") {
+			return
+		}
+		panic(err)
 	}
 	defer rows.Close()
 
@@ -688,7 +682,10 @@ func (r *SQLiteTraceReader) loadMilestoneBatch(taskMap map[uint64]*Task, ids []u
 
 		err := rows.Scan(&taskID, &time, &kind, &what)
 		if err != nil {
-			continue
+			if ctx.Err() != nil {
+				return
+			}
+			panic(err)
 		}
 
 		if task, exists := taskMap[taskID]; exists {
@@ -699,6 +696,12 @@ func (r *SQLiteTraceReader) loadMilestoneBatch(taskMap map[uint64]*Task, ids []u
 			}
 			task.Steps = append(task.Steps, step)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		panic(err)
 	}
 }
 
@@ -728,12 +731,12 @@ func (r *SQLiteTraceReader) loadTagsForTasks(ctx context.Context, tasks []Task) 
 	const batchSize = 10000
 	for start := 0; start < len(taskIDs); start += batchSize {
 		end := min(start+batchSize, len(taskIDs))
-		r.loadTagBatch(taskMap, taskIDs[start:end])
+		r.loadTagBatch(ctx, taskMap, taskIDs[start:end])
 	}
 }
 
 // loadTagBatch loads tags for one batch of task ids into taskMap.
-func (r *SQLiteTraceReader) loadTagBatch(taskMap map[uint64]*Task, ids []uint64) {
+func (r *SQLiteTraceReader) loadTagBatch(ctx context.Context, taskMap map[uint64]*Task, ids []uint64) {
 	args := make([]any, len(ids))
 	for i, id := range ids {
 		args[i] = id
@@ -747,10 +750,12 @@ func (r *SQLiteTraceReader) loadTagBatch(taskMap map[uint64]*Task, ids []uint64)
 		WHERE TaskID IN (%s)
 		ORDER BY TaskID, Time`, placeholders)
 
-	rows, err := r.Query(sqlStr, args...)
+	rows, err := r.QueryContext(ctx, sqlStr, args...)
 	if err != nil {
-		// If the tag table doesn't exist, just return without error.
-		return
+		if ctx.Err() != nil || strings.Contains(err.Error(), "no such table") {
+			return
+		}
+		panic(err)
 	}
 	defer rows.Close()
 
@@ -761,7 +766,10 @@ func (r *SQLiteTraceReader) loadTagBatch(taskMap map[uint64]*Task, ids []uint64)
 
 		err := rows.Scan(&taskID, &time, &what)
 		if err != nil {
-			continue
+			if ctx.Err() != nil {
+				return
+			}
+			panic(err)
 		}
 
 		if task, exists := taskMap[taskID]; exists {
@@ -772,82 +780,35 @@ func (r *SQLiteTraceReader) loadTagBatch(taskMap map[uint64]*Task, ids []uint64)
 			})
 		}
 	}
+	if err := rows.Err(); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		panic(err)
+	}
 }
 
-func (r *SQLiteTraceReader) scanTaskFromRow(
-	rows *sql.Rows,
-	enableParentTask bool,
-) Task {
+func (r *SQLiteTraceReader) scanTaskFromRow(rows *sql.Rows) Task {
 	t := Task{}
+	var startTime, endTime float64
 
-	if enableParentTask {
-		t.ParentTask = &Task{}
-		r.scanTaskWithParent(rows, &t)
-	} else {
-		r.scanTaskWithoutParent(rows, &t)
+	err := rows.Scan(
+		&t.ID,
+		&t.ParentID,
+		&t.Kind,
+		&t.What,
+		&t.Location,
+		&startTime,
+		&endTime,
+	)
+	if err != nil {
+		panic(err)
 	}
+
+	t.StartTime = timing.VTimeInPicoSec(uint64(startTime))
+	t.EndTime = timing.VTimeInPicoSec(uint64(endTime))
 
 	return t
-}
-
-func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
-	var ptID, ptParentID sql.NullInt64
-	var ptKind, ptWhat, ptLocation sql.NullString
-	var ptStartTime, ptEndTime sql.NullFloat64
-	var startTime, endTime float64
-
-	err := rows.Scan(
-		&t.ID,
-		&t.ParentID,
-		&t.Kind,
-		&t.What,
-		&t.Location,
-		&startTime,
-		&endTime,
-		&ptID,
-		&ptParentID,
-		&ptKind,
-		&ptWhat,
-		&ptLocation,
-		&ptStartTime,
-		&ptEndTime,
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	t.StartTime = timing.VTimeInPicoSec(uint64(startTime))
-	t.EndTime = timing.VTimeInPicoSec(uint64(endTime))
-
-	if ptID.Valid {
-		t.ParentTask.ID = uint64(ptID.Int64)
-		t.ParentTask.ParentID = uint64(ptParentID.Int64)
-		t.ParentTask.Kind = ptKind.String
-		t.ParentTask.What = ptWhat.String
-		t.ParentTask.Location = ptLocation.String
-		t.ParentTask.StartTime = timing.VTimeInPicoSec(uint64(ptStartTime.Float64))
-		t.ParentTask.EndTime = timing.VTimeInPicoSec(uint64(ptEndTime.Float64))
-	}
-}
-
-func (r *SQLiteTraceReader) scanTaskWithoutParent(rows *sql.Rows, t *Task) {
-	var startTime, endTime float64
-
-	err := rows.Scan(
-		&t.ID,
-		&t.ParentID,
-		&t.Kind,
-		&t.What,
-		&t.Location,
-		&startTime,
-		&endTime,
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	t.StartTime = timing.VTimeInPicoSec(uint64(startTime))
-	t.EndTime = timing.VTimeInPicoSec(uint64(endTime))
 }
 
 func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) (string, []any) {
@@ -862,55 +823,42 @@ func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) (string, []any)
 			loc.Locale,
 			t.StartTime,
 			t.EndTime
-	`
-
-	if query.EnableParentTask {
-		sqlStr += `,
-			pt.ID,
-			pt.ParentID,
-			pt.Kind,
-			pt.What,
-			ploc.Locale,
-			pt.StartTime,
-			pt.EndTime
-		`
-	}
-
-	sqlStr += `
 		FROM trace t
 		JOIN location loc ON t.Location = loc.ID
 	`
-
-	if query.EnableParentTask {
-		sqlStr += `
-			LEFT JOIN trace pt
-			ON t.ParentID = pt.ID
-			LEFT JOIN location ploc
-			ON pt.Location = ploc.ID
-		`
-	}
 
 	sqlStr, args := r.addQueryConditionsToQueryStr(sqlStr, query)
 
 	return sqlStr, args
 }
 
-// addIDFilters appends the t.ID / t.ParentID equality and IN(...) clauses. The
-// values are uint64, so they are inlined with nothing to escape.
-func addIDFilters(sqlStr string, query TaskQuery) string {
+func sqlPlaceholders(count int) string {
+	return strings.TrimSuffix(strings.Repeat("?,", count), ",")
+}
+
+// addIDFilters appends the t.ID / t.ParentID equality and IN(...) clauses.
+func addIDFilters(sqlStr string, args []any, query TaskQuery) (string, []any) {
 	if query.ID != 0 {
-		sqlStr += "\n\t\t\tAND t.ID = " + strconv.FormatUint(query.ID, 10) + "\n"
+		sqlStr += "\n\t\t\tAND t.ID = ?\n"
+		args = append(args, query.ID)
 	}
 	if query.ParentID != 0 {
-		sqlStr += "\n\t\t\tAND t.ParentID = " + strconv.FormatUint(query.ParentID, 10) + "\n"
+		sqlStr += "\n\t\t\tAND t.ParentID = ?\n"
+		args = append(args, query.ParentID)
 	}
 	if len(query.ParentIDs) > 0 {
-		sqlStr += "\n\t\t\tAND t.ParentID IN (" + joinIDs(query.ParentIDs) + ")\n"
+		sqlStr += "\n\t\t\tAND t.ParentID IN (" + sqlPlaceholders(len(query.ParentIDs)) + ")\n"
+		for _, id := range query.ParentIDs {
+			args = append(args, id)
+		}
 	}
 	if len(query.IDs) > 0 {
-		sqlStr += "\n\t\t\tAND t.ID IN (" + joinIDs(query.IDs) + ")\n"
+		sqlStr += "\n\t\t\tAND t.ID IN (" + sqlPlaceholders(len(query.IDs)) + ")\n"
+		for _, id := range query.IDs {
+			args = append(args, id)
+		}
 	}
-	return sqlStr
+	return sqlStr, args
 }
 
 func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
@@ -923,12 +871,13 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 		WHERE 1=1
 	`
 
-	sqlStr = addIDFilters(sqlStr, query)
+	sqlStr, args = addIDFilters(sqlStr, args, query)
 
 	if query.Kind != "" {
 		sqlStr += `
-			AND t.Kind = '` + query.Kind + `'
+			AND t.Kind = ?
 		`
+		args = append(args, query.Kind)
 	}
 
 	if query.Where != "" {
@@ -967,10 +916,10 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 	}
 
 	if query.EnableTimeRange {
-		sqlStr += fmt.Sprintf(
-			"AND t.EndTime > %.15f AND t.StartTime < %.15f",
-			query.StartTime,
-			query.EndTime)
+		sqlStr += `
+			AND t.EndTime > ? AND t.StartTime < ?
+		`
+		args = append(args, query.StartTime, query.EndTime)
 	}
 
 	return sqlStr, args
@@ -997,8 +946,8 @@ type SegmentsResponse struct {
 	Segments []Segment `json:"segments"`
 }
 
-// HasSegmentsTable checks if the daisen$segments table exists in the database
-func (r *SQLiteTraceReader) HasSegmentsTable(ctx context.Context) bool {
+// hasSegmentsTable checks if the daisen$segments table exists in the database
+func (r *SQLiteTraceReader) hasSegmentsTable(ctx context.Context) bool {
 	query := `SELECT name FROM sqlite_master WHERE type='table' AND name='daisen$segments'`
 	rows, err := r.QueryContext(ctx, query)
 	if err != nil {
@@ -1016,7 +965,7 @@ func (r *SQLiteTraceReader) ListSegments(ctx context.Context) SegmentsResponse {
 		Segments: []Segment{},
 	}
 
-	if !r.HasSegmentsTable(ctx) {
+	if !r.hasSegmentsTable(ctx) {
 		return response
 	}
 
@@ -1037,6 +986,9 @@ func (r *SQLiteTraceReader) ListSegments(ctx context.Context) SegmentsResponse {
 		}
 		response.Segments = append(response.Segments, segment)
 	}
+	if err := rows.Err(); err != nil {
+		return response
+	}
 
 	return response
 }
@@ -1047,11 +999,5 @@ func (s *Server) httpSegments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	segments := s.traceReader.ListSegments(r.Context())
-
-	rsp, err := json.Marshal(segments)
-	dieOnErr(err)
-
-	_, err = w.Write(rsp)
-	dieOnErr(err)
+	writeJSON(w, s.traceReader.ListSegments(r.Context()))
 }

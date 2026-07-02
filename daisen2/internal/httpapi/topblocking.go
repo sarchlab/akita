@@ -67,6 +67,9 @@ func (r *SQLiteTraceReader) TopBlockingResources(
 		}
 		resp.Resources = append(resp.Resources, br)
 	}
+	if err := rows.Err(); err != nil {
+		return TopBlockingResourcesResponse{Resources: []BlockingResource{}}
+	}
 	return resp
 }
 

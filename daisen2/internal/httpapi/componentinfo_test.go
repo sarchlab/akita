@@ -2,10 +2,8 @@ package httpapi
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -155,7 +153,7 @@ func TestComponentInfoUsesSweepForTimeWeightedCounts(t *testing.T) {
 	server := &Server{traceReader: reader}
 
 	concurrent := server.calculateConcurrentTask(
-		context.Background(), nil, "A", "ConcurrentTask", 0, 20, 4)
+		context.Background(), "A", "ConcurrentTask", 0, 20, 4)
 	assertValues(t, concurrent.Data, []float64{1, 2, 2, 1})
 }
 
@@ -184,18 +182,18 @@ func TestBufferOccupancyFromPortTasks(t *testing.T) {
 
 	// Request buffer pressure: ReadReq [0,15) plus the long-form DataMoveRequest [0,5).
 	requestBP := server.calculateRequestBufferPressure(
-		context.Background(), nil, "D", "RequestBufferPressure", 0, 20, 4)
+		context.Background(), "D", "RequestBufferPressure", 0, 20, 4)
 	assertValues(t, requestBP.Data, []float64{2, 1, 1, 0})
 
 	// Response buffer pressure: DataReadyRsp [5,20) plus the long-form
 	// DataMoveResponse [15,20).
 	responseBP := server.calculateResponseBufferPressure(
-		context.Background(), nil, "D", "ResponseBufferPressure", 0, 20, 4)
+		context.Background(), "D", "ResponseBufferPressure", 0, 20, 4)
 	assertValues(t, responseBP.Data, []float64{0, 1, 1, 2})
 
 	// Pending request out: the req_out task [0,10).
 	pendingReqOut := server.calculatePendingReqOut(
-		context.Background(), nil, "D", "PendingReqOut", 0, 20, 4)
+		context.Background(), "D", "PendingReqOut", 0, 20, 4)
 	assertValues(t, pendingReqOut.Data, []float64{1, 1, 0, 0})
 }
 
@@ -248,48 +246,5 @@ func TestListTasksLoadsMilestonesOnlyWhenRequested(t *testing.T) {
 	tasks = reader.ListTasks(context.Background(), TaskQuery{Where: "A", EnableMilestones: true})
 	if len(tasks[0].Steps) != 1 {
 		t.Fatalf("expected one milestone, got %+v", tasks[0].Steps)
-	}
-}
-
-func TestFormatTraceRowsCapsAtMaxRows(t *testing.T) {
-	reader := newTestTraceReader(t)
-
-	if _, err := reader.Exec(`INSERT INTO location (ID, Locale) VALUES (1, 'A')`); err != nil {
-		t.Fatalf("insert location: %v", err)
-	}
-	// Insert more than the cap so the query's LIMIT is what bounds the output.
-	insert := fmt.Sprintf(`INSERT INTO trace
-		(ID, ParentID, Kind, What, Location, StartTime, EndTime)
-		WITH RECURSIVE seq(n) AS (
-			SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n < %d
-		)
-		SELECT n, 0, 'k', 'w', 1, 0, 1 FROM seq`, maxTraceContextRows+100)
-	if _, err := reader.Exec(insert); err != nil {
-		t.Fatalf("insert trace rows: %v", err)
-	}
-
-	out := formatTraceRows(reader, buildTraceSQL([]string{"A"}, -1, 2))
-
-	// Lines = header marker + column header + N data rows + truncation note +
-	// end marker, so data rows = total newline count - 4.
-	dataRows := strings.Count(out, "\n") - 4
-	if dataRows != maxTraceContextRows {
-		t.Errorf("data rows = %d, want %d (cap)", dataRows, maxTraceContextRows)
-	}
-	if !strings.Contains(out, "truncated to the first") {
-		t.Error("expected a truncation note when the cap is hit")
-	}
-}
-
-func TestBuildTraceSQLOrdersBeforeLimiting(t *testing.T) {
-	sql := buildTraceSQL([]string{"A"}, 0, 100)
-
-	order := strings.Index(sql, "ORDER BY t.StartTime, t.ID")
-	limit := strings.Index(sql, "LIMIT")
-	if order == -1 {
-		t.Fatalf("expected a stable ORDER BY in trace SQL:\n%s", sql)
-	}
-	if limit == -1 || order > limit {
-		t.Errorf("ORDER BY must precede LIMIT so the cap keeps the earliest events:\n%s", sql)
 	}
 }

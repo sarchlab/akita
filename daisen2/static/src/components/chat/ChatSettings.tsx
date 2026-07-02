@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Loader2, RefreshCw, X } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "../ui/select";
 import { PROVIDER_PRESETS } from "../../hooks/useLLMSettings";
+import { fetchModelList, useModelList } from "../../hooks/useModelList";
 import type { LLMSettings } from "../../types/chat";
 
 interface ChatSettingsProps {
@@ -31,40 +32,13 @@ export default function ChatSettings({
 }: ChatSettingsProps) {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
-  const [models, setModels] = useState<string[]>([]);
-  const [modelsLoading, setModelsLoading] = useState(false);
-  const [modelsError, setModelsError] = useState<string | null>(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
-
-  const loadModels = useCallback(async () => {
-    if (!settings.baseURL.trim()) {
-      setModelsError("Set a base URL first.");
-      return;
-    }
-    setModelsLoading(true);
-    setModelsError(null);
-    try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (settings.apiKey.trim()) headers["X-Llm-Api-Key"] = settings.apiKey.trim();
-
-      const response = await fetch("/api/models", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ provider: settings.provider, baseURL: settings.baseURL }),
-      });
-      if (!response.ok) {
-        setModels([]);
-        setModelsError((await response.text()).trim().slice(0, 300) || `HTTP ${response.status}`);
-        return;
-      }
-      const json = (await response.json()) as { models?: string[] };
-      setModels(Array.isArray(json.models) ? json.models : []);
-    } catch (err) {
-      setModelsError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setModelsLoading(false);
-    }
-  }, [settings.apiKey, settings.baseURL, settings.provider]);
+  const {
+    models,
+    loading: modelsLoading,
+    error: modelsError,
+    loadModels,
+  } = useModelList(settings);
 
   // Load the model list when the panel opens or the provider preset changes, but
   // only once a key is available (most endpoints require one to list models) so
@@ -79,24 +53,11 @@ export default function ChatSettings({
     setTesting(true);
     setTestResult(null);
     try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (settings.apiKey.trim()) headers["X-Llm-Api-Key"] = settings.apiKey.trim();
-
       // Validate the connection via /api/models, which returns a real HTTP status
       // (the chat endpoint is a streamed agent that always replies 200 and reports
       // provider failures as SSE error events, so it can't signal pass/fail here).
-      const response = await fetch("/api/models", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ provider: settings.provider, baseURL: settings.baseURL }),
-      });
-
-      if (response.ok) {
-        setTestResult({ ok: true, message: "Connection succeeded." });
-      } else {
-        const text = (await response.text()).trim();
-        setTestResult({ ok: false, message: text.slice(0, 400) || `HTTP ${response.status}` });
-      }
+      const result = await fetchModelList(settings);
+      setTestResult({ ok: result.ok, message: result.message });
     } catch (err) {
       setTestResult({ ok: false, message: err instanceof Error ? err.message : String(err) });
     } finally {

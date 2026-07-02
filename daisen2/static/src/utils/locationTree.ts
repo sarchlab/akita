@@ -80,31 +80,6 @@ export function leafCount(node: LocationNode): number {
   return node.children.reduce((sum, child) => sum + leafCount(child), 0);
 }
 
-// isInternalNode reports whether the path names a node that has children, i.e. a
-// component/port to drill into rather than a single task row.
-export function isInternalNode(root: LocationNode, path: string): boolean {
-  const node = findNode(root, path);
-  return !!node && node.children.length > 0;
-}
-
-// isLeafNode reports whether the path names a single task row (a real location
-// with no children).
-export function isLeafNode(node: LocationNode): boolean {
-  return node.children.length === 0;
-}
-
-// childPathFor returns the scope's direct child that contains the given full
-// location. For scope "TLB" and location "TLB.Top.incoming" it returns
-// "TLB.Top"; for "TLB.req_in" it returns "TLB.req_in". Returns the scope itself
-// when location equals the scope.
-export function childPathFor(scope: string, location: string): string {
-  if (location === scope) return scope;
-  const prefix = `${scope}.`;
-  if (!location.startsWith(prefix)) return location;
-  const firstSegment = location.slice(prefix.length).split(".")[0];
-  return `${scope}.${firstSegment}`;
-}
-
 // breadcrumbSegments splits a dotted path into cumulative (label, path) pairs so
 // each ancestor can be rendered as a clickable crumb.
 export function breadcrumbSegments(path: string): { label: string; path: string }[] {

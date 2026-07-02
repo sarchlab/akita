@@ -8,6 +8,8 @@ import { useResourceTasks } from "../hooks/useResourceTasks";
 import { useSimulationRange } from "../hooks/useSimulationRange";
 import { useSegments } from "../hooks/useSegments";
 import { useElementSize } from "../hooks/useElementSize";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useTaskColorMap } from "../hooks/useTaskColorMap";
 import TraceChartLayout from "../components/TraceChartLayout";
 import TimeTicks from "../components/charts/TimeTicks";
 import YAxisOverlay from "../components/charts/YAxisOverlay";
@@ -18,7 +20,7 @@ import { Button } from "../components/ui/button";
 import { ResourceViewHelp } from "../components/HelpTopics";
 import { SectionLabel } from "../components/Legend";
 import { milestonesOf } from "../utils/milestoneViz";
-import { buildColorMapFromKeys, lookupColor, taskColorKey } from "../utils/taskColorCoder";
+import { lookupColor } from "../utils/taskColorCoder";
 import type { Task } from "../types/task";
 import {
   AXIS_TICK_COUNT,
@@ -45,15 +47,6 @@ const STROKE = "#ea580c";
 interface TimeRange {
   startTime: number;
   endTime: number;
-}
-
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const id = window.setTimeout(() => setDebounced(value), delayMs);
-    return () => window.clearTimeout(id);
-  }, [delayMs, value]);
-  return debounced;
 }
 
 function sanitize(start: number, end: number): TimeRange {
@@ -113,7 +106,7 @@ export default function ResourcePage() {
     window.history.replaceState(null, "", `/resource?${params.toString()}`);
   }, [dataRange.startTime, dataRange.endTime, what]);
 
-  const { ref, size } = useElementSize<HTMLDivElement>();
+  const { ref: sizeRef, size } = useElementSize<HTMLDivElement>();
   const width = Math.max(size.width, 320);
   const height = Math.max(size.height, 220);
   const innerWidth = Math.max(1, width - 10);
@@ -126,10 +119,7 @@ export default function ResourcePage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedTask = tasks.find((t) => String(t.id) === selectedId) ?? null;
 
-  const taskColorMap = useMemo(
-    () => buildColorMapFromKeys(tasks.map((t) => taskColorKey(t)), "task"),
-    [tasks],
-  );
+  const taskColorMap = useTaskColorMap(tasks);
 
   // Pan/zoom state (kept in refs so the wheel listener reads the latest).
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -215,7 +205,12 @@ export default function ResourcePage() {
     const n = data?.num_bins ?? bins.length;
     const binW = n > 0 ? ((data?.end_time ?? endTime) - dStart) / n : 0;
     const pts = bins.map((v, b) => ({ t: dStart + (b + 0.5) * binW, v }));
-    const area = d3.area<{ t: number; v: number }>().x((p) => xScale(p.t)).y0(y(0)).y1((p) => y(p.v)).curve(d3.curveMonotoneX);
+    const area = d3
+      .area<{ t: number; v: number }>()
+      .x((p) => safeScale(xScale, p.t))
+      .y0(safeScale(y, 0))
+      .y1((p) => safeScale(y, p.v))
+      .curve(d3.curveMonotoneX);
     return { areaPath: area(pts) ?? "", yScale: y };
   }, [data, xScale, startTime, endTime, curveTop, curveBottom]);
 
@@ -266,7 +261,7 @@ export default function ResourcePage() {
       <div className="relative min-w-0 flex-1 bg-white">
         <div
           ref={(node) => {
-            ref.current = node;
+            sizeRef(node);
             containerRef.current = node;
           }}
           className="h-full w-full cursor-grab select-none active:cursor-grabbing"

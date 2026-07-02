@@ -1,19 +1,27 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+
+interface Size {
+  width: number;
+  height: number;
+}
 
 /** Observes an element and reports its pixel size, for sizing canvases/charts. */
-export function useElementSize<T extends HTMLElement>() {
-  const ref = useRef<T | null>(null);
-  const [size, setSize] = useState({ width: 600, height: 400 });
+export function useElementSize<T extends HTMLElement>(initialSize: Size = { width: 600, height: 400 }) {
+  const observerRef = useRef<ResizeObserver | null>(null);
+  const elementRef = useRef<T | null>(null);
+  const [size, setSize] = useState(initialSize);
 
-  useEffect(() => {
-    if (!ref.current) return;
+  const ref = useCallback((node: T | null) => {
+    observerRef.current?.disconnect();
+    elementRef.current = node;
+    if (!node) return;
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       if (width > 0 && height > 0) setSize({ width, height });
     });
-    observer.observe(ref.current);
-    return () => observer.disconnect();
+    observer.observe(node);
+    observerRef.current = observer;
   }, []);
 
-  return { ref, size };
+  return { ref, elementRef, size };
 }

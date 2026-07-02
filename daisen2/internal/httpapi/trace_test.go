@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"database/sql"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 )
@@ -297,5 +298,43 @@ func TestListTasksParentIDsSelectsChildrenOfManyParents(t *testing.T) {
 
 	if one := reader.ListTasks(context.Background(), TaskQuery{ParentID: 1}); len(one) != 2 {
 		t.Fatalf("ParentID 1 returned %d tasks, want 2", len(one))
+	}
+}
+
+func TestBuildTraceQueryRejectsInvalidTime(t *testing.T) {
+	req := httptest.NewRequest("GET", "/api/trace?starttime=abc&endtime=1", nil)
+	if _, err := buildTraceQuery(req); err == nil {
+		t.Fatal("expected invalid starttime to be rejected")
+	}
+
+	req = httptest.NewRequest("GET", "/api/trace?starttime=1&endtime=abc", nil)
+	if _, err := buildTraceQuery(req); err == nil {
+		t.Fatal("expected invalid endtime to be rejected")
+	}
+}
+
+func TestListTasksTreatsKindAsBoundValue(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
+	reader := NewSQLiteTraceReader(dbPath)
+	reader.Init()
+	defer reader.Close()
+
+	exec := func(q string) {
+		if _, err := reader.Exec(q); err != nil {
+			t.Fatalf("exec %q: %v", q, err)
+		}
+	}
+	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO location (ID, Locale) VALUES (1, 'L')`)
+	exec(`CREATE TABLE trace (
+		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
+		Location INTEGER, StartTime REAL, EndTime REAL)`)
+	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+		(1, 0, 'read', 'a', 1, 0, 10),
+		(2, 0, 'write', 'b', 1, 0, 10)`)
+
+	tasks := reader.ListTasks(context.Background(), TaskQuery{Kind: "read' OR 1=1 --"})
+	if len(tasks) != 0 {
+		t.Fatalf("malicious kind matched %d tasks, want 0", len(tasks))
 	}
 }

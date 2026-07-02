@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { RotateCcw, X, ChevronLeft, ChevronRight, ChevronDown, Search } from "lucide-react";
 import DashboardWidget from "../components/DashboardWidget";
@@ -16,6 +16,8 @@ import { useComponentNames } from "../hooks/useComponentNames";
 import { useSegments } from "../hooks/useSegments";
 import { useSimulationRange } from "../hooks/useSimulationRange";
 import { useRenderReady } from "../hooks/useRenderReady";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useElementSize } from "../hooks/useElementSize";
 import { parseView, mergeParams, DASHBOARD_DEFAULTS } from "../utils/viewState.mjs";
 import { buildLocationTree, findNode, leafCount, breadcrumbSegments, type LocationNode } from "../utils/locationTree";
 import { cn } from "../lib/utils";
@@ -46,36 +48,6 @@ const DATA_RANGE_DEBOUNCE_MS = 1000;
 interface TimeRange {
   startTime: number;
   endTime: number;
-}
-
-function useElementSize<T extends HTMLElement>() {
-  const [size, setSize] = useState({ width: 1200, height: 720 });
-  const observerRef = useRef<ResizeObserver | null>(null);
-
-  // A callback ref so the observer (re)attaches whenever the measured node mounts.
-  // The grid only renders after the components finish loading, so a mount-time
-  // effect would run while the node doesn't exist yet and never observe it —
-  // leaving `size` stuck at the default and the charts narrower than their cards.
-  const ref = useCallback((node: T | null) => {
-    observerRef.current?.disconnect();
-    if (!node) return;
-    const observer = new ResizeObserver(([entry]) => {
-      setSize({ width: entry.contentRect.width, height: entry.contentRect.height });
-    });
-    observer.observe(node);
-    observerRef.current = observer;
-  }, []);
-
-  return { ref, size };
-}
-
-function useDebouncedValue<T>(value: T, delayMs: number) {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-  useEffect(() => {
-    const timeout = window.setTimeout(() => setDebouncedValue(value), delayMs);
-    return () => window.clearTimeout(timeout);
-  }, [delayMs, value]);
-  return debouncedValue;
 }
 
 // keepForSearch returns the set of node paths to show when filtering the tree: a
@@ -326,7 +298,7 @@ export default function DashboardPage() {
     return open;
   }, [keep, expandedNodes, scope]);
 
-  const { ref, size } = useElementSize<HTMLDivElement>();
+  const { ref, size } = useElementSize<HTMLDivElement>({ width: 1200, height: 720 });
   // Fewer, larger charts: 3 across on a wide screen, 2 on a medium one, 1 when
   // narrow — so each figure has room to breathe.
   const columns = size.width >= 1400 ? 3 : size.width >= 720 ? 2 : 1;

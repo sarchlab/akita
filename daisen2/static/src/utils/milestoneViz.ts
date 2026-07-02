@@ -51,7 +51,7 @@ export function wavyPath(
 // The trace reader merges a task's tags into its steps with this kind (see
 // trace.go). Tags are categorical labels, not blocking reasons, so milestone
 // logic must skip them.
-export const TAG_STEP_KIND = "tag";
+const TAG_STEP_KIND = "tag";
 
 // milestonesOf returns a task's steps with tag entries removed — i.e. only the
 // real milestones.

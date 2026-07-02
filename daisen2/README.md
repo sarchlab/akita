@@ -1,14 +1,51 @@
 # Daisen
 
-Daisen is the trace visualization tool for Akita simulations.
+Daisen is Akita's trace visualization and analysis tool. It serves a SQLite
+trace through a Go HTTP API and a React UI for exploring simulation time ranges,
+component residency, task hierarchies, topology, resource blocking, recorded
+source, and Daisen Bot's trace-aware assistant.
 
-This README is a placeholder. Documentation for Daisen will be added here.
+## Running Daisen
+
+Build an Akita simulation with tracing enabled, then point Daisen at the
+generated SQLite trace:
+
+```sh
+go run ./daisen2/cmd/daisen2 -trace path/to/trace.sqlite -addr :3001
+```
+
+The server listens on the supplied address and serves both the API and the
+bundled UI. During frontend development, run the Vite dev server from
+`daisen2/static`; it proxies `/api` to `localhost:3001`.
+
+```sh
+cd daisen2/static
+npm install
+npm run dev
+```
+
+For a production frontend bundle:
+
+```sh
+cd daisen2/static
+npm run build
+```
+
+## What To Inspect
+
+- Dashboard: component-level task density and metric charts.
+- Component view: a scoped task timeline, hierarchy, and blocking reasons.
+- Task view: ancestors, descendants, milestones, and selected-task details.
+- Resource view: tasks blocked on a hardware resource over a time window.
+- Topology and code browser: recorded structure and source when present in the
+  trace.
 
 ## Daisen Bot (chat assistant)
 
-Daisen Bot answers questions about the trace you are viewing. It sends your
-message — together with context from the selected components and the current
-time range — to an LLM through the Daisen server.
+Daisen Bot answers questions about the trace you are viewing. The browser sends
+your message to the Daisen server, and the server runs a bounded tool-using loop
+that can query trace data, read recorded source, and request view captures when
+the selected model supports those capabilities.
 
 ### Configuring a model
 

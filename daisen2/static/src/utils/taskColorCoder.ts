@@ -42,10 +42,6 @@ export function buildColorMapFromKeys(keys: string[], palette: Palette = "task")
   }, {});
 }
 
-export function buildColorMap(tasks: Task[]): ColorMap {
-  return buildColorMapFromKeys(tasks.map((task) => taskColorKey(task)));
-}
-
 export function lookupColor(
   map: ColorMap,
   task: Task,
