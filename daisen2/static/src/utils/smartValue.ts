@@ -24,5 +24,3 @@ export function smartString(value: number): string {
   }
   return value.toExponential(2);
 }
-
-export const smartTimeString = smartString;

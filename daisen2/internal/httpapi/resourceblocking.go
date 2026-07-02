@@ -58,8 +58,6 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 	r.ensureIndex(ctx, "Building index idx_trace_ID_time",
 		"CREATE INDEX IF NOT EXISTS idx_trace_ID_time ON trace(ID, StartTime, EndTime)")
 
-	startStr := strconv.FormatFloat(start, 'f', -1, 64)
-	endStr := strconv.FormatFloat(end, 'f', -1, 64)
 	// Whole-trace count (index-only), for context.
 	_ = r.QueryRowContext(ctx,
 		`SELECT COUNT(DISTINCT TaskID) FROM milestone WHERE Kind = 'hardware_resource' AND What = ?`,
@@ -73,7 +71,7 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 		FROM milestone m
 		JOIN trace t ON t.ID = m.TaskID
 		WHERE m.Kind = 'hardware_resource' AND m.What = ?
-			AND t.EndTime > `+startStr+` AND t.StartTime < `+endStr, what).Scan(&total)
+			AND t.EndTime > ? AND t.StartTime < ?`, what, start, end).Scan(&total)
 	resp.Total = total
 
 	if sample < 1 {
@@ -135,7 +133,10 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 	}
 	defer rows.Close()
 
-	_, bins, _ := accumulateBins(rows, numBins)
+	_, bins, _, err := accumulateBins(rows, numBins)
+	if err != nil {
+		return resp
+	}
 	resp.Bins = make([]int, numBins)
 	for b := range bins {
 		if len(bins[b]) > 0 {
@@ -160,15 +161,13 @@ func (r *SQLiteTraceReader) TasksBlockingOn(
 	r.ensureIndex(ctx, "Building index idx_trace_ID_time",
 		"CREATE INDEX IF NOT EXISTS idx_trace_ID_time ON trace(ID, StartTime, EndTime)")
 
-	s := strconv.FormatFloat(start, 'f', -1, 64)
-	e := strconv.FormatFloat(end, 'f', -1, 64)
 	rows, err := r.QueryContext(ctx, `
 		SELECT DISTINCT m.TaskID
 		FROM milestone m
 		JOIN trace t ON t.ID = m.TaskID
 		WHERE m.Kind = 'hardware_resource' AND m.What = ?
-			AND t.EndTime > `+s+` AND t.StartTime < `+e+`
-		LIMIT `+strconv.Itoa(limit), what)
+			AND t.EndTime > ? AND t.StartTime < ?
+		LIMIT ?`, what, start, end, limit)
 	if err != nil {
 		return []Task{}
 	}
@@ -180,7 +179,11 @@ func (r *SQLiteTraceReader) TasksBlockingOn(
 			ids = append(ids, id)
 		}
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return []Task{}
+	}
+	_ = rows.Close()
 	if len(ids) == 0 {
 		return []Task{}
 	}

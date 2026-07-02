@@ -24,8 +24,8 @@ export const SECTION_LABEL_FONT_SIZE = 12;
 export const SECTION_LABEL_HALO_WIDTH = 3;
 
 // --- Affordance opacities ---
-export const STROKE_OPACITY_SELECTED = 0.8;
-export const STROKE_OPACITY_DEFAULT = 0.2;
+const STROKE_OPACITY_SELECTED = 0.8;
+const STROKE_OPACITY_DEFAULT = 0.2;
 const OPACITY_DIM_HIGHLIGHT = 0.4; // non-matching bar when a legend key is highlighted
 const OPACITY_DIM_SELECTION = 0.6; // non-selected bar when a task is selected
 export const OPACITY_DIM_MILESTONE = 0.25; // non-selected / non-matching milestone wave

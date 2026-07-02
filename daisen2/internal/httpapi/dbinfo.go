@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"database/sql"
+	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -259,6 +260,9 @@ func (r *SQLiteTraceReader) tableIndexNames(ctx context.Context) map[string][]st
 		}
 		out[tbl] = append(out[tbl], name)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("sqlite_master index query: %v", err)
+	}
 
 	return out
 }
@@ -284,6 +288,9 @@ func (r *SQLiteTraceReader) objectSizes(ctx context.Context) (map[string]int64, 
 			continue
 		}
 		sizes[name] = bytes.Int64
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("dbstat query: %v", err)
 	}
 
 	return sizes, true

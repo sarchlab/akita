@@ -45,8 +45,7 @@ type ProviderConfig struct {
 // come from the body; the API key is read from the X-Llm-Api-Key header (not the
 // body) so it stays out of request logs.
 type chatRequest struct {
-	Messages  []map[string]interface{} `json:"messages"`
-	TraceInfo map[string]interface{}   `json:"traceInfo"`
+	Messages []map[string]interface{} `json:"messages"`
 
 	Provider    string   `json:"provider"`
 	BaseURL     string   `json:"baseURL"`

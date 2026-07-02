@@ -9,7 +9,3 @@ type Server = httpapi.Server
 func NewReplayServer(sqliteFile, addr string) *Server {
 	return httpapi.NewReplayServer(sqliteFile, addr)
 }
-
-func NewReplayServerReadOnly(sqliteFile string) *Server {
-	return httpapi.NewReplayServerReadOnly(sqliteFile)
-}

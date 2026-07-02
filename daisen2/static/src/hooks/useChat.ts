@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AgentStep, ChatMessage, LLMSettings, TraceInformation, UnitContent, UploadedFile } from "../types/chat";
+import type { AgentStep, ChatMessage, LLMSettings, UnitContent, UploadedFile } from "../types/chat";
 import { captureCurrentView, captureUrl } from "../utils/captureView";
 import { loadConversations, saveConversations } from "../utils/conversationStore.mjs";
 
@@ -106,7 +106,6 @@ export function useChat(traceId: string | null) {
   const sendMessage = useCallback(
     async (
       content: UnitContent[],
-      traceInfo: TraceInformation,
       llm: LLMSettings,
       opts: { newConversation?: boolean } = {},
     ) => {
@@ -153,7 +152,6 @@ export function useChat(traceId: string | null) {
             // (the agent trail) that the server forwards verbatim to the provider,
             // and some providers reject unknown message fields.
             messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
-            traceInfo,
             provider: llm.provider,
             baseURL: llm.baseURL,
             model: llm.model,

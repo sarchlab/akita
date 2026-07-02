@@ -2,13 +2,10 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sort"
 	"strconv"
-	"strings"
 )
 
 // TimeValue represents a data point with a time and a value.
@@ -48,13 +45,7 @@ func (s *Server) httpComponentNames(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	componentNames := s.traceReader.ListComponents(r.Context())
-
-	rsp, err := json.Marshal(componentNames)
-	dieOnErr(err)
-
-	_, err = w.Write(rsp)
-	dieOnErr(err)
+	writeJSON(w, s.traceReader.ListComponents(r.Context()))
 }
 
 func (s *Server) httpComponentInfo(w http.ResponseWriter, r *http.Request) {
@@ -67,13 +58,22 @@ func (s *Server) httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 	infoType := r.FormValue("info_type")
 
 	startTime, err := strconv.ParseFloat(r.FormValue("start_time"), 64)
-	dieOnErr(err)
+	if err != nil {
+		http.Error(w, "invalid start_time", http.StatusBadRequest)
+		return
+	}
 
 	endTime, err := strconv.ParseFloat(r.FormValue("end_time"), 64)
-	dieOnErr(err)
+	if err != nil {
+		http.Error(w, "invalid end_time", http.StatusBadRequest)
+		return
+	}
 
 	numDots, err := strconv.ParseInt(r.FormValue("num_dots"), 10, 32)
-	dieOnErr(err)
+	if err != nil {
+		http.Error(w, "invalid num_dots", http.StatusBadRequest)
+		return
+	}
 
 	var compInfo *ComponentInfo
 
@@ -89,28 +89,25 @@ func (s *Server) httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 			r.Context(), compName, startTime, endTime, int(numDots))
 	case "ConcurrentTask":
 		compInfo = s.calculateConcurrentTask(
-			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
+			r.Context(), compName, infoType, startTime, endTime, numDots)
 	case "ConcurrentTaskMilestones":
 		s.httpConcurrentTaskMilestones(w, r, compName, infoType, startTime, endTime, int(numDots))
 		return
 	case "RequestBufferPressure":
 		compInfo = s.calculateRequestBufferPressure(
-			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
+			r.Context(), compName, infoType, startTime, endTime, numDots)
 	case "ResponseBufferPressure":
 		compInfo = s.calculateResponseBufferPressure(
-			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
+			r.Context(), compName, infoType, startTime, endTime, numDots)
 	case "PendingReqOut":
 		compInfo = s.calculatePendingReqOut(
-			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
+			r.Context(), compName, infoType, startTime, endTime, numDots)
 	default:
-		log.Panicf("unknown info_type %s\n", infoType)
+		http.Error(w, "unknown info_type", http.StatusBadRequest)
+		return
 	}
 
-	rsp, err := json.Marshal(compInfo)
-	dieOnErr(err)
-
-	_, err = w.Write(rsp)
-	dieOnErr(err)
+	writeJSON(w, compInfo)
 }
 
 // httpConcurrentTaskMilestones writes the blocking-reason chart — the one metric
@@ -141,20 +138,16 @@ func (s *Server) httpConcurrentTaskMilestones(
 	groupByKind := r.FormValue("group") == "kind"
 	stackedInfo := s.calculateConcurrentTaskMilestones(
 		r.Context(), scope, infoType, startTime, endTime, numDots, sample, groupByKind)
-	rsp, err := json.Marshal(stackedInfo)
-	dieOnErr(err)
-	_, err = w.Write(rsp)
-	dieOnErr(err)
+	writeJSON(w, stackedInfo)
 }
 
 func (s *Server) calculateConcurrentTask(
 	ctx context.Context,
-	compInfo *ComponentInfo,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
-	compInfo = &ComponentInfo{
+	compInfo := &ComponentInfo{
 		Name:      compName,
 		InfoType:  infoType,
 		StartTime: startTime,
@@ -184,7 +177,6 @@ func (s *Server) calculateConcurrentTask(
 
 func (s *Server) calculateRequestBufferPressure(
 	ctx context.Context,
-	compInfo *ComponentInfo,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int64,
@@ -194,30 +186,24 @@ func (s *Server) calculateRequestBufferPressure(
 	// ever buffers responses). akita names message types "*Req"/"*Request" and
 	// "*Rsp"/"*Response", so split the incoming_buffer occupancy by that: the
 	// requests waiting to be served.
-	compInfo = s.calculateKindOccupancy(
+	return s.calculateKindOccupancy(
 		ctx, compName, infoType, "incoming_buffer", []string{"%Req", "%Request"}, startTime, endTime, numDots)
-
-	return compInfo
 }
 
 func (s *Server) calculateResponseBufferPressure(
 	ctx context.Context,
-	compInfo *ComponentInfo,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
 	// The other half of the incoming buffer: responses returning for requests this
 	// component sent downstream.
-	compInfo = s.calculateKindOccupancy(
+	return s.calculateKindOccupancy(
 		ctx, compName, infoType, "incoming_buffer", []string{"%Rsp", "%Response"}, startTime, endTime, numDots)
-
-	return compInfo
 }
 
 func (s *Server) calculatePendingReqOut(
 	ctx context.Context,
-	compInfo *ComponentInfo,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int64,
@@ -227,10 +213,8 @@ func (s *Server) calculatePendingReqOut(
 	// downstream — the pending-request-out level. (The outgoing-buffer tasks are a
 	// poor proxy here: a request usually leaves the port the instant it is accepted,
 	// so those tasks are near-zero duration.)
-	compInfo = s.calculateKindOccupancy(
+	return s.calculateKindOccupancy(
 		ctx, compName, infoType, "req_out", nil, startTime, endTime, numDots)
-
-	return compInfo
 }
 
 // calculateKindOccupancy bins the time-weighted count of in-flight tasks of one
@@ -437,6 +421,12 @@ func (s *Server) fillBinnedEventRate(
 			data[bin].Value = float64(count) / binDuration
 		}
 	}
+	if err := rows.Err(); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		panic(err)
+	}
 }
 
 func (s *Server) fillBinnedAverageLatency(
@@ -485,6 +475,12 @@ func (s *Server) fillBinnedAverageLatency(
 		if bin >= 0 && bin < len(data) {
 			data[bin].Value = value
 		}
+	}
+	if err := rows.Err(); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		panic(err)
 	}
 }
 
@@ -572,96 +568,6 @@ func calculateTimeWeightedBins( //nolint:funlen
 	}
 
 	return data
-}
-
-// maxTraceContextRows caps how many trace events get embedded in the chat
-// context. The full trace can be hundreds of thousands of rows, which both pegs
-// the server (building the string) and overruns the model's context window, so
-// we send only a bounded sample.
-const maxTraceContextRows = 500
-
-func buildTraceSQL(locations []string, startTime, endTime float64) string {
-	quoted := make([]string, 0, len(locations))
-	for _, loc := range locations {
-		quoted = append(quoted, "'"+loc+"'")
-	}
-	// Location is an interned id; join the location table to filter by component
-	// name and surface the readable name under the original "Location" column,
-	// rather than leaking the integer id (via t.*) or adding an extra column.
-	whereClause := "loc.Locale IN (" + strings.Join(quoted, ",") + ")"
-	timeClause := fmt.Sprintf(
-		"t.StartTime >= %.15f AND t.EndTime <= %.15f", startTime, endTime)
-	return `
-SELECT
-	t.ID,
-	t.ParentID,
-	t.Kind,
-	t.What,
-	loc.Locale AS Location,
-	t.StartTime,
-	t.EndTime
-FROM trace t
-JOIN location loc ON t.Location = loc.ID
-WHERE ` + whereClause + `
-AND ` + timeClause + fmt.Sprintf(`
-ORDER BY t.StartTime, t.ID
-LIMIT %d`, maxTraceContextRows)
-}
-
-func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
-	rows, err := traceReader.Query(sqlStr)
-	if err != nil {
-		log.Println("Failed to query trace:", err)
-		return ""
-	}
-	defer rows.Close()
-
-	columns, err := rows.Columns()
-	if err != nil {
-		log.Println("Failed to get columns:", err)
-		return ""
-	}
-
-	var b strings.Builder
-	b.WriteString("[Reference Akita Trace File]\n")
-	b.WriteString(strings.Join(columns, ","))
-	b.WriteByte('\n')
-
-	rowCount := 0
-	for rows.Next() {
-		values := make([]interface{}, len(columns))
-		valuePtrs := make([]interface{}, len(columns))
-		for i := range values {
-			valuePtrs[i] = &values[i]
-		}
-		if err := rows.Scan(valuePtrs...); err != nil {
-			log.Println("Failed to scan trace row:", err)
-			continue
-		}
-		rowStrs := make([]string, 0, len(values))
-		for _, val := range values {
-			switch v := val.(type) {
-			case nil:
-				rowStrs = append(rowStrs, "")
-			case []byte:
-				rowStrs = append(rowStrs, string(v))
-			case float64:
-				rowStrs = append(rowStrs, fmt.Sprintf("%.9f", v))
-			default:
-				rowStrs = append(rowStrs, fmt.Sprintf("%v", v))
-			}
-		}
-		b.WriteString(strings.Join(rowStrs, ","))
-		b.WriteByte('\n')
-		rowCount++
-	}
-
-	if rowCount >= maxTraceContextRows {
-		b.WriteString(fmt.Sprintf(
-			"[Note: trace truncated to the first %d events]\n", maxTraceContextRows))
-	}
-	b.WriteString("[End Akita Trace File]\n")
-	return b.String()
 }
 
 func (s *Server) calculateConcurrentTaskMilestones(

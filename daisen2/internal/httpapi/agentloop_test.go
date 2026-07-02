@@ -246,7 +246,6 @@ func TestHTTPChatProxyAgentSSE(t *testing.T) {
 
 	s := &Server{traceReader: reader}
 	reqBody, err := json.Marshal(map[string]interface{}{
-		"agent":    true,
 		"provider": "openai-compatible",
 		"baseURL":  srv.URL,
 		"model":    "mock",

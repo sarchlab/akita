@@ -26,27 +26,6 @@ export interface UploadedFile {
   size: string;
 }
 
-export interface TraceInformation {
-  selected: number;
-  startTime: number;
-  endTime: number;
-  selectedComponentNameList: string[];
-}
-
-export interface GPTRequest {
-  messages: ChatMessage[];
-  traceInfo: TraceInformation;
-  provider?: string;
-  baseURL?: string;
-  model?: string;
-  temperature?: number;
-}
-
-export interface GPTResponse {
-  content: string;
-  totalTokens: number;
-}
-
 // LLMSettings is the user-configured provider connection. The LLM config lives
 // entirely in the browser — the server holds no credentials. The API key is
 // persisted separately from the non-secret fields (see useLLMSettings) so it can

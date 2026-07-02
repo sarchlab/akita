@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { LineChart, ListTree } from "lucide-react";
-import { select, zoom, zoomIdentity } from "d3";
+import { select, zoom, zoomIdentity, type D3ZoomEvent, type ZoomBehavior } from "d3";
 import WidgetCard from "./WidgetCard";
 import { Button } from "./ui/button";
 import { useTopology } from "../hooks/useTopology";
@@ -23,12 +23,12 @@ const PORT_H = 19;
 const PORT_PAD = 14;
 const PORT_CW = 5.6;
 const PORT_GAP = 8;
-const COL_GAP = 300;
 const ROW_GAP = 170;
 const MARGIN = 30;
 
 const NODE_COLOR = "#2c7bb6";
 const SELECTED_COLOR = "#f97316";
+const SEP = "\u0000";
 
 interface PortGlyph {
   port: string;
@@ -95,10 +95,6 @@ interface Layout {
 function shortPort(full: string): string {
   const dot = full.lastIndexOf(".");
   return dot >= 0 ? full.slice(dot + 1) : full;
-}
-
-function isTopPort(port: string): boolean {
-  return shortPort(port).toLowerCase() === "top";
 }
 
 function portWidth(short: string): number {
@@ -480,386 +476,6 @@ function buildNetworkLayout(topology: Topology): Layout {
   };
 }
 
-// buildLayout produces a deterministic layered block diagram: a tidy tree of
-// component rectangles (oriented via the ".Top" port convention) with each
-// component's ports placed as hexagons on its top and bottom edges, and edges
-// wired between the ports that share a connection.
-function buildLayout(topology: Topology): Layout {
-  const compByName = new Map(topology.components.map((c) => [c.name, c]));
-
-  const ids: string[] = [];
-  const seen = new Set<string>();
-  const addId = (id: string) => {
-    if (!seen.has(id)) {
-      seen.add(id);
-      ids.push(id);
-    }
-  };
-  topology.components.forEach((c) => addId(c.name));
-  topology.ports.forEach((p) => addId(p.component));
-
-  const portsOf = new Map<string, { port: string; connection: string }[]>();
-  ids.forEach((id) => portsOf.set(id, []));
-  topology.ports.forEach((p) => {
-    portsOf.get(p.component)?.push({ port: p.port, connection: p.connection });
-  });
-
-  // Parent/child orientation from the ".Top" convention.
-  const children = new Map<string, string[]>();
-  ids.forEach((id) => children.set(id, []));
-  const parent = new Map<string, string>();
-  const members = membersByConnection(topology);
-  members.forEach((list) => {
-    for (let i = 0; i < list.length; i++) {
-      for (let j = i + 1; j < list.length; j++) {
-        const a = list[i];
-        const b = list[j];
-        let p: string | null = null;
-        let c: string | null = null;
-        if (isTopPort(b.port) && !isTopPort(a.port)) {
-          p = a.component;
-          c = b.component;
-        } else if (isTopPort(a.port) && !isTopPort(b.port)) {
-          p = b.component;
-          c = a.component;
-        }
-        if (p && c && p !== c && !parent.has(c)) {
-          parent.set(c, p);
-          children.get(p)!.push(c);
-        }
-      }
-    }
-  });
-
-  // No ".Top" tree at all (e.g. a network whose ports are NetworkPort/Port[i])
-  // — fall back to a connection-graph layout instead of dumping every node into
-  // a single row.
-  if (parent.size === 0) {
-    return buildNetworkLayout(topology);
-  }
-
-  let roots = ids.filter((id) => !parent.has(id));
-  if (roots.length === 0 && ids.length > 0) roots = [ids[0]];
-
-  const depth = new Map<string, number>();
-  const order = new Map<string, number>();
-  const visited = new Set<string>();
-  let nextLeaf = 0;
-  const place = (id: string, d: number): number => {
-    visited.add(id);
-    depth.set(id, d);
-    const kids = (children.get(id) ?? []).filter((k) => !visited.has(k));
-    if (kids.length === 0) {
-      const x = nextLeaf++;
-      order.set(id, x);
-      return x;
-    }
-    const xs = kids.map((k) => place(k, d + 1));
-    const x = (Math.min(...xs) + Math.max(...xs)) / 2;
-    order.set(id, x);
-    return x;
-  };
-  roots.forEach((r) => place(r, 0));
-  ids.forEach((id) => {
-    if (!visited.has(id)) place(id, 0);
-  });
-
-  // Build the component boxes with their port glyphs.
-  const portPos = new Map<string, { x: number; y: number }>();
-  const boxes: CompBox[] = ids.map((id) => {
-    const cx = MARGIN + (order.get(id) ?? 0) * COL_GAP + 140;
-    const cy = MARGIN + (depth.get(id) ?? 0) * ROW_GAP + 60;
-
-    const raw = portsOf.get(id) ?? [];
-    const top = raw
-      .filter((p) => isTopPort(p.port))
-      .map((p) => ({ ...p, short: shortPort(p.port), w: portWidth(shortPort(p.port)) }));
-    const bottom = raw
-      .filter((p) => !isTopPort(p.port))
-      .map((p) => ({ ...p, short: shortPort(p.port), w: portWidth(shortPort(p.port)) }));
-
-    const nameW = id.length * NAME_CW + RECT_PAD * 2;
-    // The box must contain its widest port row so every port sits on its edge
-    // rather than floating outside it.
-    const rectW = Math.max(
-      nameW,
-      rowWidth(top) + RECT_SIDE_PAD * 2,
-      rowWidth(bottom) + RECT_SIDE_PAD * 2,
-      90,
-    );
-
-    const layRow = (
-      row: { port: string; short: string; w: number; connection: string }[],
-      edgeY: number,
-    ): PortGlyph[] => {
-      const total = rowWidth(row);
-      let x = cx - total / 2;
-      return row.map((p) => {
-        const gx = x + p.w / 2;
-        x += p.w + PORT_GAP;
-        portPos.set(`${id}|${p.port}`, { x: gx, y: edgeY });
-        return {
-          port: p.port,
-          short: p.short,
-          connection: p.connection,
-          cx: gx,
-          cy: edgeY,
-          w: p.w,
-        };
-      });
-    };
-
-    const ports = [
-      ...layRow(top, cy - RECT_H / 2),
-      ...layRow(bottom, cy + RECT_H / 2),
-    ];
-
-    return { id, component: compByName.get(id) ?? null, cx, cy, rectW, ports };
-  });
-
-  const edges: Edge[] = [];
-  members.forEach((list, connection) => {
-    for (let i = 0; i < list.length; i++) {
-      for (let j = i + 1; j < list.length; j++) {
-        const pa = portPos.get(`${list[i].component}|${list[i].port}`);
-        const pb = portPos.get(`${list[j].component}|${list[j].port}`);
-        if (!pa || !pb) continue;
-        edges.push({
-          connection,
-          ax: pa.x,
-          ay: pa.y,
-          bx: pb.x,
-          by: pb.y,
-          a: list[i].component,
-          b: list[j].component,
-        });
-      }
-    }
-  });
-
-  // Bounding box (include glyph extents).
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  boxes.forEach((b) => {
-    const halfW = Math.max(b.rectW, rowWidth(b.ports)) / 2 + 4;
-    minX = Math.min(minX, b.cx - halfW);
-    maxX = Math.max(maxX, b.cx + halfW);
-    minY = Math.min(minY, b.cy - RECT_H / 2 - PORT_H);
-    maxY = Math.max(maxY, b.cy + RECT_H / 2 + PORT_H);
-  });
-  if (!Number.isFinite(minX)) {
-    minX = 0;
-    minY = 0;
-    maxX = 1;
-    maxY = 1;
-  }
-
-  return {
-    boxes,
-    connNodes: [],
-    edges,
-    minX: minX - MARGIN,
-    minY: minY - MARGIN,
-    width: maxX - minX + MARGIN * 2,
-    height: maxY - minY + MARGIN * 2,
-  };
-}
-
-// groupKeyOf collapses array indices in a component name so a row of sibling
-// components (GPU[1].CU[0..63]) shares one key. Every "[<digits>]" becomes
-// "[*]", turning hundreds of identical leaves into a handful of groups.
-function groupKeyOf(name: string): string {
-  return name.replace(/\[\d+\]/g, "[*]");
-}
-
-// buildAggregatedLayout collapses each array of sibling components into a single
-// group node (e.g. "GPU[1].CU[*] ×64") and lays the resulting handful of groups
-// out as the same ".Top"-oriented tree buildLayout uses. It turns the
-// hundreds-of-nodes "smear" into a readable block diagram while preserving the
-// real structure; a single (non-array) component keeps its own name.
-function buildAggregatedLayout(topology: Topology): Layout {
-  const compByName = new Map<string, TopologyComponent>();
-  topology.components.forEach((c) => compByName.set(c.name, c));
-
-  const allNames = new Set<string>();
-  topology.components.forEach((c) => allNames.add(c.name));
-  topology.ports.forEach((p) => allNames.add(p.component));
-
-  // Group every component by its index-collapsed name.
-  const membersOf = new Map<string, string[]>();
-  allNames.forEach((name) => {
-    const key = groupKeyOf(name);
-    const arr = membersOf.get(key) ?? [];
-    arr.push(name);
-    membersOf.set(key, arr);
-  });
-  const groupIds = [...membersOf.keys()];
-
-  // Display label: a single component keeps its real name; an array shows its
-  // size. The id (rendered on the box) is the label, unique per group.
-  const labelOf = new Map<string, string>();
-  groupIds.forEach((g) => {
-    const m = membersOf.get(g) ?? [];
-    labelOf.set(g, m.length === 1 ? m[0] : `${g} ×${m.length}`);
-  });
-
-  // Group-level parent/child from the ".Top" convention, plus the distinct group
-  // pairs that share any connection (these become the edges).
-  const parent = new Map<string, string>();
-  const children = new Map<string, string[]>();
-  groupIds.forEach((g) => children.set(g, []));
-  const pairKey = (a: string, b: string) =>
-    a < b ? `${a} ${b}` : `${b} ${a}`;
-  const pairs = new Set<string>();
-
-  const members = membersByConnection(topology);
-  members.forEach((list) => {
-    for (let i = 0; i < list.length; i++) {
-      for (let j = i + 1; j < list.length; j++) {
-        const a = list[i];
-        const b = list[j];
-        const ga = groupKeyOf(a.component);
-        const gb = groupKeyOf(b.component);
-        if (ga === gb) continue;
-        pairs.add(pairKey(ga, gb));
-        let p: string | null = null;
-        let c: string | null = null;
-        if (isTopPort(b.port) && !isTopPort(a.port)) {
-          p = ga;
-          c = gb;
-        } else if (isTopPort(a.port) && !isTopPort(b.port)) {
-          p = gb;
-          c = ga;
-        }
-        if (p && c && p !== c && !parent.has(c)) {
-          parent.set(c, p);
-          children.get(p)!.push(c);
-        }
-      }
-    }
-  });
-
-  // Tree layout over the groups (same scheme as buildLayout): leaves take
-  // sequential columns, parents centre over their children, depth sets the row.
-  let roots = groupIds.filter((g) => !parent.has(g));
-  if (roots.length === 0 && groupIds.length > 0) roots = [groupIds[0]];
-  const depth = new Map<string, number>();
-  const order = new Map<string, number>();
-  const visited = new Set<string>();
-  let nextLeaf = 0;
-  const place = (id: string, d: number): number => {
-    visited.add(id);
-    depth.set(id, d);
-    const kids = (children.get(id) ?? []).filter((k) => !visited.has(k));
-    if (kids.length === 0) {
-      const x = nextLeaf++;
-      order.set(id, x);
-      return x;
-    }
-    const xs = kids.map((k) => place(k, d + 1));
-    const x = (Math.min(...xs) + Math.max(...xs)) / 2;
-    order.set(id, x);
-    return x;
-  };
-  roots.forEach((r) => place(r, 0));
-  groupIds.forEach((g) => {
-    if (!visited.has(g)) place(g, 0);
-  });
-
-  const boxes: CompBox[] = groupIds.map((g) => {
-    const label = labelOf.get(g) ?? g;
-    const cx = MARGIN + (order.get(g) ?? 0) * COL_GAP + 140;
-    const cy = MARGIN + (depth.get(g) ?? 0) * ROW_GAP + 60;
-    const rectW = Math.max(label.length * NAME_CW + RECT_PAD * 2, 90);
-    return {
-      id: label,
-      component: compByName.get((membersOf.get(g) ?? [])[0]) ?? null,
-      cx,
-      cy,
-      rectW,
-      ports: [],
-    };
-  });
-  const boxByGroup = new Map<string, CompBox>();
-  groupIds.forEach((g, i) => boxByGroup.set(g, boxes[i]));
-
-  // One edge per group pair, routed from the upper box's bottom edge to the
-  // lower box's top edge so the existing bowed-edge renderer arcs it cleanly.
-  const edges: Edge[] = [];
-  pairs.forEach((pk) => {
-    const [g1, g2] = pk.split(" ");
-    const b1 = boxByGroup.get(g1);
-    const b2 = boxByGroup.get(g2);
-    if (!b1 || !b2) return;
-    const upper = b1.cy <= b2.cy ? b1 : b2;
-    const lower = b1.cy <= b2.cy ? b2 : b1;
-    edges.push({
-      connection: `${upper.id} – ${lower.id}`,
-      ax: upper.cx,
-      ay: upper.cy + RECT_H / 2,
-      adir: 1,
-      bx: lower.cx,
-      by: lower.cy - RECT_H / 2,
-      bdir: -1,
-      a: upper.id,
-      b: lower.id,
-    });
-  });
-
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  boxes.forEach((b) => {
-    const halfW = b.rectW / 2 + 4;
-    minX = Math.min(minX, b.cx - halfW);
-    maxX = Math.max(maxX, b.cx + halfW);
-    minY = Math.min(minY, b.cy - RECT_H / 2);
-    maxY = Math.max(maxY, b.cy + RECT_H / 2);
-  });
-  if (!Number.isFinite(minX)) {
-    minX = 0;
-    minY = 0;
-    maxX = 1;
-    maxY = 1;
-  }
-
-  return {
-    boxes,
-    connNodes: [],
-    edges,
-    minX: minX - MARGIN,
-    minY: minY - MARGIN,
-    width: maxX - minX + MARGIN * 2,
-    height: maxY - minY + MARGIN * 2,
-  };
-}
-
-// segBase strips the array index from one path segment: "SA[0]" -> "SA".
-function segBase(seg: string): string {
-  return seg.replace(/\[\d+\]/g, "");
-}
-
-// defaultExpanded opens, initially, every top-level domain that has children, so
-// the view starts at "GPU expanded one level" (its Shader Arrays and GPU-level
-// units) rather than a single opaque GPU box. Keys are index-collapsed to match
-// buildHierarchicalLayout (e.g. "GPU[1]" -> "GPU[*]").
-function defaultExpanded(topology: Topology): Set<string> {
-  const roots = new Set<string>();
-  const hasChild = new Set<string>();
-  const note = (n: string) => {
-    const segs = n.split(".");
-    const root = segs[0].replace(/\[\d+\]/g, "[*]");
-    roots.add(root);
-    if (segs.length > 1) hasChild.add(root);
-  };
-  topology.components.forEach((c) => note(c.name));
-  topology.ports.forEach((p) => note(p.component));
-  return new Set([...roots].filter((r) => hasChild.has(r)));
-}
-
 // buildHierarchicalLayout renders the components as a collapsible domain tree
 // parsed from the dotted names (GPU -> Shader Array -> unit). Array siblings
 // collapse to one "Base[*] xN" group per parent — so a Shader Array is a real
@@ -962,7 +578,7 @@ function buildHierarchicalLayout(
     // wiring internal to a collapsed domain is not drawn.
     if ((collapsedConnBoxes.get(conn)?.size ?? 0) < 2) return;
     const portName = `${box}.${shortPort(p.port)}`;
-    const sig = `${portName} ${conn}`;
+    const sig = `${portName}${SEP}${conn}`;
     if (seenSynthPort.has(sig)) return;
     seenSynthPort.add(sig);
     synthPorts.push({ component: box, port: portName, connection: conn });
@@ -1069,8 +685,7 @@ export default function TopologyWidget({ expandHref, bare }: TopologyWidgetProps
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const viewportRef = useRef<SVGGElement | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const zoomRef = useRef<any>(null);
+  const zoomRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
 
   const ready = !loading && !error && layout.boxes.length > 0;
 
@@ -1089,15 +704,13 @@ export default function TopologyWidget({ expandHref, bare }: TopologyWidgetProps
       // component is always reachable; the real fix is a less-wide layout.
       .scaleExtent([0.1, 100])
       .clickDistance(4)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .on("zoom", (event: any) => {
+      .on("zoom", (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
         viewport.setAttribute("transform", event.transform.toString());
       });
     zoomRef.current = behavior;
 
     const sel = select(svg);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    sel.call(behavior as any).on("dblclick.zoom", null);
+    sel.call(behavior).on("dblclick.zoom", null);
 
     return () => {
       sel.on(".zoom", null);
@@ -1127,14 +740,6 @@ export default function TopologyWidget({ expandHref, bare }: TopologyWidgetProps
         topology.components.find((c) => c.name === selected.component) ??
         null
       : null;
-
-  const peerOf = (component: string, port: string, connection: string) => {
-    if (!connection) return null;
-    const mem = members.get(connection) ?? [];
-    return (
-      mem.find((x) => !(x.component === component && x.port === port)) ?? null
-    );
-  };
 
   // For a selected port or hub: the connection it lights up, plus the boxes and
   // roles on that connection (for the side panel).
@@ -1632,40 +1237,5 @@ function SpecTable({ spec }: { spec: Record<string, unknown> }) {
         ))}
       </tbody>
     </table>
-  );
-}
-
-function PortDetail({
-  component,
-  port,
-  peer,
-}: {
-  component: string;
-  port: string;
-  peer: { conn: string; peer: { component: string; port: string } | null };
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="break-all text-sm font-semibold">{port}</div>
-      <div className="text-xs text-muted-foreground">on {component}</div>
-      <table className="w-full border-collapse text-xs">
-        <tbody>
-          <tr className="border-b border-border/60 align-top">
-            <td className="py-1 pr-3 font-mono text-muted-foreground">connection</td>
-            <td className="break-all py-1 text-right font-mono">
-              {peer.conn || "—"}
-            </td>
-          </tr>
-          <tr className="align-top">
-            <td className="py-1 pr-3 font-mono text-muted-foreground">peer</td>
-            <td className="break-all py-1 text-right font-mono">
-              {peer.peer
-                ? `${peer.peer.component}.${shortPort(peer.peer.port)}`
-                : "unconnected"}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
   );
 }

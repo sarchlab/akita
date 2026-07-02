@@ -14,7 +14,6 @@ export interface Task {
   end_time: number;
   steps?: TaskStep[] | null;
   yIndex?: number;
-  isParentTask?: boolean;
   isMainTask?: boolean;
 }
 

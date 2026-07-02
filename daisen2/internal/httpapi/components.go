@@ -91,6 +91,9 @@ func (r *SQLiteTraceReader) componentKinds(ctx context.Context) map[string][]str
 			kinds[component] = strings.Split(concat.String, ",")
 		}
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("component-kinds query: %v", err)
+	}
 
 	return kinds
 }

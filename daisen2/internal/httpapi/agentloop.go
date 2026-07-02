@@ -330,7 +330,10 @@ func clip(s string, n int) string {
 const (
 	dataQueryRowCap  = 1000
 	dataQueryByteCap = 64 * 1024
-	dataQueryTimeout = 15 * time.Second
+	// Large traces can need a full-table aggregate or GROUP BY before the model
+	// learns which indexed slice to inspect next. The agent's wall-clock cap still
+	// bounds the whole run even when one exploratory query is slow.
+	dataQueryTimeout = 2 * time.Minute
 )
 
 const dataQueryDescription = `Run a single read-only SQL query (SELECT or WITH only) over the Akita trace
@@ -422,7 +425,18 @@ func runDataQuery(ctx context.Context, reader *SQLiteTraceReader, query string) 
 	if _, err := conn.ExecContext(qctx, "PRAGMA query_only = ON"); err != nil {
 		return "", fmt.Errorf("query failed: %w", err)
 	}
-	defer func() { _, _ = conn.ExecContext(qctx, "PRAGMA query_only = OFF") }()
+	defer func() {
+		resetCtx, resetCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer resetCancel()
+		if _, err := conn.ExecContext(resetCtx, "PRAGMA query_only = OFF"); err != nil {
+			_ = conn.Raw(func(driverConn any) error {
+				if c, ok := driverConn.(interface{ Close() error }); ok {
+					return c.Close()
+				}
+				return nil
+			})
+		}
+	}()
 
 	rows, err := conn.QueryContext(qctx, safe)
 	if err != nil {
