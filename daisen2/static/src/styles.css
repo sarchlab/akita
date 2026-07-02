@@ -65,6 +65,25 @@
   .daisen-main {
     height: calc(100vh - 3.5rem);
     overflow: hidden;
+    min-width: 260px;
+  }
+
+  .daisen-overview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-auto-rows: minmax(260px, 1fr);
+    gap: 0.75rem;
+    height: 100%;
+    min-height: 0;
+    min-width: 260px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background: white;
+    padding: 0.75rem;
+  }
+
+  .daisen-chat-panel {
+    width: min(560px, 42vw);
   }
 
   .daisen-dashboard-grid {
@@ -77,6 +96,24 @@
   .daisen-widget {
     @apply overflow-hidden rounded border border-slate-400 bg-white p-2 pt-1;
     min-height: 80px;
+  }
+
+  @media (max-width: 1120px) {
+    .daisen-chat-panel {
+      position: absolute;
+      inset: 0 0 0 auto;
+      z-index: 40;
+      width: min(560px, 100vw);
+      box-shadow: -16px 0 28px rgb(15 23 42 / 0.16);
+    }
+  }
+
+  @media (max-width: 560px) {
+    .daisen-chat-panel {
+      left: 0;
+      width: 100%;
+      border-left-width: 0;
+    }
   }
 
   .daisen-widget-title {

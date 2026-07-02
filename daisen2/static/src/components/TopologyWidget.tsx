@@ -704,8 +704,9 @@ export default function TopologyWidget({ expandHref, bare }: TopologyWidgetProps
       // component is always reachable; the real fix is a less-wide layout.
       .scaleExtent([0.1, 100])
       .clickDistance(4)
-      .on("zoom", (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
-        viewport.setAttribute("transform", event.transform.toString());
+      .on("zoom", (event: unknown) => {
+        const zoomEvent = event as D3ZoomEvent<SVGSVGElement, unknown>;
+        viewport.setAttribute("transform", zoomEvent.transform.toString());
       });
     zoomRef.current = behavior;
 

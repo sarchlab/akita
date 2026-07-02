@@ -17,7 +17,7 @@ export interface DBTableInfo {
 }
 
 /** Schema-and-size overview of the loaded trace database. `has_sizes` is false
- *  when the SQLite build lacks dbstat, in which case the byte fields are 0. */
+ *  when no available SQLite runtime can read dbstat, so byte fields are 0. */
 export interface DBInfo {
   file: string;
   file_bytes: number;

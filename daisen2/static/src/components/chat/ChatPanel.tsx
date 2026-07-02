@@ -130,7 +130,7 @@ export default function ChatPanel({ open }: { open: boolean }) {
 
   return (
     <>
-      <SidePanel className={cn("flex w-[min(560px,42vw)] flex-col", !open && "hidden")}>
+      <SidePanel className={cn("daisen-chat-panel flex flex-col", !open && "hidden")}>
         <header className="flex h-14 items-center justify-between border-b px-3">
           <div className="flex items-center gap-2 font-semibold">
             {view === "chat" && !showSettings ? (
