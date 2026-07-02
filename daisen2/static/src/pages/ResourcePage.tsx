@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
+import type {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+  WheelEvent as ReactWheelEvent,
+} from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { X } from "lucide-react";
+import { Minus, Plus, X } from "lucide-react";
 import * as d3 from "d3";
 import { useResourceBlocking } from "../hooks/useResourceBlocking";
 import { useResourceTasks } from "../hooks/useResourceTasks";
@@ -15,7 +19,7 @@ import TraceChartLayout from "../components/TraceChartLayout";
 import TimeTicks from "../components/charts/TimeTicks";
 import YAxisOverlay from "../components/charts/YAxisOverlay";
 import GapShading from "../components/charts/GapShading";
-import TimeZoomControls from "../components/charts/TimeZoomControls";
+import TimeZoomControls, { ZOOM_BTN_CLASS } from "../components/charts/TimeZoomControls";
 import SelectedTaskSection from "../components/SelectedTaskSection";
 import { Button } from "../components/ui/button";
 import { ResourceViewHelp } from "../components/HelpTopics";
@@ -47,6 +51,9 @@ const CURVE_PAD_TOP = 18; // room at the top of the curve band for its label
 const GAP = 5;
 // Below this many tasks in view, draw the per-task gantt under the curve.
 const GANTT_THRESHOLD = 300;
+const ROW_HEIGHT = 16;
+const MIN_ROW_HEIGHT = 4;
+const MAX_ROW_HEIGHT = 80;
 const HW_RESOURCE_KIND = "hardware_resource";
 // Warm fill for the blocking-reason (milestone) family.
 const FILL = "#f59e0b";
@@ -175,6 +182,7 @@ export default function ResourcePage() {
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [hoveredResourceTime, setHoveredResourceTime] = useState<number | null>(null);
   const [highlightedResourceReason, setHighlightedResourceReason] = useState<string | null>(null);
+  const [rowHeight, setRowHeight] = useState(ROW_HEIGHT);
   // Tasks located at the resource are the work that consumes it (e.g. inst-VALU
   // tasks at GPU[..].VALU). Other tasks carrying the resource milestone are the
   // higher-level tasks blocked by it (e.g. wavefront tasks).
@@ -290,17 +298,23 @@ export default function ResourcePage() {
   const ganttRegionHeight = showGantt ? Math.max(1, height - curveRegionHeight) : 0;
   const taskRegionHeight = showGantt ? Math.max(1, Math.round(ganttRegionHeight * 0.5)) : 0;
   const blockingRegionHeight = showGantt ? Math.max(1, ganttRegionHeight - taskRegionHeight) : 0;
-  const taskGridTop = AXIS_PAD;
-  const taskGridBottom = Math.max(taskGridTop + 1, taskRegionHeight);
-  const blockingGridTop = 0;
-  const blockingGridBottom = Math.max(1, blockingRegionHeight);
-  const blockingLabelTop = 16;
-  const blockingTaskTop = 20;
   const curveGridTop = showGantt ? 0 : AXIS_PAD;
   const curveGridBottom = Math.max(curveGridTop + 1, curveRegionHeight - AXIS_PAD);
+  const taskGridTop = AXIS_PAD;
   const taskTop = taskGridTop;
-  const taskH = showGantt ? Math.max(0, taskGridBottom - GAP - taskTop) : 0;
-  const blockingTaskH = showGantt ? Math.max(0, blockingGridBottom - GAP - blockingTaskTop) : 0;
+  const blockingGridTop = 0;
+  const blockingLabelTop = 16;
+  const blockingTaskTop = 20;
+  const taskContentHeight = showGantt
+    ? Math.max(taskRegionHeight, taskTop + GAP + usageLayout.rows * rowHeight)
+    : 0;
+  const blockingContentHeight = showGantt
+    ? Math.max(blockingRegionHeight, blockingTaskTop + GAP + blockedLayout.rows * rowHeight)
+    : 0;
+  const taskGridBottom = Math.max(taskGridTop + 1, taskContentHeight);
+  const blockingGridBottom = Math.max(1, blockingContentHeight);
+  const taskH = showGantt ? Math.max(0, taskContentHeight - GAP - taskTop) : 0;
+  const blockingTaskH = showGantt ? Math.max(0, blockingContentHeight - GAP - blockingTaskTop) : 0;
 
   const { areaPath, yScale } = useMemo(() => {
     const bins = data?.bins ?? [];
@@ -327,6 +341,46 @@ export default function ResourcePage() {
   const blockingRowH = showGantt && blockedLayout.rows > 0 ? blockingTaskH / blockedLayout.rows : 0;
   const chartUpdating =
     what && ((!hasData && loading) || (showGantt && taskFetchEnabled && tasks.length === 0));
+
+  const zoomRowsBy = useCallback((dir: number) => {
+    setRowHeight((h) => Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, h + dir * 4)));
+  }, []);
+  const zoomRowsAll = useCallback(() => {
+    const fits = [];
+    if (usageLayout.rows > 0) fits.push((taskRegionHeight - taskTop - GAP) / usageLayout.rows);
+    if (blockedLayout.rows > 0) fits.push((blockingRegionHeight - blockingTaskTop - GAP) / blockedLayout.rows);
+    if (fits.length === 0) return;
+    setRowHeight(Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, Math.floor(Math.min(...fits)))));
+  }, [blockedLayout.rows, blockingRegionHeight, blockingTaskTop, taskRegionHeight, taskTop, usageLayout.rows]);
+  const onRowsWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (!event.altKey) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setRowHeight((h) => Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, h - event.deltaY * 0.04)));
+  };
+
+  const rowControls = showGantt ? (
+    <div
+      className="absolute right-2 top-9 z-20 flex items-center gap-0.5 rounded border bg-white/90 px-1 py-0.5 shadow-sm"
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <span className="select-none px-0.5 text-[10px] font-medium text-muted-foreground">rows</span>
+      <button type="button" className={ZOOM_BTN_CLASS} title="Shorter rows (Alt+scroll)" onClick={() => zoomRowsBy(-1)}>
+        <Minus className="h-4 w-4" />
+      </button>
+      <button type="button" className={ZOOM_BTN_CLASS} title="Taller rows (Alt+scroll)" onClick={() => zoomRowsBy(1)}>
+        <Plus className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        className={`${ZOOM_BTN_CLASS} px-1 text-[10px] font-medium`}
+        title="Fit all rows"
+        onClick={zoomRowsAll}
+      >
+        all
+      </button>
+    </div>
+  ) : null;
 
   const panel = (
     <>
@@ -416,19 +470,20 @@ export default function ResourcePage() {
             <>
               {showGantt ? (
                 <div className="daisen1-component-view relative" style={{ height: taskRegionHeight }}>
-                  <svg width={width} height={taskRegionHeight} className="block">
-                    <TimeTicks
-                      ticks={xScale.ticks(AXIS_TICK_COUNT)}
-                      xScale={xScale}
-                      gridTop={taskGridTop}
-                      gridBottom={taskGridBottom}
-                      topLabelY={12}
-                      tickMarks
-                    />
-                    <line x1={5} x2={width - 5} y1={taskGridTop} y2={taskGridTop} stroke={COLOR_GRID} />
-                    <GapShading gaps={gaps} xScale={xScale} height={taskRegionHeight} patternId="resource-task-gap" />
+                  <div className="h-full w-full overflow-y-auto overflow-x-hidden" onWheel={onRowsWheel}>
+                    <svg width={width} height={taskContentHeight} className="block">
+                      <TimeTicks
+                        ticks={xScale.ticks(AXIS_TICK_COUNT)}
+                        xScale={xScale}
+                        gridTop={taskGridTop}
+                        gridBottom={taskGridBottom}
+                        topLabelY={12}
+                        tickMarks
+                      />
+                      <line x1={5} x2={width - 5} y1={taskGridTop} y2={taskGridTop} stroke={COLOR_GRID} />
+                      <GapShading gaps={gaps} xScale={xScale} height={taskContentHeight} patternId="resource-task-gap" />
 
-                    {usageLayout.tasks.map((task) => {
+                      {usageLayout.tasks.map((task) => {
                       const barY = taskTop + (task.yIndex ?? 0) * rowH + Math.min(1, rowH * 0.15);
                       const barH = Math.max(1.5, rowH - Math.min(2, rowH * 0.3));
                       const bx0 = Math.max(5, Math.min(width - 5, safeScale(xScale, task.start_time)));
@@ -473,34 +528,36 @@ export default function ResourcePage() {
                           />
                         </g>
                       );
-                    })}
+                      })}
 
-                    <text
-                      x={8}
-                      y={taskGridTop + 13}
-                      fontSize="11"
-                      fill="#475569"
-                      stroke="#ffffff"
-                      strokeWidth={2.5}
-                      paintOrder="stroke"
-                      pointerEvents="none"
-                    >
-                      {`Task usage · ${usageTasks.length.toLocaleString()} tasks`}
-                    </text>
-                  </svg>
+                      <text
+                        x={8}
+                        y={taskGridTop + 13}
+                        fontSize="11"
+                        fill="#475569"
+                        stroke="#ffffff"
+                        strokeWidth={2.5}
+                        paintOrder="stroke"
+                        pointerEvents="none"
+                      >
+                        {`Task usage · ${usageTasks.length.toLocaleString()} tasks`}
+                      </text>
+                    </svg>
+                  </div>
                 </div>
               ) : null}
               {showGantt ? (
                 <div className="daisen1-resource-blocking-view relative border-t border-slate-200" style={{ height: blockingRegionHeight }}>
-                  <svg width={width} height={blockingRegionHeight} className="block">
-                    <TimeTicks
-                      ticks={xScale.ticks(AXIS_TICK_COUNT)}
-                      xScale={xScale}
-                      gridTop={blockingGridTop}
-                      gridBottom={blockingGridBottom}
-                    />
-                    <GapShading gaps={gaps} xScale={xScale} height={blockingRegionHeight} patternId="resource-blocking-gap" />
-                    {blockedLayout.tasks.map((task) => {
+                  <div className="h-full w-full overflow-y-auto overflow-x-hidden" onWheel={onRowsWheel}>
+                    <svg width={width} height={blockingContentHeight} className="block">
+                      <TimeTicks
+                        ticks={xScale.ticks(AXIS_TICK_COUNT)}
+                        xScale={xScale}
+                        gridTop={blockingGridTop}
+                        gridBottom={blockingGridBottom}
+                      />
+                      <GapShading gaps={gaps} xScale={xScale} height={blockingContentHeight} patternId="resource-blocking-gap" />
+                      {blockedLayout.tasks.map((task) => {
                       const centerY = blockingTaskTop + (task.yIndex ?? 0) * blockingRowH + blockingRowH / 2;
                       const barH = Math.max(1.5, blockingRowH - Math.min(2, blockingRowH * 0.3));
                       const barY = centerY - barH / 2;
@@ -595,21 +652,22 @@ export default function ResourcePage() {
                           })}
                         </g>
                       );
-                    })}
+                      })}
 
-                    <text
-                      x={8}
-                      y={blockingLabelTop}
-                      fontSize="11"
-                      fill="#475569"
-                      stroke="#ffffff"
-                      strokeWidth={2.5}
-                      paintOrder="stroke"
-                      pointerEvents="none"
-                    >
-                      {`Resource waits · ${blockedTasks.length.toLocaleString()} tasks`}
-                    </text>
-                  </svg>
+                      <text
+                        x={8}
+                        y={blockingLabelTop}
+                        fontSize="11"
+                        fill="#475569"
+                        stroke="#ffffff"
+                        strokeWidth={2.5}
+                        paintOrder="stroke"
+                        pointerEvents="none"
+                      >
+                        {`Resource waits · ${blockedTasks.length.toLocaleString()} tasks`}
+                      </text>
+                    </svg>
+                  </div>
                 </div>
               ) : null}
               <div
@@ -665,6 +723,7 @@ export default function ResourcePage() {
         </div>
 
         <TimeZoomControls onZoom={(dir) => zoomBy(dir > 0 ? 1.4 : 0.7)} className="absolute right-2 top-1" />
+        {rowControls}
         {what ? (
           <div className="absolute bottom-2 right-2 z-20" onPointerDown={(e) => e.stopPropagation()}>
             <ResourceViewHelp className="bg-white/85 p-1 shadow-sm ring-1 ring-slate-200 backdrop-blur-sm hover:bg-white" />
