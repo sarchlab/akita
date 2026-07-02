@@ -1,7 +1,7 @@
 import * as d3 from "d3";
 import type { TaskStep } from "../../types/task";
 import { taskColorKey, type ColorMode } from "../../utils/taskColorCoder";
-import { wavyPath, type SelectedMilestone } from "../../utils/milestoneViz";
+import { mergeConsecutiveMilestones, wavyPath, type SelectedMilestone } from "../../utils/milestoneViz";
 import {
   COLOR_HALO,
   COLOR_TASK_FALLBACK,
@@ -50,10 +50,11 @@ export default function MilestoneMarks({
   highlightedReason,
   onSelect,
 }: MilestoneMarksProps) {
+  const visualSteps = mergeConsecutiveMilestones(steps);
   return (
     <>
-      {steps.map((step, index) => {
-        const intervalStart = index === 0 ? taskStart : steps[index - 1].time;
+      {visualSteps.map((step, index) => {
+        const intervalStart = index === 0 ? taskStart : visualSteps[index - 1].time;
         const x0 = safeScale(xScale, intervalStart);
         const x1 = safeScale(xScale, step.time);
         const key = taskColorKey(step, colorMode);
@@ -68,7 +69,7 @@ export default function MilestoneMarks({
         const opacity = dimmed ? OPACITY_DIM_MILESTONE : 1;
         return (
           <g
-            key={`milestone-${index}-${step.kind}`}
+            key={`milestone-${index}-${step.kind}-${step.what}-${step.time}`}
             className="cursor-pointer"
             onClick={(event) => {
               event.stopPropagation();

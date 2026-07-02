@@ -25,7 +25,7 @@ import { Button } from "../components/ui/button";
 import { ResourceViewHelp } from "../components/HelpTopics";
 import Legend from "../components/Legend";
 import { SectionLabel } from "../components/Legend";
-import { milestonesOf, wavyPath } from "../utils/milestoneViz";
+import { mergeConsecutiveMilestones, milestonesOf, wavyPath } from "../utils/milestoneViz";
 import { lookupColor, taskColorKey } from "../utils/taskColorCoder";
 import type { ColorMode } from "../utils/taskColorCoder";
 import { assignYIndices } from "../utils/taskYIndexAssigner";
@@ -82,7 +82,7 @@ function sameTime(a: number, b: number): boolean {
 // interval ending at each matching milestone, from the previous milestone (or the
 // task's start).
 function blockedIntervals(task: Task, what: string): { lo: number; hi: number }[] {
-  const ms = milestonesOf(task.steps).slice().sort((a, b) => a.time - b.time);
+  const ms = mergeConsecutiveMilestones(milestonesOf(task.steps).slice().sort((a, b) => a.time - b.time));
   const out: { lo: number; hi: number }[] = [];
   for (let i = 0; i < ms.length; i++) {
     if (ms[i].kind === HW_RESOURCE_KIND && ms[i].what === what) {
