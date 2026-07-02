@@ -658,14 +658,14 @@ the same interface without touching the tools.
   plus `Roots` / `Files`. A missing/empty `source` table is **not** an error — it returns an empty
   `Source` — so pre-Phase-3 traces load fine. (`database/sql`-only, so it's reusable outside
   daisen2.)
-- daisen2 `Server` loads it once on startup (`loadCodeSource`) into `s.codeSource`; the code
-  tools read that recorded source directly. Startup logs coverage, e.g.
+- daisen2 `Server` loads it once on startup (`loadCodeSource`) into `s.codeSource` and exposes
+  `CodeSource()` for the tools. Startup logs coverage, e.g.
   `DaisenBot: recorded source available — 268 files across [github.com/sarchlab/akita/v5]`, or
   `no source recorded in this trace`.
 - Verified: `OpenTraceSource` unit tests (populated table + reads a file back; missing table →
   empty); running daisen2 against the recorded virtualmem trace logs the 268-file coverage.
   `go build ./...`, `sourcefs` + `daisen2/internal/httpapi` suites, gofmt, vet all green.
-- **Next (Workstreams C/D):** `code_search` / `code_read` tools over the server's recorded source,
+- **Next (Workstreams C/D):** `code_search` / `code_read` tools over `Server.CodeSource().FS()`,
   registered in the `runAgentSSE` tool slice.
 
 ### Workstream C — `code_search` (regex content search)
@@ -685,7 +685,7 @@ the same interface without touching the tools.
 
 **Status (2026-06-18): C + D implemented.**
 - `daisen2/internal/httpapi/codetools.go`: `code_search` (RE2 regex over
-  the server's recorded source, optional `path_contains` substring filter, capped matches/bytes/
+  `Server.CodeSource().FS()`, optional `path_contains` substring filter, capped matches/bytes/
   line-length with a truncation note) and `code_read` (FS-relative path, optional
   `start_line`/`end_line`, numbered lines, default window + "more lines" note, per-read
   line/byte caps, `fs.ValidPath` guard). Both require `reason`; an empty `codeSource` returns a
