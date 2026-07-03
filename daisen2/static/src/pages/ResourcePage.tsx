@@ -549,8 +549,6 @@ export default function ResourcePage() {
     : 0;
   const taskGridBottom = Math.max(taskGridTop + 1, taskContentHeight);
   const blockingGridBottom = Math.max(1, blockingContentHeight);
-  const taskH = showUsageGantt ? Math.max(0, taskContentHeight - GAP - taskTop) : 0;
-  const blockingTaskH = showWaitGantt ? Math.max(0, blockingContentHeight - GAP - blockingTaskTop) : 0;
 
   const usageBins = useMemo(
     () => (usageDataMatchesRange ? componentBinsTotal(usageData?.bins ?? []) : []),
@@ -597,8 +595,11 @@ export default function ResourcePage() {
 
   const gaps = segmentsData?.enabled ? gapSegments(segmentsData.segments, startTime, endTime) : [];
   const hasData = (data?.bins.length ?? 0) > 0;
-  const rowH = showUsageGantt && usageLayout.rows > 0 ? taskH / usageLayout.rows : 0;
-  const blockingRowH = showWaitGantt && blockedLayout.rows > 0 ? blockingTaskH / blockedLayout.rows : 0;
+  // Row height is controlled only by the rows -/+/all control; time zoom must not
+  // change it (dividing the region by the visible row count made Ctrl/Cmd+scroll
+  // fatten the rows as tasks left the range).
+  const rowH = showUsageGantt && usageLayout.rows > 0 ? usageRowHeight : 0;
+  const blockingRowH = showWaitGantt && blockedLayout.rows > 0 ? waitRowHeight : 0;
   const chartUpdating =
     what &&
     ((!hasData && loading) ||
