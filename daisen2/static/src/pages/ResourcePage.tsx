@@ -530,17 +530,37 @@ export default function ResourcePage() {
   const usageCurveRegionHeight = areaRegionHeight;
   const waitCurveRegionHeight = showAnyGantt ? areaRegionHeight : Math.max(1, height - usageCurveRegionHeight);
   const ganttRegionHeight = showAnyGantt ? Math.max(1, height - usageCurveRegionHeight - waitCurveRegionHeight) : 0;
-  const taskRegionHeight = showUsageGantt ? Math.max(1, showWaitGantt ? Math.round(ganttRegionHeight * 0.5) : ganttRegionHeight) : 0;
-  const blockingRegionHeight = showWaitGantt ? Math.max(1, showUsageGantt ? ganttRegionHeight - taskRegionHeight : ganttRegionHeight) : 0;
-  const usageCurveGridTop = showAnyGantt ? 0 : AXIS_PAD;
-  const usageCurveGridBottom = Math.max(usageCurveGridTop + 1, usageCurveRegionHeight - AXIS_PAD);
-  const waitCurveGridTop = showAnyGantt ? 0 : AXIS_PAD;
-  const waitCurveGridBottom = Math.max(waitCurveGridTop + 1, waitCurveRegionHeight - AXIS_PAD);
   const taskGridTop = AXIS_PAD;
   const taskTop = taskGridTop;
   const blockingGridTop = 0;
   const blockingLabelTop = 16;
   const blockingTaskTop = 20;
+  // Split the gantt region between the two panes. Start from an even split, but
+  // when one pane's rows need less than its half (rows render at a fixed height,
+  // so a few rows leave the rest blank), hand the surplus to the other pane.
+  const usagePaneNeed = taskTop + GAP + usageLayout.rows * usageRowHeight;
+  const waitPaneNeed = blockingTaskTop + GAP + blockedLayout.rows * waitRowHeight;
+  const evenSplit = Math.round(ganttRegionHeight * 0.5);
+  let taskRegionHeight = 0;
+  let blockingRegionHeight = 0;
+  if (showUsageGantt && showWaitGantt) {
+    if (usagePaneNeed < evenSplit) {
+      taskRegionHeight = Math.max(1, usagePaneNeed);
+    } else if (waitPaneNeed < evenSplit) {
+      taskRegionHeight = Math.max(1, Math.min(usagePaneNeed, ganttRegionHeight - waitPaneNeed));
+    } else {
+      taskRegionHeight = Math.max(1, evenSplit);
+    }
+    blockingRegionHeight = Math.max(1, ganttRegionHeight - taskRegionHeight);
+  } else if (showUsageGantt) {
+    taskRegionHeight = Math.max(1, ganttRegionHeight);
+  } else if (showWaitGantt) {
+    blockingRegionHeight = Math.max(1, ganttRegionHeight);
+  }
+  const usageCurveGridTop = showAnyGantt ? 0 : AXIS_PAD;
+  const usageCurveGridBottom = Math.max(usageCurveGridTop + 1, usageCurveRegionHeight - AXIS_PAD);
+  const waitCurveGridTop = showAnyGantt ? 0 : AXIS_PAD;
+  const waitCurveGridBottom = Math.max(waitCurveGridTop + 1, waitCurveRegionHeight - AXIS_PAD);
   const taskContentHeight = showUsageGantt
     ? Math.max(taskRegionHeight, taskTop + GAP + usageLayout.rows * usageRowHeight)
     : 0;
