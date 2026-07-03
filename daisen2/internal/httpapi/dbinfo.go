@@ -336,7 +336,11 @@ func objectSizesFromSQLiteCLI(ctx context.Context, filename string) (map[string]
 	return objectSizesFromSQLiteCLIQuery(ctx, filename, sep, dbstatPageSizeQuery, true)
 }
 
-func objectSizesFromSQLiteCLIQuery(ctx context.Context, filename, sep, query string, logFailure bool) (map[string]int64, bool) {
+func objectSizesFromSQLiteCLIQuery(
+	ctx context.Context,
+	filename, sep, query string,
+	logFailure bool,
+) (map[string]int64, bool) {
 	sizes := map[string]int64{}
 	// #nosec G204 -- command and SQL are fixed; filename is passed as argv.
 	out, err := exec.CommandContext(ctx, "sqlite3",
