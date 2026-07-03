@@ -75,6 +75,9 @@ const RAW_TASK_THRESHOLD = 5000;
 // a divided region (which made bars 1px when many overlapped); the chart grows
 // past its region and is navigated by dragging / scroll buttons instead.
 const ROW_HEIGHT = 22;
+const ROW_HEIGHT_MIN = 6;
+const ROW_HEIGHT_FIT_MIN = 2;
+const ROW_HEIGHT_MAX = 80;
 
 const MIN_RANGE = 1e-12;
 const TASK_VIEW_MARGIN_TOP = 20;
@@ -544,7 +547,7 @@ function buildComponentTaskLayout(
 
   const arrows = buildDependencyArrows(clonedTasks, groupOf);
 
-  return { layout, contentHeight, topRows, arrows };
+  return { layout, contentHeight, topRows, arrows, arrowTopPad };
 }
 
 function ComponentTopAxis({ width, height, range }: { width: number; height: number; range: TimeRange }) {
@@ -574,6 +577,8 @@ interface ComponentTimelineProps {
   highlightedTaskId: string | null;
   highlightedTaskIds: Set<string> | null;
   selectedTaskId: string | null;
+  rowHeight: number;
+  onRowHeightChange: (value: number | ((prev: number) => number)) => void;
   onSelectTask: (task: Task) => void;
   onOpenTask: (task: Task) => void;
   onDeselect: () => void;
@@ -596,6 +601,8 @@ function ComponentTimeline({
   highlightedTaskId,
   highlightedTaskIds,
   selectedTaskId,
+  rowHeight,
+  onRowHeightChange,
   onSelectTask,
   onOpenTask,
   onDeselect,
@@ -606,14 +613,17 @@ function ComponentTimeline({
   const height = Math.max(1, size.height);
   const xScale = d3.scaleLinear().domain([range.startTime, range.endTime]).range([5, width - 5]);
   const ticks = xScale.ticks(AXIS_TICK_COUNT);
-  // Row height is the vertical zoom: taller rows = bigger bars, a taller chart that
-  // scrolls. The chart grows past its region and is navigated by dragging/scrolling.
-  const [rowHeight, setRowHeight] = useState(ROW_HEIGHT);
   // Whether more task rows sit above/below the visible area (and roughly how many),
   // so we can show "scroll for more" affordances at each end. Both stay hidden when
   // everything fits; the top one also hides at the very top, the bottom at the end.
   const [scrollHint, setScrollHint] = useState({ canUp: false, hiddenAbove: 0, canDown: false, hiddenBelow: 0 });
-  const { layout: taskLayout, contentHeight, topRows, arrows: depArrows } = buildComponentTaskLayout(tasks, width, height, range.startTime, range.endTime, rowHeight);
+  const {
+    layout: taskLayout,
+    contentHeight,
+    topRows,
+    arrows: depArrows,
+    arrowTopPad,
+  } = buildComponentTaskLayout(tasks, width, height, range.startTime, range.endTime, rowHeight);
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
 
   const taskById = useMemo(() => {
@@ -661,7 +671,7 @@ function ComponentTimeline({
       const bounds = el.getBoundingClientRect();
       const ratio = bounds.width > 0 ? Math.min(Math.max(event.clientX - bounds.left, 0), bounds.width) / bounds.width : 0.5;
       if (event.altKey) {
-        setRowHeight((h) => Math.min(80, Math.max(6, h - event.deltaY * 0.04)));
+        onRowHeightChange((h) => Math.min(ROW_HEIGHT_MAX, Math.max(ROW_HEIGHT_MIN, h - event.deltaY * 0.04)));
       } else if (event.ctrlKey || event.metaKey) {
         const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
         onZoomRef.current(delta, 0, ratio);
@@ -754,9 +764,13 @@ function ComponentTimeline({
   // the always-on page-level toolbar (TimeZoomControls), since it applies to every
   // view; row zoom is specific to the per-task gantt and stays here. The gantt
   // still zooms time on Ctrl/⌘+scroll via onZoom (see the wheel handler above).
-  const zoomRowsBy = (dir: number) => setRowHeight((h) => Math.min(80, Math.max(6, h + dir * 4)));
+  const zoomRowsBy = (dir: number) =>
+    onRowHeightChange((h) => Math.min(ROW_HEIGHT_MAX, Math.max(ROW_HEIGHT_MIN, h + dir * 4)));
   // Shrink rows so every concurrency row fits in the visible region at once.
-  const zoomRowsAll = () => setRowHeight(Math.max(2, Math.min(80, Math.floor(height / Math.max(1, topRows)))));
+  const zoomRowsAll = () => {
+    const usableHeight = Math.max(1, height - arrowTopPad);
+    onRowHeightChange(Math.max(ROW_HEIGHT_FIT_MIN, Math.min(ROW_HEIGHT_MAX, Math.floor(usableHeight / Math.max(1, topRows)))));
+  };
 
   return (
     <div className="relative h-full w-full">
@@ -1479,6 +1493,9 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // Blocking reasons get their own coloring granularity, toggled independently of
   // tasks (it drives the server's blocking-reason grouping).
   const [milestoneColorMode, setMilestoneColorMode] = useState<ColorMode>("kind-what");
+  // Keep row zoom outside ComponentTimeline so horizontal panning, data reloads, or
+  // temporary level-of-detail remounts do not reset the user's vertical scale.
+  const [timelineRowHeight, setTimelineRowHeight] = useState(ROW_HEIGHT);
   const { info: stackedInfo, loading: infoLoading } = useStackedCompInfo(componentName, "ConcurrentTaskMilestones", dataRange.startTime, dataRange.endTime, numBins, milestoneColorMode);
 
   // Level-of-detail: always fetch the cheap aggregated summary first. Its `total`
@@ -2031,6 +2048,8 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               highlightedTaskId={null}
               highlightedTaskIds={highlightedTaskIds}
               selectedTaskId={selectedTaskId}
+              rowHeight={timelineRowHeight}
+              onRowHeightChange={setTimelineRowHeight}
               onSelectTask={selectTask}
               onOpenTask={makeTaskCurrent}
               onDeselect={deselectTask}
@@ -2167,6 +2186,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
           <SelectedTaskSection
             task={panelTask}
             milestone={selectedMilestone}
+            resourceRange={viewRange}
           />
           <div className="-mx-4 border-t" />
           <ComponentLegend taskKeys={taskColorKeys} colorMap={colorMap} milestoneColorMap={milestoneColorMap} colorMode={colorMode} onColorMode={handleColorMode} milestoneColorMode={milestoneColorMode} onMilestoneColorMode={handleMilestoneColorMode} blockingReasons={blockingReasons} highlightedKey={highlightedKey} onHighlight={setHighlightedKey} highlightedReason={reasonHighlight} onHighlightReason={setHighlightedReason} resourceRange={viewRange} />

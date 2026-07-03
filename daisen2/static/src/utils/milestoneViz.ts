@@ -59,6 +59,22 @@ export function milestonesOf(steps: TaskStep[] | null | undefined): TaskStep[] {
   return (steps ?? []).filter((step) => step.kind !== TAG_STEP_KIND);
 }
 
+// Consecutive milestones with the same exact reason describe one continuous wait
+// that happened to record multiple releases. Visually merge them so the wave
+// spans the whole blocked period and only the final release dot is shown.
+export function mergeConsecutiveMilestones(steps: TaskStep[]): TaskStep[] {
+  const merged: TaskStep[] = [];
+  for (const step of steps) {
+    const prev = merged[merged.length - 1];
+    if (prev && prev.kind === step.kind && prev.what === step.what) {
+      merged[merged.length - 1] = step;
+    } else {
+      merged.push(step);
+    }
+  }
+  return merged;
+}
+
 // blockingReasonKeyAt returns the color key of the reason a task is blocked on at
 // time t — the first milestone at or after t (the next to be released), keyed by
 // kind or the finer kind-what to match the blocking-reason chart's bands so a

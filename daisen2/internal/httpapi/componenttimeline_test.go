@@ -48,6 +48,46 @@ func TestComponentTimelineScopeAggregatesSubtree(t *testing.T) {
 	}
 }
 
+// TestLocationTimelineMatchesOnlyExactLocation verifies the hardware-resource
+// timeline path: unlike a component scope, it should count only tasks whose
+// Location exactly matches the requested resource.
+func TestLocationTimelineMatchesOnlyExactLocation(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
+	reader := NewSQLiteTraceReader(dbPath)
+	reader.Init()
+	defer reader.Close()
+
+	exec := func(q string) {
+		if _, err := reader.Exec(q); err != nil {
+			t.Fatalf("exec %q: %v", q, err)
+		}
+	}
+	exec(`CREATE TABLE location (ID INTEGER, Locale TEXT)`)
+	exec(`INSERT INTO location (ID, Locale) VALUES
+		(1, 'ROB'), (2, 'ROB.req_in'), (3, 'ROB.req_out'), (4, 'ROBOT.x')`)
+	exec(`CREATE TABLE trace (
+		ID INTEGER, ParentID INTEGER, Kind TEXT, What TEXT,
+		Location INTEGER, StartTime REAL, EndTime REAL)`)
+	exec(`INSERT INTO trace (ID, ParentID, Kind, What, Location, StartTime, EndTime) VALUES
+		(1, 0, 'inst',    'VALU',    1, 0, 10),
+		(2, 0, 'req_in',  'ReadReq', 2, 0, 10),
+		(3, 0, 'req_out', 'ReadReq', 3, 0, 10),
+		(4, 0, 'misc',    'Other',   4, 0, 10)`)
+
+	subtree := reader.ComponentTimeline(context.Background(), "ROB", 0, 10, 1, false, 1)
+	if subtree.Total != 3 {
+		t.Fatalf("ComponentTimeline(ROB) Total = %d, want 3", subtree.Total)
+	}
+
+	exact := reader.LocationTimeline(context.Background(), "ROB", 0, 10, 1, false, 1)
+	if exact.Total != 1 {
+		t.Fatalf("LocationTimeline(ROB) Total = %d, want 1", exact.Total)
+	}
+	if len(exact.Keys) != 1 || exact.Keys[0] != "inst-VALU" {
+		t.Fatalf("LocationTimeline(ROB) keys = %v, want [inst-VALU]", exact.Keys)
+	}
+}
+
 // TestCountTasksInScope verifies the cheap exact count that guards the exact
 // occupancy scan: it counts tasks overlapping the range in a location subtree
 // (matching ComponentTimeline's Total), excludes a sibling prefix, and respects

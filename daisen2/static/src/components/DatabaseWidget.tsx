@@ -191,8 +191,8 @@ export default function DatabaseWidget({ expandHref, bare }: DatabaseWidgetProps
 
           {!data.has_sizes ? (
             <div className="rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
-              On-disk sizes unavailable — this SQLite build lacks the dbstat
-              module. Showing row counts only.
+              On-disk sizes unavailable: no dbstat-capable SQLite runtime was
+              found. Showing row counts only.
             </div>
           ) : null}
 

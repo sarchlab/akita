@@ -46,12 +46,12 @@ export default function Layout() {
           Daisen Bot
         </Button>
       </nav>
-      {/* The chat docks beside the content and narrows it (no overlay), so the
-          visualizations reflow to the new width via their ResizeObservers. The
+      {/* The chat docks beside the content on wide screens. On narrower screens it
+          overlays the content so dashboard widgets keep their usable width. The
           panel stays mounted while closed (hidden via CSS) so closing and
           reopening does not discard the conversation or an in-flight answer. */}
-      <div className="flex min-h-0 flex-1">
-        <main className="daisen-main min-w-0 flex-1">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        <main className="daisen-main flex-1">
           <Outlet />
         </main>
         <ChatPanel open={chatOpen} />

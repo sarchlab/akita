@@ -6,9 +6,17 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
+)
+
+const (
+	dbstatAggregateSizeQuery = `SELECT name, SUM(pgsize) FROM dbstat WHERE aggregate=TRUE GROUP BY name`
+	dbstatPageSizeQuery      = `SELECT name, SUM(pgsize) FROM dbstat GROUP BY name`
 )
 
 // ---- DB activity tracking ----------------------------------------------------
@@ -116,9 +124,9 @@ type DBTableInfo struct {
 }
 
 // DBInfo is the schema-and-size overview of the loaded trace database. Sizes are
-// best-effort: when the SQLite build lacks the dbstat virtual table, HasSizes is
-// false and the byte fields are zero while row counts and the file size remain
-// valid.
+// best-effort: when no available SQLite runtime can read the dbstat virtual
+// table, HasSizes is false and the byte fields are zero while row counts and the
+// file size remain valid.
 type DBInfo struct {
 	File       string        `json:"file"`
 	FileBytes  int64         `json:"file_bytes"`
@@ -268,14 +276,30 @@ func (r *SQLiteTraceReader) tableIndexNames(ctx context.Context) map[string][]st
 }
 
 // objectSizes maps every table/index name to its on-disk byte size via the
-// dbstat virtual table. The second return is false when dbstat is unavailable
-// (SQLite built without SQLITE_ENABLE_DBSTAT_VTAB), letting callers degrade to
-// row-counts-only rather than reporting zero sizes as if they were real.
+// dbstat virtual table. It first uses the embedded SQLite connection; if that
+// build lacks SQLITE_ENABLE_DBSTAT_VTAB, it falls back to a dbstat-capable
+// sqlite3 executable when one is available. The second return is false when no
+// runtime can provide dbstat, letting callers degrade to row-counts-only rather
+// than reporting zero sizes as if they were real.
 func (r *SQLiteTraceReader) objectSizes(ctx context.Context) (map[string]int64, bool) {
+	if sizes, ok := r.objectSizesFromEmbeddedDBStat(ctx); ok {
+		return sizes, true
+	}
+
+	return objectSizesFromSQLiteCLI(ctx, r.filename)
+}
+
+func (r *SQLiteTraceReader) objectSizesFromEmbeddedDBStat(ctx context.Context) (map[string]int64, bool) {
+	if sizes, ok := r.objectSizesFromEmbeddedQuery(ctx, dbstatAggregateSizeQuery); ok {
+		return sizes, true
+	}
+	return r.objectSizesFromEmbeddedQuery(ctx, dbstatPageSizeQuery)
+}
+
+func (r *SQLiteTraceReader) objectSizesFromEmbeddedQuery(ctx context.Context, query string) (map[string]int64, bool) {
 	sizes := map[string]int64{}
 
-	rows, err := r.QueryContext(ctx,
-		`SELECT name, SUM(pgsize) FROM dbstat GROUP BY name`)
+	rows, err := r.QueryContext(ctx, query)
 	if err != nil {
 		return sizes, false
 	}
@@ -294,6 +318,56 @@ func (r *SQLiteTraceReader) objectSizes(ctx context.Context) (map[string]int64, 
 	}
 
 	return sizes, true
+}
+
+func objectSizesFromSQLiteCLI(ctx context.Context, filename string) (map[string]int64, bool) {
+	sizes := map[string]int64{}
+	if filename == "" {
+		return sizes, false
+	}
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		return sizes, false
+	}
+
+	const sep = "\x1f"
+	if sizes, ok := objectSizesFromSQLiteCLIQuery(ctx, filename, sep, dbstatAggregateSizeQuery, false); ok {
+		return sizes, true
+	}
+	return objectSizesFromSQLiteCLIQuery(ctx, filename, sep, dbstatPageSizeQuery, true)
+}
+
+func objectSizesFromSQLiteCLIQuery(
+	ctx context.Context,
+	filename, sep, query string,
+	logFailure bool,
+) (map[string]int64, bool) {
+	sizes := map[string]int64{}
+	// #nosec G204 -- command and SQL are fixed; filename is passed as argv.
+	out, err := exec.CommandContext(ctx, "sqlite3",
+		"-readonly", "-separator", sep, filename, query).CombinedOutput()
+	if err != nil {
+		if logFailure {
+			log.Printf("sqlite3 dbstat query: %v: %s", err, strings.TrimSpace(string(out)))
+		}
+		return sizes, false
+	}
+
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, sep, 2)
+		if len(parts) != 2 {
+			continue
+		}
+		bytes, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			continue
+		}
+		sizes[parts[0]] = bytes
+	}
+
+	return sizes, len(sizes) > 0
 }
 
 // get returns the cached overview if present. When absent, it starts a

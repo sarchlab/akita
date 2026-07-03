@@ -7,6 +7,11 @@ import taskTreeImg from "../assets/help/task-tree.png";
 import componentTasksImg from "../assets/help/component-tasks.png";
 import selectorImg from "../assets/help/selector.png";
 import taskGanttImg from "../assets/help/task-gantt.png";
+import resourceImg from "../assets/help/resource.png";
+import resourceUsageTasksImg from "../assets/help/resource-usage-tasks.png";
+import resourceUsageCountImg from "../assets/help/resource-usage-count.png";
+import resourceWaitTasksImg from "../assets/help/resource-wait-tasks.png";
+import resourceWaitCountImg from "../assets/help/resource-wait-count.png";
 
 // HelpTopics are ready-made InfoButtons for the concepts that are hard to grasp at
 // a glance, so a view just drops in e.g. <MetricsHelp /> next to the thing it
@@ -208,14 +213,75 @@ export function BlockingReasonsHelp({ className }: { className?: string }) {
   );
 }
 
-// ResourceViewHelp explains the resource view: one hardware resource's
-// blocking-occupancy curve and the per-task gantt of the tasks waiting on it.
+// ResourceViewHelp explains the resource view: one hardware resource's usage
+// bars, blocking waves, and blocking-occupancy curve.
+export function ResourceUsageTasksHelp({ className }: { className?: string }) {
+  return (
+    <InfoButton title="Resource usage tasks" className={className}>
+      <Figure
+        src={resourceUsageTasksImg}
+        alt="The resource view usage Gantt showing tasks running on the selected resource"
+        caption="Each bar is a task located at this hardware resource."
+      />
+      <p>This chart shows the <strong>tasks that use the selected resource</strong>. For a pipeline stage or execution unit, these are the work items actually running on it in this time window.</p>
+      <p>Overlapping tasks are stacked into rows. <strong>Click</strong> a bar to inspect it in the side panel, or <strong>double-click</strong> it to open the component view on that task. Use the row controls to make this Gantt denser or taller without changing the wait Gantt below.</p>
+    </InfoButton>
+  );
+}
+
+export function ResourceUsageCountHelp({ className }: { className?: string }) {
+  return (
+    <InfoButton title="Resource usage count" className={className}>
+      <Figure
+        src={resourceUsageCountImg}
+        alt="The resource view usage-count curve below the usage Gantt"
+        caption="The filled area counts how many tasks are using the resource over time."
+      />
+      <p>This curve is the aggregate companion to the usage Gantt. At each time, it counts <strong>how many tasks are running on this resource</strong>.</p>
+      <p>Hover the curve to highlight the tasks active at that time in the usage Gantt above. When the visible range contains too many tasks to draw individually, this curve stays available as the level-of-detail view.</p>
+    </InfoButton>
+  );
+}
+
+export function ResourceWaitTasksHelp({ className }: { className?: string }) {
+  return (
+    <InfoButton title="Resource wait tasks" className={className}>
+      <Figure
+        src={resourceWaitTasksImg}
+        alt="The resource view wait Gantt with wavy blocking intervals over task bars"
+        caption="Bars are tasks that waited for the resource; waves mark the actual wait spans."
+      />
+      <p>This chart shows the <strong>tasks that waited for the selected resource</strong>. The solid bar is the task's lifetime, and the orange wavy line is the interval where it was blocked on this resource.</p>
+      <p>A dot marks the <strong>release milestone</strong> when that wait ended. If a wave reaches the edge without a dot, the wait continues outside the current time window; the release is not inside this view. Row controls here affect only the wait Gantt.</p>
+    </InfoButton>
+  );
+}
+
+export function ResourceWaitCountHelp({ className }: { className?: string }) {
+  return (
+    <InfoButton title="Resource wait count" className={className}>
+      <Figure
+        src={resourceWaitCountImg}
+        alt="The resource view wait-count curve below the wait Gantt"
+        caption="The filled area counts tasks blocked waiting for this resource."
+      />
+      <p>This curve counts, over time, <strong>how many tasks are blocked waiting for this resource</strong>. Peaks are the moments where the resource is most contended.</p>
+      <p>Hover the curve to highlight the tasks blocked at that time in the wait Gantt. The highlighted tasks are the ones whose wavy wait interval covers the hovered time.</p>
+    </InfoButton>
+  );
+}
+
 export function ResourceViewHelp({ className }: { className?: string }) {
   return (
     <InfoButton title="Resource view" className={className}>
+      <Figure
+        src={resourceImg}
+        alt="The resource view: task usage bars, resource-wait waves, and a blocked-task count curve"
+        caption="Usage bars show work running on the resource; blocked-task bars below show work waiting on it, with waves marking the wait intervals."
+      />
       <p>This view focuses on <strong>one hardware resource</strong> — a buffer slot, a cache bank, an MSHR, a pipeline stage — and the tasks that <strong>block waiting on it</strong>. A task is blocked on a resource whenever it is stalled until that resource frees up; each such wait is recorded as a <code>hardware_resource</code> milestone (see <em>Blocking reasons</em>).</p>
-      <p>The <strong>curve</strong> plots, over time, <strong>how many tasks are blocked</strong> waiting on this resource — a tall stretch means the resource is contended and many tasks are queued behind it. Its label reports the count in the current view (and notes when the curve is a sample of a very busy resource).</p>
-      <p>When <strong>few enough tasks</strong> fall in the visible range, a <strong>per-task gantt</strong> is drawn above the curve: each task is its own bar across time, with the stretch it spent <strong>waiting on this resource highlighted</strong>. With more tasks in view only the curve is shown — <strong>zoom in</strong> to bring the bars back.</p>
+      <p>The view stacks up to four aligned panes. On top, <strong>Tasks using the resource</strong>: a Gantt of the tasks located at it, above a curve counting how many are running at each time. Below, <strong>Tasks that waited for the resource</strong>: a Gantt of the tasks blocked on it — wavy wait intervals and release dots overlaid on the task bars — above a curve counting how many are blocked. A tall stretch of that wait curve means the resource is contended and many tasks are queued behind it.</p>
+      <p>The curves are always shown. The per-task Gantts appear when <strong>few enough tasks</strong> fall in the visible range — with more tasks in view only the curves are shown, so <strong>zoom in</strong> to bring the per-task charts back. Each Gantt has its own <strong>rows</strong> control (-/+/all) to make its rows denser or taller.</p>
       <p>Interact with it directly:</p>
       <ul className="space-y-1.5">
         <Term label="Click a task">select it — its timing, location, and milestones fill the side panel.</Term>

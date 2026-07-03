@@ -23,11 +23,12 @@ export function taskColorKey(
 }
 
 function paletteScale(palette: Palette) {
-  // Milestones: a warm amber→orange→red ramp. Tasks: a cool cubehelix (blue→purple).
+  // Milestones: a warm amber→orange→red ramp. Tasks: a cool cubehelix rotating
+  // from blue through teal to green (away from the milestones' warm reds).
   // The two families are easy to tell apart even when a key string collides.
   return palette === "milestone"
     ? chroma.scale(["#fcd34d", "#f59e0b", "#ea580c", "#c2410c", "#9f1239"]).mode("lab")
-    : chroma.cubehelix().start(220).rotations(0.5).gamma(0.7).lightness([0.3, 0.74]).scale();
+    : chroma.cubehelix().start(220).rotations(-0.5).gamma(0.7).lightness([0.3, 0.74]).scale();
 }
 
 // buildColorMapFromKeys assigns each distinct key a color from the given palette's

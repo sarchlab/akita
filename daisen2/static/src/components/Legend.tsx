@@ -3,11 +3,8 @@ import { ExternalLink } from "lucide-react";
 import { BlockingReasonsHelp, TaskTypesHelp } from "./HelpTopics";
 import { cn } from "../lib/utils";
 import { wavyPath } from "../utils/milestoneViz";
+import { resourceHrefForReason, resourceWhatFromReason, type TimeRange } from "../utils/resourceLinks";
 import type { ColorMode } from "../utils/taskColorCoder";
-
-// A kind-what blocking-reason key for a hardware resource is "hardware_resource-<what>";
-// the suffix is the resource name, which links to its resource page.
-const HW_RESOURCE_PREFIX = "hardware_resource-";
 
 export function SectionLabel({ children }: { children: string }) {
   return (
@@ -71,7 +68,7 @@ interface LegendProps {
   onHighlightReason?: (kind: string | null) => void;
   // When set, a hardware_resource reason's link carries this time range so the
   // resource page opens at the same window.
-  resourceRange?: { startTime: number; endTime: number };
+  resourceRange?: TimeRange;
 }
 
 // Legend is the shared task-type + blocking-reason key used by both the component
@@ -101,13 +98,13 @@ export default function Legend({
       {taskKeys.length > 0 && (
         <>
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              <SectionLabel>Tasks</SectionLabel>
+            <SectionLabel>Tasks</SectionLabel>
+            <div className="ml-auto flex items-center gap-2">
+              {onColorMode ? (
+                <ColorModeToggle label="Color tasks by" mode={colorMode ?? "kind-what"} onChange={onColorMode} />
+              ) : null}
               <TaskTypesHelp />
             </div>
-            {onColorMode ? (
-              <ColorModeToggle label="Color tasks by" mode={colorMode ?? "kind-what"} onChange={onColorMode} />
-            ) : null}
           </div>
           <ul className="mb-3 mt-2 space-y-0.5">
             {taskKeys.map((key) => {
@@ -143,17 +140,17 @@ export default function Legend({
       {blockingReasons.length > 0 && (
         <>
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              <SectionLabel>Blocking reasons</SectionLabel>
+            <SectionLabel>Blocking reasons</SectionLabel>
+            <div className="ml-auto flex items-center gap-2">
+              {onMilestoneColorMode ? (
+                <ColorModeToggle
+                  label="Color blocking reasons by"
+                  mode={milestoneColorMode ?? "kind-what"}
+                  onChange={onMilestoneColorMode}
+                />
+              ) : null}
               <BlockingReasonsHelp />
             </div>
-            {onMilestoneColorMode ? (
-              <ColorModeToggle
-                label="Color blocking reasons by"
-                mode={milestoneColorMode ?? "kind-what"}
-                onChange={onMilestoneColorMode}
-              />
-            ) : null}
           </div>
           <ul className="mt-2 space-y-0.5">
             {blockingReasons.map((reason) => {
@@ -161,13 +158,8 @@ export default function Legend({
               const active = highlightedReason === reason;
               const dimmed = highlightedReason !== null && !active;
               // A hardware_resource reason links to its resource page.
-              const resourceWhat = reason.startsWith(HW_RESOURCE_PREFIX)
-                ? reason.slice(HW_RESOURCE_PREFIX.length)
-                : null;
-              const resourceHref = resourceWhat
-                ? `/resource?what=${encodeURIComponent(resourceWhat)}` +
-                  (resourceRange ? `&starttime=${resourceRange.startTime}&endtime=${resourceRange.endTime}` : "")
-                : null;
+              const resourceWhat = resourceWhatFromReason(reason);
+              const resourceHref = resourceHrefForReason(reason, resourceRange);
               const rowClass = cn(
                 "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted",
                 active && "bg-primary/10",

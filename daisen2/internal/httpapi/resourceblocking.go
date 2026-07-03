@@ -59,19 +59,43 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 		"CREATE INDEX IF NOT EXISTS idx_trace_ID_time ON trace(ID, StartTime, EndTime)")
 
 	// Whole-trace count (index-only), for context.
-	_ = r.QueryRowContext(ctx,
-		`SELECT COUNT(DISTINCT TaskID) FROM milestone WHERE Kind = 'hardware_resource' AND What = ?`,
-		what).Scan(&resp.TotalAll)
-	// Windowed count: tasks blocked on the resource that overlap the view range —
-	// this is what the density-vs-gantt choice keys on, so a deep zoom into a sparse
-	// window surfaces the per-task gantt even for a busy resource.
-	total := 0
 	_ = r.QueryRowContext(ctx, `
 		SELECT COUNT(DISTINCT m.TaskID)
 		FROM milestone m
 		JOIN trace t ON t.ID = m.TaskID
 		WHERE m.Kind = 'hardware_resource' AND m.What = ?
-			AND t.EndTime > ? AND t.StartTime < ?`, what, start, end).Scan(&total)
+			AND t.Location NOT IN (SELECT ID FROM location WHERE Locale = ?)`,
+		what, what).Scan(&resp.TotalAll)
+	// Windowed count: tasks blocked on the resource that overlap the view range —
+	// this is what the density-vs-gantt choice keys on, so a deep zoom into a sparse
+	// window surfaces the per-task gantt even for a busy resource.
+	total := 0
+	_ = r.QueryRowContext(ctx, `
+		WITH bx AS (
+			SELECT DISTINCT m.TaskID
+			FROM milestone m
+			JOIN trace t ON t.ID = m.TaskID
+			WHERE m.Kind = 'hardware_resource' AND m.What = ?
+				AND t.EndTime > ? AND t.StartTime < ?
+				AND t.Location NOT IN (SELECT ID FROM location WHERE Locale = ?)
+		),
+		ivals AS MATERIALIZED (
+			SELECT
+				m.TaskID,
+				m.What AS w,
+				COALESCE(
+					LAG(m.Time) OVER (PARTITION BY m.TaskID ORDER BY m.Time),
+					t.StartTime
+				) AS lo,
+				m.Time AS hi
+			FROM bx
+			JOIN trace t ON t.ID = bx.TaskID
+			JOIN milestone m ON m.TaskID = t.ID
+		)
+		SELECT COUNT(DISTINCT TaskID)
+		FROM ivals
+		WHERE w = ? AND hi > ? AND lo < ?`,
+		what, start, end, what, what, start, end).Scan(&total)
 	resp.Total = total
 
 	if sample < 1 {
@@ -97,6 +121,7 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 			JOIN trace t ON t.ID = m.TaskID
 			WHERE m.Kind = 'hardware_resource' AND m.What = ?
 				AND t.EndTime > ` + be.startStr + ` AND t.StartTime < ` + be.endStr + `
+				AND t.Location NOT IN (SELECT ID FROM location WHERE Locale = ?)
 		),
 		ivals AS MATERIALIZED (
 			SELECT
@@ -127,7 +152,7 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 		FROM events
 		GROUP BY bin, k, delta`
 
-	rows, err := r.QueryContext(ctx, sqlStr, what, what)
+	rows, err := r.QueryContext(ctx, sqlStr, what, what, what)
 	if err != nil {
 		return resp
 	}
@@ -162,12 +187,31 @@ func (r *SQLiteTraceReader) TasksBlockingOn(
 		"CREATE INDEX IF NOT EXISTS idx_trace_ID_time ON trace(ID, StartTime, EndTime)")
 
 	rows, err := r.QueryContext(ctx, `
-		SELECT DISTINCT m.TaskID
-		FROM milestone m
-		JOIN trace t ON t.ID = m.TaskID
-		WHERE m.Kind = 'hardware_resource' AND m.What = ?
-			AND t.EndTime > ? AND t.StartTime < ?
-		LIMIT ?`, what, start, end, limit)
+		WITH bx AS (
+			SELECT DISTINCT m.TaskID
+			FROM milestone m
+			JOIN trace t ON t.ID = m.TaskID
+			WHERE m.Kind = 'hardware_resource' AND m.What = ?
+				AND t.EndTime > ? AND t.StartTime < ?
+				AND t.Location NOT IN (SELECT ID FROM location WHERE Locale = ?)
+		),
+		ivals AS MATERIALIZED (
+			SELECT
+				m.TaskID,
+				m.What AS w,
+				COALESCE(
+					LAG(m.Time) OVER (PARTITION BY m.TaskID ORDER BY m.Time),
+					t.StartTime
+				) AS lo,
+				m.Time AS hi
+			FROM bx
+			JOIN trace t ON t.ID = bx.TaskID
+			JOIN milestone m ON m.TaskID = t.ID
+		)
+		SELECT DISTINCT TaskID
+		FROM ivals
+		WHERE w = ? AND hi > ? AND lo < ?
+		LIMIT ?`, what, start, end, what, what, start, end, limit)
 	if err != nil {
 		return []Task{}
 	}
