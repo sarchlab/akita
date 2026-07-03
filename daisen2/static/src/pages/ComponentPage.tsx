@@ -1928,6 +1928,14 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     const params = new URLSearchParams(searchParams);
     params.set("taskid", String(task.id));
     params.delete("sel");
+    // If the task lives outside the current component's subtree (e.g. a sub-task
+    // served by a sibling component), follow it there; inside the subtree the
+    // scope already covers the task, so the page stays put.
+    const inSubtree =
+      task.location === componentName || task.location.startsWith(componentName + ".");
+    if (task.location && !inSubtree) {
+      params.set("name", task.location);
+    }
     const duration = task.end_time - task.start_time;
     const padding = duration > 0 ? duration * 0.2 : Math.max(MIN_RANGE, (viewRange.endTime - viewRange.startTime) * 0.05);
     const focus = sanitizeRange(task.start_time - padding, task.end_time + padding);
