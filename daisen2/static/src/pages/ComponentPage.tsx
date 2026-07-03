@@ -247,17 +247,19 @@ function assignYIndices(tasks: LayoutTask[], groupOf?: Map<string, string> | nul
 }
 
 interface PackBlock {
+  // Stable identity across refetches: the group id for sibling groups, the task
+  // id for singletons. Sticky packing keys its row memory on this.
+  key: string;
   start: number;
   end: number;
   height: number;
   members: { task: LayoutTask; localY: number }[];
 }
 
-// Group-aware row packing. Each sibling group is packed internally (members keep
-// full height), then reserved as a bounding-box block that is dropped into the
-// lowest free row band; singletons are height-1 blocks. Result: a request's
-// phases occupy a contiguous block instead of being scattered across rows.
-function assignYIndicesGrouped(tasks: LayoutTask[], groupOf: Map<string, string>) {
+// buildPackBlocks turns the task list into packable blocks. Each sibling group
+// is packed internally (members keep full height) and reserved as one bounding
+// box; ungrouped tasks are height-1 blocks.
+function buildPackBlocks(tasks: LayoutTask[], groupOf: Map<string, string>): PackBlock[] {
   const groups = new Map<string, LayoutTask[]>();
   const blocks: PackBlock[] = [];
 
@@ -265,6 +267,7 @@ function assignYIndicesGrouped(tasks: LayoutTask[], groupOf: Map<string, string>
     const gid = groupOf.get(String(task.id));
     if (gid == null) {
       blocks.push({
+        key: `t:${task.id}`,
         start: task.start_time,
         end: task.effEnd ?? task.end_time,
         height: 1,
@@ -280,7 +283,7 @@ function assignYIndicesGrouped(tasks: LayoutTask[], groupOf: Map<string, string>
     members.push(task);
   }
 
-  for (const members of groups.values()) {
+  for (const [gid, members] of groups) {
     // Pack members among themselves (plain packing, no group key), then reserve
     // the group's bounding box across (localMax + 1) rows.
     const localMax = assignYIndices(members);
@@ -291,6 +294,7 @@ function assignYIndicesGrouped(tasks: LayoutTask[], groupOf: Map<string, string>
       end = Math.max(end, task.effEnd ?? task.end_time);
     }
     blocks.push({
+      key: `g:${gid}`,
       start,
       end,
       height: localMax + 1,
@@ -298,31 +302,74 @@ function assignYIndicesGrouped(tasks: LayoutTask[], groupOf: Map<string, string>
     });
   }
 
-  blocks.sort((a, b) => a.start - b.start);
+  return blocks;
+}
+
+interface BlockPlacement {
+  bases: Map<string, number>;
+  rows: number;
+}
+
+// placeBlocks drops each block into the lowest free row band (first-fit by start
+// time). When presetBases is given, those blocks are seated first at their preset
+// base row (skipping any whose band is no longer free — e.g. a group whose time
+// envelope grew); everything else packs greedily into the remaining gaps.
+function placeBlocks(blocks: PackBlock[], presetBases?: Map<string, number>): BlockPlacement {
   const rowIntervals: { start: number; end: number }[][] = [];
   const rowFree = (r: number, start: number, end: number) => {
     const row = rowIntervals[r];
     if (!row) return true;
     return !row.some((iv) => start < iv.end && iv.start < end);
   };
-
-  let maxYIndex = -1;
-  for (const block of blocks) {
-    let base = 0;
-    for (;;) {
-      let fits = true;
-      for (let k = 0; k < block.height; k++) {
-        if (!rowFree(base + k, block.start, block.end)) {
-          fits = false;
-          break;
-        }
-      }
-      if (fits) break;
-      base++;
+  const bandFree = (block: PackBlock, base: number) => {
+    for (let k = 0; k < block.height; k++) {
+      if (!rowFree(base + k, block.start, block.end)) return false;
     }
+    return true;
+  };
+  const bases = new Map<string, number>();
+  let rows = 0;
+  const occupy = (block: PackBlock, base: number) => {
     for (let k = 0; k < block.height; k++) {
       (rowIntervals[base + k] ??= []).push({ start: block.start, end: block.end });
     }
+    bases.set(block.key, base);
+    rows = Math.max(rows, base + block.height);
+  };
+
+  const greedy: PackBlock[] = [];
+  if (presetBases) {
+    const preset = blocks
+      .filter((block) => presetBases.has(block.key))
+      .sort((a, b) => presetBases.get(a.key)! - presetBases.get(b.key)!);
+    for (const block of preset) {
+      const base = presetBases.get(block.key)!;
+      if (bandFree(block, base)) occupy(block, base);
+      else greedy.push(block);
+    }
+    greedy.push(...blocks.filter((block) => !presetBases.has(block.key)));
+  } else {
+    greedy.push(...blocks);
+  }
+
+  greedy.sort((a, b) => a.start - b.start);
+  for (const block of greedy) {
+    let base = 0;
+    while (!bandFree(block, base)) base++;
+    occupy(block, base);
+  }
+
+  return { bases, rows };
+}
+
+// Group-aware row packing (nested levels): pack blocks greedily, no row memory.
+function assignYIndicesGrouped(tasks: LayoutTask[], groupOf: Map<string, string>) {
+  const blocks = buildPackBlocks(tasks, groupOf);
+  const placement = placeBlocks(blocks);
+
+  let maxYIndex = -1;
+  for (const block of blocks) {
+    const base = placement.bases.get(block.key) ?? 0;
     for (const { task, localY } of block.members) {
       task.yIndex = base + localY;
       maxYIndex = Math.max(maxYIndex, base + localY);
@@ -330,6 +377,67 @@ function assignYIndicesGrouped(tasks: LayoutTask[], groupOf: Map<string, string>
   }
 
   return maxYIndex;
+}
+
+// Sticky packing memory: block key → last row band, carried across refetches.
+type StickyRows = Map<string, { base: number; height: number }>;
+
+// A pan keeps most tasks visible; below this survivor fraction the view moved
+// far enough (jump, refocus, component switch) that a fresh dense pack reads
+// better than preserving the few rows that remain.
+const STICKY_MIN_SURVIVORS = 0.3;
+// Sticky placement may use more rows than a fresh pack (newcomers stack above
+// locked survivors). Beyond this inflation, repack densely instead.
+const STICKY_MAX_ROW_INFLATION = 1.4;
+
+// assignTopYIndices packs the top-level concurrency rows with memory of the
+// previous layout: blocks that survive a refetch keep their exact rows — two
+// survivors can never conflict, since they coexisted before — so panning the
+// time axis cannot make an on-screen task jump rows. Only newcomers pack
+// greedily into the gaps. Falls back to a fresh dense pack when few tasks
+// survive or the sticky layout drifts too sparse (see the constants above).
+function assignTopYIndices(
+  tasks: LayoutTask[],
+  groupOf: Map<string, string>,
+  prev: StickyRows | null,
+): { maxYIndex: number; next: StickyRows } {
+  const blocks = buildPackBlocks(tasks, groupOf);
+  const fresh = placeBlocks(blocks);
+  let placement = fresh;
+
+  if (prev && prev.size) {
+    const preset = new Map<string, number>();
+    let survivors = 0;
+    let total = 0;
+    for (const block of blocks) {
+      total += block.members.length;
+      const last = prev.get(block.key);
+      // A changed height means the group gained/lost members; reflow it.
+      if (last && last.height === block.height) {
+        preset.set(block.key, last.base);
+        survivors += block.members.length;
+      }
+    }
+    if (total > 0 && survivors / total >= STICKY_MIN_SURVIVORS) {
+      const sticky = placeBlocks(blocks, preset);
+      if (sticky.rows <= Math.max(fresh.rows * STICKY_MAX_ROW_INFLATION, fresh.rows + 2)) {
+        placement = sticky;
+      }
+    }
+  }
+
+  const next: StickyRows = new Map();
+  let maxYIndex = -1;
+  for (const block of blocks) {
+    const base = placement.bases.get(block.key) ?? 0;
+    next.set(block.key, { base, height: block.height });
+    for (const { task, localY } of block.members) {
+      task.yIndex = base + localY;
+      maxYIndex = Math.max(maxYIndex, base + localY);
+    }
+  }
+
+  return { maxYIndex, next };
 }
 
 function hasConflict(task: LayoutTask, row?: LayoutTask[]) {
@@ -372,10 +480,19 @@ function assignDimensionLevel(
   if (!levelTasks.length) return 0;
 
   // groupOf only matches top-level ids, so it only affects depth 0 (root's
-  // children); deeper levels fall through to plain packing.
+  // children); deeper levels fall through to plain packing. Depth 0's rows were
+  // already assigned by assignTopYIndices (sticky packing) in
+  // buildComponentTaskLayout — reuse them rather than re-packing, which would
+  // discard the row memory.
   let globalMaxY = -1;
   for (const task of levelTasks) {
-    globalMaxY = Math.max(globalMaxY, assignYIndices(task.subTasks, groupOf));
+    if (depth === 0) {
+      for (const child of task.subTasks) {
+        globalMaxY = Math.max(globalMaxY, child.yIndex ?? 0);
+      }
+    } else {
+      globalMaxY = Math.max(globalMaxY, assignYIndices(task.subTasks, groupOf));
+    }
   }
 
   if (globalMaxY === -1) return 0;
@@ -503,6 +620,7 @@ function buildComponentTaskLayout(
   startTime: number,
   endTime: number,
   rowHeight: number,
+  prevRows: StickyRows | null,
 ) {
   // Drop zero-duration tasks (e.g. an instantaneous outgoing_buffer enqueue):
   // they would render as unclickable 1px slivers yet still consume a packing
@@ -515,7 +633,8 @@ function buildComponentTaskLayout(
   // Give each top-level concurrency row a fixed rowHeight so bars stay legible no
   // matter how many overlap; the chart then grows past its region and scrolls.
   // When few rows are needed, fall back to filling the region (no wasted space).
-  const topRows = assignYIndices(root.subTasks, groupOf) + 1;
+  const { maxYIndex: topMaxY, next: nextRows } = assignTopYIndices(root.subTasks, groupOf, prevRows);
+  const topRows = topMaxY + 1;
   // Reserve a strip above the top row for the arcs, but only when there is a
   // group to draw one — components without sibling groups are laid out exactly
   // as before (zero visual change).
@@ -547,7 +666,7 @@ function buildComponentTaskLayout(
 
   const arrows = buildDependencyArrows(clonedTasks, groupOf);
 
-  return { layout, contentHeight, topRows, arrows, arrowTopPad };
+  return { layout, contentHeight, topRows, arrows, arrowTopPad, nextRows };
 }
 
 function ComponentTopAxis({ width, height, range }: { width: number; height: number; range: TimeRange }) {
@@ -587,6 +706,13 @@ interface ComponentTimelineProps {
   onZoom: (deltaY: number, deltaX: number, pointerRatio: number) => void;
   // Set the visible time range (used by horizontal drag-panning).
   onRangeChange: (range: TimeRange) => void;
+  // Row memory for sticky packing, owned by the page so it survives this
+  // chart unmounting during transitions (it is mounted only while showGantt).
+  // Tasks that stay visible across a pan keep their rows (see
+  // assignTopYIndices); the survivor-fraction/inflation fallbacks in there
+  // also cover component switches and big jumps, so the memory never needs
+  // an explicit reset.
+  stickyRows: { current: StickyRows | null };
 }
 
 function ComponentTimeline({
@@ -608,6 +734,7 @@ function ComponentTimeline({
   onDeselect,
   onZoom,
   onRangeChange,
+  stickyRows,
 }: ComponentTimelineProps) {
   const width = Math.max(1, size.width);
   const height = Math.max(1, size.height);
@@ -623,7 +750,12 @@ function ComponentTimeline({
     topRows,
     arrows: depArrows,
     arrowTopPad,
-  } = buildComponentTaskLayout(tasks, width, height, range.startTime, range.endTime, rowHeight);
+    nextRows,
+  } = buildComponentTaskLayout(tasks, width, height, range.startTime, range.endTime, rowHeight, stickyRows.current);
+  // Transitional renders with no tasks (the list clears while a navigation's
+  // fetch is in flight) must not wipe the memory, or the next fetch packs
+  // fresh and every surviving task jumps rows.
+  if (nextRows.size > 0) stickyRows.current = nextRows;
   const gaps = segmentsEnabled ? gapSegments(segments, range.startTime, range.endTime) : [];
 
   const taskById = useMemo(() => {
@@ -1496,6 +1628,9 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
   // Keep row zoom outside ComponentTimeline so horizontal panning, data reloads, or
   // temporary level-of-detail remounts do not reset the user's vertical scale.
   const [timelineRowHeight, setTimelineRowHeight] = useState(ROW_HEIGHT);
+  // Sticky row memory for the per-task gantt; lives here (not in the chart)
+  // because the chart unmounts whenever showGantt flips during a transition.
+  const timelineStickyRows = useRef<StickyRows | null>(null);
   const { info: stackedInfo, loading: infoLoading } = useStackedCompInfo(componentName, "ConcurrentTaskMilestones", dataRange.startTime, dataRange.endTime, numBins, milestoneColorMode);
 
   // Level-of-detail: always fetch the cheap aggregated summary first. Its `total`
@@ -1928,6 +2063,14 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
     const params = new URLSearchParams(searchParams);
     params.set("taskid", String(task.id));
     params.delete("sel");
+    // If the task lives outside the current component's subtree (e.g. a sub-task
+    // served by a sibling component), follow it there; inside the subtree the
+    // scope already covers the task, so the page stays put.
+    const inSubtree =
+      task.location === componentName || task.location.startsWith(componentName + ".");
+    if (task.location && !inSubtree) {
+      params.set("name", task.location);
+    }
     const duration = task.end_time - task.start_time;
     const padding = duration > 0 ? duration * 0.2 : Math.max(MIN_RANGE, (viewRange.endTime - viewRange.startTime) * 0.05);
     const focus = sanitizeRange(task.start_time - padding, task.end_time + padding);
@@ -2055,6 +2198,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
               onDeselect={deselectTask}
               onZoom={zoomTimeRange}
               onRangeChange={shiftRange}
+              stickyRows={timelineStickyRows}
             />
             <div className={CHART_HELP_CORNER} onPointerDown={(e) => e.stopPropagation()}>
               <ComponentTaskViewHelp className={CHART_HELP_BUTTON} />
