@@ -155,33 +155,69 @@ func accumulateBins(rows *sql.Rows, numBins int) (keys []string, bins [][]int, t
 // deterministically missed by the rowid sample.
 const exactScanTaskCap = 200_000
 
-// countTasksInScope counts the tasks overlapping [start, end) in a location scope
-// via a plain index-only COUNT (no event fan-out, no GROUP BY), so it is far
-// cheaper than the occupancy aggregation and can guard it. The bool is false if
-// the count could not be run.
-func (r *SQLiteTraceReader) countTasksInScope(
-	ctx context.Context, scope string, start, end float64,
+func locationIDSelect(location string, exact bool) (string, []any) {
+	if exact {
+		return "SELECT ID FROM location WHERE Locale = ?", []any{location}
+	}
+
+	lo, hi := scopePrefixBounds(location)
+	return "SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?)", []any{location, lo, hi}
+}
+
+// countTasksInLocation counts tasks overlapping [start, end) in either a
+// location subtree or an exact location via a plain index-only COUNT (no event
+// fan-out, no GROUP BY), so it is far cheaper than the occupancy aggregation and
+// can guard it. The bool is false if the count could not be run.
+func (r *SQLiteTraceReader) countTasksInLocation(
+	ctx context.Context, location string, exact bool, start, end float64,
 ) (int, bool) {
+	locSelect, args := locationIDSelect(location, exact)
 	sqlStr := `
-		WITH scope_locs AS (
-			SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?)
-		)
+		WITH scope_locs AS (` + locSelect + `)
 		SELECT COUNT(*) FROM trace t
 		WHERE t.Location IN (SELECT ID FROM scope_locs)
 			AND t.EndTime > ? AND t.StartTime < ?`
+	args = append(args, start, end)
 
-	lo, hi := scopePrefixBounds(scope)
 	var n int
-	if err := r.QueryRowContext(ctx, sqlStr, scope, lo, hi, start, end).Scan(&n); err != nil {
+	if err := r.QueryRowContext(ctx, sqlStr, args...).Scan(&n); err != nil {
 		return 0, false
 	}
 
 	return n, true
 }
 
+// countTasksInScope keeps the existing subtree semantics used by component views.
+func (r *SQLiteTraceReader) countTasksInScope(ctx context.Context, scope string, start, end float64) (int, bool) {
+	return r.countTasksInLocation(ctx, scope, false, start, end)
+}
+
 func (r *SQLiteTraceReader) ComponentTimeline( //nolint:funlen // one cohesive occupancy-binning SQL pipeline
 	ctx context.Context,
 	scope string,
+	start, end float64,
+	numBins int,
+	groupByKind bool,
+	sample int,
+) ComponentTimelineResponse {
+	return r.componentTimeline(ctx, scope, false, start, end, numBins, groupByKind, sample)
+}
+
+func (r *SQLiteTraceReader) LocationTimeline(
+	ctx context.Context,
+	location string,
+	start, end float64,
+	numBins int,
+	groupByKind bool,
+	sample int,
+) ComponentTimelineResponse {
+	return r.componentTimeline(ctx, location, true, start, end, numBins, groupByKind, sample)
+}
+
+func (r *SQLiteTraceReader) componentTimeline( //nolint:funlen // one cohesive occupancy-binning SQL pipeline
+	ctx context.Context,
+	location string,
+	exactLocation bool,
 	start, end float64,
 	numBins int,
 	groupByKind bool,
@@ -231,7 +267,7 @@ func (r *SQLiteTraceReader) ComponentTimeline( //nolint:funlen // one cohesive o
 	// confirms the scope is genuinely small before paying for the fan-out; if it is
 	// large, return the true count and leave the bins empty (caller keeps sampled).
 	if sample == 1 {
-		if n, ok := r.countTasksInScope(ctx, scope, start, end); ok && n > exactScanTaskCap {
+		if n, ok := r.countTasksInLocation(ctx, location, exactLocation, start, end); ok && n > exactScanTaskCap {
 			resp.Total = n
 			return resp
 		}
@@ -245,12 +281,11 @@ func (r *SQLiteTraceReader) ComponentTimeline( //nolint:funlen // one cohesive o
 		sampleFilter = " AND (t.rowid % " + strconv.Itoa(sample) + ") = 0"
 	}
 
-	// Resolve the scope's location IDs first (the location table is tiny), then
+	// Resolve the location IDs first (the location table is tiny), then
 	// filter trace by those IDs so the covering index drives the scan.
+	locSelect, args := locationIDSelect(location, exactLocation)
 	sqlStr := `
-		WITH scope_locs AS (
-			SELECT ID FROM location WHERE Locale = ? OR (Locale >= ? AND Locale < ?)
-		),
+		WITH scope_locs AS (` + locSelect + `),
 		events AS (
 			SELECT
 				CASE WHEN d.delta = 1
@@ -268,8 +303,7 @@ func (r *SQLiteTraceReader) ComponentTimeline( //nolint:funlen // one cohesive o
 		FROM events
 		GROUP BY bin, k, delta`
 
-	lo, hi := scopePrefixBounds(scope)
-	rows, err := r.QueryContext(ctx, sqlStr, scope, lo, hi)
+	rows, err := r.QueryContext(ctx, sqlStr, args...)
 	if err != nil {
 		return resp
 	}
@@ -449,6 +483,16 @@ func (s *Server) httpComponentTimeline(w http.ResponseWriter, r *http.Request) {
 		if n, err := strconv.Atoi(v); err == nil && n > 1 {
 			sample = n
 		}
+	}
+
+	if r.FormValue("exact") == "1" || r.FormValue("exact") == "true" {
+		where := r.FormValue("where")
+		if where == "" {
+			where = scope
+		}
+		writeJSON(w, s.traceReader.LocationTimeline(
+			r.Context(), where, start, end, numBins, groupByKind, sample))
+		return
 	}
 
 	writeJSON(w, s.traceReader.ComponentTimeline(

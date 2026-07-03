@@ -9,6 +9,8 @@ import { Minus, Plus, X } from "lucide-react";
 import * as d3 from "d3";
 import { useResourceBlocking } from "../hooks/useResourceBlocking";
 import { useResourceTasks } from "../hooks/useResourceTasks";
+import { useComponentTimeline } from "../hooks/useComponentTimeline";
+import { useTraceData } from "../hooks/useTraceData";
 import { useSimulationRange } from "../hooks/useSimulationRange";
 import { useSegments } from "../hooks/useSegments";
 import { useElementSize } from "../hooks/useElementSize";
@@ -19,6 +21,7 @@ import TraceChartLayout from "../components/TraceChartLayout";
 import TimeTicks from "../components/charts/TimeTicks";
 import YAxisOverlay from "../components/charts/YAxisOverlay";
 import GapShading from "../components/charts/GapShading";
+import LoadingCurve from "../components/charts/LoadingCurve";
 import TimeZoomControls, { ZOOM_BTN_CLASS } from "../components/charts/TimeZoomControls";
 import SelectedTaskSection from "../components/SelectedTaskSection";
 import { Button } from "../components/ui/button";
@@ -49,8 +52,11 @@ const DEBOUNCE_MS = 400;
 const AXIS_PAD = 20; // room above/below for the top and bottom time-axis labels
 const CURVE_PAD_TOP = 18; // room at the top of the curve band for its label
 const GAP = 5;
-// Below this many tasks in view, draw the per-task gantt under the curve.
-const GANTT_THRESHOLD = 300;
+// Below these task counts, draw per-task gantts under the curves. Wait rows are
+// the resource bottleneck evidence the user asked to quadruple; usage rows can
+// tolerate a slightly higher cap because they are simple bars without waves.
+const WAIT_GANTT_THRESHOLD = 1200;
+const USAGE_GANTT_THRESHOLD = 2000;
 const ROW_HEIGHT = 16;
 const MIN_ROW_HEIGHT = 4;
 const MAX_ROW_HEIGHT = 80;
@@ -103,6 +109,29 @@ function packTasksUp(tasks: Task[]): PackedTasks {
   return { tasks: packed, rows: maxRow + 1 };
 }
 
+function shortResourceLabel(what: string): string {
+  const parts = what.split(".");
+  return parts[parts.length - 1] || what || "resource";
+}
+
+function componentBinsTotal(bins: number[][]): number[] {
+  return bins.map((row) => row.reduce((sum, value) => sum + value, 0));
+}
+
+function uniqueTasks(...groups: Task[][]): Task[] {
+  const seen = new Set<string>();
+  const out: Task[] = [];
+  for (const group of groups) {
+    for (const task of group) {
+      const id = String(task.id);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(task);
+    }
+  }
+  return out;
+}
+
 // ResourcePage (/resource?what=<name>) shows one hardware resource like the
 // component page shows a location: the occupancy curve of tasks blocked on it
 // (always, top) and — when few enough are in view — a per-task gantt below, each
@@ -147,57 +176,103 @@ export default function ResourcePage() {
   const innerWidth = Math.max(1, width - 10);
   const numBins = Math.max(60, Math.min(400, Math.round(innerWidth / 4)));
 
-  const { data, loading } = useResourceBlocking(what, dataRange.startTime, dataRange.endTime, numBins);
-  const dataMatchesRange =
-    !!data &&
-    sameTime(data.start_time, dataRange.startTime) &&
-    sameTime(data.end_time, dataRange.endTime) &&
-    data.num_bins === numBins;
-  const [showGantt, setShowGantt] = useState(false);
-  useEffect(() => {
-    setShowGantt(false);
-  }, [what]);
-  useEffect(() => {
-    if (dataMatchesRange) setShowGantt(!!data && data.total > 0 && data.total <= GANTT_THRESHOLD);
-  }, [dataMatchesRange, data?.total]);
-  const taskFetchEnabled = dataMatchesRange && showGantt;
-  const { tasks: fetchedTasks, loading: tasksLoading } = useResourceTasks(
-    what,
-    dataRange.startTime,
-    dataRange.endTime,
-    taskFetchEnabled,
-    GANTT_THRESHOLD,
-  );
-  const [tasks, setTasks] = useState<Task[]>([]);
-  useEffect(() => {
-    setTasks([]);
-  }, [what]);
-  useEffect(() => {
-    if (taskFetchEnabled && !tasksLoading) setTasks(fetchedTasks);
-  }, [fetchedTasks, taskFetchEnabled, tasksLoading]);
-
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selectedTask = tasks.find((t) => String(t.id) === selectedId) ?? null;
   const [colorMode, setColorMode] = useState<ColorMode>("kind-what");
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [hoveredResourceTime, setHoveredResourceTime] = useState<number | null>(null);
   const [highlightedResourceReason, setHighlightedResourceReason] = useState<string | null>(null);
   const [rowHeight, setRowHeight] = useState(ROW_HEIGHT);
+
+  const { data, loading } = useResourceBlocking(what, dataRange.startTime, dataRange.endTime, numBins);
+  const { data: usageData, loading: usageLoading } = useComponentTimeline(
+    what,
+    dataRange.startTime,
+    dataRange.endTime,
+    numBins,
+    colorMode,
+    true,
+  );
+  const dataMatchesRange =
+    !!data &&
+    sameTime(data.start_time, dataRange.startTime) &&
+    sameTime(data.end_time, dataRange.endTime) &&
+    data.num_bins === numBins;
+  const usageDataMatchesRange =
+    !!usageData &&
+    sameTime(usageData.start_time, dataRange.startTime) &&
+    sameTime(usageData.end_time, dataRange.endTime) &&
+    usageData.num_bins === numBins;
+  const [showGantt, setShowGantt] = useState(false);
+  useEffect(() => {
+    setShowGantt(false);
+  }, [what]);
+  useEffect(() => {
+    if (dataMatchesRange) setShowGantt(!!data && data.total > 0 && data.total <= WAIT_GANTT_THRESHOLD);
+  }, [dataMatchesRange, data?.total]);
+  const showWaitGantt = showGantt;
+  const showUsageGantt =
+    usageDataMatchesRange &&
+    (usageData?.sample ?? Infinity) === 1 &&
+    (usageData?.total ?? Infinity) > 0 &&
+    (usageData?.total ?? Infinity) <= USAGE_GANTT_THRESHOLD;
+  const showAnyGantt = showUsageGantt || showWaitGantt;
+  const waitTaskFetchEnabled = dataMatchesRange && showWaitGantt;
+  const usageTaskFetchEnabled =
+    usageDataMatchesRange &&
+    showUsageGantt &&
+    (usageData?.sample ?? Infinity) === 1 &&
+    (usageData?.total ?? Infinity) > 0 &&
+    (usageData?.total ?? Infinity) <= USAGE_GANTT_THRESHOLD;
+  const { tasks: fetchedWaitTasks, loading: waitTasksLoading } = useResourceTasks(
+    what,
+    dataRange.startTime,
+    dataRange.endTime,
+    waitTaskFetchEnabled,
+    WAIT_GANTT_THRESHOLD,
+  );
+  const usageTaskQuery = useMemo(
+    () =>
+      usageTaskFetchEnabled
+        ? { where: what, startTime: dataRange.startTime, endTime: dataRange.endTime }
+        : {},
+    [dataRange.endTime, dataRange.startTime, usageTaskFetchEnabled, what],
+  );
+  const { tasks: fetchedUsageTasks, loading: usageTasksLoading } = useTraceData(usageTaskQuery);
+  const [waitTasks, setWaitTasks] = useState<Task[]>([]);
+  const [usageTasks, setUsageTasks] = useState<Task[]>([]);
+  useEffect(() => {
+    setWaitTasks([]);
+    setUsageTasks([]);
+  }, [what]);
+  useEffect(() => {
+    if (waitTaskFetchEnabled && !waitTasksLoading) setWaitTasks(fetchedWaitTasks);
+  }, [fetchedWaitTasks, waitTaskFetchEnabled, waitTasksLoading]);
+  useEffect(() => {
+    if (dataMatchesRange && !waitTaskFetchEnabled) setWaitTasks([]);
+  }, [dataMatchesRange, waitTaskFetchEnabled]);
+  useEffect(() => {
+    if (usageTaskFetchEnabled && !usageTasksLoading) setUsageTasks(fetchedUsageTasks);
+  }, [fetchedUsageTasks, usageTaskFetchEnabled, usageTasksLoading]);
+  useEffect(() => {
+    if (usageDataMatchesRange && !usageTaskFetchEnabled) setUsageTasks([]);
+  }, [usageDataMatchesRange, usageTaskFetchEnabled]);
+
   // Tasks located at the resource are the work that consumes it (e.g. inst-VALU
   // tasks at GPU[..].VALU). Other tasks carrying the resource milestone are the
   // higher-level tasks blocked by it (e.g. wavefront tasks).
-  const usageTasks = useMemo(() => tasks.filter((task) => task.location === what), [tasks, what]);
   const blockedTasks = useMemo(
-    () => tasks.filter((task) => task.location !== what && blockedIntervals(task, what).length > 0),
-    [tasks, what],
+    () => waitTasks.filter((task) => task.location !== what && blockedIntervals(task, what).length > 0),
+    [waitTasks, what],
   );
+  const allTasks = useMemo(() => uniqueTasks(usageTasks, blockedTasks), [usageTasks, blockedTasks]);
+  const selectedTask = allTasks.find((t) => String(t.id) === selectedId) ?? null;
   const usageLayout = useMemo(() => packTasksUp(usageTasks), [usageTasks]);
   const blockedLayout = useMemo(() => packTasksUp(blockedTasks), [blockedTasks]);
   const taskKeys = useMemo(() => {
     const keys = new Set<string>();
-    for (const task of tasks) keys.add(taskColorKey(task, colorMode));
+    for (const task of allTasks) keys.add(taskColorKey(task, colorMode));
     return Array.from(keys).sort();
-  }, [tasks, colorMode]);
+  }, [allTasks, colorMode]);
   const handleColorMode = useAutoColorMode(colorMode, setColorMode, taskKeys.length, 10);
   const taskColorMap = useColorMapFromKeys(taskKeys, "task");
   const resourceReason = what ? taskColorKey({ kind: HW_RESOURCE_KIND, what }, "kind-what") : "";
@@ -207,14 +282,14 @@ export default function ResourcePage() {
   );
   const reasonHighlight = highlightedResourceReason ?? (hoveredResourceTime != null ? resourceReason : null);
   const highlightedBlockedTaskIds = useMemo(() => {
-    if (hoveredResourceTime == null || !showGantt) return null;
+    if (hoveredResourceTime == null || !showWaitGantt) return null;
     const ids = new Set<string>();
     for (const task of blockedTasks) {
       if (task.start_time > hoveredResourceTime || task.end_time < hoveredResourceTime) continue;
       if (isBlockedOnResourceAt(task, what, hoveredResourceTime)) ids.add(String(task.id));
     }
     return ids;
-  }, [blockedTasks, hoveredResourceTime, showGantt, what]);
+  }, [blockedTasks, hoveredResourceTime, showWaitGantt, what]);
 
   // Pan/zoom state (kept in refs so the wheel listener reads the latest).
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -289,39 +364,68 @@ export default function ResourcePage() {
     () => d3.scaleLinear().domain([startTime, endTime]).range([5, width - 5]),
     [startTime, endTime, width],
   );
+  const resourceLabel = shortResourceLabel(what);
 
-  // Vertical layout when individual tasks are visible:
-  // [resource usage tasks] [blocked tasks + wait waves] [blocked-task occupancy curve].
-  // Usage and blocking are separate chart regions, divided with the same subtle
-  // border used by the component page instead of painting both in one gantt.
-  const curveRegionHeight = showGantt ? Math.min(Math.round(height * 0.28), 180) : height;
-  const ganttRegionHeight = showGantt ? Math.max(1, height - curveRegionHeight) : 0;
-  const taskRegionHeight = showGantt ? Math.max(1, Math.round(ganttRegionHeight * 0.5)) : 0;
-  const blockingRegionHeight = showGantt ? Math.max(1, ganttRegionHeight - taskRegionHeight) : 0;
-  const curveGridTop = showGantt ? 0 : AXIS_PAD;
-  const curveGridBottom = Math.max(curveGridTop + 1, curveRegionHeight - AXIS_PAD);
+  // Vertical layout:
+  // [tasks using resource gantt] [tasks using resource area]
+  // [tasks that waited gantt] [tasks waiting area].
+  // The two area curves are the aggregate counterparts of the two per-task panes.
+  const areaRegionHeight = showAnyGantt ? Math.min(Math.max(80, Math.round(height * 0.16)), 150) : Math.max(1, Math.round(height * 0.5));
+  const usageCurveRegionHeight = areaRegionHeight;
+  const waitCurveRegionHeight = showAnyGantt ? areaRegionHeight : Math.max(1, height - usageCurveRegionHeight);
+  const ganttRegionHeight = showAnyGantt ? Math.max(1, height - usageCurveRegionHeight - waitCurveRegionHeight) : 0;
+  const taskRegionHeight = showUsageGantt ? Math.max(1, showWaitGantt ? Math.round(ganttRegionHeight * 0.5) : ganttRegionHeight) : 0;
+  const blockingRegionHeight = showWaitGantt ? Math.max(1, showUsageGantt ? ganttRegionHeight - taskRegionHeight : ganttRegionHeight) : 0;
+  const usageCurveGridTop = showAnyGantt ? 0 : AXIS_PAD;
+  const usageCurveGridBottom = Math.max(usageCurveGridTop + 1, usageCurveRegionHeight - AXIS_PAD);
+  const waitCurveGridTop = showAnyGantt ? 0 : AXIS_PAD;
+  const waitCurveGridBottom = Math.max(waitCurveGridTop + 1, waitCurveRegionHeight - AXIS_PAD);
   const taskGridTop = AXIS_PAD;
   const taskTop = taskGridTop;
   const blockingGridTop = 0;
   const blockingLabelTop = 16;
   const blockingTaskTop = 20;
-  const taskContentHeight = showGantt
+  const taskContentHeight = showUsageGantt
     ? Math.max(taskRegionHeight, taskTop + GAP + usageLayout.rows * rowHeight)
     : 0;
-  const blockingContentHeight = showGantt
+  const blockingContentHeight = showWaitGantt
     ? Math.max(blockingRegionHeight, blockingTaskTop + GAP + blockedLayout.rows * rowHeight)
     : 0;
   const taskGridBottom = Math.max(taskGridTop + 1, taskContentHeight);
   const blockingGridBottom = Math.max(1, blockingContentHeight);
-  const taskH = showGantt ? Math.max(0, taskContentHeight - GAP - taskTop) : 0;
-  const blockingTaskH = showGantt ? Math.max(0, blockingContentHeight - GAP - blockingTaskTop) : 0;
+  const taskH = showUsageGantt ? Math.max(0, taskContentHeight - GAP - taskTop) : 0;
+  const blockingTaskH = showWaitGantt ? Math.max(0, blockingContentHeight - GAP - blockingTaskTop) : 0;
 
-  const { areaPath, yScale } = useMemo(() => {
+  const usageBins = useMemo(
+    () => (usageDataMatchesRange ? componentBinsTotal(usageData?.bins ?? []) : []),
+    [usageData?.bins, usageDataMatchesRange],
+  );
+  const usageTotalLabel = usageDataMatchesRange && usageData ? usageData.total.toLocaleString() : "loading";
+  const usageSample = usageDataMatchesRange && usageData ? usageData.sample ?? 1 : 1;
+
+  const { areaPath: usageAreaPath, yScale: usageYScale } = useMemo(() => {
+    const bins = usageBins;
+    const maxV = Math.max(1, d3.max(bins) ?? 1);
+    const y = d3.scaleLinear().domain([0, maxV]).nice().range([usageCurveGridBottom, usageCurveGridTop + CURVE_PAD_TOP]);
+    const dStart = usageData?.start_time ?? startTime;
+    const n = usageData?.num_bins ?? bins.length;
+    const binW = n > 0 ? ((usageData?.end_time ?? endTime) - dStart) / n : 0;
+    const pts = bins.map((v, b) => ({ t: dStart + (b + 0.5) * binW, v }));
+    const area = d3
+      .area<{ t: number; v: number }>()
+      .x((p) => safeScale(xScale, p.t))
+      .y0(safeScale(y, 0))
+      .y1((p) => safeScale(y, p.v))
+      .curve(d3.curveMonotoneX);
+    return { areaPath: area(pts) ?? "", yScale: y };
+  }, [usageBins, usageData, xScale, startTime, endTime, usageCurveGridTop, usageCurveGridBottom]);
+
+  const { areaPath: waitAreaPath, yScale: waitYScale } = useMemo(() => {
     const bins = data?.bins ?? [];
     const maxV = Math.max(1, d3.max(bins) ?? 1);
     // Leave CURVE_PAD_TOP at the top of the band for the label, matching the
     // component page's task-count area (padTop above the peak).
-    const y = d3.scaleLinear().domain([0, maxV]).nice().range([curveGridBottom, curveGridTop + CURVE_PAD_TOP]);
+    const y = d3.scaleLinear().domain([0, maxV]).nice().range([waitCurveGridBottom, waitCurveGridTop + CURVE_PAD_TOP]);
     const dStart = data?.start_time ?? startTime;
     const n = data?.num_bins ?? bins.length;
     const binW = n > 0 ? ((data?.end_time ?? endTime) - dStart) / n : 0;
@@ -333,14 +437,17 @@ export default function ResourcePage() {
       .y1((p) => safeScale(y, p.v))
       .curve(d3.curveMonotoneX);
     return { areaPath: area(pts) ?? "", yScale: y };
-  }, [data, xScale, startTime, endTime, curveGridTop, curveGridBottom]);
+  }, [data, xScale, startTime, endTime, waitCurveGridTop, waitCurveGridBottom]);
 
   const gaps = segmentsData?.enabled ? gapSegments(segmentsData.segments, startTime, endTime) : [];
   const hasData = (data?.bins.length ?? 0) > 0;
-  const rowH = showGantt && usageLayout.rows > 0 ? taskH / usageLayout.rows : 0;
-  const blockingRowH = showGantt && blockedLayout.rows > 0 ? blockingTaskH / blockedLayout.rows : 0;
+  const rowH = showUsageGantt && usageLayout.rows > 0 ? taskH / usageLayout.rows : 0;
+  const blockingRowH = showWaitGantt && blockedLayout.rows > 0 ? blockingTaskH / blockedLayout.rows : 0;
   const chartUpdating =
-    what && ((!hasData && loading) || (showGantt && taskFetchEnabled && tasks.length === 0));
+    what &&
+    ((!hasData && loading) ||
+      (showWaitGantt && waitTaskFetchEnabled && waitTasks.length === 0) ||
+      (showUsageGantt && usageTaskFetchEnabled && usageTasks.length === 0));
 
   const zoomRowsBy = useCallback((dir: number) => {
     setRowHeight((h) => Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, h + dir * 4)));
@@ -359,7 +466,7 @@ export default function ResourcePage() {
     setRowHeight((h) => Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, h - event.deltaY * 0.04)));
   };
 
-  const rowControls = showGantt ? (
+  const rowControls = showAnyGantt ? (
     <div
       className="absolute right-2 top-9 z-20 flex items-center gap-0.5 rounded border bg-white/90 px-1 py-0.5 shadow-sm"
       onPointerDown={(event) => event.stopPropagation()}
@@ -392,7 +499,14 @@ export default function ResourcePage() {
           <div className="mt-0.5 break-all font-mono text-sm font-bold leading-tight">{what || "—"}</div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {(dataPending || loading || tasksLoading || (what && data && !dataMatchesRange)) && what ? (
+          {(dataPending ||
+            loading ||
+            usageLoading ||
+            waitTasksLoading ||
+            usageTasksLoading ||
+            (what && data && !dataMatchesRange) ||
+            (what && usageData && !usageDataMatchesRange)) &&
+          what ? (
             <span className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
               Updating…
             </span>
@@ -468,7 +582,7 @@ export default function ResourcePage() {
             </div>
           ) : (
             <>
-              {showGantt ? (
+              {showUsageGantt ? (
                 <div className="daisen1-component-view relative" style={{ height: taskRegionHeight }}>
                   <div className="h-full w-full overflow-y-auto overflow-x-hidden" onWheel={onRowsWheel}>
                     <svg width={width} height={taskContentHeight} className="block">
@@ -540,13 +654,51 @@ export default function ResourcePage() {
                         paintOrder="stroke"
                         pointerEvents="none"
                       >
-                        {`Task usage · ${usageTasks.length.toLocaleString()} tasks`}
+                        {`Tasks using ${resourceLabel} · ${usageTasks.length.toLocaleString()} tasks`}
                       </text>
                     </svg>
                   </div>
                 </div>
               ) : null}
-              {showGantt ? (
+              <div
+                className={`daisen1-resource-usage-curve relative${showAnyGantt ? " border-t border-slate-200" : ""}`}
+                style={{ height: usageCurveRegionHeight }}
+              >
+                <svg width={width} height={usageCurveRegionHeight} className="block">
+                  <TimeTicks
+                    ticks={xScale.ticks(AXIS_TICK_COUNT)}
+                    xScale={xScale}
+                    gridTop={usageCurveGridTop}
+                    gridBottom={usageCurveGridBottom}
+                    topLabelY={showAnyGantt ? undefined : 12}
+                    tickMarks={!showAnyGantt}
+                  />
+                  {!showAnyGantt ? <line x1={5} x2={width - 5} y1={usageCurveGridTop} y2={usageCurveGridTop} stroke={COLOR_GRID} /> : null}
+                  <line x1={5} x2={width - 5} y1={usageCurveGridBottom} y2={usageCurveGridBottom} stroke={COLOR_GRID} />
+                  {usageDataMatchesRange ? (
+                    <path d={usageAreaPath} fill={taskColorMap[taskColorKey({ kind: "inst", what: resourceLabel }, "kind-what")] ?? "#8b5cf6"} opacity={0.85} />
+                  ) : (
+                    <LoadingCurve width={width} height={usageCurveRegionHeight} id="resource-usage" />
+                  )}
+                  <YAxisOverlay yScale={usageYScale} width={width} />
+                  <text
+                    x={8}
+                    y={usageCurveGridTop + 13}
+                    fontSize="11"
+                    fill="#475569"
+                    stroke="#ffffff"
+                    strokeWidth={2.5}
+                    paintOrder="stroke"
+                    pointerEvents="none"
+                  >
+                    {`Tasks using ${resourceLabel} over time · ${usageTotalLabel} tasks${
+                      usageSample > 1 ? ` · ≈1-in-${usageSample} sample` : ""
+                    }${usageDataMatchesRange && usageData && !showUsageGantt && usageData.total > 0 ? " · zoom in for individual tasks" : ""}`}
+                  </text>
+                  <GapShading gaps={gaps} xScale={xScale} height={usageCurveGridBottom} patternId="resource-usage-gap" />
+                </svg>
+              </div>
+              {showWaitGantt ? (
                 <div className="daisen1-resource-blocking-view relative border-t border-slate-200" style={{ height: blockingRegionHeight }}>
                   <div className="h-full w-full overflow-y-auto overflow-x-hidden" onWheel={onRowsWheel}>
                     <svg width={width} height={blockingContentHeight} className="block">
@@ -664,19 +816,19 @@ export default function ResourcePage() {
                         paintOrder="stroke"
                         pointerEvents="none"
                       >
-                        {`Resource waits · ${blockedTasks.length.toLocaleString()} tasks`}
+                        {`Tasks that waited for ${resourceLabel} · ${blockedTasks.length.toLocaleString()} tasks`}
                       </text>
                     </svg>
                   </div>
                 </div>
               ) : null}
               <div
-                className={`daisen1-metric-view relative${showGantt ? " border-t border-slate-200" : ""}`}
-                style={{ height: curveRegionHeight }}
+                className={`daisen1-metric-view relative${showAnyGantt ? " border-t border-slate-200" : ""}`}
+                style={{ height: waitCurveRegionHeight }}
               >
                 <svg
                   width={width}
-                  height={curveRegionHeight}
+                  height={waitCurveRegionHeight}
                   className="block"
                   onMouseMove={(event) => {
                     const rect = event.currentTarget.getBoundingClientRect();
@@ -687,22 +839,22 @@ export default function ResourcePage() {
                   <TimeTicks
                     ticks={xScale.ticks(AXIS_TICK_COUNT)}
                     xScale={xScale}
-                    gridTop={curveGridTop}
-                    gridBottom={curveGridBottom}
-                    topLabelY={showGantt ? undefined : 12}
-                    bottomLabelY={curveRegionHeight - 6}
+                    gridTop={waitCurveGridTop}
+                    gridBottom={waitCurveGridBottom}
+                    topLabelY={showAnyGantt ? undefined : 12}
+                    bottomLabelY={waitCurveRegionHeight - 6}
                     tickMarks
                   />
-                  {!showGantt ? <line x1={5} x2={width - 5} y1={curveGridTop} y2={curveGridTop} stroke={COLOR_GRID} /> : null}
-                  <line x1={5} x2={width - 5} y1={curveGridBottom} y2={curveGridBottom} stroke={COLOR_GRID} />
+                  {!showAnyGantt ? <line x1={5} x2={width - 5} y1={waitCurveGridTop} y2={waitCurveGridTop} stroke={COLOR_GRID} /> : null}
+                  <line x1={5} x2={width - 5} y1={waitCurveGridBottom} y2={waitCurveGridBottom} stroke={COLOR_GRID} />
 
                   {/* Occupancy curve (always) — a filled band only, matching the
                       component page's task-count area (no outline, 0.9 opacity). */}
-                  <path d={areaPath} fill={FILL} opacity={0.9} />
-                  <YAxisOverlay yScale={yScale} width={width} />
+                  <path d={waitAreaPath} fill={FILL} opacity={0.9} />
+                  <YAxisOverlay yScale={waitYScale} width={width} />
                   <text
                     x={8}
-                    y={curveGridTop + 13}
+                    y={waitCurveGridTop + 13}
                     fontSize="11"
                     fill="#475569"
                     stroke="#ffffff"
@@ -710,12 +862,12 @@ export default function ResourcePage() {
                     paintOrder="stroke"
                     pointerEvents="none"
                   >
-                    {`Tasks blocked · ${data?.total.toLocaleString() ?? "—"}${
+                    {`Tasks waiting for ${resourceLabel} over time · ${data?.total.toLocaleString() ?? "—"} tasks${
                       data && data.sample > 1 ? ` · ≈1-in-${data.sample} sample` : ""
-                    }${data && !showGantt && data.total > 0 ? " · zoom in for individual tasks" : ""}`}
+                    }${data && !showWaitGantt && data.total > 0 ? " · zoom in for individual tasks" : ""}`}
                   </text>
 
-                  <GapShading gaps={gaps} xScale={xScale} height={curveGridBottom} patternId="resource-curve-gap" />
+                  <GapShading gaps={gaps} xScale={xScale} height={waitCurveGridBottom} patternId="resource-curve-gap" />
                 </svg>
               </div>
             </>

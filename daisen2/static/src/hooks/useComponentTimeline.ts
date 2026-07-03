@@ -35,6 +35,7 @@ export function useComponentTimeline(
   // "kind" | "kind-what" — how the server groups tasks into bands. Must match the
   // client's taskColorKey so a band's key resolves to the same color.
   group: string = "kind-what",
+  exactLocation = false,
 ) {
   const [data, setData] = useState<ComponentTimelineData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -50,7 +51,7 @@ export function useComponentTimeline(
     // if the new fetch is slow or fails). A range / bin-count change keeps the previous
     // chart on screen while the new one loads, so the view never flickers to blank
     // between progressive passes or when the measured width re-quantizes numBins.
-    const cacheKey = `${scope}\n${group}`;
+    const cacheKey = `${scope}\n${group}\n${exactLocation ? "exact" : "scope"}`;
     if (lastKeyRef.current !== cacheKey) {
       lastKeyRef.current = cacheKey;
       setData(null);
@@ -74,12 +75,17 @@ export function useComponentTimeline(
 
     const runPass = async (sample: number): Promise<boolean> => {
       const params = new URLSearchParams({
-        scope,
         starttime: String(startTime),
         endtime: String(endTime),
         num_bins: String(numBins),
         group,
       });
+      if (exactLocation) {
+        params.set("where", scope);
+        params.set("exact", "1");
+      } else {
+        params.set("scope", scope);
+      }
       if (sample > 1) params.set("sample", String(sample));
       const response = await fetch(
         `/api/component_timeline?${params.toString()}`,
@@ -121,7 +127,7 @@ export function useComponentTimeline(
     })();
 
     return () => controller.abort();
-  }, [scope, startTime, endTime, numBins, group]);
+  }, [scope, startTime, endTime, numBins, group, exactLocation]);
 
   useRenderReady(loading, error !== null);
 
