@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  ReactNode,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
   WheelEvent as ReactWheelEvent,
 } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Minus, Plus, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Minus, Plus, X } from "lucide-react";
 import * as d3 from "d3";
 import { useResourceBlocking } from "../hooks/useResourceBlocking";
 import { useResourceTasks } from "../hooks/useResourceTasks";
@@ -25,7 +26,12 @@ import LoadingCurve from "../components/charts/LoadingCurve";
 import TimeZoomControls, { ZOOM_BTN_CLASS } from "../components/charts/TimeZoomControls";
 import SelectedTaskSection from "../components/SelectedTaskSection";
 import { Button } from "../components/ui/button";
-import { ResourceViewHelp } from "../components/HelpTopics";
+import {
+  ResourceUsageCountHelp,
+  ResourceUsageTasksHelp,
+  ResourceWaitCountHelp,
+  ResourceWaitTasksHelp,
+} from "../components/HelpTopics";
 import Legend from "../components/Legend";
 import { SectionLabel } from "../components/Legend";
 import { mergeConsecutiveMilestones, milestonesOf, wavyPath } from "../utils/milestoneViz";
@@ -61,6 +67,8 @@ const ROW_HEIGHT = 16;
 const MIN_ROW_HEIGHT = 4;
 const MAX_ROW_HEIGHT = 80;
 const HW_RESOURCE_KIND = "hardware_resource";
+const CHART_HELP_CORNER = "absolute bottom-2 right-2 z-20";
+const CHART_HELP_BUTTON = "bg-white/85 p-1 shadow-sm ring-1 ring-slate-200 backdrop-blur-sm hover:bg-white";
 // Warm fill for the blocking-reason (milestone) family.
 const FILL = "#f59e0b";
 const STROKE = "#ea580c";
@@ -73,6 +81,24 @@ interface TimeRange {
 interface PackedTasks {
   tasks: Task[];
   rows: number;
+}
+
+interface ScrollHint {
+  canUp: boolean;
+  hiddenAbove: number;
+  canDown: boolean;
+  hiddenBelow: number;
+}
+
+interface ResourceGanttScrollFrameProps {
+  height: number;
+  contentHeight: number;
+  rowHeight: number;
+  rowCount: number;
+  topPad: number;
+  controlsTop?: number;
+  onRowHeightChange: (value: number | ((prev: number) => number)) => void;
+  children: ReactNode;
 }
 
 function sanitize(start: number, end: number): TimeRange {
@@ -132,6 +158,119 @@ function uniqueTasks(...groups: Task[][]): Task[] {
   return out;
 }
 
+function ResourceGanttScrollFrame({
+  height,
+  contentHeight,
+  rowHeight,
+  rowCount,
+  topPad,
+  controlsTop = 4,
+  onRowHeightChange,
+  children,
+}: ResourceGanttScrollFrameProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollHint, setScrollHint] = useState<ScrollHint>({
+    canUp: false,
+    hiddenAbove: 0,
+    canDown: false,
+    hiddenBelow: 0,
+  });
+
+  const updateScrollHint = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const above = el.scrollTop;
+    const below = el.scrollHeight - el.clientHeight - el.scrollTop;
+    const threshold = Math.max(2, rowHeight * 0.5);
+    const rows = (px: number) => Math.max(0, Math.ceil(px / Math.max(1, rowHeight)));
+    setScrollHint({
+      canUp: above > threshold,
+      hiddenAbove: rows(above),
+      canDown: below > threshold,
+      hiddenBelow: rows(below),
+    });
+  }, [rowHeight]);
+
+  useEffect(() => {
+    updateScrollHint();
+  }, [contentHeight, height, rowCount, rowHeight, updateScrollHint]);
+
+  const zoomRowsBy = (dir: number) => {
+    onRowHeightChange((h) => Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, h + dir * 4)));
+  };
+
+  const zoomRowsAll = () => {
+    if (rowCount <= 0) return;
+    const usableHeight = Math.max(1, height - topPad - GAP);
+    onRowHeightChange(Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, Math.floor(usableHeight / rowCount))));
+  };
+
+  const onRowsWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (!event.altKey) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onRowHeightChange((h) => Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, h - event.deltaY * 0.04)));
+  };
+
+  return (
+    <div className="relative h-full w-full">
+      <div
+        className="absolute right-2 z-20 flex items-center gap-0.5 rounded border bg-white/90 px-1 py-0.5 shadow-sm"
+        style={{ top: controlsTop }}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <span className="select-none px-0.5 text-[10px] font-medium text-muted-foreground">rows</span>
+        <button type="button" className={ZOOM_BTN_CLASS} title="Shorter rows (Alt+scroll)" onClick={() => zoomRowsBy(-1)}>
+          <Minus className="h-4 w-4" />
+        </button>
+        <button type="button" className={ZOOM_BTN_CLASS} title="Taller rows (Alt+scroll)" onClick={() => zoomRowsBy(1)}>
+          <Plus className="h-4 w-4" />
+        </button>
+        <button type="button" className={`${ZOOM_BTN_CLASS} px-1 text-[10px] font-medium`} title="Fit all rows" onClick={zoomRowsAll}>
+          all
+        </button>
+      </div>
+      <div
+        ref={scrollRef}
+        className="h-full w-full overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        onScroll={updateScrollHint}
+        onWheel={onRowsWheel}
+      >
+        {children}
+      </div>
+      {scrollHint.canUp && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-14 items-start justify-center bg-gradient-to-b from-white via-white/70 to-transparent">
+          <button
+            type="button"
+            className="pointer-events-auto mt-1.5 flex items-center gap-1 rounded-full border bg-white/95 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm transition-colors hover:text-primary"
+            title="Scroll up to see earlier task rows"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => scrollRef.current?.scrollBy({ top: -Math.max(1, height * 0.8), behavior: "smooth" })}
+          >
+            <ChevronUp className="h-3.5 w-3.5" />
+            {scrollHint.hiddenAbove} more row{scrollHint.hiddenAbove === 1 ? "" : "s"} above
+          </button>
+        </div>
+      )}
+      {scrollHint.canDown && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex h-14 items-end justify-center bg-gradient-to-t from-white via-white/70 to-transparent">
+          <button
+            type="button"
+            className="pointer-events-auto mb-1.5 flex items-center gap-1 rounded-full border bg-white/95 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm transition-colors hover:text-primary"
+            title="Scroll down to see more task rows"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => scrollRef.current?.scrollBy({ top: Math.max(1, height * 0.8), behavior: "smooth" })}
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+            {scrollHint.hiddenBelow} more row{scrollHint.hiddenBelow === 1 ? "" : "s"} below
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ResourcePage (/resource?what=<name>) shows one hardware resource like the
 // component page shows a location: the occupancy curve of tasks blocked on it
 // (always, top) and — when few enough are in view — a per-task gantt below, each
@@ -179,9 +318,11 @@ export default function ResourcePage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [colorMode, setColorMode] = useState<ColorMode>("kind-what");
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
-  const [hoveredResourceTime, setHoveredResourceTime] = useState<number | null>(null);
+  const [hoveredUsageTime, setHoveredUsageTime] = useState<number | null>(null);
+  const [hoveredWaitTime, setHoveredWaitTime] = useState<number | null>(null);
   const [highlightedResourceReason, setHighlightedResourceReason] = useState<string | null>(null);
-  const [rowHeight, setRowHeight] = useState(ROW_HEIGHT);
+  const [usageRowHeight, setUsageRowHeight] = useState(ROW_HEIGHT);
+  const [waitRowHeight, setWaitRowHeight] = useState(ROW_HEIGHT);
 
   const { data, loading } = useResourceBlocking(what, dataRange.startTime, dataRange.endTime, numBins);
   const { data: usageData, loading: usageLoading } = useComponentTimeline(
@@ -261,8 +402,15 @@ export default function ResourcePage() {
   // tasks at GPU[..].VALU). Other tasks carrying the resource milestone are the
   // higher-level tasks blocked by it (e.g. wavefront tasks).
   const blockedTasks = useMemo(
-    () => waitTasks.filter((task) => task.location !== what && blockedIntervals(task, what).length > 0),
-    [waitTasks, what],
+    () =>
+      waitTasks.filter(
+        (task) =>
+          task.location !== what &&
+          blockedIntervals(task, what).some(
+            (interval) => interval.hi > viewRange.startTime && interval.lo < viewRange.endTime,
+          ),
+      ),
+    [viewRange.endTime, viewRange.startTime, waitTasks, what],
   );
   const allTasks = useMemo(() => uniqueTasks(usageTasks, blockedTasks), [usageTasks, blockedTasks]);
   const selectedTask = allTasks.find((t) => String(t.id) === selectedId) ?? null;
@@ -280,16 +428,24 @@ export default function ResourcePage() {
     () => (resourceReason ? { [resourceReason]: STROKE } : {}),
     [resourceReason],
   );
-  const reasonHighlight = highlightedResourceReason ?? (hoveredResourceTime != null ? resourceReason : null);
-  const highlightedBlockedTaskIds = useMemo(() => {
-    if (hoveredResourceTime == null || !showWaitGantt) return null;
+  const reasonHighlight = highlightedResourceReason ?? (hoveredWaitTime != null ? resourceReason : null);
+  const highlightedUsageTaskIds = useMemo(() => {
+    if (hoveredUsageTime == null || !showUsageGantt) return null;
     const ids = new Set<string>();
-    for (const task of blockedTasks) {
-      if (task.start_time > hoveredResourceTime || task.end_time < hoveredResourceTime) continue;
-      if (isBlockedOnResourceAt(task, what, hoveredResourceTime)) ids.add(String(task.id));
+    for (const task of usageTasks) {
+      if (task.start_time <= hoveredUsageTime && task.end_time >= hoveredUsageTime) ids.add(String(task.id));
     }
     return ids;
-  }, [blockedTasks, hoveredResourceTime, showWaitGantt, what]);
+  }, [hoveredUsageTime, showUsageGantt, usageTasks]);
+  const highlightedBlockedTaskIds = useMemo(() => {
+    if (hoveredWaitTime == null || !showWaitGantt) return null;
+    const ids = new Set<string>();
+    for (const task of blockedTasks) {
+      if (task.start_time > hoveredWaitTime || task.end_time < hoveredWaitTime) continue;
+      if (isBlockedOnResourceAt(task, what, hoveredWaitTime)) ids.add(String(task.id));
+    }
+    return ids;
+  }, [blockedTasks, hoveredWaitTime, showWaitGantt, what]);
 
   // Pan/zoom state (kept in refs so the wheel listener reads the latest).
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -386,10 +542,10 @@ export default function ResourcePage() {
   const blockingLabelTop = 16;
   const blockingTaskTop = 20;
   const taskContentHeight = showUsageGantt
-    ? Math.max(taskRegionHeight, taskTop + GAP + usageLayout.rows * rowHeight)
+    ? Math.max(taskRegionHeight, taskTop + GAP + usageLayout.rows * usageRowHeight)
     : 0;
   const blockingContentHeight = showWaitGantt
-    ? Math.max(blockingRegionHeight, blockingTaskTop + GAP + blockedLayout.rows * rowHeight)
+    ? Math.max(blockingRegionHeight, blockingTaskTop + GAP + blockedLayout.rows * waitRowHeight)
     : 0;
   const taskGridBottom = Math.max(taskGridTop + 1, taskContentHeight);
   const blockingGridBottom = Math.max(1, blockingContentHeight);
@@ -449,46 +605,6 @@ export default function ResourcePage() {
       (showWaitGantt && waitTaskFetchEnabled && waitTasks.length === 0) ||
       (showUsageGantt && usageTaskFetchEnabled && usageTasks.length === 0));
 
-  const zoomRowsBy = useCallback((dir: number) => {
-    setRowHeight((h) => Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, h + dir * 4)));
-  }, []);
-  const zoomRowsAll = useCallback(() => {
-    const fits = [];
-    if (usageLayout.rows > 0) fits.push((taskRegionHeight - taskTop - GAP) / usageLayout.rows);
-    if (blockedLayout.rows > 0) fits.push((blockingRegionHeight - blockingTaskTop - GAP) / blockedLayout.rows);
-    if (fits.length === 0) return;
-    setRowHeight(Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, Math.floor(Math.min(...fits)))));
-  }, [blockedLayout.rows, blockingRegionHeight, blockingTaskTop, taskRegionHeight, taskTop, usageLayout.rows]);
-  const onRowsWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
-    if (!event.altKey) return;
-    event.preventDefault();
-    event.stopPropagation();
-    setRowHeight((h) => Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, h - event.deltaY * 0.04)));
-  };
-
-  const rowControls = showAnyGantt ? (
-    <div
-      className="absolute right-2 top-9 z-20 flex items-center gap-0.5 rounded border bg-white/90 px-1 py-0.5 shadow-sm"
-      onPointerDown={(event) => event.stopPropagation()}
-    >
-      <span className="select-none px-0.5 text-[10px] font-medium text-muted-foreground">rows</span>
-      <button type="button" className={ZOOM_BTN_CLASS} title="Shorter rows (Alt+scroll)" onClick={() => zoomRowsBy(-1)}>
-        <Minus className="h-4 w-4" />
-      </button>
-      <button type="button" className={ZOOM_BTN_CLASS} title="Taller rows (Alt+scroll)" onClick={() => zoomRowsBy(1)}>
-        <Plus className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        className={`${ZOOM_BTN_CLASS} px-1 text-[10px] font-medium`}
-        title="Fit all rows"
-        onClick={zoomRowsAll}
-      >
-        all
-      </button>
-    </div>
-  ) : null;
-
   const panel = (
     <>
       {/* Header mirrors the component page: title on the left, the Updating…
@@ -527,8 +643,8 @@ export default function ResourcePage() {
         </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-4">
-        {/* What the view means moved into the chart-corner info modal
-            (ResourceViewHelp); the panel just reflects the selected task. */}
+        {/* What the view means lives in the chart-corner info buttons; the panel
+            itself just reflects the selected task and legends. */}
         <SelectedTaskSection task={selectedTask} milestone={null} />
         <div className="-mx-4 border-t" />
         <Legend
@@ -555,7 +671,8 @@ export default function ResourcePage() {
         onMouseMove={moveCrosshair}
         onMouseLeave={() => {
           hideCrosshair();
-          setHoveredResourceTime(null);
+          setHoveredUsageTime(null);
+          setHoveredWaitTime(null);
         }}
       >
         <div
@@ -584,7 +701,15 @@ export default function ResourcePage() {
             <>
               {showUsageGantt ? (
                 <div className="daisen1-component-view relative" style={{ height: taskRegionHeight }}>
-                  <div className="h-full w-full overflow-y-auto overflow-x-hidden" onWheel={onRowsWheel}>
+                  <ResourceGanttScrollFrame
+                    height={taskRegionHeight}
+                    contentHeight={taskContentHeight}
+                    rowHeight={usageRowHeight}
+                    rowCount={usageLayout.rows}
+                    topPad={taskTop}
+                    controlsTop={36}
+                    onRowHeightChange={setUsageRowHeight}
+                  >
                     <svg width={width} height={taskContentHeight} className="block">
                       <TimeTicks
                         ticks={xScale.ticks(AXIS_TICK_COUNT)}
@@ -604,8 +729,13 @@ export default function ResourcePage() {
                       const bx1 = Math.max(5, Math.min(width - 5, safeScale(xScale, task.end_time)));
                       const selected = selectedId === String(task.id);
                       const key = taskColorKey(task, colorMode);
-                      const hasHighlight = highlightedKey !== null;
-                      const highlighted = highlightedKey !== null ? highlightedKey === key : true;
+                      const hasHighlight = highlightedUsageTaskIds !== null || highlightedKey !== null;
+                      const highlighted =
+                        highlightedUsageTaskIds !== null
+                          ? highlightedUsageTaskIds.has(String(task.id))
+                          : highlightedKey !== null
+                            ? highlightedKey === key
+                            : true;
                       return (
                         <g
                           key={task.id}
@@ -657,6 +787,9 @@ export default function ResourcePage() {
                         {`Tasks using ${resourceLabel} · ${usageTasks.length.toLocaleString()} tasks`}
                       </text>
                     </svg>
+                  </ResourceGanttScrollFrame>
+                  <div className={CHART_HELP_CORNER} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+                    <ResourceUsageTasksHelp className={CHART_HELP_BUTTON} />
                   </div>
                 </div>
               ) : null}
@@ -664,7 +797,16 @@ export default function ResourcePage() {
                 className={`daisen1-resource-usage-curve relative${showAnyGantt ? " border-t border-slate-200" : ""}`}
                 style={{ height: usageCurveRegionHeight }}
               >
-                <svg width={width} height={usageCurveRegionHeight} className="block">
+                <svg
+                  width={width}
+                  height={usageCurveRegionHeight}
+                  className="block"
+                  onMouseMove={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setHoveredUsageTime(xScale.invert(event.clientX - rect.left));
+                  }}
+                  onMouseLeave={() => setHoveredUsageTime(null)}
+                >
                   <TimeTicks
                     ticks={xScale.ticks(AXIS_TICK_COUNT)}
                     xScale={xScale}
@@ -697,10 +839,20 @@ export default function ResourcePage() {
                   </text>
                   <GapShading gaps={gaps} xScale={xScale} height={usageCurveGridBottom} patternId="resource-usage-gap" />
                 </svg>
+                <div className={CHART_HELP_CORNER} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+                  <ResourceUsageCountHelp className={CHART_HELP_BUTTON} />
+                </div>
               </div>
               {showWaitGantt ? (
                 <div className="daisen1-resource-blocking-view relative border-t border-slate-200" style={{ height: blockingRegionHeight }}>
-                  <div className="h-full w-full overflow-y-auto overflow-x-hidden" onWheel={onRowsWheel}>
+                  <ResourceGanttScrollFrame
+                    height={blockingRegionHeight}
+                    contentHeight={blockingContentHeight}
+                    rowHeight={waitRowHeight}
+                    rowCount={blockedLayout.rows}
+                    topPad={blockingTaskTop}
+                    onRowHeightChange={setWaitRowHeight}
+                  >
                     <svg width={width} height={blockingContentHeight} className="block">
                       <TimeTicks
                         ticks={xScale.ticks(AXIS_TICK_COUNT)}
@@ -766,27 +918,41 @@ export default function ResourcePage() {
                             if (hi <= lo) return null;
                             const x0 = safeScale(xScale, lo);
                             const x1 = safeScale(xScale, hi);
-                            if (x1 - x0 < 1) return null;
                             const showRelease = iv.hi >= startTime && iv.hi <= endTime;
+                            const showWave = x1 - x0 >= 1;
+                            if (!showWave && !showRelease) return null;
                             return (
                               <g key={`${task.id}-${k}`}>
-                                <rect
-                                  x={x0}
-                                  y={centerY - 8}
-                                  width={x1 - x0}
-                                  height={16}
-                                  fill="transparent"
-                                  pointerEvents="all"
-                                />
-                                <path
-                                  d={wavyPath(x0, x1, centerY, amplitude, 3)}
-                                  fill="none"
-                                  stroke={STROKE}
-                                  strokeWidth={MILESTONE_WAVE_WIDTH}
-                                  strokeLinecap="round"
-                                  opacity={opacity}
-                                  pointerEvents="none"
-                                />
+                                {showWave ? (
+                                  <>
+                                    <rect
+                                      x={x0}
+                                      y={centerY - 8}
+                                      width={x1 - x0}
+                                      height={16}
+                                      fill="transparent"
+                                      pointerEvents="all"
+                                    />
+                                    <path
+                                      d={wavyPath(x0, x1, centerY, amplitude, 3)}
+                                      fill="none"
+                                      stroke={COLOR_HALO}
+                                      strokeWidth={Math.max(3, MILESTONE_WAVE_WIDTH + 2)}
+                                      strokeLinecap="round"
+                                      opacity={opacity}
+                                      pointerEvents="none"
+                                    />
+                                    <path
+                                      d={wavyPath(x0, x1, centerY, amplitude, 3)}
+                                      fill="none"
+                                      stroke={STROKE}
+                                      strokeWidth={Math.max(1.5, MILESTONE_WAVE_WIDTH)}
+                                      strokeLinecap="round"
+                                      opacity={opacity}
+                                      pointerEvents="none"
+                                    />
+                                  </>
+                                ) : null}
                                 {showRelease ? (
                                   <circle
                                     cx={x1}
@@ -819,6 +985,9 @@ export default function ResourcePage() {
                         {`Tasks that waited for ${resourceLabel} · ${blockedTasks.length.toLocaleString()} tasks`}
                       </text>
                     </svg>
+                  </ResourceGanttScrollFrame>
+                  <div className={CHART_HELP_CORNER} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+                    <ResourceWaitTasksHelp className={CHART_HELP_BUTTON} />
                   </div>
                 </div>
               ) : null}
@@ -832,9 +1001,9 @@ export default function ResourcePage() {
                   className="block"
                   onMouseMove={(event) => {
                     const rect = event.currentTarget.getBoundingClientRect();
-                    setHoveredResourceTime(xScale.invert(event.clientX - rect.left));
+                    setHoveredWaitTime(xScale.invert(event.clientX - rect.left));
                   }}
-                  onMouseLeave={() => setHoveredResourceTime(null)}
+                  onMouseLeave={() => setHoveredWaitTime(null)}
                 >
                   <TimeTicks
                     ticks={xScale.ticks(AXIS_TICK_COUNT)}
@@ -869,18 +1038,15 @@ export default function ResourcePage() {
 
                   <GapShading gaps={gaps} xScale={xScale} height={waitCurveGridBottom} patternId="resource-curve-gap" />
                 </svg>
+                <div className={CHART_HELP_CORNER} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+                  <ResourceWaitCountHelp className={CHART_HELP_BUTTON} />
+                </div>
               </div>
             </>
           )}
         </div>
 
         <TimeZoomControls onZoom={(dir) => zoomBy(dir > 0 ? 1.4 : 0.7)} className="absolute right-2 top-1" />
-        {rowControls}
-        {what ? (
-          <div className="absolute bottom-2 right-2 z-20" onPointerDown={(e) => e.stopPropagation()}>
-            <ResourceViewHelp className="bg-white/85 p-1 shadow-sm ring-1 ring-slate-200 backdrop-blur-sm hover:bg-white" />
-          </div>
-        ) : null}
         <div
           ref={crosshairRef}
           aria-hidden="true"

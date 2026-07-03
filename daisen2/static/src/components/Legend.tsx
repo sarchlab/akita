@@ -98,13 +98,13 @@ export default function Legend({
       {taskKeys.length > 0 && (
         <>
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              <SectionLabel>Tasks</SectionLabel>
+            <SectionLabel>Tasks</SectionLabel>
+            <div className="ml-auto flex items-center gap-2">
+              {onColorMode ? (
+                <ColorModeToggle label="Color tasks by" mode={colorMode ?? "kind-what"} onChange={onColorMode} />
+              ) : null}
               <TaskTypesHelp />
             </div>
-            {onColorMode ? (
-              <ColorModeToggle label="Color tasks by" mode={colorMode ?? "kind-what"} onChange={onColorMode} />
-            ) : null}
           </div>
           <ul className="mb-3 mt-2 space-y-0.5">
             {taskKeys.map((key) => {
@@ -140,17 +140,17 @@ export default function Legend({
       {blockingReasons.length > 0 && (
         <>
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              <SectionLabel>Blocking reasons</SectionLabel>
+            <SectionLabel>Blocking reasons</SectionLabel>
+            <div className="ml-auto flex items-center gap-2">
+              {onMilestoneColorMode ? (
+                <ColorModeToggle
+                  label="Color blocking reasons by"
+                  mode={milestoneColorMode ?? "kind-what"}
+                  onChange={onMilestoneColorMode}
+                />
+              ) : null}
               <BlockingReasonsHelp />
             </div>
-            {onMilestoneColorMode ? (
-              <ColorModeToggle
-                label="Color blocking reasons by"
-                mode={milestoneColorMode ?? "kind-what"}
-                onChange={onMilestoneColorMode}
-              />
-            ) : null}
           </div>
           <ul className="mt-2 space-y-0.5">
             {blockingReasons.map((reason) => {

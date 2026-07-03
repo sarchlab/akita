@@ -71,13 +71,31 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 	// window surfaces the per-task gantt even for a busy resource.
 	total := 0
 	_ = r.QueryRowContext(ctx, `
-		SELECT COUNT(DISTINCT m.TaskID)
-		FROM milestone m
-		JOIN trace t ON t.ID = m.TaskID
-		WHERE m.Kind = 'hardware_resource' AND m.What = ?
-			AND t.EndTime > ? AND t.StartTime < ?
-			AND t.Location NOT IN (SELECT ID FROM location WHERE Locale = ?)`,
-		what, start, end, what).Scan(&total)
+		WITH bx AS (
+			SELECT DISTINCT m.TaskID
+			FROM milestone m
+			JOIN trace t ON t.ID = m.TaskID
+			WHERE m.Kind = 'hardware_resource' AND m.What = ?
+				AND t.EndTime > ? AND t.StartTime < ?
+				AND t.Location NOT IN (SELECT ID FROM location WHERE Locale = ?)
+		),
+		ivals AS MATERIALIZED (
+			SELECT
+				m.TaskID,
+				m.What AS w,
+				COALESCE(
+					LAG(m.Time) OVER (PARTITION BY m.TaskID ORDER BY m.Time),
+					t.StartTime
+				) AS lo,
+				m.Time AS hi
+			FROM bx
+			JOIN trace t ON t.ID = bx.TaskID
+			JOIN milestone m ON m.TaskID = t.ID
+		)
+		SELECT COUNT(DISTINCT TaskID)
+		FROM ivals
+		WHERE w = ? AND hi > ? AND lo < ?`,
+		what, start, end, what, what, start, end).Scan(&total)
 	resp.Total = total
 
 	if sample < 1 {
@@ -169,13 +187,31 @@ func (r *SQLiteTraceReader) TasksBlockingOn(
 		"CREATE INDEX IF NOT EXISTS idx_trace_ID_time ON trace(ID, StartTime, EndTime)")
 
 	rows, err := r.QueryContext(ctx, `
-		SELECT DISTINCT m.TaskID
-		FROM milestone m
-		JOIN trace t ON t.ID = m.TaskID
-		WHERE m.Kind = 'hardware_resource' AND m.What = ?
-			AND t.EndTime > ? AND t.StartTime < ?
-			AND t.Location NOT IN (SELECT ID FROM location WHERE Locale = ?)
-		LIMIT ?`, what, start, end, what, limit)
+		WITH bx AS (
+			SELECT DISTINCT m.TaskID
+			FROM milestone m
+			JOIN trace t ON t.ID = m.TaskID
+			WHERE m.Kind = 'hardware_resource' AND m.What = ?
+				AND t.EndTime > ? AND t.StartTime < ?
+				AND t.Location NOT IN (SELECT ID FROM location WHERE Locale = ?)
+		),
+		ivals AS MATERIALIZED (
+			SELECT
+				m.TaskID,
+				m.What AS w,
+				COALESCE(
+					LAG(m.Time) OVER (PARTITION BY m.TaskID ORDER BY m.Time),
+					t.StartTime
+				) AS lo,
+				m.Time AS hi
+			FROM bx
+			JOIN trace t ON t.ID = bx.TaskID
+			JOIN milestone m ON m.TaskID = t.ID
+		)
+		SELECT DISTINCT TaskID
+		FROM ivals
+		WHERE w = ? AND hi > ? AND lo < ?
+		LIMIT ?`, what, start, end, what, what, start, end, limit)
 	if err != nil {
 		return []Task{}
 	}
