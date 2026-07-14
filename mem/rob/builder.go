@@ -1,23 +1,14 @@
 package rob
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/timing"
 )
-
-var defaultSpec = Spec{
-	Freq:           1 * timing.GHz,
-	BufferSize:     128,
-	NumReqPerCycle: 4,
-}
 
 // DefaultSpec returns a copy of the default reorder-buffer configuration.
 // Callers typically take it, tweak the fields they care about, and pass the
 // result to WithSpec.
 func DefaultSpec() Spec {
-	return defaultSpec
+	return Definition.DefaultSpec()
 }
 
 // Builder constructs reorder-buffer components. Configuration is supplied as a
@@ -32,7 +23,7 @@ type Builder struct {
 
 // MakeBuilder returns a Builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{spec: defaultSpec}
+	return Builder{spec: Definition.DefaultSpec()}
 }
 
 // WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
@@ -69,9 +60,7 @@ func (b Builder) Build(name string) *Comp {
 	comp.State = State{}
 	comp.AddMiddleware(&middleware{comp: comp})
 
-	comp.DeclarePort("Top", memprotocol.Responder)
-	comp.DeclarePort("Bottom", memprotocol.Requester)
-	comp.DeclarePort("Control", memcontrolprotocol.Responder)
+	Definition.DeclarePorts(comp)
 
 	b.registrar.RegisterComponent(comp)
 
