@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "kind": "component",
+  "name": "FullComp",
+  "package": "github.com/sarchlab/akita/v5/inspect/fixtures/fullcomp",
+  "module": "github.com/sarchlab/akita/v5",
+  "spec": [
+    {
+      "name": "Freq",
+      "json_name": "freq",
+      "type": "github.com/sarchlab/akita/v5/timing.Freq",
+      "doc": "Freq is the clock frequency.",
+      "default": 1000000000,
+      "unit": "Hz"
+    },
+    {
+      "name": "NumLanes",
+      "json_name": "num_lanes",
+      "type": "int",
+      "doc": "NumLanes is the number of parallel lanes.",
+      "default": 4,
+      "min": 1,
+      "max": 64
+    },
+    {
+      "name": "NumOut",
+      "json_name": "num_out",
+      "type": "int",
+      "doc": "NumOut is derived from the number of wired Out ports.",
+      "default": 0,
+      "derived": true
+    },
+    {
+      "name": "Mode",
+      "json_name": "mode",
+      "type": "Mode",
+      "doc": "Mode selects how precisely the component is modeled.",
+      "default": "fast",
+      "choices": [
+        "accurate",
+        "fast"
+      ]
+    },
+    {
+      "name": "Weights",
+      "json_name": "weights",
+      "type": "[]float64",
+      "doc": "Weights are per-lane scheduling weights.",
+      "default": [
+        1,
+        2
+      ]
+    },
+    {
+      "name": "Hidden",
+      "type": "int",
+      "default": 0
+    }
+  ],
+  "resources": [
+    {
+      "name": "Mapper",
+      "type": "github.com/sarchlab/akita/v5/mem.AddressToPortMapper",
+      "doc": "Mapper locates the remote port that serves a given address."
+    }
+  ],
+  "ports": [
+    {
+      "name": "Top",
+      "roles": [
+        {
+          "protocol": "mem",
+          "role": "responder"
+        }
+      ]
+    }
+  ],
+  "port_groups": [
+    {
+      "name": "Out",
+      "roles": [
+        {
+          "protocol": "mem",
+          "role": "requester"
+        }
+      ],
+      "min_count": 1,
+      "max_count": 8,
+      "count_field": "num_out"
+    }
+  ]
+}
