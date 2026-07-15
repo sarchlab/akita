@@ -73,6 +73,19 @@
           "role": "responder"
         }
       ]
+    },
+    {
+      "name": "Ctrl",
+      "roles": [
+        {
+          "protocol": "mem",
+          "role": "responder"
+        },
+        {
+          "protocol": "mem.control",
+          "role": "responder"
+        }
+      ]
     }
   ],
   "port_groups": [

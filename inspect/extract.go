@@ -161,6 +161,98 @@ func extractComponent(
 
 	def := &schema.Definition{Kind: schema.KindComponent}
 
+	defaults, err := applyComponentFields(pkg, lit, def, index)
+	if err != nil {
+		return nil, err
+	}
+
+	def.Spec, err = structFields(pkg, specType, defaults, index)
+	if err != nil {
+		return nil, err
+	}
+
+	def.Resources, err = structFields(pkg, resType, nil, index)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := checkCountFields(pkg, lit, specType, def); err != nil {
+		return nil, err
+	}
+
+	return def, nil
+}
+
+// checkCountFields validates every port group's CountField against the Spec,
+// mirroring the runtime checks in modeling.DefineComponent: the field must
+// exist (by JSON name), be an integer, and be tagged derived. The runtime
+// panics on violations, but a definition that is never executed would
+// otherwise slip through the inspector.
+func checkCountFields(
+	pkg *packages.Package, lit *ast.CompositeLit,
+	specType types.Type, def *schema.Definition,
+) error {
+	specByJSON := map[string]schema.Field{}
+	for _, f := range def.Spec {
+		if f.JSONName != "" {
+			specByJSON[f.JSONName] = f
+		}
+	}
+
+	for _, g := range def.PortGroups {
+		if g.CountField == "" {
+			continue
+		}
+
+		f, ok := specByJSON[g.CountField]
+		if !ok {
+			return posErrorf(pkg, lit.Pos(),
+				"port group %q: CountField %q does not match any Spec "+
+					"field's JSON name", g.Name, g.CountField)
+		}
+
+		if !isIntegerField(specType, f.Name) {
+			return posErrorf(pkg, lit.Pos(),
+				"port group %q: CountField %q must be an integer Spec field",
+				g.Name, g.CountField)
+		}
+
+		if !f.Derived {
+			return posErrorf(pkg, lit.Pos(),
+				"port group %q: CountField %q must be tagged "+
+					"`akita:\"derived\"`", g.Name, g.CountField)
+		}
+	}
+
+	return nil
+}
+
+// isIntegerField reports whether the named field of the struct type has an
+// integer underlying type.
+func isIntegerField(specType types.Type, fieldName string) bool {
+	st, ok := specType.Underlying().(*types.Struct)
+	if !ok {
+		return false
+	}
+
+	for f := range st.Fields() {
+		if f.Name() != fieldName {
+			continue
+		}
+
+		basic, ok := f.Type().Underlying().(*types.Basic)
+		return ok && basic.Info()&types.IsInteger != 0
+	}
+
+	return false
+}
+
+// applyComponentFields walks the keyed fields of the ComponentDef literal
+// into def and returns the evaluated DefaultSpec values.
+func applyComponentFields(
+	pkg *packages.Package, lit *ast.CompositeLit,
+	def *schema.Definition, index pkgIndex,
+) (map[string]any, error) {
 	fields, err := keyedElements(pkg, lit)
 	if err != nil {
 		return nil, err
@@ -187,17 +279,7 @@ func extractComponent(
 		}
 	}
 
-	def.Spec, err = structFields(pkg, specType, defaults, index)
-	if err != nil {
-		return nil, err
-	}
-
-	def.Resources, err = structFields(pkg, resType, nil, index)
-	if err != nil {
-		return nil, err
-	}
-
-	return def, nil
+	return defaults, nil
 }
 
 // componentTypeArgs returns the Spec and Resources type arguments of the

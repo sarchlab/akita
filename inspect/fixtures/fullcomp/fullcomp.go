@@ -5,6 +5,7 @@ package fullcomp
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -61,6 +62,9 @@ var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec, Resources]
 	},
 	Ports: []modeling.PortDef{
 		{Name: "Top", Roles: []*messaging.Role{memprotocol.Responder}},
+		// Ctrl multiplexes two protocols on one port.
+		{Name: "Ctrl", Roles: []*messaging.Role{
+			memprotocol.Responder, memcontrolprotocol.Responder}},
 	},
 	PortGroups: []modeling.PortGroupDef{
 		{
