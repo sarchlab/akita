@@ -3,25 +3,13 @@ package idealmemcontroller
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides the default configuration for the ideal memory
-// controller.
-var defaultSpec = Spec{
-	Freq:          1 * timing.GHz,
-	Latency:       100,
-	Width:         1,
-	CacheLineSize: 64,
-	Capacity:      4 * mem.GB,
-}
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
 // obtain it, tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return defaultSpec
+	return Definition.DefaultSpec()
 }
 
 // Builder builds ideal memory controller components. Configuration is supplied
@@ -37,7 +25,7 @@ type Builder struct {
 
 // MakeBuilder returns a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{spec: defaultSpec}
+	return Builder{spec: Definition.DefaultSpec()}
 }
 
 // WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
@@ -85,8 +73,7 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.AddMiddleware(&ctrlMiddleware{comp: modelComp})
 	modelComp.AddMiddleware(&memMiddleware{comp: modelComp})
 
-	modelComp.DeclarePort("Top", memprotocol.Responder)
-	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
+	Definition.DeclarePorts(modelComp)
 
 	b.registrar.RegisterComponent(modelComp)
 
