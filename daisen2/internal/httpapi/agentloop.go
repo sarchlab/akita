@@ -119,6 +119,15 @@ func callProvider(
 	if offerTools && len(toolSpecs) > 0 {
 		payload["tools"] = toolSpecs
 		payload["tool_choice"] = "auto"
+		// GPT-5.6 reasoning variants reject function tools on the Chat
+		// Completions endpoint unless reasoning is disabled. The Responses API
+		// supports reasoning together with tools, but Daisen's provider contract is
+		// intentionally OpenAI-compatible Chat Completions for now. Keep the
+		// compatibility adjustment scoped to GPT-5.6 tool turns so other providers
+		// and non-tool requests retain their native defaults.
+		if requiresNoReasoningForChatCompletionTools(cfg.Model) {
+			payload["reasoning_effort"] = "none"
+		}
 	}
 
 	bodyBytes, err := json.Marshal(payload)
@@ -160,6 +169,14 @@ func callProvider(
 
 	m := parsed.Choices[0].Message
 	return assistantMessageFromOAI(m.Role, m.Content, m.ToolCalls), m.ToolCalls, m.Content, nil
+}
+
+func requiresNoReasoningForChatCompletionTools(model string) bool {
+	model = strings.ToLower(strings.TrimSpace(model))
+	if slash := strings.LastIndex(model, "/"); slash >= 0 {
+		model = model[slash+1:]
+	}
+	return model == "gpt-5.6" || strings.HasPrefix(model, "gpt-5.6-")
 }
 
 // assistantMessageFromOAI converts a parsed OpenAI assistant message into the map

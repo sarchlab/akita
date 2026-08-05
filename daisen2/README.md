@@ -23,6 +23,12 @@ The model field is backed by the provider's model list (fetched via the server
 from `{baseURL}/models`); use the refresh button to load it, then pick a model
 or type your own.
 
+GPT-5.6 models require `reasoning_effort: "none"` when function tools are used
+through OpenAI's `/chat/completions` endpoint. Daisen applies that compatibility
+setting automatically on GPT-5.6 tool turns. This preserves Daisen's tool loop;
+using GPT-5.6 reasoning together with tools would require a future Responses API
+provider implementation.
+
 The API key is sent on each request in the `X-Llm-Api-Key` header (not the body)
 and is never written to disk on the server. In the browser it is kept in
 `sessionStorage` and cleared when the tab closes; tick **Remember key on this
