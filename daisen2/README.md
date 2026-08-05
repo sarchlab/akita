@@ -21,7 +21,18 @@ the key blank for keyless local servers).
 
 The model field is backed by the provider's model list (fetched via the server
 from `{baseURL}/models`); use the refresh button to load it, then pick a model
-or type your own.
+or type your own. New configurations and the OpenAI preset default to
+`gpt-5.6-sol`; an existing saved model selection is preserved.
+
+GPT-5.6 models require `reasoning_effort: "none"` when function tools are used
+through OpenAI's `/chat/completions` endpoint. Daisen applies that compatibility
+setting automatically on GPT-5.6 tool turns. This preserves Daisen's tool loop;
+using GPT-5.6 reasoning together with tools would require a future Responses API
+provider implementation.
+
+If a provider rejects a tool-enabled request, Daisen still retries that turn
+without tools for compatibility, but now surfaces the provider error in the chat
+instead of silently hiding the fallback.
 
 The API key is sent on each request in the `X-Llm-Api-Key` header (not the body)
 and is never written to disk on the server. In the browser it is kept in
