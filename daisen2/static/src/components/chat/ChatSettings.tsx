@@ -122,7 +122,7 @@ export default function ChatSettings({
               type="text"
               autoComplete="off"
               value={settings.model}
-              placeholder="gpt-4o"
+              placeholder="gpt-5.6-sol"
               onChange={(event) => {
                 update({ model: event.target.value, presetId: "custom" });
                 setModelMenuOpen(true);

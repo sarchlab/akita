@@ -171,12 +171,10 @@ func callProvider(
 	return assistantMessageFromOAI(m.Role, m.Content, m.ToolCalls), m.ToolCalls, m.Content, nil
 }
 
+var gpt56ModelID = regexp.MustCompile(`(^|[:/])gpt-5\.6($|[-:])`)
+
 func requiresNoReasoningForChatCompletionTools(model string) bool {
-	model = strings.ToLower(strings.TrimSpace(model))
-	if slash := strings.LastIndex(model, "/"); slash >= 0 {
-		model = model[slash+1:]
-	}
-	return model == "gpt-5.6" || strings.HasPrefix(model, "gpt-5.6-")
+	return gpt56ModelID.MatchString(strings.ToLower(strings.TrimSpace(model)))
 }
 
 // assistantMessageFromOAI converts a parsed OpenAI assistant message into the map
@@ -229,6 +227,11 @@ func runAgentLoop(
 		if err != nil && offerTools {
 			// The endpoint may not support tools — retry once without them so a
 			// non-tool model still answers (capability fallback).
+			emit(agentEvent{
+				Type: "thinking",
+				Text: "The tool-enabled provider request failed; retrying this turn without tools. " +
+					"Provider error: " + clip(err.Error(), 600),
+			})
 			msg, toolCalls, content, err = callProvider(ctx, cfg, messages, nil, false)
 		}
 		if err != nil {

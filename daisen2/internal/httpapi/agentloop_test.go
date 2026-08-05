@@ -92,9 +92,12 @@ func TestRequiresNoReasoningForChatCompletionTools(t *testing.T) {
 		{model: "gpt-5.6-luna", want: true},
 		{model: "gpt-5.6-sol-2026-08-01", want: true},
 		{model: "openai/gpt-5.6-terra", want: true},
+		{model: "gpt-5.6:latest", want: true},
+		{model: "ft:gpt-5.6-sol:org::abc", want: true},
 		{model: " GPT-5.6-SOL ", want: true},
 		{model: "gpt-5.5", want: false},
 		{model: "gpt-5.60", want: false},
+		{model: "mygpt-5.6-sol", want: false},
 		{model: "mock", want: false},
 	}
 
@@ -160,6 +163,52 @@ func TestCallProviderGPT56UsesNoReasoningWithTools(t *testing.T) {
 				t.Fatalf("reasoning_effort = %v, want omitted", effort)
 			}
 		})
+	}
+}
+
+func TestRunAgentLoopSurfacesToolCapabilityFallback(t *testing.T) {
+	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1")
+
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if calls == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, `{"error":{"message":"tools are unsupported"}}`)
+			return
+		}
+		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"fallback answer"}}]}`)
+	}))
+	defer srv.Close()
+
+	cfg := ProviderConfig{Provider: ProviderOpenAICompatible, BaseURL: srv.URL, Model: "strict-proxy-model"}
+	tools := []agentTool{{
+		name:        "synthetic_lookup",
+		description: "test tool",
+		parameters:  map[string]interface{}{"type": "object"},
+	}}
+	var events []agentEvent
+	if err := runAgentLoop(
+		context.Background(),
+		cfg,
+		[]map[string]interface{}{{"role": "user", "content": "test"}},
+		tools,
+		func(ev agentEvent) { events = append(events, ev) },
+	); err != nil {
+		t.Fatalf("runAgentLoop: %v", err)
+	}
+
+	if calls != 2 {
+		t.Fatalf("provider calls = %d, want tool request plus no-tools fallback", calls)
+	}
+	if len(events) != 2 || events[0].Type != "thinking" ||
+		!strings.Contains(events[0].Text, "retrying this turn without tools") ||
+		!strings.Contains(events[0].Text, "tools are unsupported") {
+		t.Fatalf("fallback event not surfaced before the answer: %#v", events)
+	}
+	if events[1].Type != "message" || events[1].Text != "fallback answer" {
+		t.Fatalf("unexpected fallback answer event: %#v", events[1])
 	}
 }
 

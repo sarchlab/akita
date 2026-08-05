@@ -8,7 +8,7 @@ export const PROVIDER_PRESETS = [
     id: "openai",
     label: "OpenAI",
     baseURL: "https://api.openai.com/v1/chat/completions",
-    model: "gpt-4o",
+    model: "gpt-5.6-sol",
   },
   {
     id: "openrouter",
@@ -38,7 +38,7 @@ const DEFAULT_SETTINGS: LLMSettings = {
   provider: "openai-compatible",
   presetId: "openai",
   baseURL: "https://api.openai.com/v1/chat/completions",
-  model: "gpt-4o",
+  model: "gpt-5.6-sol",
   apiKey: "",
   remember: false,
 };
