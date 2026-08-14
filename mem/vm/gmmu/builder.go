@@ -1,24 +1,14 @@
 package gmmu
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides the default configuration for GMMU components.
-var defaultSpec = Spec{
-	Freq:                1 * timing.GHz,
-	Log2PageSize:        12,
-	MaxRequestsInFlight: 16,
-}
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
 // obtain it, tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return defaultSpec
+	return Definition.DefaultSpec()
 }
 
 // Builder builds GMMU components. Configuration is supplied as a whole through
@@ -34,7 +24,7 @@ type Builder struct {
 
 // MakeBuilder creates a new builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{spec: defaultSpec}
+	return Builder{spec: Definition.DefaultSpec()}
 }
 
 // WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
@@ -81,9 +71,7 @@ func (b Builder) Build(name string) *Comp {
 		RemoteMemReqs: make(map[uint64]transactionState),
 	}
 
-	modelComp.DeclarePort("Top", vmprotocol.Responder)
-	modelComp.DeclarePort("Bottom", vmprotocol.Requester)
-	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
+	Definition.DeclarePorts(modelComp)
 
 	cMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cMW)

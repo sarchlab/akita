@@ -1,25 +1,14 @@
 package mmu
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides the default configuration for MMU components.
-var defaultSpec = Spec{
-	Freq:                1 * timing.GHz,
-	Log2PageSize:        12,
-	Latency:             10,
-	MaxRequestsInFlight: 16,
-}
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
 // obtain it, tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return defaultSpec
+	return Definition.DefaultSpec()
 }
 
 // Builder builds MMU components. Configuration is supplied as a whole through
@@ -36,7 +25,7 @@ type Builder struct {
 // MakeBuilder creates a new builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: defaultSpec,
+		spec: Definition.DefaultSpec(),
 	}
 }
 
@@ -81,8 +70,7 @@ func (b Builder) Build(name string) *Comp {
 		WithResources(Resources{PageTable: pt}).
 		Build(name)
 
-	modelComp.DeclarePort("Top", vmprotocol.Responder)
-	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
+	Definition.DeclarePorts(modelComp)
 
 	cmw := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cmw)

@@ -2,23 +2,12 @@ package endpoint
 
 import (
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/noc/packetization"
-	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides the default configuration for endpoint components.
-var defaultSpec = Spec{
-	Freq:              1 * timing.GHz,
-	NumInputChannels:  1,
-	NumOutputChannels: 1,
-	FlitByteSize:      32,
-	EncodingOverhead:  0.25,
-}
 
 // DefaultSpec returns a copy of the default configuration. Callers obtain it,
 // tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return defaultSpec
+	return Definition.DefaultSpec()
 }
 
 // Builder builds End Points. Configuration is supplied as a whole through
@@ -34,7 +23,7 @@ type Builder struct {
 // MakeBuilder creates a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: defaultSpec,
+		spec: Definition.DefaultSpec(),
 	}
 }
 
@@ -92,7 +81,7 @@ func (b Builder) Build(name string) *Comp {
 	ep.AddMiddleware(outMW)
 	ep.AddMiddleware(inMW)
 
-	ep.DeclarePort("NetworkPort", packetization.Link)
+	Definition.DeclarePorts(ep)
 
 	for _, dp := range b.resources.DevicePorts {
 		ep.PlugIn(dp)

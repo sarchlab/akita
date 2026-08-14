@@ -2,7 +2,6 @@ package cmd
 
 import (
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -87,31 +86,6 @@ var linterCmd = &cobra.Command{
 						hasError = true
 					}
 				}
-			}
-		}
-
-		manifest, errManifest := checkManifestFile(folderPath)
-		if errManifest != nil {
-			fmt.Printf("<3> Manifest error: %v\n", errManifest)
-			hasError = true
-		} else {
-			errManifestName := checkManifestName(manifest)
-			if errManifestName != nil {
-				fmt.Printf("<3a> Manifest name error: %s\n",
-					errManifestName)
-				hasError = true
-			}
-			errManifestPort := checkManifestPort(manifest)
-			if errManifestPort != nil {
-				fmt.Printf("<3b> Manifest port error: %s\n",
-					errManifestPort)
-				hasError = true
-			}
-			errManifestParam := checkManifestParam(manifest)
-			if errManifestParam != nil {
-				fmt.Printf("<3b> Manifest parameter error: %s\n",
-					errManifestParam)
-				hasError = true
 			}
 		}
 
@@ -486,53 +460,3 @@ func getBuildFunctionReturnErr(node *ast.File) error {
 	return nil
 }
 
-func checkManifestFile(folderPath string) (map[string]any, error) {
-	// Check manifest.json existence
-	jsonFilePath := filepath.Join(folderPath, "manifest.json")
-	if _, err := os.Stat(jsonFilePath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("manifest.json file does not exist")
-	}
-
-	// Read the json file
-	fileContent, err := os.ReadFile(jsonFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read manifest.json: %v", err)
-	}
-
-	// Parse the json file
-	var manifest map[string]any
-	if err := json.Unmarshal(fileContent, &manifest); err != nil {
-		return nil, fmt.Errorf("failed to parse manifest.json: %v", err)
-	}
-
-	return manifest, nil
-}
-
-func checkManifestName(manifest map[string]any) error {
-	// Must have `name` attribute with a non-empty string value
-	nameAtt, ok := manifest["name"].(string)
-	if !ok || nameAtt == "" {
-		return fmt.Errorf("manifest.json must contain a " +
-			"non-empty 'name' attribute")
-	}
-
-	return nil
-}
-
-func checkManifestPort(manifest map[string]any) error {
-	// Must have `ports`
-	if _, ok := manifest["ports"]; !ok {
-		return fmt.Errorf("manifest.json must contain `ports` attribute")
-	}
-
-	return nil
-}
-
-func checkManifestParam(manifest map[string]any) error {
-	// Must have `parameters`
-	if _, ok := manifest["parameters"]; !ok {
-		return fmt.Errorf("manifest.json must contain `parameters` attribute")
-	}
-
-	return nil
-}

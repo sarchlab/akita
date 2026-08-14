@@ -1,29 +1,14 @@
 package tlb
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides the default configuration for TLB components.
-var defaultSpec = Spec{
-	Freq:           1 * timing.GHz,
-	NumReqPerCycle: 4,
-	NumSets:        1,
-	NumWays:        32,
-	Log2PageSize:   12,
-	PageSize:       4096,
-	MSHRSize:       4,
-	Latency:        4,
-}
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
 // obtain it, tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return defaultSpec
+	return Definition.DefaultSpec()
 }
 
 // A Builder can build TLBs. Configuration is supplied as a whole through
@@ -40,7 +25,7 @@ type Builder struct {
 // MakeBuilder returns a Builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: defaultSpec,
+		spec: Definition.DefaultSpec(),
 	}
 }
 
@@ -107,9 +92,7 @@ func (b Builder) Build(name string) *Comp {
 	tlbMW := &tlbMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(tlbMW)
 
-	modelComp.DeclarePort("Top", vmprotocol.Responder)
-	modelComp.DeclarePort("Bottom", vmprotocol.Requester)
-	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
+	Definition.DeclarePorts(modelComp)
 
 	b.registrar.RegisterComponent(modelComp)
 

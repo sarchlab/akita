@@ -2,23 +2,14 @@ package datamover
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides default configuration for the data mover.
-var defaultSpec = Spec{
-	Freq: 1 * timing.GHz,
-}
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
 // obtain it, tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return defaultSpec
+	return Definition.DefaultSpec()
 }
 
 // Builder builds StreamingDataMover components. Configuration is supplied as a
@@ -35,7 +26,7 @@ type Builder struct {
 // MakeBuilder creates a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: defaultSpec,
+		spec: Definition.DefaultSpec(),
 	}
 }
 
@@ -87,10 +78,7 @@ func (b Builder) Build(name string) *Comp {
 	dataMW := &dataTransferMW{comp: modelComp}
 	modelComp.AddMiddleware(dataMW)
 
-	modelComp.DeclarePort("Top", datamoverprotocol.Responder)
-	modelComp.DeclarePort("Inside", memprotocol.Requester)
-	modelComp.DeclarePort("Outside", memprotocol.Requester)
-	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
+	Definition.DeclarePorts(modelComp)
 
 	b.registrar.RegisterComponent(modelComp)
 

@@ -2,30 +2,14 @@ package simplebankedmemory
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides default configuration for the simple banked memory.
-var defaultSpec = Spec{
-	Freq:                           1 * timing.GHz,
-	NumBanks:                       4,
-	BankPipelineWidth:              1,
-	BankPipelineDepth:              1,
-	StageLatency:                   10,
-	PostPipelineBufSize:            1,
-	Capacity:                       4 * mem.GB,
-	BankSelectorKind:               "interleaved",
-	BankSelectorLog2InterleaveSize: 6,
-}
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
 // obtain it, tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return defaultSpec
+	return Definition.DefaultSpec()
 }
 
 // Builder constructs SimpleBankedMemory components. Configuration is supplied
@@ -41,7 +25,7 @@ type Builder struct {
 
 // MakeBuilder creates a builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{spec: defaultSpec}
+	return Builder{spec: Definition.DefaultSpec()}
 }
 
 // WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
@@ -95,8 +79,7 @@ func (b Builder) Build(name string) *Comp {
 	dMW := &dispatchMW{comp: modelComp}
 	modelComp.AddMiddleware(dMW)
 
-	modelComp.DeclarePort("Top", memprotocol.Responder)
-	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
+	Definition.DeclarePorts(modelComp)
 
 	b.registrar.RegisterComponent(modelComp)
 

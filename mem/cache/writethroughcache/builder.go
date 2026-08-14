@@ -5,37 +5,17 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 
 	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// defaultSpec provides default configuration for the writethroughcache.
-// The default write policy type is "write-around".
-var defaultSpec = Spec{
-	Freq:                  1 * timing.GHz,
-	NumReqPerCycle:        4,
-	Log2BlockSize:         6,
-	BankLatency:           20,
-	WayAssociativity:      4,
-	MaxNumConcurrentTrans: 16,
-	NumBanks:              1,
-	NumMSHREntry:          4,
-	TotalByteSize:         4 * mem.KB,
-	DirLatency:            2,
-	InterleavingSize:      4096,
-	WritePolicyType:       "write-around",
-}
-
 // DefaultSpec returns a copy of the default configuration. Callers typically
 // obtain it, tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return defaultSpec
+	return Definition.DefaultSpec()
 }
 
 // A Builder can build a writethroughcache cache. Configuration is supplied as a
@@ -51,7 +31,7 @@ type Builder struct {
 
 // MakeBuilder creates a builder with default parameter setting.
 func MakeBuilder() Builder {
-	return Builder{spec: defaultSpec}
+	return Builder{spec: Definition.DefaultSpec()}
 }
 
 // WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
@@ -118,9 +98,7 @@ func (b Builder) Build(name string) *Comp {
 	comp.AddMiddleware(ucmw) // index 0: control verbs
 	comp.AddMiddleware(pmw)  // index 1: data pipeline
 
-	comp.DeclarePort("Top", memprotocol.Responder)
-	comp.DeclarePort("Bottom", memprotocol.Requester)
-	comp.DeclarePort("Control", memcontrolprotocol.Responder)
+	Definition.DeclarePorts(comp)
 
 	b.registrar.RegisterComponent(comp)
 

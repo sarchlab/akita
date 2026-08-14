@@ -6,21 +6,12 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides the default configuration for the memory access agent.
-var defaultSpec = Spec{
-	Freq:       1 * timing.GHz,
-	MaxAddress: 1024 * 1024,
-	WriteLeft:  1000,
-	ReadLeft:   1000,
-}
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
 // obtain it, tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return defaultSpec
+	return Definition.DefaultSpec()
 }
 
 // Builder constructs MemAccessAgent instances. Configuration is supplied as a
@@ -37,7 +28,7 @@ type Builder struct {
 
 // MakeBuilder returns a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{spec: defaultSpec}
+	return Builder{spec: Definition.DefaultSpec()}
 }
 
 // WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
@@ -112,7 +103,7 @@ func (b Builder) Build(name string) *MemAccessAgent {
 	mw := &agentMiddleware{agent: agent}
 	modelComp.AddMiddleware(mw)
 
-	modelComp.DeclarePort("Mem", memprotocol.Requester)
+	Definition.DeclarePorts(modelComp)
 
 	b.registrar.RegisterComponent(agent)
 
