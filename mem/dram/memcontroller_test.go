@@ -925,7 +925,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 				Location: location{Rank: 0, BankGroup: 0, Bank: uint64(i)},
 			}
 			Expect(canAcceptCommand(state, cmd, spec)).To(BeTrue())
-			acceptCommand(state, cmd)
+			acceptCommand(state, cmd, spec)
 		}
 
 		// One more write should be rejected
@@ -954,7 +954,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 				Location: location{Rank: 0, BankGroup: 0, Bank: uint64(i)},
 			}
 			Expect(canAcceptCommand(state, cmd, spec)).To(BeTrue())
-			acceptCommand(state, cmd)
+			acceptCommand(state, cmd, spec)
 		}
 
 		// One more read should be rejected
@@ -987,7 +987,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 			}
 			Expect(canAcceptCommand(state, cmd, spec)).To(BeTrue())
-			acceptCommand(state, cmd)
+			acceptCommand(state, cmd, spec)
 		}
 
 		// Both reads and writes should be rejected
@@ -1029,7 +1029,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0},
 		}
-		acceptCommand(state, writeCmd)
+		acceptCommand(state, writeCmd, spec)
 		Expect(state.CommandQueues.Entries[0].IsWrite).To(BeTrue())
 
 		readCmd := &commandState{
@@ -1037,7 +1037,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0},
 		}
-		acceptCommand(state, readCmd)
+		acceptCommand(state, readCmd, spec)
 		Expect(state.CommandQueues.Entries[1].IsWrite).To(BeFalse())
 	})
 })

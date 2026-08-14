@@ -176,7 +176,7 @@ func (c *controller) fillCommandQueue(spec *Spec, state *State) bool {
 		cmd := c.rowPolicy.CommandFor(spec, state, ref, loc)
 
 		if canAcceptCommand(state, cmd, spec) {
-			acceptCommand(state, cmd)
+			acceptCommand(state, cmd, spec)
 			state.SubTransQueue.Entries = append(
 				state.SubTransQueue.Entries[:i],
 				state.SubTransQueue.Entries[i+1:]...,

@@ -65,7 +65,7 @@ def _channel_size_mb():
 # activates == #ops and reads/writes == the obvious split, independent of
 # address mapping, so these are exact across all three simulators.
 
-# Refresh is a separate validation axis (roadmap P2) and a confound for command
+# Refresh is a separate validation axis and a confound for command
 # counts: DRAMSim3 idles for the full -c budget after the trace drains, firing
 # many refreshes (one boundary even adds a stray activate). For these
 # count-focused close-page scenarios we push refresh out of range so only
@@ -92,11 +92,11 @@ def build_ops(pattern):
 #  * Performance scenarios (open-page read streams at various strides):
 #    average read latency is compared against DRAMSim3 within 15% (Tier 6).
 #    These deliberately probe a feature Akita does NOT support — configurable
-#    address mapping (roadmap P3). When a stride serializes to a single bank
+#    address mapping. When a stride serializes to a single bank
 #    (0x40 sequential, 0x20000 same-bank) Akita matches DRAMSim3, so those are
 #    *enforced*. When bank parallelism depends on the address map (0x2000,
 #    0x4000) Akita's fixed map diverges 50-60% from DRAMSim3's `rochrababgco`;
-#    those are *known gaps* that the suite tracks until P3 lands.
+#    those are *known gaps* that the suite tracks until that feature lands.
 #
 # Each scenario carries a compact `pattern` (op/count/stride); ops are expanded
 # by build_ops. latency_check: "off"|"enforced"|"known_gap"; counts_check:
@@ -124,11 +124,11 @@ SCENARIOS = [
     {"name": "op_stride_8K",   "page_policy": "open",
      "pattern": {"op": "read", "count": 512, "stride": "0x2000"},
      "counts_check": "off", "latency_check": "known_gap",
-     "gap_reason": "configurable address mapping (roadmap P3)"},
+     "gap_reason": "configurable address mapping"},
     {"name": "op_stride_16K",  "page_policy": "open",
      "pattern": {"op": "read", "count": 512, "stride": "0x4000"},
      "counts_check": "off", "latency_check": "known_gap",
-     "gap_reason": "configurable address mapping (roadmap P3)"},
+     "gap_reason": "configurable address mapping"},
 ]
 
 # Expand ops once so the rest of the script can use scn["ops"] directly; the

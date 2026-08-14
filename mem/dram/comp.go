@@ -48,6 +48,12 @@ const (
 	PagePolicyOpen  PagePolicy = 1
 )
 
+// Command-queue structures. The empty string selects PER_RANK.
+const (
+	QueueStructurePerRank = "PER_RANK"
+	QueueStructurePerBank = "PER_BANK"
+)
+
 // Spec contains immutable configuration for the DRAM memory controller.
 type Spec struct {
 	// Frequency
@@ -112,6 +118,10 @@ type Spec struct {
 	// Queue sizes
 	TransactionQueueSize int `json:"transaction_queue_size"`
 	CommandQueueCapacity int `json:"command_queue_capacity"`
+
+	// Command-queue structure: "" / QueueStructurePerRank groups a rank's banks
+	// into one command queue; QueueStructurePerBank gives each bank its own.
+	QueueStructure string `json:"queue_structure"`
 
 	// Read/Write queue separation
 	ReadQueueSize      int `json:"read_queue_size"`

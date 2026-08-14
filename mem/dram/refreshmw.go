@@ -12,8 +12,8 @@ import (
 // State.RefreshInProgress (the stall flag).
 //
 // Today it implements the fake global tRFC stall (deviation D2). Real refresh
-// (P2) is a different refresh middleware selected by config; the bank-tick
-// issue step does not change — it just honors the stall flag.
+// is a different refresh middleware selected by config; the bank-tick issue
+// step does not change — it just honors the stall flag.
 type refreshMiddleware struct {
 	comp *modeling.Component[Spec, State, Resources]
 }

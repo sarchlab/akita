@@ -94,9 +94,25 @@ func createOpenPageCommand(
 		spec, state, ref, mapAddress(spec, st.Address))
 }
 
-// getQueueIndex returns the command queue index for a command (by rank).
-func getQueueIndex(cmd *commandState) int {
-	return int(cmd.Location.Rank)
+// getQueueIndex returns the command-queue index for a command. PER_RANK (the
+// default) groups all of a rank's banks into one queue; PER_BANK gives each
+// bank its own queue, keyed by the bank's flat (rank, bank-group, bank) index.
+func getQueueIndex(spec *Spec, cmd *commandState) int {
+	loc := cmd.Location
+	if spec.QueueStructure == QueueStructurePerBank {
+		return (int(loc.Rank)*spec.NumBankGroup+int(loc.BankGroup))*spec.NumBank +
+			int(loc.Bank)
+	}
+	return int(loc.Rank)
+}
+
+// numCommandQueues returns the number of command queues for the configured
+// queue structure: one per bank under PER_BANK, one per rank otherwise.
+func numCommandQueues(spec *Spec) int {
+	if spec.QueueStructure == QueueStructurePerBank {
+		return spec.NumRank * spec.NumBankGroup * spec.NumBank
+	}
+	return spec.NumChannel * spec.NumRank
 }
 
 // isWriteCommand returns true if the command is a write or write-precharge.
@@ -113,7 +129,7 @@ func canAcceptCommand(
 	cmd *commandState,
 	spec *Spec,
 ) bool {
-	queueIdx := getQueueIndex(cmd)
+	queueIdx := getQueueIndex(spec, cmd)
 	isWrite := isWriteCommand(cmd)
 
 	// If R/W queue separation is configured (sizes > 0), use separate limits
@@ -141,8 +157,8 @@ func canAcceptCommand(
 }
 
 // acceptCommand adds a command to the command queue.
-func acceptCommand(state *State, cmd *commandState) {
-	queueIdx := getQueueIndex(cmd)
+func acceptCommand(state *State, cmd *commandState, spec *Spec) {
+	queueIdx := getQueueIndex(spec, cmd)
 	state.CommandQueues.Entries = append(
 		state.CommandQueues.Entries,
 		queueEntry{

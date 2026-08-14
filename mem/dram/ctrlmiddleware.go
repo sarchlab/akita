@@ -127,7 +127,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	state.Transactions = nil
 	state.SubTransQueue = subTransQueueState{Entries: []subTransRef{}}
 	state.CommandQueues = commandQueueState{
-		NumQueues: spec.NumChannel * spec.NumRank,
+		NumQueues: numCommandQueues(&spec),
 		Entries:   []queueEntry{},
 	}
 	state.BankStates = initBankStatesFlat(

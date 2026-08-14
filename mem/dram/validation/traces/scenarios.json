@@ -108,7 +108,7 @@
       },
       "counts_check": "off",
       "latency_check": "known_gap",
-      "gap_reason": "configurable address mapping (roadmap P3)"
+      "gap_reason": "configurable address mapping"
     },
     {
       "name": "op_stride_16K",
@@ -120,7 +120,7 @@
       },
       "counts_check": "off",
       "latency_check": "known_gap",
-      "gap_reason": "configurable address mapping (roadmap P3)"
+      "gap_reason": "configurable address mapping"
     }
   ]
 }

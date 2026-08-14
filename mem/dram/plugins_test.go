@@ -30,7 +30,7 @@ func (t *cmdTracer) AddMilestone(m tracing.Milestone) {
 	t.byKind[m.What]++
 }
 
-var _ = Describe("P1: strategy selection", func() {
+var _ = Describe("strategy selection", func() {
 	It("selects the default strategies from a default spec", func() {
 		spec := DefaultSpec()
 		ctrl := newDefaultController(&spec)
@@ -62,20 +62,20 @@ var _ = Describe("P1: strategy selection", func() {
 	})
 })
 
-var _ = Describe("P1: command tracing", func() {
+var _ = Describe("command tracing", func() {
 	It("records command milestones without changing results", func() {
 		spec := DefaultSpec()
 		tracer := newCmdTracer()
 
 		// Same workload, with and without the tracer.
-		traced := newP0Harness(spec, tracer)
+		traced := newDramHarness(spec, tracer)
 		traced.src.Send(traced.write(0x40, []byte{1, 2, 3, 4}))
 		traced.engine.Run()
 		traced.src.Send(traced.read(0x40))
 		traced.engine.Run()
 		tracedReads, tracedWrites := traced.collect()
 
-		plain := newP0Harness(spec)
+		plain := newDramHarness(spec)
 		plain.src.Send(plain.write(0x40, []byte{1, 2, 3, 4}))
 		plain.engine.Run()
 		plain.src.Send(plain.read(0x40))

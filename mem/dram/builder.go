@@ -120,7 +120,7 @@ func (b Builder) Build(name string) *Comp {
 			Entries: []subTransRef{},
 		},
 		CommandQueues: commandQueueState{
-			NumQueues: b.spec.NumChannel * b.spec.NumRank,
+			NumQueues: numCommandQueues(&b.spec),
 			Entries:   []queueEntry{},
 		},
 		BankStates: initBankStatesFlat(
