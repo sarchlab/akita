@@ -13,9 +13,8 @@ Usage:
   python3 run_oracles.py [--dramsim3 PATH] [--ramulator2 PATH] [--workdir DIR]
 
 Defaults look for the binaries built by oracles/build_oracles.sh
-(oracles/.oracles/...). See oracles/README.md for the metric normalization and
-why command *counts* (activates/reads/writes) are the exact cross-sim quantity
-for these close-page scenarios while latency is timing-dependent.
+(oracles/.oracles/...). See oracles/README.md for the metric normalization
+(which command counts are exact across simulators vs. timing-dependent).
 """
 import argparse
 import csv
@@ -65,12 +64,12 @@ def _channel_size_mb():
 # activates == #ops and reads/writes == the obvious split, independent of
 # address mapping, so these are exact across all three simulators.
 
-# Refresh is a separate validation axis (roadmap P2) and a confound for command
-# counts: DRAMSim3 idles for the full -c budget after the trace drains, firing
-# many refreshes (one boundary even adds a stray activate). For these
-# count-focused close-page scenarios we push refresh out of range so only
-# access-driven commands are counted. (Ramulator2's tail-subtraction already
-# cancels refresh; Akita's command counts are refresh-independent.)
+# Refresh is a separate validation axis and a confound for command counts:
+# DRAMSim3 idles for the full -c budget after the trace drains, firing many
+# refreshes (one boundary even adds a stray activate). We push refresh out of
+# range so only access-driven commands are counted. (Ramulator2's
+# tail-subtraction already cancels refresh; Akita's counts are
+# refresh-independent.)
 REFRESH_OFF_TREFI = 100000000
 
 def build_ops(pattern):
@@ -84,51 +83,48 @@ def build_ops(pattern):
     return [[is_write, i * stride] for i in range(pattern["count"])]
 
 
-# Scenarios split into two groups:
+# One scenario set, each compared on BOTH command counts and read latency:
 #
-#  * Count scenarios (close-page, pure read/write): command counts are config-
-#    and mapping-independent, compared *exactly* against both oracles (Tier 5).
-#
-#  * Performance scenarios (open-page read streams at various strides):
-#    average read latency is compared against DRAMSim3 within 15% (Tier 6).
-#    These deliberately probe a feature Akita does NOT support — configurable
-#    address mapping (roadmap P3). When a stride serializes to a single bank
-#    (0x40 sequential, 0x20000 same-bank) Akita matches DRAMSim3, so those are
-#    *enforced*. When bank parallelism depends on the address map (0x2000,
-#    0x4000) Akita's fixed map diverges 50-60% from DRAMSim3's `rochrababgco`;
-#    those are *known gaps* that the suite tracks until P3 lands.
+#  * command counts (activates / reads / writes): recorded from both oracles.
+#    The Akita-side test asserts a count exact only where the two oracles AGREE
+#    on it — reads/writes always agree (one column command per access), and
+#    activates agree wherever the count is map-independent. Where the oracles
+#    disagree, it's a documented reference divergence and is not asserted.
+#  * read_latency: compared against DRAMSim3 within tolerance. "enforced" must
+#    match; "known_gap" currently exceeds tolerance for a feature Akita lacks
+#    (configurable address mapping) and is tracked until that lands; "off" for
+#    write-only scenarios (no reads).
 #
 # Each scenario carries a compact `pattern` (op/count/stride); ops are expanded
-# by build_ops. latency_check: "off"|"enforced"|"known_gap"; counts_check:
-# "enforced"|"off".
+# by build_ops.
 SCENARIOS = [
     {"name": "cp_read_64",   "page_policy": "close",
      "pattern": {"op": "read",  "count": 64,  "stride": "0x20000"},
-     "counts_check": "enforced", "latency_check": "off"},
+     "read_latency": "enforced"},
     {"name": "cp_read_256",  "page_policy": "close",
      "pattern": {"op": "read",  "count": 256, "stride": "0x20000"},
-     "counts_check": "enforced", "latency_check": "off"},
+     "read_latency": "enforced"},
     {"name": "cp_write_64",  "page_policy": "close",
      "pattern": {"op": "write", "count": 64,  "stride": "0x20000"},
-     "counts_check": "enforced", "latency_check": "off"},
+     "read_latency": "off"},
     {"name": "cp_write_256", "page_policy": "close",
      "pattern": {"op": "write", "count": 256, "stride": "0x20000"},
-     "counts_check": "enforced", "latency_check": "off"},
+     "read_latency": "off"},
 
     {"name": "op_seq_64B",     "page_policy": "open",
      "pattern": {"op": "read", "count": 512, "stride": "0x40"},
-     "counts_check": "off", "latency_check": "enforced"},
+     "read_latency": "enforced"},
     {"name": "op_stride_128K", "page_policy": "open",
      "pattern": {"op": "read", "count": 512, "stride": "0x20000"},
-     "counts_check": "off", "latency_check": "enforced"},
+     "read_latency": "enforced"},
     {"name": "op_stride_8K",   "page_policy": "open",
      "pattern": {"op": "read", "count": 512, "stride": "0x2000"},
-     "counts_check": "off", "latency_check": "known_gap",
-     "gap_reason": "configurable address mapping (roadmap P3)"},
+     "read_latency": "known_gap",
+     "gap_reason": "configurable address mapping"},
     {"name": "op_stride_16K",  "page_policy": "open",
      "pattern": {"op": "read", "count": 512, "stride": "0x4000"},
-     "counts_check": "off", "latency_check": "known_gap",
-     "gap_reason": "configurable address mapping (roadmap P3)"},
+     "read_latency": "known_gap",
+     "gap_reason": "configurable address mapping"},
 ]
 
 # Expand ops once so the rest of the script can use scn["ops"] directly; the
@@ -270,13 +266,12 @@ def ramulator2_trace_lines(ops):
     return "".join(f"{'ST' if w else 'LD'} 0x{addr:X}\n" for w, addr in ops)
 
 
-def _ram2_counts(binary, ops, work, tag):
+def _ram2_counts(binary, ops, page_policy, work, tag):
     trace = work / f"{tag}.ram2.trace"
     cmdcount = work / f"{tag}.cmdcount.csv"
     yaml = work / f"{tag}.yaml"
     trace.write_text(ramulator2_trace_lines(ops))
-    # page_policy carried via a throwaway scn dict (close-page for all here)
-    yaml.write_text(ramulator2_yaml({"page_policy": "close"}, trace, cmdcount))
+    yaml.write_text(ramulator2_yaml({"page_policy": page_policy}, trace, cmdcount))
     subprocess.run([binary, "-f", str(yaml)], check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     counts = {}
@@ -296,10 +291,11 @@ def run_ramulator2(binary, scn, work):
     op_types = {w for w, _ in scn["ops"]}
     assert len(op_types) == 1, "ramulator2 tail-subtraction needs pure scenarios"
     op_type = op_types.pop()
+    page = scn["page_policy"]
     suffix_len = len(scn["ops"]) + 400
     suffix = [[op_type, SUFFIX_ADDR] for _ in range(suffix_len)]
-    combined = _ram2_counts(binary, scn["ops"] + suffix, work, f"{scn['name']}_comb")
-    tail = _ram2_counts(binary, suffix, work, f"{scn['name']}_tail")
+    combined = _ram2_counts(binary, scn["ops"] + suffix, page, work, f"{scn['name']}_comb")
+    tail = _ram2_counts(binary, suffix, page, work, f"{scn['name']}_tail")
 
     def diff(*keys):
         return sum(combined.get(k, 0) - tail.get(k, 0) for k in keys)
@@ -338,12 +334,13 @@ def main():
     rows = []
     for scn in SCENARIOS:
         exp = expected_counts(scn)
-        # DRAMSim3 runs every scenario (clean counts and latency). Ramulator2
-        # runs only the count scenarios (its trace frontend does not drain, so
-        # latency is unavailable and counts need pure close-page tail-subtraction).
-        sims = [("dramsim3", run_dramsim3, args.dramsim3)]
-        if scn.get("counts_check") == "enforced":
-            sims.append(("ramulator2", run_ramulator2, args.ramulator2))
+        # Both oracles run every scenario. DRAMSim3 gives counts + latency;
+        # Ramulator2 gives counts via tail-subtraction (its trace frontend does
+        # not drain, so it has no per-request latency).
+        sims = [
+            ("dramsim3", run_dramsim3, args.dramsim3),
+            ("ramulator2", run_ramulator2, args.ramulator2),
+        ]
 
         for sim, runner, binary in sims:
             if not os.path.exists(binary):
@@ -351,11 +348,13 @@ def main():
                       f"   build it with oracles/build_oracles.sh", file=sys.stderr)
                 return 2
             got = runner(binary, scn, work)
-            if scn.get("counts_check") == "enforced":
-                for k in ("activates", "reads", "writes"):
-                    if got[k] != exp[k]:
-                        print(f"WARN {sim}/{scn['name']}: {k} {got[k]} != expected "
-                              f"{exp[k]}", file=sys.stderr)
+            # reads/writes are one column command per access -> always exact.
+            # (activates depend on locality/map; the Go test asserts them only
+            # where the two oracles agree.)
+            for k in ("reads", "writes"):
+                if got[k] != exp[k]:
+                    print(f"WARN {sim}/{scn['name']}: {k} {got[k]} != expected "
+                          f"{exp[k]}", file=sys.stderr)
             lat = got["avg_read_latency"]
             rows.append({
                 "scenario": scn["name"], "simulator": sim,
