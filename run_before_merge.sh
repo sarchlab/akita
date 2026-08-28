@@ -3,8 +3,8 @@
 set -Eeuo pipefail
 
 MOCKGEN_VERSION="v0.6.0"
-GINKGO_VERSION="v2.25.1"
-GOLANGCI_LINT_VERSION="v2.9.0"
+GINKGO_VERSION="v2.32.1"
+GOLANGCI_LINT_VERSION="v2.13.2"
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 temp_parent_dir="${AKITA_RUN_BEFORE_MERGE_TMPDIR:-${TMPDIR:-/tmp}}"

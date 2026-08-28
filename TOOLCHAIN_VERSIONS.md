@@ -7,13 +7,14 @@ with full CI, frontend, acceptance, or downstream MGPUSim coverage.
 
 ## Go Toolchain
 
-- **Go language version**: 1.26.0
-- **Go toolchain version**: go1.26.2
-- **Rationale**: Keep the module language version, local toolchain pin, and CI
-  toolchain aligned with the current security-remediated baseline.
+- **Go language version**: 1.27.0
+- **Go toolchain version**: go1.27.0
+- **Rationale**: Keep the module language version and CI toolchain aligned with
+  the current stable baseline. A separate `toolchain` directive would be
+  redundant with the `go 1.27.0` directive and is removed by `go mod tidy`.
 - **Configuration**:
-  - `go.mod`: `go 1.26.0` and `toolchain go1.26.2`
-  - `.github/workflows/akita_test.yml`: `go-version: 1.26.2`
+  - `go.mod`: `go 1.27.0`
+  - `.github/workflows/akita_test.yml`: `go-version: 1.27.0`
 
 ## Go Tools
 
@@ -21,15 +22,15 @@ with full CI, frontend, acceptance, or downstream MGPUSim coverage.
   - Used for generating mock implementations for testing
   - Locked in `run_before_merge.sh` and `.github/workflows/akita_test.yml`
 
-- **ginkgo**: v2.25.1
+- **ginkgo**: v2.32.1
   - BDD testing framework
   - Locked in `run_before_merge.sh` and `.github/workflows/akita_test.yml`
 
-- **golangci-lint**: v2.9.0
+- **golangci-lint**: v2.13.2
   - Go linter aggregator
   - Locked in `run_before_merge.sh` and `.github/workflows/akita_test.yml`
   - The checked-in `.golangci.yml` keeps the established linter set stable
-    across the v2.9.0 compatibility update.
+    across the v2.13.2 compatibility update.
 
 ## Local Validation Gate Scope
 
@@ -46,8 +47,8 @@ The local gate currently performs this Go-only scope:
    `go mod tidy -diff`.
 3. Installs repository-pinned tools into a temporary `GOBIN`:
    `go.uber.org/mock/mockgen@v0.6.0`,
-   `github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.9.0`, and
-   `github.com/onsi/ginkgo/v2/ginkgo@v2.25.1`. The gate also points `GOPATH`,
+   `github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2`, and
+   `github.com/onsi/ginkgo/v2/ginkgo@v2.32.1`. The gate also points `GOPATH`,
    `GOMODCACHE`, `GOCACHE`, and the golangci-lint cache at the temporary
    validation directory so validation does not mutate a developer's shared Go
    dependency or build caches.
@@ -88,11 +89,11 @@ To verify all checked-in toolchain settings:
 ```bash
 # Go toolchain settings
 grep -nE '^(go|toolchain) ' go.mod
-# Should show: go 1.26.0 and toolchain go1.26.2
+# Should show: go 1.27.0
 
 # GitHub Actions Go and Node settings
 grep -nE 'go-version|node-version' .github/workflows/akita_test.yml
-# Should show: go-version: 1.26.2 and node-version: 18.20.7
+# Should show: go-version: 1.27.0 and the configured Node version
 
 # Node.js version lock and package engine requirements
 cat daisen2/static/.nvmrc

@@ -44,9 +44,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
-          go-version: 1.26.2
+          go-version: 1.27.0
           # Self-hosted runner: GOMODCACHE/GOCACHE persist on local disk
           # between jobs, so setup-go's dependency cache is redundant. It was
           # also failing auth and burning ~20 min / ~2 GB restoring a stale
@@ -55,7 +55,7 @@ jobs:
       - name: Install mockgen
         run: go install go.uber.org/mock/mockgen@v0.6.0
       - name: Install ginkgo
-        run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.25.1
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.32.1
       - name: Generate mocks
         run: go generate ./...
       - name: Build
@@ -63,7 +63,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.9.0
+          version: v2.13.2
           args: --timeout=10m
           verify: false
       - name: Run tests
@@ -82,9 +82,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
-          go-version: 1.26.2
+          go-version: 1.27.0
           # Self-hosted runner: GOMODCACHE/GOCACHE persist on local disk
           # between jobs, so setup-go's dependency cache is redundant. It was
           # also failing auth and burning ~20 min / ~2 GB restoring a stale
@@ -100,9 +100,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
-          go-version: 1.26.2
+          go-version: 1.27.0
           # Self-hosted runner: GOMODCACHE/GOCACHE persist on local disk
           # between jobs, so setup-go's dependency cache is redundant. It was
           # also failing auth and burning ~20 min / ~2 GB restoring a stale
@@ -127,9 +127,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
-          go-version: 1.26.2
+          go-version: 1.27.0
           # Self-hosted runner: GOMODCACHE/GOCACHE persist on local disk
           # between jobs, so setup-go's dependency cache is redundant. It was
           # also failing auth and burning ~20 min / ~2 GB restoring a stale
