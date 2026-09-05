@@ -48,8 +48,10 @@ storage := mem.NewStorage(4 * mem.GB)
 storage.Write(0x1000, []byte{0xDE, 0xAD})
 
 // Read data
-data, err := storage.Read(0x1000, 2)
+data := storage.Read(0x1000, 2)
 ```
+
+Empty, overflowing, or out-of-capacity ranges panic before allocation or mutation.
 
 A `Storage` can be registered with the simulation as shared state via
 `NewStorageResource(name, storage)`, making its contents reachable by name
