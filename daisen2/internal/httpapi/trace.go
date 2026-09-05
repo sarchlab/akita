@@ -261,7 +261,7 @@ func (r *SQLiteTraceReader) ensureIndex(ctx context.Context, activityLabel, ddl 
 	}
 
 	id := r.activity.Begin("index", activityLabel, "covering index")
-	_, err := r.ExecContext(ctx, ddl)
+	_, err := r.ExecContext(context.WithoutCancel(ctx), ddl)
 	r.activity.End(id)
 	if err != nil {
 		log.Printf("optional trace index: %v", err)

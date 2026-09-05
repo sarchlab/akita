@@ -112,3 +112,23 @@ func TestDBFileBytesSumsSidecars(t *testing.T) {
 		t.Fatalf("dbFileBytes without sidecars = %d, want %d", got, want)
 	}
 }
+
+func TestEnsureIndexSurvivesRequestCancellation(t *testing.T) {
+	reader := NewSQLiteTraceReader(filepath.Join(t.TempDir(), "trace.sqlite3"))
+	if err := reader.Init(); err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	if _, err := reader.Exec("CREATE TABLE trace (Location INTEGER)"); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	reader.ensureIndex(ctx, "test", "CREATE INDEX idx_cancelled_request ON trace(Location)")
+	if !reader.indexExists(context.Background(), "idx_cancelled_request") {
+		t.Fatal("request cancellation discarded the shared covering index")
+	}
+	if _, ok := reader.builtIndexes.Load("idx_cancelled_request"); !ok {
+		t.Fatal("successful index build was not recorded")
+	}
+}

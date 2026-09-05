@@ -65,7 +65,11 @@ engine time, or call `Terminate`. Do not inspect or mutate component state.
 Further run/setup/checkpoint operations return errors. Direct scheduling or
 resuming violates the failed-instance precondition and panics; using it inside
 `Setup` returns the already recorded failure. The monitor rejects model
-inspection and mutation on failed instances.
+inspection and mutation on failed instances. `timing.ErrClosed` identifies an
+operation rejected during healthy shutdown. An in-flight monitor inspection
+may encounter it while releasing its pause; that specific condition produces
+a diagnostic without invalidating completed results. Other panics still fail
+the simulation, including panics already unwinding when inspection cleanup runs.
 
 Recovery covers ordinary Go panics in managed setup, hooks, handlers, and
 workers. It cannot contain fatal runtime failures such as out-of-memory,

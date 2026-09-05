@@ -289,8 +289,7 @@ func (m *Monitor) containRequests(next http.Handler) http.Handler {
 		defer m.work.Done()
 		defer func() {
 			if p := recover(); p != nil {
-				m.fail(p)
-				http.Error(w, "monitor operation failed", http.StatusInternalServerError)
+				m.requestFailure(w, p)
 			}
 		}()
 		if e, ok := m.engine.(timing.ManagedEngine); ok && e.Supervisor().Err() != nil {
@@ -517,10 +516,7 @@ func (m *Monitor) pauseForInspection() func() {
 
 	m.engine.Pause()
 
-	return func() {
-		defer m.engineControlMu.Unlock()
-		m.engine.Continue()
-	}
+	return m.resumeAfterInspection
 }
 
 func (m *Monitor) run(w http.ResponseWriter, _ *http.Request) {
@@ -1496,4 +1492,39 @@ func (m *Monitor) fail(cause any) {
 	} else {
 		m.warning(fmt.Errorf("panic: %v", cause))
 	}
+}
+
+// An inspection's deferred resume must not replace an existing model panic
+// with the expected closed-operation panic during concurrent shutdown.
+func (m *Monitor) resumeAfterInspection() {
+	defer m.engineControlMu.Unlock()
+	defer func() {
+		if p := recover(); p != nil {
+			if m.closedOperation(p) {
+				m.warning(timing.ErrClosed)
+				return
+			}
+			panic(p)
+		}
+	}()
+	m.engine.Continue()
+}
+
+func (m *Monitor) closedOperation(cause any) bool {
+	err, ok := cause.(error)
+	if !ok || err != timing.ErrClosed {
+		return false
+	}
+	e, ok := m.engine.(timing.ManagedEngine)
+	return ok && e.Supervisor().State() == "closed"
+}
+
+func (m *Monitor) requestFailure(w http.ResponseWriter, cause any) {
+	if m.closedOperation(cause) {
+		m.warning(timing.ErrClosed)
+		http.Error(w, "simulation is closed", http.StatusServiceUnavailable)
+		return
+	}
+	m.fail(cause)
+	http.Error(w, "monitor operation failed", http.StatusInternalServerError)
 }

@@ -9,6 +9,9 @@ import (
 	"sync/atomic"
 )
 
+// ErrClosed identifies operations rejected because healthy shutdown has begun.
+var ErrClosed = errors.New("simulation is closed")
+
 // FailureError describes the first failure of one simulation. Cause preserves the
 // original panic value; Stack records where it was caught. A failed instance
 // cannot be resumed. Diagnosis must not inspect mutable component state.
@@ -122,7 +125,7 @@ func (s *Supervisor) Check() {
 		panic(cloneFailure(s.failures[0]))
 	}
 	if s.closed || s.closing {
-		panic("simulation is closed")
+		panic(ErrClosed)
 	}
 }
 
@@ -167,7 +170,7 @@ func (s *Supervisor) begin(operation string) error {
 		return cloneFailure(s.failures[0])
 	}
 	if s.closed || s.closing {
-		return errors.New("simulation is closed")
+		return ErrClosed
 	}
 	s.active = true
 	s.accepting = true
