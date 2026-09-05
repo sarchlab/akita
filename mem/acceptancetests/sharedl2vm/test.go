@@ -503,5 +503,7 @@ func main() {
 		"All %d agents completed %d reads and %d writes each.\n",
 		numAgents, *numAccessFlag, *numAccessFlag)
 
-	s.Terminate()
+	if err := s.Terminate(); err != nil {
+		panic(err)
+	}
 }

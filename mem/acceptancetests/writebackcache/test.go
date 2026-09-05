@@ -155,5 +155,7 @@ func main() {
 		panic("more requests to send")
 	}
 
-	s.Terminate()
+	if err := s.Terminate(); err != nil {
+		panic(err)
+	}
 }

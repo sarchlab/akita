@@ -10,5 +10,8 @@
 //	monitor.RegisterEngine(engine)
 //	monitor.RegisterComponent(component)
 //	monitor.RegisterVisTracer(tracer)
-//	monitor.StartServer()
+//	if err := monitor.StartServer(); err != nil {
+//	    return err
+//	}
+//	defer monitor.StopServer() // call after the engine has stopped
 package monitoring2
