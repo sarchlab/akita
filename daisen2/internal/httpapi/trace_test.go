@@ -4,9 +4,43 @@ import (
 	"context"
 	"database/sql"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestTraceReaderUsesLiteralFilename(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "trace.sqlite3")
+	path := base + "?mode=memory#literal.sqlite3"
+	r := NewSQLiteTraceReader(path)
+	if err := r.Init(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Exec("CREATE TABLE proof (value INTEGER); INSERT INTO proof VALUES (42)"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("literal recording missing: %v", err)
+	}
+	if _, err := os.Stat(base); !os.IsNotExist(err) {
+		t.Fatalf("opened an unintended path: %v", err)
+	}
+	r = NewSQLiteTraceReader(path)
+	if err := r.InitReadOnly(); err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	var value int
+	if err := r.QueryRow("SELECT value FROM proof").Scan(&value); err != nil || value != 42 {
+		t.Fatalf("wrong read-only recording: value=%d err=%v", value, err)
+	}
+	if _, err := r.Exec("INSERT INTO proof VALUES (43)"); err == nil {
+		t.Fatal("read-only connection allowed a write")
+	}
+}
 
 // TestInitReadOnlyReadsNonWALTrace is a regression test: a read-only connection
 // must not try to set the journal mode. With the native driver "mode=ro" is a

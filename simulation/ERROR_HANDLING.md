@@ -98,6 +98,11 @@ it, so two simulations cannot overwrite each other's recording. Use distinct
 output paths, and choose a new path or explicitly remove a discarded recording
 before retrying.
 
+Output filenames are literal paths, including `?` and `#`; they cannot inject
+SQLite connection options or alias another recording. A connection initialization
+error removes the newly claimed unused file when possible. Later recording
+failures retain partial output for diagnosis.
+
 ## Optional features and output validity
 
 An unavailable monitor or source archive produces a warning through

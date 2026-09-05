@@ -82,3 +82,35 @@ func TestClosedRecorderRejectsWrites(t *testing.T) {
 		}
 	}
 }
+
+func TestOutputPathsRemainLiteralSQLiteFilenames(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "result")
+	type record struct{ ID int }
+	for i, name := range []string{base, base + ".sqlite3?ignored#suffix"} {
+		r, err := NewDataRecorder(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := r.CreateTable("records", record{}); err != nil {
+			t.Fatal(err)
+		}
+		if err := r.InsertData("records", record{ID: i}); err != nil {
+			t.Fatal(err)
+		}
+		if err := r.Close(); err != nil {
+			t.Fatal(err)
+		}
+		reader, err := NewReader(name + ".sqlite3")
+		if err != nil {
+			t.Fatal(err)
+		}
+		reader.MapTable("records", record{})
+		rows, count, err := reader.Query(context.Background(), "records", QueryParams{})
+		if err != nil || count != 1 || len(rows) != 1 || rows[0].(*record).ID != i {
+			t.Fatalf("output path aliased another recording: rows=%v count=%d err=%v", rows, count, err)
+		}
+		if err := reader.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

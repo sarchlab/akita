@@ -1,7 +1,10 @@
 package monitoring2
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,6 +12,54 @@ import (
 
 	"github.com/sarchlab/akita/v5/timing"
 )
+
+func TestBufferPaginationCannotFailSimulation(t *testing.T) {
+	for _, tc := range []struct {
+		query  string
+		status int
+		count  int
+	}{
+		{"limit=-1", http.StatusBadRequest, 0},
+		{"offset=-1&limit=1", http.StatusBadRequest, 0},
+		{fmt.Sprintf("offset=1&limit=%d", int(^uint(0)>>1)), http.StatusOK, 1},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			m := NewMonitor()
+			e := timing.NewSerialEngine()
+			m.RegisterEngine(e)
+			m.RegisterComponent(newBufferOnlyComponent("a", 10, 5))
+			m.RegisterComponent(newBufferOnlyComponent("b", 10, 7))
+			h := m.containRequests(http.HandlerFunc(m.hangDetectorBuffers))
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/hangdetector/buffers?"+tc.query, nil))
+			if w.Code != tc.status || e.Supervisor().Err() != nil {
+				t.Fatalf("status=%d failure=%v body=%s", w.Code, e.Supervisor().Err(), w.Body.String())
+			}
+			if tc.status == http.StatusOK {
+				var buffers []bufferRsp
+				if err := json.Unmarshal(w.Body.Bytes(), &buffers); err != nil || len(buffers) != tc.count {
+					t.Fatalf("invalid page: %s, %v", w.Body.String(), err)
+				}
+			}
+			if err := e.Run(); err != nil {
+				t.Fatalf("request invalidated engine: %v", err)
+			}
+		})
+	}
+}
+
+func TestProfileCaptureHonorsCancellation(t *testing.T) {
+	m := NewMonitor()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	r := httptest.NewRequest(http.MethodGet, "/api/profile?seconds=2", nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+	started := time.Now()
+	m.collectProfile(w, r)
+	if w.Code != http.StatusRequestTimeout || time.Since(started) > time.Second {
+		t.Fatalf("profile ignored cancellation: status=%d elapsed=%s", w.Code, time.Since(started))
+	}
+}
 
 func TestStopServerJoinsAdmittedRequests(t *testing.T) {
 	m := NewMonitor()

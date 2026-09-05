@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+
+	"github.com/sarchlab/akita/v5/internal/sqlitefile"
 )
 
 // QueryParams encapsulates all query parameters
@@ -58,7 +60,11 @@ type sqliteReader struct {
 // NewReader creates a new DataReader
 func NewReader(dbFilename string) (DataReader, error) {
 	// Open the database
-	db, err := sql.Open("sqlite", dbFilename)
+	dsn, err := sqlitefile.DSN(dbFilename)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}

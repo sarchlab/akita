@@ -23,6 +23,7 @@ type FailureError struct {
 	Time         VTimeInPicoSec
 	Cause        any
 	Stack        []byte
+	recordedBy   *Supervisor
 }
 
 func (f *FailureError) Error() string {
@@ -101,7 +102,10 @@ func (s *Supervisor) Failures() []*FailureError {
 func (s *Supervisor) Fail(operation string, cause any) { s.record(operation, nil, cause) }
 
 func (s *Supervisor) record(operation string, evt Event, cause any) {
-	f := &FailureError{Operation: operation, Cause: cause, Stack: debug.Stack()}
+	if s.alreadyRecorded(cause) {
+		return
+	}
+	f := &FailureError{Operation: operation, Cause: cause, Stack: debug.Stack(), recordedBy: s}
 	if evt != nil {
 		annotateFailure(f, evt)
 	}
@@ -111,6 +115,30 @@ func (s *Supervisor) record(operation string, evt Event, cause any) {
 	s.stopped.Store(true)
 	s.cancel()
 	s.mu.Unlock()
+}
+
+// A failure returned through nested managed boundaries is one incident. Errors
+// from another owner, and distinct later failures, must still be recorded.
+func (s *Supervisor) alreadyRecorded(cause any) (recorded bool) {
+	// A user-defined Unwrap method must not break the failure boundary.
+	defer func() { _ = recover() }()
+	err, ok := cause.(error)
+	if !ok {
+		return false
+	}
+	for err != nil {
+		if failure, ok := err.(*FailureError); ok {
+			return failure != nil && failure.recordedBy == s
+		}
+		// A joined error can contain an additional failure, so only suppress
+		// ordinary single-cause wrapping of an already-recorded incident.
+		wrapped, ok := err.(interface{ Unwrap() error })
+		if !ok {
+			return false
+		}
+		err = wrapped.Unwrap()
+	}
+	return false
 }
 
 // Check rejects operations on failed or closed instances by panicking. Managed

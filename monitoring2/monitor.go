@@ -987,6 +987,9 @@ func buffersParseParams(
 	if err != nil {
 		return sortMethod, 0, 0, err
 	}
+	if limitNumber < 0 {
+		return sortMethod, 0, 0, errors.New("limit must be non-negative")
+	}
 
 	offsetStr := r.URL.Query().Get("offset")
 	if offsetStr == "" {
@@ -996,6 +999,9 @@ func buffersParseParams(
 	offsetNumber, err := strconv.Atoi(offsetStr)
 	if err != nil {
 		return sortMethod, limitNumber, 0, err
+	}
+	if offsetNumber < 0 {
+		return sortMethod, limitNumber, 0, errors.New("offset must be non-negative")
 	}
 
 	return sortMethod, limitNumber, offsetNumber, nil
@@ -1050,7 +1056,7 @@ func (m *Monitor) sortAndSelectBuffers(
 		return []bufferState{}
 	}
 
-	if offset+limit > len(sortedBuffers) {
+	if limit > len(sortedBuffers)-offset {
 		limit = len(sortedBuffers) - offset
 	}
 
@@ -1272,7 +1278,15 @@ func (m *Monitor) collectProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	time.Sleep(time.Duration(seconds) * time.Second)
+	timer := time.NewTimer(time.Duration(seconds) * time.Second)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-r.Context().Done():
+		pprof.StopCPUProfile()
+		http.Error(w, r.Context().Err().Error(), http.StatusRequestTimeout)
+		return
+	}
 
 	pprof.StopCPUProfile()
 

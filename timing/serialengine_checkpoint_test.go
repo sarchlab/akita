@@ -2,6 +2,8 @@ package timing
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -18,6 +20,33 @@ type idRecordingHandler struct {
 func (h *idRecordingHandler) Handle(e Event) {
 	h.ids = append(h.ids, e.(queueTestEvent).ID)
 	return
+}
+
+func TestFailedEngineRestoreIsRecordedOnceAcrossBoundaries(t *testing.T) {
+	e := NewSerialEngine()
+	err := e.Supervisor().Execute("restore checkpoint", func() error {
+		err := e.LoadCheckpoint(bytes.NewBufferString("invalid JSON"))
+		if err == nil {
+			return nil
+		}
+		return fmt.Errorf("load entity: %w", err)
+	})
+	if err == nil || len(e.Supervisor().Failures()) != 1 {
+		t.Fatalf("restore failure recorded incorrectly: err=%v failures=%d", err, len(e.Supervisor().Failures()))
+	}
+	if e.Run() == nil {
+		t.Fatal("failed restore engine was reusable")
+	}
+	cleanup := errors.New("cleanup failed too")
+	e.Supervisor().Fail("cleanup", errors.Join(err, cleanup))
+	if failures := e.Supervisor().Failures(); len(failures) != 2 || !errors.Is(failures[1], cleanup) {
+		t.Fatal("joined secondary failure was discarded")
+	}
+	other := NewSupervisor("other")
+	other.Fail("shared host operation", err)
+	if len(other.Failures()) != 1 || other.Err() == nil {
+		t.Fatal("failure originating in another supervisor was discarded")
+	}
 }
 
 func TestSerialEngineQueueRoundTrip(t *testing.T) {

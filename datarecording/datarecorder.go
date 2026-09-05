@@ -13,6 +13,7 @@ import (
 	// Need to use SQLite connections.
 	_ "github.com/glebarez/go-sqlite"
 	"github.com/rs/xid"
+	"github.com/sarchlab/akita/v5/internal/sqlitefile"
 )
 
 // DataRecorder is a backend that can record and store data.
@@ -101,17 +102,28 @@ func (t *sqliteWriter) Init() (err error) {
 	if err != nil {
 		return err
 	}
+	// No recorder has been published yet. Release our unused path if opening
+	// the database fails so a later attempt can claim it again.
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, os.Remove(filename))
+		}
+	}()
 	if err = file.Close(); err != nil {
 		return err
 	}
 
-	db, err := sql.Open("sqlite", filename)
+	dsn, err := sqlitefile.DSN(filename)
 	if err != nil {
-		panic(recorderIOError{err})
+		return err
+	}
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return err
 	}
 
 	if err = db.Ping(); err != nil {
-		_ = db.Close()
+		err = errors.Join(err, db.Close())
 		return err
 	}
 	t.DB = db

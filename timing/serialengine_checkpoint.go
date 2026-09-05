@@ -51,6 +51,7 @@ func (e *SerialEngine) LoadCheckpoint(r io.Reader) (err error) {
 		}
 		if err != nil {
 			e.supervisor.Fail("restore engine", err)
+			err = e.supervisor.Err()
 		}
 	}()
 	if !e.supervisor.Fresh() {
