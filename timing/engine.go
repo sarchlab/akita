@@ -1,6 +1,10 @@
 package timing
 
-import "github.com/sarchlab/akita/v5/hooking"
+import (
+	"context"
+
+	"github.com/sarchlab/akita/v5/hooking"
+)
 
 // TimeTeller can be used to get the current time.
 type TimeTeller interface {
@@ -27,9 +31,18 @@ type Engine interface {
 	// Run will process all the events until the simulation finishes.
 	Run() error
 
-	// Pause will pause the simulation until continue is called.
-	Pause()
+	// RequestPause is safe in handlers; wait for its acknowledgment externally.
+	RequestPause() PauseRequest
 
-	// Continue will continue the paused simulation.
-	Continue()
+	// Pause waits for the current event/batch and hooks to finish.
+	Pause() error
+
+	// Continue resumes dispatch; repeated calls are harmless.
+	Continue() error
+
+	// IsPaused reports acknowledged state, including pauses requested by handlers.
+	IsPaused() bool
+
+	// Inspect copies/serializes state at a boundary without changing pause state.
+	Inspect(context.Context, func() error) error
 }

@@ -64,13 +64,19 @@ type Engine interface {
     hooking.Hookable
     EventScheduler
     Run() error
-    Pause()
-    Continue()
+    RequestPause() PauseRequest
+    Pause() error
+    Continue() error
+    IsPaused() bool
+    Inspect(context.Context, func() error) error
 }
 ```
 
 `SerialEngine` runs events strictly one after another and is deterministic.
 `ParallelEngine` runs same-time, non-conflicting events across goroutines.
+See [pause and boundary inspection](CONTROL.md) for acknowledged controls and
+safe snapshots.
+
 Both implement `Engine`, register handlers by name via `RegisterHandler`, and
 keep a separate secondary queue for `IsSecondary()` events.
 

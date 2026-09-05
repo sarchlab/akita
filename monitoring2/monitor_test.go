@@ -1,6 +1,7 @@
 package monitoring2
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -26,6 +27,7 @@ import (
 )
 
 type fakeEngine struct {
+	control *timing.SerialEngine
 	hooking.HookableBase
 
 	mu            sync.Mutex
@@ -51,18 +53,35 @@ func (e *fakeEngine) Run() error {
 	return nil
 }
 
-func (e *fakeEngine) Pause() {
+func (e *fakeEngine) controls() *timing.SerialEngine {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-
-	e.pauseCalls++
+	if e.control == nil {
+		e.control = timing.NewSerialEngine()
+	}
+	return e.control
 }
 
-func (e *fakeEngine) Continue() {
+func (e *fakeEngine) RequestPause() timing.PauseRequest {
 	e.mu.Lock()
-	defer e.mu.Unlock()
+	e.pauseCalls++
+	e.mu.Unlock()
+	return e.controls().RequestPause()
+}
 
+func (e *fakeEngine) Pause() error { return e.RequestPause().Wait(context.Background()) }
+
+func (e *fakeEngine) Continue() error {
+	e.mu.Lock()
 	e.continueCalls++
+	e.mu.Unlock()
+	return e.controls().Continue()
+}
+
+func (e *fakeEngine) IsPaused() bool { return e.controls().IsPaused() }
+
+func (e *fakeEngine) Inspect(ctx context.Context, fn func() error) error {
+	return e.controls().Inspect(ctx, fn)
 }
 
 func (e *fakeEngine) CurrentTime() timing.VTimeInPicoSec {
@@ -137,8 +156,8 @@ func TestEngineStateTracksPauseContinueIdempotently(t *testing.T) {
 		monitor.pauseEngine(recorder, request)
 	}
 
-	if engine.pauseCalls != 1 {
-		t.Fatalf("expected one engine pause call, got %d", engine.pauseCalls)
+	if engine.pauseCalls != 2 {
+		t.Fatalf("expected two idempotent engine pause calls, got %d", engine.pauseCalls)
 	}
 
 	recorder = httptest.NewRecorder()
@@ -159,8 +178,8 @@ func TestEngineStateTracksPauseContinueIdempotently(t *testing.T) {
 		monitor.continueEngine(recorder, request)
 	}
 
-	if engine.continueCalls != 1 {
-		t.Fatalf("expected one engine continue call, got %d", engine.continueCalls)
+	if engine.continueCalls != 2 {
+		t.Fatalf("expected two idempotent engine continue calls, got %d", engine.continueCalls)
 	}
 
 	recorder = httptest.NewRecorder()

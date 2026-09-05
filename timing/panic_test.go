@@ -173,10 +173,9 @@ func TestParallelDispatcherPanicReleasesWaitingWorker(t *testing.T) {
 	if !errors.As(err, &failure) || failure.Cause != "dispatcher failure" || !joined.Load() {
 		t.Fatalf("dispatcher did not contain panic and join worker: %v joined=%v", err, joined.Load())
 	}
-	if !e.pauseLock.TryLock() {
-		t.Fatal("round lock was left held")
+	if got := finishRun(t, e.Pause); got != err {
+		t.Fatalf("control request after failed run: %v", got)
 	}
-	e.pauseLock.Unlock()
 	t.Log("dispatcher failure released and joined a worker blocked in Schedule")
 }
 
