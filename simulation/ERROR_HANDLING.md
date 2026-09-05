@@ -35,14 +35,23 @@ managed setup/worker/cleanup contract. Extensions start workers with
 `sim.Go(name, func(context.Context) error)` inside an active managed operation.
 A worker must finish or respond to cancellation. Handle rejected worker
 launches; do not start unmanaged goroutines that touch simulation state.
-`Run` waits for owned workers and processes events they schedule before
-returning. `Cancel` stops cooperative work and records terminal failure.
+`Run` joins owned workers before returning. `Cancel` stops cooperative work
+and records terminal failure.
+
+The serial engine's event queue and model belong to the goroutine calling
+`Run`/`RunUntil`. During execution, only callbacks on that goroutine may schedule
+events or mutate engine state. Background tooling must not access that queue or
+model; worker supervision does not grant concurrent access. Setup, registration,
+and checkpoint operations require stopped execution and host coordination.
+The parallel engine separately supports scheduling from its workers.
 
 Do not recursively call `Run`, `Setup`, or checkpoint operations from their
 callbacks. Concurrent managed operations return an error. `Pause` and
 `Terminate` are host operations: do not call them from an event callback or
 owned worker, because they wait for that work to settle. External `Pause`
 waits for admitted event callbacks to leave model state; `Continue` resumes.
+The serial event loop acknowledges pause at an event boundary without locking
+its queue or each dispatch. Hosts must coordinate inspection and resume calls.
 It is still the host's responsibility to stop other extension producers before
 inspecting their state or saving a checkpoint.
 

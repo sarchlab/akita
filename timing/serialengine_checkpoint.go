@@ -17,12 +17,11 @@ type serialEngineCheckpoint struct {
 }
 
 // SaveCheckpoint writes the engine's current time and queued events.
+// Execution and all engine mutations must be stopped until it returns.
 func (e *SerialEngine) SaveCheckpoint(w io.Writer) error {
 	if err := e.supervisor.Err(); err != nil {
 		return err
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	primary, err := eventCodec.EncodeSlice(e.queue.snapshot())
 	if err != nil {
 		return err
@@ -57,8 +56,6 @@ func (e *SerialEngine) LoadCheckpoint(r io.Reader) (err error) {
 	if !e.supervisor.Fresh() {
 		return fmt.Errorf("timing: restore requires a fresh engine")
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	if e.restored {
 		return fmt.Errorf("timing: engine has already attempted a restore")

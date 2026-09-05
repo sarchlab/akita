@@ -36,6 +36,12 @@ func (f *FailureError) Unwrap() error {
 	return err
 }
 
+type pauseRequest struct {
+	resume  chan struct{}
+	reached chan struct{}
+	once    sync.Once
+}
+
 // Supervisor owns a simulation's failure boundary and cooperative workers.
 // Use Execute for setup and external mutations, and Go for extension workers.
 // Callbacks must not recursively call Execute, Run, or Close. Workers must
@@ -44,7 +50,7 @@ type Supervisor struct {
 	opMu          sync.Mutex
 	dispatchMu    sync.RWMutex
 	stopped       atomic.Bool
-	pauseSignal   atomic.Pointer[chan struct{}]
+	pauseSignal   atomic.Pointer[pauseRequest]
 	mu            sync.Mutex
 	id            string
 	ctx           context.Context //nolint:containedctx // Owns the simulation lifetime, rather than a request context.
@@ -58,7 +64,10 @@ type Supervisor struct {
 	workers       sync.WaitGroup
 	workerCount   int
 	workerChanged chan struct{}
-	resume        chan struct{}
+	// Serial dispatch acknowledges pauses at event boundaries. These fields
+	// are initialized before use (serial) or protected by mu (serialRunDone).
+	serial        bool
+	serialRunDone chan struct{}
 }
 
 func NewSupervisor(id string) *Supervisor {
@@ -182,6 +191,10 @@ func (s *Supervisor) Execute(operation string, fn func() error) error {
 	}
 	s.Protect(operation, nil, fn)
 	s.mu.Lock()
+	if s.serialRunDone != nil {
+		close(s.serialRunDone)
+		s.serialRunDone = nil
+	}
 	s.accepting = false
 	s.mu.Unlock()
 	s.workers.Wait()
@@ -204,6 +217,9 @@ func (s *Supervisor) begin(operation string) error {
 	s.accepting = true
 	if operation == "run" {
 		s.executed = true
+		if s.serial {
+			s.serialRunDone = make(chan struct{})
+		}
 	}
 	return nil
 }
@@ -235,15 +251,27 @@ func (s *Supervisor) Fresh() bool {
 func (s *Supervisor) Pause() {
 	s.Check()
 	s.mu.Lock()
-	if s.resume == nil {
-		s.resume = make(chan struct{})
-		signal := s.resume
-		s.pauseSignal.Store(&signal)
+	request := s.pauseSignal.Load()
+	if request == nil {
+		request = &pauseRequest{resume: make(chan struct{}), reached: make(chan struct{})}
+		s.pauseSignal.Store(request)
 	}
+	done := s.serialRunDone
 	s.mu.Unlock()
-	// An external pause waits until admitted callbacks have left their state.
-	s.dispatchMu.Lock()
-	s.dispatchMu.Unlock()
+	if s.serial {
+		if done != nil {
+			select {
+			case <-request.reached:
+			case <-done:
+			case <-request.resume:
+			case <-s.ctx.Done():
+			}
+		}
+	} else {
+		// Parallel callbacks acknowledge completion by releasing their locks.
+		s.dispatchMu.Lock()
+		s.dispatchMu.Unlock()
+	}
 	s.Check()
 }
 
@@ -251,17 +279,18 @@ func (s *Supervisor) Continue() {
 	s.Check()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.resume != nil {
-		close(s.resume)
-		s.resume = nil
-		s.pauseSignal.Store(nil)
+	if request := s.pauseSignal.Swap(nil); request != nil {
+		close(request.resume)
 	}
 }
 
 func (s *Supervisor) awaitResume() bool {
-	if signal := s.pauseSignal.Load(); signal != nil {
+	if request := s.pauseSignal.Load(); request != nil {
+		if s.serial {
+			request.once.Do(func() { close(request.reached) })
+		}
 		select {
-		case <-*signal:
+		case <-request.resume:
 		case <-s.ctx.Done():
 			return false
 		}

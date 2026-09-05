@@ -2,13 +2,15 @@ package timing
 
 import (
 	"log"
-	"sync"
 	"sync/atomic"
 
 	"github.com/sarchlab/akita/v5/hooking"
 )
 
-// A SerialEngine is an Engine that always run events one after another.
+// A SerialEngine runs events one after another on the goroutine calling Run.
+// During execution, only that goroutine may schedule events or mutate engine
+// state. External callers may Pause/Continue, read CurrentTime, or inspect the
+// supervisor. Other access requires stopped execution and host coordination.
 type SerialEngine struct {
 	hooking.HookableBase
 
@@ -16,12 +18,10 @@ type SerialEngine struct {
 	queue          *unsafeEventQueue
 	secondaryQueue *unsafeEventQueue
 
-	mu         sync.Mutex
 	supervisor *Supervisor
 	ids        IDGenerator
 
 	registry map[string]Handler
-	wake     chan struct{}
 	restored bool
 }
 
@@ -33,8 +33,8 @@ func NewSerialEngine() *SerialEngine {
 	e.secondaryQueue = newUnsafeEventQueue()
 	e.registry = make(map[string]Handler)
 	e.supervisor = NewSupervisor("Engine")
+	e.supervisor.serial = true
 	e.ids = NewIDGenerator()
-	e.wake = make(chan struct{}, 1)
 
 	return e
 }
@@ -48,22 +48,13 @@ func (e *SerialEngine) Name() string {
 // RegisterHandler registers a handler with the given name.
 func (e *SerialEngine) RegisterHandler(name string, handler Handler) {
 	e.supervisor.Check()
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	e.registry[name] = handler
 }
 
-// Schedule registers an event to happen in the future.
+// Schedule registers an event to happen in the future. During a run, only
+// callbacks on the run goroutine may call Schedule; background producers cannot.
 func (e *SerialEngine) Schedule(evt Event) {
 	e.supervisor.Check()
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	defer func() {
-		select {
-		case e.wake <- struct{}{}:
-		default:
-		}
-	}()
 	if evt.Time() < e.time {
 		log.Panic("scheduling an event earlier than current time")
 	}
@@ -88,9 +79,6 @@ func (e *SerialEngine) run(limit *VTimeInPicoSec) error {
 		hasHooks := e.NumHooks() > 0
 		for e.supervisor.awaitResume() {
 			if e.dispatchNext(hasHooks, limit) {
-				if e.supervisor.waitForWork(e.wake) {
-					continue
-				}
 				break
 			}
 		}
@@ -98,13 +86,9 @@ func (e *SerialEngine) run(limit *VTimeInPicoSec) error {
 	})
 }
 
-// dispatchNext keeps the queue critical section separate from model callbacks.
+// dispatchNext accesses the queue and model on the same goroutine.
 // A recovery is installed before calling even user-defined event accessors.
 func (e *SerialEngine) dispatchNext(hasHooks bool, limit *VTimeInPicoSec) (done bool) {
-	if !e.supervisor.beginDispatch() {
-		return true
-	}
-	defer e.supervisor.endDispatch()
 	var evt Event
 	defer func() {
 		if p := recover(); p != nil {
@@ -132,8 +116,6 @@ func (e *SerialEngine) dispatchNext(hasHooks bool, limit *VTimeInPicoSec) (done 
 }
 
 func (e *SerialEngine) prepareNext(limit *VTimeInPicoSec) (Event, Handler, bool) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	if e.noMoreEvent() || (limit != nil && e.nextEventTime() > *limit) {
 		return nil, nil, true
 	}
@@ -198,8 +180,6 @@ func (e *SerialEngine) CurrentTime() VTimeInPicoSec {
 }
 func (e *SerialEngine) SetCurrentTime(t VTimeInPicoSec) {
 	e.supervisor.Check()
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	atomic.StoreUint64((*uint64)(&e.time), uint64(t))
 }
 func (e *SerialEngine) Supervisor() *Supervisor  { return e.supervisor }

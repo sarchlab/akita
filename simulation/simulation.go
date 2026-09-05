@@ -236,6 +236,9 @@ func (s *Simulation) Run() error { return s.engine.Run() }
 func (s *Simulation) Setup(fn func(*Simulation) error) error {
 	return s.supervisor.Execute("setup", func() error { return fn(s) })
 }
+
+// Go supervises background tooling. With a serial engine, workers must not
+// schedule events or access model state while execution is active.
 func (s *Simulation) Go(name string, fn func(context.Context) error) error {
 	return s.supervisor.Go(name, fn)
 }

@@ -146,31 +146,27 @@ func TestManagedWorkersCancelAndJoin(t *testing.T) {
 	}
 }
 
-func TestWorkerCanWakeEmptyEngine(t *testing.T) {
-	for name, newEngine := range engines() {
-		t.Run(name, func(t *testing.T) {
-			e := newEngine()
-			var count atomic.Int32
-			registrar(e).RegisterHandler("component", failureHandler(func(evt Event) {
-				count.Add(1)
-				if evt.Time() == 1 {
-					if err := e.Supervisor().Go("producer", func(context.Context) error {
-						time.Sleep(time.Millisecond)
-						e.Schedule(MakeEventBase(e.IDGenerator(), 2, "component"))
-						return nil
-					}); err != nil {
-						panic(err)
-					}
-				}
-			}))
-			e.Schedule(MakeEventBase(e.IDGenerator(), 1, "component"))
-			if err := runWithDeadline(t, e.Run); err != nil {
-				t.Fatal(err)
+func TestWorkerCanWakeEmptyParallelEngine(t *testing.T) {
+	e := NewParallelEngine()
+	var count atomic.Int32
+	e.RegisterHandler("component", failureHandler(func(evt Event) {
+		count.Add(1)
+		if evt.Time() == 1 {
+			if err := e.Supervisor().Go("producer", func(context.Context) error {
+				time.Sleep(time.Millisecond)
+				e.Schedule(MakeEventBase(e.IDGenerator(), 2, "component"))
+				return nil
+			}); err != nil {
+				panic(err)
 			}
-			if count.Load() != 2 {
-				t.Fatalf("run returned before worker event: %d", count.Load())
-			}
-		})
+		}
+	}))
+	e.Schedule(MakeEventBase(e.IDGenerator(), 1, "component"))
+	if err := runWithDeadline(t, e.Run); err != nil {
+		t.Fatal(err)
+	}
+	if count.Load() != 2 {
+		t.Fatalf("run returned before worker event: %d", count.Load())
 	}
 }
 
