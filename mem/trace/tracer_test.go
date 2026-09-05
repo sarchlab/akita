@@ -89,7 +89,7 @@ func (suite *TracerTestSuite) TestStartAndEndTask() {
 
 	suite.tracer.EndTask(tracing.TaskEnd{ID: 1, Time: 200})
 
-	suite.dataRecorder.Flush()
+	datarecording.MustRecord(suite.dataRecorder.Flush())
 
 	suite.verifyBasicTransaction()
 }
@@ -148,7 +148,7 @@ func (suite *TracerTestSuite) TestTaskTag() {
 		Time:   150,
 	})
 
-	suite.dataRecorder.Flush()
+	datarecording.MustRecord(suite.dataRecorder.Flush())
 
 	// Verify the tag was recorded
 	rows, err := suite.db.Query(
@@ -197,7 +197,7 @@ func (suite *TracerTestSuite) TestCompleteMemoryTrace() {
 
 	suite.tracer.EndTask(tracing.TaskEnd{ID: 3, Time: 100})
 
-	suite.dataRecorder.Flush()
+	datarecording.MustRecord(suite.dataRecorder.Flush())
 
 	suite.verifyCompleteTransaction()
 	suite.verifyCompleteTag()
@@ -266,7 +266,7 @@ func (suite *TracerTestSuite) TestTaskWithoutAccessReq() {
 
 	suite.tracer.EndTask(tracing.TaskEnd{ID: 4, Time: 20})
 
-	suite.dataRecorder.Flush()
+	datarecording.MustRecord(suite.dataRecorder.Flush())
 
 	// Verify no transaction was recorded (since Detail is not AccessReq)
 	rows, err := suite.db.Query("SELECT COUNT(*) FROM memory_transactions")
@@ -293,7 +293,7 @@ func (suite *TracerTestSuite) TestAddMilestone() {
 	// This should not panic and should do nothing.
 	suite.tracer.AddMilestone(milestone)
 
-	suite.dataRecorder.Flush()
+	datarecording.MustRecord(suite.dataRecorder.Flush())
 }
 
 func TestTracerTestSuite(t *testing.T) {
@@ -309,7 +309,10 @@ func TestDBTracerEndToEnd(t *testing.T) {
 	}
 	tmpFile.Close()
 
-	recorder := datarecording.NewDataRecorder(tmpFile.Name())
+	recorder, err := datarecording.NewDataRecorder(tmpFile.Name())
+	if err != nil {
+		panic(err)
+	}
 	defer recorder.Close()
 	tracer := NewDBTracer(recorder)
 

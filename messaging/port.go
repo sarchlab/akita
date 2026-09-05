@@ -128,12 +128,18 @@ func (p *defaultPort) CanSend() bool {
 // the port has capacity with CanSend before calling Send; sending into a full
 // outgoing buffer is a programming error and will panic.
 func (p *defaultPort) Send(msg Msg) {
+	wasEmpty := p.sendLocked(msg)
+	if wasEmpty {
+		p.conn.NotifySend()
+	}
+}
+func (p *defaultPort) sendLocked(msg Msg) bool {
 	p.lock.Lock()
+	defer p.lock.Unlock()
 
 	p.msgMustBeValid(msg)
 
 	if !p.outgoingBuf.CanPush() {
-		p.lock.Unlock()
 		panic(fmt.Sprintf(
 			"Send called on port %s with full outgoing buffer; "+
 				"caller must check CanSend first",
@@ -150,11 +156,8 @@ func (p *defaultPort) Send(msg Msg) {
 		Item:   msg,
 	}
 	p.InvokeHook(hookCtx)
-	p.lock.Unlock()
 
-	if wasEmpty {
-		p.conn.NotifySend()
-	}
+	return wasEmpty
 }
 
 // CanDeliver checks if the port can accept an incoming message without error.
@@ -169,10 +172,16 @@ func (p *defaultPort) CanDeliver() bool {
 // the port has capacity with CanDeliver before calling Deliver; delivering
 // into a full incoming buffer is a programming error and will panic.
 func (p *defaultPort) Deliver(msg Msg) {
+	wasEmpty := p.deliverLocked(msg)
+	if p.comp != nil && wasEmpty {
+		p.comp.NotifyRecv(p)
+	}
+}
+func (p *defaultPort) deliverLocked(msg Msg) bool {
 	p.lock.Lock()
+	defer p.lock.Unlock()
 
 	if !p.incomingBuf.CanPush() {
-		p.lock.Unlock()
 		panic(fmt.Sprintf(
 			"Deliver called on port %s with full incoming buffer; "+
 				"caller must check CanDeliver first",
@@ -190,29 +199,20 @@ func (p *defaultPort) Deliver(msg Msg) {
 	p.InvokeHook(hookCtx)
 
 	p.incomingBuf.PushTyped(msg)
-	p.lock.Unlock()
 
-	if p.comp != nil && wasEmpty {
-		p.comp.NotifyRecv(p)
-	}
+	return wasEmpty
 }
 
 // RetrieveIncoming is used by the component to take a message from the
 // incoming buffer.
 func (p *defaultPort) RetrieveIncoming() Msg {
-	p.lock.Lock()
-
-	msg := p.incomingBuf.Pop()
+	msg, freed := p.popBuffer(&p.incomingBuf)
 	if msg == nil {
-		p.lock.Unlock()
 		return nil
 	}
-
-	if p.incomingBuf.Size() == p.incomingBuf.Capacity()-1 {
+	if freed {
 		p.conn.NotifyAvailable(p)
 	}
-
-	p.lock.Unlock()
 
 	hookCtx := hooking.HookCtx{
 		Domain: p,
@@ -227,19 +227,13 @@ func (p *defaultPort) RetrieveIncoming() Msg {
 // RetrieveOutgoing is used by the component to take a message from the outgoing
 // buffer.
 func (p *defaultPort) RetrieveOutgoing() Msg {
-	p.lock.Lock()
-
-	msg := p.outgoingBuf.Pop()
+	msg, freed := p.popBuffer(&p.outgoingBuf)
 	if msg == nil {
-		p.lock.Unlock()
 		return nil
 	}
-
-	if p.outgoingBuf.Size() == p.outgoingBuf.Capacity()-1 {
+	if freed {
 		p.comp.NotifyPortFree(p)
 	}
-
-	p.lock.Unlock()
 
 	hookCtx := hooking.HookCtx{
 		Domain: p,
@@ -330,4 +324,11 @@ func srcDstMustNotBeTheSame(msg Msg) {
 	if msg.Meta().Src == msg.Meta().Dst {
 		panic("sending back to src")
 	}
+}
+
+func (p *defaultPort) popBuffer(buf *queueing.Buffer[Msg]) (Msg, bool) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	msg := buf.Pop()
+	return msg, msg != nil && buf.Size() == buf.Capacity()-1
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path"
@@ -90,15 +91,23 @@ func runCodeSearch(src *sourcefs.Source, query, filter string) (string, error) {
 	var body strings.Builder
 	matches := 0
 	truncated := false
-	for _, p := range sortedFilePaths(fsys) {
+	paths, err := sortedFilePaths(fsys)
+	if err != nil {
+		return "", err
+	}
+	for _, p := range paths {
 		if filter != "" && !strings.Contains(p, filter) {
 			continue
 		}
 		data, err := fs.ReadFile(fsys, p)
 		if err != nil {
-			continue
+			return "", err
 		}
-		if appendFileMatches(re, p, data, &body, &matches) {
+		hitCap, err := appendFileMatches(re, p, data, &body, &matches)
+		if err != nil {
+			return "", err
+		}
+		if hitCap {
 			truncated = true
 			break
 		}
@@ -111,7 +120,7 @@ func runCodeSearch(src *sourcefs.Source, query, filter string) (string, error) {
 // stops searching further files).
 func appendFileMatches(
 	re *regexp.Regexp, p string, data []byte, body *strings.Builder, matches *int,
-) bool {
+) (bool, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	lineNo := 0
@@ -122,16 +131,16 @@ func appendFileMatches(
 			continue
 		}
 		if *matches >= codeSearchMaxMatches {
-			return true
+			return true, nil
 		}
 		entry := fmt.Sprintf("%s:%d: %s\n", p, lineNo, clipLine(strings.TrimSpace(line)))
 		if body.Len()+len(entry) > codeSearchMaxBytes {
-			return true
+			return true, nil
 		}
 		body.WriteString(entry)
 		*matches++
 	}
-	return false
+	return false, scanner.Err()
 }
 
 func formatSearchResult(query, filter, body string, matches int, truncated bool) string {
@@ -195,6 +204,9 @@ func runCodeRead(src *sourcefs.Source, p string, start, end int) (string, error)
 	}
 
 	data, err := fs.ReadFile(src.FS(), clean)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", err
+	}
 	if err != nil {
 		return fmt.Sprintf("File not found: %q. Use code_search to find the right path "+
 			"(recorded roots: %v).", p, src.Roots), nil
@@ -447,17 +459,20 @@ func humanBytes(n int) string {
 	}
 }
 
-func sortedFilePaths(fsys fs.FS) []string {
+func sortedFilePaths(fsys fs.FS) ([]string, error) {
 	var paths []string
-	_ = fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
 			return nil
 		}
 		paths = append(paths, p)
 		return nil
 	})
 	sort.Strings(paths)
-	return paths
+	return paths, err
 }
 
 func normalizeReadPath(p string) (string, error) {

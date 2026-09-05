@@ -8,7 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 
 	// respondMW handles the bottom→top response path:
@@ -88,7 +87,7 @@ func (m *respondMW) handleTranslationRsp(rsp vmprotocol.TranslationRsp) bool {
 	rspToTop := vmprotocol.TranslationRsp{
 		Page: rsp.Page,
 	}
-	rspToTop.ID = timing.GetIDGenerator().Generate()
+	rspToTop.ID = m.comp.IDGenerator().Generate()
 	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = reqTransaction.ReqSrc
 	rspToTop.RspTo = rsp.ID

@@ -68,3 +68,6 @@ mock_*_test.go
 *.sqlite3-wal
 *.sqlite3-journal
 .history
+
+# Simulation output completion markers
+*.complete

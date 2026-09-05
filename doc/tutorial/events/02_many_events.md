@@ -55,7 +55,7 @@ type handler struct {
     count int
 }
 
-func (h *handler) Handle(e timing.Event) error {
+func (h *handler) Handle(e timing.Event) {
     h.count += 1
 
     evt := e.(splitEvent)
@@ -65,7 +65,6 @@ func (h *handler) Handle(e timing.Event) error {
     h.scheduleNextSplitEvent(evt.Time(), evt.id)
     h.scheduleNextSplitEvent(evt.Time(), h.count)
 
-    return nil
 }
 ```
 
@@ -105,7 +104,10 @@ when no more events are pending, the engine returns.
 ```go
 randGen = rand.New(rand.NewSource(0))
 
-s := simulation.MakeBuilder().Build()
+s, err := simulation.MakeBuilder().Build()
+if err != nil {
+    panic(err) // command-line boundary
+}
 engine = s.GetEngine()
 h := handler{count: 1}
 
@@ -121,7 +123,7 @@ firstEvt := splitEvent{
 }
 engine.Schedule(firstEvt)
 
-err := engine.Run()
+err = engine.Run()
 ```
 
 Same shape as the previous example: build, get engine, register handler,
@@ -165,3 +167,7 @@ introduces **event-driven components**, which wear the component shape you
 already know from the first section — Spec, State, ports — but wake on
 demand instead of every cycle. They are the bridge between raw events and
 the default ticking components.
+
+For a host running multiple simulations, construct components in a `Build`
+callback or `Simulation.Setup`, and handle boundary errors without panicking
+in the host. See [the failure-isolation example](https://github.com/sarchlab/akita/tree/main/examples/failureisolation).

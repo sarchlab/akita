@@ -2,6 +2,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -31,7 +32,10 @@ func main() {
 		log.Fatal("Must specify a SQLite file with -sqlite flag")
 	}
 
-	server := daisen2.NewReplayServer(*sqliteFileName, *httpFlag)
+	server, err := daisen2.NewReplayServer(*sqliteFileName, *httpFlag)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	url := fmt.Sprintf("http://localhost%s", *httpFlag)
 	if len(*httpFlag) > 0 && (*httpFlag)[0] != ':' {
@@ -48,7 +52,10 @@ func main() {
 		log.Printf("Serving at %s — pass --open to open it in a browser tab", url)
 	}
 
-	server.Start()
+	err = server.Start()
+	if err := errors.Join(err, server.Stop()); err != nil {
+		log.Fatal(err)
+	}
 }
 
 // openBrowserInBackground opens url in the user's default browser without raising

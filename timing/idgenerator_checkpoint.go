@@ -10,15 +10,19 @@ import (
 // idGeneratorCheckpoint is the serialized form of the ID generator: its kind and
 // next counter value.
 type idGeneratorCheckpoint struct {
-	Kind   string `json:"kind"`
-	NextID uint64 `json:"next_id"`
+	Kind     string                       `json:"kind"`
+	NextID   uint64                       `json:"next_id"`
+	Tracking map[string]map[uint64]uint64 `json:"tracking,omitempty"`
 }
 
 // SaveCheckpoint writes the sequential ID generator's kind and next counter.
 func (g *sequentialIDGenerator) SaveCheckpoint(w io.Writer) error {
+	g.trackingMu.Lock()
+	defer g.trackingMu.Unlock()
 	dto := idGeneratorCheckpoint{
-		Kind:   "sequential",
-		NextID: atomic.LoadUint64(&g.nextID),
+		Kind:     "sequential",
+		Tracking: g.tracking,
+		NextID:   atomic.LoadUint64(&g.nextID),
 	}
 	return json.NewEncoder(w).Encode(dto)
 }
@@ -34,17 +38,16 @@ func (g *sequentialIDGenerator) LoadCheckpoint(r io.Reader) error {
 			"timing: ID generator kind mismatch: checkpoint %q, rebuilt sequential",
 			dto.Kind)
 	}
+	for _, tasks := range dto.Tracking {
+		for msg, id := range tasks {
+			if msg == 0 || id == 0 || id > dto.NextID {
+				return fmt.Errorf("timing: invalid tracked ID")
+			}
+		}
+	}
+	g.trackingMu.Lock()
+	defer g.trackingMu.Unlock()
+	g.tracking = dto.Tracking
 	atomic.StoreUint64(&g.nextID, dto.NextID)
 	return nil
-}
-
-// SaveCheckpoint rejects checkpointing the parallel ID generator: its IDs are not
-// deterministic, so a restored counter would not reproduce the same IDs.
-func (g *parallelIDGenerator) SaveCheckpoint(_ io.Writer) error {
-	return fmt.Errorf("timing: parallel ID generator is not checkpointable")
-}
-
-// LoadCheckpoint rejects loading into the parallel ID generator.
-func (g *parallelIDGenerator) LoadCheckpoint(_ io.Reader) error {
-	return fmt.Errorf("timing: parallel ID generator is not checkpointable")
 }

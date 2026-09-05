@@ -42,7 +42,7 @@ var _ = Describe("Bankstage", func() {
 			storage: storage,
 		}
 		c.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(nil).
+			WithEngine(timing.NewSerialEngine()).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				BankLatency:      10,
@@ -115,7 +115,7 @@ var _ = Describe("Bankstage", func() {
 			})
 
 			readMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -168,7 +168,7 @@ var _ = Describe("Bankstage", func() {
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
 			writeMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 64 + 12,
 				TrafficClass: "req",
 			}
@@ -219,7 +219,7 @@ var _ = Describe("Bankstage", func() {
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
-			data, _ := storage.Read(0x400, 64)
+			data := storage.Read(0x400, 64)
 			Expect(data).To(Equal([]byte{
 				0, 0, 0, 0, 0, 0, 0, 0,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -283,7 +283,7 @@ var _ = Describe("Bankstage", func() {
 			Expect(madeProgress).To(BeTrue())
 			Expect(next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
 			trans := &next.Transactions[0]
-			data, _ := storage.Read(0x400, 64)
+			data := storage.Read(0x400, 64)
 			Expect(data).To(Equal(trans.Data))
 		})
 
@@ -297,7 +297,7 @@ var _ = Describe("Bankstage", func() {
 				// the coalesced write that depends on the fetcher's
 				// merged fill landing in storage.
 				coalescedWriteMeta = messaging.MsgMeta{
-					ID:           timing.GetIDGenerator().Generate(),
+					ID:           testIDs.Generate(),
 					TrafficBytes: 4 + 12,
 					TrafficClass: "req",
 				}

@@ -54,7 +54,10 @@ func Example() {
 	os.Remove(dbPath + ".sqlite3")
 
 	// Create a data recorder
-	dataRecorder := datarecording.NewDataRecorder(dbPath)
+	dataRecorder, err := datarecording.NewDataRecorder(dbPath)
+	if err != nil {
+		panic(err)
+	}
 
 	// Create a time teller
 	timeTeller := &SimpleTimeTeller{currentTime: 0}
@@ -65,7 +68,7 @@ func Example() {
 	runExampleTrace(memTracer, timeTeller)
 
 	// Flush data to database
-	dataRecorder.Flush()
+	datarecording.MustRecord(dataRecorder.Flush())
 
 	// List available tables
 	tables := dataRecorder.ListTables()

@@ -61,7 +61,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	makeReadReq := func() memprotocol.ReadReq {
 		req := memprotocol.ReadReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = 0
@@ -92,7 +92,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should accept write request and add to inflight transactions", func() {
 		writeReq := memprotocol.WriteReq{}
-		writeReq.ID = timing.GetIDGenerator().Generate()
+		writeReq.ID = testIDs.Generate()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0
@@ -137,7 +137,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should send write response after latency ticks", func() {
 		writeReq := memprotocol.WriteReq{}
-		writeReq.ID = timing.GetIDGenerator().Generate()
+		writeReq.ID = testIDs.Generate()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0
@@ -164,8 +164,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		Expect(rsp).To(BeAssignableToTypeOf(memprotocol.WriteDoneRsp{}))
 
 		// Verify data was written to storage
-		data, err := storage.Read(0, 4)
-		Expect(err).ToNot(HaveOccurred())
+		data := storage.Read(0, 4)
 		Expect(data).To(Equal([]byte{0, 1, 2, 3}))
 	})
 
@@ -212,11 +211,10 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should write with dirty mask", func() {
 		// Pre-write data
-		err := storage.Write(0, []byte{10, 20, 30, 40})
-		Expect(err).ToNot(HaveOccurred())
+		storage.Write(0, []byte{10, 20, 30, 40})
 
 		writeReq := memprotocol.WriteReq{}
-		writeReq.ID = timing.GetIDGenerator().Generate()
+		writeReq.ID = testIDs.Generate()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0
@@ -238,8 +236,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		memController.Tick()
 
 		// Check that only dirty bytes were written
-		data, err := storage.Read(0, 4)
-		Expect(err).ToNot(HaveOccurred())
+		data := storage.Read(0, 4)
 		Expect(data).To(Equal([]byte{10, 20, 2, 40}))
 	})
 

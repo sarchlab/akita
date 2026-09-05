@@ -48,6 +48,14 @@ type monitorPort interface {
 }
 
 type Monitor struct {
+	progressIDs timing.IDGenerator
+	// Callbacks are configured before starting the server.
+	OnWarning  func(error)
+	OnFailure  func(any)
+	serverDone chan struct{}
+	workMu     sync.Mutex
+	stopping   bool
+	work       sync.WaitGroup
 	// Configuration (set before StartServer).
 	port      int
 	engine    timing.Engine
@@ -69,6 +77,7 @@ type Monitor struct {
 // started until StartServer() is called.
 func NewMonitor() *Monitor {
 	return &Monitor{
+		progressIDs:  timing.NewIDGenerator(),
 		fs:           static.GetAssets(),
 		progressBars: []*daisen2.ProgressBar{},
 	}
@@ -123,7 +132,7 @@ func (m *Monitor) SetTraceDBPath(path string) {
 // CreateProgressBar creates a new progress bar tracked by the monitor.
 func (m *Monitor) CreateProgressBar(name string, total uint64) *daisen2.ProgressBar {
 	bar := &daisen2.ProgressBar{
-		ID:    timing.GetIDGenerator().Generate(),
+		ID:    m.progressIDs.Generate(),
 		Name:  name,
 		Total: total,
 	}
@@ -153,7 +162,7 @@ func (m *Monitor) CompleteProgressBar(pb *daisen2.ProgressBar) {
 }
 
 // StartServer initializes and starts the monitoring HTTP server.
-func (m *Monitor) StartServer() {
+func (m *Monitor) StartServer() error {
 	// Build combined mux.
 	mux := http.NewServeMux()
 
@@ -182,20 +191,26 @@ func (m *Monitor) StartServer() {
 	m.setupStaticRoutes(mux)
 
 	// Find port and start listener.
-	listener := m.findPort()
+	listener, err := m.findPort()
+	if err != nil {
+		return err
+	}
 	port := listener.Addr().(*net.TCPAddr).Port
 
 	fmt.Fprintf(os.Stderr,
 		"Monitoring simulation with http://localhost:%d\n", port)
 
-	m.httpServer = &http.Server{Handler: mux}
+	m.httpServer = &http.Server{Handler: m.containRequests(mux)}
+	m.serverDone = make(chan struct{})
 
 	go func() {
-		err := m.httpServer.Serve(listener)
-		if err != nil && err != http.ErrServerClosed {
-			log.Panic(err)
+		defer close(m.serverDone)
+		defer m.recoverFailure()
+		if err := m.httpServer.Serve(listener); err != nil && err != http.ErrServerClosed {
+			m.warning(err)
 		}
 	}()
+	return nil
 }
 
 func (m *Monitor) setupStaticRoutes(mux *http.ServeMux) {
@@ -214,14 +229,14 @@ func (m *Monitor) setupStaticRoutes(mux *http.ServeMux) {
 	mux.Handle("/", fServer)
 }
 
-func (m *Monitor) findPort() net.Listener {
+func (m *Monitor) findPort() (net.Listener, error) {
 	if m.port > 0 {
 		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", m.port))
 		if err != nil {
-			log.Panicf("failed to listen on port %d: %v", m.port, err)
+			return nil, fmt.Errorf("failed to listen on port %d: %w", m.port, err)
 		}
 
-		return listener
+		return listener, nil
 	}
 
 	startPort := 32776
@@ -231,20 +246,69 @@ func (m *Monitor) findPort() net.Listener {
 		listener, err := net.Listen("tcp",
 			fmt.Sprintf(":%d", startPort+i))
 		if err == nil {
-			return listener
+			return listener, nil
 		}
 	}
 
-	log.Panic("failed to find available port")
-
-	return nil
+	return nil, errors.New("failed to find available port")
 }
 
 // StopServer gracefully shuts down the monitoring server.
-func (m *Monitor) StopServer() {
-	if m.httpServer != nil {
-		m.httpServer.Close()
+func (m *Monitor) StopServer() error {
+	m.workMu.Lock()
+	m.stopping = true
+	m.workMu.Unlock()
+	defer m.work.Wait()
+	if m.httpServer == nil {
+		return nil
 	}
+	err := m.httpServer.Close()
+	if m.serverDone != nil {
+		<-m.serverDone
+	}
+	return err
+}
+func (m *Monitor) warning(err error) {
+	if m.OnWarning != nil {
+		m.OnWarning(err)
+	} else {
+		log.Printf("monitor: %v", err)
+	}
+}
+func (m *Monitor) recoverFailure() {
+	if p := recover(); p != nil {
+		if m.OnFailure != nil {
+			m.OnFailure(p)
+		} else {
+			m.warning(fmt.Errorf("panic: %v", p))
+		}
+	}
+}
+func (m *Monitor) containRequests(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !m.beginWork() {
+			http.Error(w, "monitor is stopping", http.StatusServiceUnavailable)
+			return
+		}
+		defer m.work.Done()
+		defer func() {
+			if p := recover(); p != nil {
+				if m.OnFailure != nil {
+					m.OnFailure(p)
+				}
+				http.Error(w, "monitor operation failed", http.StatusInternalServerError)
+			}
+		}()
+		if e, ok := m.engine.(timing.ManagedEngine); ok && e.Supervisor().Err() != nil {
+			switch r.URL.Path {
+			case "/api/engine/state", "/api/now", "/api/mode":
+			default:
+				http.Error(w, "simulation failed; model inspection and mutation are unavailable", http.StatusConflict)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // ---- Buffer inspection ----
@@ -361,40 +425,43 @@ func (m *Monitor) apiMode(w http.ResponseWriter, _ *http.Request) {
 func (m *Monitor) serveIndex(w http.ResponseWriter, _ *http.Request) {
 	f, err := m.fs.Open("index.html")
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	p, err := readAll(f)
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	_, err = w.Write(p)
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
 func (m *Monitor) pauseEngine(w http.ResponseWriter, _ *http.Request) {
 	m.engineControlMu.Lock()
+	defer m.engineControlMu.Unlock()
 	if !m.enginePaused {
 		m.engine.Pause()
 		m.enginePaused = true
 	}
 	response := m.engineStateResponseLocked()
-	m.engineControlMu.Unlock()
 
 	m.writeEngineState(w, response)
 }
 
 func (m *Monitor) continueEngine(w http.ResponseWriter, _ *http.Request) {
 	m.engineControlMu.Lock()
+	defer m.engineControlMu.Unlock()
 	if m.enginePaused {
 		m.engine.Continue()
 		m.enginePaused = false
 	}
 	response := m.engineStateResponseLocked()
-	m.engineControlMu.Unlock()
 
 	m.writeEngineState(w, response)
 }
@@ -413,6 +480,9 @@ func (m *Monitor) apiEngineState(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (m *Monitor) engineStateResponseLocked() engineStateRsp {
+	if e, ok := m.engine.(timing.ManagedEngine); ok && e.Supervisor().Err() != nil {
+		return engineStateRsp{State: "failed"}
+	}
 	if m.enginePaused {
 		return engineStateRsp{State: "paused", Paused: true}
 	}
@@ -438,6 +508,12 @@ func (m *Monitor) now(w http.ResponseWriter, _ *http.Request) {
 
 func (m *Monitor) pauseForInspection() func() {
 	m.engineControlMu.Lock()
+	defer func() {
+		if p := recover(); p != nil {
+			m.engineControlMu.Unlock()
+			panic(p)
+		}
+	}()
 
 	if m.enginePaused {
 		return func() {
@@ -448,16 +524,22 @@ func (m *Monitor) pauseForInspection() func() {
 	m.engine.Pause()
 
 	return func() {
+		defer m.engineControlMu.Unlock()
 		m.engine.Continue()
-		m.engineControlMu.Unlock()
 	}
 }
 
-func (m *Monitor) run(_ http.ResponseWriter, _ *http.Request) {
+func (m *Monitor) run(w http.ResponseWriter, _ *http.Request) {
+	if !m.beginWork() {
+		http.Error(w, "monitor is stopping", http.StatusServiceUnavailable)
+		return
+	}
 	go func() {
+		defer m.work.Done()
+		defer m.recoverFailure()
 		err := m.engine.Run()
 		if err != nil {
-			panic(err)
+			m.warning(err)
 		}
 	}()
 }
@@ -518,7 +600,8 @@ func (m *Monitor) listComponentDetails(
 
 	err := serializer.Serialize(w)
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -538,9 +621,14 @@ func (m *Monitor) listFieldValue(w http.ResponseWriter, r *http.Request) {
 
 	err := json.Unmarshal([]byte(jsonString), &req)
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
+	m.writeFieldValue(w, r, req)
+}
+
+func (m *Monitor) writeFieldValue(w http.ResponseWriter, r *http.Request, req fieldReq) {
 	name := req.CompName
 	fields := strings.Split(req.FieldName, ".")
 
@@ -571,7 +659,8 @@ func (m *Monitor) listFieldValue(w http.ResponseWriter, r *http.Request) {
 		if monitorStrip(value).Kind() == reflect.Slice {
 			err = writeSlicePage(w, value, sliceOffset, sliceLimit)
 			if err != nil {
-				log.Panic(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
 			}
 
 			return
@@ -591,7 +680,8 @@ func (m *Monitor) listFieldValue(w http.ResponseWriter, r *http.Request) {
 
 	err = serializer.Serialize(w)
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -996,7 +1086,8 @@ func (m *Monitor) findComponentOr404(
 
 		_, err := w.Write([]byte("Component not found"))
 		if err != nil {
-			log.Panic(err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return nil
 		}
 	}
 
@@ -1013,7 +1104,8 @@ func writeFieldNotFound(w http.ResponseWriter, cause error) {
 
 	_, err := fmt.Fprintf(w, "Field not found: %s", cause)
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -1030,12 +1122,14 @@ func (m *Monitor) listProgressBars(
 
 	b, err := json.Marshal(progressBars)
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	_, err = w.Write(b)
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -1125,17 +1219,20 @@ func (m *Monitor) listResources(w http.ResponseWriter, _ *http.Request) {
 
 	proc, err := process.NewProcess(int32(pid))
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	cpuPercent, err := proc.CPUPercent()
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	memorySize, err := proc.MemoryInfo()
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	rsp := resourceRsp{
@@ -1145,12 +1242,14 @@ func (m *Monitor) listResources(w http.ResponseWriter, _ *http.Request) {
 
 	b, err := json.Marshal(rsp)
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	_, err = w.Write(b)
 	if err != nil {
-		log.Panic(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -1382,4 +1481,15 @@ func readAll(f http.File) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+// beginWork closes admission before StopServer joins requests and run workers.
+func (m *Monitor) beginWork() bool {
+	m.workMu.Lock()
+	defer m.workMu.Unlock()
+	if m.stopping {
+		return false
+	}
+	m.work.Add(1)
+	return true
 }

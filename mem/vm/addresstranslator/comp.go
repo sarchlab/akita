@@ -112,6 +112,7 @@ func msgToIncomingReqState(msg messaging.Msg) incomingReqState {
 }
 
 func createTranslatedReq(
+	ids timing.IDGenerator,
 	reqState incomingReqState,
 	page vm.Page,
 	log2PageSize uint64,
@@ -124,7 +125,7 @@ func createTranslatedReq(
 	switch reqState.Type {
 	case "memprotocol.ReadReq":
 		clone := memprotocol.ReadReq{}
-		clone.ID = timing.GetIDGenerator().Generate()
+		clone.ID = ids.Generate()
 		clone.Src = bottomPortRemote
 		clone.Dst = memProviderMapper.Find(addr)
 		clone.Address = addr
@@ -136,7 +137,7 @@ func createTranslatedReq(
 		return clone
 	case "memprotocol.WriteReq":
 		clone := memprotocol.WriteReq{}
-		clone.ID = timing.GetIDGenerator().Generate()
+		clone.ID = ids.Generate()
 		clone.Src = bottomPortRemote
 		clone.Dst = memProviderMapper.Find(addr)
 		clone.Data = reqState.Data

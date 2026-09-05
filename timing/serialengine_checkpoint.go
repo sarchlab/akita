@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sync/atomic"
 )
 
 // serialEngineCheckpoint is the serialized form of the engine: its current time
@@ -17,6 +18,11 @@ type serialEngineCheckpoint struct {
 
 // SaveCheckpoint writes the engine's current time and queued events.
 func (e *SerialEngine) SaveCheckpoint(w io.Writer) error {
+	if err := e.supervisor.Err(); err != nil {
+		return err
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	primary, err := eventCodec.EncodeSlice(e.queue.snapshot())
 	if err != nil {
 		return err
@@ -37,7 +43,26 @@ func (e *SerialEngine) SaveCheckpoint(w io.Writer) error {
 // rebuilt engine, whose queues must already be empty. Events are restored in
 // pop order so the (time, sequence) ordering is reproduced, and each event's
 // handler must already be registered.
-func (e *SerialEngine) LoadCheckpoint(r io.Reader) error {
+func (e *SerialEngine) LoadCheckpoint(r io.Reader) (err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			e.supervisor.Fail("restore engine", p)
+			err = e.supervisor.Err()
+		}
+		if err != nil {
+			e.supervisor.Fail("restore engine", err)
+		}
+	}()
+	if !e.supervisor.Fresh() {
+		return fmt.Errorf("timing: restore requires a fresh engine")
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.restored {
+		return fmt.Errorf("timing: engine has already attempted a restore")
+	}
+	e.restored = true
 	if e.queue.Len() != 0 || e.secondaryQueue.Len() != 0 {
 		return fmt.Errorf(
 			"timing: cannot load a checkpoint into a non-empty serial engine queue")
@@ -57,9 +82,19 @@ func (e *SerialEngine) LoadCheckpoint(r io.Reader) error {
 		return err
 	}
 
+	for _, evt := range primary {
+		if evt.IsSecondary() || evt.Time() < dto.Time {
+			return fmt.Errorf("timing: invalid primary checkpoint event")
+		}
+	}
+	for _, evt := range secondary {
+		if !evt.IsSecondary() || evt.Time() < dto.Time {
+			return fmt.Errorf("timing: invalid secondary checkpoint event")
+		}
+	}
 	e.queue.restore(primary)
 	e.secondaryQueue.restore(secondary)
-	e.time = dto.Time
+	atomic.StoreUint64((*uint64)(&e.time), uint64(dto.Time))
 
 	return nil
 }

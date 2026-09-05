@@ -31,14 +31,14 @@ type readRsp struct {
 	messaging.MsgMeta
 }
 
-func newReq(src, dst messaging.RemotePort) readReq {
+func newReq(ids timing.IDGenerator, src, dst messaging.RemotePort) readReq {
 	return readReq{MsgMeta: messaging.MsgMeta{
-		ID: timing.GetIDGenerator().Generate(), Src: src, Dst: dst}}
+		ID: ids.Generate(), Src: src, Dst: dst}}
 }
 
-func newRsp(src, dst messaging.RemotePort, rspTo uint64) readRsp {
+func newRsp(ids timing.IDGenerator, src, dst messaging.RemotePort, rspTo uint64) readRsp {
 	return readRsp{MsgMeta: messaging.MsgMeta{
-		ID: timing.GetIDGenerator().Generate(), Src: src, Dst: dst, RspTo: rspTo}}
+		ID: ids.Generate(), Src: src, Dst: dst, RspTo: rspTo}}
 }
 
 // --- Client ---
@@ -69,7 +69,7 @@ func (m *clientMW) send() bool {
 		return false
 	}
 
-	req := newReq(port.AsRemote(), s.Dst)
+	req := newReq(m.comp.IDGenerator(), port.AsRemote(), s.Dst)
 	tracing.TraceReqInitiate(m.comp, req, 0) // root task, no parent
 	port.Send(req)
 	m.inFlight[req.ID] = req
@@ -136,7 +136,7 @@ func (m *cacheMW) forwardDown() bool {
 	tracing.TraceReqReceive(m.comp, upReq) // req_in @ this cache
 
 	// Miss: send a request one level down, parented to the task above.
-	downReq := newReq(bottom.AsRemote(), m.comp.State.DownstreamDst)
+	downReq := newReq(m.comp.IDGenerator(), bottom.AsRemote(), m.comp.State.DownstreamDst)
 	tracing.TraceReqInitiate(m.comp, downReq, tracing.MsgIDAtReceiver(upReq, m.comp))
 	bottom.Send(downReq)
 
@@ -162,7 +162,7 @@ func (m *cacheMW) respondUp() bool {
 
 	tracing.TraceReqFinalize(m.comp, txn.downReq) // close the downstream task
 
-	upRsp := newRsp(top.AsRemote(), txn.upReq.Src, txn.upReq.ID)
+	upRsp := newRsp(m.comp.IDGenerator(), top.AsRemote(), txn.upReq.Src, txn.upReq.ID)
 	top.Send(upRsp)
 	tracing.TraceReqComplete(m.comp, txn.upReq) // close the handling task
 
@@ -191,7 +191,7 @@ func (m *memMW) Tick() bool {
 	req := msg.(readReq)
 
 	tracing.TraceReqReceive(m.comp, req) // req_in @ Memory — a leaf task
-	port.Send(newRsp(port.AsRemote(), req.Src, req.ID))
+	port.Send(newRsp(m.comp.IDGenerator(), port.AsRemote(), req.Src, req.ID))
 	tracing.TraceReqComplete(m.comp, req)
 	port.RetrieveIncoming()
 	return true

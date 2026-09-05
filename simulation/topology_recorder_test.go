@@ -70,7 +70,10 @@ func TestTopologyRecorderRecordsComponentSpecs(t *testing.T) {
 	os.Remove(dbFile)
 	defer os.Remove(dbFile)
 
-	recorder := datarecording.NewDataRecorder(path)
+	recorder, err := datarecording.NewDataRecorder(path)
+	if err != nil {
+		panic(err)
+	}
 	r := newTopologyRecorder(recorder)
 
 	components := []Component{
@@ -107,7 +110,10 @@ func TestTopologyRecorderRecordsPorts(t *testing.T) {
 	os.Remove(dbFile)
 	defer os.Remove(dbFile)
 
-	recorder := datarecording.NewDataRecorder(path)
+	recorder, err := datarecording.NewDataRecorder(path)
+	if err != nil {
+		panic(err)
+	}
 	r := newTopologyRecorder(recorder)
 
 	connA := &namedEntity{name: "ConnA"}
@@ -155,7 +161,10 @@ func readComponentSpecs(
 ) map[string]componentSpecEntry {
 	t.Helper()
 
-	reader := datarecording.NewReader(dbFile)
+	reader, err := datarecording.NewReader(dbFile)
+	if err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 	reader.MapTable(componentSpecTableName, componentSpecEntry{})
 
@@ -183,7 +192,10 @@ func readPorts(
 ) []portEntry {
 	t.Helper()
 
-	reader := datarecording.NewReader(dbFile)
+	reader, err := datarecording.NewReader(dbFile)
+	if err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 	reader.MapTable(portTableName, portEntry{})
 

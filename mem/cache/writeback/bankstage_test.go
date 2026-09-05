@@ -105,7 +105,7 @@ var _ = Describe("Bank Stage", func() {
 			storage.Write(0x40, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 
 			read := memprotocol.ReadReq{}
-			read.ID = timing.GetIDGenerator().Generate()
+			read.ID = testIDs.Generate()
 			read.Src = messaging.RemotePort("Agent")
 			read.Address = 0x104
 			read.AccessByteSize = 4
@@ -164,7 +164,7 @@ var _ = Describe("Bank Stage", func() {
 			block.IsLocked = true
 
 			write := memprotocol.WriteReq{}
-			write.ID = timing.GetIDGenerator().Generate()
+			write.ID = testIDs.Generate()
 			write.Src = messaging.RemotePort("Agent")
 			write.Address = 0x104
 			write.Data = []byte{5, 6, 7, 8}
@@ -200,7 +200,7 @@ var _ = Describe("Bank Stage", func() {
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
-			data, _ := storage.Read(0x44, 4)
+			data := storage.Read(0x44, 4)
 			Expect(data).To(Equal([]byte{5, 6, 7, 8}))
 			next := &m.comp.State
 			block := &next.DirectoryState.Sets[0].Blocks[0]
@@ -252,7 +252,7 @@ var _ = Describe("Bank Stage", func() {
 
 			Expect(ret).To(BeTrue())
 			next := &m.comp.State
-			writtenData, _ := storage.Read(0x40, 64)
+			writtenData := storage.Read(0x40, 64)
 			Expect(writtenData).To(Equal(next.Transactions[0].MSHRData))
 			block := &next.DirectoryState.Sets[0].Blocks[0]
 			Expect(block.IsLocked).To(BeFalse())

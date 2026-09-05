@@ -9,7 +9,6 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -76,7 +75,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		// ID rides on the item through the pipeline and is closed at finalize.
 		tracing.TraceReqReceive(m.comp, msg)
 
-		pipelineTaskID := timing.GetIDGenerator().Generate()
+		pipelineTaskID := m.comp.IDGenerator().Generate()
 		tracing.StartTask(m.comp, tracing.TaskStart{
 			ID:       pipelineTaskID,
 			ParentID: tracing.MsgIDAtReceiver(msg, m.comp),

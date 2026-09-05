@@ -211,7 +211,7 @@ func (t *DBTracer) EndTask(task TaskEnd) {
 		StartTime: float64(originalTask.StartTime),
 		EndTime:   float64(originalTask.EndTime),
 	}
-	t.backend.InsertData(traceTableName, entry)
+	datarecording.MustRecord(t.backend.InsertData(traceTableName, entry))
 
 	// Write milestones to the milestone table. A milestone's location is
 	// the task's location, recovered by readers via the TaskID join.
@@ -223,7 +223,7 @@ func (t *DBTracer) EndTask(task TaskEnd) {
 			Kind:   string(m.Kind),
 			What:   m.What,
 		}
-		t.backend.InsertData(milestoneTableName, milestoneEntry)
+		datarecording.MustRecord(t.backend.InsertData(milestoneTableName, milestoneEntry))
 	}
 
 	// Write tags to the tag table.
@@ -234,7 +234,7 @@ func (t *DBTracer) EndTask(task TaskEnd) {
 			Time:   float64(tag.Time),
 			What:   tag.What,
 		}
-		t.backend.InsertData(tagTableName, tagEntry)
+		datarecording.MustRecord(t.backend.InsertData(tagTableName, tagEntry))
 	}
 }
 
@@ -267,7 +267,7 @@ func (t *DBTracer) Terminate() {
 	defer t.mu.Unlock()
 
 	t.tracingTasks = nil
-	t.backend.Flush()
+	datarecording.MustRecord(t.backend.Flush())
 }
 
 func captureBacktrace() string {
@@ -304,12 +304,12 @@ func (t *DBTracer) StopTracing() {
 		StartTime: float64(t.tracingStartTime),
 		EndTime:   float64(endTime),
 	}
-	t.backend.InsertData(segmentTableName, segment)
+	datarecording.MustRecord(t.backend.InsertData(segmentTableName, segment))
 
 	t.isTracing = false
 
 	// Flush to ensure all data is written to database immediately
-	t.backend.Flush()
+	datarecording.MustRecord(t.backend.Flush())
 }
 
 // NewDBTracer creates a new DBTracer.
@@ -317,10 +317,10 @@ func NewDBTracer(
 	timeTeller timing.TimeTeller,
 	dataRecorder datarecording.DataRecorder,
 ) *DBTracer {
-	dataRecorder.CreateTable(traceTableName, taskTableEntry{})
-	dataRecorder.CreateTable(milestoneTableName, milestoneTableEntry{})
-	dataRecorder.CreateTable(tagTableName, tagTableEntry{})
-	dataRecorder.CreateTable(segmentTableName, segmentTableEntry{})
+	datarecording.MustRecord(dataRecorder.CreateTable(traceTableName, taskTableEntry{}))
+	datarecording.MustRecord(dataRecorder.CreateTable(milestoneTableName, milestoneTableEntry{}))
+	datarecording.MustRecord(dataRecorder.CreateTable(tagTableName, tagTableEntry{}))
+	datarecording.MustRecord(dataRecorder.CreateTable(segmentTableName, segmentTableEntry{}))
 
 	t := &DBTracer{
 		timeTeller:   timeTeller,

@@ -55,7 +55,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// Bottom port and opens both the top req_in and the forwarded req_out, then
 	// waits on the bottom response — which never comes, so the walk is in flight.
 	req := vmprotocol.TranslationReq{}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = testIDs.Generate()
 	req.Src = messaging.RemotePort("Requester")
 	req.Dst = topPort.AsRemote()
 	req.PID = 1
@@ -91,7 +91,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the walk is in flight (bottom response deliberately withheld).
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = timing.GetIDGenerator().Generate()
+	reset.ID = testIDs.Generate()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = controlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

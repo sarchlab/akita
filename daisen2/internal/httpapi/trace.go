@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -27,7 +28,12 @@ func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, s.traceReader.ListTasks(r.Context(), query))
+	tasks, err := s.traceReader.ListTasks(r.Context(), query)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, tasks)
 }
 
 // buildTraceQuery parses the /api/trace request parameters into a TaskQuery.
@@ -255,8 +261,12 @@ func (r *SQLiteTraceReader) ensureIndex(ctx context.Context, activityLabel, ddl 
 	}
 
 	id := r.activity.Begin("index", activityLabel, "covering index")
-	_, _ = r.ExecContext(context.WithoutCancel(ctx), ddl)
+	_, err := r.ExecContext(ctx, ddl)
 	r.activity.End(id)
+	if err != nil {
+		log.Printf("optional trace index: %v", err)
+		return
+	}
 
 	if name != "" {
 		r.builtIndexes.Store(name, struct{}{})
@@ -278,19 +288,25 @@ func NewSQLiteTraceReader(filename string) *SQLiteTraceReader {
 }
 
 // Init establishes a connection to the database.
-func (r *SQLiteTraceReader) Init() {
+func (r *SQLiteTraceReader) Init() error {
 	db, err := sql.Open("sqlite3", r.filename)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	// Enable WAL mode for concurrent read access.
 	_, err = db.Exec("PRAGMA journal_mode=WAL")
 	if err != nil {
-		panic(err)
+		_ = db.Close()
+		return err
 	}
 
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return err
+	}
 	r.DB = db
+	return nil
 }
 
 // InitReadOnly establishes a read-only connection to the database. It is used to
@@ -299,13 +315,18 @@ func (r *SQLiteTraceReader) Init() {
 // mode itself. With the native driver "mode=ro" is a true read-only open, so
 // setting WAL here would fail on any non-WAL file and panic — hence no such
 // pragma below.
-func (r *SQLiteTraceReader) InitReadOnly() {
+func (r *SQLiteTraceReader) InitReadOnly() error {
 	db, err := sql.Open("sqlite3", r.filename+"?mode=ro")
 	if err != nil {
-		panic(err)
+		return err
 	}
 
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return err
+	}
 	r.DB = db
+	return nil
 }
 
 func naturalLess(a, b string) bool {
@@ -331,7 +352,10 @@ func naturalLess(a, b string) bool {
 }
 
 // ListComponents returns a list of components in the trace.
-func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
+func (r *SQLiteTraceReader) ListComponents(ctx context.Context) ([]string, error) {
+	return readTrace(ctx, func() []string { return r.listComponents(ctx) })
+}
+func (r *SQLiteTraceReader) listComponents(ctx context.Context) []string {
 	var components []string
 
 	// The shared location table holds exactly the set of component names used
@@ -341,13 +365,13 @@ func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
 		if ctx.Err() != nil {
 			return nil
 		}
-		panic(err)
+		panic(traceReadError{err})
 	}
 
 	defer func() {
 		err := rows.Close()
 		if err != nil && ctx.Err() == nil {
-			panic(err)
+			panic(traceReadError{err})
 		}
 	}()
 
@@ -359,7 +383,7 @@ func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
 			if ctx.Err() != nil {
 				return nil
 			}
-			panic(err)
+			panic(traceReadError{err})
 		}
 
 		components = append(components, component)
@@ -368,7 +392,7 @@ func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
 		if ctx.Err() != nil {
 			return nil
 		}
-		panic(err)
+		panic(traceReadError{err})
 	}
 
 	sort.Slice(components, func(i, j int) bool {
@@ -417,14 +441,17 @@ func (r *SQLiteTraceReader) ensureTaskQueryIndexes(ctx context.Context, query Ta
 	}
 }
 
-func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Task {
+func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) ([]Task, error) {
+	return readTrace(ctx, func() []Task { return r.listTasks(ctx, query) })
+}
+func (r *SQLiteTraceReader) listTasks(ctx context.Context, query TaskQuery) []Task {
 	r.ensureTaskQueryIndexes(ctx, query)
 
 	sqlStr, args := r.prepareTaskQueryStr(query)
 
 	rows, err := r.QueryContext(ctx, sqlStr, args...)
 	if err != nil {
-		panic(err)
+		panic(traceReadError{err})
 	}
 
 	defer rows.Close()
@@ -439,7 +466,7 @@ func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Ta
 		if ctx.Err() != nil {
 			return tasks
 		}
-		panic(err)
+		panic(traceReadError{err})
 	}
 
 	if query.EnableMilestones {
@@ -492,7 +519,7 @@ func (r *SQLiteTraceReader) listTaskIntervals(
 		if ctx.Err() != nil {
 			return nil
 		}
-		panic(err)
+		panic(traceReadError{err})
 	}
 	defer rows.Close()
 
@@ -503,7 +530,7 @@ func (r *SQLiteTraceReader) listTaskIntervals(
 			if ctx.Err() != nil {
 				return tasks
 			}
-			panic(err)
+			panic(traceReadError{err})
 		}
 		tasks = append(tasks, Task{
 			StartTime: timing.VTimeInPicoSec(s),
@@ -514,7 +541,7 @@ func (r *SQLiteTraceReader) listTaskIntervals(
 		if ctx.Err() != nil {
 			return tasks
 		}
-		panic(err)
+		panic(traceReadError{err})
 	}
 
 	return tasks
@@ -532,7 +559,15 @@ func sortTaskSteps(tasks []Task) {
 }
 
 // TimeRange returns the min task start time and max task end time in the trace.
-func (r *SQLiteTraceReader) TimeRange(ctx context.Context) (TraceTimeRange, bool) {
+func (r *SQLiteTraceReader) TimeRange(ctx context.Context) (TraceTimeRange, bool, error) {
+	type result struct {
+		value TraceTimeRange
+		found bool
+	}
+	value, err := readTrace(ctx, func() result { v, ok := r.timeRange(ctx); return result{v, ok} })
+	return value.value, value.found, err
+}
+func (r *SQLiteTraceReader) timeRange(ctx context.Context) (TraceTimeRange, bool) {
 	if timeRange, ok := r.execInfoTimeRange(ctx); ok {
 		return timeRange, true
 	}
@@ -545,7 +580,7 @@ func (r *SQLiteTraceReader) TimeRange(ctx context.Context) (TraceTimeRange, bool
 		if ctx.Err() != nil {
 			return TraceTimeRange{}, false
 		}
-		panic(err)
+		panic(traceReadError{err})
 	}
 
 	if !startTime.Valid || !endTime.Valid || startTime.Float64 >= endTime.Float64 {
@@ -559,13 +594,22 @@ func (r *SQLiteTraceReader) TimeRange(ctx context.Context) (TraceTimeRange, bool
 }
 
 func (r *SQLiteTraceReader) execInfoTimeRange(ctx context.Context) (TraceTimeRange, bool) {
+	var exists int
+	if err := r.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='exec_info'",
+	).Scan(&exists); err != nil {
+		panic(traceReadError{err})
+	}
+	if exists == 0 {
+		return TraceTimeRange{}, false
+	}
 	rows, err := r.QueryContext(ctx, `
 		SELECT Property, Value
 		FROM exec_info
 		WHERE Property IN ('Start Virtual Time', 'End Virtual Time')
 	`)
 	if err != nil {
-		return TraceTimeRange{}, false
+		panic(traceReadError{err})
 	}
 	defer rows.Close()
 
@@ -575,12 +619,12 @@ func (r *SQLiteTraceReader) execInfoTimeRange(ctx context.Context) (TraceTimeRan
 		var property, value string
 		err := rows.Scan(&property, &value)
 		if err != nil {
-			return TraceTimeRange{}, false
+			panic(traceReadError{err})
 		}
 
 		parsed, err := strconv.ParseFloat(value, 64)
 		if err != nil {
-			return TraceTimeRange{}, false
+			panic(traceReadError{err})
 		}
 
 		switch property {
@@ -593,7 +637,7 @@ func (r *SQLiteTraceReader) execInfoTimeRange(ctx context.Context) (TraceTimeRan
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return TraceTimeRange{}, false
+		panic(traceReadError{err})
 	}
 
 	if !hasStart || !hasEnd || timeRange.StartTime >= timeRange.EndTime {
@@ -609,7 +653,11 @@ func (s *Server) httpTraceTimeRange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	timeRange, ok := s.traceReader.TimeRange(r.Context())
+	timeRange, ok, err := s.traceReader.TimeRange(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if !ok {
 		http.Error(w, "trace time range not available", http.StatusNotFound)
 		return
@@ -671,7 +719,7 @@ func (r *SQLiteTraceReader) loadMilestoneBatch(ctx context.Context, taskMap map[
 		if ctx.Err() != nil || strings.Contains(err.Error(), "no such table") {
 			return
 		}
-		panic(err)
+		panic(traceReadError{err})
 	}
 	defer rows.Close()
 
@@ -685,7 +733,7 @@ func (r *SQLiteTraceReader) loadMilestoneBatch(ctx context.Context, taskMap map[
 			if ctx.Err() != nil {
 				return
 			}
-			panic(err)
+			panic(traceReadError{err})
 		}
 
 		if task, exists := taskMap[taskID]; exists {
@@ -701,7 +749,7 @@ func (r *SQLiteTraceReader) loadMilestoneBatch(ctx context.Context, taskMap map[
 		if ctx.Err() != nil {
 			return
 		}
-		panic(err)
+		panic(traceReadError{err})
 	}
 }
 
@@ -755,7 +803,7 @@ func (r *SQLiteTraceReader) loadTagBatch(ctx context.Context, taskMap map[uint64
 		if ctx.Err() != nil || strings.Contains(err.Error(), "no such table") {
 			return
 		}
-		panic(err)
+		panic(traceReadError{err})
 	}
 	defer rows.Close()
 
@@ -769,7 +817,7 @@ func (r *SQLiteTraceReader) loadTagBatch(ctx context.Context, taskMap map[uint64
 			if ctx.Err() != nil {
 				return
 			}
-			panic(err)
+			panic(traceReadError{err})
 		}
 
 		if task, exists := taskMap[taskID]; exists {
@@ -784,7 +832,7 @@ func (r *SQLiteTraceReader) loadTagBatch(ctx context.Context, taskMap map[uint64
 		if ctx.Err() != nil {
 			return
 		}
-		panic(err)
+		panic(traceReadError{err})
 	}
 }
 
@@ -802,7 +850,7 @@ func (r *SQLiteTraceReader) scanTaskFromRow(rows *sql.Rows) Task {
 		&endTime,
 	)
 	if err != nil {
-		panic(err)
+		panic(traceReadError{err})
 	}
 
 	t.StartTime = timing.VTimeInPicoSec(uint64(startTime))
@@ -951,15 +999,22 @@ func (r *SQLiteTraceReader) hasSegmentsTable(ctx context.Context) bool {
 	query := `SELECT name FROM sqlite_master WHERE type='table' AND name='daisen$segments'`
 	rows, err := r.QueryContext(ctx, query)
 	if err != nil {
-		return false
+		panic(traceReadError{err})
 	}
 	defer rows.Close()
 
-	return rows.Next()
+	found := rows.Next()
+	if err := rows.Err(); err != nil {
+		panic(traceReadError{err})
+	}
+	return found
 }
 
 // ListSegments returns all segments from the daisen$segments table
-func (r *SQLiteTraceReader) ListSegments(ctx context.Context) SegmentsResponse {
+func (r *SQLiteTraceReader) ListSegments(ctx context.Context) (SegmentsResponse, error) {
+	return readTrace(ctx, func() SegmentsResponse { return r.listSegments(ctx) })
+}
+func (r *SQLiteTraceReader) listSegments(ctx context.Context) SegmentsResponse {
 	response := SegmentsResponse{
 		Enabled:  false,
 		Segments: []Segment{},
@@ -974,7 +1029,7 @@ func (r *SQLiteTraceReader) ListSegments(ctx context.Context) SegmentsResponse {
 	query := `SELECT StartTime, EndTime FROM "daisen$segments" ORDER BY StartTime`
 	rows, err := r.QueryContext(ctx, query)
 	if err != nil {
-		return response
+		panic(traceReadError{err})
 	}
 	defer rows.Close()
 
@@ -982,12 +1037,12 @@ func (r *SQLiteTraceReader) ListSegments(ctx context.Context) SegmentsResponse {
 		var segment Segment
 		err := rows.Scan(&segment.StartTime, &segment.EndTime)
 		if err != nil {
-			continue
+			panic(traceReadError{err})
 		}
 		response.Segments = append(response.Segments, segment)
 	}
 	if err := rows.Err(); err != nil {
-		return response
+		panic(traceReadError{err})
 	}
 
 	return response
@@ -999,5 +1054,10 @@ func (s *Server) httpSegments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, s.traceReader.ListSegments(r.Context()))
+	segments, err := s.traceReader.ListSegments(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, segments)
 }

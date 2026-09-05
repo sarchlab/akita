@@ -59,11 +59,16 @@ func (p *defaultPort) LoadCheckpoint(r io.Reader) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	if err := loadBuffer(&p.incomingBuf, dto.Incoming, p.name, "incoming"); err != nil {
+	incoming, outgoing := p.incomingBuf, p.outgoingBuf
+	if err := loadBuffer(&incoming, dto.Incoming, p.name, "incoming"); err != nil {
 		return err
 	}
 
-	return loadBuffer(&p.outgoingBuf, dto.Outgoing, p.name, "outgoing")
+	if err := loadBuffer(&outgoing, dto.Outgoing, p.name, "outgoing"); err != nil {
+		return err
+	}
+	p.incomingBuf, p.outgoingBuf = incoming, outgoing
+	return nil
 }
 
 // saveBuffer captures a buffer's capacity and its type-tagged contents.
@@ -98,6 +103,9 @@ func loadBuffer(
 		return fmt.Errorf("messaging: port %q %s: %w", portName, label, err)
 	}
 
+	if len(elements) > buf.Capacity() {
+		return fmt.Errorf("messaging: port %q %s exceeds capacity", portName, label)
+	}
 	buf.Restore(elements)
 
 	return nil

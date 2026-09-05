@@ -56,7 +56,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 	It("should send full latency on miss", func() {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("UpModule")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -83,7 +83,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 	It("should reduce latency on upper-level hit", func() {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("UpModule")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -122,10 +122,10 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		rsp := vmprotocol.TranslationRsp{
 			Page: page,
 		}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = testIDs.Generate()
 		rsp.Src = messaging.RemotePort("LowModule")
 		rsp.Dst = bottomPort.AsRemote()
-		rsp.RspTo = timing.GetIDGenerator().Generate()
+		rsp.RspTo = testIDs.Generate()
 		rsp.TrafficClass = "vmprotocol.TranslationRsp"
 		bottomPort.Deliver(rsp)
 
@@ -185,7 +185,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 			Command:   memcontrolprotocol.CmdInvalidate,
 			Addresses: []uint64{dropAddr},
 		}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = controlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"

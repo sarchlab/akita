@@ -6,7 +6,6 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -74,14 +73,11 @@ func (m *respondMW) finalizeWriteTrans(
 	t *transactionState,
 	i int,
 ) bool {
-	err := m.comp.Resources().Storage.Write(
+	m.comp.Resources().Storage.Write(
 		transactionGlobalAddress(t), t.WriteMsg.Data)
-	if err != nil {
-		panic(err)
-	}
 
 	writeDone := memprotocol.WriteDoneRsp{}
-	writeDone.ID = timing.GetIDGenerator().Generate()
+	writeDone.ID = m.comp.IDGenerator().Generate()
 	writeDone.Src = m.topPort().AsRemote()
 	writeDone.Dst = t.WriteMsg.Src
 	writeDone.RspTo = t.WriteMsg.ID
@@ -105,14 +101,11 @@ func (m *respondMW) finalizeReadTrans(
 	t *transactionState,
 	i int,
 ) bool {
-	data, err := m.comp.Resources().Storage.Read(
+	data := m.comp.Resources().Storage.Read(
 		transactionGlobalAddress(t), t.ReadMsg.AccessByteSize)
-	if err != nil {
-		panic(err)
-	}
 
 	dataReady := memprotocol.DataReadyRsp{}
-	dataReady.ID = timing.GetIDGenerator().Generate()
+	dataReady.ID = m.comp.IDGenerator().Generate()
 	dataReady.Src = m.topPort().AsRemote()
 	dataReady.Dst = t.ReadMsg.Src
 	dataReady.Data = data

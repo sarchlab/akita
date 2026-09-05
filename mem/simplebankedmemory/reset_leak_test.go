@@ -62,7 +62,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the read is in flight.
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = timing.GetIDGenerator().Generate()
+	reset.ID = testIDs.Generate()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = ctrlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

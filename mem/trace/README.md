@@ -43,7 +43,10 @@ import (
 )
 
 // Create a data recorder
-dataRecorder := datarecording.NewDataRecorder("memory_trace")
+dataRecorder, err := datarecording.NewDataRecorder("memory_trace")
+if err != nil {
+    return err
+}
 
 // Create the tracer
 memTracer := trace.NewDBTracer(dataRecorder)

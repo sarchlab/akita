@@ -24,8 +24,8 @@ func TestConcurrentRecording(t *testing.T) {
 			t.Cleanup(func() { _ = db.Close() })
 			recorder := NewDataRecorderWithDB(db).(*sqliteWriter)
 			recorder.batchSize = 32
-			recorder.CreateTable("first", concurrentRecord{})
-			recorder.CreateTable("second", concurrentRecord{})
+			MustRecord(recorder.CreateTable("first", concurrentRecord{}))
+			MustRecord(recorder.CreateTable("second", concurrentRecord{}))
 
 			const writers, perWriter = 4, 400
 			start := make(chan struct{})
@@ -41,7 +41,7 @@ func TestConcurrentRecording(t *testing.T) {
 					workers.Go(func() {
 						<-start
 						for range 100 {
-							recorder.Flush()
+							MustRecord(recorder.Flush())
 							runtime.Gosched()
 						}
 					})
@@ -49,8 +49,8 @@ func TestConcurrentRecording(t *testing.T) {
 			}
 			close(start)
 			workers.Wait()
-			recorder.Flush()
-			recorder.Flush() // An empty flush must not replay the last batch.
+			MustRecord(recorder.Flush())
+			MustRecord(recorder.Flush()) // An empty flush must not replay the last batch.
 
 			assertConcurrentRecords(t, db, writers*perWriter)
 			if err := recorder.Close(); err != nil {
@@ -67,9 +67,9 @@ func insertConcurrentRecords(recorder DataRecorder, firstID, count int) {
 		if id%2 != 0 {
 			tableName = "second"
 		}
-		recorder.InsertData(tableName, concurrentRecord{
+		MustRecord(recorder.InsertData(tableName, concurrentRecord{
 			ID: id, Location: fmt.Sprintf("location-%d", id%7),
-		})
+		}))
 		runtime.Gosched()
 	}
 }
@@ -116,17 +116,17 @@ func TestFlushRollsBackAndRetainsBatch(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	recorder := NewDataRecorderWithDB(db)
-	recorder.CreateTable("first", concurrentRecord{})
-	recorder.CreateTable("second", concurrentRecord{})
+	MustRecord(recorder.CreateTable("first", concurrentRecord{}))
+	MustRecord(recorder.CreateTable("second", concurrentRecord{}))
 	_, err = db.Exec(`CREATE TRIGGER reject_row BEFORE INSERT ON first
 		WHEN NEW.ID = 1 BEGIN SELECT RAISE(ABORT, 'test insert failure'); END`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for id := range 2 {
-		recorder.InsertData("first", concurrentRecord{
+		MustRecord(recorder.InsertData("first", concurrentRecord{
 			ID: id, Location: fmt.Sprintf("location-%d", id),
-		})
+		}))
 	}
 	func() {
 		defer func() {
@@ -134,7 +134,7 @@ func TestFlushRollsBackAndRetainsBatch(t *testing.T) {
 				t.Error("Flush did not report the injected insert failure")
 			}
 		}()
-		recorder.Flush()
+		MustRecord(recorder.Flush())
 	}()
 	var count int
 	if err := db.QueryRow("SELECT COUNT(*) FROM first").Scan(&count); err != nil {
@@ -146,7 +146,7 @@ func TestFlushRollsBackAndRetainsBatch(t *testing.T) {
 	if _, err := db.Exec("DROP TRIGGER reject_row"); err != nil {
 		t.Fatal(err)
 	}
-	recorder.Flush()
+	MustRecord(recorder.Flush())
 	assertConcurrentRecords(t, db, 2)
 	if err := recorder.Close(); err != nil {
 		t.Fatal(err)

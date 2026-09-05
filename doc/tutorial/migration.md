@@ -138,18 +138,12 @@ Note the new `SendTaskID` and `RecvTaskID` fields for tracing integration.
 
 ### IDGenerator (V5)
 
-```go
-// v5/sim/idgenerator.go
-type IDGenerator interface {
-    Generate() uint64
-}
-
-// Two implementations: sequential (deterministic) and parallel (non-deterministic).
-sim.UseSequentialIDGenerator() // Call before any Generate()
-sim.UseParallelIDGenerator()   // For parallel simulations
-
-id := sim.GetIDGenerator().Generate() // returns uint64
-```
+Each engine owns a concurrent ID sequence and tracing associations. Use
+`sim.GetIDGenerator()` where `sim` is a `*simulation.Simulation`, or
+`timing.IDsFor(engine)` through an engine interface. Pass this owner into event
+and message construction. Process-global generator selection and resets have
+been removed. Custom generators implement `Generate`, `Track`, `Lookup`, and
+`Forget`; see `timing.IDGenerator`.
 
 ### Before / After
 
@@ -193,7 +187,7 @@ if req.ID == 0 { ... }
 - Replace `== ""` / `!= ""` checks with `== 0` / `!= 0`.
 - Replace `fmt.Sprintf`-based ID formatting with `strconv.FormatUint` or `%d`.
 - Update tracing task ID comparisons from string to uint64.
-- Checkpoint/restore: use `GetIDGeneratorNextID()` / `SetIDGeneratorNextID()` to snapshot generator state.
+- Checkpoint/restore: the simulation snapshots its owned generator. Restore into a fresh simulation; do not reset a process-global counter.
 
 ---
 

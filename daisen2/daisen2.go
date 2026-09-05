@@ -6,6 +6,6 @@ import "github.com/sarchlab/akita/v5/daisen2/internal/httpapi"
 type ProgressBar = httpapi.ProgressBar
 type Server = httpapi.Server
 
-func NewReplayServer(sqliteFile, addr string) *Server {
+func NewReplayServer(sqliteFile, addr string) (*Server, error) {
 	return httpapi.NewReplayServer(sqliteFile, addr)
 }

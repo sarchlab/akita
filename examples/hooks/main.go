@@ -73,7 +73,7 @@ func (m *agentMW) send() bool {
 		p := s.Pending[0]
 		port.Send(pingRsp{
 			MsgMeta: messaging.MsgMeta{
-				ID:    timing.GetIDGenerator().Generate(),
+				ID:    m.comp.IDGenerator().Generate(),
 				Src:   port.AsRemote(),
 				Dst:   p.Dst,
 				RspTo: p.ReqID,
@@ -87,7 +87,7 @@ func (m *agentMW) send() bool {
 	if s.PingsToSend > 0 && port.CanSend() {
 		port.Send(pingReq{
 			MsgMeta: messaging.MsgMeta{
-				ID:  timing.GetIDGenerator().Generate(),
+				ID:  m.comp.IDGenerator().Generate(),
 				Src: port.AsRemote(),
 				Dst: s.PingDst,
 			},

@@ -57,7 +57,7 @@ var _ = Describe("TLB control behavior", func() {
 
 	makeLookup := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -69,7 +69,7 @@ var _ = Describe("TLB control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = controlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -89,7 +89,7 @@ var _ = Describe("TLB control behavior", func() {
 			Valid: true,
 		}
 		rsp := vmprotocol.TranslationRsp{Page: page}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = testIDs.Generate()
 		rsp.Src = remotePort
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = req.ID

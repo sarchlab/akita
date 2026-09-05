@@ -35,7 +35,13 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 		timeTeller = &testTimeTeller{}
 		dbPath = "test_trace_milestone"
 		os.Remove(dbPath + ".sqlite3")
-		dataRecorder = datarecording.NewDataRecorder(dbPath)
+		{
+			var err error
+			dataRecorder, err = datarecording.NewDataRecorder(dbPath)
+			if err != nil {
+				panic(err)
+			}
+		}
 		tracer = NewDBTracer(timeTeller, dataRecorder)
 	})
 

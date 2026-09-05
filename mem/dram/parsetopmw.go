@@ -8,7 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -39,7 +38,7 @@ func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
 		return false
 	}
 
-	ts := transactionState{ID: timing.GetIDGenerator().Generate()}
+	ts := transactionState{ID: m.comp.IDGenerator().Generate()}
 
 	switch msg := msgI.(type) {
 	case memprotocol.ReadReq:
@@ -54,7 +53,7 @@ func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
 
 	// Split into sub-transactions
 	transIdx := len(next.Transactions)
-	splitTransaction(spec, &ts)
+	splitTransaction(m.comp.IDGenerator(), spec, &ts)
 
 	if !canPushSubTrans(next, len(ts.SubTransactions),
 		spec.TransactionQueueSize) {

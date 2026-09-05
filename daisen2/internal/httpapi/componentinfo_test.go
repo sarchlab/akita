@@ -12,7 +12,9 @@ func newTestTraceReader(t *testing.T) *SQLiteTraceReader {
 
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	t.Cleanup(func() {
 		_ = reader.Close()
 	})
@@ -235,7 +237,10 @@ func TestListTasksLoadsMilestonesOnlyWhenRequested(t *testing.T) {
 	reader := newTestTraceReader(t)
 	insertTraceRows(t, reader)
 
-	tasks := reader.ListTasks(context.Background(), TaskQuery{Where: "A"})
+	tasks, readErr := reader.ListTasks(context.Background(), TaskQuery{Where: "A"})
+	if readErr != nil {
+		panic(readErr)
+	}
 	if len(tasks) == 0 {
 		t.Fatal("expected tasks")
 	}
@@ -243,7 +248,13 @@ func TestListTasksLoadsMilestonesOnlyWhenRequested(t *testing.T) {
 		t.Fatalf("milestones loaded without EnableMilestones: %+v", tasks[0].Steps)
 	}
 
-	tasks = reader.ListTasks(context.Background(), TaskQuery{Where: "A", EnableMilestones: true})
+	{
+		var readErr error
+		tasks, readErr = reader.ListTasks(context.Background(), TaskQuery{Where: "A", EnableMilestones: true})
+		if readErr != nil {
+			panic(readErr)
+		}
+	}
 	if len(tasks[0].Steps) != 1 {
 		t.Fatalf("expected one milestone, got %+v", tasks[0].Steps)
 	}

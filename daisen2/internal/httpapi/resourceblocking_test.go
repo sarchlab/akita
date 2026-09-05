@@ -13,7 +13,9 @@ import (
 func TestResourceBlockingOccupancy(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	exec := func(q string) {
@@ -60,7 +62,9 @@ func TestResourceBlockingOccupancy(t *testing.T) {
 func TestTasksBlockingOn(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	exec := func(q string) {
@@ -85,7 +89,10 @@ func TestTasksBlockingOn(t *testing.T) {
 		(3, 3, 30, 'hardware_resource', 'R2'),
 		(4, 4, 40, 'hardware_resource', 'R1')`)
 
-	tasks := reader.TasksBlockingOn(context.Background(), "R1", 0, 100, 10)
+	tasks, readErr := reader.TasksBlockingOn(context.Background(), "R1", 0, 100, 10)
+	if readErr != nil {
+		panic(readErr)
+	}
 
 	if len(tasks) != 2 {
 		t.Fatalf("expected 2 tasks blocked on R1, got %d: %+v", len(tasks), tasks)

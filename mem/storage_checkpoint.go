@@ -70,11 +70,17 @@ func (s *Storage) LoadCheckpoint(r io.Reader) error {
 		return err
 	}
 
-	data := make(map[uint64]*storageUnit, numUnits)
+	if s.unitSize == 0 || (numUnits > 0 && (s.capacity == 0 || numUnits > 1+(s.capacity-1)/s.unitSize)) {
+		return fmt.Errorf("mem: invalid storage unit count")
+	}
+	data := make(map[uint64]*storageUnit)
 	for i := uint64(0); i < numUnits; i++ {
 		addr, err := readUint64(r)
 		if err != nil {
 			return err
+		}
+		if addr >= s.capacity || addr%s.unitSize != 0 || data[addr] != nil {
+			return fmt.Errorf("mem: invalid or duplicate storage unit address %d", addr)
 		}
 		unit := newStorageUnit(s.unitSize)
 		if _, err := io.ReadFull(r, unit.data); err != nil {

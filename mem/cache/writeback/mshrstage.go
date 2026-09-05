@@ -2,7 +2,6 @@ package writeback
 
 import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -102,7 +101,7 @@ func (s *mshrStage) respondRead(
 	_, offset := getCacheLineID(trans.ReadAddress, log2BlockSize)
 	respondData := data[offset : offset+trans.ReadAccessByteSize]
 	dataReady := memprotocol.DataReadyRsp{}
-	dataReady.ID = timing.GetIDGenerator().Generate()
+	dataReady.ID = s.cache.comp.IDGenerator().Generate()
 	dataReady.Src = s.cache.topPort().AsRemote()
 	dataReady.Dst = trans.ReadMeta.Src
 	dataReady.RspTo = trans.ReadMeta.ID
@@ -126,7 +125,7 @@ func (s *mshrStage) respondRead(
 
 func (s *mshrStage) respondWrite(trans *transactionState) {
 	writeDoneRsp := memprotocol.WriteDoneRsp{}
-	writeDoneRsp.ID = timing.GetIDGenerator().Generate()
+	writeDoneRsp.ID = s.cache.comp.IDGenerator().Generate()
 	writeDoneRsp.Src = s.cache.topPort().AsRemote()
 	writeDoneRsp.Dst = trans.WriteMeta.Src
 	writeDoneRsp.RspTo = trans.WriteMeta.ID

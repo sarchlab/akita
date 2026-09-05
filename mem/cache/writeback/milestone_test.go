@@ -157,7 +157,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 			})
 
 			read := memprotocol.ReadReq{}
-			read.ID = timing.GetIDGenerator().Generate()
+			read.ID = testIDs.Generate()
 			read.Src = agentPort.AsRemote()
 			read.Dst = topPort.AsRemote()
 			read.Address = 0x10004
@@ -215,7 +215,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 			})
 
 			read := memprotocol.ReadReq{}
-			read.ID = timing.GetIDGenerator().Generate()
+			read.ID = testIDs.Generate()
 			read.Src = agentPort.AsRemote()
 			read.Dst = topPort.AsRemote()
 			read.Address = 0x10004

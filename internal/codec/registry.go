@@ -16,6 +16,7 @@
 package codec
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -116,6 +117,9 @@ func (r *Registry[T]) Tags() []string {
 func (r *Registry[T]) EncodeSlice(vs []T) (json.RawMessage, error) {
 	payloads := make([]typedPayload, len(vs))
 	for i, v := range vs {
+		if reflect.TypeOf(v) == nil || (reflect.ValueOf(v).Kind() == reflect.Ptr && reflect.ValueOf(v).IsNil()) {
+			return nil, fmt.Errorf("codec: nil %s at index %d", r.label, i)
+		}
 		raw, err := json.Marshal(v)
 		if err != nil {
 			return nil, fmt.Errorf("codec: encode %s %T: %w", r.label, v, err)
@@ -152,6 +156,9 @@ func (r *Registry[T]) DecodeSlice(data json.RawMessage) ([]T, error) {
 
 func (r *Registry[T]) decodeOne(tp typedPayload) (T, error) {
 	var zero T
+	if bytes.Equal(bytes.TrimSpace(tp.Payload), []byte("null")) {
+		return zero, fmt.Errorf("codec: null %s payload", r.label)
+	}
 
 	r.mu.RLock()
 	t, ok := r.types[tp.Type]

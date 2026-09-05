@@ -29,10 +29,10 @@ type PingSpec struct {
 }
 
 type PingState struct {
-	NumPingNeedToSend int                 `json:"num_ping_need_to_send"`
-	NextSeqID         int                 `json:"next_seq_id"`
+	NumPingNeedToSend int                     `json:"num_ping_need_to_send"`
+	NextSeqID         int                     `json:"next_seq_id"`
 	StartTimes        []timing.VTimeInPicoSec `json:"start_times"`
-	CompletedPings    int                 `json:"completed_pings"`
+	CompletedPings    int                     `json:"completed_pings"`
 }
 
 type pingTransaction struct {
@@ -112,7 +112,7 @@ func (m *pingMiddleware) sendRsp() bool {
 
 	rsp := PingRsp{
 		MsgMeta: messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  testIDs.Generate(),
 			Src: m.outPort.AsRemote(),
 			Dst: trans.req.Src,
 		},
@@ -137,7 +137,7 @@ func (m *pingMiddleware) sendPing() bool {
 
 	req := PingReq{
 		MsgMeta: messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  testIDs.Generate(),
 			Src: m.outPort.AsRemote(),
 			Dst: m.pingDst,
 		},

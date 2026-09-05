@@ -46,25 +46,17 @@ func testInvalidStorageRange(t *testing.T, capacity, address, length uint64, ope
 	s := NewStorageWithUnitSize(capacity, 4)
 	original := []byte{1, 2, 3, 4}
 	if capacity >= 4 {
-		if err := s.Write(0, original); err != nil {
-			t.Fatal(err)
-		}
+		s.Write(0, original)
 	}
 	unitsBefore := len(s.data)
 
-	var err error
-	if operation == "read" {
-		var data []byte
-		data, err = s.Read(address, length)
-		if err != nil && data != nil {
-			t.Errorf("rejected read returned data: %v", data)
+	mustPanic(t, func() {
+		if operation == "read" {
+			s.Read(address, length)
+		} else {
+			s.Write(address, make([]byte, length))
 		}
-	} else {
-		err = s.Write(address, make([]byte, length))
-	}
-	if err == nil {
-		t.Error("invalid range succeeded")
-	}
+	})
 	if len(s.data) != unitsBefore {
 		t.Errorf("invalid range allocated units: %d -> %d", unitsBefore, len(s.data))
 	}
@@ -75,10 +67,7 @@ func testInvalidStorageRange(t *testing.T, capacity, address, length uint64, ope
 
 func TestStorageRejectsHugeReadBeforeAllocation(t *testing.T) {
 	s := NewStorageWithUnitSize(10, 4)
-	data, err := s.Read(1, math.MaxUint64)
-	if err == nil || data != nil {
-		t.Fatalf("huge out-of-range read returned (%v, %v)", data, err)
-	}
+	mustPanic(t, func() { s.Read(1, math.MaxUint64) })
 	if len(s.data) != 0 {
 		t.Fatal("rejected read allocated storage units")
 	}
@@ -103,17 +92,25 @@ func TestStorageValidBoundaryRanges(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := NewStorageWithUnitSize(tt.capacity, tt.unitSize)
-			data, err := s.Read(tt.address, uint64(len(tt.data)))
-			if err != nil || !bytes.Equal(data, make([]byte, len(tt.data))) {
-				t.Fatalf("untouched boundary read = (%v, %v)", data, err)
+			data := s.Read(tt.address, uint64(len(tt.data)))
+			if !bytes.Equal(data, make([]byte, len(tt.data))) {
+				t.Fatalf("untouched boundary read = %v", data)
 			}
-			if err := s.Write(tt.address, tt.data); err != nil {
-				t.Fatal(err)
-			}
-			data, err = s.Read(tt.address, uint64(len(tt.data)))
-			if err != nil || !bytes.Equal(data, tt.data) {
-				t.Fatalf("boundary round trip = (%v, %v), want %v", data, err, tt.data)
+			s.Write(tt.address, tt.data)
+			data = s.Read(tt.address, uint64(len(tt.data)))
+			if !bytes.Equal(data, tt.data) {
+				t.Fatalf("boundary round trip = %v, want %v", data, tt.data)
 			}
 		})
 	}
+}
+
+func mustPanic(t *testing.T, fn func()) {
+	t.Helper()
+	defer func() {
+		if recover() == nil {
+			t.Error("expected panic")
+		}
+	}()
+	fn()
 }

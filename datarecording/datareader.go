@@ -56,17 +56,21 @@ type sqliteReader struct {
 }
 
 // NewReader creates a new DataReader
-func NewReader(dbFilename string) DataReader {
+func NewReader(dbFilename string) (DataReader, error) {
 	// Open the database
 	db, err := sql.Open("sqlite", dbFilename)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	return &sqliteReader{
 		DB:      db,
 		typeMap: make(map[string]reflect.Type),
-	}
+	}, nil
 }
 
 // NewReaderWithDB creates a new DataReader with a given database
@@ -128,7 +132,11 @@ func (r *sqliteReader) Query(
 	}
 	defer rows.Close()
 
-	return r.scanRowsToSlice(ctx, rows, structType), totalCount, nil
+	result, err := r.scanRowsToSlice(ctx, rows, structType)
+	if err != nil {
+		return nil, 0, err
+	}
+	return result, totalCount, nil
 }
 
 func (r *sqliteReader) queryTotalCount(
@@ -157,12 +165,12 @@ func (r *sqliteReader) scanRowsToSlice(
 	ctx context.Context,
 	rows *sql.Rows,
 	structType reflect.Type,
-) []any {
+) ([]any, error) {
 	var results []any
 
 	columns, err := rows.Columns()
 	if err != nil {
-		return nil // Error getting columns
+		return nil, err
 	}
 
 	hasLocation := r.checkLocationTag(structType)
@@ -192,11 +200,13 @@ func (r *sqliteReader) scanRowsToSlice(
 
 		err := rows.Scan(scanTargets...)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 
 		if hasLocation {
-			r.restoreStrLocation(ctx, structVal, structType)
+			if err := r.restoreStrLocation(ctx, structVal, structType); err != nil {
+				return nil, err
+			}
 		}
 
 		results = append(results, structPtr.Interface())
@@ -204,10 +214,10 @@ func (r *sqliteReader) scanRowsToSlice(
 
 	err = rows.Err()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return results
+	return results, nil
 }
 
 func (r *sqliteReader) Close() error {
@@ -219,7 +229,7 @@ func (r *sqliteReader) restoreStrLocation(
 	ctx context.Context,
 	structVal reflect.Value,
 	structType reflect.Type,
-) {
+) error {
 	var strLocation string // Retrieves the real location
 
 	for i := 0; i < structType.NumField(); i++ {
@@ -232,11 +242,14 @@ func (r *sqliteReader) restoreStrLocation(
 
 			stmt := fmt.Sprintf("SELECT Locale FROM"+
 				" location WHERE ID = %s", index)
-			r.DB.QueryRowContext(ctx, stmt).Scan(&strLocation)
+			if err := r.DB.QueryRowContext(ctx, stmt).Scan(&strLocation); err != nil {
+				return err
+			}
 
 			fieldVal.SetString(strLocation)
 		}
 	}
+	return nil
 }
 
 // Helper function that checks whehter this struct has location tag

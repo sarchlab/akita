@@ -14,6 +14,7 @@ import (
 // tasks on it). InvokeHook is provided by the embedded HookableBase, which is
 // how CollectTrace forwards events to a tracer.
 type obFakeComp struct {
+	ids timing.IDGenerator
 	hooking.HookableBase
 	name string
 	time timing.VTimeInPicoSec
@@ -51,7 +52,7 @@ type obFakeConn struct {
 	hooking.HookableBase
 }
 
-func (c *obFakeConn) Name() string                  { return "Conn" }
+func (c *obFakeConn) Name() string                   { return "Conn" }
 func (c *obFakeConn) PlugIn(messaging.Port)          {}
 func (c *obFakeConn) Unplug(messaging.Port)          {}
 func (c *obFakeConn) NotifyAvailable(messaging.Port) {}
@@ -153,3 +154,10 @@ var _ = Describe("Outgoing buffer tracer", func() {
 		Expect(tracer.milestones).To(BeEmpty())
 	})
 })
+
+func (d *obFakeComp) IDGenerator() timing.IDGenerator {
+	if d.ids == nil {
+		d.ids = timing.NewIDGenerator()
+	}
+	return d.ids
+}

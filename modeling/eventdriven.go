@@ -22,8 +22,8 @@ type TimerFiredEvent struct {
 }
 
 // MakeTimerFiredEvent creates a new TimerFiredEvent.
-func MakeTimerFiredEvent(handlerID string, time timing.VTimeInPicoSec) TimerFiredEvent {
-	return TimerFiredEvent{EventBase: timing.MakeEventBase(time, handlerID)}
+func MakeTimerFiredEvent(ids timing.IDGenerator, handlerID string, time timing.VTimeInPicoSec) TimerFiredEvent {
+	return TimerFiredEvent{EventBase: timing.MakeEventBase(ids, time, handlerID)}
 }
 
 // EventDrivenComponent is a generic component that reacts to events rather
@@ -77,7 +77,7 @@ func (c *EventDrivenComponent[S, T, R]) ScheduleWakeAt(t timing.VTimeInPicoSec) 
 
 	c.pendingWakeup = t
 
-	c.engine.Schedule(MakeTimerFiredEvent(c.Name(), t))
+	c.engine.Schedule(MakeTimerFiredEvent(c.IDGenerator(), c.Name(), t))
 }
 
 // ScheduleWakeNow schedules a wakeup at the current engine time.
@@ -87,14 +87,14 @@ func (c *EventDrivenComponent[S, T, R]) ScheduleWakeNow() {
 
 // Handle processes an event. For TimerFiredEvent, it resets the dedup guard
 // and calls the processor.
-func (c *EventDrivenComponent[S, T, R]) Handle(e timing.Event) error {
+func (c *EventDrivenComponent[S, T, R]) Handle(e timing.Event) {
 	c.Lock()
 	defer c.Unlock()
 
 	c.pendingWakeup = math.MaxUint64
 	c.processor.Process(c, e.Time())
 
-	return nil
+	return
 }
 
 // NotifyRecv is called when a port receives a message. It schedules an
@@ -107,4 +107,8 @@ func (c *EventDrivenComponent[S, T, R]) NotifyRecv(port messaging.Port) {
 // immediate wakeup.
 func (c *EventDrivenComponent[S, T, R]) NotifyPortFree(port messaging.Port) {
 	c.ScheduleWakeNow()
+}
+
+func (c *EventDrivenComponent[S, T, R]) IDGenerator() timing.IDGenerator {
+	return timing.IDsFor(c.engine)
 }

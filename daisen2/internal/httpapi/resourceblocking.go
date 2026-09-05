@@ -177,9 +177,9 @@ func (r *SQLiteTraceReader) ResourceBlockingOccupancy( //nolint:funlen // one co
 // task's wait for the resource. Used only when the resource's task set is small.
 func (r *SQLiteTraceReader) TasksBlockingOn(
 	ctx context.Context, what string, start, end float64, limit int,
-) []Task {
+) ([]Task, error) {
 	if what == "" || limit < 1 {
-		return []Task{}
+		return []Task{}, nil
 	}
 	r.ensureIndex(ctx, "Building index idx_milestone_Kind_What",
 		"CREATE INDEX IF NOT EXISTS idx_milestone_Kind_What ON milestone(Kind, What, TaskID)")
@@ -213,23 +213,25 @@ func (r *SQLiteTraceReader) TasksBlockingOn(
 		WHERE w = ? AND hi > ? AND lo < ?
 		LIMIT ?`, what, start, end, what, what, start, end, limit)
 	if err != nil {
-		return []Task{}
+		return nil, err
 	}
 
 	ids := []uint64{}
 	for rows.Next() {
 		var id uint64
-		if err := rows.Scan(&id); err == nil {
-			ids = append(ids, id)
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return nil, err
 		}
+		ids = append(ids, id)
 	}
 	if err := rows.Err(); err != nil {
 		_ = rows.Close()
-		return []Task{}
+		return nil, err
 	}
 	_ = rows.Close()
 	if len(ids) == 0 {
-		return []Task{}
+		return []Task{}, nil
 	}
 
 	return r.ListTasks(ctx, TaskQuery{IDs: ids, EnableMilestones: true})
@@ -257,7 +259,12 @@ func (s *Server) httpResourceTasks(w http.ResponseWriter, r *http.Request) {
 			limit = n
 		}
 	}
-	writeJSON(w, s.traceReader.TasksBlockingOn(r.Context(), what, start, end, limit))
+	tasks, err := s.traceReader.TasksBlockingOn(r.Context(), what, start, end, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, tasks)
 }
 
 func (s *Server) httpResourceBlocking(w http.ResponseWriter, r *http.Request) {

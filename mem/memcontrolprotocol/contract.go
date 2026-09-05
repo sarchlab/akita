@@ -326,7 +326,7 @@ func newControlReq(
 	cmd Command,
 ) Req {
 	req := Req{Command: cmd}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = timing.IDsFor(ctrl.Component()).Generate()
 	req.Src = messaging.RemotePort("ContractAgent")
 	req.Dst = ctrl.AsRemote()
 	req.TrafficClass = "Req"

@@ -63,6 +63,8 @@ func main() {
 
 	test.MustHaveReceivedAllMsgs()
 	test.ReportBandwidthAchieved(engine.CurrentTime())
-	sim.Terminate()
+	if err := sim.Terminate(); err != nil {
+		panic(err)
+	}
 	fmt.Println("passed!")
 }

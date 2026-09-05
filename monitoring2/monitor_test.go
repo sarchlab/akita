@@ -802,8 +802,11 @@ func TestHangDetectorBuffersRejectsInvalidSort(t *testing.T) {
 func newTestDBTracer(t *testing.T) *tracing.DBTracer {
 	t.Helper()
 
-	recorder := datarecording.NewDataRecorder(
+	recorder, err := datarecording.NewDataRecorder(
 		filepath.Join(t.TempDir(), "tracer"))
+	if err != nil {
+		panic(err)
+	}
 	t.Cleanup(func() {
 		_ = recorder.Close()
 	})

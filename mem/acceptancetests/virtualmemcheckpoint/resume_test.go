@@ -32,7 +32,10 @@ func cleanup(sim *simulation.Simulation) {
 // table. Every component, port, connection, and the page table is registered,
 // so all of it is part of the checkpoint inventory.
 func buildSim() (*simulation.Simulation, *driver) {
-	sim := simulation.MakeBuilder().WithoutMonitoring().Build()
+	sim, err := simulation.MakeBuilder().WithoutMonitoring().Build()
+	if err != nil {
+		panic(err)
+	}
 
 	l1Cache, l2Cache, memCtrl := buildMemoryHierarchy(sim)
 	ioMMU, itlb, l2TLB := buildTranslationHierarchy(sim)

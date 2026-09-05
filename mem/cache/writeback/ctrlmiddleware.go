@@ -362,7 +362,7 @@ func makeCtrlRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = timing.IDsFor(port.Component()).Generate()
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo

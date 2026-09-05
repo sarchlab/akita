@@ -122,7 +122,10 @@ func setupTest(seed int64) (
 		simBuilder = simBuilder.WithVisTracingOnStart()
 	}
 
-	s := simBuilder.Build()
+	s, err := simBuilder.Build()
+	if err != nil {
+		panic(err)
+	}
 	engine := s.GetEngine()
 
 	shared := buildSharedHierarchy(s)

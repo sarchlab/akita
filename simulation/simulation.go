@@ -1,8 +1,12 @@
 package simulation
 
 import (
-	"github.com/sarchlab/akita/v5/datarecording"
+	"context"
+	"fmt"
+	"log"
+	"sync"
 
+	"github.com/sarchlab/akita/v5/datarecording"
 	"github.com/sarchlab/akita/v5/monitoring2"
 	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/timing"
@@ -10,6 +14,10 @@ import (
 )
 
 type Simulation struct {
+	supervisor       *timing.Supervisor
+	warningsMu       sync.Mutex
+	warnings         []string
+	restored         bool
 	id               string
 	outputPath       string
 	engine           timing.Engine
@@ -76,6 +84,9 @@ func (s *Simulation) Components() []Component {
 // typed Register methods pass the concrete object, which satisfies Entity, so
 // the inventory holds the live entity itself.
 func (s *Simulation) registerEntity(e Entity) {
+	if s.supervisor != nil {
+		s.supervisor.Check()
+	}
 	name := e.Name()
 	if name == "" {
 		panic("entity name cannot be empty")
@@ -219,23 +230,81 @@ func (s *Simulation) GetPortByName(name string) Port {
 	return s.ports[idx]
 }
 
-// Terminate terminates the simulation.
-func (s *Simulation) Terminate() {
-	if s.monitor != nil {
-		s.monitor.StopServer()
-	}
-
-	if s.visTracer != nil {
-		s.visTracer.Terminate()
-	}
-
-	if s.metaRecorder != nil {
-		s.metaRecorder.End()
-	}
-
-	if s.topologyRecorder != nil {
-		s.topologyRecorder.Record(s.components, s.ports)
-	}
-
-	s.dataRecorder.Close()
+// Run executes this simulation. Extension workers must use Go, and external
+// model mutations must use Setup while execution is stopped.
+func (s *Simulation) Run() error { return s.engine.Run() }
+func (s *Simulation) Setup(fn func(*Simulation) error) error {
+	return s.supervisor.Execute("setup", func() error { return fn(s) })
 }
+func (s *Simulation) Go(name string, fn func(context.Context) error) error {
+	return s.supervisor.Go(name, fn)
+}
+func (s *Simulation) Context() context.Context         { return s.supervisor.Context() }
+func (s *Simulation) Err() error                       { return s.supervisor.Err() }
+func (s *Simulation) Failures() []*timing.FailureError { return s.supervisor.Failures() }
+func (s *Simulation) GetIDGenerator() timing.IDGenerator {
+	return s.engine.(timing.IDSource).IDGenerator()
+}
+
+// Warnings reports optional capabilities that are unavailable. It never treats
+// lost requested results as optional.
+func (s *Simulation) Warnings() []string {
+	s.warningsMu.Lock()
+	defer s.warningsMu.Unlock()
+	return append([]string(nil), s.warnings...)
+}
+func (s *Simulation) warn(feature string, err error) {
+	message := fmt.Sprintf("%s unavailable: %v", feature, err)
+	s.warningsMu.Lock()
+	s.warnings = append(s.warnings, message)
+	s.warningsMu.Unlock()
+	log.Printf("simulation %s: %s", s.id, message)
+}
+
+// Terminate joins cooperative work and releases resources. Only healthy state
+// is inspected for topology recording. A .complete marker is published only
+// after all requested recording and close operations succeed; an end timestamp
+// alone is never evidence of successful output.
+func (s *Simulation) Terminate() error {
+	return s.supervisor.Close(func() {
+		if s.monitor != nil {
+			s.supervisor.Protect("stop monitor", nil, func() error {
+				if err := s.monitor.StopServer(); err != nil {
+					s.warn("monitor shutdown", err)
+				}
+				return nil
+			})
+		}
+		if s.Err() == nil {
+			if s.visTracer != nil {
+				s.supervisor.Protect("finish tracing", nil, func() error { s.visTracer.Terminate(); return nil })
+			}
+			if s.Err() == nil && s.topologyRecorder != nil {
+				s.supervisor.Protect("record topology", nil, func() error {
+					s.topologyRecorder.Record(s.components, s.ports)
+					return nil
+				})
+			}
+			if s.Err() == nil && s.metaRecorder != nil {
+				s.supervisor.Protect("record end", nil, func() error {
+					for _, warning := range s.Warnings() {
+						s.metaRecorder.insertEntry("Warning", warning)
+					}
+					s.metaRecorder.End()
+					return nil
+				})
+			}
+		}
+		if s.dataRecorder != nil {
+			s.supervisor.Protect("close recording", nil, s.dataRecorder.Close)
+		}
+		if s.Err() == nil && s.outputPath != "" {
+			s.supervisor.Protect("mark complete", nil, func() error {
+				return markOutputComplete(s.outputPath)
+			})
+		}
+	})
+}
+
+func (s *Simulation) Cancel()       { s.supervisor.Cancel() }
+func (s *Simulation) State() string { return s.supervisor.State() }

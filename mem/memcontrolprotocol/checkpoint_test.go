@@ -133,7 +133,7 @@ func (h *cacheOverDRAM) write(t *testing.T, addr uint64, data []byte) {
 	t.Helper()
 
 	req := memprotocol.WriteReq{Address: addr, Data: data}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = testIDs.Generate()
 	req.Src = h.agent
 	req.Dst = h.top.AsRemote()
 	req.TrafficClass = "memprotocol.WriteReq"
@@ -156,7 +156,7 @@ func (h *cacheOverDRAM) read(t *testing.T, addr uint64, size uint64) []byte {
 	t.Helper()
 
 	req := memprotocol.ReadReq{Address: addr, AccessByteSize: size}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = testIDs.Generate()
 	req.Src = h.agent
 	req.Dst = h.top.AsRemote()
 	req.TrafficClass = "memprotocol.ReadReq"
@@ -179,7 +179,7 @@ func (h *cacheOverDRAM) control(t *testing.T, cmd memcontrolprotocol.Command) me
 	t.Helper()
 
 	req := memcontrolprotocol.Req{Command: cmd}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = testIDs.Generate()
 	req.Src = h.agent
 	req.Dst = h.ctrl.AsRemote()
 	req.TrafficClass = "memcontrolprotocol.Req"
@@ -222,10 +222,8 @@ func TestCheckpoint_DrainFlushReset_PersistsAndServesCorrectData(t *testing.T) {
 	// Guarantee 1: after Drain+Flush the backing memory is a complete,
 	// correct snapshot of everything written.
 	for addr, data := range want {
-		got, err := h.dramStorage.Read(addr, uint64(len(data)))
-		if err != nil {
-			t.Fatalf("backing read %#x: %v", addr, err)
-		}
+		got := h.dramStorage.Read(addr, uint64(len(data)))
+
 		if !bytes.Equal(got, data) {
 			t.Errorf("after Flush, backing memory[%#x] = %v, want %v",
 				addr, got, data)
@@ -305,7 +303,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 	// A read miss makes the cache issue a fetch out the Bottom port. Tick only
 	// the cache (no ferry) and capture that fetch so it stays "outstanding".
 	read := memprotocol.ReadReq{Address: 0, AccessByteSize: 4}
-	read.ID = timing.GetIDGenerator().Generate()
+	read.ID = testIDs.Generate()
 	read.Src = h.agent
 	read.Dst = h.top.AsRemote()
 	read.TrafficClass = "memprotocol.ReadReq"
@@ -325,7 +323,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 
 	// Reset while the fetch is outstanding (this clears the inflight indices).
 	rst := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	rst.ID = timing.GetIDGenerator().Generate()
+	rst.ID = testIDs.Generate()
 	rst.Src = h.agent
 	rst.Dst = h.ctrl.AsRemote()
 	rst.TrafficClass = "memcontrolprotocol.Req"
@@ -346,7 +344,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 
 	// The lower memory's now-orphaned response arrives after the reset.
 	rsp := memprotocol.DataReadyRsp{Data: make([]byte, cpBlockSize)}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = testIDs.Generate()
 	rsp.Src = h.dramTop.AsRemote()
 	rsp.Dst = h.bottom.AsRemote()
 	rsp.RspTo = fetch.ID

@@ -91,7 +91,7 @@ var _ = Describe("MMU milestones", func() {
 
 	makeReq := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Agent.Top")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1

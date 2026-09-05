@@ -27,5 +27,9 @@ func NewSimulation() *simulation.Simulation {
 		b = b.WithVisTracingOnStart().WithOutputFileName("trace")
 	}
 
-	return b.Build()
+	sim, err := b.Build()
+	if err != nil {
+		panic(err)
+	}
+	return sim
 }

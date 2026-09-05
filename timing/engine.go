@@ -33,3 +33,10 @@ type Engine interface {
 	// Continue will continue the paused simulation.
 	Continue()
 }
+
+// ManagedEngine owns the failure boundary and ID sequence for one simulation.
+type ManagedEngine interface {
+	Engine
+	IDSource
+	Supervisor() *Supervisor
+}

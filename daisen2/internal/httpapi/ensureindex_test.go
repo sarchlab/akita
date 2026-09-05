@@ -14,7 +14,9 @@ import (
 func TestEnsureIndexBuildsOnceAndInvalidatesDBInfo(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 
 	if _, err := reader.Exec(`CREATE TABLE trace (
 		ID INTEGER, Location INTEGER, StartTime REAL, EndTime REAL, Kind TEXT, What TEXT)`); err != nil {

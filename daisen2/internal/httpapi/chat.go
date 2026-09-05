@@ -335,7 +335,10 @@ func (openAICompatibleProvider) ListModels(ctx context.Context, cfg ProviderConf
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxModelsResponseBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxModelsResponseBytes))
+	if err != nil {
+		return nil, err
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("models endpoint returned %d: %s",
 			resp.StatusCode, strings.TrimSpace(string(body)))

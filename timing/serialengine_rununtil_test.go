@@ -59,7 +59,7 @@ type rescheduleHandler struct {
 	until  VTimeInPicoSec
 }
 
-func (h *rescheduleHandler) Handle(e Event) error {
+func (h *rescheduleHandler) Handle(e Event) {
 	now := e.Time()
 	h.fired = append(h.fired, now)
 
@@ -71,7 +71,7 @@ func (h *rescheduleHandler) Handle(e Event) error {
 		h.engine.Schedule(ev)
 	}
 
-	return nil
+	return
 }
 
 func TestRunUntilProcessesEventsScheduledWithinBoundary(t *testing.T) {

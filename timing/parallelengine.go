@@ -1,287 +1,144 @@
 package timing
 
 import (
-	"log"
-	"math"
-	"reflect"
-	"runtime"
+	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/sarchlab/akita/v5/hooking"
 )
 
-// A ParallelEngine is an event engine that is capable for scheduling event
-// in a parallel fashion.
+// ParallelEngine dispatches different handlers concurrently at the earliest
+// virtual time. Events for one handler run in queue order, never concurrently.
+// Scheduling uses short critical sections; workers never borrow dispatcher queues.
 type ParallelEngine struct {
 	hooking.HookableBase
-
-	pauseLock              sync.Mutex
-	nowLock                sync.RWMutex
-	now                    VTimeInPicoSec
-	runningSecondaryEvents bool
-
-	eventChan    chan Event
-	waitGroup    sync.WaitGroup
-	maxGoRoutine int
-
-	queues             []EventQueue
-	queueChan          chan EventQueue
-	secondaryQueues    []EventQueue
-	secondaryQueueChan chan EventQueue
-
-	registry map[string]Handler
+	mu             sync.Mutex
+	now            VTimeInPicoSec
+	queue          *unsafeEventQueue
+	secondaryQueue *unsafeEventQueue
+	registry       map[string]Handler
+	supervisor     *Supervisor
+	ids            IDGenerator
+	wake           chan struct{}
 }
 
-// Name returns the name of the engine. The engine is registered as a simulation
-// entity so its event-queue and time state are part of the state snapshot.
-func (e *ParallelEngine) Name() string {
-	return "Engine"
-}
-
-// NewParallelEngine creates a ParallelEngine.
 func NewParallelEngine() *ParallelEngine {
-	e := new(ParallelEngine)
-
-	e.eventChan = make(chan Event, 10000)
-
-	e.maxGoRoutine = runtime.GOMAXPROCS(0)
-	numQueues := runtime.GOMAXPROCS(0)
-
-	e.registry = make(map[string]Handler)
-
-	// e.spawnWorkers()
-	e.queues = make([]EventQueue, 0, numQueues)
-	e.queueChan = make(chan EventQueue, numQueues)
-	e.secondaryQueues = make([]EventQueue, 0, numQueues)
-	e.secondaryQueueChan = make(chan EventQueue, numQueues)
-
-	for i := 0; i < numQueues; i++ {
-		queue := NewEventQueue()
-		e.queueChan <- queue
-
-		e.queues = append(e.queues, queue)
-
-		secondaryQueue := NewEventQueue()
-		e.secondaryQueueChan <- secondaryQueue
-
-		e.secondaryQueues = append(e.secondaryQueues, secondaryQueue)
+	return &ParallelEngine{
+		queue: newUnsafeEventQueue(), secondaryQueue: newUnsafeEventQueue(),
+		registry: make(map[string]Handler), supervisor: NewSupervisor("Engine"),
+		ids: NewIDGenerator(), wake: make(chan struct{}, 1),
 	}
-
-	return e
+}
+func (e *ParallelEngine) Name() string             { return "Engine" }
+func (e *ParallelEngine) Supervisor() *Supervisor  { return e.supervisor }
+func (e *ParallelEngine) IDGenerator() IDGenerator { return e.ids }
+func (e *ParallelEngine) CurrentTime() VTimeInPicoSec {
+	return VTimeInPicoSec(atomic.LoadUint64((*uint64)(&e.now)))
 }
 
-// RegisterHandler registers a handler with the given name.
-func (e *ParallelEngine) RegisterHandler(name string, handler Handler) {
-	e.registry[name] = handler
+func (e *ParallelEngine) RegisterHandler(name string, h Handler) {
+	e.supervisor.Check()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.registry[name] = h
 }
-
-func (e *ParallelEngine) readNow() VTimeInPicoSec {
-	var now VTimeInPicoSec
-
-	e.nowLock.RLock()
-	now = e.now
-	e.nowLock.RUnlock()
-
-	return now
-}
-
-func (e *ParallelEngine) writeNow(t VTimeInPicoSec) {
-	e.nowLock.Lock()
-	e.now = t
-	e.nowLock.Unlock()
-}
-
-// Schedule registers an event to happen in the future.
 func (e *ParallelEngine) Schedule(evt Event) {
-	now := e.readNow()
-	if evt.Time() < now {
-		log.Panicf(
-			"cannot schedule event in the past, evt %s @ %d, now %d",
-			reflect.TypeOf(evt), evt.Time(), now)
+	e.supervisor.Check()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	defer func() {
+		select {
+		case e.wake <- struct{}{}:
+		default:
+		}
+	}()
+	if evt.Time() < e.now {
+		panic("cannot schedule event in the past")
 	}
-
 	if evt.IsSecondary() {
-		queue := <-e.secondaryQueueChan
-		queue.Push(evt)
-
-		e.secondaryQueueChan <- queue
-
-		return
+		e.secondaryQueue.Push(evt)
+	} else {
+		e.queue.Push(evt)
 	}
-
-	queue := <-e.queueChan
-	queue.Push(evt)
-
-	e.queueChan <- queue
 }
-
-// Run processes all the events scheduled in the ParallelEngine.
 func (e *ParallelEngine) Run() error {
-	for {
-		if !e.hasMoreEvents() {
-			return nil
-		}
-
-		e.pauseLock.Lock()
-		e.determineWhatToRun()
-		e.runRound()
-
-		e.pauseLock.Unlock()
-	}
-}
-
-func (e *ParallelEngine) determineWhatToRun() {
-	primaryTime := e.earliestTimeInQueueGroup(e.queues)
-	secondaryTime := e.earliestTimeInQueueGroup(e.secondaryQueues)
-
-	if primaryTime <= secondaryTime {
-		e.runningSecondaryEvents = false
-		e.writeNow(primaryTime)
-
-		return
-	}
-
-	e.runningSecondaryEvents = true
-	e.writeNow(secondaryTime)
-}
-
-func (e *ParallelEngine) earliestTimeInQueueGroup(
-	queues []EventQueue,
-) VTimeInPicoSec {
-	earliestTime := VTimeInPicoSec(math.MaxUint64)
-
-	for _, q := range queues {
-		if q.Len() == 0 {
-			continue
-		}
-
-		t := q.Peek().Time()
-		if t < earliestTime {
-			earliestTime = t
-		}
-	}
-
-	return earliestTime
-}
-
-func (e *ParallelEngine) runRound() {
-	queues := e.queues
-	queueChan := e.queueChan
-
-	if e.runningSecondaryEvents {
-		queues = e.secondaryQueues
-		queueChan = e.secondaryQueueChan
-	}
-
-	e.emptyQueueChan(queues, queueChan)
-	e.runEventsUntilConflict(queues, queueChan)
-	e.waitGroup.Wait()
-}
-
-func (e *ParallelEngine) emptyQueueChan(
-	queues []EventQueue,
-	queueChan chan EventQueue,
-) {
-	for range queues {
-		<-queueChan
-	}
-}
-
-func (e *ParallelEngine) hasMoreEvents() bool {
-	if e.hasMorePrimaryEvents() || e.hasMoreSecondaryEvents() {
-		return true
-	}
-
-	return false
-}
-
-func (e *ParallelEngine) hasMorePrimaryEvents() bool {
-	for _, q := range e.queues {
-		if q.Len() > 0 {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (e *ParallelEngine) hasMoreSecondaryEvents() bool {
-	for _, q := range e.secondaryQueues {
-		if q.Len() > 0 {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (e *ParallelEngine) runEventsUntilConflict(
-	queues []EventQueue,
-	queueChan chan EventQueue,
-) {
-	now := e.readNow()
-
-	for _, queue := range queues {
-		for queue.Len() > 0 {
-			evt := queue.Peek()
-			if evt.Time() == now {
-				queue.Pop()
-				e.runEventWithTempWorker(evt)
-			} else if evt.Time() < now {
-				log.Panicf(
-					"cannot run event in the past, evt %s @ %d, now %d",
-					reflect.TypeOf(evt), evt.Time(), now)
-			} else {
+	return e.supervisor.Execute("run", func() error {
+		for e.supervisor.awaitResume() {
+			groups := e.nextRound()
+			if len(groups) == 0 {
+				if e.supervisor.waitForWork(e.wake) {
+					continue
+				}
 				break
 			}
+			var round sync.WaitGroup
+			for _, events := range groups {
+				round.Add(1)
+				err := e.supervisor.Go("event worker", func(context.Context) error {
+					defer round.Done()
+					for _, evt := range events {
+						if e.supervisor.stopped.Load() {
+							break
+						}
+						e.supervisor.Protect("event", evt, func() error { e.dispatch(evt); return nil })
+					}
+					return nil
+				})
+				if err != nil {
+					round.Done()
+					break
+				}
+			}
+			round.Wait()
 		}
-
-		queueChan <- queue
+		return nil
+	})
+}
+func (e *ParallelEngine) nextRound() [][]Event {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	q := e.queue
+	if q.Len() == 0 || (e.secondaryQueue.Len() > 0 && e.secondaryQueue.Peek().Time() < q.Peek().Time()) {
+		q = e.secondaryQueue
+	}
+	if q.Len() == 0 {
+		return nil
+	}
+	atomic.StoreUint64((*uint64)(&e.now), uint64(q.Peek().Time()))
+	var groups [][]Event
+	indices := make(map[string]int)
+	for q.Len() > 0 && q.Peek().Time() == e.now {
+		evt := q.Pop()
+		i, ok := indices[evt.HandlerID()]
+		if !ok {
+			i = len(groups)
+			indices[evt.HandlerID()] = i
+			groups = append(groups, nil)
+		}
+		groups[i] = append(groups[i], evt)
+	}
+	return groups
+}
+func (e *ParallelEngine) dispatch(evt Event) {
+	if !e.supervisor.beginDispatch() {
+		return
+	}
+	defer e.supervisor.endDispatch()
+	ctx := hooking.HookCtx{Domain: e, Pos: HookPosBeforeEvent, Item: evt}
+	e.InvokeHook(ctx)
+	if e.supervisor.stopped.Load() {
+		return
+	}
+	name := evt.HandlerID()
+	e.mu.Lock()
+	h := e.registry[name]
+	e.mu.Unlock()
+	h.Handle(evt)
+	if !e.supervisor.stopped.Load() {
+		ctx.Pos = HookPosAfterEvent
+		e.InvokeHook(ctx)
 	}
 }
-
-func (e *ParallelEngine) runEventWithTempWorker(evt Event) {
-	e.waitGroup.Add(1)
-
-	go e.tempWorkerRun(evt)
-}
-
-func (e *ParallelEngine) tempWorkerRun(evt Event) {
-	now := e.readNow()
-
-	if evt.Time() < now {
-		log.Panic("running event in the past")
-	}
-
-	hookCtx := hooking.HookCtx{
-		Domain: e,
-		Pos:    HookPosBeforeEvent,
-		Item:   evt,
-	}
-	e.InvokeHook(hookCtx)
-
-	handler := e.registry[evt.HandlerID()]
-	_ = handler.Handle(evt)
-
-	hookCtx.Pos = HookPosAfterEvent
-	e.InvokeHook(hookCtx)
-
-	e.waitGroup.Done()
-}
-
-// Pause will prevent the engine to move forward. For events that are scheduled
-// at the same time, they may still be triggered.
-func (e *ParallelEngine) Pause() {
-	e.pauseLock.Lock()
-}
-
-// Continue allows the engine to continue to make progress.
-func (e *ParallelEngine) Continue() {
-	e.pauseLock.Unlock()
-}
-
-// CurrentTime returns the current time at which the engine is at.
-// Specifically, the run time of the current event.
-func (e *ParallelEngine) CurrentTime() VTimeInPicoSec {
-	return e.readNow()
-}
+func (e *ParallelEngine) Pause()    { e.supervisor.Pause() }
+func (e *ParallelEngine) Continue() { e.supervisor.Continue() }

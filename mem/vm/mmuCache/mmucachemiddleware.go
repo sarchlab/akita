@@ -8,7 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -149,7 +148,7 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 	res := m.comp.Resources()
 
 	reqToBottom := vmprotocol.TranslationReq{}
-	reqToBottom.ID = timing.GetIDGenerator().Generate()
+	reqToBottom.ID = m.comp.IDGenerator().Generate()
 	reqToBottom.Src = m.bottomPort().AsRemote()
 	reqToBottom.Dst = res.LowModulePort
 	reqToBottom.PID = req.PID
@@ -232,7 +231,7 @@ func (m *mmuCacheMiddleware) handleRsp(rsp vmprotocol.TranslationRsp) bool {
 	rspToTop := vmprotocol.TranslationRsp{
 		Page: rsp.Page,
 	}
-	rspToTop.ID = timing.GetIDGenerator().Generate()
+	rspToTop.ID = m.comp.IDGenerator().Generate()
 	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = res.UpModulePort
 	rspToTop.RspTo = rsp.RspTo

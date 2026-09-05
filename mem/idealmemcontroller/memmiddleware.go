@@ -8,7 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -131,13 +130,10 @@ func (m *memMiddleware) sendResponse(tx *inflightTransaction) bool {
 }
 
 func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
-	data, err := m.comp.Resources().Storage.Read(tx.Address, tx.AccessByteSize)
-	if err != nil {
-		log.Panic(err)
-	}
+	data := m.comp.Resources().Storage.Read(tx.Address, tx.AccessByteSize)
 
 	rsp := memprotocol.DataReadyRsp{}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = m.comp.IDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
 	rsp.RspTo = tx.ReqID
@@ -158,7 +154,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 
 func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 	rsp := memprotocol.WriteDoneRsp{}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = m.comp.IDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
 	rsp.RspTo = tx.ReqID
@@ -174,15 +170,9 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 	addr := tx.Address
 
 	if tx.DirtyMask == nil {
-		err := m.comp.Resources().Storage.Write(addr, tx.Data)
-		if err != nil {
-			log.Panic(err)
-		}
+		m.comp.Resources().Storage.Write(addr, tx.Data)
 	} else {
-		data, err := m.comp.Resources().Storage.Read(addr, uint64(len(tx.Data)))
-		if err != nil {
-			panic(err)
-		}
+		data := m.comp.Resources().Storage.Read(addr, uint64(len(tx.Data)))
 
 		for i := 0; i < len(tx.Data); i++ {
 			if tx.DirtyMask[i] {
@@ -190,10 +180,7 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 			}
 		}
 
-		err = m.comp.Resources().Storage.Write(addr, data)
-		if err != nil {
-			panic(err)
-		}
+		m.comp.Resources().Storage.Write(addr, data)
 	}
 
 	m.traceReqComplete(tx.RecvTaskID, tx.ReqID)

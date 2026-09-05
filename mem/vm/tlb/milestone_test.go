@@ -150,7 +150,7 @@ var _ = Describe("TLB milestones", func() {
 
 	makeReq := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -274,7 +274,7 @@ var _ = Describe("TLB milestones", func() {
 		rsp := vmprotocol.TranslationRsp{
 			Page: vm.Page{PID: 1, VAddr: 0x100, PAddr: 0x200, Valid: true},
 		}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = testIDs.Generate()
 		rsp.Src = remotePort
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = fetch.ID

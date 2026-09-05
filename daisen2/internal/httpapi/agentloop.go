@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -150,12 +151,18 @@ func callProvider(
 	}
 	defer resp.Body.Close()
 
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxChatResponseBytes))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxChatResponseBytes))
+	if err != nil {
+		return nil, nil, "", err
+	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, nil, "", fmt.Errorf("provider returned %d: %s",
-			resp.StatusCode, strings.TrimSpace(string(raw)))
+		return nil, nil, "", providerResponseError(resp.StatusCode, string(raw), offerTools)
 	}
 
+	return decodeProviderResponse(raw)
+}
+
+func decodeProviderResponse(raw []byte) (map[string]interface{}, []oaiToolCall, string, error) {
 	var parsed oaiResponse
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return nil, nil, "", fmt.Errorf("decoding provider response: %w", err)
@@ -224,7 +231,7 @@ func runAgentLoop(
 		offerTools := toolCallCount < maxAgentToolCalls
 
 		msg, toolCalls, content, err := callProvider(ctx, cfg, messages, specs, offerTools)
-		if err != nil && offerTools {
+		if errors.Is(err, errToolsUnsupported) && offerTools {
 			// The endpoint may not support tools — retry once without them so a
 			// non-tool model still answers (capability fallback).
 			emit(agentEvent{
@@ -769,4 +776,16 @@ func daisenViewTool(capture captureRequester) agentTool {
 			return toolResult{text: "Rendered the view: " + url, images: []string{img}}, nil
 		},
 	}
+}
+
+var errToolsUnsupported = errors.New("provider does not support tools")
+
+func providerResponseError(status int, body string, tools bool) error {
+	message := strings.ToLower(body)
+	if tools && (status == http.StatusBadRequest || status == http.StatusUnprocessableEntity) &&
+		strings.Contains(message, "tool") &&
+		(strings.Contains(message, "unsupported") || strings.Contains(message, "not support")) {
+		return fmt.Errorf("%w: %s", errToolsUnsupported, strings.TrimSpace(body))
+	}
+	return fmt.Errorf("provider returned %d: %s", status, strings.TrimSpace(body))
 }

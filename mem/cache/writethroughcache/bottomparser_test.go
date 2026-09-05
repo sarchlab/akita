@@ -78,13 +78,13 @@ var _ = Describe("Bottom Parser", func() {
 			next := &c.comp.State
 
 			writeToBottomMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
 
 			writeMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -103,7 +103,7 @@ var _ = Describe("Bottom Parser", func() {
 			)
 
 			done := memprotocol.WriteDoneRsp{}
-			done.ID = timing.GetIDGenerator().Generate()
+			done.ID = testIDs.Generate()
 			done.RspTo = writeToBottomMeta.ID
 			done.TrafficBytes = 4
 			done.TrafficClass = "rsp"
@@ -123,12 +123,12 @@ var _ = Describe("Bottom Parser", func() {
 			next := &c.comp.State
 
 			writeToBottomMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
 			writeMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -153,7 +153,7 @@ var _ = Describe("Bottom Parser", func() {
 			)
 
 			done := memprotocol.WriteDoneRsp{}
-			done.ID = timing.GetIDGenerator().Generate()
+			done.ID = testIDs.Generate()
 			done.RspTo = writeToBottomMeta.ID
 			done.TrafficBytes = 4
 			done.TrafficClass = "rsp"
@@ -182,7 +182,7 @@ var _ = Describe("Bottom Parser", func() {
 			next := &c.comp.State
 
 			readToBottomMeta = messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -198,7 +198,7 @@ var _ = Describe("Bottom Parser", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}
 			dataReady = memprotocol.DataReadyRsp{}
-			dataReady.ID = timing.GetIDGenerator().Generate()
+			dataReady.ID = testIDs.Generate()
 			dataReady.RspTo = readToBottomMeta.ID
 			dataReady.Data = drData
 			dataReady.TrafficBytes = len(drData) + 4
@@ -212,7 +212,7 @@ var _ = Describe("Bottom Parser", func() {
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
 			readMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -287,7 +287,7 @@ var _ = Describe("Bottom Parser", func() {
 
 			// Add another read transaction (index 1) that is in the MSHR
 			read2Meta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -303,7 +303,7 @@ var _ = Describe("Bottom Parser", func() {
 
 			// Add a write transaction (index 2)
 			writeMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 16 + 12,
 				TrafficClass: "req",
 			}

@@ -37,14 +37,14 @@ func recordSourceArchives(
 	recorder datarecording.DataRecorder,
 	explicitFSes map[string]fs.FS,
 ) error {
-	recorder.CreateTable(sourceTableName, sourceArchiveEntry{})
+	datarecording.MustRecord(recorder.CreateTable(sourceTableName, sourceArchiveEntry{}))
 
 	insert := func(root string, gztar []byte) {
-		recorder.InsertData(sourceTableName, sourceArchiveEntry{
+		datarecording.MustRecord(recorder.InsertData(sourceTableName, sourceArchiveEntry{
 			Root:    root,
 			Format:  sourceArchiveFormat,
 			Content: base64.StdEncoding.EncodeToString(gztar),
-		})
+		}))
 	}
 
 	// Akita's own source, read from disk so it matches what ran. When the
@@ -72,6 +72,6 @@ func recordSourceArchives(
 		insert(root, gztar)
 	}
 
-	recorder.Flush()
+	datarecording.MustRecord(recorder.Flush())
 	return nil
 }

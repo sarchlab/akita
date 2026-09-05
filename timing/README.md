@@ -29,22 +29,22 @@ type Event interface {
 }
 ```
 
-Embed `EventBase` to get the standard fields and getters. `MakeEventBase(t, handlerID)`
-returns an `EventBase` value with a fresh ID from the global ID generator:
+Embed `EventBase` to get the standard fields and getters. `MakeEventBase(ids, t, handlerID)`
+returns an `EventBase` value with a fresh ID from the owning engine:
 
 ```go
 type tickEvent struct {
     timing.EventBase
 }
 
-evt := tickEvent{timing.MakeEventBase(now, comp.Name())}
+evt := tickEvent{timing.MakeEventBase(engine.IDGenerator(), now, comp.Name())}
 ```
 
 ### Handler
 
 ```go
 type Handler interface {
-    Handle(e Event) error
+    Handle(e Event)
 }
 ```
 
@@ -97,10 +97,18 @@ later := freq.NCyclesLater(3, now)
 
 ## ID Generation
 
-`GetIDGenerator().Generate()` returns unique `uint64` IDs. By default IDs are
-sequential and deterministic; call `UseParallelIDGenerator()` before first use
-for faster but non-deterministic IDs (or `UseSequentialIDGenerator()` to be
-explicit). The generator's counter is part of the simulation state snapshot.
+`engine.IDGenerator().Generate()` returns IDs unique within that engine's
+simulation. The generator is safe for concurrent use and is included in the
+simulation checkpoint. Pass it explicitly to event and message constructors;
+independent simulations must not share a generator.
+
+## Failure boundaries
+
+`Run` and serial `RunUntil` return a `*timing.FailureError` for a panic in a
+handler, hook, or owned worker. Failure cancels and joins this engine's workers
+and is terminal. Other engine instances remain usable. Use `Supervisor.Execute`
+for setup and `Supervisor.Go` for cooperative workers. See the
+[ownership and migration guide](../simulation/ERROR_HANDLING.md).
 
 ## Hooks
 

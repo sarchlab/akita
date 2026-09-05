@@ -10,14 +10,17 @@ import (
 type EventPrinter struct {
 }
 
-func (e *EventPrinter) Handle(event timing.Event) error {
+func (e *EventPrinter) Handle(event timing.Event) {
 	fmt.Printf("Event: %d\n", event.Time())
 
-	return nil
+	return
 }
 
 func main() {
-	s := simulation.MakeBuilder().Build()
+	s, err := simulation.MakeBuilder().Build()
+	if err != nil {
+		panic(err)
+	}
 
 	handler := &EventPrinter{}
 	engine := s.GetEngine()
@@ -26,12 +29,14 @@ func main() {
 		registrar.RegisterHandler("printer", handler)
 	}
 
-	engine.Schedule(timing.MakeEventBase(1, "printer"))
+	engine.Schedule(timing.MakeEventBase(timing.IDsFor(engine), 1, "printer"))
 
-	err := engine.Run()
+	err = engine.Run()
 	if err != nil {
 		panic(err)
 	}
 
-	s.Terminate()
+	if err := s.Terminate(); err != nil {
+		panic(err)
+	}
 }

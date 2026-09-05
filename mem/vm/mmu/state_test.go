@@ -81,7 +81,7 @@ func TestStateAndStateAssignment(t *testing.T) {
 	engine := timing.NewSerialEngine()
 	mmu := buildTestMMU(engine, "TestMMU")
 
-	reqID := timing.GetIDGenerator().Generate()
+	reqID := testIDs.Generate()
 	state := makeTestState(reqID)
 
 	mmu.State = state

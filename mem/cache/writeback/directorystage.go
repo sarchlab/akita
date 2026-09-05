@@ -7,7 +7,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -653,7 +652,7 @@ func (ds *directoryStage) needEviction(victim *cache.BlockState) bool {
 func (ds *directoryStage) startDirPipeline(transIdx int) {
 	trans := &ds.cache.comp.State.Transactions[transIdx]
 
-	pid := timing.GetIDGenerator().Generate()
+	pid := ds.cache.comp.IDGenerator().Generate()
 	trans.DirPipelinePID = pid
 
 	tracing.StartTask(ds.cache.comp, tracing.TaskStart{

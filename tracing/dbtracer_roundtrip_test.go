@@ -14,6 +14,7 @@ import (
 // roundTripDomain is a minimal NamedHookable used to drive the DBTracer through
 // a real emit -> persist cycle.
 type roundTripDomain struct {
+	ids timing.IDGenerator
 	*hooking.HookableBase
 	name string
 	now  timing.VTimeInPicoSec
@@ -50,7 +51,10 @@ func writeRoundTripTrace(t *testing.T) string {
 	os.Remove(dbFile)
 	t.Cleanup(func() { os.Remove(dbFile) })
 
-	recorder := datarecording.NewDataRecorder(dbName)
+	recorder, err := datarecording.NewDataRecorder(dbName)
+	if err != nil {
+		panic(err)
+	}
 	domain := &roundTripDomain{
 		HookableBase: hooking.NewHookableBase(),
 		name:         "GPU[0].L1Cache",
@@ -125,4 +129,11 @@ func assertDictionaryAndChildren(t *testing.T, db *sql.DB) {
 	if tagWhat != "read-hit" {
 		t.Fatalf("tag What = %q, want read-hit", tagWhat)
 	}
+}
+
+func (d *roundTripDomain) IDGenerator() timing.IDGenerator {
+	if d.ids == nil {
+		d.ids = timing.NewIDGenerator()
+	}
+	return d.ids
 }

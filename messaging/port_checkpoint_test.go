@@ -79,3 +79,20 @@ func TestPortCheckpointRoundTripWithMessages(t *testing.T) {
 		t.Fatalf("outgoing = %+v", out)
 	}
 }
+
+func TestPortRestoreDoesNotApplyIncomingBeforeOutgoingValidation(t *testing.T) {
+	RegisterMsg(registryTestMsg{})
+	src := newCkptPort(1, 2)
+	src.incomingBuf.PushTyped(registryTestMsg{Value: 7})
+	var buf bytes.Buffer
+	if err := src.SaveCheckpoint(&buf); err != nil {
+		t.Fatal(err)
+	}
+	dst := newCkptPort(1, 1)
+	if err := dst.LoadCheckpoint(&buf); err == nil {
+		t.Fatal("invalid outgoing capacity accepted")
+	}
+	if dst.incomingBuf.Size() != 0 || dst.outgoingBuf.Size() != 0 {
+		t.Fatal("failed restore changed target buffers")
+	}
+}

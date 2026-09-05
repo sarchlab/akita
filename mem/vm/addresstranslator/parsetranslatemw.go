@@ -6,7 +6,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -53,7 +52,7 @@ func (m *parseTranslateMW) translate() bool {
 	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
 
 	transReq := vmprotocol.TranslationReq{}
-	transReq.ID = timing.GetIDGenerator().Generate()
+	transReq.ID = m.comp.IDGenerator().Generate()
 	transReq.Src = m.translationPort().AsRemote()
 	transReq.Dst = m.comp.Resources().TranslationProviderMapper.Find(vAddr)
 	transReq.PID = item.GetPID()

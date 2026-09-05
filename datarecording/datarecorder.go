@@ -13,7 +13,6 @@ import (
 	// Need to use SQLite connections.
 	_ "github.com/glebarez/go-sqlite"
 	"github.com/rs/xid"
-	"github.com/tebeka/atexit"
 )
 
 // DataRecorder is a backend that can record and store data.
@@ -21,39 +20,37 @@ import (
 // ListTables, and Flush calls. Stop producers before calling Close.
 type DataRecorder interface {
 	// CreateTable creates a new table with given filename
-	CreateTable(tableName string, sampleEntry any)
+	CreateTable(tableName string, sampleEntry any) error
 
 	// DataInsert writes a same-type task into table that already exists
-	InsertData(tableName string, entry any)
+	InsertData(tableName string, entry any) error
 
 	// ListTable returns a slice containing names of all tables
 	ListTables() []string
 
 	// Flush flushes all the buffered task into database
-	Flush()
+	Flush() error
 
 	// Close closes the recorder
 	Close() error
 }
 
 // NewDataRecorder creates a new DataRecorder.
-func NewDataRecorder(path string) DataRecorder {
+func NewDataRecorder(path string) (DataRecorder, error) {
 	w := &sqliteWriter{
 		dbName:    path,
 		batchSize: 100000,
 		tables:    make(map[string]*table),
 	}
 
-	w.Init()
-
-	atexit.Register(func() {
-		w.Flush()
-	})
-
-	return w
+	if err := w.Init(); err != nil {
+		return nil, err
+	}
+	return w, nil
 }
 
-// NewDataRecorderWithDB creates a new DataRecorder with a given database.
+// NewDataRecorderWithDB creates a recorder and takes responsibility for closing
+// the database. The caller must not share it with another simulation.
 func NewDataRecorderWithDB(db *sql.DB) DataRecorder {
 	w := &sqliteWriter{
 		DB:        db,
@@ -86,28 +83,39 @@ type sqliteWriter struct {
 	locationInfo map[string]int
 	batchSize    int
 	entryCount   int
+	closed       bool
+	closeErr     error
 }
 
 // Init establishes a connection to the database.
-func (t *sqliteWriter) Init() {
+func (t *sqliteWriter) Init() (err error) {
+	defer recoverIO(&err)
 	if t.dbName == "" {
 		t.dbName = "akita_data_recording_" + xid.New().String()
 	}
 
 	filename := t.dbName + ".sqlite3"
-	os.Remove(filename)
-
-	_, err := os.Stat(filename)
-	if err == nil {
-		panic(fmt.Errorf("file %s already exists", filename))
+	// Exclusive creation prevents a second simulation from deleting a live
+	// recorder's file. Output paths are owned by exactly one simulation.
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	if err = file.Close(); err != nil {
+		return err
 	}
 
 	db, err := sql.Open("sqlite", filename)
 	if err != nil {
-		panic(err)
+		panic(recorderIOError{err})
 	}
 
+	if err = db.Ping(); err != nil {
+		_ = db.Close()
+		return err
+	}
 	t.DB = db
+	return nil
 }
 
 func (t *sqliteWriter) isAllowedType(kind reflect.Kind) bool {
@@ -135,7 +143,7 @@ func (t *sqliteWriter) isAllowedType(kind reflect.Kind) bool {
 	}
 }
 
-func (t *sqliteWriter) checkStructFields(entry any) error {
+func (t *sqliteWriter) checkStructFields(entry any) {
 	types := reflect.TypeOf(entry)
 
 	for i := 0; i < types.NumField(); i++ {
@@ -149,11 +157,9 @@ func (t *sqliteWriter) checkStructFields(entry any) error {
 
 		fieldKind := field.Type.Kind()
 		if !t.isAllowedType(fieldKind) {
-			return errors.New("entry is invalid")
+			panic("entry is invalid")
 		}
 	}
-
-	return nil
 }
 
 func (t *sqliteWriter) mustHaveAtMostOneTag(field reflect.StructField) {
@@ -182,14 +188,15 @@ func (t *sqliteWriter) mustHaveAtMostOneTag(field reflect.StructField) {
 		"ignore, unique, index, or location")
 }
 
-func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
+func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) (err error) {
+	defer recoverIO(&err)
 	t.mu.Lock()
 	defer t.mu.Unlock()
-
-	err := t.checkStructFields(sampleEntry)
-	if err != nil {
-		panic(err)
+	if t.closed {
+		return sql.ErrConnDone
 	}
+
+	t.checkStructFields(sampleEntry)
 
 	fieldNames := t.getFieldNames(sampleEntry)
 	fields := strings.Join(fieldNames, ", \n\t")
@@ -212,6 +219,7 @@ func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 	t.tables[tableName] = tableInfo
 
 	t.prepareStatement(tableName, sampleEntry)
+	return nil
 }
 
 func (t *sqliteWriter) checkLocationTag(entry any) bool {
@@ -272,7 +280,7 @@ func (t *sqliteWriter) prepareStatement(table string, task any) {
 
 	stmt, err := t.PrepareContext(context.Background(), sqlStr)
 	if err != nil {
-		panic(err)
+		panic(recorderIOError{err})
 	}
 
 	t.tables[table].statement = stmt
@@ -332,9 +340,13 @@ func (t *sqliteWriter) createIndex(tableName, fieldName string, unique bool) {
 	t.mustExecute(indexSQL)
 }
 
-func (t *sqliteWriter) InsertData(tableName string, entry any) {
+func (t *sqliteWriter) InsertData(tableName string, entry any) (err error) {
+	defer recoverIO(&err)
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.closed {
+		return sql.ErrConnDone
+	}
 
 	table, exists := t.tables[tableName]
 	if !exists {
@@ -348,6 +360,7 @@ func (t *sqliteWriter) InsertData(tableName string, entry any) {
 	if t.entryCount >= t.batchSize {
 		t.flushLocked()
 	}
+	return nil
 }
 
 func (t *sqliteWriter) ListTables() []string {
@@ -362,11 +375,16 @@ func (t *sqliteWriter) ListTables() []string {
 	return tables
 }
 
-func (t *sqliteWriter) Flush() {
+func (t *sqliteWriter) Flush() (err error) {
+	defer recoverIO(&err)
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.closed {
+		return sql.ErrConnDone
+	}
 
 	t.flushLocked()
+	return nil
 }
 
 // flushLocked owns the buffers and location dictionary until the whole batch
@@ -378,7 +396,7 @@ func (t *sqliteWriter) flushLocked() {
 
 	tx, err := t.DB.BeginTx(context.Background(), nil)
 	if err != nil {
-		panic(err)
+		panic(recorderIOError{err})
 	}
 	defer tx.Rollback()
 
@@ -399,7 +417,7 @@ func (t *sqliteWriter) flushLocked() {
 	}
 
 	if err := tx.Commit(); err != nil {
-		panic(err)
+		panic(recorderIOError{err})
 	}
 
 	for _, table := range t.tables {
@@ -455,7 +473,7 @@ func (t *sqliteWriter) insertEntryForTable(
 
 	_, err := stmt.ExecContext(context.Background(), v...)
 	if err != nil {
-		panic(err)
+		panic(recorderIOError{err})
 	}
 }
 
@@ -494,7 +512,7 @@ func (t *sqliteWriter) mustExecute(query string) sql.Result {
 	res, err := t.ExecContext(context.Background(), query)
 	if err != nil {
 		fmt.Printf("Failed to execute: %s\n", query)
-		panic(err)
+		panic(recorderIOError{err})
 	}
 
 	return res
@@ -520,17 +538,19 @@ func (t *sqliteWriter) buildIndexes() {
 	}
 }
 
-func (t *sqliteWriter) Close() error {
+// Close releases the owned database even when the final batch or index build
+// fails. A failed Flush retains its batch for retry; Close is final and is not
+// a retry operation. Do not resubmit entries after an automatic flush failure.
+func (t *sqliteWriter) Close() (err error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-
+	if t.closed {
+		return t.closeErr
+	}
+	t.closed = true
+	defer func() { err = errors.Join(err, t.DB.Close()); t.closeErr = err }()
+	defer recoverIO(&err)
 	t.flushLocked()
 	t.buildIndexes()
-
-	err := t.DB.Close()
-	if err != nil {
-		return fmt.Errorf("failed to close database connection: %w", err)
-	}
-
 	return nil
 }

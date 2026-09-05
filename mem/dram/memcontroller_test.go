@@ -31,7 +31,7 @@ var _ = Describe("Transaction Splitting", func() {
 		trans.ReadMsg.Address = 0x100
 		trans.ReadMsg.AccessByteSize = 128
 
-		splitTransaction(spec, trans)
+		splitTransaction(testIDs, spec, trans)
 		// 128 bytes at 64-byte units = 2 sub-transactions
 		Expect(trans.SubTransactions).To(HaveLen(2))
 		Expect(trans.SubTransactions[0].Address).To(Equal(uint64(0x100)))
@@ -47,7 +47,7 @@ var _ = Describe("Transaction Splitting", func() {
 		trans.ReadMsg.Address = 0x110 // Not aligned
 		trans.ReadMsg.AccessByteSize = 4
 
-		splitTransaction(spec, trans)
+		splitTransaction(testIDs, spec, trans)
 		Expect(trans.SubTransactions).To(HaveLen(1))
 		Expect(trans.SubTransactions[0].Address).To(Equal(uint64(0x100)))
 	})
@@ -219,7 +219,7 @@ var _ = Describe("DRAM Integration", func() {
 
 		writeData := []byte{1, 2, 3, 4}
 		write := memprotocol.WriteReq{}
-		write.ID = timing.GetIDGenerator().Generate()
+		write.ID = testIDs.Generate()
 		write.Address = 0x40
 		write.Data = writeData
 		write.Src = srcPort.AsRemote()
@@ -228,7 +228,7 @@ var _ = Describe("DRAM Integration", func() {
 		write.TrafficClass = "memprotocol.WriteReq"
 
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = testIDs.Generate()
 		read.Address = 0x40
 		read.AccessByteSize = 4
 		read.Src = srcPort.AsRemote()
@@ -494,7 +494,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyOpen
 
 		ref := subTransRef{TxID: 0, SubIndex: 0}
-		cmd := createOpenPageCommand(spec, state, ref)
+		cmd := createOpenPageCommand(testIDs, spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindRead)))
@@ -504,7 +504,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyOpen
 
 		ref := subTransRef{TxID: 1, SubIndex: 0}
-		cmd := createOpenPageCommand(spec, state, ref)
+		cmd := createOpenPageCommand(testIDs, spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindWrite)))
@@ -514,7 +514,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyClose
 
 		ref := subTransRef{TxID: 0, SubIndex: 0}
-		cmd := createClosePageCommand(spec, state, ref)
+		cmd := createClosePageCommand(testIDs, spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindReadPrecharge)))
@@ -524,7 +524,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyClose
 
 		ref := subTransRef{TxID: 1, SubIndex: 0}
-		cmd := createClosePageCommand(spec, state, ref)
+		cmd := createClosePageCommand(testIDs, spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindWritePrecharge)))
@@ -620,7 +620,7 @@ var _ = Describe("Open Page Policy", func() {
 			{TxID: 0, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(spec, state)
+		progress := tickSubTransQueue(testIDs, spec, state)
 		Expect(progress).To(BeTrue())
 
 		// The command in the queue should be CmdKindRead (not ReadPrecharge)
@@ -635,7 +635,7 @@ var _ = Describe("Open Page Policy", func() {
 			{TxID: 0, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(spec, state)
+		progress := tickSubTransQueue(testIDs, spec, state)
 		Expect(progress).To(BeTrue())
 
 		// The command in the queue should be CmdKindReadPrecharge
@@ -650,7 +650,7 @@ var _ = Describe("Open Page Policy", func() {
 			{TxID: 1, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(spec, state)
+		progress := tickSubTransQueue(testIDs, spec, state)
 		Expect(progress).To(BeTrue())
 
 		Expect(state.CommandQueues.Entries).To(HaveLen(1))
@@ -664,7 +664,7 @@ var _ = Describe("Open Page Policy", func() {
 			{TxID: 1, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(spec, state)
+		progress := tickSubTransQueue(testIDs, spec, state)
 		Expect(progress).To(BeTrue())
 
 		Expect(state.CommandQueues.Entries).To(HaveLen(1))
@@ -858,7 +858,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 				queueEntry{
 					QueueIndex: 0,
 					Command: commandState{
-						ID:       timing.GetIDGenerator().Generate(),
+						ID:       testIDs.Generate(),
 						Kind:     int(cmdKindWritePrecharge),
 						Location: location{Rank: 0, BankGroup: 0, Bank: uint64(i), Row: uint64(i)},
 					},
@@ -893,7 +893,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			{
 				QueueIndex: 0,
 				Command: commandState{
-					ID:       timing.GetIDGenerator().Generate(),
+					ID:       testIDs.Generate(),
 					Kind:     int(cmdKindWritePrecharge),
 					Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 1},
 				},
@@ -902,7 +902,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			{
 				QueueIndex: 0,
 				Command: commandState{
-					ID:       timing.GetIDGenerator().Generate(),
+					ID:       testIDs.Generate(),
 					Kind:     int(cmdKindWritePrecharge),
 					Location: location{Rank: 0, BankGroup: 0, Bank: 1, Row: 2},
 				},
@@ -920,7 +920,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 		// Fill write queue to capacity (4)
 		for i := range 4 {
 			cmd := &commandState{
-				ID:       timing.GetIDGenerator().Generate(),
+				ID:       testIDs.Generate(),
 				Kind:     int(cmdKindWritePrecharge),
 				Location: location{Rank: 0, BankGroup: 0, Bank: uint64(i)},
 			}
@@ -930,7 +930,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 		// One more write should be rejected
 		extraWrite := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       testIDs.Generate(),
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
@@ -938,7 +938,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 		// But a read should still be accepted
 		readCmd := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       testIDs.Generate(),
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
@@ -949,7 +949,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 		// Fill read queue to capacity (4)
 		for i := range 4 {
 			cmd := &commandState{
-				ID:       timing.GetIDGenerator().Generate(),
+				ID:       testIDs.Generate(),
 				Kind:     int(cmdKindReadPrecharge),
 				Location: location{Rank: 0, BankGroup: 0, Bank: uint64(i)},
 			}
@@ -959,7 +959,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 		// One more read should be rejected
 		extraRead := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       testIDs.Generate(),
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
@@ -967,7 +967,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 		// But a write should still be accepted
 		writeCmd := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       testIDs.Generate(),
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
@@ -982,7 +982,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 		// Fill unified queue to capacity
 		for range 4 {
 			cmd := &commandState{
-				ID:       timing.GetIDGenerator().Generate(),
+				ID:       testIDs.Generate(),
 				Kind:     int(cmdKindReadPrecharge),
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 			}
@@ -992,14 +992,14 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 		// Both reads and writes should be rejected
 		readCmd := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       testIDs.Generate(),
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
 		Expect(canAcceptCommand(state, readCmd, spec)).To(BeFalse())
 
 		writeCmd := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       testIDs.Generate(),
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
@@ -1025,7 +1025,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 	It("should tag queue entries with IsWrite flag", func() {
 		writeCmd := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       testIDs.Generate(),
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0},
 		}
@@ -1033,7 +1033,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 		Expect(state.CommandQueues.Entries[0].IsWrite).To(BeTrue())
 
 		readCmd := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       testIDs.Generate(),
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0},
 		}

@@ -1,6 +1,9 @@
 package lruset
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // setJSON is the JSON form of a Set. The Set's fields are unexported, so without
 // these methods encoding/json would serialize a Set as an empty object and
@@ -34,6 +37,26 @@ func (s *Set) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	if dto.WayCount < 0 || len(dto.LastVisits) != dto.WayCount {
+		return fmt.Errorf("lruset: invalid way count")
+	}
+	seen := make(map[int]bool)
+	for _, way := range dto.VisitList {
+		if way < 0 || way >= dto.WayCount || seen[way] {
+			return fmt.Errorf("lruset: invalid visit list")
+		}
+		seen[way] = true
+	}
+	for _, way := range dto.KeyMap {
+		if way < 0 || way >= dto.WayCount {
+			return fmt.Errorf("lruset: invalid key mapping")
+		}
+	}
+	for _, visit := range dto.LastVisits {
+		if visit > dto.VisitCount {
+			return fmt.Errorf("lruset: invalid visit counter")
+		}
+	}
 	s.wayCount = dto.WayCount
 	s.visitList = dto.VisitList
 	s.visitCount = dto.VisitCount

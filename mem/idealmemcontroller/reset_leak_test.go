@@ -55,7 +55,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// Admit a read: takeNewReqs opens the req_in task and parks the access in
 	// InflightTransactions; the access never completes within the ticks below.
 	read := memprotocol.ReadReq{Address: 0, AccessByteSize: 4}
-	read.ID = timing.GetIDGenerator().Generate()
+	read.ID = testIDs.Generate()
 	read.Src = messaging.RemotePort("Agent")
 	read.Dst = topPort.AsRemote()
 	read.TrafficClass = "memprotocol.ReadReq"
@@ -73,7 +73,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the access is in flight.
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = timing.GetIDGenerator().Generate()
+	reset.ID = testIDs.Generate()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = ctrlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

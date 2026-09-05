@@ -267,7 +267,7 @@ func (m *middleware) buildShadowReq(
 			AccessByteSize: r.AccessByteSize,
 			PID:            r.PID,
 		}
-		shadow.ID = timing.GetIDGenerator().Generate()
+		shadow.ID = m.comp.IDGenerator().Generate()
 		shadow.Src = src
 		shadow.Dst = dst
 		shadow.TrafficBytes = r.TrafficBytes
@@ -280,7 +280,7 @@ func (m *middleware) buildShadowReq(
 			DirtyMask: r.DirtyMask,
 			PID:       r.PID,
 		}
-		shadow.ID = timing.GetIDGenerator().Generate()
+		shadow.ID = m.comp.IDGenerator().Generate()
 		shadow.Src = src
 		shadow.Dst = dst
 		shadow.TrafficBytes = r.TrafficBytes
@@ -296,7 +296,7 @@ func (m *middleware) buildTopRsp(
 ) messaging.Msg {
 	if trans.IsRead {
 		rsp := memprotocol.DataReadyRsp{Data: trans.RspData}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = m.comp.IDGenerator().Generate()
 		rsp.Src = src
 		rsp.Dst = trans.ReqFromTopSrc
 		rsp.RspTo = trans.ReqFromTopID
@@ -306,7 +306,7 @@ func (m *middleware) buildTopRsp(
 	}
 
 	rsp := memprotocol.WriteDoneRsp{}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = m.comp.IDGenerator().Generate()
 	rsp.Src = src
 	rsp.Dst = trans.ReqFromTopSrc
 	rsp.RspTo = trans.ReqFromTopID
@@ -523,7 +523,7 @@ func makeCtrlRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = timing.IDsFor(port.Component()).Generate()
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo

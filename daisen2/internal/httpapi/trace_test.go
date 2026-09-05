@@ -36,10 +36,13 @@ func TestInitReadOnlyReadsNonWALTrace(t *testing.T) {
 	}
 
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.InitReadOnly() // must not panic
+	if err := reader.InitReadOnly(); err != nil {
+		panic(err)
+	} // must not panic
 	defer reader.Close()
 
-	timeRange, ok := reader.TimeRange(context.Background())
+	timeRange, ok, readErr := reader.TimeRange(context.Background())
+	assertReadOK(t, readErr)
 	if !ok {
 		t.Fatal("expected a trace time range from the read-only reader")
 	}
@@ -51,7 +54,9 @@ func TestInitReadOnlyReadsNonWALTrace(t *testing.T) {
 func TestSQLiteTraceReaderTimeRange(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	_, err := reader.Exec(`CREATE TABLE trace (
@@ -76,7 +81,8 @@ func TestSQLiteTraceReaderTimeRange(t *testing.T) {
 		t.Fatalf("insert trace rows: %v", err)
 	}
 
-	timeRange, ok := reader.TimeRange(context.Background())
+	timeRange, ok, readErr := reader.TimeRange(context.Background())
+	assertReadOK(t, readErr)
 	if !ok {
 		t.Fatal("expected a trace time range")
 	}
@@ -88,7 +94,9 @@ func TestSQLiteTraceReaderTimeRange(t *testing.T) {
 func TestSQLiteTraceReaderMergesTagsAndMilestonesIntoSteps(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	exec := func(query string) {
@@ -111,8 +119,9 @@ func TestSQLiteTraceReaderMergesTagsAndMilestonesIntoSteps(t *testing.T) {
 	exec(`INSERT INTO milestone VALUES (10, 1, 5000, 'data', 'arrived')`)
 	exec(`INSERT INTO tag VALUES (20, 1, 3000, 'read-hit')`)
 
-	tasks := reader.ListTasks(context.Background(),
+	tasks, readErr := reader.ListTasks(context.Background(),
 		TaskQuery{ID: 1, EnableMilestones: true})
+	assertReadOK(t, readErr)
 
 	if len(tasks) != 1 {
 		t.Fatalf("expected 1 task, got %d", len(tasks))
@@ -143,7 +152,9 @@ func TestSQLiteTraceReaderMergesTagsAndMilestonesIntoSteps(t *testing.T) {
 func TestSQLiteTraceReaderTimeRangePrefersExecInfoVirtualTime(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	_, err := reader.Exec(`CREATE TABLE trace (
@@ -180,7 +191,8 @@ func TestSQLiteTraceReaderTimeRangePrefersExecInfoVirtualTime(t *testing.T) {
 		t.Fatalf("insert exec_info rows: %v", err)
 	}
 
-	timeRange, ok := reader.TimeRange(context.Background())
+	timeRange, ok, readErr := reader.TimeRange(context.Background())
+	assertReadOK(t, readErr)
 	if !ok {
 		t.Fatal("expected a trace time range")
 	}
@@ -199,7 +211,9 @@ func TestSQLiteTraceReaderTimeRangePrefersExecInfoVirtualTime(t *testing.T) {
 func TestListTasksScopeAggregatesSubtree(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	exec := func(q string) {
@@ -222,13 +236,14 @@ func TestListTasksScopeAggregatesSubtree(t *testing.T) {
 		(3, 0, 'k', 'c', 3, 0, 10),
 		(4, 0, 'k', 'd', 2, 100, 110)`)
 
-	tasks := reader.ListTasks(context.Background(), TaskQuery{
+	tasks, readErr := reader.ListTasks(context.Background(), TaskQuery{
 		Scope:            "ROB",
 		StartTime:        0,
 		EndTime:          50,
 		EnableTimeRange:  true,
 		EnableMilestones: true,
 	})
+	assertReadOK(t, readErr)
 
 	// ROB + ROB.req_in overlapping [0,50): tasks 1 and 2. The sibling "ROBOT.x"
 	// (task 3) is excluded by the dot boundary; task 4 (ROB.req_in but at t=100)
@@ -245,12 +260,13 @@ func TestListTasksScopeAggregatesSubtree(t *testing.T) {
 	}
 
 	// A leaf scope matches only itself, not the subtree.
-	leaf := reader.ListTasks(context.Background(), TaskQuery{
+	leaf, readErr := reader.ListTasks(context.Background(), TaskQuery{
 		Scope:           "ROB.req_in",
 		StartTime:       0,
 		EndTime:         50,
 		EnableTimeRange: true,
 	})
+	assertReadOK(t, readErr)
 	if len(leaf) != 1 || leaf[0].ID != 2 {
 		t.Fatalf("scope ROB.req_in = %+v, want exactly task id 2", leaf)
 	}
@@ -263,7 +279,9 @@ func TestListTasksScopeAggregatesSubtree(t *testing.T) {
 func TestListTasksParentIDsSelectsChildrenOfManyParents(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	exec := func(q string) {
@@ -287,7 +305,8 @@ func TestListTasksParentIDsSelectsChildrenOfManyParents(t *testing.T) {
 		(20, 2, 'c', 'c', 1, 0, 5),
 		(30, 3, 'c', 'd', 1, 0, 5)`)
 
-	tasks := reader.ListTasks(context.Background(), TaskQuery{ParentIDs: []uint64{1, 2}})
+	tasks, readErr := reader.ListTasks(context.Background(), TaskQuery{ParentIDs: []uint64{1, 2}})
+	assertReadOK(t, readErr)
 	got := map[uint64]bool{}
 	for _, tk := range tasks {
 		got[tk.ID] = true
@@ -296,7 +315,9 @@ func TestListTasksParentIDsSelectsChildrenOfManyParents(t *testing.T) {
 		t.Fatalf("ParentIDs{1,2} returned ids %v, want {10,11,20}", got)
 	}
 
-	if one := reader.ListTasks(context.Background(), TaskQuery{ParentID: 1}); len(one) != 2 {
+	if one, readErr := reader.ListTasks(context.Background(), TaskQuery{ParentID: 1}); readErr != nil {
+		panic(readErr)
+	} else if len(one) != 2 {
 		t.Fatalf("ParentID 1 returned %d tasks, want 2", len(one))
 	}
 }
@@ -316,7 +337,9 @@ func TestBuildTraceQueryRejectsInvalidTime(t *testing.T) {
 func TestListTasksTreatsKindAsBoundValue(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	exec := func(q string) {
@@ -333,8 +356,16 @@ func TestListTasksTreatsKindAsBoundValue(t *testing.T) {
 		(1, 0, 'read', 'a', 1, 0, 10),
 		(2, 0, 'write', 'b', 1, 0, 10)`)
 
-	tasks := reader.ListTasks(context.Background(), TaskQuery{Kind: "read' OR 1=1 --"})
+	tasks, readErr := reader.ListTasks(context.Background(), TaskQuery{Kind: "read' OR 1=1 --"})
+	assertReadOK(t, readErr)
 	if len(tasks) != 0 {
 		t.Fatalf("malicious kind matched %d tasks, want 0", len(tasks))
+	}
+}
+
+func assertReadOK(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
 	}
 }

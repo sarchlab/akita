@@ -65,7 +65,7 @@ var _ = Describe("MMUCache control behavior", func() {
 
 	makeTranslationReq := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -77,7 +77,7 @@ var _ = Describe("MMUCache control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = controlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -92,7 +92,7 @@ var _ = Describe("MMUCache control behavior", func() {
 				PID: fwd.PID, VAddr: fwd.VAddr, PAddr: 0x5000, Valid: true,
 			},
 		}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = testIDs.Generate()
 		rsp.Src = messaging.RemotePort("LowModule")
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = fwd.ID

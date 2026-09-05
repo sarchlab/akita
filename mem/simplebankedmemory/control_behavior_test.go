@@ -52,7 +52,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"

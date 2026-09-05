@@ -29,7 +29,7 @@ type scheduler interface {
 // open- vs close-page variant. The location is resolved by the addrMapper.
 type rowPolicy interface {
 	Name() string
-	CommandFor(spec *Spec, st *State, ref subTransRef, loc location) *commandState
+	CommandFor(ids timing.IDGenerator, spec *Spec, st *State, ref subTransRef, loc location) *commandState
 }
 
 // addrMapper maps a physical address to a DRAM location. The location keeps a
@@ -65,9 +65,10 @@ type openPageRowPolicy struct{}
 func (openPageRowPolicy) Name() string { return rowPolicyOpen }
 
 func (openPageRowPolicy) CommandFor(
+	ids timing.IDGenerator,
 	_ *Spec, st *State, ref subTransRef, loc location,
 ) *commandState {
-	return buildColumnCommand(st, ref, loc, cmdKindRead, cmdKindWrite)
+	return buildColumnCommand(ids, st, ref, loc, cmdKindRead, cmdKindWrite)
 }
 
 // closePageRowPolicy issues ReadPrecharge/WritePrecharge (auto-precharge),
@@ -77,16 +78,18 @@ type closePageRowPolicy struct{}
 func (closePageRowPolicy) Name() string { return rowPolicyClose }
 
 func (closePageRowPolicy) CommandFor(
+	ids timing.IDGenerator,
 	_ *Spec, st *State, ref subTransRef, loc location,
 ) *commandState {
 	return buildColumnCommand(
-		st, ref, loc, cmdKindReadPrecharge, cmdKindWritePrecharge)
+		ids, st, ref, loc, cmdKindReadPrecharge, cmdKindWritePrecharge)
 }
 
 // buildColumnCommand constructs a column command for a sub-transaction at the
 // given location, choosing the read or write variant from the parent
 // transaction's direction.
 func buildColumnCommand(
+	ids timing.IDGenerator,
 	st *State, ref subTransRef, loc location,
 	readKind, writeKind commandKind,
 ) *commandState {
@@ -94,7 +97,7 @@ func buildColumnCommand(
 	sub := &trans.SubTransactions[ref.SubIndex]
 
 	cmd := &commandState{
-		ID:          timing.GetIDGenerator().Generate(),
+		ID:          ids.Generate(),
 		Address:     sub.Address,
 		SubTransRef: ref,
 		Location:    loc,
@@ -165,7 +168,7 @@ type controller struct {
 // sub-transaction queue into a command queue: it maps the address and turns the
 // sub-transaction into a column command via the configured strategies. Returns
 // true if a sub-transaction was enqueued.
-func (c *controller) fillCommandQueue(spec *Spec, state *State) bool {
+func (c *controller) fillCommandQueue(ids timing.IDGenerator, spec *Spec, state *State) bool {
 	for i, ref := range state.SubTransQueue.Entries {
 		sub := subTransByRef(state, ref)
 		if sub == nil {
@@ -173,7 +176,7 @@ func (c *controller) fillCommandQueue(spec *Spec, state *State) bool {
 		}
 
 		loc := c.addrMapper.Map(spec, sub.Address)
-		cmd := c.rowPolicy.CommandFor(spec, state, ref, loc)
+		cmd := c.rowPolicy.CommandFor(ids, spec, state, ref, loc)
 
 		if canAcceptCommand(state, cmd, spec) {
 			acceptCommand(state, cmd)

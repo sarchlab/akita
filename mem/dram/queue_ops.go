@@ -7,6 +7,7 @@ import (
 // splitTransaction breaks a transaction into sub-transactions based on
 // the access unit size (from Spec.Log2AccessUnitSize).
 func splitTransaction(
+	ids timing.IDGenerator,
 	spec *Spec,
 	trans *transactionState,
 ) {
@@ -31,7 +32,7 @@ func splitTransaction(
 
 	for a := alignedAddr; a < alignedEnd; a += unitSize {
 		st := subTransState{
-			ID:        timing.GetIDGenerator().Generate(),
+			ID:        ids.Generate(),
 			Address:   a,
 			Completed: false,
 		}
@@ -64,34 +65,36 @@ func pushSubTrans(state *State, transIdx int) {
 // made. Production drives this through the component's configured controller
 // (see controller.fillCommandQueue); this package-level shim builds the default
 // controller so tests can exercise the path directly.
-func tickSubTransQueue(spec *Spec, state *State) bool {
-	return newDefaultController(spec).fillCommandQueue(spec, state)
+func tickSubTransQueue(ids timing.IDGenerator, spec *Spec, state *State) bool {
+	return newDefaultController(spec).fillCommandQueue(ids, spec, state)
 }
 
 // createClosePageCommand creates a command for a sub-transaction using
 // close-page policy (auto-precharge). Thin wrapper over the row policy, kept
 // for direct testing.
 func createClosePageCommand(
+	ids timing.IDGenerator,
 	spec *Spec,
 	state *State,
 	ref subTransRef,
 ) *commandState {
 	st := subTransByRef(state, ref)
 	return closePageRowPolicy{}.CommandFor(
-		spec, state, ref, mapAddress(spec, st.Address))
+		ids, spec, state, ref, mapAddress(spec, st.Address))
 }
 
 // createOpenPageCommand creates a command for a sub-transaction using
 // open-page policy (plain Read/Write, leaving the row buffer open). Thin
 // wrapper over the row policy, kept for direct testing.
 func createOpenPageCommand(
+	ids timing.IDGenerator,
 	spec *Spec,
 	state *State,
 	ref subTransRef,
 ) *commandState {
 	st := subTransByRef(state, ref)
 	return openPageRowPolicy{}.CommandFor(
-		spec, state, ref, mapAddress(spec, st.Address))
+		ids, spec, state, ref, mapAddress(spec, st.Address))
 }
 
 // getQueueIndex returns the command queue index for a command (by rank).

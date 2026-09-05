@@ -129,7 +129,7 @@ values, so the literal has no `&`:
 ```go
 pingMsg := pingReq{
     MsgMeta: messaging.MsgMeta{
-        ID:  timing.GetIDGenerator().Generate(),
+        ID:  m.comp.IDGenerator().Generate(),
         Src: outPort(m.comp).AsRemote(),
         Dst: state.PingDst,
     },

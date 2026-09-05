@@ -16,9 +16,9 @@ type TickEvent struct {
 }
 
 // MakeTickEvent creates a new TickEvent
-func MakeTickEvent(handlerID string, time timing.VTimeInPicoSec) TickEvent {
+func MakeTickEvent(ids timing.IDGenerator, handlerID string, time timing.VTimeInPicoSec) TickEvent {
 	evt := TickEvent{}
-	evt.ID = timing.GetIDGenerator().Generate()
+	evt.ID = ids.Generate()
 	evt.HandlerID_ = handlerID
 	evt.Time_ = time
 	evt.Secondary = false
@@ -80,45 +80,43 @@ func NewSecondaryTickScheduler(
 // TickNow schedule a Tick event at the current time.
 func (t *TickScheduler) TickNow() {
 	t.lock.Lock()
+	defer t.lock.Unlock()
 	time := t.CurrentTime()
 
 	if t.hasScheduledTick && t.nextTickTime >= time {
-		t.lock.Unlock()
 		return
 	}
 
 	t.nextTickTime = t.freq.ThisTick(time)
 	t.hasScheduledTick = true
-	tick := MakeTickEvent(t.handlerID, t.nextTickTime)
+	tick := MakeTickEvent(t.IDGenerator(), t.handlerID, t.nextTickTime)
 
 	if t.secondary {
 		tick.Secondary = true
 	}
 
 	t.engine.Schedule(tick)
-	t.lock.Unlock()
 }
 
 // TickLater will schedule a tick event at the cycle after the now time.
 func (t *TickScheduler) TickLater() {
 	t.lock.Lock()
+	defer t.lock.Unlock()
 	time := t.freq.NextTick(t.CurrentTime())
 
 	if t.hasScheduledTick && t.nextTickTime >= time {
-		t.lock.Unlock()
 		return
 	}
 
 	t.nextTickTime = time
 	t.hasScheduledTick = true
-	tick := MakeTickEvent(t.handlerID, t.nextTickTime)
+	tick := MakeTickEvent(t.IDGenerator(), t.handlerID, t.nextTickTime)
 
 	if t.secondary {
 		tick.Secondary = true
 	}
 
 	t.engine.Schedule(tick)
-	t.lock.Unlock()
 }
 
 func (t *TickScheduler) CurrentTime() timing.VTimeInPicoSec {
@@ -178,13 +176,13 @@ func (c *TickingComponent) NotifyRecv(
 }
 
 // Handle triggers the tick function of the TickingComponent
-func (c *TickingComponent) Handle(e timing.Event) error {
+func (c *TickingComponent) Handle(e timing.Event) {
 	madeProgress := c.ticker.Tick()
 	if madeProgress {
 		c.TickLater()
 	}
 
-	return nil
+	return
 }
 
 // NewTickingComponent creates a new ticking component
@@ -230,3 +228,5 @@ func NewSecondaryTickingComponent(
 
 	return tc
 }
+
+func (t *TickScheduler) IDGenerator() timing.IDGenerator { return timing.IDsFor(t.engine) }

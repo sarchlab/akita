@@ -14,6 +14,7 @@ import (
 // domain's clock, but only after confirming the domain has hooks, so the
 // clock is never consulted when tracing is disabled.
 type NamedHookable interface {
+	timing.IDSource
 	naming.Named
 	hooking.Hookable
 	timing.TimeTeller
@@ -127,7 +128,7 @@ func AddTaskTag(domain NamedHookable, tag TaskTag) {
 	}
 
 	if tag.ID == 0 {
-		tag.ID = timing.GetIDGenerator().Generate()
+		tag.ID = timing.IDsFor(domain).Generate()
 	}
 
 	tag.Time = domain.CurrentTime()
@@ -148,7 +149,7 @@ func AddMilestone(domain NamedHookable, m Milestone) {
 	}
 
 	if m.ID == 0 {
-		m.ID = timing.GetIDGenerator().Generate()
+		m.ID = timing.IDsFor(domain).Generate()
 	}
 
 	m.Time = domain.CurrentTime()

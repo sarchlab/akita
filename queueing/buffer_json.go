@@ -1,6 +1,9 @@
 package queueing
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // bufferState is the JSON form of a Buffer: its name, capacity, and FIFO
 // contents. Buffer's fields are unexported, so without these methods
@@ -29,6 +32,9 @@ func (b *Buffer[T]) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	if s.Cap < 0 || len(s.Elements) > s.Cap {
+		return fmt.Errorf("queueing: invalid buffer capacity or occupancy")
+	}
 	b.name = s.Name
 	b.cap = s.Cap
 	b.elements = s.Elements

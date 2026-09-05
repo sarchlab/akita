@@ -20,7 +20,7 @@ type testMsg struct {
 func newTestMsg() testMsg {
 	return testMsg{
 		MsgMeta: messaging.MsgMeta{
-			ID: timing.GetIDGenerator().Generate(),
+			ID: testIDs.Generate(),
 		},
 	}
 }
@@ -63,7 +63,7 @@ var _ = Describe("DirectConnection", func() {
 	It("should forward when handling tick event", func() {
 		engine.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10000))
 
-		tick := modeling.MakeTickEvent(connection.Name(), timing.VTimeInPicoSec(10000))
+		tick := modeling.MakeTickEvent(testIDs, connection.Name(), timing.VTimeInPicoSec(10000))
 
 		msg1 := newTestMsg()
 		msg1.Src = port1.AsRemote()
@@ -96,7 +96,7 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should keep outgoing messages queued when delivery is blocked", func() {
-		tick := modeling.MakeTickEvent(connection.Name(), timing.VTimeInPicoSec(10000))
+		tick := modeling.MakeTickEvent(testIDs, connection.Name(), timing.VTimeInPicoSec(10000))
 
 		msg := newTestMsg()
 		msg.Src = port1.AsRemote()
@@ -184,7 +184,7 @@ var _ = Describe("Direct Connection Integration", func() {
 				for msg.Dst == msg.Src {
 					msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
 				}
-				msg.ID = timing.GetIDGenerator().Generate()
+				msg.ID = testIDs.Generate()
 				agent.msgsOut = append(agent.msgsOut, msg)
 			}
 			agent.TickLater()
@@ -237,7 +237,7 @@ func directConnectionTest(seed int64) timing.VTimeInPicoSec {
 				msg.Dst = agents[r.Intn(len(agents))].OutPort.AsRemote()
 			}
 
-			msg.ID = timing.GetIDGenerator().Generate()
+			msg.ID = testIDs.Generate()
 
 			agent.msgsOut = append(agent.msgsOut, msg)
 		}

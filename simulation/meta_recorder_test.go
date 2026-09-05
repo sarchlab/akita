@@ -25,7 +25,10 @@ func TestMetaRecorderWritesExecInfo(t *testing.T) {
 	defer os.Remove(dbFile)
 
 	clock := &fakeTimeTeller{now: 10}
-	recorder := datarecording.NewDataRecorder(path)
+	recorder, err := datarecording.NewDataRecorder(path)
+	if err != nil {
+		panic(err)
+	}
 	metaRecorder := newMetaRecorder(recorder, clock)
 
 	values := readExecInfo(t, dbFile)
@@ -54,7 +57,10 @@ func TestMetaRecorderWritesExecInfo(t *testing.T) {
 func readExecInfo(t *testing.T, dbFile string) map[string]string {
 	t.Helper()
 
-	reader := datarecording.NewReader(dbFile)
+	reader, err := datarecording.NewReader(dbFile)
+	if err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 	reader.MapTable("exec_info", simulationInfo{})
 

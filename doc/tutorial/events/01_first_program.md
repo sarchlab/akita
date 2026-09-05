@@ -36,23 +36,25 @@ implements a single method:
 ```go
 type EventPrinter struct{}
 
-func (e *EventPrinter) Handle(event timing.Event) error {
+func (e *EventPrinter) Handle(event timing.Event) {
     fmt.Printf("Event: %d\n", event.Time())
-    return nil
 }
 ```
 
 When the engine fires an event, it looks up the registered handler by name
-and calls `Handle(event)`. Anything the handler returns as an error stops
-the simulation.
+and calls `Handle(event)`. A handler panic fails its owning simulation;
+`Run` returns the captured failure. `Handle` has no error result.
 
 ### 2. Building the simulation
 
 ```go
-s := simulation.MakeBuilder().Build()
+s, err := simulation.MakeBuilder().Build()
+if err != nil {
+    panic(err) // command-line boundary
+}
 ```
 
-`simulation.MakeBuilder().Build()` returns a `*simulation.Simulation`. It
+`simulation.MakeBuilder().Build()` returns `(*simulation.Simulation, error)`. It
 owns an engine, a registrar, and optional tracing and monitoring
 infrastructure. For this example we only need the engine:
 
@@ -77,11 +79,11 @@ The type assertion is a safety check — most engines implement
 ### 4. Creating and scheduling the event
 
 ```go
-evt := timing.MakeEventBase(1, "printer")
+evt := timing.MakeEventBase(s.GetIDGenerator(), 1, "printer")
 engine.Schedule(evt)
 ```
 
-`MakeEventBase(time, handlerID)` creates a minimal event whose `Time()`
+`MakeEventBase(ids, time, handlerID)` creates a minimal event whose `Time()`
 returns `1` and whose `HandlerID()` returns `"printer"`. The engine will
 fire it at time = 1 picosecond and dispatch it to the handler registered
 under `"printer"`.
@@ -89,7 +91,7 @@ under `"printer"`.
 ### 5. Running
 
 ```go
-err := engine.Run()
+err = engine.Run()
 if err != nil {
     panic(err)
 }
@@ -102,7 +104,9 @@ event and returns.
 ### 6. Cleanup
 
 ```go
-s.Terminate()
+if err := s.Terminate(); err != nil {
+    panic(err) // requested output did not complete
+}
 ```
 
 `Terminate` flushes any tracing and data-recording buffers held by the
@@ -138,3 +142,7 @@ and the engine returned because no further events were scheduled.
 
 The next chapter shows handlers that schedule *more* events during the
 simulation — the basic pattern that components themselves use internally.
+
+For a host running multiple simulations, construct components in a `Build`
+callback or `Simulation.Setup`, and handle boundary errors without panicking
+in the host. See [the failure-isolation example](https://github.com/sarchlab/akita/tree/main/examples/failureisolation).

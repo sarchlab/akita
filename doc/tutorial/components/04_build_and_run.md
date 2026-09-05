@@ -10,7 +10,10 @@ component and runs the engine.
 ## Building the Component
 
 ```go
-s := simulation.MakeBuilder().Build()
+s, err := simulation.MakeBuilder().Build()
+if err != nil {
+    panic(err) // command-line boundary
+}
 
 spec := walkSpec{Freq: 1 * timing.GHz, WallDistance: 10}
 comp := modeling.NewBuilder[walkSpec, walkState, modeling.None]().
@@ -71,7 +74,9 @@ if err := s.GetEngine().Run(); err != nil {
     panic(err)
 }
 
-s.Terminate()
+if err := s.Terminate(); err != nil {
+    panic(err) // requested output did not complete
+}
 ```
 
 `TickLater` schedules the first tick at the next cycle. Without it the
@@ -119,3 +124,7 @@ This component talks to nobody. The next section, **Make Components Talk to
 Each Other**, introduces **ports** for sending and receiving messages,
 **multiple middlewares** that share one component's state, and the
 per-package **builder** convention used throughout Akita.
+
+For a host running multiple simulations, construct components in a `Build`
+callback or `Simulation.Setup`, and handle boundary errors without panicking
+in the host. See [the failure-isolation example](https://github.com/sarchlab/akita/tree/main/examples/failureisolation).

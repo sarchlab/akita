@@ -18,6 +18,7 @@ func (t *SampleTimeTeller) CurrentTime() timing.VTimeInPicoSec {
 }
 
 type SampleDomain struct {
+	ids timing.IDGenerator
 	*hooking.HookableBase
 
 	timeTeller timing.TimeTeller
@@ -96,4 +97,11 @@ func ExampleTracer() {
 	// 25
 	// 20
 	// 12
+}
+
+func (d *SampleDomain) IDGenerator() timing.IDGenerator {
+	if d.ids == nil {
+		d.ids = timing.NewIDGenerator()
+	}
+	return d.ids
 }

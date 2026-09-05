@@ -98,3 +98,20 @@ func TestRegistry_CheckRoundTrip(t *testing.T) {
 		t.Fatalf("expected CheckRoundTrip to fail for an unregistered type")
 	}
 }
+
+func TestRegistryRejectsNilAndNullValues(t *testing.T) {
+	r := NewRegistry[shape]("shape")
+	r.Register(&rect{})
+	for _, input := range []shape{nil, (*rect)(nil)} {
+		if _, err := r.EncodeSlice([]shape{input}); err == nil {
+			t.Fatal("encoded nil shape")
+		}
+	}
+	payload, err := json.Marshal([]typedPayload{{Type: Tag(&rect{}), Payload: json.RawMessage("null")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.DecodeSlice(payload); err == nil {
+		t.Fatal("null shape silently became a zero-valued shape")
+	}
+}

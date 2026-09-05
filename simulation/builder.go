@@ -1,8 +1,11 @@
 package simulation
 
 import (
+	"errors"
+	"fmt"
 	"io/fs"
 	"maps"
+	"os"
 
 	"github.com/rs/xid"
 	"github.com/sarchlab/akita/v5/datarecording"
@@ -95,22 +98,35 @@ func (b Builder) parametersMustBeValid() {
 	}
 }
 
-// Build builds the simulation.
-func (b Builder) Build() *Simulation {
-	b.parametersMustBeValid()
-
+// Build creates a simulation and contains setup panics. Optional callbacks
+// construct components inside the same boundary. On failure the returned
+// instance contains diagnostics and has already released its owned resources.
+func (b Builder) Build(setup ...func(*Simulation) error) (*Simulation, error) {
 	s := b.createSimulation()
-
-	b.createDataRecorder(s)
 	b.createEngine(s)
-	b.createIDGenerator(s)
-	b.createMetaRecorder(s)
-	b.createSourceRecorder(s)
-	b.createTopologyRecorder(s)
-	b.createVisTracer(s)
-	b.createServer(s)
-
-	return s
+	s.supervisor = s.engine.(timing.ManagedEngine).Supervisor()
+	s.supervisor.SetID(s.id)
+	err := s.supervisor.Execute("setup", func() error {
+		b.parametersMustBeValid()
+		b.createIDGenerator(s)
+		b.createDataRecorder(s)
+		b.createMetaRecorder(s)
+		b.createSourceRecorder(s)
+		b.createTopologyRecorder(s)
+		b.createVisTracer(s)
+		b.createServer(s)
+		for _, fn := range setup {
+			if err := fn(s); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		_ = s.Terminate()
+		return s, s.Err()
+	}
+	return s, nil
 }
 
 // createSourceRecorder records the simulator source into the trace so it is
@@ -122,7 +138,7 @@ func (b Builder) createSourceRecorder(s *Simulation) {
 	}
 
 	if err := recordSourceArchives(s.dataRecorder, b.sourceFSes); err != nil {
-		panic(err)
+		s.warn("source archive", err)
 	}
 }
 
@@ -153,7 +169,14 @@ func (b Builder) createDataRecorder(s *Simulation) {
 		outputPath = "akita_sim_" + s.id
 	}
 	s.outputPath = outputPath
-	s.dataRecorder = datarecording.NewDataRecorder(outputPath)
+	recorder, err := datarecording.NewDataRecorder(outputPath)
+	if err != nil {
+		panic(err)
+	}
+	s.dataRecorder = recorder
+	if err := os.Remove(outputPath + ".complete"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		panic(err)
+	}
 }
 
 func (b Builder) createEngine(s *Simulation) {
@@ -168,10 +191,9 @@ func (b Builder) createEngine(s *Simulation) {
 	}
 }
 
-// createIDGenerator registers the process-wide ID generator as an entity so its
-// counter is captured in the state snapshot.
+// createIDGenerator registers this engine's sequence for checkpoint ownership.
 func (b Builder) createIDGenerator(s *Simulation) {
-	s.registerEntity(timing.GetIDGenerator().(Entity))
+	s.registerEntity(s.engine.(timing.IDSource).IDGenerator().(Entity))
 }
 
 func (b Builder) createMetaRecorder(s *Simulation) {
@@ -199,7 +221,12 @@ func (b Builder) createServer(s *Simulation) {
 	monitor.RegisterEngine(s.engine)
 	monitor.RegisterVisTracer(s.visTracer)
 	monitor.SetTraceDBPath(s.outputPath + ".sqlite3")
-	monitor.StartServer()
+	monitor.OnWarning = func(err error) { s.warn("monitor", err) }
+	monitor.OnFailure = func(cause any) { s.supervisor.Fail("monitor", cause) }
+	if err := monitor.StartServer(); err != nil {
+		s.warn("monitor", fmt.Errorf("start: %w", err))
+		return
+	}
 
 	s.monitor = monitor
 }

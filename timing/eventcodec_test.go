@@ -53,7 +53,7 @@ func TestEventRegistryUnknownType(t *testing.T) {
 // MakeEventBase round-trips without the caller registering EventBase: the timing
 // package registers its own built-in event type.
 func TestEventBaseRegisteredByDefault(t *testing.T) {
-	e := MakeEventBase(42, "h")
+	e := MakeEventBase(testIDs, 42, "h")
 	e.ID = 7
 
 	if err := eventCodec.CheckRoundTrip(e); err != nil {

@@ -105,7 +105,7 @@ var _ = Describe("DRAM Statistics", func() {
 
 		// Send a write request
 		write := memprotocol.WriteReq{}
-		write.ID = timing.GetIDGenerator().Generate()
+		write.ID = testIDs.Generate()
 		write.Address = 0x40
 		write.Data = []byte{1, 2, 3, 4}
 		write.Src = srcPort.AsRemote()
@@ -116,7 +116,7 @@ var _ = Describe("DRAM Statistics", func() {
 
 		// Send a read request
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = testIDs.Generate()
 		read.Address = 0x40
 		read.AccessByteSize = 4
 		read.Src = srcPort.AsRemote()

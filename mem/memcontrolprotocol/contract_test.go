@@ -1,12 +1,12 @@
 package memcontrolprotocol_test
 
 import (
+	"github.com/sarchlab/akita/v5/timing"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 // fakeComp is a minimal component that satisfies the contract harness's
@@ -156,7 +156,7 @@ func (c *fakeComp) makeRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = testIDs.Generate()
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
@@ -271,3 +271,5 @@ func TestState_String(t *testing.T) {
 		}
 	}
 }
+
+func (c *fakeComp) IDGenerator() timing.IDGenerator { return testIDs }

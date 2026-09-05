@@ -64,7 +64,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	makeMove := func() datamoverprotocol.DataMoveRequest {
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.SrcAddress = 0
@@ -78,7 +78,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Cmd")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"

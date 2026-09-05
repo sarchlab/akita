@@ -1,6 +1,9 @@
 package queueing
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // pipelineState is the JSON form of a Pipeline: its geometry and the items
 // currently occupying it. Pipeline's fields are unexported, so without these
@@ -29,6 +32,18 @@ func (p *Pipeline[T]) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	if s.Width < 0 || s.NumStages < 0 {
+		return fmt.Errorf("queueing: invalid pipeline geometry")
+	}
+	occupied := make(map[[2]int]bool)
+	for _, stage := range s.Stages {
+		key := [2]int{stage.Lane, stage.Stage}
+		if stage.Lane < 0 || stage.Lane >= s.Width ||
+			stage.Stage < 0 || stage.Stage >= s.NumStages || stage.CycleLeft < 0 || occupied[key] {
+			return fmt.Errorf("queueing: invalid pipeline occupancy")
+		}
+		occupied[key] = true
+	}
 	p.width = s.Width
 	p.numStages = s.NumStages
 	p.stages = s.Stages

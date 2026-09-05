@@ -36,7 +36,10 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 		simBuilder = simBuilder.WithVisTracingOnStart()
 	}
 
-	s := simBuilder.Build()
+	s, err := simBuilder.Build()
+	if err != nil {
+		panic(err)
+	}
 	engine := s.GetEngine()
 
 	conn := directconnection.MakeBuilder().

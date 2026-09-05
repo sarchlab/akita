@@ -309,12 +309,13 @@ func (r *SQLiteTraceReader) objectSizesFromEmbeddedQuery(ctx context.Context, qu
 		var name string
 		var bytes sql.NullInt64
 		if err := rows.Scan(&name, &bytes); err != nil {
-			continue
+			return nil, false
 		}
 		sizes[name] = bytes.Int64
 	}
 	if err := rows.Err(); err != nil {
 		log.Printf("dbstat query: %v", err)
+		return nil, false
 	}
 
 	return sizes, true

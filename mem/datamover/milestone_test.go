@@ -176,7 +176,7 @@ var _ = Describe("DataMover milestones", func() {
 		outsideStorage.Write(0, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = topPort.AsRemote()
 		req.SrcAddress = 0
@@ -227,7 +227,7 @@ var _ = Describe("DataMover milestones", func() {
 		outsideStorage.Write(0, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = topPort.AsRemote()
 		req.SrcAddress = 0
@@ -280,7 +280,7 @@ var _ = Describe("DataMover milestones", func() {
 
 		makeMove := func() datamoverprotocol.DataMoveRequest {
 			req := datamoverprotocol.DataMoveRequest{}
-			req.ID = timing.GetIDGenerator().Generate()
+			req.ID = testIDs.Generate()
 			req.Src = srcPort.AsRemote()
 			req.Dst = topPort.AsRemote()
 			req.SrcAddress = 0

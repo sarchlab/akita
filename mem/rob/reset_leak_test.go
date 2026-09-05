@@ -47,7 +47,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// Admit a read: topDown opens the top req_in and the shadow req_out, then
 	// waits on the bottom response (which never comes — the request is in flight).
 	read := memprotocol.ReadReq{Address: 0, AccessByteSize: 4}
-	read.ID = timing.GetIDGenerator().Generate()
+	read.ID = testIDs.Generate()
 	read.Src = messaging.RemotePort("Agent")
 	read.Dst = topPort.AsRemote()
 	read.TrafficClass = "memprotocol.ReadReq"
@@ -65,7 +65,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the transaction is in flight.
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = timing.GetIDGenerator().Generate()
+	reset.ID = testIDs.Generate()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = ctrlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

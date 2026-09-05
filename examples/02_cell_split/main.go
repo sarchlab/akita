@@ -35,7 +35,7 @@ type handler struct {
 	count int
 }
 
-func (h *handler) Handle(e timing.Event) error {
+func (h *handler) Handle(e timing.Event) {
 	h.count += 1
 
 	evt := e.(splitEvent)
@@ -45,7 +45,7 @@ func (h *handler) Handle(e timing.Event) error {
 	h.scheduleNextSplitEvent(evt.Time(), evt.id)
 	h.scheduleNextSplitEvent(evt.Time(), h.count) // h.count is the new cell
 
-	return nil
+	return
 }
 
 func (h *handler) scheduleNextSplitEvent(now timing.VTimeInPicoSec, id int) {
@@ -64,7 +64,10 @@ func (h *handler) scheduleNextSplitEvent(now timing.VTimeInPicoSec, id int) {
 func main() {
 	randGen = rand.New(rand.NewSource(0))
 
-	s := simulation.MakeBuilder().Build()
+	s, err := simulation.MakeBuilder().Build()
+	if err != nil {
+		panic(err)
+	}
 	engine = s.GetEngine()
 	h := handler{
 		count: 1,
@@ -83,12 +86,14 @@ func main() {
 
 	engine.Schedule(firstEvt)
 
-	err := engine.Run()
+	err = engine.Run()
 	if err != nil {
 		panic(err)
 	}
 
-	s.Terminate()
+	if err := s.Terminate(); err != nil {
+		panic(err)
+	}
 
 	fmt.Printf("Cell count at time %d ps: %d\n", endTime, h.count)
 }

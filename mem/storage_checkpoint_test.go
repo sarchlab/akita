@@ -10,13 +10,9 @@ import (
 
 func TestStorageCheckpointRoundTrip(t *testing.T) {
 	src := mem.NewStorage(1 * mem.MB)
-	if err := src.Write(0, []byte{1, 2, 3, 4}); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
+	src.Write(0, []byte{1, 2, 3, 4})
 	// A second write in a different allocation unit (default unit size 4 KB).
-	if err := src.Write(64*mem.KB, []byte{9, 9, 9}); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
+	src.Write(64*mem.KB, []byte{9, 9, 9})
 
 	var buf bytes.Buffer
 	if err := src.SaveCheckpoint(&buf); err != nil {
@@ -28,16 +24,16 @@ func TestStorageCheckpointRoundTrip(t *testing.T) {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
 
-	got, _ := dst.Read(0, 4)
+	got := dst.Read(0, 4)
 	if !bytes.Equal(got, []byte{1, 2, 3, 4}) {
 		t.Fatalf("Read(0,4) = %v, want [1 2 3 4]", got)
 	}
-	got, _ = dst.Read(64*mem.KB, 3)
+	got = dst.Read(64*mem.KB, 3)
 	if !bytes.Equal(got, []byte{9, 9, 9}) {
 		t.Fatalf("Read(64KB,3) = %v, want [9 9 9]", got)
 	}
 	// An untouched region restores as zeros.
-	got, _ = dst.Read(4, 4)
+	got = dst.Read(4, 4)
 	if !bytes.Equal(got, []byte{0, 0, 0, 0}) {
 		t.Fatalf("untouched Read = %v, want zeros", got)
 	}

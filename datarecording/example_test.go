@@ -19,7 +19,10 @@ func Example() {
 	dbPath := "test"
 	os.Remove(dbPath + ".sqlite3")
 
-	recorder := datarecording.NewDataRecorder(dbPath)
+	recorder, err := datarecording.NewDataRecorder(dbPath)
+	if err != nil {
+		panic(err)
+	}
 
 	cleanup := func() {
 		os.Remove(dbPath + ".sqlite3")
@@ -27,15 +30,18 @@ func Example() {
 	defer cleanup()
 
 	task1 := Task{1, "task1", 30, "A"}
-	recorder.CreateTable("test_table", task1)
+	datarecording.MustRecord(recorder.CreateTable("test_table", task1))
 
 	task2 := Task{2, "task2", 15, "B"}
-	recorder.InsertData("test_table", task2)
-	recorder.Flush()
+	datarecording.MustRecord(recorder.InsertData("test_table", task2))
+	datarecording.MustRecord(recorder.Flush())
 
 	recorder.Close()
 
-	reader := datarecording.NewReader(dbPath + ".sqlite3")
+	reader, err := datarecording.NewReader(dbPath + ".sqlite3")
+	if err != nil {
+		panic(err)
+	}
 	reader.MapTable("test_table", Task{})
 
 	results, _, err := reader.Query(context.Background(), "test_table", datarecording.QueryParams{})

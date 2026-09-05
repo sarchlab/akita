@@ -6,7 +6,6 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -89,7 +88,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		// milestones.
 		tracing.TraceReqReceive(m.comp, msg)
 
-		pid := timing.GetIDGenerator().Generate()
+		pid := m.comp.IDGenerator().Generate()
 		tracing.StartTask(m.comp, tracing.TaskStart{
 			ID:       pid,
 			ParentID: tracing.MsgIDAtReceiver(msg, m.comp),
@@ -208,7 +207,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	rspToTop := vmprotocol.TranslationRsp{
 		Page: page,
 	}
-	rspToTop.ID = timing.GetIDGenerator().Generate()
+	rspToTop.ID = m.comp.IDGenerator().Generate()
 	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = reqMsg.Src
 	rspToTop.RspTo = reqMsg.ID
@@ -319,7 +318,7 @@ func (m *tlbMiddleware) sendRspToTop(
 	rsp := vmprotocol.TranslationRsp{
 		Page: page,
 	}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = m.comp.IDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.RspTo = msg.ID
@@ -361,7 +360,7 @@ func (m *tlbMiddleware) fetchBottom(msg vmprotocol.TranslationReq) bool {
 	mapper := m.comp.Resources().TranslationProviderMapper
 
 	fetchBottom := vmprotocol.TranslationReq{}
-	fetchBottom.ID = timing.GetIDGenerator().Generate()
+	fetchBottom.ID = m.comp.IDGenerator().Generate()
 	fetchBottom.Src = m.bottomPort().AsRemote()
 	fetchBottom.Dst = findTranslationPort(mapper, msg.VAddr)
 	fetchBottom.PID = msg.PID

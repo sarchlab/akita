@@ -63,7 +63,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// fetch ReadReq out the Bottom port. We never answer it, so req_in, the
 	// fetch req_out, and the directory-pipeline subtask stay open.
 	read := memprotocol.ReadReq{}
-	read.ID = timing.GetIDGenerator().Generate()
+	read.ID = testIDs.Generate()
 	read.Src = messaging.RemotePort("Agent")
 	read.Dst = topPort.AsRemote()
 	read.Address = 0x10000
@@ -95,7 +95,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the fetch is in flight.
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = timing.GetIDGenerator().Generate()
+	reset.ID = testIDs.Generate()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = ctrlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

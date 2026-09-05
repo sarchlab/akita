@@ -144,7 +144,7 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 
 		for i, a := range addrs {
 			w := memprotocol.WriteReq{}
-			w.ID = timing.GetIDGenerator().Generate()
+			w.ID = testIDs.Generate()
 			w.Src = agent.port.AsRemote()
 			w.Dst = tp.AsRemote()
 			w.Address = a
@@ -159,7 +159,7 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 
 		for i, a := range addrs {
 			r := memprotocol.ReadReq{}
-			r.ID = timing.GetIDGenerator().Generate()
+			r.ID = testIDs.Generate()
 			r.Src = agent.port.AsRemote()
 			r.Dst = tp.AsRemote()
 			r.Address = a

@@ -88,7 +88,7 @@ var _ = Describe("DRAM admission milestones", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{Address: addr, AccessByteSize: 4}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.TrafficBytes = 12
@@ -150,7 +150,7 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 		tracing.CollectIncomingBufferTrace(topPort)
 
 		read := memprotocol.ReadReq{Address: 0x40, AccessByteSize: 4}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = testIDs.Generate()
 		read.Src = messaging.RemotePort("Agent")
 		read.Dst = topPort.AsRemote()
 		read.TrafficBytes = 12

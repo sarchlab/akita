@@ -63,7 +63,7 @@ func (m *workerMW) Tick() bool {
 		return false
 	}
 
-	id := timing.GetIDGenerator().Generate()
+	id := m.comp.IDGenerator().Generate()
 	m.comp.State.Processed++
 	m.comp.State.Checksum = m.comp.State.Checksum*1000003 + id
 	m.comp.State.Pending--
@@ -78,9 +78,14 @@ func main() {
 	ckpt := flag.String("ckpt", "/tmp/akita-checkpoint.tar.gz", "checkpoint path")
 	flag.Parse()
 
-	sim := simulation.MakeBuilder().WithoutMonitoring().Build()
+	sim, err := simulation.MakeBuilder().WithoutMonitoring().Build()
+	if err != nil {
+		panic(err)
+	}
 	defer func() {
-		sim.Terminate()
+		if err := sim.Terminate(); err != nil {
+			panic(err)
+		}
 		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
 	}()
 

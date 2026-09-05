@@ -5,6 +5,7 @@ package httpapi
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -39,20 +40,22 @@ type Server struct {
 
 // NewReplayServer creates a new Server in replay mode. It reads trace data
 // from the given SQLite file and serves it on the given address.
-func NewReplayServer(sqliteFile, addr string) *Server {
+func NewReplayServer(sqliteFile, addr string) (*Server, error) {
 	if sqliteFile == "" {
-		panic("must specify a SQLite file")
+		return nil, fmt.Errorf("must specify a SQLite file")
 	}
 
 	reader := NewSQLiteTraceReader(sqliteFile)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		return nil, err
+	}
 
 	return &Server{
 		addr:        addr,
 		traceReader: reader,
 		fs:          static.GetAssets(),
 		codeSource:  loadCodeSource(reader),
-	}
+	}, nil
 }
 
 // loadCodeSource reads the source recorded in the trace (if any) and logs what
@@ -76,22 +79,23 @@ func loadCodeSource(reader *SQLiteTraceReader) *sourcefs.Source {
 
 // Start starts the HTTP server in replay mode. It listens on the configured
 // address and blocks until the server is shut down.
-func (s *Server) Start() {
+func (s *Server) Start() error {
 	mux := s.setupRoutes()
-	s.startReplayServer(mux)
+	return s.startReplayServer(mux)
 }
 
 // Stop gracefully shuts down the HTTP server.
-func (s *Server) Stop() {
+func (s *Server) Stop() error {
+	var err error
 	if s.httpServer != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-
-		err := s.httpServer.Shutdown(ctx)
-		if err != nil {
-			log.Printf("Error shutting down server: %v", err)
-		}
+		err = s.httpServer.Shutdown(ctx)
 	}
+	if s.traceReader != nil && s.traceReader.DB != nil {
+		err = errors.Join(err, s.traceReader.Close())
+	}
+	return err
 }
 
 func (s *Server) setupRoutes() *http.ServeMux {
@@ -137,7 +141,7 @@ func (s *Server) setupRoutes() *http.ServeMux {
 	return mux
 }
 
-func (s *Server) startReplayServer(mux *http.ServeMux) {
+func (s *Server) startReplayServer(mux *http.ServeMux) error {
 	s.httpServer = &http.Server{
 		Addr:    s.addr,
 		Handler: mux,
@@ -147,8 +151,9 @@ func (s *Server) startReplayServer(mux *http.ServeMux) {
 
 	err := s.httpServer.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
-		dieOnErr(err)
+		return err
 	}
+	return nil
 }
 
 // httpTraceInfo returns a stable identifier for the loaded trace, used by the
@@ -190,10 +195,4 @@ func (s *Server) serveIndex(w http.ResponseWriter, _ *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write(p)
-}
-
-func dieOnErr(err error) {
-	if err != nil {
-		log.Panic(err)
-	}
 }

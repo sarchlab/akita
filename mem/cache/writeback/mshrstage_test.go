@@ -86,7 +86,7 @@ var _ = Describe("MSHR Stage", func() {
 
 	It("should stall if topSender is busy", func() {
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = testIDs.Generate()
 		read.Address = 0x104
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
@@ -131,7 +131,7 @@ var _ = Describe("MSHR Stage", func() {
 
 	It("should send data ready to top", func() {
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = testIDs.Generate()
 		read.Src = messaging.RemotePort("Agent")
 		read.Address = 0x104
 		read.AccessByteSize = 4

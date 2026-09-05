@@ -3,7 +3,6 @@ package tickingping
 import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 // outPort is a helper that returns the "Out" port from the component.
@@ -39,7 +38,7 @@ func (m *sendMW) sendRsp() bool {
 
 	rsp := pingRsp{
 		MsgMeta: messaging.MsgMeta{
-			ID:    timing.GetIDGenerator().Generate(),
+			ID:    m.comp.IDGenerator().Generate(),
 			Src:   outPort(m.comp).AsRemote(),
 			Dst:   trans.ReqSrc,
 			RspTo: trans.ReqID,
@@ -67,7 +66,7 @@ func (m *sendMW) sendPing() bool {
 
 	pingMsg := pingReq{
 		MsgMeta: messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  m.comp.IDGenerator().Generate(),
 			Src: outPort(m.comp).AsRemote(),
 			Dst: state.PingDst,
 		},

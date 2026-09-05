@@ -44,10 +44,19 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		simBuilder = simBuilder.WithVisTracingOnStart()
 	}
 
-	s := simBuilder.Build()
+	s, err := simBuilder.Build()
+	if err != nil {
+		panic(err)
+	}
 
 	engine := s.GetEngine()
 
+	agent = buildTestComponents(s)
+	return s, engine, agent
+}
+
+func buildTestComponents(s *simulation.Simulation) *memaccessagent.MemAccessAgent {
+	var agent *memaccessagent.MemAccessAgent
 	l1Cache, l2Cache, memCtrl := buildMemoryHierarchy(s)
 	ioMMU, tlb, l2TLB := buildTranslationHierarchy(s)
 
@@ -95,7 +104,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		at, tlb, l2TLB, ioMMU,
 		l1Cache, l2Cache, memCtrl)
 
-	return s, engine, agent
+	return agent
 }
 
 // buildROB builds a reorder buffer that forwards every access to bottomUnit

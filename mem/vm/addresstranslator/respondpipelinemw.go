@@ -9,7 +9,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 
 	// respondPipelineMW handles translation responses and bottom-port responses.
@@ -74,7 +73,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 	nextTrans := &nextState.Transactions[transIdx]
 	reqState := nextTrans.IncomingReqs[0]
 	spec := m.comp.Spec()
-	translatedReq := createTranslatedReq(reqState, rsp.Page,
+	translatedReq := createTranslatedReq(m.comp.IDGenerator(), reqState, rsp.Page,
 		spec.Log2PageSize, m.bottomPort().AsRemote(),
 		m.comp.Resources().MemProviderMapper)
 
@@ -175,7 +174,7 @@ func (m *respondPipelineMW) respond() bool {
 			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 			rspToTop = memprotocol.DataReadyRsp{
 				MsgMeta: messaging.MsgMeta{
-					ID:           timing.GetIDGenerator().Generate(),
+					ID:           m.comp.IDGenerator().Generate(),
 					Src:          m.topPort().AsRemote(),
 					Dst:          reqFromTopState.ReqFromTopSrc,
 					RspTo:        reqFromTopState.ReqFromTopID,
@@ -202,7 +201,7 @@ func (m *respondPipelineMW) respond() bool {
 			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 			rspToTop = memprotocol.WriteDoneRsp{
 				MsgMeta: messaging.MsgMeta{
-					ID:           timing.GetIDGenerator().Generate(),
+					ID:           m.comp.IDGenerator().Generate(),
 					Src:          m.topPort().AsRemote(),
 					Dst:          reqFromTopState.ReqFromTopSrc,
 					RspTo:        reqFromTopState.ReqFromTopID,

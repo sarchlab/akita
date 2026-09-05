@@ -13,7 +13,9 @@ func seedBlockingTrace(t *testing.T) *SQLiteTraceReader {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	t.Cleanup(func() { reader.Close() })
 
 	exec := func(query string) {

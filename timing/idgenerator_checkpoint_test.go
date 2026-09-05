@@ -2,8 +2,6 @@ package timing
 
 import (
 	"bytes"
-	"io"
-	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -31,16 +29,5 @@ func TestSequentialIDGeneratorCheckpointRoundTrip(t *testing.T) {
 	// The next generated ID continues from the restored counter.
 	if id := dst.Generate(); id != 101 {
 		t.Fatalf("next ID = %d, want 101", id)
-	}
-}
-
-func TestParallelIDGeneratorNotCheckpointable(t *testing.T) {
-	g := &parallelIDGenerator{}
-	if err := g.SaveCheckpoint(io.Discard); err == nil ||
-		!strings.Contains(err.Error(), "not checkpointable") {
-		t.Fatalf("expected not-checkpointable error, got %v", err)
-	}
-	if err := g.LoadCheckpoint(strings.NewReader("{}")); err == nil {
-		t.Fatalf("expected not-checkpointable error on load")
 	}
 }

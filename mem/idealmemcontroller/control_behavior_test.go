@@ -50,7 +50,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = addr
@@ -62,7 +62,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"

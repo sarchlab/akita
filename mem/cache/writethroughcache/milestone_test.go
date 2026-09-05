@@ -162,7 +162,7 @@ var _ = Describe("Cache milestones", func() {
 
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4})
 		read := memprotocol.ReadReq{Address: 0x100, AccessByteSize: 4}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = testIDs.Generate()
 		read.Src = cuPort.AsRemote()
 		read.Dst = c.GetPortByName("Top").AsRemote()
 		read.TrafficBytes = 12
@@ -211,7 +211,7 @@ var _ = Describe("Cache milestones", func() {
 
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4})
 		read := memprotocol.ReadReq{Address: 0x100, AccessByteSize: 4}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = testIDs.Generate()
 		read.Src = cuPort.AsRemote()
 		read.Dst = c.GetPortByName("Top").AsRemote()
 		read.TrafficBytes = 12
@@ -261,7 +261,7 @@ var _ = Describe("Cache milestones", func() {
 			fullLine[i] = byte(i)
 		}
 		warm := memprotocol.WriteReq{Address: 0x100, Data: fullLine}
-		warm.ID = timing.GetIDGenerator().Generate()
+		warm.ID = testIDs.Generate()
 		warm.Src = cuPort.AsRemote()
 		warm.Dst = c.GetPortByName("Top").AsRemote()
 		warm.TrafficBytes = 64 + 12
@@ -279,7 +279,7 @@ var _ = Describe("Cache milestones", func() {
 		// Now a partial write to the same line: this is a write-through write
 		// hit and must carry the write-hit tag.
 		hit := memprotocol.WriteReq{Address: 0x100, Data: []byte{9, 9, 9, 9}}
-		hit.ID = timing.GetIDGenerator().Generate()
+		hit.ID = testIDs.Generate()
 		hit.Src = cuPort.AsRemote()
 		hit.Dst = c.GetPortByName("Top").AsRemote()
 		hit.TrafficBytes = 4 + 12
@@ -333,7 +333,7 @@ var _ = Describe("Cache milestones", func() {
 			fullLine[i] = byte(i)
 		}
 		miss := memprotocol.WriteReq{Address: 0x100, Data: fullLine}
-		miss.ID = timing.GetIDGenerator().Generate()
+		miss.ID = testIDs.Generate()
 		miss.Src = cuPort.AsRemote()
 		miss.Dst = c.GetPortByName("Top").AsRemote()
 		miss.TrafficBytes = 64 + 12
@@ -371,7 +371,7 @@ var _ = Describe("Cache milestones", func() {
 		// open a bank subtask.
 		fullLine := make([]byte, 64)
 		w := memprotocol.WriteReq{Address: 0x100, Data: fullLine}
-		w.ID = timing.GetIDGenerator().Generate()
+		w.ID = testIDs.Generate()
 		w.Src = cuPort.AsRemote()
 		w.Dst = c.GetPortByName("Top").AsRemote()
 		w.TrafficBytes = 64 + 12

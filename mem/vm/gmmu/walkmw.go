@@ -9,7 +9,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 
 	// walkMW handles the top→page-table walk path:
@@ -90,7 +89,7 @@ func (m *walkMW) startWalking(req vmprotocol.TranslationReq) {
 	state := &m.comp.State
 
 	recvTaskID := tracing.MsgIDAtReceiver(req, m.comp)
-	walkTaskID := timing.GetIDGenerator().Generate()
+	walkTaskID := m.comp.IDGenerator().Generate()
 
 	ts := transactionState{
 		ReqID:      req.ID,
@@ -190,7 +189,7 @@ func (m *walkMW) processRemoteMemReq(
 	walking := state.WalkingTranslations[walkingIndex]
 
 	req := vmprotocol.TranslationReq{}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = m.comp.IDGenerator().Generate()
 	req.Src = m.bottomPort().AsRemote()
 	req.Dst = spec.LowModule
 	req.PID = vm.PID(walking.PID)
@@ -249,7 +248,7 @@ func (m *walkMW) doPageWalkHit(
 	rsp := vmprotocol.TranslationRsp{
 		Page: pageFromPageState(walking.Page),
 	}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = m.comp.IDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = walking.ReqSrc
 	rsp.RspTo = walking.ReqID

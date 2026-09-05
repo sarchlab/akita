@@ -55,7 +55,7 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 
 func (h *p0Harness) read(addr uint64) memprotocol.ReadReq {
 	r := memprotocol.ReadReq{}
-	r.ID = timing.GetIDGenerator().Generate()
+	r.ID = testIDs.Generate()
 	r.Address = addr
 	r.AccessByteSize = 64
 	r.Src = h.src.AsRemote()
@@ -67,7 +67,7 @@ func (h *p0Harness) read(addr uint64) memprotocol.ReadReq {
 
 func (h *p0Harness) write(addr uint64, data []byte) memprotocol.WriteReq {
 	w := memprotocol.WriteReq{}
-	w.ID = timing.GetIDGenerator().Generate()
+	w.ID = testIDs.Generate()
 	w.Address = addr
 	w.Data = data
 	w.Src = h.src.AsRemote()

@@ -6,7 +6,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -82,7 +81,7 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 	switch m := msg.(type) {
 	case memprotocol.ReadReq:
 		t = transactionState{
-			ID:                 timing.GetIDGenerator().Generate(),
+			ID:                 s.cache.comp.IDGenerator().Generate(),
 			HasRead:            true,
 			ReadMeta:           m.MsgMeta,
 			ReadAddress:        m.Address,
@@ -91,7 +90,7 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 		}
 	case memprotocol.WriteReq:
 		t = transactionState{
-			ID:             timing.GetIDGenerator().Generate(),
+			ID:             s.cache.comp.IDGenerator().Generate(),
 			HasWrite:       true,
 			WriteMeta:      m.MsgMeta,
 			WriteAddress:   m.Address,

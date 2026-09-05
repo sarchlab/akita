@@ -2,7 +2,6 @@ package writeback
 
 import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -27,7 +26,7 @@ func (p *topParser) Tick() bool {
 	}
 
 	trans := transactionState{
-		ID: timing.GetIDGenerator().Generate(),
+		ID: p.cache.comp.IDGenerator().Generate(),
 	}
 
 	switch msg := msg.(type) {

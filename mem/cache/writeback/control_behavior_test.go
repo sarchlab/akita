@@ -68,7 +68,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = addr
@@ -80,7 +80,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -97,7 +97,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 			data[i] = byte(i + 1)
 		}
 		rsp := memprotocol.DataReadyRsp{Data: data}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = testIDs.Generate()
 		rsp.Src = messaging.RemotePort("LowerCache")
 		rsp.Dst = botPort.AsRemote()
 		rsp.RspTo = read.ID
@@ -130,7 +130,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		for i := range data {
 			data[i] = fill
 		}
-		Expect(storage.Write(block.CacheAddress, data)).To(Succeed())
+		storage.Write(block.CacheAddress, data)
 
 		return setID
 	}
@@ -447,7 +447,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 				if w, ok := out.(memprotocol.WriteReq); ok {
 					botWrites = append(botWrites, w)
 					done := memprotocol.WriteDoneRsp{}
-					done.ID = timing.GetIDGenerator().Generate()
+					done.ID = testIDs.Generate()
 					done.Src = messaging.RemotePort("LowerCache")
 					done.Dst = botPort.AsRemote()
 					done.RspTo = w.ID

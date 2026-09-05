@@ -74,7 +74,7 @@ func (m *clientMW) send() bool {
 
 	req := readReq{
 		MsgMeta: messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  m.comp.IDGenerator().Generate(),
 			Src: port.AsRemote(),
 			Dst: s.Dst,
 		},
@@ -180,7 +180,7 @@ func (m *serverMW) respond() bool {
 	txn := m.pending[0]
 	port.Send(readRsp{
 		MsgMeta: messaging.MsgMeta{
-			ID:    timing.GetIDGenerator().Generate(),
+			ID:    m.comp.IDGenerator().Generate(),
 			Src:   port.AsRemote(),
 			Dst:   txn.req.Src,
 			RspTo: txn.req.ID,

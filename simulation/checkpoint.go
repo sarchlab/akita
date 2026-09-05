@@ -15,6 +15,14 @@ import (
 // Entity payload serializers land in later milestones, so this currently
 // returns an error for the first entity that has no serializer.
 func (s *Simulation) SaveCheckpoint(path, buildID string) error {
+	var saveErr error
+	err := s.supervisor.Execute("save checkpoint", func() error { saveErr = s.saveCheckpoint(path, buildID); return nil })
+	if err != nil {
+		return err
+	}
+	return saveErr
+}
+func (s *Simulation) saveCheckpoint(path, buildID string) error {
 	if err := s.checkpointPreflight(); err != nil {
 		return err
 	}
@@ -46,6 +54,15 @@ func (s *Simulation) SaveCheckpoint(path, buildID string) error {
 // checks the build identity and that the saved entity set matches the rebuilt
 // one, then hands each entity its payload.
 func (s *Simulation) LoadCheckpoint(path, buildID string) error {
+	return s.supervisor.Execute("restore checkpoint", func() error {
+		if !s.supervisor.Fresh() || s.restored {
+			return fmt.Errorf("checkpoint: restore requires a fresh, never executed instance")
+		}
+		s.restored = true
+		return s.loadCheckpoint(path, buildID)
+	})
+}
+func (s *Simulation) loadCheckpoint(path, buildID string) error {
 	if err := s.checkpointPreflight(); err != nil {
 		return err
 	}

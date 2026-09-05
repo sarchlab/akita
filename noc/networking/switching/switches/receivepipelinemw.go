@@ -5,7 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/noc/packetization"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -47,7 +46,7 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 			}
 
 			flit := itemI.(packetization.Flit)
-			taskID := timing.GetIDGenerator().Generate()
+			taskID := m.comp.IDGenerator().Generate()
 			item := routedFlit{
 				Flit:    flit,
 				TaskID:  taskID,

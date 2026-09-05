@@ -90,7 +90,10 @@ Unlike the time tracers it does take a `timing.TimeTeller` (the engine works),
 alongside a `datarecording.DataRecorder`:
 
 ```go
-recorder := datarecording.NewDataRecorder("trace")
+recorder, err := datarecording.NewDataRecorder("trace")
+if err != nil {
+    return err
+}
 dbTracer := tracing.NewDBTracer(engine, recorder)
 tracing.CollectTrace(component, dbTracer)
 

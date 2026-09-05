@@ -74,7 +74,7 @@ var _ = Describe("DataMover control behavior", func() {
 	// (one read on Outside, one write on Inside).
 	makeMove := func() datamoverprotocol.DataMoveRequest {
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.SrcAddress = 0
@@ -88,7 +88,7 @@ var _ = Describe("DataMover control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Cmd")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -97,7 +97,7 @@ var _ = Describe("DataMover control behavior", func() {
 
 	answerRead := func(port messaging.Port, read memprotocol.ReadReq) {
 		rsp := memprotocol.DataReadyRsp{Data: make([]byte, int(read.AccessByteSize))}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = testIDs.Generate()
 		rsp.Src = read.Dst
 		rsp.Dst = port.AsRemote()
 		rsp.RspTo = read.ID
@@ -107,7 +107,7 @@ var _ = Describe("DataMover control behavior", func() {
 
 	answerWrite := func(port messaging.Port, write memprotocol.WriteReq) {
 		rsp := memprotocol.WriteDoneRsp{}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = testIDs.Generate()
 		rsp.Src = write.Dst
 		rsp.Dst = port.AsRemote()
 		rsp.RspTo = write.ID

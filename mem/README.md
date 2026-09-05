@@ -48,8 +48,11 @@ storage := mem.NewStorage(4 * mem.GB)
 storage.Write(0x1000, []byte{0xDE, 0xAD})
 
 // Read data
-data, err := storage.Read(0x1000, 2)
+data := storage.Read(0x1000, 2)
 ```
+
+Empty or invalid ranges panic before allocation or mutation. A managed
+simulation contains that panic and becomes terminally failed.
 
 A `Storage` can be registered with the simulation as shared state via
 `NewStorageResource(name, storage)`, making its contents reachable by name

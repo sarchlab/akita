@@ -48,7 +48,7 @@ func (m *bankTickMW) Tick() bool {
 		next.RefreshBlockedIssue = true
 	}
 
-	progress = m.ctrl.fillCommandQueue(&spec, next) || progress
+	progress = m.ctrl.fillCommandQueue(m.comp.IDGenerator(), &spec, next) || progress
 
 	// Keep ticking while reads/writes are still in flight, even on cycles when
 	// no timing gap counted down — otherwise a pending completion with no other

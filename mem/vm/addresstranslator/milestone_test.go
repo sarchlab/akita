@@ -146,7 +146,7 @@ var _ = Describe("Address Translator milestones", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{Address: addr, AccessByteSize: 4}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.TrafficBytes = 12
@@ -156,7 +156,7 @@ var _ = Describe("Address Translator milestones", func() {
 
 	makeWrite := func(addr uint64, data []byte) memprotocol.WriteReq {
 		req := memprotocol.WriteReq{Address: addr, Data: data}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.TrafficBytes = len(data) + 12
@@ -182,7 +182,7 @@ var _ = Describe("Address Translator milestones", func() {
 		transRsp := vmprotocol.TranslationRsp{
 			Page: vm.Page{PID: 1, VAddr: 0x10000, PAddr: 0x20000},
 		}
-		transRsp.ID = timing.GetIDGenerator().Generate()
+		transRsp.ID = testIDs.Generate()
 		transRsp.RspTo = transReqID
 		transRsp.TrafficClass = "vmprotocol.TranslationRsp"
 		translationPort.Deliver(transRsp)
@@ -200,7 +200,7 @@ var _ = Describe("Address Translator milestones", func() {
 	It("splits admission (buffer task) from processing (req_in) for a read", func() {
 		driveRoundTrip(makeRead(0x10040), func(rspTo uint64) messaging.Msg {
 			rsp := memprotocol.DataReadyRsp{Data: []byte{1, 2, 3, 4}}
-			rsp.ID = timing.GetIDGenerator().Generate()
+			rsp.ID = testIDs.Generate()
 			rsp.RspTo = rspTo
 			rsp.TrafficClass = "memprotocol.DataReadyRsp"
 			return rsp
@@ -243,7 +243,7 @@ var _ = Describe("Address Translator milestones", func() {
 			makeWrite(0x10040, []byte{1, 2, 3, 4}),
 			func(rspTo uint64) messaging.Msg {
 				rsp := memprotocol.WriteDoneRsp{}
-				rsp.ID = timing.GetIDGenerator().Generate()
+				rsp.ID = testIDs.Generate()
 				rsp.RspTo = rspTo
 				rsp.TrafficClass = "memprotocol.WriteDoneRsp"
 				return rsp
@@ -264,8 +264,8 @@ var _ = Describe("Address Translator milestones", func() {
 		// Two in-flight transactions; complete the first (non-last) one. The
 		// removeTransaction append-shift must not redirect the trace finalize
 		// to the surviving transaction shifted into the freed slot.
-		transReq1ID := timing.GetIDGenerator().Generate()
-		transReq2ID := timing.GetIDGenerator().Generate()
+		transReq1ID := testIDs.Generate()
+		transReq2ID := testIDs.Generate()
 
 		req := makeRead(0x10040)
 
@@ -287,7 +287,7 @@ var _ = Describe("Address Translator milestones", func() {
 		transRsp := vmprotocol.TranslationRsp{
 			Page: vm.Page{PID: 1, VAddr: 0x10000, PAddr: 0x20000},
 		}
-		transRsp.ID = timing.GetIDGenerator().Generate()
+		transRsp.ID = testIDs.Generate()
 		transRsp.RspTo = transReq1ID
 		transRsp.TrafficClass = "vmprotocol.TranslationRsp"
 		translationPort.Deliver(transRsp)

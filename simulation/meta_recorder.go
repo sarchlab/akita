@@ -33,7 +33,7 @@ func newMetaRecorder(
 		recorder:   recorder,
 		timeTeller: timeTeller,
 	}
-	r.recorder.CreateTable(r.tableName, simulationInfo{})
+	datarecording.MustRecord(r.recorder.CreateTable(r.tableName, simulationInfo{}))
 	r.Start()
 	return r
 }
@@ -56,7 +56,7 @@ func (r *metaRecorder) Start() {
 			strconv.FormatUint(uint64(r.timeTeller.CurrentTime()), 10))
 	}
 
-	r.recorder.Flush()
+	datarecording.MustRecord(r.recorder.Flush())
 }
 
 func (r *metaRecorder) End() {
@@ -72,12 +72,12 @@ func (r *metaRecorder) End() {
 			strconv.FormatUint(uint64(r.timeTeller.CurrentTime()), 10))
 	}
 
-	r.recorder.Flush()
+	datarecording.MustRecord(r.recorder.Flush())
 }
 
 func (r *metaRecorder) insertEntry(property, value string) {
-	r.recorder.InsertData(r.tableName, simulationInfo{
+	datarecording.MustRecord(r.recorder.InsertData(r.tableName, simulationInfo{
 		Property: property,
 		Value:    value,
-	})
+	}))
 }

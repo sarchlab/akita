@@ -123,7 +123,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		})
 
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = testIDs.Generate()
 		read.Src = agentPort.AsRemote()
 		read.Dst = cacheComp.GetPortByName("Top").AsRemote()
 		read.Address = 0x10004
@@ -162,7 +162,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		})
 
 		write := memprotocol.WriteReq{}
-		write.ID = timing.GetIDGenerator().Generate()
+		write.ID = testIDs.Generate()
 		write.Src = agentPort.AsRemote()
 		write.Dst = cacheComp.GetPortByName("Top").AsRemote()
 		write.Address = 0x10004
@@ -179,7 +179,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		// Re-read state after engine run
 		postState := m.comp.State
 		postBlock := &postState.DirectoryState.Sets[setID].Blocks[0]
-		retData, _ := m.storage.Read(postBlock.CacheAddress+0x4, 4)
+		retData := m.storage.Read(postBlock.CacheAddress+0x4, 4)
 		Expect(retData).To(Equal(write.Data))
 		Expect(postBlock.IsValid).To(BeTrue())
 		Expect(postBlock.IsDirty).To(BeTrue())
@@ -198,7 +198,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		})
 
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = testIDs.Generate()
 		read.Src = agentPort.AsRemote()
 		read.Dst = cacheComp.GetPortByName("Top").AsRemote()
 		read.Address = 0x10004
@@ -228,7 +228,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		})
 
 		read1 := memprotocol.ReadReq{}
-		read1.ID = timing.GetIDGenerator().Generate()
+		read1.ID = testIDs.Generate()
 		read1.Src = agentPort.AsRemote()
 		read1.Dst = cacheComp.GetPortByName("Top").AsRemote()
 		read1.Address = 0x10004
@@ -238,7 +238,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		cacheComp.GetPortByName("Top").Deliver(read1)
 
 		read2 := memprotocol.ReadReq{}
-		read2.ID = timing.GetIDGenerator().Generate()
+		read2.ID = testIDs.Generate()
 		read2.Src = agentPort.AsRemote()
 		read2.Dst = cacheComp.GetPortByName("Top").AsRemote()
 		read2.Address = 0x10008
@@ -272,7 +272,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 		}
 		write := memprotocol.WriteReq{}
-		write.ID = timing.GetIDGenerator().Generate()
+		write.ID = testIDs.Generate()
 		write.Src = agentPort.AsRemote()
 		write.Dst = cacheComp.GetPortByName("Top").AsRemote()
 		write.Address = 0x10000
@@ -282,7 +282,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		cacheComp.GetPortByName("Top").Deliver(write)
 
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = testIDs.Generate()
 		read.Src = agentPort.AsRemote()
 		read.Dst = cacheComp.GetPortByName("Top").AsRemote()
 		read.Address = 0x10004
@@ -329,7 +329,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		m.comp.State = state
 
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = testIDs.Generate()
 		read.Src = agentPort.AsRemote()
 		read.Dst = cacheComp.GetPortByName("Top").AsRemote()
 		read.Address = 0x10004
@@ -348,7 +348,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 	It("should flush", func() {
 		write1 := memprotocol.WriteReq{}
-		write1.ID = timing.GetIDGenerator().Generate()
+		write1.ID = testIDs.Generate()
 		write1.Src = agentPort.AsRemote()
 		write1.Dst = cacheComp.GetPortByName("Top").AsRemote()
 		write1.Address = 0x100000
@@ -358,7 +358,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		cacheComp.GetPortByName("Top").Deliver(write1)
 
 		write2 := memprotocol.WriteReq{}
-		write2.ID = timing.GetIDGenerator().Generate()
+		write2.ID = testIDs.Generate()
 		write2.Src = agentPort.AsRemote()
 		write2.Dst = cacheComp.GetPortByName("Top").AsRemote()
 		write2.Address = 0x100000
@@ -373,7 +373,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		// Flush is a conditional verb: pause first so it is legal.
 		pause := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdPause}
-		pause.ID = timing.GetIDGenerator().Generate()
+		pause.ID = testIDs.Generate()
 		pause.Src = controlAgentPort.AsRemote()
 		pause.Dst = cacheComp.GetPortByName("Control").AsRemote()
 		pause.TrafficClass = "memcontrolprotocol.Req"
@@ -387,7 +387,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		Expect(pauseRsp.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 
 		flush := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-		flush.ID = timing.GetIDGenerator().Generate()
+		flush.ID = testIDs.Generate()
 		flush.Src = controlAgentPort.AsRemote()
 		flush.Dst = cacheComp.GetPortByName("Control").AsRemote()
 		flush.TrafficClass = "memcontrolprotocol.Req"
@@ -401,8 +401,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		Expect(rsp.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 
 		// The dirty block's data reached DRAM.
-		flushed, err := dramStorage.Read(0x100000, 4)
-		Expect(err).ToNot(HaveOccurred())
+		flushed := dramStorage.Read(0x100000, 4)
 		Expect(flushed).To(Equal([]byte{1, 2, 3, 4}))
 	})
 })

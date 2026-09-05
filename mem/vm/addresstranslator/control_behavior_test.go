@@ -68,7 +68,7 @@ var _ = Describe("Address Translator control behavior", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = addr
@@ -80,7 +80,7 @@ var _ = Describe("Address Translator control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -92,7 +92,7 @@ var _ = Describe("Address Translator control behavior", func() {
 	// as createTranslatedReq does.
 	makeBottomReq := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = bottomPort.AsRemote()
 		req.Dst = messaging.RemotePort("MemPort")
 		req.Address = addr
@@ -126,7 +126,7 @@ var _ = Describe("Address Translator control behavior", func() {
 	// DataReadyRsp out Top, and removes the in-flight entry.
 	feedBottomDataReady := func(rspTo uint64) {
 		dataReady := memprotocol.DataReadyRsp{}
-		dataReady.ID = timing.GetIDGenerator().Generate()
+		dataReady.ID = testIDs.Generate()
 		dataReady.Src = messaging.RemotePort("MemPort")
 		dataReady.Dst = bottomPort.AsRemote()
 		dataReady.RspTo = rspTo

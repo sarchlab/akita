@@ -5,7 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -139,7 +138,7 @@ func (wb *writeBufferStage) fetchFromBottom(
 	spec := wb.cache.comp.Spec()
 	lowModulePort := wb.cache.findPort(trans.FetchAddress)
 	read := memprotocol.ReadReq{}
-	read.ID = timing.GetIDGenerator().Generate()
+	read.ID = wb.cache.comp.IDGenerator().Generate()
 	read.Src = wb.cache.bottomPort().AsRemote()
 	read.Dst = lowModulePort
 	read.PID = trans.FetchPID
@@ -244,7 +243,7 @@ func (wb *writeBufferStage) write() bool {
 
 	lowModulePort := wb.cache.findPort(trans.EvictingAddr)
 	write := memprotocol.WriteReq{}
-	write.ID = timing.GetIDGenerator().Generate()
+	write.ID = wb.cache.comp.IDGenerator().Generate()
 	write.Src = wb.cache.bottomPort().AsRemote()
 	write.Dst = lowModulePort
 	write.PID = trans.EvictingPID

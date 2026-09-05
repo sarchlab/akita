@@ -25,7 +25,7 @@ var _ = Describe("Directory", func() {
 	// next CanSend returns false, simulating a busy port.
 	fillBottomOutgoing := func() {
 		dummy := memprotocol.ReadReq{}
-		dummy.ID = timing.GetIDGenerator().Generate()
+		dummy.ID = testIDs.Generate()
 		dummy.Src = bottomPort.AsRemote()
 		dummy.Dst = messaging.RemotePort("DRAM")
 		dummy.TrafficClass = "req"
@@ -98,7 +98,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -133,7 +133,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -175,7 +175,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -209,7 +209,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -242,7 +242,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -289,7 +289,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -318,7 +318,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -347,7 +347,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -381,7 +381,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -410,7 +410,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -441,7 +441,7 @@ var _ = Describe("Directory", func() {
 			// the MSHR — required so the coalesced write can record it
 			// as MSHRFillFetcherIdx.
 			fetcherReadMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -457,7 +457,7 @@ var _ = Describe("Directory", func() {
 			)
 
 			writeMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -501,7 +501,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -543,7 +543,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -575,7 +575,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -607,7 +607,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -640,7 +640,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -675,7 +675,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           testIDs.Generate(),
 				TrafficBytes: 64 + 12,
 				TrafficClass: "req",
 			}

@@ -75,7 +75,7 @@ var _ = Describe("GMMU control behavior", func() {
 
 	makeTranslationReq := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = agentPort
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -87,7 +87,7 @@ var _ = Describe("GMMU control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"

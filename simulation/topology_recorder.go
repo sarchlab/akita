@@ -61,8 +61,8 @@ type topologyRecorder struct {
 // for a run that registers nothing. The rows are written later by Record.
 func newTopologyRecorder(recorder datarecording.DataRecorder) *topologyRecorder {
 	r := &topologyRecorder{recorder: recorder}
-	r.recorder.CreateTable(componentSpecTableName, componentSpecEntry{})
-	r.recorder.CreateTable(portTableName, portEntry{})
+	datarecording.MustRecord(r.recorder.CreateTable(componentSpecTableName, componentSpecEntry{}))
+	datarecording.MustRecord(r.recorder.CreateTable(portTableName, portEntry{}))
 
 	return r
 }
@@ -72,7 +72,7 @@ func newTopologyRecorder(recorder datarecording.DataRecorder) *topologyRecorder 
 func (r *topologyRecorder) Record(components []Component, ports []Port) {
 	r.recordComponentSpecs(components)
 	r.recordPorts(ports)
-	r.recorder.Flush()
+	datarecording.MustRecord(r.recorder.Flush())
 }
 
 func (r *topologyRecorder) recordComponentSpecs(components []Component) {
@@ -86,7 +86,7 @@ func (r *topologyRecorder) recordComponentSpecs(components []Component) {
 			}
 		}
 
-		r.recorder.InsertData(componentSpecTableName, entry)
+		datarecording.MustRecord(r.recorder.InsertData(componentSpecTableName, entry))
 	}
 }
 
@@ -101,11 +101,11 @@ func (r *topologyRecorder) recordPorts(ports []Port) {
 		conn, _ := reflectName(p, "Connection")
 		comp, _ := reflectName(p, "Component")
 
-		r.recorder.InsertData(portTableName, portEntry{
+		datarecording.MustRecord(r.recorder.InsertData(portTableName, portEntry{
 			Component:  comp,
 			Port:       p.Name(),
 			Connection: conn,
-		})
+		}))
 	}
 }
 

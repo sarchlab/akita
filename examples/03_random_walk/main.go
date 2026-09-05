@@ -49,7 +49,10 @@ func (m *walkMW) Tick() bool {
 }
 
 func main() {
-	s := simulation.MakeBuilder().Build()
+	s, err := simulation.MakeBuilder().Build()
+	if err != nil {
+		panic(err)
+	}
 
 	spec := walkSpec{Freq: 1 * timing.GHz, WallDistance: 10}
 	comp := modeling.NewBuilder[walkSpec, walkState, modeling.None]().
@@ -68,5 +71,7 @@ func main() {
 		panic(err)
 	}
 
-	s.Terminate()
+	if err := s.Terminate(); err != nil {
+		panic(err)
+	}
 }

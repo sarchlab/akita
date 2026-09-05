@@ -83,7 +83,7 @@ var _ = Describe("MMU", func() {
 	Context("parse top", func() {
 		It("should process translation request", func() {
 			translationReq := vmprotocol.TranslationReq{}
-			translationReq.ID = timing.GetIDGenerator().Generate()
+			translationReq.ID = testIDs.Generate()
 			translationReq.Src = messaging.RemotePort("Agent.Top")
 			translationReq.Dst = topPort.AsRemote()
 			translationReq.PID = 1
@@ -116,7 +116,7 @@ var _ = Describe("MMU", func() {
 			mmuComp.State = State{
 				WalkingTranslations: []transactionState{
 					{
-						ReqID:     timing.GetIDGenerator().Generate(),
+						ReqID:     testIDs.Generate(),
 						ReqDst:    topPort.AsRemote(),
 						PID:       1,
 						VAddr:     0x1020,
@@ -146,7 +146,7 @@ var _ = Describe("MMU", func() {
 			mmuComp.State = State{
 				WalkingTranslations: []transactionState{
 					{
-						ReqID:     timing.GetIDGenerator().Generate(),
+						ReqID:     testIDs.Generate(),
 						ReqSrc:    messaging.RemotePort("Agent.Top"),
 						ReqDst:    topPort.AsRemote(),
 						PID:       1,
@@ -191,7 +191,7 @@ var _ = Describe("MMU", func() {
 			mmuComp.State = State{
 				WalkingTranslations: []transactionState{
 					{
-						ReqID:     timing.GetIDGenerator().Generate(),
+						ReqID:     testIDs.Generate(),
 						ReqSrc:    messaging.RemotePort("Agent.Top"),
 						ReqDst:    topPort.AsRemote(),
 						PID:       1,
@@ -252,7 +252,7 @@ var _ = Describe("MMU Integration", func() {
 		pageTable.Insert(page)
 
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = agentPort.AsRemote()
 		req.Dst = topPort.AsRemote()
 		req.PID = 1

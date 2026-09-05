@@ -9,7 +9,6 @@ import (
 	"github.com/sarchlab/akita/v5/noc/packetization"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -63,7 +62,7 @@ var _ = Describe("End Point", func() {
 
 	It("should send flits", func() {
 		msg := messaging.MsgMeta{
-			ID:           timing.GetIDGenerator().Generate(),
+			ID:           testIDs.Generate(),
 			Src:          devicePort.AsRemote(),
 			TrafficBytes: 33,
 		}
@@ -110,18 +109,18 @@ var _ = Describe("End Point", func() {
 
 	It("should receive message", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  testIDs.Generate(),
 			Dst: devicePort.AsRemote(),
 		}
 
 		flit0 := packetization.Flit{}
-		flit0.ID = timing.GetIDGenerator().Generate()
+		flit0.ID = testIDs.Generate()
 		flit0.TrafficClass = reflect.TypeOf(msg).String()
 		flit0.SeqID = 0
 		flit0.NumFlitInMsg = 2
 		flit0.Msg = msg
 		flit1 := packetization.Flit{}
-		flit1.ID = timing.GetIDGenerator().Generate()
+		flit1.ID = testIDs.Generate()
 		flit1.TrafficClass = reflect.TypeOf(msg).String()
 		flit1.SeqID = 1
 		flit1.NumFlitInMsg = 2

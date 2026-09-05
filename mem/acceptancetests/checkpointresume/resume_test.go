@@ -110,7 +110,7 @@ func (m *driverMW) sendNext() bool {
 		}
 		idx := st.WritesSent
 		req := memprotocol.WriteReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = port.AsRemote()
 		req.Dst = m.d.lowModule.AsRemote()
 		req.Address = addressForOp(idx)
@@ -136,7 +136,7 @@ func (m *driverMW) sendNext() bool {
 		}
 		idx := st.ReadsSent
 		req := memprotocol.ReadReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = testIDs.Generate()
 		req.Src = port.AsRemote()
 		req.Dst = m.d.lowModule.AsRemote()
 		req.Address = addressForOp(idx)
@@ -184,7 +184,10 @@ func buildDriver(reg modeling.Registrar, lowModule messaging.Port) *driver {
 // and an ideal memory controller wired over a direct connection. The connection
 // is registered so its round-robin cursor is checkpointed too.
 func buildSim() (*simulation.Simulation, *driver) {
-	sim := simulation.MakeBuilder().WithoutMonitoring().Build()
+	sim, err := simulation.MakeBuilder().WithoutMonitoring().Build()
+	if err != nil {
+		panic(err)
+	}
 
 	dramSpec := idealmemcontroller.DefaultSpec()
 	dramSpec.Capacity = 1 * mem.MB

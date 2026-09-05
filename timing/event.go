@@ -18,16 +18,16 @@ type Event interface {
 
 // EventBase provides the basic fields and getters for other events.
 type EventBase struct {
-	ID         uint64     `json:"id"`
+	ID         uint64         `json:"id"`
 	Time_      VTimeInPicoSec `json:"time"`
-	HandlerID_ string     `json:"handler_id"`
-	Secondary  bool       `json:"secondary"`
+	HandlerID_ string         `json:"handler_id"`
+	Secondary  bool           `json:"secondary"`
 }
 
 // MakeEventBase creates a new EventBase as a value.
-func MakeEventBase(t VTimeInPicoSec, handlerID string) EventBase {
+func MakeEventBase(ids IDGenerator, t VTimeInPicoSec, handlerID string) EventBase {
 	return EventBase{
-		ID:         GetIDGenerator().Generate(),
+		ID:         ids.Generate(),
 		Time_:      t,
 		HandlerID_: handlerID,
 		Secondary:  false,
@@ -54,5 +54,5 @@ func (e EventBase) IsSecondary() bool {
 // One event is always constrained to one Handler, which means the event can
 // only be scheduled by one handler and can only directly modify that handler.
 type Handler interface {
-	Handle(e Event) error
+	Handle(e Event)
 }

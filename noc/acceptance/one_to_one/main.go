@@ -34,7 +34,9 @@ func main() {
 
 	t.MustHaveReceivedAllMsgs()
 	t.ReportBandwidthAchieved(engine.CurrentTime())
-	s.Terminate()
+	if err := s.Terminate(); err != nil {
+		panic(err)
+	}
 	atexit.Exit(0)
 }
 

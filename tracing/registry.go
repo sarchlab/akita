@@ -1,154 +1,34 @@
 package tracing
 
 import (
-	"sync"
-
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// The receiver task ID registry maps (domain, message-ID) to the local task ID
-// that the receiver uses to track its handling of that message. This lets a
-// receiver derive a stable task ID for an incoming message without mutating
-// the message itself.
-
-type receiverTaskKey struct {
-	domain string
-	msgID  uint64
-}
-
-var (
-	receiverTaskIDs   = make(map[receiverTaskKey]uint64)
-	receiverTaskIDsMu sync.Mutex
-)
-
+// Tracking belongs to the simulation's ID sequence, so identical component
+// names and message IDs in two simulations cannot share task identities.
+func registry(domain NamedHookable) timing.IDGenerator { return timing.IDsFor(domain) }
 func lookupOrCreateReceiverTaskID(msg messaging.Msg, domain NamedHookable) uint64 {
-	key := receiverTaskKey{domain: domain.Name(), msgID: msg.Meta().ID}
-
-	receiverTaskIDsMu.Lock()
-	defer receiverTaskIDsMu.Unlock()
-
-	if id, ok := receiverTaskIDs[key]; ok {
-		return id
-	}
-
-	id := timing.GetIDGenerator().Generate()
-	receiverTaskIDs[key] = id
-
-	return id
+	return registry(domain).Track(domain.Name()+"/receiver", msg.Meta().ID)
 }
-
-// receiverTaskIDByMsgID returns the receiver-side task ID registered for the
-// message ID at the domain, and whether one exists. Unlike
-// lookupOrCreateReceiverTaskID it never creates an entry, so a reset path can
-// resolve an in-flight task's ID to end it without resurrecting an entry that
-// was already forgotten.
-func receiverTaskIDByMsgID(
-	msgID uint64, domain NamedHookable,
-) (uint64, bool) {
-	key := receiverTaskKey{domain: domain.Name(), msgID: msgID}
-
-	receiverTaskIDsMu.Lock()
-	defer receiverTaskIDsMu.Unlock()
-
-	id, ok := receiverTaskIDs[key]
-
-	return id, ok
+func receiverTaskIDByMsgID(msgID uint64, domain NamedHookable) (uint64, bool) {
+	return registry(domain).Lookup(domain.Name()+"/receiver", msgID)
 }
-
 func forgetReceiverTaskID(msg messaging.Msg, domain NamedHookable) {
 	forgetReceiverTaskIDByMsgID(msg.Meta().ID, domain)
 }
-
 func forgetReceiverTaskIDByMsgID(msgID uint64, domain NamedHookable) {
-	key := receiverTaskKey{domain: domain.Name(), msgID: msgID}
-
-	receiverTaskIDsMu.Lock()
-	delete(receiverTaskIDs, key)
-	receiverTaskIDsMu.Unlock()
+	registry(domain).Forget(domain.Name()+"/receiver", msgID)
 }
-
-// The incoming-buffer task ID registry maps (domain, message-ID) to the task ID
-// of the buffer task that tracks a message's residency in a port's incoming
-// buffer (from delivery until it is retrieved). The port hook that opens the
-// task and the component that hangs admission milestones on it both derive the
-// same ID from the message, without mutating the message.
-
-type incomingBufferTaskKey struct {
-	domain string
-	msgID  uint64
+func lookupOrCreateIncomingBufferTaskID(msg messaging.Msg, domain NamedHookable) uint64 {
+	return registry(domain).Track(domain.Name()+"/incoming", msg.Meta().ID)
 }
-
-var (
-	incomingBufferTaskIDs   = make(map[incomingBufferTaskKey]uint64)
-	incomingBufferTaskIDsMu sync.Mutex
-)
-
-func lookupOrCreateIncomingBufferTaskID(
-	msg messaging.Msg, domain NamedHookable,
-) uint64 {
-	key := incomingBufferTaskKey{domain: domain.Name(), msgID: msg.Meta().ID}
-
-	incomingBufferTaskIDsMu.Lock()
-	defer incomingBufferTaskIDsMu.Unlock()
-
-	if id, ok := incomingBufferTaskIDs[key]; ok {
-		return id
-	}
-
-	id := timing.GetIDGenerator().Generate()
-	incomingBufferTaskIDs[key] = id
-
-	return id
-}
-
 func forgetIncomingBufferTaskIDByMsgID(msgID uint64, domain NamedHookable) {
-	key := incomingBufferTaskKey{domain: domain.Name(), msgID: msgID}
-
-	incomingBufferTaskIDsMu.Lock()
-	delete(incomingBufferTaskIDs, key)
-	incomingBufferTaskIDsMu.Unlock()
+	registry(domain).Forget(domain.Name()+"/incoming", msgID)
 }
-
-// The outgoing-buffer task ID registry maps (domain, message-ID) to the task ID
-// of the buffer task that tracks a message's residency in a port's outgoing
-// buffer (from send until the connection drains it). It is kept separate from
-// the incoming-buffer registry so that a message which is both received and
-// re-sent by the same component (same domain name, same message ID) gets a
-// distinct task on each side.
-
-type outgoingBufferTaskKey struct {
-	domain string
-	msgID  uint64
+func lookupOrCreateOutgoingBufferTaskID(msg messaging.Msg, domain NamedHookable) uint64 {
+	return registry(domain).Track(domain.Name()+"/outgoing", msg.Meta().ID)
 }
-
-var (
-	outgoingBufferTaskIDs   = make(map[outgoingBufferTaskKey]uint64)
-	outgoingBufferTaskIDsMu sync.Mutex
-)
-
-func lookupOrCreateOutgoingBufferTaskID(
-	msg messaging.Msg, domain NamedHookable,
-) uint64 {
-	key := outgoingBufferTaskKey{domain: domain.Name(), msgID: msg.Meta().ID}
-
-	outgoingBufferTaskIDsMu.Lock()
-	defer outgoingBufferTaskIDsMu.Unlock()
-
-	if id, ok := outgoingBufferTaskIDs[key]; ok {
-		return id
-	}
-
-	id := timing.GetIDGenerator().Generate()
-	outgoingBufferTaskIDs[key] = id
-
-	return id
-}
-
 func forgetOutgoingBufferTaskIDByMsgID(msgID uint64, domain NamedHookable) {
-	key := outgoingBufferTaskKey{domain: domain.Name(), msgID: msgID}
-
-	outgoingBufferTaskIDsMu.Lock()
-	delete(outgoingBufferTaskIDs, key)
-	outgoingBufferTaskIDsMu.Unlock()
+	registry(domain).Forget(domain.Name()+"/outgoing", msgID)
 }

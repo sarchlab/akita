@@ -45,7 +45,12 @@ func (s *Server) httpComponentNames(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, s.traceReader.ListComponents(r.Context()))
+	components, err := s.traceReader.ListComponents(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, components)
 }
 
 func (s *Server) httpComponentInfo(w http.ResponseWriter, r *http.Request) {
@@ -75,39 +80,55 @@ func (s *Server) httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var compInfo *ComponentInfo
-
-	switch infoType {
-	case "ReqInCount":
-		compInfo = s.calculateReqIn(
-			r.Context(), compName, startTime, endTime, int(numDots))
-	case "ReqCompleteCount":
-		compInfo = s.calculateReqComplete(
-			r.Context(), compName, startTime, endTime, int(numDots))
-	case "AvgLatency":
-		compInfo = s.calculateAvgLatency(
-			r.Context(), compName, startTime, endTime, int(numDots))
-	case "ConcurrentTask":
-		compInfo = s.calculateConcurrentTask(
-			r.Context(), compName, infoType, startTime, endTime, numDots)
-	case "ConcurrentTaskMilestones":
+	if infoType == "ConcurrentTaskMilestones" {
 		s.httpConcurrentTaskMilestones(w, r, compName, infoType, startTime, endTime, int(numDots))
 		return
-	case "RequestBufferPressure":
-		compInfo = s.calculateRequestBufferPressure(
-			r.Context(), compName, infoType, startTime, endTime, numDots)
-	case "ResponseBufferPressure":
-		compInfo = s.calculateResponseBufferPressure(
-			r.Context(), compName, infoType, startTime, endTime, numDots)
-	case "PendingReqOut":
-		compInfo = s.calculatePendingReqOut(
-			r.Context(), compName, infoType, startTime, endTime, numDots)
-	default:
+	}
+	ctx := r.Context()
+	compInfo, err := readTrace(ctx, func() *ComponentInfo {
+		return s.computeMetric(ctx, compName, infoType, startTime, endTime, numDots)
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if compInfo == nil {
 		http.Error(w, "unknown info_type", http.StatusBadRequest)
 		return
 	}
 
 	writeJSON(w, compInfo)
+}
+
+func (s *Server) computeMetric(
+	ctx context.Context, compName, infoType string,
+	startTime, endTime float64, numDots int64,
+) *ComponentInfo {
+	switch infoType {
+	case "ReqInCount":
+		return s.calculateReqIn(
+			ctx, compName, startTime, endTime, int(numDots))
+	case "ReqCompleteCount":
+		return s.calculateReqComplete(
+			ctx, compName, startTime, endTime, int(numDots))
+	case "AvgLatency":
+		return s.calculateAvgLatency(
+			ctx, compName, startTime, endTime, int(numDots))
+	case "ConcurrentTask":
+		return s.calculateConcurrentTask(
+			ctx, compName, infoType, startTime, endTime, numDots)
+	case "RequestBufferPressure":
+		return s.calculateRequestBufferPressure(
+			ctx, compName, infoType, startTime, endTime, numDots)
+	case "ResponseBufferPressure":
+		return s.calculateResponseBufferPressure(
+			ctx, compName, infoType, startTime, endTime, numDots)
+	case "PendingReqOut":
+		return s.calculatePendingReqOut(
+			ctx, compName, infoType, startTime, endTime, numDots)
+	default:
+		return nil
+	}
 }
 
 // httpConcurrentTaskMilestones writes the blocking-reason chart — the one metric
@@ -136,8 +157,15 @@ func (s *Server) httpConcurrentTaskMilestones(
 	// (default) keeps the finer kind-what grouping, mirroring component_timeline so
 	// the legend matches the client's colorMode.
 	groupByKind := r.FormValue("group") == "kind"
-	stackedInfo := s.calculateConcurrentTaskMilestones(
-		r.Context(), scope, infoType, startTime, endTime, numDots, sample, groupByKind)
+	ctx := r.Context()
+	stackedInfo, err := readTrace(ctx, func() *StackedComponentInfo {
+		return s.calculateConcurrentTaskMilestones(
+			ctx, scope, infoType, startTime, endTime, numDots, sample, groupByKind)
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	writeJSON(w, stackedInfo)
 }
 
@@ -403,7 +431,7 @@ func (s *Server) fillBinnedEventRate(
 		if ctx.Err() != nil {
 			return
 		}
-		panic(err)
+		panic(traceReadError{err})
 	}
 	defer rows.Close()
 
@@ -414,7 +442,7 @@ func (s *Server) fillBinnedEventRate(
 			if ctx.Err() != nil {
 				return
 			}
-			panic(err)
+			panic(traceReadError{err})
 		}
 
 		if bin >= 0 && bin < len(data) {
@@ -425,7 +453,7 @@ func (s *Server) fillBinnedEventRate(
 		if ctx.Err() != nil {
 			return
 		}
-		panic(err)
+		panic(traceReadError{err})
 	}
 }
 
@@ -458,7 +486,7 @@ func (s *Server) fillBinnedAverageLatency(
 		if ctx.Err() != nil {
 			return
 		}
-		panic(err)
+		panic(traceReadError{err})
 	}
 	defer rows.Close()
 
@@ -469,7 +497,7 @@ func (s *Server) fillBinnedAverageLatency(
 			if ctx.Err() != nil {
 				return
 			}
-			panic(err)
+			panic(traceReadError{err})
 		}
 
 		if bin >= 0 && bin < len(data) {
@@ -480,7 +508,7 @@ func (s *Server) fillBinnedAverageLatency(
 		if ctx.Err() != nil {
 			return
 		}
-		panic(err)
+		panic(traceReadError{err})
 	}
 }
 

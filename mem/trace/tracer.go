@@ -4,8 +4,8 @@ package trace
 import (
 	"github.com/sarchlab/akita/v5/datarecording"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-
 	"github.com/sarchlab/akita/v5/timing"
+
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -33,6 +33,7 @@ type memoryTagEntry struct {
 type dbTracer struct {
 	tracing.NopTracer
 
+	ids                 timing.IDGenerator
 	dataRecorder        datarecording.DataRecorder
 	pendingTransactions map[uint64]*memoryTransactionEntry
 }
@@ -40,13 +41,14 @@ type dbTracer struct {
 // NewDBTracer creates a new database-based Tracer.
 func NewDBTracer(dataRecorder datarecording.DataRecorder) tracing.Tracer {
 	t := &dbTracer{
+		ids:                 timing.NewIDGenerator(),
 		dataRecorder:        dataRecorder,
 		pendingTransactions: make(map[uint64]*memoryTransactionEntry),
 	}
 
 	// Create tables for memory transactions and tags
-	t.dataRecorder.CreateTable("memory_transactions", memoryTransactionEntry{})
-	t.dataRecorder.CreateTable("memory_tags", memoryTagEntry{})
+	datarecording.MustRecord(t.dataRecorder.CreateTable("memory_transactions", memoryTransactionEntry{}))
+	datarecording.MustRecord(t.dataRecorder.CreateTable("memory_tags", memoryTagEntry{}))
 
 	return t
 }
@@ -74,13 +76,13 @@ func (t *dbTracer) StartTask(task tracing.TaskStart) {
 // AddTaskTag records a tag on a memory transaction
 func (t *dbTracer) AddTaskTag(tag tracing.TaskTag) {
 	entry := memoryTagEntry{
-		ID:     timing.GetIDGenerator().Generate(),
+		ID:     t.ids.Generate(),
 		TaskID: tag.TaskID,
 		Time:   float64(tag.Time),
 		What:   tag.What,
 	}
 
-	t.dataRecorder.InsertData("memory_tags", entry)
+	datarecording.MustRecord(t.dataRecorder.InsertData("memory_tags", entry))
 }
 
 // EndTask marks the end of a memory transaction
@@ -91,7 +93,7 @@ func (t *dbTracer) EndTask(task tracing.TaskEnd) {
 	}
 
 	entry.EndTime = float64(task.Time)
-	t.dataRecorder.InsertData("memory_transactions", *entry)
+	datarecording.MustRecord(t.dataRecorder.InsertData("memory_transactions", *entry))
 
 	delete(t.pendingTransactions, task.ID)
 }

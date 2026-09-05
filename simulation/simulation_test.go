@@ -111,7 +111,13 @@ var _ = Describe("Simulation", func() {
 	)
 
 	BeforeEach(func() {
-		simulation = MakeBuilder().WithoutMonitoring().Build()
+		{
+			var err error
+			simulation, err = MakeBuilder().WithoutMonitoring().Build()
+			if err != nil {
+				panic(err)
+			}
+		}
 		port = testPort{name: "port"}
 		comp = testComponent{name: "comp", ports: []Port{port}}
 	})
@@ -235,7 +241,13 @@ var _ = Describe("Simulation", func() {
 			builder := MakeBuilder().
 				WithoutMonitoring().
 				WithOutputFileName("test_custom_output")
-			customSim = builder.Build()
+			{
+				var err error
+				customSim, err = builder.Build()
+				if err != nil {
+					panic(err)
+				}
+			}
 
 			Expect(customSim).ToNot(BeNil())
 			Expect(customSim.GetDataRecorder()).ToNot(BeNil())
@@ -246,7 +258,10 @@ var _ = Describe("Simulation", func() {
 		It("should reject an entity that has no serializer", func() {
 			// A bare component/port has no checkpoint serializer yet, so save
 			// must fail loudly and not leave an archive behind.
-			noSerializerSim := MakeBuilder().WithoutMonitoring().Build()
+			noSerializerSim, err := MakeBuilder().WithoutMonitoring().Build()
+			if err != nil {
+				panic(err)
+			}
 			defer func() {
 				noSerializerSim.Terminate()
 				os.Remove("akita_sim_" + noSerializerSim.ID() + ".sqlite3")
@@ -258,7 +273,7 @@ var _ = Describe("Simulation", func() {
 
 			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
 
-			err := noSerializerSim.SaveCheckpoint(path, "test-build")
+			err = noSerializerSim.SaveCheckpoint(path, "test-build")
 
 			Expect(err).To(MatchError(ContainSubstring(
 				"has no checkpoint serializer")))
@@ -267,10 +282,13 @@ var _ = Describe("Simulation", func() {
 		})
 
 		It("should reject checkpoints for parallel engines", func() {
-			parallelSim := MakeBuilder().
+			parallelSim, err := MakeBuilder().
 				WithoutMonitoring().
 				WithParallelEngine().
 				Build()
+			if err != nil {
+				panic(err)
+			}
 			defer func() {
 				parallelSim.Terminate()
 				os.Remove("akita_sim_" + parallelSim.ID() + ".sqlite3")
@@ -278,7 +296,7 @@ var _ = Describe("Simulation", func() {
 
 			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
 
-			err := parallelSim.SaveCheckpoint(path, "test-build")
+			err = parallelSim.SaveCheckpoint(path, "test-build")
 
 			Expect(err).To(MatchError(ContainSubstring(
 				"only timing.SerialEngine is supported")))
@@ -363,7 +381,13 @@ var _ = Describe("Global state manager", func() {
 	var sim *Simulation
 
 	BeforeEach(func() {
-		sim = MakeBuilder().WithoutMonitoring().Build()
+		{
+			var err error
+			sim, err = MakeBuilder().WithoutMonitoring().Build()
+			if err != nil {
+				panic(err)
+			}
+		}
 	})
 
 	AfterEach(func() {
@@ -398,7 +422,10 @@ var _ = Describe("Global state manager", func() {
 	Describe("Deterministic entity inventory", func() {
 		It("should list entities in stable registration order across rebuilds", func() {
 			build := func() []string {
-				s := MakeBuilder().WithoutMonitoring().Build()
+				s, err := MakeBuilder().WithoutMonitoring().Build()
+				if err != nil {
+					panic(err)
+				}
 				defer func() {
 					s.Terminate()
 					os.Remove("akita_sim_" + s.ID() + ".sqlite3")
@@ -450,7 +477,10 @@ type roundTripState struct {
 
 var _ = Describe("Checkpoint round trip", func() {
 	It("restores component state, storage, ID counter, and engine time", func() {
-		sim := MakeBuilder().WithoutMonitoring().Build()
+		sim, err := MakeBuilder().WithoutMonitoring().Build()
+		if err != nil {
+			panic(err)
+		}
 		defer func() {
 			sim.Terminate()
 			os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
@@ -473,11 +503,11 @@ var _ = Describe("Checkpoint round trip", func() {
 
 		// Establish runtime state across all four entity kinds.
 		comp.State = roundTripState{Count: 7}
-		Expect(storage.Write(0, []byte{1, 2, 3, 4})).To(Succeed())
+		storage.Write(0, []byte{1, 2, 3, 4})
 		for i := 0; i < 5; i++ {
-			timing.GetIDGenerator().Generate()
+			sim.GetIDGenerator().Generate()
 		}
-		savedCounter := timing.GetIDGeneratorNextID()
+		savedCounter := sim.GetIDGenerator().(interface{ NextID() uint64 }).NextID()
 		engine.SetCurrentTime(100)
 
 		path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
@@ -485,19 +515,19 @@ var _ = Describe("Checkpoint round trip", func() {
 
 		// Mutate every piece of runtime state away from the checkpoint.
 		comp.State = roundTripState{Count: 999}
-		Expect(storage.Write(0, []byte{0, 0, 0, 0})).To(Succeed())
-		timing.GetIDGenerator().Generate()
-		timing.GetIDGenerator().Generate()
+		storage.Write(0, []byte{0, 0, 0, 0})
+		sim.GetIDGenerator().Generate()
+		sim.GetIDGenerator().Generate()
 		engine.SetCurrentTime(500)
 
 		// Restore and confirm every piece came back.
 		Expect(sim.LoadCheckpoint(path, "test-build")).To(Succeed())
 
 		Expect(comp.State.Count).To(Equal(7))
-		data, err := storage.Read(0, 4)
+		data := storage.Read(0, 4)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
-		Expect(timing.GetIDGeneratorNextID()).To(Equal(savedCounter))
+		Expect(sim.GetIDGenerator().(interface{ NextID() uint64 }).NextID()).To(Equal(savedCounter))
 		Expect(engine.CurrentTime()).To(Equal(timing.VTimeInPicoSec(100)))
 	})
 })
@@ -527,7 +557,10 @@ func (m *resumeWorkerMW) Tick() bool {
 }
 
 func buildResumeSim() (*Simulation, *modeling.Component[resumeSpec, resumeState, modeling.None]) {
-	sim := MakeBuilder().WithoutMonitoring().Build()
+	sim, err := MakeBuilder().WithoutMonitoring().Build()
+	if err != nil {
+		panic(err)
+	}
 	engine := sim.GetEngine().(*timing.SerialEngine)
 	w := modeling.NewBuilder[resumeSpec, resumeState, modeling.None]().
 		WithEngine(engine).
@@ -604,7 +637,10 @@ func buildTickCountSim() (
 	*Simulation,
 	*modeling.Component[tickCountSpec, tickCountState, modeling.None],
 ) {
-	sim := MakeBuilder().WithoutMonitoring().Build()
+	sim, err := MakeBuilder().WithoutMonitoring().Build()
+	if err != nil {
+		panic(err)
+	}
 	engine := sim.GetEngine().(*timing.SerialEngine)
 	c := modeling.NewBuilder[tickCountSpec, tickCountState, modeling.None]().
 		WithEngine(engine).
@@ -680,7 +716,10 @@ func buildWakeSim() (
 	*Simulation,
 	*modeling.EventDrivenComponent[wakeSpec, wakeState, modeling.None],
 ) {
-	sim := MakeBuilder().WithoutMonitoring().Build()
+	sim, err := MakeBuilder().WithoutMonitoring().Build()
+	if err != nil {
+		panic(err)
+	}
 	engine := sim.GetEngine().(*timing.SerialEngine)
 	c := modeling.NewEventDrivenBuilder[wakeSpec, wakeState, modeling.None]().
 		WithEngine(engine).

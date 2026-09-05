@@ -135,8 +135,8 @@ func (a *testAgent) NotifyPortFree(messaging.Port) {
 	// No-op.
 }
 
-func (a *testAgent) Handle(timing.Event) error {
-	return nil
+func (a *testAgent) Handle(timing.Event) {
+	return
 }
 
 func (a *testAgent) send(msg messaging.Msg) {
@@ -189,8 +189,8 @@ func (a *bandwidthAgent) NotifyRecv(port messaging.Port) {
 
 func (a *bandwidthAgent) NotifyPortFree(messaging.Port) {}
 
-func (a *bandwidthAgent) Handle(timing.Event) error {
-	return nil
+func (a *bandwidthAgent) Handle(timing.Event) {
+	return
 }
 
 const (
@@ -229,7 +229,7 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.F
 func makeReadReq(src, dst messaging.RemotePort, index int) memprotocol.ReadReq {
 	addr := uint64(index * readSize)
 	r := memprotocol.ReadReq{}
-	r.ID = timing.GetIDGenerator().Generate()
+	r.ID = testIDs.Generate()
 	r.Src = src
 	r.Dst = dst
 	r.Address = addr
@@ -297,12 +297,11 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 	It("should return read data after configured latency", func() {
 		data := []byte{1, 2, 3, 4}
-		err := storage.Write(0x0, data)
-		Expect(err).NotTo(HaveOccurred())
+		storage.Write(0x0, data)
 
 		topPort := memComp.GetPortByName("Top")
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = testIDs.Generate()
 		read.Src = agent.port.AsRemote()
 		read.Dst = topPort.AsRemote()
 		read.Address = 0x0
@@ -325,15 +324,14 @@ var _ = Describe("SimpleBankedMemory", func() {
 		addr := uint64(0x100)
 
 		initial := []byte{0xAA, 0xBB, 0xCC, 0xDD}
-		err := storage.Write(addr, initial)
-		Expect(err).NotTo(HaveOccurred())
+		storage.Write(addr, initial)
 
 		newData := []byte{0x10, 0x20, 0x30, 0x40}
 
 		topPort := memComp.GetPortByName("Top")
 
 		write := memprotocol.WriteReq{}
-		write.ID = timing.GetIDGenerator().Generate()
+		write.ID = testIDs.Generate()
 		write.Src = agent.port.AsRemote()
 		write.Dst = topPort.AsRemote()
 		write.Address = addr
@@ -342,7 +340,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		write.TrafficClass = "memprotocol.WriteReq"
 
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = testIDs.Generate()
 		read.Src = agent.port.AsRemote()
 		read.Dst = topPort.AsRemote()
 		read.Address = addr
@@ -366,8 +364,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		Expect(ok).To(BeTrue())
 		Expect(readRsp.Data).To(Equal(newData))
 
-		committed, err := storage.Read(addr, uint64(len(newData)))
-		Expect(err).NotTo(HaveOccurred())
+		committed := storage.Read(addr, uint64(len(newData)))
 		Expect(committed).To(Equal(newData))
 	})
 
@@ -396,7 +393,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		// Write 4 bytes at a non-zero global address.
 		writeData := []byte{1, 2, 3, 4}
 		write := memprotocol.WriteReq{}
-		write.ID = timing.GetIDGenerator().Generate()
+		write.ID = testIDs.Generate()
 		write.Src = agent.port.AsRemote()
 		write.Dst = topPort.AsRemote()
 		write.Address = 0x200
@@ -406,7 +403,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		// Read the same global address back.
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = testIDs.Generate()
 		read.Src = agent.port.AsRemote()
 		read.Dst = topPort.AsRemote()
 		read.Address = 0x200

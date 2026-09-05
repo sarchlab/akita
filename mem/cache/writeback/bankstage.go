@@ -4,7 +4,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -121,7 +120,7 @@ func (s *bankStage) acceptIntoPipeline(next *State, spec Spec, transIdx int) {
 	// transaction that visits the bank more than once (e.g. evict then fill)
 	// opens one subtask per visit, each closed in finishBank.
 	if trans.hasReqMeta() {
-		pid := timing.GetIDGenerator().Generate()
+		pid := s.cache.comp.IDGenerator().Generate()
 		trans.BankPID = pid
 		tracing.StartTask(s.cache.comp, tracing.TaskStart{
 			ID:       pid,
@@ -202,11 +201,8 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	_, offset := getCacheLineID(addr, spec.Log2BlockSize)
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 
-	data, err := s.cache.storage.Read(
+	data := s.cache.storage.Read(
 		nextBlock.CacheAddress+offset, trans.ReadAccessByteSize)
-	if err != nil {
-		panic(err)
-	}
 
 	trans.Removed = true
 
@@ -215,7 +211,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	nextBlock.ReadCount--
 
 	dataReady := memprotocol.DataReadyRsp{}
-	dataReady.ID = timing.GetIDGenerator().Generate()
+	dataReady.ID = s.cache.comp.IDGenerator().Generate()
 	dataReady.Src = s.cache.topPort().AsRemote()
 	dataReady.Dst = trans.ReadMeta.Src
 	dataReady.RspTo = trans.ReadMeta.ID
@@ -254,7 +250,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 	next.BankInflightTransCounts[s.bankID]--
 
 	done := memprotocol.WriteDoneRsp{}
-	done.ID = timing.GetIDGenerator().Generate()
+	done.ID = s.cache.comp.IDGenerator().Generate()
 	done.Src = s.cache.topPort().AsRemote()
 	done.Dst = trans.WriteMeta.Src
 	done.RspTo = trans.WriteMeta.ID
@@ -274,11 +270,8 @@ func (s *bankStage) writeData(
 	offset uint64,
 	log2BlockSize uint64,
 ) []bool {
-	data, err := s.cache.storage.Read(
+	data := s.cache.storage.Read(
 		block.CacheAddress, 1<<log2BlockSize)
-	if err != nil {
-		panic(err)
-	}
 
 	dirtyMask := block.DirtyMask
 	if dirtyMask == nil {
@@ -293,10 +286,7 @@ func (s *bankStage) writeData(
 		}
 	}
 
-	err = s.cache.storage.Write(block.CacheAddress, data)
-	if err != nil {
-		panic(err)
-	}
+	s.cache.storage.Write(block.CacheAddress, data)
 
 	return dirtyMask
 }
@@ -316,10 +306,8 @@ func (s *bankStage) finalizeBankWriteFetched(
 
 	mshrBuf.PushTyped(transIdx)
 
-	err := s.cache.storage.Write(nextBlock.CacheAddress, trans.MSHRData)
-	if err != nil {
-		panic(err)
-	}
+	s.cache.storage.Write(nextBlock.CacheAddress, trans.MSHRData)
+
 	nextBlock.IsLocked = false
 	nextBlock.IsValid = true
 
@@ -342,11 +330,8 @@ func (s *bankStage) finalizeBankEviction(
 		return false
 	}
 
-	data, err := s.cache.storage.Read(
+	data := s.cache.storage.Read(
 		trans.VictimCacheAddress, 1<<spec.Log2BlockSize)
-	if err != nil {
-		panic(err)
-	}
 
 	trans.EvictingData = data
 

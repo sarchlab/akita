@@ -2,7 +2,6 @@ package timing
 
 import (
 	"log"
-	"reflect"
 	"sync"
 	"sync/atomic"
 
@@ -17,13 +16,13 @@ type SerialEngine struct {
 	queue          *unsafeEventQueue
 	secondaryQueue *unsafeEventQueue
 
-	paused    int32 // atomic: 0 = running, 1 = paused
-	pauseMu   sync.Mutex
-	pauseCond *sync.Cond
-
-	singleRunLock sync.Mutex
+	mu         sync.Mutex
+	supervisor *Supervisor
+	ids        IDGenerator
 
 	registry map[string]Handler
+	wake     chan struct{}
+	restored bool
 }
 
 // NewSerialEngine creates a SerialEngine.
@@ -33,7 +32,9 @@ func NewSerialEngine() *SerialEngine {
 	e.queue = newUnsafeEventQueue()
 	e.secondaryQueue = newUnsafeEventQueue()
 	e.registry = make(map[string]Handler)
-	e.pauseCond = sync.NewCond(&e.pauseMu)
+	e.supervisor = NewSupervisor("Engine")
+	e.ids = NewIDGenerator()
+	e.wake = make(chan struct{}, 1)
 
 	return e
 }
@@ -46,11 +47,23 @@ func (e *SerialEngine) Name() string {
 
 // RegisterHandler registers a handler with the given name.
 func (e *SerialEngine) RegisterHandler(name string, handler Handler) {
+	e.supervisor.Check()
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.registry[name] = handler
 }
 
 // Schedule registers an event to happen in the future.
 func (e *SerialEngine) Schedule(evt Event) {
+	e.supervisor.Check()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	defer func() {
+		select {
+		case e.wake <- struct{}{}:
+		default:
+		}
+	}()
 	if evt.Time() < e.time {
 		log.Panic("scheduling an event earlier than current time")
 	}
@@ -65,84 +78,71 @@ func (e *SerialEngine) Schedule(evt Event) {
 }
 
 // Run processes all the events scheduled in the SerialEngine.
-func (e *SerialEngine) Run() error {
-	e.singleRunLock.Lock()
-	defer e.singleRunLock.Unlock()
+func (e *SerialEngine) Run() error { return e.run(nil) }
 
-	hasHooks := e.NumHooks() > 0
+// RunUntil processes events at or before t, retaining later events for another run.
+func (e *SerialEngine) RunUntil(t VTimeInPicoSec) error { return e.run(&t) }
 
-	for {
-		if e.noMoreEvent() {
-			return nil
+func (e *SerialEngine) run(limit *VTimeInPicoSec) error {
+	return e.supervisor.Execute("run", func() error {
+		hasHooks := e.NumHooks() > 0
+		for e.supervisor.awaitResume() {
+			if e.dispatchNext(hasHooks, limit) {
+				if e.supervisor.waitForWork(e.wake) {
+					continue
+				}
+				break
+			}
 		}
-
-		// Lightweight pause check: atomic load is ~1ns when not paused.
-		if atomic.LoadInt32(&e.paused) != 0 {
-			e.waitForResume()
-		}
-
-		e.dispatchNext(hasHooks)
-	}
+		return nil
+	})
 }
 
-// RunUntil runs events in time order until the next event's time would exceed t,
-// or the queue empties. Events at times <= t scheduled while running (including
-// newly scheduled ones) are processed; the engine stops with its time at the
-// last processed event and all later events still queued. This is a
-// deterministic mid-run boundary — unlike Pause, which stops at a
-// non-reproducible point — used to take a mid-transaction checkpoint.
-func (e *SerialEngine) RunUntil(t VTimeInPicoSec) error {
-	e.singleRunLock.Lock()
-	defer e.singleRunLock.Unlock()
-
-	hasHooks := e.NumHooks() > 0
-
-	for {
-		if e.noMoreEvent() {
-			return nil
-		}
-		if e.nextEventTime() > t {
-			return nil
-		}
-
-		if atomic.LoadInt32(&e.paused) != 0 {
-			e.waitForResume()
-		}
-
-		e.dispatchNext(hasHooks)
+// dispatchNext keeps the queue critical section separate from model callbacks.
+// A recovery is installed before calling even user-defined event accessors.
+func (e *SerialEngine) dispatchNext(hasHooks bool, limit *VTimeInPicoSec) (done bool) {
+	if !e.supervisor.beginDispatch() {
+		return true
 	}
-}
-
-// dispatchNext pops the earliest event and runs it, invoking hooks when present.
-func (e *SerialEngine) dispatchNext(hasHooks bool) {
-	evt := e.nextEvent()
-
-	if evt.Time() < e.time {
-		log.Panicf(
-			"cannot run event in the past, evt %s @ %d, now %d",
-			reflect.TypeOf(evt), evt.Time(), e.time,
-		)
+	defer e.supervisor.endDispatch()
+	var evt Event
+	defer func() {
+		if p := recover(); p != nil {
+			e.supervisor.record("event", evt, p)
+		}
+	}()
+	var handler Handler
+	evt, handler, done = e.prepareNext(limit)
+	if done {
+		return true
 	}
-
-	e.time = evt.Time()
-
+	ctx := hooking.HookCtx{Domain: e, Pos: HookPosBeforeEvent, Item: evt}
 	if hasHooks {
-		hookCtx := hooking.HookCtx{
-			Domain: e,
-			Pos:    HookPosBeforeEvent,
-			Item:   evt,
-		}
-		e.InvokeHook(hookCtx)
-
-		handler := e.registry[evt.HandlerID()]
-		_ = handler.Handle(evt)
-
-		hookCtx.Pos = HookPosAfterEvent
-		e.InvokeHook(hookCtx)
-	} else {
-		handler := e.registry[evt.HandlerID()]
-		_ = handler.Handle(evt)
+		e.InvokeHook(ctx)
 	}
+	if e.supervisor.stopped.Load() {
+		return false
+	}
+	handler.Handle(evt)
+	if hasHooks && !e.supervisor.stopped.Load() {
+		ctx.Pos = HookPosAfterEvent
+		e.InvokeHook(ctx)
+	}
+	return false
+}
+
+func (e *SerialEngine) prepareNext(limit *VTimeInPicoSec) (Event, Handler, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.noMoreEvent() || (limit != nil && e.nextEventTime() > *limit) {
+		return nil, nil, true
+	}
+	evt := e.nextEvent()
+	if evt.Time() < e.time {
+		panic("cannot run event in the past")
+	}
+	atomic.StoreUint64((*uint64)(&e.time), uint64(evt.Time()))
+	return evt, e.registry[evt.HandlerID()], false
 }
 
 // nextEventTime returns the time of the earliest queued event. It must not be
@@ -162,15 +162,6 @@ func (e *SerialEngine) nextEventTime() VTimeInPicoSec {
 	}
 
 	return secondary
-}
-
-// waitForResume blocks until the engine is unpaused.
-func (e *SerialEngine) waitForResume() {
-	e.pauseMu.Lock()
-	for atomic.LoadInt32(&e.paused) != 0 {
-		e.pauseCond.Wait()
-	}
-	e.pauseMu.Unlock()
 }
 
 func (e *SerialEngine) noMoreEvent() bool {
@@ -199,30 +190,17 @@ func (e *SerialEngine) nextEvent() Event {
 	return secondaryEvt
 }
 
-// Pause prevents the SerialEngine from triggering more events.
-func (e *SerialEngine) Pause() {
-	e.pauseMu.Lock()
-	defer e.pauseMu.Unlock()
-
-	atomic.StoreInt32(&e.paused, 1)
-}
-
-// Continue allows the SerialEngine to trigger more events.
-func (e *SerialEngine) Continue() {
-	e.pauseMu.Lock()
-	defer e.pauseMu.Unlock()
-
-	atomic.StoreInt32(&e.paused, 0)
-	e.pauseCond.Broadcast()
-}
-
-// CurrentTime returns the current time at which the engine is at.
-// Specifically, the run time of the current event.
+// Pause prevents subsequent event dispatch; an already admitted event may finish.
+func (e *SerialEngine) Pause()    { e.supervisor.Pause() }
+func (e *SerialEngine) Continue() { e.supervisor.Continue() }
 func (e *SerialEngine) CurrentTime() VTimeInPicoSec {
-	return e.time
+	return VTimeInPicoSec(atomic.LoadUint64((*uint64)(&e.time)))
 }
-
-// SetCurrentTime sets the current time of the engine.
 func (e *SerialEngine) SetCurrentTime(t VTimeInPicoSec) {
-	e.time = t
+	e.supervisor.Check()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	atomic.StoreUint64((*uint64)(&e.time), uint64(t))
 }
+func (e *SerialEngine) Supervisor() *Supervisor  { return e.supervisor }
+func (e *SerialEngine) IDGenerator() IDGenerator { return e.ids }

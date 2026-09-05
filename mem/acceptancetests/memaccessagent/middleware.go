@@ -6,7 +6,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -166,7 +165,7 @@ func (m *agentMiddleware) doRead() bool {
 	}
 
 	readReq := memprotocol.ReadReq{}
-	readReq.ID = timing.GetIDGenerator().Generate()
+	readReq.ID = m.agent.IDGenerator().Generate()
 	readReq.Src = m.memPort().AsRemote()
 	readReq.Dst = m.agent.LowModule.AsRemote()
 	readReq.Address = address
@@ -249,7 +248,7 @@ func (m *agentMiddleware) doWrite() bool {
 
 	writeData := uint32ToBytes(data)
 	writeReq := memprotocol.WriteReq{}
-	writeReq.ID = timing.GetIDGenerator().Generate()
+	writeReq.ID = m.agent.IDGenerator().Generate()
 	writeReq.Src = m.memPort().AsRemote()
 	writeReq.Dst = m.agent.LowModule.AsRemote()
 	writeReq.Address = address

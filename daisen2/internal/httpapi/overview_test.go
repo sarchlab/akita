@@ -14,7 +14,9 @@ func newTestReader(t *testing.T) *SQLiteTraceReader {
 
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 
 	return reader
 }

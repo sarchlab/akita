@@ -1,124 +1,69 @@
 package timing
 
 import (
-	"log"
 	"sync"
 	"sync/atomic"
 )
 
-var idGeneratorMutex sync.Mutex
-var idGeneratorInstantiated bool
-var idGenerator IDGenerator
-
-// IDGenerator can generate IDs.
+// IDGenerator is owned by an engine. Share it with that engine's components and
+// message producers; never share it between independently restorable simulations.
 type IDGenerator interface {
-	// Generate generates an ID.
 	Generate() uint64
+	// Track, Lookup, and Forget maintain owned ID associations (for example,
+	// tracing tasks). They must be safe for concurrent use with Generate.
+	Track(namespace string, key uint64) uint64
+	Lookup(namespace string, key uint64) (uint64, bool)
+	Forget(namespace string, key uint64)
 }
 
-// UseSequentialIDGenerator configures the ID generator to generate IDs
-// sequentially.
-func UseSequentialIDGenerator() {
-	if idGeneratorInstantiated {
-		log.Panic("cannot change id generator type after using it")
-	}
-
-	idGeneratorMutex.Lock()
-
-	if idGeneratorInstantiated {
-		log.Panic("cannot change id generator type after using it")
-	}
-
-	idGenerator = &sequentialIDGenerator{}
-	idGeneratorInstantiated = true
-
-	idGeneratorMutex.Unlock()
-}
-
-// UseParallelIDGenerator configures the ID generator to generate IDs in
-// parallel. The IDs generated will not be deterministic anymore.
-func UseParallelIDGenerator() {
-	if idGeneratorInstantiated {
-		log.Panic("cannot change id generator type after using it")
-	}
-
-	idGeneratorMutex.Lock()
-
-	if idGeneratorInstantiated {
-		log.Panic("cannot change id generator type after using it")
-	}
-
-	idGenerator = &parallelIDGenerator{}
-	idGeneratorInstantiated = true
-
-	idGeneratorMutex.Unlock()
-}
-
-// GetIDGenerator returns the ID generator used in the current simulation.
-func GetIDGenerator() IDGenerator {
-	if idGeneratorInstantiated {
-		return idGenerator
-	}
-
-	idGeneratorMutex.Lock()
-
-	if idGeneratorInstantiated {
-		idGeneratorMutex.Unlock()
-		return idGenerator
-	}
-
-	idGenerator = &sequentialIDGenerator{}
-	idGeneratorInstantiated = true
-
-	idGeneratorMutex.Unlock()
-
-	return idGenerator
-}
+// NewIDGenerator constructs an independent, checkpointable sequence.
+func NewIDGenerator() *sequentialIDGenerator { return &sequentialIDGenerator{} }
 
 type sequentialIDGenerator struct {
-	nextID uint64
+	nextID     uint64
+	trackingMu sync.Mutex
+	tracking   map[string]map[uint64]uint64
 }
 
-func (g *sequentialIDGenerator) Generate() uint64 {
-	return atomic.AddUint64(&g.nextID, 1)
+func (g *sequentialIDGenerator) Generate() uint64 { return atomic.AddUint64(&g.nextID, 1) }
+func (g *sequentialIDGenerator) Name() string     { return "IDGenerator" }
+func (g *sequentialIDGenerator) NextID() uint64   { return atomic.LoadUint64(&g.nextID) }
+
+// Track associates a message with an owned tracing task, creating it if absent.
+func (g *sequentialIDGenerator) Track(domain string, msg uint64) uint64 {
+	g.trackingMu.Lock()
+	defer g.trackingMu.Unlock()
+	if g.tracking == nil {
+		g.tracking = make(map[string]map[uint64]uint64)
+	}
+	if g.tracking[domain] == nil {
+		g.tracking[domain] = make(map[uint64]uint64)
+	}
+	if id, ok := g.tracking[domain][msg]; ok {
+		return id
+	}
+	id := g.Generate()
+	g.tracking[domain][msg] = id
+	return id
+}
+func (g *sequentialIDGenerator) Lookup(domain string, msg uint64) (uint64, bool) {
+	g.trackingMu.Lock()
+	defer g.trackingMu.Unlock()
+	id, ok := g.tracking[domain][msg]
+	return id, ok
+}
+func (g *sequentialIDGenerator) Forget(domain string, msg uint64) {
+	g.trackingMu.Lock()
+	defer g.trackingMu.Unlock()
+	delete(g.tracking[domain], msg)
+	if len(g.tracking[domain]) == 0 {
+		delete(g.tracking, domain)
+	}
 }
 
-// Name returns the name of the ID generator. It is registered as a simulation
-// entity so its counter is part of the state snapshot.
-func (g *sequentialIDGenerator) Name() string {
-	return "IDGenerator"
-}
+// IDSource exposes the sequence used for event, message, and tracing IDs.
+type IDSource interface{ IDGenerator() IDGenerator }
 
-// GetIDGeneratorNextID returns the current nextID from the sequential ID
-// generator. It panics if the ID generator is not a sequentialIDGenerator.
-func GetIDGeneratorNextID() uint64 {
-	gen := idGenerator.(*sequentialIDGenerator)
-	return atomic.LoadUint64(&gen.nextID)
-}
-
-// SetIDGeneratorNextID sets the nextID on the sequential ID generator.
-// It panics if the ID generator is not a sequentialIDGenerator.
-func SetIDGeneratorNextID(id uint64) {
-	gen := idGenerator.(*sequentialIDGenerator)
-	atomic.StoreUint64(&gen.nextID, id)
-}
-
-// ResetIDGenerator resets the ID generator so a new one can be created.
-func ResetIDGenerator() {
-	idGeneratorInstantiated = false
-	idGenerator = nil
-}
-
-type parallelIDGenerator struct {
-	nextID uint64
-}
-
-func (g *parallelIDGenerator) Generate() uint64 {
-	return atomic.AddUint64(&g.nextID, 1)
-}
-
-// Name returns the name of the ID generator. It is registered as a simulation
-// entity so its counter is part of the state snapshot.
-func (g *parallelIDGenerator) Name() string {
-	return "IDGenerator"
-}
+// IDsFor obtains an explicitly supplied owner's sequence. Custom event
+// schedulers must implement IDSource when used to construct Akita components.
+func IDsFor(owner any) IDGenerator { return owner.(IDSource).IDGenerator() }

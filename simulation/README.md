@@ -155,3 +155,5 @@ worked example, and the gotchas.
 
 See `examples/checkpointdemo` for a runnable save/load demo and
 `mem/acceptancetests/checkpointresume` for a mid-transaction resume oracle.
+
+See [v5 error handling and ownership](ERROR_HANDLING.md) for managed setup, failure isolation, and interface migration.

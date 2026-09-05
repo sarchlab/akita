@@ -17,7 +17,10 @@ func TestDirectConnectionCursorRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ck.tar.gz")
 	const buildID = "conn-test"
 
-	sim := simulation.MakeBuilder().WithoutMonitoring().Build()
+	sim, err := simulation.MakeBuilder().WithoutMonitoring().Build()
+	if err != nil {
+		panic(err)
+	}
 	defer func() {
 		sim.Terminate()
 		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")

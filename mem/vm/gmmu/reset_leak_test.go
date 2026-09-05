@@ -64,7 +64,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	})
 
 	req := vmprotocol.TranslationReq{}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = testIDs.Generate()
 	req.Src = agentPort
 	req.Dst = topPort.AsRemote()
 	req.PID = 1
@@ -96,7 +96,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// Reset while the remote walk is in flight; the remote response is never
 	// delivered.
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = timing.GetIDGenerator().Generate()
+	reset.ID = testIDs.Generate()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = ctrlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

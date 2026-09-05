@@ -64,7 +64,7 @@ func (t *Test) GenerateMsgs(n uint64) {
 
 		msg := TrafficMsg{
 			MsgMeta: messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           t.agents[0].IDGenerator().Generate(),
 				Src:          srcPort.AsRemote(),
 				Dst:          dstPort.AsRemote(),
 				TrafficBytes: rand.Intn(4096),

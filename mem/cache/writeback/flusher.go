@@ -4,7 +4,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 
 	// blockRef is a set+way pair referencing a block in the directory.
@@ -230,7 +229,7 @@ func (f *flusher) finalizeFlushing() bool {
 	}
 
 	rsp := memcontrolprotocol.Rsp{Command: memcontrolprotocol.CmdFlush, Success: true}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = f.pipeline.comp.IDGenerator().Generate()
 	rsp.Src = f.ctrlPort().AsRemote()
 	rsp.Dst = next.ProcessingFlush.MsgMeta.Src
 	rsp.RspTo = next.ProcessingFlush.MsgMeta.ID

@@ -13,7 +13,9 @@ import (
 func TestComponentTimelineScopeAggregatesSubtree(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	exec := func(q string) {
@@ -54,7 +56,9 @@ func TestComponentTimelineScopeAggregatesSubtree(t *testing.T) {
 func TestLocationTimelineMatchesOnlyExactLocation(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	exec := func(q string) {
@@ -95,7 +99,9 @@ func TestLocationTimelineMatchesOnlyExactLocation(t *testing.T) {
 func TestCountTasksInScope(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	exec := func(q string) {
@@ -143,7 +149,9 @@ func TestCountTasksInScope(t *testing.T) {
 func TestComponentTimelineGroupByKind(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	exec := func(q string) {
@@ -188,7 +196,9 @@ func TestComponentTimelineGroupByKind(t *testing.T) {
 func TestComponentTimelineRespectsHalfOpenBins(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	exec := func(q string) {
@@ -241,7 +251,9 @@ func TestComponentTimelineRespectsHalfOpenBins(t *testing.T) {
 func TestBlockingReasonOccupancyBinsMilestoneIntervals(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	exec := func(q string) {
@@ -290,7 +302,9 @@ func TestBlockingReasonOccupancyBinsMilestoneIntervals(t *testing.T) {
 func TestBlockingReasonOccupancyGroupsByKindWhat(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	exec := func(q string) {
@@ -325,7 +339,9 @@ func TestBlockingReasonOccupancyGroupsByKindWhat(t *testing.T) {
 func TestComponentTimelineScopeIsCaseSensitive(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "trace.sqlite3")
 	reader := NewSQLiteTraceReader(dbPath)
-	reader.Init()
+	if err := reader.Init(); err != nil {
+		panic(err)
+	}
 	defer reader.Close()
 
 	exec := func(q string) {

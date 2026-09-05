@@ -10,10 +10,10 @@ The `DataRecorder` interface writes structured data into SQLite tables:
 
 ```go
 type DataRecorder interface {
-    CreateTable(tableName string, sampleEntry any)
-    InsertData(tableName string, entry any)
+    CreateTable(tableName string, sampleEntry any) error
+    InsertData(tableName string, entry any) error
     ListTables() []string
-    Flush()
+    Flush() error
     Close() error
 }
 ```
@@ -21,8 +21,11 @@ type DataRecorder interface {
 ### Creating a Recorder
 
 ```go
-recorder := datarecording.NewDataRecorder("my_simulation")
-defer recorder.Close()
+recorder, err := datarecording.NewDataRecorder("my_simulation")
+if err != nil {
+    return err
+}
+defer recorder.Close() // fallback cleanup; check Close explicitly on success
 ```
 
 This creates a SQLite file `my_simulation.sqlite3`. Simulation-level metadata
@@ -43,7 +46,9 @@ type MyEntry struct {
     Location  string  `akita_data:"location"` // auto-mapped to int IDs
 }
 
-recorder.CreateTable("my_results", MyEntry{})
+if err := recorder.CreateTable("my_results", MyEntry{}); err != nil {
+    return err
+}
 ```
 
 #### Struct Tags
@@ -61,12 +66,14 @@ complex, string).
 ### Inserting Data
 
 ```go
-recorder.InsertData("my_results", MyEntry{
+if err := recorder.InsertData("my_results", MyEntry{
     ID:       1,
     Category: "latency",
     Value:    42.5,
     Location: "Cache.L1",
-})
+}); err != nil {
+    return err
+}
 ```
 
 Data is batched internally (default 100,000 entries) and flushed automatically
@@ -77,7 +84,10 @@ or via `Flush()`.
 The `DataReader` interface reads from SQLite databases:
 
 ```go
-reader := datarecording.NewReader("my_simulation.sqlite3")
+reader, err := datarecording.NewReader("my_simulation.sqlite3")
+if err != nil {
+    return err
+}
 defer reader.Close()
 
 reader.MapTable("my_results", MyEntry{})
@@ -103,3 +113,15 @@ results, totalCount, err := reader.Query(ctx, "my_results", datarecording.QueryP
 
 Results are returned as `[]any` where each element is a pointer to the
 mapped struct type.
+
+## Recording failures
+
+Creation refuses an existing output file. Check errors from every write and
+from `Close`; a failed final flush or index build invalidates requested output.
+A failed flush retains its batch for retry. `Close` releases the database even
+on failure and cannot be retried. There is no process-wide exit handler.
+
+Inside managed simulation callbacks, `MustRecord(err)` turns an I/O error into
+a contained simulation failure. Standalone clients handle the error directly.
+The simulation's `Terminate` publishes a `.complete` marker after successful
+recording and close; see [output validity](../simulation/ERROR_HANDLING.md).

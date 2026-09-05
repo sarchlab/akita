@@ -1,14 +1,11 @@
 package simplebankedmemory
 
 import (
-	"log"
-
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -67,11 +64,8 @@ func (m *tickFinalizeMW) finalizeRead(
 	readReq := &item.ReadMsg
 
 	if !item.Committed {
-		data, err := m.comp.Resources().Storage.Read(
+		data := m.comp.Resources().Storage.Read(
 			readReq.Address, readReq.AccessByteSize)
-		if err != nil {
-			log.Panic(err)
-		}
 
 		item.ReadData = data
 		item.Committed = true
@@ -92,7 +86,7 @@ func (m *tickFinalizeMW) finalizeRead(
 	m.finishPipeline(&item.ReadMsg, item.PipelineTaskID)
 
 	rsp := memprotocol.DataReadyRsp{}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = m.comp.IDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = readReq.Src
 	rsp.RspTo = readReq.ID
@@ -119,14 +113,9 @@ func (m *tickFinalizeMW) finalizeWrite(
 		addr := writeReq.Address
 
 		if writeReq.DirtyMask == nil {
-			if err := m.comp.Resources().Storage.Write(addr, writeReq.Data); err != nil {
-				log.Panic(err)
-			}
+			m.comp.Resources().Storage.Write(addr, writeReq.Data)
 		} else {
-			data, err := m.comp.Resources().Storage.Read(addr, uint64(len(writeReq.Data)))
-			if err != nil {
-				log.Panic(err)
-			}
+			data := m.comp.Resources().Storage.Read(addr, uint64(len(writeReq.Data)))
 
 			for i := range writeReq.Data {
 				if writeReq.DirtyMask[i] {
@@ -134,9 +123,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 				}
 			}
 
-			if err := m.comp.Resources().Storage.Write(addr, data); err != nil {
-				log.Panic(err)
-			}
+			m.comp.Resources().Storage.Write(addr, data)
 		}
 
 		item.Committed = true
@@ -152,7 +139,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 	m.finishPipeline(&item.WriteMsg, item.PipelineTaskID)
 
 	rsp := memprotocol.WriteDoneRsp{}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = m.comp.IDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = writeReq.Src
 	rsp.RspTo = writeReq.ID
