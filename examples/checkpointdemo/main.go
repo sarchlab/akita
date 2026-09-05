@@ -87,6 +87,7 @@ func main() {
 			panic(err)
 		}
 		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
+		os.Remove("akita_sim_" + sim.ID() + ".complete")
 	}()
 
 	engine := sim.GetEngine().(*timing.SerialEngine)

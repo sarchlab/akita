@@ -7,11 +7,45 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/sarchlab/akita/v5/datarecording"
 	"github.com/sarchlab/akita/v5/timing"
 )
+
+func TestExecutionInfoUsesLiteralRecordingPath(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "trace.sqlite3")
+	name := base + "?literal#"
+	r, err := datarecording.NewDataRecorder(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := executionInfoEntry{Property: "Command", Value: "expected recording"}
+	if err := r.CreateTable("exec_info", entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.InsertData("exec_info", entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	m := NewMonitor()
+	m.SetTraceDBPath(name + ".sqlite3")
+	w := httptest.NewRecorder()
+	m.apiExecutionInfo(w, httptest.NewRequest(http.MethodGet, "/api/execution/info", nil))
+	var entries []executionInfoEntry
+	err = json.Unmarshal(w.Body.Bytes(), &entries)
+	if err != nil || w.Code != http.StatusOK || len(entries) != 1 || entries[0] != entry {
+		t.Fatalf("read wrong recording: status=%d body=%s err=%v", w.Code, w.Body.String(), err)
+	}
+	if _, err := os.Stat(base); !os.IsNotExist(err) {
+		t.Fatalf("monitor created an unintended file: %v", err)
+	}
+}
 
 func TestBufferPaginationCannotFailSimulation(t *testing.T) {
 	for _, tc := range []struct {

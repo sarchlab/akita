@@ -28,6 +28,7 @@ import (
 
 	"github.com/google/pprof/profile"
 	"github.com/sarchlab/akita/v5/daisen2"
+	"github.com/sarchlab/akita/v5/internal/sqlitefile"
 	"github.com/sarchlab/akita/v5/monitoring2/static"
 
 	"github.com/sarchlab/akita/v5/timing"
@@ -1172,7 +1173,11 @@ func (m *Monitor) readExecutionInfo() ([]executionInfoEntry, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite", absPath)
+	dsn, err := sqlitefile.DSN(absPath)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", dsn+"?mode=ro")
 	if err != nil {
 		return nil, err
 	}
