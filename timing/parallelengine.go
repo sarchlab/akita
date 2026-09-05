@@ -15,8 +15,8 @@ import (
 // in a parallel fashion.
 type ParallelEngine struct {
 	hooking.HookableBase
+	*engineControl
 
-	pauseLock              sync.Mutex
 	nowLock                sync.RWMutex
 	now                    VTimeInPicoSec
 	runningSecondaryEvents bool
@@ -44,6 +44,7 @@ func (e *ParallelEngine) Name() string {
 // NewParallelEngine creates a ParallelEngine.
 func NewParallelEngine() *ParallelEngine {
 	e := new(ParallelEngine)
+	e.engineControl = newEngineControl()
 	e.failed = make(chan struct{})
 
 	e.eventChan = make(chan Event, 10000)
@@ -123,6 +124,10 @@ func (e *ParallelEngine) Schedule(evt Event) {
 
 // Run processes all the events scheduled in the ParallelEngine.
 func (e *ParallelEngine) Run() (err error) {
+	if err := e.engineControl.begin(); err != nil {
+		return err
+	}
+	defer e.engineControl.end(&err)
 	defer func() {
 		if cause := recover(); cause != nil {
 			e.recordPanic(cause, nil)
@@ -139,16 +144,12 @@ func (e *ParallelEngine) Run() (err error) {
 			return nil
 		}
 
-		e.runNextRound()
+		if e.engineControl.pending.Load() {
+			e.engineControl.boundary()
+		}
+		e.determineWhatToRun()
+		e.runRound()
 	}
-}
-
-// Keep the existing round lock and always release it during panic unwinding.
-func (e *ParallelEngine) runNextRound() {
-	e.pauseLock.Lock()
-	defer e.pauseLock.Unlock()
-	e.determineWhatToRun()
-	e.runRound()
 }
 
 func (e *ParallelEngine) determineWhatToRun() {
@@ -310,17 +311,6 @@ func (e *ParallelEngine) tempWorkerRun(evt Event) {
 		hookCtx.Pos = HookPosAfterEvent
 		e.InvokeHook(hookCtx)
 	}
-}
-
-// Pause will prevent the engine to move forward. For events that are scheduled
-// at the same time, they may still be triggered.
-func (e *ParallelEngine) Pause() {
-	e.pauseLock.Lock()
-}
-
-// Continue allows the engine to continue to make progress.
-func (e *ParallelEngine) Continue() {
-	e.pauseLock.Unlock()
 }
 
 // CurrentTime returns the current time at which the engine is at.
