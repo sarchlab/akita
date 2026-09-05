@@ -222,3 +222,23 @@ type unavailableSourceFS struct{}
 func (unavailableSourceFS) Open(string) (fs.File, error) {
 	return nil, fs.ErrPermission
 }
+
+func TestMonitorIsPublishedOnlyAfterManagedSetup(t *testing.T) {
+	var configured bool
+	s, err := MakeBuilder().WithoutSourceRecording().
+		WithOutputFileName(filepath.Join(t.TempDir(), "result")).
+		Build(func(s *Simulation) error {
+			if s.GetMonitor() != nil {
+				t.Fatal("monitor exposed partially constructed components")
+			}
+			configured = true
+			return nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Terminate()
+	if !configured || s.GetMonitor() == nil {
+		t.Fatal("monitor not published after setup")
+	}
+}

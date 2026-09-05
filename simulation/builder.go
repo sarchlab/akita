@@ -114,7 +114,6 @@ func (b Builder) Build(setup ...func(*Simulation) error) (*Simulation, error) {
 		b.createSourceRecorder(s)
 		b.createTopologyRecorder(s)
 		b.createVisTracer(s)
-		b.createServer(s)
 		for _, fn := range setup {
 			if err := fn(s); err != nil {
 				return err
@@ -122,6 +121,10 @@ func (b Builder) Build(setup ...func(*Simulation) error) (*Simulation, error) {
 		}
 		return nil
 	})
+	if err == nil {
+		// Publish the monitor only after setup and its owned workers settle.
+		err = s.supervisor.Execute("start monitor", func() error { b.createServer(s); return nil })
+	}
 	if err != nil {
 		_ = s.Terminate()
 		return s, s.Err()
@@ -218,6 +221,12 @@ func (b Builder) createServer(s *Simulation) {
 		monitor.WithPortNumber(b.monitorPort)
 	}
 
+	for _, comp := range s.components {
+		monitor.RegisterComponent(comp)
+	}
+	for _, port := range s.ports {
+		monitor.RegisterPort(port)
+	}
 	monitor.RegisterEngine(s.engine)
 	monitor.RegisterVisTracer(s.visTracer)
 	monitor.SetTraceDBPath(s.outputPath + ".sqlite3")

@@ -1,6 +1,7 @@
 package monitoring2
 
 import (
+	"github.com/sarchlab/akita/v5/timing"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -41,5 +42,19 @@ func TestStopServerJoinsAdmittedRequests(t *testing.T) {
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatal("accepted request after stop")
+	}
+}
+
+func TestMonitorPanicFailsStandaloneManagedEngine(t *testing.T) {
+	m := NewMonitor()
+	e := timing.NewSerialEngine()
+	m.RegisterEngine(e)
+	h := m.containRequests(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("invalid monitored model")
+	}))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/tick/test", nil))
+	if w.Code != http.StatusInternalServerError || e.Run() == nil {
+		t.Fatal("monitor hid the standalone engine failure")
 	}
 }

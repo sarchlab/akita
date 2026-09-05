@@ -277,11 +277,7 @@ func (m *Monitor) warning(err error) {
 }
 func (m *Monitor) recoverFailure() {
 	if p := recover(); p != nil {
-		if m.OnFailure != nil {
-			m.OnFailure(p)
-		} else {
-			m.warning(fmt.Errorf("panic: %v", p))
-		}
+		m.fail(p)
 	}
 }
 func (m *Monitor) containRequests(next http.Handler) http.Handler {
@@ -293,9 +289,7 @@ func (m *Monitor) containRequests(next http.Handler) http.Handler {
 		defer m.work.Done()
 		defer func() {
 			if p := recover(); p != nil {
-				if m.OnFailure != nil {
-					m.OnFailure(p)
-				}
+				m.fail(p)
 				http.Error(w, "monitor operation failed", http.StatusInternalServerError)
 			}
 		}()
@@ -1492,4 +1486,14 @@ func (m *Monitor) beginWork() bool {
 	}
 	m.work.Add(1)
 	return true
+}
+
+func (m *Monitor) fail(cause any) {
+	if m.OnFailure != nil {
+		m.OnFailure(cause)
+	} else if e, ok := m.engine.(timing.ManagedEngine); ok {
+		e.Supervisor().Fail("monitor", cause)
+	} else {
+		m.warning(fmt.Errorf("panic: %v", cause))
+	}
 }
