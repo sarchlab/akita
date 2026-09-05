@@ -130,7 +130,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		for i := range data {
 			data[i] = fill
 		}
-		Expect(storage.Write(block.CacheAddress, data)).To(Succeed())
+		storage.Write(block.CacheAddress, data)
 
 		return setID
 	}

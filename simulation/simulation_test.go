@@ -473,7 +473,7 @@ var _ = Describe("Checkpoint round trip", func() {
 
 		// Establish runtime state across all four entity kinds.
 		comp.State = roundTripState{Count: 7}
-		Expect(storage.Write(0, []byte{1, 2, 3, 4})).To(Succeed())
+		storage.Write(0, []byte{1, 2, 3, 4})
 		for i := 0; i < 5; i++ {
 			timing.GetIDGenerator().Generate()
 		}
@@ -485,7 +485,7 @@ var _ = Describe("Checkpoint round trip", func() {
 
 		// Mutate every piece of runtime state away from the checkpoint.
 		comp.State = roundTripState{Count: 999}
-		Expect(storage.Write(0, []byte{0, 0, 0, 0})).To(Succeed())
+		storage.Write(0, []byte{0, 0, 0, 0})
 		timing.GetIDGenerator().Generate()
 		timing.GetIDGenerator().Generate()
 		engine.SetCurrentTime(500)
@@ -494,8 +494,7 @@ var _ = Describe("Checkpoint round trip", func() {
 		Expect(sim.LoadCheckpoint(path, "test-build")).To(Succeed())
 
 		Expect(comp.State.Count).To(Equal(7))
-		data, err := storage.Read(0, 4)
-		Expect(err).ToNot(HaveOccurred())
+		data := storage.Read(0, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
 		Expect(timing.GetIDGeneratorNextID()).To(Equal(savedCounter))
 		Expect(engine.CurrentTime()).To(Equal(timing.VTimeInPicoSec(100)))

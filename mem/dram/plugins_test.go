@@ -70,16 +70,16 @@ var _ = Describe("P1: command tracing", func() {
 		// Same workload, with and without the tracer.
 		traced := newP0Harness(spec, tracer)
 		traced.src.Send(traced.write(0x40, []byte{1, 2, 3, 4}))
-		traced.engine.Run()
+		Expect(traced.engine.Run()).To(Succeed())
 		traced.src.Send(traced.read(0x40))
-		traced.engine.Run()
+		Expect(traced.engine.Run()).To(Succeed())
 		tracedReads, tracedWrites := traced.collect()
 
 		plain := newP0Harness(spec)
 		plain.src.Send(plain.write(0x40, []byte{1, 2, 3, 4}))
-		plain.engine.Run()
+		Expect(plain.engine.Run()).To(Succeed())
 		plain.src.Send(plain.read(0x40))
-		plain.engine.Run()
+		Expect(plain.engine.Run()).To(Succeed())
 		plainReads, plainWrites := plain.collect()
 
 		// The tracer saw sub-transaction tasks and command milestones (at least

@@ -219,7 +219,7 @@ var _ = Describe("Bankstage", func() {
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
-			data, _ := storage.Read(0x400, 64)
+			data := storage.Read(0x400, 64)
 			Expect(data).To(Equal([]byte{
 				0, 0, 0, 0, 0, 0, 0, 0,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -283,7 +283,7 @@ var _ = Describe("Bankstage", func() {
 			Expect(madeProgress).To(BeTrue())
 			Expect(next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
 			trans := &next.Transactions[0]
-			data, _ := storage.Read(0x400, 64)
+			data := storage.Read(0x400, 64)
 			Expect(data).To(Equal(trans.Data))
 		})
 

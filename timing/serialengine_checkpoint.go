@@ -17,6 +17,9 @@ type serialEngineCheckpoint struct {
 
 // SaveCheckpoint writes the engine's current time and queued events.
 func (e *SerialEngine) SaveCheckpoint(w io.Writer) error {
+	if e.failure != nil {
+		return e.failure
+	}
 	primary, err := eventCodec.EncodeSlice(e.queue.snapshot())
 	if err != nil {
 		return err
@@ -38,6 +41,9 @@ func (e *SerialEngine) SaveCheckpoint(w io.Writer) error {
 // pop order so the (time, sequence) ordering is reproduced, and each event's
 // handler must already be registered.
 func (e *SerialEngine) LoadCheckpoint(r io.Reader) error {
+	if e.failure != nil {
+		return e.failure
+	}
 	if e.queue.Len() != 0 || e.secondaryQueue.Len() != 0 {
 		return fmt.Errorf(
 			"timing: cannot load a checkpoint into a non-empty serial engine queue")

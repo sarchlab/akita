@@ -123,10 +123,7 @@ func TestEventDrivenHandle(t *testing.T) {
 
 	evt := timing.MakeEventBase(10, comp.Name())
 
-	err := comp.Handle(evt)
-	if err != nil {
-		t.Fatalf("Handle() returned error: %v", err)
-	}
+	comp.Handle(evt)
 
 	if proc.callCount != 1 {
 		t.Errorf("processor called %d times, want 1", proc.callCount)

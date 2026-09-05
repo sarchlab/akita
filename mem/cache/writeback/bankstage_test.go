@@ -200,7 +200,7 @@ var _ = Describe("Bank Stage", func() {
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
-			data, _ := storage.Read(0x44, 4)
+			data := storage.Read(0x44, 4)
 			Expect(data).To(Equal([]byte{5, 6, 7, 8}))
 			next := &m.comp.State
 			block := &next.DirectoryState.Sets[0].Blocks[0]
@@ -252,7 +252,7 @@ var _ = Describe("Bank Stage", func() {
 
 			Expect(ret).To(BeTrue())
 			next := &m.comp.State
-			writtenData, _ := storage.Read(0x40, 64)
+			writtenData := storage.Read(0x40, 64)
 			Expect(writtenData).To(Equal(next.Transactions[0].MSHRData))
 			block := &next.DirectoryState.Sets[0].Blocks[0]
 			Expect(block.IsLocked).To(BeFalse())

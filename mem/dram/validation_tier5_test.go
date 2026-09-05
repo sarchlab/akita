@@ -105,7 +105,7 @@ func runAkita(scn tier5Scenario) akitaResult {
 			h.src.Send(h.read(op[1]))
 		}
 	}
-	h.engine.Run()
+	Expect(h.engine.Run()).To(Succeed())
 
 	st := &h.dram.State
 	lat := math.NaN()

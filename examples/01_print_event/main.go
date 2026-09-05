@@ -10,10 +10,8 @@ import (
 type EventPrinter struct {
 }
 
-func (e *EventPrinter) Handle(event timing.Event) error {
+func (e *EventPrinter) Handle(event timing.Event) {
 	fmt.Printf("Event: %d\n", event.Time())
-
-	return nil
 }
 
 func main() {

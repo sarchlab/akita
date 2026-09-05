@@ -74,11 +74,8 @@ func (m *respondMW) finalizeWriteTrans(
 	t *transactionState,
 	i int,
 ) bool {
-	err := m.comp.Resources().Storage.Write(
+	m.comp.Resources().Storage.Write(
 		transactionGlobalAddress(t), t.WriteMsg.Data)
-	if err != nil {
-		panic(err)
-	}
 
 	writeDone := memprotocol.WriteDoneRsp{}
 	writeDone.ID = timing.GetIDGenerator().Generate()
@@ -105,11 +102,8 @@ func (m *respondMW) finalizeReadTrans(
 	t *transactionState,
 	i int,
 ) bool {
-	data, err := m.comp.Resources().Storage.Read(
+	data := m.comp.Resources().Storage.Read(
 		transactionGlobalAddress(t), t.ReadMsg.AccessByteSize)
-	if err != nil {
-		panic(err)
-	}
 
 	dataReady := memprotocol.DataReadyRsp{}
 	dataReady.ID = timing.GetIDGenerator().Generate()

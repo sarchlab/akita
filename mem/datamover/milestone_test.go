@@ -188,7 +188,7 @@ var _ = Describe("DataMover milestones", func() {
 
 		topPort.Deliver(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		// The move completed end-to-end.
 		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
@@ -239,7 +239,7 @@ var _ = Describe("DataMover milestones", func() {
 
 		topPort.Deliver(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		// The move completed end-to-end, so reads and writes were issued and
 		// acknowledged.
@@ -301,7 +301,7 @@ var _ = Describe("DataMover milestones", func() {
 		topPort.Deliver(req1)
 		topPort.Deliver(req2)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		// Both transactions completed: two responses come back to the source.
 		Expect(srcPort.RetrieveIncoming()).To(

@@ -55,7 +55,7 @@ type handler struct {
     count int
 }
 
-func (h *handler) Handle(e timing.Event) error {
+func (h *handler) Handle(e timing.Event) {
     h.count += 1
 
     evt := e.(splitEvent)
@@ -64,8 +64,6 @@ func (h *handler) Handle(e timing.Event) error {
 
     h.scheduleNextSplitEvent(evt.Time(), evt.id)
     h.scheduleNextSplitEvent(evt.Time(), h.count)
-
-    return nil
 }
 ```
 

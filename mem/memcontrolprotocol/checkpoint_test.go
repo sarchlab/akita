@@ -222,10 +222,7 @@ func TestCheckpoint_DrainFlushReset_PersistsAndServesCorrectData(t *testing.T) {
 	// Guarantee 1: after Drain+Flush the backing memory is a complete,
 	// correct snapshot of everything written.
 	for addr, data := range want {
-		got, err := h.dramStorage.Read(addr, uint64(len(data)))
-		if err != nil {
-			t.Fatalf("backing read %#x: %v", addr, err)
-		}
+		got := h.dramStorage.Read(addr, uint64(len(data)))
 		if !bytes.Equal(got, data) {
 			t.Errorf("after Flush, backing memory[%#x] = %v, want %v",
 				addr, got, data)

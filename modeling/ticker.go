@@ -178,13 +178,11 @@ func (c *TickingComponent) NotifyRecv(
 }
 
 // Handle triggers the tick function of the TickingComponent
-func (c *TickingComponent) Handle(e timing.Event) error {
+func (c *TickingComponent) Handle(e timing.Event) {
 	madeProgress := c.ticker.Tick()
 	if madeProgress {
 		c.TickLater()
 	}
-
-	return nil
 }
 
 // NewTickingComponent creates a new ticking component

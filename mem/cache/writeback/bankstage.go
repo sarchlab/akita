@@ -202,11 +202,8 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	_, offset := getCacheLineID(addr, spec.Log2BlockSize)
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 
-	data, err := s.cache.storage.Read(
+	data := s.cache.storage.Read(
 		nextBlock.CacheAddress+offset, trans.ReadAccessByteSize)
-	if err != nil {
-		panic(err)
-	}
 
 	trans.Removed = true
 
@@ -274,11 +271,8 @@ func (s *bankStage) writeData(
 	offset uint64,
 	log2BlockSize uint64,
 ) []bool {
-	data, err := s.cache.storage.Read(
+	data := s.cache.storage.Read(
 		block.CacheAddress, 1<<log2BlockSize)
-	if err != nil {
-		panic(err)
-	}
 
 	dirtyMask := block.DirtyMask
 	if dirtyMask == nil {
@@ -293,10 +287,7 @@ func (s *bankStage) writeData(
 		}
 	}
 
-	err = s.cache.storage.Write(block.CacheAddress, data)
-	if err != nil {
-		panic(err)
-	}
+	s.cache.storage.Write(block.CacheAddress, data)
 
 	return dirtyMask
 }
@@ -316,10 +307,7 @@ func (s *bankStage) finalizeBankWriteFetched(
 
 	mshrBuf.PushTyped(transIdx)
 
-	err := s.cache.storage.Write(nextBlock.CacheAddress, trans.MSHRData)
-	if err != nil {
-		panic(err)
-	}
+	s.cache.storage.Write(nextBlock.CacheAddress, trans.MSHRData)
 	nextBlock.IsLocked = false
 	nextBlock.IsValid = true
 
@@ -342,11 +330,8 @@ func (s *bankStage) finalizeBankEviction(
 		return false
 	}
 
-	data, err := s.cache.storage.Read(
+	data := s.cache.storage.Read(
 		trans.VictimCacheAddress, 1<<spec.Log2BlockSize)
-	if err != nil {
-		panic(err)
-	}
 
 	trans.EvictingData = data
 
