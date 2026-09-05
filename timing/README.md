@@ -44,7 +44,7 @@ evt := tickEvent{timing.MakeEventBase(now, comp.Name())}
 
 ```go
 type Handler interface {
-    Handle(e Event) error
+    Handle(e Event)
 }
 ```
 

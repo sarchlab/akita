@@ -210,7 +210,7 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 	It("attributes the bank-pipeline traversal as work on the read "+
 		"req_in", func() {
 		data := []byte{1, 2, 3, 4}
-		Expect(storage.Write(0x40, data)).To(Succeed())
+		storage.Write(0x40, data)
 
 		read := memprotocol.ReadReq{Address: 0x40, AccessByteSize: 4}
 		read.ID = timing.GetIDGenerator().Generate()

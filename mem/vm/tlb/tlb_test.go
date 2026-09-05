@@ -545,7 +545,7 @@ var _ = Describe("TLB Integration", func() {
 		req.TrafficClass = "vmprotocol.TranslationReq"
 		agent.port.Send(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsp := agent.lastDelivered.(vmprotocol.TranslationRsp)
 		Expect(rsp.Page).To(Equal(page))
@@ -563,7 +563,7 @@ var _ = Describe("TLB Integration", func() {
 		req.TrafficClass = "vmprotocol.TranslationReq"
 		agent.port.Send(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsp := agent.lastDelivered.(vmprotocol.TranslationRsp)
 		Expect(rsp.Page).To(Equal(page))
@@ -580,7 +580,7 @@ var _ = Describe("TLB Integration", func() {
 		req2.TrafficClass = "vmprotocol.TranslationReq"
 		agent.port.Send(req2)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsp = agent.lastDelivered.(vmprotocol.TranslationRsp)
 		Expect(rsp.Page).To(Equal(page))

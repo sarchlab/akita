@@ -81,17 +81,17 @@ func NewEventQueue() *EventQueueImpl {
 // Push adds an event to the event queue.
 func (q *EventQueueImpl) Push(evt Event) {
 	q.Lock()
+	defer q.Unlock()
 	q.events = append(q.events, queuedEvent{event: evt, seq: q.nextSeq})
 	q.nextSeq++
 	q.events.up(len(q.events) - 1)
-	q.Unlock()
 }
 
 // Pop returns the next earliest event.
 func (q *EventQueueImpl) Pop() Event {
 	q.Lock()
+	defer q.Unlock()
 	evt := popHeap(&q.events)
-	q.Unlock()
 
 	return evt
 }
@@ -99,8 +99,8 @@ func (q *EventQueueImpl) Pop() Event {
 // Len returns the number of events in the queue.
 func (q *EventQueueImpl) Len() int {
 	q.Lock()
+	defer q.Unlock()
 	l := len(q.events)
-	q.Unlock()
 
 	return l
 }
@@ -109,8 +109,8 @@ func (q *EventQueueImpl) Len() int {
 // queue.
 func (q *EventQueueImpl) Peek() Event {
 	q.Lock()
+	defer q.Unlock()
 	evt := q.events[0].event
-	q.Unlock()
 
 	return evt
 }

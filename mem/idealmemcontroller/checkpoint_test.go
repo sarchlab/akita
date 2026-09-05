@@ -33,9 +33,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 		Build("DRAM")
 
 	storage := dram.Resources().Storage
-	if err := storage.Write(0x40, []byte(payload)); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
+	storage.Write(0x40, []byte(payload))
 	dram.State.CurrentCmdID = 7
 
 	if err := sim.SaveCheckpoint(path, buildID); err != nil {
@@ -43,19 +41,14 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	}
 
 	// Mutate the resource and the component state away from the checkpoint.
-	if err := storage.Write(0x40, make([]byte, len(payload))); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
+	storage.Write(0x40, make([]byte, len(payload)))
 	dram.State.CurrentCmdID = 99
 
 	if err := sim.LoadCheckpoint(path, buildID); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
 
-	got, err := storage.Read(0x40, uint64(len(payload)))
-	if err != nil {
-		t.Fatalf("Read: %v", err)
-	}
+	got := storage.Read(0x40, uint64(len(payload)))
 	if string(got) != payload {
 		t.Fatalf("storage = %q, want %q", got, payload)
 	}

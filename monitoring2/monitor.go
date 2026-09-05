@@ -457,7 +457,7 @@ func (m *Monitor) run(_ http.ResponseWriter, _ *http.Request) {
 	go func() {
 		err := m.engine.Run()
 		if err != nil {
-			panic(err)
+			log.Printf("simulation run failed: %v", err)
 		}
 	}()
 }

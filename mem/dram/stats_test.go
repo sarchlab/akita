@@ -125,7 +125,7 @@ var _ = Describe("DRAM Statistics", func() {
 		read.TrafficClass = "memprotocol.ReadReq"
 		srcPort.Send(read)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		state := &dramComp.State
 		Expect(state.CompletedReads).To(BeNumerically(">=", 1))

@@ -169,7 +169,7 @@ var _ = Describe("Cache milestones", func() {
 		read.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
@@ -220,7 +220,7 @@ var _ = Describe("Cache milestones", func() {
 
 		// Run to quiescence: the read miss fetches from the lower memory and the
 		// DataReadyRsp comes back, filling the line and completing the request.
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
@@ -267,7 +267,7 @@ var _ = Describe("Cache milestones", func() {
 		warm.TrafficBytes = 64 + 12
 		warm.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(warm)
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 		Expect(drainResponses()).To(HaveLen(1))
 
 		// Discard the warm write's trace events so the assertions below see only
@@ -285,7 +285,7 @@ var _ = Describe("Cache milestones", func() {
 		hit.TrafficBytes = 4 + 12
 		hit.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(hit)
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 		Expect(drainResponses()).To(HaveLen(1))
 
 		// The req_in is now the cache's single task for the request, so the
@@ -339,7 +339,7 @@ var _ = Describe("Cache milestones", func() {
 		miss.TrafficBytes = 64 + 12
 		miss.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(miss)
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 		Expect(drainResponses()).To(HaveLen(1))
 
 		reqInStart, ok := rec.firstStart("req_in")
@@ -377,7 +377,7 @@ var _ = Describe("Cache milestones", func() {
 		w.TrafficBytes = 64 + 12
 		w.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(w)
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 		Expect(drainResponses()).To(HaveLen(1))
 
 		reqInStart, ok := rec.firstStart("req_in")

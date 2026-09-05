@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"github.com/sarchlab/akita/v5/hooking"
 )
@@ -30,6 +31,8 @@ type ParallelEngine struct {
 	secondaryQueueChan chan EventQueue
 
 	registry map[string]Handler
+	failure  atomic.Pointer[PanicError]
+	failed   chan struct{}
 }
 
 // Name returns the name of the engine. The engine is registered as a simulation
@@ -41,6 +44,7 @@ func (e *ParallelEngine) Name() string {
 // NewParallelEngine creates a ParallelEngine.
 func NewParallelEngine() *ParallelEngine {
 	e := new(ParallelEngine)
+	e.failed = make(chan struct{})
 
 	e.eventChan = make(chan Event, 10000)
 
@@ -100,34 +104,51 @@ func (e *ParallelEngine) Schedule(evt Event) {
 			reflect.TypeOf(evt), evt.Time(), now)
 	}
 
+	queueChan := e.queueChan
 	if evt.IsSecondary() {
-		queue := <-e.secondaryQueueChan
-		queue.Push(evt)
-
-		e.secondaryQueueChan <- queue
-
-		return
+		queueChan = e.secondaryQueueChan
 	}
-
-	queue := <-e.queueChan
-	queue.Push(evt)
-
-	e.queueChan <- queue
+	select {
+	case <-e.failed:
+		panic(e.failure.Load())
+	case queue := <-queueChan:
+		// Return the borrowed queue even if an event accessor panics in Push.
+		defer func() { queueChan <- queue }()
+		if failure := e.failure.Load(); failure != nil {
+			panic(failure)
+		}
+		queue.Push(evt)
+	}
 }
 
 // Run processes all the events scheduled in the ParallelEngine.
-func (e *ParallelEngine) Run() error {
+func (e *ParallelEngine) Run() (err error) {
+	defer func() {
+		if cause := recover(); cause != nil {
+			e.recordPanic(cause, nil)
+		}
+		if failure := e.failure.Load(); failure != nil {
+			err = failure
+		}
+	}()
 	for {
+		if failure := e.failure.Load(); failure != nil {
+			return failure
+		}
 		if !e.hasMoreEvents() {
 			return nil
 		}
 
-		e.pauseLock.Lock()
-		e.determineWhatToRun()
-		e.runRound()
-
-		e.pauseLock.Unlock()
+		e.runNextRound()
 	}
+}
+
+// Keep the existing round lock and always release it during panic unwinding.
+func (e *ParallelEngine) runNextRound() {
+	e.pauseLock.Lock()
+	defer e.pauseLock.Unlock()
+	e.determineWhatToRun()
+	e.runRound()
 }
 
 func (e *ParallelEngine) determineWhatToRun() {
@@ -165,6 +186,14 @@ func (e *ParallelEngine) earliestTimeInQueueGroup(
 }
 
 func (e *ParallelEngine) runRound() {
+	defer func() {
+		// Signal failure before joining: workers may be waiting to borrow a
+		// queue still held by this round's dispatcher.
+		if cause := recover(); cause != nil {
+			e.recordPanic(cause, nil)
+		}
+		e.waitGroup.Wait()
+	}()
 	queues := e.queues
 	queueChan := e.queueChan
 
@@ -175,7 +204,6 @@ func (e *ParallelEngine) runRound() {
 
 	e.emptyQueueChan(queues, queueChan)
 	e.runEventsUntilConflict(queues, queueChan)
-	e.waitGroup.Wait()
 }
 
 func (e *ParallelEngine) emptyQueueChan(
@@ -223,6 +251,9 @@ func (e *ParallelEngine) runEventsUntilConflict(
 
 	for _, queue := range queues {
 		for queue.Len() > 0 {
+			if e.failure.Load() != nil {
+				break
+			}
 			evt := queue.Peek()
 			if evt.Time() == now {
 				queue.Pop()
@@ -247,6 +278,15 @@ func (e *ParallelEngine) runEventWithTempWorker(evt Event) {
 }
 
 func (e *ParallelEngine) tempWorkerRun(evt Event) {
+	defer e.waitGroup.Done()
+	defer func() {
+		if cause := recover(); cause != nil {
+			e.recordPanic(cause, evt)
+		}
+	}()
+	if e.failure.Load() != nil {
+		return
+	}
 	now := e.readNow()
 
 	if evt.Time() < now {
@@ -261,12 +301,15 @@ func (e *ParallelEngine) tempWorkerRun(evt Event) {
 	e.InvokeHook(hookCtx)
 
 	handler := e.registry[evt.HandlerID()]
-	_ = handler.Handle(evt)
+	if e.failure.Load() != nil {
+		return
+	}
+	handler.Handle(evt)
 
-	hookCtx.Pos = HookPosAfterEvent
-	e.InvokeHook(hookCtx)
-
-	e.waitGroup.Done()
+	if e.failure.Load() == nil {
+		hookCtx.Pos = HookPosAfterEvent
+		e.InvokeHook(hookCtx)
+	}
 }
 
 // Pause will prevent the engine to move forward. For events that are scheduled
@@ -284,4 +327,11 @@ func (e *ParallelEngine) Continue() {
 // Specifically, the run time of the current event.
 func (e *ParallelEngine) CurrentTime() VTimeInPicoSec {
 	return e.readNow()
+}
+
+func (e *ParallelEngine) recordPanic(cause any, evt Event) {
+	failure := newPanicError(cause, evt)
+	if e.failure.CompareAndSwap(nil, failure) {
+		close(e.failed)
+	}
 }

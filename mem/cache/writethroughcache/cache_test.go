@@ -103,7 +103,7 @@ var _ = Describe("Cache", func() {
 		read.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
@@ -133,7 +133,7 @@ var _ = Describe("Cache", func() {
 		read2.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read2)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		// Without coalescing, the MSHR-hit transaction (read2) may be
 		// finalized before the fetcher (read1). Accept responses in
@@ -163,7 +163,7 @@ var _ = Describe("Cache", func() {
 		read1.TrafficBytes = 12
 		read1.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read1)
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 		t1 := engine.CurrentTime()
 
 		rsps := drainResponses()
@@ -179,7 +179,7 @@ var _ = Describe("Cache", func() {
 		read2.TrafficBytes = 12
 		read2.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read2)
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 		t2 := engine.CurrentTime()
 
 		rsps = drainResponses()
@@ -200,13 +200,13 @@ var _ = Describe("Cache", func() {
 		write.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(write)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
 		Expect(rsps[0].Meta().RspTo).To(Equal(write.ID))
 
-		data, _ := dramStorage.Read(0x100, 4)
+		data := dramStorage.Read(0x100, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 
@@ -229,13 +229,13 @@ var _ = Describe("Cache", func() {
 		write.TrafficBytes = 64 + 12
 		write.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(write)
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
 		Expect(rsps[0].Meta().RspTo).To(Equal(write.ID))
 
-		data, _ := dramStorage.Read(0x100, 4)
+		data := dramStorage.Read(0x100, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 

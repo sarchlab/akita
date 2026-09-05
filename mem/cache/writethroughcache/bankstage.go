@@ -105,11 +105,8 @@ func (s *bankStage) finalizeReadHitTrans(
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 	blockSize := uint64(1 << s.cache.comp.Spec().Log2BlockSize)
 
-	data, err := s.cache.storage.Read(
+	data := s.cache.storage.Read(
 		nextBlock.CacheAddress, blockSize)
-	if err != nil {
-		panic(err)
-	}
 
 	nextBlock.ReadCount--
 
@@ -132,10 +129,7 @@ func (s *bankStage) finalizeWriteTrans(
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 	blockSize := 1 << s.cache.comp.Spec().Log2BlockSize
 
-	data, err := s.cache.storage.Read(nextBlock.CacheAddress, uint64(blockSize))
-	if err != nil {
-		panic(err)
-	}
+	data := s.cache.storage.Read(nextBlock.CacheAddress, uint64(blockSize))
 
 	offset := trans.WriteAddress - nextBlock.Tag
 
@@ -145,10 +139,7 @@ func (s *bankStage) finalizeWriteTrans(
 		}
 	}
 
-	err = s.cache.storage.Write(nextBlock.CacheAddress, data)
-	if err != nil {
-		panic(err)
-	}
+	s.cache.storage.Write(nextBlock.CacheAddress, data)
 
 	nextBlock.DirtyMask = trans.WriteDirtyMask
 	nextBlock.IsLocked = false
@@ -172,10 +163,7 @@ func (s *bankStage) finalizeWriteFetchedTrans(
 	next := &s.cache.comp.State
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 
-	err := s.cache.storage.Write(nextBlock.CacheAddress, trans.Data)
-	if err != nil {
-		panic(err)
-	}
+	s.cache.storage.Write(nextBlock.CacheAddress, trans.Data)
 
 	nextBlock.DirtyMask = trans.WriteFetchedDirtyMask
 	nextBlock.IsLocked = false

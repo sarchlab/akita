@@ -119,7 +119,7 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
 		Expect(srcPort.RetrieveIncoming()).To(
@@ -150,7 +150,7 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		Expect(insideStorage.Read(8192, 2048)).To(Equal(data))
 		Expect(srcPort.RetrieveIncoming()).To(
@@ -177,7 +177,7 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
 		Expect(srcPort.RetrieveIncoming()).To(
@@ -204,7 +204,7 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		Expect(outsideStorage.Read(4096, 4096)).To(Equal(data))
 		Expect(srcPort.RetrieveIncoming()).To(
@@ -231,7 +231,7 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		expected := data[:512]
 		Expect(insideStorage.Read(512, 512)).To(Equal(expected))
@@ -276,7 +276,7 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		expected := append(data[:512], data[:512]...)
 		Expect(insideStorage.Read(0, 1024)).To(Equal(expected))

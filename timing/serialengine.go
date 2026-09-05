@@ -23,7 +23,9 @@ type SerialEngine struct {
 
 	singleRunLock sync.Mutex
 
-	registry map[string]Handler
+	registry     map[string]Handler
+	failure      *PanicError
+	currentEvent Event
 }
 
 // NewSerialEngine creates a SerialEngine.
@@ -51,6 +53,9 @@ func (e *SerialEngine) RegisterHandler(name string, handler Handler) {
 
 // Schedule registers an event to happen in the future.
 func (e *SerialEngine) Schedule(evt Event) {
+	if e.failure != nil {
+		panic(e.failure)
+	}
 	if evt.Time() < e.time {
 		log.Panic("scheduling an event earlier than current time")
 	}
@@ -65,13 +70,18 @@ func (e *SerialEngine) Schedule(evt Event) {
 }
 
 // Run processes all the events scheduled in the SerialEngine.
-func (e *SerialEngine) Run() error {
+func (e *SerialEngine) Run() (err error) {
 	e.singleRunLock.Lock()
 	defer e.singleRunLock.Unlock()
+	if e.failure != nil {
+		return e.failure
+	}
+	defer e.recoverRun(&err)
 
 	hasHooks := e.NumHooks() > 0
 
 	for {
+		e.currentEvent = nil
 		if e.noMoreEvent() {
 			return nil
 		}
@@ -91,13 +101,18 @@ func (e *SerialEngine) Run() error {
 // last processed event and all later events still queued. This is a
 // deterministic mid-run boundary — unlike Pause, which stops at a
 // non-reproducible point — used to take a mid-transaction checkpoint.
-func (e *SerialEngine) RunUntil(t VTimeInPicoSec) error {
+func (e *SerialEngine) RunUntil(t VTimeInPicoSec) (err error) {
 	e.singleRunLock.Lock()
 	defer e.singleRunLock.Unlock()
+	if e.failure != nil {
+		return e.failure
+	}
+	defer e.recoverRun(&err)
 
 	hasHooks := e.NumHooks() > 0
 
 	for {
+		e.currentEvent = nil
 		if e.noMoreEvent() {
 			return nil
 		}
@@ -116,6 +131,7 @@ func (e *SerialEngine) RunUntil(t VTimeInPicoSec) error {
 // dispatchNext pops the earliest event and runs it, invoking hooks when present.
 func (e *SerialEngine) dispatchNext(hasHooks bool) {
 	evt := e.nextEvent()
+	e.currentEvent = evt
 
 	if evt.Time() < e.time {
 		log.Panicf(
@@ -135,13 +151,13 @@ func (e *SerialEngine) dispatchNext(hasHooks bool) {
 		e.InvokeHook(hookCtx)
 
 		handler := e.registry[evt.HandlerID()]
-		_ = handler.Handle(evt)
+		handler.Handle(evt)
 
 		hookCtx.Pos = HookPosAfterEvent
 		e.InvokeHook(hookCtx)
 	} else {
 		handler := e.registry[evt.HandlerID()]
-		_ = handler.Handle(evt)
+		handler.Handle(evt)
 	}
 }
 
@@ -225,4 +241,13 @@ func (e *SerialEngine) CurrentTime() VTimeInPicoSec {
 // SetCurrentTime sets the current time of the engine.
 func (e *SerialEngine) SetCurrentTime(t VTimeInPicoSec) {
 	e.time = t
+}
+
+// recoverRun is deferred once by Run/RunUntil, not once per event.
+func (e *SerialEngine) recoverRun(err *error) {
+	if cause := recover(); cause != nil {
+		e.failure = newPanicError(cause, e.currentEvent)
+		*err = e.failure
+	}
+	e.currentEvent = nil
 }

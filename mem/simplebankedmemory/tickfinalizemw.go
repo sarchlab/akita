@@ -1,8 +1,6 @@
 package simplebankedmemory
 
 import (
-	"log"
-
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -67,11 +65,8 @@ func (m *tickFinalizeMW) finalizeRead(
 	readReq := &item.ReadMsg
 
 	if !item.Committed {
-		data, err := m.comp.Resources().Storage.Read(
+		data := m.comp.Resources().Storage.Read(
 			readReq.Address, readReq.AccessByteSize)
-		if err != nil {
-			log.Panic(err)
-		}
 
 		item.ReadData = data
 		item.Committed = true
@@ -119,14 +114,9 @@ func (m *tickFinalizeMW) finalizeWrite(
 		addr := writeReq.Address
 
 		if writeReq.DirtyMask == nil {
-			if err := m.comp.Resources().Storage.Write(addr, writeReq.Data); err != nil {
-				log.Panic(err)
-			}
+			m.comp.Resources().Storage.Write(addr, writeReq.Data)
 		} else {
-			data, err := m.comp.Resources().Storage.Read(addr, uint64(len(writeReq.Data)))
-			if err != nil {
-				log.Panic(err)
-			}
+			data := m.comp.Resources().Storage.Read(addr, uint64(len(writeReq.Data)))
 
 			for i := range writeReq.Data {
 				if writeReq.DirtyMask[i] {
@@ -134,9 +124,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 				}
 			}
 
-			if err := m.comp.Resources().Storage.Write(addr, data); err != nil {
-				log.Panic(err)
-			}
+			m.comp.Resources().Storage.Write(addr, data)
 		}
 
 		item.Committed = true

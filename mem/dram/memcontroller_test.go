@@ -239,7 +239,7 @@ var _ = Describe("DRAM Integration", func() {
 		srcPort.Send(write)
 		srcPort.Send(read)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		// Collect responses
 		var writeDone memprotocol.WriteDoneRsp

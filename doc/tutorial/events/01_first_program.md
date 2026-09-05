@@ -36,15 +36,15 @@ implements a single method:
 ```go
 type EventPrinter struct{}
 
-func (e *EventPrinter) Handle(event timing.Event) error {
+func (e *EventPrinter) Handle(event timing.Event) {
     fmt.Printf("Event: %d\n", event.Time())
-    return nil
 }
 ```
 
 When the engine fires an event, it looks up the registered handler by name
-and calls `Handle(event)`. Anything the handler returns as an error stops
-the simulation.
+and calls `Handle(event)`. A violated model invariant may panic. The engine
+contains that panic and returns a `*timing.PanicError` from `Run` or `RunUntil`;
+discard the failed engine and its model state. Check the returned error.
 
 ### 2. Building the simulation
 

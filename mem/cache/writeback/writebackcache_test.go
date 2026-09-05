@@ -132,7 +132,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		read.TrafficClass = "memprotocol.ReadReq"
 		cacheComp.GetPortByName("Top").Deliver(read)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsp := agentPort.RetrieveIncoming()
 		dr := rsp.(memprotocol.DataReadyRsp)
@@ -171,7 +171,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		write.TrafficClass = "memprotocol.WriteReq"
 		cacheComp.GetPortByName("Top").Deliver(write)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsp := agentPort.RetrieveIncoming()
 		Expect(rsp.Meta().RspTo).To(Equal(write.ID))
@@ -179,7 +179,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		// Re-read state after engine run
 		postState := m.comp.State
 		postBlock := &postState.DirectoryState.Sets[setID].Blocks[0]
-		retData, _ := m.storage.Read(postBlock.CacheAddress+0x4, 4)
+		retData := m.storage.Read(postBlock.CacheAddress+0x4, 4)
 		Expect(retData).To(Equal(write.Data))
 		Expect(postBlock.IsValid).To(BeTrue())
 		Expect(postBlock.IsDirty).To(BeTrue())
@@ -207,7 +207,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		read.TrafficClass = "memprotocol.ReadReq"
 		cacheComp.GetPortByName("Top").Deliver(read)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsp := agentPort.RetrieveIncoming()
 		dr := rsp.(memprotocol.DataReadyRsp)
@@ -247,7 +247,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		read2.TrafficClass = "memprotocol.ReadReq"
 		cacheComp.GetPortByName("Top").Deliver(read2)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsps := map[uint64][]byte{}
 		for i := 0; i < 2; i++ {
@@ -291,7 +291,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		read.TrafficClass = "memprotocol.ReadReq"
 		cacheComp.GetPortByName("Top").Deliver(read)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsps := map[uint64]messaging.Msg{}
 		for i := 0; i < 2; i++ {
@@ -338,7 +338,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		read.TrafficClass = "memprotocol.ReadReq"
 		cacheComp.GetPortByName("Top").Deliver(read)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsp := agentPort.RetrieveIncoming()
 		dr := rsp.(memprotocol.DataReadyRsp)
@@ -368,7 +368,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		cacheComp.GetPortByName("Top").Deliver(write2)
 
 		// Let the writes settle so the block is resident and dirty.
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 		Expect(controlAgentPort.RetrieveIncoming()).To(BeNil())
 
 		// Flush is a conditional verb: pause first so it is legal.
@@ -379,7 +379,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		pause.TrafficClass = "memcontrolprotocol.Req"
 		cacheComp.GetPortByName("Control").Deliver(pause)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		pauseRsp := controlAgentPort.RetrieveIncoming()
 		Expect(pauseRsp).NotTo(BeNil())
@@ -393,7 +393,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		flush.TrafficClass = "memcontrolprotocol.Req"
 		cacheComp.GetPortByName("Control").Deliver(flush)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsp := controlAgentPort.RetrieveIncoming()
 		Expect(rsp).NotTo(BeNil())
@@ -401,8 +401,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		Expect(rsp.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 
 		// The dirty block's data reached DRAM.
-		flushed, err := dramStorage.Read(0x100000, 4)
-		Expect(err).ToNot(HaveOccurred())
+		flushed := dramStorage.Read(0x100000, 4)
 		Expect(flushed).To(Equal([]byte{1, 2, 3, 4}))
 	})
 })

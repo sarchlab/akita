@@ -413,9 +413,7 @@ func installDirtyBlock(
 	for i := range data {
 		data[i] = fill
 	}
-	if err := storage.Write(block.CacheAddress, data); err != nil {
-		t.Fatalf("seed storage: %v", err)
-	}
+	storage.Write(block.CacheAddress, data)
 
 	return setID
 }

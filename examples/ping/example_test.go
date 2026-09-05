@@ -40,7 +40,9 @@ func Example_pingWithEvents() {
 	SchedulePing(agentA, 1, agentB.GetPortByName("Out").AsRemote())
 	SchedulePing(agentA, 3, agentB.GetPortByName("Out").AsRemote())
 
-	engine.Run()
+	if err := engine.Run(); err != nil {
+		panic(err)
+	}
 	// Output:
 	// Ping 0, 2000000000999 ps
 	// Ping 1, 2000000000997 ps

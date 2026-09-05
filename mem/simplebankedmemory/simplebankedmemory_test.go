@@ -135,8 +135,8 @@ func (a *testAgent) NotifyPortFree(messaging.Port) {
 	// No-op.
 }
 
-func (a *testAgent) Handle(timing.Event) error {
-	return nil
+func (a *testAgent) Handle(timing.Event) {
+	return
 }
 
 func (a *testAgent) send(msg messaging.Msg) {
@@ -189,8 +189,8 @@ func (a *bandwidthAgent) NotifyRecv(port messaging.Port) {
 
 func (a *bandwidthAgent) NotifyPortFree(messaging.Port) {}
 
-func (a *bandwidthAgent) Handle(timing.Event) error {
-	return nil
+func (a *bandwidthAgent) Handle(timing.Event) {
+	return
 }
 
 const (
@@ -297,8 +297,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 	It("should return read data after configured latency", func() {
 		data := []byte{1, 2, 3, 4}
-		err := storage.Write(0x0, data)
-		Expect(err).NotTo(HaveOccurred())
+		storage.Write(0x0, data)
 
 		topPort := memComp.GetPortByName("Top")
 		read := memprotocol.ReadReq{}
@@ -325,8 +324,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		addr := uint64(0x100)
 
 		initial := []byte{0xAA, 0xBB, 0xCC, 0xDD}
-		err := storage.Write(addr, initial)
-		Expect(err).NotTo(HaveOccurred())
+		storage.Write(addr, initial)
 
 		newData := []byte{0x10, 0x20, 0x30, 0x40}
 
@@ -366,8 +364,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		Expect(ok).To(BeTrue())
 		Expect(readRsp.Data).To(Equal(newData))
 
-		committed, err := storage.Read(addr, uint64(len(newData)))
-		Expect(err).NotTo(HaveOccurred())
+		committed := storage.Read(addr, uint64(len(newData)))
 		Expect(committed).To(Equal(newData))
 	})
 

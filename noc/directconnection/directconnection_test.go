@@ -190,7 +190,7 @@ var _ = Describe("Direct Connection Integration", func() {
 			agent.TickLater()
 		}
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		totalRecvedMsgCount := 0
 		for _, agent := range agents {
@@ -245,7 +245,7 @@ func directConnectionTest(seed int64) timing.VTimeInPicoSec {
 		agent.TickLater()
 	}
 
-	engine.Run()
+	Expect(engine.Run()).To(Succeed())
 
 	return engine.CurrentTime()
 }

@@ -11,9 +11,8 @@ type recordingHandler struct {
 	labels []string
 }
 
-func (h *recordingHandler) Handle(e Event) error {
+func (h *recordingHandler) Handle(e Event) {
 	h.labels = append(h.labels, e.(testEvent).label)
-	return nil
 }
 
 func TestSerialEngineRunsEventsInTimeOrder(t *testing.T) {

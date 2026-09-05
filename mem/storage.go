@@ -1,7 +1,6 @@
 package mem
 
 import (
-	"errors"
 	"sync"
 )
 
@@ -99,25 +98,21 @@ func (s *Storage) parseAddress(addr uint64) (baseAddr, inUnitAddr uint64) {
 	return
 }
 
-func (s *Storage) validateRange(address, length uint64) error {
+func (s *Storage) validateRange(address, length uint64) {
 	if length == 0 {
-		return errors.New("storage access length must be greater than zero")
+		panic("storage access length must be greater than zero")
 	}
 	// Subtraction avoids overflowing address + length.
 	if address > s.capacity || length > s.capacity-address {
-		return errors.New("accessing physical address beyond the storage capacity")
+		panic("accessing physical address beyond the storage capacity")
 	}
-
-	return nil
 }
 
-// Read returns length bytes starting at address. It returns an error for an
+// Read returns length bytes starting at address. It panics for an
 // empty range or a range extending beyond capacity, before allocating data or
 // storage units. A nonempty range may end exactly at capacity.
-func (s *Storage) Read(address uint64, length uint64) ([]byte, error) {
-	if err := s.validateRange(address, length); err != nil {
-		return nil, err
-	}
+func (s *Storage) Read(address uint64, length uint64) []byte {
+	s.validateRange(address, length)
 
 	currAddr := address
 	lenLeft := length
@@ -145,16 +140,14 @@ func (s *Storage) Read(address uint64, length uint64) ([]byte, error) {
 		currAddr += lenToRead
 	}
 
-	return res, nil
+	return res
 }
 
-// Write stores data starting at address. It returns an error for empty data or
+// Write stores data starting at address. It panics for empty data or
 // a range extending beyond capacity, without allocating storage units or
 // changing stored bytes. A nonempty range may end exactly at capacity.
-func (s *Storage) Write(address uint64, data []byte) error {
-	if err := s.validateRange(address, uint64(len(data))); err != nil {
-		return err
-	}
+func (s *Storage) Write(address uint64, data []byte) {
+	s.validateRange(address, uint64(len(data)))
 
 	currAddr := address
 	dataOffset := uint64(0)
@@ -179,6 +172,4 @@ func (s *Storage) Write(address uint64, data []byte) error {
 		dataOffset += lenToWrite
 		currAddr += lenToWrite
 	}
-
-	return nil
 }

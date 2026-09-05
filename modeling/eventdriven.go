@@ -87,14 +87,12 @@ func (c *EventDrivenComponent[S, T, R]) ScheduleWakeNow() {
 
 // Handle processes an event. For TimerFiredEvent, it resets the dedup guard
 // and calls the processor.
-func (c *EventDrivenComponent[S, T, R]) Handle(e timing.Event) error {
+func (c *EventDrivenComponent[S, T, R]) Handle(e timing.Event) {
 	c.Lock()
 	defer c.Unlock()
 
 	c.pendingWakeup = math.MaxUint64
 	c.processor.Process(c, e.Time())
-
-	return nil
 }
 
 // NotifyRecv is called when a port receives a message. It schedules an

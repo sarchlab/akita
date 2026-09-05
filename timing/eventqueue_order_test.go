@@ -48,9 +48,8 @@ type orderRecordingHandler struct {
 	order []int
 }
 
-func (h *orderRecordingHandler) Handle(e Event) error {
+func (h *orderRecordingHandler) Handle(e Event) {
 	h.order = append(h.order, e.(*orderEvent).id)
-	return nil
 }
 
 func TestSerialEngineFiresSameTimeInScheduleOrder(t *testing.T) {

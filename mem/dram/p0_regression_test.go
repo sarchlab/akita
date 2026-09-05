@@ -119,7 +119,7 @@ var _ = Describe("P0: open-page panic regression", func() {
 		h.src.Send(h.read(0x40))
 		h.src.Send(h.read(0x80))
 
-		Expect(func() { h.engine.Run() }).NotTo(Panic())
+		Expect(h.engine.Run()).To(Succeed())
 
 		reads, _ := h.collect()
 		Expect(reads).To(HaveLen(2))
@@ -133,7 +133,7 @@ var _ = Describe("P0: open-page panic regression", func() {
 		h.src.Send(h.read(0x0))
 		h.src.Send(h.read(0x20000))
 
-		Expect(func() { h.engine.Run() }).NotTo(Panic())
+		Expect(h.engine.Run()).To(Succeed())
 
 		reads, _ := h.collect()
 		Expect(reads).To(HaveLen(2))
@@ -150,7 +150,7 @@ var _ = Describe("P0: open-page panic regression", func() {
 			h.src.Send(h.read(uint64(i) * 64))
 		}
 
-		Expect(func() { h.engine.Run() }).NotTo(Panic())
+		Expect(h.engine.Run()).To(Succeed())
 
 		reads, _ := h.collect()
 		Expect(reads).To(HaveLen(n))
@@ -163,12 +163,12 @@ var _ = Describe("P0: open-page panic regression", func() {
 
 		// Drive the write to completion first so the read observes it.
 		h.src.Send(h.write(0x40, data))
-		h.engine.Run()
+		Expect(h.engine.Run()).To(Succeed())
 		_, writes := h.collect()
 		Expect(writes).To(HaveLen(1))
 
 		h.src.Send(h.read(0x40))
-		h.engine.Run()
+		Expect(h.engine.Run()).To(Succeed())
 		reads, _ := h.collect()
 		Expect(reads).To(HaveLen(1))
 		Expect(reads[0].Data[:len(data)]).To(Equal(data))
