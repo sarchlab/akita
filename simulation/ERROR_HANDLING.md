@@ -39,11 +39,14 @@ launches; do not start unmanaged goroutines that touch simulation state.
 and records terminal failure.
 
 The serial engine's event queue and model belong to the goroutine calling
-`Run`/`RunUntil`. During execution, only callbacks on that goroutine may schedule
-events or mutate engine state. Background tooling must not access that queue or
+`Run`/`RunUntil`. While dispatch is running, only callbacks on that goroutine may
+schedule events or mutate engine state. Background tooling must not access that queue or
 model; worker supervision does not grant concurrent access. Setup, registration,
 and checkpoint operations require stopped execution and host coordination.
-The parallel engine separately supports scheduling from its workers.
+External scheduling requires a completed run or an acknowledged `Pause`, with
+host coordination preventing concurrent access or resume. The monitor uses this
+pause protocol when its tick endpoint schedules an event. The parallel engine
+separately supports scheduling from its workers.
 
 Do not recursively call `Run`, `Setup`, or checkpoint operations from their
 callbacks. Concurrent managed operations return an error. `Pause` and

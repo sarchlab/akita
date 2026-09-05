@@ -567,6 +567,7 @@ func (c *tickableComponent) TickLater()                    { c.tickCalls++ }
 
 func TestTickInvokesTickLaterOnTickingComponent(t *testing.T) {
 	monitor := NewMonitor()
+	monitor.RegisterEngine(&fakeEngine{})
 	tickable := newTickableComponent("ticker")
 	monitor.RegisterComponent(tickable)
 

@@ -567,6 +567,8 @@ func (m *Monitor) tick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	resume := m.pauseForInspection()
+	defer resume()
 	tickingComp.TickLater()
 	w.WriteHeader(200)
 }

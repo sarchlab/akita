@@ -8,9 +8,10 @@ import (
 )
 
 // A SerialEngine runs events one after another on the goroutine calling Run.
-// During execution, only that goroutine may schedule events or mutate engine
-// state. External callers may Pause/Continue, read CurrentTime, or inspect the
-// supervisor. Other access requires stopped execution and host coordination.
+// While dispatch is running, only that goroutine may schedule events or mutate
+// engine state. External callers may Pause/Continue, read CurrentTime, or inspect the
+// supervisor. Other access requires a completed run or an acknowledged Pause,
+// with host coordination preventing concurrent access or resume.
 type SerialEngine struct {
 	hooking.HookableBase
 
@@ -51,8 +52,9 @@ func (e *SerialEngine) RegisterHandler(name string, handler Handler) {
 	e.registry[name] = handler
 }
 
-// Schedule registers an event to happen in the future. During a run, only
-// callbacks on the run goroutine may call Schedule; background producers cannot.
+// Schedule registers an event to happen in the future. While dispatch is running,
+// only callbacks on the run goroutine may call Schedule. External scheduling
+// requires a completed run or an acknowledged Pause, with host coordination.
 func (e *SerialEngine) Schedule(evt Event) {
 	e.supervisor.Check()
 	if evt.Time() < e.time {
