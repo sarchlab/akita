@@ -78,7 +78,7 @@ var _ = Describe("Bankstage", func() {
 
 		// Add a transaction
 		next.Transactions = append(next.Transactions, transactionState{})
-		next.BankBufs[0].PushTyped(0)
+		next.BankBufs[0].Push(0)
 
 		madeProgress := s.Tick()
 
@@ -135,7 +135,7 @@ var _ = Describe("Bankstage", func() {
 			)
 
 			// Put in post-pipeline buffer
-			next.BankPostBufs[0].PushTyped(0)
+			next.BankPostBufs[0].Push(0)
 		})
 
 		It("should read", func() {
@@ -209,7 +209,7 @@ var _ = Describe("Bankstage", func() {
 				},
 			)
 
-			next.BankPostBufs[0].PushTyped(0)
+			next.BankPostBufs[0].Push(0)
 		})
 
 		It("should write", func() {
@@ -272,7 +272,7 @@ var _ = Describe("Bankstage", func() {
 				},
 			)
 
-			next.BankPostBufs[0].PushTyped(0)
+			next.BankPostBufs[0].Push(0)
 		})
 
 		It("should write fetched", func() {

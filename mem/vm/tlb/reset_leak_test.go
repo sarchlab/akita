@@ -65,7 +65,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	bottomSent := false
 	for i := 0; i < 64 && mshrIsEmpty(tlbComp.State.MSHREntries); i++ {
 		tlbComp.Tick()
-		if out := bottomPort.RetrieveOutgoing(); out != nil {
+		if out, ok := bottomPort.RetrieveOutgoing(); ok {
 			if _, ok := out.(vmprotocol.TranslationReq); ok {
 				bottomSent = true
 			}
@@ -95,7 +95,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	acked := false
 	for i := 0; i < 64; i++ {
 		tlbComp.Tick()
-		if msg := controlPort.RetrieveOutgoing(); msg != nil {
+		if msg, ok := controlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {
 				acked = true

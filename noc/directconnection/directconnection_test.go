@@ -73,15 +73,15 @@ var _ = Describe("DirectConnection", func() {
 		msg2.Src = port2.AsRemote()
 		msg2.Dst = port1.AsRemote()
 
-		port1.EXPECT().PeekOutgoing().Return(msg1)
-		port1.EXPECT().PeekOutgoing().Return(nil)
-		port1.EXPECT().RetrieveOutgoing().Return(msg1)
+		port1.EXPECT().PeekOutgoing().Return(msg1, true)
+		port1.EXPECT().PeekOutgoing().Return(nil, false)
+		port1.EXPECT().RetrieveOutgoing().Return(msg1, true)
 		port1.EXPECT().CanDeliver().Return(true)
 		port1.EXPECT().Deliver(msg2)
 
-		port2.EXPECT().PeekOutgoing().Return(msg2)
-		port2.EXPECT().PeekOutgoing().Return(nil)
-		port2.EXPECT().RetrieveOutgoing().Return(msg2)
+		port2.EXPECT().PeekOutgoing().Return(msg2, true)
+		port2.EXPECT().PeekOutgoing().Return(nil, false)
+		port2.EXPECT().RetrieveOutgoing().Return(msg2, true)
 		port2.EXPECT().CanDeliver().Return(true)
 		port2.EXPECT().Deliver(msg1)
 
@@ -102,9 +102,9 @@ var _ = Describe("DirectConnection", func() {
 		msg.Src = port1.AsRemote()
 		msg.Dst = port2.AsRemote()
 
-		port1.EXPECT().PeekOutgoing().Return(msg)
+		port1.EXPECT().PeekOutgoing().Return(msg, true)
 		port2.EXPECT().CanDeliver().Return(false)
-		port2.EXPECT().PeekOutgoing().Return(nil)
+		port2.EXPECT().PeekOutgoing().Return(nil, false)
 
 		connection.Handle(tick)
 	})
@@ -131,8 +131,8 @@ func newAgent(engine timing.EventScheduler, freq timing.Freq, name string, outPo
 func (a *agent) Tick() bool {
 	madeProgress := false
 
-	msgIn := a.OutPort.RetrieveIncoming()
-	if msgIn != nil {
+	msgIn, ok := a.OutPort.RetrieveIncoming()
+	if ok {
 		a.msgsIn = append(a.msgsIn, msgIn)
 		madeProgress = true
 	}

@@ -45,7 +45,7 @@ func driveCtrl(
 
 	for range 256 {
 		comp.Tick()
-		if out := ctrl.RetrieveOutgoing(); out != nil {
+		if out, ok := ctrl.RetrieveOutgoing(); ok {
 			if rsp, ok := out.(memcontrolprotocol.Rsp); ok && rsp.Command == cmd {
 				return rsp
 			}
@@ -139,7 +139,7 @@ func resolveTranslation(
 	botFound := false
 	for i := 0; i < 64 && !botFound; i++ {
 		comp.Tick()
-		if out := bottom.RetrieveOutgoing(); out != nil {
+		if out, ok := bottom.RetrieveOutgoing(); ok {
 			if r, ok := out.(vmprotocol.TranslationReq); ok {
 				botReq = r
 				botFound = true
@@ -162,7 +162,7 @@ func resolveTranslation(
 
 	for range 64 {
 		comp.Tick()
-		if out := top.RetrieveOutgoing(); out != nil {
+		if out, ok := top.RetrieveOutgoing(); ok {
 			if _, ok := out.(vmprotocol.TranslationRsp); ok {
 				return
 			}
@@ -186,12 +186,12 @@ func lookupMisses(
 
 	for range 64 {
 		comp.Tick()
-		if out := bottom.RetrieveOutgoing(); out != nil {
+		if out, ok := bottom.RetrieveOutgoing(); ok {
 			if _, ok := out.(vmprotocol.TranslationReq); ok {
 				return true
 			}
 		}
-		if out := top.RetrieveOutgoing(); out != nil {
+		if out, ok := top.RetrieveOutgoing(); ok {
 			if _, ok := out.(vmprotocol.TranslationRsp); ok {
 				return false
 			}
@@ -234,7 +234,10 @@ func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
 	}
 
 	// Drain any straggler Bottom traffic before checking Invalidate.
-	for bottom.RetrieveOutgoing() != nil {
+	for {
+		if _, ok := bottom.RetrieveOutgoing(); !ok {
+			break
+		}
 	}
 
 	// 3. Invalidate (no filter): every block is dropped, with no write-back.
@@ -245,7 +248,7 @@ func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
 		comp.State.DirectoryState.Sets[setB].Blocks[0].IsValid {
 		t.Error("blocks should be invalid after Invalidate")
 	}
-	if out := bottom.RetrieveOutgoing(); out != nil {
+	if out, ok := bottom.RetrieveOutgoing(); ok {
 		t.Errorf("Invalidate must not write back; got %T on Bottom", out)
 	}
 
@@ -296,7 +299,7 @@ func driveFlushAll(
 	for range 2048 {
 		comp.Tick()
 		answerWriteBacks(bottom, writtenBack)
-		if out := ctrl.RetrieveOutgoing(); out != nil {
+		if out, ok := ctrl.RetrieveOutgoing(); ok {
 			rsp, ok := out.(memcontrolprotocol.Rsp)
 			if ok && rsp.Command == memcontrolprotocol.CmdFlush {
 				if !rsp.Success {
@@ -316,8 +319,8 @@ func driveFlushAll(
 // WriteDoneRsp so the flush can make progress.
 func answerWriteBacks(bottom messaging.Port, writtenBack map[byte]bool) {
 	for {
-		out := bottom.RetrieveOutgoing()
-		if out == nil {
+		out, ok := bottom.RetrieveOutgoing()
+		if !ok {
 			return
 		}
 		w, ok := out.(memprotocol.WriteReq)

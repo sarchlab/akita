@@ -94,9 +94,9 @@ func (a *Agent) recv() bool {
 	madeProgress := false
 
 	for _, port := range a.AgentPorts {
-		msgI := port.RetrieveIncoming()
+		msgI, ok := port.RetrieveIncoming()
 
-		if msgI != nil {
+		if ok {
 			meta := msgI.Meta()
 			a.test.receiveMsgMeta(meta, port)
 			a.recvBytes += uint64(meta.TrafficBytes)

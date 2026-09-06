@@ -37,8 +37,8 @@ func (m *respondMW) Tick() bool {
 }
 
 func (m *respondMW) fetchFromBottom() bool {
-	rspI := m.bottomPort().PeekIncoming()
-	if rspI == nil {
+	rspI, ok := m.bottomPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 

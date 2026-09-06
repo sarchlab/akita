@@ -87,13 +87,13 @@ type Port interface {
     // For the component side
     CanSend() bool
     Send(msg Msg)
-    PeekIncoming() Msg
-    RetrieveIncoming() Msg
+    PeekIncoming() (Msg, bool)
+    RetrieveIncoming() (Msg, bool)
 
     // For the connection side
     Deliver(msg Msg)
-    PeekOutgoing() Msg
-    RetrieveOutgoing() Msg
+    PeekOutgoing() (Msg, bool)
+    RetrieveOutgoing() (Msg, bool)
     NotifyAvailable()
 
     SetConnection(conn Connection)
@@ -120,6 +120,11 @@ sending into a full buffer panics — and, when the buffer transitions from
 empty, notifies the connection via `NotifySend`. `Deliver` pushes onto the
 incoming buffer (guarded by `CanDeliver` the same way) and notifies the owning
 component via `NotifyRecv`.
+
+Reads return `(nil, false)` when empty. `Peek` leaves the message queued;
+`Retrieve` consumes it and retains the sender notification when a full buffer
+gains space. A successful read returns `true`. Capacity and peek checks do not
+reserve buffer space or messages.
 
 ### Connection
 

@@ -37,8 +37,8 @@ var _ = Describe("Flusher", func() {
 			BankPipelines: []queueing.Pipeline[int]{
 				queueing.NewPipeline[int](4, 10),
 			},
-			BankPostPipelineBufs: []postPipelineBuf{
-				newPostPipelineBuf(4),
+			BankPostPipelineBufs: []queueing.Buffer[int]{
+				queueing.NewBuffer[int]("BankPostPipelineBuf", 4),
 			},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
@@ -179,7 +179,7 @@ var _ = Describe("Flusher", func() {
 			// Flush returns the cache to paused (its prior, legal state).
 			Expect(cacheState(next.CacheState)).To(Equal(cacheStatePaused))
 
-			out := controlPort.RetrieveOutgoing()
+			out, _ := controlPort.RetrieveOutgoing()
 			Expect(out).NotTo(BeNil())
 			Expect(out.Meta().RspTo).To(Equal(flushID))
 		})

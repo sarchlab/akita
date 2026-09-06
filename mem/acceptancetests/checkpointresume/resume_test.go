@@ -73,8 +73,8 @@ func (m *driverMW) Tick() bool {
 }
 
 func (m *driverMW) processResponse() bool {
-	msg := m.port().RetrieveIncoming()
-	if msg == nil {
+	msg, ok := m.port().RetrieveIncoming()
+	if !ok {
 		return false
 	}
 

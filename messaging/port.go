@@ -31,6 +31,9 @@ var HookPosPortMsgRetrieveOutgoing = &hooking.HookPos{
 type RemotePort string
 
 // A Port is owned by a component and is used to plug in connections.
+// Peek and Retrieve return nil, false when the corresponding buffer is empty.
+// Retrieve removes a message and notifies its sender when a full buffer gains
+// space. Capacity and peek checks do not reserve space or messages.
 type Port interface {
 	naming.Named
 	hooking.Hookable
@@ -45,14 +48,14 @@ type Port interface {
 	CanDeliver() bool
 	Deliver(msg Msg)
 	NotifyAvailable()
-	RetrieveOutgoing() Msg
-	PeekOutgoing() Msg
+	RetrieveOutgoing() (Msg, bool)
+	PeekOutgoing() (Msg, bool)
 
 	// For component
 	CanSend() bool
 	Send(msg Msg)
-	RetrieveIncoming() Msg
-	PeekIncoming() Msg
+	RetrieveIncoming() (Msg, bool)
+	PeekIncoming() (Msg, bool)
 
 	// Buffer counts
 	NumIncoming() int
@@ -142,7 +145,7 @@ func (p *defaultPort) Send(msg Msg) {
 	}
 
 	wasEmpty := (p.outgoingBuf.Size() == 0)
-	p.outgoingBuf.PushTyped(msg)
+	p.outgoingBuf.Push(msg)
 
 	hookCtx := hooking.HookCtx{
 		Domain: p,
@@ -189,7 +192,7 @@ func (p *defaultPort) Deliver(msg Msg) {
 	}
 	p.InvokeHook(hookCtx)
 
-	p.incomingBuf.PushTyped(msg)
+	p.incomingBuf.Push(msg)
 	p.lock.Unlock()
 
 	if p.comp != nil && wasEmpty {
@@ -198,14 +201,14 @@ func (p *defaultPort) Deliver(msg Msg) {
 }
 
 // RetrieveIncoming is used by the component to take a message from the
-// incoming buffer.
-func (p *defaultPort) RetrieveIncoming() Msg {
+// incoming buffer. The boolean reports whether a message was present.
+func (p *defaultPort) RetrieveIncoming() (Msg, bool) {
 	p.lock.Lock()
 
-	msg := p.incomingBuf.Pop()
-	if msg == nil {
+	msg, ok := p.incomingBuf.Pop()
+	if !ok {
 		p.lock.Unlock()
-		return nil
+		return nil, false
 	}
 
 	if p.incomingBuf.Size() == p.incomingBuf.Capacity()-1 {
@@ -221,18 +224,18 @@ func (p *defaultPort) RetrieveIncoming() Msg {
 	}
 	p.InvokeHook(hookCtx)
 
-	return msg
+	return msg, true
 }
 
-// RetrieveOutgoing is used by the component to take a message from the outgoing
-// buffer.
-func (p *defaultPort) RetrieveOutgoing() Msg {
+// RetrieveOutgoing is used by the connection to take a message from the outgoing
+// buffer. The boolean reports whether a message was present.
+func (p *defaultPort) RetrieveOutgoing() (Msg, bool) {
 	p.lock.Lock()
 
-	msg := p.outgoingBuf.Pop()
-	if msg == nil {
+	msg, ok := p.outgoingBuf.Pop()
+	if !ok {
 		p.lock.Unlock()
-		return nil
+		return nil, false
 	}
 
 	if p.outgoingBuf.Size() == p.outgoingBuf.Capacity()-1 {
@@ -248,12 +251,12 @@ func (p *defaultPort) RetrieveOutgoing() Msg {
 	}
 	p.InvokeHook(hookCtx)
 
-	return msg
+	return msg, true
 }
 
 // PeekIncoming returns the first message in the incoming buffer without
-// removing it.
-func (p *defaultPort) PeekIncoming() Msg {
+// removing it. The boolean reports whether a message was present.
+func (p *defaultPort) PeekIncoming() (Msg, bool) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -261,8 +264,8 @@ func (p *defaultPort) PeekIncoming() Msg {
 }
 
 // PeekOutgoing returns the first message in the outgoing buffer without
-// removing it.
-func (p *defaultPort) PeekOutgoing() Msg {
+// removing it. The boolean reports whether a message was present.
+func (p *defaultPort) PeekOutgoing() (Msg, bool) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 

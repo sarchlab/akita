@@ -117,8 +117,8 @@ var _ = Describe("MMUCache control behavior", func() {
 		for i := 0; i < 256 && len(forwarded) < n; i++ {
 			comp.Tick()
 			for {
-				out := bottomPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := bottomPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if r, ok := out.(vmprotocol.TranslationReq); ok {
@@ -143,11 +143,14 @@ var _ = Describe("MMUCache control behavior", func() {
 		topPort.Deliver(makeTranslationReq(0x9000))
 		for range 8 {
 			comp.Tick()
-			Expect(controlPort.RetrieveOutgoing()).To(BeNil())
-			Expect(bottomPort.RetrieveOutgoing()).To(BeNil())
+			_, present0 := controlPort.RetrieveOutgoing()
+			Expect(present0).To(BeFalse())
+			_, present1 := bottomPort.RetrieveOutgoing()
+			Expect(present1).To(BeFalse())
 		}
 		Expect(comp.State.OutstandingBottomReqs).To(HaveLen(n))
-		Expect(topPort.PeekIncoming()).ToNot(BeNil()) // late req still queued
+		_, present2 := topPort.PeekIncoming()
+		Expect(present2).To(BeTrue()) // late req still queued
 
 		// Let every outstanding walk complete.
 		for _, fr := range forwarded {
@@ -162,15 +165,15 @@ var _ = Describe("MMUCache control behavior", func() {
 		for i := 0; i < 4096 && !drainFound; i++ {
 			comp.Tick()
 			for {
-				out := topPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := topPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if _, ok := out.(vmprotocol.TranslationRsp); ok {
 					upResponses++
 				}
 			}
-			if out := controlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := controlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
@@ -186,7 +189,8 @@ var _ = Describe("MMUCache control behavior", func() {
 		Expect(comp.State.OutstandingBottomReqs).To(BeEmpty())
 		// The request delivered mid-drain was never admitted; it remains
 		// queued for after Enable.
-		Expect(topPort.PeekIncoming()).ToNot(BeNil())
+		_, present3 := topPort.PeekIncoming()
+		Expect(present3).To(BeTrue())
 		Expect(comp.State.CurrentState).To(Equal(mmuCacheStatePause))
 	})
 
@@ -197,7 +201,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		gotFwd := false
 		for i := 0; i < 64 && !gotFwd; i++ {
 			comp.Tick()
-			if out := bottomPort.RetrieveOutgoing(); out != nil {
+			if out, ok := bottomPort.RetrieveOutgoing(); ok {
 				fwd, gotFwd = out.(vmprotocol.TranslationReq)
 			}
 		}
@@ -210,7 +214,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		resetAcked := false
 		for i := 0; i < 64 && !resetAcked; i++ {
 			comp.Tick()
-			if out := controlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := controlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdReset {
 					resetAcked = true
@@ -226,7 +230,8 @@ var _ = Describe("MMUCache control behavior", func() {
 		bottomPort.Deliver(makeBottomRsp(fwd))
 		for range 16 {
 			comp.Tick()
-			Expect(topPort.RetrieveOutgoing()).To(BeNil())
+			_, present4 := topPort.RetrieveOutgoing()
+			Expect(present4).To(BeFalse())
 		}
 		Expect(comp.State.OutstandingBottomReqs).To(BeEmpty())
 	})
@@ -240,8 +245,10 @@ var _ = Describe("MMUCache control behavior", func() {
 		}
 
 		// The lookup is neither consumed nor forwarded while paused.
-		Expect(topPort.PeekIncoming()).ToNot(BeNil())
-		Expect(bottomPort.RetrieveOutgoing()).To(BeNil())
+		_, present5 := topPort.PeekIncoming()
+		Expect(present5).To(BeTrue())
+		_, present6 := bottomPort.RetrieveOutgoing()
+		Expect(present6).To(BeFalse())
 	})
 
 	DescribeTable("Reset wipes queued work from any control state",
@@ -256,7 +263,7 @@ var _ = Describe("MMUCache control behavior", func() {
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				comp.Tick()
-				if out := controlPort.RetrieveOutgoing(); out != nil {
+				if out, ok := controlPort.RetrieveOutgoing(); ok {
 					rsp, found = out.(memcontrolprotocol.Rsp)
 				}
 			}
@@ -266,8 +273,10 @@ var _ = Describe("MMUCache control behavior", func() {
 			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			Expect(comp.State.CurrentState).To(Equal(mmuCacheStateEnable))
-			Expect(topPort.PeekIncoming()).To(BeNil())
-			Expect(bottomPort.PeekIncoming()).To(BeNil())
+			_, present7 := topPort.PeekIncoming()
+			Expect(present7).To(BeFalse())
+			_, present8 := bottomPort.PeekIncoming()
+			Expect(present8).To(BeFalse())
 		},
 		Entry("from Enable", mmuCacheStateEnable),
 		Entry("from Pause", mmuCacheStatePause),
@@ -291,8 +300,8 @@ var _ = Describe("MMUCache control behavior", func() {
 		for range 32 {
 			comp.Tick()
 			for {
-				out := controlPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := controlPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if r, ok := out.(memcontrolprotocol.Rsp); ok {

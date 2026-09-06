@@ -88,10 +88,11 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		next := &comp.State
 		Expect(madeProgress).To(BeTrue())
 		Expect(next.CurrentState).To(Equal(mmuCacheStateEnable))
-		Expect(topPort.PeekIncoming()).To(BeNil())
-		Expect(bottomPort.PeekIncoming()).To(BeNil())
-
-		rsp := controlPort.RetrieveOutgoing()
+		_, present0 := topPort.PeekIncoming()
+		Expect(present0).To(BeFalse())
+		_, present1 := bottomPort.PeekIncoming()
+		Expect(present1).To(BeFalse())
+		rsp, _ := controlPort.RetrieveOutgoing()
 		ctrlRsp, ok := rsp.(memcontrolprotocol.Rsp)
 		Expect(ok).To(BeTrue())
 		Expect(ctrlRsp.Command).To(Equal(memcontrolprotocol.CmdReset))
@@ -110,7 +111,9 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		Expect(ctrl.handleIncomingCommands()).To(BeTrue())
 
-		rsp := controlPort.RetrieveOutgoing().(memcontrolprotocol.Rsp)
+		rspValue, _ := controlPort.RetrieveOutgoing()
+
+		rsp := rspValue.(memcontrolprotocol.Rsp)
 		Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdFlush))
 		Expect(rsp.Success).To(BeFalse())
 		Expect(rsp.Error).To(Equal(memcontrolprotocol.ErrUnsupported))
@@ -143,7 +146,9 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		_, found = setLookup(&next.Table[0], pid, seg)
 		Expect(found).To(BeFalse())
 
-		rsp := controlPort.RetrieveOutgoing().(memcontrolprotocol.Rsp)
+		rspValue, _ := controlPort.RetrieveOutgoing()
+
+		rsp := rspValue.(memcontrolprotocol.Rsp)
 		Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
 		Expect(rsp.Success).To(BeTrue())
 	})
@@ -161,7 +166,9 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		Expect(ctrl.handleIncomingCommands()).To(BeTrue())
 
-		rsp := controlPort.RetrieveOutgoing().(memcontrolprotocol.Rsp)
+		rspValue, _ := controlPort.RetrieveOutgoing()
+
+		rsp := rspValue.(memcontrolprotocol.Rsp)
 		Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
 		Expect(rsp.Success).To(BeFalse())
 		Expect(rsp.Error).To(Equal(memcontrolprotocol.ErrMustBePausedOrDrained))
@@ -215,7 +222,9 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		_, foundB := setLookup(&next.Table[0], vm.PID(2), segB)
 		Expect(foundB).To(BeTrue())
 
-		rsp := control2.RetrieveOutgoing().(memcontrolprotocol.Rsp)
+		rspValue, _ := control2.RetrieveOutgoing()
+
+		rsp := rspValue.(memcontrolprotocol.Rsp)
 		Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
 		Expect(rsp.Success).To(BeTrue())
 	})

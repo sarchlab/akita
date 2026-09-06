@@ -36,8 +36,8 @@ var _ = Describe("TopParser", func() {
 			BankPipelines: []queueing.Pipeline[int]{
 				queueing.NewPipeline[int](4, 10),
 			},
-			BankPostPipelineBufs: []postPipelineBuf{
-				newPostPipelineBuf(4),
+			BankPostPipelineBufs: []queueing.Buffer[int]{
+				queueing.NewBuffer[int]("BankPostPipelineBuf", 4),
 			},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
@@ -97,7 +97,8 @@ var _ = Describe("TopParser", func() {
 		Expect(next.Transactions[0].HasRead).To(BeTrue())
 		Expect(next.Transactions[0].ReadAddress).To(Equal(uint64(0x100)))
 		Expect(next.Transactions[0].ReadAccessByteSize).To(Equal(uint64(64)))
-		Expect(topPort.PeekIncoming()).To(BeNil())
+		_, present0 := topPort.PeekIncoming()
+		Expect(present0).To(BeFalse())
 	})
 
 	It("should parse write from top", func() {
@@ -115,6 +116,7 @@ var _ = Describe("TopParser", func() {
 		Expect(next.Transactions).To(HaveLen(1))
 		Expect(next.Transactions[0].HasWrite).To(BeTrue())
 		Expect(next.Transactions[0].WriteAddress).To(Equal(uint64(0x100)))
-		Expect(topPort.PeekIncoming()).To(BeNil())
+		_, present1 := topPort.PeekIncoming()
+		Expect(present1).To(BeFalse())
 	})
 })

@@ -118,7 +118,7 @@ var _ = Describe("Directory", func() {
 			entryIdx := cache.MSHRAdd(&next.MSHRState, 4, vm.PID(1), uint64(0x100))
 
 			// Put trans in post-pipeline buffer
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			madeProgress := d.Tick()
 
@@ -156,7 +156,7 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			madeProgress := d.Tick()
 
@@ -195,7 +195,7 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			// Fill up bank buffer
 			next.BankBufs[0] = queueing.NewBuffer[int]("Cache.BankBuf0", 0)
@@ -230,7 +230,7 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 			next.DirectoryState.Sets[setID].Blocks[wayID].IsLocked = true
 
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			madeProgress := d.Tick()
 			Expect(madeProgress).To(BeFalse())
@@ -255,13 +255,15 @@ var _ = Describe("Directory", func() {
 					ReadPID:            1,
 				},
 			)
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 
-			readToBottom := bottomPort.RetrieveOutgoing().(memprotocol.ReadReq)
+			readToBottomValue, _ := bottomPort.RetrieveOutgoing()
+
+			readToBottom := readToBottomValue.(memprotocol.ReadReq)
 			Expect(readToBottom.Address).To(Equal(uint64(0x100)))
 			Expect(readToBottom.AccessByteSize).To(Equal(uint64(64)))
 			Expect(readToBottom.PID).To(Equal(vm.PID(1)))
@@ -302,7 +304,7 @@ var _ = Describe("Directory", func() {
 					ReadPID:            1,
 				},
 			)
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			setID := cache.DirectorySetID(0x100, 64, 16)
 			for w := range next.DirectoryState.Sets[setID].Blocks {
@@ -331,7 +333,7 @@ var _ = Describe("Directory", func() {
 					ReadPID:            1,
 				},
 			)
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			setID := cache.DirectorySetID(0x100, 64, 16)
 			for w := range next.DirectoryState.Sets[setID].Blocks {
@@ -360,7 +362,7 @@ var _ = Describe("Directory", func() {
 					ReadPID:            1,
 				},
 			)
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			setID := cache.DirectorySetID(0x100, 64, 16)
 			// Lock only the LRU-most way; other ways should still be picked.
@@ -394,7 +396,7 @@ var _ = Describe("Directory", func() {
 					ReadPID:            1,
 				},
 			)
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			cache.MSHRAdd(&next.MSHRState, 4, vm.PID(1), 0x200)
 			cache.MSHRAdd(&next.MSHRState, 4, vm.PID(1), 0x300)
@@ -423,7 +425,7 @@ var _ = Describe("Directory", func() {
 					ReadPID:            1,
 				},
 			)
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			fillBottomOutgoing()
 
@@ -474,13 +476,15 @@ var _ = Describe("Directory", func() {
 			// Pre-populate MSHR with the fetcher at index 0.
 			entryIdx := cache.MSHRAdd(&next.MSHRState, 4, vm.PID(1), uint64(0x100))
 			next.MSHRState.Entries[entryIdx].TransactionIndices = []int{0}
-			next.DirPostBuf.PushTyped(1)
+			next.DirPostBuf.Push(1)
 
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 
-			writeToBottom := bottomPort.RetrieveOutgoing().(memprotocol.WriteReq)
+			writeToBottomValue, _ := bottomPort.RetrieveOutgoing()
+
+			writeToBottom := writeToBottomValue.(memprotocol.WriteReq)
 			Expect(writeToBottom.Address).To(Equal(uint64(0x104)))
 			Expect(writeToBottom.Data).To(Equal([]byte{1, 2, 3, 4}))
 			Expect(writeToBottom.PID).To(Equal(vm.PID(1)))
@@ -522,11 +526,13 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			madeProgress := d.Tick()
 
-			w := bottomPort.RetrieveOutgoing().(memprotocol.WriteReq)
+			wValue, _ := bottomPort.RetrieveOutgoing()
+
+			w := wValue.(memprotocol.WriteReq)
 			Expect(w.Address).To(Equal(uint64(0x104)))
 			Expect(w.Data).To(Equal([]byte{1, 2, 3, 4}))
 			Expect(w.PID).To(Equal(vm.PID(1)))
@@ -564,7 +570,7 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 			next.DirectoryState.Sets[setID].Blocks[wayID].IsLocked = true
 
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			madeProgress := d.Tick()
 
@@ -596,7 +602,7 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 			next.DirectoryState.Sets[setID].Blocks[wayID].ReadCount = 1
 
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			madeProgress := d.Tick()
 
@@ -627,7 +633,7 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			next.BankBufs[0] = queueing.NewBuffer[int]("Cache.BankBuf0", 0)
 
@@ -660,7 +666,7 @@ var _ = Describe("Directory", func() {
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag = 0x100
 			next.DirectoryState.Sets[setID].Blocks[wayID].PID = 1
 
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			fillBottomOutgoing()
 
@@ -688,11 +694,13 @@ var _ = Describe("Directory", func() {
 					WritePID:     1,
 				},
 			)
-			next.DirPostBuf.PushTyped(0)
+			next.DirPostBuf.Push(0)
 
 			madeProgress := d.Tick()
 
-			w := bottomPort.RetrieveOutgoing().(memprotocol.WriteReq)
+			wValue, _ := bottomPort.RetrieveOutgoing()
+
+			w := wValue.(memprotocol.WriteReq)
 			Expect(w.Address).To(Equal(uint64(0x100)))
 			Expect(w.Data).To(HaveLen(64))
 			Expect(w.PID).To(Equal(vm.PID(1)))

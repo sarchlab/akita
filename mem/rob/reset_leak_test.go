@@ -74,7 +74,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	acked := false
 	for range 16 {
 		rob.Tick()
-		if msg := ctrlPort.RetrieveOutgoing(); msg != nil {
+		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {
 				acked = true

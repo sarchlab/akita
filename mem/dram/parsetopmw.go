@@ -34,8 +34,8 @@ func (m *parseTopMW) Tick() bool {
 }
 
 func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
-	msgI := m.topPort().PeekIncoming()
-	if msgI == nil {
+	msgI, ok := m.topPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 

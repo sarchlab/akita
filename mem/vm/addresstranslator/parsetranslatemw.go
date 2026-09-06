@@ -42,8 +42,8 @@ func (m *parseTranslateMW) Tick() bool {
 }
 
 func (m *parseTranslateMW) translate() bool {
-	itemI := m.topPort().PeekIncoming()
-	if itemI == nil {
+	itemI, ok := m.topPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 

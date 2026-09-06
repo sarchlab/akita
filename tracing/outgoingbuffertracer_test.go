@@ -51,7 +51,7 @@ type obFakeConn struct {
 	hooking.HookableBase
 }
 
-func (c *obFakeConn) Name() string                  { return "Conn" }
+func (c *obFakeConn) Name() string                   { return "Conn" }
 func (c *obFakeConn) PlugIn(messaging.Port)          {}
 func (c *obFakeConn) Unplug(messaging.Port)          {}
 func (c *obFakeConn) NotifyAvailable(messaging.Port) {}
@@ -109,8 +109,8 @@ var _ = Describe("Outgoing buffer tracer", func() {
 
 		// Draining A ends A's buffer task and exposes B at the head.
 		comp.time = 150
-		Expect(port.RetrieveOutgoing()).NotTo(BeNil())
-
+		_, present0 := port.RetrieveOutgoing()
+		Expect(present0).To(BeTrue())
 		Expect(tracer.ends).To(HaveLen(1))
 		Expect(tracer.ends[0].ID).To(Equal(startA.ID))
 		Expect(tracer.ends[0].Time).To(Equal(timing.VTimeInPicoSec(150)))
@@ -122,7 +122,8 @@ var _ = Describe("Outgoing buffer tracer", func() {
 
 		// Draining B ends B's buffer task.
 		comp.time = 160
-		Expect(port.RetrieveOutgoing()).NotTo(BeNil())
+		_, present1 := port.RetrieveOutgoing()
+		Expect(present1).To(BeTrue())
 		Expect(tracer.ends).To(HaveLen(2))
 		Expect(tracer.ends[1].ID).To(Equal(startB.ID))
 		Expect(tracer.ends[1].Time).To(Equal(timing.VTimeInPicoSec(160)))
@@ -146,8 +147,8 @@ var _ = Describe("Outgoing buffer tracer", func() {
 
 		untraced.time = 100
 		p2.Send(obTestMsg{messaging.MsgMeta{ID: 1, Src: "Untraced.Bottom", Dst: "Other.Top"}})
-		Expect(p2.RetrieveOutgoing()).NotTo(BeNil())
-
+		_, present2 := p2.RetrieveOutgoing()
+		Expect(present2).To(BeTrue())
 		Expect(tracer.starts).To(BeEmpty())
 		Expect(tracer.ends).To(BeEmpty())
 		Expect(tracer.milestones).To(BeEmpty())

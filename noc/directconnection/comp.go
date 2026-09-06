@@ -112,8 +112,8 @@ func (m *middleware) Tick() bool {
 func (m *middleware) forwardMany(port messaging.Port) bool {
 	madeProgress := false
 	for {
-		head := port.PeekOutgoing()
-		if head == nil {
+		head, ok := port.PeekOutgoing()
+		if !ok {
 			break
 		}
 		dst := head.Meta().Dst

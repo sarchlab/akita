@@ -52,7 +52,8 @@ func (m *mmuCacheMiddleware) handleDrain() bool {
 	}
 
 	next := &m.comp.State
-	quiescent := m.bottomPort().PeekIncoming() == nil &&
+	_, hasBottom := m.bottomPort().PeekIncoming()
+	quiescent := !hasBottom &&
 		len(next.OutstandingBottomReqs) == 0
 	if quiescent {
 		next.CurrentState = mmuCacheStatePause
@@ -84,8 +85,8 @@ func (m *mmuCacheMiddleware) lookup() bool {
 		return false
 	}
 
-	msgI := m.topPort().PeekIncoming()
-	if msgI == nil {
+	msgI, ok := m.topPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -197,8 +198,8 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 func (m *mmuCacheMiddleware) handleBottomPort() bool {
 	madeProgress := false
 
-	itemI := m.bottomPort().PeekIncoming()
-	if itemI == nil {
+	itemI, ok := m.bottomPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 

@@ -55,8 +55,8 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		return false
 	}
 
-	reqI := m.topPort().PeekIncoming()
-	if reqI == nil {
+	reqI, ok := m.topPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 

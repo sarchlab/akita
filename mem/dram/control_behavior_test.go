@@ -100,15 +100,15 @@ var _ = Describe("DRAM control behavior", func() {
 		for i := 0; i < 4096 && !drainFound; i++ {
 			comp.Tick()
 			for {
-				out := topPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := topPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if _, ok := out.(memprotocol.DataReadyRsp); ok {
 					completed++
 				}
 			}
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
@@ -137,9 +137,11 @@ var _ = Describe("DRAM control behavior", func() {
 
 		// The request is neither consumed nor turned into work, and no
 		// response is produced, while paused.
-		Expect(topPort.PeekIncoming()).ToNot(BeNil())
+		_, present0 := topPort.PeekIncoming()
+		Expect(present0).To(BeTrue())
 		Expect(comp.State.Transactions).To(BeEmpty())
-		Expect(topPort.RetrieveOutgoing()).To(BeNil())
+		_, present1 := topPort.RetrieveOutgoing()
+		Expect(present1).To(BeFalse())
 	})
 
 	It("does not abort an in-flight Drain when a Pause arrives", func() {
@@ -166,8 +168,8 @@ var _ = Describe("DRAM control behavior", func() {
 		for i := 0; i < 4096 && !drainAcked; i++ {
 			comp.Tick()
 			for {
-				out := ctrlPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := ctrlPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				r, ok := out.(memcontrolprotocol.Rsp)
@@ -205,8 +207,8 @@ var _ = Describe("DRAM control behavior", func() {
 		for range 8 {
 			comp.Tick()
 			for {
-				out := ctrlPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := ctrlPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				r, ok := out.(memcontrolprotocol.Rsp)
@@ -244,8 +246,8 @@ var _ = Describe("DRAM control behavior", func() {
 		for range 4 {
 			comp.Tick()
 			for {
-				out := ctrlPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := ctrlPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if r, ok := out.(memcontrolprotocol.Rsp); ok {
@@ -276,7 +278,7 @@ var _ = Describe("DRAM control behavior", func() {
 		found := false
 		for i := 0; i < 8 && !found; i++ {
 			comp.Tick()
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if r, ok := out.(memcontrolprotocol.Rsp); ok &&
 					r.Command == memcontrolprotocol.CmdReset {
 					found = true
@@ -310,7 +312,7 @@ var _ = Describe("DRAM control behavior", func() {
 		found := false
 		for i := 0; i < 8 && !found; i++ {
 			comp.Tick()
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if r, ok := out.(memcontrolprotocol.Rsp); ok &&
 					r.Command == memcontrolprotocol.CmdReset {
 					found = true
@@ -338,7 +340,7 @@ var _ = Describe("DRAM control behavior", func() {
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				comp.Tick()
-				if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					if r, ok := out.(memcontrolprotocol.Rsp); ok {
 						rsp = r
 						found = true

@@ -122,7 +122,9 @@ var _ = Describe("DataMover", func() {
 		Expect(engine.Run()).To(Succeed())
 
 		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
-		Expect(srcPort.RetrieveIncoming()).To(
+		value0, present0 := srcPort.RetrieveIncoming()
+		Expect(present0).To(BeTrue())
+		Expect(value0).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 
@@ -153,7 +155,9 @@ var _ = Describe("DataMover", func() {
 		Expect(engine.Run()).To(Succeed())
 
 		Expect(insideStorage.Read(8192, 2048)).To(Equal(data))
-		Expect(srcPort.RetrieveIncoming()).To(
+		value1, present1 := srcPort.RetrieveIncoming()
+		Expect(present1).To(BeTrue())
+		Expect(value1).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 
@@ -180,7 +184,9 @@ var _ = Describe("DataMover", func() {
 		Expect(engine.Run()).To(Succeed())
 
 		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
-		Expect(srcPort.RetrieveIncoming()).To(
+		value2, present2 := srcPort.RetrieveIncoming()
+		Expect(present2).To(BeTrue())
+		Expect(value2).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 
@@ -207,7 +213,9 @@ var _ = Describe("DataMover", func() {
 		Expect(engine.Run()).To(Succeed())
 
 		Expect(outsideStorage.Read(4096, 4096)).To(Equal(data))
-		Expect(srcPort.RetrieveIncoming()).To(
+		value3, present3 := srcPort.RetrieveIncoming()
+		Expect(present3).To(BeTrue())
+		Expect(value3).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 
@@ -235,7 +243,9 @@ var _ = Describe("DataMover", func() {
 
 		expected := data[:512]
 		Expect(insideStorage.Read(512, 512)).To(Equal(expected))
-		Expect(srcPort.RetrieveIncoming()).To(
+		value4, present4 := srcPort.RetrieveIncoming()
+		Expect(present4).To(BeTrue())
+		Expect(value4).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 
@@ -280,7 +290,9 @@ var _ = Describe("DataMover", func() {
 
 		expected := append(data[:512], data[:512]...)
 		Expect(insideStorage.Read(0, 1024)).To(Equal(expected))
-		Expect(srcPort.RetrieveIncoming()).To(
+		value5, present5 := srcPort.RetrieveIncoming()
+		Expect(present5).To(BeTrue())
+		Expect(value5).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 })

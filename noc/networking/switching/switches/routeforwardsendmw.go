@@ -69,11 +69,11 @@ func (m *routeForwardSendMW) route() (madeProgress bool) {
 				break
 			}
 
-			item := pcs.RouteBuffer.Pop()
+			item, _ := pcs.RouteBuffer.Pop()
 			outputBufIdx := m.resolveOutputBufIdx(item.RouteTo)
 			item.OutputBufIdx = outputBufIdx
 
-			pcs.ForwardBuffer.PushTyped(item)
+			pcs.ForwardBuffer.Push(item)
 
 			// The flit waited in the route buffer until a forward-buffer slot
 			// opened (behind other flits / for downstream credit).
@@ -117,7 +117,7 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 		pcs := &state.PortComplexes[i]
 
 		for pcs.ForwardBuffer.Size() > 0 {
-			item := pcs.ForwardBuffer.Peek()
+			item, _ := pcs.ForwardBuffer.Peek()
 			outIdx := item.OutputBufIdx
 
 			if occupiedOutputPort[outIdx] {
@@ -133,7 +133,7 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 			// Push the whole routedFlit (carrying its TaskID) so the in-switch
 			// "flit" task can be ended in sendOut, once the flit actually
 			// leaves on the output link, rather than here.
-			sendBuf.PushTyped(item)
+			sendBuf.Push(item)
 
 			// The flit waited in the forward buffer for the output port to win
 			// arbitration and for a send-buffer slot downstream.
@@ -170,7 +170,7 @@ func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 				break
 			}
 
-			item := pcs.SendOutBuffer.Peek()
+			item, _ := pcs.SendOutBuffer.Peek()
 			flit := item.Flit
 			flit.Src = port.AsRemote()
 			flit.Dst = pcs.RemotePort

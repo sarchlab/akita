@@ -95,8 +95,8 @@ func (m *clientMW) send() bool {
 func (m *clientMW) receive() bool {
 	port := m.comp.GetPortByName("Out")
 
-	msg := port.PeekIncoming()
-	if msg == nil {
+	msg, ok := port.PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -143,8 +143,8 @@ func (m *serverMW) Tick() bool {
 func (m *serverMW) receive() bool {
 	port := m.comp.GetPortByName("Out")
 
-	msg := port.PeekIncoming()
-	if msg == nil {
+	msg, ok := port.PeekIncoming()
+	if !ok {
 		return false
 	}
 

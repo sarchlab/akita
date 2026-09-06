@@ -152,8 +152,8 @@ func (m *translationMW) parseFromTop() bool {
 	spec := m.comp.Spec()
 	state := &m.comp.State
 
-	reqI := m.topPort().PeekIncoming()
-	if reqI == nil {
+	reqI, ok := m.topPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 

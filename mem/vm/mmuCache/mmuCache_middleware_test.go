@@ -69,7 +69,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 		Expect(madeProgress).To(BeTrue())
 
-		sent := bottomPort.RetrieveOutgoing()
+		sent, _ := bottomPort.RetrieveOutgoing()
 		sentReq, ok := sent.(vmprotocol.TranslationReq)
 		Expect(ok).To(BeTrue())
 		Expect(sentReq.TransLatency).To(Equal(uint64(200)))
@@ -78,7 +78,8 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		Expect(sentReq.PID).To(Equal(vm.PID(1)))
 		Expect(sentReq.VAddr).To(Equal(uint64(0x2000)))
 		Expect(sentReq.DeviceID).To(Equal(uint64(3)))
-		Expect(topPort.PeekIncoming()).To(BeNil())
+		_, present0 := topPort.PeekIncoming()
+		Expect(present0).To(BeFalse())
 	})
 
 	It("should reduce latency on upper-level hit", func() {
@@ -106,7 +107,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 		Expect(madeProgress).To(BeTrue())
 
-		sent := bottomPort.RetrieveOutgoing()
+		sent, _ := bottomPort.RetrieveOutgoing()
 		sentReq, ok := sent.(vmprotocol.TranslationReq)
 		Expect(ok).To(BeTrue())
 		Expect(sentReq.TransLatency).To(Equal(uint64(100)))
@@ -138,7 +139,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		next := &comp.State
 		Expect(madeProgress).To(BeTrue())
 
-		sent := topPort.RetrieveOutgoing()
+		sent, _ := topPort.RetrieveOutgoing()
 		sentRsp, ok := sent.(vmprotocol.TranslationRsp)
 		Expect(ok).To(BeTrue())
 		Expect(sentRsp.Dst).To(Equal(messaging.RemotePort("UpModule")))
@@ -204,7 +205,9 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		_, keepFound := setLookup(&next.Table[0], pid, keepSeg0)
 		Expect(keepFound).To(BeTrue())
 
-		sentRsp := controlPort.RetrieveOutgoing().(memcontrolprotocol.Rsp)
+		sentRspValue, _ := controlPort.RetrieveOutgoing()
+
+		sentRsp := sentRspValue.(memcontrolprotocol.Rsp)
 		Expect(sentRsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
 		Expect(sentRsp.Success).To(BeTrue())
 		Expect(sentRsp.Dst).To(Equal(messaging.RemotePort("Requester")))

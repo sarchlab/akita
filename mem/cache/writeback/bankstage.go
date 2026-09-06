@@ -57,7 +57,7 @@ func (s *bankStage) pullFromBuf() bool {
 	// Check write buffer to bank buffer first
 	wbBuf := &next.WriteBufferToBankBufs[s.bankID]
 	if wbBuf.Size() > 0 {
-		transIdx := wbBuf.Pop()
+		transIdx, _ := wbBuf.Pop()
 		s.acceptIntoPipeline(next, spec, transIdx)
 		next.BankInflightTransCounts[s.bankID]++
 		return true
@@ -93,11 +93,11 @@ func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
 		return false
 	}
 
-	transIdx := dirBuf.Pop()
+	transIdx, _ := dirBuf.Pop()
 	t := &next.Transactions[transIdx]
 
 	if t.Action == writeBufferFetch {
-		next.WriteBufferBuf.PushTyped(transIdx)
+		next.WriteBufferBuf.Push(transIdx)
 		return true
 	}
 
@@ -135,7 +135,7 @@ func (s *bankStage) acceptIntoPipeline(next *State, spec Spec, transIdx int) {
 		next.BankPipelines[s.bankID].Accept(transIdx)
 	} else {
 		// Bypass pipeline: put directly in post-pipeline buffer
-		next.BankPostPipelineBufs[s.bankID].PushTyped(transIdx)
+		next.BankPostPipelineBufs[s.bankID].Push(transIdx)
 	}
 }
 
@@ -163,7 +163,7 @@ func (s *bankStage) finalizeTrans() bool {
 	postBuf := &next.BankPostPipelineBufs[s.bankID]
 
 	for i := 0; i < postBuf.Size(); i++ {
-		idx := postBuf.Get(i)
+		idx, _ := postBuf.PeekAt(i)
 		trans := &next.Transactions[idx]
 
 		done := false
@@ -182,7 +182,7 @@ func (s *bankStage) finalizeTrans() bool {
 		}
 
 		if done {
-			postBuf.RemoveAt(i)
+			postBuf.PopAt(i)
 			return true
 		}
 	}
@@ -305,7 +305,7 @@ func (s *bankStage) finalizeBankWriteFetched(
 
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 
-	mshrBuf.PushTyped(transIdx)
+	mshrBuf.Push(transIdx)
 
 	s.cache.storage.Write(nextBlock.CacheAddress, trans.MSHRData)
 	nextBlock.IsLocked = false
@@ -352,7 +352,7 @@ func (s *bankStage) finalizeBankEviction(
 	// while the dirty write-back is still in flight, allowing stale lower-
 	// memory data to be returned.
 
-	wbBuf.PushTyped(transIdx)
+	wbBuf.Push(transIdx)
 
 	next.BankInflightTransCounts[s.bankID]--
 	next.BankDownwardInflightTransCounts[s.bankID]--

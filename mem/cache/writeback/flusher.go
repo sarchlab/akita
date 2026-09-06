@@ -147,7 +147,7 @@ func (f *flusher) processFlush() bool {
 	}
 
 	transIdx := next.allocTransaction(trans)
-	bankBuf.PushTyped(transIdx)
+	bankBuf.Push(transIdx)
 
 	next.FlusherBlockToEvictRefs = next.FlusherBlockToEvictRefs[1:]
 
@@ -158,8 +158,8 @@ func (f *flusher) processFlush() bool {
 // other verb (Pause, Drain, Enable, Reset, Invalidate) is owned by
 // ctrlMiddleware and is left in the incoming queue.
 func (f *flusher) extractFromPort() bool {
-	msg := f.ctrlPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := f.ctrlPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 

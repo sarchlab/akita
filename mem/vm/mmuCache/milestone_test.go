@@ -149,7 +149,9 @@ var _ = Describe("MMUCache milestones", func() {
 
 		Expect(mw.lookup()).To(BeTrue())
 
-		sent := bottomPort.RetrieveOutgoing().(vmprotocol.TranslationReq)
+		sentValue, _ := bottomPort.RetrieveOutgoing()
+
+		sent := sentValue.(vmprotocol.TranslationReq)
 		bottomReqID := sent.ID
 
 		page := vm.Page{
@@ -272,7 +274,8 @@ var _ = Describe("MMUCache milestones", func() {
 		req := makeTopReq(0x2000)
 		topPort.Deliver(req)
 		Expect(mw.lookup()).To(BeTrue())
-		sent := bottomPort.RetrieveOutgoing().(vmprotocol.TranslationReq)
+		sentValue, _ := bottomPort.RetrieveOutgoing()
+		sent := sentValue.(vmprotocol.TranslationReq)
 		bottomReqID := sent.ID
 
 		// The walk is in flight: req_in and req_out are open but not yet ended,
@@ -297,7 +300,7 @@ var _ = Describe("MMUCache milestones", func() {
 		acked := false
 		for i := 0; i < 64 && !acked; i++ {
 			comp.Tick()
-			if out := comp.GetPortByName("Control").RetrieveOutgoing(); out != nil {
+			if out, ok := comp.GetPortByName("Control").RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdReset {
 					acked = true

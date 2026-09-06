@@ -153,7 +153,7 @@ var _ = Describe("GMMU", func() {
 			// Tick 3: CycleLeft==0, page walk completes and sends response.
 			gmmuComp.Tick()
 
-			rspI := topPort.RetrieveOutgoing()
+			rspI, _ := topPort.RetrieveOutgoing()
 			Expect(rspI).NotTo(BeNil())
 			rsp := rspI.(vmprotocol.TranslationRsp)
 			Expect(rsp.Page).To(Equal(page))
@@ -178,7 +178,7 @@ var _ = Describe("GMMU", func() {
 			// Tick 3: CycleLeft==0, page is remote, sends request to bottom.
 			gmmuComp.Tick()
 
-			reqI := bottomPort.RetrieveOutgoing()
+			reqI, _ := bottomPort.RetrieveOutgoing()
 			Expect(reqI).NotTo(BeNil())
 			req := reqI.(vmprotocol.TranslationReq)
 			Expect(req.Dst).To(Equal(lowModulePort))
@@ -203,7 +203,7 @@ var _ = Describe("GMMU", func() {
 			// Tick 3: CycleLeft==0, page is remote, sends request to bottom.
 			gmmuComp.Tick()
 
-			reqI := bottomPort.RetrieveOutgoing()
+			reqI, _ := bottomPort.RetrieveOutgoing()
 			Expect(reqI).NotTo(BeNil())
 			sentReqToBottom := reqI.(vmprotocol.TranslationReq)
 
@@ -221,7 +221,7 @@ var _ = Describe("GMMU", func() {
 			// Tick: fetchFromBottom receives response, sends to top.
 			gmmuComp.Tick()
 
-			rspToTopI := topPort.RetrieveOutgoing()
+			rspToTopI, _ := topPort.RetrieveOutgoing()
 			Expect(rspToTopI).NotTo(BeNil())
 			rspToTop := rspToTopI.(vmprotocol.TranslationRsp)
 			Expect(rspToTop.Page).To(Equal(page))

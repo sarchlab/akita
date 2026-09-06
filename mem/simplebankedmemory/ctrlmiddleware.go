@@ -62,8 +62,8 @@ func bankIsQuiescent(b *bankState) bool {
 }
 
 func (m *ctrlMiddleware) handleIncoming() bool {
-	msg := m.ctrlPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := m.ctrlPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -132,7 +132,10 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	state.CurrentCmdSrc = ""
 	state.ControlState = memcontrolprotocol.StateEnabled
 
-	for m.topPort().RetrieveIncoming() != nil {
+	for {
+		if _, ok := m.topPort().RetrieveIncoming(); !ok {
+			break
+		}
 	}
 
 	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdReset,

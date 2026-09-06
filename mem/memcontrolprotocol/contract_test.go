@@ -88,7 +88,7 @@ func (c *fakeComp) Tick() bool {
 	}
 
 	if c.pending == nil {
-		if msg := port.PeekIncoming(); msg != nil {
+		if msg, ok := port.PeekIncoming(); ok {
 			if req, ok := msg.(memcontrolprotocol.Req); ok {
 				port.RetrieveIncoming()
 				made = c.handleReq(port, req) || made

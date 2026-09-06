@@ -2,7 +2,7 @@
 
 Package `queueing` provides generic `Buffer[T]` and `Pipeline[T]` data
 structures for the Akita simulation framework. They are reusable building
-blocks for component state: a bounded FIFO queue and a fixed-latency,
+blocks for component state: a bounded buffer with FIFO and indexed access, and a fixed-latency,
 multi-lane pipeline that a component embeds in its `State` and drives once per
 tick.
 
@@ -10,7 +10,7 @@ tick.
 
 Both types fully encapsulate their state behind methods — their fields are
 unexported, so callers interact through the API only, which keeps the capacity
-and FIFO invariants intact. Construct them with the provided constructors,
+and remaining element order intact. Construct them with the provided constructors,
 which return values so they can be embedded directly in a component's state.
 
 A `Pipeline[T]` drains its completed items into a `Sink[T]`, which is any
@@ -19,7 +19,7 @@ destination that can accept an item:
 ```go
 type Sink[T any] interface {
     CanPush() bool
-    PushTyped(T)
+    Push(T)
 }
 ```
 
@@ -28,13 +28,13 @@ landing spot.
 
 ## Buffer[T]
 
-A bounded FIFO queue with hook support. Create one with `NewBuffer`:
+A bounded buffer with FIFO and indexed access and hook support. Create one with `NewBuffer`:
 
 ```go
 inbox := queueing.NewBuffer[MyRequest]("inbox", 16)
 
 if inbox.CanPush() {
-    inbox.PushTyped(req)
+    inbox.Push(req)
 }
 
 fmt.Println(inbox.Size(), inbox.Capacity())
@@ -45,14 +45,24 @@ fmt.Println(inbox.Size(), inbox.Capacity())
 | Method | Description |
 |--------|-------------|
 | `CanPush() bool` | True if the buffer has room for another element |
-| `PushTyped(e T)` | Add an element to the back (panics if full) |
-| `Peek() T` | Return the front element without removing it (zero value if empty) |
-| `UpdateFront(e T)` | Replace the front element in place (no-op if empty) |
-| `Pop() T` | Remove and return the front element (zero value if empty) |
+| `Push(e T)` | Add an element to the back (panics if full) |
+| `Peek() (T, bool)` | Read the head without removing it |
+| `Pop() (T, bool)` | Remove and return the head |
+| `PeekAt(index int) (T, bool)` | Read an entry by index; the head is index 0 |
+| `PopAt(index int) (T, bool)` | Remove an indexed entry, preserving remaining order |
+| `UpdateFront(e T) bool` | Replace the head; false if empty |
 | `Clear()` | Remove all elements |
 | `Size() int` | Current number of elements |
 | `Capacity() int` | Maximum capacity |
 | `Name() string` | Buffer name (for hooks and monitoring) |
+
+Reads return the zero value and `false` when empty or out of range, including
+negative indices. A stored zero or nil value returns `true`. `PopAt` shifts later
+indices down by one. Invalid removals do not mutate the buffer or fire hooks.
+Head removal is O(1); indexed removal shifts the entries after the removed item.
+
+Buffers and pipelines require serialized access. `CanPush`, `CanAccept`, and
+peek operations do not reserve capacity or entries.
 
 ### Hook Positions
 
@@ -92,8 +102,8 @@ madeProgress := pipe.Tick(&post)
 | Method | Description |
 |--------|-------------|
 | `CanAccept() bool` | True if a lane is free at stage 0 |
-| `Accept(item T)` | Insert an item into the first stage |
-| `AcceptWithDelay(item T, delay int)` | Like `Accept`, but the item dwells `delay` extra cycles at stage 0 |
+| `Accept(item T)` | Insert into the first stage; panic if full |
+| `AcceptWithDelay(item T, delay int)` | Like `Accept` (including panic if full), but the item dwells `delay` extra cycles at stage 0 |
 | `Tick(sink Sink[T]) bool` | Advance one cycle; completed items go to `sink`. Returns true if any item moved |
 | `Stages() []PipelineStage[T]` | Copy of current occupancy, for inspection and testing |
 | `Clear()` | Remove all items |

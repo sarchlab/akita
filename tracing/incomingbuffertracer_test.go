@@ -96,8 +96,8 @@ var _ = Describe("Incoming buffer tracer", func() {
 
 		// Retrieving A ends A's buffer task and exposes B at the head.
 		comp.time = 150
-		Expect(port.RetrieveIncoming()).NotTo(BeNil())
-
+		_, present0 := port.RetrieveIncoming()
+		Expect(present0).To(BeTrue())
 		Expect(tracer.ends).To(HaveLen(1))
 		Expect(tracer.ends[0].ID).To(Equal(startA.ID))
 		Expect(tracer.ends[0].Time).To(Equal(timing.VTimeInPicoSec(150)))
@@ -109,7 +109,8 @@ var _ = Describe("Incoming buffer tracer", func() {
 
 		// Retrieving B ends B's buffer task.
 		comp.time = 160
-		Expect(port.RetrieveIncoming()).NotTo(BeNil())
+		_, present1 := port.RetrieveIncoming()
+		Expect(present1).To(BeTrue())
 		Expect(tracer.ends).To(HaveLen(2))
 		Expect(tracer.ends[1].ID).To(Equal(startB.ID))
 		Expect(tracer.ends[1].Time).To(Equal(timing.VTimeInPicoSec(160)))
@@ -132,8 +133,8 @@ var _ = Describe("Incoming buffer tracer", func() {
 
 		untraced.time = 100
 		p2.Deliver(ibTestMsg{messaging.MsgMeta{ID: 1, Dst: "Untraced.Top"}})
-		Expect(p2.RetrieveIncoming()).NotTo(BeNil())
-
+		_, present2 := p2.RetrieveIncoming()
+		Expect(present2).To(BeTrue())
 		Expect(tracer.starts).To(BeEmpty())
 		Expect(tracer.ends).To(BeEmpty())
 		Expect(tracer.milestones).To(BeEmpty())

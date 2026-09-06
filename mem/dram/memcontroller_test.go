@@ -247,8 +247,8 @@ var _ = Describe("DRAM Integration", func() {
 		var gotWriteDone, gotDataReady bool
 
 		for {
-			msg := srcPort.RetrieveIncoming()
-			if msg == nil {
+			msg, ok := srcPort.RetrieveIncoming()
+			if !ok {
 				break
 			}
 			switch m := msg.(type) {

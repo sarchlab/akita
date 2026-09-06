@@ -157,8 +157,8 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		for i := 0; i < 64 && len(botReads) < n; i++ {
 			comp.Tick()
 			for {
-				out := botPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := botPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if r, ok := out.(memprotocol.ReadReq); ok {
@@ -181,7 +181,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		// ControlRsp yet, state is Draining, still not quiescent.
 		for range 5 {
 			comp.Tick()
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok {
 					Expect(rsp.Command).ToNot(Equal(memcontrolprotocol.CmdDrain),
 						"Drain must not ack before in-flight misses finish")
@@ -204,15 +204,15 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		for i := 0; i < 4096 && !gotDrainRsp; i++ {
 			comp.Tick()
 			for {
-				out := topPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := topPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if _, ok := out.(memprotocol.DataReadyRsp); ok {
 					completed++
 				}
 			}
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
@@ -244,14 +244,16 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		// preserved (aborting it would strand the flusher).
 		for range 16 {
 			comp.Tick()
-			Expect(ctrlPort.RetrieveOutgoing()).To(BeNil())
+			_, present0 := ctrlPort.RetrieveOutgoing()
+			Expect(present0).To(BeFalse())
 		}
 		Expect(comp.State.HasProcessingFlush).To(BeTrue())
 		Expect(cacheState(comp.State.CacheState)).
 			To(Equal(cacheStatePreFlushing))
 		// The Pause is still waiting on the Control port, to be handled once the
 		// flush settles.
-		Expect(ctrlPort.PeekIncoming()).ToNot(BeNil())
+		_, present1 := ctrlPort.PeekIncoming()
+		Expect(present1).To(BeTrue())
 	})
 
 	It("freezes incoming traffic while paused", func() {
@@ -264,9 +266,11 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 
 		// The request is neither consumed nor turned into work, and nothing is
 		// forwarded out Bottom, while paused.
-		Expect(topPort.PeekIncoming()).ToNot(BeNil())
+		_, present2 := topPort.PeekIncoming()
+		Expect(present2).To(BeTrue())
 		Expect(comp.State.Transactions).To(BeEmpty())
-		Expect(botPort.RetrieveOutgoing()).To(BeNil())
+		_, present3 := botPort.RetrieveOutgoing()
+		Expect(present3).To(BeFalse())
 	})
 
 	DescribeTable("Reset wipes in-flight state from any control state",
@@ -287,7 +291,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 			gotRsp := false
 			for i := 0; i < 64 && !gotRsp; i++ {
 				comp.Tick()
-				if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					rsp, gotRsp = out.(memcontrolprotocol.Rsp)
 				}
 			}
@@ -322,8 +326,8 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		for range 16 {
 			comp.Tick()
 			for {
-				out := ctrlPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := ctrlPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if r, ok := out.(memcontrolprotocol.Rsp); ok {
@@ -364,7 +368,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		gotRsp := false
 		for i := 0; i < 64 && !gotRsp; i++ {
 			comp.Tick()
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				rsp, gotRsp = out.(memcontrolprotocol.Rsp)
 			}
 		}
@@ -384,7 +388,8 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		Expect(keepBlock.Tag).To(Equal(addrKeep))
 
 		// Invalidate discards dirty data silently: no write-back is emitted.
-		Expect(botPort.RetrieveOutgoing()).To(BeNil())
+		_, present4 := botPort.RetrieveOutgoing()
+		Expect(present4).To(BeFalse())
 	})
 
 	It("rejects Invalidate while Enabled with ErrMustBePausedOrDrained",
@@ -401,7 +406,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 			gotRsp := false
 			for i := 0; i < 64 && !gotRsp; i++ {
 				comp.Tick()
-				if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					rsp, gotRsp = out.(memcontrolprotocol.Rsp)
 				}
 			}
@@ -440,8 +445,8 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		for i := 0; i < 4096 && !gotFlushRsp; i++ {
 			comp.Tick()
 			for {
-				out := botPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := botPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if w, ok := out.(memprotocol.WriteReq); ok {
@@ -455,7 +460,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 					botPort.Deliver(done)
 				}
 			}
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if r, ok := out.(memcontrolprotocol.Rsp); ok &&
 					r.Command == memcontrolprotocol.CmdFlush {
 					flushRsp = r

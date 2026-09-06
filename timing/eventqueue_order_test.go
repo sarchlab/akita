@@ -34,7 +34,11 @@ func TestEventQueueOrdersByTimeThenSchedule(t *testing.T) {
 
 	var gotIDs []int
 	for q.Len() > 0 {
-		gotIDs = append(gotIDs, q.Pop().(*orderEvent).id)
+		evt, ok := q.Pop()
+		if !ok {
+			t.Fatal("missing scheduled event")
+		}
+		gotIDs = append(gotIDs, evt.(*orderEvent).id)
 	}
 
 	// time order, ties broken by schedule order.

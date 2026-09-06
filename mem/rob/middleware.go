@@ -85,8 +85,8 @@ func (m *middleware) topDown() bool {
 		return false
 	}
 
-	msg := m.topPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := m.topPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -148,8 +148,8 @@ func (m *middleware) topDown() bool {
 // matching transaction. Unmatched responses (e.g. left over after a flush) are
 // dropped.
 func (m *middleware) parseBottom() bool {
-	msg := m.bottomPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := m.bottomPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -386,8 +386,8 @@ func (m *middleware) processControlMsg() bool {
 		return false
 	}
 
-	msg := m.ctrlPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := m.ctrlPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -532,7 +532,10 @@ func makeCtrlRsp(
 }
 
 func drainIncoming(p messaging.Port) {
-	for p.RetrieveIncoming() != nil {
+	for {
+		if _, ok := p.RetrieveIncoming(); !ok {
+			break
+		}
 	}
 }
 

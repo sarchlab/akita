@@ -23,7 +23,7 @@ func (s *mshrStage) Tick() bool {
 		return false
 	}
 
-	transIdx := mshrBuf.Pop()
+	transIdx, _ := mshrBuf.Pop()
 	trans := &next.Transactions[transIdx]
 	next.HasProcessingMSHREntry = true
 	next.ProcessingMSHREntryIdx = transIdx

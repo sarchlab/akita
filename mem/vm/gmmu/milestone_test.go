@@ -280,7 +280,7 @@ var _ = Describe("GMMU milestones", func() {
 		gmmuComp.Tick()
 		gmmuComp.Tick()
 
-		reqI := bottomPort.RetrieveOutgoing()
+		reqI, _ := bottomPort.RetrieveOutgoing()
 		Expect(reqI).ToNot(BeNil())
 		downstream := reqI.(vmprotocol.TranslationReq)
 
@@ -305,7 +305,7 @@ var _ = Describe("GMMU milestones", func() {
 		// Tick: fetchFromBottom forwards upstream and finalizes the walk.
 		gmmuComp.Tick()
 
-		rspToTopI := topPort.RetrieveOutgoing()
+		rspToTopI, _ := topPort.RetrieveOutgoing()
 		Expect(rspToTopI).ToNot(BeNil())
 
 		// (b) The remote-walk in-flight wait is recorded as a translation

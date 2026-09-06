@@ -31,7 +31,7 @@ func (wb *writeBufferStage) processNewTransaction() bool {
 		return false
 	}
 
-	transIdx := wbBuf.Peek()
+	transIdx, _ := wbBuf.Peek()
 	trans := &next.Transactions[transIdx]
 
 	switch trans.Action {
@@ -115,7 +115,7 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 	cache.MSHRRemove(&next.MSHRState,
 		vm.PID(mshrEntry.PID), mshrEntry.Address)
 
-	bankBuf.PushTyped(transIdx)
+	bankBuf.Push(transIdx)
 
 	next.WriteBufferBuf.Pop()
 
@@ -184,7 +184,7 @@ func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
 	}
 
 	trans.Action = bankWriteHit
-	bankBuf.PushTyped(transIdx)
+	bankBuf.Push(transIdx)
 
 	next.PendingEvictionIndices = append(next.PendingEvictionIndices, transIdx)
 	next.WriteBufferBuf.Pop()
@@ -268,8 +268,8 @@ func (wb *writeBufferStage) write() bool {
 }
 
 func (wb *writeBufferStage) processReturnRsp() bool {
-	msg := wb.cache.bottomPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := wb.cache.bottomPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -341,7 +341,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	cache.MSHRRemove(&next.MSHRState,
 		vm.PID(mshrEntry.PID), mshrEntry.Address)
 
-	bankBuf.PushTyped(transIdx)
+	bankBuf.Push(transIdx)
 
 	wb.removeInflightFetch(transIdx)
 	wb.cache.bottomPort().RetrieveIncoming()

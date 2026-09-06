@@ -147,7 +147,7 @@ var _ = Describe("MMU milestones", func() {
 		sent := false
 		for i := 0; i < 64 && !sent; i++ {
 			mw.Tick()
-			if out := topPort.RetrieveOutgoing(); out != nil {
+			if out, ok := topPort.RetrieveOutgoing(); ok {
 				if _, ok := out.(vmprotocol.TranslationRsp); ok {
 					sent = true
 				}

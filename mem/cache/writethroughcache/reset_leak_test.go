@@ -83,7 +83,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	bottomSent := false
 	for i := 0; i < 256 && !bottomSent; i++ {
 		comp.Tick()
-		if out := bottomPort.RetrieveOutgoing(); out != nil {
+		if out, ok := bottomPort.RetrieveOutgoing(); ok {
 			if _, ok := out.(memprotocol.ReadReq); ok {
 				bottomSent = true
 			}
@@ -125,7 +125,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
 		comp.Tick()
-		if msg := ctrlPort.RetrieveOutgoing(); msg != nil {
+		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {
 				acked = true

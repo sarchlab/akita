@@ -54,15 +54,15 @@ func (h *cacheOverDRAM) tick() {
 	h.dram.Tick()
 
 	for {
-		m := h.bottom.RetrieveOutgoing()
-		if m == nil {
+		m, ok := h.bottom.RetrieveOutgoing()
+		if !ok {
 			break
 		}
 		h.dramTop.Deliver(m)
 	}
 	for {
-		m := h.dramTop.RetrieveOutgoing()
-		if m == nil {
+		m, ok := h.dramTop.RetrieveOutgoing()
+		if !ok {
 			break
 		}
 		h.bottom.Deliver(m)
@@ -141,7 +141,7 @@ func (h *cacheOverDRAM) write(t *testing.T, addr uint64, data []byte) {
 
 	for range 4096 {
 		h.tick()
-		if out := h.top.RetrieveOutgoing(); out != nil {
+		if out, ok := h.top.RetrieveOutgoing(); ok {
 			if _, ok := out.(memprotocol.WriteDoneRsp); ok {
 				return
 			}
@@ -164,7 +164,7 @@ func (h *cacheOverDRAM) read(t *testing.T, addr uint64, size uint64) []byte {
 
 	for range 4096 {
 		h.tick()
-		if out := h.top.RetrieveOutgoing(); out != nil {
+		if out, ok := h.top.RetrieveOutgoing(); ok {
 			if rsp, ok := out.(memprotocol.DataReadyRsp); ok {
 				return rsp.Data
 			}
@@ -187,7 +187,7 @@ func (h *cacheOverDRAM) control(t *testing.T, cmd memcontrolprotocol.Command) me
 
 	for range 4096 {
 		h.tick()
-		if out := h.ctrl.RetrieveOutgoing(); out != nil {
+		if out, ok := h.ctrl.RetrieveOutgoing(); ok {
 			if rsp, ok := out.(memcontrolprotocol.Rsp); ok && rsp.Command == cmd {
 				return rsp
 			}
@@ -312,7 +312,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 	gotFetch := false
 	for i := 0; i < 4096 && !gotFetch; i++ {
 		h.cache.Tick()
-		if out := h.bottom.RetrieveOutgoing(); out != nil {
+		if out, ok := h.bottom.RetrieveOutgoing(); ok {
 			fetch, gotFetch = out.(memprotocol.ReadReq)
 		}
 	}
@@ -330,7 +330,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
 		h.cache.Tick()
-		if out := h.ctrl.RetrieveOutgoing(); out != nil {
+		if out, ok := h.ctrl.RetrieveOutgoing(); ok {
 			if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {
 				acked = true

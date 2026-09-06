@@ -359,8 +359,8 @@ func (m *migMW) processAcks() bool {
 	progress := false
 
 	for {
-		msgI := m.ctrlPort().RetrieveIncoming()
-		if msgI == nil {
+		msgI, ok := m.ctrlPort().RetrieveIncoming()
+		if !ok {
 			break
 		}
 
@@ -428,8 +428,8 @@ func (m *migMW) tickCopying() bool {
 // processMoveRsp handles the data mover's completion: it repoints the page to
 // the destination device and moves on to invalidation.
 func (m *migMW) processMoveRsp() bool {
-	msgI := m.moverPort().RetrieveIncoming()
-	if msgI == nil {
+	msgI, ok := m.moverPort().RetrieveIncoming()
+	if !ok {
 		return false
 	}
 

@@ -77,15 +77,15 @@ func newFuzzer(t *testing.T, seed int64) *fuzzer {
 // checks the invariants they carry.
 func (f *fuzzer) collect() {
 	for {
-		out := f.h.top.RetrieveOutgoing()
-		if out == nil {
+		out, ok := f.h.top.RetrieveOutgoing()
+		if !ok {
 			break
 		}
 		f.handleWorkloadRsp(out)
 	}
 	for {
-		out := f.h.ctrl.RetrieveOutgoing()
-		if out == nil {
+		out, ok := f.h.ctrl.RetrieveOutgoing()
+		if !ok {
 			break
 		}
 		f.handleControlRsp(out)

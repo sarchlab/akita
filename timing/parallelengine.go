@@ -177,7 +177,8 @@ func (e *ParallelEngine) earliestTimeInQueueGroup(
 			continue
 		}
 
-		t := q.Peek().Time()
+		evt, _ := q.Peek()
+		t := evt.Time()
 		if t < earliestTime {
 			earliestTime = t
 		}
@@ -255,7 +256,7 @@ func (e *ParallelEngine) runEventsUntilConflict(
 			if e.failure.Load() != nil {
 				break
 			}
-			evt := queue.Peek()
+			evt, _ := queue.Peek()
 			if evt.Time() == now {
 				queue.Pop()
 				e.runEventWithTempWorker(evt)

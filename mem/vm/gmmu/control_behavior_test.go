@@ -125,15 +125,15 @@ var _ = Describe("GMMU control behavior", func() {
 		for i := 0; i < 4096 && !gotDrainRsp; i++ {
 			comp.Tick()
 			for {
-				out := topPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := topPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if _, ok := out.(vmprotocol.TranslationRsp); ok {
 					completed++
 				}
 			}
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
@@ -165,9 +165,11 @@ var _ = Describe("GMMU control behavior", func() {
 
 		// The request is neither consumed nor turned into a walk, and no
 		// translation response is produced, while paused.
-		Expect(topPort.PeekIncoming()).ToNot(BeNil())
+		_, present0 := topPort.PeekIncoming()
+		Expect(present0).To(BeTrue())
 		Expect(comp.State.WalkingTranslations).To(BeEmpty())
-		Expect(topPort.RetrieveOutgoing()).To(BeNil())
+		_, present1 := topPort.RetrieveOutgoing()
+		Expect(present1).To(BeFalse())
 	})
 
 	DescribeTable("Reset wipes in-flight state from any control state",
@@ -191,7 +193,7 @@ var _ = Describe("GMMU control behavior", func() {
 			gotRsp := false
 			for i := 0; i < 64 && !gotRsp; i++ {
 				comp.Tick()
-				if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					rsp, gotRsp = out.(memcontrolprotocol.Rsp)
 				}
 			}
@@ -234,8 +236,8 @@ var _ = Describe("GMMU control behavior", func() {
 		for range 16 {
 			comp.Tick()
 			for {
-				out := ctrlPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := ctrlPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if r, ok := out.(memcontrolprotocol.Rsp); ok {

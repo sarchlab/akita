@@ -65,9 +65,9 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 }
 
 func (m *ctrlMiddleware) handleIncomingCommands() bool {
-	msgI := m.controlPort().PeekIncoming()
+	msgI, ok := m.controlPort().PeekIncoming()
 
-	if msgI == nil {
+	if !ok {
 		return false
 	}
 
@@ -306,11 +306,17 @@ func (m *ctrlMiddleware) handleReset(msg memcontrolprotocol.Req) bool {
 	spec := m.comp.Spec()
 	state.Table = initSets(spec.NumLevels, spec.NumBlocks)
 
-	for m.topPort().PeekIncoming() != nil {
+	for {
+		if _, ok := m.topPort().PeekIncoming(); !ok {
+			break
+		}
 		m.topPort().RetrieveIncoming()
 	}
 
-	for m.bottomPort().PeekIncoming() != nil {
+	for {
+		if _, ok := m.bottomPort().PeekIncoming(); !ok {
+			break
+		}
 		m.bottomPort().RetrieveIncoming()
 	}
 
