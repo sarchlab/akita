@@ -4,7 +4,6 @@ import (
 	"log"
 	"reflect"
 	"sync"
-	"sync/atomic"
 
 	"github.com/sarchlab/akita/v5/hooking"
 )
@@ -12,14 +11,11 @@ import (
 // A SerialEngine is an Engine that always run events one after another.
 type SerialEngine struct {
 	hooking.HookableBase
+	*engineControl
 
 	time           VTimeInPicoSec
 	queue          *unsafeEventQueue
 	secondaryQueue *unsafeEventQueue
-
-	paused    int32 // atomic: 0 = running, 1 = paused
-	pauseMu   sync.Mutex
-	pauseCond *sync.Cond
 
 	singleRunLock sync.Mutex
 
@@ -35,7 +31,7 @@ func NewSerialEngine() *SerialEngine {
 	e.queue = newUnsafeEventQueue()
 	e.secondaryQueue = newUnsafeEventQueue()
 	e.registry = make(map[string]Handler)
-	e.pauseCond = sync.NewCond(&e.pauseMu)
+	e.engineControl = newEngineControl()
 
 	return e
 }
@@ -73,9 +69,10 @@ func (e *SerialEngine) Schedule(evt Event) {
 func (e *SerialEngine) Run() (err error) {
 	e.singleRunLock.Lock()
 	defer e.singleRunLock.Unlock()
-	if e.failure != nil {
-		return e.failure
+	if err := e.engineControl.begin(); err != nil {
+		return err
 	}
+	defer e.engineControl.end(&err)
 	defer e.recoverRun(&err)
 
 	hasHooks := e.NumHooks() > 0
@@ -86,9 +83,8 @@ func (e *SerialEngine) Run() (err error) {
 			return nil
 		}
 
-		// Lightweight pause check: atomic load is ~1ns when not paused.
-		if atomic.LoadInt32(&e.paused) != 0 {
-			e.waitForResume()
+		if e.engineControl.pending.Load() {
+			e.engineControl.boundary()
 		}
 
 		e.dispatchNext(hasHooks)
@@ -104,9 +100,10 @@ func (e *SerialEngine) Run() (err error) {
 func (e *SerialEngine) RunUntil(t VTimeInPicoSec) (err error) {
 	e.singleRunLock.Lock()
 	defer e.singleRunLock.Unlock()
-	if e.failure != nil {
-		return e.failure
+	if err := e.engineControl.begin(); err != nil {
+		return err
 	}
+	defer e.engineControl.end(&err)
 	defer e.recoverRun(&err)
 
 	hasHooks := e.NumHooks() > 0
@@ -120,8 +117,8 @@ func (e *SerialEngine) RunUntil(t VTimeInPicoSec) (err error) {
 			return nil
 		}
 
-		if atomic.LoadInt32(&e.paused) != 0 {
-			e.waitForResume()
+		if e.engineControl.pending.Load() {
+			e.engineControl.boundary()
 		}
 
 		e.dispatchNext(hasHooks)
@@ -180,15 +177,6 @@ func (e *SerialEngine) nextEventTime() VTimeInPicoSec {
 	return secondary
 }
 
-// waitForResume blocks until the engine is unpaused.
-func (e *SerialEngine) waitForResume() {
-	e.pauseMu.Lock()
-	for atomic.LoadInt32(&e.paused) != 0 {
-		e.pauseCond.Wait()
-	}
-	e.pauseMu.Unlock()
-}
-
 func (e *SerialEngine) noMoreEvent() bool {
 	return e.queue.Len() == 0 && e.secondaryQueue.Len() == 0
 }
@@ -213,23 +201,6 @@ func (e *SerialEngine) nextEvent() Event {
 	e.secondaryQueue.Pop()
 
 	return secondaryEvt
-}
-
-// Pause prevents the SerialEngine from triggering more events.
-func (e *SerialEngine) Pause() {
-	e.pauseMu.Lock()
-	defer e.pauseMu.Unlock()
-
-	atomic.StoreInt32(&e.paused, 1)
-}
-
-// Continue allows the SerialEngine to trigger more events.
-func (e *SerialEngine) Continue() {
-	e.pauseMu.Lock()
-	defer e.pauseMu.Unlock()
-
-	atomic.StoreInt32(&e.paused, 0)
-	e.pauseCond.Broadcast()
 }
 
 // CurrentTime returns the current time at which the engine is at.

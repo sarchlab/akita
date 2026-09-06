@@ -25,8 +25,8 @@ if err := engine.Run(); err != nil {
 Serial recovery is installed once around the run, on its existing goroutine.
 Parallel recovery runs inside the existing workers as well as the dispatcher.
 Parallel failure wakes workers waiting to borrow a queue, and Run joins started
-workers before returning. Queues, event ordering, concurrency, and pause/resume
-contracts are otherwise unchanged. There is no extension-worker API or new
+workers before returning. Event ordering and scheduling concurrency are unchanged. Pause and inspection
+use [execution boundaries](CONTROL.md). There is no extension-worker API or new
 serial scheduling concurrency.
 
 Containment covers ordinary Go panics during engine execution. Construction,

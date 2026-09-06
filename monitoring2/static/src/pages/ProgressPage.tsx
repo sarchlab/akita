@@ -26,7 +26,7 @@ interface ExecutionInfoEntry {
   value: string;
 }
 
-type EngineState = "running" | "paused";
+type EngineState = "running" | "pausing" | "paused" | "resuming";
 
 function isProgressBarState(value: unknown): value is ProgressBarState {
   if (!value || typeof value !== "object") {
@@ -74,12 +74,12 @@ function parseEngineState(value: unknown): EngineState | null {
   }
 
   const response = value as { paused?: unknown; state?: unknown };
-  if (typeof response.paused === "boolean") {
-    return response.paused ? "paused" : "running";
+  if (["running", "pausing", "paused", "resuming"].includes(response.state as string)) {
+    return response.state as EngineState;
   }
 
-  if (response.state === "paused" || response.state === "running") {
-    return response.state;
+  if (typeof response.paused === "boolean") {
+    return response.paused ? "paused" : "running";
   }
 
   return null;
@@ -243,7 +243,7 @@ function formatBytes(bytes: number) {
 
 export default function ProgressPage() {
   const now = useEngineTime(500);
-  const { engineState, setEngineState, refresh: refreshEngineState } = useEngineState();
+  const { engineState, refresh: refreshEngineState } = useEngineState();
   const { progressBars } = useProgressBars();
   const { entries: executionInfo } = useExecutionInfo();
   const { isTracing, refresh: refreshTraceStatus } = useTraceStatus();
@@ -252,27 +252,27 @@ export default function ProgressPage() {
   const [controlBusy, setControlBusy] = useState(false);
   const [traceStatus, setTraceStatus] = useState("");
   const isPaused = engineState === "paused";
+  const isTransitioning = engineState === "pausing" || engineState === "resuming";
+  const stateLabel = engineState[0].toUpperCase() + engineState.slice(1);
   const controlActionLabel = isPaused ? "Continue simulation" : "Pause simulation";
   const ControlActionIcon = isPaused ? Play : Pause;
   const traceActionLabel = isTracing ? "Stop tracing" : "Start tracing";
   const TraceActionIcon = isTracing ? Square : Play;
   const sqliteBytes = storage?.total_size_bytes ?? storage?.file_size_bytes;
-  const executionCardClass = isPaused
+  const executionCardClass = isPaused || isTransitioning
     ? "rounded border-2 border-amber-500 bg-white p-4"
     : "rounded border-2 border-emerald-500 bg-white p-4";
 
   const runEngineControl = async () => {
-    const nextState: EngineState = isPaused ? "running" : "paused";
     setControlBusy(true);
     setControlError("");
 
     try {
       await post(isPaused ? "/api/continue" : "/api/pause");
-      setEngineState(nextState);
-      refreshEngineState();
     } catch (err) {
       setControlError(err instanceof Error ? err.message : `${controlActionLabel} failed`);
     } finally {
+      refreshEngineState();
       setControlBusy(false);
     }
   };
@@ -300,16 +300,17 @@ export default function ProgressPage() {
             </div>
             <div className="ml-auto flex items-center gap-3">
               {controlError ? <div className="max-w-56 text-right text-xs text-destructive">{controlError}</div> : null}
+              <span role="status" className="text-sm font-medium">{stateLabel}</span>
               <Button
                 type="button"
                 size="sm"
                 variant={isPaused ? "default" : "outline"}
                 className="min-w-[7.5rem]"
-                disabled={controlBusy}
+                disabled={controlBusy || isTransitioning}
                 aria-label={controlActionLabel}
                 onClick={runEngineControl}
               >
-                <ControlActionIcon /> {isPaused ? "Continue" : "Pause"}
+                <ControlActionIcon /> {isTransitioning ? `${stateLabel}…` : isPaused ? "Continue" : "Pause"}
               </Button>
             </div>
           </div>
