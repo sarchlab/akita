@@ -134,7 +134,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		Expect(engine.Run()).To(Succeed())
 
-		rsp := agentPort.RetrieveIncoming()
+		rsp, _ := agentPort.RetrieveIncoming()
 		dr := rsp.(memprotocol.DataReadyRsp)
 		Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 		Expect(dr.RspTo).To(Equal(read.ID))
@@ -173,7 +173,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		Expect(engine.Run()).To(Succeed())
 
-		rsp := agentPort.RetrieveIncoming()
+		rsp, _ := agentPort.RetrieveIncoming()
 		Expect(rsp.Meta().RspTo).To(Equal(write.ID))
 
 		// Re-read state after engine run
@@ -209,7 +209,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		Expect(engine.Run()).To(Succeed())
 
-		rsp := agentPort.RetrieveIncoming()
+		rsp, _ := agentPort.RetrieveIncoming()
 		dr := rsp.(memprotocol.DataReadyRsp)
 		Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 		Expect(dr.RspTo).To(Equal(read.ID))
@@ -251,7 +251,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		rsps := map[uint64][]byte{}
 		for i := 0; i < 2; i++ {
-			rsp := agentPort.RetrieveIncoming()
+			rsp, _ := agentPort.RetrieveIncoming()
 			Expect(rsp).NotTo(BeNil())
 			dr := rsp.(memprotocol.DataReadyRsp)
 			rsps[dr.RspTo] = dr.Data
@@ -295,7 +295,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		rsps := map[uint64]messaging.Msg{}
 		for i := 0; i < 2; i++ {
-			rsp := agentPort.RetrieveIncoming()
+			rsp, _ := agentPort.RetrieveIncoming()
 			Expect(rsp).NotTo(BeNil())
 			rsps[rsp.Meta().RspTo] = rsp
 		}
@@ -340,7 +340,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		Expect(engine.Run()).To(Succeed())
 
-		rsp := agentPort.RetrieveIncoming()
+		rsp, _ := agentPort.RetrieveIncoming()
 		dr := rsp.(memprotocol.DataReadyRsp)
 		Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 		Expect(dr.RspTo).To(Equal(read.ID))
@@ -369,8 +369,8 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		// Let the writes settle so the block is resident and dirty.
 		Expect(engine.Run()).To(Succeed())
-		Expect(controlAgentPort.RetrieveIncoming()).To(BeNil())
-
+		_, present0 := controlAgentPort.RetrieveIncoming()
+		Expect(present0).To(BeFalse())
 		// Flush is a conditional verb: pause first so it is legal.
 		pause := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdPause}
 		pause.ID = timing.GetIDGenerator().Generate()
@@ -381,7 +381,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		Expect(engine.Run()).To(Succeed())
 
-		pauseRsp := controlAgentPort.RetrieveIncoming()
+		pauseRsp, _ := controlAgentPort.RetrieveIncoming()
 		Expect(pauseRsp).NotTo(BeNil())
 		Expect(pauseRsp.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdPause))
 		Expect(pauseRsp.(memcontrolprotocol.Rsp).Success).To(BeTrue())
@@ -395,7 +395,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		Expect(engine.Run()).To(Succeed())
 
-		rsp := controlAgentPort.RetrieveIncoming()
+		rsp, _ := controlAgentPort.RetrieveIncoming()
 		Expect(rsp).NotTo(BeNil())
 		Expect(rsp.Meta().RspTo).To(Equal(flush.ID))
 		Expect(rsp.(memcontrolprotocol.Rsp).Success).To(BeTrue())

@@ -693,7 +693,7 @@ func newBufferOnlyComponent(
 	}
 
 	for i := 0; i < filled; i++ {
-		c.Buf.PushTyped(i)
+		c.Buf.Push(i)
 	}
 
 	return c

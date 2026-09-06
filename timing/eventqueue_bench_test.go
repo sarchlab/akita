@@ -16,7 +16,7 @@ func (e *benchEvent) IsSecondary() bool    { return false }
 // benchPushPop fills a queue to depth (with same-time clusters), then repeatedly
 // pops the earliest event and reschedules it into the future, holding the queue
 // at steady-state depth.
-func benchPushPop(b *testing.B, push func(Event), pop func() Event) {
+func benchPushPop(b *testing.B, push func(Event), pop func() (Event, bool)) {
 	b.Helper()
 
 	const depth = 1024
@@ -30,7 +30,8 @@ func benchPushPop(b *testing.B, push func(Event), pop func() Event) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		e := pop().(*benchEvent)
+		event, _ := pop()
+		e := event.(*benchEvent)
 		e.t = e.t + 64
 		push(e)
 	}

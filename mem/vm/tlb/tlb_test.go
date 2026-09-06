@@ -107,7 +107,7 @@ var _ = Describe("TLB", func() {
 			madeProgress := tlbMW.lookup(req)
 
 			Expect(madeProgress).To(BeTrue())
-			rsp := topPort.RetrieveOutgoing()
+			rsp, _ := topPort.RetrieveOutgoing()
 			Expect(rsp).To(BeAssignableToTypeOf(vmprotocol.TranslationRsp{}))
 		})
 	})
@@ -146,7 +146,7 @@ var _ = Describe("TLB", func() {
 			Expect(mshrIsEntryPresent(nextState.MSHREntries, vm.PID(1), uint64(0x100))).
 				To(Equal(true))
 
-			sent := bottomPort.RetrieveOutgoing()
+			sent, _ := bottomPort.RetrieveOutgoing()
 			Expect(sent).To(BeAssignableToTypeOf(vmprotocol.TranslationReq{}))
 			sentMsg := sent.(vmprotocol.TranslationReq)
 			Expect(sentMsg.VAddr).To(Equal(uint64(0x100)))
@@ -253,7 +253,7 @@ var _ = Describe("TLB", func() {
 			Expect(nextState.RespondingMSHRData.Requests).To(HaveLen(0))
 			Expect(nextState.HasRespondingMSHR).To(BeFalse())
 
-			rsp := topPort.RetrieveOutgoing()
+			rsp, _ := topPort.RetrieveOutgoing()
 			Expect(rsp).To(BeAssignableToTypeOf(vmprotocol.TranslationRsp{}))
 		})
 	})
@@ -295,7 +295,7 @@ var _ = Describe("TLB", func() {
 			_, gotPage, found := setLookup(&next.Sets[0], 1, 0x1000)
 			Expect(found && gotPage.Valid).To(BeFalse())
 
-			rspMsg := controlPort.RetrieveOutgoing()
+			rspMsg, _ := controlPort.RetrieveOutgoing()
 			Expect(rspMsg).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
 			rsp := rspMsg.(memcontrolprotocol.Rsp)
 			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
@@ -315,7 +315,7 @@ var _ = Describe("TLB", func() {
 			controlPort.Deliver(invReq)
 			Expect(tlbCtrlMW.handleIncomingCommands()).To(BeTrue())
 
-			rspMsg := controlPort.RetrieveOutgoing()
+			rspMsg, _ := controlPort.RetrieveOutgoing()
 			rsp := rspMsg.(memcontrolprotocol.Rsp)
 			Expect(rsp.Success).To(BeFalse())
 			Expect(rsp.Error).To(Equal(memcontrolprotocol.ErrMustBePausedOrDrained))
@@ -345,7 +345,9 @@ var _ = Describe("TLB", func() {
 			Expect(next.Sets[0].Blocks[0].Page.Valid).To(BeFalse())
 			Expect(next.Sets[0].Blocks[1].Page.Valid).To(BeTrue())
 
-			rsp := controlPort.RetrieveOutgoing().(memcontrolprotocol.Rsp)
+			rspValue, _ := controlPort.RetrieveOutgoing()
+
+			rsp := rspValue.(memcontrolprotocol.Rsp)
 			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
 			Expect(rsp.Success).To(BeTrue())
 		})
@@ -369,7 +371,9 @@ var _ = Describe("TLB", func() {
 			_, gotPage, found := setLookup(&next.Sets[0], 1, 0x1000)
 			Expect(found && gotPage.Valid).To(BeFalse())
 
-			rsp := controlPort.RetrieveOutgoing().(memcontrolprotocol.Rsp)
+			rspValue, _ := controlPort.RetrieveOutgoing()
+
+			rsp := rspValue.(memcontrolprotocol.Rsp)
 			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
 		})
@@ -386,7 +390,7 @@ var _ = Describe("TLB", func() {
 
 			Expect(madeProgress).To(BeTrue())
 
-			rsp := controlPort.RetrieveOutgoing()
+			rsp, _ := controlPort.RetrieveOutgoing()
 			Expect(rsp).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
 		})
 	})
@@ -431,7 +435,9 @@ var _ = Describe("TLB", func() {
 
 			// Drain the Pause ack so the next ack has room in the
 			// single-slot control port outgoing buffer.
-			Expect(controlPort.RetrieveOutgoing()).
+			value0, present0 := controlPort.RetrieveOutgoing()
+			Expect(present0).To(BeTrue())
+			Expect(value0).
 				To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
 
 			enable := memcontrolprotocol.Req{

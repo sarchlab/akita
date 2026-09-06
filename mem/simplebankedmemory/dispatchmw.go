@@ -34,8 +34,8 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 	next := &m.comp.State
 
 	for {
-		msgI := m.topPort().PeekIncoming()
-		if msgI == nil {
+		msgI, ok := m.topPort().PeekIncoming()
+		if !ok {
 			break
 		}
 

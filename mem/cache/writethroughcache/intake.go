@@ -22,8 +22,8 @@ func (s *intake) Tick() bool {
 		return false
 	}
 
-	msg := s.cache.topPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := s.cache.topPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -56,7 +56,7 @@ func (s *intake) Tick() bool {
 
 	transIdx := s.createTransaction(msg)
 
-	dirBuf.PushTyped(transIdx)
+	dirBuf.Push(transIdx)
 
 	s.cache.topPort().RetrieveIncoming()
 

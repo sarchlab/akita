@@ -41,8 +41,8 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 		pcs := &state.PortComplexes[i]
 
 		for j := 0; j < pcs.NumInputChannel; j++ {
-			itemI := port.PeekIncoming()
-			if itemI == nil {
+			itemI, ok := port.PeekIncoming()
+			if !ok {
 				break
 			}
 
@@ -58,7 +58,7 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 				if !pcs.RouteBuffer.CanPush() {
 					break
 				}
-				pcs.RouteBuffer.PushTyped(item)
+				pcs.RouteBuffer.Push(item)
 			} else {
 				if !pcs.Pipeline.CanAccept() {
 					break

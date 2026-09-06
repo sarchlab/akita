@@ -152,8 +152,8 @@ var _ = Describe("Writethrough cache control behavior", func() {
 	captureBottomReads := func() []memprotocol.ReadReq {
 		reads := []memprotocol.ReadReq{}
 		for {
-			out := bottomPort.RetrieveOutgoing()
-			if out == nil {
+			out, ok := bottomPort.RetrieveOutgoing()
+			if !ok {
 				break
 			}
 			if r, ok := out.(memprotocol.ReadReq); ok {
@@ -199,9 +199,11 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		for range 16 {
 			comp.Tick()
 			// No completion can occur, so no DataReadyRsp should leave Top.
-			Expect(topPort.RetrieveOutgoing()).To(BeNil())
+			_, present0 := topPort.RetrieveOutgoing()
+			Expect(present0).To(BeFalse())
 			// And no Drain ack yet on Control.
-			Expect(ctrlPort.RetrieveOutgoing()).To(BeNil())
+			_, present1 := ctrlPort.RetrieveOutgoing()
+			Expect(present1).To(BeFalse())
 		}
 		Expect(comp.State.IsDraining).To(BeTrue())
 		Expect(inflightCount()).To(BeNumerically(">", 0))
@@ -219,8 +221,8 @@ var _ = Describe("Writethrough cache control behavior", func() {
 			comp.Tick()
 
 			for {
-				out := topPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := topPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if _, ok := out.(memprotocol.DataReadyRsp); ok {
@@ -228,7 +230,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 				}
 			}
 
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
@@ -282,8 +284,8 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		for i := 0; i < 4096 && !drainAcked; i++ {
 			comp.Tick()
 			for {
-				out := ctrlPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := ctrlPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				r, ok := out.(memcontrolprotocol.Rsp)
@@ -321,7 +323,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		pausedAck := false
 		for i := 0; i < 64 && !pausedAck; i++ {
 			comp.Tick()
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok && rsp.RspTo == pause.ID {
 					Expect(rsp.Success).To(BeTrue())
 					pausedAck = true
@@ -346,7 +348,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		found := false
 		for i := 0; i < 4096 && !found; i++ {
 			comp.Tick()
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
@@ -375,9 +377,11 @@ var _ = Describe("Writethrough cache control behavior", func() {
 
 		// The request is neither consumed nor turned into work, and nothing
 		// is forwarded out the Bottom port, while paused.
-		Expect(topPort.PeekIncoming()).ToNot(BeNil())
+		_, present2 := topPort.PeekIncoming()
+		Expect(present2).To(BeTrue())
 		Expect(inflightCount()).To(Equal(0))
-		Expect(bottomPort.RetrieveOutgoing()).To(BeNil())
+		_, present3 := bottomPort.RetrieveOutgoing()
+		Expect(present3).To(BeFalse())
 	})
 
 	DescribeTable("Reset wipes in-flight state from any control state",
@@ -398,7 +402,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				comp.Tick()
-				if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					rsp, found = out.(memcontrolprotocol.Rsp)
 				}
 			}
@@ -440,8 +444,8 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		for range 16 {
 			comp.Tick()
 			for {
-				out := ctrlPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := ctrlPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if r, ok := out.(memcontrolprotocol.Rsp); ok {
@@ -467,7 +471,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 
 		for range 64 {
 			comp.Tick()
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.RspTo == req.ID {
 					return rsp, true

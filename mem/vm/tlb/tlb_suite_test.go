@@ -103,7 +103,7 @@ func newIdealEndpoint(name string) *idealEndpoint {
 func (ep *idealEndpoint) Name() string { return ep.name }
 
 func (ep *idealEndpoint) NotifyRecv(port messaging.Port) {
-	for msg := port.RetrieveIncoming(); msg != nil; msg = port.RetrieveIncoming() {
+	for msg, ok := port.RetrieveIncoming(); ok; msg, ok = port.RetrieveIncoming() {
 		ep.lastDelivered = msg
 		if ep.onDeliver != nil {
 			ep.onDeliver(msg)

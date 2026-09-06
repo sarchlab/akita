@@ -39,8 +39,8 @@ func (m *agentMiddleware) Tick() bool {
 }
 
 func (m *agentMiddleware) processMsgRsp() bool {
-	msgI := m.memPort().RetrieveIncoming()
-	if msgI == nil {
+	msgI, ok := m.memPort().RetrieveIncoming()
+	if !ok {
 		return false
 	}
 

@@ -168,8 +168,8 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 	}
 
 	srcP := m.srcPort()
-	rspI := srcP.PeekIncoming()
-	if rspI == nil {
+	rspI, ok := srcP.PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -270,8 +270,8 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 	}
 
 	dstP := m.dstPort()
-	rspI := dstP.PeekIncoming()
-	if rspI == nil {
+	rspI, ok := dstP.PeekIncoming()
+	if !ok {
 		return false
 	}
 

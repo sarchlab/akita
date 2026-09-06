@@ -96,15 +96,15 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		for i := 0; i < 4096 && !drainFound; i++ {
 			comp.Tick()
 			for {
-				out := topPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := topPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if _, ok := out.(memprotocol.DataReadyRsp); ok {
 					completed++
 				}
 			}
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
@@ -134,9 +134,11 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 
 		// The request is neither consumed nor turned into work, and no
 		// response is produced, while paused.
-		Expect(topPort.PeekIncoming()).ToNot(BeNil())
+		_, present0 := topPort.PeekIncoming()
+		Expect(present0).To(BeTrue())
 		Expect(allBanksQuiescent()).To(BeTrue())
-		Expect(topPort.RetrieveOutgoing()).To(BeNil())
+		_, present1 := topPort.RetrieveOutgoing()
+		Expect(present1).To(BeFalse())
 	})
 
 	DescribeTable("Reset wipes in-flight state from any control state",
@@ -155,7 +157,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				comp.Tick()
-				if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					if r, ok := out.(memcontrolprotocol.Rsp); ok {
 						rsp = r
 						found = true
@@ -176,8 +178,8 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 			for range 8 {
 				comp.Tick()
 				for {
-					out := topPort.RetrieveOutgoing()
-					if out == nil {
+					out, ok := topPort.RetrieveOutgoing()
+					if !ok {
 						break
 					}
 					if _, ok := out.(memprotocol.DataReadyRsp); ok {
@@ -210,8 +212,8 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		for range 16 {
 			comp.Tick()
 			for {
-				out := ctrlPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := ctrlPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if r, ok := out.(memcontrolprotocol.Rsp); ok {

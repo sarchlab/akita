@@ -103,8 +103,8 @@ func (m *agentMW) send() bool {
 
 func (m *agentMW) recv() bool {
 	port := out(m.comp)
-	msgI := port.PeekIncoming()
-	if msgI == nil {
+	msgI, ok := port.PeekIncoming()
+	if !ok {
 		return false
 	}
 

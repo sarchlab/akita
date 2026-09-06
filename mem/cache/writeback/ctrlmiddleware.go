@@ -90,8 +90,8 @@ func cacheIsQuiescent(state *State) bool {
 }
 
 func (m *ctrlMiddleware) handleIncoming() bool {
-	msg := m.ctrlPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := m.ctrlPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 

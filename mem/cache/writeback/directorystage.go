@@ -40,7 +40,7 @@ func (ds *directoryStage) processTransaction() bool {
 			break
 		}
 
-		idx := next.DirPostPipelineBuf.Peek()
+		idx, _ := next.DirPostPipelineBuf.Peek()
 		trans := &next.Transactions[idx]
 
 		// The directory pipeline traversal is done; the transaction is now being
@@ -84,7 +84,7 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 			break
 		}
 
-		transIdx := next.DirStageBuf.Peek()
+		transIdx, _ := next.DirStageBuf.Peek()
 
 		if spec.DirLatency == 0 {
 			// Bypass pipeline: put directly in post-pipeline buffer
@@ -92,7 +92,7 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 				break
 			}
 			ds.startDirPipeline(transIdx)
-			next.DirPostPipelineBuf.PushTyped(transIdx)
+			next.DirPostPipelineBuf.Push(transIdx)
 			next.DirStageBuf.Pop()
 			madeProgress = true
 		} else {
@@ -384,7 +384,7 @@ func (ds *directoryStage) readFromBank(
 	trans.Action = bankReadHit
 
 	ds.popDirPostBuf()
-	bankBuf.PushTyped(transIdx)
+	bankBuf.Push(transIdx)
 
 	return true
 }
@@ -419,7 +419,7 @@ func (ds *directoryStage) writeToBank(
 	trans.Action = bankWriteHit
 
 	ds.popDirPostBuf()
-	bankBuf.PushTyped(transIdx)
+	bankBuf.Push(transIdx)
 
 	return true
 }
@@ -458,7 +458,7 @@ func (ds *directoryStage) evict(
 	ds.updateVictimBlockMetaData(victimSetID, victimWayID, cacheLineID, pid)
 
 	ds.popDirPostBuf()
-	bankBuf.PushTyped(transIdx)
+	bankBuf.Push(transIdx)
 
 	if next.EvictingList == nil {
 		next.EvictingList = make(map[uint64]bool)
@@ -584,7 +584,7 @@ func (ds *directoryStage) fetch(
 	trans.Action = writeBufferFetch
 	trans.FetchPID = pid
 	trans.FetchAddress = cacheLineID
-	bankBuf.PushTyped(transIdx)
+	bankBuf.Push(transIdx)
 
 	ds.addMSHREntryBlock(next, mshrIdx, setID, wayID, transIdx)
 
@@ -672,7 +672,7 @@ func (ds *directoryStage) popDirPostBuf() {
 		return
 	}
 
-	idx := next.DirPostPipelineBuf.Peek()
+	idx, _ := next.DirPostPipelineBuf.Peek()
 	trans := &next.Transactions[idx]
 	if trans.DirPipelinePID != 0 {
 		tracing.EndTask(ds.cache.comp, tracing.TaskEnd{ID: trans.DirPipelinePID})

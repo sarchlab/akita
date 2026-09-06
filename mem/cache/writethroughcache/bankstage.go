@@ -54,7 +54,7 @@ func (s *bankStage) extractFromBuf() bool {
 		return false
 	}
 
-	transIdx := bankBuf.Pop()
+	transIdx, _ := bankBuf.Pop()
 	trans := &next.Transactions[transIdx]
 
 	// Open the bank subtask: the transaction is entering the bank (data-array)
@@ -83,7 +83,7 @@ func (s *bankStage) finalizeTrans() bool {
 		return false
 	}
 
-	transIdx := bankPostBuf.Peek()
+	transIdx, _ := bankPostBuf.Peek()
 	trans := &next.Transactions[transIdx]
 
 	switch trans.BankAction {

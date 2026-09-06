@@ -68,11 +68,11 @@ var _ = Describe("End Point", func() {
 			TrafficBytes: 33,
 		}
 
-		networkPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
+		networkPort.EXPECT().PeekIncoming().Return(nil, false).AnyTimes()
 
-		devicePort.EXPECT().PeekOutgoing().Return(msg)
-		devicePort.EXPECT().RetrieveOutgoing().Return(msg)
-		devicePort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
+		devicePort.EXPECT().PeekOutgoing().Return(msg, true)
+		devicePort.EXPECT().RetrieveOutgoing().Return(msg, true)
+		devicePort.EXPECT().PeekOutgoing().Return(nil, false).AnyTimes()
 
 		madeProgress := endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
@@ -127,13 +127,13 @@ var _ = Describe("End Point", func() {
 		flit1.NumFlitInMsg = 2
 		flit1.Msg = msg
 
-		networkPort.EXPECT().PeekIncoming().Return(flit0)
-		networkPort.EXPECT().PeekIncoming().Return(flit1)
-		networkPort.EXPECT().PeekIncoming().Return(nil).Times(3)
+		networkPort.EXPECT().PeekIncoming().Return(flit0, true)
+		networkPort.EXPECT().PeekIncoming().Return(flit1, true)
+		networkPort.EXPECT().PeekIncoming().Return(nil, false).Times(3)
 		networkPort.EXPECT().RetrieveIncoming().Times(2)
 		devicePort.EXPECT().CanDeliver().Return(true)
 		devicePort.EXPECT().Deliver(packetization.AssembledMsg{MsgMeta: msg})
-		devicePort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
+		devicePort.EXPECT().PeekOutgoing().Return(nil, false).AnyTimes()
 
 		madeProgress := endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())

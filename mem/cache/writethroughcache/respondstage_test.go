@@ -93,7 +93,7 @@ var _ = Describe("Respond Stage", func() {
 			Expect(madeProgress).To(BeTrue())
 			Expect(next.Transactions[0].Removed).To(BeTrue())
 
-			out := topPort.RetrieveOutgoing()
+			out, _ := topPort.RetrieveOutgoing()
 			dr := out.(memprotocol.DataReadyRsp)
 			Expect(dr.RspTo).To(Equal(readMeta.ID))
 			Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
@@ -143,7 +143,7 @@ var _ = Describe("Respond Stage", func() {
 			Expect(madeProgress).To(BeTrue())
 			Expect(next.Transactions[0].Removed).To(BeTrue())
 
-			out := topPort.RetrieveOutgoing()
+			out, _ := topPort.RetrieveOutgoing()
 			Expect(out.Meta().RspTo).To(Equal(writeMeta.ID))
 		})
 	})

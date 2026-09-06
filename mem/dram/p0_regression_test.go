@@ -82,8 +82,8 @@ func (h *p0Harness) collect() (
 	writes []memprotocol.WriteDoneRsp,
 ) {
 	for {
-		msg := h.src.RetrieveIncoming()
-		if msg == nil {
+		msg, ok := h.src.RetrieveIncoming()
+		if !ok {
 			break
 		}
 		switch m := msg.(type) {

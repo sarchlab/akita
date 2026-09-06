@@ -163,7 +163,7 @@ var _ = Describe("Address Translator control behavior", func() {
 		// must enter Draining, and the in-flight entries must stay.
 		for range 8 {
 			t.Tick()
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					Fail("Drain acked while bottom requests still in flight")
@@ -184,15 +184,15 @@ var _ = Describe("Address Translator control behavior", func() {
 		for i := 0; i < 64 && !drainFound; i++ {
 			t.Tick()
 			for {
-				out := topPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := topPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if _, ok := out.(memprotocol.DataReadyRsp); ok {
 					topResponses++
 				}
 			}
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
@@ -222,10 +222,13 @@ var _ = Describe("Address Translator control behavior", func() {
 
 		// The request is neither consumed nor turned into work, and nothing is
 		// forwarded out the Bottom port, while paused.
-		Expect(topPort.PeekIncoming()).ToNot(BeNil())
+		_, present0 := topPort.PeekIncoming()
+		Expect(present0).To(BeTrue())
 		Expect(t.State.Transactions).To(BeEmpty())
-		Expect(bottomPort.RetrieveOutgoing()).To(BeNil())
-		Expect(translationPort.RetrieveOutgoing()).To(BeNil())
+		_, present1 := bottomPort.RetrieveOutgoing()
+		Expect(present1).To(BeFalse())
+		_, present2 := translationPort.RetrieveOutgoing()
+		Expect(present2).To(BeFalse())
 	})
 
 	DescribeTable("Reset wipes in-flight state from any control state",
@@ -244,7 +247,7 @@ var _ = Describe("Address Translator control behavior", func() {
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				t.Tick()
-				if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					rsp, found = out.(memcontrolprotocol.Rsp)
 				}
 			}
@@ -281,8 +284,8 @@ var _ = Describe("Address Translator control behavior", func() {
 		for range 16 {
 			t.Tick()
 			for {
-				out := ctrlPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := ctrlPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if r, ok := out.(memcontrolprotocol.Rsp); ok {

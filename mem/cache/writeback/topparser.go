@@ -17,8 +17,8 @@ func (p *topParser) Tick() bool {
 		return false
 	}
 
-	msg := p.cache.topPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := p.cache.topPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -47,7 +47,7 @@ func (p *topParser) Tick() bool {
 	}
 
 	idx := next.allocTransaction(trans)
-	next.DirStageBuf.PushTyped(idx)
+	next.DirStageBuf.Push(idx)
 
 	// Admission milestone on the incoming-buffer task: the message left the Top
 	// buffer because the directory stage buffer had room. The buffer task is

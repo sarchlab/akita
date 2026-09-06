@@ -152,7 +152,7 @@ func (b Builder) buildInitialState(
 	dirToBank := make([]queueing.Buffer[int], numBanks)
 	wbToBank := make([]queueing.Buffer[int], numBanks)
 	bankPipes := make([]queueing.Pipeline[int], numBanks)
-	bankPostBufs := make([]postPipelineBuf, numBanks)
+	bankPostBufs := make([]queueing.Buffer[int], numBanks)
 	for i := 0; i < numBanks; i++ {
 		dirToBank[i] = queueing.NewBuffer[int](
 			fmt.Sprintf("%s.DirToBankBuf%d", name, i), spec.NumReqPerCycle)
@@ -160,7 +160,8 @@ func (b Builder) buildInitialState(
 			fmt.Sprintf("%s.WriteBufferToBankBuf%d", name, i),
 			spec.NumReqPerCycle)
 		bankPipes[i] = queueing.NewPipeline[int](laneWidth, spec.BankLatency)
-		bankPostBufs[i] = newPostPipelineBuf(laneWidth)
+		bankPostBufs[i] = queueing.NewBuffer[int](
+			fmt.Sprintf("%s.BankPostPipelineBuf%d", name, i), laneWidth)
 	}
 
 	s := State{

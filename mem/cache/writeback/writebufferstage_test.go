@@ -36,8 +36,8 @@ var _ = Describe("WriteBufferStage", func() {
 			BankPipelines: []queueing.Pipeline[int]{
 				queueing.NewPipeline[int](4, 10),
 			},
-			BankPostPipelineBufs: []postPipelineBuf{
-				newPostPipelineBuf(4),
+			BankPostPipelineBufs: []queueing.Buffer[int]{
+				queueing.NewBuffer[int]("BankPostPipelineBuf", 4),
 			},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
@@ -102,7 +102,7 @@ var _ = Describe("WriteBufferStage", func() {
 			next := &m.comp.State
 			next.Transactions = []transactionState{trans}
 			next.WriteBufferBuf.Clear()
-			next.WriteBufferBuf.PushTyped(0)
+			next.WriteBufferBuf.Push(0)
 
 			ret := wb.Tick()
 
@@ -110,7 +110,7 @@ var _ = Describe("WriteBufferStage", func() {
 			next = &m.comp.State
 			Expect(next.InflightFetchIndices).To(HaveLen(1))
 
-			out := bottomPort.RetrieveOutgoing()
+			out, _ := bottomPort.RetrieveOutgoing()
 			Expect(out).NotTo(BeNil())
 		})
 
@@ -130,12 +130,13 @@ var _ = Describe("WriteBufferStage", func() {
 			}
 			next.Transactions = []transactionState{trans}
 			next.WriteBufferBuf.Clear()
-			next.WriteBufferBuf.PushTyped(0)
+			next.WriteBufferBuf.Push(0)
 
 			ret := wb.Tick()
 
 			Expect(ret).To(BeFalse())
-			Expect(bottomPort.PeekOutgoing()).To(BeNil())
+			_, present0 := bottomPort.PeekOutgoing()
+			Expect(present0).To(BeFalse())
 		})
 	})
 
@@ -164,7 +165,7 @@ var _ = Describe("WriteBufferStage", func() {
 			Expect(next.PendingEvictionIndices).To(HaveLen(0))
 			Expect(next.InflightEvictionIndices).To(HaveLen(1))
 
-			out := bottomPort.RetrieveOutgoing()
+			out, _ := bottomPort.RetrieveOutgoing()
 			Expect(out).NotTo(BeNil())
 		})
 
@@ -177,7 +178,8 @@ var _ = Describe("WriteBufferStage", func() {
 			ret := wb.Tick()
 
 			Expect(ret).To(BeFalse())
-			Expect(bottomPort.PeekOutgoing()).To(BeNil())
+			_, present1 := bottomPort.PeekOutgoing()
+			Expect(present1).To(BeFalse())
 		})
 	})
 
@@ -213,7 +215,8 @@ var _ = Describe("WriteBufferStage", func() {
 			Expect(ret).To(BeTrue())
 			next = &m.comp.State
 			Expect(next.InflightEvictionIndices).To(HaveLen(0))
-			Expect(bottomPort.PeekIncoming()).To(BeNil())
+			_, present2 := bottomPort.PeekIncoming()
+			Expect(present2).To(BeFalse())
 		})
 	})
 })

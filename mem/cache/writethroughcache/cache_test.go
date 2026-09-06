@@ -31,8 +31,8 @@ var _ = Describe("Cache", func() {
 	drainResponses := func() []messaging.Msg {
 		msgs := []messaging.Msg{}
 		for {
-			msg := cuPort.RetrieveIncoming()
-			if msg == nil {
+			msg, ok := cuPort.RetrieveIncoming()
+			if !ok {
 				break
 			}
 			msgs = append(msgs, msg)

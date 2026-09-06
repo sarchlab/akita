@@ -168,7 +168,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 
 			Expect(engine.Run()).To(Succeed())
 
-			rsp := agentPort.RetrieveIncoming()
+			rsp, _ := agentPort.RetrieveIncoming()
 			dr := rsp.(memprotocol.DataReadyRsp)
 			Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 			Expect(dr.RspTo).To(Equal(read.ID))
@@ -228,7 +228,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 
 			// Drive the read miss all the way through the downstream fetch
 			// response: the agent must have received the data.
-			rsp := agentPort.RetrieveIncoming()
+			rsp, _ := agentPort.RetrieveIncoming()
 			dr := rsp.(memprotocol.DataReadyRsp)
 			Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 			Expect(dr.RspTo).To(Equal(read.ID))

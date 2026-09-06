@@ -61,8 +61,8 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		// Peek the head before the pipeline-slot gate so the admission milestone
 		// can be attributed to the head message's buffer task on the tick the
 		// slot frees.
-		headI := m.topPort().PeekIncoming()
-		if headI == nil {
+		headI, ok := m.topPort().PeekIncoming()
+		if !ok {
 			break
 		}
 
@@ -80,7 +80,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 			What:   m.comp.Name() + ".pipeline",
 		})
 
-		msgI := m.topPort().RetrieveIncoming()
+		msgI, _ := m.topPort().RetrieveIncoming()
 		msg := msgI.(vmprotocol.TranslationReq)
 
 		// Admit the request: open req_in at retrieve, then open the pipeline
@@ -118,7 +118,7 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 			break
 		}
 
-		item := next.BufferItems.Peek()
+		item, _ := next.BufferItems.Peek()
 		msg := item.Msg
 
 		// The pipeline traversal is done; the request is now being looked up.
@@ -185,9 +185,11 @@ func (m *tlbMiddleware) handleDrain() bool {
 	// the top. parseBottom stages that response in RespondingMSHRData (and
 	// empties MSHREntries) before respondMSHREntry can drain it, so pausing
 	// on mshrIsEmpty alone would strand the final translation response.
-	if mshrIsEmpty(next.MSHREntries) && !next.HasRespondingMSHR &&
-		m.bottomPort().PeekIncoming() == nil {
-		next.TLBState = tlbStatePause
+	if mshrIsEmpty(next.MSHREntries) && !next.HasRespondingMSHR {
+		_, hasBottom := m.bottomPort().PeekIncoming()
+		if !hasBottom {
+			next.TLBState = tlbStatePause
+		}
 	}
 
 	return madeProgress
@@ -399,8 +401,8 @@ func (m *tlbMiddleware) parseBottom() bool {
 	if next.HasRespondingMSHR {
 		return false
 	}
-	itemI := m.bottomPort().PeekIncoming()
-	if itemI == nil {
+	itemI, ok := m.bottomPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 

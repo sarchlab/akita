@@ -160,7 +160,7 @@ var _ = Describe("Address Translator", func() {
 			updatedState := &t.State
 			Expect(updatedState.Transactions).To(HaveLen(1))
 
-			sent := translationPort.RetrieveOutgoing()
+			sent, _ := translationPort.RetrieveOutgoing()
 			Expect(sent).To(BeAssignableToTypeOf(vmprotocol.TranslationReq{}))
 			transReq := sent.(vmprotocol.TranslationReq)
 			Expect(updatedState.Transactions[0].TranslationReqID).
@@ -289,7 +289,7 @@ var _ = Describe("Address Translator", func() {
 
 			Expect(madeProgress).To(BeTrue())
 
-			sent := bottomPort.RetrieveOutgoing()
+			sent, _ := bottomPort.RetrieveOutgoing()
 			read := sent.(memprotocol.ReadReq)
 			Expect(read.PID).To(Equal(vm.PID(0)))
 			Expect(read.Address).To(Equal(uint64(0x20040)))
@@ -348,7 +348,7 @@ var _ = Describe("Address Translator", func() {
 
 			Expect(madeProgress).To(BeTrue())
 
-			sent := bottomPort.RetrieveOutgoing()
+			sent, _ := bottomPort.RetrieveOutgoing()
 			writeMsg := sent.(memprotocol.WriteReq)
 			Expect(writeMsg.PID).To(Equal(vm.PID(0)))
 			Expect(writeMsg.Address).To(Equal(uint64(0x20040)))
@@ -444,7 +444,7 @@ var _ = Describe("Address Translator", func() {
 
 			Expect(madeProgress).To(BeTrue())
 
-			sent := topPort.RetrieveOutgoing()
+			sent, _ := topPort.RetrieveOutgoing()
 			dr := sent.(memprotocol.DataReadyRsp)
 			Expect(dr.RspTo).To(Equal(readFromTop.ID))
 			Expect(dr.Data).To(Equal(dataReady.Data))
@@ -465,7 +465,7 @@ var _ = Describe("Address Translator", func() {
 
 			Expect(madeProgress).To(BeTrue())
 
-			sent := topPort.RetrieveOutgoing()
+			sent, _ := topPort.RetrieveOutgoing()
 			doneMsg := sent.(memprotocol.WriteDoneRsp)
 			Expect(doneMsg.RspTo).To(Equal(writeFromTop.ID))
 
@@ -580,7 +580,7 @@ var _ = Describe("Address Translator", func() {
 			madeProgress := t.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			rspMsg := ctrlPort.RetrieveOutgoing()
+			rspMsg, _ := ctrlPort.RetrieveOutgoing()
 			Expect(rspMsg).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
 			rsp := rspMsg.(memcontrolprotocol.Rsp)
 			Expect(rsp.Success).To(BeFalse())
@@ -593,7 +593,7 @@ var _ = Describe("Address Translator", func() {
 			madeProgress := t.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			rspMsg := ctrlPort.RetrieveOutgoing()
+			rspMsg, _ := ctrlPort.RetrieveOutgoing()
 			Expect(rspMsg).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
 			rsp := rspMsg.(memcontrolprotocol.Rsp)
 			Expect(rsp.Success).To(BeTrue())

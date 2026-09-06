@@ -39,7 +39,7 @@ func (d *directory) acceptIntoPipeline() (madeProgress bool) {
 			break
 		}
 
-		transIdx := dirBuf.Pop()
+		transIdx, _ := dirBuf.Pop()
 		trans := &next.Transactions[transIdx]
 		pid := timing.GetIDGenerator().Generate()
 		trans.DirPipelineTaskID = pid
@@ -73,7 +73,7 @@ func (d *directory) processPostPipeline() (madeProgress bool) {
 			break
 		}
 
-		transIdx := dirPostBuf.Peek()
+		transIdx, _ := dirPostBuf.Peek()
 		trans := &next.Transactions[transIdx]
 
 		tracing.AddMilestone(d.cache.comp, tracing.Milestone{
@@ -202,7 +202,7 @@ func (d *directory) processReadHit(
 	nextBlock.ReadCount++
 	cache.DirectoryVisit(&next.DirectoryState, setID, wayID)
 
-	bankBuf.PushTyped(transIdx)
+	bankBuf.Push(transIdx)
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()

@@ -118,9 +118,9 @@ var _ = Describe("Switch", func() {
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
-		port1.EXPECT().PeekIncoming().Return(flit)
+		port1.EXPECT().PeekIncoming().Return(flit, true)
 		port1.EXPECT().RetrieveIncoming()
-		port2.EXPECT().PeekIncoming().Return(nil)
+		port2.EXPECT().PeekIncoming().Return(nil, false)
 
 		madeProgress := rpMW.startProcessing()
 
@@ -147,8 +147,8 @@ var _ = Describe("Switch", func() {
 		next := &sw.State
 		next.PortComplexes[0].Pipeline.Accept(routedFlit{TaskID: 1})
 
-		port1.EXPECT().PeekIncoming().Return(flit)
-		port2.EXPECT().PeekIncoming().Return(nil)
+		port1.EXPECT().PeekIncoming().Return(flit, true)
+		port2.EXPECT().PeekIncoming().Return(nil, false)
 
 		madeProgress := rpMW.startProcessing()
 
@@ -187,7 +187,7 @@ var _ = Describe("Switch", func() {
 		next := &sw.State
 		next.PortComplexes[0].RouteBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort1RouteBuf", 1)
-		next.PortComplexes[0].RouteBuffer.PushTyped(
+		next.PortComplexes[0].RouteBuffer.Push(
 			routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
 
 		routingTable.EXPECT().
@@ -217,11 +217,11 @@ var _ = Describe("Switch", func() {
 		next := &sw.State
 		next.PortComplexes[0].RouteBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort1RouteBuf", 1)
-		next.PortComplexes[0].RouteBuffer.PushTyped(
+		next.PortComplexes[0].RouteBuffer.Push(
 			routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
 		next.PortComplexes[0].ForwardBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort1FwdBuf", 1)
-		next.PortComplexes[0].ForwardBuffer.PushTyped(
+		next.PortComplexes[0].ForwardBuffer.Push(
 			routedFlit{Flit: packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 300}}})
 
 		madeProgress := rfsMW.route()
@@ -243,7 +243,7 @@ var _ = Describe("Switch", func() {
 		next := &sw.State
 		next.PortComplexes[0].ForwardBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort1FwdBuf", 1)
-		next.PortComplexes[0].ForwardBuffer.PushTyped(
+		next.PortComplexes[0].ForwardBuffer.Push(
 			routedFlit{Flit: flit, OutputBufIdx: 1})
 
 		madeProgress := rfsMW.forward()
@@ -268,11 +268,11 @@ var _ = Describe("Switch", func() {
 		next := &sw.State
 		next.PortComplexes[0].ForwardBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort1FwdBuf", 1)
-		next.PortComplexes[0].ForwardBuffer.PushTyped(
+		next.PortComplexes[0].ForwardBuffer.Push(
 			routedFlit{Flit: flit, OutputBufIdx: 1})
 		next.PortComplexes[1].SendOutBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort2SendBuf", 1)
-		next.PortComplexes[1].SendOutBuffer.PushTyped(
+		next.PortComplexes[1].SendOutBuffer.Push(
 			routedFlit{Flit: packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 400}}})
 
 		madeProgress := rfsMW.forward()
@@ -295,7 +295,7 @@ var _ = Describe("Switch", func() {
 		next := &sw.State
 		next.PortComplexes[1].SendOutBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort2SendBuf", 1)
-		next.PortComplexes[1].SendOutBuffer.PushTyped(routedFlit{Flit: flit})
+		next.PortComplexes[1].SendOutBuffer.Push(routedFlit{Flit: flit})
 
 		port2.EXPECT().CanSend().Return(true)
 		port2.EXPECT().Send(gomock.Any())
@@ -322,7 +322,7 @@ var _ = Describe("Switch", func() {
 		next := &sw.State
 		next.PortComplexes[1].SendOutBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort2SendBuf", 1)
-		next.PortComplexes[1].SendOutBuffer.PushTyped(routedFlit{Flit: flit})
+		next.PortComplexes[1].SendOutBuffer.Push(routedFlit{Flit: flit})
 
 		port2.EXPECT().CanSend().Return(false)
 

@@ -162,14 +162,18 @@ func (e *SerialEngine) dispatchNext(hasHooks bool) {
 // called when both queues are empty.
 func (e *SerialEngine) nextEventTime() VTimeInPicoSec {
 	if e.queue.Len() == 0 {
-		return e.secondaryQueue.Peek().Time()
+		evt, _ := e.secondaryQueue.Peek()
+		return evt.Time()
 	}
 	if e.secondaryQueue.Len() == 0 {
-		return e.queue.Peek().Time()
+		evt, _ := e.queue.Peek()
+		return evt.Time()
 	}
 
-	primary := e.queue.Peek().Time()
-	secondary := e.secondaryQueue.Peek().Time()
+	primaryEvent, _ := e.queue.Peek()
+	primary := primaryEvent.Time()
+	secondaryEvent, _ := e.secondaryQueue.Peek()
+	secondary := secondaryEvent.Time()
 	if primary <= secondary {
 		return primary
 	}
@@ -183,15 +187,17 @@ func (e *SerialEngine) noMoreEvent() bool {
 
 func (e *SerialEngine) nextEvent() Event {
 	if e.queue.Len() == 0 {
-		return e.secondaryQueue.Pop()
+		evt, _ := e.secondaryQueue.Pop()
+		return evt
 	}
 
 	if e.secondaryQueue.Len() == 0 {
-		return e.queue.Pop()
+		evt, _ := e.queue.Pop()
+		return evt
 	}
 
-	primaryEvt := e.queue.Peek()
-	secondaryEvt := e.secondaryQueue.Peek()
+	primaryEvt, _ := e.queue.Peek()
+	secondaryEvt, _ := e.secondaryQueue.Peek()
 
 	if primaryEvt.Time() <= secondaryEvt.Time() {
 		e.queue.Pop()

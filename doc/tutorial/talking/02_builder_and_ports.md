@@ -166,8 +166,8 @@ adds a new transaction, and if there is a `pingRsp` it prints the duration
 and acknowledges receipt.
 
 ```go
-msgI := outPort(m.comp).PeekIncoming()
-if msgI == nil {
+msgI, ok := outPort(m.comp).PeekIncoming()
+if !ok {
     return false
 }
 
@@ -183,7 +183,7 @@ default:
 
 Because messages are values, the type switch matches on value cases
 (`pingReq`, `pingRsp`) — not pointer cases. `PeekIncoming` returns the
-message as a `messaging.Msg` interface value; the handlers then call
+message as a `messaging.Msg` interface value and a presence boolean; the handlers call
 `RetrieveIncoming()` to consume it.
 
 Note `Peek` then `Retrieve`: peek does not consume the message — you can

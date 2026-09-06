@@ -57,8 +57,8 @@ func (m *respondPipelineMW) Tick() bool {
 }
 
 func (m *respondPipelineMW) parseTranslation() bool {
-	rspI := m.translationPort().PeekIncoming()
-	if rspI == nil {
+	rspI, ok := m.translationPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -154,8 +154,8 @@ func (m *respondPipelineMW) traceTranslationComplete(
 
 //nolint:funlen,gocyclo
 func (m *respondPipelineMW) respond() bool {
-	rspI := m.bottomPort().PeekIncoming()
-	if rspI == nil {
+	rspI, ok := m.bottomPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 

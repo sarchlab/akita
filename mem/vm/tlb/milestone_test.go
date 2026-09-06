@@ -270,7 +270,8 @@ var _ = Describe("TLB milestones", func() {
 		// time the req_out was in flight) is recorded as a translation milestone
 		// on req_in, and the response-send network_busy on the Top port comes
 		// only afterwards — not during the req_out.
-		fetch := bottomPort.RetrieveOutgoing().(vmprotocol.TranslationReq)
+		fetchValue, _ := bottomPort.RetrieveOutgoing()
+		fetch := fetchValue.(vmprotocol.TranslationReq)
 		rsp := vmprotocol.TranslationRsp{
 			Page: vm.Page{PID: 1, VAddr: 0x100, PAddr: 0x200, Valid: true},
 		}

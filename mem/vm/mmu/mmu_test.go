@@ -163,7 +163,7 @@ var _ = Describe("MMU", func() {
 			next := &mmuComp.State
 			Expect(next.WalkingTranslations).To(HaveLen(0))
 
-			rsp := topPort.RetrieveOutgoing()
+			rsp, _ := topPort.RetrieveOutgoing()
 			Expect(rsp).To(BeAssignableToTypeOf(vmprotocol.TranslationRsp{}))
 			Expect(rsp.(vmprotocol.TranslationRsp).Page).To(Equal(page))
 		})
@@ -267,7 +267,7 @@ var _ = Describe("MMU Integration", func() {
 			mmuComp.Tick()
 		}
 
-		rspI := topPort.RetrieveOutgoing()
+		rspI, _ := topPort.RetrieveOutgoing()
 		Expect(rspI).ToNot(BeNil())
 		rsp := rspI.(vmprotocol.TranslationRsp)
 		Expect(rsp.Page).To(Equal(page))

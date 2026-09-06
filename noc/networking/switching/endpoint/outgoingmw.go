@@ -142,11 +142,11 @@ func (m *outgoingMW) prepareMsg() bool {
 		}
 
 		port := m.devicePorts[i]
-		if port.PeekOutgoing() == nil {
+		if _, ok := port.PeekOutgoing(); !ok {
 			continue
 		}
 
-		msg := port.RetrieveOutgoing()
+		msg, _ := port.RetrieveOutgoing()
 		state.MsgOutBuf = append(state.MsgOutBuf, msg.Meta())
 
 		madeProgress = true

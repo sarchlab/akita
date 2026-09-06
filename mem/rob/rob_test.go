@@ -123,7 +123,7 @@ var _ = Describe("Reorder Buffer", func() {
 			Expect(rob.State.Transactions[0].ReqFromTopID).To(Equal(req.ID))
 			Expect(rob.State.Transactions[0].ReqFromTopSrc).To(Equal(topRemote))
 
-			sent := bottomPort.RetrieveOutgoing()
+			sent, _ := bottomPort.RetrieveOutgoing()
 			Expect(sent).To(BeAssignableToTypeOf(memprotocol.ReadReq{}))
 			shadow := sent.(memprotocol.ReadReq)
 			Expect(shadow.Src).To(Equal(bottomPort.AsRemote()))
@@ -144,7 +144,7 @@ var _ = Describe("Reorder Buffer", func() {
 			Expect(rob.State.Transactions).To(HaveLen(1))
 			Expect(rob.State.Transactions[0].IsRead).To(BeFalse())
 
-			sent := bottomPort.RetrieveOutgoing()
+			sent, _ := bottomPort.RetrieveOutgoing()
 			Expect(sent).To(BeAssignableToTypeOf(memprotocol.WriteReq{}))
 			shadow := sent.(memprotocol.WriteReq)
 			Expect(shadow.Data).To(Equal([]byte{1, 2, 3, 4}))
@@ -164,7 +164,8 @@ var _ = Describe("Reorder Buffer", func() {
 
 			Expect(progress).To(BeFalse())
 			Expect(rob.State.Transactions).To(HaveLen(spec.BufferSize))
-			Expect(topPort.PeekIncoming()).ToNot(BeNil())
+			_, present0 := topPort.PeekIncoming()
+			Expect(present0).To(BeTrue())
 		})
 
 		It("stalls when the bottom port is full", func() {
@@ -185,7 +186,8 @@ var _ = Describe("Reorder Buffer", func() {
 
 			Expect(progress).To(BeFalse())
 			Expect(rob.State.Transactions).To(BeEmpty())
-			Expect(topPort.PeekIncoming()).ToNot(BeNil())
+			_, present1 := topPort.PeekIncoming()
+			Expect(present1).To(BeTrue())
 		})
 
 		It("panics on unsupported top-port traffic", func() {
@@ -236,7 +238,8 @@ var _ = Describe("Reorder Buffer", func() {
 
 			rob.Tick()
 
-			Expect(bottomPort.PeekIncoming()).To(BeNil())
+			_, present2 := bottomPort.PeekIncoming()
+			Expect(present2).To(BeFalse())
 		})
 
 		It("drops unsupported bottom-port traffic", func() {
@@ -250,7 +253,8 @@ var _ = Describe("Reorder Buffer", func() {
 			progress := rob.Tick()
 
 			Expect(progress).To(BeTrue())
-			Expect(bottomPort.PeekIncoming()).To(BeNil())
+			_, present3 := bottomPort.PeekIncoming()
+			Expect(present3).To(BeFalse())
 			Expect(rob.State.Transactions).To(BeEmpty())
 		})
 	})
@@ -260,7 +264,7 @@ var _ = Describe("Reorder Buffer", func() {
 			req := makeRead(0)
 			topPort.Deliver(req)
 			rob.Tick()
-			shadowSent := bottomPort.RetrieveOutgoing()
+			shadowSent, _ := bottomPort.RetrieveOutgoing()
 			Expect(shadowSent).ToNot(BeNil())
 
 			shadowID := rob.State.Transactions[0].ReqToBottomID
@@ -278,7 +282,7 @@ var _ = Describe("Reorder Buffer", func() {
 
 			Expect(rob.State.Transactions).To(BeEmpty())
 
-			topOut := topPort.RetrieveOutgoing()
+			topOut, _ := topPort.RetrieveOutgoing()
 			Expect(topOut).To(BeAssignableToTypeOf(memprotocol.DataReadyRsp{}))
 			data := topOut.(memprotocol.DataReadyRsp)
 			Expect(data.Data).To(Equal([]byte{0xDE, 0xAD}))
@@ -297,9 +301,10 @@ var _ = Describe("Reorder Buffer", func() {
 			// cycle (NumReqPerCycle=2).
 			rob.Tick()
 			Expect(rob.State.Transactions).To(HaveLen(2))
-			Expect(bottomPort.RetrieveOutgoing()).ToNot(BeNil())
-			Expect(bottomPort.RetrieveOutgoing()).ToNot(BeNil())
-
+			_, present4 := bottomPort.RetrieveOutgoing()
+			Expect(present4).To(BeTrue())
+			_, present5 := bottomPort.RetrieveOutgoing()
+			Expect(present5).To(BeTrue())
 			shadow1 := rob.State.Transactions[0].ReqToBottomID
 			shadow2 := rob.State.Transactions[1].ReqToBottomID
 
@@ -319,8 +324,8 @@ var _ = Describe("Reorder Buffer", func() {
 			Expect(rob.State.Transactions).To(HaveLen(2))
 			Expect(rob.State.Transactions[0].HasRsp).To(BeFalse())
 			Expect(rob.State.Transactions[1].HasRsp).To(BeTrue())
-			Expect(topPort.RetrieveOutgoing()).To(BeNil())
-
+			_, present6 := topPort.RetrieveOutgoing()
+			Expect(present6).To(BeFalse())
 			// Now deliver the response for the head; both should drain in
 			// order on subsequent ticks.
 			rsp1 := memprotocol.DataReadyRsp{Data: []byte{0x11}}
@@ -336,8 +341,8 @@ var _ = Describe("Reorder Buffer", func() {
 
 			Expect(rob.State.Transactions).To(BeEmpty())
 
-			out1 := topPort.RetrieveOutgoing()
-			out2 := topPort.RetrieveOutgoing()
+			out1, _ := topPort.RetrieveOutgoing()
+			out2, _ := topPort.RetrieveOutgoing()
 			Expect(out1).To(BeAssignableToTypeOf(memprotocol.DataReadyRsp{}))
 			Expect(out2).To(BeAssignableToTypeOf(memprotocol.DataReadyRsp{}))
 			Expect(out1.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{0x11}))
@@ -404,7 +409,7 @@ var _ = Describe("Reorder Buffer", func() {
 			Expect(rob.State.Transactions).To(BeEmpty())
 			Expect(rob.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 
-			ack := ctrlPort.RetrieveOutgoing()
+			ack, _ := ctrlPort.RetrieveOutgoing()
 			Expect(ack).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
 			rsp := ack.(memcontrolprotocol.Rsp)
 			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
@@ -420,7 +425,8 @@ var _ = Describe("Reorder Buffer", func() {
 
 			Expect(progress).To(BeFalse())
 			Expect(rob.State.Transactions).To(BeEmpty())
-			Expect(topPort.PeekIncoming()).ToNot(BeNil())
+			_, present7 := topPort.PeekIncoming()
+			Expect(present7).To(BeTrue())
 		})
 
 		It("resumes on CmdEnable, draining incoming traffic", func() {
@@ -446,10 +452,11 @@ var _ = Describe("Reorder Buffer", func() {
 			rob.Tick()
 
 			Expect(rob.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
-			Expect(topPort.PeekIncoming()).To(BeNil())
-			Expect(bottomPort.PeekIncoming()).To(BeNil())
-
-			ack := ctrlPort.RetrieveOutgoing()
+			_, present8 := topPort.PeekIncoming()
+			Expect(present8).To(BeFalse())
+			_, present9 := bottomPort.PeekIncoming()
+			Expect(present9).To(BeFalse())
+			ack, _ := ctrlPort.RetrieveOutgoing()
 			Expect(ack).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
 			Expect(ack.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdEnable))
 		})
@@ -476,7 +483,10 @@ var _ = Describe("Reorder Buffer", func() {
 				shadowIDs = append(shadowIDs,
 					rob.State.Transactions[i].ReqToBottomID)
 			}
-			for bottomPort.RetrieveOutgoing() != nil {
+			for {
+				if _, ok := bottomPort.RetrieveOutgoing(); !ok {
+					break
+				}
 			}
 
 			drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
@@ -487,7 +497,8 @@ var _ = Describe("Reorder Buffer", func() {
 			for range 5 {
 				rob.Tick()
 				Expect(rob.State.ControlState).To(Equal(memcontrolprotocol.StateDraining))
-				Expect(ctrlPort.RetrieveOutgoing()).To(BeNil())
+				_, present10 := ctrlPort.RetrieveOutgoing()
+				Expect(present10).To(BeFalse())
 			}
 			Expect(rob.State.Transactions).To(HaveLen(n))
 
@@ -508,15 +519,15 @@ var _ = Describe("Reorder Buffer", func() {
 			for i := 0; i < 64 && !drainFound; i++ {
 				rob.Tick()
 				for {
-					out := topPort.RetrieveOutgoing()
-					if out == nil {
+					out, ok := topPort.RetrieveOutgoing()
+					if !ok {
 						break
 					}
 					if _, ok := out.(memprotocol.DataReadyRsp); ok {
 						completed++
 					}
 				}
-				if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 						rsp.Command == memcontrolprotocol.CmdDrain {
 						drainRsp = rsp
@@ -549,7 +560,7 @@ var _ = Describe("Reorder Buffer", func() {
 				found := false
 				for i := 0; i < 64 && !found; i++ {
 					rob.Tick()
-					if out := ctrlPort.RetrieveOutgoing(); out != nil {
+					if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 						rsp, found = out.(memcontrolprotocol.Rsp)
 					}
 				}
@@ -585,8 +596,8 @@ var _ = Describe("Reorder Buffer", func() {
 			for range 16 {
 				rob.Tick()
 				for {
-					out := ctrlPort.RetrieveOutgoing()
-					if out == nil {
+					out, ok := ctrlPort.RetrieveOutgoing()
+					if !ok {
 						break
 					}
 					if r, ok := out.(memcontrolprotocol.Rsp); ok {

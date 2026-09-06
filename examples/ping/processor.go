@@ -134,8 +134,8 @@ func (p *pingProcessor) processIncoming(
 	progress := false
 
 	for {
-		msg := outPort(comp).RetrieveIncoming()
-		if msg == nil {
+		msg, ok := outPort(comp).RetrieveIncoming()
+		if !ok {
 			break
 		}
 

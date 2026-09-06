@@ -61,8 +61,8 @@ func (m *pingMiddleware) Tick() bool {
 }
 
 func (m *pingMiddleware) processInput() bool {
-	rawMsg := m.outPort.PeekIncoming()
-	if rawMsg == nil {
+	rawMsg, ok := m.outPort.PeekIncoming()
+	if !ok {
 		return false
 	}
 

@@ -131,7 +131,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		state = memController.State
 		Expect(state.InflightTransactions).To(HaveLen(0))
 
-		rsp := topPort.RetrieveOutgoing()
+		rsp, _ := topPort.RetrieveOutgoing()
 		Expect(rsp).To(BeAssignableToTypeOf(memprotocol.DataReadyRsp{}))
 	})
 
@@ -160,7 +160,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		state := memController.State
 		Expect(state.InflightTransactions).To(HaveLen(0))
 
-		rsp := topPort.RetrieveOutgoing()
+		rsp, _ := topPort.RetrieveOutgoing()
 		Expect(rsp).To(BeAssignableToTypeOf(memprotocol.WriteDoneRsp{}))
 
 		// Verify data was written to storage
@@ -202,7 +202,9 @@ var _ = Describe("Ideal Memory Controller", func() {
 		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(0))
 
 		// Free the outgoing buffer, then retry succeeds.
-		Expect(topPort.RetrieveOutgoing()).To(Equal(dummy))
+		value0, present0 := topPort.RetrieveOutgoing()
+		Expect(present0).To(BeTrue())
+		Expect(value0).To(Equal(dummy))
 		memController.Tick()
 
 		state = memController.State

@@ -79,8 +79,8 @@ func (m *clientMW) send() bool {
 
 func (m *clientMW) receive() bool {
 	port := m.comp.GetPortByName("Out")
-	msg := port.PeekIncoming()
-	if msg == nil {
+	msg, ok := port.PeekIncoming()
+	if !ok {
 		return false
 	}
 	rsp := msg.(readRsp)
@@ -126,8 +126,8 @@ func (m *cacheMW) forwardDown() bool {
 	if !bottom.CanSend() {
 		return false
 	}
-	msg := top.PeekIncoming()
-	if msg == nil {
+	msg, ok := top.PeekIncoming()
+	if !ok {
 		return false
 	}
 	upReq := msg.(readReq)
@@ -153,8 +153,8 @@ func (m *cacheMW) respondUp() bool {
 	if !top.CanSend() {
 		return false
 	}
-	msg := bottom.PeekIncoming()
-	if msg == nil {
+	msg, ok := bottom.PeekIncoming()
+	if !ok {
 		return false
 	}
 	downRsp := msg.(readRsp)
@@ -181,8 +181,8 @@ type memMW struct {
 
 func (m *memMW) Tick() bool {
 	port := m.comp.GetPortByName("Top")
-	msg := port.PeekIncoming()
-	if msg == nil {
+	msg, ok := port.PeekIncoming()
+	if !ok {
 		return false
 	}
 	if !port.CanSend() {

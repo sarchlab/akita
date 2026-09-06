@@ -9,9 +9,9 @@ import (
 
 func TestBufferJSONRoundTrip(t *testing.T) {
 	b := NewBuffer[int]("buf", 4)
-	b.PushTyped(10)
-	b.PushTyped(20)
-	b.PushTyped(30)
+	b.Push(10)
+	b.Push(20)
+	b.Push(30)
 
 	data, err := json.Marshal(b)
 	if err != nil {
@@ -32,7 +32,7 @@ func TestBufferJSONRoundTrip(t *testing.T) {
 			got.Name(), got.Capacity(), got.Size())
 	}
 	for _, want := range []int{10, 20, 30} { // FIFO order preserved
-		if got := got.Pop(); got != want {
+		if got, _ := got.Pop(); got != want {
 			t.Fatalf("Pop = %d, want %d", got, want)
 		}
 	}
@@ -71,7 +71,7 @@ func TestPipelineJSONRoundTrip(t *testing.T) {
 type nopSink[T any] struct{}
 
 func (nopSink[T]) CanPush() bool { return false }
-func (nopSink[T]) PushTyped(T)   {}
+func (nopSink[T]) Push(T)        {}
 
 func drainPipeline(p *Pipeline[int]) []int {
 	sink := NewBuffer[int]("sink", 1024)
@@ -79,7 +79,8 @@ func drainPipeline(p *Pipeline[int]) []int {
 	for i := 0; i < 1000 && len(p.Stages()) > 0; i++ {
 		p.Tick(&sink)
 		for sink.Size() > 0 {
-			out = append(out, sink.Pop())
+			item, _ := sink.Pop()
+			out = append(out, item)
 		}
 	}
 	return out

@@ -74,7 +74,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	var transReqSent bool
 	for range 8 {
 		at.Tick()
-		if out := translationPort.RetrieveOutgoing(); out != nil {
+		if out, ok := translationPort.RetrieveOutgoing(); ok {
 			if _, ok := out.(vmprotocol.TranslationReq); ok {
 				transReqSent = true
 				break
@@ -105,7 +105,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	acked := false
 	for range 64 {
 		at.Tick()
-		if msg := ctrlPort.RetrieveOutgoing(); msg != nil {
+		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {
 				acked = true

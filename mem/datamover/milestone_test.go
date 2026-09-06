@@ -192,7 +192,9 @@ var _ = Describe("DataMover milestones", func() {
 
 		// The move completed end-to-end.
 		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
-		Expect(srcPort.RetrieveIncoming()).To(
+		value0, present0 := srcPort.RetrieveIncoming()
+		Expect(present0).To(BeTrue())
+		Expect(value0).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 
 		// (a) The admission milestone lands on the buffer task, not on req_in.
@@ -244,7 +246,9 @@ var _ = Describe("DataMover milestones", func() {
 		// The move completed end-to-end, so reads and writes were issued and
 		// acknowledged.
 		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
-		Expect(srcPort.RetrieveIncoming()).To(
+		value1, present1 := srcPort.RetrieveIncoming()
+		Expect(present1).To(BeTrue())
+		Expect(value1).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 
 		reqInID := rec.taskID("req_in")
@@ -304,9 +308,13 @@ var _ = Describe("DataMover milestones", func() {
 		Expect(engine.Run()).To(Succeed())
 
 		// Both transactions completed: two responses come back to the source.
-		Expect(srcPort.RetrieveIncoming()).To(
+		value2, present2 := srcPort.RetrieveIncoming()
+		Expect(present2).To(BeTrue())
+		Expect(value2).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
-		Expect(srcPort.RetrieveIncoming()).To(
+		value3, present3 := srcPort.RetrieveIncoming()
+		Expect(present3).To(BeTrue())
+		Expect(value3).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 
 		// Two req_in tasks opened and both were closed (one per request), so the

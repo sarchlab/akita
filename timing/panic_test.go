@@ -140,9 +140,13 @@ func TestRunUntilContainsPanicAndRejectsReuse(t *testing.T) {
 // for a queue token. Healthy scheduling still uses the original queue design.
 type panicDispatchQueue struct{ events []Event }
 
-func (q *panicDispatchQueue) Len() int     { return len(q.events) }
-func (q *panicDispatchQueue) Peek() Event  { return q.events[0] }
-func (q *panicDispatchQueue) Pop() Event   { e := q.events[0]; q.events = q.events[1:]; return e }
+func (q *panicDispatchQueue) Len() int            { return len(q.events) }
+func (q *panicDispatchQueue) Peek() (Event, bool) { return q.events[0], true }
+func (q *panicDispatchQueue) Pop() (Event, bool) {
+	e := q.events[0]
+	q.events = q.events[1:]
+	return e, true
+}
 func (q *panicDispatchQueue) Push(e Event) { q.events = append(q.events, e) }
 
 type panicTimeEvent struct {
@@ -180,26 +184,15 @@ func TestParallelDispatcherPanicReleasesWaitingWorker(t *testing.T) {
 }
 
 func TestEventQueueReleasesExistingLockOnPanic(t *testing.T) {
-	for _, op := range []string{"peek", "pop", "push"} {
-		t.Run(op, func(t *testing.T) {
-			q := NewEventQueue()
-			catchPanic(t, func() {
-				switch op {
-				case "peek":
-					q.Peek()
-				case "pop":
-					q.Pop()
-				case "push":
-					q.Push(EventBase{Time_: 1})
-					ready := make(chan struct{})
-					close(ready)
-					q.Push(panicTimeEvent{attempted: ready})
-				}
-			})
-			if !q.TryLock() {
-				t.Fatal("queue lock was left held after panic")
-			}
-			q.Unlock()
-		})
+	q := NewEventQueue()
+	catchPanic(t, func() {
+		q.Push(EventBase{Time_: 1})
+		ready := make(chan struct{})
+		close(ready)
+		q.Push(panicTimeEvent{attempted: ready})
+	})
+	if !q.TryLock() {
+		t.Fatal("queue lock was left held after panic")
 	}
+	q.Unlock()
 }

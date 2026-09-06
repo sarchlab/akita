@@ -100,7 +100,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
 		comp.Tick()
-		if msg := controlPort.RetrieveOutgoing(); msg != nil {
+		if msg, ok := controlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {
 				acked = true

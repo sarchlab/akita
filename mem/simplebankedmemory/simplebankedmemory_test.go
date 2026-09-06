@@ -78,8 +78,8 @@ func (c *loopbackConnection) transfer() {
 
 func (c *loopbackConnection) forward(src, dst messaging.Port) {
 	for {
-		msg := src.PeekOutgoing()
-		if msg == nil {
+		msg, ok := src.PeekOutgoing()
+		if !ok {
 			break
 		}
 
@@ -122,8 +122,8 @@ func (a *testAgent) Name() string {
 
 func (a *testAgent) NotifyRecv(port messaging.Port) {
 	for {
-		msg := port.RetrieveIncoming()
-		if msg == nil {
+		msg, ok := port.RetrieveIncoming()
+		if !ok {
 			break
 		}
 
@@ -175,8 +175,8 @@ func (a *bandwidthAgent) Name() string {
 
 func (a *bandwidthAgent) NotifyRecv(port messaging.Port) {
 	for {
-		msg := port.RetrieveIncoming()
-		if msg == nil {
+		msg, ok := port.RetrieveIncoming()
+		if !ok {
 			break
 		}
 
