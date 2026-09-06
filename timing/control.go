@@ -7,6 +7,32 @@ import (
 	"sync/atomic"
 )
 
+// EngineState reports dispatch permission and pending pause/resume transitions.
+// It does not report whether Run is active or whether a simulation has failed.
+type EngineState uint32
+
+const (
+	EngineRunning  EngineState = iota // Dispatch is permitted, including while idle.
+	EnginePausing                     // A pause is queued; the boundary has not acknowledged it.
+	EnginePaused                      // Dispatch is paused at a boundary.
+	EngineResuming                    // A continue is queued; dispatch remains paused.
+)
+
+func (s EngineState) String() string {
+	switch s {
+	case EngineRunning:
+		return "running"
+	case EnginePausing:
+		return "pausing"
+	case EnginePaused:
+		return "paused"
+	case EngineResuming:
+		return "resuming"
+	default:
+		return "unknown"
+	}
+}
+
 // PauseRequest acknowledges a requested pause once execution reaches a boundary.
 // Multiple callers may Wait. Cancellation stops waiting, not the pause request.
 type PauseRequest interface {
@@ -49,8 +75,9 @@ type controlRequest struct {
 type engineControl struct {
 	mu      sync.Mutex
 	changed *sync.Cond
-	pending atomic.Bool // requests pending, or paused
-	paused  atomic.Bool // acknowledged state, not requested state
+	pending atomic.Bool   // requests pending, or paused
+	state   atomic.Uint32 // published state; readable during inspection
+	paused  bool          // acknowledged dispatch state, protected by mu
 	running bool
 	failure error
 	queue   []controlRequest
@@ -80,7 +107,14 @@ func (c *engineControl) Continue() error {
 }
 
 // IsPaused reports the last acknowledged pause state. It is safe during Run.
-func (c *engineControl) IsPaused() bool { return c.paused.Load() }
+func (c *engineControl) IsPaused() bool {
+	state := c.State()
+	return state == EnginePaused || state == EngineResuming
+}
+
+// State reports the acknowledged state and the next queued transition. It is
+// safe during Run and does not wait for an event, batch, or inspection callback.
+func (c *engineControl) State() EngineState { return EngineState(c.state.Load()) }
 
 // Inspect runs a read-only callback between events (between joined batches in a
 // parallel engine), without changing pause state. The callback must copy or
@@ -105,25 +139,27 @@ func (c *engineControl) submit(req controlRequest) *pauseRequest {
 	if c.running {
 		c.queue = append(c.queue, req)
 		c.pending.Store(true)
+		c.publishState()
 		c.changed.Signal()
 	} else {
 		c.apply(req)
-		c.pending.Store(c.paused.Load())
+		c.pending.Store(c.paused)
 	}
 	return req.result
 }
 
 func (c *engineControl) apply(req controlRequest) {
 	defer close(req.result.done)
+	defer c.publishState()
 	if c.failure != nil {
 		req.result.err = c.failure
 		return
 	}
 	switch req.kind {
 	case controlPause:
-		c.paused.Store(true)
+		c.paused = true
 	case controlContinue:
-		c.paused.Store(false)
+		c.paused = false
 	case controlInspect:
 		req.result.err = req.inspect()
 	}
@@ -155,10 +191,36 @@ func (c *engineControl) begin() error {
 }
 
 func (c *engineControl) drain() {
-	for _, req := range c.queue {
+	for len(c.queue) > 0 {
+		req := c.queue[0]
+		c.queue[0] = controlRequest{}
+		c.queue = c.queue[1:]
 		c.apply(req)
 	}
 	c.queue = nil
+}
+
+// publishState runs under mu. Report the first queued request that changes
+// acknowledged dispatch permission; inspections and idempotent controls do not
+// create transitions. FIFO order also applies to opposing queued requests.
+func (c *engineControl) publishState() {
+	state := EngineRunning
+	if c.paused {
+		state = EnginePaused
+	}
+	if c.failure == nil {
+		for _, req := range c.queue {
+			if req.kind == controlPause && !c.paused {
+				state = EnginePausing
+				break
+			}
+			if req.kind == controlContinue && c.paused {
+				state = EngineResuming
+				break
+			}
+		}
+	}
+	c.state.Store(uint32(state))
 }
 
 // boundary is entered only when pending is set, keeping the ordinary event
@@ -168,7 +230,7 @@ func (c *engineControl) boundary() {
 	defer c.mu.Unlock()
 	for {
 		c.drain()
-		if !c.paused.Load() {
+		if !c.paused {
 			c.pending.Store(false)
 			return
 		}
@@ -184,8 +246,9 @@ func (c *engineControl) end(err *error) {
 	c.running = false
 	if *err != nil {
 		c.failure = *err
-		c.paused.Store(false)
+		c.paused = false
 	}
+	c.publishState()
 	c.drain()
-	c.pending.Store(c.paused.Load())
+	c.pending.Store(c.paused)
 }

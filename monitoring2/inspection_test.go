@@ -117,3 +117,38 @@ func TestMonitorReportsHandlerRequestedPause(t *testing.T) {
 		t.Fatal("monitor reported its own stale pause state")
 	}
 }
+
+type stateReportingEngine struct {
+	timing.Engine
+	state timing.EngineState
+}
+
+func (e stateReportingEngine) State() timing.EngineState { return e.state }
+
+func TestMonitorReportsAllEngineStates(t *testing.T) {
+	for _, tc := range []struct {
+		state  timing.EngineState
+		name   string
+		paused bool
+	}{
+		{timing.EngineRunning, "running", false},
+		{timing.EnginePausing, "pausing", false},
+		{timing.EnginePaused, "paused", true},
+		{timing.EngineResuming, "resuming", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := NewMonitor()
+			m.RegisterEngine(stateReportingEngine{state: tc.state})
+			w := httptest.NewRecorder()
+			m.apiEngineState(w, httptest.NewRequest(http.MethodGet, "/api/engine/state", nil))
+			var response engineStateRsp
+			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if w.Code != http.StatusOK || response.State != tc.name || response.Paused != tc.paused {
+				t.Fatalf("unexpected response: %s", w.Body)
+			}
+			t.Log(w.Body.String())
+		})
+	}
+}

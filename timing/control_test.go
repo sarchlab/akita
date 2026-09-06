@@ -43,6 +43,11 @@ func receiveControl[T any](t *testing.T, ch <-chan T) T {
 // may release a handler before the inspection goroutine has reached the engine.
 func awaitInspection(t *testing.T, e testEngine) {
 	t.Helper()
+	awaitControlKind(t, e, controlInspect)
+}
+
+func awaitControlKind(t *testing.T, e testEngine, kind controlKind) {
+	t.Helper()
 	var c *engineControl
 	switch e := e.(type) {
 	case *SerialEngine:
@@ -55,7 +60,7 @@ func awaitInspection(t *testing.T, e testEngine) {
 		c.mu.Lock()
 		found := false
 		for _, req := range c.queue {
-			found = found || req.kind == controlInspect
+			found = found || req.kind == kind
 		}
 		c.mu.Unlock()
 		if found {
@@ -63,7 +68,7 @@ func awaitInspection(t *testing.T, e testEngine) {
 		}
 		select {
 		case <-ctx.Done():
-			t.Fatal("inspection was not queued")
+			t.Fatal("control request was not queued")
 		case <-time.After(time.Millisecond):
 		}
 	}
@@ -105,8 +110,8 @@ func TestPauseAcknowledgesAfterHooksAndServesInspection(t *testing.T) {
 			t.Fatal("pause acknowledged inside handler")
 		default:
 		}
-		if e.IsPaused() {
-			t.Fatal("requested pause reported as acknowledged")
+		if e.State() != EnginePausing || e.IsPaused() {
+			t.Fatal("pending pause must report pausing without acknowledgment")
 		}
 		close(release)
 		receiveControl(t, hookEntered)
@@ -151,7 +156,7 @@ func TestHandlerCanRequestPause(t *testing.T) {
 		if err := receiveControl(t, ticket).Wait(controlContext(t)); err != nil {
 			t.Fatal(err)
 		}
-		if !e.IsPaused() {
+		if e.State() != EnginePaused || !e.IsPaused() {
 			t.Fatal("handler pause was lost")
 		}
 		if err := e.Continue(); err != nil {
@@ -417,4 +422,67 @@ func assertPausedSnapshot(t *testing.T, e Engine, events *int) {
 	if !e.IsPaused() {
 		t.Fatal("inspection resumed a paused engine")
 	}
+}
+
+// Hold an inspection between opposing controls so both transitions are
+// observable without depending on goroutine scheduling or sleeps.
+func TestEngineReportsQueuedTransitionsInOrder(t *testing.T) {
+	controlEngines(t, func(t *testing.T, e testEngine) {
+		t.Helper()
+		ctx := controlContext(t)
+		entered, release := make(chan struct{}), make(chan struct{})
+		inspecting, releaseInspection := make(chan struct{}), make(chan struct{})
+		e.RegisterHandler("model", panicHandler(func(Event) { close(entered); <-release }))
+		e.Schedule(EventBase{Time_: 1, HandlerID_: "model"})
+		done := startControlRun(e)
+		receiveControl(t, entered)
+		pause := e.RequestPause()
+		duplicatePause := e.RequestPause()
+		inspected := make(chan error, 1)
+		go func() {
+			inspected <- e.Inspect(ctx, func() error {
+				close(inspecting)
+				<-releaseInspection
+				return nil
+			})
+		}()
+		awaitInspection(t, e)
+		continued := make(chan error, 1)
+		go func() { continued <- e.Continue() }()
+		awaitControlKind(t, e, controlContinue)
+		if e.State() != EnginePausing || e.IsPaused() {
+			t.Fatal("a later Continue hid the pending pause")
+		}
+		close(release)
+		receiveControl(t, inspecting)
+		if err := pause.Wait(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := duplicatePause.Wait(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if e.State() != EngineResuming || !e.IsPaused() {
+			t.Fatal("Continue must report resuming while dispatch is still paused")
+		}
+		select {
+		case <-continued:
+			t.Fatal("Continue acknowledged before inspection finished")
+		default:
+		}
+		close(releaseInspection)
+		if err := receiveControl(t, inspected); err != nil {
+			t.Fatal(err)
+		}
+		if err := receiveControl(t, continued); err != nil {
+			t.Fatal(err)
+		}
+		if err := receiveControl(t, done); err != nil {
+			t.Fatal(err)
+		}
+		if e.State() != EngineRunning || e.IsPaused() {
+			t.Fatal("acknowledged Continue did not report running")
+		}
+		t.Log("pausing during event; resuming during boundary inspection with paused=true; " +
+			"running after Continue acknowledgment")
+	})
 }

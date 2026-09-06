@@ -68,6 +68,7 @@ type Engine interface {
     Pause() error
     Continue() error
     IsPaused() bool
+    State() EngineState
     Inspect(context.Context, func() error) error
 }
 ```

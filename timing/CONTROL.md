@@ -33,7 +33,22 @@ them exclusive ownership of live model state.
 `IsPaused()` is safe to call concurrently and reports acknowledged state. A
 pending request alone does not make it true. Cancelling PauseRequest.Wait stops
 that wait; it does not cancel or undo the pause. A request can be waited on more
-than once. The monitor reads this engine state rather than maintaining its own.
+than once.
+
+`State()` reports `EngineRunning`, `EnginePausing`, `EnginePaused`, or
+`EngineResuming`. A queued pause reports pausing until a boundary acknowledges it;
+a queued continue reports resuming while dispatch is still paused. IsPaused is
+true for paused and resuming. If opposing requests are queued, State reports the
+first transition that changes the acknowledged state, in enqueue order. Repeated
+requests and inspection alone do not introduce transitions. State reads do not
+wait for events or inspection callbacks. Requests waiting to acquire the control
+mutex have not been enqueued and do not yet change State.
+
+These are dispatch-control states, not a run lifecycle: running also covers an
+inactive engine with dispatch permission. Failure reporting remains through Run
+and control errors. The monitor reads State directly, preserves the acknowledged
+`paused` Boolean in its JSON response, and displays all four states. It disables
+pause/continue during transitions. Very brief transitions may occur between polls.
 
 ## Inspection
 
@@ -86,7 +101,7 @@ Control requests cannot forcibly interrupt a nonreturning handler or callback.
 ## Migration and cost
 
 Pause and Continue now return errors. Custom Engine implementations must also
-provide RequestPause, IsPaused, and Inspect. Mock generation picks up these
+provide RequestPause, IsPaused, State, and Inspect. Mock generation picks up these
 methods. Existing scheduling and checkpoint interfaces are unchanged; control
 requests and pause state are not serialized into checkpoints.
 

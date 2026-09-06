@@ -401,11 +401,10 @@ func (m *Monitor) apiEngineState(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (m *Monitor) engineStateResponse() engineStateRsp {
-	if m.engine.IsPaused() {
-		return engineStateRsp{State: "paused", Paused: true}
+	state := m.engine.State()
+	return engineStateRsp{
+		State: state.String(), Paused: state == timing.EnginePaused || state == timing.EngineResuming,
 	}
-
-	return engineStateRsp{State: "running", Paused: false}
 }
 
 func (m *Monitor) writeEngineState(w http.ResponseWriter, response engineStateRsp) {

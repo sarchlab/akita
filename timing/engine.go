@@ -43,6 +43,9 @@ type Engine interface {
 	// IsPaused reports acknowledged state, including pauses requested by handlers.
 	IsPaused() bool
 
+	// State reports running, pausing, paused, or resuming without blocking.
+	State() EngineState
+
 	// Inspect copies/serializes state at a boundary without changing pause state.
 	Inspect(context.Context, func() error) error
 }

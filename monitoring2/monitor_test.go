@@ -78,6 +78,8 @@ func (e *fakeEngine) Continue() error {
 	return e.controls().Continue()
 }
 
+func (e *fakeEngine) State() timing.EngineState { return e.controls().State() }
+
 func (e *fakeEngine) IsPaused() bool { return e.controls().IsPaused() }
 
 func (e *fakeEngine) Inspect(ctx context.Context, fn func() error) error {
