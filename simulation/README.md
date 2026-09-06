@@ -134,7 +134,8 @@ setup rebuilds; put cursors and counters in `State`.
 - **Serial engine only.** `SaveCheckpoint`/`LoadCheckpoint` reject a
   `ParallelEngine`.
 - **Run with tracing off** for a deterministic resume: the tracing task-ID side
-  table consumes the global ID generator, perturbing the ID sequence.
+  table is not checkpointed; rebuilding associations consumes the simulation's
+  ID counter, perturbing the resumed ID sequence.
 - **`SerialEngine.RunUntil(t)`** stops the engine at a deterministic boundary
   (every event with time ≤ `t`), unlike `Run` (drains everything) or `Pause`
   (stops at a non-reproducible point) — useful for taking a mid-transaction

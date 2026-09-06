@@ -138,18 +138,20 @@ Note the new `SendTaskID` and `RecvTaskID` fields for tracing integration.
 
 ### IDGenerator (V5)
 
+Each simulation owns its counter, shared by its engine and components. There
+is no process-global generator or sequential/parallel configuration switch.
+
 ```go
-// v5/sim/idgenerator.go
-type IDGenerator interface {
-    Generate() uint64
-}
-
-// Two implementations: sequential (deterministic) and parallel (non-deterministic).
-sim.UseSequentialIDGenerator() // Call before any Generate()
-sim.UseParallelIDGenerator()   // For parallel simulations
-
-id := sim.GetIDGenerator().Generate() // returns uint64
+id := simulation.NewID() // uint64, unique within this simulation
+req.ID = component.NewID() // uses the same counter
 ```
+
+Event factories now take the ID source explicitly:
+`timing.MakeEventBase(engine, time, handlerID)` and
+`modeling.MakeTickEvent(component, handlerID, time)`.
+
+Separate simulations may reuse numeric IDs. Tracing associations are scoped
+to the simulation as well as the component name and message ID.
 
 ### Before / After
 
@@ -175,7 +177,7 @@ if req.ID == "" { ... }
 pendingReqs := map[uint64]*ReadReq{}
 
 req := &ReadReq{}
-req.ID = sim.GetIDGenerator().Generate() // 1, 2, 3, ...
+req.ID = component.NewID() // 1, 2, 3, ...
 pendingReqs[req.ID] = req
 
 // Later, matching response:
@@ -193,7 +195,8 @@ if req.ID == 0 { ... }
 - Replace `== ""` / `!= ""` checks with `== 0` / `!= 0`.
 - Replace `fmt.Sprintf`-based ID formatting with `strconv.FormatUint` or `%d`.
 - Update tracing task ID comparisons from string to uint64.
-- Checkpoint/restore: use `GetIDGeneratorNextID()` / `SetIDGeneratorNextID()` to snapshot generator state.
+- Replace global ID allocation with `simulation.NewID()` or `component.NewID()`.
+- Simulation checkpoints include the owned counter. Standalone-engine users must checkpoint `engine.GetIDGenerator()` alongside the engine. Restore into fresh instances.
 
 ---
 

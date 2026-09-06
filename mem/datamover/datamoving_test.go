@@ -107,7 +107,7 @@ var _ = Describe("DataMover", func() {
 		outsideStorage.Write(0, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = engine.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
@@ -140,7 +140,7 @@ var _ = Describe("DataMover", func() {
 		outsideStorage.Write(4096, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = engine.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 4096
@@ -169,7 +169,7 @@ var _ = Describe("DataMover", func() {
 		insideStorage.Write(0, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = engine.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
@@ -198,7 +198,7 @@ var _ = Describe("DataMover", func() {
 		insideStorage.Write(0, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = engine.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
@@ -227,7 +227,7 @@ var _ = Describe("DataMover", func() {
 		outsideStorage.Write(0, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = engine.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
@@ -251,7 +251,7 @@ var _ = Describe("DataMover", func() {
 
 	It("should handle zero-size transfers", func() {
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = engine.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
@@ -274,7 +274,7 @@ var _ = Describe("DataMover", func() {
 		insideStorage.Write(0, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = engine.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0

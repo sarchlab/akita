@@ -37,7 +37,7 @@ func driveCtrl(
 	t.Helper()
 
 	req := memcontrolprotocol.Req{Command: cmd, Addresses: addrs, PID: pid}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = ctrl.Component().NewID()
 	req.Src = messaging.RemotePort("Cmd")
 	req.Dst = ctrl.AsRemote()
 	req.TrafficClass = "memcontrolprotocol.Req"
@@ -153,7 +153,7 @@ func resolveTranslation(
 	rsp := vmprotocol.TranslationRsp{Page: vm.Page{
 		PID: pid, VAddr: vAddr, PAddr: vAddr + 0x10000, Valid: true,
 	}}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = bottom.Component().NewID()
 	rsp.Src = remote
 	rsp.Dst = bottom.AsRemote()
 	rsp.RspTo = botReq.ID
@@ -268,7 +268,7 @@ func makeTransReq(
 	pid vm.PID,
 ) vmprotocol.TranslationReq {
 	req := vmprotocol.TranslationReq{}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = top.Component().NewID()
 	req.Src = messaging.RemotePort("Agent")
 	req.Dst = top.AsRemote()
 	req.PID = pid
@@ -289,7 +289,7 @@ func driveFlushAll(
 	t.Helper()
 
 	flush := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-	flush.ID = timing.GetIDGenerator().Generate()
+	flush.ID = ctrl.Component().NewID()
 	flush.Src = messaging.RemotePort("Cmd")
 	flush.Dst = ctrl.AsRemote()
 	flush.TrafficClass = "memcontrolprotocol.Req"
@@ -331,7 +331,7 @@ func answerWriteBacks(bottom messaging.Port, writtenBack map[byte]bool) {
 			writtenBack[w.Data[0]] = true
 		}
 		done := memprotocol.WriteDoneRsp{}
-		done.ID = timing.GetIDGenerator().Generate()
+		done.ID = bottom.Component().NewID()
 		done.Src = messaging.RemotePort("LowerCache")
 		done.Dst = bottom.AsRemote()
 		done.RspTo = w.ID

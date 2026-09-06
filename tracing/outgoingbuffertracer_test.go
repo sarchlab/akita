@@ -14,6 +14,7 @@ import (
 // tasks on it). InvokeHook is provided by the embedded HookableBase, which is
 // how CollectTrace forwards events to a tracer.
 type obFakeComp struct {
+	timing.IDGenerator
 	hooking.HookableBase
 	name string
 	time timing.VTimeInPicoSec

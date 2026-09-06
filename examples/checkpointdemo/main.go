@@ -63,7 +63,7 @@ func (m *workerMW) Tick() bool {
 		return false
 	}
 
-	id := timing.GetIDGenerator().Generate()
+	id := m.comp.NewID()
 	m.comp.State.Processed++
 	m.comp.State.Checksum = m.comp.State.Checksum*1000003 + id
 	m.comp.State.Pending--

@@ -14,6 +14,7 @@ import (
 // roundTripDomain is a minimal NamedHookable used to drive the DBTracer through
 // a real emit -> persist cycle.
 type roundTripDomain struct {
+	timing.IDGenerator
 	*hooking.HookableBase
 	name string
 	now  timing.VTimeInPicoSec

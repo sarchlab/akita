@@ -61,7 +61,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	makeReadReq := func() memprotocol.ReadReq {
 		req := memprotocol.ReadReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = engine.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = 0
@@ -92,7 +92,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should accept write request and add to inflight transactions", func() {
 		writeReq := memprotocol.WriteReq{}
-		writeReq.ID = timing.GetIDGenerator().Generate()
+		writeReq.ID = engine.NewID()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0
@@ -137,7 +137,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should send write response after latency ticks", func() {
 		writeReq := memprotocol.WriteReq{}
-		writeReq.ID = timing.GetIDGenerator().Generate()
+		writeReq.ID = engine.NewID()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0
@@ -216,7 +216,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		storage.Write(0, []byte{10, 20, 30, 40})
 
 		writeReq := memprotocol.WriteReq{}
-		writeReq.ID = timing.GetIDGenerator().Generate()
+		writeReq.ID = engine.NewID()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0

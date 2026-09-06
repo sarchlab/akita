@@ -26,6 +26,9 @@ var _ = Describe("End Point", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
+		engineIDs := &timing.IDGenerator{}
+		engine.EXPECT().NewID().DoAndReturn(engineIDs.NewID).AnyTimes()
+		engine.EXPECT().GetIDGenerator().Return(engineIDs).AnyTimes()
 		devicePort = NewMockPort(mockCtrl)
 		devicePort.EXPECT().
 			AsRemote().
@@ -63,7 +66,7 @@ var _ = Describe("End Point", func() {
 
 	It("should send flits", func() {
 		msg := messaging.MsgMeta{
-			ID:           timing.GetIDGenerator().Generate(),
+			ID:           engine.NewID(),
 			Src:          devicePort.AsRemote(),
 			TrafficBytes: 33,
 		}
@@ -110,18 +113,18 @@ var _ = Describe("End Point", func() {
 
 	It("should receive message", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  engine.NewID(),
 			Dst: devicePort.AsRemote(),
 		}
 
 		flit0 := packetization.Flit{}
-		flit0.ID = timing.GetIDGenerator().Generate()
+		flit0.ID = engine.NewID()
 		flit0.TrafficClass = reflect.TypeOf(msg).String()
 		flit0.SeqID = 0
 		flit0.NumFlitInMsg = 2
 		flit0.Msg = msg
 		flit1 := packetization.Flit{}
-		flit1.ID = timing.GetIDGenerator().Generate()
+		flit1.ID = engine.NewID()
 		flit1.TrafficClass = reflect.TypeOf(msg).String()
 		flit1.SeqID = 1
 		flit1.NumFlitInMsg = 2

@@ -47,12 +47,12 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 	}
 
 	makeRead := func(index int) memprotocol.ReadReq {
-		return makeReadReq(messaging.RemotePort("Agent"), topPort.AsRemote(), index)
+		return makeReadReq(engine, messaging.RemotePort("Agent"), topPort.AsRemote(), index)
 	}
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = engine.NewID()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"

@@ -55,7 +55,7 @@ var _ = Describe("Respond Stage", func() {
 			next := &mw.comp.State
 
 			readMeta = messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           mw.comp.NewID(),
 				Src:          "SomeSrc",
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -107,7 +107,7 @@ var _ = Describe("Respond Stage", func() {
 			next := &mw.comp.State
 
 			writeMeta = messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           mw.comp.NewID(),
 				Src:          "SomeSrc",
 				TrafficBytes: 12,
 				TrafficClass: "req",

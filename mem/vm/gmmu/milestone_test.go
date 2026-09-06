@@ -137,7 +137,7 @@ var _ = Describe("GMMU milestones", func() {
 
 	makeReq := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = engine.NewID()
 		req.Src = agentPort
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -192,14 +192,14 @@ var _ = Describe("GMMU milestones", func() {
 		// A remote walk is outstanding so the bottom response matches a
 		// transaction and is forwarded upstream.
 		walking := transactionState{
-			ReqID:    timing.GetIDGenerator().Generate(),
+			ReqID:    engine.NewID(),
 			ReqSrc:   agentPort,
 			ReqDst:   topPort.AsRemote(),
 			PID:      1,
 			VAddr:    0x1000,
 			DeviceID: 1,
 		}
-		remoteReqID := timing.GetIDGenerator().Generate()
+		remoteReqID := engine.NewID()
 		gmmuComp.State.RemoteMemReqs = map[uint64]transactionState{
 			remoteReqID: walking,
 		}
@@ -207,7 +207,7 @@ var _ = Describe("GMMU milestones", func() {
 		rsp := vmprotocol.TranslationRsp{
 			Page: vm.Page{PID: 1, VAddr: 0x1000, PAddr: 0x2000},
 		}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = engine.NewID()
 		rsp.Src = lowModulePort
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = remoteReqID
@@ -295,7 +295,7 @@ var _ = Describe("GMMU milestones", func() {
 
 		// Deliver the remote response.
 		rsp := vmprotocol.TranslationRsp{Page: page}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = engine.NewID()
 		rsp.Src = lowModulePort
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = downstream.ID

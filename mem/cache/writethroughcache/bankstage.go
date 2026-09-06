@@ -1,7 +1,6 @@
 package writethroughcache
 
 import (
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -61,7 +60,7 @@ func (s *bankStage) extractFromBuf() bool {
 	// pipeline, so its bank read/write gets its own child bar under the req_in,
 	// mirroring the directory pipeline subtask. The bank latency then shows as
 	// real work rather than an unexplained gap before completion.
-	pid := timing.GetIDGenerator().Generate()
+	pid := s.cache.comp.NewID()
 	trans.BankTaskID = pid
 	tracing.StartTask(s.cache.comp, tracing.TaskStart{
 		ID:       pid,

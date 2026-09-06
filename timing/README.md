@@ -29,15 +29,15 @@ type Event interface {
 }
 ```
 
-Embed `EventBase` to get the standard fields and getters. `MakeEventBase(t, handlerID)`
-returns an `EventBase` value with a fresh ID from the global ID generator:
+Embed `EventBase` to get the standard fields and getters. `MakeEventBase(ids, t, handlerID)`
+returns an `EventBase` value with a fresh ID from the supplied simulation ID source:
 
 ```go
 type tickEvent struct {
     timing.EventBase
 }
 
-evt := tickEvent{timing.MakeEventBase(now, comp.Name())}
+evt := tickEvent{timing.MakeEventBase(comp, now, comp.Name())}
 ```
 
 ### Handler
@@ -104,10 +104,21 @@ later := freq.NCyclesLater(3, now)
 
 ## ID Generation
 
-`GetIDGenerator().Generate()` returns unique `uint64` IDs. By default IDs are
-sequential and deterministic; call `UseParallelIDGenerator()` before first use
-for faster but non-deterministic IDs (or `UseSequentialIDGenerator()` to be
-explicit). The generator's counter is part of the simulation state snapshot.
+Each simulation owns an atomic ID counter. Use `simulation.NewID()`,
+`component.NewID()`, or `engine.NewID()` to allocate a `uint64` ID from that
+simulation. The first ID is 1; zero remains unset. Separate simulations can
+reuse the same numeric IDs. Parallel callers receive unique IDs within their
+simulation, with allocation order determined by execution order.
+
+Event factories accept an explicit `timing.IDSource` (usually the component
+or engine). The process-global generator, configuration, and reset functions
+have been removed.
+
+A `Simulation` checkpoints its counter automatically. Standalone-engine users
+must save and restore `engine.GetIDGenerator()` alongside the engine and other
+entities. Restore into a fresh, stopped simulation; restoring one simulation
+does not change another simulation's counter. Parallel simulation checkpointing
+remains unsupported.
 
 ## Hooks
 

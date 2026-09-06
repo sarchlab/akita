@@ -27,6 +27,7 @@ import (
 )
 
 type fakeEngine struct {
+	timing.IDGenerator
 	control *timing.SerialEngine
 	hooking.HookableBase
 
@@ -98,6 +99,7 @@ type sliceFieldState struct {
 }
 
 type sliceFieldComponent struct {
+	timing.IDGenerator
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 
@@ -567,6 +569,7 @@ func TestListComponentDetailsSerializesRegisteredComponent(t *testing.T) {
 }
 
 type tickableComponent struct {
+	timing.IDGenerator
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 
@@ -635,6 +638,7 @@ func TestTickReturns404ForUnknownComponent(t *testing.T) {
 
 func TestProgressBarsLifecycleRoundtripsThroughHandler(t *testing.T) {
 	monitor := NewMonitor()
+	monitor.RegisterEngine(timing.NewSerialEngine())
 
 	requireEmpty := func() {
 		recorder := httptest.NewRecorder()
@@ -676,6 +680,7 @@ func TestProgressBarsLifecycleRoundtripsThroughHandler(t *testing.T) {
 }
 
 type bufferOnlyComponent struct {
+	timing.IDGenerator
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 
@@ -704,6 +709,7 @@ func (c *bufferOnlyComponent) NotifyRecv(messaging.Port)     {}
 func (c *bufferOnlyComponent) NotifyPortFree(messaging.Port) {}
 
 type portedComponent struct {
+	timing.IDGenerator
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 

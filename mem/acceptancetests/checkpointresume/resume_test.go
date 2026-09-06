@@ -110,7 +110,7 @@ func (m *driverMW) sendNext() bool {
 		}
 		idx := st.WritesSent
 		req := memprotocol.WriteReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = m.d.NewID()
 		req.Src = port.AsRemote()
 		req.Dst = m.d.lowModule.AsRemote()
 		req.Address = addressForOp(idx)
@@ -136,7 +136,7 @@ func (m *driverMW) sendNext() bool {
 		}
 		idx := st.ReadsSent
 		req := memprotocol.ReadReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = m.d.NewID()
 		req.Src = port.AsRemote()
 		req.Dst = m.d.lowModule.AsRemote()
 		req.Address = addressForOp(idx)

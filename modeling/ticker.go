@@ -16,9 +16,9 @@ type TickEvent struct {
 }
 
 // MakeTickEvent creates a new TickEvent
-func MakeTickEvent(handlerID string, time timing.VTimeInPicoSec) TickEvent {
+func MakeTickEvent(ids timing.IDSource, handlerID string, time timing.VTimeInPicoSec) TickEvent {
 	evt := TickEvent{}
-	evt.ID = timing.GetIDGenerator().Generate()
+	evt.ID = ids.NewID()
 	evt.HandlerID_ = handlerID
 	evt.Time_ = time
 	evt.Secondary = false
@@ -89,7 +89,7 @@ func (t *TickScheduler) TickNow() {
 
 	t.nextTickTime = t.freq.ThisTick(time)
 	t.hasScheduledTick = true
-	tick := MakeTickEvent(t.handlerID, t.nextTickTime)
+	tick := MakeTickEvent(t.engine, t.handlerID, t.nextTickTime)
 
 	if t.secondary {
 		tick.Secondary = true
@@ -111,7 +111,7 @@ func (t *TickScheduler) TickLater() {
 
 	t.nextTickTime = time
 	t.hasScheduledTick = true
-	tick := MakeTickEvent(t.handlerID, t.nextTickTime)
+	tick := MakeTickEvent(t.engine, t.handlerID, t.nextTickTime)
 
 	if t.secondary {
 		tick.Secondary = true
@@ -227,4 +227,12 @@ func NewSecondaryTickingComponent(
 	}
 
 	return tc
+}
+
+// NewID allocates an ID from the component's simulation.
+func (t *TickScheduler) NewID() uint64 { return t.engine.NewID() }
+
+// GetIDGenerator identifies the component's simulation ID namespace.
+func (t *TickScheduler) GetIDGenerator() *timing.IDGenerator {
+	return t.engine.GetIDGenerator()
 }

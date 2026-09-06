@@ -12,6 +12,7 @@ import (
 
 // Simple test time teller implementation
 type testTimeTeller struct {
+	timing.IDGenerator
 	currentTime timing.VTimeInPicoSec
 }
 

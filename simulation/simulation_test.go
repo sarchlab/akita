@@ -474,10 +474,10 @@ var _ = Describe("Checkpoint round trip", func() {
 		// Establish runtime state across all four entity kinds.
 		comp.State = roundTripState{Count: 7}
 		storage.Write(0, []byte{1, 2, 3, 4})
+		var savedCounter uint64
 		for i := 0; i < 5; i++ {
-			timing.GetIDGenerator().Generate()
+			savedCounter = engine.NewID()
 		}
-		savedCounter := timing.GetIDGeneratorNextID()
 		engine.SetCurrentTime(100)
 
 		path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
@@ -486,8 +486,8 @@ var _ = Describe("Checkpoint round trip", func() {
 		// Mutate every piece of runtime state away from the checkpoint.
 		comp.State = roundTripState{Count: 999}
 		storage.Write(0, []byte{0, 0, 0, 0})
-		timing.GetIDGenerator().Generate()
-		timing.GetIDGenerator().Generate()
+		engine.NewID()
+		engine.NewID()
 		engine.SetCurrentTime(500)
 
 		// Restore and confirm every piece came back.
@@ -496,7 +496,7 @@ var _ = Describe("Checkpoint round trip", func() {
 		Expect(comp.State.Count).To(Equal(7))
 		data := storage.Read(0, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
-		Expect(timing.GetIDGeneratorNextID()).To(Equal(savedCounter))
+		Expect(sim.NewID()).To(Equal(savedCounter + 1))
 		Expect(engine.CurrentTime()).To(Equal(timing.VTimeInPicoSec(100)))
 	})
 })

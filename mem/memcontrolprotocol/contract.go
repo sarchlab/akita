@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 // Controllable is the minimal interface the contract harness requires
@@ -326,7 +325,7 @@ func newControlReq(
 	cmd Command,
 ) Req {
 	req := Req{Command: cmd}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = ctrl.Component().NewID()
 	req.Src = messaging.RemotePort("ContractAgent")
 	req.Dst = ctrl.AsRemote()
 	req.TrafficClass = "Req"

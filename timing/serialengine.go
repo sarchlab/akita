@@ -13,6 +13,8 @@ type SerialEngine struct {
 	hooking.HookableBase
 	*engineControl
 
+	idGenerator *IDGenerator
+
 	time           VTimeInPicoSec
 	queue          *unsafeEventQueue
 	secondaryQueue *unsafeEventQueue
@@ -27,6 +29,7 @@ type SerialEngine struct {
 // NewSerialEngine creates a SerialEngine.
 func NewSerialEngine() *SerialEngine {
 	e := new(SerialEngine)
+	e.idGenerator = &IDGenerator{}
 
 	e.queue = newUnsafeEventQueue()
 	e.secondaryQueue = newUnsafeEventQueue()
@@ -228,3 +231,10 @@ func (e *SerialEngine) recoverRun(err *error) {
 	}
 	e.currentEvent = nil
 }
+
+// NewID allocates an ID in this engine's simulation namespace.
+func (e *SerialEngine) NewID() uint64 { return e.idGenerator.NewID() }
+
+// GetIDGenerator returns the counter shared by this engine and its components.
+// A Simulation registers it separately as a checkpoint entity.
+func (e *SerialEngine) GetIDGenerator() *IDGenerator { return e.idGenerator }

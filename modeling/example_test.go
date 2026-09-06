@@ -112,7 +112,7 @@ func (m *pingMiddleware) sendRsp() bool {
 
 	rsp := PingRsp{
 		MsgMeta: messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  m.comp.NewID(),
 			Src: m.outPort.AsRemote(),
 			Dst: trans.req.Src,
 		},
@@ -137,7 +137,7 @@ func (m *pingMiddleware) sendPing() bool {
 
 	req := PingReq{
 		MsgMeta: messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  m.comp.NewID(),
 			Src: m.outPort.AsRemote(),
 			Dst: m.pingDst,
 		},

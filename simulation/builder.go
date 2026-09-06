@@ -168,10 +168,10 @@ func (b Builder) createEngine(s *Simulation) {
 	}
 }
 
-// createIDGenerator registers the process-wide ID generator as an entity so its
+// createIDGenerator registers this simulation's ID generator as an entity so its
 // counter is captured in the state snapshot.
 func (b Builder) createIDGenerator(s *Simulation) {
-	s.registerEntity(timing.GetIDGenerator().(Entity))
+	s.registerEntity(s.engine.GetIDGenerator())
 }
 
 func (b Builder) createMetaRecorder(s *Simulation) {

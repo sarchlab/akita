@@ -79,6 +79,7 @@ func makeDirectConnection(engine timing.Engine) messaging.Connection {
 // TLB in the integration tests. It owns a single real port; when a message is
 // delivered to that port it records the message and optionally runs onDeliver.
 type idealEndpoint struct {
+	timing.IDGenerator
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 

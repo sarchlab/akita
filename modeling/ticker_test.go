@@ -8,6 +8,7 @@ import (
 )
 
 type testEngine struct {
+	timing.IDGenerator
 	now       timing.VTimeInPicoSec
 	scheduled []timing.Event
 }
@@ -60,7 +61,7 @@ var _ = Describe("Ticking Component", func() {
 	It("should tick when the ticker make progress in a tick", func() {
 		ticker.progress = true
 
-		tc.Handle(MakeTickEvent(tc.Name(), timing.VTimeInPicoSec(10000)))
+		tc.Handle(MakeTickEvent(engine, tc.Name(), timing.VTimeInPicoSec(10000)))
 
 		Expect(engine.scheduled).To(HaveLen(1))
 		Expect(engine.scheduled[0].Time()).To(Equal(timing.VTimeInPicoSec(11000)))
@@ -70,7 +71,7 @@ var _ = Describe("Ticking Component", func() {
 		func() {
 			ticker.progress = true
 
-			tc.Handle(MakeTickEvent(tc.Name(), timing.VTimeInPicoSec(10000)))
+			tc.Handle(MakeTickEvent(engine, tc.Name(), timing.VTimeInPicoSec(10000)))
 			tc.TickNow()
 
 			Expect(engine.scheduled).To(HaveLen(1))
@@ -81,7 +82,7 @@ var _ = Describe("Ticking Component", func() {
 	It("should stop ticking if no progress is made", func() {
 		ticker.progress = false
 
-		tc.Handle(MakeTickEvent(tc.Name(), timing.VTimeInPicoSec(10000)))
+		tc.Handle(MakeTickEvent(engine, tc.Name(), timing.VTimeInPicoSec(10000)))
 
 		Expect(engine.scheduled).To(BeEmpty())
 	})

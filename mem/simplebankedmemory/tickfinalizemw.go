@@ -6,7 +6,6 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -87,7 +86,7 @@ func (m *tickFinalizeMW) finalizeRead(
 	m.finishPipeline(&item.ReadMsg, item.PipelineTaskID)
 
 	rsp := memprotocol.DataReadyRsp{}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = m.comp.NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = readReq.Src
 	rsp.RspTo = readReq.ID
@@ -140,7 +139,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 	m.finishPipeline(&item.WriteMsg, item.PipelineTaskID)
 
 	rsp := memprotocol.WriteDoneRsp{}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = m.comp.NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = writeReq.Src
 	rsp.RspTo = writeReq.ID

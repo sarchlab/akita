@@ -25,9 +25,9 @@ type EventBase struct {
 }
 
 // MakeEventBase creates a new EventBase as a value.
-func MakeEventBase(t VTimeInPicoSec, handlerID string) EventBase {
+func MakeEventBase(ids IDSource, t VTimeInPicoSec, handlerID string) EventBase {
 	return EventBase{
-		ID:         GetIDGenerator().Generate(),
+		ID:         ids.NewID(),
 		Time_:      t,
 		HandlerID_: handlerID,
 		Secondary:  false,

@@ -16,6 +16,7 @@ import (
 // verbs respond with Success=false, Error=ErrUnsupported. The test
 // suite uses it to verify the harness's own logic.
 type fakeComp struct {
+	timing.IDGenerator
 	hooking.HookableBase
 
 	name       string
@@ -156,7 +157,7 @@ func (c *fakeComp) makeRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = c.NewID()
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo

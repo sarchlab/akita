@@ -239,3 +239,11 @@ func (s *Simulation) Terminate() {
 
 	s.dataRecorder.Close()
 }
+
+// NewID allocates an ID unique within this simulation.
+func (s *Simulation) NewID() uint64 { return s.engine.NewID() }
+
+// GetIDGenerator returns this simulation's checkpointed ID counter.
+func (s *Simulation) GetIDGenerator() *timing.IDGenerator {
+	return s.engine.GetIDGenerator()
+}

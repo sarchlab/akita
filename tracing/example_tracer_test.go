@@ -10,6 +10,7 @@ import (
 )
 
 type SampleTimeTeller struct {
+	timing.IDGenerator
 	time timing.VTimeInPicoSec
 }
 
@@ -18,6 +19,7 @@ func (t *SampleTimeTeller) CurrentTime() timing.VTimeInPicoSec {
 }
 
 type SampleDomain struct {
+	timing.IDGenerator
 	*hooking.HookableBase
 
 	timeTeller timing.TimeTeller

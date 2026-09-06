@@ -44,7 +44,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// tick, so the item is still in flight: it has not reached PostPipelineBuf
 	// and so has not been finalized/completed. The memory is a leaf, so there is
 	// no downstream req_out.
-	read := makeReadReq(messaging.RemotePort("Agent"), topPort.AsRemote(), 0)
+	read := makeReadReq(engine, messaging.RemotePort("Agent"), topPort.AsRemote(), 0)
 	topPort.Deliver(read)
 	comp.Tick()
 
@@ -62,7 +62,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the read is in flight.
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = timing.GetIDGenerator().Generate()
+	reset.ID = engine.NewID()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = ctrlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

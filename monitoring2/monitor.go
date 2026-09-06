@@ -23,8 +23,9 @@ import (
 	"unsafe"
 
 	// Enable profiling.
-	_ "github.com/glebarez/go-sqlite"
 	_ "net/http/pprof"
+
+	_ "github.com/glebarez/go-sqlite"
 
 	"github.com/google/pprof/profile"
 	"github.com/sarchlab/akita/v5/daisen2"
@@ -119,9 +120,10 @@ func (m *Monitor) SetTraceDBPath(path string) {
 }
 
 // CreateProgressBar creates a new progress bar tracked by the monitor.
+// RegisterEngine must be called first so the ID belongs to that simulation.
 func (m *Monitor) CreateProgressBar(name string, total uint64) *daisen2.ProgressBar {
 	bar := &daisen2.ProgressBar{
-		ID:    timing.GetIDGenerator().Generate(),
+		ID:    m.engine.NewID(),
 		Name:  name,
 		Total: total,
 	}

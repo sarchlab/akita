@@ -99,7 +99,7 @@ var _ = Describe("GMMU", func() {
 
 	makeTranslationReq := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = engine.NewID()
 		req.Src = agentPort
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -211,7 +211,7 @@ var _ = Describe("GMMU", func() {
 			rsp := vmprotocol.TranslationRsp{
 				Page: page,
 			}
-			rsp.ID = timing.GetIDGenerator().Generate()
+			rsp.ID = engine.NewID()
 			rsp.Src = lowModulePort
 			rsp.Dst = bottomPort.AsRemote()
 			rsp.RspTo = sentReqToBottom.ID

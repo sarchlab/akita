@@ -17,10 +17,10 @@ type testMsg struct {
 	messaging.MsgMeta
 }
 
-func newTestMsg() testMsg {
+func newTestMsg(engine timing.IDSource) testMsg {
 	return testMsg{
 		MsgMeta: messaging.MsgMeta{
-			ID: timing.GetIDGenerator().Generate(),
+			ID: engine.NewID(),
 		},
 	}
 }
@@ -45,6 +45,10 @@ var _ = Describe("DirectConnection", func() {
 		port2.EXPECT().AsRemote().Return(messaging.RemotePort("port2")).AnyTimes()
 
 		engine = NewMockEngine(mockCtrl)
+
+		engineIDs := &timing.IDGenerator{}
+		engine.EXPECT().NewID().DoAndReturn(engineIDs.NewID).AnyTimes()
+		engine.EXPECT().GetIDGenerator().Return(engineIDs).AnyTimes()
 		connection = MakeBuilder().
 			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
 			Build("Direct")
@@ -63,13 +67,13 @@ var _ = Describe("DirectConnection", func() {
 	It("should forward when handling tick event", func() {
 		engine.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10000))
 
-		tick := modeling.MakeTickEvent(connection.Name(), timing.VTimeInPicoSec(10000))
+		tick := modeling.MakeTickEvent(engine, connection.Name(), timing.VTimeInPicoSec(10000))
 
-		msg1 := newTestMsg()
+		msg1 := newTestMsg(engine)
 		msg1.Src = port1.AsRemote()
 		msg1.Dst = port2.AsRemote()
 
-		msg2 := newTestMsg()
+		msg2 := newTestMsg(engine)
 		msg2.Src = port2.AsRemote()
 		msg2.Dst = port1.AsRemote()
 
@@ -96,9 +100,9 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should keep outgoing messages queued when delivery is blocked", func() {
-		tick := modeling.MakeTickEvent(connection.Name(), timing.VTimeInPicoSec(10000))
+		tick := modeling.MakeTickEvent(engine, connection.Name(), timing.VTimeInPicoSec(10000))
 
-		msg := newTestMsg()
+		msg := newTestMsg(engine)
 		msg.Src = port1.AsRemote()
 		msg.Dst = port2.AsRemote()
 
@@ -178,13 +182,13 @@ var _ = Describe("Direct Connection Integration", func() {
 	It("should deliver all messages", func() {
 		for _, agent := range agents {
 			for i := 0; i < numMsgsPerAgent; i++ {
-				msg := newTestMsg()
+				msg := newTestMsg(engine)
 				msg.Src = agent.OutPort.AsRemote()
 				msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
 				for msg.Dst == msg.Src {
 					msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
 				}
-				msg.ID = timing.GetIDGenerator().Generate()
+				msg.ID = engine.NewID()
 				agent.msgsOut = append(agent.msgsOut, msg)
 			}
 			agent.TickLater()
@@ -229,7 +233,7 @@ func directConnectionTest(seed int64) timing.VTimeInPicoSec {
 
 	for _, agent := range agents {
 		for i := 0; i < numMsgsPerAgent; i++ {
-			msg := newTestMsg()
+			msg := newTestMsg(engine)
 			msg.Src = agent.OutPort.AsRemote()
 			msg.Dst = agents[r.Intn(len(agents))].OutPort.AsRemote()
 
@@ -237,7 +241,7 @@ func directConnectionTest(seed int64) timing.VTimeInPicoSec {
 				msg.Dst = agents[r.Intn(len(agents))].OutPort.AsRemote()
 			}
 
-			msg.ID = timing.GetIDGenerator().Generate()
+			msg.ID = engine.NewID()
 
 			agent.msgsOut = append(agent.msgsOut, msg)
 		}

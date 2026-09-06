@@ -94,7 +94,7 @@ var _ = Describe("Cache", func() {
 	It("should do read miss", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4})
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = engine.NewID()
 		read.Src = cuPort.AsRemote()
 		read.Dst = c.GetPortByName("Top").AsRemote()
 		read.Address = 0x100
@@ -114,7 +114,7 @@ var _ = Describe("Cache", func() {
 	It("should do read miss coalesce", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := memprotocol.ReadReq{}
-		read1.ID = timing.GetIDGenerator().Generate()
+		read1.ID = engine.NewID()
 		read1.Src = cuPort.AsRemote()
 		read1.Dst = c.GetPortByName("Top").AsRemote()
 		read1.Address = 0x100
@@ -124,7 +124,7 @@ var _ = Describe("Cache", func() {
 		c.GetPortByName("Top").Deliver(read1)
 
 		read2 := memprotocol.ReadReq{}
-		read2.ID = timing.GetIDGenerator().Generate()
+		read2.ID = engine.NewID()
 		read2.Src = cuPort.AsRemote()
 		read2.Dst = c.GetPortByName("Top").AsRemote()
 		read2.Address = 0x104
@@ -155,7 +155,7 @@ var _ = Describe("Cache", func() {
 	It("should do read hit", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := memprotocol.ReadReq{}
-		read1.ID = timing.GetIDGenerator().Generate()
+		read1.ID = engine.NewID()
 		read1.Src = cuPort.AsRemote()
 		read1.Dst = c.GetPortByName("Top").AsRemote()
 		read1.Address = 0x100
@@ -171,7 +171,7 @@ var _ = Describe("Cache", func() {
 		Expect(rsps[0].(memprotocol.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
 
 		read2 := memprotocol.ReadReq{}
-		read2.ID = timing.GetIDGenerator().Generate()
+		read2.ID = engine.NewID()
 		read2.Src = cuPort.AsRemote()
 		read2.Dst = c.GetPortByName("Top").AsRemote()
 		read2.Address = 0x104
@@ -191,7 +191,7 @@ var _ = Describe("Cache", func() {
 
 	It("should write partial line", func() {
 		write := memprotocol.WriteReq{}
-		write.ID = timing.GetIDGenerator().Generate()
+		write.ID = engine.NewID()
 		write.Src = cuPort.AsRemote()
 		write.Dst = c.GetPortByName("Top").AsRemote()
 		write.Address = 0x100
@@ -212,7 +212,7 @@ var _ = Describe("Cache", func() {
 
 	It("should write full line", func() {
 		write := memprotocol.WriteReq{}
-		write.ID = timing.GetIDGenerator().Generate()
+		write.ID = engine.NewID()
 		write.Src = cuPort.AsRemote()
 		write.Dst = c.GetPortByName("Top").AsRemote()
 		write.Address = 0x100

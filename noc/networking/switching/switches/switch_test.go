@@ -29,7 +29,9 @@ var _ = Describe("Switch", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
-
+		engineIDs := &timing.IDGenerator{}
+		engine.EXPECT().NewID().DoAndReturn(engineIDs.NewID).AnyTimes()
+		engine.EXPECT().GetIDGenerator().Return(engineIDs).AnyTimes()
 		port1 = NewMockPort(mockCtrl)
 		port1.EXPECT().AsRemote().
 			Return(messaging.RemotePort("LocalPort1")).
@@ -108,12 +110,12 @@ var _ = Describe("Switch", func() {
 
 	It("should start processing", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  engine.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = engine.NewID()
 		flit.Dst = port1.AsRemote()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
@@ -133,12 +135,12 @@ var _ = Describe("Switch", func() {
 
 	It("should not start processing if pipeline is busy", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  engine.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = engine.NewID()
 		flit.Dst = port1.AsRemote()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
@@ -174,12 +176,12 @@ var _ = Describe("Switch", func() {
 
 	It("should route", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  engine.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = engine.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
@@ -204,12 +206,12 @@ var _ = Describe("Switch", func() {
 
 	It("should not route if forward buffer is full", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  engine.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = engine.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
@@ -231,12 +233,12 @@ var _ = Describe("Switch", func() {
 
 	It("should forward", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  engine.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = engine.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
@@ -256,12 +258,12 @@ var _ = Describe("Switch", func() {
 
 	It("should not forward if the output buffer is busy", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  engine.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = engine.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 		// Fill sendOut buffer to capacity, forward buffer targets port2
@@ -282,12 +284,12 @@ var _ = Describe("Switch", func() {
 
 	It("should send flits out", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  engine.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = engine.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
@@ -309,12 +311,12 @@ var _ = Describe("Switch", func() {
 
 	It("should wait if port is busy sending flits out", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  engine.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = engine.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
