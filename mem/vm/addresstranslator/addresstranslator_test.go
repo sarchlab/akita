@@ -42,17 +42,17 @@ const (
 	ctrlBufSize        = 1
 )
 
-// assignPort builds a port with the given buffer size using the same registrar
+// assignPort builds a port with the given buffer size using the same simulation
 // the component was built with, and assigns it to the component's declared port
 // of the same name.
 func assignPort(
-	reg modeling.Registrar,
+	sim timing.Simulation,
 	comp *Comp,
 	name string,
 	bufSize int,
 ) messaging.Port {
 	p := modeling.MakePortBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithComponent(comp).
 		WithSpec(modeling.PortSpec{BufSize: bufSize}).
 		Build(name)
@@ -63,16 +63,17 @@ func assignPort(
 // assignPorts assigns the translator's four declared ports (Top, Bottom,
 // Translation, Control), with the given Top buffer size and the historical
 // defaults for the rest.
-func assignPorts(reg modeling.Registrar, comp *Comp, topBufSize int) {
-	assignPort(reg, comp, "Top", topBufSize)
-	assignPort(reg, comp, "Bottom", bottomBufSize)
-	assignPort(reg, comp, "Translation", translationBufSize)
-	assignPort(reg, comp, "Control", ctrlBufSize)
+func assignPorts(sim timing.Simulation, comp *Comp, topBufSize int) {
+	assignPort(sim, comp, "Top", topBufSize)
+	assignPort(sim, comp, "Bottom", bottomBufSize)
+	assignPort(sim, comp, "Translation", translationBufSize)
+	assignPort(sim, comp, "Control", ctrlBufSize)
 }
 
 var _ = Describe("Address Translator", func() {
 	var (
 		engine          timing.Engine
+		sim             timing.Simulation
 		t               *Comp
 		topPort         messaging.Port
 		bottomPort      messaging.Port
@@ -98,14 +99,13 @@ var _ = Describe("Address Translator", func() {
 			},
 		}
 
-		reg := modeling.NewStandaloneRegistrar(engine)
 		t = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(resources).
 			Build("AddressTranslator")
 
-		assignPorts(reg, t, topBufSize)
+		assignPorts(sim, t, topBufSize)
 
 		topPort = t.GetPortByName("Top")
 		bottomPort = t.GetPortByName("Bottom")
@@ -125,6 +125,7 @@ var _ = Describe("Address Translator", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		build(topBufSize)
 	})
 
@@ -135,7 +136,7 @@ var _ = Describe("Address Translator", func() {
 
 		BeforeEach(func() {
 			req = memprotocol.ReadReq{}
-			req.ID = timing.GetIDGenerator().Generate()
+			req.ID = sim.NewID()
 			req.Src = messaging.RemotePort("Agent")
 			req.Dst = topPort.AsRemote()
 			req.Address = 0x100
@@ -187,13 +188,13 @@ var _ = Describe("Address Translator", func() {
 
 		BeforeEach(func() {
 			transReq1 = vmprotocol.TranslationReq{}
-			transReq1.ID = timing.GetIDGenerator().Generate()
+			transReq1.ID = sim.NewID()
 			transReq1.PID = 1
 			transReq1.VAddr = 0x100
 			transReq1.DeviceID = 1
 			transReq1.TrafficClass = "vmprotocol.TranslationReq"
 			transReq2 = vmprotocol.TranslationReq{}
-			transReq2.ID = timing.GetIDGenerator().Generate()
+			transReq2.ID = sim.NewID()
 			transReq2.PID = 1
 			transReq2.VAddr = 0x100
 			transReq2.DeviceID = 1
@@ -214,7 +215,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should stall if send failed", func() {
 			req := memprotocol.ReadReq{}
-			req.ID = timing.GetIDGenerator().Generate()
+			req.ID = sim.NewID()
 			req.Address = 0x10040
 			req.AccessByteSize = 4
 			req.TrafficBytes = 12
@@ -226,7 +227,7 @@ var _ = Describe("Address Translator", func() {
 					PAddr: 0x20000,
 				},
 			}
-			translationRsp.ID = timing.GetIDGenerator().Generate()
+			translationRsp.ID = sim.NewID()
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vmprotocol.TranslationRsp"
 
@@ -254,7 +255,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should forward read request", func() {
 			req := memprotocol.ReadReq{}
-			req.ID = timing.GetIDGenerator().Generate()
+			req.ID = sim.NewID()
 			req.Address = 0x10040
 			req.AccessByteSize = 4
 			req.TrafficBytes = 12
@@ -266,7 +267,7 @@ var _ = Describe("Address Translator", func() {
 					PAddr: 0x20000,
 				},
 			}
-			translationRsp.ID = timing.GetIDGenerator().Generate()
+			translationRsp.ID = sim.NewID()
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vmprotocol.TranslationRsp"
 
@@ -312,7 +313,7 @@ var _ = Describe("Address Translator", func() {
 			data := []byte{1, 2, 3, 4}
 			dirty := []bool{false, true, false, true}
 			write := memprotocol.WriteReq{}
-			write.ID = timing.GetIDGenerator().Generate()
+			write.ID = sim.NewID()
 			write.Address = 0x10040
 			write.Data = data
 			write.DirtyMask = dirty
@@ -325,7 +326,7 @@ var _ = Describe("Address Translator", func() {
 					PAddr: 0x20000,
 				},
 			}
-			translationRsp.ID = timing.GetIDGenerator().Generate()
+			translationRsp.ID = sim.NewID()
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vmprotocol.TranslationRsp"
 
@@ -371,7 +372,7 @@ var _ = Describe("Address Translator", func() {
 
 		BeforeEach(func() {
 			readFromTop = memprotocol.ReadReq{}
-			readFromTop.ID = timing.GetIDGenerator().Generate()
+			readFromTop.ID = sim.NewID()
 			readFromTop.Src = messaging.RemotePort("Agent")
 			readFromTop.Dst = topPort.AsRemote()
 			readFromTop.Address = 0x10040
@@ -379,7 +380,7 @@ var _ = Describe("Address Translator", func() {
 			readFromTop.TrafficBytes = 12
 			readFromTop.TrafficClass = "memprotocol.ReadReq"
 			readToBottom = memprotocol.ReadReq{}
-			readToBottom.ID = timing.GetIDGenerator().Generate()
+			readToBottom.ID = sim.NewID()
 			readToBottom.Src = bottomPort.AsRemote()
 			readToBottom.Dst = messaging.RemotePort("MemPort")
 			readToBottom.Address = 0x20040
@@ -387,14 +388,14 @@ var _ = Describe("Address Translator", func() {
 			readToBottom.TrafficBytes = 12
 			readToBottom.TrafficClass = "memprotocol.ReadReq"
 			writeFromTop = memprotocol.WriteReq{}
-			writeFromTop.ID = timing.GetIDGenerator().Generate()
+			writeFromTop.ID = sim.NewID()
 			writeFromTop.Src = messaging.RemotePort("Agent")
 			writeFromTop.Dst = topPort.AsRemote()
 			writeFromTop.Address = 0x10040
 			writeFromTop.TrafficBytes = 12
 			writeFromTop.TrafficClass = "memprotocol.WriteReq"
 			writeToBottom = memprotocol.WriteReq{}
-			writeToBottom.ID = timing.GetIDGenerator().Generate()
+			writeToBottom.ID = sim.NewID()
 			writeToBottom.Src = bottomPort.AsRemote()
 			writeToBottom.Dst = messaging.RemotePort("MemPort")
 			writeToBottom.Address = 0x10040
@@ -434,7 +435,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should respond data ready", func() {
 			dataReady := memprotocol.DataReadyRsp{}
-			dataReady.ID = timing.GetIDGenerator().Generate()
+			dataReady.ID = sim.NewID()
 			dataReady.RspTo = readToBottom.ID
 			dataReady.TrafficBytes = 4
 			dataReady.TrafficClass = "memprotocol.DataReadyRsp"
@@ -455,7 +456,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should respond write done", func() {
 			done := memprotocol.WriteDoneRsp{}
-			done.ID = timing.GetIDGenerator().Generate()
+			done.ID = sim.NewID()
 			done.RspTo = writeToBottom.ID
 			done.TrafficBytes = 4
 			done.TrafficClass = "memprotocol.WriteDoneRsp"
@@ -475,7 +476,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should stall if TopPort is busy", func() {
 			dataReady := memprotocol.DataReadyRsp{}
-			dataReady.ID = timing.GetIDGenerator().Generate()
+			dataReady.ID = sim.NewID()
 			dataReady.RspTo = readToBottom.ID
 			dataReady.TrafficBytes = 4
 			dataReady.TrafficClass = "memprotocol.DataReadyRsp"
@@ -511,31 +512,31 @@ var _ = Describe("Address Translator", func() {
 
 		BeforeEach(func() {
 			readFromTop = memprotocol.ReadReq{}
-			readFromTop.ID = timing.GetIDGenerator().Generate()
+			readFromTop.ID = sim.NewID()
 			readFromTop.Address = 0x10040
 			readFromTop.AccessByteSize = 4
 			readFromTop.TrafficBytes = 12
 			readFromTop.TrafficClass = "memprotocol.ReadReq"
 			readToBottom = memprotocol.ReadReq{}
-			readToBottom.ID = timing.GetIDGenerator().Generate()
+			readToBottom.ID = sim.NewID()
 			readToBottom.Address = 0x20040
 			readToBottom.AccessByteSize = 4
 			readToBottom.TrafficBytes = 12
 			readToBottom.TrafficClass = "memprotocol.ReadReq"
 			writeFromTop = memprotocol.WriteReq{}
-			writeFromTop.ID = timing.GetIDGenerator().Generate()
+			writeFromTop.ID = sim.NewID()
 			writeFromTop.Address = 0x10040
 			writeFromTop.TrafficBytes = 12
 			writeFromTop.TrafficClass = "memprotocol.WriteReq"
 			writeToBottom = memprotocol.WriteReq{}
-			writeToBottom.ID = timing.GetIDGenerator().Generate()
+			writeToBottom.ID = sim.NewID()
 			writeToBottom.Address = 0x10040
 			writeToBottom.TrafficBytes = 12
 			writeToBottom.TrafficClass = "memprotocol.WriteReq"
 			flushReq = memcontrolprotocol.Req{
 				Command: memcontrolprotocol.CmdFlush,
 			}
-			flushReq.ID = timing.GetIDGenerator().Generate()
+			flushReq.ID = sim.NewID()
 			flushReq.Src = messaging.RemotePort("Agent")
 			flushReq.Dst = ctrlPort.AsRemote()
 			flushReq.TrafficBytes = 4
@@ -543,7 +544,7 @@ var _ = Describe("Address Translator", func() {
 			restartReq = memcontrolprotocol.Req{
 				Command: memcontrolprotocol.CmdReset,
 			}
-			restartReq.ID = timing.GetIDGenerator().Generate()
+			restartReq.ID = sim.NewID()
 			restartReq.Src = messaging.RemotePort("Agent")
 			restartReq.Dst = ctrlPort.AsRemote()
 			restartReq.TrafficBytes = 4
@@ -611,7 +612,7 @@ var _ = Describe("Address Translator", func() {
 func fillOutgoing(p messaging.Port, n int) {
 	for i := 0; i < n; i++ {
 		dummy := memprotocol.WriteDoneRsp{}
-		dummy.ID = timing.GetIDGenerator().Generate()
+		dummy.ID = p.Component().Simulation().NewID()
 		dummy.Src = p.AsRemote()
 		dummy.Dst = messaging.RemotePort("Dummy")
 		dummy.TrafficClass = "memprotocol.WriteDoneRsp"

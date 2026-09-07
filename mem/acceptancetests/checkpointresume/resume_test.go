@@ -110,7 +110,7 @@ func (m *driverMW) sendNext() bool {
 		}
 		idx := st.WritesSent
 		req := memprotocol.WriteReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = m.d.Simulation().NewID()
 		req.Src = port.AsRemote()
 		req.Dst = m.d.lowModule.AsRemote()
 		req.Address = addressForOp(idx)
@@ -136,7 +136,7 @@ func (m *driverMW) sendNext() bool {
 		}
 		idx := st.ReadsSent
 		req := memprotocol.ReadReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = m.d.Simulation().NewID()
 		req.Src = port.AsRemote()
 		req.Dst = m.d.lowModule.AsRemote()
 		req.Address = addressForOp(idx)
@@ -153,10 +153,10 @@ func (m *driverMW) sendNext() bool {
 	return false
 }
 
-func buildDriver(reg modeling.Registrar, lowModule messaging.Port) *driver {
+func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
 	spec := driverSpec{Freq: 1 * timing.GHz, NumOps: numOps}
 	modelComp := modeling.NewBuilder[driverSpec, driverState, modeling.None]().
-		WithEngine(reg.GetEngine()).
+		WithSimulation(sim).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build("Driver")
@@ -168,10 +168,10 @@ func buildDriver(reg modeling.Registrar, lowModule messaging.Port) *driver {
 
 	d := &driver{Component: modelComp, lowModule: lowModule}
 	modelComp.AddMiddleware(&driverMW{d: d})
-	reg.RegisterComponent(d)
+	sim.RegisterComponent(d)
 
 	memPort := modeling.MakePortBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithComponent(d).
 		WithSpec(modeling.PortSpec{BufSize: 4}).
 		Build("Mem")
@@ -191,14 +191,14 @@ func buildSim() (*simulation.Simulation, *driver) {
 	dramSpec.Width = 4
 	dramSpec.Latency = 10
 	dram := idealmemcontroller.MakeBuilder().
-		WithRegistrar(sim).
+		WithSimulation(sim).
 		WithSpec(dramSpec).
 		Build("DRAM")
 	assignPorts(sim, dram, "Top", "Control")
 
 	d := buildDriver(sim, dram.GetPortByName("Top"))
 
-	conn := directconnection.MakeBuilder().WithRegistrar(sim).Build("Conn")
+	conn := directconnection.MakeBuilder().WithSimulation(sim).Build("Conn")
 	conn.PlugIn(d.GetPortByName("Mem"))
 	conn.PlugIn(dram.GetPortByName("Top"))
 
@@ -214,7 +214,7 @@ func assignPorts(
 ) {
 	for _, name := range names {
 		p := modeling.MakePortBuilder().
-			WithRegistrar(sim).
+			WithSimulation(sim).
 			WithComponent(comp).
 			WithSpec(modeling.PortSpec{BufSize: 8}).
 			Build(name)

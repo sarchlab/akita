@@ -26,17 +26,17 @@ func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
 
-// assignPort builds a port with the given buffer size using the same registrar
+// assignPort builds a port with the given buffer size using the same simulation
 // the component was built with, and assigns it to the component's declared port
 // of the same name.
 func assignPort(
-	reg modeling.Registrar,
+	sim timing.Simulation,
 	comp *Comp,
 	name string,
 	bufSize int,
 ) messaging.Port {
 	p := modeling.MakePortBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithComponent(comp).
 		WithSpec(modeling.PortSpec{BufSize: bufSize}).
 		Build(name)
@@ -48,6 +48,7 @@ var _ = Describe("MMU", func() {
 
 	var (
 		engine           timing.Engine
+		sim              timing.Simulation
 		pageTable        vm.PageTable
 		mmuComp          *Comp
 		topPort          messaging.Port
@@ -57,16 +58,15 @@ var _ = Describe("MMU", func() {
 	// build constructs an MMU with the given Top buffer size, injects the
 	// shared page table, and plugs noopConns so its ports can be driven.
 	build := func(topBufSize int) {
-		reg := modeling.NewStandaloneRegistrar(engine)
 
 		mmuComp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(DefaultSpec()).
 			Build("MMU")
 
-		topPort = assignPort(reg, mmuComp, "Top", topBufSize)
-		assignPort(reg, mmuComp, "Control", 4)
+		topPort = assignPort(sim, mmuComp, "Top", topBufSize)
+		assignPort(sim, mmuComp, "Control", 4)
 
 		(&noopConn{}).PlugIn(topPort)
 		(&noopConn{}).PlugIn(mmuComp.GetPortByName("Control"))
@@ -76,6 +76,7 @@ var _ = Describe("MMU", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		pageTable = vm.NewPageTable(12)
 		build(4096)
 	})
@@ -83,7 +84,7 @@ var _ = Describe("MMU", func() {
 	Context("parse top", func() {
 		It("should process translation request", func() {
 			translationReq := vmprotocol.TranslationReq{}
-			translationReq.ID = timing.GetIDGenerator().Generate()
+			translationReq.ID = sim.NewID()
 			translationReq.Src = messaging.RemotePort("Agent.Top")
 			translationReq.Dst = topPort.AsRemote()
 			translationReq.PID = 1
@@ -116,7 +117,7 @@ var _ = Describe("MMU", func() {
 			mmuComp.State = State{
 				WalkingTranslations: []transactionState{
 					{
-						ReqID:     timing.GetIDGenerator().Generate(),
+						ReqID:     sim.NewID(),
 						ReqDst:    topPort.AsRemote(),
 						PID:       1,
 						VAddr:     0x1020,
@@ -146,7 +147,7 @@ var _ = Describe("MMU", func() {
 			mmuComp.State = State{
 				WalkingTranslations: []transactionState{
 					{
-						ReqID:     timing.GetIDGenerator().Generate(),
+						ReqID:     sim.NewID(),
 						ReqSrc:    messaging.RemotePort("Agent.Top"),
 						ReqDst:    topPort.AsRemote(),
 						PID:       1,
@@ -191,7 +192,7 @@ var _ = Describe("MMU", func() {
 			mmuComp.State = State{
 				WalkingTranslations: []transactionState{
 					{
-						ReqID:     timing.GetIDGenerator().Generate(),
+						ReqID:     sim.NewID(),
 						ReqSrc:    messaging.RemotePort("Agent.Top"),
 						ReqDst:    topPort.AsRemote(),
 						PID:       1,
@@ -213,6 +214,7 @@ var _ = Describe("MMU", func() {
 var _ = Describe("MMU Integration", func() {
 	var (
 		engine    timing.Engine
+		sim       timing.Simulation
 		mmuComp   *Comp
 		pageTable vm.PageTable
 		topPort   messaging.Port
@@ -221,19 +223,18 @@ var _ = Describe("MMU Integration", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 
 		pageTable = vm.NewPageTable(12)
 
-		reg := modeling.NewStandaloneRegistrar(engine)
-
 		mmuComp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(DefaultSpec()).
 			Build("MMU")
 
-		topPort = assignPort(reg, mmuComp, "Top", 4096)
-		assignPort(reg, mmuComp, "Control", 4)
+		topPort = assignPort(sim, mmuComp, "Top", 4096)
+		assignPort(sim, mmuComp, "Control", 4)
 		(&noopConn{}).PlugIn(topPort)
 
 		agentPort = messaging.NewPort(nil, 4, 4, "Agent.Top")
@@ -252,7 +253,7 @@ var _ = Describe("MMU Integration", func() {
 		pageTable.Insert(page)
 
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = agentPort.AsRemote()
 		req.Dst = topPort.AsRemote()
 		req.PID = 1

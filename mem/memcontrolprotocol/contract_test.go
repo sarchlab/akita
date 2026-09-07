@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -16,6 +17,7 @@ import (
 // verbs respond with Success=false, Error=ErrUnsupported. The test
 // suite uses it to verify the harness's own logic.
 type fakeComp struct {
+	sim timing.Simulation
 	hooking.HookableBase
 
 	name       string
@@ -40,7 +42,7 @@ type pendingReq struct {
 }
 
 func newFakeComp(name string, matrix memcontrolprotocol.VerbSupport, asyncDelay int) *fakeComp {
-	c := &fakeComp{
+	c := &fakeComp{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
 		name:       name,
 		matrix:     matrix,
 		asyncDelay: asyncDelay,
@@ -156,7 +158,7 @@ func (c *fakeComp) makeRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = c.Simulation().NewID()
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
@@ -271,3 +273,5 @@ func TestState_String(t *testing.T) {
 		}
 	}
 }
+
+func (c *fakeComp) Simulation() timing.Simulation { return c.sim }

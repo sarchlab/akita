@@ -25,7 +25,7 @@ func TestSwitchArbCursorRoundTrip(t *testing.T) {
 	}()
 
 	sw := switches.MakeBuilder().
-		WithRegistrar(sim).
+		WithSimulation(sim).
 		WithResources(switches.Resources{RoutingTable: routing.NewTable()}).
 		Build("Switch")
 	sw.State.NextArbPort = 2

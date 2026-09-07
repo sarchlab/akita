@@ -31,14 +31,14 @@ type readRsp struct {
 	messaging.MsgMeta
 }
 
-func newReq(src, dst messaging.RemotePort) readReq {
+func newReq(ids timing.Simulation, src, dst messaging.RemotePort) readReq {
 	return readReq{MsgMeta: messaging.MsgMeta{
-		ID: timing.GetIDGenerator().Generate(), Src: src, Dst: dst}}
+		ID: ids.NewID(), Src: src, Dst: dst}}
 }
 
-func newRsp(src, dst messaging.RemotePort, rspTo uint64) readRsp {
+func newRsp(ids timing.Simulation, src, dst messaging.RemotePort, rspTo uint64) readRsp {
 	return readRsp{MsgMeta: messaging.MsgMeta{
-		ID: timing.GetIDGenerator().Generate(), Src: src, Dst: dst, RspTo: rspTo}}
+		ID: ids.NewID(), Src: src, Dst: dst, RspTo: rspTo}}
 }
 
 // --- Client ---
@@ -69,7 +69,7 @@ func (m *clientMW) send() bool {
 		return false
 	}
 
-	req := newReq(port.AsRemote(), s.Dst)
+	req := newReq(m.comp.Simulation(), port.AsRemote(), s.Dst)
 	tracing.TraceReqInitiate(m.comp, req, 0) // root task, no parent
 	port.Send(req)
 	m.inFlight[req.ID] = req
@@ -136,7 +136,7 @@ func (m *cacheMW) forwardDown() bool {
 	tracing.TraceReqReceive(m.comp, upReq) // req_in @ this cache
 
 	// Miss: send a request one level down, parented to the task above.
-	downReq := newReq(bottom.AsRemote(), m.comp.State.DownstreamDst)
+	downReq := newReq(m.comp.Simulation(), bottom.AsRemote(), m.comp.State.DownstreamDst)
 	tracing.TraceReqInitiate(m.comp, downReq, tracing.MsgIDAtReceiver(upReq, m.comp))
 	bottom.Send(downReq)
 
@@ -162,7 +162,7 @@ func (m *cacheMW) respondUp() bool {
 
 	tracing.TraceReqFinalize(m.comp, txn.downReq) // close the downstream task
 
-	upRsp := newRsp(top.AsRemote(), txn.upReq.Src, txn.upReq.ID)
+	upRsp := newRsp(m.comp.Simulation(), top.AsRemote(), txn.upReq.Src, txn.upReq.ID)
 	top.Send(upRsp)
 	tracing.TraceReqComplete(m.comp, txn.upReq) // close the handling task
 
@@ -191,7 +191,7 @@ func (m *memMW) Tick() bool {
 	req := msg.(readReq)
 
 	tracing.TraceReqReceive(m.comp, req) // req_in @ Memory — a leaf task
-	port.Send(newRsp(port.AsRemote(), req.Src, req.ID))
+	port.Send(newRsp(m.comp.Simulation(), port.AsRemote(), req.Src, req.ID))
 	tracing.TraceReqComplete(m.comp, req)
 	port.RetrieveIncoming()
 	return true
@@ -243,52 +243,52 @@ func (t *treeTracer) print() {
 
 // --- Wiring ---
 
-func buildClient(engine timing.Engine, reg modeling.Registrar) *ClientComp {
+func buildClient(sim timing.Simulation) *ClientComp {
 	c := modeling.NewBuilder[modeling.None, clientState, modeling.None]().
-		WithEngine(engine).WithFreq(1 * timing.GHz).Build("Client")
+		WithSimulation(sim).WithFreq(1 * timing.GHz).Build("Client")
 	c.AddMiddleware(&clientMW{comp: c, inFlight: map[uint64]readReq{}})
 	c.DeclarePort("Out")
 	c.AssignPort("Out", messaging.NewPort(c, 4, 4, "Client.Out"))
-	reg.RegisterComponent(c)
+	sim.RegisterComponent(c)
 
 	return c
 }
 
-func buildCache(engine timing.Engine, reg modeling.Registrar, name string) *CacheComp {
+func buildCache(sim timing.Simulation, name string) *CacheComp {
 	c := modeling.NewBuilder[modeling.None, cacheState, modeling.None]().
-		WithEngine(engine).WithFreq(1 * timing.GHz).Build(name)
+		WithSimulation(sim).WithFreq(1 * timing.GHz).Build(name)
 	c.AddMiddleware(&cacheMW{comp: c, txns: map[uint64]cacheTxn{}})
 	c.DeclarePort("Top")
 	c.AssignPort("Top", messaging.NewPort(c, 4, 4, name+".Top"))
 	c.DeclarePort("Bottom")
 	c.AssignPort("Bottom", messaging.NewPort(c, 4, 4, name+".Bottom"))
-	reg.RegisterComponent(c)
+	sim.RegisterComponent(c)
 
 	return c
 }
 
-func buildMemory(engine timing.Engine, reg modeling.Registrar) *MemComp {
+func buildMemory(sim timing.Simulation) *MemComp {
 	mem := modeling.NewBuilder[modeling.None, modeling.None, modeling.None]().
-		WithEngine(engine).WithFreq(1 * timing.GHz).Build("Memory")
+		WithSimulation(sim).WithFreq(1 * timing.GHz).Build("Memory")
 	mem.AddMiddleware(&memMW{comp: mem})
 	mem.DeclarePort("Top")
 	mem.AssignPort("Top", messaging.NewPort(mem, 4, 4, "Memory.Top"))
-	reg.RegisterComponent(mem)
+	sim.RegisterComponent(mem)
 
 	return mem
 }
 
 func main() {
 	engine := timing.NewSerialEngine()
-	reg := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
 
-	client := buildClient(engine, reg)
-	l1 := buildCache(engine, reg, "L1")
-	l2 := buildCache(engine, reg, "L2")
-	mem := buildMemory(engine, reg)
+	client := buildClient(sim)
+	l1 := buildCache(sim, "L1")
+	l2 := buildCache(sim, "L2")
+	mem := buildMemory(sim)
 
 	connect := func(name string, a, b messaging.Port) {
-		conn := directconnection.MakeBuilder().WithRegistrar(reg).Build(name)
+		conn := directconnection.MakeBuilder().WithSimulation(sim).Build(name)
 		conn.PlugIn(a)
 		conn.PlugIn(b)
 	}

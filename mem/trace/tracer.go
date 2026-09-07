@@ -5,7 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/datarecording"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -71,10 +70,11 @@ func (t *dbTracer) StartTask(task tracing.TaskStart) {
 	t.pendingTransactions[task.ID] = entry
 }
 
-// AddTaskTag records a tag on a memory transaction
+// AddTaskTag records a tag on a memory transaction. The caller supplies the tag
+// ID; tracing.AddTaskTag assigns one from the domain when emitting the hook.
 func (t *dbTracer) AddTaskTag(tag tracing.TaskTag) {
 	entry := memoryTagEntry{
-		ID:     timing.GetIDGenerator().Generate(),
+		ID:     tag.ID,
 		TaskID: tag.TaskID,
 		Time:   float64(tag.Time),
 		What:   tag.What,

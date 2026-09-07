@@ -20,7 +20,7 @@ import (
 // tasks are ended — i.e. a mid-flight Reset leaves no started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
-	reg := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	spec := DefaultSpec()
 	spec.NumBlocks = 1
@@ -31,7 +31,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.LatencyPerLevel = 100
 
 	comp := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(Resources{
 			LowModulePort: messaging.RemotePort("LowModule"),
@@ -39,7 +39,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		}).
 		Build("MMUCache")
 
-	assignDefaultPorts(reg, comp)
+	assignDefaultPorts(sim, comp)
 
 	topPort := comp.GetPortByName("Top")
 	bottomPort := comp.GetPortByName("Bottom")
@@ -55,7 +55,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// Bottom port and opens both the top req_in and the forwarded req_out, then
 	// waits on the bottom response — which never comes, so the walk is in flight.
 	req := vmprotocol.TranslationReq{}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = sim.NewID()
 	req.Src = messaging.RemotePort("Requester")
 	req.Dst = topPort.AsRemote()
 	req.PID = 1
@@ -91,7 +91,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the walk is in flight (bottom response deliberately withheld).
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = timing.GetIDGenerator().Generate()
+	reset.ID = sim.NewID()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = controlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

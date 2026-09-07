@@ -24,6 +24,7 @@ import (
 var _ = Describe("MMU control behavior", func() {
 	var (
 		engine    timing.Engine
+		sim       timing.Simulation
 		pageTable vm.PageTable
 		comp      *Comp
 		topPort   messaging.Port
@@ -31,16 +32,15 @@ var _ = Describe("MMU control behavior", func() {
 	)
 
 	build := func() {
-		reg := modeling.NewStandaloneRegistrar(engine)
 
 		comp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(DefaultSpec()).
 			Build("MMU")
 
-		topPort = assignPort(reg, comp, "Top", 16)
-		ctrlPort = assignPort(reg, comp, "Control", 4)
+		topPort = assignPort(sim, comp, "Top", 16)
+		ctrlPort = assignPort(sim, comp, "Control", 4)
 		for _, name := range []string{"Top", "Control"} {
 			(&noopConn{}).PlugIn(comp.GetPortByName(name))
 		}
@@ -64,7 +64,7 @@ var _ = Describe("MMU control behavior", func() {
 
 	makeTranslationReq := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -76,7 +76,7 @@ var _ = Describe("MMU control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -85,6 +85,7 @@ var _ = Describe("MMU control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		pageTable = vm.NewPageTable(12)
 		build()
 	})

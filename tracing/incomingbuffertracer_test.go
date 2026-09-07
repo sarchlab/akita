@@ -6,6 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -14,6 +15,7 @@ import (
 // tasks on it). InvokeHook is provided by the embedded HookableBase, which is
 // how CollectTrace forwards events to a tracer.
 type ibFakeComp struct {
+	sim timing.Simulation
 	hooking.HookableBase
 	name string
 	time timing.VTimeInPicoSec
@@ -53,7 +55,7 @@ var _ = Describe("Incoming buffer tracer", func() {
 	)
 
 	BeforeEach(func() {
-		comp = &ibFakeComp{name: "Comp"}
+		comp = &ibFakeComp{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()), name: "Comp"}
 		tracer = &ibRecordingTracer{}
 		CollectTrace(comp, tracer)
 
@@ -127,7 +129,7 @@ var _ = Describe("Incoming buffer tracer", func() {
 	})
 
 	It("is a no-op when the owning component is not being traced", func() {
-		untraced := &ibFakeComp{name: "Untraced"}
+		untraced := &ibFakeComp{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()), name: "Untraced"}
 		p2 := messaging.NewPort(untraced, 4, 4, "Untraced.Top")
 		CollectIncomingBufferTrace(p2)
 
@@ -140,3 +142,5 @@ var _ = Describe("Incoming buffer tracer", func() {
 		Expect(tracer.milestones).To(BeEmpty())
 	})
 })
+
+func (c *ibFakeComp) Simulation() timing.Simulation { return c.sim }

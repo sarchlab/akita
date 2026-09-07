@@ -28,6 +28,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	)
 
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 	pageTable := vm.NewPageTable(12)
 
 	spec := DefaultSpec()
@@ -35,14 +36,13 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.Latency = 1
 	spec.LowModule = lowModule
 
-	reg := modeling.NewStandaloneRegistrar(engine)
 	comp := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithResources(Resources{PageTable: pageTable}).
 		WithSpec(spec).
 		Build("GMMU")
 
-	assignDefaultPorts(reg, comp)
+	assignDefaultPorts(sim, comp)
 	for _, name := range []string{"Top", "Bottom", "Control"} {
 		(&noopConn{}).PlugIn(comp.GetPortByName(name))
 	}
@@ -64,7 +64,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	})
 
 	req := vmprotocol.TranslationReq{}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = sim.NewID()
 	req.Src = agentPort
 	req.Dst = topPort.AsRemote()
 	req.PID = 1
@@ -96,7 +96,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// Reset while the remote walk is in flight; the remote response is never
 	// delivered.
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = timing.GetIDGenerator().Generate()
+	reset.ID = sim.NewID()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = ctrlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

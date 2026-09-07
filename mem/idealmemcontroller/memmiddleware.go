@@ -8,7 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -134,7 +133,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 	data := m.comp.Resources().Storage.Read(tx.Address, tx.AccessByteSize)
 
 	rsp := memprotocol.DataReadyRsp{}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = m.comp.Simulation().NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
 	rsp.RspTo = tx.ReqID
@@ -155,7 +154,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 
 func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 	rsp := memprotocol.WriteDoneRsp{}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = m.comp.Simulation().NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
 	rsp.RspTo = tx.ReqID

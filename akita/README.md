@@ -25,7 +25,7 @@ writes two files:
 - `comp.go` — a `Comp` struct embedding `sim.TickingComponent` and
   `sim.MiddlewareHolder`, with a `Tick()` method.
 - `builder.go` — a `Builder` struct (with `engine` and `freq` fields), plus
-  `MakeBuilder`, `WithEngine`, `WithFreq`, and `Build` methods.
+  `MakeBuilder`, `WithSimulation`, `WithFreq`, and `Build` methods.
 
 The package name in both files is set to `<Name>`.
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -23,7 +24,7 @@ func TestMonitorReportsRunFailureWithoutRepanicking(t *testing.T) {
 	e.RegisterHandler("model", runPanicHandler{})
 	e.Schedule(timing.EventBase{Time_: 1, HandlerID_: "model"})
 	m := NewMonitor()
-	m.RegisterEngine(e)
+	m.RegisterSimulation(modeling.NewStandaloneSimulation(e))
 	messages := make(runLog, 1)
 	previous := log.Writer()
 	log.SetOutput(messages)

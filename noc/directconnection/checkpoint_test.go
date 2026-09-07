@@ -23,7 +23,7 @@ func TestDirectConnectionCursorRoundTrip(t *testing.T) {
 		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
 	}()
 
-	conn := directconnection.MakeBuilder().WithRegistrar(sim).Build("Conn")
+	conn := directconnection.MakeBuilder().WithSimulation(sim).Build("Conn")
 	conn.State.NextPortID = 3
 
 	if err := sim.SaveCheckpoint(path, buildID); err != nil {

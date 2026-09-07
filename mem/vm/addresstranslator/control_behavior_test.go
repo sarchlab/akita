@@ -23,6 +23,7 @@ import (
 var _ = Describe("Address Translator control behavior", func() {
 	var (
 		engine          timing.Engine
+		sim             timing.Simulation
 		t               *Comp
 		topPort         messaging.Port
 		bottomPort      messaging.Port
@@ -44,14 +45,13 @@ var _ = Describe("Address Translator control behavior", func() {
 			},
 		}
 
-		reg := modeling.NewStandaloneRegistrar(engine)
 		t = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(resources).
 			Build("AddressTranslator")
 
-		assignPorts(reg, t, 16)
+		assignPorts(sim, t, 16)
 
 		topPort = t.GetPortByName("Top")
 		bottomPort = t.GetPortByName("Bottom")
@@ -68,7 +68,7 @@ var _ = Describe("Address Translator control behavior", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = addr
@@ -80,7 +80,7 @@ var _ = Describe("Address Translator control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -92,7 +92,7 @@ var _ = Describe("Address Translator control behavior", func() {
 	// as createTranslatedReq does.
 	makeBottomReq := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = bottomPort.AsRemote()
 		req.Dst = messaging.RemotePort("MemPort")
 		req.Address = addr
@@ -126,7 +126,7 @@ var _ = Describe("Address Translator control behavior", func() {
 	// DataReadyRsp out Top, and removes the in-flight entry.
 	feedBottomDataReady := func(rspTo uint64) {
 		dataReady := memprotocol.DataReadyRsp{}
-		dataReady.ID = timing.GetIDGenerator().Generate()
+		dataReady.ID = sim.NewID()
 		dataReady.Src = messaging.RemotePort("MemPort")
 		dataReady.Dst = bottomPort.AsRemote()
 		dataReady.RspTo = rspTo
@@ -137,6 +137,7 @@ var _ = Describe("Address Translator control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		build()
 	})
 

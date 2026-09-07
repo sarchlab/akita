@@ -54,6 +54,7 @@ func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 var _ = Describe("MMU milestones", func() {
 	var (
 		engine    timing.Engine
+		sim       timing.Simulation
 		pageTable vm.PageTable
 		mmuComp   *Comp
 		topPort   messaging.Port
@@ -63,17 +64,17 @@ var _ = Describe("MMU milestones", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		pageTable = vm.NewPageTable(12)
 
-		reg := modeling.NewStandaloneRegistrar(engine)
 		mmuComp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(DefaultSpec()).
 			Build("MMU")
 
-		topPort = assignPort(reg, mmuComp, "Top", 16)
-		assignPort(reg, mmuComp, "Control", 4)
+		topPort = assignPort(sim, mmuComp, "Top", 16)
+		assignPort(sim, mmuComp, "Control", 4)
 
 		(&noopConn{}).PlugIn(topPort)
 		(&noopConn{}).PlugIn(mmuComp.GetPortByName("Control"))
@@ -91,7 +92,7 @@ var _ = Describe("MMU milestones", func() {
 
 	makeReq := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent.Top")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1

@@ -22,10 +22,10 @@ type p0Harness struct {
 
 func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 	engine := timing.NewSerialEngine()
-	reg := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	dramComp := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		Build("P0DRAM")
 	for _, t := range tracers {
@@ -34,7 +34,7 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 
 	for _, name := range []string{"Top", "Control"} {
 		p := modeling.MakePortBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithComponent(dramComp).
 			WithSpec(modeling.PortSpec{BufSize: 1024}).
 			Build(name)
@@ -45,7 +45,7 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 	src := messaging.NewPort(nil, 1024, 1024, "P0Src.Top")
 
 	conn := directconnection.MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		Build("P0Conn")
 	conn.PlugIn(top)
 	conn.PlugIn(src)
@@ -55,7 +55,7 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 
 func (h *p0Harness) read(addr uint64) memprotocol.ReadReq {
 	r := memprotocol.ReadReq{}
-	r.ID = timing.GetIDGenerator().Generate()
+	r.ID = h.dram.Simulation().NewID()
 	r.Address = addr
 	r.AccessByteSize = 64
 	r.Src = h.src.AsRemote()
@@ -67,7 +67,7 @@ func (h *p0Harness) read(addr uint64) memprotocol.ReadReq {
 
 func (h *p0Harness) write(addr uint64, data []byte) memprotocol.WriteReq {
 	w := memprotocol.WriteReq{}
-	w.ID = timing.GetIDGenerator().Generate()
+	w.ID = h.dram.Simulation().NewID()
 	w.Address = addr
 	w.Data = data
 	w.Src = h.src.AsRemote()
@@ -222,11 +222,12 @@ var _ = Describe("P0: channel guard", func() {
 	build := func(numChannel int) func() {
 		return func() {
 			engine := timing.NewSerialEngine()
-			reg := modeling.NewStandaloneRegistrar(engine)
+			sim := modeling.NewStandaloneSimulation(engine)
+
 			spec := DefaultSpec()
 			spec.NumChannel = numChannel
 			MakeBuilder().
-				WithRegistrar(reg).
+				WithSimulation(sim).
 				WithSpec(spec).
 				Build("ChannelGuard")
 		}

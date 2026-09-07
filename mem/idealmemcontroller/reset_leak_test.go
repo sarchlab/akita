@@ -21,7 +21,7 @@ import (
 // controller is a leaf, so the only open task per access is its req_in.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
-	reg := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	storage := mem.NewStorage(1 * mem.MB)
 
@@ -33,7 +33,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.CacheLineSize = 64
 
 	comp := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithResources(Resources{Storage: storage}).
 		WithSpec(spec).
 		Build("MemCtrl")
@@ -55,7 +55,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// Admit a read: takeNewReqs opens the req_in task and parks the access in
 	// InflightTransactions; the access never completes within the ticks below.
 	read := memprotocol.ReadReq{Address: 0, AccessByteSize: 4}
-	read.ID = timing.GetIDGenerator().Generate()
+	read.ID = sim.NewID()
 	read.Src = messaging.RemotePort("Agent")
 	read.Dst = topPort.AsRemote()
 	read.TrafficClass = "memprotocol.ReadReq"
@@ -73,7 +73,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the access is in flight.
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = timing.GetIDGenerator().Generate()
+	reset.ID = sim.NewID()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = ctrlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

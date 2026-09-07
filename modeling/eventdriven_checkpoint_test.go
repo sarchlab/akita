@@ -28,7 +28,7 @@ func (edckProc) Process(
 
 func buildEDckComp(latency int) *modeling.EventDrivenComponent[edckSpec, edckState, modeling.None] {
 	return modeling.NewEventDrivenBuilder[edckSpec, edckState, modeling.None]().
-		WithEngine(timing.NewSerialEngine()).
+		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 		WithSpec(edckSpec{Latency: latency}).
 		WithProcessor(edckProc{}).
 		Build("ED")

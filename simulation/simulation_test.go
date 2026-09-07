@@ -461,7 +461,7 @@ var _ = Describe("Checkpoint round trip", func() {
 		// connection serializers are needed yet.
 		engine := sim.GetEngine().(*timing.SerialEngine)
 		comp := modeling.NewBuilder[roundTripSpec, roundTripState, modeling.None]().
-			WithEngine(engine).
+			WithSimulation(sim).
 			WithFreq(1 * timing.GHz).
 			WithSpec(roundTripSpec{Latency: 5}).
 			Build("Comp")
@@ -474,10 +474,10 @@ var _ = Describe("Checkpoint round trip", func() {
 		// Establish runtime state across all four entity kinds.
 		comp.State = roundTripState{Count: 7}
 		storage.Write(0, []byte{1, 2, 3, 4})
+		var savedCounter uint64
 		for i := 0; i < 5; i++ {
-			timing.GetIDGenerator().Generate()
+			savedCounter = sim.NewID()
 		}
-		savedCounter := timing.GetIDGeneratorNextID()
 		engine.SetCurrentTime(100)
 
 		path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
@@ -486,8 +486,8 @@ var _ = Describe("Checkpoint round trip", func() {
 		// Mutate every piece of runtime state away from the checkpoint.
 		comp.State = roundTripState{Count: 999}
 		storage.Write(0, []byte{0, 0, 0, 0})
-		timing.GetIDGenerator().Generate()
-		timing.GetIDGenerator().Generate()
+		sim.NewID()
+		sim.NewID()
 		engine.SetCurrentTime(500)
 
 		// Restore and confirm every piece came back.
@@ -496,7 +496,7 @@ var _ = Describe("Checkpoint round trip", func() {
 		Expect(comp.State.Count).To(Equal(7))
 		data := storage.Read(0, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
-		Expect(timing.GetIDGeneratorNextID()).To(Equal(savedCounter))
+		Expect(sim.NewID()).To(Equal(savedCounter + 1))
 		Expect(engine.CurrentTime()).To(Equal(timing.VTimeInPicoSec(100)))
 	})
 })
@@ -527,9 +527,8 @@ func (m *resumeWorkerMW) Tick() bool {
 
 func buildResumeSim() (*Simulation, *modeling.Component[resumeSpec, resumeState, modeling.None]) {
 	sim := MakeBuilder().WithoutMonitoring().Build()
-	engine := sim.GetEngine().(*timing.SerialEngine)
 	w := modeling.NewBuilder[resumeSpec, resumeState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(1 * timing.GHz).
 		WithSpec(resumeSpec{N: 1}).
 		Build("Worker")
@@ -604,9 +603,8 @@ func buildTickCountSim() (
 	*modeling.Component[tickCountSpec, tickCountState, modeling.None],
 ) {
 	sim := MakeBuilder().WithoutMonitoring().Build()
-	engine := sim.GetEngine().(*timing.SerialEngine)
 	c := modeling.NewBuilder[tickCountSpec, tickCountState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(1 * timing.GHz).
 		WithSpec(tickCountSpec{Tag: 1}).
 		Build("Ticker")
@@ -680,9 +678,8 @@ func buildWakeSim() (
 	*modeling.EventDrivenComponent[wakeSpec, wakeState, modeling.None],
 ) {
 	sim := MakeBuilder().WithoutMonitoring().Build()
-	engine := sim.GetEngine().(*timing.SerialEngine)
 	c := modeling.NewEventDrivenBuilder[wakeSpec, wakeState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithSpec(wakeSpec{Tag: 1}).
 		WithProcessor(wakeProcessor{}).
 		Build("Waker")

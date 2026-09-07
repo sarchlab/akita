@@ -34,6 +34,7 @@ var _ = Describe("Reorder Buffer", func() {
 
 	var (
 		engine     timing.Engine
+		sim        timing.Simulation
 		rob        *Comp
 		topPort    messaging.Port
 		bottomPort messaging.Port
@@ -45,16 +46,15 @@ var _ = Describe("Reorder Buffer", func() {
 	)
 
 	build := func(spec Spec) {
-		reg := modeling.NewStandaloneRegistrar(engine)
 
 		rob = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			Build("Rob")
 
 		assign := func(name string, bufSize int) messaging.Port {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(reg).
+				WithSimulation(sim).
 				WithComponent(rob).
 				WithSpec(modeling.PortSpec{BufSize: bufSize}).
 				Build(name)
@@ -77,7 +77,7 @@ var _ = Describe("Reorder Buffer", func() {
 			Address:        addr,
 			AccessByteSize: 4,
 		}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = topRemote
 		req.Dst = topPort.AsRemote()
 		req.TrafficBytes = 12
@@ -90,7 +90,7 @@ var _ = Describe("Reorder Buffer", func() {
 			Address: addr,
 			Data:    data,
 		}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = topRemote
 		req.Dst = topPort.AsRemote()
 		req.TrafficBytes = len(data) + 12
@@ -100,6 +100,7 @@ var _ = Describe("Reorder Buffer", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		spec := DefaultSpec()
 		spec.BufferSize = 4
 		spec.NumReqPerCycle = 2
@@ -174,7 +175,7 @@ var _ = Describe("Reorder Buffer", func() {
 			// Fill the bottom outgoing buffer so Send fails.
 			for i := 0; i < bottomBufSize; i++ {
 				filler := memprotocol.ReadReq{Address: uint64(i)}
-				filler.ID = timing.GetIDGenerator().Generate()
+				filler.ID = sim.NewID()
 				filler.Src = bottomPort.AsRemote()
 				filler.Dst = bottomUnitRemote
 				filler.TrafficClass = "memprotocol.ReadReq"
@@ -192,7 +193,7 @@ var _ = Describe("Reorder Buffer", func() {
 
 		It("panics on unsupported top-port traffic", func() {
 			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-			req.ID = timing.GetIDGenerator().Generate()
+			req.ID = sim.NewID()
 			req.Src = topRemote
 			req.Dst = topPort.AsRemote()
 			req.TrafficClass = "memcontrolprotocol.Req"
@@ -212,7 +213,7 @@ var _ = Describe("Reorder Buffer", func() {
 			shadowID := rob.State.Transactions[0].ReqToBottomID
 
 			rsp := memprotocol.WriteDoneRsp{}
-			rsp.ID = timing.GetIDGenerator().Generate()
+			rsp.ID = sim.NewID()
 			rsp.Src = bottomUnitRemote
 			rsp.Dst = bottomPort.AsRemote()
 			rsp.RspTo = shadowID
@@ -229,7 +230,7 @@ var _ = Describe("Reorder Buffer", func() {
 
 		It("ignores a response that does not match any transaction", func() {
 			rsp := memprotocol.WriteDoneRsp{}
-			rsp.ID = timing.GetIDGenerator().Generate()
+			rsp.ID = sim.NewID()
 			rsp.Src = bottomUnitRemote
 			rsp.Dst = bottomPort.AsRemote()
 			rsp.RspTo = 999999
@@ -244,7 +245,7 @@ var _ = Describe("Reorder Buffer", func() {
 
 		It("drops unsupported bottom-port traffic", func() {
 			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-			req.ID = timing.GetIDGenerator().Generate()
+			req.ID = sim.NewID()
 			req.Src = bottomUnitRemote
 			req.Dst = bottomPort.AsRemote()
 			req.TrafficClass = "memcontrolprotocol.Req"
@@ -270,7 +271,7 @@ var _ = Describe("Reorder Buffer", func() {
 			shadowID := rob.State.Transactions[0].ReqToBottomID
 
 			rsp := memprotocol.DataReadyRsp{Data: []byte{0xDE, 0xAD}}
-			rsp.ID = timing.GetIDGenerator().Generate()
+			rsp.ID = sim.NewID()
 			rsp.Src = bottomUnitRemote
 			rsp.Dst = bottomPort.AsRemote()
 			rsp.RspTo = shadowID
@@ -311,7 +312,7 @@ var _ = Describe("Reorder Buffer", func() {
 			// Deliver the second response first; the head must still wait
 			// since its response has not arrived yet.
 			rsp2 := memprotocol.DataReadyRsp{Data: []byte{0x22}}
-			rsp2.ID = timing.GetIDGenerator().Generate()
+			rsp2.ID = sim.NewID()
 			rsp2.Src = bottomUnitRemote
 			rsp2.Dst = bottomPort.AsRemote()
 			rsp2.RspTo = shadow2
@@ -329,7 +330,7 @@ var _ = Describe("Reorder Buffer", func() {
 			// Now deliver the response for the head; both should drain in
 			// order on subsequent ticks.
 			rsp1 := memprotocol.DataReadyRsp{Data: []byte{0x11}}
-			rsp1.ID = timing.GetIDGenerator().Generate()
+			rsp1.ID = sim.NewID()
 			rsp1.Src = bottomUnitRemote
 			rsp1.Dst = bottomPort.AsRemote()
 			rsp1.RspTo = shadow1
@@ -359,7 +360,7 @@ var _ = Describe("Reorder Buffer", func() {
 
 			shadowID := rob.State.Transactions[0].ReqToBottomID
 			rsp := memprotocol.DataReadyRsp{Data: []byte{0x1}}
-			rsp.ID = timing.GetIDGenerator().Generate()
+			rsp.ID = sim.NewID()
 			rsp.Src = bottomUnitRemote
 			rsp.Dst = bottomPort.AsRemote()
 			rsp.RspTo = shadowID
@@ -371,7 +372,7 @@ var _ = Describe("Reorder Buffer", func() {
 			// Fill the top outgoing buffer so the next bottomUp Send fails.
 			for i := 0; i < topBufSize; i++ {
 				filler := memprotocol.DataReadyRsp{Data: []byte{byte(i)}}
-				filler.ID = timing.GetIDGenerator().Generate()
+				filler.ID = sim.NewID()
 				filler.Src = topPort.AsRemote()
 				filler.Dst = topRemote
 				filler.TrafficClass = "memprotocol.DataReadyRsp"
@@ -398,7 +399,7 @@ var _ = Describe("Reorder Buffer", func() {
 			req := memcontrolprotocol.Req{
 				Command: memcontrolprotocol.CmdReset,
 			}
-			req.ID = timing.GetIDGenerator().Generate()
+			req.ID = sim.NewID()
 			req.Src = messaging.RemotePort("Cmd")
 			req.Dst = ctrlPort.AsRemote()
 			req.TrafficClass = "memcontrolprotocol.Req"
@@ -435,7 +436,7 @@ var _ = Describe("Reorder Buffer", func() {
 			// Stale traffic that should be cleared on resume.
 			topPort.Deliver(makeRead(0))
 			stray := memprotocol.DataReadyRsp{Data: []byte{0xFF}}
-			stray.ID = timing.GetIDGenerator().Generate()
+			stray.ID = sim.NewID()
 			stray.Src = bottomUnitRemote
 			stray.Dst = bottomPort.AsRemote()
 			stray.RspTo = 0xDEAD
@@ -443,7 +444,7 @@ var _ = Describe("Reorder Buffer", func() {
 			bottomPort.Deliver(stray)
 
 			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdEnable}
-			req.ID = timing.GetIDGenerator().Generate()
+			req.ID = sim.NewID()
 			req.Src = messaging.RemotePort("Cmd")
 			req.Dst = ctrlPort.AsRemote()
 			req.TrafficClass = "memcontrolprotocol.Req"
@@ -463,7 +464,7 @@ var _ = Describe("Reorder Buffer", func() {
 
 		makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 			req := memcontrolprotocol.Req{Command: cmd}
-			req.ID = timing.GetIDGenerator().Generate()
+			req.ID = sim.NewID()
 			req.Src = messaging.RemotePort("Cmd")
 			req.Dst = ctrlPort.AsRemote()
 			req.TrafficClass = "memcontrolprotocol.Req"
@@ -505,7 +506,7 @@ var _ = Describe("Reorder Buffer", func() {
 			// Now let the in-flight reads complete.
 			for _, id := range shadowIDs {
 				rsp := memprotocol.DataReadyRsp{Data: []byte{0x1}}
-				rsp.ID = timing.GetIDGenerator().Generate()
+				rsp.ID = sim.NewID()
 				rsp.Src = bottomUnitRemote
 				rsp.Dst = bottomPort.AsRemote()
 				rsp.RspTo = id

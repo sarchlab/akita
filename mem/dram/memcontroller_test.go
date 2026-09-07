@@ -22,6 +22,8 @@ var _ = Describe("Address Operations", func() {
 })
 
 var _ = Describe("Transaction Splitting", func() {
+	var ids timing.Simulation
+	BeforeEach(func() { ids = modeling.NewStandaloneSimulation(timing.NewSerialEngine()) })
 	It("should split a transaction into sub-transactions", func() {
 		spec := &Spec{Log2AccessUnitSize: 6} // 64 bytes
 		trans := &transactionState{
@@ -31,7 +33,7 @@ var _ = Describe("Transaction Splitting", func() {
 		trans.ReadMsg.Address = 0x100
 		trans.ReadMsg.AccessByteSize = 128
 
-		splitTransaction(spec, trans)
+		splitTransaction(ids, spec, trans)
 		// 128 bytes at 64-byte units = 2 sub-transactions
 		Expect(trans.SubTransactions).To(HaveLen(2))
 		Expect(trans.SubTransactions[0].Address).To(Equal(uint64(0x100)))
@@ -47,7 +49,7 @@ var _ = Describe("Transaction Splitting", func() {
 		trans.ReadMsg.Address = 0x110 // Not aligned
 		trans.ReadMsg.AccessByteSize = 4
 
-		splitTransaction(spec, trans)
+		splitTransaction(ids, spec, trans)
 		Expect(trans.SubTransactions).To(HaveLen(1))
 		Expect(trans.SubTransactions[0].Address).To(Equal(uint64(0x100)))
 	})
@@ -188,19 +190,21 @@ var _ = Describe("Queue Operations", func() {
 var _ = Describe("DRAM Integration", func() {
 	var (
 		engine  timing.Engine
+		sim     timing.Simulation
 		memCtrl *modeling.Component[Spec, State, Resources]
 	)
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		reg := modeling.NewStandaloneRegistrar(engine)
+		sim = modeling.NewStandaloneSimulation(engine)
+
 		memCtrl = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			Build("MemCtrl")
 
 		for _, name := range []string{"Top", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(reg).
+				WithSimulation(sim).
 				WithComponent(memCtrl).
 				WithSpec(modeling.PortSpec{BufSize: 1024}).
 				Build(name)
@@ -211,7 +215,7 @@ var _ = Describe("DRAM Integration", func() {
 	It("should read and write via direct connection", func() {
 		srcPort := messaging.NewPort(nil, 1024, 1024, "Src.Top")
 		conn := directconnection.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			Build("Conn")
 		topPort := memCtrl.GetPortByName("Top")
 		conn.PlugIn(topPort)
@@ -219,7 +223,7 @@ var _ = Describe("DRAM Integration", func() {
 
 		writeData := []byte{1, 2, 3, 4}
 		write := memprotocol.WriteReq{}
-		write.ID = timing.GetIDGenerator().Generate()
+		write.ID = sim.NewID()
 		write.Address = 0x40
 		write.Data = writeData
 		write.Src = srcPort.AsRemote()
@@ -228,7 +232,7 @@ var _ = Describe("DRAM Integration", func() {
 		write.TrafficClass = "memprotocol.WriteReq"
 
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = sim.NewID()
 		read.Address = 0x40
 		read.AccessByteSize = 4
 		read.Src = srcPort.AsRemote()
@@ -276,8 +280,9 @@ var _ = Describe("DRAM Integration", func() {
 var _ = Describe("Predefined Specs", func() {
 	It("should build with DDR4 spec", func() {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		ctrl := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(DDR4Spec).
 			Build("DDR4Ctrl")
 		Expect(ctrl).NotTo(BeNil())
@@ -292,8 +297,9 @@ var _ = Describe("Predefined Specs", func() {
 
 	It("should build with DDR5 spec", func() {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		ctrl := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(DDR5Spec).
 			Build("DDR5Ctrl")
 		Expect(ctrl).NotTo(BeNil())
@@ -307,8 +313,9 @@ var _ = Describe("Predefined Specs", func() {
 
 	It("should build with HBM2 spec", func() {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		ctrl := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(HBM2Spec).
 			Build("HBM2Ctrl")
 		Expect(ctrl).NotTo(BeNil())
@@ -323,8 +330,9 @@ var _ = Describe("Predefined Specs", func() {
 
 	It("should build with HBM3 spec", func() {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		ctrl := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(HBM3Spec).
 			Build("HBM3Ctrl")
 		Expect(ctrl).NotTo(BeNil())
@@ -338,8 +346,9 @@ var _ = Describe("Predefined Specs", func() {
 
 	It("should build with GDDR6 spec", func() {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		ctrl := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(GDDR6Spec).
 			Build("GDDR6Ctrl")
 		Expect(ctrl).NotTo(BeNil())
@@ -445,11 +454,13 @@ var _ = Describe("Protocol Enums", func() {
 
 var _ = Describe("Open Page Policy", func() {
 	var (
+		ids   timing.Simulation
 		spec  *Spec
 		state *State
 	)
 
 	BeforeEach(func() {
+		ids = modeling.NewStandaloneSimulation(timing.NewSerialEngine())
 		b := MakeBuilder()
 		builtSpec := b.buildSpec()
 		spec = &builtSpec
@@ -494,7 +505,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyOpen
 
 		ref := subTransRef{TxID: 0, SubIndex: 0}
-		cmd := createOpenPageCommand(spec, state, ref)
+		cmd := createOpenPageCommand(ids, spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindRead)))
@@ -504,7 +515,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyOpen
 
 		ref := subTransRef{TxID: 1, SubIndex: 0}
-		cmd := createOpenPageCommand(spec, state, ref)
+		cmd := createOpenPageCommand(ids, spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindWrite)))
@@ -514,7 +525,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyClose
 
 		ref := subTransRef{TxID: 0, SubIndex: 0}
-		cmd := createClosePageCommand(spec, state, ref)
+		cmd := createClosePageCommand(ids, spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindReadPrecharge)))
@@ -524,7 +535,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyClose
 
 		ref := subTransRef{TxID: 1, SubIndex: 0}
-		cmd := createClosePageCommand(spec, state, ref)
+		cmd := createClosePageCommand(ids, spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindWritePrecharge)))
@@ -620,7 +631,7 @@ var _ = Describe("Open Page Policy", func() {
 			{TxID: 0, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(spec, state)
+		progress := tickSubTransQueue(ids, spec, state)
 		Expect(progress).To(BeTrue())
 
 		// The command in the queue should be CmdKindRead (not ReadPrecharge)
@@ -635,7 +646,7 @@ var _ = Describe("Open Page Policy", func() {
 			{TxID: 0, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(spec, state)
+		progress := tickSubTransQueue(ids, spec, state)
 		Expect(progress).To(BeTrue())
 
 		// The command in the queue should be CmdKindReadPrecharge
@@ -650,7 +661,7 @@ var _ = Describe("Open Page Policy", func() {
 			{TxID: 1, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(spec, state)
+		progress := tickSubTransQueue(ids, spec, state)
 		Expect(progress).To(BeTrue())
 
 		Expect(state.CommandQueues.Entries).To(HaveLen(1))
@@ -664,7 +675,7 @@ var _ = Describe("Open Page Policy", func() {
 			{TxID: 1, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(spec, state)
+		progress := tickSubTransQueue(ids, spec, state)
 		Expect(progress).To(BeTrue())
 
 		Expect(state.CommandQueues.Entries).To(HaveLen(1))
@@ -800,11 +811,13 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 
 var _ = Describe("Read/Write Queue Separation", func() {
 	var (
+		ids   timing.Simulation
 		spec  *Spec
 		state *State
 	)
 
 	BeforeEach(func() {
+		ids = modeling.NewStandaloneSimulation(timing.NewSerialEngine())
 		spec = &Spec{
 			NumRank:              1,
 			NumBankGroup:         1,
@@ -858,7 +871,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 				queueEntry{
 					QueueIndex: 0,
 					Command: commandState{
-						ID:       timing.GetIDGenerator().Generate(),
+						ID:       ids.NewID(),
 						Kind:     int(cmdKindWritePrecharge),
 						Location: location{Rank: 0, BankGroup: 0, Bank: uint64(i), Row: uint64(i)},
 					},
@@ -893,7 +906,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			{
 				QueueIndex: 0,
 				Command: commandState{
-					ID:       timing.GetIDGenerator().Generate(),
+					ID:       ids.NewID(),
 					Kind:     int(cmdKindWritePrecharge),
 					Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 1},
 				},
@@ -902,7 +915,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			{
 				QueueIndex: 0,
 				Command: commandState{
-					ID:       timing.GetIDGenerator().Generate(),
+					ID:       ids.NewID(),
 					Kind:     int(cmdKindWritePrecharge),
 					Location: location{Rank: 0, BankGroup: 0, Bank: 1, Row: 2},
 				},
@@ -920,7 +933,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 		// Fill write queue to capacity (4)
 		for i := range 4 {
 			cmd := &commandState{
-				ID:       timing.GetIDGenerator().Generate(),
+				ID:       ids.NewID(),
 				Kind:     int(cmdKindWritePrecharge),
 				Location: location{Rank: 0, BankGroup: 0, Bank: uint64(i)},
 			}
@@ -930,7 +943,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 		// One more write should be rejected
 		extraWrite := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       ids.NewID(),
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
@@ -938,7 +951,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 		// But a read should still be accepted
 		readCmd := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       ids.NewID(),
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
@@ -949,7 +962,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 		// Fill read queue to capacity (4)
 		for i := range 4 {
 			cmd := &commandState{
-				ID:       timing.GetIDGenerator().Generate(),
+				ID:       ids.NewID(),
 				Kind:     int(cmdKindReadPrecharge),
 				Location: location{Rank: 0, BankGroup: 0, Bank: uint64(i)},
 			}
@@ -959,7 +972,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 		// One more read should be rejected
 		extraRead := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       ids.NewID(),
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
@@ -967,7 +980,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 		// But a write should still be accepted
 		writeCmd := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       ids.NewID(),
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
@@ -982,7 +995,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 		// Fill unified queue to capacity
 		for range 4 {
 			cmd := &commandState{
-				ID:       timing.GetIDGenerator().Generate(),
+				ID:       ids.NewID(),
 				Kind:     int(cmdKindReadPrecharge),
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 			}
@@ -992,14 +1005,14 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 		// Both reads and writes should be rejected
 		readCmd := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       ids.NewID(),
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
 		Expect(canAcceptCommand(state, readCmd, spec)).To(BeFalse())
 
 		writeCmd := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       ids.NewID(),
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
@@ -1025,7 +1038,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 	It("should tag queue entries with IsWrite flag", func() {
 		writeCmd := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       ids.NewID(),
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0},
 		}
@@ -1033,7 +1046,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 		Expect(state.CommandQueues.Entries[0].IsWrite).To(BeTrue())
 
 		readCmd := &commandState{
-			ID:       timing.GetIDGenerator().Generate(),
+			ID:       ids.NewID(),
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0},
 		}
@@ -1045,10 +1058,11 @@ var _ = Describe("Read/Write Queue Separation", func() {
 var _ = Describe("Builder Configuration", func() {
 	It("should set page policy via builder", func() {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		spec := DefaultSpec()
 		spec.PagePolicy = PagePolicyOpen
 		ctrl := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(spec).
 			Build("OpenPageCtrl")
 
@@ -1058,13 +1072,14 @@ var _ = Describe("Builder Configuration", func() {
 
 	It("should set R/W queue sizes via builder", func() {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		spec := DefaultSpec()
 		spec.ReadQueueSize = 8
 		spec.WriteQueueSize = 8
 		spec.WriteHighWatermark = 6
 		spec.WriteLowWatermark = 2
 		ctrl := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(spec).
 			Build("RWQueueCtrl")
 
@@ -1077,10 +1092,11 @@ var _ = Describe("Builder Configuration", func() {
 
 	It("should build with spec and preserve page policy", func() {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		specWithOpenPage := DDR4Spec
 		specWithOpenPage.PagePolicy = PagePolicyOpen
 		ctrl := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(specWithOpenPage).
 			Build("DDR4OpenPage")
 
@@ -1091,13 +1107,14 @@ var _ = Describe("Builder Configuration", func() {
 
 	It("should build with spec and preserve R/W queue config", func() {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		specWithRW := DDR4Spec
 		specWithRW.ReadQueueSize = 16
 		specWithRW.WriteQueueSize = 16
 		specWithRW.WriteHighWatermark = 12
 		specWithRW.WriteLowWatermark = 4
 		ctrl := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(specWithRW).
 			Build("DDR4RWQueue")
 

@@ -27,17 +27,17 @@ func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
 
-// assignPort builds a port with the given buffer size using the same registrar
+// assignPort builds a port with the given buffer size using the same simulation
 // the component was built with, and assigns it to the component's declared port
 // of the same name.
 func assignPort(
-	reg modeling.Registrar,
+	sim timing.Simulation,
 	comp *Comp,
 	name string,
 	bufSize int,
 ) messaging.Port {
 	p := modeling.MakePortBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithComponent(comp).
 		WithSpec(modeling.PortSpec{BufSize: bufSize}).
 		Build(name)
@@ -47,15 +47,16 @@ func assignPort(
 
 // assignDefaultPorts assigns the GMMU's three declared ports (Top, Bottom,
 // Control) with the historical default buffer sizes.
-func assignDefaultPorts(reg modeling.Registrar, comp *Comp) {
-	assignPort(reg, comp, "Top", 16)
-	assignPort(reg, comp, "Bottom", 16)
-	assignPort(reg, comp, "Control", 4)
+func assignDefaultPorts(sim timing.Simulation, comp *Comp) {
+	assignPort(sim, comp, "Top", 16)
+	assignPort(sim, comp, "Bottom", 16)
+	assignPort(sim, comp, "Control", 4)
 }
 
 var _ = Describe("GMMU", func() {
 	var (
 		engine     timing.Engine
+		sim        timing.Simulation
 		pageTable  vm.PageTable
 		gmmuComp   *Comp
 		topPort    messaging.Port
@@ -76,14 +77,13 @@ var _ = Describe("GMMU", func() {
 		spec.Latency = 1
 		spec.LowModule = lowModulePort
 
-		reg := modeling.NewStandaloneRegistrar(engine)
 		gmmuComp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(spec).
 			Build("MMU")
 
-		assignDefaultPorts(reg, gmmuComp)
+		assignDefaultPorts(sim, gmmuComp)
 
 		mw = gmmuComp.Middlewares()[1].(*walkMW)
 
@@ -99,7 +99,7 @@ var _ = Describe("GMMU", func() {
 
 	makeTranslationReq := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = agentPort
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -111,6 +111,7 @@ var _ = Describe("GMMU", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		pageTable = vm.NewPageTable(12)
 		build()
 	})
@@ -211,7 +212,7 @@ var _ = Describe("GMMU", func() {
 			rsp := vmprotocol.TranslationRsp{
 				Page: page,
 			}
-			rsp.ID = timing.GetIDGenerator().Generate()
+			rsp.ID = sim.NewID()
 			rsp.Src = lowModulePort
 			rsp.Dst = bottomPort.AsRemote()
 			rsp.RspTo = sentReqToBottom.ID

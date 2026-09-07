@@ -21,6 +21,7 @@ import (
 	"github.com/sarchlab/akita/v5/datarecording"
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -98,6 +99,7 @@ type sliceFieldState struct {
 }
 
 type sliceFieldComponent struct {
+	sim timing.Simulation
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 
@@ -119,7 +121,7 @@ type fieldValueResponse struct {
 }
 
 func newSliceFieldComponent(name string, values []int) *sliceFieldComponent {
-	return &sliceFieldComponent{
+	return &sliceFieldComponent{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
 		PortOwnerBase: messaging.NewPortOwnerBase(),
 		State:         sliceFieldState{Values: values},
 		name:          name,
@@ -137,7 +139,7 @@ func (c *sliceFieldComponent) NotifyPortFree(messaging.Port) {}
 func TestEngineStateTracksPauseContinueIdempotently(t *testing.T) {
 	engine := &fakeEngine{}
 	monitor := NewMonitor()
-	monitor.RegisterEngine(engine)
+	monitor.RegisterSimulation(modeling.NewStandaloneSimulation(engine))
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/engine/state", nil)
@@ -241,7 +243,7 @@ func requestFieldValue(
 
 func newSliceFieldMonitor(values []int) *Monitor {
 	monitor := NewMonitor()
-	monitor.RegisterEngine(&fakeEngine{})
+	monitor.RegisterSimulation(modeling.NewStandaloneSimulation(&fakeEngine{}))
 	monitor.RegisterComponent(newSliceFieldComponent("slice-comp", values))
 
 	return monitor
@@ -464,7 +466,7 @@ func TestApiModeReturnsLiveJSON(t *testing.T) {
 func TestNowReportsEngineCurrentTime(t *testing.T) {
 	engine := &fakeEngine{now: timing.VTimeInPicoSec(1234)}
 	monitor := NewMonitor()
-	monitor.RegisterEngine(engine)
+	monitor.RegisterSimulation(modeling.NewStandaloneSimulation(engine))
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/now", nil)
@@ -485,7 +487,7 @@ func TestNowReportsEngineCurrentTime(t *testing.T) {
 func TestRunInvokesEngineRun(t *testing.T) {
 	engine := &fakeEngine{runReady: make(chan struct{})}
 	monitor := NewMonitor()
-	monitor.RegisterEngine(engine)
+	monitor.RegisterSimulation(modeling.NewStandaloneSimulation(engine))
 
 	monitor.run(httptest.NewRecorder(),
 		httptest.NewRequest(http.MethodPost, "/api/run", nil))
@@ -525,7 +527,7 @@ func TestListComponentsReturnsRegisteredNames(t *testing.T) {
 
 func TestListComponentDetailsReturns404ForUnknown(t *testing.T) {
 	monitor := NewMonitor()
-	monitor.RegisterEngine(&fakeEngine{})
+	monitor.RegisterSimulation(modeling.NewStandaloneSimulation(&fakeEngine{}))
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet,
@@ -540,7 +542,7 @@ func TestListComponentDetailsReturns404ForUnknown(t *testing.T) {
 
 func TestListComponentDetailsSerializesRegisteredComponent(t *testing.T) {
 	monitor := NewMonitor()
-	monitor.RegisterEngine(&fakeEngine{})
+	monitor.RegisterSimulation(modeling.NewStandaloneSimulation(&fakeEngine{}))
 	monitor.RegisterComponent(newSliceFieldComponent("slice-comp", []int{1, 2}))
 
 	recorder := httptest.NewRecorder()
@@ -567,6 +569,7 @@ func TestListComponentDetailsSerializesRegisteredComponent(t *testing.T) {
 }
 
 type tickableComponent struct {
+	sim timing.Simulation
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 
@@ -575,7 +578,7 @@ type tickableComponent struct {
 }
 
 func newTickableComponent(name string) *tickableComponent {
-	return &tickableComponent{
+	return &tickableComponent{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
 		PortOwnerBase: messaging.NewPortOwnerBase(),
 		name:          name,
 	}
@@ -635,6 +638,7 @@ func TestTickReturns404ForUnknownComponent(t *testing.T) {
 
 func TestProgressBarsLifecycleRoundtripsThroughHandler(t *testing.T) {
 	monitor := NewMonitor()
+	monitor.RegisterSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine()))
 
 	requireEmpty := func() {
 		recorder := httptest.NewRecorder()
@@ -676,6 +680,7 @@ func TestProgressBarsLifecycleRoundtripsThroughHandler(t *testing.T) {
 }
 
 type bufferOnlyComponent struct {
+	sim timing.Simulation
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 
@@ -686,7 +691,7 @@ type bufferOnlyComponent struct {
 func newBufferOnlyComponent(
 	name string, capacity, filled int,
 ) *bufferOnlyComponent {
-	c := &bufferOnlyComponent{
+	c := &bufferOnlyComponent{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
 		PortOwnerBase: messaging.NewPortOwnerBase(),
 		Buf:           queueing.NewBuffer[int](name+".buf", capacity),
 		name:          name,
@@ -704,6 +709,7 @@ func (c *bufferOnlyComponent) NotifyRecv(messaging.Port)     {}
 func (c *bufferOnlyComponent) NotifyPortFree(messaging.Port) {}
 
 type portedComponent struct {
+	sim timing.Simulation
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 
@@ -711,7 +717,7 @@ type portedComponent struct {
 }
 
 func newPortedComponent(name string) *portedComponent {
-	c := &portedComponent{
+	c := &portedComponent{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
 		PortOwnerBase: messaging.NewPortOwnerBase(),
 		name:          name,
 	}
@@ -989,3 +995,11 @@ func TestCollectProfileReportsWhenCPUProfilingActive(t *testing.T) {
 			http.StatusConflict, recorder.Code)
 	}
 }
+
+func (c *sliceFieldComponent) Simulation() timing.Simulation { return c.sim }
+
+func (c *tickableComponent) Simulation() timing.Simulation { return c.sim }
+
+func (c *bufferOnlyComponent) Simulation() timing.Simulation { return c.sim }
+
+func (c *portedComponent) Simulation() timing.Simulation { return c.sim }

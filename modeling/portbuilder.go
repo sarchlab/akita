@@ -2,6 +2,7 @@ package modeling
 
 import (
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // PortSpec configures a port built by a PortBuilder.
@@ -19,15 +20,15 @@ func DefaultPortSpec() PortSpec {
 	return defaultPortSpec
 }
 
-// PortBuilder builds a messaging.Port and registers it with the registrar,
+// PortBuilder builds a messaging.Port and registers it with the simulation,
 // mirroring how component and connection builders register themselves. The
 // component owns its port topology (declared with DeclarePort); a PortBuilder
 // supplies an instance for one of those ports. Build returns the port; attach
 // it to the component with comp.AssignPort(name, port).
 type PortBuilder struct {
-	registrar Registrar
-	comp      messaging.Component
-	spec      PortSpec
+	simulation timing.Simulation
+	comp       messaging.Component
+	spec       PortSpec
 }
 
 // MakePortBuilder returns a PortBuilder seeded with the default spec.
@@ -35,11 +36,9 @@ func MakePortBuilder() PortBuilder {
 	return PortBuilder{spec: defaultPortSpec}
 }
 
-// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
-// registrar registers the built port.
-func (b PortBuilder) WithRegistrar(reg Registrar) PortBuilder {
-	b.registrar = reg
+// WithSimulation sets the simulation that registers the built port.
+func (b PortBuilder) WithSimulation(sim timing.Simulation) PortBuilder {
+	b.simulation = sim
 	return b
 }
 
@@ -56,11 +55,11 @@ func (b PortBuilder) WithSpec(spec PortSpec) PortBuilder {
 }
 
 // Build builds a port whose full name is comp.Name()+"."+name, owned by the
-// component, and registers it with the registrar. It returns the port; attach
+// component, and registers it with the simulation. It returns the port; attach
 // it to the component with comp.AssignPort(name, port).
 func (b PortBuilder) Build(name string) messaging.Port {
-	if b.registrar == nil {
-		panic("modeling: PortBuilder requires a registrar")
+	if b.simulation == nil {
+		panic("modeling: PortBuilder requires a simulation")
 	}
 
 	if b.comp == nil {
@@ -69,7 +68,7 @@ func (b PortBuilder) Build(name string) messaging.Port {
 
 	port := messaging.NewPort(
 		b.comp, b.spec.BufSize, b.spec.BufSize, b.comp.Name()+"."+name)
-	b.registrar.RegisterPort(port)
+	b.simulation.RegisterPort(port)
 
 	return port
 }

@@ -30,6 +30,7 @@ func (c *noopConn) NotifySend()                      {}
 var _ = Describe("Ideal Memory Controller", func() {
 	var (
 		engine        timing.Engine
+		sim           timing.Simulation
 		storage       *mem.Storage
 		memController *Comp
 		topPort       messaging.Port
@@ -44,7 +45,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		spec.CacheLineSize = 64
 
 		memController = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			WithSpec(spec).
 			Build("MemCtrl")
@@ -61,7 +62,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	makeReadReq := func() memprotocol.ReadReq {
 		req := memprotocol.ReadReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = 0
@@ -73,6 +74,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		storage = mem.NewStorage(1 * mem.MB)
 		build(16)
 	})
@@ -92,7 +94,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should accept write request and add to inflight transactions", func() {
 		writeReq := memprotocol.WriteReq{}
-		writeReq.ID = timing.GetIDGenerator().Generate()
+		writeReq.ID = sim.NewID()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0
@@ -137,7 +139,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should send write response after latency ticks", func() {
 		writeReq := memprotocol.WriteReq{}
-		writeReq.ID = timing.GetIDGenerator().Generate()
+		writeReq.ID = sim.NewID()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0
@@ -216,7 +218,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		storage.Write(0, []byte{10, 20, 30, 40})
 
 		writeReq := memprotocol.WriteReq{}
-		writeReq.ID = timing.GetIDGenerator().Generate()
+		writeReq.ID = sim.NewID()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0

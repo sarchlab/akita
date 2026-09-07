@@ -7,12 +7,13 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// The receiver task ID registry maps (domain, message-ID) to the local task ID
+// The receiver task ID registry maps (generator, domain, message-ID) to the local task ID
 // that the receiver uses to track its handling of that message. This lets a
 // receiver derive a stable task ID for an incoming message without mutating
 // the message itself.
 
 type receiverTaskKey struct {
+	ids    *timing.IDGenerator
 	domain string
 	msgID  uint64
 }
@@ -23,7 +24,7 @@ var (
 )
 
 func lookupOrCreateReceiverTaskID(msg messaging.Msg, domain NamedHookable) uint64 {
-	key := receiverTaskKey{domain: domain.Name(), msgID: msg.Meta().ID}
+	key := receiverTaskKey{ids: domain.Simulation().GetIDGenerator(), domain: domain.Name(), msgID: msg.Meta().ID}
 
 	receiverTaskIDsMu.Lock()
 	defer receiverTaskIDsMu.Unlock()
@@ -32,7 +33,7 @@ func lookupOrCreateReceiverTaskID(msg messaging.Msg, domain NamedHookable) uint6
 		return id
 	}
 
-	id := timing.GetIDGenerator().Generate()
+	id := domain.Simulation().NewID()
 	receiverTaskIDs[key] = id
 
 	return id
@@ -46,7 +47,7 @@ func lookupOrCreateReceiverTaskID(msg messaging.Msg, domain NamedHookable) uint6
 func receiverTaskIDByMsgID(
 	msgID uint64, domain NamedHookable,
 ) (uint64, bool) {
-	key := receiverTaskKey{domain: domain.Name(), msgID: msgID}
+	key := receiverTaskKey{ids: domain.Simulation().GetIDGenerator(), domain: domain.Name(), msgID: msgID}
 
 	receiverTaskIDsMu.Lock()
 	defer receiverTaskIDsMu.Unlock()
@@ -61,20 +62,21 @@ func forgetReceiverTaskID(msg messaging.Msg, domain NamedHookable) {
 }
 
 func forgetReceiverTaskIDByMsgID(msgID uint64, domain NamedHookable) {
-	key := receiverTaskKey{domain: domain.Name(), msgID: msgID}
+	key := receiverTaskKey{ids: domain.Simulation().GetIDGenerator(), domain: domain.Name(), msgID: msgID}
 
 	receiverTaskIDsMu.Lock()
 	delete(receiverTaskIDs, key)
 	receiverTaskIDsMu.Unlock()
 }
 
-// The incoming-buffer task ID registry maps (domain, message-ID) to the task ID
+// The incoming-buffer task ID registry maps (generator, domain, message-ID) to the task ID
 // of the buffer task that tracks a message's residency in a port's incoming
 // buffer (from delivery until it is retrieved). The port hook that opens the
 // task and the component that hangs admission milestones on it both derive the
 // same ID from the message, without mutating the message.
 
 type incomingBufferTaskKey struct {
+	ids    *timing.IDGenerator
 	domain string
 	msgID  uint64
 }
@@ -87,7 +89,7 @@ var (
 func lookupOrCreateIncomingBufferTaskID(
 	msg messaging.Msg, domain NamedHookable,
 ) uint64 {
-	key := incomingBufferTaskKey{domain: domain.Name(), msgID: msg.Meta().ID}
+	key := incomingBufferTaskKey{ids: domain.Simulation().GetIDGenerator(), domain: domain.Name(), msgID: msg.Meta().ID}
 
 	incomingBufferTaskIDsMu.Lock()
 	defer incomingBufferTaskIDsMu.Unlock()
@@ -96,21 +98,21 @@ func lookupOrCreateIncomingBufferTaskID(
 		return id
 	}
 
-	id := timing.GetIDGenerator().Generate()
+	id := domain.Simulation().NewID()
 	incomingBufferTaskIDs[key] = id
 
 	return id
 }
 
 func forgetIncomingBufferTaskIDByMsgID(msgID uint64, domain NamedHookable) {
-	key := incomingBufferTaskKey{domain: domain.Name(), msgID: msgID}
+	key := incomingBufferTaskKey{ids: domain.Simulation().GetIDGenerator(), domain: domain.Name(), msgID: msgID}
 
 	incomingBufferTaskIDsMu.Lock()
 	delete(incomingBufferTaskIDs, key)
 	incomingBufferTaskIDsMu.Unlock()
 }
 
-// The outgoing-buffer task ID registry maps (domain, message-ID) to the task ID
+// The outgoing-buffer task ID registry maps (generator, domain, message-ID) to the task ID
 // of the buffer task that tracks a message's residency in a port's outgoing
 // buffer (from send until the connection drains it). It is kept separate from
 // the incoming-buffer registry so that a message which is both received and
@@ -118,6 +120,7 @@ func forgetIncomingBufferTaskIDByMsgID(msgID uint64, domain NamedHookable) {
 // distinct task on each side.
 
 type outgoingBufferTaskKey struct {
+	ids    *timing.IDGenerator
 	domain string
 	msgID  uint64
 }
@@ -130,7 +133,7 @@ var (
 func lookupOrCreateOutgoingBufferTaskID(
 	msg messaging.Msg, domain NamedHookable,
 ) uint64 {
-	key := outgoingBufferTaskKey{domain: domain.Name(), msgID: msg.Meta().ID}
+	key := outgoingBufferTaskKey{ids: domain.Simulation().GetIDGenerator(), domain: domain.Name(), msgID: msg.Meta().ID}
 
 	outgoingBufferTaskIDsMu.Lock()
 	defer outgoingBufferTaskIDsMu.Unlock()
@@ -139,14 +142,14 @@ func lookupOrCreateOutgoingBufferTaskID(
 		return id
 	}
 
-	id := timing.GetIDGenerator().Generate()
+	id := domain.Simulation().NewID()
 	outgoingBufferTaskIDs[key] = id
 
 	return id
 }
 
 func forgetOutgoingBufferTaskIDByMsgID(msgID uint64, domain NamedHookable) {
-	key := outgoingBufferTaskKey{domain: domain.Name(), msgID: msgID}
+	key := outgoingBufferTaskKey{ids: domain.Simulation().GetIDGenerator(), domain: domain.Name(), msgID: msgID}
 
 	outgoingBufferTaskIDsMu.Lock()
 	delete(outgoingBufferTaskIDs, key)

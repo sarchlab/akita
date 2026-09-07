@@ -22,12 +22,12 @@ func DefaultSpec() Spec {
 }
 
 // Builder builds switches. Configuration is supplied as a whole through
-// WithSpec; wiring is supplied through WithRegistrar and WithResources. Ports
+// WithSpec; wiring is supplied through WithSimulation and WithResources. Ports
 // are added after build with MakeSwitchPortAdder.
 type Builder struct {
-	registrar modeling.Registrar
-	spec      Spec
-	resources Resources
+	simulation timing.Simulation
+	spec       Spec
+	resources  Resources
 }
 
 // MakeBuilder creates a new Builder seeded with the default spec.
@@ -37,11 +37,9 @@ func MakeBuilder() Builder {
 	}
 }
 
-// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
-// registrar provides the engine and registers the built component.
-func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
-	b.registrar = reg
+// WithSimulation sets the simulation that owns and registers the built component.
+func (b Builder) WithSimulation(sim timing.Simulation) Builder {
+	b.simulation = sim
 	return b
 }
 
@@ -60,16 +58,16 @@ func (b Builder) WithResources(r Resources) Builder {
 
 // Build creates a new switch
 func (b Builder) Build(name string) *Comp {
-	if b.registrar == nil {
-		panic("switches: WithRegistrar is required")
+	if b.simulation == nil {
+		panic("switches: WithSimulation is required")
 	}
 
 	b.routingTableMustBeGiven()
 
 	spec := b.spec
-	engine := b.registrar.GetEngine()
+	sim := b.simulation
 	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
@@ -96,7 +94,7 @@ func (b Builder) Build(name string) *Comp {
 	// MakeSwitchPortAdder. They live in the "Port" group.
 	modelComp.DeclarePortGroup("Port", packetization.Link)
 
-	b.registrar.RegisterComponent(modelComp)
+	b.simulation.RegisterComponent(modelComp)
 
 	return modelComp
 }
@@ -144,12 +142,12 @@ func addPort(
 
 // SwitchPortAdder mints a port on a switch connected to a remote peer (another
 // switch's port or an endpoint's NetworkPort). The local port is created,
-// registered with the registrar, and appended to the switch's "Port" group; the
+// registered with the simulation, and appended to the switch's "Port" group; the
 // port complex (channels, latency, buffers, routing) it sets up is internal to
 // the switch. Externally you only supply the remote peer.
 type SwitchPortAdder struct {
 	sw               *modeling.Component[Spec, State, modeling.None]
-	registrar        modeling.Registrar
+	simulation       timing.Simulation
 	remotePort       messaging.Port
 	bufSize          int
 	latency          int
@@ -169,9 +167,9 @@ func MakeSwitchPortAdder(sw *modeling.Component[Spec, State, modeling.None]) Swi
 	}
 }
 
-// WithRegistrar sets the registrar used to register the minted local port.
-func (a SwitchPortAdder) WithRegistrar(reg modeling.Registrar) SwitchPortAdder {
-	a.registrar = reg
+// WithSimulation sets the simulation used to register the minted local port.
+func (a SwitchPortAdder) WithSimulation(sim timing.Simulation) SwitchPortAdder {
+	a.simulation = sim
 	return a
 }
 
@@ -214,13 +212,13 @@ func (a SwitchPortAdder) WithNumOutputChannel(num int) SwitchPortAdder {
 // group, builds the internal port complex toward the remote peer, and returns
 // the new local port.
 func (a SwitchPortAdder) Add() messaging.Port {
-	if a.registrar == nil {
-		panic("switches: SwitchPortAdder requires a registrar")
+	if a.simulation == nil {
+		panic("switches: SwitchPortAdder requires a simulation")
 	}
 
 	idx := a.sw.NumPortsInGroup("Port")
 	local := modeling.MakePortBuilder().
-		WithRegistrar(a.registrar).
+		WithSimulation(a.simulation).
 		WithComponent(a.sw).
 		WithSpec(modeling.PortSpec{BufSize: a.bufSize}).
 		Build(fmt.Sprintf("Port[%d]", idx))

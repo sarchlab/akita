@@ -14,10 +14,10 @@ import (
 // T is the State type (mutable runtime data).
 // R is the Resources type (references to shared resources; None when unused).
 type EventDrivenBuilder[S any, T any, R any] struct {
-	engine    timing.EventScheduler
-	spec      S
-	resources R
-	processor EventProcessor[S, T, R]
+	simulation timing.Simulation
+	spec       S
+	resources  R
+	processor  EventProcessor[S, T, R]
 }
 
 // NewEventDrivenBuilder creates a new EventDrivenBuilder.
@@ -25,9 +25,9 @@ func NewEventDrivenBuilder[S any, T any, R any]() EventDrivenBuilder[S, T, R] {
 	return EventDrivenBuilder[S, T, R]{}
 }
 
-// WithEngine sets the simulation engine.
-func (b EventDrivenBuilder[S, T, R]) WithEngine(engine timing.EventScheduler) EventDrivenBuilder[S, T, R] {
-	b.engine = engine
+// WithSimulation sets the simulation this component belongs to.
+func (b EventDrivenBuilder[S, T, R]) WithSimulation(sim timing.Simulation) EventDrivenBuilder[S, T, R] {
+	b.simulation = sim
 	return b
 }
 
@@ -58,7 +58,8 @@ func (b EventDrivenBuilder[S, T, R]) Build(name string) *EventDrivenComponent[S,
 
 	comp := &EventDrivenComponent[S, T, R]{
 		PortOwnerBase: messaging.NewPortOwnerBase(),
-		engine:        b.engine,
+		simulation:    b.simulation,
+		engine:        b.simulation.GetEngine(),
 		name:          name,
 		spec:          b.spec,
 		resources:     b.resources,
@@ -66,8 +67,8 @@ func (b EventDrivenBuilder[S, T, R]) Build(name string) *EventDrivenComponent[S,
 		pendingWakeup: math.MaxUint64,
 	}
 
-	if registrar, ok := b.engine.(timing.HandlerRegistrar); ok {
-		registrar.RegisterHandler(name, comp)
+	if handlers, ok := b.simulation.GetEngine().(timing.HandlerRegistry); ok {
+		handlers.RegisterHandler(name, comp)
 	}
 
 	return comp

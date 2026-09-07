@@ -29,6 +29,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 
 	var (
 		engine     timing.Engine
+		sim        timing.Simulation
 		storage    *mem.Storage
 		comp       *Comp
 		topPort    messaging.Port
@@ -48,9 +49,8 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		spec.TotalByteSize = 64 * 1024
 		spec.MaxNumConcurrentTrans = 16
 
-		reg := modeling.NewStandaloneRegistrar(engine)
 		comp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				Storage: storage,
@@ -65,7 +65,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		// is ticked.
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(reg).
+				WithSimulation(sim).
 				WithComponent(comp).
 				WithSpec(modeling.PortSpec{BufSize: 16}).
 				Build(name)
@@ -82,7 +82,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = addr
@@ -94,7 +94,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -107,7 +107,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 	// the fetcher's slice [offset:offset+AccessByteSize] is always in range.
 	makeFill := func(bottomRead memprotocol.ReadReq) memprotocol.DataReadyRsp {
 		rsp := memprotocol.DataReadyRsp{Data: make([]byte, blockSize)}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = sim.NewID()
 		rsp.Src = messaging.RemotePort("LowerCache")
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = bottomRead.ID
@@ -165,6 +165,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		storage = mem.NewStorage(4 * mem.GB)
 		build()
 	})

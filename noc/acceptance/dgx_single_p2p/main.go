@@ -53,7 +53,7 @@ func createNetwork(sim *simulation.Simulation, test *acceptance.Test) {
 	}
 
 	connector := nvlink.NewConnector().
-		WithRegistrar(sim)
+		WithSimulation(sim)
 
 	connector.CreateNetwork("Network")
 

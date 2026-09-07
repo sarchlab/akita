@@ -46,7 +46,7 @@ var _ = Describe("Flusher", func() {
 
 		m = &pipelineMW{}
 		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(timing.NewSerialEngine()).
+			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:    6,
@@ -106,7 +106,7 @@ var _ = Describe("Flusher", func() {
 			m.comp.State.CacheState = int(cacheStatePaused)
 
 			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-			req.ID = timing.GetIDGenerator().Generate()
+			req.ID = m.comp.Simulation().NewID()
 			req.TrafficClass = "memcontrolprotocol.Req"
 			controlPort.Deliver(req)
 
@@ -126,7 +126,7 @@ var _ = Describe("Flusher", func() {
 			next.HasProcessingFlush = true
 			next.ProcessingFlush = flushReqState{
 				MsgMeta: messaging.MsgMeta{
-					ID: timing.GetIDGenerator().Generate(),
+					ID: m.comp.Simulation().NewID(),
 				},
 			}
 
@@ -141,7 +141,7 @@ var _ = Describe("Flusher", func() {
 			next.HasProcessingFlush = true
 			next.ProcessingFlush = flushReqState{
 				MsgMeta: messaging.MsgMeta{
-					ID: timing.GetIDGenerator().Generate(),
+					ID: m.comp.Simulation().NewID(),
 				},
 			}
 
@@ -162,7 +162,7 @@ var _ = Describe("Flusher", func() {
 			next := &m.comp.State
 			next.CacheState = int(cacheStateFlushing)
 			next.HasProcessingFlush = true
-			flushID := timing.GetIDGenerator().Generate()
+			flushID := m.comp.Simulation().NewID()
 			next.ProcessingFlush = flushReqState{
 				MsgMeta: messaging.MsgMeta{
 					ID:  flushID,
@@ -191,7 +191,7 @@ var _ = Describe("Flusher", func() {
 			m.comp.State.CacheState = int(cacheStatePaused)
 
 			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-			req.ID = timing.GetIDGenerator().Generate()
+			req.ID = m.comp.Simulation().NewID()
 			req.TrafficClass = "memcontrolprotocol.Req"
 
 			controlPort.Deliver(req)

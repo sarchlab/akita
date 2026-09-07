@@ -11,6 +11,7 @@ import (
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 
 		spec := DefaultSpec()
 		spec.NumBlocks = 1
@@ -20,13 +21,12 @@ func TestControlContract(t *testing.T) {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
-		reg := modeling.NewStandaloneRegistrar(engine)
 		comp := MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			Build("MMUCache")
 
-		assignDefaultPorts(reg, comp)
+		assignDefaultPorts(sim, comp)
 
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			(&noopConn{}).PlugIn(comp.GetPortByName(name))

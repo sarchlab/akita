@@ -18,16 +18,16 @@ import (
 // the banks leaves no started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 	storage := mem.NewStorage(1 * mem.MB)
 
-	reg := modeling.NewStandaloneRegistrar(engine)
 	comp := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithResources(Resources{Storage: storage}).
 		Build("BankedMem")
 
-	assignPort(reg, comp, "Top", 16)
-	assignPort(reg, comp, "Control", 16)
+	assignPort(sim, comp, "Top", 16)
+	assignPort(sim, comp, "Control", 16)
 
 	topPort := comp.GetPortByName("Top")
 	ctrlPort := comp.GetPortByName("Control")
@@ -44,7 +44,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// tick, so the item is still in flight: it has not reached PostPipelineBuf
 	// and so has not been finalized/completed. The memory is a leaf, so there is
 	// no downstream req_out.
-	read := makeReadReq(messaging.RemotePort("Agent"), topPort.AsRemote(), 0)
+	read := makeReadReq(sim, messaging.RemotePort("Agent"), topPort.AsRemote(), 0)
 	topPort.Deliver(read)
 	comp.Tick()
 
@@ -62,7 +62,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the read is in flight.
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = timing.GetIDGenerator().Generate()
+	reset.ID = sim.NewID()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = ctrlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

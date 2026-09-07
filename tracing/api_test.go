@@ -3,6 +3,8 @@ package tracing
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -15,6 +17,8 @@ var _ = Describe("Api", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		domain = NewMockNamedHookable(mockCtrl)
+		sim := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+		domain.EXPECT().Simulation().Return(sim).AnyTimes()
 		domain.EXPECT().NumHooks().Return(1).AnyTimes()
 		domain.EXPECT().InvokeHook(gomock.Any()).AnyTimes()
 	})

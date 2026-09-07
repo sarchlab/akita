@@ -51,7 +51,7 @@ spec.NumWays = 4
 spec.MSHRSize = 8
 
 t := tlb.MakeBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithSpec(spec).
     WithResources(tlb.Resources{
         TranslationProviderMapper: mmuMapper,
@@ -61,7 +61,7 @@ t := tlb.MakeBuilder().
 
 | Method | Description |
 |---|---|
-| `WithRegistrar(r)` | Source of the engine and component registration (required) |
+| `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
 | `WithResources(Resources{...})` | External wiring (the translation provider mapper) |
 
@@ -73,10 +73,10 @@ instances. After `Build`, the caller builds each port with
 `comp.AssignPort(name, port)`:
 
 ```go
-t := tlb.MakeBuilder().WithRegistrar(sim).Build("L2TLB")
+t := tlb.MakeBuilder().WithSimulation(sim).Build("L2TLB")
 for _, name := range []string{"Top", "Bottom", "Control"} {
     p := modeling.MakePortBuilder().
-        WithRegistrar(sim).
+        WithSimulation(sim).
         WithComponent(t).
         WithSpec(modeling.PortSpec{BufSize: 4}).
         Build(name)

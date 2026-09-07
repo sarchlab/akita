@@ -42,7 +42,7 @@ var _ = Describe("Bankstage", func() {
 			storage: storage,
 		}
 		c.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(nil).
+			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				BankLatency:      10,
@@ -115,7 +115,7 @@ var _ = Describe("Bankstage", func() {
 			})
 
 			readMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -168,7 +168,7 @@ var _ = Describe("Bankstage", func() {
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
 			writeMeta := messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 64 + 12,
 				TrafficClass: "req",
 			}
@@ -297,7 +297,7 @@ var _ = Describe("Bankstage", func() {
 				// the coalesced write that depends on the fetcher's
 				// merged fill landing in storage.
 				coalescedWriteMeta = messaging.MsgMeta{
-					ID:           timing.GetIDGenerator().Generate(),
+					ID:           c.comp.Simulation().NewID(),
 					TrafficBytes: 4 + 12,
 					TrafficClass: "req",
 				}

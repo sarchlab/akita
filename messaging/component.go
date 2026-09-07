@@ -3,6 +3,7 @@ package messaging
 import (
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/naming"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // A PortOwner is an element that can communicate with others through ports.
@@ -18,6 +19,7 @@ type PortOwner interface {
 // A Component is an element that owns ports and can be notified of port
 // activity.
 type Component interface {
+	timing.SimulationElement
 	naming.Named
 	hooking.Hookable
 	PortOwner

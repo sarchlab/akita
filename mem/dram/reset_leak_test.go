@@ -20,16 +20,16 @@ import (
 // started-never-ended task. DRAM is a leaf, so there is no downstream req_out.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
-	reg := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	comp := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithResources(Resources{Storage: mem.NewStorage(1 * mem.MB)}).
 		Build("DRAM")
 
 	assign := func(name string) messaging.Port {
 		p := modeling.MakePortBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithComponent(comp).
 			WithSpec(modeling.PortSpec{BufSize: 16}).
 			Build(name)
@@ -52,7 +52,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// out. Ticking just enough to admit the transaction — but far fewer than the
 	// DRAM access latency — leaves it in flight.
 	read := memprotocol.ReadReq{Address: 0, AccessByteSize: 4}
-	read.ID = timing.GetIDGenerator().Generate()
+	read.ID = sim.NewID()
 	read.Src = messaging.RemotePort("Agent")
 	read.Dst = topPort.AsRemote()
 	read.TrafficBytes = 12
@@ -83,7 +83,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the transaction is in flight.
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = timing.GetIDGenerator().Generate()
+	reset.ID = sim.NewID()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = ctrlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

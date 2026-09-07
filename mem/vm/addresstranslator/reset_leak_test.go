@@ -20,7 +20,7 @@ import (
 // mid-flight Reset leaves no started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
-	reg := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	spec := DefaultSpec()
 	spec.Log2PageSize = 12
@@ -36,12 +36,12 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	}
 
 	at := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(resources).
 		Build("AddressTranslator")
 
-	assignPorts(reg, at, 16)
+	assignPorts(sim, at, 16)
 
 	topPort := at.GetPortByName("Top")
 	translationPort := at.GetPortByName("Translation")
@@ -64,7 +64,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// flight). Tick until the transaction is created and the TranslationReq has
 	// actually gone out the Translation port.
 	read := memprotocol.ReadReq{Address: 0x1040, AccessByteSize: 4}
-	read.ID = timing.GetIDGenerator().Generate()
+	read.ID = sim.NewID()
 	read.Src = messaging.RemotePort("Agent")
 	read.Dst = topPort.AsRemote()
 	read.TrafficBytes = 12
@@ -96,7 +96,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the transaction is in flight (translation never answered).
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = timing.GetIDGenerator().Generate()
+	reset.ID = sim.NewID()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = ctrlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

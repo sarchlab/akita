@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -21,7 +22,7 @@ var _ = Describe("Reset task-cleanup helpers", func() {
 	)
 
 	BeforeEach(func() {
-		comp = &ibFakeComp{name: "ResetComp"}
+		comp = &ibFakeComp{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()), name: "ResetComp"}
 		tracer = &ibRecordingTracer{}
 		CollectTrace(comp, tracer)
 	})
@@ -109,7 +110,7 @@ var _ = Describe("Reset task-cleanup helpers", func() {
 		})
 
 		It("is a no-op when the domain has no hooks", func() {
-			untraced := &ibFakeComp{name: "Untraced"}
+			untraced := &ibFakeComp{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()), name: "Untraced"}
 			EndTaskOnReset(untraced, 12345)
 			Expect(tracer.ends).To(BeEmpty())
 		})

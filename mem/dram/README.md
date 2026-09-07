@@ -91,7 +91,7 @@ Activate → Read/Write → Precharge → (next row)
 
 All scalar configuration is supplied as a whole through `WithSpec`. Start from a
 preset (or `DefaultSpec()`), tweak the fields you need, and pass it in. Wiring is
-supplied through `WithRegistrar` (which provides the engine and registers the
+supplied through `WithSimulation` (which provides the engine and registers the
 component) and `WithResources` (shared objects such as backing storage). `Build`
 declares the `Top` and `Control` ports but does not create their instances.
 Build each port with `modeling.MakePortBuilder` (which registers the port with
@@ -103,20 +103,20 @@ spec.Freq = 1200 * timing.MHz
 spec.PagePolicy = dram.PagePolicyOpen
 
 ctrl := dram.MakeBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithSpec(spec).
     WithResources(dram.Resources{Storage: storage}).
     Build("DRAM")
 
 topPort := modeling.MakePortBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithComponent(ctrl).
     WithSpec(modeling.PortSpec{BufSize: 1024}).
     Build("Top")
 ctrl.AssignPort("Top", topPort)
 
 ctrlPort := modeling.MakePortBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithComponent(ctrl).
     WithSpec(modeling.PortSpec{BufSize: 4}).
     Build("Control")
@@ -129,7 +129,7 @@ topPort = ctrl.GetPortByName("Top")
 
 | Method | Description |
 |---|---|
-| `WithRegistrar(r)` | Source of the engine and component registration (required) |
+| `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `DefaultSpec()` or a preset (DDR4Spec, HBM2Spec, ...) |
 | `WithResources(Resources{Storage: s})` | Shared backing storage (built internally if omitted) |
 

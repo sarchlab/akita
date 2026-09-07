@@ -1,10 +1,11 @@
 package acceptance
 
 import (
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"log"
 	"math/rand"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // TrafficMsg is a concrete message type used in acceptance tests.
@@ -64,7 +65,7 @@ func (t *Test) GenerateMsgs(n uint64) {
 
 		msg := TrafficMsg{
 			MsgMeta: messaging.MsgMeta{
-				ID:           timing.GetIDGenerator().Generate(),
+				ID:           srcAgent.Simulation().NewID(),
 				Src:          srcPort.AsRemote(),
 				Dst:          dstPort.AsRemote(),
 				TrafficBytes: rand.Intn(4096),

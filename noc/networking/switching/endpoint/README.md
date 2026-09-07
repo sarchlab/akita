@@ -54,13 +54,13 @@ backpressure to keep the serializable state bounded.
 
 ```go
 ep := endpoint.MakeBuilder().
-    WithRegistrar(reg).                                        // *simulation.Simulation or StandaloneRegistrar
+    WithSimulation(sim).                                        // *simulation.Simulation or a standalone simulation
     WithSpec(endpoint.DefaultSpec()).
     WithResources(endpoint.Resources{DevicePorts: ports}).
     Build("EndPoint0")
 ```
 
-`WithRegistrar` is required (`Build` panics otherwise). `Build` creates the
+`WithSimulation` is required (`Build` panics otherwise). `Build` creates the
 endpoint's network port; device ports listed in `Resources` are plugged in
 automatically, and more can be added later with `PlugIn`. `DefaultSpec`
 defaults to a 32-byte flit, 0.25 encoding overhead, single input/output

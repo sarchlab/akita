@@ -138,18 +138,28 @@ Note the new `SendTaskID` and `RecvTaskID` fields for tracing integration.
 
 ### IDGenerator (V5)
 
+Each simulation owns its counter. Components retain their simulation reference. There
+is no process-global generator or sequential/parallel configuration switch.
+
 ```go
-// v5/sim/idgenerator.go
-type IDGenerator interface {
-    Generate() uint64
-}
-
-// Two implementations: sequential (deterministic) and parallel (non-deterministic).
-sim.UseSequentialIDGenerator() // Call before any Generate()
-sim.UseParallelIDGenerator()   // For parallel simulations
-
-id := sim.GetIDGenerator().Generate() // returns uint64
+id := sim.NewID() // uint64, unique within this simulation
+req.ID = component.Simulation().NewID() // uses the same counter
 ```
+
+Event factories now take the allocated ID explicitly:
+`timing.MakeEventBase(sim.NewID(), time, handlerID)` and
+`modeling.MakeTickEvent(sim.NewID(), handlerID, time)`.
+
+Separate simulations may reuse numeric IDs. Tracing associations are scoped
+to the simulation as well as the component name and message ID.
+
+Pass the simulation to builders with `WithSimulation(sim)`. All component and
+package builders accept the shared `timing.Simulation` interface. Components expose `Simulation()`, while engines and components have
+no `NewID()` method. For lightweight setups, create
+`modeling.NewStandaloneSimulation(engine)` once and share that instance with
+all builders. Custom components and tracing domains implement
+`Simulation() timing.Simulation`. Monitors use `RegisterSimulation(sim)` so
+progress IDs come from the same counter.
 
 ### Before / After
 
@@ -175,7 +185,7 @@ if req.ID == "" { ... }
 pendingReqs := map[uint64]*ReadReq{}
 
 req := &ReadReq{}
-req.ID = sim.GetIDGenerator().Generate() // 1, 2, 3, ...
+req.ID = component.Simulation().NewID() // 1, 2, 3, ...
 pendingReqs[req.ID] = req
 
 // Later, matching response:
@@ -193,7 +203,8 @@ if req.ID == 0 { ... }
 - Replace `== ""` / `!= ""` checks with `== 0` / `!= 0`.
 - Replace `fmt.Sprintf`-based ID formatting with `strconv.FormatUint` or `%d`.
 - Update tracing task ID comparisons from string to uint64.
-- Checkpoint/restore: use `GetIDGeneratorNextID()` / `SetIDGeneratorNextID()` to snapshot generator state.
+- Replace global ID allocation with `sim.NewID()` or `component.Simulation().NewID()`.
+- Simulation checkpoints include the owned counter. Standalone simulation users must checkpoint `sim.GetIDGenerator()` alongside the engine. Restore into fresh instances.
 
 ---
 
@@ -340,11 +351,11 @@ type EventBase struct {
 
 ### Handler Registration
 
-The engine implements `HandlerRegistrar`:
+The engine implements `HandlerRegistry`:
 
 ```go
 // v5/sim/engine.go
-type HandlerRegistrar interface {
+type HandlerRegistry interface {
     RegisterHandler(name string, handler Handler)
 }
 ```
@@ -356,18 +367,18 @@ Components register themselves during construction. For example,
 // v5/sim/ticker.go
 func NewTickingComponent(
     name string,
-    engine EventScheduler,
+    sim timing.Simulation,
     freq Freq,
     ticker Ticker,
 ) *TickingComponent {
     tc := new(TickingComponent)
-    tc.TickScheduler = NewTickScheduler(name, engine, freq)
+    tc.TickScheduler = NewTickScheduler(name, sim, freq)
     tc.ComponentBase = NewComponentBase(name)
     tc.ticker = ticker
 
     // Auto-register so events with HandlerID_==name route here.
-    if registrar, ok := engine.(HandlerRegistrar); ok {
-        registrar.RegisterHandler(name, tc)
+    if handlers, ok := sim.GetEngine().(timing.HandlerRegistry); ok {
+        handlers.RegisterHandler(name, tc)
     }
 
     return tc
@@ -509,7 +520,7 @@ type Component[S any, T any] struct {
 
 ```go
 comp := modeling.NewBuilder[MySpec, MyState]().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithFreq(1 * sim.GHz).
     WithSpec(mySpec).
     Build("MyComponent")
@@ -543,7 +554,7 @@ V5 unifies how components are modeled and wired. Each component is a single stru
    - Snapshot/restore uses deep copies of State so checkpoints are immutable.
 
 3. Ports (declared by the component, instances injected)
-   - A component declares the ports it has (`DeclarePort`) but never constructs the instances or owns connections. Port instances are built and registered during wiring with a port builder (`modeling.MakePortBuilder`, which registers each port with the simulation through the registrar) and attached via `AssignPort(name, port)`.
+   - A component declares the ports it has (`DeclarePort`) but never constructs the instances or owns connections. Port instances are built and registered during wiring with a port builder (`modeling.MakePortBuilder`, which registers each port with the simulation) and attached via `AssignPort(name, port)`.
    - Components access ports by name via `GetPortByName("...")` to avoid compile‑time coupling.
 
 4. Middlewares (ordered, stateless over the component)
@@ -566,7 +577,7 @@ V5 unifies how components are modeled and wired. Each component is a single stru
 #### Build and Wire (two stages)
 
 1. Build from Spec
-   - `Builder.WithRegistrar(reg).WithSpec(spec).Build(name)` constructs the component with defaults and resolved strategies, and declares the component's ports.
+   - `Builder.WithSimulation(sim).WithSpec(spec).Build(name)` constructs the component with defaults and resolved strategies, and declares the component's ports.
    - Do not create the port instances or connect them here.
 
 2. Wire topology
@@ -675,7 +686,7 @@ dram.GDDR6Spec  // GDDR6-14Gbps (1750 MHz, BL16)
 topPort := sim.NewPort(nil, 4, 4, "DRAM.Top")
 
 ctrl := dram.MakeBuilder().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithSpec(dram.DDR4Spec).
     WithFreq(1200 * sim.MHz).
     WithTopPort(topPort).
@@ -713,7 +724,7 @@ hitRate := dram.RowBufferHitRate(&state) // 0.0 to 1.0
 ```go
 // V4: Fixed-latency memory controller, no bank modeling.
 ctrl := idealmemcontroller.New().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithFreq(1 * sim.GHz).
     WithLatency(100).
     Build("MemCtrl")
@@ -725,7 +736,7 @@ ctrl := idealmemcontroller.New().
 topPort := sim.NewPort(nil, 4, 4, "DRAM.Top")
 
 ctrl := dram.MakeBuilder().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithSpec(dram.HBM2Spec).
     WithTopPort(topPort).
     WithPagePolicy(dram.PagePolicyOpen).
@@ -747,7 +758,7 @@ changing the component.
 ```go
 // V4: Builder creates ports internally — caller has no control over port creation.
 cache := cachebuilder.New().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithFreq(1 * sim.GHz).
     Build("Cache")
 ```
@@ -757,13 +768,13 @@ cache := cachebuilder.New().
 // V5: the component declares its ports; a port builder creates+registers each
 // instance (like component/connection builders), and the caller attaches it.
 comp := somepkg.MakeBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithSpec(spec).
     Build("Comp") // Build calls DeclarePort("Top"), DeclarePort("Bottom"), ...
 
 for _, name := range []string{"Top", "Bottom", "Control"} {
     p := modeling.MakePortBuilder().
-        WithRegistrar(sim).
+        WithSimulation(sim).
         WithComponent(comp).
         WithSpec(modeling.PortSpec{BufSize: 4}).
         Build(name) // creates comp.Name()+"."+name and registers it
@@ -771,8 +782,8 @@ for _, name := range []string{"Top", "Bottom", "Control"} {
 }
 ```
 
-The port builder takes the registrar and registers the port with the
-simulation, exactly as `RegisterComponent` registers a component. `AssignPort`
+The port builder registers each port with its simulation, exactly as
+`RegisterComponent` registers a component. `AssignPort`
 then panics if the name was not declared or is already assigned, so a typo or a
 forgotten port fails fast.
 
@@ -783,7 +794,7 @@ Because the component is built before its ports, a port is normally created
 with its owner directly and then assigned:
 
 ```go
-agent := somepkg.MakeBuilder().WithRegistrar(sim).Build("Agent")
+agent := somepkg.MakeBuilder().WithSimulation(sim).Build("Agent")
 outPort := messaging.NewPort(agent, 4, 4, "Agent.Out")
 agent.AssignPort("Out", outPort)
 ```

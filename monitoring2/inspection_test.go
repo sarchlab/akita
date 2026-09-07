@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -41,11 +42,11 @@ func waitInspection[T any](t *testing.T, ch <-chan T) T {
 func TestMonitorSnapshotDoesNotWaitForSlowClient(t *testing.T) {
 	for name, e := range map[string]interface {
 		timing.Engine
-		timing.HandlerRegistrar
+		timing.HandlerRegistry
 	}{"serial": timing.NewSerialEngine(), "parallel": timing.NewParallelEngine()} {
 		t.Run(name, func(t *testing.T) {
 			m := NewMonitor()
-			m.RegisterEngine(e)
+			m.RegisterSimulation(modeling.NewStandaloneSimulation(e))
 			component := newSliceFieldComponent("snapshot", []int{10, 20})
 			m.RegisterComponent(component)
 			e.RegisterHandler("model", inspectionHandler(func(timing.Event) {
@@ -106,7 +107,7 @@ func TestMonitorReportsHandlerRequestedPause(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := NewMonitor()
-	m.RegisterEngine(e)
+	m.RegisterSimulation(modeling.NewStandaloneSimulation(e))
 	w := httptest.NewRecorder()
 	m.apiEngineState(w, httptest.NewRequest(http.MethodGet, "/api/engine/state", nil))
 	var state engineStateRsp
@@ -138,7 +139,7 @@ func TestMonitorReportsAllEngineStates(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := NewMonitor()
-			m.RegisterEngine(stateReportingEngine{state: tc.state})
+			m.RegisterSimulation(modeling.NewStandaloneSimulation(stateReportingEngine{state: tc.state}))
 			w := httptest.NewRecorder()
 			m.apiEngineState(w, httptest.NewRequest(http.MethodGet, "/api/engine/state", nil))
 			var response engineStateRsp

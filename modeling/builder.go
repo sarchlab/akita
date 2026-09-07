@@ -10,10 +10,10 @@ import (
 // T is the State type (mutable runtime data).
 // R is the Resources type (references to shared resources; None when unused).
 type Builder[S any, T any, R any] struct {
-	engine    timing.EventScheduler
-	freq      timing.Freq
-	spec      S
-	resources R
+	simulation timing.Simulation
+	freq       timing.Freq
+	spec       S
+	resources  R
 }
 
 // NewBuilder creates a new Builder.
@@ -21,9 +21,9 @@ func NewBuilder[S any, T any, R any]() Builder[S, T, R] {
 	return Builder[S, T, R]{}
 }
 
-// WithEngine sets the simulation engine.
-func (b Builder[S, T, R]) WithEngine(engine timing.EventScheduler) Builder[S, T, R] {
-	b.engine = engine
+// WithSimulation sets the simulation this component belongs to.
+func (b Builder[S, T, R]) WithSimulation(sim timing.Simulation) Builder[S, T, R] {
+	b.simulation = sim
 	return b
 }
 
@@ -54,7 +54,7 @@ func (b Builder[S, T, R]) Build(name string) *Component[S, T, R] {
 		resources: b.resources,
 	}
 	comp.TickingComponent = NewTickingComponent(
-		name, b.engine, b.freq, comp)
+		name, b.simulation, b.freq, comp)
 
 	return comp
 }

@@ -6,7 +6,6 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -78,7 +77,7 @@ func (m *respondMW) finalizeWriteTrans(
 		transactionGlobalAddress(t), t.WriteMsg.Data)
 
 	writeDone := memprotocol.WriteDoneRsp{}
-	writeDone.ID = timing.GetIDGenerator().Generate()
+	writeDone.ID = m.comp.Simulation().NewID()
 	writeDone.Src = m.topPort().AsRemote()
 	writeDone.Dst = t.WriteMsg.Src
 	writeDone.RspTo = t.WriteMsg.ID
@@ -106,7 +105,7 @@ func (m *respondMW) finalizeReadTrans(
 		transactionGlobalAddress(t), t.ReadMsg.AccessByteSize)
 
 	dataReady := memprotocol.DataReadyRsp{}
-	dataReady.ID = timing.GetIDGenerator().Generate()
+	dataReady.ID = m.comp.Simulation().NewID()
 	dataReady.Src = m.topPort().AsRemote()
 	dataReady.Dst = t.ReadMsg.Src
 	dataReady.Data = data

@@ -52,7 +52,7 @@ spec := addresstranslator.DefaultSpec()
 spec.DeviceID = 1
 
 at := addresstranslator.MakeBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithSpec(spec).
     WithResources(addresstranslator.Resources{
         MemProviderMapper:         memMapper,
@@ -63,7 +63,7 @@ at := addresstranslator.MakeBuilder().
 
 | Method | Description |
 |---|---|
-| `WithRegistrar(r)` | Source of the engine and component registration (required) |
+| `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
 | `WithResources(Resources{...})` | External wiring (memory and translation provider mappers) |
 
@@ -72,20 +72,20 @@ at := addresstranslator.MakeBuilder().
 `Build` declares the component's ports by logical name; it does not create the
 port instances. After `Build`, the caller builds each port with
 `modeling.MakePortBuilder` (choosing the buffer size) and attaches it with
-`AssignPort`. The same `modeling.Registrar` passed to the builder is used to
+`AssignPort`. The same `timing.Simulation` passed to the builder is used to
 build the ports. Every declared port must be assigned before the component is
 ticked.
 
 ```go
 at := addresstranslator.MakeBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithSpec(spec).
     WithResources(res).
     Build("AddressTranslator")
 
 for _, name := range []string{"Top", "Bottom", "Translation", "Control"} {
     p := modeling.MakePortBuilder().
-        WithRegistrar(sim).
+        WithSimulation(sim).
         WithComponent(at).
         WithSpec(modeling.PortSpec{BufSize: 4}).
         Build(name)

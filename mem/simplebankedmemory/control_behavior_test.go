@@ -23,6 +23,7 @@ import (
 var _ = Describe("Simple Banked Memory control behavior", func() {
 	var (
 		engine   timing.Engine
+		sim      timing.Simulation
 		storage  *mem.Storage
 		comp     *Comp
 		topPort  messaging.Port
@@ -30,14 +31,14 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 	)
 
 	build := func() {
-		reg := modeling.NewStandaloneRegistrar(engine)
+
 		comp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			Build("BankedMem")
 
-		assignPort(reg, comp, "Top", 16)
-		assignPort(reg, comp, "Control", 16)
+		assignPort(sim, comp, "Top", 16)
+		assignPort(sim, comp, "Control", 16)
 
 		topPort = comp.GetPortByName("Top")
 		ctrlPort = comp.GetPortByName("Control")
@@ -47,12 +48,12 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 	}
 
 	makeRead := func(index int) memprotocol.ReadReq {
-		return makeReadReq(messaging.RemotePort("Agent"), topPort.AsRemote(), index)
+		return makeReadReq(sim, messaging.RemotePort("Agent"), topPort.AsRemote(), index)
 	}
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -70,6 +71,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		storage = mem.NewStorage(1 * mem.MB)
 		build()
 	})

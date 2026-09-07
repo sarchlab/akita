@@ -73,7 +73,7 @@ func (m *agentMW) send() bool {
 		p := s.Pending[0]
 		port.Send(pingRsp{
 			MsgMeta: messaging.MsgMeta{
-				ID:    timing.GetIDGenerator().Generate(),
+				ID:    m.comp.Simulation().NewID(),
 				Src:   port.AsRemote(),
 				Dst:   p.Dst,
 				RspTo: p.ReqID,
@@ -87,7 +87,7 @@ func (m *agentMW) send() bool {
 	if s.PingsToSend > 0 && port.CanSend() {
 		port.Send(pingReq{
 			MsgMeta: messaging.MsgMeta{
-				ID:  timing.GetIDGenerator().Generate(),
+				ID:  m.comp.Simulation().NewID(),
 				Src: port.AsRemote(),
 				Dst: s.PingDst,
 			},
@@ -120,16 +120,16 @@ func (m *agentMW) recv() bool {
 	return true
 }
 
-func buildAgent(reg modeling.Registrar, name string) *Comp {
+func buildAgent(sim timing.Simulation, name string) *Comp {
 	c := modeling.NewBuilder[agentSpec, agentState, modeling.None]().
-		WithEngine(reg.GetEngine()).
+		WithSimulation(sim).
 		WithFreq(1 * timing.GHz).
 		WithSpec(agentSpec{Freq: 1 * timing.GHz}).
 		Build(name)
 	c.AddMiddleware(&agentMW{comp: c})
 	c.DeclarePort("Out")
 	c.AssignPort("Out", messaging.NewPort(c, 4, 4, name+".Out"))
-	reg.RegisterComponent(c)
+	sim.RegisterComponent(c)
 	return c
 }
 
@@ -165,13 +165,13 @@ func (h *msgHook) Func(ctx hooking.HookCtx) {
 
 func main() {
 	engine := timing.NewSerialEngine()
-	registrar := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
 
-	agentA := buildAgent(registrar, "AgentA")
-	agentB := buildAgent(registrar, "AgentB")
+	agentA := buildAgent(sim, "AgentA")
+	agentB := buildAgent(sim, "AgentB")
 
 	conn := directconnection.MakeBuilder().
-		WithRegistrar(registrar).
+		WithSimulation(sim).
 		Build("Conn")
 	conn.PlugIn(agentA.GetPortByName("Out"))
 	conn.PlugIn(agentB.GetPortByName("Out"))

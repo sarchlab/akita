@@ -13,6 +13,7 @@ type Simulation struct {
 	id               string
 	outputPath       string
 	engine           timing.Engine
+	idGenerator      *timing.IDGenerator
 	dataRecorder     datarecording.DataRecorder
 	visTracer        *tracing.DBTracer
 	metaRecorder     *metaRecorder
@@ -95,7 +96,7 @@ func (s *Simulation) registerEntity(e Entity) {
 
 // RegisterComponent registers a component with the simulation. It accepts any
 // named object so that component builders can register through the
-// modeling.Registrar interface without importing this package.
+// timing.Simulation interface without importing this package.
 func (s *Simulation) RegisterComponent(c naming.Named) {
 	compName := c.Name()
 	s.registerEntity(c)
@@ -113,7 +114,7 @@ func (s *Simulation) RegisterComponent(c naming.Named) {
 }
 
 // RegisterPort registers a port with the simulation so it can be resolved by
-// name and monitored. Port builders call this through the modeling.Registrar
+// name and monitored. Port builders call this through the timing.Simulation
 // interface, mirroring RegisterComponent — a component is registered when it is
 // built, and each of its ports is registered when the port is built.
 func (s *Simulation) RegisterPort(p naming.Named) {
@@ -238,4 +239,12 @@ func (s *Simulation) Terminate() {
 	}
 
 	s.dataRecorder.Close()
+}
+
+// NewID allocates an ID unique within this simulation.
+func (s *Simulation) NewID() uint64 { return s.idGenerator.NewID() }
+
+// GetIDGenerator returns this simulation's checkpointed ID counter.
+func (s *Simulation) GetIDGenerator() *timing.IDGenerator {
+	return s.idGenerator
 }

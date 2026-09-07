@@ -24,6 +24,7 @@ func (c *ccNoopConn) NotifySend()                      {}
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		storage := mem.NewStorage(1 * mem.MB)
 
 		spec := DefaultSpec()
@@ -37,7 +38,7 @@ func TestControlContract(t *testing.T) {
 		spec.DirLatency = 1
 
 		comp := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				Storage: storage,

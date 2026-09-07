@@ -25,6 +25,7 @@ import (
 var _ = Describe("GMMU control behavior", func() {
 	var (
 		engine    timing.Engine
+		sim       timing.Simulation
 		pageTable vm.PageTable
 		comp      *Comp
 		topPort   messaging.Port
@@ -46,14 +47,13 @@ var _ = Describe("GMMU control behavior", func() {
 		spec.Latency = 10
 		spec.LowModule = lowModule
 
-		reg := modeling.NewStandaloneRegistrar(engine)
 		comp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(spec).
 			Build("GMMU")
 
-		assignDefaultPorts(reg, comp)
+		assignDefaultPorts(sim, comp)
 
 		topPort = comp.GetPortByName("Top")
 		ctrlPort = comp.GetPortByName("Control")
@@ -75,7 +75,7 @@ var _ = Describe("GMMU control behavior", func() {
 
 	makeTranslationReq := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = agentPort
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -87,7 +87,7 @@ var _ = Describe("GMMU control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -96,6 +96,7 @@ var _ = Describe("GMMU control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		pageTable = vm.NewPageTable(12)
 		build()
 	})

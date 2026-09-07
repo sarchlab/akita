@@ -117,6 +117,7 @@ func runExampleTrace(memTracer tracing.Tracer, timeTeller *SimpleTimeTeller) {
 	// Add a tag (cache miss)
 	timeTeller.AdvanceTime(50)
 	memTracer.AddTaskTag(tracing.TaskTag{
+		ID:     2,
 		TaskID: 1,
 		What:   "cache_miss",
 		Time:   timeTeller.CurrentTime(),

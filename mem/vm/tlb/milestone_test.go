@@ -112,6 +112,7 @@ var _ = Describe("TLB milestones", func() {
 
 	var (
 		engine  timing.Engine
+		sim     timing.Simulation
 		tlbComp *Comp
 		topPort messaging.Port
 		rec     *tlbMilestoneRecorder
@@ -119,15 +120,15 @@ var _ = Describe("TLB milestones", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 
 		spec := DefaultSpec()
 		spec.NumSets = 1
 		spec.NumWays = 32
 		spec.Log2PageSize = 12
 
-		reg := modeling.NewStandaloneRegistrar(engine)
 		tlbComp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
@@ -136,7 +137,7 @@ var _ = Describe("TLB milestones", func() {
 			}).
 			Build("TLB")
 
-		assignDefaultPorts(reg, tlbComp)
+		assignDefaultPorts(sim, tlbComp)
 		plugNoopConn(tlbComp)
 
 		topPort = tlbComp.GetPortByName("Top")
@@ -150,7 +151,7 @@ var _ = Describe("TLB milestones", func() {
 
 	makeReq := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -275,7 +276,7 @@ var _ = Describe("TLB milestones", func() {
 		rsp := vmprotocol.TranslationRsp{
 			Page: vm.Page{PID: 1, VAddr: 0x100, PAddr: 0x200, Valid: true},
 		}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = sim.NewID()
 		rsp.Src = remotePort
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = fetch.ID

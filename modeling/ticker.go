@@ -16,9 +16,9 @@ type TickEvent struct {
 }
 
 // MakeTickEvent creates a new TickEvent
-func MakeTickEvent(handlerID string, time timing.VTimeInPicoSec) TickEvent {
+func MakeTickEvent(id uint64, handlerID string, time timing.VTimeInPicoSec) TickEvent {
 	evt := TickEvent{}
-	evt.ID = timing.GetIDGenerator().Generate()
+	evt.ID = id
 	evt.HandlerID_ = handlerID
 	evt.Time_ = time
 	evt.Secondary = false
@@ -33,11 +33,12 @@ type Ticker interface {
 
 // TickScheduler can help schedule tick events.
 type TickScheduler struct {
-	lock      sync.Mutex
-	handlerID string
-	freq      timing.Freq
-	engine    timing.EventScheduler
-	secondary bool
+	lock       sync.Mutex
+	handlerID  string
+	freq       timing.Freq
+	simulation timing.Simulation
+	engine     timing.EventScheduler
+	secondary  bool
 
 	nextTickTime     timing.VTimeInPicoSec
 	hasScheduledTick bool
@@ -46,13 +47,14 @@ type TickScheduler struct {
 // NewTickScheduler creates a scheduler for tick events.
 func NewTickScheduler(
 	handlerID string,
-	engine timing.EventScheduler,
+	sim timing.Simulation,
 	freq timing.Freq,
 ) *TickScheduler {
 	ticker := new(TickScheduler)
 
 	ticker.handlerID = handlerID
-	ticker.engine = engine
+	ticker.simulation = sim
+	ticker.engine = sim.GetEngine()
 	ticker.freq = freq
 	ticker.hasScheduledTick = false
 
@@ -63,13 +65,14 @@ func NewTickScheduler(
 // tick events.
 func NewSecondaryTickScheduler(
 	handlerID string,
-	engine timing.EventScheduler,
+	sim timing.Simulation,
 	freq timing.Freq,
 ) *TickScheduler {
 	ticker := new(TickScheduler)
 
 	ticker.handlerID = handlerID
-	ticker.engine = engine
+	ticker.simulation = sim
+	ticker.engine = sim.GetEngine()
 	ticker.freq = freq
 	ticker.secondary = true
 	ticker.hasScheduledTick = false
@@ -89,7 +92,7 @@ func (t *TickScheduler) TickNow() {
 
 	t.nextTickTime = t.freq.ThisTick(time)
 	t.hasScheduledTick = true
-	tick := MakeTickEvent(t.handlerID, t.nextTickTime)
+	tick := MakeTickEvent(t.simulation.NewID(), t.handlerID, t.nextTickTime)
 
 	if t.secondary {
 		tick.Secondary = true
@@ -111,7 +114,7 @@ func (t *TickScheduler) TickLater() {
 
 	t.nextTickTime = time
 	t.hasScheduledTick = true
-	tick := MakeTickEvent(t.handlerID, t.nextTickTime)
+	tick := MakeTickEvent(t.simulation.NewID(), t.handlerID, t.nextTickTime)
 
 	if t.secondary {
 		tick.Secondary = true
@@ -188,20 +191,20 @@ func (c *TickingComponent) Handle(e timing.Event) {
 // NewTickingComponent creates a new ticking component
 func NewTickingComponent(
 	name string,
-	engine timing.EventScheduler,
+	sim timing.Simulation,
 	freq timing.Freq,
 	ticker Ticker,
 ) *TickingComponent {
 	naming.MustBeValid(name)
 
 	tc := new(TickingComponent)
-	tc.TickScheduler = NewTickScheduler(name, engine, freq)
+	tc.TickScheduler = NewTickScheduler(name, sim, freq)
 	tc.PortOwnerBase = messaging.NewPortOwnerBase()
 	tc.name = name
 	tc.ticker = ticker
 
-	if registrar, ok := engine.(timing.HandlerRegistrar); ok {
-		registrar.RegisterHandler(name, tc)
+	if handlers, ok := sim.GetEngine().(timing.HandlerRegistry); ok {
+		handlers.RegisterHandler(name, tc)
 	}
 
 	return tc
@@ -210,21 +213,24 @@ func NewTickingComponent(
 // NewSecondaryTickingComponent creates a new ticking component
 func NewSecondaryTickingComponent(
 	name string,
-	engine timing.EventScheduler,
+	sim timing.Simulation,
 	freq timing.Freq,
 	ticker Ticker,
 ) *TickingComponent {
 	naming.MustBeValid(name)
 
 	tc := new(TickingComponent)
-	tc.TickScheduler = NewSecondaryTickScheduler(name, engine, freq)
+	tc.TickScheduler = NewSecondaryTickScheduler(name, sim, freq)
 	tc.PortOwnerBase = messaging.NewPortOwnerBase()
 	tc.name = name
 	tc.ticker = ticker
 
-	if registrar, ok := engine.(timing.HandlerRegistrar); ok {
-		registrar.RegisterHandler(name, tc)
+	if handlers, ok := sim.GetEngine().(timing.HandlerRegistry); ok {
+		handlers.RegisterHandler(name, tc)
 	}
 
 	return tc
 }
+
+// Simulation returns the simulation this component belongs to.
+func (t *TickScheduler) Simulation() timing.Simulation { return t.simulation }

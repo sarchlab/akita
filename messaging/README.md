@@ -111,7 +111,7 @@ port := messaging.NewPort(comp, incomingCap, outgoingCap, "MyComp.Top")
 ```
 
 In assembly, prefer `modeling.MakePortBuilder` — it wraps `NewPort` and
-registers the port with the simulation (and the monitor) through the registrar,
+registers the port with the simulation (and the monitor),
 mirroring how component and connection builders register themselves. `NewPort`
 is the low-level constructor it builds on.
 

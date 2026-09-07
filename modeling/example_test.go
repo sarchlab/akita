@@ -112,7 +112,7 @@ func (m *pingMiddleware) sendRsp() bool {
 
 	rsp := PingRsp{
 		MsgMeta: messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  m.comp.Simulation().NewID(),
 			Src: m.outPort.AsRemote(),
 			Dst: trans.req.Src,
 		},
@@ -137,7 +137,7 @@ func (m *pingMiddleware) sendPing() bool {
 
 	req := PingReq{
 		MsgMeta: messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  m.comp.Simulation().NewID(),
 			Src: m.outPort.AsRemote(),
 			Dst: m.pingDst,
 		},
@@ -162,6 +162,7 @@ func (m *pingMiddleware) sendPing() bool {
 // modeling.Component with Spec and State.
 func Example() {
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	specA := PingSpec{NumPingsToSend: 2}
 	specB := PingSpec{NumPingsToSend: 0}
@@ -170,7 +171,7 @@ func Example() {
 	portB := messaging.NewPort(nil, 4, 4, "AgentB.OutPort")
 
 	agentA := modeling.NewBuilder[PingSpec, PingState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(1 * timing.Hz).
 		WithSpec(specA).
 		Build("AgentA")
@@ -184,7 +185,7 @@ func Example() {
 	portA.SetComponent(agentA)
 
 	agentB := modeling.NewBuilder[PingSpec, PingState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(1 * timing.Hz).
 		WithSpec(specB).
 		Build("AgentB")
@@ -199,7 +200,7 @@ func Example() {
 
 	conn := directconnection.
 		MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithSimulation(sim).
 		Build("Conn")
 
 	conn.PlugIn(portA)

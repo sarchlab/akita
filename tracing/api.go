@@ -17,6 +17,7 @@ type NamedHookable interface {
 	naming.Named
 	hooking.Hookable
 	timing.TimeTeller
+	timing.SimulationElement
 	InvokeHook(hooking.HookCtx)
 }
 
@@ -127,7 +128,7 @@ func AddTaskTag(domain NamedHookable, tag TaskTag) {
 	}
 
 	if tag.ID == 0 {
-		tag.ID = timing.GetIDGenerator().Generate()
+		tag.ID = domain.Simulation().NewID()
 	}
 
 	tag.Time = domain.CurrentTime()
@@ -148,7 +149,7 @@ func AddMilestone(domain NamedHookable, m Milestone) {
 	}
 
 	if m.ID == 0 {
-		m.ID = timing.GetIDGenerator().Generate()
+		m.ID = domain.Simulation().NewID()
 	}
 
 	m.Time = domain.CurrentTime()

@@ -61,7 +61,7 @@ the shared store at the request's global address.
 ## Builder Pattern
 
 Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec
-to `WithSpec`. Wiring comes from `WithRegistrar` (which provides the engine and
+to `WithSpec`. Wiring comes from `WithSimulation` (which provides the engine and
 registers the component) and `WithResources` (the shared backing storage). When
 `WithResources` is omitted, the controller builds its own storage sized by
 `Spec.Capacity`. `Build` declares the `Top` and `Control` ports but does not
@@ -74,20 +74,20 @@ spec := idealmemcontroller.DefaultSpec()
 spec.Latency = 50
 
 ctrl := idealmemcontroller.MakeBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithSpec(spec).
     WithResources(idealmemcontroller.Resources{Storage: storage}).
     Build("IdealMem")
 
 topPort := modeling.MakePortBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithComponent(ctrl).
     WithSpec(modeling.PortSpec{BufSize: 16}).
     Build("Top")
 ctrl.AssignPort("Top", topPort)
 
 ctrlPort := modeling.MakePortBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithComponent(ctrl).
     WithSpec(modeling.PortSpec{BufSize: 16}).
     Build("Control")
@@ -98,7 +98,7 @@ topPort = ctrl.GetPortByName("Top")
 
 | Method | Description |
 |---|---|
-| `WithRegistrar(r)` | Source of the engine and component registration (required) |
+| `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
 | `WithResources(Resources{Storage: s})` | Shared backing storage (built internally if omitted) |
 

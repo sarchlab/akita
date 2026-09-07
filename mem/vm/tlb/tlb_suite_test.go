@@ -42,17 +42,17 @@ func plugNoopConn(comp *Comp) {
 	conn.PlugIn(comp.GetPortByName("Control"))
 }
 
-// assignPort builds a port with the given buffer size using the same registrar
+// assignPort builds a port with the given buffer size using the same simulation
 // the component was built with, and assigns it to the component's declared port
 // of the same name.
 func assignPort(
-	reg modeling.Registrar,
+	sim timing.Simulation,
 	comp *Comp,
 	name string,
 	bufSize int,
 ) messaging.Port {
 	p := modeling.MakePortBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithComponent(comp).
 		WithSpec(modeling.PortSpec{BufSize: bufSize}).
 		Build(name)
@@ -62,16 +62,16 @@ func assignPort(
 
 // assignDefaultPorts assigns the TLB's three declared ports (Top, Bottom,
 // Control) with the historical default buffer sizes.
-func assignDefaultPorts(reg modeling.Registrar, comp *Comp) {
-	assignPort(reg, comp, "Top", 4)
-	assignPort(reg, comp, "Bottom", 4)
-	assignPort(reg, comp, "Control", 1)
+func assignDefaultPorts(sim timing.Simulation, comp *Comp) {
+	assignPort(sim, comp, "Top", 4)
+	assignPort(sim, comp, "Bottom", 4)
+	assignPort(sim, comp, "Control", 1)
 }
 
-// makeDirectConnection builds a direct connection driven by the given engine.
-func makeDirectConnection(engine timing.Engine) messaging.Connection {
+// makeDirectConnection builds a direct connection using the given simulation.
+func makeDirectConnection(sim timing.Simulation) messaging.Connection {
 	return directconnection.MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithSimulation(sim).
 		Build("Conn")
 }
 
@@ -79,6 +79,7 @@ func makeDirectConnection(engine timing.Engine) messaging.Connection {
 // TLB in the integration tests. It owns a single real port; when a message is
 // delivered to that port it records the message and optionally runs onDeliver.
 type idealEndpoint struct {
+	sim timing.Simulation
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 
@@ -89,7 +90,7 @@ type idealEndpoint struct {
 }
 
 func newIdealEndpoint(name string) *idealEndpoint {
-	ep := &idealEndpoint{
+	ep := &idealEndpoint{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
 		name:          name,
 		PortOwnerBase: messaging.NewPortOwnerBase(),
 	}
@@ -118,3 +119,5 @@ func TestValidateState(t *testing.T) {
 		t.Fatalf("State failed validation: %v", err)
 	}
 }
+
+func (c *idealEndpoint) Simulation() timing.Simulation { return c.sim }

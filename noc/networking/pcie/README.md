@@ -45,7 +45,7 @@ of 140 cycles.
 
 ```go
 connector := pcie.NewConnector().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithFrequency(1 * timing.GHz).
     WithVersion(4, 16).      // PCIe Gen4, x16 lanes
     WithSwitchLatency(140).  // cycles per switch hop
@@ -57,7 +57,7 @@ connector := pcie.NewConnector().
 
 | Method | Description |
 |---|---|
-| `WithEngine(e)` | Event scheduler (required) |
+| `WithSimulation(sim)` | Simulation context (required) |
 | `WithFrequency(f)` | Frequency of the network interfaces |
 | `WithVersion(v, w)` | PCIe generation (1–5) and lane width; sets bandwidth |
 | `WithBandwidth(b)` | Set link bandwidth directly in bytes/second |
@@ -69,7 +69,7 @@ connector := pcie.NewConnector().
 
 ```go
 connector := pcie.NewConnector().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithFrequency(1 * timing.GHz).
     WithVersion(4, 16)
 

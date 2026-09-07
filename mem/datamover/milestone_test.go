@@ -71,6 +71,7 @@ func (r *dmTraceRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 var _ = Describe("DataMover milestones", func() {
 	var (
 		engine         timing.Engine
+		sim            timing.Simulation
 		dataMover      *modeling.Component[Spec, State, modeling.None]
 		insideMem      *idealmemcontroller.Comp
 		insideStorage  *mem.Storage
@@ -84,6 +85,7 @@ var _ = Describe("DataMover milestones", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 
 		srcPort = messaging.NewPort(nil, 4, 4, "Src.Top")
 
@@ -94,7 +96,7 @@ var _ = Describe("DataMover milestones", func() {
 
 		insideStorage = mem.NewStorage(1 * mem.MB)
 		insideMem = idealmemcontroller.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(memSpec).
 			WithResources(idealmemcontroller.Resources{Storage: insideStorage}).
 			Build("InsideMem")
@@ -105,7 +107,7 @@ var _ = Describe("DataMover milestones", func() {
 
 		outsideStorage = mem.NewStorage(1 * mem.MB)
 		outsideMem = idealmemcontroller.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(memSpec).
 			WithResources(idealmemcontroller.Resources{Storage: outsideStorage}).
 			Build("OutsideMem")
@@ -119,9 +121,9 @@ var _ = Describe("DataMover milestones", func() {
 		dmSpec.InsideByteGranularity = 64
 		dmSpec.OutsideByteGranularity = 256
 
-		dmReg := modeling.NewStandaloneRegistrar(engine)
+		dmReg := sim
 		dataMover = MakeBuilder().
-			WithRegistrar(dmReg).
+			WithSimulation(dmReg).
 			WithSpec(dmSpec).
 			WithResources(Resources{
 				InsideMapper: &mem.SinglePortMapper{
@@ -135,7 +137,7 @@ var _ = Describe("DataMover milestones", func() {
 
 		assignDM := func(name string, bufSize int) {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(dmReg).
+				WithSimulation(dmReg).
 				WithComponent(dataMover).
 				WithSpec(modeling.PortSpec{BufSize: bufSize}).
 				Build(name)
@@ -149,7 +151,7 @@ var _ = Describe("DataMover milestones", func() {
 		topPort = dataMover.GetPortByName("Top")
 
 		conn = directconnection.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			Build("Conn")
 		conn.PlugIn(srcPort)
 		conn.PlugIn(topPort)
@@ -176,7 +178,7 @@ var _ = Describe("DataMover milestones", func() {
 		outsideStorage.Write(0, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = topPort.AsRemote()
 		req.SrcAddress = 0
@@ -229,7 +231,7 @@ var _ = Describe("DataMover milestones", func() {
 		outsideStorage.Write(0, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = topPort.AsRemote()
 		req.SrcAddress = 0
@@ -284,7 +286,7 @@ var _ = Describe("DataMover milestones", func() {
 
 		makeMove := func() datamoverprotocol.DataMoveRequest {
 			req := datamoverprotocol.DataMoveRequest{}
-			req.ID = timing.GetIDGenerator().Generate()
+			req.ID = sim.NewID()
 			req.Src = srcPort.AsRemote()
 			req.Dst = topPort.AsRemote()
 			req.SrcAddress = 0

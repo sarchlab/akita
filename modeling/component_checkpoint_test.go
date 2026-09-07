@@ -21,7 +21,7 @@ type ckptState struct {
 
 func buildCkptComp(latency int) *modeling.Component[ckptSpec, ckptState, modeling.None] {
 	return modeling.NewBuilder[ckptSpec, ckptState, modeling.None]().
-		WithEngine(timing.NewSerialEngine()).
+		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 		WithFreq(1 * timing.GHz).
 		WithSpec(ckptSpec{Latency: latency}).
 		Build("Comp")
@@ -75,7 +75,7 @@ type bufState struct {
 
 func buildBufComp() *modeling.Component[bufSpec, bufState, modeling.None] {
 	c := modeling.NewBuilder[bufSpec, bufState, modeling.None]().
-		WithEngine(timing.NewSerialEngine()).
+		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 		WithFreq(1 * timing.GHz).
 		WithSpec(bufSpec{N: 1}).
 		Build("C")

@@ -7,9 +7,9 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/packetization"
+	"github.com/sarchlab/akita/v5/timing"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -17,6 +17,7 @@ var _ = Describe("End Point", func() {
 	var (
 		mockCtrl          *gomock.Controller
 		engine            *MockEngine
+		sim               timing.Simulation
 		devicePort        *MockPort
 		networkPort       *MockPort
 		defaultSwitchPort *MockPort
@@ -26,6 +27,7 @@ var _ = Describe("End Point", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
+		sim = modeling.NewStandaloneSimulation(engine)
 		devicePort = NewMockPort(mockCtrl)
 		devicePort.EXPECT().
 			AsRemote().
@@ -49,7 +51,7 @@ var _ = Describe("End Point", func() {
 		spec.FlitByteSize = 32
 
 		endPoint = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{DevicePorts: []messaging.Port{devicePort}}).
 			Build("EndPoint")
@@ -63,7 +65,7 @@ var _ = Describe("End Point", func() {
 
 	It("should send flits", func() {
 		msg := messaging.MsgMeta{
-			ID:           timing.GetIDGenerator().Generate(),
+			ID:           sim.NewID(),
 			Src:          devicePort.AsRemote(),
 			TrafficBytes: 33,
 		}
@@ -110,18 +112,18 @@ var _ = Describe("End Point", func() {
 
 	It("should receive message", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  sim.NewID(),
 			Dst: devicePort.AsRemote(),
 		}
 
 		flit0 := packetization.Flit{}
-		flit0.ID = timing.GetIDGenerator().Generate()
+		flit0.ID = sim.NewID()
 		flit0.TrafficClass = reflect.TypeOf(msg).String()
 		flit0.SeqID = 0
 		flit0.NumFlitInMsg = 2
 		flit0.Msg = msg
 		flit1 := packetization.Flit{}
-		flit1.ID = timing.GetIDGenerator().Generate()
+		flit1.ID = sim.NewID()
 		flit1.TrafficClass = reflect.TypeOf(msg).String()
 		flit1.SeqID = 1
 		flit1.NumFlitInMsg = 2

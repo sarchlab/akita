@@ -54,6 +54,7 @@ func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 var _ = Describe("DRAM admission milestones", func() {
 	var (
 		engine  timing.Engine
+		sim     timing.Simulation
 		memCtrl *modeling.Component[Spec, State, Resources]
 		topPort messaging.Port
 		rec     *milestoneRecorder
@@ -61,14 +62,15 @@ var _ = Describe("DRAM admission milestones", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		reg := modeling.NewStandaloneRegistrar(engine)
+		sim = modeling.NewStandaloneSimulation(engine)
+
 		memCtrl = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			Build("MemCtrl")
 
 		for _, name := range []string{"Top", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(reg).
+				WithSimulation(sim).
 				WithComponent(memCtrl).
 				WithSpec(modeling.PortSpec{BufSize: 16}).
 				Build(name)
@@ -88,7 +90,7 @@ var _ = Describe("DRAM admission milestones", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{Address: addr, AccessByteSize: 4}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.TrafficBytes = 12
@@ -121,7 +123,7 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 	It("charges a refresh milestone to the sub-trans that issues "+
 		"after a refresh window", func() {
 		engine := timing.NewSerialEngine()
-		reg := modeling.NewStandaloneRegistrar(engine)
+		sim := modeling.NewStandaloneSimulation(engine)
 
 		// A short tREFI/tRFC so a refresh window opens quickly and the request
 		// that arrives during it is the one charged the stall.
@@ -130,13 +132,13 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 		spec.TRFC = 3
 
 		memCtrl := MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			Build("MemCtrl")
 
 		for _, name := range []string{"Top", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(reg).
+				WithSimulation(sim).
 				WithComponent(memCtrl).
 				WithSpec(modeling.PortSpec{BufSize: 16}).
 				Build(name)
@@ -150,7 +152,7 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 		tracing.CollectIncomingBufferTrace(topPort)
 
 		read := memprotocol.ReadReq{Address: 0x40, AccessByteSize: 4}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = sim.NewID()
 		read.Src = messaging.RemotePort("Agent")
 		read.Dst = topPort.AsRemote()
 		read.TrafficBytes = 12
