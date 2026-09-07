@@ -20,8 +20,8 @@ func main() {
 	handler := &EventPrinter{}
 	engine := s.GetEngine()
 
-	if registrar, ok := engine.(timing.HandlerRegistrar); ok {
-		registrar.RegisterHandler("printer", handler)
+	if handlers, ok := engine.(timing.HandlerRegistry); ok {
+		handlers.RegisterHandler("printer", handler)
 	}
 
 	engine.Schedule(timing.MakeEventBase(s.NewID(), 1, "printer"))

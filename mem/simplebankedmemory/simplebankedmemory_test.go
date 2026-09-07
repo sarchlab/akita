@@ -16,15 +16,15 @@ import (
 )
 
 // assignPort builds a port instance for a declared component port and attaches
-// it, using the same registrar the component builder used.
+// it, using the same simulation the component builder used.
 func assignPort(
-	reg modeling.Registrar,
+	sim timing.Simulation,
 	comp *Comp,
 	name string,
 	bufSize int,
 ) {
 	p := modeling.MakePortBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithComponent(comp).
 		WithSpec(modeling.PortSpec{BufSize: bufSize}).
 		Build(name)
@@ -211,14 +211,13 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.F
 	spec.StageLatency = 6
 	spec.PostPipelineBufSize = 32
 
-	reg := sim
 	memComp := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		Build("Mem")
 
-	assignPort(reg, memComp, "Top", 32)
-	assignPort(reg, memComp, "Control", 16)
+	assignPort(sim, memComp, "Top", 32)
+	assignPort(sim, memComp, "Control", 16)
 
 	topPort := memComp.GetPortByName("Top")
 	agent := newBandwidthAgent("Agent")
@@ -263,7 +262,7 @@ func collectLatency(
 var _ = Describe("SimpleBankedMemory", func() {
 	var (
 		engine  timing.Engine
-		sim     modeling.Registrar
+		sim     timing.Simulation
 		memComp *Comp
 		storage *mem.Storage
 		agent   *testAgent
@@ -279,15 +278,14 @@ var _ = Describe("SimpleBankedMemory", func() {
 		spec.NumBanks = 2
 		spec.StageLatency = 2
 
-		reg := sim
 		memComp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{Storage: storage}).
 			Build("Mem")
 
-		assignPort(reg, memComp, "Top", 4)
-		assignPort(reg, memComp, "Control", 16)
+		assignPort(sim, memComp, "Top", 4)
+		assignPort(sim, memComp, "Control", 16)
 
 		topPort := memComp.GetPortByName("Top")
 		agent = newTestAgent("Agent")
@@ -380,14 +378,13 @@ var _ = Describe("SimpleBankedMemory", func() {
 		spec.NumBanks = 2
 		spec.StageLatency = 2
 
-		reg := sim
 		memComp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			Build("MemGlobal")
 
-		assignPort(reg, memComp, "Top", 4)
-		assignPort(reg, memComp, "Control", 16)
+		assignPort(sim, memComp, "Top", 4)
+		assignPort(sim, memComp, "Control", 16)
 
 		topPort := memComp.GetPortByName("Top")
 		agent = newTestAgent("AgentGlobal")

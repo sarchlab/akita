@@ -53,7 +53,7 @@ s := simulation.MakeBuilder().Build()
 ```
 
 `simulation.MakeBuilder().Build()` returns a `*simulation.Simulation`. It
-owns an engine, a registrar, and optional tracing and monitoring
+owns an engine, an entity inventory, and optional tracing and monitoring
 infrastructure. We use the simulation to allocate IDs and its engine to schedule events:
 
 ```go
@@ -66,13 +66,13 @@ The engine routes events to handlers by **name**, not by pointer. Register
 the handler under a name you choose:
 
 ```go
-if registrar, ok := engine.(timing.HandlerRegistrar); ok {
-    registrar.RegisterHandler("printer", handler)
+if handlers, ok := engine.(timing.HandlerRegistry); ok {
+    handlers.RegisterHandler("printer", handler)
 }
 ```
 
 The type assertion is a safety check — most engines implement
-`HandlerRegistrar`, but the interface keeps that explicit.
+`HandlerRegistry`, but the interface keeps that explicit.
 
 ### 4. Creating and scheduling the event
 

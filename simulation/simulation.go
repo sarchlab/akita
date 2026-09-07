@@ -96,7 +96,7 @@ func (s *Simulation) registerEntity(e Entity) {
 
 // RegisterComponent registers a component with the simulation. It accepts any
 // named object so that component builders can register through the
-// modeling.Registrar interface without importing this package.
+// timing.Simulation interface without importing this package.
 func (s *Simulation) RegisterComponent(c naming.Named) {
 	compName := c.Name()
 	s.registerEntity(c)
@@ -114,7 +114,7 @@ func (s *Simulation) RegisterComponent(c naming.Named) {
 }
 
 // RegisterPort registers a port with the simulation so it can be resolved by
-// name and monitored. Port builders call this through the modeling.Registrar
+// name and monitored. Port builders call this through the timing.Simulation
 // interface, mirroring RegisterComponent — a component is registered when it is
 // built, and each of its ports is registered when the port is built.
 func (s *Simulation) RegisterPort(p naming.Named) {

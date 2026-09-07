@@ -15,15 +15,14 @@ func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		reg := sim
 
 		comp := MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(DefaultSpec()).
 			Build("MMU")
 
-		assignPort(reg, comp, "Top", 16)
-		assignPort(reg, comp, "Control", 4)
+		assignPort(sim, comp, "Top", 16)
+		assignPort(sim, comp, "Control", 4)
 
 		for _, name := range []string{"Top", "Control"} {
 			(&noopConn{}).PlugIn(comp.GetPortByName(name))

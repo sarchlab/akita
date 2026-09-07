@@ -21,14 +21,13 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	sim := modeling.NewStandaloneSimulation(engine)
 	storage := mem.NewStorage(1 * mem.MB)
 
-	reg := sim
 	comp := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithResources(Resources{Storage: storage}).
 		Build("BankedMem")
 
-	assignPort(reg, comp, "Top", 16)
-	assignPort(reg, comp, "Control", 16)
+	assignPort(sim, comp, "Top", 16)
+	assignPort(sim, comp, "Control", 16)
 
 	topPort := comp.GetPortByName("Top")
 	ctrlPort := comp.GetPortByName("Control")

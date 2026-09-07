@@ -27,10 +27,8 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.InsideByteGranularity = 64
 	spec.OutsideByteGranularity = 64
 
-	reg := sim
-
 	dataMover := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(Resources{
 			InsideMapper: &mem.SinglePortMapper{
@@ -44,7 +42,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	assign := func(name string, bufSize int) messaging.Port {
 		p := modeling.MakePortBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithComponent(dataMover).
 			WithSpec(modeling.PortSpec{BufSize: bufSize}).
 			Build(name)

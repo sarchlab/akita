@@ -86,7 +86,7 @@ func (r *traceRecorder) kindsOn(taskID uint64) []tracing.MilestoneKind {
 var _ = Describe("Address Translator milestones", func() {
 	var (
 		engine          timing.Engine
-		sim             modeling.Registrar
+		sim             timing.Simulation
 		at              *Comp
 		topPort         messaging.Port
 		bottomPort      messaging.Port
@@ -113,14 +113,13 @@ var _ = Describe("Address Translator milestones", func() {
 			},
 		}
 
-		reg := sim
 		at = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(resources).
 			Build("AddressTranslator")
 
-		assignPorts(reg, at, topBufSize)
+		assignPorts(sim, at, topBufSize)
 
 		topPort = at.GetPortByName("Top")
 		bottomPort = at.GetPortByName("Bottom")

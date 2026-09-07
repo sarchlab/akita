@@ -83,7 +83,6 @@ func (h *stepLogger) Func(ctx hooking.HookCtx) {
 func main() {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
-	registrar := sim
 
 	walker := modeling.NewBuilder[walkSpec, walkState, modeling.None]().
 		WithSimulation(sim).
@@ -94,7 +93,7 @@ func main() {
 		comp: walker,
 		rng:  rand.New(rand.NewSource(1)),
 	})
-	registrar.RegisterComponent(walker)
+	sim.RegisterComponent(walker)
 
 	// Observe the walker's own steps.
 	walker.AcceptHook(&stepLogger{})

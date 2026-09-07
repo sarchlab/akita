@@ -26,9 +26,9 @@ func DefaultSpec() Spec {
 // component declares a "NetworkPort"; the instance is assigned externally after
 // Build (e.g. with SetNetworkPort / AssignPort).
 type Builder struct {
-	registrar modeling.Registrar
-	spec      Spec
-	resources Resources
+	simulation timing.Simulation
+	spec       Spec
+	resources  Resources
 }
 
 // MakeBuilder creates a new Builder seeded with the default spec.
@@ -38,11 +38,9 @@ func MakeBuilder() Builder {
 	}
 }
 
-// WithSimulation wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneSimulation(engine) in isolated tests). The
-// registrar provides the engine and registers the built component.
-func (b Builder) WithSimulation(reg modeling.Registrar) Builder {
-	b.registrar = reg
+// WithSimulation sets the simulation that owns and registers the built component.
+func (b Builder) WithSimulation(sim timing.Simulation) Builder {
+	b.simulation = sim
 	return b
 }
 
@@ -63,12 +61,12 @@ func (b Builder) WithResources(r Resources) Builder {
 // Build creates a new End Point. It declares the component's "NetworkPort"; the
 // instance is assigned externally after Build (see SetNetworkPort).
 func (b Builder) Build(name string) *Comp {
-	if b.registrar == nil {
+	if b.simulation == nil {
 		panic("endpoint: WithSimulation is required")
 	}
 
 	spec := b.spec
-	sim := b.registrar
+	sim := b.simulation
 
 	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithSimulation(sim).
@@ -98,7 +96,7 @@ func (b Builder) Build(name string) *Comp {
 		ep.PlugIn(dp)
 	}
 
-	b.registrar.RegisterComponent(ep)
+	b.simulation.RegisterComponent(ep)
 
 	return ep
 }

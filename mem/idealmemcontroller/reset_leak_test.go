@@ -22,7 +22,6 @@ import (
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
-	reg := sim
 
 	storage := mem.NewStorage(1 * mem.MB)
 
@@ -34,7 +33,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.CacheLineSize = 64
 
 	comp := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithResources(Resources{Storage: storage}).
 		WithSpec(spec).
 		Build("MemCtrl")

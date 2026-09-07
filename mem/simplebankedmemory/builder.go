@@ -34,9 +34,9 @@ func DefaultSpec() Spec {
 // port instances are supplied externally after Build with AssignPort (the
 // caller chooses the buffer sizes).
 type Builder struct {
-	spec      Spec
-	registrar modeling.Registrar
-	resources Resources
+	spec       Spec
+	simulation timing.Simulation
+	resources  Resources
 }
 
 // MakeBuilder creates a builder seeded with the default spec.
@@ -44,11 +44,9 @@ func MakeBuilder() Builder {
 	return Builder{spec: defaultSpec}
 }
 
-// WithSimulation wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneSimulation(engine) in isolated tests). The
-// registrar provides the engine and registers the built component.
-func (b Builder) WithSimulation(reg modeling.Registrar) Builder {
-	b.registrar = reg
+// WithSimulation sets the simulation that owns and registers the built component.
+func (b Builder) WithSimulation(sim timing.Simulation) Builder {
+	b.simulation = sim
 	return b
 }
 
@@ -70,7 +68,7 @@ func (b Builder) WithResources(r Resources) Builder {
 // "Top" and "Control" ports; assign the port instances after Build with
 // AssignPort.
 func (b Builder) Build(name string) *Comp {
-	if b.registrar == nil {
+	if b.simulation == nil {
 		panic("simplebankedmemory: WithSimulation is required")
 	}
 
@@ -81,7 +79,7 @@ func (b Builder) Build(name string) *Comp {
 	initialState := buildInitialState(spec)
 
 	modelComp := modeling.NewBuilder[Spec, State, Resources]().
-		WithSimulation(b.registrar).
+		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		WithResources(Resources{Storage: storage}).
@@ -98,13 +96,13 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.DeclarePort("Top", memprotocol.Responder)
 	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
-	b.registrar.RegisterComponent(modelComp)
+	b.simulation.RegisterComponent(modelComp)
 
 	return modelComp
 }
 
 // resolveStorage returns the injected storage, or builds a default one sized by
-// Spec.Capacity that self-registers with the registrar.
+// Spec.Capacity that self-registers with the simulation.
 func (b Builder) resolveStorage(name string, spec Spec) *mem.Storage {
 	if b.resources.Storage != nil {
 		return b.resources.Storage
@@ -112,7 +110,7 @@ func (b Builder) resolveStorage(name string, spec Spec) *mem.Storage {
 
 	return mem.MakeStorageBuilder().
 		WithCapacity(spec.Capacity).
-		WithSimulation(b.registrar).
+		WithSimulation(b.simulation).
 		Build(name + ".Storage")
 }
 

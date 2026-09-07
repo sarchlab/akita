@@ -9,28 +9,27 @@ import (
 func Example() {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
-	registrar := sim
 
 	agentSpec := DefaultSpec()
 	agentSpec.Freq = 1 * timing.Hz
 
 	agentA := MakeBuilder().
-		WithSimulation(registrar).
+		WithSimulation(sim).
 		WithSpec(agentSpec).
 		Build("AgentA")
 	agentAOut := modeling.MakePortBuilder().
-		WithSimulation(registrar).
+		WithSimulation(sim).
 		WithComponent(agentA).
 		WithSpec(modeling.PortSpec{BufSize: 16}).
 		Build("Out")
 	agentA.AssignPort("Out", agentAOut)
 
 	agentB := MakeBuilder().
-		WithSimulation(registrar).
+		WithSimulation(sim).
 		WithSpec(agentSpec).
 		Build("AgentB")
 	agentBOut := modeling.MakePortBuilder().
-		WithSimulation(registrar).
+		WithSimulation(sim).
 		WithComponent(agentB).
 		WithSpec(modeling.PortSpec{BufSize: 16}).
 		Build("Out")
@@ -38,7 +37,7 @@ func Example() {
 
 	conn := directconnection.
 		MakeBuilder().
-		WithSimulation(registrar).
+		WithSimulation(sim).
 		Build("Conn")
 
 	conn.PlugIn(agentA.GetPortByName("Out"))

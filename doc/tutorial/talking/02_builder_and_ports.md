@@ -11,14 +11,14 @@ follows the same shape, so once you know one you know them all.
 
 ```go
 type Builder struct {
-    spec      Spec
-    registrar modeling.Registrar
+    spec       Spec
+    simulation timing.Simulation
 }
 
 func MakeBuilder() Builder { return Builder{spec: defaultSpec} }
 
-func (b Builder) WithSimulation(reg modeling.Registrar) Builder {
-    b.registrar = reg
+func (b Builder) WithSimulation(sim timing.Simulation) Builder {
+    b.simulation = sim
     return b
 }
 
@@ -29,7 +29,7 @@ func (b Builder) WithSpec(spec Spec) Builder {
 
 func (b Builder) Build(name string) *Comp {
     comp := modeling.NewBuilder[Spec, State, modeling.None]().
-        WithSimulation(b.registrar).
+        WithSimulation(b.simulation).
         WithFreq(b.spec.Freq).
         WithSpec(b.spec).
         Build(name)
@@ -40,7 +40,7 @@ func (b Builder) Build(name string) *Comp {
 
     comp.DeclarePort("Out")
 
-    b.registrar.RegisterComponent(comp)
+    b.simulation.RegisterComponent(comp)
 
     return comp
 }
@@ -54,8 +54,8 @@ Things to notice:
   after `Build` (shown next); the component still reaches it by name with
   `comp.GetPortByName("Out")`.
 - Middlewares are added in order; the first one added runs first.
-- The component is **registered with the registrar**, which integrates it
-  with the engine and the broader simulation.
+- The component is **registered with the simulation**, which adds it to
+  checkpointing, tracing, and monitoring.
 - The `MakeBuilder` → `WithX` → `Build(name)` shape is universal across
   Akita components and connections.
 
@@ -82,7 +82,7 @@ wires two agents together this way.
 In *Create a Component* the walker had no ports and a single middleware, so we
 built it inline with `modeling.NewBuilder` right in `main`. Assembling this
 component is more work: declare the `Out` port, add two middlewares in the
-right order, and register with the registrar.
+right order, and register with the simulation.
 Repeating all of that at every call site — and we build two agents — would be
 verbose and easy to get wrong.
 

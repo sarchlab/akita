@@ -16,7 +16,7 @@ import (
 var _ = Describe("DataMover", func() {
 	var (
 		engine         timing.Engine
-		sim            modeling.Registrar
+		sim            timing.Simulation
 		dataMover      *modeling.Component[Spec, State, modeling.None]
 		insideMem      *idealmemcontroller.Comp
 		insideStorage  *mem.Storage

@@ -87,7 +87,7 @@ var _ = Describe("GMMU milestones", func() {
 
 	var (
 		engine     timing.Engine
-		sim        modeling.Registrar
+		sim        timing.Simulation
 		pageTable  vm.PageTable
 		gmmuComp   *Comp
 		topPort    messaging.Port
@@ -107,14 +107,13 @@ var _ = Describe("GMMU milestones", func() {
 		spec.Latency = 1
 		spec.LowModule = lowModulePort
 
-		reg := sim
 		gmmuComp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(spec).
 			Build("GMMU")
 
-		assignDefaultPorts(reg, gmmuComp)
+		assignDefaultPorts(sim, gmmuComp)
 
 		topPort = gmmuComp.GetPortByName("Top")
 		bottomPort = gmmuComp.GetPortByName("Bottom")

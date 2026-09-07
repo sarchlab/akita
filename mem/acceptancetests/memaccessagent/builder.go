@@ -29,10 +29,10 @@ func DefaultSpec() Spec {
 // supplied externally after Build with AssignPort (the caller chooses the
 // buffer size).
 type Builder struct {
-	spec      Spec
-	registrar modeling.Registrar
-	resources Resources
-	randSeed  *int64
+	spec       Spec
+	simulation timing.Simulation
+	resources  Resources
+	randSeed   *int64
 }
 
 // MakeBuilder returns a new Builder seeded with the default spec.
@@ -40,11 +40,9 @@ func MakeBuilder() Builder {
 	return Builder{spec: defaultSpec}
 }
 
-// WithSimulation wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneSimulation(engine) in isolated tests). The
-// registrar provides the engine and registers the built component.
-func (b Builder) WithSimulation(reg modeling.Registrar) Builder {
-	b.registrar = reg
+// WithSimulation sets the simulation that owns and registers the built component.
+func (b Builder) WithSimulation(sim timing.Simulation) Builder {
+	b.simulation = sim
 	return b
 }
 
@@ -76,7 +74,7 @@ func (b Builder) WithRandSeed(seed int64) Builder {
 // Build creates a new MemAccessAgent with the given name. It declares the
 // agent's "Mem" port; assign the port instance after Build with AssignPort.
 func (b Builder) Build(name string) *MemAccessAgent {
-	if b.registrar == nil {
+	if b.simulation == nil {
 		panic("memaccessagent: WithSimulation is required")
 	}
 
@@ -91,7 +89,7 @@ func (b Builder) Build(name string) *MemAccessAgent {
 	}
 
 	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithSimulation(b.registrar).
+		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
@@ -114,7 +112,7 @@ func (b Builder) Build(name string) *MemAccessAgent {
 
 	modelComp.DeclarePort("Mem", memprotocol.Requester)
 
-	b.registrar.RegisterComponent(agent)
+	b.simulation.RegisterComponent(agent)
 
 	return agent
 }

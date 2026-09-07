@@ -85,7 +85,7 @@ func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 var _ = Describe("SimpleBankedMemory admission milestones", func() {
 	var (
 		engine  timing.Engine
-		sim     modeling.Registrar
+		sim     timing.Simulation
 		memComp *Comp
 		topPort messaging.Port
 		rec     *milestoneRecorder
@@ -100,15 +100,14 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 		spec.NumBanks = 2
 		spec.StageLatency = 2
 
-		reg := sim
 		memComp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{Storage: storage}).
 			Build("Mem")
 
-		assignPort(reg, memComp, "Top", 4)
-		assignPort(reg, memComp, "Control", 16)
+		assignPort(sim, memComp, "Top", 4)
+		assignPort(sim, memComp, "Control", 16)
 
 		topPort = memComp.GetPortByName("Top")
 
@@ -162,7 +161,7 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 	var (
 		engine  timing.Engine
-		sim     modeling.Registrar
+		sim     timing.Simulation
 		storage *mem.Storage
 		memComp *Comp
 		topPort messaging.Port
@@ -180,15 +179,14 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 		spec.NumBanks = 2
 		spec.StageLatency = 3
 
-		reg := sim
 		memComp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{Storage: storage}).
 			Build("Mem")
 
-		assignPort(reg, memComp, "Top", 4)
-		assignPort(reg, memComp, "Control", 16)
+		assignPort(sim, memComp, "Top", 4)
+		assignPort(sim, memComp, "Control", 16)
 
 		topPort = memComp.GetPortByName("Top")
 		agent = newTestAgent("Agent")

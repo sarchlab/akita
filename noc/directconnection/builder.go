@@ -19,21 +19,19 @@ func DefaultSpec() Spec {
 
 // Builder builds direct connections. A connection owns no ports (ports plug in)
 // and has no resources, so it is configured by Spec alone and wired to the
-// simulation through a registrar.
+// simulation through WithSimulation.
 type Builder struct {
-	spec      Spec
-	registrar modeling.Registrar
+	spec       Spec
+	simulation timing.Simulation
 }
 
 func MakeBuilder() Builder {
 	return Builder{spec: defaultSpec}
 }
 
-// WithSimulation wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneSimulation(engine) in isolated tests). The
-// registrar provides the engine and registers the built connection.
-func (b Builder) WithSimulation(reg modeling.Registrar) Builder {
-	b.registrar = reg
+// WithSimulation sets the simulation that owns and registers the built connection.
+func (b Builder) WithSimulation(sim timing.Simulation) Builder {
+	b.simulation = sim
 	return b
 }
 
@@ -44,11 +42,11 @@ func (b Builder) WithSpec(spec Spec) Builder {
 }
 
 func (b Builder) Build(name string) *Comp {
-	if b.registrar == nil {
+	if b.simulation == nil {
 		panic("directconnection: WithSimulation is required")
 	}
 
-	sim := b.registrar
+	sim := b.simulation
 	spec := b.spec
 
 	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
@@ -75,7 +73,7 @@ func (b Builder) Build(name string) *Comp {
 
 	conn := &Comp{Component: modelComp}
 
-	b.registrar.RegisterConnection(conn)
+	b.simulation.RegisterConnection(conn)
 
 	return conn
 }

@@ -90,7 +90,6 @@ var _ = Describe("MMUCache milestones", func() {
 	BeforeEach(func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		reg := sim
 
 		spec := DefaultSpec()
 		spec.NumBlocks = 4
@@ -101,7 +100,7 @@ var _ = Describe("MMUCache milestones", func() {
 		spec.LatencyPerLevel = 100
 
 		comp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				LowModulePort: messaging.RemotePort("LowModule"),
@@ -109,7 +108,7 @@ var _ = Describe("MMUCache milestones", func() {
 			}).
 			Build("MMUCache")
 
-		assignDefaultPorts(reg, comp)
+		assignDefaultPorts(sim, comp)
 
 		topPort = comp.GetPortByName("Top")
 		bottomPort = comp.GetPortByName("Bottom")

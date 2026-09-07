@@ -36,14 +36,13 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.Latency = 1
 	spec.LowModule = lowModule
 
-	reg := sim
 	comp := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithResources(Resources{PageTable: pageTable}).
 		WithSpec(spec).
 		Build("GMMU")
 
-	assignDefaultPorts(reg, comp)
+	assignDefaultPorts(sim, comp)
 	for _, name := range []string{"Top", "Bottom", "Control"} {
 		(&noopConn{}).PlugIn(comp.GetPortByName(name))
 	}

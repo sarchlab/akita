@@ -16,13 +16,13 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 	// Create MMU with auto page allocation enabled
 	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
-	reg := sim
+
 	mmu := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		Build("TestMMU")
-	assignPort(reg, mmu, "Top", 4096)
-	assignPort(reg, mmu, "Control", 4)
+	assignPort(sim, mmu, "Top", 4096)
+	assignPort(sim, mmu, "Control", 4)
 
 	mw := mmu.Middlewares()[1].(*translationMW)
 
@@ -80,13 +80,13 @@ func TestPhysicalPageAllocator(t *testing.T) {
 	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
 	spec.Log2PageSize = 12 // 4KB pages
-	reg := sim
+
 	mmu := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		Build("TestMMU")
-	assignPort(reg, mmu, "Top", 4096)
-	assignPort(reg, mmu, "Control", 4)
+	assignPort(sim, mmu, "Top", 4096)
+	assignPort(sim, mmu, "Control", 4)
 
 	mw := mmu.Middlewares()[1].(*translationMW)
 
@@ -122,13 +122,13 @@ func TestAutoPageAllocationDisabled(t *testing.T) {
 	sim := modeling.NewStandaloneSimulation(engine)
 
 	// Create MMU with auto page allocation disabled (default)
-	reg := sim
+
 	mmu := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithSpec(DefaultSpec()).
 		Build("TestMMU")
-	assignPort(reg, mmu, "Top", 4096)
-	assignPort(reg, mmu, "Control", 4)
+	assignPort(sim, mmu, "Top", 4096)
+	assignPort(sim, mmu, "Control", 4)
 
 	if mmu.Spec().AutoPageAllocation {
 		t.Error("Auto page allocation should be disabled by default")
@@ -143,13 +143,13 @@ func TestAutoPageAllocationEnabled(t *testing.T) {
 	// Create MMU with auto page allocation enabled
 	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
-	reg := sim
+
 	mmu := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		Build("TestMMU")
-	assignPort(reg, mmu, "Top", 4096)
-	assignPort(reg, mmu, "Control", 4)
+	assignPort(sim, mmu, "Top", 4096)
+	assignPort(sim, mmu, "Control", 4)
 
 	if !mmu.Spec().AutoPageAllocation {
 		t.Error("Auto page allocation should be enabled when set")

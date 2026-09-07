@@ -18,18 +18,17 @@ import (
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
-	reg := sim
 
 	spec := DefaultSpec()
 	spec.BufferSize = 4
 	spec.NumReqPerCycle = 2
 	spec.BottomUnit = messaging.RemotePort("BottomUnit")
 
-	rob := MakeBuilder().WithSimulation(reg).WithSpec(spec).Build("Rob")
+	rob := MakeBuilder().WithSimulation(sim).WithSpec(spec).Build("Rob")
 
 	assign := func(name string) messaging.Port {
 		p := modeling.MakePortBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithComponent(rob).
 			WithSpec(modeling.PortSpec{BufSize: 4}).
 			Build(name)

@@ -14,7 +14,7 @@ import (
 var _ = Describe("MMUCacheMiddleware", func() {
 	var (
 		engine      timing.Engine
-		sim         modeling.Registrar
+		sim         timing.Simulation
 		comp        *Comp
 		mw          *mmuCacheMiddleware
 		topPort     messaging.Port
@@ -34,9 +34,8 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
-		reg := sim
 		comp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				LowModulePort: messaging.RemotePort("LowModule"),
@@ -44,7 +43,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 			}).
 			Build("MMUCache")
 
-		assignDefaultPorts(reg, comp)
+		assignDefaultPorts(sim, comp)
 
 		topPort = comp.GetPortByName("Top")
 		bottomPort = comp.GetPortByName("Bottom")

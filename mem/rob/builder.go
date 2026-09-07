@@ -26,8 +26,8 @@ func DefaultSpec() Spec {
 // component declares its "Top", "Bottom", and "Control" ports; the port
 // instances are supplied externally after Build with AssignPort.
 type Builder struct {
-	spec      Spec
-	registrar modeling.Registrar
+	spec       Spec
+	simulation timing.Simulation
 }
 
 // MakeBuilder returns a Builder seeded with the default spec.
@@ -35,11 +35,9 @@ func MakeBuilder() Builder {
 	return Builder{spec: defaultSpec}
 }
 
-// WithSimulation wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneSimulation(engine) in isolated tests). The
-// registrar provides the engine and registers the built component.
-func (b Builder) WithSimulation(reg modeling.Registrar) Builder {
-	b.registrar = reg
+// WithSimulation sets the simulation that owns and registers the built component.
+func (b Builder) WithSimulation(sim timing.Simulation) Builder {
+	b.simulation = sim
 	return b
 }
 
@@ -54,14 +52,14 @@ func (b Builder) WithSpec(spec Spec) Builder {
 // port instances are assigned externally after Build with AssignPort (the
 // caller chooses the buffer sizes).
 func (b Builder) Build(name string) *Comp {
-	if b.registrar == nil {
+	if b.simulation == nil {
 		panic("rob: WithSimulation is required")
 	}
 
 	spec := b.spec
 
 	comp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithSimulation(b.registrar).
+		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
@@ -73,7 +71,7 @@ func (b Builder) Build(name string) *Comp {
 	comp.DeclarePort("Bottom", memprotocol.Requester)
 	comp.DeclarePort("Control", memcontrolprotocol.Responder)
 
-	b.registrar.RegisterComponent(comp)
+	b.simulation.RegisterComponent(comp)
 
 	return comp
 }

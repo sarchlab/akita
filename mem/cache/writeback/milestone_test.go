@@ -74,7 +74,7 @@ func (r *wbMilestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 var _ = Describe("Write-Back Cache milestones", func() {
 	var (
 		engine      timing.Engine
-		sim         modeling.Registrar
+		sim         timing.Simulation
 		cacheComp   *Comp
 		dram        *idealmemcontroller.Comp
 		dramStorage *mem.Storage

@@ -24,7 +24,7 @@ import (
 var _ = Describe("MMU control behavior", func() {
 	var (
 		engine    timing.Engine
-		sim       modeling.Registrar
+		sim       timing.Simulation
 		pageTable vm.PageTable
 		comp      *Comp
 		topPort   messaging.Port
@@ -32,16 +32,15 @@ var _ = Describe("MMU control behavior", func() {
 	)
 
 	build := func() {
-		reg := sim
 
 		comp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(DefaultSpec()).
 			Build("MMU")
 
-		topPort = assignPort(reg, comp, "Top", 16)
-		ctrlPort = assignPort(reg, comp, "Control", 4)
+		topPort = assignPort(sim, comp, "Top", 16)
+		ctrlPort = assignPort(sim, comp, "Control", 4)
 		for _, name := range []string{"Top", "Control"} {
 			(&noopConn{}).PlugIn(comp.GetPortByName(name))
 		}

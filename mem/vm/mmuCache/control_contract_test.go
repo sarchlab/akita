@@ -21,13 +21,12 @@ func TestControlContract(t *testing.T) {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
-		reg := sim
 		comp := MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			Build("MMUCache")
 
-		assignDefaultPorts(reg, comp)
+		assignDefaultPorts(sim, comp)
 
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			(&noopConn{}).PlugIn(comp.GetPortByName(name))

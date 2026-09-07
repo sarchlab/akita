@@ -23,7 +23,7 @@ import (
 var _ = Describe("Simple Banked Memory control behavior", func() {
 	var (
 		engine   timing.Engine
-		sim      modeling.Registrar
+		sim      timing.Simulation
 		storage  *mem.Storage
 		comp     *Comp
 		topPort  messaging.Port
@@ -31,14 +31,14 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 	)
 
 	build := func() {
-		reg := sim
+
 		comp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			Build("BankedMem")
 
-		assignPort(reg, comp, "Top", 16)
-		assignPort(reg, comp, "Control", 16)
+		assignPort(sim, comp, "Top", 16)
+		assignPort(sim, comp, "Control", 16)
 
 		topPort = comp.GetPortByName("Top")
 		ctrlPort = comp.GetPortByName("Control")

@@ -21,7 +21,6 @@ import (
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
-	reg := sim
 
 	spec := DefaultSpec()
 	spec.Log2PageSize = 12
@@ -37,12 +36,12 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	}
 
 	at := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(resources).
 		Build("AddressTranslator")
 
-	assignPorts(reg, at, 16)
+	assignPorts(sim, at, 16)
 
 	topPort := at.GetPortByName("Top")
 	translationPort := at.GetPortByName("Translation")

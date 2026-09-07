@@ -38,7 +38,7 @@ connection for message delivery. The only configuration is the `Freq` field on
 ## Builder Pattern
 
 A connection owns no resources, so it is configured by `Spec` alone and wired to
-the simulation through a registrar. The registrar supplies the engine and
+the simulation through `WithSimulation(sim)`. The simulation supplies the engine and
 registers the connection.
 
 ```go
@@ -46,7 +46,7 @@ spec := directconnection.DefaultSpec()
 spec.Freq = 1 * timing.GHz
 
 conn := directconnection.MakeBuilder().
-    WithSimulation(reg).
+    WithSimulation(sim).
     WithSpec(spec).
     Build("Connection")
 
@@ -67,9 +67,9 @@ conn.PlugIn(portC)
 ```go
 // Create engine and connection
 engine := timing.NewSerialEngine()
-reg := modeling.NewStandaloneSimulation(engine)
+sim := modeling.NewStandaloneSimulation(engine)
 conn := directconnection.MakeBuilder().
-    WithSimulation(reg).
+    WithSimulation(sim).
     WithSpec(directconnection.DefaultSpec()).
     Build("Bus")
 

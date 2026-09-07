@@ -85,7 +85,7 @@ func (r *milestoneRecorder) tagsWith(what string) []tracing.TaskTag {
 var _ = Describe("Cache milestones", func() {
 	var (
 		engine      timing.Engine
-		sim         modeling.Registrar
+		sim         timing.Simulation
 		connection  messaging.Connection
 		dram        *idealmemcontroller.Comp
 		dramStorage *mem.Storage

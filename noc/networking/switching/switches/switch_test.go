@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/packetization"
+	"github.com/sarchlab/akita/v5/timing"
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
@@ -17,7 +18,7 @@ var _ = Describe("Switch", func() {
 	var (
 		mockCtrl     *gomock.Controller
 		engine       *MockEngine
-		sim          modeling.Registrar
+		sim          timing.Simulation
 		port1, port2 *MockPort
 		dstPort      *MockPort
 		routingTable *MockTable

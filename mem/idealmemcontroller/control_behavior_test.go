@@ -18,7 +18,7 @@ import (
 var _ = Describe("Ideal Memory Controller control behavior", func() {
 	var (
 		engine        timing.Engine
-		sim           modeling.Registrar
+		sim           timing.Simulation
 		storage       *mem.Storage
 		memController *Comp
 		topPort       messaging.Port

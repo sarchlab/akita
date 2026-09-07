@@ -107,8 +107,8 @@ s := simulation.MakeBuilder().Build()
 engine = s.GetEngine()
 h := handler{count: 1}
 
-if registrar, ok := engine.(timing.HandlerRegistrar); ok {
-    registrar.RegisterHandler("splitter", &h)
+if handlers, ok := engine.(timing.HandlerRegistry); ok {
+    handlers.RegisterHandler("splitter", &h)
 }
 
 firstEvtTime := timing.VTimeInPicoSec(uint64((randGen.Float64() + 1) * 1e12))

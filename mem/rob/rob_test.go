@@ -34,7 +34,7 @@ var _ = Describe("Reorder Buffer", func() {
 
 	var (
 		engine     timing.Engine
-		sim        modeling.Registrar
+		sim        timing.Simulation
 		rob        *Comp
 		topPort    messaging.Port
 		bottomPort messaging.Port
@@ -46,16 +46,15 @@ var _ = Describe("Reorder Buffer", func() {
 	)
 
 	build := func(spec Spec) {
-		reg := sim
 
 		rob = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			Build("Rob")
 
 		assign := func(name string, bufSize int) messaging.Port {
 			p := modeling.MakePortBuilder().
-				WithSimulation(reg).
+				WithSimulation(sim).
 				WithComponent(rob).
 				WithSpec(modeling.PortSpec{BufSize: bufSize}).
 				Build(name)

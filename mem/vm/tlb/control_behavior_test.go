@@ -24,7 +24,7 @@ import (
 var _ = Describe("TLB control behavior", func() {
 	var (
 		engine      timing.Engine
-		sim         modeling.Registrar
+		sim         timing.Simulation
 		tlbComp     *Comp
 		topPort     messaging.Port
 		bottomPort  messaging.Port
@@ -35,9 +35,8 @@ var _ = Describe("TLB control behavior", func() {
 	build := func() {
 		spec := DefaultSpec()
 
-		reg := sim
 		tlbComp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
@@ -46,7 +45,7 @@ var _ = Describe("TLB control behavior", func() {
 			}).
 			Build("TLB")
 
-		assignDefaultPorts(reg, tlbComp)
+		assignDefaultPorts(sim, tlbComp)
 
 		topPort = tlbComp.GetPortByName("Top")
 		bottomPort = tlbComp.GetPortByName("Bottom")

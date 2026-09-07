@@ -21,7 +21,7 @@ import (
 var _ = Describe("DataMover control behavior", func() {
 	var (
 		engine       timing.Engine
-		sim          modeling.Registrar
+		sim          timing.Simulation
 		dataMover    *modeling.Component[Spec, State, modeling.None]
 		topPort      messaging.Port
 		ctrlPort     messaging.Port
@@ -36,11 +36,9 @@ var _ = Describe("DataMover control behavior", func() {
 		spec.InsideByteGranularity = 64
 		spec.OutsideByteGranularity = 64
 
-		reg := sim
-
 		insideRemote = messaging.RemotePort("InsideMem")
 		dataMover = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				InsideMapper: &mem.SinglePortMapper{Port: insideRemote},
@@ -52,7 +50,7 @@ var _ = Describe("DataMover control behavior", func() {
 
 		assign := func(name string, bufSize int) messaging.Port {
 			p := modeling.MakePortBuilder().
-				WithSimulation(reg).
+				WithSimulation(sim).
 				WithComponent(dataMover).
 				WithSpec(modeling.PortSpec{BufSize: bufSize}).
 				Build(name)

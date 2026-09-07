@@ -90,20 +90,20 @@ spec.StageLatency = 2
 spec.BankSelectorLog2InterleaveSize = 6 // 64 B stride
 
 memCtrl := simplebankedmemory.MakeBuilder().
-    WithSimulation(reg).
+    WithSimulation(sim).
     WithSpec(spec).
     WithResources(simplebankedmemory.Resources{Storage: storage}).
     Build("MyMemCtrl")
 
 topPort := modeling.MakePortBuilder().
-    WithSimulation(reg).
+    WithSimulation(sim).
     WithComponent(memCtrl).
     WithSpec(modeling.PortSpec{BufSize: 16}).
     Build("Top")
 memCtrl.AssignPort("Top", topPort)
 
 ctrlPort := modeling.MakePortBuilder().
-    WithSimulation(reg).
+    WithSimulation(sim).
     WithComponent(memCtrl).
     WithSpec(modeling.PortSpec{BufSize: 4}).
     Build("Control")

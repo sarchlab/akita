@@ -19,7 +19,7 @@ import (
 var _ = Describe("Cache", func() {
 	var (
 		engine              timing.Engine
-		sim                 modeling.Registrar
+		sim                 timing.Simulation
 		connection          messaging.Connection
 		addressToPortMapper mem.AddressToPortMapper
 		dram                *idealmemcontroller.Comp

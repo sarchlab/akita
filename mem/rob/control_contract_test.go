@@ -17,16 +17,14 @@ func TestControlContract(t *testing.T) {
 		spec := DefaultSpec()
 		spec.BottomUnit = messaging.RemotePort("BottomUnit")
 
-		reg := sim
-
 		comp := MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			Build("ROB")
 
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithSimulation(reg).
+				WithSimulation(sim).
 				WithComponent(comp).
 				WithSpec(modeling.PortSpec{BufSize: 16}).
 				Build(name)

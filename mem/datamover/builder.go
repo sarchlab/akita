@@ -27,9 +27,9 @@ func DefaultSpec() Spec {
 // "Control" ports; the port instances are supplied externally after Build with
 // AssignPort (the caller chooses the buffer sizes).
 type Builder struct {
-	spec      Spec
-	registrar modeling.Registrar
-	resources Resources
+	spec       Spec
+	simulation timing.Simulation
+	resources  Resources
 }
 
 // MakeBuilder creates a new Builder seeded with the default spec.
@@ -39,11 +39,9 @@ func MakeBuilder() Builder {
 	}
 }
 
-// WithSimulation wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneSimulation(engine) in isolated tests). The
-// registrar provides the engine and registers the built component.
-func (b Builder) WithSimulation(reg modeling.Registrar) Builder {
-	b.registrar = reg
+// WithSimulation sets the simulation that owns and registers the built component.
+func (b Builder) WithSimulation(sim timing.Simulation) Builder {
+	b.simulation = sim
 	return b
 }
 
@@ -64,7 +62,7 @@ func (b Builder) WithResources(r Resources) Builder {
 // "Inside", "Outside", and "Control" ports; assign the port instances after
 // Build with AssignPort.
 func (b Builder) Build(name string) *Comp {
-	if b.registrar == nil {
+	if b.simulation == nil {
 		panic("datamover: WithSimulation is required")
 	}
 
@@ -72,7 +70,7 @@ func (b Builder) Build(name string) *Comp {
 	initialState := State{}
 
 	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithSimulation(b.registrar).
+		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
@@ -92,7 +90,7 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.DeclarePort("Outside", memprotocol.Requester)
 	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
-	b.registrar.RegisterComponent(modelComp)
+	b.simulation.RegisterComponent(modelComp)
 
 	return modelComp
 }

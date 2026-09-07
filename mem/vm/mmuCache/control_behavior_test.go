@@ -28,7 +28,7 @@ import (
 var _ = Describe("MMUCache control behavior", func() {
 	var (
 		engine      timing.Engine
-		sim         modeling.Registrar
+		sim         timing.Simulation
 		comp        *Comp
 		topPort     messaging.Port
 		bottomPort  messaging.Port
@@ -44,9 +44,8 @@ var _ = Describe("MMUCache control behavior", func() {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
-		reg := sim
 		comp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				LowModulePort: messaging.RemotePort("LowModule"),
@@ -54,7 +53,7 @@ var _ = Describe("MMUCache control behavior", func() {
 			}).
 			Build("MMUCache")
 
-		assignDefaultPorts(reg, comp)
+		assignDefaultPorts(sim, comp)
 
 		topPort = comp.GetPortByName("Top")
 		bottomPort = comp.GetPortByName("Bottom")

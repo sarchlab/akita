@@ -45,7 +45,7 @@ func TestSimulationsAllocateIndependentlyWhileRunning(t *testing.T) {
 				require.Equal(t, uint64(1), comp.Simulation().NewID())
 				h := &allocatingHandler{ids: comp.Simulation()}
 				handlers[i] = h
-				s.GetEngine().(timing.HandlerRegistrar).RegisterHandler("handler", h)
+				s.GetEngine().(timing.HandlerRegistry).RegisterHandler("handler", h)
 				e := timing.MakeEventBase(s.NewID(), 1, "handler")
 				require.Equal(t, uint64(2), e.ID)
 				s.GetEngine().Schedule(e)

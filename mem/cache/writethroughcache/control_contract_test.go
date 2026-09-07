@@ -37,9 +37,8 @@ func TestControlContract(t *testing.T) {
 		spec.BankLatency = 1
 		spec.DirLatency = 1
 
-		reg := sim
 		comp := MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				Storage: storage,
@@ -54,7 +53,7 @@ func TestControlContract(t *testing.T) {
 		// is ticked, then plug each into a no-op connection.
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithSimulation(reg).
+				WithSimulation(sim).
 				WithComponent(comp).
 				WithSpec(modeling.PortSpec{BufSize: 4}).
 				Build(name)

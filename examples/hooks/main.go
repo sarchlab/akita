@@ -120,16 +120,16 @@ func (m *agentMW) recv() bool {
 	return true
 }
 
-func buildAgent(reg modeling.Registrar, name string) *Comp {
+func buildAgent(sim timing.Simulation, name string) *Comp {
 	c := modeling.NewBuilder[agentSpec, agentState, modeling.None]().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithFreq(1 * timing.GHz).
 		WithSpec(agentSpec{Freq: 1 * timing.GHz}).
 		Build(name)
 	c.AddMiddleware(&agentMW{comp: c})
 	c.DeclarePort("Out")
 	c.AssignPort("Out", messaging.NewPort(c, 4, 4, name+".Out"))
-	reg.RegisterComponent(c)
+	sim.RegisterComponent(c)
 	return c
 }
 
@@ -166,13 +166,12 @@ func (h *msgHook) Func(ctx hooking.HookCtx) {
 func main() {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
-	registrar := sim
 
-	agentA := buildAgent(registrar, "AgentA")
-	agentB := buildAgent(registrar, "AgentB")
+	agentA := buildAgent(sim, "AgentA")
+	agentB := buildAgent(sim, "AgentB")
 
 	conn := directconnection.MakeBuilder().
-		WithSimulation(registrar).
+		WithSimulation(sim).
 		Build("Conn")
 	conn.PlugIn(agentA.GetPortByName("Out"))
 	conn.PlugIn(agentB.GetPortByName("Out"))

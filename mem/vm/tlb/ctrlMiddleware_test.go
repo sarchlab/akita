@@ -12,7 +12,7 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 
 	var (
 		engine timing.Engine
-		sim    modeling.Registrar
+		sim    timing.Simulation
 		comp   *Comp
 		ctrlMW *ctrlMiddleware
 	)
@@ -21,9 +21,8 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		reg := sim
 		comp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(DefaultSpec()).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
@@ -32,7 +31,7 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 			}).
 			Build("TLB")
 
-		assignDefaultPorts(reg, comp)
+		assignDefaultPorts(sim, comp)
 		plugNoopConn(comp)
 
 		ctrlMW = comp.Middlewares()[0].(*ctrlMiddleware)

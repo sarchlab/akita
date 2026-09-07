@@ -203,8 +203,8 @@ func NewTickingComponent(
 	tc.name = name
 	tc.ticker = ticker
 
-	if registrar, ok := sim.GetEngine().(timing.HandlerRegistrar); ok {
-		registrar.RegisterHandler(name, tc)
+	if handlers, ok := sim.GetEngine().(timing.HandlerRegistry); ok {
+		handlers.RegisterHandler(name, tc)
 	}
 
 	return tc
@@ -225,8 +225,8 @@ func NewSecondaryTickingComponent(
 	tc.name = name
 	tc.ticker = ticker
 
-	if registrar, ok := sim.GetEngine().(timing.HandlerRegistrar); ok {
-		registrar.RegisterHandler(name, tc)
+	if handlers, ok := sim.GetEngine().(timing.HandlerRegistry); ok {
+		handlers.RegisterHandler(name, tc)
 	}
 
 	return tc

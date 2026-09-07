@@ -72,7 +72,7 @@ at := addresstranslator.MakeBuilder().
 `Build` declares the component's ports by logical name; it does not create the
 port instances. After `Build`, the caller builds each port with
 `modeling.MakePortBuilder` (choosing the buffer size) and attaches it with
-`AssignPort`. The same `modeling.Registrar` passed to the builder is used to
+`AssignPort`. The same `timing.Simulation` passed to the builder is used to
 build the ports. Every declared port must be assigned before the component is
 ticked.
 

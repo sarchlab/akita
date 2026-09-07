@@ -112,7 +112,7 @@ var _ = Describe("TLB milestones", func() {
 
 	var (
 		engine  timing.Engine
-		sim     modeling.Registrar
+		sim     timing.Simulation
 		tlbComp *Comp
 		topPort messaging.Port
 		rec     *tlbMilestoneRecorder
@@ -127,9 +127,8 @@ var _ = Describe("TLB milestones", func() {
 		spec.NumWays = 32
 		spec.Log2PageSize = 12
 
-		reg := sim
 		tlbComp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
@@ -138,7 +137,7 @@ var _ = Describe("TLB milestones", func() {
 			}).
 			Build("TLB")
 
-		assignDefaultPorts(reg, tlbComp)
+		assignDefaultPorts(sim, tlbComp)
 		plugNoopConn(tlbComp)
 
 		topPort = tlbComp.GetPortByName("Top")

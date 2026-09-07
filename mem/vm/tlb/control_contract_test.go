@@ -26,9 +26,8 @@ func TestControlContract(t *testing.T) {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
 
-		reg := sim
 		comp := MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
 					Port: messaging.RemotePort("MMU"),
@@ -36,7 +35,7 @@ func TestControlContract(t *testing.T) {
 			}).
 			Build("TLB")
 
-		assignDefaultPorts(reg, comp)
+		assignDefaultPorts(sim, comp)
 
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			(&ccNoopConn{}).PlugIn(comp.GetPortByName(name))

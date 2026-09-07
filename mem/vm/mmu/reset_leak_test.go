@@ -21,7 +21,7 @@ import (
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
-	reg := sim
+
 	pageTable := vm.NewPageTable(12)
 
 	// A long walk latency keeps the walk genuinely in flight after a single
@@ -30,13 +30,13 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.Latency = 100
 
 	comp := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithResources(Resources{PageTable: pageTable}).
 		WithSpec(spec).
 		Build("MMU")
 
-	topPort := assignPort(reg, comp, "Top", 16)
-	ctrlPort := assignPort(reg, comp, "Control", 4)
+	topPort := assignPort(sim, comp, "Top", 16)
+	ctrlPort := assignPort(sim, comp, "Control", 4)
 	(&noopConn{}).PlugIn(topPort)
 	(&noopConn{}).PlugIn(ctrlPort)
 

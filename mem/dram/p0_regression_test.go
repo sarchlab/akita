@@ -23,10 +23,9 @@ type p0Harness struct {
 func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
-	reg := sim
 
 	dramComp := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		Build("P0DRAM")
 	for _, t := range tracers {
@@ -35,7 +34,7 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 
 	for _, name := range []string{"Top", "Control"} {
 		p := modeling.MakePortBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithComponent(dramComp).
 			WithSpec(modeling.PortSpec{BufSize: 1024}).
 			Build(name)
@@ -46,7 +45,7 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 	src := messaging.NewPort(nil, 1024, 1024, "P0Src.Top")
 
 	conn := directconnection.MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		Build("P0Conn")
 	conn.PlugIn(top)
 	conn.PlugIn(src)
@@ -224,11 +223,11 @@ var _ = Describe("P0: channel guard", func() {
 		return func() {
 			engine := timing.NewSerialEngine()
 			sim := modeling.NewStandaloneSimulation(engine)
-			reg := sim
+
 			spec := DefaultSpec()
 			spec.NumChannel = numChannel
 			MakeBuilder().
-				WithSimulation(reg).
+				WithSimulation(sim).
 				WithSpec(spec).
 				Build("ChannelGuard")
 		}

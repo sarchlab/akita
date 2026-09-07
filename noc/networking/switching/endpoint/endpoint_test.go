@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/packetization"
+	"github.com/sarchlab/akita/v5/timing"
 
 	"github.com/sarchlab/akita/v5/messaging"
 	gomock "go.uber.org/mock/gomock"
@@ -16,7 +17,7 @@ var _ = Describe("End Point", func() {
 	var (
 		mockCtrl          *gomock.Controller
 		engine            *MockEngine
-		sim               modeling.Registrar
+		sim               timing.Simulation
 		devicePort        *MockPort
 		networkPort       *MockPort
 		defaultSwitchPort *MockPort

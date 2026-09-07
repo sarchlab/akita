@@ -61,9 +61,9 @@ func DefaultSpec() Spec {
 // port instances are supplied externally after Build with AssignPort (the
 // caller chooses the buffer sizes).
 type Builder struct {
-	registrar modeling.Registrar
-	spec      Spec
-	resources Resources
+	simulation timing.Simulation
+	spec       Spec
+	resources  Resources
 
 	tracers []tracing.Tracer
 }
@@ -79,11 +79,9 @@ func (b Builder) WithSpec(spec Spec) Builder {
 	return b
 }
 
-// WithSimulation wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneSimulation(engine) in isolated tests). The
-// registrar provides the engine and registers the built component.
-func (b Builder) WithSimulation(reg modeling.Registrar) Builder {
-	b.registrar = reg
+// WithSimulation sets the simulation that owns and registers the built component.
+func (b Builder) WithSimulation(sim timing.Simulation) Builder {
+	b.simulation = sim
 	return b
 }
 
@@ -105,7 +103,7 @@ func (b Builder) WithResources(r Resources) Builder {
 // Build builds a new MemController. It declares the component's "Top" and
 // "Control" ports; assign the port instances after Build with AssignPort.
 func (b Builder) Build(name string) *Comp {
-	if b.registrar == nil {
+	if b.simulation == nil {
 		panic("dram: WithSimulation is required")
 	}
 
@@ -130,7 +128,7 @@ func (b Builder) Build(name string) *Comp {
 	storage := b.resolveStorage(name)
 
 	modelComp := modeling.NewBuilder[Spec, State, Resources]().
-		WithSimulation(b.registrar).
+		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		WithResources(Resources{Storage: storage}).
@@ -146,7 +144,7 @@ func (b Builder) Build(name string) *Comp {
 		tracing.CollectTrace(modelComp, tracer)
 	}
 
-	b.registrar.RegisterComponent(modelComp)
+	b.simulation.RegisterComponent(modelComp)
 
 	return modelComp
 }
@@ -174,7 +172,7 @@ func (b Builder) resolveStorage(name string) *mem.Storage {
 
 	return mem.MakeStorageBuilder().
 		WithCapacity(uint64(totalSize)).
-		WithSimulation(b.registrar).
+		WithSimulation(b.simulation).
 		Build(name + ".Storage")
 }
 

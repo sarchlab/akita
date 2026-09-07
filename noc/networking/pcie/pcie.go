@@ -4,7 +4,6 @@ package pcie
 import (
 	"math"
 
-	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/monitoring2"
 	"github.com/sarchlab/akita/v5/noc/networking/networkconnector"
 
@@ -37,8 +36,8 @@ func NewConnector() *Connector {
 }
 
 // WithSimulation sets the simulation that owns the network components.
-func (c *Connector) WithSimulation(reg modeling.Registrar) *Connector {
-	c.connector = c.connector.WithSimulation(reg)
+func (c *Connector) WithSimulation(sim timing.Simulation) *Connector {
+	c.connector = c.connector.WithSimulation(sim)
 	return c
 }
 

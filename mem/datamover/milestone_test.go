@@ -71,7 +71,7 @@ func (r *dmTraceRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 var _ = Describe("DataMover milestones", func() {
 	var (
 		engine         timing.Engine
-		sim            modeling.Registrar
+		sim            timing.Simulation
 		dataMover      *modeling.Component[Spec, State, modeling.None]
 		insideMem      *idealmemcontroller.Comp
 		insideStorage  *mem.Storage

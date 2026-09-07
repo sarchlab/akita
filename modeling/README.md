@@ -102,11 +102,13 @@ port := gpu.GetPortByName("Top")
 | `NewEventDrivenBuilder[S, T, R]()` | `*EventDrivenComponent[S, T, R]` | `WithSimulation`, `WithSpec`, `WithResources`, `WithProcessor` |
 
 Both builders register the component as an event handler when the engine
-implements `timing.HandlerRegistrar`.
+implements `timing.HandlerRegistry`.
 
 ## Simulation context
 
-Pass the same simulation to every builder in one setup. Components expose
+All builders accept `timing.Simulation`, which supplies the engine and IDs
+and registers components, connections, resources, and ports. Pass the same
+simulation to every builder in one setup. Components expose
 `Simulation()`; allocate a message or event ID with `comp.Simulation().NewID()`.
 The simulation owns the counter, so two components share one ID sequence even
 though they have different names. Independent simulations have separate sequences.

@@ -32,7 +32,7 @@ func TestCache(t *testing.T) {
 var _ = Describe("Write-Back Cache Integration", func() {
 	var (
 		engine              timing.Engine
-		sim                 modeling.Registrar
+		sim                 timing.Simulation
 		addressToPortMapper *mem.SinglePortMapper
 		cacheComp           *modeling.Component[Spec, State, Resources]
 		m                   *pipelineMW

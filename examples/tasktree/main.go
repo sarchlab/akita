@@ -243,7 +243,7 @@ func (t *treeTracer) print() {
 
 // --- Wiring ---
 
-func buildClient(sim modeling.Registrar) *ClientComp {
+func buildClient(sim timing.Simulation) *ClientComp {
 	c := modeling.NewBuilder[modeling.None, clientState, modeling.None]().
 		WithSimulation(sim).WithFreq(1 * timing.GHz).Build("Client")
 	c.AddMiddleware(&clientMW{comp: c, inFlight: map[uint64]readReq{}})
@@ -254,7 +254,7 @@ func buildClient(sim modeling.Registrar) *ClientComp {
 	return c
 }
 
-func buildCache(sim modeling.Registrar, name string) *CacheComp {
+func buildCache(sim timing.Simulation, name string) *CacheComp {
 	c := modeling.NewBuilder[modeling.None, cacheState, modeling.None]().
 		WithSimulation(sim).WithFreq(1 * timing.GHz).Build(name)
 	c.AddMiddleware(&cacheMW{comp: c, txns: map[uint64]cacheTxn{}})
@@ -267,7 +267,7 @@ func buildCache(sim modeling.Registrar, name string) *CacheComp {
 	return c
 }
 
-func buildMemory(sim modeling.Registrar) *MemComp {
+func buildMemory(sim timing.Simulation) *MemComp {
 	mem := modeling.NewBuilder[modeling.None, modeling.None, modeling.None]().
 		WithSimulation(sim).WithFreq(1 * timing.GHz).Build("Memory")
 	mem.AddMiddleware(&memMW{comp: mem})
@@ -281,7 +281,6 @@ func buildMemory(sim modeling.Registrar) *MemComp {
 func main() {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
-	reg := sim
 
 	client := buildClient(sim)
 	l1 := buildCache(sim, "L1")
@@ -289,7 +288,7 @@ func main() {
 	mem := buildMemory(sim)
 
 	connect := func(name string, a, b messaging.Port) {
-		conn := directconnection.MakeBuilder().WithSimulation(reg).Build(name)
+		conn := directconnection.MakeBuilder().WithSimulation(sim).Build(name)
 		conn.PlugIn(a)
 		conn.PlugIn(b)
 	}

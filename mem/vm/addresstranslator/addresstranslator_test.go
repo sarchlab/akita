@@ -42,17 +42,17 @@ const (
 	ctrlBufSize        = 1
 )
 
-// assignPort builds a port with the given buffer size using the same registrar
+// assignPort builds a port with the given buffer size using the same simulation
 // the component was built with, and assigns it to the component's declared port
 // of the same name.
 func assignPort(
-	reg modeling.Registrar,
+	sim timing.Simulation,
 	comp *Comp,
 	name string,
 	bufSize int,
 ) messaging.Port {
 	p := modeling.MakePortBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithComponent(comp).
 		WithSpec(modeling.PortSpec{BufSize: bufSize}).
 		Build(name)
@@ -63,17 +63,17 @@ func assignPort(
 // assignPorts assigns the translator's four declared ports (Top, Bottom,
 // Translation, Control), with the given Top buffer size and the historical
 // defaults for the rest.
-func assignPorts(reg modeling.Registrar, comp *Comp, topBufSize int) {
-	assignPort(reg, comp, "Top", topBufSize)
-	assignPort(reg, comp, "Bottom", bottomBufSize)
-	assignPort(reg, comp, "Translation", translationBufSize)
-	assignPort(reg, comp, "Control", ctrlBufSize)
+func assignPorts(sim timing.Simulation, comp *Comp, topBufSize int) {
+	assignPort(sim, comp, "Top", topBufSize)
+	assignPort(sim, comp, "Bottom", bottomBufSize)
+	assignPort(sim, comp, "Translation", translationBufSize)
+	assignPort(sim, comp, "Control", ctrlBufSize)
 }
 
 var _ = Describe("Address Translator", func() {
 	var (
 		engine          timing.Engine
-		sim             modeling.Registrar
+		sim             timing.Simulation
 		t               *Comp
 		topPort         messaging.Port
 		bottomPort      messaging.Port
@@ -99,14 +99,13 @@ var _ = Describe("Address Translator", func() {
 			},
 		}
 
-		reg := sim
 		t = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(resources).
 			Build("AddressTranslator")
 
-		assignPorts(reg, t, topBufSize)
+		assignPorts(sim, t, topBufSize)
 
 		topPort = t.GetPortByName("Top")
 		bottomPort = t.GetPortByName("Bottom")

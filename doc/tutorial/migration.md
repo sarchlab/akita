@@ -153,9 +153,8 @@ Event factories now take the allocated ID explicitly:
 Separate simulations may reuse numeric IDs. Tracing associations are scoped
 to the simulation as well as the component name and message ID.
 
-Pass the simulation to builders with `WithSimulation(sim)`. This replaces
-`WithEngine` on generic component builders and `WithRegistrar` on package
-builders. Components expose `Simulation()`, while engines and components have
+Pass the simulation to builders with `WithSimulation(sim)`. All component and
+package builders accept the shared `timing.Simulation` interface. Components expose `Simulation()`, while engines and components have
 no `NewID()` method. For lightweight setups, create
 `modeling.NewStandaloneSimulation(engine)` once and share that instance with
 all builders. Custom components and tracing domains implement
@@ -352,11 +351,11 @@ type EventBase struct {
 
 ### Handler Registration
 
-The engine implements `HandlerRegistrar`:
+The engine implements `HandlerRegistry`:
 
 ```go
 // v5/sim/engine.go
-type HandlerRegistrar interface {
+type HandlerRegistry interface {
     RegisterHandler(name string, handler Handler)
 }
 ```
@@ -378,8 +377,8 @@ func NewTickingComponent(
     tc.ticker = ticker
 
     // Auto-register so events with HandlerID_==name route here.
-    if registrar, ok := sim.GetEngine().(timing.HandlerRegistrar); ok {
-        registrar.RegisterHandler(name, tc)
+    if handlers, ok := sim.GetEngine().(timing.HandlerRegistry); ok {
+        handlers.RegisterHandler(name, tc)
     }
 
     return tc
@@ -555,7 +554,7 @@ V5 unifies how components are modeled and wired. Each component is a single stru
    - Snapshot/restore uses deep copies of State so checkpoints are immutable.
 
 3. Ports (declared by the component, instances injected)
-   - A component declares the ports it has (`DeclarePort`) but never constructs the instances or owns connections. Port instances are built and registered during wiring with a port builder (`modeling.MakePortBuilder`, which registers each port with the simulation through the registrar) and attached via `AssignPort(name, port)`.
+   - A component declares the ports it has (`DeclarePort`) but never constructs the instances or owns connections. Port instances are built and registered during wiring with a port builder (`modeling.MakePortBuilder`, which registers each port with the simulation) and attached via `AssignPort(name, port)`.
    - Components access ports by name via `GetPortByName("...")` to avoid compile‑time coupling.
 
 4. Middlewares (ordered, stateless over the component)
@@ -578,7 +577,7 @@ V5 unifies how components are modeled and wired. Each component is a single stru
 #### Build and Wire (two stages)
 
 1. Build from Spec
-   - `Builder.WithSimulation(reg).WithSpec(spec).Build(name)` constructs the component with defaults and resolved strategies, and declares the component's ports.
+   - `Builder.WithSimulation(sim).WithSpec(spec).Build(name)` constructs the component with defaults and resolved strategies, and declares the component's ports.
    - Do not create the port instances or connect them here.
 
 2. Wire topology
@@ -783,8 +782,8 @@ for _, name := range []string{"Top", "Bottom", "Control"} {
 }
 ```
 
-The port builder takes the registrar and registers the port with the
-simulation, exactly as `RegisterComponent` registers a component. `AssignPort`
+The port builder registers each port with its simulation, exactly as
+`RegisterComponent` registers a component. `AssignPort`
 then panics if the name was not declared or is already assigned, so a typo or a
 forgotten port fails fast.
 

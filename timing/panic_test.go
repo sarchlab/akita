@@ -21,7 +21,7 @@ func (h panicHook) Func(ctx hooking.HookCtx) { h(ctx) }
 
 type testEngine interface {
 	Engine
-	HandlerRegistrar
+	HandlerRegistry
 }
 
 func finishRun(t *testing.T, run func() error) error {

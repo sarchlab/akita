@@ -54,7 +54,7 @@ func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 var _ = Describe("MMU milestones", func() {
 	var (
 		engine    timing.Engine
-		sim       modeling.Registrar
+		sim       timing.Simulation
 		pageTable vm.PageTable
 		mmuComp   *Comp
 		topPort   messaging.Port
@@ -67,15 +67,14 @@ var _ = Describe("MMU milestones", func() {
 		sim = modeling.NewStandaloneSimulation(engine)
 		pageTable = vm.NewPageTable(12)
 
-		reg := sim
 		mmuComp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(DefaultSpec()).
 			Build("MMU")
 
-		topPort = assignPort(reg, mmuComp, "Top", 16)
-		assignPort(reg, mmuComp, "Control", 4)
+		topPort = assignPort(sim, mmuComp, "Top", 16)
+		assignPort(sim, mmuComp, "Control", 4)
 
 		(&noopConn{}).PlugIn(topPort)
 		(&noopConn{}).PlugIn(mmuComp.GetPortByName("Control"))

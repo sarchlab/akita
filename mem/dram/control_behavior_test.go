@@ -18,7 +18,7 @@ import (
 var _ = Describe("DRAM control behavior", func() {
 	var (
 		engine   timing.Engine
-		sim      modeling.Registrar
+		sim      timing.Simulation
 		storage  *mem.Storage
 		comp     *Comp
 		topPort  messaging.Port
@@ -26,15 +26,15 @@ var _ = Describe("DRAM control behavior", func() {
 	)
 
 	build := func() {
-		reg := sim
+
 		comp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			Build("DRAM")
 
 		for _, name := range []string{"Top", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithSimulation(reg).
+				WithSimulation(sim).
 				WithComponent(comp).
 				WithSpec(modeling.PortSpec{BufSize: 16}).
 				Build(name)

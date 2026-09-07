@@ -21,16 +21,15 @@ import (
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
-	reg := sim
 
 	comp := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithResources(Resources{Storage: mem.NewStorage(1 * mem.MB)}).
 		Build("DRAM")
 
 	assign := func(name string) messaging.Port {
 		p := modeling.MakePortBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithComponent(comp).
 			WithSpec(modeling.PortSpec{BufSize: 16}).
 			Build(name)

@@ -21,7 +21,7 @@ import (
 var _ = Describe("Write-Back Cache control behavior", func() {
 	var (
 		engine   timing.Engine
-		sim      modeling.Registrar
+		sim      timing.Simulation
 		storage  *mem.Storage
 		comp     *Comp
 		topPort  messaging.Port

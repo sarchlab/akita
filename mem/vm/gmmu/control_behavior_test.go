@@ -25,7 +25,7 @@ import (
 var _ = Describe("GMMU control behavior", func() {
 	var (
 		engine    timing.Engine
-		sim       modeling.Registrar
+		sim       timing.Simulation
 		pageTable vm.PageTable
 		comp      *Comp
 		topPort   messaging.Port
@@ -47,14 +47,13 @@ var _ = Describe("GMMU control behavior", func() {
 		spec.Latency = 10
 		spec.LowModule = lowModule
 
-		reg := sim
 		comp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(spec).
 			Build("GMMU")
 
-		assignDefaultPorts(reg, comp)
+		assignDefaultPorts(sim, comp)
 
 		topPort = comp.GetPortByName("Top")
 		ctrlPort = comp.GetPortByName("Control")

@@ -32,7 +32,7 @@ var _ = Describe("DirectConnection", func() {
 		port1      *MockPort
 		port2      *MockPort
 		engine     *MockEngine
-		sim        modeling.Registrar
+		sim        timing.Simulation
 		connection *Comp
 	)
 
@@ -152,7 +152,7 @@ var _ = Describe("Direct Connection Integration", func() {
 	var (
 		mockCtrl        *gomock.Controller
 		engine          timing.Engine
-		sim             modeling.Registrar
+		sim             timing.Simulation
 		connection      *Comp
 		agents          []*agent
 		numAgents       = 10

@@ -23,7 +23,6 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
 	storage := mem.NewStorage(4 * mem.GB)
-	reg := sim
 
 	spec := DefaultSpec()
 	spec.NumReqPerCycle = 1
@@ -37,7 +36,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.MaxNumConcurrentTrans = 16
 
 	comp := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(Resources{
 			Storage: storage,
@@ -51,7 +50,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// each into a no-op connection before the component is ticked.
 	assign := func(name string) messaging.Port {
 		p := modeling.MakePortBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithComponent(comp).
 			WithSpec(modeling.PortSpec{BufSize: 16}).
 			Build(name)

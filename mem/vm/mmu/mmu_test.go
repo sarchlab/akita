@@ -26,17 +26,17 @@ func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
 
-// assignPort builds a port with the given buffer size using the same registrar
+// assignPort builds a port with the given buffer size using the same simulation
 // the component was built with, and assigns it to the component's declared port
 // of the same name.
 func assignPort(
-	reg modeling.Registrar,
+	sim timing.Simulation,
 	comp *Comp,
 	name string,
 	bufSize int,
 ) messaging.Port {
 	p := modeling.MakePortBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithComponent(comp).
 		WithSpec(modeling.PortSpec{BufSize: bufSize}).
 		Build(name)
@@ -48,7 +48,7 @@ var _ = Describe("MMU", func() {
 
 	var (
 		engine           timing.Engine
-		sim              modeling.Registrar
+		sim              timing.Simulation
 		pageTable        vm.PageTable
 		mmuComp          *Comp
 		topPort          messaging.Port
@@ -58,16 +58,15 @@ var _ = Describe("MMU", func() {
 	// build constructs an MMU with the given Top buffer size, injects the
 	// shared page table, and plugs noopConns so its ports can be driven.
 	build := func(topBufSize int) {
-		reg := sim
 
 		mmuComp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(DefaultSpec()).
 			Build("MMU")
 
-		topPort = assignPort(reg, mmuComp, "Top", topBufSize)
-		assignPort(reg, mmuComp, "Control", 4)
+		topPort = assignPort(sim, mmuComp, "Top", topBufSize)
+		assignPort(sim, mmuComp, "Control", 4)
 
 		(&noopConn{}).PlugIn(topPort)
 		(&noopConn{}).PlugIn(mmuComp.GetPortByName("Control"))
@@ -215,7 +214,7 @@ var _ = Describe("MMU", func() {
 var _ = Describe("MMU Integration", func() {
 	var (
 		engine    timing.Engine
-		sim       modeling.Registrar
+		sim       timing.Simulation
 		mmuComp   *Comp
 		pageTable vm.PageTable
 		topPort   messaging.Port
@@ -228,16 +227,14 @@ var _ = Describe("MMU Integration", func() {
 
 		pageTable = vm.NewPageTable(12)
 
-		reg := sim
-
 		mmuComp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(DefaultSpec()).
 			Build("MMU")
 
-		topPort = assignPort(reg, mmuComp, "Top", 4096)
-		assignPort(reg, mmuComp, "Control", 4)
+		topPort = assignPort(sim, mmuComp, "Top", 4096)
+		assignPort(sim, mmuComp, "Control", 4)
 		(&noopConn{}).PlugIn(topPort)
 
 		agentPort = messaging.NewPort(nil, 4, 4, "Agent.Top")

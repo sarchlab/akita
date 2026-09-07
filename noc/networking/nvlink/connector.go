@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/monitoring2"
 	"github.com/sarchlab/akita/v5/noc/networking/networkconnector"
 
@@ -76,8 +75,8 @@ func (c *Connector) WithMonitor(m *monitoring2.Monitor) *Connector {
 }
 
 // WithSimulation sets the simulation that owns the network components.
-func (c *Connector) WithSimulation(reg modeling.Registrar) *Connector {
-	c.connector = c.connector.WithSimulation(reg)
+func (c *Connector) WithSimulation(sim timing.Simulation) *Connector {
+	c.connector = c.connector.WithSimulation(sim)
 	return c
 }
 

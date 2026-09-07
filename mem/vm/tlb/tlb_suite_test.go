@@ -42,17 +42,17 @@ func plugNoopConn(comp *Comp) {
 	conn.PlugIn(comp.GetPortByName("Control"))
 }
 
-// assignPort builds a port with the given buffer size using the same registrar
+// assignPort builds a port with the given buffer size using the same simulation
 // the component was built with, and assigns it to the component's declared port
 // of the same name.
 func assignPort(
-	reg modeling.Registrar,
+	sim timing.Simulation,
 	comp *Comp,
 	name string,
 	bufSize int,
 ) messaging.Port {
 	p := modeling.MakePortBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithComponent(comp).
 		WithSpec(modeling.PortSpec{BufSize: bufSize}).
 		Build(name)
@@ -62,14 +62,14 @@ func assignPort(
 
 // assignDefaultPorts assigns the TLB's three declared ports (Top, Bottom,
 // Control) with the historical default buffer sizes.
-func assignDefaultPorts(reg modeling.Registrar, comp *Comp) {
-	assignPort(reg, comp, "Top", 4)
-	assignPort(reg, comp, "Bottom", 4)
-	assignPort(reg, comp, "Control", 1)
+func assignDefaultPorts(sim timing.Simulation, comp *Comp) {
+	assignPort(sim, comp, "Top", 4)
+	assignPort(sim, comp, "Bottom", 4)
+	assignPort(sim, comp, "Control", 1)
 }
 
 // makeDirectConnection builds a direct connection using the given simulation.
-func makeDirectConnection(sim modeling.Registrar) messaging.Connection {
+func makeDirectConnection(sim timing.Simulation) messaging.Connection {
 	return directconnection.MakeBuilder().
 		WithSimulation(sim).
 		Build("Conn")

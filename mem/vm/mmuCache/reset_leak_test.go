@@ -21,7 +21,6 @@ import (
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
-	reg := sim
 
 	spec := DefaultSpec()
 	spec.NumBlocks = 1
@@ -32,7 +31,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.LatencyPerLevel = 100
 
 	comp := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(Resources{
 			LowModulePort: messaging.RemotePort("LowModule"),
@@ -40,7 +39,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		}).
 		Build("MMUCache")
 
-	assignDefaultPorts(reg, comp)
+	assignDefaultPorts(sim, comp)
 
 	topPort := comp.GetPortByName("Top")
 	bottomPort := comp.GetPortByName("Bottom")

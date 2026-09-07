@@ -13,7 +13,7 @@ The simplest connection type — zero-latency message forwarding between ports.
 import "github.com/sarchlab/akita/v5/noc/directconnection"
 
 conn := directconnection.MakeBuilder().
-    WithSimulation(reg).
+    WithSimulation(sim).
     WithSpec(directconnection.DefaultSpec()).
     Build("conn")
 

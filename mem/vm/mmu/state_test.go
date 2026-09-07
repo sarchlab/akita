@@ -15,18 +15,17 @@ func TestValidateState(t *testing.T) {
 	}
 }
 
-func buildTestMMU(sim modeling.Registrar, name string) *Comp {
+func buildTestMMU(sim timing.Simulation, name string) *Comp {
 	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
 
-	reg := sim
 	comp := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		Build(name)
 
-	assignPort(reg, comp, "Top", 4096)
-	assignPort(reg, comp, "Control", 4)
+	assignPort(sim, comp, "Top", 4096)
+	assignPort(sim, comp, "Control", 4)
 
 	return comp
 }

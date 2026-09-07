@@ -16,7 +16,7 @@ var _ = Describe("TLB", func() {
 
 	var (
 		engine      timing.Engine
-		sim         modeling.Registrar
+		sim         timing.Simulation
 		tlbComp     *Comp
 		tlbMW       *tlbMiddleware
 		tlbCtrlMW   *ctrlMiddleware
@@ -35,9 +35,8 @@ var _ = Describe("TLB", func() {
 		spec.NumWays = 32
 		spec.Log2PageSize = 12
 
-		reg := sim
 		tlbComp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
@@ -46,7 +45,7 @@ var _ = Describe("TLB", func() {
 			}).
 			Build("TLB")
 
-		assignDefaultPorts(reg, tlbComp)
+		assignDefaultPorts(sim, tlbComp)
 		plugNoopConn(tlbComp)
 
 		topPort = tlbComp.GetPortByName("Top")
@@ -488,7 +487,7 @@ var _ = Describe("TLB", func() {
 var _ = Describe("TLB Integration", func() {
 	var (
 		engine     timing.Engine
-		sim        modeling.Registrar
+		sim        timing.Simulation
 		tlbComp    *Comp
 		lowModule  *idealEndpoint
 		agent      *idealEndpoint
@@ -505,9 +504,8 @@ var _ = Describe("TLB Integration", func() {
 		lowModule = newIdealEndpoint("LowModule")
 		agent = newIdealEndpoint("Agent")
 
-		reg := sim
 		tlbComp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(DefaultSpec()).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
@@ -516,7 +514,7 @@ var _ = Describe("TLB Integration", func() {
 			}).
 			Build("TLB")
 
-		assignDefaultPorts(reg, tlbComp)
+		assignDefaultPorts(sim, tlbComp)
 
 		connection.PlugIn(agent.port)
 		connection.PlugIn(lowModule.port)

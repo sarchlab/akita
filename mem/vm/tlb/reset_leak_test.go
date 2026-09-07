@@ -22,12 +22,11 @@ import (
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
-	reg := sim
 
 	remotePort := messaging.RemotePort("MMU")
 
 	tlbComp := MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithSpec(DefaultSpec()).
 		WithResources(Resources{
 			TranslationProviderMapper: &mem.SinglePortMapper{
@@ -36,7 +35,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		}).
 		Build("TLB")
 
-	assignDefaultPorts(reg, tlbComp)
+	assignDefaultPorts(sim, tlbComp)
 	plugNoopConn(tlbComp)
 
 	topPort := tlbComp.GetPortByName("Top")

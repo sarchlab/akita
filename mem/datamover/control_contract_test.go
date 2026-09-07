@@ -31,10 +31,8 @@ func TestControlContract(t *testing.T) {
 		spec.InsideByteGranularity = 8
 		spec.OutsideByteGranularity = 8
 
-		reg := sim
-
 		comp := MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				InsideMapper:  &mem.SinglePortMapper{Port: messaging.RemotePort("InsideMem")},
@@ -44,7 +42,7 @@ func TestControlContract(t *testing.T) {
 
 		for _, name := range []string{"Top", "Inside", "Outside", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithSimulation(reg).
+				WithSimulation(sim).
 				WithComponent(comp).
 				WithSpec(modeling.PortSpec{BufSize: 16}).
 				Build(name)

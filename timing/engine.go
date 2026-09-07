@@ -18,8 +18,8 @@ type EventScheduler interface {
 	Schedule(e Event)
 }
 
-// HandlerRegistrar allows registering named handlers for event dispatch.
-type HandlerRegistrar interface {
+// HandlerRegistry allows registering named handlers for event dispatch.
+type HandlerRegistry interface {
 	RegisterHandler(name string, handler Handler)
 }
 

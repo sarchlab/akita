@@ -103,7 +103,7 @@ var _ = Describe("Bank selection across interleaved controllers", func() {
 var _ = Describe("Bank selection data correctness with global storage", func() {
 	var (
 		engine  timing.Engine
-		sim     modeling.Registrar
+		sim     timing.Simulation
 		memComp *Comp
 		agent   *testAgent
 		conn    *loopbackConnection
@@ -112,7 +112,6 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
-		reg := sim
 
 		spec := DefaultSpec()
 		spec.NumBanks = 4
@@ -124,9 +123,9 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 		spec.BankAddrTotalNumOfElements = 4
 		spec.BankAddrCurrentElementIndex = 1
 
-		memComp = MakeBuilder().WithSimulation(reg).WithSpec(spec).Build("MemBank")
-		assignPort(reg, memComp, "Top", 8)
-		assignPort(reg, memComp, "Control", 16)
+		memComp = MakeBuilder().WithSimulation(sim).WithSpec(spec).Build("MemBank")
+		assignPort(sim, memComp, "Top", 8)
+		assignPort(sim, memComp, "Control", 16)
 
 		agent = newTestAgent("AgentBank")
 		conn = newLoopbackConnection("ConnBank")

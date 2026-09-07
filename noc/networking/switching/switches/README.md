@@ -52,7 +52,7 @@ The switch is built first, then ports are added one at a time.
 
 ```go
 sw := switches.MakeBuilder().
-    WithSimulation(reg).                                  // *simulation.Simulation or a standalone simulation
+    WithSimulation(sim).                                  // *simulation.Simulation or a standalone simulation
     WithSpec(switches.DefaultSpec()).
     WithResources(switches.Resources{RoutingTable: rt}).
     Build("Switch0")
@@ -61,7 +61,7 @@ sw := switches.MakeBuilder().
 // "Port[i]"), registers it, builds the internal port complex toward the remote
 // peer, and returns the new local port to connect.
 swPort := switches.MakeSwitchPortAdder(sw).
-    WithSimulation(reg).
+    WithSimulation(sim).
     WithRemotePort(remotePort). // an endpoint's NetworkPort or another switch's port
     WithLatency(1).
     WithNumInputChannel(1).

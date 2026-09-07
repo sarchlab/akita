@@ -190,21 +190,21 @@ var _ = Describe("Queue Operations", func() {
 var _ = Describe("DRAM Integration", func() {
 	var (
 		engine  timing.Engine
-		sim     modeling.Registrar
+		sim     timing.Simulation
 		memCtrl *modeling.Component[Spec, State, Resources]
 	)
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
-		reg := sim
+
 		memCtrl = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			Build("MemCtrl")
 
 		for _, name := range []string{"Top", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithSimulation(reg).
+				WithSimulation(sim).
 				WithComponent(memCtrl).
 				WithSpec(modeling.PortSpec{BufSize: 1024}).
 				Build(name)

@@ -27,15 +27,14 @@ func TestControlContract(t *testing.T) {
 		sim := modeling.NewStandaloneSimulation(engine)
 		storage := mem.NewStorage(1 * mem.MB)
 
-		reg := sim
 		comp := MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			Build("DRAM")
 
 		for _, name := range []string{"Top", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithSimulation(reg).
+				WithSimulation(sim).
 				WithComponent(comp).
 				WithSpec(modeling.PortSpec{BufSize: 16}).
 				Build(name)

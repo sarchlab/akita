@@ -11,34 +11,34 @@ engine. This is where the components from the previous pages actually talk.
 
 ```go
 engine := timing.NewSerialEngine()
-registrar := modeling.NewStandaloneSimulation(engine)
+sim := modeling.NewStandaloneSimulation(engine)
 
 agentSpec := DefaultSpec()
 agentSpec.Freq = 1 * timing.Hz
 
 // Each agent declares an "Out" port in Build; build its instance and attach it.
 agentA := MakeBuilder().
-    WithSimulation(registrar).
+    WithSimulation(sim).
     WithSpec(agentSpec).
     Build("AgentA")
 agentA.AssignPort("Out", modeling.MakePortBuilder().
-    WithSimulation(registrar).
+    WithSimulation(sim).
     WithComponent(agentA).
     WithSpec(modeling.PortSpec{BufSize: 4}).
     Build("Out"))
 
 agentB := MakeBuilder().
-    WithSimulation(registrar).
+    WithSimulation(sim).
     WithSpec(agentSpec).
     Build("AgentB")
 agentB.AssignPort("Out", modeling.MakePortBuilder().
-    WithSimulation(registrar).
+    WithSimulation(sim).
     WithComponent(agentB).
     WithSpec(modeling.PortSpec{BufSize: 4}).
     Build("Out"))
 
 conn := directconnection.MakeBuilder().
-    WithSimulation(registrar).
+    WithSimulation(sim).
     Build("Conn")
 
 conn.PlugIn(agentA.GetPortByName("Out"))

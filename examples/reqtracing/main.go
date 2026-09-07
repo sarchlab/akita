@@ -199,7 +199,6 @@ func (m *serverMW) respond() bool {
 func main() {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
-	registrar := sim
 
 	client := modeling.NewBuilder[clientSpec, clientState, modeling.None]().
 		WithSimulation(sim).
@@ -209,7 +208,7 @@ func main() {
 	client.AddMiddleware(&clientMW{comp: client, inFlight: make(map[uint64]readReq)})
 	client.DeclarePort("Out")
 	client.AssignPort("Out", messaging.NewPort(client, 4, 4, "Client.Out"))
-	registrar.RegisterComponent(client)
+	sim.RegisterComponent(client)
 
 	server := modeling.NewBuilder[serverSpec, serverState, modeling.None]().
 		WithSimulation(sim).
@@ -219,9 +218,9 @@ func main() {
 	server.AddMiddleware(&serverMW{comp: server})
 	server.DeclarePort("Out")
 	server.AssignPort("Out", messaging.NewPort(server, 4, 4, "Server.Out"))
-	registrar.RegisterComponent(server)
+	sim.RegisterComponent(server)
 
-	conn := directconnection.MakeBuilder().WithSimulation(registrar).Build("Conn")
+	conn := directconnection.MakeBuilder().WithSimulation(sim).Build("Conn")
 	conn.PlugIn(client.GetPortByName("Out"))
 	conn.PlugIn(server.GetPortByName("Out"))
 

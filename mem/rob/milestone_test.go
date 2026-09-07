@@ -82,18 +82,17 @@ var _ = Describe("Reorder Buffer milestones", func() {
 	BeforeEach(func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		reg := sim
 
 		spec := DefaultSpec()
 		spec.BufferSize = 4
 		spec.NumReqPerCycle = 2
 		spec.BottomUnit = bottomUnitRemote
 
-		rob = MakeBuilder().WithSimulation(reg).WithSpec(spec).Build("Rob")
+		rob = MakeBuilder().WithSimulation(sim).WithSpec(spec).Build("Rob")
 
 		assign := func(name string, bufSize int) messaging.Port {
 			p := modeling.MakePortBuilder().
-				WithSimulation(reg).
+				WithSimulation(sim).
 				WithComponent(rob).
 				WithSpec(modeling.PortSpec{BufSize: bufSize}).
 				Build(name)

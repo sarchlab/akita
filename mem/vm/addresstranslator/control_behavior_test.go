@@ -23,7 +23,7 @@ import (
 var _ = Describe("Address Translator control behavior", func() {
 	var (
 		engine          timing.Engine
-		sim             modeling.Registrar
+		sim             timing.Simulation
 		t               *Comp
 		topPort         messaging.Port
 		bottomPort      messaging.Port
@@ -45,14 +45,13 @@ var _ = Describe("Address Translator control behavior", func() {
 			},
 		}
 
-		reg := sim
 		t = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(resources).
 			Build("AddressTranslator")
 
-		assignPorts(reg, t, 16)
+		assignPorts(sim, t, 16)
 
 		topPort = t.GetPortByName("Top")
 		bottomPort = t.GetPortByName("Bottom")

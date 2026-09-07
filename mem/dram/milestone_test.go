@@ -54,7 +54,7 @@ func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 var _ = Describe("DRAM admission milestones", func() {
 	var (
 		engine  timing.Engine
-		sim     modeling.Registrar
+		sim     timing.Simulation
 		memCtrl *modeling.Component[Spec, State, Resources]
 		topPort messaging.Port
 		rec     *milestoneRecorder
@@ -63,14 +63,14 @@ var _ = Describe("DRAM admission milestones", func() {
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
-		reg := sim
+
 		memCtrl = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			Build("MemCtrl")
 
 		for _, name := range []string{"Top", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithSimulation(reg).
+				WithSimulation(sim).
 				WithComponent(memCtrl).
 				WithSpec(modeling.PortSpec{BufSize: 16}).
 				Build(name)
@@ -124,7 +124,6 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 		"after a refresh window", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		reg := sim
 
 		// A short tREFI/tRFC so a refresh window opens quickly and the request
 		// that arrives during it is the one charged the stall.
@@ -133,13 +132,13 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 		spec.TRFC = 3
 
 		memCtrl := MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			Build("MemCtrl")
 
 		for _, name := range []string{"Top", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithSimulation(reg).
+				WithSimulation(sim).
 				WithComponent(memCtrl).
 				WithSpec(modeling.PortSpec{BufSize: 16}).
 				Build(name)

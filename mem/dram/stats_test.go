@@ -78,21 +78,21 @@ var _ = Describe("DRAM Statistics", func() {
 	It("should accumulate statistics during simulation", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		reg := sim
+
 		conn := directconnection.MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			Build("StatsConn")
 
 		spec := dram.DefaultSpec()
 		spec.Freq = 1 * timing.GHz
 		dramComp := dram.MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			Build("StatsDRAM")
 
 		for _, name := range []string{"Top", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithSimulation(reg).
+				WithSimulation(sim).
 				WithComponent(dramComp).
 				WithSpec(modeling.PortSpec{BufSize: 1024}).
 				Build(name)

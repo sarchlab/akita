@@ -65,9 +65,8 @@ func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
 	sim := modeling.NewStandaloneSimulation(engine)
 	remote := messaging.RemotePort("MMU")
 
-	reg := sim
 	comp := tlb.MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithSpec(tlb.DefaultSpec()).
 		WithResources(tlb.Resources{
 			TranslationProviderMapper: &mem.SinglePortMapper{Port: remote},
@@ -76,7 +75,7 @@ func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
 
 	for _, name := range []string{"Top", "Bottom", "Control"} {
 		comp.AssignPort(name, modeling.MakePortBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithComponent(comp).
 			WithSpec(modeling.PortSpec{BufSize: 16}).
 			Build(name))
@@ -363,9 +362,8 @@ func buildWritebackForSequence(
 	spec.BankLatency = 1
 	spec.DirLatency = 1
 
-	reg := sim
 	comp := writeback.MakeBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(writeback.Resources{
 			Storage: storage,
@@ -377,7 +375,7 @@ func buildWritebackForSequence(
 
 	for _, name := range []string{"Top", "Bottom", "Control"} {
 		comp.AssignPort(name, modeling.MakePortBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithComponent(comp).
 			WithSpec(modeling.PortSpec{BufSize: 16}).
 			Build(name))

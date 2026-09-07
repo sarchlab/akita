@@ -32,7 +32,7 @@ func (t *testTicker) Tick() bool {
 var _ = Describe("Ticking Component", func() {
 	var (
 		engine *testEngine
-		sim    Registrar
+		sim    timing.Simulation
 		ticker *testTicker
 		tc     *TickingComponent
 	)

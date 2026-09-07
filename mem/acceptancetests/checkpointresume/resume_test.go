@@ -153,10 +153,10 @@ func (m *driverMW) sendNext() bool {
 	return false
 }
 
-func buildDriver(reg modeling.Registrar, lowModule messaging.Port) *driver {
+func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
 	spec := driverSpec{Freq: 1 * timing.GHz, NumOps: numOps}
 	modelComp := modeling.NewBuilder[driverSpec, driverState, modeling.None]().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build("Driver")
@@ -168,10 +168,10 @@ func buildDriver(reg modeling.Registrar, lowModule messaging.Port) *driver {
 
 	d := &driver{Component: modelComp, lowModule: lowModule}
 	modelComp.AddMiddleware(&driverMW{d: d})
-	reg.RegisterComponent(d)
+	sim.RegisterComponent(d)
 
 	memPort := modeling.MakePortBuilder().
-		WithSimulation(reg).
+		WithSimulation(sim).
 		WithComponent(d).
 		WithSpec(modeling.PortSpec{BufSize: 4}).
 		Build("Mem")

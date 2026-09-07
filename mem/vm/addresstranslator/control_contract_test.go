@@ -30,14 +30,13 @@ func TestControlContract(t *testing.T) {
 			},
 		}
 
-		reg := sim
 		comp := MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(resources).
 			Build("AddressTranslator")
 
-		assignPorts(reg, comp, topBufSize)
+		assignPorts(sim, comp, topBufSize)
 
 		for _, name := range []string{"Top", "Bottom", "Translation", "Control"} {
 			conn := &noopConn{}

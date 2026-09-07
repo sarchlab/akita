@@ -12,7 +12,7 @@ import (
 var _ = Describe("Connector", func() {
 	var (
 		engine    timing.Engine
-		sim       modeling.Registrar
+		sim       timing.Simulation
 		connector *mesh.Connector
 	)
 

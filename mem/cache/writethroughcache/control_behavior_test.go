@@ -29,7 +29,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 
 	var (
 		engine     timing.Engine
-		sim        modeling.Registrar
+		sim        timing.Simulation
 		storage    *mem.Storage
 		comp       *Comp
 		topPort    messaging.Port
@@ -49,9 +49,8 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		spec.TotalByteSize = 64 * 1024
 		spec.MaxNumConcurrentTrans = 16
 
-		reg := sim
 		comp = MakeBuilder().
-			WithSimulation(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				Storage: storage,
@@ -66,7 +65,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		// is ticked.
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithSimulation(reg).
+				WithSimulation(sim).
 				WithComponent(comp).
 				WithSpec(modeling.PortSpec{BufSize: 16}).
 				Build(name)
