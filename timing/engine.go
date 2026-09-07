@@ -13,7 +13,6 @@ type TimeTeller interface {
 
 // EventScheduler can be used to schedule future events.
 type EventScheduler interface {
-	IDSource
 	TimeTeller
 
 	Schedule(e Event)

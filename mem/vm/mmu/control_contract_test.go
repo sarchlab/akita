@@ -14,10 +14,11 @@ import (
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
-		reg := modeling.NewStandaloneRegistrar(engine)
+		sim := modeling.NewStandaloneSimulation(engine)
+		reg := sim
 
 		comp := MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithSpec(DefaultSpec()).
 			Build("MMU")
 

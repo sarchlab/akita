@@ -461,7 +461,7 @@ var _ = Describe("Checkpoint round trip", func() {
 		// connection serializers are needed yet.
 		engine := sim.GetEngine().(*timing.SerialEngine)
 		comp := modeling.NewBuilder[roundTripSpec, roundTripState, modeling.None]().
-			WithEngine(engine).
+			WithSimulation(sim).
 			WithFreq(1 * timing.GHz).
 			WithSpec(roundTripSpec{Latency: 5}).
 			Build("Comp")
@@ -476,7 +476,7 @@ var _ = Describe("Checkpoint round trip", func() {
 		storage.Write(0, []byte{1, 2, 3, 4})
 		var savedCounter uint64
 		for i := 0; i < 5; i++ {
-			savedCounter = engine.NewID()
+			savedCounter = sim.NewID()
 		}
 		engine.SetCurrentTime(100)
 
@@ -486,8 +486,8 @@ var _ = Describe("Checkpoint round trip", func() {
 		// Mutate every piece of runtime state away from the checkpoint.
 		comp.State = roundTripState{Count: 999}
 		storage.Write(0, []byte{0, 0, 0, 0})
-		engine.NewID()
-		engine.NewID()
+		sim.NewID()
+		sim.NewID()
 		engine.SetCurrentTime(500)
 
 		// Restore and confirm every piece came back.
@@ -527,9 +527,8 @@ func (m *resumeWorkerMW) Tick() bool {
 
 func buildResumeSim() (*Simulation, *modeling.Component[resumeSpec, resumeState, modeling.None]) {
 	sim := MakeBuilder().WithoutMonitoring().Build()
-	engine := sim.GetEngine().(*timing.SerialEngine)
 	w := modeling.NewBuilder[resumeSpec, resumeState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(1 * timing.GHz).
 		WithSpec(resumeSpec{N: 1}).
 		Build("Worker")
@@ -604,9 +603,8 @@ func buildTickCountSim() (
 	*modeling.Component[tickCountSpec, tickCountState, modeling.None],
 ) {
 	sim := MakeBuilder().WithoutMonitoring().Build()
-	engine := sim.GetEngine().(*timing.SerialEngine)
 	c := modeling.NewBuilder[tickCountSpec, tickCountState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(1 * timing.GHz).
 		WithSpec(tickCountSpec{Tag: 1}).
 		Build("Ticker")
@@ -680,9 +678,8 @@ func buildWakeSim() (
 	*modeling.EventDrivenComponent[wakeSpec, wakeState, modeling.None],
 ) {
 	sim := MakeBuilder().WithoutMonitoring().Build()
-	engine := sim.GetEngine().(*timing.SerialEngine)
 	c := modeling.NewEventDrivenBuilder[wakeSpec, wakeState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithSpec(wakeSpec{Tag: 1}).
 		WithProcessor(wakeProcessor{}).
 		Build("Waker")

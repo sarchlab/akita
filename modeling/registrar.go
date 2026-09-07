@@ -5,39 +5,36 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// Registrar is the single build-time context a builder needs: it sources the
-// engine (GetEngine) and registers the built entity. A *simulation.Simulation
-// satisfies it. Builders accept it through a WithRegistrar method, replacing
-// separate engine and registration steps. Each builder calls the registration
-// method matching the kind it builds.
+// Registrar is the simulation context a package builder needs. It provides
+// runtime services and registers the built entity. A *simulation.Simulation
+// satisfies it. Builders retain the simulation reference on their components.
 type Registrar interface {
-	GetEngine() timing.Engine
+	timing.Simulation
 	RegisterComponent(c naming.Named)
 	RegisterConnection(c naming.Named)
 	RegisterResource(c naming.Named)
 	RegisterPort(p naming.Named)
 }
 
-// standaloneRegistrar adapts a bare engine into a Registrar whose registration
-// methods are no-ops. It is the engine-only path for isolated unit tests that
-// build a component without a full simulation.
-type standaloneRegistrar struct {
+// standaloneSimulation provides a simulation context without recording,
+// monitoring, or an entity inventory. All elements in a standalone setup must
+// share one instance, just as they would share a full simulation.
+type standaloneSimulation struct {
 	engine timing.Engine
+	ids    *timing.IDGenerator
 }
 
-// NewStandaloneRegistrar returns a Registrar backed only by the given engine,
-// with no-op registration. Use it in isolated tests:
-//
-//	comp := pkg.MakeBuilder().
-//		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
-//		WithSpec(spec).
-//		Build("Comp")
-func NewStandaloneRegistrar(engine timing.Engine) Registrar {
-	return &standaloneRegistrar{engine: engine}
+// NewStandaloneSimulation creates a lightweight simulation around an engine.
+// Construct it once and pass it to every builder in that simulation. This is
+// useful for isolated tests and engine-only examples.
+func NewStandaloneSimulation(engine timing.Engine) Registrar {
+	return &standaloneSimulation{engine: engine, ids: &timing.IDGenerator{}}
 }
 
-func (r *standaloneRegistrar) GetEngine() timing.Engine          { return r.engine }
-func (r *standaloneRegistrar) RegisterComponent(_ naming.Named)  {}
-func (r *standaloneRegistrar) RegisterConnection(_ naming.Named) {}
-func (r *standaloneRegistrar) RegisterResource(_ naming.Named)   {}
-func (r *standaloneRegistrar) RegisterPort(_ naming.Named)       {}
+func (s *standaloneSimulation) GetEngine() timing.Engine            { return s.engine }
+func (s *standaloneSimulation) NewID() uint64                       { return s.ids.NewID() }
+func (s *standaloneSimulation) GetIDGenerator() *timing.IDGenerator { return s.ids }
+func (s *standaloneSimulation) RegisterComponent(_ naming.Named)    {}
+func (s *standaloneSimulation) RegisterConnection(_ naming.Named)   {}
+func (s *standaloneSimulation) RegisterResource(_ naming.Named)     {}
+func (s *standaloneSimulation) RegisterPort(_ naming.Named)         {}

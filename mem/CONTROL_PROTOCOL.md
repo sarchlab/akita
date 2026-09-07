@@ -333,7 +333,7 @@ memcontrolprotocol.ErrMustBePausedOrDrained
 
    // during assembly, after Build:
    comp.AssignPort("Control", modeling.MakePortBuilder().
-       WithRegistrar(reg).
+       WithSimulation(reg).
        WithComponent(comp).
        WithSpec(modeling.PortSpec{BufSize: ctrlBufSize}).
        Build("Control"))

@@ -12,20 +12,21 @@ import (
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 
 		spec := DefaultSpec()
 		spec.BottomUnit = messaging.RemotePort("BottomUnit")
 
-		reg := modeling.NewStandaloneRegistrar(engine)
+		reg := sim
 
 		comp := MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithSpec(spec).
 			Build("ROB")
 
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(reg).
+				WithSimulation(reg).
 				WithComponent(comp).
 				WithSpec(modeling.PortSpec{BufSize: 16}).
 				Build(name)

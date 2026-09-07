@@ -19,7 +19,7 @@ type PortOwner interface {
 // A Component is an element that owns ports and can be notified of port
 // activity.
 type Component interface {
-	timing.IDSource
+	timing.SimulationElement
 	naming.Named
 	hooking.Hookable
 	PortOwner

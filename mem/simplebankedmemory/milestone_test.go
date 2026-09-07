@@ -85,6 +85,7 @@ func (r *milestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 var _ = Describe("SimpleBankedMemory admission milestones", func() {
 	var (
 		engine  timing.Engine
+		sim     modeling.Registrar
 		memComp *Comp
 		topPort messaging.Port
 		rec     *milestoneRecorder
@@ -92,15 +93,16 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		storage := mem.NewStorage(4 * mem.GB)
 
 		spec := DefaultSpec()
 		spec.NumBanks = 2
 		spec.StageLatency = 2
 
-		reg := modeling.NewStandaloneRegistrar(engine)
+		reg := sim
 		memComp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithSpec(spec).
 			WithResources(Resources{Storage: storage}).
 			Build("Mem")
@@ -121,7 +123,7 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{Address: addr, AccessByteSize: 4}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.TrafficBytes = 12
@@ -160,6 +162,7 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 	var (
 		engine  timing.Engine
+		sim     modeling.Registrar
 		storage *mem.Storage
 		memComp *Comp
 		topPort messaging.Port
@@ -170,15 +173,16 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		storage = mem.NewStorage(4 * mem.GB)
 
 		spec := DefaultSpec()
 		spec.NumBanks = 2
 		spec.StageLatency = 3
 
-		reg := modeling.NewStandaloneRegistrar(engine)
+		reg := sim
 		memComp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithSpec(spec).
 			WithResources(Resources{Storage: storage}).
 			Build("Mem")
@@ -213,7 +217,7 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 		storage.Write(0x40, data)
 
 		read := memprotocol.ReadReq{Address: 0x40, AccessByteSize: 4}
-		read.ID = engine.NewID()
+		read.ID = sim.NewID()
 		read.Src = agent.port.AsRemote()
 		read.Dst = topPort.AsRemote()
 		read.TrafficBytes = 12
@@ -253,7 +257,7 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 			Address: 0x80,
 			Data:    []byte{9, 8, 7, 6},
 		}
-		write.ID = engine.NewID()
+		write.ID = sim.NewID()
 		write.Src = agent.port.AsRemote()
 		write.Dst = topPort.AsRemote()
 		write.TrafficBytes = len(write.Data) + 12

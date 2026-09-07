@@ -63,7 +63,7 @@ func (m *workerMW) Tick() bool {
 		return false
 	}
 
-	id := m.comp.NewID()
+	id := m.comp.Simulation().NewID()
 	m.comp.State.Processed++
 	m.comp.State.Checksum = m.comp.State.Checksum*1000003 + id
 	m.comp.State.Pending--
@@ -86,7 +86,7 @@ func main() {
 
 	engine := sim.GetEngine().(*timing.SerialEngine)
 	worker := modeling.NewBuilder[workerSpec, workerState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(1 * timing.GHz).
 		WithSpec(workerSpec{Label: "demo"}).
 		Build("Worker")

@@ -17,7 +17,6 @@ import (
 )
 
 type SimpleTimeTeller struct {
-	timing.IDGenerator
 	currentTime timing.VTimeInPicoSec
 }
 

@@ -17,7 +17,7 @@ type Builder struct {
 
 func MakeBuilder() Builder { return Builder{spec: defaultSpec} }
 
-func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+func (b Builder) WithSimulation(reg modeling.Registrar) Builder {
     b.registrar = reg
     return b
 }
@@ -29,7 +29,7 @@ func (b Builder) WithSpec(spec Spec) Builder {
 
 func (b Builder) Build(name string) *Comp {
     comp := modeling.NewBuilder[Spec, State, modeling.None]().
-        WithEngine(b.registrar.GetEngine()).
+        WithSimulation(b.registrar).
         WithFreq(b.spec.Freq).
         WithSpec(b.spec).
         Build(name)
@@ -63,10 +63,10 @@ The port instance is supplied after `Build` — a port builder creates it and
 registers it with the simulation, and `AssignPort` attaches it to the component:
 
 ```go
-agent := tickingping.MakeBuilder().WithRegistrar(sim).Build("AgentA")
+agent := tickingping.MakeBuilder().WithSimulation(sim).Build("AgentA")
 
 out := modeling.MakePortBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithComponent(agent).
     WithSpec(modeling.PortSpec{BufSize: 4}).
     Build("Out")
@@ -129,7 +129,7 @@ values, so the literal has no `&`:
 ```go
 pingMsg := pingReq{
     MsgMeta: messaging.MsgMeta{
-        ID:  m.comp.NewID(),
+        ID:  m.comp.Simulation().NewID(),
         Src: outPort(m.comp).AsRemote(),
         Dst: state.PingDst,
     },

@@ -40,7 +40,7 @@ remembered remote request, and relays a `vm.TranslationRsp` back up on `Top`.
 ## Builder Pattern
 
 Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec
-to `WithSpec`. Wiring comes from `WithRegistrar` (which provides the engine and
+to `WithSpec`. Wiring comes from `WithSimulation` (which provides the engine and
 registers the component) and `WithResources` (the shared page table). When
 `WithResources` is omitted, the GMMU builds its own page table sized by
 `Spec.Log2PageSize`. `Build` declares the `Top`, `Bottom`, and `Control` ports
@@ -54,14 +54,14 @@ spec.DeviceID = 1
 spec.LowModule = mmuPort
 
 g := gmmu.MakeBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithSpec(spec).
     WithResources(gmmu.Resources{PageTable: pageTable}).
     Build("GMMU")
 
 for _, name := range []string{"Top", "Bottom", "Control"} {
     p := modeling.MakePortBuilder().
-        WithRegistrar(sim).
+        WithSimulation(sim).
         WithComponent(g).
         WithSpec(modeling.PortSpec{BufSize: 16}).
         Build(name)
@@ -71,7 +71,7 @@ for _, name := range []string{"Top", "Bottom", "Control"} {
 
 | Method | Description |
 |---|---|
-| `WithRegistrar(r)` | Source of the engine and component registration (required) |
+| `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
 | `WithResources(Resources{PageTable: pt})` | Shared page table (built internally if omitted) |
 

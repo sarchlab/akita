@@ -39,7 +39,7 @@ type MyState struct {
 }
 
 comp := modeling.NewBuilder[MySpec, MyState, modeling.None]().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithFreq(1 * timing.GHz).
     WithSpec(MySpec{Size: 64}).
     Build("MyComponent")
@@ -58,7 +58,7 @@ A component that wakes on events rather than ticking at a fixed frequency.
 
 ```go
 comp := modeling.NewEventDrivenBuilder[MySpec, MyState, modeling.None]().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithSpec(MySpec{Size: 64}).
     WithProcessor(&myProcessor{}).
     Build("MyEDComponent")
@@ -98,8 +98,26 @@ port := gpu.GetPortByName("Top")
 
 | Builder | Creates | Key Settings |
 |---|---|---|
-| `NewBuilder[S, T, R]()` | `*Component[S, T, R]` | `WithEngine`, `WithFreq`, `WithSpec`, `WithResources` |
-| `NewEventDrivenBuilder[S, T, R]()` | `*EventDrivenComponent[S, T, R]` | `WithEngine`, `WithSpec`, `WithResources`, `WithProcessor` |
+| `NewBuilder[S, T, R]()` | `*Component[S, T, R]` | `WithSimulation`, `WithFreq`, `WithSpec`, `WithResources` |
+| `NewEventDrivenBuilder[S, T, R]()` | `*EventDrivenComponent[S, T, R]` | `WithSimulation`, `WithSpec`, `WithResources`, `WithProcessor` |
 
 Both builders register the component as an event handler when the engine
 implements `timing.HandlerRegistrar`.
+
+## Simulation context
+
+Pass the same simulation to every builder in one setup. Components expose
+`Simulation()`; allocate a message or event ID with `comp.Simulation().NewID()`.
+The simulation owns the counter, so two components share one ID sequence even
+though they have different names. Independent simulations have separate sequences.
+
+For isolated tests or small examples, create a lightweight context once:
+
+```go
+engine := timing.NewSerialEngine()
+sim := modeling.NewStandaloneSimulation(engine)
+```
+
+Pass `sim` to each builder through `WithSimulation(sim)`. This context performs
+no entity registration or recording. Use `simulation.MakeBuilder().Build()`
+when automatic checkpoint inventory, recording, or monitoring is needed.

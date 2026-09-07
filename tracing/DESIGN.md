@@ -155,10 +155,9 @@ Notes:
   `timing.TimeTeller`, and each emit function stamps the event's `Time` with
   `domain.CurrentTime()` *after* the `NumHooks()==0` guard. This is a change
   from the original "caller supplies `Time`" plan: passing `domain.CurrentTime()`
-  as a call-site argument is evaluated eagerly, which (a) defeats the
-  cheap-when-disabled guarantee and (b) panics the many unit tests that build
-  components with `WithEngine(nil)`. Sourcing the time inside the guard keeps
-  tracing free when no tracer is attached and leaves those tests untouched.
+  as a call-site argument is evaluated eagerly, which defeats the
+  cheap-when-disabled guarantee. Sourcing the time inside the guard avoids
+  reading the engine clock when no tracer is attached.
   Callers therefore pass **no** time; the `Time` fields exist only for the
   emit→tracer handoff. `TraceReq*` helpers take `(domain, msg, ...)` with no
   `now`.
@@ -340,7 +339,7 @@ an incoming message **without mutating the message**. The scenario:
   ID, with `ParentID = msg.Meta().ID` to link the two into a tree.
 
 `MsgIDAtReceiver` keeps a process-global, mutex-guarded map
-`(domain.GetIDGenerator(), domain.Name(), msg.ID) → generated taskID`:
+`(domain.Simulation().GetIDGenerator(), domain.Name(), msg.ID) → generated taskID`:
 1. `TraceReqReceive` → first lookup generates and stores the id; `StartTask`
    uses it.
 2. `AddTaskTag` / `AddMilestone` → same key returns the **same** id, so every

@@ -54,7 +54,7 @@ s := simulation.MakeBuilder().Build()
 
 `simulation.MakeBuilder().Build()` returns a `*simulation.Simulation`. It
 owns an engine, a registrar, and optional tracing and monitoring
-infrastructure. For this example we only need the engine:
+infrastructure. We use the simulation to allocate IDs and its engine to schedule events:
 
 ```go
 engine := s.GetEngine()
@@ -77,11 +77,11 @@ The type assertion is a safety check — most engines implement
 ### 4. Creating and scheduling the event
 
 ```go
-evt := timing.MakeEventBase(engine, 1, "printer")
+evt := timing.MakeEventBase(s.NewID(), 1, "printer")
 engine.Schedule(evt)
 ```
 
-`MakeEventBase(engine, time, handlerID)` creates a minimal event whose `Time()`
+`MakeEventBase(id, time, handlerID)` creates a minimal event whose `Time()`
 returns `1` and whose `HandlerID()` returns `"printer"`. The engine will
 fire it at time = 1 picosecond and dispatch it to the handler registered
 under `"printer"`.

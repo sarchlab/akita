@@ -18,6 +18,7 @@ import (
 var _ = Describe("DRAM control behavior", func() {
 	var (
 		engine   timing.Engine
+		sim      modeling.Registrar
 		storage  *mem.Storage
 		comp     *Comp
 		topPort  messaging.Port
@@ -25,15 +26,15 @@ var _ = Describe("DRAM control behavior", func() {
 	)
 
 	build := func() {
-		reg := modeling.NewStandaloneRegistrar(engine)
+		reg := sim
 		comp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithResources(Resources{Storage: storage}).
 			Build("DRAM")
 
 		for _, name := range []string{"Top", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(reg).
+				WithSimulation(reg).
 				WithComponent(comp).
 				WithSpec(modeling.PortSpec{BufSize: 16}).
 				Build(name)
@@ -49,7 +50,7 @@ var _ = Describe("DRAM control behavior", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = addr
@@ -61,7 +62,7 @@ var _ = Describe("DRAM control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -83,6 +84,7 @@ var _ = Describe("DRAM control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		storage = mem.NewStorage(1 * mem.MB)
 		build()
 	})

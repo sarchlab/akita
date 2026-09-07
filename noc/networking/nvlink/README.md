@@ -55,7 +55,7 @@ switch latency 100000, and Ethernet bandwidth 1.25 GiB/s.
 
 ```go
 connector := nvlink.NewConnector().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithFrequency(1 * timing.GHz).
     WithPCIeVersion(4, 16).
     WithPCIeSwitchLatency(140).
@@ -70,7 +70,7 @@ connector := nvlink.NewConnector().
 
 | Method | Description |
 |---|---|
-| `WithEngine(e)` | Event scheduler (required) |
+| `WithSimulation(sim)` | Simulation context (required) |
 | `WithFrequency(f)` | Frequency of the network components |
 | `WithPCIeVersion(v, w)` / `WithPCIeBandwidth(b)` | PCIe link bandwidth |
 | `WithPCIeSwitchLatency(n)` | Cycles per PCIe switch hop |
@@ -85,7 +85,7 @@ connector := nvlink.NewConnector().
 
 ```go
 connector := nvlink.NewConnector().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithFrequency(1 * timing.GHz).
     WithPCIeVersion(4, 16).
     WithNVLinkVersion(2)

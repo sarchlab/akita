@@ -7,7 +7,7 @@ import (
 // splitTransaction breaks a transaction into sub-transactions based on
 // the access unit size (from Spec.Log2AccessUnitSize).
 func splitTransaction(
-	ids timing.IDSource,
+	ids timing.Simulation,
 	spec *Spec,
 	trans *transactionState,
 ) {
@@ -65,7 +65,7 @@ func pushSubTrans(state *State, transIdx int) {
 // made. Production drives this through the component's configured controller
 // (see controller.fillCommandQueue); this package-level shim builds the default
 // controller so tests can exercise the path directly.
-func tickSubTransQueue(ids timing.IDSource, spec *Spec, state *State) bool {
+func tickSubTransQueue(ids timing.Simulation, spec *Spec, state *State) bool {
 	return newDefaultController(spec).fillCommandQueue(ids, spec, state)
 }
 
@@ -73,7 +73,7 @@ func tickSubTransQueue(ids timing.IDSource, spec *Spec, state *State) bool {
 // close-page policy (auto-precharge). Thin wrapper over the row policy, kept
 // for direct testing.
 func createClosePageCommand(
-	ids timing.IDSource,
+	ids timing.Simulation,
 	spec *Spec,
 	state *State,
 	ref subTransRef,
@@ -88,7 +88,7 @@ func createClosePageCommand(
 // open-page policy (plain Read/Write, leaving the row buffer open). Thin
 // wrapper over the row policy, kept for direct testing.
 func createOpenPageCommand(
-	ids timing.IDSource,
+	ids timing.Simulation,
 	spec *Spec,
 	state *State,
 	ref subTransRef,

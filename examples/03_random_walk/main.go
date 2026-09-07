@@ -53,7 +53,7 @@ func main() {
 
 	spec := walkSpec{Freq: 1 * timing.GHz, WallDistance: 10}
 	comp := modeling.NewBuilder[walkSpec, walkState, modeling.None]().
-		WithEngine(s.GetEngine()).
+		WithSimulation(s).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build("Walker")

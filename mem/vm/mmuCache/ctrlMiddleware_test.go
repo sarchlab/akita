@@ -14,6 +14,7 @@ import (
 var _ = Describe("MMUCacheCtrlMiddleware", func() {
 	var (
 		engine      timing.Engine
+		sim         modeling.Registrar
 		comp        *Comp
 		ctrl        *ctrlMiddleware
 		topPort     messaging.Port
@@ -23,6 +24,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 
 		spec := DefaultSpec()
 		spec.NumBlocks = 1
@@ -32,9 +34,9 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
-		reg := modeling.NewStandaloneRegistrar(engine)
+		reg := sim
 		comp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithSpec(spec).
 			Build("MMUCache")
 		comp.State.CurrentState = mmuCacheStatePause
@@ -59,12 +61,12 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 	It("should restart and drain ports", func() {
 		req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Requester")
 		req.TrafficClass = "memcontrolprotocol.Req"
 
 		topMsg := vmprotocol.TranslationReq{}
-		topMsg.ID = engine.NewID()
+		topMsg.ID = sim.NewID()
 		topMsg.Src = messaging.RemotePort("Requester")
 		topMsg.Dst = topPort.AsRemote()
 		topMsg.PID = 1
@@ -76,10 +78,10 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		bottomMsg := vmprotocol.TranslationRsp{
 			Page: vm.Page{},
 		}
-		bottomMsg.ID = engine.NewID()
+		bottomMsg.ID = sim.NewID()
 		bottomMsg.Src = messaging.RemotePort("LowModule")
 		bottomMsg.Dst = bottomPort.AsRemote()
-		bottomMsg.RspTo = engine.NewID()
+		bottomMsg.RspTo = sim.NewID()
 		bottomMsg.TrafficClass = "vmprotocol.TranslationRsp"
 		bottomPort.Deliver(bottomMsg)
 
@@ -103,7 +105,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 	It("should reject Flush as unsupported", func() {
 		req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = controlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -135,7 +137,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		Expect(found).To(BeTrue())
 
 		req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = controlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -158,7 +160,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		next.CurrentState = mmuCacheStateEnable
 
 		req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = controlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -185,9 +187,9 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
-		reg2 := modeling.NewStandaloneRegistrar(engine)
+		reg2 := sim
 		comp2 := MakeBuilder().
-			WithRegistrar(reg2).
+			WithSimulation(reg2).
 			WithSpec(spec).
 			Build("MMUCache2")
 		assignDefaultPorts(reg2, comp2)
@@ -208,7 +210,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		setVisit(&next.Table[0], 1)
 
 		req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdInvalidate, PID: 1}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Requester")
 		req.Dst = control2.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -239,7 +241,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		msg := memcontrolprotocol.Req{
 			Command: memcontrolprotocol.CmdPause,
 		}
-		msg.ID = engine.NewID()
+		msg.ID = sim.NewID()
 		msg.Src = messaging.RemotePort("Requester")
 		msg.Dst = controlPort.AsRemote()
 		msg.TrafficBytes = 4

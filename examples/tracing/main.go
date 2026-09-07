@@ -71,10 +71,11 @@ func (m *workerMW) Tick() bool {
 
 func main() {
 	engine := timing.NewSerialEngine()
-	registrar := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
+	registrar := sim
 
 	worker := modeling.NewBuilder[workerSpec, workerState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(1 * timing.GHz).
 		WithSpec(workerSpec{NumJobs: 3, CyclesPerJob: 4}).
 		Build("Worker")

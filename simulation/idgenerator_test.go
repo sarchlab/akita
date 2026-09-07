@@ -23,7 +23,7 @@ func buildIDTestSimulation(t *testing.T, parallel bool) *Simulation {
 }
 
 type allocatingHandler struct {
-	ids       timing.IDSource
+	ids       timing.Simulation
 	allocated uint64
 }
 
@@ -40,13 +40,13 @@ func TestSimulationsAllocateIndependentlyWhileRunning(t *testing.T) {
 			handlers := make([]*allocatingHandler, 2)
 			for i, s := range sims {
 				comp := modeling.NewBuilder[modeling.None, modeling.None, modeling.None]().
-					WithEngine(s.GetEngine()).WithFreq(timing.GHz).Build("Comp")
-				require.Same(t, s.GetIDGenerator(), comp.GetIDGenerator())
-				require.Equal(t, uint64(1), comp.NewID())
-				h := &allocatingHandler{ids: comp}
+					WithSimulation(s).WithFreq(timing.GHz).Build("Comp")
+				require.Same(t, s, comp.Simulation())
+				require.Equal(t, uint64(1), comp.Simulation().NewID())
+				h := &allocatingHandler{ids: comp.Simulation()}
 				handlers[i] = h
 				s.GetEngine().(timing.HandlerRegistrar).RegisterHandler("handler", h)
-				e := timing.MakeEventBase(s, 1, "handler")
+				e := timing.MakeEventBase(s.NewID(), 1, "handler")
 				require.Equal(t, uint64(2), e.ID)
 				s.GetEngine().Schedule(e)
 			}
@@ -84,4 +84,59 @@ func TestRestoringSimulationDoesNotChangeOtherIDCounters(t *testing.T) {
 	require.Equal(t, uint64(11), restored.NewID())
 	require.Equal(t, uint64(12), a.NewID())
 	require.Equal(t, uint64(102), b.NewID())
+}
+
+func TestConcurrentSimulationIDAllocation(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		parallel bool
+	}{
+		{"serial", false},
+		{"parallel", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, b := buildIDTestSimulation(t, tc.parallel), buildIDTestSimulation(t, tc.parallel)
+			require.NotSame(t, a.GetIDGenerator(), b.GetIDGenerator())
+			const workers, perWorker = 8, 1024
+			var wg sync.WaitGroup
+			results := make([][]uint64, workers)
+			for worker := range workers {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					results[worker] = make([]uint64, perWorker)
+					for i := range perWorker {
+						results[worker][i] = a.NewID()
+					}
+				}()
+			}
+			wg.Wait()
+			seen := make(map[uint64]bool)
+			for _, batch := range results {
+				for _, id := range batch {
+					require.NotZero(t, id)
+					require.False(t, seen[id], "duplicate ID %d", id)
+					seen[id] = true
+				}
+			}
+			require.Len(t, seen, workers*perWorker)
+			require.Equal(t, uint64(workers*perWorker+1), a.NewID())
+			require.Equal(t, uint64(1), b.NewID())
+			require.Equal(t, uint64(2), b.NewID())
+			t.Logf("%s: %d unique IDs from %d concurrent callers; second simulation starts at 1", tc.name, len(seen), workers)
+		})
+	}
+}
+
+func TestComponentsScheduleWithSharedSimulationIDs(t *testing.T) {
+	s := buildIDTestSimulation(t, false)
+	ticked := modeling.NewBuilder[modeling.None, modeling.None, modeling.None]().
+		WithSimulation(s).WithFreq(timing.GHz).Build("Ticked")
+	eventDriven := modeling.NewEventDrivenBuilder[modeling.None, modeling.None, modeling.None]().
+		WithSimulation(s).Build("EventDriven")
+	require.Same(t, s, ticked.Simulation())
+	require.Same(t, s, eventDriven.Simulation())
+	ticked.TickLater()
+	eventDriven.ScheduleWakeAt(1000)
+	require.Equal(t, uint64(3), s.NewID(), "both scheduled events must use the simulation's counter")
 }

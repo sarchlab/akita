@@ -20,16 +20,17 @@ import (
 // leaving no started-never-ended tracing leak.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	spec := DefaultSpec()
 	spec.BufferSize = 2048
 	spec.InsideByteGranularity = 64
 	spec.OutsideByteGranularity = 64
 
-	reg := modeling.NewStandaloneRegistrar(engine)
+	reg := sim
 
 	dataMover := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(reg).
 		WithSpec(spec).
 		WithResources(Resources{
 			InsideMapper: &mem.SinglePortMapper{
@@ -43,7 +44,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	assign := func(name string, bufSize int) messaging.Port {
 		p := modeling.MakePortBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithComponent(dataMover).
 			WithSpec(modeling.PortSpec{BufSize: bufSize}).
 			Build(name)
@@ -64,7 +65,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	makeMove := func() datamoverprotocol.DataMoveRequest {
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.SrcAddress = 0
@@ -78,7 +79,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Cmd")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"

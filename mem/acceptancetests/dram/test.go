@@ -38,7 +38,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 	engine := s.GetEngine()
 
 	conn := directconnection.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		Build("Conn")
 
 	agentSpec := memaccessagent.DefaultSpec()
@@ -47,7 +47,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 	agentSpec.ReadLeft = *numAccessFlag
 
 	agent := memaccessagent.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(agentSpec).
 		Build("MemAccessAgent")
 	assignPorts(s, agent, "Mem")
@@ -59,7 +59,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 	dramSpec.Freq = 1 * timing.GHz
 
 	memCtrl := dram.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(dramSpec).
 		Build("Mem")
 	assignPorts(s, memCtrl, "Top", "Control")
@@ -81,7 +81,7 @@ func assignPorts(
 ) {
 	for _, name := range names {
 		p := modeling.MakePortBuilder().
-			WithRegistrar(s).
+			WithSimulation(s).
 			WithComponent(comp).
 			WithSpec(modeling.PortSpec{BufSize: 16}).
 			Build(name)

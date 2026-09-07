@@ -82,10 +82,11 @@ func (h *stepLogger) Func(ctx hooking.HookCtx) {
 
 func main() {
 	engine := timing.NewSerialEngine()
-	registrar := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
+	registrar := sim
 
 	walker := modeling.NewBuilder[walkSpec, walkState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(1 * timing.GHz).
 		WithSpec(walkSpec{WallDistance: 3}).
 		Build("Walker")

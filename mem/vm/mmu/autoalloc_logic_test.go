@@ -11,13 +11,14 @@ import (
 // TestAutoPageAllocationLogic tests the core auto page allocation functionality
 func TestAutoPageAllocationLogic(t *testing.T) {
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	// Create MMU with auto page allocation enabled
 	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
-	reg := modeling.NewStandaloneRegistrar(engine)
+	reg := sim
 	mmu := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(reg).
 		WithSpec(spec).
 		Build("TestMMU")
 	assignPort(reg, mmu, "Top", 4096)
@@ -74,13 +75,14 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 // TestPhysicalPageAllocator tests the physical page allocation algorithm
 func TestPhysicalPageAllocator(t *testing.T) {
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
 	spec.Log2PageSize = 12 // 4KB pages
-	reg := modeling.NewStandaloneRegistrar(engine)
+	reg := sim
 	mmu := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(reg).
 		WithSpec(spec).
 		Build("TestMMU")
 	assignPort(reg, mmu, "Top", 4096)
@@ -117,11 +119,12 @@ func TestPhysicalPageAllocator(t *testing.T) {
 // TestAutoPageAllocationDisabled tests behavior when auto page allocation is disabled
 func TestAutoPageAllocationDisabled(t *testing.T) {
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	// Create MMU with auto page allocation disabled (default)
-	reg := modeling.NewStandaloneRegistrar(engine)
+	reg := sim
 	mmu := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(reg).
 		WithSpec(DefaultSpec()).
 		Build("TestMMU")
 	assignPort(reg, mmu, "Top", 4096)
@@ -135,13 +138,14 @@ func TestAutoPageAllocationDisabled(t *testing.T) {
 // TestAutoPageAllocationEnabled tests that auto page allocation is properly enabled
 func TestAutoPageAllocationEnabled(t *testing.T) {
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	// Create MMU with auto page allocation enabled
 	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
-	reg := modeling.NewStandaloneRegistrar(engine)
+	reg := sim
 	mmu := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(reg).
 		WithSpec(spec).
 		Build("TestMMU")
 	assignPort(reg, mmu, "Top", 4096)

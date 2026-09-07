@@ -26,7 +26,7 @@ func (p *topParser) Tick() bool {
 	}
 
 	trans := transactionState{
-		ID: p.cache.comp.NewID(),
+		ID: p.cache.comp.Simulation().NewID(),
 	}
 
 	switch msg := msg.(type) {

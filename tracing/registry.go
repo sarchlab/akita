@@ -24,7 +24,7 @@ var (
 )
 
 func lookupOrCreateReceiverTaskID(msg messaging.Msg, domain NamedHookable) uint64 {
-	key := receiverTaskKey{ids: domain.GetIDGenerator(), domain: domain.Name(), msgID: msg.Meta().ID}
+	key := receiverTaskKey{ids: domain.Simulation().GetIDGenerator(), domain: domain.Name(), msgID: msg.Meta().ID}
 
 	receiverTaskIDsMu.Lock()
 	defer receiverTaskIDsMu.Unlock()
@@ -33,7 +33,7 @@ func lookupOrCreateReceiverTaskID(msg messaging.Msg, domain NamedHookable) uint6
 		return id
 	}
 
-	id := domain.NewID()
+	id := domain.Simulation().NewID()
 	receiverTaskIDs[key] = id
 
 	return id
@@ -47,7 +47,7 @@ func lookupOrCreateReceiverTaskID(msg messaging.Msg, domain NamedHookable) uint6
 func receiverTaskIDByMsgID(
 	msgID uint64, domain NamedHookable,
 ) (uint64, bool) {
-	key := receiverTaskKey{ids: domain.GetIDGenerator(), domain: domain.Name(), msgID: msgID}
+	key := receiverTaskKey{ids: domain.Simulation().GetIDGenerator(), domain: domain.Name(), msgID: msgID}
 
 	receiverTaskIDsMu.Lock()
 	defer receiverTaskIDsMu.Unlock()
@@ -62,7 +62,7 @@ func forgetReceiverTaskID(msg messaging.Msg, domain NamedHookable) {
 }
 
 func forgetReceiverTaskIDByMsgID(msgID uint64, domain NamedHookable) {
-	key := receiverTaskKey{ids: domain.GetIDGenerator(), domain: domain.Name(), msgID: msgID}
+	key := receiverTaskKey{ids: domain.Simulation().GetIDGenerator(), domain: domain.Name(), msgID: msgID}
 
 	receiverTaskIDsMu.Lock()
 	delete(receiverTaskIDs, key)
@@ -89,7 +89,7 @@ var (
 func lookupOrCreateIncomingBufferTaskID(
 	msg messaging.Msg, domain NamedHookable,
 ) uint64 {
-	key := incomingBufferTaskKey{ids: domain.GetIDGenerator(), domain: domain.Name(), msgID: msg.Meta().ID}
+	key := incomingBufferTaskKey{ids: domain.Simulation().GetIDGenerator(), domain: domain.Name(), msgID: msg.Meta().ID}
 
 	incomingBufferTaskIDsMu.Lock()
 	defer incomingBufferTaskIDsMu.Unlock()
@@ -98,14 +98,14 @@ func lookupOrCreateIncomingBufferTaskID(
 		return id
 	}
 
-	id := domain.NewID()
+	id := domain.Simulation().NewID()
 	incomingBufferTaskIDs[key] = id
 
 	return id
 }
 
 func forgetIncomingBufferTaskIDByMsgID(msgID uint64, domain NamedHookable) {
-	key := incomingBufferTaskKey{ids: domain.GetIDGenerator(), domain: domain.Name(), msgID: msgID}
+	key := incomingBufferTaskKey{ids: domain.Simulation().GetIDGenerator(), domain: domain.Name(), msgID: msgID}
 
 	incomingBufferTaskIDsMu.Lock()
 	delete(incomingBufferTaskIDs, key)
@@ -133,7 +133,7 @@ var (
 func lookupOrCreateOutgoingBufferTaskID(
 	msg messaging.Msg, domain NamedHookable,
 ) uint64 {
-	key := outgoingBufferTaskKey{ids: domain.GetIDGenerator(), domain: domain.Name(), msgID: msg.Meta().ID}
+	key := outgoingBufferTaskKey{ids: domain.Simulation().GetIDGenerator(), domain: domain.Name(), msgID: msg.Meta().ID}
 
 	outgoingBufferTaskIDsMu.Lock()
 	defer outgoingBufferTaskIDsMu.Unlock()
@@ -142,14 +142,14 @@ func lookupOrCreateOutgoingBufferTaskID(
 		return id
 	}
 
-	id := domain.NewID()
+	id := domain.Simulation().NewID()
 	outgoingBufferTaskIDs[key] = id
 
 	return id
 }
 
 func forgetOutgoingBufferTaskIDByMsgID(msgID uint64, domain NamedHookable) {
-	key := outgoingBufferTaskKey{ids: domain.GetIDGenerator(), domain: domain.Name(), msgID: msgID}
+	key := outgoingBufferTaskKey{ids: domain.Simulation().GetIDGenerator(), domain: domain.Name(), msgID: msgID}
 
 	outgoingBufferTaskIDsMu.Lock()
 	delete(outgoingBufferTaskIDs, key)

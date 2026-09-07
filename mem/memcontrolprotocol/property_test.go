@@ -185,7 +185,7 @@ func (f *fuzzer) issueWrite() {
 		byte(f.rng.Intn(256)), byte(f.rng.Intn(256)),
 	}
 	req := memprotocol.WriteReq{Address: addr, Data: data}
-	req.ID = f.h.cache.NewID()
+	req.ID = f.h.cache.Simulation().NewID()
 	req.Src = f.h.agent
 	req.Dst = f.h.top.AsRemote()
 	req.TrafficClass = "memprotocol.WriteReq"
@@ -202,7 +202,7 @@ func (f *fuzzer) issueRead() {
 		return
 	}
 	req := memprotocol.ReadReq{Address: addr, AccessByteSize: 4}
-	req.ID = f.h.cache.NewID()
+	req.ID = f.h.cache.Simulation().NewID()
 	req.Src = f.h.agent
 	req.Dst = f.h.top.AsRemote()
 	req.TrafficClass = "memprotocol.ReadReq"
@@ -214,7 +214,7 @@ func (f *fuzzer) issueRead() {
 
 func (f *fuzzer) issueControl(cmd memcontrolprotocol.Command) {
 	req := memcontrolprotocol.Req{Command: cmd}
-	req.ID = f.h.cache.NewID()
+	req.ID = f.h.cache.Simulation().NewID()
 	req.Src = f.h.agent
 	req.Dst = f.h.ctrl.AsRemote()
 	req.TrafficClass = "memcontrolprotocol.Req"

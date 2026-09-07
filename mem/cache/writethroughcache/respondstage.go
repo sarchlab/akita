@@ -33,7 +33,7 @@ func (s *respondStage) Tick() bool {
 
 func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 	dr := memprotocol.DataReadyRsp{}
-	dr.ID = s.cache.comp.NewID()
+	dr.ID = s.cache.comp.Simulation().NewID()
 	dr.Src = s.cache.topPort().AsRemote()
 	dr.Dst = trans.ReadMeta.Src
 	dr.RspTo = trans.ReadMeta.ID
@@ -63,7 +63,7 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 
 func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
 	done := memprotocol.WriteDoneRsp{}
-	done.ID = s.cache.comp.NewID()
+	done.ID = s.cache.comp.Simulation().NewID()
 	done.Src = s.cache.topPort().AsRemote()
 	done.Dst = trans.WriteMeta.Src
 	done.RspTo = trans.WriteMeta.ID

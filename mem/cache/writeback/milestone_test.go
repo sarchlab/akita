@@ -74,6 +74,7 @@ func (r *wbMilestoneRecorder) milestonesOn(taskID uint64) []tracing.Milestone {
 var _ = Describe("Write-Back Cache milestones", func() {
 	var (
 		engine      timing.Engine
+		sim         modeling.Registrar
 		cacheComp   *Comp
 		dram        *idealmemcontroller.Comp
 		dramStorage *mem.Storage
@@ -85,6 +86,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 
 		agentPort = messaging.NewPort(nil, 8, 8, "Agent.Top")
 
@@ -94,7 +96,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 		dramSpec.Latency = 200
 		dramSpec.CacheLineSize = 64
 		dram = idealmemcontroller.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 			WithSpec(dramSpec).
 			Build("DRAM")
@@ -112,7 +114,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 		cacheSpec.NumReqPerCycle = 4
 
 		cacheComp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(cacheSpec).
 			WithResources(Resources{
 				AddressToPortMapper: addressToPortMapper,
@@ -125,7 +127,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 		topPort = cacheComp.GetPortByName("Top")
 
 		conn = directconnection.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			Build("Connection")
 		conn.PlugIn(topPort)
 		conn.PlugIn(cacheComp.GetPortByName("Bottom"))
@@ -157,7 +159,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 			})
 
 			read := memprotocol.ReadReq{}
-			read.ID = engine.NewID()
+			read.ID = sim.NewID()
 			read.Src = agentPort.AsRemote()
 			read.Dst = topPort.AsRemote()
 			read.Address = 0x10004
@@ -215,7 +217,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 			})
 
 			read := memprotocol.ReadReq{}
-			read.ID = engine.NewID()
+			read.ID = sim.NewID()
 			read.Src = agentPort.AsRemote()
 			read.Dst = topPort.AsRemote()
 			read.Address = 0x10004

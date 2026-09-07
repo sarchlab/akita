@@ -10,7 +10,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -18,6 +17,7 @@ var _ = Describe("Switch", func() {
 	var (
 		mockCtrl     *gomock.Controller
 		engine       *MockEngine
+		sim          modeling.Registrar
 		port1, port2 *MockPort
 		dstPort      *MockPort
 		routingTable *MockTable
@@ -29,9 +29,7 @@ var _ = Describe("Switch", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
-		engineIDs := &timing.IDGenerator{}
-		engine.EXPECT().NewID().DoAndReturn(engineIDs.NewID).AnyTimes()
-		engine.EXPECT().GetIDGenerator().Return(engineIDs).AnyTimes()
+		sim = modeling.NewStandaloneSimulation(engine)
 		port1 = NewMockPort(mockCtrl)
 		port1.EXPECT().AsRemote().
 			Return(messaging.RemotePort("LocalPort1")).
@@ -70,7 +68,7 @@ var _ = Describe("Switch", func() {
 		spec.Freq = 1
 
 		sw = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{RoutingTable: routingTable}).
 			Build("Switch")
@@ -110,12 +108,12 @@ var _ = Describe("Switch", func() {
 
 	It("should start processing", func() {
 		msg := messaging.MsgMeta{
-			ID:  engine.NewID(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = engine.NewID()
+		flit.ID = sim.NewID()
 		flit.Dst = port1.AsRemote()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
@@ -135,12 +133,12 @@ var _ = Describe("Switch", func() {
 
 	It("should not start processing if pipeline is busy", func() {
 		msg := messaging.MsgMeta{
-			ID:  engine.NewID(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = engine.NewID()
+		flit.ID = sim.NewID()
 		flit.Dst = port1.AsRemote()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
@@ -176,12 +174,12 @@ var _ = Describe("Switch", func() {
 
 	It("should route", func() {
 		msg := messaging.MsgMeta{
-			ID:  engine.NewID(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = engine.NewID()
+		flit.ID = sim.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
@@ -206,12 +204,12 @@ var _ = Describe("Switch", func() {
 
 	It("should not route if forward buffer is full", func() {
 		msg := messaging.MsgMeta{
-			ID:  engine.NewID(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = engine.NewID()
+		flit.ID = sim.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
@@ -233,12 +231,12 @@ var _ = Describe("Switch", func() {
 
 	It("should forward", func() {
 		msg := messaging.MsgMeta{
-			ID:  engine.NewID(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = engine.NewID()
+		flit.ID = sim.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
@@ -258,12 +256,12 @@ var _ = Describe("Switch", func() {
 
 	It("should not forward if the output buffer is busy", func() {
 		msg := messaging.MsgMeta{
-			ID:  engine.NewID(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = engine.NewID()
+		flit.ID = sim.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 		// Fill sendOut buffer to capacity, forward buffer targets port2
@@ -284,12 +282,12 @@ var _ = Describe("Switch", func() {
 
 	It("should send flits out", func() {
 		msg := messaging.MsgMeta{
-			ID:  engine.NewID(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = engine.NewID()
+		flit.ID = sim.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
@@ -311,12 +309,12 @@ var _ = Describe("Switch", func() {
 
 	It("should wait if port is busy sending flits out", func() {
 		msg := messaging.MsgMeta{
-			ID:  engine.NewID(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = engine.NewID()
+		flit.ID = sim.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 

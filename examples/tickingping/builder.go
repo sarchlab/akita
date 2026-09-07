@@ -17,7 +17,7 @@ func DefaultSpec() Spec {
 }
 
 // Builder builds tickingping components. Configuration is supplied as a whole
-// through WithSpec; wiring is supplied through WithRegistrar. The component
+// through WithSpec; wiring is supplied through WithSimulation. The component
 // declares its "Out" port; the port instance is supplied externally after
 // Build with AssignPort (the caller chooses the buffer size).
 type Builder struct {
@@ -30,10 +30,10 @@ func MakeBuilder() Builder {
 	return Builder{spec: defaultSpec}
 }
 
-// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// WithSimulation wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneSimulation(engine) in isolated tests). The
 // registrar provides the engine and registers the built component.
-func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+func (b Builder) WithSimulation(reg modeling.Registrar) Builder {
 	b.registrar = reg
 	return b
 }
@@ -48,11 +48,11 @@ func (b Builder) WithSpec(spec Spec) Builder {
 // port; assign the port instance after Build with AssignPort.
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
-		panic("tickingping: WithRegistrar is required")
+		panic("tickingping: WithSimulation is required")
 	}
 
 	comp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithEngine(b.registrar.GetEngine()).
+		WithSimulation(b.registrar).
 		WithFreq(b.spec.Freq).
 		WithSpec(b.spec).
 		Build(name)

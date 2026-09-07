@@ -39,7 +39,7 @@ var _ = Describe("Bottom Parser", func() {
 
 		c = &pipelineMW{}
 		c.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(timing.NewSerialEngine()).
+			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:    6,
@@ -78,13 +78,13 @@ var _ = Describe("Bottom Parser", func() {
 			next := &c.comp.State
 
 			writeToBottomMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -103,7 +103,7 @@ var _ = Describe("Bottom Parser", func() {
 			)
 
 			done := memprotocol.WriteDoneRsp{}
-			done.ID = c.comp.NewID()
+			done.ID = c.comp.Simulation().NewID()
 			done.RspTo = writeToBottomMeta.ID
 			done.TrafficBytes = 4
 			done.TrafficClass = "rsp"
@@ -123,12 +123,12 @@ var _ = Describe("Bottom Parser", func() {
 			next := &c.comp.State
 
 			writeToBottomMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -153,7 +153,7 @@ var _ = Describe("Bottom Parser", func() {
 			)
 
 			done := memprotocol.WriteDoneRsp{}
-			done.ID = c.comp.NewID()
+			done.ID = c.comp.Simulation().NewID()
 			done.RspTo = writeToBottomMeta.ID
 			done.TrafficBytes = 4
 			done.TrafficClass = "rsp"
@@ -182,7 +182,7 @@ var _ = Describe("Bottom Parser", func() {
 			next := &c.comp.State
 
 			readToBottomMeta = messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -198,7 +198,7 @@ var _ = Describe("Bottom Parser", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}
 			dataReady = memprotocol.DataReadyRsp{}
-			dataReady.ID = c.comp.NewID()
+			dataReady.ID = c.comp.Simulation().NewID()
 			dataReady.RspTo = readToBottomMeta.ID
 			dataReady.Data = drData
 			dataReady.TrafficBytes = len(drData) + 4
@@ -212,7 +212,7 @@ var _ = Describe("Bottom Parser", func() {
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -287,7 +287,7 @@ var _ = Describe("Bottom Parser", func() {
 
 			// Add another read transaction (index 1) that is in the MSHR
 			read2Meta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -303,7 +303,7 @@ var _ = Describe("Bottom Parser", func() {
 
 			// Add a write transaction (index 2)
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 16 + 12,
 				TrafficClass: "req",
 			}

@@ -266,7 +266,7 @@ func (m *middleware) buildShadowReq(
 			AccessByteSize: r.AccessByteSize,
 			PID:            r.PID,
 		}
-		shadow.ID = m.comp.NewID()
+		shadow.ID = m.comp.Simulation().NewID()
 		shadow.Src = src
 		shadow.Dst = dst
 		shadow.TrafficBytes = r.TrafficBytes
@@ -279,7 +279,7 @@ func (m *middleware) buildShadowReq(
 			DirtyMask: r.DirtyMask,
 			PID:       r.PID,
 		}
-		shadow.ID = m.comp.NewID()
+		shadow.ID = m.comp.Simulation().NewID()
 		shadow.Src = src
 		shadow.Dst = dst
 		shadow.TrafficBytes = r.TrafficBytes
@@ -295,7 +295,7 @@ func (m *middleware) buildTopRsp(
 ) messaging.Msg {
 	if trans.IsRead {
 		rsp := memprotocol.DataReadyRsp{Data: trans.RspData}
-		rsp.ID = m.comp.NewID()
+		rsp.ID = m.comp.Simulation().NewID()
 		rsp.Src = src
 		rsp.Dst = trans.ReqFromTopSrc
 		rsp.RspTo = trans.ReqFromTopID
@@ -305,7 +305,7 @@ func (m *middleware) buildTopRsp(
 	}
 
 	rsp := memprotocol.WriteDoneRsp{}
-	rsp.ID = m.comp.NewID()
+	rsp.ID = m.comp.Simulation().NewID()
 	rsp.Src = src
 	rsp.Dst = trans.ReqFromTopSrc
 	rsp.RspTo = trans.ReqFromTopID
@@ -522,7 +522,7 @@ func makeCtrlRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = port.Component().NewID()
+	rsp.ID = port.Component().Simulation().NewID()
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo

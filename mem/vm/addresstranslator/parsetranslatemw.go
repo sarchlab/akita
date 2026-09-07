@@ -52,7 +52,7 @@ func (m *parseTranslateMW) translate() bool {
 	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
 
 	transReq := vmprotocol.TranslationReq{}
-	transReq.ID = m.comp.NewID()
+	transReq.ID = m.comp.Simulation().NewID()
 	transReq.Src = m.translationPort().AsRemote()
 	transReq.Dst = m.comp.Resources().TranslationProviderMapper.Find(vAddr)
 	transReq.PID = item.GetPID()

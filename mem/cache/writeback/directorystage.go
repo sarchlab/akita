@@ -652,7 +652,7 @@ func (ds *directoryStage) needEviction(victim *cache.BlockState) bool {
 func (ds *directoryStage) startDirPipeline(transIdx int) {
 	trans := &ds.cache.comp.State.Transactions[transIdx]
 
-	pid := ds.cache.comp.NewID()
+	pid := ds.cache.comp.Simulation().NewID()
 	trans.DirPipelinePID = pid
 
 	tracing.StartTask(ds.cache.comp, tracing.TaskStart{

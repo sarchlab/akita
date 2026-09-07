@@ -8,7 +8,7 @@ import (
 )
 
 type testEngine struct {
-	timing.IDGenerator
+	timing.Engine
 	now       timing.VTimeInPicoSec
 	scheduled []timing.Event
 }
@@ -32,14 +32,16 @@ func (t *testTicker) Tick() bool {
 var _ = Describe("Ticking Component", func() {
 	var (
 		engine *testEngine
+		sim    Registrar
 		ticker *testTicker
 		tc     *TickingComponent
 	)
 
 	BeforeEach(func() {
 		engine = &testEngine{now: timing.VTimeInPicoSec(10000)}
+		sim = NewStandaloneSimulation(engine)
 		ticker = &testTicker{}
-		tc = NewTickingComponent("TC", engine, 1*timing.GHz, ticker)
+		tc = NewTickingComponent("TC", sim, 1*timing.GHz, ticker)
 	})
 
 	It("should start ticking when notified of receiving a request", func() {
@@ -61,7 +63,7 @@ var _ = Describe("Ticking Component", func() {
 	It("should tick when the ticker make progress in a tick", func() {
 		ticker.progress = true
 
-		tc.Handle(MakeTickEvent(engine, tc.Name(), timing.VTimeInPicoSec(10000)))
+		tc.Handle(MakeTickEvent(sim.NewID(), tc.Name(), timing.VTimeInPicoSec(10000)))
 
 		Expect(engine.scheduled).To(HaveLen(1))
 		Expect(engine.scheduled[0].Time()).To(Equal(timing.VTimeInPicoSec(11000)))
@@ -71,7 +73,7 @@ var _ = Describe("Ticking Component", func() {
 		func() {
 			ticker.progress = true
 
-			tc.Handle(MakeTickEvent(engine, tc.Name(), timing.VTimeInPicoSec(10000)))
+			tc.Handle(MakeTickEvent(sim.NewID(), tc.Name(), timing.VTimeInPicoSec(10000)))
 			tc.TickNow()
 
 			Expect(engine.scheduled).To(HaveLen(1))
@@ -82,7 +84,7 @@ var _ = Describe("Ticking Component", func() {
 	It("should stop ticking if no progress is made", func() {
 		ticker.progress = false
 
-		tc.Handle(MakeTickEvent(engine, tc.Name(), timing.VTimeInPicoSec(10000)))
+		tc.Handle(MakeTickEvent(sim.NewID(), tc.Name(), timing.VTimeInPicoSec(10000)))
 
 		Expect(engine.scheduled).To(BeEmpty())
 	})

@@ -229,7 +229,7 @@ func (f *flusher) finalizeFlushing() bool {
 	}
 
 	rsp := memcontrolprotocol.Rsp{Command: memcontrolprotocol.CmdFlush, Success: true}
-	rsp.ID = f.pipeline.comp.NewID()
+	rsp.ID = f.pipeline.comp.Simulation().NewID()
 	rsp.Src = f.ctrlPort().AsRemote()
 	rsp.Dst = next.ProcessingFlush.MsgMeta.Src
 	rsp.RspTo = next.ProcessingFlush.MsgMeta.ID

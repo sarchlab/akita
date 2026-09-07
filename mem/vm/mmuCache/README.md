@@ -43,7 +43,7 @@ levels.
 ## Builder Pattern
 
 Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec
-to `WithSpec`. Wiring comes from `WithRegistrar` (which provides the engine and
+to `WithSpec`. Wiring comes from `WithSimulation` (which provides the engine and
 registers the component) and `WithResources` (the low- and up-module remote
 ports). `Build` declares the `Top`, `Bottom`, and `Control` ports but does not
 create their instances. Build each port with `modeling.MakePortBuilder` (which
@@ -57,7 +57,7 @@ spec.NumBlocks = 16
 spec.LatencyPerLevel = 50
 
 c := mmuCache.MakeBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithSpec(spec).
     WithResources(mmuCache.Resources{
         LowModulePort: mmuPort,
@@ -67,7 +67,7 @@ c := mmuCache.MakeBuilder().
 
 for _, name := range []string{"Top", "Bottom", "Control"} {
     p := modeling.MakePortBuilder().
-        WithRegistrar(sim).
+        WithSimulation(sim).
         WithComponent(c).
         WithSpec(modeling.PortSpec{BufSize: 16}).
         Build(name)
@@ -77,7 +77,7 @@ for _, name := range []string{"Top", "Bottom", "Control"} {
 
 | Method | Description |
 |---|---|
-| `WithRegistrar(r)` | Source of the engine and component registration (required) |
+| `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak (`NumBlocks` must be > 0) |
 | `WithResources(Resources{...})` | External wiring (low- and up-module remote ports) |
 

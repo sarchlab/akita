@@ -49,7 +49,7 @@ var _ = Describe("DirectoryStage", func() {
 
 		m = &pipelineMW{}
 		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(timing.NewSerialEngine()).
+			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:    6,
@@ -79,7 +79,7 @@ var _ = Describe("DirectoryStage", func() {
 	Context("read", func() {
 		BeforeEach(func() {
 			read := memprotocol.ReadReq{}
-			read.ID = m.comp.NewID()
+			read.ID = m.comp.Simulation().NewID()
 			read.Address = 0x100
 			read.PID = 1
 			read.AccessByteSize = 64
@@ -177,7 +177,7 @@ var _ = Describe("DirectoryStage", func() {
 	Context("write", func() {
 		BeforeEach(func() {
 			write := memprotocol.WriteReq{}
-			write.ID = m.comp.NewID()
+			write.ID = m.comp.Simulation().NewID()
 			write.Address = 0x100
 			write.PID = 1
 			write.TrafficBytes = 12

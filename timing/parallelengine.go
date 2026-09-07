@@ -17,8 +17,6 @@ type ParallelEngine struct {
 	hooking.HookableBase
 	*engineControl
 
-	idGenerator *IDGenerator
-
 	nowLock                sync.RWMutex
 	now                    VTimeInPicoSec
 	runningSecondaryEvents bool
@@ -46,7 +44,6 @@ func (e *ParallelEngine) Name() string {
 // NewParallelEngine creates a ParallelEngine.
 func NewParallelEngine() *ParallelEngine {
 	e := new(ParallelEngine)
-	e.idGenerator = &IDGenerator{}
 	e.engineControl = newEngineControl()
 	e.failed = make(chan struct{})
 
@@ -329,10 +326,3 @@ func (e *ParallelEngine) recordPanic(cause any, evt Event) {
 		close(e.failed)
 	}
 }
-
-// NewID allocates an ID in this engine's simulation namespace.
-func (e *ParallelEngine) NewID() uint64 { return e.idGenerator.NewID() }
-
-// GetIDGenerator returns the counter shared by this engine and its components.
-// A Simulation registers it separately as a checkpoint entity.
-func (e *ParallelEngine) GetIDGenerator() *IDGenerator { return e.idGenerator }

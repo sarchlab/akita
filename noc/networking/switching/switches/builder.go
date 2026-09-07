@@ -22,7 +22,7 @@ func DefaultSpec() Spec {
 }
 
 // Builder builds switches. Configuration is supplied as a whole through
-// WithSpec; wiring is supplied through WithRegistrar and WithResources. Ports
+// WithSpec; wiring is supplied through WithSimulation and WithResources. Ports
 // are added after build with MakeSwitchPortAdder.
 type Builder struct {
 	registrar modeling.Registrar
@@ -37,10 +37,10 @@ func MakeBuilder() Builder {
 	}
 }
 
-// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// WithSimulation wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneSimulation(engine) in isolated tests). The
 // registrar provides the engine and registers the built component.
-func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+func (b Builder) WithSimulation(reg modeling.Registrar) Builder {
 	b.registrar = reg
 	return b
 }
@@ -61,15 +61,15 @@ func (b Builder) WithResources(r Resources) Builder {
 // Build creates a new switch
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
-		panic("switches: WithRegistrar is required")
+		panic("switches: WithSimulation is required")
 	}
 
 	b.routingTableMustBeGiven()
 
 	spec := b.spec
-	engine := b.registrar.GetEngine()
+	sim := b.registrar
 	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
@@ -169,8 +169,8 @@ func MakeSwitchPortAdder(sw *modeling.Component[Spec, State, modeling.None]) Swi
 	}
 }
 
-// WithRegistrar sets the registrar used to register the minted local port.
-func (a SwitchPortAdder) WithRegistrar(reg modeling.Registrar) SwitchPortAdder {
+// WithSimulation sets the registrar used to register the minted local port.
+func (a SwitchPortAdder) WithSimulation(reg modeling.Registrar) SwitchPortAdder {
 	a.registrar = reg
 	return a
 }
@@ -220,7 +220,7 @@ func (a SwitchPortAdder) Add() messaging.Port {
 
 	idx := a.sw.NumPortsInGroup("Port")
 	local := modeling.MakePortBuilder().
-		WithRegistrar(a.registrar).
+		WithSimulation(a.registrar).
 		WithComponent(a.sw).
 		WithSpec(modeling.PortSpec{BufSize: a.bufSize}).
 		Build(fmt.Sprintf("Port[%d]", idx))

@@ -20,7 +20,8 @@ import (
 // leaf page walk (no downstream req_out), so a single req_in is open per walk.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
-	reg := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
+	reg := sim
 	pageTable := vm.NewPageTable(12)
 
 	// A long walk latency keeps the walk genuinely in flight after a single
@@ -29,7 +30,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.Latency = 100
 
 	comp := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(reg).
 		WithResources(Resources{PageTable: pageTable}).
 		WithSpec(spec).
 		Build("MMU")
@@ -55,7 +56,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	pageTable.Insert(page)
 
 	req := vmprotocol.TranslationReq{}
-	req.ID = engine.NewID()
+	req.ID = sim.NewID()
 	req.Src = messaging.RemotePort("Agent")
 	req.Dst = topPort.AsRemote()
 	req.PID = 1
@@ -80,7 +81,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the walk is in flight.
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = engine.NewID()
+	reset.ID = sim.NewID()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = ctrlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

@@ -112,7 +112,7 @@ func msgToIncomingReqState(msg messaging.Msg) incomingReqState {
 }
 
 func createTranslatedReq(
-	ids timing.IDSource,
+	ids timing.Simulation,
 	reqState incomingReqState,
 	page vm.Page,
 	log2PageSize uint64,

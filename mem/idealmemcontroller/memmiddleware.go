@@ -133,7 +133,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 	data := m.comp.Resources().Storage.Read(tx.Address, tx.AccessByteSize)
 
 	rsp := memprotocol.DataReadyRsp{}
-	rsp.ID = m.comp.NewID()
+	rsp.ID = m.comp.Simulation().NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
 	rsp.RspTo = tx.ReqID
@@ -154,7 +154,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 
 func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 	rsp := memprotocol.WriteDoneRsp{}
-	rsp.ID = m.comp.NewID()
+	rsp.ID = m.comp.Simulation().NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
 	rsp.RspTo = tx.ReqID

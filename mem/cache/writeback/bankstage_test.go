@@ -63,7 +63,7 @@ var _ = Describe("Bank Stage", func() {
 			storage: storage,
 		}
 		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(timing.NewSerialEngine()).
+			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				BankLatency:      10,
@@ -130,7 +130,7 @@ var _ = Describe("Bank Stage", func() {
 			storage.Write(0x40, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 
 			read := memprotocol.ReadReq{}
-			read.ID = m.comp.NewID()
+			read.ID = m.comp.Simulation().NewID()
 			read.Src = messaging.RemotePort("Agent")
 			read.Address = 0x104
 			read.AccessByteSize = 4
@@ -189,7 +189,7 @@ var _ = Describe("Bank Stage", func() {
 			block.IsLocked = true
 
 			write := memprotocol.WriteReq{}
-			write.ID = m.comp.NewID()
+			write.ID = m.comp.Simulation().NewID()
 			write.Src = messaging.RemotePort("Agent")
 			write.Address = 0x104
 			write.Data = []byte{5, 6, 7, 8}

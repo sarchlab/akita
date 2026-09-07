@@ -18,6 +18,7 @@ import (
 var _ = Describe("Ideal Memory Controller control behavior", func() {
 	var (
 		engine        timing.Engine
+		sim           modeling.Registrar
 		storage       *mem.Storage
 		memController *Comp
 		topPort       messaging.Port
@@ -31,7 +32,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		spec.CacheLineSize = 64
 
 		memController = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			WithSpec(spec).
 			Build("MemCtrl")
@@ -50,7 +51,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = addr
@@ -62,7 +63,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -71,6 +72,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		storage = mem.NewStorage(1 * mem.MB)
 		build()
 	})

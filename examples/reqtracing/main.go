@@ -74,7 +74,7 @@ func (m *clientMW) send() bool {
 
 	req := readReq{
 		MsgMeta: messaging.MsgMeta{
-			ID:  m.comp.NewID(),
+			ID:  m.comp.Simulation().NewID(),
 			Src: port.AsRemote(),
 			Dst: s.Dst,
 		},
@@ -180,7 +180,7 @@ func (m *serverMW) respond() bool {
 	txn := m.pending[0]
 	port.Send(readRsp{
 		MsgMeta: messaging.MsgMeta{
-			ID:    m.comp.NewID(),
+			ID:    m.comp.Simulation().NewID(),
 			Src:   port.AsRemote(),
 			Dst:   txn.req.Src,
 			RspTo: txn.req.ID,
@@ -198,10 +198,11 @@ func (m *serverMW) respond() bool {
 
 func main() {
 	engine := timing.NewSerialEngine()
-	registrar := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
+	registrar := sim
 
 	client := modeling.NewBuilder[clientSpec, clientState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(1 * timing.GHz).
 		WithSpec(clientSpec{Freq: 1 * timing.GHz}).
 		Build("Client")
@@ -211,7 +212,7 @@ func main() {
 	registrar.RegisterComponent(client)
 
 	server := modeling.NewBuilder[serverSpec, serverState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(1 * timing.GHz).
 		WithSpec(serverSpec{Freq: 1 * timing.GHz, Latency: 4}).
 		Build("Server")
@@ -220,7 +221,7 @@ func main() {
 	server.AssignPort("Out", messaging.NewPort(server, 4, 4, "Server.Out"))
 	registrar.RegisterComponent(server)
 
-	conn := directconnection.MakeBuilder().WithRegistrar(registrar).Build("Conn")
+	conn := directconnection.MakeBuilder().WithSimulation(registrar).Build("Conn")
 	conn.PlugIn(client.GetPortByName("Out"))
 	conn.PlugIn(server.GetPortByName("Out"))
 

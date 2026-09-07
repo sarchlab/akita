@@ -22,8 +22,8 @@ type TimerFiredEvent struct {
 }
 
 // MakeTimerFiredEvent creates a new TimerFiredEvent.
-func MakeTimerFiredEvent(ids timing.IDSource, handlerID string, time timing.VTimeInPicoSec) TimerFiredEvent {
-	return TimerFiredEvent{EventBase: timing.MakeEventBase(ids, time, handlerID)}
+func MakeTimerFiredEvent(id uint64, handlerID string, time timing.VTimeInPicoSec) TimerFiredEvent {
+	return TimerFiredEvent{EventBase: timing.MakeEventBase(id, time, handlerID)}
 }
 
 // EventDrivenComponent is a generic component that reacts to events rather
@@ -41,12 +41,13 @@ type EventDrivenComponent[S any, T any, R any] struct {
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 
-	engine    timing.EventScheduler
-	name      string
-	spec      S
-	State     T
-	resources R
-	processor EventProcessor[S, T, R]
+	simulation timing.Simulation
+	engine     timing.EventScheduler
+	name       string
+	spec       S
+	State      T
+	resources  R
+	processor  EventProcessor[S, T, R]
 
 	pendingWakeup timing.VTimeInPicoSec
 }
@@ -77,7 +78,7 @@ func (c *EventDrivenComponent[S, T, R]) ScheduleWakeAt(t timing.VTimeInPicoSec) 
 
 	c.pendingWakeup = t
 
-	c.engine.Schedule(MakeTimerFiredEvent(c, c.Name(), t))
+	c.engine.Schedule(MakeTimerFiredEvent(c.simulation.NewID(), c.Name(), t))
 }
 
 // ScheduleWakeNow schedules a wakeup at the current engine time.
@@ -107,10 +108,5 @@ func (c *EventDrivenComponent[S, T, R]) NotifyPortFree(port messaging.Port) {
 	c.ScheduleWakeNow()
 }
 
-// NewID allocates an ID from the component's simulation.
-func (c *EventDrivenComponent[S, T, R]) NewID() uint64 { return c.engine.NewID() }
-
-// GetIDGenerator identifies the component's simulation ID namespace.
-func (c *EventDrivenComponent[S, T, R]) GetIDGenerator() *timing.IDGenerator {
-	return c.engine.GetIDGenerator()
-}
+// Simulation returns the simulation this component belongs to.
+func (c *EventDrivenComponent[S, T, R]) Simulation() timing.Simulation { return c.simulation }

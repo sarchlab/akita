@@ -45,7 +45,7 @@ var _ = Describe("TopParser", func() {
 
 		m = &pipelineMW{}
 		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(timing.NewSerialEngine()).
+			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				NumReqPerCycle: 4,
@@ -82,7 +82,7 @@ var _ = Describe("TopParser", func() {
 
 	It("should parse read from top", func() {
 		read := memprotocol.ReadReq{}
-		read.ID = m.comp.NewID()
+		read.ID = m.comp.Simulation().NewID()
 		read.Address = 0x100
 		read.AccessByteSize = 64
 		read.TrafficBytes = 12
@@ -103,7 +103,7 @@ var _ = Describe("TopParser", func() {
 
 	It("should parse write from top", func() {
 		write := memprotocol.WriteReq{}
-		write.ID = m.comp.NewID()
+		write.ID = m.comp.Simulation().NewID()
 		write.Address = 0x100
 		write.TrafficBytes = 12
 		write.TrafficClass = "memprotocol.WriteReq"

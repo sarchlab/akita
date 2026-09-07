@@ -73,7 +73,7 @@ func (m *agentMW) send() bool {
 		p := s.Pending[0]
 		port.Send(pingRsp{
 			MsgMeta: messaging.MsgMeta{
-				ID:    m.comp.NewID(),
+				ID:    m.comp.Simulation().NewID(),
 				Src:   port.AsRemote(),
 				Dst:   p.Dst,
 				RspTo: p.ReqID,
@@ -87,7 +87,7 @@ func (m *agentMW) send() bool {
 	if s.PingsToSend > 0 && port.CanSend() {
 		port.Send(pingReq{
 			MsgMeta: messaging.MsgMeta{
-				ID:  m.comp.NewID(),
+				ID:  m.comp.Simulation().NewID(),
 				Src: port.AsRemote(),
 				Dst: s.PingDst,
 			},
@@ -122,7 +122,7 @@ func (m *agentMW) recv() bool {
 
 func buildAgent(reg modeling.Registrar, name string) *Comp {
 	c := modeling.NewBuilder[agentSpec, agentState, modeling.None]().
-		WithEngine(reg.GetEngine()).
+		WithSimulation(reg).
 		WithFreq(1 * timing.GHz).
 		WithSpec(agentSpec{Freq: 1 * timing.GHz}).
 		Build(name)
@@ -165,13 +165,14 @@ func (h *msgHook) Func(ctx hooking.HookCtx) {
 
 func main() {
 	engine := timing.NewSerialEngine()
-	registrar := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
+	registrar := sim
 
 	agentA := buildAgent(registrar, "AgentA")
 	agentB := buildAgent(registrar, "AgentB")
 
 	conn := directconnection.MakeBuilder().
-		WithRegistrar(registrar).
+		WithSimulation(registrar).
 		Build("Conn")
 	conn.PlugIn(agentA.GetPortByName("Out"))
 	conn.PlugIn(agentB.GetPortByName("Out"))

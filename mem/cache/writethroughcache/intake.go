@@ -81,7 +81,7 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 	switch m := msg.(type) {
 	case memprotocol.ReadReq:
 		t = transactionState{
-			ID:                 s.cache.comp.NewID(),
+			ID:                 s.cache.comp.Simulation().NewID(),
 			HasRead:            true,
 			ReadMeta:           m.MsgMeta,
 			ReadAddress:        m.Address,
@@ -90,7 +90,7 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 		}
 	case memprotocol.WriteReq:
 		t = transactionState{
-			ID:             s.cache.comp.NewID(),
+			ID:             s.cache.comp.Simulation().NewID(),
 			HasWrite:       true,
 			WriteMeta:      m.MsgMeta,
 			WriteAddress:   m.Address,

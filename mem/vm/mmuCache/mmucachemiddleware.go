@@ -149,7 +149,7 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 	res := m.comp.Resources()
 
 	reqToBottom := vmprotocol.TranslationReq{}
-	reqToBottom.ID = m.comp.NewID()
+	reqToBottom.ID = m.comp.Simulation().NewID()
 	reqToBottom.Src = m.bottomPort().AsRemote()
 	reqToBottom.Dst = res.LowModulePort
 	reqToBottom.PID = req.PID
@@ -232,7 +232,7 @@ func (m *mmuCacheMiddleware) handleRsp(rsp vmprotocol.TranslationRsp) bool {
 	rspToTop := vmprotocol.TranslationRsp{
 		Page: rsp.Page,
 	}
-	rspToTop.ID = m.comp.NewID()
+	rspToTop.ID = m.comp.Simulation().NewID()
 	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = res.UpModulePort
 	rspToTop.RspTo = rsp.RspTo

@@ -21,12 +21,13 @@ import (
 // started-never-ended task.
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
-	reg := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
+	reg := sim
 
 	remotePort := messaging.RemotePort("MMU")
 
 	tlbComp := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(reg).
 		WithSpec(DefaultSpec()).
 		WithResources(Resources{
 			TranslationProviderMapper: &mem.SinglePortMapper{
@@ -51,7 +52,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// shadow req_out). The bottom fetch is never answered, so the miss stays in
 	// flight.
 	req := vmprotocol.TranslationReq{}
-	req.ID = engine.NewID()
+	req.ID = sim.NewID()
 	req.Src = messaging.RemotePort("Agent")
 	req.Dst = topPort.AsRemote()
 	req.PID = 1
@@ -86,7 +87,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the miss is in flight.
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = engine.NewID()
+	reset.ID = sim.NewID()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = controlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

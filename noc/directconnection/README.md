@@ -46,7 +46,7 @@ spec := directconnection.DefaultSpec()
 spec.Freq = 1 * timing.GHz
 
 conn := directconnection.MakeBuilder().
-    WithRegistrar(reg).
+    WithSimulation(reg).
     WithSpec(spec).
     Build("Connection")
 
@@ -59,7 +59,7 @@ conn.PlugIn(portC)
 
 | Method | Description |
 |---|---|
-| `WithRegistrar(r)` | Source of the engine and connection registration (required) |
+| `WithSimulation(r)` | Source of the engine and connection registration (required) |
 | `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and set `Freq` |
 
 ## Usage
@@ -67,9 +67,9 @@ conn.PlugIn(portC)
 ```go
 // Create engine and connection
 engine := timing.NewSerialEngine()
-reg := modeling.NewStandaloneRegistrar(engine)
+reg := modeling.NewStandaloneSimulation(engine)
 conn := directconnection.MakeBuilder().
-    WithRegistrar(reg).
+    WithSimulation(reg).
     WithSpec(directconnection.DefaultSpec()).
     Build("Bus")
 

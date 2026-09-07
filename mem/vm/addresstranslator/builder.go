@@ -23,7 +23,7 @@ func DefaultSpec() Spec {
 }
 
 // Builder builds address translator components. Configuration is supplied as a
-// whole through WithSpec; wiring is supplied through WithRegistrar and
+// whole through WithSpec; wiring is supplied through WithSimulation and
 // WithResources. The component declares its "Top", "Bottom", "Translation",
 // and "Control" ports; the port instances are supplied externally after Build
 // with AssignPort (the caller chooses the buffer sizes).
@@ -40,10 +40,10 @@ func MakeBuilder() Builder {
 	}
 }
 
-// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// WithSimulation wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or modeling.NewStandaloneSimulation(engine) in isolated tests). The
 // registrar provides the engine and registers the built component.
-func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
+func (b Builder) WithSimulation(reg modeling.Registrar) Builder {
 	b.registrar = reg
 	return b
 }
@@ -66,13 +66,13 @@ func (b Builder) WithResources(r Resources) Builder {
 // after Build with AssignPort.
 func (b Builder) Build(name string) *Comp {
 	if b.registrar == nil {
-		panic("addresstranslator: WithRegistrar is required")
+		panic("addresstranslator: WithSimulation is required")
 	}
 
 	spec := b.spec
 
 	modelComp := modeling.NewBuilder[Spec, State, Resources]().
-		WithEngine(b.registrar.GetEngine()).
+		WithSimulation(b.registrar).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		WithResources(b.resources).

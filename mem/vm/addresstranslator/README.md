@@ -52,7 +52,7 @@ spec := addresstranslator.DefaultSpec()
 spec.DeviceID = 1
 
 at := addresstranslator.MakeBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithSpec(spec).
     WithResources(addresstranslator.Resources{
         MemProviderMapper:         memMapper,
@@ -63,7 +63,7 @@ at := addresstranslator.MakeBuilder().
 
 | Method | Description |
 |---|---|
-| `WithRegistrar(r)` | Source of the engine and component registration (required) |
+| `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
 | `WithResources(Resources{...})` | External wiring (memory and translation provider mappers) |
 
@@ -78,14 +78,14 @@ ticked.
 
 ```go
 at := addresstranslator.MakeBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithSpec(spec).
     WithResources(res).
     Build("AddressTranslator")
 
 for _, name := range []string{"Top", "Bottom", "Translation", "Control"} {
     p := modeling.MakePortBuilder().
-        WithRegistrar(sim).
+        WithSimulation(sim).
         WithComponent(at).
         WithSpec(modeling.PortSpec{BufSize: 4}).
         Build(name)

@@ -35,10 +35,10 @@ func MakePortBuilder() PortBuilder {
 	return PortBuilder{spec: defaultPortSpec}
 }
 
-// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
+// WithSimulation wires the builder to a registrar (a *simulation.Simulation in
+// assembly, or NewStandaloneSimulation(engine) in isolated tests). The
 // registrar registers the built port.
-func (b PortBuilder) WithRegistrar(reg Registrar) PortBuilder {
+func (b PortBuilder) WithSimulation(reg Registrar) PortBuilder {
 	b.registrar = reg
 	return b
 }

@@ -120,7 +120,7 @@ func (s *bankStage) acceptIntoPipeline(next *State, spec Spec, transIdx int) {
 	// transaction that visits the bank more than once (e.g. evict then fill)
 	// opens one subtask per visit, each closed in finishBank.
 	if trans.hasReqMeta() {
-		pid := s.cache.comp.NewID()
+		pid := s.cache.comp.Simulation().NewID()
 		trans.BankPID = pid
 		tracing.StartTask(s.cache.comp, tracing.TaskStart{
 			ID:       pid,
@@ -211,7 +211,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	nextBlock.ReadCount--
 
 	dataReady := memprotocol.DataReadyRsp{}
-	dataReady.ID = s.cache.comp.NewID()
+	dataReady.ID = s.cache.comp.Simulation().NewID()
 	dataReady.Src = s.cache.topPort().AsRemote()
 	dataReady.Dst = trans.ReadMeta.Src
 	dataReady.RspTo = trans.ReadMeta.ID
@@ -250,7 +250,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 	next.BankInflightTransCounts[s.bankID]--
 
 	done := memprotocol.WriteDoneRsp{}
-	done.ID = s.cache.comp.NewID()
+	done.ID = s.cache.comp.Simulation().NewID()
 	done.Src = s.cache.topPort().AsRemote()
 	done.Dst = trans.WriteMeta.Src
 	done.RspTo = trans.WriteMeta.ID

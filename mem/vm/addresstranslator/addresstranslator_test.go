@@ -52,7 +52,7 @@ func assignPort(
 	bufSize int,
 ) messaging.Port {
 	p := modeling.MakePortBuilder().
-		WithRegistrar(reg).
+		WithSimulation(reg).
 		WithComponent(comp).
 		WithSpec(modeling.PortSpec{BufSize: bufSize}).
 		Build(name)
@@ -73,6 +73,7 @@ func assignPorts(reg modeling.Registrar, comp *Comp, topBufSize int) {
 var _ = Describe("Address Translator", func() {
 	var (
 		engine          timing.Engine
+		sim             modeling.Registrar
 		t               *Comp
 		topPort         messaging.Port
 		bottomPort      messaging.Port
@@ -98,9 +99,9 @@ var _ = Describe("Address Translator", func() {
 			},
 		}
 
-		reg := modeling.NewStandaloneRegistrar(engine)
+		reg := sim
 		t = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithSpec(spec).
 			WithResources(resources).
 			Build("AddressTranslator")
@@ -125,6 +126,7 @@ var _ = Describe("Address Translator", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		build(topBufSize)
 	})
 
@@ -135,7 +137,7 @@ var _ = Describe("Address Translator", func() {
 
 		BeforeEach(func() {
 			req = memprotocol.ReadReq{}
-			req.ID = engine.NewID()
+			req.ID = sim.NewID()
 			req.Src = messaging.RemotePort("Agent")
 			req.Dst = topPort.AsRemote()
 			req.Address = 0x100
@@ -187,13 +189,13 @@ var _ = Describe("Address Translator", func() {
 
 		BeforeEach(func() {
 			transReq1 = vmprotocol.TranslationReq{}
-			transReq1.ID = engine.NewID()
+			transReq1.ID = sim.NewID()
 			transReq1.PID = 1
 			transReq1.VAddr = 0x100
 			transReq1.DeviceID = 1
 			transReq1.TrafficClass = "vmprotocol.TranslationReq"
 			transReq2 = vmprotocol.TranslationReq{}
-			transReq2.ID = engine.NewID()
+			transReq2.ID = sim.NewID()
 			transReq2.PID = 1
 			transReq2.VAddr = 0x100
 			transReq2.DeviceID = 1
@@ -214,7 +216,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should stall if send failed", func() {
 			req := memprotocol.ReadReq{}
-			req.ID = engine.NewID()
+			req.ID = sim.NewID()
 			req.Address = 0x10040
 			req.AccessByteSize = 4
 			req.TrafficBytes = 12
@@ -226,7 +228,7 @@ var _ = Describe("Address Translator", func() {
 					PAddr: 0x20000,
 				},
 			}
-			translationRsp.ID = engine.NewID()
+			translationRsp.ID = sim.NewID()
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vmprotocol.TranslationRsp"
 
@@ -254,7 +256,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should forward read request", func() {
 			req := memprotocol.ReadReq{}
-			req.ID = engine.NewID()
+			req.ID = sim.NewID()
 			req.Address = 0x10040
 			req.AccessByteSize = 4
 			req.TrafficBytes = 12
@@ -266,7 +268,7 @@ var _ = Describe("Address Translator", func() {
 					PAddr: 0x20000,
 				},
 			}
-			translationRsp.ID = engine.NewID()
+			translationRsp.ID = sim.NewID()
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vmprotocol.TranslationRsp"
 
@@ -312,7 +314,7 @@ var _ = Describe("Address Translator", func() {
 			data := []byte{1, 2, 3, 4}
 			dirty := []bool{false, true, false, true}
 			write := memprotocol.WriteReq{}
-			write.ID = engine.NewID()
+			write.ID = sim.NewID()
 			write.Address = 0x10040
 			write.Data = data
 			write.DirtyMask = dirty
@@ -325,7 +327,7 @@ var _ = Describe("Address Translator", func() {
 					PAddr: 0x20000,
 				},
 			}
-			translationRsp.ID = engine.NewID()
+			translationRsp.ID = sim.NewID()
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vmprotocol.TranslationRsp"
 
@@ -371,7 +373,7 @@ var _ = Describe("Address Translator", func() {
 
 		BeforeEach(func() {
 			readFromTop = memprotocol.ReadReq{}
-			readFromTop.ID = engine.NewID()
+			readFromTop.ID = sim.NewID()
 			readFromTop.Src = messaging.RemotePort("Agent")
 			readFromTop.Dst = topPort.AsRemote()
 			readFromTop.Address = 0x10040
@@ -379,7 +381,7 @@ var _ = Describe("Address Translator", func() {
 			readFromTop.TrafficBytes = 12
 			readFromTop.TrafficClass = "memprotocol.ReadReq"
 			readToBottom = memprotocol.ReadReq{}
-			readToBottom.ID = engine.NewID()
+			readToBottom.ID = sim.NewID()
 			readToBottom.Src = bottomPort.AsRemote()
 			readToBottom.Dst = messaging.RemotePort("MemPort")
 			readToBottom.Address = 0x20040
@@ -387,14 +389,14 @@ var _ = Describe("Address Translator", func() {
 			readToBottom.TrafficBytes = 12
 			readToBottom.TrafficClass = "memprotocol.ReadReq"
 			writeFromTop = memprotocol.WriteReq{}
-			writeFromTop.ID = engine.NewID()
+			writeFromTop.ID = sim.NewID()
 			writeFromTop.Src = messaging.RemotePort("Agent")
 			writeFromTop.Dst = topPort.AsRemote()
 			writeFromTop.Address = 0x10040
 			writeFromTop.TrafficBytes = 12
 			writeFromTop.TrafficClass = "memprotocol.WriteReq"
 			writeToBottom = memprotocol.WriteReq{}
-			writeToBottom.ID = engine.NewID()
+			writeToBottom.ID = sim.NewID()
 			writeToBottom.Src = bottomPort.AsRemote()
 			writeToBottom.Dst = messaging.RemotePort("MemPort")
 			writeToBottom.Address = 0x10040
@@ -434,7 +436,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should respond data ready", func() {
 			dataReady := memprotocol.DataReadyRsp{}
-			dataReady.ID = engine.NewID()
+			dataReady.ID = sim.NewID()
 			dataReady.RspTo = readToBottom.ID
 			dataReady.TrafficBytes = 4
 			dataReady.TrafficClass = "memprotocol.DataReadyRsp"
@@ -455,7 +457,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should respond write done", func() {
 			done := memprotocol.WriteDoneRsp{}
-			done.ID = engine.NewID()
+			done.ID = sim.NewID()
 			done.RspTo = writeToBottom.ID
 			done.TrafficBytes = 4
 			done.TrafficClass = "memprotocol.WriteDoneRsp"
@@ -475,7 +477,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should stall if TopPort is busy", func() {
 			dataReady := memprotocol.DataReadyRsp{}
-			dataReady.ID = engine.NewID()
+			dataReady.ID = sim.NewID()
 			dataReady.RspTo = readToBottom.ID
 			dataReady.TrafficBytes = 4
 			dataReady.TrafficClass = "memprotocol.DataReadyRsp"
@@ -511,31 +513,31 @@ var _ = Describe("Address Translator", func() {
 
 		BeforeEach(func() {
 			readFromTop = memprotocol.ReadReq{}
-			readFromTop.ID = engine.NewID()
+			readFromTop.ID = sim.NewID()
 			readFromTop.Address = 0x10040
 			readFromTop.AccessByteSize = 4
 			readFromTop.TrafficBytes = 12
 			readFromTop.TrafficClass = "memprotocol.ReadReq"
 			readToBottom = memprotocol.ReadReq{}
-			readToBottom.ID = engine.NewID()
+			readToBottom.ID = sim.NewID()
 			readToBottom.Address = 0x20040
 			readToBottom.AccessByteSize = 4
 			readToBottom.TrafficBytes = 12
 			readToBottom.TrafficClass = "memprotocol.ReadReq"
 			writeFromTop = memprotocol.WriteReq{}
-			writeFromTop.ID = engine.NewID()
+			writeFromTop.ID = sim.NewID()
 			writeFromTop.Address = 0x10040
 			writeFromTop.TrafficBytes = 12
 			writeFromTop.TrafficClass = "memprotocol.WriteReq"
 			writeToBottom = memprotocol.WriteReq{}
-			writeToBottom.ID = engine.NewID()
+			writeToBottom.ID = sim.NewID()
 			writeToBottom.Address = 0x10040
 			writeToBottom.TrafficBytes = 12
 			writeToBottom.TrafficClass = "memprotocol.WriteReq"
 			flushReq = memcontrolprotocol.Req{
 				Command: memcontrolprotocol.CmdFlush,
 			}
-			flushReq.ID = engine.NewID()
+			flushReq.ID = sim.NewID()
 			flushReq.Src = messaging.RemotePort("Agent")
 			flushReq.Dst = ctrlPort.AsRemote()
 			flushReq.TrafficBytes = 4
@@ -543,7 +545,7 @@ var _ = Describe("Address Translator", func() {
 			restartReq = memcontrolprotocol.Req{
 				Command: memcontrolprotocol.CmdReset,
 			}
-			restartReq.ID = engine.NewID()
+			restartReq.ID = sim.NewID()
 			restartReq.Src = messaging.RemotePort("Agent")
 			restartReq.Dst = ctrlPort.AsRemote()
 			restartReq.TrafficBytes = 4
@@ -611,7 +613,7 @@ var _ = Describe("Address Translator", func() {
 func fillOutgoing(p messaging.Port, n int) {
 	for i := 0; i < n; i++ {
 		dummy := memprotocol.WriteDoneRsp{}
-		dummy.ID = p.Component().NewID()
+		dummy.ID = p.Component().Simulation().NewID()
 		dummy.Src = p.AsRemote()
 		dummy.Dst = messaging.RemotePort("Dummy")
 		dummy.TrafficClass = "memprotocol.WriteDoneRsp"

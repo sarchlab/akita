@@ -10,7 +10,6 @@ import (
 )
 
 type fakeTimeTeller struct {
-	timing.IDGenerator
 	now timing.VTimeInPicoSec
 }
 

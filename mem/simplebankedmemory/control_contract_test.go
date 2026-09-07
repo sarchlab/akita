@@ -24,11 +24,12 @@ func (c *noopConn) NotifySend()                      {}
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		storage := mem.NewStorage(1 * mem.MB)
 
-		reg := modeling.NewStandaloneRegistrar(engine)
+		reg := sim
 		comp := MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithResources(Resources{Storage: storage}).
 			Build("BankedMem")
 

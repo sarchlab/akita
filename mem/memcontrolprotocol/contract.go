@@ -325,7 +325,7 @@ func newControlReq(
 	cmd Command,
 ) Req {
 	req := Req{Command: cmd}
-	req.ID = ctrl.Component().NewID()
+	req.ID = ctrl.Component().Simulation().NewID()
 	req.Src = messaging.RemotePort("ContractAgent")
 	req.Dst = ctrl.AsRemote()
 	req.TrafficClass = "Req"

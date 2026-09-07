@@ -138,20 +138,29 @@ Note the new `SendTaskID` and `RecvTaskID` fields for tracing integration.
 
 ### IDGenerator (V5)
 
-Each simulation owns its counter, shared by its engine and components. There
+Each simulation owns its counter. Components retain their simulation reference. There
 is no process-global generator or sequential/parallel configuration switch.
 
 ```go
-id := simulation.NewID() // uint64, unique within this simulation
-req.ID = component.NewID() // uses the same counter
+id := sim.NewID() // uint64, unique within this simulation
+req.ID = component.Simulation().NewID() // uses the same counter
 ```
 
-Event factories now take the ID source explicitly:
-`timing.MakeEventBase(engine, time, handlerID)` and
-`modeling.MakeTickEvent(component, handlerID, time)`.
+Event factories now take the allocated ID explicitly:
+`timing.MakeEventBase(sim.NewID(), time, handlerID)` and
+`modeling.MakeTickEvent(sim.NewID(), handlerID, time)`.
 
 Separate simulations may reuse numeric IDs. Tracing associations are scoped
 to the simulation as well as the component name and message ID.
+
+Pass the simulation to builders with `WithSimulation(sim)`. This replaces
+`WithEngine` on generic component builders and `WithRegistrar` on package
+builders. Components expose `Simulation()`, while engines and components have
+no `NewID()` method. For lightweight setups, create
+`modeling.NewStandaloneSimulation(engine)` once and share that instance with
+all builders. Custom components and tracing domains implement
+`Simulation() timing.Simulation`. Monitors use `RegisterSimulation(sim)` so
+progress IDs come from the same counter.
 
 ### Before / After
 
@@ -177,7 +186,7 @@ if req.ID == "" { ... }
 pendingReqs := map[uint64]*ReadReq{}
 
 req := &ReadReq{}
-req.ID = component.NewID() // 1, 2, 3, ...
+req.ID = component.Simulation().NewID() // 1, 2, 3, ...
 pendingReqs[req.ID] = req
 
 // Later, matching response:
@@ -195,8 +204,8 @@ if req.ID == 0 { ... }
 - Replace `== ""` / `!= ""` checks with `== 0` / `!= 0`.
 - Replace `fmt.Sprintf`-based ID formatting with `strconv.FormatUint` or `%d`.
 - Update tracing task ID comparisons from string to uint64.
-- Replace global ID allocation with `simulation.NewID()` or `component.NewID()`.
-- Simulation checkpoints include the owned counter. Standalone-engine users must checkpoint `engine.GetIDGenerator()` alongside the engine. Restore into fresh instances.
+- Replace global ID allocation with `sim.NewID()` or `component.Simulation().NewID()`.
+- Simulation checkpoints include the owned counter. Standalone simulation users must checkpoint `sim.GetIDGenerator()` alongside the engine. Restore into fresh instances.
 
 ---
 
@@ -359,17 +368,17 @@ Components register themselves during construction. For example,
 // v5/sim/ticker.go
 func NewTickingComponent(
     name string,
-    engine EventScheduler,
+    sim timing.Simulation,
     freq Freq,
     ticker Ticker,
 ) *TickingComponent {
     tc := new(TickingComponent)
-    tc.TickScheduler = NewTickScheduler(name, engine, freq)
+    tc.TickScheduler = NewTickScheduler(name, sim, freq)
     tc.ComponentBase = NewComponentBase(name)
     tc.ticker = ticker
 
     // Auto-register so events with HandlerID_==name route here.
-    if registrar, ok := engine.(HandlerRegistrar); ok {
+    if registrar, ok := sim.GetEngine().(timing.HandlerRegistrar); ok {
         registrar.RegisterHandler(name, tc)
     }
 
@@ -512,7 +521,7 @@ type Component[S any, T any] struct {
 
 ```go
 comp := modeling.NewBuilder[MySpec, MyState]().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithFreq(1 * sim.GHz).
     WithSpec(mySpec).
     Build("MyComponent")
@@ -569,7 +578,7 @@ V5 unifies how components are modeled and wired. Each component is a single stru
 #### Build and Wire (two stages)
 
 1. Build from Spec
-   - `Builder.WithRegistrar(reg).WithSpec(spec).Build(name)` constructs the component with defaults and resolved strategies, and declares the component's ports.
+   - `Builder.WithSimulation(reg).WithSpec(spec).Build(name)` constructs the component with defaults and resolved strategies, and declares the component's ports.
    - Do not create the port instances or connect them here.
 
 2. Wire topology
@@ -678,7 +687,7 @@ dram.GDDR6Spec  // GDDR6-14Gbps (1750 MHz, BL16)
 topPort := sim.NewPort(nil, 4, 4, "DRAM.Top")
 
 ctrl := dram.MakeBuilder().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithSpec(dram.DDR4Spec).
     WithFreq(1200 * sim.MHz).
     WithTopPort(topPort).
@@ -716,7 +725,7 @@ hitRate := dram.RowBufferHitRate(&state) // 0.0 to 1.0
 ```go
 // V4: Fixed-latency memory controller, no bank modeling.
 ctrl := idealmemcontroller.New().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithFreq(1 * sim.GHz).
     WithLatency(100).
     Build("MemCtrl")
@@ -728,7 +737,7 @@ ctrl := idealmemcontroller.New().
 topPort := sim.NewPort(nil, 4, 4, "DRAM.Top")
 
 ctrl := dram.MakeBuilder().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithSpec(dram.HBM2Spec).
     WithTopPort(topPort).
     WithPagePolicy(dram.PagePolicyOpen).
@@ -750,7 +759,7 @@ changing the component.
 ```go
 // V4: Builder creates ports internally — caller has no control over port creation.
 cache := cachebuilder.New().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithFreq(1 * sim.GHz).
     Build("Cache")
 ```
@@ -760,13 +769,13 @@ cache := cachebuilder.New().
 // V5: the component declares its ports; a port builder creates+registers each
 // instance (like component/connection builders), and the caller attaches it.
 comp := somepkg.MakeBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithSpec(spec).
     Build("Comp") // Build calls DeclarePort("Top"), DeclarePort("Bottom"), ...
 
 for _, name := range []string{"Top", "Bottom", "Control"} {
     p := modeling.MakePortBuilder().
-        WithRegistrar(sim).
+        WithSimulation(sim).
         WithComponent(comp).
         WithSpec(modeling.PortSpec{BufSize: 4}).
         Build(name) // creates comp.Name()+"."+name and registers it
@@ -786,7 +795,7 @@ Because the component is built before its ports, a port is normally created
 with its owner directly and then assigned:
 
 ```go
-agent := somepkg.MakeBuilder().WithRegistrar(sim).Build("Agent")
+agent := somepkg.MakeBuilder().WithSimulation(sim).Build("Agent")
 outPort := messaging.NewPort(agent, 4, 4, "Agent.Out")
 agent.AssignPort("Out", outPort)
 ```

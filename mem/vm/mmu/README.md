@@ -56,14 +56,14 @@ spec.Latency = 100
 spec.AutoPageAllocation = true
 
 m := mmu.MakeBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithSpec(spec).
     WithResources(mmu.Resources{PageTable: pageTable}).
     Build("MMU")
 
 for _, name := range []string{"Top", "Control"} {
     p := modeling.MakePortBuilder().
-        WithRegistrar(sim).
+        WithSimulation(sim).
         WithComponent(m).
         WithSpec(modeling.PortSpec{BufSize: 16}).
         Build(name)
@@ -73,7 +73,7 @@ for _, name := range []string{"Top", "Control"} {
 
 | Method | Description |
 |---|---|
-| `WithRegistrar(r)` | Source of the engine and component registration (required) |
+| `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
 | `WithResources(Resources{PageTable: pt})` | Shared page table (built internally if omitted) |
 

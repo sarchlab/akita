@@ -52,7 +52,7 @@ func assignPort(
 	bufSize int,
 ) messaging.Port {
 	p := modeling.MakePortBuilder().
-		WithRegistrar(reg).
+		WithSimulation(reg).
 		WithComponent(comp).
 		WithSpec(modeling.PortSpec{BufSize: bufSize}).
 		Build(name)
@@ -68,10 +68,10 @@ func assignDefaultPorts(reg modeling.Registrar, comp *Comp) {
 	assignPort(reg, comp, "Control", 1)
 }
 
-// makeDirectConnection builds a direct connection driven by the given engine.
-func makeDirectConnection(engine timing.Engine) messaging.Connection {
+// makeDirectConnection builds a direct connection using the given simulation.
+func makeDirectConnection(sim modeling.Registrar) messaging.Connection {
 	return directconnection.MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithSimulation(sim).
 		Build("Conn")
 }
 
@@ -79,7 +79,7 @@ func makeDirectConnection(engine timing.Engine) messaging.Connection {
 // TLB in the integration tests. It owns a single real port; when a message is
 // delivered to that port it records the message and optionally runs onDeliver.
 type idealEndpoint struct {
-	timing.IDGenerator
+	sim timing.Simulation
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 
@@ -90,7 +90,7 @@ type idealEndpoint struct {
 }
 
 func newIdealEndpoint(name string) *idealEndpoint {
-	ep := &idealEndpoint{
+	ep := &idealEndpoint{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
 		name:          name,
 		PortOwnerBase: messaging.NewPortOwnerBase(),
 	}
@@ -119,3 +119,5 @@ func TestValidateState(t *testing.T) {
 		t.Fatalf("State failed validation: %v", err)
 	}
 }
+
+func (c *idealEndpoint) Simulation() timing.Simulation { return c.sim }

@@ -28,7 +28,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	spec := idealmemcontroller.DefaultSpec()
 	spec.Capacity = 4 * mem.KB
 	dram := idealmemcontroller.MakeBuilder().
-		WithRegistrar(sim).
+		WithSimulation(sim).
 		WithSpec(spec).
 		Build("DRAM")
 

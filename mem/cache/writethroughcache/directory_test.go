@@ -25,7 +25,7 @@ var _ = Describe("Directory", func() {
 	// next CanSend returns false, simulating a busy port.
 	fillBottomOutgoing := func() {
 		dummy := memprotocol.ReadReq{}
-		dummy.ID = c.comp.NewID()
+		dummy.ID = c.comp.Simulation().NewID()
 		dummy.Src = bottomPort.AsRemote()
 		dummy.Dst = messaging.RemotePort("DRAM")
 		dummy.TrafficClass = "req"
@@ -55,7 +55,7 @@ var _ = Describe("Directory", func() {
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
 		c.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(timing.NewSerialEngine()).
+			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:     6,
@@ -98,7 +98,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -133,7 +133,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -175,7 +175,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -209,7 +209,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -242,7 +242,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -291,7 +291,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -320,7 +320,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -349,7 +349,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -383,7 +383,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -412,7 +412,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -443,7 +443,7 @@ var _ = Describe("Directory", func() {
 			// the MSHR — required so the coalesced write can record it
 			// as MSHRFillFetcherIdx.
 			fetcherReadMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -459,7 +459,7 @@ var _ = Describe("Directory", func() {
 			)
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -505,7 +505,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -549,7 +549,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -581,7 +581,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -613,7 +613,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -646,7 +646,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -681,7 +681,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.NewID(),
+				ID:           c.comp.Simulation().NewID(),
 				TrafficBytes: 64 + 12,
 				TrafficClass: "req",
 			}

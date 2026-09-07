@@ -24,6 +24,7 @@ func (c *ccNoopConn) NotifySend()                      {}
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		storage := mem.NewStorage(1 * mem.MB)
 
 		spec := DefaultSpec()
@@ -36,9 +37,9 @@ func TestControlContract(t *testing.T) {
 		spec.BankLatency = 1
 		spec.DirLatency = 1
 
-		reg := modeling.NewStandaloneRegistrar(engine)
+		reg := sim
 		comp := MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithSpec(spec).
 			WithResources(Resources{
 				Storage: storage,
@@ -53,7 +54,7 @@ func TestControlContract(t *testing.T) {
 		// is ticked, then plug each into a no-op connection.
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(reg).
+				WithSimulation(reg).
 				WithComponent(comp).
 				WithSpec(modeling.PortSpec{BufSize: 4}).
 				Build(name)

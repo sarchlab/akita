@@ -13,6 +13,7 @@ type Simulation struct {
 	id               string
 	outputPath       string
 	engine           timing.Engine
+	idGenerator      *timing.IDGenerator
 	dataRecorder     datarecording.DataRecorder
 	visTracer        *tracing.DBTracer
 	metaRecorder     *metaRecorder
@@ -241,9 +242,9 @@ func (s *Simulation) Terminate() {
 }
 
 // NewID allocates an ID unique within this simulation.
-func (s *Simulation) NewID() uint64 { return s.engine.NewID() }
+func (s *Simulation) NewID() uint64 { return s.idGenerator.NewID() }
 
 // GetIDGenerator returns this simulation's checkpointed ID counter.
 func (s *Simulation) GetIDGenerator() *timing.IDGenerator {
-	return s.engine.GetIDGenerator()
+	return s.idGenerator
 }

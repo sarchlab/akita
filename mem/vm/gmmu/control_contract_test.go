@@ -15,14 +15,15 @@ import (
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		spec := DefaultSpec()
 		spec.DeviceID = 0
 		spec.Latency = 1
 		spec.LowModule = messaging.RemotePort("LowModule")
 
-		reg := modeling.NewStandaloneRegistrar(engine)
+		reg := sim
 		comp := MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithSpec(spec).
 			Build("GMMU")
 

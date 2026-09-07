@@ -21,6 +21,7 @@ import (
 var _ = Describe("DataMover control behavior", func() {
 	var (
 		engine       timing.Engine
+		sim          modeling.Registrar
 		dataMover    *modeling.Component[Spec, State, modeling.None]
 		topPort      messaging.Port
 		ctrlPort     messaging.Port
@@ -35,11 +36,11 @@ var _ = Describe("DataMover control behavior", func() {
 		spec.InsideByteGranularity = 64
 		spec.OutsideByteGranularity = 64
 
-		reg := modeling.NewStandaloneRegistrar(engine)
+		reg := sim
 
 		insideRemote = messaging.RemotePort("InsideMem")
 		dataMover = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithSpec(spec).
 			WithResources(Resources{
 				InsideMapper: &mem.SinglePortMapper{Port: insideRemote},
@@ -51,7 +52,7 @@ var _ = Describe("DataMover control behavior", func() {
 
 		assign := func(name string, bufSize int) messaging.Port {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(reg).
+				WithSimulation(reg).
 				WithComponent(dataMover).
 				WithSpec(modeling.PortSpec{BufSize: bufSize}).
 				Build(name)
@@ -74,7 +75,7 @@ var _ = Describe("DataMover control behavior", func() {
 	// (one read on Outside, one write on Inside).
 	makeMove := func() datamoverprotocol.DataMoveRequest {
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.SrcAddress = 0
@@ -88,7 +89,7 @@ var _ = Describe("DataMover control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Cmd")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -97,7 +98,7 @@ var _ = Describe("DataMover control behavior", func() {
 
 	answerRead := func(port messaging.Port, read memprotocol.ReadReq) {
 		rsp := memprotocol.DataReadyRsp{Data: make([]byte, int(read.AccessByteSize))}
-		rsp.ID = engine.NewID()
+		rsp.ID = sim.NewID()
 		rsp.Src = read.Dst
 		rsp.Dst = port.AsRemote()
 		rsp.RspTo = read.ID
@@ -107,7 +108,7 @@ var _ = Describe("DataMover control behavior", func() {
 
 	answerWrite := func(port messaging.Port, write memprotocol.WriteReq) {
 		rsp := memprotocol.WriteDoneRsp{}
-		rsp.ID = engine.NewID()
+		rsp.ID = sim.NewID()
 		rsp.Src = write.Dst
 		rsp.Dst = port.AsRemote()
 		rsp.RspTo = write.ID
@@ -133,6 +134,7 @@ var _ = Describe("DataMover control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		build()
 	})
 

@@ -22,6 +22,7 @@ import (
 // receiver-registry entry).
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 	storage := mem.NewStorage(1 * mem.MB)
 
 	spec := DefaultSpec()
@@ -35,7 +36,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.DirLatency = 1
 
 	comp := MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(Resources{
 			Storage: storage,
@@ -63,7 +64,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// fetch ReadReq out the Bottom port. We never answer it, so req_in, the
 	// fetch req_out, and the directory-pipeline subtask stay open.
 	read := memprotocol.ReadReq{}
-	read.ID = engine.NewID()
+	read.ID = sim.NewID()
 	read.Src = messaging.RemotePort("Agent")
 	read.Dst = topPort.AsRemote()
 	read.Address = 0x10000
@@ -95,7 +96,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the fetch is in flight.
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = engine.NewID()
+	reset.ID = sim.NewID()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = ctrlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

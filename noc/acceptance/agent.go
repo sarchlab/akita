@@ -31,7 +31,7 @@ func NewAgent(
 ) *Agent {
 	a := &Agent{}
 	a.test = test
-	a.TickingComponent = modeling.NewTickingComponent(name, reg.GetEngine(), freq, a)
+	a.TickingComponent = modeling.NewTickingComponent(name, reg, freq, a)
 	reg.RegisterComponent(a)
 
 	for _, p := range ports {

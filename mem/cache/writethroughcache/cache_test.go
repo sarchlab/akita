@@ -19,6 +19,7 @@ import (
 var _ = Describe("Cache", func() {
 	var (
 		engine              timing.Engine
+		sim                 modeling.Registrar
 		connection          messaging.Connection
 		addressToPortMapper mem.AddressToPortMapper
 		dram                *idealmemcontroller.Comp
@@ -42,8 +43,9 @@ var _ = Describe("Cache", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		connection = directconnection.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			Build("Conn")
 
 		// cuPort is a real, component-less port that stands in for the compute
@@ -53,7 +55,7 @@ var _ = Describe("Cache", func() {
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dram = idealmemcontroller.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 			Build("DRAM")
 		dram.AssignPort("Top",
@@ -64,9 +66,9 @@ var _ = Describe("Cache", func() {
 			Port: dram.GetPortByName("Top").AsRemote(),
 		}
 
-		cacheReg := modeling.NewStandaloneRegistrar(engine)
+		cacheReg := sim
 		c = MakeBuilder().
-			WithRegistrar(cacheReg).
+			WithSimulation(cacheReg).
 			WithResources(Resources{
 				AddressMapper: addressToPortMapper,
 			}).
@@ -78,7 +80,7 @@ var _ = Describe("Cache", func() {
 		// resolve it.
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(cacheReg).
+				WithSimulation(cacheReg).
 				WithComponent(c).
 				WithSpec(modeling.PortSpec{BufSize: 4}).
 				Build(name)
@@ -94,7 +96,7 @@ var _ = Describe("Cache", func() {
 	It("should do read miss", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4})
 		read := memprotocol.ReadReq{}
-		read.ID = engine.NewID()
+		read.ID = sim.NewID()
 		read.Src = cuPort.AsRemote()
 		read.Dst = c.GetPortByName("Top").AsRemote()
 		read.Address = 0x100
@@ -114,7 +116,7 @@ var _ = Describe("Cache", func() {
 	It("should do read miss coalesce", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := memprotocol.ReadReq{}
-		read1.ID = engine.NewID()
+		read1.ID = sim.NewID()
 		read1.Src = cuPort.AsRemote()
 		read1.Dst = c.GetPortByName("Top").AsRemote()
 		read1.Address = 0x100
@@ -124,7 +126,7 @@ var _ = Describe("Cache", func() {
 		c.GetPortByName("Top").Deliver(read1)
 
 		read2 := memprotocol.ReadReq{}
-		read2.ID = engine.NewID()
+		read2.ID = sim.NewID()
 		read2.Src = cuPort.AsRemote()
 		read2.Dst = c.GetPortByName("Top").AsRemote()
 		read2.Address = 0x104
@@ -155,7 +157,7 @@ var _ = Describe("Cache", func() {
 	It("should do read hit", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := memprotocol.ReadReq{}
-		read1.ID = engine.NewID()
+		read1.ID = sim.NewID()
 		read1.Src = cuPort.AsRemote()
 		read1.Dst = c.GetPortByName("Top").AsRemote()
 		read1.Address = 0x100
@@ -171,7 +173,7 @@ var _ = Describe("Cache", func() {
 		Expect(rsps[0].(memprotocol.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
 
 		read2 := memprotocol.ReadReq{}
-		read2.ID = engine.NewID()
+		read2.ID = sim.NewID()
 		read2.Src = cuPort.AsRemote()
 		read2.Dst = c.GetPortByName("Top").AsRemote()
 		read2.Address = 0x104
@@ -191,7 +193,7 @@ var _ = Describe("Cache", func() {
 
 	It("should write partial line", func() {
 		write := memprotocol.WriteReq{}
-		write.ID = engine.NewID()
+		write.ID = sim.NewID()
 		write.Src = cuPort.AsRemote()
 		write.Dst = c.GetPortByName("Top").AsRemote()
 		write.Address = 0x100
@@ -212,7 +214,7 @@ var _ = Describe("Cache", func() {
 
 	It("should write full line", func() {
 		write := memprotocol.WriteReq{}
-		write.ID = engine.NewID()
+		write.ID = sim.NewID()
 		write.Src = cuPort.AsRemote()
 		write.Dst = c.GetPortByName("Top").AsRemote()
 		write.Address = 0x100

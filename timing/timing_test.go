@@ -17,15 +17,16 @@ func (h *recordingHandler) Handle(e Event) {
 
 func TestSerialEngineRunsEventsInTimeOrder(t *testing.T) {
 	engine := NewSerialEngine()
+	var ids IDGenerator
 	handler := &recordingHandler{}
 	engine.RegisterHandler("handler", handler)
 
 	engine.Schedule(testEvent{
-		EventBase: MakeEventBase(engine, 2, "handler"),
+		EventBase: MakeEventBase(ids.NewID(), 2, "handler"),
 		label:     "second",
 	})
 	engine.Schedule(testEvent{
-		EventBase: MakeEventBase(engine, 1, "handler"),
+		EventBase: MakeEventBase(ids.NewID(), 1, "handler"),
 		label:     "first",
 	})
 
@@ -40,18 +41,19 @@ func TestSerialEngineRunsEventsInTimeOrder(t *testing.T) {
 
 func TestSerialEngineRunsSecondaryEventsAfterPrimaryEvents(t *testing.T) {
 	engine := NewSerialEngine()
+	var ids IDGenerator
 	handler := &recordingHandler{}
 	engine.RegisterHandler("handler", handler)
 
 	secondary := testEvent{
-		EventBase: MakeEventBase(engine, 1, "handler"),
+		EventBase: MakeEventBase(ids.NewID(), 1, "handler"),
 		label:     "secondary",
 	}
 	secondary.Secondary = true
 
 	engine.Schedule(secondary)
 	engine.Schedule(testEvent{
-		EventBase: MakeEventBase(engine, 1, "handler"),
+		EventBase: MakeEventBase(ids.NewID(), 1, "handler"),
 		label:     "primary",
 	})
 
@@ -65,11 +67,11 @@ func TestSerialEngineRunsSecondaryEventsAfterPrimaryEvents(t *testing.T) {
 }
 
 func TestIDGeneratorSequence(t *testing.T) {
-	engine := NewSerialEngine()
-	if got := engine.NewID(); got != 1 {
+	var ids IDGenerator
+	if got := ids.NewID(); got != 1 {
 		t.Fatalf("first ID = %d, want 1", got)
 	}
-	if got := engine.NewID(); got != 2 {
+	if got := ids.NewID(); got != 2 {
 		t.Fatalf("second ID = %d, want 2", got)
 	}
 }
@@ -92,4 +94,13 @@ func sameStrings(a, b []string) bool {
 	}
 
 	return true
+}
+
+// Constructing an event preserves the supplied ID without requiring an engine
+// or simulation, including when reconstructing an existing event.
+func TestEventBaseUsesExplicitID(t *testing.T) {
+	evt := MakeEventBase(42, 100, "handler")
+	if evt.ID != 42 || evt.Time() != 100 || evt.HandlerID() != "handler" {
+		t.Fatalf("event did not preserve its arguments: %+v", evt)
+	}
 }

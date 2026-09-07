@@ -7,7 +7,7 @@
 // Usage:
 //
 //	monitor := monitoring2.NewMonitor().WithPortNumber(8080)
-//	monitor.RegisterEngine(engine)
+//	monitor.RegisterSimulation(sim)
 //	monitor.RegisterComponent(component)
 //	monitor.RegisterVisTracer(tracer)
 //	monitor.StartServer()

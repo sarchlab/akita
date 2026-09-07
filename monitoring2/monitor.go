@@ -50,10 +50,11 @@ type monitorPort interface {
 
 type Monitor struct {
 	// Configuration (set before StartServer).
-	port      int
-	engine    timing.Engine
-	visTracer *tracing.DBTracer
-	tracePath string
+	port       int
+	engine     timing.Engine
+	simulation timing.Simulation
+	visTracer  *tracing.DBTracer
+	tracePath  string
 
 	// Internal state.
 	components       []Component
@@ -90,9 +91,10 @@ func (m *Monitor) WithPortNumber(port int) *Monitor {
 	return m
 }
 
-// RegisterEngine registers the simulation engine with the monitor.
-func (m *Monitor) RegisterEngine(e timing.Engine) {
-	m.engine = e
+// RegisterSimulation supplies the monitor's simulation and its engine.
+func (m *Monitor) RegisterSimulation(sim timing.Simulation) {
+	m.simulation = sim
+	m.engine = sim.GetEngine()
 }
 
 // RegisterComponent registers a component with the monitor so its internal
@@ -120,10 +122,10 @@ func (m *Monitor) SetTraceDBPath(path string) {
 }
 
 // CreateProgressBar creates a new progress bar tracked by the monitor.
-// RegisterEngine must be called first so the ID belongs to that simulation.
+// RegisterSimulation must be called first so the ID belongs to that simulation.
 func (m *Monitor) CreateProgressBar(name string, total uint64) *daisen2.ProgressBar {
 	bar := &daisen2.ProgressBar{
-		ID:    m.engine.NewID(),
+		ID:    m.simulation.NewID(),
 		Name:  name,
 		Total: total,
 	}

@@ -136,7 +136,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 
 	rsp := datamoverprotocol.DataMoveResponse{
 		MsgMeta: messaging.MsgMeta{
-			ID:    m.comp.NewID(),
+			ID:    m.comp.Simulation().NewID(),
 			Src:   trans.ReqDst,
 			Dst:   trans.ReqSrc,
 			RspTo: trans.ReqID,

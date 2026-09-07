@@ -40,7 +40,7 @@ func (d *directory) acceptIntoPipeline() (madeProgress bool) {
 
 		transIdx, _ := dirBuf.Pop()
 		trans := &next.Transactions[transIdx]
-		pid := d.cache.comp.NewID()
+		pid := d.cache.comp.Simulation().NewID()
 		trans.DirPipelineTaskID = pid
 		tracing.StartTask(d.cache.comp, tracing.TaskStart{
 			ID:       pid,
@@ -289,7 +289,7 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 	cacheLineID := addr / blockSize * blockSize
 
 	writeToBottom := memprotocol.WriteReq{}
-	writeToBottom.ID = d.cache.comp.NewID()
+	writeToBottom.ID = d.cache.comp.Simulation().NewID()
 	writeToBottom.Src = d.cache.bottomPort().AsRemote()
 	// Route by cache-line ID so the write-through write and the
 	// corresponding read-fill always target the same lower-memory port,
@@ -337,7 +337,7 @@ func (d *directory) fetchFromBottom(
 		PID:            pid,
 		AccessByteSize: blockSize,
 	}
-	readToBottom.ID = d.cache.comp.NewID()
+	readToBottom.ID = d.cache.comp.Simulation().NewID()
 	readToBottom.Src = d.cache.bottomPort().AsRemote()
 	readToBottom.Dst = bottomModule
 	readToBottom.TrafficBytes, readToBottom.TrafficClass = 12, "req"

@@ -29,7 +29,7 @@ type scheduler interface {
 // open- vs close-page variant. The location is resolved by the addrMapper.
 type rowPolicy interface {
 	Name() string
-	CommandFor(ids timing.IDSource, spec *Spec, st *State, ref subTransRef, loc location) *commandState
+	CommandFor(ids timing.Simulation, spec *Spec, st *State, ref subTransRef, loc location) *commandState
 }
 
 // addrMapper maps a physical address to a DRAM location. The location keeps a
@@ -65,7 +65,7 @@ type openPageRowPolicy struct{}
 func (openPageRowPolicy) Name() string { return rowPolicyOpen }
 
 func (openPageRowPolicy) CommandFor(
-	ids timing.IDSource,
+	ids timing.Simulation,
 	_ *Spec, st *State, ref subTransRef, loc location,
 ) *commandState {
 	return buildColumnCommand(ids, st, ref, loc, cmdKindRead, cmdKindWrite)
@@ -78,7 +78,7 @@ type closePageRowPolicy struct{}
 func (closePageRowPolicy) Name() string { return rowPolicyClose }
 
 func (closePageRowPolicy) CommandFor(
-	ids timing.IDSource,
+	ids timing.Simulation,
 	_ *Spec, st *State, ref subTransRef, loc location,
 ) *commandState {
 	return buildColumnCommand(
@@ -90,7 +90,7 @@ func (closePageRowPolicy) CommandFor(
 // given location, choosing the read or write variant from the parent
 // transaction's direction.
 func buildColumnCommand(
-	ids timing.IDSource,
+	ids timing.Simulation,
 	st *State, ref subTransRef, loc location,
 	readKind, writeKind commandKind,
 ) *commandState {
@@ -169,7 +169,7 @@ type controller struct {
 // sub-transaction queue into a command queue: it maps the address and turns the
 // sub-transaction into a column command via the configured strategies. Returns
 // true if a sub-transaction was enqueued.
-func (c *controller) fillCommandQueue(ids timing.IDSource, spec *Spec, state *State) bool {
+func (c *controller) fillCommandQueue(ids timing.Simulation, spec *Spec, state *State) bool {
 	for i, ref := range state.SubTransQueue.Entries {
 		sub := subTransByRef(state, ref)
 		if sub == nil {

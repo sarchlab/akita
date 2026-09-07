@@ -46,7 +46,7 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 			}
 
 			flit := itemI.(packetization.Flit)
-			taskID := m.comp.NewID()
+			taskID := m.comp.Simulation().NewID()
 			item := routedFlit{
 				Flit:    flit,
 				TaskID:  taskID,

@@ -130,7 +130,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 	srcP := m.srcPort()
 
 	req := memprotocol.ReadReq{}
-	req.ID = m.comp.NewID()
+	req.ID = m.comp.Simulation().NewID()
 	req.Address = addr
 	req.Src = srcP.AsRemote()
 	req.Dst = m.findSrcPort(addr)
@@ -230,7 +230,7 @@ func (m *dataTransferMW) writeToDst() bool {
 	dstP := m.dstPort()
 
 	req := memprotocol.WriteReq{}
-	req.ID = m.comp.NewID()
+	req.ID = m.comp.Simulation().NewID()
 	req.Address = trans.NextWriteAddr
 	req.Data = data
 	req.Src = dstP.AsRemote()

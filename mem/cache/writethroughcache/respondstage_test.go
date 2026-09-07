@@ -20,7 +20,7 @@ var _ = Describe("Respond Stage", func() {
 	BeforeEach(func() {
 		mw = &pipelineMW{}
 		mw.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(timing.NewSerialEngine()).
+			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{}).
 			Build("Cache")
@@ -55,7 +55,7 @@ var _ = Describe("Respond Stage", func() {
 			next := &mw.comp.State
 
 			readMeta = messaging.MsgMeta{
-				ID:           mw.comp.NewID(),
+				ID:           mw.comp.Simulation().NewID(),
 				Src:          "SomeSrc",
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -107,7 +107,7 @@ var _ = Describe("Respond Stage", func() {
 			next := &mw.comp.State
 
 			writeMeta = messaging.MsgMeta{
-				ID:           mw.comp.NewID(),
+				ID:           mw.comp.Simulation().NewID(),
 				Src:          "SomeSrc",
 				TrafficBytes: 12,
 				TrafficClass: "req",

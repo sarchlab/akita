@@ -15,13 +15,13 @@ func TestValidateState(t *testing.T) {
 	}
 }
 
-func buildTestMMU(engine timing.Engine, name string) *Comp {
+func buildTestMMU(sim modeling.Registrar, name string) *Comp {
 	spec := DefaultSpec()
 	spec.AutoPageAllocation = true
 
-	reg := modeling.NewStandaloneRegistrar(engine)
+	reg := sim
 	comp := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(reg).
 		WithSpec(spec).
 		Build(name)
 
@@ -79,9 +79,10 @@ func verifyState(t *testing.T, got State, reqID uint64) {
 
 func TestStateAndStateAssignment(t *testing.T) {
 	engine := timing.NewSerialEngine()
-	mmu := buildTestMMU(engine, "TestMMU")
+	sim := modeling.NewStandaloneSimulation(engine)
+	mmu := buildTestMMU(sim, "TestMMU")
 
-	reqID := engine.NewID()
+	reqID := sim.NewID()
 	state := makeTestState(reqID)
 
 	mmu.State = state

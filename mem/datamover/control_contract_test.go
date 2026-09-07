@@ -24,16 +24,17 @@ func (c *ccNoopConn) NotifySend()                      {}
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 
 		spec := DefaultSpec()
 		spec.BufferSize = 64
 		spec.InsideByteGranularity = 8
 		spec.OutsideByteGranularity = 8
 
-		reg := modeling.NewStandaloneRegistrar(engine)
+		reg := sim
 
 		comp := MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithSpec(spec).
 			WithResources(Resources{
 				InsideMapper:  &mem.SinglePortMapper{Port: messaging.RemotePort("InsideMem")},
@@ -43,7 +44,7 @@ func TestControlContract(t *testing.T) {
 
 		for _, name := range []string{"Top", "Inside", "Outside", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(reg).
+				WithSimulation(reg).
 				WithComponent(comp).
 				WithSpec(modeling.PortSpec{BufSize: 16}).
 				Build(name)

@@ -60,7 +60,7 @@ func (s *bankStage) extractFromBuf() bool {
 	// pipeline, so its bank read/write gets its own child bar under the req_in,
 	// mirroring the directory pipeline subtask. The bank latency then shows as
 	// real work rather than an unexplained gap before completion.
-	pid := s.cache.comp.NewID()
+	pid := s.cache.comp.Simulation().NewID()
 	trans.BankTaskID = pid
 	tracing.StartTask(s.cache.comp, tracing.TaskStart{
 		ID:       pid,

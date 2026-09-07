@@ -59,20 +59,20 @@ func createNetwork(s *simulation.Simulation, test *acceptance.Test) {
 	epSpec.FlitByteSize = 8
 
 	ep1 := endpoint.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(epSpec).
 		WithResources(endpoint.Resources{DevicePorts: agents[0].AgentPorts}).
 		Build("EP1")
 
 	ep2 := endpoint.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(epSpec).
 		WithResources(endpoint.Resources{DevicePorts: agents[1].AgentPorts}).
 		Build("EP2")
 
 	for _, ep := range []*endpoint.Comp{ep1, ep2} {
 		ep.SetNetworkPort(modeling.MakePortBuilder().
-			WithRegistrar(s).
+			WithSimulation(s).
 			WithComponent(ep).
 			WithSpec(modeling.PortSpec{BufSize: 4}).
 			Build("NetworkPort"))
@@ -82,7 +82,7 @@ func createNetwork(s *simulation.Simulation, test *acceptance.Test) {
 	ep2.SetDefaultSwitchDst(ep1.NetworkPort().AsRemote())
 
 	conn := directconnection.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		Build("Conn")
 
 	conn.PlugIn(ep1.NetworkPort())

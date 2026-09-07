@@ -85,6 +85,7 @@ func (r *milestoneRecorder) tagsWith(what string) []tracing.TaskTag {
 var _ = Describe("Cache milestones", func() {
 	var (
 		engine      timing.Engine
+		sim         modeling.Registrar
 		connection  messaging.Connection
 		dram        *idealmemcontroller.Comp
 		dramStorage *mem.Storage
@@ -95,15 +96,16 @@ var _ = Describe("Cache milestones", func() {
 
 	buildCache := func(policy string) {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		connection = directconnection.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			Build("Conn")
 
 		cuPort = messaging.NewPort(nil, 16, 16, "CU.Top")
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dram = idealmemcontroller.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 			Build("DRAM")
 		dram.AssignPort("Top",
@@ -114,18 +116,18 @@ var _ = Describe("Cache milestones", func() {
 			Port: dram.GetPortByName("Top").AsRemote(),
 		}
 
-		cacheReg := modeling.NewStandaloneRegistrar(engine)
+		cacheReg := sim
 		spec := DefaultSpec()
 		spec.WritePolicyType = policy
 		c = MakeBuilder().
-			WithRegistrar(cacheReg).
+			WithSimulation(cacheReg).
 			WithSpec(spec).
 			WithResources(Resources{AddressMapper: addressToPortMapper}).
 			Build("Cache")
 
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(cacheReg).
+				WithSimulation(cacheReg).
 				WithComponent(c).
 				WithSpec(modeling.PortSpec{BufSize: 4}).
 				Build(name)
@@ -162,7 +164,7 @@ var _ = Describe("Cache milestones", func() {
 
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4})
 		read := memprotocol.ReadReq{Address: 0x100, AccessByteSize: 4}
-		read.ID = engine.NewID()
+		read.ID = sim.NewID()
 		read.Src = cuPort.AsRemote()
 		read.Dst = c.GetPortByName("Top").AsRemote()
 		read.TrafficBytes = 12
@@ -211,7 +213,7 @@ var _ = Describe("Cache milestones", func() {
 
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4})
 		read := memprotocol.ReadReq{Address: 0x100, AccessByteSize: 4}
-		read.ID = engine.NewID()
+		read.ID = sim.NewID()
 		read.Src = cuPort.AsRemote()
 		read.Dst = c.GetPortByName("Top").AsRemote()
 		read.TrafficBytes = 12
@@ -261,7 +263,7 @@ var _ = Describe("Cache milestones", func() {
 			fullLine[i] = byte(i)
 		}
 		warm := memprotocol.WriteReq{Address: 0x100, Data: fullLine}
-		warm.ID = engine.NewID()
+		warm.ID = sim.NewID()
 		warm.Src = cuPort.AsRemote()
 		warm.Dst = c.GetPortByName("Top").AsRemote()
 		warm.TrafficBytes = 64 + 12
@@ -279,7 +281,7 @@ var _ = Describe("Cache milestones", func() {
 		// Now a partial write to the same line: this is a write-through write
 		// hit and must carry the write-hit tag.
 		hit := memprotocol.WriteReq{Address: 0x100, Data: []byte{9, 9, 9, 9}}
-		hit.ID = engine.NewID()
+		hit.ID = sim.NewID()
 		hit.Src = cuPort.AsRemote()
 		hit.Dst = c.GetPortByName("Top").AsRemote()
 		hit.TrafficBytes = 4 + 12
@@ -333,7 +335,7 @@ var _ = Describe("Cache milestones", func() {
 			fullLine[i] = byte(i)
 		}
 		miss := memprotocol.WriteReq{Address: 0x100, Data: fullLine}
-		miss.ID = engine.NewID()
+		miss.ID = sim.NewID()
 		miss.Src = cuPort.AsRemote()
 		miss.Dst = c.GetPortByName("Top").AsRemote()
 		miss.TrafficBytes = 64 + 12
@@ -371,7 +373,7 @@ var _ = Describe("Cache milestones", func() {
 		// open a bank subtask.
 		fullLine := make([]byte, 64)
 		w := memprotocol.WriteReq{Address: 0x100, Data: fullLine}
-		w.ID = engine.NewID()
+		w.ID = sim.NewID()
 		w.Src = cuPort.AsRemote()
 		w.Dst = c.GetPortByName("Top").AsRemote()
 		w.TrafficBytes = 64 + 12

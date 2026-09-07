@@ -52,7 +52,7 @@ The switch is built first, then ports are added one at a time.
 
 ```go
 sw := switches.MakeBuilder().
-    WithRegistrar(reg).                                  // *simulation.Simulation or StandaloneRegistrar
+    WithSimulation(reg).                                  // *simulation.Simulation or a standalone simulation
     WithSpec(switches.DefaultSpec()).
     WithResources(switches.Resources{RoutingTable: rt}).
     Build("Switch0")
@@ -61,7 +61,7 @@ sw := switches.MakeBuilder().
 // "Port[i]"), registers it, builds the internal port complex toward the remote
 // peer, and returns the new local port to connect.
 swPort := switches.MakeSwitchPortAdder(sw).
-    WithRegistrar(reg).
+    WithSimulation(reg).
     WithRemotePort(remotePort). // an endpoint's NetworkPort or another switch's port
     WithLatency(1).
     WithNumInputChannel(1).
@@ -69,7 +69,7 @@ swPort := switches.MakeSwitchPortAdder(sw).
     Add()
 ```
 
-`WithRegistrar` and a non-nil `RoutingTable` are required — `Build` panics
+`WithSimulation` and a non-nil `RoutingTable` are required — `Build` panics
 otherwise. `MakeSwitchPortAdder` defaults to one input/output channel, a latency
 of 1, and buffer size 1; `Add` mints the switch-side local port and wires it to
 the remote peer you supply. For a switch-to-switch link — where both local ports

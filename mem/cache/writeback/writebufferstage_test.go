@@ -45,7 +45,7 @@ var _ = Describe("WriteBufferStage", func() {
 
 		m = &pipelineMW{}
 		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(timing.NewSerialEngine()).
+			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:       6,
@@ -85,7 +85,7 @@ var _ = Describe("WriteBufferStage", func() {
 	Context("processing new writeBufferFetch transactions", func() {
 		It("should fetch from bottom", func() {
 			read := memprotocol.ReadReq{}
-			read.ID = m.comp.NewID()
+			read.ID = m.comp.Simulation().NewID()
 			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				Action:       writeBufferFetch,
@@ -119,7 +119,7 @@ var _ = Describe("WriteBufferStage", func() {
 			next.InflightFetchIndices = []int{10, 11, 12, 13}
 
 			read := memprotocol.ReadReq{}
-			read.ID = m.comp.NewID()
+			read.ID = m.comp.Simulation().NewID()
 			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				Action:       writeBufferFetch,
@@ -143,7 +143,7 @@ var _ = Describe("WriteBufferStage", func() {
 	Context("writing evictions", func() {
 		It("should send eviction to bottom", func() {
 			read := memprotocol.ReadReq{}
-			read.ID = m.comp.NewID()
+			read.ID = m.comp.Simulation().NewID()
 			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				EvictingAddr: 0x200,
@@ -190,7 +190,7 @@ var _ = Describe("WriteBufferStage", func() {
 			evictWrite.TrafficClass = "memprotocol.WriteReq"
 
 			read := memprotocol.ReadReq{}
-			read.ID = m.comp.NewID()
+			read.ID = m.comp.Simulation().NewID()
 			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				HasEvictionWriteReq:  true,

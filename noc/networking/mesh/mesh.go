@@ -51,18 +51,9 @@ func NewConnector() *Connector {
 	return c
 }
 
-// WithEngine sets the engine to be used.
-func (c *Connector) WithEngine(e timing.EventScheduler) *Connector {
-	c.connector = c.connector.WithEngine(e)
-	return c
-}
-
-// WithRegistrar sets the registrar used to source the engine and register the
-// components built by the connector. Prefer this over WithEngine when a full
-// simulation is available, so the network's components are recorded for tracing
-// and topology.
-func (c *Connector) WithRegistrar(reg modeling.Registrar) *Connector {
-	c.connector = c.connector.WithRegistrar(reg)
+// WithSimulation sets the simulation that owns the network components.
+func (c *Connector) WithSimulation(reg modeling.Registrar) *Connector {
+	c.connector = c.connector.WithSimulation(reg)
 	return c
 }
 

@@ -38,7 +38,7 @@ func (m *sendMW) sendRsp() bool {
 
 	rsp := pingRsp{
 		MsgMeta: messaging.MsgMeta{
-			ID:    m.comp.NewID(),
+			ID:    m.comp.Simulation().NewID(),
 			Src:   outPort(m.comp).AsRemote(),
 			Dst:   trans.ReqSrc,
 			RspTo: trans.ReqID,
@@ -66,7 +66,7 @@ func (m *sendMW) sendPing() bool {
 
 	pingMsg := pingReq{
 		MsgMeta: messaging.MsgMeta{
-			ID:  m.comp.NewID(),
+			ID:  m.comp.Simulation().NewID(),
 			Src: outPort(m.comp).AsRemote(),
 			Dst: state.PingDst,
 		},

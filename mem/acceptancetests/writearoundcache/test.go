@@ -39,7 +39,7 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 	engine := s.GetEngine()
 
 	conn := directconnection.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		Build("Conn")
 
 	agentSpec := memaccessagent.DefaultSpec()
@@ -47,11 +47,11 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.ReadLeft = *numAccessFlag
 	agent := memaccessagent.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(agentSpec).
 		Build("MemAccessAgent")
 	agentMem := modeling.MakePortBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithComponent(agent).
 		WithSpec(modeling.PortSpec{BufSize: 16}).
 		Build("Mem")
@@ -63,17 +63,17 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 	dramSpec := idealmemcontroller.DefaultSpec()
 	dramSpec.Capacity = 4 * mem.GB
 	dram := idealmemcontroller.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(dramSpec).
 		Build("DRAM")
 	dramTop := modeling.MakePortBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithComponent(dram).
 		WithSpec(modeling.PortSpec{BufSize: 16}).
 		Build("Top")
 	dram.AssignPort("Top", dramTop)
 	dramCtrl := modeling.MakePortBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithComponent(dram).
 		WithSpec(modeling.PortSpec{BufSize: 16}).
 		Build("Control")
@@ -91,26 +91,26 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 	cacheSpec.NumBanks = 1
 	cacheSpec.BankLatency = 20
 	writeAroundCache := writethroughcache.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(cacheSpec).
 		WithResources(writethroughcache.Resources{
 			AddressMapper: addressToPortMapper,
 		}).
 		Build("Cache")
 	cacheTop := modeling.MakePortBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithComponent(writeAroundCache).
 		WithSpec(modeling.PortSpec{BufSize: 16}).
 		Build("Top")
 	writeAroundCache.AssignPort("Top", cacheTop)
 	cacheBottom := modeling.MakePortBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithComponent(writeAroundCache).
 		WithSpec(modeling.PortSpec{BufSize: 16}).
 		Build("Bottom")
 	writeAroundCache.AssignPort("Bottom", cacheBottom)
 	cacheControl := modeling.MakePortBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithComponent(writeAroundCache).
 		WithSpec(modeling.PortSpec{BufSize: 16}).
 		Build("Control")

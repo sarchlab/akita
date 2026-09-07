@@ -103,6 +103,7 @@ var _ = Describe("Bank selection across interleaved controllers", func() {
 var _ = Describe("Bank selection data correctness with global storage", func() {
 	var (
 		engine  timing.Engine
+		sim     modeling.Registrar
 		memComp *Comp
 		agent   *testAgent
 		conn    *loopbackConnection
@@ -110,7 +111,8 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		reg := modeling.NewStandaloneRegistrar(engine)
+		sim = modeling.NewStandaloneSimulation(engine)
+		reg := sim
 
 		spec := DefaultSpec()
 		spec.NumBanks = 4
@@ -122,7 +124,7 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 		spec.BankAddrTotalNumOfElements = 4
 		spec.BankAddrCurrentElementIndex = 1
 
-		memComp = MakeBuilder().WithRegistrar(reg).WithSpec(spec).Build("MemBank")
+		memComp = MakeBuilder().WithSimulation(reg).WithSpec(spec).Build("MemBank")
 		assignPort(reg, memComp, "Top", 8)
 		assignPort(reg, memComp, "Control", 16)
 
@@ -144,7 +146,7 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 
 		for i, a := range addrs {
 			w := memprotocol.WriteReq{}
-			w.ID = engine.NewID()
+			w.ID = sim.NewID()
 			w.Src = agent.port.AsRemote()
 			w.Dst = tp.AsRemote()
 			w.Address = a
@@ -159,7 +161,7 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 
 		for i, a := range addrs {
 			r := memprotocol.ReadReq{}
-			r.ID = engine.NewID()
+			r.ID = sim.NewID()
 			r.Src = agent.port.AsRemote()
 			r.Dst = tp.AsRemote()
 			r.Address = a

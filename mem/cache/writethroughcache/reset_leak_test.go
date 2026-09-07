@@ -21,8 +21,9 @@ import (
 // it leaks (and, for a req_in, leaks a receiver-registry entry too).
 func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 	storage := mem.NewStorage(4 * mem.GB)
-	reg := modeling.NewStandaloneRegistrar(engine)
+	reg := sim
 
 	spec := DefaultSpec()
 	spec.NumReqPerCycle = 1
@@ -36,7 +37,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.MaxNumConcurrentTrans = 16
 
 	comp := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(reg).
 		WithSpec(spec).
 		WithResources(Resources{
 			Storage: storage,
@@ -50,7 +51,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// each into a no-op connection before the component is ticked.
 	assign := func(name string) messaging.Port {
 		p := modeling.MakePortBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithComponent(comp).
 			WithSpec(modeling.PortSpec{BufSize: 16}).
 			Build(name)
@@ -70,7 +71,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// bottom fetch (req_out) that is never answered, leaving the transaction in
 	// flight with both its req_in and req_out tracing tasks open.
 	read := memprotocol.ReadReq{Address: 0, AccessByteSize: 4}
-	read.ID = engine.NewID()
+	read.ID = sim.NewID()
 	read.Src = messaging.RemotePort("Agent")
 	read.Dst = topPort.AsRemote()
 	read.TrafficBytes = 12
@@ -116,7 +117,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the transaction is in flight.
 	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = engine.NewID()
+	reset.ID = sim.NewID()
 	reset.Src = messaging.RemotePort("Cmd")
 	reset.Dst = ctrlPort.AsRemote()
 	reset.TrafficClass = "memcontrolprotocol.Req"

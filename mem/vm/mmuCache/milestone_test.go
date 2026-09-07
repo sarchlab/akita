@@ -89,7 +89,8 @@ var _ = Describe("MMUCache milestones", func() {
 
 	BeforeEach(func() {
 		engine := timing.NewSerialEngine()
-		reg := modeling.NewStandaloneRegistrar(engine)
+		sim := modeling.NewStandaloneSimulation(engine)
+		reg := sim
 
 		spec := DefaultSpec()
 		spec.NumBlocks = 4
@@ -100,7 +101,7 @@ var _ = Describe("MMUCache milestones", func() {
 		spec.LatencyPerLevel = 100
 
 		comp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithSpec(spec).
 			WithResources(Resources{
 				LowModulePort: messaging.RemotePort("LowModule"),
@@ -129,7 +130,7 @@ var _ = Describe("MMUCache milestones", func() {
 
 	makeTopReq := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = comp.NewID()
+		req.ID = comp.Simulation().NewID()
 		req.Src = messaging.RemotePort("UpModule")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -161,7 +162,7 @@ var _ = Describe("MMUCache milestones", func() {
 			Valid: true,
 		}
 		rsp := vmprotocol.TranslationRsp{Page: page}
-		rsp.ID = comp.NewID()
+		rsp.ID = comp.Simulation().NewID()
 		rsp.Src = messaging.RemotePort("LowModule")
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = bottomReqID
@@ -291,7 +292,7 @@ var _ = Describe("MMUCache milestones", func() {
 
 		// Reset while the walk is in flight.
 		reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-		reset.ID = comp.NewID()
+		reset.ID = comp.Simulation().NewID()
 		reset.Src = messaging.RemotePort("CtrlAgent")
 		reset.Dst = comp.GetPortByName("Control").AsRemote()
 		reset.TrafficClass = "memcontrolprotocol.Req"

@@ -8,30 +8,31 @@ import (
 
 func Example_pingWithEvents() {
 	engine := timing.NewSerialEngine()
-	registrar := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
+	registrar := sim
 
 	agentA := MakeBuilder().
-		WithRegistrar(registrar).
+		WithSimulation(registrar).
 		Build("AgentA")
 	agentAOut := modeling.MakePortBuilder().
-		WithRegistrar(registrar).
+		WithSimulation(registrar).
 		WithComponent(agentA).
 		WithSpec(modeling.PortSpec{BufSize: 16}).
 		Build("Out")
 	agentA.AssignPort("Out", agentAOut)
 
 	agentB := MakeBuilder().
-		WithRegistrar(registrar).
+		WithSimulation(registrar).
 		Build("AgentB")
 	agentBOut := modeling.MakePortBuilder().
-		WithRegistrar(registrar).
+		WithSimulation(registrar).
 		WithComponent(agentB).
 		WithSpec(modeling.PortSpec{BufSize: 16}).
 		Build("Out")
 	agentB.AssignPort("Out", agentBOut)
 
 	conn := directconnection.MakeBuilder().
-		WithRegistrar(registrar).
+		WithSimulation(registrar).
 		Build("Conn")
 
 	conn.PlugIn(agentA.GetPortByName("Out"))

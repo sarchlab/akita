@@ -24,6 +24,7 @@ import (
 var _ = Describe("TLB control behavior", func() {
 	var (
 		engine      timing.Engine
+		sim         modeling.Registrar
 		tlbComp     *Comp
 		topPort     messaging.Port
 		bottomPort  messaging.Port
@@ -34,9 +35,9 @@ var _ = Describe("TLB control behavior", func() {
 	build := func() {
 		spec := DefaultSpec()
 
-		reg := modeling.NewStandaloneRegistrar(engine)
+		reg := sim
 		tlbComp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithSpec(spec).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
@@ -57,7 +58,7 @@ var _ = Describe("TLB control behavior", func() {
 
 	makeLookup := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -69,7 +70,7 @@ var _ = Describe("TLB control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = controlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -89,7 +90,7 @@ var _ = Describe("TLB control behavior", func() {
 			Valid: true,
 		}
 		rsp := vmprotocol.TranslationRsp{Page: page}
-		rsp.ID = engine.NewID()
+		rsp.ID = sim.NewID()
 		rsp.Src = remotePort
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = req.ID
@@ -99,6 +100,7 @@ var _ = Describe("TLB control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		build()
 	})
 

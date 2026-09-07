@@ -87,6 +87,7 @@ var _ = Describe("GMMU milestones", func() {
 
 	var (
 		engine     timing.Engine
+		sim        modeling.Registrar
 		pageTable  vm.PageTable
 		gmmuComp   *Comp
 		topPort    messaging.Port
@@ -98,6 +99,7 @@ var _ = Describe("GMMU milestones", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		pageTable = vm.NewPageTable(12)
 
 		spec := DefaultSpec()
@@ -105,9 +107,9 @@ var _ = Describe("GMMU milestones", func() {
 		spec.Latency = 1
 		spec.LowModule = lowModulePort
 
-		reg := modeling.NewStandaloneRegistrar(engine)
+		reg := sim
 		gmmuComp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(reg).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(spec).
 			Build("GMMU")
@@ -137,7 +139,7 @@ var _ = Describe("GMMU milestones", func() {
 
 	makeReq := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = agentPort
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -192,14 +194,14 @@ var _ = Describe("GMMU milestones", func() {
 		// A remote walk is outstanding so the bottom response matches a
 		// transaction and is forwarded upstream.
 		walking := transactionState{
-			ReqID:    engine.NewID(),
+			ReqID:    sim.NewID(),
 			ReqSrc:   agentPort,
 			ReqDst:   topPort.AsRemote(),
 			PID:      1,
 			VAddr:    0x1000,
 			DeviceID: 1,
 		}
-		remoteReqID := engine.NewID()
+		remoteReqID := sim.NewID()
 		gmmuComp.State.RemoteMemReqs = map[uint64]transactionState{
 			remoteReqID: walking,
 		}
@@ -207,7 +209,7 @@ var _ = Describe("GMMU milestones", func() {
 		rsp := vmprotocol.TranslationRsp{
 			Page: vm.Page{PID: 1, VAddr: 0x1000, PAddr: 0x2000},
 		}
-		rsp.ID = engine.NewID()
+		rsp.ID = sim.NewID()
 		rsp.Src = lowModulePort
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = remoteReqID
@@ -295,7 +297,7 @@ var _ = Describe("GMMU milestones", func() {
 
 		// Deliver the remote response.
 		rsp := vmprotocol.TranslationRsp{Page: page}
-		rsp.ID = engine.NewID()
+		rsp.ID = sim.NewID()
 		rsp.Src = lowModulePort
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = downstream.ID

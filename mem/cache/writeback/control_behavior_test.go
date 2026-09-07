@@ -21,6 +21,7 @@ import (
 var _ = Describe("Write-Back Cache control behavior", func() {
 	var (
 		engine   timing.Engine
+		sim      modeling.Registrar
 		storage  *mem.Storage
 		comp     *Comp
 		topPort  messaging.Port
@@ -42,7 +43,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		spec.DirLatency = 1
 
 		comp = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				Storage: storage,
@@ -68,7 +69,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = addr
@@ -80,7 +81,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = engine.NewID()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -97,7 +98,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 			data[i] = byte(i + 1)
 		}
 		rsp := memprotocol.DataReadyRsp{Data: data}
-		rsp.ID = engine.NewID()
+		rsp.ID = sim.NewID()
 		rsp.Src = messaging.RemotePort("LowerCache")
 		rsp.Dst = botPort.AsRemote()
 		rsp.RspTo = read.ID
@@ -137,6 +138,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		storage = mem.NewStorage(1 * mem.MB)
 		build()
 	})
@@ -452,7 +454,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 				if w, ok := out.(memprotocol.WriteReq); ok {
 					botWrites = append(botWrites, w)
 					done := memprotocol.WriteDoneRsp{}
-					done.ID = engine.NewID()
+					done.ID = sim.NewID()
 					done.Src = messaging.RemotePort("LowerCache")
 					done.Dst = botPort.AsRemote()
 					done.RspTo = w.ID

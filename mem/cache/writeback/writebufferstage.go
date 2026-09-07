@@ -138,7 +138,7 @@ func (wb *writeBufferStage) fetchFromBottom(
 	spec := wb.cache.comp.Spec()
 	lowModulePort := wb.cache.findPort(trans.FetchAddress)
 	read := memprotocol.ReadReq{}
-	read.ID = wb.cache.comp.NewID()
+	read.ID = wb.cache.comp.Simulation().NewID()
 	read.Src = wb.cache.bottomPort().AsRemote()
 	read.Dst = lowModulePort
 	read.PID = trans.FetchPID
@@ -243,7 +243,7 @@ func (wb *writeBufferStage) write() bool {
 
 	lowModulePort := wb.cache.findPort(trans.EvictingAddr)
 	write := memprotocol.WriteReq{}
-	write.ID = wb.cache.comp.NewID()
+	write.ID = wb.cache.comp.Simulation().NewID()
 	write.Src = wb.cache.bottomPort().AsRemote()
 	write.Dst = lowModulePort
 	write.PID = trans.EvictingPID
