@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "kind": "component",
+  "name": "ReorderBuffer",
+  "package": "github.com/sarchlab/akita/v5/mem/rob",
+  "module": "github.com/sarchlab/akita/v5",
+  "spec": [
+    {
+      "name": "Freq",
+      "json_name": "freq",
+      "type": "github.com/sarchlab/akita/v5/timing.Freq",
+      "default": 1000000000,
+      "unit": "Hz"
+    },
+    {
+      "name": "BufferSize",
+      "json_name": "buffer_size",
+      "type": "int",
+      "default": 128
+    },
+    {
+      "name": "NumReqPerCycle",
+      "json_name": "num_req_per_cycle",
+      "type": "int",
+      "default": 4
+    },
+    {
+      "name": "BottomUnit",
+      "json_name": "bottom_unit",
+      "type": "github.com/sarchlab/akita/v5/messaging.RemotePort",
+      "doc": "BottomUnit is the remote port of the unit that the reorder buffer\nforwards requests to. The reorder buffer rewrites the Dst of every\nshadow request to this value.",
+      "default": ""
+    }
+  ],
+  "ports": [
+    {
+      "name": "Top",
+      "roles": [
+        {
+          "protocol": "mem",
+          "role": "responder"
+        }
+      ]
+    },
+    {
+      "name": "Bottom",
+      "roles": [
+        {
+          "protocol": "mem",
+          "role": "requester"
+        }
+      ]
+    },
+    {
+      "name": "Control",
+      "roles": [
+        {
+          "protocol": "mem.control",
+          "role": "responder"
+        }
+      ]
+    }
+  ]
+}
