@@ -2,23 +2,17 @@ package switches
 
 import (
 	"fmt"
+	"github.com/sarchlab/akita/v5/timing"
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides the default configuration for switch components.
-var defaultSpec = Spec{
-	Freq: 1 * timing.GHz,
-}
 
 // DefaultSpec returns a copy of the default configuration. Callers obtain it,
 // tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return defaultSpec
+	return Definition.NewSpec()
 }
 
 // Builder builds switches. Configuration is supplied as a whole through
@@ -33,7 +27,7 @@ type Builder struct {
 // MakeBuilder creates a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: defaultSpec,
+		spec: Definition.NewSpec(),
 	}
 }
 
@@ -90,9 +84,7 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.AddMiddleware(rfsMW)
 	modelComp.AddMiddleware(rpMW)
 
-	// The switch has a dynamic number of ports, added later with
-	// MakeSwitchPortAdder. They live in the "Port" group.
-	modelComp.DeclarePortGroup("Port", packetization.Link)
+	Definition.DeclarePorts(modelComp)
 
 	b.simulation.RegisterComponent(modelComp)
 

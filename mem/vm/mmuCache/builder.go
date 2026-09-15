@@ -1,27 +1,14 @@
 package mmuCache
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// defaultSpec provides the default configuration for mmuCache components.
-var defaultSpec = Spec{
-	Freq:            1 * timing.GHz,
-	NumReqPerCycle:  4,
-	NumLevels:       5,
-	NumBlocks:       1,
-	PageSize:        4096,
-	LatencyPerLevel: 100,
-	Log2PageSize:    12,
-}
-
 // DefaultSpec returns a copy of the default configuration. Callers typically
 // obtain it, tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return defaultSpec
+	return Definition.NewSpec()
 }
 
 // A Builder builds mmuCache components. Configuration is supplied as a whole
@@ -38,7 +25,7 @@ type Builder struct {
 // MakeBuilder returns a Builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: defaultSpec,
+		spec: Definition.NewSpec(),
 	}
 }
 
@@ -95,9 +82,7 @@ func (b Builder) Build(name string) *Comp {
 	cacheMW := &mmuCacheMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cacheMW)
 
-	modelComp.DeclarePort("Top", vmprotocol.Responder)
-	modelComp.DeclarePort("Bottom", vmprotocol.Requester)
-	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
+	Definition.DeclarePorts(modelComp)
 
 	b.simulation.RegisterComponent(modelComp)
 

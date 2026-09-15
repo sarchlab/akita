@@ -2,37 +2,19 @@ package writeback
 
 import (
 	"fmt"
+	"github.com/sarchlab/akita/v5/timing"
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides default configuration for the writeback cache.
-var defaultSpec = Spec{
-	Freq:                1 * timing.GHz,
-	NumReqPerCycle:      1,
-	Log2BlockSize:       6,
-	BankLatency:         10,
-	WayAssociativity:    4,
-	NumBanks:            1,
-	NumMSHREntry:        16,
-	TotalByteSize:       512 * mem.KB,
-	WriteBufferCapacity: 1024,
-	MaxInflightFetch:    128,
-	MaxInflightEviction: 128,
-	InterleavingSize:    4096,
-}
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
 // obtain it, tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return defaultSpec
+	return Definition.NewSpec()
 }
 
 // A Builder can build writeback caches. Configuration is supplied as a whole
@@ -48,7 +30,7 @@ type Builder struct {
 
 // MakeBuilder creates a new builder with default configurations.
 func MakeBuilder() Builder {
-	return Builder{spec: defaultSpec}
+	return Builder{spec: Definition.NewSpec()}
 }
 
 // WithSimulation sets the simulation that owns and registers the built component.
@@ -107,9 +89,7 @@ func (b Builder) Build(name string) *Comp {
 
 	comp.State = initialState
 
-	comp.DeclarePort("Top", memprotocol.Responder)
-	comp.DeclarePort("Bottom", memprotocol.Requester)
-	comp.DeclarePort("Control", memcontrolprotocol.Responder)
+	Definition.DeclarePorts(comp)
 
 	pmw := b.buildPipelineMW(comp, laneWidth)
 	cmw := b.buildControlMW(comp, pmw)
