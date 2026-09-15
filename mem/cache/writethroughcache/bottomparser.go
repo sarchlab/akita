@@ -43,8 +43,8 @@ func (p *bottomParser) chargeFillDataMilestone(entryTransIdxs []int) {
 }
 
 func (p *bottomParser) Tick() bool {
-	itemI := p.cache.bottomPort().PeekIncoming()
-	if itemI == nil {
+	itemI, ok := p.cache.bottomPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -141,7 +141,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 	trans.Data = data
 	trans.WriteFetchedDirtyMask = dirtyMask
 
-	bankBuf.PushTyped(transIdx)
+	bankBuf.Push(transIdx)
 
 	// Finalize MSHR transactions (marks transactions as done, removes
 	// from active processing). Skip the fetcher trans — it's been

@@ -18,6 +18,7 @@ import (
 var _ = Describe("Ideal Memory Controller control behavior", func() {
 	var (
 		engine        timing.Engine
+		sim           timing.Simulation
 		storage       *mem.Storage
 		memController *Comp
 		topPort       messaging.Port
@@ -31,7 +32,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		spec.CacheLineSize = 64
 
 		memController = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			WithSpec(spec).
 			Build("MemCtrl")
@@ -50,7 +51,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = addr
@@ -62,7 +63,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -71,6 +72,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		storage = mem.NewStorage(1 * mem.MB)
 		build()
 	})
@@ -92,15 +94,15 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		for i := 0; i < 4096 && !drainFound; i++ {
 			memController.Tick()
 			for {
-				out := topPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := topPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if _, ok := out.(memprotocol.DataReadyRsp); ok {
 					completed++
 				}
 			}
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
@@ -129,9 +131,11 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 
 		// The request is neither consumed nor turned into work, and no
 		// response is produced, while paused.
-		Expect(topPort.PeekIncoming()).ToNot(BeNil())
+		_, present0 := topPort.PeekIncoming()
+		Expect(present0).To(BeTrue())
 		Expect(memController.State.InflightTransactions).To(BeEmpty())
-		Expect(topPort.RetrieveOutgoing()).To(BeNil())
+		_, present1 := topPort.RetrieveOutgoing()
+		Expect(present1).To(BeFalse())
 	})
 
 	DescribeTable("Reset wipes in-flight state from any control state",
@@ -149,7 +153,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				memController.Tick()
-				if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					if r, ok := out.(memcontrolprotocol.Rsp); ok {
 						rsp = r
 						found = true
@@ -190,8 +194,8 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		for range 16 {
 			memController.Tick()
 			for {
-				out := ctrlPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := ctrlPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if r, ok := out.(memcontrolprotocol.Rsp); ok {
@@ -216,7 +220,8 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		for range 3 {
 			memController.Tick()
 		}
-		Expect(topPort.PeekIncoming()).ToNot(BeNil())
+		_, present2 := topPort.PeekIncoming()
+		Expect(present2).To(BeTrue())
 		Expect(memController.State.InflightTransactions).To(BeEmpty())
 
 		// Reset must drop that queued request. Before the fix it survived and
@@ -228,7 +233,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		found := false
 		for i := 0; i < 64 && !found; i++ {
 			memController.Tick()
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdReset {
 					Expect(rsp.Success).To(BeTrue())
@@ -241,9 +246,11 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		// The stale read never became work and never produced a response.
 		for range 16 {
 			memController.Tick()
-			Expect(topPort.RetrieveOutgoing()).To(BeNil())
+			_, present3 := topPort.RetrieveOutgoing()
+			Expect(present3).To(BeFalse())
 		}
-		Expect(topPort.PeekIncoming()).To(BeNil())
+		_, present4 := topPort.PeekIncoming()
+		Expect(present4).To(BeFalse())
 		Expect(memController.State.InflightTransactions).To(BeEmpty())
 	})
 })

@@ -12,9 +12,9 @@ var HookPosBufPush = &hooking.HookPos{Name: "Buffer Push"}
 // HookPosBufPop marks when an element is popped from the buffer.
 var HookPosBufPop = &hooking.HookPos{Name: "Buffer Pop"}
 
-// Buffer is a generic, bounded FIFO queue. Its state is fully encapsulated:
-// callers interact through the methods only, which keeps the capacity and
-// FIFO invariants intact and lets the representation evolve freely.
+// Buffer is a generic, bounded buffer with FIFO and indexed reads.
+// Indexed removal preserves the order of the remaining elements. Buffer is not
+// synchronized; callers must serialize access. Capacity checks do not reserve space.
 type Buffer[T any] struct {
 	hooking.HookableBase `json:"-"`
 
@@ -52,9 +52,9 @@ func (b *Buffer[T]) CanPush() bool {
 	return len(b.elements) < b.cap
 }
 
-// PushTyped adds an element to the back of the buffer. It panics if the buffer
+// Push adds an element to the back of the buffer. It panics if the buffer
 // is already at capacity.
-func (b *Buffer[T]) PushTyped(e T) {
+func (b *Buffer[T]) Push(e T) {
 	if len(b.elements) >= b.cap {
 		log.Panic("buffer overflow")
 	}
@@ -70,38 +70,50 @@ func (b *Buffer[T]) PushTyped(e T) {
 	}
 }
 
-// Peek returns the element at the front of the buffer without removing it. It
-// returns the zero value of T if the buffer is empty.
-func (b *Buffer[T]) Peek() T {
-	if len(b.elements) == 0 {
-		var zero T
-		return zero
-	}
+// Peek returns the head element without removing it. The boolean reports
+// presence, including when the stored value is the zero value of T.
+func (b *Buffer[T]) Peek() (T, bool) { return b.PeekAt(0) }
 
-	return b.elements[0]
+// PeekAt returns the element at index without removing it. The head has index
+// zero. Out-of-range indices return the zero value of T and false.
+func (b *Buffer[T]) PeekAt(index int) (T, bool) {
+	if index < 0 || index >= len(b.elements) {
+		var zero T
+		return zero, false
+	}
+	return b.elements[index], true
 }
 
-// UpdateFront replaces the element at the front of the buffer. It is a no-op
-// if the buffer is empty. This lets a consumer process the head item in place
-// across ticks (for example, marking it committed) without dequeuing it.
-func (b *Buffer[T]) UpdateFront(e T) {
+// UpdateFront replaces the head element and reports whether one existed.
+func (b *Buffer[T]) UpdateFront(e T) bool {
 	if len(b.elements) == 0 {
-		return
+		return false
 	}
-
 	b.elements[0] = e
+	return true
 }
 
-// Pop removes and returns the element at the front of the buffer. It returns
-// the zero value of T if the buffer is empty.
-func (b *Buffer[T]) Pop() T {
-	if len(b.elements) == 0 {
-		var zero T
-		return zero
+// Pop removes the head element and reports whether one existed.
+func (b *Buffer[T]) Pop() (T, bool) { return b.PopAt(0) }
+
+// PopAt removes and returns the element at index, preserving the order of the
+// remaining elements. Out-of-range indices return the zero value of T and false
+// without mutation or hooks. Removing an entry invalidates subsequent indices.
+func (b *Buffer[T]) PopAt(index int) (T, bool) {
+	e, ok := b.PeekAt(index)
+	if !ok {
+		return e, false
 	}
 
-	e := b.elements[0]
-	b.elements = b.elements[1:]
+	var zero T
+	if index == 0 {
+		b.elements[0] = zero
+		b.elements = b.elements[1:]
+	} else {
+		copy(b.elements[index:], b.elements[index+1:])
+		b.elements[len(b.elements)-1] = zero
+		b.elements = b.elements[:len(b.elements)-1]
+	}
 
 	if b.NumHooks() > 0 {
 		b.InvokeHook(hooking.HookCtx{
@@ -110,8 +122,7 @@ func (b *Buffer[T]) Pop() T {
 			Item:   e,
 		})
 	}
-
-	return e
+	return e, true
 }
 
 // Clear removes all elements from the buffer.

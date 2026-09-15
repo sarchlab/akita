@@ -52,8 +52,8 @@ var _ = Describe("Bank Stage", func() {
 			BankPipelines: []queueing.Pipeline[int]{
 				queueing.NewPipeline[int](4, 10),
 			},
-			BankPostPipelineBufs: []postPipelineBuf{
-				newPostPipelineBuf(4),
+			BankPostPipelineBufs: []queueing.Buffer[int]{
+				queueing.NewBuffer[int]("BankPostPipelineBuf", 4),
 			},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
@@ -63,7 +63,7 @@ var _ = Describe("Bank Stage", func() {
 			storage: storage,
 		}
 		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(timing.NewSerialEngine()).
+			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				BankLatency:      10,
@@ -95,6 +95,31 @@ var _ = Describe("Bank Stage", func() {
 		m.bankStages = []*bankStage{bs}
 	})
 
+	It("completes a later transaction while preserving a blocked zero-index head", func() {
+		next := &m.comp.State
+		fillTop()
+		next.Transactions = []transactionState{
+			{Action: bankReadHit},
+			{Action: bankEvict},
+			{Action: bankWriteHit},
+		}
+		for _, idx := range []int{0, 1, 2} {
+			next.BankPostPipelineBufs[0].Push(idx)
+		}
+		next.BankInflightTransCounts[0] = 3
+		next.BankDownwardInflightTransCounts[0] = 1
+
+		Expect(bs.finalizeTrans()).To(BeTrue())
+		Expect(next.BankPostPipelineBufs[0].Elements()).To(Equal([]int{0, 2}))
+		Expect(next.WriteBufferBuf.Elements()).To(Equal([]int{1}))
+		Expect(next.Transactions[0].Removed).To(BeFalse())
+		Expect(next.Transactions[1].Action).To(Equal(writeBufferFlush))
+		Expect(next.BankInflightTransCounts[0]).To(Equal(2))
+		Expect(next.BankDownwardInflightTransCounts[0]).To(Equal(0))
+		Expect(bs.finalizeTrans()).To(BeFalse())
+		Expect(next.BankPostPipelineBufs[0].Elements()).To(Equal([]int{0, 2}))
+	})
+
 	Context("completing a read hit transaction", func() {
 		BeforeEach(func() {
 			next := &m.comp.State
@@ -105,7 +130,7 @@ var _ = Describe("Bank Stage", func() {
 			storage.Write(0x40, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 
 			read := memprotocol.ReadReq{}
-			read.ID = timing.GetIDGenerator().Generate()
+			read.ID = m.comp.Simulation().NewID()
 			read.Src = messaging.RemotePort("Agent")
 			read.Address = 0x104
 			read.AccessByteSize = 4
@@ -125,7 +150,7 @@ var _ = Describe("Bank Stage", func() {
 			next.Transactions = []transactionState{trans}
 
 			// Put transaction in bank post-pipeline buffer
-			next.BankPostPipelineBufs[0].PushTyped(0)
+			next.BankPostPipelineBufs[0].Push(0)
 			next.BankInflightTransCounts[0] = 1
 		})
 
@@ -149,7 +174,7 @@ var _ = Describe("Bank Stage", func() {
 			Expect(next.Transactions[0].Removed).To(BeTrue())
 			Expect(next.BankInflightTransCounts[0]).To(Equal(0))
 
-			out := topPort.RetrieveOutgoing()
+			out, _ := topPort.RetrieveOutgoing()
 			dr := out.(memprotocol.DataReadyRsp)
 			Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 		})
@@ -164,7 +189,7 @@ var _ = Describe("Bank Stage", func() {
 			block.IsLocked = true
 
 			write := memprotocol.WriteReq{}
-			write.ID = timing.GetIDGenerator().Generate()
+			write.ID = m.comp.Simulation().NewID()
 			write.Src = messaging.RemotePort("Agent")
 			write.Address = 0x104
 			write.Data = []byte{5, 6, 7, 8}
@@ -182,7 +207,7 @@ var _ = Describe("Bank Stage", func() {
 				Action:       bankWriteHit,
 			}
 			next.Transactions = []transactionState{trans}
-			next.BankPostPipelineBufs[0].PushTyped(0)
+			next.BankPostPipelineBufs[0].Push(0)
 			next.BankInflightTransCounts[0] = 1
 		})
 
@@ -200,7 +225,7 @@ var _ = Describe("Bank Stage", func() {
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
-			data, _ := storage.Read(0x44, 4)
+			data := storage.Read(0x44, 4)
 			Expect(data).To(Equal([]byte{5, 6, 7, 8}))
 			next := &m.comp.State
 			block := &next.DirectoryState.Sets[0].Blocks[0]
@@ -210,7 +235,7 @@ var _ = Describe("Bank Stage", func() {
 			Expect(next.Transactions[0].Removed).To(BeTrue())
 			Expect(next.BankInflightTransCounts[0]).To(Equal(0))
 
-			out := topPort.RetrieveOutgoing()
+			out, _ := topPort.RetrieveOutgoing()
 			Expect(out).NotTo(BeNil())
 		})
 	})
@@ -242,7 +267,7 @@ var _ = Describe("Bank Stage", func() {
 				Action:                 bankWriteFetched,
 			}
 			next.Transactions = []transactionState{trans}
-			next.BankPostPipelineBufs[0].PushTyped(0)
+			next.BankPostPipelineBufs[0].Push(0)
 			next.BankInflightTransCounts[0] = 1
 		})
 
@@ -252,7 +277,7 @@ var _ = Describe("Bank Stage", func() {
 
 			Expect(ret).To(BeTrue())
 			next := &m.comp.State
-			writtenData, _ := storage.Read(0x40, 64)
+			writtenData := storage.Read(0x40, 64)
 			Expect(writtenData).To(Equal(next.Transactions[0].MSHRData))
 			block := &next.DirectoryState.Sets[0].Blocks[0]
 			Expect(block.IsLocked).To(BeFalse())
@@ -282,7 +307,7 @@ var _ = Describe("Bank Stage", func() {
 				EvictingAddr: 0x200,
 			}
 			next.Transactions = []transactionState{trans}
-			next.BankPostPipelineBufs[0].PushTyped(0)
+			next.BankPostPipelineBufs[0].Push(0)
 			next.BankInflightTransCounts[0] = 1
 		})
 

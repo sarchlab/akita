@@ -54,7 +54,7 @@ func createNetwork(sim *simulation.Simulation, test *acceptance.Test) {
 	}
 
 	connector := nc.MakeConnector().
-		WithRegistrar(sim).
+		WithSimulation(sim).
 		WithDefaultFreq(freq).
 		WithFlitSize(16)
 

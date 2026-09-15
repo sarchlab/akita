@@ -89,7 +89,7 @@ var _ = Describe("MMUCache milestones", func() {
 
 	BeforeEach(func() {
 		engine := timing.NewSerialEngine()
-		reg := modeling.NewStandaloneRegistrar(engine)
+		sim := modeling.NewStandaloneSimulation(engine)
 
 		spec := DefaultSpec()
 		spec.NumBlocks = 4
@@ -100,7 +100,7 @@ var _ = Describe("MMUCache milestones", func() {
 		spec.LatencyPerLevel = 100
 
 		comp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				LowModulePort: messaging.RemotePort("LowModule"),
@@ -108,7 +108,7 @@ var _ = Describe("MMUCache milestones", func() {
 			}).
 			Build("MMUCache")
 
-		assignDefaultPorts(reg, comp)
+		assignDefaultPorts(sim, comp)
 
 		topPort = comp.GetPortByName("Top")
 		bottomPort = comp.GetPortByName("Bottom")
@@ -129,7 +129,7 @@ var _ = Describe("MMUCache milestones", func() {
 
 	makeTopReq := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = comp.Simulation().NewID()
 		req.Src = messaging.RemotePort("UpModule")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -149,7 +149,9 @@ var _ = Describe("MMUCache milestones", func() {
 
 		Expect(mw.lookup()).To(BeTrue())
 
-		sent := bottomPort.RetrieveOutgoing().(vmprotocol.TranslationReq)
+		sentValue, _ := bottomPort.RetrieveOutgoing()
+
+		sent := sentValue.(vmprotocol.TranslationReq)
 		bottomReqID := sent.ID
 
 		page := vm.Page{
@@ -159,7 +161,7 @@ var _ = Describe("MMUCache milestones", func() {
 			Valid: true,
 		}
 		rsp := vmprotocol.TranslationRsp{Page: page}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = comp.Simulation().NewID()
 		rsp.Src = messaging.RemotePort("LowModule")
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = bottomReqID
@@ -272,7 +274,8 @@ var _ = Describe("MMUCache milestones", func() {
 		req := makeTopReq(0x2000)
 		topPort.Deliver(req)
 		Expect(mw.lookup()).To(BeTrue())
-		sent := bottomPort.RetrieveOutgoing().(vmprotocol.TranslationReq)
+		sentValue, _ := bottomPort.RetrieveOutgoing()
+		sent := sentValue.(vmprotocol.TranslationReq)
 		bottomReqID := sent.ID
 
 		// The walk is in flight: req_in and req_out are open but not yet ended,
@@ -288,7 +291,7 @@ var _ = Describe("MMUCache milestones", func() {
 
 		// Reset while the walk is in flight.
 		reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-		reset.ID = timing.GetIDGenerator().Generate()
+		reset.ID = comp.Simulation().NewID()
 		reset.Src = messaging.RemotePort("CtrlAgent")
 		reset.Dst = comp.GetPortByName("Control").AsRemote()
 		reset.TrafficClass = "memcontrolprotocol.Req"
@@ -297,7 +300,7 @@ var _ = Describe("MMUCache milestones", func() {
 		acked := false
 		for i := 0; i < 64 && !acked; i++ {
 			comp.Tick()
-			if out := comp.GetPortByName("Control").RetrieveOutgoing(); out != nil {
+			if out, ok := comp.GetPortByName("Control").RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdReset {
 					acked = true

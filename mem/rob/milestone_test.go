@@ -81,18 +81,18 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 	BeforeEach(func() {
 		engine := timing.NewSerialEngine()
-		reg := modeling.NewStandaloneRegistrar(engine)
+		sim := modeling.NewStandaloneSimulation(engine)
 
 		spec := DefaultSpec()
 		spec.BufferSize = 4
 		spec.NumReqPerCycle = 2
 		spec.BottomUnit = bottomUnitRemote
 
-		rob = MakeBuilder().WithRegistrar(reg).WithSpec(spec).Build("Rob")
+		rob = MakeBuilder().WithSimulation(sim).WithSpec(spec).Build("Rob")
 
 		assign := func(name string, bufSize int) messaging.Port {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(reg).
+				WithSimulation(sim).
 				WithComponent(rob).
 				WithSpec(modeling.PortSpec{BufSize: bufSize}).
 				Build(name)
@@ -118,7 +118,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{Address: addr, AccessByteSize: 4}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = rob.Simulation().NewID()
 		req.Src = topRemote
 		req.Dst = topPort.AsRemote()
 		req.TrafficClass = "memprotocol.ReadReq"
@@ -127,7 +127,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 	makeWrite := func(addr uint64, data []byte) memprotocol.WriteReq {
 		req := memprotocol.WriteReq{Address: addr, Data: data}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = rob.Simulation().NewID()
 		req.Src = topRemote
 		req.Dst = topPort.AsRemote()
 		req.TrafficClass = "memprotocol.WriteReq"
@@ -161,7 +161,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 	It("records admission milestones on the buffer task and processing "+
 		"milestones on req_in, plus a read tag, for a read", func() {
 		rsp := memprotocol.DataReadyRsp{Data: []byte{1, 2, 3, 4}}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = rob.Simulation().NewID()
 		rsp.Src = bottomUnitRemote
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.TrafficClass = "memprotocol.DataReadyRsp"
@@ -204,7 +204,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 	It("distinguishes a write with a subtask milestone and a write tag", func() {
 		rsp := memprotocol.WriteDoneRsp{}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = rob.Simulation().NewID()
 		rsp.Src = bottomUnitRemote
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.TrafficClass = "memprotocol.WriteDoneRsp"
@@ -225,7 +225,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 	It("emits the dependency milestone before the response-sent milestone "+
 		"so the in-order-commit reason wins a same-tick tie", func() {
 		rsp := memprotocol.DataReadyRsp{Data: []byte{0xAB}}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = rob.Simulation().NewID()
 		rsp.Src = bottomUnitRemote
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.TrafficClass = "memprotocol.DataReadyRsp"

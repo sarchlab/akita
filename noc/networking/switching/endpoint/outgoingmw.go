@@ -14,6 +14,7 @@ import (
 )
 
 func msgMetaToFlits(
+	ids timing.Simulation,
 	meta messaging.MsgMeta,
 	spec Spec,
 	networkPortRemote messaging.RemotePort,
@@ -32,7 +33,7 @@ func msgMetaToFlits(
 	for i := 0; i < numFlit; i++ {
 		flits[i] = packetization.Flit{
 			MsgMeta: messaging.MsgMeta{
-				ID:  timing.GetIDGenerator().Generate(),
+				ID:  ids.NewID(),
 				Src: networkPortRemote,
 				Dst: defaultSwitchDst,
 			},
@@ -142,11 +143,11 @@ func (m *outgoingMW) prepareMsg() bool {
 		}
 
 		port := m.devicePorts[i]
-		if port.PeekOutgoing() == nil {
+		if _, ok := port.PeekOutgoing(); !ok {
 			continue
 		}
 
-		msg := port.RetrieveOutgoing()
+		msg, _ := port.RetrieveOutgoing()
 		state.MsgOutBuf = append(state.MsgOutBuf, msg.Meta())
 
 		madeProgress = true
@@ -184,8 +185,9 @@ func (m *outgoingMW) prepareFlits() bool {
 		// simulation), travels in every flit as MsgTaskID, and is the parent of
 		// each per-flit flit_e2e task. It is parented to the message's own ID so
 		// it nests under that req_out when one exists.
-		msgTaskID := timing.GetIDGenerator().Generate()
+		msgTaskID := m.comp.Simulation().NewID()
 		flits := msgMetaToFlits(
+			m.comp.Simulation(),
 			meta, spec, networkPortRemote, m.defaultSwitchDst, msgTaskID)
 
 		state.FlitsToSend = append(state.FlitsToSend, flits...)

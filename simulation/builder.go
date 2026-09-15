@@ -168,10 +168,11 @@ func (b Builder) createEngine(s *Simulation) {
 	}
 }
 
-// createIDGenerator registers the process-wide ID generator as an entity so its
+// createIDGenerator registers this simulation's ID generator as an entity so its
 // counter is captured in the state snapshot.
 func (b Builder) createIDGenerator(s *Simulation) {
-	s.registerEntity(timing.GetIDGenerator().(Entity))
+	s.idGenerator = &timing.IDGenerator{}
+	s.registerEntity(s.idGenerator)
 }
 
 func (b Builder) createMetaRecorder(s *Simulation) {
@@ -196,7 +197,7 @@ func (b Builder) createServer(s *Simulation) {
 		monitor.WithPortNumber(b.monitorPort)
 	}
 
-	monitor.RegisterEngine(s.engine)
+	monitor.RegisterSimulation(s)
 	monitor.RegisterVisTracer(s.visTracer)
 	monitor.SetTraceDBPath(s.outputPath + ".sqlite3")
 	monitor.StartServer()

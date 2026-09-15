@@ -136,8 +136,8 @@ func (h *incomingBufferHook) onRetrieve(
 	EndTask(domain, TaskEnd{ID: MsgIDAtIncomingBuffer(retrieved, domain)})
 	ForgetMsgIDAtIncomingBuffer(retrieved.Meta().ID, domain)
 
-	newHead := port.PeekIncoming()
-	if newHead == nil {
+	newHead, ok := port.PeekIncoming()
+	if !ok {
 		return
 	}
 

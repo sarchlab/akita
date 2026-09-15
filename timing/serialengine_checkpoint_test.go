@@ -15,9 +15,8 @@ type idRecordingHandler struct {
 	ids []uint64
 }
 
-func (h *idRecordingHandler) Handle(e Event) error {
+func (h *idRecordingHandler) Handle(e Event) {
 	h.ids = append(h.ids, e.(queueTestEvent).ID)
-	return nil
 }
 
 func TestSerialEngineQueueRoundTrip(t *testing.T) {

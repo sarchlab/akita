@@ -7,10 +7,10 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/packetization"
+	"github.com/sarchlab/akita/v5/timing"
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -18,6 +18,7 @@ var _ = Describe("Switch", func() {
 	var (
 		mockCtrl     *gomock.Controller
 		engine       *MockEngine
+		sim          timing.Simulation
 		port1, port2 *MockPort
 		dstPort      *MockPort
 		routingTable *MockTable
@@ -29,7 +30,7 @@ var _ = Describe("Switch", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
-
+		sim = modeling.NewStandaloneSimulation(engine)
 		port1 = NewMockPort(mockCtrl)
 		port1.EXPECT().AsRemote().
 			Return(messaging.RemotePort("LocalPort1")).
@@ -68,7 +69,7 @@ var _ = Describe("Switch", func() {
 		spec.Freq = 1
 
 		sw = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{RoutingTable: routingTable}).
 			Build("Switch")
@@ -108,19 +109,19 @@ var _ = Describe("Switch", func() {
 
 	It("should start processing", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = sim.NewID()
 		flit.Dst = port1.AsRemote()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
-		port1.EXPECT().PeekIncoming().Return(flit)
+		port1.EXPECT().PeekIncoming().Return(flit, true)
 		port1.EXPECT().RetrieveIncoming()
-		port2.EXPECT().PeekIncoming().Return(nil)
+		port2.EXPECT().PeekIncoming().Return(nil, false)
 
 		madeProgress := rpMW.startProcessing()
 
@@ -133,12 +134,12 @@ var _ = Describe("Switch", func() {
 
 	It("should not start processing if pipeline is busy", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = sim.NewID()
 		flit.Dst = port1.AsRemote()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
@@ -147,8 +148,8 @@ var _ = Describe("Switch", func() {
 		next := &sw.State
 		next.PortComplexes[0].Pipeline.Accept(routedFlit{TaskID: 1})
 
-		port1.EXPECT().PeekIncoming().Return(flit)
-		port2.EXPECT().PeekIncoming().Return(nil)
+		port1.EXPECT().PeekIncoming().Return(flit, true)
+		port2.EXPECT().PeekIncoming().Return(nil, false)
 
 		madeProgress := rpMW.startProcessing()
 
@@ -174,12 +175,12 @@ var _ = Describe("Switch", func() {
 
 	It("should route", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = sim.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
@@ -187,7 +188,7 @@ var _ = Describe("Switch", func() {
 		next := &sw.State
 		next.PortComplexes[0].RouteBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort1RouteBuf", 1)
-		next.PortComplexes[0].RouteBuffer.PushTyped(
+		next.PortComplexes[0].RouteBuffer.Push(
 			routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
 
 		routingTable.EXPECT().
@@ -204,12 +205,12 @@ var _ = Describe("Switch", func() {
 
 	It("should not route if forward buffer is full", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = sim.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
@@ -217,11 +218,11 @@ var _ = Describe("Switch", func() {
 		next := &sw.State
 		next.PortComplexes[0].RouteBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort1RouteBuf", 1)
-		next.PortComplexes[0].RouteBuffer.PushTyped(
+		next.PortComplexes[0].RouteBuffer.Push(
 			routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
 		next.PortComplexes[0].ForwardBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort1FwdBuf", 1)
-		next.PortComplexes[0].ForwardBuffer.PushTyped(
+		next.PortComplexes[0].ForwardBuffer.Push(
 			routedFlit{Flit: packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 300}}})
 
 		madeProgress := rfsMW.route()
@@ -231,19 +232,19 @@ var _ = Describe("Switch", func() {
 
 	It("should forward", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = sim.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
 		next := &sw.State
 		next.PortComplexes[0].ForwardBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort1FwdBuf", 1)
-		next.PortComplexes[0].ForwardBuffer.PushTyped(
+		next.PortComplexes[0].ForwardBuffer.Push(
 			routedFlit{Flit: flit, OutputBufIdx: 1})
 
 		madeProgress := rfsMW.forward()
@@ -256,23 +257,23 @@ var _ = Describe("Switch", func() {
 
 	It("should not forward if the output buffer is busy", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = sim.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 		// Fill sendOut buffer to capacity, forward buffer targets port2
 		next := &sw.State
 		next.PortComplexes[0].ForwardBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort1FwdBuf", 1)
-		next.PortComplexes[0].ForwardBuffer.PushTyped(
+		next.PortComplexes[0].ForwardBuffer.Push(
 			routedFlit{Flit: flit, OutputBufIdx: 1})
 		next.PortComplexes[1].SendOutBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort2SendBuf", 1)
-		next.PortComplexes[1].SendOutBuffer.PushTyped(
+		next.PortComplexes[1].SendOutBuffer.Push(
 			routedFlit{Flit: packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 400}}})
 
 		madeProgress := rfsMW.forward()
@@ -282,12 +283,12 @@ var _ = Describe("Switch", func() {
 
 	It("should send flits out", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = sim.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
@@ -295,7 +296,7 @@ var _ = Describe("Switch", func() {
 		next := &sw.State
 		next.PortComplexes[1].SendOutBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort2SendBuf", 1)
-		next.PortComplexes[1].SendOutBuffer.PushTyped(routedFlit{Flit: flit})
+		next.PortComplexes[1].SendOutBuffer.Push(routedFlit{Flit: flit})
 
 		port2.EXPECT().CanSend().Return(true)
 		port2.EXPECT().Send(gomock.Any())
@@ -309,12 +310,12 @@ var _ = Describe("Switch", func() {
 
 	It("should wait if port is busy sending flits out", func() {
 		msg := messaging.MsgMeta{
-			ID:  timing.GetIDGenerator().Generate(),
+			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := packetization.Flit{}
-		flit.ID = timing.GetIDGenerator().Generate()
+		flit.ID = sim.NewID()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
@@ -322,7 +323,7 @@ var _ = Describe("Switch", func() {
 		next := &sw.State
 		next.PortComplexes[1].SendOutBuffer =
 			queueing.NewBuffer[routedFlit]("LocalPort2SendBuf", 1)
-		next.PortComplexes[1].SendOutBuffer.PushTyped(routedFlit{Flit: flit})
+		next.PortComplexes[1].SendOutBuffer.Push(routedFlit{Flit: flit})
 
 		port2.EXPECT().CanSend().Return(false)
 

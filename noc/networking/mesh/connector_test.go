@@ -4,19 +4,22 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	// . "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/networking/mesh"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 var _ = Describe("Connector", func() {
 	var (
-		engine    timing.EventScheduler
+		engine    timing.Engine
+		sim       timing.Simulation
 		connector *mesh.Connector
 	)
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
-		connector = mesh.NewConnector().WithEngine(engine)
+		sim = modeling.NewStandaloneSimulation(engine)
+		connector = mesh.NewConnector().WithSimulation(sim)
 		connector.CreateNetwork("Network")
 	})
 

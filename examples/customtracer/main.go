@@ -101,15 +101,15 @@ func (t *maxDurationTracer) MaxDuration() timing.VTimeInPicoSec { return t.max }
 
 func main() {
 	engine := timing.NewSerialEngine()
-	registrar := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	worker := modeling.NewBuilder[workerSpec, workerState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(1 * timing.GHz).
 		WithSpec(workerSpec{NumJobs: 3, CyclesPerJob: 4}).
 		Build("Worker")
 	worker.AddMiddleware(&workerMW{comp: worker})
-	registrar.RegisterComponent(worker)
+	sim.RegisterComponent(worker)
 
 	tracer := newMaxDurationTracer()
 	tracing.CollectTrace(worker, tracer)

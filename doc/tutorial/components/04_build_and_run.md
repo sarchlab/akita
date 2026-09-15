@@ -14,7 +14,7 @@ s := simulation.MakeBuilder().Build()
 
 spec := walkSpec{Freq: 1 * timing.GHz, WallDistance: 10}
 comp := modeling.NewBuilder[walkSpec, walkState, modeling.None]().
-    WithEngine(s.GetEngine()).
+    WithSimulation(s).
     WithFreq(spec.Freq).
     WithSpec(spec).
     Build("Walker")
@@ -37,7 +37,7 @@ name.
 
 :::info The builder pattern
 
-`NewBuilder().WithEngine(…).WithFreq(…).WithSpec(…).Build("Walker")` is the
+`NewBuilder().WithSimulation(…).WithFreq(…).WithSpec(…).Build("Walker")` is the
 **builder pattern**: rather than one constructor with a long argument list,
 you assemble the component through a chain of small `WithX` calls and finish
 with `Build`. It reads top to bottom, and each setting is independent.
@@ -51,7 +51,7 @@ partially configured builder is just a value you can stash and reuse.
 section — take a component's whole configuration as one `Spec` through
 `WithSpec` (there is no setter per spec field) and start from a
 `DefaultSpec()`. That is why the clock frequency lives in the spec. They also
-follow a fixed shape, `MakeBuilder().WithRegistrar(…).WithSpec(…).Build(name)`,
+follow a fixed shape, `MakeBuilder().WithSimulation(…).WithSpec(…).Build(name)`,
 and create their ports inside `Build`. The low-level `modeling.NewBuilder`
 shown here cannot pull `Freq` out of an arbitrary spec type on its own, so we
 hand it over explicitly with `WithFreq(spec.Freq)`; a per-package builder does

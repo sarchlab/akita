@@ -4,7 +4,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -52,8 +51,8 @@ func (m *ctrlMiddleware) handleStateUpdate() (madeProgress bool) {
 }
 
 func (m *ctrlMiddleware) handleIncomingCommands() (madeProgress bool) {
-	msg := m.ctrlPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := m.ctrlPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -132,7 +131,10 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	// middleware runs before the memory middleware) takeNewReqs would consume
 	// a stale request in the very same tick, right after the reset ack.
 	top := m.comp.GetPortByName("Top")
-	for top.PeekIncoming() != nil {
+	for {
+		if _, ok := top.PeekIncoming(); !ok {
+			break
+		}
 		top.RetrieveIncoming()
 	}
 
@@ -177,7 +179,7 @@ func makeRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = port.Component().Simulation().NewID()
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo

@@ -49,9 +49,9 @@ func TestPortCheckpointRoundTripWithMessages(t *testing.T) {
 	}
 
 	src := newCkptPort(4, 4)
-	src.incomingBuf.PushTyped(mk(1, 10))
-	src.incomingBuf.PushTyped(mk(2, 20))
-	src.outgoingBuf.PushTyped(mk(3, 30))
+	src.incomingBuf.Push(mk(1, 10))
+	src.incomingBuf.Push(mk(2, 20))
+	src.outgoingBuf.Push(mk(3, 30))
 
 	var buf bytes.Buffer
 	if err := src.SaveCheckpoint(&buf); err != nil {

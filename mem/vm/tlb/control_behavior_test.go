@@ -24,6 +24,7 @@ import (
 var _ = Describe("TLB control behavior", func() {
 	var (
 		engine      timing.Engine
+		sim         timing.Simulation
 		tlbComp     *Comp
 		topPort     messaging.Port
 		bottomPort  messaging.Port
@@ -34,9 +35,8 @@ var _ = Describe("TLB control behavior", func() {
 	build := func() {
 		spec := DefaultSpec()
 
-		reg := modeling.NewStandaloneRegistrar(engine)
 		tlbComp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
@@ -45,7 +45,7 @@ var _ = Describe("TLB control behavior", func() {
 			}).
 			Build("TLB")
 
-		assignDefaultPorts(reg, tlbComp)
+		assignDefaultPorts(sim, tlbComp)
 
 		topPort = tlbComp.GetPortByName("Top")
 		bottomPort = tlbComp.GetPortByName("Bottom")
@@ -57,7 +57,7 @@ var _ = Describe("TLB control behavior", func() {
 
 	makeLookup := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -69,7 +69,7 @@ var _ = Describe("TLB control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = controlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -89,7 +89,7 @@ var _ = Describe("TLB control behavior", func() {
 			Valid: true,
 		}
 		rsp := vmprotocol.TranslationRsp{Page: page}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = sim.NewID()
 		rsp.Src = remotePort
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = req.ID
@@ -99,6 +99,7 @@ var _ = Describe("TLB control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		build()
 	})
 
@@ -122,8 +123,8 @@ var _ = Describe("TLB control behavior", func() {
 			(len(tlbComp.State.MSHREntries) < n || len(bottomReqs) < n); i++ {
 			tlbComp.Tick()
 			for {
-				out := bottomPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := bottomPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				bottomReqs = append(bottomReqs, out.(vmprotocol.TranslationReq))
@@ -144,7 +145,7 @@ var _ = Describe("TLB control behavior", func() {
 		drainFound := false
 		for range 5 {
 			tlbComp.Tick()
-			if out := controlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := controlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
@@ -168,15 +169,15 @@ var _ = Describe("TLB control behavior", func() {
 		for i := 0; i < 256 && !drainFound; i++ {
 			tlbComp.Tick()
 			for {
-				out := topPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := topPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if _, ok := out.(vmprotocol.TranslationRsp); ok {
 					completed++
 				}
 			}
-			if out := controlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := controlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
@@ -204,7 +205,7 @@ var _ = Describe("TLB control behavior", func() {
 		got := false
 		for i := 0; i < 64 && !got; i++ {
 			tlbComp.Tick()
-			if out := bottomPort.RetrieveOutgoing(); out != nil {
+			if out, ok := bottomPort.RetrieveOutgoing(); ok {
 				bottomReq, got = out.(vmprotocol.TranslationReq)
 			}
 		}
@@ -224,11 +225,14 @@ var _ = Describe("TLB control behavior", func() {
 		topPort.Deliver(makeLookup(0x5000))
 		for range 8 {
 			tlbComp.Tick()
-			Expect(bottomPort.RetrieveOutgoing()).To(BeNil())
-			Expect(controlPort.RetrieveOutgoing()).To(BeNil())
+			_, present0 := bottomPort.RetrieveOutgoing()
+			Expect(present0).To(BeFalse())
+			_, present1 := controlPort.RetrieveOutgoing()
+			Expect(present1).To(BeFalse())
 		}
 		Expect(tlbComp.State.TLBState).To(Equal(tlbStateDrain))
-		Expect(topPort.PeekIncoming()).ToNot(BeNil()) // late lookup still queued
+		_, present2 := topPort.PeekIncoming()
+		Expect(present2).To(BeTrue()) // late lookup still queued
 
 		// Completing the in-flight miss lets Drain finish; the late lookup is
 		// still queued for after Enable.
@@ -237,11 +241,11 @@ var _ = Describe("TLB control behavior", func() {
 		for i := 0; i < 256 && !drainFound; i++ {
 			tlbComp.Tick()
 			for {
-				if topPort.RetrieveOutgoing() == nil {
+				if _, ok := topPort.RetrieveOutgoing(); !ok {
 					break
 				}
 			}
-			if out := controlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := controlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainFound = true
@@ -250,7 +254,8 @@ var _ = Describe("TLB control behavior", func() {
 		}
 		Expect(drainFound).To(BeTrue())
 		Expect(tlbComp.State.TLBState).To(Equal(tlbStatePause))
-		Expect(topPort.PeekIncoming()).ToNot(BeNil()) // late lookup survived
+		_, present3 := topPort.PeekIncoming()
+		Expect(present3).To(BeTrue()) // late lookup survived
 	})
 
 	It("drops a stale bottom translation that arrives after Reset", func() {
@@ -260,7 +265,7 @@ var _ = Describe("TLB control behavior", func() {
 		gotA := false
 		for i := 0; i < 64 && !gotA; i++ {
 			tlbComp.Tick()
-			if out := bottomPort.RetrieveOutgoing(); out != nil {
+			if out, ok := bottomPort.RetrieveOutgoing(); ok {
 				reqA, gotA = out.(vmprotocol.TranslationReq)
 			}
 		}
@@ -272,7 +277,7 @@ var _ = Describe("TLB control behavior", func() {
 		acked := false
 		for i := 0; i < 64 && !acked; i++ {
 			tlbComp.Tick()
-			if out := controlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := controlPort.RetrieveOutgoing(); ok {
 				if r, ok := out.(memcontrolprotocol.Rsp); ok &&
 					r.Command == memcontrolprotocol.CmdReset {
 					acked = true
@@ -288,7 +293,7 @@ var _ = Describe("TLB control behavior", func() {
 		gotB := false
 		for i := 0; i < 64 && !gotB; i++ {
 			tlbComp.Tick()
-			if out := bottomPort.RetrieveOutgoing(); out != nil {
+			if out, ok := bottomPort.RetrieveOutgoing(); ok {
 				reqB, gotB = out.(vmprotocol.TranslationReq)
 			}
 		}
@@ -300,7 +305,8 @@ var _ = Describe("TLB control behavior", func() {
 		bottomPort.Deliver(makeBottomRsp(reqA))
 		for range 8 {
 			tlbComp.Tick()
-			Expect(topPort.RetrieveOutgoing()).To(BeNil())
+			_, present4 := topPort.RetrieveOutgoing()
+			Expect(present4).To(BeFalse())
 		}
 		Expect(mshrIsEntryPresent(
 			tlbComp.State.MSHREntries, reqB.PID, reqB.VAddr)).To(BeTrue())
@@ -310,7 +316,7 @@ var _ = Describe("TLB control behavior", func() {
 		answered := false
 		for i := 0; i < 64 && !answered; i++ {
 			tlbComp.Tick()
-			if out := topPort.RetrieveOutgoing(); out != nil {
+			if out, ok := topPort.RetrieveOutgoing(); ok {
 				if _, ok := out.(vmprotocol.TranslationRsp); ok {
 					answered = true
 				}
@@ -329,9 +335,11 @@ var _ = Describe("TLB control behavior", func() {
 
 		// The request is neither consumed nor turned into work, and nothing is
 		// forwarded out Bottom, while paused.
-		Expect(topPort.PeekIncoming()).ToNot(BeNil())
+		_, present5 := topPort.PeekIncoming()
+		Expect(present5).To(BeTrue())
 		Expect(mshrIsEmpty(tlbComp.State.MSHREntries)).To(BeTrue())
-		Expect(bottomPort.RetrieveOutgoing()).To(BeNil())
+		_, present6 := bottomPort.RetrieveOutgoing()
+		Expect(present6).To(BeFalse())
 	})
 
 	DescribeTable("Reset wipes in-flight MSHR state from any control state",
@@ -352,7 +360,7 @@ var _ = Describe("TLB control behavior", func() {
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				tlbComp.Tick()
-				if out := controlPort.RetrieveOutgoing(); out != nil {
+				if out, ok := controlPort.RetrieveOutgoing(); ok {
 					rsp, found = out.(memcontrolprotocol.Rsp)
 				}
 			}
@@ -390,8 +398,8 @@ var _ = Describe("TLB control behavior", func() {
 		for range 32 {
 			tlbComp.Tick()
 			for {
-				out := controlPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := controlPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if r, ok := out.(memcontrolprotocol.Rsp); ok {

@@ -13,7 +13,7 @@ type PipelineStage[T any] struct {
 // queueing.Buffer and any bounded collection that accepts items satisfy it.
 type Sink[T any] interface {
 	CanPush() bool
-	PushTyped(T)
+	Push(T)
 }
 
 // Pipeline is a generic multi-lane, multi-stage pipeline. Its state is
@@ -65,7 +65,8 @@ func (p *Pipeline[T]) CanAccept() bool {
 // Accept inserts an item into the first stage of the pipeline. It occupies
 // the next free lane. The item starts with CycleLeft=0, meaning it will
 // attempt to advance to the next stage on the very next Tick. The total
-// latency through the pipeline equals NumStages ticks.
+// latency through the pipeline equals NumStages ticks. Accept panics when
+// stage 0 is full; callers must check CanAccept before inserting.
 func (p *Pipeline[T]) Accept(item T) {
 	// Use a fixed-size bitset on the stack for small widths,
 	// fall back to a slice for larger ones.
@@ -90,6 +91,10 @@ func (p *Pipeline[T]) Accept(item T) {
 			break
 		}
 		lane++
+	}
+
+	if lane == p.width {
+		panic("pipeline has no free input lane")
 	}
 
 	p.stages = append(p.stages, PipelineStage[T]{
@@ -128,7 +133,7 @@ func (p *Pipeline[T]) Tick(sink Sink[T]) bool {
 		s := &p.stages[i]
 		if s.Stage == lastStage && s.CycleLeft == 0 {
 			if sink.CanPush() {
-				sink.PushTyped(s.Item)
+				sink.Push(s.Item)
 				p.stages[i] = p.stages[n-1]
 				n--
 				moved = true

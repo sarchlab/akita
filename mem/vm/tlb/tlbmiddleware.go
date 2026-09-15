@@ -6,7 +6,6 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -61,8 +60,8 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		// Peek the head before the pipeline-slot gate so the admission milestone
 		// can be attributed to the head message's buffer task on the tick the
 		// slot frees.
-		headI := m.topPort().PeekIncoming()
-		if headI == nil {
+		headI, ok := m.topPort().PeekIncoming()
+		if !ok {
 			break
 		}
 
@@ -80,7 +79,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 			What:   m.comp.Name() + ".pipeline",
 		})
 
-		msgI := m.topPort().RetrieveIncoming()
+		msgI, _ := m.topPort().RetrieveIncoming()
 		msg := msgI.(vmprotocol.TranslationReq)
 
 		// Admit the request: open req_in at retrieve, then open the pipeline
@@ -89,7 +88,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		// milestones.
 		tracing.TraceReqReceive(m.comp, msg)
 
-		pid := timing.GetIDGenerator().Generate()
+		pid := m.comp.Simulation().NewID()
 		tracing.StartTask(m.comp, tracing.TaskStart{
 			ID:       pid,
 			ParentID: tracing.MsgIDAtReceiver(msg, m.comp),
@@ -118,7 +117,7 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 			break
 		}
 
-		item := next.BufferItems.Peek()
+		item, _ := next.BufferItems.Peek()
 		msg := item.Msg
 
 		// The pipeline traversal is done; the request is now being looked up.
@@ -185,9 +184,11 @@ func (m *tlbMiddleware) handleDrain() bool {
 	// the top. parseBottom stages that response in RespondingMSHRData (and
 	// empties MSHREntries) before respondMSHREntry can drain it, so pausing
 	// on mshrIsEmpty alone would strand the final translation response.
-	if mshrIsEmpty(next.MSHREntries) && !next.HasRespondingMSHR &&
-		m.bottomPort().PeekIncoming() == nil {
-		next.TLBState = tlbStatePause
+	if mshrIsEmpty(next.MSHREntries) && !next.HasRespondingMSHR {
+		_, hasBottom := m.bottomPort().PeekIncoming()
+		if !hasBottom {
+			next.TLBState = tlbStatePause
+		}
 	}
 
 	return madeProgress
@@ -208,7 +209,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	rspToTop := vmprotocol.TranslationRsp{
 		Page: page,
 	}
-	rspToTop.ID = timing.GetIDGenerator().Generate()
+	rspToTop.ID = m.comp.Simulation().NewID()
 	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = reqMsg.Src
 	rspToTop.RspTo = reqMsg.ID
@@ -319,7 +320,7 @@ func (m *tlbMiddleware) sendRspToTop(
 	rsp := vmprotocol.TranslationRsp{
 		Page: page,
 	}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = m.comp.Simulation().NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.RspTo = msg.ID
@@ -361,7 +362,7 @@ func (m *tlbMiddleware) fetchBottom(msg vmprotocol.TranslationReq) bool {
 	mapper := m.comp.Resources().TranslationProviderMapper
 
 	fetchBottom := vmprotocol.TranslationReq{}
-	fetchBottom.ID = timing.GetIDGenerator().Generate()
+	fetchBottom.ID = m.comp.Simulation().NewID()
 	fetchBottom.Src = m.bottomPort().AsRemote()
 	fetchBottom.Dst = findTranslationPort(mapper, msg.VAddr)
 	fetchBottom.PID = msg.PID
@@ -399,8 +400,8 @@ func (m *tlbMiddleware) parseBottom() bool {
 	if next.HasRespondingMSHR {
 		return false
 	}
-	itemI := m.bottomPort().PeekIncoming()
-	if itemI == nil {
+	itemI, ok := m.bottomPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 

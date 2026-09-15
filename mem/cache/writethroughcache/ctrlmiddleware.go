@@ -5,7 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -63,8 +62,8 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 }
 
 func (m *ctrlMiddleware) handleIncoming() bool {
-	msg := m.ctrlPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := m.ctrlPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -161,10 +160,16 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	next.CurrentCmdID = 0
 	next.CurrentCmdSrc = ""
 
-	for m.pipeline.topPort().PeekIncoming() != nil {
+	for {
+		if _, ok := m.pipeline.topPort().PeekIncoming(); !ok {
+			break
+		}
 		m.pipeline.topPort().RetrieveIncoming()
 	}
-	for m.pipeline.bottomPort().PeekIncoming() != nil {
+	for {
+		if _, ok := m.pipeline.bottomPort().PeekIncoming(); !ok {
+			break
+		}
 		m.pipeline.bottomPort().RetrieveIncoming()
 	}
 
@@ -331,7 +336,7 @@ func makeCtrlRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = port.Component().Simulation().NewID()
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo

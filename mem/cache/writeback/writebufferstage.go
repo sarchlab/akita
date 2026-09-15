@@ -5,7 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -31,7 +30,7 @@ func (wb *writeBufferStage) processNewTransaction() bool {
 		return false
 	}
 
-	transIdx := wbBuf.Peek()
+	transIdx, _ := wbBuf.Peek()
 	trans := &next.Transactions[transIdx]
 
 	switch trans.Action {
@@ -115,7 +114,7 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 	cache.MSHRRemove(&next.MSHRState,
 		vm.PID(mshrEntry.PID), mshrEntry.Address)
 
-	bankBuf.PushTyped(transIdx)
+	bankBuf.Push(transIdx)
 
 	next.WriteBufferBuf.Pop()
 
@@ -139,7 +138,7 @@ func (wb *writeBufferStage) fetchFromBottom(
 	spec := wb.cache.comp.Spec()
 	lowModulePort := wb.cache.findPort(trans.FetchAddress)
 	read := memprotocol.ReadReq{}
-	read.ID = timing.GetIDGenerator().Generate()
+	read.ID = wb.cache.comp.Simulation().NewID()
 	read.Src = wb.cache.bottomPort().AsRemote()
 	read.Dst = lowModulePort
 	read.PID = trans.FetchPID
@@ -184,7 +183,7 @@ func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
 	}
 
 	trans.Action = bankWriteHit
-	bankBuf.PushTyped(transIdx)
+	bankBuf.Push(transIdx)
 
 	next.PendingEvictionIndices = append(next.PendingEvictionIndices, transIdx)
 	next.WriteBufferBuf.Pop()
@@ -244,7 +243,7 @@ func (wb *writeBufferStage) write() bool {
 
 	lowModulePort := wb.cache.findPort(trans.EvictingAddr)
 	write := memprotocol.WriteReq{}
-	write.ID = timing.GetIDGenerator().Generate()
+	write.ID = wb.cache.comp.Simulation().NewID()
 	write.Src = wb.cache.bottomPort().AsRemote()
 	write.Dst = lowModulePort
 	write.PID = trans.EvictingPID
@@ -268,8 +267,8 @@ func (wb *writeBufferStage) write() bool {
 }
 
 func (wb *writeBufferStage) processReturnRsp() bool {
-	msg := wb.cache.bottomPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := wb.cache.bottomPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -341,7 +340,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	cache.MSHRRemove(&next.MSHRState,
 		vm.PID(mshrEntry.PID), mshrEntry.Address)
 
-	bankBuf.PushTyped(transIdx)
+	bankBuf.Push(transIdx)
 
 	wb.removeInflightFetch(transIdx)
 	wb.cache.bottomPort().RetrieveIncoming()

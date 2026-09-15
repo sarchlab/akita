@@ -2,6 +2,7 @@ package rob
 
 import (
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // DefaultSpec returns a copy of the default reorder-buffer configuration.
@@ -12,13 +13,13 @@ func DefaultSpec() Spec {
 }
 
 // Builder constructs reorder-buffer components. Configuration is supplied as a
-// whole through WithSpec; wiring is supplied through WithRegistrar. The reorder
+// whole through WithSpec; wiring is supplied through WithSimulation. The reorder
 // buffer references no shared resources, so no WithResources is exposed. The
 // component declares its "Top", "Bottom", and "Control" ports; the port
 // instances are supplied externally after Build with AssignPort.
 type Builder struct {
-	spec      Spec
-	registrar modeling.Registrar
+	spec       Spec
+	simulation timing.Simulation
 }
 
 // MakeBuilder returns a Builder seeded with the default spec.
@@ -26,11 +27,9 @@ func MakeBuilder() Builder {
 	return Builder{spec: Definition.DefaultSpec()}
 }
 
-// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
-// registrar provides the engine and registers the built component.
-func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
-	b.registrar = reg
+// WithSimulation sets the simulation that owns and registers the built component.
+func (b Builder) WithSimulation(sim timing.Simulation) Builder {
+	b.simulation = sim
 	return b
 }
 
@@ -45,14 +44,14 @@ func (b Builder) WithSpec(spec Spec) Builder {
 // port instances are assigned externally after Build with AssignPort (the
 // caller chooses the buffer sizes).
 func (b Builder) Build(name string) *Comp {
-	if b.registrar == nil {
-		panic("rob: WithRegistrar is required")
+	if b.simulation == nil {
+		panic("rob: WithSimulation is required")
 	}
 
 	spec := b.spec
 
 	comp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithEngine(b.registrar.GetEngine()).
+		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
@@ -62,7 +61,7 @@ func (b Builder) Build(name string) *Comp {
 
 	Definition.DeclarePorts(comp)
 
-	b.registrar.RegisterComponent(comp)
+	b.simulation.RegisterComponent(comp)
 
 	return comp
 }

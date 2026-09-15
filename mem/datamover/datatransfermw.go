@@ -7,7 +7,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 
 	// dataTransferMW handles data read/write operations between source and
@@ -131,7 +130,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 	srcP := m.srcPort()
 
 	req := memprotocol.ReadReq{}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = m.comp.Simulation().NewID()
 	req.Address = addr
 	req.Src = srcP.AsRemote()
 	req.Dst = m.findSrcPort(addr)
@@ -168,8 +167,8 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 	}
 
 	srcP := m.srcPort()
-	rspI := srcP.PeekIncoming()
-	if rspI == nil {
+	rspI, ok := srcP.PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -231,7 +230,7 @@ func (m *dataTransferMW) writeToDst() bool {
 	dstP := m.dstPort()
 
 	req := memprotocol.WriteReq{}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = m.comp.Simulation().NewID()
 	req.Address = trans.NextWriteAddr
 	req.Data = data
 	req.Src = dstP.AsRemote()
@@ -270,8 +269,8 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 	}
 
 	dstP := m.dstPort()
-	rspI := dstP.PeekIncoming()
-	if rspI == nil {
+	rspI, ok := dstP.PeekIncoming()
+	if !ok {
 		return false
 	}
 

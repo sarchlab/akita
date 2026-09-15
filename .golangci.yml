@@ -2,6 +2,10 @@ version: "2"
 
 linters:
   default: all
+  settings:
+    govet:
+      disable:
+        - inline
   disable:
     - copyloopvar
     - cyclop
@@ -12,6 +16,7 @@ linters:
     - err113
     - exhaustive
     - exhaustruct
+    - exhaustruct_v5
     - forbidigo
     - forcetypeassert
     - funcorder
@@ -61,4 +66,5 @@ linters:
     - godoclint
     - iotamixing
     - modernize
+    - gomodguard
     - unqueryvet

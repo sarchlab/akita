@@ -6,6 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -14,6 +15,7 @@ import (
 // tasks on it). InvokeHook is provided by the embedded HookableBase, which is
 // how CollectTrace forwards events to a tracer.
 type obFakeComp struct {
+	sim timing.Simulation
 	hooking.HookableBase
 	name string
 	time timing.VTimeInPicoSec
@@ -51,7 +53,7 @@ type obFakeConn struct {
 	hooking.HookableBase
 }
 
-func (c *obFakeConn) Name() string                  { return "Conn" }
+func (c *obFakeConn) Name() string                   { return "Conn" }
 func (c *obFakeConn) PlugIn(messaging.Port)          {}
 func (c *obFakeConn) Unplug(messaging.Port)          {}
 func (c *obFakeConn) NotifyAvailable(messaging.Port) {}
@@ -65,7 +67,7 @@ var _ = Describe("Outgoing buffer tracer", func() {
 	)
 
 	BeforeEach(func() {
-		comp = &obFakeComp{name: "Comp"}
+		comp = &obFakeComp{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()), name: "Comp"}
 		tracer = &obRecordingTracer{}
 		CollectTrace(comp, tracer)
 
@@ -109,8 +111,8 @@ var _ = Describe("Outgoing buffer tracer", func() {
 
 		// Draining A ends A's buffer task and exposes B at the head.
 		comp.time = 150
-		Expect(port.RetrieveOutgoing()).NotTo(BeNil())
-
+		_, present0 := port.RetrieveOutgoing()
+		Expect(present0).To(BeTrue())
 		Expect(tracer.ends).To(HaveLen(1))
 		Expect(tracer.ends[0].ID).To(Equal(startA.ID))
 		Expect(tracer.ends[0].Time).To(Equal(timing.VTimeInPicoSec(150)))
@@ -122,7 +124,8 @@ var _ = Describe("Outgoing buffer tracer", func() {
 
 		// Draining B ends B's buffer task.
 		comp.time = 160
-		Expect(port.RetrieveOutgoing()).NotTo(BeNil())
+		_, present1 := port.RetrieveOutgoing()
+		Expect(present1).To(BeTrue())
 		Expect(tracer.ends).To(HaveLen(2))
 		Expect(tracer.ends[1].ID).To(Equal(startB.ID))
 		Expect(tracer.ends[1].Time).To(Equal(timing.VTimeInPicoSec(160)))
@@ -139,17 +142,19 @@ var _ = Describe("Outgoing buffer tracer", func() {
 	})
 
 	It("is a no-op when the owning component is not being traced", func() {
-		untraced := &obFakeComp{name: "Untraced"}
+		untraced := &obFakeComp{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()), name: "Untraced"}
 		p2 := messaging.NewPort(untraced, 4, 4, "Untraced.Bottom")
 		p2.SetConnection(&obFakeConn{})
 		CollectOutgoingBufferTrace(p2)
 
 		untraced.time = 100
 		p2.Send(obTestMsg{messaging.MsgMeta{ID: 1, Src: "Untraced.Bottom", Dst: "Other.Top"}})
-		Expect(p2.RetrieveOutgoing()).NotTo(BeNil())
-
+		_, present2 := p2.RetrieveOutgoing()
+		Expect(present2).To(BeTrue())
 		Expect(tracer.starts).To(BeEmpty())
 		Expect(tracer.ends).To(BeEmpty())
 		Expect(tracer.milestones).To(BeEmpty())
 	})
 })
+
+func (c *obFakeComp) Simulation() timing.Simulation { return c.sim }

@@ -4,7 +4,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 
 	// blockRef is a set+way pair referencing a block in the directory.
@@ -147,7 +146,7 @@ func (f *flusher) processFlush() bool {
 	}
 
 	transIdx := next.allocTransaction(trans)
-	bankBuf.PushTyped(transIdx)
+	bankBuf.Push(transIdx)
 
 	next.FlusherBlockToEvictRefs = next.FlusherBlockToEvictRefs[1:]
 
@@ -158,8 +157,8 @@ func (f *flusher) processFlush() bool {
 // other verb (Pause, Drain, Enable, Reset, Invalidate) is owned by
 // ctrlMiddleware and is left in the incoming queue.
 func (f *flusher) extractFromPort() bool {
-	msg := f.ctrlPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := f.ctrlPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -230,7 +229,7 @@ func (f *flusher) finalizeFlushing() bool {
 	}
 
 	rsp := memcontrolprotocol.Rsp{Command: memcontrolprotocol.CmdFlush, Success: true}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = f.pipeline.comp.Simulation().NewID()
 	rsp.Src = f.ctrlPort().AsRemote()
 	rsp.Dst = next.ProcessingFlush.MsgMeta.Src
 	rsp.RspTo = next.ProcessingFlush.MsgMeta.ID

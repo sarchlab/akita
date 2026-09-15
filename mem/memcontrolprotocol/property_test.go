@@ -8,7 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 // This file is the Layer-4 property/fuzz test. It drives the write-back
@@ -77,15 +76,15 @@ func newFuzzer(t *testing.T, seed int64) *fuzzer {
 // checks the invariants they carry.
 func (f *fuzzer) collect() {
 	for {
-		out := f.h.top.RetrieveOutgoing()
-		if out == nil {
+		out, ok := f.h.top.RetrieveOutgoing()
+		if !ok {
 			break
 		}
 		f.handleWorkloadRsp(out)
 	}
 	for {
-		out := f.h.ctrl.RetrieveOutgoing()
-		if out == nil {
+		out, ok := f.h.ctrl.RetrieveOutgoing()
+		if !ok {
 			break
 		}
 		f.handleControlRsp(out)
@@ -186,7 +185,7 @@ func (f *fuzzer) issueWrite() {
 		byte(f.rng.Intn(256)), byte(f.rng.Intn(256)),
 	}
 	req := memprotocol.WriteReq{Address: addr, Data: data}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = f.h.cache.Simulation().NewID()
 	req.Src = f.h.agent
 	req.Dst = f.h.top.AsRemote()
 	req.TrafficClass = "memprotocol.WriteReq"
@@ -203,7 +202,7 @@ func (f *fuzzer) issueRead() {
 		return
 	}
 	req := memprotocol.ReadReq{Address: addr, AccessByteSize: 4}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = f.h.cache.Simulation().NewID()
 	req.Src = f.h.agent
 	req.Dst = f.h.top.AsRemote()
 	req.TrafficClass = "memprotocol.ReadReq"
@@ -215,7 +214,7 @@ func (f *fuzzer) issueRead() {
 
 func (f *fuzzer) issueControl(cmd memcontrolprotocol.Command) {
 	req := memcontrolprotocol.Req{Command: cmd}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = f.h.cache.Simulation().NewID()
 	req.Src = f.h.agent
 	req.Dst = f.h.ctrl.AsRemote()
 	req.TrafficClass = "memcontrolprotocol.Req"

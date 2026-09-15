@@ -2,6 +2,7 @@ package mmuCache
 
 import (
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // DefaultSpec returns a copy of the default configuration. Callers typically
@@ -11,14 +12,14 @@ func DefaultSpec() Spec {
 }
 
 // A Builder builds mmuCache components. Configuration is supplied as a whole
-// through WithSpec; wiring is supplied through WithRegistrar and WithResources.
+// through WithSpec; wiring is supplied through WithSimulation and WithResources.
 // The component declares its "Top", "Bottom", and "Control" ports; the port
 // instances are supplied externally after Build with AssignPort (the caller
 // chooses the buffer sizes).
 type Builder struct {
-	registrar modeling.Registrar
-	spec      Spec
-	resources Resources
+	simulation timing.Simulation
+	spec       Spec
+	resources  Resources
 }
 
 // MakeBuilder returns a Builder seeded with the default spec.
@@ -28,11 +29,9 @@ func MakeBuilder() Builder {
 	}
 }
 
-// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
-// registrar provides the engine and registers the built component.
-func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
-	b.registrar = reg
+// WithSimulation sets the simulation that owns and registers the built component.
+func (b Builder) WithSimulation(sim timing.Simulation) Builder {
+	b.simulation = sim
 	return b
 }
 
@@ -52,8 +51,8 @@ func (b Builder) WithResources(r Resources) Builder {
 // Build builds a new mmuCache. It declares the component's "Top", "Bottom", and
 // "Control" ports; assign the port instances after Build with AssignPort.
 func (b Builder) Build(name string) *Comp {
-	if b.registrar == nil {
-		panic("mmuCache: WithRegistrar is required")
+	if b.simulation == nil {
+		panic("mmuCache: WithSimulation is required")
 	}
 
 	if b.spec.NumBlocks <= 0 {
@@ -70,7 +69,7 @@ func (b Builder) Build(name string) *Comp {
 	}
 
 	modelComp := modeling.NewBuilder[Spec, State, Resources]().
-		WithEngine(b.registrar.GetEngine()).
+		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		WithResources(b.resources).
@@ -85,7 +84,7 @@ func (b Builder) Build(name string) *Comp {
 
 	Definition.DeclarePorts(modelComp)
 
-	b.registrar.RegisterComponent(modelComp)
+	b.simulation.RegisterComponent(modelComp)
 
 	return modelComp
 }

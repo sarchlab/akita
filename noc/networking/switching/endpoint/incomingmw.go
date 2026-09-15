@@ -41,8 +41,8 @@ func (m *incomingMW) recv() bool {
 	state := &m.comp.State
 
 	for i := 0; i < spec.NumInputChannels; i++ {
-		receivedI := m.networkPort().PeekIncoming()
-		if receivedI == nil {
+		receivedI, ok := m.networkPort().PeekIncoming()
+		if !ok {
 			return madeProgress
 		}
 

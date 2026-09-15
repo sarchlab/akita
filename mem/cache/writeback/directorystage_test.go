@@ -40,8 +40,8 @@ var _ = Describe("DirectoryStage", func() {
 			BankPipelines: []queueing.Pipeline[int]{
 				queueing.NewPipeline[int](4, 10),
 			},
-			BankPostPipelineBufs: []postPipelineBuf{
-				newPostPipelineBuf(4),
+			BankPostPipelineBufs: []queueing.Buffer[int]{
+				queueing.NewBuffer[int]("BankPostPipelineBuf", 4),
 			},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
@@ -49,7 +49,7 @@ var _ = Describe("DirectoryStage", func() {
 
 		m = &pipelineMW{}
 		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(nil).
+			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:    6,
@@ -79,7 +79,7 @@ var _ = Describe("DirectoryStage", func() {
 	Context("read", func() {
 		BeforeEach(func() {
 			read := memprotocol.ReadReq{}
-			read.ID = timing.GetIDGenerator().Generate()
+			read.ID = m.comp.Simulation().NewID()
 			read.Address = 0x100
 			read.PID = 1
 			read.AccessByteSize = 64
@@ -96,7 +96,7 @@ var _ = Describe("DirectoryStage", func() {
 			next := &m.comp.State
 			next.Transactions = []transactionState{trans}
 			next.DirPostPipelineBuf.Clear()
-			next.DirPostPipelineBuf.PushTyped(0)
+			next.DirPostPipelineBuf.Push(0)
 		})
 
 		Context("mshr hit", func() {
@@ -177,7 +177,7 @@ var _ = Describe("DirectoryStage", func() {
 	Context("write", func() {
 		BeforeEach(func() {
 			write := memprotocol.WriteReq{}
-			write.ID = timing.GetIDGenerator().Generate()
+			write.ID = m.comp.Simulation().NewID()
 			write.Address = 0x100
 			write.PID = 1
 			write.TrafficBytes = 12
@@ -192,7 +192,7 @@ var _ = Describe("DirectoryStage", func() {
 			next := &m.comp.State
 			next.Transactions = []transactionState{trans}
 			next.DirPostPipelineBuf.Clear()
-			next.DirPostPipelineBuf.PushTyped(0)
+			next.DirPostPipelineBuf.Push(0)
 		})
 
 		Context("hit", func() {

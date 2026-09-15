@@ -23,8 +23,9 @@ import (
 	"unsafe"
 
 	// Enable profiling.
-	_ "github.com/glebarez/go-sqlite"
 	_ "net/http/pprof"
+
+	_ "github.com/glebarez/go-sqlite"
 
 	"github.com/google/pprof/profile"
 	"github.com/sarchlab/akita/v5/daisen2"
@@ -32,7 +33,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
-	"github.com/shirou/gopsutil/process"
+	"github.com/shirou/gopsutil/v4/process"
 	"github.com/syifan/goseth"
 )
 
@@ -49,16 +50,15 @@ type monitorPort interface {
 
 type Monitor struct {
 	// Configuration (set before StartServer).
-	port      int
-	engine    timing.Engine
-	visTracer *tracing.DBTracer
-	tracePath string
+	port       int
+	engine     timing.Engine
+	simulation timing.Simulation
+	visTracer  *tracing.DBTracer
+	tracePath  string
 
 	// Internal state.
 	components       []Component
 	buffers          []bufferState
-	engineControlMu  sync.Mutex
-	enginePaused     bool
 	progressBarsLock sync.Mutex
 	progressBars     []*daisen2.ProgressBar
 	httpServer       *http.Server
@@ -91,9 +91,10 @@ func (m *Monitor) WithPortNumber(port int) *Monitor {
 	return m
 }
 
-// RegisterEngine registers the simulation engine with the monitor.
-func (m *Monitor) RegisterEngine(e timing.Engine) {
-	m.engine = e
+// RegisterSimulation supplies the monitor's simulation and its engine.
+func (m *Monitor) RegisterSimulation(sim timing.Simulation) {
+	m.simulation = sim
+	m.engine = sim.GetEngine()
 }
 
 // RegisterComponent registers a component with the monitor so its internal
@@ -121,9 +122,10 @@ func (m *Monitor) SetTraceDBPath(path string) {
 }
 
 // CreateProgressBar creates a new progress bar tracked by the monitor.
+// RegisterSimulation must be called first so the ID belongs to that simulation.
 func (m *Monitor) CreateProgressBar(name string, total uint64) *daisen2.ProgressBar {
 	bar := &daisen2.ProgressBar{
-		ID:    timing.GetIDGenerator().Generate(),
+		ID:    m.simulation.NewID(),
 		Name:  name,
 		Total: total,
 	}
@@ -375,28 +377,20 @@ func (m *Monitor) serveIndex(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func (m *Monitor) pauseEngine(w http.ResponseWriter, _ *http.Request) {
-	m.engineControlMu.Lock()
-	if !m.enginePaused {
-		m.engine.Pause()
-		m.enginePaused = true
+func (m *Monitor) pauseEngine(w http.ResponseWriter, r *http.Request) {
+	if err := m.engine.RequestPause().Wait(r.Context()); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	response := m.engineStateResponseLocked()
-	m.engineControlMu.Unlock()
-
-	m.writeEngineState(w, response)
+	m.writeEngineState(w, m.engineStateResponse())
 }
 
 func (m *Monitor) continueEngine(w http.ResponseWriter, _ *http.Request) {
-	m.engineControlMu.Lock()
-	if m.enginePaused {
-		m.engine.Continue()
-		m.enginePaused = false
+	if err := m.engine.Continue(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	response := m.engineStateResponseLocked()
-	m.engineControlMu.Unlock()
-
-	m.writeEngineState(w, response)
+	m.writeEngineState(w, m.engineStateResponse())
 }
 
 type engineStateRsp struct {
@@ -405,19 +399,16 @@ type engineStateRsp struct {
 }
 
 func (m *Monitor) apiEngineState(w http.ResponseWriter, _ *http.Request) {
-	m.engineControlMu.Lock()
-	response := m.engineStateResponseLocked()
-	m.engineControlMu.Unlock()
+	response := m.engineStateResponse()
 
 	m.writeEngineState(w, response)
 }
 
-func (m *Monitor) engineStateResponseLocked() engineStateRsp {
-	if m.enginePaused {
-		return engineStateRsp{State: "paused", Paused: true}
+func (m *Monitor) engineStateResponse() engineStateRsp {
+	state := m.engine.State()
+	return engineStateRsp{
+		State: state.String(), Paused: state == timing.EnginePaused || state == timing.EngineResuming,
 	}
-
-	return engineStateRsp{State: "running", Paused: false}
 }
 
 func (m *Monitor) writeEngineState(w http.ResponseWriter, response engineStateRsp) {
@@ -431,33 +422,17 @@ func (m *Monitor) writeEngineState(w http.ResponseWriter, response engineStateRs
 	}
 }
 
-func (m *Monitor) now(w http.ResponseWriter, _ *http.Request) {
-	nowTime := m.engine.CurrentTime()
-	fmt.Fprintf(w, "{\"now\":%d}", nowTime)
-}
-
-func (m *Monitor) pauseForInspection() func() {
-	m.engineControlMu.Lock()
-
-	if m.enginePaused {
-		return func() {
-			m.engineControlMu.Unlock()
-		}
-	}
-
-	m.engine.Pause()
-
-	return func() {
-		m.engine.Continue()
-		m.engineControlMu.Unlock()
-	}
+func (m *Monitor) now(w http.ResponseWriter, r *http.Request) {
+	m.inspectResponse(w, r, func(out http.ResponseWriter) {
+		fmt.Fprintf(out, "{\"now\":%d}", m.engine.CurrentTime())
+	})
 }
 
 func (m *Monitor) run(_ http.ResponseWriter, _ *http.Request) {
 	go func() {
 		err := m.engine.Run()
 		if err != nil {
-			panic(err)
+			log.Printf("simulation run failed: %v", err)
 		}
 	}()
 }
@@ -509,17 +484,16 @@ func (m *Monitor) listComponentDetails(
 		return
 	}
 
-	resume := m.pauseForInspection()
-	defer resume()
+	m.inspectResponse(w, r, func(w http.ResponseWriter) {
+		serializer := goseth.NewSerializer()
+		serializer.SetRoot(component)
+		serializer.SetMaxDepth(1)
 
-	serializer := goseth.NewSerializer()
-	serializer.SetRoot(component)
-	serializer.SetMaxDepth(1)
-
-	err := serializer.Serialize(w)
-	if err != nil {
-		log.Panic(err)
-	}
+		err := serializer.Serialize(w)
+		if err != nil {
+			log.Panic(err)
+		}
+	})
 }
 
 type fieldReq struct {
@@ -549,50 +523,49 @@ func (m *Monitor) listFieldValue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resume := m.pauseForInspection()
-	defer resume()
+	m.inspectResponse(w, r, func(w http.ResponseWriter) {
+		sliceOffset, sliceLimit, pagingRequested, err := parseSlicePageParams(r)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, "Error: %s", err)
 
-	sliceOffset, sliceLimit, pagingRequested, err := parseSlicePageParams(r)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "Error: %s", err)
+			return
+		}
 
-		return
-	}
+		if pagingRequested {
+			value, err := monitorEntryPointValue(component, fields)
+			if err != nil {
+				writeFieldNotFound(w, err)
 
-	if pagingRequested {
-		value, err := monitorEntryPointValue(component, fields)
+				return
+			}
+
+			if monitorStrip(value).Kind() == reflect.Slice {
+				err = writeSlicePage(w, value, sliceOffset, sliceLimit)
+				if err != nil {
+					log.Panic(err)
+				}
+
+				return
+			}
+		}
+
+		serializer := goseth.NewSerializer()
+		serializer.SetRoot(component)
+		serializer.SetMaxDepth(1)
+
+		err = serializer.SetEntryPoint(fields)
 		if err != nil {
 			writeFieldNotFound(w, err)
 
 			return
 		}
 
-		if monitorStrip(value).Kind() == reflect.Slice {
-			err = writeSlicePage(w, value, sliceOffset, sliceLimit)
-			if err != nil {
-				log.Panic(err)
-			}
-
-			return
+		err = serializer.Serialize(w)
+		if err != nil {
+			log.Panic(err)
 		}
-	}
-
-	serializer := goseth.NewSerializer()
-	serializer.SetRoot(component)
-	serializer.SetMaxDepth(1)
-
-	err = serializer.SetEntryPoint(fields)
-	if err != nil {
-		writeFieldNotFound(w, err)
-
-		return
-	}
-
-	err = serializer.Serialize(w)
-	if err != nil {
-		log.Panic(err)
-	}
+	})
 }
 
 func parseSlicePageParams(

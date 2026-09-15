@@ -5,7 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -39,9 +38,9 @@ func (d *directory) acceptIntoPipeline() (madeProgress bool) {
 			break
 		}
 
-		transIdx := dirBuf.Pop()
+		transIdx, _ := dirBuf.Pop()
 		trans := &next.Transactions[transIdx]
-		pid := timing.GetIDGenerator().Generate()
+		pid := d.cache.comp.Simulation().NewID()
 		trans.DirPipelineTaskID = pid
 		tracing.StartTask(d.cache.comp, tracing.TaskStart{
 			ID:       pid,
@@ -73,7 +72,7 @@ func (d *directory) processPostPipeline() (madeProgress bool) {
 			break
 		}
 
-		transIdx := dirPostBuf.Peek()
+		transIdx, _ := dirPostBuf.Peek()
 		trans := &next.Transactions[transIdx]
 
 		tracing.AddMilestone(d.cache.comp, tracing.Milestone{
@@ -202,7 +201,7 @@ func (d *directory) processReadHit(
 	nextBlock.ReadCount++
 	cache.DirectoryVisit(&next.DirectoryState, setID, wayID)
 
-	bankBuf.PushTyped(transIdx)
+	bankBuf.Push(transIdx)
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
@@ -290,7 +289,7 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 	cacheLineID := addr / blockSize * blockSize
 
 	writeToBottom := memprotocol.WriteReq{}
-	writeToBottom.ID = timing.GetIDGenerator().Generate()
+	writeToBottom.ID = d.cache.comp.Simulation().NewID()
 	writeToBottom.Src = d.cache.bottomPort().AsRemote()
 	// Route by cache-line ID so the write-through write and the
 	// corresponding read-fill always target the same lower-memory port,
@@ -338,7 +337,7 @@ func (d *directory) fetchFromBottom(
 		PID:            pid,
 		AccessByteSize: blockSize,
 	}
-	readToBottom.ID = timing.GetIDGenerator().Generate()
+	readToBottom.ID = d.cache.comp.Simulation().NewID()
 	readToBottom.Src = d.cache.bottomPort().AsRemote()
 	readToBottom.Dst = bottomModule
 	readToBottom.TrafficBytes, readToBottom.TrafficClass = 12, "req"

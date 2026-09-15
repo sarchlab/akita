@@ -16,12 +16,12 @@ func DefaultSpec() Spec {
 }
 
 // Builder builds ping components. Configuration is supplied as a whole through
-// WithSpec; wiring is supplied through WithRegistrar. The component declares
+// WithSpec; wiring is supplied through WithSimulation. The component declares
 // its "Out" port; the port instance is supplied externally after Build with
 // AssignPort (the caller chooses the buffer size).
 type Builder struct {
-	spec      Spec
-	registrar modeling.Registrar
+	spec       Spec
+	simulation timing.Simulation
 }
 
 // MakeBuilder creates a new Builder seeded with the default spec.
@@ -29,11 +29,9 @@ func MakeBuilder() Builder {
 	return Builder{spec: defaultSpec}
 }
 
-// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
-// registrar provides the engine and registers the built component.
-func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
-	b.registrar = reg
+// WithSimulation sets the simulation that owns and registers the built component.
+func (b Builder) WithSimulation(sim timing.Simulation) Builder {
+	b.simulation = sim
 	return b
 }
 
@@ -46,19 +44,19 @@ func (b Builder) WithSpec(spec Spec) Builder {
 // Build creates a new ping component with the given name. It declares the
 // component's "Out" port; assign the port instance after Build with AssignPort.
 func (b Builder) Build(name string) *Comp {
-	if b.registrar == nil {
-		panic("ping: WithRegistrar is required")
+	if b.simulation == nil {
+		panic("ping: WithSimulation is required")
 	}
 
 	comp := modeling.NewEventDrivenBuilder[Spec, State, modeling.None]().
-		WithEngine(b.registrar.GetEngine()).
+		WithSimulation(b.simulation).
 		WithSpec(b.spec).
 		WithProcessor(&pingProcessor{}).
 		Build(name)
 
 	comp.DeclarePort("Out")
 
-	b.registrar.RegisterComponent(comp)
+	b.simulation.RegisterComponent(comp)
 
 	return comp
 }

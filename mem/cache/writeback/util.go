@@ -21,8 +21,8 @@ func bankID(setID, wayID, wayAssociativity, numBanks int) int {
 
 func clearPort(p messaging.Port) {
 	for {
-		item := p.RetrieveIncoming()
-		if item == nil {
+		_, ok := p.RetrieveIncoming()
+		if !ok {
 			return
 		}
 	}

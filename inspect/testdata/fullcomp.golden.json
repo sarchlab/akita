@@ -2,7 +2,7 @@
   "schema_version": 1,
   "kind": "component",
   "name": "FullComp",
-  "package": "github.com/sarchlab/akita/v5/inspect/fixtures/fullcomp",
+  "package": "github.com/sarchlab/akita/v5/inspect/testdata/fixtures/fullcomp",
   "module": "github.com/sarchlab/akita/v5",
   "spec": [
     {

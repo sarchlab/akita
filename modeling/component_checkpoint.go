@@ -16,8 +16,8 @@ import (
 // directly — alongside the engine's matching tick event — so load is a single
 // pass with no post-load reconciliation against the queue.
 type componentCheckpoint struct {
-	SpecHash  string            `json:"spec_hash"`
-	State     json.RawMessage   `json:"state"`
+	SpecHash  string              `json:"spec_hash"`
+	State     json.RawMessage     `json:"state"`
 	Scheduler schedulerCheckpoint `json:"scheduler"`
 }
 

@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -18,8 +19,9 @@ func TestNetworkconnector(t *testing.T) {
 var _ = Describe("Connector", func() {
 	It("should establish route in a simple network", func() {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		connector := MakeConnector().
-			WithEngine(engine).
+			WithSimulation(sim).
 			WithDefaultFreq(1 * timing.GHz)
 		connector.NewNetwork("Network")
 
@@ -55,8 +57,9 @@ var _ = Describe("Connector", func() {
 
 	It("should establish route in a small tree", func() {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		connector := MakeConnector().
-			WithEngine(engine).
+			WithSimulation(sim).
 			WithDefaultFreq(1 * timing.GHz)
 		connector.NewNetwork("Network")
 
@@ -121,8 +124,9 @@ var _ = Describe("Connector", func() {
 
 	It("should establish route in a large tree", func() {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		connector := MakeConnector().
-			WithEngine(engine).
+			WithSimulation(sim).
 			WithDefaultFreq(1 * timing.GHz)
 		connector.NewNetwork("Network")
 

@@ -5,7 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -85,8 +84,8 @@ func (m *middleware) topDown() bool {
 		return false
 	}
 
-	msg := m.topPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := m.topPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -148,8 +147,8 @@ func (m *middleware) topDown() bool {
 // matching transaction. Unmatched responses (e.g. left over after a flush) are
 // dropped.
 func (m *middleware) parseBottom() bool {
-	msg := m.bottomPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := m.bottomPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -267,7 +266,7 @@ func (m *middleware) buildShadowReq(
 			AccessByteSize: r.AccessByteSize,
 			PID:            r.PID,
 		}
-		shadow.ID = timing.GetIDGenerator().Generate()
+		shadow.ID = m.comp.Simulation().NewID()
 		shadow.Src = src
 		shadow.Dst = dst
 		shadow.TrafficBytes = r.TrafficBytes
@@ -280,7 +279,7 @@ func (m *middleware) buildShadowReq(
 			DirtyMask: r.DirtyMask,
 			PID:       r.PID,
 		}
-		shadow.ID = timing.GetIDGenerator().Generate()
+		shadow.ID = m.comp.Simulation().NewID()
 		shadow.Src = src
 		shadow.Dst = dst
 		shadow.TrafficBytes = r.TrafficBytes
@@ -296,7 +295,7 @@ func (m *middleware) buildTopRsp(
 ) messaging.Msg {
 	if trans.IsRead {
 		rsp := memprotocol.DataReadyRsp{Data: trans.RspData}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = m.comp.Simulation().NewID()
 		rsp.Src = src
 		rsp.Dst = trans.ReqFromTopSrc
 		rsp.RspTo = trans.ReqFromTopID
@@ -306,7 +305,7 @@ func (m *middleware) buildTopRsp(
 	}
 
 	rsp := memprotocol.WriteDoneRsp{}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = m.comp.Simulation().NewID()
 	rsp.Src = src
 	rsp.Dst = trans.ReqFromTopSrc
 	rsp.RspTo = trans.ReqFromTopID
@@ -386,8 +385,8 @@ func (m *middleware) processControlMsg() bool {
 		return false
 	}
 
-	msg := m.ctrlPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := m.ctrlPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -523,7 +522,7 @@ func makeCtrlRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = port.Component().Simulation().NewID()
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
@@ -532,7 +531,10 @@ func makeCtrlRsp(
 }
 
 func drainIncoming(p messaging.Port) {
-	for p.RetrieveIncoming() != nil {
+	for {
+		if _, ok := p.RetrieveIncoming(); !ok {
+			break
+		}
 	}
 }
 

@@ -2,6 +2,7 @@ package inspect
 
 import (
 	"go/ast"
+	"go/constant"
 	"go/token"
 	"go/types"
 	"reflect"
@@ -82,25 +83,7 @@ func fieldDefault(typ types.Type, explicit any) any {
 		return explicit
 	}
 
-	basic, ok := typ.Underlying().(*types.Basic)
-	if !ok {
-		return nil
-	}
-
-	switch {
-	case basic.Info()&types.IsBoolean != 0:
-		return false
-	case basic.Info()&types.IsUnsigned != 0:
-		return uint64(0)
-	case basic.Info()&types.IsInteger != 0:
-		return int64(0)
-	case basic.Info()&types.IsFloat != 0:
-		return float64(0)
-	case basic.Info()&types.IsString != 0:
-		return ""
-	default:
-		return nil
-	}
+	return zeroValue(typ)
 }
 
 // jsonName mirrors encoding/json's field naming: the json tag's name part,
@@ -144,7 +127,7 @@ func choicesFor(typ types.Type) []string {
 			continue
 		}
 
-		choices = append(choices, strings.Trim(c.Val().ExactString(), `"`))
+		choices = append(choices, constant.StringVal(c.Val()))
 	}
 
 	sort.Strings(choices)

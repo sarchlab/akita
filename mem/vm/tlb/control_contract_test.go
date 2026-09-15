@@ -24,10 +24,10 @@ func (c *ccNoopConn) NotifySend()                      {}
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 
-		reg := modeling.NewStandaloneRegistrar(engine)
 		comp := MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
 					Port: messaging.RemotePort("MMU"),
@@ -35,7 +35,7 @@ func TestControlContract(t *testing.T) {
 			}).
 			Build("TLB")
 
-		assignDefaultPorts(reg, comp)
+		assignDefaultPorts(sim, comp)
 
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			(&ccNoopConn{}).PlugIn(comp.GetPortByName(name))

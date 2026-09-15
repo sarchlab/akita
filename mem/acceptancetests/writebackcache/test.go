@@ -40,7 +40,7 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 	engine := s.GetEngine()
 
 	conn := directconnection.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		Build("Conn")
 
 	agentSpec := memaccessagent.DefaultSpec()
@@ -48,7 +48,7 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.ReadLeft = *numAccessFlag
 	agent := memaccessagent.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(agentSpec).
 		Build("MemAccessAgent")
 	assignPorts(s, agent, "Mem")
@@ -66,7 +66,7 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 	cacheSpec.NumMSHREntry = 4
 	cacheSpec.NumReqPerCycle = 16
 	writeBackCache := writeback.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(cacheSpec).
 		WithResources(writeback.Resources{
 			AddressToPortMapper: addressToPortMapper,
@@ -89,7 +89,7 @@ func buildDRAM(s *simulation.Simulation) *idealmemcontroller.Comp {
 	dramSpec := idealmemcontroller.DefaultSpec()
 	dramSpec.Capacity = 4 * mem.GB
 	dram := idealmemcontroller.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(dramSpec).
 		Build("DRAM")
 	assignPorts(s, dram, "Top", "Control")
@@ -106,7 +106,7 @@ func assignPorts(
 ) {
 	for _, name := range names {
 		p := modeling.MakePortBuilder().
-			WithRegistrar(s).
+			WithSimulation(s).
 			WithComponent(comp).
 			WithSpec(modeling.PortSpec{BufSize: 16}).
 			Build(name)

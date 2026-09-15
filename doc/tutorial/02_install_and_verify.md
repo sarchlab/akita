@@ -10,7 +10,7 @@ ready and the next chapter starts the real work.
 
 ## Prerequisites
 
-- **Go 1.26 or newer** — check with `go version`.
+- **Go 1.27 or newer** — check with `go version`.
 - **Git** — for cloning the repository.
 
 ## Install

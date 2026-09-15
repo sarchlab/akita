@@ -2,7 +2,7 @@
 package modelingtest
 
 import (
-	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -51,41 +51,75 @@ func staticDefinition(t *testing.T, pkgPath string) schema.Definition {
 	return schema.Definition{}
 }
 
-// checkDefaults compares the statically extracted defaults with the runtime
-// DefaultSpec. Both sides are normalized through JSON so numeric types
-// compare by value. A field the runtime marshaling drops (omitempty) must be
-// zero on the static side.
+// checkDefaults compares Go field values, before encoding/json applies byte
+// encoding, string tags or omitempty. This preserves integer precision and
+// distinguishes nil containers from empty containers.
 func checkDefaults(t *testing.T, static schema.Definition, runtimeSpec any) {
 	t.Helper()
-
-	staticDefaults := map[string]any{}
-	for _, f := range static.Spec {
-		if f.JSONName != "" {
-			staticDefaults[f.JSONName] = f.Default
-		}
+	for name, mismatch := range defaultMismatches(static, runtimeSpec) {
+		t.Errorf("default %q: %s", name, mismatch)
 	}
+}
 
-	staticNorm := jsonNormalize(t, staticDefaults)
-	runtimeNorm := jsonNormalize(t, runtimeSpec)
-
-	for name, runtimeVal := range runtimeNorm {
-		staticVal, ok := staticNorm[name]
-		if !ok {
-			t.Errorf("default %q: present at runtime, missing statically",
-				name)
+func defaultMismatches(static schema.Definition, runtimeSpec any) map[string]string {
+	mismatches := map[string]string{}
+	runtime := reflect.ValueOf(runtimeSpec)
+	seen := map[string]bool{}
+	for _, f := range static.Spec {
+		seen[f.Name] = true
+		value := runtime.FieldByName(f.Name)
+		if !value.IsValid() {
+			mismatches[f.Name] = "missing at runtime"
 			continue
 		}
-		if !reflect.DeepEqual(staticVal, runtimeVal) {
-			t.Errorf("default %q: static %v, runtime %v",
-				name, staticVal, runtimeVal)
+		actual := defaultValue(value)
+		if !reflect.DeepEqual(f.Default, actual) {
+			mismatches[f.Name] = fmt.Sprintf("static %v, runtime %v", f.Default, actual)
 		}
 	}
-
-	for name, staticVal := range staticNorm {
-		if _, ok := runtimeNorm[name]; !ok && !isJSONZero(staticVal) {
-			t.Errorf("default %q: static %v, dropped by runtime marshaling",
-				name, staticVal)
+	for f := range runtime.Type().Fields() {
+		if f.IsExported() && !seen[f.Name] {
+			mismatches[f.Name] = "missing statically"
 		}
+	}
+	return mismatches
+}
+
+// defaultValue uses the inspector's representation of primitive values and
+// containers. Maps use decimal integer keys, matching the schema's JSON keys.
+func defaultValue(v reflect.Value) any {
+	switch v.Kind() {
+	case reflect.Bool:
+		return v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int()
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return v.Uint()
+	case reflect.Float32, reflect.Float64:
+		return v.Float()
+	case reflect.String:
+		return v.String()
+	case reflect.Slice, reflect.Array:
+		if v.Kind() == reflect.Slice && v.IsNil() {
+			return nil
+		}
+		out := make([]any, v.Len())
+		for i := range out {
+			out[i] = defaultValue(v.Index(i))
+		}
+		return out
+	case reflect.Map:
+		if v.IsNil() {
+			return nil
+		}
+		out := map[string]any{}
+		iter := v.MapRange()
+		for iter.Next() {
+			out[fmt.Sprint(defaultValue(iter.Key()))] = defaultValue(iter.Value())
+		}
+		return out
+	default:
+		return nil
 	}
 }
 
@@ -145,38 +179,4 @@ func runtimeRoles(roles []*messaging.Role) []schema.Role {
 	}
 
 	return out
-}
-
-// jsonNormalize round-trips a value through JSON into a generic map so that
-// static (int64/uint64) and runtime (typed struct) values compare by their
-// JSON representation.
-func jsonNormalize(t *testing.T, v any) map[string]any {
-	t.Helper()
-
-	data, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("marshaling %T: %v", v, err)
-	}
-
-	var out map[string]any
-	if err := json.Unmarshal(data, &out); err != nil {
-		t.Fatalf("unmarshaling %T: %v", v, err)
-	}
-
-	return out
-}
-
-func isJSONZero(v any) bool {
-	switch x := v.(type) {
-	case nil:
-		return true
-	case bool:
-		return !x
-	case float64:
-		return x == 0
-	case string:
-		return x == ""
-	default:
-		return false
-	}
 }

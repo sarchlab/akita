@@ -71,7 +71,7 @@ type DataMoveResponse struct {
 ## Builder Pattern
 
 Configuration is supplied as a whole through `WithSpec` (start from
-`DefaultSpec()`); the engine and registration come from `WithRegistrar`; the
+`DefaultSpec()`); the engine and registration come from `WithSimulation`; the
 side mappers come from `WithResources`. `Build` declares the component's `Top`,
 `Inside`, `Outside`, and `Control` ports; the caller builds the port instances
 (choosing the buffer sizes) with `modeling.MakePortBuilder` and attaches them
@@ -84,7 +84,7 @@ spec.InsideByteGranularity = 64
 spec.OutsideByteGranularity = 64
 
 mover := datamover.MakeBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithSpec(spec).
     WithResources(datamover.Resources{
         InsideMapper:  &mem.SinglePortMapper{Port: l2Port},
@@ -94,7 +94,7 @@ mover := datamover.MakeBuilder().
 
 for _, name := range []string{"Top", "Inside", "Outside", "Control"} {
     p := modeling.MakePortBuilder().
-        WithRegistrar(sim).
+        WithSimulation(sim).
         WithComponent(mover).
         WithSpec(modeling.PortSpec{BufSize: 16}).
         Build(name)
@@ -108,7 +108,7 @@ ctrlPort := mover.GetPortByName("Control")
 
 | Method | Description |
 |---|---|
-| `WithRegistrar(r)` | Source of the engine and component registration (required). |
+| `WithSimulation(r)` | Source of the engine and component registration (required). |
 | `WithSpec(s)` | Full configuration; start from `DefaultSpec()`. |
 | `WithResources(r)` | The inside/outside address-to-port mappers. |
 

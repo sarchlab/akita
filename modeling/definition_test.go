@@ -329,7 +329,7 @@ func TestDefinitionWorksWithComponent(t *testing.T) {
 
 	engine := timing.NewSerialEngine()
 	comp := modeling.NewBuilder[defTestSpec, TestState, defTestResources]().
-		WithEngine(engine).
+		WithSimulation(modeling.NewStandaloneSimulation(engine)).
 		WithFreq(1 * timing.GHz).
 		WithSpec(def.DefaultSpec()).
 		Build("Comp")
@@ -344,5 +344,46 @@ func TestDefinitionWorksWithComponent(t *testing.T) {
 	if roles := comp.PortRoles("Out"); len(roles) != 1 ||
 		roles[0] != defTestRequester {
 		t.Errorf("PortRoles(Out) = %+v, want [requester]", roles)
+	}
+}
+
+func TestDefinitionCopiesNestedContainers(t *testing.T) {
+	type spec struct {
+		Slices [][]int
+		Maps   map[string][]int
+		Arrays [1][]int
+		Nested []map[int][1][]int
+	}
+	input := spec{
+		Slices: [][]int{{1}}, Maps: map[string][]int{"a": {2}},
+		Arrays: [1][]int{{3}}, Nested: []map[int][1][]int{{4: {{5}}}},
+	}
+	def := modeling.DefineComponent(modeling.ComponentDef[spec, modeling.None]{Name: "Nested", DefaultSpec: input})
+	mutate := func(s spec) {
+		s.Slices[0][0] = 99
+		s.Maps["a"][0] = 99
+		s.Arrays[0][0] = 99
+		s.Nested[0][4][0][0] = 99
+	}
+	mutate(input)
+	mutate(def.DefaultSpec())
+	got := def.DefaultSpec()
+	if got.Slices[0][0] != 1 || got.Maps["a"][0] != 2 || got.Arrays[0][0] != 3 || got.Nested[0][4][0][0] != 5 {
+		t.Fatalf("nested defaults were mutated: %+v", got)
+	}
+}
+
+func TestDefinitionDeclaredRolesAreIndependent(t *testing.T) {
+	def := modeling.DefineComponent(makeDefTestDef())
+	first, second := messaging.NewPortOwnerBase(), messaging.NewPortOwnerBase()
+	def.DeclarePorts(first)
+	def.DeclarePorts(second)
+	first.PortRoles("Top")[0] = nil
+	first.PortRoles("Out")[0] = nil
+	if second.PortRoles("Top")[0] != defTestResponder || second.PortRoles("Out")[0] != defTestRequester {
+		t.Fatal("mutating one component's roles affected another component")
+	}
+	if def.Ports()[0].Roles[0] != defTestResponder || def.PortGroups()[0].Roles[0] != defTestRequester {
+		t.Fatal("mutating a component's roles affected the definition")
 	}
 }

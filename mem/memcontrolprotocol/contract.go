@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 // Controllable is the minimal interface the contract harness requires
@@ -326,7 +325,7 @@ func newControlReq(
 	cmd Command,
 ) Req {
 	req := Req{Command: cmd}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = ctrl.Component().Simulation().NewID()
 	req.Src = messaging.RemotePort("ContractAgent")
 	req.Dst = ctrl.AsRemote()
 	req.TrafficClass = "Req"
@@ -339,7 +338,7 @@ func newControlReq(
 // exhausted.
 func drainForRsp(h *Harness, budget int) (Rsp, bool) {
 	for range budget {
-		if msg := h.Ctrl.RetrieveOutgoing(); msg != nil {
+		if msg, ok := h.Ctrl.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(Rsp); ok {
 				return rsp, true
 			}
@@ -348,7 +347,7 @@ func drainForRsp(h *Harness, budget int) (Rsp, bool) {
 	}
 
 	// One last sweep in case the final tick produced the Rsp.
-	if msg := h.Ctrl.RetrieveOutgoing(); msg != nil {
+	if msg, ok := h.Ctrl.RetrieveOutgoing(); ok {
 		if rsp, ok := msg.(Rsp); ok {
 			return rsp, true
 		}

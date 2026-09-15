@@ -44,11 +44,12 @@ func (p *mockProcessor) Process(
 
 func TestEventDrivenBuilderBuild(t *testing.T) {
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 	spec := edSpec{Capacity: 10, Label: "test"}
 	proc := &mockProcessor{}
 
 	comp := modeling.NewEventDrivenBuilder[edSpec, edState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithSpec(spec).
 		WithProcessor(proc).
 		Build("EDComp")
@@ -70,10 +71,11 @@ func TestEventDrivenBuilderBuild(t *testing.T) {
 
 func TestEventDrivenGetStateAssignment(t *testing.T) {
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 	proc := &mockProcessor{}
 
 	comp := modeling.NewEventDrivenBuilder[edSpec, edState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithProcessor(proc).
 		Build("EDComp")
 
@@ -90,10 +92,11 @@ func TestEventDrivenGetStateAssignment(t *testing.T) {
 
 func TestEventDrivenStatePtr(t *testing.T) {
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 	proc := &mockProcessor{}
 
 	comp := modeling.NewEventDrivenBuilder[edSpec, edState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithProcessor(proc).
 		Build("EDComp")
 
@@ -114,19 +117,17 @@ func TestEventDrivenStatePtr(t *testing.T) {
 
 func TestEventDrivenHandle(t *testing.T) {
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 	proc := &mockProcessor{}
 
 	comp := modeling.NewEventDrivenBuilder[edSpec, edState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithProcessor(proc).
 		Build("EDComp")
 
-	evt := timing.MakeEventBase(10, comp.Name())
+	evt := timing.MakeEventBase(sim.NewID(), 10, comp.Name())
 
-	err := comp.Handle(evt)
-	if err != nil {
-		t.Fatalf("Handle() returned error: %v", err)
-	}
+	comp.Handle(evt)
 
 	if proc.callCount != 1 {
 		t.Errorf("processor called %d times, want 1", proc.callCount)
@@ -148,10 +149,11 @@ func TestEventDrivenHandle(t *testing.T) {
 
 func TestEventDrivenNotifyRecv(t *testing.T) {
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 	proc := &mockProcessor{}
 
 	comp := modeling.NewEventDrivenBuilder[edSpec, edState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithProcessor(proc).
 		Build("EDComp")
 
@@ -161,10 +163,11 @@ func TestEventDrivenNotifyRecv(t *testing.T) {
 
 func TestEventDrivenNotifyPortFree(t *testing.T) {
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 	proc := &mockProcessor{}
 
 	comp := modeling.NewEventDrivenBuilder[edSpec, edState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithProcessor(proc).
 		Build("EDComp")
 
@@ -176,10 +179,11 @@ func TestEventDrivenNotifyPortFree(t *testing.T) {
 
 func TestEventDrivenScheduleWakeAtDedup(t *testing.T) {
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 	proc := &mockProcessor{}
 
 	comp := modeling.NewEventDrivenBuilder[edSpec, edState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithProcessor(proc).
 		Build("EDComp")
 

@@ -54,15 +54,15 @@ func (h *cacheOverDRAM) tick() {
 	h.dram.Tick()
 
 	for {
-		m := h.bottom.RetrieveOutgoing()
-		if m == nil {
+		m, ok := h.bottom.RetrieveOutgoing()
+		if !ok {
 			break
 		}
 		h.dramTop.Deliver(m)
 	}
 	for {
-		m := h.dramTop.RetrieveOutgoing()
-		if m == nil {
+		m, ok := h.dramTop.RetrieveOutgoing()
+		if !ok {
 			break
 		}
 		h.bottom.Deliver(m)
@@ -73,13 +73,14 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 	t.Helper()
 
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 	dramStorage := mem.NewStorage(4 * mem.MB)
 
 	dramSpec := idealmemcontroller.DefaultSpec()
 	dramSpec.Latency = 5
 	dramSpec.Width = 4
 	dram := idealmemcontroller.MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithSimulation(sim).
 		WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 		WithSpec(dramSpec).
 		Build("DRAM")
@@ -96,7 +97,7 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 	cacheSpec.NumMSHREntry = 8
 	cacheSpec.NumReqPerCycle = 4
 	cache := writeback.MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithSimulation(sim).
 		WithSpec(cacheSpec).
 		WithResources(writeback.Resources{
 			Storage: mem.NewStorage(cacheSpec.TotalByteSize),
@@ -133,7 +134,7 @@ func (h *cacheOverDRAM) write(t *testing.T, addr uint64, data []byte) {
 	t.Helper()
 
 	req := memprotocol.WriteReq{Address: addr, Data: data}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = h.cache.Simulation().NewID()
 	req.Src = h.agent
 	req.Dst = h.top.AsRemote()
 	req.TrafficClass = "memprotocol.WriteReq"
@@ -141,7 +142,7 @@ func (h *cacheOverDRAM) write(t *testing.T, addr uint64, data []byte) {
 
 	for range 4096 {
 		h.tick()
-		if out := h.top.RetrieveOutgoing(); out != nil {
+		if out, ok := h.top.RetrieveOutgoing(); ok {
 			if _, ok := out.(memprotocol.WriteDoneRsp); ok {
 				return
 			}
@@ -156,7 +157,7 @@ func (h *cacheOverDRAM) read(t *testing.T, addr uint64, size uint64) []byte {
 	t.Helper()
 
 	req := memprotocol.ReadReq{Address: addr, AccessByteSize: size}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = h.cache.Simulation().NewID()
 	req.Src = h.agent
 	req.Dst = h.top.AsRemote()
 	req.TrafficClass = "memprotocol.ReadReq"
@@ -164,7 +165,7 @@ func (h *cacheOverDRAM) read(t *testing.T, addr uint64, size uint64) []byte {
 
 	for range 4096 {
 		h.tick()
-		if out := h.top.RetrieveOutgoing(); out != nil {
+		if out, ok := h.top.RetrieveOutgoing(); ok {
 			if rsp, ok := out.(memprotocol.DataReadyRsp); ok {
 				return rsp.Data
 			}
@@ -179,7 +180,7 @@ func (h *cacheOverDRAM) control(t *testing.T, cmd memcontrolprotocol.Command) me
 	t.Helper()
 
 	req := memcontrolprotocol.Req{Command: cmd}
-	req.ID = timing.GetIDGenerator().Generate()
+	req.ID = h.cache.Simulation().NewID()
 	req.Src = h.agent
 	req.Dst = h.ctrl.AsRemote()
 	req.TrafficClass = "memcontrolprotocol.Req"
@@ -187,7 +188,7 @@ func (h *cacheOverDRAM) control(t *testing.T, cmd memcontrolprotocol.Command) me
 
 	for range 4096 {
 		h.tick()
-		if out := h.ctrl.RetrieveOutgoing(); out != nil {
+		if out, ok := h.ctrl.RetrieveOutgoing(); ok {
 			if rsp, ok := out.(memcontrolprotocol.Rsp); ok && rsp.Command == cmd {
 				return rsp
 			}
@@ -222,10 +223,7 @@ func TestCheckpoint_DrainFlushReset_PersistsAndServesCorrectData(t *testing.T) {
 	// Guarantee 1: after Drain+Flush the backing memory is a complete,
 	// correct snapshot of everything written.
 	for addr, data := range want {
-		got, err := h.dramStorage.Read(addr, uint64(len(data)))
-		if err != nil {
-			t.Fatalf("backing read %#x: %v", addr, err)
-		}
+		got := h.dramStorage.Read(addr, uint64(len(data)))
 		if !bytes.Equal(got, data) {
 			t.Errorf("after Flush, backing memory[%#x] = %v, want %v",
 				addr, got, data)
@@ -305,7 +303,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 	// A read miss makes the cache issue a fetch out the Bottom port. Tick only
 	// the cache (no ferry) and capture that fetch so it stays "outstanding".
 	read := memprotocol.ReadReq{Address: 0, AccessByteSize: 4}
-	read.ID = timing.GetIDGenerator().Generate()
+	read.ID = h.cache.Simulation().NewID()
 	read.Src = h.agent
 	read.Dst = h.top.AsRemote()
 	read.TrafficClass = "memprotocol.ReadReq"
@@ -315,7 +313,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 	gotFetch := false
 	for i := 0; i < 4096 && !gotFetch; i++ {
 		h.cache.Tick()
-		if out := h.bottom.RetrieveOutgoing(); out != nil {
+		if out, ok := h.bottom.RetrieveOutgoing(); ok {
 			fetch, gotFetch = out.(memprotocol.ReadReq)
 		}
 	}
@@ -325,7 +323,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 
 	// Reset while the fetch is outstanding (this clears the inflight indices).
 	rst := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	rst.ID = timing.GetIDGenerator().Generate()
+	rst.ID = h.cache.Simulation().NewID()
 	rst.Src = h.agent
 	rst.Dst = h.ctrl.AsRemote()
 	rst.TrafficClass = "memcontrolprotocol.Req"
@@ -333,7 +331,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
 		h.cache.Tick()
-		if out := h.ctrl.RetrieveOutgoing(); out != nil {
+		if out, ok := h.ctrl.RetrieveOutgoing(); ok {
 			if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {
 				acked = true
@@ -346,7 +344,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 
 	// The lower memory's now-orphaned response arrives after the reset.
 	rsp := memprotocol.DataReadyRsp{Data: make([]byte, cpBlockSize)}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = h.cache.Simulation().NewID()
 	rsp.Src = h.dramTop.AsRemote()
 	rsp.Dst = h.bottom.AsRemote()
 	rsp.RspTo = fetch.ID

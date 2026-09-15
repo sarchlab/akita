@@ -23,6 +23,7 @@ import (
 var _ = Describe("Simple Banked Memory control behavior", func() {
 	var (
 		engine   timing.Engine
+		sim      timing.Simulation
 		storage  *mem.Storage
 		comp     *Comp
 		topPort  messaging.Port
@@ -30,14 +31,14 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 	)
 
 	build := func() {
-		reg := modeling.NewStandaloneRegistrar(engine)
+
 		comp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			Build("BankedMem")
 
-		assignPort(reg, comp, "Top", 16)
-		assignPort(reg, comp, "Control", 16)
+		assignPort(sim, comp, "Top", 16)
+		assignPort(sim, comp, "Control", 16)
 
 		topPort = comp.GetPortByName("Top")
 		ctrlPort = comp.GetPortByName("Control")
@@ -47,12 +48,12 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 	}
 
 	makeRead := func(index int) memprotocol.ReadReq {
-		return makeReadReq(messaging.RemotePort("Agent"), topPort.AsRemote(), index)
+		return makeReadReq(sim, messaging.RemotePort("Agent"), topPort.AsRemote(), index)
 	}
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Ctrl")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -70,6 +71,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		storage = mem.NewStorage(1 * mem.MB)
 		build()
 	})
@@ -96,15 +98,15 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		for i := 0; i < 4096 && !drainFound; i++ {
 			comp.Tick()
 			for {
-				out := topPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := topPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if _, ok := out.(memprotocol.DataReadyRsp); ok {
 					completed++
 				}
 			}
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
@@ -134,9 +136,11 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 
 		// The request is neither consumed nor turned into work, and no
 		// response is produced, while paused.
-		Expect(topPort.PeekIncoming()).ToNot(BeNil())
+		_, present0 := topPort.PeekIncoming()
+		Expect(present0).To(BeTrue())
 		Expect(allBanksQuiescent()).To(BeTrue())
-		Expect(topPort.RetrieveOutgoing()).To(BeNil())
+		_, present1 := topPort.RetrieveOutgoing()
+		Expect(present1).To(BeFalse())
 	})
 
 	DescribeTable("Reset wipes in-flight state from any control state",
@@ -155,7 +159,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				comp.Tick()
-				if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					if r, ok := out.(memcontrolprotocol.Rsp); ok {
 						rsp = r
 						found = true
@@ -176,8 +180,8 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 			for range 8 {
 				comp.Tick()
 				for {
-					out := topPort.RetrieveOutgoing()
-					if out == nil {
+					out, ok := topPort.RetrieveOutgoing()
+					if !ok {
 						break
 					}
 					if _, ok := out.(memprotocol.DataReadyRsp); ok {
@@ -210,8 +214,8 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		for range 16 {
 			comp.Tick()
 			for {
-				out := ctrlPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := ctrlPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if r, ok := out.(memcontrolprotocol.Rsp); ok {

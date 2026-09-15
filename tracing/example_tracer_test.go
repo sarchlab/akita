@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/hooking"
+	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -18,6 +19,7 @@ func (t *SampleTimeTeller) CurrentTime() timing.VTimeInPicoSec {
 }
 
 type SampleDomain struct {
+	sim timing.Simulation
 	*hooking.HookableBase
 
 	timeTeller timing.TimeTeller
@@ -56,7 +58,7 @@ func (d *SampleDomain) End() {
 // Example for how to use standard tracers
 func ExampleTracer() {
 	timeTeller := &SampleTimeTeller{}
-	domain := &SampleDomain{
+	domain := &SampleDomain{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
 		HookableBase: hooking.NewHookableBase(),
 		timeTeller:   timeTeller,
 	}
@@ -97,3 +99,5 @@ func ExampleTracer() {
 	// 20
 	// 12
 }
+
+func (c *SampleDomain) Simulation() timing.Simulation { return c.sim }

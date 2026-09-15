@@ -16,15 +16,15 @@ import (
 )
 
 // assignPort builds a port instance for a declared component port and attaches
-// it, using the same registrar the component builder used.
+// it, using the same simulation the component builder used.
 func assignPort(
-	reg modeling.Registrar,
+	sim timing.Simulation,
 	comp *Comp,
 	name string,
 	bufSize int,
 ) {
 	p := modeling.MakePortBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithComponent(comp).
 		WithSpec(modeling.PortSpec{BufSize: bufSize}).
 		Build(name)
@@ -78,8 +78,8 @@ func (c *loopbackConnection) transfer() {
 
 func (c *loopbackConnection) forward(src, dst messaging.Port) {
 	for {
-		msg := src.PeekOutgoing()
-		if msg == nil {
+		msg, ok := src.PeekOutgoing()
+		if !ok {
 			break
 		}
 
@@ -93,6 +93,7 @@ func (c *loopbackConnection) forward(src, dst messaging.Port) {
 }
 
 type testAgent struct {
+	sim timing.Simulation
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 
@@ -104,7 +105,7 @@ type testAgent struct {
 func newTestAgent(name string) *testAgent {
 	naming.MustBeValid(name)
 
-	a := &testAgent{
+	a := &testAgent{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
 		PortOwnerBase: messaging.NewPortOwnerBase(),
 		name:          name,
 	}
@@ -122,8 +123,8 @@ func (a *testAgent) Name() string {
 
 func (a *testAgent) NotifyRecv(port messaging.Port) {
 	for {
-		msg := port.RetrieveIncoming()
-		if msg == nil {
+		msg, ok := port.RetrieveIncoming()
+		if !ok {
 			break
 		}
 
@@ -135,8 +136,8 @@ func (a *testAgent) NotifyPortFree(messaging.Port) {
 	// No-op.
 }
 
-func (a *testAgent) Handle(timing.Event) error {
-	return nil
+func (a *testAgent) Handle(timing.Event) {
+	return
 }
 
 func (a *testAgent) send(msg messaging.Msg) {
@@ -145,6 +146,7 @@ func (a *testAgent) send(msg messaging.Msg) {
 }
 
 type bandwidthAgent struct {
+	sim timing.Simulation
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 
@@ -157,7 +159,7 @@ type bandwidthAgent struct {
 func newBandwidthAgent(name string) *bandwidthAgent {
 	naming.MustBeValid(name)
 
-	a := &bandwidthAgent{
+	a := &bandwidthAgent{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
 		PortOwnerBase: messaging.NewPortOwnerBase(),
 		name:          name,
 	}
@@ -175,8 +177,8 @@ func (a *bandwidthAgent) Name() string {
 
 func (a *bandwidthAgent) NotifyRecv(port messaging.Port) {
 	for {
-		msg := port.RetrieveIncoming()
-		if msg == nil {
+		msg, ok := port.RetrieveIncoming()
+		if !ok {
 			break
 		}
 
@@ -189,8 +191,8 @@ func (a *bandwidthAgent) NotifyRecv(port messaging.Port) {
 
 func (a *bandwidthAgent) NotifyPortFree(messaging.Port) {}
 
-func (a *bandwidthAgent) Handle(timing.Event) error {
-	return nil
+func (a *bandwidthAgent) Handle(timing.Event) {
+	return
 }
 
 const (
@@ -200,6 +202,7 @@ const (
 
 func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.Freq) {
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 	freq := 1 * timing.GHz
 
 	spec := DefaultSpec()
@@ -208,14 +211,13 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.F
 	spec.StageLatency = 6
 	spec.PostPipelineBufSize = 32
 
-	reg := modeling.NewStandaloneRegistrar(engine)
 	memComp := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		Build("Mem")
 
-	assignPort(reg, memComp, "Top", 32)
-	assignPort(reg, memComp, "Control", 16)
+	assignPort(sim, memComp, "Top", 32)
+	assignPort(sim, memComp, "Control", 16)
 
 	topPort := memComp.GetPortByName("Top")
 	agent := newBandwidthAgent("Agent")
@@ -226,10 +228,10 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.F
 	return memComp, agent, conn, freq
 }
 
-func makeReadReq(src, dst messaging.RemotePort, index int) memprotocol.ReadReq {
+func makeReadReq(ids timing.Simulation, src, dst messaging.RemotePort, index int) memprotocol.ReadReq {
 	addr := uint64(index * readSize)
 	r := memprotocol.ReadReq{}
-	r.ID = timing.GetIDGenerator().Generate()
+	r.ID = ids.NewID()
 	r.Src = src
 	r.Dst = dst
 	r.Address = addr
@@ -260,6 +262,7 @@ func collectLatency(
 var _ = Describe("SimpleBankedMemory", func() {
 	var (
 		engine  timing.Engine
+		sim     timing.Simulation
 		memComp *Comp
 		storage *mem.Storage
 		agent   *testAgent
@@ -268,21 +271,21 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		storage = mem.NewStorage(4 * mem.GB)
 
 		spec := DefaultSpec()
 		spec.NumBanks = 2
 		spec.StageLatency = 2
 
-		reg := modeling.NewStandaloneRegistrar(engine)
 		memComp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{Storage: storage}).
 			Build("Mem")
 
-		assignPort(reg, memComp, "Top", 4)
-		assignPort(reg, memComp, "Control", 16)
+		assignPort(sim, memComp, "Top", 4)
+		assignPort(sim, memComp, "Control", 16)
 
 		topPort := memComp.GetPortByName("Top")
 		agent = newTestAgent("Agent")
@@ -297,12 +300,11 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 	It("should return read data after configured latency", func() {
 		data := []byte{1, 2, 3, 4}
-		err := storage.Write(0x0, data)
-		Expect(err).NotTo(HaveOccurred())
+		storage.Write(0x0, data)
 
 		topPort := memComp.GetPortByName("Top")
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = sim.NewID()
 		read.Src = agent.port.AsRemote()
 		read.Dst = topPort.AsRemote()
 		read.Address = 0x0
@@ -325,15 +327,14 @@ var _ = Describe("SimpleBankedMemory", func() {
 		addr := uint64(0x100)
 
 		initial := []byte{0xAA, 0xBB, 0xCC, 0xDD}
-		err := storage.Write(addr, initial)
-		Expect(err).NotTo(HaveOccurred())
+		storage.Write(addr, initial)
 
 		newData := []byte{0x10, 0x20, 0x30, 0x40}
 
 		topPort := memComp.GetPortByName("Top")
 
 		write := memprotocol.WriteReq{}
-		write.ID = timing.GetIDGenerator().Generate()
+		write.ID = sim.NewID()
 		write.Src = agent.port.AsRemote()
 		write.Dst = topPort.AsRemote()
 		write.Address = addr
@@ -342,7 +343,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		write.TrafficClass = "memprotocol.WriteReq"
 
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = sim.NewID()
 		read.Src = agent.port.AsRemote()
 		read.Dst = topPort.AsRemote()
 		read.Address = addr
@@ -366,8 +367,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		Expect(ok).To(BeTrue())
 		Expect(readRsp.Data).To(Equal(newData))
 
-		committed, err := storage.Read(addr, uint64(len(newData)))
-		Expect(err).NotTo(HaveOccurred())
+		committed := storage.Read(addr, uint64(len(newData)))
 		Expect(committed).To(Equal(newData))
 	})
 
@@ -378,14 +378,13 @@ var _ = Describe("SimpleBankedMemory", func() {
 		spec.NumBanks = 2
 		spec.StageLatency = 2
 
-		reg := modeling.NewStandaloneRegistrar(engine)
 		memComp = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			Build("MemGlobal")
 
-		assignPort(reg, memComp, "Top", 4)
-		assignPort(reg, memComp, "Control", 16)
+		assignPort(sim, memComp, "Top", 4)
+		assignPort(sim, memComp, "Control", 16)
 
 		topPort := memComp.GetPortByName("Top")
 		agent = newTestAgent("AgentGlobal")
@@ -396,7 +395,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		// Write 4 bytes at a non-zero global address.
 		writeData := []byte{1, 2, 3, 4}
 		write := memprotocol.WriteReq{}
-		write.ID = timing.GetIDGenerator().Generate()
+		write.ID = sim.NewID()
 		write.Src = agent.port.AsRemote()
 		write.Dst = topPort.AsRemote()
 		write.Address = 0x200
@@ -406,7 +405,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		// Read the same global address back.
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = sim.NewID()
 		read.Src = agent.port.AsRemote()
 		read.Dst = topPort.AsRemote()
 		read.Address = 0x200
@@ -445,7 +444,7 @@ func Example() {
 
 	for agent.completed < numRequests {
 		if !hasPending && requestsSent < numRequests {
-			pendingReq = makeReadReq(srcRemote, dstRemote, requestsSent)
+			pendingReq = makeReadReq(memComp.Simulation(), srcRemote, dstRemote, requestsSent)
 			hasPending = true
 		}
 
@@ -475,3 +474,7 @@ func Example() {
 	// Achieved bandwidth: 64.00 GB/s
 	// Average latency: 7.00 cycles
 }
+
+func (c *testAgent) Simulation() timing.Simulation { return c.sim }
+
+func (c *bandwidthAgent) Simulation() timing.Simulation { return c.sim }

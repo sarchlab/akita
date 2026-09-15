@@ -16,7 +16,9 @@ import (
 	"github.com/tebeka/atexit"
 )
 
-// DataRecorder is a backend that can record and store data
+// DataRecorder is a backend that can record and store data.
+// The SQLite implementation supports concurrent CreateTable, InsertData,
+// ListTables, and Flush calls. Stop producers before calling Close.
 type DataRecorder interface {
 	// CreateTable creates a new table with given filename
 	CreateTable(tableName string, sampleEntry any)
@@ -332,10 +334,10 @@ func (t *sqliteWriter) createIndex(tableName, fieldName string, unique bool) {
 
 func (t *sqliteWriter) InsertData(tableName string, entry any) {
 	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	table, exists := t.tables[tableName]
 	if !exists {
-		t.mu.Unlock()
 		panic(fmt.Sprintf("table %s does not exist", tableName))
 	}
 
@@ -344,16 +346,14 @@ func (t *sqliteWriter) InsertData(tableName string, entry any) {
 	t.entryCount += 1
 
 	if t.entryCount >= t.batchSize {
-		t.mu.Unlock()
-		t.Flush()
-
-		return
+		t.flushLocked()
 	}
-
-	t.mu.Unlock()
 }
 
 func (t *sqliteWriter) ListTables() []string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	tables := make([]string, 0, len(t.tables))
 	for table := range t.tables {
 		tables = append(tables, table)
@@ -363,12 +363,24 @@ func (t *sqliteWriter) ListTables() []string {
 }
 
 func (t *sqliteWriter) Flush() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.flushLocked()
+}
+
+// flushLocked owns the buffers and location dictionary until the whole batch
+// commits. The caller must hold mu, including for automatic flushes.
+func (t *sqliteWriter) flushLocked() {
 	if t.entryCount == 0 {
 		return
 	}
 
-	t.mustExecute("BEGIN TRANSACTION")
-	defer t.mustExecute("COMMIT TRANSACTION")
+	tx, err := t.DB.BeginTx(context.Background(), nil)
+	if err != nil {
+		panic(err)
+	}
+	defer tx.Rollback()
 
 	for tableName, table := range t.tables {
 		if len(table.entries) == 0 {
@@ -379,25 +391,44 @@ func (t *sqliteWriter) Flush() {
 			continue
 		}
 
-		for _, task := range table.entries {
-			t.insertEntryForTable(task, table)
-		}
+		t.insertTableEntries(tx, table)
+	}
 
+	if locations, ok := t.tables["location"]; ok {
+		t.insertTableEntries(tx, locations)
+	}
+
+	if err := tx.Commit(); err != nil {
+		panic(err)
+	}
+
+	for _, table := range t.tables {
 		table.entries = nil
 	}
 
-	t.flushLocationTable()
-
 	t.entryCount = 0
+}
+
+// insertTableEntries writes one table through the batch's connection. Location
+// rows use the same insertion path after all other tables have interned theirs.
+func (t *sqliteWriter) insertTableEntries(tx *sql.Tx, table *table) {
+	if len(table.entries) == 0 {
+		return
+	}
+
+	stmt := tx.StmtContext(context.Background(), table.statement)
+	defer stmt.Close()
+
+	for _, task := range table.entries {
+		t.insertEntryForTable(task, table, stmt)
+	}
 }
 
 func (t *sqliteWriter) insertEntryForTable(
 	task any,
 	table *table,
+	stmt *sql.Stmt,
 ) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	v := []any{}
 
 	value := reflect.ValueOf(task)
@@ -422,7 +453,7 @@ func (t *sqliteWriter) insertEntryForTable(
 		}
 	}
 
-	_, err := table.statement.ExecContext(context.Background(), v...)
+	_, err := stmt.ExecContext(context.Background(), v...)
 	if err != nil {
 		panic(err)
 	}
@@ -459,45 +490,6 @@ func (t *sqliteWriter) fieldLocation(field reflect.StructField) bool {
 	return ok && strings.Contains(tag, "location")
 }
 
-func (t *sqliteWriter) flushLocationTable() {
-	table, exists := t.tables["location"]
-	if !exists {
-		return
-	}
-
-	if len(table.entries) == 0 {
-		return
-	}
-
-	for _, task := range table.entries {
-		v := []any{}
-
-		value := reflect.ValueOf(task)
-		vType := value.Type()
-
-		if vType != table.structType {
-			panic("entry type mismatch")
-		}
-
-		for i := 0; i < value.NumField(); i++ {
-			field := vType.Field(i)
-
-			if t.fieldIgnored(field) {
-				continue
-			}
-
-			v = append(v, value.Field(i).Interface())
-		}
-
-		_, err := table.statement.ExecContext(context.Background(), v...)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	table.entries = nil
-}
-
 func (t *sqliteWriter) mustExecute(query string) sql.Result {
 	res, err := t.ExecContext(context.Background(), query)
 	if err != nil {
@@ -529,7 +521,10 @@ func (t *sqliteWriter) buildIndexes() {
 }
 
 func (t *sqliteWriter) Close() error {
-	t.Flush()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.flushLocked()
 	t.buildIndexes()
 
 	err := t.DB.Close()

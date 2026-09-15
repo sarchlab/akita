@@ -83,6 +83,135 @@ func TestRunDataQuery(t *testing.T) {
 	}
 }
 
+func TestRequiresNoReasoningForChatCompletionTools(t *testing.T) {
+	tests := []struct {
+		model string
+		want  bool
+	}{
+		{model: "gpt-5.6", want: true},
+		{model: "gpt-5.6-luna", want: true},
+		{model: "gpt-5.6-sol-2026-08-01", want: true},
+		{model: "openai/gpt-5.6-terra", want: true},
+		{model: "gpt-5.6:latest", want: true},
+		{model: "ft:gpt-5.6-sol:org::abc", want: true},
+		{model: " GPT-5.6-SOL ", want: true},
+		{model: "gpt-5.5", want: false},
+		{model: "gpt-5.60", want: false},
+		{model: "mygpt-5.6-sol", want: false},
+		{model: "mock", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			if got := requiresNoReasoningForChatCompletionTools(tt.model); got != tt.want {
+				t.Fatalf("requiresNoReasoningForChatCompletionTools(%q) = %v, want %v", tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCallProviderGPT56UsesNoReasoningWithTools(t *testing.T) {
+	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1")
+
+	tests := []struct {
+		model               string
+		offerTools          bool
+		wantReasoningEffort bool
+	}{
+		{model: "gpt-5.6-sol", offerTools: true, wantReasoningEffort: true},
+		{model: "gpt-5.6-sol", offerTools: false, wantReasoningEffort: false},
+		{model: "gpt-5.5", offerTools: true, wantReasoningEffort: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			var got map[string]interface{}
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+					t.Errorf("decode request: %v", err)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"done"}}]}`)
+			}))
+			defer srv.Close()
+
+			cfg := ProviderConfig{Provider: ProviderOpenAICompatible, BaseURL: srv.URL, Model: tt.model}
+			toolSpecs := []interface{}{map[string]interface{}{
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":       "synthetic_lookup",
+					"parameters": map[string]interface{}{"type": "object"},
+				},
+			}}
+
+			if _, _, _, err := callProvider(
+				context.Background(),
+				cfg,
+				[]map[string]interface{}{{"role": "user", "content": "test"}},
+				toolSpecs,
+				tt.offerTools,
+			); err != nil {
+				t.Fatalf("callProvider: %v", err)
+			}
+
+			effort, present := got["reasoning_effort"]
+			if tt.wantReasoningEffort {
+				if !present || effort != "none" {
+					t.Fatalf("reasoning_effort = %v (present %v), want none", effort, present)
+				}
+			} else if present {
+				t.Fatalf("reasoning_effort = %v, want omitted", effort)
+			}
+		})
+	}
+}
+
+func TestRunAgentLoopSurfacesToolCapabilityFallback(t *testing.T) {
+	t.Setenv("DAISEN_ALLOW_PRIVATE_LLM_URL", "1")
+
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if calls == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, `{"error":{"message":"tools are unsupported"}}`)
+			return
+		}
+		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"fallback answer"}}]}`)
+	}))
+	defer srv.Close()
+
+	cfg := ProviderConfig{Provider: ProviderOpenAICompatible, BaseURL: srv.URL, Model: "strict-proxy-model"}
+	tools := []agentTool{{
+		name:        "synthetic_lookup",
+		description: "test tool",
+		parameters:  map[string]interface{}{"type": "object"},
+	}}
+	var events []agentEvent
+	if err := runAgentLoop(
+		context.Background(),
+		cfg,
+		[]map[string]interface{}{{"role": "user", "content": "test"}},
+		tools,
+		func(ev agentEvent) { events = append(events, ev) },
+	); err != nil {
+		t.Fatalf("runAgentLoop: %v", err)
+	}
+
+	if calls != 2 {
+		t.Fatalf("provider calls = %d, want tool request plus no-tools fallback", calls)
+	}
+	if len(events) != 2 || events[0].Type != "thinking" ||
+		!strings.Contains(events[0].Text, "retrying this turn without tools") ||
+		!strings.Contains(events[0].Text, "tools are unsupported") {
+		t.Fatalf("fallback event not surfaced before the answer: %#v", events)
+	}
+	if events[1].Type != "message" || events[1].Text != "fallback answer" {
+		t.Fatalf("unexpected fallback answer event: %#v", events[1])
+	}
+}
+
 // TestRunDataQueryRejectsCTEWrite guards the P1: a write smuggled through a CTE
 // passes the SELECT/WITH prefix check but must be rejected by the read-only
 // connection (PRAGMA query_only) without mutating the trace.

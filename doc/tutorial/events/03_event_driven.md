@@ -128,23 +128,23 @@ Wiring is almost identical to the default components you have already met:
 
 ```go
 engine := timing.NewSerialEngine()
-registrar := modeling.NewStandaloneRegistrar(engine)
+sim := modeling.NewStandaloneSimulation(engine)
 
-agentA := MakeBuilder().WithRegistrar(registrar).Build("AgentA")
+agentA := MakeBuilder().WithSimulation(sim).Build("AgentA")
 agentA.AssignPort("Out", modeling.MakePortBuilder().
-    WithRegistrar(registrar).
+    WithSimulation(sim).
     WithComponent(agentA).
     WithSpec(modeling.PortSpec{BufSize: 4}).
     Build("Out"))
-agentB := MakeBuilder().WithRegistrar(registrar).Build("AgentB")
+agentB := MakeBuilder().WithSimulation(sim).Build("AgentB")
 agentB.AssignPort("Out", modeling.MakePortBuilder().
-    WithRegistrar(registrar).
+    WithSimulation(sim).
     WithComponent(agentB).
     WithSpec(modeling.PortSpec{BufSize: 4}).
     Build("Out"))
 
 conn := directconnection.MakeBuilder().
-    WithRegistrar(registrar).
+    WithSimulation(sim).
     Build("Conn")
 
 conn.PlugIn(agentA.GetPortByName("Out"))

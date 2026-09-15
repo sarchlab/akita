@@ -16,6 +16,7 @@ import (
 var _ = Describe("DataMover", func() {
 	var (
 		engine         timing.Engine
+		sim            timing.Simulation
 		dataMover      *modeling.Component[Spec, State, modeling.None]
 		insideMem      *idealmemcontroller.Comp
 		insideStorage  *mem.Storage
@@ -27,6 +28,7 @@ var _ = Describe("DataMover", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 
 		srcPort = messaging.NewPort(nil, 4, 4, "Src.Top")
 
@@ -37,7 +39,7 @@ var _ = Describe("DataMover", func() {
 
 		insideStorage = mem.NewStorage(1 * mem.MB)
 		insideMem = idealmemcontroller.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(memSpec).
 			WithResources(idealmemcontroller.Resources{Storage: insideStorage}).
 			Build("InsideMem")
@@ -47,7 +49,7 @@ var _ = Describe("DataMover", func() {
 			messaging.NewPort(insideMem, 16, 16, insideMem.Name()+".Control"))
 		outsideStorage = mem.NewStorage(1 * mem.MB)
 		outsideMem = idealmemcontroller.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithSpec(memSpec).
 			WithResources(idealmemcontroller.Resources{Storage: outsideStorage}).
 			Build("OutsideMem")
@@ -61,9 +63,9 @@ var _ = Describe("DataMover", func() {
 		dmSpec.InsideByteGranularity = 64
 		dmSpec.OutsideByteGranularity = 256
 
-		dmReg := modeling.NewStandaloneRegistrar(engine)
+		dmReg := sim
 		dataMover = MakeBuilder().
-			WithRegistrar(dmReg).
+			WithSimulation(dmReg).
 			WithSpec(dmSpec).
 			WithResources(Resources{
 				InsideMapper: &mem.SinglePortMapper{
@@ -77,7 +79,7 @@ var _ = Describe("DataMover", func() {
 
 		assignDM := func(name string, bufSize int) {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(dmReg).
+				WithSimulation(dmReg).
 				WithComponent(dataMover).
 				WithSpec(modeling.PortSpec{BufSize: bufSize}).
 				Build(name)
@@ -89,7 +91,7 @@ var _ = Describe("DataMover", func() {
 		assignDM("Control", 40960000)
 
 		conn = directconnection.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			Build("Conn")
 		conn.PlugIn(srcPort)
 		conn.PlugIn(dataMover.GetPortByName("Top"))
@@ -107,7 +109,7 @@ var _ = Describe("DataMover", func() {
 		outsideStorage.Write(0, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
@@ -119,10 +121,12 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
-		Expect(srcPort.RetrieveIncoming()).To(
+		value0, present0 := srcPort.RetrieveIncoming()
+		Expect(present0).To(BeTrue())
+		Expect(value0).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 
@@ -138,7 +142,7 @@ var _ = Describe("DataMover", func() {
 		outsideStorage.Write(4096, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 4096
@@ -150,10 +154,12 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		Expect(insideStorage.Read(8192, 2048)).To(Equal(data))
-		Expect(srcPort.RetrieveIncoming()).To(
+		value1, present1 := srcPort.RetrieveIncoming()
+		Expect(present1).To(BeTrue())
+		Expect(value1).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 
@@ -165,7 +171,7 @@ var _ = Describe("DataMover", func() {
 		insideStorage.Write(0, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
@@ -177,10 +183,12 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		Expect(insideStorage.Read(0, 4096)).To(Equal(data))
-		Expect(srcPort.RetrieveIncoming()).To(
+		value2, present2 := srcPort.RetrieveIncoming()
+		Expect(present2).To(BeTrue())
+		Expect(value2).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 
@@ -192,7 +200,7 @@ var _ = Describe("DataMover", func() {
 		insideStorage.Write(0, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
@@ -204,10 +212,12 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		Expect(outsideStorage.Read(4096, 4096)).To(Equal(data))
-		Expect(srcPort.RetrieveIncoming()).To(
+		value3, present3 := srcPort.RetrieveIncoming()
+		Expect(present3).To(BeTrue())
+		Expect(value3).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 
@@ -219,7 +229,7 @@ var _ = Describe("DataMover", func() {
 		outsideStorage.Write(0, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
@@ -231,17 +241,19 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		expected := data[:512]
 		Expect(insideStorage.Read(512, 512)).To(Equal(expected))
-		Expect(srcPort.RetrieveIncoming()).To(
+		value4, present4 := srcPort.RetrieveIncoming()
+		Expect(present4).To(BeTrue())
+		Expect(value4).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 
 	It("should handle zero-size transfers", func() {
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
@@ -264,7 +276,7 @@ var _ = Describe("DataMover", func() {
 		insideStorage.Write(0, data)
 
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Top").AsRemote()
 		req.SrcAddress = 0
@@ -276,11 +288,13 @@ var _ = Describe("DataMover", func() {
 
 		dataMover.GetPortByName("Top").Deliver(req)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		expected := append(data[:512], data[:512]...)
 		Expect(insideStorage.Read(0, 1024)).To(Equal(expected))
-		Expect(srcPort.RetrieveIncoming()).To(
+		value5, present5 := srcPort.RetrieveIncoming()
+		Expect(present5).To(BeTrue())
+		Expect(value5).To(
 			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
 	})
 })

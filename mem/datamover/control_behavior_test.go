@@ -21,6 +21,7 @@ import (
 var _ = Describe("DataMover control behavior", func() {
 	var (
 		engine       timing.Engine
+		sim          timing.Simulation
 		dataMover    *modeling.Component[Spec, State, modeling.None]
 		topPort      messaging.Port
 		ctrlPort     messaging.Port
@@ -35,11 +36,9 @@ var _ = Describe("DataMover control behavior", func() {
 		spec.InsideByteGranularity = 64
 		spec.OutsideByteGranularity = 64
 
-		reg := modeling.NewStandaloneRegistrar(engine)
-
 		insideRemote = messaging.RemotePort("InsideMem")
 		dataMover = MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				InsideMapper: &mem.SinglePortMapper{Port: insideRemote},
@@ -51,7 +50,7 @@ var _ = Describe("DataMover control behavior", func() {
 
 		assign := func(name string, bufSize int) messaging.Port {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(reg).
+				WithSimulation(sim).
 				WithComponent(dataMover).
 				WithSpec(modeling.PortSpec{BufSize: bufSize}).
 				Build(name)
@@ -74,7 +73,7 @@ var _ = Describe("DataMover control behavior", func() {
 	// (one read on Outside, one write on Inside).
 	makeMove := func() datamoverprotocol.DataMoveRequest {
 		req := datamoverprotocol.DataMoveRequest{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.SrcAddress = 0
@@ -88,7 +87,7 @@ var _ = Describe("DataMover control behavior", func() {
 
 	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Cmd")
 		req.Dst = ctrlPort.AsRemote()
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -97,7 +96,7 @@ var _ = Describe("DataMover control behavior", func() {
 
 	answerRead := func(port messaging.Port, read memprotocol.ReadReq) {
 		rsp := memprotocol.DataReadyRsp{Data: make([]byte, int(read.AccessByteSize))}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = sim.NewID()
 		rsp.Src = read.Dst
 		rsp.Dst = port.AsRemote()
 		rsp.RspTo = read.ID
@@ -107,7 +106,7 @@ var _ = Describe("DataMover control behavior", func() {
 
 	answerWrite := func(port messaging.Port, write memprotocol.WriteReq) {
 		rsp := memprotocol.WriteDoneRsp{}
-		rsp.ID = timing.GetIDGenerator().Generate()
+		rsp.ID = sim.NewID()
 		rsp.Src = write.Dst
 		rsp.Dst = port.AsRemote()
 		rsp.RspTo = write.ID
@@ -124,7 +123,7 @@ var _ = Describe("DataMover control behavior", func() {
 		gotRead := false
 		for i := 0; i < 64 && !gotRead; i++ {
 			dataMover.Tick()
-			if out := outsidePort.RetrieveOutgoing(); out != nil {
+			if out, ok := outsidePort.RetrieveOutgoing(); ok {
 				read, gotRead = out.(memprotocol.ReadReq)
 			}
 		}
@@ -133,6 +132,7 @@ var _ = Describe("DataMover control behavior", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		build()
 	})
 
@@ -151,7 +151,8 @@ var _ = Describe("DataMover control behavior", func() {
 			Expect(dataMover.State.ControlState).
 				To(Equal(memcontrolprotocol.StateDraining))
 			Expect(dataMover.State.CurrentTransaction.Active).To(BeTrue())
-			Expect(ctrlPort.RetrieveOutgoing()).To(BeNil())
+			_, present0 := ctrlPort.RetrieveOutgoing()
+			Expect(present0).To(BeFalse())
 		}
 
 		// Let the move finish: answer the read, then the write it triggers.
@@ -165,7 +166,7 @@ var _ = Describe("DataMover control behavior", func() {
 		for i := 0; i < 256 && !gotDrainRsp; i++ {
 			dataMover.Tick()
 			if !gotWrite {
-				if out := insidePort.RetrieveOutgoing(); out != nil {
+				if out, ok := insidePort.RetrieveOutgoing(); ok {
 					if w, ok := out.(memprotocol.WriteReq); ok {
 						write = w
 						gotWrite = true
@@ -173,12 +174,12 @@ var _ = Describe("DataMover control behavior", func() {
 					}
 				}
 			}
-			if out := topPort.RetrieveOutgoing(); out != nil {
+			if out, ok := topPort.RetrieveOutgoing(); ok {
 				if _, ok := out.(datamoverprotocol.DataMoveResponse); ok {
 					moveDone = true
 				}
 			}
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
@@ -207,7 +208,7 @@ var _ = Describe("DataMover control behavior", func() {
 		gotWrite := false
 		for i := 0; i < 64 && !gotWrite; i++ {
 			dataMover.Tick()
-			if out := insidePort.RetrieveOutgoing(); out != nil {
+			if out, ok := insidePort.RetrieveOutgoing(); ok {
 				write, gotWrite = out.(memprotocol.WriteReq)
 			}
 		}
@@ -221,8 +222,10 @@ var _ = Describe("DataMover control behavior", func() {
 		ctrlPort.Deliver(drain)
 		for range 8 {
 			dataMover.Tick()
-			Expect(topPort.RetrieveOutgoing()).To(BeNil())
-			Expect(ctrlPort.RetrieveOutgoing()).To(BeNil())
+			_, present1 := topPort.RetrieveOutgoing()
+			Expect(present1).To(BeFalse())
+			_, present2 := ctrlPort.RetrieveOutgoing()
+			Expect(present2).To(BeFalse())
 			Expect(dataMover.State.CurrentTransaction.Active).To(BeTrue())
 		}
 
@@ -233,12 +236,12 @@ var _ = Describe("DataMover control behavior", func() {
 		var drainRsp memcontrolprotocol.Rsp
 		for i := 0; i < 256 && !gotDrainRsp; i++ {
 			dataMover.Tick()
-			if out := topPort.RetrieveOutgoing(); out != nil {
+			if out, ok := topPort.RetrieveOutgoing(); ok {
 				if _, ok := out.(datamoverprotocol.DataMoveResponse); ok {
 					moveDone = true
 				}
 			}
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
 					drainRsp = rsp
@@ -265,7 +268,7 @@ var _ = Describe("DataMover control behavior", func() {
 		acked := false
 		for i := 0; i < 64 && !acked; i++ {
 			dataMover.Tick()
-			if out := ctrlPort.RetrieveOutgoing(); out != nil {
+			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if r, ok := out.(memcontrolprotocol.Rsp); ok &&
 					r.Command == memcontrolprotocol.CmdReset {
 					acked = true
@@ -294,14 +297,14 @@ var _ = Describe("DataMover control behavior", func() {
 		for i := 0; i < 256 && !moveDone; i++ {
 			dataMover.Tick()
 			if !gotWrite {
-				if out := insidePort.RetrieveOutgoing(); out != nil {
+				if out, ok := insidePort.RetrieveOutgoing(); ok {
 					if w, ok := out.(memprotocol.WriteReq); ok {
 						gotWrite = true
 						answerWrite(insidePort, w)
 					}
 				}
 			}
-			if out := topPort.RetrieveOutgoing(); out != nil {
+			if out, ok := topPort.RetrieveOutgoing(); ok {
 				if _, ok := out.(datamoverprotocol.DataMoveResponse); ok {
 					moveDone = true
 				}
@@ -318,9 +321,11 @@ var _ = Describe("DataMover control behavior", func() {
 			dataMover.Tick()
 		}
 
-		Expect(topPort.PeekIncoming()).ToNot(BeNil())
+		_, present3 := topPort.PeekIncoming()
+		Expect(present3).To(BeTrue())
 		Expect(dataMover.State.CurrentTransaction.Active).To(BeFalse())
-		Expect(outsidePort.RetrieveOutgoing()).To(BeNil())
+		_, present4 := outsidePort.RetrieveOutgoing()
+		Expect(present4).To(BeFalse())
 	})
 
 	DescribeTable("Reset wipes the in-flight move from any control state",
@@ -338,7 +343,7 @@ var _ = Describe("DataMover control behavior", func() {
 			gotRsp := false
 			for i := 0; i < 64 && !gotRsp; i++ {
 				dataMover.Tick()
-				if out := ctrlPort.RetrieveOutgoing(); out != nil {
+				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					rsp, gotRsp = out.(memcontrolprotocol.Rsp)
 				}
 			}
@@ -376,8 +381,8 @@ var _ = Describe("DataMover control behavior", func() {
 		for range 16 {
 			dataMover.Tick()
 			for {
-				out := ctrlPort.RetrieveOutgoing()
-				if out == nil {
+				out, ok := ctrlPort.RetrieveOutgoing()
+				if !ok {
 					break
 				}
 				if r, ok := out.(memcontrolprotocol.Rsp); ok {

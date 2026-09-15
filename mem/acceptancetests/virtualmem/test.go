@@ -62,7 +62,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 	atSpec.Log2PageSize = 12
 	atSpec.NumReqPerCycle = 4
 	at := addresstranslator.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(atSpec).
 		WithResources(addresstranslator.Resources{
 			MemProviderMapper:         atMemoryMapper,
@@ -80,7 +80,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 	agentSpec.ReadLeft = *numAccessFlag
 	agentSpec.WriteLeft = *numAccessFlag
 	agent = memaccessagent.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(agentSpec).
 		WithResources(memaccessagent.Resources{
 			LowModule: robComp.GetPortByName("Top"),
@@ -105,7 +105,7 @@ func buildROB(s *simulation.Simulation, bottomUnit messaging.RemotePort) *rob.Co
 	robSpec.NumReqPerCycle = 4
 	robSpec.BottomUnit = bottomUnit
 	robComp := rob.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(robSpec).
 		Build("ROB")
 	assignPorts(s, robComp, "Top", "Bottom", "Control")
@@ -124,7 +124,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 	memCtrlSpec.Latency = 100
 	memCtrlSpec.CacheLineSize = 64
 	memCtrl := idealmemcontroller.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(memCtrlSpec).
 		Build("MemCtrl")
 	assignPorts(s, memCtrl, "Top", "Control")
@@ -134,7 +134,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 	l2Spec.NumReqPerCycle = 2
 	l2Spec.AddressMapperType = "single"
 	L2Cache := writeback.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(l2Spec).
 		WithResources(writeback.Resources{
 			RemotePorts: []messaging.RemotePort{
@@ -149,7 +149,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 	l1Spec.WayAssociativity = 2
 	l1Spec.AddressMapperType = "single"
 	L1Cache := writethroughcache.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(l1Spec).
 		WithResources(writethroughcache.Resources{
 			RemotePorts: []messaging.RemotePort{
@@ -176,7 +176,7 @@ func buildTranslationHierarchy(
 	mmuSpec.MaxRequestsInFlight = 16
 	mmuSpec.Latency = 10
 	IoMMU := mmu.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(mmuSpec).
 		WithResources(mmu.Resources{PageTable: pageTable}).
 		Build("IoMMU")
@@ -192,7 +192,7 @@ func buildTranslationHierarchy(
 	l2TLBSpec.Log2PageSize = 12
 	l2TLBSpec.NumReqPerCycle = 4
 	L2TLB := tlb.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(l2TLBSpec).
 		WithResources(tlb.Resources{TranslationProviderMapper: L2TLBMapper}).
 		Build("L2TLB")
@@ -208,7 +208,7 @@ func buildTranslationHierarchy(
 	tlbSpec.Log2PageSize = 12
 	tlbSpec.NumReqPerCycle = 2
 	TLB := tlb.MakeBuilder().
-		WithRegistrar(s).
+		WithSimulation(s).
 		WithSpec(tlbSpec).
 		WithResources(tlb.Resources{TranslationProviderMapper: TLBMapper}).
 		Build("TLB")
@@ -254,7 +254,7 @@ func assignPorts(
 ) {
 	for _, name := range names {
 		p := modeling.MakePortBuilder().
-			WithRegistrar(s).
+			WithSimulation(s).
 			WithComponent(comp).
 			WithSpec(modeling.PortSpec{BufSize: 16}).
 			Build(name)
@@ -263,7 +263,7 @@ func assignPorts(
 }
 
 func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {
-	conn := directconnection.MakeBuilder().WithRegistrar(s).Build(name)
+	conn := directconnection.MakeBuilder().WithSimulation(s).Build(name)
 	conn.PlugIn(p1)
 	conn.PlugIn(p2)
 }

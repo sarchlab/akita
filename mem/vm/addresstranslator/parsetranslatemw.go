@@ -6,7 +6,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -42,8 +41,8 @@ func (m *parseTranslateMW) Tick() bool {
 }
 
 func (m *parseTranslateMW) translate() bool {
-	itemI := m.topPort().PeekIncoming()
-	if itemI == nil {
+	itemI, ok := m.topPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -53,7 +52,7 @@ func (m *parseTranslateMW) translate() bool {
 	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
 
 	transReq := vmprotocol.TranslationReq{}
-	transReq.ID = timing.GetIDGenerator().Generate()
+	transReq.ID = m.comp.Simulation().NewID()
 	transReq.Src = m.translationPort().AsRemote()
 	transReq.Dst = m.comp.Resources().TranslationProviderMapper.Find(vAddr)
 	transReq.PID = item.GetPID()

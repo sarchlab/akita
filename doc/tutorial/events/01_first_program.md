@@ -36,15 +36,15 @@ implements a single method:
 ```go
 type EventPrinter struct{}
 
-func (e *EventPrinter) Handle(event timing.Event) error {
+func (e *EventPrinter) Handle(event timing.Event) {
     fmt.Printf("Event: %d\n", event.Time())
-    return nil
 }
 ```
 
 When the engine fires an event, it looks up the registered handler by name
-and calls `Handle(event)`. Anything the handler returns as an error stops
-the simulation.
+and calls `Handle(event)`. A violated model invariant may panic. The engine
+contains that panic and returns a `*timing.PanicError` from `Run` or `RunUntil`;
+discard the failed engine and its model state. Check the returned error.
 
 ### 2. Building the simulation
 
@@ -53,8 +53,8 @@ s := simulation.MakeBuilder().Build()
 ```
 
 `simulation.MakeBuilder().Build()` returns a `*simulation.Simulation`. It
-owns an engine, a registrar, and optional tracing and monitoring
-infrastructure. For this example we only need the engine:
+owns an engine, an entity inventory, and optional tracing and monitoring
+infrastructure. We use the simulation to allocate IDs and its engine to schedule events:
 
 ```go
 engine := s.GetEngine()
@@ -66,22 +66,22 @@ The engine routes events to handlers by **name**, not by pointer. Register
 the handler under a name you choose:
 
 ```go
-if registrar, ok := engine.(timing.HandlerRegistrar); ok {
-    registrar.RegisterHandler("printer", handler)
+if handlers, ok := engine.(timing.HandlerRegistry); ok {
+    handlers.RegisterHandler("printer", handler)
 }
 ```
 
 The type assertion is a safety check — most engines implement
-`HandlerRegistrar`, but the interface keeps that explicit.
+`HandlerRegistry`, but the interface keeps that explicit.
 
 ### 4. Creating and scheduling the event
 
 ```go
-evt := timing.MakeEventBase(1, "printer")
+evt := timing.MakeEventBase(s.NewID(), 1, "printer")
 engine.Schedule(evt)
 ```
 
-`MakeEventBase(time, handlerID)` creates a minimal event whose `Time()`
+`MakeEventBase(id, time, handlerID)` creates a minimal event whose `Time()`
 returns `1` and whose `HandlerID()` returns `"printer"`. The engine will
 fire it at time = 1 picosecond and dispatch it to the handler registered
 under `"printer"`.

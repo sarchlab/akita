@@ -10,10 +10,8 @@ import (
 type EventPrinter struct {
 }
 
-func (e *EventPrinter) Handle(event timing.Event) error {
+func (e *EventPrinter) Handle(event timing.Event) {
 	fmt.Printf("Event: %d\n", event.Time())
-
-	return nil
 }
 
 func main() {
@@ -22,11 +20,11 @@ func main() {
 	handler := &EventPrinter{}
 	engine := s.GetEngine()
 
-	if registrar, ok := engine.(timing.HandlerRegistrar); ok {
-		registrar.RegisterHandler("printer", handler)
+	if handlers, ok := engine.(timing.HandlerRegistry); ok {
+		handlers.RegisterHandler("printer", handler)
 	}
 
-	engine.Schedule(timing.MakeEventBase(1, "printer"))
+	engine.Schedule(timing.MakeEventBase(s.NewID(), 1, "printer"))
 
 	err := engine.Run()
 	if err != nil {

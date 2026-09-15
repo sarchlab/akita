@@ -55,7 +55,7 @@ type handler struct {
     count int
 }
 
-func (h *handler) Handle(e timing.Event) error {
+func (h *handler) Handle(e timing.Event) {
     h.count += 1
 
     evt := e.(splitEvent)
@@ -64,8 +64,6 @@ func (h *handler) Handle(e timing.Event) error {
 
     h.scheduleNextSplitEvent(evt.Time(), evt.id)
     h.scheduleNextSplitEvent(evt.Time(), h.count)
-
-    return nil
 }
 ```
 
@@ -109,8 +107,8 @@ s := simulation.MakeBuilder().Build()
 engine = s.GetEngine()
 h := handler{count: 1}
 
-if registrar, ok := engine.(timing.HandlerRegistrar); ok {
-    registrar.RegisterHandler("splitter", &h)
+if handlers, ok := engine.(timing.HandlerRegistry); ok {
+    handlers.RegisterHandler("splitter", &h)
 }
 
 firstEvtTime := timing.VTimeInPicoSec(uint64((randGen.Float64() + 1) * 1e12))

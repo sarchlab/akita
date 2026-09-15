@@ -143,6 +143,7 @@ func (suite *TracerTestSuite) verifyBasicTransaction() {
 
 func (suite *TracerTestSuite) TestTaskTag() {
 	suite.tracer.AddTaskTag(tracing.TaskTag{
+		ID:     101,
 		TaskID: 2,
 		What:   "cache_hit",
 		Time:   150,
@@ -166,6 +167,7 @@ func (suite *TracerTestSuite) TestTaskTag() {
 	err = rows.Scan(&id, &taskID, &time, &what)
 	suite.Require().NoError(err)
 
+	suite.Equal(uint64(101), id)
 	suite.Equal(uint64(2), taskID)
 	suite.Equal(150.0, time)
 	suite.Equal("cache_hit", what)
@@ -190,6 +192,7 @@ func (suite *TracerTestSuite) TestCompleteMemoryTrace() {
 	})
 
 	suite.tracer.AddTaskTag(tracing.TaskTag{
+		ID:     101,
 		TaskID: 3,
 		What:   "cache_miss",
 		Time:   75,
@@ -328,7 +331,7 @@ func TestDBTracerEndToEnd(t *testing.T) {
 		Time:     100,
 	})
 
-	tracer.AddTaskTag(tracing.TaskTag{TaskID: 20, What: "test_tag", Time: 150})
+	tracer.AddTaskTag(tracing.TaskTag{ID: 101, TaskID: 20, What: "test_tag", Time: 150})
 
 	tracer.EndTask(tracing.TaskEnd{ID: 20, Time: 200})
 

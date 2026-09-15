@@ -36,8 +36,8 @@ var _ = Describe("WriteBufferStage", func() {
 			BankPipelines: []queueing.Pipeline[int]{
 				queueing.NewPipeline[int](4, 10),
 			},
-			BankPostPipelineBufs: []postPipelineBuf{
-				newPostPipelineBuf(4),
+			BankPostPipelineBufs: []queueing.Buffer[int]{
+				queueing.NewBuffer[int]("BankPostPipelineBuf", 4),
 			},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
@@ -45,7 +45,7 @@ var _ = Describe("WriteBufferStage", func() {
 
 		m = &pipelineMW{}
 		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(timing.NewSerialEngine()).
+			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:       6,
@@ -85,7 +85,7 @@ var _ = Describe("WriteBufferStage", func() {
 	Context("processing new writeBufferFetch transactions", func() {
 		It("should fetch from bottom", func() {
 			read := memprotocol.ReadReq{}
-			read.ID = timing.GetIDGenerator().Generate()
+			read.ID = m.comp.Simulation().NewID()
 			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				Action:       writeBufferFetch,
@@ -102,7 +102,7 @@ var _ = Describe("WriteBufferStage", func() {
 			next := &m.comp.State
 			next.Transactions = []transactionState{trans}
 			next.WriteBufferBuf.Clear()
-			next.WriteBufferBuf.PushTyped(0)
+			next.WriteBufferBuf.Push(0)
 
 			ret := wb.Tick()
 
@@ -110,7 +110,7 @@ var _ = Describe("WriteBufferStage", func() {
 			next = &m.comp.State
 			Expect(next.InflightFetchIndices).To(HaveLen(1))
 
-			out := bottomPort.RetrieveOutgoing()
+			out, _ := bottomPort.RetrieveOutgoing()
 			Expect(out).NotTo(BeNil())
 		})
 
@@ -119,7 +119,7 @@ var _ = Describe("WriteBufferStage", func() {
 			next.InflightFetchIndices = []int{10, 11, 12, 13}
 
 			read := memprotocol.ReadReq{}
-			read.ID = timing.GetIDGenerator().Generate()
+			read.ID = m.comp.Simulation().NewID()
 			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				Action:       writeBufferFetch,
@@ -130,19 +130,20 @@ var _ = Describe("WriteBufferStage", func() {
 			}
 			next.Transactions = []transactionState{trans}
 			next.WriteBufferBuf.Clear()
-			next.WriteBufferBuf.PushTyped(0)
+			next.WriteBufferBuf.Push(0)
 
 			ret := wb.Tick()
 
 			Expect(ret).To(BeFalse())
-			Expect(bottomPort.PeekOutgoing()).To(BeNil())
+			_, present0 := bottomPort.PeekOutgoing()
+			Expect(present0).To(BeFalse())
 		})
 	})
 
 	Context("writing evictions", func() {
 		It("should send eviction to bottom", func() {
 			read := memprotocol.ReadReq{}
-			read.ID = timing.GetIDGenerator().Generate()
+			read.ID = m.comp.Simulation().NewID()
 			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				EvictingAddr: 0x200,
@@ -164,7 +165,7 @@ var _ = Describe("WriteBufferStage", func() {
 			Expect(next.PendingEvictionIndices).To(HaveLen(0))
 			Expect(next.InflightEvictionIndices).To(HaveLen(1))
 
-			out := bottomPort.RetrieveOutgoing()
+			out, _ := bottomPort.RetrieveOutgoing()
 			Expect(out).NotTo(BeNil())
 		})
 
@@ -177,7 +178,8 @@ var _ = Describe("WriteBufferStage", func() {
 			ret := wb.Tick()
 
 			Expect(ret).To(BeFalse())
-			Expect(bottomPort.PeekOutgoing()).To(BeNil())
+			_, present1 := bottomPort.PeekOutgoing()
+			Expect(present1).To(BeFalse())
 		})
 	})
 
@@ -188,7 +190,7 @@ var _ = Describe("WriteBufferStage", func() {
 			evictWrite.TrafficClass = "memprotocol.WriteReq"
 
 			read := memprotocol.ReadReq{}
-			read.ID = timing.GetIDGenerator().Generate()
+			read.ID = m.comp.Simulation().NewID()
 			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				HasEvictionWriteReq:  true,
@@ -213,7 +215,8 @@ var _ = Describe("WriteBufferStage", func() {
 			Expect(ret).To(BeTrue())
 			next = &m.comp.State
 			Expect(next.InflightEvictionIndices).To(HaveLen(0))
-			Expect(bottomPort.PeekIncoming()).To(BeNil())
+			_, present2 := bottomPort.PeekIncoming()
+			Expect(present2).To(BeFalse())
 		})
 	})
 })

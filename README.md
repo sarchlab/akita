@@ -81,7 +81,7 @@ It is not a fit for:
 
 ## Getting Started
 
-Requirements: **Go 1.26 or newer** (`go version` to check) and a checkout of
+Requirements: **Go 1.27 or newer** (`go version` to check) and a checkout of
 this repository.
 
 ```bash

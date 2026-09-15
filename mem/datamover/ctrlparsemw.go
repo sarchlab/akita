@@ -8,7 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 
 	// ctrlParseMW handles control port parsing and transaction completion.
@@ -55,8 +54,8 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		return false
 	}
 
-	reqI := m.topPort().PeekIncoming()
-	if reqI == nil {
+	reqI, ok := m.topPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -137,7 +136,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 
 	rsp := datamoverprotocol.DataMoveResponse{
 		MsgMeta: messaging.MsgMeta{
-			ID:    timing.GetIDGenerator().Generate(),
+			ID:    m.comp.Simulation().NewID(),
 			Src:   trans.ReqDst,
 			Dst:   trans.ReqSrc,
 			RspTo: trans.ReqID,

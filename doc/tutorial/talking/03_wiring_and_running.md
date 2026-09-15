@@ -11,34 +11,34 @@ engine. This is where the components from the previous pages actually talk.
 
 ```go
 engine := timing.NewSerialEngine()
-registrar := modeling.NewStandaloneRegistrar(engine)
+sim := modeling.NewStandaloneSimulation(engine)
 
 agentSpec := DefaultSpec()
 agentSpec.Freq = 1 * timing.Hz
 
 // Each agent declares an "Out" port in Build; build its instance and attach it.
 agentA := MakeBuilder().
-    WithRegistrar(registrar).
+    WithSimulation(sim).
     WithSpec(agentSpec).
     Build("AgentA")
 agentA.AssignPort("Out", modeling.MakePortBuilder().
-    WithRegistrar(registrar).
+    WithSimulation(sim).
     WithComponent(agentA).
     WithSpec(modeling.PortSpec{BufSize: 4}).
     Build("Out"))
 
 agentB := MakeBuilder().
-    WithRegistrar(registrar).
+    WithSimulation(sim).
     WithSpec(agentSpec).
     Build("AgentB")
 agentB.AssignPort("Out", modeling.MakePortBuilder().
-    WithRegistrar(registrar).
+    WithSimulation(sim).
     WithComponent(agentB).
     WithSpec(modeling.PortSpec{BufSize: 4}).
     Build("Out"))
 
 conn := directconnection.MakeBuilder().
-    WithRegistrar(registrar).
+    WithSimulation(sim).
     Build("Conn")
 
 conn.PlugIn(agentA.GetPortByName("Out"))
@@ -57,9 +57,9 @@ err := engine.Run()
 Step by step:
 
 1. **Engine.** A serial engine for deterministic runs.
-2. **Registrar.** `NewStandaloneRegistrar` is the test-friendly registrar.
-   In a real simulation, `simulation.MakeBuilder().Build()` gives you one
-   as part of a richer setup.
+2. **Simulation.** `NewStandaloneSimulation` supplies a lightweight context
+   shared by the agents and connection, including their ID counter.
+   `simulation.MakeBuilder().Build()` adds recording, monitoring, and inventory.
 3. **Build agents.** Two instances of the same component, named `AgentA`
    and `AgentB`.
 4. **Build connection.** A `directconnection` — zero-latency, ideal for

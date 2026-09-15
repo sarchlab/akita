@@ -60,7 +60,7 @@ func createNetwork(sim *simulation.Simulation, test *acceptance.Test) {
 
 	pcieConnector := pcie.NewConnector()
 	pcieConnector = pcieConnector.
-		WithRegistrar(sim).
+		WithSimulation(sim).
 		WithFrequency(freq).
 		WithVersion(4, 16)
 

@@ -11,14 +11,15 @@ import (
 // TestPageSizeValidation tests that the MMU validates page table page size consistency
 func TestPageSizeValidation(t *testing.T) {
 	engine := timing.NewSerialEngine()
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	// Test case 1: Matching page sizes should work
 	pageTable := vm.NewPageTable(12) // 4KB pages
 	matchingSpec := DefaultSpec()
 	matchingSpec.Log2PageSize = 12 // 4KB pages
-	reg := modeling.NewStandaloneRegistrar(engine)
+
 	builder := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithResources(Resources{PageTable: pageTable}).
 		WithSpec(matchingSpec)
 
@@ -27,15 +28,15 @@ func TestPageSizeValidation(t *testing.T) {
 	if mmu == nil {
 		t.Error("MMU creation should succeed with matching page sizes")
 	}
-	assignPort(reg, mmu, "Top", 4096)
-	assignPort(reg, mmu, "Control", 4)
+	assignPort(sim, mmu, "Top", 4096)
+	assignPort(sim, mmu, "Control", 4)
 
 	// Test case 2: Mismatched page sizes should panic
 	pageTable2 := vm.NewPageTable(12) // 4KB pages
 	mismatchedSpec := DefaultSpec()
 	mismatchedSpec.Log2PageSize = 16 // 64KB pages
 	builder2 := MakeBuilder().
-		WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+		WithSimulation(sim).
 		WithResources(Resources{PageTable: pageTable2}).
 		WithSpec(mismatchedSpec)
 

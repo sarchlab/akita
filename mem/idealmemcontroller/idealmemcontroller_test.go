@@ -30,6 +30,7 @@ func (c *noopConn) NotifySend()                      {}
 var _ = Describe("Ideal Memory Controller", func() {
 	var (
 		engine        timing.Engine
+		sim           timing.Simulation
 		storage       *mem.Storage
 		memController *Comp
 		topPort       messaging.Port
@@ -44,7 +45,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		spec.CacheLineSize = 64
 
 		memController = MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			WithSpec(spec).
 			Build("MemCtrl")
@@ -61,7 +62,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	makeReadReq := func() memprotocol.ReadReq {
 		req := memprotocol.ReadReq{}
-		req.ID = timing.GetIDGenerator().Generate()
+		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
 		req.Address = 0
@@ -73,6 +74,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		storage = mem.NewStorage(1 * mem.MB)
 		build(16)
 	})
@@ -92,7 +94,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should accept write request and add to inflight transactions", func() {
 		writeReq := memprotocol.WriteReq{}
-		writeReq.ID = timing.GetIDGenerator().Generate()
+		writeReq.ID = sim.NewID()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0
@@ -131,13 +133,13 @@ var _ = Describe("Ideal Memory Controller", func() {
 		state = memController.State
 		Expect(state.InflightTransactions).To(HaveLen(0))
 
-		rsp := topPort.RetrieveOutgoing()
+		rsp, _ := topPort.RetrieveOutgoing()
 		Expect(rsp).To(BeAssignableToTypeOf(memprotocol.DataReadyRsp{}))
 	})
 
 	It("should send write response after latency ticks", func() {
 		writeReq := memprotocol.WriteReq{}
-		writeReq.ID = timing.GetIDGenerator().Generate()
+		writeReq.ID = sim.NewID()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0
@@ -160,12 +162,11 @@ var _ = Describe("Ideal Memory Controller", func() {
 		state := memController.State
 		Expect(state.InflightTransactions).To(HaveLen(0))
 
-		rsp := topPort.RetrieveOutgoing()
+		rsp, _ := topPort.RetrieveOutgoing()
 		Expect(rsp).To(BeAssignableToTypeOf(memprotocol.WriteDoneRsp{}))
 
 		// Verify data was written to storage
-		data, err := storage.Read(0, 4)
-		Expect(err).ToNot(HaveOccurred())
+		data := storage.Read(0, 4)
 		Expect(data).To(Equal([]byte{0, 1, 2, 3}))
 	})
 
@@ -203,7 +204,9 @@ var _ = Describe("Ideal Memory Controller", func() {
 		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(0))
 
 		// Free the outgoing buffer, then retry succeeds.
-		Expect(topPort.RetrieveOutgoing()).To(Equal(dummy))
+		value0, present0 := topPort.RetrieveOutgoing()
+		Expect(present0).To(BeTrue())
+		Expect(value0).To(Equal(dummy))
 		memController.Tick()
 
 		state = memController.State
@@ -212,11 +215,10 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should write with dirty mask", func() {
 		// Pre-write data
-		err := storage.Write(0, []byte{10, 20, 30, 40})
-		Expect(err).ToNot(HaveOccurred())
+		storage.Write(0, []byte{10, 20, 30, 40})
 
 		writeReq := memprotocol.WriteReq{}
-		writeReq.ID = timing.GetIDGenerator().Generate()
+		writeReq.ID = sim.NewID()
 		writeReq.Src = messaging.RemotePort("Agent")
 		writeReq.Dst = topPort.AsRemote()
 		writeReq.Address = 0
@@ -238,8 +240,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		memController.Tick()
 
 		// Check that only dirty bytes were written
-		data, err := storage.Read(0, 4)
-		Expect(err).ToNot(HaveOccurred())
+		data := storage.Read(0, 4)
 		Expect(data).To(Equal([]byte{10, 20, 2, 40}))
 	})
 

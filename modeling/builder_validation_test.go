@@ -22,13 +22,13 @@ func TestBuild_PanicsOnUncheckpointableState(t *testing.T) {
 	}()
 
 	NewBuilder[None, hidden, None]().
-		WithEngine(timing.NewSerialEngine()).
+		WithSimulation(NewStandaloneSimulation(timing.NewSerialEngine())).
 		Build("BadComp")
 }
 
 // TestBuild_AllowsCheckpointableState confirms a normal State builds fine.
 func TestBuild_AllowsCheckpointableState(t *testing.T) {
 	NewBuilder[None, normalState, None]().
-		WithEngine(timing.NewSerialEngine()).
+		WithSimulation(NewStandaloneSimulation(timing.NewSerialEngine())).
 		Build("GoodComp")
 }

@@ -22,8 +22,8 @@ type TimerFiredEvent struct {
 }
 
 // MakeTimerFiredEvent creates a new TimerFiredEvent.
-func MakeTimerFiredEvent(handlerID string, time timing.VTimeInPicoSec) TimerFiredEvent {
-	return TimerFiredEvent{EventBase: timing.MakeEventBase(time, handlerID)}
+func MakeTimerFiredEvent(id uint64, handlerID string, time timing.VTimeInPicoSec) TimerFiredEvent {
+	return TimerFiredEvent{EventBase: timing.MakeEventBase(id, time, handlerID)}
 }
 
 // EventDrivenComponent is a generic component that reacts to events rather
@@ -41,12 +41,13 @@ type EventDrivenComponent[S any, T any, R any] struct {
 	hooking.HookableBase
 	*messaging.PortOwnerBase
 
-	engine    timing.EventScheduler
-	name      string
-	spec      S
-	State     T
-	resources R
-	processor EventProcessor[S, T, R]
+	simulation timing.Simulation
+	engine     timing.EventScheduler
+	name       string
+	spec       S
+	State      T
+	resources  R
+	processor  EventProcessor[S, T, R]
 
 	pendingWakeup timing.VTimeInPicoSec
 }
@@ -77,7 +78,7 @@ func (c *EventDrivenComponent[S, T, R]) ScheduleWakeAt(t timing.VTimeInPicoSec) 
 
 	c.pendingWakeup = t
 
-	c.engine.Schedule(MakeTimerFiredEvent(c.Name(), t))
+	c.engine.Schedule(MakeTimerFiredEvent(c.simulation.NewID(), c.Name(), t))
 }
 
 // ScheduleWakeNow schedules a wakeup at the current engine time.
@@ -87,14 +88,12 @@ func (c *EventDrivenComponent[S, T, R]) ScheduleWakeNow() {
 
 // Handle processes an event. For TimerFiredEvent, it resets the dedup guard
 // and calls the processor.
-func (c *EventDrivenComponent[S, T, R]) Handle(e timing.Event) error {
+func (c *EventDrivenComponent[S, T, R]) Handle(e timing.Event) {
 	c.Lock()
 	defer c.Unlock()
 
 	c.pendingWakeup = math.MaxUint64
 	c.processor.Process(c, e.Time())
-
-	return nil
 }
 
 // NotifyRecv is called when a port receives a message. It schedules an
@@ -108,3 +107,6 @@ func (c *EventDrivenComponent[S, T, R]) NotifyRecv(port messaging.Port) {
 func (c *EventDrivenComponent[S, T, R]) NotifyPortFree(port messaging.Port) {
 	c.ScheduleWakeNow()
 }
+
+// Simulation returns the simulation this component belongs to.
+func (c *EventDrivenComponent[S, T, R]) Simulation() timing.Simulation { return c.simulation }

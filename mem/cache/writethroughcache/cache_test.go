@@ -19,6 +19,7 @@ import (
 var _ = Describe("Cache", func() {
 	var (
 		engine              timing.Engine
+		sim                 timing.Simulation
 		connection          messaging.Connection
 		addressToPortMapper mem.AddressToPortMapper
 		dram                *idealmemcontroller.Comp
@@ -31,8 +32,8 @@ var _ = Describe("Cache", func() {
 	drainResponses := func() []messaging.Msg {
 		msgs := []messaging.Msg{}
 		for {
-			msg := cuPort.RetrieveIncoming()
-			if msg == nil {
+			msg, ok := cuPort.RetrieveIncoming()
+			if !ok {
 				break
 			}
 			msgs = append(msgs, msg)
@@ -42,8 +43,9 @@ var _ = Describe("Cache", func() {
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
+		sim = modeling.NewStandaloneSimulation(engine)
 		connection = directconnection.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			Build("Conn")
 
 		// cuPort is a real, component-less port that stands in for the compute
@@ -53,7 +55,7 @@ var _ = Describe("Cache", func() {
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dram = idealmemcontroller.MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 			Build("DRAM")
 		dram.AssignPort("Top",
@@ -64,9 +66,9 @@ var _ = Describe("Cache", func() {
 			Port: dram.GetPortByName("Top").AsRemote(),
 		}
 
-		cacheReg := modeling.NewStandaloneRegistrar(engine)
+		cacheReg := sim
 		c = MakeBuilder().
-			WithRegistrar(cacheReg).
+			WithSimulation(cacheReg).
 			WithResources(Resources{
 				AddressMapper: addressToPortMapper,
 			}).
@@ -78,7 +80,7 @@ var _ = Describe("Cache", func() {
 		// resolve it.
 		for _, name := range []string{"Top", "Bottom", "Control"} {
 			p := modeling.MakePortBuilder().
-				WithRegistrar(cacheReg).
+				WithSimulation(cacheReg).
 				WithComponent(c).
 				WithSpec(modeling.PortSpec{BufSize: 4}).
 				Build(name)
@@ -94,7 +96,7 @@ var _ = Describe("Cache", func() {
 	It("should do read miss", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4})
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = sim.NewID()
 		read.Src = cuPort.AsRemote()
 		read.Dst = c.GetPortByName("Top").AsRemote()
 		read.Address = 0x100
@@ -103,7 +105,7 @@ var _ = Describe("Cache", func() {
 		read.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
@@ -114,7 +116,7 @@ var _ = Describe("Cache", func() {
 	It("should do read miss coalesce", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := memprotocol.ReadReq{}
-		read1.ID = timing.GetIDGenerator().Generate()
+		read1.ID = sim.NewID()
 		read1.Src = cuPort.AsRemote()
 		read1.Dst = c.GetPortByName("Top").AsRemote()
 		read1.Address = 0x100
@@ -124,7 +126,7 @@ var _ = Describe("Cache", func() {
 		c.GetPortByName("Top").Deliver(read1)
 
 		read2 := memprotocol.ReadReq{}
-		read2.ID = timing.GetIDGenerator().Generate()
+		read2.ID = sim.NewID()
 		read2.Src = cuPort.AsRemote()
 		read2.Dst = c.GetPortByName("Top").AsRemote()
 		read2.Address = 0x104
@@ -133,7 +135,7 @@ var _ = Describe("Cache", func() {
 		read2.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read2)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		// Without coalescing, the MSHR-hit transaction (read2) may be
 		// finalized before the fetcher (read1). Accept responses in
@@ -155,7 +157,7 @@ var _ = Describe("Cache", func() {
 	It("should do read hit", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := memprotocol.ReadReq{}
-		read1.ID = timing.GetIDGenerator().Generate()
+		read1.ID = sim.NewID()
 		read1.Src = cuPort.AsRemote()
 		read1.Dst = c.GetPortByName("Top").AsRemote()
 		read1.Address = 0x100
@@ -163,7 +165,7 @@ var _ = Describe("Cache", func() {
 		read1.TrafficBytes = 12
 		read1.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read1)
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 		t1 := engine.CurrentTime()
 
 		rsps := drainResponses()
@@ -171,7 +173,7 @@ var _ = Describe("Cache", func() {
 		Expect(rsps[0].(memprotocol.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
 
 		read2 := memprotocol.ReadReq{}
-		read2.ID = timing.GetIDGenerator().Generate()
+		read2.ID = sim.NewID()
 		read2.Src = cuPort.AsRemote()
 		read2.Dst = c.GetPortByName("Top").AsRemote()
 		read2.Address = 0x104
@@ -179,7 +181,7 @@ var _ = Describe("Cache", func() {
 		read2.TrafficBytes = 12
 		read2.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read2)
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 		t2 := engine.CurrentTime()
 
 		rsps = drainResponses()
@@ -191,7 +193,7 @@ var _ = Describe("Cache", func() {
 
 	It("should write partial line", func() {
 		write := memprotocol.WriteReq{}
-		write.ID = timing.GetIDGenerator().Generate()
+		write.ID = sim.NewID()
 		write.Src = cuPort.AsRemote()
 		write.Dst = c.GetPortByName("Top").AsRemote()
 		write.Address = 0x100
@@ -200,19 +202,19 @@ var _ = Describe("Cache", func() {
 		write.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(write)
 
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
 		Expect(rsps[0].Meta().RspTo).To(Equal(write.ID))
 
-		data, _ := dramStorage.Read(0x100, 4)
+		data := dramStorage.Read(0x100, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 
 	It("should write full line", func() {
 		write := memprotocol.WriteReq{}
-		write.ID = timing.GetIDGenerator().Generate()
+		write.ID = sim.NewID()
 		write.Src = cuPort.AsRemote()
 		write.Dst = c.GetPortByName("Top").AsRemote()
 		write.Address = 0x100
@@ -229,13 +231,13 @@ var _ = Describe("Cache", func() {
 		write.TrafficBytes = 64 + 12
 		write.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(write)
-		engine.Run()
+		Expect(engine.Run()).To(Succeed())
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
 		Expect(rsps[0].Meta().RspTo).To(Equal(write.ID))
 
-		data, _ := dramStorage.Read(0x100, 4)
+		data := dramStorage.Read(0x100, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 

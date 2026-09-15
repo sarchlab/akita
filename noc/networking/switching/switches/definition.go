@@ -14,7 +14,7 @@ import (
 // The switch has a dynamic number of ports, added at configuration time with
 // MakeSwitchPortAdder; they live in the "Port" group, addressed "Port[0]",
 // "Port[1]", ... The count is implicit in how many links get wired.
-var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec, modeling.None]{
+var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec, Resources]{
 	Name: "Switch",
 	DefaultSpec: Spec{
 		Freq: 1 * timing.GHz,

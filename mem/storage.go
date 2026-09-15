@@ -1,7 +1,6 @@
 package mem
 
 import (
-	"errors"
 	"sync"
 )
 
@@ -75,13 +74,9 @@ func NewStorageWithUnitSize(capacity uint64, unitSize uint64) *Storage {
 }
 
 // createOrGetStorageUnit retrieves a storage unit if the unit has been created
-// before. Otherwise it initializes a storage unit in the storage object
-func (s *Storage) createOrGetStorageUnit(address uint64) (*storageUnit, error) {
-	if address > s.capacity {
-		return nil, errors.New(
-			"accessing physical address beyond the storage capacity")
-	}
-
+// before. Otherwise it initializes a storage unit in the storage object.
+// The caller must validate the access range first.
+func (s *Storage) createOrGetStorageUnit(address uint64) *storageUnit {
 	baseAddr, _ := s.parseAddress(address)
 
 	s.Lock()
@@ -93,7 +88,7 @@ func (s *Storage) createOrGetStorageUnit(address uint64) (*storageUnit, error) {
 		s.data[baseAddr] = unit
 	}
 
-	return unit, nil
+	return unit
 }
 
 func (s *Storage) parseAddress(addr uint64) (baseAddr, inUnitAddr uint64) {
@@ -103,20 +98,32 @@ func (s *Storage) parseAddress(addr uint64) (baseAddr, inUnitAddr uint64) {
 	return
 }
 
-func (s *Storage) Read(address uint64, len uint64) ([]byte, error) {
+func (s *Storage) validateRange(address, length uint64) {
+	if length == 0 {
+		panic("storage access length must be greater than zero")
+	}
+	// Subtraction avoids overflowing address + length.
+	if address > s.capacity || length > s.capacity-address {
+		panic("accessing physical address beyond the storage capacity")
+	}
+}
+
+// Read returns length bytes starting at address. It panics for an
+// empty range or a range extending beyond capacity, before allocating data or
+// storage units. A nonempty range may end exactly at capacity.
+func (s *Storage) Read(address uint64, length uint64) []byte {
+	s.validateRange(address, length)
+
 	currAddr := address
-	lenLeft := len
+	lenLeft := length
 	dataOffset := uint64(0)
-	res := make([]byte, len)
+	res := make([]byte, length)
 
-	for currAddr < address+len {
-		unit, err := s.createOrGetStorageUnit(currAddr)
-		if err != nil {
-			return nil, err
-		}
+	for lenLeft > 0 {
+		unit := s.createOrGetStorageUnit(currAddr)
 
-		baseAddr, inUnitAddr := s.parseAddress(currAddr)
-		lenLeftInUnit := baseAddr + s.unitSize - currAddr
+		_, inUnitAddr := s.parseAddress(currAddr)
+		lenLeftInUnit := s.unitSize - inUnitAddr
 
 		var lenToRead uint64
 		if lenLeft < lenLeftInUnit {
@@ -133,22 +140,24 @@ func (s *Storage) Read(address uint64, len uint64) ([]byte, error) {
 		currAddr += lenToRead
 	}
 
-	return res, nil
+	return res
 }
 
-func (s *Storage) Write(address uint64, data []byte) error {
+// Write stores data starting at address. It panics for empty data or
+// a range extending beyond capacity, without allocating storage units or
+// changing stored bytes. A nonempty range may end exactly at capacity.
+func (s *Storage) Write(address uint64, data []byte) {
+	s.validateRange(address, uint64(len(data)))
+
 	currAddr := address
 	dataOffset := uint64(0)
 
 	for dataOffset < uint64(len(data)) {
-		unit, err := s.createOrGetStorageUnit(currAddr)
-		if err != nil {
-			return err
-		}
+		unit := s.createOrGetStorageUnit(currAddr)
 
 		_, inUnitAddr := s.parseAddress(currAddr)
 		lenLeftInData := uint64(len(data)) - dataOffset
-		lenLeftInUnit := currAddr/s.unitSize*s.unitSize + s.unitSize - currAddr
+		lenLeftInUnit := s.unitSize - inUnitAddr
 
 		var lenToWrite uint64
 		if lenLeftInData < lenLeftInUnit {
@@ -163,6 +172,4 @@ func (s *Storage) Write(address uint64, data []byte) error {
 		dataOffset += lenToWrite
 		currAddr += lenToWrite
 	}
-
-	return nil
 }

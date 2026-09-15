@@ -23,14 +23,14 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "d3": "^7.8.4",
-    "dompurify": "^3.4.11",
+    "dompurify": "^3.4.12",
     "highlight.js": "^11.11.1",
     "html2canvas": "^1.4.1",
     "lucide-react": "^0.468.0",
     "markdown-it": "^14.2.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-router-dom": "^6.30.4",
+    "react-router-dom": "^7.18.2",
     "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {

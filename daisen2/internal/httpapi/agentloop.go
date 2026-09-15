@@ -119,6 +119,15 @@ func callProvider(
 	if offerTools && len(toolSpecs) > 0 {
 		payload["tools"] = toolSpecs
 		payload["tool_choice"] = "auto"
+		// GPT-5.6 reasoning variants reject function tools on the Chat
+		// Completions endpoint unless reasoning is disabled. The Responses API
+		// supports reasoning together with tools, but Daisen's provider contract is
+		// intentionally OpenAI-compatible Chat Completions for now. Keep the
+		// compatibility adjustment scoped to GPT-5.6 tool turns so other providers
+		// and non-tool requests retain their native defaults.
+		if requiresNoReasoningForChatCompletionTools(cfg.Model) {
+			payload["reasoning_effort"] = "none"
+		}
 	}
 
 	bodyBytes, err := json.Marshal(payload)
@@ -160,6 +169,12 @@ func callProvider(
 
 	m := parsed.Choices[0].Message
 	return assistantMessageFromOAI(m.Role, m.Content, m.ToolCalls), m.ToolCalls, m.Content, nil
+}
+
+var gpt56ModelID = regexp.MustCompile(`(^|[:/])gpt-5\.6($|[-:])`)
+
+func requiresNoReasoningForChatCompletionTools(model string) bool {
+	return gpt56ModelID.MatchString(strings.ToLower(strings.TrimSpace(model)))
 }
 
 // assistantMessageFromOAI converts a parsed OpenAI assistant message into the map
@@ -212,6 +227,11 @@ func runAgentLoop(
 		if err != nil && offerTools {
 			// The endpoint may not support tools — retry once without them so a
 			// non-tool model still answers (capability fallback).
+			emit(agentEvent{
+				Type: "thinking",
+				Text: "The tool-enabled provider request failed; retrying this turn without tools. " +
+					"Provider error: " + clip(err.Error(), 600),
+			})
 			msg, toolCalls, content, err = callProvider(ctx, cfg, messages, nil, false)
 		}
 		if err != nil {

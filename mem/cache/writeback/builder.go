@@ -2,6 +2,7 @@ package writeback
 
 import (
 	"fmt"
+	"github.com/sarchlab/akita/v5/timing"
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
@@ -17,14 +18,14 @@ func DefaultSpec() Spec {
 }
 
 // A Builder can build writeback caches. Configuration is supplied as a whole
-// through WithSpec; wiring is supplied through WithRegistrar and WithResources.
+// through WithSpec; wiring is supplied through WithSimulation and WithResources.
 // The component declares its "Top", "Bottom", and "Control" ports; the port
 // instances are supplied externally after Build with AssignPort (the caller
 // chooses the buffer sizes).
 type Builder struct {
-	spec      Spec
-	registrar modeling.Registrar
-	resources Resources
+	spec       Spec
+	simulation timing.Simulation
+	resources  Resources
 }
 
 // MakeBuilder creates a new builder with default configurations.
@@ -32,11 +33,9 @@ func MakeBuilder() Builder {
 	return Builder{spec: Definition.DefaultSpec()}
 }
 
-// WithRegistrar wires the builder to a registrar (a *simulation.Simulation in
-// assembly, or modeling.NewStandaloneRegistrar(engine) in isolated tests). The
-// registrar provides the engine and registers the built component.
-func (b Builder) WithRegistrar(reg modeling.Registrar) Builder {
-	b.registrar = reg
+// WithSimulation sets the simulation that owns and registers the built component.
+func (b Builder) WithSimulation(sim timing.Simulation) Builder {
+	b.simulation = sim
 	return b
 }
 
@@ -58,8 +57,8 @@ func (b Builder) WithResources(r Resources) Builder {
 // "Bottom", and "Control" ports; assign the port instances after Build with
 // AssignPort.
 func (b Builder) Build(name string) *Comp {
-	if b.registrar == nil {
-		panic("writeback: WithRegistrar is required")
+	if b.simulation == nil {
+		panic("writeback: WithSimulation is required")
 	}
 
 	blockSize := 1 << b.spec.Log2BlockSize
@@ -78,7 +77,7 @@ func (b Builder) Build(name string) *Comp {
 	storage := b.resolveStorage(name, spec)
 
 	comp := modeling.NewBuilder[Spec, State, Resources]().
-		WithEngine(b.registrar.GetEngine()).
+		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		WithResources(Resources{
@@ -104,7 +103,7 @@ func (b Builder) Build(name string) *Comp {
 	comp.AddMiddleware(cmw)  // index 1: legacy flush walker
 	comp.AddMiddleware(pmw)  // index 2: data pipeline
 
-	b.registrar.RegisterComponent(comp)
+	b.simulation.RegisterComponent(comp)
 
 	return comp
 }
@@ -118,7 +117,7 @@ func (b Builder) resolveStorage(name string, spec Spec) *mem.Storage {
 
 	return mem.MakeStorageBuilder().
 		WithCapacity(spec.TotalByteSize).
-		WithSimulation(b.registrar).
+		WithSimulation(b.simulation).
 		Build(name + ".Storage")
 }
 
@@ -131,7 +130,7 @@ func (b Builder) buildInitialState(
 	dirToBank := make([]queueing.Buffer[int], numBanks)
 	wbToBank := make([]queueing.Buffer[int], numBanks)
 	bankPipes := make([]queueing.Pipeline[int], numBanks)
-	bankPostBufs := make([]postPipelineBuf, numBanks)
+	bankPostBufs := make([]queueing.Buffer[int], numBanks)
 	for i := 0; i < numBanks; i++ {
 		dirToBank[i] = queueing.NewBuffer[int](
 			fmt.Sprintf("%s.DirToBankBuf%d", name, i), spec.NumReqPerCycle)
@@ -139,7 +138,8 @@ func (b Builder) buildInitialState(
 			fmt.Sprintf("%s.WriteBufferToBankBuf%d", name, i),
 			spec.NumReqPerCycle)
 		bankPipes[i] = queueing.NewPipeline[int](laneWidth, spec.BankLatency)
-		bankPostBufs[i] = newPostPipelineBuf(laneWidth)
+		bankPostBufs[i] = queueing.NewBuffer[int](
+			fmt.Sprintf("%s.BankPostPipelineBuf%d", name, i), laneWidth)
 	}
 
 	s := State{

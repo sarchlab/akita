@@ -46,7 +46,8 @@ type PortGroupDef struct {
 }
 
 // ComponentDef is the declarative input to DefineComponent. S is the Spec
-// type and R the Resources type of the component it describes.
+// type and R the builder Resources type: the external references supplied
+// at construction, even when the component does not retain them as Resources.
 //
 // The initializer of a component's Definition must be statically evaluable:
 // a single DefineComponent call whose argument is a composite literal with
@@ -132,11 +133,11 @@ func (d Definition[S, R]) PortGroups() []PortGroupDef {
 // DeclarePort calls.
 func (d Definition[S, R]) DeclarePorts(po PortDeclarer) {
 	for _, p := range d.def.Ports {
-		po.DeclarePort(p.Name, p.Roles...)
+		po.DeclarePort(p.Name, copyRoles(p.Roles)...)
 	}
 
 	for _, g := range d.def.PortGroups {
-		po.DeclarePortGroup(g.Name, g.Roles...)
+		po.DeclarePortGroup(g.Name, copyRoles(g.Roles)...)
 	}
 }
 
@@ -370,40 +371,45 @@ func copyRoles(roles []*messaging.Role) []*messaging.Role {
 	return out
 }
 
-// deepCopyStruct copies a Spec value. Specs contain only primitives and
-// slices/maps of primitives (enforced by ValidateSpec), so cloning the
-// top-level slices and maps yields a fully independent copy.
+// deepCopyStruct copies the Spec's exported fields, recursively cloning its
+// slice, map and array contents. ValidateSpec permits nested containers.
 func deepCopyStruct(v reflect.Value) reflect.Value {
-	if v.Kind() != reflect.Struct {
+	switch v.Kind() {
+	case reflect.Struct:
+		out := reflect.New(v.Type()).Elem()
+		out.Set(v)
+		for i := range v.NumField() {
+			if out.Field(i).CanSet() {
+				out.Field(i).Set(deepCopyStruct(v.Field(i)))
+			}
+		}
+		return out
+	case reflect.Slice:
+		if v.IsNil() {
+			return v
+		}
+		out := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		for i := range v.Len() {
+			out.Index(i).Set(deepCopyStruct(v.Index(i)))
+		}
+		return out
+	case reflect.Array:
+		out := reflect.New(v.Type()).Elem()
+		for i := range v.Len() {
+			out.Index(i).Set(deepCopyStruct(v.Index(i)))
+		}
+		return out
+	case reflect.Map:
+		if v.IsNil() {
+			return v
+		}
+		out := reflect.MakeMapWithSize(v.Type(), v.Len())
+		it := v.MapRange()
+		for it.Next() {
+			out.SetMapIndex(it.Key(), deepCopyStruct(it.Value()))
+		}
+		return out
+	default:
 		return v
 	}
-
-	out := reflect.New(v.Type()).Elem()
-	out.Set(v)
-
-	for _, f := range out.Fields() {
-		if !f.CanSet() {
-			continue
-		}
-
-		switch f.Kind() {
-		case reflect.Slice:
-			if !f.IsNil() {
-				c := reflect.MakeSlice(f.Type(), f.Len(), f.Len())
-				reflect.Copy(c, f)
-				f.Set(c)
-			}
-		case reflect.Map:
-			if !f.IsNil() {
-				c := reflect.MakeMapWithSize(f.Type(), f.Len())
-				iter := f.MapRange()
-				for iter.Next() {
-					c.SetMapIndex(iter.Key(), iter.Value())
-				}
-				f.Set(c)
-			}
-		}
-	}
-
-	return out
 }

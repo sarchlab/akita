@@ -21,8 +21,8 @@ func (m *receiveProcessMW) Tick() bool {
 }
 
 func (m *receiveProcessMW) processInput() bool {
-	msgI := outPort(m.comp).PeekIncoming()
-	if msgI == nil {
+	msgI, ok := outPort(m.comp).PeekIncoming()
+	if !ok {
 		return false
 	}
 

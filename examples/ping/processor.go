@@ -68,7 +68,7 @@ func (p *pingProcessor) sendScheduledPings(
 
 		pingMsg := pingReq{
 			MsgMeta: messaging.MsgMeta{
-				ID:  timing.GetIDGenerator().Generate(),
+				ID:  comp.Simulation().NewID(),
 				Src: outPort(comp).AsRemote(),
 				Dst: sp.Dst,
 			},
@@ -109,7 +109,7 @@ func (p *pingProcessor) deliverPendingResponses(
 
 		rsp := pingRsp{
 			MsgMeta: messaging.MsgMeta{
-				ID:    timing.GetIDGenerator().Generate(),
+				ID:    comp.Simulation().NewID(),
 				Src:   outPort(comp).AsRemote(),
 				Dst:   pr.Dst,
 				RspTo: pr.OrigMsgID,
@@ -134,8 +134,8 @@ func (p *pingProcessor) processIncoming(
 	progress := false
 
 	for {
-		msg := outPort(comp).RetrieveIncoming()
-		if msg == nil {
+		msg, ok := outPort(comp).RetrieveIncoming()
+		if !ok {
 			break
 		}
 

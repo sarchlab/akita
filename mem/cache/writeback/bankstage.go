@@ -4,7 +4,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -57,7 +56,7 @@ func (s *bankStage) pullFromBuf() bool {
 	// Check write buffer to bank buffer first
 	wbBuf := &next.WriteBufferToBankBufs[s.bankID]
 	if wbBuf.Size() > 0 {
-		transIdx := wbBuf.Pop()
+		transIdx, _ := wbBuf.Pop()
 		s.acceptIntoPipeline(next, spec, transIdx)
 		next.BankInflightTransCounts[s.bankID]++
 		return true
@@ -93,11 +92,11 @@ func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
 		return false
 	}
 
-	transIdx := dirBuf.Pop()
+	transIdx, _ := dirBuf.Pop()
 	t := &next.Transactions[transIdx]
 
 	if t.Action == writeBufferFetch {
-		next.WriteBufferBuf.PushTyped(transIdx)
+		next.WriteBufferBuf.Push(transIdx)
 		return true
 	}
 
@@ -121,7 +120,7 @@ func (s *bankStage) acceptIntoPipeline(next *State, spec Spec, transIdx int) {
 	// transaction that visits the bank more than once (e.g. evict then fill)
 	// opens one subtask per visit, each closed in finishBank.
 	if trans.hasReqMeta() {
-		pid := timing.GetIDGenerator().Generate()
+		pid := s.cache.comp.Simulation().NewID()
 		trans.BankPID = pid
 		tracing.StartTask(s.cache.comp, tracing.TaskStart{
 			ID:       pid,
@@ -135,7 +134,7 @@ func (s *bankStage) acceptIntoPipeline(next *State, spec Spec, transIdx int) {
 		next.BankPipelines[s.bankID].Accept(transIdx)
 	} else {
 		// Bypass pipeline: put directly in post-pipeline buffer
-		next.BankPostPipelineBufs[s.bankID].PushTyped(transIdx)
+		next.BankPostPipelineBufs[s.bankID].Push(transIdx)
 	}
 }
 
@@ -163,7 +162,7 @@ func (s *bankStage) finalizeTrans() bool {
 	postBuf := &next.BankPostPipelineBufs[s.bankID]
 
 	for i := 0; i < postBuf.Size(); i++ {
-		idx := postBuf.Get(i)
+		idx, _ := postBuf.PeekAt(i)
 		trans := &next.Transactions[idx]
 
 		done := false
@@ -182,7 +181,7 @@ func (s *bankStage) finalizeTrans() bool {
 		}
 
 		if done {
-			postBuf.RemoveAt(i)
+			postBuf.PopAt(i)
 			return true
 		}
 	}
@@ -202,11 +201,8 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	_, offset := getCacheLineID(addr, spec.Log2BlockSize)
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 
-	data, err := s.cache.storage.Read(
+	data := s.cache.storage.Read(
 		nextBlock.CacheAddress+offset, trans.ReadAccessByteSize)
-	if err != nil {
-		panic(err)
-	}
 
 	trans.Removed = true
 
@@ -215,7 +211,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	nextBlock.ReadCount--
 
 	dataReady := memprotocol.DataReadyRsp{}
-	dataReady.ID = timing.GetIDGenerator().Generate()
+	dataReady.ID = s.cache.comp.Simulation().NewID()
 	dataReady.Src = s.cache.topPort().AsRemote()
 	dataReady.Dst = trans.ReadMeta.Src
 	dataReady.RspTo = trans.ReadMeta.ID
@@ -254,7 +250,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 	next.BankInflightTransCounts[s.bankID]--
 
 	done := memprotocol.WriteDoneRsp{}
-	done.ID = timing.GetIDGenerator().Generate()
+	done.ID = s.cache.comp.Simulation().NewID()
 	done.Src = s.cache.topPort().AsRemote()
 	done.Dst = trans.WriteMeta.Src
 	done.RspTo = trans.WriteMeta.ID
@@ -274,11 +270,8 @@ func (s *bankStage) writeData(
 	offset uint64,
 	log2BlockSize uint64,
 ) []bool {
-	data, err := s.cache.storage.Read(
+	data := s.cache.storage.Read(
 		block.CacheAddress, 1<<log2BlockSize)
-	if err != nil {
-		panic(err)
-	}
 
 	dirtyMask := block.DirtyMask
 	if dirtyMask == nil {
@@ -293,10 +286,7 @@ func (s *bankStage) writeData(
 		}
 	}
 
-	err = s.cache.storage.Write(block.CacheAddress, data)
-	if err != nil {
-		panic(err)
-	}
+	s.cache.storage.Write(block.CacheAddress, data)
 
 	return dirtyMask
 }
@@ -314,12 +304,9 @@ func (s *bankStage) finalizeBankWriteFetched(
 
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 
-	mshrBuf.PushTyped(transIdx)
+	mshrBuf.Push(transIdx)
 
-	err := s.cache.storage.Write(nextBlock.CacheAddress, trans.MSHRData)
-	if err != nil {
-		panic(err)
-	}
+	s.cache.storage.Write(nextBlock.CacheAddress, trans.MSHRData)
 	nextBlock.IsLocked = false
 	nextBlock.IsValid = true
 
@@ -342,11 +329,8 @@ func (s *bankStage) finalizeBankEviction(
 		return false
 	}
 
-	data, err := s.cache.storage.Read(
+	data := s.cache.storage.Read(
 		trans.VictimCacheAddress, 1<<spec.Log2BlockSize)
-	if err != nil {
-		panic(err)
-	}
 
 	trans.EvictingData = data
 
@@ -367,7 +351,7 @@ func (s *bankStage) finalizeBankEviction(
 	// while the dirty write-back is still in flight, allowing stale lower-
 	// memory data to be returned.
 
-	wbBuf.PushTyped(transIdx)
+	wbBuf.Push(transIdx)
 
 	next.BankInflightTransCounts[s.bankID]--
 	next.BankDownwardInflightTransCounts[s.bankID]--

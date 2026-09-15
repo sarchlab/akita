@@ -71,7 +71,7 @@ func createNetwork(
 	agents := createAgents(sim, test)
 
 	connector := nvlink.NewConnector().
-		WithRegistrar(sim).
+		WithSimulation(sim).
 		WithPCIeVersion(3, 16)
 	connector.CreateNetwork("Network")
 

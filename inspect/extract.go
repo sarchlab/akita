@@ -6,6 +6,7 @@ import (
 	"go/constant"
 	"go/token"
 	"go/types"
+	"strconv"
 
 	"golang.org/x/tools/go/packages"
 
@@ -159,6 +160,10 @@ func extractComponent(
 		return nil, err
 	}
 
+	if err := validateSpecType(pkg, specType, index); err != nil {
+		return nil, err
+	}
+
 	def := &schema.Definition{Kind: schema.KindComponent}
 
 	defaults, err := applyComponentFields(pkg, lit, def, index)
@@ -176,7 +181,7 @@ func extractComponent(
 		return nil, err
 	}
 
-	if err := checkCountFields(pkg, lit, specType, def); err != nil {
+	if err := validateDefinition(pkg, lit, specType, def); err != nil {
 		return nil, err
 	}
 
@@ -258,7 +263,7 @@ func applyComponentFields(
 		return nil, err
 	}
 
-	var defaults map[string]any
+	defaults := map[string]any{}
 
 	for key, value := range fields {
 		switch key {
@@ -466,6 +471,12 @@ func evalStructLiteral(
 // evalConstExpr evaluates an expression that must be statically evaluable: a
 // constant expression, or a slice/map composite literal of such expressions.
 func evalConstExpr(pkg *packages.Package, expr ast.Expr) (any, error) {
+	if paren, ok := expr.(*ast.ParenExpr); ok {
+		return evalConstExpr(pkg, paren.X)
+	}
+	if tv, ok := pkg.TypesInfo.Types[expr]; ok && tv.IsNil() {
+		return nil, nil //nolint:nilnil // A nil container is a valid constant default.
+	}
 	if lit, ok := expr.(*ast.CompositeLit); ok {
 		return evalCompositeConst(pkg, lit)
 	}
@@ -487,47 +498,107 @@ func evalCompositeConst(
 		return nil, posErrorf(pkg, lit.Pos(), "cannot resolve literal type")
 	}
 
-	switch tv.Type.Underlying().(type) {
+	switch typ := tv.Type.Underlying().(type) {
 	case *types.Slice:
-		out := make([]any, 0, len(lit.Elts))
-		for _, elt := range lit.Elts {
-			v, err := evalConstExpr(pkg, elt)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, v)
-		}
-		return out, nil
-
+		return evalSequence(pkg, lit, typ.Elem(), -1)
+	case *types.Array:
+		return evalSequence(pkg, lit, typ.Elem(), typ.Len())
 	case *types.Map:
 		out := map[string]any{}
 		for _, elt := range lit.Elts {
 			kv, ok := elt.(*ast.KeyValueExpr)
 			if !ok {
-				return nil, posErrorf(pkg, elt.Pos(),
-					"map literal entries must be key: value")
+				return nil, posErrorf(pkg, elt.Pos(), "map literal entries must be key: value")
 			}
-			k, err := evalConstExpr(pkg, kv.Key)
+			key, err := evalConstExpr(pkg, kv.Key)
 			if err != nil {
 				return nil, err
 			}
-			key, ok := k.(string)
-			if !ok {
-				return nil, posErrorf(pkg, kv.Key.Pos(),
-					"map keys must be strings")
+			var name string
+			switch k := key.(type) {
+			case string:
+				name = k
+			case int64:
+				name = strconv.FormatInt(k, 10)
+			case uint64:
+				name = strconv.FormatUint(k, 10)
+			default:
+				return nil, posErrorf(pkg, kv.Key.Pos(), "map keys must be strings or integers")
 			}
-			v, err := evalConstExpr(pkg, kv.Value)
+			value, err := evalConstExpr(pkg, kv.Value)
 			if err != nil {
 				return nil, err
 			}
-			out[key] = v
+			out[name] = value
 		}
 		return out, nil
-
 	default:
-		return nil, posErrorf(pkg, lit.Pos(),
-			"not statically analyzable: nested %s literal", tv.Type)
+		return nil, posErrorf(pkg, lit.Pos(), "not statically analyzable: nested %s literal", tv.Type)
 	}
+}
+
+// evalSequence preserves keyed indices, omitted elements and array lengths.
+func evalSequence(pkg *packages.Package, lit *ast.CompositeLit, elem types.Type, length int64) ([]any, error) {
+	values := map[int]any{}
+	next, size := 0, 0
+	for _, entry := range lit.Elts {
+		value := entry
+		if keyed, ok := entry.(*ast.KeyValueExpr); ok {
+			idx, err := constInt(pkg, keyed.Key)
+			if err != nil {
+				return nil, err
+			}
+			next, value = idx, keyed.Value
+		}
+		v, err := evalConstExpr(pkg, value)
+		if err != nil {
+			return nil, err
+		}
+		values[next] = v
+		next++
+		if next > size {
+			size = next
+		}
+	}
+	if length >= 0 {
+		size = int(length)
+	}
+	out := make([]any, size)
+	for i := range out {
+		v, ok := values[i]
+		if !ok {
+			v = zeroValue(elem)
+		}
+		out[i] = v
+	}
+	return out, nil
+}
+
+// zeroValue uses the same representation as constantValue and container
+// evaluation. Nil containers stay nil; omitted arrays retain their length.
+func zeroValue(typ types.Type) any {
+	switch t := typ.Underlying().(type) {
+	case *types.Array:
+		out := make([]any, t.Len())
+		for i := range out {
+			out[i] = zeroValue(t.Elem())
+		}
+		return out
+	case *types.Basic:
+		switch {
+		case t.Info()&types.IsBoolean != 0:
+			return false
+		case t.Info()&types.IsUnsigned != 0:
+			return uint64(0)
+		case t.Info()&types.IsInteger != 0:
+			return int64(0)
+		case t.Info()&types.IsFloat != 0:
+			return float64(0)
+		case t.Info()&types.IsString != 0:
+			return ""
+		}
+	}
+	return nil
 }
 
 // constantValue converts a folded constant to a plain Go value based on the
@@ -587,12 +658,17 @@ func constInt(pkg *packages.Package, expr ast.Expr) (int, error) {
 		return 0, err
 	}
 
-	n, ok := v.(int64)
-	if !ok {
-		return 0, posErrorf(pkg, expr.Pos(), "expected an integer constant")
+	switch n := v.(type) {
+	case int64:
+		if int64(int(n)) == n {
+			return int(n), nil
+		}
+	case uint64:
+		if n <= uint64(^uint(0)>>1) {
+			return int(n), nil
+		}
 	}
-
-	return int(n), nil
+	return 0, posErrorf(pkg, expr.Pos(), "expected an integer constant representable as int")
 }
 
 func posErrorf(

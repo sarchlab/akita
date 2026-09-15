@@ -60,7 +60,9 @@ func TestPipelineTickAdvancesToPostBuf(t *testing.T) {
 	assert.True(t, moved)
 	assert.Equal(t, 0, len(p.stages))
 	assert.Equal(t, 1, postBuf.Size())
-	assert.Equal(t, 100, postBuf.Peek())
+	value0, present0 := postBuf.Peek()
+	assert.True(t, present0)
+	assert.Equal(t, 100, value0)
 }
 
 func TestPipelineTickMultiStage(t *testing.T) {
@@ -160,7 +162,9 @@ func TestPipelineBlockedThenUnblocked(t *testing.T) {
 	assert.Equal(t, 1, p.stages[0].Stage)
 	assert.Equal(t, 10, p.stages[0].Item)
 	assert.Equal(t, 1, postBuf.Size())
-	assert.Equal(t, 20, postBuf.Peek())
+	value1, present1 := postBuf.Peek()
+	assert.True(t, present1)
+	assert.Equal(t, 20, value1)
 }
 
 func TestPipelineStreamOfItems(t *testing.T) {
@@ -184,8 +188,12 @@ func TestPipelineStreamOfItems(t *testing.T) {
 	p.Tick(postBuf)
 	assert.Equal(t, 2, postBuf.Size())
 
-	assert.Equal(t, 1, postBuf.Pop())
-	assert.Equal(t, 2, postBuf.Pop())
+	value2, present2 := postBuf.Pop()
+	assert.True(t, present2)
+	assert.Equal(t, 1, value2)
+	value3, present3 := postBuf.Pop()
+	assert.True(t, present3)
+	assert.Equal(t, 2, value3)
 }
 
 func TestPipelineCycleLeftDecrement(t *testing.T) {
@@ -217,4 +225,25 @@ func TestPipelineCycleLeftDecrement(t *testing.T) {
 	assert.True(t, moved)
 	assert.Equal(t, 0, len(p.stages))
 	assert.Equal(t, 1, postBuf.Size())
+}
+
+func TestPipelineFullAcceptDoesNotChangeContents(t *testing.T) {
+	for _, delayed := range []bool{false, true} {
+		p := newPipeline(2, 2)
+		p.Accept(0)
+		p.Accept(1)
+		before := p.Stages()
+		assert.Panics(t, func() {
+			if delayed {
+				p.AcceptWithDelay(2, 3)
+			} else {
+				p.Accept(2)
+			}
+		})
+		assert.Equal(t, before, p.Stages())
+		sink := newPostBuf(2)
+		p.Tick(sink)
+		p.Tick(sink)
+		assert.ElementsMatch(t, []int{0, 1}, sink.Elements())
+	}
 }

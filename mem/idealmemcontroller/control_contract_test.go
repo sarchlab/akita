@@ -16,6 +16,7 @@ import (
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		storage := mem.NewStorage(1 * mem.MB)
 		spec := DefaultSpec()
 		spec.Width = 1
@@ -23,7 +24,7 @@ func TestControlContract(t *testing.T) {
 		spec.CacheLineSize = 64
 
 		comp := MakeBuilder().
-			WithRegistrar(modeling.NewStandaloneRegistrar(engine)).
+			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			WithSpec(spec).
 			Build("MemCtrl")

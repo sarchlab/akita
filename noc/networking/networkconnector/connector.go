@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/hooking"
-	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/monitoring2"
 	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
@@ -70,27 +69,11 @@ type PortFactory func(
 	name string,
 ) messaging.Port
 
-// engineRegistrar adapts a bare EventScheduler into a modeling.Registrar so the
-// connector can keep its engine-only WithEngine API while the component builders
-// require a registrar. Registration is a no-op; the connector registers
-// components with its monitor separately.
-type engineRegistrar struct {
-	engine timing.EventScheduler
-}
-
-func (r engineRegistrar) GetEngine() timing.Engine {
-	return r.engine.(timing.Engine)
-}
-func (r engineRegistrar) RegisterComponent(_ naming.Named)  {}
-func (r engineRegistrar) RegisterConnection(_ naming.Named) {}
-func (r engineRegistrar) RegisterResource(_ naming.Named)   {}
-func (r engineRegistrar) RegisterPort(_ naming.Named)       {}
-
 // Connector can build complex network topologies.
 type Connector struct {
 	name        string
 	engine      timing.EventScheduler
-	registrar   modeling.Registrar
+	simulation  timing.Simulation
 	monitor     *monitoring2.Monitor
 	defaultFreq timing.Freq
 	flitSize    int
@@ -114,21 +97,10 @@ func MakeConnector() Connector {
 	}
 }
 
-// WithEngine sets the engine to be used by all the components in the
-// connection. It wraps the engine in a registrar whose registration is a no-op;
-// the connector registers components with its monitor separately.
-func (c Connector) WithEngine(e timing.EventScheduler) Connector {
-	c.engine = e
-	c.registrar = engineRegistrar{engine: e}
-	return c
-}
-
-// WithRegistrar sets the registrar used to source the engine and register the
-// components built by the connector. Prefer this over WithEngine when a full
-// simulation registrar is available.
-func (c Connector) WithRegistrar(reg modeling.Registrar) Connector {
-	c.registrar = reg
-	c.engine = reg.GetEngine()
+// WithSimulation sets the simulation that owns the network components.
+func (c Connector) WithSimulation(sim timing.Simulation) Connector {
+	c.simulation = sim
+	c.engine = sim.GetEngine()
 	return c
 }
 
@@ -212,7 +184,7 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 	swSpec := switches.DefaultSpec()
 	swSpec.Freq = c.defaultFreq
 	sw := switches.MakeBuilder().
-		WithRegistrar(c.registrar).
+		WithSimulation(c.simulation).
 		WithSpec(swSpec).
 		WithResources(switches.Resources{RoutingTable: rt}).
 		Build(name)
@@ -298,7 +270,7 @@ func (c *Connector) createEndPointWithName(
 	epSpec.NumOutputChannels = param.DeviceEndParam.NumOutputChannel
 
 	endPoint := endpoint.MakeBuilder().
-		WithRegistrar(c.registrar).
+		WithSimulation(c.simulation).
 		WithSpec(epSpec).
 		WithResources(endpoint.Resources{DevicePorts: ports}).
 		Build(fullName)
@@ -315,7 +287,7 @@ func (c *Connector) createEndPointWithName(
 		param.DeviceEndParam.IncomingBufSize,
 		param.DeviceEndParam.OutgoingBufSize,
 		endPoint.Name()+".NetworkPort")
-	c.registrar.RegisterPort(epPort)
+	c.simulation.RegisterPort(epPort)
 	endPoint.SetNetworkPort(epPort)
 
 	epNode := &deviceNode{
@@ -345,7 +317,7 @@ func (c *Connector) connectEndPointWithSwitch(
 	epPort := endPoint.NetworkPort()
 
 	swPort := switches.MakeSwitchPortAdder(sw).
-		WithRegistrar(c.registrar).
+		WithSimulation(c.simulation).
 		WithRemotePort(epPort).
 		WithBufferSize(param.SwitchEndParam.OutgoingBufSize).
 		WithLatency(param.SwitchEndParam.Latency).
@@ -389,7 +361,7 @@ func (c *Connector) connectPorts(
 
 	if linkParam.IsIdeal {
 		conn = directconnection.MakeBuilder().
-			WithRegistrar(c.registrar).
+			WithSimulation(c.simulation).
 			WithSpec(directconnection.Spec{Freq: c.defaultFreq}).
 			Build(connName)
 	} else {
@@ -429,7 +401,7 @@ func (c *Connector) ConnectSwitches(
 	// port, which does not exist yet), then the right port (remote = left), then
 	// wire the left port's remote once both exist.
 	leftPort = switches.MakeSwitchPortAdder(leftSwitch).
-		WithRegistrar(c.registrar).
+		WithSimulation(c.simulation).
 		WithBufferSize(param.LeftEndParam.OutgoingBufSize).
 		WithLatency(param.LeftEndParam.Latency).
 		WithNumInputChannel(param.LeftEndParam.NumInputChannel).
@@ -437,7 +409,7 @@ func (c *Connector) ConnectSwitches(
 		Add()
 
 	rightPort = switches.MakeSwitchPortAdder(rightSwitch).
-		WithRegistrar(c.registrar).
+		WithSimulation(c.simulation).
 		WithRemotePort(leftPort).
 		WithBufferSize(param.RightEndParam.OutgoingBufSize).
 		WithLatency(param.RightEndParam.Latency).

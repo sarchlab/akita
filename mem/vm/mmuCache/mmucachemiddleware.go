@@ -8,7 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -52,7 +51,8 @@ func (m *mmuCacheMiddleware) handleDrain() bool {
 	}
 
 	next := &m.comp.State
-	quiescent := m.bottomPort().PeekIncoming() == nil &&
+	_, hasBottom := m.bottomPort().PeekIncoming()
+	quiescent := !hasBottom &&
 		len(next.OutstandingBottomReqs) == 0
 	if quiescent {
 		next.CurrentState = mmuCacheStatePause
@@ -84,8 +84,8 @@ func (m *mmuCacheMiddleware) lookup() bool {
 		return false
 	}
 
-	msgI := m.topPort().PeekIncoming()
-	if msgI == nil {
+	msgI, ok := m.topPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -149,7 +149,7 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 	res := m.comp.Resources()
 
 	reqToBottom := vmprotocol.TranslationReq{}
-	reqToBottom.ID = timing.GetIDGenerator().Generate()
+	reqToBottom.ID = m.comp.Simulation().NewID()
 	reqToBottom.Src = m.bottomPort().AsRemote()
 	reqToBottom.Dst = res.LowModulePort
 	reqToBottom.PID = req.PID
@@ -197,8 +197,8 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 func (m *mmuCacheMiddleware) handleBottomPort() bool {
 	madeProgress := false
 
-	itemI := m.bottomPort().PeekIncoming()
-	if itemI == nil {
+	itemI, ok := m.bottomPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -232,7 +232,7 @@ func (m *mmuCacheMiddleware) handleRsp(rsp vmprotocol.TranslationRsp) bool {
 	rspToTop := vmprotocol.TranslationRsp{
 		Page: rsp.Page,
 	}
-	rspToTop.ID = timing.GetIDGenerator().Generate()
+	rspToTop.ID = m.comp.Simulation().NewID()
 	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = res.UpModulePort
 	rspToTop.RspTo = rsp.RspTo

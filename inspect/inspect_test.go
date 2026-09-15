@@ -21,6 +21,18 @@ var expectedErrors = []struct {
 	pkgSubstr string
 	msgSubstr string
 }{
+	{"emptyname", "fixtures/emptyname", "must have a name"},
+	{"emptyport", "fixtures/emptyport", "empty name"},
+	{"duplicateport", "fixtures/duplicateport", "more than once"},
+	{"duplicateboundary", "fixtures/duplicateboundary", "more than once"},
+	{"emptygroup", "fixtures/emptygroup", "empty name"},
+	{"negativebounds", "fixtures/negativebounds", "negative count"},
+	{"reversedbounds", "fixtures/reversedbounds", "less than MinCount"},
+	{"duplicatejson", "fixtures/duplicatejson", "duplicate JSON"},
+	{"pointerspec", "fixtures/pointerspec", "disallowed Spec"},
+	{"pointertype", "fixtures/pointertype", "must be a struct"},
+	{"nonnumeric", "fixtures/nonnumeric", "only to numeric"},
+	{"nonfinite", "fixtures/nonfinite", "non-finite"},
 	{"non-constant default", "fixtures/nonconst",
 		"not statically analyzable"},
 	{"misnamed definition var", "fixtures/wrongname",
@@ -34,16 +46,29 @@ var expectedErrors = []struct {
 // the whole dependency graph, so one load shared by all subtests keeps the
 // test fast) and checks definitions and errors per package.
 func TestInspect(t *testing.T) {
-	defs, errs := inspect.Inspect(inspect.Options{},
-		"github.com/sarchlab/akita/v5/mem/rob",
-		"github.com/sarchlab/akita/v5/inspect/fixtures/...",
-		"github.com/sarchlab/akita/v5/timing",
-	)
+	defs, errs := inspect.Inspect(inspect.Options{}, fixturePatterns(t)...)
 
 	byPkg := map[string]schema.Definition{}
 	for _, d := range defs {
 		byPkg[d.Package] = d
 	}
+
+	t.Run("escaped string choices", func(t *testing.T) {
+		def := byPkg["github.com/sarchlab/akita/v5/inspect/testdata/fixtures/containers"]
+		found := false
+		for _, f := range def.Spec {
+			if f.Name != "Choice" {
+				continue
+			}
+			found = true
+			if len(f.Choices) != 1 || f.Choices[0] != f.Default {
+				t.Errorf("choices %q disagree with Go default %q", f.Choices, f.Default)
+			}
+		}
+		if !found {
+			t.Fatal("no Choice field extracted")
+		}
+	})
 
 	t.Run("rob matches golden", func(t *testing.T) {
 		checkGolden(t, byPkg, "github.com/sarchlab/akita/v5/mem/rob",
@@ -52,7 +77,7 @@ func TestInspect(t *testing.T) {
 
 	t.Run("fullcomp matches golden", func(t *testing.T) {
 		checkGolden(t, byPkg,
-			"github.com/sarchlab/akita/v5/inspect/fixtures/fullcomp",
+			"github.com/sarchlab/akita/v5/inspect/testdata/fixtures/fullcomp",
 			"fullcomp.golden.json")
 	})
 
@@ -87,7 +112,7 @@ func checkInstantiated(
 ) {
 	t.Helper()
 
-	def, ok := byPkg["github.com/sarchlab/akita/v5/inspect/fixtures/instantiated"]
+	def, ok := byPkg["github.com/sarchlab/akita/v5/inspect/testdata/fixtures/instantiated"]
 	if !ok {
 		t.Fatalf("no definition extracted for the instantiated fixture")
 	}
@@ -105,7 +130,7 @@ func checkInstantiated(
 func checkLocalProto(t *testing.T, byPkg map[string]schema.Definition) {
 	t.Helper()
 
-	def, ok := byPkg["github.com/sarchlab/akita/v5/inspect/fixtures/localproto"]
+	def, ok := byPkg["github.com/sarchlab/akita/v5/inspect/testdata/fixtures/localproto"]
 	if !ok {
 		t.Fatalf("no definition extracted for the localproto fixture")
 	}
@@ -194,4 +219,56 @@ func checkError(t *testing.T, errs []error, pkgSubstr, msgSubstr string) {
 
 	t.Errorf("no error for %s containing %q; errors: %v",
 		pkgSubstr, msgSubstr, errs)
+}
+
+func TestModuleDiscovery(t *testing.T) {
+	defs, errs := inspect.Inspect(inspect.Options{Dir: ".."}, "./...")
+	if len(errs) != 0 {
+		t.Fatalf("module inspection failed: %v", errs)
+	}
+	if len(defs) != 15 {
+		t.Fatalf("got %d definitions, want 15", len(defs))
+	}
+	resources := map[string][]string{
+		"mem/datamover":                      {"InsideMapper", "OutsideMapper"},
+		"mem/acceptancetests/memaccessagent": {"LowModule"},
+		"noc/networking/switching/endpoint":  {"DevicePorts"},
+		"noc/networking/switching/switches":  {"RoutingTable"},
+	}
+	for _, def := range defs {
+		if strings.Contains(def.Package, "/fixtures/") {
+			t.Errorf("discovered fixture: %s", def.Package)
+		}
+		suffix := strings.TrimPrefix(def.Package, "github.com/sarchlab/akita/v5/")
+		if want, ok := resources[suffix]; ok {
+			got := make([]string, len(def.Resources))
+			for i, field := range def.Resources {
+				got[i] = field.Name
+			}
+			if strings.Join(got, ",") != strings.Join(want, ",") {
+				t.Errorf("%s resources: got %v, want %v", suffix, got, want)
+			}
+			delete(resources, suffix)
+		}
+	}
+	if len(resources) != 0 {
+		t.Errorf("missing resource definitions: %v", resources)
+	}
+	t.Logf("module inspection: %d production definitions, zero errors, all required builder resources present", len(defs))
+}
+
+func fixturePatterns(t *testing.T) []string {
+	t.Helper()
+
+	patterns := []string{"github.com/sarchlab/akita/v5/mem/rob", "github.com/sarchlab/akita/v5/timing"}
+	fixtures, err := os.ReadDir("testdata/fixtures")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fixture := range fixtures {
+		if fixture.IsDir() {
+			patterns = append(patterns, "./testdata/fixtures/"+fixture.Name())
+		}
+	}
+	return patterns
 }

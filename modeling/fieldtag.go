@@ -2,6 +2,7 @@ package modeling
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -65,9 +66,9 @@ func parseDirective(directive string, parsed *FieldTag) error {
 		}
 
 		n, err := strconv.ParseFloat(value, 64)
-		if err != nil {
+		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
 			return fmt.Errorf(
-				"akita tag: directive %q has non-numeric value %q", key, value)
+				"akita tag: directive %q has non-numeric or non-finite value %q", key, value)
 		}
 
 		dst := &parsed.Min

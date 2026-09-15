@@ -46,7 +46,9 @@ type Field struct {
 
 	// Default is the value the definition's DefaultSpec assigns to the
 	// field; fields the literal leaves out get their Go zero value. Absent
-	// for Resources fields and for nil slices/maps.
+	// for Resources fields and for nil slices/maps. Values describe Go fields
+	// before JSON marshaling: bytes are numbers, integer map keys are decimal
+	// strings, and json:",string" and omitempty do not transform defaults.
 	Default any `json:"default,omitempty"`
 
 	// Unit is the semantic unit implied by the field's Go type (e.g. "Hz"

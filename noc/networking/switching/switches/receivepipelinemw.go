@@ -5,7 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/noc/packetization"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -41,13 +40,13 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 		pcs := &state.PortComplexes[i]
 
 		for j := 0; j < pcs.NumInputChannel; j++ {
-			itemI := port.PeekIncoming()
-			if itemI == nil {
+			itemI, ok := port.PeekIncoming()
+			if !ok {
 				break
 			}
 
 			flit := itemI.(packetization.Flit)
-			taskID := timing.GetIDGenerator().Generate()
+			taskID := m.comp.Simulation().NewID()
 			item := routedFlit{
 				Flit:    flit,
 				TaskID:  taskID,
@@ -58,7 +57,7 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 				if !pcs.RouteBuffer.CanPush() {
 					break
 				}
-				pcs.RouteBuffer.PushTyped(item)
+				pcs.RouteBuffer.Push(item)
 			} else {
 				if !pcs.Pipeline.CanAccept() {
 					break

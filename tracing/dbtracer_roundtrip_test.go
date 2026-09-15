@@ -8,12 +8,14 @@ import (
 	_ "github.com/glebarez/go-sqlite"
 	"github.com/sarchlab/akita/v5/datarecording"
 	"github.com/sarchlab/akita/v5/hooking"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 // roundTripDomain is a minimal NamedHookable used to drive the DBTracer through
 // a real emit -> persist cycle.
 type roundTripDomain struct {
+	sim timing.Simulation
 	*hooking.HookableBase
 	name string
 	now  timing.VTimeInPicoSec
@@ -51,7 +53,7 @@ func writeRoundTripTrace(t *testing.T) string {
 	t.Cleanup(func() { os.Remove(dbFile) })
 
 	recorder := datarecording.NewDataRecorder(dbName)
-	domain := &roundTripDomain{
+	domain := &roundTripDomain{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
 		HookableBase: hooking.NewHookableBase(),
 		name:         "GPU[0].L1Cache",
 	}
@@ -126,3 +128,5 @@ func assertDictionaryAndChildren(t *testing.T, db *sql.DB) {
 		t.Fatalf("tag What = %q, want read-hit", tagWhat)
 	}
 }
+
+func (c *roundTripDomain) Simulation() timing.Simulation { return c.sim }

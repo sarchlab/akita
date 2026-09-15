@@ -16,6 +16,7 @@ import (
 func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
+		sim := modeling.NewStandaloneSimulation(engine)
 		spec := DefaultSpec()
 		spec.Log2PageSize = 12
 		spec.Freq = 1
@@ -29,14 +30,13 @@ func TestControlContract(t *testing.T) {
 			},
 		}
 
-		reg := modeling.NewStandaloneRegistrar(engine)
 		comp := MakeBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(resources).
 			Build("AddressTranslator")
 
-		assignPorts(reg, comp, topBufSize)
+		assignPorts(sim, comp, topBufSize)
 
 		for _, name := range []string{"Top", "Bottom", "Translation", "Control"} {
 			conn := &noopConn{}

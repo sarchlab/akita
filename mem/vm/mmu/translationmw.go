@@ -9,7 +9,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 
 	// pageTable aggregates all the methods of the page table that are used in the MMU package.
@@ -122,7 +121,7 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	rsp := vmprotocol.TranslationRsp{
 		Page: walking.Page,
 	}
-	rsp.ID = timing.GetIDGenerator().Generate()
+	rsp.ID = m.comp.Simulation().NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = walking.ReqSrc
 	rsp.RspTo = walking.ReqID
@@ -152,8 +151,8 @@ func (m *translationMW) parseFromTop() bool {
 	spec := m.comp.Spec()
 	state := &m.comp.State
 
-	reqI := m.topPort().PeekIncoming()
-	if reqI == nil {
+	reqI, ok := m.topPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -190,7 +189,7 @@ func (m *translationMW) startWalking(req vmprotocol.TranslationReq) {
 	state := &m.comp.State
 
 	recvTaskID := tracing.MsgIDAtReceiver(req, m.comp)
-	walkTaskID := timing.GetIDGenerator().Generate()
+	walkTaskID := m.comp.Simulation().NewID()
 
 	ts := transactionState{
 		ReqID:        req.ID,

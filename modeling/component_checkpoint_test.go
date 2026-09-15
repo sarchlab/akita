@@ -21,7 +21,7 @@ type ckptState struct {
 
 func buildCkptComp(latency int) *modeling.Component[ckptSpec, ckptState, modeling.None] {
 	return modeling.NewBuilder[ckptSpec, ckptState, modeling.None]().
-		WithEngine(timing.NewSerialEngine()).
+		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 		WithFreq(1 * timing.GHz).
 		WithSpec(ckptSpec{Latency: latency}).
 		Build("Comp")
@@ -75,7 +75,7 @@ type bufState struct {
 
 func buildBufComp() *modeling.Component[bufSpec, bufState, modeling.None] {
 	c := modeling.NewBuilder[bufSpec, bufState, modeling.None]().
-		WithEngine(timing.NewSerialEngine()).
+		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 		WithFreq(1 * timing.GHz).
 		WithSpec(bufSpec{N: 1}).
 		Build("C")
@@ -88,8 +88,8 @@ func buildBufComp() *modeling.Component[bufSpec, bufState, modeling.None] {
 // queueing gained MarshalJSON/UnmarshalJSON this dropped the contents silently.
 func TestComponentCheckpointPreservesStateBuffer(t *testing.T) {
 	src := buildBufComp()
-	src.State.Items.PushTyped(7)
-	src.State.Items.PushTyped(8)
+	src.State.Items.Push(7)
+	src.State.Items.Push(8)
 
 	var buf bytes.Buffer
 	if err := src.SaveCheckpoint(&buf); err != nil {
@@ -105,7 +105,7 @@ func TestComponentCheckpointPreservesStateBuffer(t *testing.T) {
 		t.Fatalf("restored buffer size = %d, want 2", dst.State.Items.Size())
 	}
 	for _, want := range []int{7, 8} {
-		if got := dst.State.Items.Pop(); got != want {
+		if got, _ := dst.State.Items.Pop(); got != want {
 			t.Fatalf("Pop = %d, want %d", got, want)
 		}
 	}

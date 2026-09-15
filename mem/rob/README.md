@@ -53,7 +53,7 @@ and exposes no `WithResources`.
 ## Builder Pattern
 
 Configuration is supplied as a whole through `WithSpec` (start from
-`DefaultSpec()`); the engine and registration come from `WithRegistrar`. `Build`
+`DefaultSpec()`); the engine and registration come from `WithSimulation`. `Build`
 declares the component's `Top`, `Bottom`, and `Control` ports; the port
 instances are built and attached externally after `Build` with `AssignPort`, so
 the caller chooses the buffer sizes.
@@ -64,13 +64,13 @@ spec.BufferSize = 256
 spec.BottomUnit = dramPort.AsRemote()
 
 reorderBuffer := rob.MakeBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithSpec(spec).
     Build("ROB")
 
 for _, name := range []string{"Top", "Bottom", "Control"} {
     p := modeling.MakePortBuilder().
-        WithRegistrar(sim).
+        WithSimulation(sim).
         WithComponent(reorderBuffer).
         WithSpec(modeling.PortSpec{BufSize: 8}).
         Build(name)
@@ -84,7 +84,7 @@ topPort := reorderBuffer.GetPortByName("Top")
 
 | Method | Description |
 |---|---|
-| `WithRegistrar(r)` | Source of the engine and component registration (required). |
+| `WithSimulation(r)` | Source of the engine and component registration (required). |
 | `WithSpec(s)` | Full configuration; start from `DefaultSpec()`. Set `BottomUnit` to the downstream port. |
 
 ## Ports

@@ -4,7 +4,7 @@
 //
 // Components are built with the minimal builder: configuration is supplied as a
 // whole through WithSpec (start from DefaultSpec()), the engine and registration
-// come from WithRegistrar, and shared/external wiring (storage, the
+// come from WithSimulation, and shared/external wiring (storage, the
 // address-to-port mapper, and remote ports) is injected through WithResources.
 // Build declares the component's Top, Bottom, and Control ports; the port
 // instances are built with modeling.MakePortBuilder and attached after Build

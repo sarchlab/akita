@@ -97,7 +97,7 @@ func pipelineAccept(
 	item bankPipelineItemState,
 ) {
 	if spec.BankPipelineDepth == 0 {
-		bank.PostPipelineBuf.PushTyped(item)
+		bank.PostPipelineBuf.Push(item)
 		return
 	}
 
@@ -109,11 +109,7 @@ func pipelineTick(bank *bankState) bool {
 }
 
 func bufferPeek(bank bankState) (bankPipelineItemState, bool) {
-	if bank.PostPipelineBuf.Size() == 0 {
-		return bankPipelineItemState{}, false
-	}
-
-	return bank.PostPipelineBuf.Peek(), true
+	return bank.PostPipelineBuf.Peek()
 }
 
 func bufferPop(bank *bankState) {

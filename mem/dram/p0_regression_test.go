@@ -22,10 +22,10 @@ type p0Harness struct {
 
 func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 	engine := timing.NewSerialEngine()
-	reg := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	dramComp := MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		WithSpec(spec).
 		Build("P0DRAM")
 	for _, t := range tracers {
@@ -34,7 +34,7 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 
 	for _, name := range []string{"Top", "Control"} {
 		p := modeling.MakePortBuilder().
-			WithRegistrar(reg).
+			WithSimulation(sim).
 			WithComponent(dramComp).
 			WithSpec(modeling.PortSpec{BufSize: 1024}).
 			Build(name)
@@ -45,7 +45,7 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 	src := messaging.NewPort(nil, 1024, 1024, "P0Src.Top")
 
 	conn := directconnection.MakeBuilder().
-		WithRegistrar(reg).
+		WithSimulation(sim).
 		Build("P0Conn")
 	conn.PlugIn(top)
 	conn.PlugIn(src)
@@ -55,7 +55,7 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 
 func (h *p0Harness) read(addr uint64) memprotocol.ReadReq {
 	r := memprotocol.ReadReq{}
-	r.ID = timing.GetIDGenerator().Generate()
+	r.ID = h.dram.Simulation().NewID()
 	r.Address = addr
 	r.AccessByteSize = 64
 	r.Src = h.src.AsRemote()
@@ -67,7 +67,7 @@ func (h *p0Harness) read(addr uint64) memprotocol.ReadReq {
 
 func (h *p0Harness) write(addr uint64, data []byte) memprotocol.WriteReq {
 	w := memprotocol.WriteReq{}
-	w.ID = timing.GetIDGenerator().Generate()
+	w.ID = h.dram.Simulation().NewID()
 	w.Address = addr
 	w.Data = data
 	w.Src = h.src.AsRemote()
@@ -82,8 +82,8 @@ func (h *p0Harness) collect() (
 	writes []memprotocol.WriteDoneRsp,
 ) {
 	for {
-		msg := h.src.RetrieveIncoming()
-		if msg == nil {
+		msg, ok := h.src.RetrieveIncoming()
+		if !ok {
 			break
 		}
 		switch m := msg.(type) {
@@ -119,7 +119,7 @@ var _ = Describe("P0: open-page panic regression", func() {
 		h.src.Send(h.read(0x40))
 		h.src.Send(h.read(0x80))
 
-		Expect(func() { h.engine.Run() }).NotTo(Panic())
+		Expect(h.engine.Run()).To(Succeed())
 
 		reads, _ := h.collect()
 		Expect(reads).To(HaveLen(2))
@@ -133,7 +133,7 @@ var _ = Describe("P0: open-page panic regression", func() {
 		h.src.Send(h.read(0x0))
 		h.src.Send(h.read(0x20000))
 
-		Expect(func() { h.engine.Run() }).NotTo(Panic())
+		Expect(h.engine.Run()).To(Succeed())
 
 		reads, _ := h.collect()
 		Expect(reads).To(HaveLen(2))
@@ -150,7 +150,7 @@ var _ = Describe("P0: open-page panic regression", func() {
 			h.src.Send(h.read(uint64(i) * 64))
 		}
 
-		Expect(func() { h.engine.Run() }).NotTo(Panic())
+		Expect(h.engine.Run()).To(Succeed())
 
 		reads, _ := h.collect()
 		Expect(reads).To(HaveLen(n))
@@ -163,12 +163,12 @@ var _ = Describe("P0: open-page panic regression", func() {
 
 		// Drive the write to completion first so the read observes it.
 		h.src.Send(h.write(0x40, data))
-		h.engine.Run()
+		Expect(h.engine.Run()).To(Succeed())
 		_, writes := h.collect()
 		Expect(writes).To(HaveLen(1))
 
 		h.src.Send(h.read(0x40))
-		h.engine.Run()
+		Expect(h.engine.Run()).To(Succeed())
 		reads, _ := h.collect()
 		Expect(reads).To(HaveLen(1))
 		Expect(reads[0].Data[:len(data)]).To(Equal(data))
@@ -222,11 +222,12 @@ var _ = Describe("P0: channel guard", func() {
 	build := func(numChannel int) func() {
 		return func() {
 			engine := timing.NewSerialEngine()
-			reg := modeling.NewStandaloneRegistrar(engine)
+			sim := modeling.NewStandaloneSimulation(engine)
+
 			spec := DefaultSpec()
 			spec.NumChannel = numChannel
 			MakeBuilder().
-				WithRegistrar(reg).
+				WithSimulation(sim).
 				WithSpec(spec).
 				Build("ChannelGuard")
 		}

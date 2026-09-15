@@ -112,7 +112,7 @@ func (d *directory) writearoundWriteHit(
 	trans.BlockWayID = wayID
 	trans.HasBlock = true
 
-	bankBuf.PushTyped(postCoalesceIdx)
+	bankBuf.Push(postCoalesceIdx)
 
 	tracing.AddTaskTag(d.cache.comp, tracing.TaskTag{
 		TaskID: d.reqInTaskID(trans),
@@ -269,7 +269,7 @@ func (d *directory) writethroughInstallLine(
 	trans.BlockWayID = wayID
 	trans.HasBlock = true
 
-	bankBuf.PushTyped(postCoalesceIdx)
+	bankBuf.Push(postCoalesceIdx)
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()

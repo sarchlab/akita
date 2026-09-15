@@ -71,15 +71,15 @@ func (m *workerMW) Tick() bool {
 
 func main() {
 	engine := timing.NewSerialEngine()
-	registrar := modeling.NewStandaloneRegistrar(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	worker := modeling.NewBuilder[workerSpec, workerState, modeling.None]().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(1 * timing.GHz).
 		WithSpec(workerSpec{NumJobs: 3, CyclesPerJob: 4}).
 		Build("Worker")
 	worker.AddMiddleware(&workerMW{comp: worker})
-	registrar.RegisterComponent(worker)
+	sim.RegisterComponent(worker)
 
 	// A tracer only cares about tasks whose Kind matches this filter.
 	onlyJobs := func(t tracing.TaskStart) bool { return t.Kind == "job" }

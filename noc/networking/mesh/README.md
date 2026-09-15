@@ -49,7 +49,7 @@ destination port to its tile and returns the next-hop port.
 
 ```go
 connector := mesh.NewConnector().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithFreq(1 * timing.GHz).
     WithFlitSize(16).
     WithBandwidth(1).      // transfers per cycle, per link
@@ -63,7 +63,7 @@ connector := mesh.NewConnector().
 
 | Method | Description |
 |---|---|
-| `WithEngine(e)` | Event scheduler (required) |
+| `WithSimulation(sim)` | Simulation context (required) |
 | `WithFreq(f)` | Frequency the network runs at |
 | `WithFlitSize(n)` | Flit size in bytes |
 | `WithBandwidth(t)` | Per-link bandwidth as transfers per cycle |
@@ -76,7 +76,7 @@ connector := mesh.NewConnector().
 
 ```go
 connector := mesh.NewConnector().
-    WithEngine(engine).
+    WithSimulation(sim).
     WithFreq(1 * timing.GHz)
 
 connector.CreateNetwork("Mesh")

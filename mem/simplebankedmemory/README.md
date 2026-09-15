@@ -73,7 +73,7 @@ also runs on the request's global address.
 ## Builder Pattern
 
 Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec
-to `WithSpec`. Wiring comes from `WithRegistrar` (which provides the engine and
+to `WithSpec`. Wiring comes from `WithSimulation` (which provides the engine and
 registers the component) and `WithResources` (the shared backing storage). When
 `WithResources` is omitted, the controller builds its own storage sized by
 `Spec.Capacity`. `Build` declares the `Top` and `Control` ports but does not
@@ -90,20 +90,20 @@ spec.StageLatency = 2
 spec.BankSelectorLog2InterleaveSize = 6 // 64 B stride
 
 memCtrl := simplebankedmemory.MakeBuilder().
-    WithRegistrar(reg).
+    WithSimulation(sim).
     WithSpec(spec).
     WithResources(simplebankedmemory.Resources{Storage: storage}).
     Build("MyMemCtrl")
 
 topPort := modeling.MakePortBuilder().
-    WithRegistrar(reg).
+    WithSimulation(sim).
     WithComponent(memCtrl).
     WithSpec(modeling.PortSpec{BufSize: 16}).
     Build("Top")
 memCtrl.AssignPort("Top", topPort)
 
 ctrlPort := modeling.MakePortBuilder().
-    WithRegistrar(reg).
+    WithSimulation(sim).
     WithComponent(memCtrl).
     WithSpec(modeling.PortSpec{BufSize: 4}).
     Build("Control")
@@ -114,7 +114,7 @@ topPort = memCtrl.GetPortByName("Top")
 
 | Method | Description |
 |---|---|
-| `WithRegistrar(r)` | Source of the engine and component registration (required) |
+| `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
 | `WithResources(Resources{Storage: s})` | Shared backing storage (built internally if omitted) |
 

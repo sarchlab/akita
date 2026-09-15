@@ -6,7 +6,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -22,8 +21,8 @@ func (s *intake) Tick() bool {
 		return false
 	}
 
-	msg := s.cache.topPort().PeekIncoming()
-	if msg == nil {
+	msg, ok := s.cache.topPort().PeekIncoming()
+	if !ok {
 		return false
 	}
 
@@ -56,7 +55,7 @@ func (s *intake) Tick() bool {
 
 	transIdx := s.createTransaction(msg)
 
-	dirBuf.PushTyped(transIdx)
+	dirBuf.Push(transIdx)
 
 	s.cache.topPort().RetrieveIncoming()
 
@@ -82,7 +81,7 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 	switch m := msg.(type) {
 	case memprotocol.ReadReq:
 		t = transactionState{
-			ID:                 timing.GetIDGenerator().Generate(),
+			ID:                 s.cache.comp.Simulation().NewID(),
 			HasRead:            true,
 			ReadMeta:           m.MsgMeta,
 			ReadAddress:        m.Address,
@@ -91,7 +90,7 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 		}
 	case memprotocol.WriteReq:
 		t = transactionState{
-			ID:             timing.GetIDGenerator().Generate(),
+			ID:             s.cache.comp.Simulation().NewID(),
 			HasWrite:       true,
 			WriteMeta:      m.MsgMeta,
 			WriteAddress:   m.Address,

@@ -47,8 +47,8 @@ var _ = Describe("MSHR Stage", func() {
 			BankPipelines: []queueing.Pipeline[int]{
 				queueing.NewPipeline[int](4, 10),
 			},
-			BankPostPipelineBufs: []postPipelineBuf{
-				newPostPipelineBuf(4),
+			BankPostPipelineBufs: []queueing.Buffer[int]{
+				queueing.NewBuffer[int]("BankPostPipelineBuf", 4),
 			},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
@@ -56,7 +56,7 @@ var _ = Describe("MSHR Stage", func() {
 
 		m = &pipelineMW{}
 		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithEngine(timing.NewSerialEngine()).
+			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:  6,
@@ -86,7 +86,7 @@ var _ = Describe("MSHR Stage", func() {
 
 	It("should stall if topSender is busy", func() {
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = m.comp.Simulation().NewID()
 		read.Address = 0x104
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
@@ -118,7 +118,7 @@ var _ = Describe("MSHR Stage", func() {
 
 		// Push mshrTrans to the MSHR stage buffer
 		next.MSHRStageBuf.Clear()
-		next.MSHRStageBuf.PushTyped(1)
+		next.MSHRStageBuf.Push(1)
 
 		fillTop()
 
@@ -131,7 +131,7 @@ var _ = Describe("MSHR Stage", func() {
 
 	It("should send data ready to top", func() {
 		read := memprotocol.ReadReq{}
-		read.ID = timing.GetIDGenerator().Generate()
+		read.ID = m.comp.Simulation().NewID()
 		read.Src = messaging.RemotePort("Agent")
 		read.Address = 0x104
 		read.AccessByteSize = 4
@@ -162,7 +162,7 @@ var _ = Describe("MSHR Stage", func() {
 		next := &m.comp.State
 		next.Transactions = []transactionState{trans, mshrTrans}
 		next.MSHRStageBuf.Clear()
-		next.MSHRStageBuf.PushTyped(1)
+		next.MSHRStageBuf.Push(1)
 
 		ret := ms.Tick()
 
@@ -171,7 +171,7 @@ var _ = Describe("MSHR Stage", func() {
 		Expect(next.HasProcessingMSHREntry).To(BeFalse())
 		Expect(next.Transactions[0].Removed).To(BeTrue())
 
-		out := topPort.RetrieveOutgoing()
+		out, _ := topPort.RetrieveOutgoing()
 		dr := out.(memprotocol.DataReadyRsp)
 		Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 	})
@@ -194,7 +194,7 @@ var _ = Describe("MSHR Stage", func() {
 		next := &m.comp.State
 		next.Transactions = []transactionState{mshrTrans}
 		next.MSHRStageBuf.Clear()
-		next.MSHRStageBuf.PushTyped(0)
+		next.MSHRStageBuf.Push(0)
 
 		ret := ms.Tick()
 

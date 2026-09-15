@@ -155,10 +155,9 @@ Notes:
   `timing.TimeTeller`, and each emit function stamps the event's `Time` with
   `domain.CurrentTime()` *after* the `NumHooks()==0` guard. This is a change
   from the original "caller supplies `Time`" plan: passing `domain.CurrentTime()`
-  as a call-site argument is evaluated eagerly, which (a) defeats the
-  cheap-when-disabled guarantee and (b) panics the many unit tests that build
-  components with `WithEngine(nil)`. Sourcing the time inside the guard keeps
-  tracing free when no tracer is attached and leaves those tests untouched.
+  as a call-site argument is evaluated eagerly, which defeats the
+  cheap-when-disabled guarantee. Sourcing the time inside the guard avoids
+  reading the engine clock when no tracer is attached.
   Callers therefore pass **no** time; the `Time` fields exist only for the
   emit→tracer handoff. `TraceReq*` helpers take `(domain, msg, ...)` with no
   `now`.
@@ -340,20 +339,20 @@ an incoming message **without mutating the message**. The scenario:
   ID, with `ParentID = msg.Meta().ID` to link the two into a tree.
 
 `MsgIDAtReceiver` keeps a process-global, mutex-guarded map
-`(domain.Name(), msg.ID) → generated taskID`:
+`(domain.Simulation().GetIDGenerator(), domain.Name(), msg.ID) → generated taskID`:
 1. `TraceReqReceive` → first lookup generates and stores the id; `StartTask`
    uses it.
 2. `AddTaskTag` / `AddMilestone` → same key returns the **same** id, so every
    event lands on that receiver task.
 3. `TraceReqComplete` → `EndTask`, then `forget` deletes the entry.
 
-Keyed by domain name because one message flows through many components, each
-needing its own handling task. When `NumHooks()==0` it returns `0` and never
+The generator identity isolates simulations that reuse component names and
+message IDs. The domain name distinguishes handling tasks at different
+components within one simulation. When `NumHooks()==0` it returns `0` and never
 touches the map.
 
-Known smells to revisit later: process-global lock contention, coupling across
-simulations in one process, keying by name, and leak risk if a `forget` is
-missed. A likely direction is deriving the id deterministically
+Known smells to revisit later: process-global lock contention, keying by name,
+and leak risk if a `forget` is missed. A likely direction is deriving the id deterministically
 (`hash(domainName, msgID)`), which removes the map, the mutex, and the `forget`
 calls — but that is a separate discussion.
 

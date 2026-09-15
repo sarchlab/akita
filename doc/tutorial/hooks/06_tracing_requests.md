@@ -75,7 +75,11 @@ func (m *clientMW) send() bool {
 }
 
 func (m *clientMW) receive() bool {
-    rsp := m.comp.GetPortByName("Out").PeekIncoming().(readRsp)
+    msg, ok := m.comp.GetPortByName("Out").PeekIncoming()
+    if !ok {
+        return false
+    }
+    rsp := msg.(readRsp)
     if req, ok := m.inFlight[rsp.RspTo]; ok {
         tracing.TraceReqFinalize(m.comp, req) // close req_out
         delete(m.inFlight, rsp.RspTo)
@@ -98,7 +102,11 @@ a fixed latency, then completes the task and sends the response:
 
 ```go
 func (m *serverMW) receive() bool {
-    req := m.comp.GetPortByName("Out").PeekIncoming().(readReq)
+    msg, ok := m.comp.GetPortByName("Out").PeekIncoming()
+    if !ok {
+        return false
+    }
+    req := msg.(readReq)
     tracing.TraceReqReceive(m.comp, req) // open req_in
     m.pending = append(m.pending, serverTxn{req: req, left: m.comp.Spec().Latency})
     m.comp.GetPortByName("Out").RetrieveIncoming()

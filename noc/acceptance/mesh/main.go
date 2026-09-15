@@ -33,7 +33,7 @@ func main() {
 
 	freq := 1 * timing.GHz
 	connector := mesh.NewConnector().
-		WithRegistrar(sim).
+		WithSimulation(sim).
 		WithFreq(freq)
 
 	connector.CreateNetwork("Mesh")

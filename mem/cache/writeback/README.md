@@ -66,7 +66,7 @@ type Spec struct {
 ## Builder Pattern
 
 Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec to
-`WithSpec`. Wiring comes from `WithRegistrar` (which provides the engine and
+`WithSpec`. Wiring comes from `WithSimulation` (which provides the engine and
 registers the component) and `WithResources` (the backing storage plus the
 address-to-port mapping for lower memory). When the storage is omitted, the
 component builds its own sized by `Spec.TotalByteSize`. `Build` only *declares*
@@ -81,7 +81,7 @@ spec.Log2BlockSize = 6 // 64-byte lines
 spec.NumMSHREntry = 16
 
 cache := writeback.MakeBuilder().
-    WithRegistrar(sim).
+    WithSimulation(sim).
     WithSpec(spec).
     WithResources(writeback.Resources{
         AddressToPortMapper: lowModuleMapper,
@@ -92,7 +92,7 @@ cache := writeback.MakeBuilder().
 // sizes) after Build.
 for _, name := range []string{"Top", "Bottom", "Control"} {
     p := modeling.MakePortBuilder().
-        WithRegistrar(sim).
+        WithSimulation(sim).
         WithComponent(cache).
         WithSpec(modeling.PortSpec{BufSize: 8}).
         Build(name)
@@ -104,7 +104,7 @@ topPort := cache.GetPortByName("Top")
 
 | Method | Description |
 |---|---|
-| `WithRegistrar(r)` | Source of the engine and component registration (required) |
+| `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
 | `WithResources(Resources{...})` | Backing storage and the lower-memory address mapping (`AddressToPortMapper` or `RemotePorts`) |
 

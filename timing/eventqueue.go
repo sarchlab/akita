@@ -5,12 +5,13 @@ import (
 	"sync"
 )
 
-// EventQueue is a queue of events ordered by event time.
+// EventQueue is a queue of events ordered by event time. Peek and Pop report
+// whether an event was present; empty reads return nil, false.
 type EventQueue interface {
 	Push(evt Event)
-	Pop() Event
+	Pop() (Event, bool)
 	Len() int
-	Peek() Event
+	Peek() (Event, bool)
 }
 
 // queuedEvent pairs an event with the sequence number it was assigned when
@@ -81,38 +82,37 @@ func NewEventQueue() *EventQueueImpl {
 // Push adds an event to the event queue.
 func (q *EventQueueImpl) Push(evt Event) {
 	q.Lock()
+	defer q.Unlock()
 	q.events = append(q.events, queuedEvent{event: evt, seq: q.nextSeq})
 	q.nextSeq++
 	q.events.up(len(q.events) - 1)
-	q.Unlock()
 }
 
 // Pop returns the next earliest event.
-func (q *EventQueueImpl) Pop() Event {
+func (q *EventQueueImpl) Pop() (Event, bool) {
 	q.Lock()
-	evt := popHeap(&q.events)
-	q.Unlock()
-
-	return evt
+	defer q.Unlock()
+	return popHeap(&q.events)
 }
 
 // Len returns the number of events in the queue.
 func (q *EventQueueImpl) Len() int {
 	q.Lock()
+	defer q.Unlock()
 	l := len(q.events)
-	q.Unlock()
 
 	return l
 }
 
 // Peek returns the event in front of the queue without removing it from the
 // queue.
-func (q *EventQueueImpl) Peek() Event {
+func (q *EventQueueImpl) Peek() (Event, bool) {
 	q.Lock()
-	evt := q.events[0].event
-	q.Unlock()
-
-	return evt
+	defer q.Unlock()
+	if len(q.events) == 0 {
+		return nil, false
+	}
+	return q.events[0].event, true
 }
 
 // unsafeEventQueue is a lock-free event queue for single-threaded use.
@@ -136,7 +136,7 @@ func (q *unsafeEventQueue) Push(evt Event) {
 }
 
 // Pop returns the next earliest event without locking.
-func (q *unsafeEventQueue) Pop() Event {
+func (q *unsafeEventQueue) Pop() (Event, bool) {
 	return popHeap(&q.events)
 }
 
@@ -146,8 +146,11 @@ func (q *unsafeEventQueue) Len() int {
 }
 
 // Peek returns the event in front of the queue without removing it.
-func (q *unsafeEventQueue) Peek() Event {
-	return q.events[0].event
+func (q *unsafeEventQueue) Peek() (Event, bool) {
+	if len(q.events) == 0 {
+		return nil, false
+	}
+	return q.events[0].event, true
 }
 
 // snapshot returns the queue's events in pop order — by time, then schedule
@@ -174,9 +177,12 @@ func (q *unsafeEventQueue) restore(events []Event) {
 }
 
 // popHeap removes and returns the earliest event from the heap.
-func popHeap(h *eventHeap) Event {
+func popHeap(h *eventHeap) (Event, bool) {
 	events := *h
 	n := len(events)
+	if n == 0 {
+		return nil, false
+	}
 	root := events[0].event
 
 	events[0] = events[n-1]
@@ -188,5 +194,5 @@ func popHeap(h *eventHeap) Event {
 		events.down(0, len(events))
 	}
 
-	return root
+	return root, true
 }
