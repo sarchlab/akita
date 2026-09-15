@@ -14,7 +14,7 @@ import (
 // DefaultSpec returns a copy of the default configuration. Callers typically
 // obtain it, tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return Definition.DefaultSpec()
+	return Definition.NewSpec()
 }
 
 // A Builder can build writeback caches. Configuration is supplied as a whole
@@ -30,7 +30,7 @@ type Builder struct {
 
 // MakeBuilder creates a new builder with default configurations.
 func MakeBuilder() Builder {
-	return Builder{spec: Definition.DefaultSpec()}
+	return Builder{spec: Definition.NewSpec()}
 }
 
 // WithSimulation sets the simulation that owns and registers the built component.

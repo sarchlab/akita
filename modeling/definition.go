@@ -45,31 +45,9 @@ type PortGroupDef struct {
 	CountField string
 }
 
-// ComponentDef is the declarative input to DefineComponent. S is the Spec
-// type and R the builder Resources type: the external references supplied
-// at construction, even when the component does not retain them as Resources.
-//
-// The initializer of a component's Definition must be statically evaluable:
-// a single DefineComponent call whose argument is a composite literal with
-// constant leaves (plus role identifiers). Tooling reads the same literal
-// without executing the package, so values computed at runtime would make the
-// static and runtime views diverge.
-type ComponentDef[S, R any] struct {
-	// Name is the component's display name, e.g. "TLB".
-	Name string
-
-	// DefaultSpec is the component's default configuration.
-	DefaultSpec S
-
-	// Ports and PortGroups declare the component's boundary ports.
-	Ports      []PortDef
-	PortGroups []PortGroupDef
-}
-
-// Definition is a validated, immutable component definition. It is the single
-// source of truth for the component's default Spec and port topology: the
-// builder consumes it at runtime (DefaultSpec, DeclarePorts) and tooling reads
-// the same declaration statically.
+// ComponentDef describes a component's default Spec and port topology. S is
+// the Spec type and R the builder Resources type: the external references
+// supplied at construction, even when the component does not retain them.
 //
 // Declare it as a package-level var in the component's package:
 //
@@ -80,15 +58,31 @@ type ComponentDef[S, R any] struct {
 //	        {Name: "Top", Roles: []*messaging.Role{vmprotocol.Responder}},
 //	    },
 //	})
-type Definition[S, R any] struct {
-	def ComponentDef[S, R]
+//
+// The initializer must be statically evaluable: a single DefineComponent call
+// whose argument is a composite literal with constant leaves (plus role
+// identifiers). Tooling reads the same literal without executing the package.
+// Treat the definition as read-only after initialization so the static and
+// runtime views agree. Builders use NewSpec to obtain a configuration to edit
+// and DeclarePorts to declare the component's boundary.
+type ComponentDef[S, R any] struct {
+	// Name is the component's display name, e.g. "TLB".
+	Name string
+
+	// DefaultSpec is the component's default configuration. Use NewSpec to
+	// obtain a copy for customization.
+	DefaultSpec S
+
+	// Ports and PortGroups declare the component's boundary ports.
+	Ports      []PortDef
+	PortGroups []PortGroupDef
 }
 
-// DefineComponent validates def and returns the immutable Definition. It
+// DefineComponent validates def and returns it unchanged. It
 // panics on an invalid definition — like DefineProtocol, it is meant to run
 // as a package-level var initializer, where a bad definition is a programming
 // error that must fail loudly at init.
-func DefineComponent[S, R any](def ComponentDef[S, R]) Definition[S, R] {
+func DefineComponent[S, R any](def ComponentDef[S, R]) ComponentDef[S, R] {
 	if def.Name == "" {
 		panic("modeling: component definition must have a name")
 	}
@@ -102,41 +96,26 @@ func DefineComponent[S, R any](def ComponentDef[S, R]) Definition[S, R] {
 	specFields := validateSpecFieldTags[S](def.Name)
 	validatePortDefs(def.Name, def.Ports, def.PortGroups, specFields)
 
-	return Definition[S, R]{def: copyComponentDef(def)}
+	return def
 }
 
-// Name returns the component's display name.
-func (d Definition[S, R]) Name() string {
-	return d.def.Name
-}
-
-// DefaultSpec returns a copy of the default configuration. Callers typically
-// obtain it, tweak the fields they care about, and pass it to the builder's
-// WithSpec.
-func (d Definition[S, R]) DefaultSpec() S {
-	v := deepCopyStruct(reflect.ValueOf(d.def.DefaultSpec))
+// NewSpec returns a copy of the default configuration, recursively copying
+// exported slice, map, and array contents. Callers can customize the result
+// and pass it to the builder's WithSpec without changing the defaults.
+func (d ComponentDef[S, R]) NewSpec() S {
+	v := deepCopyStruct(reflect.ValueOf(d.DefaultSpec))
 	return v.Interface().(S)
-}
-
-// Ports returns the declared ports.
-func (d Definition[S, R]) Ports() []PortDef {
-	return copyPortDefs(d.def.Ports)
-}
-
-// PortGroups returns the declared port groups.
-func (d Definition[S, R]) PortGroups() []PortGroupDef {
-	return copyPortGroupDefs(d.def.PortGroups)
 }
 
 // DeclarePorts declares every port and port group of the definition on the
 // given component. Builders call it in Build in place of per-port
 // DeclarePort calls.
-func (d Definition[S, R]) DeclarePorts(po PortDeclarer) {
-	for _, p := range d.def.Ports {
+func (d ComponentDef[S, R]) DeclarePorts(po PortDeclarer) {
+	for _, p := range d.Ports {
 		po.DeclarePort(p.Name, copyRoles(p.Roles)...)
 	}
 
-	for _, g := range d.def.PortGroups {
+	for _, g := range d.PortGroups {
 		po.DeclarePortGroup(g.Name, copyRoles(g.Roles)...)
 	}
 }
@@ -319,45 +298,6 @@ func isIntegerKind(k reflect.Kind) bool {
 	default:
 		return false
 	}
-}
-
-// copyComponentDef deep-copies the definition input so later mutation of the
-// caller's slices cannot change the Definition.
-func copyComponentDef[S, R any](def ComponentDef[S, R]) ComponentDef[S, R] {
-	def.DefaultSpec = deepCopyStruct(
-		reflect.ValueOf(def.DefaultSpec)).Interface().(S)
-	def.Ports = copyPortDefs(def.Ports)
-	def.PortGroups = copyPortGroupDefs(def.PortGroups)
-
-	return def
-}
-
-func copyPortDefs(ports []PortDef) []PortDef {
-	if ports == nil {
-		return nil
-	}
-
-	out := make([]PortDef, len(ports))
-	for i, p := range ports {
-		p.Roles = copyRoles(p.Roles)
-		out[i] = p
-	}
-
-	return out
-}
-
-func copyPortGroupDefs(groups []PortGroupDef) []PortGroupDef {
-	if groups == nil {
-		return nil
-	}
-
-	out := make([]PortGroupDef, len(groups))
-	for i, g := range groups {
-		g.Roles = copyRoles(g.Roles)
-		out[i] = g
-	}
-
-	return out
 }
 
 func copyRoles(roles []*messaging.Role) []*messaging.Role {

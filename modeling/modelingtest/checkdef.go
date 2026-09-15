@@ -18,19 +18,19 @@ import (
 // which turns "the static and runtime views agree" into a CI guarantee
 // instead of a convention.
 func CheckDefinition[S, R any](
-	t *testing.T, def modeling.Definition[S, R], pkgPath string,
+	t *testing.T, def modeling.ComponentDef[S, R], pkgPath string,
 ) {
 	t.Helper()
 
 	static := staticDefinition(t, pkgPath)
 
-	if static.Name != def.Name() {
-		t.Errorf("name: static %q, runtime %q", static.Name, def.Name())
+	if static.Name != def.Name {
+		t.Errorf("name: static %q, runtime %q", static.Name, def.Name)
 	}
 
-	checkDefaults(t, static, def.DefaultSpec())
-	checkPorts(t, static, def.Ports())
-	checkPortGroups(t, static, def.PortGroups())
+	checkDefaults(t, static, def.DefaultSpec)
+	checkPorts(t, static, def.Ports)
+	checkPortGroups(t, static, def.PortGroups)
 }
 
 func staticDefinition(t *testing.T, pkgPath string) schema.Definition {

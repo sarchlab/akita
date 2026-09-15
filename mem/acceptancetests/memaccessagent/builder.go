@@ -12,7 +12,7 @@ import (
 // DefaultSpec returns a copy of the default configuration. Callers typically
 // obtain it, tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return Definition.DefaultSpec()
+	return Definition.NewSpec()
 }
 
 // Builder constructs MemAccessAgent instances. Configuration is supplied as a
@@ -29,7 +29,7 @@ type Builder struct {
 
 // MakeBuilder returns a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{spec: Definition.DefaultSpec()}
+	return Builder{spec: Definition.NewSpec()}
 }
 
 // WithSimulation sets the simulation that owns and registers the built component.

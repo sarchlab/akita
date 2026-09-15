@@ -9,7 +9,7 @@ import (
 // DefaultSpec returns a copy of the default configuration. Callers typically
 // obtain it, tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return Definition.DefaultSpec()
+	return Definition.NewSpec()
 }
 
 // Builder builds MMU components. Configuration is supplied as a whole through
@@ -26,7 +26,7 @@ type Builder struct {
 // MakeBuilder creates a new builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: Definition.DefaultSpec(),
+		spec: Definition.NewSpec(),
 	}
 }
 

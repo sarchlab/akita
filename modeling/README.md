@@ -24,6 +24,30 @@ an integer type.
 
 ## Key Types
 
+### ComponentDef[S, R]
+
+A component's defaults and boundary ports live in one public declaration:
+
+```go
+var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec, Resources]{
+    Name:        "MyComponent",
+    DefaultSpec: Spec{Size: 64},
+    Ports:       []modeling.PortDef{{Name: "Top"}},
+})
+```
+
+`DefineComponent` validates the declaration during package initialization and
+returns the same `ComponentDef` type. Its fields remain public; treat the
+declaration as read-only afterward so builders and the static inspector see
+the same defaults and ports.
+
+- `Definition.NewSpec()` copies the defaults, including nested slices, maps,
+  and arrays, for a builder or caller to customize.
+- `Definition.DeclarePorts(comp)` declares the fixed ports and optional port
+  groups on a component. Each component receives its own role slices.
+- `Definition.Name`, `DefaultSpec`, `Ports`, and `PortGroups` expose the metadata
+  directly.
+
 ### Component[S, T, R] (tick-driven)
 
 A fixed-frequency component that processes state each tick via a middleware

@@ -10,7 +10,7 @@ import (
 // DefaultSpec returns a copy of the default configuration. Callers typically
 // obtain it, tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return Definition.DefaultSpec()
+	return Definition.NewSpec()
 }
 
 // Builder constructs SimpleBankedMemory components. Configuration is supplied
@@ -26,7 +26,7 @@ type Builder struct {
 
 // MakeBuilder creates a builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{spec: Definition.DefaultSpec()}
+	return Builder{spec: Definition.NewSpec()}
 }
 
 // WithSimulation sets the simulation that owns and registers the built component.

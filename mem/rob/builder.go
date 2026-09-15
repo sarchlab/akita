@@ -9,7 +9,7 @@ import (
 // Callers typically take it, tweak the fields they care about, and pass the
 // result to WithSpec.
 func DefaultSpec() Spec {
-	return Definition.DefaultSpec()
+	return Definition.NewSpec()
 }
 
 // Builder constructs reorder-buffer components. Configuration is supplied as a
@@ -24,7 +24,7 @@ type Builder struct {
 
 // MakeBuilder returns a Builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{spec: Definition.DefaultSpec()}
+	return Builder{spec: Definition.NewSpec()}
 }
 
 // WithSimulation sets the simulation that owns and registers the built component.

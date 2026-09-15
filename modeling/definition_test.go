@@ -84,41 +84,41 @@ func mustPanicWith(t *testing.T, substr string, f func()) {
 // --- Tests ---
 
 func TestDefineComponent(t *testing.T) {
-	def := modeling.DefineComponent(makeDefTestDef())
+	var def modeling.ComponentDef[defTestSpec, defTestResources] = modeling.DefineComponent(makeDefTestDef())
 
-	if def.Name() != "DefTest" {
-		t.Errorf("Name() = %q, want %q", def.Name(), "DefTest")
+	if def.Name != "DefTest" {
+		t.Errorf("Name = %q, want %q", def.Name, "DefTest")
 	}
 
-	got, want := def.DefaultSpec(), makeDefTestDef().DefaultSpec
+	got, want := def.NewSpec(), makeDefTestDef().DefaultSpec
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("DefaultSpec() = %+v, want %+v", got, want)
+		t.Errorf("NewSpec() = %+v, want %+v", got, want)
 	}
 
-	ports := def.Ports()
+	ports := def.Ports
 	if len(ports) != 2 || ports[0].Name != "Top" || ports[1].Name != "Bottom" {
-		t.Errorf("Ports() = %+v", ports)
+		t.Errorf("Ports = %+v", ports)
 	}
 	if len(ports[0].Roles) != 1 || ports[0].Roles[0] != defTestResponder {
-		t.Errorf("Ports()[0].Roles = %+v, want [responder]", ports[0].Roles)
+		t.Errorf("Ports[0].Roles = %+v, want [responder]", ports[0].Roles)
 	}
 
-	groups := def.PortGroups()
+	groups := def.PortGroups
 	if len(groups) != 1 || groups[0].Name != "Out" ||
 		groups[0].MinCount != 1 || groups[0].MaxCount != 0 ||
 		groups[0].CountField != "num_out" {
-		t.Errorf("PortGroups() = %+v", groups)
+		t.Errorf("PortGroups = %+v", groups)
 	}
 }
 
-func TestDefinitionDefaultSpecIsACopy(t *testing.T) {
+func TestComponentDefNewSpecIsACopy(t *testing.T) {
 	def := modeling.DefineComponent(makeDefTestDef())
 
-	spec := def.DefaultSpec()
+	spec := def.NewSpec()
 	spec.Values[0] = 99
 	spec.Weights["a"] = 99
 
-	fresh := def.DefaultSpec()
+	fresh := def.NewSpec()
 	if fresh.Values[0] != 1 {
 		t.Errorf("mutating a returned spec's slice changed the default")
 	}
@@ -127,33 +127,7 @@ func TestDefinitionDefaultSpecIsACopy(t *testing.T) {
 	}
 }
 
-func TestDefinitionIsIndependentOfInput(t *testing.T) {
-	input := makeDefTestDef()
-	def := modeling.DefineComponent(input)
-
-	input.Ports[0].Name = "Mutated"
-	input.DefaultSpec.Values[0] = 99
-
-	if def.Ports()[0].Name != "Top" {
-		t.Errorf("mutating the input def changed the definition's ports")
-	}
-	if def.DefaultSpec().Values[0] != 1 {
-		t.Errorf("mutating the input def changed the definition's default spec")
-	}
-}
-
-func TestDefinitionAccessorsReturnCopies(t *testing.T) {
-	def := modeling.DefineComponent(makeDefTestDef())
-
-	def.Ports()[0].Name = "Mutated"
-	def.PortGroups()[0].Name = "Mutated"
-
-	if def.Ports()[0].Name != "Top" || def.PortGroups()[0].Name != "Out" {
-		t.Errorf("mutating an accessor's result changed the definition")
-	}
-}
-
-func TestDefinitionDeclarePorts(t *testing.T) {
+func TestComponentDefDeclarePorts(t *testing.T) {
 	def := modeling.DefineComponent(makeDefTestDef())
 
 	po := messaging.NewPortOwnerBase()
@@ -322,16 +296,16 @@ func TestDefineComponentPanicsOnBadPortGroups(t *testing.T) {
 	})
 }
 
-// TestDefinitionWorksWithComponent exercises the intended builder usage:
+// TestComponentDefWorksWithComponent exercises the intended builder usage:
 // DeclarePorts on a built component, then assigning ports normally.
-func TestDefinitionWorksWithComponent(t *testing.T) {
+func TestComponentDefWorksWithComponent(t *testing.T) {
 	def := modeling.DefineComponent(makeDefTestDef())
 
 	engine := timing.NewSerialEngine()
 	comp := modeling.NewBuilder[defTestSpec, TestState, defTestResources]().
 		WithSimulation(modeling.NewStandaloneSimulation(engine)).
 		WithFreq(1 * timing.GHz).
-		WithSpec(def.DefaultSpec()).
+		WithSpec(def.NewSpec()).
 		Build("Comp")
 
 	def.DeclarePorts(comp)
@@ -347,7 +321,7 @@ func TestDefinitionWorksWithComponent(t *testing.T) {
 	}
 }
 
-func TestDefinitionCopiesNestedContainers(t *testing.T) {
+func TestComponentDefNewSpecCopiesNestedContainers(t *testing.T) {
 	type spec struct {
 		Slices [][]int
 		Maps   map[string][]int
@@ -365,15 +339,14 @@ func TestDefinitionCopiesNestedContainers(t *testing.T) {
 		s.Arrays[0][0] = 99
 		s.Nested[0][4][0][0] = 99
 	}
-	mutate(input)
-	mutate(def.DefaultSpec())
-	got := def.DefaultSpec()
+	mutate(def.NewSpec())
+	got := def.NewSpec()
 	if got.Slices[0][0] != 1 || got.Maps["a"][0] != 2 || got.Arrays[0][0] != 3 || got.Nested[0][4][0][0] != 5 {
 		t.Fatalf("nested defaults were mutated: %+v", got)
 	}
 }
 
-func TestDefinitionDeclaredRolesAreIndependent(t *testing.T) {
+func TestComponentDefDeclaredRolesAreIndependent(t *testing.T) {
 	def := modeling.DefineComponent(makeDefTestDef())
 	first, second := messaging.NewPortOwnerBase(), messaging.NewPortOwnerBase()
 	def.DeclarePorts(first)
@@ -383,7 +356,7 @@ func TestDefinitionDeclaredRolesAreIndependent(t *testing.T) {
 	if second.PortRoles("Top")[0] != defTestResponder || second.PortRoles("Out")[0] != defTestRequester {
 		t.Fatal("mutating one component's roles affected another component")
 	}
-	if def.Ports()[0].Roles[0] != defTestResponder || def.PortGroups()[0].Roles[0] != defTestRequester {
+	if def.Ports[0].Roles[0] != defTestResponder || def.PortGroups[0].Roles[0] != defTestRequester {
 		t.Fatal("mutating a component's roles affected the definition")
 	}
 }

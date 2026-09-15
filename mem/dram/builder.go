@@ -11,7 +11,7 @@ import (
 // DefaultSpec returns a copy of the default configuration. Callers typically
 // obtain it, tweak the fields they care about, and pass it to WithSpec.
 func DefaultSpec() Spec {
-	return Definition.DefaultSpec()
+	return Definition.NewSpec()
 }
 
 // Builder can build new memory controllers. Configuration is supplied as a
@@ -29,7 +29,7 @@ type Builder struct {
 
 // MakeBuilder creates a builder with default configuration.
 func MakeBuilder() Builder {
-	return Builder{spec: Definition.DefaultSpec()}
+	return Builder{spec: Definition.NewSpec()}
 }
 
 // WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
