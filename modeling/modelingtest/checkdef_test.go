@@ -8,7 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/inspect/testdata/fixtures/zerodefaults"
 )
 
-func TestCheckDefinitionSupportedDefaults(t *testing.T) {
+func TestCheckDefinitionSupportedDeclarations(t *testing.T) {
 	CheckDefinition(t, containers.Definition, "github.com/sarchlab/akita/v5/inspect/testdata/fixtures/containers")
 	CheckDefinition(t, zerodefaults.Definition, "github.com/sarchlab/akita/v5/inspect/testdata/fixtures/zerodefaults")
 }

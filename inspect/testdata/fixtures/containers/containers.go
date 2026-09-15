@@ -1,6 +1,9 @@
 package containers
 
-import "github.com/sarchlab/akita/v5/modeling"
+import (
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
+)
 
 type Choice string
 
@@ -26,4 +29,7 @@ var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec, modeling.N
 	Maps: map[int64][]int{-1: {2}}, Unsigned: map[uint64][2]int{18446744073709551615: {3}},
 	Nil: nil, Bytes: []byte{65, 66}, StringNumber: 18446744073709551615, Fraction: 0.1,
 	EmptySlice: []int{}, EmptyMap: map[string]int{}, Choice: Escaped,
-}})
+},
+	Ports:      []modeling.PortDef{{Name: "Empty", Roles: []*messaging.Role{}}, {Name: "Omitted"}},
+	PortGroups: []modeling.PortGroupDef{{Name: "EmptyGroup", Roles: []*messaging.Role{}}, {Name: "OmittedGroup"}},
+})

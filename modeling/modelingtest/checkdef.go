@@ -166,7 +166,7 @@ func checkPortGroups(
 }
 
 func runtimeRoles(roles []*messaging.Role) []schema.Role {
-	if len(roles) == 0 {
+	if roles == nil {
 		return nil
 	}
 
