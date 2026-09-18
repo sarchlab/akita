@@ -8,6 +8,10 @@ cp_write_64,ramulator2,close,64,64,0,64,
 cp_write_256,dramsim3,close,256,256,0,256,1.0
 cp_write_256,ramulator2,close,256,256,0,256,
 op_seq_64B,dramsim3,open,512,4,512,0,227.459
+op_seq_64B,ramulator2,open,512,4,512,0,
 op_stride_128K,dramsim3,open,512,512,512,0,2130.754
+op_stride_128K,ramulator2,open,512,512,512,0,
 op_stride_8K,dramsim3,open,512,512,512,0,787.674
+op_stride_8K,ramulator2,open,512,512,512,0,
 op_stride_16K,dramsim3,open,512,512,512,0,620.186
+op_stride_16K,ramulator2,open,512,512,512,0,

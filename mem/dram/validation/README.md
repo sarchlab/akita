@@ -43,46 +43,64 @@ config+trace, runs them, and writes `data/reference.csv`.
 
 ## Current coverage
 
-| Tier | Scenarios | Metric | Tol. | Status |
-|---|---|---|---|---|
-| 5 — counts | `cp_read_64/256`, `cp_write_64/256` (close-page) | `activates`/`reads`/`writes` | exact | ✅ both oracles agree; Akita matches |
-| 6 — latency (enforced) | `op_seq_64B`, `op_stride_128K` (open-page) | avg read latency vs DRAMSim3 | 15% | ✅ Akita within 8% / 0.1% |
-| 6 — latency (known gap) | `op_stride_8K`, `op_stride_16K` (open-page) | avg read latency vs DRAMSim3 | 15% | ⚠️ **gap 54–63%** — see Findings |
+One differential suite drives **all** scenarios through DRAMSim3, Ramulator2,
+and Akita, and compares each scenario on **both** command counts and read
+latency:
+
+- **command counts** (activates/reads/writes): Akita is asserted to match the
+  oracles wherever the **two oracles agree** on a count. reads/writes always
+  agree (one column command per access); activates agree wherever the count is
+  map-independent. Where the oracles disagree, it's a documented reference
+  divergence, not asserted.
+- **read latency** vs DRAMSim3, 15% tolerance: `enforced` must match;
+  `known_gap` currently exceeds tolerance; `off` for write-only scenarios.
+
+| Scenario | Page | Counts (vs both) | Read latency (vs DRAMSim3) |
+|---|---|---|---|
+| `cp_read_64` / `cp_read_256` | close | ✅ exact | ✅ enforced (within ~0%) |
+| `cp_write_64` / `cp_write_256` | close | ✅ exact | — (no reads) |
+| `op_seq_64B` | open | ✅ exact | ✅ enforced (~8%) |
+| `op_stride_128K` | open | ✅ exact | ✅ enforced (~0%) |
+| `op_stride_8K` / `op_stride_16K` | open | ✅ exact | ⚠️ known gap 54–63% |
 
 ### Findings so far
 
 1. **Single-request latency: +1 cycle** (Akita 38 vs DRAMSim3 37). Accepted — a
    fixed offset within tolerance, likely a latency-measurement boundary.
-2. **Address-mapping performance gap (KNOWN GAP, roadmap P3).** Akita has a
-   single fixed address map and cannot be configured to match the references'.
-   When a stride serializes to one bank (`op_seq_64B`, `op_stride_128K`) Akita
-   matches DRAMSim3. When bank parallelism depends on the mapping
-   (`op_stride_8K`, `op_stride_16K`) Akita's fixed map spreads accesses across
-   bank groups that DRAMSim3's `rochrababgco` does not, so Akita is **54–63%
-   faster** for the same nominal config. The Tier-6 suite asserts this gap is
-   *currently* large; when P3 lands and it closes, the characterization spec
-   fails — that is the cue to flip the scenario to `latency_check: enforced`.
-3. **Row-buffer-hit-rate statistic is broken (bug, not a feature gap).**
+2. **Address-mapping performance gap (known gap).** Akita has a single fixed
+   address map and cannot be configured to match the references'. When a stride
+   serializes to one bank (`op_seq_64B`, `op_stride_128K`) Akita matches
+   DRAMSim3. When bank parallelism depends on the mapping (`op_stride_8K`,
+   `op_stride_16K`) Akita's fixed map spreads accesses across bank groups that
+   DRAMSim3's `rochrababgco` does not, so Akita is **54–63% faster** for the
+   same nominal config. The suite asserts this gap is *currently* large; when
+   configurable address mapping lands and it closes, the characterization spec
+   fails — the cue to flip the scenario to `read_latency: enforced`.
+3. **Read coalescing not modeled (feature gap).** DRAMSim3 (and we still need to
+   confirm Ramulator2) coalesces pending reads to the same address — one DRAM
+   read serves all pending requests to that address. Akita issues them all. On a
+   duplicate-address trace this alone changes read count and saturated latency
+   by several-fold, so saturated average latency is only a fair cross-simulator
+   metric on distinct-address traces until coalescing is modeled.
+4. **Row-buffer-hit-rate statistic is broken (bug, not a feature gap).**
    `RowBufferHits`/`RowBufferMisses` count every issued read as a hit and every
-   activate as a miss (because by the time a read issues its bank is always
-   open), so the rate is meaningless — e.g. 512 "hits" for 512 all-miss
-   accesses. `RowBufferHitRate` should not be trusted or used as a metric until
-   fixed. Surfaced by the open-page sweep against DRAMSim3's row-hit counts.
+   activate as a miss, so the rate is meaningless (e.g. 512 "hits" for 512
+   all-miss accesses). `RowBufferHitRate` should not be trusted until fixed.
 
 ### Still to do
 
 | Axis | Why deferred |
 |---|---|
+| Ramulator2 latency/bandwidth | its trace frontend never drains memory (needs a drain patch) |
 | Mixed read/write counts | needs the Ramulator2 drain fix (tail-subtraction is single-type) |
-| Ramulator2 latency/bandwidth | its trace frontend never drains memory |
-| Open-page count comparison | needs aligned per-oracle address encoders |
+| Read coalescing | a feature gap (see Findings) — needs sequential/random × small/large-range scenarios |
 
 ### Two method notes (so the numbers are trustworthy)
 
 - **Refresh is disabled for these count scenarios** (`tREFI` pushed out of
   range). DRAMSim3 runs the full `-c` cycle budget and idles long after the
   trace drains, firing many refreshes (one boundary even adds a stray
-  activate); refresh is a separate axis (P2). Akita command counts are
+  activate); refresh is a separate validation axis. Akita command counts are
   refresh-independent regardless.
 - **Ramulator2 does not drain memory** — `src/main.cpp` stops the moment the
   frontend has *injected* every request (the frontend source even marks this
