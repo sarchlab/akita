@@ -8,14 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// PortDeclarer is the subset of a component's port API that DeclarePorts
-// needs. *messaging.PortOwnerBase satisfies it, and so does every component
-// that embeds one.
-type PortDeclarer interface {
-	DeclarePort(name string, roles ...*messaging.Role)
-	DeclarePortGroup(name string, roles ...*messaging.Role)
-}
-
 // PortDef declares one port and the protocol role(s) it speaks. A port with
 // no roles is untyped.
 type PortDef struct {
@@ -110,7 +102,7 @@ func (d ComponentDef[S, R]) NewSpec() S {
 // DeclarePorts declares every port and port group of the definition on the
 // given component. Builders call it in Build in place of per-port
 // DeclarePort calls.
-func (d ComponentDef[S, R]) DeclarePorts(po PortDeclarer) {
+func (d ComponentDef[S, R]) DeclarePorts(po messaging.PortOwner) {
 	for _, p := range d.Ports {
 		po.DeclarePort(p.Name, copyRoles(p.Roles)...)
 	}
