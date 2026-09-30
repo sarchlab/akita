@@ -175,7 +175,8 @@ func (b Builder) buildSpec(numSets int) Spec {
 // resolveAddressMapper returns the mapper that routes fetches and evictions
 // to lower memory: the injected Resources.AddressToPortMapper, or one built
 // from Spec.AddressMapperType over Resources.RemotePorts. It returns nil when
-// neither is configured.
+// neither is configured or there are no remote ports, so the first routed
+// request reports the missing wiring.
 func (b Builder) resolveAddressMapper() mem.AddressToPortMapper {
 	if b.resources.AddressToPortMapper != nil {
 		return b.resources.AddressToPortMapper
@@ -193,6 +194,15 @@ func (b Builder) resolveAddressMapper() mem.AddressToPortMapper {
 
 		return &mem.SinglePortMapper{Port: ports[0]}
 	case "interleaved":
+		if len(ports) == 0 {
+			return nil
+		}
+
+		if b.spec.InterleavingSize == 0 {
+			panic("writeback: an interleaved address mapper needs a " +
+				"non-zero Spec.InterleavingSize")
+		}
+
 		mapper := mem.NewInterleavedAddressPortMapper(b.spec.InterleavingSize)
 		mapper.LowModules = append(mapper.LowModules, ports...)
 

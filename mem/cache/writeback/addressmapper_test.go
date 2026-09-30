@@ -2,6 +2,8 @@ package writeback
 
 import (
 	"bytes"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem"
@@ -81,4 +83,43 @@ func TestRestoreRoutesThroughRebuiltWiring(t *testing.T) {
 	if got := pipeline.findPort(0); got != "NewMemory.Top" {
 		t.Errorf("restored cache routes to %s, want NewMemory.Top", got)
 	}
+}
+
+// TestBuildRejectsIncompleteInterleaving checks the two ways an interleaved
+// mapper can be misconfigured: no remote ports defers to findPort's clear
+// panic, and a zero interleaving size fails at Build instead of dividing by
+// zero on the first miss.
+func TestBuildRejectsIncompleteInterleaving(t *testing.T) {
+	spec := Definition.DefaultSpec
+	spec.AddressMapperType = "interleaved"
+	spec.InterleavingSize = 4096
+
+	noPorts := buildWired(Resources{}, spec)
+	if mapper := noPorts.Resources().AddressToPortMapper; mapper != nil {
+		t.Errorf("mapper without remote ports = %v, want nil", mapper)
+	}
+
+	assertPanics(t, "no address mapper", func() {
+		(&pipelineMW{comp: noPorts}).findPort(0)
+	})
+
+	spec.InterleavingSize = 0
+	assertPanics(t, "non-zero Spec.InterleavingSize", func() {
+		buildWired(Resources{RemotePorts: []messaging.RemotePort{"DRAM0"}}, spec)
+	})
+}
+
+func assertPanics(t *testing.T, substr string, f func()) {
+	t.Helper()
+
+	defer func() {
+		t.Helper()
+
+		r := recover()
+		if r == nil || !strings.Contains(fmt.Sprint(r), substr) {
+			t.Fatalf("panic = %v, want one containing %q", r, substr)
+		}
+	}()
+
+	f()
 }

@@ -111,7 +111,8 @@ func (b Builder) resolveStorage(name string, spec Spec) *mem.Storage {
 // resolveAddressMapper returns the mapper that routes requests to lower
 // memory: the injected Resources.AddressMapper, or one built from
 // Spec.AddressMapperType over Resources.RemotePorts. It returns nil when
-// neither is configured.
+// neither is configured or there are no remote ports, so the first routed
+// request reports the missing wiring.
 func (b Builder) resolveAddressMapper() mem.AddressToPortMapper {
 	if b.resources.AddressMapper != nil {
 		return b.resources.AddressMapper
@@ -129,6 +130,15 @@ func (b Builder) resolveAddressMapper() mem.AddressToPortMapper {
 
 		return &mem.SinglePortMapper{Port: ports[0]}
 	case "interleaved":
+		if len(ports) == 0 {
+			return nil
+		}
+
+		if b.spec.InterleavingSize == 0 {
+			panic("writethroughcache: an interleaved address mapper needs a " +
+				"non-zero Spec.InterleavingSize")
+		}
+
 		mapper := mem.NewInterleavedAddressPortMapper(b.spec.InterleavingSize)
 		mapper.LowModules = append(mapper.LowModules, ports...)
 
