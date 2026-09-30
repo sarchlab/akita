@@ -53,7 +53,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	read.Dst = topPort.AsRemote()
 	read.TrafficClass = "memprotocol.ReadReq"
 	topPort.Deliver(read)
-	rob.Tick()
+	tick(rob)
 
 	if len(rob.State.Transactions) != 1 {
 		t.Fatalf("expected 1 in-flight transaction, got %d",
@@ -74,7 +74,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	acked := false
 	for range 16 {
-		rob.Tick()
+		tick(rob)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {

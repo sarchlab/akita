@@ -142,7 +142,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 	driveRoundTrip := func(req memprotocol.AccessReq, rsp messaging.Msg) {
 		topPort.Deliver(req)
 
-		rob.Tick()
+		tick(rob)
 		shadowID := rob.State.Transactions[0].ReqToBottomID
 		bottomPort.RetrieveOutgoing()
 
@@ -155,8 +155,8 @@ var _ = Describe("Reorder Buffer milestones", func() {
 			bottomPort.Deliver(r)
 		}
 
-		rob.Tick() // parseBottom records the response
-		rob.Tick() // bottomUp retires the head and responds
+		tick(rob) // parseBottom records the response
+		tick(rob) // bottomUp retires the head and responds
 	}
 
 	It("records admission milestones on the buffer task and processing "+

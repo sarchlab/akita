@@ -71,9 +71,8 @@ func (c *fakeComp) AllPorts() []messaging.Port {
 func (c *fakeComp) NotifyRecv(_ messaging.Port)     {}
 func (c *fakeComp) NotifyPortFree(_ messaging.Port) {}
 
-func (c *fakeComp) Tick() bool {
+func (c *fakeComp) Handle(_ timing.Event) {
 	port := c.ports["Control"]
-	made := false
 
 	if c.pending != nil {
 		c.pending.ticksLeft--
@@ -84,7 +83,6 @@ func (c *fakeComp) Tick() bool {
 			port.Send(c.makeRsp(c.pending.cmd, c.pending.src,
 				c.pending.id, true, ""))
 			c.pending = nil
-			made = true
 		}
 	}
 
@@ -92,23 +90,23 @@ func (c *fakeComp) Tick() bool {
 		if msg, ok := port.PeekIncoming(); ok {
 			if req, ok := msg.(memcontrolprotocol.Req); ok {
 				port.RetrieveIncoming()
-				made = c.handleReq(port, req) || made
+				c.handleReq(port, req)
 			}
 		}
 	}
-
-	return made
 }
 
-func (c *fakeComp) handleReq(port messaging.Port, req memcontrolprotocol.Req) bool {
+func (c *fakeComp) handleReq(port messaging.Port, req memcontrolprotocol.Req) {
 	if !c.matrix.Supports(req.Command) {
-		return c.respond(port, req, false, memcontrolprotocol.ErrUnsupported)
+		c.respond(port, req, false, memcontrolprotocol.ErrUnsupported)
+		return
 	}
 
 	// Conditional verbs are only legal while paused or drained.
 	if (req.Command == memcontrolprotocol.CmdInvalidate || req.Command == memcontrolprotocol.CmdFlush) &&
 		!c.paused {
-		return c.respond(port, req, false, memcontrolprotocol.ErrMustBePausedOrDrained)
+		c.respond(port, req, false, memcontrolprotocol.ErrMustBePausedOrDrained)
+		return
 	}
 
 	switch req.Command {
@@ -119,7 +117,8 @@ func (c *fakeComp) handleReq(port messaging.Port, req memcontrolprotocol.Req) bo
 	}
 
 	if memcontrolprotocol.IsSyncVerb(req.Command) {
-		return c.respond(port, req, true, "")
+		c.respond(port, req, true, "")
+		return
 	}
 
 	c.pending = &pendingReq{
@@ -128,7 +127,6 @@ func (c *fakeComp) handleReq(port messaging.Port, req memcontrolprotocol.Req) bo
 		id:        req.ID,
 		ticksLeft: c.asyncDelay,
 	}
-	return true
 }
 
 func (c *fakeComp) respond(
@@ -136,12 +134,10 @@ func (c *fakeComp) respond(
 	req memcontrolprotocol.Req,
 	success bool,
 	errStr string,
-) bool {
-	if !port.CanSend() {
-		return false
+) {
+	if port.CanSend() {
+		port.Send(c.makeRsp(req.Command, req.Src, req.ID, success, errStr))
 	}
-	port.Send(c.makeRsp(req.Command, req.Src, req.ID, success, errStr))
-	return true
 }
 
 func (c *fakeComp) makeRsp(

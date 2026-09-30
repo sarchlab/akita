@@ -37,16 +37,24 @@ type Middlewares struct {
 
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-// recordMW logs its name and the type of every event it handles.
+// recordMW logs its name and the type of every event it handles. A counting
+// middleware makes progress while State.Count is positive, counting it down.
 type recordMW struct {
 	comp     *Comp
 	name     string
-	progress bool
+	counting bool
 }
 
 func (m *recordMW) Handle(e timing.Event) bool {
 	m.comp.State.Log = append(m.comp.State.Log, fmt.Sprintf("%s %T", m.name, e))
-	return m.progress
+
+	if !m.counting || m.comp.State.Count == 0 {
+		return false
+	}
+
+	m.comp.State.Count--
+
+	return true
 }
 
 // pokeEvent is an event a component schedules for itself.
@@ -62,7 +70,7 @@ var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewar
 	NewMiddlewares: func(c *Comp) Middlewares {
 		return Middlewares{
 			First:  &recordMW{comp: c, name: "first"},
-			Second: &recordMW{comp: c, name: "second", progress: true},
+			Second: &recordMW{comp: c, name: "second", counting: true},
 		}
 	},
 }
@@ -115,13 +123,31 @@ func TestBuildBindsPortsAndRunsMiddlewaresInOrder(t *testing.T) {
 		t.Errorf("NewState was not applied: Count = %d, want 2", c.State.Count)
 	}
 
-	if progress := c.Tick(); !progress {
-		t.Errorf("Tick() = false, want true: one middleware made progress")
-	}
+	c.Handle(modeling.MakeTickEvent(1, "C", 0))
 
 	want := []string{"first modeling.TickEvent", "second modeling.TickEvent"}
 	if !reflect.DeepEqual(c.State.Log, want) {
 		t.Errorf("middlewares ran as %v, want %v", c.State.Log, want)
+	}
+}
+
+func TestTicksWhileMiddlewaresMakeProgress(t *testing.T) {
+	sim := newSim()
+	c := Definition.Builder().
+		WithSimulation(sim).
+		WithPorts(Ports{In: newPort("C.In")}).
+		Build("C")
+
+	c.TickLater()
+	if err := sim.GetEngine().Run(); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// Count starts at 2: two ticks make progress, and the third, which makes
+	// none, lets the component sleep.
+	if c.State.Count != 0 || len(c.State.Log) != 6 {
+		t.Errorf("after the run, Count = %d and %d middleware calls, "+
+			"want 0 and 6 (3 ticks)", c.State.Count, len(c.State.Log))
 	}
 }
 

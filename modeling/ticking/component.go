@@ -64,21 +64,6 @@ func (c *Component[S, T, R, P, M]) Resources() R {
 // event is usually a tick; it can also be an event the component scheduled
 // for itself.
 func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
-	if c.handle(e) {
-		c.TickLater()
-	}
-}
-
-// Tick handles a tick at the current time and reports whether any middleware
-// made progress, without scheduling the next tick. The engine drives the
-// component through Handle; Tick is for tests and tools that step a component
-// by hand.
-func (c *Component[S, T, R, P, M]) Tick() bool {
-	return c.handle(modeling.MakeTickEvent(
-		c.Simulation().NewID(), c.name, c.CurrentTime()))
-}
-
-func (c *Component[S, T, R, P, M]) handle(e timing.Event) bool {
 	progress := false
 
 	for _, mw := range c.pipeline {
@@ -87,7 +72,9 @@ func (c *Component[S, T, R, P, M]) handle(e timing.Event) bool {
 		}
 	}
 
-	return progress
+	if progress {
+		c.TickLater()
+	}
 }
 
 // NotifyRecv wakes the instance when a port receives a message.

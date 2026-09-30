@@ -5,20 +5,23 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // Controllable is the minimal interface the contract harness requires
-// from a component under test. Every Akita memory agent satisfies it
-// through embedding modeling.TickingComponent.
+// from a component under test. Every ticking Akita memory agent satisfies
+// it.
 type Controllable interface {
-	Tick() bool
+	timing.Handler
 	Name() string
 }
 
 // Harness bundles a built component, its Control port, and a teardown
 // callback. Build functions passed to RunContract return a *Harness.
 type Harness struct {
-	// Comp is the component under test. RunContract drives it via Tick.
+	// Comp is the component under test. RunContract drives it by handing
+	// it a TickEvent at a time, as the engine does.
 	Comp Controllable
 
 	// Ctrl is the component's Control port. RunContract delivers
@@ -332,6 +335,14 @@ func newControlReq(
 	return req
 }
 
+// tick hands the component a TickEvent at the current time, as the engine
+// does on every cycle.
+func (h *Harness) tick() {
+	sim := h.Ctrl.Component().Simulation()
+	h.Comp.Handle(modeling.MakeTickEvent(
+		sim.NewID(), h.Comp.Name(), sim.GetEngine().CurrentTime()))
+}
+
 // drainForRsp ticks the component up to budget times waiting for a
 // ControlRsp to appear on the Control port's outgoing queue. It returns
 // the first such Rsp and true, or a zero Rsp and false if the budget is
@@ -343,7 +354,7 @@ func drainForRsp(h *Harness, budget int) (Rsp, bool) {
 				return rsp, true
 			}
 		}
-		h.Comp.Tick()
+		h.tick()
 	}
 
 	// One last sweep in case the final tick produced the Rsp.
