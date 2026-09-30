@@ -4,12 +4,12 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/inspect/schema"
-	"github.com/sarchlab/akita/v5/inspect/testdata/fixtures/containers"
+	"github.com/sarchlab/akita/v5/inspect/testdata/fixtures/scalars"
 	"github.com/sarchlab/akita/v5/inspect/testdata/fixtures/zerodefaults"
 )
 
 func TestCheckDefinitionSupportedDeclarations(t *testing.T) {
-	CheckDefinition(t, containers.Definition, "github.com/sarchlab/akita/v5/inspect/testdata/fixtures/containers")
+	CheckDefinition(t, scalars.Definition, "github.com/sarchlab/akita/v5/inspect/testdata/fixtures/scalars")
 	CheckDefinition(t, zerodefaults.Definition, "github.com/sarchlab/akita/v5/inspect/testdata/fixtures/zerodefaults")
 }
 

@@ -1,6 +1,7 @@
 // Package fullcomp is a synthetic component used by the inspector tests. It
 // exercises every feature of the definition schema: docs, units, tags,
-// choices, slice defaults, excluded fields, resources, and port groups.
+// choices, unset container fields, excluded fields, resources, and port
+// groups.
 package fullcomp
 
 import (
@@ -70,7 +71,6 @@ var Definition = modeling.ComponentDef[Spec]{
 		Freq:     1 * timing.GHz,
 		NumLanes: 4,
 		Mode:     ModeFast,
-		Weights:  []float64{1, 2},
 	},
 	Ports: []modeling.PortDef{
 		{Name: "Top", Roles: []*messaging.Role{memprotocol.Responder}},

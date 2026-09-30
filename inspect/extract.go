@@ -6,7 +6,6 @@ import (
 	"go/constant"
 	"go/token"
 	"go/types"
-	"strconv"
 
 	"golang.org/x/tools/go/packages"
 
@@ -359,6 +358,12 @@ func evalStructLiteral(
 
 	out := map[string]any{}
 	for name, value := range fields {
+		if _, ok := ast.Unparen(value).(*ast.CompositeLit); ok {
+			return nil, posErrorf(pkg, value.Pos(),
+				"DefaultSpec field %s: defaults must be scalar constants; "+
+					"leave slice, map and array fields unset", name)
+		}
+
 		v, err := evalConstExpr(pkg, value)
 		if err != nil {
 			return nil, err
@@ -370,16 +375,13 @@ func evalStructLiteral(
 }
 
 // evalConstExpr evaluates an expression that must be statically evaluable: a
-// constant expression, or a slice/map composite literal of such expressions.
+// constant expression, or nil.
 func evalConstExpr(pkg *packages.Package, expr ast.Expr) (any, error) {
 	if paren, ok := expr.(*ast.ParenExpr); ok {
 		return evalConstExpr(pkg, paren.X)
 	}
 	if tv, ok := pkg.TypesInfo.Types[expr]; ok && tv.IsNil() {
 		return nil, nil //nolint:nilnil // A nil container is a valid constant default.
-	}
-	if lit, ok := expr.(*ast.CompositeLit); ok {
-		return evalCompositeConst(pkg, lit)
 	}
 
 	tv, ok := pkg.TypesInfo.Types[expr]
@@ -391,92 +393,9 @@ func evalConstExpr(pkg *packages.Package, expr ast.Expr) (any, error) {
 	return constantValue(pkg, expr, tv)
 }
 
-func evalCompositeConst(
-	pkg *packages.Package, lit *ast.CompositeLit,
-) (any, error) {
-	tv, ok := pkg.TypesInfo.Types[lit]
-	if !ok {
-		return nil, posErrorf(pkg, lit.Pos(), "cannot resolve literal type")
-	}
-
-	switch typ := tv.Type.Underlying().(type) {
-	case *types.Slice:
-		return evalSequence(pkg, lit, typ.Elem(), -1)
-	case *types.Array:
-		return evalSequence(pkg, lit, typ.Elem(), typ.Len())
-	case *types.Map:
-		out := map[string]any{}
-		for _, elt := range lit.Elts {
-			kv, ok := elt.(*ast.KeyValueExpr)
-			if !ok {
-				return nil, posErrorf(pkg, elt.Pos(), "map literal entries must be key: value")
-			}
-			key, err := evalConstExpr(pkg, kv.Key)
-			if err != nil {
-				return nil, err
-			}
-			var name string
-			switch k := key.(type) {
-			case string:
-				name = k
-			case int64:
-				name = strconv.FormatInt(k, 10)
-			case uint64:
-				name = strconv.FormatUint(k, 10)
-			default:
-				return nil, posErrorf(pkg, kv.Key.Pos(), "map keys must be strings or integers")
-			}
-			value, err := evalConstExpr(pkg, kv.Value)
-			if err != nil {
-				return nil, err
-			}
-			out[name] = value
-		}
-		return out, nil
-	default:
-		return nil, posErrorf(pkg, lit.Pos(), "not statically analyzable: nested %s literal", tv.Type)
-	}
-}
-
-// evalSequence preserves keyed indices, omitted elements and array lengths.
-func evalSequence(pkg *packages.Package, lit *ast.CompositeLit, elem types.Type, length int64) ([]any, error) {
-	values := map[int]any{}
-	next, size := 0, 0
-	for _, entry := range lit.Elts {
-		value := entry
-		if keyed, ok := entry.(*ast.KeyValueExpr); ok {
-			idx, err := constInt(pkg, keyed.Key)
-			if err != nil {
-				return nil, err
-			}
-			next, value = idx, keyed.Value
-		}
-		v, err := evalConstExpr(pkg, value)
-		if err != nil {
-			return nil, err
-		}
-		values[next] = v
-		next++
-		if next > size {
-			size = next
-		}
-	}
-	if length >= 0 {
-		size = int(length)
-	}
-	out := make([]any, size)
-	for i := range out {
-		v, ok := values[i]
-		if !ok {
-			v = zeroValue(elem)
-		}
-		out[i] = v
-	}
-	return out, nil
-}
-
-// zeroValue uses the same representation as constantValue and container
-// evaluation. Nil containers stay nil; omitted arrays retain their length.
+// zeroValue returns the default of a field the DefaultSpec literal leaves
+// out, in the same representation as constantValue. Slices and maps are nil;
+// arrays keep their length.
 func zeroValue(typ types.Type) any {
 	switch t := typ.Underlying().(type) {
 	case *types.Array:
@@ -565,25 +484,6 @@ func constBool(pkg *packages.Package, expr ast.Expr) (bool, error) {
 	}
 
 	return b, nil
-}
-
-func constInt(pkg *packages.Package, expr ast.Expr) (int, error) {
-	v, err := evalConstExpr(pkg, expr)
-	if err != nil {
-		return 0, err
-	}
-
-	switch n := v.(type) {
-	case int64:
-		if int64(int(n)) == n {
-			return int(n), nil
-		}
-	case uint64:
-		if n <= uint64(^uint(0)>>1) {
-			return int(n), nil
-		}
-	}
-	return 0, posErrorf(pkg, expr.Pos(), "expected an integer constant representable as int")
 }
 
 func posErrorf(

@@ -1,8 +1,6 @@
 package modeling
 
 import (
-	"reflect"
-
 	"github.com/sarchlab/akita/v5/messaging"
 )
 
@@ -37,27 +35,21 @@ type PortDef struct {
 // The initializer must be statically evaluable: a keyed composite literal
 // with constant leaves (plus role identifiers). Tooling reads and validates
 // the same literal without executing the package. Treat the definition as
-// read-only so the static and runtime views agree. Builders use NewSpec to
-// obtain a configuration to edit and pass the definition to
-// modeling.Builder.WithDefinition, which declares the component's ports.
+// read-only so the static and runtime views agree. Builders start from
+// DefaultSpec and pass the definition to modeling.Builder.WithDefinition,
+// which declares the component's ports.
 type ComponentDef[S any] struct {
 	// Name is the component's display name, e.g. "TLB".
 	Name string
 
-	// DefaultSpec is the component's default configuration. Use NewSpec to
-	// obtain a copy for customization.
+	// DefaultSpec is the component's default configuration. It may set only
+	// scalar fields; slice, map and array fields stay unset (and are filled
+	// in Build when needed). Reading it therefore yields an independent copy
+	// that callers can customize.
 	DefaultSpec S
 
 	// Ports declares the component's boundary ports and port groups.
 	Ports []PortDef
-}
-
-// NewSpec returns a copy of the default configuration, recursively copying
-// exported slice, map, and array contents. Callers can customize the result
-// and pass it to the builder's WithSpec without changing the defaults.
-func (d ComponentDef[S]) NewSpec() S {
-	v := deepCopyStruct(reflect.ValueOf(d.DefaultSpec))
-	return v.Interface().(S)
 }
 
 // declarePorts declares every port and port group of the definition on the
@@ -82,47 +74,4 @@ func copyRoles(roles []*messaging.Role) []*messaging.Role {
 	copy(out, roles)
 
 	return out
-}
-
-// deepCopyStruct copies the Spec's exported fields, recursively cloning its
-// slice, map and array contents. ValidateSpec permits nested containers.
-func deepCopyStruct(v reflect.Value) reflect.Value {
-	switch v.Kind() {
-	case reflect.Struct:
-		out := reflect.New(v.Type()).Elem()
-		out.Set(v)
-		for i := range v.NumField() {
-			if out.Field(i).CanSet() {
-				out.Field(i).Set(deepCopyStruct(v.Field(i)))
-			}
-		}
-		return out
-	case reflect.Slice:
-		if v.IsNil() {
-			return v
-		}
-		out := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
-		for i := range v.Len() {
-			out.Index(i).Set(deepCopyStruct(v.Index(i)))
-		}
-		return out
-	case reflect.Array:
-		out := reflect.New(v.Type()).Elem()
-		for i := range v.Len() {
-			out.Index(i).Set(deepCopyStruct(v.Index(i)))
-		}
-		return out
-	case reflect.Map:
-		if v.IsNil() {
-			return v
-		}
-		out := reflect.MakeMapWithSize(v.Type(), v.Len())
-		it := v.MapRange()
-		for it.Next() {
-			out.SetMapIndex(it.Key(), deepCopyStruct(it.Value()))
-		}
-		return out
-	default:
-		return v
-	}
 }

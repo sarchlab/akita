@@ -36,6 +36,8 @@ var expectedErrors = []struct {
 	{"misnamed definition var", "fixtures/wrongname",
 		`must be named "Definition"`},
 	{"unkeyed literal", "fixtures/unkeyed", "must be keyed"},
+	{"container default", "fixtures/containerdefault",
+		"defaults must be scalar constants"},
 	{"computed definition", "fixtures/computed",
 		"must be initialized with a composite literal"},
 }
@@ -52,7 +54,7 @@ func TestInspect(t *testing.T) {
 	}
 
 	t.Run("escaped string choices", func(t *testing.T) {
-		def := byPkg["github.com/sarchlab/akita/v5/inspect/testdata/fixtures/containers"]
+		def := byPkg["github.com/sarchlab/akita/v5/inspect/testdata/fixtures/scalars"]
 		found := false
 		for _, f := range def.Spec {
 			if f.Name != "Choice" {

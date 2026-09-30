@@ -43,8 +43,9 @@ running the code. Treat it as read-only so builders and the inspector see the
 same defaults and ports. Tooling finds the component's Resources type through
 its builder's `WithResources` parameter.
 
-- `Definition.NewSpec()` copies the defaults, including nested slices, maps,
-  and arrays, for a builder or caller to customize.
+- `Definition.DefaultSpec` is the starting configuration for a builder or
+  caller to customize. It may set only scalar fields (slice, map, and array
+  fields stay unset), so reading it yields an independent copy.
 - `modeling.NewBuilder[...]().WithDefinition(Definition)` makes `Build` declare
   the definition's ports on the new component (the event-driven builder has
   the same method). A `PortDef` with `Group: true` declares a port group whose
