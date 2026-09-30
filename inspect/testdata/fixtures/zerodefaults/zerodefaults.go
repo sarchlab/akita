@@ -7,9 +7,6 @@ type Spec struct {
 	Label   string
 	Enabled bool
 	Ratio   float32
-	Array   [2]int
-	Slice   []int
-	Map     map[int]int
 }
 
 var Definition = modeling.ComponentDef[Spec]{Name: "ZeroDefaults"}

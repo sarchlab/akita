@@ -1,7 +1,6 @@
 // Package fullcomp is a synthetic component used by the inspector tests. It
 // exercises every feature of the definition schema: docs, units, tags,
-// choices, unset container fields, excluded fields, resources, and port
-// groups.
+// choices, excluded fields, resources, and port groups.
 package fullcomp
 
 import (
@@ -36,9 +35,6 @@ type Spec struct {
 
 	// Mode selects how precisely the component is modeled.
 	Mode Mode `json:"mode"`
-
-	// Weights are per-lane scheduling weights.
-	Weights []float64 `json:"weights"`
 
 	Hidden int `json:"-"`
 }

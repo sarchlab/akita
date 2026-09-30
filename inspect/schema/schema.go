@@ -44,11 +44,10 @@ type Field struct {
 	Doc      string `json:"doc,omitempty"`
 
 	// Default is the value the definition's DefaultSpec assigns to the
-	// field; fields the literal leaves out get their Go zero value. Defaults
-	// are scalars: slice and map fields are always unset (so Default is
-	// absent) and array fields default to zeros. Absent for Resources
-	// fields. Values describe Go fields before JSON marshaling, so
-	// json:",string" does not transform defaults.
+	// field; fields the literal leaves out get their Go zero value. Spec
+	// fields are scalars, so defaults are too. Absent for Resources fields.
+	// Values describe Go fields before JSON marshaling, so json:",string"
+	// does not transform defaults.
 	Default any `json:"default,omitempty"`
 
 	// Unit is the semantic unit implied by the field's Go type (e.g. "Hz"

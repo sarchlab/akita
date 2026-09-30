@@ -36,8 +36,8 @@ var expectedErrors = []struct {
 	{"misnamed definition var", "fixtures/wrongname",
 		`must be named "Definition"`},
 	{"unkeyed literal", "fixtures/unkeyed", "must be keyed"},
-	{"container default", "fixtures/containerdefault",
-		"defaults must be scalar constants"},
+	{"container field", "fixtures/containerfield",
+		"Spec fields must be scalars"},
 	{"computed definition", "fixtures/computed",
 		"must be initialized with a composite literal"},
 }

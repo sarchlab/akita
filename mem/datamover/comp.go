@@ -17,14 +17,6 @@ type Spec struct {
 	BufferSize             uint64      `json:"buffer_size"`
 	InsideByteGranularity  uint64      `json:"inside_byte_granularity"`
 	OutsideByteGranularity uint64      `json:"outside_byte_granularity"`
-
-	InsideMapperKind             string                 `json:"inside_mapper_kind"`
-	InsideMapperPorts            []messaging.RemotePort `json:"inside_mapper_ports"`
-	InsideMapperInterleavingSize uint64                 `json:"inside_mapper_interleaving_size"`
-
-	OutsideMapperKind             string                 `json:"outside_mapper_kind"`
-	OutsideMapperPorts            []messaging.RemotePort `json:"outside_mapper_ports"`
-	OutsideMapperInterleavingSize uint64                 `json:"outside_mapper_interleaving_size"`
 }
 
 // Resources holds the data mover's wiring. The data mover owns no storage; it
@@ -96,6 +88,21 @@ type State struct {
 	DstByteGranularity uint64                    `json:"dst_byte_granularity"`
 	SrcSide            string                    `json:"src_side"`
 	DstSide            string                    `json:"dst_side"`
+
+	// InsideMapper and OutsideMapper route each side's addresses to remote
+	// ports. Build resolves them from Resources; they do not change after
+	// Build.
+	InsideMapper  portMapping `json:"inside_mapper"`
+	OutsideMapper portMapping `json:"outside_mapper"`
+}
+
+// portMapping is an address-to-port mapper flattened into serializable
+// fields. Kind "single" routes every address to Ports[0]; "interleaved"
+// spreads addresses across Ports in InterleavingSize-byte chunks.
+type portMapping struct {
+	Kind             string                 `json:"kind"`
+	Ports            []messaging.RemotePort `json:"ports"`
+	InterleavingSize uint64                 `json:"interleaving_size"`
 }
 
 // Comp is the data mover component.
@@ -111,21 +118,16 @@ func addressMustBeAligned(addr, granularity uint64) {
 	}
 }
 
-// findPort resolves a port mapper lookup from Spec fields.
-func findPort(
-	kind string,
-	ports []messaging.RemotePort,
-	interleavingSize uint64,
-	addr uint64,
-) messaging.RemotePort {
-	switch kind {
+// findPort returns the remote port that serves addr.
+func (pm portMapping) findPort(addr uint64) messaging.RemotePort {
+	switch pm.Kind {
 	case "single":
-		return ports[0]
+		return pm.Ports[0]
 	case "interleaved":
-		number := addr / interleavingSize % uint64(len(ports))
-		return ports[number]
+		number := addr / pm.InterleavingSize % uint64(len(pm.Ports))
+		return pm.Ports[number]
 	default:
-		log.Panicf("unknown mapper kind %q", kind)
+		log.Panicf("unknown mapper kind %q", pm.Kind)
 		return ""
 	}
 }

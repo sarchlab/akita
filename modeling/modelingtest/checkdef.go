@@ -50,9 +50,8 @@ func staticDefinition(t *testing.T, pkgPath string) schema.Definition {
 	return schema.Definition{}
 }
 
-// checkDefaults compares Go field values, before encoding/json applies byte
-// encoding, string tags or omitempty. This preserves integer precision and
-// distinguishes nil containers from empty containers.
+// checkDefaults compares Go field values, before encoding/json applies string
+// tags or omitempty. This preserves integer precision.
 func checkDefaults(t *testing.T, static schema.Definition, runtimeSpec any) {
 	t.Helper()
 	for name, mismatch := range defaultMismatches(static, runtimeSpec) {
@@ -84,8 +83,8 @@ func defaultMismatches(static schema.Definition, runtimeSpec any) map[string]str
 	return mismatches
 }
 
-// defaultValue uses the inspector's representation of primitive values and
-// containers. Maps use decimal integer keys, matching the schema's JSON keys.
+// defaultValue uses the inspector's representation of scalar values: 64-bit
+// integers and floats, so comparisons stay exact.
 func defaultValue(v reflect.Value) any {
 	switch v.Kind() {
 	case reflect.Bool:
@@ -98,25 +97,6 @@ func defaultValue(v reflect.Value) any {
 		return v.Float()
 	case reflect.String:
 		return v.String()
-	case reflect.Slice, reflect.Array:
-		if v.Kind() == reflect.Slice && v.IsNil() {
-			return nil
-		}
-		out := make([]any, v.Len())
-		for i := range out {
-			out[i] = defaultValue(v.Index(i))
-		}
-		return out
-	case reflect.Map:
-		if v.IsNil() {
-			return nil
-		}
-		out := map[string]any{}
-		iter := v.MapRange()
-		for iter.Next() {
-			out[fmt.Sprint(defaultValue(iter.Key()))] = defaultValue(iter.Value())
-		}
-		return out
 	default:
 		return nil
 	}

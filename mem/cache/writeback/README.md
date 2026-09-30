@@ -33,8 +33,9 @@ optionally invalidate the directory, and pause the cache.
   capacities, inflight limits, and address mapping. Port buffer sizes are chosen
   by the caller when assigning the port instances, not in the spec.
 - `State` — mutable runtime data: the directory state, MSHR state, all
-  inter-stage buffers and pipelines, the transaction list, and inflight
-  counters. Fully JSON-serializable, as required by the `State` constraint.
+  inter-stage buffers and pipelines, the transaction list, inflight
+  counters, and the lower-memory port names resolved from `Resources` at
+  Build. Fully JSON-serializable, as required by the `State` constraint.
 - `Resources` — shared wiring; holds the backing `*mem.Storage` and the
   address-to-port mapping used to route fetches/evictions to lower memory
   (supply either `AddressToPortMapper` or `RemotePorts`).
@@ -56,9 +57,9 @@ type Spec struct {
     MaxInflightFetch    int         // Concurrent fetches to lower memory
     MaxInflightEviction int         // Concurrent evictions to lower memory
 
-    // Address mapping to lower-level memory.
-    AddressMapperType string   // "single" or "interleaved"
-    RemotePortNames   []string
+    // Address mapping to lower-level memory. The remote ports come from
+    // Resources and are resolved into State at Build.
+    AddressMapperType string // "single" or "interleaved"
     InterleavingSize  uint64
 }
 ```

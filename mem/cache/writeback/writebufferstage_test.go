@@ -54,7 +54,6 @@ var _ = Describe("WriteBufferStage", func() {
 				NumSets:             64,
 				NumBanks:            1,
 				AddressMapperType:   "single",
-				RemotePortNames:     []string{"DRAM"},
 				WriteBufferCapacity: 16,
 				MaxInflightFetch:    4,
 				MaxInflightEviction: 4,
@@ -69,6 +68,7 @@ var _ = Describe("WriteBufferStage", func() {
 		m.comp.AssignPort("Bottom", bottomPort)
 
 		m.comp.State = initialState
+		m.comp.State.RemotePortNames = []string{"DRAM"}
 
 		wb = &writeBufferStage{
 			cache: m,

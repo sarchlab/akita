@@ -59,14 +59,13 @@ type DataMoveResponse struct {
 }
 ```
 
-- **Spec** — immutable config: `Freq`, `BufferSize`,
-  `InsideByteGranularity`/`OutsideByteGranularity`, and the inside/outside
-  address-mapper fields.
+- **Spec** — immutable config: `Freq`, `BufferSize`, and
+  `InsideByteGranularity`/`OutsideByteGranularity`.
 - **State** — mutable runtime: the single `CurrentTransaction` (with its pending
-  read/write maps and next read/write addresses) and the sliding `Buffer`.
+  read/write maps and next read/write addresses), the sliding `Buffer`, and the
+  inside/outside port mappings that Build flattens from `Resources`.
 - **Resources** — the inside/outside `mem.AddressToPortMapper`s describing which
-  remote port serves a given address on each side. They are optional; when
-  omitted the flat mapper fields in `Spec` are used.
+  remote port serves a given address on each side.
 
 ## Builder Pattern
 

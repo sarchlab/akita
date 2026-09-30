@@ -37,24 +37,24 @@ func validateForCheckpoint[S, T any](name string, spec S) {
 	}
 }
 
-// ValidateSpec checks that the given value is a struct containing only
-// primitive fields (bool, int*, uint*, float*, string), slices of primitives,
-// and maps with string keys and primitive values. No pointers, interfaces,
-// channels, or functions are allowed.
+// ValidateSpec checks that the given value is a struct containing only scalar
+// fields (bool, int*, uint*, float*, string, and named types based on them).
+// Slices, arrays, maps, nested structs, pointers, interfaces, channels, and
+// functions are not allowed: a Spec is flat configuration, and anything a
+// component derives or references belongs in State or Resources.
 func ValidateSpec(v any) error {
 	return validateValue(reflect.ValueOf(v), "spec", false)
 }
 
 // ValidateState checks that the given value is a struct containing only
-// primitive fields, simple nested structs, slices of primitives or structs,
-// and maps with string keys. Pointers, interfaces, channels, and functions
-// are not allowed. This is slightly more permissive than ValidateSpec in that
-// it allows nested structs.
+// scalar fields, slices, arrays, maps with string or integer keys, and simple
+// nested structs. Pointers, interfaces, channels, and functions are not
+// allowed.
 func ValidateState(v any) error {
 	return validateValue(reflect.ValueOf(v), "state", true)
 }
 
-func validateValue(v reflect.Value, path string, allowNestedStructs bool) error {
+func validateValue(v reflect.Value, path string, allowComposite bool) error {
 	if !v.IsValid() {
 		return fmt.Errorf("%s: invalid value", path)
 	}
@@ -65,10 +65,10 @@ func validateValue(v reflect.Value, path string, allowNestedStructs bool) error 
 		return fmt.Errorf("%s: expected struct, got %s", path, t.Kind())
 	}
 
-	return validateStructType(t, path, allowNestedStructs)
+	return validateStructType(t, path, allowComposite)
 }
 
-func validateFieldType(t reflect.Type, path string, allowNestedStructs bool) error {
+func validateFieldType(t reflect.Type, path string, allowComposite bool) error {
 	switch t.Kind() {
 	case reflect.Bool,
 		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
@@ -78,9 +78,19 @@ func validateFieldType(t reflect.Type, path string, allowNestedStructs bool) err
 		return nil
 
 	case reflect.Slice, reflect.Array:
-		return validateFieldType(t.Elem(), path+"[]", allowNestedStructs)
+		if !allowComposite {
+			return fmt.Errorf("%s: %s not allowed in spec; "+
+				"spec fields must be scalars", path, t.Kind())
+		}
+
+		return validateFieldType(t.Elem(), path+"[]", allowComposite)
 
 	case reflect.Map:
+		if !allowComposite {
+			return fmt.Errorf("%s: map not allowed in spec; "+
+				"spec fields must be scalars", path)
+		}
+
 		k := t.Key().Kind()
 		if k != reflect.String &&
 			k != reflect.Uint64 && k != reflect.Uint && k != reflect.Uint32 &&
@@ -88,15 +98,15 @@ func validateFieldType(t reflect.Type, path string, allowNestedStructs bool) err
 			return fmt.Errorf("%s: map key must be string or integer, got %s", path, k)
 		}
 
-		return validateFieldType(t.Elem(), path+"[value]", allowNestedStructs)
+		return validateFieldType(t.Elem(), path+"[value]", allowComposite)
 
 	case reflect.Struct:
-		if !allowNestedStructs {
+		if !allowComposite {
 			return fmt.Errorf("%s: nested structs not allowed in spec", path)
 		}
 
 		// Validate the nested struct's fields recursively.
-		return validateStructType(t, path, allowNestedStructs)
+		return validateStructType(t, path, allowComposite)
 
 	case reflect.Ptr, reflect.Interface, reflect.Chan, reflect.Func:
 		return fmt.Errorf("%s: disallowed kind %s", path, t.Kind())
@@ -106,7 +116,7 @@ func validateFieldType(t reflect.Type, path string, allowNestedStructs bool) err
 	}
 }
 
-func validateStructType(t reflect.Type, path string, allowNestedStructs bool) error {
+func validateStructType(t reflect.Type, path string, allowComposite bool) error {
 	// A type that customizes its own JSON is trusted: it round-trips on its own
 	// terms, so neither the structural rules nor the data-loss guard apply —
 	// provided both halves of the round trip exist. UnmarshalJSON must be
@@ -150,7 +160,7 @@ func validateStructType(t reflect.Type, path string, allowNestedStructs bool) er
 
 		fieldPath := fmt.Sprintf("%s.%s", path, field.Name)
 
-		if err := validateFieldType(field.Type, fieldPath, allowNestedStructs); err != nil {
+		if err := validateFieldType(field.Type, fieldPath, allowComposite); err != nil {
 			return err
 		}
 	}

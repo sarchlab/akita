@@ -58,8 +58,11 @@ func (b Builder) Build(name string) *Comp {
 		panic("datamover: WithSimulation is required")
 	}
 
-	spec := b.resolveSpec()
-	initialState := State{}
+	spec := b.spec
+	initialState := State{
+		InsideMapper:  flattenMapper(b.resources.InsideMapper),
+		OutsideMapper: flattenMapper(b.resources.OutsideMapper),
+	}
 
 	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithSimulation(b.simulation).
@@ -83,47 +86,26 @@ func (b Builder) Build(name string) *Comp {
 	return modelComp
 }
 
-// resolveSpec produces the final Spec used by the component. Any address mapper
-// injected through Resources takes precedence and is decomposed into the flat
-// mapper fields read at Tick time; otherwise the Spec's own mapper fields are
-// used as-is.
-func (b Builder) resolveSpec() Spec {
-	spec := b.spec
-
-	if b.resources.InsideMapper != nil {
-		inlineMapper(b.resources.InsideMapper,
-			&spec.InsideMapperKind,
-			&spec.InsideMapperPorts,
-			&spec.InsideMapperInterleavingSize)
-	}
-
-	if b.resources.OutsideMapper != nil {
-		inlineMapper(b.resources.OutsideMapper,
-			&spec.OutsideMapperKind,
-			&spec.OutsideMapperPorts,
-			&spec.OutsideMapperInterleavingSize)
-	}
-
-	return spec
-}
-
-// inlineMapper converts an AddressToPortMapper into serializable Spec fields.
-func inlineMapper(
-	mapper mem.AddressToPortMapper,
-	kind *string,
-	ports *[]messaging.RemotePort,
-	interleavingSize *uint64,
-) {
+// flattenMapper converts an AddressToPortMapper into the serializable
+// portMapping kept in State. A nil mapper yields an empty mapping.
+func flattenMapper(mapper mem.AddressToPortMapper) portMapping {
 	switch m := mapper.(type) {
+	case nil:
+		return portMapping{}
 	case *mem.SinglePortMapper:
-		*kind = "single"
-		*ports = []messaging.RemotePort{m.Port}
-		*interleavingSize = 0
+		return portMapping{
+			Kind:  "single",
+			Ports: []messaging.RemotePort{m.Port},
+		}
 	case *mem.InterleavedAddressPortMapper:
-		*kind = "interleaved"
-		*ports = make([]messaging.RemotePort, len(m.LowModules))
-		copy(*ports, m.LowModules)
-		*interleavingSize = m.InterleavingSize
+		ports := make([]messaging.RemotePort, len(m.LowModules))
+		copy(ports, m.LowModules)
+
+		return portMapping{
+			Kind:             "interleaved",
+			Ports:            ports,
+			InterleavingSize: m.InterleavingSize,
+		}
 	default:
 		panic("unsupported mapper type for inline conversion")
 	}

@@ -65,7 +65,6 @@ var _ = Describe("Directory", func() {
 				NumSets:           16,
 				NumBanks:          1,
 				AddressMapperType: "single",
-				RemotePortNames:   []string{"DRAM"},
 				WritePolicyType:   "write-around",
 			}).
 			Build("Cache")
@@ -81,6 +80,7 @@ var _ = Describe("Directory", func() {
 		c.comp.AssignPort("Bottom", bottomPort)
 
 		c.comp.State = initialState
+		c.comp.State.RemotePortNames = []string{"DRAM"}
 
 		d = &directory{
 			cache: c,

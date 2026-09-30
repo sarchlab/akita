@@ -65,7 +65,7 @@ func (b Builder) Build(name string) *Comp {
 	numSets := int(
 		b.spec.TotalByteSize / uint64(b.spec.WayAssociativity*blockSize))
 
-	spec := b.buildSpec(numSets)
+	spec, remotePortNames := b.buildSpec(numSets)
 
 	laneWidth := spec.NumReqPerCycle
 	if laneWidth == 1 {
@@ -73,6 +73,7 @@ func (b Builder) Build(name string) *Comp {
 	}
 
 	initialState := b.buildInitialState(name, spec, laneWidth, numSets)
+	initialState.RemotePortNames = remotePortNames
 
 	storage := b.resolveStorage(name, spec)
 
@@ -170,26 +171,28 @@ func (b Builder) buildInitialState(
 // buildSpec produces the final Spec used by the component. It derives the
 // number of sets and resolves the address mapper (from an injected mapper or
 // from the type string plus the remote ports in Resources) into the flat
-// address-mapping fields read at Tick time.
-func (b Builder) buildSpec(numSets int) Spec {
+// address-mapping fields read at Tick time. It returns the resolved remote
+// port names separately because they belong in State.
+func (b Builder) buildSpec(numSets int) (Spec, []string) {
 	spec := b.spec
 	if spec.NumBanks < 1 {
 		spec.NumBanks = 1
 	}
 	spec.NumSets = numSets
 
+	var remotePortNames []string
+
 	mapperType, remotePorts, interleavingSize := b.resolveAddressMapper()
 	if mapperType != "" {
-		remotePortNames := make([]string, len(remotePorts))
+		remotePortNames = make([]string, len(remotePorts))
 		for i, rp := range remotePorts {
 			remotePortNames[i] = string(rp)
 		}
 		spec.AddressMapperType = mapperType
-		spec.RemotePortNames = remotePortNames
 		spec.InterleavingSize = interleavingSize
 	}
 
-	return spec
+	return spec, remotePortNames
 }
 
 // resolveAddressMapper returns the address mapper type, remote ports, and

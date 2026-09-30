@@ -40,29 +40,15 @@ func validateSpecType(pkg *packages.Package, typ types.Type, index pkgIndex) err
 	return nil
 }
 
+// validateSpecFieldType accepts only scalar field types: booleans, integers
+// (except uintptr), floats, strings, and named types based on them.
 func validateSpecFieldType(typ types.Type) error {
-	switch t := typ.Underlying().(type) {
-	case *types.Basic:
-		if t.Kind() != types.Uintptr && t.Info()&(types.IsBoolean|types.IsInteger|types.IsFloat|types.IsString) != 0 {
-			return nil
-		}
-	case *types.Slice:
-		return validateSpecFieldType(t.Elem())
-	case *types.Array:
-		return validateSpecFieldType(t.Elem())
-	case *types.Map:
-		k, ok := t.Key().Underlying().(*types.Basic)
-		if !ok {
-			return fmt.Errorf("map key must be string or integer, got %s", t.Key())
-		}
-		switch k.Kind() {
-		case types.String, types.Int, types.Int32, types.Int64, types.Uint, types.Uint32, types.Uint64:
-			return validateSpecFieldType(t.Elem())
-		default:
-			return fmt.Errorf("map key must be string or integer, got %s", t.Key())
-		}
+	if t, ok := typ.Underlying().(*types.Basic); ok && t.Kind() != types.Uintptr &&
+		t.Info()&(types.IsBoolean|types.IsInteger|types.IsFloat|types.IsString) != 0 {
+		return nil
 	}
-	return fmt.Errorf("disallowed Spec type %s", typ)
+
+	return fmt.Errorf("disallowed Spec type %s: Spec fields must be scalars", typ)
 }
 
 // validateDefinition checks the definition's metadata invariants. The

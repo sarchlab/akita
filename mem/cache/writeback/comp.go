@@ -37,10 +37,10 @@ type Spec struct {
 	MaxInflightFetch    int         `json:"max_inflight_fetch"`
 	MaxInflightEviction int         `json:"max_inflight_eviction"`
 
-	// Address mapper configuration (inlined from interface)
-	AddressMapperType string   `json:"address_mapper_type"`
-	RemotePortNames   []string `json:"remote_port_names"`
-	InterleavingSize  uint64   `json:"interleaving_size"`
+	// Address mapper configuration (inlined from interface). The remote
+	// ports it routes to are resolved in Build into State.RemotePortNames.
+	AddressMapperType string `json:"address_mapper_type"`
+	InterleavingSize  uint64 `json:"interleaving_size"`
 }
 
 // State contains mutable runtime data for the writeback cache.
@@ -52,6 +52,10 @@ type State struct {
 	MSHRState      cache.MSHRState      `json:"mshr_state"`
 	Transactions   []transactionState   `json:"transactions"`
 	EvictingList   map[uint64]bool      `json:"evicting_list"`
+
+	// RemotePortNames are the ports the address mapper routes to, resolved
+	// from Resources in Build. They do not change after Build.
+	RemotePortNames []string `json:"remote_port_names"`
 
 	// Buffers (transaction indices stored as int)
 	DirStageBuf           queueing.Buffer[int]   `json:"dir_stage_buf"`

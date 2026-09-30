@@ -51,15 +51,12 @@ func (m *dataTransferMW) dstPort() messaging.Port {
 }
 
 func (m *dataTransferMW) findSrcPort(addr uint64) messaging.RemotePort {
-	spec := m.comp.Spec()
 	state := &m.comp.State
 	switch state.SrcSide {
 	case "inside":
-		return findPort(spec.InsideMapperKind, spec.InsideMapperPorts,
-			spec.InsideMapperInterleavingSize, addr)
+		return state.InsideMapper.findPort(addr)
 	case "outside":
-		return findPort(spec.OutsideMapperKind, spec.OutsideMapperPorts,
-			spec.OutsideMapperInterleavingSize, addr)
+		return state.OutsideMapper.findPort(addr)
 	default:
 		log.Panicf("unknown src side %q", state.SrcSide)
 		return ""
@@ -67,15 +64,12 @@ func (m *dataTransferMW) findSrcPort(addr uint64) messaging.RemotePort {
 }
 
 func (m *dataTransferMW) findDstPort(addr uint64) messaging.RemotePort {
-	spec := m.comp.Spec()
 	state := &m.comp.State
 	switch state.DstSide {
 	case "inside":
-		return findPort(spec.InsideMapperKind, spec.InsideMapperPorts,
-			spec.InsideMapperInterleavingSize, addr)
+		return state.InsideMapper.findPort(addr)
 	case "outside":
-		return findPort(spec.OutsideMapperKind, spec.OutsideMapperPorts,
-			spec.OutsideMapperInterleavingSize, addr)
+		return state.OutsideMapper.findPort(addr)
 	default:
 		log.Panicf("unknown dst side %q", state.DstSide)
 		return ""

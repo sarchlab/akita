@@ -358,12 +358,6 @@ func evalStructLiteral(
 
 	out := map[string]any{}
 	for name, value := range fields {
-		if _, ok := ast.Unparen(value).(*ast.CompositeLit); ok {
-			return nil, posErrorf(pkg, value.Pos(),
-				"DefaultSpec field %s: defaults must be scalar constants; "+
-					"leave slice, map and array fields unset", name)
-		}
-
 		v, err := evalConstExpr(pkg, value)
 		if err != nil {
 			return nil, err
@@ -375,13 +369,10 @@ func evalStructLiteral(
 }
 
 // evalConstExpr evaluates an expression that must be statically evaluable: a
-// constant expression, or nil.
+// constant expression.
 func evalConstExpr(pkg *packages.Package, expr ast.Expr) (any, error) {
 	if paren, ok := expr.(*ast.ParenExpr); ok {
 		return evalConstExpr(pkg, paren.X)
-	}
-	if tv, ok := pkg.TypesInfo.Types[expr]; ok && tv.IsNil() {
-		return nil, nil //nolint:nilnil // A nil container is a valid constant default.
 	}
 
 	tv, ok := pkg.TypesInfo.Types[expr]
@@ -394,31 +385,27 @@ func evalConstExpr(pkg *packages.Package, expr ast.Expr) (any, error) {
 }
 
 // zeroValue returns the default of a field the DefaultSpec literal leaves
-// out, in the same representation as constantValue. Slices and maps are nil;
-// arrays keep their length.
+// out, in the same representation as constantValue.
 func zeroValue(typ types.Type) any {
-	switch t := typ.Underlying().(type) {
-	case *types.Array:
-		out := make([]any, t.Len())
-		for i := range out {
-			out[i] = zeroValue(t.Elem())
-		}
-		return out
-	case *types.Basic:
-		switch {
-		case t.Info()&types.IsBoolean != 0:
-			return false
-		case t.Info()&types.IsUnsigned != 0:
-			return uint64(0)
-		case t.Info()&types.IsInteger != 0:
-			return int64(0)
-		case t.Info()&types.IsFloat != 0:
-			return float64(0)
-		case t.Info()&types.IsString != 0:
-			return ""
-		}
+	t, ok := typ.Underlying().(*types.Basic)
+	if !ok {
+		return nil
 	}
-	return nil
+
+	switch {
+	case t.Info()&types.IsBoolean != 0:
+		return false
+	case t.Info()&types.IsUnsigned != 0:
+		return uint64(0)
+	case t.Info()&types.IsInteger != 0:
+		return int64(0)
+	case t.Info()&types.IsFloat != 0:
+		return float64(0)
+	case t.Info()&types.IsString != 0:
+		return ""
+	default:
+		return nil
+	}
 }
 
 // constantValue converts a folded constant to a plain Go value based on the

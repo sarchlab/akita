@@ -42,12 +42,6 @@
       ]
     },
     {
-      "name": "Weights",
-      "json_name": "weights",
-      "type": "[]float64",
-      "doc": "Weights are per-lane scheduling weights."
-    },
-    {
       "name": "Hidden",
       "type": "int",
       "default": 0

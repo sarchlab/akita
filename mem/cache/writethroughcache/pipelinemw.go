@@ -33,22 +33,24 @@ func (m *pipelineMW) bottomPort() messaging.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
-// findPort resolves an address to a remote port using data from Spec.
+// findPort resolves an address to a remote port using the mapper
+// configuration in Spec and the remote ports resolved into State.
 func (m *pipelineMW) findPort(address uint64) messaging.RemotePort {
 	spec := m.comp.Spec()
+	names := m.comp.State.RemotePortNames
 
 	switch spec.AddressMapperType {
 	case "single":
-		if len(spec.RemotePortNames) > 0 {
-			name := spec.RemotePortNames[0]
+		if len(names) > 0 {
+			name := names[0]
 			if name != "" {
 				return messaging.RemotePort(name)
 			}
 		}
 	case "interleaved":
-		if n := uint64(len(spec.RemotePortNames)); n > 0 {
+		if n := uint64(len(names)); n > 0 {
 			idx := address / spec.InterleavingSize % n
-			name := spec.RemotePortNames[idx]
+			name := names[idx]
 			if name != "" {
 				return messaging.RemotePort(name)
 			}

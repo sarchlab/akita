@@ -75,8 +75,7 @@ func structFields(
 }
 
 // fieldDefault returns the explicit default from the DefaultSpec literal,
-// or the field's zero value when the literal leaves it out. Slices and maps
-// default to nil, which the schema omits.
+// or the field's zero value when the literal leaves it out.
 func fieldDefault(typ types.Type, explicit any) any {
 	if explicit != nil {
 		return explicit
