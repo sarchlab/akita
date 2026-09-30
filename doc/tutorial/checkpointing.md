@@ -150,8 +150,10 @@ type Comp = modeling.Component[Spec, State, Resources]
 `Spec` may contain only scalar fields: booleans, numbers, strings, and named
 types based on them. No slices, arrays, maps, or nested structs. `State` is more
 permissive: nested structs, slices, arrays, and maps (with string or integer
-keys) are all fine. Neither may contain pointers, interfaces, channels, or funcs
-(tag a field `json:"-"` to exempt one that setup rebuilds).
+keys) are all fine. Neither may contain pointers, interfaces, channels, or funcs;
+in `State` you may tag a field `json:"-"` to exempt one that setup rebuilds.
+Every field of either struct needs a distinct JSON name: `encoding/json`
+silently drops colliding fields, so `Build` rejects them.
 
 ### The builder validates this for you — loudly
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -38,10 +39,11 @@ func validateForCheckpoint[S, T any](name string, spec S) {
 }
 
 // ValidateSpec checks that the given value is a struct containing only scalar
-// fields (bool, int*, uint*, float*, string, and named types based on them).
-// Slices, arrays, maps, nested structs, pointers, interfaces, channels, and
-// functions are not allowed: a Spec is flat configuration, and anything a
-// component derives or references belongs in State or Resources.
+// fields (bool, int*, uint*, float*, string, and named types based on them),
+// including fields tagged `json:"-"`. Slices, arrays, maps, nested structs,
+// pointers, interfaces, channels, and functions are not allowed: a Spec is
+// flat configuration, and anything a component derives or references belongs
+// in State or Resources.
 func ValidateSpec(v any) error {
 	return validateValue(reflect.ValueOf(v), "spec", false)
 }
@@ -154,7 +156,9 @@ func validateStructType(t reflect.Type, path string, allowComposite bool) error 
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 
-		if tag := field.Tag.Get("json"); tag == "-" {
+		// State may exempt a field that setup rebuilds; every Spec field
+		// must still be a scalar.
+		if tag := field.Tag.Get("json"); tag == "-" && allowComposite {
 			continue
 		}
 
@@ -168,58 +172,63 @@ func validateStructType(t reflect.Type, path string, allowComposite bool) error 
 	return nil
 }
 
-// checkDuplicateJSONNames rejects two exported fields that encode under the
-// same JSON name. encoding/json silently drops both, so a checkpoint would
-// neither save nor restore them. Embedded fields without an explicit JSON
-// name are skipped: encoding/json flattens them by its own rules.
+// checkDuplicateJSONNames rejects exported fields that encode under the same
+// JSON name, following encoding/json's rules for embedded structs. When names
+// collide, encoding/json keeps at most one of the fields, so a checkpoint
+// would silently lose the others.
 func checkDuplicateJSONNames(t reflect.Type, path string) error {
-	seen := map[string]string{}
+	fields := map[string][]string{}
+	collectJSONFields(t, "", fields)
 
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		if !field.IsExported() {
-			continue
+	var dups []string
+	for name, paths := range fields {
+		if len(paths) > 1 {
+			dups = append(dups, name)
 		}
-
-		if _, tagged := field.Tag.Lookup("json"); field.Anonymous && !tagged {
-			continue
-		}
-
-		name := fieldJSONName(field)
-		if name == "" {
-			continue
-		}
-
-		if other, dup := seen[name]; dup {
-			return fmt.Errorf(
-				"%s: fields %s and %s have duplicate JSON name %q, so "+
-					"encoding/json silently drops both across a checkpoint",
-				path, other, field.Name, name)
-		}
-
-		seen[name] = field.Name
 	}
 
-	return nil
+	if len(dups) == 0 {
+		return nil
+	}
+
+	slices.Sort(dups)
+	name := dups[0]
+
+	return fmt.Errorf(
+		"%s: fields %s share JSON name %q; encoding/json keeps at most one "+
+			"of them, so a checkpoint would lose the others",
+		path, strings.Join(fields[name], " and "), name)
 }
 
-// fieldJSONName returns the name encoding/json uses for the field, or "" if
-// the field is excluded from JSON.
-func fieldJSONName(f reflect.StructField) string {
-	tag, ok := f.Tag.Lookup("json")
-	if !ok {
-		return f.Name
-	}
+// collectJSONFields records, by JSON name, the Go path of every field
+// encoding/json encodes for t. Like encoding/json, it flattens embedded
+// structs whose JSON tag gives no name, including unexported ones.
+func collectJSONFields(t reflect.Type, prefix string, fields map[string][]string) {
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
 
-	name, _, _ := strings.Cut(tag, ",")
-	if name == "-" {
-		return ""
-	}
-	if name == "" {
-		return f.Name
-	}
+		tag := f.Tag.Get("json")
+		if tag == "-" {
+			continue
+		}
 
-	return name
+		name, _, _ := strings.Cut(tag, ",")
+
+		if f.Anonymous && name == "" && f.Type.Kind() == reflect.Struct {
+			collectJSONFields(f.Type, prefix+f.Name+".", fields)
+			continue
+		}
+
+		if !f.IsExported() {
+			continue
+		}
+
+		if name == "" {
+			name = f.Name
+		}
+
+		fields[name] = append(fields[name], prefix+f.Name)
+	}
 }
 
 // serializesToEmpty reports whether a struct type holds unexported fields yet

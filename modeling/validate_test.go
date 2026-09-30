@@ -127,8 +127,8 @@ func TestValidateState_RejectsPointerInNestedCollection(t *testing.T) {
 }
 
 // dupJSONSpec's N is untagged, so its JSON name is the field name "N",
-// colliding with B's explicit tag. encoding/json drops both. go vet only
-// catches two identical explicit tags, not this collision.
+// colliding with B's explicit tag: encoding/json keeps only the tagged B.
+// go vet only catches two identical explicit tags, not this collision.
 type dupJSONSpec struct {
 	N int
 	B int `json:"N"`
@@ -151,22 +151,88 @@ type distinctJSONState struct {
 	x       int
 }
 
+type embeddedA struct{ X int }
+type embeddedB struct{ X int }
+
+// stateWithEmbeddedCollision embeds two structs that both contribute X;
+// encoding/json flattens them and drops both. Count keeps the struct from
+// serializing as {}, which a separate check already rejects.
+type stateWithEmbeddedCollision struct {
+	embeddedA
+	embeddedB
+	Count int
+}
+
+// stateWithShadowedField has an outer X that hides the embedded one, which
+// encoding/json then never encodes.
+type stateWithShadowedField struct {
+	embeddedA
+	X int
+}
+
+type header struct{ Seq int }
+
+// stateWithUnnamedEmbeddedTag embeds header with a tag that sets only an
+// option. encoding/json still flattens it, so its JSON names are "Seq" and
+// the explicit "Header" field, which do not collide.
+type stateWithUnnamedEmbeddedTag struct {
+	header `json:",omitempty"`
+	Other  int `json:"Header"`
+}
+
 func TestValidateSpec_RejectsDuplicateJSONNames(t *testing.T) {
 	err := ValidateSpec(dupJSONSpec{})
-	if err == nil || !strings.Contains(err.Error(), `duplicate JSON name "N"`) {
+	if err == nil || !strings.Contains(err.Error(), `share JSON name "N"`) {
 		t.Fatalf("expected duplicate JSON name error, got %v", err)
 	}
 }
 
 func TestValidateState_RejectsDuplicateJSONNames(t *testing.T) {
-	err := ValidateState(stateWithDupJSON{})
-	if err == nil || !strings.Contains(err.Error(), `duplicate JSON name "X"`) {
-		t.Fatalf("expected duplicate JSON name error in nested state, got %v", err)
+	for name, state := range map[string]any{
+		"nested struct":       stateWithDupJSON{},
+		"embedded collision":  stateWithEmbeddedCollision{},
+		"shadowed by outer X": stateWithShadowedField{},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := ValidateState(state)
+			if err == nil || !strings.Contains(err.Error(), `share JSON name "X"`) {
+				t.Fatalf("expected duplicate JSON name error, got %v", err)
+			}
+		})
 	}
 }
 
 func TestValidateState_AllowsNamesIgnoredByJSON(t *testing.T) {
-	if err := ValidateState(distinctJSONState{x: 1}); err != nil {
+	for name, state := range map[string]any{
+		"unexported and dash-tagged": distinctJSONState{x: 1},
+		"embedded with option tag":   stateWithUnnamedEmbeddedTag{},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidateState(state); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateSpec_RejectsNonScalarDashField(t *testing.T) {
+	type spec struct {
+		N    int   `json:"n"`
+		List []int `json:"-"`
+	}
+
+	if err := ValidateSpec(spec{}); err == nil {
+		t.Fatal("expected a json:\"-\" slice field to be rejected in a Spec")
+	}
+}
+
+func TestValidateState_AllowsDashFieldRebuiltBySetup(t *testing.T) {
+	type state struct {
+		N    int    `json:"n"`
+		Hook func() `json:"-"`
+	}
+
+	if err := ValidateState(state{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
