@@ -92,6 +92,31 @@ func TestInspect(t *testing.T) {
 			checkLocalProto(t, byPkg)
 		})
 
+	checkDeclarationForms(t, byPkg)
+
+	t.Run("package without definition is skipped", func(t *testing.T) {
+		if _, ok := byPkg["github.com/sarchlab/akita/v5/timing"]; ok {
+			t.Errorf("timing has no definition but one was extracted")
+		}
+	})
+
+	for _, c := range expectedErrors {
+		t.Run(c.name+" is an error", func(t *testing.T) {
+			checkError(t, errs, c.pkgSubstr, c.msgSubstr)
+		})
+	}
+
+	t.Run("no unexpected errors", func(t *testing.T) {
+		checkNoUnexpectedErrors(t, errs)
+	})
+}
+
+// checkDeclarationForms covers definitions and resources written in less
+// common but valid forms: through type aliases, with nil roles, and behind
+// a pointer WithResources parameter.
+func checkDeclarationForms(t *testing.T, byPkg map[string]schema.Definition) {
+	t.Helper()
+
 	t.Run("definitions declared through aliases", func(t *testing.T) {
 		for pkg, name := range map[string]string{
 			"aliasdef":        "AliasDef",
@@ -117,22 +142,6 @@ func TestInspect(t *testing.T) {
 		if len(def.Resources) != 1 || def.Resources[0].Name != "Storage" {
 			t.Errorf("Resources = %+v, want Storage", def.Resources)
 		}
-	})
-
-	t.Run("package without definition is skipped", func(t *testing.T) {
-		if _, ok := byPkg["github.com/sarchlab/akita/v5/timing"]; ok {
-			t.Errorf("timing has no definition but one was extracted")
-		}
-	})
-
-	for _, c := range expectedErrors {
-		t.Run(c.name+" is an error", func(t *testing.T) {
-			checkError(t, errs, c.pkgSubstr, c.msgSubstr)
-		})
-	}
-
-	t.Run("no unexpected errors", func(t *testing.T) {
-		checkNoUnexpectedErrors(t, errs)
 	})
 }
 

@@ -246,14 +246,14 @@ func componentSpecType(
 func builderResourcesType(pkg *packages.Package) (types.Type, error) {
 	obj, ok := pkg.Types.Scope().Lookup(builderTypeName).(*types.TypeName)
 	if !ok {
-		return nil, nil
+		return nil, nil //nolint:nilnil // No Builder means no resources.
 	}
 
 	// The pointer method set holds both value- and pointer-receiver methods.
 	sel := types.NewMethodSet(types.NewPointer(obj.Type())).
 		Lookup(pkg.Types, withResourcesMethod)
 	if sel == nil {
-		return nil, nil
+		return nil, nil //nolint:nilnil // A Builder may take no resources.
 	}
 
 	sig, ok := sel.Obj().Type().(*types.Signature)
