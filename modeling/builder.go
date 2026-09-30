@@ -63,7 +63,7 @@ func (b Builder[S, T, R]) Build(name string) *Component[S, T, R] {
 	}
 	comp.TickingComponent = NewTickingComponent(
 		name, b.simulation, b.freq, comp)
-	b.definition.declarePorts(comp)
+	b.definition.declarePorts(comp.PortOwnerBase)
 
 	return comp
 }

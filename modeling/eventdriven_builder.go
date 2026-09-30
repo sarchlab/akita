@@ -76,7 +76,7 @@ func (b EventDrivenBuilder[S, T, R]) Build(name string) *EventDrivenComponent[S,
 		processor:     b.processor,
 		pendingWakeup: math.MaxUint64,
 	}
-	b.definition.declarePorts(comp)
+	b.definition.declarePorts(comp.PortOwnerBase)
 
 	if handlers, ok := b.simulation.GetEngine().(timing.HandlerRegistry); ok {
 		handlers.RegisterHandler(name, comp)

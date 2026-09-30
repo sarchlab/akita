@@ -51,17 +51,10 @@ type ComponentDef[S any] struct {
 	Ports []PortDef
 }
 
-// portDeclarer is the declaration half of messaging.PortOwnerBase, which
-// ComponentDef uses to declare its ports.
-type portDeclarer interface {
-	DeclarePort(name string, roles ...*messaging.Role)
-	DeclarePortGroup(name string, roles ...*messaging.Role)
-}
-
-// declarePorts declares every port and port group of the definition on the
-// given component. Builder.Build and EventDrivenBuilder.Build call it for the
-// definition passed to WithDefinition.
-func (d ComponentDef[S]) declarePorts(po portDeclarer) {
+// declarePorts declares every port and port group of the definition on a
+// component's PortOwnerBase. Builder.Build and EventDrivenBuilder.Build call
+// it for the definition passed to WithDefinition.
+func (d ComponentDef[S]) declarePorts(po *messaging.PortOwnerBase) {
 	for _, p := range d.Ports {
 		if p.Group {
 			po.DeclarePortGroup(p.Name, p.Roles...)
