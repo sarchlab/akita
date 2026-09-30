@@ -79,7 +79,7 @@ of jobs, each taking a fixed number of cycles. It opens a task when a job
 starts and closes it when the job finishes:
 
 ```go
-func (m *workerMW) Tick() bool {
+func (m *workerMW) Handle(_ timing.Event) bool {
     s := &m.comp.State
 
     if !s.Working {
@@ -87,6 +87,7 @@ func (m *workerMW) Tick() bool {
             return false
         }
 
+        // Start a new job and open a tracing task for it.
         s.NextID++
         s.CurTaskID = s.NextID
         tracing.StartTask(m.comp, tracing.TaskStart{
@@ -102,6 +103,7 @@ func (m *workerMW) Tick() bool {
         return true
     }
 
+    // Working: count down, and close the task when the job finishes.
     s.CountDown--
     if s.CountDown == 0 {
         tracing.EndTask(m.comp, tracing.TaskEnd{ID: s.CurTaskID})
@@ -112,7 +114,9 @@ func (m *workerMW) Tick() bool {
 }
 ```
 
-With `NumJobs: 3` and `CyclesPerJob: 4` at 1 GHz, each job spans 4 cycles =
+The worker's `Definition` gives it a `NewState` that loads all of its jobs
+up front (`State{JobsLeft: c.Spec().NumJobs}`). With the default
+`NumJobs: 3` and `CyclesPerJob: 4` at 1 GHz, each job spans 4 cycles =
 4000 ps, and the three run back to back.
 
 ## Seeing a Number

@@ -16,7 +16,7 @@ explains the motivation, shows before/after code, and notes pitfalls.
 3. [Unified Control Protocol](#3-unified-control-protocol)
 4. [Event Serialization: Handler() → HandlerID()](#4-event-serialization-handler--handlerid)
 5. [In-Place State Update](#5-in-place-state-update)
-6. [Component Model: Spec + State + Ports + Middleware + Hooks](#6-component-model)
+6. [Component Models: Five Structs + Definition](#6-component-model)
 7. [DRAM Improvements](#7-dram-improvements)
 8. [Port Creation API](#8-port-creation-api)
 9. [Queueing V5](#9-queueing-v5)
@@ -360,28 +360,21 @@ type HandlerRegistry interface {
 }
 ```
 
-Components register themselves during construction. For example,
-`NewTickingComponent` automatically registers with the engine:
+Components register themselves during construction. Every component model's
+`Build` ends with `modeling.Register`, which registers the instance's ports,
+registers the instance with the engine under its name (so events whose
+`HandlerID()` is that name reach it), and registers it with the simulation:
 
 ```go
-// v5/sim/ticker.go
-func NewTickingComponent(
-    name string,
-    sim timing.Simulation,
-    freq Freq,
-    ticker Ticker,
-) *TickingComponent {
-    tc := new(TickingComponent)
-    tc.TickScheduler = NewTickScheduler(name, sim, freq)
-    tc.ComponentBase = NewComponentBase(name)
-    tc.ticker = ticker
+// v5/modeling/component_base.go
+func Register[S, T, R, P, M any](base *ComponentBase[S, T, R, P, M]) {
+    registerPorts(base.simulation, &base.Ports)
 
-    // Auto-register so events with HandlerID_==name route here.
-    if handlers, ok := sim.GetEngine().(timing.HandlerRegistry); ok {
-        handlers.RegisterHandler(name, tc)
+    if handlers, ok := base.simulation.GetEngine().(timing.HandlerRegistry); ok {
+        handlers.RegisterHandler(base.name, base.owner)
     }
 
-    return tc
+    base.simulation.RegisterComponent(base.owner)
 }
 ```
 
@@ -408,13 +401,13 @@ type Event interface {
 }
 
 // Creating an event:
-evt := sim.NewEventBase(now, "MyComponent") // pass handler name
+evt := timing.MakeEventBase(sim.NewID(), now, "MyComponent") // pass handler name
 ```
 
 ### Migration Checklist
 
 - Replace `evt.Handler()` calls with `evt.HandlerID()`.
-- Replace `NewEventBase(time, handlerObj)` with `NewEventBase(time, "handlerName")`.
+- Replace `NewEventBase(time, handlerObj)` with `timing.MakeEventBase(id, time, "handlerName")`.
 - Ensure all event handlers are registered with the engine via `RegisterHandler`.
 - Custom event types: change the `Handler` field from interface to `string`.
 
@@ -426,33 +419,37 @@ evt := sim.NewEventBase(now, "MyComponent") // pass handler name
 were deep copies. This was expensive and error-prone. V5 simplifies to
 one mutable state value per component.
 
-### V5 Tick Cycle
+### V5 Dispatch
 
-From `v5/modeling/component.go`:
+A V5 component hands each event it receives to its middlewares, which mutate
+its one State in place. From `v5/modeling/ticking/component.go`:
 
 ```go
-func (c *Component[S, T]) Tick() bool {
-    return c.MiddlewareHolder.Tick()
+func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
+    if modeling.Dispatch(c.pipeline, e) {
+        c.ticks.TickLater()
+    }
 }
 ```
 
-Components store one state value. Middlewares can read a value copy with
-`State` or mutate the state directly with `State` field. Mutations via
-`State` field are immediately visible through `State`.
+Components store one state value, the exported `State` field. A middleware
+mutates it in place through a pointer, and the change is immediately visible
+to every middleware that runs after it.
 
 ### State Access
 
 ```go
-// Read current state value.
-state := comp.State
+// Inside a middleware: mutate the component's State in place.
+state := &m.comp.State
+state.Counter++
 
-// Get pointer to state for mutation.
-statePtr := &comp.State
-statePtr.Counter++
-
-// direct state assignment replaces the state.
-comp.State = initialState
+// Anywhere: read a copy, for example in a test or a report.
+snapshot := comp.State
 ```
+
+The initial State comes from the `Definition`'s `NewState` (or is the zero
+value), and loading a checkpoint replaces it wholesale. Only the component's
+own code writes it.
 
 ### Before / After
 
@@ -469,8 +466,8 @@ comp.CommitNextState()        // deep copy next → current
 
 **After (V5) — single-state update:**
 ```go
-// Read and write through `State` field pointer.
-state := &comp.State
+// Inside a middleware: read and write through a pointer to the State field.
+state := &m.comp.State
 state.Value++                  // direct mutation, visible immediately
 
 // No explicit commit needed.
@@ -479,65 +476,176 @@ state.Value++                  // direct mutation, visible immediately
 ### Migration Checklist
 
 - Remove any deep-copy logic between current/next state.
-- Use `State` for value reads and `State` field for direct mutation.
-- For initialization, use `comp.State = initialState`.
-- For checkpoint restore, assign `comp.State`.
+- Mutate `State` in place through a pointer (`&m.comp.State`) from the
+  component's middlewares; read a copy with `comp.State`.
+- For initialization, return the initial State from the `Definition`'s
+  `NewState`.
+- For checkpoint restore, write nothing: the component model's
+  `LoadCheckpoint` replaces the State.
 
 ---
 
 ## 6. Component Model
 
-V5 unifies component structure into five orthogonal parts. See the
-"Defining Components in V5" section below for the full philosophy.
+**Motivation:** In V4 every component was a hand-written struct: it embedded
+the engine's ticking base, created its own ports in a per-package builder, and
+implemented a single per-tick method. V5 defines every component the same way
+— five structs and a `Definition` in a package of its own — and a **component
+model** supplies everything else: scheduling, port binding, registration, and
+checkpointing. See "Defining Components in V5" below for the full philosophy.
 
 ### Anatomy
 
-| Part | Role | Key Rule |
-|------|------|----------|
-| **Spec** | Immutable configuration | Scalar fields only (bool, numbers, strings, and named types based on them). No slices, arrays, maps, nested structs, pointers, or interfaces. |
-| **State** | Mutable runtime data | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. |
-| **Ports** | Communication endpoints | Declared by the component (`DeclarePort`); instances built and registered externally with a port builder (`modeling.MakePortBuilder`), then attached via `AssignPort(name, port)`. Never constructed internally. |
-| **Middlewares** | Per-tick behavior pipeline | Ordered. Operate on State via `State` field. Stateless w.r.t. external deps. |
-| **Hooks** | Observation/tracing | Attached via `HookableBase`. Don't affect simulation logic. |
+| Struct | What it is | Supplied by | Key rule |
+|--------|------------|-------------|----------|
+| **Spec** | Configuration | System builder (defaults in `Definition.DefaultSpec`) | Scalar fields only (bool, numbers, strings, and named types based on them). No slices, arrays, maps, nested structs, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
+| **State** | Mutable runtime data, saved in checkpoints | Component (`NewState`, or the zero value) | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. Written only by the component's own code. |
+| **Resources** | References to shared objects (storage, page table, address mapper) | System builder | Not checkpointed; the rebuild supplies them again. `modeling.None` when there are none. |
+| **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`messaging.NewPort`) | Bound and registered by `Build`; none is added later. A field may carry an `akita:"role=<protocol>/<role>"` tag. |
+| **Middlewares** | The behavior: one exported pointer field per middleware | Component (`NewMiddlewares`) | Each implements `Handle(e timing.Event) bool`; they run in field order and hold only references. |
 
-### Generic Component
+Hooks are not a sixth struct: every component embeds `hooking.HookableBase`,
+so it accepts hooks and fires its own hook points (`InvokeHook`) without
+affecting simulation logic.
+
+### Three Component Models
+
+Each model is a sub-package of `modeling` with the same shape — a `Definition`,
+a `Builder`, and a generic `Component` over the five structs. They differ only
+in which events reach the middlewares:
+
+| Model | Events that reach the middlewares | Use it for |
+|-------|-----------------------------------|------------|
+| `modeling/ticking` | a `TickEvent` every cycle while any middleware makes progress; port activity restarts ticking (`TickLater` starts it) | work that advances cycle by cycle: pipelines, caches, switches. The default, and the usual target for a V4 ticking component. |
+| `modeling/wakeup` | a data-less `WakeupEvent` on port activity, or at a time a middleware asked for with `WakeAt` | a component that is idle most of the time and knows when it next has work |
+| `modeling/event` | `event.Recv` and `event.PortFree` for port activity, and the events the component schedules for itself with `Schedule` | behavior that is a set of distinct happenings, each with its own data and time |
+
+The *Wakeup and Event Components* tutorial walks through the two clockless
+models.
+
+### Declaring a Component
+
+The reorder buffer in `mem/rob` is a small, complete example. Its package
+declares the five structs and the `Comp` alias (Resources is `modeling.None`):
 
 ```go
-// v5/modeling/component.go
-type Component[S any, T any] struct {
-    *sim.TickingComponent
-    sim.MiddlewareHolder
+// mem/rob/comp.go
+type Spec struct {
+    Freq           timing.Freq `json:"freq"`
+    BufferSize     int         `json:"buffer_size"`
+    NumReqPerCycle int         `json:"num_req_per_cycle"`
 
-    spec    S
-    current T
-    next    T
+    // BottomUnit is the remote port of the unit that the reorder buffer
+    // forwards requests to. The reorder buffer rewrites the Dst of every
+    // shadow request to this value.
+    BottomUnit messaging.RemotePort `json:"bottom_unit"`
+}
+
+type State struct {
+    Transactions  []transactionState       `json:"transactions"`
+    ControlState  memcontrolprotocol.State `json:"control_state"`
+    CurrentCmdID  uint64                   `json:"current_cmd_id"`
+    CurrentCmdSrc messaging.RemotePort     `json:"current_cmd_src"`
+}
+
+type Ports struct {
+    Top     messaging.Port `akita:"role=mem/responder"`
+    Bottom  messaging.Port `akita:"role=mem/requester"`
+    Control messaging.Port `akita:"role=mem.control/responder"`
+}
+
+type Middlewares struct {
+    Pipeline *middleware
+}
+
+type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
+```
+
+and its `Definition`:
+
+```go
+// mem/rob/definition.go
+var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
+    DefaultSpec: Spec{
+        Freq:           1 * timing.GHz,
+        BufferSize:     128,
+        NumReqPerCycle: 4,
+    },
+    NewMiddlewares: newMiddlewares,
+}
+
+func newMiddlewares(c *Comp) Middlewares {
+    return Middlewares{Pipeline: &middleware{comp: c}}
 }
 ```
 
-`S` is the Spec type, `T` is the State type. Both are plain structs.
+A middleware holds the component and implements `Handle`:
+
+```go
+// mem/rob/middleware.go
+func (m *middleware) Handle(_ timing.Event) bool {
+    madeProgress := false
+
+    madeProgress = m.processControlMsg() || madeProgress
+
+    switch m.comp.State.ControlState {
+    case memcontrolprotocol.StateEnabled, memcontrolprotocol.StateDraining:
+        madeProgress = m.runPipeline() || madeProgress
+    }
+
+    return madeProgress
+}
+```
+
+`DefaultSpec` must be a keyed literal with constant leaves, and `NewState` and
+`NewMiddlewares` must name functions, because the `inspect` package reads the
+`Definition` without running the code. A one-line test keeps the static and
+runtime views in agreement:
+
+```go
+// mem/rob/definition_test.go
+func TestDefinitionMatchesSource(t *testing.T) {
+    modelingtest.CheckTicking(t, Definition)
+}
+```
+
+`Comp` is an alias of a type from another package, so Go allows no methods on
+it. What used to be an exported method becomes a package function that takes
+the instance — `ping.SchedulePing(comp, sendAt, dst)` in `examples/ping` — and
+internal helpers become methods of the middlewares.
 
 ### Building a Component
 
+The **system builder** — the code that assembles a simulation — creates every
+port and builds the instance:
+
 ```go
-comp := modeling.NewBuilder[MySpec, MyState]().
+spec := rob.Definition.DefaultSpec
+spec.BottomUnit = bottomUnit.AsRemote()
+
+r := rob.Definition.Builder().
     WithSimulation(sim).
-    WithFreq(1 * sim.GHz).
-    WithSpec(mySpec).
-    Build("MyComponent")
+    WithSpec(spec).
+    WithPorts(rob.Ports{
+        Top:     messaging.NewPort(nil, 4, 4, "ROB.Top"),
+        Bottom:  messaging.NewPort(nil, 4, 4, "ROB.Bottom"),
+        Control: messaging.NewPort(nil, 4, 4, "ROB.Control"),
+    }).
+    Build("ROB")
 
-comp.State = initialState
-comp.AddMiddleware(&myMiddleware{comp: comp})
-
-comp.DeclarePort("Top")
-
-// During wiring, after the component is built, create and attach the instance:
-port := messaging.NewPort(comp, 4, 4, "MyComponent.Top")
-comp.AssignPort("Top", port)
+conn.PlugIn(r.Ports.Top)
 ```
+
+`Build` validates the Spec and State, binds each port to the instance
+(checking that it is named `<instance>.<Field>`, or `<instance>.<Field>[i]` for
+member `i` of a port group), creates the State and the middlewares, and
+registers the ports and the instance with the simulation. No port or middleware
+is added afterward; the component and outside code reach ports as fields,
+`r.Ports.Top`.
 
 ### Defining Components in V5: Philosophy and Patterns
 
-V5 unifies how components are modeled and wired. Each component is a single struct composed of four orthogonal parts: Spec, State, Ports, and Middlewares. The goals are: declarative configuration, local and serializable runtime state, explicit wiring, testability, and deterministic snapshot/restore.
+V5 unifies how components are modeled and wired. Each component type is five structs — Spec, State, Resources, Ports, and Middlewares — and a `Definition`, declared in a package of its own; a component model turns them into a running component. The goals are: declarative configuration, local and serializable runtime state, explicit wiring, testability, and deterministic snapshot/restore.
 
 #### Core Principles
 
@@ -545,76 +653,86 @@ V5 unifies how components are modeled and wired. Each component is a single stru
    - Describes behavior and dependencies using only scalar fields: bool, numbers, strings, and named types based on them (such as `timing.Freq` or an enum-like `type Mode string`). No slices, arrays, maps, or nested structs.
    - Strategy dependencies are expressed as flat scalar fields: a kind plus its scalar parameters (e.g., `AddressMapperType: "interleaved"` and `InterleavingSize: 4096`).
    - No pointers or live objects in Spec. Keep it JSON/YAML‑friendly and hashable.
-   - Validation and defaults are part of the component package (e.g., `validate()` + `defaults()`).
+   - Defaults live in `Definition.DefaultSpec`; the system builder copies it, changes fields, and passes the result to `WithSpec`.
 
 2. State (mutable runtime data)
    - Pure data only: scalars, slices, arrays, maps with string or integer keys, and simple nested structs.
    - No live handles, functions, channels, or ports in State.
    - All cross‑references use stable identifiers (IDs), never in‑memory pointers.
-   - Snapshot/restore uses deep copies of State so checkpoints are immutable.
+   - Written only by the component's own code: its `NewState`, its middlewares, and functions its package exports for the system builder (such as `ping.SchedulePing`).
+   - A checkpoint serializes the State; loading one replaces it wholesale.
 
-3. Ports (declared by the component, instances injected)
-   - A component declares the ports it has (`DeclarePort`) but never constructs the instances or owns connections. Port instances are built and registered during wiring with a port builder (`modeling.MakePortBuilder`, which registers each port with the simulation) and attached via `AssignPort(name, port)`.
-   - Components access ports by name via `GetPortByName("...")` to avoid compile‑time coupling.
+3. Resources (references supplied by the system builder)
+   - References to shared objects — a `*mem.Storage`, a `vm.PageTable`, a `mem.AddressToPortMapper` — passed with `WithResources`.
+   - Not checkpointed. A shared object that holds data checkpoints itself as a registered resource, and the rebuild supplies the same references again.
 
-4. Middlewares (ordered, stateless over the component)
-   - Implement the per‑tick pipeline. Each middleware operates on the component's State and interacts with Ports.
-   - Keep middlewares stateless wrt external dependencies; resolve them at build time and pass the resolved handles in.
-   - Prefer tick‑driven countdowns/backpressure over ad‑hoc scheduled events for simpler snapshots and determinism.
+4. Ports (declared by the component, created by the system builder)
+   - A component declares the ports it has as the fields of its `Ports` struct, tagged with the protocol roles they speak, but never constructs the instances or owns connections.
+   - The system builder creates each port with `messaging.NewPort(nil, in, out, "<instance>.<Field>")`, choosing its buffer sizes, and passes them all to `Build`, which binds them to the component and registers them with the simulation.
+   - Middlewares reach ports as fields (`m.comp.Ports.Top`), checked by the compiler.
+
+5. Middlewares (ordered, holding only references)
+   - Each middleware implements `Handle(e timing.Event) bool` and is an exported pointer field of `Middlewares`; the component passes every event to them in field order. Created in `NewMiddlewares`.
+   - A middleware holds the component pointer and nothing mutable; everything that changes lives in State.
+   - In a ticking component, prefer tick‑driven countdowns/backpressure over ad‑hoc scheduled events for simpler snapshots and determinism. When the behavior is naturally a set of timed events, use the event model instead.
 
 #### Dependency Injection and Shared State
 
 - Strategy injection (e.g., address conversion)
   - Keep in Spec as flat scalar fields (a `Kind` string plus scalar parameters), not as a live object.
-  - Resolve to concrete implementations locally in the component builder and inject into middlewares.
+  - Resolve to concrete implementations in the component package (in `NewState` or `NewMiddlewares`), or accept a ready-made object through Resources — the caches take a `mem.AddressToPortMapper` either way.
   - On restore, reconstruct from Spec; never serialize strategy objects.
 
 - Emulation state (e.g., memory storage)
-  - Treat as shared state separate from timing logic. Store only an ID (e.g., `StorageRef`) in Spec/State.
-  - Keep a per‑simulation state registry; components resolve handles by ID at runtime.
-  - Snapshot/restore orchestrates shared state once per ID (outside components); components snapshot only their own State.
+  - Treat as shared state separate from timing logic. The system builder creates the `*mem.Storage` and passes it through Resources (`dram.Resources{Storage: storage}`); several components may share one.
+  - The storage checkpoints itself once, as a registered resource; components checkpoint only their own State.
 
-#### Build and Wire (two stages)
+#### Build and Wire
 
-1. Build from Spec
-   - `Builder.WithSimulation(sim).WithSpec(spec).Build(name)` constructs the component with defaults and resolved strategies, and declares the component's ports.
-   - Do not create the port instances or connect them here.
+1. Create ports
+   - Create every port with `messaging.NewPort`, named `<instance>.<Field>` (or `<instance>.<Field>[i]` for member `i` of a port group).
+   - Creating ports first lets one component's Spec name another's port (`spec.BottomUnit = port.AsRemote()`).
 
-2. Wire topology
-   - Build the port instances with a port builder (which registers each with the simulation) and the connections, then attach ports via `AssignPort("...", port)`.
+2. Build from the Definition
+   - `Definition.Builder().WithSimulation(sim).WithSpec(spec).WithResources(res).WithPorts(ports).Build(name)` validates the configuration, binds the ports, creates the State and middlewares, and registers everything with the simulation.
+
+3. Wire topology
+   - Build the connections and plug in the ports, reached as `comp.Ports.X`.
    - Use names consistently so components and tooling can introspect topology.
 
 #### Determinism and Introspection
 
 - Determinism: avoid non‑deterministic IDs or iteration order; snapshot ID generators; canonicalize map iteration by sorting.
-- Introspection: provide methods to inspect effective Spec (with defaults) and to dump State for debugging.
-- Tracing/metrics: attach as middlewares or hooks; avoid embedding tracing in business logic.
+- Introspection: `comp.Spec()` returns the effective Spec and `comp.State` can be dumped for debugging; the `inspect` package reads each `Definition`, its ports, and their roles without running the code.
+- Tracing/metrics: attach as hooks; avoid embedding tracing in business logic.
 
 #### Testing and Mocks
 
 - Favor local interfaces inside the component package to reduce external coupling (e.g., `Storage`, `AddressConverter`, `StateAccessor`).
 - Generate mocks from local interfaces for unit tests; avoid importing remote mocks.
-- Drive behavior via ticks and ports; avoid requiring real engines or networks in unit tests.
+- Drive behavior via ticks and ports; avoid requiring real engines or networks in unit tests. `modelingtest.Tick(comp)` hands every middleware of a ticking component one tick and reports whether any made progress, without scheduling the next one, so a test steps the component cycle by cycle.
+- Add a `modelingtest.CheckTicking(t, Definition)` test (or `CheckWakeup`, `CheckEvent`) to every component package.
 
 #### Example: Ideal Memory Controller (V5)
 
 - Spec
-  - Timing: `Width`, `LatencyCycles`, `Freq`.
-  - Shared emulation: `StorageRef` (ID in simulation state registry).
-  - Strategy: `AddrConv` as flat scalar fields: a kind (e.g., identity or interleaving) plus its scalar parameters.
+  - `Freq`, `Width`, `Latency`, `CacheLineSize`; defaults in `Definition.DefaultSpec`.
 
 - State
-  - Pure data transactions with countdowns; no ports or live pointers.
-  - Drain/enable mode as a small enum; deep‑copied for snapshots.
+  - Pure data transactions with countdowns (`InflightTransactions`); no ports or live pointers.
+  - Control mode (enabled, paused, draining) as a small enum, plus the command being served.
+
+- Resources
+  - `Storage *mem.Storage`, required; the system builder sizes it and may share it.
 
 - Ports
-  - `Top`, `Control` injected during wiring; accessed via name lookups.
+  - `Top` (`role=mem/responder`) and `Control` (`role=mem.control/responder`), created by the system builder.
 
 - Middlewares
-  - Data path: tick‑driven; consumes from `Top`, counts down latency, responds when ready; uses storage resolved via state registry by `StorageRef`.
-  - Control path: processes enable/pause/drain; replies only when safe (e.g., after drain completes).
+  - `Ctrl` runs first: processes enable/pause/drain/reset; replies only when safe (e.g., after drain completes).
+  - `Memory` is the data path: tick‑driven; takes requests from `Top`, counts down latency, reads or writes `Storage`, responds when ready.
 
-This pattern generalizes to other components: keep Spec flat and declarative, keep State pure and serializable, inject Ports, and implement behavior as pipelines of middlewares with minimal, explicit dependencies.
+This pattern generalizes to other components: keep Spec flat and declarative, keep State pure and serializable, take shared objects through Resources and ports through `Ports`, and implement behavior as ordered middlewares with minimal, explicit dependencies.
 
 ### Moving Container Fields Out of Spec
 
@@ -630,10 +748,17 @@ Resources are not checkpointed. The setup that rebuilds a simulation supplies th
 
 ### Migration Checklist
 
-- Split each component's configuration into Spec (scalar user settings), State (data that changes while simulating), and Resources (references to external objects and the wiring derived from them).
+- Give each component type its own package, and choose its model: `modeling/ticking` for cycle-by-cycle work, `modeling/wakeup` or `modeling/event` for clockless components.
+- Split each component's configuration into Spec (scalar user settings, including `Freq timing.Freq` for a ticking component), State (data that changes while simulating), and Resources (references to external objects and the wiring derived from them).
 - Replace every slice, array, map, or nested-struct Spec field using the table above.
 - Express strategy choices as a named string type with constants plus scalar parameters, not as a nested sub-spec.
 - Give every Spec and State field a `json` tag, and make sure no two fields share a JSON name.
+- Replace port fields, port declarations, and port lookups by name with a `Ports` struct: one `messaging.Port` field per port, `[]messaging.Port` per port group, each tagged `akita:"role=<protocol>/<role>"` when it speaks a protocol role. Reach ports as `comp.Ports.X`.
+- Turn each per-tick method into `Handle(e timing.Event) bool`, list the middlewares as exported pointer fields of a `Middlewares` struct in the order they run, and create them in a `newMiddlewares(c *Comp) Middlewares` function. Move any mutable middleware field into State.
+- Declare `type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]` and `var Definition = ticking.Definition[...]{DefaultSpec: ..., NewState: ..., NewMiddlewares: ...}`, and delete the hand-written builder and constructor.
+- Turn exported methods on the component into package functions that take `*Comp`.
+- In the system builder, create every port with `messaging.NewPort(nil, in, out, "<instance>.<Field>")` and build with `Definition.Builder().WithSimulation(sim).WithSpec(spec).WithResources(res).WithPorts(ports).Build(name)`; start a component that begins work on its own with `TickLater()`.
+- In tests, step the component with `modelingtest.Tick(comp)` and add a `modelingtest.CheckTicking(t, Definition)` test.
 
 ---
 
@@ -701,14 +826,23 @@ dram.GDDR6Spec  // GDDR6-14Gbps (1750 MHz, BL16)
 
 ### Usage
 
-```go
-topPort := sim.NewPort(nil, 4, 4, "DRAM.Top")
+A preset is a complete `dram.Spec`, including its `Freq`; copy it, change the
+fields you need, and pass it to `WithSpec`:
 
-ctrl := dram.MakeBuilder().
+```go
+spec := dram.DDR4Spec
+spec.PagePolicy = dram.PagePolicyOpen
+
+storage := mem.NewStorage(4 * mem.GB)
+
+ctrl := dram.Definition.Builder().
     WithSimulation(sim).
-    WithSpec(dram.DDR4Spec).
-    WithFreq(1200 * sim.MHz).
-    WithTopPort(topPort).
+    WithSpec(spec).
+    WithResources(dram.Resources{Storage: storage}).
+    WithPorts(dram.Ports{
+        Top:     messaging.NewPort(nil, 1024, 1024, "DRAM.Top"),
+        Control: messaging.NewPort(nil, 4, 4, "DRAM.Control"),
+    }).
     Build("DRAM")
 ```
 
@@ -752,13 +886,17 @@ ctrl := idealmemcontroller.New().
 **After (V5) — cycle-accurate DRAM:**
 ```go
 // V5: Bank-state machine with proper command sequencing.
-topPort := sim.NewPort(nil, 4, 4, "DRAM.Top")
+spec := dram.HBM2Spec
+spec.PagePolicy = dram.PagePolicyOpen
 
-ctrl := dram.MakeBuilder().
+ctrl := dram.Definition.Builder().
     WithSimulation(sim).
-    WithSpec(dram.HBM2Spec).
-    WithTopPort(topPort).
-    WithPagePolicy(dram.PagePolicyOpen).
+    WithSpec(spec).
+    WithResources(dram.Resources{Storage: storage}).
+    WithPorts(dram.Ports{
+        Top:     messaging.NewPort(nil, 4, 4, "DRAM.Top"),
+        Control: messaging.NewPort(nil, 4, 4, "DRAM.Control"),
+    }).
     Build("DRAM")
 ```
 
@@ -767,11 +905,11 @@ ctrl := dram.MakeBuilder().
 ## 8. Port Creation API
 
 In V4, ports were created internally by component builders. In V5, the
-component owns its port *topology* — its builder declares the ports the
-component has (`DeclarePort`) but does not create the instances. Setup code
-creates each port externally and attaches it with `AssignPort`. This makes
-wiring explicit and lets ports be sized or implemented differently without
-changing the component.
+component owns its port *topology* — the fields of its `Ports` struct say
+which ports it has — but it does not create the instances. The system builder
+creates each port with `messaging.NewPort` and passes all of them to `Build`
+through `WithPorts`. This makes wiring explicit and lets ports be sized or
+implemented differently without changing the component.
 
 **Before (V4):**
 ```go
@@ -784,51 +922,51 @@ cache := cachebuilder.New().
 
 **After (V5):**
 ```go
-// V5: the component declares its ports; a port builder creates+registers each
-// instance (like component/connection builders), and the caller attaches it.
-comp := somepkg.MakeBuilder().
+// V5: the component declares its ports as the fields of its Ports struct;
+// the system builder creates each port and passes them all to Build.
+cache := writeback.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
-    Build("Comp") // Build calls DeclarePort("Top"), DeclarePort("Bottom"), ...
+    WithResources(writeback.Resources{Storage: storage}).
+    WithPorts(writeback.Ports{
+        Top:     messaging.NewPort(nil, 4, 4, "Cache.Top"),
+        Bottom:  messaging.NewPort(nil, 4, 4, "Cache.Bottom"),
+        Control: messaging.NewPort(nil, 4, 4, "Cache.Control"),
+    }).
+    Build("Cache")
 
-for _, name := range []string{"Top", "Bottom", "Control"} {
-    p := modeling.MakePortBuilder().
-        WithSimulation(sim).
-        WithComponent(comp).
-        WithSpec(modeling.PortSpec{BufSize: 4}).
-        Build(name) // creates comp.Name()+"."+name and registers it
-    comp.AssignPort(name, p)
-}
+conn.PlugIn(cache.Ports.Top)
 ```
 
-The port builder registers each port with its simulation, exactly as
-`RegisterComponent` registers a component. `AssignPort`
-then panics if the name was not declared or is already assigned, so a typo or a
-forgotten port fails fast.
+`Build` binds each port to the new component and registers it with the
+simulation, exactly as it registers the component. It panics if a port is
+missing, is not named `<instance>.<Field>`, or already belongs to another
+component, so a typo or a forgotten port fails fast. No port is added after
+`Build`.
+
+A port group is a `[]messaging.Port` field; the system builder chooses its
+size and names member `i` `<instance>.<Field>[i]`.
 
 ### SetComponent
 
 The `Port` interface in V5 includes a `SetComponent(comp Component)` method.
-Because the component is built before its ports, a port is normally created
-with its owner directly and then assigned:
-
-```go
-agent := somepkg.MakeBuilder().WithSimulation(sim).Build("Agent")
-outPort := messaging.NewPort(agent, 4, 4, "Agent.Out")
-agent.AssignPort("Out", outPort)
-```
-
-`SetComponent` remains for the less common case of building a port before its
-owning component exists, then associating it afterward:
+Because the system builder creates ports before the component exists, a port
+is created with no owner (`nil`), and `Build` calls `SetComponent` to
+associate it with the component:
 
 ```go
 outPort := messaging.NewPort(nil, 4, 4, "Agent.Out")
-// ... later, once the component exists:
-outPort.SetComponent(agent)
+
+agent := ping.Definition.Builder().
+    WithSimulation(sim).
+    WithPorts(ping.Ports{Out: outPort}).
+    Build("Agent") // calls outPort.SetComponent(agent)
 ```
 
-This decouples port creation from component construction, which suits the V5
-wiring model where topology is assembled separately from component internals.
+Creating the port first also lets another component's Spec name it
+(`outPort.AsRemote()`) before either component is built. This decouples port
+creation from component construction, which suits the V5 wiring model where
+topology is assembled separately from component internals.
 
 ---
 
@@ -840,9 +978,9 @@ The `queueing` package provides generic buffer and pipeline implementations that
 
 **V4 Pattern (Interface + Constructor):**
 ```go
-// V4: Interface abstraction with hidden implementation
+// V4: Interface abstraction with hidden implementation. Pipelines were
+// likewise a pipelining.Pipeline interface, created by the package's builder.
 var buffer sim.Buffer = sim.NewBuffer("name", 10)
-var pipeline pipelining.Pipeline = pipelining.MakeBuilder().Build("name")
 ```
 
 **V5 Pattern (Generic Struct Literals):**
@@ -872,14 +1010,12 @@ buffer := queueing.Buffer[int]{BufferName: "MyBuffer", Cap: 100}
 ```
 
 **Pipeline Migration:**
-```go
-// V4
-pipeline := pipelining.MakeBuilder().
-    WithNumStage(5).
-    WithCyclePerStage(2).
-    WithPostPipelineBuffer(postBuf).
-    Build("MyPipeline")
 
+V4 built a pipeline through the `pipelining` package's builder, setting the
+number of stages (`WithNumStage`), the cycles per stage (`WithCyclePerStage`),
+and a post-pipeline buffer (`WithPostPipelineBuffer`).
+
+```go
 // V5 — Pipeline has Width, NumStages, and Stages fields only.
 // No CyclePerStage or Name fields.
 pipeline := queueing.Pipeline[int]{NumStages: 5, Width: 1}

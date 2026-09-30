@@ -15,7 +15,7 @@ components. The whole user-facing surface is small:
 | --- | --- |
 | make messages checkpointable | a protocol: `messaging.DefineProtocol(...)` as a package-level `var` |
 | make an event checkpointable | `timing.RegisterEvent(MyEvent{})` in an `init()` |
-| make a component checkpointable | split it into `Spec` / `State` / `Resources` (the `modeling.Component` machinery does the rest) |
+| make a component checkpointable | declare it with a component model — five structs and a `Definition` — and keep all mutable data in `State` (the model does the rest) |
 | take / restore a checkpoint | `sim.SaveCheckpoint(path, "")` / `sim.LoadCheckpoint(path, "")` |
 
 There is **no** custom marshalling to write, no wire format to learn, and no
@@ -23,8 +23,9 @@ encoder/decoder to call. Default JSON does the work.
 
 ## The model: setup rebuilds the shape, the checkpoint restores the runtime
 
-Your setup code rebuilds the *shape* — components, ports, connections, resources,
-and wiring. The checkpoint restores only the *runtime* that setup cannot
+Your system builder — the setup code that assembles the simulation — rebuilds
+the *shape*: components, ports, connections, resources, and wiring. The
+checkpoint restores only the *runtime* that setup cannot
 reproduce: each component's `State`, the messages buffered in ports, shared
 resources, the event queue, the engine time, and the ID-generator counter.
 
@@ -37,9 +38,9 @@ That division drives the one rule that matters most:
 > resource). Runtime state hidden on a middleware struct — a round-robin cursor, a
 > counter, an RNG — is *not* checkpointed, so a resumed run silently diverges.
 
-Keep middleware fields to structural wiring (ports, downstream references, routing
-tables) that setup rebuilds; put cursors, counters, and in-flight tables in
-`State`.
+Keep middleware fields to references that `Build` recreates — usually just the
+component pointer; ports live in `Ports` and shared objects in `Resources`. Put
+cursors, counters, and in-flight tables in `State`.
 
 ## Messages
 
@@ -81,11 +82,13 @@ var (
 )
 ```
 
-Components then declare which role each port speaks, right where they declare
-the port:
+Components then declare which role each port speaks with a tag on the port's
+field in their `Ports` struct:
 
 ```go
-comp.DeclarePort("Top", mypkg.Responder)
+type Ports struct {
+	Top messaging.Port `akita:"role=mypkg/responder"`
+}
 ```
 
 Adding a new message is one type definition plus one entry in a `Sends` list.
@@ -118,16 +121,18 @@ A forgotten registration fails at load with `unknown event type "..."`.
 
 ## Components
 
-Build on `modeling.Component[Spec, State, Resources]` (or
-`EventDrivenComponent`). You write **no** checkpoint methods — the generic
-component already implements them. You only have to put your data in the right
-one of the three type parameters:
+Declare the component with one of the component models — `modeling/ticking`,
+`modeling/wakeup`, or `modeling/event`. You write **no** checkpoint methods —
+the model's generic `Component` already implements them. You only have to put
+your data in the right one of the five structs:
 
-| Type param | Holds | Checkpoint treatment |
+| Struct | Holds | Checkpoint treatment |
 | --- | --- | --- |
 | `Spec` | immutable config (scalar fields only) | hashed and **compared** on load, not restored |
-| `State` | **all** mutable runtime data | serialized and restored — the only thing saved |
-| `Resources` | references to shared objects (e.g. `*mem.Storage`) | not serialized; setup reinjects them |
+| `State` | **all** mutable runtime data | serialized and restored — the only component data saved |
+| `Resources` | references to shared objects (e.g. `*mem.Storage`) | not serialized; the system builder supplies them again |
+| `Ports` | the component's ports | not part of the component's checkpoint; the system builder creates them again, and the simulation saves the messages buffered in them |
+| `Middlewares` | the behaviour, holding only references | not serialized; `Build` recreates them with `NewMiddlewares` |
 
 ```go
 type Spec struct {
@@ -136,16 +141,29 @@ type Spec struct {
 }
 
 type State struct {
-	Inflight     []txn  `json:"inflight"`
-	NextArbPort  int    `json:"next_arb_port"` // a cursor — runtime state, so it lives here
+	Inflight    []txn `json:"inflight"`
+	NextArbPort int   `json:"next_arb_port"` // a cursor — runtime state, so it lives here
 }
 
 type Resources struct {
-	Storage *mem.Storage // rebuilt by setup, not serialized
+	Storage *mem.Storage // supplied by the system builder, not serialized
 }
 
-type Comp = modeling.Component[Spec, State, Resources]
+type Ports struct {
+	Top    messaging.Port
+	Bottom messaging.Port
+}
+
+type Middlewares struct {
+	Pipeline *pipelineMW // holds only its *Comp; its data lives in State
+}
+
+type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
 ```
+
+An event component's pending events are part of the engine's event queue, so
+they are saved too — register each event type it schedules (see *Events*
+above).
 
 `Spec` may contain only scalar fields: booleans, numbers, strings, and named
 types based on them. No slices, arrays, maps, or nested structs. `State` is more
@@ -157,10 +175,11 @@ silently drops colliding fields, so `Build` rejects them.
 
 ### The builder validates this for you — loudly
 
-`Build` runs `ValidateSpec`/`ValidateState` and **panics** at construction if the
-Spec or State cannot be checkpointed. In particular, a struct whose state is
-entirely **unexported** and that has no `MarshalJSON` serializes as `{}` and would
-silently lose its contents — the builder rejects it:
+`Definition.Builder()…Build(name)` runs `ValidateSpec`/`ValidateState` and
+**panics** at construction if the Spec or State cannot be checkpointed. In
+particular, a struct whose state is entirely **unexported** and that has no
+`MarshalJSON` serializes as `{}` and would silently lose its contents — the
+builder rejects it:
 
 ```
 modeling: component "TLB" has a State that cannot be checkpointed:
@@ -178,7 +197,9 @@ A shared object referenced by several components (memory contents, a page table)
 is a registered entity in its own right and implements the `Checkpointable`
 interface directly. `mem.Storage` and `vm.PageTable` already do; a custom shared
 resource must implement `SaveCheckpoint(io.Writer)` / `LoadCheckpoint(io.Reader)`
-and be registered with `sim.RegisterResource`.
+and be registered with `sim.RegisterResource`. Components reach such an object
+through their `Resources`, and the system builder passes the same instance to
+each of them.
 
 ## Gotchas
 

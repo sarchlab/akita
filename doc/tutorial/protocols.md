@@ -24,7 +24,9 @@ when:
   receives — in one discoverable place, instead of spread across
   middleware code.
 - **You want tooling to see your topology's contracts.** Ports bound to
-  roles can be read back programmatically (`PortOwnerBase.PortRoles`).
+  roles can be read back programmatically: the `inspect` package reports
+  each port of a component together with its roles, without running the
+  code.
 
 ## Defining a Protocol
 
@@ -87,33 +89,36 @@ message type listed in two roles of one protocol.
 ## Binding Ports to Roles
 
 A port declares the role(s) it speaks right where the component declares
-the port. A library component lists its ports in its `Definition`, and its
-builder passes the definition to `WithDefinition` so that `Build` declares
-them:
+the port: on its field in the component's `Ports` struct, with an
+`akita:"role=<protocol>/<role>"` tag. The reorder buffer in `mem/rob`:
 
 ```go
-var Definition = modeling.ComponentDef[Spec]{
-    Name: "MyCache",
-    Ports: []modeling.PortDef{
-        {Name: "Top", Roles: []*messaging.Role{memprotocol.Responder}},
-        {Name: "Bottom", Roles: []*messaging.Role{memprotocol.Requester}},
-        {Name: "Control", Roles: []*messaging.Role{memcontrolprotocol.Responder}},
-    },
+type Ports struct {
+    // Top receives memory requests and returns their responses in request
+    // order.
+    Top messaging.Port `akita:"role=mem/responder"`
+
+    // Bottom forwards the requests to the bottom unit and receives its
+    // responses in any order.
+    Bottom messaging.Port `akita:"role=mem/requester"`
+
+    // Control receives enable, pause, drain, and reset commands.
+    Control messaging.Port `akita:"role=mem.control/responder"`
 }
 ```
 
-The definition is the single discoverable home for "the `Top` port speaks
-the mem protocol as the responder": the builder declares these ports at
-runtime, and the `inspect` package reads the same list without running the
-code. A component without a definition, like the examples, declares its
-ports directly in `Build`, for instance
-`comp.DeclarePort("Top", memprotocol.Responder)`.
+`<protocol>` is the name passed to `DefineProtocol` (`"mem"`,
+`"mem.control"`), and `<role>` is the `Name` of one of its `RoleDef`s. The
+`Ports` struct is the single discoverable home for "the `Top` port speaks
+the mem protocol as the responder": the `inspect` package reads the tags
+without running the code and reports an error for a tag that names no
+defined protocol role.
 
 The binding is metadata: it does not change how messages flow, and there is
-no runtime conformance check. A port may
-bind more than one role when it multiplexes protocols, and a port declared
-with no role — like every port in the examples — is untyped and works
-exactly the same.
+no runtime conformance check. A port may bind more than one role when it
+multiplexes protocols — list several comma-separated directives,
+`akita:"role=a/x,role=b/y"` — and a port with no tag — like every port in
+the examples — is untyped and works exactly the same.
 
 ## One Package per Protocol
 
@@ -149,7 +154,7 @@ exported role handles.
   audit covers the Akita module; for your own library the runtime
   registration works as-is, and you can replicate the audit pattern from
   `messaging/protocolaudit_test.go`.)
-- **A contract you can read.** The role binding in `DeclarePort` tells the
+- **A contract you can read.** The role tag on a `Ports` field tells the
   next reader what a port sends and receives without tracing middleware
   code.
 

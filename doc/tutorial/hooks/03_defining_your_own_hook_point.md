@@ -52,7 +52,7 @@ The component here is the random walker from *Create a Component*, taking one
 position as the `Item`:
 
 ```go
-func (m *walkMW) Tick() bool {
+func (m *walkMW) Handle(_ timing.Event) bool {
     s := &m.comp.State
     wall := m.comp.Spec().WallDistance
 
@@ -60,13 +60,15 @@ func (m *walkMW) Tick() bool {
         return false
     }
 
-    if m.rng.Intn(2) == 0 {
+    if m.comp.Resources().RNG.Intn(2) == 0 {
         s.Position--
     } else {
         s.Position++
     }
     s.Steps++
 
+    // Fire our own hook point. Anything that has accepted a hook on this
+    // component now sees the step.
     m.comp.InvokeHook(hooking.HookCtx{
         Domain: m.comp,
         Pos:    HookPosStep,
@@ -147,10 +149,10 @@ port carries both requests and responses:
 
 ```go
 switch msg := ctx.Item.(type) {
-case *pingReq:
-    // msg is a *pingReq in this branch
-case *pingRsp:
-    // msg is a *pingRsp in this branch
+case pingReq:
+    // msg is a pingReq in this branch
+case pingRsp:
+    // msg is a pingRsp in this branch
 }
 ```
 

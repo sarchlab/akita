@@ -20,12 +20,12 @@ set of worked recipes.
 >
 > | Concept | Path | What it gives you |
 > |---|---|---|
-> | Component model | `v5/modeling/` | `Component[S, T, R]`, builders, `WithResources` |
+> | Component models | `v5/modeling/ticking/` (and `wakeup/`, `event/`) | the five structs, `Definition.Builder()`, `WithResources` |
 > | Hooks | `v5/hooking/` | `Hook`, `HookCtx`, `AcceptHook` |
 > | Port hook points | `v5/messaging/port.go` | `HookPosPortMsgSend`, `HookPosPortMsgRecvd` |
 > | Buffer hook points | `v5/queueing/buffer.go` | `HookPosBufPush`, `HookPosBufPop` |
 > | Ideal component example | `v5/mem/idealmemcontroller/` | A "perfect memory" variant |
-> | Middleware | `v5/modeling/middleware.go` | `Middleware`, `AddMiddleware` |
+> | Middleware | `v5/modeling/middleware.go` | `Middleware` (`Handle(e timing.Event) bool`) |
 > | Writing a component | the [Create a Component](/tutorial/components/what_is_a_component) tutorial | The full component how-to |
 
 ---
@@ -35,11 +35,12 @@ set of worked recipes.
 Two principles run through Akita's design:
 
 1. **Wiring happens at setup, by injection.** A component never looks another
-   component up by name at runtime. The builder constructs everything and hands
-   each component direct references to what it needs.
-2. **Runtime state is encapsulated.** A component's `State` is private to its
-   package; other components reach it only through methods the owner chose to
-   expose.
+   component up by name at runtime. The system builder constructs everything
+   and hands each component direct references to what it needs, through its
+   `Resources` and `Ports`.
+2. **Runtime state is encapsulated.** A component's `State` is written only by
+   the component's own code; other components reach it only through functions
+   the owner's package chose to expose.
 
 "Magic" is enabled by working *with* these principles, not around them. There
 is deliberately **no global `GetByName(...)` backdoor** that lets one component
@@ -110,11 +111,26 @@ models. To run with perfect memory, you build an `idealmemcontroller` where you
 would have built `dram`.
 
 ```go
+top := messaging.NewPort(nil, 1024, 1024, "DRAM.Top")
+control := messaging.NewPort(nil, 4, 4, "DRAM.Control")
+
 // Real run:
-mem := dram.MakeBuilder().WithName("DRAM").Build()
+ctrl := dram.Definition.Builder().
+    WithSimulation(sim).
+    WithResources(dram.Resources{Storage: storage}).
+    WithPorts(dram.Ports{Top: top, Control: control}).
+    Build("DRAM")
+
 // Idealized run — same ports, drop-in:
-mem := idealmemcontroller.MakeBuilder().WithName("DRAM").Build()
+ctrl := idealmemcontroller.Definition.Builder().
+    WithSimulation(sim).
+    WithResources(idealmemcontroller.Resources{Storage: storage}).
+    WithPorts(idealmemcontroller.Ports{Top: top, Control: control}).
+    Build("DRAM")
 ```
+
+Both components declare the same `Ports` fields (`Top`, `Control`) with the
+same protocol roles, so everything wired to `ctrl.Ports.Top` is unchanged.
 
 Use this for: perfect TLB, ideal memory, a magic interconnect, an oracle
 predictor — anything where "the component is fundamentally different."
@@ -127,9 +143,15 @@ fields. Setting `latency = 0` or `capacity = 1<<30` at build time is not a
 hack — it is the intended way to reach an extreme operating point.
 
 ```go
-tlb := tlb.MakeBuilder().
-    WithNumSets(1).
-    WithNumWays(1 << 20). // effectively unbounded
+spec := tlb.Definition.DefaultSpec
+spec.NumSets = 1
+spec.NumWays = 1 << 20 // effectively unbounded
+
+t := tlb.Definition.Builder().
+    WithSimulation(sim).
+    WithSpec(spec).
+    WithResources(res).
+    WithPorts(ports).
     Build("TLB")
 ```
 
@@ -182,15 +204,19 @@ replacement for a global lookup.
 
 ```go
 // Build the shared thing once.
-pageTable := vm.NewPageTable(...)
+pageTable := vm.NewPageTable(12)
 
-// Hand the SAME pointer to every consumer at setup.
-tlb := tlb.MakeBuilder().
-    WithResources(tlb.Resources{PageTable: pageTable}).
-    Build("TLB")
-mmu := mmu.MakeBuilder().
+// Hand the SAME reference to every consumer at setup.
+m := mmu.Definition.Builder().
+    WithSimulation(sim).
     WithResources(mmu.Resources{PageTable: pageTable}).
+    WithPorts(mmuPorts).
     Build("MMU")
+g := gmmu.Definition.Builder().
+    WithSimulation(sim).
+    WithResources(gmmu.Resources{PageTable: pageTable}).
+    WithPorts(gmmuPorts).
+    Build("GMMU")
 ```
 
 At runtime each component uses its held reference directly — no name, no map,
@@ -200,46 +226,89 @@ still build-once, inject-the-same-pointer.
 
 ### 3.5 Extend Behavior via Middleware
 
-A tick-based component *is* its middleware pipeline (`Tick()` just runs each
-middleware in order). You can `AddMiddleware` a custom stage — to inject a
-delay, drop a message, arbitrate differently, or splice in a probe that needs
-to run every cycle.
+A component *is* its middleware pipeline: every event it receives — for a
+ticking component, a tick every cycle — goes to each field of its
+`Middlewares` struct in order. You can splice in a custom stage — to inject a
+delay, drop a message, arbitrate differently, or add a probe that needs to run
+every cycle — by adding a field to `Middlewares` and creating it in
+`NewMiddlewares`. For the TLB:
 
 ```go
-type myProbe struct{ comp *tlb.Comp }
+type Middlewares struct {
+    Probe *myProbe // runs first, every cycle
+    Ctrl  *ctrlMiddleware
+    TLB   *tlbMiddleware
+}
 
-func (m *myProbe) Tick() bool {
+type myProbe struct{ comp *Comp }
+
+func (m *myProbe) Handle(_ timing.Event) bool {
     // inspect/act each cycle; return true if progress was made
     return false
 }
 
-comp.AddMiddleware(&myProbe{comp: comp}) // at setup
+func newMiddlewares(c *Comp) Middlewares {
+    return Middlewares{
+        Probe: &myProbe{comp: c},
+        Ctrl:  &ctrlMiddleware{comp: c},
+        TLB:   &tlbMiddleware{comp: c},
+    }
+}
 ```
 
-Use middleware for per-tick behavior you want layered onto an existing
-component. For a *wholesale* behavior swap, write a variant (§3.1) instead.
+The middlewares are fixed when `Build` runs — nothing is added to a component
+from outside — so this edit lives in the component's package: a variant
+(§3.1) or your research fork (§3.7). Like any middleware, the probe holds only
+references; anything it counts goes in `State`. Use middleware for per-cycle
+behavior you want layered onto an existing component. For a *wholesale*
+behavior swap, write a variant (§3.1) instead; to only *observe* from outside,
+use a hook (§3.3).
 
 ### 3.6 Seed `State` at Setup (Warm-up)
 
 Preloading a cache, pre-filling a TLB, or starting from a crafted condition is
-a **setup-time** concern. A component's `State` is yours to initialize during
-assembly, before the simulation runs:
+a **setup-time** concern, but the `State` is still written only by the
+component's own code. The component gives the system builder an entry point,
+and the system builder calls it during assembly, before the simulation runs.
+There are two:
+
+- **From configuration.** The `Definition`'s `NewState` builds each instance's
+  initial State from its Spec and Resources. A warm-up that a Spec field or a
+  Resource can describe belongs here.
+- **From a package function.** The component's package exports a function
+  that takes the instance and seeds it. `examples/ping` hands a component its
+  pings this way:
 
 ```go
-comp := tlb.MakeBuilder().Build("TLB")
-// Setup phase only — single-threaded, before Run():
-comp.State.Sets[0].Entries = preloadedEntries
+// In the component's package:
+func SchedulePing(
+    comp *Comp,
+    sendAt timing.VTimeInPicoSec,
+    dst messaging.RemotePort,
+) {
+    state := &comp.State
+    state.ScheduledPings = append(state.ScheduledPings, scheduledPing{
+        SendAt: sendAt,
+        Dst:    dst,
+    })
+    comp.WakeAt(sendAt)
+}
+
+// In the system builder, before Run():
+ping.SchedulePing(agentA, 1, agentB.Ports.Out.AsRemote())
 ```
 
-This is *not* the same as reaching into `State` at **runtime** from another
-component — that's the anti-pattern (§5). At setup, you are the assembler; the
-machine isn't running yet, so seeding state is exactly your job.
+A function that preloads a TLB's sets would have the same shape; if the
+component lacks one, add it in your fork (§3.7). This is *not* the same as
+reaching into `State` at **runtime** from another component — that's the
+anti-pattern (§5). At setup, you are the assembler; the machine isn't running
+yet, so seeding state through the owner's entry point is exactly your job.
 
 ### 3.7 Escape Hatch: Fork the Package
 
 If no seam fits — a truly unforeseen experiment — edit the component's package.
-Inside `tlb`, every field is visible; add the method, `Spec` flag, `HookPos`,
-or behavior you need. This is the right place for deep surgery: the change is
+Inside `tlb`, every field is visible; add the function, `Spec` flag,
+`Middlewares` field, `HookPos`, or behavior you need. This is the right place for deep surgery: the change is
 explicit, local to the thing you're studying, and committed to your research
 branch — not smuggled in as a runtime poke from across the codebase.
 
@@ -284,31 +353,39 @@ counter object, injected into both the MMU (which reads it) and the TLBs (or a
 hook, which writes it). Nobody reaches into anybody's state.
 
 ```go
-accesses := metrics.NewCounter("tlb.accesses")
-mmu := mmu.MakeBuilder().WithResources(mmu.Resources{Accesses: accesses}).Build("MMU")
-// each TLB's port gets a hook that does accesses.Inc()
+// Your own counter type, and an Accesses field you add to mmu.Resources.
+accesses := &Counter{}
+m := mmu.Definition.Builder().
+    WithSimulation(sim).
+    WithResources(mmu.Resources{PageTable: pageTable, Accesses: accesses}).
+    WithPorts(mmuPorts).
+    Build("MMU")
+// each TLB's port gets a hook that increments accesses
 ```
 
-*If it must be MMU-internal state* — the MMU **declares a mutation method**, and
-a hook holding an **injected MMU reference** calls it. The TLB stays untouched;
-the MMU's counter stays private; only the one method is exposed.
+*If it must be MMU-internal state* — the MMU's package **declares a mutation
+function**, and a hook holding an **injected MMU reference** calls it. The TLB
+stays untouched; the MMU's State is still written only by MMU code; only the
+one function is exposed. (It is a function, not a method: `mmu.Comp` is an
+alias of `ticking.Component[…]`, a type from another package, and Go allows no
+methods on it. `ping.SchedulePing` in §3.6 has the same shape.)
 
 ```go
 // In the mmu package — the MMU chooses its mutation surface:
-func (m *Comp) RecordTLBAccess() { m.State.TLBAccessCount++ }
+func RecordTLBAccess(c *Comp) { c.State.TLBAccessCount++ }
 
 // A hook bridges TLB-access events to the MMU, carrying a direct reference
 // injected at setup.
 type tlbAccessRecorder struct{ mmu *mmu.Comp }
 func (h *tlbAccessRecorder) Func(ctx hooking.HookCtx) {
     if ctx.Pos == messaging.HookPosPortMsgRecvd {
-        h.mmu.RecordTLBAccess()
+        mmu.RecordTLBAccess(h.mmu)
     }
 }
 
 // setup:
 for _, t := range tlbs {
-    t.GetTopPort().AcceptHook(&tlbAccessRecorder{mmu: theMMU})
+    t.Ports.Top.AcceptHook(&tlbAccessRecorder{mmu: theMMU})
 }
 ```
 
@@ -324,7 +401,8 @@ but the only correct option when the count feeds back into what the MMU does.
 **Seam:** a hook at the port (§3.3) to drop/mutate a message on a side-channel,
 a **custom middleware** (§3.5) to inject the fault as a tick-based action, or a
 dedicated fault-injector component wired into the topology (§3.1). For
-state-level faults (bit flips), expose or add a method on the owner (§3.7) and
+state-level faults (bit flips), expose or add a function in the owner's package
+(§3.7) and
 drive it from a hook or a scheduled event — never a cross-package field write.
 
 ### 4.5 A Custom Structure Shared Across Components
@@ -352,7 +430,7 @@ correctly: explicit, type-safe, set up once.
 | Anti-pattern | Why it's wrong | Instead |
 |---|---|---|
 | Global `GetByName(...)` to reach another component at runtime | Service-locator: hides the dependency, needs public fields, string+assertion per access | Inject the reference at setup (§3.4) |
-| Writing another package's `State` field directly | Breaks encapsulation; impossible across packages anyway without hacks | Call a method the owner exposes (§4.3b) |
+| Writing another package's `State` field directly | Breaks encapsulation: only the component's own code writes its `State` | Call a function the owner's package exposes (§4.3b) |
 | Direct cross-component mutation that affects timing | Instantaneous, bypasses the event model → silent timing corruption | Send a message (§4.3, timing case) |
 | Public buffer/pipeline fields to allow poking | Freezes the representation, breaks invariants | `Spec` knob, hook, or variant |
 | Editing a component in place for a one-off and committing it to `main` | Pollutes the shared model | Variant (§3.1) or a research fork (§3.7) |
@@ -370,7 +448,7 @@ Count / log / trace               Hook                     (§3.3)
 Share a structure                 Resources injection      (§3.4)
 Add per-tick behavior             Middleware               (§3.5)
 Preload / warm up                 Seed State at setup      (§3.6)
-Mutate another component's state  Method on the owner +
+Mutate another component's state  Owner's package function +
   (instrumentation)                 injected reference     (§4.3b)
 Influence another's timing        Message between them     (§2, §4.3)
 Anything unforeseen               Fork the package         (§3.7)
