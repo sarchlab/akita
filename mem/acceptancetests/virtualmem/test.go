@@ -58,7 +58,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		Port: tlb.GetPortByName("Top").AsRemote(),
 	}
 
-	atSpec := addresstranslator.DefaultSpec()
+	atSpec := addresstranslator.Definition.DefaultSpec
 	atSpec.Log2PageSize = 12
 	atSpec.NumReqPerCycle = 4
 	at := addresstranslator.MakeBuilder().
@@ -75,7 +75,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 	// the trace exercises the ROB instrumentation end-to-end.
 	robComp := buildROB(s, at.GetPortByName("Top").AsRemote())
 
-	agentSpec := memaccessagent.DefaultSpec()
+	agentSpec := memaccessagent.Definition.DefaultSpec
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.ReadLeft = *numAccessFlag
 	agentSpec.WriteLeft = *numAccessFlag
@@ -101,7 +101,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 // buildROB builds a reorder buffer that forwards every access to bottomUnit
 // (the address translator's Top port) and reorders the responses back.
 func buildROB(s *simulation.Simulation, bottomUnit messaging.RemotePort) *rob.Comp {
-	robSpec := rob.DefaultSpec()
+	robSpec := rob.Definition.DefaultSpec
 	robSpec.NumReqPerCycle = 4
 	robSpec.BottomUnit = bottomUnit
 	robComp := rob.MakeBuilder().
@@ -118,7 +118,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 	*modeling.Component[writeback.Spec, writeback.State, writeback.Resources],
 	*idealmemcontroller.Comp,
 ) {
-	memCtrlSpec := idealmemcontroller.DefaultSpec()
+	memCtrlSpec := idealmemcontroller.Definition.DefaultSpec
 	memCtrlSpec.Capacity = 4 * mem.GB
 	memCtrlSpec.Width = 1
 	memCtrlSpec.Latency = 100
@@ -129,7 +129,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 		Build("MemCtrl")
 	assignPorts(s, memCtrl, "Top", "Control")
 
-	l2Spec := writeback.DefaultSpec()
+	l2Spec := writeback.Definition.DefaultSpec
 	l2Spec.WayAssociativity = 4
 	l2Spec.NumReqPerCycle = 2
 	l2Spec.AddressMapperType = "single"
@@ -144,7 +144,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 		Build("L2Cache")
 	assignPorts(s, L2Cache, "Top", "Bottom", "Control")
 
-	l1Spec := writethroughcache.DefaultSpec()
+	l1Spec := writethroughcache.Definition.DefaultSpec
 	l1Spec.WritePolicyType = "write-through"
 	l1Spec.WayAssociativity = 2
 	l1Spec.AddressMapperType = "single"
@@ -171,7 +171,7 @@ func buildTranslationHierarchy(
 ) {
 	pageTable := setupPageTable(*maxAddressFlag, s)
 
-	mmuSpec := mmu.DefaultSpec()
+	mmuSpec := mmu.Definition.DefaultSpec
 	mmuSpec.Log2PageSize = 12
 	mmuSpec.MaxRequestsInFlight = 16
 	mmuSpec.Latency = 10
@@ -186,7 +186,7 @@ func buildTranslationHierarchy(
 		Port: IoMMU.GetPortByName("Top").AsRemote(),
 	}
 
-	l2TLBSpec := tlb.DefaultSpec()
+	l2TLBSpec := tlb.Definition.DefaultSpec
 	l2TLBSpec.NumWays = 64
 	l2TLBSpec.NumSets = 64
 	l2TLBSpec.Log2PageSize = 12
@@ -202,7 +202,7 @@ func buildTranslationHierarchy(
 		Port: L2TLB.GetPortByName("Top").AsRemote(),
 	}
 
-	tlbSpec := tlb.DefaultSpec()
+	tlbSpec := tlb.Definition.DefaultSpec
 	tlbSpec.NumWays = 8
 	tlbSpec.NumSets = 8
 	tlbSpec.Log2PageSize = 12

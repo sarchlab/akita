@@ -72,7 +72,7 @@ var _ = Describe("GMMU", func() {
 	// build constructs a GMMU, injects the shared page table, and plugs a
 	// noopConn into each port so they can be driven.
 	build := func() {
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.DeviceID = 0
 		spec.Latency = 1
 		spec.LowModule = lowModulePort

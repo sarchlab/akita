@@ -17,20 +17,12 @@ type Spec struct {
 	BufferSize             uint64      `json:"buffer_size"`
 	InsideByteGranularity  uint64      `json:"inside_byte_granularity"`
 	OutsideByteGranularity uint64      `json:"outside_byte_granularity"`
-
-	InsideMapperKind             string                 `json:"inside_mapper_kind"`
-	InsideMapperPorts            []messaging.RemotePort `json:"inside_mapper_ports"`
-	InsideMapperInterleavingSize uint64                 `json:"inside_mapper_interleaving_size"`
-
-	OutsideMapperKind             string                 `json:"outside_mapper_kind"`
-	OutsideMapperPorts            []messaging.RemotePort `json:"outside_mapper_ports"`
-	OutsideMapperInterleavingSize uint64                 `json:"outside_mapper_interleaving_size"`
 }
 
 // Resources holds the data mover's wiring. The data mover owns no storage; it
 // moves data between external memory controllers. The inside/outside mappers
 // describe which remote port serves a given address on each side. They are
-// optional: when omitted, the equivalent flat mapper fields in Spec are used.
+// not checkpointed: the setup that rebuilds the data mover supplies them.
 type Resources struct {
 	InsideMapper  mem.AddressToPortMapper
 	OutsideMapper mem.AddressToPortMapper
@@ -108,25 +100,6 @@ func alignAddress(addr, granularity uint64) uint64 {
 func addressMustBeAligned(addr, granularity uint64) {
 	if addr%granularity != 0 {
 		log.Panicf("address %d must be aligned to %d", addr, granularity)
-	}
-}
-
-// findPort resolves a port mapper lookup from Spec fields.
-func findPort(
-	kind string,
-	ports []messaging.RemotePort,
-	interleavingSize uint64,
-	addr uint64,
-) messaging.RemotePort {
-	switch kind {
-	case "single":
-		return ports[0]
-	case "interleaved":
-		number := addr / interleavingSize % uint64(len(ports))
-		return ports[number]
-	default:
-		log.Panicf("unknown mapper kind %q", kind)
-		return ""
 	}
 }
 

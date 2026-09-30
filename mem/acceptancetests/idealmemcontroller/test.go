@@ -42,7 +42,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		WithSimulation(s).
 		Build("Conn")
 
-	agentSpec := memaccessagent.DefaultSpec()
+	agentSpec := memaccessagent.Definition.DefaultSpec
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.ReadLeft = *numAccessFlag
@@ -55,7 +55,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		agent.CreateProgressBars(monitor.CreateProgressBar)
 	}
 
-	dramSpec := idealmemcontroller.DefaultSpec()
+	dramSpec := idealmemcontroller.Definition.DefaultSpec
 	dramSpec.Capacity = 4 * mem.GB
 	dramSpec.Width = 1
 	dramSpec.Latency = 100

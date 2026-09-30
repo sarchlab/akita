@@ -14,6 +14,7 @@ type Builder[S any, T any, R any] struct {
 	freq       timing.Freq
 	spec       S
 	resources  R
+	definition ComponentDef[S]
 }
 
 // NewBuilder creates a new Builder.
@@ -45,6 +46,13 @@ func (b Builder[S, T, R]) WithResources(resources R) Builder[S, T, R] {
 	return b
 }
 
+// WithDefinition sets the component's definition. Build declares the
+// definition's ports and port groups on the new component.
+func (b Builder[S, T, R]) WithDefinition(def ComponentDef[S]) Builder[S, T, R] {
+	b.definition = def
+	return b
+}
+
 // Build creates the Component with the given name.
 func (b Builder[S, T, R]) Build(name string) *Component[S, T, R] {
 	validateForCheckpoint[S, T](name, b.spec)
@@ -55,6 +63,7 @@ func (b Builder[S, T, R]) Build(name string) *Component[S, T, R] {
 	}
 	comp.TickingComponent = NewTickingComponent(
 		name, b.simulation, b.freq, comp)
+	b.definition.declarePorts(comp)
 
 	return comp
 }

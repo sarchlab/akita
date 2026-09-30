@@ -41,7 +41,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		WithSimulation(s).
 		Build("Conn")
 
-	agentSpec := memaccessagent.DefaultSpec()
+	agentSpec := memaccessagent.Definition.DefaultSpec
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.ReadLeft = *numAccessFlag
@@ -55,7 +55,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		agent.CreateProgressBars(monitor.CreateProgressBar)
 	}
 
-	dramSpec := dram.DefaultSpec()
+	dramSpec := dram.Definition.DefaultSpec
 	dramSpec.Freq = 1 * timing.GHz
 
 	memCtrl := dram.MakeBuilder().

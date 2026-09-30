@@ -7,10 +7,12 @@ import (
 )
 
 // A PortOwner is an element that can communicate with others through ports.
-// A component declares the ports it has with DeclarePort and receives their
-// instances externally through AssignPort.
+// A component declares the ports it has with DeclarePort (or DeclarePortGroup
+// for a dynamically-sized group) and receives their instances externally
+// through AssignPort.
 type PortOwner interface {
 	DeclarePort(name string, roles ...*Role)
+	DeclarePortGroup(name string, roles ...*Role)
 	AssignPort(name string, port Port)
 	GetPortByName(name string) Port
 	Ports() []Port

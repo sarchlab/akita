@@ -83,7 +83,7 @@ var _ = Describe("DRAM Statistics", func() {
 			WithSimulation(sim).
 			Build("StatsConn")
 
-		spec := dram.DefaultSpec()
+		spec := dram.Definition.DefaultSpec
 		spec.Freq = 1 * timing.GHz
 		dramComp := dram.MakeBuilder().
 			WithSimulation(sim).

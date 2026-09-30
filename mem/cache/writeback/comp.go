@@ -37,10 +37,11 @@ type Spec struct {
 	MaxInflightFetch    int         `json:"max_inflight_fetch"`
 	MaxInflightEviction int         `json:"max_inflight_eviction"`
 
-	// Address mapper configuration (inlined from interface)
-	AddressMapperType string   `json:"address_mapper_type"`
-	RemotePortNames   []string `json:"remote_port_names"`
-	InterleavingSize  uint64   `json:"interleaving_size"`
+	// AddressMapperType ("single" or "interleaved") and InterleavingSize
+	// describe how to route to Resources.RemotePorts when no
+	// Resources.AddressToPortMapper is injected.
+	AddressMapperType string `json:"address_mapper_type"`
+	InterleavingSize  uint64 `json:"interleaving_size"`
 }
 
 // State contains mutable runtime data for the writeback cache.
@@ -305,10 +306,10 @@ func (t *transactionState) hasReqMeta() bool {
 }
 
 // Resources holds the shared resources and wiring referenced by the writeback
-// cache. Storage is the backing store. AddressToPortMapper is an externally
-// injected mapper used to derive the remote ports the cache evicts/fetches to;
-// RemotePorts is the equivalent wiring data when the mapper is built from
-// Spec.AddressMapperType. Only one of the two needs to be supplied.
+// cache. Storage is the backing store. AddressToPortMapper routes fetches and
+// evictions to lower memory; when it is not supplied, Build creates one from
+// Spec.AddressMapperType over RemotePorts. Only one of the two needs to be
+// supplied.
 type Resources struct {
 	Storage             *mem.Storage
 	AddressToPortMapper mem.AddressToPortMapper

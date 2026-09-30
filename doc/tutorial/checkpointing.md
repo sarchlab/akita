@@ -125,7 +125,7 @@ one of the three type parameters:
 
 | Type param | Holds | Checkpoint treatment |
 | --- | --- | --- |
-| `Spec` | immutable config (primitives only) | hashed and **compared** on load, not restored |
+| `Spec` | immutable config (scalar fields only) | hashed and **compared** on load, not restored |
 | `State` | **all** mutable runtime data | serialized and restored — the only thing saved |
 | `Resources` | references to shared objects (e.g. `*mem.Storage`) | not serialized; setup reinjects them |
 
@@ -147,10 +147,13 @@ type Resources struct {
 type Comp = modeling.Component[Spec, State, Resources]
 ```
 
-`Spec` must contain only primitives, slices/maps of primitives — no nested
-structs. `State` is more permissive: nested structs, slices, and maps (with
-string or integer keys) are all fine. Neither may contain pointers, interfaces,
-channels, or funcs (tag a field `json:"-"` to exempt one that setup rebuilds).
+`Spec` may contain only scalar fields: booleans, numbers, strings, and named
+types based on them. No slices, arrays, maps, or nested structs. `State` is more
+permissive: nested structs, slices, arrays, and maps (with string or integer
+keys) are all fine. Neither may contain pointers, interfaces, channels, or funcs;
+in `State` you may tag a field `json:"-"` to exempt one that setup rebuilds.
+Every field of either struct needs a distinct JSON name: `encoding/json`
+silently drops colliding fields, so `Build` rejects them.
 
 ### The builder validates this for you — loudly
 

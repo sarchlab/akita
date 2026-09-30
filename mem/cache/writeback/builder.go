@@ -5,35 +5,10 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides default configuration for the writeback cache.
-var defaultSpec = Spec{
-	Freq:                1 * timing.GHz,
-	NumReqPerCycle:      1,
-	Log2BlockSize:       6,
-	BankLatency:         10,
-	WayAssociativity:    4,
-	NumBanks:            1,
-	NumMSHREntry:        16,
-	TotalByteSize:       512 * mem.KB,
-	WriteBufferCapacity: 1024,
-	MaxInflightFetch:    128,
-	MaxInflightEviction: 128,
-	InterleavingSize:    4096,
-}
-
-// DefaultSpec returns a copy of the default configuration. Callers typically
-// obtain it, tweak the fields they care about, and pass it to WithSpec.
-func DefaultSpec() Spec {
-	return defaultSpec
-}
 
 // A Builder can build writeback caches. Configuration is supplied as a whole
 // through WithSpec; wiring is supplied through WithSimulation and WithResources.
@@ -48,7 +23,7 @@ type Builder struct {
 
 // MakeBuilder creates a new builder with default configurations.
 func MakeBuilder() Builder {
-	return Builder{spec: defaultSpec}
+	return Builder{spec: Definition.DefaultSpec}
 }
 
 // WithSimulation sets the simulation that owns and registers the built component.
@@ -57,7 +32,7 @@ func (b Builder) WithSimulation(sim timing.Simulation) Builder {
 	return b
 }
 
-// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+// WithSpec sets the entire configuration. Start from Definition.DefaultSpec and tweak.
 func (b Builder) WithSpec(spec Spec) Builder {
 	b.spec = spec
 	return b
@@ -98,18 +73,15 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		WithResources(Resources{
 			Storage:             storage,
-			AddressToPortMapper: b.resources.AddressToPortMapper,
+			AddressToPortMapper: b.resolveAddressMapper(),
 			RemotePorts:         b.resources.RemotePorts,
 		}).
 		Build(name)
 
 	comp.State = initialState
-
-	comp.DeclarePort("Top", memprotocol.Responder)
-	comp.DeclarePort("Bottom", memprotocol.Requester)
-	comp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	pmw := b.buildPipelineMW(comp, laneWidth)
 	cmw := b.buildControlMW(comp, pmw)
@@ -188,10 +160,8 @@ func (b Builder) buildInitialState(
 	return s
 }
 
-// buildSpec produces the final Spec used by the component. It derives the
-// number of sets and resolves the address mapper (from an injected mapper or
-// from the type string plus the remote ports in Resources) into the flat
-// address-mapping fields read at Tick time.
+// buildSpec produces the final Spec used by the component: it derives the
+// number of sets and defaults the bank count.
 func (b Builder) buildSpec(numSets int) Spec {
 	spec := b.spec
 	if spec.NumBanks < 1 {
@@ -199,43 +169,49 @@ func (b Builder) buildSpec(numSets int) Spec {
 	}
 	spec.NumSets = numSets
 
-	mapperType, remotePorts, interleavingSize := b.resolveAddressMapper()
-	if mapperType != "" {
-		remotePortNames := make([]string, len(remotePorts))
-		for i, rp := range remotePorts {
-			remotePortNames[i] = string(rp)
-		}
-		spec.AddressMapperType = mapperType
-		spec.RemotePortNames = remotePortNames
-		spec.InterleavingSize = interleavingSize
-	}
-
 	return spec
 }
 
-// resolveAddressMapper returns the address mapper type, remote ports, and
-// interleaving size. An externally injected mapper (Resources.AddressToPortMapper)
-// takes precedence and is decomposed into these fields; otherwise the values
-// come from Spec.AddressMapperType plus Resources.RemotePorts.
-func (b Builder) resolveAddressMapper() (
-	mapperType string,
-	remotePorts []messaging.RemotePort,
-	interleavingSize uint64,
-) {
+// resolveAddressMapper returns the mapper that routes fetches and evictions
+// to lower memory: the injected Resources.AddressToPortMapper, or one built
+// from Spec.AddressMapperType over Resources.RemotePorts. It returns nil when
+// neither is configured or there are no remote ports, so the first routed
+// request reports the missing wiring.
+func (b Builder) resolveAddressMapper() mem.AddressToPortMapper {
 	if b.resources.AddressToPortMapper != nil {
-		switch m := b.resources.AddressToPortMapper.(type) {
-		case *mem.SinglePortMapper:
-			return "single", []messaging.RemotePort{m.Port}, b.spec.InterleavingSize
-		case *mem.InterleavedAddressPortMapper:
-			return "interleaved", m.LowModules, m.InterleavingSize
-		default:
-			panic(fmt.Sprintf(
-				"unsupported address mapper type: %T",
-				b.resources.AddressToPortMapper))
-		}
+		return b.resources.AddressToPortMapper
 	}
 
-	return b.spec.AddressMapperType, b.resources.RemotePorts, b.spec.InterleavingSize
+	ports := b.resources.RemotePorts
+
+	switch b.spec.AddressMapperType {
+	case "":
+		return nil
+	case "single":
+		if len(ports) == 0 {
+			return nil
+		}
+
+		return &mem.SinglePortMapper{Port: ports[0]}
+	case "interleaved":
+		if len(ports) == 0 {
+			return nil
+		}
+
+		if b.spec.InterleavingSize == 0 {
+			panic("writeback: an interleaved address mapper needs a " +
+				"non-zero Spec.InterleavingSize")
+		}
+
+		mapper := mem.NewInterleavedAddressPortMapper(b.spec.InterleavingSize)
+		mapper.LowModules = append(mapper.LowModules, ports...)
+
+		return mapper
+	default:
+		panic(fmt.Sprintf(
+			"writeback: unknown address mapper type %q",
+			b.spec.AddressMapperType))
+	}
 }
 
 func (b Builder) buildPipelineMW(

@@ -31,7 +31,7 @@ var _ = Describe("DataMover control behavior", func() {
 	)
 
 	build := func() {
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.BufferSize = 2048
 		spec.InsideByteGranularity = 64
 		spec.OutsideByteGranularity = 64

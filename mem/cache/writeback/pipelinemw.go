@@ -39,30 +39,15 @@ func (m *pipelineMW) bottomPort() messaging.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
-// findPort resolves an address to a remote port using data from Spec.
+// findPort resolves an address to the lower-memory port that serves it.
 func (m *pipelineMW) findPort(address uint64) messaging.RemotePort {
-	spec := m.comp.Spec()
-
-	switch spec.AddressMapperType {
-	case "single":
-		if len(spec.RemotePortNames) > 0 {
-			name := spec.RemotePortNames[0]
-			if name != "" {
-				return messaging.RemotePort(name)
-			}
-		}
-	case "interleaved":
-		if n := uint64(len(spec.RemotePortNames)); n > 0 {
-			idx := address / spec.InterleavingSize % n
-			name := spec.RemotePortNames[idx]
-			if name != "" {
-				return messaging.RemotePort(name)
-			}
-		}
+	mapper := m.comp.Resources().AddressToPortMapper
+	if mapper == nil {
+		panic("writeback: no address mapper; set Resources.AddressToPortMapper, " +
+			"or Spec.AddressMapperType with Resources.RemotePorts")
 	}
 
-	panic("findPort: no valid address mapping for address; " +
-		"Spec.AddressMapperType=" + spec.AddressMapperType)
+	return mapper.Find(address)
 }
 
 // Tick updates the internal states of the Cache pipeline.

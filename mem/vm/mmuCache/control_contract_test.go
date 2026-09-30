@@ -13,7 +13,7 @@ func TestControlContract(t *testing.T) {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
 
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.NumBlocks = 1
 		spec.NumLevels = 5
 		spec.PageSize = 4096

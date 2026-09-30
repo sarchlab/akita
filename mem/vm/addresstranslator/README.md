@@ -48,7 +48,7 @@ Up to `NumReqPerCycle` translations and responses are handled each tick.
 ## Builder Pattern
 
 ```go
-spec := addresstranslator.DefaultSpec()
+spec := addresstranslator.Definition.DefaultSpec
 spec.DeviceID = 1
 
 at := addresstranslator.MakeBuilder().
@@ -64,7 +64,7 @@ at := addresstranslator.MakeBuilder().
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
+| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
 | `WithResources(Resources{...})` | External wiring (memory and translation provider mappers) |
 
 ## Ports

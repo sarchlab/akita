@@ -236,6 +236,9 @@ func TestBuilderWithSpec(t *testing.T) {
 
 // --- ValidateSpec tests ---
 
+// testKind is an enum-like named string type, a valid Spec field type.
+type testKind string
+
 func TestValidateSpecValid(t *testing.T) {
 	tests := []struct {
 		name string
@@ -243,15 +246,10 @@ func TestValidateSpecValid(t *testing.T) {
 	}{
 		{"primitives only", TestSpec{Frequency: 1, BufferLen: 4, Name: "x", Enabled: true}},
 		{"empty struct", struct{}{}},
-		{"with slices", struct {
-			Ids    []int
-			Names  []string
-			Floats []float64
-		}{Ids: []int{1}, Names: []string{"a"}, Floats: []float64{1.0}}},
-		{"with map", struct {
-			Labels map[string]string
-			Counts map[string]int
-		}{Labels: map[string]string{"a": "b"}, Counts: map[string]int{"x": 1}}},
+		{"named scalar types", struct {
+			Freq timing.Freq
+			Kind testKind
+		}{Freq: 1 * timing.GHz, Kind: "fast"}},
 	}
 
 	for _, tt := range tests {
@@ -286,6 +284,18 @@ func TestValidateSpecInvalid(t *testing.T) {
 		}
 	}
 
+	type withSlice struct {
+		IDs []int
+	}
+
+	type withArray struct {
+		Lanes [4]int
+	}
+
+	type withMap struct {
+		Labels map[string]string
+	}
+
 	tests := []struct {
 		name string
 		v    any
@@ -295,6 +305,9 @@ func TestValidateSpecInvalid(t *testing.T) {
 		{"func field", withFunc{}},
 		{"chan field", withChan{}},
 		{"nested struct", withNestedStruct{}},
+		{"slice field", withSlice{}},
+		{"array field", withArray{}},
+		{"map field", withMap{}},
 		{"not a struct", 42},
 	}
 

@@ -127,7 +127,7 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 
 		// A short tREFI/tRFC so a refresh window opens quickly and the request
 		// that arrives during it is the one charged the stall.
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.TREFI = 1
 		spec.TRFC = 3
 

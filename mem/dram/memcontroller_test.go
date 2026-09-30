@@ -1059,7 +1059,7 @@ var _ = Describe("Builder Configuration", func() {
 	It("should set page policy via builder", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.PagePolicy = PagePolicyOpen
 		ctrl := MakeBuilder().
 			WithSimulation(sim).
@@ -1073,7 +1073,7 @@ var _ = Describe("Builder Configuration", func() {
 	It("should set R/W queue sizes via builder", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.ReadQueueSize = 8
 		spec.WriteQueueSize = 8
 		spec.WriteHighWatermark = 6

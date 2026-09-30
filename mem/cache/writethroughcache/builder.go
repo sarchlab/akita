@@ -5,38 +5,10 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
-
-	"github.com/sarchlab/akita/v5/messaging"
 )
-
-// defaultSpec provides default configuration for the writethroughcache.
-// The default write policy type is "write-around".
-var defaultSpec = Spec{
-	Freq:                  1 * timing.GHz,
-	NumReqPerCycle:        4,
-	Log2BlockSize:         6,
-	BankLatency:           20,
-	WayAssociativity:      4,
-	MaxNumConcurrentTrans: 16,
-	NumBanks:              1,
-	NumMSHREntry:          4,
-	TotalByteSize:         4 * mem.KB,
-	DirLatency:            2,
-	InterleavingSize:      4096,
-	WritePolicyType:       "write-around",
-}
-
-// DefaultSpec returns a copy of the default configuration. Callers typically
-// obtain it, tweak the fields they care about, and pass it to WithSpec.
-func DefaultSpec() Spec {
-	return defaultSpec
-}
 
 // A Builder can build a writethroughcache cache. Configuration is supplied as a
 // whole through WithSpec; wiring is supplied through WithSimulation and
@@ -51,7 +23,7 @@ type Builder struct {
 
 // MakeBuilder creates a builder with default parameter setting.
 func MakeBuilder() Builder {
-	return Builder{spec: defaultSpec}
+	return Builder{spec: Definition.DefaultSpec}
 }
 
 // WithSimulation sets the simulation that owns and registers the built component.
@@ -60,7 +32,7 @@ func (b Builder) WithSimulation(sim timing.Simulation) Builder {
 	return b
 }
 
-// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+// WithSpec sets the entire configuration. Start from Definition.DefaultSpec and tweak.
 func (b Builder) WithSpec(spec Spec) Builder {
 	b.spec = spec
 	return b
@@ -87,8 +59,6 @@ func (b Builder) Build(name string) *Comp {
 		spec.WritePolicyType = "write-around"
 	}
 
-	b.resolveAddressMapper(&spec)
-
 	blockSize := 1 << spec.Log2BlockSize
 	spec.NumSets = int(spec.TotalByteSize /
 		uint64(spec.WayAssociativity*blockSize))
@@ -101,7 +71,11 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
-		WithResources(Resources{Storage: storage}).
+		WithDefinition(Definition).
+		WithResources(Resources{
+			Storage:       storage,
+			AddressMapper: b.resolveAddressMapper(),
+		}).
 		Build(name)
 
 	comp.State = initialState
@@ -115,10 +89,6 @@ func (b Builder) Build(name string) *Comp {
 	// effect this tick before any Top/Bottom traffic advances.
 	comp.AddMiddleware(ucmw) // index 0: control verbs
 	comp.AddMiddleware(pmw)  // index 1: data pipeline
-
-	comp.DeclarePort("Top", memprotocol.Responder)
-	comp.DeclarePort("Bottom", memprotocol.Requester)
-	comp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	b.simulation.RegisterComponent(comp)
 
@@ -138,41 +108,46 @@ func (b Builder) resolveStorage(name string, spec Spec) *mem.Storage {
 		Build(name + ".Storage")
 }
 
-// resolveAddressMapper derives the address-mapper configuration stored in Spec
-// (AddressMapperType, RemotePortNames, InterleavingSize) from the wiring placed
-// in Resources. When an explicit mapper is injected via Resources.AddressMapper
-// it is decoded into the type string and remote ports; otherwise the remote
-// ports listed in Resources are combined with the Spec type string.
-func (b Builder) resolveAddressMapper(spec *Spec) {
+// resolveAddressMapper returns the mapper that routes requests to lower
+// memory: the injected Resources.AddressMapper, or one built from
+// Spec.AddressMapperType over Resources.RemotePorts. It returns nil when
+// neither is configured or there are no remote ports, so the first routed
+// request reports the missing wiring.
+func (b Builder) resolveAddressMapper() mem.AddressToPortMapper {
 	if b.resources.AddressMapper != nil {
-		switch m := b.resources.AddressMapper.(type) {
-		case *mem.SinglePortMapper:
-			spec.AddressMapperType = "single"
-			spec.RemotePortNames = []string{string(m.Port)}
-		case *mem.InterleavedAddressPortMapper:
-			spec.AddressMapperType = "interleaved"
-			spec.RemotePortNames = remotePortNames(m.LowModules)
-			spec.InterleavingSize = m.InterleavingSize
-		default:
-			panic(fmt.Sprintf(
-				"unsupported address mapper type: %T", b.resources.AddressMapper))
+		return b.resources.AddressMapper
+	}
+
+	ports := b.resources.RemotePorts
+
+	switch b.spec.AddressMapperType {
+	case "":
+		return nil
+	case "single":
+		if len(ports) == 0 {
+			return nil
 		}
 
-		return
-	}
+		return &mem.SinglePortMapper{Port: ports[0]}
+	case "interleaved":
+		if len(ports) == 0 {
+			return nil
+		}
 
-	if spec.AddressMapperType != "" {
-		spec.RemotePortNames = remotePortNames(b.resources.RemotePorts)
-	}
-}
+		if b.spec.InterleavingSize == 0 {
+			panic("writethroughcache: an interleaved address mapper needs a " +
+				"non-zero Spec.InterleavingSize")
+		}
 
-func remotePortNames(ports []messaging.RemotePort) []string {
-	names := make([]string, len(ports))
-	for i, rp := range ports {
-		names[i] = string(rp)
-	}
+		mapper := mem.NewInterleavedAddressPortMapper(b.spec.InterleavingSize)
+		mapper.LowModules = append(mapper.LowModules, ports...)
 
-	return names
+		return mapper
+	default:
+		panic(fmt.Sprintf(
+			"writethroughcache: unknown address mapper type %q",
+			b.spec.AddressMapperType))
+	}
 }
 
 func (b *Builder) buildInitialState(

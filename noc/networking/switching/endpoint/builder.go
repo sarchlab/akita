@@ -2,24 +2,8 @@ package endpoint
 
 import (
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides the default configuration for endpoint components.
-var defaultSpec = Spec{
-	Freq:              1 * timing.GHz,
-	NumInputChannels:  1,
-	NumOutputChannels: 1,
-	FlitByteSize:      32,
-	EncodingOverhead:  0.25,
-}
-
-// DefaultSpec returns a copy of the default configuration. Callers obtain it,
-// tweak the fields they care about, and pass it to WithSpec.
-func DefaultSpec() Spec {
-	return defaultSpec
-}
 
 // Builder builds End Points. Configuration is supplied as a whole through
 // WithSpec; wiring is supplied through WithSimulation and WithResources. The
@@ -34,7 +18,7 @@ type Builder struct {
 // MakeBuilder creates a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: defaultSpec,
+		spec: Definition.DefaultSpec,
 	}
 }
 
@@ -44,7 +28,7 @@ func (b Builder) WithSimulation(sim timing.Simulation) Builder {
 	return b
 }
 
-// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+// WithSpec sets the entire configuration. Start from Definition.DefaultSpec and tweak.
 func (b Builder) WithSpec(spec Spec) Builder {
 	b.spec = spec
 	return b
@@ -72,6 +56,7 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(sim).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		Build(name)
 
 	ep := &Comp{
@@ -89,8 +74,6 @@ func (b Builder) Build(name string) *Comp {
 
 	ep.AddMiddleware(outMW)
 	ep.AddMiddleware(inMW)
-
-	ep.DeclarePort("NetworkPort", packetization.Link)
 
 	for _, dp := range b.resources.DevicePorts {
 		ep.PlugIn(dp)

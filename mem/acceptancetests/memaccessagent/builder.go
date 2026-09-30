@@ -9,20 +9,6 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// defaultSpec provides the default configuration for the memory access agent.
-var defaultSpec = Spec{
-	Freq:       1 * timing.GHz,
-	MaxAddress: 1024 * 1024,
-	WriteLeft:  1000,
-	ReadLeft:   1000,
-}
-
-// DefaultSpec returns a copy of the default configuration. Callers typically
-// obtain it, tweak the fields they care about, and pass it to WithSpec.
-func DefaultSpec() Spec {
-	return defaultSpec
-}
-
 // Builder constructs MemAccessAgent instances. Configuration is supplied as a
 // whole through WithSpec; wiring is supplied through WithSimulation and
 // WithResources. The component declares its "Mem" port; the port instance is
@@ -37,7 +23,7 @@ type Builder struct {
 
 // MakeBuilder returns a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{spec: defaultSpec}
+	return Builder{spec: Definition.DefaultSpec}
 }
 
 // WithSimulation sets the simulation that owns and registers the built component.
@@ -46,7 +32,7 @@ func (b Builder) WithSimulation(sim timing.Simulation) Builder {
 	return b
 }
 
-// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+// WithSpec sets the entire configuration. Start from Definition.DefaultSpec and tweak.
 func (b Builder) WithSpec(spec Spec) Builder {
 	b.spec = spec
 	return b
@@ -92,6 +78,7 @@ func (b Builder) Build(name string) *MemAccessAgent {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		Build(name)
 	modelComp.State = initialState
 
@@ -109,8 +96,6 @@ func (b Builder) Build(name string) *MemAccessAgent {
 
 	mw := &agentMiddleware{agent: agent}
 	modelComp.AddMiddleware(mw)
-
-	modelComp.DeclarePort("Mem", memprotocol.Requester)
 
 	b.simulation.RegisterComponent(agent)
 

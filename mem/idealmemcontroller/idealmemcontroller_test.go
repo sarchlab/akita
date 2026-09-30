@@ -39,7 +39,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 	// build constructs a controller with the given Top-port buffer size, injects
 	// the shared storage, and plugs a noopConn so its ports can be driven.
 	build := func(topBufSize int) {
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.Width = 1
 		spec.Latency = 10
 		spec.CacheLineSize = 64

@@ -70,7 +70,7 @@ var _ = Describe("MMU milestones", func() {
 		mmuComp = MakeBuilder().
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(DefaultSpec()).
+			WithSpec(Definition.DefaultSpec).
 			Build("MMU")
 
 		topPort = assignPort(sim, mmuComp, "Top", 16)

@@ -19,7 +19,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
 
-	spec := DefaultSpec()
+	spec := Definition.DefaultSpec
 	spec.BufferSize = 4
 	spec.NumReqPerCycle = 2
 	spec.BottomUnit = messaging.RemotePort("BottomUnit")

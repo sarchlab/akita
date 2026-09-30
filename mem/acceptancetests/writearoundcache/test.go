@@ -42,7 +42,7 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 		WithSimulation(s).
 		Build("Conn")
 
-	agentSpec := memaccessagent.DefaultSpec()
+	agentSpec := memaccessagent.Definition.DefaultSpec
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.ReadLeft = *numAccessFlag
@@ -60,7 +60,7 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 		agent.CreateProgressBars(monitor.CreateProgressBar)
 	}
 
-	dramSpec := idealmemcontroller.DefaultSpec()
+	dramSpec := idealmemcontroller.Definition.DefaultSpec
 	dramSpec.Capacity = 4 * mem.GB
 	dram := idealmemcontroller.MakeBuilder().
 		WithSimulation(s).
@@ -82,7 +82,7 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 	addressToPortMapper := new(mem.SinglePortMapper)
 	addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()
 
-	cacheSpec := writethroughcache.DefaultSpec()
+	cacheSpec := writethroughcache.Definition.DefaultSpec
 	cacheSpec.WritePolicyType = "write-around"
 	cacheSpec.Log2BlockSize = 6
 	cacheSpec.NumMSHREntry = 4

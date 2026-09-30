@@ -46,7 +46,7 @@ var _ = Describe("End Point", func() {
 
 		devicePort.EXPECT().SetConnection(gomock.Any())
 
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.Freq = 1
 		spec.FlitByteSize = 32
 

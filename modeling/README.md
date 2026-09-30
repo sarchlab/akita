@@ -10,19 +10,60 @@ separation and a middleware pipeline.
 Every modeled component is parameterized by three type arguments:
 
 - **Spec (`S`)** — immutable configuration set at build time (e.g., cache size,
-  number of banks). Must be a plain struct with primitive fields only.
+  number of banks). Must be a plain struct with scalar fields only: booleans,
+  numbers, strings, and named types based on them (such as `timing.Freq` or an
+  enum-like string type). No slices, arrays, maps, or nested structs.
 - **State (`T`)** — mutable runtime data (e.g., queues, counters, in-flight
   tables). May contain nested structs, slices, and maps; must be
   JSON-serializable.
 - **Resources (`R`)** — references to shared objects (e.g., backing storage).
   Use `modeling.None` when a component references no shared resources.
 
-Validate values at runtime with `ValidateSpec(v)` and `ValidateState(v)`. Both
-reject pointers, interfaces, channels, and functions. `ValidateSpec` additionally
-rejects nested structs; `ValidateState` allows them. Map keys must be `string` or
-an integer type.
+Validate values at runtime with `ValidateSpec(v)` and `ValidateState(v)`; every
+`Build` runs both. Both reject pointers, interfaces, channels, and functions, and
+two fields that share a JSON name (which `encoding/json` silently drops).
+`ValidateSpec` additionally rejects slices, arrays, maps, and nested structs;
+`ValidateState` allows them, with `string` or integer map keys.
+
+A value that seems to need a container in the Spec usually belongs elsewhere:
+
+- one value repeated per unit (the same register count for every SIMD) is a
+  single scalar;
+- a reference to an external object, or something derived only from one (the
+  address mapper that routes to lower memory), is a Resources field. Resources
+  are not checkpointed: the rebuild supplies them, and `Build` recomputes what
+  it derives from them.
 
 ## Key Types
+
+### ComponentDef[S]
+
+A component's defaults and boundary ports live in one public declaration, a
+package-level var named `Definition`:
+
+```go
+var Definition = modeling.ComponentDef[Spec]{
+    Name:        "MyComponent",
+    DefaultSpec: Spec{Size: 64},
+    Ports:       []modeling.PortDef{{Name: "Top"}},
+}
+```
+
+The literal must be statically evaluable (keyed fields, constant leaves, role
+identifiers) because the `inspect` package reads and validates it without
+running the code. Treat it as read-only so builders and the inspector see the
+same defaults and ports. Tooling finds the component's Resources type through
+its builder's `WithResources` parameter.
+
+- `Definition.DefaultSpec` is the starting configuration for a builder or
+  caller to customize. Spec fields are scalars, so reading it yields an
+  independent copy.
+- `modeling.NewBuilder[...]().WithDefinition(Definition)` makes `Build` declare
+  the definition's ports on the new component (the event-driven builder has
+  the same method). A `PortDef` with `Group: true` declares a port group whose
+  members are added at configuration time. Each component receives its own
+  role slices.
+- `Definition.Name`, `DefaultSpec`, and `Ports` expose the metadata directly.
 
 ### Component[S, T, R] (tick-driven)
 

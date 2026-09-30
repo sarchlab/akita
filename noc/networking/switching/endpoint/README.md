@@ -55,7 +55,7 @@ backpressure to keep the serializable state bounded.
 ```go
 ep := endpoint.MakeBuilder().
     WithSimulation(sim).                                        // *simulation.Simulation or a standalone simulation
-    WithSpec(endpoint.DefaultSpec()).
+    WithSpec(endpoint.Definition.DefaultSpec).
     WithResources(endpoint.Resources{DevicePorts: ports}).
     Build("EndPoint0")
 ```

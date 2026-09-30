@@ -89,7 +89,7 @@ var _ = Describe("DataMover milestones", func() {
 
 		srcPort = messaging.NewPort(nil, 4, 4, "Src.Top")
 
-		memSpec := idealmemcontroller.DefaultSpec()
+		memSpec := idealmemcontroller.Definition.DefaultSpec
 		memSpec.Latency = 100
 		memSpec.Width = 1
 		memSpec.CacheLineSize = 64
@@ -116,7 +116,7 @@ var _ = Describe("DataMover milestones", func() {
 		outsideMem.AssignPort("Control",
 			messaging.NewPort(outsideMem, 16, 16, outsideMem.Name()+".Control"))
 
-		dmSpec := DefaultSpec()
+		dmSpec := Definition.DefaultSpec
 		dmSpec.BufferSize = 2048
 		dmSpec.InsideByteGranularity = 64
 		dmSpec.OutsideByteGranularity = 256

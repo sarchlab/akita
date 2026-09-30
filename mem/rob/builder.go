@@ -1,24 +1,9 @@
 package rob
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
-
-var defaultSpec = Spec{
-	Freq:           1 * timing.GHz,
-	BufferSize:     128,
-	NumReqPerCycle: 4,
-}
-
-// DefaultSpec returns a copy of the default reorder-buffer configuration.
-// Callers typically take it, tweak the fields they care about, and pass the
-// result to WithSpec.
-func DefaultSpec() Spec {
-	return defaultSpec
-}
 
 // Builder constructs reorder-buffer components. Configuration is supplied as a
 // whole through WithSpec; wiring is supplied through WithSimulation. The reorder
@@ -32,7 +17,7 @@ type Builder struct {
 
 // MakeBuilder returns a Builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{spec: defaultSpec}
+	return Builder{spec: Definition.DefaultSpec}
 }
 
 // WithSimulation sets the simulation that owns and registers the built component.
@@ -41,7 +26,7 @@ func (b Builder) WithSimulation(sim timing.Simulation) Builder {
 	return b
 }
 
-// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+// WithSpec sets the entire configuration. Start from Definition.DefaultSpec and tweak.
 func (b Builder) WithSpec(spec Spec) Builder {
 	b.spec = spec
 	return b
@@ -62,14 +47,11 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		Build(name)
 
 	comp.State = State{}
 	comp.AddMiddleware(&middleware{comp: comp})
-
-	comp.DeclarePort("Top", memprotocol.Responder)
-	comp.DeclarePort("Bottom", memprotocol.Requester)
-	comp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	b.simulation.RegisterComponent(comp)
 

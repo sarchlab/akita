@@ -51,7 +51,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		controlAgentPort = messaging.NewPort(nil, 8, 8, "Agent.Control")
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
-		dramSpec := idealmemcontroller.DefaultSpec()
+		dramSpec := idealmemcontroller.Definition.DefaultSpec
 		dramSpec.Width = 1
 		dramSpec.Latency = 200
 		dramSpec.CacheLineSize = 64
@@ -69,7 +69,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			Port: dram.GetPortByName("Top").AsRemote(),
 		}
 
-		cacheSpec := DefaultSpec()
+		cacheSpec := Definition.DefaultSpec
 		cacheSpec.TotalByteSize = 1024 * 4 * 64
 		cacheSpec.NumReqPerCycle = 4
 

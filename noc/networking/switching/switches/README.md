@@ -53,7 +53,7 @@ The switch is built first, then ports are added one at a time.
 ```go
 sw := switches.MakeBuilder().
     WithSimulation(sim).                                  // *simulation.Simulation or a standalone simulation
-    WithSpec(switches.DefaultSpec()).
+    WithSpec(switches.Definition.DefaultSpec).
     WithResources(switches.Resources{RoutingTable: rt}).
     Build("Switch0")
 

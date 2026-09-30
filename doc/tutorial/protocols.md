@@ -87,17 +87,30 @@ message type listed in two roles of one protocol.
 ## Binding Ports to Roles
 
 A port declares the role(s) it speaks right where the component declares
-the port, typically in the builder's `Build`:
+the port. A library component lists its ports in its `Definition`, and its
+builder passes the definition to `WithDefinition` so that `Build` declares
+them:
 
 ```go
-modelComp.DeclarePort("Top", memprotocol.Responder)
-modelComp.DeclarePort("Bottom", memprotocol.Requester)
-modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
+var Definition = modeling.ComponentDef[Spec]{
+    Name: "MyCache",
+    Ports: []modeling.PortDef{
+        {Name: "Top", Roles: []*messaging.Role{memprotocol.Responder}},
+        {Name: "Bottom", Roles: []*messaging.Role{memprotocol.Requester}},
+        {Name: "Control", Roles: []*messaging.Role{memcontrolprotocol.Responder}},
+    },
+}
 ```
 
-This is the single discoverable home for "the `Top` port speaks the mem
-protocol as the responder." The binding is metadata: it does not change
-how messages flow, and there is no runtime conformance check. A port may
+The definition is the single discoverable home for "the `Top` port speaks
+the mem protocol as the responder": the builder declares these ports at
+runtime, and the `inspect` package reads the same list without running the
+code. A component without a definition, like the examples, declares its
+ports directly in `Build`, for instance
+`comp.DeclarePort("Top", memprotocol.Responder)`.
+
+The binding is metadata: it does not change how messages flow, and there is
+no runtime conformance check. A port may
 bind more than one role when it multiplexes protocols, and a port declared
 with no role — like every port in the examples — is untyped and works
 exactly the same.

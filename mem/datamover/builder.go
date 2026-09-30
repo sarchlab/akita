@@ -1,25 +1,9 @@
 package datamover
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides default configuration for the data mover.
-var defaultSpec = Spec{
-	Freq: 1 * timing.GHz,
-}
-
-// DefaultSpec returns a copy of the default configuration. Callers typically
-// obtain it, tweak the fields they care about, and pass it to WithSpec.
-func DefaultSpec() Spec {
-	return defaultSpec
-}
 
 // Builder builds StreamingDataMover components. Configuration is supplied as a
 // whole through WithSpec; wiring is supplied through WithSimulation and
@@ -35,7 +19,7 @@ type Builder struct {
 // MakeBuilder creates a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: defaultSpec,
+		spec: Definition.DefaultSpec,
 	}
 }
 
@@ -45,7 +29,7 @@ func (b Builder) WithSimulation(sim timing.Simulation) Builder {
 	return b
 }
 
-// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+// WithSpec sets the entire configuration. Start from Definition.DefaultSpec and tweak.
 func (b Builder) WithSpec(spec Spec) Builder {
 	b.spec = spec
 	return b
@@ -66,13 +50,14 @@ func (b Builder) Build(name string) *Comp {
 		panic("datamover: WithSimulation is required")
 	}
 
-	spec := b.resolveSpec()
+	spec := b.spec
 	initialState := State{}
 
 	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		Build(name)
 	modelComp.State = initialState
 
@@ -82,61 +67,14 @@ func (b Builder) Build(name string) *Comp {
 	parseMW := &ctrlParseMW{comp: modelComp}
 	modelComp.AddMiddleware(parseMW)
 
-	dataMW := &dataTransferMW{comp: modelComp}
+	dataMW := &dataTransferMW{
+		comp:          modelComp,
+		insideMapper:  b.resources.InsideMapper,
+		outsideMapper: b.resources.OutsideMapper,
+	}
 	modelComp.AddMiddleware(dataMW)
-
-	modelComp.DeclarePort("Top", datamoverprotocol.Responder)
-	modelComp.DeclarePort("Inside", memprotocol.Requester)
-	modelComp.DeclarePort("Outside", memprotocol.Requester)
-	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	b.simulation.RegisterComponent(modelComp)
 
 	return modelComp
-}
-
-// resolveSpec produces the final Spec used by the component. Any address mapper
-// injected through Resources takes precedence and is decomposed into the flat
-// mapper fields read at Tick time; otherwise the Spec's own mapper fields are
-// used as-is.
-func (b Builder) resolveSpec() Spec {
-	spec := b.spec
-
-	if b.resources.InsideMapper != nil {
-		inlineMapper(b.resources.InsideMapper,
-			&spec.InsideMapperKind,
-			&spec.InsideMapperPorts,
-			&spec.InsideMapperInterleavingSize)
-	}
-
-	if b.resources.OutsideMapper != nil {
-		inlineMapper(b.resources.OutsideMapper,
-			&spec.OutsideMapperKind,
-			&spec.OutsideMapperPorts,
-			&spec.OutsideMapperInterleavingSize)
-	}
-
-	return spec
-}
-
-// inlineMapper converts an AddressToPortMapper into serializable Spec fields.
-func inlineMapper(
-	mapper mem.AddressToPortMapper,
-	kind *string,
-	ports *[]messaging.RemotePort,
-	interleavingSize *uint64,
-) {
-	switch m := mapper.(type) {
-	case *mem.SinglePortMapper:
-		*kind = "single"
-		*ports = []messaging.RemotePort{m.Port}
-		*interleavingSize = 0
-	case *mem.InterleavedAddressPortMapper:
-		*kind = "interleaved"
-		*ports = make([]messaging.RemotePort, len(m.LowModules))
-		copy(*ports, m.LowModules)
-		*interleavingSize = m.InterleavingSize
-	default:
-		panic("unsupported mapper type for inline conversion")
-	}
 }

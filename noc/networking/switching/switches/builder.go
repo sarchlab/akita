@@ -5,21 +5,9 @@ import (
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides the default configuration for switch components.
-var defaultSpec = Spec{
-	Freq: 1 * timing.GHz,
-}
-
-// DefaultSpec returns a copy of the default configuration. Callers obtain it,
-// tweak the fields they care about, and pass it to WithSpec.
-func DefaultSpec() Spec {
-	return defaultSpec
-}
 
 // Builder builds switches. Configuration is supplied as a whole through
 // WithSpec; wiring is supplied through WithSimulation and WithResources. Ports
@@ -33,7 +21,7 @@ type Builder struct {
 // MakeBuilder creates a new Builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: defaultSpec,
+		spec: Definition.DefaultSpec,
 	}
 }
 
@@ -43,7 +31,7 @@ func (b Builder) WithSimulation(sim timing.Simulation) Builder {
 	return b
 }
 
-// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+// WithSpec sets the entire configuration. Start from Definition.DefaultSpec and tweak.
 func (b Builder) WithSpec(spec Spec) Builder {
 	b.spec = spec
 	return b
@@ -70,6 +58,7 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(sim).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		Build(name)
 
 	portIndex := make(map[messaging.RemotePort]int)
@@ -89,10 +78,6 @@ func (b Builder) Build(name string) *Comp {
 	// This matches the execution order: sendOut → forward → route → movePipeline → startProcessing
 	modelComp.AddMiddleware(rfsMW)
 	modelComp.AddMiddleware(rpMW)
-
-	// The switch has a dynamic number of ports, added later with
-	// MakeSwitchPortAdder. They live in the "Port" group.
-	modelComp.DeclarePortGroup("Port", packetization.Link)
 
 	b.simulation.RegisterComponent(modelComp)
 

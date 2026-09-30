@@ -31,7 +31,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	sim := modeling.NewStandaloneSimulation(engine)
 	pageTable := vm.NewPageTable(12)
 
-	spec := DefaultSpec()
+	spec := Definition.DefaultSpec
 	spec.DeviceID = deviceID
 	spec.Latency = 1
 	spec.LowModule = lowModule

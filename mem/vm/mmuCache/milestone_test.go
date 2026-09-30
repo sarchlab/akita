@@ -91,7 +91,7 @@ var _ = Describe("MMUCache milestones", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
 
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.NumBlocks = 4
 		spec.NumLevels = 2
 		spec.PageSize = 4096

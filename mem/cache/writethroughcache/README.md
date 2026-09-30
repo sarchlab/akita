@@ -57,21 +57,22 @@ type Comp = modeling.Component[Spec, State, Resources]
 - **State** — mutable runtime: `cache.DirectoryState`, `cache.MSHRState`, the
   flat `Transactions` list, the directory/bank `queueing.Buffer`/`Pipeline`
   stages, the pause flag, and the in-progress flush request.
-- **Resources** — shared wiring: the backing `*mem.Storage` plus the
-  `AddressToPortMapper`/`RemotePorts` describing how to reach lower memory (used
-  only at build time to populate the spec's mapper fields).
+- **Resources** — shared wiring: the backing `*mem.Storage` plus either an
+  `AddressMapper` or the `RemotePorts` that `Spec.AddressMapperType` routes
+  across. Build resolves them into the mapper the cache uses; none of them is
+  checkpointed.
 
 ## Builder Pattern
 
 Configuration is supplied as a whole through `WithSpec` (start from
-`DefaultSpec()`); the engine and registration come from `WithSimulation`; storage
+`Definition.DefaultSpec`); the engine and registration come from `WithSimulation`; storage
 and the address-to-port mapping come from `WithResources`. `Build` declares the
 component's `Top`, `Bottom`, and `Control` ports; the port instances are built
 with `modeling.MakePortBuilder` and attached after `Build` with `AssignPort`, so
 the caller chooses each port's buffer size.
 
 ```go
-spec := writethroughcache.DefaultSpec()
+spec := writethroughcache.Definition.DefaultSpec
 spec.WritePolicyType = "write-through"
 spec.TotalByteSize = 256 * mem.KB
 spec.WayAssociativity = 8
@@ -101,7 +102,7 @@ topPort := cache.GetPortByName("Top")
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required). |
-| `WithSpec(s)` | Full configuration; start from `DefaultSpec()`. |
+| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec`. |
 | `WithResources(r)` | Backing storage and the address-to-port mapper / remote ports. Storage is built internally if omitted. |
 
 ## Ports

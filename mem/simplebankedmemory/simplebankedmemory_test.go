@@ -205,7 +205,7 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.F
 	sim := modeling.NewStandaloneSimulation(engine)
 	freq := 1 * timing.GHz
 
-	spec := DefaultSpec()
+	spec := Definition.DefaultSpec
 	spec.Freq = freq
 	spec.NumBanks = 16
 	spec.StageLatency = 6
@@ -274,7 +274,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		sim = modeling.NewStandaloneSimulation(engine)
 		storage = mem.NewStorage(4 * mem.GB)
 
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.NumBanks = 2
 		spec.StageLatency = 2
 
@@ -374,7 +374,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 	It("accesses storage at the global request address (identity)", func() {
 		// Storage is global: a request's address indexes the backing store
 		// directly, with no per-controller conversion.
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.NumBanks = 2
 		spec.StageLatency = 2
 

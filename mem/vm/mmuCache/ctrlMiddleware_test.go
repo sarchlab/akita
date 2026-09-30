@@ -26,7 +26,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.NumBlocks = 1
 		spec.NumLevels = 5
 		spec.PageSize = 4096
@@ -178,7 +178,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 	It("invalidates only entries matching the PID filter", func() {
 		// A two-way single-level cache so two PIDs can coexist in
 		// distinct ways and the filter's selectivity is observable.
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.NumBlocks = 2
 		spec.NumLevels = 1
 		spec.PageSize = 4096

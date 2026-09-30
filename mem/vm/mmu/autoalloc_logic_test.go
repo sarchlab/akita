@@ -14,7 +14,7 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 	sim := modeling.NewStandaloneSimulation(engine)
 
 	// Create MMU with auto page allocation enabled
-	spec := DefaultSpec()
+	spec := Definition.DefaultSpec
 	spec.AutoPageAllocation = true
 
 	mmu := MakeBuilder().
@@ -77,7 +77,7 @@ func TestPhysicalPageAllocator(t *testing.T) {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
 
-	spec := DefaultSpec()
+	spec := Definition.DefaultSpec
 	spec.AutoPageAllocation = true
 	spec.Log2PageSize = 12 // 4KB pages
 
@@ -125,7 +125,7 @@ func TestAutoPageAllocationDisabled(t *testing.T) {
 
 	mmu := MakeBuilder().
 		WithSimulation(sim).
-		WithSpec(DefaultSpec()).
+		WithSpec(Definition.DefaultSpec).
 		Build("TestMMU")
 	assignPort(sim, mmu, "Top", 4096)
 	assignPort(sim, mmu, "Control", 4)
@@ -141,7 +141,7 @@ func TestAutoPageAllocationEnabled(t *testing.T) {
 	sim := modeling.NewStandaloneSimulation(engine)
 
 	// Create MMU with auto page allocation enabled
-	spec := DefaultSpec()
+	spec := Definition.DefaultSpec
 	spec.AutoPageAllocation = true
 
 	mmu := MakeBuilder().

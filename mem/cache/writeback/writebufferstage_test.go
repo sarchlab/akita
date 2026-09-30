@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
@@ -53,11 +54,12 @@ var _ = Describe("WriteBufferStage", func() {
 				WayAssociativity:    4,
 				NumSets:             64,
 				NumBanks:            1,
-				AddressMapperType:   "single",
-				RemotePortNames:     []string{"DRAM"},
 				WriteBufferCapacity: 16,
 				MaxInflightFetch:    4,
 				MaxInflightEviction: 4,
+			}).
+			WithResources(Resources{
+				AddressToPortMapper: &mem.SinglePortMapper{Port: "DRAM"},
 			}).
 			Build("Cache")
 

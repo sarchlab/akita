@@ -23,7 +23,7 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 
 		comp = MakeBuilder().
 			WithSimulation(sim).
-			WithSpec(DefaultSpec()).
+			WithSpec(Definition.DefaultSpec).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
 					Port: "RemotePort",

@@ -1,26 +1,9 @@
 package addresstranslator
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides the default configuration for address translators.
-var defaultSpec = Spec{
-	Freq:           1 * timing.GHz,
-	NumReqPerCycle: 4,
-	Log2PageSize:   12,
-	DeviceID:       1,
-}
-
-// DefaultSpec returns a copy of the default configuration. Callers typically
-// obtain it, tweak the fields they care about, and pass it to WithSpec.
-func DefaultSpec() Spec {
-	return defaultSpec
-}
 
 // Builder builds address translator components. Configuration is supplied as a
 // whole through WithSpec; wiring is supplied through WithSimulation and
@@ -36,7 +19,7 @@ type Builder struct {
 // MakeBuilder creates a new builder seeded with the default spec.
 func MakeBuilder() Builder {
 	return Builder{
-		spec: defaultSpec,
+		spec: Definition.DefaultSpec,
 	}
 }
 
@@ -46,7 +29,7 @@ func (b Builder) WithSimulation(sim timing.Simulation) Builder {
 	return b
 }
 
-// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+// WithSpec sets the entire configuration. Start from Definition.DefaultSpec and tweak.
 func (b Builder) WithSpec(spec Spec) Builder {
 	b.spec = spec
 	return b
@@ -73,6 +56,7 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		WithResources(b.resources).
 		Build(name)
 
@@ -84,11 +68,6 @@ func (b Builder) Build(name string) *Comp {
 
 	rpMW := &respondPipelineMW{comp: modelComp}
 	modelComp.AddMiddleware(rpMW)
-
-	modelComp.DeclarePort("Top", memprotocol.Responder)
-	modelComp.DeclarePort("Bottom", memprotocol.Requester)
-	modelComp.DeclarePort("Translation", vmprotocol.Requester)
-	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	b.simulation.RegisterComponent(modelComp)
 

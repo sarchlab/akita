@@ -1,25 +1,10 @@
 package gmmu
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
-
-// defaultSpec provides the default configuration for GMMU components.
-var defaultSpec = Spec{
-	Freq:                1 * timing.GHz,
-	Log2PageSize:        12,
-	MaxRequestsInFlight: 16,
-}
-
-// DefaultSpec returns a copy of the default configuration. Callers typically
-// obtain it, tweak the fields they care about, and pass it to WithSpec.
-func DefaultSpec() Spec {
-	return defaultSpec
-}
 
 // Builder builds GMMU components. Configuration is supplied as a whole through
 // WithSpec; wiring is supplied through WithSimulation and WithResources. The
@@ -34,7 +19,7 @@ type Builder struct {
 
 // MakeBuilder creates a new builder seeded with the default spec.
 func MakeBuilder() Builder {
-	return Builder{spec: defaultSpec}
+	return Builder{spec: Definition.DefaultSpec}
 }
 
 // WithSimulation sets the simulation that owns and registers the built component.
@@ -43,7 +28,7 @@ func (b Builder) WithSimulation(sim timing.Simulation) Builder {
 	return b
 }
 
-// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+// WithSpec sets the entire configuration. Start from Definition.DefaultSpec and tweak.
 func (b Builder) WithSpec(spec Spec) Builder {
 	b.spec = spec
 	return b
@@ -72,16 +57,13 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		WithResources(Resources{PageTable: pt}).
 		Build(name)
 
 	modelComp.State = State{
 		RemoteMemReqs: make(map[uint64]transactionState),
 	}
-
-	modelComp.DeclarePort("Top", vmprotocol.Responder)
-	modelComp.DeclarePort("Bottom", vmprotocol.Requester)
-	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	cMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cMW)

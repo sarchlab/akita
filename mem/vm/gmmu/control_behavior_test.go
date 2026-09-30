@@ -39,7 +39,7 @@ var _ = Describe("GMMU control behavior", func() {
 	)
 
 	build := func() {
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.DeviceID = deviceID
 		// A latency larger than the in-flight count lets every delivered
 		// request be parsed into a walk before the first one finalizes, so

@@ -2,58 +2,11 @@ package dram
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/timing"
+
 	"github.com/sarchlab/akita/v5/tracing"
 )
-
-var defaultSpec = Spec{
-	Freq:                 1600 * timing.MHz,
-	Protocol:             int(protoDDR3),
-	TAL:                  0,
-	TCL:                  11,
-	TCWL:                 8,
-	TRCD:                 11,
-	TRP:                  11,
-	TRAS:                 28,
-	TCCDL:                4,
-	TCCDS:                4,
-	TRTRS:                1,
-	TRTP:                 6,
-	TWTRL:                6,
-	TWTRS:                6,
-	TWR:                  12,
-	TPPD:                 0,
-	TRRDL:                5,
-	TRRDS:                5,
-	TRCDRD:               24,
-	TRCDWR:               20,
-	TREFI:                6240,
-	TRFC:                 208,
-	TRFCb:                1950,
-	TCKESR:               5,
-	TXS:                  216,
-	BusWidth:             64,
-	BurstLength:          8,
-	DeviceWidth:          16,
-	NumChannel:           1,
-	NumRank:              2,
-	NumBankGroup:         1,
-	NumBank:              8,
-	NumRow:               32768,
-	NumCol:               1024,
-	TransactionQueueSize: 32,
-	CommandQueueCapacity: 8,
-}
-
-// DefaultSpec returns a copy of the default configuration. Callers typically
-// obtain it, tweak the fields they care about, and pass it to WithSpec.
-func DefaultSpec() Spec {
-	return defaultSpec
-}
 
 // Builder can build new memory controllers. Configuration is supplied as a
 // whole through WithSpec; wiring is supplied through WithSimulation and
@@ -70,10 +23,10 @@ type Builder struct {
 
 // MakeBuilder creates a builder with default configuration.
 func MakeBuilder() Builder {
-	return Builder{spec: defaultSpec}
+	return Builder{spec: Definition.DefaultSpec}
 }
 
-// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+// WithSpec sets the entire configuration. Start from Definition.DefaultSpec and tweak.
 func (b Builder) WithSpec(spec Spec) Builder {
 	b.spec = spec
 	return b
@@ -131,12 +84,10 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		WithResources(Resources{Storage: storage}).
 		Build(name)
 	modelComp.State = initialState
-
-	modelComp.DeclarePort("Top", memprotocol.Responder)
-	modelComp.DeclarePort("Control", memcontrolprotocol.Responder)
 
 	b.addMiddlewares(modelComp, timing, cmdCycles, b.buildController())
 

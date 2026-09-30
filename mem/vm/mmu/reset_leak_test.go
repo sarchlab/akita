@@ -26,7 +26,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// A long walk latency keeps the walk genuinely in flight after a single
 	// parse tick, well short of completion.
-	spec := DefaultSpec()
+	spec := Definition.DefaultSpec
 	spec.Latency = 100
 
 	comp := MakeBuilder().

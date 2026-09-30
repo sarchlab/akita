@@ -104,7 +104,7 @@ func (h *p0Harness) collect() (
 
 var _ = Describe("P0: open-page panic regression", func() {
 	openPageSpec := func() Spec {
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.PagePolicy = PagePolicyOpen
 		return spec
 	}
@@ -224,7 +224,7 @@ var _ = Describe("P0: channel guard", func() {
 			engine := timing.NewSerialEngine()
 			sim := modeling.NewStandaloneSimulation(engine)
 
-			spec := DefaultSpec()
+			spec := Definition.DefaultSpec
 			spec.NumChannel = numChannel
 			MakeBuilder().
 				WithSimulation(sim).

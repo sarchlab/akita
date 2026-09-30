@@ -27,7 +27,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	tlbComp := MakeBuilder().
 		WithSimulation(sim).
-		WithSpec(DefaultSpec()).
+		WithSpec(Definition.DefaultSpec).
 		WithResources(Resources{
 			TranslationProviderMapper: &mem.SinglePortMapper{
 				Port: remotePort,

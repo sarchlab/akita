@@ -24,7 +24,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	sim := modeling.NewStandaloneSimulation(engine)
 	storage := mem.NewStorage(4 * mem.GB)
 
-	spec := DefaultSpec()
+	spec := Definition.DefaultSpec
 	spec.NumReqPerCycle = 1
 	spec.NumBanks = 1
 	spec.NumMSHREntry = 8

@@ -62,7 +62,7 @@ var _ = Describe("MMU", func() {
 		mmuComp = MakeBuilder().
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(DefaultSpec()).
+			WithSpec(Definition.DefaultSpec).
 			Build("MMU")
 
 		topPort = assignPort(sim, mmuComp, "Top", topBufSize)
@@ -230,7 +230,7 @@ var _ = Describe("MMU Integration", func() {
 		mmuComp = MakeBuilder().
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(DefaultSpec()).
+			WithSpec(Definition.DefaultSpec).
 			Build("MMU")
 
 		topPort = assignPort(sim, mmuComp, "Top", 4096)
