@@ -36,7 +36,7 @@ func TestDomainExposesPorts(t *testing.T) {
 		t.Error("expected GetPortByName to return the assigned port")
 	}
 
-	ports := d.Ports()
+	ports := d.AllPorts()
 	if len(ports) != 1 || ports[0] != port {
 		t.Error("expected Ports to list the assigned port")
 	}

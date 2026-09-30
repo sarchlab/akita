@@ -300,7 +300,7 @@ func (m *Monitor) registerPortBuffers(p monitorPort) {
 }
 
 func componentPorts(c Component) []monitorPort {
-	method := reflect.ValueOf(c).MethodByName("Ports")
+	method := reflect.ValueOf(c).MethodByName("AllPorts")
 	if !method.IsValid() {
 		return nil
 	}
@@ -310,7 +310,7 @@ func componentPorts(c Component) []monitorPort {
 		methodType.NumOut() != 1 ||
 		methodType.Out(0).Kind() != reflect.Slice {
 		panic("component " + c.Name() +
-			" Ports method must take no arguments and return one slice")
+			" AllPorts method must take no arguments and return one slice")
 	}
 
 	values := method.Call(nil)

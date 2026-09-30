@@ -151,9 +151,9 @@ func (po PortOwnerBase) GetPortByName(name string) Port {
 	panic("port not found")
 }
 
-// Ports returns a slice of all assigned ports owned by the PortOwner, sorted
+// AllPorts returns a slice of all assigned ports owned by the PortOwner, sorted
 // by name.
-func (po PortOwnerBase) Ports() []Port {
+func (po PortOwnerBase) AllPorts() []Port {
 	portList := make([]string, 0, len(po.ports))
 
 	for k := range po.ports {

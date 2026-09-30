@@ -108,7 +108,7 @@ func (a *Agent) recv() bool {
 	return madeProgress
 }
 
-// Ports returns the ports of the agent.
-func (a *Agent) Ports() []messaging.Port {
+// AllPorts returns the ports of the agent.
+func (a *Agent) AllPorts() []messaging.Port {
 	return a.AgentPorts
 }

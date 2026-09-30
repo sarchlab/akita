@@ -55,15 +55,13 @@ func newFakeComp(name string, matrix memcontrolprotocol.VerbSupport, asyncDelay 
 	return c
 }
 
-func (c *fakeComp) Name() string                                    { return c.name }
-func (c *fakeComp) DeclarePort(_ string, _ ...*messaging.Role)      {}
-func (c *fakeComp) DeclarePortGroup(_ string, _ ...*messaging.Role) {}
+func (c *fakeComp) Name() string { return c.name }
 func (c *fakeComp) AssignPort(name string, p messaging.Port) {
 	c.ports[name] = p
 	p.SetComponent(c)
 }
 func (c *fakeComp) GetPortByName(name string) messaging.Port { return c.ports[name] }
-func (c *fakeComp) Ports() []messaging.Port {
+func (c *fakeComp) AllPorts() []messaging.Port {
 	out := make([]messaging.Port, 0, len(c.ports))
 	for _, p := range c.ports {
 		out = append(out, p)

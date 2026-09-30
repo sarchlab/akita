@@ -99,7 +99,7 @@ func (c testComponent) Name() string {
 	return c.name
 }
 
-func (c testComponent) Ports() []Port {
+func (c testComponent) AllPorts() []Port {
 	return c.ports
 }
 

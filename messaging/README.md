@@ -156,11 +156,9 @@ type Component interface {
 }
 
 type PortOwner interface {
-    DeclarePort(name string, roles ...*Role)
-    DeclarePortGroup(name string, roles ...*Role)
     AssignPort(name string, port Port)
     GetPortByName(name string) Port
-    Ports() []Port
+    AllPorts() []Port
 }
 ```
 

@@ -43,5 +43,5 @@ type Resource interface {
 
 // PortOwner is implemented by simulation-native components that expose ports.
 type PortOwner interface {
-	Ports() []Port
+	AllPorts() []Port
 }
