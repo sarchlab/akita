@@ -11,7 +11,7 @@ type Spec struct {
 }
 
 // Definition uses a positional Spec literal on purpose.
-var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec, modeling.None]{
+var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{
 	Name:        "Unkeyed",
 	DefaultSpec: Spec{1},
 })

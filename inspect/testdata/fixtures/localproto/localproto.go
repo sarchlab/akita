@@ -34,7 +34,7 @@ type Spec struct {
 }
 
 // Definition references the local roles by bare identifiers.
-var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec, modeling.None]{
+var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{
 	Name:        "LocalProto",
 	DefaultSpec: Spec{Width: 2},
 	Ports: []modeling.PortDef{

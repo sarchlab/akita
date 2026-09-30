@@ -16,6 +16,13 @@ import (
 // definitionVarName is the required name of the package-level definition var.
 const definitionVarName = "Definition"
 
+// builderTypeName and withResourcesMethod locate a component's Resources
+// type: the parameter of its builder's WithResources method.
+const (
+	builderTypeName     = "Builder"
+	withResourcesMethod = "WithResources"
+)
+
 // extractors maps the fully-qualified name of a Define* function to the
 // extractor for its definition kind. Adding a kind (e.g. DefineBenchmark)
 // means adding an entry here plus its extractor.
@@ -155,7 +162,7 @@ func extractComponent(
 				"not a value computed elsewhere")
 	}
 
-	specType, resType, err := componentTypeArgs(pkg, lit)
+	specType, err := componentSpecType(pkg, lit)
 	if err != nil {
 		return nil, err
 	}
@@ -176,9 +183,11 @@ func extractComponent(
 		return nil, err
 	}
 
-	def.Resources, err = structFields(pkg, resType, nil, index)
-	if err != nil {
-		return nil, err
+	if resType := builderResourcesType(pkg); resType != nil {
+		def.Resources, err = structFields(pkg, resType, nil, index)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if err := validateDefinition(pkg, lit, specType, def); err != nil {
@@ -287,24 +296,49 @@ func applyComponentFields(
 	return defaults, nil
 }
 
-// componentTypeArgs returns the Spec and Resources type arguments of the
-// ComponentDef literal.
-func componentTypeArgs(
+// componentSpecType returns the Spec type argument of the ComponentDef
+// literal.
+func componentSpecType(
 	pkg *packages.Package, lit *ast.CompositeLit,
-) (spec, res types.Type, err error) {
+) (types.Type, error) {
 	tv, ok := pkg.TypesInfo.Types[lit]
 	if !ok {
-		return nil, nil, posErrorf(pkg, lit.Pos(),
+		return nil, posErrorf(pkg, lit.Pos(),
 			"cannot resolve ComponentDef literal type")
 	}
 
 	named, ok := tv.Type.(*types.Named)
-	if !ok || named.TypeArgs().Len() != 2 {
-		return nil, nil, posErrorf(pkg, lit.Pos(),
-			"ComponentDef literal must be instantiated with [Spec, Resources]")
+	if !ok || named.TypeArgs().Len() != 1 {
+		return nil, posErrorf(pkg, lit.Pos(),
+			"ComponentDef literal must be instantiated with [Spec]")
 	}
 
-	return named.TypeArgs().At(0), named.TypeArgs().At(1), nil
+	return named.TypeArgs().At(0), nil
+}
+
+// builderResourcesType returns the parameter type of the package's
+// Builder.WithResources method: the external references a caller supplies
+// at construction. It returns nil when the package has no Builder type or
+// the Builder takes no resources.
+func builderResourcesType(pkg *packages.Package) types.Type {
+	obj, ok := pkg.Types.Scope().Lookup(builderTypeName).(*types.TypeName)
+	if !ok {
+		return nil
+	}
+
+	// The pointer method set holds both value- and pointer-receiver methods.
+	sel := types.NewMethodSet(types.NewPointer(obj.Type())).
+		Lookup(pkg.Types, withResourcesMethod)
+	if sel == nil {
+		return nil
+	}
+
+	sig, ok := sel.Obj().Type().(*types.Signature)
+	if !ok || sig.Params().Len() != 1 {
+		return nil
+	}
+
+	return sig.Params().At(0).Type()
 }
 
 // keyedElements returns the keyed fields of a composite literal, requiring

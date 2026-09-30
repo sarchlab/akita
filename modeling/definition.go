@@ -38,12 +38,12 @@ type PortGroupDef struct {
 }
 
 // ComponentDef describes a component's default Spec and port topology. S is
-// the Spec type and R the builder Resources type: the external references
-// supplied at construction, even when the component does not retain them.
+// the Spec type. Tooling finds the component's Resources type through its
+// builder's WithResources method, so the definition does not repeat it.
 //
 // Declare it as a package-level var in the component's package:
 //
-//	var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec, Resources]{
+//	var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{
 //	    Name:        "TLB",
 //	    DefaultSpec: Spec{Freq: 1 * timing.GHz, NumSets: 1},
 //	    Ports: []modeling.PortDef{
@@ -57,7 +57,7 @@ type PortGroupDef struct {
 // Treat the definition as read-only after initialization so the static and
 // runtime views agree. Builders use NewSpec to obtain a configuration to edit
 // and DeclarePorts to declare the component's boundary.
-type ComponentDef[S, R any] struct {
+type ComponentDef[S any] struct {
 	// Name is the component's display name, e.g. "TLB".
 	Name string
 
@@ -74,7 +74,7 @@ type ComponentDef[S, R any] struct {
 // panics on an invalid definition — like DefineProtocol, it is meant to run
 // as a package-level var initializer, where a bad definition is a programming
 // error that must fail loudly at init.
-func DefineComponent[S, R any](def ComponentDef[S, R]) ComponentDef[S, R] {
+func DefineComponent[S any](def ComponentDef[S]) ComponentDef[S] {
 	if def.Name == "" {
 		panic("modeling: component definition must have a name")
 	}
@@ -94,7 +94,7 @@ func DefineComponent[S, R any](def ComponentDef[S, R]) ComponentDef[S, R] {
 // NewSpec returns a copy of the default configuration, recursively copying
 // exported slice, map, and array contents. Callers can customize the result
 // and pass it to the builder's WithSpec without changing the defaults.
-func (d ComponentDef[S, R]) NewSpec() S {
+func (d ComponentDef[S]) NewSpec() S {
 	v := deepCopyStruct(reflect.ValueOf(d.DefaultSpec))
 	return v.Interface().(S)
 }
@@ -102,7 +102,7 @@ func (d ComponentDef[S, R]) NewSpec() S {
 // DeclarePorts declares every port and port group of the definition on the
 // given component. Builders call it in Build in place of per-port
 // DeclarePort calls.
-func (d ComponentDef[S, R]) DeclarePorts(po messaging.PortOwner) {
+func (d ComponentDef[S]) DeclarePorts(po messaging.PortOwner) {
 	for _, p := range d.Ports {
 		po.DeclarePort(p.Name, copyRoles(p.Roles)...)
 	}

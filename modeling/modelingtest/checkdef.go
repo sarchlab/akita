@@ -17,8 +17,8 @@ import (
 // ports and port groups. Every migrated component adds one test calling it,
 // which turns "the static and runtime views agree" into a CI guarantee
 // instead of a convention.
-func CheckDefinition[S, R any](
-	t *testing.T, def modeling.ComponentDef[S, R], pkgPath string,
+func CheckDefinition[S any](
+	t *testing.T, def modeling.ComponentDef[S], pkgPath string,
 ) {
 	t.Helper()
 

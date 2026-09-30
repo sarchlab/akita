@@ -39,8 +39,8 @@ type defTestSpec struct {
 
 type defTestResources struct{}
 
-func makeDefTestDef() modeling.ComponentDef[defTestSpec, defTestResources] {
-	return modeling.ComponentDef[defTestSpec, defTestResources]{
+func makeDefTestDef() modeling.ComponentDef[defTestSpec] {
+	return modeling.ComponentDef[defTestSpec]{
 		Name: "DefTest",
 		DefaultSpec: defTestSpec{
 			Freq:     1 * timing.GHz,
@@ -84,7 +84,7 @@ func mustPanicWith(t *testing.T, substr string, f func()) {
 // --- Tests ---
 
 func TestDefineComponent(t *testing.T) {
-	var def modeling.ComponentDef[defTestSpec, defTestResources] = modeling.DefineComponent(makeDefTestDef())
+	var def modeling.ComponentDef[defTestSpec] = modeling.DefineComponent(makeDefTestDef())
 
 	if def.Name != "DefTest" {
 		t.Errorf("Name = %q, want %q", def.Name, "DefTest")
@@ -158,7 +158,7 @@ func defineWith(name string, ports []modeling.PortDef,
 	groups []modeling.PortGroupDef) func() {
 	return func() {
 		modeling.DefineComponent(
-			modeling.ComponentDef[plainSpec, modeling.None]{
+			modeling.ComponentDef[plainSpec]{
 				Name:       name,
 				Ports:      ports,
 				PortGroups: groups,
@@ -190,21 +190,21 @@ func TestDefineComponentPanicsOnBadSpec(t *testing.T) {
 	t.Run("invalid spec", func(t *testing.T) {
 		mustPanicWith(t, "invalid default Spec", func() {
 			modeling.DefineComponent(
-				modeling.ComponentDef[pointerSpec, modeling.None]{Name: "C"})
+				modeling.ComponentDef[pointerSpec]{Name: "C"})
 		})
 	})
 
 	t.Run("bad akita tag", func(t *testing.T) {
 		mustPanicWith(t, `unknown directive "bogus"`, func() {
 			modeling.DefineComponent(
-				modeling.ComponentDef[badTagSpec, modeling.None]{Name: "C"})
+				modeling.ComponentDef[badTagSpec]{Name: "C"})
 		})
 	})
 
 	t.Run("min on non-numeric field", func(t *testing.T) {
 		mustPanicWith(t, "min/max apply only to numeric fields", func() {
 			modeling.DefineComponent(
-				modeling.ComponentDef[minOnStringSpec, modeling.None]{
+				modeling.ComponentDef[minOnStringSpec]{
 					Name: "C"})
 		})
 	})
@@ -212,7 +212,7 @@ func TestDefineComponentPanicsOnBadSpec(t *testing.T) {
 	t.Run("duplicate json name", func(t *testing.T) {
 		mustPanicWith(t, `duplicate JSON name "N"`, func() {
 			modeling.DefineComponent(
-				modeling.ComponentDef[dupJSONSpec, modeling.None]{Name: "C"})
+				modeling.ComponentDef[dupJSONSpec]{Name: "C"})
 		})
 	})
 }
@@ -276,7 +276,7 @@ func TestDefineComponentPanicsOnBadPortGroups(t *testing.T) {
 	t.Run("count field not integer", func(t *testing.T) {
 		mustPanicWith(t, "must be an integer Spec field", func() {
 			modeling.DefineComponent(
-				modeling.ComponentDef[nonIntCountSpec, modeling.None]{
+				modeling.ComponentDef[nonIntCountSpec]{
 					Name: "C",
 					PortGroups: []modeling.PortGroupDef{
 						{Name: "Out", CountField: "num_out"}},
@@ -287,7 +287,7 @@ func TestDefineComponentPanicsOnBadPortGroups(t *testing.T) {
 	t.Run("count field not derived", func(t *testing.T) {
 		mustPanicWith(t, "must be tagged", func() {
 			modeling.DefineComponent(
-				modeling.ComponentDef[notDerivedCountSpec, modeling.None]{
+				modeling.ComponentDef[notDerivedCountSpec]{
 					Name: "C",
 					PortGroups: []modeling.PortGroupDef{
 						{Name: "Out", CountField: "num_out"}},
@@ -332,7 +332,7 @@ func TestComponentDefNewSpecCopiesNestedContainers(t *testing.T) {
 		Slices: [][]int{{1}}, Maps: map[string][]int{"a": {2}},
 		Arrays: [1][]int{{3}}, Nested: []map[int][1][]int{{4: {{5}}}},
 	}
-	def := modeling.DefineComponent(modeling.ComponentDef[spec, modeling.None]{Name: "Nested", DefaultSpec: input})
+	def := modeling.DefineComponent(modeling.ComponentDef[spec]{Name: "Nested", DefaultSpec: input})
 	mutate := func(s spec) {
 		s.Slices[0][0] = 99
 		s.Maps["a"][0] = 99

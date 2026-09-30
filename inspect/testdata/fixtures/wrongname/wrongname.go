@@ -10,6 +10,6 @@ type Spec struct {
 }
 
 // Def is misnamed on purpose: the contract requires "Definition".
-var Def = modeling.DefineComponent(modeling.ComponentDef[Spec, modeling.None]{
+var Def = modeling.DefineComponent(modeling.ComponentDef[Spec]{
 	Name: "WrongName",
 })

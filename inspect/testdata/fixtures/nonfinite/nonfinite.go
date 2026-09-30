@@ -6,4 +6,4 @@ type Spec struct {
 	N int `akita:"min=NaN"`
 }
 
-var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec, modeling.None]{Name: "C"})
+var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{Name: "C"})

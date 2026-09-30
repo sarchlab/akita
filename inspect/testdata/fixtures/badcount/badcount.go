@@ -14,7 +14,7 @@ type Spec struct {
 }
 
 // Definition binds a CountField that does not exist in Spec.
-var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec, modeling.None]{
+var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{
 	Name: "BadCount",
 	PortGroups: []modeling.PortGroupDef{
 		{Name: "Out", CountField: "missing"},

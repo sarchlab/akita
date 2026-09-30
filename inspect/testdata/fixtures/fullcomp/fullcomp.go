@@ -51,8 +51,20 @@ type Resources struct {
 	Mapper mem.AddressToPortMapper `json:"-"`
 }
 
+// Builder builds the component. Its WithResources parameter tells the
+// inspector which type holds the component's resources.
+type Builder struct {
+	resources Resources
+}
+
+// WithResources sets the external wiring.
+func (b Builder) WithResources(r Resources) Builder {
+	b.resources = r
+	return b
+}
+
 // Definition declares the component.
-var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec, Resources]{
+var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{
 	Name: "FullComp",
 	DefaultSpec: Spec{
 		Freq:     1 * timing.GHz,

@@ -7,4 +7,4 @@ type Spec struct {
 	B int `json:"N"`
 }
 
-var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec, modeling.None]{Name: "C"})
+var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{Name: "C"})

@@ -12,8 +12,8 @@ type Spec struct {
 }
 
 // Definition declares the component with explicit type arguments.
-var Definition = modeling.DefineComponent[Spec, modeling.None](
-	modeling.ComponentDef[Spec, modeling.None]{
+var Definition = modeling.DefineComponent[Spec](
+	modeling.ComponentDef[Spec]{
 		Name:        "Instantiated",
 		DefaultSpec: Spec{Depth: 16},
 	})

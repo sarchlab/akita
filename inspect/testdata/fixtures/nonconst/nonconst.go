@@ -14,7 +14,7 @@ type Spec struct {
 var dynamicLanes = 4
 
 // Definition declares the component with a non-constant default.
-var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec, modeling.None]{
+var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{
 	Name:        "NonConst",
 	DefaultSpec: Spec{NumLanes: dynamicLanes},
 })

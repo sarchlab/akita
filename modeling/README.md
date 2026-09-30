@@ -24,12 +24,12 @@ an integer type.
 
 ## Key Types
 
-### ComponentDef[S, R]
+### ComponentDef[S]
 
 A component's defaults and boundary ports live in one public declaration:
 
 ```go
-var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec, Resources]{
+var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{
     Name:        "MyComponent",
     DefaultSpec: Spec{Size: 64},
     Ports:       []modeling.PortDef{{Name: "Top"}},
