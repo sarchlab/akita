@@ -26,7 +26,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 	)
 
 	build := func() {
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.Width = 4
 		spec.Latency = 10
 		spec.CacheLineSize = 64

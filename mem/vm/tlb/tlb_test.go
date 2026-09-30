@@ -30,7 +30,7 @@ var _ = Describe("TLB", func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.NumSets = 1
 		spec.NumWays = 32
 		spec.Log2PageSize = 12
@@ -506,7 +506,7 @@ var _ = Describe("TLB Integration", func() {
 
 		tlbComp = MakeBuilder().
 			WithSimulation(sim).
-			WithSpec(DefaultSpec()).
+			WithSpec(Definition.DefaultSpec).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
 					Port: lowModule.port.AsRemote(),

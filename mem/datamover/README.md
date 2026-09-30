@@ -70,14 +70,14 @@ type DataMoveResponse struct {
 ## Builder Pattern
 
 Configuration is supplied as a whole through `WithSpec` (start from
-`DefaultSpec()`); the engine and registration come from `WithSimulation`; the
+`Definition.DefaultSpec`); the engine and registration come from `WithSimulation`; the
 side mappers come from `WithResources`. `Build` declares the component's `Top`,
 `Inside`, `Outside`, and `Control` ports; the caller builds the port instances
 (choosing the buffer sizes) with `modeling.MakePortBuilder` and attaches them
 with `AssignPort`.
 
 ```go
-spec := datamover.DefaultSpec()
+spec := datamover.Definition.DefaultSpec
 spec.BufferSize = 4096
 spec.InsideByteGranularity = 64
 spec.OutsideByteGranularity = 64
@@ -108,7 +108,7 @@ ctrlPort := mover.GetPortByName("Control")
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required). |
-| `WithSpec(s)` | Full configuration; start from `DefaultSpec()`. |
+| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec`. |
 | `WithResources(r)` | The inside/outside address-to-port mappers. |
 
 ## Ports

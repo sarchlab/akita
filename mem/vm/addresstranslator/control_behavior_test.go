@@ -32,7 +32,7 @@ var _ = Describe("Address Translator control behavior", func() {
 	)
 
 	build := func() {
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.Log2PageSize = 12
 		spec.Freq = 1
 

@@ -18,7 +18,7 @@ func TestControlContract(t *testing.T) {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
 		storage := mem.NewStorage(1 * mem.MB)
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.Width = 1
 		spec.Latency = 10
 		spec.CacheLineSize = 64

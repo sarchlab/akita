@@ -83,7 +83,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
 
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.BufferSize = 4
 		spec.NumReqPerCycle = 2
 		spec.BottomUnit = bottomUnitRemote

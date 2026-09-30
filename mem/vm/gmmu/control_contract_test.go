@@ -16,7 +16,7 @@ func TestControlContract(t *testing.T) {
 	build := func() *memcontrolprotocol.Harness {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.DeviceID = 0
 		spec.Latency = 1
 		spec.LowModule = messaging.RemotePort("LowModule")

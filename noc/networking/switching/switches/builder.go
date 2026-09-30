@@ -9,12 +9,6 @@ import (
 	"github.com/sarchlab/akita/v5/queueing"
 )
 
-// DefaultSpec returns a copy of the default configuration. Callers obtain it,
-// tweak the fields they care about, and pass it to WithSpec.
-func DefaultSpec() Spec {
-	return Definition.DefaultSpec
-}
-
 // Builder builds switches. Configuration is supplied as a whole through
 // WithSpec; wiring is supplied through WithSimulation and WithResources. Ports
 // are added after build with MakeSwitchPortAdder.
@@ -37,7 +31,7 @@ func (b Builder) WithSimulation(sim timing.Simulation) Builder {
 	return b
 }
 
-// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+// WithSpec sets the entire configuration. Start from Definition.DefaultSpec and tweak.
 func (b Builder) WithSpec(spec Spec) Builder {
 	b.spec = spec
 	return b

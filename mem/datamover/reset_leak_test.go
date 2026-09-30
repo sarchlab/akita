@@ -22,7 +22,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
 
-	spec := DefaultSpec()
+	spec := Definition.DefaultSpec
 	spec.BufferSize = 2048
 	spec.InsideByteGranularity = 64
 	spec.OutsideByteGranularity = 64

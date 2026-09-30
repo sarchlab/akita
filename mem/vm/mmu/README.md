@@ -51,7 +51,7 @@ the port instances. The caller builds each port with `modeling.MakePortBuilder`
 (choosing the buffer size) and attaches it with `AssignPort`.
 
 ```go
-spec := mmu.DefaultSpec()
+spec := mmu.Definition.DefaultSpec
 spec.Latency = 100
 spec.AutoPageAllocation = true
 
@@ -74,7 +74,7 @@ for _, name := range []string{"Top", "Control"} {
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
+| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
 | `WithResources(Resources{PageTable: pt})` | Shared page table (built internally if omitted) |
 
 ## Ports

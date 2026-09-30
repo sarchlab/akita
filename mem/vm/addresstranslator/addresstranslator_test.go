@@ -86,7 +86,7 @@ var _ = Describe("Address Translator", func() {
 	// build constructs a translator with the given Top-port buffer size, injects
 	// the mappers, and plugs a noopConn into each port so they can be driven.
 	build := func(topBufSize int) {
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.Log2PageSize = 12
 		spec.Freq = 1
 

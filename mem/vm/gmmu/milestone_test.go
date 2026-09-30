@@ -102,7 +102,7 @@ var _ = Describe("GMMU milestones", func() {
 		sim = modeling.NewStandaloneSimulation(engine)
 		pageTable = vm.NewPageTable(12)
 
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.DeviceID = 0
 		spec.Latency = 1
 		spec.LowModule = lowModulePort

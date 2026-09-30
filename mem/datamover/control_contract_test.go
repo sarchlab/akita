@@ -26,7 +26,7 @@ func TestControlContract(t *testing.T) {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
 
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.BufferSize = 64
 		spec.InsideByteGranularity = 8
 		spec.OutsideByteGranularity = 8

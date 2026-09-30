@@ -76,7 +76,7 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 	sim := modeling.NewStandaloneSimulation(engine)
 	dramStorage := mem.NewStorage(4 * mem.MB)
 
-	dramSpec := idealmemcontroller.DefaultSpec()
+	dramSpec := idealmemcontroller.Definition.DefaultSpec
 	dramSpec.Latency = 5
 	dramSpec.Width = 4
 	dram := idealmemcontroller.MakeBuilder().
@@ -90,7 +90,7 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 		messaging.NewPort(dram, 16, 16, dram.Name()+".Control"))
 	dramTop := dram.GetPortByName("Top")
 
-	cacheSpec := writeback.DefaultSpec()
+	cacheSpec := writeback.Definition.DefaultSpec
 	cacheSpec.TotalByteSize = 4 * mem.KB
 	cacheSpec.Log2BlockSize = 6
 	cacheSpec.WayAssociativity = 4

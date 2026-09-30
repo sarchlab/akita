@@ -37,7 +37,7 @@ func buildSim() (*simulation.Simulation, *driver) {
 	l1Cache, l2Cache, memCtrl := buildMemoryHierarchy(sim)
 	ioMMU, itlb, l2TLB := buildTranslationHierarchy(sim)
 
-	atSpec := addresstranslator.DefaultSpec()
+	atSpec := addresstranslator.Definition.DefaultSpec
 	atSpec.Log2PageSize = 12
 	atSpec.NumReqPerCycle = 4
 	at := addresstranslator.MakeBuilder().
@@ -66,7 +66,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 	*modeling.Component[writeback.Spec, writeback.State, writeback.Resources],
 	*idealmemcontroller.Comp,
 ) {
-	memCtrlSpec := idealmemcontroller.DefaultSpec()
+	memCtrlSpec := idealmemcontroller.Definition.DefaultSpec
 	memCtrlSpec.Capacity = 4 * mem.GB
 	memCtrlSpec.Width = 1
 	memCtrlSpec.Latency = 100
@@ -77,7 +77,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 		Build("MemCtrl")
 	assignPorts(s, memCtrl, "Top", "Control")
 
-	l2Spec := writeback.DefaultSpec()
+	l2Spec := writeback.Definition.DefaultSpec
 	l2Spec.WayAssociativity = 4
 	l2Spec.NumReqPerCycle = 2
 	l2Spec.AddressMapperType = "single"
@@ -92,7 +92,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 		Build("L2Cache")
 	assignPorts(s, l2Cache, "Top", "Bottom", "Control")
 
-	l1Spec := writethroughcache.DefaultSpec()
+	l1Spec := writethroughcache.Definition.DefaultSpec
 	l1Spec.WritePolicyType = "write-through"
 	l1Spec.WayAssociativity = 2
 	l1Spec.AddressMapperType = "single"
@@ -113,7 +113,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 func buildTranslationHierarchy(s *simulation.Simulation) (*mmu.Comp, *tlb.Comp, *tlb.Comp) {
 	pageTable := setupPageTable(s)
 
-	mmuSpec := mmu.DefaultSpec()
+	mmuSpec := mmu.Definition.DefaultSpec
 	mmuSpec.Log2PageSize = 12
 	mmuSpec.MaxRequestsInFlight = 16
 	mmuSpec.Latency = 10
@@ -124,7 +124,7 @@ func buildTranslationHierarchy(s *simulation.Simulation) (*mmu.Comp, *tlb.Comp, 
 		Build("IoMMU")
 	assignPorts(s, ioMMU, "Top", "Control")
 
-	l2TLBSpec := tlb.DefaultSpec()
+	l2TLBSpec := tlb.Definition.DefaultSpec
 	l2TLBSpec.NumWays = 64
 	l2TLBSpec.NumSets = 64
 	l2TLBSpec.Log2PageSize = 12
@@ -140,7 +140,7 @@ func buildTranslationHierarchy(s *simulation.Simulation) (*mmu.Comp, *tlb.Comp, 
 		Build("L2TLB")
 	assignPorts(s, l2TLB, "Top", "Bottom", "Control")
 
-	tlbSpec := tlb.DefaultSpec()
+	tlbSpec := tlb.Definition.DefaultSpec
 	tlbSpec.NumWays = 8
 	tlbSpec.NumSets = 8
 	tlbSpec.Log2PageSize = 12

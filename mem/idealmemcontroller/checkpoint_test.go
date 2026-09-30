@@ -25,7 +25,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
 	}()
 
-	spec := idealmemcontroller.DefaultSpec()
+	spec := idealmemcontroller.Definition.DefaultSpec
 	spec.Capacity = 4 * mem.KB
 	dram := idealmemcontroller.MakeBuilder().
 		WithSimulation(sim).

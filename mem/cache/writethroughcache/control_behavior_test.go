@@ -38,7 +38,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 	)
 
 	build := func() {
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.NumReqPerCycle = 1
 		spec.NumBanks = 1
 		spec.NumMSHREntry = 8

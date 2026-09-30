@@ -45,7 +45,7 @@ are tracked by the shared `mshr` package.
 ## Builder Pattern
 
 ```go
-spec := tlb.DefaultSpec()
+spec := tlb.Definition.DefaultSpec
 spec.NumSets = 64
 spec.NumWays = 4
 spec.MSHRSize = 8
@@ -62,7 +62,7 @@ t := tlb.MakeBuilder().
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
+| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
 | `WithResources(Resources{...})` | External wiring (the translation provider mapper) |
 
 ## Ports

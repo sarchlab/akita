@@ -90,7 +90,7 @@ Activate → Read/Write → Precharge → (next row)
 ## Builder Pattern
 
 All scalar configuration is supplied as a whole through `WithSpec`. Start from a
-preset (or `DefaultSpec()`), tweak the fields you need, and pass it in. Wiring is
+preset (or `Definition.DefaultSpec`), tweak the fields you need, and pass it in. Wiring is
 supplied through `WithSimulation` (which provides the engine and registers the
 component) and `WithResources` (shared objects such as backing storage). `Build`
 declares the `Top` and `Control` ports but does not create their instances.
@@ -130,7 +130,7 @@ topPort = ctrl.GetPortByName("Top")
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` or a preset (DDR4Spec, HBM2Spec, ...) |
+| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` or a preset (DDR4Spec, HBM2Spec, ...) |
 | `WithResources(Resources{Storage: s})` | Shared backing storage (built internally if omitted) |
 
 ### Commonly Tweaked Spec Fields

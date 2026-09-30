@@ -33,7 +33,7 @@ var _ = Describe("TLB control behavior", func() {
 	)
 
 	build := func() {
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 
 		tlbComp = MakeBuilder().
 			WithSimulation(sim).

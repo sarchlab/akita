@@ -540,7 +540,7 @@ func buildDataMover(
 		memCtrlPorts[d] = mc.GetPortByName("Top").AsRemote()
 	}
 
-	dmSpec := datamover.DefaultSpec()
+	dmSpec := datamover.Definition.DefaultSpec
 	dmSpec.BufferSize = pageSize
 	dmSpec.InsideByteGranularity = 64
 	dmSpec.OutsideByteGranularity = 64

@@ -15,7 +15,7 @@ func TestPageSizeValidation(t *testing.T) {
 
 	// Test case 1: Matching page sizes should work
 	pageTable := vm.NewPageTable(12) // 4KB pages
-	matchingSpec := DefaultSpec()
+	matchingSpec := Definition.DefaultSpec
 	matchingSpec.Log2PageSize = 12 // 4KB pages
 
 	builder := MakeBuilder().
@@ -33,7 +33,7 @@ func TestPageSizeValidation(t *testing.T) {
 
 	// Test case 2: Mismatched page sizes should panic
 	pageTable2 := vm.NewPageTable(12) // 4KB pages
-	mismatchedSpec := DefaultSpec()
+	mismatchedSpec := Definition.DefaultSpec
 	mismatchedSpec.Log2PageSize = 16 // 64KB pages
 	builder2 := MakeBuilder().
 		WithSimulation(sim).

@@ -7,12 +7,6 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// DefaultSpec returns a copy of the default configuration. Callers typically
-// obtain it, tweak the fields they care about, and pass it to WithSpec.
-func DefaultSpec() Spec {
-	return Definition.DefaultSpec
-}
-
 // Builder constructs SimpleBankedMemory components. Configuration is supplied
 // as a whole through WithSpec; wiring is supplied through WithSimulation and
 // WithResources. The component declares its "Top" and "Control" ports; the
@@ -35,7 +29,7 @@ func (b Builder) WithSimulation(sim timing.Simulation) Builder {
 	return b
 }
 
-// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+// WithSpec sets the entire configuration. Start from Definition.DefaultSpec and tweak.
 func (b Builder) WithSpec(spec Spec) Builder {
 	b.spec = spec
 	return b

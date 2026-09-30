@@ -181,7 +181,7 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 	switchID = len(c.switches)
 
 	name := fmt.Sprintf("%s.%s", c.name, swName)
-	swSpec := switches.DefaultSpec()
+	swSpec := switches.Definition.DefaultSpec
 	swSpec.Freq = c.defaultFreq
 	sw := switches.MakeBuilder().
 		WithSimulation(c.simulation).
@@ -263,7 +263,7 @@ func (c *Connector) createEndPointWithName(
 ) *deviceNode {
 	fullName := fmt.Sprintf("%s.%s", c.name, name)
 
-	epSpec := endpoint.DefaultSpec()
+	epSpec := endpoint.Definition.DefaultSpec
 	epSpec.Freq = c.defaultFreq
 	epSpec.FlitByteSize = c.flitSize
 	epSpec.NumInputChannels = param.DeviceEndParam.NumInputChannel

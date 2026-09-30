@@ -122,7 +122,7 @@ var _ = Describe("TLB milestones", func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.NumSets = 1
 		spec.NumWays = 32
 		spec.Log2PageSize = 12

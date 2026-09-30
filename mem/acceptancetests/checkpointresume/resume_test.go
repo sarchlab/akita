@@ -186,7 +186,7 @@ func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
 func buildSim() (*simulation.Simulation, *driver) {
 	sim := simulation.MakeBuilder().WithoutMonitoring().Build()
 
-	dramSpec := idealmemcontroller.DefaultSpec()
+	dramSpec := idealmemcontroller.Definition.DefaultSpec
 	dramSpec.Capacity = 1 * mem.MB
 	dramSpec.Width = 4
 	dramSpec.Latency = 10

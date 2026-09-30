@@ -18,7 +18,7 @@ func TestControlContract(t *testing.T) {
 
 		comp := MakeBuilder().
 			WithSimulation(sim).
-			WithSpec(DefaultSpec()).
+			WithSpec(Definition.DefaultSpec).
 			Build("MMU")
 
 		assignPort(sim, comp, "Top", 16)

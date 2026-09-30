@@ -54,7 +54,7 @@ func createNetwork(s *simulation.Simulation, test *acceptance.Test) {
 		agents = append(agents, agent)
 	}
 
-	epSpec := endpoint.DefaultSpec()
+	epSpec := endpoint.Definition.DefaultSpec
 	epSpec.Freq = freq
 	epSpec.FlitByteSize = 8
 

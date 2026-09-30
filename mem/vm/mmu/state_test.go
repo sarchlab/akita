@@ -16,7 +16,7 @@ func TestValidateState(t *testing.T) {
 }
 
 func buildTestMMU(sim timing.Simulation, name string) *Comp {
-	spec := DefaultSpec()
+	spec := Definition.DefaultSpec
 	spec.AutoPageAllocation = true
 
 	comp := MakeBuilder().

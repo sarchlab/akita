@@ -96,7 +96,7 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 		sim = modeling.NewStandaloneSimulation(engine)
 		storage := mem.NewStorage(4 * mem.GB)
 
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.NumBanks = 2
 		spec.StageLatency = 2
 
@@ -175,7 +175,7 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 		sim = modeling.NewStandaloneSimulation(engine)
 		storage = mem.NewStorage(4 * mem.GB)
 
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.NumBanks = 2
 		spec.StageLatency = 3
 

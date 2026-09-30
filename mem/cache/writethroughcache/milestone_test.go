@@ -117,7 +117,7 @@ var _ = Describe("Cache milestones", func() {
 		}
 
 		cacheReg := sim
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.WritePolicyType = policy
 		c = MakeBuilder().
 			WithSimulation(cacheReg).

@@ -36,7 +36,7 @@ var _ = Describe("MMUCache control behavior", func() {
 	)
 
 	build := func() {
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.NumBlocks = 1
 		spec.NumLevels = 5
 		spec.PageSize = 4096

@@ -36,7 +36,7 @@ var _ = Describe("MMU control behavior", func() {
 		comp = MakeBuilder().
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
-			WithSpec(DefaultSpec()).
+			WithSpec(Definition.DefaultSpec).
 			Build("MMU")
 
 		topPort = assignPort(sim, comp, "Top", 16)

@@ -67,7 +67,7 @@ func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
 
 	comp := tlb.MakeBuilder().
 		WithSimulation(sim).
-		WithSpec(tlb.DefaultSpec()).
+		WithSpec(tlb.Definition.DefaultSpec).
 		WithResources(tlb.Resources{
 			TranslationProviderMapper: &mem.SinglePortMapper{Port: remote},
 		}).
@@ -352,7 +352,7 @@ func buildWritebackForSequence(
 	sim := modeling.NewStandaloneSimulation(engine)
 	storage := mem.NewStorage(1 * mem.MB)
 
-	spec := writeback.DefaultSpec()
+	spec := writeback.Definition.DefaultSpec
 	spec.TotalByteSize = 64 * 1024
 	spec.NumBanks = 1
 	spec.NumMSHREntry = 16

@@ -39,7 +39,7 @@ remembered remote request, and relays a `vm.TranslationRsp` back up on `Top`.
 
 ## Builder Pattern
 
-Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec
+Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the whole spec
 to `WithSpec`. Wiring comes from `WithSimulation` (which provides the engine and
 registers the component) and `WithResources` (the shared page table). When
 `WithResources` is omitted, the GMMU builds its own page table sized by
@@ -49,7 +49,7 @@ but does not create their instances. Build each port with
 attach it with `AssignPort`, choosing the buffer size.
 
 ```go
-spec := gmmu.DefaultSpec()
+spec := gmmu.Definition.DefaultSpec
 spec.DeviceID = 1
 spec.LowModule = mmuPort
 
@@ -72,7 +72,7 @@ for _, name := range []string{"Top", "Bottom", "Control"} {
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
+| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
 | `WithResources(Resources{PageTable: pt})` | Shared page table (built internally if omitted) |
 
 ## Ports

@@ -66,7 +66,7 @@ type Spec struct {
 
 ## Builder Pattern
 
-Start from `DefaultSpec()`, tweak the fields you need, and pass the whole spec to
+Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the whole spec to
 `WithSpec`. Wiring comes from `WithSimulation` (which provides the engine and
 registers the component) and `WithResources` (the backing storage plus the
 address-to-port mapping for lower memory). When the storage is omitted, the
@@ -75,7 +75,7 @@ the `Top`, `Bottom`, and `Control` ports; the caller builds the port instances
 (choosing their buffer sizes) and attaches them with `AssignPort` after `Build`.
 
 ```go
-spec := writeback.DefaultSpec()
+spec := writeback.Definition.DefaultSpec
 spec.TotalByteSize = 64 * mem.KB
 spec.WayAssociativity = 4
 spec.Log2BlockSize = 6 // 64-byte lines
@@ -106,7 +106,7 @@ topPort := cache.GetPortByName("Top")
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
-| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and tweak |
+| `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
 | `WithResources(Resources{...})` | Backing storage and the lower-memory address mapping (`AddressToPortMapper` or `RemotePorts`) |
 
 ### Default Configuration

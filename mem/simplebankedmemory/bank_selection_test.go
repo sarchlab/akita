@@ -49,7 +49,7 @@ var _ = Describe("Bank selection across interleaved controllers", func() {
 	// withBankConv returns a spec whose bank selection strips the 128 B/4-way
 	// controller interleaving for element 1.
 	withBankConv := func() Spec {
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.NumBanks = numBanks
 		spec.BankSelectorLog2InterleaveSize = bankLog2
 		spec.BankAddrConvKind = "interleaving"
@@ -60,7 +60,7 @@ var _ = Describe("Bank selection across interleaved controllers", func() {
 	}
 
 	It("collapses onto a fraction of banks without the bank conversion", func() {
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.NumBanks = numBanks
 		spec.BankSelectorLog2InterleaveSize = bankLog2
 		// No bank conversion: selection runs on the strided global address.
@@ -113,7 +113,7 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.NumBanks = 4
 		spec.StageLatency = 2
 		spec.BankSelectorLog2InterleaveSize = 6

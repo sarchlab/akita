@@ -187,7 +187,7 @@ func buildMemCtrl(
 	index int,
 	capacity uint64,
 ) messaging.Component {
-	memCtrlSpec := idealmemcontroller.DefaultSpec()
+	memCtrlSpec := idealmemcontroller.Definition.DefaultSpec
 	memCtrlSpec.Capacity = capacity
 	memCtrlSpec.Width = 1
 	memCtrlSpec.Latency = 100
@@ -209,7 +209,7 @@ func buildL2Cache(
 	memCtrlPorts []messaging.RemotePort,
 	deviceStride uint64,
 ) messaging.Component {
-	l2Spec := writeback.DefaultSpec()
+	l2Spec := writeback.Definition.DefaultSpec
 	l2Spec.WayAssociativity = 4
 	l2Spec.NumReqPerCycle = 2
 	l2Cache := writeback.MakeBuilder().
@@ -231,7 +231,7 @@ func buildMMU(
 	s *simulation.Simulation,
 	pageTable vm.PageTable,
 ) messaging.Component {
-	mmuSpec := mmu.DefaultSpec()
+	mmuSpec := mmu.Definition.DefaultSpec
 	mmuSpec.Log2PageSize = log2PageSize
 	mmuSpec.MaxRequestsInFlight = 16
 	mmuSpec.Latency = 10
@@ -249,7 +249,7 @@ func buildL2TLB(
 	s *simulation.Simulation,
 	ioMMU messaging.Component,
 ) messaging.Component {
-	l2TLBSpec := tlb.DefaultSpec()
+	l2TLBSpec := tlb.Definition.DefaultSpec
 	l2TLBSpec.NumWays = 64
 	l2TLBSpec.NumSets = 64
 	l2TLBSpec.Log2PageSize = log2PageSize
@@ -298,7 +298,7 @@ func buildL1Cache(
 	suffix string,
 	l2Cache messaging.Component,
 ) messaging.Component {
-	l1Spec := writethroughcache.DefaultSpec()
+	l1Spec := writethroughcache.Definition.DefaultSpec
 	l1Spec.WritePolicyType = "write-through"
 	l1Spec.WayAssociativity = 2
 	l1Spec.AddressMapperType = "single"
@@ -321,7 +321,7 @@ func buildL1TLB(
 	suffix string,
 	l2TLB messaging.Component,
 ) messaging.Component {
-	l1TLBSpec := tlb.DefaultSpec()
+	l1TLBSpec := tlb.Definition.DefaultSpec
 	l1TLBSpec.NumWays = 8
 	l1TLBSpec.NumSets = 8
 	l1TLBSpec.Log2PageSize = log2PageSize
@@ -345,7 +345,7 @@ func buildAddressTranslator(
 	suffix string,
 	l1Cache, l1TLB messaging.Component,
 ) messaging.Component {
-	atSpec := addresstranslator.DefaultSpec()
+	atSpec := addresstranslator.Definition.DefaultSpec
 	atSpec.Log2PageSize = log2PageSize
 	atSpec.NumReqPerCycle = 4
 	at := addresstranslator.MakeBuilder().
@@ -370,7 +370,7 @@ func buildROB(
 	suffix string,
 	at messaging.Component,
 ) messaging.Component {
-	robSpec := rob.DefaultSpec()
+	robSpec := rob.Definition.DefaultSpec
 	robSpec.NumReqPerCycle = 4
 	robSpec.BottomUnit = at.GetPortByName("Top").AsRemote()
 	robComp := rob.MakeBuilder().
@@ -388,7 +388,7 @@ func buildAgent(
 	robComp messaging.Component,
 	seed int64,
 ) *memaccessagent.MemAccessAgent {
-	agentSpec := memaccessagent.DefaultSpec()
+	agentSpec := memaccessagent.Definition.DefaultSpec
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.AddressOffset = uint64(index) * agentStride()
 	agentSpec.ReadLeft = *numAccessFlag

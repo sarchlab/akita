@@ -32,7 +32,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 	const blockSize = 64 // 1 << Log2BlockSize(6)
 
 	build := func() {
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.TotalByteSize = 64 * 1024
 		spec.NumBanks = 1
 		spec.NumMSHREntry = 16

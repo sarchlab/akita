@@ -8,12 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
-// DefaultSpec returns a copy of the default configuration. Callers typically
-// obtain it, tweak the fields they care about, and pass it to WithSpec.
-func DefaultSpec() Spec {
-	return Definition.DefaultSpec
-}
-
 // Builder can build new memory controllers. Configuration is supplied as a
 // whole through WithSpec; wiring is supplied through WithSimulation and
 // WithResources. The component declares its "Top" and "Control" ports; the
@@ -32,7 +26,7 @@ func MakeBuilder() Builder {
 	return Builder{spec: Definition.DefaultSpec}
 }
 
-// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+// WithSpec sets the entire configuration. Start from Definition.DefaultSpec and tweak.
 func (b Builder) WithSpec(spec Spec) Builder {
 	b.spec = spec
 	return b

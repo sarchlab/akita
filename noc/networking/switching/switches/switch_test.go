@@ -65,7 +65,7 @@ var _ = Describe("Switch", func() {
 
 		routingTable = NewMockTable(mockCtrl)
 
-		spec := DefaultSpec()
+		spec := Definition.DefaultSpec
 		spec.Freq = 1
 
 		sw = MakeBuilder().
