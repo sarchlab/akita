@@ -2,13 +2,12 @@ package writeback
 
 import (
 	"fmt"
-	"github.com/sarchlab/akita/v5/timing"
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // A Builder can build writeback caches. Configuration is supplied as a whole
@@ -59,7 +58,7 @@ func (b Builder) Build(name string) *Comp {
 	numSets := int(
 		b.spec.TotalByteSize / uint64(b.spec.WayAssociativity*blockSize))
 
-	spec, remotePortNames := b.buildSpec(numSets)
+	spec := b.buildSpec(numSets)
 
 	laneWidth := spec.NumReqPerCycle
 	if laneWidth == 1 {
@@ -67,7 +66,6 @@ func (b Builder) Build(name string) *Comp {
 	}
 
 	initialState := b.buildInitialState(name, spec, laneWidth, numSets)
-	initialState.RemotePortNames = remotePortNames
 
 	storage := b.resolveStorage(name, spec)
 
@@ -78,7 +76,7 @@ func (b Builder) Build(name string) *Comp {
 		WithDefinition(Definition).
 		WithResources(Resources{
 			Storage:             storage,
-			AddressToPortMapper: b.resources.AddressToPortMapper,
+			AddressToPortMapper: b.resolveAddressMapper(),
 			RemotePorts:         b.resources.RemotePorts,
 		}).
 		Build(name)
@@ -162,56 +160,48 @@ func (b Builder) buildInitialState(
 	return s
 }
 
-// buildSpec produces the final Spec used by the component. It derives the
-// number of sets and resolves the address mapper (from an injected mapper or
-// from the type string plus the remote ports in Resources) into the flat
-// address-mapping fields read at Tick time. It returns the resolved remote
-// port names separately because they belong in State.
-func (b Builder) buildSpec(numSets int) (Spec, []string) {
+// buildSpec produces the final Spec used by the component: it derives the
+// number of sets and defaults the bank count.
+func (b Builder) buildSpec(numSets int) Spec {
 	spec := b.spec
 	if spec.NumBanks < 1 {
 		spec.NumBanks = 1
 	}
 	spec.NumSets = numSets
 
-	var remotePortNames []string
-
-	mapperType, remotePorts, interleavingSize := b.resolveAddressMapper()
-	if mapperType != "" {
-		remotePortNames = make([]string, len(remotePorts))
-		for i, rp := range remotePorts {
-			remotePortNames[i] = string(rp)
-		}
-		spec.AddressMapperType = mapperType
-		spec.InterleavingSize = interleavingSize
-	}
-
-	return spec, remotePortNames
+	return spec
 }
 
-// resolveAddressMapper returns the address mapper type, remote ports, and
-// interleaving size. An externally injected mapper (Resources.AddressToPortMapper)
-// takes precedence and is decomposed into these fields; otherwise the values
-// come from Spec.AddressMapperType plus Resources.RemotePorts.
-func (b Builder) resolveAddressMapper() (
-	mapperType string,
-	remotePorts []messaging.RemotePort,
-	interleavingSize uint64,
-) {
+// resolveAddressMapper returns the mapper that routes fetches and evictions
+// to lower memory: the injected Resources.AddressToPortMapper, or one built
+// from Spec.AddressMapperType over Resources.RemotePorts. It returns nil when
+// neither is configured.
+func (b Builder) resolveAddressMapper() mem.AddressToPortMapper {
 	if b.resources.AddressToPortMapper != nil {
-		switch m := b.resources.AddressToPortMapper.(type) {
-		case *mem.SinglePortMapper:
-			return "single", []messaging.RemotePort{m.Port}, b.spec.InterleavingSize
-		case *mem.InterleavedAddressPortMapper:
-			return "interleaved", m.LowModules, m.InterleavingSize
-		default:
-			panic(fmt.Sprintf(
-				"unsupported address mapper type: %T",
-				b.resources.AddressToPortMapper))
-		}
+		return b.resources.AddressToPortMapper
 	}
 
-	return b.spec.AddressMapperType, b.resources.RemotePorts, b.spec.InterleavingSize
+	ports := b.resources.RemotePorts
+
+	switch b.spec.AddressMapperType {
+	case "":
+		return nil
+	case "single":
+		if len(ports) == 0 {
+			return nil
+		}
+
+		return &mem.SinglePortMapper{Port: ports[0]}
+	case "interleaved":
+		mapper := mem.NewInterleavedAddressPortMapper(b.spec.InterleavingSize)
+		mapper.LowModules = append(mapper.LowModules, ports...)
+
+		return mapper
+	default:
+		panic(fmt.Sprintf(
+			"writeback: unknown address mapper type %q",
+			b.spec.AddressMapperType))
+	}
 }
 
 func (b Builder) buildPipelineMW(

@@ -57,9 +57,10 @@ type Comp = modeling.Component[Spec, State, Resources]
 - **State** — mutable runtime: `cache.DirectoryState`, `cache.MSHRState`, the
   flat `Transactions` list, the directory/bank `queueing.Buffer`/`Pipeline`
   stages, the pause flag, and the in-progress flush request.
-- **Resources** — shared wiring: the backing `*mem.Storage` plus the
-  `AddressToPortMapper`/`RemotePorts` describing how to reach lower memory (used
-  only at build time to populate the spec's mapper fields).
+- **Resources** — shared wiring: the backing `*mem.Storage` plus either an
+  `AddressMapper` or the `RemotePorts` that `Spec.AddressMapperType` routes
+  across. Build resolves them into the mapper the cache uses; none of them is
+  checkpointed.
 
 ## Builder Pattern
 

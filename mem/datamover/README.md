@@ -62,10 +62,10 @@ type DataMoveResponse struct {
 - **Spec** — immutable config: `Freq`, `BufferSize`, and
   `InsideByteGranularity`/`OutsideByteGranularity`.
 - **State** — mutable runtime: the single `CurrentTransaction` (with its pending
-  read/write maps and next read/write addresses), the sliding `Buffer`, and the
-  inside/outside port mappings that Build flattens from `Resources`.
+  read/write maps and next read/write addresses) and the sliding `Buffer`.
 - **Resources** — the inside/outside `mem.AddressToPortMapper`s describing which
-  remote port serves a given address on each side.
+  remote port serves a given address on each side. They are not checkpointed;
+  the setup that rebuilds the data mover supplies them.
 
 ## Builder Pattern
 

@@ -1,8 +1,6 @@
 package datamover
 
 import (
-	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -53,10 +51,7 @@ func (b Builder) Build(name string) *Comp {
 	}
 
 	spec := b.spec
-	initialState := State{
-		InsideMapper:  flattenMapper(b.resources.InsideMapper),
-		OutsideMapper: flattenMapper(b.resources.OutsideMapper),
-	}
+	initialState := State{}
 
 	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
 		WithSimulation(b.simulation).
@@ -72,35 +67,14 @@ func (b Builder) Build(name string) *Comp {
 	parseMW := &ctrlParseMW{comp: modelComp}
 	modelComp.AddMiddleware(parseMW)
 
-	dataMW := &dataTransferMW{comp: modelComp}
+	dataMW := &dataTransferMW{
+		comp:          modelComp,
+		insideMapper:  b.resources.InsideMapper,
+		outsideMapper: b.resources.OutsideMapper,
+	}
 	modelComp.AddMiddleware(dataMW)
 
 	b.simulation.RegisterComponent(modelComp)
 
 	return modelComp
-}
-
-// flattenMapper converts an AddressToPortMapper into the serializable
-// portMapping kept in State. A nil mapper yields an empty mapping.
-func flattenMapper(mapper mem.AddressToPortMapper) portMapping {
-	switch m := mapper.(type) {
-	case nil:
-		return portMapping{}
-	case *mem.SinglePortMapper:
-		return portMapping{
-			Kind:  "single",
-			Ports: []messaging.RemotePort{m.Port},
-		}
-	case *mem.InterleavedAddressPortMapper:
-		ports := make([]messaging.RemotePort, len(m.LowModules))
-		copy(ports, m.LowModules)
-
-		return portMapping{
-			Kind:             "interleaved",
-			Ports:            ports,
-			InterleavingSize: m.InterleavingSize,
-		}
-	default:
-		panic("unsupported mapper type for inline conversion")
-	}
 }

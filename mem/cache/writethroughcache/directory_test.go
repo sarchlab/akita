@@ -1,6 +1,7 @@
 package writethroughcache
 
 import (
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -58,14 +59,16 @@ var _ = Describe("Directory", func() {
 			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
-				Log2BlockSize:     6,
-				NumReqPerCycle:    4,
-				WayAssociativity:  4,
-				NumMSHREntry:      4,
-				NumSets:           16,
-				NumBanks:          1,
-				AddressMapperType: "single",
-				WritePolicyType:   "write-around",
+				Log2BlockSize:    6,
+				NumReqPerCycle:   4,
+				WayAssociativity: 4,
+				NumMSHREntry:     4,
+				NumSets:          16,
+				NumBanks:         1,
+				WritePolicyType:  "write-around",
+			}).
+			WithResources(Resources{
+				AddressMapper: &mem.SinglePortMapper{Port: "DRAM"},
 			}).
 			Build("Cache")
 
@@ -80,7 +83,6 @@ var _ = Describe("Directory", func() {
 		c.comp.AssignPort("Bottom", bottomPort)
 
 		c.comp.State = initialState
-		c.comp.State.RemotePortNames = []string{"DRAM"}
 
 		d = &directory{
 			cache: c,

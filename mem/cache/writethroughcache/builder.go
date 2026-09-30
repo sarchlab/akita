@@ -2,15 +2,12 @@ package writethroughcache
 
 import (
 	"fmt"
-	"github.com/sarchlab/akita/v5/timing"
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/queueing"
-
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // A Builder can build a writethroughcache cache. Configuration is supplied as a
@@ -62,14 +59,11 @@ func (b Builder) Build(name string) *Comp {
 		spec.WritePolicyType = "write-around"
 	}
 
-	remotePortNames := b.resolveAddressMapper(&spec)
-
 	blockSize := 1 << spec.Log2BlockSize
 	spec.NumSets = int(spec.TotalByteSize /
 		uint64(spec.WayAssociativity*blockSize))
 
 	initialState := b.buildInitialState(name, spec, spec.NumSets, blockSize)
-	initialState.RemotePortNames = remotePortNames
 
 	storage := b.resolveStorage(name, spec)
 
@@ -78,7 +72,10 @@ func (b Builder) Build(name string) *Comp {
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		WithDefinition(Definition).
-		WithResources(Resources{Storage: storage}).
+		WithResources(Resources{
+			Storage:       storage,
+			AddressMapper: b.resolveAddressMapper(),
+		}).
 		Build(name)
 
 	comp.State = initialState
@@ -111,42 +108,36 @@ func (b Builder) resolveStorage(name string, spec Spec) *mem.Storage {
 		Build(name + ".Storage")
 }
 
-// resolveAddressMapper derives the address-mapper configuration from the
-// wiring placed in Resources. It stores the mapper type and interleaving size
-// in Spec and returns the remote port names, which belong in State. When an
-// explicit mapper is injected via Resources.AddressMapper it is decoded into
-// the type string and remote ports; otherwise the remote ports listed in
-// Resources are combined with the Spec type string.
-func (b Builder) resolveAddressMapper(spec *Spec) []string {
+// resolveAddressMapper returns the mapper that routes requests to lower
+// memory: the injected Resources.AddressMapper, or one built from
+// Spec.AddressMapperType over Resources.RemotePorts. It returns nil when
+// neither is configured.
+func (b Builder) resolveAddressMapper() mem.AddressToPortMapper {
 	if b.resources.AddressMapper != nil {
-		switch m := b.resources.AddressMapper.(type) {
-		case *mem.SinglePortMapper:
-			spec.AddressMapperType = "single"
-			return []string{string(m.Port)}
-		case *mem.InterleavedAddressPortMapper:
-			spec.AddressMapperType = "interleaved"
-			spec.InterleavingSize = m.InterleavingSize
-			return remotePortNames(m.LowModules)
-		default:
-			panic(fmt.Sprintf(
-				"unsupported address mapper type: %T", b.resources.AddressMapper))
+		return b.resources.AddressMapper
+	}
+
+	ports := b.resources.RemotePorts
+
+	switch b.spec.AddressMapperType {
+	case "":
+		return nil
+	case "single":
+		if len(ports) == 0 {
+			return nil
 		}
+
+		return &mem.SinglePortMapper{Port: ports[0]}
+	case "interleaved":
+		mapper := mem.NewInterleavedAddressPortMapper(b.spec.InterleavingSize)
+		mapper.LowModules = append(mapper.LowModules, ports...)
+
+		return mapper
+	default:
+		panic(fmt.Sprintf(
+			"writethroughcache: unknown address mapper type %q",
+			b.spec.AddressMapperType))
 	}
-
-	if spec.AddressMapperType != "" {
-		return remotePortNames(b.resources.RemotePorts)
-	}
-
-	return nil
-}
-
-func remotePortNames(ports []messaging.RemotePort) []string {
-	names := make([]string, len(ports))
-	for i, rp := range ports {
-		names[i] = string(rp)
-	}
-
-	return names
 }
 
 func (b *Builder) buildInitialState(

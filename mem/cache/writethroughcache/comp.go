@@ -28,8 +28,9 @@ type Spec struct {
 	// Valid values: "write-around" (default), "write-evict", "write-through".
 	WritePolicyType string `json:"write_policy_type"`
 
-	// Address mapper configuration (inlined from interface). The remote
-	// ports it routes to are resolved in Build into State.RemotePortNames.
+	// AddressMapperType ("single" or "interleaved") and InterleavingSize
+	// describe how to route to Resources.RemotePorts when no
+	// Resources.AddressMapper is injected.
 	AddressMapperType string `json:"address_mapper_type"`
 	InterleavingSize  uint64 `json:"interleaving_size"`
 }
@@ -41,10 +42,6 @@ type State struct {
 
 	// Transactions stores all transaction states as a flat list.
 	Transactions []transactionState `json:"transactions"`
-
-	// RemotePortNames are the ports the address mapper routes to, resolved
-	// from Resources in Build. They do not change after Build.
-	RemotePortNames []string `json:"remote_port_names"`
 
 	DirBuf        queueing.Buffer[int]     `json:"dir_buf"`
 	BankBufs      []queueing.Buffer[int]   `json:"bank_bufs"`
@@ -157,9 +154,9 @@ func (t *transactionState) PID() vm.PID {
 
 // Resources holds the shared resources and external wiring referenced by the
 // writethroughcache. Storage is the (optionally shared) backing storage.
-// AddressMapper and RemotePorts describe how the cache reaches the lower-level
-// modules; they are only consumed at Build time to populate the Spec's address
-// mapper configuration and are not serialized with the component state.
+// AddressMapper routes requests to the lower-level modules; when it is not
+// supplied, Build creates one from Spec.AddressMapperType over RemotePorts.
+// Neither is serialized with the component state.
 type Resources struct {
 	Storage *mem.Storage
 

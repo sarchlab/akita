@@ -22,7 +22,7 @@ type Spec struct {
 // Resources holds the data mover's wiring. The data mover owns no storage; it
 // moves data between external memory controllers. The inside/outside mappers
 // describe which remote port serves a given address on each side. They are
-// optional: when omitted, the equivalent flat mapper fields in Spec are used.
+// not checkpointed: the setup that rebuilds the data mover supplies them.
 type Resources struct {
 	InsideMapper  mem.AddressToPortMapper
 	OutsideMapper mem.AddressToPortMapper
@@ -88,21 +88,6 @@ type State struct {
 	DstByteGranularity uint64                    `json:"dst_byte_granularity"`
 	SrcSide            string                    `json:"src_side"`
 	DstSide            string                    `json:"dst_side"`
-
-	// InsideMapper and OutsideMapper route each side's addresses to remote
-	// ports. Build resolves them from Resources; they do not change after
-	// Build.
-	InsideMapper  portMapping `json:"inside_mapper"`
-	OutsideMapper portMapping `json:"outside_mapper"`
-}
-
-// portMapping is an address-to-port mapper flattened into serializable
-// fields. Kind "single" routes every address to Ports[0]; "interleaved"
-// spreads addresses across Ports in InterleavingSize-byte chunks.
-type portMapping struct {
-	Kind             string                 `json:"kind"`
-	Ports            []messaging.RemotePort `json:"ports"`
-	InterleavingSize uint64                 `json:"interleaving_size"`
 }
 
 // Comp is the data mover component.
@@ -115,20 +100,6 @@ func alignAddress(addr, granularity uint64) uint64 {
 func addressMustBeAligned(addr, granularity uint64) {
 	if addr%granularity != 0 {
 		log.Panicf("address %d must be aligned to %d", addr, granularity)
-	}
-}
-
-// findPort returns the remote port that serves addr.
-func (pm portMapping) findPort(addr uint64) messaging.RemotePort {
-	switch pm.Kind {
-	case "single":
-		return pm.Ports[0]
-	case "interleaved":
-		number := addr / pm.InterleavingSize % uint64(len(pm.Ports))
-		return pm.Ports[number]
-	default:
-		log.Panicf("unknown mapper kind %q", pm.Kind)
-		return ""
 	}
 }
 

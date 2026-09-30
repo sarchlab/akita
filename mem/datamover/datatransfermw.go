@@ -3,6 +3,7 @@ package datamover
 import (
 	"log"
 
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -16,6 +17,11 @@ import (
 
 type dataTransferMW struct {
 	comp *modeling.Component[Spec, State, modeling.None]
+
+	// insideMapper and outsideMapper route each side's addresses to remote
+	// ports. Build takes them from Resources; they are not checkpointed.
+	insideMapper  mem.AddressToPortMapper
+	outsideMapper mem.AddressToPortMapper
 }
 
 func (m *dataTransferMW) insidePort() messaging.Port {
@@ -51,29 +57,32 @@ func (m *dataTransferMW) dstPort() messaging.Port {
 }
 
 func (m *dataTransferMW) findSrcPort(addr uint64) messaging.RemotePort {
-	state := &m.comp.State
-	switch state.SrcSide {
-	case "inside":
-		return state.InsideMapper.findPort(addr)
-	case "outside":
-		return state.OutsideMapper.findPort(addr)
-	default:
-		log.Panicf("unknown src side %q", state.SrcSide)
-		return ""
-	}
+	return m.mapperFor(m.comp.State.SrcSide).Find(addr)
 }
 
 func (m *dataTransferMW) findDstPort(addr uint64) messaging.RemotePort {
-	state := &m.comp.State
-	switch state.DstSide {
+	return m.mapperFor(m.comp.State.DstSide).Find(addr)
+}
+
+// mapperFor returns the mapper for the "inside" or "outside" side.
+func (m *dataTransferMW) mapperFor(side string) mem.AddressToPortMapper {
+	var mapper mem.AddressToPortMapper
+
+	switch side {
 	case "inside":
-		return state.InsideMapper.findPort(addr)
+		mapper = m.insideMapper
 	case "outside":
-		return state.OutsideMapper.findPort(addr)
+		mapper = m.outsideMapper
 	default:
-		log.Panicf("unknown dst side %q", state.DstSide)
-		return ""
+		log.Panicf("unknown side %q", side)
 	}
+
+	if mapper == nil {
+		log.Panicf("datamover: no mapper for the %s side; "+
+			"set Resources.InsideMapper and Resources.OutsideMapper", side)
+	}
+
+	return mapper
 }
 
 // Tick runs data transfer stages. Paused data movers make no progress;
