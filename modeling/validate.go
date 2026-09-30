@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"unicode"
 )
 
 // jsonMarshalerType is the reflect.Type of json.Marshaler, used to exempt types
@@ -119,9 +120,17 @@ func validateFieldType(t reflect.Type, path string, allowComposite bool) error {
 }
 
 func validateStructType(t reflect.Type, path string, allowComposite bool) error {
-	// A type that customizes its own JSON is trusted: it round-trips on its own
-	// terms, so neither the structural rules nor the data-loss guard apply —
-	// provided both halves of the round trip exist. UnmarshalJSON must be
+	// Spec fields must be scalars even when the Spec customizes its JSON: a
+	// container would still be shared by every copy of the default Spec.
+	if !allowComposite {
+		if err := validateFields(t, path, allowComposite); err != nil {
+			return err
+		}
+	}
+
+	// A type that customizes its own JSON is otherwise trusted: it round-trips
+	// on its own terms, so the remaining structural rules and the data-loss
+	// guard do not apply — provided both halves of the round trip exist. UnmarshalJSON must be
 	// checked on the pointer type: it mutates the value, so it always has a
 	// pointer receiver, while MarshalJSON typically has a value receiver.
 	if t.Implements(jsonMarshalerType) {
@@ -153,6 +162,15 @@ func validateStructType(t reflect.Type, path string, allowComposite bool) error 
 		return err
 	}
 
+	if allowComposite {
+		return validateFields(t, path, allowComposite)
+	}
+
+	return nil
+}
+
+// validateFields checks every field's type against the Spec or State rules.
+func validateFields(t reflect.Type, path string, allowComposite bool) error {
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 
@@ -202,7 +220,8 @@ func checkDuplicateJSONNames(t reflect.Type, path string) error {
 
 // collectJSONFields records, by JSON name, the Go path of every field
 // encoding/json encodes for t. Like encoding/json, it flattens embedded
-// structs whose JSON tag gives no name, including unexported ones.
+// structs whose JSON tag gives no valid name, including unexported ones, and
+// encodes an unexported embedded struct that the tag does name.
 func collectJSONFields(t reflect.Type, prefix string, fields map[string][]string) {
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
@@ -213,13 +232,19 @@ func collectJSONFields(t reflect.Type, prefix string, fields map[string][]string
 		}
 
 		name, _, _ := strings.Cut(tag, ",")
-
-		if f.Anonymous && name == "" && f.Type.Kind() == reflect.Struct {
-			collectJSONFields(f.Type, prefix+f.Name+".", fields)
-			continue
+		if !isValidJSONName(name) {
+			name = ""
 		}
 
-		if !f.IsExported() {
+		isStruct := f.Type.Kind() == reflect.Struct
+
+		switch {
+		case f.Anonymous && isStruct && name == "":
+			collectJSONFields(f.Type, prefix+f.Name+".", fields)
+			continue
+		case f.Anonymous && isStruct:
+			// A named embedded struct is encoded even when unexported.
+		case !f.IsExported():
 			continue
 		}
 
@@ -229,6 +254,27 @@ func collectJSONFields(t reflect.Type, prefix string, fields map[string][]string
 
 		fields[name] = append(fields[name], prefix+f.Name)
 	}
+}
+
+// isValidJSONName reports whether encoding/json accepts name from a struct
+// tag. It falls back to the field name otherwise. Letters, digits, and most
+// punctuation are allowed; backslashes and quotes are reserved.
+func isValidJSONName(name string) bool {
+	if name == "" {
+		return false
+	}
+
+	for _, c := range name {
+		if strings.ContainsRune("!#$%&()*+-./:;<=>?@[]^_{|}~ ", c) {
+			continue
+		}
+
+		if !unicode.IsLetter(c) && !unicode.IsDigit(c) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // serializesToEmpty reports whether a struct type holds unexported fields yet

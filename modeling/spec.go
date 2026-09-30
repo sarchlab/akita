@@ -14,8 +14,10 @@ package modeling
 // int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, string,
 // and named types based on them (such as timing.Freq or an enum-like string
 // type). No slices, arrays, maps, nested structs, pointers, interfaces, or
-// functions. A value a component derives in Build that needs a container
-// belongs in State; a reference to an external object belongs in Resources.
+// functions, even on fields tagged `json:"-"` or in a Spec that customizes its
+// JSON. Data that changes while simulating belongs in State. A reference to an
+// external object, and anything derived only from one such as an address
+// mapper, belongs in Resources.
 //
 // Go does not support a struct constraint, so this is typed as `any`.
 // Use [ValidateSpec] at runtime to verify that a value conforms to these rules.

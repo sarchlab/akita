@@ -170,14 +170,38 @@ type stateWithShadowedField struct {
 	X int
 }
 
-type header struct{ Seq int }
+// Header is exported so the check sees an embedded field named "Header".
+type Header struct{ Seq int }
 
-// stateWithUnnamedEmbeddedTag embeds header with a tag that sets only an
+// stateWithUnnamedEmbeddedTag embeds Header with a tag that sets only an
 // option. encoding/json still flattens it, so its JSON names are "Seq" and
 // the explicit "Header" field, which do not collide.
 type stateWithUnnamedEmbeddedTag struct {
-	header `json:",omitempty"`
+	Header `json:",omitempty"`
 	Other  int `json:"Header"`
+}
+
+type counters struct{ Hits int }
+
+// stateWithNamedUnexportedEmbed embeds the unexported counters under the
+// JSON name "Other". encoding/json encodes it and drops the Other field.
+type stateWithNamedUnexportedEmbed struct {
+	counters `json:"Other"`
+	Other    int
+}
+
+// stateWithInvalidTagName tags Y with a name encoding/json rejects, so Y
+// falls back to its field name and collides with Z.
+type stateWithInvalidTagName struct {
+	Y int `json:"'"`
+	Z int `json:"Y"`
+}
+
+// stateWithTwoInvalidTagNames tags two fields with names encoding/json
+// rejects; both fall back to their own field names and do not collide.
+type stateWithTwoInvalidTagNames struct {
+	A int `json:"'"`
+	B int `json:"''"`
 }
 
 func TestValidateSpec_RejectsDuplicateJSONNames(t *testing.T) {
@@ -189,13 +213,15 @@ func TestValidateSpec_RejectsDuplicateJSONNames(t *testing.T) {
 
 func TestValidateState_RejectsDuplicateJSONNames(t *testing.T) {
 	for name, state := range map[string]any{
-		"nested struct":       stateWithDupJSON{},
-		"embedded collision":  stateWithEmbeddedCollision{},
-		"shadowed by outer X": stateWithShadowedField{},
+		"nested struct":             stateWithDupJSON{},
+		"embedded collision":        stateWithEmbeddedCollision{},
+		"shadowed by outer X":       stateWithShadowedField{},
+		"named unexported embedded": stateWithNamedUnexportedEmbed{},
+		"invalid tag name":          stateWithInvalidTagName{},
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := ValidateState(state)
-			if err == nil || !strings.Contains(err.Error(), `share JSON name "X"`) {
+			if err == nil || !strings.Contains(err.Error(), "share JSON name") {
 				t.Fatalf("expected duplicate JSON name error, got %v", err)
 			}
 		})
@@ -206,6 +232,7 @@ func TestValidateState_AllowsNamesIgnoredByJSON(t *testing.T) {
 	for name, state := range map[string]any{
 		"unexported and dash-tagged": distinctJSONState{x: 1},
 		"embedded with option tag":   stateWithUnnamedEmbeddedTag{},
+		"two invalid tag names":      stateWithTwoInvalidTagNames{},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := ValidateState(state); err != nil {
@@ -234,5 +261,23 @@ func TestValidateState_AllowsDashFieldRebuiltBySetup(t *testing.T) {
 
 	if err := ValidateState(state{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// marshalingSpec customizes its JSON but still holds a slice, which every
+// copy of a default Spec would share.
+type marshalingSpec struct {
+	Sizes []int
+}
+
+func (s marshalingSpec) MarshalJSON() ([]byte, error) { return json.Marshal(s.Sizes) }
+func (s *marshalingSpec) UnmarshalJSON(b []byte) error {
+	return json.Unmarshal(b, &s.Sizes)
+}
+
+func TestValidateSpec_RejectsContainerBehindMarshalJSON(t *testing.T) {
+	err := ValidateSpec(marshalingSpec{})
+	if err == nil || !strings.Contains(err.Error(), "spec fields must be scalars") {
+		t.Fatalf("expected a scalar-field error, got %v", err)
 	}
 }
