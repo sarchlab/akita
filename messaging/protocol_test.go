@@ -162,4 +162,10 @@ func TestDeclarePortCopiesRoles(t *testing.T) {
 	if got := po.PortRoles("Link")[0]; got != p.Role("responder") {
 		t.Errorf("PortRoles(Link) changed with the caller's slice: %v", got)
 	}
+
+	po.PortRoles("Top")[0] = p.Role("requester")
+
+	if got := po.PortRoles("Top")[0]; got != p.Role("responder") {
+		t.Errorf("mutating a PortRoles result changed the port: %v", got)
+	}
 }

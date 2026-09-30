@@ -69,9 +69,10 @@ func (po *PortOwnerBase) DeclarePortGroup(name string, roles ...*Role) {
 	po.roles[name] = slices.Clone(roles)
 }
 
-// PortRoles returns the protocol roles bound to the named port or port group
-// when it was declared, in declaration order. It returns nil for an untyped
-// port. It panics if the name is neither a declared port nor a port group.
+// PortRoles returns a copy of the protocol roles bound to the named port or
+// port group when it was declared, in declaration order. It returns nil for
+// an untyped port. It panics if the name is neither a declared port nor a
+// port group.
 func (po PortOwnerBase) PortRoles(name string) []*Role {
 	_, isPort := po.declared[name]
 	_, isGroup := po.groups[name]
@@ -81,7 +82,7 @@ func (po PortOwnerBase) PortRoles(name string) []*Role {
 			"port or port group %q is not declared by this component", name))
 	}
 
-	return po.roles[name]
+	return slices.Clone(po.roles[name])
 }
 
 // AssignPortToGroup appends a port instance to a previously declared port group
