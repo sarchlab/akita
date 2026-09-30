@@ -64,6 +64,7 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(sim).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		Build(name)
 
 	portIndex := make(map[messaging.RemotePort]int)
@@ -83,8 +84,6 @@ func (b Builder) Build(name string) *Comp {
 	// This matches the execution order: sendOut → forward → route → movePipeline → startProcessing
 	modelComp.AddMiddleware(rfsMW)
 	modelComp.AddMiddleware(rpMW)
-
-	Definition.DeclarePorts(modelComp)
 
 	b.simulation.RegisterComponent(modelComp)
 

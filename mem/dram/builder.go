@@ -90,11 +90,10 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		WithResources(Resources{Storage: storage}).
 		Build(name)
 	modelComp.State = initialState
-
-	Definition.DeclarePorts(modelComp)
 
 	b.addMiddlewares(modelComp, timing, cmdCycles, b.buildController())
 

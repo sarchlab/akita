@@ -62,6 +62,7 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(sim).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		Build(name)
 
 	ep := &Comp{
@@ -79,8 +80,6 @@ func (b Builder) Build(name string) *Comp {
 
 	ep.AddMiddleware(outMW)
 	ep.AddMiddleware(inMW)
-
-	Definition.DeclarePorts(ep)
 
 	for _, dp := range b.resources.DevicePorts {
 		ep.PlugIn(dp)

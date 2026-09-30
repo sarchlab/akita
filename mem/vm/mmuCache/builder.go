@@ -72,6 +72,7 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		WithResources(b.resources).
 		Build(name)
 	modelComp.State = initialState
@@ -81,8 +82,6 @@ func (b Builder) Build(name string) *Comp {
 
 	cacheMW := &mmuCacheMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cacheMW)
-
-	Definition.DeclarePorts(modelComp)
 
 	b.simulation.RegisterComponent(modelComp)
 

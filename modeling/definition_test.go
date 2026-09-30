@@ -127,11 +127,23 @@ func TestComponentDefNewSpecIsACopy(t *testing.T) {
 	}
 }
 
-func TestComponentDefDeclarePorts(t *testing.T) {
-	def := modeling.DefineComponent(makeDefTestDef())
+func buildWithDef(
+	def modeling.ComponentDef[defTestSpec], name string,
+) *modeling.Component[defTestSpec, TestState, defTestResources] {
+	engine := timing.NewSerialEngine()
 
-	po := messaging.NewPortOwnerBase()
-	def.DeclarePorts(po)
+	return modeling.NewBuilder[defTestSpec, TestState, defTestResources]().
+		WithSimulation(modeling.NewStandaloneSimulation(engine)).
+		WithFreq(1 * timing.GHz).
+		WithSpec(def.NewSpec()).
+		WithDefinition(def).
+		Build(name)
+}
+
+func checkDefTestRoles(t *testing.T, po interface {
+	PortRoles(name string) []*messaging.Role
+}) {
+	t.Helper()
 
 	if roles := po.PortRoles("Top"); len(roles) != 1 ||
 		roles[0] != defTestResponder {
@@ -142,10 +154,28 @@ func TestComponentDefDeclarePorts(t *testing.T) {
 		roles[0] != defTestRequester {
 		t.Errorf("PortRoles(Out) = %+v, want [requester]", roles)
 	}
+}
 
-	if n := po.NumPortsInGroup("Out"); n != 0 {
+func TestBuilderWithDefinitionDeclaresPorts(t *testing.T) {
+	comp := buildWithDef(modeling.DefineComponent(makeDefTestDef()), "Comp")
+
+	checkDefTestRoles(t, comp)
+
+	if n := comp.NumPortsInGroup("Out"); n != 0 {
 		t.Errorf("NumPortsInGroup(Out) = %d, want 0", n)
 	}
+}
+
+func TestEventDrivenBuilderWithDefinitionDeclaresPorts(t *testing.T) {
+	engine := timing.NewSerialEngine()
+
+	comp := modeling.NewEventDrivenBuilder[defTestSpec, TestState, defTestResources]().
+		WithSimulation(modeling.NewStandaloneSimulation(engine)).
+		WithSpec(makeDefTestDef().NewSpec()).
+		WithDefinition(modeling.DefineComponent(makeDefTestDef())).
+		Build("EDComp")
+
+	checkDefTestRoles(t, comp)
 }
 
 // plainSpec is a minimal valid Spec for the panic tests below.
@@ -296,31 +326,6 @@ func TestDefineComponentPanicsOnBadPortGroups(t *testing.T) {
 	})
 }
 
-// TestComponentDefWorksWithComponent exercises the intended builder usage:
-// DeclarePorts on a built component, then assigning ports normally.
-func TestComponentDefWorksWithComponent(t *testing.T) {
-	def := modeling.DefineComponent(makeDefTestDef())
-
-	engine := timing.NewSerialEngine()
-	comp := modeling.NewBuilder[defTestSpec, TestState, defTestResources]().
-		WithSimulation(modeling.NewStandaloneSimulation(engine)).
-		WithFreq(1 * timing.GHz).
-		WithSpec(def.NewSpec()).
-		Build("Comp")
-
-	def.DeclarePorts(comp)
-
-	if roles := comp.PortRoles("Top"); len(roles) != 1 ||
-		roles[0] != defTestResponder {
-		t.Errorf("PortRoles(Top) = %+v, want [responder]", roles)
-	}
-
-	if roles := comp.PortRoles("Out"); len(roles) != 1 ||
-		roles[0] != defTestRequester {
-		t.Errorf("PortRoles(Out) = %+v, want [requester]", roles)
-	}
-}
-
 func TestComponentDefNewSpecCopiesNestedContainers(t *testing.T) {
 	type spec struct {
 		Slices [][]int
@@ -348,9 +353,7 @@ func TestComponentDefNewSpecCopiesNestedContainers(t *testing.T) {
 
 func TestComponentDefDeclaredRolesAreIndependent(t *testing.T) {
 	def := modeling.DefineComponent(makeDefTestDef())
-	first, second := messaging.NewPortOwnerBase(), messaging.NewPortOwnerBase()
-	def.DeclarePorts(first)
-	def.DeclarePorts(second)
+	first, second := buildWithDef(def, "First"), buildWithDef(def, "Second")
 	first.PortRoles("Top")[0] = nil
 	first.PortRoles("Out")[0] = nil
 	if second.PortRoles("Top")[0] != defTestResponder || second.PortRoles("Out")[0] != defTestRequester {

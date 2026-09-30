@@ -65,14 +65,13 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		WithResources(Resources{Storage: storage}).
 		Build(name)
 	modelComp.State = State{ControlState: memcontrolprotocol.StateEnabled}
 
 	modelComp.AddMiddleware(&ctrlMiddleware{comp: modelComp})
 	modelComp.AddMiddleware(&memMiddleware{comp: modelComp})
-
-	Definition.DeclarePorts(modelComp)
 
 	b.simulation.RegisterComponent(modelComp)
 

@@ -56,7 +56,8 @@ type PortGroupDef struct {
 // identifiers). Tooling reads the same literal without executing the package.
 // Treat the definition as read-only after initialization so the static and
 // runtime views agree. Builders use NewSpec to obtain a configuration to edit
-// and DeclarePorts to declare the component's boundary.
+// and pass the definition to modeling.Builder.WithDefinition, which declares
+// the component's ports.
 type ComponentDef[S any] struct {
 	// Name is the component's display name, e.g. "TLB".
 	Name string
@@ -99,10 +100,10 @@ func (d ComponentDef[S]) NewSpec() S {
 	return v.Interface().(S)
 }
 
-// DeclarePorts declares every port and port group of the definition on the
-// given component. Builders call it in Build in place of per-port
-// DeclarePort calls.
-func (d ComponentDef[S]) DeclarePorts(po messaging.PortOwner) {
+// declarePorts declares every port and port group of the definition on the
+// given component. Builder.Build and EventDrivenBuilder.Build call it for the
+// definition passed to WithDefinition.
+func (d ComponentDef[S]) declarePorts(po messaging.PortOwner) {
 	for _, p := range d.Ports {
 		po.DeclarePort(p.Name, copyRoles(p.Roles)...)
 	}

@@ -63,14 +63,13 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		WithResources(Resources{PageTable: pt}).
 		Build(name)
 
 	modelComp.State = State{
 		RemoteMemReqs: make(map[uint64]transactionState),
 	}
-
-	Definition.DeclarePorts(modelComp)
 
 	cMW := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cMW)

@@ -84,6 +84,7 @@ func (b Builder) Build(name string) *MemAccessAgent {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		Build(name)
 	modelComp.State = initialState
 
@@ -101,8 +102,6 @@ func (b Builder) Build(name string) *MemAccessAgent {
 
 	mw := &agentMiddleware{agent: agent}
 	modelComp.AddMiddleware(mw)
-
-	Definition.DeclarePorts(modelComp)
 
 	b.simulation.RegisterComponent(agent)
 

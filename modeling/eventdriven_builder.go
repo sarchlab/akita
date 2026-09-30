@@ -18,6 +18,7 @@ type EventDrivenBuilder[S any, T any, R any] struct {
 	spec       S
 	resources  R
 	processor  EventProcessor[S, T, R]
+	definition ComponentDef[S]
 }
 
 // NewEventDrivenBuilder creates a new EventDrivenBuilder.
@@ -51,6 +52,15 @@ func (b EventDrivenBuilder[S, T, R]) WithProcessor(
 	return b
 }
 
+// WithDefinition sets the component's definition. Build declares the
+// definition's ports and port groups on the new component.
+func (b EventDrivenBuilder[S, T, R]) WithDefinition(
+	def ComponentDef[S],
+) EventDrivenBuilder[S, T, R] {
+	b.definition = def
+	return b
+}
+
 // Build creates the EventDrivenComponent with the given name.
 func (b EventDrivenBuilder[S, T, R]) Build(name string) *EventDrivenComponent[S, T, R] {
 	naming.MustBeValid(name)
@@ -66,6 +76,7 @@ func (b EventDrivenBuilder[S, T, R]) Build(name string) *EventDrivenComponent[S,
 		processor:     b.processor,
 		pendingWakeup: math.MaxUint64,
 	}
+	b.definition.declarePorts(comp)
 
 	if handlers, ok := b.simulation.GetEngine().(timing.HandlerRegistry); ok {
 		handlers.RegisterHandler(name, comp)

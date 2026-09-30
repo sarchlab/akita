@@ -62,6 +62,7 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		WithResources(b.resources).
 		Build(name)
 
@@ -73,8 +74,6 @@ func (b Builder) Build(name string) *Comp {
 
 	rpMW := &respondPipelineMW{comp: modelComp}
 	modelComp.AddMiddleware(rpMW)
-
-	Definition.DeclarePorts(modelComp)
 
 	b.simulation.RegisterComponent(modelComp)
 

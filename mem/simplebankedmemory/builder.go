@@ -67,6 +67,7 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		WithResources(Resources{Storage: storage}).
 		Build(name)
 	modelComp.State = initialState
@@ -77,8 +78,6 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.AddMiddleware(tfMW)
 	dMW := &dispatchMW{comp: modelComp}
 	modelComp.AddMiddleware(dMW)
-
-	Definition.DeclarePorts(modelComp)
 
 	b.simulation.RegisterComponent(modelComp)
 

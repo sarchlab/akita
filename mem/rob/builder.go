@@ -54,12 +54,11 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		Build(name)
 
 	comp.State = State{}
 	comp.AddMiddleware(&middleware{comp: comp})
-
-	Definition.DeclarePorts(comp)
 
 	b.simulation.RegisterComponent(comp)
 

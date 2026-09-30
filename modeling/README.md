@@ -43,8 +43,10 @@ the same defaults and ports.
 
 - `Definition.NewSpec()` copies the defaults, including nested slices, maps,
   and arrays, for a builder or caller to customize.
-- `Definition.DeclarePorts(comp)` declares the fixed ports and optional port
-  groups on a component. Each component receives its own role slices.
+- `modeling.NewBuilder[...]().WithDefinition(Definition)` makes `Build` declare
+  the fixed ports and optional port groups on the new component (the
+  event-driven builder has the same method). Each component receives its own
+  role slices.
 - `Definition.Name`, `DefaultSpec`, `Ports`, and `PortGroups` expose the metadata
   directly.
 

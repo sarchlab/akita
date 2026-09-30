@@ -82,6 +82,7 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		WithResources(Resources{Storage: storage}).
 		Build(name)
 
@@ -96,8 +97,6 @@ func (b Builder) Build(name string) *Comp {
 	// effect this tick before any Top/Bottom traffic advances.
 	comp.AddMiddleware(ucmw) // index 0: control verbs
 	comp.AddMiddleware(pmw)  // index 1: data pipeline
-
-	Definition.DeclarePorts(comp)
 
 	b.simulation.RegisterComponent(comp)
 

@@ -80,6 +80,7 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		WithResources(Resources{
 			Storage:             storage,
 			AddressToPortMapper: b.resources.AddressToPortMapper,
@@ -88,8 +89,6 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 
 	comp.State = initialState
-
-	Definition.DeclarePorts(comp)
 
 	pmw := b.buildPipelineMW(comp, laneWidth)
 	cmw := b.buildControlMW(comp, pmw)

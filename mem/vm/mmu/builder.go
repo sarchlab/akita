@@ -66,10 +66,9 @@ func (b Builder) Build(name string) *Comp {
 		WithSimulation(b.simulation).
 		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithDefinition(Definition).
 		WithResources(Resources{PageTable: pt}).
 		Build(name)
-
-	Definition.DeclarePorts(modelComp)
 
 	cmw := &ctrlMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cmw)
