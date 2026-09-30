@@ -12,15 +12,19 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 )
 
-// CheckDefinition asserts that the inspector's static view of the package at
-// pkgPath matches the live Definition value: same name, same defaults, same
-// ports. Every migrated component adds one test calling it,
-// which turns "the static and runtime views agree" into a CI guarantee
+// CheckDefinition asserts that the inspector's static view of the package
+// that declares the Spec type S matches the live Definition value: same name,
+// same defaults, same ports. Every migrated component adds one test calling
+// it, which turns "the static and runtime views agree" into a CI guarantee
 // instead of a convention.
-func CheckDefinition[S any](
-	t *testing.T, def modeling.ComponentDef[S], pkgPath string,
-) {
+func CheckDefinition[S any](t *testing.T, def modeling.ComponentDef[S]) {
 	t.Helper()
+
+	pkgPath := reflect.TypeFor[S]().PkgPath()
+	if pkgPath == "" {
+		t.Fatalf("Spec type %s must be a named type declared in the "+
+			"component package", reflect.TypeFor[S]())
+	}
 
 	static := staticDefinition(t, pkgPath)
 

@@ -9,8 +9,8 @@ import (
 )
 
 func TestCheckDefinitionSupportedDeclarations(t *testing.T) {
-	CheckDefinition(t, scalars.Definition, "github.com/sarchlab/akita/v5/inspect/testdata/fixtures/scalars")
-	CheckDefinition(t, zerodefaults.Definition, "github.com/sarchlab/akita/v5/inspect/testdata/fixtures/zerodefaults")
+	CheckDefinition(t, scalars.Definition)
+	CheckDefinition(t, zerodefaults.Definition)
 }
 
 func TestDefaultsDetectExactIntegerDrift(t *testing.T) {
