@@ -82,9 +82,11 @@ func load(opts Options, patterns ...string) ([]*packages.Package, error) {
 		Mode: loadMode,
 		Dir:  opts.Dir,
 		// Pin the toolchain so a malicious go.mod cannot select a
-		// downloaded toolchain, and disable cgo so no C compiler runs on
-		// repository-controlled input.
-		Env: append(os.Environ(), "GOTOOLCHAIN=local", "CGO_ENABLED=0"),
+		// downloaded toolchain, disable cgo so no C compiler runs on
+		// repository-controlled input, and turn off any external
+		// go/packages driver named by the environment.
+		Env: append(os.Environ(),
+			"GOTOOLCHAIN=local", "CGO_ENABLED=0", "GOPACKAGESDRIVER=off"),
 	}
 
 	pkgs, err := packages.Load(cfg, patterns...)

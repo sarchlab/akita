@@ -5,6 +5,8 @@ import (
 	"go/ast"
 	"go/types"
 	"reflect"
+	"slices"
+	"strings"
 
 	"golang.org/x/tools/go/packages"
 
@@ -28,16 +30,38 @@ func validateSpecType(pkg *packages.Package, typ types.Type, index pkgIndex) err
 			return nil
 		}
 	}
+	hasUnexported, encodesField := false, false
 	for i := range st.NumFields() {
 		f := st.Field(i)
-		if reflect.StructTag(st.Tag(i)).Get("json") == "-" {
-			continue
-		}
 		if err := validateSpecFieldType(f.Type()); err != nil {
 			return posErrorf(pkg, f.Pos(), "Spec field %s: %v", f.Name(), err)
 		}
+		if !f.Exported() {
+			hasUnexported = true
+		} else if encodedWhenZero(reflect.StructTag(st.Tag(i))) {
+			encodesField = true
+		}
+	}
+	// Mirror modeling's data-loss guard: a Spec whose state is unexported
+	// serializes as {} and would lose it across a checkpoint.
+	if hasUnexported && !encodesField {
+		return fmt.Errorf("%s: Spec has unexported fields but serializes as {}; "+
+			"export the fields", pkg.PkgPath)
 	}
 	return nil
+}
+
+// encodedWhenZero reports whether encoding/json writes an exported field whose
+// value is zero: it is not tagged "-" and has no omitempty option.
+func encodedWhenZero(tag reflect.StructTag) bool {
+	jsonTag := tag.Get("json")
+	if jsonTag == "-" {
+		return false
+	}
+
+	_, opts, _ := strings.Cut(jsonTag, ",")
+
+	return !slices.Contains(strings.Split(opts, ","), "omitempty")
 }
 
 // validateSpecFieldType accepts only scalar field types: booleans, integers

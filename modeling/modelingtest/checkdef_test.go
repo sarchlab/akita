@@ -4,6 +4,9 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/inspect/schema"
+	"github.com/sarchlab/akita/v5/inspect/testdata/fixtures/aliasdef"
+	"github.com/sarchlab/akita/v5/inspect/testdata/fixtures/genericaliasdef"
+	"github.com/sarchlab/akita/v5/inspect/testdata/fixtures/nilroles"
 	"github.com/sarchlab/akita/v5/inspect/testdata/fixtures/scalars"
 	"github.com/sarchlab/akita/v5/inspect/testdata/fixtures/zerodefaults"
 )
@@ -11,6 +14,9 @@ import (
 func TestCheckDefinitionSupportedDeclarations(t *testing.T) {
 	CheckDefinition(t, scalars.Definition)
 	CheckDefinition(t, zerodefaults.Definition)
+	CheckDefinition(t, aliasdef.Definition)
+	CheckDefinition(t, genericaliasdef.Definition)
+	CheckDefinition(t, nilroles.Definition)
 }
 
 func TestDefaultsDetectExactIntegerDrift(t *testing.T) {

@@ -29,7 +29,7 @@ func structFields(
 	pkg *packages.Package, typ types.Type,
 	defaults map[string]any, index pkgIndex,
 ) ([]schema.Field, error) {
-	named, _ := typ.(*types.Named)
+	named, _ := types.Unalias(typ).(*types.Named)
 
 	st, ok := typ.Underlying().(*types.Struct)
 	if !ok {

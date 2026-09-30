@@ -22,6 +22,10 @@ const defineProtocolFullName = "github.com/sarchlab/akita/v5/messaging.DefinePro
 func extractRoles(
 	pkg *packages.Package, expr ast.Expr, index pkgIndex,
 ) ([]schema.Role, error) {
+	if tv, ok := pkg.TypesInfo.Types[expr]; ok && tv.IsNil() {
+		return nil, nil //nolint:nilnil // Roles: nil declares an untyped port.
+	}
+
 	lit, ok := expr.(*ast.CompositeLit)
 	if !ok {
 		return nil, posErrorf(pkg, expr.Pos(),

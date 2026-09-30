@@ -82,7 +82,15 @@ func extractVarSpec(
 			continue
 		}
 
-		extractor := extractors[definitionTypeName(obj.Type())]
+		typ := types.Unalias(obj.Type())
+		if ptr, ok := typ.(*types.Pointer); ok {
+			if kind := definitionTypeName(ptr.Elem()); extractors[kind] != nil {
+				return schema.Definition{}, false, posErrorf(pkg, name.Pos(),
+					"%s must be a %s value, not a pointer", name.Name, kind)
+			}
+		}
+
+		extractor := extractors[definitionTypeName(typ)]
 		if extractor == nil {
 			continue
 		}
@@ -122,8 +130,9 @@ func extractVarSpec(
 
 // definitionTypeName returns "importpath.TypeName" of a named type's generic
 // origin (so ComponentDef[Spec] maps to ComponentDef), or "" for other types.
+// Aliases, including generic ones, resolve to the type they denote.
 func definitionTypeName(typ types.Type) string {
-	named, ok := typ.(*types.Named)
+	named, ok := types.Unalias(typ).(*types.Named)
 	if !ok {
 		return ""
 	}
@@ -157,7 +166,12 @@ func extractComponent(
 		return nil, err
 	}
 
-	if resType := builderResourcesType(pkg); resType != nil {
+	resType, err := builderResourcesType(pkg)
+	if err != nil {
+		return nil, err
+	}
+
+	if resType != nil {
 		def.Resources, err = structFields(pkg, resType, nil, index)
 		if err != nil {
 			return nil, err
@@ -215,7 +229,7 @@ func componentSpecType(
 			"cannot resolve ComponentDef literal type")
 	}
 
-	named, ok := tv.Type.(*types.Named)
+	named, ok := types.Unalias(tv.Type).(*types.Named)
 	if !ok || named.TypeArgs().Len() != 1 {
 		return nil, posErrorf(pkg, lit.Pos(),
 			"ComponentDef literal must be instantiated with [Spec]")
@@ -224,29 +238,46 @@ func componentSpecType(
 	return named.TypeArgs().At(0), nil
 }
 
-// builderResourcesType returns the parameter type of the package's
-// Builder.WithResources method: the external references a caller supplies
-// at construction. It returns nil when the package has no Builder type or
-// the Builder takes no resources.
-func builderResourcesType(pkg *packages.Package) types.Type {
+// builderResourcesType returns the Resources struct taken by the package's
+// Builder.WithResources method: the external references a caller supplies at
+// construction. A pointer or variadic parameter resolves to its struct. It
+// returns nil when the package has no Builder or the Builder takes no
+// resources, and an error when WithResources does not take one struct.
+func builderResourcesType(pkg *packages.Package) (types.Type, error) {
 	obj, ok := pkg.Types.Scope().Lookup(builderTypeName).(*types.TypeName)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 
 	// The pointer method set holds both value- and pointer-receiver methods.
 	sel := types.NewMethodSet(types.NewPointer(obj.Type())).
 		Lookup(pkg.Types, withResourcesMethod)
 	if sel == nil {
-		return nil
+		return nil, nil
 	}
 
 	sig, ok := sel.Obj().Type().(*types.Signature)
 	if !ok || sig.Params().Len() != 1 {
-		return nil
+		return nil, posErrorf(pkg, sel.Obj().Pos(),
+			"%s.%s must take a single Resources struct",
+			builderTypeName, withResourcesMethod)
 	}
 
-	return sig.Params().At(0).Type()
+	param := sig.Params().At(0).Type()
+	if sig.Variadic() {
+		param = param.(*types.Slice).Elem()
+	}
+	if ptr, ok := types.Unalias(param).(*types.Pointer); ok {
+		param = ptr.Elem()
+	}
+
+	if _, ok := param.Underlying().(*types.Struct); !ok {
+		return nil, posErrorf(pkg, sel.Obj().Pos(),
+			"%s.%s must take a Resources struct, got %s",
+			builderTypeName, withResourcesMethod, sig.Params().At(0).Type())
+	}
+
+	return param, nil
 }
 
 // keyedElements returns the keyed fields of a composite literal, requiring

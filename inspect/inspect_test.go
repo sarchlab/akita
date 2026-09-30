@@ -40,6 +40,12 @@ var expectedErrors = []struct {
 		"Spec fields must be scalars"},
 	{"computed definition", "fixtures/computed",
 		"must be initialized with a composite literal"},
+	{"pointer definition", "fixtures/pointerdef", "not a pointer"},
+	{"container behind json dash", "fixtures/dashcontainer",
+		"Spec fields must be scalars"},
+	{"unexported-only spec", "fixtures/unexportedonly", "serializes as {}"},
+	{"non-struct resources", "fixtures/badresources",
+		"must take a Resources struct"},
 }
 
 // TestInspect loads all test subjects in one Inspect call (loading carries
@@ -86,6 +92,33 @@ func TestInspect(t *testing.T) {
 			checkLocalProto(t, byPkg)
 		})
 
+	t.Run("definitions declared through aliases", func(t *testing.T) {
+		for pkg, name := range map[string]string{
+			"aliasdef":        "AliasDef",
+			"genericaliasdef": "GenericAliasDef",
+		} {
+			def, ok := byPkg[fixturePath(pkg)]
+			if !ok || def.Name != name {
+				t.Errorf("%s: got %+v, want a definition named %s", pkg, def, name)
+			}
+		}
+	})
+
+	t.Run("nil roles declare an untyped port", func(t *testing.T) {
+		def := byPkg[fixturePath("nilroles")]
+		if len(def.Ports) != 1 || def.Ports[0].Name != "Untyped" ||
+			def.Ports[0].Roles != nil {
+			t.Errorf("Ports = %+v, want one untyped port", def.Ports)
+		}
+	})
+
+	t.Run("resources behind a pointer parameter", func(t *testing.T) {
+		def := byPkg[fixturePath("pointerresources")]
+		if len(def.Resources) != 1 || def.Resources[0].Name != "Storage" {
+			t.Errorf("Resources = %+v, want Storage", def.Resources)
+		}
+	})
+
 	t.Run("package without definition is skipped", func(t *testing.T) {
 		if _, ok := byPkg["github.com/sarchlab/akita/v5/timing"]; ok {
 			t.Errorf("timing has no definition but one was extracted")
@@ -101,6 +134,10 @@ func TestInspect(t *testing.T) {
 	t.Run("no unexpected errors", func(t *testing.T) {
 		checkNoUnexpectedErrors(t, errs)
 	})
+}
+
+func fixturePath(name string) string {
+	return "github.com/sarchlab/akita/v5/inspect/testdata/fixtures/" + name
 }
 
 func checkLocalProto(t *testing.T, byPkg map[string]schema.Definition) {
