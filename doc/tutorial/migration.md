@@ -623,14 +623,14 @@ V5 Spec fields must be scalars. `Build` panics if a Spec has a slice, array, map
 | The list is… | Move it to | Example |
 |---|---|---|
 | One value repeated per unit | A single scalar in Spec | A per-SIMD `VGPRCounts []int` whose entries are all equal becomes `VGPRPerSIMD int`. |
-| Derived by the builder from the wiring | State, filled in `Build` | The caches' `RemotePortNames`, resolved from the address mapper in Resources. |
-| A reference to external objects | Resources | An address mapper, a backing storage. |
+| Wiring, or derived only from wiring | Resources, used directly by the component | The caches route through the `mem.AddressToPortMapper` in Resources instead of a list of remote port names. |
+| Runtime data that changes while simulating | State | Queues, in-flight transaction tables. |
 
-A value moved to State is filled into the initial State in `Build`. It is checkpointed with the rest of the State, so the component behaves the same after a restore.
+Resources are not checkpointed. The setup that rebuilds a simulation supplies them again, so a restored component uses the rebuilt wiring. Do not copy wiring into State: `LoadCheckpoint` replaces the State wholesale and would bring back the wiring of the saved run.
 
 ### Migration Checklist
 
-- Split each component's configuration into Spec (scalar user settings), State (runtime data, including values `Build` derives), and Resources (references to external objects).
+- Split each component's configuration into Spec (scalar user settings), State (data that changes while simulating), and Resources (references to external objects and the wiring derived from them).
 - Replace every slice, array, map, or nested-struct Spec field using the table above.
 - Express strategy choices as a named string type with constants plus scalar parameters, not as a nested sub-spec.
 - Give every Spec and State field a `json` tag, and make sure no two fields share a JSON name.

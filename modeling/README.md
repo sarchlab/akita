@@ -29,9 +29,10 @@ A value that seems to need a container in the Spec usually belongs elsewhere:
 
 - one value repeated per unit (the same register count for every SIMD) is a
   single scalar;
-- something `Build` derives from the wiring (the remote ports an address mapper
-  routes to) is computed in `Build` and kept in State;
-- a reference to an external object is a Resources field.
+- a reference to an external object, or something derived only from one (the
+  address mapper that routes to lower memory), is a Resources field. Resources
+  are not checkpointed: the rebuild supplies them, and `Build` recomputes what
+  it derives from them.
 
 ## Key Types
 

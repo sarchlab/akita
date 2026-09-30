@@ -57,10 +57,11 @@ seems to need a list, it is usually one of these instead:
 
 - **One value repeated per unit**, such as the same register count for every
   SIMD: use a single scalar.
-- **Something the builder computes from the wiring**, such as the remote
-  ports an address mapper routes to: compute it in `Build` and keep it in
-  State.
-- **A reference to another object**: put it in Resources.
+- **A reference to another object**, or something derived only from one,
+  such as the address mapper that picks which lower memory serves an
+  address: put it in Resources. Resources are not checkpointed; the setup
+  that rebuilds the simulation supplies them again, so `Build` recomputes
+  anything derived from them.
 
 `Build` checks these rules and panics if the Spec has a slice, array, map,
 nested struct, pointer, or interface field, or if the State cannot be
