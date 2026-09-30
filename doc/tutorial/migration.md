@@ -494,8 +494,8 @@ V5 unifies component structure into five orthogonal parts. See the
 
 | Part | Role | Key Rule |
 |------|------|----------|
-| **Spec** | Immutable configuration | Primitives only. JSON-friendly. No pointers. |
-| **State** | Mutable runtime data | Pure data. No ports, functions, channels. Use IDs for cross-references. |
+| **Spec** | Immutable configuration | Scalar fields only (bool, numbers, strings, and named types based on them). No slices, arrays, maps, nested structs, pointers, or interfaces. |
+| **State** | Mutable runtime data | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. |
 | **Ports** | Communication endpoints | Declared by the component (`DeclarePort`); instances built and registered externally with a port builder (`modeling.MakePortBuilder`), then attached via `AssignPort(name, port)`. Never constructed internally. |
 | **Middlewares** | Per-tick behavior pipeline | Ordered. Operate on State via `State` field. Stateless w.r.t. external deps. |
 | **Hooks** | Observation/tracing | Attached via `HookableBase`. Don't affect simulation logic. |
@@ -542,13 +542,13 @@ V5 unifies how components are modeled and wired. Each component is a single stru
 #### Core Principles
 
 1. Spec (immutable configuration)
-   - Describes behavior and dependencies using only primitives (bool, number, string) and primitive maps/slices.
-   - Strategy dependencies are expressed as small primitive "sub‑specs" (e.g., `{ Kind: "interleaving", Params: { ... } }`).
+   - Describes behavior and dependencies using only scalar fields: bool, numbers, strings, and named types based on them (such as `timing.Freq` or an enum-like `type Mode string`). No slices, arrays, maps, or nested structs.
+   - Strategy dependencies are expressed as flat scalar fields: a kind plus its scalar parameters (e.g., `AddressMapperType: "interleaved"` and `InterleavingSize: 4096`).
    - No pointers or live objects in Spec. Keep it JSON/YAML‑friendly and hashable.
    - Validation and defaults are part of the component package (e.g., `validate()` + `defaults()`).
 
 2. State (mutable runtime data)
-   - Pure data only: scalars and slices/maps of primitives or simple structs thereof.
+   - Pure data only: scalars, slices, arrays, maps with string or integer keys, and simple nested structs.
    - No live handles, functions, channels, or ports in State.
    - All cross‑references use stable identifiers (IDs), never in‑memory pointers.
    - Snapshot/restore uses deep copies of State so checkpoints are immutable.
@@ -565,7 +565,7 @@ V5 unifies how components are modeled and wired. Each component is a single stru
 #### Dependency Injection and Shared State
 
 - Strategy injection (e.g., address conversion)
-  - Keep in Spec as a primitive descriptor (`Kind`, `Params`), not as a live object.
+  - Keep in Spec as flat scalar fields (a `Kind` string plus scalar parameters), not as a live object.
   - Resolve to concrete implementations locally in the component builder and inject into middlewares.
   - On restore, reconstruct from Spec; never serialize strategy objects.
 
@@ -601,7 +601,7 @@ V5 unifies how components are modeled and wired. Each component is a single stru
 - Spec
   - Timing: `Width`, `LatencyCycles`, `Freq`.
   - Shared emulation: `StorageRef` (ID in simulation state registry).
-  - Strategy: `AddrConv` as `{ Kind, Params }` (e.g., identity/interleaving).
+  - Strategy: `AddrConv` as flat scalar fields: a kind (e.g., identity or interleaving) plus its scalar parameters.
 
 - State
   - Pure data transactions with countdowns; no ports or live pointers.
@@ -614,7 +614,26 @@ V5 unifies how components are modeled and wired. Each component is a single stru
   - Data path: tick‑driven; consumes from `Top`, counts down latency, responds when ready; uses storage resolved via state registry by `StorageRef`.
   - Control path: processes enable/pause/drain; replies only when safe (e.g., after drain completes).
 
-This pattern generalizes to other components: keep Spec primitive and declarative, keep State pure and serializable, inject Ports, and implement behavior as pipelines of middlewares with minimal, explicit dependencies.
+This pattern generalizes to other components: keep Spec flat and declarative, keep State pure and serializable, inject Ports, and implement behavior as pipelines of middlewares with minimal, explicit dependencies.
+
+### Moving Container Fields Out of Spec
+
+V5 Spec fields must be scalars. `Build` panics if a Spec has a slice, array, map, nested struct, pointer, or interface field, and the `inspect` package reports the same error. A V4 configuration field that holds a list is usually one of three things:
+
+| The list is… | Move it to | Example |
+|---|---|---|
+| One value repeated per unit | A single scalar in Spec | A per-SIMD `VGPRCounts []int` whose entries are all equal becomes `VGPRPerSIMD int`. |
+| Derived by the builder from the wiring | State, filled in `Build` | The caches' `RemotePortNames`, resolved from the address mapper in Resources. |
+| A reference to external objects | Resources | An address mapper, a backing storage. |
+
+A value moved to State is filled into the initial State in `Build`. It is checkpointed with the rest of the State, so the component behaves the same after a restore.
+
+### Migration Checklist
+
+- Split each component's configuration into Spec (scalar user settings), State (runtime data, including values `Build` derives), and Resources (references to external objects).
+- Replace every slice, array, map, or nested-struct Spec field using the table above.
+- Express strategy choices as a named string type with constants plus scalar parameters, not as a nested sub-spec.
+- Give every Spec and State field a `json` tag, and make sure no two fields share a JSON name.
 
 ---
 

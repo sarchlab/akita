@@ -10,17 +10,28 @@ separation and a middleware pipeline.
 Every modeled component is parameterized by three type arguments:
 
 - **Spec (`S`)** — immutable configuration set at build time (e.g., cache size,
-  number of banks). Must be a plain struct with primitive fields only.
+  number of banks). Must be a plain struct with scalar fields only: booleans,
+  numbers, strings, and named types based on them (such as `timing.Freq` or an
+  enum-like string type). No slices, arrays, maps, or nested structs.
 - **State (`T`)** — mutable runtime data (e.g., queues, counters, in-flight
   tables). May contain nested structs, slices, and maps; must be
   JSON-serializable.
 - **Resources (`R`)** — references to shared objects (e.g., backing storage).
   Use `modeling.None` when a component references no shared resources.
 
-Validate values at runtime with `ValidateSpec(v)` and `ValidateState(v)`. Both
-reject pointers, interfaces, channels, and functions. `ValidateSpec` additionally
-rejects nested structs; `ValidateState` allows them. Map keys must be `string` or
-an integer type.
+Validate values at runtime with `ValidateSpec(v)` and `ValidateState(v)`; every
+`Build` runs both. Both reject pointers, interfaces, channels, and functions, and
+two fields that share a JSON name (which `encoding/json` silently drops).
+`ValidateSpec` additionally rejects slices, arrays, maps, and nested structs;
+`ValidateState` allows them, with `string` or integer map keys.
+
+A value that seems to need a container in the Spec usually belongs elsewhere:
+
+- one value repeated per unit (the same register count for every SIMD) is a
+  single scalar;
+- something `Build` derives from the wiring (the remote ports an address mapper
+  routes to) is computed in `Build` and kept in State;
+- a reference to an external object is a Resources field.
 
 ## Key Types
 

@@ -37,11 +37,34 @@ type walkState struct {
 many steps it has taken. State holds everything the component must
 remember between cycles.
 
-Both structs carry JSON tags. That is the rule for Spec and State: use
-primitive, JSON-serializable types and tag every field. It is what makes
-an Akita simulation checkpoint-friendly without any extra work from you —
-the engine can serialize the whole simulation by serializing each
-component's Spec and State.
+Both structs carry JSON tags on every field and hold only plain data. That
+is what makes an Akita simulation checkpoint-friendly without any extra work
+from you: the engine can serialize the whole simulation by serializing each
+component's Spec and State. The two differ in what they may hold:
+
+| | Allowed field types |
+|---|---|
+| **Spec** | Scalars only: `bool`, integers, floats, `string`, and named types based on them (such as `timing.Freq` or an enum-like `type Mode string`). |
+| **State** | Scalars, plus slices, arrays, maps with string or integer keys, and nested structs. |
+
+Neither may hold pointers, interfaces, channels, or functions. A reference to
+an external object, such as a backing storage, goes in the component's
+Resources, the third type parameter introduced below.
+
+The Spec is flat on purpose. It is the configuration users edit and tools
+display, so every field is one setting with one default. When a setting
+seems to need a list, it is usually one of these instead:
+
+- **One value repeated per unit**, such as the same register count for every
+  SIMD: use a single scalar.
+- **Something the builder computes from the wiring**, such as the remote
+  ports an address mapper routes to: compute it in `Build` and keep it in
+  State.
+- **A reference to another object**: put it in Resources.
+
+`Build` checks these rules and panics if the Spec has a slice, array, map,
+nested struct, pointer, or interface field, or if the State cannot be
+checkpointed.
 
 ## The `Comp` Alias
 
