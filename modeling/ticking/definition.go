@@ -13,9 +13,11 @@ type Definition[S, T, R, P, M any] struct {
 	// reading it yields an independent copy the system builder can change.
 	DefaultSpec S
 
-	// NewState returns the initial State of the instance with the given name
-	// and Spec. Omit it to start from the zero State.
-	NewState func(name string, spec S) T
+	// NewState returns the initial State of the instance, which may depend on
+	// its name, Spec, Resources, and Ports. Build calls it once, after the
+	// ports are bound and before the middlewares exist. Omit it to start from
+	// the zero State.
+	NewState func(c *Component[S, T, R, P, M]) T
 
 	// NewMiddlewares returns the instance's middlewares. Build calls it once,
 	// after the ports are bound and the State is set.

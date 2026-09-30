@@ -5,7 +5,7 @@ import (
 )
 
 // splitTransaction breaks a transaction into sub-transactions based on
-// the access unit size (from Spec.Log2AccessUnitSize).
+// the access unit size (see Spec.log2AccessUnitSize).
 func splitTransaction(
 	ids timing.Simulation,
 	spec *Spec,
@@ -14,7 +14,7 @@ func splitTransaction(
 	addr := transactionGlobalAddress(trans)
 	size := transactionAccessByteSize(trans)
 
-	unitSize := uint64(1 << spec.Log2AccessUnitSize)
+	unitSize := uint64(1 << spec.log2AccessUnitSize())
 
 	// Align
 	addrMask := ^(unitSize - 1)
@@ -66,7 +66,7 @@ func pushSubTrans(state *State, transIdx int) {
 // (see controller.fillCommandQueue); this package-level shim builds the default
 // controller so tests can exercise the path directly.
 func tickSubTransQueue(ids timing.Simulation, spec *Spec, state *State) bool {
-	return newDefaultController(spec).fillCommandQueue(ids, spec, state)
+	return newController(spec).fillCommandQueue(ids, spec, state)
 }
 
 // createClosePageCommand creates a command for a sub-transaction using
@@ -81,7 +81,7 @@ func createClosePageCommand(
 	st := subTransByRef(state, ref)
 	return closePageRowPolicy{}.CommandFor(
 		ids,
-		spec, state, ref, mapAddress(spec, st.Address))
+		spec, state, ref, newAddrMapping(spec).mapAddress(st.Address))
 }
 
 // createOpenPageCommand creates a command for a sub-transaction using
@@ -96,7 +96,7 @@ func createOpenPageCommand(
 	st := subTransByRef(state, ref)
 	return openPageRowPolicy{}.CommandFor(
 		ids,
-		spec, state, ref, mapAddress(spec, st.Address))
+		spec, state, ref, newAddrMapping(spec).mapAddress(st.Address))
 }
 
 // getQueueIndex returns the command queue index for a command (by rank).

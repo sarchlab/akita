@@ -38,17 +38,18 @@ levels.
   the current state, and inflight-flush bookkeeping.
 - `Resources` — external wiring; holds `LowModulePort` (downstream provider) and
   `UpModulePort` (upstream requester).
-- `Comp` — `modeling.Component[Spec, State, Resources]`.
+- `Ports` — the `Top`, `Bottom`, and `Control` ports.
+- `Middlewares` — `Ctrl` (control commands) and `Cache` (lookup, forwarding,
+  and responses), run in that order every cycle.
+- `Comp` — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+  ticking component.
 
 ## Builder Pattern
 
-Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the whole spec
-to `WithSpec`. Wiring comes from `WithSimulation` (which provides the engine and
-registers the component) and `WithResources` (the low- and up-module remote
-ports). `Build` declares the `Top`, `Bottom`, and `Control` ports but does not
-create their instances. Build each port with `modeling.MakePortBuilder` (which
-registers the port with the simulation) and attach it with `AssignPort`,
-choosing the buffer size.
+Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the
+whole spec to `WithSpec`. Wiring comes from `WithSimulation` (which provides the
+engine and registers the component), `WithResources` (the low- and up-module
+remote ports), and `WithPorts` (the port instances).
 
 ```go
 spec := mmuCache.Definition.DefaultSpec
@@ -56,23 +57,19 @@ spec.NumLevels = 4
 spec.NumBlocks = 16
 spec.LatencyPerLevel = 50
 
-c := mmuCache.MakeBuilder().
+c := mmuCache.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(mmuCache.Resources{
         LowModulePort: mmuPort,
         UpModulePort:  tlbPort,
     }).
+    WithPorts(mmuCache.Ports{
+        Top:     messaging.NewPort(nil, 16, 16, "MMUCache.Top"),
+        Bottom:  messaging.NewPort(nil, 16, 16, "MMUCache.Bottom"),
+        Control: messaging.NewPort(nil, 16, 16, "MMUCache.Control"),
+    }).
     Build("MMUCache")
-
-for _, name := range []string{"Top", "Bottom", "Control"} {
-    p := modeling.MakePortBuilder().
-        WithSimulation(sim).
-        WithComponent(c).
-        WithSpec(modeling.PortSpec{BufSize: 16}).
-        Build(name)
-    c.AssignPort(name, p)
-}
 ```
 
 | Method | Description |
@@ -80,8 +77,12 @@ for _, name := range []string{"Top", "Bottom", "Control"} {
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak (`NumBlocks` must be > 0) |
 | `WithResources(Resources{...})` | External wiring (low- and up-module remote ports) |
+| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required) |
 
 ## Ports
+
+The system builder creates each port with `messaging.NewPort`, choosing its
+buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top**: accepts `vm.TranslationReq` from the upstream requester.
 - **Bottom**: forwards `vm.TranslationReq` to the downstream provider and

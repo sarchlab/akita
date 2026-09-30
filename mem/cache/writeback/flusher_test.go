@@ -3,13 +3,11 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 var _ = Describe("Flusher", func() {
@@ -44,55 +42,19 @@ var _ = Describe("Flusher", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &pipelineMW{}
-		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
-				Log2BlockSize:    6,
-				NumReqPerCycle:   4,
-				WayAssociativity: 4,
-				NumSets:          64,
-				NumBanks:         1,
-			}).
-			Build("Cache")
+		spec := stageTestSpec()
+		comp := buildStageTestComp(spec,
+			Resources{Storage: mem.NewStorage(spec.TotalByteSize)},
+			makePorts("Cache", 4))
+		controlPort = comp.Ports.Control
 
-		// The flusher resolves the "Control" port by name; the data pipeline
-		// resolves "Top"/"Bottom". Assign real ports (owned by the component)
-		// and plug a noop connection. Ticking the flusher only touches Control,
-		// but Top/Bottom are declared so the pipeline can resolve them too.
-		controlPort = messaging.NewPort(m.comp, 4, 4, "Cache.Control")
-		(&ccNoopConn{}).PlugIn(controlPort)
-		m.comp.DeclarePort("Control")
-		m.comp.AssignPort("Control", controlPort)
-
-		topPort := messaging.NewPort(m.comp, 4, 4, "Cache.Top")
-		(&ccNoopConn{}).PlugIn(topPort)
-		m.comp.DeclarePort("Top")
-		m.comp.AssignPort("Top", topPort)
-
-		bottomPort := messaging.NewPort(m.comp, 4, 4, "Cache.Bottom")
-		(&ccNoopConn{}).PlugIn(bottomPort)
-		m.comp.DeclarePort("Bottom")
-		m.comp.AssignPort("Bottom", bottomPort)
-
+		m = comp.Middlewares.Pipeline
 		m.comp.State = initialState
 		next := &m.comp.State
 
 		cache.DirectoryReset(&next.DirectoryState, 64, 4, 64)
 
-		m.dirStage = &directoryStage{cache: m}
-		m.mshrStage = &mshrStage{cache: m}
-		m.bankStages = []*bankStage{{
-			cache:         m,
-			bankID:        0,
-			pipelineWidth: 4,
-		}}
-		m.writeBuffer = &writeBufferStage{
-			cache: m,
-		}
-
-		f = &flusher{pipeline: m}
+		f = comp.Middlewares.Flusher.flusher
 	})
 
 	It("should do nothing if no request", func() {

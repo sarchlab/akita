@@ -5,25 +5,20 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// buildDDR4TimingAndCycles replicates the builder's logic to generate
-// Timing and cmdCycles for the DDR4 spec without needing to call private
-// builder methods or construct a full Component.
+// buildDDR4TimingAndCycles generates the Timing and cmdCycles for the DDR4
+// spec, as the component does when it is built, without constructing a full
+// Component. The derived values for DDR4 are:
+//
+//	burstCycle = burstLength / 2 = 8 / 2 = 4
+//	tRL        = tAL + tCL        = 0 + 16 = 16
+//	tWL        = tAL + tCWL       = 0 + 12 = 12
+//	readDelay  = tRL + burstCycle = 16 + 4 = 20
+//	writeDelay = tRL + burstCycle = 16 + 4 = 20
+//	tRC        = tRAS + tRP       = 39 + 16 = 55
 func buildDDR4TimingAndCycles() (dramTiming, map[commandKind]int) {
-	b := MakeBuilder().WithSpec(DDR4Spec)
+	spec := DDR4Spec
 
-	// Replicate the computed fields that Build() would calculate.
-	// DDR4 burstCycle = burstLength / 2 = 8 / 2 = 4
-	b.spec.BurstCycle = b.spec.BurstLength / 2
-	b.spec.TRL = b.spec.TAL + b.spec.TCL               // 0 + 16 = 16
-	b.spec.TWL = b.spec.TAL + b.spec.TCWL              // 0 + 12 = 12
-	b.spec.ReadDelay = b.spec.TRL + b.spec.BurstCycle  // 16 + 4 = 20
-	b.spec.WriteDelay = b.spec.TRL + b.spec.BurstCycle // 16 + 4 = 20
-	b.spec.TRC = b.spec.TRAS + b.spec.TRP              // 39 + 16 = 55
-
-	timing := b.generateTiming()
-	cmdCycles := b.buildCmdCycles()
-
-	return timing, cmdCycles
+	return generateTiming(&spec), buildCmdCycles(&spec)
 }
 
 // newDDR4State creates a fresh State with DDR4 bank layout (1 rank, 4 bank groups, 4 banks).

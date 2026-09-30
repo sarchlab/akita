@@ -14,6 +14,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -26,24 +27,50 @@ type walkStep struct {
 	Steps    int
 }
 
-type walkSpec struct {
-	WallDistance int `json:"wall_distance"`
+// Spec is the walker's configuration.
+type Spec struct {
+	Freq         timing.Freq `json:"freq"`
+	WallDistance int         `json:"wall_distance"`
 }
 
-type walkState struct {
+// State is the walker's runtime data.
+type State struct {
 	Position int `json:"position"`
 	Steps    int `json:"steps"`
 }
 
-// Comp is the walker component.
-type Comp = modeling.Component[walkSpec, walkState, modeling.None]
+// Resources holds the random source the walker draws its steps from.
+type Resources struct {
+	RNG *rand.Rand
+}
+
+// Ports is empty: the walker talks to no one.
+type Ports struct{}
+
+// Middlewares holds the walker's behavior.
+type Middlewares struct {
+	// Walk takes one step per tick and reports it on HookPosStep.
+	Walk *walkMW
+}
+
+// Comp is the walker, a ticking component.
+type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
+
+// Definition declares the walker.
+var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
+	DefaultSpec:    Spec{Freq: 1 * timing.GHz, WallDistance: 3},
+	NewMiddlewares: newMiddlewares,
+}
+
+func newMiddlewares(c *Comp) Middlewares {
+	return Middlewares{Walk: &walkMW{comp: c}}
+}
 
 type walkMW struct {
 	comp *Comp
-	rng  *rand.Rand
 }
 
-func (m *walkMW) Tick() bool {
+func (m *walkMW) Handle(_ timing.Event) bool {
 	s := &m.comp.State
 	wall := m.comp.Spec().WallDistance
 
@@ -51,7 +78,7 @@ func (m *walkMW) Tick() bool {
 		return false
 	}
 
-	if m.rng.Intn(2) == 0 {
+	if m.comp.Resources().RNG.Intn(2) == 0 {
 		s.Position--
 	} else {
 		s.Position++
@@ -84,16 +111,10 @@ func main() {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
 
-	walker := modeling.NewBuilder[walkSpec, walkState, modeling.None]().
+	walker := Definition.Builder().
 		WithSimulation(sim).
-		WithFreq(1 * timing.GHz).
-		WithSpec(walkSpec{WallDistance: 3}).
+		WithResources(Resources{RNG: rand.New(rand.NewSource(1))}).
 		Build("Walker")
-	walker.AddMiddleware(&walkMW{
-		comp: walker,
-		rng:  rand.New(rand.NewSource(1)),
-	})
-	sim.RegisterComponent(walker)
 
 	// Observe the walker's own steps.
 	walker.AcceptHook(&stepLogger{})

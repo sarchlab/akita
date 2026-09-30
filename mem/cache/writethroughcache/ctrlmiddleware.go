@@ -5,6 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -14,30 +15,29 @@ import (
 // drained; issued while Enabled they are rejected with
 // ErrMustBePausedOrDrained.
 type ctrlMiddleware struct {
-	pipeline *pipelineMW
+	comp *Comp
 }
 
-// ctrlPort resolves the "Control" port by name. The port instance no longer
-// exists at Build time (it is assigned externally), so it is looked up lazily
-// on use.
+// ctrlPort returns the Control port.
 func (m *ctrlMiddleware) ctrlPort() messaging.Port {
-	return m.pipeline.comp.GetPortByName("Control")
+	return m.comp.Ports.Control
 }
 
-func (m *ctrlMiddleware) Tick() bool {
+// Handle completes a pending Drain and handles the next control command.
+func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 	madeProgress = m.completePendingDrain() || madeProgress
 	// Control commands are processed serially: while an async verb (Drain) is
 	// in progress, the next command is not accepted — it stays queued on the
 	// Control port and is handled once the component settles.
-	if !m.pipeline.comp.State.IsDraining {
+	if !m.comp.State.IsDraining {
 		madeProgress = m.handleIncoming() || madeProgress
 	}
 	return madeProgress
 }
 
 func (m *ctrlMiddleware) completePendingDrain() bool {
-	next := &m.pipeline.comp.State
+	next := &m.comp.State
 	if !next.IsDraining {
 		return false
 	}
@@ -96,7 +96,7 @@ func (m *ctrlMiddleware) handlePause(req memcontrolprotocol.Req) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	m.pipeline.comp.State.IsPaused = true
+	m.comp.State.IsPaused = true
 	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdPause,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
@@ -104,7 +104,7 @@ func (m *ctrlMiddleware) handlePause(req memcontrolprotocol.Req) bool {
 }
 
 func (m *ctrlMiddleware) handleDrain(req memcontrolprotocol.Req) bool {
-	next := &m.pipeline.comp.State
+	next := &m.comp.State
 	next.IsDraining = true
 	// Clear any prior pause so the data pipeline runs and lets in-flight work
 	// finish. Intake is gated on IsDraining, so no new traffic is admitted
@@ -123,7 +123,7 @@ func (m *ctrlMiddleware) handleEnable(req memcontrolprotocol.Req) bool {
 		return false
 	}
 
-	next := &m.pipeline.comp.State
+	next := &m.comp.State
 	next.IsPaused = false
 	next.IsDraining = false
 
@@ -142,16 +142,16 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 		return false
 	}
 
-	next := &m.pipeline.comp.State
-	spec := m.pipeline.comp.Spec()
+	next := &m.comp.State
+	spec := m.comp.Spec()
 
 	next.DirBuf.Clear()
 	for i := range next.BankBufs {
 		next.BankBufs[i].Clear()
 	}
 	cache.DirectoryReset(
-		&next.DirectoryState, spec.NumSets, spec.WayAssociativity,
-		int(1<<spec.Log2BlockSize))
+		&next.DirectoryState, spec.numSets(), spec.WayAssociativity,
+		spec.blockSize())
 	next.MSHRState = cache.MSHRState{}
 	m.endInflightTasks()
 	next.Transactions = nil
@@ -161,16 +161,16 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	next.CurrentCmdSrc = ""
 
 	for {
-		if _, ok := m.pipeline.topPort().PeekIncoming(); !ok {
+		if _, ok := m.comp.Ports.Top.PeekIncoming(); !ok {
 			break
 		}
-		m.pipeline.topPort().RetrieveIncoming()
+		m.comp.Ports.Top.RetrieveIncoming()
 	}
 	for {
-		if _, ok := m.pipeline.bottomPort().PeekIncoming(); !ok {
+		if _, ok := m.comp.Ports.Bottom.PeekIncoming(); !ok {
 			break
 		}
-		m.pipeline.bottomPort().RetrieveIncoming()
+		m.comp.Ports.Bottom.RetrieveIncoming()
 	}
 
 	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdReset,
@@ -188,7 +188,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 // the already-ended req_in end is idempotent. Mirrors respondStage (req_in),
 // bottomparser (req_out), and the directory/bank pipelines (subtasks).
 func (m *ctrlMiddleware) endInflightTasks() {
-	comp := m.pipeline.comp
+	comp := m.comp
 
 	for i := range comp.State.Transactions {
 		trans := &comp.State.Transactions[i]
@@ -225,7 +225,7 @@ func (m *ctrlMiddleware) endInflightTasks() {
 // synchronous verb that is only legal once the cache is paused or
 // drained; issued while Enabled it is rejected.
 func (m *ctrlMiddleware) handleInvalidate(req memcontrolprotocol.Req) bool {
-	next := &m.pipeline.comp.State
+	next := &m.comp.State
 	if !next.IsPaused {
 		// Only the fully-paused state is legal; while still draining,
 		// in-flight work can still touch the directory after the verb.
@@ -236,7 +236,7 @@ func (m *ctrlMiddleware) handleInvalidate(req memcontrolprotocol.Req) bool {
 	}
 
 	invalidateBlocks(
-		&next.DirectoryState, m.pipeline.comp.Spec(), req.Addresses, req.PID)
+		&next.DirectoryState, m.comp.Spec(), req.Addresses, req.PID)
 
 	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdInvalidate,
 		req.Src, req.ID, true, ""))
@@ -250,7 +250,7 @@ func (m *ctrlMiddleware) handleInvalidate(req memcontrolprotocol.Req) bool {
 // Success, leaving the directory intact. Like Invalidate it is only legal
 // once the cache is paused or drained.
 func (m *ctrlMiddleware) handleFlush(req memcontrolprotocol.Req) bool {
-	next := &m.pipeline.comp.State
+	next := &m.comp.State
 	if !next.IsPaused {
 		// Only the fully-paused state is legal; while still draining,
 		// in-flight work can still touch the directory after the verb.

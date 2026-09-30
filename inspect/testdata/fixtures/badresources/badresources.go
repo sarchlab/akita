@@ -1,14 +1,29 @@
+// Package badresources passes a pointer as the Resources type argument. The
+// inspector must reject it: Resources is a struct whose fields it reports.
 package badresources
 
-import "github.com/sarchlab/akita/v5/modeling"
+import (
+	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
+)
 
 type Spec struct{ N int }
 
-type Builder struct{ n int }
-
-func (b Builder) WithResources(n int) Builder {
-	b.n = n
-	return b
+// Resources wires the component.
+type Resources struct {
+	Storage *mem.Storage
 }
 
-var Definition = modeling.ComponentDef[Spec]{Name: "C"}
+type (
+	State       struct{}
+	Ports       struct{}
+	Middlewares struct{}
+)
+
+type Comp = ticking.Component[Spec, State, *Resources, Ports, Middlewares]
+
+var Definition = ticking.Definition[Spec, State, *Resources, Ports, Middlewares]{
+	NewMiddlewares: newMiddlewares,
+}
+
+func newMiddlewares(*Comp) Middlewares { return Middlewares{} }

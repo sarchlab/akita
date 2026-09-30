@@ -12,10 +12,9 @@ import (
 
 var _ = Describe("Address Operations", func() {
 	It("should map address", func() {
-		b := MakeBuilder()
-		spec := b.buildSpec()
+		spec := Definition.DefaultSpec
 
-		loc := mapAddress(&spec, 0)
+		loc := newAddrMapping(&spec).mapAddress(0)
 		Expect(loc.Channel).To(Equal(uint64(0)))
 		Expect(loc.Rank).To(Equal(uint64(0)))
 	})
@@ -25,7 +24,7 @@ var _ = Describe("Transaction Splitting", func() {
 	var ids timing.Simulation
 	BeforeEach(func() { ids = modeling.NewStandaloneSimulation(timing.NewSerialEngine()) })
 	It("should split a transaction into sub-transactions", func() {
-		spec := &Spec{Log2AccessUnitSize: 6} // 64 bytes
+		spec := &Spec{BusWidth: 64, BurstLength: 8} // 64-byte access unit
 		trans := &transactionState{
 			HasRead: true,
 			ReadMsg: memprotocol.ReadReq{},
@@ -41,7 +40,7 @@ var _ = Describe("Transaction Splitting", func() {
 	})
 
 	It("should align to unit boundaries", func() {
-		spec := &Spec{Log2AccessUnitSize: 6} // 64 bytes
+		spec := &Spec{BusWidth: 64, BurstLength: 8} // 64-byte access unit
 		trans := &transactionState{
 			HasRead: true,
 			ReadMsg: memprotocol.ReadReq{},
@@ -191,25 +190,14 @@ var _ = Describe("DRAM Integration", func() {
 	var (
 		engine  timing.Engine
 		sim     timing.Simulation
-		memCtrl *modeling.Component[Spec, State, Resources]
+		memCtrl *Comp
 	)
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		memCtrl = MakeBuilder().
-			WithSimulation(sim).
-			Build("MemCtrl")
-
-		for _, name := range []string{"Top", "Control"} {
-			p := modeling.MakePortBuilder().
-				WithSimulation(sim).
-				WithComponent(memCtrl).
-				WithSpec(modeling.PortSpec{BufSize: 1024}).
-				Build(name)
-			memCtrl.AssignPort(name, p)
-		}
+		memCtrl = buildDRAM(sim, Definition.DefaultSpec, "MemCtrl", 1024)
 	})
 
 	It("should read and write via direct connection", func() {
@@ -217,7 +205,7 @@ var _ = Describe("DRAM Integration", func() {
 		conn := directconnection.MakeBuilder().
 			WithSimulation(sim).
 			Build("Conn")
-		topPort := memCtrl.GetPortByName("Top")
+		topPort := memCtrl.Ports.Top
 		conn.PlugIn(topPort)
 		conn.PlugIn(srcPort)
 
@@ -281,10 +269,7 @@ var _ = Describe("Predefined Specs", func() {
 	It("should build with DDR4 spec", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(DDR4Spec).
-			Build("DDR4Ctrl")
+		ctrl := buildDRAM(sim, DDR4Spec, "DDR4Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
 		spec := ctrl.Spec()
 		Expect(spec.BurstLength).To(Equal(8))
@@ -298,10 +283,7 @@ var _ = Describe("Predefined Specs", func() {
 	It("should build with DDR5 spec", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(DDR5Spec).
-			Build("DDR5Ctrl")
+		ctrl := buildDRAM(sim, DDR5Spec, "DDR5Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
 		spec := ctrl.Spec()
 		Expect(spec.BurstLength).To(Equal(16))
@@ -314,10 +296,7 @@ var _ = Describe("Predefined Specs", func() {
 	It("should build with HBM2 spec", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(HBM2Spec).
-			Build("HBM2Ctrl")
+		ctrl := buildDRAM(sim, HBM2Spec, "HBM2Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
 		spec := ctrl.Spec()
 		Expect(spec.BurstLength).To(Equal(4))
@@ -331,10 +310,7 @@ var _ = Describe("Predefined Specs", func() {
 	It("should build with HBM3 spec", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(HBM3Spec).
-			Build("HBM3Ctrl")
+		ctrl := buildDRAM(sim, HBM3Spec, "HBM3Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
 		spec := ctrl.Spec()
 		Expect(spec.BurstLength).To(Equal(8))
@@ -347,10 +323,7 @@ var _ = Describe("Predefined Specs", func() {
 	It("should build with GDDR6 spec", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(GDDR6Spec).
-			Build("GDDR6Ctrl")
+		ctrl := buildDRAM(sim, GDDR6Spec, "GDDR6Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
 		spec := ctrl.Spec()
 		Expect(spec.BurstLength).To(Equal(16))
@@ -461,9 +434,8 @@ var _ = Describe("Open Page Policy", func() {
 
 	BeforeEach(func() {
 		ids = modeling.NewStandaloneSimulation(timing.NewSerialEngine())
-		b := MakeBuilder()
-		builtSpec := b.buildSpec()
-		spec = &builtSpec
+		defaultSpec := Definition.DefaultSpec
+		spec = &defaultSpec
 		state = &State{
 			Transactions: []transactionState{
 				{
@@ -1061,10 +1033,7 @@ var _ = Describe("Builder Configuration", func() {
 		sim := modeling.NewStandaloneSimulation(engine)
 		spec := Definition.DefaultSpec
 		spec.PagePolicy = PagePolicyOpen
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(spec).
-			Build("OpenPageCtrl")
+		ctrl := buildDRAM(sim, spec, "OpenPageCtrl", 16)
 
 		builtSpec := ctrl.Spec()
 		Expect(builtSpec.PagePolicy).To(Equal(PagePolicyOpen))
@@ -1078,10 +1047,7 @@ var _ = Describe("Builder Configuration", func() {
 		spec.WriteQueueSize = 8
 		spec.WriteHighWatermark = 6
 		spec.WriteLowWatermark = 2
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(spec).
-			Build("RWQueueCtrl")
+		ctrl := buildDRAM(sim, spec, "RWQueueCtrl", 16)
 
 		builtSpec := ctrl.Spec()
 		Expect(builtSpec.ReadQueueSize).To(Equal(8))
@@ -1095,10 +1061,7 @@ var _ = Describe("Builder Configuration", func() {
 		sim := modeling.NewStandaloneSimulation(engine)
 		specWithOpenPage := DDR4Spec
 		specWithOpenPage.PagePolicy = PagePolicyOpen
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(specWithOpenPage).
-			Build("DDR4OpenPage")
+		ctrl := buildDRAM(sim, specWithOpenPage, "DDR4OpenPage", 16)
 
 		builtSpec := ctrl.Spec()
 		Expect(builtSpec.PagePolicy).To(Equal(PagePolicyOpen))
@@ -1113,15 +1076,23 @@ var _ = Describe("Builder Configuration", func() {
 		specWithRW.WriteQueueSize = 16
 		specWithRW.WriteHighWatermark = 12
 		specWithRW.WriteLowWatermark = 4
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(specWithRW).
-			Build("DDR4RWQueue")
+		ctrl := buildDRAM(sim, specWithRW, "DDR4RWQueue", 16)
 
 		builtSpec := ctrl.Spec()
 		Expect(builtSpec.ReadQueueSize).To(Equal(16))
 		Expect(builtSpec.WriteQueueSize).To(Equal(16))
 		Expect(builtSpec.WriteHighWatermark).To(Equal(12))
 		Expect(builtSpec.WriteLowWatermark).To(Equal(4))
+	})
+
+	It("should require a storage", func() {
+		sim := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+
+		Expect(func() {
+			Definition.Builder().
+				WithSimulation(sim).
+				WithPorts(defaultPorts("NoStorage", 16)).
+				Build("NoStorage")
+		}).To(PanicWith("dram: Resources.Storage is required"))
 	})
 })

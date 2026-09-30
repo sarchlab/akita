@@ -1,17 +1,17 @@
 package writeback
 
 import (
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
-// controlMW runs the flusher (flush/invalidate from controlPort,
-// controls cache state).
+// controlMW runs the flusher, which takes Flush commands from the Control
+// port and walks the cache state through the flush.
 type controlMW struct {
-	comp    *modeling.Component[Spec, State, Resources]
+	comp    *Comp
 	flusher *flusher
 }
 
-// Tick runs the flusher.
-func (m *controlMW) Tick() bool {
+// Handle runs the flusher.
+func (m *controlMW) Handle(_ timing.Event) bool {
 	return m.flusher.Tick()
 }

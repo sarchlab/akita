@@ -13,6 +13,7 @@ import (
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -31,8 +32,12 @@ type pingRsp struct {
 
 // --- Component ---
 
-type agentSpec struct {
-	Freq timing.Freq `json:"freq"`
+// Spec is an agent's configuration. An agent sends NumPings pings to PingDst
+// and answers every ping it receives.
+type Spec struct {
+	Freq     timing.Freq          `json:"freq"`
+	PingDst  messaging.RemotePort `json:"ping_dst"`
+	NumPings int                  `json:"num_pings"`
 }
 
 type pendingRsp struct {
@@ -41,23 +46,42 @@ type pendingRsp struct {
 	Dst   messaging.RemotePort `json:"dst"`
 }
 
-type agentState struct {
-	PingsToSend int                  `json:"pings_to_send"`
-	NextSeqID   int                  `json:"next_seq_id"`
-	PingDst     messaging.RemotePort `json:"ping_dst"`
-	Pending     []pendingRsp         `json:"pending"`
+// State is an agent's runtime data.
+type State struct {
+	NextSeqID int          `json:"next_seq_id"`
+	Pending   []pendingRsp `json:"pending"`
 }
 
-// Comp is the ping agent. Both agents use this same type.
-type Comp = modeling.Component[agentSpec, agentState, modeling.None]
+// Ports holds an agent's only port.
+type Ports struct {
+	// Out sends pings and responses and receives them from the peer.
+	Out messaging.Port
+}
 
-func out(c *Comp) messaging.Port { return c.GetPortByName("Out") }
+// Middlewares holds an agent's behavior.
+type Middlewares struct {
+	// Agent sends pings and responses and takes incoming messages.
+	Agent *agentMW
+}
+
+// Comp is the ping agent, a ticking component. Both agents use this type.
+type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
+
+// Definition declares the ping agent.
+var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
+	DefaultSpec:    Spec{Freq: 1 * timing.GHz},
+	NewMiddlewares: newMiddlewares,
+}
+
+func newMiddlewares(c *Comp) Middlewares {
+	return Middlewares{Agent: &agentMW{comp: c}}
+}
 
 type agentMW struct {
 	comp *Comp
 }
 
-func (m *agentMW) Tick() bool {
+func (m *agentMW) Handle(_ timing.Event) bool {
 	progress := false
 	progress = m.send() || progress
 	progress = m.recv() || progress
@@ -66,7 +90,8 @@ func (m *agentMW) Tick() bool {
 
 func (m *agentMW) send() bool {
 	s := &m.comp.State
-	port := out(m.comp)
+	spec := m.comp.Spec()
+	port := m.comp.Ports.Out
 	progress := false
 
 	if len(s.Pending) > 0 && port.CanSend() {
@@ -84,16 +109,15 @@ func (m *agentMW) send() bool {
 		progress = true
 	}
 
-	if s.PingsToSend > 0 && port.CanSend() {
+	if s.NextSeqID < spec.NumPings && port.CanSend() {
 		port.Send(pingReq{
 			MsgMeta: messaging.MsgMeta{
 				ID:  m.comp.Simulation().NewID(),
 				Src: port.AsRemote(),
-				Dst: s.PingDst,
+				Dst: spec.PingDst,
 			},
 			SeqID: s.NextSeqID,
 		})
-		s.PingsToSend--
 		s.NextSeqID++
 		progress = true
 	}
@@ -102,7 +126,7 @@ func (m *agentMW) send() bool {
 }
 
 func (m *agentMW) recv() bool {
-	port := out(m.comp)
+	port := m.comp.Ports.Out
 	msgI, ok := port.PeekIncoming()
 	if !ok {
 		return false
@@ -118,19 +142,6 @@ func (m *agentMW) recv() bool {
 
 	port.RetrieveIncoming()
 	return true
-}
-
-func buildAgent(sim timing.Simulation, name string) *Comp {
-	c := modeling.NewBuilder[agentSpec, agentState, modeling.None]().
-		WithSimulation(sim).
-		WithFreq(1 * timing.GHz).
-		WithSpec(agentSpec{Freq: 1 * timing.GHz}).
-		Build(name)
-	c.AddMiddleware(&agentMW{comp: c})
-	c.DeclarePort("Out")
-	c.AssignPort("Out", messaging.NewPort(c, 4, 4, name+".Out"))
-	sim.RegisterComponent(c)
-	return c
 }
 
 // --- Hooks ---
@@ -167,24 +178,30 @@ func main() {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
 
-	agentA := buildAgent(sim, "AgentA")
-	agentB := buildAgent(sim, "AgentB")
+	// Create the ports first, so AgentA's Spec can name AgentB's port.
+	outA := messaging.NewPort(nil, 4, 4, "AgentA.Out")
+	outB := messaging.NewPort(nil, 4, 4, "AgentB.Out")
+
+	agentA := Definition.Builder().
+		WithSimulation(sim).
+		WithSpec(Spec{Freq: 1 * timing.GHz, PingDst: outB.AsRemote(), NumPings: 1}).
+		WithPorts(Ports{Out: outA}).
+		Build("AgentA")
+	agentB := Definition.Builder().
+		WithSimulation(sim).
+		WithPorts(Ports{Out: outB}).
+		Build("AgentB")
 
 	conn := directconnection.MakeBuilder().
 		WithSimulation(sim).
 		Build("Conn")
-	conn.PlugIn(agentA.GetPortByName("Out"))
-	conn.PlugIn(agentB.GetPortByName("Out"))
+	conn.PlugIn(agentA.Ports.Out)
+	conn.PlugIn(agentB.Ports.Out)
 
 	// Attach the hooks. The agents above never reference these.
 	engine.AcceptHook(&eventHook{})
-	agentA.GetPortByName("Out").AcceptHook(&msgHook{agent: "AgentA"})
-	agentB.GetPortByName("Out").AcceptHook(&msgHook{agent: "AgentB"})
-
-	state := agentA.State
-	state.PingDst = agentB.GetPortByName("Out").AsRemote()
-	state.PingsToSend = 1
-	agentA.State = state
+	agentA.Ports.Out.AcceptHook(&msgHook{agent: "AgentA"})
+	agentB.Ports.Out.AcceptHook(&msgHook{agent: "AgentB"})
 
 	agentA.TickLater()
 

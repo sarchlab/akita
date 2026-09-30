@@ -35,29 +35,6 @@ type Scheduler interface {
 	restore(at timing.VTimeInPicoSec, scheduled bool)
 }
 
-// SaveCheckpoint writes the component's spec hash, State, and scheduler guard as
-// JSON. It implements the structural Checkpointable contract without the
-// modeling package importing the simulation package.
-func (c *Component[S, T, R]) SaveCheckpoint(w io.Writer) error {
-	return WriteCheckpoint(w, c.spec, c.State, c.tickScheduler())
-}
-
-// LoadCheckpoint restores State and the scheduler guard after verifying that the
-// saved spec hash matches the rebuilt component's.
-func (c *Component[S, T, R]) LoadCheckpoint(r io.Reader) error {
-	return ReadCheckpoint(r, c.spec, &c.State, c.tickScheduler())
-}
-
-// tickScheduler returns the component's tick scheduler, or nil when the
-// component was not built with one.
-func (c *Component[S, T, R]) tickScheduler() Scheduler {
-	if c.TickingComponent == nil {
-		return nil
-	}
-
-	return c.TickScheduler
-}
-
 // WriteCheckpoint writes a component's spec hash, State, and scheduler guard
 // as JSON. Component models use it to implement SaveCheckpoint; s is nil for a
 // component without its own scheduler.

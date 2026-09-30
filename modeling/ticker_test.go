@@ -1,10 +1,9 @@
 package modeling
 
 import (
-	"github.com/sarchlab/akita/v5/timing"
+	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 type testEngine struct {
@@ -21,71 +20,65 @@ func (e *testEngine) Schedule(event timing.Event) {
 	e.scheduled = append(e.scheduled, event)
 }
 
-type testTicker struct {
-	progress bool
+func newTestScheduler(secondary bool) (*TickScheduler, *testEngine) {
+	engine := &testEngine{now: timing.VTimeInPicoSec(10000)}
+	sim := NewStandaloneSimulation(engine)
+
+	if secondary {
+		return NewSecondaryTickScheduler("TC", sim, 1*timing.GHz), engine
+	}
+
+	return NewTickScheduler("TC", sim, 1*timing.GHz), engine
 }
 
-func (t *testTicker) Tick() bool {
-	return t.progress
+func wantScheduled(t *testing.T, engine *testEngine, times ...timing.VTimeInPicoSec) {
+	t.Helper()
+
+	if len(engine.scheduled) != len(times) {
+		t.Fatalf("scheduled %d ticks, want %d", len(engine.scheduled), len(times))
+	}
+
+	for i, e := range engine.scheduled {
+		if e.Time() != times[i] || e.HandlerID() != "TC" {
+			t.Errorf("tick %d at %d for %q, want %d for TC",
+				i, e.Time(), e.HandlerID(), times[i])
+		}
+	}
 }
 
-var _ = Describe("Ticking Component", func() {
-	var (
-		engine *testEngine
-		sim    timing.Simulation
-		ticker *testTicker
-		tc     *TickingComponent
-	)
+func TestTickLaterSchedulesTheNextCycle(t *testing.T) {
+	ts, engine := newTestScheduler(false)
 
-	BeforeEach(func() {
-		engine = &testEngine{now: timing.VTimeInPicoSec(10000)}
-		sim = NewStandaloneSimulation(engine)
-		ticker = &testTicker{}
-		tc = NewTickingComponent("TC", sim, 1*timing.GHz, ticker)
-	})
+	ts.TickLater()
 
-	It("should start ticking when notified of receiving a request", func() {
-		tc.NotifyRecv(nil)
+	wantScheduled(t, engine, 11000)
+}
 
-		Expect(engine.scheduled).To(HaveLen(1))
-		Expect(engine.scheduled[0].Time()).To(Equal(timing.VTimeInPicoSec(11000)))
-	})
+func TestTickNowSchedulesTheCurrentCycle(t *testing.T) {
+	ts, engine := newTestScheduler(false)
 
-	It("should start ticking when notified of a port becoming available",
-		func() {
-			tc.NotifyPortFree(nil)
+	ts.TickNow()
 
-			Expect(engine.scheduled).To(HaveLen(1))
-			Expect(engine.scheduled[0].Time()).
-				To(Equal(timing.VTimeInPicoSec(11000)))
-		})
+	wantScheduled(t, engine, 10000)
+}
 
-	It("should tick when the ticker make progress in a tick", func() {
-		ticker.progress = true
+func TestTickSchedulerSchedulesOneTickPerCycle(t *testing.T) {
+	ts, engine := newTestScheduler(false)
 
-		tc.Handle(MakeTickEvent(sim.NewID(), tc.Name(), timing.VTimeInPicoSec(10000)))
+	ts.TickLater()
+	ts.TickLater()
+	ts.TickNow() // a tick is already scheduled in the future
 
-		Expect(engine.scheduled).To(HaveLen(1))
-		Expect(engine.scheduled[0].Time()).To(Equal(timing.VTimeInPicoSec(11000)))
-	})
+	wantScheduled(t, engine, 11000)
+}
 
-	It("should not tick if there is another tick scheduled in the future",
-		func() {
-			ticker.progress = true
+func TestSecondaryTickSchedulerSchedulesSecondaryTicks(t *testing.T) {
+	ts, engine := newTestScheduler(true)
 
-			tc.Handle(MakeTickEvent(sim.NewID(), tc.Name(), timing.VTimeInPicoSec(10000)))
-			tc.TickNow()
+	ts.TickLater()
 
-			Expect(engine.scheduled).To(HaveLen(1))
-			Expect(engine.scheduled[0].Time()).
-				To(Equal(timing.VTimeInPicoSec(11000)))
-		})
-
-	It("should stop ticking if no progress is made", func() {
-		ticker.progress = false
-
-		tc.Handle(MakeTickEvent(sim.NewID(), tc.Name(), timing.VTimeInPicoSec(10000)))
-
-		Expect(engine.scheduled).To(BeEmpty())
-	})
-})
+	wantScheduled(t, engine, 11000)
+	if !engine.scheduled[0].IsSecondary() {
+		t.Errorf("the tick of a secondary scheduler is not secondary")
+	}
+}

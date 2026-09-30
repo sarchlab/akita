@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -100,16 +101,14 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 		spec.NumBanks = 2
 		spec.StageLatency = 2
 
-		memComp = MakeBuilder().
+		memComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{Storage: storage}).
+			WithPorts(makePorts("Mem", 4, 16)).
 			Build("Mem")
 
-		assignPort(sim, memComp, "Top", 4)
-		assignPort(sim, memComp, "Control", 16)
-
-		topPort = memComp.GetPortByName("Top")
+		topPort = memComp.Ports.Top
 
 		// Attach the recorder before driving so MsgIDAtIncomingBuffer hands out a
 		// real buffer task ID (it returns 0 with no hooks). The admission
@@ -141,7 +140,7 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 		// One tick runs dispatchFromTopPort, which admits the request: the
 		// buffer task's bank admission milestone is emitted just before
 		// RetrieveIncoming.
-		memComp.Tick()
+		modelingtest.Tick(memComp)
 
 		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
 		Expect(bufID).ToNot(BeZero())
@@ -179,16 +178,14 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 		spec.NumBanks = 2
 		spec.StageLatency = 3
 
-		memComp = MakeBuilder().
+		memComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{Storage: storage}).
+			WithPorts(makePorts("Mem", 4, 16)).
 			Build("Mem")
 
-		assignPort(sim, memComp, "Top", 4)
-		assignPort(sim, memComp, "Control", 16)
-
-		topPort = memComp.GetPortByName("Top")
+		topPort = memComp.Ports.Top
 		agent = newTestAgent("Agent")
 		conn = newLoopbackConnection("Conn")
 		conn.PlugIn(topPort)
@@ -204,7 +201,7 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 	// agent has received the response, or a tick budget is exhausted.
 	drive := func() {
 		for i := 0; i < 64 && len(agent.received) == 0; i++ {
-			memComp.Tick()
+			modelingtest.Tick(memComp)
 			conn.transfer()
 		}
 	}

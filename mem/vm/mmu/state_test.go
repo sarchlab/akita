@@ -19,13 +19,12 @@ func buildTestMMU(sim timing.Simulation, name string) *Comp {
 	spec := Definition.DefaultSpec
 	spec.AutoPageAllocation = true
 
-	comp := MakeBuilder().
+	comp := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
+		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
+		WithPorts(makePorts(name, 4096)).
 		Build(name)
-
-	assignPort(sim, comp, "Top", 4096)
-	assignPort(sim, comp, "Control", 4)
 
 	return comp
 }

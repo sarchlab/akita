@@ -9,7 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -19,6 +19,36 @@ type Spec struct {
 	Log2PageSize   uint64      `json:"log2_page_size"`
 	DeviceID       uint64      `json:"device_id"`
 	NumReqPerCycle int         `json:"num_req_per_cycle"`
+}
+
+// Ports holds the AddressTranslator's ports.
+type Ports struct {
+	// Top receives memory requests with virtual addresses and returns their
+	// responses.
+	Top messaging.Port `akita:"role=mem/responder"`
+
+	// Bottom sends the translated memory requests to the memory providers.
+	Bottom messaging.Port `akita:"role=mem/requester"`
+
+	// Translation sends translation requests to the translation providers.
+	Translation messaging.Port `akita:"role=vm/requester"`
+
+	// Control receives enable, pause, drain, flush, and reset commands.
+	Control messaging.Port `akita:"role=mem.control/responder"`
+}
+
+// Middlewares holds the AddressTranslator's behavior, run in field order
+// every cycle.
+type Middlewares struct {
+	// Ctrl handles control commands.
+	Ctrl *ctrlMiddleware
+
+	// ParseTranslate accepts requests from Top and starts their translation.
+	ParseTranslate *parseTranslateMW
+
+	// RespondPipeline handles translation responses, sends the translated
+	// requests, and returns the memory responses to Top.
+	RespondPipeline *respondPipelineMW
 }
 
 // Resources holds the external wiring referenced by the AddressTranslator. The
@@ -232,4 +262,4 @@ func buildReqToBottom(
 }
 
 // Comp is the AddressTranslator component.
-type Comp = modeling.Component[Spec, State, Resources]
+type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]

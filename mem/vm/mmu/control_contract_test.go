@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -16,21 +18,20 @@ func TestControlContract(t *testing.T) {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
 
-		comp := MakeBuilder().
+		comp := Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(Definition.DefaultSpec).
+			WithResources(Resources{PageTable: vm.NewPageTable(12)}).
+			WithPorts(makePorts("MMU", 16)).
 			Build("MMU")
 
-		assignPort(sim, comp, "Top", 16)
-		assignPort(sim, comp, "Control", 4)
-
-		for _, name := range []string{"Top", "Control"} {
-			(&noopConn{}).PlugIn(comp.GetPortByName(name))
+		for _, p := range []messaging.Port{comp.Ports.Top, comp.Ports.Control} {
+			(&noopConn{}).PlugIn(p)
 		}
 
 		return &memcontrolprotocol.Harness{
 			Comp: comp,
-			Ctrl: comp.GetPortByName("Control"),
+			Ctrl: comp.Ports.Control,
 			IsQuiescent: func() bool {
 				return len(comp.State.WalkingTranslations) == 0
 			},

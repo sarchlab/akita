@@ -2,25 +2,25 @@ package dram
 
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // refreshMiddleware models refresh as a reactive per-cycle behavior. Following
 // Akita convention, a controller behavior that runs every cycle and mutates
-// State is a Middleware (not a bespoke plugin): the builder adds it ahead of the
-// bank-tick middleware, and it communicates with the issue step through
-// State.RefreshInProgress (the stall flag).
+// State is a Middleware (not a bespoke plugin): it is declared in Middlewares
+// ahead of the bank-tick middleware, and it communicates with the issue step
+// through State.RefreshInProgress (the stall flag).
 //
 // Today it implements the fake global tRFC stall (deviation D2). Real refresh
 // (P2) is a different refresh middleware selected by config; the bank-tick
 // issue step does not change — it just honors the stall flag.
 type refreshMiddleware struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
-// Tick advances the refresh schedule by one cycle. Paused DRAM freezes it, so
-// the refresh phase does not drift while the controller is suspended.
-func (m *refreshMiddleware) Tick() bool {
+// Handle advances the refresh schedule by one cycle. Paused DRAM freezes it,
+// so the refresh phase does not drift while the controller is suspended.
+func (m *refreshMiddleware) Handle(_ timing.Event) bool {
 	next := &m.comp.State
 	if next.ControlState == memcontrolprotocol.StatePaused {
 		return false

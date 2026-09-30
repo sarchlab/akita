@@ -2,24 +2,28 @@ package endpoint
 
 import (
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 // Spec contains immutable configuration for the endpoint.
 type Spec struct {
-	Freq              timing.Freq          `json:"freq"`
-	NumInputChannels  int                  `json:"num_input_channels"`
-	NumOutputChannels int                  `json:"num_output_channels"`
-	FlitByteSize      int                  `json:"flit_byte_size"`
-	EncodingOverhead  float64              `json:"encoding_overhead"`
-	DefaultSwitchDst  messaging.RemotePort `json:"default_switch_dst"`
+	Freq              timing.Freq `json:"freq"`
+	NumInputChannels  int         `json:"num_input_channels"`
+	NumOutputChannels int         `json:"num_output_channels"`
+	FlitByteSize      int         `json:"flit_byte_size"`
+	EncodingOverhead  float64     `json:"encoding_overhead"`
+
+	// DefaultSwitchDst is the port at the other end of the network link,
+	// usually a switch port, that every flit is sent to.
+	DefaultSwitchDst messaging.RemotePort `json:"default_switch_dst"`
 }
 
 // Resources holds the external wiring referenced by the endpoint, namely the
-// device ports that communicate directly through it. These are remote ports
-// owned by other components, so they belong in Resources rather than Spec.
+// device ports that communicate directly through it. These are ports owned by
+// other components; Build plugs them into the endpoint, which acts as their
+// connection.
 type Resources struct {
 	DevicePorts []messaging.Port `json:"-"`
 }
@@ -46,63 +50,51 @@ type State struct {
 	AssembledMsgs  []messaging.MsgMeta  `json:"assembled_msgs"`
 }
 
-// Comp is an akita component(Endpoint) that delegates sending and receiving
-// actions of a few ports.
-type Comp struct {
-	*modeling.Component[Spec, State, modeling.None]
+// Ports holds the endpoint's ports.
+type Ports struct {
+	// NetworkPort exchanges flits with the switch (or the endpoint) on the
+	// other end of the link.
+	NetworkPort messaging.Port `akita:"role=packetization/link"`
 }
 
-// outgoingMW returns the outgoing middleware from the component's middleware list.
-func (c *Comp) outgoingMW() *outgoingMW {
-	return c.Middlewares()[0].(*outgoingMW)
+// Middlewares holds the endpoint's behavior, run in field order every cycle.
+type Middlewares struct {
+	// Outgoing takes messages from the device ports, splits them into flits,
+	// and sends the flits out of the network port.
+	Outgoing *outgoingMW
+
+	// Incoming reassembles flits from the network port into messages and
+	// delivers them to the device ports.
+	Incoming *incomingMW
 }
 
-// incomingMW returns the incoming middleware from the component's middleware list.
-func (c *Comp) incomingMW() *incomingMW {
-	return c.Middlewares()[1].(*incomingMW)
+// Comp is an endpoint: it carries the messages of a few device ports over the
+// network as flits.
+type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
+
+// deviceSide is the connection the device ports plug into. It is part of the
+// endpoint: its name and hooks are the endpoint's, and activity on a device
+// port wakes the endpoint.
+type deviceSide struct {
+	*Comp
 }
 
-// NetworkPort returns the network port of the endpoint. It panics if the port
-// has not been assigned yet (see SetNetworkPort).
-func (c *Comp) NetworkPort() messaging.Port {
-	return c.GetPortByName("NetworkPort")
-}
-
-// SetNetworkPort assigns the endpoint's network-port instance. The endpoint
-// declares the "NetworkPort" in Build; callers (e.g. the network connector)
-// create the real port from the built endpoint and assign it here.
-func (c *Comp) SetNetworkPort(p messaging.Port) {
-	c.AssignPort("NetworkPort", p)
-}
-
-// SetDefaultSwitchDst sets the default switch destination. Prefer the
-// WithDefaultSwitchDst builder option for build-time wiring. This setter remains
-// for callers that only learn the destination after the endpoint is built (e.g.
-// the network connector creates the switch port from the built endpoint, and
-// two endpoints connected directly each need the other's post-build port).
-func (c *Comp) SetDefaultSwitchDst(dst messaging.RemotePort) {
-	c.outgoingMW().defaultSwitchDst = dst
-}
-
-// PlugIn connects a port to the endpoint.
-func (c *Comp) PlugIn(port messaging.Port) {
-	port.SetConnection(c)
-	c.outgoingMW().devicePorts = append(c.outgoingMW().devicePorts, port)
-	c.incomingMW().devicePorts = append(c.incomingMW().devicePorts, port)
-}
-
-// NotifyAvailable triggers the endpoint to continue to tick.
-func (c *Comp) NotifyAvailable(_ messaging.Port) {
-	c.TickLater()
-}
-
-// NotifySend is called by a port to notify the connection there are
-// messages waiting to be sent, can start tick
-func (c *Comp) NotifySend() {
-	c.TickLater()
+// PlugIn connects a device port to the endpoint.
+func (d deviceSide) PlugIn(port messaging.Port) {
+	port.SetConnection(d)
 }
 
 // Unplug removes the association of a port and an endpoint.
-func (c *Comp) Unplug(_ messaging.Port) {
+func (d deviceSide) Unplug(_ messaging.Port) {
 	panic("not implemented")
+}
+
+// NotifyAvailable wakes the endpoint when a device port has room again.
+func (d deviceSide) NotifyAvailable(_ messaging.Port) {
+	d.TickLater()
+}
+
+// NotifySend wakes the endpoint when a device port has a message to send.
+func (d deviceSide) NotifySend() {
+	d.TickLater()
 }

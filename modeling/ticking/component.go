@@ -28,6 +28,14 @@ func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
 	}
 }
 
+// TickLater schedules a tick at the next cycle, unless one is already
+// scheduled. A component ticks on its own while it makes progress and wakes
+// on port activity; TickLater starts one that begins work by itself, such as
+// a traffic generator.
+func (c *Component[S, T, R, P, M]) TickLater() {
+	c.ticks.TickLater()
+}
+
 // NotifyRecv wakes the instance when a port receives a message.
 func (c *Component[S, T, R, P, M]) NotifyRecv(_ messaging.Port) {
 	c.ticks.TickLater()

@@ -11,7 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
@@ -103,50 +103,94 @@ func phaseName(phase migPhase) string {
 	}
 }
 
-// migrationController periodically relocates a page from one device to another
-// while keeping the data transparent to the agents. It owns no memory; it
-// orchestrates the existing control protocol, page table, and data mover.
-type migrationController struct {
-	*modeling.Component[migSpec, migState, modeling.None]
-
-	// pages is the shared page table; the controller mutates it directly.
-	pages vm.PageTable
-	// agents is used only to detect when the workload is finished so the
+// migResources holds the references the migration controller works on,
+// supplied by the system builder. It owns no memory; it orchestrates the
+// existing control protocol, page table, and data mover.
+type migResources struct {
+	// Pages is the shared page table; the controller mutates it directly.
+	Pages vm.PageTable
+	// Agents is used only to detect when the workload is finished so the
 	// controller can stop ticking and let the simulation terminate.
-	agents []*memaccessagent.MemAccessAgent
-	// moverDst is the data mover's Top port.
-	moverDst messaging.RemotePort
+	Agents []*memaccessagent.MemAccessAgent
+	// MoverDst is the data mover's Top port.
+	MoverDst messaging.RemotePort
 
-	// robTargets are the request sources, drained first.
-	robTargets []messaging.RemotePort
-	// restTargets are the translation and data path components, paused once the
+	// ROBTargets are the request sources, drained first.
+	ROBTargets []messaging.RemotePort
+	// RestTargets are the translation and data path components, paused once the
 	// reorder buffers are drained and everything downstream is idle.
-	restTargets []messaging.RemotePort
-	// allTargets is robTargets+restTargets, re-enabled together at the end.
-	allTargets []messaging.RemotePort
-	// flushTargets are the write-back caches whose dirty data must reach memory
+	RestTargets []messaging.RemotePort
+	// AllTargets is ROBTargets+RestTargets, re-enabled together at the end.
+	AllTargets []messaging.RemotePort
+	// FlushTargets are the write-back caches whose dirty data must reach memory
 	// before the copy.
-	flushTargets []messaging.RemotePort
-	// invalTargets are the caches and TLBs whose stale entries are dropped after
+	FlushTargets []messaging.RemotePort
+	// InvalTargets are the caches and TLBs whose stale entries are dropped after
 	// the page table is repointed.
-	invalTargets []messaging.RemotePort
+	InvalTargets []messaging.RemotePort
+}
+
+// migPorts holds the migration controller's ports.
+type migPorts struct {
+	// Ctrl sends the drain, pause, flush, invalidate, and enable commands and
+	// receives their responses.
+	Ctrl messaging.Port `akita:"role=mem.control/requester"`
+
+	// Mover sends the page-copy request to the data mover and receives its
+	// completion.
+	Mover messaging.Port `akita:"role=datamover/requester"`
+}
+
+// migMiddlewares holds the migration controller's behavior.
+type migMiddlewares struct {
+	// Migration advances the migration finite state machine.
+	Migration *migMW
+}
+
+// migrationController periodically relocates a page from one device to another
+// while keeping the data transparent to the agents.
+type migrationController = ticking.Component[
+	migSpec, migState, migResources, migPorts, migMiddlewares]
+
+// Definition declares the migration controller, a ticking component.
+var Definition = ticking.Definition[
+	migSpec, migState, migResources, migPorts, migMiddlewares]{
+	DefaultSpec: migSpec{
+		Freq: 1 * timing.GHz,
+	},
+	NewState:       newMigState,
+	NewMiddlewares: newMigMiddlewares,
+}
+
+func newMigState(c *migrationController) migState {
+	return migState{
+		Phase:     migIdle,
+		Countdown: c.Spec().Interval,
+	}
+}
+
+func newMigMiddlewares(c *migrationController) migMiddlewares {
+	return migMiddlewares{
+		Migration: &migMW{ctrl: c, res: c.Resources()},
+	}
 }
 
 // migMW is the migration controller's behavior.
 type migMW struct {
 	ctrl *migrationController
+	res  migResources
 }
 
 func (m *migMW) ctrlPort() messaging.Port {
-	return m.ctrl.GetPortByName("Ctrl")
+	return m.ctrl.Ports.Ctrl
 }
 
 func (m *migMW) moverPort() messaging.Port {
-	return m.ctrl.GetPortByName("Mover")
+	return m.ctrl.Ports.Mover
 }
 
-// Tick advances the migration finite state machine.
-func (m *migMW) Tick() bool {
+// Handle advances the migration finite state machine by one cycle.
+func (m *migMW) Handle(_ timing.Event) bool {
 	state := &m.ctrl.State
 	progress := false
 
@@ -158,29 +202,29 @@ func (m *migMW) Tick() bool {
 		progress = m.tickIdle() || progress
 	case migDrainROB:
 		progress = m.runControlPhase(
-			m.ctrl.robTargets, memcontrolprotocol.CmdDrain,
-			func() { m.enterControlPhase(migPauseRest, len(m.ctrl.restTargets)) },
+			m.res.ROBTargets, memcontrolprotocol.CmdDrain,
+			func() { m.enterControlPhase(migPauseRest, len(m.res.RestTargets)) },
 		) || progress
 	case migPauseRest:
 		progress = m.runControlPhase(
-			m.ctrl.restTargets, memcontrolprotocol.CmdPause,
-			func() { m.enterControlPhase(migFlushing, len(m.ctrl.flushTargets)) },
+			m.res.RestTargets, memcontrolprotocol.CmdPause,
+			func() { m.enterControlPhase(migFlushing, len(m.res.FlushTargets)) },
 		) || progress
 	case migFlushing:
 		progress = m.runControlPhase(
-			m.ctrl.flushTargets, memcontrolprotocol.CmdFlush,
+			m.res.FlushTargets, memcontrolprotocol.CmdFlush,
 			func() { m.enterCopyPhase() },
 		) || progress
 	case migCopying:
 		progress = m.tickCopying() || progress
 	case migInvalidating:
 		progress = m.runControlPhase(
-			m.ctrl.invalTargets, memcontrolprotocol.CmdInvalidate,
-			func() { m.enterControlPhase(migEnabling, len(m.ctrl.allTargets)) },
+			m.res.InvalTargets, memcontrolprotocol.CmdInvalidate,
+			func() { m.enterControlPhase(migEnabling, len(m.res.AllTargets)) },
 		) || progress
 	case migEnabling:
 		progress = m.runControlPhase(
-			m.ctrl.allTargets, memcontrolprotocol.CmdEnable,
+			m.res.AllTargets, memcontrolprotocol.CmdEnable,
 			func() { m.finishMigration() },
 		) || progress
 	}
@@ -209,7 +253,7 @@ func (m *migMW) tickIdle() bool {
 }
 
 func (m *migMW) allAgentsDone() bool {
-	for _, a := range m.ctrl.agents {
+	for _, a := range m.res.Agents {
 		if a.State.ReadLeft > 0 || a.State.WriteLeft > 0 {
 			return false
 		}
@@ -231,7 +275,7 @@ func (m *migMW) beginMigration() {
 	state.PageCursor = (state.PageCursor + 1) % spec.NumPages
 
 	vAddr := page * pageSize
-	pageEntry, found := m.ctrl.pages.Find(1, vAddr)
+	pageEntry, found := m.res.Pages.Find(1, vAddr)
 	if !found {
 		log.Panicf("migration: page %d (vAddr 0x%x) not found", page, vAddr)
 	}
@@ -245,7 +289,7 @@ func (m *migMW) beginMigration() {
 	state.DstDevice = dstDevice
 
 	pageEntry.IsMigrating = true
-	m.ctrl.pages.Update(pageEntry)
+	m.res.Pages.Update(pageEntry)
 
 	if *migDebugFlag {
 		log.Printf("%d migration #%d: page %d dev %d->%d (0x%x->0x%x)",
@@ -263,7 +307,7 @@ func (m *migMW) beginMigration() {
 		Location: m.ctrl.Name(),
 	})
 
-	m.enterControlPhase(migDrainROB, len(m.ctrl.robTargets))
+	m.enterControlPhase(migDrainROB, len(m.res.ROBTargets))
 }
 
 // startPhaseTask ends the previous phase's trace task (if any) and opens one for
@@ -406,7 +450,7 @@ func (m *migMW) tickCopying() bool {
 	}
 	req.ID = m.ctrl.Simulation().NewID()
 	req.Src = m.moverPort().AsRemote()
-	req.Dst = m.ctrl.moverDst
+	req.Dst = m.res.MoverDst
 	req.TrafficClass = "datamoverprotocol.DataMoveRequest"
 	m.moverPort().Send(req)
 
@@ -418,7 +462,7 @@ func (m *migMW) tickCopying() bool {
 
 	if *migDebugFlag {
 		log.Printf("%d   move req sent to %s (0x%x->0x%x %d bytes)",
-			m.ctrl.CurrentTime(), m.ctrl.moverDst,
+			m.ctrl.CurrentTime(), m.res.MoverDst,
 			state.SrcAddr, state.DstAddr, pageSize)
 	}
 
@@ -447,7 +491,7 @@ func (m *migMW) processMoveRsp() bool {
 	tracing.EndTask(m.ctrl, tracing.TaskEnd{ID: rsp.RspTo})
 
 	vAddr := state.CurPage * pageSize
-	pageEntry, found := m.ctrl.pages.Find(1, vAddr)
+	pageEntry, found := m.res.Pages.Find(1, vAddr)
 	if !found {
 		log.Panicf("migration: page %d vanished mid-migration", state.CurPage)
 	}
@@ -455,9 +499,9 @@ func (m *migMW) processMoveRsp() bool {
 	pageEntry.PAddr = state.DstAddr
 	pageEntry.DeviceID = state.DstDevice
 	pageEntry.IsMigrating = false
-	m.ctrl.pages.Update(pageEntry)
+	m.res.Pages.Update(pageEntry)
 
-	m.enterControlPhase(migInvalidating, len(m.ctrl.invalTargets))
+	m.enterControlPhase(migInvalidating, len(m.res.InvalTargets))
 
 	return true
 }
@@ -500,8 +544,8 @@ func setupMigrationController(
 	mover := buildDataMover(s, shared)
 
 	// The data mover reads and writes memory over the same fabric as the L2.
-	memConn.PlugIn(mover.GetPortByName("Inside"))
-	memConn.PlugIn(mover.GetPortByName("Outside"))
+	memConn.PlugIn(mover.Ports.Inside)
+	memConn.PlugIn(mover.Ports.Outside)
 
 	ctrl := buildMigrationController(s, shared, chains, mover)
 
@@ -510,20 +554,20 @@ func setupMigrationController(
 	ctrlConn := directconnection.MakeBuilder().
 		WithSimulation(s).
 		Build("ConnControl")
-	ctrlConn.PlugIn(ctrl.GetPortByName("Ctrl"))
+	ctrlConn.PlugIn(ctrl.Ports.Ctrl)
 	for _, c := range chains {
 		ctrlConn.PlugIn(c.rob.Ports.Control)
-		ctrlConn.PlugIn(c.at.GetPortByName("Control"))
-		ctrlConn.PlugIn(c.l1Cache.GetPortByName("Control"))
-		ctrlConn.PlugIn(c.l1TLB.GetPortByName("Control"))
+		ctrlConn.PlugIn(c.at.Ports.Control)
+		ctrlConn.PlugIn(c.l1Cache.Ports.Control)
+		ctrlConn.PlugIn(c.l1TLB.Ports.Control)
 	}
-	ctrlConn.PlugIn(shared.l2Cache.GetPortByName("Control"))
-	ctrlConn.PlugIn(shared.l2TLB.GetPortByName("Control"))
-	ctrlConn.PlugIn(shared.ioMMU.GetPortByName("Control"))
+	ctrlConn.PlugIn(shared.l2Cache.Ports.Control)
+	ctrlConn.PlugIn(shared.l2TLB.Ports.Control)
+	ctrlConn.PlugIn(shared.ioMMU.Ports.Control)
 
 	connect(s, "ConnMover",
-		ctrl.GetPortByName("Mover"),
-		mover.GetPortByName("Top"),
+		ctrl.Ports.Mover,
+		mover.Ports.Top,
 	)
 
 	ctrl.TickLater()
@@ -537,14 +581,14 @@ func buildDataMover(
 ) *datamover.Comp {
 	memCtrlPorts := make([]messaging.RemotePort, len(shared.memCtrls))
 	for d, mc := range shared.memCtrls {
-		memCtrlPorts[d] = mc.GetPortByName("Top").AsRemote()
+		memCtrlPorts[d] = mc.Ports.Top.AsRemote()
 	}
 
 	dmSpec := datamover.Definition.DefaultSpec
 	dmSpec.BufferSize = pageSize
 	dmSpec.InsideByteGranularity = 64
 	dmSpec.OutsideByteGranularity = 64
-	mover := datamover.MakeBuilder().
+	mover := datamover.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(dmSpec).
 		WithResources(datamover.Resources{
@@ -557,8 +601,13 @@ func buildDataMover(
 				LowModules:       memCtrlPorts,
 			},
 		}).
+		WithPorts(datamover.Ports{
+			Top:     newPort("DataMover.Top"),
+			Inside:  newPort("DataMover.Inside"),
+			Outside: newPort("DataMover.Outside"),
+			Control: newPort("DataMover.Control"),
+		}).
 		Build("DataMover")
-	assignPorts(s, mover, "Top", "Inside", "Outside", "Control")
 
 	return mover
 }
@@ -569,70 +618,59 @@ func buildMigrationController(
 	chains []agentChain,
 	mover *datamover.Comp,
 ) *migrationController {
-	spec := migSpec{
-		Freq:         1 * timing.GHz,
-		Interval:     *migrateIntervalFlag,
-		NumPages:     shared.numPages,
-		DeviceStride: shared.deviceStride,
-	}
+	spec := Definition.DefaultSpec
+	spec.Interval = *migrateIntervalFlag
+	spec.NumPages = shared.numPages
+	spec.DeviceStride = shared.deviceStride
 
-	modelComp := modeling.NewBuilder[migSpec, migState, modeling.None]().
+	res := migResources{
+		Pages:    shared.pageTable,
+		MoverDst: mover.Ports.Top.AsRemote(),
+	}
+	collectControlTargets(&res, shared, chains)
+
+	return Definition.Builder().
 		WithSimulation(s).
-		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithResources(res).
+		WithPorts(migPorts{
+			Ctrl:  newPort("MigrationController.Ctrl"),
+			Mover: newPort("MigrationController.Mover"),
+		}).
 		Build("MigrationController")
-	modelComp.State = migState{
-		Phase:     migIdle,
-		Countdown: spec.Interval,
-	}
-
-	ctrl := &migrationController{
-		Component: modelComp,
-		pages:     shared.pageTable,
-		moverDst:  mover.GetPortByName("Top").AsRemote(),
-	}
-	collectControlTargets(ctrl, shared, chains)
-
-	mw := &migMW{ctrl: ctrl}
-	modelComp.AddMiddleware(mw)
-
-	modelComp.DeclarePort("Ctrl", memcontrolprotocol.Requester)
-	modelComp.DeclarePort("Mover", datamoverprotocol.Requester)
-
-	s.RegisterComponent(ctrl)
-	assignPorts(s, ctrl, "Ctrl", "Mover")
-
-	return ctrl
 }
 
 // collectControlTargets gathers the control-port references the migration FSM
 // addresses: the reorder buffers (drained first), the translation and data path
 // (paused after), the write-back L2 (flushed), and the caches and TLBs
-// (invalidated). allTargets is the union re-enabled at the end.
+// (invalidated). AllTargets is the union re-enabled at the end.
 func collectControlTargets(
-	ctrl *migrationController,
+	res *migResources,
 	shared sharedHierarchy,
 	chains []agentChain,
 ) {
-	control := func(c portOwner) messaging.RemotePort {
-		return c.GetPortByName("Control").AsRemote()
-	}
-
 	for _, c := range chains {
-		ctrl.agents = append(ctrl.agents, c.agent)
-		ctrl.robTargets = append(ctrl.robTargets, c.rob.Ports.Control.AsRemote())
-		ctrl.restTargets = append(ctrl.restTargets,
-			control(c.at), control(c.l1Cache), control(c.l1TLB))
-		ctrl.invalTargets = append(ctrl.invalTargets,
-			control(c.l1Cache), control(c.l1TLB))
+		res.Agents = append(res.Agents, c.agent)
+		res.ROBTargets = append(res.ROBTargets, c.rob.Ports.Control.AsRemote())
+		res.RestTargets = append(res.RestTargets,
+			c.at.Ports.Control.AsRemote(),
+			c.l1Cache.Ports.Control.AsRemote(),
+			c.l1TLB.Ports.Control.AsRemote())
+		res.InvalTargets = append(res.InvalTargets,
+			c.l1Cache.Ports.Control.AsRemote(),
+			c.l1TLB.Ports.Control.AsRemote())
 	}
 
-	ctrl.restTargets = append(ctrl.restTargets,
-		control(shared.l2Cache), control(shared.l2TLB), control(shared.ioMMU))
-	ctrl.flushTargets = append(ctrl.flushTargets, control(shared.l2Cache))
-	ctrl.invalTargets = append(ctrl.invalTargets,
-		control(shared.l2Cache), control(shared.l2TLB))
+	res.RestTargets = append(res.RestTargets,
+		shared.l2Cache.Ports.Control.AsRemote(),
+		shared.l2TLB.Ports.Control.AsRemote(),
+		shared.ioMMU.Ports.Control.AsRemote())
+	res.FlushTargets = append(res.FlushTargets,
+		shared.l2Cache.Ports.Control.AsRemote())
+	res.InvalTargets = append(res.InvalTargets,
+		shared.l2Cache.Ports.Control.AsRemote(),
+		shared.l2TLB.Ports.Control.AsRemote())
 
-	ctrl.allTargets = append(ctrl.allTargets, ctrl.robTargets...)
-	ctrl.allTargets = append(ctrl.allTargets, ctrl.restTargets...)
+	res.AllTargets = append(res.AllTargets, res.ROBTargets...)
+	res.AllTargets = append(res.AllTargets, res.RestTargets...)
 }

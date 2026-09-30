@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -45,18 +46,17 @@ var _ = Describe("Address Translator control behavior", func() {
 			},
 		}
 
-		t = MakeBuilder().
+		t = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(resources).
+			WithPorts(makePorts("AddressTranslator", 16)).
 			Build("AddressTranslator")
 
-		assignPorts(sim, t, 16)
-
-		topPort = t.GetPortByName("Top")
-		bottomPort = t.GetPortByName("Bottom")
-		translationPort = t.GetPortByName("Translation")
-		ctrlPort = t.GetPortByName("Control")
+		topPort = t.Ports.Top
+		bottomPort = t.Ports.Bottom
+		translationPort = t.Ports.Translation
+		ctrlPort = t.Ports.Control
 
 		for _, p := range []messaging.Port{
 			topPort, bottomPort, translationPort, ctrlPort,
@@ -163,7 +163,7 @@ var _ = Describe("Address Translator control behavior", func() {
 		// The Drain must not ack while in-flight work remains, the component
 		// must enter Draining, and the in-flight entries must stay.
 		for range 8 {
-			t.Tick()
+			modelingtest.Tick(t)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
@@ -183,7 +183,7 @@ var _ = Describe("Address Translator control behavior", func() {
 		drainFound := false
 		topResponses := 0
 		for i := 0; i < 64 && !drainFound; i++ {
-			t.Tick()
+			modelingtest.Tick(t)
 			for {
 				out, ok := topPort.RetrieveOutgoing()
 				if !ok {
@@ -218,7 +218,7 @@ var _ = Describe("Address Translator control behavior", func() {
 		topPort.Deliver(makeRead(0x100))
 
 		for range 5 {
-			t.Tick()
+			modelingtest.Tick(t)
 		}
 
 		// The request is neither consumed nor turned into work, and nothing is
@@ -247,7 +247,7 @@ var _ = Describe("Address Translator control behavior", func() {
 			var rsp memcontrolprotocol.Rsp
 			found := false
 			for i := 0; i < 64 && !found; i++ {
-				t.Tick()
+				modelingtest.Tick(t)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					rsp, found = out.(memcontrolprotocol.Rsp)
 				}
@@ -283,7 +283,7 @@ var _ = Describe("Address Translator control behavior", func() {
 
 		var rsps []memcontrolprotocol.Rsp
 		for range 16 {
-			t.Tick()
+			modelingtest.Tick(t)
 			for {
 				out, ok := ctrlPort.RetrieveOutgoing()
 				if !ok {

@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -67,19 +68,19 @@ var _ = Describe("MMU milestones", func() {
 		sim = modeling.NewStandaloneSimulation(engine)
 		pageTable = vm.NewPageTable(12)
 
-		mmuComp = MakeBuilder().
+		mmuComp = Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(Definition.DefaultSpec).
+			WithPorts(makePorts("MMU", 16)).
 			Build("MMU")
 
-		topPort = assignPort(sim, mmuComp, "Top", 16)
-		assignPort(sim, mmuComp, "Control", 4)
+		topPort = mmuComp.Ports.Top
 
 		(&noopConn{}).PlugIn(topPort)
-		(&noopConn{}).PlugIn(mmuComp.GetPortByName("Control"))
+		(&noopConn{}).PlugIn(mmuComp.Ports.Control)
 
-		mw = mmuComp.Middlewares()[1].(*translationMW)
+		mw = mmuComp.Middlewares.Translation
 
 		// Attach the recorder before driving so MsgIDAtIncomingBuffer hands out
 		// real task IDs (it returns 0 when there are no hooks).
@@ -147,7 +148,7 @@ var _ = Describe("MMU milestones", func() {
 
 		sent := false
 		for i := 0; i < 64 && !sent; i++ {
-			mw.Tick()
+			mw.Handle(modelingtest.TickEvent(mmuComp))
 			if out, ok := topPort.RetrieveOutgoing(); ok {
 				if _, ok := out.(vmprotocol.TranslationRsp); ok {
 					sent = true

@@ -12,8 +12,8 @@ buffer to another port's incoming buffer.
   belongs to no protocol.
 - A **protocol** (`Protocol`) is a named set of message types organized into
   **roles** (`Role`). Defining a protocol with `DefineProtocol` registers
-  every message type it carries with the checkpoint codec; ports declare the
-  role(s) they speak in `DeclarePort`. Protocols are **opt-in**: messages
+  every message type it carries with the checkpoint codec; components tag each
+  port with the role(s) it speaks, `akita:"role=<protocol>/<role>"`. Protocols are **opt-in**: messages
   flow without one, and registration only matters when a checkpoint can
   capture the message.
 - A **port** is owned by a component and holds an incoming and an outgoing
@@ -65,8 +65,13 @@ var (
 )
 ```
 
-and bind ports to roles where they are declared:
-`comp.DeclarePort("Top", memprotocol.Responder)`. Each protocol lives in its
+and bind ports to roles with a tag on the component's Ports field:
+
+```go
+Top messaging.Port `akita:"role=mem/responder"`
+```
+
+The inspector checks each tag against the protocol's roles. Each protocol lives in its
 own package (e.g. `mem/memprotocol`, `mem/memcontrolprotocol`, `mem/vm/vmprotocol`)
 that owns the message types and the protocol definition. A
 registration-coverage audit
@@ -107,13 +112,12 @@ type Port interface {
 Create a port with `NewPort`:
 
 ```go
-port := messaging.NewPort(comp, incomingCap, outgoingCap, "MyComp.Top")
+port := messaging.NewPort(nil, incomingCap, outgoingCap, "MyComp.Top")
 ```
 
-In assembly, prefer `modeling.MakePortBuilder` — it wraps `NewPort` and
-registers the port with the simulation (and the monitor),
-mirroring how component and connection builders register themselves. `NewPort`
-is the low-level constructor it builds on.
+In assembly, the system builder creates each port with no component and passes
+it to the component's `Build`, which binds the port to the component and
+registers it with the simulation (and the monitor).
 
 `Send` pushes onto the outgoing buffer — callers must check `CanSend` first;
 sending into a full buffer panics — and, when the buffer transitions from
@@ -162,16 +166,10 @@ siblings) holds its ports in a typed `Ports` struct: the system builder creates
 each port with `NewPort` and passes them all to `Build`, which binds and
 registers them.
 
-Components on the older `modeling.Component` API embed `PortOwnerBase` (via
-`NewPortOwnerBase`) instead: they declare their ports with `DeclarePort`, setup
-code supplies the instances with `AssignPort`, and middlewares look them up with
-`GetPortByName`.
-
 ## How It Works
 
-1. Setup code creates each port with `NewPort` and gives it to its component:
-   through `Build` for a component model, or with `AssignPort` (often after
-   `modeling.MakePortBuilder`) for the older API.
+1. Setup code creates each port with `NewPort` and passes it to its component's
+   `Build`.
 2. A connection is plugged into the ports with `PlugIn`, and each port's
    connection is set with `SetConnection`.
 3. To send, a component builds a message with `Src`/`Dst` remote port names and

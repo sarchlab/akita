@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
+	"github.com/sarchlab/akita/v5/modeling/wakeup"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/stretchr/testify/require"
 )
@@ -39,8 +41,7 @@ func TestSimulationsAllocateIndependentlyWhileRunning(t *testing.T) {
 			sims := []*Simulation{buildIDTestSimulation(t, parallel), buildIDTestSimulation(t, parallel)}
 			handlers := make([]*allocatingHandler, 2)
 			for i, s := range sims {
-				comp := modeling.NewBuilder[modeling.None, modeling.None, modeling.None]().
-					WithSimulation(s).WithFreq(timing.GHz).Build("Comp")
+				comp := idTickedDef.Builder().WithSimulation(s).Build("Comp")
 				require.Same(t, s, comp.Simulation())
 				require.Equal(t, uint64(1), comp.Simulation().NewID())
 				h := &allocatingHandler{ids: comp.Simulation()}
@@ -130,13 +131,36 @@ func TestConcurrentSimulationIDAllocation(t *testing.T) {
 
 func TestComponentsScheduleWithSharedSimulationIDs(t *testing.T) {
 	s := buildIDTestSimulation(t, false)
-	ticked := modeling.NewBuilder[modeling.None, modeling.None, modeling.None]().
-		WithSimulation(s).WithFreq(timing.GHz).Build("Ticked")
-	eventDriven := modeling.NewEventDrivenBuilder[modeling.None, modeling.None, modeling.None]().
-		WithSimulation(s).Build("EventDriven")
+	ticked := idTickedDef.Builder().WithSimulation(s).Build("Ticked")
+	woken := idWakeupDef.Builder().WithSimulation(s).Build("Woken")
 	require.Same(t, s, ticked.Simulation())
-	require.Same(t, s, eventDriven.Simulation())
+	require.Same(t, s, woken.Simulation())
 	ticked.TickLater()
-	eventDriven.ScheduleWakeAt(1000)
+	woken.WakeAt(1000)
 	require.Equal(t, uint64(3), s.NewID(), "both scheduled events must use the simulation's counter")
+}
+
+type idSpec struct {
+	Freq timing.Freq `json:"freq"`
+}
+
+// idTickedDef and idWakeupDef define the smallest components of the ticking
+// and wakeup models: no state, no ports, and no behavior.
+var idTickedDef = ticking.Definition[
+	idSpec, modeling.None, modeling.None, noPorts, noMiddlewares]{
+	DefaultSpec: idSpec{Freq: timing.GHz},
+	NewMiddlewares: func(
+		*ticking.Component[idSpec, modeling.None, modeling.None, noPorts, noMiddlewares],
+	) noMiddlewares {
+		return noMiddlewares{}
+	},
+}
+
+var idWakeupDef = wakeup.Definition[
+	idSpec, modeling.None, modeling.None, noPorts, noMiddlewares]{
+	NewMiddlewares: func(
+		*wakeup.Component[idSpec, modeling.None, modeling.None, noPorts, noMiddlewares],
+	) noMiddlewares {
+		return noMiddlewares{}
+	},
 }

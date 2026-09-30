@@ -75,9 +75,9 @@ connector := pcie.NewConnector().
 
 connector.CreateNetwork("PCIe")
 
-root := connector.AddRootComplex([]messaging.Port{cpu.GetPortByName("PCIe")})
+root := connector.AddRootComplex([]messaging.Port{cpu.Ports.PCIe})
 sw := connector.AddSwitch(root)
-connector.PlugInDevice(sw, []messaging.Port{gpu.GetPortByName("PCIe")})
+connector.PlugInDevice(sw, []messaging.Port{gpu.Ports.PCIe})
 
 connector.EstablishRoute()
 ```

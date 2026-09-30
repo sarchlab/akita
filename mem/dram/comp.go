@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -48,7 +48,10 @@ const (
 	PagePolicyOpen  PagePolicy = 1
 )
 
-// Spec contains immutable configuration for the DRAM memory controller.
+// Spec contains immutable configuration for the DRAM memory controller. The
+// values derived from it — the burst cycle, tRL, tWL, the read and write
+// delays, tRC, the access unit size, and the address mapping — are computed
+// from these fields (see the Spec methods and newAddrMapping), not set.
 type Spec struct {
 	// Frequency
 	Freq timing.Freq `json:"freq"`
@@ -65,36 +68,30 @@ type Spec struct {
 	AddrMapper string `json:"addr_mapper"`
 
 	// Timing params
-	TAL        int `json:"t_al"`
-	TCL        int `json:"t_cl"`
-	TCWL       int `json:"t_cwl"`
-	TRL        int `json:"t_rl"`
-	TWL        int `json:"t_wl"`
-	ReadDelay  int `json:"read_delay"`
-	WriteDelay int `json:"write_delay"`
-	TRCD       int `json:"t_rcd"`
-	TRP        int `json:"t_rp"`
-	TRAS       int `json:"t_ras"`
-	TCCDS      int `json:"t_ccds"`
-	TCCDL      int `json:"t_ccdl"`
-	TRTRS      int `json:"t_rtrs"`
-	TRTP       int `json:"t_rtp"`
-	TWTRL      int `json:"t_wtrl"`
-	TWTRS      int `json:"t_wtrs"`
-	TWR        int `json:"t_wr"`
-	TPPD       int `json:"t_ppd"`
-	TRC        int `json:"t_rc"`
-	TRRDS      int `json:"t_rrds"`
-	TRRDL      int `json:"t_rrdl"`
-	TFAW       int `json:"t_faw"`
-	TRCDRD     int `json:"t_rcdrd"`
-	TRCDWR     int `json:"t_rcdwr"`
-	TREFI      int `json:"t_refi"`
-	TRFC       int `json:"t_rfc"`
-	TRFCb      int `json:"t_rfcb"`
-	TCKESR     int `json:"t_ckesr"`
-	TXS        int `json:"t_xs"`
-	BurstCycle int `json:"burst_cycle"`
+	TAL    int `json:"t_al"`
+	TCL    int `json:"t_cl"`
+	TCWL   int `json:"t_cwl"`
+	TRCD   int `json:"t_rcd"`
+	TRP    int `json:"t_rp"`
+	TRAS   int `json:"t_ras"`
+	TCCDS  int `json:"t_ccds"`
+	TCCDL  int `json:"t_ccdl"`
+	TRTRS  int `json:"t_rtrs"`
+	TRTP   int `json:"t_rtp"`
+	TWTRL  int `json:"t_wtrl"`
+	TWTRS  int `json:"t_wtrs"`
+	TWR    int `json:"t_wr"`
+	TPPD   int `json:"t_ppd"`
+	TRRDS  int `json:"t_rrds"`
+	TRRDL  int `json:"t_rrdl"`
+	TFAW   int `json:"t_faw"`
+	TRCDRD int `json:"t_rcdrd"`
+	TRCDWR int `json:"t_rcdwr"`
+	TREFI  int `json:"t_refi"`
+	TRFC   int `json:"t_rfc"`
+	TRFCb  int `json:"t_rfcb"`
+	TCKESR int `json:"t_ckesr"`
+	TXS    int `json:"t_xs"`
 
 	// Bus / burst / device params
 	BusWidth    int `json:"bus_width"`
@@ -118,23 +115,76 @@ type Spec struct {
 	WriteQueueSize     int `json:"write_queue_size"`
 	WriteHighWatermark int `json:"write_high_watermark"`
 	WriteLowWatermark  int `json:"write_low_watermark"`
+}
 
-	// Address mapping: position/mask pairs
-	ChannelPos    int    `json:"channel_pos"`
-	ChannelMask   uint64 `json:"channel_mask"`
-	RankPos       int    `json:"rank_pos"`
-	RankMask      uint64 `json:"rank_mask"`
-	BankGroupPos  int    `json:"bank_group_pos"`
-	BankGroupMask uint64 `json:"bank_group_mask"`
-	BankPos       int    `json:"bank_pos"`
-	BankMask      uint64 `json:"bank_mask"`
-	RowPos        int    `json:"row_pos"`
-	RowMask       uint64 `json:"row_mask"`
-	ColPos        int    `json:"col_pos"`
-	ColMask       uint64 `json:"col_mask"`
+// burstCycle returns the number of clock cycles a burst occupies the data
+// bus: BurstLength divided by the number of transfers per cycle of the
+// protocol.
+func (s Spec) burstCycle() int {
+	switch protocol(s.Protocol) {
+	case protoGDDR5:
+		return s.BurstLength / 4
+	case protoGDDR5X:
+		return s.BurstLength / 8
+	case protoGDDR6:
+		return s.BurstLength / 16
+	default:
+		return s.BurstLength / 2
+	}
+}
 
-	// Sub-transaction splitting
-	Log2AccessUnitSize uint64 `json:"log2_access_unit_size"`
+// tRL returns the read latency, tAL + tCL.
+func (s Spec) tRL() int {
+	return s.TAL + s.TCL
+}
+
+// tWL returns the write latency, tAL + tCWL.
+func (s Spec) tWL() int {
+	return s.TAL + s.TCWL
+}
+
+// readDelay returns the number of cycles from a read command to its data,
+// tRL + burstCycle.
+func (s Spec) readDelay() int {
+	return s.tRL() + s.burstCycle()
+}
+
+// writeDelay returns the number of cycles from a write command to its
+// response. It is tRL + burstCycle, the same as readDelay; DRAMSim3 uses
+// tWL + burstCycle (a known deviation, see README).
+func (s Spec) writeDelay() int {
+	return s.tRL() + s.burstCycle()
+}
+
+// tRC returns the row cycle time, tRAS + tRP.
+func (s Spec) tRC() int {
+	return s.TRAS + s.TRP
+}
+
+// log2AccessUnitSize returns log2 of the access unit size in bytes, the
+// amount of data one burst moves: BusWidth/8 × BurstLength. Requests are
+// split into sub-transactions of this size.
+func (s Spec) log2AccessUnitSize() uint64 {
+	n, _ := log2(uint64(s.BusWidth / 8 * s.BurstLength))
+	return n
+}
+
+// mustBeSupported panics if the Spec describes a configuration the
+// controller does not model.
+func (s Spec) mustBeSupported() {
+	// One component per channel: the address decode produces a Channel field
+	// that the single-channel controller does not act on, so NumChannel > 1
+	// would silently alias all channels onto the same banks. Multi-channel is
+	// a first-class feature deferred to a later phase; until then, instantiate
+	// one dram.Comp per channel.
+	if s.NumChannel > 1 {
+		panic("dram: NumChannel > 1 is not supported; " +
+			"instantiate one dram.Comp per channel")
+	}
+
+	if s.BurstLength == 0 {
+		panic("burst length cannot be 0")
+	}
 }
 
 // commandKind represents the kind of the command.
@@ -479,8 +529,42 @@ func findTransaction(state *State, txID uint64) *transactionState {
 
 // Resources holds the shared resources referenced by the DRAM controller.
 type Resources struct {
+	// Storage holds the data. It is indexed by the global physical address of
+	// a request. Required.
 	Storage *mem.Storage
 }
 
+// Ports holds the DRAM controller's ports.
+type Ports struct {
+	// Top receives read and write requests and returns their responses.
+	Top messaging.Port `akita:"role=mem/responder"`
+
+	// Control receives enable, pause, drain, and reset commands.
+	Control messaging.Port `akita:"role=mem.control/responder"`
+}
+
+// Middlewares holds the DRAM controller's behavior, run in field order every
+// cycle.
+type Middlewares struct {
+	// Ctrl handles control commands.
+	Ctrl *ctrlMiddleware
+
+	// Respond sends the responses of completed transactions and reads or
+	// writes the storage.
+	Respond *respondMW
+
+	// Refresh schedules refresh; it runs ahead of BankTick so its stall flag
+	// (State.RefreshInProgress) is set before the issue step reads it.
+	Refresh *refreshMiddleware
+
+	// BankTick advances the bank timing, issues commands, and refills the
+	// command queues.
+	BankTick *bankTickMW
+
+	// ParseTop accepts requests from Top and splits them into
+	// sub-transactions.
+	ParseTop *parseTopMW
+}
+
 // Comp is the DRAM memory controller component.
-type Comp = modeling.Component[Spec, State, Resources]
+type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]

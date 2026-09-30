@@ -3,13 +3,11 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 	"go.uber.org/mock/gomock"
 )
 
@@ -47,29 +45,19 @@ var _ = Describe("DirectoryStage", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &pipelineMW{}
-		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
-				Log2BlockSize:    6,
-				NumReqPerCycle:   4,
-				WayAssociativity: 4,
-				NumMSHREntry:     16,
-				NumSets:          64,
-				NumBanks:         1,
-			}).
-			Build("Cache")
+		spec := stageTestSpec()
+		spec.NumMSHREntry = 16
+		comp := buildStageTestComp(spec,
+			Resources{Storage: mem.NewStorage(spec.TotalByteSize)},
+			makePorts("Cache", 4))
 
+		m = comp.Middlewares.Pipeline
 		m.comp.State = initialState
 		next := &m.comp.State
 
 		cache.DirectoryReset(&next.DirectoryState, 64, 4, 64)
 
-		ds = &directoryStage{
-			cache: m,
-		}
-		m.dirStage = ds
+		ds = m.dirStage
 	})
 
 	AfterEach(func() {

@@ -20,31 +20,38 @@ Additional protocol constants: `DDR3`, `GDDR5`, `GDDR5X`, `LPDDR`, `LPDDR3`,
 
 ## Architecture
 
-The controller is organized as three middleware stages executed each tick:
+A request flows through three stages:
 
 ```
-Top port ──► parseTopMW ──► bankTickMW ──► respondMW ──► Top port
-                │               │              │
-           (parse reqs,    (issue DRAM     (send data-ready
-            split into     commands,        / write-done
-            sub-trans)     tick banks)       responses)
+Top port ──► ParseTop ──► BankTick ──► Respond ──► Top port
+                │             │            │
+           (parse reqs,  (issue DRAM   (send data-ready
+            split into   commands,      / write-done
+            sub-trans)   tick banks)     responses)
 ```
 
-A `ctrlMiddleware` also runs each tick, handling `mem.ControlReq` (enable /
-pause / drain / reset) on the `Control` port.
+The stages are middlewares, the fields of `Middlewares`. They run every cycle
+in field order: `Ctrl`, `Respond`, `Refresh`, `BankTick`, `ParseTop`.
 
-1. **parseTopMW** — Receives `mem.ReadReq`/`mem.WriteReq` from the top port,
-   splits large requests into sub-transactions aligned to the access unit size
-   (bus width × burst length), and queues them.
+1. **Ctrl** — Handles `memcontrolprotocol.Req` (enable / pause / drain /
+   reset) on the `Control` port.
 
-2. **bankTickMW** — The core scheduling engine. Each tick it advances bank
+2. **Respond** — Completes transactions when all sub-transactions finish,
+   reads/writes data from the backing `mem.Storage`, and sends responses.
+
+3. **Refresh** — Schedules periodic refresh (a global tRFC stall every tREFI
+   cycles). It runs ahead of BankTick so its stall flag is set before the issue
+   step reads it.
+
+4. **BankTick** — The core scheduling engine. Each tick it advances bank
    state machines, enforces timing constraints between commands (same-bank,
-   same-bank-group, same-rank, other-ranks), handles periodic refresh, and
+   same-bank-group, same-rank, other-ranks), honors the refresh stall, and
    issues activate/read/write/precharge commands. Tracks tFAW (four-activate
    window) constraints.
 
-3. **respondMW** — Completes transactions when all sub-transactions finish,
-   reads/writes data from the backing `mem.Storage`, and sends responses.
+5. **ParseTop** — Receives `memprotocol.ReadReq`/`memprotocol.WriteReq` from
+   the top port, splits large requests into sub-transactions aligned to the
+   access unit size (bus width × burst length), and queues them.
 
 ## Key Types
 
@@ -68,10 +75,39 @@ Core timing parameters (all in DRAM clock cycles):
 Organization parameters: `NumChannel`, `NumRank`, `NumBankGroup`, `NumBank`,
 `NumRow`, `NumCol`, `BusWidth`, `BurstLength`, `DeviceWidth`.
 
+Derived values are not Spec fields; they are computed from the fields above
+when the component is built:
+
+| Value | Formula |
+|---|---|
+| burst cycle | `BurstLength / 2` (GDDR5: `/ 4`, GDDR5X: `/ 8`, GDDR6: `/ 16`) |
+| tRL / tWL | `TAL + TCL` / `TAL + TCWL` |
+| read delay / write delay | `tRL + burstCycle` (both; see the write-delay gap below) |
+| tRC | `TRAS + TRP` |
+| access unit size | `BusWidth / 8 × BurstLength` bytes |
+| address mapping | bit positions and masks from the geometry (see below) |
+
+The Spec fields that used to hold these values — `TRL`, `TWL`, `ReadDelay`,
+`WriteDelay`, `TRC`, `BurstCycle`, `Log2AccessUnitSize`, and the
+address-mapping `ChannelPos`/`ChannelMask`, `RankPos`/`RankMask`,
+`BankGroupPos`/`BankGroupMask`, `BankPos`/`BankMask`, `RowPos`/`RowMask`,
+`ColPos`/`ColMask` — are removed; the old builder overwrote whatever the caller
+set in them.
+
 ### State (mutable runtime data)
 
 Contains the transaction queue, sub-transaction queue, per-bank command queues,
 bank states (open/closed/refreshing), and statistics counters.
+
+### Resources, Ports, Middlewares, Comp
+
+- `Resources` — `Storage`, the `mem.Storage` that holds the data. **Required**:
+  `Build` panics if it is nil.
+- `Ports` — the `Top` and `Control` ports.
+- `Middlewares` — `Ctrl`, `Respond`, `Refresh`, `BankTick`, and `ParseTop`,
+  run in that order every cycle.
+- `Comp` — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+  ticking component.
 
 ### Bank States
 
@@ -92,37 +128,27 @@ Activate → Read/Write → Precharge → (next row)
 All scalar configuration is supplied as a whole through `WithSpec`. Start from a
 preset (or `Definition.DefaultSpec`), tweak the fields you need, and pass it in. Wiring is
 supplied through `WithSimulation` (which provides the engine and registers the
-component) and `WithResources` (shared objects such as backing storage). `Build`
-declares the `Top` and `Control` ports but does not create their instances.
-Build each port with `modeling.MakePortBuilder` (which registers the port with
-the simulation) and attach it with `AssignPort`, choosing the buffer size.
+component), `WithResources` (the backing storage), and `WithPorts` (the port
+instances).
 
 ```go
 spec := dram.DDR4Spec
 spec.Freq = 1200 * timing.MHz
 spec.PagePolicy = dram.PagePolicyOpen
 
-ctrl := dram.MakeBuilder().
+storage := mem.NewStorage(4 * mem.GB)
+
+ctrl := dram.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(dram.Resources{Storage: storage}).
+    WithPorts(dram.Ports{
+        Top:     messaging.NewPort(nil, 1024, 1024, "DRAM.Top"),
+        Control: messaging.NewPort(nil, 4, 4, "DRAM.Control"),
+    }).
     Build("DRAM")
 
-topPort := modeling.MakePortBuilder().
-    WithSimulation(sim).
-    WithComponent(ctrl).
-    WithSpec(modeling.PortSpec{BufSize: 1024}).
-    Build("Top")
-ctrl.AssignPort("Top", topPort)
-
-ctrlPort := modeling.MakePortBuilder().
-    WithSimulation(sim).
-    WithComponent(ctrl).
-    WithSpec(modeling.PortSpec{BufSize: 4}).
-    Build("Control")
-ctrl.AssignPort("Control", ctrlPort)
-
-topPort = ctrl.GetPortByName("Top")
+topPort := ctrl.Ports.Top
 ```
 
 ### Builder Methods
@@ -131,7 +157,18 @@ topPort = ctrl.GetPortByName("Top")
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` or a preset (DDR4Spec, HBM2Spec, ...) |
-| `WithResources(Resources{Storage: s})` | Shared backing storage (built internally if omitted) |
+| `WithResources(Resources{Storage: s})` | Backing storage (required; no longer built internally) |
+| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required) |
+
+`Build` panics if the storage is missing, if `NumChannel > 1` (instantiate one
+controller per channel), if `BurstLength` is 0, or if `Scheduler` or
+`AddrMapper` names an unknown strategy.
+
+The storage is indexed by the global request address, so it must cover every
+address the controller serves. To cover the whole geometry of a Spec, size it
+to `NumCol × NumRow × DeviceWidth/8 × NumBank × BusWidth/DeviceWidth × NumRank
+× NumChannel` bytes (4 GiB for `Definition.DefaultSpec`); storage is allocated
+lazily, so a large capacity costs nothing until it is touched.
 
 ### Commonly Tweaked Spec Fields
 
@@ -143,20 +180,24 @@ topPort = ctrl.GetPortByName("Top")
 | `BusWidth` / `BurstLength` | Data bus width (bits) and burst transfer length |
 | `PagePolicy` | `PagePolicyOpen` or `PagePolicyClose` |
 | `TransactionQueueSize` / `CommandQueueCapacity` | Queue depths |
-| `ChannelPos`/`Mask`, `RankPos`/`Mask`, `BankPos`/`Mask`, `RowPos`/`Mask`, ... | Address-bit positions for channel/rank/bank/row/column decode — **computed by `Build` from the geometry** (`NumChannel`/`NumRank`/`NumBank`/`NumRow`/`NumCol`, bus/burst); values passed via `WithSpec` are overwritten |
+| `ReadQueueSize` / `WriteQueueSize` / `WriteHighWatermark` / `WriteLowWatermark` | Separate read/write command queues and write drain (used when both sizes are > 0) |
+| `Scheduler` / `AddrMapper` | Strategy registry keys (`""` selects the default `FRFCFS` / `default`) |
 
 Storage is **global**: a request's address indexes the backing store directly,
-and `mapAddress` decodes that same global address into a channel/rank/bank/row/
-column location. There is no per-controller address conversion.
+and the address mapper decodes that same global address into a channel/rank/
+bank/row/column location. There is no per-controller address conversion.
 
-The decode bit positions are derived from the geometry by `Build`, not set by
-the caller. As a result this model is intended for **standalone / single
-controller** use (all presets are standalone). It does not currently support
-being one of several finely-interleaved controllers over shared storage: decode
-runs on the global address with builder-derived positions, so an upstream
-inter-controller interleave finer than the decode layout would alias. For a
-multi-controller memory system, use `mem/simplebankedmemory` (whose bank
-selector has an explicit bank-selection address conversion).
+The decode bit positions and masks are derived from the geometry
+(`NumChannel`/`NumRank`/`NumBankGroup`/`NumBank`/`NumRow`/`NumCol`, bus/burst)
+when the component is built; they are not Spec fields. From low to high: the
+access unit, column, bank group, bank, rank, channel, row. As a result this
+model is intended for **standalone / single controller** use (all presets are
+standalone). It does not currently support being one of several
+finely-interleaved controllers over shared storage: decode runs on the global
+address with geometry-derived positions, so an upstream inter-controller
+interleave finer than the decode layout would alias. For a multi-controller
+memory system, use `mem/simplebankedmemory` (whose bank selector has an
+explicit bank-selection address conversion).
 
 ## Statistics
 
@@ -177,10 +218,14 @@ Available counters: `TotalReadCommands`, `TotalWriteCommands`,
 
 ## Ports
 
-- **Top**: accepts `mem.ReadReq` and `mem.WriteReq`, returns
-  `mem.DataReadyRsp` and `mem.WriteDoneRsp`
-- **Control**: accepts `mem.ControlReq` (enable / pause / drain / reset),
-  returns `mem.ControlRsp`
+The system builder creates each port with `messaging.NewPort`, choosing its
+buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
+
+- **Top** (`mem` responder): accepts `memprotocol.ReadReq` and
+  `memprotocol.WriteReq`, returns `memprotocol.DataReadyRsp` and
+  `memprotocol.WriteDoneRsp`
+- **Control** (`mem.control` responder): accepts `memcontrolprotocol.Req`
+  (enable / pause / drain / reset), returns `memcontrolprotocol.Rsp`
 
 ## Validation
 

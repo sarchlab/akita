@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -42,7 +43,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		spec.BankLatency = 1
 		spec.DirLatency = 1
 
-		comp = MakeBuilder().
+		comp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
@@ -51,20 +52,13 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 					Port: messaging.RemotePort("LowerCache"),
 				},
 			}).
+			WithPorts(makePorts("L1Cache", 16)).
 			Build("L1Cache")
+		plugNoopConn(comp)
 
-		// Build only declares the ports; the caller assigns the instances and
-		// chooses their buffer sizes.
-		for _, name := range []string{"Top", "Bottom", "Control"} {
-			comp.AssignPort(name,
-				messaging.NewPort(comp, 16, 16, comp.Name()+"."+name))
-		}
-		topPort = comp.GetPortByName("Top")
-		botPort = comp.GetPortByName("Bottom")
-		ctrlPort = comp.GetPortByName("Control")
-		for _, p := range []messaging.Port{topPort, botPort, ctrlPort} {
-			(&ccNoopConn{}).PlugIn(p)
-		}
+		topPort = comp.Ports.Top
+		botPort = comp.Ports.Bottom
+		ctrlPort = comp.Ports.Control
 	}
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
@@ -120,7 +114,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 	// a later flush write-back can be identified by its payload. It returns
 	// the block's set ID so the test can inspect it after the verb.
 	residentDirtyBlock := func(addr uint64, fill byte) int {
-		setID := cache.DirectorySetID(addr, blockSize, comp.Spec().NumSets)
+		setID := cache.DirectorySetID(addr, blockSize, comp.Spec().numSets())
 		block := &comp.State.DirectoryState.Sets[setID].Blocks[0]
 		block.Tag = addr
 		block.PID = 0
@@ -157,7 +151,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		// can answer later. Until we answer, the cache cannot be quiescent.
 		botReads := make([]memprotocol.ReadReq, 0, n)
 		for i := 0; i < 64 && len(botReads) < n; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := botPort.RetrieveOutgoing()
 				if !ok {
@@ -182,7 +176,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		// Tick a small window WITHOUT answering Bottom. Drain must wait: no
 		// ControlRsp yet, state is Draining, still not quiescent.
 		for range 5 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok {
 					Expect(rsp.Command).ToNot(Equal(memcontrolprotocol.CmdDrain),
@@ -204,7 +198,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		var drainRsp memcontrolprotocol.Rsp
 		gotDrainRsp := false
 		for i := 0; i < 4096 && !gotDrainRsp; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := topPort.RetrieveOutgoing()
 				if !ok {
@@ -245,7 +239,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		// Pause is not dequeued, so it is never acked and the flush state is
 		// preserved (aborting it would strand the flusher).
 		for range 16 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			_, present0 := ctrlPort.RetrieveOutgoing()
 			Expect(present0).To(BeFalse())
 		}
@@ -263,7 +257,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		topPort.Deliver(makeRead(0))
 
 		for range 5 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 		}
 
 		// The request is neither consumed nor turned into work, and nothing is
@@ -280,7 +274,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 			// Get a transaction in flight via one read miss.
 			topPort.Deliver(makeRead(0x10000))
 			for i := 0; i < 64 && len(comp.State.Transactions) == 0; i++ {
-				comp.Tick()
+				modelingtest.Tick(comp)
 			}
 			Expect(comp.State.Transactions).ToNot(BeEmpty())
 
@@ -292,7 +286,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 			var rsp memcontrolprotocol.Rsp
 			gotRsp := false
 			for i := 0; i < 64 && !gotRsp; i++ {
-				comp.Tick()
+				modelingtest.Tick(comp)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					rsp, gotRsp = out.(memcontrolprotocol.Rsp)
 				}
@@ -326,7 +320,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 
 		var rsps []memcontrolprotocol.Rsp
 		for range 16 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := ctrlPort.RetrieveOutgoing()
 				if !ok {
@@ -369,7 +363,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		var rsp memcontrolprotocol.Rsp
 		gotRsp := false
 		for i := 0; i < 64 && !gotRsp; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				rsp, gotRsp = out.(memcontrolprotocol.Rsp)
 			}
@@ -407,7 +401,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 			var rsp memcontrolprotocol.Rsp
 			gotRsp := false
 			for i := 0; i < 64 && !gotRsp; i++ {
-				comp.Tick()
+				modelingtest.Tick(comp)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					rsp, gotRsp = out.(memcontrolprotocol.Rsp)
 				}
@@ -445,7 +439,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		var flushRsp memcontrolprotocol.Rsp
 		gotFlushRsp := false
 		for i := 0; i < 4096 && !gotFlushRsp; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := botPort.RetrieveOutgoing()
 				if !ok {

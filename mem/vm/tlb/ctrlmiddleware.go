@@ -4,27 +4,27 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type ctrlMiddleware struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *ctrlMiddleware) controlPort() messaging.Port {
-	return m.comp.GetPortByName("Control")
+	return m.comp.Ports.Control
 }
 
 func (m *ctrlMiddleware) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
 func (m *ctrlMiddleware) bottomPort() messaging.Port {
-	return m.comp.GetPortByName("Bottom")
+	return m.comp.Ports.Bottom
 }
 
-func (m *ctrlMiddleware) Tick() bool {
+func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 	madeProgress = m.completePendingDrain() || madeProgress
 	// Control commands are processed serially: while an async verb (Drain) is
@@ -202,7 +202,7 @@ func invalidateEntries(
 ) {
 	matchAddr := make(map[uint64]bool, len(addresses))
 	for _, a := range addresses {
-		matchAddr[a/spec.PageSize*spec.PageSize] = true
+		matchAddr[a/spec.pageSize()*spec.pageSize()] = true
 	}
 
 	for si := range state.Sets {

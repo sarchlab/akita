@@ -1,10 +1,10 @@
 package writethroughcache
 
 import (
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/queueing"
 
@@ -37,33 +37,29 @@ var _ = Describe("Bottom Parser", func() {
 			},
 		}
 
-		c = &pipelineMW{}
-		c.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
-				Log2BlockSize:    6,
-				WayAssociativity: 4,
-				NumMSHREntry:     4,
-				NumSets:          16,
-				NumBanks:         1,
-				WritePolicyType:  "write-around",
-			}).
-			Build("Cache")
-
-		// bottomPort is a real port with no owning component, so Deliver does
-		// not try to schedule a tick on the engine-less comp. The bottomParser
-		// resolves it lazily via GetPortByName("Bottom"), so it is still
-		// declared and assigned a real port.
-		bottomPort = messaging.NewPort(nil, 4, 4, "Cache.Bottom")
-		(&noopConn{}).PlugIn(bottomPort)
-		c.comp.DeclarePort("Bottom")
-		c.comp.AssignPort("Bottom", bottomPort)
-
 		// Initialize directoryState before SetState so both buffers match
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
-		c.comp.State = initialState
+		ports := makePorts("Cache", 4)
+		c = buildStageTestCache(
+			Spec{
+				Freq:             1 * timing.GHz,
+				Log2BlockSize:    6,
+				WayAssociativity: 4,
+				NumMSHREntry:     4,
+				TotalByteSize:    4 * mem.KB, // 16 sets
+				NumBanks:         1,
+				WritePolicyType:  "write-around",
+			},
+			Resources{Storage: mem.NewStorage(4 * mem.KB)},
+			ports,
+			initialState,
+		)
+
+		// The bottomParser reads responses from the cache's real Bottom port,
+		// so the tests deliver into it.
+		bottomPort = ports.Bottom
+		(&noopConn{}).PlugIn(bottomPort)
 
 		p = &bottomParser{cache: c}
 	})

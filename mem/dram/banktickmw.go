@@ -2,22 +2,25 @@ package dram
 
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
+// bankTickMW drives the banks. Its timing tables, completion delays, and
+// controller strategies are immutable, derived from the Spec when the
+// component is built; all mutable data lives in State.
 type bankTickMW struct {
-	comp      *modeling.Component[Spec, State, Resources]
+	comp      *Comp
 	timing    dramTiming
 	cmdCycles map[commandKind]int
 	ctrl      *controller
 }
 
-// Tick advances per-bank timing, issues a command, and refills the command
+// Handle advances per-bank timing, issues a command, and refills the command
 // queue. Refresh runs in a separate middleware ahead of this one and stalls
 // issue via State.RefreshInProgress. Paused DRAM freezes the timing pipeline;
 // draining DRAM continues so the drain can converge.
-func (m *bankTickMW) Tick() bool {
+func (m *bankTickMW) Handle(_ timing.Event) bool {
 	next := &m.comp.State
 	if next.ControlState == memcontrolprotocol.StatePaused {
 		return false

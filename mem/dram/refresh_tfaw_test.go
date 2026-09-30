@@ -18,16 +18,8 @@ var _ = Describe("tFAW and Refresh", func() {
 			spec = DDR4Spec
 			spec.TFAW = 28
 
-			b := MakeBuilder().WithSpec(spec)
-			b.spec.BurstCycle = b.spec.BurstLength / 2
-			b.spec.TRL = b.spec.TAL + b.spec.TCL
-			b.spec.TWL = b.spec.TAL + b.spec.TCWL
-			b.spec.ReadDelay = b.spec.TRL + b.spec.BurstCycle
-			b.spec.WriteDelay = b.spec.TRL + b.spec.BurstCycle
-			b.spec.TRC = b.spec.TRAS + b.spec.TRP
-
-			timing = b.generateTiming()
-			cmdCycles = b.buildCmdCycles()
+			timing = generateTiming(&spec)
+			cmdCycles = buildCmdCycles(&spec)
 
 			state = &State{
 				BankStates: initBankStatesFlat(

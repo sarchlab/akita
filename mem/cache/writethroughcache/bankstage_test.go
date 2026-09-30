@@ -3,7 +3,6 @@ package writethroughcache
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/queueing"
 
@@ -38,27 +37,24 @@ var _ = Describe("Bankstage", func() {
 			},
 		}
 
-		c = &pipelineMW{
-			storage: storage,
-		}
-		c.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
-				BankLatency:      10,
-				Log2BlockSize:    6,
-				WayAssociativity: 4,
-				NumSets:          16,
-				NumBanks:         1,
-				NumReqPerCycle:   1,
-				WritePolicyType:  "write-around",
-			}).
-			Build("Cache")
-
 		// Initialize directoryState before SetState so both buffers match
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
-		c.comp.State = initialState
+		c = buildStageTestCache(
+			Spec{
+				Freq:             1 * timing.GHz,
+				BankLatency:      10,
+				Log2BlockSize:    6,
+				WayAssociativity: 4,
+				TotalByteSize:    4 * mem.KB, // 16 sets
+				NumBanks:         1,
+				NumReqPerCycle:   1,
+				WritePolicyType:  "write-around",
+			},
+			Resources{Storage: storage},
+			makePorts("Cache", 4),
+			initialState,
+		)
 
 		s = &bankStage{
 			cache:          c,

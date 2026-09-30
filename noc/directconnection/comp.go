@@ -1,9 +1,13 @@
-// Package directconnection provides directconnection
+// Package directconnection provides a connection that delivers messages
+// between the ports plugged into it without latency.
 package directconnection
 
 import (
 	"fmt"
+	"io"
+	"sync"
 
+	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -29,10 +33,6 @@ func (p *ports) addPort(port messaging.Port) {
 	p.portMap[port.AsRemote()] = len(p.ports) - 1
 }
 
-func (p *ports) getPortIndex(index int) messaging.Port {
-	return p.ports[index]
-}
-
 func (p *ports) getPortByName(name messaging.RemotePort) messaging.Port {
 	portIndex, found := p.portMap[name]
 	if !found {
@@ -41,29 +41,44 @@ func (p *ports) getPortByName(name messaging.RemotePort) messaging.Port {
 	return p.ports[portIndex]
 }
 
-func (p *ports) list() []messaging.Port {
-	return p.ports
-}
-
-func (p *ports) len() int {
-	return len(p.ports)
-}
-
-// Comp is a DirectConnection that connects components without latency.
+// Comp is a DirectConnection that connects components without latency. It is
+// a connection, not a component: ports plug into it during wiring. It ticks on
+// secondary tick events, so it runs after the components of the same cycle.
 type Comp struct {
-	*modeling.Component[Spec, State, modeling.None]
+	hooking.HookableBase
+
+	// State is the connection's mutable data, saved in checkpoints.
+	State State
+
+	lock  sync.Mutex
+	name  string
+	spec  Spec
+	sim   timing.Simulation
+	ticks *modeling.TickScheduler
+	ports ports
 }
 
-func (c *Comp) mw() *middleware {
-	return c.Middlewares()[0].(*middleware)
+// Name returns the connection's name.
+func (c *Comp) Name() string {
+	return c.name
+}
+
+// Simulation returns the simulation the connection belongs to.
+func (c *Comp) Simulation() timing.Simulation {
+	return c.sim
+}
+
+// CurrentTime returns the simulation's current time.
+func (c *Comp) CurrentTime() timing.VTimeInPicoSec {
+	return c.ticks.CurrentTime()
 }
 
 // PlugIn marks the port connects to this DirectConnection.
 func (c *Comp) PlugIn(port messaging.Port) {
-	c.Lock()
-	defer c.Unlock()
+	c.lock.Lock()
+	defer c.lock.Unlock()
 
-	c.mw().ports.addPort(port)
+	c.ports.addPort(port)
 	port.SetConnection(c)
 }
 
@@ -74,42 +89,45 @@ func (c *Comp) Unplug(_ messaging.Port) {
 
 // NotifyAvailable is called by a port to notify the connection can deliver again.
 func (c *Comp) NotifyAvailable(p messaging.Port) {
-	for _, port := range c.mw().ports.list() {
+	for _, port := range c.ports.ports {
 		if port == p {
 			continue
 		}
 		port.NotifyAvailable()
 	}
-	c.TickNow()
+	c.ticks.TickNow()
 }
 
 // NotifySend is called by a port to notify the connection can start ticking.
 func (c *Comp) NotifySend() {
-	c.TickNow()
+	c.ticks.TickNow()
 }
 
-type middleware struct {
-	comp  *modeling.Component[Spec, State, modeling.None]
-	ports ports
+// Handle forwards messages on a tick and schedules the next tick if any
+// message moved.
+func (c *Comp) Handle(_ timing.Event) {
+	if c.forward() {
+		c.ticks.TickLater()
+	}
 }
 
-func (m *middleware) Tick() bool {
-	state := m.comp.State
-	numPorts := m.ports.len()
+// forward moves the messages waiting in the plugged-in ports to their
+// destinations, starting from a round-robin port.
+func (c *Comp) forward() bool {
+	numPorts := len(c.ports.ports)
 	madeProgress := false
 
 	for i := range numPorts {
-		portID := (i + state.NextPortID) % numPorts
-		port := m.ports.getPortIndex(portID)
-		madeProgress = m.forwardMany(port) || madeProgress
+		portID := (i + c.State.NextPortID) % numPorts
+		madeProgress = c.forwardMany(c.ports.ports[portID]) || madeProgress
 	}
 
-	(&m.comp.State).NextPortID = (state.NextPortID + 1) % numPorts
+	c.State.NextPortID = (c.State.NextPortID + 1) % numPorts
 
 	return madeProgress
 }
 
-func (m *middleware) forwardMany(port messaging.Port) bool {
+func (c *Comp) forwardMany(port messaging.Port) bool {
 	madeProgress := false
 	for {
 		head, ok := port.PeekOutgoing()
@@ -117,7 +135,7 @@ func (m *middleware) forwardMany(port messaging.Port) bool {
 			break
 		}
 		dst := head.Meta().Dst
-		dstPort := m.ports.getPortByName(dst)
+		dstPort := c.ports.getPortByName(dst)
 		if !dstPort.CanDeliver() {
 			break
 		}
@@ -127,4 +145,16 @@ func (m *middleware) forwardMany(port messaging.Port) bool {
 		port.RetrieveOutgoing()
 	}
 	return madeProgress
+}
+
+// SaveCheckpoint writes the connection's spec hash, State, and tick-scheduler
+// guard.
+func (c *Comp) SaveCheckpoint(w io.Writer) error {
+	return modeling.WriteCheckpoint(w, c.spec, c.State, c.ticks)
+}
+
+// LoadCheckpoint restores the State and tick-scheduler guard after verifying
+// that the saved spec hash matches this connection's.
+func (c *Comp) LoadCheckpoint(r io.Reader) error {
+	return modeling.ReadCheckpoint(r, c.spec, &c.State, c.ticks)
 }

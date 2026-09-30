@@ -1,31 +1,50 @@
 package tlb
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// Definition declares the TLB component: its default configuration and
-// its port topology. The builder consumes it at runtime and tooling reads it
-// statically, so it is the single source of truth for both.
-var Definition = modeling.ComponentDef[Spec]{
-	Name: "TLB",
+// Definition declares the TLB, a ticking component: its default
+// configuration and its behavior. Its ports and middlewares are the fields of
+// Ports and Middlewares. The system builder builds an instance with
+// Definition.Builder()...Build(name); tooling reads the same declaration
+// statically.
+var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 	DefaultSpec: Spec{
 		Freq:           1 * timing.GHz,
 		NumReqPerCycle: 4,
 		NumSets:        1,
 		NumWays:        32,
 		Log2PageSize:   12,
-		PageSize:       4096,
 		MSHRSize:       4,
 		Latency:        4,
 	},
-	Ports: []modeling.PortDef{
-		{Name: "Top", Roles: []*messaging.Role{vmprotocol.Responder}},
-		{Name: "Bottom", Roles: []*messaging.Role{vmprotocol.Requester}},
-		{Name: "Control", Roles: []*messaging.Role{memcontrolprotocol.Responder}},
-	},
+	NewState:       newState,
+	NewMiddlewares: newMiddlewares,
+}
+
+func newState(c *Comp) State {
+	name, spec := c.Name(), c.Spec()
+
+	return State{
+		TLBState: tlbStateEnable,
+		Sets:     initSets(spec.NumSets, spec.NumWays),
+		Pipeline: queueing.NewPipeline[pipelineTLBReqState](
+			spec.NumReqPerCycle,
+			spec.Latency,
+		),
+		BufferItems: queueing.NewBuffer[pipelineTLBReqState](
+			name+".BufferItems",
+			spec.NumReqPerCycle,
+		),
+	}
+}
+
+func newMiddlewares(c *Comp) Middlewares {
+	return Middlewares{
+		Ctrl: &ctrlMiddleware{comp: c},
+		TLB:  &tlbMiddleware{comp: c},
+	}
 }

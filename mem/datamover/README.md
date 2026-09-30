@@ -9,11 +9,11 @@ two memory-facing ports.
 
 ## How It Works
 
-A move is driven by a single `DataMoveRequest` on the `Control` port. The
+A move is driven by a single `DataMoveRequest` on the `Top` port. The
 component processes one transaction at a time:
 
 ```
-Control ──► DataMoveRequest ──► dataTransferMW ──► DataMoveResponse ──► Control
+Top ──► DataMoveRequest ──► dataTransferMW ──► DataMoveResponse ──► Top
                                       │
               ┌───────────────────────┴────────────────────────┐
         read side (src)                                  write side (dst)
@@ -45,7 +45,7 @@ and write transfer sizes.
 ## Key Types
 
 ```go
-type Comp = modeling.Component[Spec, State, modeling.None]
+type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
 
 type DataMoveRequest struct {
     messaging.MsgMeta
@@ -65,16 +65,21 @@ type DataMoveResponse struct {
   read/write maps and next read/write addresses) and the sliding `Buffer`.
 - **Resources** — the inside/outside `mem.AddressToPortMapper`s describing which
   remote port serves a given address on each side. They are not checkpointed;
-  the setup that rebuilds the data mover supplies them.
+  the setup that rebuilds the data mover supplies them. A move panics if the
+  mapper for a side it touches is nil.
+- **Ports** — the `Top`, `Inside`, `Outside`, and `Control` ports.
+- **Middlewares** — `Ctrl` (control commands), `CtrlParse` (admits moves and
+  completes finished ones), and `DataTransfer` (reads and writes), run in that
+  order every cycle.
+- **Comp** — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+  ticking component.
 
 ## Builder Pattern
 
 Configuration is supplied as a whole through `WithSpec` (start from
-`Definition.DefaultSpec`); the engine and registration come from `WithSimulation`; the
-side mappers come from `WithResources`. `Build` declares the component's `Top`,
-`Inside`, `Outside`, and `Control` ports; the caller builds the port instances
-(choosing the buffer sizes) with `modeling.MakePortBuilder` and attaches them
-with `AssignPort`.
+`Definition.DefaultSpec`); the engine and registration come from
+`WithSimulation`; the side mappers come from `WithResources`; the port
+instances come from `WithPorts`.
 
 ```go
 spec := datamover.Definition.DefaultSpec
@@ -82,25 +87,22 @@ spec.BufferSize = 4096
 spec.InsideByteGranularity = 64
 spec.OutsideByteGranularity = 64
 
-mover := datamover.MakeBuilder().
+mover := datamover.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(datamover.Resources{
         InsideMapper:  &mem.SinglePortMapper{Port: l2Port},
         OutsideMapper: &mem.SinglePortMapper{Port: dramPort},
     }).
+    WithPorts(datamover.Ports{
+        Top:     messaging.NewPort(nil, 16, 16, "DMA.Top"),
+        Inside:  messaging.NewPort(nil, 16, 16, "DMA.Inside"),
+        Outside: messaging.NewPort(nil, 16, 16, "DMA.Outside"),
+        Control: messaging.NewPort(nil, 16, 16, "DMA.Control"),
+    }).
     Build("DMA")
 
-for _, name := range []string{"Top", "Inside", "Outside", "Control"} {
-    p := modeling.MakePortBuilder().
-        WithSimulation(sim).
-        WithComponent(mover).
-        WithSpec(modeling.PortSpec{BufSize: 16}).
-        Build(name)
-    mover.AssignPort(name, p)
-}
-
-ctrlPort := mover.GetPortByName("Control")
+ctrlPort := mover.Ports.Control
 ```
 
 ### Builder Methods
@@ -110,11 +112,17 @@ ctrlPort := mover.GetPortByName("Control")
 | `WithSimulation(r)` | Source of the engine and component registration (required). |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec`. |
 | `WithResources(r)` | The inside/outside address-to-port mappers. |
+| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required). |
 
 ## Ports
 
-- **Control** — accepts `DataMoveRequest`, returns `DataMoveResponse` to the
+The system builder creates each port with `messaging.NewPort`, choosing its
+buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
+
+- **Top** — accepts `DataMoveRequest`, returns `DataMoveResponse` to the
   requester once the move completes.
 - **Inside** / **Outside** — the two memory-facing ports. Whichever side a move
   names as source issues `mem.ReadReq`s (receiving `mem.DataReadyRsp`); the
   destination side issues `mem.WriteReq`s (receiving `mem.WriteDoneRsp`).
+- **Control** — accepts the uniform `memcontrolprotocol` commands (Enable,
+  Pause, Drain, Reset).

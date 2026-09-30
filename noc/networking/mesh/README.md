@@ -81,9 +81,9 @@ connector := mesh.NewConnector().
 
 connector.CreateNetwork("Mesh")
 
-connector.AddTile([3]int{0, 0, 0}, []messaging.Port{tile00.GetPortByName("Net")})
-connector.AddTile([3]int{1, 0, 0}, []messaging.Port{tile10.GetPortByName("Net")})
-connector.AddTile([3]int{0, 1, 0}, []messaging.Port{tile01.GetPortByName("Net")})
+connector.AddTile([3]int{0, 0, 0}, []messaging.Port{tile00.Ports.Net})
+connector.AddTile([3]int{1, 0, 0}, []messaging.Port{tile10.Ports.Net})
+connector.AddTile([3]int{0, 1, 0}, []messaging.Port{tile01.Ports.Net})
 
 connector.EstablishNetwork()
 ```

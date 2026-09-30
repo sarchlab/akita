@@ -7,35 +7,33 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
-	"github.com/sarchlab/akita/v5/tracing"
-
-	// respondPipelineMW handles translation responses and bottom-port responses.
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
+// respondPipelineMW handles translation responses and bottom-port responses.
 type respondPipelineMW struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *respondPipelineMW) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
 func (m *respondPipelineMW) bottomPort() messaging.Port {
-	return m.comp.GetPortByName("Bottom")
+	return m.comp.Ports.Bottom
 }
 
 func (m *respondPipelineMW) translationPort() messaging.Port {
-	return m.comp.GetPortByName("Translation")
+	return m.comp.Ports.Translation
 }
 
-// Tick runs the respond pipeline: respond + parseTranslation. It is
+// Handle runs the respond pipeline: respond + parseTranslation. It is
 // gated by ControlState — paused agents do not advance in-flight
 // transactions; draining and enabled agents do, so a Drain can
 // converge.
-func (m *respondPipelineMW) Tick() bool {
+func (m *respondPipelineMW) Handle(_ timing.Event) bool {
 	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}

@@ -24,11 +24,8 @@ type obFakeComp struct {
 func (c *obFakeComp) Name() string                       { return c.name }
 func (c *obFakeComp) CurrentTime() timing.VTimeInPicoSec { return c.time }
 
-func (c *obFakeComp) AssignPort(string, messaging.Port)   {}
-func (c *obFakeComp) GetPortByName(string) messaging.Port { return nil }
-func (c *obFakeComp) AllPorts() []messaging.Port          { return nil }
-func (c *obFakeComp) NotifyRecv(messaging.Port)           {}
-func (c *obFakeComp) NotifyPortFree(messaging.Port)       {}
+func (c *obFakeComp) NotifyRecv(messaging.Port)     {}
+func (c *obFakeComp) NotifyPortFree(messaging.Port) {}
 
 // obRecordingTracer captures the task events the hook produces.
 type obRecordingTracer struct {

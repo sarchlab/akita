@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/sarchlab/akita/v5/tracing/tracingtest"
@@ -50,7 +51,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	read.Dst = topPort.AsRemote()
 	read.TrafficClass = "memprotocol.ReadReq"
 	topPort.Deliver(read)
-	tick(rob)
+	modelingtest.Tick(rob)
 
 	if len(rob.State.Transactions) != 1 {
 		t.Fatalf("expected 1 in-flight transaction, got %d",
@@ -71,7 +72,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	acked := false
 	for range 16 {
-		tick(rob)
+		modelingtest.Tick(rob)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {

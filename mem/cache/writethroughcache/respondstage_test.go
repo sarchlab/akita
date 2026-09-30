@@ -3,11 +3,10 @@ package writethroughcache
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 var _ = Describe("Respond Stage", func() {
@@ -18,21 +17,20 @@ var _ = Describe("Respond Stage", func() {
 	)
 
 	BeforeEach(func() {
-		mw = &pipelineMW{}
-		mw.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{}).
-			Build("Cache")
-
 		// topPort is a real, single-slot port (owned by the component) so the
 		// "cannot send" cases can be forced by pre-filling its outgoing buffer.
-		// The pipeline resolves it lazily via GetPortByName("Top"), so it is
-		// declared and assigned a real port.
-		topPort = messaging.NewPort(mw.comp, 1, 1, "Cache.Top")
+		ports := makePorts("Cache", 4)
+		ports.Top = messaging.NewPort(nil, 1, 1, "Cache.Top")
+
+		mw = buildStageTestCache(
+			Definition.DefaultSpec,
+			Resources{Storage: mem.NewStorage(4 * mem.KB)},
+			ports,
+			State{},
+		)
+
+		topPort = ports.Top
 		(&noopConn{}).PlugIn(topPort)
-		mw.comp.DeclarePort("Top")
-		mw.comp.AssignPort("Top", topPort)
 
 		s = &respondStage{cache: mw}
 	})

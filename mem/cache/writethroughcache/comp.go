@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -20,12 +20,12 @@ type Spec struct {
 	MaxNumConcurrentTrans int         `json:"max_num_concurrent_trans"`
 	NumBanks              int         `json:"num_banks"`
 	NumMSHREntry          int         `json:"num_mshr_entry"`
-	NumSets               int         `json:"num_sets"`
 	TotalByteSize         uint64      `json:"total_byte_size"`
 	DirLatency            int         `json:"dir_latency"`
 
 	// WritePolicyType selects the write-policy strategy.
-	// Valid values: "write-around" (default), "write-evict", "write-through".
+	// Valid values: "write-around" (default, also used when empty),
+	// "write-evict", "write-through".
 	WritePolicyType string `json:"write_policy_type"`
 
 	// AddressMapperType ("single" or "interleaved") and InterleavingSize
@@ -33,6 +33,56 @@ type Spec struct {
 	// Resources.AddressMapper is injected.
 	AddressMapperType string `json:"address_mapper_type"`
 	InterleavingSize  uint64 `json:"interleaving_size"`
+}
+
+// blockSize returns the size of a cache line, 2^Log2BlockSize bytes.
+func (s Spec) blockSize() int {
+	return 1 << s.Log2BlockSize
+}
+
+// numSets returns the number of sets in the directory,
+// TotalByteSize / (WayAssociativity * 2^Log2BlockSize).
+func (s Spec) numSets() int {
+	return int(s.TotalByteSize / uint64(s.WayAssociativity*s.blockSize()))
+}
+
+// writePolicy returns the write policy, WritePolicyType, or "write-around" if
+// it is empty.
+func (s Spec) writePolicy() string {
+	if s.WritePolicyType == "" {
+		return "write-around"
+	}
+
+	return s.WritePolicyType
+}
+
+// Ports holds the writethroughcache's ports.
+type Ports struct {
+	// Top receives read and write requests from the upper level and returns
+	// their responses.
+	Top messaging.Port `akita:"role=mem/responder"`
+
+	// Bottom sends line fetches and written-through data to lower memory and
+	// receives their responses.
+	Bottom messaging.Port `akita:"role=mem/requester"`
+
+	// Control receives pause, drain, enable, reset, invalidate, and flush
+	// commands.
+	Control messaging.Port `akita:"role=mem.control/responder"`
+}
+
+// Middlewares holds the writethroughcache's behavior, run in field order every
+// cycle. Control runs before the data pipeline so that a Pause, Drain, or
+// Reset takes effect in the same cycle, before any Top or Bottom traffic
+// advances.
+type Middlewares struct {
+	// Ctrl handles every control command: Pause, Drain, Enable, Reset,
+	// Invalidate, and Flush.
+	Ctrl *ctrlMiddleware
+
+	// Pipeline runs the data pipeline: the intake, the directory, the banks,
+	// the bottom parser, and the respond stage.
+	Pipeline *pipelineMW
 }
 
 // State contains mutable runtime data for the writethroughcache.
@@ -153,16 +203,19 @@ func (t *transactionState) PID() vm.PID {
 }
 
 // Resources holds the shared resources and external wiring referenced by the
-// writethroughcache. Storage is the (optionally shared) backing storage.
-// AddressMapper routes requests to the lower-level modules; when it is not
-// supplied, Build creates one from Spec.AddressMapperType over RemotePorts.
-// Neither is serialized with the component state.
+// writethroughcache, supplied by the system builder. None of them is
+// serialized with the component state.
 type Resources struct {
+	// Storage is the data array. It is required; size it to hold at least
+	// Spec.TotalByteSize bytes.
 	Storage *mem.Storage
 
+	// AddressMapper routes requests to the lower-level modules. When it is
+	// not supplied, the cache creates one from Spec.AddressMapperType over
+	// RemotePorts. Only one of the two needs to be supplied.
 	AddressMapper mem.AddressToPortMapper `json:"-"`
 	RemotePorts   []messaging.RemotePort  `json:"-"`
 }
 
-// Comp is the writethroughcache component type.
-type Comp = modeling.Component[Spec, State, Resources]
+// Comp is the writethroughcache component, a ticking component.
+type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]

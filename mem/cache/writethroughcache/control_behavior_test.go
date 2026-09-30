@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -49,7 +50,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		spec.TotalByteSize = 64 * 1024
 		spec.MaxNumConcurrentTrans = 16
 
-		comp = MakeBuilder().
+		comp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
@@ -58,23 +59,12 @@ var _ = Describe("Writethrough cache control behavior", func() {
 					Port: messaging.RemotePort("LowerCache"),
 				},
 			}).
+			WithPorts(makePorts("L1Cache", 16)).
 			Build("L1Cache")
 
-		// Build declares the ports; assign every declared port instance
-		// (the caller now chooses the buffer sizes) before the component
-		// is ticked.
-		for _, name := range []string{"Top", "Bottom", "Control"} {
-			p := modeling.MakePortBuilder().
-				WithSimulation(sim).
-				WithComponent(comp).
-				WithSpec(modeling.PortSpec{BufSize: 16}).
-				Build(name)
-			comp.AssignPort(name, p)
-		}
-
-		topPort = comp.GetPortByName("Top")
-		bottomPort = comp.GetPortByName("Bottom")
-		ctrlPort = comp.GetPortByName("Control")
+		topPort = comp.Ports.Top
+		bottomPort = comp.Ports.Bottom
+		ctrlPort = comp.Ports.Control
 		for _, p := range []messaging.Port{topPort, bottomPort, ctrlPort} {
 			(&ccNoopConn{}).PlugIn(p)
 		}
@@ -137,7 +127,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		ds := &comp.State.DirectoryState
 		cacheLineID := addr / blockSize * blockSize
 		setID, _, _ := cache.DirectoryLookup(
-			ds, comp.Spec().NumSets, int(blockSize), pid, cacheLineID)
+			ds, comp.Spec().numSets(), int(blockSize), pid, cacheLineID)
 		wayID := 0
 		block := &ds.Sets[setID].Blocks[wayID]
 		block.IsValid = true
@@ -182,7 +172,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		// in-flight transactions waiting on them.
 		bottomReads := []memprotocol.ReadReq{}
 		for i := 0; i < 256 && len(bottomReads) < n; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			bottomReads = append(bottomReads, captureBottomReads()...)
 		}
 		Expect(bottomReads).To(HaveLen(n))
@@ -198,7 +188,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		// Tick a window WITHOUT feeding any bottom responses. Drain must wait
 		// because transactions are still in flight.
 		for range 16 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			// No completion can occur, so no DataReadyRsp should leave Top.
 			_, present0 := topPort.RetrieveOutgoing()
 			Expect(present0).To(BeFalse())
@@ -219,7 +209,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		var drainRsp memcontrolprotocol.Rsp
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 
 			for {
 				out, ok := topPort.RetrieveOutgoing()
@@ -258,7 +248,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		topPort.Deliver(makeRead(0))
 		bottomReads := []memprotocol.ReadReq{}
 		for i := 0; i < 256 && len(bottomReads) == 0; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			bottomReads = append(bottomReads, captureBottomReads()...)
 		}
 		Expect(bottomReads).To(HaveLen(1))
@@ -270,12 +260,12 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		// strand the drain.
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		ctrlPort.Deliver(drain)
-		comp.Tick()
+		modelingtest.Tick(comp)
 		Expect(comp.State.IsDraining).To(BeTrue())
 
 		pause := makeCtrlReq(memcontrolprotocol.CmdPause)
 		ctrlPort.Deliver(pause)
-		comp.Tick()
+		modelingtest.Tick(comp)
 
 		// Feed the fill; the in-flight read retires and the drain still acks.
 		for _, br := range bottomReads {
@@ -283,7 +273,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		}
 		drainAcked, pauseAcked := false, false
 		for i := 0; i < 4096 && !drainAcked; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := ctrlPort.RetrieveOutgoing()
 				if !ok {
@@ -312,7 +302,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		topPort.Deliver(makeRead(0))
 		bottomReads := []memprotocol.ReadReq{}
 		for i := 0; i < 256 && len(bottomReads) == 0; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			bottomReads = append(bottomReads, captureBottomReads()...)
 		}
 		Expect(bottomReads).To(HaveLen(1))
@@ -323,7 +313,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		ctrlPort.Deliver(pause)
 		pausedAck := false
 		for i := 0; i < 64 && !pausedAck; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok && rsp.RspTo == pause.ID {
 					Expect(rsp.Success).To(BeTrue())
@@ -348,7 +338,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		var drainRsp memcontrolprotocol.Rsp
 		found := false
 		for i := 0; i < 4096 && !found; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdDrain {
@@ -373,7 +363,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		topPort.Deliver(makeRead(0))
 
 		for range 5 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 		}
 
 		// The request is neither consumed nor turned into work, and nothing
@@ -390,7 +380,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 			// Get a read miss in flight.
 			topPort.Deliver(makeRead(0))
 			for i := 0; i < 256 && inflightCount() == 0; i++ {
-				comp.Tick()
+				modelingtest.Tick(comp)
 			}
 			Expect(inflightCount()).To(BeNumerically(">", 0))
 
@@ -402,7 +392,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 			var rsp memcontrolprotocol.Rsp
 			found := false
 			for i := 0; i < 64 && !found; i++ {
-				comp.Tick()
+				modelingtest.Tick(comp)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					rsp, found = out.(memcontrolprotocol.Rsp)
 				}
@@ -443,7 +433,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 
 		var rsps []memcontrolprotocol.Rsp
 		for range 16 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := ctrlPort.RetrieveOutgoing()
 				if !ok {
@@ -471,7 +461,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		ctrlPort.Deliver(req)
 
 		for range 64 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.RspTo == req.ID {

@@ -3,7 +3,6 @@ package endpoint
 import (
 	"math"
 
-	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 
 	"github.com/sarchlab/akita/v5/timing"
@@ -57,19 +56,18 @@ func msgMetaToFlits(
 // outgoingMW handles the device→network path:
 // sendFlitOut, prepareMsg, prepareFlits.
 type outgoingMW struct {
-	comp             *modeling.Component[Spec, State, modeling.None]
-	devicePorts      []messaging.Port
-	defaultSwitchDst messaging.RemotePort
+	comp        *Comp
+	devicePorts []messaging.Port
 }
 
 // networkPort resolves the endpoint's network port by name. The instance is
 // assigned externally after Build, so it is resolved lazily.
 func (m *outgoingMW) networkPort() messaging.Port {
-	return m.comp.GetPortByName("NetworkPort")
+	return m.comp.Ports.NetworkPort
 }
 
-// Tick runs the outgoing stages.
-func (m *outgoingMW) Tick() bool {
+// Handle runs the outgoing stages on every tick.
+func (m *outgoingMW) Handle(_ timing.Event) bool {
 	madeProgress := false
 
 	madeProgress = m.sendFlitOut() || madeProgress
@@ -188,7 +186,7 @@ func (m *outgoingMW) prepareFlits() bool {
 		msgTaskID := m.comp.Simulation().NewID()
 		flits := msgMetaToFlits(
 			m.comp.Simulation(),
-			meta, spec, networkPortRemote, m.defaultSwitchDst, msgTaskID)
+			meta, spec, networkPortRemote, m.comp.Spec().DefaultSwitchDst, msgTaskID)
 
 		state.FlitsToSend = append(state.FlitsToSend, flits...)
 

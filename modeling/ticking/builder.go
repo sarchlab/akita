@@ -51,9 +51,9 @@ func (b Builder[S, T, R, P, M]) WithPorts(ports P) Builder[S, T, R, P, M] {
 }
 
 // Build creates the instance with the given name. It checks the
-// configuration, binds and registers the ports, creates the State with
-// NewState and the middlewares with NewMiddlewares, and registers the
-// instance with the simulation, in that order.
+// configuration, binds the ports, creates the State with NewState and the
+// middlewares with NewMiddlewares, and registers the ports and the instance
+// with the simulation, in that order, so a Build that fails registers nothing.
 func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 	naming.MustBeValid(name)
 
@@ -76,17 +76,13 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 		b.simulation, name, b.spec, b.resources, b.ports)
 
 	if b.def.NewState != nil {
-		c.State = b.def.NewState(name, b.spec)
+		c.State = b.def.NewState(c)
 	}
 
 	c.Middlewares = b.def.NewMiddlewares(c)
 	c.pipeline = modeling.OrderedMiddlewares(&c.Middlewares)
 
-	if handlers, ok := b.simulation.GetEngine().(timing.HandlerRegistry); ok {
-		handlers.RegisterHandler(name, c)
-	}
-
-	b.simulation.RegisterComponent(c)
+	modeling.Register(&c.ComponentBase)
 
 	return c
 }

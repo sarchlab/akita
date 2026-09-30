@@ -5,7 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/queueing"
 
@@ -35,8 +34,6 @@ var _ = Describe("Directory", func() {
 	}
 
 	BeforeEach(func() {
-		c = &pipelineMW{}
-
 		initialState := State{
 			DirBuf: queueing.NewBuffer[int]("Cache.DirBuf", 4),
 			BankBufs: []queueing.Buffer[int]{
@@ -55,34 +52,33 @@ var _ = Describe("Directory", func() {
 		// Initialize directoryState before SetState so both buffers match
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
-		c.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
+		// bottomPort is a real, single-slot port owned by the component.
+		// Success cases read the sent request back via RetrieveOutgoing;
+		// failure cases pre-fill the slot.
+		ports := makePorts("Cache", 4)
+		ports.Bottom = messaging.NewPort(nil, 1, 1, "Cache.Bottom")
+
+		c = buildStageTestCache(
+			Spec{
+				Freq:             1 * timing.GHz,
 				Log2BlockSize:    6,
 				NumReqPerCycle:   4,
 				WayAssociativity: 4,
 				NumMSHREntry:     4,
-				NumSets:          16,
+				TotalByteSize:    4 * mem.KB, // 16 sets
 				NumBanks:         1,
 				WritePolicyType:  "write-around",
-			}).
-			WithResources(Resources{
+			},
+			Resources{
+				Storage:       mem.NewStorage(4 * mem.KB),
 				AddressMapper: &mem.SinglePortMapper{Port: "DRAM"},
-			}).
-			Build("Cache")
+			},
+			ports,
+			initialState,
+		)
 
-		// bottomPort is a real, single-slot port owned by the component.
-		// Success cases read the sent request back via RetrieveOutgoing;
-		// failure cases pre-fill the slot. The directory stage resolves it
-		// lazily via GetPortByName("Bottom"), so it is declared and assigned a
-		// real port.
-		bottomPort = messaging.NewPort(c.comp, 1, 1, "Cache.Bottom")
+		bottomPort = ports.Bottom
 		(&noopConn{}).PlugIn(bottomPort)
-		c.comp.DeclarePort("Bottom")
-		c.comp.AssignPort("Bottom", bottomPort)
-
-		c.comp.State = initialState
 
 		d = &directory{
 			cache: c,

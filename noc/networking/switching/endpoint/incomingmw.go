@@ -3,8 +3,8 @@ package endpoint
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/packetization"
+	"github.com/sarchlab/akita/v5/timing"
 
 	"github.com/sarchlab/akita/v5/tracing"
 
@@ -14,18 +14,18 @@ import (
 )
 
 type incomingMW struct {
-	comp        *modeling.Component[Spec, State, modeling.None]
+	comp        *Comp
 	devicePorts []messaging.Port
 }
 
 // networkPort resolves the endpoint's network port by name. The instance is
 // assigned externally after Build, so it is resolved lazily.
 func (m *incomingMW) networkPort() messaging.Port {
-	return m.comp.GetPortByName("NetworkPort")
+	return m.comp.Ports.NetworkPort
 }
 
-// Tick runs the incoming stages.
-func (m *incomingMW) Tick() bool {
+// Handle runs the incoming stages on every tick.
+func (m *incomingMW) Handle(_ timing.Event) bool {
 	madeProgress := false
 
 	madeProgress = m.tryDeliver() || madeProgress

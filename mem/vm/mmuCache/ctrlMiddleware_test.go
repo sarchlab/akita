@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -34,26 +35,25 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
-		comp = MakeBuilder().
+		comp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
+			WithPorts(defaultPorts("MMUCache")).
 			Build("MMUCache")
 		comp.State.CurrentState = mmuCacheStatePause
 
-		assignDefaultPorts(sim, comp)
-
-		topPort = comp.GetPortByName("Top")
-		bottomPort = comp.GetPortByName("Bottom")
-		controlPort = comp.GetPortByName("Control")
+		topPort = comp.Ports.Top
+		bottomPort = comp.Ports.Bottom
+		controlPort = comp.Ports.Control
 		(&noopConn{}).PlugIn(topPort)
 		(&noopConn{}).PlugIn(bottomPort)
 		(&noopConn{}).PlugIn(controlPort)
 
-		ctrl = &ctrlMiddleware{comp: comp}
+		ctrl = comp.Middlewares.Ctrl
 	})
 
 	It("should do nothing when no control message", func() {
-		madeProgress := ctrl.Tick()
+		madeProgress := ctrl.Handle(modelingtest.TickEvent(comp))
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -187,16 +187,18 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		spec.LatencyPerLevel = 100
 
 		reg2 := sim
-		comp2 := MakeBuilder().
+		comp2 := Definition.Builder().
 			WithSimulation(reg2).
 			WithSpec(spec).
+			WithPorts(defaultPorts("MMUCache2")).
 			Build("MMUCache2")
-		assignDefaultPorts(reg2, comp2)
-		control2 := comp2.GetPortByName("Control")
-		for _, name := range []string{"Top", "Bottom", "Control"} {
-			(&noopConn{}).PlugIn(comp2.GetPortByName(name))
+		control2 := comp2.Ports.Control
+		for _, p := range []messaging.Port{
+			comp2.Ports.Top, comp2.Ports.Bottom, comp2.Ports.Control,
+		} {
+			(&noopConn{}).PlugIn(p)
 		}
-		ctrl2 := &ctrlMiddleware{comp: comp2}
+		ctrl2 := comp2.Middlewares.Ctrl
 
 		next := &comp2.State
 		next.CurrentState = mmuCacheStatePause

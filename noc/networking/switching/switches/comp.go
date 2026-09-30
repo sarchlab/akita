@@ -2,7 +2,7 @@ package switches
 
 import (
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/queueing"
@@ -14,11 +14,51 @@ type Spec struct {
 	Freq timing.Freq `json:"freq"`
 }
 
-// Resources holds the external wiring referenced by the switch, namely the
-// routing table used to resolve flit destinations. The table is shared state
-// owned outside the switch, so it belongs in Resources rather than Spec.
+// Resources holds the external wiring referenced by the switch: the routing
+// table used to resolve flit destinations, and the link behind each port.
+// Both are supplied by the system builder and rebuilt, not saved, on restore.
 type Resources struct {
 	RoutingTable routing.Table `json:"-"`
+
+	// Links describes the link behind each port, index-aligned with
+	// Ports.Port.
+	Links []Link `json:"-"`
+}
+
+// Link describes the link behind one switch port.
+type Link struct {
+	// Remote is the port at the other end of the link: an endpoint's network
+	// port or another switch's port.
+	Remote messaging.RemotePort
+
+	// Latency is the number of cycles a flit spends in the switch after
+	// entering from this port.
+	Latency int
+
+	// NumInputChannel is the number of flits the port can inject into the
+	// switch per cycle.
+	NumInputChannel int
+
+	// NumOutputChannel is the number of flits the switch can eject to the
+	// port per cycle.
+	NumOutputChannel int
+}
+
+// Ports holds the switch's ports.
+type Ports struct {
+	// Port holds one port per link, index-aligned with Resources.Links.
+	Port []messaging.Port `akita:"role=packetization/link"`
+}
+
+// Middlewares holds the switch's behavior, run in field order every cycle.
+type Middlewares struct {
+	// RouteForwardSend sends flits out, forwards them to their output
+	// buffers, and routes them.
+	RouteForwardSend *routeForwardSendMW
+
+	// ReceivePipeline moves flits through the per-port pipelines and takes
+	// new flits in.
+	ReceivePipeline *receivePipelineMW
 }
 
 // routedFlit is a flit that has been received and assigned a route destination.
@@ -31,12 +71,12 @@ type routedFlit struct {
 
 // portComplexState is the serializable state of one port complex.
 type portComplexState struct {
-	LocalPortName    string                              `json:"local_port_name"`
-	RemotePort       messaging.RemotePort                `json:"remote_port"`
-	NumInputChannel  int                                 `json:"num_input_channel"`
-	NumOutputChannel int                                 `json:"num_output_channel"`
-	Latency          int                                 `json:"latency"`
-	PipelineWidth    int                                 `json:"pipeline_width"`
+	LocalPortName    string                        `json:"local_port_name"`
+	RemotePort       messaging.RemotePort          `json:"remote_port"`
+	NumInputChannel  int                           `json:"num_input_channel"`
+	NumOutputChannel int                           `json:"num_output_channel"`
+	Latency          int                           `json:"latency"`
+	PipelineWidth    int                           `json:"pipeline_width"`
 	Pipeline         queueing.Pipeline[routedFlit] `json:"pipeline"`
 	RouteBuffer      queueing.Buffer[routedFlit]   `json:"route_buffer"`
 	ForwardBuffer    queueing.Buffer[routedFlit]   `json:"forward_buffer"`
@@ -58,4 +98,4 @@ type State struct {
 }
 
 // Comp is the switch component.
-type Comp = modeling.Component[Spec, State, modeling.None]
+type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]

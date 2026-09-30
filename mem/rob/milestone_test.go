@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -139,7 +140,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 	driveRoundTrip := func(req memprotocol.AccessReq, rsp messaging.Msg) {
 		topPort.Deliver(req)
 
-		tick(rob)
+		modelingtest.Tick(rob)
 		shadowID := rob.State.Transactions[0].ReqToBottomID
 		bottomPort.RetrieveOutgoing()
 
@@ -152,8 +153,8 @@ var _ = Describe("Reorder Buffer milestones", func() {
 			bottomPort.Deliver(r)
 		}
 
-		tick(rob) // parseBottom records the response
-		tick(rob) // bottomUp retires the head and responds
+		modelingtest.Tick(rob) // parseBottom records the response
+		modelingtest.Tick(rob) // bottomUp retires the head and responds
 	}
 
 	It("records admission milestones on the buffer task and processing "+

@@ -3,24 +3,23 @@ package dram
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type respondMW struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *respondMW) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
-// Tick runs the respond stage twice (matching original execution
+// Handle runs the respond stage twice (matching original execution
 // order). Paused DRAM makes no progress; draining DRAM continues so
 // in-flight transactions can finish and the drain can converge.
-func (m *respondMW) Tick() bool {
+func (m *respondMW) Handle(_ timing.Event) bool {
 	next := &m.comp.State
 	if next.ControlState == memcontrolprotocol.StatePaused {
 		return false

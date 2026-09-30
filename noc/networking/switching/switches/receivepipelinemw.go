@@ -1,26 +1,26 @@
 package switches
 
 import (
-	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/packetization"
+	"github.com/sarchlab/akita/v5/timing"
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type receivePipelineMW struct {
-	comp      *modeling.Component[Spec, State, modeling.None]
+	comp      *Comp
 	portIndex map[messaging.RemotePort]int
 }
 
 // ports returns the switch's local ports, in index order aligned with
 // State.PortComplexes.
 func (m *receivePipelineMW) ports() []messaging.Port {
-	return m.comp.PortsInGroup("Port")
+	return m.comp.Ports.Port
 }
 
-// Tick runs movePipeline → startProcessing.
-func (m *receivePipelineMW) Tick() bool {
+// Handle runs movePipeline → startProcessing on every tick.
+func (m *receivePipelineMW) Handle(_ timing.Event) bool {
 	madeProgress := false
 
 	madeProgress = m.movePipeline() || madeProgress

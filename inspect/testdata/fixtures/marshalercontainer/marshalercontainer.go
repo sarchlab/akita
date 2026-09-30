@@ -1,9 +1,13 @@
+// Package marshalercontainer customizes its Spec's JSON but still holds a
+// slice. The inspector must reject it: Spec fields must be scalars even when
+// the Spec customizes its JSON.
 package marshalercontainer
 
 import (
 	"encoding/json"
 
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 )
 
 // Spec customizes its JSON but still holds a slice.
@@ -15,4 +19,16 @@ func (s Spec) MarshalJSON() ([]byte, error) { return json.Marshal(s.Sizes) }
 
 func (s *Spec) UnmarshalJSON(b []byte) error { return json.Unmarshal(b, &s.Sizes) }
 
-var Definition = modeling.ComponentDef[Spec]{Name: "C"}
+type (
+	State       struct{}
+	Ports       struct{}
+	Middlewares struct{}
+)
+
+type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
+
+var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
+	NewMiddlewares: newMiddlewares,
+}
+
+func newMiddlewares(*Comp) Middlewares { return Middlewares{} }

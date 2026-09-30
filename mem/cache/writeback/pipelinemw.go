@@ -3,16 +3,17 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
-// pipelineMW holds all non-serializable infrastructure for the writeback
-// cache pipeline. It implements the Tick method and delegates NamedHookable
-// to comp. All mutable state is in comp.State.
+// pipelineMW runs the writeback cache's data pipeline. It holds only
+// references: the component, the storage and address mapper resolved at build
+// time, and the pipeline stages. All mutable state is in comp.State.
 type pipelineMW struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 
-	storage *mem.Storage
+	storage       *mem.Storage
+	addressMapper mem.AddressToPortMapper
 
 	topParser   *topParser
 	writeBuffer *writeBufferStage
@@ -21,37 +22,60 @@ type pipelineMW struct {
 	mshrStage   *mshrStage
 }
 
+// stage is one stage of the data pipeline. Tick advances it by one step and
+// reports whether it made progress.
+type stage interface {
+	Tick() bool
+}
+
+// createInternalStages creates the pipeline stages, one bank stage per bank.
+func (m *pipelineMW) createInternalStages() {
+	spec := m.comp.Spec()
+
+	m.topParser = &topParser{cache: m}
+	m.dirStage = &directoryStage{cache: m}
+
+	numBanks := spec.numBanks()
+	m.bankStages = make([]*bankStage, numBanks)
+	for i := 0; i < numBanks; i++ {
+		m.bankStages[i] = &bankStage{
+			cache:         m,
+			bankID:        i,
+			pipelineWidth: spec.laneWidth(),
+		}
+	}
+
+	m.mshrStage = &mshrStage{cache: m}
+	m.writeBuffer = &writeBufferStage{cache: m}
+}
+
 // GetSpec returns the immutable specification.
 func (m *pipelineMW) GetSpec() Spec {
 	return m.comp.Spec()
 }
 
-// topPort resolves the "Top" port by name. The port instance is assigned
-// externally after Build, so it is resolved lazily on every use rather than
-// cached at build time.
+// topPort returns the Top port.
 func (m *pipelineMW) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
-// bottomPort resolves the "Bottom" port by name, lazily, for the same reason
-// as topPort.
+// bottomPort returns the Bottom port.
 func (m *pipelineMW) bottomPort() messaging.Port {
-	return m.comp.GetPortByName("Bottom")
+	return m.comp.Ports.Bottom
 }
 
 // findPort resolves an address to the lower-memory port that serves it.
 func (m *pipelineMW) findPort(address uint64) messaging.RemotePort {
-	mapper := m.comp.Resources().AddressToPortMapper
-	if mapper == nil {
+	if m.addressMapper == nil {
 		panic("writeback: no address mapper; set Resources.AddressToPortMapper, " +
 			"or Spec.AddressMapperType with Resources.RemotePorts")
 	}
 
-	return mapper.Find(address)
+	return m.addressMapper.Find(address)
 }
 
-// Tick updates the internal states of the Cache pipeline.
-func (m *pipelineMW) Tick() bool {
+// Handle runs one cycle of the cache pipeline, unless the cache is paused.
+func (m *pipelineMW) Handle(_ timing.Event) bool {
 	next := &m.comp.State
 	madeProgress := false
 
@@ -80,10 +104,10 @@ func (m *pipelineMW) runPipeline() bool {
 	return madeProgress
 }
 
-func (m *pipelineMW) runStage(stage modeling.Ticker, n int) bool {
+func (m *pipelineMW) runStage(s stage, n int) bool {
 	madeProgress := false
 	for range n {
-		madeProgress = stage.Tick() || madeProgress
+		madeProgress = s.Tick() || madeProgress
 	}
 
 	return madeProgress

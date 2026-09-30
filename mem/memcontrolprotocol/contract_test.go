@@ -23,7 +23,7 @@ type fakeComp struct {
 	name       string
 	matrix     memcontrolprotocol.VerbSupport
 	asyncDelay int
-	ports      map[string]messaging.Port
+	control    messaging.Port
 
 	// pending captures an in-flight async verb that owes a Rsp; sync
 	// verbs are answered inside the same tick and never sit here.
@@ -46,33 +46,19 @@ func newFakeComp(name string, matrix memcontrolprotocol.VerbSupport, asyncDelay 
 		name:       name,
 		matrix:     matrix,
 		asyncDelay: asyncDelay,
-		ports:      map[string]messaging.Port{},
 	}
-	port := messaging.NewPort(c, 4, 4, name+".Control")
-	c.AssignPort("Control", port)
+	c.control = messaging.NewPort(c, 4, 4, name+".Control")
 	conn := &noopConn{}
-	conn.PlugIn(port)
+	conn.PlugIn(c.control)
 	return c
 }
 
-func (c *fakeComp) Name() string { return c.name }
-func (c *fakeComp) AssignPort(name string, p messaging.Port) {
-	c.ports[name] = p
-	p.SetComponent(c)
-}
-func (c *fakeComp) GetPortByName(name string) messaging.Port { return c.ports[name] }
-func (c *fakeComp) AllPorts() []messaging.Port {
-	out := make([]messaging.Port, 0, len(c.ports))
-	for _, p := range c.ports {
-		out = append(out, p)
-	}
-	return out
-}
+func (c *fakeComp) Name() string                    { return c.name }
 func (c *fakeComp) NotifyRecv(_ messaging.Port)     {}
 func (c *fakeComp) NotifyPortFree(_ messaging.Port) {}
 
 func (c *fakeComp) Handle(_ timing.Event) {
-	port := c.ports["Control"]
+	port := c.control
 
 	if c.pending != nil {
 		c.pending.ticksLeft--
@@ -147,7 +133,7 @@ func (c *fakeComp) makeRsp(
 	success bool,
 	errStr string,
 ) memcontrolprotocol.Rsp {
-	port := c.ports["Control"]
+	port := c.control
 	rsp := memcontrolprotocol.Rsp{
 		Command: cmd,
 		Success: success,
@@ -182,7 +168,7 @@ func buildFake(matrix memcontrolprotocol.VerbSupport, asyncDelay int) memcontrol
 		c := newFakeComp("Fake", matrix, asyncDelay)
 		return &memcontrolprotocol.Harness{
 			Comp:        c,
-			Ctrl:        c.GetPortByName("Control"),
+			Ctrl:        c.control,
 			IsQuiescent: func() bool { return c.pending == nil },
 		}
 	}

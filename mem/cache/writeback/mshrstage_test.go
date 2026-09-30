@@ -3,12 +3,10 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 var _ = Describe("MSHR Stage", func() {
@@ -54,28 +52,19 @@ var _ = Describe("MSHR Stage", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &pipelineMW{}
-		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
-				Log2BlockSize:  6,
-				NumReqPerCycle: 4,
-			}).
-			Build("Cache")
+		// The stage sends on the Top port, so the test gives it a single-slot
+		// Top port to simulate a busy port.
+		spec := stageTestSpec()
+		ports := makePorts("Cache", 4)
+		ports.Top = messaging.NewPort(nil, 1, 1, "Cache.Top")
+		comp := buildStageTestComp(spec,
+			Resources{Storage: mem.NewStorage(spec.TotalByteSize)}, ports)
+		topPort = comp.Ports.Top
 
-		// The stage resolves the "Top" port by name, so the test assigns a real
-		// single-slot port (owned by the component) and plugs a noop connection.
-		topPort = messaging.NewPort(m.comp, 1, 1, "Cache.Top")
-		(&ccNoopConn{}).PlugIn(topPort)
-		m.comp.DeclarePort("Top")
-		m.comp.AssignPort("Top", topPort)
-
+		m = comp.Middlewares.Pipeline
 		m.comp.State = initialState
 
-		ms = &mshrStage{
-			cache: m,
-		}
+		ms = m.mshrStage
 	})
 
 	It("should do nothing if there is no entry in input buffer", func() {

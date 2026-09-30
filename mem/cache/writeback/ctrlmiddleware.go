@@ -5,6 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -16,14 +17,13 @@ type ctrlMiddleware struct {
 	pipeline *pipelineMW
 }
 
-// ctrlPort resolves the "Control" port by name. The port instance is assigned
-// externally after Build, so it is resolved lazily on every use rather than
-// cached at build time.
+// ctrlPort returns the Control port.
 func (m *ctrlMiddleware) ctrlPort() messaging.Port {
-	return m.pipeline.comp.GetPortByName("Control")
+	return m.pipeline.comp.Ports.Control
 }
 
-func (m *ctrlMiddleware) Tick() bool {
+// Handle finalizes a pending Drain and handles the next control command.
+func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 	madeProgress = m.completePendingDrain() || madeProgress
 	// Control commands are processed serially: while an async verb (Drain or
@@ -243,7 +243,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	spec := m.pipeline.comp.Spec()
 	blockSize := 1 << spec.Log2BlockSize
 	cache.DirectoryReset(
-		&next.DirectoryState, spec.NumSets, spec.WayAssociativity, blockSize)
+		&next.DirectoryState, spec.numSets(), spec.WayAssociativity, blockSize)
 	next.MSHRState = cache.MSHRState{}
 	m.endInflightTasks()
 	next.Transactions = nil

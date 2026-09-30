@@ -7,7 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -26,6 +26,34 @@ type Spec struct {
 type Resources struct {
 	InsideMapper  mem.AddressToPortMapper
 	OutsideMapper mem.AddressToPortMapper
+}
+
+// Ports holds the data mover's ports.
+type Ports struct {
+	// Top receives data-move requests and returns their responses.
+	Top messaging.Port `akita:"role=datamover/responder"`
+
+	// Inside sends reads and writes to the inside memory.
+	Inside messaging.Port `akita:"role=mem/requester"`
+
+	// Outside sends reads and writes to the outside memory.
+	Outside messaging.Port `akita:"role=mem/requester"`
+
+	// Control receives enable, pause, drain, and reset commands.
+	Control messaging.Port `akita:"role=mem.control/responder"`
+}
+
+// Middlewares holds the data mover's behavior, run in field order every cycle.
+type Middlewares struct {
+	// Ctrl handles control commands.
+	Ctrl *ctrlMiddleware
+
+	// CtrlParse admits data-move requests and completes finished moves.
+	CtrlParse *ctrlParseMW
+
+	// DataTransfer reads from the source side and writes to the destination
+	// side.
+	DataTransfer *dataTransferMW
 }
 
 // dataChunk wraps a single []byte slot. This avoids [][]byte which fails
@@ -91,7 +119,7 @@ type State struct {
 }
 
 // Comp is the data mover component.
-type Comp = modeling.Component[Spec, State, modeling.None]
+type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
 
 func alignAddress(addr, granularity uint64) uint64 {
 	return addr / granularity * granularity

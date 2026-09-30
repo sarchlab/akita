@@ -5,21 +5,22 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type memMiddleware struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *memMiddleware) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
-func (m *memMiddleware) Tick() bool {
+// Handle admits new requests and advances the in-flight accesses by one
+// cycle.
+func (m *memMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 
 	madeProgress = m.takeNewReqs() || madeProgress

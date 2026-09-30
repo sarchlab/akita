@@ -11,7 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
@@ -51,12 +51,50 @@ type driverState struct {
 	Mismatch      bool           `json:"mismatch"`
 }
 
-type driver struct {
-	*modeling.Component[driverSpec, driverState, modeling.None]
-	lowModule messaging.Port
+// driverResources holds the driver's external wiring.
+type driverResources struct {
+	// LowModule is the memory port the driver sends requests to.
+	LowModule messaging.Port
 }
 
-func (d *driver) done() bool {
+// driverPorts holds the driver's ports.
+type driverPorts struct {
+	// Mem sends the writes and reads and receives their responses.
+	Mem messaging.Port `akita:"role=mem/requester"`
+}
+
+// driverMiddlewares holds the driver's behavior.
+type driverMiddlewares struct {
+	// Drive checks responses and issues the next request.
+	Drive *driverMW
+}
+
+type driver = ticking.Component[
+	driverSpec, driverState, driverResources, driverPorts, driverMiddlewares]
+
+// Definition declares the traffic driver, a ticking component.
+var Definition = ticking.Definition[
+	driverSpec, driverState, driverResources, driverPorts, driverMiddlewares]{
+	DefaultSpec: driverSpec{
+		Freq:   1 * timing.GHz,
+		NumOps: numOps,
+	},
+	NewState:       newDriverState,
+	NewMiddlewares: newDriverMiddlewares,
+}
+
+func newDriverState(_ *driver) driverState {
+	return driverState{
+		PendingWrite: make(map[uint64]int),
+		PendingRead:  make(map[uint64]int),
+	}
+}
+
+func newDriverMiddlewares(d *driver) driverMiddlewares {
+	return driverMiddlewares{Drive: &driverMW{d: d}}
+}
+
+func done(d *driver) bool {
 	return d.State.ReadsVerified == d.Spec().NumOps && !d.State.Mismatch
 }
 
@@ -64,9 +102,9 @@ type driverMW struct {
 	d *driver
 }
 
-func (m *driverMW) port() messaging.Port { return m.d.GetPortByName("Mem") }
+func (m *driverMW) port() messaging.Port { return m.d.Ports.Mem }
 
-func (m *driverMW) Tick() bool {
+func (m *driverMW) Handle(_ timing.Event) bool {
 	progress := m.processResponse()
 	progress = m.sendNext() || progress
 	return progress
@@ -112,7 +150,7 @@ func (m *driverMW) sendNext() bool {
 		req := memprotocol.WriteReq{}
 		req.ID = m.d.Simulation().NewID()
 		req.Src = port.AsRemote()
-		req.Dst = m.d.lowModule.AsRemote()
+		req.Dst = m.d.Resources().LowModule.AsRemote()
 		req.Address = addressForOp(idx)
 		req.PID = 1
 		req.Data = uint32ToBytes(valueForOp(idx))
@@ -138,7 +176,7 @@ func (m *driverMW) sendNext() bool {
 		req := memprotocol.ReadReq{}
 		req.ID = m.d.Simulation().NewID()
 		req.Src = port.AsRemote()
-		req.Dst = m.d.lowModule.AsRemote()
+		req.Dst = m.d.Resources().LowModule.AsRemote()
 		req.Address = addressForOp(idx)
 		req.AccessByteSize = 4
 		req.PID = 1
@@ -154,30 +192,14 @@ func (m *driverMW) sendNext() bool {
 }
 
 func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
-	spec := driverSpec{Freq: 1 * timing.GHz, NumOps: numOps}
-	modelComp := modeling.NewBuilder[driverSpec, driverState, modeling.None]().
+	return Definition.Builder().
 		WithSimulation(sim).
-		WithFreq(spec.Freq).
-		WithSpec(spec).
+		WithSpec(Definition.DefaultSpec).
+		WithResources(driverResources{LowModule: lowModule}).
+		WithPorts(driverPorts{
+			Mem: messaging.NewPort(nil, 4, 4, "Driver.Mem"),
+		}).
 		Build("Driver")
-	modelComp.State = driverState{
-		PendingWrite: make(map[uint64]int),
-		PendingRead:  make(map[uint64]int),
-	}
-	modelComp.DeclarePort("Mem")
-
-	d := &driver{Component: modelComp, lowModule: lowModule}
-	modelComp.AddMiddleware(&driverMW{d: d})
-	sim.RegisterComponent(d)
-
-	memPort := modeling.MakePortBuilder().
-		WithSimulation(sim).
-		WithComponent(d).
-		WithSpec(modeling.PortSpec{BufSize: 4}).
-		Build("Mem")
-	d.AssignPort("Mem", memPort)
-
-	return d
 }
 
 // buildSim assembles an identical simulation each time: a deterministic driver
@@ -187,47 +209,30 @@ func buildSim() (*simulation.Simulation, *driver) {
 	sim := simulation.MakeBuilder().WithoutMonitoring().Build()
 
 	dramSpec := idealmemcontroller.Definition.DefaultSpec
-	dramSpec.Capacity = 1 * mem.MB
 	dramSpec.Width = 4
 	dramSpec.Latency = 10
-	dram := idealmemcontroller.MakeBuilder().
+	dram := idealmemcontroller.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(dramSpec).
+		WithResources(idealmemcontroller.Resources{
+			Storage: mem.MakeStorageBuilder().
+				WithCapacity(1 * mem.MB).
+				WithSimulation(sim).
+				Build("DRAM.Storage"),
+		}).
+		WithPorts(idealmemcontroller.Ports{
+			Top:     messaging.NewPort(nil, 8, 8, "DRAM.Top"),
+			Control: messaging.NewPort(nil, 8, 8, "DRAM.Control"),
+		}).
 		Build("DRAM")
-	assignPorts(sim, dram, "Top", "Control")
 
-	d := buildDriver(sim, dram.GetPortByName("Top"))
+	d := buildDriver(sim, dram.Ports.Top)
 
 	conn := directconnection.MakeBuilder().WithSimulation(sim).Build("Conn")
-	conn.PlugIn(d.GetPortByName("Mem"))
-	conn.PlugIn(dram.GetPortByName("Top"))
+	conn.PlugIn(d.Ports.Mem)
+	conn.PlugIn(dram.Ports.Top)
 
 	return sim, d
-}
-
-// portOwner is a component on the Component API: its ports are assigned
-// after Build and looked up by name.
-type portOwner interface {
-	messaging.Component
-	AssignPort(name string, port messaging.Port)
-	GetPortByName(name string) messaging.Port
-}
-
-// assignPorts builds a port for each declared name on the component, registers
-// it, and assigns it, choosing a default buffer size.
-func assignPorts(
-	sim *simulation.Simulation,
-	comp portOwner,
-	names ...string,
-) {
-	for _, name := range names {
-		p := modeling.MakePortBuilder().
-			WithSimulation(sim).
-			WithComponent(comp).
-			WithSpec(modeling.PortSpec{BufSize: 8}).
-			Build(name)
-		comp.AssignPort(name, p)
-	}
 }
 
 func cleanup(sim *simulation.Simulation) {
@@ -248,7 +253,7 @@ func runReference(t *testing.T) (wantVerified int, wantTime timing.VTimeInPicoSe
 	if err := refEngine.Run(); err != nil {
 		t.Fatalf("reference run: %v", err)
 	}
-	if !refD.done() {
+	if !done(refD) {
 		t.Fatalf("reference run did not finish: %+v", refD.State)
 	}
 
@@ -276,7 +281,7 @@ func resumeAndVerify(
 		t.Fatalf("resumed run: %v", err)
 	}
 
-	if !resD.done() {
+	if !done(resD) {
 		t.Fatalf("resumed run did not finish: %+v", resD.State)
 	}
 	if resD.State.Mismatch {
@@ -314,7 +319,7 @@ func checkpointAtMidTransaction(t *testing.T, path, buildID string, wantTime tim
 	}
 
 	inFlight := len(srcD.State.PendingWrite) + len(srcD.State.PendingRead)
-	if inFlight == 0 || srcD.done() {
+	if inFlight == 0 || done(srcD) {
 		t.Fatalf("never reached a mid-transaction boundary: %+v", srcD.State)
 	}
 	t.Logf("checkpoint at t=%d: %d requests in flight, writesAcked=%d",

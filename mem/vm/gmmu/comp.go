@@ -4,7 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -102,9 +102,36 @@ func pageFromPageState(ps pageState) vm.Page {
 // they are wiring to objects shared with other components rather than scalar
 // configuration.
 type Resources struct {
+	// PageTable holds the pages the GMMU translates with. It is required; the
+	// system builder creates it (usually with page size 2^Spec.Log2PageSize)
+	// and may share it with other components.
 	PageTable vm.PageTable `json:"-"`
 }
 
-// Comp is the GMMU component, a modeling.Component specialized to this
-// package's Spec, State, and Resources.
-type Comp = modeling.Component[Spec, State, Resources]
+// Ports holds the GMMU's ports.
+type Ports struct {
+	// Top receives translation requests and returns their responses.
+	Top messaging.Port `akita:"role=vm/responder"`
+
+	// Bottom sends translation requests for remote pages to the LowModule.
+	Bottom messaging.Port `akita:"role=vm/requester"`
+
+	// Control receives enable, pause, drain, and reset commands.
+	Control messaging.Port `akita:"role=mem.control/responder"`
+}
+
+// Middlewares holds the GMMU's behavior, run in field order every cycle.
+type Middlewares struct {
+	// Ctrl handles control commands.
+	Ctrl *ctrlMiddleware
+
+	// Walk accepts translation requests and walks the page table.
+	Walk *walkMW
+
+	// Respond forwards responses for remote pages to the requesters.
+	Respond *respondMW
+}
+
+// Comp is the GMMU component, a ticking component specialized to this
+// package's five structs.
+type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]

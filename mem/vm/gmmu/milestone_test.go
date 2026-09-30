@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -107,23 +108,22 @@ var _ = Describe("GMMU milestones", func() {
 		spec.Latency = 1
 		spec.LowModule = lowModulePort
 
-		gmmuComp = MakeBuilder().
+		gmmuComp = Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(spec).
+			WithPorts(defaultPorts("GMMU")).
 			Build("GMMU")
 
-		assignDefaultPorts(sim, gmmuComp)
-
-		topPort = gmmuComp.GetPortByName("Top")
-		bottomPort = gmmuComp.GetPortByName("Bottom")
+		topPort = gmmuComp.Ports.Top
+		bottomPort = gmmuComp.Ports.Bottom
 
 		(&noopConn{}).PlugIn(topPort)
 		(&noopConn{}).PlugIn(bottomPort)
-		(&noopConn{}).PlugIn(gmmuComp.GetPortByName("Control"))
+		(&noopConn{}).PlugIn(gmmuComp.Ports.Control)
 
-		walk = gmmuComp.Middlewares()[1].(*walkMW)
-		respond = gmmuComp.Middlewares()[2].(*respondMW)
+		walk = gmmuComp.Middlewares.Walk
+		respond = gmmuComp.Middlewares.Respond
 
 		// Attach the recorder before driving so MsgIDAtIncomingBuffer hands out
 		// real task IDs (it returns 0 when there are no hooks).
@@ -247,9 +247,9 @@ var _ = Describe("GMMU milestones", func() {
 		// Tick 1: parseFromTop admits the request (opens req_in).
 		// Tick 2: walkPageTable decrements CycleLeft (latency=1 -> 0).
 		// Tick 3: CycleLeft==0, local hit completes and responds upstream.
-		gmmuComp.Tick()
-		gmmuComp.Tick()
-		gmmuComp.Tick()
+		modelingtest.Tick(gmmuComp)
+		modelingtest.Tick(gmmuComp)
+		modelingtest.Tick(gmmuComp)
 
 		reqInID := rec.taskID("req_in")
 		Expect(reqInID).ToNot(BeZero())
@@ -277,9 +277,9 @@ var _ = Describe("GMMU milestones", func() {
 		// Tick 1: parseFromTop admits the request (opens req_in).
 		// Tick 2: walkPageTable decrements CycleLeft (latency=1 -> 0).
 		// Tick 3: CycleLeft==0, page is remote, sends downstream req_out.
-		gmmuComp.Tick()
-		gmmuComp.Tick()
-		gmmuComp.Tick()
+		modelingtest.Tick(gmmuComp)
+		modelingtest.Tick(gmmuComp)
+		modelingtest.Tick(gmmuComp)
 
 		reqI, _ := bottomPort.RetrieveOutgoing()
 		Expect(reqI).ToNot(BeNil())
@@ -304,7 +304,7 @@ var _ = Describe("GMMU milestones", func() {
 		bottomPort.Deliver(rsp)
 
 		// Tick: fetchFromBottom forwards upstream and finalizes the walk.
-		gmmuComp.Tick()
+		modelingtest.Tick(gmmuComp)
 
 		rspToTopI, _ := topPort.RetrieveOutgoing()
 		Expect(rspToTopI).ToNot(BeNil())

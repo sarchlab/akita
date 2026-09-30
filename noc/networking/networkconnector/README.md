@@ -30,7 +30,10 @@ Topology methods:
 - `ConnectDevice(switchID, ports, param)` — create an endpoint for the device's
   ports and link it to a switch.
 - `ConnectSwitches(leftID, rightID, param)` — add a bidirectional switch link.
-- `EstablishRoute()` — run the router to populate every switch's routing table.
+- `EstablishRoute()` — build the switches, then run the router to populate every
+  switch's routing table. Call it once, after the last `ConnectDevice` and
+  `ConnectSwitches`: a switch takes all of its ports at `Build`, so it is built
+  only when its links are final.
 
 Link parameters (`DeviceToSwitchLinkParameter`, `SwitchToSwitchLinkParameter`,
 and their `LinkEnd*`/`LinkParameter` fields) configure buffer sizes, channel

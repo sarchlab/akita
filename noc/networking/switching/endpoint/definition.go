@@ -1,17 +1,16 @@
 package endpoint
 
 import (
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/noc/packetization"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// Definition declares the Endpoint component: its default configuration and
-// its port topology. The builder consumes it at runtime and tooling reads it
-// statically, so it is the single source of truth for both.
-var Definition = modeling.ComponentDef[Spec]{
-	Name: "Endpoint",
+// Definition declares the endpoint, a ticking component: its default
+// configuration and its behavior. Its ports and middlewares are the fields of
+// Ports and Middlewares. The system builder builds an instance with
+// Definition.Builder()...Build(name); tooling reads the same declaration
+// statically.
+var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 	DefaultSpec: Spec{
 		Freq:              1 * timing.GHz,
 		NumInputChannels:  1,
@@ -19,7 +18,21 @@ var Definition = modeling.ComponentDef[Spec]{
 		FlitByteSize:      32,
 		EncodingOverhead:  0.25,
 	},
-	Ports: []modeling.PortDef{
-		{Name: "NetworkPort", Roles: []*messaging.Role{packetization.Link}},
-	},
+	NewMiddlewares: newMiddlewares,
+}
+
+// newMiddlewares creates the middlewares and plugs the device ports into the
+// endpoint, which becomes their connection.
+func newMiddlewares(c *Comp) Middlewares {
+	devicePorts := c.Resources().DevicePorts
+
+	conn := deviceSide{c}
+	for _, p := range devicePorts {
+		conn.PlugIn(p)
+	}
+
+	return Middlewares{
+		Outgoing: &outgoingMW{comp: c, devicePorts: devicePorts},
+		Incoming: &incomingMW{comp: c, devicePorts: devicePorts},
+	}
 }

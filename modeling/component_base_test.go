@@ -28,15 +28,21 @@ type baseComp struct {
 
 func (c *baseComp) NotifyRecv(messaging.Port)     {}
 func (c *baseComp) NotifyPortFree(messaging.Port) {}
+func (c *baseComp) Handle(timing.Event)           {}
 
-// recordingSim records the ports registered with it.
+// recordingSim records the ports and components registered with it.
 type recordingSim struct {
 	timing.Simulation
-	ports []string
+	ports      []string
+	components []string
 }
 
 func (s *recordingSim) RegisterPort(p naming.Named) {
 	s.ports = append(s.ports, p.Name())
+}
+
+func (s *recordingSim) RegisterComponent(c naming.Named) {
+	s.components = append(s.components, c.Name())
 }
 
 func newRecordingSim() *recordingSim {
@@ -75,7 +81,7 @@ func expectPanic(t *testing.T, substr string, f func()) {
 	f()
 }
 
-func TestInitComponentBaseBindsAndRegistersEveryPort(t *testing.T) {
+func TestInitComponentBaseBindsEveryPortAndRegisterRegisters(t *testing.T) {
 	sim := newRecordingSim()
 	in, l0, l1 := unowned("C.In"), unowned("C.Links[0]"), unowned("C.Links[1]")
 
@@ -91,9 +97,20 @@ func TestInitComponentBaseBindsAndRegistersEveryPort(t *testing.T) {
 		t.Errorf("ports are not reachable through the Ports fields")
 	}
 
+	if len(sim.ports) != 0 || len(sim.components) != 0 {
+		t.Errorf("InitComponentBase registered %v and %v, want nothing before Register",
+			sim.ports, sim.components)
+	}
+
+	modeling.Register(&c.ComponentBase)
+
 	want := []string{"C.In", "C.Links[0]", "C.Links[1]"}
 	if !reflect.DeepEqual(sim.ports, want) {
 		t.Errorf("registered ports %v, want %v", sim.ports, want)
+	}
+
+	if !reflect.DeepEqual(sim.components, []string{"C"}) {
+		t.Errorf("registered components %v, want [C]", sim.components)
 	}
 }
 

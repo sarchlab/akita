@@ -222,6 +222,7 @@ func (c *Connector) initializeGrid(cap [3]int) [][][]tile {
 func (c *Connector) EstablishNetwork() {
 	c.createSwitches()
 	c.createLinks()
+	c.connector.BuildSwitches()
 }
 
 func (c *Connector) createLinks() {

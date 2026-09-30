@@ -1,6 +1,11 @@
+// Package zerodefaults leaves DefaultSpec out, so every Spec field defaults to
+// its zero value, and declares no ports.
 package zerodefaults
 
-import "github.com/sarchlab/akita/v5/modeling"
+import (
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
+)
 
 type Spec struct {
 	Count   int
@@ -9,4 +14,16 @@ type Spec struct {
 	Ratio   float32
 }
 
-var Definition = modeling.ComponentDef[Spec]{Name: "ZeroDefaults", Ports: nil}
+type (
+	State       struct{}
+	Ports       struct{}
+	Middlewares struct{}
+)
+
+type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
+
+var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
+	NewMiddlewares: newMiddlewares,
+}
+
+func newMiddlewares(*Comp) Middlewares { return Middlewares{} }

@@ -3,12 +3,10 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 var _ = Describe("TopParser", func() {
@@ -43,28 +41,16 @@ var _ = Describe("TopParser", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &pipelineMW{}
-		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
-				NumReqPerCycle: 4,
-				Log2BlockSize:  6,
-			}).
-			Build("Cache")
+		spec := stageTestSpec()
+		comp := buildStageTestComp(spec,
+			Resources{Storage: mem.NewStorage(spec.TotalByteSize)},
+			makePorts("Cache", 4))
+		topPort = comp.Ports.Top
 
-		// The stage resolves the "Top" port by name, so the test assigns a real
-		// port (owned by the component) and plugs a noop connection.
-		topPort = messaging.NewPort(m.comp, 4, 4, "Cache.Top")
-		(&ccNoopConn{}).PlugIn(topPort)
-		m.comp.DeclarePort("Top")
-		m.comp.AssignPort("Top", topPort)
-
+		m = comp.Middlewares.Pipeline
 		m.comp.State = initialState
 
-		parser = &topParser{
-			cache: m,
-		}
+		parser = m.topParser
 	})
 
 	It("should return if no req to parse", func() {

@@ -7,7 +7,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -65,16 +65,54 @@ type driverState struct {
 	Mismatch      bool           `json:"mismatch"`
 }
 
-type driver struct {
-	*modeling.Component[driverSpec, driverState, modeling.None]
-	lowModule messaging.Port
+// driverResources holds the driver's external wiring.
+type driverResources struct {
+	// LowModule is the memory port the driver sends requests to.
+	LowModule messaging.Port
 }
 
-func (d *driver) done() bool {
+// driverPorts holds the driver's ports.
+type driverPorts struct {
+	// Mem sends the writes and reads and receives their responses.
+	Mem messaging.Port `akita:"role=mem/requester"`
+}
+
+// driverMiddlewares holds the driver's behavior.
+type driverMiddlewares struct {
+	// Drive checks responses and issues the next request.
+	Drive *driverMW
+}
+
+type driver = ticking.Component[
+	driverSpec, driverState, driverResources, driverPorts, driverMiddlewares]
+
+// Definition declares the traffic driver, a ticking component. Build sets
+// Spec.NumOps from numOps.
+var Definition = ticking.Definition[
+	driverSpec, driverState, driverResources, driverPorts, driverMiddlewares]{
+	DefaultSpec: driverSpec{
+		Freq: 1 * timing.GHz,
+	},
+	NewState:       newDriverState,
+	NewMiddlewares: newDriverMiddlewares,
+}
+
+func newDriverState(_ *driver) driverState {
+	return driverState{
+		PendingWrite: make(map[uint64]int),
+		PendingRead:  make(map[uint64]int),
+	}
+}
+
+func newDriverMiddlewares(d *driver) driverMiddlewares {
+	return driverMiddlewares{Drive: &driverMW{d: d}}
+}
+
+func done(d *driver) bool {
 	return d.State.ReadsVerified == d.Spec().NumOps && !d.State.Mismatch
 }
 
-func (d *driver) inFlight() int {
+func inFlight(d *driver) int {
 	return len(d.State.PendingWrite) + len(d.State.PendingRead)
 }
 
@@ -82,9 +120,9 @@ type driverMW struct {
 	d *driver
 }
 
-func (m *driverMW) port() messaging.Port { return m.d.GetPortByName("Mem") }
+func (m *driverMW) port() messaging.Port { return m.d.Ports.Mem }
 
-func (m *driverMW) Tick() bool {
+func (m *driverMW) Handle(_ timing.Event) bool {
 	progress := m.processResponse()
 	progress = m.sendNext() || progress
 	return progress
@@ -130,7 +168,7 @@ func (m *driverMW) sendNext() bool {
 		req := memprotocol.WriteReq{}
 		req.ID = m.d.Simulation().NewID()
 		req.Src = port.AsRemote()
-		req.Dst = m.d.lowModule.AsRemote()
+		req.Dst = m.d.Resources().LowModule.AsRemote()
 		req.Address = addressForOp(idx)
 		req.PID = pid
 		req.Data = uint32ToBytes(valueForOp(idx))
@@ -156,7 +194,7 @@ func (m *driverMW) sendNext() bool {
 		req := memprotocol.ReadReq{}
 		req.ID = m.d.Simulation().NewID()
 		req.Src = port.AsRemote()
-		req.Dst = m.d.lowModule.AsRemote()
+		req.Dst = m.d.Resources().LowModule.AsRemote()
 		req.Address = addressForOp(idx)
 		req.AccessByteSize = 4
 		req.PID = pid
@@ -172,28 +210,15 @@ func (m *driverMW) sendNext() bool {
 }
 
 func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
-	spec := driverSpec{Freq: 1 * timing.GHz, NumOps: numOps}
-	modelComp := modeling.NewBuilder[driverSpec, driverState, modeling.None]().
+	spec := Definition.DefaultSpec
+	spec.NumOps = numOps
+
+	return Definition.Builder().
 		WithSimulation(sim).
-		WithFreq(spec.Freq).
 		WithSpec(spec).
+		WithResources(driverResources{LowModule: lowModule}).
+		WithPorts(driverPorts{
+			Mem: messaging.NewPort(nil, 4, 4, "Driver.Mem"),
+		}).
 		Build("Driver")
-	modelComp.State = driverState{
-		PendingWrite: make(map[uint64]int),
-		PendingRead:  make(map[uint64]int),
-	}
-	modelComp.DeclarePort("Mem")
-
-	d := &driver{Component: modelComp, lowModule: lowModule}
-	modelComp.AddMiddleware(&driverMW{d: d})
-	sim.RegisterComponent(d)
-
-	memPort := modeling.MakePortBuilder().
-		WithSimulation(sim).
-		WithComponent(d).
-		WithSpec(modeling.PortSpec{BufSize: 4}).
-		Build("Mem")
-	d.AssignPort("Mem", memPort)
-
-	return d
 }

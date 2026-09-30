@@ -6,30 +6,29 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
-	"github.com/sarchlab/akita/v5/tracing"
-
-	// dataTransferMW handles data read/write operations between source and
-	// destination ports.
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
+// dataTransferMW handles data read/write operations between source and
+// destination ports.
 type dataTransferMW struct {
-	comp *modeling.Component[Spec, State, modeling.None]
+	comp *Comp
 
 	// insideMapper and outsideMapper route each side's addresses to remote
-	// ports. Build takes them from Resources; they are not checkpointed.
+	// ports. newMiddlewares takes them from Resources; they are not
+	// checkpointed.
 	insideMapper  mem.AddressToPortMapper
 	outsideMapper mem.AddressToPortMapper
 }
 
 func (m *dataTransferMW) insidePort() messaging.Port {
-	return m.comp.GetPortByName("Inside")
+	return m.comp.Ports.Inside
 }
 
 func (m *dataTransferMW) outsidePort() messaging.Port {
-	return m.comp.GetPortByName("Outside")
+	return m.comp.Ports.Outside
 }
 
 func (m *dataTransferMW) srcPort() messaging.Port {
@@ -85,10 +84,10 @@ func (m *dataTransferMW) mapperFor(side string) mem.AddressToPortMapper {
 	return mapper
 }
 
-// Tick runs data transfer stages. Paused data movers make no progress;
+// Handle runs data transfer stages. Paused data movers make no progress;
 // draining data movers continue to let the current transaction
 // complete so a drain can converge.
-func (m *dataTransferMW) Tick() bool {
+func (m *dataTransferMW) Handle(_ timing.Event) bool {
 	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}

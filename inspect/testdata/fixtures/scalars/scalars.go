@@ -1,11 +1,13 @@
 // Package scalars is a synthetic component covering scalar defaults whose
-// static and runtime representations are easy to get wrong, and ports with
-// empty or omitted roles.
+// static and runtime representations are easy to get wrong, and untyped
+// ports: Ports fields without a role tag.
 package scalars
 
 import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 type Choice string
@@ -19,13 +21,28 @@ type Spec struct {
 	Quoted       int `json:"'"`
 }
 
-var Definition = modeling.ComponentDef[Spec]{
-	Name: "Scalars",
+type State struct{}
+
+type Ports struct {
+	Untyped      messaging.Port
+	UntypedGroup []messaging.Port
+}
+
+type Middlewares struct {
+	Idle idleMW
+}
+
+type idleMW struct{}
+
+func (idleMW) Handle(timing.Event) bool { return false }
+
+type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
+
+var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
 	DefaultSpec: Spec{
 		StringNumber: 18446744073709551615, Fraction: 0.1, Choice: Escaped,
 	},
-	Ports: []modeling.PortDef{
-		{Name: "Empty", Roles: []*messaging.Role{}}, {Name: "Omitted"},
-		{Name: "EmptyGroup", Roles: []*messaging.Role{}, Group: true}, {Name: "OmittedGroup", Group: true},
-	},
+	NewMiddlewares: newMiddlewares,
 }
+
+func newMiddlewares(*Comp) Middlewares { return Middlewares{} }

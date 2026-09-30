@@ -29,19 +29,30 @@ type ComponentBase[S, T, R, P, M any] struct {
 	Middlewares M
 
 	name       string
+	owner      Instance
 	simulation timing.Simulation
 	spec       S
 	resources  R
 }
 
+// None is the Resources type of a component that references no shared
+// objects, and the State type of one that keeps no state.
+type None struct{}
+
+// An Instance is a component built by a component model: a component that
+// handles the events addressed to it.
+type Instance interface {
+	messaging.Component
+	timing.Handler
+}
+
 // InitComponentBase sets up the ComponentBase embedded in owner, a component
 // being built: it records the instance's name, simulation, Spec, and
-// Resources, and binds each port to owner and registers it with the
-// simulation. A model's Build calls it once, before it creates the State and
-// the middlewares.
+// Resources, and binds each port to owner. A model's Build calls it first,
+// then creates the State and the middlewares, and calls Register last.
 func InitComponentBase[S, T, R, P, M any](
 	base *ComponentBase[S, T, R, P, M],
-	owner messaging.Component,
+	owner Instance,
 	sim timing.Simulation,
 	name string,
 	spec S,
@@ -49,11 +60,27 @@ func InitComponentBase[S, T, R, P, M any](
 	ports P,
 ) {
 	base.name = name
+	base.owner = owner
 	base.simulation = sim
 	base.spec = spec
 	base.resources = resources
 	base.Ports = ports
-	bindPorts(owner, sim, &base.Ports)
+	bindPorts(owner, &base.Ports)
+}
+
+// Register registers the instance that embeds base with its simulation: each
+// of its ports, then the instance as the handler of its events (when the
+// engine takes handlers) and as a component. A model's Build calls it last,
+// once the State and the middlewares exist, so a Build that fails registers
+// nothing.
+func Register[S, T, R, P, M any](base *ComponentBase[S, T, R, P, M]) {
+	registerPorts(base.simulation, &base.Ports)
+
+	if handlers, ok := base.simulation.GetEngine().(timing.HandlerRegistry); ok {
+		handlers.RegisterHandler(base.name, base.owner)
+	}
+
+	base.simulation.RegisterComponent(base.owner)
 }
 
 // Name returns the instance name given to Build.

@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -26,23 +27,14 @@ var _ = Describe("DRAM control behavior", func() {
 	)
 
 	build := func() {
-
-		comp = MakeBuilder().
+		comp = Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
+			WithPorts(defaultPorts("DRAM", 16)).
 			Build("DRAM")
 
-		for _, name := range []string{"Top", "Control"} {
-			p := modeling.MakePortBuilder().
-				WithSimulation(sim).
-				WithComponent(comp).
-				WithSpec(modeling.PortSpec{BufSize: 16}).
-				Build(name)
-			comp.AssignPort(name, p)
-		}
-
-		topPort = comp.GetPortByName("Top")
-		ctrlPort = comp.GetPortByName("Control")
+		topPort = comp.Ports.Top
+		ctrlPort = comp.Ports.Control
 		for _, p := range []messaging.Port{topPort, ctrlPort} {
 			(&noopConn{}).PlugIn(p)
 		}
@@ -77,7 +69,7 @@ var _ = Describe("DRAM control behavior", func() {
 			topPort.Deliver(makeRead(uint64(i * 64)))
 		}
 		for i := 0; i < 64 && len(comp.State.Transactions) < n; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 		}
 		Expect(comp.State.Transactions).To(HaveLen(n))
 	}
@@ -100,7 +92,7 @@ var _ = Describe("DRAM control behavior", func() {
 		var drainRsp memcontrolprotocol.Rsp
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := topPort.RetrieveOutgoing()
 				if !ok {
@@ -134,7 +126,7 @@ var _ = Describe("DRAM control behavior", func() {
 		topPort.Deliver(makeRead(0))
 
 		for range 5 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 		}
 
 		// The request is neither consumed nor turned into work, and no
@@ -151,13 +143,13 @@ var _ = Describe("DRAM control behavior", func() {
 		for i := range n {
 			topPort.Deliver(makeRead(uint64(i * 64)))
 		}
-		comp.Tick()
+		modelingtest.Tick(comp)
 		Expect(comp.State.Transactions).ToNot(BeEmpty())
 
 		// Begin draining while work is still in flight.
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		ctrlPort.Deliver(drain)
-		comp.Tick()
+		modelingtest.Tick(comp)
 		Expect(comp.State.ControlState).To(Equal(memcontrolprotocol.StateDraining))
 
 		// A Pause arrives mid-drain. Control commands are serialized, so the
@@ -168,7 +160,7 @@ var _ = Describe("DRAM control behavior", func() {
 
 		drainAcked, pauseAcked := false, false
 		for i := 0; i < 4096 && !drainAcked; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := ctrlPort.RetrieveOutgoing()
 				if !ok {
@@ -207,7 +199,7 @@ var _ = Describe("DRAM control behavior", func() {
 
 		drainAcked, pauseAcked := false, false
 		for range 8 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := ctrlPort.RetrieveOutgoing()
 				if !ok {
@@ -246,7 +238,7 @@ var _ = Describe("DRAM control behavior", func() {
 
 		var rsps []memcontrolprotocol.Rsp
 		for range 4 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := ctrlPort.RetrieveOutgoing()
 				if !ok {
@@ -279,7 +271,7 @@ var _ = Describe("DRAM control behavior", func() {
 		ctrlPort.Deliver(reset)
 		found := false
 		for i := 0; i < 8 && !found; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if r, ok := out.(memcontrolprotocol.Rsp); ok &&
 					r.Command == memcontrolprotocol.CmdReset {
@@ -313,7 +305,7 @@ var _ = Describe("DRAM control behavior", func() {
 		ctrlPort.Deliver(reset)
 		found := false
 		for i := 0; i < 8 && !found; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if r, ok := out.(memcontrolprotocol.Rsp); ok &&
 					r.Command == memcontrolprotocol.CmdReset {
@@ -341,7 +333,7 @@ var _ = Describe("DRAM control behavior", func() {
 			var rsp memcontrolprotocol.Rsp
 			found := false
 			for i := 0; i < 64 && !found; i++ {
-				comp.Tick()
+				modelingtest.Tick(comp)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					if r, ok := out.(memcontrolprotocol.Rsp); ok {
 						rsp = r

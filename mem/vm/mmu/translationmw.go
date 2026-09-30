@@ -7,14 +7,13 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
-	"github.com/sarchlab/akita/v5/tracing"
-
-	// pageTable aggregates all the methods of the page table that are used in the MMU package.
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
+// pageTable aggregates all the methods of the page table that are used in the
+// MMU package.
 type pageTable interface {
 	Insert(page vm.Page)
 	Remove(pid vm.PID, vAddr uint64)
@@ -27,22 +26,22 @@ type pageTable interface {
 // translationMW handles translation requests: parsing from top,
 // page table walks, and sending responses for local hits.
 type translationMW struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 // Port helpers.
 
 func (m *translationMW) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
 func (m *translationMW) pageTable() vm.PageTable {
 	return m.comp.Resources().PageTable
 }
 
-// Tick runs the translation stages. Paused MMUs make no progress;
+// Handle runs the translation stages. Paused MMUs make no progress;
 // draining MMUs continue walks but accept no new requests.
-func (m *translationMW) Tick() bool {
+func (m *translationMW) Handle(_ timing.Event) bool {
 	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}

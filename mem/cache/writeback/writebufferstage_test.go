@@ -3,13 +3,10 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 var _ = Describe("WriteBufferStage", func() {
@@ -44,38 +41,22 @@ var _ = Describe("WriteBufferStage", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &pipelineMW{}
-		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
-				Log2BlockSize:       6,
-				NumReqPerCycle:      4,
-				WayAssociativity:    4,
-				NumSets:             64,
-				NumBanks:            1,
-				WriteBufferCapacity: 16,
-				MaxInflightFetch:    4,
-				MaxInflightEviction: 4,
-			}).
-			WithResources(Resources{
+		spec := stageTestSpec()
+		spec.WriteBufferCapacity = 16
+		spec.MaxInflightFetch = 4
+		spec.MaxInflightEviction = 4
+		comp := buildStageTestComp(spec,
+			Resources{
+				Storage:             mem.NewStorage(spec.TotalByteSize),
 				AddressToPortMapper: &mem.SinglePortMapper{Port: "DRAM"},
-			}).
-			Build("Cache")
+			},
+			makePorts("Cache", 4))
+		bottomPort = comp.Ports.Bottom
 
-		// The stage resolves the "Bottom" port by name, so the test assigns a
-		// real port (owned by the component) and plugs a noop connection.
-		bottomPort = messaging.NewPort(m.comp, 4, 4, "Cache.Bottom")
-		(&ccNoopConn{}).PlugIn(bottomPort)
-		m.comp.DeclarePort("Bottom")
-		m.comp.AssignPort("Bottom", bottomPort)
-
+		m = comp.Middlewares.Pipeline
 		m.comp.State = initialState
 
-		wb = &writeBufferStage{
-			cache: m,
-		}
-		m.writeBuffer = wb
+		wb = m.writeBuffer
 	})
 
 	It("should do nothing if no transactions", func() {

@@ -8,22 +8,13 @@ import (
 )
 
 // ---------------------------------------------------------------
-// Helper: build timing + cmdCycles for any Spec (replicates Build logic)
+// Helper: build timing + cmdCycles for any Spec (as the component does when
+// it is built). NOTE: In this codebase writeDelay = tRL + burstCycle, NOT
+// tWL + burstCycle. This is a known deviation from DRAMSim3 where
+// writeDelay = tWL + burstCycle.
 // ---------------------------------------------------------------
 func buildTimingForSpec(spec Spec) (dramTiming, map[commandKind]int) {
-	b := MakeBuilder().WithSpec(spec)
-	b.calculateBurstCycle()
-	b.spec.TRL = b.spec.TAL + b.spec.TCL
-	b.spec.TWL = b.spec.TAL + b.spec.TCWL
-	b.spec.ReadDelay = b.spec.TRL + b.spec.BurstCycle
-	// NOTE: In this codebase writeDelay = tRL + burstCycle, NOT tWL + burstCycle.
-	// This is a known deviation from DRAMSim3 where writeDelay = tWL + burstCycle.
-	b.spec.WriteDelay = b.spec.TRL + b.spec.BurstCycle
-	b.spec.TRC = b.spec.TRAS + b.spec.TRP
-
-	timing := b.generateTiming()
-	cmdCycles := b.buildCmdCycles()
-	return timing, cmdCycles
+	return generateTiming(&spec), buildCmdCycles(&spec)
 }
 
 // ---------------------------------------------------------------

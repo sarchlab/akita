@@ -3,6 +3,7 @@ package simplebankedmemory
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -17,5 +18,14 @@ func TestSimpleBankedMemory(t *testing.T) {
 func TestValidateState(t *testing.T) {
 	if err := modeling.ValidateState(State{}); err != nil {
 		t.Fatalf("State failed validation: %v", err)
+	}
+}
+
+// makePorts creates the ports of the memory named name, with the given buffer
+// sizes (each used for both the incoming and outgoing buffer).
+func makePorts(name string, top, control int) Ports {
+	return Ports{
+		Top:     messaging.NewPort(nil, top, top, name+".Top"),
+		Control: messaging.NewPort(nil, control, control, name+".Control"),
 	}
 }

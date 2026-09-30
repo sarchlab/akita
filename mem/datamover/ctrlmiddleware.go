@@ -3,31 +3,31 @@ package datamover
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type ctrlMiddleware struct {
-	comp *modeling.Component[Spec, State, modeling.None]
+	comp *Comp
 }
 
 func (m *ctrlMiddleware) ctrlPort() messaging.Port {
-	return m.comp.GetPortByName("Control")
+	return m.comp.Ports.Control
 }
 
 func (m *ctrlMiddleware) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
 func (m *ctrlMiddleware) insidePort() messaging.Port {
-	return m.comp.GetPortByName("Inside")
+	return m.comp.Ports.Inside
 }
 
 func (m *ctrlMiddleware) outsidePort() messaging.Port {
-	return m.comp.GetPortByName("Outside")
+	return m.comp.Ports.Outside
 }
 
-func (m *ctrlMiddleware) Tick() bool {
+func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 	madeProgress = m.completePendingDrain() || madeProgress
 	// Control commands are processed serially: while an async verb (Drain) is

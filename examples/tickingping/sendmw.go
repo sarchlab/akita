@@ -2,20 +2,16 @@ package tickingping
 
 import (
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
-
-// outPort is a helper that returns the "Out" port from the component.
-func outPort(comp *modeling.Component[Spec, State, modeling.None]) messaging.Port {
-	return comp.GetPortByName("Out")
-}
 
 // sendMW handles sending responses and ping requests.
 type sendMW struct {
-	comp *modeling.Component[Spec, State, modeling.None]
+	comp *Comp
 }
 
-func (m *sendMW) Tick() bool {
+// Handle sends at most one response and one ping per tick.
+func (m *sendMW) Handle(_ timing.Event) bool {
 	madeProgress := false
 
 	madeProgress = m.sendRsp() || madeProgress
@@ -26,6 +22,7 @@ func (m *sendMW) Tick() bool {
 
 func (m *sendMW) sendRsp() bool {
 	state := &m.comp.State
+	out := m.comp.Ports.Out
 
 	if len(state.CurrentTransactions) == 0 {
 		return false
@@ -36,21 +33,19 @@ func (m *sendMW) sendRsp() bool {
 		return false
 	}
 
-	rsp := pingRsp{
+	if !out.CanSend() {
+		return false
+	}
+
+	out.Send(pingRsp{
 		MsgMeta: messaging.MsgMeta{
 			ID:    m.comp.Simulation().NewID(),
-			Src:   outPort(m.comp).AsRemote(),
+			Src:   out.AsRemote(),
 			Dst:   trans.ReqSrc,
 			RspTo: trans.ReqID,
 		},
 		SeqID: trans.SeqID,
-	}
-
-	if !outPort(m.comp).CanSend() {
-		return false
-	}
-
-	outPort(m.comp).Send(rsp)
+	})
 
 	state.CurrentTransactions = state.CurrentTransactions[1:]
 
@@ -59,28 +54,27 @@ func (m *sendMW) sendRsp() bool {
 
 func (m *sendMW) sendPing() bool {
 	state := &m.comp.State
+	spec := m.comp.Spec()
+	out := m.comp.Ports.Out
 
-	if state.NumPingNeedToSend == 0 {
+	if state.NextSeqID >= spec.NumPings {
 		return false
 	}
 
-	pingMsg := pingReq{
+	if !out.CanSend() {
+		return false
+	}
+
+	out.Send(pingReq{
 		MsgMeta: messaging.MsgMeta{
 			ID:  m.comp.Simulation().NewID(),
-			Src: outPort(m.comp).AsRemote(),
-			Dst: state.PingDst,
+			Src: out.AsRemote(),
+			Dst: spec.PingDst,
 		},
 		SeqID: state.NextSeqID,
-	}
-
-	if !outPort(m.comp).CanSend() {
-		return false
-	}
-
-	outPort(m.comp).Send(pingMsg)
+	})
 
 	state.StartTimes = append(state.StartTimes, uint64(m.comp.CurrentTime()))
-	state.NumPingNeedToSend--
 	state.NextSeqID++
 
 	return true

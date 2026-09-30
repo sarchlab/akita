@@ -25,7 +25,7 @@ var _ = Describe("Cache", func() {
 		dram                *idealmemcontroller.Comp
 		dramStorage         *mem.Storage
 		cuPort              messaging.Port
-		c                   *modeling.Component[Spec, State, Resources]
+		c                   *Comp
 	)
 
 	// drainResponses retrieves every message that has been delivered to cuPort.
@@ -54,42 +54,36 @@ var _ = Describe("Cache", func() {
 		cuPort = messaging.NewPort(nil, 16, 16, "CU.Top")
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
-		dram = idealmemcontroller.MakeBuilder().
+		dram = idealmemcontroller.Definition.Builder().
 			WithSimulation(sim).
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
+			WithPorts(idealmemcontroller.Ports{
+				Top:     messaging.NewPort(nil, 16, 16, "DRAM.Top"),
+				Control: messaging.NewPort(nil, 16, 16, "DRAM.Control"),
+			}).
 			Build("DRAM")
-		dram.AssignPort("Top",
-			messaging.NewPort(dram, 16, 16, dram.Name()+".Top"))
-		dram.AssignPort("Control",
-			messaging.NewPort(dram, 16, 16, dram.Name()+".Control"))
 		addressToPortMapper = &mem.SinglePortMapper{
-			Port: dram.GetPortByName("Top").AsRemote(),
+			Port: dram.Ports.Top.AsRemote(),
 		}
 
-		cacheReg := sim
-		c = MakeBuilder().
-			WithSimulation(cacheReg).
+		// The system builder chooses the port buffer sizes. Control is
+		// unused here but every port must still be given.
+		c = Definition.Builder().
+			WithSimulation(sim).
 			WithResources(Resources{
+				Storage:       mem.NewStorage(Definition.DefaultSpec.TotalByteSize),
 				AddressMapper: addressToPortMapper,
+			}).
+			WithPorts(Ports{
+				Top:     messaging.NewPort(nil, 4, 4, "Cache.Top"),
+				Bottom:  messaging.NewPort(nil, 4, 4, "Cache.Bottom"),
+				Control: messaging.NewPort(nil, 4, 4, "Cache.Control"),
 			}).
 			Build("Cache")
 
-		// Build declares the cache's ports; assign every declared port
-		// instance (the caller now chooses the buffer sizes). Control is
-		// unused here but must still be assigned so the first tick can
-		// resolve it.
-		for _, name := range []string{"Top", "Bottom", "Control"} {
-			p := modeling.MakePortBuilder().
-				WithSimulation(cacheReg).
-				WithComponent(c).
-				WithSpec(modeling.PortSpec{BufSize: 4}).
-				Build(name)
-			c.AssignPort(name, p)
-		}
-
-		connection.PlugIn(dram.GetPortByName("Top"))
-		connection.PlugIn(c.GetPortByName("Top"))
-		connection.PlugIn(c.GetPortByName("Bottom"))
+		connection.PlugIn(dram.Ports.Top)
+		connection.PlugIn(c.Ports.Top)
+		connection.PlugIn(c.Ports.Bottom)
 		connection.PlugIn(cuPort)
 	})
 
@@ -98,12 +92,12 @@ var _ = Describe("Cache", func() {
 		read := memprotocol.ReadReq{}
 		read.ID = sim.NewID()
 		read.Src = cuPort.AsRemote()
-		read.Dst = c.GetPortByName("Top").AsRemote()
+		read.Dst = c.Ports.Top.AsRemote()
 		read.Address = 0x100
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
 		read.TrafficClass = "req"
-		c.GetPortByName("Top").Deliver(read)
+		c.Ports.Top.Deliver(read)
 
 		Expect(engine.Run()).To(Succeed())
 
@@ -118,22 +112,22 @@ var _ = Describe("Cache", func() {
 		read1 := memprotocol.ReadReq{}
 		read1.ID = sim.NewID()
 		read1.Src = cuPort.AsRemote()
-		read1.Dst = c.GetPortByName("Top").AsRemote()
+		read1.Dst = c.Ports.Top.AsRemote()
 		read1.Address = 0x100
 		read1.AccessByteSize = 4
 		read1.TrafficBytes = 12
 		read1.TrafficClass = "req"
-		c.GetPortByName("Top").Deliver(read1)
+		c.Ports.Top.Deliver(read1)
 
 		read2 := memprotocol.ReadReq{}
 		read2.ID = sim.NewID()
 		read2.Src = cuPort.AsRemote()
-		read2.Dst = c.GetPortByName("Top").AsRemote()
+		read2.Dst = c.Ports.Top.AsRemote()
 		read2.Address = 0x104
 		read2.AccessByteSize = 4
 		read2.TrafficBytes = 12
 		read2.TrafficClass = "req"
-		c.GetPortByName("Top").Deliver(read2)
+		c.Ports.Top.Deliver(read2)
 
 		Expect(engine.Run()).To(Succeed())
 
@@ -159,12 +153,12 @@ var _ = Describe("Cache", func() {
 		read1 := memprotocol.ReadReq{}
 		read1.ID = sim.NewID()
 		read1.Src = cuPort.AsRemote()
-		read1.Dst = c.GetPortByName("Top").AsRemote()
+		read1.Dst = c.Ports.Top.AsRemote()
 		read1.Address = 0x100
 		read1.AccessByteSize = 4
 		read1.TrafficBytes = 12
 		read1.TrafficClass = "req"
-		c.GetPortByName("Top").Deliver(read1)
+		c.Ports.Top.Deliver(read1)
 		Expect(engine.Run()).To(Succeed())
 		t1 := engine.CurrentTime()
 
@@ -175,12 +169,12 @@ var _ = Describe("Cache", func() {
 		read2 := memprotocol.ReadReq{}
 		read2.ID = sim.NewID()
 		read2.Src = cuPort.AsRemote()
-		read2.Dst = c.GetPortByName("Top").AsRemote()
+		read2.Dst = c.Ports.Top.AsRemote()
 		read2.Address = 0x104
 		read2.AccessByteSize = 4
 		read2.TrafficBytes = 12
 		read2.TrafficClass = "req"
-		c.GetPortByName("Top").Deliver(read2)
+		c.Ports.Top.Deliver(read2)
 		Expect(engine.Run()).To(Succeed())
 		t2 := engine.CurrentTime()
 
@@ -195,12 +189,12 @@ var _ = Describe("Cache", func() {
 		write := memprotocol.WriteReq{}
 		write.ID = sim.NewID()
 		write.Src = cuPort.AsRemote()
-		write.Dst = c.GetPortByName("Top").AsRemote()
+		write.Dst = c.Ports.Top.AsRemote()
 		write.Address = 0x100
 		write.Data = []byte{1, 2, 3, 4}
 		write.TrafficBytes = 4 + 12
 		write.TrafficClass = "req"
-		c.GetPortByName("Top").Deliver(write)
+		c.Ports.Top.Deliver(write)
 
 		Expect(engine.Run()).To(Succeed())
 
@@ -216,7 +210,7 @@ var _ = Describe("Cache", func() {
 		write := memprotocol.WriteReq{}
 		write.ID = sim.NewID()
 		write.Src = cuPort.AsRemote()
-		write.Dst = c.GetPortByName("Top").AsRemote()
+		write.Dst = c.Ports.Top.AsRemote()
 		write.Address = 0x100
 		write.Data = []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
@@ -230,7 +224,7 @@ var _ = Describe("Cache", func() {
 		}
 		write.TrafficBytes = 64 + 12
 		write.TrafficClass = "req"
-		c.GetPortByName("Top").Deliver(write)
+		c.Ports.Top.Deliver(write)
 		Expect(engine.Run()).To(Succeed())
 
 		rsps := drainResponses()

@@ -3,6 +3,7 @@ package dram_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/dram"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
@@ -85,21 +86,18 @@ var _ = Describe("DRAM Statistics", func() {
 
 		spec := dram.Definition.DefaultSpec
 		spec.Freq = 1 * timing.GHz
-		dramComp := dram.MakeBuilder().
+		dramComp := dram.Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
+			WithResources(dram.Resources{Storage: mem.NewStorage(4 * mem.GB)}).
+			WithPorts(dram.Ports{
+				Top: messaging.NewPort(nil, 1024, 1024, "StatsDRAM.Top"),
+				Control: messaging.NewPort(
+					nil, 1024, 1024, "StatsDRAM.Control"),
+			}).
 			Build("StatsDRAM")
 
-		for _, name := range []string{"Top", "Control"} {
-			p := modeling.MakePortBuilder().
-				WithSimulation(sim).
-				WithComponent(dramComp).
-				WithSpec(modeling.PortSpec{BufSize: 1024}).
-				Build(name)
-			dramComp.AssignPort(name, p)
-		}
-
-		topPort := dramComp.GetPortByName("Top")
+		topPort := dramComp.Ports.Top
 		srcPort := messaging.NewPort(nil, 1024, 1024, "Src.Top")
 		conn.PlugIn(topPort)
 		conn.PlugIn(srcPort)

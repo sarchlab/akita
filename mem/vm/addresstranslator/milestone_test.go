@@ -113,18 +113,17 @@ var _ = Describe("Address Translator milestones", func() {
 			},
 		}
 
-		at = MakeBuilder().
+		at = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(resources).
+			WithPorts(makePorts("AddressTranslator", topBufSize)).
 			Build("AddressTranslator")
 
-		assignPorts(sim, at, topBufSize)
-
-		topPort = at.GetPortByName("Top")
-		bottomPort = at.GetPortByName("Bottom")
-		translationPort = at.GetPortByName("Translation")
-		ctrlPort := at.GetPortByName("Control")
+		topPort = at.Ports.Top
+		bottomPort = at.Ports.Bottom
+		translationPort = at.Ports.Translation
+		ctrlPort := at.Ports.Control
 
 		for _, p := range []messaging.Port{
 			topPort, bottomPort, translationPort, ctrlPort,
@@ -133,8 +132,8 @@ var _ = Describe("Address Translator milestones", func() {
 			conn.PlugIn(p)
 		}
 
-		ptMW = at.Middlewares()[1].(*parseTranslateMW)
-		rpMW = at.Middlewares()[2].(*respondPipelineMW)
+		ptMW = at.Middlewares.ParseTranslate
+		rpMW = at.Middlewares.RespondPipeline
 
 		// Attach the recorder before driving so MsgIDAtReceiver hands out
 		// real receiver-side task IDs (it returns 0 when there are no hooks).

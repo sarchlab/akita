@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -31,19 +32,15 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		spec.Latency = 10
 		spec.CacheLineSize = 64
 
-		memController = MakeBuilder().
+		memController = Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			WithSpec(spec).
+			WithPorts(makePorts("MemCtrl", 16)).
 			Build("MemCtrl")
 
-		memController.AssignPort("Top",
-			messaging.NewPort(memController, 16, 16, memController.Name()+".Top"))
-		memController.AssignPort("Control",
-			messaging.NewPort(memController, 16, 16, memController.Name()+".Control"))
-
-		topPort = memController.GetPortByName("Top")
-		ctrlPort = memController.GetPortByName("Control")
+		topPort = memController.Ports.Top
+		ctrlPort = memController.Ports.Control
 		for _, p := range []messaging.Port{topPort, ctrlPort} {
 			(&noopConn{}).PlugIn(p)
 		}
@@ -82,7 +79,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		for i := range n {
 			topPort.Deliver(makeRead(uint64(i * 64)))
 		}
-		memController.Tick()
+		modelingtest.Tick(memController)
 		Expect(memController.State.InflightTransactions).To(HaveLen(n))
 
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
@@ -92,7 +89,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		var drainRsp memcontrolprotocol.Rsp
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
-			memController.Tick()
+			modelingtest.Tick(memController)
 			for {
 				out, ok := topPort.RetrieveOutgoing()
 				if !ok {
@@ -126,7 +123,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		topPort.Deliver(makeRead(0))
 
 		for range 5 {
-			memController.Tick()
+			modelingtest.Tick(memController)
 		}
 
 		// The request is neither consumed nor turned into work, and no
@@ -141,7 +138,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 	DescribeTable("Reset wipes in-flight state from any control state",
 		func(startState memcontrolprotocol.State) {
 			topPort.Deliver(makeRead(0))
-			memController.Tick()
+			modelingtest.Tick(memController)
 			Expect(memController.State.InflightTransactions).ToNot(BeEmpty())
 
 			memController.State.ControlState = startState
@@ -152,7 +149,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 			var rsp memcontrolprotocol.Rsp
 			found := false
 			for i := 0; i < 64 && !found; i++ {
-				memController.Tick()
+				modelingtest.Tick(memController)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					if r, ok := out.(memcontrolprotocol.Rsp); ok {
 						rsp = r
@@ -192,7 +189,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 
 		var rsps []memcontrolprotocol.Rsp
 		for range 16 {
-			memController.Tick()
+			modelingtest.Tick(memController)
 			for {
 				out, ok := ctrlPort.RetrieveOutgoing()
 				if !ok {
@@ -218,7 +215,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		memController.State.ControlState = memcontrolprotocol.StatePaused
 		topPort.Deliver(makeRead(0))
 		for range 3 {
-			memController.Tick()
+			modelingtest.Tick(memController)
 		}
 		_, present2 := topPort.PeekIncoming()
 		Expect(present2).To(BeTrue())
@@ -232,7 +229,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		ctrlPort.Deliver(reset)
 		found := false
 		for i := 0; i < 64 && !found; i++ {
-			memController.Tick()
+			modelingtest.Tick(memController)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdReset {
@@ -245,7 +242,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 
 		// The stale read never became work and never produced a response.
 		for range 16 {
-			memController.Tick()
+			modelingtest.Tick(memController)
 			_, present3 := topPort.RetrieveOutgoing()
 			Expect(present3).To(BeFalse())
 		}

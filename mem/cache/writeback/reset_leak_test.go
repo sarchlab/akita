@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/sarchlab/akita/v5/tracing/tracingtest"
@@ -35,7 +36,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.BankLatency = 1
 	spec.DirLatency = 1
 
-	comp := MakeBuilder().
+	comp := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(Resources{
@@ -44,18 +45,12 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 				Port: messaging.RemotePort("LowerCache"),
 			},
 		}).
+		WithPorts(makePorts("L1Cache", 16)).
 		Build("L1Cache")
+	plugNoopConn(comp)
 
-	for _, name := range []string{"Top", "Bottom", "Control"} {
-		comp.AssignPort(name,
-			messaging.NewPort(comp, 16, 16, comp.Name()+"."+name))
-	}
-	topPort := comp.GetPortByName("Top")
-	botPort := comp.GetPortByName("Bottom")
-	ctrlPort := comp.GetPortByName("Control")
-	for _, p := range []messaging.Port{topPort, botPort, ctrlPort} {
-		(&ccNoopConn{}).PlugIn(p)
-	}
+	topPort := comp.Ports.Top
+	ctrlPort := comp.Ports.Control
 
 	rec := &tracingtest.LeakRecorder{}
 	tracing.CollectTrace(comp, rec)
@@ -77,7 +72,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// Do NOT answer the Bottom read; the request stays genuinely in flight.
 	inFlight := false
 	for i := 0; i < 64 && !inFlight; i++ {
-		comp.Tick()
+		modelingtest.Tick(comp)
 		for j := range comp.State.Transactions {
 			if comp.State.Transactions[j].HasFetchReadReq {
 				inFlight = true
@@ -104,7 +99,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
-		comp.Tick()
+		modelingtest.Tick(comp)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {

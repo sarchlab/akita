@@ -15,8 +15,8 @@ const (
 	KindComponent = "component"
 )
 
-// Component models: how a component runs. Definitions declared with the
-// legacy modeling.ComponentDef carry no model.
+// Component models: how a component runs. Every component definition carries
+// one.
 const (
 	// ModelTicking is a component that runs on a clock (modeling/ticking).
 	ModelTicking = "ticking"
@@ -35,12 +35,11 @@ type Definition struct {
 	SchemaVersion int    `json:"schema_version"`
 	Kind          string `json:"kind"`
 
-	// Model says how a component runs, e.g. "ticking".
+	// Model says how a component runs, e.g. "ticking" (component kind only).
 	Model string `json:"model,omitempty"`
 
-	// Name is the definition's display name. A component declared with a
-	// component model is identified by its package, so its Name is the
-	// package name.
+	// Name is the definition's name. A component is identified by its
+	// package, so its Name is the package name.
 	Name    string `json:"name"`
 	Package string `json:"package"`
 	Module  string `json:"module,omitempty"`
@@ -53,12 +52,12 @@ type Definition struct {
 	// external references that must be supplied at construction time.
 	Resources []Field `json:"resources,omitempty"`
 
-	// Ports describes the component's boundary ports and port groups
-	// (component kind only).
+	// Ports describes the component's ports and port groups, the fields of
+	// its Ports struct in declaration order (component kind only).
 	Ports []Port `json:"ports,omitempty"`
 
 	// Middlewares lists the component's middlewares in the order it runs them
-	// on every tick (component kind only, for definitions that declare them).
+	// (component kind only).
 	Middlewares []Middleware `json:"middlewares,omitempty"`
 }
 
@@ -99,15 +98,20 @@ type Field struct {
 	Choices []string `json:"choices,omitempty"`
 }
 
-// Role identifies one protocol role a port speaks.
+// Role identifies one protocol role a port speaks, as named by an
+// `akita:"role=<protocol>/<role>"` tag on the port's field.
 type Role struct {
 	Protocol string `json:"protocol"`
 	Role     string `json:"role"`
 }
 
-// Port describes one declared port or port group.
+// Port describes one field of a component's Ports struct: a port or a port
+// group.
 type Port struct {
-	Name  string `json:"name"`
+	Name string `json:"name"`
+
+	// Roles lists the protocol roles the port speaks. A port without roles
+	// is untyped.
 	Roles []Role `json:"roles,omitempty"`
 
 	// Group marks a dynamically-sized port group. Members are addressed

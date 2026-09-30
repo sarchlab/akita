@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -21,20 +22,21 @@ func TestControlContract(t *testing.T) {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
-		comp := MakeBuilder().
+		comp := Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
+			WithPorts(defaultPorts("MMUCache")).
 			Build("MMUCache")
 
-		assignDefaultPorts(sim, comp)
-
-		for _, name := range []string{"Top", "Bottom", "Control"} {
-			(&noopConn{}).PlugIn(comp.GetPortByName(name))
+		for _, p := range []messaging.Port{
+			comp.Ports.Top, comp.Ports.Bottom, comp.Ports.Control,
+		} {
+			(&noopConn{}).PlugIn(p)
 		}
 
 		return &memcontrolprotocol.Harness{
 			Comp: comp,
-			Ctrl: comp.GetPortByName("Control"),
+			Ctrl: comp.Ports.Control,
 			IsQuiescent: func() bool {
 				return len(comp.State.OutstandingBottomReqs) == 0
 			},

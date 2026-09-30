@@ -22,7 +22,8 @@ a compute unit and its L1 cache — without modeling a full network-on-chip.
 
 ```go
 type Comp struct {
-    *modeling.Component[Spec, State, modeling.None]
+    State State // saved in checkpoints
+    // ...
 }
 
 func (c *Comp) PlugIn(port messaging.Port)          // Connect a port
@@ -32,7 +33,9 @@ func (c *Comp) NotifySend()                         // Port has outgoing message
 ```
 
 `Comp` implements `messaging.Connection`, so ports can use it as their
-connection for message delivery. The only configuration is the `Freq` field on
+connection for message delivery. It is a connection, not a component: ports plug
+into it during wiring. It ticks on secondary tick events, so it runs after the
+components of the same cycle. The only configuration is the `Freq` field on
 `Spec`, which sets the connection's tick frequency.
 
 ## Builder Pattern
@@ -74,8 +77,8 @@ conn := directconnection.MakeBuilder().
     Build("Bus")
 
 // Create components with ports, then plug them in
-conn.PlugIn(cache.GetPortByName("Bottom"))
-conn.PlugIn(memCtrl.GetPortByName("Top"))
+conn.PlugIn(cache.Ports.Bottom)
+conn.PlugIn(memCtrl.Ports.Top)
 ```
 
 When component A sends a message to component B:

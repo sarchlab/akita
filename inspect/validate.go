@@ -2,7 +2,6 @@ package inspect
 
 import (
 	"fmt"
-	"go/ast"
 	"go/types"
 	"reflect"
 	"slices"
@@ -79,34 +78,9 @@ func validateSpecFieldType(typ types.Type) error {
 	return fmt.Errorf("disallowed Spec type %s: Spec fields must be scalars", typ)
 }
 
-// validateDefinition checks the definition's metadata invariants. The
-// runtime does not re-check them, so the inspector is where they are enforced.
-func validateDefinition(
-	pkg *packages.Package, lit *ast.CompositeLit,
-	specType types.Type, def *schema.Definition,
-) error {
-	if def.Name == "" {
-		return posErrorf(pkg, lit.Pos(), "component definition must have a name")
-	}
-	seen := map[string]bool{}
-	checkName := func(name string) error {
-		if name == "" {
-			return posErrorf(pkg, lit.Pos(), "port has an empty name")
-		}
-		if seen[name] {
-			return posErrorf(pkg, lit.Pos(), "port %q declared more than once", name)
-		}
-		seen[name] = true
-		return nil
-	}
-	for _, p := range def.Ports {
-		if err := checkName(p.Name); err != nil {
-			return err
-		}
-	}
-	return validateFieldMetadata(pkg, specType, def.Spec)
-}
-
+// validateFieldMetadata checks the Spec field metadata that the runtime does
+// not re-check, so the inspector is where it is enforced: min and max apply
+// only to numeric fields, and no two fields share a JSON name.
 func validateFieldMetadata(pkg *packages.Package, specType types.Type, fields []schema.Field) error {
 	st := specType.Underlying().(*types.Struct)
 	seen := map[string]bool{}

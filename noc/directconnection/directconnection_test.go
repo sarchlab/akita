@@ -7,6 +7,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
@@ -112,9 +113,13 @@ var _ = Describe("DirectConnection", func() {
 	})
 })
 
+// agent is a test double that sends its messages out of OutPort and records
+// what it receives, ticking while it makes progress.
 type agent struct {
-	*modeling.TickingComponent
+	*modeling.TickScheduler
+	hooking.HookableBase
 
+	name    string
 	msgsOut []testMsg
 	msgsIn  []messaging.Msg
 
@@ -122,15 +127,22 @@ type agent struct {
 }
 
 func newAgent(sim timing.Simulation, freq timing.Freq, name string, outPort messaging.Port) *agent {
-	a := new(agent)
-	a.TickingComponent = modeling.NewTickingComponent(name, sim, freq, a)
-	a.OutPort = outPort
+	a := &agent{
+		TickScheduler: modeling.NewTickScheduler(name, sim, freq),
+		name:          name,
+		OutPort:       outPort,
+	}
 	a.OutPort.SetComponent(a)
+	sim.GetEngine().(timing.HandlerRegistry).RegisterHandler(name, a)
 
 	return a
 }
 
-func (a *agent) Tick() bool {
+func (a *agent) Name() string                  { return a.name }
+func (a *agent) NotifyRecv(messaging.Port)     { a.TickLater() }
+func (a *agent) NotifyPortFree(messaging.Port) { a.TickLater() }
+
+func (a *agent) Handle(timing.Event) {
 	madeProgress := false
 
 	msgIn, ok := a.OutPort.RetrieveIncoming()
@@ -145,7 +157,9 @@ func (a *agent) Tick() bool {
 		a.msgsOut = a.msgsOut[1:]
 	}
 
-	return madeProgress
+	if madeProgress {
+		a.TickLater()
+	}
 }
 
 var _ = Describe("Direct Connection Integration", func() {

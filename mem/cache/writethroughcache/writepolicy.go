@@ -39,8 +39,8 @@ func (d *directory) handleWriteHit(
 	setID, wayID int,
 	postCoalesceIdx int,
 ) bool {
-	spec := d.cache.comp.Spec()
-	switch spec.WritePolicyType {
+	policy := d.cache.comp.Spec().writePolicy()
+	switch policy {
 	case "write-around":
 		return d.writearoundWriteHit(trans, setID, wayID, postCoalesceIdx)
 	case "write-evict":
@@ -48,7 +48,7 @@ func (d *directory) handleWriteHit(
 	case "write-through":
 		return d.writethroughWriteHit(trans, setID, wayID, postCoalesceIdx)
 	default:
-		panic("unknown write policy type: " + spec.WritePolicyType)
+		panic("unknown write policy type: " + policy)
 	}
 }
 
@@ -58,8 +58,8 @@ func (d *directory) handleWriteMiss(
 	trans *transactionState,
 	postCoalesceIdx int,
 ) bool {
-	spec := d.cache.comp.Spec()
-	switch spec.WritePolicyType {
+	policy := d.cache.comp.Spec().writePolicy()
+	switch policy {
 	case "write-around":
 		return d.writearoundWriteMiss(trans, postCoalesceIdx)
 	case "write-evict":
@@ -67,7 +67,7 @@ func (d *directory) handleWriteMiss(
 	case "write-through":
 		return d.writethroughWriteMiss(trans, postCoalesceIdx)
 	default:
-		panic("unknown write policy type: " + spec.WritePolicyType)
+		panic("unknown write policy type: " + policy)
 	}
 }
 
@@ -332,7 +332,7 @@ func (d *directory) writethroughPartialWriteMiss(
 	}
 
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
-		&next.DirectoryState, spec.NumSets, int(blockSize), cacheLineID)
+		&next.DirectoryState, spec.numSets(), int(blockSize), cacheLineID)
 	victim := &next.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
 	if victim.ReadCount > 0 || victim.IsLocked {
 		return false
@@ -375,7 +375,7 @@ func (d *directory) writethroughFullLineWriteMiss(
 	next := &d.cache.comp.State
 
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
-		&next.DirectoryState, spec.NumSets, int(blockSize), cacheLineID)
+		&next.DirectoryState, spec.numSets(), int(blockSize), cacheLineID)
 
 	// Install the line via the shared core, not writethroughWriteHit: this is a
 	// miss, so writethroughWriteMiss owns the write-miss tag. Calling the hit

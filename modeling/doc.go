@@ -10,10 +10,8 @@
 //   - modeling/event: no clock; reacts to events that carry data.
 //
 // This package holds what the models share: ComponentBase, Middleware, the
-// tick and wakeup schedulers, checkpoint helpers, and validation of Spec and
-// State types. It also holds the older API that most components still use:
-// Component[S, T, R] with a middleware pipeline, EventDrivenComponent, and
-// Domain for bundling components and exposing ports at a boundary.
+// tick and wakeup schedulers, checkpoint helpers, validation of Spec and State
+// types, and Domain for bundling components and exposing ports at a boundary.
 //
 // The timing package provides the simulation kernel. The messaging package
 // provides ports and connections. The modeling package provides the

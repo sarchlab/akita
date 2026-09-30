@@ -11,7 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/cache/writethroughcache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 
 	"github.com/sarchlab/akita/v5/simulation"
@@ -25,7 +25,10 @@ var maxAddressFlag = flag.Uint64("max-address", 1048576, "Address range to use")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 var traceFlag = flag.Bool("trace", false, "Collect trace")
 
-func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) { //nolint:funlen
+//nolint:funlen // wires the whole simulation in one place
+func buildEnvironment(
+	seed int64,
+) (*simulation.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
 	simBuilder := simulation.MakeBuilder()
 
 	if *parallelFlag {
@@ -42,45 +45,48 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 		WithSimulation(s).
 		Build("Conn")
 
+	// The agent sends to the cache's Top port, so the cache's ports are
+	// created before the agent is built.
+	cachePorts := writethroughcache.Ports{
+		Top:     messaging.NewPort(nil, 16, 16, "Cache.Top"),
+		Bottom:  messaging.NewPort(nil, 16, 16, "Cache.Bottom"),
+		Control: messaging.NewPort(nil, 16, 16, "Cache.Control"),
+	}
+
 	agentSpec := memaccessagent.Definition.DefaultSpec
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.ReadLeft = *numAccessFlag
-	agent := memaccessagent.MakeBuilder().
+	agentSpec.RandSeed = seed
+	agent := memaccessagent.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(agentSpec).
+		WithResources(memaccessagent.Resources{LowModule: cachePorts.Top}).
+		WithPorts(memaccessagent.Ports{
+			Mem: messaging.NewPort(nil, 16, 16, "MemAccessAgent.Mem"),
+		}).
 		Build("MemAccessAgent")
-	agentMem := modeling.MakePortBuilder().
-		WithSimulation(s).
-		WithComponent(agent).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Mem")
-	agent.AssignPort("Mem", agentMem)
 	if monitor := s.GetMonitor(); monitor != nil {
-		agent.CreateProgressBars(monitor.CreateProgressBar)
+		memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
 	}
 
-	dramSpec := idealmemcontroller.Definition.DefaultSpec
-	dramSpec.Capacity = 4 * mem.GB
-	dram := idealmemcontroller.MakeBuilder().
+	dram := idealmemcontroller.Definition.Builder().
 		WithSimulation(s).
-		WithSpec(dramSpec).
+		WithSpec(idealmemcontroller.Definition.DefaultSpec).
+		WithResources(idealmemcontroller.Resources{
+			Storage: mem.MakeStorageBuilder().
+				WithCapacity(4 * mem.GB).
+				WithSimulation(s).
+				Build("DRAM.Storage"),
+		}).
+		WithPorts(idealmemcontroller.Ports{
+			Top:     messaging.NewPort(nil, 16, 16, "DRAM.Top"),
+			Control: messaging.NewPort(nil, 16, 16, "DRAM.Control"),
+		}).
 		Build("DRAM")
-	dramTop := modeling.MakePortBuilder().
-		WithSimulation(s).
-		WithComponent(dram).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Top")
-	dram.AssignPort("Top", dramTop)
-	dramCtrl := modeling.MakePortBuilder().
-		WithSimulation(s).
-		WithComponent(dram).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Control")
-	dram.AssignPort("Control", dramCtrl)
 
 	addressToPortMapper := new(mem.SinglePortMapper)
-	addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()
+	addressToPortMapper.Port = dram.Ports.Top.AsRemote()
 
 	cacheSpec := writethroughcache.Definition.DefaultSpec
 	cacheSpec.WritePolicyType = "write-evict"
@@ -90,38 +96,23 @@ func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.
 	cacheSpec.TotalByteSize = 4 * mem.KB
 	cacheSpec.NumBanks = 1
 	cacheSpec.BankLatency = 20
-	writeEvictCache := writethroughcache.MakeBuilder().
+	writeEvictCache := writethroughcache.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(cacheSpec).
 		WithResources(writethroughcache.Resources{
+			Storage: mem.MakeStorageBuilder().
+				WithCapacity(cacheSpec.TotalByteSize).
+				WithSimulation(s).
+				Build("Cache.Storage"),
 			AddressMapper: addressToPortMapper,
 		}).
+		WithPorts(cachePorts).
 		Build("Cache")
-	cacheTop := modeling.MakePortBuilder().
-		WithSimulation(s).
-		WithComponent(writeEvictCache).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Top")
-	writeEvictCache.AssignPort("Top", cacheTop)
-	cacheBottom := modeling.MakePortBuilder().
-		WithSimulation(s).
-		WithComponent(writeEvictCache).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Bottom")
-	writeEvictCache.AssignPort("Bottom", cacheBottom)
-	cacheControl := modeling.MakePortBuilder().
-		WithSimulation(s).
-		WithComponent(writeEvictCache).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Control")
-	writeEvictCache.AssignPort("Control", cacheControl)
 
-	agent.LowModule = writeEvictCache.GetPortByName("Top")
-
-	conn.PlugIn(agent.GetPortByName("Mem"))
-	conn.PlugIn(writeEvictCache.GetPortByName("Bottom"))
-	conn.PlugIn(writeEvictCache.GetPortByName("Top"))
-	conn.PlugIn(dram.GetPortByName("Top"))
+	conn.PlugIn(agent.Ports.Mem)
+	conn.PlugIn(writeEvictCache.Ports.Bottom)
+	conn.PlugIn(writeEvictCache.Ports.Top)
+	conn.PlugIn(dram.Ports.Top)
 
 	return s, engine, agent
 }
@@ -139,7 +130,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, "Seed %d\n", seed)
 	rand.Seed(seed)
 
-	s, engine, agent := buildEnvironment()
+	s, engine, agent := buildEnvironment(seed)
 	agent.TickLater()
 
 	err := engine.Run()

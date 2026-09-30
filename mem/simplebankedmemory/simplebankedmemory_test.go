@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -14,22 +15,6 @@ import (
 	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/timing"
 )
-
-// assignPort builds a port instance for a declared component port and attaches
-// it, using the same simulation the component builder used.
-func assignPort(
-	sim timing.Simulation,
-	comp *Comp,
-	name string,
-	bufSize int,
-) {
-	p := modeling.MakePortBuilder().
-		WithSimulation(sim).
-		WithComponent(comp).
-		WithSpec(modeling.PortSpec{BufSize: bufSize}).
-		Build(name)
-	comp.AssignPort(name, p)
-}
 
 type loopbackConnection struct {
 	hooking.HookableBase
@@ -95,7 +80,6 @@ func (c *loopbackConnection) forward(src, dst messaging.Port) {
 type testAgent struct {
 	sim timing.Simulation
 	hooking.HookableBase
-	*messaging.PortOwnerBase
 
 	name     string
 	port     messaging.Port
@@ -105,14 +89,12 @@ type testAgent struct {
 func newTestAgent(name string) *testAgent {
 	naming.MustBeValid(name)
 
-	a := &testAgent{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
-		PortOwnerBase: messaging.NewPortOwnerBase(),
-		name:          name,
+	a := &testAgent{
+		sim:  modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
+		name: name,
 	}
 
 	a.port = messaging.NewPort(a, 4, 4, fmt.Sprintf("%s.Port", name))
-	a.DeclarePort("Port")
-	a.AssignPort("Port", a.port)
 
 	return a
 }
@@ -148,7 +130,6 @@ func (a *testAgent) send(msg messaging.Msg) {
 type bandwidthAgent struct {
 	sim timing.Simulation
 	hooking.HookableBase
-	*messaging.PortOwnerBase
 
 	name         string
 	port         messaging.Port
@@ -159,14 +140,12 @@ type bandwidthAgent struct {
 func newBandwidthAgent(name string) *bandwidthAgent {
 	naming.MustBeValid(name)
 
-	a := &bandwidthAgent{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
-		PortOwnerBase: messaging.NewPortOwnerBase(),
-		name:          name,
+	a := &bandwidthAgent{
+		sim:  modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
+		name: name,
 	}
 
 	a.port = messaging.NewPort(a, 8, 8, fmt.Sprintf("%s.Port", name))
-	a.DeclarePort("Port")
-	a.AssignPort("Port", a.port)
 
 	return a
 }
@@ -211,15 +190,14 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.F
 	spec.StageLatency = 6
 	spec.PostPipelineBufSize = 32
 
-	memComp := MakeBuilder().
+	memComp := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
+		WithResources(Resources{Storage: mem.NewStorage(spec.Capacity)}).
+		WithPorts(makePorts("Mem", 32, 16)).
 		Build("Mem")
 
-	assignPort(sim, memComp, "Top", 32)
-	assignPort(sim, memComp, "Control", 16)
-
-	topPort := memComp.GetPortByName("Top")
+	topPort := memComp.Ports.Top
 	agent := newBandwidthAgent("Agent")
 	conn := newLoopbackConnection("Conn")
 	conn.PlugIn(topPort)
@@ -278,16 +256,14 @@ var _ = Describe("SimpleBankedMemory", func() {
 		spec.NumBanks = 2
 		spec.StageLatency = 2
 
-		memComp = MakeBuilder().
+		memComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{Storage: storage}).
+			WithPorts(makePorts("Mem", 4, 16)).
 			Build("Mem")
 
-		assignPort(sim, memComp, "Top", 4)
-		assignPort(sim, memComp, "Control", 16)
-
-		topPort := memComp.GetPortByName("Top")
+		topPort := memComp.Ports.Top
 		agent = newTestAgent("Agent")
 		conn = newLoopbackConnection("Conn")
 		conn.PlugIn(topPort)
@@ -302,7 +278,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		data := []byte{1, 2, 3, 4}
 		storage.Write(0x0, data)
 
-		topPort := memComp.GetPortByName("Top")
+		topPort := memComp.Ports.Top
 		read := memprotocol.ReadReq{}
 		read.ID = sim.NewID()
 		read.Src = agent.port.AsRemote()
@@ -315,7 +291,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		agent.send(read)
 
 		for i := 0; i < 6; i++ {
-			memComp.Tick()
+			modelingtest.Tick(memComp)
 		}
 
 		Expect(agent.received).To(HaveLen(1))
@@ -331,7 +307,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		newData := []byte{0x10, 0x20, 0x30, 0x40}
 
-		topPort := memComp.GetPortByName("Top")
+		topPort := memComp.Ports.Top
 
 		write := memprotocol.WriteReq{}
 		write.ID = sim.NewID()
@@ -355,7 +331,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		agent.send(read)
 
 		for i := 0; i < 10; i++ {
-			memComp.Tick()
+			modelingtest.Tick(memComp)
 		}
 
 		Expect(agent.received).To(HaveLen(2))
@@ -378,15 +354,14 @@ var _ = Describe("SimpleBankedMemory", func() {
 		spec.NumBanks = 2
 		spec.StageLatency = 2
 
-		memComp = MakeBuilder().
+		memComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
+			WithResources(Resources{Storage: mem.NewStorage(spec.Capacity)}).
+			WithPorts(makePorts("MemGlobal", 4, 16)).
 			Build("MemGlobal")
 
-		assignPort(sim, memComp, "Top", 4)
-		assignPort(sim, memComp, "Control", 16)
-
-		topPort := memComp.GetPortByName("Top")
+		topPort := memComp.Ports.Top
 		agent = newTestAgent("AgentGlobal")
 		conn = newLoopbackConnection("ConnGlobal")
 		conn.PlugIn(topPort)
@@ -417,7 +392,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		agent.send(read)
 
 		for i := 0; i < 12; i++ {
-			memComp.Tick()
+			modelingtest.Tick(memComp)
 		}
 
 		Expect(agent.received).To(HaveLen(2))
@@ -430,7 +405,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 func Example() {
 	memComp, agent, conn, freq := setupExampleSystem()
-	topPort := memComp.GetPortByName("Top")
+	topPort := memComp.Ports.Top
 	srcRemote := agent.port.AsRemote()
 	dstRemote := topPort.AsRemote()
 
@@ -456,7 +431,7 @@ func Example() {
 			conn.transfer()
 		}
 
-		memComp.Tick()
+		modelingtest.Tick(memComp)
 		conn.transfer()
 
 		latencySum += collectLatency(agent, startCycles, cycles, &processed)

@@ -128,7 +128,7 @@ func (ds *directoryStage) doRead(transIdx int, trans *transactionState) bool {
 
 	setID, wayID, blockFound := cache.DirectoryLookup(
 		&next.DirectoryState,
-		spec.NumSets, 1<<spec.Log2BlockSize,
+		spec.numSets(), 1<<spec.Log2BlockSize,
 		trans.ReadPID, cachelineID)
 	if blockFound {
 		return ds.handleReadHit(transIdx, trans, setID, wayID)
@@ -191,7 +191,7 @@ func (ds *directoryStage) handleReadMiss(transIdx int, trans *transactionState) 
 	blockSize := 1 << spec.Log2BlockSize
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
 		&next.DirectoryState,
-		spec.NumSets, blockSize,
+		spec.numSets(), blockSize,
 		cacheLineID)
 	victim := &next.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
 
@@ -243,7 +243,7 @@ func (ds *directoryStage) doWrite(transIdx int, trans *transactionState) bool {
 
 	setID, wayID, blockFound := cache.DirectoryLookup(
 		&next.DirectoryState,
-		spec.NumSets, 1<<spec.Log2BlockSize,
+		spec.numSets(), 1<<spec.Log2BlockSize,
 		trans.WritePID, cachelineID)
 	if blockFound {
 		ok := ds.doWriteHit(transIdx, trans, setID, wayID)
@@ -316,7 +316,7 @@ func (ds *directoryStage) writeFullLineMiss(transIdx int, trans *transactionStat
 	blockSize := 1 << spec.Log2BlockSize
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
 		&next.DirectoryState,
-		spec.NumSets, blockSize,
+		spec.numSets(), blockSize,
 		cachelineID)
 	victim := &next.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
 
@@ -343,7 +343,7 @@ func (ds *directoryStage) writePartialLineMiss(transIdx int, trans *transactionS
 	blockSize := 1 << spec.Log2BlockSize
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
 		&next.DirectoryState,
-		spec.NumSets, blockSize,
+		spec.numSets(), blockSize,
 		cachelineID)
 	victim := &next.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
 

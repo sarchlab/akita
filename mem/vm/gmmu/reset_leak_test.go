@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/sarchlab/akita/v5/tracing/tracingtest"
@@ -36,19 +37,19 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.Latency = 1
 	spec.LowModule = lowModule
 
-	comp := MakeBuilder().
+	comp := Definition.Builder().
 		WithSimulation(sim).
 		WithResources(Resources{PageTable: pageTable}).
 		WithSpec(spec).
+		WithPorts(defaultPorts("GMMU")).
 		Build("GMMU")
 
-	assignDefaultPorts(sim, comp)
-	for _, name := range []string{"Top", "Bottom", "Control"} {
-		(&noopConn{}).PlugIn(comp.GetPortByName(name))
+	for _, p := range allPorts(comp) {
+		(&noopConn{}).PlugIn(p)
 	}
 
-	topPort := comp.GetPortByName("Top")
-	ctrlPort := comp.GetPortByName("Control")
+	topPort := comp.Ports.Top
+	ctrlPort := comp.Ports.Control
 
 	rec := &tracingtest.LeakRecorder{}
 	tracing.CollectTrace(comp, rec)
@@ -77,7 +78,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// WalkingTranslations and now sits in RemoteMemReqs, with both the original
 	// req_in and the downstream req_out tracing tasks open.
 	for i := 0; i < 64 && len(comp.State.RemoteMemReqs) == 0; i++ {
-		comp.Tick()
+		modelingtest.Tick(comp)
 	}
 
 	if len(comp.State.RemoteMemReqs) == 0 {
@@ -104,7 +105,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
-		comp.Tick()
+		modelingtest.Tick(comp)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {

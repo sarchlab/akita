@@ -12,6 +12,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
@@ -42,32 +43,19 @@ const (
 	ctrlBufSize        = 1
 )
 
-// assignPort builds a port with the given buffer size using the same simulation
-// the component was built with, and assigns it to the component's declared port
-// of the same name.
-func assignPort(
-	sim timing.Simulation,
-	comp *Comp,
-	name string,
-	bufSize int,
-) messaging.Port {
-	p := modeling.MakePortBuilder().
-		WithSimulation(sim).
-		WithComponent(comp).
-		WithSpec(modeling.PortSpec{BufSize: bufSize}).
-		Build(name)
-	comp.AssignPort(name, p)
-	return p
-}
-
-// assignPorts assigns the translator's four declared ports (Top, Bottom,
-// Translation, Control), with the given Top buffer size and the historical
+// makePorts creates the four ports (Top, Bottom, Translation, Control) of the
+// translator named name, with the given Top buffer size and the historical
 // defaults for the rest.
-func assignPorts(sim timing.Simulation, comp *Comp, topBufSize int) {
-	assignPort(sim, comp, "Top", topBufSize)
-	assignPort(sim, comp, "Bottom", bottomBufSize)
-	assignPort(sim, comp, "Translation", translationBufSize)
-	assignPort(sim, comp, "Control", ctrlBufSize)
+func makePorts(name string, topBufSize int) Ports {
+	return Ports{
+		Top: messaging.NewPort(nil, topBufSize, topBufSize, name+".Top"),
+		Bottom: messaging.NewPort(nil, bottomBufSize, bottomBufSize,
+			name+".Bottom"),
+		Translation: messaging.NewPort(nil, translationBufSize,
+			translationBufSize, name+".Translation"),
+		Control: messaging.NewPort(nil, ctrlBufSize, ctrlBufSize,
+			name+".Control"),
+	}
 }
 
 var _ = Describe("Address Translator", func() {
@@ -99,18 +87,17 @@ var _ = Describe("Address Translator", func() {
 			},
 		}
 
-		t = MakeBuilder().
+		t = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(resources).
+			WithPorts(makePorts("AddressTranslator", topBufSize)).
 			Build("AddressTranslator")
 
-		assignPorts(sim, t, topBufSize)
-
-		topPort = t.GetPortByName("Top")
-		bottomPort = t.GetPortByName("Bottom")
-		translationPort = t.GetPortByName("Translation")
-		ctrlPort = t.GetPortByName("Control")
+		topPort = t.Ports.Top
+		bottomPort = t.Ports.Bottom
+		translationPort = t.Ports.Translation
+		ctrlPort = t.Ports.Control
 
 		for _, p := range []messaging.Port{
 			topPort, bottomPort, translationPort, ctrlPort,
@@ -119,8 +106,8 @@ var _ = Describe("Address Translator", func() {
 			conn.PlugIn(p)
 		}
 
-		tParseTransMW = t.Middlewares()[1].(*parseTranslateMW)
-		tRespondPipeMW = t.Middlewares()[2].(*respondPipelineMW)
+		tParseTransMW = t.Middlewares.ParseTranslate
+		tRespondPipeMW = t.Middlewares.RespondPipeline
 	}
 
 	BeforeEach(func() {
@@ -578,7 +565,7 @@ var _ = Describe("Address Translator", func() {
 		It("rejects Flush as unsupported", func() {
 			ctrlPort.Deliver(flushReq)
 
-			madeProgress := t.Tick()
+			madeProgress := modelingtest.Tick(t)
 
 			Expect(madeProgress).To(BeTrue())
 			rspMsg, _ := ctrlPort.RetrieveOutgoing()
@@ -591,7 +578,7 @@ var _ = Describe("Address Translator", func() {
 		It("clears in-flight state on Reset", func() {
 			ctrlPort.Deliver(restartReq)
 
-			madeProgress := t.Tick()
+			madeProgress := modelingtest.Tick(t)
 
 			Expect(madeProgress).To(BeTrue())
 			rspMsg, _ := ctrlPort.RetrieveOutgoing()

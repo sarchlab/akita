@@ -1,14 +1,15 @@
 // Package fullcomp is a synthetic component used by the inspector tests. It
 // exercises every feature of the definition schema: docs, units, tags,
-// choices, excluded fields, resources, and port groups.
+// choices, excluded fields, resources, port roles and port groups, and
+// middlewares.
 package fullcomp
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	_ "github.com/sarchlab/akita/v5/mem/memcontrolprotocol" // Declares mem.control.
+	_ "github.com/sarchlab/akita/v5/mem/memprotocol"        // Declares mem.
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -40,7 +41,10 @@ type Spec struct {
 }
 
 // State is the mutable runtime state.
-type State struct{}
+type State struct {
+	// Served counts the requests served.
+	Served int `json:"served"`
+}
 
 // Resources wires the component to external objects.
 type Resources struct {
@@ -48,32 +52,51 @@ type Resources struct {
 	Mapper mem.AddressToPortMapper `json:"-"`
 }
 
-// Builder builds the component. Its WithResources parameter tells the
-// inspector which type holds the component's resources.
-type Builder struct {
-	resources Resources
+// Ports holds the component's ports.
+type Ports struct {
+	// Top receives memory requests.
+	Top messaging.Port `akita:"role=mem/responder"`
+
+	// Ctrl multiplexes two protocols on one port.
+	Ctrl messaging.Port `akita:"role=mem/responder,role=mem.control/responder"`
+
+	// Out is a port group: its size is decided when it is wired.
+	Out []messaging.Port `akita:"role=mem/requester"`
 }
 
-// WithResources sets the external wiring.
-func (b Builder) WithResources(r Resources) Builder {
-	b.resources = r
-	return b
+// Middlewares holds the component's behavior.
+type Middlewares struct {
+	// Control handles control commands.
+	Control *controlMW
+
+	// Serve forwards requests from Top to Out.
+	Serve *serveMW
 }
+
+// Comp is the component.
+type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
 
 // Definition declares the component.
-var Definition = modeling.ComponentDef[Spec]{
-	Name: "FullComp",
+var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 	DefaultSpec: Spec{
 		Freq:     1 * timing.GHz,
 		NumLanes: 4,
 		Mode:     ModeFast,
 	},
-	Ports: []modeling.PortDef{
-		{Name: "Top", Roles: []*messaging.Role{memprotocol.Responder}},
-		// Ctrl multiplexes two protocols on one port.
-		{Name: "Ctrl", Roles: []*messaging.Role{
-			memprotocol.Responder, memcontrolprotocol.Responder}},
-		// Out is a port group: its size is decided when it is wired.
-		{Name: "Out", Roles: []*messaging.Role{memprotocol.Requester}, Group: true},
-	},
+	NewState:       newState,
+	NewMiddlewares: newMiddlewares,
 }
+
+func newState(*Comp) State { return State{} }
+
+func newMiddlewares(c *Comp) Middlewares {
+	return Middlewares{Control: &controlMW{comp: c}, Serve: &serveMW{comp: c}}
+}
+
+type controlMW struct{ comp *Comp }
+
+func (m *controlMW) Handle(timing.Event) bool { return false }
+
+type serveMW struct{ comp *Comp }
+
+func (m *serveMW) Handle(timing.Event) bool { return false }

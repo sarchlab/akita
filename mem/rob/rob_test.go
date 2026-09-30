@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -25,13 +26,6 @@ func (c *noopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
-
-// tick hands the reorder buffer's middleware a TickEvent at the current time,
-// as the component does on every cycle, and reports whether it made progress.
-func tick(c *Comp) bool {
-	return c.Middlewares.Pipeline.Handle(modeling.MakeTickEvent(
-		c.Simulation().NewID(), c.Name(), c.CurrentTime()))
-}
 
 var _ = Describe("Reorder Buffer", func() {
 	const (
@@ -117,7 +111,7 @@ var _ = Describe("Reorder Buffer", func() {
 			req := makeRead(0)
 			topPort.Deliver(req)
 
-			progress := tick(rob)
+			progress := modelingtest.Tick(rob)
 
 			Expect(progress).To(BeTrue())
 			Expect(rob.State.Transactions).To(HaveLen(1))
@@ -140,7 +134,7 @@ var _ = Describe("Reorder Buffer", func() {
 			req := makeWrite(64, []byte{1, 2, 3, 4})
 			topPort.Deliver(req)
 
-			progress := tick(rob)
+			progress := modelingtest.Tick(rob)
 
 			Expect(progress).To(BeTrue())
 			Expect(rob.State.Transactions).To(HaveLen(1))
@@ -162,7 +156,7 @@ var _ = Describe("Reorder Buffer", func() {
 
 			topPort.Deliver(makeRead(0))
 
-			progress := tick(rob)
+			progress := modelingtest.Tick(rob)
 
 			Expect(progress).To(BeFalse())
 			Expect(rob.State.Transactions).To(HaveLen(spec.BufferSize))
@@ -184,7 +178,7 @@ var _ = Describe("Reorder Buffer", func() {
 				bottomPort.Send(filler)
 			}
 
-			progress := tick(rob)
+			progress := modelingtest.Tick(rob)
 
 			Expect(progress).To(BeFalse())
 			Expect(rob.State.Transactions).To(BeEmpty())
@@ -200,7 +194,7 @@ var _ = Describe("Reorder Buffer", func() {
 			req.TrafficClass = "memcontrolprotocol.Req"
 			topPort.Deliver(req)
 
-			Expect(func() { tick(rob) }).To(Panic())
+			Expect(func() { modelingtest.Tick(rob) }).To(Panic())
 		})
 	})
 
@@ -208,7 +202,7 @@ var _ = Describe("Reorder Buffer", func() {
 		It("attaches the bottom response to the matching transaction", func() {
 			req := makeWrite(0, []byte{0xAA})
 			topPort.Deliver(req)
-			tick(rob) // forward to bottom
+			modelingtest.Tick(rob) // forward to bottom
 
 			Expect(rob.State.Transactions).To(HaveLen(1))
 			shadowID := rob.State.Transactions[0].ReqToBottomID
@@ -221,7 +215,7 @@ var _ = Describe("Reorder Buffer", func() {
 			rsp.TrafficClass = "memprotocol.WriteDoneRsp"
 			bottomPort.Deliver(rsp)
 
-			tick(rob)
+			modelingtest.Tick(rob)
 
 			// The response is recorded on this tick; bottomUp will drain
 			// the head on the following tick (hardware pipeline ordering).
@@ -238,7 +232,7 @@ var _ = Describe("Reorder Buffer", func() {
 			rsp.TrafficClass = "memprotocol.WriteDoneRsp"
 			bottomPort.Deliver(rsp)
 
-			tick(rob)
+			modelingtest.Tick(rob)
 
 			_, present2 := bottomPort.PeekIncoming()
 			Expect(present2).To(BeFalse())
@@ -252,7 +246,7 @@ var _ = Describe("Reorder Buffer", func() {
 			req.TrafficClass = "memcontrolprotocol.Req"
 			bottomPort.Deliver(req)
 
-			progress := tick(rob)
+			progress := modelingtest.Tick(rob)
 
 			Expect(progress).To(BeTrue())
 			_, present3 := bottomPort.PeekIncoming()
@@ -265,7 +259,7 @@ var _ = Describe("Reorder Buffer", func() {
 		It("forwards the head response to the top once it is ready", func() {
 			req := makeRead(0)
 			topPort.Deliver(req)
-			tick(rob)
+			modelingtest.Tick(rob)
 			shadowSent, _ := bottomPort.RetrieveOutgoing()
 			Expect(shadowSent).ToNot(BeNil())
 
@@ -279,8 +273,8 @@ var _ = Describe("Reorder Buffer", func() {
 			rsp.TrafficClass = "memprotocol.DataReadyRsp"
 			bottomPort.Deliver(rsp)
 
-			tick(rob) // parseBottom records the response
-			tick(rob) // bottomUp drains the head
+			modelingtest.Tick(rob) // parseBottom records the response
+			modelingtest.Tick(rob) // bottomUp drains the head
 
 			Expect(rob.State.Transactions).To(BeEmpty())
 
@@ -301,7 +295,7 @@ var _ = Describe("Reorder Buffer", func() {
 
 			// Tick once: both requests forward to the bottom in the same
 			// cycle (NumReqPerCycle=2).
-			tick(rob)
+			modelingtest.Tick(rob)
 			Expect(rob.State.Transactions).To(HaveLen(2))
 			_, present4 := bottomPort.RetrieveOutgoing()
 			Expect(present4).To(BeTrue())
@@ -320,8 +314,8 @@ var _ = Describe("Reorder Buffer", func() {
 			rsp2.TrafficClass = "memprotocol.DataReadyRsp"
 			bottomPort.Deliver(rsp2)
 
-			tick(rob) // parseBottom records rsp2
-			tick(rob) // bottomUp finds head not ready, makes no progress
+			modelingtest.Tick(rob) // parseBottom records rsp2
+			modelingtest.Tick(rob) // bottomUp finds head not ready, makes no progress
 
 			Expect(rob.State.Transactions).To(HaveLen(2))
 			Expect(rob.State.Transactions[0].HasRsp).To(BeFalse())
@@ -338,8 +332,8 @@ var _ = Describe("Reorder Buffer", func() {
 			rsp1.TrafficClass = "memprotocol.DataReadyRsp"
 			bottomPort.Deliver(rsp1)
 
-			tick(rob) // parseBottom records rsp1
-			tick(rob) // bottomUp drains both (NumReqPerCycle=2)
+			modelingtest.Tick(rob) // parseBottom records rsp1
+			modelingtest.Tick(rob) // bottomUp drains both (NumReqPerCycle=2)
 
 			Expect(rob.State.Transactions).To(BeEmpty())
 
@@ -356,7 +350,7 @@ var _ = Describe("Reorder Buffer", func() {
 		It("stalls when the top port cannot accept the response", func() {
 			req := makeRead(0)
 			topPort.Deliver(req)
-			tick(rob)
+			modelingtest.Tick(rob)
 			bottomPort.RetrieveOutgoing()
 
 			shadowID := rob.State.Transactions[0].ReqToBottomID
@@ -368,7 +362,7 @@ var _ = Describe("Reorder Buffer", func() {
 			rsp.TrafficClass = "memprotocol.DataReadyRsp"
 			bottomPort.Deliver(rsp)
 
-			tick(rob) // parseBottom records the response
+			modelingtest.Tick(rob) // parseBottom records the response
 
 			// Fill the top outgoing buffer so the next bottomUp Send fails.
 			for i := 0; i < topBufSize; i++ {
@@ -381,7 +375,7 @@ var _ = Describe("Reorder Buffer", func() {
 				topPort.Send(filler)
 			}
 
-			tick(rob)
+			modelingtest.Tick(rob)
 
 			// The head should still be present and marked HasRsp because
 			// bottomUp could not enqueue the outgoing response.
@@ -393,7 +387,7 @@ var _ = Describe("Reorder Buffer", func() {
 	Context("control", func() {
 		It("drops in-flight transactions and pauses on CmdReset", func() {
 			topPort.Deliver(makeRead(0))
-			tick(rob)
+			modelingtest.Tick(rob)
 			bottomPort.RetrieveOutgoing()
 			Expect(rob.State.Transactions).To(HaveLen(1))
 
@@ -406,7 +400,7 @@ var _ = Describe("Reorder Buffer", func() {
 			req.TrafficClass = "memcontrolprotocol.Req"
 			ctrlPort.Deliver(req)
 
-			tick(rob)
+			modelingtest.Tick(rob)
 
 			Expect(rob.State.Transactions).To(BeEmpty())
 			Expect(rob.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
@@ -423,7 +417,7 @@ var _ = Describe("Reorder Buffer", func() {
 			rob.State.ControlState = memcontrolprotocol.StatePaused
 			topPort.Deliver(makeRead(0))
 
-			progress := tick(rob)
+			progress := modelingtest.Tick(rob)
 
 			Expect(progress).To(BeFalse())
 			Expect(rob.State.Transactions).To(BeEmpty())
@@ -451,7 +445,7 @@ var _ = Describe("Reorder Buffer", func() {
 			req.TrafficClass = "memcontrolprotocol.Req"
 			ctrlPort.Deliver(req)
 
-			tick(rob)
+			modelingtest.Tick(rob)
 
 			Expect(rob.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 			_, present8 := topPort.PeekIncoming()
@@ -477,7 +471,7 @@ var _ = Describe("Reorder Buffer", func() {
 			for i := range n {
 				topPort.Deliver(makeRead(uint64(i * 0x100)))
 			}
-			tick(rob) // forward both to the bottom (NumReqPerCycle=2)
+			modelingtest.Tick(rob) // forward both to the bottom (NumReqPerCycle=2)
 			Expect(rob.State.Transactions).To(HaveLen(n))
 
 			shadowIDs := make([]uint64, 0, n)
@@ -497,7 +491,7 @@ var _ = Describe("Reorder Buffer", func() {
 			// While transactions are still in flight (no bottom responses
 			// fed yet), Drain must stay pending and emit no ack.
 			for range 5 {
-				tick(rob)
+				modelingtest.Tick(rob)
 				Expect(rob.State.ControlState).To(Equal(memcontrolprotocol.StateDraining))
 				_, present10 := ctrlPort.RetrieveOutgoing()
 				Expect(present10).To(BeFalse())
@@ -519,7 +513,7 @@ var _ = Describe("Reorder Buffer", func() {
 			var drainRsp memcontrolprotocol.Rsp
 			drainFound := false
 			for i := 0; i < 64 && !drainFound; i++ {
-				tick(rob)
+				modelingtest.Tick(rob)
 				for {
 					out, ok := topPort.RetrieveOutgoing()
 					if !ok {
@@ -550,7 +544,7 @@ var _ = Describe("Reorder Buffer", func() {
 		DescribeTable("Reset wipes in-flight transactions from any state",
 			func(startState memcontrolprotocol.State) {
 				topPort.Deliver(makeRead(0))
-				tick(rob)
+				modelingtest.Tick(rob)
 				Expect(rob.State.Transactions).To(HaveLen(1))
 
 				rob.State.ControlState = startState
@@ -561,7 +555,7 @@ var _ = Describe("Reorder Buffer", func() {
 				var rsp memcontrolprotocol.Rsp
 				found := false
 				for i := 0; i < 64 && !found; i++ {
-					tick(rob)
+					modelingtest.Tick(rob)
 					if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 						rsp, found = out.(memcontrolprotocol.Rsp)
 					}
@@ -596,7 +590,7 @@ var _ = Describe("Reorder Buffer", func() {
 
 			var rsps []memcontrolprotocol.Rsp
 			for range 16 {
-				tick(rob)
+				modelingtest.Tick(rob)
 				for {
 					out, ok := ctrlPort.RetrieveOutgoing()
 					if !ok {

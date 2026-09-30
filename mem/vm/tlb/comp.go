@@ -7,7 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/lruset"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -18,11 +18,35 @@ type Spec struct {
 	NumSets        int         `json:"num_sets"`
 	NumWays        int         `json:"num_ways"`
 	Log2PageSize   uint64      `json:"log2_page_size"`
-	PageSize       uint64      `json:"page_size"`
 	NumReqPerCycle int         `json:"num_req_per_cycle"`
 	MSHRSize       int         `json:"mshr_size"`
 	Latency        int         `json:"latency"`
-	PipelineWidth  int         `json:"pipeline_width"`
+}
+
+// pageSize returns the size of a page, 2^Log2PageSize bytes.
+func (s Spec) pageSize() uint64 {
+	return 1 << s.Log2PageSize
+}
+
+// Ports holds the TLB's ports.
+type Ports struct {
+	// Top receives translation requests and returns their responses.
+	Top messaging.Port `akita:"role=vm/responder"`
+
+	// Bottom sends translation requests for misses to the next level.
+	Bottom messaging.Port `akita:"role=vm/requester"`
+
+	// Control receives enable, pause, drain, flush, and reset commands.
+	Control messaging.Port `akita:"role=mem.control/responder"`
+}
+
+// Middlewares holds the TLB's behavior, run in field order every cycle.
+type Middlewares struct {
+	// Ctrl handles control commands.
+	Ctrl *ctrlMiddleware
+
+	// TLB looks up translations, tracks misses, and responds.
+	TLB *tlbMiddleware
 }
 
 // Resources holds the external objects wired into the TLB. The translation
@@ -186,4 +210,4 @@ func findTranslationPort(
 }
 
 // Comp is the TLB component.
-type Comp = modeling.Component[Spec, State, Resources]
+type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]

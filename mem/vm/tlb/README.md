@@ -15,7 +15,7 @@ flow through a fixed-latency pipeline before lookup:
    `queueing.Pipeline` that imposes `Latency` cycles. Up to `NumReqPerCycle`
    requests move per tick.
 2. **Lookup** — On exit from the pipeline the request is looked up in the set
-   selected by `vAddr / PageSize % NumSets`.
+   selected by `vAddr / 2^Log2PageSize % NumSets`.
    - **Hit** (entry present and `Valid`): a `vm.TranslationRsp` carrying the
      `vm.Page` is sent back on `Top`, and the matched way is marked
      most-recently-used.
@@ -40,7 +40,11 @@ are tracked by the shared `mshr` package.
 - `Resources` — external wiring; holds the `TranslationProviderMapper`
   (`mem.AddressToPortMapper`) used to locate the downstream provider for a
   virtual address.
-- `Comp` — `modeling.Component[Spec, State, Resources]`.
+- `Ports` — the `Top`, `Bottom`, and `Control` ports.
+- `Middlewares` — `Ctrl` (control commands) and `TLB` (lookup, misses, and
+  responses), run in that order every cycle.
+- `Comp` — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+  ticking component.
 
 ## Builder Pattern
 
@@ -50,11 +54,16 @@ spec.NumSets = 64
 spec.NumWays = 4
 spec.MSHRSize = 8
 
-t := tlb.MakeBuilder().
+t := tlb.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(tlb.Resources{
         TranslationProviderMapper: mmuMapper,
+    }).
+    WithPorts(tlb.Ports{
+        Top:     messaging.NewPort(nil, 4, 4, "L2TLB.Top"),
+        Bottom:  messaging.NewPort(nil, 4, 4, "L2TLB.Bottom"),
+        Control: messaging.NewPort(nil, 4, 4, "L2TLB.Control"),
     }).
     Build("L2TLB")
 ```
@@ -64,25 +73,12 @@ t := tlb.MakeBuilder().
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
 | `WithResources(Resources{...})` | External wiring (the translation provider mapper) |
+| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required) |
 
 ## Ports
 
-`Build` declares the ports below by logical name; it does not create the port
-instances. After `Build`, the caller builds each port with
-`modeling.MakePortBuilder()` (choosing the buffer size) and attaches it with
-`comp.AssignPort(name, port)`:
-
-```go
-t := tlb.MakeBuilder().WithSimulation(sim).Build("L2TLB")
-for _, name := range []string{"Top", "Bottom", "Control"} {
-    p := modeling.MakePortBuilder().
-        WithSimulation(sim).
-        WithComponent(t).
-        WithSpec(modeling.PortSpec{BufSize: 4}).
-        Build(name)
-    t.AssignPort(name, p)
-}
-```
+The system builder creates each port with `messaging.NewPort`, choosing its
+buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top**: accepts `vm.TranslationReq`, returns `vm.TranslationRsp`.
 - **Bottom**: forwards `vm.TranslationReq` on a miss, receives `vm.TranslationRsp`.

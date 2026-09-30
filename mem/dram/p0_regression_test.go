@@ -24,24 +24,12 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
 
-	dramComp := MakeBuilder().
-		WithSimulation(sim).
-		WithSpec(spec).
-		Build("P0DRAM")
+	dramComp := buildDRAM(sim, spec, "P0DRAM", 1024)
 	for _, t := range tracers {
 		tracing.CollectTrace(dramComp, t)
 	}
 
-	for _, name := range []string{"Top", "Control"} {
-		p := modeling.MakePortBuilder().
-			WithSimulation(sim).
-			WithComponent(dramComp).
-			WithSpec(modeling.PortSpec{BufSize: 1024}).
-			Build(name)
-		dramComp.AssignPort(name, p)
-	}
-
-	top := dramComp.GetPortByName("Top")
+	top := dramComp.Ports.Top
 	src := messaging.NewPort(nil, 1024, 1024, "P0Src.Top")
 
 	conn := directconnection.MakeBuilder().
@@ -226,15 +214,12 @@ var _ = Describe("P0: channel guard", func() {
 
 			spec := Definition.DefaultSpec
 			spec.NumChannel = numChannel
-			MakeBuilder().
-				WithSimulation(sim).
-				WithSpec(spec).
-				Build("ChannelGuard")
+			buildDRAM(sim, spec, "ChannelGuard", 16)
 		}
 	}
 
 	It("should reject NumChannel > 1 at build time", func() {
-		Expect(build(2)).To(Panic())
+		Expect(build(2)).To(PanicWith(ContainSubstring("NumChannel > 1")))
 	})
 
 	It("should still build with a single channel", func() {

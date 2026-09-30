@@ -113,13 +113,16 @@ func buildColumnCommand(
 
 const addrMapperDefault = "default"
 
-// fixedAddrMapper applies the single fixed bit-decode scheme configured on Spec.
-type fixedAddrMapper struct{}
+// fixedAddrMapper applies the single fixed bit-decode scheme derived from the
+// geometry in Spec (see newAddrMapping).
+type fixedAddrMapper struct {
+	mapping addrMapping
+}
 
 func (fixedAddrMapper) Name() string { return addrMapperDefault }
 
-func (fixedAddrMapper) Map(spec *Spec, addr uint64) location {
-	return mapAddress(spec, addr)
+func (m *fixedAddrMapper) Map(_ *Spec, addr uint64) location {
+	return m.mapping.mapAddress(addr)
 }
 
 // --- Registries ----------------------------------------------------------
@@ -128,8 +131,12 @@ var schedulerRegistry = map[string]func() scheduler{
 	schedulerFRFCFS: func() scheduler { return frfcfsScheduler{} },
 }
 
-var addrMapperRegistry = map[string]func() addrMapper{
-	addrMapperDefault: func() addrMapper { return fixedAddrMapper{} },
+// addrMapperRegistry holds the address mapper factories. A factory receives
+// the Spec so it can derive its mapping once, when the component is built.
+var addrMapperRegistry = map[string]func(spec *Spec) addrMapper{
+	addrMapperDefault: func(spec *Spec) addrMapper {
+		return &fixedAddrMapper{mapping: newAddrMapping(spec)}
+	},
 }
 
 func newScheduler(name string) scheduler {
@@ -143,7 +150,7 @@ func newScheduler(name string) scheduler {
 	return factory()
 }
 
-func newAddrMapper(name string) addrMapper {
+func newAddrMapper(name string, spec *Spec) addrMapper {
 	if name == "" {
 		name = addrMapperDefault
 	}
@@ -151,7 +158,14 @@ func newAddrMapper(name string) addrMapper {
 	if !ok {
 		panic(fmt.Sprintf("dram: unknown address mapper %q", name))
 	}
-	return factory()
+	return factory(spec)
+}
+
+func newRowPolicy(p PagePolicy) rowPolicy {
+	if p == PagePolicyOpen {
+		return openPageRowPolicy{}
+	}
+	return closePageRowPolicy{}
 }
 
 // --- Controller ----------------------------------------------------------
@@ -163,6 +177,17 @@ type controller struct {
 	scheduler  scheduler
 	rowPolicy  rowPolicy
 	addrMapper addrMapper
+}
+
+// newController selects the controller strategies from configuration: the
+// scheduler and address mapper from their Spec registry keys, the row policy
+// from Spec.PagePolicy. It panics on an unknown registry key.
+func newController(spec *Spec) *controller {
+	return &controller{
+		scheduler:  newScheduler(spec.Scheduler),
+		rowPolicy:  newRowPolicy(spec.PagePolicy),
+		addrMapper: newAddrMapper(spec.AddrMapper, spec),
+	}
 }
 
 // fillCommandQueue moves at most one ready sub-transaction from the

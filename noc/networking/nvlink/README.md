@@ -92,10 +92,10 @@ connector := nvlink.NewConnector().
 
 connector.CreateNetwork("NVLink")
 
-root := connector.AddRootComplex([]messaging.Port{cpu.GetPortByName("PCIe")})
+root := connector.AddRootComplex([]messaging.Port{cpu.Ports.PCIe})
 
-dev0 := connector.PlugInDevice(root, []messaging.Port{gpu0.GetPortByName("Net")})
-dev1 := connector.PlugInDevice(root, []messaging.Port{gpu1.GetPortByName("Net")})
+dev0 := connector.PlugInDevice(root, []messaging.Port{gpu0.Ports.Net})
+dev1 := connector.PlugInDevice(root, []messaging.Port{gpu1.Ports.Net})
 
 connector.ConnectDevicesWithNVLink(dev0, dev1, 4) // 4 NVLinks between the GPUs
 

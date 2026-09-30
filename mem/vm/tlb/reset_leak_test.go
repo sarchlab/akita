@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/sarchlab/akita/v5/tracing/tracingtest"
@@ -25,7 +26,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	remotePort := messaging.RemotePort("MMU")
 
-	tlbComp := MakeBuilder().
+	tlbComp := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(Definition.DefaultSpec).
 		WithResources(Resources{
@@ -33,14 +34,14 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 				Port: remotePort,
 			},
 		}).
+		WithPorts(defaultPorts("TLB")).
 		Build("TLB")
 
-	assignDefaultPorts(sim, tlbComp)
 	plugNoopConn(tlbComp)
 
-	topPort := tlbComp.GetPortByName("Top")
-	bottomPort := tlbComp.GetPortByName("Bottom")
-	controlPort := tlbComp.GetPortByName("Control")
+	topPort := tlbComp.Ports.Top
+	bottomPort := tlbComp.Ports.Bottom
+	controlPort := tlbComp.Ports.Control
 
 	rec := &tracingtest.LeakRecorder{}
 	tracing.CollectTrace(tlbComp, rec)
@@ -64,7 +65,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// fetch sent; do not answer the fetch.
 	bottomSent := false
 	for i := 0; i < 64 && mshrIsEmpty(tlbComp.State.MSHREntries); i++ {
-		tlbComp.Tick()
+		modelingtest.Tick(tlbComp)
 		if out, ok := bottomPort.RetrieveOutgoing(); ok {
 			if _, ok := out.(vmprotocol.TranslationReq); ok {
 				bottomSent = true
@@ -94,7 +95,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	acked := false
 	for i := 0; i < 64; i++ {
-		tlbComp.Tick()
+		modelingtest.Tick(tlbComp)
 		if msg, ok := controlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {

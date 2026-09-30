@@ -11,16 +11,20 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
-type workerSpec struct {
-	NumJobs      int `json:"num_jobs"`
-	CyclesPerJob int `json:"cycles_per_job"`
+// Spec is the worker's configuration.
+type Spec struct {
+	Freq         timing.Freq `json:"freq"`
+	NumJobs      int         `json:"num_jobs"`
+	CyclesPerJob int         `json:"cycles_per_job"`
 }
 
-type workerState struct {
+// State is the worker's runtime data.
+type State struct {
 	JobsLeft  int    `json:"jobs_left"`
 	Working   bool   `json:"working"`
 	CountDown int    `json:"count_down"`
@@ -28,14 +32,39 @@ type workerState struct {
 	NextID    uint64 `json:"next_id"`
 }
 
-// Comp is the worker component.
-type Comp = modeling.Component[workerSpec, workerState, modeling.None]
+// Ports is empty: the worker talks to no one.
+type Ports struct{}
+
+// Middlewares holds the worker's behavior.
+type Middlewares struct {
+	// Work runs one cycle of the current job, or starts the next one.
+	Work *workerMW
+}
+
+// Comp is the worker, a ticking component.
+type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
+
+// Definition declares the worker.
+var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
+	DefaultSpec:    Spec{Freq: 1 * timing.GHz, NumJobs: 3, CyclesPerJob: 4},
+	NewState:       newState,
+	NewMiddlewares: newMiddlewares,
+}
+
+// newState gives the worker all of its jobs up front.
+func newState(c *Comp) State {
+	return State{JobsLeft: c.Spec().NumJobs}
+}
+
+func newMiddlewares(c *Comp) Middlewares {
+	return Middlewares{Work: &workerMW{comp: c}}
+}
 
 type workerMW struct {
 	comp *Comp
 }
 
-func (m *workerMW) Tick() bool {
+func (m *workerMW) Handle(_ timing.Event) bool {
 	s := &m.comp.State
 
 	if !s.Working {
@@ -73,13 +102,9 @@ func main() {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
 
-	worker := modeling.NewBuilder[workerSpec, workerState, modeling.None]().
+	worker := Definition.Builder().
 		WithSimulation(sim).
-		WithFreq(1 * timing.GHz).
-		WithSpec(workerSpec{NumJobs: 3, CyclesPerJob: 4}).
 		Build("Worker")
-	worker.AddMiddleware(&workerMW{comp: worker})
-	sim.RegisterComponent(worker)
 
 	// A tracer only cares about tasks whose Kind matches this filter.
 	onlyJobs := func(t tracing.TaskStart) bool { return t.Kind == "job" }
@@ -90,7 +115,6 @@ func main() {
 	tracing.CollectTrace(worker, busy)
 	tracing.CollectTrace(worker, avg)
 
-	worker.State.JobsLeft = worker.Spec().NumJobs
 	worker.TickLater()
 
 	if err := engine.Run(); err != nil {

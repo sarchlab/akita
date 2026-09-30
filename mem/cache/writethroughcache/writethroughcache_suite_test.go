@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // noopConn is a minimal messaging.Connection used to drive a component's real
@@ -25,6 +26,33 @@ func (c *noopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
+
+// makePorts creates the Top, Bottom, and Control ports of the cache named
+// name, each with the given buffer size.
+func makePorts(name string, bufSize int) Ports {
+	return Ports{
+		Top:     messaging.NewPort(nil, bufSize, bufSize, name+".Top"),
+		Bottom:  messaging.NewPort(nil, bufSize, bufSize, name+".Bottom"),
+		Control: messaging.NewPort(nil, bufSize, bufSize, name+".Control"),
+	}
+}
+
+// buildStageTestCache builds a cache named "Cache" for a stage test from the
+// given spec, resources, and ports, and replaces its State with state. It
+// returns the pipeline middleware the stages under test belong to.
+func buildStageTestCache(
+	spec Spec, res Resources, ports Ports, state State,
+) *pipelineMW {
+	comp := Definition.Builder().
+		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
+		WithSpec(spec).
+		WithResources(res).
+		WithPorts(ports).
+		Build("Cache")
+	comp.State = state
+
+	return comp.Middlewares.Pipeline
+}
 
 func TestWriteThroughCache(t *testing.T) {
 	log.SetOutput(GinkgoWriter)

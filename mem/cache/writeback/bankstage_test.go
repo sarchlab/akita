@@ -6,11 +6,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 var _ = Describe("Bank Stage", func() {
@@ -59,40 +56,23 @@ var _ = Describe("Bank Stage", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &pipelineMW{
-			storage: storage,
-		}
-		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
-				BankLatency:      10,
-				Log2BlockSize:    6,
-				WayAssociativity: 4,
-				NumSets:          64,
-				NumBanks:         1,
-				NumReqPerCycle:   4,
-			}).
-			Build("Cache")
+		spec := stageTestSpec()
+		spec.BankLatency = 10
 
-		// The stage resolves the "Top" port by name, so the test assigns a real
-		// single-slot port (owned by the component) and plugs a noop connection.
-		topPort = messaging.NewPort(m.comp, 1, 1, "Cache.Top")
-		(&ccNoopConn{}).PlugIn(topPort)
-		m.comp.DeclarePort("Top")
-		m.comp.AssignPort("Top", topPort)
+		// The stage sends on the Top port, so the test gives it a single-slot
+		// Top port to simulate a busy port.
+		ports := makePorts("Cache", 4)
+		ports.Top = messaging.NewPort(nil, 1, 1, "Cache.Top")
+		comp := buildStageTestComp(spec, Resources{Storage: storage}, ports)
+		topPort = comp.Ports.Top
 
+		m = comp.Middlewares.Pipeline
 		m.comp.State = initialState
 		next := &m.comp.State
 
 		cache.DirectoryReset(&next.DirectoryState, 64, 4, 64)
 
-		bs = &bankStage{
-			cache:         m,
-			bankID:        0,
-			pipelineWidth: 4,
-		}
-		m.bankStages = []*bankStage{bs}
+		bs = m.bankStages[0]
 	})
 
 	It("completes a later transaction while preserving a blocked zero-index head", func() {

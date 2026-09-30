@@ -4,12 +4,11 @@ package memaccessagent
 
 import (
 	"encoding/binary"
-	"math/rand"
 
 	"github.com/sarchlab/akita/v5/daisen2"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -28,13 +27,19 @@ type Spec struct {
 	// only ever touches [AddressOffset, AddressOffset+MaxAddress). Defaults to
 	// 0, which keeps single-agent tests unchanged.
 	AddressOffset uint64 `json:"address_offset"`
+
+	// RandSeed seeds the agent's private random source, so a run is
+	// reproducible from the seed: the agent draws the same values as
+	// math/rand.New(math/rand.NewSource(RandSeed)). Every value, including 0,
+	// is a seed. The default is a fixed seed, so the default access stream is
+	// deterministic.
+	RandSeed int64 `json:"rand_seed"`
 }
 
-// Resources holds the external wiring referenced by the MemAccessAgent. The
-// LowModule is the downstream port to which memory requests are sent. It can be
-// supplied through WithResources, or assigned to the public LowModule field
-// after Build when construction ordering requires it.
+// Resources holds the external wiring referenced by the MemAccessAgent.
 type Resources struct {
+	// LowModule is the downstream port to which memory requests are sent. It
+	// is required.
 	LowModule messaging.Port
 }
 
@@ -45,32 +50,43 @@ type State struct {
 	KnownMemValue   map[uint64][]uint32             `json:"known_mem_value"`
 	PendingReadReq  map[uint64]memprotocol.ReadReq  `json:"pending_read_req"`
 	PendingWriteReq map[uint64]memprotocol.WriteReq `json:"pending_write_req"`
+	RNG             randState                       `json:"rng"`
 }
+
+// Ports holds the MemAccessAgent's ports.
+type Ports struct {
+	// Mem sends read and write requests to the LowModule and receives their
+	// responses.
+	Mem messaging.Port `akita:"role=mem/requester"`
+}
+
+// Middlewares holds the MemAccessAgent's behavior, run every cycle.
+type Middlewares struct {
+	// Agent checks responses and issues new read and write requests.
+	Agent *agentMiddleware
+}
+
+// Comp is the MemAccessAgent component: a ticking component that helps test
+// caches and memory controllers by generating a large number of read and
+// write requests and checking the data read back.
+type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
 
 // A MemAccessAgent is a Component that can help testing the cache and the
 // memory controllers by generating a large number of read and write requests.
-type MemAccessAgent struct {
-	*modeling.Component[Spec, State, modeling.None]
+type MemAccessAgent = Comp
 
-	// LowModule is the downstream port to which memory requests are sent.
-	// It is not serialized as part of the state.
-	LowModule messaging.Port
-
-	// rng is the random source used by the agent. If nil, the global
-	// math/rand functions are used (non-deterministic in Go 1.22+).
-	rng *rand.Rand
-
-	writeProgressBar *daisen2.ProgressBar
-	readProgressBar  *daisen2.ProgressBar
-}
-
-// CreateProgressBars creates the read/write progress bars for the agent.
-func (a *MemAccessAgent) CreateProgressBars(
+// CreateProgressBars creates the read/write progress bars for the agent a.
+// Progress bars observe the run; they are not simulation state and are not
+// checkpointed. Call it after Build, like attaching a hook.
+func CreateProgressBars(
+	a *Comp,
 	createProgressBar func(name string, total uint64) *daisen2.ProgressBar,
 ) {
 	if createProgressBar == nil {
 		return
 	}
+
+	mw := a.Middlewares.Agent
 
 	writeTotal := remainingAccesses(
 		a.State.WriteLeft,
@@ -81,12 +97,12 @@ func (a *MemAccessAgent) CreateProgressBars(
 		len(a.State.PendingReadReq),
 	)
 
-	if writeTotal > 0 && a.writeProgressBar == nil {
-		a.writeProgressBar = createProgressBar(a.Name()+".Writes", writeTotal)
+	if writeTotal > 0 && mw.writeProgressBar == nil {
+		mw.writeProgressBar = createProgressBar(a.Name()+".Writes", writeTotal)
 	}
 
-	if readTotal > 0 && a.readProgressBar == nil {
-		a.readProgressBar = createProgressBar(a.Name()+".Reads", readTotal)
+	if readTotal > 0 && mw.readProgressBar == nil {
+		mw.readProgressBar = createProgressBar(a.Name()+".Reads", readTotal)
 	}
 }
 
@@ -114,19 +130,4 @@ func uint32ToBytes(data uint32) []byte {
 	binary.LittleEndian.PutUint32(bytes, data)
 
 	return bytes
-}
-
-// globalFloat64 returns a random float64 from the global rand source.
-func globalFloat64() float64 {
-	return rand.Float64()
-}
-
-// globalUint64 returns a random uint64 from the global rand source.
-func globalUint64() uint64 {
-	return rand.Uint64()
-}
-
-// globalUint32 returns a random uint32 from the global rand source.
-func globalUint32() uint32 {
-	return rand.Uint32()
 }

@@ -46,8 +46,8 @@ func (p *Protocol) Messages() []Msg {
 }
 
 // A Role is one endpoint's view of a protocol: the messages it sends. What a
-// role receives is whatever the protocol's other roles send. Ports declare the
-// role(s) they speak with DeclarePort.
+// role receives is whatever the protocol's other roles send. A component tags
+// each port with the role(s) it speaks, `akita:"role=<protocol>/<role>"`.
 type Role struct {
 	protocol *Protocol
 	name     string

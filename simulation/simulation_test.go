@@ -7,6 +7,8 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
+	"github.com/sarchlab/akita/v5/modeling/wakeup"
 	"github.com/sarchlab/akita/v5/timing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -91,16 +93,11 @@ func (p testPort) NumOutgoing() int {
 }
 
 type testComponent struct {
-	name  string
-	ports []Port
+	name string
 }
 
 func (c testComponent) Name() string {
 	return c.name
-}
-
-func (c testComponent) AllPorts() []Port {
-	return c.ports
 }
 
 var _ = Describe("Simulation", func() {
@@ -113,7 +110,7 @@ var _ = Describe("Simulation", func() {
 	BeforeEach(func() {
 		simulation = MakeBuilder().WithoutMonitoring().Build()
 		port = testPort{name: "port"}
-		comp = testComponent{name: "comp", ports: []Port{port}}
+		comp = testComponent{name: "comp"}
 	})
 
 	AfterEach(func() {
@@ -131,7 +128,6 @@ var _ = Describe("Simulation", func() {
 	})
 
 	It("should reject duplicate component names", func() {
-		comp.ports = nil
 		simulation.RegisterComponent(comp)
 
 		dup := testComponent{name: "comp"}
@@ -251,10 +247,7 @@ var _ = Describe("Simulation", func() {
 				noSerializerSim.Terminate()
 				os.Remove("akita_sim_" + noSerializerSim.ID() + ".sqlite3")
 			}()
-			noSerializerSim.RegisterComponent(testComponent{
-				name:  "comp",
-				ports: []Port{testPort{name: "comp.Port"}},
-			})
+			noSerializerSim.RegisterComponent(testComponent{name: "comp"})
 
 			path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
 
@@ -404,14 +397,8 @@ var _ = Describe("Global state manager", func() {
 					os.Remove("akita_sim_" + s.ID() + ".sqlite3")
 				}()
 
-				s.RegisterComponent(testComponent{
-					name:  "GPU[1]",
-					ports: []Port{testPort{name: "GPU[1].Port"}},
-				})
-				s.RegisterComponent(testComponent{
-					name:  "GPU[2]",
-					ports: []Port{testPort{name: "GPU[2].Port"}},
-				})
+				s.RegisterComponent(testComponent{name: "GPU[1]"})
+				s.RegisterComponent(testComponent{name: "GPU[2]"})
 				s.RegisterConnection(newTestConnection("GPU[1].GPU[2].Conn"))
 
 				entities := s.entities
@@ -441,11 +428,28 @@ var _ = Describe("Global state manager", func() {
 })
 
 type roundTripSpec struct {
-	Latency int `json:"latency"`
+	Freq    timing.Freq `json:"freq"`
+	Latency int         `json:"latency"`
 }
 
 type roundTripState struct {
 	Count int `json:"count"`
+}
+
+// noPorts and noMiddlewares shape the test components that need neither.
+type (
+	noPorts       struct{}
+	noMiddlewares struct{}
+)
+
+var roundTripDef = ticking.Definition[
+	roundTripSpec, roundTripState, modeling.None, noPorts, noMiddlewares]{
+	DefaultSpec: roundTripSpec{Freq: 1 * timing.GHz, Latency: 5},
+	NewMiddlewares: func(
+		*ticking.Component[roundTripSpec, roundTripState, modeling.None, noPorts, noMiddlewares],
+	) noMiddlewares {
+		return noMiddlewares{}
+	},
 }
 
 var _ = Describe("Checkpoint round trip", func() {
@@ -460,12 +464,7 @@ var _ = Describe("Checkpoint round trip", func() {
 		// (Engine, IDGenerator, Comp, Mem) is checkpointable, so no port or
 		// connection serializers are needed yet.
 		engine := sim.GetEngine().(*timing.SerialEngine)
-		comp := modeling.NewBuilder[roundTripSpec, roundTripState, modeling.None]().
-			WithSimulation(sim).
-			WithFreq(1 * timing.GHz).
-			WithSpec(roundTripSpec{Latency: 5}).
-			Build("Comp")
-		sim.RegisterComponent(comp)
+		comp := roundTripDef.Builder().WithSimulation(sim).Build("Comp")
 		storage := mem.MakeStorageBuilder().
 			WithCapacity(4 * mem.KB).
 			WithSimulation(sim).
@@ -502,7 +501,8 @@ var _ = Describe("Checkpoint round trip", func() {
 })
 
 type resumeSpec struct {
-	N int `json:"n"`
+	Freq timing.Freq `json:"freq"`
+	N    int         `json:"n"`
 }
 
 type resumeState struct {
@@ -511,11 +511,18 @@ type resumeState struct {
 	Checksum uint64 `json:"checksum"`
 }
 
-type resumeWorkerMW struct {
-	comp *modeling.Component[resumeSpec, resumeState, modeling.None]
+type resumeMWs struct {
+	Worker *resumeWorkerMW
 }
 
-func (m *resumeWorkerMW) Tick() bool {
+type resumeComp = ticking.Component[
+	resumeSpec, resumeState, modeling.None, noPorts, resumeMWs]
+
+type resumeWorkerMW struct {
+	comp *resumeComp
+}
+
+func (m *resumeWorkerMW) Handle(timing.Event) bool {
 	if m.comp.State.Pending <= 0 {
 		return false
 	}
@@ -525,16 +532,17 @@ func (m *resumeWorkerMW) Tick() bool {
 	return true
 }
 
-func buildResumeSim() (*Simulation, *modeling.Component[resumeSpec, resumeState, modeling.None]) {
+var resumeDef = ticking.Definition[
+	resumeSpec, resumeState, modeling.None, noPorts, resumeMWs]{
+	DefaultSpec: resumeSpec{Freq: 1 * timing.GHz, N: 1},
+	NewMiddlewares: func(c *resumeComp) resumeMWs {
+		return resumeMWs{Worker: &resumeWorkerMW{comp: c}}
+	},
+}
+
+func buildResumeSim() (*Simulation, *resumeComp) {
 	sim := MakeBuilder().WithoutMonitoring().Build()
-	w := modeling.NewBuilder[resumeSpec, resumeState, modeling.None]().
-		WithSimulation(sim).
-		WithFreq(1 * timing.GHz).
-		WithSpec(resumeSpec{N: 1}).
-		Build("Worker")
-	w.AddMiddleware(&resumeWorkerMW{comp: w})
-	sim.RegisterComponent(w)
-	return sim, w
+	return sim, resumeDef.Builder().WithSimulation(sim).Build("Worker")
 }
 
 var _ = Describe("Mid-transaction resume", func() {
@@ -580,7 +588,8 @@ var _ = Describe("Mid-transaction resume", func() {
 })
 
 type tickCountSpec struct {
-	Tag int `json:"tag"`
+	Freq timing.Freq `json:"freq"`
+	Tag  int         `json:"tag"`
 }
 
 type tickCountState struct {
@@ -589,28 +598,33 @@ type tickCountState struct {
 
 // tickCountMW counts every tick and never reports progress, so the component
 // chains no follow-up ticks: exactly the ticks present in the engine queue fire.
-type tickCountMW struct {
-	comp *modeling.Component[tickCountSpec, tickCountState, modeling.None]
+type tickCountMWs struct {
+	Counter *tickCountMW
 }
 
-func (m *tickCountMW) Tick() bool {
+type tickCountComp = ticking.Component[
+	tickCountSpec, tickCountState, modeling.None, noPorts, tickCountMWs]
+
+type tickCountMW struct {
+	comp *tickCountComp
+}
+
+func (m *tickCountMW) Handle(timing.Event) bool {
 	m.comp.State.Ticks++
 	return false
 }
 
-func buildTickCountSim() (
-	*Simulation,
-	*modeling.Component[tickCountSpec, tickCountState, modeling.None],
-) {
+var tickCountDef = ticking.Definition[
+	tickCountSpec, tickCountState, modeling.None, noPorts, tickCountMWs]{
+	DefaultSpec: tickCountSpec{Freq: 1 * timing.GHz, Tag: 1},
+	NewMiddlewares: func(c *tickCountComp) tickCountMWs {
+		return tickCountMWs{Counter: &tickCountMW{comp: c}}
+	},
+}
+
+func buildTickCountSim() (*Simulation, *tickCountComp) {
 	sim := MakeBuilder().WithoutMonitoring().Build()
-	c := modeling.NewBuilder[tickCountSpec, tickCountState, modeling.None]().
-		WithSimulation(sim).
-		WithFreq(1 * timing.GHz).
-		WithSpec(tickCountSpec{Tag: 1}).
-		Build("Ticker")
-	c.AddMiddleware(&tickCountMW{comp: c})
-	sim.RegisterComponent(c)
-	return sim, c
+	return sim, tickCountDef.Builder().WithSimulation(sim).Build("Ticker")
 }
 
 var _ = Describe("Tick scheduler guard restore", func() {
@@ -661,30 +675,33 @@ type wakeState struct {
 	Wakeups int `json:"wakeups"`
 }
 
-// wakeProcessor counts every wakeup and schedules no follow-up, so exactly the
-// timer events present in the engine queue fire.
-type wakeProcessor struct{}
+type wakeMWs struct {
+	Counter *wakeMW
+}
 
-func (wakeProcessor) Process(
-	c *modeling.EventDrivenComponent[wakeSpec, wakeState, modeling.None],
-	_ timing.VTimeInPicoSec,
-) bool {
-	c.State.Wakeups++
+type wakeComp = wakeup.Component[wakeSpec, wakeState, modeling.None, noPorts, wakeMWs]
+
+// wakeMW counts every wakeup and makes no progress, so the component asks for
+// no follow-up and exactly the wakeups present in the engine queue fire.
+type wakeMW struct {
+	comp *wakeComp
+}
+
+func (m *wakeMW) Handle(timing.Event) bool {
+	m.comp.State.Wakeups++
 	return false
 }
 
-func buildWakeSim() (
-	*Simulation,
-	*modeling.EventDrivenComponent[wakeSpec, wakeState, modeling.None],
-) {
+var wakeDef = wakeup.Definition[wakeSpec, wakeState, modeling.None, noPorts, wakeMWs]{
+	DefaultSpec: wakeSpec{Tag: 1},
+	NewMiddlewares: func(c *wakeComp) wakeMWs {
+		return wakeMWs{Counter: &wakeMW{comp: c}}
+	},
+}
+
+func buildWakeSim() (*Simulation, *wakeComp) {
 	sim := MakeBuilder().WithoutMonitoring().Build()
-	c := modeling.NewEventDrivenBuilder[wakeSpec, wakeState, modeling.None]().
-		WithSimulation(sim).
-		WithSpec(wakeSpec{Tag: 1}).
-		WithProcessor(wakeProcessor{}).
-		Build("Waker")
-	sim.RegisterComponent(c)
-	return sim, c
+	return sim, wakeDef.Builder().WithSimulation(sim).Build("Waker")
 }
 
 var _ = Describe("Event-driven wakeup guard restore", func() {
@@ -700,7 +717,7 @@ var _ = Describe("Event-driven wakeup guard restore", func() {
 			srcSim.Terminate()
 			os.Remove("akita_sim_" + srcSim.ID() + ".sqlite3")
 		}()
-		srcC.ScheduleWakeAt(wakeTime)
+		srcC.WakeAt(wakeTime)
 		Expect(srcSim.SaveCheckpoint(path, buildID)).To(Succeed())
 
 		// Restore into a fresh sim, whose wakeup guard is restored directly from
@@ -714,7 +731,7 @@ var _ = Describe("Event-driven wakeup guard restore", func() {
 
 		// A redundant request for a wakeup at the already-pending time. With the
 		// guard restored, it is recognized as redundant and queues no duplicate.
-		dstC.ScheduleWakeAt(wakeTime)
+		dstC.WakeAt(wakeTime)
 
 		engine := dstSim.GetEngine().(*timing.SerialEngine)
 		Expect(engine.Run()).To(Succeed())

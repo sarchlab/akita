@@ -32,8 +32,8 @@ Top ──► intake ──► directory(+MSHR) ──► bank(s) ──► resp
 5. **respond** — Returns `mem.DataReadyRsp`/`mem.WriteDoneRsp` to `Top` once a
    transaction's bank, fetch, and lower-memory dependencies are all satisfied.
 
-A separate `controlMW` runs the **control stage**, which handles flush and
-re-enable commands on the `Control` port (see [Ports](#ports)).
+A separate control middleware, `Ctrl`, runs before the pipeline every cycle and
+handles the commands on the `Control` port (see [Ports](#ports)).
 
 ## Write Policies
 
@@ -45,31 +45,32 @@ re-enable commands on the `Control` port (see [Ports](#ports)).
 
 ## Key Types
 
-```go
-type Comp = modeling.Component[Spec, State, Resources]
-```
-
 - **Spec** — immutable config: `Freq`, `Log2BlockSize`, `WayAssociativity`,
-  `NumSets` (derived from `TotalByteSize`), `NumBanks`, `NumMSHREntry`,
-  `NumReqPerCycle`, `MaxNumConcurrentTrans`, `BankLatency`, `DirLatency`,
-  `WritePolicyType`, and the address-mapper fields. (Port buffer sizes are no
-  longer part of Spec — the caller chooses them when assigning each port.)
+  `TotalByteSize`, `NumBanks`, `NumMSHREntry`, `NumReqPerCycle`,
+  `MaxNumConcurrentTrans`, `BankLatency`, `DirLatency`, `WritePolicyType`, and
+  the address-mapper fields. The number of sets is derived:
+  `TotalByteSize / (WayAssociativity * 2^Log2BlockSize)`. An empty
+  `WritePolicyType` means `write-around`.
 - **State** — mutable runtime: `cache.DirectoryState`, `cache.MSHRState`, the
   flat `Transactions` list, the directory/bank `queueing.Buffer`/`Pipeline`
-  stages, the pause flag, and the in-progress flush request.
-- **Resources** — shared wiring: the backing `*mem.Storage` plus either an
-  `AddressMapper` or the `RemotePorts` that `Spec.AddressMapperType` routes
-  across. Build resolves them into the mapper the cache uses; none of them is
-  checkpointed.
+  stages, the pause and drain flags, and the in-progress control command.
+- **Resources** — shared wiring, supplied by the system builder: the backing
+  `*mem.Storage` (required; size it to hold at least `TotalByteSize` bytes)
+  plus either an `AddressMapper` or the `RemotePorts` that
+  `Spec.AddressMapperType` routes across. The cache resolves the latter two into
+  the mapper it uses; none of them is checkpointed.
+- **Ports** — the `Top`, `Bottom`, and `Control` ports.
+- **Middlewares** — `Ctrl` (control commands) and `Pipeline` (the data
+  pipeline), run in that order every cycle.
+- **Comp** — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+  ticking component.
 
 ## Builder Pattern
 
 Configuration is supplied as a whole through `WithSpec` (start from
-`Definition.DefaultSpec`); the engine and registration come from `WithSimulation`; storage
-and the address-to-port mapping come from `WithResources`. `Build` declares the
-component's `Top`, `Bottom`, and `Control` ports; the port instances are built
-with `modeling.MakePortBuilder` and attached after `Build` with `AssignPort`, so
-the caller chooses each port's buffer size.
+`Definition.DefaultSpec`); the engine and registration come from
+`WithSimulation`; storage and the address-to-port mapping come from
+`WithResources`; the port instances come from `WithPorts`.
 
 ```go
 spec := writethroughcache.Definition.DefaultSpec
@@ -77,24 +78,21 @@ spec.WritePolicyType = "write-through"
 spec.TotalByteSize = 256 * mem.KB
 spec.WayAssociativity = 8
 
-cache := writethroughcache.MakeBuilder().
+cache := writethroughcache.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(writethroughcache.Resources{
+        Storage:       mem.NewStorage(spec.TotalByteSize),
         AddressMapper: &mem.SinglePortMapper{Port: dramPort},
+    }).
+    WithPorts(writethroughcache.Ports{
+        Top:     messaging.NewPort(nil, 16, 16, "L2Cache.Top"),
+        Bottom:  messaging.NewPort(nil, 16, 16, "L2Cache.Bottom"),
+        Control: messaging.NewPort(nil, 16, 16, "L2Cache.Control"),
     }).
     Build("L2Cache")
 
-for _, name := range []string{"Top", "Bottom", "Control"} {
-    p := modeling.MakePortBuilder().
-        WithSimulation(sim).
-        WithComponent(cache).
-        WithSpec(modeling.PortSpec{BufSize: 16}).
-        Build(name)
-    cache.AssignPort(name, p)
-}
-
-topPort := cache.GetPortByName("Top")
+topPort := cache.Ports.Top
 ```
 
 ### Builder Methods
@@ -103,13 +101,17 @@ topPort := cache.GetPortByName("Top")
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required). |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec`. |
-| `WithResources(r)` | Backing storage and the address-to-port mapper / remote ports. Storage is built internally if omitted. |
+| `WithResources(r)` | Backing storage (required) and the address-to-port mapper / remote ports. |
+| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required). |
 
 ## Ports
+
+The system builder creates each port with `messaging.NewPort`, choosing its
+buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top** — accepts `mem.ReadReq` and `mem.WriteReq`, returns
   `mem.DataReadyRsp` and `mem.WriteDoneRsp`.
 - **Bottom** — sends `mem.ReadReq`/`mem.WriteReq` to lower memory and receives
   `mem.DataReadyRsp`/`mem.WriteDoneRsp`.
-- **Control** — accepts `mem.ControlReq` (`CmdFlush` to reset the directory and
-  drain in-flight work, `CmdEnable` to restart), returns `mem.ControlRsp`.
+- **Control** — accepts `memcontrolprotocol.Req` (Pause, Drain, Enable, Reset,
+  and, once paused, Invalidate and Flush), returns `memcontrolprotocol.Rsp`.

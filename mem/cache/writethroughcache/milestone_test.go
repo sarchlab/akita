@@ -90,7 +90,7 @@ var _ = Describe("Cache milestones", func() {
 		dram        *idealmemcontroller.Comp
 		dramStorage *mem.Storage
 		cuPort      messaging.Port
-		c           *modeling.Component[Spec, State, Resources]
+		c           *Comp
 		rec         *milestoneRecorder
 	)
 
@@ -104,46 +104,44 @@ var _ = Describe("Cache milestones", func() {
 		cuPort = messaging.NewPort(nil, 16, 16, "CU.Top")
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
-		dram = idealmemcontroller.MakeBuilder().
+		dram = idealmemcontroller.Definition.Builder().
 			WithSimulation(sim).
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
+			WithPorts(idealmemcontroller.Ports{
+				Top:     messaging.NewPort(nil, 16, 16, "DRAM.Top"),
+				Control: messaging.NewPort(nil, 16, 16, "DRAM.Control"),
+			}).
 			Build("DRAM")
-		dram.AssignPort("Top",
-			messaging.NewPort(dram, 16, 16, dram.Name()+".Top"))
-		dram.AssignPort("Control",
-			messaging.NewPort(dram, 16, 16, dram.Name()+".Control"))
 		addressToPortMapper := &mem.SinglePortMapper{
-			Port: dram.GetPortByName("Top").AsRemote(),
+			Port: dram.Ports.Top.AsRemote(),
 		}
 
-		cacheReg := sim
 		spec := Definition.DefaultSpec
 		spec.WritePolicyType = policy
-		c = MakeBuilder().
-			WithSimulation(cacheReg).
+		c = Definition.Builder().
+			WithSimulation(sim).
 			WithSpec(spec).
-			WithResources(Resources{AddressMapper: addressToPortMapper}).
+			WithResources(Resources{
+				Storage:       mem.NewStorage(spec.TotalByteSize),
+				AddressMapper: addressToPortMapper,
+			}).
+			WithPorts(Ports{
+				Top:     messaging.NewPort(nil, 4, 4, "Cache.Top"),
+				Bottom:  messaging.NewPort(nil, 4, 4, "Cache.Bottom"),
+				Control: messaging.NewPort(nil, 4, 4, "Cache.Control"),
+			}).
 			Build("Cache")
 
-		for _, name := range []string{"Top", "Bottom", "Control"} {
-			p := modeling.MakePortBuilder().
-				WithSimulation(cacheReg).
-				WithComponent(c).
-				WithSpec(modeling.PortSpec{BufSize: 4}).
-				Build(name)
-			c.AssignPort(name, p)
-		}
-
-		connection.PlugIn(dram.GetPortByName("Top"))
-		connection.PlugIn(c.GetPortByName("Top"))
-		connection.PlugIn(c.GetPortByName("Bottom"))
+		connection.PlugIn(dram.Ports.Top)
+		connection.PlugIn(c.Ports.Top)
+		connection.PlugIn(c.Ports.Bottom)
 		connection.PlugIn(cuPort)
 
 		rec = &milestoneRecorder{}
 		tracing.CollectTrace(c, rec)
 		// The admission milestones and the buffer task land on the Top-port
 		// buffer task, so the test needs that task to exist.
-		tracing.CollectIncomingBufferTrace(c.GetPortByName("Top"))
+		tracing.CollectIncomingBufferTrace(c.Ports.Top)
 	}
 
 	drainResponses := func() []messaging.Msg {
@@ -166,10 +164,10 @@ var _ = Describe("Cache milestones", func() {
 		read := memprotocol.ReadReq{Address: 0x100, AccessByteSize: 4}
 		read.ID = sim.NewID()
 		read.Src = cuPort.AsRemote()
-		read.Dst = c.GetPortByName("Top").AsRemote()
+		read.Dst = c.Ports.Top.AsRemote()
 		read.TrafficBytes = 12
 		read.TrafficClass = "req"
-		c.GetPortByName("Top").Deliver(read)
+		c.Ports.Top.Deliver(read)
 
 		Expect(engine.Run()).To(Succeed())
 
@@ -215,10 +213,10 @@ var _ = Describe("Cache milestones", func() {
 		read := memprotocol.ReadReq{Address: 0x100, AccessByteSize: 4}
 		read.ID = sim.NewID()
 		read.Src = cuPort.AsRemote()
-		read.Dst = c.GetPortByName("Top").AsRemote()
+		read.Dst = c.Ports.Top.AsRemote()
 		read.TrafficBytes = 12
 		read.TrafficClass = "req"
-		c.GetPortByName("Top").Deliver(read)
+		c.Ports.Top.Deliver(read)
 
 		// Run to quiescence: the read miss fetches from the lower memory and the
 		// DataReadyRsp comes back, filling the line and completing the request.
@@ -265,10 +263,10 @@ var _ = Describe("Cache milestones", func() {
 		warm := memprotocol.WriteReq{Address: 0x100, Data: fullLine}
 		warm.ID = sim.NewID()
 		warm.Src = cuPort.AsRemote()
-		warm.Dst = c.GetPortByName("Top").AsRemote()
+		warm.Dst = c.Ports.Top.AsRemote()
 		warm.TrafficBytes = 64 + 12
 		warm.TrafficClass = "req"
-		c.GetPortByName("Top").Deliver(warm)
+		c.Ports.Top.Deliver(warm)
 		Expect(engine.Run()).To(Succeed())
 		Expect(drainResponses()).To(HaveLen(1))
 
@@ -283,10 +281,10 @@ var _ = Describe("Cache milestones", func() {
 		hit := memprotocol.WriteReq{Address: 0x100, Data: []byte{9, 9, 9, 9}}
 		hit.ID = sim.NewID()
 		hit.Src = cuPort.AsRemote()
-		hit.Dst = c.GetPortByName("Top").AsRemote()
+		hit.Dst = c.Ports.Top.AsRemote()
 		hit.TrafficBytes = 4 + 12
 		hit.TrafficClass = "req"
-		c.GetPortByName("Top").Deliver(hit)
+		c.Ports.Top.Deliver(hit)
 		Expect(engine.Run()).To(Succeed())
 		Expect(drainResponses()).To(HaveLen(1))
 
@@ -337,10 +335,10 @@ var _ = Describe("Cache milestones", func() {
 		miss := memprotocol.WriteReq{Address: 0x100, Data: fullLine}
 		miss.ID = sim.NewID()
 		miss.Src = cuPort.AsRemote()
-		miss.Dst = c.GetPortByName("Top").AsRemote()
+		miss.Dst = c.Ports.Top.AsRemote()
 		miss.TrafficBytes = 64 + 12
 		miss.TrafficClass = "req"
-		c.GetPortByName("Top").Deliver(miss)
+		c.Ports.Top.Deliver(miss)
 		Expect(engine.Run()).To(Succeed())
 		Expect(drainResponses()).To(HaveLen(1))
 
@@ -375,10 +373,10 @@ var _ = Describe("Cache milestones", func() {
 		w := memprotocol.WriteReq{Address: 0x100, Data: fullLine}
 		w.ID = sim.NewID()
 		w.Src = cuPort.AsRemote()
-		w.Dst = c.GetPortByName("Top").AsRemote()
+		w.Dst = c.Ports.Top.AsRemote()
 		w.TrafficBytes = 64 + 12
 		w.TrafficClass = "req"
-		c.GetPortByName("Top").Deliver(w)
+		c.Ports.Top.Deliver(w)
 		Expect(engine.Run()).To(Succeed())
 		Expect(drainResponses()).To(HaveLen(1))
 

@@ -101,7 +101,6 @@ type sliceFieldState struct {
 type sliceFieldComponent struct {
 	sim timing.Simulation
 	hooking.HookableBase
-	*messaging.PortOwnerBase
 
 	State sliceFieldState
 	name  string
@@ -122,9 +121,8 @@ type fieldValueResponse struct {
 
 func newSliceFieldComponent(name string, values []int) *sliceFieldComponent {
 	return &sliceFieldComponent{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
-		PortOwnerBase: messaging.NewPortOwnerBase(),
-		State:         sliceFieldState{Values: values},
-		name:          name,
+		State: sliceFieldState{Values: values},
+		name:  name,
 	}
 }
 
@@ -571,7 +569,6 @@ func TestListComponentDetailsSerializesRegisteredComponent(t *testing.T) {
 type tickableComponent struct {
 	sim timing.Simulation
 	hooking.HookableBase
-	*messaging.PortOwnerBase
 
 	name      string
 	tickCalls int
@@ -579,8 +576,7 @@ type tickableComponent struct {
 
 func newTickableComponent(name string) *tickableComponent {
 	return &tickableComponent{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
-		PortOwnerBase: messaging.NewPortOwnerBase(),
-		name:          name,
+		name: name,
 	}
 }
 
@@ -682,7 +678,6 @@ func TestProgressBarsLifecycleRoundtripsThroughHandler(t *testing.T) {
 type bufferOnlyComponent struct {
 	sim timing.Simulation
 	hooking.HookableBase
-	*messaging.PortOwnerBase
 
 	Buf  queueing.Buffer[int]
 	name string
@@ -692,9 +687,8 @@ func newBufferOnlyComponent(
 	name string, capacity, filled int,
 ) *bufferOnlyComponent {
 	c := &bufferOnlyComponent{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
-		PortOwnerBase: messaging.NewPortOwnerBase(),
-		Buf:           queueing.NewBuffer[int](name+".buf", capacity),
-		name:          name,
+		Buf:  queueing.NewBuffer[int](name+".buf", capacity),
+		name: name,
 	}
 
 	for i := 0; i < filled; i++ {
@@ -711,18 +705,17 @@ func (c *bufferOnlyComponent) NotifyPortFree(messaging.Port) {}
 type portedComponent struct {
 	sim timing.Simulation
 	hooking.HookableBase
-	*messaging.PortOwnerBase
 
 	name string
+	port messaging.Port
 }
 
 func newPortedComponent(name string) *portedComponent {
-	c := &portedComponent{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
-		PortOwnerBase: messaging.NewPortOwnerBase(),
-		name:          name,
+	c := &portedComponent{
+		sim:  modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
+		name: name,
 	}
-	c.DeclarePort("p")
-	c.AssignPort("p", messaging.NewPort(c, 4, 4, name+".p"))
+	c.port = messaging.NewPort(c, 4, 4, name+".p")
 
 	return c
 }
@@ -793,7 +786,7 @@ func TestHangDetectorBuffersIncludesPortAdapters(t *testing.T) {
 	monitor := NewMonitor()
 	comp := newPortedComponent("comp")
 	monitor.RegisterComponent(comp)
-	monitor.RegisterPort(comp.GetPortByName("p"))
+	monitor.RegisterPort(comp.port)
 
 	recorder := httptest.NewRecorder()
 	monitor.hangDetectorBuffers(recorder,

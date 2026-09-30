@@ -5,22 +5,26 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 // Spec contains immutable configuration for the simple banked memory.
 type Spec struct {
-	Freq                           timing.Freq `json:"freq"`
-	NumBanks                       int         `json:"num_banks"`
-	BankPipelineWidth              int         `json:"bank_pipeline_width"`
-	BankPipelineDepth              int         `json:"bank_pipeline_depth"`
-	StageLatency                   int         `json:"stage_latency"`
-	PostPipelineBufSize            int         `json:"post_pipeline_buf_size"`
-	Capacity                       uint64      `json:"capacity"`
-	BankSelectorKind               string      `json:"bank_selector_kind"`
-	BankSelectorLog2InterleaveSize uint64      `json:"bank_selector_log2_interleave_size"`
+	Freq                timing.Freq `json:"freq"`
+	NumBanks            int         `json:"num_banks"`
+	BankPipelineWidth   int         `json:"bank_pipeline_width"`
+	BankPipelineDepth   int         `json:"bank_pipeline_depth"`
+	StageLatency        int         `json:"stage_latency"`
+	PostPipelineBufSize int         `json:"post_pipeline_buf_size"`
+
+	// Capacity is the size in bytes of the memory. The component does not
+	// read it: the system builder sizes the Resources.Storage it supplies
+	// with it.
+	Capacity                       uint64 `json:"capacity"`
+	BankSelectorKind               string `json:"bank_selector_kind"`
+	BankSelectorLog2InterleaveSize uint64 `json:"bank_selector_log2_interleave_size"`
 
 	// Bank-selection address conversion. Bank selection runs on this
 	// conversion of the request address; storage is always global, so this
@@ -39,8 +43,6 @@ type Spec struct {
 	BankAddrTotalNumOfElements  int    `json:"bank_addr_total_num_of_elements"`
 	BankAddrCurrentElementIndex int    `json:"bank_addr_current_element_index"`
 	BankAddrOffset              uint64 `json:"bank_addr_offset"`
-
-	StorageRef string `json:"storage_ref"`
 }
 
 // bankPipelineItemState is a serializable representation of a pipeline item.
@@ -73,13 +75,37 @@ type State struct {
 
 // Resources holds the shared resources referenced by the memory.
 type Resources struct {
+	// Storage holds the memory's data. It is required; the system builder
+	// creates it (usually sized by Spec.Capacity) and may share it with other
+	// components.
 	Storage *mem.Storage
 }
 
+// Ports holds the memory's ports.
+type Ports struct {
+	// Top receives read and write requests and returns their responses.
+	Top messaging.Port `akita:"role=mem/responder"`
+
+	// Control receives enable, pause, drain, and reset commands.
+	Control messaging.Port `akita:"role=mem.control/responder"`
+}
+
+// Middlewares holds the memory's behavior, run in field order every cycle.
+type Middlewares struct {
+	// Ctrl handles control commands.
+	Ctrl *ctrlMiddleware
+
+	// TickFinalize commits requests leaving the bank pipelines, responds to
+	// them, and advances the pipelines.
+	TickFinalize *tickFinalizeMW
+
+	// Dispatch moves incoming requests into their banks' pipelines.
+	Dispatch *dispatchMW
+}
+
 // Comp models a banked memory with configurable banking and pipeline behavior.
-// It is a modeling.Component specialized to this package's Spec, State, and
-// Resources.
-type Comp = modeling.Component[Spec, State, Resources]
+// It is a ticking component specialized to this package's five structs.
+type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
 
 // --- Free functions for pipeline / buffer / bank-selection / address conversion ---
 

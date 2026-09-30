@@ -1,11 +1,9 @@
 package inspect
 
 import (
-	"fmt"
 	"go/ast"
 	"go/types"
 	"reflect"
-	"strings"
 
 	"golang.org/x/tools/go/packages"
 
@@ -63,7 +61,11 @@ func extractModelDefinition(
 		return nil, err
 	}
 
-	if def.Resources, err = structFields(pkg, resType, nil, index); err != nil {
+	if err := validateFieldMetadata(pkg, specType, def.Spec); err != nil {
+		return nil, err
+	}
+
+	if def.Resources, err = resourcesOfType(pkg, lit, resType, index); err != nil {
 		return nil, err
 	}
 
@@ -72,10 +74,6 @@ func extractModelDefinition(
 	}
 
 	if def.Middlewares, err = middlewaresOfType(pkg, lit, mwType, index); err != nil {
-		return nil, err
-	}
-
-	if err := validateDefinition(pkg, lit, specType, def); err != nil {
 		return nil, err
 	}
 
@@ -155,6 +153,41 @@ func functionRef(pkg *packages.Package, field string, expr ast.Expr) error {
 	return nil
 }
 
+// identObject resolves an identifier or selector expression to the
+// package-level object it references.
+func identObject(pkg *packages.Package, expr ast.Expr) (types.Object, error) {
+	var ident *ast.Ident
+	switch e := expr.(type) {
+	case *ast.Ident:
+		ident = e
+	case *ast.SelectorExpr:
+		ident = e.Sel
+	default:
+		return nil, posErrorf(pkg, expr.Pos(),
+			"expected an identifier referencing a package-level declaration")
+	}
+
+	obj := pkg.TypesInfo.Uses[ident]
+	if obj == nil || obj.Pkg() == nil {
+		return nil, posErrorf(pkg, expr.Pos(),
+			"cannot resolve identifier %s", ident.Name)
+	}
+
+	return obj, nil
+}
+
+// resourcesOfType describes the fields of a Resources struct: the references
+// to shared objects that the system builder supplies.
+func resourcesOfType(
+	pkg *packages.Package, lit *ast.CompositeLit, typ types.Type, index pkgIndex,
+) ([]schema.Field, error) {
+	if _, ok := typ.Underlying().(*types.Struct); !ok {
+		return nil, posErrorf(pkg, lit.Pos(), "Resources type %s must be a struct", typ)
+	}
+
+	return structFields(pkg, typ, nil, index)
+}
+
 // portsOfType describes the fields of a Ports struct: a messaging.Port field
 // is a port and a []messaging.Port field a port group. Roles come from
 // `akita:"role=<protocol>/<role>"` tags and must name a defined protocol role.
@@ -211,89 +244,6 @@ func portFieldKind(typ types.Type) (group, ok bool) {
 	}
 
 	return false, false
-}
-
-// parsePortRoles parses a port's akita tag: comma-separated
-// role=<protocol>/<role> directives.
-func parsePortRoles(tag string) ([]schema.Role, error) {
-	if tag == "" {
-		return nil, nil
-	}
-
-	var roles []schema.Role
-	for directive := range strings.SplitSeq(tag, ",") {
-		key, value, _ := strings.Cut(directive, "=")
-		protocol, role, found := strings.Cut(value, "/")
-		if key != "role" || !found || protocol == "" || role == "" {
-			return nil, fmt.Errorf(
-				"akita tag: want role=<protocol>/<role>, got %q", directive)
-		}
-
-		roles = append(roles, schema.Role{Protocol: protocol, Role: role})
-	}
-
-	return roles, nil
-}
-
-// protocolRoles collects, from every loaded package, the protocols declared
-// with messaging.DefineProtocol and the names of their roles.
-func protocolRoles(index pkgIndex) map[string]map[string]bool {
-	out := map[string]map[string]bool{}
-
-	for _, pkg := range index {
-		for _, file := range pkg.Syntax {
-			ast.Inspect(file, func(n ast.Node) bool {
-				call, ok := n.(*ast.CallExpr)
-				if !ok || len(call.Args) == 0 {
-					return true
-				}
-
-				fn := calleeFunc(pkg, call)
-				if fn == nil || fn.FullName() != defineProtocolFullName {
-					return true
-				}
-
-				name, err := constString(pkg, call.Args[0])
-				if err != nil {
-					return true
-				}
-
-				roles := map[string]bool{}
-				for _, arg := range call.Args[1:] {
-					if role, ok := roleDefName(pkg, arg); ok {
-						roles[role] = true
-					}
-				}
-				out[name] = roles
-
-				return true
-			})
-		}
-	}
-
-	return out
-}
-
-// roleDefName returns the Name of a messaging.RoleDef literal.
-func roleDefName(pkg *packages.Package, expr ast.Expr) (string, bool) {
-	lit, ok := expr.(*ast.CompositeLit)
-	if !ok {
-		return "", false
-	}
-
-	for _, elt := range lit.Elts {
-		kv, ok := elt.(*ast.KeyValueExpr)
-		if !ok {
-			continue
-		}
-
-		if key, ok := kv.Key.(*ast.Ident); ok && key.Name == "Name" {
-			name, err := constString(pkg, kv.Value)
-			return name, err == nil
-		}
-	}
-
-	return "", false
 }
 
 // middlewaresOfType lists the fields of a Middlewares struct in declaration

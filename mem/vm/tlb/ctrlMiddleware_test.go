@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -21,7 +22,7 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		comp = MakeBuilder().
+		comp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(Definition.DefaultSpec).
 			WithResources(Resources{
@@ -29,16 +30,16 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 					Port: "RemotePort",
 				},
 			}).
+			WithPorts(defaultPorts("TLB")).
 			Build("TLB")
 
-		assignDefaultPorts(sim, comp)
 		plugNoopConn(comp)
 
-		ctrlMW = comp.Middlewares()[0].(*ctrlMiddleware)
+		ctrlMW = comp.Middlewares.Ctrl
 	})
 
 	It("should do nothing if there is no req in ctrlPort", func() {
-		madeProgress := ctrlMW.Tick()
+		madeProgress := ctrlMW.Handle(modelingtest.TickEvent(comp))
 
 		Expect(madeProgress).To(BeFalse())
 	})

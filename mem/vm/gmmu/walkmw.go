@@ -7,32 +7,32 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
-	"github.com/sarchlab/akita/v5/tracing"
-
-	// walkMW handles the top→page-table walk path:
-	// parseFromTop, startWalking, walkPageTable, removeCompletedTranslations,
-	// processRemoteMemReq, finalizePageWalk, doPageWalkHit.
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
+// walkMW handles the top→page-table walk path:
+// parseFromTop, startWalking, walkPageTable, removeCompletedTranslations,
+// processRemoteMemReq, finalizePageWalk, doPageWalkHit.
 type walkMW struct {
-	comp      *modeling.Component[Spec, State, Resources]
+	comp *Comp
+
+	// pageTable is Resources.PageTable, taken by newMiddlewares.
 	pageTable vm.PageTable
 }
 
 func (m *walkMW) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
 func (m *walkMW) bottomPort() messaging.Port {
-	return m.comp.GetPortByName("Bottom")
+	return m.comp.Ports.Bottom
 }
 
-// Tick runs the walk stages. Paused GMMUs make no progress; draining
+// Handle runs the walk stages. Paused GMMUs make no progress; draining
 // GMMUs continue page-table walks but accept no new requests.
-func (m *walkMW) Tick() bool {
+func (m *walkMW) Handle(_ timing.Event) bool {
 	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}

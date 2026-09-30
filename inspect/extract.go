@@ -15,13 +15,6 @@ import (
 // definitionVarName is the required name of the package-level definition var.
 const definitionVarName = "Definition"
 
-// builderTypeName and withResourcesMethod locate a component's Resources
-// type: the parameter of its builder's WithResources method.
-const (
-	builderTypeName     = "Builder"
-	withResourcesMethod = "WithResources"
-)
-
 // extractors maps the fully-qualified name of a definition type to the
 // extractor for its definition kind. A package-level var of such a type is a
 // definition. Adding a kind (e.g. a benchmark definition) means adding an
@@ -29,7 +22,6 @@ const (
 var extractors = map[string]func(
 	pkg *packages.Package, lit *ast.CompositeLit, index pkgIndex,
 ) (*schema.Definition, error){
-	"github.com/sarchlab/akita/v5/modeling.ComponentDef": extractComponent,
 	"github.com/sarchlab/akita/v5/modeling/ticking.Definition": extractModel(
 		schema.ModelTicking),
 	"github.com/sarchlab/akita/v5/modeling/wakeup.Definition": extractModel(
@@ -135,8 +127,9 @@ func extractVarSpec(
 }
 
 // definitionTypeName returns "importpath.TypeName" of a named type's generic
-// origin (so ComponentDef[Spec] maps to ComponentDef), or "" for other types.
-// Aliases, including generic ones, resolve to the type they denote.
+// origin (so ticking.Definition[S, T, R, P, M] maps to ticking.Definition),
+// or "" for other types. Aliases, including generic ones, resolve to the type
+// they denote.
 func definitionTypeName(typ types.Type) string {
 	named, ok := types.Unalias(typ).(*types.Named)
 	if !ok {
@@ -144,146 +137,6 @@ func definitionTypeName(typ types.Type) string {
 	}
 
 	return qualifiedTypeName(named.Origin())
-}
-
-// extractComponent extracts a ComponentDef composite literal with
-// statically evaluable leaves.
-func extractComponent(
-	pkg *packages.Package, lit *ast.CompositeLit, index pkgIndex,
-) (*schema.Definition, error) {
-	specType, err := componentSpecType(pkg, lit)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := validateSpecType(pkg, specType, index); err != nil {
-		return nil, err
-	}
-
-	def := &schema.Definition{Kind: schema.KindComponent}
-
-	defaults, err := applyComponentFields(pkg, lit, def, index)
-	if err != nil {
-		return nil, err
-	}
-
-	def.Spec, err = structFields(pkg, specType, defaults, index)
-	if err != nil {
-		return nil, err
-	}
-
-	resType, err := builderResourcesType(pkg)
-	if err != nil {
-		return nil, err
-	}
-
-	if resType != nil {
-		def.Resources, err = structFields(pkg, resType, nil, index)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if err := validateDefinition(pkg, lit, specType, def); err != nil {
-		return nil, err
-	}
-
-	return def, nil
-}
-
-// applyComponentFields walks the keyed fields of the ComponentDef literal
-// into def and returns the evaluated DefaultSpec values.
-func applyComponentFields(
-	pkg *packages.Package, lit *ast.CompositeLit,
-	def *schema.Definition, index pkgIndex,
-) (map[string]any, error) {
-	fields, err := keyedElements(pkg, lit)
-	if err != nil {
-		return nil, err
-	}
-
-	defaults := map[string]any{}
-
-	for key, value := range fields {
-		switch key {
-		case "Name":
-			def.Name, err = constString(pkg, value)
-		case "DefaultSpec":
-			defaults, err = evalStructLiteral(pkg, value)
-		case "Ports":
-			def.Ports, err = extractPorts(pkg, value, index)
-		default:
-			err = posErrorf(pkg, value.Pos(),
-				"unsupported ComponentDef field %q", key)
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return defaults, nil
-}
-
-// componentSpecType returns the Spec type argument of the ComponentDef
-// literal.
-func componentSpecType(
-	pkg *packages.Package, lit *ast.CompositeLit,
-) (types.Type, error) {
-	tv, ok := pkg.TypesInfo.Types[lit]
-	if !ok {
-		return nil, posErrorf(pkg, lit.Pos(),
-			"cannot resolve ComponentDef literal type")
-	}
-
-	named, ok := types.Unalias(tv.Type).(*types.Named)
-	if !ok || named.TypeArgs().Len() != 1 {
-		return nil, posErrorf(pkg, lit.Pos(),
-			"ComponentDef literal must be instantiated with [Spec]")
-	}
-
-	return named.TypeArgs().At(0), nil
-}
-
-// builderResourcesType returns the Resources struct taken by the package's
-// Builder.WithResources method: the external references a caller supplies at
-// construction. A pointer or variadic parameter resolves to its struct. It
-// returns nil when the package has no Builder or the Builder takes no
-// resources, and an error when WithResources does not take one struct.
-func builderResourcesType(pkg *packages.Package) (types.Type, error) {
-	obj, ok := pkg.Types.Scope().Lookup(builderTypeName).(*types.TypeName)
-	if !ok {
-		return nil, nil //nolint:nilnil // No Builder means no resources.
-	}
-
-	// The pointer method set holds both value- and pointer-receiver methods.
-	sel := types.NewMethodSet(types.NewPointer(obj.Type())).
-		Lookup(pkg.Types, withResourcesMethod)
-	if sel == nil {
-		return nil, nil //nolint:nilnil // A Builder may take no resources.
-	}
-
-	sig, ok := sel.Obj().Type().(*types.Signature)
-	if !ok || sig.Params().Len() != 1 {
-		return nil, posErrorf(pkg, sel.Obj().Pos(),
-			"%s.%s must take a single Resources struct",
-			builderTypeName, withResourcesMethod)
-	}
-
-	param := sig.Params().At(0).Type()
-	if sig.Variadic() {
-		param = param.(*types.Slice).Elem()
-	}
-	if ptr, ok := types.Unalias(param).(*types.Pointer); ok {
-		param = ptr.Elem()
-	}
-
-	if _, ok := param.Underlying().(*types.Struct); !ok {
-		return nil, posErrorf(pkg, sel.Obj().Pos(),
-			"%s.%s must take a Resources struct, got %s",
-			builderTypeName, withResourcesMethod, sig.Params().At(0).Type())
-	}
-
-	return param, nil
 }
 
 // keyedElements returns the keyed fields of a composite literal, requiring
@@ -310,74 +163,6 @@ func keyedElements(
 	}
 
 	return out, nil
-}
-
-// extractPorts extracts a []PortDef literal.
-func extractPorts(
-	pkg *packages.Package, expr ast.Expr, index pkgIndex,
-) ([]schema.Port, error) {
-	if tv, ok := pkg.TypesInfo.Types[expr]; ok && tv.IsNil() {
-		return nil, nil //nolint:nilnil // Ports: nil declares no ports.
-	}
-
-	elems, err := sliceElements(pkg, expr)
-	if err != nil {
-		return nil, err
-	}
-
-	ports := make([]schema.Port, 0, len(elems))
-	for _, elem := range elems {
-		fields, err := keyedElements(pkg, elem)
-		if err != nil {
-			return nil, err
-		}
-
-		var port schema.Port
-		for key, value := range fields {
-			switch key {
-			case "Name":
-				port.Name, err = constString(pkg, value)
-			case "Roles":
-				port.Roles, err = extractRoles(pkg, value, index)
-			case "Group":
-				port.Group, err = constBool(pkg, value)
-			default:
-				err = posErrorf(pkg, value.Pos(),
-					"unsupported PortDef field %q", key)
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		ports = append(ports, port)
-	}
-
-	return ports, nil
-}
-
-// sliceElements returns the elements of a slice composite literal, each of
-// which must itself be a composite literal.
-func sliceElements(
-	pkg *packages.Package, expr ast.Expr,
-) ([]*ast.CompositeLit, error) {
-	lit, ok := expr.(*ast.CompositeLit)
-	if !ok {
-		return nil, posErrorf(pkg, expr.Pos(),
-			"expected a slice literal, not a value computed elsewhere")
-	}
-
-	elems := make([]*ast.CompositeLit, 0, len(lit.Elts))
-	for _, elt := range lit.Elts {
-		el, ok := elt.(*ast.CompositeLit)
-		if !ok {
-			return nil, posErrorf(pkg, elt.Pos(),
-				"slice elements must be literals")
-		}
-		elems = append(elems, el)
-	}
-
-	return elems, nil
 }
 
 // evalStructLiteral evaluates a struct composite literal with constant
@@ -498,20 +283,6 @@ func constString(pkg *packages.Package, expr ast.Expr) (string, error) {
 	}
 
 	return s, nil
-}
-
-func constBool(pkg *packages.Package, expr ast.Expr) (bool, error) {
-	v, err := evalConstExpr(pkg, expr)
-	if err != nil {
-		return false, err
-	}
-
-	b, ok := v.(bool)
-	if !ok {
-		return false, posErrorf(pkg, expr.Pos(), "expected a boolean constant")
-	}
-
-	return b, nil
 }
 
 func posErrorf(

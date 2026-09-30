@@ -11,7 +11,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 
 	"github.com/sarchlab/akita/v5/simulation"
@@ -25,7 +24,7 @@ var maxAddressFlag = flag.Uint64("max-address", 1048576, "Address range to use")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 var traceFlag = flag.Bool("trace", false, "Collect trace")
 
-func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
+func setupTest(seed int64) (*simulation.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
 	simBuilder := simulation.MakeBuilder()
 
 	if *parallelFlag {
@@ -42,61 +41,50 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		WithSimulation(s).
 		Build("Conn")
 
+	// The agent sends to the DRAM's Top port, so the DRAM's ports are created
+	// before the agent is built.
+	dramPorts := idealmemcontroller.Ports{
+		Top:     messaging.NewPort(nil, 16, 16, "DRAM.Top"),
+		Control: messaging.NewPort(nil, 16, 16, "DRAM.Control"),
+	}
+
 	agentSpec := memaccessagent.Definition.DefaultSpec
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.ReadLeft = *numAccessFlag
-	agent := memaccessagent.MakeBuilder().
+	agentSpec.RandSeed = seed
+	agent := memaccessagent.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(agentSpec).
+		WithResources(memaccessagent.Resources{LowModule: dramPorts.Top}).
+		WithPorts(memaccessagent.Ports{
+			Mem: messaging.NewPort(nil, 16, 16, "MemAccessAgent.Mem"),
+		}).
 		Build("MemAccessAgent")
-	assignPorts(s, agent, "Mem")
 	if monitor := s.GetMonitor(); monitor != nil {
-		agent.CreateProgressBars(monitor.CreateProgressBar)
+		memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
 	}
 
 	dramSpec := idealmemcontroller.Definition.DefaultSpec
-	dramSpec.Capacity = 4 * mem.GB
 	dramSpec.Width = 1
 	dramSpec.Latency = 100
 	dramSpec.CacheLineSize = 64
-	dram := idealmemcontroller.MakeBuilder().
+	dram := idealmemcontroller.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(dramSpec).
+		WithResources(idealmemcontroller.Resources{
+			Storage: mem.MakeStorageBuilder().
+				WithCapacity(4 * mem.GB).
+				WithSimulation(s).
+				Build("DRAM.Storage"),
+		}).
+		WithPorts(dramPorts).
 		Build("DRAM")
-	assignPorts(s, dram, "Top", "Control")
 
-	agent.LowModule = dram.GetPortByName("Top")
-
-	conn.PlugIn(agent.GetPortByName("Mem"))
-	conn.PlugIn(dram.GetPortByName("Top"))
+	conn.PlugIn(agent.Ports.Mem)
+	conn.PlugIn(dram.Ports.Top)
 
 	return s, engine, agent
-}
-
-// portOwner is a component on the Component API: its ports are assigned
-// after Build and looked up by name.
-type portOwner interface {
-	messaging.Component
-	AssignPort(name string, port messaging.Port)
-	GetPortByName(name string) messaging.Port
-}
-
-// assignPorts builds a port for each declared name on the component and assigns
-// it, choosing a default buffer size.
-func assignPorts(
-	s *simulation.Simulation,
-	comp portOwner,
-	names ...string,
-) {
-	for _, name := range names {
-		p := modeling.MakePortBuilder().
-			WithSimulation(s).
-			WithComponent(comp).
-			WithSpec(modeling.PortSpec{BufSize: 16}).
-			Build(name)
-		comp.AssignPort(name, p)
-	}
 }
 
 func main() {
@@ -110,7 +98,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, "Seed %d\n", seed)
 	rand.Seed(seed)
 
-	s, engine, agent := setupTest()
+	s, engine, agent := setupTest(seed)
 
 	agent.TickLater()
 

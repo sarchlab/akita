@@ -2,14 +2,19 @@
 
 Package `mmu` provides a memory management unit for the Akita simulation
 framework. It is the CPU-side terminus of the virtual-memory subsystem:
-it performs page-table walks to resolve `vm.TranslationReq` messages and, for
-unified-memory pages, coordinates on-demand page migration with the driver.
+it performs page-table walks to resolve `vm.TranslationReq` messages.
 
 ## How It Works
 
-The MMU is driven by two middlewares that run each tick.
+The MMU is driven by two middlewares, run in this order every cycle.
 
-### translationMW — page-table walks
+### Ctrl — control commands
+
+Handles the control commands on the `Control` port: Pause, Enable, Drain, and
+Reset. Drain is acknowledged once no page-table walks are in progress.
+Invalidate and Flush are answered as unsupported.
+
+### Translation — page-table walks
 
 1. **parseFromTop** — Accepts a `vm.TranslationReq` from the `Top` port (up to
    `MaxRequestsInFlight` may be walking at once) and starts a walk with a
@@ -18,68 +23,55 @@ The MMU is driven by two middlewares that run each tick.
    completes it looks up the page in the shared `vm.PageTable`:
    - If the page is missing and `AutoPageAllocation` is set, a new page is
      created and inserted (otherwise it panics).
-   - If the page is migrating, or needs migration (accessed by a different
-     device, unified, not pinned), the transaction is moved to the migration
-     queue.
-   - Otherwise a `vm.TranslationRsp` is sent back on `Top`.
-
-### migrationMW — on-demand migration
-
-Transactions queued by `translationMW` are processed one at a time. When a page
-must move to the requesting device, a `vm.PageMigrationReqToDriver` is sent on the
-`Migration` port to the configured `MigrationServiceProvider`. When the driver's
-response returns, the page is marked pinned, the page table is updated, and the
-final `vm.TranslationRsp` is sent on `Top`.
+   - A `vm.TranslationRsp` is then sent back on `Top`.
 
 ## Key Types
 
 - `Spec` — immutable configuration: frequency, walk `Latency`,
   `MaxRequestsInFlight`, `AutoPageAllocation`, and `Log2PageSize`. Port buffer
-  sizes are no longer part of the spec; they are chosen by the caller when the
-  port instances are built.
-- `State` — mutable runtime data: in-flight walks, the migration queue, the
-  current on-demand migration, per-page device-access tracking, and the next
-  physical page to allocate.
-- `Resources` — shared wiring; holds the `vm.PageTable`. If none is supplied the
-  builder constructs one sized by `Log2PageSize`.
-- `Comp` — `modeling.Component[Spec, State, Resources]`.
+  sizes are not part of the spec; the system builder chooses them when it
+  creates the port instances.
+- `State` — mutable runtime data: the control state, the in-flight walks, and
+  the next physical page to allocate.
+- `Resources` — shared wiring; holds the `vm.PageTable`. It is required: `Build`
+  panics if `PageTable` is nil, or if its page size does not match
+  `Log2PageSize`. (The MMU no longer builds a default page table; build one with
+  `vm.MakePageTableBuilder()` or `vm.NewPageTable(log2PageSize)`.)
+- `Ports` — the `Top` and `Control` ports.
+- `Middlewares` — `Ctrl` (control commands) and `Translation` (page-table
+  walks), run in that order every cycle.
+- `Comp` — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+  ticking component.
 
 ## Builder Pattern
-
-`Build` declares the component's `Top` and `Control` ports but does not create
-the port instances. The caller builds each port with `modeling.MakePortBuilder`
-(choosing the buffer size) and attaches it with `AssignPort`.
 
 ```go
 spec := mmu.Definition.DefaultSpec
 spec.Latency = 100
 spec.AutoPageAllocation = true
 
-m := mmu.MakeBuilder().
+m := mmu.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(mmu.Resources{PageTable: pageTable}).
+    WithPorts(mmu.Ports{
+        Top:     messaging.NewPort(nil, 16, 16, "MMU.Top"),
+        Control: messaging.NewPort(nil, 4, 4, "MMU.Control"),
+    }).
     Build("MMU")
-
-for _, name := range []string{"Top", "Control"} {
-    p := modeling.MakePortBuilder().
-        WithSimulation(sim).
-        WithComponent(m).
-        WithSpec(modeling.PortSpec{BufSize: 16}).
-        Build(name)
-    m.AssignPort(name, p)
-}
 ```
 
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
-| `WithResources(Resources{PageTable: pt})` | Shared page table (built internally if omitted) |
+| `WithResources(Resources{PageTable: pt})` | Shared page table (required) |
+| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required) |
 
 ## Ports
 
-`Build` declares these ports; the caller assigns the instances after `Build`.
+The system builder creates each port with `messaging.NewPort`, choosing its
+buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top**: accepts `vm.TranslationReq`, returns `vm.TranslationRsp`.
 - **Control**: accepts `mem.ControlReq` (Pause, Drain, Enable, Reset), returns

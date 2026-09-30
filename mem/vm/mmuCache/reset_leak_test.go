@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/sarchlab/akita/v5/tracing/tracingtest"
@@ -30,20 +31,19 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.NumReqPerCycle = 4
 	spec.LatencyPerLevel = 100
 
-	comp := MakeBuilder().
+	comp := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(Resources{
 			LowModulePort: messaging.RemotePort("LowModule"),
 			UpModulePort:  messaging.RemotePort("UpModule"),
 		}).
+		WithPorts(defaultPorts("MMUCache")).
 		Build("MMUCache")
 
-	assignDefaultPorts(sim, comp)
-
-	topPort := comp.GetPortByName("Top")
-	bottomPort := comp.GetPortByName("Bottom")
-	controlPort := comp.GetPortByName("Control")
+	topPort := comp.Ports.Top
+	bottomPort := comp.Ports.Bottom
+	controlPort := comp.Ports.Control
 	for _, p := range []messaging.Port{topPort, bottomPort, controlPort} {
 		(&noopConn{}).PlugIn(p)
 	}
@@ -67,7 +67,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// Tick until the forward happens and the walk is recorded in flight.
 	forwarded := false
 	for i := 0; i < 64 && !forwarded; i++ {
-		comp.Tick()
+		modelingtest.Tick(comp)
 		if len(comp.State.InflightReqs) > 0 {
 			forwarded = true
 		}
@@ -99,7 +99,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
-		comp.Tick()
+		modelingtest.Tick(comp)
 		if msg, ok := controlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {

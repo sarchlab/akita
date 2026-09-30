@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -55,7 +56,7 @@ var _ = Describe("DRAM admission milestones", func() {
 	var (
 		engine  timing.Engine
 		sim     timing.Simulation
-		memCtrl *modeling.Component[Spec, State, Resources]
+		memCtrl *Comp
 		topPort messaging.Port
 		rec     *milestoneRecorder
 	)
@@ -64,20 +65,9 @@ var _ = Describe("DRAM admission milestones", func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		memCtrl = MakeBuilder().
-			WithSimulation(sim).
-			Build("MemCtrl")
+		memCtrl = buildDRAM(sim, Definition.DefaultSpec, "MemCtrl", 16)
 
-		for _, name := range []string{"Top", "Control"} {
-			p := modeling.MakePortBuilder().
-				WithSimulation(sim).
-				WithComponent(memCtrl).
-				WithSpec(modeling.PortSpec{BufSize: 16}).
-				Build(name)
-			memCtrl.AssignPort(name, p)
-		}
-
-		topPort = memCtrl.GetPortByName("Top")
+		topPort = memCtrl.Ports.Top
 
 		// Attach the recorder before driving so MsgIDAtReceiver and
 		// MsgIDAtIncomingBuffer hand out real task IDs (they return 0 with no
@@ -103,7 +93,7 @@ var _ = Describe("DRAM admission milestones", func() {
 
 		// One tick runs parseTop, which admits the request: the buffer task's
 		// queue admission milestone is emitted just before RetrieveIncoming.
-		memCtrl.Tick()
+		modelingtest.Tick(memCtrl)
 
 		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
 		Expect(bufID).ToNot(BeZero())
@@ -131,21 +121,9 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 		spec.TREFI = 1
 		spec.TRFC = 3
 
-		memCtrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(spec).
-			Build("MemCtrl")
+		memCtrl := buildDRAM(sim, spec, "MemCtrl", 16)
 
-		for _, name := range []string{"Top", "Control"} {
-			p := modeling.MakePortBuilder().
-				WithSimulation(sim).
-				WithComponent(memCtrl).
-				WithSpec(modeling.PortSpec{BufSize: 16}).
-				Build(name)
-			memCtrl.AssignPort(name, p)
-		}
-
-		topPort := memCtrl.GetPortByName("Top")
+		topPort := memCtrl.Ports.Top
 
 		rec := &milestoneRecorder{}
 		tracing.CollectTrace(memCtrl, rec)
@@ -162,7 +140,7 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 		// Tick enough for the refresh window to open and close and the command
 		// to finally issue.
 		for i := 0; i < 20; i++ {
-			memCtrl.Tick()
+			modelingtest.Tick(memCtrl)
 		}
 
 		subID := rec.taskID("sub-trans")

@@ -5,24 +5,23 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type parseTopMW struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *parseTopMW) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
-// Tick runs the parseTop stage. Pause and Drain both stop accepting
+// Handle runs the parseTop stage. Pause and Drain both stop accepting
 // new traffic from the Top port; only Enabled DRAM accepts new
 // transactions.
-func (m *parseTopMW) Tick() bool {
+func (m *parseTopMW) Handle(_ timing.Event) bool {
 	next := &m.comp.State
 	if next.ControlState != memcontrolprotocol.StateEnabled {
 		return false

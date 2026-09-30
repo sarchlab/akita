@@ -76,38 +76,3 @@ func isNilable(k reflect.Kind) bool {
 		return false
 	}
 }
-
-// MiddlewareHolder can maintain a list of middleware. It serves the Component
-// API, whose middlewares are Tickers; a component model declares its
-// middlewares as a Middlewares struct instead.
-type MiddlewareHolder struct {
-	middlewares []Ticker
-}
-
-// AddMiddleware adds a middleware to the holder.
-func (holder *MiddlewareHolder) AddMiddleware(middleware Ticker) {
-	holder.middlewares = append(holder.middlewares, middleware)
-}
-
-// Middlewares returns a copy of the middleware list. The copy prevents callers
-// from mutating the holder's internal slice; the middleware objects themselves
-// are shared.
-func (holder *MiddlewareHolder) Middlewares() []Ticker {
-	middlewares := make([]Ticker, len(holder.middlewares))
-	copy(middlewares, holder.middlewares)
-
-	return middlewares
-}
-
-// Tick processes a tick event. It returns true if progress is made.
-func (holder *MiddlewareHolder) Tick() bool {
-	progress := false
-
-	for _, middleware := range holder.middlewares {
-		if middleware.Tick() {
-			progress = true
-		}
-	}
-
-	return progress
-}

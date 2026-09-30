@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
   "kind": "component",
-  "name": "FullComp",
+  "model": "ticking",
+  "name": "fullcomp",
   "package": "github.com/sarchlab/akita/v5/inspect/testdata/fixtures/fullcomp",
   "module": "github.com/sarchlab/akita/v5",
   "spec": [
@@ -86,6 +87,18 @@
         }
       ],
       "group": true
+    }
+  ],
+  "middlewares": [
+    {
+      "name": "Control",
+      "type": "*controlMW",
+      "doc": "Control handles control commands."
+    },
+    {
+      "name": "Serve",
+      "type": "*serveMW",
+      "doc": "Serve forwards requests from Top to Out."
     }
   ]
 }

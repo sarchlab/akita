@@ -3,15 +3,16 @@ package idealmemcontroller
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type ctrlMiddleware struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
-func (m *ctrlMiddleware) Tick() (madeProgress bool) {
+// Handle completes a pending Drain and handles the next control command.
+func (m *ctrlMiddleware) Handle(_ timing.Event) (madeProgress bool) {
 	madeProgress = m.handleStateUpdate() || madeProgress
 	// Control commands are processed serially: while an async verb (Drain) is
 	// in progress, the next command is not accepted — it stays queued on the
@@ -23,7 +24,7 @@ func (m *ctrlMiddleware) Tick() (madeProgress bool) {
 }
 
 func (m *ctrlMiddleware) ctrlPort() messaging.Port {
-	return m.comp.GetPortByName("Control")
+	return m.comp.Ports.Control
 }
 
 // handleStateUpdate notices Drain completion and acks the pending
@@ -130,7 +131,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	// requests still queued on the Top port; otherwise (the control
 	// middleware runs before the memory middleware) takeNewReqs would consume
 	// a stale request in the very same tick, right after the reset ack.
-	top := m.comp.GetPortByName("Top")
+	top := m.comp.Ports.Top
 	for {
 		if _, ok := top.PeekIncoming(); !ok {
 			break

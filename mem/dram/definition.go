@@ -1,18 +1,22 @@
 package dram
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// Definition declares the DRAMController component: its default configuration and
-// its port topology. The builder consumes it at runtime and tooling reads it
-// statically, so it is the single source of truth for both.
-var Definition = modeling.ComponentDef[Spec]{
-	Name: "DRAMController",
+// Definition declares the DRAM controller, a ticking component: its default
+// configuration and its behavior. Its ports and middlewares are the fields of
+// Ports and Middlewares. The system builder builds an instance with
+// Definition.Builder()...Build(name); tooling reads the same declaration
+// statically.
+//
+// Strategy and behavior selection is by configuration, not by injecting
+// objects: the scheduler and address mapper are chosen by the Spec.Scheduler /
+// Spec.AddrMapper registry keys, the row policy by Spec.PagePolicy, and
+// refresh is a middleware. New strategies/behaviors are added in-tree and
+// registered — the model the reference simulators use.
+var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 	DefaultSpec: Spec{
 		Freq:                 1600 * timing.MHz,
 		Protocol:             int(protoDDR3),
@@ -51,8 +55,51 @@ var Definition = modeling.ComponentDef[Spec]{
 		TransactionQueueSize: 32,
 		CommandQueueCapacity: 8,
 	},
-	Ports: []modeling.PortDef{
-		{Name: "Top", Roles: []*messaging.Role{memprotocol.Responder}},
-		{Name: "Control", Roles: []*messaging.Role{memcontrolprotocol.Responder}},
-	},
+	NewState:       newState,
+	NewMiddlewares: newMiddlewares,
+}
+
+// newState returns the State of a freshly built controller: empty queues and
+// every bank closed.
+func newState(c *Comp) State {
+	spec := c.Spec()
+
+	return State{
+		SubTransQueue: subTransQueueState{
+			Entries: []subTransRef{},
+		},
+		CommandQueues: commandQueueState{
+			NumQueues: spec.NumChannel * spec.NumRank,
+			Entries:   []queueEntry{},
+		},
+		BankStates: initBankStatesFlat(
+			spec.NumRank, spec.NumBankGroup, spec.NumBank),
+	}
+}
+
+// newMiddlewares checks the configuration and creates the middlewares. The
+// immutable values derived from the Spec — the inter-command timing tables,
+// the command completion delays, and the controller strategies with their
+// address mapping — are computed once here and held by the bank-tick
+// middleware.
+func newMiddlewares(c *Comp) Middlewares {
+	spec := c.Spec()
+	spec.mustBeSupported()
+
+	if c.Resources().Storage == nil {
+		panic("dram: Resources.Storage is required")
+	}
+
+	return Middlewares{
+		Ctrl:    &ctrlMiddleware{comp: c},
+		Respond: &respondMW{comp: c},
+		Refresh: &refreshMiddleware{comp: c},
+		BankTick: &bankTickMW{
+			comp:      c,
+			timing:    generateTiming(&spec),
+			cmdCycles: buildCmdCycles(&spec),
+			ctrl:      newController(&spec),
+		},
+		ParseTop: &parseTopMW{comp: c},
+	}
 }

@@ -3,25 +3,24 @@ package tlb
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type tlbMiddleware struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *tlbMiddleware) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
 func (m *tlbMiddleware) bottomPort() messaging.Port {
-	return m.comp.GetPortByName("Bottom")
+	return m.comp.Ports.Bottom
 }
 
-func (m *tlbMiddleware) Tick() bool {
+func (m *tlbMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 	next := &m.comp.State
 
@@ -310,7 +309,7 @@ func (m *tlbMiddleware) handleTranslationMiss(msg vmprotocol.TranslationReq) boo
 }
 
 func vAddrToSetID(vAddr uint64, spec Spec) (setID int) {
-	return int(vAddr / spec.PageSize % uint64(spec.NumSets))
+	return int(vAddr / spec.pageSize() % uint64(spec.NumSets))
 }
 
 func (m *tlbMiddleware) sendRspToTop(

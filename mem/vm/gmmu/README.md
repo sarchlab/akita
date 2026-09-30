@@ -8,7 +8,8 @@ a lower-level translation provider (typically the CPU-side MMU).
 
 ## How It Works
 
-The GMMU is configured with a `DeviceID` and is driven by two middlewares.
+The GMMU is configured with a `DeviceID` and is driven by two middlewares
+(after `ctrlMiddleware`, which handles control commands).
 
 ### walkMW — top→page-table path
 
@@ -33,49 +34,56 @@ remembered remote request, and relays a `vm.TranslationRsp` back up on `Top`.
   `Latency`, `MaxRequestsInFlight`, and the `LowModule` remote port.
 - `State` — mutable runtime data: in-flight walks, the map of remote memory
   requests awaiting responses, and per-device page-access tracking.
-- `Resources` — shared wiring; holds the `vm.PageTable`. If none is supplied the
-  builder constructs one sized by `Log2PageSize`.
-- `Comp` — `modeling.Component[Spec, State, Resources]`.
+- `Resources` — shared wiring; holds the `vm.PageTable`, which is required.
+- `Ports` — the `Top`, `Bottom`, and `Control` ports.
+- `Middlewares` — `Ctrl` (control commands), `Walk` (walkMW), and `Respond`
+  (respondMW), run in that order every cycle.
+- `Comp` — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+  ticking component.
 
 ## Builder Pattern
 
 Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the whole spec
 to `WithSpec`. Wiring comes from `WithSimulation` (which provides the engine and
-registers the component) and `WithResources` (the shared page table). When
-`WithResources` is omitted, the GMMU builds its own page table sized by
-`Spec.Log2PageSize`. `Build` declares the `Top`, `Bottom`, and `Control` ports
-but does not create their instances. Build each port with
-`modeling.MakePortBuilder` (which registers the port with the simulation) and
-attach it with `AssignPort`, choosing the buffer size.
+registers the component), `WithResources` (the page table, required), and
+`WithPorts` (the port instances). The GMMU does not build a page table of its
+own: the system builder creates one, usually with page size
+`2^Spec.Log2PageSize`, and may share it with other components. `Build` panics
+if `Resources.PageTable` is nil.
 
 ```go
 spec := gmmu.Definition.DefaultSpec
 spec.DeviceID = 1
 spec.LowModule = mmuPort
 
-g := gmmu.MakeBuilder().
+pageTable := vm.MakePageTableBuilder().
+    WithLog2PageSize(spec.Log2PageSize).
+    WithSimulation(sim).
+    Build("GMMU.PageTable")
+
+g := gmmu.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(gmmu.Resources{PageTable: pageTable}).
+    WithPorts(gmmu.Ports{
+        Top:     messaging.NewPort(nil, 16, 16, "GMMU.Top"),
+        Bottom:  messaging.NewPort(nil, 16, 16, "GMMU.Bottom"),
+        Control: messaging.NewPort(nil, 16, 16, "GMMU.Control"),
+    }).
     Build("GMMU")
-
-for _, name := range []string{"Top", "Bottom", "Control"} {
-    p := modeling.MakePortBuilder().
-        WithSimulation(sim).
-        WithComponent(g).
-        WithSpec(modeling.PortSpec{BufSize: 16}).
-        Build(name)
-    g.AssignPort(name, p)
-}
 ```
 
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
-| `WithResources(Resources{PageTable: pt})` | Shared page table (built internally if omitted) |
+| `WithResources(Resources{PageTable: pt})` | Shared page table (required) |
+| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required) |
 
 ## Ports
+
+The system builder creates each port with `messaging.NewPort`, choosing its
+buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top**: accepts `vm.TranslationReq`, returns `vm.TranslationRsp`.
 - **Bottom**: forwards `vm.TranslationReq` for remote pages, receives
