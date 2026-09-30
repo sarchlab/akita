@@ -63,9 +63,9 @@ func (c *Comp) Name() string {
 	return c.name
 }
 
-// Simulation returns the simulation the connection belongs to.
-func (c *Comp) Simulation() timing.Simulation {
-	return c.sim
+// NewID allocates an ID, unique within the connection's simulation.
+func (c *Comp) NewID() uint64 {
+	return c.sim.NewID()
 }
 
 // CurrentTime returns the simulation's current time.

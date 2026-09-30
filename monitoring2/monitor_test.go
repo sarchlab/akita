@@ -99,7 +99,6 @@ type sliceFieldState struct {
 }
 
 type sliceFieldComponent struct {
-	sim timing.Simulation
 	hooking.HookableBase
 
 	State sliceFieldState
@@ -120,9 +119,9 @@ type fieldValueResponse struct {
 }
 
 func newSliceFieldComponent(name string, values []int) *sliceFieldComponent {
-	return &sliceFieldComponent{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
-		State: sliceFieldState{Values: values},
+	return &sliceFieldComponent{
 		name:  name,
+		State: sliceFieldState{Values: values},
 	}
 }
 
@@ -133,6 +132,7 @@ func (c *sliceFieldComponent) Name() string {
 func (c *sliceFieldComponent) NotifyRecv(messaging.Port) {}
 
 func (c *sliceFieldComponent) NotifyPortFree(messaging.Port) {}
+func (c *sliceFieldComponent) Handle(timing.Event)           {}
 
 func TestEngineStateTracksPauseContinueIdempotently(t *testing.T) {
 	engine := &fakeEngine{}
@@ -567,7 +567,6 @@ func TestListComponentDetailsSerializesRegisteredComponent(t *testing.T) {
 }
 
 type tickableComponent struct {
-	sim timing.Simulation
 	hooking.HookableBase
 
 	name      string
@@ -575,14 +574,13 @@ type tickableComponent struct {
 }
 
 func newTickableComponent(name string) *tickableComponent {
-	return &tickableComponent{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
-		name: name,
-	}
+	return &tickableComponent{name: name}
 }
 
 func (c *tickableComponent) Name() string                  { return c.name }
 func (c *tickableComponent) NotifyRecv(messaging.Port)     {}
 func (c *tickableComponent) NotifyPortFree(messaging.Port) {}
+func (c *tickableComponent) Handle(timing.Event)           {}
 func (c *tickableComponent) TickLater()                    { c.tickCalls++ }
 
 func TestTickInvokesTickLaterOnTickingComponent(t *testing.T) {
@@ -676,7 +674,6 @@ func TestProgressBarsLifecycleRoundtripsThroughHandler(t *testing.T) {
 }
 
 type bufferOnlyComponent struct {
-	sim timing.Simulation
 	hooking.HookableBase
 
 	Buf  queueing.Buffer[int]
@@ -686,9 +683,9 @@ type bufferOnlyComponent struct {
 func newBufferOnlyComponent(
 	name string, capacity, filled int,
 ) *bufferOnlyComponent {
-	c := &bufferOnlyComponent{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
-		Buf:  queueing.NewBuffer[int](name+".buf", capacity),
+	c := &bufferOnlyComponent{
 		name: name,
+		Buf:  queueing.NewBuffer[int](name+".buf", capacity),
 	}
 
 	for i := 0; i < filled; i++ {
@@ -701,9 +698,9 @@ func newBufferOnlyComponent(
 func (c *bufferOnlyComponent) Name() string                  { return c.name }
 func (c *bufferOnlyComponent) NotifyRecv(messaging.Port)     {}
 func (c *bufferOnlyComponent) NotifyPortFree(messaging.Port) {}
+func (c *bufferOnlyComponent) Handle(timing.Event)           {}
 
 type portedComponent struct {
-	sim timing.Simulation
 	hooking.HookableBase
 
 	name string
@@ -711,10 +708,7 @@ type portedComponent struct {
 }
 
 func newPortedComponent(name string) *portedComponent {
-	c := &portedComponent{
-		sim:  modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
-		name: name,
-	}
+	c := &portedComponent{name: name}
 	c.port = messaging.NewPort(c, 4, 4, name+".p")
 
 	return c
@@ -723,6 +717,7 @@ func newPortedComponent(name string) *portedComponent {
 func (c *portedComponent) Name() string                  { return c.name }
 func (c *portedComponent) NotifyRecv(messaging.Port)     {}
 func (c *portedComponent) NotifyPortFree(messaging.Port) {}
+func (c *portedComponent) Handle(timing.Event)           {}
 
 type bufferRsp struct {
 	Buffer string `json:"buffer"`
@@ -990,11 +985,3 @@ func TestCollectProfileReportsWhenCPUProfilingActive(t *testing.T) {
 			http.StatusConflict, recorder.Code)
 	}
 }
-
-func (c *sliceFieldComponent) Simulation() timing.Simulation { return c.sim }
-
-func (c *tickableComponent) Simulation() timing.Simulation { return c.sim }
-
-func (c *bufferOnlyComponent) Simulation() timing.Simulation { return c.sim }
-
-func (c *portedComponent) Simulation() timing.Simulation { return c.sim }

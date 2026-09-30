@@ -139,7 +139,7 @@ func (c *fakeComp) makeRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = c.Simulation().NewID()
+	rsp.ID = c.sim.NewID()
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
@@ -168,6 +168,7 @@ func buildFake(matrix memcontrolprotocol.VerbSupport, asyncDelay int) memcontrol
 		c := newFakeComp("Fake", matrix, asyncDelay)
 		return &memcontrolprotocol.Harness{
 			Comp:        c,
+			Sim:         c.sim,
 			Ctrl:        c.control,
 			IsQuiescent: func() bool { return c.pending == nil },
 		}
@@ -254,5 +255,3 @@ func TestState_String(t *testing.T) {
 		}
 	}
 }
-
-func (c *fakeComp) Simulation() timing.Simulation { return c.sim }

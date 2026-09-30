@@ -299,7 +299,7 @@ func (m *migMW) beginMigration() {
 
 	// Open a parent task spanning the whole migration so the control phases nest
 	// under it in the trace.
-	state.MigTaskID = m.ctrl.Simulation().NewID()
+	state.MigTaskID = m.ctrl.NewID()
 	tracing.StartTask(m.ctrl, tracing.TaskStart{
 		ID:       state.MigTaskID,
 		Kind:     "migration",
@@ -321,7 +321,7 @@ func (m *migMW) startPhaseTask(phase migPhase) {
 	}
 
 	name := phaseName(phase)
-	state.PhaseTaskID = m.ctrl.Simulation().NewID()
+	state.PhaseTaskID = m.ctrl.NewID()
 	tracing.StartTask(m.ctrl, tracing.TaskStart{
 		ID:       state.PhaseTaskID,
 		ParentID: state.MigTaskID,
@@ -374,7 +374,7 @@ func (m *migMW) runControlPhase(
 		}
 
 		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = m.ctrl.Simulation().NewID()
+		req.ID = m.ctrl.NewID()
 		req.Src = m.ctrlPort().AsRemote()
 		req.Dst = targets[state.SendCursor]
 		req.TrafficClass = "memcontrolprotocol.Req"
@@ -448,7 +448,7 @@ func (m *migMW) tickCopying() bool {
 		SrcSide:    "inside",
 		DstSide:    "outside",
 	}
-	req.ID = m.ctrl.Simulation().NewID()
+	req.ID = m.ctrl.NewID()
 	req.Src = m.moverPort().AsRemote()
 	req.Dst = m.res.MoverDst
 	req.TrafficClass = "datamoverprotocol.DataMoveRequest"

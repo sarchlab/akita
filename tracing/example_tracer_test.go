@@ -100,4 +100,4 @@ func ExampleTracer() {
 	// 12
 }
 
-func (c *SampleDomain) Simulation() timing.Simulation { return c.sim }
+func (c *SampleDomain) NewID() uint64 { return c.sim.NewID() }

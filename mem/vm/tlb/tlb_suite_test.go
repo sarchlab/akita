@@ -63,7 +63,6 @@ func makeDirectConnection(sim timing.Simulation) messaging.Connection {
 // TLB in the integration tests. It owns a single real port; when a message is
 // delivered to that port it records the message and optionally runs onDeliver.
 type idealEndpoint struct {
-	sim timing.Simulation
 	hooking.HookableBase
 
 	name          string
@@ -74,7 +73,6 @@ type idealEndpoint struct {
 
 func newIdealEndpoint(name string) *idealEndpoint {
 	ep := &idealEndpoint{
-		sim:  modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
 		name: name,
 	}
 	ep.port = messaging.NewPort(ep, 4, 4, name+".Port")
@@ -95,10 +93,10 @@ func (ep *idealEndpoint) NotifyRecv(port messaging.Port) {
 
 func (ep *idealEndpoint) NotifyPortFree(_ messaging.Port) {}
 
+func (ep *idealEndpoint) Handle(_ timing.Event) {}
+
 func TestValidateState(t *testing.T) {
 	if err := modeling.ValidateState(State{}); err != nil {
 		t.Fatalf("State failed validation: %v", err)
 	}
 }
-
-func (c *idealEndpoint) Simulation() timing.Simulation { return c.sim }

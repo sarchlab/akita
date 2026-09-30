@@ -117,7 +117,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{Address: addr, AccessByteSize: 4}
-		req.ID = rob.Simulation().NewID()
+		req.ID = rob.NewID()
 		req.Src = topRemote
 		req.Dst = topPort.AsRemote()
 		req.TrafficClass = "memprotocol.ReadReq"
@@ -126,7 +126,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 	makeWrite := func(addr uint64, data []byte) memprotocol.WriteReq {
 		req := memprotocol.WriteReq{Address: addr, Data: data}
-		req.ID = rob.Simulation().NewID()
+		req.ID = rob.NewID()
 		req.Src = topRemote
 		req.Dst = topPort.AsRemote()
 		req.TrafficClass = "memprotocol.WriteReq"
@@ -160,7 +160,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 	It("records admission milestones on the buffer task and processing "+
 		"milestones on req_in, plus a read tag, for a read", func() {
 		rsp := memprotocol.DataReadyRsp{Data: []byte{1, 2, 3, 4}}
-		rsp.ID = rob.Simulation().NewID()
+		rsp.ID = rob.NewID()
 		rsp.Src = bottomUnitRemote
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.TrafficClass = "memprotocol.DataReadyRsp"
@@ -203,7 +203,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 	It("distinguishes a write with a subtask milestone and a write tag", func() {
 		rsp := memprotocol.WriteDoneRsp{}
-		rsp.ID = rob.Simulation().NewID()
+		rsp.ID = rob.NewID()
 		rsp.Src = bottomUnitRemote
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.TrafficClass = "memprotocol.WriteDoneRsp"
@@ -224,7 +224,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 	It("emits the dependency milestone before the response-sent milestone "+
 		"so the in-order-commit reason wins a same-tick tie", func() {
 		rsp := memprotocol.DataReadyRsp{Data: []byte{0xAB}}
-		rsp.ID = rob.Simulation().NewID()
+		rsp.ID = rob.NewID()
 		rsp.Src = bottomUnitRemote
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.TrafficClass = "memprotocol.DataReadyRsp"

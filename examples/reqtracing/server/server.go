@@ -125,7 +125,7 @@ func (m *serveMW) respond() bool {
 	req := s.Pending[0].Req
 	port.Send(ReadRsp{
 		MsgMeta: messaging.MsgMeta{
-			ID:    m.comp.Simulation().NewID(),
+			ID:    m.comp.NewID(),
 			Src:   port.AsRemote(),
 			Dst:   req.Src,
 			RspTo: req.ID,

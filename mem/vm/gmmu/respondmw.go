@@ -85,7 +85,7 @@ func (m *respondMW) handleTranslationRsp(rsp vmprotocol.TranslationRsp) bool {
 	rspToTop := vmprotocol.TranslationRsp{
 		Page: rsp.Page,
 	}
-	rspToTop.ID = m.comp.Simulation().NewID()
+	rspToTop.ID = m.comp.NewID()
 	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = reqTransaction.ReqSrc
 	rspToTop.RspTo = rsp.ID

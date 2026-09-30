@@ -36,6 +36,7 @@ func TestControlContract(t *testing.T) {
 
 		return &memcontrolprotocol.Harness{
 			Comp: comp,
+			Sim:  sim,
 			Ctrl: comp.Ports.Control,
 			IsQuiescent: func() bool {
 				return len(comp.State.OutstandingBottomReqs) == 0

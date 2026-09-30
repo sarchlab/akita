@@ -76,7 +76,7 @@ func (m *respondMW) finalizeWriteTrans(
 		transactionGlobalAddress(t), t.WriteMsg.Data)
 
 	writeDone := memprotocol.WriteDoneRsp{}
-	writeDone.ID = m.comp.Simulation().NewID()
+	writeDone.ID = m.comp.NewID()
 	writeDone.Src = m.topPort().AsRemote()
 	writeDone.Dst = t.WriteMsg.Src
 	writeDone.RspTo = t.WriteMsg.ID
@@ -104,7 +104,7 @@ func (m *respondMW) finalizeReadTrans(
 		transactionGlobalAddress(t), t.ReadMsg.AccessByteSize)
 
 	dataReady := memprotocol.DataReadyRsp{}
-	dataReady.ID = m.comp.Simulation().NewID()
+	dataReady.ID = m.comp.NewID()
 	dataReady.Src = m.topPort().AsRemote()
 	dataReady.Dst = t.ReadMsg.Src
 	dataReady.Data = data

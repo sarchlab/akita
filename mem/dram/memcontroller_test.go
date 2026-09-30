@@ -32,7 +32,7 @@ var _ = Describe("Transaction Splitting", func() {
 		trans.ReadMsg.Address = 0x100
 		trans.ReadMsg.AccessByteSize = 128
 
-		splitTransaction(ids, spec, trans)
+		splitTransaction(ids.NewID, spec, trans)
 		// 128 bytes at 64-byte units = 2 sub-transactions
 		Expect(trans.SubTransactions).To(HaveLen(2))
 		Expect(trans.SubTransactions[0].Address).To(Equal(uint64(0x100)))
@@ -48,7 +48,7 @@ var _ = Describe("Transaction Splitting", func() {
 		trans.ReadMsg.Address = 0x110 // Not aligned
 		trans.ReadMsg.AccessByteSize = 4
 
-		splitTransaction(ids, spec, trans)
+		splitTransaction(ids.NewID, spec, trans)
 		Expect(trans.SubTransactions).To(HaveLen(1))
 		Expect(trans.SubTransactions[0].Address).To(Equal(uint64(0x100)))
 	})
@@ -477,7 +477,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyOpen
 
 		ref := subTransRef{TxID: 0, SubIndex: 0}
-		cmd := createOpenPageCommand(ids, spec, state, ref)
+		cmd := createOpenPageCommand(ids.NewID, spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindRead)))
@@ -487,7 +487,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyOpen
 
 		ref := subTransRef{TxID: 1, SubIndex: 0}
-		cmd := createOpenPageCommand(ids, spec, state, ref)
+		cmd := createOpenPageCommand(ids.NewID, spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindWrite)))
@@ -497,7 +497,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyClose
 
 		ref := subTransRef{TxID: 0, SubIndex: 0}
-		cmd := createClosePageCommand(ids, spec, state, ref)
+		cmd := createClosePageCommand(ids.NewID, spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindReadPrecharge)))
@@ -507,7 +507,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyClose
 
 		ref := subTransRef{TxID: 1, SubIndex: 0}
-		cmd := createClosePageCommand(ids, spec, state, ref)
+		cmd := createClosePageCommand(ids.NewID, spec, state, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindWritePrecharge)))
@@ -603,7 +603,7 @@ var _ = Describe("Open Page Policy", func() {
 			{TxID: 0, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(ids, spec, state)
+		progress := tickSubTransQueue(ids.NewID, spec, state)
 		Expect(progress).To(BeTrue())
 
 		// The command in the queue should be CmdKindRead (not ReadPrecharge)
@@ -618,7 +618,7 @@ var _ = Describe("Open Page Policy", func() {
 			{TxID: 0, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(ids, spec, state)
+		progress := tickSubTransQueue(ids.NewID, spec, state)
 		Expect(progress).To(BeTrue())
 
 		// The command in the queue should be CmdKindReadPrecharge
@@ -633,7 +633,7 @@ var _ = Describe("Open Page Policy", func() {
 			{TxID: 1, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(ids, spec, state)
+		progress := tickSubTransQueue(ids.NewID, spec, state)
 		Expect(progress).To(BeTrue())
 
 		Expect(state.CommandQueues.Entries).To(HaveLen(1))
@@ -647,7 +647,7 @@ var _ = Describe("Open Page Policy", func() {
 			{TxID: 1, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(ids, spec, state)
+		progress := tickSubTransQueue(ids.NewID, spec, state)
 		Expect(progress).To(BeTrue())
 
 		Expect(state.CommandQueues.Entries).To(HaveLen(1))

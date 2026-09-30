@@ -168,7 +168,7 @@ func (m *agentMiddleware) doRead() bool {
 	}
 
 	readReq := memprotocol.ReadReq{}
-	readReq.ID = m.comp.Simulation().NewID()
+	readReq.ID = m.comp.NewID()
 	readReq.Src = m.memPort().AsRemote()
 	readReq.Dst = m.lowModule().AsRemote()
 	readReq.Address = address
@@ -251,7 +251,7 @@ func (m *agentMiddleware) doWrite() bool {
 
 	writeData := uint32ToBytes(data)
 	writeReq := memprotocol.WriteReq{}
-	writeReq.ID = m.comp.Simulation().NewID()
+	writeReq.ID = m.comp.NewID()
 	writeReq.Src = m.memPort().AsRemote()
 	writeReq.Dst = m.lowModule().AsRemote()
 	writeReq.Address = address

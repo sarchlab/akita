@@ -78,7 +78,6 @@ func (c *loopbackConnection) forward(src, dst messaging.Port) {
 }
 
 type testAgent struct {
-	sim timing.Simulation
 	hooking.HookableBase
 
 	name     string
@@ -90,7 +89,6 @@ func newTestAgent(name string) *testAgent {
 	naming.MustBeValid(name)
 
 	a := &testAgent{
-		sim:  modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
 		name: name,
 	}
 
@@ -128,7 +126,6 @@ func (a *testAgent) send(msg messaging.Msg) {
 }
 
 type bandwidthAgent struct {
-	sim timing.Simulation
 	hooking.HookableBase
 
 	name         string
@@ -141,7 +138,6 @@ func newBandwidthAgent(name string) *bandwidthAgent {
 	naming.MustBeValid(name)
 
 	a := &bandwidthAgent{
-		sim:  modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
 		name: name,
 	}
 
@@ -206,7 +202,7 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.F
 	return memComp, agent, conn, freq
 }
 
-func makeReadReq(ids timing.Simulation, src, dst messaging.RemotePort, index int) memprotocol.ReadReq {
+func makeReadReq(ids interface{ NewID() uint64 }, src, dst messaging.RemotePort, index int) memprotocol.ReadReq {
 	addr := uint64(index * readSize)
 	r := memprotocol.ReadReq{}
 	r.ID = ids.NewID()
@@ -419,7 +415,7 @@ func Example() {
 
 	for agent.completed < numRequests {
 		if !hasPending && requestsSent < numRequests {
-			pendingReq = makeReadReq(memComp.Simulation(), srcRemote, dstRemote, requestsSent)
+			pendingReq = makeReadReq(memComp, srcRemote, dstRemote, requestsSent)
 			hasPending = true
 		}
 
@@ -449,7 +445,3 @@ func Example() {
 	// Achieved bandwidth: 64.00 GB/s
 	// Average latency: 7.00 cycles
 }
-
-func (c *testAgent) Simulation() timing.Simulation { return c.sim }
-
-func (c *bandwidthAgent) Simulation() timing.Simulation { return c.sim }

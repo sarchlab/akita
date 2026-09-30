@@ -105,9 +105,9 @@ later := freq.NCyclesLater(3, now)
 ## ID Generation
 
 Each simulation owns an atomic ID counter. Use `sim.NewID()` to allocate a
-`uint64` ID. Components retain their simulation, so middleware can call
-`comp.Simulation().NewID()`. Engines schedule events and do not allocate IDs.
-The first ID is 1; zero remains unset. Separate simulations can reuse the same
+`uint64` ID. A component keeps its simulation internal and offers
+`comp.NewID()`, so middleware allocates from the same counter. Engines schedule
+events and do not allocate IDs. The first ID is 1; zero remains unset. Separate simulations can reuse the same
 numeric IDs. Parallel callers receive unique IDs within their simulation, with
 allocation order determined by execution order.
 

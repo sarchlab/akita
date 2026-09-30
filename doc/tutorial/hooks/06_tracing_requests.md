@@ -72,7 +72,7 @@ func (m *requestMW) send() bool {
 
     req := server.ReadReq{
         MsgMeta: messaging.MsgMeta{
-            ID:  m.comp.Simulation().NewID(),
+            ID:  m.comp.NewID(),
             Src: port.AsRemote(),
             Dst: spec.Dst,
         },
@@ -153,7 +153,7 @@ func (m *serveMW) respond() bool {
     req := s.Pending[0].Req
     port.Send(ReadRsp{
         MsgMeta: messaging.MsgMeta{
-            ID:    m.comp.Simulation().NewID(),
+            ID:    m.comp.NewID(),
             Src:   port.AsRemote(),
             Dst:   req.Src,
             RspTo: req.ID,
@@ -239,7 +239,7 @@ of the task it is currently handling. From the cache's middleware in
 tracing.TraceReqReceive(m.comp, upReq) // req_in @ this cache
 
 // Miss: send a request one level down, parented to the task above.
-downReq := memory.NewReq(m.comp.Simulation(),
+downReq := memory.NewReq(m.comp.NewID(),
     bottom.AsRemote(), m.comp.Spec().Downstream)
 tracing.TraceReqInitiate(m.comp, downReq,
     tracing.MsgIDAtReceiver(upReq, m.comp))

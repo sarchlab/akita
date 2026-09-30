@@ -19,5 +19,5 @@ func Tick[S, T, R, P, M any](c *ticking.Component[S, T, R, P, M]) bool {
 func TickEvent[S, T, R, P, M any](
 	c *ticking.Component[S, T, R, P, M],
 ) modeling.TickEvent {
-	return modeling.MakeTickEvent(c.Simulation().NewID(), c.Name(), c.CurrentTime())
+	return modeling.MakeTickEvent(c.NewID(), c.Name(), c.CurrentTime())
 }

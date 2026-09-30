@@ -31,11 +31,11 @@ func TestTaskRegistriesIsolateSimulationNamespaces(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			a := &isolatedDomain{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine())}
 			b := &isolatedDomain{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine())}
-			msg := &messaging.MsgMeta{ID: a.Simulation().NewID()}
-			require.Equal(t, msg.ID, b.Simulation().NewID())
+			msg := &messaging.MsgMeta{ID: a.NewID()}
+			require.Equal(t, msg.ID, b.NewID())
 			aTask := tc.lookup(msg, a)
 			require.Equal(t, uint64(2), aTask)
-			b.Simulation().NewID()
+			b.NewID()
 			bTask := tc.lookup(msg, b)
 			require.Equal(t, uint64(3), bTask)
 			require.Equal(t, aTask, tc.lookup(msg, a))
@@ -48,4 +48,4 @@ func TestTaskRegistriesIsolateSimulationNamespaces(t *testing.T) {
 	}
 }
 
-func (c *isolatedDomain) Simulation() timing.Simulation { return c.sim }
+func (c *isolatedDomain) NewID() uint64 { return c.sim.NewID() }

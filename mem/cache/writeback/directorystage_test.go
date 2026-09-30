@@ -67,7 +67,7 @@ var _ = Describe("DirectoryStage", func() {
 	Context("read", func() {
 		BeforeEach(func() {
 			read := memprotocol.ReadReq{}
-			read.ID = m.comp.Simulation().NewID()
+			read.ID = m.comp.NewID()
 			read.Address = 0x100
 			read.PID = 1
 			read.AccessByteSize = 64
@@ -165,7 +165,7 @@ var _ = Describe("DirectoryStage", func() {
 	Context("write", func() {
 		BeforeEach(func() {
 			write := memprotocol.WriteReq{}
-			write.ID = m.comp.Simulation().NewID()
+			write.ID = m.comp.NewID()
 			write.Address = 0x100
 			write.PID = 1
 			write.TrafficBytes = 12

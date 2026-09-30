@@ -89,7 +89,7 @@ func (m *walkMW) startWalking(req vmprotocol.TranslationReq) {
 	state := &m.comp.State
 
 	recvTaskID := tracing.MsgIDAtReceiver(req, m.comp)
-	walkTaskID := m.comp.Simulation().NewID()
+	walkTaskID := m.comp.NewID()
 
 	ts := transactionState{
 		ReqID:      req.ID,
@@ -189,7 +189,7 @@ func (m *walkMW) processRemoteMemReq(
 	walking := state.WalkingTranslations[walkingIndex]
 
 	req := vmprotocol.TranslationReq{}
-	req.ID = m.comp.Simulation().NewID()
+	req.ID = m.comp.NewID()
 	req.Src = m.bottomPort().AsRemote()
 	req.Dst = spec.LowModule
 	req.PID = vm.PID(walking.PID)
@@ -248,7 +248,7 @@ func (m *walkMW) doPageWalkHit(
 	rsp := vmprotocol.TranslationRsp{
 		Page: pageFromPageState(walking.Page),
 	}
-	rsp.ID = m.comp.Simulation().NewID()
+	rsp.ID = m.comp.NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = walking.ReqSrc
 	rsp.RspTo = walking.ReqID

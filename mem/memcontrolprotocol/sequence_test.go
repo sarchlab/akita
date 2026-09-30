@@ -44,7 +44,7 @@ func driveCtrl(
 	t.Helper()
 
 	req := memcontrolprotocol.Req{Command: cmd, Addresses: addrs, PID: pid}
-	req.ID = ctrl.Component().Simulation().NewID()
+	req.ID = newIDFor(ctrl)
 	req.Src = messaging.RemotePort("Cmd")
 	req.Dst = ctrl.AsRemote()
 	req.TrafficClass = "memcontrolprotocol.Req"
@@ -158,7 +158,7 @@ func resolveTranslation(
 	rsp := vmprotocol.TranslationRsp{Page: vm.Page{
 		PID: pid, VAddr: vAddr, PAddr: vAddr + 0x10000, Valid: true,
 	}}
-	rsp.ID = bottom.Component().Simulation().NewID()
+	rsp.ID = newIDFor(bottom)
 	rsp.Src = remote
 	rsp.Dst = bottom.AsRemote()
 	rsp.RspTo = botReq.ID
@@ -274,7 +274,7 @@ func makeTransReq(
 	pid vm.PID,
 ) vmprotocol.TranslationReq {
 	req := vmprotocol.TranslationReq{}
-	req.ID = top.Component().Simulation().NewID()
+	req.ID = newIDFor(top)
 	req.Src = messaging.RemotePort("Agent")
 	req.Dst = top.AsRemote()
 	req.PID = pid
@@ -295,7 +295,7 @@ func driveFlushAll(
 	t.Helper()
 
 	flush := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-	flush.ID = ctrl.Component().Simulation().NewID()
+	flush.ID = newIDFor(ctrl)
 	flush.Src = messaging.RemotePort("Cmd")
 	flush.Dst = ctrl.AsRemote()
 	flush.TrafficClass = "memcontrolprotocol.Req"
@@ -337,7 +337,7 @@ func answerWriteBacks(bottom messaging.Port, writtenBack map[byte]bool) {
 			writtenBack[w.Data[0]] = true
 		}
 		done := memprotocol.WriteDoneRsp{}
-		done.ID = bottom.Component().Simulation().NewID()
+		done.ID = newIDFor(bottom)
 		done.Src = messaging.RemotePort("LowerCache")
 		done.Dst = bottom.AsRemote()
 		done.RspTo = w.ID
@@ -421,4 +421,10 @@ func installDirtyBlock(
 	storage.Write(block.CacheAddress, data)
 
 	return setID
+}
+
+// newIDFor allocates an ID from the simulation of the component that owns p,
+// for a message the test sends through p.
+func newIDFor(p messaging.Port) uint64 {
+	return p.Component().(interface{ NewID() uint64 }).NewID()
 }

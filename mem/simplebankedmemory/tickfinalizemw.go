@@ -85,7 +85,7 @@ func (m *tickFinalizeMW) finalizeRead(
 	m.finishPipeline(&item.ReadMsg, item.PipelineTaskID)
 
 	rsp := memprotocol.DataReadyRsp{}
-	rsp.ID = m.comp.Simulation().NewID()
+	rsp.ID = m.comp.NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = readReq.Src
 	rsp.RspTo = readReq.ID
@@ -138,7 +138,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 	m.finishPipeline(&item.WriteMsg, item.PipelineTaskID)
 
 	rsp := memprotocol.WriteDoneRsp{}
-	rsp.ID = m.comp.Simulation().NewID()
+	rsp.ID = m.comp.NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = writeReq.Src
 	rsp.RspTo = writeReq.ID

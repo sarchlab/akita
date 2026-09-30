@@ -86,7 +86,7 @@ func (m *requestMW) send() bool {
 
 	req := server.ReadReq{
 		MsgMeta: messaging.MsgMeta{
-			ID:  m.comp.Simulation().NewID(),
+			ID:  m.comp.NewID(),
 			Src: port.AsRemote(),
 			Dst: spec.Dst,
 		},

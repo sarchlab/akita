@@ -599,7 +599,7 @@ var _ = Describe("Address Translator", func() {
 func fillOutgoing(p messaging.Port, n int) {
 	for i := 0; i < n; i++ {
 		dummy := memprotocol.WriteDoneRsp{}
-		dummy.ID = p.Component().Simulation().NewID()
+		dummy.ID = p.Component().(interface{ NewID() uint64 }).NewID()
 		dummy.Src = p.AsRemote()
 		dummy.Dst = messaging.RemotePort("Dummy")
 		dummy.TrafficClass = "memprotocol.WriteDoneRsp"

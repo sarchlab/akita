@@ -140,5 +140,5 @@ func (t *TickScheduler) restore(nextTickTime timing.VTimeInPicoSec, scheduled bo
 	t.hasScheduledTick = scheduled
 }
 
-// Simulation returns the simulation the scheduler schedules in.
-func (t *TickScheduler) Simulation() timing.Simulation { return t.simulation }
+// NewID allocates an ID, unique within the scheduler's simulation.
+func (t *TickScheduler) NewID() uint64 { return t.simulation.NewID() }

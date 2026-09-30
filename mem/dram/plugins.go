@@ -2,8 +2,6 @@ package dram
 
 import (
 	"fmt"
-
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 // This file holds the controller's swappable *strategies* — the scheduler, row
@@ -29,7 +27,7 @@ type scheduler interface {
 // open- vs close-page variant. The location is resolved by the addrMapper.
 type rowPolicy interface {
 	Name() string
-	CommandFor(ids timing.Simulation, spec *Spec, st *State, ref subTransRef, loc location) *commandState
+	CommandFor(newID func() uint64, spec *Spec, st *State, ref subTransRef, loc location) *commandState
 }
 
 // addrMapper maps a physical address to a DRAM location. The location keeps a
@@ -65,10 +63,10 @@ type openPageRowPolicy struct{}
 func (openPageRowPolicy) Name() string { return rowPolicyOpen }
 
 func (openPageRowPolicy) CommandFor(
-	ids timing.Simulation,
+	newID func() uint64,
 	_ *Spec, st *State, ref subTransRef, loc location,
 ) *commandState {
-	return buildColumnCommand(ids, st, ref, loc, cmdKindRead, cmdKindWrite)
+	return buildColumnCommand(newID, st, ref, loc, cmdKindRead, cmdKindWrite)
 }
 
 // closePageRowPolicy issues ReadPrecharge/WritePrecharge (auto-precharge),
@@ -78,11 +76,11 @@ type closePageRowPolicy struct{}
 func (closePageRowPolicy) Name() string { return rowPolicyClose }
 
 func (closePageRowPolicy) CommandFor(
-	ids timing.Simulation,
+	newID func() uint64,
 	_ *Spec, st *State, ref subTransRef, loc location,
 ) *commandState {
 	return buildColumnCommand(
-		ids,
+		newID,
 		st, ref, loc, cmdKindReadPrecharge, cmdKindWritePrecharge)
 }
 
@@ -90,7 +88,7 @@ func (closePageRowPolicy) CommandFor(
 // given location, choosing the read or write variant from the parent
 // transaction's direction.
 func buildColumnCommand(
-	ids timing.Simulation,
+	newID func() uint64,
 	st *State, ref subTransRef, loc location,
 	readKind, writeKind commandKind,
 ) *commandState {
@@ -98,7 +96,7 @@ func buildColumnCommand(
 	sub := &trans.SubTransactions[ref.SubIndex]
 
 	cmd := &commandState{
-		ID:          ids.NewID(),
+		ID:          newID(),
 		Address:     sub.Address,
 		SubTransRef: ref,
 		Location:    loc,
@@ -194,7 +192,7 @@ func newController(spec *Spec) *controller {
 // sub-transaction queue into a command queue: it maps the address and turns the
 // sub-transaction into a column command via the configured strategies. Returns
 // true if a sub-transaction was enqueued.
-func (c *controller) fillCommandQueue(ids timing.Simulation, spec *Spec, state *State) bool {
+func (c *controller) fillCommandQueue(newID func() uint64, spec *Spec, state *State) bool {
 	for i, ref := range state.SubTransQueue.Entries {
 		sub := subTransByRef(state, ref)
 		if sub == nil {
@@ -202,7 +200,7 @@ func (c *controller) fillCommandQueue(ids timing.Simulation, spec *Spec, state *
 		}
 
 		loc := c.addrMapper.Map(spec, sub.Address)
-		cmd := c.rowPolicy.CommandFor(ids, spec, state, ref, loc)
+		cmd := c.rowPolicy.CommandFor(newID, spec, state, ref, loc)
 
 		if canAcceptCommand(state, cmd, spec) {
 			acceptCommand(state, cmd)

@@ -71,7 +71,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 	nextTrans := &nextState.Transactions[transIdx]
 	reqState := nextTrans.IncomingReqs[0]
 	spec := m.comp.Spec()
-	translatedReq := createTranslatedReq(m.comp.Simulation(), reqState, rsp.Page,
+	translatedReq := createTranslatedReq(m.comp.NewID, reqState, rsp.Page,
 		spec.Log2PageSize, m.bottomPort().AsRemote(),
 		m.comp.Resources().MemProviderMapper)
 
@@ -172,7 +172,7 @@ func (m *respondPipelineMW) respond() bool {
 			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 			rspToTop = memprotocol.DataReadyRsp{
 				MsgMeta: messaging.MsgMeta{
-					ID:           m.comp.Simulation().NewID(),
+					ID:           m.comp.NewID(),
 					Src:          m.topPort().AsRemote(),
 					Dst:          reqFromTopState.ReqFromTopSrc,
 					RspTo:        reqFromTopState.ReqFromTopID,
@@ -199,7 +199,7 @@ func (m *respondPipelineMW) respond() bool {
 			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 			rspToTop = memprotocol.WriteDoneRsp{
 				MsgMeta: messaging.MsgMeta{
-					ID:           m.comp.Simulation().NewID(),
+					ID:           m.comp.NewID(),
 					Src:          m.topPort().AsRemote(),
 					Dst:          reqFromTopState.ReqFromTopSrc,
 					RspTo:        reqFromTopState.ReqFromTopID,

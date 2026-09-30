@@ -13,7 +13,7 @@ import (
 )
 
 func msgMetaToFlits(
-	ids timing.Simulation,
+	newID func() uint64,
 	meta messaging.MsgMeta,
 	spec Spec,
 	networkPortRemote messaging.RemotePort,
@@ -32,7 +32,7 @@ func msgMetaToFlits(
 	for i := 0; i < numFlit; i++ {
 		flits[i] = packetization.Flit{
 			MsgMeta: messaging.MsgMeta{
-				ID:  ids.NewID(),
+				ID:  newID(),
 				Src: networkPortRemote,
 				Dst: defaultSwitchDst,
 			},
@@ -183,9 +183,9 @@ func (m *outgoingMW) prepareFlits() bool {
 		// simulation), travels in every flit as MsgTaskID, and is the parent of
 		// each per-flit flit_e2e task. It is parented to the message's own ID so
 		// it nests under that req_out when one exists.
-		msgTaskID := m.comp.Simulation().NewID()
+		msgTaskID := m.comp.NewID()
 		flits := msgMetaToFlits(
-			m.comp.Simulation(),
+			m.comp.NewID,
 			meta, spec, networkPortRemote, m.comp.Spec().DefaultSwitchDst, msgTaskID)
 
 		state.FlitsToSend = append(state.FlitsToSend, flits...)

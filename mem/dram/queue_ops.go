@@ -1,13 +1,9 @@
 package dram
 
-import (
-	"github.com/sarchlab/akita/v5/timing"
-)
-
 // splitTransaction breaks a transaction into sub-transactions based on
 // the access unit size (see Spec.log2AccessUnitSize).
 func splitTransaction(
-	ids timing.Simulation,
+	newID func() uint64,
 	spec *Spec,
 	trans *transactionState,
 ) {
@@ -32,7 +28,7 @@ func splitTransaction(
 
 	for a := alignedAddr; a < alignedEnd; a += unitSize {
 		st := subTransState{
-			ID:        ids.NewID(),
+			ID:        newID(),
 			Address:   a,
 			Completed: false,
 		}
@@ -65,22 +61,22 @@ func pushSubTrans(state *State, transIdx int) {
 // made. Production drives this through the component's configured controller
 // (see controller.fillCommandQueue); this package-level shim builds the default
 // controller so tests can exercise the path directly.
-func tickSubTransQueue(ids timing.Simulation, spec *Spec, state *State) bool {
-	return newController(spec).fillCommandQueue(ids, spec, state)
+func tickSubTransQueue(newID func() uint64, spec *Spec, state *State) bool {
+	return newController(spec).fillCommandQueue(newID, spec, state)
 }
 
 // createClosePageCommand creates a command for a sub-transaction using
 // close-page policy (auto-precharge). Thin wrapper over the row policy, kept
 // for direct testing.
 func createClosePageCommand(
-	ids timing.Simulation,
+	newID func() uint64,
 	spec *Spec,
 	state *State,
 	ref subTransRef,
 ) *commandState {
 	st := subTransByRef(state, ref)
 	return closePageRowPolicy{}.CommandFor(
-		ids,
+		newID,
 		spec, state, ref, newAddrMapping(spec).mapAddress(st.Address))
 }
 
@@ -88,14 +84,14 @@ func createClosePageCommand(
 // open-page policy (plain Read/Write, leaving the row buffer open). Thin
 // wrapper over the row policy, kept for direct testing.
 func createOpenPageCommand(
-	ids timing.Simulation,
+	newID func() uint64,
 	spec *Spec,
 	state *State,
 	ref subTransRef,
 ) *commandState {
 	st := subTransByRef(state, ref)
 	return openPageRowPolicy{}.CommandFor(
-		ids,
+		newID,
 		spec, state, ref, newAddrMapping(spec).mapAddress(st.Address))
 }
 

@@ -15,6 +15,7 @@ import (
 type Component[S, T, R, P, M any] struct {
 	modeling.ComponentBase[S, T, R, P, M]
 
+	engine   timing.EventScheduler
 	pipeline []modeling.Middleware
 }
 
@@ -47,7 +48,7 @@ func (c *Component[S, T, R, P, M]) NotifyPortFree(port messaging.Port) {
 func (c *Component[S, T, R, P, M]) MakeEventBase(
 	t timing.VTimeInPicoSec,
 ) timing.EventBase {
-	return timing.MakeEventBase(c.Simulation().NewID(), t, c.Name())
+	return timing.MakeEventBase(c.NewID(), t, c.Name())
 }
 
 // Schedule schedules an event for this instance. It panics if the event is
@@ -60,7 +61,7 @@ func (c *Component[S, T, R, P, M]) Schedule(e timing.Event) {
 			c.Name(), e.HandlerID()))
 	}
 
-	c.Simulation().GetEngine().Schedule(e)
+	c.engine.Schedule(e)
 }
 
 // SaveCheckpoint writes the instance's spec hash and State. Its pending

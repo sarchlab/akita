@@ -151,9 +151,9 @@ is the simplest implementation.
 
 ```go
 type Component interface {
-    timing.SimulationElement
     naming.Named
     hooking.Hookable
+    timing.Handler
 
     NotifyRecv(port Port)
     NotifyPortFree(port Port)

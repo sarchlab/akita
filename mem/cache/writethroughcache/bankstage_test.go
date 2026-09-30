@@ -111,7 +111,7 @@ var _ = Describe("Bankstage", func() {
 			})
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -164,7 +164,7 @@ var _ = Describe("Bankstage", func() {
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 64 + 12,
 				TrafficClass: "req",
 			}
@@ -293,7 +293,7 @@ var _ = Describe("Bankstage", func() {
 				// the coalesced write that depends on the fetcher's
 				// merged fill landing in storage.
 				coalescedWriteMeta = messaging.MsgMeta{
-					ID:           c.comp.Simulation().NewID(),
+					ID:           c.comp.NewID(),
 					TrafficBytes: 4 + 12,
 					TrafficClass: "req",
 				}

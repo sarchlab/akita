@@ -10,7 +10,7 @@ type Simulation interface {
 	GetEngine() Engine
 	NewID() uint64
 	// GetIDGenerator returns the same counter for this simulation's lifetime.
-	// Its identity distinguishes namespaces in shared tracing registries.
+	// Checkpoints save and restore it.
 	GetIDGenerator() *IDGenerator
 
 	// Registration adds elements to the simulation's inventory for checkpointing,
@@ -19,10 +19,4 @@ type Simulation interface {
 	RegisterConnection(c naming.Named)
 	RegisterResource(c naming.Named)
 	RegisterPort(p naming.Named)
-}
-
-// SimulationElement belongs to a simulation. Elements use their simulation
-// to allocate IDs, so the scope of an allocation is explicit at the call site.
-type SimulationElement interface {
-	Simulation() Simulation
 }

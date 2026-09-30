@@ -23,19 +23,16 @@ type ReadRsp struct {
 	messaging.MsgMeta
 }
 
-// NewReq returns a read request from src to dst with a new ID.
-func NewReq(sim timing.Simulation, src, dst messaging.RemotePort) ReadReq {
-	return ReadReq{MsgMeta: messaging.MsgMeta{
-		ID: sim.NewID(), Src: src, Dst: dst}}
+// NewReq returns a read request with the given ID from src to dst.
+func NewReq(id uint64, src, dst messaging.RemotePort) ReadReq {
+	return ReadReq{MsgMeta: messaging.MsgMeta{ID: id, Src: src, Dst: dst}}
 }
 
-// NewRsp returns a response from src to dst for the request whose ID is
-// rspTo.
-func NewRsp(
-	sim timing.Simulation, src, dst messaging.RemotePort, rspTo uint64,
-) ReadRsp {
+// NewRsp returns a response with the given ID from src to dst, for the
+// request whose ID is rspTo.
+func NewRsp(id uint64, src, dst messaging.RemotePort, rspTo uint64) ReadRsp {
 	return ReadRsp{MsgMeta: messaging.MsgMeta{
-		ID: sim.NewID(), Src: src, Dst: dst, RspTo: rspTo}}
+		ID: id, Src: src, Dst: dst, RspTo: rspTo}}
 }
 
 // Spec is the memory's configuration.
@@ -84,7 +81,7 @@ func (m *serveMW) Handle(_ timing.Event) bool {
 	req := msg.(ReadReq)
 
 	tracing.TraceReqReceive(m.comp, req) // req_in @ Memory — a leaf task
-	port.Send(NewRsp(m.comp.Simulation(), port.AsRemote(), req.Src, req.ID))
+	port.Send(NewRsp(m.comp.NewID(), port.AsRemote(), req.Src, req.ID))
 	tracing.TraceReqComplete(m.comp, req)
 	port.RetrieveIncoming()
 	return true

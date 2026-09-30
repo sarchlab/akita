@@ -145,7 +145,7 @@ func (m *sendMW) sendPing() bool {
 
     out.Send(pingReq{
         MsgMeta: messaging.MsgMeta{
-            ID:  m.comp.Simulation().NewID(),
+            ID:  m.comp.NewID(),
             Src: out.AsRemote(),
             Dst: spec.PingDst,
         },

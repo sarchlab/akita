@@ -54,7 +54,7 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 		return false
 	}
 
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), memcontrolprotocol.CmdDrain,
+	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdDrain,
 		state.CurrentCmdSrc, state.CurrentCmdID, true, ""))
 	state.PendingDrainRsp = false
 	state.CurrentCmdID = 0
@@ -107,7 +107,7 @@ func (m *ctrlMiddleware) performCtrlEnable(msg memcontrolprotocol.Req) bool {
 	state := &m.comp.State
 	state.CurrentState = mmuCacheStateEnable
 
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), memcontrolprotocol.CmdEnable,
+	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdEnable,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
 	tracing.AddMilestone(m.comp, tracing.Milestone{
@@ -145,7 +145,7 @@ func (m *ctrlMiddleware) performCtrlPause(msg memcontrolprotocol.Req) bool {
 	state := &m.comp.State
 	state.CurrentState = mmuCacheStatePause
 
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), memcontrolprotocol.CmdPause,
+	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdPause,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
 	tracing.AddMilestone(m.comp, tracing.Milestone{
@@ -176,7 +176,7 @@ func (m *ctrlMiddleware) handleInvalidate(msg memcontrolprotocol.Req) bool {
 
 	invalidateEntries(state, m.comp.Spec(), msg.Addresses, msg.PID)
 
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), memcontrolprotocol.CmdInvalidate,
+	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdInvalidate,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
 	tracing.AddMilestone(m.comp, tracing.Milestone{
@@ -195,7 +195,7 @@ func (m *ctrlMiddleware) rejectMustBePaused(msg memcontrolprotocol.Req) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), msg.Command,
+	m.controlPort().Send(makeCtrlRsp(m.comp, msg.Command,
 		msg.Src, msg.ID, false, memcontrolprotocol.ErrMustBePausedOrDrained))
 	m.controlPort().RetrieveIncoming()
 	return true
@@ -270,7 +270,7 @@ func (m *ctrlMiddleware) handleReset(msg memcontrolprotocol.Req) bool {
 		return false
 	}
 
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), memcontrolprotocol.CmdReset,
+	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdReset,
 		msg.Src, msg.ID, true, ""))
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
@@ -339,14 +339,14 @@ func (m *ctrlMiddleware) handleUnsupported(msg memcontrolprotocol.Req) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), msg.Command,
+	m.controlPort().Send(makeCtrlRsp(m.comp, msg.Command,
 		msg.Src, msg.ID, false, memcontrolprotocol.ErrUnsupported))
 	m.controlPort().RetrieveIncoming()
 	return true
 }
 
 func makeCtrlRsp(
-	port messaging.Port,
+	c *Comp,
 	cmd memcontrolprotocol.Command,
 	dst messaging.RemotePort,
 	rspTo uint64,
@@ -358,8 +358,8 @@ func makeCtrlRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = port.Component().Simulation().NewID()
-	rsp.Src = port.AsRemote()
+	rsp.ID = c.NewID()
+	rsp.Src = c.Ports.Control.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
 	rsp.TrafficClass = "memcontrolprotocol.Rsp"

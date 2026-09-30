@@ -58,7 +58,7 @@ func (m *pingMW) sendScheduledPings(now timing.VTimeInPicoSec) bool {
 
 		pingMsg := pingReq{
 			MsgMeta: messaging.MsgMeta{
-				ID:  m.comp.Simulation().NewID(),
+				ID:  m.comp.NewID(),
 				Src: out.AsRemote(),
 				Dst: sp.Dst,
 			},
@@ -97,7 +97,7 @@ func (m *pingMW) deliverPendingResponses(now timing.VTimeInPicoSec) bool {
 
 		rsp := pingRsp{
 			MsgMeta: messaging.MsgMeta{
-				ID:    m.comp.Simulation().NewID(),
+				ID:    m.comp.NewID(),
 				Src:   out.AsRemote(),
 				Dst:   pr.Dst,
 				RspTo: pr.OrigMsgID,

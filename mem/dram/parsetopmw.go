@@ -37,7 +37,7 @@ func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
 		return false
 	}
 
-	ts := transactionState{ID: m.comp.Simulation().NewID()}
+	ts := transactionState{ID: m.comp.NewID()}
 
 	switch msg := msgI.(type) {
 	case memprotocol.ReadReq:
@@ -52,7 +52,7 @@ func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
 
 	// Split into sub-transactions
 	transIdx := len(next.Transactions)
-	splitTransaction(m.comp.Simulation(), spec, &ts)
+	splitTransaction(m.comp.NewID, spec, &ts)
 
 	if !canPushSubTrans(next, len(ts.SubTransactions),
 		spec.TransactionQueueSize) {

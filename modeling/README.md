@@ -124,10 +124,10 @@ port := gpu.Ports.Top
 
 Every builder takes a `timing.Simulation`, which supplies the engine and IDs
 and registers components, connections, resources, and ports. Pass the same
-simulation to every builder in one setup. Components expose `Simulation()`;
-allocate a message or event ID with `comp.Simulation().NewID()`. The
-simulation owns the counter, so two components share one ID sequence even
-though they have different names. Independent simulations have separate
+simulation to every builder in one setup. A component keeps its simulation
+to itself; allocate a message or event ID with `comp.NewID()`. The simulation
+owns the counter, so two components share one ID sequence even though they
+have different names. Independent simulations have separate
 sequences.
 
 For isolated tests or small examples, create a lightweight context once:

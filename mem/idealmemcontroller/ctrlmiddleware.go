@@ -43,7 +43,7 @@ func (m *ctrlMiddleware) handleStateUpdate() (madeProgress bool) {
 		return false
 	}
 
-	rsp := makeRsp(m.ctrlPort(), memcontrolprotocol.CmdDrain,
+	rsp := makeRsp(m.comp, memcontrolprotocol.CmdDrain,
 		state.CurrentCmdSrc, state.CurrentCmdID, true, "")
 	m.ctrlPort().Send(rsp)
 	state.ControlState = memcontrolprotocol.StatePaused
@@ -85,7 +85,7 @@ func (m *ctrlMiddleware) handlePause(req memcontrolprotocol.Req) bool {
 	state := &m.comp.State
 	state.ControlState = memcontrolprotocol.StatePaused
 
-	m.ctrlPort().Send(makeRsp(m.ctrlPort(), memcontrolprotocol.CmdPause,
+	m.ctrlPort().Send(makeRsp(m.comp, memcontrolprotocol.CmdPause,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -99,7 +99,7 @@ func (m *ctrlMiddleware) handleEnable(req memcontrolprotocol.Req) bool {
 	state := &m.comp.State
 	state.ControlState = memcontrolprotocol.StateEnabled
 
-	m.ctrlPort().Send(makeRsp(m.ctrlPort(), memcontrolprotocol.CmdEnable,
+	m.ctrlPort().Send(makeRsp(m.comp, memcontrolprotocol.CmdEnable,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -139,7 +139,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 		top.RetrieveIncoming()
 	}
 
-	m.ctrlPort().Send(makeRsp(m.ctrlPort(), memcontrolprotocol.CmdReset,
+	m.ctrlPort().Send(makeRsp(m.comp, memcontrolprotocol.CmdReset,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -161,14 +161,14 @@ func (m *ctrlMiddleware) handleUnsupported(req memcontrolprotocol.Req) bool {
 		return false
 	}
 
-	m.ctrlPort().Send(makeRsp(m.ctrlPort(), req.Command,
+	m.ctrlPort().Send(makeRsp(m.comp, req.Command,
 		req.Src, req.ID, false, memcontrolprotocol.ErrUnsupported))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
 func makeRsp(
-	port messaging.Port,
+	c *Comp,
 	cmd memcontrolprotocol.Command,
 	dst messaging.RemotePort,
 	rspTo uint64,
@@ -180,8 +180,8 @@ func makeRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = port.Component().Simulation().NewID()
-	rsp.Src = port.AsRemote()
+	rsp.ID = c.NewID()
+	rsp.Src = c.Ports.Control.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
 	rsp.TrafficClass = "memcontrolprotocol.Rsp"

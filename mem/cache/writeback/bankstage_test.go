@@ -110,7 +110,7 @@ var _ = Describe("Bank Stage", func() {
 			storage.Write(0x40, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 
 			read := memprotocol.ReadReq{}
-			read.ID = m.comp.Simulation().NewID()
+			read.ID = m.comp.NewID()
 			read.Src = messaging.RemotePort("Agent")
 			read.Address = 0x104
 			read.AccessByteSize = 4
@@ -169,7 +169,7 @@ var _ = Describe("Bank Stage", func() {
 			block.IsLocked = true
 
 			write := memprotocol.WriteReq{}
-			write.ID = m.comp.Simulation().NewID()
+			write.ID = m.comp.NewID()
 			write.Src = messaging.RemotePort("Agent")
 			write.Address = 0x104
 			write.Data = []byte{5, 6, 7, 8}

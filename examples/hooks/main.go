@@ -98,7 +98,7 @@ func (m *agentMW) send() bool {
 		p := s.Pending[0]
 		port.Send(pingRsp{
 			MsgMeta: messaging.MsgMeta{
-				ID:    m.comp.Simulation().NewID(),
+				ID:    m.comp.NewID(),
 				Src:   port.AsRemote(),
 				Dst:   p.Dst,
 				RspTo: p.ReqID,
@@ -112,7 +112,7 @@ func (m *agentMW) send() bool {
 	if s.NextSeqID < spec.NumPings && port.CanSend() {
 		port.Send(pingReq{
 			MsgMeta: messaging.MsgMeta{
-				ID:  m.comp.Simulation().NewID(),
+				ID:  m.comp.NewID(),
 				Src: port.AsRemote(),
 				Dst: spec.PingDst,
 			},

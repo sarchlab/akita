@@ -42,9 +42,8 @@ func TestSimulationsAllocateIndependentlyWhileRunning(t *testing.T) {
 			handlers := make([]*allocatingHandler, 2)
 			for i, s := range sims {
 				comp := idTickedDef.Builder().WithSimulation(s).Build("Comp")
-				require.Same(t, s, comp.Simulation())
-				require.Equal(t, uint64(1), comp.Simulation().NewID())
-				h := &allocatingHandler{ids: comp.Simulation()}
+				require.Equal(t, uint64(1), comp.NewID())
+				h := &allocatingHandler{ids: s}
 				handlers[i] = h
 				s.GetEngine().(timing.HandlerRegistry).RegisterHandler("handler", h)
 				e := timing.MakeEventBase(s.NewID(), 1, "handler")
@@ -133,8 +132,6 @@ func TestComponentsScheduleWithSharedSimulationIDs(t *testing.T) {
 	s := buildIDTestSimulation(t, false)
 	ticked := idTickedDef.Builder().WithSimulation(s).Build("Ticked")
 	woken := idWakeupDef.Builder().WithSimulation(s).Build("Woken")
-	require.Same(t, s, ticked.Simulation())
-	require.Same(t, s, woken.Simulation())
 	ticked.TickLater()
 	woken.WakeAt(1000)
 	require.Equal(t, uint64(3), s.NewID(), "both scheduled events must use the simulation's counter")

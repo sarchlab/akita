@@ -29,7 +29,7 @@ type ComponentBase[S, T, R, P, M any] struct {
 	Middlewares M
 
 	name       string
-	owner      instance
+	owner      messaging.Component
 	simulation timing.Simulation
 	spec       S
 	resources  R
@@ -39,20 +39,13 @@ type ComponentBase[S, T, R, P, M any] struct {
 // objects, and the State type of one that keeps no state.
 type None struct{}
 
-// instance is what a model's Component is: a component that also handles the
-// events addressed to it, so Register can register it both ways.
-type instance interface {
-	messaging.Component
-	timing.Handler
-}
-
 // InitComponentBase sets up the ComponentBase embedded in owner, a component
 // being built: it records the instance's name, simulation, Spec, and
 // Resources, and binds each port to owner. A model's Build calls it first,
 // then creates the State and the middlewares, and calls Register last.
 func InitComponentBase[S, T, R, P, M any](
 	base *ComponentBase[S, T, R, P, M],
-	owner instance,
+	owner messaging.Component,
 	sim timing.Simulation,
 	name string,
 	spec S,
@@ -94,9 +87,10 @@ func (c *ComponentBase[S, T, R, P, M]) TypeName() string {
 	return reflect.TypeFor[S]().PkgPath()
 }
 
-// Simulation returns the simulation the instance belongs to.
-func (c *ComponentBase[S, T, R, P, M]) Simulation() timing.Simulation {
-	return c.simulation
+// NewID allocates an ID, unique within the instance's simulation, for a
+// message or event the instance creates.
+func (c *ComponentBase[S, T, R, P, M]) NewID() uint64 {
+	return c.simulation.NewID()
 }
 
 // CurrentTime returns the simulation's current time.

@@ -255,7 +255,7 @@ func (m *middleware) buildShadowReq(
 			AccessByteSize: r.AccessByteSize,
 			PID:            r.PID,
 		}
-		shadow.ID = m.comp.Simulation().NewID()
+		shadow.ID = m.comp.NewID()
 		shadow.Src = src
 		shadow.Dst = dst
 		shadow.TrafficBytes = r.TrafficBytes
@@ -268,7 +268,7 @@ func (m *middleware) buildShadowReq(
 			DirtyMask: r.DirtyMask,
 			PID:       r.PID,
 		}
-		shadow.ID = m.comp.Simulation().NewID()
+		shadow.ID = m.comp.NewID()
 		shadow.Src = src
 		shadow.Dst = dst
 		shadow.TrafficBytes = r.TrafficBytes
@@ -284,7 +284,7 @@ func (m *middleware) buildTopRsp(
 ) messaging.Msg {
 	if trans.IsRead {
 		rsp := memprotocol.DataReadyRsp{Data: trans.RspData}
-		rsp.ID = m.comp.Simulation().NewID()
+		rsp.ID = m.comp.NewID()
 		rsp.Src = src
 		rsp.Dst = trans.ReqFromTopSrc
 		rsp.RspTo = trans.ReqFromTopID
@@ -294,7 +294,7 @@ func (m *middleware) buildTopRsp(
 	}
 
 	rsp := memprotocol.WriteDoneRsp{}
-	rsp.ID = m.comp.Simulation().NewID()
+	rsp.ID = m.comp.NewID()
 	rsp.Src = src
 	rsp.Dst = trans.ReqFromTopSrc
 	rsp.RspTo = trans.ReqFromTopID
@@ -414,7 +414,7 @@ func (m *middleware) completePendingDrain() bool {
 		return false
 	}
 
-	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp.Ports.Control, memcontrolprotocol.CmdDrain,
+	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdDrain,
 		state.CurrentCmdSrc, state.CurrentCmdID, true, ""))
 	state.ControlState = memcontrolprotocol.StatePaused
 	return true
@@ -425,7 +425,7 @@ func (m *middleware) handlePause(req memcontrolprotocol.Req) bool {
 		return false
 	}
 	m.comp.State.ControlState = memcontrolprotocol.StatePaused
-	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp.Ports.Control, memcontrolprotocol.CmdPause,
+	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdPause,
 		req.Src, req.ID, true, ""))
 	m.comp.Ports.Control.RetrieveIncoming()
 	return true
@@ -445,7 +445,7 @@ func (m *middleware) handleEnable(req memcontrolprotocol.Req) bool {
 		return false
 	}
 
-	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp.Ports.Control, memcontrolprotocol.CmdEnable,
+	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdEnable,
 		req.Src, req.ID, true, ""))
 
 	state := &m.comp.State
@@ -467,7 +467,7 @@ func (m *middleware) handleReset(req memcontrolprotocol.Req) bool {
 		return false
 	}
 
-	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp.Ports.Control, memcontrolprotocol.CmdReset,
+	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdReset,
 		req.Src, req.ID, true, ""))
 
 	state := &m.comp.State
@@ -492,14 +492,14 @@ func (m *middleware) handleUnsupported(req memcontrolprotocol.Req) bool {
 	if !m.comp.Ports.Control.CanSend() {
 		return false
 	}
-	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp.Ports.Control, req.Command,
+	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp, req.Command,
 		req.Src, req.ID, false, memcontrolprotocol.ErrUnsupported))
 	m.comp.Ports.Control.RetrieveIncoming()
 	return true
 }
 
 func makeCtrlRsp(
-	port messaging.Port,
+	c *Comp,
 	cmd memcontrolprotocol.Command,
 	dst messaging.RemotePort,
 	rspTo uint64,
@@ -511,8 +511,8 @@ func makeCtrlRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = port.Component().Simulation().NewID()
-	rsp.Src = port.AsRemote()
+	rsp.ID = c.NewID()
+	rsp.Src = c.Ports.Control.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
 	rsp.TrafficClass = "memcontrolprotocol.Rsp"

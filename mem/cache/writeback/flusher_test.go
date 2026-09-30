@@ -68,7 +68,7 @@ var _ = Describe("Flusher", func() {
 			m.comp.State.CacheState = int(cacheStatePaused)
 
 			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-			req.ID = m.comp.Simulation().NewID()
+			req.ID = m.comp.NewID()
 			req.TrafficClass = "memcontrolprotocol.Req"
 			controlPort.Deliver(req)
 
@@ -88,7 +88,7 @@ var _ = Describe("Flusher", func() {
 			next.HasProcessingFlush = true
 			next.ProcessingFlush = flushReqState{
 				MsgMeta: messaging.MsgMeta{
-					ID: m.comp.Simulation().NewID(),
+					ID: m.comp.NewID(),
 				},
 			}
 
@@ -103,7 +103,7 @@ var _ = Describe("Flusher", func() {
 			next.HasProcessingFlush = true
 			next.ProcessingFlush = flushReqState{
 				MsgMeta: messaging.MsgMeta{
-					ID: m.comp.Simulation().NewID(),
+					ID: m.comp.NewID(),
 				},
 			}
 
@@ -124,7 +124,7 @@ var _ = Describe("Flusher", func() {
 			next := &m.comp.State
 			next.CacheState = int(cacheStateFlushing)
 			next.HasProcessingFlush = true
-			flushID := m.comp.Simulation().NewID()
+			flushID := m.comp.NewID()
 			next.ProcessingFlush = flushReqState{
 				MsgMeta: messaging.MsgMeta{
 					ID:  flushID,
@@ -153,7 +153,7 @@ var _ = Describe("Flusher", func() {
 			m.comp.State.CacheState = int(cacheStatePaused)
 
 			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-			req.ID = m.comp.Simulation().NewID()
+			req.ID = m.comp.NewID()
 			req.TrafficClass = "memcontrolprotocol.Req"
 
 			controlPort.Deliver(req)

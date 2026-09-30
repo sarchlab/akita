@@ -96,7 +96,7 @@ func (m *forwardMW) forwardDown() bool {
 	tracing.TraceReqReceive(m.comp, upReq) // req_in @ this cache
 
 	// Miss: send a request one level down, parented to the task above.
-	downReq := memory.NewReq(m.comp.Simulation(),
+	downReq := memory.NewReq(m.comp.NewID(),
 		bottom.AsRemote(), m.comp.Spec().Downstream)
 	tracing.TraceReqInitiate(m.comp, downReq,
 		tracing.MsgIDAtReceiver(upReq, m.comp))
@@ -123,7 +123,7 @@ func (m *forwardMW) respondUp() bool {
 
 	tracing.TraceReqFinalize(m.comp, t.DownReq) // close the downstream task
 
-	top.Send(memory.NewRsp(m.comp.Simulation(),
+	top.Send(memory.NewRsp(m.comp.NewID(),
 		top.AsRemote(), t.UpReq.Src, t.UpReq.ID))
 	tracing.TraceReqComplete(m.comp, t.UpReq) // close the handling task
 

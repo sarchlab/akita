@@ -100,7 +100,7 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 		return false
 	}
 
-	id := m.comp.Simulation().NewID()
+	id := m.comp.NewID()
 	s.Processed++
 	s.Checksum = s.Checksum*1000003 + id
 	s.Pending--

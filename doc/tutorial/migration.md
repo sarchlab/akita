@@ -143,7 +143,7 @@ is no process-global generator or sequential/parallel configuration switch.
 
 ```go
 id := sim.NewID() // uint64, unique within this simulation
-req.ID = component.Simulation().NewID() // uses the same counter
+req.ID = component.NewID() // uses the same counter
 ```
 
 Event factories now take the allocated ID explicitly:
@@ -185,7 +185,7 @@ if req.ID == "" { ... }
 pendingReqs := map[uint64]*ReadReq{}
 
 req := &ReadReq{}
-req.ID = component.Simulation().NewID() // 1, 2, 3, ...
+req.ID = component.NewID() // 1, 2, 3, ...
 pendingReqs[req.ID] = req
 
 // Later, matching response:
@@ -203,7 +203,7 @@ if req.ID == 0 { ... }
 - Replace `== ""` / `!= ""` checks with `== 0` / `!= 0`.
 - Replace `fmt.Sprintf`-based ID formatting with `strconv.FormatUint` or `%d`.
 - Update tracing task ID comparisons from string to uint64.
-- Replace global ID allocation with `sim.NewID()` or `component.Simulation().NewID()`.
+- Replace global ID allocation with `sim.NewID()` or `component.NewID()`.
 - Simulation checkpoints include the owned counter. Standalone simulation users must checkpoint `sim.GetIDGenerator()` alongside the engine. Restore into fresh instances.
 
 ---

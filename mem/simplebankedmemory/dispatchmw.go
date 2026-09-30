@@ -74,7 +74,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		// ID rides on the item through the pipeline and is closed at finalize.
 		tracing.TraceReqReceive(m.comp, msg)
 
-		pipelineTaskID := m.comp.Simulation().NewID()
+		pipelineTaskID := m.comp.NewID()
 		tracing.StartTask(m.comp, tracing.TaskStart{
 			ID:       pipelineTaskID,
 			ParentID: tracing.MsgIDAtReceiver(msg, m.comp),

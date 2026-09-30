@@ -129,4 +129,4 @@ func assertDictionaryAndChildren(t *testing.T, db *sql.DB) {
 	}
 }
 
-func (c *roundTripDomain) Simulation() timing.Simulation { return c.sim }
+func (c *roundTripDomain) NewID() uint64 { return c.sim.NewID() }

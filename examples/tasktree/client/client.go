@@ -81,7 +81,7 @@ func (m *requestMW) send() bool {
 		return false
 	}
 
-	req := memory.NewReq(m.comp.Simulation(), port.AsRemote(), spec.Dst)
+	req := memory.NewReq(m.comp.NewID(), port.AsRemote(), spec.Dst)
 	tracing.TraceReqInitiate(m.comp, req, 0) // root task, no parent
 	port.Send(req)
 	s.InFlight[req.ID] = req

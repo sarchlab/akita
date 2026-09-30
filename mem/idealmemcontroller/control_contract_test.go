@@ -36,6 +36,7 @@ func TestControlContract(t *testing.T) {
 
 		return &memcontrolprotocol.Harness{
 			Comp: comp,
+			Sim:  sim,
 			Ctrl: ctrl,
 			IsQuiescent: func() bool {
 				return len(comp.State.InflightTransactions) == 0

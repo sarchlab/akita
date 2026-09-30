@@ -139,4 +139,5 @@ var _ = Describe("Incoming buffer tracer", func() {
 	})
 })
 
-func (c *ibFakeComp) Simulation() timing.Simulation { return c.sim }
+func (c *ibFakeComp) NewID() uint64       { return c.sim.NewID() }
+func (c *ibFakeComp) Handle(timing.Event) {}

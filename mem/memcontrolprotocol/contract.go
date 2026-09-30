@@ -24,6 +24,10 @@ type Harness struct {
 	// it a TickEvent at a time, as the engine does.
 	Comp Controllable
 
+	// Sim is the simulation the component belongs to. RunContract allocates
+	// the IDs of the requests and ticks it makes from it.
+	Sim timing.Simulation
+
 	// Ctrl is the component's Control port. RunContract delivers
 	// ControlReq into it via Deliver and reads ControlRsp out of it via
 	// RetrieveOutgoing.
@@ -190,7 +194,7 @@ func teardown(h *Harness) {
 func driveExpectSuccess(t *testing.T, h *Harness, cmd Command) {
 	t.Helper()
 
-	req := newControlReq(h.Ctrl, cmd)
+	req := newControlReq(h, cmd)
 	h.Ctrl.Deliver(req)
 
 	budget := maxTicks
@@ -218,7 +222,7 @@ func isConditionalVerb(cmd Command) bool {
 func pauseForConditionalVerb(t *testing.T, h *Harness) {
 	t.Helper()
 
-	req := newControlReq(h.Ctrl, CmdPause)
+	req := newControlReq(h, CmdPause)
 	h.Ctrl.Deliver(req)
 
 	rsp, ok := drainForRsp(h, maxTicks)
@@ -236,7 +240,7 @@ func checkConditionalIllegalState(
 ) {
 	t.Helper()
 
-	req := newControlReq(h.Ctrl, cmd)
+	req := newControlReq(h, cmd)
 	h.Ctrl.Deliver(req)
 
 	rsp, ok := drainForRsp(h, maxTicks)
@@ -272,7 +276,7 @@ func checkVerb(
 		pauseForConditionalVerb(t, h)
 	}
 
-	req := newControlReq(h.Ctrl, cmd)
+	req := newControlReq(h, cmd)
 	h.Ctrl.Deliver(req)
 
 	budget := maxTicks
@@ -323,14 +327,11 @@ func checkVerb(
 
 // newControlReq builds a ControlReq addressed to the component's
 // Control port from a fixed pseudo-source "ContractAgent".
-func newControlReq(
-	ctrl messaging.Port,
-	cmd Command,
-) Req {
+func newControlReq(h *Harness, cmd Command) Req {
 	req := Req{Command: cmd}
-	req.ID = ctrl.Component().Simulation().NewID()
+	req.ID = h.Sim.NewID()
 	req.Src = messaging.RemotePort("ContractAgent")
-	req.Dst = ctrl.AsRemote()
+	req.Dst = h.Ctrl.AsRemote()
 	req.TrafficClass = "Req"
 	return req
 }
@@ -338,9 +339,8 @@ func newControlReq(
 // tick hands the component a TickEvent at the current time, as the engine
 // does on every cycle.
 func (h *Harness) tick() {
-	sim := h.Ctrl.Component().Simulation()
 	h.Comp.Handle(modeling.MakeTickEvent(
-		sim.NewID(), h.Comp.Name(), sim.GetEngine().CurrentTime()))
+		h.Sim.NewID(), h.Comp.Name(), h.Sim.GetEngine().CurrentTime()))
 }
 
 // drainForRsp ticks the component up to budget times waiting for a
