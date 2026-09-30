@@ -34,6 +34,17 @@ type Definition struct {
 	// Ports describes the component's boundary ports and port groups
 	// (component kind only).
 	Ports []Port `json:"ports,omitempty"`
+
+	// Middlewares lists the component's middlewares in the order it runs them
+	// on every tick (component kind only, for definitions that declare them).
+	Middlewares []Middleware `json:"middlewares,omitempty"`
+}
+
+// Middleware describes one field of a component's Middlewares struct.
+type Middleware struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+	Doc  string `json:"doc,omitempty"`
 }
 
 // Field describes one field of a Spec or Resources struct.

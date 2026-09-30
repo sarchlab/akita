@@ -30,6 +30,7 @@ var extractors = map[string]func(
 	pkg *packages.Package, lit *ast.CompositeLit, index pkgIndex,
 ) (*schema.Definition, error){
 	"github.com/sarchlab/akita/v5/modeling.ComponentDef": extractComponent,
+	"github.com/sarchlab/akita/v5/modeling.Definition":   extractDefinition,
 }
 
 // extractPackage finds the definition in pkg, if any, and extracts it. The

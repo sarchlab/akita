@@ -32,17 +32,41 @@ type schedulerCheckpoint struct {
 // JSON. It implements the structural Checkpointable contract without the
 // modeling package importing the simulation package.
 func (c *Component[S, T, R]) SaveCheckpoint(w io.Writer) error {
-	state, err := json.Marshal(c.State)
+	return saveCheckpoint(w, c.spec, c.State, c.tickScheduler())
+}
+
+// LoadCheckpoint restores State and the scheduler guard after verifying that the
+// saved spec hash matches the rebuilt component's.
+func (c *Component[S, T, R]) LoadCheckpoint(r io.Reader) error {
+	return loadCheckpoint(r, c.spec, &c.State, c.tickScheduler())
+}
+
+// tickScheduler returns the component's tick scheduler, or nil when the
+// component was not built with one.
+func (c *Component[S, T, R]) tickScheduler() *TickScheduler {
+	if c.TickingComponent == nil {
+		return nil
+	}
+
+	return c.TickScheduler
+}
+
+// saveCheckpoint writes a component's spec hash, State, and scheduler guard as
+// JSON. ts may be nil for a component without a tick scheduler.
+func saveCheckpoint[S, T any](
+	w io.Writer, spec S, state T, ts *TickScheduler,
+) error {
+	data, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("modeling: marshal state: %w", err)
 	}
 
 	dto := componentCheckpoint{
-		SpecHash: c.specHash(),
-		State:    state,
+		SpecHash: specHash(spec),
+		State:    data,
 	}
-	if c.TickingComponent != nil && c.TickScheduler != nil {
-		next, scheduled := c.TickScheduler.snapshot()
+	if ts != nil {
+		next, scheduled := ts.snapshot()
 		dto.Scheduler = schedulerCheckpoint{
 			HasScheduledTick: scheduled,
 			NextTickTime:     next,
@@ -52,38 +76,39 @@ func (c *Component[S, T, R]) SaveCheckpoint(w io.Writer) error {
 	return json.NewEncoder(w).Encode(dto)
 }
 
-// LoadCheckpoint restores State and the scheduler guard after verifying that the
-// saved spec hash matches the rebuilt component's.
-func (c *Component[S, T, R]) LoadCheckpoint(r io.Reader) error {
+// loadCheckpoint restores a component's State and scheduler guard after
+// verifying that the saved spec hash matches spec, the rebuilt component's.
+func loadCheckpoint[S, T any](
+	r io.Reader, spec S, state *T, ts *TickScheduler,
+) error {
 	var dto componentCheckpoint
 	if err := json.NewDecoder(r).Decode(&dto); err != nil {
 		return fmt.Errorf("modeling: decode component checkpoint: %w", err)
 	}
 
-	if got := c.specHash(); got != dto.SpecHash {
+	if got := specHash(spec); got != dto.SpecHash {
 		return fmt.Errorf(
 			"modeling: spec hash mismatch: checkpoint %s, rebuilt %s",
 			dto.SpecHash, got)
 	}
 
-	var state T
-	if err := json.Unmarshal(dto.State, &state); err != nil {
+	var restored T
+	if err := json.Unmarshal(dto.State, &restored); err != nil {
 		return fmt.Errorf("modeling: unmarshal state: %w", err)
 	}
-	c.State = state
+	*state = restored
 
-	if c.TickingComponent != nil && c.TickScheduler != nil {
-		c.TickScheduler.restore(
-			dto.Scheduler.NextTickTime, dto.Scheduler.HasScheduledTick)
+	if ts != nil {
+		ts.restore(dto.Scheduler.NextTickTime, dto.Scheduler.HasScheduledTick)
 	}
 
 	return nil
 }
 
-// specHash is a deterministic fingerprint of the component's immutable Spec, used
+// specHash is a deterministic fingerprint of a component's immutable Spec, used
 // to reject loading a checkpoint into a component built with a different config.
-func (c *Component[S, T, R]) specHash() string {
-	data, err := json.Marshal(c.spec)
+func specHash(spec any) string {
+	data, err := json.Marshal(spec)
 	if err != nil {
 		panic(fmt.Sprintf("modeling: cannot hash spec: %v", err))
 	}

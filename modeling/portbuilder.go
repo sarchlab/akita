@@ -22,9 +22,8 @@ func DefaultPortSpec() PortSpec {
 
 // PortBuilder builds a messaging.Port and registers it with the simulation,
 // mirroring how component and connection builders register themselves. The
-// component owns its port topology (declared with DeclarePort); a PortBuilder
-// supplies an instance for one of those ports. Build returns the port; attach
-// it to the component with comp.AssignPort(name, port).
+// component owns its port topology; a PortBuilder supplies an instance for one
+// of those ports, choosing its buffer size.
 type PortBuilder struct {
 	simulation timing.Simulation
 	comp       messaging.Component
@@ -54,20 +53,23 @@ func (b PortBuilder) WithSpec(spec PortSpec) PortBuilder {
 	return b
 }
 
-// Build builds a port whose full name is comp.Name()+"."+name, owned by the
-// component, and registers it with the simulation. It returns the port; attach
-// it to the component with comp.AssignPort(name, port).
+// Build builds a port and registers it with the simulation.
+//
+// With a component, the port's full name is comp.Name()+"."+name and the
+// component owns it; attach it with comp.AssignPort(name, port). Without one,
+// name is the full name, "<component>.<port>", and the port is unowned until
+// a Comp builder binds it (see CompBuilder.WithPorts).
 func (b PortBuilder) Build(name string) messaging.Port {
 	if b.simulation == nil {
 		panic("modeling: PortBuilder requires a simulation")
 	}
 
-	if b.comp == nil {
-		panic("modeling: PortBuilder requires a component")
+	fullName := name
+	if b.comp != nil {
+		fullName = b.comp.Name() + "." + name
 	}
 
-	port := messaging.NewPort(
-		b.comp, b.spec.BufSize, b.spec.BufSize, b.comp.Name()+"."+name)
+	port := messaging.NewPort(b.comp, b.spec.BufSize, b.spec.BufSize, fullName)
 	b.simulation.RegisterPort(port)
 
 	return port
