@@ -12,18 +12,6 @@ type middleware struct {
 	comp *Comp
 }
 
-func (m *middleware) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
-}
-
-func (m *middleware) bottomPort() messaging.Port {
-	return m.comp.GetPortByName("Bottom")
-}
-
-func (m *middleware) ctrlPort() messaging.Port {
-	return m.comp.GetPortByName("Control")
-}
-
 // Tick advances the reorder buffer by one cycle. The control port is
 // serviced first so Reset or Pause can quiesce the pipeline before any
 // new traffic moves. While paused the pipeline is frozen entirely.
@@ -84,7 +72,7 @@ func (m *middleware) topDown() bool {
 		return false
 	}
 
-	msg, ok := m.topPort().PeekIncoming()
+	msg, ok := m.comp.Ports.Top.PeekIncoming()
 	if !ok {
 		return false
 	}
@@ -109,20 +97,20 @@ func (m *middleware) topDown() bool {
 	})
 
 	shadow, isRead := m.buildShadowReq(
-		req, m.bottomPort().AsRemote(), m.comp.Spec().BottomUnit)
+		req, m.comp.Ports.Bottom.AsRemote(), m.comp.Spec().BottomUnit)
 
-	if !m.bottomPort().CanSend() {
+	if !m.comp.Ports.Bottom.CanSend() {
 		return false
 	}
 
-	m.bottomPort().Send(shadow)
+	m.comp.Ports.Bottom.Send(shadow)
 
 	// The shadow request is on its way downstream: the at-head wait to send on
 	// the Bottom port is over (also on the incoming-buffer task).
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: tracing.MsgIDAtIncomingBuffer(req, m.comp),
 		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.bottomPort().Name(),
+		What:   m.comp.Ports.Bottom.Name(),
 	})
 
 	// Admit the request: open req_in at retrieve and record the transaction.
@@ -135,7 +123,7 @@ func (m *middleware) topDown() bool {
 		ReqToBottomID: shadow.Meta().ID,
 		IsRead:        isRead,
 	})
-	m.topPort().RetrieveIncoming()
+	m.comp.Ports.Top.RetrieveIncoming()
 
 	tracing.TraceReqInitiate(m.comp, shadow,
 		tracing.MsgIDAtReceiver(req, m.comp))
@@ -147,7 +135,7 @@ func (m *middleware) topDown() bool {
 // matching transaction. Unmatched responses (e.g. left over after a flush) are
 // dropped.
 func (m *middleware) parseBottom() bool {
-	msg, ok := m.bottomPort().PeekIncoming()
+	msg, ok := m.comp.Ports.Bottom.PeekIncoming()
 	if !ok {
 		return false
 	}
@@ -155,7 +143,7 @@ func (m *middleware) parseBottom() bool {
 	switch dataRsp := msg.(type) {
 	case memprotocol.DataReadyRsp:
 		idx := m.findTransactionByBottomID(dataRsp.RspTo)
-		m.bottomPort().RetrieveIncoming()
+		m.comp.Ports.Bottom.RetrieveIncoming()
 
 		if idx < 0 {
 			return true
@@ -168,13 +156,13 @@ func (m *middleware) parseBottom() bool {
 		tracing.AddMilestone(m.comp, tracing.Milestone{
 			TaskID: m.reqInTaskID(*trans),
 			Kind:   tracing.MilestoneKindData,
-			What:   m.bottomPort().Name(),
+			What:   m.comp.Ports.Bottom.Name(),
 		})
 		tracing.TraceReqFinalize(m.comp, m.shadowReqTraceMsg(*trans))
 		return true
 	case memprotocol.WriteDoneRsp:
 		idx := m.findTransactionByBottomID(dataRsp.RspTo)
-		m.bottomPort().RetrieveIncoming()
+		m.comp.Ports.Bottom.RetrieveIncoming()
 
 		if idx < 0 {
 			return true
@@ -187,12 +175,12 @@ func (m *middleware) parseBottom() bool {
 		tracing.AddMilestone(m.comp, tracing.Milestone{
 			TaskID: m.reqInTaskID(*trans),
 			Kind:   tracing.MilestoneKindSubTask,
-			What:   m.bottomPort().Name(),
+			What:   m.comp.Ports.Bottom.Name(),
 		})
 		tracing.TraceReqFinalize(m.comp, m.shadowReqTraceMsg(*trans))
 		return true
 	default:
-		m.bottomPort().RetrieveIncoming()
+		m.comp.Ports.Bottom.RetrieveIncoming()
 		return true
 	}
 }
@@ -222,13 +210,13 @@ func (m *middleware) bottomUp() bool {
 		What:   m.comp.Name() + ".reorder",
 	})
 
-	rsp := m.buildTopRsp(head, m.topPort().AsRemote())
+	rsp := m.buildTopRsp(head, m.comp.Ports.Top.AsRemote())
 
-	if !m.topPort().CanSend() {
+	if !m.comp.Ports.Top.CanSend() {
 		return false
 	}
 
-	m.topPort().Send(rsp)
+	m.comp.Ports.Top.Send(rsp)
 
 	state.Transactions = state.Transactions[1:]
 
@@ -237,7 +225,7 @@ func (m *middleware) bottomUp() bool {
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: m.reqInTaskID(head),
 		Kind:   tracing.MilestoneKindNetworkBusy,
-		What:   m.topPort().Name(),
+		What:   m.comp.Ports.Top.Name(),
 	})
 
 	tracing.TraceReqComplete(m.comp, m.topReqTraceMsg(head))
@@ -320,13 +308,13 @@ func (m *middleware) shadowReqTraceMsg(trans transactionState) messaging.Msg {
 	if trans.IsRead {
 		req := memprotocol.ReadReq{}
 		req.ID = trans.ReqToBottomID
-		req.Src = m.bottomPort().AsRemote()
+		req.Src = m.comp.Ports.Bottom.AsRemote()
 		req.Dst = m.comp.Spec().BottomUnit
 		return req
 	}
 	req := memprotocol.WriteReq{}
 	req.ID = trans.ReqToBottomID
-	req.Src = m.bottomPort().AsRemote()
+	req.Src = m.comp.Ports.Bottom.AsRemote()
 	req.Dst = m.comp.Spec().BottomUnit
 	return req
 }
@@ -338,13 +326,13 @@ func (m *middleware) topReqTraceMsg(trans transactionState) messaging.Msg {
 		req := memprotocol.ReadReq{}
 		req.ID = trans.ReqFromTopID
 		req.Src = trans.ReqFromTopSrc
-		req.Dst = m.topPort().AsRemote()
+		req.Dst = m.comp.Ports.Top.AsRemote()
 		return req
 	}
 	req := memprotocol.WriteReq{}
 	req.ID = trans.ReqFromTopID
 	req.Src = trans.ReqFromTopSrc
-	req.Dst = m.topPort().AsRemote()
+	req.Dst = m.comp.Ports.Top.AsRemote()
 	return req
 }
 
@@ -385,14 +373,14 @@ func (m *middleware) processControlMsg() bool {
 		return false
 	}
 
-	msg, ok := m.ctrlPort().PeekIncoming()
+	msg, ok := m.comp.Ports.Control.PeekIncoming()
 	if !ok {
 		return false
 	}
 
 	req, ok := msg.(memcontrolprotocol.Req)
 	if !ok {
-		m.ctrlPort().RetrieveIncoming()
+		m.comp.Ports.Control.RetrieveIncoming()
 		return true
 	}
 
@@ -421,24 +409,24 @@ func (m *middleware) completePendingDrain() bool {
 	if len(state.Transactions) != 0 {
 		return false
 	}
-	if !m.ctrlPort().CanSend() {
+	if !m.comp.Ports.Control.CanSend() {
 		return false
 	}
 
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdDrain,
+	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp.Ports.Control, memcontrolprotocol.CmdDrain,
 		state.CurrentCmdSrc, state.CurrentCmdID, true, ""))
 	state.ControlState = memcontrolprotocol.StatePaused
 	return true
 }
 
 func (m *middleware) handlePause(req memcontrolprotocol.Req) bool {
-	if !m.ctrlPort().CanSend() {
+	if !m.comp.Ports.Control.CanSend() {
 		return false
 	}
 	m.comp.State.ControlState = memcontrolprotocol.StatePaused
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdPause,
+	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp.Ports.Control, memcontrolprotocol.CmdPause,
 		req.Src, req.ID, true, ""))
-	m.ctrlPort().RetrieveIncoming()
+	m.comp.Ports.Control.RetrieveIncoming()
 	return true
 }
 
@@ -447,16 +435,16 @@ func (m *middleware) handleDrain(req memcontrolprotocol.Req) bool {
 	state.ControlState = memcontrolprotocol.StateDraining
 	state.CurrentCmdID = req.ID
 	state.CurrentCmdSrc = req.Src
-	m.ctrlPort().RetrieveIncoming()
+	m.comp.Ports.Control.RetrieveIncoming()
 	return true
 }
 
 func (m *middleware) handleEnable(req memcontrolprotocol.Req) bool {
-	if !m.ctrlPort().CanSend() {
+	if !m.comp.Ports.Control.CanSend() {
 		return false
 	}
 
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdEnable,
+	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp.Ports.Control, memcontrolprotocol.CmdEnable,
 		req.Src, req.ID, true, ""))
 
 	state := &m.comp.State
@@ -465,7 +453,7 @@ func (m *middleware) handleEnable(req memcontrolprotocol.Req) bool {
 	// Enable resumes from Paused; it must not discard traffic queued while
 	// paused (e.g. bottom responses that retire frozen in-flight
 	// transactions). They are processed once the pipeline runs again.
-	m.ctrlPort().RetrieveIncoming()
+	m.comp.Ports.Control.RetrieveIncoming()
 	return true
 }
 
@@ -474,11 +462,11 @@ func (m *middleware) handleEnable(req memcontrolprotocol.Req) bool {
 // that topDown opened for each in-flight transaction are ended (and their
 // receiver-registry entries released) so they do not outlive the transactions.
 func (m *middleware) handleReset(req memcontrolprotocol.Req) bool {
-	if !m.ctrlPort().CanSend() {
+	if !m.comp.Ports.Control.CanSend() {
 		return false
 	}
 
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdReset,
+	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp.Ports.Control, memcontrolprotocol.CmdReset,
 		req.Src, req.ID, true, ""))
 
 	state := &m.comp.State
@@ -492,20 +480,20 @@ func (m *middleware) handleReset(req memcontrolprotocol.Req) bool {
 	// by the drains below: each RetrieveIncoming fires the retrieve hook, which
 	// ends the buffer task. No pre-admission req_in exists to clean up — req_in
 	// now opens only at retrieve.
-	drainIncoming(m.topPort())
-	drainIncoming(m.bottomPort())
+	drainIncoming(m.comp.Ports.Top)
+	drainIncoming(m.comp.Ports.Bottom)
 
-	m.ctrlPort().RetrieveIncoming()
+	m.comp.Ports.Control.RetrieveIncoming()
 	return true
 }
 
 func (m *middleware) handleUnsupported(req memcontrolprotocol.Req) bool {
-	if !m.ctrlPort().CanSend() {
+	if !m.comp.Ports.Control.CanSend() {
 		return false
 	}
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), req.Command,
+	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp.Ports.Control, req.Command,
 		req.Src, req.ID, false, memcontrolprotocol.ErrUnsupported))
-	m.ctrlPort().RetrieveIncoming()
+	m.comp.Ports.Control.RetrieveIncoming()
 	return true
 }
 

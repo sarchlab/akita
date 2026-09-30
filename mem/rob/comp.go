@@ -59,5 +59,26 @@ type State struct {
 	CurrentCmdSrc messaging.RemotePort     `json:"current_cmd_src"`
 }
 
+// Ports holds the reorder buffer's ports.
+type Ports struct {
+	// Top receives memory requests and returns their responses in request
+	// order.
+	Top messaging.Port `akita:"role=mem/responder"`
+
+	// Bottom forwards the requests to the bottom unit and receives its
+	// responses in any order.
+	Bottom messaging.Port `akita:"role=mem/requester"`
+
+	// Control receives enable, pause, drain, and reset commands.
+	Control messaging.Port `akita:"role=mem.control/responder"`
+}
+
+// Middlewares holds the reorder buffer's behavior.
+type Middlewares struct {
+	// Pipeline handles control commands, forwards requests, and releases
+	// responses in order.
+	Pipeline *middleware
+}
+
 // Comp is a reorder buffer component.
-type Comp = modeling.Component[Spec, State, modeling.None]
+type Comp = modeling.Comp[Spec, State, modeling.None, Ports, Middlewares]

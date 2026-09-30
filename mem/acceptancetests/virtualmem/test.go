@@ -104,13 +104,16 @@ func buildROB(s *simulation.Simulation, bottomUnit messaging.RemotePort) *rob.Co
 	robSpec := rob.Definition.DefaultSpec
 	robSpec.NumReqPerCycle = 4
 	robSpec.BottomUnit = bottomUnit
-	robComp := rob.MakeBuilder().
+
+	return rob.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(robSpec).
+		WithPorts(rob.Ports{
+			Top:     newPort(s, "ROB.Top"),
+			Bottom:  newPort(s, "ROB.Bottom"),
+			Control: newPort(s, "ROB.Control"),
+		}).
 		Build("ROB")
-	assignPorts(s, robComp, "Top", "Bottom", "Control")
-
-	return robComp
 }
 
 func buildMemoryHierarchy(s *simulation.Simulation) (
@@ -260,6 +263,15 @@ func assignPorts(
 			Build(name)
 		comp.AssignPort(name, p)
 	}
+}
+
+// newPort builds an unowned port named fullName, for a component that takes
+// its ports at Build.
+func newPort(s *simulation.Simulation, fullName string) messaging.Port {
+	return modeling.MakePortBuilder().
+		WithSimulation(s).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build(fullName)
 }
 
 func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {

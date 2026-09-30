@@ -24,22 +24,23 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.NumReqPerCycle = 2
 	spec.BottomUnit = messaging.RemotePort("BottomUnit")
 
-	rob := MakeBuilder().WithSimulation(sim).WithSpec(spec).Build("Rob")
-
-	assign := func(name string) messaging.Port {
+	port := func(name string) messaging.Port {
 		p := modeling.MakePortBuilder().
 			WithSimulation(sim).
-			WithComponent(rob).
 			WithSpec(modeling.PortSpec{BufSize: 4}).
-			Build(name)
-		rob.AssignPort(name, p)
+			Build("Rob." + name)
 		(&noopConn{}).PlugIn(p)
 		return p
 	}
 
-	topPort := assign("Top")
-	assign("Bottom")
-	ctrlPort := assign("Control")
+	topPort := port("Top")
+	ctrlPort := port("Control")
+
+	rob := Definition.Builder().
+		WithSimulation(sim).
+		WithSpec(spec).
+		WithPorts(Ports{Top: topPort, Bottom: port("Bottom"), Control: ctrlPort}).
+		Build("Rob")
 
 	rec := &tracingtest.LeakRecorder{}
 	tracing.CollectTrace(rob, rec)

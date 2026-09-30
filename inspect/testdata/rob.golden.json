@@ -60,5 +60,12 @@
         }
       ]
     }
+  ],
+  "middlewares": [
+    {
+      "name": "Pipeline",
+      "type": "*middleware",
+      "doc": "Pipeline handles control commands, forwards requests, and releases\nresponses in order."
+    }
   ]
 }

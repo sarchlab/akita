@@ -88,21 +88,22 @@ var _ = Describe("Reorder Buffer milestones", func() {
 		spec.NumReqPerCycle = 2
 		spec.BottomUnit = bottomUnitRemote
 
-		rob = MakeBuilder().WithSimulation(sim).WithSpec(spec).Build("Rob")
-
-		assign := func(name string, bufSize int) messaging.Port {
-			p := modeling.MakePortBuilder().
+		port := func(name string, bufSize int) messaging.Port {
+			return modeling.MakePortBuilder().
 				WithSimulation(sim).
-				WithComponent(rob).
 				WithSpec(modeling.PortSpec{BufSize: bufSize}).
-				Build(name)
-			rob.AssignPort(name, p)
-			return p
+				Build("Rob." + name)
 		}
 
-		topPort = assign("Top", 4)
-		bottomPort = assign("Bottom", 4)
-		ctrlPort := assign("Control", 2)
+		topPort = port("Top", 4)
+		bottomPort = port("Bottom", 4)
+		ctrlPort := port("Control", 2)
+
+		rob = Definition.Builder().
+			WithSimulation(sim).
+			WithSpec(spec).
+			WithPorts(Ports{Top: topPort, Bottom: bottomPort, Control: ctrlPort}).
+			Build("Rob")
 
 		for _, p := range []messaging.Port{topPort, bottomPort, ctrlPort} {
 			conn := &noopConn{}

@@ -324,13 +324,18 @@ func buildROB(
 	robSpec := rob.Definition.DefaultSpec
 	robSpec.NumReqPerCycle = 4
 	robSpec.BottomUnit = at.GetPortByName("Top").AsRemote()
-	robComp := rob.MakeBuilder().
+
+	name := "ROB" + suffix
+
+	return rob.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(robSpec).
-		Build("ROB" + suffix)
-	assignPorts(s, robComp, "Top", "Bottom", "Control")
-
-	return robComp
+		WithPorts(rob.Ports{
+			Top:     newPort(s, name+".Top"),
+			Bottom:  newPort(s, name+".Bottom"),
+			Control: newPort(s, name+".Control"),
+		}).
+		Build(name)
 }
 
 func buildAgent(
@@ -456,6 +461,15 @@ func assignPorts(
 			Build(name)
 		comp.AssignPort(name, p)
 	}
+}
+
+// newPort builds an unowned port named fullName, for a component that takes
+// its ports at Build.
+func newPort(s *simulation.Simulation, fullName string) messaging.Port {
+	return modeling.MakePortBuilder().
+		WithSimulation(s).
+		WithSpec(modeling.PortSpec{BufSize: 16}).
+		Build(fullName)
 }
 
 func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {
