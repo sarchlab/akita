@@ -2,11 +2,11 @@
 package memaccessagent
 
 import (
-	"github.com/sarchlab/akita/v5/timing"
 	"math/rand"
 
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // Builder constructs MemAccessAgent instances. Configuration is supplied as a

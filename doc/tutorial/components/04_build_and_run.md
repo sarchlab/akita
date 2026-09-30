@@ -49,8 +49,9 @@ partially configured builder is just a value you can stash and reuse.
 
 **Akita's convention.** Per-package builders — the subject of the next
 section — take a component's whole configuration as one `Spec` through
-`WithSpec` (there is no setter per spec field) and start from a
-`DefaultSpec()`. That is why the clock frequency lives in the spec. They also
+`WithSpec` (there is no setter per spec field) and start from a default
+Spec; library components expose theirs as `Definition.DefaultSpec`. That is
+why the clock frequency lives in the spec. They also
 follow a fixed shape, `MakeBuilder().WithSimulation(…).WithSpec(…).Build(name)`,
 and create their ports inside `Build`. The low-level `modeling.NewBuilder`
 shown here cannot pull `Freq` out of an arbitrary spec type on its own, so we

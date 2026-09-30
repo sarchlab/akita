@@ -2,11 +2,11 @@ package switches
 
 import (
 	"fmt"
-	"github.com/sarchlab/akita/v5/timing"
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // Builder builds switches. Configuration is supplied as a whole through
