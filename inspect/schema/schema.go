@@ -31,10 +31,9 @@ type Definition struct {
 	// external references that must be supplied at construction time.
 	Resources []Field `json:"resources,omitempty"`
 
-	// Ports and PortGroups describe the component's boundary ports
+	// Ports describes the component's boundary ports and port groups
 	// (component kind only).
-	Ports      []Port      `json:"ports,omitempty"`
-	PortGroups []PortGroup `json:"port_groups,omitempty"`
+	Ports []Port `json:"ports,omitempty"`
 }
 
 // Field describes one field of a Spec or Resources struct.
@@ -73,24 +72,13 @@ type Role struct {
 	Role     string `json:"role"`
 }
 
-// Port describes one declared port.
+// Port describes one declared port or port group.
 type Port struct {
 	Name  string `json:"name"`
 	Roles []Role `json:"roles,omitempty"`
-}
 
-// PortGroup describes a dynamically-sized group of ports. Members are
-// addressed "Name[0]" ... "Name[N-1]", dense and zero-indexed; N is decided
-// at configuration time within [MinCount, MaxCount].
-type PortGroup struct {
-	Name  string `json:"name"`
-	Roles []Role `json:"roles,omitempty"`
-
-	MinCount int `json:"min_count,omitempty"`
-	// MaxCount of 0 means unbounded.
-	MaxCount int `json:"max_count,omitempty"`
-
-	// CountField names the Spec field (by JSON name) that holds the
-	// configured group size, if the component binds one.
-	CountField string `json:"count_field,omitempty"`
+	// Group marks a dynamically-sized port group. Members are addressed
+	// "Name[0]" ... "Name[N-1]", dense and zero-indexed; N is decided at
+	// configuration time. All members speak Roles.
+	Group bool `json:"group,omitempty"`
 }

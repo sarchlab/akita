@@ -26,7 +26,7 @@
       "name": "NumOut",
       "json_name": "num_out",
       "type": "int",
-      "doc": "NumOut is derived from the number of wired Out ports.",
+      "doc": "NumOut is computed in Build from the number of wired Out ports.",
       "default": 0,
       "derived": true
     },
@@ -86,9 +86,7 @@
           "role": "responder"
         }
       ]
-    }
-  ],
-  "port_groups": [
+    },
     {
       "name": "Out",
       "roles": [
@@ -97,9 +95,7 @@
           "role": "requester"
         }
       ],
-      "min_count": 1,
-      "max_count": 8,
-      "count_field": "num_out"
+      "group": true
     }
   ]
 }

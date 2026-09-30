@@ -30,7 +30,7 @@ type Spec struct {
 	// NumLanes is the number of parallel lanes.
 	NumLanes int `json:"num_lanes" akita:"min=1,max=64"`
 
-	// NumOut is derived from the number of wired Out ports.
+	// NumOut is computed in Build from the number of wired Out ports.
 	NumOut int `json:"num_out" akita:"derived"`
 
 	// Mode selects how precisely the component is modeled.
@@ -77,14 +77,7 @@ var Definition = modeling.ComponentDef[Spec]{
 		// Ctrl multiplexes two protocols on one port.
 		{Name: "Ctrl", Roles: []*messaging.Role{
 			memprotocol.Responder, memcontrolprotocol.Responder}},
-	},
-	PortGroups: []modeling.PortGroupDef{
-		{
-			Name:       "Out",
-			Roles:      []*messaging.Role{memprotocol.Requester},
-			MinCount:   1,
-			MaxCount:   8,
-			CountField: "num_out",
-		},
+		// Out is a port group: its size is decided when it is wired.
+		{Name: "Out", Roles: []*messaging.Role{memprotocol.Requester}, Group: true},
 	},
 }

@@ -14,7 +14,7 @@ import (
 
 // CheckDefinition asserts that the inspector's static view of the package at
 // pkgPath matches the live Definition value: same name, same defaults, same
-// ports and port groups. Every migrated component adds one test calling it,
+// ports. Every migrated component adds one test calling it,
 // which turns "the static and runtime views agree" into a CI guarantee
 // instead of a convention.
 func CheckDefinition[S any](
@@ -30,7 +30,6 @@ func CheckDefinition[S any](
 
 	checkDefaults(t, static, def.DefaultSpec)
 	checkPorts(t, static, def.Ports)
-	checkPortGroups(t, static, def.PortGroups)
 }
 
 func staticDefinition(t *testing.T, pkgPath string) schema.Definition {
@@ -136,31 +135,10 @@ func checkPorts(
 
 	for i, p := range runtime {
 		s := static.Ports[i]
-		if s.Name != p.Name ||
+		if s.Name != p.Name || s.Group != p.Group ||
 			!reflect.DeepEqual(s.Roles, runtimeRoles(p.Roles)) {
 			t.Errorf("port %d: static %+v, runtime %s %+v",
 				i, s, p.Name, runtimeRoles(p.Roles))
-		}
-	}
-}
-
-func checkPortGroups(
-	t *testing.T, static schema.Definition, runtime []modeling.PortGroupDef,
-) {
-	t.Helper()
-
-	if len(static.PortGroups) != len(runtime) {
-		t.Errorf("port groups: static %d, runtime %d",
-			len(static.PortGroups), len(runtime))
-		return
-	}
-
-	for i, g := range runtime {
-		s := static.PortGroups[i]
-		if s.Name != g.Name || s.MinCount != g.MinCount ||
-			s.MaxCount != g.MaxCount || s.CountField != g.CountField ||
-			!reflect.DeepEqual(s.Roles, runtimeRoles(g.Roles)) {
-			t.Errorf("port group %d: static %+v, runtime %+v", i, s, g)
 		}
 	}
 }

@@ -19,11 +19,7 @@ var Definition = modeling.ComponentDef[Spec]{
 	DefaultSpec: Spec{
 		Freq: 1 * timing.GHz,
 	},
-	PortGroups: []modeling.PortGroupDef{
-		{
-			Name:     "Port",
-			Roles:    []*messaging.Role{packetization.Link},
-			MinCount: 1,
-		},
+	Ports: []modeling.PortDef{
+		{Name: "Port", Roles: []*messaging.Role{packetization.Link}, Group: true},
 	},
 }

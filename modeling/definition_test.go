@@ -49,14 +49,7 @@ func makeDefTestDef() modeling.ComponentDef[defTestSpec] {
 		Ports: []modeling.PortDef{
 			{Name: "Top", Roles: []*messaging.Role{defTestResponder}},
 			{Name: "Bottom", Roles: []*messaging.Role{defTestRequester}},
-		},
-		PortGroups: []modeling.PortGroupDef{
-			{
-				Name:       "Out",
-				Roles:      []*messaging.Role{defTestRequester},
-				MinCount:   1,
-				CountField: "num_out",
-			},
+			{Name: "Out", Roles: []*messaging.Role{defTestRequester}, Group: true},
 		},
 	}
 }
@@ -75,20 +68,6 @@ func TestComponentDef(t *testing.T) {
 		t.Errorf("NewSpec() = %+v, want %+v", got, want)
 	}
 
-	ports := def.Ports
-	if len(ports) != 2 || ports[0].Name != "Top" || ports[1].Name != "Bottom" {
-		t.Errorf("Ports = %+v", ports)
-	}
-	if len(ports[0].Roles) != 1 || ports[0].Roles[0] != defTestResponder {
-		t.Errorf("Ports[0].Roles = %+v, want [responder]", ports[0].Roles)
-	}
-
-	groups := def.PortGroups
-	if len(groups) != 1 || groups[0].Name != "Out" ||
-		groups[0].MinCount != 1 || groups[0].MaxCount != 0 ||
-		groups[0].CountField != "num_out" {
-		t.Errorf("PortGroups = %+v", groups)
-	}
 }
 
 func TestComponentDefNewSpecIsACopy(t *testing.T) {
@@ -191,7 +170,7 @@ func TestComponentDefDeclaredRolesAreIndependent(t *testing.T) {
 	if second.PortRoles("Top")[0] != defTestResponder || second.PortRoles("Out")[0] != defTestRequester {
 		t.Fatal("mutating one component's roles affected another component")
 	}
-	if def.Ports[0].Roles[0] != defTestResponder || def.PortGroups[0].Roles[0] != defTestRequester {
+	if def.Ports[0].Roles[0] != defTestResponder || def.Ports[2].Roles[0] != defTestRequester {
 		t.Fatal("mutating a component's roles affected the definition")
 	}
 }

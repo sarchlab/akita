@@ -90,21 +90,7 @@ func validateDefinition(
 			return err
 		}
 	}
-	for _, g := range def.PortGroups {
-		if err := checkName(g.Name); err != nil {
-			return err
-		}
-		if g.MinCount < 0 || g.MaxCount < 0 {
-			return posErrorf(pkg, lit.Pos(), "port group %q has a negative count bound", g.Name)
-		}
-		if g.MaxCount != 0 && g.MaxCount < g.MinCount {
-			return posErrorf(pkg, lit.Pos(), "port group %q: MaxCount is less than MinCount", g.Name)
-		}
-	}
-	if err := validateFieldMetadata(pkg, specType, def.Spec); err != nil {
-		return err
-	}
-	return checkCountFields(pkg, lit, specType, def)
+	return validateFieldMetadata(pkg, specType, def.Spec)
 }
 
 func validateFieldMetadata(pkg *packages.Package, specType types.Type, fields []schema.Field) error {

@@ -30,6 +30,8 @@ var Definition = modeling.ComponentDef[Spec]{Name: "Containers", DefaultSpec: Sp
 	Nil: nil, Bytes: []byte{65, 66}, StringNumber: 18446744073709551615, Fraction: 0.1,
 	EmptySlice: []int{}, EmptyMap: map[string]int{}, Choice: Escaped,
 },
-	Ports:      []modeling.PortDef{{Name: "Empty", Roles: []*messaging.Role{}}, {Name: "Omitted"}},
-	PortGroups: []modeling.PortGroupDef{{Name: "EmptyGroup", Roles: []*messaging.Role{}}, {Name: "OmittedGroup"}},
+	Ports: []modeling.PortDef{
+		{Name: "Empty", Roles: []*messaging.Role{}}, {Name: "Omitted"},
+		{Name: "EmptyGroup", Roles: []*messaging.Role{}, Group: true}, {Name: "OmittedGroup", Group: true},
+	},
 }

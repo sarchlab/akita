@@ -172,67 +172,6 @@ func extractComponent(
 	return def, nil
 }
 
-// checkCountFields validates every port group's CountField against the Spec:
-// the field must exist (by JSON name), be an integer, and be tagged derived.
-func checkCountFields(
-	pkg *packages.Package, lit *ast.CompositeLit,
-	specType types.Type, def *schema.Definition,
-) error {
-	specByJSON := map[string]schema.Field{}
-	for _, f := range def.Spec {
-		if f.JSONName != "" {
-			specByJSON[f.JSONName] = f
-		}
-	}
-
-	for _, g := range def.PortGroups {
-		if g.CountField == "" {
-			continue
-		}
-
-		f, ok := specByJSON[g.CountField]
-		if !ok {
-			return posErrorf(pkg, lit.Pos(),
-				"port group %q: CountField %q does not match any Spec "+
-					"field's JSON name", g.Name, g.CountField)
-		}
-
-		if !isIntegerField(specType, f.Name) {
-			return posErrorf(pkg, lit.Pos(),
-				"port group %q: CountField %q must be an integer Spec field",
-				g.Name, g.CountField)
-		}
-
-		if !f.Derived {
-			return posErrorf(pkg, lit.Pos(),
-				"port group %q: CountField %q must be tagged "+
-					"`akita:\"derived\"`", g.Name, g.CountField)
-		}
-	}
-
-	return nil
-}
-
-// isIntegerField reports whether the named field of the struct type has an
-// integer underlying type.
-func isIntegerField(specType types.Type, fieldName string) bool {
-	st, ok := specType.Underlying().(*types.Struct)
-	if !ok {
-		return false
-	}
-
-	for f := range st.Fields() {
-		if f.Name() != fieldName {
-			continue
-		}
-
-		basic, ok := f.Type().Underlying().(*types.Basic)
-		return ok && basic.Info()&types.IsInteger != 0
-	}
-
-	return false
-}
-
 // applyComponentFields walks the keyed fields of the ComponentDef literal
 // into def and returns the evaluated DefaultSpec values.
 func applyComponentFields(
@@ -254,8 +193,6 @@ func applyComponentFields(
 			defaults, err = evalStructLiteral(pkg, value)
 		case "Ports":
 			def.Ports, err = extractPorts(pkg, value, index)
-		case "PortGroups":
-			def.PortGroups, err = extractPortGroups(pkg, value, index)
 		default:
 			err = posErrorf(pkg, value.Pos(),
 				"unsupported ComponentDef field %q", key)
@@ -362,6 +299,8 @@ func extractPorts(
 				port.Name, err = constString(pkg, value)
 			case "Roles":
 				port.Roles, err = extractRoles(pkg, value, index)
+			case "Group":
+				port.Group, err = constBool(pkg, value)
 			default:
 				err = posErrorf(pkg, value.Pos(),
 					"unsupported PortDef field %q", key)
@@ -375,50 +314,6 @@ func extractPorts(
 	}
 
 	return ports, nil
-}
-
-// extractPortGroups extracts a []PortGroupDef literal.
-func extractPortGroups(
-	pkg *packages.Package, expr ast.Expr, index pkgIndex,
-) ([]schema.PortGroup, error) {
-	elems, err := sliceElements(pkg, expr)
-	if err != nil {
-		return nil, err
-	}
-
-	groups := make([]schema.PortGroup, 0, len(elems))
-	for _, elem := range elems {
-		fields, err := keyedElements(pkg, elem)
-		if err != nil {
-			return nil, err
-		}
-
-		var group schema.PortGroup
-		for key, value := range fields {
-			switch key {
-			case "Name":
-				group.Name, err = constString(pkg, value)
-			case "Roles":
-				group.Roles, err = extractRoles(pkg, value, index)
-			case "MinCount":
-				group.MinCount, err = constInt(pkg, value)
-			case "MaxCount":
-				group.MaxCount, err = constInt(pkg, value)
-			case "CountField":
-				group.CountField, err = constString(pkg, value)
-			default:
-				err = posErrorf(pkg, value.Pos(),
-					"unsupported PortGroupDef field %q", key)
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		groups = append(groups, group)
-	}
-
-	return groups, nil
 }
 
 // sliceElements returns the elements of a slice composite literal, each of
@@ -656,6 +551,20 @@ func constString(pkg *packages.Package, expr ast.Expr) (string, error) {
 	}
 
 	return s, nil
+}
+
+func constBool(pkg *packages.Package, expr ast.Expr) (bool, error) {
+	v, err := evalConstExpr(pkg, expr)
+	if err != nil {
+		return false, err
+	}
+
+	b, ok := v.(bool)
+	if !ok {
+		return false, posErrorf(pkg, expr.Pos(), "expected a boolean constant")
+	}
+
+	return b, nil
 }
 
 func constInt(pkg *packages.Package, expr ast.Expr) (int, error) {

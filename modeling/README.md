@@ -46,11 +46,11 @@ its builder's `WithResources` parameter.
 - `Definition.NewSpec()` copies the defaults, including nested slices, maps,
   and arrays, for a builder or caller to customize.
 - `modeling.NewBuilder[...]().WithDefinition(Definition)` makes `Build` declare
-  the fixed ports and optional port groups on the new component (the
-  event-driven builder has the same method). Each component receives its own
+  the definition's ports on the new component (the event-driven builder has
+  the same method). A `PortDef` with `Group: true` declares a port group whose
+  members are added at configuration time. Each component receives its own
   role slices.
-- `Definition.Name`, `DefaultSpec`, `Ports`, and `PortGroups` expose the metadata
-  directly.
+- `Definition.Name`, `DefaultSpec`, and `Ports` expose the metadata directly.
 
 ### Component[S, T, R] (tick-driven)
 

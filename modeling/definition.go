@@ -11,28 +11,12 @@ import (
 type PortDef struct {
 	Name  string
 	Roles []*messaging.Role
-}
 
-// PortGroupDef declares a dynamically-sized group of ports that all speak the
-// same role(s). The group's size is not part of the definition: it is decided
-// at configuration time, and members are addressed "Name[0]", "Name[1]", ...
-// in the order they are assigned (see messaging.PortOwnerBase).
-type PortGroupDef struct {
-	Name  string
-	Roles []*messaging.Role
-
-	// MinCount and MaxCount bound how many members a configuration may give
-	// the group. MaxCount of 0 means unbounded.
-	MinCount int
-	MaxCount int
-
-	// CountField optionally names the Spec field (by its JSON name) that
-	// holds the group's configured size, for components that size internal
-	// structures by port count at Build time. The field must be an integer
-	// tagged `akita:"derived"`: the wired topology is the source of truth
-	// for the count, so the field must not also be user-configurable. Empty
-	// means the count is implicit in how many members get assigned.
-	CountField string
+	// Group declares a dynamically-sized port group instead of a single
+	// port. Its size is decided at configuration time: members are addressed
+	// "Name[0]", "Name[1]", ... in the order they are assigned (see
+	// messaging.PortOwnerBase), and all of them speak Roles.
+	Group bool
 }
 
 // ComponentDef describes a component's default Spec and port topology. S is
@@ -64,9 +48,8 @@ type ComponentDef[S any] struct {
 	// obtain a copy for customization.
 	DefaultSpec S
 
-	// Ports and PortGroups declare the component's boundary ports.
-	Ports      []PortDef
-	PortGroups []PortGroupDef
+	// Ports declares the component's boundary ports and port groups.
+	Ports []PortDef
 }
 
 // NewSpec returns a copy of the default configuration, recursively copying
@@ -82,11 +65,11 @@ func (d ComponentDef[S]) NewSpec() S {
 // definition passed to WithDefinition.
 func (d ComponentDef[S]) declarePorts(po messaging.PortOwner) {
 	for _, p := range d.Ports {
-		po.DeclarePort(p.Name, copyRoles(p.Roles)...)
-	}
-
-	for _, g := range d.PortGroups {
-		po.DeclarePortGroup(g.Name, copyRoles(g.Roles)...)
+		if p.Group {
+			po.DeclarePortGroup(p.Name, copyRoles(p.Roles)...)
+		} else {
+			po.DeclarePort(p.Name, copyRoles(p.Roles)...)
+		}
 	}
 }
 
