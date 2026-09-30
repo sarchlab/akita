@@ -34,6 +34,25 @@ A value that seems to need a container in the Spec usually belongs elsewhere:
   are not checkpointed: the rebuild supplies them, and `Build` recomputes what
   it derives from them.
 
+## Component Models
+
+A component is being moved to one of three component models, each in its own
+sub-package. A component defined by a model is five structs — Spec, State,
+Resources, Ports, and Middlewares — plus a package-level `Definition`:
+
+- **`modeling/ticking`** — a clocked component that polls its middlewares on
+  every cycle while it makes progress. Choose it for pipelines and anything
+  that does a bounded amount of work per cycle. See the package doc for how to
+  declare and build one; `mem/rob` is the example.
+- **wakeup** (planned) — an unclocked component that polls its middlewares when
+  a message arrives or a timer fires; today's `EventDrivenComponent`.
+- **event** (planned) — a component made of typed event handlers.
+
+The models share the building blocks in this package: `PortTable` (a Ports
+struct bound to its component), `OrderedMiddlewares`, `WriteCheckpoint` and
+`ReadCheckpoint`, and `MustBeCheckpointable`. The API below is the one most
+components still use.
+
 ## Key Types
 
 ### ComponentDef[S]

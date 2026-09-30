@@ -15,13 +15,27 @@ const (
 	KindComponent = "component"
 )
 
+// Component models: how a component runs. Definitions declared with the
+// legacy modeling.ComponentDef carry no model.
+const (
+	// ModelTicking is a component that runs on a clock (modeling/ticking).
+	ModelTicking = "ticking"
+)
+
 // Definition describes one definition found in a package.
 type Definition struct {
 	SchemaVersion int    `json:"schema_version"`
 	Kind          string `json:"kind"`
-	Name          string `json:"name"`
-	Package       string `json:"package"`
-	Module        string `json:"module,omitempty"`
+
+	// Model says how a component runs, e.g. "ticking".
+	Model string `json:"model,omitempty"`
+
+	// Name is the definition's display name. A component declared with a
+	// component model is identified by its package, so its Name is the
+	// package name.
+	Name    string `json:"name"`
+	Package string `json:"package"`
+	Module  string `json:"module,omitempty"`
 
 	// Spec lists the configurable fields of the definition's Spec (or
 	// parameter) type, in declaration order.

@@ -55,7 +55,7 @@ func (b Builder[S, T, R]) WithDefinition(def ComponentDef[S]) Builder[S, T, R] {
 
 // Build creates the Component with the given name.
 func (b Builder[S, T, R]) Build(name string) *Component[S, T, R] {
-	validateForCheckpoint[S, T](name, b.spec)
+	MustBeCheckpointable[S, T](name, b.spec)
 
 	comp := &Component[S, T, R]{
 		spec:      b.spec,

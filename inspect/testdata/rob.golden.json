@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
   "kind": "component",
-  "name": "ReorderBuffer",
+  "model": "ticking",
+  "name": "rob",
   "package": "github.com/sarchlab/akita/v5/mem/rob",
   "module": "github.com/sarchlab/akita/v5",
   "spec": [

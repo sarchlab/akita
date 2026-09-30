@@ -5,18 +5,15 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/inspect/schema"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 )
 
-// CheckComponent asserts that the inspector's static view of the package that
-// declares the Spec type S matches a live modeling.Definition: the same name
-// and defaults, the ports of P (with the same port groups), and the
-// middlewares of M in the same order.
-//
-// CheckComponent is the prototype counterpart of CheckDefinition for the #492
-// component model.
-func CheckComponent[S, T, R, P, M any](
-	t *testing.T, def modeling.Definition[S, T, R, P, M],
+// CheckTicking asserts that the inspector's static view of the package that
+// declares the Spec type S matches a live ticking.Definition: the same
+// defaults, the ports of P (with the same port groups), and the middlewares
+// of M in the same order.
+func CheckTicking[S, T, R, P, M any](
+	t *testing.T, def ticking.Definition[S, T, R, P, M],
 ) {
 	t.Helper()
 
@@ -28,8 +25,8 @@ func CheckComponent[S, T, R, P, M any](
 
 	static := staticDefinition(t, pkgPath)
 
-	if static.Name != def.Name {
-		t.Errorf("name: static %q, runtime %q", static.Name, def.Name)
+	if static.Model != schema.ModelTicking {
+		t.Errorf("model: static %q, runtime %q", static.Model, schema.ModelTicking)
 	}
 
 	checkDefaults(t, static, def.DefaultSpec)

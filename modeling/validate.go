@@ -20,11 +20,11 @@ var jsonMarshalerType = reflect.TypeOf((*json.Marshaler)(nil)).Elem()
 // default decoder only sets exported fields).
 var jsonUnmarshalerType = reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()
 
-// validateForCheckpoint checks a component's Spec and State so a mis-modeled
+// MustBeCheckpointable checks a component's Spec and State so a mis-modeled
 // component fails loudly at construction rather than silently producing a wrong
 // resume. It panics — like the other builder misconfiguration guards — because a
 // non-serializable Spec/State is a programming error, not a runtime condition.
-func validateForCheckpoint[S, T any](name string, spec S) {
+func MustBeCheckpointable[S, T any](name string, spec S) {
 	if err := ValidateSpec(spec); err != nil {
 		panic(fmt.Sprintf(
 			"modeling: component %q has a Spec that cannot be checkpointed: %v",

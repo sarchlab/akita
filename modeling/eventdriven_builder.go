@@ -64,7 +64,7 @@ func (b EventDrivenBuilder[S, T, R]) WithDefinition(
 // Build creates the EventDrivenComponent with the given name.
 func (b EventDrivenBuilder[S, T, R]) Build(name string) *EventDrivenComponent[S, T, R] {
 	naming.MustBeValid(name)
-	validateForCheckpoint[S, T](name, b.spec)
+	MustBeCheckpointable[S, T](name, b.spec)
 
 	comp := &EventDrivenComponent[S, T, R]{
 		PortOwnerBase: messaging.NewPortOwnerBase(),

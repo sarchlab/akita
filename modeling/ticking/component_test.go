@@ -1,4 +1,4 @@
-package modeling_test
+package ticking_test
 
 import (
 	"bytes"
@@ -9,36 +9,37 @@ import (
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// --- A small component in the five-struct model ---
+// --- A small ticking component ---
 
-type compSpec struct {
+type Spec struct {
 	Freq  timing.Freq `json:"freq"`
 	Depth int         `json:"depth"`
 }
 
-type compState struct {
+type State struct {
 	Count int      `json:"count"`
 	Log   []string `json:"log"`
 }
 
-type compPorts struct {
+type Ports struct {
 	In    messaging.Port
 	Links []messaging.Port
 }
 
-type compMiddlewares struct {
+type Middlewares struct {
 	First  *recordMW
 	Second *recordMW
 }
 
-type testComp = modeling.Comp[compSpec, compState, modeling.None, compPorts, compMiddlewares]
+type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
 // recordMW appends its name to the State log on every tick.
 type recordMW struct {
-	comp     *testComp
+	comp     *Comp
 	name     string
 	progress bool
 }
@@ -48,14 +49,13 @@ func (m *recordMW) Tick() bool {
 	return m.progress
 }
 
-var compDef = modeling.Definition[compSpec, compState, modeling.None, compPorts, compMiddlewares]{
-	Name:        "CompTest",
-	DefaultSpec: compSpec{Freq: 1 * timing.GHz, Depth: 2},
-	NewState: func(_ string, spec compSpec) compState {
-		return compState{Count: spec.Depth}
+var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
+	DefaultSpec: Spec{Freq: 1 * timing.GHz, Depth: 2},
+	NewState: func(_ string, spec Spec) State {
+		return State{Count: spec.Depth}
 	},
-	NewMiddlewares: func(c *testComp) compMiddlewares {
-		return compMiddlewares{
+	NewMiddlewares: func(c *Comp) Middlewares {
+		return Middlewares{
 			First:  &recordMW{comp: c, name: "first"},
 			Second: &recordMW{comp: c, name: "second", progress: true},
 		}
@@ -66,8 +66,12 @@ func newSim() timing.Simulation {
 	return modeling.NewStandaloneSimulation(timing.NewSerialEngine())
 }
 
-func buildComp(sim timing.Simulation, ports compPorts) *testComp {
-	return compDef.Builder().WithSimulation(sim).WithPorts(ports).Build("C")
+func newPort(name string) messaging.Port {
+	return messaging.NewPort(nil, 1, 1, name)
+}
+
+func build(ports Ports) *Comp {
+	return Definition.Builder().WithSimulation(newSim()).WithPorts(ports).Build("C")
 }
 
 func mustPanic(t *testing.T, substr string, f func()) {
@@ -90,9 +94,9 @@ func mustPanic(t *testing.T, substr string, f func()) {
 
 // --- Tests ---
 
-func TestCompBuildBindsPortsAndRunsMiddlewaresInOrder(t *testing.T) {
-	in := messaging.NewPort(nil, 1, 1, "C.In")
-	c := buildComp(newSim(), compPorts{In: in})
+func TestBuildBindsPortsAndRunsMiddlewaresInOrder(t *testing.T) {
+	in := newPort("C.In")
+	c := build(Ports{In: in})
 
 	if in.Component() != messaging.Component(c) {
 		t.Errorf("port In is not bound to the component")
@@ -115,28 +119,41 @@ func TestCompBuildBindsPortsAndRunsMiddlewaresInOrder(t *testing.T) {
 	}
 }
 
-func TestCompRejectsMisconfiguredPorts(t *testing.T) {
+func TestTypeNameIsThePackageAndNameIsTheInstance(t *testing.T) {
+	c := build(Ports{In: newPort("C.In")})
+
+	if c.Name() != "C" {
+		t.Errorf("Name() = %q, want the instance name C", c.Name())
+	}
+
+	want := "github.com/sarchlab/akita/v5/modeling/ticking_test"
+	if c.TypeName() != want {
+		t.Errorf("TypeName() = %q, want the package path %q", c.TypeName(), want)
+	}
+}
+
+func TestBuildRejectsMisconfiguredPorts(t *testing.T) {
 	t.Run("missing port", func(t *testing.T) {
 		mustPanic(t, "port In is not given", func() {
-			buildComp(newSim(), compPorts{})
+			build(Ports{})
 		})
 	})
 
 	t.Run("misnamed port", func(t *testing.T) {
 		mustPanic(t, `want "C.In"`, func() {
-			buildComp(newSim(), compPorts{In: messaging.NewPort(nil, 1, 1, "Other.In")})
+			build(Ports{In: newPort("Other.In")})
 		})
 	})
 
 	t.Run("no ports after Build", func(t *testing.T) {
-		c := buildComp(newSim(), compPorts{In: messaging.NewPort(nil, 1, 1, "C.In")})
+		c := build(Ports{In: newPort("C.In")})
 		mustPanic(t, "ports are fixed at Build", func() {
-			c.AssignPort("In", messaging.NewPort(nil, 1, 1, "C.In"))
+			c.AssignPort("In", newPort("C.In"))
 		})
 	})
 
 	t.Run("unknown port name", func(t *testing.T) {
-		c := buildComp(newSim(), compPorts{In: messaging.NewPort(nil, 1, 1, "C.In")})
+		c := build(Ports{In: newPort("C.In")})
 		mustPanic(t, "ports are In, Links[]", func() {
 			c.GetPortByName("Out")
 		})
@@ -144,16 +161,16 @@ func TestCompRejectsMisconfiguredPorts(t *testing.T) {
 
 	t.Run("no simulation", func(t *testing.T) {
 		mustPanic(t, "WithSimulation is required", func() {
-			compDef.Builder().Build("C")
+			Definition.Builder().Build("C")
 		})
 	})
 }
 
-func TestCompPortGroupGrowsAfterBuild(t *testing.T) {
-	in := messaging.NewPort(nil, 1, 1, "C.In")
-	c := buildComp(newSim(), compPorts{In: in})
+func TestPortGroupGrowsAfterBuild(t *testing.T) {
+	in := newPort("C.In")
+	c := build(Ports{In: in})
 
-	link := messaging.NewPort(nil, 1, 1, "C.Links[0]")
+	link := newPort("C.Links[0]")
 	if name := c.AssignPortToGroup("Links", link); name != "Links[0]" {
 		t.Errorf("AssignPortToGroup returned %q, want Links[0]", name)
 	}
@@ -172,8 +189,8 @@ func TestCompPortGroupGrowsAfterBuild(t *testing.T) {
 	}
 }
 
-func TestCompCheckpointRoundTrip(t *testing.T) {
-	c := buildComp(newSim(), compPorts{In: messaging.NewPort(nil, 1, 1, "C.In")})
+func TestCheckpointRoundTrip(t *testing.T) {
+	c := build(Ports{In: newPort("C.In")})
 	c.State.Count = 7
 
 	var buf bytes.Buffer
@@ -182,7 +199,7 @@ func TestCompCheckpointRoundTrip(t *testing.T) {
 	}
 	saved := buf.Bytes()
 
-	restored := buildComp(newSim(), compPorts{In: messaging.NewPort(nil, 1, 1, "C.In")})
+	restored := build(Ports{In: newPort("C.In")})
 	if err := restored.LoadCheckpoint(bytes.NewReader(saved)); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
@@ -190,12 +207,12 @@ func TestCompCheckpointRoundTrip(t *testing.T) {
 		t.Errorf("restored Count = %d, want 7", restored.State.Count)
 	}
 
-	spec := compDef.DefaultSpec
+	spec := Definition.DefaultSpec
 	spec.Depth = 3
-	other := compDef.Builder().
+	other := Definition.Builder().
 		WithSimulation(newSim()).
 		WithSpec(spec).
-		WithPorts(compPorts{In: messaging.NewPort(nil, 1, 1, "C.In")}).
+		WithPorts(Ports{In: newPort("C.In")}).
 		Build("C")
 	if err := other.LoadCheckpoint(bytes.NewReader(saved)); err == nil {
 		t.Errorf("LoadCheckpoint into a different Spec succeeded, want an error")
@@ -213,12 +230,13 @@ type oneMiddleware struct {
 	Only *recordMW
 }
 
-func TestCompRejectsBadShapes(t *testing.T) {
+func TestBuildRejectsBadShapes(t *testing.T) {
 	t.Run("non-port field in Ports", func(t *testing.T) {
-		def := modeling.Definition[compSpec, compState, modeling.None, badPorts, oneMiddleware]{
-			Name:        "Bad",
-			DefaultSpec: compSpec{Freq: 1 * timing.GHz},
-			NewMiddlewares: func(*modeling.Comp[compSpec, compState, modeling.None, badPorts, oneMiddleware]) oneMiddleware {
+		def := ticking.Definition[Spec, State, modeling.None, badPorts, oneMiddleware]{
+			DefaultSpec: Spec{Freq: 1 * timing.GHz},
+			NewMiddlewares: func(
+				*ticking.Component[Spec, State, modeling.None, badPorts, oneMiddleware],
+			) oneMiddleware {
 				return oneMiddleware{Only: &recordMW{}}
 			},
 		}
@@ -226,21 +244,42 @@ func TestCompRejectsBadShapes(t *testing.T) {
 		mustPanic(t, "must be messaging.Port or []messaging.Port", func() {
 			def.Builder().
 				WithSimulation(newSim()).
-				WithPorts(badPorts{In: messaging.NewPort(nil, 1, 1, "B.In")}).
+				WithPorts(badPorts{In: newPort("B.In")}).
 				Build("B")
 		})
 	})
 
 	t.Run("unset middleware", func(t *testing.T) {
-		def := compDef
-		def.NewMiddlewares = func(c *testComp) compMiddlewares {
-			return compMiddlewares{First: &recordMW{comp: c}}
+		def := Definition
+		def.NewMiddlewares = func(c *Comp) Middlewares {
+			return Middlewares{First: &recordMW{comp: c}}
 		}
 
 		mustPanic(t, "Second is not set by NewMiddlewares", func() {
 			def.Builder().
 				WithSimulation(newSim()).
-				WithPorts(compPorts{In: messaging.NewPort(nil, 1, 1, "C.In")}).
+				WithPorts(Ports{In: newPort("C.In")}).
+				Build("C")
+		})
+	})
+
+	t.Run("Spec without Freq", func(t *testing.T) {
+		type noFreq struct {
+			N int `json:"n"`
+		}
+
+		def := ticking.Definition[noFreq, State, modeling.None, Ports, oneMiddleware]{
+			NewMiddlewares: func(
+				*ticking.Component[noFreq, State, modeling.None, Ports, oneMiddleware],
+			) oneMiddleware {
+				return oneMiddleware{Only: &recordMW{}}
+			},
+		}
+
+		mustPanic(t, "must have a Freq timing.Freq field", func() {
+			def.Builder().
+				WithSimulation(newSim()).
+				WithPorts(Ports{In: newPort("C.In")}).
 				Build("C")
 		})
 	})

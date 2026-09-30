@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -81,4 +82,4 @@ type Middlewares struct {
 }
 
 // Comp is a reorder buffer component.
-type Comp = modeling.Comp[Spec, State, modeling.None, Ports, Middlewares]
+type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]

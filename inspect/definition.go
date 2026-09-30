@@ -19,10 +19,12 @@ const (
 	middlewareName = "Middleware"
 )
 
-// extractDefinition extracts a modeling.Definition literal, the five-struct
-// component model of #492. Name and the Spec defaults come from the literal;
-// the Resources, Ports, and Middlewares come from the type arguments.
-func extractDefinition(
+// extractTicking extracts a ticking.Definition literal, a component defined by
+// five structs (see modeling/ticking). The component type is identified by its
+// package, so its name is the package name. The Spec defaults come from the
+// literal; the Resources, Ports, and Middlewares come from the type
+// arguments.
+func extractTicking(
 	pkg *packages.Package, lit *ast.CompositeLit, index pkgIndex,
 ) (*schema.Definition, error) {
 	args, err := definitionTypeArgs(pkg, lit)
@@ -35,9 +37,13 @@ func extractDefinition(
 		return nil, err
 	}
 
-	def := &schema.Definition{Kind: schema.KindComponent}
+	def := &schema.Definition{
+		Kind:  schema.KindComponent,
+		Model: schema.ModelTicking,
+		Name:  pkg.Types.Name(),
+	}
 
-	defaults, err := applyDefinitionFields(pkg, lit, def)
+	defaults, err := applyDefinitionFields(pkg, lit)
 	if err != nil {
 		return nil, err
 	}
@@ -90,11 +96,11 @@ func definitionTypeArgs(
 	return args, nil
 }
 
-// applyDefinitionFields walks the keyed fields of the Definition literal into
-// def and returns the evaluated DefaultSpec values. NewState and
-// NewMiddlewares must name functions.
+// applyDefinitionFields walks the keyed fields of the Definition literal and
+// returns the evaluated DefaultSpec values. NewState and NewMiddlewares must
+// name functions.
 func applyDefinitionFields(
-	pkg *packages.Package, lit *ast.CompositeLit, def *schema.Definition,
+	pkg *packages.Package, lit *ast.CompositeLit,
 ) (map[string]any, error) {
 	fields, err := keyedElements(pkg, lit)
 	if err != nil {
@@ -104,8 +110,6 @@ func applyDefinitionFields(
 	defaults := map[string]any{}
 	for key, value := range fields {
 		switch key {
-		case "Name":
-			def.Name, err = constString(pkg, value)
 		case "DefaultSpec":
 			defaults, err = evalStructLiteral(pkg, value)
 		case "NewState", "NewMiddlewares":
@@ -297,8 +301,7 @@ func middlewaresOfType(
 	docs := fieldDocs(named, index)
 
 	out := make([]schema.Middleware, 0, st.NumFields())
-	for i := range st.NumFields() {
-		f := st.Field(i)
+	for f := range st.Fields() {
 		if !f.Exported() || (iface != nil && !types.Implements(f.Type(), iface)) {
 			return nil, posErrorf(pkg, f.Pos(),
 				"Middlewares field %s must be exported and implement "+

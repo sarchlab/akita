@@ -32,13 +32,13 @@ type schedulerCheckpoint struct {
 // JSON. It implements the structural Checkpointable contract without the
 // modeling package importing the simulation package.
 func (c *Component[S, T, R]) SaveCheckpoint(w io.Writer) error {
-	return saveCheckpoint(w, c.spec, c.State, c.tickScheduler())
+	return WriteCheckpoint(w, c.spec, c.State, c.tickScheduler())
 }
 
 // LoadCheckpoint restores State and the scheduler guard after verifying that the
 // saved spec hash matches the rebuilt component's.
 func (c *Component[S, T, R]) LoadCheckpoint(r io.Reader) error {
-	return loadCheckpoint(r, c.spec, &c.State, c.tickScheduler())
+	return ReadCheckpoint(r, c.spec, &c.State, c.tickScheduler())
 }
 
 // tickScheduler returns the component's tick scheduler, or nil when the
@@ -51,9 +51,10 @@ func (c *Component[S, T, R]) tickScheduler() *TickScheduler {
 	return c.TickScheduler
 }
 
-// saveCheckpoint writes a component's spec hash, State, and scheduler guard as
-// JSON. ts may be nil for a component without a tick scheduler.
-func saveCheckpoint[S, T any](
+// WriteCheckpoint writes a component's spec hash, State, and tick-scheduler
+// guard as JSON. Component kinds use it to implement SaveCheckpoint; ts may be
+// nil for a component without a tick scheduler.
+func WriteCheckpoint[S, T any](
 	w io.Writer, spec S, state T, ts *TickScheduler,
 ) error {
 	data, err := json.Marshal(state)
@@ -76,9 +77,9 @@ func saveCheckpoint[S, T any](
 	return json.NewEncoder(w).Encode(dto)
 }
 
-// loadCheckpoint restores a component's State and scheduler guard after
+// ReadCheckpoint restores a component's State and tick-scheduler guard after
 // verifying that the saved spec hash matches spec, the rebuilt component's.
-func loadCheckpoint[S, T any](
+func ReadCheckpoint[S, T any](
 	r io.Reader, spec S, state *T, ts *TickScheduler,
 ) error {
 	var dto componentCheckpoint
