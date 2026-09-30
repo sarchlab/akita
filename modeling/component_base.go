@@ -29,7 +29,7 @@ type ComponentBase[S, T, R, P, M any] struct {
 	Middlewares M
 
 	name       string
-	owner      Instance
+	owner      instance
 	simulation timing.Simulation
 	spec       S
 	resources  R
@@ -39,9 +39,9 @@ type ComponentBase[S, T, R, P, M any] struct {
 // objects, and the State type of one that keeps no state.
 type None struct{}
 
-// An Instance is a component built by a component model: a component that
-// handles the events addressed to it.
-type Instance interface {
+// instance is what a model's Component is: a component that also handles the
+// events addressed to it, so Register can register it both ways.
+type instance interface {
 	messaging.Component
 	timing.Handler
 }
@@ -52,7 +52,7 @@ type Instance interface {
 // then creates the State and the middlewares, and calls Register last.
 func InitComponentBase[S, T, R, P, M any](
 	base *ComponentBase[S, T, R, P, M],
-	owner Instance,
+	owner instance,
 	sim timing.Simulation,
 	name string,
 	spec S,
