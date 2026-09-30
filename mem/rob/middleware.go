@@ -5,6 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -12,11 +13,11 @@ type middleware struct {
 	comp *Comp
 }
 
-// Tick advances the reorder buffer by one cycle. The control port is
-// serviced first so Reset or Pause can quiesce the pipeline before any
-// new traffic moves. While paused the pipeline is frozen entirely.
-// Drain completion is handled inside processControlMsg.
-func (m *middleware) Tick() bool {
+// Handle advances the reorder buffer by one cycle on every tick. The control
+// port is serviced first so Reset or Pause can quiesce the pipeline before
+// any new traffic moves. While paused the pipeline is frozen entirely. Drain
+// completion is handled inside processControlMsg.
+func (m *middleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 
 	madeProgress = m.processControlMsg() || madeProgress

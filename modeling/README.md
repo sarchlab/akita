@@ -36,22 +36,26 @@ A value that seems to need a container in the Spec usually belongs elsewhere:
 
 ## Component Models
 
-A component is being moved to one of three component models, each in its own
-sub-package. A component defined by a model is five structs — Spec, State,
-Resources, Ports, and Middlewares — plus a package-level `Definition`:
+Components are moving to component models, each in its own sub-package. A
+component defined by a model is five structs — Spec, State, Resources, Ports,
+and Middlewares — plus a package-level `Definition`. In every model, a
+middleware implements `Middleware`, `Handle(e timing.Event) bool`: the
+component passes each event it receives to its middlewares in field order.
+The models differ in which events arrive:
 
-- **`modeling/ticking`** — a clocked component that polls its middlewares on
-  every cycle while it makes progress. Choose it for pipelines and anything
-  that does a bounded amount of work per cycle. See the package doc for how to
-  declare and build one; `mem/rob` is the example.
-- **wakeup** (planned) — an unclocked component that polls its middlewares when
-  a message arrives or a timer fires; today's `EventDrivenComponent`.
-- **event** (planned) — a component made of typed event handlers.
+- **`modeling/ticking`** — a clocked component: it receives a `TickEvent` on
+  every cycle while it makes progress, and any event it schedules for itself.
+  Choose it for pipelines and anything that does a bounded amount of work per
+  cycle. See the package doc for how to declare and build one; `mem/rob` is the
+  example.
+- **Unclocked** (planned) — a component that runs when a message arrives, a
+  port frees, or an event it scheduled fires; today's `EventDrivenComponent`.
 
-The models share the building blocks in this package: `PortTable` (a Ports
-struct bound to its component), `OrderedMiddlewares`, `WriteCheckpoint` and
-`ReadCheckpoint`, and `MustBeCheckpointable`. The API below is the one most
-components still use.
+The models share the building blocks in this package: `Middleware` and
+`OrderedMiddlewares`, `PortTable` (a Ports struct bound to its component),
+`WriteCheckpoint` and `ReadCheckpoint`, and `MustBeCheckpointable`. The API
+below is the one most components still use; its middlewares are `Ticker`s,
+`Tick() bool`.
 
 ## Key Types
 

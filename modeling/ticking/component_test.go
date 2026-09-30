@@ -37,16 +37,21 @@ type Middlewares struct {
 
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 
-// recordMW appends its name to the State log on every tick.
+// recordMW logs its name and the type of every event it handles.
 type recordMW struct {
 	comp     *Comp
 	name     string
 	progress bool
 }
 
-func (m *recordMW) Tick() bool {
-	m.comp.State.Log = append(m.comp.State.Log, m.name)
+func (m *recordMW) Handle(e timing.Event) bool {
+	m.comp.State.Log = append(m.comp.State.Log, fmt.Sprintf("%s %T", m.name, e))
 	return m.progress
+}
+
+// pokeEvent is an event a component schedules for itself.
+type pokeEvent struct {
+	timing.EventBase
 }
 
 var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
@@ -114,7 +119,19 @@ func TestBuildBindsPortsAndRunsMiddlewaresInOrder(t *testing.T) {
 		t.Errorf("Tick() = false, want true: one middleware made progress")
 	}
 
-	if want := []string{"first", "second"}; !reflect.DeepEqual(c.State.Log, want) {
+	want := []string{"first modeling.TickEvent", "second modeling.TickEvent"}
+	if !reflect.DeepEqual(c.State.Log, want) {
+		t.Errorf("middlewares ran as %v, want %v", c.State.Log, want)
+	}
+}
+
+func TestHandlePassesEveryEventToTheMiddlewares(t *testing.T) {
+	c := build(Ports{In: newPort("C.In")})
+
+	c.Handle(pokeEvent{timing.EventBase{HandlerID_: "C"}})
+
+	want := []string{"first ticking_test.pokeEvent", "second ticking_test.pokeEvent"}
+	if !reflect.DeepEqual(c.State.Log, want) {
 		t.Errorf("middlewares ran as %v, want %v", c.State.Log, want)
 	}
 }

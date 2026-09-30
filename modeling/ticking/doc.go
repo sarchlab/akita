@@ -9,6 +9,17 @@
 // component sleeps when no middleware makes progress and wakes when a port
 // receives a message or frees buffer space.
 //
+// # Middlewares handle events
+//
+// A middleware implements modeling.Middleware: Handle(e timing.Event) bool.
+// The component passes every event it receives to all of its middlewares in
+// field order. A tick is a modeling.TickEvent, and most middlewares do their
+// cycle of work without looking at the event. A component may also schedule
+// events for itself; they reach the middlewares the same way, and a
+// middleware ignores the events it does not handle. Handle returns true if
+// the middleware made progress, and the component ticks again on the next
+// cycle if any middleware did.
+//
 // # Five structs
 //
 // A ticking component type is defined by five structs, all declared in the
@@ -30,7 +41,7 @@
 //     field per port group. The system builder creates the port instances,
 //     choosing their buffer sizes, and passes them to Build.
 //   - Middlewares has one field per middleware. The component creates them
-//     with the Definition's NewMiddlewares, and on every tick they run in
+//     with the Definition's NewMiddlewares, and they handle every event in
 //     field order. Middlewares hold only references; all mutable data lives
 //     in State, because only State is saved in checkpoints.
 //

@@ -3,12 +3,18 @@ package modeling
 import (
 	"fmt"
 	"reflect"
+
+	"github.com/sarchlab/akita/v5/timing"
 )
 
-// Middleware defines the actions of a component.
+// Middleware is one piece of a component's behavior. Every component model
+// uses it: the component passes each event it receives to its middlewares in
+// the declaration order of its Middlewares struct. A tick is a TickEvent; a
+// middleware ignores the events it does not handle.
 type Middleware interface {
-	// Tick processes a tick event. It returns true if progress is made.
-	Tick() bool
+	// Handle processes an event. It returns true if it made progress:
+	// changed the State, or sent or received a message.
+	Handle(e timing.Event) bool
 }
 
 var middlewareType = reflect.TypeFor[Middleware]()
@@ -57,21 +63,23 @@ func isNilable(k reflect.Kind) bool {
 	}
 }
 
-// MiddlewareHolder can maintain a list of middleware.
+// MiddlewareHolder can maintain a list of middleware. It serves the Component
+// API, whose middlewares are Tickers; a component model declares its
+// middlewares as a Middlewares struct instead.
 type MiddlewareHolder struct {
-	middlewares []Middleware
+	middlewares []Ticker
 }
 
 // AddMiddleware adds a middleware to the holder.
-func (holder *MiddlewareHolder) AddMiddleware(middleware Middleware) {
+func (holder *MiddlewareHolder) AddMiddleware(middleware Ticker) {
 	holder.middlewares = append(holder.middlewares, middleware)
 }
 
 // Middlewares returns a copy of the middleware list. The copy prevents callers
 // from mutating the holder's internal slice; the middleware objects themselves
 // are shared.
-func (holder *MiddlewareHolder) Middlewares() []Middleware {
-	middlewares := make([]Middleware, len(holder.middlewares))
+func (holder *MiddlewareHolder) Middlewares() []Ticker {
+	middlewares := make([]Ticker, len(holder.middlewares))
 	copy(middlewares, holder.middlewares)
 
 	return middlewares
