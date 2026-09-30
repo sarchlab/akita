@@ -141,3 +141,25 @@ func TestPortRoles(t *testing.T) {
 		po.PortRoles("Nonexistent")
 	})
 }
+
+func TestDeclarePortCopiesRoles(t *testing.T) {
+	p := DefineProtocol("test.copiedroles",
+		RoleDef{Name: "requester", Sends: []Msg{protoTestReq{}}},
+		RoleDef{Name: "responder", Sends: []Msg{protoTestRsp{}}},
+	)
+
+	roles := []*Role{p.Role("responder")}
+	po := NewPortOwnerBase()
+	po.DeclarePort("Top", roles...)
+	po.DeclarePortGroup("Link", roles...)
+
+	roles[0] = p.Role("requester")
+
+	if got := po.PortRoles("Top")[0]; got != p.Role("responder") {
+		t.Errorf("PortRoles(Top) changed with the caller's slice: %v", got)
+	}
+
+	if got := po.PortRoles("Link")[0]; got != p.Role("responder") {
+		t.Errorf("PortRoles(Link) changed with the caller's slice: %v", got)
+	}
+}

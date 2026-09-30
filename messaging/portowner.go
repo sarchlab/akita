@@ -3,6 +3,7 @@ package messaging
 import (
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 )
 
@@ -34,7 +35,8 @@ func NewPortOwnerBase() *PortOwnerBase {
 // name, optionally binding the protocol role(s) the port speaks (more than one
 // when the port multiplexes protocols). The instance is supplied later with
 // AssignPort. It panics if the name is already declared. A port declared with
-// no role is untyped; PortRoles reports nil for it.
+// no role is untyped; PortRoles reports nil for it. The roles are copied, so
+// callers may reuse the slice they pass.
 func (po *PortOwnerBase) DeclarePort(name string, roles ...*Role) {
 	if _, found := po.declared[name]; found {
 		panic(fmt.Sprintf("port %q already declared", name))
@@ -45,14 +47,15 @@ func (po *PortOwnerBase) DeclarePort(name string, roles ...*Role) {
 	}
 
 	po.declared[name] = struct{}{}
-	po.roles[name] = roles
+	po.roles[name] = slices.Clone(roles)
 }
 
 // DeclarePortGroup declares that the component has a dynamically-sized group of
 // ports under the given name (e.g. a switch with an arbitrary number of links).
 // All members of the group speak the given role(s). Members are added with
 // AssignPortToGroup and keyed "name[0]", "name[1]", ...
-// It panics if the name is already declared as a port or a group.
+// It panics if the name is already declared as a port or a group. The roles
+// are copied, as in DeclarePort.
 func (po *PortOwnerBase) DeclarePortGroup(name string, roles ...*Role) {
 	if _, found := po.declared[name]; found {
 		panic(fmt.Sprintf("%q is already declared as a port", name))
@@ -63,7 +66,7 @@ func (po *PortOwnerBase) DeclarePortGroup(name string, roles ...*Role) {
 	}
 
 	po.groups[name] = nil
-	po.roles[name] = roles
+	po.roles[name] = slices.Clone(roles)
 }
 
 // PortRoles returns the protocol roles bound to the named port or port group

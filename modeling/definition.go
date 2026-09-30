@@ -42,10 +42,9 @@ type ComponentDef[S any] struct {
 	// Name is the component's display name, e.g. "TLB".
 	Name string
 
-	// DefaultSpec is the component's default configuration. It may set only
-	// scalar fields; slice, map and array fields stay unset (and are filled
-	// in Build when needed). Reading it therefore yields an independent copy
-	// that callers can customize.
+	// DefaultSpec is the component's default configuration. Spec fields are
+	// scalars, so reading it yields an independent copy that callers can
+	// customize.
 	DefaultSpec S
 
 	// Ports declares the component's boundary ports and port groups.
@@ -58,20 +57,9 @@ type ComponentDef[S any] struct {
 func (d ComponentDef[S]) declarePorts(po messaging.PortOwner) {
 	for _, p := range d.Ports {
 		if p.Group {
-			po.DeclarePortGroup(p.Name, copyRoles(p.Roles)...)
+			po.DeclarePortGroup(p.Name, p.Roles...)
 		} else {
-			po.DeclarePort(p.Name, copyRoles(p.Roles)...)
+			po.DeclarePort(p.Name, p.Roles...)
 		}
 	}
-}
-
-func copyRoles(roles []*messaging.Role) []*messaging.Role {
-	if roles == nil {
-		return nil
-	}
-
-	out := make([]*messaging.Role, len(roles))
-	copy(out, roles)
-
-	return out
 }
