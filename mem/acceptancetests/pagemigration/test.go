@@ -84,10 +84,10 @@ var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 // sharedHierarchy holds the lower memory components shared by all agents, plus
 // the resources a migration controller needs to relocate pages.
 type sharedHierarchy struct {
-	l2Cache   messaging.Component
-	l2TLB     messaging.Component
-	ioMMU     messaging.Component
-	memCtrls  []messaging.Component
+	l2Cache   portOwner
+	l2TLB     portOwner
+	ioMMU     portOwner
+	memCtrls  []portOwner
 	pageTable vm.PageTable
 
 	// deviceStride is the size of each device's physical address window and the
@@ -100,10 +100,10 @@ type sharedHierarchy struct {
 // agentChain holds an agent together with its private upstream components.
 type agentChain struct {
 	agent   *memaccessagent.MemAccessAgent
-	rob     messaging.Component
-	at      messaging.Component
-	l1Cache messaging.Component
-	l1TLB   messaging.Component
+	rob     *rob.Comp
+	at      portOwner
+	l1Cache portOwner
+	l1TLB   portOwner
 }
 
 func setupTest(seed int64) (
@@ -158,7 +158,7 @@ func buildSharedHierarchy(s *simulation.Simulation) sharedHierarchy {
 	deviceStride := ptBase + numPages*pageSize
 	deviceStride = (deviceStride/mem.MB + 1) * mem.MB
 
-	memCtrls := make([]messaging.Component, numDevices)
+	memCtrls := make([]portOwner, numDevices)
 	memCtrlPorts := make([]messaging.RemotePort, numDevices)
 	for d := 0; d < numDevices; d++ {
 		memCtrls[d] = buildMemCtrl(s, d, uint64(numDevices)*deviceStride+mem.MB)
@@ -186,7 +186,7 @@ func buildMemCtrl(
 	s *simulation.Simulation,
 	index int,
 	capacity uint64,
-) messaging.Component {
+) portOwner {
 	memCtrlSpec := idealmemcontroller.Definition.DefaultSpec
 	memCtrlSpec.Capacity = capacity
 	memCtrlSpec.Width = 1
@@ -208,7 +208,7 @@ func buildL2Cache(
 	s *simulation.Simulation,
 	memCtrlPorts []messaging.RemotePort,
 	deviceStride uint64,
-) messaging.Component {
+) portOwner {
 	l2Spec := writeback.Definition.DefaultSpec
 	l2Spec.WayAssociativity = 4
 	l2Spec.NumReqPerCycle = 2
@@ -230,7 +230,7 @@ func buildL2Cache(
 func buildMMU(
 	s *simulation.Simulation,
 	pageTable vm.PageTable,
-) messaging.Component {
+) portOwner {
 	mmuSpec := mmu.Definition.DefaultSpec
 	mmuSpec.Log2PageSize = log2PageSize
 	mmuSpec.MaxRequestsInFlight = 16
@@ -247,8 +247,8 @@ func buildMMU(
 
 func buildL2TLB(
 	s *simulation.Simulation,
-	ioMMU messaging.Component,
-) messaging.Component {
+	ioMMU portOwner,
+) portOwner {
 	l2TLBSpec := tlb.Definition.DefaultSpec
 	l2TLBSpec.NumWays = 64
 	l2TLBSpec.NumSets = 64
@@ -296,8 +296,8 @@ func buildAgentChain(
 func buildL1Cache(
 	s *simulation.Simulation,
 	suffix string,
-	l2Cache messaging.Component,
-) messaging.Component {
+	l2Cache portOwner,
+) portOwner {
 	l1Spec := writethroughcache.Definition.DefaultSpec
 	l1Spec.WritePolicyType = "write-through"
 	l1Spec.WayAssociativity = 2
@@ -319,8 +319,8 @@ func buildL1Cache(
 func buildL1TLB(
 	s *simulation.Simulation,
 	suffix string,
-	l2TLB messaging.Component,
-) messaging.Component {
+	l2TLB portOwner,
+) portOwner {
 	l1TLBSpec := tlb.Definition.DefaultSpec
 	l1TLBSpec.NumWays = 8
 	l1TLBSpec.NumSets = 8
@@ -343,8 +343,8 @@ func buildL1TLB(
 func buildAddressTranslator(
 	s *simulation.Simulation,
 	suffix string,
-	l1Cache, l1TLB messaging.Component,
-) messaging.Component {
+	l1Cache, l1TLB portOwner,
+) portOwner {
 	atSpec := addresstranslator.Definition.DefaultSpec
 	atSpec.Log2PageSize = log2PageSize
 	atSpec.NumReqPerCycle = 4
@@ -368,8 +368,8 @@ func buildAddressTranslator(
 func buildROB(
 	s *simulation.Simulation,
 	suffix string,
-	at messaging.Component,
-) messaging.Component {
+	at portOwner,
+) *rob.Comp {
 	robSpec := rob.Definition.DefaultSpec
 	robSpec.NumReqPerCycle = 4
 	robSpec.BottomUnit = at.GetPortByName("Top").AsRemote()
@@ -380,9 +380,9 @@ func buildROB(
 		WithSimulation(s).
 		WithSpec(robSpec).
 		WithPorts(rob.Ports{
-			Top:     newPort(s, name+".Top"),
-			Bottom:  newPort(s, name+".Bottom"),
-			Control: newPort(s, name+".Control"),
+			Top:     newPort(name + ".Top"),
+			Bottom:  newPort(name + ".Bottom"),
+			Control: newPort(name + ".Control"),
 		}).
 		Build(name)
 }
@@ -390,7 +390,7 @@ func buildROB(
 func buildAgent(
 	s *simulation.Simulation,
 	index int,
-	robComp messaging.Component,
+	robComp *rob.Comp,
 	seed int64,
 ) *memaccessagent.MemAccessAgent {
 	agentSpec := memaccessagent.Definition.DefaultSpec
@@ -403,7 +403,7 @@ func buildAgent(
 		WithSpec(agentSpec).
 		WithRandSeed(seed + int64(index)).
 		WithResources(memaccessagent.Resources{
-			LowModule: robComp.GetPortByName("Top"),
+			LowModule: robComp.Ports.Top,
 		}).
 		Build(fmt.Sprintf("MemAccessAgent[%d]", index))
 	assignPorts(s, agent, "Mem")
@@ -468,10 +468,10 @@ func setupConnections(
 
 		connect(s, "ConnAgentROB"+suffix,
 			c.agent.GetPortByName("Mem"),
-			c.rob.GetPortByName("Top"),
+			c.rob.Ports.Top,
 		)
 		connect(s, "ConnROBAT"+suffix,
-			c.rob.GetPortByName("Bottom"),
+			c.rob.Ports.Bottom,
 			c.at.GetPortByName("Top"),
 		)
 		connect(s, "ConnATL1"+suffix,
@@ -516,11 +516,19 @@ func setupConnections(
 	return memConn
 }
 
+// portOwner is a component on the Component API: its ports are assigned
+// after Build and looked up by name.
+type portOwner interface {
+	messaging.Component
+	AssignPort(name string, port messaging.Port)
+	GetPortByName(name string) messaging.Port
+}
+
 // assignPorts builds a port for each named, declared port of the component
 // (with a default buffer size) and assigns it.
 func assignPorts(
 	s *simulation.Simulation,
-	comp messaging.Component,
+	comp portOwner,
 	names ...string,
 ) {
 	for _, name := range names {
@@ -533,13 +541,10 @@ func assignPorts(
 	}
 }
 
-// newPort builds an unowned port named fullName, for a component that takes
-// its ports at Build.
-func newPort(s *simulation.Simulation, fullName string) messaging.Port {
-	return modeling.MakePortBuilder().
-		WithSimulation(s).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build(fullName)
+// newPort creates an unowned port named fullName, for a component that takes
+// its ports at Build. The component's Build binds and registers it.
+func newPort(fullName string) messaging.Port {
+	return messaging.NewPort(nil, 16, 16, fullName)
 }
 
 func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {

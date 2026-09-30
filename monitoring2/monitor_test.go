@@ -791,7 +791,9 @@ func TestHangDetectorBuffersSortsByLevelHonorsPagination(t *testing.T) {
 
 func TestHangDetectorBuffersIncludesPortAdapters(t *testing.T) {
 	monitor := NewMonitor()
-	monitor.RegisterComponent(newPortedComponent("comp"))
+	comp := newPortedComponent("comp")
+	monitor.RegisterComponent(comp)
+	monitor.RegisterPort(comp.GetPortByName("p"))
 
 	recorder := httptest.NewRecorder()
 	monitor.hangDetectorBuffers(recorder,

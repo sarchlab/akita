@@ -7,7 +7,10 @@
 // cycle, like a pipeline or a cache. On every tick, the component's
 // middlewares look at its State and ports and do one cycle of work. The
 // component sleeps when no middleware makes progress and wakes when a port
-// receives a message or frees buffer space.
+// receives a message or frees buffer space. It is the default choice; choose
+// modeling/wakeup for a component that is idle most of the time and knows when
+// it next has work, and modeling/event for one whose behavior is a set of
+// reactions to events that carry data.
 //
 // # Middlewares handle events
 //
@@ -66,9 +69,12 @@
 //	    WithPorts(cache.Ports{Top: top, Bottom: bottom}).
 //	    Build("GPU[0].L1Cache")
 //
-// Each fixed port must be named "<instance>.<field>", for example
-// "GPU[0].L1Cache.Top". Port groups may start empty and grow after Build with
-// AssignPortToGroup; no other port can be added after Build.
+// The system builder creates every port with messaging.NewPort, choosing its
+// buffer sizes, and names it "<instance>.<field>", for example
+// "GPU[0].L1Cache.Top", or "<instance>.<field>[i]" for member i of a port
+// group. Build binds each port to the instance and registers it with the
+// simulation; no port is added after Build. Middlewares reach the ports
+// through the Ports fields.
 //
 // # Type name and instance name
 //

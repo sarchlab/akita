@@ -54,10 +54,7 @@ var _ = Describe("Reorder Buffer", func() {
 
 	build := func(spec Spec) {
 		port := func(name string, bufSize int) messaging.Port {
-			return modeling.MakePortBuilder().
-				WithSimulation(sim).
-				WithSpec(modeling.PortSpec{BufSize: bufSize}).
-				Build("Rob." + name)
+			return messaging.NewPort(nil, bufSize, bufSize, "Rob."+name)
 		}
 
 		topPort = port("Top", topBufSize)

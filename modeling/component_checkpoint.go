@@ -11,21 +11,28 @@ import (
 )
 
 // componentCheckpoint is the serialized form of a generic component: a spec hash
-// for compatibility checking, the mutable State, and the tick-scheduler guard.
+// for compatibility checking, the mutable State, and the scheduler guard.
 // Resources and ports are rebuilt by setup, not serialized. The guard is saved
-// directly — alongside the engine's matching tick event — so load is a single
-// pass with no post-load reconciliation against the queue.
+// directly — alongside the engine's matching event — so load is a single pass
+// with no post-load reconciliation against the queue.
 type componentCheckpoint struct {
 	SpecHash  string              `json:"spec_hash"`
 	State     json.RawMessage     `json:"state"`
 	Scheduler schedulerCheckpoint `json:"scheduler"`
 }
 
-// schedulerCheckpoint is the serialized tick-scheduler dedup guard: whether a tick
+// schedulerCheckpoint is the serialized scheduler dedup guard: whether an event
 // is pending and at what time.
 type schedulerCheckpoint struct {
-	HasScheduledTick bool                  `json:"has_scheduled_tick"`
-	NextTickTime     timing.VTimeInPicoSec `json:"next_tick_time"`
+	Scheduled bool                  `json:"scheduled"`
+	At        timing.VTimeInPicoSec `json:"at"`
+}
+
+// A Scheduler schedules a component's own tick or wakeup events and keeps a
+// dedup guard that checkpoints save: a *TickScheduler or a *WakeupScheduler.
+type Scheduler interface {
+	snapshot() (at timing.VTimeInPicoSec, scheduled bool)
+	restore(at timing.VTimeInPicoSec, scheduled bool)
 }
 
 // SaveCheckpoint writes the component's spec hash, State, and scheduler guard as
@@ -43,7 +50,7 @@ func (c *Component[S, T, R]) LoadCheckpoint(r io.Reader) error {
 
 // tickScheduler returns the component's tick scheduler, or nil when the
 // component was not built with one.
-func (c *Component[S, T, R]) tickScheduler() *TickScheduler {
+func (c *Component[S, T, R]) tickScheduler() Scheduler {
 	if c.TickingComponent == nil {
 		return nil
 	}
@@ -51,11 +58,11 @@ func (c *Component[S, T, R]) tickScheduler() *TickScheduler {
 	return c.TickScheduler
 }
 
-// WriteCheckpoint writes a component's spec hash, State, and tick-scheduler
-// guard as JSON. Component kinds use it to implement SaveCheckpoint; ts may be
-// nil for a component without a tick scheduler.
+// WriteCheckpoint writes a component's spec hash, State, and scheduler guard
+// as JSON. Component models use it to implement SaveCheckpoint; s is nil for a
+// component without its own scheduler.
 func WriteCheckpoint[S, T any](
-	w io.Writer, spec S, state T, ts *TickScheduler,
+	w io.Writer, spec S, state T, s Scheduler,
 ) error {
 	data, err := json.Marshal(state)
 	if err != nil {
@@ -66,21 +73,18 @@ func WriteCheckpoint[S, T any](
 		SpecHash: specHash(spec),
 		State:    data,
 	}
-	if ts != nil {
-		next, scheduled := ts.snapshot()
-		dto.Scheduler = schedulerCheckpoint{
-			HasScheduledTick: scheduled,
-			NextTickTime:     next,
-		}
+	if s != nil {
+		at, scheduled := s.snapshot()
+		dto.Scheduler = schedulerCheckpoint{Scheduled: scheduled, At: at}
 	}
 
 	return json.NewEncoder(w).Encode(dto)
 }
 
-// ReadCheckpoint restores a component's State and tick-scheduler guard after
+// ReadCheckpoint restores a component's State and scheduler guard after
 // verifying that the saved spec hash matches spec, the rebuilt component's.
 func ReadCheckpoint[S, T any](
-	r io.Reader, spec S, state *T, ts *TickScheduler,
+	r io.Reader, spec S, state *T, s Scheduler,
 ) error {
 	var dto componentCheckpoint
 	if err := json.NewDecoder(r).Decode(&dto); err != nil {
@@ -99,8 +103,8 @@ func ReadCheckpoint[S, T any](
 	}
 	*state = restored
 
-	if ts != nil {
-		ts.restore(dto.Scheduler.NextTickTime, dto.Scheduler.HasScheduledTick)
+	if s != nil {
+		s.restore(dto.Scheduler.At, dto.Scheduler.Scheduled)
 	}
 
 	return nil

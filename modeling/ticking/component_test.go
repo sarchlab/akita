@@ -107,16 +107,12 @@ func mustPanic(t *testing.T, substr string, f func()) {
 
 // --- Tests ---
 
-func TestBuildBindsPortsAndRunsMiddlewaresInOrder(t *testing.T) {
+func TestBuildRunsMiddlewaresInOrder(t *testing.T) {
 	in := newPort("C.In")
 	c := build(Ports{In: in})
 
-	if in.Component() != messaging.Component(c) {
+	if in.Component() != messaging.Component(c) || c.Ports.In != in {
 		t.Errorf("port In is not bound to the component")
-	}
-
-	if c.Ports.In != in || c.GetPortByName("In") != in {
-		t.Errorf("port In is not reachable through the field and by name")
 	}
 
 	if c.State.Count != 2 {
@@ -138,7 +134,7 @@ func TestTicksWhileMiddlewaresMakeProgress(t *testing.T) {
 		WithPorts(Ports{In: newPort("C.In")}).
 		Build("C")
 
-	c.TickLater()
+	c.NotifyRecv(c.Ports.In)
 	if err := sim.GetEngine().Run(); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -159,76 +155,6 @@ func TestHandlePassesEveryEventToTheMiddlewares(t *testing.T) {
 	want := []string{"first ticking_test.pokeEvent", "second ticking_test.pokeEvent"}
 	if !reflect.DeepEqual(c.State.Log, want) {
 		t.Errorf("middlewares ran as %v, want %v", c.State.Log, want)
-	}
-}
-
-func TestTypeNameIsThePackageAndNameIsTheInstance(t *testing.T) {
-	c := build(Ports{In: newPort("C.In")})
-
-	if c.Name() != "C" {
-		t.Errorf("Name() = %q, want the instance name C", c.Name())
-	}
-
-	want := "github.com/sarchlab/akita/v5/modeling/ticking_test"
-	if c.TypeName() != want {
-		t.Errorf("TypeName() = %q, want the package path %q", c.TypeName(), want)
-	}
-}
-
-func TestBuildRejectsMisconfiguredPorts(t *testing.T) {
-	t.Run("missing port", func(t *testing.T) {
-		mustPanic(t, "port In is not given", func() {
-			build(Ports{})
-		})
-	})
-
-	t.Run("misnamed port", func(t *testing.T) {
-		mustPanic(t, `want "C.In"`, func() {
-			build(Ports{In: newPort("Other.In")})
-		})
-	})
-
-	t.Run("no ports after Build", func(t *testing.T) {
-		c := build(Ports{In: newPort("C.In")})
-		mustPanic(t, "ports are fixed at Build", func() {
-			c.AssignPort("In", newPort("C.In"))
-		})
-	})
-
-	t.Run("unknown port name", func(t *testing.T) {
-		c := build(Ports{In: newPort("C.In")})
-		mustPanic(t, "ports are In, Links[]", func() {
-			c.GetPortByName("Out")
-		})
-	})
-
-	t.Run("no simulation", func(t *testing.T) {
-		mustPanic(t, "WithSimulation is required", func() {
-			Definition.Builder().Build("C")
-		})
-	})
-}
-
-func TestPortGroupGrowsAfterBuild(t *testing.T) {
-	in := newPort("C.In")
-	c := build(Ports{In: in})
-
-	link := newPort("C.Links[0]")
-	if name := c.AssignPortToGroup("Links", link); name != "Links[0]" {
-		t.Errorf("AssignPortToGroup returned %q, want Links[0]", name)
-	}
-
-	if link.Component() != messaging.Component(c) {
-		t.Errorf("group member is not bound to the component")
-	}
-
-	if c.NumPortsInGroup("Links") != 1 || c.Ports.Links[0] != link ||
-		c.GetPortByName("Links[0]") != link {
-		t.Errorf("group member is not reachable")
-	}
-
-	if got := c.AllPorts(); len(got) != 2 || got[0] != in || got[1] != link {
-		t.Errorf("AllPorts() = %v, want [In Links[0]]", got)
 	}
 }
 
@@ -264,31 +190,14 @@ func TestCheckpointRoundTrip(t *testing.T) {
 
 // --- Shape checks on the Ports and Middlewares types ---
 
-type badPorts struct {
-	In messaging.Port
-	N  int
-}
-
 type oneMiddleware struct {
 	Only *recordMW
 }
 
 func TestBuildRejectsBadShapes(t *testing.T) {
-	t.Run("non-port field in Ports", func(t *testing.T) {
-		def := ticking.Definition[Spec, State, modeling.None, badPorts, oneMiddleware]{
-			DefaultSpec: Spec{Freq: 1 * timing.GHz},
-			NewMiddlewares: func(
-				*ticking.Component[Spec, State, modeling.None, badPorts, oneMiddleware],
-			) oneMiddleware {
-				return oneMiddleware{Only: &recordMW{}}
-			},
-		}
-
-		mustPanic(t, "must be messaging.Port or []messaging.Port", func() {
-			def.Builder().
-				WithSimulation(newSim()).
-				WithPorts(badPorts{In: newPort("B.In")}).
-				Build("B")
+	t.Run("no simulation", func(t *testing.T) {
+		mustPanic(t, "WithSimulation is required", func() {
+			Definition.Builder().Build("C")
 		})
 	})
 

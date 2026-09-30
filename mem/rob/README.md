@@ -52,32 +52,29 @@ and exposes no `WithResources`.
 
 ## Builder Pattern
 
-Configuration is supplied as a whole through `WithSpec` (start from
-`Definition.DefaultSpec`); the engine and registration come from `WithSimulation`. `Build`
-declares the component's `Top`, `Bottom`, and `Control` ports; the port
-instances are built and attached externally after `Build` with `AssignPort`, so
-the caller chooses the buffer sizes.
+The reorder buffer is a ticking component (`modeling/ticking`). The system
+builder builds it from `rob.Definition`: configuration is supplied as a whole
+through `WithSpec` (start from `Definition.DefaultSpec`), and the port instances
+through `WithPorts`. The system builder creates each port with
+`messaging.NewPort`, choosing its buffer sizes, and names it
+`"<instance>.<field>"`; `Build` binds and registers the ports.
 
 ```go
 spec := rob.Definition.DefaultSpec
 spec.BufferSize = 256
 spec.BottomUnit = dramPort.AsRemote()
 
-reorderBuffer := rob.MakeBuilder().
+reorderBuffer := rob.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
+    WithPorts(rob.Ports{
+        Top:     messaging.NewPort(nil, 8, 8, "ROB.Top"),
+        Bottom:  messaging.NewPort(nil, 8, 8, "ROB.Bottom"),
+        Control: messaging.NewPort(nil, 8, 8, "ROB.Control"),
+    }).
     Build("ROB")
 
-for _, name := range []string{"Top", "Bottom", "Control"} {
-    p := modeling.MakePortBuilder().
-        WithSimulation(sim).
-        WithComponent(reorderBuffer).
-        WithSpec(modeling.PortSpec{BufSize: 8}).
-        Build(name)
-    reorderBuffer.AssignPort(name, p)
-}
-
-topPort := reorderBuffer.GetPortByName("Top")
+topPort := reorderBuffer.Ports.Top
 ```
 
 ### Builder Methods
@@ -86,6 +83,7 @@ topPort := reorderBuffer.GetPortByName("Top")
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required). |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec`. Set `BottomUnit` to the downstream port. |
+| `WithPorts(p)` | The `Top`, `Bottom`, and `Control` port instances (required). |
 
 ## Ports
 

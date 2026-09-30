@@ -3,6 +3,7 @@ package ping
 import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/wakeup"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -31,5 +32,43 @@ type State struct {
 	ScheduledPings   []scheduledPing
 }
 
-// Comp is the ping component built on EventDrivenComponent.
-type Comp = modeling.EventDrivenComponent[Spec, State, modeling.None]
+// Ports holds the ping component's ports.
+type Ports struct {
+	// Out sends pings and responses and receives them from the peer.
+	Out messaging.Port
+}
+
+// Middlewares holds the ping component's behavior.
+type Middlewares struct {
+	// Ping sends due pings and responses and handles incoming messages.
+	Ping *pingMW
+}
+
+// Comp is a ping component, a wakeup component: it runs when a message
+// arrives or when a ping or response it holds becomes due.
+type Comp = wakeup.Component[Spec, State, modeling.None, Ports, Middlewares]
+
+// Definition declares the ping component.
+var Definition = wakeup.Definition[Spec, State, modeling.None, Ports, Middlewares]{
+	DefaultSpec:    Spec{},
+	NewMiddlewares: newMiddlewares,
+}
+
+func newMiddlewares(c *Comp) Middlewares {
+	return Middlewares{Ping: &pingMW{comp: c}}
+}
+
+// SchedulePing schedules a ping to be sent at the given time to the given
+// destination.
+func SchedulePing(
+	comp *Comp,
+	sendAt timing.VTimeInPicoSec,
+	dst messaging.RemotePort,
+) {
+	state := &comp.State
+	state.ScheduledPings = append(state.ScheduledPings, scheduledPing{
+		SendAt: sendAt,
+		Dst:    dst,
+	})
+	comp.WakeAt(sendAt)
+}

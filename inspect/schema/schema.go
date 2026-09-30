@@ -20,6 +20,14 @@ const (
 const (
 	// ModelTicking is a component that runs on a clock (modeling/ticking).
 	ModelTicking = "ticking"
+
+	// ModelWakeup is a component without a clock that runs when woken
+	// (modeling/wakeup).
+	ModelWakeup = "wakeup"
+
+	// ModelEvent is a component without a clock whose behavior is a set of
+	// reactions to events (modeling/event).
+	ModelEvent = "event"
 )
 
 // Definition describes one definition found in a package.

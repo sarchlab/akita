@@ -105,8 +105,8 @@ func (m *Monitor) RegisterComponent(c Component) {
 }
 
 // RegisterPort registers a port's incoming and outgoing buffers with the
-// monitor. Used for ports created and registered after their component (e.g.
-// through a port builder), which RegisterComponent's eager walk does not see.
+// monitor. The simulation registers every port this way, when the port is
+// built or when its component's Build binds it.
 func (m *Monitor) RegisterPort(p monitorPort) {
 	m.registerPortBuffers(p)
 }
@@ -282,14 +282,9 @@ func (a *portBufferAdapter) Capacity() int {
 }
 
 func (m *Monitor) registerBuffers(c Component) {
+	// Port buffers are registered with each port (RegisterPort) through
+	// portBufferAdapter; this walk finds the component's own buffers.
 	m.registerComponentOrPortBuffers(c)
-
-	// Port buffers are monitored through portBufferAdapter (registerPortBuffers),
-	// which is the canonical source. Reflecting into the port's own fields would
-	// double-count them.
-	for _, p := range componentPorts(c) {
-		m.registerPortBuffers(p)
-	}
 }
 
 func (m *Monitor) registerPortBuffers(p monitorPort) {
@@ -297,37 +292,6 @@ func (m *Monitor) registerPortBuffers(p monitorPort) {
 		&portBufferAdapter{port: p, direction: "in"},
 		&portBufferAdapter{port: p, direction: "out"},
 	)
-}
-
-func componentPorts(c Component) []monitorPort {
-	method := reflect.ValueOf(c).MethodByName("AllPorts")
-	if !method.IsValid() {
-		return nil
-	}
-
-	methodType := method.Type()
-	if methodType.NumIn() != 0 ||
-		methodType.NumOut() != 1 ||
-		methodType.Out(0).Kind() != reflect.Slice {
-		panic("component " + c.Name() +
-			" AllPorts method must take no arguments and return one slice")
-	}
-
-	values := method.Call(nil)
-	portsValue := values[0]
-	ports := make([]monitorPort, 0, portsValue.Len())
-
-	for i := 0; i < portsValue.Len(); i++ {
-		port, ok := portsValue.Index(i).Interface().(monitorPort)
-		if !ok {
-			panic("component " + c.Name() +
-				" Ports method returned a non-monitorable port")
-		}
-
-		ports = append(ports, port)
-	}
-
-	return ports
 }
 
 func (m *Monitor) registerComponentOrPortBuffers(c any) {

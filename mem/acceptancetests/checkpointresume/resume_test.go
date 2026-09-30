@@ -205,11 +205,19 @@ func buildSim() (*simulation.Simulation, *driver) {
 	return sim, d
 }
 
+// portOwner is a component on the Component API: its ports are assigned
+// after Build and looked up by name.
+type portOwner interface {
+	messaging.Component
+	AssignPort(name string, port messaging.Port)
+	GetPortByName(name string) messaging.Port
+}
+
 // assignPorts builds a port for each declared name on the component, registers
 // it, and assigns it, choosing a default buffer size.
 func assignPorts(
 	sim *simulation.Simulation,
-	comp messaging.Component,
+	comp portOwner,
 	names ...string,
 ) {
 	for _, name := range names {

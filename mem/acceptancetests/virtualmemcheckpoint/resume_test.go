@@ -187,11 +187,19 @@ func setupPageTable(s *simulation.Simulation) vm.PageTable {
 	return pageTable
 }
 
+// portOwner is a component on the Component API: its ports are assigned
+// after Build and looked up by name.
+type portOwner interface {
+	messaging.Component
+	AssignPort(name string, port messaging.Port)
+	GetPortByName(name string) messaging.Port
+}
+
 // assignPorts builds a port for each declared name on the component, registers
 // it, and assigns it, choosing a default buffer size.
 func assignPorts(
 	s *simulation.Simulation,
-	comp messaging.Component,
+	comp portOwner,
 	names ...string,
 ) {
 	for _, name := range names {
@@ -213,7 +221,7 @@ func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {
 func setupConnection(
 	s *simulation.Simulation,
 	d *driver,
-	at, itlb, l2TLB, ioMMU, l1Cache, l2Cache, memCtrl messaging.Component,
+	at, itlb, l2TLB, ioMMU, l1Cache, l2Cache, memCtrl portOwner,
 ) {
 	connect(s, "Conn1", d.GetPortByName("Mem"), at.GetPortByName("Top"))
 	connect(s, "Conn2", at.GetPortByName("Translation"), itlb.GetPortByName("Top"))

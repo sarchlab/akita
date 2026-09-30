@@ -97,11 +97,19 @@ func buildDRAM(s *simulation.Simulation) *idealmemcontroller.Comp {
 	return dram
 }
 
+// portOwner is a component on the Component API: its ports are assigned
+// after Build and looked up by name.
+type portOwner interface {
+	messaging.Component
+	AssignPort(name string, port messaging.Port)
+	GetPortByName(name string) messaging.Port
+}
+
 // assignPorts builds a port for each declared name on the component and assigns
 // it, choosing a default buffer size.
 func assignPorts(
 	s *simulation.Simulation,
-	comp messaging.Component,
+	comp portOwner,
 	names ...string,
 ) {
 	for _, name := range names {

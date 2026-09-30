@@ -29,8 +29,13 @@ const (
 var extractors = map[string]func(
 	pkg *packages.Package, lit *ast.CompositeLit, index pkgIndex,
 ) (*schema.Definition, error){
-	"github.com/sarchlab/akita/v5/modeling.ComponentDef":       extractComponent,
-	"github.com/sarchlab/akita/v5/modeling/ticking.Definition": extractTicking,
+	"github.com/sarchlab/akita/v5/modeling.ComponentDef": extractComponent,
+	"github.com/sarchlab/akita/v5/modeling/ticking.Definition": extractModel(
+		schema.ModelTicking),
+	"github.com/sarchlab/akita/v5/modeling/wakeup.Definition": extractModel(
+		schema.ModelWakeup),
+	"github.com/sarchlab/akita/v5/modeling/event.Definition": extractModel(
+		schema.ModelEvent),
 }
 
 // extractPackage finds the definition in pkg, if any, and extracts it. The

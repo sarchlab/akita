@@ -19,13 +19,24 @@ const (
 	middlewareName = "Middleware"
 )
 
-// extractTicking extracts a ticking.Definition literal, a component defined by
-// five structs (see modeling/ticking). The component type is identified by its
+// extractModel returns the extractor for the Definition literal of a
+// component model (modeling/ticking, modeling/wakeup, or modeling/event): a
+// component defined by five structs. The component type is identified by its
 // package, so its name is the package name. The Spec defaults come from the
 // literal; the Resources, Ports, and Middlewares come from the type
 // arguments.
-func extractTicking(
+func extractModel(model string) func(
 	pkg *packages.Package, lit *ast.CompositeLit, index pkgIndex,
+) (*schema.Definition, error) {
+	return func(
+		pkg *packages.Package, lit *ast.CompositeLit, index pkgIndex,
+	) (*schema.Definition, error) {
+		return extractModelDefinition(pkg, lit, index, model)
+	}
+}
+
+func extractModelDefinition(
+	pkg *packages.Package, lit *ast.CompositeLit, index pkgIndex, model string,
 ) (*schema.Definition, error) {
 	args, err := definitionTypeArgs(pkg, lit)
 	if err != nil {
@@ -39,7 +50,7 @@ func extractTicking(
 
 	def := &schema.Definition{
 		Kind:  schema.KindComponent,
-		Model: schema.ModelTicking,
+		Model: model,
 		Name:  pkg.Types.Name(),
 	}
 

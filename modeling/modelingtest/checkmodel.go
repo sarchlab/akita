@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/inspect/schema"
+	"github.com/sarchlab/akita/v5/modeling/event"
 	"github.com/sarchlab/akita/v5/modeling/ticking"
+	"github.com/sarchlab/akita/v5/modeling/wakeup"
 )
 
 // CheckTicking asserts that the inspector's static view of the package that
@@ -16,6 +18,27 @@ func CheckTicking[S, T, R, P, M any](
 	t *testing.T, def ticking.Definition[S, T, R, P, M],
 ) {
 	t.Helper()
+	checkModel[S, P, M](t, schema.ModelTicking, def.DefaultSpec)
+}
+
+// CheckWakeup is CheckTicking for a wakeup.Definition.
+func CheckWakeup[S, T, R, P, M any](
+	t *testing.T, def wakeup.Definition[S, T, R, P, M],
+) {
+	t.Helper()
+	checkModel[S, P, M](t, schema.ModelWakeup, def.DefaultSpec)
+}
+
+// CheckEvent is CheckTicking for an event.Definition.
+func CheckEvent[S, T, R, P, M any](
+	t *testing.T, def event.Definition[S, T, R, P, M],
+) {
+	t.Helper()
+	checkModel[S, P, M](t, schema.ModelEvent, def.DefaultSpec)
+}
+
+func checkModel[S, P, M any](t *testing.T, model string, defaultSpec S) {
+	t.Helper()
 
 	pkgPath := reflect.TypeFor[S]().PkgPath()
 	if pkgPath == "" {
@@ -25,11 +48,11 @@ func CheckTicking[S, T, R, P, M any](
 
 	static := staticDefinition(t, pkgPath)
 
-	if static.Model != schema.ModelTicking {
-		t.Errorf("model: static %q, runtime %q", static.Model, schema.ModelTicking)
+	if static.Model != model {
+		t.Errorf("model: static %q, runtime %q", static.Model, model)
 	}
 
-	checkDefaults(t, static, def.DefaultSpec)
+	checkDefaults(t, static, defaultSpec)
 
 	checkNames(t, "ports", staticPortNames(static.Ports), runtimePortNames[P]())
 	checkNames(t, "middlewares",

@@ -53,23 +53,25 @@ func (b PortBuilder) WithSpec(spec PortSpec) PortBuilder {
 	return b
 }
 
-// Build builds a port and registers it with the simulation.
+// Build builds a port named comp.Name()+"."+name, owned by the component, and
+// registers it with the simulation. Attach it with comp.AssignPort(name, port).
 //
-// With a component, the port's full name is comp.Name()+"."+name and the
-// component owns it; attach it with comp.AssignPort(name, port). Without one,
-// name is the full name, "<component>.<port>", and the port is unowned until
-// a Comp builder binds it (see CompBuilder.WithPorts).
+// PortBuilder serves components on the Component API. A component defined by
+// a component model (modeling/ticking and its siblings) takes ports created
+// with messaging.NewPort through its builder's WithPorts, and its Build
+// registers them.
 func (b PortBuilder) Build(name string) messaging.Port {
 	if b.simulation == nil {
 		panic("modeling: PortBuilder requires a simulation")
 	}
 
-	fullName := name
-	if b.comp != nil {
-		fullName = b.comp.Name() + "." + name
+	if b.comp == nil {
+		panic("modeling: PortBuilder requires a component; for a component " +
+			"model, create the port with messaging.NewPort and pass it to WithPorts")
 	}
 
-	port := messaging.NewPort(b.comp, b.spec.BufSize, b.spec.BufSize, fullName)
+	port := messaging.NewPort(b.comp, b.spec.BufSize, b.spec.BufSize,
+		b.comp.Name()+"."+name)
 	b.simulation.RegisterPort(port)
 
 	return port

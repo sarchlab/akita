@@ -268,8 +268,8 @@ func TestModuleDiscovery(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatalf("module inspection failed: %v", errs)
 	}
-	if len(defs) != 15 {
-		t.Fatalf("got %d definitions, want 15", len(defs))
+	if len(defs) != 16 {
+		t.Fatalf("got %d definitions, want 16", len(defs))
 	}
 	resources := map[string][]string{
 		"mem/datamover":                      {"InsideMapper", "OutsideMapper"},

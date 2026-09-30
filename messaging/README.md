@@ -143,36 +143,35 @@ type Connection interface {
 A connection moves messages from outgoing to incoming buffers. `directconnection`
 is the simplest implementation.
 
-### Component and PortOwner
+### Component
 
 ```go
 type Component interface {
+    timing.SimulationElement
     naming.Named
     hooking.Hookable
-    PortOwner
 
     NotifyRecv(port Port)
     NotifyPortFree(port Port)
 }
-
-type PortOwner interface {
-    AssignPort(name string, port Port)
-    GetPortByName(name string) Port
-    AllPorts() []Port
-}
 ```
 
-Embed `PortOwnerBase` (via `NewPortOwnerBase`) to manage a named set of ports.
-A component owns its port topology: it declares its ports with `DeclarePort`
-(typically in its builder), and setup code supplies the instances with
-`AssignPort`. `GetPortByName` panics with a helpful message if the name is
-unknown or was declared but not yet assigned.
+The interface says nothing about which ports a component has or how it reaches
+them. A component defined by a component model (`modeling/ticking` and its
+siblings) holds its ports in a typed `Ports` struct: the system builder creates
+each port with `NewPort` and passes them all to `Build`, which binds and
+registers them.
+
+Components on the older `modeling.Component` API embed `PortOwnerBase` (via
+`NewPortOwnerBase`) instead: they declare their ports with `DeclarePort`, setup
+code supplies the instances with `AssignPort`, and middlewares look them up with
+`GetPortByName`.
 
 ## How It Works
 
-1. A component declares its ports with `DeclarePort`; setup code builds each
-   port with `modeling.MakePortBuilder` (which registers it with the
-   simulation) — or the low-level `NewPort` — and attaches it with `AssignPort`.
+1. Setup code creates each port with `NewPort` and gives it to its component:
+   through `Build` for a component model, or with `AssignPort` (often after
+   `modeling.MakePortBuilder`) for the older API.
 2. A connection is plugged into the ports with `PlugIn`, and each port's
    connection is set with `SetConnection`.
 3. To send, a component builds a message with `Src`/`Dst` remote port names and

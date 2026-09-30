@@ -512,7 +512,7 @@ func setupMigrationController(
 		Build("ConnControl")
 	ctrlConn.PlugIn(ctrl.GetPortByName("Ctrl"))
 	for _, c := range chains {
-		ctrlConn.PlugIn(c.rob.GetPortByName("Control"))
+		ctrlConn.PlugIn(c.rob.Ports.Control)
 		ctrlConn.PlugIn(c.at.GetPortByName("Control"))
 		ctrlConn.PlugIn(c.l1Cache.GetPortByName("Control"))
 		ctrlConn.PlugIn(c.l1TLB.GetPortByName("Control"))
@@ -614,13 +614,13 @@ func collectControlTargets(
 	shared sharedHierarchy,
 	chains []agentChain,
 ) {
-	control := func(c messaging.Component) messaging.RemotePort {
+	control := func(c portOwner) messaging.RemotePort {
 		return c.GetPortByName("Control").AsRemote()
 	}
 
 	for _, c := range chains {
 		ctrl.agents = append(ctrl.agents, c.agent)
-		ctrl.robTargets = append(ctrl.robTargets, control(c.rob))
+		ctrl.robTargets = append(ctrl.robTargets, c.rob.Ports.Control.AsRemote())
 		ctrl.restTargets = append(ctrl.restTargets,
 			control(c.at), control(c.l1Cache), control(c.l1TLB))
 		ctrl.invalTargets = append(ctrl.invalTargets,

@@ -83,7 +83,7 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 		WithSimulation(s).
 		WithSpec(agentSpec).
 		WithResources(memaccessagent.Resources{
-			LowModule: robComp.GetPortByName("Top"),
+			LowModule: robComp.Ports.Top,
 		}).
 		Build("MemAccessAgent")
 	assignPorts(s, agent, "Mem")
@@ -109,9 +109,9 @@ func buildROB(s *simulation.Simulation, bottomUnit messaging.RemotePort) *rob.Co
 		WithSimulation(s).
 		WithSpec(robSpec).
 		WithPorts(rob.Ports{
-			Top:     newPort(s, "ROB.Top"),
-			Bottom:  newPort(s, "ROB.Bottom"),
-			Control: newPort(s, "ROB.Control"),
+			Top:     newPort("ROB.Top"),
+			Bottom:  newPort("ROB.Bottom"),
+			Control: newPort("ROB.Control"),
 		}).
 		Build("ROB")
 }
@@ -246,13 +246,21 @@ func setupPageTable(maxAddress uint64, s *simulation.Simulation) vm.PageTable {
 	return pageTable
 }
 
+// portOwner is a component on the Component API: its ports are assigned
+// after Build and looked up by name.
+type portOwner interface {
+	messaging.Component
+	AssignPort(name string, port messaging.Port)
+	GetPortByName(name string) messaging.Port
+}
+
 // assignPorts builds a port for each named, declared port of the component
 // (with a default buffer size) and assigns it. Every declared port must be
 // assigned because the component resolves all of its ports by name on each
 // tick.
 func assignPorts(
 	s *simulation.Simulation,
-	comp messaging.Component,
+	comp portOwner,
 	names ...string,
 ) {
 	for _, name := range names {
@@ -265,13 +273,10 @@ func assignPorts(
 	}
 }
 
-// newPort builds an unowned port named fullName, for a component that takes
-// its ports at Build.
-func newPort(s *simulation.Simulation, fullName string) messaging.Port {
-	return modeling.MakePortBuilder().
-		WithSimulation(s).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build(fullName)
+// newPort creates an unowned port named fullName, for a component that takes
+// its ports at Build. The component's Build binds and registers it.
+func newPort(fullName string) messaging.Port {
+	return messaging.NewPort(nil, 16, 16, fullName)
 }
 
 func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {
@@ -283,14 +288,15 @@ func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {
 func setupConnection(
 	s *simulation.Simulation,
 	agent *memaccessagent.MemAccessAgent,
-	ROB, AT, TLB, L2TLB, IoMMU, L1Cache, L2Cache, memCtrl messaging.Component,
+	ROB *rob.Comp,
+	AT, TLB, L2TLB, IoMMU, L1Cache, L2Cache, memCtrl portOwner,
 ) {
 	connect(s, "Conn1",
 		agent.GetPortByName("Mem"),
-		ROB.GetPortByName("Top"),
+		ROB.Ports.Top,
 	)
 	connect(s, "ConnROB",
-		ROB.GetPortByName("Bottom"),
+		ROB.Ports.Bottom,
 		AT.GetPortByName("Top"),
 	)
 	connect(s, "Conn2",

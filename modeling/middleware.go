@@ -19,6 +19,20 @@ type Middleware interface {
 
 var middlewareType = reflect.TypeFor[Middleware]()
 
+// Dispatch passes an event to each middleware in order and reports whether
+// any of them made progress. Each model's Component calls it from Handle.
+func Dispatch(middlewares []Middleware, e timing.Event) bool {
+	progress := false
+
+	for _, mw := range middlewares {
+		if mw.Handle(e) {
+			progress = true
+		}
+	}
+
+	return progress
+}
+
 // OrderedMiddlewares returns the fields of a Middlewares struct in declaration
 // order, the order a component runs them. middlewares is the struct or a
 // pointer to it. It panics unless every field is exported, implements

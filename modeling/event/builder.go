@@ -1,4 +1,4 @@
-package ticking
+package event
 
 import (
 	"fmt"
@@ -9,9 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-var freqType = reflect.TypeFor[timing.Freq]()
-
-// Builder builds instances of one ticking component type. Obtain it with
+// Builder builds instances of one event component type. Obtain it with
 // Definition.Builder.
 type Builder[S, T, R, P, M any] struct {
 	def        Definition[S, T, R, P, M]
@@ -58,20 +56,18 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 	naming.MustBeValid(name)
 
 	if b.simulation == nil {
-		panic(fmt.Sprintf("ticking: %s %q: WithSimulation is required",
+		panic(fmt.Sprintf("event: %s %q: WithSimulation is required",
 			typeName[S](), name))
 	}
 
 	if b.def.NewMiddlewares == nil {
-		panic(fmt.Sprintf("ticking: %s: Definition has no NewMiddlewares",
+		panic(fmt.Sprintf("event: %s: Definition has no NewMiddlewares",
 			typeName[S]()))
 	}
 
 	modeling.MustBeCheckpointable[S, T](name, b.spec)
 
-	c := &Component[S, T, R, P, M]{
-		ticks: modeling.NewTickScheduler(name, b.simulation, specFreq(b.spec)),
-	}
+	c := &Component[S, T, R, P, M]{}
 	modeling.InitComponentBase(&c.ComponentBase, c,
 		b.simulation, name, b.spec, b.resources, b.ports)
 
@@ -89,19 +85,6 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 	b.simulation.RegisterComponent(c)
 
 	return c
-}
-
-// specFreq returns the Spec's Freq field, the clock the instance ticks at.
-func specFreq(spec any) timing.Freq {
-	v := reflect.ValueOf(spec)
-
-	f := v.FieldByName("Freq")
-	if !f.IsValid() || f.Type() != freqType {
-		panic(fmt.Sprintf(
-			"ticking: Spec %s must have a Freq timing.Freq field", v.Type()))
-	}
-
-	return f.Interface().(timing.Freq)
 }
 
 // typeName returns the import path of the package that declares S, which

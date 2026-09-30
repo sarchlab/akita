@@ -7,7 +7,10 @@ import (
 	"sort"
 )
 
-// PortOwnerBase provides an implementation of the PortOwner interface.
+// PortOwnerBase manages the ports of a component that looks them up by name:
+// AssignPort, GetPortByName, AllPorts, and port groups. Components defined by
+// a component model (modeling/ticking and its siblings) hold their ports in a
+// typed Ports struct instead.
 //
 // A component owns its port topology: it declares the set of ports it has (by
 // logical name, e.g. "Top") with DeclarePort, typically in its builder's
