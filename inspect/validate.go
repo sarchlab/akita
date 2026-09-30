@@ -65,7 +65,8 @@ func validateSpecFieldType(typ types.Type) error {
 	return fmt.Errorf("disallowed Spec type %s", typ)
 }
 
-// validateDefinition checks the same metadata invariants as DefineComponent.
+// validateDefinition checks the definition's metadata invariants. The
+// runtime does not re-check them, so the inspector is where they are enforced.
 func validateDefinition(
 	pkg *packages.Package, lit *ast.CompositeLit,
 	specType types.Type, def *schema.Definition,

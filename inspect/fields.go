@@ -12,7 +12,6 @@ import (
 	"golang.org/x/tools/go/packages"
 
 	"github.com/sarchlab/akita/v5/inspect/schema"
-	"github.com/sarchlab/akita/v5/modeling"
 )
 
 // unitByType maps fully-qualified named types to the semantic unit they
@@ -47,7 +46,7 @@ func structFields(
 		}
 
 		tag := reflect.StructTag(st.Tag(i))
-		akitaTag, err := modeling.ParseFieldTag(tag.Get("akita"))
+		akitaTag, err := parseFieldTag(tag.Get("akita"))
 		if err != nil {
 			return nil, posErrorf(pkg, f.Pos(),
 				"field %s: %v", f.Name(), err)

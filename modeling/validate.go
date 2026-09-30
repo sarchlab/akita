@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 )
 
 // jsonMarshalerType is the reflect.Type of json.Marshaler, used to exempt types
@@ -136,6 +137,10 @@ func validateStructType(t reflect.Type, path string, allowNestedStructs bool) er
 			path, t)
 	}
 
+	if err := checkDuplicateJSONNames(t, path); err != nil {
+		return err
+	}
+
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 
@@ -151,6 +156,60 @@ func validateStructType(t reflect.Type, path string, allowNestedStructs bool) er
 	}
 
 	return nil
+}
+
+// checkDuplicateJSONNames rejects two exported fields that encode under the
+// same JSON name. encoding/json silently drops both, so a checkpoint would
+// neither save nor restore them. Embedded fields without an explicit JSON
+// name are skipped: encoding/json flattens them by its own rules.
+func checkDuplicateJSONNames(t reflect.Type, path string) error {
+	seen := map[string]string{}
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if !field.IsExported() {
+			continue
+		}
+
+		if _, tagged := field.Tag.Lookup("json"); field.Anonymous && !tagged {
+			continue
+		}
+
+		name := fieldJSONName(field)
+		if name == "" {
+			continue
+		}
+
+		if other, dup := seen[name]; dup {
+			return fmt.Errorf(
+				"%s: fields %s and %s have duplicate JSON name %q, so "+
+					"encoding/json silently drops both across a checkpoint",
+				path, other, field.Name, name)
+		}
+
+		seen[name] = field.Name
+	}
+
+	return nil
+}
+
+// fieldJSONName returns the name encoding/json uses for the field, or "" if
+// the field is excluded from JSON.
+func fieldJSONName(f reflect.StructField) string {
+	tag, ok := f.Tag.Lookup("json")
+	if !ok {
+		return f.Name
+	}
+
+	name, _, _ := strings.Cut(tag, ",")
+	if name == "-" {
+		return ""
+	}
+	if name == "" {
+		return f.Name
+	}
+
+	return name
 }
 
 // serializesToEmpty reports whether a struct type holds unexported fields yet

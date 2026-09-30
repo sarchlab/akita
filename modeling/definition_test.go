@@ -1,9 +1,7 @@
 package modeling_test
 
 import (
-	"fmt"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -63,28 +61,10 @@ func makeDefTestDef() modeling.ComponentDef[defTestSpec] {
 	}
 }
 
-func mustPanicWith(t *testing.T, substr string, f func()) {
-	t.Helper()
-
-	defer func() {
-		t.Helper()
-
-		r := recover()
-		if r == nil {
-			t.Fatalf("expected panic containing %q, got none", substr)
-		}
-		if !strings.Contains(fmt.Sprint(r), substr) {
-			t.Fatalf("panic %q does not contain %q", fmt.Sprint(r), substr)
-		}
-	}()
-
-	f()
-}
-
 // --- Tests ---
 
-func TestDefineComponent(t *testing.T) {
-	var def modeling.ComponentDef[defTestSpec] = modeling.DefineComponent(makeDefTestDef())
+func TestComponentDef(t *testing.T) {
+	def := makeDefTestDef()
 
 	if def.Name != "DefTest" {
 		t.Errorf("Name = %q, want %q", def.Name, "DefTest")
@@ -112,7 +92,7 @@ func TestDefineComponent(t *testing.T) {
 }
 
 func TestComponentDefNewSpecIsACopy(t *testing.T) {
-	def := modeling.DefineComponent(makeDefTestDef())
+	def := makeDefTestDef()
 
 	spec := def.NewSpec()
 	spec.Values[0] = 99
@@ -157,7 +137,7 @@ func checkDefTestRoles(t *testing.T, po interface {
 }
 
 func TestBuilderWithDefinitionDeclaresPorts(t *testing.T) {
-	comp := buildWithDef(modeling.DefineComponent(makeDefTestDef()), "Comp")
+	comp := buildWithDef(makeDefTestDef(), "Comp")
 
 	checkDefTestRoles(t, comp)
 
@@ -172,158 +152,10 @@ func TestEventDrivenBuilderWithDefinitionDeclaresPorts(t *testing.T) {
 	comp := modeling.NewEventDrivenBuilder[defTestSpec, TestState, defTestResources]().
 		WithSimulation(modeling.NewStandaloneSimulation(engine)).
 		WithSpec(makeDefTestDef().NewSpec()).
-		WithDefinition(modeling.DefineComponent(makeDefTestDef())).
+		WithDefinition(makeDefTestDef()).
 		Build("EDComp")
 
 	checkDefTestRoles(t, comp)
-}
-
-// plainSpec is a minimal valid Spec for the panic tests below.
-type plainSpec struct {
-	N int `json:"n"`
-}
-
-// defineWith returns a DefineComponent thunk over plainSpec for panic tests.
-func defineWith(name string, ports []modeling.PortDef,
-	groups []modeling.PortGroupDef) func() {
-	return func() {
-		modeling.DefineComponent(
-			modeling.ComponentDef[plainSpec]{
-				Name:       name,
-				Ports:      ports,
-				PortGroups: groups,
-			})
-	}
-}
-
-func TestDefineComponentPanicsOnBadSpec(t *testing.T) {
-	type pointerSpec struct {
-		P *int `json:"p"`
-	}
-	type badTagSpec struct {
-		N int `json:"n" akita:"bogus"`
-	}
-	type minOnStringSpec struct {
-		S string `json:"s" akita:"min=1"`
-	}
-	// N is untagged, so its JSON name is the field name "N", colliding
-	// with B's explicit tag.
-	type dupJSONSpec struct {
-		N int
-		B int `json:"N"`
-	}
-
-	t.Run("empty name", func(t *testing.T) {
-		mustPanicWith(t, "must have a name", defineWith("", nil, nil))
-	})
-
-	t.Run("invalid spec", func(t *testing.T) {
-		mustPanicWith(t, "invalid default Spec", func() {
-			modeling.DefineComponent(
-				modeling.ComponentDef[pointerSpec]{Name: "C"})
-		})
-	})
-
-	t.Run("bad akita tag", func(t *testing.T) {
-		mustPanicWith(t, `unknown directive "bogus"`, func() {
-			modeling.DefineComponent(
-				modeling.ComponentDef[badTagSpec]{Name: "C"})
-		})
-	})
-
-	t.Run("min on non-numeric field", func(t *testing.T) {
-		mustPanicWith(t, "min/max apply only to numeric fields", func() {
-			modeling.DefineComponent(
-				modeling.ComponentDef[minOnStringSpec]{
-					Name: "C"})
-		})
-	})
-
-	t.Run("duplicate json name", func(t *testing.T) {
-		mustPanicWith(t, `duplicate JSON name "N"`, func() {
-			modeling.DefineComponent(
-				modeling.ComponentDef[dupJSONSpec]{Name: "C"})
-		})
-	})
-}
-
-func TestDefineComponentPanicsOnBadPorts(t *testing.T) {
-	t.Run("empty port name", func(t *testing.T) {
-		mustPanicWith(t, "empty name",
-			defineWith("C", []modeling.PortDef{{Name: ""}}, nil))
-	})
-
-	t.Run("duplicate port name", func(t *testing.T) {
-		mustPanicWith(t, `port "Top" more than once`,
-			defineWith("C",
-				[]modeling.PortDef{{Name: "Top"}, {Name: "Top"}}, nil))
-	})
-
-	t.Run("port and group name collide", func(t *testing.T) {
-		mustPanicWith(t, `port "Top" more than once`,
-			defineWith("C",
-				[]modeling.PortDef{{Name: "Top"}},
-				[]modeling.PortGroupDef{{Name: "Top"}}))
-	})
-
-	t.Run("nil role", func(t *testing.T) {
-		mustPanicWith(t, "nil role",
-			defineWith("C",
-				[]modeling.PortDef{
-					{Name: "Top", Roles: []*messaging.Role{nil}}},
-				nil))
-	})
-}
-
-func TestDefineComponentPanicsOnBadPortGroups(t *testing.T) {
-	type notDerivedCountSpec struct {
-		NumOut int `json:"num_out"`
-	}
-	type nonIntCountSpec struct {
-		NumOut float64 `json:"num_out" akita:"derived"`
-	}
-
-	t.Run("negative count bound", func(t *testing.T) {
-		mustPanicWith(t, "negative count bound",
-			defineWith("C", nil,
-				[]modeling.PortGroupDef{{Name: "Out", MinCount: -1}}))
-	})
-
-	t.Run("max below min", func(t *testing.T) {
-		mustPanicWith(t, "MaxCount 1 < MinCount 2",
-			defineWith("C", nil,
-				[]modeling.PortGroupDef{
-					{Name: "Out", MinCount: 2, MaxCount: 1}}))
-	})
-
-	t.Run("count field missing", func(t *testing.T) {
-		mustPanicWith(t, `CountField "num_out" does not match`,
-			defineWith("C", nil,
-				[]modeling.PortGroupDef{
-					{Name: "Out", CountField: "num_out"}}))
-	})
-
-	t.Run("count field not integer", func(t *testing.T) {
-		mustPanicWith(t, "must be an integer Spec field", func() {
-			modeling.DefineComponent(
-				modeling.ComponentDef[nonIntCountSpec]{
-					Name: "C",
-					PortGroups: []modeling.PortGroupDef{
-						{Name: "Out", CountField: "num_out"}},
-				})
-		})
-	})
-
-	t.Run("count field not derived", func(t *testing.T) {
-		mustPanicWith(t, "must be tagged", func() {
-			modeling.DefineComponent(
-				modeling.ComponentDef[notDerivedCountSpec]{
-					Name: "C",
-					PortGroups: []modeling.PortGroupDef{
-						{Name: "Out", CountField: "num_out"}},
-				})
-		})
-	})
 }
 
 func TestComponentDefNewSpecCopiesNestedContainers(t *testing.T) {
@@ -337,7 +169,7 @@ func TestComponentDefNewSpecCopiesNestedContainers(t *testing.T) {
 		Slices: [][]int{{1}}, Maps: map[string][]int{"a": {2}},
 		Arrays: [1][]int{{3}}, Nested: []map[int][1][]int{{4: {{5}}}},
 	}
-	def := modeling.DefineComponent(modeling.ComponentDef[spec]{Name: "Nested", DefaultSpec: input})
+	def := modeling.ComponentDef[spec]{Name: "Nested", DefaultSpec: input}
 	mutate := func(s spec) {
 		s.Slices[0][0] = 99
 		s.Maps["a"][0] = 99
@@ -352,7 +184,7 @@ func TestComponentDefNewSpecCopiesNestedContainers(t *testing.T) {
 }
 
 func TestComponentDefDeclaredRolesAreIndependent(t *testing.T) {
-	def := modeling.DefineComponent(makeDefTestDef())
+	def := makeDefTestDef()
 	first, second := buildWithDef(def, "First"), buildWithDef(def, "Second")
 	first.PortRoles("Top")[0] = nil
 	first.PortRoles("Out")[0] = nil

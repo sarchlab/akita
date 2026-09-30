@@ -1,7 +1,8 @@
 // Package inspect extracts akita definitions (components, and later other
 // kinds) from Go source without executing it. It statically evaluates the
-// package-level DefineComponent call that also drives the component at
-// runtime, so the emitted schema cannot drift from runtime behavior.
+// package-level Definition literal (a modeling.ComponentDef) that also drives
+// the component at runtime, so the emitted schema cannot drift from runtime
+// behavior.
 //
 // The inspector loads packages with go/packages, which invokes the Go
 // toolchain on the target module but never runs package code. The

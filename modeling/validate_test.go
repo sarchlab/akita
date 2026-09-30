@@ -125,3 +125,48 @@ func TestValidateState_RejectsPointerInNestedCollection(t *testing.T) {
 		t.Fatalf("a pointer nested in a map value should still be rejected")
 	}
 }
+
+// dupJSONSpec's N is untagged, so its JSON name is the field name "N",
+// colliding with B's explicit tag. encoding/json drops both. go vet only
+// catches two identical explicit tags, not this collision.
+type dupJSONSpec struct {
+	N int
+	B int `json:"N"`
+}
+
+type dupJSONNested struct {
+	X int
+	B int `json:"X"`
+}
+
+type stateWithDupJSON struct {
+	Inner dupJSONNested `json:"inner"`
+}
+
+// distinctJSONState reuses a JSON name only on fields encoding/json ignores:
+// an unexported field and one tagged "-".
+type distinctJSONState struct {
+	X       int `json:"x"`
+	Skipped int `json:"-"`
+	x       int
+}
+
+func TestValidateSpec_RejectsDuplicateJSONNames(t *testing.T) {
+	err := ValidateSpec(dupJSONSpec{})
+	if err == nil || !strings.Contains(err.Error(), `duplicate JSON name "N"`) {
+		t.Fatalf("expected duplicate JSON name error, got %v", err)
+	}
+}
+
+func TestValidateState_RejectsDuplicateJSONNames(t *testing.T) {
+	err := ValidateState(stateWithDupJSON{})
+	if err == nil || !strings.Contains(err.Error(), `duplicate JSON name "X"`) {
+		t.Fatalf("expected duplicate JSON name error in nested state, got %v", err)
+	}
+}
+
+func TestValidateState_AllowsNamesIgnoredByJSON(t *testing.T) {
+	if err := ValidateState(distinctJSONState{x: 1}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

@@ -4,4 +4,4 @@ import "github.com/sarchlab/akita/v5/modeling"
 
 type Spec struct{ P *int }
 
-var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{Name: "C"})
+var Definition = modeling.ComponentDef[Spec]{Name: "C"}

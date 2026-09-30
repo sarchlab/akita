@@ -64,7 +64,7 @@ func (b Builder) WithResources(r Resources) Builder {
 }
 
 // Definition declares the component.
-var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{
+var Definition = modeling.ComponentDef[Spec]{
 	Name: "FullComp",
 	DefaultSpec: Spec{
 		Freq:     1 * timing.GHz,
@@ -87,4 +87,4 @@ var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{
 			CountField: "num_out",
 		},
 	},
-})
+}

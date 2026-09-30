@@ -23,13 +23,14 @@ const (
 	withResourcesMethod = "WithResources"
 )
 
-// extractors maps the fully-qualified name of a Define* function to the
-// extractor for its definition kind. Adding a kind (e.g. DefineBenchmark)
-// means adding an entry here plus its extractor.
+// extractors maps the fully-qualified name of a definition type to the
+// extractor for its definition kind. A package-level var of such a type is a
+// definition. Adding a kind (e.g. a benchmark definition) means adding an
+// entry here plus its extractor.
 var extractors = map[string]func(
-	pkg *packages.Package, call *ast.CallExpr, index pkgIndex,
+	pkg *packages.Package, lit *ast.CompositeLit, index pkgIndex,
 ) (*schema.Definition, error){
-	"github.com/sarchlab/akita/v5/modeling.DefineComponent": extractComponent,
+	"github.com/sarchlab/akita/v5/modeling.ComponentDef": extractComponent,
 }
 
 // extractPackage finds the definition in pkg, if any, and extracts it. The
@@ -70,31 +71,40 @@ func extractPackage(
 	return found, hasDef, nil
 }
 
-// extractVarSpec checks whether the value spec initializes a var with a
-// Define* call and, if so, extracts the definition. The bool reports whether
-// the spec declares one.
+// extractVarSpec checks whether the value spec declares a var of a
+// definition type and, if so, extracts the definition from its literal
+// initializer. The bool reports whether the spec declares one.
 func extractVarSpec(
 	pkg *packages.Package, vs *ast.ValueSpec, index pkgIndex,
 ) (schema.Definition, bool, error) {
-	for i, value := range vs.Values {
-		call, ok := value.(*ast.CallExpr)
-		if !ok {
+	for i, name := range vs.Names {
+		obj := pkg.TypesInfo.Defs[name]
+		if obj == nil {
 			continue
 		}
 
-		extractor := extractorFor(pkg, call)
+		extractor := extractors[definitionTypeName(obj.Type())]
 		if extractor == nil {
 			continue
 		}
 
-		if vs.Names[i].Name != definitionVarName {
-			return schema.Definition{}, false, posErrorf(pkg,
-				vs.Names[i].Pos(),
+		if name.Name != definitionVarName {
+			return schema.Definition{}, false, posErrorf(pkg, name.Pos(),
 				"definition var must be named %q, found %q",
-				definitionVarName, vs.Names[i].Name)
+				definitionVarName, name.Name)
 		}
 
-		def, err := extractor(pkg, call, index)
+		var lit *ast.CompositeLit
+		if i < len(vs.Values) {
+			lit, _ = vs.Values[i].(*ast.CompositeLit)
+		}
+		if lit == nil {
+			return schema.Definition{}, false, posErrorf(pkg, name.Pos(),
+				"%s must be initialized with a composite literal, "+
+					"not a value computed elsewhere", definitionVarName)
+		}
+
+		def, err := extractor(pkg, lit, index)
 		if err != nil {
 			return schema.Definition{}, false, err
 		}
@@ -111,57 +121,22 @@ func extractVarSpec(
 	return schema.Definition{}, false, nil
 }
 
-// extractorFor resolves the call's callee through type information and looks
-// it up in the extractor registry. It returns nil if the call is not a
-// Define* call.
-func extractorFor(pkg *packages.Package, call *ast.CallExpr) func(
-	*packages.Package, *ast.CallExpr, pkgIndex,
-) (*schema.Definition, error) {
-	fun := call.Fun
-
-	// Strip explicit type instantiation: DefineComponent[S, R](...).
-	switch f := fun.(type) {
-	case *ast.IndexExpr:
-		fun = f.X
-	case *ast.IndexListExpr:
-		fun = f.X
-	}
-
-	var ident *ast.Ident
-	switch f := fun.(type) {
-	case *ast.SelectorExpr:
-		ident = f.Sel
-	case *ast.Ident:
-		ident = f
-	default:
-		return nil
-	}
-
-	fn, ok := pkg.TypesInfo.Uses[ident].(*types.Func)
+// definitionTypeName returns "importpath.TypeName" of a named type's generic
+// origin (so ComponentDef[Spec] maps to ComponentDef), or "" for other types.
+func definitionTypeName(typ types.Type) string {
+	named, ok := typ.(*types.Named)
 	if !ok {
-		return nil
+		return ""
 	}
 
-	return extractors[fn.FullName()]
+	return qualifiedTypeName(named.Origin())
 }
 
-// extractComponent extracts a DefineComponent call: one ComponentDef
-// composite literal with statically evaluable leaves.
+// extractComponent extracts a ComponentDef composite literal with
+// statically evaluable leaves.
 func extractComponent(
-	pkg *packages.Package, call *ast.CallExpr, index pkgIndex,
+	pkg *packages.Package, lit *ast.CompositeLit, index pkgIndex,
 ) (*schema.Definition, error) {
-	if len(call.Args) != 1 {
-		return nil, posErrorf(pkg, call.Pos(),
-			"DefineComponent must be called with a single ComponentDef literal")
-	}
-
-	lit, ok := call.Args[0].(*ast.CompositeLit)
-	if !ok {
-		return nil, posErrorf(pkg, call.Args[0].Pos(),
-			"DefineComponent argument must be a composite literal, "+
-				"not a value computed elsewhere")
-	}
-
 	specType, err := componentSpecType(pkg, lit)
 	if err != nil {
 		return nil, err
@@ -197,11 +172,8 @@ func extractComponent(
 	return def, nil
 }
 
-// checkCountFields validates every port group's CountField against the Spec,
-// mirroring the runtime checks in modeling.DefineComponent: the field must
-// exist (by JSON name), be an integer, and be tagged derived. The runtime
-// panics on violations, but a definition that is never executed would
-// otherwise slip through the inspector.
+// checkCountFields validates every port group's CountField against the Spec:
+// the field must exist (by JSON name), be an integer, and be tagged derived.
 func checkCountFields(
 	pkg *packages.Package, lit *ast.CompositeLit,
 	specType types.Type, def *schema.Definition,

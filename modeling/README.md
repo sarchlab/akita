@@ -26,20 +26,22 @@ an integer type.
 
 ### ComponentDef[S]
 
-A component's defaults and boundary ports live in one public declaration:
+A component's defaults and boundary ports live in one public declaration, a
+package-level var named `Definition`:
 
 ```go
-var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{
+var Definition = modeling.ComponentDef[Spec]{
     Name:        "MyComponent",
     DefaultSpec: Spec{Size: 64},
     Ports:       []modeling.PortDef{{Name: "Top"}},
-})
+}
 ```
 
-`DefineComponent` validates the declaration during package initialization and
-returns the same `ComponentDef` type. Its fields remain public; treat the
-declaration as read-only afterward so builders and the static inspector see
-the same defaults and ports.
+The literal must be statically evaluable (keyed fields, constant leaves, role
+identifiers) because the `inspect` package reads and validates it without
+running the code. Treat it as read-only so builders and the inspector see the
+same defaults and ports. Tooling finds the component's Resources type through
+its builder's `WithResources` parameter.
 
 - `Definition.NewSpec()` copies the defaults, including nested slices, maps,
   and arrays, for a builder or caller to customize.

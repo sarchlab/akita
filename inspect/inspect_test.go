@@ -40,6 +40,12 @@ var expectedErrors = []struct {
 	{"unkeyed literal", "fixtures/unkeyed", "must be keyed"},
 	{"count field without spec field", "fixtures/badcount",
 		`CountField "missing" does not match`},
+	{"non-integer count field", "fixtures/countnotint",
+		"must be an integer Spec field"},
+	{"count field not derived", "fixtures/countnotderived",
+		"must be tagged"},
+	{"computed definition", "fixtures/computed",
+		"must be initialized with a composite literal"},
 }
 
 // TestInspect loads all test subjects in one Inspect call (loading carries
@@ -81,10 +87,6 @@ func TestInspect(t *testing.T) {
 			"fullcomp.golden.json")
 	})
 
-	t.Run("explicit type instantiation", func(t *testing.T) {
-		checkInstantiated(t, byPkg)
-	})
-
 	t.Run("same-package protocol and bare role identifiers",
 		func(t *testing.T) {
 			checkLocalProto(t, byPkg)
@@ -105,26 +107,6 @@ func TestInspect(t *testing.T) {
 	t.Run("no unexpected errors", func(t *testing.T) {
 		checkNoUnexpectedErrors(t, errs)
 	})
-}
-
-func checkInstantiated(
-	t *testing.T, byPkg map[string]schema.Definition,
-) {
-	t.Helper()
-
-	def, ok := byPkg["github.com/sarchlab/akita/v5/inspect/testdata/fixtures/instantiated"]
-	if !ok {
-		t.Fatalf("no definition extracted for the instantiated fixture")
-	}
-
-	if def.Name != "Instantiated" {
-		t.Errorf("Name = %q, want %q", def.Name, "Instantiated")
-	}
-
-	if len(def.Spec) != 1 || def.Spec[0].JSONName != "depth" ||
-		def.Spec[0].Default != int64(16) {
-		t.Errorf("Spec = %+v, want depth with default 16", def.Spec)
-	}
 }
 
 func checkLocalProto(t *testing.T, byPkg map[string]schema.Definition) {

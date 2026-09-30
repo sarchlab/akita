@@ -12,7 +12,7 @@ import (
 // Definition declares the SimpleBankedMemory component: its default configuration and
 // its port topology. The builder consumes it at runtime and tooling reads it
 // statically, so it is the single source of truth for both.
-var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{
+var Definition = modeling.ComponentDef[Spec]{
 	Name: "SimpleBankedMemory",
 	DefaultSpec: Spec{
 		Freq:                           1 * timing.GHz,
@@ -29,4 +29,4 @@ var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{
 		{Name: "Top", Roles: []*messaging.Role{memprotocol.Responder}},
 		{Name: "Control", Roles: []*messaging.Role{memcontrolprotocol.Responder}},
 	},
-})
+}

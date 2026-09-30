@@ -12,4 +12,4 @@ type Spec struct {
 	Map     map[int]int
 }
 
-var Definition = modeling.DefineComponent(modeling.ComponentDef[Spec]{Name: "ZeroDefaults"})
+var Definition = modeling.ComponentDef[Spec]{Name: "ZeroDefaults"}
