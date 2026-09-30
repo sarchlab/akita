@@ -20,16 +20,7 @@ func validateSpecType(pkg *packages.Package, typ types.Type, index pkgIndex) err
 	if !ok {
 		return fmt.Errorf("%s: Spec must be a struct, got %s", pkg.PkgPath, typ)
 	}
-	if jsonPkg := index["encoding/json"]; jsonPkg != nil {
-		marshaler := jsonPkg.Types.Scope().Lookup("Marshaler").Type().Underlying().(*types.Interface)
-		unmarshaler := jsonPkg.Types.Scope().Lookup("Unmarshaler").Type().Underlying().(*types.Interface)
-		if types.Implements(typ, marshaler) {
-			if !types.Implements(types.NewPointer(typ), unmarshaler) {
-				return fmt.Errorf("%s: Spec customizes MarshalJSON but has no UnmarshalJSON", pkg.PkgPath)
-			}
-			return nil
-		}
-	}
+	// Spec fields must be scalars even when the Spec customizes its JSON.
 	hasUnexported, encodesField := false, false
 	for i := range st.NumFields() {
 		f := st.Field(i)
@@ -42,6 +33,16 @@ func validateSpecType(pkg *packages.Package, typ types.Type, index pkgIndex) err
 			encodesField = true
 		}
 	}
+	if jsonPkg := index["encoding/json"]; jsonPkg != nil {
+		marshaler := jsonPkg.Types.Scope().Lookup("Marshaler").Type().Underlying().(*types.Interface)
+		unmarshaler := jsonPkg.Types.Scope().Lookup("Unmarshaler").Type().Underlying().(*types.Interface)
+		if types.Implements(typ, marshaler) {
+			if !types.Implements(types.NewPointer(typ), unmarshaler) {
+				return fmt.Errorf("%s: Spec customizes MarshalJSON but has no UnmarshalJSON", pkg.PkgPath)
+			}
+			return nil
+		}
+	}
 	// Mirror modeling's data-loss guard: a Spec whose state is unexported
 	// serializes as {} and would lose it across a checkpoint.
 	if hasUnexported && !encodesField {
@@ -52,7 +53,8 @@ func validateSpecType(pkg *packages.Package, typ types.Type, index pkgIndex) err
 }
 
 // encodedWhenZero reports whether encoding/json writes an exported field whose
-// value is zero: it is not tagged "-" and has no omitempty option.
+// value is zero: it is not tagged "-" and has neither the omitempty nor the
+// omitzero option.
 func encodedWhenZero(tag reflect.StructTag) bool {
 	jsonTag := tag.Get("json")
 	if jsonTag == "-" {
@@ -60,8 +62,10 @@ func encodedWhenZero(tag reflect.StructTag) bool {
 	}
 
 	_, opts, _ := strings.Cut(jsonTag, ",")
+	options := strings.Split(opts, ",")
 
-	return !slices.Contains(strings.Split(opts, ","), "omitempty")
+	return !slices.Contains(options, "omitempty") &&
+		!slices.Contains(options, "omitzero")
 }
 
 // validateSpecFieldType accepts only scalar field types: booleans, integers

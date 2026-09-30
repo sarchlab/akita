@@ -310,6 +310,10 @@ func keyedElements(
 func extractPorts(
 	pkg *packages.Package, expr ast.Expr, index pkgIndex,
 ) ([]schema.Port, error) {
+	if tv, ok := pkg.TypesInfo.Types[expr]; ok && tv.IsNil() {
+		return nil, nil //nolint:nilnil // Ports: nil declares no ports.
+	}
+
 	elems, err := sliceElements(pkg, expr)
 	if err != nil {
 		return nil, err

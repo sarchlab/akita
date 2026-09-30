@@ -9,4 +9,4 @@ type Spec struct {
 	Ratio   float32
 }
 
-var Definition = modeling.ComponentDef[Spec]{Name: "ZeroDefaults"}
+var Definition = modeling.ComponentDef[Spec]{Name: "ZeroDefaults", Ports: nil}

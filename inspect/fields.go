@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"unicode"
 
 	"golang.org/x/tools/go/packages"
 
@@ -87,20 +88,38 @@ func fieldDefault(typ types.Type, explicit any) any {
 // jsonName mirrors encoding/json's field naming: the json tag's name part,
 // the field name when untagged, or "" when the field is excluded.
 func jsonName(fieldName string, tag reflect.StructTag) string {
-	jsonTag, ok := tag.Lookup("json")
-	if !ok {
-		return fieldName
+	jsonTag := tag.Get("json")
+	if jsonTag == "-" {
+		return ""
 	}
 
 	name, _, _ := strings.Cut(jsonTag, ",")
-	if name == "-" {
-		return ""
-	}
-	if name == "" {
+	if !isValidJSONName(name) {
 		return fieldName
 	}
 
 	return name
+}
+
+// isValidJSONName reports whether encoding/json accepts name from a struct
+// tag; it falls back to the field name otherwise. Letters, digits, and most
+// punctuation are allowed; backslashes and quotes are reserved.
+func isValidJSONName(name string) bool {
+	if name == "" {
+		return false
+	}
+
+	for _, c := range name {
+		if strings.ContainsRune("!#$%&()*+-./:;<=>?@[]^_{|}~ ", c) {
+			continue
+		}
+
+		if !unicode.IsLetter(c) && !unicode.IsDigit(c) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // choicesFor lists the declared constants of a named string type, sorted.

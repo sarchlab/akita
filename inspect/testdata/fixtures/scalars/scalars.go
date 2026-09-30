@@ -16,6 +16,7 @@ type Spec struct {
 	StringNumber uint64 `json:",string"`
 	Fraction     float32
 	Choice       Choice
+	Quoted       int `json:"'"`
 }
 
 var Definition = modeling.ComponentDef[Spec]{

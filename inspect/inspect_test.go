@@ -46,6 +46,9 @@ var expectedErrors = []struct {
 	{"unexported-only spec", "fixtures/unexportedonly", "serializes as {}"},
 	{"non-struct resources", "fixtures/badresources",
 		"must take a Resources struct"},
+	{"omitzero-only spec", "fixtures/omitzeroonly", "serializes as {}"},
+	{"container behind MarshalJSON", "fixtures/marshalercontainer",
+		"Spec fields must be scalars"},
 }
 
 // TestInspect loads all test subjects in one Inspect call (loading carries
@@ -137,10 +140,27 @@ func checkDeclarationForms(t *testing.T, byPkg map[string]schema.Definition) {
 		}
 	})
 
-	t.Run("resources behind a pointer parameter", func(t *testing.T) {
-		def := byPkg[fixturePath("pointerresources")]
-		if len(def.Resources) != 1 || def.Resources[0].Name != "Storage" {
-			t.Errorf("Resources = %+v, want Storage", def.Resources)
+	t.Run("resources behind pointer and variadic parameters", func(t *testing.T) {
+		for _, pkg := range []string{"pointerresources", "variadicresources"} {
+			def := byPkg[fixturePath(pkg)]
+			if len(def.Resources) != 1 || def.Resources[0].Name != "Storage" {
+				t.Errorf("%s: Resources = %+v, want Storage", pkg, def.Resources)
+			}
+		}
+	})
+
+	t.Run("nil ports", func(t *testing.T) {
+		def, ok := byPkg[fixturePath("zerodefaults")]
+		if !ok || def.Ports != nil {
+			t.Errorf("zerodefaults: got %+v, want a definition without ports", def)
+		}
+	})
+
+	t.Run("invalid tag name falls back to the field name", func(t *testing.T) {
+		for _, f := range byPkg[fixturePath("scalars")].Spec {
+			if f.Name == "Quoted" && f.JSONName != "Quoted" {
+				t.Errorf("Quoted JSON name = %q, want Quoted", f.JSONName)
+			}
 		}
 	})
 }
