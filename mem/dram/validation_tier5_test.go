@@ -11,51 +11,46 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// Tier 5/6 — differential validation against DRAMSim3 and Ramulator2.
+// Tier 5 — differential validation against DRAMSim3 and Ramulator2.
 //
-// The committed reference data (validation/data/reference.csv) was produced by
-// running both oracles at pinned commits over the workload in
-// validation/traces/scenarios.json (see validation/run_oracles.py). These tests
-// drive the *same* workload through Akita's dram.Comp and compare:
+// One scenario set (validation/traces/scenarios.json) drives all three
+// simulators on the same workload. Each scenario is compared on BOTH:
 //
-//   Tier 5 — command counts (activates/reads/writes), close-page count
-//            scenarios, compared EXACTLY against both oracles. These quantities
-//            are config- and address-map-independent, so exact match is fair.
+//   * command counts (activates/reads/writes) — Akita is asserted to match the
+//     oracles wherever the two oracles AGREE on a count (reads/writes always
+//     agree: one column command per access; activates agree where the count is
+//     map-independent). Where the oracles disagree it's a documented reference
+//     divergence and is not asserted.
 //
-//   Tier 6 — average read latency, open-page stream scenarios, compared against
-//            DRAMSim3 within a 15% tolerance. Some of these deliberately probe a
-//            feature Akita does NOT support (configurable address mapping, P3):
-//            when bank parallelism depends on the mapping, Akita's fixed map
-//            diverges far past 15%. Those scenarios are marked "known_gap" and
-//            the suite asserts the gap is *currently* large (a tracked,
-//            executable record). When P3 lands and the gap closes, the
-//            characterization assertion will fail — flip it to "enforced" then.
+//   * read latency vs DRAMSim3 — within 15% for "enforced" scenarios.
+//     "known_gap" scenarios currently exceed 15% for a feature Akita lacks
+//     (configurable address mapping) and are tracked until it lands.
+//
+// The committed reference data was produced by validation/run_oracles.py.
 
 const (
-	tier5ScenariosPath = "validation/traces/scenarios.json"
-	tier5ReferencePath = "validation/data/reference.csv"
-	latencyTolerance   = 0.15
+	scenariosPath    = "validation/traces/scenarios.json"
+	referencePath    = "validation/data/reference.csv"
+	latencyTolerance = 0.15
 )
 
-// tier5Pattern is the compact workload generator stored in scenarios.json.
-type tier5Pattern struct {
+type scnPattern struct {
 	Op     string `json:"op"`     // "read" | "write"
 	Count  int    `json:"count"`  // number of accesses
 	Stride string `json:"stride"` // hex address stride, e.g. "0x2000"
 }
 
-type tier5Scenario struct {
-	Name         string       `json:"name"`
-	PagePolicy   string       `json:"page_policy"`
-	Pattern      tier5Pattern `json:"pattern"`
-	CountsCheck  string       `json:"counts_check"`
-	LatencyCheck string       `json:"latency_check"`
-	GapReason    string       `json:"gap_reason"`
+type scenario struct {
+	Name        string     `json:"name"`
+	PagePolicy  string     `json:"page_policy"`
+	Pattern     scnPattern `json:"pattern"`
+	ReadLatency string     `json:"read_latency"` // "enforced" | "known_gap" | "off"
+	GapReason   string     `json:"gap_reason"`
 }
 
 // ops expands the scenario's pattern into [is_write, address] pairs, matching
 // run_oracles.build_ops so Akita drives the exact workload the oracles saw.
-func (s tier5Scenario) ops() [][2]uint64 {
+func (s scenario) ops() [][2]uint64 {
 	stride, _ := strconv.ParseUint(s.Pattern.Stride, 0, 64)
 	var isWrite uint64
 	if s.Pattern.Op == "write" {
@@ -68,13 +63,9 @@ func (s tier5Scenario) ops() [][2]uint64 {
 	return out
 }
 
-type tier5Scenarios struct {
-	Scenarios []tier5Scenario `json:"scenarios"`
-}
-
 type oracleResult struct {
 	activates, reads, writes int
-	avgReadLatency           float64 // NaN when not recorded by that oracle
+	avgReadLatency           float64 // NaN when the oracle did not record it
 }
 
 type akitaResult struct {
@@ -85,9 +76,9 @@ type akitaResult struct {
 // runAkita drives the scenario through a dram.Comp configured to match the
 // canonical oracle config (DDR4, refresh off, given page policy) and returns
 // the issued command counts and the average read latency in DRAM cycles.
-func runAkita(scn tier5Scenario) akitaResult {
+func runAkita(s scenario) akitaResult {
 	spec := DDR4Spec
-	if scn.PagePolicy == "open" {
+	if s.PagePolicy == "open" {
 		spec.PagePolicy = PagePolicyOpen
 	} else {
 		spec.PagePolicy = PagePolicyClose
@@ -98,7 +89,7 @@ func runAkita(scn tier5Scenario) akitaResult {
 
 	h := newP0Harness(spec)
 	data := []byte{1, 2, 3, 4}
-	for _, op := range scn.ops() {
+	for _, op := range s.ops() {
 		if op[0] == 1 {
 			h.src.Send(h.write(op[1], data))
 		} else {
@@ -120,21 +111,23 @@ func runAkita(scn tier5Scenario) akitaResult {
 	}
 }
 
-func loadTier5Scenarios() ([]tier5Scenario, bool) {
-	raw, err := os.ReadFile(tier5ScenariosPath)
+func loadScenarios() ([]scenario, bool) {
+	raw, err := os.ReadFile(scenariosPath)
 	if err != nil {
 		return nil, false
 	}
-	var s tier5Scenarios
-	if json.Unmarshal(raw, &s) != nil {
+	var doc struct {
+		Scenarios []scenario `json:"scenarios"`
+	}
+	if json.Unmarshal(raw, &doc) != nil {
 		return nil, false
 	}
-	return s.Scenarios, true
+	return doc.Scenarios, true
 }
 
 // loadReference returns reference results keyed by scenario then simulator.
 func loadReference() (map[string]map[string]oracleResult, bool) {
-	f, err := os.Open(tier5ReferencePath)
+	f, err := os.Open(referencePath)
 	if err != nil {
 		return nil, false
 	}
@@ -172,103 +165,92 @@ func loadReference() (map[string]map[string]oracleResult, bool) {
 }
 
 var (
-	tier5Scen, tier5OKScn = loadTier5Scenarios()
-	tier5Ref, tier5OKRef  = loadReference()
+	scen, okScen = loadScenarios()
+	ref, okRef   = loadReference()
 )
 
 // requireReference fails (not skips): the fixtures are committed and required,
 // so a missing or malformed file is a breakage CI must catch, not silently pass.
 func requireReference() {
-	Expect(tier5OKScn).To(BeTrue(), "committed %s missing or malformed "+
-		"(required; regenerate with validation/run_oracles.py)", tier5ScenariosPath)
-	Expect(tier5OKRef).To(BeTrue(), "committed %s missing or malformed "+
-		"(required; regenerate with validation/run_oracles.py)", tier5ReferencePath)
+	Expect(okScen).To(BeTrue(), "committed %s missing or malformed "+
+		"(required; regenerate with validation/run_oracles.py)", scenariosPath)
+	Expect(okRef).To(BeTrue(), "committed %s missing or malformed "+
+		"(required; regenerate with validation/run_oracles.py)", referencePath)
 }
 
-// countOracles is the set of oracles every enforced count scenario must be
-// compared against (both must be present in reference.csv).
-var countOracles = []string{"dramsim3", "ramulator2"}
+// dramsim3RefLatency returns the DRAMSim3 reference read latency for a scenario,
+// failing if the row is missing or not a positive finite value.
+func dramsim3RefLatency(scnName string) float64 {
+	row, ok := ref[scnName]["dramsim3"]
+	Expect(ok).To(BeTrue(), "%s: missing dramsim3 row in reference.csv", scnName)
+	lat := row.avgReadLatency
+	Expect(math.IsNaN(lat)).To(BeFalse(), "%s: dramsim3 latency not recorded", scnName)
+	Expect(lat).To(BeNumerically(">", 0), "%s: dramsim3 latency must be positive", scnName)
+	return lat
+}
 
-var _ = Describe("Tier 5: command counts vs DRAMSim3 & Ramulator2", func() {
+var _ = Describe("Tier 5: Differential validation vs DRAMSim3 & Ramulator2", func() {
 	BeforeEach(requireReference)
 
-	It("matches the committed oracle command counts exactly", func() {
+	It("matches command counts where the two oracles agree", func() {
 		checked := 0
-		for _, scn := range tier5Scen {
-			if scn.CountsCheck != "enforced" {
-				continue
+		for _, s := range scen {
+			ds3, okd := ref[s.Name]["dramsim3"]
+			ram, okr := ref[s.Name]["ramulator2"]
+			Expect(okd && okr).To(BeTrue(),
+				"%s: need both oracle rows in reference.csv", s.Name)
+
+			akita := runAkita(s)
+			assertIfAgree := func(name string, dv, rv, av int) {
+				if dv == rv { // oracles agree -> the count is well-defined
+					Expect(av).To(Equal(dv),
+						"%s: %s vs oracles (both report %d)", s.Name, name, dv)
+				}
 			}
-			akita := runAkita(scn)
-			ref := tier5Ref[scn.Name]
-			for _, sim := range countOracles {
-				want, ok := ref[sim]
-				Expect(ok).To(BeTrue(),
-					"%s: missing %s row in reference.csv", scn.Name, sim)
-				Expect(akita.activates).To(Equal(want.activates),
-					"%s: activates vs %s", scn.Name, sim)
-				Expect(akita.reads).To(Equal(want.reads),
-					"%s: reads vs %s", scn.Name, sim)
-				Expect(akita.writes).To(Equal(want.writes),
-					"%s: writes vs %s", scn.Name, sim)
-			}
+			assertIfAgree("activates", ds3.activates, ram.activates, akita.activates)
+			assertIfAgree("reads", ds3.reads, ram.reads, akita.reads)
+			assertIfAgree("writes", ds3.writes, ram.writes, akita.writes)
 			checked++
 		}
 		Expect(checked).To(BeNumerically(">", 0))
 	})
-})
 
-// dramsim3RefLatency returns the DRAMSim3 reference read latency for a
-// scenario, failing if the row is missing or not a positive finite value — so a
-// dropped/misspelled oracle row can't silently turn the relative-error check
-// into +Inf (which would pass the known-gap assertion).
-func dramsim3RefLatency(scnName string) float64 {
-	row, ok := tier5Ref[scnName]["dramsim3"]
-	Expect(ok).To(BeTrue(), "%s: missing dramsim3 row in reference.csv", scnName)
-	ref := row.avgReadLatency
-	Expect(math.IsNaN(ref)).To(BeFalse(), "%s: dramsim3 latency is not recorded", scnName)
-	Expect(ref).To(BeNumerically(">", 0), "%s: dramsim3 latency must be positive", scnName)
-	return ref
-}
-
-var _ = Describe("Tier 6: read latency vs DRAMSim3 (15% tolerance)", func() {
-	BeforeEach(requireReference)
-
-	It("matches DRAMSim3 read latency where Akita's model is faithful", func() {
+	It("matches DRAMSim3 read latency within 15% (enforced scenarios)", func() {
 		checked := 0
-		for _, scn := range tier5Scen {
-			if scn.LatencyCheck != "enforced" {
+		for _, s := range scen {
+			if s.ReadLatency != "enforced" {
 				continue
 			}
-			ref := dramsim3RefLatency(scn.Name)
-			akita := runAkita(scn).avgReadLatency
-			relErr := math.Abs(akita-ref) / ref
+			refLat := dramsim3RefLatency(s.Name)
+			akita := runAkita(s).avgReadLatency
+			relErr := math.Abs(akita-refLat) / refLat
 			Expect(relErr).To(BeNumerically("<=", latencyTolerance),
 				"%s: Akita %.1f vs DRAMSim3 %.1f cyc (%.0f%% off)",
-				scn.Name, akita, ref, relErr*100)
+				s.Name, akita, refLat, relErr*100)
 			checked++
 		}
 		Expect(checked).To(BeNumerically(">", 0))
 	})
 
-	// KNOWN GAPS — these probe a feature Akita does not yet support. The suite
-	// records that the divergence is currently large; when the feature lands and
-	// the gap closes (relErr <= 15%), this spec FAILS — that is the signal to
-	// move the scenario to latency_check="enforced".
+	// KNOWN GAPS — probe a feature Akita does not yet support. The suite records
+	// that the divergence is currently large; when the feature lands and the gap
+	// closes (<=15%), this spec FAILS — the signal to move the scenario to
+	// read_latency="enforced".
 	It("records the known feature gaps (currently exceeding 15%)", func() {
 		checked := 0
-		for _, scn := range tier5Scen {
-			if scn.LatencyCheck != "known_gap" {
+		for _, s := range scen {
+			if s.ReadLatency != "known_gap" {
 				continue
 			}
-			ref := dramsim3RefLatency(scn.Name)
-			akita := runAkita(scn).avgReadLatency
-			relErr := math.Abs(akita-ref) / ref
+			refLat := dramsim3RefLatency(s.Name)
+			akita := runAkita(s).avgReadLatency
+			relErr := math.Abs(akita-refLat) / refLat
 			GinkgoWriter.Printf(
 				"KNOWN GAP %-16s Akita %.1f vs DRAMSim3 %.1f cyc (%.0f%% off) — %s\n",
-				scn.Name, akita, ref, relErr*100, scn.GapReason)
+				s.Name, akita, refLat, relErr*100, s.GapReason)
 			Expect(relErr).To(BeNumerically(">", latencyTolerance),
-				"%s gap closed (now %.0f%% off) — promote to latency_check=enforced",
-				scn.Name, relErr*100)
+				"%s gap closed (now %.0f%% off) — promote to read_latency=enforced",
+				s.Name, relErr*100)
 			checked++
 		}
 		Expect(checked).To(BeNumerically(">", 0),
