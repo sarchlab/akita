@@ -92,12 +92,6 @@ func TestDefineProtocolPanics(t *testing.T) {
 			RoleDef{Name: "dup", Sends: []Msg{protoTestRsp{}}})
 	})
 
-	mustPanic(t, "exactly one role", func() {
-		defineProtocol("test.twosenders",
-			RoleDef{Name: "a", Sends: []Msg{protoTestReq{}}},
-			RoleDef{Name: "b", Sends: []Msg{protoTestReq{}}})
-	})
-
 	p := defineProtocol("test.unknownrole",
 		RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
 	mustPanic(t, "does not define role", func() {
@@ -112,11 +106,33 @@ func TestMsgTypeMayBelongToTwoProtocols(t *testing.T) {
 		RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
 }
 
-func TestDefineProtocolNamesItAfterItsPackage(t *testing.T) {
-	p := DefineProtocol(RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
+func TestMsgTypeMayBeSentByTwoRoles(t *testing.T) {
+	p := defineProtocol("test.twosenders",
+		RoleDef{Name: "a", Sends: []Msg{protoTestReq{}}},
+		RoleDef{Name: "b", Sends: []Msg{protoTestReq{}, protoTestRsp{}}})
 
-	if p.Name() != "github.com/sarchlab/akita/v5/messaging" {
-		t.Errorf("Name() = %q, want the defining package's import path", p.Name())
+	if len(p.Role("a").Sends()) != 1 || len(p.Role("b").Sends()) != 2 {
+		t.Errorf("roles send %v and %v", p.Role("a").Sends(), p.Role("b").Sends())
+	}
+
+	if len(p.Messages()) != 2 {
+		t.Errorf("Messages() = %v, want each message type once", p.Messages())
+	}
+}
+
+// AnyProtocol is messaging's own protocol, so it also shows that a protocol
+// is named after the package that defines it, and that a package defines at
+// most one.
+func TestAnyProtocolIsNamedAfterMessaging(t *testing.T) {
+	if AnyProtocol.Name() != "github.com/sarchlab/akita/v5/messaging" {
+		t.Errorf("Name() = %q, want the defining package's import path",
+			AnyProtocol.Name())
+	}
+
+	if AnyRole.Name() != "any" || AnyRole.Protocol() != AnyProtocol ||
+		len(AnyRole.Sends()) != 0 || len(AnyProtocol.Messages()) != 0 {
+		t.Errorf("AnyRole = %q sending %v, want a role named any that lists no messages",
+			AnyRole.Name(), AnyRole.Sends())
 	}
 
 	mustPanic(t, "at most one protocol", func() {

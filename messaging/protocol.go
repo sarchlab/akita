@@ -39,11 +39,19 @@ func (p *Protocol) Role(name string) *Role {
 }
 
 // Messages returns the union of all roles' sends: every message type the
-// protocol carries.
+// protocol carries, each once, although more than one role may send it.
 func (p *Protocol) Messages() []Msg {
+	seen := map[reflect.Type]bool{}
 	msgs := make([]Msg, 0, len(p.roles)*2)
+
 	for _, r := range p.roles {
-		msgs = append(msgs, r.sends...)
+		for _, msg := range r.sends {
+			t := reflect.TypeOf(msg)
+			if !seen[t] {
+				seen[t] = true
+				msgs = append(msgs, msg)
+			}
+		}
 	}
 
 	return msgs
@@ -110,9 +118,9 @@ var (
 //
 // A package defines at most one protocol. A role name is made of letters,
 // digits, '_', and '-'. DefineProtocol panics on a second protocol in the same
-// package, an invalid or duplicate role name, or a message type listed in
-// more than one role of the same protocol. A message type may belong to more
-// than one protocol; re-registration with the codec is harmless.
+// package or an invalid or duplicate role name. A message type may be sent by
+// more than one role, and may belong to more than one protocol;
+// re-registration with the codec is harmless.
 func DefineProtocol(roles ...RoleDef) *Protocol {
 	return defineProtocol(callerPackage(), roles...)
 }
@@ -165,7 +173,6 @@ func defineProtocol(name string, roles ...RoleDef) *Protocol {
 
 	p := &Protocol{name: name}
 	seenRoles := map[string]bool{}
-	seenMsgTypes := map[reflect.Type]string{}
 
 	for _, def := range roles {
 		if !validRoleName(def.Name) {
@@ -181,15 +188,6 @@ func defineProtocol(name string, roles ...RoleDef) *Protocol {
 		seenRoles[def.Name] = true
 
 		for _, msg := range def.Sends {
-			t := reflect.TypeOf(msg)
-			if otherRole, seen := seenMsgTypes[t]; seen {
-				panic(fmt.Sprintf(
-					"protocol %q: message type %s is sent by both role %q "+
-						"and role %q; every message is sent by exactly one role",
-					name, t, otherRole, def.Name))
-			}
-			seenMsgTypes[t] = def.Name
-
 			msgCodec.Register(msg)
 		}
 

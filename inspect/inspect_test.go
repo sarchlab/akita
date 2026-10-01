@@ -195,13 +195,14 @@ func checkLocalProto(t *testing.T, byPkg map[string]schema.Definition) {
 		t.Fatalf("no definition extracted for the localproto fixture")
 	}
 
-	if len(def.Ports) != 2 {
-		t.Fatalf("Ports = %+v, want 2 ports", def.Ports)
+	if len(def.Ports) != 3 {
+		t.Fatalf("Ports = %+v, want 3 ports", def.Ports)
 	}
 
 	want := map[string]schema.Role{
 		"In":   {Protocol: fixturePath("localproto"), Role: "consumer"},
 		"Feed": {Protocol: fixturePath("localproto"), Role: "producer"},
+		"Sink": {Protocol: modulePath + "/messaging", Role: "any"},
 	}
 
 	for _, port := range def.Ports {

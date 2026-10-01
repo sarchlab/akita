@@ -17,7 +17,9 @@ buffer to another port's incoming buffer.
   role(s) it speaks, `akita:"role=<protocol>.<role>"`, for example
   `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`.
   Protocols are **opt-in**: messages flow without one, and registration only
-  matters when a checkpoint can capture the message.
+  matters when a checkpoint can capture the message. A port that takes
+  messages of every protocol, such as a message sink, speaks `AnyRole`, the
+  only role of `AnyProtocol`: `akita:"role=github.com/sarchlab/akita/v5/messaging.any"`.
 - A **port** is owned by a component and holds an incoming and an outgoing
   buffer. Components `Send`/`RetrieveIncoming` on their side; connections
   `Deliver`/`RetrieveOutgoing` on theirs.

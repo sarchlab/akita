@@ -84,9 +84,10 @@ protocol also **registers every listed message type with the checkpoint
 codec** — that is the mechanical payoff.
 
 `DefineProtocol` panics at init time on mistakes that would otherwise be
-silent: a second protocol in the same package, an invalid or duplicate role
-name, or the same message type listed in two roles of one protocol. A role
-name uses only letters, digits, `_`, and `-`.
+silent: a second protocol in the same package, or an invalid or duplicate
+role name. A role name uses only letters, digits, `_`, and `-`. The same
+message type may be sent by more than one role, as when a response goes back
+to requesters of several kinds.
 
 ## Binding Ports to Roles
 
@@ -124,6 +125,12 @@ multiplexes protocols — list several comma-separated directives,
 `akita:"role=example.com/a.x,role=example.com/b.y"` — and a port with no tag — like every port in
 the examples — is untyped and works exactly the same.
 
+A port that takes messages of every protocol, such as a message sink that
+consumes whatever arrives, speaks `messaging.AnyRole`, the only role of
+`messaging.AnyProtocol`:
+`akita:"role=github.com/sarchlab/akita/v5/messaging.any"`. A port without a
+tag declares nothing; a port with the any role declares that it speaks
+anything.
 ## One Package per Protocol
 
 A package defines at most one protocol, and the protocol is named after it:

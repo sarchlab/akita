@@ -31,10 +31,12 @@ type Spec struct {
 // State is the mutable runtime state.
 type State struct{}
 
-// Ports speaks both roles of the local protocol.
+// Ports speaks both roles of the local protocol, and Sink speaks
+// messaging's any role.
 type Ports struct {
 	In   messaging.Port `akita:"role=github.com/sarchlab/akita/v5/inspect/testdata/fixtures/localproto.consumer"`
 	Feed messaging.Port `akita:"role=github.com/sarchlab/akita/v5/inspect/testdata/fixtures/localproto.producer"`
+	Sink messaging.Port `akita:"role=github.com/sarchlab/akita/v5/messaging.any"`
 }
 
 // Middlewares holds the component's behavior.
