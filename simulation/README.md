@@ -142,8 +142,9 @@ setup rebuilds; put cursors and counters in `State`.
   checkpoint.
 - **Register your message and event types.** A port can hold any `messaging.Msg`
   and the engine queue any `timing.Event`; each concrete type must be registered
-  with `messaging.RegisterMsg` / `timing.RegisterEvent` in an `init()` so a
-  checkpoint that captures it can be decoded. A forgotten registration fails
+  (a message by listing it in a `messaging.DefineProtocol`, an event with
+  `timing.RegisterEvent` in an `init()`) so a checkpoint that captures it can
+  be decoded. A forgotten registration fails
   loudly at load.
 - An entity package becomes checkpointable by implementing the structural
   `Checkpointable` interface (`SaveCheckpoint(io.Writer)` / `LoadCheckpoint(io.Reader)`);

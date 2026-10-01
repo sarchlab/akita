@@ -38,14 +38,6 @@ type HookableBase struct {
 	hookList []Hook
 }
 
-// NewHookableBase creates a HookableBase object.
-func NewHookableBase() *HookableBase {
-	h := new(HookableBase)
-	h.hookList = make([]Hook, 0)
-
-	return h
-}
-
 // NumHooks returns the number of hooks registered.
 func (h *HookableBase) NumHooks() int {
 	return len(h.hookList)

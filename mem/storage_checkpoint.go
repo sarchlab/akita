@@ -11,8 +11,8 @@ import (
 // allocated unit, sorted by address, as a compact binary stream. Untouched units
 // are never allocated and therefore not written, so a sparse storage stays small.
 func (s *Storage) SaveCheckpoint(w io.Writer) error {
-	s.Lock()
-	defer s.Unlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
 	addrs := make([]uint64, 0, len(s.data))
 	for addr := range s.data {
@@ -83,9 +83,9 @@ func (s *Storage) LoadCheckpoint(r io.Reader) error {
 		data[addr] = unit
 	}
 
-	s.Lock()
+	s.lock.Lock()
 	s.data = data
-	s.Unlock()
+	s.lock.Unlock()
 
 	return nil
 }

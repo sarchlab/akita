@@ -12,7 +12,7 @@ type registryTestMsg struct {
 }
 
 func TestMsgRegistryRoundTrip(t *testing.T) {
-	RegisterMsg(registryTestMsg{})
+	msgCodec.Register(registryTestMsg{})
 
 	msg := registryTestMsg{Value: 42}
 	msg.ID = 7

@@ -59,7 +59,7 @@ func (d *SampleDomain) End() {
 func ExampleTracer() {
 	timeTeller := &SampleTimeTeller{}
 	domain := &SampleDomain{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
-		HookableBase: hooking.NewHookableBase(),
+		HookableBase: &hooking.HookableBase{},
 		timeTeller:   timeTeller,
 	}
 

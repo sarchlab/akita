@@ -14,7 +14,7 @@ func TestNaming(t *testing.T) {
 
 var _ = Describe("Naming", func() {
 	It("should parse name", func() {
-		name := ParseName("GPU[0].Core[0]")
+		name := parseName("GPU[0].Core[0]")
 		Expect(name.Tokens[0].ElemName).To(Equal("GPU"))
 		Expect(name.Tokens[0].Index).To(Equal([]int{0}))
 		Expect(name.Tokens[1].ElemName).To(Equal("Core"))
@@ -22,7 +22,7 @@ var _ = Describe("Naming", func() {
 	})
 
 	It("should parse multi-dimensional index", func() {
-		name := ParseName("GPU[0][1].Core[0][1]")
+		name := parseName("GPU[0][1].Core[0][1]")
 		Expect(name.Tokens[0].ElemName).To(Equal("GPU"))
 		Expect(name.Tokens[0].Index).To(Equal([]int{0, 1}))
 		Expect(name.Tokens[1].ElemName).To(Equal("Core"))

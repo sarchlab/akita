@@ -58,18 +58,11 @@ fmt.Println(inbox.Size(), inbox.Capacity())
 
 Reads return the zero value and `false` when empty or out of range, including
 negative indices. A stored zero or nil value returns `true`. `PopAt` shifts later
-indices down by one. Invalid removals do not mutate the buffer or fire hooks.
+indices down by one. Invalid removals do not mutate the buffer.
 Head removal is O(1); indexed removal shifts the entries after the removed item.
 
 Buffers and pipelines require serialized access. `CanPush`, `CanAccept`, and
 peek operations do not reserve capacity or entries.
-
-### Hook Positions
-
-`Buffer[T]` embeds `hooking.HookableBase` and fires:
-
-- `HookPosBufPush` — after an element is pushed.
-- `HookPosBufPop` — after an element is popped.
 
 ### Checkpointing
 

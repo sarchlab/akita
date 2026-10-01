@@ -16,9 +16,7 @@ when:
 - **Your simulation will be checkpointed.** A message captured in a port
   buffer at save time can only be decoded at load time if its concrete
   type was registered. Defining a protocol registers every message type it
-  carries. (Without a protocol, the low-level
-  `messaging.RegisterMsg(MyReq{})` in an `init()` does the same for one
-  type at a time. If you never checkpoint, neither is needed.)
+  carries. (If you never checkpoint, you do not need one.)
 - **You are building a component library.** A protocol package documents
   the wire contract between your components — what a port sends and
   receives — in one discoverable place, instead of spread across

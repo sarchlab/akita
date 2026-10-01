@@ -23,7 +23,6 @@ set of worked recipes.
 > | Component models | `v5/modeling/ticking/` (and `wakeup/`, `event/`) | the five structs, `Definition.Builder()`, `WithResources` |
 > | Hooks | `v5/hooking/` | `Hook`, `HookCtx`, `AcceptHook` |
 > | Port hook points | `v5/messaging/port.go` | `HookPosPortMsgSend`, `HookPosPortMsgRecvd` |
-> | Buffer hook points | `v5/queueing/buffer.go` | `HookPosBufPush`, `HookPosBufPop` |
 > | Ideal component example | `v5/mem/idealmemcontroller/` | A "perfect memory" variant |
 > | Middleware | `v5/modeling/middleware.go` | `Middleware` (`Handle(e timing.Event) bool`) |
 > | Writing a component | the [Create a Component](/tutorial/components/what_is_a_component) tutorial | The full component how-to |
@@ -189,8 +188,7 @@ topPort.AcceptHook(&accessCounter{count: &tlbAccesses})
 The same hook can be attached to **every** instance in a loop, so "do X on
 every TLB access across the whole machine" is one setup loop, not an edit to
 the TLB. Available event points include `messaging.HookPosPortMsgSend` /
-`HookPosPortMsgRecvd` on ports and `queueing.HookPosBufPush` /
-`HookPosBufPop` on buffers; components may define their own.
+`HookPosPortMsgRecvd` on ports; components may define their own.
 
 Hooks observe and can act on a side-channel you own; for genuine **behavior**
 change, prefer §3.1 or §3.5.

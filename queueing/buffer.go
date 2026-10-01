@@ -1,23 +1,11 @@
 package queueing
 
-import (
-	"log"
-
-	"github.com/sarchlab/akita/v5/hooking"
-)
-
-// HookPosBufPush marks when an element is pushed into the buffer.
-var HookPosBufPush = &hooking.HookPos{Name: "Buffer Push"}
-
-// HookPosBufPop marks when an element is popped from the buffer.
-var HookPosBufPop = &hooking.HookPos{Name: "Buffer Pop"}
+import "log"
 
 // Buffer is a generic, bounded buffer with FIFO and indexed reads.
 // Indexed removal preserves the order of the remaining elements. Buffer is not
 // synchronized; callers must serialize access. Capacity checks do not reserve space.
 type Buffer[T any] struct {
-	hooking.HookableBase `json:"-"`
-
 	name     string
 	cap      int
 	elements []T
@@ -60,14 +48,6 @@ func (b *Buffer[T]) Push(e T) {
 	}
 
 	b.elements = append(b.elements, e)
-
-	if b.NumHooks() > 0 {
-		b.InvokeHook(hooking.HookCtx{
-			Domain: b,
-			Pos:    HookPosBufPush,
-			Item:   e,
-		})
-	}
 }
 
 // Peek returns the head element without removing it. The boolean reports
@@ -98,7 +78,7 @@ func (b *Buffer[T]) Pop() (T, bool) { return b.PopAt(0) }
 
 // PopAt removes and returns the element at index, preserving the order of the
 // remaining elements. Out-of-range indices return the zero value of T and false
-// without mutation or hooks. Removing an entry invalidates subsequent indices.
+// without mutation. Removing an entry invalidates subsequent indices.
 func (b *Buffer[T]) PopAt(index int) (T, bool) {
 	e, ok := b.PeekAt(index)
 	if !ok {
@@ -115,13 +95,6 @@ func (b *Buffer[T]) PopAt(index int) (T, bool) {
 		b.elements = b.elements[:len(b.elements)-1]
 	}
 
-	if b.NumHooks() > 0 {
-		b.InvokeHook(hooking.HookCtx{
-			Domain: b,
-			Pos:    HookPosBufPop,
-			Item:   e,
-		})
-	}
 	return e, true
 }
 
@@ -141,7 +114,7 @@ func (b *Buffer[T]) Elements() []T {
 }
 
 // Restore replaces the buffer's contents with the given elements (front to
-// back) without firing hooks. It is used to rebuild a buffer from a checkpoint
+// back). It is used to rebuild a buffer from a checkpoint
 // and panics if the elements exceed the buffer's capacity.
 func (b *Buffer[T]) Restore(elements []T) {
 	if len(elements) > b.cap {

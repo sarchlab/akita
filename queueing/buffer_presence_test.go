@@ -4,22 +4,11 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/stretchr/testify/require"
 )
 
-type bufferPopRecorder struct{ items []any }
-
-func (h *bufferPopRecorder) Func(ctx hooking.HookCtx) {
-	if ctx.Pos == HookPosBufPop {
-		h.items = append(h.items, ctx.Item)
-	}
-}
-
 func TestBufferIndexedRemoval(t *testing.T) {
 	b := NewBuffer[int]("indexed", 4)
-	h := &bufferPopRecorder{}
-	b.AcceptHook(h)
 	for _, v := range []int{0, 10, 20, 30} {
 		b.Push(v)
 	}
@@ -32,7 +21,6 @@ func TestBufferIndexedRemoval(t *testing.T) {
 		require.False(t, ok)
 	}
 	require.Equal(t, []int{0, 10, 20, 30}, b.Elements())
-	require.Empty(t, h.items)
 	v, ok := b.PopAt(2)
 	require.True(t, ok)
 	require.Equal(t, 20, v)
@@ -52,10 +40,9 @@ func TestBufferIndexedRemoval(t *testing.T) {
 	v, ok = b.Pop()
 	require.False(t, ok)
 	require.Zero(t, v)
-	require.Equal(t, []any{20, 30, 0, 10}, h.items)
 	require.True(t, b.CanPush())
 	t.Log("PopAt(2) removed 20, preserved [0 10 30]; zero-valued head returned (0, true); " +
-		"invalid reads left contents and hooks unchanged")
+		"invalid reads left the contents unchanged")
 }
 
 func TestBufferNilIsPresent(t *testing.T) {

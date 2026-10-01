@@ -97,5 +97,4 @@ for that address:
 | `mem/idealmemcontroller` | Ideal (zero-latency) memory controller |
 | `mem/mshr` | Miss Status Holding Registers |
 | `mem/datamover` | Data movement between memory components |
-| `mem/trace` | Memory access tracing utilities |
 | `mem/simplebankedmemory` | Simple banked memory model |

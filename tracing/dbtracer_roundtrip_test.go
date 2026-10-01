@@ -54,7 +54,7 @@ func writeRoundTripTrace(t *testing.T) string {
 
 	recorder := datarecording.NewDataRecorder(dbName)
 	domain := &roundTripDomain{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
-		HookableBase: hooking.NewHookableBase(),
+		HookableBase: &hooking.HookableBase{},
 		name:         "GPU[0].L1Cache",
 	}
 

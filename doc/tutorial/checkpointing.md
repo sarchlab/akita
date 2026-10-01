@@ -92,8 +92,7 @@ type Ports struct {
 ```
 
 Adding a new message is one type definition plus one entry in a `Sends` list.
-(`messaging.RegisterMsg(MyReq{})` in an `init()` remains as the low-level
-primitive, but protocols are the recommended path.) A registration-coverage
+A protocol is the only way to register a message type. A registration-coverage
 audit in `messaging` fails CI for any message type in the Akita module that
 belongs to no protocol, and the load itself fails loudly — never silently —
 with `unknown message type "yourpkg.MyReq"` if an unregistered message was

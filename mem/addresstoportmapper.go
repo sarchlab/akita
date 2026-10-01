@@ -68,12 +68,3 @@ func (f *BankedAddressPortMapper) Find(address uint64) messaging.RemotePort {
 	i := address / f.BankSize
 	return f.LowModules[i]
 }
-
-// NewBankedAddressPortMapper returns a new BankedAddressToPortMapper.
-func NewBankedAddressPortMapper(bankSize uint64) *BankedAddressPortMapper {
-	f := new(BankedAddressPortMapper)
-	f.BankSize = bankSize
-	f.LowModules = make([]messaging.RemotePort, 0)
-
-	return f
-}

@@ -22,7 +22,7 @@ const (
 // similar to the concept of page in memory management. For the units that
 // it not touched by Read and Write function, no memory will be allocated.
 type Storage struct {
-	sync.Mutex
+	lock sync.Mutex
 
 	name     string
 	capacity uint64
@@ -79,8 +79,8 @@ func NewStorageWithUnitSize(capacity uint64, unitSize uint64) *Storage {
 func (s *Storage) createOrGetStorageUnit(address uint64) *storageUnit {
 	baseAddr, _ := s.parseAddress(address)
 
-	s.Lock()
-	defer s.Unlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
 	unit, ok := s.data[baseAddr]
 	if !ok {

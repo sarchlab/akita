@@ -40,7 +40,7 @@ func TestPortCheckpointCapacityMismatch(t *testing.T) {
 }
 
 func TestPortCheckpointRoundTripWithMessages(t *testing.T) {
-	RegisterMsg(registryTestMsg{})
+	msgCodec.Register(registryTestMsg{})
 
 	mk := func(id uint64, v int) registryTestMsg {
 		m := registryTestMsg{Value: v}

@@ -80,8 +80,8 @@ own package (e.g. `mem/memprotocol`, `mem/memcontrolprotocol`, `mem/vm/vmprotoco
 that owns the message types and the protocol definition. A
 registration-coverage audit
 (`protocolaudit_test.go`) fails CI for any message type in the module that is
-not registered. `RegisterMsg(MyReq{})` in an `init()` remains as the low-level
-primitive (and `RegisterEvent` for events). No custom marshalling is needed.
+not registered. Events are registered with `timing.RegisterEvent`. No custom
+marshalling is needed.
 See [`doc/tutorial/checkpointing.md`](../doc/tutorial/checkpointing.md).
 
 ### Port
