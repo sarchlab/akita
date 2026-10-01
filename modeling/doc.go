@@ -9,9 +9,10 @@
 //     time it asked for;
 //   - modeling/event: no clock; reacts to events that carry data.
 //
-// This package holds what the models share: ComponentBase, Middleware, the
-// tick and wakeup schedulers, checkpoint helpers, validation of Spec and State
-// types, and Domain for bundling components and exposing ports at a boundary.
+// This package holds what the models share: Component, ComponentBase,
+// Middleware, checkpoint helpers, validation of Spec and State types, and
+// Domain for bundling components and exposing ports at a boundary. Each model
+// package holds its own scheduler and the event it schedules.
 //
 // The timing package provides the simulation kernel. The messaging package
 // provides ports and connections. The modeling package provides the

@@ -70,7 +70,7 @@ A few things to notice:
   `State` is saved in checkpoints. Even the random source is not a
   middleware field: it arrives through `Resources`, supplied by the system
   builder.
-- The event argument is the tick, a `modeling.TickEvent`. A ticking
+- The event argument is the tick, a `ticking.TickEvent`. A ticking
   middleware usually does its cycle of work without looking at it, so the
   walker names it `_`. (In the other two component models the same method
   receives other events; see *Wakeup and Event Components*.)

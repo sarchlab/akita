@@ -2,6 +2,7 @@ package directconnection
 
 import (
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/timing"
 
@@ -56,7 +57,7 @@ func (b Builder) Build(name string) *Comp {
 		sim:  b.simulation,
 		// A direct connection ticks on secondary events, so it runs after the
 		// components of the same cycle.
-		ticks: modeling.NewSecondaryTickScheduler(name, b.simulation, b.spec.Freq),
+		ticks: ticking.NewSecondaryScheduler(name, b.simulation, b.spec.Freq),
 		ports: ports{portMap: make(map[messaging.RemotePort]int)},
 	}
 

@@ -70,7 +70,7 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 	modeling.MustBeCheckpointable[S, T](name, b.spec)
 
 	c := &Component[S, T, R, P, M]{
-		ticks: modeling.NewTickScheduler(name, b.simulation, specFreq(b.spec)),
+		ticks: NewScheduler(name, b.simulation, specFreq(b.spec)),
 	}
 	modeling.InitComponentBase(&c.ComponentBase, c,
 		b.simulation, name, b.spec, b.resources, b.ports)

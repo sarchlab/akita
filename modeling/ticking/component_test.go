@@ -119,9 +119,9 @@ func TestBuildRunsMiddlewaresInOrder(t *testing.T) {
 		t.Errorf("NewState was not applied: Count = %d, want 2", c.State.Count)
 	}
 
-	c.Handle(modeling.MakeTickEvent(1, "C", 0))
+	c.Handle(ticking.MakeTickEvent(1, "C", 0))
 
-	want := []string{"first modeling.TickEvent", "second modeling.TickEvent"}
+	want := []string{"first ticking.TickEvent", "second ticking.TickEvent"}
 	if !reflect.DeepEqual(c.State.Log, want) {
 		t.Errorf("middlewares ran as %v, want %v", c.State.Log, want)
 	}

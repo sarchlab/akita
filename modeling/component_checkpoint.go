@@ -29,10 +29,14 @@ type schedulerCheckpoint struct {
 }
 
 // A Scheduler schedules a component's own tick or wakeup events and keeps a
-// dedup guard that checkpoints save: a *TickScheduler or a *WakeupScheduler.
+// dedup guard that checkpoints save: a *ticking.Scheduler or a
+// *wakeup.Scheduler.
 type Scheduler interface {
-	snapshot() (at timing.VTimeInPicoSec, scheduled bool)
-	restore(at timing.VTimeInPicoSec, scheduled bool)
+	// Snapshot returns the guard: whether an event is pending and at what time.
+	Snapshot() (at timing.VTimeInPicoSec, scheduled bool)
+
+	// Restore sets the guard from a checkpoint.
+	Restore(at timing.VTimeInPicoSec, scheduled bool)
 }
 
 // WriteCheckpoint writes a component's spec hash, State, and scheduler guard
@@ -51,7 +55,7 @@ func WriteCheckpoint[S, T any](
 		State:    data,
 	}
 	if s != nil {
-		at, scheduled := s.snapshot()
+		at, scheduled := s.Snapshot()
 		dto.Scheduler = schedulerCheckpoint{Scheduled: scheduled, At: at}
 	}
 
@@ -81,7 +85,7 @@ func ReadCheckpoint[S, T any](
 	*state = restored
 
 	if s != nil {
-		s.restore(dto.Scheduler.At, dto.Scheduler.Scheduled)
+		s.Restore(dto.Scheduler.At, dto.Scheduler.Scheduled)
 	}
 
 	return nil

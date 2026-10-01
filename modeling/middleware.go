@@ -9,8 +9,8 @@ import (
 
 // Middleware is one piece of a component's behavior. Every component model
 // uses it: the component passes each event it receives to its middlewares in
-// the declaration order of its Middlewares struct. A tick is a TickEvent; a
-// middleware ignores the events it does not handle.
+// the declaration order of its Middlewares struct. A tick is a
+// ticking.TickEvent; a middleware ignores the events it does not handle.
 type Middleware interface {
 	// Handle processes an event. It returns true if it made progress:
 	// changed the State, or sent or received a message.

@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -54,7 +55,7 @@ type Comp struct {
 	name  string
 	spec  Spec
 	sim   timing.Simulation
-	ticks *modeling.TickScheduler
+	ticks *ticking.Scheduler
 	ports ports
 }
 

@@ -1,4 +1,4 @@
-package modeling
+package ticking
 
 import (
 	"sync"
@@ -6,8 +6,8 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// TickEvent is a generic event that almost all the component can use to
-// update their status.
+// TickEvent is the event a ticking component receives every cycle while it
+// makes progress. It carries no data.
 type TickEvent struct {
 	timing.EventBase
 }
@@ -23,8 +23,15 @@ func MakeTickEvent(id uint64, handlerID string, time timing.VTimeInPicoSec) Tick
 	return evt
 }
 
-// TickScheduler can help schedule tick events.
-type TickScheduler struct {
+// init registers TickEvent so the engine's event queue can be checkpointed
+// while a tick is pending. Ticks are scheduled by value.
+func init() {
+	timing.RegisterEvent(TickEvent{})
+}
+
+// Scheduler schedules the tick events of a handler. Its dedup guard remembers
+// the pending tick, so at most one tick per cycle is scheduled.
+type Scheduler struct {
 	lock       sync.Mutex
 	handlerID  string
 	freq       timing.Freq
@@ -36,13 +43,14 @@ type TickScheduler struct {
 	hasScheduledTick bool
 }
 
-// NewTickScheduler creates a scheduler for tick events.
-func NewTickScheduler(
+// NewScheduler creates a scheduler for the tick events of the handler with
+// the given ID.
+func NewScheduler(
 	handlerID string,
 	sim timing.Simulation,
 	freq timing.Freq,
-) *TickScheduler {
-	ticker := new(TickScheduler)
+) *Scheduler {
+	ticker := new(Scheduler)
 
 	ticker.handlerID = handlerID
 	ticker.simulation = sim
@@ -53,14 +61,14 @@ func NewTickScheduler(
 	return ticker
 }
 
-// NewSecondaryTickScheduler creates a scheduler that always schedule secondary
-// tick events.
-func NewSecondaryTickScheduler(
+// NewSecondaryScheduler creates a scheduler that always schedules secondary
+// tick events, which run after the primary events of the same time.
+func NewSecondaryScheduler(
 	handlerID string,
 	sim timing.Simulation,
 	freq timing.Freq,
-) *TickScheduler {
-	ticker := new(TickScheduler)
+) *Scheduler {
+	ticker := new(Scheduler)
 
 	ticker.handlerID = handlerID
 	ticker.simulation = sim
@@ -73,7 +81,7 @@ func NewSecondaryTickScheduler(
 }
 
 // TickNow schedule a Tick event at the current time.
-func (t *TickScheduler) TickNow() {
+func (t *Scheduler) TickNow() {
 	t.lock.Lock()
 	time := t.CurrentTime()
 
@@ -95,7 +103,7 @@ func (t *TickScheduler) TickNow() {
 }
 
 // TickLater will schedule a tick event at the cycle after the now time.
-func (t *TickScheduler) TickLater() {
+func (t *Scheduler) TickLater() {
 	t.lock.Lock()
 	time := t.freq.NextTick(t.CurrentTime())
 
@@ -116,29 +124,31 @@ func (t *TickScheduler) TickLater() {
 	t.lock.Unlock()
 }
 
-func (t *TickScheduler) CurrentTime() timing.VTimeInPicoSec {
+// CurrentTime returns the simulation's current time.
+func (t *Scheduler) CurrentTime() timing.VTimeInPicoSec {
 	return t.engine.CurrentTime()
 }
 
-// snapshot returns the scheduler's dedup guard: whether a tick is pending and at
-// what time. It is serialized in the component checkpoint so the guard can be
-// restored directly, with no post-load reconciliation against the event queue.
-func (t *TickScheduler) snapshot() (nextTickTime timing.VTimeInPicoSec, scheduled bool) {
+// NewID allocates an ID, unique within the scheduler's simulation.
+func (t *Scheduler) NewID() uint64 { return t.simulation.NewID() }
+
+// Snapshot returns the scheduler's dedup guard: whether a tick is pending and
+// at what time. A component checkpoint saves it so the guard can be restored
+// directly, with no post-load reconciliation against the event queue.
+func (t *Scheduler) Snapshot() (nextTickTime timing.VTimeInPicoSec, scheduled bool) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	return t.nextTickTime, t.hasScheduledTick
 }
 
-// restore sets the scheduler's dedup guard from a checkpoint. The matching tick
-// event is restored separately by the engine, so the two stay consistent.
-func (t *TickScheduler) restore(nextTickTime timing.VTimeInPicoSec, scheduled bool) {
+// Restore sets the scheduler's dedup guard from a checkpoint. The engine
+// restores the matching tick event separately, so the two stay consistent.
+// Only checkpoint loading should call it.
+func (t *Scheduler) Restore(nextTickTime timing.VTimeInPicoSec, scheduled bool) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	t.nextTickTime = nextTickTime
 	t.hasScheduledTick = scheduled
 }
-
-// NewID allocates an ID, unique within the scheduler's simulation.
-func (t *TickScheduler) NewID() uint64 { return t.simulation.NewID() }

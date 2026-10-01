@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -66,7 +67,7 @@ var _ = Describe("DirectConnection", func() {
 	It("should forward when handling tick event", func() {
 		engine.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(10000))
 
-		tick := modeling.MakeTickEvent(sim.NewID(), connection.Name(), timing.VTimeInPicoSec(10000))
+		tick := ticking.MakeTickEvent(sim.NewID(), connection.Name(), timing.VTimeInPicoSec(10000))
 
 		msg1 := newTestMsg(sim)
 		msg1.Src = port1.AsRemote()
@@ -90,7 +91,7 @@ var _ = Describe("DirectConnection", func() {
 
 		engine.EXPECT().
 			Schedule(gomock.Any()).
-			Do(func(evt modeling.TickEvent) {
+			Do(func(evt ticking.TickEvent) {
 				Expect(evt.Time()).To(Equal(timing.VTimeInPicoSec(11000)))
 				Expect(evt.IsSecondary()).To(BeTrue())
 			})
@@ -99,7 +100,7 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should keep outgoing messages queued when delivery is blocked", func() {
-		tick := modeling.MakeTickEvent(sim.NewID(), connection.Name(), timing.VTimeInPicoSec(10000))
+		tick := ticking.MakeTickEvent(sim.NewID(), connection.Name(), timing.VTimeInPicoSec(10000))
 
 		msg := newTestMsg(sim)
 		msg.Src = port1.AsRemote()
@@ -116,7 +117,7 @@ var _ = Describe("DirectConnection", func() {
 // agent is a test double that sends its messages out of OutPort and records
 // what it receives, ticking while it makes progress.
 type agent struct {
-	*modeling.TickScheduler
+	*ticking.Scheduler
 	hooking.HookableBase
 
 	name    string
@@ -128,9 +129,9 @@ type agent struct {
 
 func newAgent(sim timing.Simulation, freq timing.Freq, name string, outPort messaging.Port) *agent {
 	a := &agent{
-		TickScheduler: modeling.NewTickScheduler(name, sim, freq),
-		name:          name,
-		OutPort:       outPort,
+		Scheduler: ticking.NewScheduler(name, sim, freq),
+		name:      name,
+		OutPort:   outPort,
 	}
 	a.OutPort.SetOwner(a)
 	sim.GetEngine().(timing.HandlerRegistry).RegisterHandler(name, a)

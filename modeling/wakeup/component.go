@@ -14,16 +14,16 @@ import (
 type Component[S, T, R, P, M any] struct {
 	modeling.ComponentBase[S, T, R, P, M]
 
-	wakeups  *modeling.WakeupScheduler
+	wakeups  *Scheduler
 	pipeline []modeling.Middleware
 }
 
-// Handle passes the event, a modeling.WakeupEvent, to every middleware in the
+// Handle passes the event, usually an Event, to every middleware in the
 // declaration order of Middlewares. If any of them made progress, the
 // instance wakes again at the same time, so it keeps running until no
 // middleware has work ready.
 func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
-	if _, ok := e.(modeling.WakeupEvent); ok {
+	if _, ok := e.(Event); ok {
 		c.wakeups.Woke(e.Time())
 	}
 

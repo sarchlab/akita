@@ -1,8 +1,9 @@
-package modeling
+package ticking
 
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -20,15 +21,15 @@ func (e *testEngine) Schedule(event timing.Event) {
 	e.scheduled = append(e.scheduled, event)
 }
 
-func newTestScheduler(secondary bool) (*TickScheduler, *testEngine) {
+func newTestScheduler(secondary bool) (*Scheduler, *testEngine) {
 	engine := &testEngine{now: timing.VTimeInPicoSec(10000)}
-	sim := NewStandaloneSimulation(engine)
+	sim := modeling.NewStandaloneSimulation(engine)
 
 	if secondary {
-		return NewSecondaryTickScheduler("TC", sim, 1*timing.GHz), engine
+		return NewSecondaryScheduler("TC", sim, 1*timing.GHz), engine
 	}
 
-	return NewTickScheduler("TC", sim, 1*timing.GHz), engine
+	return NewScheduler("TC", sim, 1*timing.GHz), engine
 }
 
 func wantScheduled(t *testing.T, engine *testEngine, times ...timing.VTimeInPicoSec) {
@@ -62,7 +63,7 @@ func TestTickNowSchedulesTheCurrentCycle(t *testing.T) {
 	wantScheduled(t, engine, 10000)
 }
 
-func TestTickSchedulerSchedulesOneTickPerCycle(t *testing.T) {
+func TestSchedulerSchedulesOneTickPerCycle(t *testing.T) {
 	ts, engine := newTestScheduler(false)
 
 	ts.TickLater()
@@ -72,7 +73,7 @@ func TestTickSchedulerSchedulesOneTickPerCycle(t *testing.T) {
 	wantScheduled(t, engine, 11000)
 }
 
-func TestSecondaryTickSchedulerSchedulesSecondaryTicks(t *testing.T) {
+func TestSecondarySchedulerSchedulesSecondaryTicks(t *testing.T) {
 	ts, engine := newTestScheduler(true)
 
 	ts.TickLater()

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -339,7 +339,7 @@ func newControlReq(h *Harness, cmd Command) Req {
 // tick hands the component a TickEvent at the current time, as the engine
 // does on every cycle.
 func (h *Harness) tick() {
-	h.Comp.Handle(modeling.MakeTickEvent(
+	h.Comp.Handle(ticking.MakeTickEvent(
 		h.Sim.NewID(), h.Comp.Name(), h.Sim.GetEngine().CurrentTime()))
 }
 

@@ -148,10 +148,11 @@ req.ID = component.NewID() // uses the same counter
 
 Event factories now take the allocated ID explicitly:
 `timing.MakeEventBase(sim.NewID(), time, handlerID)` and
-`modeling.MakeTickEvent(sim.NewID(), handlerID, time)`.
+`ticking.MakeTickEvent(sim.NewID(), handlerID, time)`.
 
-Separate simulations may reuse numeric IDs. Tracing associations are scoped
-to the simulation as well as the component name and message ID.
+Separate simulations may reuse numeric IDs. Tracing associations are keyed by
+the component itself and the message ID, so simulations that reuse IDs stay
+apart.
 
 Pass the simulation to builders with `WithSimulation(sim)`. All component and
 package builders accept the shared `timing.Simulation` interface. Components expose `Simulation()`, while engines and components have
@@ -516,8 +517,8 @@ in which events reach the middlewares:
 
 | Model | Events that reach the middlewares | Use it for |
 |-------|-----------------------------------|------------|
-| `modeling/ticking` | a `TickEvent` every cycle while any middleware makes progress; port activity restarts ticking (`TickLater` starts it) | work that advances cycle by cycle: pipelines, caches, switches. The default, and the usual target for a V4 ticking component. |
-| `modeling/wakeup` | a data-less `WakeupEvent` on port activity, or at a time a middleware asked for with `WakeAt` | a component that is idle most of the time and knows when it next has work |
+| `modeling/ticking` | a `ticking.TickEvent` every cycle while any middleware makes progress; port activity restarts ticking (`TickLater` starts it) | work that advances cycle by cycle: pipelines, caches, switches. The default, and the usual target for a V4 ticking component. |
+| `modeling/wakeup` | a data-less `wakeup.Event` on port activity, or at a time a middleware asked for with `WakeAt` | a component that is idle most of the time and knows when it next has work |
 | `modeling/event` | `event.Recv` and `event.PortFree` for port activity, and the events the component schedules for itself with `Schedule` | behavior that is a set of distinct happenings, each with its own data and time |
 
 The *Wakeup and Event Components* tutorial walks through the two clockless

@@ -5,16 +5,16 @@ import (
 
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 // Agent is a traffic generator for network tests. It sends the messages in
 // MsgsToSend out of its ports and reports every message it receives to the
 // test. It is a test double, not a modeled component, so it is written
-// directly on a TickScheduler.
+// directly on a ticking.Scheduler.
 type Agent struct {
-	*modeling.TickScheduler
+	*ticking.Scheduler
 	hooking.HookableBase
 
 	name       string
@@ -35,9 +35,9 @@ func NewAgent(
 	test *Test,
 ) *Agent {
 	a := &Agent{
-		TickScheduler: modeling.NewTickScheduler(name, sim, freq),
-		name:          name,
-		test:          test,
+		Scheduler: ticking.NewScheduler(name, sim, freq),
+		name:      name,
+		test:      test,
 	}
 
 	if handlers, ok := sim.GetEngine().(timing.HandlerRegistry); ok {

@@ -84,7 +84,7 @@ func (m *pingMW) Handle(e timing.Event) bool {
 }
 ```
 
-`Handle` runs on every wakeup. The event is a `modeling.WakeupEvent`, which
+`Handle` runs on every wakeup. The event is a `wakeup.Event`, which
 carries nothing but its time: the middleware looks at the State and the
 port and does whatever work is due. If it made progress, the component
 wakes again at once, so it keeps running until nothing is left to do.

@@ -63,8 +63,8 @@ handle. The models differ only in which events arrive:
 
 | Model | Events that arrive | Example |
 |---|---|---|
-| `modeling/ticking` | a `TickEvent` every cycle while any middleware makes progress; port activity restarts ticking | `mem/rob` |
-| `modeling/wakeup` | a data-less `WakeupEvent` on port activity or at a time the component asked for (`WakeAt`); it runs again at once while any middleware makes progress | `examples/ping` |
+| `modeling/ticking` | a `ticking.TickEvent` every cycle while any middleware makes progress; port activity restarts ticking | `mem/rob` |
+| `modeling/wakeup` | a data-less `wakeup.Event` on port activity or at a time the component asked for (`WakeAt`); it runs again at once while any middleware makes progress | `examples/ping` |
 | `modeling/event` | `event.Recv` and `event.PortFree` for port activity, and the events, with their data, that the component schedules for itself | the `modeling/event` example |
 
 Choosing a model:
@@ -94,10 +94,11 @@ Each package doc shows how to declare and build a component of its model.
 - `Middleware`, `Dispatch`, and `OrderedMiddlewares` — the middleware
   interface, running a list of middlewares, and listing a Middlewares struct in
   field order.
-- `TickScheduler` and `WakeupScheduler` — the schedulers of the ticking and
-  wakeup models, with the `TickEvent` and `WakeupEvent` they schedule.
 - `WriteCheckpoint` and `ReadCheckpoint` — save and restore a component's
-  Spec hash, State, and scheduler guard.
+  Spec hash, State, and the dedup guard of its scheduler. A `Scheduler` is
+  what they save the guard through; the ticking and wakeup models each keep
+  their own (`ticking.Scheduler`, `wakeup.Scheduler`), next to the event it
+  schedules.
 - `modelingtest` — `CheckTicking`, `CheckWakeup`, and `CheckEvent` assert that
   the inspector's static view of a package matches its `Definition`;
   `Tick` steps a ticking component by one cycle in tests.

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -57,11 +58,11 @@ func TestCheckpointSpecMismatch(t *testing.T) {
 // round-trips: after restoring a pending tick, asking for the same tick again
 // schedules nothing, since the engine's restored queue already holds it.
 func TestCheckpointRestoresSchedulerGuard(t *testing.T) {
-	newScheduler := func() (*modeling.TickScheduler, *timing.SerialEngine) {
+	newScheduler := func() (*ticking.Scheduler, *timing.SerialEngine) {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
 
-		return modeling.NewTickScheduler("C", sim, 1*timing.GHz), engine
+		return ticking.NewScheduler("C", sim, 1*timing.GHz), engine
 	}
 
 	src, _ := newScheduler()

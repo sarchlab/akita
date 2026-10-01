@@ -14,7 +14,7 @@ import (
 type Component[S, T, R, P, M any] struct {
 	modeling.ComponentBase[S, T, R, P, M]
 
-	ticks    *modeling.TickScheduler
+	ticks    *Scheduler
 	pipeline []modeling.Middleware
 }
 

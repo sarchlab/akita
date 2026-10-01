@@ -14,9 +14,9 @@
 // # How it runs
 //
 // The component is woken when a port receives a message or frees buffer
-// space, or at a time a middleware asked for with WakeAt. Each wakeup is a
-// modeling.WakeupEvent, which carries no data: every middleware, in field
-// order, looks at the State and ports and does the work that is ready. If
+// space, or at a time a middleware asked for with WakeAt. Each wakeup is an
+// Event, which carries no data: every middleware, in field order, looks at the
+// State and ports and does the work that is ready. If
 // any middleware made progress, the component wakes again at the same time,
 // so it keeps running until no middleware has work ready. A middleware whose
 // work becomes ready later calls WakeAt for that time.
