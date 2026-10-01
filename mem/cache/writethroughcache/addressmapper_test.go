@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
+	"github.com/stretchr/testify/require"
 )
 
 // TestBuildMapsRemotePorts checks that Build turns Spec.AddressMapperType and
@@ -33,4 +34,15 @@ func TestBuildMapsRemotePorts(t *testing.T) {
 			t.Errorf("findPort(%d) = %s, want %s", addr, got, port)
 		}
 	}
+}
+
+// TestBuildRequiresStorage checks that Build rejects a cache without a
+// backing storage instead of failing on the first bank access.
+func TestBuildRequiresStorage(t *testing.T) {
+	require.PanicsWithValue(t, "writethroughcache: Resources.Storage is required", func() {
+		Definition.Builder().
+			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
+			WithPorts(makePorts("Cache", 4)).
+			Build("Cache")
+	})
 }
