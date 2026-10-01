@@ -101,7 +101,7 @@ var _ = Describe("Cache milestones", func() {
 			WithSimulation(sim).
 			Build("Conn")
 
-		cuPort = messaging.NewPort("CU.Top", 16, 16)
+		cuPort = newDriverPort("CU.Top", 16)
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dram = idealmemcontroller.Definition.Builder().

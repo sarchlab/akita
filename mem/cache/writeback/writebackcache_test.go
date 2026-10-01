@@ -39,6 +39,22 @@ func makePorts(name string, bufSize int) Ports {
 	}
 }
 
+// testDriver owns the ports a test drives by hand. The test polls those ports,
+// so it ignores the notifications.
+type testDriver struct{}
+
+func (testDriver) NotifyRecv(messaging.Port)     {}
+func (testDriver) NotifyPortFree(messaging.Port) {}
+
+// newDriverPort creates a port with bufSize slots in each direction for the
+// test to drive by hand.
+func newDriverPort(name string, bufSize int) messaging.Port {
+	p := messaging.NewPort(name, bufSize, bufSize)
+	p.SetOwner(testDriver{})
+
+	return p
+}
+
 // plugNoopConn plugs each of comp's ports into a noop connection, so a test
 // can drive the ports directly.
 func plugNoopConn(comp *Comp) {
@@ -115,8 +131,8 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		agentPort = messaging.NewPort("Agent.Top", 8, 8)
-		controlAgentPort = messaging.NewPort("Agent.Control", 8, 8)
+		agentPort = newDriverPort("Agent.Top", 8)
+		controlAgentPort = newDriverPort("Agent.Control", 8)
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dramTop = buildIdealDRAM(sim, dramStorage)

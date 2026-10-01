@@ -173,6 +173,8 @@ func (p *defaultPort) CanDeliver() bool {
 // the port has capacity with CanDeliver before calling Deliver; delivering
 // into a full incoming buffer is a programming error and will panic.
 func (p *defaultPort) Deliver(msg Msg) {
+	owner := p.mustHaveOwner()
+
 	p.lock.Lock()
 
 	if !p.incomingBuf.CanPush() {
@@ -196,8 +198,8 @@ func (p *defaultPort) Deliver(msg Msg) {
 	p.incomingBuf.Push(msg)
 	p.lock.Unlock()
 
-	if p.owner != nil && wasEmpty {
-		p.owner.NotifyRecv(p)
+	if wasEmpty {
+		owner.NotifyRecv(p)
 	}
 }
 
@@ -231,6 +233,8 @@ func (p *defaultPort) RetrieveIncoming() (Msg, bool) {
 // RetrieveOutgoing is used by the connection to take a message from the outgoing
 // buffer. The boolean reports whether a message was present.
 func (p *defaultPort) RetrieveOutgoing() (Msg, bool) {
+	owner := p.mustHaveOwner()
+
 	p.lock.Lock()
 
 	msg, ok := p.outgoingBuf.Pop()
@@ -240,7 +244,7 @@ func (p *defaultPort) RetrieveOutgoing() (Msg, bool) {
 	}
 
 	if p.outgoingBuf.Size() == p.outgoingBuf.Capacity()-1 {
-		p.owner.NotifyPortFree(p)
+		owner.NotifyPortFree(p)
 	}
 
 	p.lock.Unlock()
@@ -292,9 +296,20 @@ func (p *defaultPort) NumOutgoing() int {
 // NotifyAvailable is called by the connection to notify the port that the
 // connection is available again.
 func (p *defaultPort) NotifyAvailable() {
-	if p.owner != nil {
-		p.owner.NotifyPortFree(p)
+	p.mustHaveOwner().NotifyPortFree(p)
+}
+
+// mustHaveOwner returns the port's owner. A port carries traffic only after
+// it is bound: a component's Build binds its ports, and an owner written
+// without a component model calls SetOwner. A port without an owner is a wiring
+// error, so it panics.
+func (p *defaultPort) mustHaveOwner() PortOwner {
+	if p.owner == nil {
+		panic(fmt.Sprintf("messaging: port %q has no owner; a component's "+
+			"Build binds its ports, and any other owner must call SetOwner", p.name))
 	}
+
+	return p.owner
 }
 
 // NewPort creates a port with default behavior, an incoming buffer, and an

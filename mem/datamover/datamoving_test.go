@@ -30,7 +30,7 @@ var _ = Describe("DataMover", func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		srcPort = messaging.NewPort("Src.Top", 4, 4)
+		srcPort = newDriverPort("Src.Top", 4)
 
 		memSpec := idealmemcontroller.Definition.DefaultSpec
 		memSpec.Latency = 100

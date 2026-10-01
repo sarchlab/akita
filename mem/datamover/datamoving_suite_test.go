@@ -31,6 +31,22 @@ func makePorts(name string, top, inside, outside, control int) Ports {
 	}
 }
 
+// testDriver owns the ports a test drives by hand. The test polls those ports,
+// so it ignores the notifications.
+type testDriver struct{}
+
+func (testDriver) NotifyRecv(messaging.Port)     {}
+func (testDriver) NotifyPortFree(messaging.Port) {}
+
+// newDriverPort creates a port with bufSize slots in each direction for the
+// test to drive by hand.
+func newDriverPort(name string, bufSize int) messaging.Port {
+	p := messaging.NewPort(name, bufSize, bufSize)
+	p.SetOwner(testDriver{})
+
+	return p
+}
+
 // allPorts lists the data mover's ports.
 func allPorts(comp *Comp) []messaging.Port {
 	return []messaging.Port{

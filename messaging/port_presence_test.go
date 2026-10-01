@@ -77,6 +77,22 @@ func TestPortReadPresenceAndNotifications(t *testing.T) {
 		"empty reads emitted no notifications or retrieval hooks")
 }
 
+func TestPortWithoutOwnerPanics(t *testing.T) {
+	msg := registryTestMsg{MsgMeta: MsgMeta{Src: "Other", Dst: "P"}}
+	for name, use := range map[string]func(p Port){
+		"Deliver":          func(p Port) { p.Deliver(msg) },
+		"RetrieveOutgoing": func(p Port) { p.RetrieveOutgoing() },
+		"NotifyAvailable":  func(p Port) { p.NotifyAvailable() },
+	} {
+		p := NewPort("P", 1, 1)
+		p.SetConnection(&portPresenceConnection{})
+		require.PanicsWithValue(t,
+			`messaging: port "P" has no owner; a component's Build binds `+
+				`its ports, and any other owner must call SetOwner`,
+			func() { use(p) }, name)
+	}
+}
+
 func assertEmptyPortReads(t *testing.T, p Port) {
 	t.Helper()
 	for _, read := range []func() (Msg, bool){

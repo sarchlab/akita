@@ -957,6 +957,10 @@ agent := ping.Definition.Builder().
     Build("Agent") // calls outPort.SetOwner(agent)
 ```
 
+A port must have an owner before it carries traffic; a port without one
+panics when a connection delivers to it or takes a message from it. Code that
+drives a port by hand, such as a test, calls `SetOwner` itself.
+
 Creating the port first also lets another component's Spec name it
 (`outPort.AsRemote()`) before either component is built. This decouples port
 creation from component construction, which suits the V5 wiring model where

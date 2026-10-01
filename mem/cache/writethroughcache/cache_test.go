@@ -16,6 +16,22 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
+// testDriver owns the ports a test drives by hand. The test polls those ports,
+// so it ignores the notifications.
+type testDriver struct{}
+
+func (testDriver) NotifyRecv(messaging.Port)     {}
+func (testDriver) NotifyPortFree(messaging.Port) {}
+
+// newDriverPort creates a port with bufSize slots in each direction for the
+// test to drive by hand.
+func newDriverPort(name string, bufSize int) messaging.Port {
+	p := messaging.NewPort(name, bufSize, bufSize)
+	p.SetOwner(testDriver{})
+
+	return p
+}
+
 var _ = Describe("Cache", func() {
 	var (
 		engine              timing.Engine
@@ -51,7 +67,7 @@ var _ = Describe("Cache", func() {
 		// cuPort is a real, component-less port that stands in for the compute
 		// unit. It is plugged into the connection so the cache's responses land
 		// in its incoming buffer, which the tests then drain and inspect.
-		cuPort = messaging.NewPort("CU.Top", 16, 16)
+		cuPort = newDriverPort("CU.Top", 16)
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dram = idealmemcontroller.Definition.Builder().

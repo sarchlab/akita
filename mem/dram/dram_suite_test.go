@@ -32,6 +32,22 @@ func defaultPorts(name string, bufSize int) Ports {
 	}
 }
 
+// testDriver owns the ports a test drives by hand. The test polls those ports,
+// so it ignores the notifications.
+type testDriver struct{}
+
+func (testDriver) NotifyRecv(messaging.Port)     {}
+func (testDriver) NotifyPortFree(messaging.Port) {}
+
+// newDriverPort creates a port with bufSize slots in each direction for the
+// test to drive by hand.
+func newDriverPort(name string, bufSize int) messaging.Port {
+	p := messaging.NewPort(name, bufSize, bufSize)
+	p.SetOwner(testDriver{})
+
+	return p
+}
+
 // storageFor returns a storage that covers the address space of the geometry
 // in spec.
 func storageFor(spec Spec) *mem.Storage {

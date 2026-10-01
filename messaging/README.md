@@ -167,7 +167,10 @@ interface says nothing about which ports an owner has or how it reaches them.
 A component defined by a component model (`modeling/ticking` and its
 siblings) holds its ports in a typed `Ports` struct: the system builder creates
 each port with `NewPort` and passes them all to `Build`, which binds and
-registers them.
+registers them. An owner written without a component model, such as a test
+driver, calls `SetOwner` itself. A port must have an owner before it carries
+traffic: `Deliver`, `RetrieveOutgoing`, and `NotifyAvailable` panic on a port
+without one.
 
 ## How It Works
 
