@@ -38,8 +38,3 @@ type Connection interface {
 type Resource interface {
 	Entity
 }
-
-// PortOwner is implemented by simulation-native components that expose ports.
-type PortOwner interface {
-	AllPorts() []Port
-}
