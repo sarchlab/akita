@@ -13,14 +13,11 @@ import (
 //
 // The vocabulary is comma-separated directives:
 //
-//	derived     the field is computed from other fields (e.g. in Build) and is
-//	            not user-configurable; tooling treats it as a read-only output.
 //	min=<n>     minimum allowed value for a numeric field.
 //	max=<n>     maximum allowed value for a numeric field.
 type fieldTag struct {
-	Derived bool
-	Min     *float64
-	Max     *float64
+	Min *float64
+	Max *float64
 }
 
 // parseFieldTag parses the value of an `akita:"..."` struct tag. An empty tag
@@ -52,14 +49,6 @@ func parseDirective(directive string, parsed *fieldTag) error {
 	key, value, hasValue := strings.Cut(directive, "=")
 
 	switch key {
-	case "derived":
-		if hasValue {
-			return fmt.Errorf("akita tag: directive %q takes no value", key)
-		}
-		if parsed.Derived {
-			return fmt.Errorf("akita tag: duplicate directive %q", key)
-		}
-		parsed.Derived = true
 	case "min", "max":
 		if !hasValue {
 			return fmt.Errorf("akita tag: directive %q requires a value", key)

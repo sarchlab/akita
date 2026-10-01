@@ -86,10 +86,6 @@ type Field struct {
 	// for timing.Freq).
 	Unit string `json:"unit,omitempty"`
 
-	// Derived marks fields computed from other fields at build time; they
-	// are not user-configurable.
-	Derived bool `json:"derived,omitempty"`
-
 	Min *float64 `json:"min,omitempty"`
 	Max *float64 `json:"max,omitempty"`
 

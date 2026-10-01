@@ -12,8 +12,7 @@ import (
 // Protocol is the memory access protocol: requesters issue reads and writes,
 // responders (caches, memory controllers) answer with data-ready and
 // write-done responses. Defining the protocol registers every message type it
-// carries with the checkpoint codec. The Info field on these messages is
-// tagged json:"-" and is not checkpointed.
+// carries with the checkpoint codec.
 var (
 	Protocol = messaging.DefineProtocol(
 		messaging.RoleDef{Name: "requester",
@@ -34,11 +33,6 @@ type AccessReq interface {
 	GetPID() vm.PID
 }
 
-// AccessRsp abstracts response messages in the memory system.
-type AccessRsp interface {
-	messaging.Msg
-}
-
 // ReadReq is a read request sent to a memory controller.
 type ReadReq struct {
 	messaging.MsgMeta
@@ -46,7 +40,6 @@ type ReadReq struct {
 	AccessByteSize     uint64
 	PID                vm.PID
 	CanWaitForCoalesce bool
-	Info               interface{} `json:"-"`
 }
 
 // GetByteSize returns the number of bytes that the request is accessing.
@@ -72,7 +65,6 @@ type WriteReq struct {
 	DirtyMask          []bool
 	PID                vm.PID
 	CanWaitForCoalesce bool
-	Info               interface{} `json:"-"`
 }
 
 // GetByteSize returns the number of bytes that the request is writing.

@@ -147,7 +147,7 @@ setup rebuilds; put cursors and counters in `State`.
   loudly at load.
 - An entity package becomes checkpointable by implementing the structural
   `Checkpointable` interface (`SaveCheckpoint(io.Writer)` / `LoadCheckpoint(io.Reader)`);
-  it never imports `simulation`. `modeling.Component`/`EventDrivenComponent`,
+  it never imports `simulation`. components built with the component models,
   ports, `mem.Storage`, and `vm.PageTable` already do.
 
 **Writing your own checkpointable messages, events, and components:** see

@@ -27,9 +27,8 @@
       "name": "NumOut",
       "json_name": "num_out",
       "type": "int",
-      "doc": "NumOut is computed in Build from the number of wired Out ports.",
-      "default": 0,
-      "derived": true
+      "doc": "NumOut is the number of Out ports the system builder wires.",
+      "default": 0
     },
     {
       "name": "Mode",

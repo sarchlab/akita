@@ -12,7 +12,7 @@
 //   - the model, from the Definition type, and the name, which is the
 //     package name because a component type is identified by its package;
 //   - the Spec fields, from the Spec type argument, with their docs, units,
-//     choices, and `akita:"derived,min=<n>,max=<n>"` tag metadata, and the
+//     choices, and `akita:"min=<n>,max=<n>"` tag metadata, and the
 //     defaults the DefaultSpec literal assigns. The literal must be keyed and
 //     have constant leaves (a slice field's literal lists constants), and
 //     Spec fields must be scalars or slices of scalars with distinct JSON

@@ -31,8 +31,8 @@ type Spec struct {
 	// NumLanes is the number of parallel lanes.
 	NumLanes int `json:"num_lanes" akita:"min=1,max=64"`
 
-	// NumOut is computed in Build from the number of wired Out ports.
-	NumOut int `json:"num_out" akita:"derived"`
+	// NumOut is the number of Out ports the system builder wires.
+	NumOut int `json:"num_out"`
 
 	// Mode selects how precisely the component is modeled.
 	Mode Mode `json:"mode"`

@@ -114,9 +114,8 @@ func (s *Simulation) RegisterComponent(c naming.Named) {
 }
 
 // RegisterPort registers a port with the simulation so it can be resolved by
-// name and monitored. Port builders call this through the timing.Simulation
-// interface, mirroring RegisterComponent — a component is registered when it is
-// built, and each of its ports is registered when the port is built.
+// name and monitored. A component model's Build registers each port it binds;
+// an owner written without a component model registers its own ports.
 func (s *Simulation) RegisterPort(p naming.Named) {
 	port, ok := p.(Port)
 	if !ok {
@@ -207,10 +206,8 @@ func (s *Simulation) GetComponentByName(name string) Component {
 	return s.components[idx]
 }
 
-// GetPortByName returns the port with the given name. Ports are registered
-// either when their component is registered (legacy components that create
-// ports in Build) or when the port is built (via a port builder that calls
-// RegisterPort).
+// GetPortByName returns the port with the given name. A component's ports are
+// registered when the component is built (see RegisterPort).
 func (s *Simulation) GetPortByName(name string) Port {
 	idx, found := s.portNameIndex[name]
 	if !found {
