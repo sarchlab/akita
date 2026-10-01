@@ -55,9 +55,9 @@ var expectedErrors = []struct {
 	{"ports field that is not a port", "fixtures/badport",
 		"must be an exported messaging.Port"},
 	{"undefined protocol role", "fixtures/unknownrole",
-		`no protocol "mem" with role "owner"`},
+		`no protocol "github.com/sarchlab/akita/v5/mem/memprotocol" with role "owner"`},
 	{"malformed role tag", "fixtures/badroletag",
-		"want role=<protocol>/<role>"},
+		"want role=<protocol>.<role>"},
 	{"missing NewMiddlewares", "fixtures/nomiddlewares",
 		"must set NewMiddlewares"},
 	{"NewState held in a var", "fixtures/funcvar",
@@ -200,8 +200,8 @@ func checkLocalProto(t *testing.T, byPkg map[string]schema.Definition) {
 	}
 
 	want := map[string]schema.Role{
-		"In":   {Protocol: "inspect.localproto", Role: "consumer"},
-		"Feed": {Protocol: "inspect.localproto", Role: "producer"},
+		"In":   {Protocol: fixturePath("localproto"), Role: "consumer"},
+		"Feed": {Protocol: fixturePath("localproto"), Role: "producer"},
 	}
 
 	for _, port := range def.Ports {

@@ -31,16 +31,16 @@ type Resources struct {
 // Ports holds the data mover's ports.
 type Ports struct {
 	// Top receives data-move requests and returns their responses.
-	Top messaging.Port `akita:"role=datamover/responder"`
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/datamoverprotocol.responder"`
 
 	// Inside sends reads and writes to the inside memory.
-	Inside messaging.Port `akita:"role=mem/requester"`
+	Inside messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.requester"`
 
 	// Outside sends reads and writes to the outside memory.
-	Outside messaging.Port `akita:"role=mem/requester"`
+	Outside messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.requester"`
 
 	// Control receives enable, pause, drain, and reset commands.
-	Control messaging.Port `akita:"role=mem.control/responder"`
+	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
 // Middlewares holds the data mover's behavior, run in field order every cycle.

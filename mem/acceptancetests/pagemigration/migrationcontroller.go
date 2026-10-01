@@ -134,11 +134,11 @@ type migResources struct {
 type migPorts struct {
 	// Ctrl sends the drain, pause, flush, invalidate, and enable commands and
 	// receives their responses.
-	Ctrl messaging.Port `akita:"role=mem.control/requester"`
+	Ctrl messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.requester"`
 
 	// Mover sends the page-copy request to the data mover and receives its
 	// completion.
-	Mover messaging.Port `akita:"role=datamover/requester"`
+	Mover messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/datamoverprotocol.requester"`
 }
 
 // migMiddlewares holds the migration controller's behavior.

@@ -502,7 +502,7 @@ checkpointing. See "Defining Components in V5" below for the full philosophy.
 | **Spec** | Configuration | System builder (defaults in `Definition.DefaultSpec`) | Scalar fields only (bool, numbers, strings, and named types based on them). No slices, arrays, maps, nested structs, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
 | **State** | Mutable runtime data, saved in checkpoints | Component (`NewState`, or the zero value) | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. Written only by the component's own code. |
 | **Resources** | References to shared objects (storage, page table, address mapper) | System builder | Not checkpointed; the rebuild supplies them again. `modeling.None` when there are none. |
-| **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`messaging.NewPort`) | Bound and registered by `Build`; none is added later. A field may carry an `akita:"role=<protocol>/<role>"` tag. |
+| **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`messaging.NewPort`) | Bound and registered by `Build`; none is added later. A field may carry an `akita:"role=<protocol>.<role>"` tag. |
 | **Middlewares** | The behavior: one exported pointer field per middleware | Component (`NewMiddlewares`) | Each implements `Handle(e timing.Event) bool`; they run in field order and hold only references. |
 
 Hooks are not a sixth struct: every component embeds `hooking.HookableBase`,
@@ -550,9 +550,9 @@ type State struct {
 }
 
 type Ports struct {
-    Top     messaging.Port `akita:"role=mem/responder"`
-    Bottom  messaging.Port `akita:"role=mem/requester"`
-    Control messaging.Port `akita:"role=mem.control/responder"`
+    Top     messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`
+    Bottom  messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.requester"`
+    Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
 type Middlewares struct {
@@ -727,7 +727,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
   - `Storage *mem.Storage`, required; the system builder sizes it and may share it.
 
 - Ports
-  - `Top` (`role=mem/responder`) and `Control` (`role=mem.control/responder`), created by the system builder.
+  - `Top` (`role=github.com/sarchlab/akita/v5/mem/memprotocol.responder`) and `Control` (`role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder`), created by the system builder.
 
 - Middlewares
   - `Ctrl` runs first: processes enable/pause/drain/reset; replies only when safe (e.g., after drain completes).
@@ -754,7 +754,7 @@ Resources are not checkpointed. The setup that rebuilds a simulation supplies th
 - Replace every slice, array, map, or nested-struct Spec field using the table above.
 - Express strategy choices as a named string type with constants plus scalar parameters, not as a nested sub-spec.
 - Give every Spec and State field a `json` tag, and make sure no two fields share a JSON name.
-- Replace port fields, port declarations, and port lookups by name with a `Ports` struct: one `messaging.Port` field per port, `[]messaging.Port` per port group, each tagged `akita:"role=<protocol>/<role>"` when it speaks a protocol role. Reach ports as `comp.Ports.X`.
+- Replace port fields, port declarations, and port lookups by name with a `Ports` struct: one `messaging.Port` field per port, `[]messaging.Port` per port group, each tagged `akita:"role=<protocol>.<role>"` when it speaks a protocol role, where `<protocol>` is the import path of the package that defines the protocol. Reach ports as `comp.Ports.X`.
 - Turn each per-tick method into `Handle(e timing.Event) bool`, list the middlewares as exported pointer fields of a `Middlewares` struct in the order they run, and create them in a `newMiddlewares(c *Comp) Middlewares` function. Move any mutable middleware field into State.
 - Declare `type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]` and `var Definition = ticking.Definition[...]{DefaultSpec: ..., NewState: ..., NewMiddlewares: ...}`, and delete the hand-written builder and constructor.
 - Turn exported methods on the component into package functions that take `*Comp`.

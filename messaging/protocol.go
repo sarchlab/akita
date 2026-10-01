@@ -3,11 +3,14 @@ package messaging
 import (
 	"fmt"
 	"reflect"
+	"runtime"
+	"strings"
 	"sync"
+	"unicode"
 )
 
-// A Protocol is a named, immutable set of message types that travel over a
-// port, organized into roles. Defining a protocol with DefineProtocol
+// A Protocol is an immutable set of message types that travel over a port,
+// organized into roles. It is named after the package that defines it. Defining a protocol with DefineProtocol
 // registers every message type it carries with the checkpoint codec, so a
 // message type that belongs to a protocol can always be decoded when a
 // checkpoint captures it in a port buffer.
@@ -16,7 +19,8 @@ type Protocol struct {
 	roles []*Role
 }
 
-// Name returns the protocol's name.
+// Name returns the protocol's name: the import path of the package that
+// defined it, such as "github.com/sarchlab/akita/v5/mem/memprotocol".
 func (p *Protocol) Name() string {
 	return p.name
 }
@@ -47,7 +51,9 @@ func (p *Protocol) Messages() []Msg {
 
 // A Role is one endpoint's view of a protocol: the messages it sends. What a
 // role receives is whatever the protocol's other roles send. A component tags
-// each port with the role(s) it speaks, `akita:"role=<protocol>/<role>"`.
+// each port with the role(s) it speaks, `akita:"role=<protocol>.<role>"`,
+// where <protocol> is the protocol's name, for example
+// `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`.
 type Role struct {
 	protocol *Protocol
 	name     string
@@ -87,11 +93,12 @@ var (
 )
 
 // DefineProtocol creates a protocol and registers every message type across
-// all roles with the checkpoint codec. Call it as a package-level var in the
-// package that defines the message types:
+// all roles with the checkpoint codec. The protocol is named after the package
+// that calls DefineProtocol: its import path. Call it directly, as a
+// package-level var in the package that defines the message types:
 //
 //	var (
-//	    Protocol  = messaging.DefineProtocol("mem",
+//	    Protocol  = messaging.DefineProtocol(
 //	        messaging.RoleDef{Name: "requester",
 //	            Sends: []messaging.Msg{ReadReq{}, WriteReq{}}},
 //	        messaging.RoleDef{Name: "responder",
@@ -101,11 +108,44 @@ var (
 //	    Responder = Protocol.Role("responder")
 //	)
 //
-// It panics on a duplicate protocol name, a duplicate role name, or a message
-// type listed in more than one role of the same protocol. A message type may
-// belong to more than one protocol; re-registration with the codec is
-// harmless.
-func DefineProtocol(name string, roles ...RoleDef) *Protocol {
+// A package defines at most one protocol. A role name is made of letters,
+// digits, '_', and '-'. DefineProtocol panics on a second protocol in the same
+// package, an invalid or duplicate role name, or a message type listed in
+// more than one role of the same protocol. A message type may belong to more
+// than one protocol; re-registration with the codec is harmless.
+func DefineProtocol(roles ...RoleDef) *Protocol {
+	return defineProtocol(callerPackage(), roles...)
+}
+
+// callerPackage returns the import path of the package whose code called the
+// function that calls callerPackage.
+func callerPackage() string {
+	pc := make([]uintptr, 1)
+	if runtime.Callers(3, pc) == 0 {
+		panic("messaging: cannot find the package that defines the protocol")
+	}
+
+	frame, _ := runtime.CallersFrames(pc).Next()
+
+	return packageOfFunc(frame.Function)
+}
+
+// packageOfFunc returns the import path in a fully qualified function name,
+// such as "github.com/x/y.init" or "gopkg.in/yaml%2ev3.init". A dot in the
+// last path element is escaped as %2e in function names.
+func packageOfFunc(funcName string) string {
+	lastSlash := strings.LastIndex(funcName, "/")
+	dot := strings.Index(funcName[lastSlash+1:], ".")
+	if dot < 0 {
+		return strings.ReplaceAll(funcName, "%2e", ".")
+	}
+
+	return strings.ReplaceAll(funcName[:lastSlash+1+dot], "%2e", ".")
+}
+
+// defineProtocol creates the protocol with the given name. DefineProtocol
+// names it after the calling package; tests name it directly.
+func defineProtocol(name string, roles ...RoleDef) *Protocol {
 	if name == "" {
 		panic("protocol name must not be empty")
 	}
@@ -117,7 +157,8 @@ func DefineProtocol(name string, roles ...RoleDef) *Protocol {
 	protocolNamesMu.Lock()
 	if protocolNames[name] {
 		protocolNamesMu.Unlock()
-		panic(fmt.Sprintf("protocol %q is already defined", name))
+		panic(fmt.Sprintf("protocol %q is already defined; "+
+			"a package defines at most one protocol", name))
 	}
 	protocolNames[name] = true
 	protocolNamesMu.Unlock()
@@ -127,9 +168,10 @@ func DefineProtocol(name string, roles ...RoleDef) *Protocol {
 	seenMsgTypes := map[reflect.Type]string{}
 
 	for _, def := range roles {
-		if def.Name == "" {
+		if !validRoleName(def.Name) {
 			panic(fmt.Sprintf(
-				"protocol %q: role name must not be empty", name))
+				"protocol %q: role name %q must be non-empty and use only "+
+					"letters, digits, '_', and '-'", name, def.Name))
 		}
 
 		if seenRoles[def.Name] {
@@ -162,4 +204,21 @@ func DefineProtocol(name string, roles ...RoleDef) *Protocol {
 	}
 
 	return p
+}
+
+// validRoleName reports whether name can be a role name. A port tag names a
+// role as "<protocol>.<role>" in a comma-separated list, so a role name must
+// not contain '.', ',', or '='.
+func validRoleName(name string) bool {
+	if name == "" {
+		return false
+	}
+
+	for _, r := range name {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '-' {
+			return false
+		}
+	}
+
+	return true
 }

@@ -15,8 +15,8 @@ type Spec struct{ N int }
 type State struct{}
 
 type Ports struct {
-	Top    messaging.Port `akita:"role=mem/responder"`
-	Bottom messaging.Port `akita:"role=mem/owner"`
+	Top    messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`
+	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.owner"`
 }
 
 type Middlewares struct{}

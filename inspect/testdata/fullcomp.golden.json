@@ -60,7 +60,7 @@
       "name": "Top",
       "roles": [
         {
-          "protocol": "mem",
+          "protocol": "github.com/sarchlab/akita/v5/mem/memprotocol",
           "role": "responder"
         }
       ]
@@ -69,11 +69,11 @@
       "name": "Ctrl",
       "roles": [
         {
-          "protocol": "mem",
+          "protocol": "github.com/sarchlab/akita/v5/mem/memprotocol",
           "role": "responder"
         },
         {
-          "protocol": "mem.control",
+          "protocol": "github.com/sarchlab/akita/v5/mem/memcontrolprotocol",
           "role": "responder"
         }
       ]
@@ -82,7 +82,7 @@
       "name": "Out",
       "roles": [
         {
-          "protocol": "mem",
+          "protocol": "github.com/sarchlab/akita/v5/mem/memprotocol",
           "role": "requester"
         }
       ],

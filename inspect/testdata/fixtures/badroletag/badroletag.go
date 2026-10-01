@@ -1,5 +1,5 @@
 // Package badroletag tags a port with a role that names no protocol. The
-// inspector must reject it: a role tag is role=<protocol>/<role>.
+// inspector must reject it: a role tag is role=<protocol>.<role>.
 package badroletag
 
 import (

@@ -15,7 +15,7 @@ import (
 // carries with the checkpoint codec. The Info field on these messages is
 // tagged json:"-" and is not checkpointed.
 var (
-	Protocol = messaging.DefineProtocol("mem",
+	Protocol = messaging.DefineProtocol(
 		messaging.RoleDef{Name: "requester",
 			Sends: []messaging.Msg{ReadReq{}, WriteReq{}}},
 		messaging.RoleDef{Name: "responder",

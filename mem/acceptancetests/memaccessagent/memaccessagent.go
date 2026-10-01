@@ -57,7 +57,7 @@ type State struct {
 type Ports struct {
 	// Mem sends read and write requests to the LowModule and receives their
 	// responses.
-	Mem messaging.Port `akita:"role=mem/requester"`
+	Mem messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.requester"`
 }
 
 // Middlewares holds the MemAccessAgent's behavior, run every cycle.

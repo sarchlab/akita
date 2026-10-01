@@ -537,10 +537,10 @@ type Resources struct {
 // Ports holds the DRAM controller's ports.
 type Ports struct {
 	// Top receives read and write requests and returns their responses.
-	Top messaging.Port `akita:"role=mem/responder"`
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`
 
 	// Control receives enable, pause, drain, and reset commands.
-	Control messaging.Port `akita:"role=mem.control/responder"`
+	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
 // Middlewares holds the DRAM controller's behavior, run in field order every

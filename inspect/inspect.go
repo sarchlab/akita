@@ -19,7 +19,7 @@
 //   - the Resources fields, from the Resources type argument, a struct;
 //   - the ports, one per field of the Ports type argument: a messaging.Port
 //     field is a port, a []messaging.Port field a port group, and an
-//     `akita:"role=<protocol>/<role>"` tag names the protocol roles it speaks,
+//     `akita:"role=<protocol>.<role>"` tag names the protocol roles it speaks,
 //     each of which must be declared with messaging.DefineProtocol in the
 //     component's package or a package it depends on;
 //   - the middlewares, one per field of the Middlewares type argument, in the

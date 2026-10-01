@@ -64,14 +64,14 @@ type State struct {
 type Ports struct {
 	// Top receives memory requests and returns their responses in request
 	// order.
-	Top messaging.Port `akita:"role=mem/responder"`
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`
 
 	// Bottom forwards the requests to the bottom unit and receives its
 	// responses in any order.
-	Bottom messaging.Port `akita:"role=mem/requester"`
+	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.requester"`
 
 	// Control receives enable, pause, drain, and reset commands.
-	Control messaging.Port `akita:"role=mem.control/responder"`
+	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
 // Middlewares holds the reorder buffer's behavior.

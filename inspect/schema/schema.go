@@ -99,10 +99,14 @@ type Field struct {
 }
 
 // Role identifies one protocol role a port speaks, as named by an
-// `akita:"role=<protocol>/<role>"` tag on the port's field.
+// `akita:"role=<protocol>.<role>"` tag on the port's field.
 type Role struct {
+	// Protocol is the protocol's name: the import path of the package that
+	// defines it.
 	Protocol string `json:"protocol"`
-	Role     string `json:"role"`
+
+	// Role is the name of one of the protocol's roles.
+	Role string `json:"role"`
 }
 
 // Port describes one field of a component's Ports struct: a port or a port

@@ -44,7 +44,7 @@ type MyRsp struct {
 }
 
 var (
-    Protocol = messaging.DefineProtocol("mypkg",
+    Protocol = messaging.DefineProtocol(
         messaging.RoleDef{Name: "requester",
             Sends: []messaging.Msg{MyReq{}}},
         messaging.RoleDef{Name: "responder",
@@ -55,8 +55,9 @@ var (
 )
 ```
 
-`DefineProtocol` takes a module-unique protocol name and one `RoleDef` per
-**role**. Each role lists the messages it *sends*; what a role receives is
+`DefineProtocol` takes one `RoleDef` per **role**. The protocol is named
+after the package that calls it: its import path, so two modules can never
+define protocols with the same name. Each role lists the messages it *sends*; what a role receives is
 whatever the protocol's other roles send. The requester/responder pair
 above is the canonical shape — Akita's memory access protocol
 (`mem/memprotocol`) looks exactly like this: a requester sends
@@ -69,7 +70,7 @@ framework example (`noc/packetization`):
 
 ```go
 var (
-    Protocol = messaging.DefineProtocol("packetization",
+    Protocol = messaging.DefineProtocol(
         messaging.RoleDef{Name: "link",
             Sends: []messaging.Msg{Flit{}}},
         ...
@@ -83,32 +84,35 @@ protocol also **registers every listed message type with the checkpoint
 codec** — that is the mechanical payoff.
 
 `DefineProtocol` panics at init time on mistakes that would otherwise be
-silent: a duplicate protocol name, a duplicate role name, or the same
-message type listed in two roles of one protocol.
+silent: a second protocol in the same package, an invalid or duplicate role
+name, or the same message type listed in two roles of one protocol. A role
+name uses only letters, digits, `_`, and `-`.
 
 ## Binding Ports to Roles
 
 A port declares the role(s) it speaks right where the component declares
 the port: on its field in the component's `Ports` struct, with an
-`akita:"role=<protocol>/<role>"` tag. The reorder buffer in `mem/rob`:
+`akita:"role=<protocol>.<role>"` tag. The reorder buffer in `mem/rob`:
 
 ```go
 type Ports struct {
     // Top receives memory requests and returns their responses in request
     // order.
-    Top messaging.Port `akita:"role=mem/responder"`
+    Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`
 
     // Bottom forwards the requests to the bottom unit and receives its
     // responses in any order.
-    Bottom messaging.Port `akita:"role=mem/requester"`
+    Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.requester"`
 
     // Control receives enable, pause, drain, and reset commands.
-    Control messaging.Port `akita:"role=mem.control/responder"`
+    Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 ```
 
-`<protocol>` is the name passed to `DefineProtocol` (`"mem"`,
-`"mem.control"`), and `<role>` is the `Name` of one of its `RoleDef`s. The
+`<protocol>` is the import path of the package that defines the protocol,
+and `<role>` is the `Name` of one of its `RoleDef`s. A component in another
+module, such as a memory model in MGPUSim, names Akita's memory protocol the
+same way, `role=github.com/sarchlab/akita/v5/mem/memprotocol.responder`. The
 `Ports` struct is the single discoverable home for "the `Top` port speaks
 the mem protocol as the responder": the `inspect` package reads the tags
 without running the code and reports an error for a tag that names no
@@ -117,14 +121,14 @@ defined protocol role.
 The binding is metadata: it does not change how messages flow, and there is
 no runtime conformance check. A port may bind more than one role when it
 multiplexes protocols — list several comma-separated directives,
-`akita:"role=a/x,role=b/y"` — and a port with no tag — like every port in
+`akita:"role=example.com/a.x,role=example.com/b.y"` — and a port with no tag — like every port in
 the examples — is untyped and works exactly the same.
 
 ## One Package per Protocol
 
-Across Akita's libraries, every protocol lives in its own,
-distinctly-named package that owns the message types and the
-`DefineProtocol` declaration — a package *is* a protocol:
+A package defines at most one protocol, and the protocol is named after it:
+the package that owns the message types and the `DefineProtocol`
+declaration *is* the protocol. Akita's protocols:
 
 | Package | Protocol | Roles |
 | --- | --- | --- |

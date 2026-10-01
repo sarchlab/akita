@@ -31,13 +31,13 @@ func (s Spec) pageSize() uint64 {
 // Ports holds the TLB's ports.
 type Ports struct {
 	// Top receives translation requests and returns their responses.
-	Top messaging.Port `akita:"role=vm/responder"`
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.responder"`
 
 	// Bottom sends translation requests for misses to the next level.
-	Bottom messaging.Port `akita:"role=vm/requester"`
+	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.requester"`
 
 	// Control receives enable, pause, drain, flush, and reset commands.
-	Control messaging.Port `akita:"role=mem.control/responder"`
+	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
 // Middlewares holds the TLB's behavior, run in field order every cycle.

@@ -47,7 +47,7 @@ type Link struct {
 // Ports holds the switch's ports.
 type Ports struct {
 	// Port holds one port per link, index-aligned with Resources.Links.
-	Port []messaging.Port `akita:"role=packetization/link"`
+	Port []messaging.Port `akita:"role=github.com/sarchlab/akita/v5/noc/packetization.link"`
 }
 
 // Middlewares holds the switch's behavior, run in field order every cycle.

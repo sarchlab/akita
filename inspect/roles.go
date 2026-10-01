@@ -14,7 +14,9 @@ import (
 const defineProtocolFullName = "github.com/sarchlab/akita/v5/messaging.DefineProtocol"
 
 // parsePortRoles parses a port's akita tag: comma-separated
-// role=<protocol>/<role> directives.
+// role=<protocol>.<role> directives, where <protocol> is the import path of
+// the package that defines the protocol. Role names contain no dots, so the
+// last dot separates the two.
 func parsePortRoles(tag string) ([]schema.Role, error) {
 	if tag == "" {
 		return nil, nil
@@ -23,20 +25,22 @@ func parsePortRoles(tag string) ([]schema.Role, error) {
 	var roles []schema.Role
 	for directive := range strings.SplitSeq(tag, ",") {
 		key, value, _ := strings.Cut(directive, "=")
-		protocol, role, found := strings.Cut(value, "/")
-		if key != "role" || !found || protocol == "" || role == "" {
+		dot := strings.LastIndex(value, ".")
+		if key != "role" || dot <= 0 || dot == len(value)-1 ||
+			strings.Contains(value[dot+1:], "/") {
 			return nil, fmt.Errorf(
-				"akita tag: want role=<protocol>/<role>, got %q", directive)
+				"akita tag: want role=<protocol>.<role>, got %q", directive)
 		}
 
-		roles = append(roles, schema.Role{Protocol: protocol, Role: role})
+		roles = append(roles, schema.Role{Protocol: value[:dot], Role: value[dot+1:]})
 	}
 
 	return roles, nil
 }
 
 // protocolRoles collects, from every loaded package, the protocols declared
-// with messaging.DefineProtocol and the names of their roles.
+// with messaging.DefineProtocol, keyed by the import path of the package that
+// declares them (the protocol's name), and the names of their roles.
 func protocolRoles(index pkgIndex) map[string]map[string]bool {
 	out := map[string]map[string]bool{}
 
@@ -53,18 +57,13 @@ func protocolRoles(index pkgIndex) map[string]map[string]bool {
 					return true
 				}
 
-				name, err := constString(pkg, call.Args[0])
-				if err != nil {
-					return true
-				}
-
 				roles := map[string]bool{}
-				for _, arg := range call.Args[1:] {
+				for _, arg := range call.Args {
 					if role, ok := roleDefName(pkg, arg); ok {
 						roles[role] = true
 					}
 				}
-				out[name] = roles
+				out[pkg.PkgPath] = roles
 
 				return true
 			})

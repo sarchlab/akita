@@ -190,7 +190,7 @@ func resourcesOfType(
 
 // portsOfType describes the fields of a Ports struct: a messaging.Port field
 // is a port and a []messaging.Port field a port group. Roles come from
-// `akita:"role=<protocol>/<role>"` tags and must name a defined protocol role.
+// `akita:"role=<protocol>.<role>"` tags and must name a defined protocol role.
 func portsOfType(
 	pkg *packages.Package, lit *ast.CompositeLit, typ types.Type, index pkgIndex,
 ) ([]schema.Port, error) {

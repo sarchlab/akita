@@ -331,7 +331,7 @@ memcontrolprotocol.ErrMustBePausedOrDrained
    ```go
    type Ports struct {
        // ...
-       Control messaging.Port `akita:"role=mem.control/responder"`
+       Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
    }
 
    // during assembly:

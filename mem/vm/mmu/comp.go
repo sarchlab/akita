@@ -20,10 +20,10 @@ type Spec struct {
 // Ports holds the MMU's ports.
 type Ports struct {
 	// Top receives translation requests and returns their responses.
-	Top messaging.Port `akita:"role=vm/responder"`
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.responder"`
 
 	// Control receives enable, pause, drain, flush, and reset commands.
-	Control messaging.Port `akita:"role=mem.control/responder"`
+	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
 // Middlewares holds the MMU's behavior, run in field order every cycle.

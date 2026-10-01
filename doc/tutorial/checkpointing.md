@@ -73,7 +73,7 @@ type MyRsp struct {
 }
 
 var (
-	Protocol = messaging.DefineProtocol("mypkg",
+	Protocol = messaging.DefineProtocol( // named "example.com/sim/mypkg"
 		messaging.RoleDef{Name: "requester", Sends: []messaging.Msg{MyReq{}}},
 		messaging.RoleDef{Name: "responder", Sends: []messaging.Msg{MyRsp{}}},
 	)
@@ -87,7 +87,7 @@ field in their `Ports` struct:
 
 ```go
 type Ports struct {
-	Top messaging.Port `akita:"role=mypkg/responder"`
+	Top messaging.Port `akita:"role=example.com/sim/mypkg.responder"`
 }
 ```
 

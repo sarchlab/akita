@@ -77,15 +77,15 @@ func (s Spec) laneWidth() int {
 type Ports struct {
 	// Top receives read and write requests from the upper level and returns
 	// their responses.
-	Top messaging.Port `akita:"role=mem/responder"`
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`
 
 	// Bottom sends line fetches and eviction write-backs to lower memory and
 	// receives their responses.
-	Bottom messaging.Port `akita:"role=mem/requester"`
+	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.requester"`
 
 	// Control receives pause, drain, enable, reset, invalidate, and flush
 	// commands.
-	Control messaging.Port `akita:"role=mem.control/responder"`
+	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
 // Middlewares holds the writeback cache's behavior, run in field order every

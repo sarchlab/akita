@@ -10,12 +10,14 @@ buffer to another port's incoming buffer.
 - A **message** (`Msg`) is any value carrying a `*MsgMeta` with routing and
   identification metadata. Bare `MsgMeta` is the envelope, not a message — it
   belongs to no protocol.
-- A **protocol** (`Protocol`) is a named set of message types organized into
-  **roles** (`Role`). Defining a protocol with `DefineProtocol` registers
-  every message type it carries with the checkpoint codec; components tag each
-  port with the role(s) it speaks, `akita:"role=<protocol>/<role>"`. Protocols are **opt-in**: messages
-  flow without one, and registration only matters when a checkpoint can
-  capture the message.
+- A **protocol** (`Protocol`) is a set of message types organized into
+  **roles** (`Role`), named after the package that defines it: its import
+  path. Defining a protocol with `DefineProtocol` registers every message type
+  it carries with the checkpoint codec; components tag each port with the
+  role(s) it speaks, `akita:"role=<protocol>.<role>"`, for example
+  `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`.
+  Protocols are **opt-in**: messages flow without one, and registration only
+  matters when a checkpoint can capture the message.
 - A **port** is owned by a component and holds an incoming and an outgoing
   buffer. Components `Send`/`RetrieveIncoming` on their side; connections
   `Deliver`/`RetrieveOutgoing` on theirs.
@@ -54,7 +56,7 @@ recommended way is to declare the package's protocol once:
 
 ```go
 var (
-    Protocol  = messaging.DefineProtocol("mem",
+    Protocol  = messaging.DefineProtocol( // named ".../mem/memprotocol"
         messaging.RoleDef{Name: "requester",
             Sends: []messaging.Msg{ReadReq{}, WriteReq{}}},
         messaging.RoleDef{Name: "responder",
@@ -68,7 +70,7 @@ var (
 and bind ports to roles with a tag on the component's Ports field:
 
 ```go
-Top messaging.Port `akita:"role=mem/responder"`
+Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`
 ```
 
 The inspector checks each tag against the protocol's roles. Each protocol lives in its

@@ -54,7 +54,7 @@ type State struct {
 type Ports struct {
 	// NetworkPort exchanges flits with the switch (or the endpoint) on the
 	// other end of the link.
-	NetworkPort messaging.Port `akita:"role=packetization/link"`
+	NetworkPort messaging.Port `akita:"role=github.com/sarchlab/akita/v5/noc/packetization.link"`
 }
 
 // Middlewares holds the endpoint's behavior, run in field order every cycle.

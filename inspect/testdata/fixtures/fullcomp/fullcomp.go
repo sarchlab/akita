@@ -55,13 +55,13 @@ type Resources struct {
 // Ports holds the component's ports.
 type Ports struct {
 	// Top receives memory requests.
-	Top messaging.Port `akita:"role=mem/responder"`
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`
 
 	// Ctrl multiplexes two protocols on one port.
-	Ctrl messaging.Port `akita:"role=mem/responder,role=mem.control/responder"`
+	Ctrl messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder,role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 
 	// Out is a port group: its size is decided when it is wired.
-	Out []messaging.Port `akita:"role=mem/requester"`
+	Out []messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.requester"`
 }
 
 // Middlewares holds the component's behavior.

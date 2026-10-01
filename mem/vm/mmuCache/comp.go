@@ -23,14 +23,14 @@ type Spec struct {
 // Ports holds the mmuCache's ports.
 type Ports struct {
 	// Top receives translation requests and returns their responses.
-	Top messaging.Port `akita:"role=vm/responder"`
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.responder"`
 
 	// Bottom forwards translation requests for misses to the low module.
-	Bottom messaging.Port `akita:"role=vm/requester"`
+	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.requester"`
 
 	// Control receives enable, pause, drain, flush, invalidate, and reset
 	// commands.
-	Control messaging.Port `akita:"role=mem.control/responder"`
+	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
 // Middlewares holds the mmuCache's behavior, run in field order every cycle.

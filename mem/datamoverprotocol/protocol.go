@@ -12,7 +12,7 @@ import (
 // responds on completion. Defining the protocol registers every message type
 // it carries with the checkpoint codec.
 var (
-	Protocol = messaging.DefineProtocol("datamover",
+	Protocol = messaging.DefineProtocol(
 		messaging.RoleDef{Name: "requester",
 			Sends: []messaging.Msg{DataMoveRequest{}}},
 		messaging.RoleDef{Name: "responder",

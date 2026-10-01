@@ -60,7 +60,7 @@ type driverResources struct {
 // driverPorts holds the driver's ports.
 type driverPorts struct {
 	// Mem sends the writes and reads and receives their responses.
-	Mem messaging.Port `akita:"role=mem/requester"`
+	Mem messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.requester"`
 }
 
 // driverMiddlewares holds the driver's behavior.

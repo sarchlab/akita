@@ -109,7 +109,7 @@ builder creates each port, choosing its buffer sizes, and passes all of
 them to `Build`, as the last page of this section shows. (A component with
 a variable number of like ports, such as one per core, declares a port
 group instead: a `[]messaging.Port` field. A field can also carry an
-`akita:"role=<protocol>/<role>"` tag naming the protocol role the port
+`akita:"role=<protocol>.<role>"` tag naming the protocol role the port
 speaks; see *Protocols*. The examples' ports need neither.)
 
 Two operations matter on a port:

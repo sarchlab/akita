@@ -111,13 +111,13 @@ type Resources struct {
 // Ports holds the GMMU's ports.
 type Ports struct {
 	// Top receives translation requests and returns their responses.
-	Top messaging.Port `akita:"role=vm/responder"`
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.responder"`
 
 	// Bottom sends translation requests for remote pages to the LowModule.
-	Bottom messaging.Port `akita:"role=vm/requester"`
+	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.requester"`
 
 	// Control receives enable, pause, drain, and reset commands.
-	Control messaging.Port `akita:"role=mem.control/responder"`
+	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
 // Middlewares holds the GMMU's behavior, run in field order every cycle.

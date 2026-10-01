@@ -15,7 +15,7 @@ import (
 )
 
 // Protocol is a local protocol carrying memprotocol's messages.
-var Protocol = messaging.DefineProtocol("inspect.localproto",
+var Protocol = messaging.DefineProtocol(
 	messaging.RoleDef{Name: "producer",
 		Sends: []messaging.Msg{memprotocol.ReadReq{}}},
 	messaging.RoleDef{Name: "consumer",
@@ -33,8 +33,8 @@ type State struct{}
 
 // Ports speaks both roles of the local protocol.
 type Ports struct {
-	In   messaging.Port `akita:"role=inspect.localproto/consumer"`
-	Feed messaging.Port `akita:"role=inspect.localproto/producer"`
+	In   messaging.Port `akita:"role=github.com/sarchlab/akita/v5/inspect/testdata/fixtures/localproto.consumer"`
+	Feed messaging.Port `akita:"role=github.com/sarchlab/akita/v5/inspect/testdata/fixtures/localproto.producer"`
 }
 
 // Middlewares holds the component's behavior.
