@@ -40,7 +40,7 @@ Invalidate and Flush are answered as unsupported.
 - `Ports` — the `Top` and `Control` ports.
 - `Middlewares` — `Ctrl` (control commands) and `Translation` (page-table
   walks), run in that order every cycle.
-- `Comp` — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+- `Comp` — `ticking.Component[Spec, state, Resources, Ports, middlewares]`, a
   ticking component.
 
 ## Builder Pattern

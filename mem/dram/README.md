@@ -106,7 +106,7 @@ bank states (open/closed/refreshing), and statistics counters.
 - `Ports` — the `Top` and `Control` ports.
 - `Middlewares` — `Ctrl`, `Respond`, `Refresh`, `BankTick`, and `ParseTop`,
   run in that order every cycle.
-- `Comp` — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+- `Comp` — `ticking.Component[Spec, state, Resources, Ports, middlewares]`, a
   ticking component.
 
 ### Bank States
@@ -213,11 +213,9 @@ writeBW := dram.WriteBandwidth(ctrl)  // bytes per cycle
 
 Read statistics through these functions rather than the fields of `ctrl.State`:
 the State of a built-in component is an implementation detail that may
-change between minor versions.
-
-Available counters: `TotalReadCommands`, `TotalWriteCommands`,
-`TotalActivates`, `TotalPrecharges`, `RowBufferHits`, `RowBufferMisses`,
-`CompletedReads`, `CompletedWrites`, `BytesRead`, `BytesWritten`.
+change between minor versions. The functions derive from counters in the
+State (command, activate, and precharge counts, row-buffer hits and misses,
+completed requests, bytes moved, and cycles), which the monitor also shows.
 
 ## Ports
 

@@ -71,11 +71,12 @@ defer sim.Terminate()
 sim.RegisterComponent(myComponent)
 ```
 
-Registration automatically adds the component and its ports to the inventory,
-attaches visual tracing hooks, connects the component to the monitoring system
-(if enabled), and registers any shared-state resources it exposes. Use
-`RegisterConnection` and `RegisterResource` to register connections and shared
-resources directly.
+Registration adds the component to the inventory, attaches the visual
+tracer, and connects the component to the monitor (if enabled). A component's
+`Build` already registers the component and each of its ports
+(`RegisterPort`), so a system builder calls `RegisterComponent` only for a
+component written without a component model. Use `RegisterConnection` and
+`RegisterResource` to register connections and shared resources.
 
 ### Accessing the Simulation
 

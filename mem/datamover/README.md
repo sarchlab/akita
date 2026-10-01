@@ -45,7 +45,7 @@ and write transfer sizes.
 ## Key Types
 
 ```go
-type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
+type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]
 
 type DataMoveReq struct {
     messaging.MsgMeta
@@ -71,7 +71,7 @@ type DataMoveRsp struct {
 - **Middlewares** — `Ctrl` (control commands), `CtrlParse` (admits moves and
   completes finished ones), and `DataTransfer` (reads and writes), run in that
   order every cycle.
-- **Comp** — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+- **Comp** — `ticking.Component[Spec, state, Resources, Ports, middlewares]`, a
   ticking component.
 
 ## Builder Pattern

@@ -43,7 +43,7 @@ are tracked by the shared `mshr` package.
 - `Ports` — the `Top`, `Bottom`, and `Control` ports.
 - `Middlewares` — `Ctrl` (control commands) and `TLB` (lookup, misses, and
   responses), run in that order every cycle.
-- `Comp` — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+- `Comp` — `ticking.Component[Spec, state, Resources, Ports, middlewares]`, a
   ticking component.
 
 ## Builder Pattern

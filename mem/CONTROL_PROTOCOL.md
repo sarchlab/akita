@@ -377,9 +377,11 @@ func RunContract(
 )
 
 type Harness struct {
-    Comp     Controllable      // Tick() bool, Name() string
-    Ctrl     messaging.Port    // the component's Control port
-    Teardown func()            // optional, called after each subtest
+    Comp        Controllable      // timing.Handler + Name(); driven by TickEvents
+    Sim         timing.Simulation // the component's simulation; IDs come from it
+    Ctrl        messaging.Port    // the component's Control port
+    IsQuiescent func() bool       // optional, checked after Drain and Reset
+    Teardown    func()            // optional, called after each subtest
 }
 ```
 

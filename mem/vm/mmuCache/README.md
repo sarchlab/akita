@@ -41,7 +41,7 @@ levels.
 - `Ports` — the `Top`, `Bottom`, and `Control` ports.
 - `Middlewares` — `Ctrl` (control commands) and `Cache` (lookup, forwarding,
   and responses), run in that order every cycle.
-- `Comp` — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+- `Comp` — `ticking.Component[Spec, state, Resources, Ports, middlewares]`, a
   ticking component.
 
 ## Builder Pattern

@@ -9,8 +9,9 @@ package ticking
 // constant leaves, because tooling reads it without running the package.
 // NewState and NewMiddlewares must name functions.
 type Definition[S, T, R, P, M any] struct {
-	// DefaultSpec is the default configuration. Spec fields are scalars, so
-	// reading it yields an independent copy the system builder can change.
+	// DefaultSpec is the default configuration. The system builder starts
+	// from a copy of it. The copy shares any slice with DefaultSpec until
+	// Build copies it, so replace a slice field rather than writing into it.
 	DefaultSpec S
 
 	// NewState returns the initial State of the instance, which may depend on

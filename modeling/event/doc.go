@@ -17,7 +17,8 @@
 // every middleware in field order:
 //
 //   - Recv, when a port receives a message into an empty incoming buffer;
-//   - PortFree, when a port has room to send again;
+//   - PortFree, when a full outgoing buffer gains a slot or the connection
+//     signals that it can take messages again;
 //   - the events the component schedules for itself with Schedule.
 //
 // A middleware checks the event's type and ignores the events it does not

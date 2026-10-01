@@ -47,7 +47,7 @@ The cache's behavior is three middlewares, run in this order every cycle:
 - `Ports` — the `Top`, `Bottom`, and `Control` ports.
 - `Middlewares` — `Ctrl`, `Flusher`, and `Pipeline`, run in that order every
   cycle.
-- `Comp` — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+- `Comp` — `ticking.Component[Spec, state, Resources, Ports, middlewares]`, a
   ticking component.
 
 ```go

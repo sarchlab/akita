@@ -10,8 +10,8 @@ table. Switches are wired together (and to endpoints) by the higher-level
 
 ### Comp, Spec, Resources, State
 
-`Comp` is a ticking component, `ticking.Component[Spec, State, Resources, Ports,
-Middlewares]`. Configuration is split the usual way:
+`Comp` is a ticking component, `ticking.Component[Spec, state, Resources, Ports,
+middlewares]`. Configuration is split the usual way:
 
 ```go
 type Spec struct {

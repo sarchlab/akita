@@ -54,8 +54,10 @@ an external object, such as a backing storage, goes in the component's
 Resources, described next.
 
 The Spec is flat on purpose. It is the configuration users edit and tools
-display, so every field is one setting with one default. When a setting
-seems to need a list, it is usually one of these instead:
+display, so every field is one setting with one default. A setting may be a
+list of scalars, such as the remote ports a unit talks to, whose length
+depends on the system. Other values that seem to belong in the Spec usually
+belong elsewhere:
 
 - **One value repeated per unit**, such as the same register count for every
   SIMD: use a single scalar.
@@ -65,9 +67,9 @@ seems to need a list, it is usually one of these instead:
   builder that rebuilds the simulation supplies them again, and the
   component's `NewMiddlewares` recomputes anything derived from them.
 
-`Build` checks these rules and panics if the Spec has a slice, array, map,
-nested struct, pointer, or interface field, or if the State cannot be
-checkpointed.
+`Build` checks these rules and panics if the Spec has a map, nested struct,
+pointer, or interface field, or a slice or array of anything but scalars, or
+if the State cannot be checkpointed.
 
 ## Resources — Shared Objects
 

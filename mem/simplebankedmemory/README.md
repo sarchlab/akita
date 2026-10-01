@@ -45,7 +45,7 @@ requests can occupy different banks while earlier ones are still in flight.
   responds to requests leaving the bank pipelines, then advances the
   pipelines), and `Dispatch` (moves incoming requests into their banks), run in
   that order every cycle.
-- `Comp` — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+- `Comp` — `ticking.Component[Spec, state, Resources, Ports, middlewares]`, a
   ticking component.
 
 ```go

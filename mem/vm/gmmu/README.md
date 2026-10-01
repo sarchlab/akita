@@ -38,7 +38,7 @@ remembered remote request, and relays a `vmprotocol.TranslationRsp` back up on `
 - `Ports` — the `Top`, `Bottom`, and `Control` ports.
 - `Middlewares` — `Ctrl` (control commands), `Walk` (walkMW), and `Respond`
   (respondMW), run in that order every cycle.
-- `Comp` — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+- `Comp` — `ticking.Component[Spec, state, Resources, Ports, middlewares]`, a
   ticking component.
 
 ## Builder Pattern

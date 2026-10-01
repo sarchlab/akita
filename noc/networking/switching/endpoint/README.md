@@ -10,8 +10,8 @@ by the `networkconnector` and the higher-level mesh, PCIe, and NVLink builders.
 
 ### Comp, Spec, Resources, State
 
-`Comp` is a ticking component, `ticking.Component[Spec, State, Resources, Ports,
-Middlewares]`. The `Spec` configures conversion and channel behavior:
+`Comp` is a ticking component, `ticking.Component[Spec, state, Resources, Ports,
+middlewares]`. The `Spec` configures conversion and channel behavior:
 
 ```go
 type Spec struct {

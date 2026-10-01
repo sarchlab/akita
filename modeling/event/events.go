@@ -13,7 +13,8 @@ type Recv struct {
 }
 
 // PortFree is the event an event component receives when one of its ports
-// has room to send again. Port is the port's full name.
+// can send again: its full outgoing buffer gained a slot, or the connection
+// signaled that it can take messages again. Port is the port's full name.
 type PortFree struct {
 	timing.EventBase
 	Port string `json:"port"`

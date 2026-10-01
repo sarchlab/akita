@@ -28,7 +28,7 @@ landing spot.
 
 ## Buffer[T]
 
-A bounded buffer with FIFO and indexed access and hook support. Create one with `NewBuffer`:
+A bounded buffer with FIFO and indexed access. Create one with `NewBuffer`:
 
 ```go
 inbox := queueing.NewBuffer[MyRequest]("inbox", 16)
@@ -54,7 +54,7 @@ fmt.Println(inbox.Size(), inbox.Capacity())
 | `Clear()` | Remove all elements |
 | `Size() int` | Current number of elements |
 | `Capacity() int` | Maximum capacity |
-| `Name() string` | Buffer name (for hooks and monitoring) |
+| `Name() string` | Buffer name (for monitoring) |
 
 Reads return the zero value and `false` when empty or out of range, including
 negative indices. A stored zero or nil value returns `true`. `PopAt` shifts later

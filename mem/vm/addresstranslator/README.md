@@ -47,7 +47,7 @@ Up to `NumReqPerCycle` translations and responses are handled each tick.
 - `Middlewares` — `Ctrl` (control commands), `ParseTranslate` (accept and
   translate), and `RespondPipeline` (forward and respond), run in that order
   every cycle.
-- `Comp` — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+- `Comp` — `ticking.Component[Spec, state, Resources, Ports, middlewares]`, a
   ticking component.
 
 ## Builder Pattern

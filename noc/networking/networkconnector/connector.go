@@ -7,15 +7,14 @@ import (
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/switches"
 
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
-
-	// LinkEndSwitchParameter defines the parameter that associated with an end of a
-	// link that is connected to a switch.
-	"github.com/sarchlab/akita/v5/messaging"
 )
 
+// LinkEndSwitchParameter defines the parameters of the end of a link that is
+// connected to a switch.
 type LinkEndSwitchParameter struct {
 	IncomingBufSize  int
 	OutgoingBufSize  int

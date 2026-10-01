@@ -112,8 +112,10 @@ bare spans left are the inherent single-cycle buffer-admission and response tick
 The domain is always the first argument; the per-event data goes in a struct.
 Callers pass **no** time — the emit functions read it from the domain's clock,
 and only when a tracer is attached (the `NumHooks()==0` fast path keeps tracing
-free when disabled). A domain must therefore be a `NamedHookable`, which is a
-`naming.Named` + `hooking.Hookable` + `timing.TimeTeller`.
+free when disabled). A domain must therefore be a `NamedHookable`: a
+`naming.Named`, `hooking.Hookable`, and `timing.TimeTeller` that also has
+`InvokeHook` and allocates IDs with `NewID() uint64`. Every component built
+from a component model is one.
 
 ```go
 tracing.StartTask(domain, tracing.TaskStart{

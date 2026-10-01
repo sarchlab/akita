@@ -12,7 +12,7 @@ import (
 
 // TestRandStateMatchesMathRand checks that the agent's random source draws
 // the same values as a math/rand generator with the same seed, so a seeded
-// agent keeps the access stream WithRandSeed used to give it.
+// agent draws the access stream that math/rand gives that seed.
 func TestRandStateMatchesMathRand(t *testing.T) {
 	const seed = 42
 

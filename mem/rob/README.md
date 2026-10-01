@@ -37,7 +37,7 @@ Top ──► topDown ──► Bottom ──► (bottom unit) ──► Bottom 
 ## Key Types
 
 ```go
-type Comp = modeling.Component[Spec, State, modeling.None]
+type Comp = ticking.Component[Spec, state, modeling.None, Ports, middlewares]
 ```
 
 - **Spec** — immutable config: `Freq`, `BufferSize` (max in-flight
@@ -47,8 +47,8 @@ type Comp = modeling.Component[Spec, State, modeling.None]
   flag. Each `transactionState` remembers the original request's ID and source,
   the shadow request's ID, whether it is a read, and the buffered response data.
 
-The reorder buffer references no shared resources, so it uses `modeling.None`
-and exposes no `WithResources`.
+The reorder buffer references no shared resources, so its Resources type is
+`modeling.None` and the system builder does not call `WithResources`.
 
 ## Builder Pattern
 

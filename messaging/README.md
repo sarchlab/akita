@@ -7,7 +7,7 @@ buffer to another port's incoming buffer.
 
 ## Key Concepts
 
-- A **message** (`Msg`) is any value carrying a `*MsgMeta` with routing and
+- A **message** (`Msg`) is any value carrying a `MsgMeta` with routing and
   identification metadata. Bare `MsgMeta` is the envelope, not a message — it
   belongs to no protocol.
 - A **protocol** (`Protocol`) is a set of message types organized into
@@ -35,7 +35,7 @@ buffer to another port's incoming buffer.
 
 ```go
 type Msg interface {
-    Meta() *MsgMeta
+    Meta() MsgMeta
 }
 
 type MsgMeta struct {
@@ -44,8 +44,6 @@ type MsgMeta struct {
     TrafficClass string
     TrafficBytes int
     RspTo        uint64 // ID of the request this responds to, if any
-    SendTaskID   uint64
-    RecvTaskID   uint64
 }
 ```
 

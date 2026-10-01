@@ -62,7 +62,6 @@ const (
 | `ThisTick()` | `func (f Freq) ThisTick(now VTimeInPicoSec) VTimeInPicoSec` | Ceil to nearest tick boundary. |
 | `NextTick()` | `func (f Freq) NextTick(now VTimeInPicoSec) VTimeInPicoSec` | Next tick strictly after `now`. |
 | `NCyclesLater()` | `func (f Freq) NCyclesLater(n int, now VTimeInPicoSec) VTimeInPicoSec` | Time `n` cycles from current tick. |
-| `HalfTick()` | `func (f Freq) HalfTick(t VTimeInPicoSec) VTimeInPicoSec` | Midpoint between two ticks. |
 
 ### Before / After
 
@@ -155,12 +154,13 @@ the component itself and the message ID, so simulations that reuse IDs stay
 apart.
 
 Pass the simulation to builders with `WithSimulation(sim)`. All component and
-package builders accept the shared `timing.Simulation` interface. Components expose `Simulation()`, while engines and components have
-no `NewID()` method. For lightweight setups, create
+package builders accept the shared `timing.Simulation` interface. A component
+keeps its simulation to itself and allocates IDs with `NewID()`; engines have
+no `NewID()`. For lightweight setups, create
 `modeling.NewStandaloneSimulation(engine)` once and share that instance with
-all builders. Custom components and tracing domains implement
-`Simulation() timing.Simulation`. Monitors use `RegisterSimulation(sim)` so
-progress IDs come from the same counter.
+all builders. A custom tracing domain (`tracing.NamedHookable`) implements
+`NewID() uint64` from its simulation. Monitors use `RegisterSimulation(sim)`
+so progress IDs come from the same counter.
 
 ### Before / After
 

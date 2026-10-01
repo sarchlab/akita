@@ -77,7 +77,8 @@ type Field struct {
 
 	// Default is the value the definition's DefaultSpec assigns to the
 	// field; fields the literal leaves out get their Go zero value. Spec
-	// fields are scalars, so defaults are too. Absent for Resources fields.
+	// fields are scalars or slices of scalars, so a default is a scalar or
+	// a []any of scalars. Absent for Resources fields.
 	// Values describe Go fields before JSON marshaling, so json:",string"
 	// does not transform defaults.
 	Default any `json:"default,omitempty"`

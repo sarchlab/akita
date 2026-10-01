@@ -143,9 +143,9 @@ test infrastructure *first* so every later phase has an oracle.
   transactions by ID, so `removeTransaction` is a plain slice compaction with no
   re-indexing and no `TransIndex = -1` sentinel.
 - ☑ **Channel decision.** Adopted option (a): one `dram.Comp` per channel;
-  `NumChannel > 1` is rejected at build time (`channelCountMustBeOne`). First-class
+  `NumChannel > 1` is rejected at build time. First-class
   channels are deferred to P1. (Previously `location.Channel` was decoded but never
-  used → silent bank aliasing.)
+  used → silent bank aliasing.) *(`Spec.mustBeSupported` checks it during `Build`.)*
 - ◐ **Validation harness skeleton** (see §5): `mem/dram/validation/` directory
   structure + `README.md` (plan & status) + `DEVIATIONS.md` (D1–D5) are in place.
   **Still pending:** vendoring/building the external DRAMSim3 & Ramulator2 oracles,
@@ -203,14 +203,15 @@ type CommandHook interface {
 
 **Deliverables**
 
-- ☑ A registry keyed by config string (e.g. `spec.Scheduler = "FRFCFS"`), plus
-  builder overrides (`WithScheduler`, `WithRowPolicy`, `WithRefreshManager`,
-  `WithAddrMapper`, `WithPlugin`). See `plugins.go`.
-- ☑ Reimplement today's behavior as the default plugins: `FRFCFS` scheduler,
-  `open`/`close` row policies, `fakestall` refresh, the `default` address
-  mapper, plus a no-op `null` command hook. **No behavior change** — the
-  defaults delegate to the existing functions and the full pre-existing suite
-  passes unmodified.
+- ☑ A registry keyed by config string: the Spec selects the scheduler
+  (`Scheduler`, e.g. `"FRFCFS"`) and address mapper (`AddrMapper`), and
+  `PagePolicy` selects the row policy. See `plugins.go`. *(The builder
+  overrides and the command-hook interface this item first had were replaced:
+  refresh is a middleware, and command observation uses Akita tracing.)*
+- ☑ Reimplement today's behavior as the default strategies: `FRFCFS`
+  scheduler, `open`/`close` row policies, and the `default` address mapper.
+  **No behavior change** — the defaults delegate to the existing functions and
+  the full pre-existing suite passes unmodified.
 - ☐ Command-queue structure option (`PER_RANK` default, add `PER_BANK`). *(P1.2)*
 - ☑ Resolve the channel model: enforced one-per-channel retained (Option A);
   the `AddrMapper` interface returns a full `location` for forward-compat. First-
@@ -218,11 +219,10 @@ type CommandHook interface {
 
 **Acceptance**
 
-- ☑ All P0 tests unchanged; new `plugins_test.go` covers registry selection,
-  builder overrides, the unknown-key panic, and the hook path. *(Tier 5
-  differential still blocked on oracle vendoring, as in P0.)*
-- ☑ A no-op "null" plugin (and a counting hook) prove the hook path works
-  without altering results.
+- ☑ All P0 tests unchanged; `plugins_test.go` covers registry selection, the
+  unknown-key panic, and command tracing. *(Tier 5 differential still blocked
+  on oracle vendoring, as in P0.)*
+- ☑ Command tracing records command milestones without altering results.
 
 ---
 

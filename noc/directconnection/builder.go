@@ -1,13 +1,11 @@
 package directconnection
 
 import (
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/timing"
-
-	// Builder can help building directconnection.
-	"github.com/sarchlab/akita/v5/messaging"
 )
 
 // defaultSpec provides the default configuration for a direct connection.

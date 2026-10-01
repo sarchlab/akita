@@ -42,7 +42,7 @@ Two middlewares, the fields of `Middlewares`, run each tick in this order:
   backing `*mem.Storage`, which is required.
 - `Ports` — the `Top` and `Control` ports.
 - `Middlewares` — `Ctrl` and `Memory`, run in that order every cycle.
-- `Comp` — `ticking.Component[Spec, State, Resources, Ports, Middlewares]`, a
+- `Comp` — `ticking.Component[Spec, state, Resources, Ports, middlewares]`, a
   ticking component.
 
 ```go

@@ -67,9 +67,10 @@ Each component package adds one test that builds the component and calls
 ```go
 func TestControlContract(t *testing.T) {
     build := func() *memcontrolprotocol.Harness {
-        comp := Definition.Builder(). /* ... */ .Build("MyComp")
+        comp := Definition.Builder().WithSimulation(sim). /* ... */ .Build("MyComp")
         return &memcontrolprotocol.Harness{
             Comp: comp,
+            Sim:  sim,
             Ctrl: comp.Ports.Control,
         }
     }

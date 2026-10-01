@@ -58,10 +58,12 @@ table for every reachable device port.
 
 ## How It Works
 
-`ConnectDevice` builds an `endpoint`, creates the switch-side port, adds it to
-the switch with a `SwitchPortAdder`, and links the two with a
-`directconnection`, recording the link as `Remote`s on both nodes.
-`ConnectSwitches` does the same symmetrically for two switches. After the
-topology is described, `EstablishRoute` gathers all nodes and lets the chosen
-`Router` fill in every switch's `routing.Table` so that flits can reach any
-device.
+`ConnectDevice` builds an `endpoint`, creates the switch-side port, records it
+on the switch's node, and links the two with a `directconnection`, recording
+the link as `Remote`s on both nodes. `ConnectSwitches` does the same
+symmetrically for two switches. A switch takes all of its ports at `Build`, so
+the connector builds the switches only in `EstablishRoute` (through
+`BuildSwitches`), once the topology is described; it then gathers all nodes
+and lets the chosen `Router` fill in every switch's `routing.Table` so that
+flits can reach any device. A `ConnectDevice` or `ConnectSwitches` that adds a
+port to a switch that is already built panics.
