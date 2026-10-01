@@ -52,7 +52,7 @@ func ValidateSpec(v any) error {
 // ValidateState checks that the given value is a struct containing only
 // scalar fields, slices, arrays, maps with string or integer keys, and simple
 // nested structs. Pointers, interfaces, channels, and functions are not
-// allowed.
+// allowed: a State refers to another component by name, not by pointer.
 func ValidateState(v any) error {
 	return validateValue(reflect.ValueOf(v), "state", true)
 }

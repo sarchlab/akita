@@ -21,32 +21,6 @@ type Component interface {
 	messaging.PortOwner
 }
 
-// Spec is a constraint for component specifications.
-//
-// Specs must be plain structs with only scalar fields: bool, int, int8, int16,
-// int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, string,
-// and named types based on them (such as timing.Freq or an enum-like string
-// type). No slices, arrays, maps, nested structs, pointers, interfaces, or
-// functions, even on fields tagged `json:"-"` or in a Spec that customizes its
-// JSON. Data that changes while simulating belongs in State. A reference to an
-// external object, and anything derived only from one such as an address
-// mapper, belongs in Resources.
-//
-// Go does not support a struct constraint, so this is typed as `any`.
-// Use [ValidateSpec] at runtime to verify that a value conforms to these rules.
-type Spec = any
-
-// State is a constraint for component runtime state.
-//
-// States must be plain structs with scalar fields, slices, arrays, maps, and
-// simple nested structs. No pointers to live objects, no ports, no functions.
-// Cross-references between components should use string IDs rather than
-// direct pointers.
-//
-// Go does not support a struct constraint, so this is typed as `any`.
-// Use [ValidateState] at runtime to verify that a value conforms to these rules.
-type State = any
-
 // None is the Resources type of a component that references no shared
 // objects, and the State type of one that keeps no state.
 type None struct{}
