@@ -84,8 +84,11 @@ Each package doc shows how to declare and build a component of its model.
 
 ## Shared Building Blocks
 
+- `Component` — the interface every model's `Component` implements: named,
+  hookable, the handler of its events, and the owner of its ports
+  (`messaging.PortOwner`).
 - `ComponentBase` — the five structs of an instance and the methods every
-  model has (`Name`, `TypeName`, `Simulation`, `CurrentTime`, `Spec`,
+  model has (`Name`, `TypeName`, `NewID`, `CurrentTime`, `Spec`,
   `Resources`). Each model's `Component` embeds it; `InitComponentBase` and
   `Register` bracket every model's `Build`.
 - `Middleware`, `Dispatch`, and `OrderedMiddlewares` — the middleware

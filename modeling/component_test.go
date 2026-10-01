@@ -88,7 +88,7 @@ func TestInitComponentBaseBindsEveryPortAndRegisterRegisters(t *testing.T) {
 	c := buildBase(sim, basePorts{In: in, Links: []messaging.Port{l0, l1}})
 
 	for _, p := range []messaging.Port{in, l0, l1} {
-		if p.Component() != messaging.Component(c) {
+		if p.Owner() != modeling.Component(c) {
 			t.Errorf("port %s is not bound to the component", p.Name())
 		}
 	}

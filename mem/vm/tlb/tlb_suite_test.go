@@ -59,7 +59,7 @@ func makeDirectConnection(sim timing.Simulation) messaging.Connection {
 		Build("Conn")
 }
 
-// idealEndpoint is a minimal messaging.Component used as the remote peer of the
+// idealEndpoint is a minimal messaging.PortOwner used as the remote peer of the
 // TLB in the integration tests. It owns a single real port; when a message is
 // delivered to that port it records the message and optionally runs onDeliver.
 type idealEndpoint struct {
@@ -92,8 +92,6 @@ func (ep *idealEndpoint) NotifyRecv(port messaging.Port) {
 }
 
 func (ep *idealEndpoint) NotifyPortFree(_ messaging.Port) {}
-
-func (ep *idealEndpoint) Handle(_ timing.Event) {}
 
 func TestValidateState(t *testing.T) {
 	if err := modeling.ValidateState(State{}); err != nil {

@@ -366,7 +366,7 @@ registers the instance with the engine under its name (so events whose
 `HandlerID()` is that name reach it), and registers it with the simulation:
 
 ```go
-// v5/modeling/component_base.go
+// v5/modeling/component.go
 func Register[S, T, R, P, M any](base *ComponentBase[S, T, R, P, M]) {
     registerPorts(base.simulation, &base.Ports)
 
@@ -947,12 +947,12 @@ component, so a typo or a forgotten port fails fast. No port is added after
 A port group is a `[]messaging.Port` field; the system builder chooses its
 size and names member `i` `<instance>.<Field>[i]`.
 
-### SetComponent
+### SetOwner
 
-The `Port` interface in V5 includes a `SetComponent(comp Component)` method.
+The `Port` interface in V5 includes a `SetOwner(owner PortOwner)` method.
 Because the system builder creates ports before the component exists, a port
-is created with no owner (`nil`), and `Build` calls `SetComponent` to
-associate it with the component:
+is created with no owner (`nil`), and `Build` calls `SetOwner` to associate
+it with the component:
 
 ```go
 outPort := messaging.NewPort(nil, 4, 4, "Agent.Out")
@@ -960,7 +960,7 @@ outPort := messaging.NewPort(nil, 4, 4, "Agent.Out")
 agent := ping.Definition.Builder().
     WithSimulation(sim).
     WithPorts(ping.Ports{Out: outPort}).
-    Build("Agent") // calls outPort.SetComponent(agent)
+    Build("Agent") // calls outPort.SetOwner(agent)
 ```
 
 Creating the port first also lets another component's Spec name it

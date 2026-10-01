@@ -5,8 +5,51 @@ import (
 
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/timing"
 )
+
+// A Component is an element of a simulation that owns ports and handles the
+// events addressed to it. The Component of each model (modeling/ticking,
+// modeling/wakeup, and modeling/event) implements it. Build registers an
+// instance as the owner of its ports, as the handler of its events, and as a
+// component of the simulation.
+type Component interface {
+	naming.Named
+	hooking.Hookable
+	timing.Handler
+	messaging.PortOwner
+}
+
+// Spec is a constraint for component specifications.
+//
+// Specs must be plain structs with only scalar fields: bool, int, int8, int16,
+// int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, string,
+// and named types based on them (such as timing.Freq or an enum-like string
+// type). No slices, arrays, maps, nested structs, pointers, interfaces, or
+// functions, even on fields tagged `json:"-"` or in a Spec that customizes its
+// JSON. Data that changes while simulating belongs in State. A reference to an
+// external object, and anything derived only from one such as an address
+// mapper, belongs in Resources.
+//
+// Go does not support a struct constraint, so this is typed as `any`.
+// Use [ValidateSpec] at runtime to verify that a value conforms to these rules.
+type Spec = any
+
+// State is a constraint for component runtime state.
+//
+// States must be plain structs with scalar fields, slices, arrays, maps, and
+// simple nested structs. No pointers to live objects, no ports, no functions.
+// Cross-references between components should use string IDs rather than
+// direct pointers.
+//
+// Go does not support a struct constraint, so this is typed as `any`.
+// Use [ValidateState] at runtime to verify that a value conforms to these rules.
+type State = any
+
+// None is the Resources type of a component that references no shared
+// objects, and the State type of one that keeps no state.
+type None struct{}
 
 // ComponentBase is what every component model shares: an instance's five
 // structs — Spec, State, Resources, Ports, and Middlewares — and the methods
@@ -29,15 +72,11 @@ type ComponentBase[S, T, R, P, M any] struct {
 	Middlewares M
 
 	name       string
-	owner      messaging.Component
+	owner      Component
 	simulation timing.Simulation
 	spec       S
 	resources  R
 }
-
-// None is the Resources type of a component that references no shared
-// objects, and the State type of one that keeps no state.
-type None struct{}
 
 // InitComponentBase sets up the ComponentBase embedded in owner, a component
 // being built: it records the instance's name, simulation, Spec, and
@@ -45,7 +84,7 @@ type None struct{}
 // then creates the State and the middlewares, and calls Register last.
 func InitComponentBase[S, T, R, P, M any](
 	base *ComponentBase[S, T, R, P, M],
-	owner messaging.Component,
+	owner Component,
 	sim timing.Simulation,
 	name string,
 	spec S,

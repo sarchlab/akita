@@ -69,8 +69,8 @@ var _ = Describe("Switch", func() {
 		spec.Freq = 1
 
 		for _, p := range []*MockPort{port1, port2} {
-			p.EXPECT().Component().Return(nil)
-			p.EXPECT().SetComponent(gomock.Any())
+			p.EXPECT().Owner().Return(nil)
+			p.EXPECT().SetOwner(gomock.Any())
 		}
 
 		link := func(remote *MockPort) Link {

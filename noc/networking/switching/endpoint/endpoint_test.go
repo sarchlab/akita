@@ -48,8 +48,8 @@ var _ = Describe("End Point", func() {
 
 		devicePort.EXPECT().SetConnection(gomock.Any())
 		networkPort.EXPECT().Name().Return("EndPoint.NetworkPort").AnyTimes()
-		networkPort.EXPECT().Component().Return(nil)
-		networkPort.EXPECT().SetComponent(gomock.Any())
+		networkPort.EXPECT().Owner().Return(nil)
+		networkPort.EXPECT().SetOwner(gomock.Any())
 
 		spec := Definition.DefaultSpec
 		spec.Freq = 1

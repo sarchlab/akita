@@ -132,7 +132,7 @@ func newAgent(sim timing.Simulation, freq timing.Freq, name string, outPort mess
 		name:          name,
 		OutPort:       outPort,
 	}
-	a.OutPort.SetComponent(a)
+	a.OutPort.SetOwner(a)
 	sim.GetEngine().(timing.HandlerRegistry).RegisterHandler(name, a)
 
 	return a

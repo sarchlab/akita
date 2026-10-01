@@ -10,7 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// ibFakeComp is a minimal component that satisfies both messaging.Component
+// ibFakeComp is a minimal component that satisfies both messaging.PortOwner
 // (so it can own a real port) and NamedHookable (so the tracing API can emit
 // tasks on it). InvokeHook is provided by the embedded HookableBase, which is
 // how CollectTrace forwards events to a tracer.
@@ -139,5 +139,4 @@ var _ = Describe("Incoming buffer tracer", func() {
 	})
 })
 
-func (c *ibFakeComp) NewID() uint64       { return c.sim.NewID() }
-func (c *ibFakeComp) Handle(timing.Event) {}
+func (c *ibFakeComp) NewID() uint64 { return c.sim.NewID() }

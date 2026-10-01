@@ -426,5 +426,5 @@ func installDirtyBlock(
 // newIDFor allocates an ID from the simulation of the component that owns p,
 // for a message the test sends through p.
 func newIDFor(p messaging.Port) uint64 {
-	return p.Component().(interface{ NewID() uint64 }).NewID()
+	return p.Owner().(interface{ NewID() uint64 }).NewID()
 }

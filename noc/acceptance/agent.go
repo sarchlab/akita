@@ -47,7 +47,7 @@ func NewAgent(
 	sim.RegisterComponent(a)
 
 	for _, p := range ports {
-		p.SetComponent(a)
+		p.SetOwner(a)
 		sim.RegisterPort(p)
 		a.AgentPorts = append(a.AgentPorts, p)
 	}

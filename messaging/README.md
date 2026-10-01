@@ -102,8 +102,8 @@ type Port interface {
     NotifyAvailable()
 
     SetConnection(conn Connection)
-    Component() Component
-    SetComponent(comp Component)
+    Owner() PortOwner
+    SetOwner(owner PortOwner)
     NumIncoming() int
     NumOutgoing() int
 }
@@ -147,21 +147,20 @@ type Connection interface {
 A connection moves messages from outgoing to incoming buffers. `directconnection`
 is the simplest implementation.
 
-### Component
+### PortOwner
 
 ```go
-type Component interface {
-    naming.Named
-    hooking.Hookable
-    timing.Handler
-
+type PortOwner interface {
     NotifyRecv(port Port)
     NotifyPortFree(port Port)
 }
 ```
 
-The interface says nothing about which ports a component has or how it reaches
-them. A component defined by a component model (`modeling/ticking` and its
+A port notifies its owner when a message arrives in an empty incoming buffer
+and when it can send again. The owner is usually a component
+(`modeling.Component`), but `messaging` asks only for these two methods. The
+interface says nothing about which ports an owner has or how it reaches them.
+A component defined by a component model (`modeling/ticking` and its
 siblings) holds its ports in a typed `Ports` struct: the system builder creates
 each port with `NewPort` and passes them all to `Build`, which binds and
 registers them.

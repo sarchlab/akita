@@ -132,7 +132,6 @@ func (c *sliceFieldComponent) Name() string {
 func (c *sliceFieldComponent) NotifyRecv(messaging.Port) {}
 
 func (c *sliceFieldComponent) NotifyPortFree(messaging.Port) {}
-func (c *sliceFieldComponent) Handle(timing.Event)           {}
 
 func TestEngineStateTracksPauseContinueIdempotently(t *testing.T) {
 	engine := &fakeEngine{}
@@ -580,7 +579,6 @@ func newTickableComponent(name string) *tickableComponent {
 func (c *tickableComponent) Name() string                  { return c.name }
 func (c *tickableComponent) NotifyRecv(messaging.Port)     {}
 func (c *tickableComponent) NotifyPortFree(messaging.Port) {}
-func (c *tickableComponent) Handle(timing.Event)           {}
 func (c *tickableComponent) TickLater()                    { c.tickCalls++ }
 
 func TestTickInvokesTickLaterOnTickingComponent(t *testing.T) {
@@ -698,7 +696,6 @@ func newBufferOnlyComponent(
 func (c *bufferOnlyComponent) Name() string                  { return c.name }
 func (c *bufferOnlyComponent) NotifyRecv(messaging.Port)     {}
 func (c *bufferOnlyComponent) NotifyPortFree(messaging.Port) {}
-func (c *bufferOnlyComponent) Handle(timing.Event)           {}
 
 type portedComponent struct {
 	hooking.HookableBase
@@ -717,7 +714,6 @@ func newPortedComponent(name string) *portedComponent {
 func (c *portedComponent) Name() string                  { return c.name }
 func (c *portedComponent) NotifyRecv(messaging.Port)     {}
 func (c *portedComponent) NotifyPortFree(messaging.Port) {}
-func (c *portedComponent) Handle(timing.Event)           {}
 
 type bufferRsp struct {
 	Buffer string `json:"buffer"`

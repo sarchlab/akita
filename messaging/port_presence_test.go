@@ -7,10 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type portPresenceOwner struct {
-	Component
-	received, freed int
-}
+type portPresenceOwner struct{ received, freed int }
 
 func (c *portPresenceOwner) NotifyRecv(Port)     { c.received++ }
 func (c *portPresenceOwner) NotifyPortFree(Port) { c.freed++ }

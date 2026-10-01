@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -45,7 +46,7 @@ func forEachPort(ports any, fn func(slot string, v reflect.Value)) {
 // bindPorts binds every port in the Ports struct that ports points to to
 // owner. Every port must be given and carry its full name: "<owner>.<field>"
 // for a port, and "<owner>.<field>[i]" for member i of a group.
-func bindPorts(owner messaging.Component, ports any) {
+func bindPorts(owner Component, ports any) {
 	forEachPort(ports, func(slot string, v reflect.Value) {
 		if v.IsNil() {
 			panic(fmt.Sprintf(
@@ -61,14 +62,24 @@ func bindPorts(owner messaging.Component, ports any) {
 				owner.Name(), slot, port.Name(), want))
 		}
 
-		if other := port.Component(); other != nil && other != owner {
+		if other := port.Owner(); other != nil && other != owner {
 			panic(fmt.Sprintf(
-				"modeling: component %q: port %q already belongs to %q",
-				owner.Name(), port.Name(), other.Name()))
+				"modeling: component %q: port %q already belongs to %s",
+				owner.Name(), port.Name(), ownerName(other)))
 		}
 
-		port.SetComponent(owner)
+		port.SetOwner(owner)
 	})
+}
+
+// ownerName names a port's owner for an error message. An owner need not be
+// named.
+func ownerName(owner messaging.PortOwner) string {
+	if named, ok := owner.(naming.Named); ok {
+		return fmt.Sprintf("%q", named.Name())
+	}
+
+	return fmt.Sprintf("an unnamed %T", owner)
 }
 
 // registerPorts registers every port in the Ports struct that ports points to
