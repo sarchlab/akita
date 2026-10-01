@@ -3,7 +3,6 @@ package networkconnector
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/monitoring2"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/switches"
@@ -70,11 +69,9 @@ type Connector struct {
 	name        string
 	engine      timing.EventScheduler
 	simulation  timing.Simulation
-	monitor     *monitoring2.Monitor
 	defaultFreq timing.Freq
 	flitSize    int
 	router      Router
-	visTracer   tracing.Tracer
 	nocTracer   tracing.Tracer
 	portFactory PortFactory
 
@@ -100,13 +97,6 @@ func (c Connector) WithSimulation(sim timing.Simulation) Connector {
 	return c
 }
 
-// WithMonitor sets the monitor that monitors all the components in the
-// connection.
-func (c Connector) WithMonitor(m *monitoring2.Monitor) Connector {
-	c.monitor = m
-	return c
-}
-
 // WithDefaultFreq sets the default frequency used by the components in the
 // connection. Note that channels will not use the default frequency. Channels
 // use their own frequency to adjust bandwidth.
@@ -124,12 +114,6 @@ func (c Connector) WithFlitSize(size int) Connector {
 // WithRouter sets the router to use to establish the routing tables.
 func (c Connector) WithRouter(r Router) Connector {
 	c.router = r
-	return c
-}
-
-// WithVisTracer sets the tracer used to trace tasks in the network.
-func (c Connector) WithVisTracer(t tracing.Tracer) Connector {
-	c.visTracer = t
 	return c
 }
 
@@ -259,7 +243,6 @@ func (c *Connector) createEndPoint(
 		WithResources(endpoint.Resources{DevicePorts: ports}).
 		WithPorts(endpoint.Ports{NetworkPort: epPort}).
 		Build(name)
-	c.observe(endPoint)
 
 	epNode := &deviceNode{
 		ports:    ports,
@@ -269,18 +252,6 @@ func (c *Connector) createEndPoint(
 	c.devices = append(c.devices, epNode)
 
 	return epNode
-}
-
-// observe registers a network component with the connector's monitor and
-// visualization tracer, if any.
-func (c *Connector) observe(comp tracing.NamedHookable) {
-	if c.monitor != nil {
-		c.monitor.RegisterComponent(comp)
-	}
-
-	if c.visTracer != nil {
-		tracing.CollectTrace(comp, c.visTracer)
-	}
 }
 
 func (c *Connector) createRemoteInfoFoEP(
@@ -322,14 +293,6 @@ func (c *Connector) connectPorts(
 
 	conn.PlugIn(left)
 	conn.PlugIn(right)
-
-	if c.monitor != nil {
-		c.monitor.RegisterComponent(conn)
-	}
-
-	if c.visTracer != nil {
-		tracing.CollectTrace(conn.(tracing.NamedHookable), c.visTracer)
-	}
 
 	if c.nocTracer != nil {
 		tracing.CollectTrace(conn.(tracing.NamedHookable), c.nocTracer)
@@ -417,7 +380,6 @@ func (c *Connector) BuildSwitches() {
 			}).
 			WithPorts(switches.Ports{Port: node.ports}).
 			Build(node.name)
-		c.observe(node.sw)
 	}
 }
 

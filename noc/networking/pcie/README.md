@@ -48,9 +48,7 @@ connector := pcie.NewConnector().
     WithSimulation(sim).
     WithFrequency(1 * timing.GHz).
     WithVersion(4, 16).      // PCIe Gen4, x16 lanes
-    WithSwitchLatency(140).  // cycles per switch hop
-    WithMonitor(monitor).
-    WithVisTracer(visTracer)
+    WithSwitchLatency(140)   // cycles per switch hop
 ```
 
 ### Builder Options
@@ -62,8 +60,10 @@ connector := pcie.NewConnector().
 | `WithVersion(v, w)` | PCIe generation (1–5) and lane width; sets bandwidth |
 | `WithBandwidth(b)` | Set link bandwidth directly in bytes/second |
 | `WithSwitchLatency(n)` | Latency in cycles added at each switch |
-| `WithMonitor(m)` | Monitor for inspecting component state |
-| `WithVisTracer(t)` | Tracer for visualizing the network |
+
+The connector builds its switches and endpoints with `WithSimulation(sim)`,
+so the simulation's tracer and monitor see each of them; the connector has
+no tracer or monitor option of its own.
 
 ## Usage
 

@@ -62,8 +62,7 @@ connector := nvlink.NewConnector().
     WithNVLinkVersion(2).
     WithNVLinkSwitchLatency(140).
     WithEthernetBandwidth(1.25 * (1 << 30)).
-    WithEthernetSwitchLatency(100000).
-    WithMonitor(monitor)
+    WithEthernetSwitchLatency(100000)
 ```
 
 ### Builder Options
@@ -78,8 +77,10 @@ connector := nvlink.NewConnector().
 | `WithNVLinkSwitchLatency(n)` | Cycles per NVLink switch hop |
 | `WithEthernetBandwidth(b)` | Ethernet link bandwidth |
 | `WithEthernetSwitchLatency(n)` | Cycles per Ethernet switch hop |
-| `WithMonitor(m)` | Monitor for inspecting component state |
-| `WithVisTracer(t)` | Tracer for visualizing network tasks |
+
+The connector builds its switches and endpoints with `WithSimulation(sim)`,
+so the simulation's tracer and monitor see each of them; the connector has
+no tracer or monitor option of its own.
 
 ## Usage
 

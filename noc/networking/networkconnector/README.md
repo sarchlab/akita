@@ -17,7 +17,6 @@ then establishes routes. Configuration methods return a copy:
 ```go
 conn := networkconnector.MakeConnector().
     WithSimulation(sim).
-    WithMonitor(monitor).
     WithDefaultFreq(1 * timing.GHz).
     WithFlitSize(64).
     WithRouter(networkconnector.FloydWarshallRouter{})

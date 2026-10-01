@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/sarchlab/akita/v5/monitoring2"
 	"github.com/sarchlab/akita/v5/noc/networking/networkconnector"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -77,12 +76,6 @@ func (c *Connector) WithBandwidth(transferPerCycle float64) *Connector {
 	return c
 }
 
-// WithVisTracer sets the tracer used to trace tasks in the network.
-func (c *Connector) WithVisTracer(t tracing.Tracer) *Connector {
-	c.connector = c.connector.WithVisTracer(t)
-	return c
-}
-
 // WithNoCTracer sets the tracer used to trace NoC-specific metrics, such as the
 // traffics and congestions in the channels.
 func (c *Connector) WithNoCTracer(t tracing.Tracer) *Connector {
@@ -95,13 +88,6 @@ func (c *Connector) WithFlitSize(size int) *Connector {
 	c.flitSize = size
 	c.connector = c.connector.WithFlitSize(size)
 
-	return c
-}
-
-// WithMonitor sets a monitor that can inspect the internal states of the
-// components in the network.
-func (c *Connector) WithMonitor(monitor *monitoring2.Monitor) *Connector {
-	c.connector = c.connector.WithMonitor(monitor)
 	return c
 }
 

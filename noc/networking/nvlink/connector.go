@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/sarchlab/akita/v5/monitoring2"
 	"github.com/sarchlab/akita/v5/noc/networking/networkconnector"
 
 	"github.com/sarchlab/akita/v5/timing"
-	"github.com/sarchlab/akita/v5/tracing"
 
 	// A deviceNode represents a switch associated with the device and
 	// and NVLink switch.
@@ -65,12 +63,6 @@ func NewConnector() *Connector {
 		FlitSize: c.flitByteSize,
 	})
 
-	return c
-}
-
-// WithMonitor sets the monitor that monitors the components in the connection.
-func (c *Connector) WithMonitor(m *monitoring2.Monitor) *Connector {
-	c.connector = c.connector.WithMonitor(m)
 	return c
 }
 
@@ -168,12 +160,6 @@ func (c *Connector) WithEthernetSwitchLatency(numCycle int) *Connector {
 // WithEthernetBandwidth sets the bandwidth of each ethernet link.
 func (c *Connector) WithEthernetBandwidth(bytePerSecond uint64) *Connector {
 	c.ethernetBandwidth = bytePerSecond
-	return c
-}
-
-// WithVisTracer sets the tracer used to trace tasks in the network.
-func (c Connector) WithVisTracer(t tracing.Tracer) Connector {
-	c.connector = c.connector.WithVisTracer(t)
 	return c
 }
 
