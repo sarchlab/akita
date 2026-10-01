@@ -46,7 +46,7 @@ func createNetwork(s *simulation.Simulation, test *acceptance.Test) {
 		name := fmt.Sprintf("Agent[%d]", i)
 		ports := make([]messaging.Port, 5)
 		for j := 0; j < 5; j++ {
-			ports[j] = messaging.NewPort(nil, 1, 1, fmt.Sprintf("%s.Port%d", name, j))
+			ports[j] = messaging.NewPort(fmt.Sprintf("%s.Port%d", name, j), 1, 1)
 		}
 		agent := acceptance.NewAgent(s, freq, name, ports, test)
 		agent.TickLater()
@@ -56,8 +56,8 @@ func createNetwork(s *simulation.Simulation, test *acceptance.Test) {
 	// The two endpoints are linked directly, so each one sends its flits to
 	// the other's network port.
 	netPorts := []messaging.Port{
-		messaging.NewPort(nil, 4, 4, "EP1.NetworkPort"),
-		messaging.NewPort(nil, 4, 4, "EP2.NetworkPort"),
+		messaging.NewPort("EP1.NetworkPort", 4, 4),
+		messaging.NewPort("EP2.NetworkPort", 4, 4),
 	}
 
 	for i, name := range []string{"EP1", "EP2"} {

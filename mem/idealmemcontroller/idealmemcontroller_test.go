@@ -32,8 +32,8 @@ func (c *noopConn) NotifySend()                      {}
 // the given buffer size and a Control port with a 16-message buffer.
 func makePorts(name string, topBufSize int) Ports {
 	return Ports{
-		Top:     messaging.NewPort(nil, topBufSize, topBufSize, name+".Top"),
-		Control: messaging.NewPort(nil, 16, 16, name+".Control"),
+		Top:     messaging.NewPort(name+".Top", topBufSize, topBufSize),
+		Control: messaging.NewPort(name+".Control", 16, 16),
 	}
 }
 

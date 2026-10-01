@@ -34,7 +34,8 @@ func (h *portPresenceHook) Func(ctx hooking.HookCtx) {
 func TestPortReadPresenceAndNotifications(t *testing.T) {
 	comp := &portPresenceOwner{}
 	conn := &portPresenceConnection{}
-	p := NewPort(comp, 2, 2, "P")
+	p := NewPort("P", 2, 2)
+	p.SetOwner(comp)
 	p.SetConnection(conn)
 	hook := &portPresenceHook{}
 	p.AcceptHook(hook)

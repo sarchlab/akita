@@ -95,10 +95,10 @@ mover := datamover.Definition.Builder().
         OutsideMapper: &mem.SinglePortMapper{Port: dramPort},
     }).
     WithPorts(datamover.Ports{
-        Top:     messaging.NewPort(nil, 16, 16, "DMA.Top"),
-        Inside:  messaging.NewPort(nil, 16, 16, "DMA.Inside"),
-        Outside: messaging.NewPort(nil, 16, 16, "DMA.Outside"),
-        Control: messaging.NewPort(nil, 16, 16, "DMA.Control"),
+        Top:     messaging.NewPort("DMA.Top", 16, 16),
+        Inside:  messaging.NewPort("DMA.Inside", 16, 16),
+        Outside: messaging.NewPort("DMA.Outside", 16, 16),
+        Control: messaging.NewPort("DMA.Control", 16, 16),
     }).
     Build("DMA")
 

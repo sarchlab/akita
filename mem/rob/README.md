@@ -68,9 +68,9 @@ reorderBuffer := rob.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithPorts(rob.Ports{
-        Top:     messaging.NewPort(nil, 8, 8, "ROB.Top"),
-        Bottom:  messaging.NewPort(nil, 8, 8, "ROB.Bottom"),
-        Control: messaging.NewPort(nil, 8, 8, "ROB.Control"),
+        Top:     messaging.NewPort("ROB.Top", 8, 8),
+        Bottom:  messaging.NewPort("ROB.Bottom", 8, 8),
+        Control: messaging.NewPort("ROB.Control", 8, 8),
     }).
     Build("ROB")
 

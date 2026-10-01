@@ -44,8 +44,8 @@ func setupTest(seed int64) (*simulation.Simulation, timing.Engine, *memaccessage
 	// The agent sends to the DRAM's Top port, so the DRAM's ports are created
 	// before the agent is built.
 	dramPorts := idealmemcontroller.Ports{
-		Top:     messaging.NewPort(nil, 16, 16, "DRAM.Top"),
-		Control: messaging.NewPort(nil, 16, 16, "DRAM.Control"),
+		Top:     messaging.NewPort("DRAM.Top", 16, 16),
+		Control: messaging.NewPort("DRAM.Control", 16, 16),
 	}
 
 	agentSpec := memaccessagent.Definition.DefaultSpec
@@ -58,7 +58,7 @@ func setupTest(seed int64) (*simulation.Simulation, timing.Engine, *memaccessage
 		WithSpec(agentSpec).
 		WithResources(memaccessagent.Resources{LowModule: dramPorts.Top}).
 		WithPorts(memaccessagent.Ports{
-			Mem: messaging.NewPort(nil, 16, 16, "MemAccessAgent.Mem"),
+			Mem: messaging.NewPort("MemAccessAgent.Mem", 16, 16),
 		}).
 		Build("MemAccessAgent")
 	if monitor := s.GetMonitor(); monitor != nil {

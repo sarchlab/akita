@@ -60,7 +60,7 @@ func buildBase(sim timing.Simulation, ports basePorts) *baseComp {
 }
 
 func unowned(name string) messaging.Port {
-	return messaging.NewPort(nil, 1, 1, name)
+	return messaging.NewPort(name, 1, 1)
 }
 
 func expectPanic(t *testing.T, substr string, f func()) {

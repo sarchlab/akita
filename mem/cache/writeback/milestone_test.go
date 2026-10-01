@@ -87,7 +87,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		agentPort = messaging.NewPort(nil, 8, 8, "Agent.Top")
+		agentPort = messaging.NewPort("Agent.Top", 8, 8)
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dramTop = buildIdealDRAM(sim, dramStorage)

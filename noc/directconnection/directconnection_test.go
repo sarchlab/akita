@@ -184,7 +184,7 @@ var _ = Describe("Direct Connection Integration", func() {
 		agents = nil
 		for i := 0; i < numAgents; i++ {
 			a := newAgent(sim, 1*timing.GHz, fmt.Sprintf("Agent[%d]", i),
-				messaging.NewPort(nil, 4, 4, fmt.Sprintf("Agent[%d].OutPort", i)))
+				messaging.NewPort(fmt.Sprintf("Agent[%d].OutPort", i), 4, 4))
 			agents = append(agents, a)
 			connection.PlugIn(a.OutPort)
 		}
@@ -242,7 +242,7 @@ func directConnectionTest(seed int64) timing.VTimeInPicoSec {
 
 	for i := 0; i < numAgents; i++ {
 		a := newAgent(sim, 1*timing.GHz, fmt.Sprintf("Agent%d", i),
-			messaging.NewPort(nil, 4, 4, fmt.Sprintf("Agent%d.OutPort", i)))
+			messaging.NewPort(fmt.Sprintf("Agent%d.OutPort", i), 4, 4))
 		agents = append(agents, a)
 		connection.PlugIn(a.OutPort)
 	}

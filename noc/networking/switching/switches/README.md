@@ -77,7 +77,7 @@ sw := switches.Definition.Builder().
         },
     }).
     WithPorts(switches.Ports{Port: []messaging.Port{
-        messaging.NewPort(nil, 1, 1, "Switch0.Port[0]"),
+        messaging.NewPort("Switch0.Port[0]", 1, 1),
     }}).
     Build("Switch0")
 ```

@@ -37,8 +37,8 @@ func TestCheckpointRoundTrip(t *testing.T) {
 		WithSimulation(sim).
 		WithResources(idealmemcontroller.Resources{Storage: storage}).
 		WithPorts(idealmemcontroller.Ports{
-			Top:     messaging.NewPort(nil, 16, 16, "DRAM.Top"),
-			Control: messaging.NewPort(nil, 16, 16, "DRAM.Control"),
+			Top:     messaging.NewPort("DRAM.Top", 16, 16),
+			Control: messaging.NewPort("DRAM.Control", 16, 16),
 		}).
 		Build("DRAM")
 

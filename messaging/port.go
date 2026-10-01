@@ -297,14 +297,12 @@ func (p *defaultPort) NotifyAvailable() {
 	}
 }
 
-// NewPort creates a new port with default behavior.
-func NewPort(
-	owner PortOwner,
-	incomingBufCap, outgoingBufCap int,
-	name string,
-) Port {
+// NewPort creates a port with default behavior, an incoming buffer, and an
+// outgoing buffer. The port has no owner yet: a component's Build binds it to
+// the component, and an owner written without a component model calls
+// SetOwner.
+func NewPort(name string, incomingBufCap, outgoingBufCap int) Port {
 	p := new(defaultPort)
-	p.owner = owner
 	p.incomingBuf = queueing.NewBuffer[Msg](name+".Incoming", incomingBufCap)
 	p.outgoingBuf = queueing.NewBuffer[Msg](name+".Outgoing", outgoingBufCap)
 	p.name = name

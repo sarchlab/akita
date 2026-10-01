@@ -103,8 +103,8 @@ memCtrl := simplebankedmemory.Definition.Builder().
     WithSpec(spec).
     WithResources(simplebankedmemory.Resources{Storage: storage}).
     WithPorts(simplebankedmemory.Ports{
-        Top:     messaging.NewPort(nil, 16, 16, "MyMemCtrl.Top"),
-        Control: messaging.NewPort(nil, 4, 4, "MyMemCtrl.Control"),
+        Top:     messaging.NewPort("MyMemCtrl.Top", 16, 16),
+        Control: messaging.NewPort("MyMemCtrl.Control", 4, 4),
     }).
     Build("MyMemCtrl")
 

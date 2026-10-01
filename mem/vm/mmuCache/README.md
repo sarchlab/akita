@@ -65,9 +65,9 @@ c := mmuCache.Definition.Builder().
         UpModulePort:  tlbPort,
     }).
     WithPorts(mmuCache.Ports{
-        Top:     messaging.NewPort(nil, 16, 16, "MMUCache.Top"),
-        Bottom:  messaging.NewPort(nil, 16, 16, "MMUCache.Bottom"),
-        Control: messaging.NewPort(nil, 16, 16, "MMUCache.Control"),
+        Top:     messaging.NewPort("MMUCache.Top", 16, 16),
+        Bottom:  messaging.NewPort("MMUCache.Bottom", 16, 16),
+        Control: messaging.NewPort("MMUCache.Control", 16, 16),
     }).
     Build("MMUCache")
 ```

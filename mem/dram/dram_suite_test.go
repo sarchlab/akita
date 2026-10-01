@@ -27,8 +27,8 @@ func TestValidateState(t *testing.T) {
 // the given buffer size.
 func defaultPorts(name string, bufSize int) Ports {
 	return Ports{
-		Top:     messaging.NewPort(nil, bufSize, bufSize, name+".Top"),
-		Control: messaging.NewPort(nil, bufSize, bufSize, name+".Control"),
+		Top:     messaging.NewPort(name+".Top", bufSize, bufSize),
+		Control: messaging.NewPort(name+".Control", bufSize, bufSize),
 	}
 }
 

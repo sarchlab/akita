@@ -61,7 +61,7 @@ ep := endpoint.Definition.Builder().
     WithSpec(spec).
     WithResources(endpoint.Resources{DevicePorts: ports}).
     WithPorts(endpoint.Ports{
-        NetworkPort: messaging.NewPort(nil, 4, 4, "EndPoint0.NetworkPort"),
+        NetworkPort: messaging.NewPort("EndPoint0.NetworkPort", 4, 4),
     }).
     Build("EndPoint0")
 ```

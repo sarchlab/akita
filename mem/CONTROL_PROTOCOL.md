@@ -339,7 +339,7 @@ memcontrolprotocol.ErrMustBePausedOrDrained
        // ...
        WithPorts(mycomp.Ports{
            // ...
-           Control: messaging.NewPort(nil, ctrlBufSize, ctrlBufSize, "MyComp.Control"),
+           Control: messaging.NewPort("MyComp.Control", ctrlBufSize, ctrlBufSize),
        }).
        Build("MyComp")
    ```

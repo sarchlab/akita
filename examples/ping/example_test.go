@@ -13,12 +13,12 @@ func Example_pingWithEvents() {
 
 	agentA := Definition.Builder().
 		WithSimulation(sim).
-		WithPorts(Ports{Out: messaging.NewPort(nil, 16, 16, "AgentA.Out")}).
+		WithPorts(Ports{Out: messaging.NewPort("AgentA.Out", 16, 16)}).
 		Build("AgentA")
 
 	agentB := Definition.Builder().
 		WithSimulation(sim).
-		WithPorts(Ports{Out: messaging.NewPort(nil, 16, 16, "AgentB.Out")}).
+		WithPorts(Ports{Out: messaging.NewPort("AgentB.Out", 16, 16)}).
 		Build("AgentB")
 
 	conn := directconnection.MakeBuilder().

@@ -44,8 +44,8 @@ func setupTest(seed int64) (*simulation.Simulation, timing.Engine, *memaccessage
 	// The agent sends to the memory controller's Top port, so the
 	// controller's ports are created before the agent is built.
 	memCtrlPorts := dram.Ports{
-		Top:     messaging.NewPort(nil, 16, 16, "Mem.Top"),
-		Control: messaging.NewPort(nil, 16, 16, "Mem.Control"),
+		Top:     messaging.NewPort("Mem.Top", 16, 16),
+		Control: messaging.NewPort("Mem.Control", 16, 16),
 	}
 
 	agentSpec := memaccessagent.Definition.DefaultSpec
@@ -59,7 +59,7 @@ func setupTest(seed int64) (*simulation.Simulation, timing.Engine, *memaccessage
 		WithSpec(agentSpec).
 		WithResources(memaccessagent.Resources{LowModule: memCtrlPorts.Top}).
 		WithPorts(memaccessagent.Ports{
-			Mem: messaging.NewPort(nil, 16, 16, "MemAccessAgent.Mem"),
+			Mem: messaging.NewPort("MemAccessAgent.Mem", 16, 16),
 		}).
 		Build("MemAccessAgent")
 	if monitor := s.GetMonitor(); monitor != nil {

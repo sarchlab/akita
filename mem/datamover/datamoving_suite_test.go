@@ -24,10 +24,10 @@ func TestValidateState(t *testing.T) {
 // buffer sizes (each used for both the incoming and outgoing buffer).
 func makePorts(name string, top, inside, outside, control int) Ports {
 	return Ports{
-		Top:     messaging.NewPort(nil, top, top, name+".Top"),
-		Inside:  messaging.NewPort(nil, inside, inside, name+".Inside"),
-		Outside: messaging.NewPort(nil, outside, outside, name+".Outside"),
-		Control: messaging.NewPort(nil, control, control, name+".Control"),
+		Top:     messaging.NewPort(name+".Top", top, top),
+		Inside:  messaging.NewPort(name+".Inside", inside, inside),
+		Outside: messaging.NewPort(name+".Outside", outside, outside),
+		Control: messaging.NewPort(name+".Control", control, control),
 	}
 }
 

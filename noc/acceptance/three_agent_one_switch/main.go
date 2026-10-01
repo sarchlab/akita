@@ -45,7 +45,7 @@ func createNetwork(sim *simulation.Simulation, test *acceptance.Test) {
 		name := fmt.Sprintf("Agent[%d]", i)
 		ports := make([]messaging.Port, 5)
 		for j := 0; j < 5; j++ {
-			ports[j] = messaging.NewPort(nil, 1, 1, fmt.Sprintf("%s.Port%d", name, j))
+			ports[j] = messaging.NewPort(fmt.Sprintf("%s.Port%d", name, j), 1, 1)
 		}
 		agent := acceptance.NewAgent(sim, freq, name, ports, test)
 		agent.TickLater()

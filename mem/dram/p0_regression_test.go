@@ -30,7 +30,7 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 	}
 
 	top := dramComp.Ports.Top
-	src := messaging.NewPort(nil, 1024, 1024, "P0Src.Top")
+	src := messaging.NewPort("P0Src.Top", 1024, 1024)
 
 	conn := directconnection.MakeBuilder().
 		WithSimulation(sim).

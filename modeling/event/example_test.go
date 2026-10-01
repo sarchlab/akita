@@ -17,7 +17,7 @@ func Example() {
 	delay := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(Spec{Latency: 10}).
-		WithPorts(Ports{In: messaging.NewPort(nil, 4, 4, "Delay.In")}).
+		WithPorts(Ports{In: messaging.NewPort("Delay.In", 4, 4)}).
 		Build("Delay")
 
 	delay.Ports.In.Deliver(req{messaging.MsgMeta{ID: 1}})

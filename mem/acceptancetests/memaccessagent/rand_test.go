@@ -40,8 +40,8 @@ func TestRandStateMatchesMathRand(t *testing.T) {
 func buildAgent() *Comp {
 	return Definition.Builder().
 		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-		WithResources(Resources{LowModule: messaging.NewPort(nil, 1, 1, "Mem.Top")}).
-		WithPorts(Ports{Mem: messaging.NewPort(nil, 4, 4, "Agent.Mem")}).
+		WithResources(Resources{LowModule: messaging.NewPort("Mem.Top", 1, 1)}).
+		WithPorts(Ports{Mem: messaging.NewPort("Agent.Mem", 4, 4)}).
 		Build("Agent")
 }
 

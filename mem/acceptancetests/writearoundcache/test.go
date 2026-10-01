@@ -48,9 +48,9 @@ func buildEnvironment(
 	// The agent sends to the cache's Top port, so the cache's ports are
 	// created before the agent is built.
 	cachePorts := writethroughcache.Ports{
-		Top:     messaging.NewPort(nil, 16, 16, "Cache.Top"),
-		Bottom:  messaging.NewPort(nil, 16, 16, "Cache.Bottom"),
-		Control: messaging.NewPort(nil, 16, 16, "Cache.Control"),
+		Top:     messaging.NewPort("Cache.Top", 16, 16),
+		Bottom:  messaging.NewPort("Cache.Bottom", 16, 16),
+		Control: messaging.NewPort("Cache.Control", 16, 16),
 	}
 
 	agentSpec := memaccessagent.Definition.DefaultSpec
@@ -63,7 +63,7 @@ func buildEnvironment(
 		WithSpec(agentSpec).
 		WithResources(memaccessagent.Resources{LowModule: cachePorts.Top}).
 		WithPorts(memaccessagent.Ports{
-			Mem: messaging.NewPort(nil, 16, 16, "MemAccessAgent.Mem"),
+			Mem: messaging.NewPort("MemAccessAgent.Mem", 16, 16),
 		}).
 		Build("MemAccessAgent")
 	if monitor := s.GetMonitor(); monitor != nil {
@@ -80,8 +80,8 @@ func buildEnvironment(
 				Build("DRAM.Storage"),
 		}).
 		WithPorts(idealmemcontroller.Ports{
-			Top:     messaging.NewPort(nil, 16, 16, "DRAM.Top"),
-			Control: messaging.NewPort(nil, 16, 16, "DRAM.Control"),
+			Top:     messaging.NewPort("DRAM.Top", 16, 16),
+			Control: messaging.NewPort("DRAM.Control", 16, 16),
 		}).
 		Build("DRAM")
 

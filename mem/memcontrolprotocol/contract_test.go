@@ -47,7 +47,8 @@ func newFakeComp(name string, matrix memcontrolprotocol.VerbSupport, asyncDelay 
 		matrix:     matrix,
 		asyncDelay: asyncDelay,
 	}
-	c.control = messaging.NewPort(c, 4, 4, name+".Control")
+	c.control = messaging.NewPort(name+".Control", 4, 4)
+	c.control.SetOwner(c)
 	conn := &noopConn{}
 	conn.PlugIn(c.control)
 	return c

@@ -218,7 +218,7 @@ func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
 		WithSpec(spec).
 		WithResources(driverResources{LowModule: lowModule}).
 		WithPorts(driverPorts{
-			Mem: messaging.NewPort(nil, 4, 4, "Driver.Mem"),
+			Mem: messaging.NewPort("Driver.Mem", 4, 4),
 		}).
 		Build("Driver")
 }

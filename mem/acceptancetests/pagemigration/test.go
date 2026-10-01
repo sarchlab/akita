@@ -562,7 +562,7 @@ func setupConnections(
 // newPort creates an unowned port named fullName, for a component that takes
 // its ports at Build. The component's Build binds and registers it.
 func newPort(fullName string) messaging.Port {
-	return messaging.NewPort(nil, 16, 16, fullName)
+	return messaging.NewPort(fullName, 16, 16)
 }
 
 // newStorage builds a storage of the given capacity that registers with the

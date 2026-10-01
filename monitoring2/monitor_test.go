@@ -706,7 +706,8 @@ type portedComponent struct {
 
 func newPortedComponent(name string) *portedComponent {
 	c := &portedComponent{name: name}
-	c.port = messaging.NewPort(c, 4, 4, name+".p")
+	c.port = messaging.NewPort(name+".p", 4, 4)
+	c.port.SetOwner(c)
 
 	return c
 }

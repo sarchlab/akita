@@ -143,8 +143,8 @@ ctrl := dram.Definition.Builder().
     WithSpec(spec).
     WithResources(dram.Resources{Storage: storage}).
     WithPorts(dram.Ports{
-        Top:     messaging.NewPort(nil, 1024, 1024, "DRAM.Top"),
-        Control: messaging.NewPort(nil, 4, 4, "DRAM.Control"),
+        Top:     messaging.NewPort("DRAM.Top", 1024, 1024),
+        Control: messaging.NewPort("DRAM.Control", 4, 4),
     }).
     Build("DRAM")
 

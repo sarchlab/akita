@@ -31,8 +31,8 @@ func (c *noopConn) NotifySend()                      {}
 // buffer size and a Control buffer size of 4.
 func makePorts(name string, topBufSize int) Ports {
 	return Ports{
-		Top:     messaging.NewPort(nil, topBufSize, topBufSize, name+".Top"),
-		Control: messaging.NewPort(nil, 4, 4, name+".Control"),
+		Top:     messaging.NewPort(name+".Top", topBufSize, topBufSize),
+		Control: messaging.NewPort(name+".Control", 4, 4),
 	}
 }
 
@@ -229,7 +229,7 @@ var _ = Describe("MMU Integration", func() {
 		topPort = mmuComp.Ports.Top
 		(&noopConn{}).PlugIn(topPort)
 
-		agentPort = messaging.NewPort(nil, 4, 4, "Agent.Top")
+		agentPort = messaging.NewPort("Agent.Top", 4, 4)
 		(&noopConn{}).PlugIn(agentPort)
 	})
 

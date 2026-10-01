@@ -114,7 +114,7 @@ type Port interface {
 Create a port with `NewPort`:
 
 ```go
-port := messaging.NewPort(nil, incomingCap, outgoingCap, "MyComp.Top")
+port := messaging.NewPort("MyComp.Top", incomingCap, outgoingCap)
 ```
 
 In assembly, the system builder creates each port with no component and passes

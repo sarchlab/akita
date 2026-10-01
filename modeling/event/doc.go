@@ -77,11 +77,13 @@
 //	comp := mem.Definition.Builder().
 //	    WithSimulation(sim).
 //	    WithSpec(spec).
-//	    WithPorts(mem.Ports{Top: messaging.NewPort(nil, 4, 4, "Mem.Top")}).
+//	    WithPorts(mem.Ports{Top: messaging.NewPort("Mem.Top", 4, 4)}).
 //	    Build("Mem")
 //
 // Every port is created by the system builder and named "<instance>.<field>",
 // or "<instance>.<field>[i]" for member i of a port group; Build binds and
-// registers them, and no port is added later. A component type is identified
-// by its package (TypeName); Name returns the instance name given to Build.
+// registers them, and no port is added later. A component's configuration
+// does not change after Build: do not reassign its Ports or Middlewares. A
+// component type is identified by its package (TypeName); Name returns the
+// instance name given to Build.
 package event

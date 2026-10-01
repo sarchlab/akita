@@ -86,9 +86,9 @@ cache := writethroughcache.Definition.Builder().
         AddressMapper: &mem.SinglePortMapper{Port: dramPort},
     }).
     WithPorts(writethroughcache.Ports{
-        Top:     messaging.NewPort(nil, 16, 16, "L2Cache.Top"),
-        Bottom:  messaging.NewPort(nil, 16, 16, "L2Cache.Bottom"),
-        Control: messaging.NewPort(nil, 16, 16, "L2Cache.Control"),
+        Top:     messaging.NewPort("L2Cache.Top", 16, 16),
+        Bottom:  messaging.NewPort("L2Cache.Bottom", 16, 16),
+        Control: messaging.NewPort("L2Cache.Control", 16, 16),
     }).
     Build("L2Cache")
 

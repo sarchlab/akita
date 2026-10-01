@@ -95,7 +95,7 @@ func build(sim timing.Simulation, spec Spec) *Comp {
 	return Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
-		WithPorts(Ports{In: messaging.NewPort(nil, 4, 4, "C.In")}).
+		WithPorts(Ports{In: messaging.NewPort("C.In", 4, 4)}).
 		Build("C")
 }
 

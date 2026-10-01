@@ -87,7 +87,7 @@ var _ = Describe("DataMover milestones", func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		srcPort = messaging.NewPort(nil, 4, 4, "Src.Top")
+		srcPort = messaging.NewPort("Src.Top", 4, 4)
 
 		memSpec := idealmemcontroller.Definition.DefaultSpec
 		memSpec.Latency = 100

@@ -12,8 +12,8 @@ func Example() {
 	sim := modeling.NewStandaloneSimulation(engine)
 
 	// Create the ports first, so AgentA's Spec can name AgentB's port.
-	outA := messaging.NewPort(nil, 16, 16, "AgentA.Out")
-	outB := messaging.NewPort(nil, 16, 16, "AgentB.Out")
+	outA := messaging.NewPort("AgentA.Out", 16, 16)
+	outB := messaging.NewPort("AgentB.Out", 16, 16)
 
 	specA := Definition.DefaultSpec
 	specA.Freq = 1 * timing.Hz

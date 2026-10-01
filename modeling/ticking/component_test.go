@@ -80,7 +80,7 @@ func newSim() timing.Simulation {
 }
 
 func newPort(name string) messaging.Port {
-	return messaging.NewPort(nil, 1, 1, name)
+	return messaging.NewPort(name, 1, 1)
 }
 
 func build(ports Ports) *Comp {

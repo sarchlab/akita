@@ -91,14 +91,13 @@ var _ = Describe("DRAM Statistics", func() {
 			WithSpec(spec).
 			WithResources(dram.Resources{Storage: mem.NewStorage(4 * mem.GB)}).
 			WithPorts(dram.Ports{
-				Top: messaging.NewPort(nil, 1024, 1024, "StatsDRAM.Top"),
-				Control: messaging.NewPort(
-					nil, 1024, 1024, "StatsDRAM.Control"),
+				Top:     messaging.NewPort("StatsDRAM.Top", 1024, 1024),
+				Control: messaging.NewPort("StatsDRAM.Control", 1024, 1024),
 			}).
 			Build("StatsDRAM")
 
 		topPort := dramComp.Ports.Top
-		srcPort := messaging.NewPort(nil, 1024, 1024, "Src.Top")
+		srcPort := messaging.NewPort("Src.Top", 1024, 1024)
 		conn.PlugIn(topPort)
 		conn.PlugIn(srcPort)
 

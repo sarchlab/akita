@@ -18,7 +18,7 @@ func TestControlContract(t *testing.T) {
 		spec.BottomUnit = messaging.RemotePort("BottomUnit")
 
 		port := func(name string) messaging.Port {
-			p := messaging.NewPort(nil, 16, 16, "ROB."+name)
+			p := messaging.NewPort("ROB."+name, 16, 16)
 			(&noopConn{}).PlugIn(p)
 			return p
 		}

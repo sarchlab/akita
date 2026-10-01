@@ -201,7 +201,7 @@ var _ = Describe("DRAM Integration", func() {
 	})
 
 	It("should read and write via direct connection", func() {
-		srcPort := messaging.NewPort(nil, 1024, 1024, "Src.Top")
+		srcPort := messaging.NewPort("Src.Top", 1024, 1024)
 		conn := directconnection.MakeBuilder().
 			WithSimulation(sim).
 			Build("Conn")

@@ -90,7 +90,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 		spec.BottomUnit = bottomUnitRemote
 
 		port := func(name string, bufSize int) messaging.Port {
-			return messaging.NewPort(nil, bufSize, bufSize, "Rob."+name)
+			return messaging.NewPort("Rob."+name, bufSize, bufSize)
 		}
 
 		topPort = port("Top", 4)

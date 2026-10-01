@@ -66,9 +66,9 @@ g := gmmu.Definition.Builder().
     WithSpec(spec).
     WithResources(gmmu.Resources{PageTable: pageTable}).
     WithPorts(gmmu.Ports{
-        Top:     messaging.NewPort(nil, 16, 16, "GMMU.Top"),
-        Bottom:  messaging.NewPort(nil, 16, 16, "GMMU.Bottom"),
-        Control: messaging.NewPort(nil, 16, 16, "GMMU.Control"),
+        Top:     messaging.NewPort("GMMU.Top", 16, 16),
+        Bottom:  messaging.NewPort("GMMU.Bottom", 16, 16),
+        Control: messaging.NewPort("GMMU.Control", 16, 16),
     }).
     Build("GMMU")
 ```

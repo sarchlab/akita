@@ -46,9 +46,9 @@ func plugNoopConn(comp *Comp) {
 // default buffer sizes.
 func defaultPorts(name string) Ports {
 	return Ports{
-		Top:     messaging.NewPort(nil, 4, 4, name+".Top"),
-		Bottom:  messaging.NewPort(nil, 4, 4, name+".Bottom"),
-		Control: messaging.NewPort(nil, 1, 1, name+".Control"),
+		Top:     messaging.NewPort(name+".Top", 4, 4),
+		Bottom:  messaging.NewPort(name+".Bottom", 4, 4),
+		Control: messaging.NewPort(name+".Control", 1, 1),
 	}
 }
 
@@ -75,7 +75,8 @@ func newIdealEndpoint(name string) *idealEndpoint {
 	ep := &idealEndpoint{
 		name: name,
 	}
-	ep.port = messaging.NewPort(ep, 4, 4, name+".Port")
+	ep.port = messaging.NewPort(name+".Port", 4, 4)
+	ep.port.SetOwner(ep)
 
 	return ep
 }

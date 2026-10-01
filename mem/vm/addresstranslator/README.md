@@ -64,10 +64,10 @@ at := addresstranslator.Definition.Builder().
         TranslationProviderMapper: tlbMapper,
     }).
     WithPorts(addresstranslator.Ports{
-        Top:         messaging.NewPort(nil, 4, 4, "AddressTranslator.Top"),
-        Bottom:      messaging.NewPort(nil, 4, 4, "AddressTranslator.Bottom"),
-        Translation: messaging.NewPort(nil, 4, 4, "AddressTranslator.Translation"),
-        Control:     messaging.NewPort(nil, 1, 1, "AddressTranslator.Control"),
+        Top:         messaging.NewPort("AddressTranslator.Top", 4, 4),
+        Bottom:      messaging.NewPort("AddressTranslator.Bottom", 4, 4),
+        Translation: messaging.NewPort("AddressTranslator.Translation", 4, 4),
+        Control:     messaging.NewPort("AddressTranslator.Control", 1, 1),
     }).
     Build("AddressTranslator")
 ```

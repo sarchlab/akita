@@ -51,15 +51,15 @@ var _ = Describe("Cache", func() {
 		// cuPort is a real, component-less port that stands in for the compute
 		// unit. It is plugged into the connection so the cache's responses land
 		// in its incoming buffer, which the tests then drain and inspect.
-		cuPort = messaging.NewPort(nil, 16, 16, "CU.Top")
+		cuPort = messaging.NewPort("CU.Top", 16, 16)
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dram = idealmemcontroller.Definition.Builder().
 			WithSimulation(sim).
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 			WithPorts(idealmemcontroller.Ports{
-				Top:     messaging.NewPort(nil, 16, 16, "DRAM.Top"),
-				Control: messaging.NewPort(nil, 16, 16, "DRAM.Control"),
+				Top:     messaging.NewPort("DRAM.Top", 16, 16),
+				Control: messaging.NewPort("DRAM.Control", 16, 16),
 			}).
 			Build("DRAM")
 		addressToPortMapper = &mem.SinglePortMapper{
@@ -75,9 +75,9 @@ var _ = Describe("Cache", func() {
 				AddressMapper: addressToPortMapper,
 			}).
 			WithPorts(Ports{
-				Top:     messaging.NewPort(nil, 4, 4, "Cache.Top"),
-				Bottom:  messaging.NewPort(nil, 4, 4, "Cache.Bottom"),
-				Control: messaging.NewPort(nil, 4, 4, "Cache.Control"),
+				Top:     messaging.NewPort("Cache.Top", 4, 4),
+				Bottom:  messaging.NewPort("Cache.Bottom", 4, 4),
+				Control: messaging.NewPort("Cache.Control", 4, 4),
 			}).
 			Build("Cache")
 

@@ -84,8 +84,8 @@ func buildCache(sim timing.Simulation, name string, lower messaging.Port) *cache
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithPorts(cache.Ports{
-			Top:    messaging.NewPort(nil, 4, 4, name+".Top"),
-			Bottom: messaging.NewPort(nil, 4, 4, name+".Bottom"),
+			Top:    messaging.NewPort(name+".Top", 4, 4),
+			Bottom: messaging.NewPort(name+".Bottom", 4, 4),
 		}).
 		Build(name)
 }
@@ -98,7 +98,7 @@ func main() {
 	// below it.
 	mem := memory.Definition.Builder().
 		WithSimulation(sim).
-		WithPorts(memory.Ports{Top: messaging.NewPort(nil, 4, 4, "Memory.Top")}).
+		WithPorts(memory.Ports{Top: messaging.NewPort("Memory.Top", 4, 4)}).
 		Build("Memory")
 	l2 := buildCache(sim, "L2", mem.Ports.Top)
 	l1 := buildCache(sim, "L1", l2.Ports.Top)
@@ -108,7 +108,7 @@ func main() {
 	cli := client.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(clientSpec).
-		WithPorts(client.Ports{Out: messaging.NewPort(nil, 4, 4, "Client.Out")}).
+		WithPorts(client.Ports{Out: messaging.NewPort("Client.Out", 4, 4)}).
 		Build("Client")
 
 	connect := func(name string, a, b messaging.Port) {

@@ -55,7 +55,8 @@ var _ = Describe("Incoming buffer tracer", func() {
 		tracer = &ibRecordingTracer{}
 		CollectTrace(comp, tracer)
 
-		port = messaging.NewPort(comp, 4, 4, "Comp.Top")
+		port = messaging.NewPort("Comp.Top", 4, 4)
+		port.SetOwner(comp)
 		CollectIncomingBufferTrace(port)
 	})
 
@@ -126,7 +127,8 @@ var _ = Describe("Incoming buffer tracer", func() {
 
 	It("is a no-op when the owning component is not being traced", func() {
 		untraced := &ibFakeComp{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()), name: "Untraced"}
-		p2 := messaging.NewPort(untraced, 4, 4, "Untraced.Top")
+		p2 := messaging.NewPort("Untraced.Top", 4, 4)
+		p2.SetOwner(untraced)
 		CollectIncomingBufferTrace(p2)
 
 		untraced.time = 100

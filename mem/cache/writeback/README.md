@@ -99,9 +99,9 @@ cache := writeback.Definition.Builder().
         AddressToPortMapper: lowModuleMapper,
     }).
     WithPorts(writeback.Ports{
-        Top:     messaging.NewPort(nil, 8, 8, "L1Cache.Top"),
-        Bottom:  messaging.NewPort(nil, 8, 8, "L1Cache.Bottom"),
-        Control: messaging.NewPort(nil, 8, 8, "L1Cache.Control"),
+        Top:     messaging.NewPort("L1Cache.Top", 8, 8),
+        Bottom:  messaging.NewPort("L1Cache.Bottom", 8, 8),
+        Control: messaging.NewPort("L1Cache.Control", 8, 8),
     }).
     Build("L1Cache")
 

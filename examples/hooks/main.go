@@ -179,8 +179,8 @@ func main() {
 	sim := modeling.NewStandaloneSimulation(engine)
 
 	// Create the ports first, so AgentA's Spec can name AgentB's port.
-	outA := messaging.NewPort(nil, 4, 4, "AgentA.Out")
-	outB := messaging.NewPort(nil, 4, 4, "AgentB.Out")
+	outA := messaging.NewPort("AgentA.Out", 4, 4)
+	outB := messaging.NewPort("AgentB.Out", 4, 4)
 
 	agentA := Definition.Builder().
 		WithSimulation(sim).

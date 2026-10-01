@@ -59,7 +59,7 @@ The system builder creates the port with `messaging.NewPort` and passes it
 through `WithPorts`:
 
 ```go
-outA := messaging.NewPort(nil, 16, 16, "AgentA.Out")
+outA := messaging.NewPort("AgentA.Out", 16, 16)
 
 agentA := Definition.Builder().
     WithSimulation(sim).
@@ -68,9 +68,9 @@ agentA := Definition.Builder().
     Build("AgentA")
 ```
 
-`NewPort(nil, 16, 16, "AgentA.Out")` creates a port with no owner yet, room
-for 16 incoming and 16 outgoing messages, and the name
-`<instance>.<field>`. `Build` sets the owner, and it checks the name and
+`NewPort("AgentA.Out", 16, 16)` creates a port named `<instance>.<field>`,
+with room for 16 incoming and 16 outgoing messages and no owner yet.
+`Build` sets the owner, and it checks the name and
 panics on a mismatch, so a typo fails fast. Every port in `Ports` must be
 given, and none is added after `Build`. This keeps the component agnostic
 to how its port is built (buffer sizes, instrumentation) while the

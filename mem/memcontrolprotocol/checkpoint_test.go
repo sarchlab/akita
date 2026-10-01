@@ -85,8 +85,8 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 		WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 		WithSpec(dramSpec).
 		WithPorts(idealmemcontroller.Ports{
-			Top:     messaging.NewPort(nil, 16, 16, "DRAM.Top"),
-			Control: messaging.NewPort(nil, 16, 16, "DRAM.Control"),
+			Top:     messaging.NewPort("DRAM.Top", 16, 16),
+			Control: messaging.NewPort("DRAM.Control", 16, 16),
 		}).
 		Build("DRAM")
 	dramTop := dram.Ports.Top
@@ -107,9 +107,9 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 			},
 		}).
 		WithPorts(writeback.Ports{
-			Top:     messaging.NewPort(nil, 256, 256, "Cache.Top"),
-			Bottom:  messaging.NewPort(nil, 256, 256, "Cache.Bottom"),
-			Control: messaging.NewPort(nil, 16, 16, "Cache.Control"),
+			Top:     messaging.NewPort("Cache.Top", 256, 256),
+			Bottom:  messaging.NewPort("Cache.Bottom", 256, 256),
+			Control: messaging.NewPort("Cache.Control", 16, 16),
 		}).
 		Build("Cache")
 

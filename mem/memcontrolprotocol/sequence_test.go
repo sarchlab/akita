@@ -79,9 +79,9 @@ func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
 			TranslationProviderMapper: &mem.SinglePortMapper{Port: remote},
 		}).
 		WithPorts(tlb.Ports{
-			Top:     messaging.NewPort(nil, 16, 16, "TLB.Top"),
-			Bottom:  messaging.NewPort(nil, 16, 16, "TLB.Bottom"),
-			Control: messaging.NewPort(nil, 16, 16, "TLB.Control"),
+			Top:     messaging.NewPort("TLB.Top", 16, 16),
+			Bottom:  messaging.NewPort("TLB.Bottom", 16, 16),
+			Control: messaging.NewPort("TLB.Control", 16, 16),
 		}).
 		Build("TLB")
 	tick := stepperOf(comp)
@@ -378,9 +378,9 @@ func buildWritebackForSequence(
 			},
 		}).
 		WithPorts(writeback.Ports{
-			Top:     messaging.NewPort(nil, 16, 16, "L1Cache.Top"),
-			Bottom:  messaging.NewPort(nil, 16, 16, "L1Cache.Bottom"),
-			Control: messaging.NewPort(nil, 16, 16, "L1Cache.Control"),
+			Top:     messaging.NewPort("L1Cache.Top", 16, 16),
+			Bottom:  messaging.NewPort("L1Cache.Bottom", 16, 16),
+			Control: messaging.NewPort("L1Cache.Control", 16, 16),
 		}).
 		Build("L1Cache")
 

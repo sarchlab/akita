@@ -36,7 +36,7 @@ func main() {
 	// Build the server first, so the client's Spec can name its port.
 	srv := server.Definition.Builder().
 		WithSimulation(sim).
-		WithPorts(server.Ports{Out: messaging.NewPort(nil, 4, 4, "Server.Out")}).
+		WithPorts(server.Ports{Out: messaging.NewPort("Server.Out", 4, 4)}).
 		Build("Server")
 
 	clientSpec := client.Definition.DefaultSpec
@@ -46,7 +46,7 @@ func main() {
 	cli := client.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(clientSpec).
-		WithPorts(client.Ports{Out: messaging.NewPort(nil, 4, 4, "Client.Out")}).
+		WithPorts(client.Ports{Out: messaging.NewPort("Client.Out", 4, 4)}).
 		Build("Client")
 
 	conn := directconnection.MakeBuilder().WithSimulation(sim).Build("Conn")

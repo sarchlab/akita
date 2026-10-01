@@ -87,8 +87,8 @@ ctrl := idealmemcontroller.Definition.Builder().
     WithSpec(spec).
     WithResources(idealmemcontroller.Resources{Storage: storage}).
     WithPorts(idealmemcontroller.Ports{
-        Top:     messaging.NewPort(nil, 16, 16, "IdealMem.Top"),
-        Control: messaging.NewPort(nil, 16, 16, "IdealMem.Control"),
+        Top:     messaging.NewPort("IdealMem.Top", 16, 16),
+        Control: messaging.NewPort("IdealMem.Control", 16, 16),
     }).
     Build("IdealMem")
 

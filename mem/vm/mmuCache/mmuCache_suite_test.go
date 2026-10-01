@@ -33,8 +33,8 @@ func (c *noopConn) NotifySend()                      {}
 // named name, each with a buffer of 16 (the historical default).
 func defaultPorts(name string) Ports {
 	return Ports{
-		Top:     messaging.NewPort(nil, 16, 16, name+".Top"),
-		Bottom:  messaging.NewPort(nil, 16, 16, name+".Bottom"),
-		Control: messaging.NewPort(nil, 16, 16, name+".Control"),
+		Top:     messaging.NewPort(name+".Top", 16, 16),
+		Bottom:  messaging.NewPort(name+".Bottom", 16, 16),
+		Control: messaging.NewPort(name+".Control", 16, 16),
 	}
 }

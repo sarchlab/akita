@@ -74,7 +74,8 @@
 // "GPU[0].L1Cache.Top", or "<instance>.<field>[i]" for member i of a port
 // group. Build binds each port to the instance and registers it with the
 // simulation; no port is added after Build. Middlewares reach the ports
-// through the Ports fields.
+// through the Ports fields. A component's configuration does not change
+// after Build: do not reassign its Ports or Middlewares.
 //
 // # Type name and instance name
 //

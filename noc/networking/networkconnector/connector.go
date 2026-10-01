@@ -60,18 +60,10 @@ type SwitchToSwitchLinkParameter struct {
 	LinkParam     LinkParameter
 }
 
-// PortFactory creates a port with the given buffer capacities and full name.
-// The port has no component yet; the Build of the component it is given to
-// binds it.
-type PortFactory func(
-	incomingBufCap, outgoingBufCap int,
-	name string,
-) messaging.Port
-
-// newPort is the default PortFactory.
-func newPort(incomingBufCap, outgoingBufCap int, name string) messaging.Port {
-	return messaging.NewPort(nil, incomingBufCap, outgoingBufCap, name)
-}
+// PortFactory creates a port with the given full name and buffer capacities,
+// like messaging.NewPort, the default. The port has no owner yet; the Build of
+// the component it is given to binds it.
+type PortFactory func(name string, incomingBufCap, outgoingBufCap int) messaging.Port
 
 // Connector can build complex network topologies.
 type Connector struct {
@@ -97,7 +89,7 @@ func MakeConnector() Connector {
 		defaultFreq: 1 * timing.GHz,
 		flitSize:    64,
 		router:      new(FloydWarshallRouter),
-		portFactory: newPort,
+		portFactory: messaging.NewPort,
 	}
 }
 
@@ -232,10 +224,9 @@ func (c *Connector) ConnectDeviceWithEPName(
 	swNode := c.switches[switchID]
 	epFullName := fmt.Sprintf("%s.%s", c.name, epName)
 
-	epPort = c.portFactory(
+	epPort = c.portFactory(epFullName+".NetworkPort",
 		param.DeviceEndParam.IncomingBufSize,
-		param.DeviceEndParam.OutgoingBufSize,
-		epFullName+".NetworkPort")
+		param.DeviceEndParam.OutgoingBufSize)
 	swPort, _ = swNode.addPort(c.portFactory, epPort.AsRemote(),
 		param.SwitchEndParam)
 

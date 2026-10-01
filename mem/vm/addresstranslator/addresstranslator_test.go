@@ -48,13 +48,10 @@ const (
 // defaults for the rest.
 func makePorts(name string, topBufSize int) Ports {
 	return Ports{
-		Top: messaging.NewPort(nil, topBufSize, topBufSize, name+".Top"),
-		Bottom: messaging.NewPort(nil, bottomBufSize, bottomBufSize,
-			name+".Bottom"),
-		Translation: messaging.NewPort(nil, translationBufSize,
-			translationBufSize, name+".Translation"),
-		Control: messaging.NewPort(nil, ctrlBufSize, ctrlBufSize,
-			name+".Control"),
+		Top:         messaging.NewPort(name+".Top", topBufSize, topBufSize),
+		Bottom:      messaging.NewPort(name+".Bottom", bottomBufSize, bottomBufSize),
+		Translation: messaging.NewPort(name+".Translation", translationBufSize, translationBufSize),
+		Control:     messaging.NewPort(name+".Control", ctrlBufSize, ctrlBufSize),
 	}
 }
 

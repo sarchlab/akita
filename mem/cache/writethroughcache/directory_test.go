@@ -56,7 +56,7 @@ var _ = Describe("Directory", func() {
 		// Success cases read the sent request back via RetrieveOutgoing;
 		// failure cases pre-fill the slot.
 		ports := makePorts("Cache", 4)
-		ports.Bottom = messaging.NewPort(nil, 1, 1, "Cache.Bottom")
+		ports.Bottom = messaging.NewPort("Cache.Bottom", 1, 1)
 
 		c = buildStageTestCache(
 			Spec{

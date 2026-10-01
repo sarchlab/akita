@@ -33,9 +33,9 @@ func TestCache(t *testing.T) {
 // bufSize slots in each direction.
 func makePorts(name string, bufSize int) Ports {
 	return Ports{
-		Top:     messaging.NewPort(nil, bufSize, bufSize, name+".Top"),
-		Bottom:  messaging.NewPort(nil, bufSize, bufSize, name+".Bottom"),
-		Control: messaging.NewPort(nil, bufSize, bufSize, name+".Control"),
+		Top:     messaging.NewPort(name+".Top", bufSize, bufSize),
+		Bottom:  messaging.NewPort(name+".Bottom", bufSize, bufSize),
+		Control: messaging.NewPort(name+".Control", bufSize, bufSize),
 	}
 }
 
@@ -89,8 +89,8 @@ func buildIdealDRAM(sim timing.Simulation, storage *mem.Storage) messaging.Port 
 		WithResources(idealmemcontroller.Resources{Storage: storage}).
 		WithSpec(dramSpec).
 		WithPorts(idealmemcontroller.Ports{
-			Top:     messaging.NewPort(nil, 16, 16, "DRAM.Top"),
-			Control: messaging.NewPort(nil, 16, 16, "DRAM.Control"),
+			Top:     messaging.NewPort("DRAM.Top", 16, 16),
+			Control: messaging.NewPort("DRAM.Control", 16, 16),
 		}).
 		Build("DRAM")
 
@@ -115,8 +115,8 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		agentPort = messaging.NewPort(nil, 8, 8, "Agent.Top")
-		controlAgentPort = messaging.NewPort(nil, 8, 8, "Agent.Control")
+		agentPort = messaging.NewPort("Agent.Top", 8, 8)
+		controlAgentPort = messaging.NewPort("Agent.Control", 8, 8)
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
 		dramTop = buildIdealDRAM(sim, dramStorage)

@@ -48,7 +48,7 @@ var _ = Describe("Reorder Buffer", func() {
 
 	build := func(spec Spec) {
 		port := func(name string, bufSize int) messaging.Port {
-			return messaging.NewPort(nil, bufSize, bufSize, "Rob."+name)
+			return messaging.NewPort("Rob."+name, bufSize, bufSize)
 		}
 
 		topPort = port("Top", topBufSize)

@@ -628,9 +628,9 @@ r := rob.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithPorts(rob.Ports{
-        Top:     messaging.NewPort(nil, 4, 4, "ROB.Top"),
-        Bottom:  messaging.NewPort(nil, 4, 4, "ROB.Bottom"),
-        Control: messaging.NewPort(nil, 4, 4, "ROB.Control"),
+        Top:     messaging.NewPort("ROB.Top", 4, 4),
+        Bottom:  messaging.NewPort("ROB.Bottom", 4, 4),
+        Control: messaging.NewPort("ROB.Control", 4, 4),
     }).
     Build("ROB")
 
@@ -669,7 +669,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
 
 4. Ports (declared by the component, created by the system builder)
    - A component declares the ports it has as the fields of its `Ports` struct, tagged with the protocol roles they speak, but never constructs the instances or owns connections.
-   - The system builder creates each port with `messaging.NewPort(nil, in, out, "<instance>.<Field>")`, choosing its buffer sizes, and passes them all to `Build`, which binds them to the component and registers them with the simulation.
+   - The system builder creates each port with `messaging.NewPort("<instance>.<Field>", in, out)`, choosing its buffer sizes, and passes them all to `Build`, which binds them to the component and registers them with the simulation.
    - Middlewares reach ports as fields (`m.comp.Ports.Top`), checked by the compiler.
 
 5. Middlewares (ordered, holding only references)
@@ -758,7 +758,7 @@ Resources are not checkpointed. The setup that rebuilds a simulation supplies th
 - Turn each per-tick method into `Handle(e timing.Event) bool`, list the middlewares as exported pointer fields of a `Middlewares` struct in the order they run, and create them in a `newMiddlewares(c *Comp) Middlewares` function. Move any mutable middleware field into State.
 - Declare `type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]` and `var Definition = ticking.Definition[...]{DefaultSpec: ..., NewState: ..., NewMiddlewares: ...}`, and delete the hand-written builder and constructor.
 - Turn exported methods on the component into package functions that take `*Comp`.
-- In the system builder, create every port with `messaging.NewPort(nil, in, out, "<instance>.<Field>")` and build with `Definition.Builder().WithSimulation(sim).WithSpec(spec).WithResources(res).WithPorts(ports).Build(name)`; start a component that begins work on its own with `TickLater()`.
+- In the system builder, create every port with `messaging.NewPort("<instance>.<Field>", in, out)` and build with `Definition.Builder().WithSimulation(sim).WithSpec(spec).WithResources(res).WithPorts(ports).Build(name)`; start a component that begins work on its own with `TickLater()`.
 - In tests, step the component with `modelingtest.Tick(comp)` and add a `modelingtest.CheckTicking(t, Definition)` test.
 
 ---
@@ -841,8 +841,8 @@ ctrl := dram.Definition.Builder().
     WithSpec(spec).
     WithResources(dram.Resources{Storage: storage}).
     WithPorts(dram.Ports{
-        Top:     messaging.NewPort(nil, 1024, 1024, "DRAM.Top"),
-        Control: messaging.NewPort(nil, 4, 4, "DRAM.Control"),
+        Top:     messaging.NewPort("DRAM.Top", 1024, 1024),
+        Control: messaging.NewPort("DRAM.Control", 4, 4),
     }).
     Build("DRAM")
 ```
@@ -895,8 +895,8 @@ ctrl := dram.Definition.Builder().
     WithSpec(spec).
     WithResources(dram.Resources{Storage: storage}).
     WithPorts(dram.Ports{
-        Top:     messaging.NewPort(nil, 4, 4, "DRAM.Top"),
-        Control: messaging.NewPort(nil, 4, 4, "DRAM.Control"),
+        Top:     messaging.NewPort("DRAM.Top", 4, 4),
+        Control: messaging.NewPort("DRAM.Control", 4, 4),
     }).
     Build("DRAM")
 ```
@@ -930,9 +930,9 @@ cache := writeback.Definition.Builder().
     WithSpec(spec).
     WithResources(writeback.Resources{Storage: storage}).
     WithPorts(writeback.Ports{
-        Top:     messaging.NewPort(nil, 4, 4, "Cache.Top"),
-        Bottom:  messaging.NewPort(nil, 4, 4, "Cache.Bottom"),
-        Control: messaging.NewPort(nil, 4, 4, "Cache.Control"),
+        Top:     messaging.NewPort("Cache.Top", 4, 4),
+        Bottom:  messaging.NewPort("Cache.Bottom", 4, 4),
+        Control: messaging.NewPort("Cache.Control", 4, 4),
     }).
     Build("Cache")
 
@@ -952,11 +952,11 @@ size and names member `i` `<instance>.<Field>[i]`.
 
 The `Port` interface in V5 includes a `SetOwner(owner PortOwner)` method.
 Because the system builder creates ports before the component exists, a port
-is created with no owner (`nil`), and `Build` calls `SetOwner` to associate
+is created without an owner, and `Build` calls `SetOwner` to associate
 it with the component:
 
 ```go
-outPort := messaging.NewPort(nil, 4, 4, "Agent.Out")
+outPort := messaging.NewPort("Agent.Out", 4, 4)
 
 agent := ping.Definition.Builder().
     WithSimulation(sim).

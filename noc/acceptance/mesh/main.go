@@ -42,7 +42,7 @@ func main() {
 		for y := 0; y < meshHeight; y++ {
 			name := fmt.Sprintf("Agent[%d][%d]", x, y)
 			ports := []messaging.Port{
-				messaging.NewPort(nil, 1, 1, name+".Port0"),
+				messaging.NewPort(name+".Port0", 1, 1),
 			}
 			agent := acceptance.NewAgent(sim, freq, name, ports, test)
 			agent.TickLater()

@@ -26,7 +26,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.BottomUnit = messaging.RemotePort("BottomUnit")
 
 	port := func(name string) messaging.Port {
-		p := messaging.NewPort(nil, 4, 4, "Rob."+name)
+		p := messaging.NewPort("Rob."+name, 4, 4)
 		(&noopConn{}).PlugIn(p)
 		return p
 	}

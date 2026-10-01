@@ -55,8 +55,8 @@ m := mmu.Definition.Builder().
     WithSpec(spec).
     WithResources(mmu.Resources{PageTable: pageTable}).
     WithPorts(mmu.Ports{
-        Top:     messaging.NewPort(nil, 16, 16, "MMU.Top"),
-        Control: messaging.NewPort(nil, 4, 4, "MMU.Control"),
+        Top:     messaging.NewPort("MMU.Top", 16, 16),
+        Control: messaging.NewPort("MMU.Control", 4, 4),
     }).
     Build("MMU")
 ```
