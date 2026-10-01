@@ -2,6 +2,7 @@ package wakeup
 
 import (
 	"io"
+	"sync"
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -16,13 +17,21 @@ type Component[S, T, R, P, M any] struct {
 
 	wakeups  *Scheduler
 	pipeline []modeling.Middleware
+
+	// handling makes the instance handle one event at a time: the parallel
+	// engine runs the events of one time concurrently, and a superseded
+	// wakeup can fall at the same time as a later one.
+	handling sync.Mutex
 }
 
 // Handle passes the event, usually an Event, to every middleware in the
 // declaration order of Middlewares. If any of them made progress, the
 // instance wakes again at the same time, so it keeps running until no
-// middleware has work ready.
+// middleware has work ready. The instance handles one event at a time.
 func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
+	c.handling.Lock()
+	defer c.handling.Unlock()
+
 	if _, ok := e.(Event); ok {
 		c.wakeups.Woke(e.Time())
 	}

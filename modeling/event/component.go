@@ -3,6 +3,7 @@ package event
 import (
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -17,12 +18,21 @@ type Component[S, T, R, P, M any] struct {
 
 	engine   timing.EventScheduler
 	pipeline []modeling.Middleware
+
+	// handling makes the instance handle one event at a time: the parallel
+	// engine runs the events of one time concurrently, and an event component
+	// often schedules several events for the same time.
+	handling sync.Mutex
 }
 
 // Handle passes the event to every middleware, in the declaration order of
 // Middlewares. The event model does not use the middlewares' progress: an
-// event component runs only when an event arrives.
+// event component runs only when an event arrives. The instance handles one
+// event at a time.
 func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
+	c.handling.Lock()
+	defer c.handling.Unlock()
+
 	modeling.Dispatch(c.pipeline, e)
 }
 

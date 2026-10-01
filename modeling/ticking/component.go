@@ -2,6 +2,7 @@ package ticking
 
 import (
 	"io"
+	"sync"
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -16,13 +17,19 @@ type Component[S, T, R, P, M any] struct {
 
 	ticks    *Scheduler
 	pipeline []modeling.Middleware
+
+	// handling makes the instance handle one event at a time: the parallel
+	// engine runs the events of one time concurrently.
+	handling sync.Mutex
 }
 
-// Handle passes the event to every middleware, in the declaration order of
-// Middlewares, and schedules the next tick if any of them made progress. The
-// event is usually a tick; it can also be an event the component scheduled
-// for itself.
+// Handle passes the event, a TickEvent, to every middleware, in the
+// declaration order of Middlewares, and schedules the next tick if any of them
+// made progress. The instance handles one event at a time.
 func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
+	c.handling.Lock()
+	defer c.handling.Unlock()
+
 	if modeling.Dispatch(c.pipeline, e) {
 		c.ticks.TickLater()
 	}

@@ -120,6 +120,27 @@ func TestRecvAndScheduledEventsReachTheMiddlewares(t *testing.T) {
 	}
 }
 
+// The parallel engine runs the events of one time concurrently, even when
+// they are for the same component. The component must still handle them one
+// at a time.
+func TestSimultaneousEventsAreHandledOneAtATime(t *testing.T) {
+	sim := modeling.NewStandaloneSimulation(timing.NewParallelEngine())
+	c := build(sim, Definition.DefaultSpec)
+
+	const n = 1000
+	for i := range n {
+		c.Schedule(doneEvent{EventBase: c.MakeEventBase(10), ReqID: uint64(i)})
+	}
+
+	if err := sim.GetEngine().Run(); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if len(c.State.Done) != n {
+		t.Errorf("recorded %d completions, want %d", len(c.State.Done), n)
+	}
+}
+
 func TestScheduleRejectsAnotherHandlersEvent(t *testing.T) {
 	c := build(newSim(), Definition.DefaultSpec)
 
