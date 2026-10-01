@@ -6,6 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/internal/base"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -13,9 +14,9 @@ import (
 // Definition. The embedded ComponentBase holds its five structs; Component
 // adds its wakeups.
 type Component[S, T, R, P, M any] struct {
-	modeling.ComponentBase[S, T, R, P, M]
+	base.ComponentBase[S, T, R, P, M]
 
-	wakeups  *Scheduler
+	wakeups  *scheduler
 	pipeline []modeling.Middleware
 
 	// handling makes the instance handle one event at a time: the parallel
@@ -36,7 +37,7 @@ func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
 		c.wakeups.Woke(e.Time())
 	}
 
-	if modeling.Dispatch(c.pipeline, e) {
+	if base.Dispatch(c.pipeline, e) {
 		c.wakeups.WakeNow()
 	}
 }

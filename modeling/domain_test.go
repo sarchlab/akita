@@ -1,6 +1,8 @@
 package modeling_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/sarchlab/akita/v5/messaging"
@@ -49,4 +51,22 @@ func TestDomainNesting(t *testing.T) {
 	if gpu.Ports.Mem != port {
 		t.Error("expected the nested domain's port to be exposed by the outer domain")
 	}
+}
+
+func expectPanic(t *testing.T, substr string, f func()) {
+	t.Helper()
+
+	defer func() {
+		t.Helper()
+
+		r := recover()
+		if r == nil {
+			t.Fatalf("expected a panic containing %q", substr)
+		}
+		if !strings.Contains(fmt.Sprint(r), substr) {
+			t.Fatalf("panic %q does not contain %q", fmt.Sprint(r), substr)
+		}
+	}()
+
+	f()
 }

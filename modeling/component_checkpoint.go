@@ -29,8 +29,8 @@ type schedulerCheckpoint struct {
 }
 
 // A Scheduler schedules a component's own tick or wakeup events and keeps a
-// dedup guard that checkpoints save: a *ticking.Scheduler or a
-// *wakeup.Scheduler.
+// dedup guard that checkpoints save, such as a *ticking.Scheduler or the
+// wakeup model's scheduler.
 type Scheduler interface {
 	// Snapshot returns the guard: whether an event is pending and at what time.
 	Snapshot() (at timing.VTimeInPicoSec, scheduled bool)

@@ -19,10 +19,10 @@ func init() {
 	timing.RegisterEvent(Event{})
 }
 
-// Scheduler schedules the wakeup events of a handler. Its dedup guard
+// scheduler schedules the wakeup events of a handler. Its dedup guard
 // remembers the earliest pending wakeup, so asking for a wakeup at or after it
 // schedules nothing.
-type Scheduler struct {
+type scheduler struct {
 	lock       sync.Mutex
 	handlerID  string
 	simulation timing.Simulation
@@ -31,15 +31,15 @@ type Scheduler struct {
 	scheduled bool
 }
 
-// NewScheduler creates a scheduler for the wakeup events of the handler with
+// newScheduler creates a scheduler for the wakeup events of the handler with
 // the given ID.
-func NewScheduler(handlerID string, sim timing.Simulation) *Scheduler {
-	return &Scheduler{handlerID: handlerID, simulation: sim}
+func newScheduler(handlerID string, sim timing.Simulation) *scheduler {
+	return &scheduler{handlerID: handlerID, simulation: sim}
 }
 
 // WakeAt schedules a wakeup at time t, unless one is already pending at or
 // before t.
-func (s *Scheduler) WakeAt(t timing.VTimeInPicoSec) {
+func (s *scheduler) WakeAt(t timing.VTimeInPicoSec) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -56,13 +56,13 @@ func (s *Scheduler) WakeAt(t timing.VTimeInPicoSec) {
 }
 
 // WakeNow schedules a wakeup at the current time.
-func (s *Scheduler) WakeNow() {
+func (s *scheduler) WakeNow() {
 	s.WakeAt(s.simulation.GetEngine().CurrentTime())
 }
 
 // Woke clears the guard once the pending wakeup is delivered. The component
 // calls it when it handles an Event at time t.
-func (s *Scheduler) Woke(t timing.VTimeInPicoSec) {
+func (s *scheduler) Woke(t timing.VTimeInPicoSec) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -73,7 +73,7 @@ func (s *Scheduler) Woke(t timing.VTimeInPicoSec) {
 
 // Snapshot returns the scheduler's dedup guard: whether a wakeup is pending
 // and at what time. A component checkpoint saves it.
-func (s *Scheduler) Snapshot() (timing.VTimeInPicoSec, bool) {
+func (s *scheduler) Snapshot() (timing.VTimeInPicoSec, bool) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -83,7 +83,7 @@ func (s *Scheduler) Snapshot() (timing.VTimeInPicoSec, bool) {
 // Restore sets the scheduler's dedup guard from a checkpoint. The engine
 // restores the matching wakeup event separately. Only checkpoint loading
 // should call it.
-func (s *Scheduler) Restore(at timing.VTimeInPicoSec, scheduled bool) {
+func (s *scheduler) Restore(at timing.VTimeInPicoSec, scheduled bool) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 

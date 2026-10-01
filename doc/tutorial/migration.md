@@ -362,12 +362,13 @@ type HandlerRegistry interface {
 ```
 
 Components register themselves during construction. Every component model's
-`Build` ends with `modeling.Register`, which registers the instance's ports,
+`Build` ends by registering the instance (`Register` in
+`modeling/internal/base`): it registers the instance's ports,
 registers the instance with the engine under its name (so events whose
 `HandlerID()` is that name reach it), and registers it with the simulation:
 
 ```go
-// v5/modeling/component.go
+// v5/modeling/internal/base/base.go
 func Register[S, T, R, P, M any](base *ComponentBase[S, T, R, P, M]) {
     registerPorts(base.simulation, &base.Ports)
 
@@ -427,7 +428,7 @@ its one State in place. From `v5/modeling/ticking/component.go`:
 
 ```go
 func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
-    if modeling.Dispatch(c.pipeline, e) {
+    if base.Dispatch(c.pipeline, e) {
         c.ticks.TickLater()
     }
 }

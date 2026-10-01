@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/internal/base"
 	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -68,7 +69,7 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 	modeling.MustBeCheckpointable[S, T](name, b.spec)
 
 	c := &Component[S, T, R, P, M]{engine: b.simulation.GetEngine()}
-	modeling.InitComponentBase(&c.ComponentBase, c,
+	base.Init(&c.ComponentBase, c,
 		b.simulation, name, b.spec, b.resources, b.ports)
 
 	if b.def.NewState != nil {
@@ -76,9 +77,9 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 	}
 
 	c.Middlewares = b.def.NewMiddlewares(c)
-	c.pipeline = modeling.OrderedMiddlewares(&c.Middlewares)
+	c.pipeline = base.OrderedMiddlewares(&c.Middlewares)
 
-	modeling.Register(&c.ComponentBase)
+	base.Register(&c.ComponentBase)
 
 	return c
 }

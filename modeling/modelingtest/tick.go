@@ -1,7 +1,7 @@
 package modelingtest
 
 import (
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/internal/base"
 	"github.com/sarchlab/akita/v5/modeling/ticking"
 )
 
@@ -10,8 +10,8 @@ import (
 // progress. Unlike c.Handle, it does not schedule the next tick, so a test
 // can step the component one cycle at a time.
 func Tick[S, T, R, P, M any](c *ticking.Component[S, T, R, P, M]) bool {
-	return modeling.Dispatch(
-		modeling.OrderedMiddlewares(&c.Middlewares), TickEvent(c))
+	return base.Dispatch(
+		base.OrderedMiddlewares(&c.Middlewares), TickEvent(c))
 }
 
 // TickEvent returns a TickEvent for c at the current time, for a test that

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/sarchlab/akita/v5/modeling/internal/portwalk"
 	"github.com/sarchlab/akita/v5/naming"
 )
 
@@ -41,7 +42,7 @@ func (d *Domain[P]) Name() string {
 // mustExposeEveryPort checks that every port slot of the Ports struct that
 // ports points to is set.
 func mustExposeEveryPort(domain string, ports any) {
-	forEachPort(ports, func(slot string, v reflect.Value) {
+	portwalk.ForEach(ports, func(slot string, v reflect.Value) {
 		if v.IsNil() {
 			panic(fmt.Sprintf(
 				"modeling: domain %q: port %s is not given", domain, slot))

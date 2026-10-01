@@ -87,21 +87,20 @@ Each package doc shows how to declare and build a component of its model.
 - `Component` — the interface every model's `Component` implements: named,
   hookable, the handler of its events, and the owner of its ports
   (`messaging.PortOwner`).
-- `ComponentBase` — the five structs of an instance and the methods every
-  model has (`Name`, `TypeName`, `NewID`, `CurrentTime`, `Spec`,
-  `Resources`). Each model's `Component` embeds it; `InitComponentBase` and
-  `Register` bracket every model's `Build`.
-- `Middleware`, `Dispatch`, and `OrderedMiddlewares` — the middleware
-  interface, running a list of middlewares, and listing a Middlewares struct in
-  field order.
+- `Middleware` — one piece of a component's behavior, `Handle(e) bool`.
 - `WriteCheckpoint` and `ReadCheckpoint` — save and restore a component's
   Spec hash, State, and the dedup guard of its scheduler. A `Scheduler` is
-  what they save the guard through; the ticking and wakeup models each keep
-  their own (`ticking.Scheduler`, `wakeup.Scheduler`), next to the event it
-  schedules.
+  what they save the guard through. The ticking and wakeup models each keep
+  their own scheduler next to the event it schedules; `ticking.Scheduler` is
+  exported for connections written by hand, such as `directconnection`.
 - `modelingtest` — `CheckTicking`, `CheckWakeup`, and `CheckEvent` assert that
   the inspector's static view of a package matches its `Definition`;
   `Tick` steps a ticking component by one cycle in tests.
+- Every model's `Component` has the same methods — `Name`, `TypeName`,
+  `NewID`, `CurrentTime`, `Spec`, and `Resources` — and the `State`, `Ports`,
+  and `Middlewares` fields. They come from a base type in
+  `modeling/internal/base`, which also holds the steps of `Build`: a
+  component model is defined only by the three model packages.
 
 ### Domain
 

@@ -1,4 +1,4 @@
-package modeling_test
+package base_test
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/internal/base"
 	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -23,7 +24,7 @@ type basePorts struct {
 
 // baseComp is the smallest component built on ComponentBase.
 type baseComp struct {
-	modeling.ComponentBase[baseSpec, modeling.None, modeling.None, basePorts, modeling.None]
+	base.ComponentBase[baseSpec, modeling.None, modeling.None, basePorts, modeling.None]
 }
 
 func (c *baseComp) NotifyRecv(messaging.Port)     {}
@@ -53,7 +54,7 @@ func newRecordingSim() *recordingSim {
 
 func buildBase(sim timing.Simulation, ports basePorts) *baseComp {
 	c := &baseComp{}
-	modeling.InitComponentBase(&c.ComponentBase, c,
+	base.Init(&c.ComponentBase, c,
 		sim, "C", baseSpec{Size: 4}, modeling.None{}, ports)
 
 	return c
@@ -102,7 +103,7 @@ func TestInitComponentBaseBindsEveryPortAndRegisterRegisters(t *testing.T) {
 			sim.ports, sim.components)
 	}
 
-	modeling.Register(&c.ComponentBase)
+	base.Register(&c.ComponentBase)
 
 	want := []string{"C.In", "C.Links[0]", "C.Links[1]"}
 	if !reflect.DeepEqual(sim.ports, want) {
@@ -152,9 +153,9 @@ func TestInitComponentBaseRejectsMisconfiguredPorts(t *testing.T) {
 		}
 
 		expectPanic(t, "must be an exported messaging.Port or []messaging.Port", func() {
-			base := &modeling.ComponentBase[
+			b := &base.ComponentBase[
 				baseSpec, modeling.None, modeling.None, badPorts, modeling.None]{}
-			modeling.InitComponentBase(base, &baseComp{},
+			base.Init(b, &baseComp{},
 				newRecordingSim(), "C", baseSpec{}, modeling.None{},
 				badPorts{In: unowned("C.In")})
 		})
@@ -168,7 +169,7 @@ func TestTypeNameIsThePackageAndNameIsTheInstance(t *testing.T) {
 		t.Errorf("Name() = %q, want the instance name C", c.Name())
 	}
 
-	if want := "github.com/sarchlab/akita/v5/modeling_test"; c.TypeName() != want {
+	if want := "github.com/sarchlab/akita/v5/modeling/internal/base_test"; c.TypeName() != want {
 		t.Errorf("TypeName() = %q, want the package path %q", c.TypeName(), want)
 	}
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/internal/base"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -14,7 +15,7 @@ import (
 // Definition. The embedded ComponentBase holds its five structs; Component
 // adds the scheduling of its own events.
 type Component[S, T, R, P, M any] struct {
-	modeling.ComponentBase[S, T, R, P, M]
+	base.ComponentBase[S, T, R, P, M]
 
 	engine   timing.EventScheduler
 	pipeline []modeling.Middleware
@@ -33,7 +34,7 @@ func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
 	c.handling.Lock()
 	defer c.handling.Unlock()
 
-	modeling.Dispatch(c.pipeline, e)
+	base.Dispatch(c.pipeline, e)
 }
 
 // NotifyRecv schedules a Recv event for the port at the current time.
