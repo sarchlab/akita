@@ -2,8 +2,8 @@
 
 Package `datamover` provides a DMA-style data-mover component for the Akita
 simulation framework. It copies a contiguous region of memory from a source to a
-destination by issuing `mem.ReadReq`s to one side, buffering the returned data,
-and issuing `mem.WriteReq`s to the other side. The mover owns no storage of its
+destination by issuing `memprotocol.ReadReq`s to one side, buffering the returned data,
+and issuing `memprotocol.WriteReq`s to the other side. The mover owns no storage of its
 own — it streams data between external memory controllers reachable through its
 two memory-facing ports.
 
@@ -22,16 +22,16 @@ Top ──► DataMoveReq ──► dataTransferMW ──► DataMoveRsp ──�
 
 Each tick the `dataTransferMW` middleware:
 
-1. **readFromSrc** — issues `mem.ReadReq`s at the source granularity, as long as
+1. **readFromSrc** — issues `memprotocol.ReadReq`s at the source granularity, as long as
    the read window stays within the configured `BufferSize` and the requested
    region.
-2. **processDataReadyFromSrc** — stores each `mem.DataReadyRsp` payload into the
+2. **processDataReadyFromSrc** — stores each `memprotocol.DataReadyRsp` payload into the
    sliding buffer at its address offset.
 3. **writeToDst** — once a full destination-granularity chunk is available in the
-   buffer, issues a `mem.WriteReq` to the destination and advances the buffer
+   buffer, issues a `memprotocol.WriteReq` to the destination and advances the buffer
    offset, discarding consumed chunks.
 4. **processWriteDoneFromDst** — clears the matching pending write on each
-   `mem.WriteDoneRsp`.
+   `memprotocol.WriteDoneRsp`.
 
 The `ctrlParseMW` middleware parses incoming `DataMoveReq`s (rejecting a new
 one while a transaction is active) and, once every byte has been written back,
@@ -122,7 +122,7 @@ buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 - **Top** — accepts `DataMoveReq`, returns `DataMoveRsp` to the
   requester once the move completes.
 - **Inside** / **Outside** — the two memory-facing ports. Whichever side a move
-  names as source issues `mem.ReadReq`s (receiving `mem.DataReadyRsp`); the
-  destination side issues `mem.WriteReq`s (receiving `mem.WriteDoneRsp`).
+  names as source issues `memprotocol.ReadReq`s (receiving `memprotocol.DataReadyRsp`); the
+  destination side issues `memprotocol.WriteReq`s (receiving `memprotocol.WriteDoneRsp`).
 - **Control** — accepts the uniform `memcontrolprotocol` commands (Enable,
   Pause, Drain, Reset).

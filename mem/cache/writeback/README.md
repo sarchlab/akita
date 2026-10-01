@@ -17,7 +17,7 @@ TopPort ──► TopParser ──► DirectoryStage ──► BankStage ──�
 
 | Stage | Role |
 |---|---|
-| **TopParser** | Receives `mem.ReadReq` and `mem.WriteReq` from the top port, creates internal transactions, and pushes them into the directory stage buffer. |
+| **TopParser** | Receives `memprotocol.ReadReq` and `memprotocol.WriteReq` from the top port, creates internal transactions, and pushes them into the directory stage buffer. |
 | **DirectoryStage** | Looks up the set-associative directory. On a hit, routes to the bank stage. On a miss, allocates an MSHR entry and sends the transaction to the write buffer for fetching/eviction. |
 | **BankStage** | Performs the actual data read/write through a latency pipeline. Handles hits, evictions, and fetched-data writes. Sends responses back through the top port. |
 | **MSHRStage** | Processes completed MSHR entries when fetched data returns. Replays all waiting transactions that targeted the same cache line. |
@@ -150,9 +150,9 @@ The cache operates in one of six states (the `cacheState` constants):
 The system builder creates each port with `messaging.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
-- **Top**: accepts `mem.ReadReq` and `mem.WriteReq`, returns `mem.DataReadyRsp`
-  and `mem.WriteDoneRsp`.
-- **Bottom**: issues `mem.ReadReq` (fetches) and `mem.WriteReq` (evictions) to
+- **Top**: accepts `memprotocol.ReadReq` and `memprotocol.WriteReq`, returns `memprotocol.DataReadyRsp`
+  and `memprotocol.WriteDoneRsp`.
+- **Bottom**: issues `memprotocol.ReadReq` (fetches) and `memprotocol.WriteReq` (evictions) to
   lower-level memory.
-- **Control**: accepts `mem.ControlReq` for pause/drain/enable/reset/
-  invalidate/flush operations, returns `mem.ControlRsp`.
+- **Control**: accepts `memcontrolprotocol.Req` for pause/drain/enable/reset/
+  invalidate/flush operations, returns `memcontrolprotocol.Rsp`.

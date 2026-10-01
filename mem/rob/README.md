@@ -21,11 +21,11 @@ Top ──► topDown ──► Bottom ──► (bottom unit) ──► Bottom 
                               bottomUp ──► Top   (released in arrival order)
 ```
 
-1. **topDown** — Peeks a `mem.AccessReq` (a `mem.ReadReq` or `mem.WriteReq`) from
+1. **topDown** — Peeks a `memprotocol.AccessReq` (a `memprotocol.ReadReq` or `memprotocol.WriteReq`) from
    `Top`, builds a fresh *shadow* request with a new ID, rewrites its `Dst` to
    the configured `BottomUnit`, sends it on `Bottom`, and appends a transaction
    to the FIFO list. Stalls when the list reaches `BufferSize`.
-2. **parseBottom** — Matches each `mem.DataReadyRsp`/`mem.WriteDoneRsp` from
+2. **parseBottom** — Matches each `memprotocol.DataReadyRsp`/`memprotocol.WriteDoneRsp` from
    `Bottom` to its transaction by `RspTo`, records the payload, and sets the
    transaction's `HasRsp` flag. Unmatched responses (e.g. left over after a
    flush) are dropped.
@@ -87,10 +87,10 @@ topPort := reorderBuffer.Ports.Top
 
 ## Ports
 
-- **Top** — accepts `mem.ReadReq` and `mem.WriteReq`, returns
-  `mem.DataReadyRsp` and `mem.WriteDoneRsp` in arrival order.
-- **Bottom** — sends shadow `mem.ReadReq`/`mem.WriteReq` to the `BottomUnit` and
-  receives `mem.DataReadyRsp`/`mem.WriteDoneRsp`.
-- **Control** — accepts `mem.ControlReq` (`CmdFlush` drops in-flight
+- **Top** — accepts `memprotocol.ReadReq` and `memprotocol.WriteReq`, returns
+  `memprotocol.DataReadyRsp` and `memprotocol.WriteDoneRsp` in arrival order.
+- **Bottom** — sends shadow `memprotocol.ReadReq`/`memprotocol.WriteReq` to the `BottomUnit` and
+  receives `memprotocol.DataReadyRsp`/`memprotocol.WriteDoneRsp`.
+- **Control** — accepts `memcontrolprotocol.Req` (`CmdFlush` drops in-flight
   transactions and quiesces the pipeline; `CmdEnable` drains stale port traffic
-  and resumes), returns `mem.ControlRsp`.
+  and resumes), returns `memcontrolprotocol.Rsp`.

@@ -13,20 +13,20 @@ The GMMU is configured with a `DeviceID` and is driven by two middlewares
 
 ### walkMW — top→page-table path
 
-1. **parseFromTop** — Accepts a `vm.TranslationReq` from the `Top` port (up to
+1. **parseFromTop** — Accepts a `vmprotocol.TranslationReq` from the `Top` port (up to
    `MaxRequestsInFlight` in flight) and starts a walk with a `Latency`-cycle
    countdown.
 2. **walkPageTable** — Each tick decrements every walk. On completion it looks up
    the page in the shared `vm.PageTable`:
    - If `page.DeviceID == DeviceID` (local), it finalizes the walk and returns a
-     `vm.TranslationRsp` on `Top`.
-   - Otherwise it forwards a `vm.TranslationReq` on the `Bottom` port to the
+     `vmprotocol.TranslationRsp` on `Top`.
+   - Otherwise it forwards a `vmprotocol.TranslationReq` on the `Bottom` port to the
      configured `LowModule`, remembering the transaction by request ID.
 
 ### respondMW — bottom→top path
 
-Reads `vm.TranslationRsp` messages arriving on `Bottom`, matches them to the
-remembered remote request, and relays a `vm.TranslationRsp` back up on `Top`.
+Reads `vmprotocol.TranslationRsp` messages arriving on `Bottom`, matches them to the
+remembered remote request, and relays a `vmprotocol.TranslationRsp` back up on `Top`.
 
 ## Key Types
 
@@ -85,8 +85,8 @@ g := gmmu.Definition.Builder().
 The system builder creates each port with `messaging.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
-- **Top**: accepts `vm.TranslationReq`, returns `vm.TranslationRsp`.
-- **Bottom**: forwards `vm.TranslationReq` for remote pages, receives
-  `vm.TranslationRsp`.
-- **Control**: accepts `mem.ControlReq` (enable / pause / drain / reset),
-  returns `mem.ControlRsp`.
+- **Top**: accepts `vmprotocol.TranslationReq`, returns `vmprotocol.TranslationRsp`.
+- **Bottom**: forwards `vmprotocol.TranslationReq` for remote pages, receives
+  `vmprotocol.TranslationRsp`.
+- **Control**: accepts `memcontrolprotocol.Req` (enable / pause / drain / reset),
+  returns `memcontrolprotocol.Rsp`.

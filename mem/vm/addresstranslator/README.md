@@ -2,8 +2,8 @@
 
 Package `addresstranslator` provides an address-translating forwarder for the
 Akita simulation framework. It sits in the virtual-memory subsystem between a
-compute unit and the memory hierarchy: it intercepts `mem.ReadReq` and
-`mem.WriteReq` messages carrying virtual addresses, obtains the page translation,
+compute unit and the memory hierarchy: it intercepts `memprotocol.ReadReq` and
+`memprotocol.WriteReq` messages carrying virtual addresses, obtains the page translation,
 rewrites each request's address to the physical address, and forwards it
 downstream.
 
@@ -15,19 +15,19 @@ do the translation work.
 
 ### ParseTranslate — accept and translate
 
-For each incoming `mem.ReadReq` / `mem.WriteReq` on the `Top` port, the
+For each incoming `memprotocol.ReadReq` / `memprotocol.WriteReq` on the `Top` port, the
 translator computes the virtual page ID (`addr >> Log2PageSize << Log2PageSize`)
-and sends a `vm.TranslationReq` on the `Translation` port to the provider
+and sends a `vmprotocol.TranslationReq` on the `Translation` port to the provider
 resolved by the `TranslationProviderMapper`. The original request's fields are
 saved in a transaction record while the translation is outstanding.
 
 ### RespondPipeline — forward and respond
 
-1. **parseTranslation** — When a `vm.TranslationRsp` returns, the saved request is
+1. **parseTranslation** — When a `vmprotocol.TranslationRsp` returns, the saved request is
    cloned with its address rewritten to `page.PAddr + offset` (where `offset` is
    the original address modulo the page size) and sent downstream on the `Bottom`
    port to the memory provider resolved by the `MemProviderMapper`.
-2. **respond** — When a `mem.DataReadyRsp` / `mem.WriteDoneRsp` returns on
+2. **respond** — When a `memprotocol.DataReadyRsp` / `memprotocol.WriteDoneRsp` returns on
    `Bottom`, it is matched to the in-flight request and a corresponding response
    is sent back up on `Top` to the original requester.
 
@@ -84,9 +84,9 @@ at := addresstranslator.Definition.Builder().
 The system builder creates each port with `messaging.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
-- **Top**: accepts `mem.ReadReq` / `mem.WriteReq` (virtual addresses), returns
-  `mem.DataReadyRsp` / `mem.WriteDoneRsp`.
-- **Bottom**: forwards translated `mem.ReadReq` / `mem.WriteReq` (physical
-  addresses), receives `mem.DataReadyRsp` / `mem.WriteDoneRsp`.
-- **Translation**: sends `vm.TranslationReq`, receives `vm.TranslationRsp`.
-- **Control**: accepts `mem.ControlReq` (flush / reset), returns `mem.ControlRsp`.
+- **Top**: accepts `memprotocol.ReadReq` / `memprotocol.WriteReq` (virtual addresses), returns
+  `memprotocol.DataReadyRsp` / `memprotocol.WriteDoneRsp`.
+- **Bottom**: forwards translated `memprotocol.ReadReq` / `memprotocol.WriteReq` (physical
+  addresses), receives `memprotocol.DataReadyRsp` / `memprotocol.WriteDoneRsp`.
+- **Translation**: sends `vmprotocol.TranslationReq`, receives `vmprotocol.TranslationRsp`.
+- **Control**: accepts `memcontrolprotocol.Req` (flush / reset), returns `memcontrolprotocol.Rsp`.

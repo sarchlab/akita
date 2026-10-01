@@ -23,7 +23,7 @@ type DataRecorder interface {
 	// CreateTable creates a new table with given filename
 	CreateTable(tableName string, sampleEntry any)
 
-	// DataInsert writes a same-type task into table that already exists
+	// InsertData writes an entry into a table that already exists.
 	InsertData(tableName string, entry any)
 
 	// ListTable returns a slice containing names of all tables

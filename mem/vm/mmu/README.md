@@ -2,7 +2,7 @@
 
 Package `mmu` provides a memory management unit for the Akita simulation
 framework. It is the CPU-side terminus of the virtual-memory subsystem:
-it performs page-table walks to resolve `vm.TranslationReq` messages.
+it performs page-table walks to resolve `vmprotocol.TranslationReq` messages.
 
 ## How It Works
 
@@ -16,14 +16,14 @@ Invalidate and Flush are answered as unsupported.
 
 ### Translation — page-table walks
 
-1. **parseFromTop** — Accepts a `vm.TranslationReq` from the `Top` port (up to
+1. **parseFromTop** — Accepts a `vmprotocol.TranslationReq` from the `Top` port (up to
    `MaxRequestsInFlight` may be walking at once) and starts a walk with a
    countdown of `Latency` cycles.
 2. **walkPageTable** — Each tick decrements every walk's countdown. When a walk
    completes it looks up the page in the shared `vm.PageTable`:
    - If the page is missing and `AutoPageAllocation` is set, a new page is
      created and inserted (otherwise it panics).
-   - A `vm.TranslationRsp` is then sent back on `Top`.
+   - A `vmprotocol.TranslationRsp` is then sent back on `Top`.
 
 ## Key Types
 
@@ -73,6 +73,6 @@ m := mmu.Definition.Builder().
 The system builder creates each port with `messaging.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
-- **Top**: accepts `vm.TranslationReq`, returns `vm.TranslationRsp`.
-- **Control**: accepts `mem.ControlReq` (Pause, Drain, Enable, Reset), returns
-  `mem.ControlRsp`.
+- **Top**: accepts `vmprotocol.TranslationReq`, returns `vmprotocol.TranslationRsp`.
+- **Control**: accepts `memcontrolprotocol.Req` (Pause, Drain, Enable, Reset), returns
+  `memcontrolprotocol.Rsp`.

@@ -8,7 +8,7 @@ locally, and forwards misses down to the MMU (or another translation provider).
 ## How It Works
 
 The TLB is a set-associative cache of `vm.Page` entries keyed by `(PID, VAddr)`.
-Translation requests arrive on the `Top` port as `vm.TranslationReq` messages and
+Translation requests arrive on the `Top` port as `vmprotocol.TranslationReq` messages and
 flow through a fixed-latency pipeline before lookup:
 
 1. **Insert / pipeline** — Incoming requests are accepted into a
@@ -16,12 +16,12 @@ flow through a fixed-latency pipeline before lookup:
    requests move per tick.
 2. **Lookup** — On exit from the pipeline the request is looked up in the set
    selected by `vAddr / 2^Log2PageSize % NumSets`.
-   - **Hit** (entry present and `Valid`): a `vm.TranslationRsp` carrying the
+   - **Hit** (entry present and `Valid`): a `vmprotocol.TranslationRsp` carrying the
      `vm.Page` is sent back on `Top`, and the matched way is marked
      most-recently-used.
    - **MSHR hit**: an outstanding miss already covers this `(PID, VAddr)`, so the
      request is attached to the existing MSHR entry.
-   - **Miss**: an MSHR entry is allocated and a `vm.TranslationReq` is forwarded
+   - **Miss**: an MSHR entry is allocated and a `vmprotocol.TranslationReq` is forwarded
      on the `Bottom` port to the translation provider resolved by the
      `TranslationProviderMapper`.
 3. **Fill / respond** — Responses returning on `Bottom` evict an LRU way, install
@@ -80,7 +80,7 @@ t := tlb.Definition.Builder().
 The system builder creates each port with `messaging.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
-- **Top**: accepts `vm.TranslationReq`, returns `vm.TranslationRsp`.
-- **Bottom**: forwards `vm.TranslationReq` on a miss, receives `vm.TranslationRsp`.
-- **Control**: accepts `mem.ControlReq` (enable / drain / pause / flush / reset)
-  and returns `mem.ControlRsp` for flush and reset.
+- **Top**: accepts `vmprotocol.TranslationReq`, returns `vmprotocol.TranslationRsp`.
+- **Bottom**: forwards `vmprotocol.TranslationReq` on a miss, receives `vmprotocol.TranslationRsp`.
+- **Control**: accepts `memcontrolprotocol.Req` (enable / drain / pause / flush / reset)
+  and returns `memcontrolprotocol.Rsp` for flush and reset.

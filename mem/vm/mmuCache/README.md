@@ -19,12 +19,12 @@ On a request arriving from the `Top` port:
    level for the corresponding segment. Each level that hits subtracts
    `LatencyPerLevel` from the total walk latency; the walk stops at the first
    miss.
-2. **sendReqToBottom** — A `vm.TranslationReq` is forwarded on the `Bottom` port
+2. **sendReqToBottom** — A `vmprotocol.TranslationReq` is forwarded on the `Bottom` port
    to `LowModulePort`, carrying the remaining latency in its `TransLatency`
    field so the downstream provider can account for the cached levels.
-3. **handleRsp** — When a `vm.TranslationRsp` returns on `Bottom`, every level is
+3. **handleRsp** — When a `vmprotocol.TranslationRsp` returns on `Bottom`, every level is
    filled with the resolved page's segments (using LRU replacement within each
-   level) and a `vm.TranslationRsp` is relayed up to `UpModulePort`.
+   level) and a `vmprotocol.TranslationRsp` is relayed up to `UpModulePort`.
 
 Up to `NumReqPerCycle` lookups and responses are processed each tick. The cache
 runs an `enable` / `drain` / `pause` / `flush` state machine; a flush clears all
@@ -84,8 +84,8 @@ c := mmuCache.Definition.Builder().
 The system builder creates each port with `messaging.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
-- **Top**: accepts `vm.TranslationReq` from the upstream requester.
-- **Bottom**: forwards `vm.TranslationReq` to the downstream provider and
-  receives `vm.TranslationRsp`, which is then relayed back to `UpModulePort`.
-- **Control**: accepts `mem.ControlReq` (enable / drain / pause / flush / reset)
-  and returns `mem.ControlRsp` for flush and reset.
+- **Top**: accepts `vmprotocol.TranslationReq` from the upstream requester.
+- **Bottom**: forwards `vmprotocol.TranslationReq` to the downstream provider and
+  receives `vmprotocol.TranslationRsp`, which is then relayed back to `UpModulePort`.
+- **Control**: accepts `memcontrolprotocol.Req` (enable / drain / pause / flush / reset)
+  and returns `memcontrolprotocol.Rsp` for flush and reset.

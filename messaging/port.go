@@ -12,7 +12,7 @@ import (
 // HookPosPortMsgSend marks when a message is sent out from the port.
 var HookPosPortMsgSend = &hooking.HookPos{Name: "Port Msg Send"}
 
-// HookPosPortMsgRecvd marks when an inbound message arrives at a the given port.
+// HookPosPortMsgRecvd marks when an inbound message arrives at the port.
 var HookPosPortMsgRecvd = &hooking.HookPos{Name: "Port Msg Recv"}
 
 // HookPosPortMsgRetrieveIncoming marks when an inbound message is retrieved

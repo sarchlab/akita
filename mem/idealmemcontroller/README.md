@@ -7,7 +7,7 @@ testing and for simulations where memory-timing detail is not important.
 
 ## How It Works
 
-The controller processes `mem.ReadReq` and `mem.WriteReq` messages on its `Top`
+The controller processes `memprotocol.ReadReq` and `memprotocol.WriteReq` messages on its `Top`
 port. Each request is assigned a countdown timer equal to the configured
 `Latency` (in cycles). Every tick, all inflight countdowns decrement by one.
 When a countdown reaches zero, the controller reads from or writes to its
@@ -30,7 +30,7 @@ Two middlewares, the fields of `Middlewares`, run each tick in this order:
 |---|---|
 | `"enable"` | Normal operation — accepts new requests and processes countdowns. |
 | `"pause"` | Stops accepting new requests and freezes all countdowns. |
-| `"drain"` | Stops accepting new requests but continues processing inflight transactions. Sends `mem.ControlRsp` when all are complete, then transitions to `"pause"`. |
+| `"drain"` | Stops accepting new requests but continues processing inflight transactions. Sends `memcontrolprotocol.Rsp` when all are complete, then transitions to `"pause"`. |
 
 ## Key Types
 
@@ -116,7 +116,7 @@ topPort := ctrl.Ports.Top
 The system builder creates each port with `messaging.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
-- **Top**: accepts `mem.ReadReq` and `mem.WriteReq`, returns `mem.DataReadyRsp`
-  and `mem.WriteDoneRsp`.
+- **Top**: accepts `memprotocol.ReadReq` and `memprotocol.WriteReq`, returns `memprotocol.DataReadyRsp`
+  and `memprotocol.WriteDoneRsp`.
 - **Control**: accepts `memcontrolprotocol.Req` (enable / pause / drain /
   reset), returns `memcontrolprotocol.Rsp`.

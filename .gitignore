@@ -39,8 +39,8 @@ __debug_bin*
 /cmd
 /debug
 /akitav5-lint
-/01_print_event
-/02_cell_split
+/examples/01_print_event/01_print_event
+/examples/02_cell_split/02_cell_split
 /dram
 /idealmemcontroller
 /virtualmem

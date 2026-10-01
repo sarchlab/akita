@@ -34,7 +34,10 @@ objects.
   read-only.
 - **State** may contain nested structs, slices, and maps; it must be
   JSON-serializable. Only the component writes it: its `NewState`, which may
-  read the Spec, Resources, and Ports, and its middlewares.
+  read the Spec, Resources, and Ports, and its middlewares. A function in the
+  component's own package may also write it while no event is running, for
+  example to queue work before the simulation starts (`ping.SchedulePing`);
+  nothing writes it while events run, so the parallel engine needs no locks.
 - **Middlewares** hold only references: the component, other middlewares, and
   immutable values derived from the Spec and Resources. All mutable data lives
   in State, because only State is saved in checkpoints.
@@ -43,19 +46,22 @@ objects.
 `Build` runs both through `MustBeCheckpointable`. Both reject pointers,
 interfaces, channels, and functions, and two fields that share a JSON name
 (which `encoding/json` silently drops). `ValidateSpec` additionally rejects
-slices, arrays, maps, and nested structs; `ValidateState` allows them, with
-`string` or integer map keys.
+maps, nested structs, and slices of anything but scalars; `ValidateState`
+allows them, with `string` or integer map keys.
 
-A value that seems to need a container in the Spec usually belongs elsewhere:
+A Spec may hold a slice of scalars, such as the remote ports a unit talks to.
+Other values that seem to belong in the Spec usually belong elsewhere:
 
 - one value repeated per unit (the same register count for every SIMD) is a
   single scalar;
 - a value derived from other Spec fields is an unexported Spec method, not a
   field;
 - a reference to an external object, or something derived only from one (the
-  address mapper that routes to lower memory), is a Resources field. Resources
-  are not checkpointed: the rebuild supplies them, and `NewMiddlewares`
-  recomputes what it derives from them.
+  address mapper that routes to lower memory), is a Resources field. A
+  component's Resources are not part of its checkpoint: the rebuild supplies
+  them, and `NewMiddlewares` recomputes what it derives from them. A shared
+  object they point to, such as a `mem.Storage` or a `vm.PageTable`, is a
+  registered resource that checkpoints itself.
 
 ## Component Models
 

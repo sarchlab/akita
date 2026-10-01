@@ -10,10 +10,10 @@ import (
 // middleware or hooks: a strategy is used *inside* the bank-tick middleware to
 // produce a value, rather than running each cycle or observing.
 //
-// The two genuinely reactive/observing concerns are expressed with Akita's own
-// mechanisms instead: refresh is a Middleware (refreshmw.go) and command
-// observation is a hook (hook.go). New schedulers/mappers are added in-tree and
-// selected by name — the same model DRAMSim3 and Ramulator2 use.
+// The one genuinely reactive concern, refresh, is expressed with Akita's own
+// mechanism instead: it is a Middleware (refreshmw.go). New schedulers and
+// mappers are added in-tree and selected by name — the same model DRAMSim3 and
+// Ramulator2 use.
 
 // scheduler chooses the next command to put on the command bus from the per-rank
 // command queues. Pick resolves the command's concrete kind, removes it from its

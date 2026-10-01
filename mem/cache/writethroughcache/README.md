@@ -9,7 +9,7 @@ port), serving hits locally and forwarding misses downstream.
 
 ## How It Works
 
-Each incoming `mem.ReadReq`/`mem.WriteReq` becomes a `transactionState` that
+Each incoming `memprotocol.ReadReq`/`memprotocol.WriteReq` becomes a `transactionState` that
 flows through a multi-stage pipeline, driven once per tick by `pipelineMW`:
 
 ```
@@ -27,9 +27,9 @@ Top ──► intake ──► directory(+MSHR) ──► bank(s) ──► resp
    duplicate misses). Writes dispatch to the active write policy.
 3. **bank** — One or more banks apply a `BankLatency`-cycle pipeline, then read
    or write the backing `mem.Storage` and unlock the directory block.
-4. **bottomParser** — Parses `mem.DataReadyRsp`/`mem.WriteDoneRsp` from `Bottom`,
+4. **bottomParser** — Parses `memprotocol.DataReadyRsp`/`memprotocol.WriteDoneRsp` from `Bottom`,
    fills MSHR entries, and merges coalesced data.
-5. **respond** — Returns `mem.DataReadyRsp`/`mem.WriteDoneRsp` to `Top` once a
+5. **respond** — Returns `memprotocol.DataReadyRsp`/`memprotocol.WriteDoneRsp` to `Top` once a
    transaction's bank, fetch, and lower-memory dependencies are all satisfied.
 
 A separate control middleware, `Ctrl`, runs before the pipeline every cycle and
@@ -109,9 +109,9 @@ topPort := cache.Ports.Top
 The system builder creates each port with `messaging.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
-- **Top** — accepts `mem.ReadReq` and `mem.WriteReq`, returns
-  `mem.DataReadyRsp` and `mem.WriteDoneRsp`.
-- **Bottom** — sends `mem.ReadReq`/`mem.WriteReq` to lower memory and receives
-  `mem.DataReadyRsp`/`mem.WriteDoneRsp`.
+- **Top** — accepts `memprotocol.ReadReq` and `memprotocol.WriteReq`, returns
+  `memprotocol.DataReadyRsp` and `memprotocol.WriteDoneRsp`.
+- **Bottom** — sends `memprotocol.ReadReq`/`memprotocol.WriteReq` to lower memory and receives
+  `memprotocol.DataReadyRsp`/`memprotocol.WriteDoneRsp`.
 - **Control** — accepts `memcontrolprotocol.Req` (Pause, Drain, Enable, Reset,
   and, once paused, Invalidate and Flush), returns `memcontrolprotocol.Rsp`.

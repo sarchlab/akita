@@ -35,7 +35,8 @@ import (
 )
 
 // A fixed build identity keeps the demo reproducible across separate `go run`
-// invocations. Real code passes "" to use checkpoint.DefaultBuildID().
+// invocations. Real code passes "" to use the default build identity, which
+// changes whenever the binary does.
 const buildID = "checkpoint-demo"
 
 const (

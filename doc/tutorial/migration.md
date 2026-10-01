@@ -272,42 +272,34 @@ engine.Send(restartReq)
 // Handler needed separate cases for FlushRsp, DrainRsp, RestartRsp
 ```
 
-**After (V5) — unified ControlReq:**
+**After (V5) — one request type, `memcontrolprotocol.Req`, with a command:**
 ```go
-// Flushing a cache
-flushReq := &mem.ControlReq{
-    Command:         mem.CmdFlush,
-    InvalidateAfter: true,
-}
-flushReq.Src = controlPort
-flushReq.Dst = cacheControlPort
-engine.Send(flushReq)
-
-// Draining a cache
-drainReq := &mem.ControlReq{
-    Command:    mem.CmdDrain,
-    PauseAfter: true,
-}
-drainReq.Src = controlPort
+// Draining a cache: in-flight work finishes, and the cache ends paused.
+drainReq := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdDrain}
+drainReq.ID = comp.NewID()
+drainReq.Src = controlPort.AsRemote()
 drainReq.Dst = cacheControlPort
-engine.Send(drainReq)
+controlPort.Send(drainReq)
 
-// Re-enabling after drain
-enableReq := &mem.ControlReq{
-    Command: mem.CmdEnable,
-}
-enableReq.Src = controlPort
-enableReq.Dst = cacheControlPort
-engine.Send(enableReq)
+// Flushing it once paused or drained: dirty lines are written back.
+flushReq := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
 
-// Handler uses single ControlRsp type:
-func handleControlRsp(rsp *mem.ControlRsp) {
+// Re-enabling it.
+enableReq := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdEnable}
+
+// One response type, memcontrolprotocol.Rsp, for every command:
+func handleControlRsp(rsp memcontrolprotocol.Rsp) {
+    if !rsp.Success {
+        // rsp.Error names the reason, e.g. "unsupported"
+        return
+    }
+
     switch rsp.Command {
-    case mem.CmdFlush:
-        // flush completed
-    case mem.CmdDrain:
+    case memcontrolprotocol.CmdDrain:
         // drain completed
-    case mem.CmdEnable:
+    case memcontrolprotocol.CmdFlush:
+        // flush completed
+    case memcontrolprotocol.CmdEnable:
         // re-enabled
     }
 }
@@ -748,7 +740,7 @@ V5 Spec fields are scalars or slices (or arrays) of scalars. `Build` panics if a
 
 `Build` copies the Spec's slices, so an instance never shares one with `Definition.DefaultSpec` or with another instance. Treat the slices that `Spec()` returns as read-only. Since ports are created before `Build`, their remote names are known in time to fill such a list.
 
-Resources are not checkpointed. The setup that rebuilds a simulation supplies them again, so a restored component uses the rebuilt wiring. Do not copy wiring into State: `LoadCheckpoint` replaces the State wholesale and would bring back the wiring of the saved run.
+A component's Resources are not part of its checkpoint. The setup that rebuilds a simulation supplies them again, so a restored component uses the rebuilt wiring; a shared object they point to, such as a `mem.Storage`, is a registered resource that checkpoints itself. Do not copy wiring into State: `LoadCheckpoint` replaces the State wholesale and would bring back the wiring of the saved run.
 
 ### Migration Checklist
 

@@ -178,10 +178,10 @@ memory is one of several interleaved controllers; a standalone memory leaves
 The system builder creates each port with `messaging.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
-- **Top**: accepts `mem.ReadReq` and `mem.WriteReq`, returns `mem.DataReadyRsp`
-  and `mem.WriteDoneRsp`.
-- **Control**: accepts `mem.ControlReq` (enable / pause / drain / reset),
-  returns `mem.ControlRsp`.
+- **Top**: accepts `memprotocol.ReadReq` and `memprotocol.WriteReq`, returns `memprotocol.DataReadyRsp`
+  and `memprotocol.WriteDoneRsp`.
+- **Control**: accepts `memcontrolprotocol.Req` (enable / pause / drain / reset),
+  returns `memcontrolprotocol.Rsp`.
 
 ## Example
 
