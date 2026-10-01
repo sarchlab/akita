@@ -5,9 +5,9 @@ import (
 	"sync"
 )
 
-// EventQueue is a queue of events ordered by event time. Peek and Pop report
+// eventQueue is a queue of events ordered by event time. Peek and Pop report
 // whether an event was present; empty reads return nil, false.
-type EventQueue interface {
+type eventQueue interface {
 	Push(evt Event)
 	Pop() (Event, bool)
 	Len() int
@@ -66,21 +66,21 @@ func (h eventHeap) down(i, n int) {
 	}
 }
 
-// EventQueueImpl provides a thread-safe event queue.
-type EventQueueImpl struct {
+// eventQueueImpl provides a thread-safe event queue.
+type eventQueueImpl struct {
 	sync.Mutex
 
 	events  eventHeap
 	nextSeq uint64
 }
 
-// NewEventQueue creates and returns a newly created EventQueue.
-func NewEventQueue() *EventQueueImpl {
-	return &EventQueueImpl{events: make(eventHeap, 0)}
+// newEventQueue creates and returns a newly created EventQueue.
+func newEventQueue() *eventQueueImpl {
+	return &eventQueueImpl{events: make(eventHeap, 0)}
 }
 
 // Push adds an event to the event queue.
-func (q *EventQueueImpl) Push(evt Event) {
+func (q *eventQueueImpl) Push(evt Event) {
 	q.Lock()
 	defer q.Unlock()
 	q.events = append(q.events, queuedEvent{event: evt, seq: q.nextSeq})
@@ -89,14 +89,14 @@ func (q *EventQueueImpl) Push(evt Event) {
 }
 
 // Pop returns the next earliest event.
-func (q *EventQueueImpl) Pop() (Event, bool) {
+func (q *eventQueueImpl) Pop() (Event, bool) {
 	q.Lock()
 	defer q.Unlock()
 	return popHeap(&q.events)
 }
 
 // Len returns the number of events in the queue.
-func (q *EventQueueImpl) Len() int {
+func (q *eventQueueImpl) Len() int {
 	q.Lock()
 	defer q.Unlock()
 	l := len(q.events)
@@ -106,7 +106,7 @@ func (q *EventQueueImpl) Len() int {
 
 // Peek returns the event in front of the queue without removing it from the
 // queue.
-func (q *EventQueueImpl) Peek() (Event, bool) {
+func (q *eventQueueImpl) Peek() (Event, bool) {
 	q.Lock()
 	defer q.Unlock()
 	if len(q.events) == 0 {

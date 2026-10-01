@@ -43,6 +43,6 @@ func BenchmarkUnsafeEventQueue(b *testing.B) {
 }
 
 func BenchmarkEventQueueImpl(b *testing.B) {
-	q := NewEventQueue()
+	q := newEventQueue()
 	benchPushPop(b, q.Push, q.Pop)
 }

@@ -452,6 +452,18 @@ var roundTripDef = ticking.Definition[
 	},
 }
 
+// timeSetter handles an event by doing nothing, so running an event for it
+// only moves the engine's clock to the event's time.
+type timeSetter struct{}
+
+func (timeSetter) Handle(timing.Event) {}
+
+// advanceTo moves the engine's clock forward to t with an empty event.
+func advanceTo(engine *timing.SerialEngine, t timing.VTimeInPicoSec) {
+	engine.Schedule(timing.MakeEventBase(0, t, "TimeSetter"))
+	Expect(engine.Run()).To(Succeed())
+}
+
 var _ = Describe("Checkpoint round trip", func() {
 	It("restores component state, storage, ID counter, and engine time", func() {
 		sim := MakeBuilder().WithoutMonitoring().Build()
@@ -464,6 +476,7 @@ var _ = Describe("Checkpoint round trip", func() {
 		// (Engine, IDGenerator, Comp, Mem) is checkpointable, so no port or
 		// connection serializers are needed yet.
 		engine := sim.GetEngine().(*timing.SerialEngine)
+		engine.RegisterHandler("TimeSetter", timeSetter{})
 		comp := roundTripDef.Builder().WithSimulation(sim).Build("Comp")
 		storage := mem.MakeStorageBuilder().
 			WithCapacity(4 * mem.KB).
@@ -477,7 +490,7 @@ var _ = Describe("Checkpoint round trip", func() {
 		for i := 0; i < 5; i++ {
 			savedCounter = sim.NewID()
 		}
-		engine.SetCurrentTime(100)
+		advanceTo(engine, 100)
 
 		path := filepath.Join(GinkgoT().TempDir(), "checkpoint.tar.gz")
 		Expect(sim.SaveCheckpoint(path, "test-build")).To(Succeed())
@@ -487,7 +500,7 @@ var _ = Describe("Checkpoint round trip", func() {
 		storage.Write(0, []byte{0, 0, 0, 0})
 		sim.NewID()
 		sim.NewID()
-		engine.SetCurrentTime(500)
+		advanceTo(engine, 500)
 
 		// Restore and confirm every piece came back.
 		Expect(sim.LoadCheckpoint(path, "test-build")).To(Succeed())

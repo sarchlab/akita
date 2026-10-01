@@ -169,8 +169,8 @@ func TestParallelDispatcherPanicReleasesWaitingWorker(t *testing.T) {
 		EventBase{Time_: 1, HandlerID_: "model"},
 		panicTimeEvent{attempted: attempted},
 	}}
-	e.queues = []EventQueue{q}
-	e.queueChan = make(chan EventQueue, 1)
+	e.queues = []eventQueue{q}
+	e.queueChan = make(chan eventQueue, 1)
 	e.queueChan <- q
 	err := finishRun(t, e.Run)
 	var failure *PanicError
@@ -184,7 +184,7 @@ func TestParallelDispatcherPanicReleasesWaitingWorker(t *testing.T) {
 }
 
 func TestEventQueueReleasesExistingLockOnPanic(t *testing.T) {
-	q := NewEventQueue()
+	q := newEventQueue()
 	catchPanic(t, func() {
 		q.Push(EventBase{Time_: 1})
 		ready := make(chan struct{})
