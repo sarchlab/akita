@@ -14,7 +14,7 @@ import (
 
 // This file holds Layer-2 control-behavior tests: it asserts the actual
 // behavior the universal verbs promise (Drain quiescence, Pause freeze,
-// Reset from every st), beyond the protocol-surface checks in
+// Reset from every state), beyond the protocol-surface checks in
 // control_contract_test.go.
 var _ = Describe("DRAM control behavior", func() {
 	var (
@@ -350,7 +350,7 @@ var _ = Describe("DRAM control behavior", func() {
 			Expect(comp.State.ControlState).
 				To(Equal(memcontrolprotocol.StateEnabled))
 		},
-		// Reset from a draining st is covered separately ("completes a
+		// Reset from a draining state is covered separately ("completes a
 		// pending Drain before servicing a queued Reset"): under serialization
 		// it does not run immediately but waits for the drain to ack.
 		Entry("from Enabled", memcontrolprotocol.StateEnabled),

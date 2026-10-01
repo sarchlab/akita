@@ -191,7 +191,7 @@ var _ = Describe("tFAW and Refresh", func() {
 		})
 
 		It("should complete refresh after TRFC cycles", func() {
-			// Set up st as if refresh just triggered
+			// Set up state as if refresh just triggered
 			st.RefreshInProgress = true
 			st.RefreshCyclesRemaining = spec.TRFC
 			st.RefreshCycleCounter = 0

@@ -170,7 +170,7 @@ var _ = Describe("Timing Validation", func() {
 	Describe("TestPrechargeToActivate", func() {
 		It("should require tRP cycles before Activate after Precharge", func() {
 			// Use a fresh bank with no prior Activate timing residue.
-			// We manually set the bank to Open st and clear timing
+			// We manually set the bank to Open state and clear timing
 			// to isolate the Precharge→Activate constraint.
 			bs := findBankState(&st.BankStates, 0, 0, 0)
 			bs.State = int(bankStateOpen)
