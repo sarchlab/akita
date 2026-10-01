@@ -9,11 +9,11 @@ two memory-facing ports.
 
 ## How It Works
 
-A move is driven by a single `DataMoveRequest` on the `Top` port. The
+A move is driven by a single `DataMoveReq` on the `Top` port. The
 component processes one transaction at a time:
 
 ```
-Top ──► DataMoveRequest ──► dataTransferMW ──► DataMoveResponse ──► Top
+Top ──► DataMoveReq ──► dataTransferMW ──► DataMoveRsp ──► Top
                                       │
               ┌───────────────────────┴────────────────────────┐
         read side (src)                                  write side (dst)
@@ -33,9 +33,9 @@ Each tick the `dataTransferMW` middleware:
 4. **processWriteDoneFromDst** — clears the matching pending write on each
    `mem.WriteDoneRsp`.
 
-The `ctrlParseMW` middleware parses incoming `DataMoveRequest`s (rejecting a new
+The `ctrlParseMW` middleware parses incoming `DataMoveReq`s (rejecting a new
 one while a transaction is active) and, once every byte has been written back,
-sends a `DataMoveResponse` to the original requester.
+sends a `DataMoveRsp` to the original requester.
 
 The source and destination each name one of the two sides — `"inside"` or
 `"outside"` — so a move can go inside→outside, outside→inside, or same-side. The
@@ -47,14 +47,14 @@ and write transfer sizes.
 ```go
 type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
 
-type DataMoveRequest struct {
+type DataMoveReq struct {
     messaging.MsgMeta
     SrcAddress, DstAddress uint64
     ByteSize               uint64
     SrcSide, DstSide       DataMovePort // "inside" or "outside"
 }
 
-type DataMoveResponse struct {
+type DataMoveRsp struct {
     messaging.MsgMeta
 }
 ```
@@ -119,7 +119,7 @@ ctrlPort := mover.Ports.Control
 The system builder creates each port with `messaging.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
-- **Top** — accepts `DataMoveRequest`, returns `DataMoveResponse` to the
+- **Top** — accepts `DataMoveReq`, returns `DataMoveRsp` to the
   requester once the move completes.
 - **Inside** / **Outside** — the two memory-facing ports. Whichever side a move
   names as source issues `mem.ReadReq`s (receiving `mem.DataReadyRsp`); the

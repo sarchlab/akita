@@ -441,7 +441,7 @@ func (m *migMW) tickCopying() bool {
 		return false
 	}
 
-	req := datamoverprotocol.DataMoveRequest{
+	req := datamoverprotocol.DataMoveReq{
 		SrcAddress: state.SrcAddr,
 		DstAddress: state.DstAddr,
 		ByteSize:   pageSize,
@@ -451,7 +451,7 @@ func (m *migMW) tickCopying() bool {
 	req.ID = m.ctrl.NewID()
 	req.Src = m.moverPort().AsRemote()
 	req.Dst = m.res.MoverDst
-	req.TrafficClass = "datamoverprotocol.DataMoveRequest"
+	req.TrafficClass = "datamoverprotocol.DataMoveReq"
 	m.moverPort().Send(req)
 
 	// Open a req_out task under the copy phase so the data mover's req_in task
@@ -477,7 +477,7 @@ func (m *migMW) processMoveRsp() bool {
 		return false
 	}
 
-	rsp, ok := msgI.(datamoverprotocol.DataMoveResponse)
+	rsp, ok := msgI.(datamoverprotocol.DataMoveRsp)
 	if !ok {
 		log.Panicf("migration: unexpected mover msg %T", msgI)
 	}

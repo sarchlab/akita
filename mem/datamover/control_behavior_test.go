@@ -63,8 +63,8 @@ var _ = Describe("DataMover control behavior", func() {
 
 	// makeMove builds a 64-byte outside->inside transfer, the minimal move
 	// (one read on Outside, one write on Inside).
-	makeMove := func() datamoverprotocol.DataMoveRequest {
-		req := datamoverprotocol.DataMoveRequest{}
+	makeMove := func() datamoverprotocol.DataMoveReq {
+		req := datamoverprotocol.DataMoveReq{}
 		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
@@ -73,7 +73,7 @@ var _ = Describe("DataMover control behavior", func() {
 		req.DstAddress = 0
 		req.DstSide = "inside"
 		req.ByteSize = 64
-		req.TrafficClass = "datamoverprotocol.datamoverprotocol.DataMoveRequest"
+		req.TrafficClass = "datamoverprotocol.DataMoveReq"
 		return req
 	}
 
@@ -167,7 +167,7 @@ var _ = Describe("DataMover control behavior", func() {
 				}
 			}
 			if out, ok := topPort.RetrieveOutgoing(); ok {
-				if _, ok := out.(datamoverprotocol.DataMoveResponse); ok {
+				if _, ok := out.(datamoverprotocol.DataMoveRsp); ok {
 					moveDone = true
 				}
 			}
@@ -229,7 +229,7 @@ var _ = Describe("DataMover control behavior", func() {
 		for i := 0; i < 256 && !gotDrainRsp; i++ {
 			modelingtest.Tick(dataMover)
 			if out, ok := topPort.RetrieveOutgoing(); ok {
-				if _, ok := out.(datamoverprotocol.DataMoveResponse); ok {
+				if _, ok := out.(datamoverprotocol.DataMoveRsp); ok {
 					moveDone = true
 				}
 			}
@@ -297,7 +297,7 @@ var _ = Describe("DataMover control behavior", func() {
 				}
 			}
 			if out, ok := topPort.RetrieveOutgoing(); ok {
-				if _, ok := out.(datamoverprotocol.DataMoveResponse); ok {
+				if _, ok := out.(datamoverprotocol.DataMoveRsp); ok {
 					moveDone = true
 				}
 			}

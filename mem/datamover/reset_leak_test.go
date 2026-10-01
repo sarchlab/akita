@@ -55,8 +55,8 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	rec := &tracingtest.LeakRecorder{}
 	tracing.CollectTrace(dataMover, rec)
 
-	makeMove := func() datamoverprotocol.DataMoveRequest {
-		req := datamoverprotocol.DataMoveRequest{}
+	makeMove := func() datamoverprotocol.DataMoveReq {
+		req := datamoverprotocol.DataMoveReq{}
 		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
@@ -65,7 +65,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		req.DstAddress = 0
 		req.DstSide = "inside"
 		req.ByteSize = 64
-		req.TrafficClass = "datamoverprotocol.DataMoveRequest"
+		req.TrafficClass = "datamoverprotocol.DataMoveReq"
 		return req
 	}
 

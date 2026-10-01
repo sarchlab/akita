@@ -148,7 +148,7 @@ var _ = Describe("DataMover milestones", func() {
 		}
 		outsideStorage.Write(0, data)
 
-		req := datamoverprotocol.DataMoveRequest{}
+		req := datamoverprotocol.DataMoveReq{}
 		req.ID = sim.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = topPort.AsRemote()
@@ -157,7 +157,7 @@ var _ = Describe("DataMover milestones", func() {
 		req.DstAddress = 0
 		req.DstSide = "inside"
 		req.ByteSize = 4096
-		req.TrafficClass = "datamoverprotocol.DataMoveRequest"
+		req.TrafficClass = "datamoverprotocol.DataMoveReq"
 
 		topPort.Deliver(req)
 
@@ -168,7 +168,7 @@ var _ = Describe("DataMover milestones", func() {
 		value0, present0 := srcPort.RetrieveIncoming()
 		Expect(present0).To(BeTrue())
 		Expect(value0).To(
-			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
+			BeAssignableToTypeOf(datamoverprotocol.DataMoveRsp{}))
 
 		// (a) The admission milestone lands on the buffer task, not on req_in.
 		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
@@ -201,7 +201,7 @@ var _ = Describe("DataMover milestones", func() {
 		}
 		outsideStorage.Write(0, data)
 
-		req := datamoverprotocol.DataMoveRequest{}
+		req := datamoverprotocol.DataMoveReq{}
 		req.ID = sim.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = topPort.AsRemote()
@@ -210,7 +210,7 @@ var _ = Describe("DataMover milestones", func() {
 		req.DstAddress = 0
 		req.DstSide = "inside"
 		req.ByteSize = 4096
-		req.TrafficClass = "datamoverprotocol.DataMoveRequest"
+		req.TrafficClass = "datamoverprotocol.DataMoveReq"
 
 		topPort.Deliver(req)
 
@@ -222,7 +222,7 @@ var _ = Describe("DataMover milestones", func() {
 		value1, present1 := srcPort.RetrieveIncoming()
 		Expect(present1).To(BeTrue())
 		Expect(value1).To(
-			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
+			BeAssignableToTypeOf(datamoverprotocol.DataMoveRsp{}))
 
 		reqInID := rec.taskID("req_in")
 		Expect(reqInID).ToNot(BeZero())
@@ -255,8 +255,8 @@ var _ = Describe("DataMover milestones", func() {
 		}
 		outsideStorage.Write(0, data)
 
-		makeMove := func() datamoverprotocol.DataMoveRequest {
-			req := datamoverprotocol.DataMoveRequest{}
+		makeMove := func() datamoverprotocol.DataMoveReq {
+			req := datamoverprotocol.DataMoveReq{}
 			req.ID = sim.NewID()
 			req.Src = srcPort.AsRemote()
 			req.Dst = topPort.AsRemote()
@@ -265,7 +265,7 @@ var _ = Describe("DataMover milestones", func() {
 			req.DstAddress = 0
 			req.DstSide = "inside"
 			req.ByteSize = 4096
-			req.TrafficClass = "datamoverprotocol.DataMoveRequest"
+			req.TrafficClass = "datamoverprotocol.DataMoveReq"
 			return req
 		}
 
@@ -284,11 +284,11 @@ var _ = Describe("DataMover milestones", func() {
 		value2, present2 := srcPort.RetrieveIncoming()
 		Expect(present2).To(BeTrue())
 		Expect(value2).To(
-			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
+			BeAssignableToTypeOf(datamoverprotocol.DataMoveRsp{}))
 		value3, present3 := srcPort.RetrieveIncoming()
 		Expect(present3).To(BeTrue())
 		Expect(value3).To(
-			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
+			BeAssignableToTypeOf(datamoverprotocol.DataMoveRsp{}))
 
 		// Two req_in tasks opened and both were closed (one per request), so the
 		// second request was processed, not dropped.

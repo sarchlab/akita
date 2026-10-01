@@ -17,7 +17,7 @@ type ctrlParseMW struct {
 }
 
 // topPort is the workload-request port the data mover listens on for
-// datamoverprotocol.DataMoveRequest messages. (It was historically named "Control" but
+// datamoverprotocol.DataMoveReq messages. (It was historically named "Control" but
 // that name is now reserved for the uniform control protocol.)
 func (m *ctrlParseMW) topPort() messaging.Port {
 	return m.comp.Ports.Top
@@ -57,7 +57,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		return false
 	}
 
-	req, ok := reqI.(datamoverprotocol.DataMoveRequest)
+	req, ok := reqI.(datamoverprotocol.DataMoveReq)
 	if !ok {
 		log.Panicf("can't process request of type %s", reflect.TypeOf(reqI))
 	}
@@ -132,7 +132,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		return false
 	}
 
-	rsp := datamoverprotocol.DataMoveResponse{
+	rsp := datamoverprotocol.DataMoveRsp{
 		MsgMeta: messaging.MsgMeta{
 			ID:    m.comp.NewID(),
 			Src:   trans.ReqDst,
@@ -148,7 +148,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 	m.topPort().Send(rsp)
 
 	// Reconstruct the original request before the transaction is reset. req_in
-	// was opened (in parseFromCP) on the DataMoveRequest, keyed by its ID, so it
+	// was opened (in parseFromCP) on the DataMoveReq, keyed by its ID, so it
 	// must be closed on that same request — not on the freshly minted response,
 	// which carries a different ID and would leak the req_in task.
 	reqMsg := transactionAsMsg(trans)

@@ -207,11 +207,11 @@ func resolveByteGranularity(spec Spec, side datamoverprotocol.DataMovePort) uint
 	}
 }
 
-// transactionAsMsg creates a temporary datamoverprotocol.DataMoveRequest for tracing purposes.
+// transactionAsMsg creates a temporary datamoverprotocol.DataMoveReq for tracing purposes.
 func transactionAsMsg(
 	trans *dataMoverTransactionState,
-) datamoverprotocol.DataMoveRequest {
-	req := datamoverprotocol.DataMoveRequest{
+) datamoverprotocol.DataMoveReq {
+	req := datamoverprotocol.DataMoveReq{
 		SrcAddress: trans.SrcAddress,
 		DstAddress: trans.DstAddress,
 		ByteSize:   trans.ByteSize,
