@@ -116,9 +116,17 @@ func defaultMismatches(static schema.Definition, runtimeSpec any) map[string]str
 }
 
 // defaultValue uses the inspector's representation of scalar values: 64-bit
-// integers and floats, so comparisons stay exact.
+// integers and floats, so comparisons stay exact. A slice or array becomes a
+// []any of its elements, and a nil slice an empty one.
 func defaultValue(v reflect.Value) any {
 	switch v.Kind() {
+	case reflect.Slice, reflect.Array:
+		elems := make([]any, v.Len())
+		for i := range elems {
+			elems[i] = defaultValue(v.Index(i))
+		}
+
+		return elems
 	case reflect.Bool:
 		return v.Bool()
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:

@@ -39,6 +39,11 @@ func TestValidateSpecValid(t *testing.T) {
 			Freq timing.Freq
 			Kind testKind
 		}{Freq: 1 * timing.GHz, Kind: "fast"}},
+		{"slices and arrays of scalars", struct {
+			IDs   []int
+			Kinds []testKind
+			Lanes [4]int
+		}{IDs: []int{1, 2}, Kinds: []testKind{"fast"}}},
 	}
 
 	for _, tt := range tests {
@@ -73,12 +78,12 @@ func TestValidateSpecInvalid(t *testing.T) {
 		}
 	}
 
-	type withSlice struct {
-		IDs []int
+	type withNestedSlice struct {
+		IDs [][]int
 	}
 
-	type withArray struct {
-		Lanes [4]int
+	type withSliceOfStructs struct {
+		Items []struct{ X int }
 	}
 
 	type withMap struct {
@@ -94,8 +99,8 @@ func TestValidateSpecInvalid(t *testing.T) {
 		{"func field", withFunc{}},
 		{"chan field", withChan{}},
 		{"nested struct", withNestedStruct{}},
-		{"slice field", withSlice{}},
-		{"array field", withArray{}},
+		{"slice of slices", withNestedSlice{}},
+		{"slice of structs", withSliceOfStructs{}},
 		{"map field", withMap{}},
 		{"not a struct", 42},
 	}

@@ -11,6 +11,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -94,6 +95,10 @@ func TestInspect(t *testing.T) {
 		if !found {
 			t.Fatal("no Choice field extracted")
 		}
+	})
+
+	t.Run("slices of scalars", func(t *testing.T) {
+		checkSliceFields(t, byPkg)
 	})
 
 	t.Run("rob matches golden", func(t *testing.T) {
@@ -185,6 +190,35 @@ func checkDeclarationForms(t *testing.T, byPkg map[string]schema.Definition) {
 
 func fixturePath(name string) string {
 	return modulePath + "/inspect/testdata/fixtures/" + name
+}
+
+// checkSliceFields checks the scalars fixture's slice fields: one with a
+// default slice literal, and one the DefaultSpec literal leaves out.
+func checkSliceFields(t *testing.T, byPkg map[string]schema.Definition) {
+	t.Helper()
+
+	want := map[string]schema.Field{
+		"Lanes":   {Type: "[]int", Default: []any{int64(1), int64(2)}},
+		"Targets": {Type: "[]github.com/sarchlab/akita/v5/messaging.RemotePort", Default: []any{}},
+	}
+
+	for _, f := range byPkg[fixturePath("scalars")].Spec {
+		w, ok := want[f.Name]
+		if !ok {
+			continue
+		}
+
+		delete(want, f.Name)
+
+		if f.Type != w.Type || !reflect.DeepEqual(f.Default, w.Default) {
+			t.Errorf("%s: type %q default %#v, want type %q default %#v",
+				f.Name, f.Type, f.Default, w.Type, w.Default)
+		}
+	}
+
+	if len(want) != 0 {
+		t.Errorf("fields not extracted: %v", want)
+	}
 }
 
 func checkLocalProto(t *testing.T, byPkg map[string]schema.Definition) {

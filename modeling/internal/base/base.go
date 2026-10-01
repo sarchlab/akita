@@ -59,7 +59,7 @@ func Init[S, T, R, P, M any](
 	base.name = name
 	base.owner = owner
 	base.simulation = sim
-	base.spec = spec
+	base.spec = cloneSpec(spec)
 	base.resources = resources
 	base.Ports = ports
 	bindPorts(owner, &base.Ports)
@@ -102,7 +102,8 @@ func (c *ComponentBase[S, T, R, P, M]) CurrentTime() timing.VTimeInPicoSec {
 	return c.simulation.GetEngine().CurrentTime()
 }
 
-// Spec returns the instance's configuration. The returned value is a copy.
+// Spec returns the instance's configuration. The returned value is a copy, but
+// its slices are the instance's own: treat them as read-only.
 func (c *ComponentBase[S, T, R, P, M]) Spec() S {
 	return c.spec
 }
@@ -217,4 +218,28 @@ func registerPorts(sim timing.Simulation, ports any) {
 	portwalk.ForEach(ports, func(_ string, v reflect.Value) {
 		sim.RegisterPort(v.Interface().(messaging.Port))
 	})
+}
+
+// cloneSpec returns spec with its own copy of every slice field, so an
+// instance shares no slice with the Definition's DefaultSpec or with the value
+// given to WithSpec. A Spec holds only scalars and slices of scalars, so
+// copying the slices copies everything.
+func cloneSpec[S any](spec S) S {
+	v := reflect.ValueOf(&spec).Elem()
+	if v.Kind() != reflect.Struct {
+		return spec
+	}
+
+	for i := range v.NumField() {
+		f := v.Field(i)
+		if f.Kind() != reflect.Slice || f.IsNil() || !f.CanSet() {
+			continue
+		}
+
+		c := reflect.MakeSlice(f.Type(), f.Len(), f.Len())
+		reflect.Copy(c, f)
+		f.Set(c)
+	}
+
+	return spec
 }

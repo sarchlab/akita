@@ -31,8 +31,9 @@
 // simulation: it builds each component instance, gives it a configuration,
 // and wires it to the rest of the system.
 //
-//   - Spec is the configuration: scalar fields only. The component gives the
-//     defaults in its Definition, and the system builder may override them.
+//   - Spec is the configuration: scalars and slices of scalars. The component
+//     gives the defaults in its Definition, and the system builder may
+//     override them.
 //     Spec must have a Freq field of type timing.Freq, the clock the
 //     component ticks at.
 //   - State is the mutable runtime data. The component creates it with the

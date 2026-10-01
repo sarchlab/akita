@@ -1,6 +1,6 @@
 // Package marshalercontainer customizes its Spec's JSON but still holds a
-// slice. The inspector must reject it: Spec fields must be scalars even when
-// the Spec customizes its JSON.
+// map. The inspector must reject it: Spec fields must be scalars or slices of
+// scalars even when the Spec customizes its JSON.
 package marshalercontainer
 
 import (
@@ -12,7 +12,7 @@ import (
 
 // Spec customizes its JSON but still holds a slice.
 type Spec struct {
-	Sizes []int
+	Sizes map[string]int
 }
 
 func (s Spec) MarshalJSON() ([]byte, error) { return json.Marshal(s.Sizes) }

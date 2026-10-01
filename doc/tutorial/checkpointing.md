@@ -128,7 +128,7 @@ your data in the right one of the five structs:
 
 | Struct | Holds | Checkpoint treatment |
 | --- | --- | --- |
-| `Spec` | immutable config (scalar fields only) | hashed and **compared** on load, not restored |
+| `Spec` | immutable config (scalars and slices of scalars) | hashed and **compared** on load, not restored |
 | `State` | **all** mutable runtime data | serialized and restored — the only component data saved |
 | `Resources` | references to shared objects (e.g. `*mem.Storage`) | not serialized; the system builder supplies them again |
 | `Ports` | the component's ports | not part of the component's checkpoint; the system builder creates them again, and the simulation saves the messages buffered in them |
@@ -165,8 +165,8 @@ An event component's pending events are part of the engine's event queue, so
 they are saved too — register each event type it schedules (see *Events*
 above).
 
-`Spec` may contain only scalar fields: booleans, numbers, strings, and named
-types based on them. No slices, arrays, maps, or nested structs. `State` is more
+`Spec` may contain only scalars (booleans, numbers, strings, and named types
+based on them) and slices or arrays of scalars. No maps or nested structs. `State` is more
 permissive: nested structs, slices, arrays, and maps (with string or integer
 keys) are all fine. Neither may contain pointers, interfaces, channels, or funcs;
 in `State` you may tag a field `json:"-"` to exempt one that setup rebuilds.

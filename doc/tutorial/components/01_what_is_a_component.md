@@ -21,7 +21,7 @@ structs, all declared in the component's package:
 
 - **Spec** — the configuration. Things you set once when you build the
   component and never change at runtime: clock frequency, buffer sizes,
-  thresholds. Scalar fields only, JSON-serializable.
+  thresholds. Scalars and slices of scalars, JSON-serializable.
 - **State** — mutable runtime data. Counters, queues, in-flight
   transactions, anything the component needs to remember between cycles.
   Also JSON-serializable, and saved in checkpoints. Only the component's

@@ -500,7 +500,7 @@ checkpointing. See "Defining Components in V5" below for the full philosophy.
 
 | Struct | What it is | Supplied by | Key rule |
 |--------|------------|-------------|----------|
-| **Spec** | Configuration | System builder (defaults in `Definition.DefaultSpec`) | Scalar fields only (bool, numbers, strings, and named types based on them). No slices, arrays, maps, nested structs, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
+| **Spec** | Configuration | System builder (defaults in `Definition.DefaultSpec`) | Scalars (bool, numbers, strings, and named types based on them) and slices or arrays of scalars. No maps, nested structs, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
 | **State** | Mutable runtime data, saved in checkpoints | Component (`NewState`, or the zero value) | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. Written only by the component's own code. |
 | **Resources** | References to shared objects (storage, page table, address mapper) | System builder | Not checkpointed; the rebuild supplies them again. `modeling.None` when there are none. |
 | **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`messaging.NewPort`) | Bound and registered by `Build`; none is added later. A field may carry an `akita:"role=<protocol>.<role>"` tag. |
@@ -652,7 +652,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
 #### Core Principles
 
 1. Spec (immutable configuration)
-   - Describes behavior and dependencies using only scalar fields: bool, numbers, strings, and named types based on them (such as `timing.Freq` or an enum-like `type Mode string`). No slices, arrays, maps, or nested structs.
+   - Describes behavior and dependencies using only scalars (bool, numbers, strings, and named types based on them, such as `timing.Freq` or an enum-like `type Mode string`) and slices of scalars. No maps or nested structs.
    - Strategy dependencies are expressed as flat scalar fields: a kind plus its scalar parameters (e.g., `AddressMapperType: "interleaved"` and `InterleavingSize: 4096`).
    - No pointers or live objects in Spec. Keep it JSON/YAML‑friendly and hashable.
    - Defaults live in `Definition.DefaultSpec`; the system builder copies it, changes fields, and passes the result to `WithSpec`.
@@ -736,15 +736,17 @@ V5 unifies how components are modeled and wired. Each component type is five str
 
 This pattern generalizes to other components: keep Spec flat and declarative, keep State pure and serializable, take shared objects through Resources and ports through `Ports`, and implement behavior as ordered middlewares with minimal, explicit dependencies.
 
-### Moving Container Fields Out of Spec
+### Lists in Spec
 
-V5 Spec fields must be scalars. `Build` panics if a Spec has a slice, array, map, nested struct, pointer, or interface field, and the `inspect` package reports the same error. A V4 configuration field that holds a list is usually one of three things:
+V5 Spec fields are scalars or slices (or arrays) of scalars. `Build` panics if a Spec has a map, a nested struct, a slice of containers, a pointer, or an interface field, and the `inspect` package reports the same error. A V4 configuration field that holds a list is usually one of three things:
 
-| The list is… | Move it to | Example |
+| The list is… | Put it in | Example |
 |---|---|---|
-| One value repeated per unit | A single scalar in Spec | A per-SIMD `VGPRCounts []int` whose entries are all equal becomes `VGPRPerSIMD int`. |
-| Wiring, or derived only from wiring | Resources, used directly by the component | The caches route through the `mem.AddressToPortMapper` in Resources instead of a list of remote port names. |
+| Configuration whose length depends on the system | A slice of scalars in Spec, which the system builder fills before `Build` | A command processor's `CUs []messaging.RemotePort`, or a per-SIMD `VGPRCounts []int`. |
+| Wiring through an address mapping | Resources, used directly by the component | The caches route through the `mem.AddressToPortMapper` in Resources. |
 | Runtime data that changes while simulating | State | Queues, in-flight transaction tables. |
+
+`Build` copies the Spec's slices, so an instance never shares one with `Definition.DefaultSpec` or with another instance. Treat the slices that `Spec()` returns as read-only. Since ports are created before `Build`, their remote names are known in time to fill such a list.
 
 Resources are not checkpointed. The setup that rebuilds a simulation supplies them again, so a restored component uses the rebuilt wiring. Do not copy wiring into State: `LoadCheckpoint` replaces the State wholesale and would bring back the wiring of the saved run.
 

@@ -1,5 +1,6 @@
-// Package dashcontainer hides a slice Spec field from JSON with a "-" tag. The
-// inspector must still reject it: Spec fields must be scalars.
+// Package dashcontainer hides a map Spec field from JSON with a "-" tag. The
+// inspector must still reject it: Spec fields must be scalars or slices of
+// scalars.
 package dashcontainer
 
 import (
@@ -8,8 +9,8 @@ import (
 )
 
 type Spec struct {
-	N    int   `json:"n"`
-	List []int `json:"-"`
+	N    int            `json:"n"`
+	List map[string]int `json:"-"`
 }
 
 type (

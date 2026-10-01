@@ -184,7 +184,7 @@ func evalStructLiteral(
 
 	out := map[string]any{}
 	for name, value := range fields {
-		v, err := evalConstExpr(pkg, value)
+		v, err := evalSpecValue(pkg, value)
 		if err != nil {
 			return nil, err
 		}
@@ -192,6 +192,55 @@ func evalStructLiteral(
 	}
 
 	return out, nil
+}
+
+// evalSpecValue evaluates a field value of a DefaultSpec literal: a constant
+// expression, or, for a slice or array field, nil or a literal whose elements
+// are constant expressions. A slice or array becomes a []any.
+func evalSpecValue(pkg *packages.Package, expr ast.Expr) (any, error) {
+	expr = ast.Unparen(expr)
+
+	tv := pkg.TypesInfo.Types[expr]
+	if tv.IsNil() {
+		return []any{}, nil
+	}
+
+	lit, ok := expr.(*ast.CompositeLit)
+	if !ok {
+		return evalConstExpr(pkg, expr)
+	}
+
+	var elems []any
+	switch t := tv.Type.Underlying().(type) {
+	case *types.Slice:
+		elems = make([]any, 0, len(lit.Elts))
+	case *types.Array:
+		elems = make([]any, 0, t.Len())
+	default:
+		return evalConstExpr(pkg, expr)
+	}
+
+	for _, elt := range lit.Elts {
+		if _, keyed := elt.(*ast.KeyValueExpr); keyed {
+			return nil, posErrorf(pkg, elt.Pos(),
+				"slice literal elements must not be keyed")
+		}
+
+		v, err := evalConstExpr(pkg, elt)
+		if err != nil {
+			return nil, err
+		}
+
+		elems = append(elems, v)
+	}
+
+	if arr, ok := tv.Type.Underlying().(*types.Array); ok {
+		for int64(len(elems)) < arr.Len() {
+			elems = append(elems, zeroValue(arr.Elem()))
+		}
+	}
+
+	return elems, nil
 }
 
 // evalConstExpr evaluates an expression that must be statically evaluable: a
@@ -213,6 +262,18 @@ func evalConstExpr(pkg *packages.Package, expr ast.Expr) (any, error) {
 // zeroValue returns the default of a field the DefaultSpec literal leaves
 // out, in the same representation as constantValue.
 func zeroValue(typ types.Type) any {
+	switch u := typ.Underlying().(type) {
+	case *types.Slice:
+		return []any{}
+	case *types.Array:
+		elems := make([]any, u.Len())
+		for i := range elems {
+			elems[i] = zeroValue(u.Elem())
+		}
+
+		return elems
+	}
+
 	t, ok := typ.Underlying().(*types.Basic)
 	if !ok {
 		return nil

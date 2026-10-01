@@ -177,3 +177,30 @@ func TestTypeNameIsThePackageAndNameIsTheInstance(t *testing.T) {
 		t.Errorf("Spec() = %+v, want Size 4", c.Spec())
 	}
 }
+
+type listSpec struct {
+	Targets []string `json:"targets"`
+}
+
+// listComp is a component whose Spec holds a slice.
+type listComp struct {
+	base.ComponentBase[listSpec, modeling.None, modeling.None, modeling.None, modeling.None]
+}
+
+func (c *listComp) NotifyRecv(messaging.Port)     {}
+func (c *listComp) NotifyPortFree(messaging.Port) {}
+func (c *listComp) Handle(timing.Event)           {}
+
+func TestInitGivesTheInstanceItsOwnSpecSlices(t *testing.T) {
+	spec := listSpec{Targets: []string{"A", "B"}}
+
+	c := &listComp{}
+	base.Init(&c.ComponentBase, c, newRecordingSim(), "C",
+		spec, modeling.None{}, modeling.None{})
+
+	spec.Targets[0] = "X"
+
+	if got := c.Spec().Targets; !reflect.DeepEqual(got, []string{"A", "B"}) {
+		t.Errorf("Spec().Targets = %v after the caller changed its slice, want [A B]", got)
+	}
+}

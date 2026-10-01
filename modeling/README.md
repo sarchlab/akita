@@ -13,7 +13,7 @@ package-level `Definition`:
 
 | Struct | What it is | Supplied by |
 |---|---|---|
-| `Spec` | configuration, scalar fields only | system builder (defaults in `Definition`) |
+| `Spec` | configuration: scalars and slices of scalars | system builder (defaults in `Definition`) |
 | `State` | mutable runtime data, saved in checkpoints | component (`NewState`) |
 | `Resources` | references to shared objects | system builder |
 | `Ports` | one `messaging.Port` field per port, `[]messaging.Port` per group | system builder (`messaging.NewPort`) |
@@ -25,10 +25,13 @@ instance with `Definition.Builder()...Build(name)`, passing all of its ports;
 `modeling.None` for the Resources of a component that references no shared
 objects.
 
-- **Spec** must be a plain struct with scalar fields only: booleans, numbers,
-  strings, and named types based on them (such as `timing.Freq`, a
-  `messaging.RemotePort`, or an enum-like string type). No slices, arrays, maps,
-  or nested structs.
+- **Spec** must be a plain struct whose fields are scalars (booleans, numbers,
+  strings, and named types based on them, such as `timing.Freq`, a
+  `messaging.RemotePort`, or an enum-like string type) or slices of scalars,
+  such as the list of remote ports a unit talks to, whose length depends on the
+  system. No maps or nested structs. `Build` copies the slices, so an instance
+  never shares one with `DefaultSpec`; treat the slices `Spec()` returns as
+  read-only.
 - **State** may contain nested structs, slices, and maps; it must be
   JSON-serializable. Only the component writes it: its `NewState`, which may
   read the Spec, Resources, and Ports, and its middlewares.

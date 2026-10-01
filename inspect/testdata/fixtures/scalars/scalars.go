@@ -19,6 +19,8 @@ type Spec struct {
 	Fraction     float32
 	Choice       Choice
 	Quoted       int `json:"'"`
+	Lanes        []int
+	Targets      []messaging.RemotePort
 }
 
 type State struct{}
@@ -41,6 +43,7 @@ type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
 var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
 	DefaultSpec: Spec{
 		StringNumber: 18446744073709551615, Fraction: 0.1, Choice: Escaped,
+		Lanes: []int{1, 2},
 	},
 	NewMiddlewares: newMiddlewares,
 }

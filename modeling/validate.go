@@ -39,12 +39,13 @@ func MustBeCheckpointable[S, T any](name string, spec S) {
 	}
 }
 
-// ValidateSpec checks that the given value is a struct containing only scalar
-// fields (bool, int*, uint*, float*, string, and named types based on them),
-// including fields tagged `json:"-"`. Slices, arrays, maps, nested structs,
-// pointers, interfaces, channels, and functions are not allowed: a Spec is
-// flat configuration, and anything a component derives or references belongs
-// in State or Resources.
+// ValidateSpec checks that the given value is a struct whose fields, including
+// fields tagged `json:"-"`, are scalars (bool, int*, uint*, float*, string, and
+// named types based on them) or slices and arrays of scalars, such as a list
+// of remote ports whose length depends on the configuration. Maps, nested
+// structs, slices of containers, pointers, interfaces, channels, and functions
+// are not allowed: a Spec is flat configuration, and anything a component
+// derives or references belongs in State or Resources.
 func ValidateSpec(v any) error {
 	return validateValue(reflect.ValueOf(v), "spec", false)
 }
@@ -82,8 +83,13 @@ func validateFieldType(t reflect.Type, path string, allowComposite bool) error {
 
 	case reflect.Slice, reflect.Array:
 		if !allowComposite {
-			return fmt.Errorf("%s: %s not allowed in spec; "+
-				"spec fields must be scalars", path, t.Kind())
+			if !isScalarKind(t.Elem().Kind()) {
+				return fmt.Errorf("%s: %s of %s not allowed in spec; "+
+					"spec fields must be scalars or slices of scalars",
+					path, t.Kind(), t.Elem().Kind())
+			}
+
+			return nil
 		}
 
 		return validateFieldType(t.Elem(), path+"[]", allowComposite)
@@ -91,7 +97,7 @@ func validateFieldType(t reflect.Type, path string, allowComposite bool) error {
 	case reflect.Map:
 		if !allowComposite {
 			return fmt.Errorf("%s: map not allowed in spec; "+
-				"spec fields must be scalars", path)
+				"spec fields must be scalars or slices of scalars", path)
 		}
 
 		k := t.Key().Kind()
@@ -119,9 +125,24 @@ func validateFieldType(t reflect.Type, path string, allowComposite bool) error {
 	}
 }
 
+// isScalarKind reports whether k is a scalar kind: a boolean, an integer, a
+// float, or a string.
+func isScalarKind(k reflect.Kind) bool {
+	switch k {
+	case reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64,
+		reflect.String:
+		return true
+	default:
+		return false
+	}
+}
+
 func validateStructType(t reflect.Type, path string, allowComposite bool) error {
-	// Spec fields must be scalars even when the Spec customizes its JSON: a
-	// container would still be shared by every copy of the default Spec.
+	// Spec fields must be scalars or slices of scalars even when the Spec
+	// customizes its JSON: any other container is not configuration.
 	if !allowComposite {
 		if err := validateFields(t, path, allowComposite); err != nil {
 			return err

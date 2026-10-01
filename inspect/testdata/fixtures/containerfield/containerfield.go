@@ -1,5 +1,6 @@
-// Package containerfield is a synthetic component whose Spec has a slice
-// field. The inspector must reject it: Spec fields must be scalars.
+// Package containerfield is a synthetic component whose Spec has a map field.
+// The inspector must reject it: Spec fields must be scalars or slices of
+// scalars.
 package containerfield
 
 import (
@@ -9,7 +10,7 @@ import (
 
 // Spec configures the component.
 type Spec struct {
-	Latencies []int `json:"latencies"`
+	Latencies map[string]int `json:"latencies"`
 }
 
 type (
