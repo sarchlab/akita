@@ -16,12 +16,12 @@
 //
 // A middleware implements modeling.Middleware: Handle(e timing.Event) bool.
 // The component passes every event it receives to all of its middlewares in
-// field order. A tick is a TickEvent, and most middlewares do their
-// cycle of work without looking at the event. A component may also schedule
-// events for itself; they reach the middlewares the same way, and a
-// middleware ignores the events it does not handle. Handle returns true if
-// the middleware made progress, and the component ticks again on the next
-// cycle if any middleware did.
+// field order. Every event a ticking component receives is a TickEvent, so
+// most middlewares do their cycle of work without looking at the event.
+// Handle returns true if the middleware made progress, and the component
+// ticks again on the next cycle if any middleware did. A ticking component
+// does not schedule events of its own: a component that needs events with
+// data at times it chooses is written in the event model (modeling/event).
 //
 // # Five structs
 //

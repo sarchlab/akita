@@ -57,7 +57,8 @@ func (m *recordMW) Handle(e timing.Event) bool {
 	return true
 }
 
-// pokeEvent is an event a component schedules for itself.
+// pokeEvent stands for an event other than a tick: Handle passes whatever it
+// receives to the middlewares.
 type pokeEvent struct {
 	timing.EventBase
 }
