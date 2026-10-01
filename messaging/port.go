@@ -41,6 +41,7 @@ type Port interface {
 	AsRemote() RemotePort
 
 	SetConnection(conn Connection)
+	Connection() Connection
 	Owner() PortOwner
 	SetOwner(owner PortOwner)
 

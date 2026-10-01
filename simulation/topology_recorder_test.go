@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/datarecording"
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
 // fakeSpec is a stand-in component spec that serializes to JSON, mirroring the
@@ -33,35 +34,33 @@ type plainComponent struct {
 
 func (c *plainComponent) Name() string { return c.name }
 
-// namedEntity is a minimal named value used as a port's component/connection.
-type namedEntity struct {
+// portOwner is a named owner of real ports.
+type portOwner struct {
 	name string
 }
 
-func (n *namedEntity) Name() string { return n.name }
+func (o *portOwner) Name() string                  { return o.name }
+func (o *portOwner) NotifyRecv(messaging.Port)     {}
+func (o *portOwner) NotifyPortFree(messaging.Port) {}
 
-// fakePort is a Port whose Connection and Component accessors mirror the
-// concrete *defaultPort the recorder reflects over. A nil conn models an
-// unconnected port.
-type fakePort struct {
+// namedConnection is a connection that only has a name; the recorder needs
+// nothing else.
+type namedConnection struct {
+	messaging.Connection
 	name string
-	conn *namedEntity
-	comp *namedEntity
 }
 
-func (p *fakePort) Name() string            { return p.name }
-func (p *fakePort) NumIncoming() int        { return 0 }
-func (p *fakePort) NumOutgoing() int        { return 0 }
-func (p *fakePort) Component() *namedEntity { return p.comp }
+func (c *namedConnection) Name() string { return c.name }
 
-// Connection returns the plugged-in connection, or nil when unconnected. The
-// nil is returned through the same interface the real port uses, so the
-// recorder's nil check is exercised.
-func (p *fakePort) Connection() named {
-	if p.conn == nil {
-		return nil
+// newOwnedPort creates a real port owned by owner and, unless conn is nil,
+// plugged into conn.
+func newOwnedPort(name string, owner *portOwner, conn messaging.Connection) messaging.Port {
+	p := messaging.NewPort(owner, 1, 1, name)
+	if conn != nil {
+		p.SetConnection(conn)
 	}
-	return p.conn
+
+	return p
 }
 
 func TestTopologyRecorderRecordsComponentSpecs(t *testing.T) {
@@ -110,11 +109,12 @@ func TestTopologyRecorderRecordsPorts(t *testing.T) {
 	recorder := datarecording.NewDataRecorder(path)
 	r := newTopologyRecorder(recorder)
 
-	connA := &namedEntity{name: "ConnA"}
+	connA := &namedConnection{name: "ConnA"}
+	l1, l2 := &portOwner{name: "L1"}, &portOwner{name: "L2"}
 	ports := []Port{
-		&fakePort{name: "L1.Top", conn: connA, comp: &namedEntity{name: "L1"}},
-		&fakePort{name: "L2.Bottom", conn: connA, comp: &namedEntity{name: "L2"}},
-		&fakePort{name: "L1.Ctrl", conn: nil, comp: &namedEntity{name: "L1"}},
+		newOwnedPort("L1.Top", l1, connA),
+		newOwnedPort("L2.Bottom", l2, connA),
+		newOwnedPort("L1.Ctrl", l1, nil),
 	}
 	r.Record(nil, ports)
 	if err := recorder.Close(); err != nil {
