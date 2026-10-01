@@ -63,7 +63,7 @@ func (m *bankTickMW) Handle(_ timing.Event) bool {
 	return progress
 }
 
-func (m *bankTickMW) issue(spec *Spec, next *State) bool {
+func (m *bankTickMW) issue(spec *Spec, next *state) bool {
 	cmd := m.ctrl.scheduler.Pick(spec, next, &m.timing)
 	if cmd == nil {
 		return false
@@ -95,7 +95,7 @@ func (m *bankTickMW) issue(spec *Spec, next *State) bool {
 // refresh commands, so without this the refresh window would be invisible in
 // the trace; attributing it to the first command that issues afterward charges
 // the wait to the sub-transaction that was actually held off.
-func (m *bankTickMW) traceRefreshStall(next *State, cmd *commandState) {
+func (m *bankTickMW) traceRefreshStall(next *state, cmd *commandState) {
 	if m.comp.NumHooks() == 0 {
 		return
 	}
@@ -114,7 +114,7 @@ func (m *bankTickMW) traceRefreshStall(next *State, cmd *commandState) {
 // trace task — each ACT/RD/PRE the controller issues for a sub-transaction is a
 // point on that task's timeline. Guarded by NumHooks so the hot path does
 // nothing when no tracer is attached.
-func (m *bankTickMW) traceCmdIssue(next *State, cmd *commandState) {
+func (m *bankTickMW) traceCmdIssue(next *state, cmd *commandState) {
 	if m.comp.NumHooks() == 0 {
 		return
 	}

@@ -22,32 +22,32 @@ func buildDDR4TimingAndCycles() (dramTiming, map[commandKind]int) {
 }
 
 // newDDR4State creates a fresh State with DDR4 bank layout (1 rank, 4 bank groups, 4 banks).
-func newDDR4State() *State {
-	state := &State{
+func newDDR4State() *state {
+	st := &state{
 		BankStates: initBankStatesFlat(
 			DDR4Spec.NumRank,
 			DDR4Spec.NumBankGroup,
 			DDR4Spec.NumBank,
 		),
 	}
-	return state
+	return st
 }
 
 var _ = Describe("Timing Validation", func() {
 	var (
 		timing    dramTiming
 		cmdCycles map[commandKind]int
-		state     *State
+		st        *state
 	)
 
 	BeforeEach(func() {
 		timing, cmdCycles = buildDDR4TimingAndCycles()
-		state = newDDR4State()
+		st = newDDR4State()
 	})
 
 	Describe("TestActivateOpensBank", func() {
 		It("should open the bank and require tRCD before a Read", func() {
-			bs := findBankState(&state.BankStates, 0, 0, 0)
+			bs := findBankState(&st.BankStates, 0, 0, 0)
 			Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
 
 			cmd := &commandState{
@@ -60,8 +60,8 @@ var _ = Describe("Timing Validation", func() {
 				},
 			}
 
-			startCommand(cmdCycles, state, bs, cmd)
-			updateTiming(timing, state, cmd)
+			startCommand(cmdCycles, st, bs, cmd)
+			updateTiming(timing, st, cmd)
 
 			// Bank should now be open with the correct row.
 			Expect(bankStateKind(bs.State)).To(Equal(bankStateOpen))
@@ -73,7 +73,7 @@ var _ = Describe("Timing Validation", func() {
 
 	Describe("TestActivateThenRead", func() {
 		It("should allow Read after tRCD cycles", func() {
-			bs := findBankState(&state.BankStates, 0, 0, 0)
+			bs := findBankState(&st.BankStates, 0, 0, 0)
 
 			activateCmd := &commandState{
 				Kind: int(cmdKindActivate),
@@ -85,8 +85,8 @@ var _ = Describe("Timing Validation", func() {
 				},
 			}
 
-			startCommand(cmdCycles, state, bs, activateCmd)
-			updateTiming(timing, state, activateCmd)
+			startCommand(cmdCycles, st, bs, activateCmd)
+			updateTiming(timing, st, activateCmd)
 
 			// After Activate, the SameBank timing for Activate→Read
 			// should be tRCD - tAL = 16.
@@ -111,7 +111,7 @@ var _ = Describe("Timing Validation", func() {
 					Row:       100,
 				},
 			}
-			ready := getReadyCommand(&DDR4Spec, state, bs, readCmd)
+			ready := getReadyCommand(&DDR4Spec, st, bs, readCmd)
 			Expect(ready).NotTo(BeNil())
 			Expect(commandKind(ready.Kind)).To(Equal(cmdKindRead))
 		})
@@ -120,7 +120,7 @@ var _ = Describe("Timing Validation", func() {
 	Describe("TestReadTiming", func() {
 		It("should set correct inter-read timing constraints", func() {
 			// First open the bank.
-			bs00 := findBankState(&state.BankStates, 0, 0, 0)
+			bs00 := findBankState(&st.BankStates, 0, 0, 0)
 			activateCmd := &commandState{
 				Kind: int(cmdKindActivate),
 				Location: location{
@@ -130,12 +130,12 @@ var _ = Describe("Timing Validation", func() {
 					Row:       1,
 				},
 			}
-			startCommand(cmdCycles, state, bs00, activateCmd)
-			updateTiming(timing, state, activateCmd)
+			startCommand(cmdCycles, st, bs00, activateCmd)
+			updateTiming(timing, st, activateCmd)
 
 			// Tick until Activate completes.
 			for range 16 {
-				tickBanks(state)
+				tickBanks(st)
 			}
 
 			// Issue a Read on bank (0,0,0).
@@ -148,8 +148,8 @@ var _ = Describe("Timing Validation", func() {
 					Row:       1,
 				},
 			}
-			startCommand(cmdCycles, state, bs00, readCmd)
-			updateTiming(timing, state, readCmd)
+			startCommand(cmdCycles, st, bs00, readCmd)
+			updateTiming(timing, st, readCmd)
 
 			// Same bank: Read→Read constraint should be tCCDL = 6
 			readKey := cmdKindRead
@@ -157,12 +157,12 @@ var _ = Describe("Timing Validation", func() {
 
 			// Other bank in same bank group (e.g., bank index 1 in group 0):
 			// should also be tCCDL = 6.
-			bs01 := findBankState(&state.BankStates, 0, 0, 1)
+			bs01 := findBankState(&st.BankStates, 0, 0, 1)
 			Expect(bs01.CyclesToCmdAvailable[readKey]).To(Equal(6))
 
 			// Bank in a different bank group but same rank (e.g., group 1, bank 0):
 			// should be tCCDS = 4.
-			bs10 := findBankState(&state.BankStates, 0, 1, 0)
+			bs10 := findBankState(&st.BankStates, 0, 1, 0)
 			Expect(bs10.CyclesToCmdAvailable[readKey]).To(Equal(4))
 		})
 	})
@@ -170,9 +170,9 @@ var _ = Describe("Timing Validation", func() {
 	Describe("TestPrechargeToActivate", func() {
 		It("should require tRP cycles before Activate after Precharge", func() {
 			// Use a fresh bank with no prior Activate timing residue.
-			// We manually set the bank to Open state and clear timing
+			// We manually set the bank to Open st and clear timing
 			// to isolate the Precharge→Activate constraint.
-			bs := findBankState(&state.BankStates, 0, 0, 0)
+			bs := findBankState(&st.BankStates, 0, 0, 0)
 			bs.State = int(bankStateOpen)
 			bs.OpenRow = 5
 
@@ -186,8 +186,8 @@ var _ = Describe("Timing Validation", func() {
 					Row:       5,
 				},
 			}
-			startCommand(cmdCycles, state, bs, prechargeCmd)
-			updateTiming(timing, state, prechargeCmd)
+			startCommand(cmdCycles, st, bs, prechargeCmd)
+			updateTiming(timing, st, prechargeCmd)
 
 			// Precharge→Activate constraint should be tRP = 16.
 			activateKey := cmdKindActivate
@@ -198,7 +198,7 @@ var _ = Describe("Timing Validation", func() {
 
 			// Tick 16 cycles to drain the constraint.
 			for range 16 {
-				tickBanks(state)
+				tickBanks(st)
 			}
 
 			// Now Activate should be ready (constraint == 0).
@@ -216,7 +216,7 @@ var _ = Describe("Timing Validation", func() {
 					Row:       10,
 				},
 			}
-			ready := getReadyCommand(&DDR4Spec, state, bs, readCmd)
+			ready := getReadyCommand(&DDR4Spec, st, bs, readCmd)
 			Expect(ready).NotTo(BeNil())
 			Expect(commandKind(ready.Kind)).To(Equal(cmdKindActivate))
 		})
@@ -224,7 +224,7 @@ var _ = Describe("Timing Validation", func() {
 
 	Describe("TestRowBufferHitVsMiss", func() {
 		It("should return Read directly for row hit, Precharge for row miss", func() {
-			bs := findBankState(&state.BankStates, 0, 0, 0)
+			bs := findBankState(&st.BankStates, 0, 0, 0)
 
 			// Open the bank to row 200.
 			activateCmd := &commandState{
@@ -236,12 +236,12 @@ var _ = Describe("Timing Validation", func() {
 					Row:       200,
 				},
 			}
-			startCommand(cmdCycles, state, bs, activateCmd)
-			updateTiming(timing, state, activateCmd)
+			startCommand(cmdCycles, st, bs, activateCmd)
+			updateTiming(timing, st, activateCmd)
 
 			// Complete the Activate.
 			for range 16 {
-				tickBanks(state)
+				tickBanks(st)
 			}
 
 			Expect(bankStateKind(bs.State)).To(Equal(bankStateOpen))

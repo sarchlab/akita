@@ -176,7 +176,7 @@ var _ = Describe("MMU milestones", func() {
 
 	It("does not admit (and emits no admission milestone) while servicing "+
 		"the max in-flight requests", func() {
-		mmuComp.State = State{
+		mmuComp.State = state{
 			WalkingTranslations: make([]transactionState, 16),
 		}
 

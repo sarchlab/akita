@@ -32,7 +32,7 @@ var _ = Describe("Bank Stage", func() {
 	BeforeEach(func() {
 		storage = mem.NewStorage(4 * mem.KB)
 
-		initialState := State{
+		initialState := state{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
 			DirStageBuf:  queueing.NewBuffer[int]("Cache.DirStageBuf", 4),

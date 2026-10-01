@@ -32,7 +32,7 @@ func (m *refreshMiddleware) Handle(_ timing.Event) bool {
 // runFakeStallRefresh implements periodic refresh scheduling: it stalls command
 // issuance for tRFC cycles every tREFI interval by holding State.RefreshInProgress,
 // without issuing real refresh commands or closing rows (deviation D2).
-func runFakeStallRefresh(spec *Spec, next *State) bool {
+func runFakeStallRefresh(spec *Spec, next *state) bool {
 	if spec.TREFI <= 0 {
 		return false
 	}

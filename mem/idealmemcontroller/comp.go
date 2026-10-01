@@ -29,8 +29,8 @@ type inflightTransaction struct {
 	Src            messaging.RemotePort `json:"src"`
 }
 
-// State contains mutable runtime data for the ideal memory controller.
-type State struct {
+// state contains mutable runtime data for the ideal memory controller.
+type state struct {
 	InflightTransactions []inflightTransaction    `json:"inflight_transactions"`
 	ControlState         memcontrolprotocol.State `json:"control_state"`
 	CurrentCmdID         uint64                   `json:"current_cmd_id"`
@@ -54,10 +54,10 @@ type Ports struct {
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
-// Middlewares holds the memory controller's behavior, run in field order
+// middlewares holds the memory controller's behavior, run in field order
 // every cycle. Control runs first so that a Pause, Drain, or Reset takes
 // effect before any Top traffic is admitted in the same cycle.
-type Middlewares struct {
+type middlewares struct {
 	// Ctrl handles control commands.
 	Ctrl *ctrlMiddleware
 
@@ -68,4 +68,4 @@ type Middlewares struct {
 // Comp is an ideal memory controller that always responds to a request in a
 // fixed number of cycles, with no limit on concurrency. It is a ticking
 // component.
-type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
+type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]

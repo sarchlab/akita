@@ -17,7 +17,7 @@ func TestEndpoint(t *testing.T) {
 }
 
 func TestValidateState(t *testing.T) {
-	if err := modeling.ValidateState(State{}); err != nil {
+	if err := modeling.ValidateState(state{}); err != nil {
 		t.Fatalf("State failed validation: %v", err)
 	}
 }

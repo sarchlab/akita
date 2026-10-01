@@ -42,8 +42,8 @@ type assemblingMsgState struct {
 	NumFlitArrived  int                  `json:"num_flit_arrived"`
 }
 
-// State contains mutable runtime data for the endpoint.
-type State struct {
+// state contains mutable runtime data for the endpoint.
+type state struct {
 	MsgOutBuf      []messaging.MsgMeta  `json:"msg_out_buf"`
 	FlitsToSend    []packetization.Flit `json:"flits_to_send"`
 	AssemblingMsgs []assemblingMsgState `json:"assembling_msgs"`
@@ -57,8 +57,8 @@ type Ports struct {
 	NetworkPort messaging.Port `akita:"role=github.com/sarchlab/akita/v5/noc/packetization.link"`
 }
 
-// Middlewares holds the endpoint's behavior, run in field order every cycle.
-type Middlewares struct {
+// middlewares holds the endpoint's behavior, run in field order every cycle.
+type middlewares struct {
 	// Outgoing takes messages from the device ports, splits them into flits,
 	// and sends the flits out of the network port.
 	Outgoing *outgoingMW
@@ -70,7 +70,7 @@ type Middlewares struct {
 
 // Comp is an endpoint: it carries the messages of a few device ports over the
 // network as flits.
-type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
+type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]
 
 // deviceSide is the connection the device ports plug into. It is part of the
 // endpoint: its name and hooks are the endpoint's, and activity on a device

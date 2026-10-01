@@ -184,7 +184,7 @@ var _ = Describe("Address Translator", func() {
 			transReq2.DeviceID = 1
 			transReq2.TrafficClass = "vmprotocol.TranslationReq"
 
-			t.State = State{
+			t.State = state{
 				Transactions: []transactionState{
 					{TranslationReqID: transReq1.ID},
 					{TranslationReqID: transReq2.ID},
@@ -215,7 +215,7 @@ var _ = Describe("Address Translator", func() {
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vmprotocol.TranslationRsp"
 
-			t.State = State{
+			t.State = state{
 				Transactions: []transactionState{
 					{
 						TranslationReqID: transReq1.ID,
@@ -255,7 +255,7 @@ var _ = Describe("Address Translator", func() {
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vmprotocol.TranslationRsp"
 
-			t.State = State{
+			t.State = state{
 				Transactions: []transactionState{
 					{
 						TranslationReqID: transReq1.ID,
@@ -314,7 +314,7 @@ var _ = Describe("Address Translator", func() {
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vmprotocol.TranslationRsp"
 
-			t.State = State{
+			t.State = state{
 				Transactions: []transactionState{
 					{
 						TranslationReqID: transReq1.ID,
@@ -386,7 +386,7 @@ var _ = Describe("Address Translator", func() {
 			writeToBottom.TrafficBytes = 12
 			writeToBottom.TrafficClass = "memprotocol.WriteReq"
 
-			t.State = State{
+			t.State = state{
 				InflightReqToBottom: []reqToBottomState{
 					{
 						ReqFromTopID:    readFromTop.ID,
@@ -479,7 +479,7 @@ var _ = Describe("Address Translator", func() {
 
 	Context("state serialization", func() {
 		It("should pass ValidateState", func() {
-			err := modeling.ValidateState(State{})
+			err := modeling.ValidateState(state{})
 			Expect(err).To(Succeed())
 		})
 	})

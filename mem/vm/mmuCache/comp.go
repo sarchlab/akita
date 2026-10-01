@@ -33,8 +33,8 @@ type Ports struct {
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
-// Middlewares holds the mmuCache's behavior, run in field order every cycle.
-type Middlewares struct {
+// middlewares holds the mmuCache's behavior, run in field order every cycle.
+type middlewares struct {
 	// Ctrl handles control commands.
 	Ctrl *ctrlMiddleware
 
@@ -55,8 +55,8 @@ const (
 	mmuCacheStateDrain  = "drain"
 )
 
-// State contains mutable runtime data for the mmuCache.
-type State struct {
+// state contains mutable runtime data for the mmuCache.
+type state struct {
 	CurrentState    string               `json:"current_state"`
 	PendingDrainRsp bool                 `json:"pending_drain_rsp"`
 	CurrentCmdID    uint64               `json:"current_cmd_id"`
@@ -170,4 +170,4 @@ func restoreTransReq(
 }
 
 // Comp is the mmuCache component.
-type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
+type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]

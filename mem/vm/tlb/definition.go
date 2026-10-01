@@ -11,7 +11,7 @@ import (
 // Ports and Middlewares. The system builder builds an instance with
 // Definition.Builder()...Build(name); tooling reads the same declaration
 // statically.
-var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
+var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
 		Freq:           1 * timing.GHz,
 		NumReqPerCycle: 4,
@@ -25,10 +25,10 @@ var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 	NewMiddlewares: newMiddlewares,
 }
 
-func newState(c *Comp) State {
+func newState(c *Comp) state {
 	name, spec := c.Name(), c.Spec()
 
-	return State{
+	return state{
 		TLBState: tlbStateEnable,
 		Sets:     initSets(spec.NumSets, spec.NumWays),
 		Pipeline: queueing.NewPipeline[pipelineTLBReqState](
@@ -42,8 +42,8 @@ func newState(c *Comp) State {
 	}
 }
 
-func newMiddlewares(c *Comp) Middlewares {
-	return Middlewares{
+func newMiddlewares(c *Comp) middlewares {
+	return middlewares{
 		Ctrl: &ctrlMiddleware{comp: c},
 		TLB:  &tlbMiddleware{comp: c},
 	}

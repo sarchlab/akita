@@ -15,7 +15,7 @@ import (
 // Ports and Middlewares. The system builder builds an instance with
 // Definition.Builder()...Build(name); tooling reads the same declaration
 // statically.
-var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
+var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
 		Freq:                1 * timing.GHz,
 		NumReqPerCycle:      1,
@@ -36,7 +36,7 @@ var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 
 // newState returns a running cache with an empty directory, MSHR, and
 // transaction table, and empty stage buffers and pipelines.
-func newState(c *Comp) State {
+func newState(c *Comp) state {
 	name, spec := c.Name(), c.Spec()
 
 	numBanks := spec.numBanks()
@@ -57,7 +57,7 @@ func newState(c *Comp) State {
 			fmt.Sprintf("%s.BankPostPipelineBuf%d", name, i), laneWidth)
 	}
 
-	s := State{
+	s := state{
 		CacheState:   int(cacheStateRunning),
 		EvictingList: make(map[uint64]bool),
 		DirStageBuf: queueing.NewBuffer[int](
@@ -86,7 +86,7 @@ func newState(c *Comp) State {
 // newMiddlewares creates the cache's middlewares. The control middlewares and
 // the pipeline stages share the pipeline middleware, which holds the storage,
 // the address mapper, and the ports' accessors.
-func newMiddlewares(c *Comp) Middlewares {
+func newMiddlewares(c *Comp) middlewares {
 	res := c.Resources()
 	if res.Storage == nil {
 		panic("writeback: Resources.Storage is required")
@@ -99,7 +99,7 @@ func newMiddlewares(c *Comp) Middlewares {
 	}
 	pipeline.createInternalStages()
 
-	return Middlewares{
+	return middlewares{
 		Ctrl: &ctrlMiddleware{pipeline: pipeline},
 		Flusher: &controlMW{
 			comp:    c,

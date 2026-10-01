@@ -12,7 +12,7 @@ import (
 // fields of Ports and Middlewares. The system builder builds an instance with
 // Definition.Builder()...Build(name); tooling reads the same declaration
 // statically.
-var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
+var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
 		Freq:                           1 * timing.GHz,
 		NumBanks:                       4,
@@ -28,20 +28,20 @@ var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 	NewMiddlewares: newMiddlewares,
 }
 
-func newState(c *Comp) State {
+func newState(c *Comp) state {
 	name, spec := c.Name(), c.Spec()
 
-	return State{
+	return state{
 		Banks: buildInitialBanks(name, spec),
 	}
 }
 
-func newMiddlewares(c *Comp) Middlewares {
+func newMiddlewares(c *Comp) middlewares {
 	if c.Resources().Storage == nil {
 		panic("simplebankedmemory: Resources.Storage is required")
 	}
 
-	return Middlewares{
+	return middlewares{
 		Ctrl:         &ctrlMiddleware{comp: c},
 		TickFinalize: &tickFinalizeMW{comp: c},
 		Dispatch:     &dispatchMW{comp: c},

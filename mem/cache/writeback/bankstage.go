@@ -75,7 +75,7 @@ func (s *bankStage) pullFromBuf() bool {
 	return s.pullFromDirBuffer(next, spec)
 }
 
-func (s *bankStage) canAcceptIntoPipeline(cur State) bool {
+func (s *bankStage) canAcceptIntoPipeline(cur state) bool {
 	spec := s.cache.comp.Spec()
 
 	if spec.BankLatency > 0 {
@@ -86,7 +86,7 @@ func (s *bankStage) canAcceptIntoPipeline(cur State) bool {
 	return cur.BankPostPipelineBufs[s.bankID].CanPush()
 }
 
-func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
+func (s *bankStage) pullFromDirBuffer(next *state, spec Spec) bool {
 	dirBuf := &next.DirToBankBufs[s.bankID]
 	if dirBuf.Size() == 0 {
 		return false
@@ -111,7 +111,7 @@ func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
 	return true
 }
 
-func (s *bankStage) acceptIntoPipeline(next *State, spec Spec, transIdx int) {
+func (s *bankStage) acceptIntoPipeline(next *state, spec Spec, transIdx int) {
 	trans := &next.Transactions[transIdx]
 
 	// Open the bank subtask spanning this data-array pipeline traversal, a child

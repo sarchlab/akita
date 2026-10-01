@@ -34,7 +34,7 @@ var _ = Describe("Directory", func() {
 	}
 
 	BeforeEach(func() {
-		initialState := State{
+		initialState := state{
 			DirBuf: queueing.NewBuffer[int]("Cache.DirBuf", 4),
 			BankBufs: []queueing.Buffer[int]{
 				queueing.NewBuffer[int]("Cache.BankBuf0", 4),

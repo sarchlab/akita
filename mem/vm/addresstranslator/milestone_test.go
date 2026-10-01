@@ -269,7 +269,7 @@ var _ = Describe("Address Translator milestones", func() {
 
 		req := makeRead(0x10040)
 
-		at.State = State{
+		at.State = state{
 			Transactions: []transactionState{
 				{
 					TranslationReqID:  transReq1ID,

@@ -160,7 +160,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 // the controller to its freshly-built shape. These counters are reported for
 // experiment results, so a reset before a new measurement phase must not carry
 // pre-reset traffic into the post-reset run.
-func resetStatistics(state *State) {
+func resetStatistics(state *state) {
 	state.TotalReadCommands = 0
 	state.TotalWriteCommands = 0
 	state.TotalActivates = 0

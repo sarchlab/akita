@@ -50,8 +50,8 @@ type Ports struct {
 	Port []messaging.Port `akita:"role=github.com/sarchlab/akita/v5/noc/packetization.link"`
 }
 
-// Middlewares holds the switch's behavior, run in field order every cycle.
-type Middlewares struct {
+// middlewares holds the switch's behavior, run in field order every cycle.
+type middlewares struct {
 	// RouteForwardSend sends flits out, forwards them to their output
 	// buffers, and routes them.
 	RouteForwardSend *routeForwardSendMW
@@ -86,8 +86,8 @@ type portComplexState struct {
 	SendOutBuffer queueing.Buffer[routedFlit] `json:"send_out_buffer"`
 }
 
-// State contains mutable runtime data for the switch.
-type State struct {
+// state contains mutable runtime data for the switch.
+type state struct {
 	PortComplexes []portComplexState `json:"port_complexes"`
 
 	// NextArbPort is the round-robin arbitration cursor for forwarding. It is
@@ -98,4 +98,4 @@ type State struct {
 }
 
 // Comp is the switch component.
-type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
+type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]

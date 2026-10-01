@@ -26,8 +26,8 @@ type Ports struct {
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
-// Middlewares holds the MMU's behavior, run in field order every cycle.
-type Middlewares struct {
+// middlewares holds the MMU's behavior, run in field order every cycle.
+type middlewares struct {
 	// Ctrl handles control commands.
 	Ctrl *ctrlMiddleware
 
@@ -55,8 +55,8 @@ type transactionState struct {
 	WalkTaskID uint64 `json:"walk_task_id"`
 }
 
-// State contains mutable runtime data for the MMU.
-type State struct {
+// state contains mutable runtime data for the MMU.
+type state struct {
 	ControlState        memcontrolprotocol.State `json:"control_state"`
 	CurrentCmdID        uint64                   `json:"current_cmd_id"`
 	CurrentCmdSrc       messaging.RemotePort     `json:"current_cmd_src"`
@@ -74,4 +74,4 @@ type Resources struct {
 }
 
 // Comp is the MMU component.
-type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
+type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]

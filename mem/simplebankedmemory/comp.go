@@ -65,8 +65,8 @@ type bankState struct {
 	PostPipelineBuf queueing.Buffer[bankPipelineItemState]   `json:"post_pipeline_buf"`
 }
 
-// State contains mutable runtime data for the simple banked memory.
-type State struct {
+// state contains mutable runtime data for the simple banked memory.
+type state struct {
 	ControlState  memcontrolprotocol.State `json:"control_state"`
 	CurrentCmdID  uint64                   `json:"current_cmd_id"`
 	CurrentCmdSrc messaging.RemotePort     `json:"current_cmd_src"`
@@ -90,8 +90,8 @@ type Ports struct {
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
-// Middlewares holds the memory's behavior, run in field order every cycle.
-type Middlewares struct {
+// middlewares holds the memory's behavior, run in field order every cycle.
+type middlewares struct {
 	// Ctrl handles control commands.
 	Ctrl *ctrlMiddleware
 
@@ -105,7 +105,7 @@ type Middlewares struct {
 
 // Comp models a banked memory with configurable banking and pipeline behavior.
 // It is a ticking component specialized to this package's five structs.
-type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
+type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]
 
 // --- Free functions for pipeline / buffer / bank-selection / address conversion ---
 

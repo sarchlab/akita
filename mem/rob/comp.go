@@ -52,8 +52,8 @@ type transactionState struct {
 	RspData []byte `json:"rsp_data,omitempty"`
 }
 
-// State contains mutable runtime data for a reorder buffer.
-type State struct {
+// state contains mutable runtime data for a reorder buffer.
+type state struct {
 	Transactions  []transactionState       `json:"transactions"`
 	ControlState  memcontrolprotocol.State `json:"control_state"`
 	CurrentCmdID  uint64                   `json:"current_cmd_id"`
@@ -74,12 +74,12 @@ type Ports struct {
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
-// Middlewares holds the reorder buffer's behavior.
-type Middlewares struct {
+// middlewares holds the reorder buffer's behavior.
+type middlewares struct {
 	// Pipeline handles control commands, forwards requests, and releases
 	// responses in order.
 	Pipeline *middleware
 }
 
 // Comp is a reorder buffer component.
-type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
+type Comp = ticking.Component[Spec, state, modeling.None, Ports, middlewares]

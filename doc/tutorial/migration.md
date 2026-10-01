@@ -850,21 +850,19 @@ ctrl := dram.Definition.Builder().
 
 ### Statistics
 
-The DRAM state tracks runtime statistics:
+The DRAM controller tracks runtime statistics, read through functions:
 
 ```go
-state := ctrl.State
-
 // Latency
-avgRead := dram.AverageReadLatency(&state)   // cycles
-avgWrite := dram.AverageWriteLatency(&state) // cycles
+avgRead := dram.AverageReadLatency(ctrl)   // cycles
+avgWrite := dram.AverageWriteLatency(ctrl) // cycles
 
 // Bandwidth
-readBW := dram.ReadBandwidth(&state)   // bytes per cycle
-writeBW := dram.WriteBandwidth(&state) // bytes per cycle
+readBW := dram.ReadBandwidth(ctrl)   // bytes per cycle
+writeBW := dram.WriteBandwidth(ctrl) // bytes per cycle
 
 // Row buffer
-hitRate := dram.RowBufferHitRate(&state) // 0.0 to 1.0
+hitRate := dram.RowBufferHitRate(ctrl) // 0.0 to 1.0
 
 // Raw counters available in state:
 // state.TotalReadCommands, state.TotalWriteCommands,

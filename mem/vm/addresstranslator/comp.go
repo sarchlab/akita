@@ -37,9 +37,9 @@ type Ports struct {
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
-// Middlewares holds the AddressTranslator's behavior, run in field order
+// middlewares holds the AddressTranslator's behavior, run in field order
 // every cycle.
-type Middlewares struct {
+type middlewares struct {
 	// Ctrl handles control commands.
 	Ctrl *ctrlMiddleware
 
@@ -97,8 +97,8 @@ type reqToBottomState struct {
 	ReqToBottomType string               `json:"req_to_bottom_type"`
 }
 
-// State contains mutable runtime data for the AddressTranslator.
-type State struct {
+// state contains mutable runtime data for the AddressTranslator.
+type state struct {
 	ControlState        memcontrolprotocol.State `json:"control_state"`
 	CurrentCmdID        uint64                   `json:"current_cmd_id"`
 	CurrentCmdSrc       messaging.RemotePort     `json:"current_cmd_src"`
@@ -208,7 +208,7 @@ func findTransactionByReqID(transactions []transactionState, id uint64) int {
 	return -1
 }
 
-func removeTransaction(state *State, idx int) {
+func removeTransaction(state *state, idx int) {
 	state.Transactions = append(
 		state.Transactions[:idx],
 		state.Transactions[idx+1:]...)
@@ -232,7 +232,7 @@ func findReqToBottomByID(inflight []reqToBottomState, id uint64) reqToBottomStat
 	panic("req to bottom not found")
 }
 
-func removeReqToBottomByID(state *State, id uint64) {
+func removeReqToBottomByID(state *state, id uint64) {
 	for i, r := range state.InflightReqToBottom {
 		if r.ReqToBottomID == id {
 			state.InflightReqToBottom = append(
@@ -262,4 +262,4 @@ func buildReqToBottom(
 }
 
 // Comp is the AddressTranslator component.
-type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
+type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]

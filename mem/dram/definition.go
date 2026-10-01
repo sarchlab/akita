@@ -16,7 +16,7 @@ import (
 // Spec.AddrMapper registry keys, the row policy by Spec.PagePolicy, and
 // refresh is a middleware. New strategies/behaviors are added in-tree and
 // registered — the model the reference simulators use.
-var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
+var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
 		Freq:                 1600 * timing.MHz,
 		Protocol:             int(protoDDR3),
@@ -61,10 +61,10 @@ var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 
 // newState returns the State of a freshly built controller: empty queues and
 // every bank closed.
-func newState(c *Comp) State {
+func newState(c *Comp) state {
 	spec := c.Spec()
 
-	return State{
+	return state{
 		SubTransQueue: subTransQueueState{
 			Entries: []subTransRef{},
 		},
@@ -82,7 +82,7 @@ func newState(c *Comp) State {
 // the command completion delays, and the controller strategies with their
 // address mapping — are computed once here and held by the bank-tick
 // middleware.
-func newMiddlewares(c *Comp) Middlewares {
+func newMiddlewares(c *Comp) middlewares {
 	spec := c.Spec()
 	spec.mustBeSupported()
 
@@ -90,7 +90,7 @@ func newMiddlewares(c *Comp) Middlewares {
 		panic("dram: Resources.Storage is required")
 	}
 
-	return Middlewares{
+	return middlewares{
 		Ctrl:    &ctrlMiddleware{comp: c},
 		Respond: &respondMW{comp: c},
 		Refresh: &refreshMiddleware{comp: c},

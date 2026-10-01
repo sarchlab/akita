@@ -189,8 +189,8 @@ var _ = Describe("P0: close-page completion latency", func() {
 	})
 
 	It("schedules a ReadPrecharge completion at ReadDelay", func() {
-		state := newDDR4State()
-		bs := findBankState(&state.BankStates, 0, 0, 0)
+		st := newDDR4State()
+		bs := findBankState(&st.BankStates, 0, 0, 0)
 		bs.State = int(bankStateOpen)
 		bs.OpenRow = 0
 
@@ -198,11 +198,11 @@ var _ = Describe("P0: close-page completion latency", func() {
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 0},
 		}
-		startCommand(cmdCycles, state, bs, cmd)
+		startCommand(cmdCycles, st, bs, cmd)
 
-		Expect(state.PendingCompletions).To(HaveLen(1))
-		Expect(state.PendingCompletions[0].CompletionTick).
-			To(Equal(state.TickCount + uint64(cmdCycles[cmdKindRead])))
+		Expect(st.PendingCompletions).To(HaveLen(1))
+		Expect(st.PendingCompletions[0].CompletionTick).
+			To(Equal(st.TickCount + uint64(cmdCycles[cmdKindRead])))
 	})
 })
 

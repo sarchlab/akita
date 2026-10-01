@@ -63,7 +63,7 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 	return true
 }
 
-func cacheIsQuiescent(state *State) bool {
+func cacheIsQuiescent(state *state) bool {
 	// Completed transactions are only marked Removed (the slice is compacted
 	// at Reset, not on each completion), so quiescence means no transaction
 	// is still live, not that the slice is empty.
@@ -163,7 +163,7 @@ func (m *ctrlMiddleware) rejectMustBePaused(req memcontrolprotocol.Req) bool {
 // Tag, so the requested addresses are aligned to the block before
 // matching.
 func invalidateBlocks(
-	state *State,
+	state *state,
 	blockSize uint64,
 	addresses []uint64,
 	pid vm.PID,
@@ -307,7 +307,7 @@ func (m *ctrlMiddleware) endInflightTasks() {
 // per-bank in-flight counter, and clears the MSHR/write-buffer stage
 // bookkeeping. It does not touch the directory, MSHR contents, or the
 // transaction table.
-func clearCachePipelinesAndBuffers(next *State) {
+func clearCachePipelinesAndBuffers(next *state) {
 	next.DirStageBuf.Clear()
 	for i := range next.DirToBankBufs {
 		next.DirToBankBufs[i].Clear()

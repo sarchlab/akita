@@ -94,7 +94,7 @@ var _ = Describe("MMU", func() {
 		It("should stall parse from top "+
 			"if MMU is servicing max requests",
 			func() {
-				mmuComp.State = State{
+				mmuComp.State = state{
 					WalkingTranslations: make([]transactionState, 16),
 				}
 
@@ -106,7 +106,7 @@ var _ = Describe("MMU", func() {
 
 	Context("walk page table", func() {
 		It("should reduce translation cycles", func() {
-			mmuComp.State = State{
+			mmuComp.State = state{
 				WalkingTranslations: []transactionState{
 					{
 						ReqID:     sim.NewID(),
@@ -136,7 +136,7 @@ var _ = Describe("MMU", func() {
 			}
 			pageTable.Insert(page)
 
-			mmuComp.State = State{
+			mmuComp.State = state{
 				WalkingTranslations: []transactionState{
 					{
 						ReqID:     sim.NewID(),
@@ -181,7 +181,7 @@ var _ = Describe("MMU", func() {
 			dummy.TrafficClass = "vmprotocol.TranslationRsp"
 			topPort.Send(dummy)
 
-			mmuComp.State = State{
+			mmuComp.State = state{
 				WalkingTranslations: []transactionState{
 					{
 						ReqID:     sim.NewID(),

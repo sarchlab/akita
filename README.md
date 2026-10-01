@@ -97,3 +97,24 @@ or browse [`examples/`](examples/) directly.
 
 For migration between versions, see the
 [Migration Guide](doc/tutorial/migration.md).
+
+## Compatibility
+
+Akita follows semantic versioning within a major version. For the built-in
+components under `mem/` and `noc/`, the v5 promise covers how a simulator
+builds, wires, and reads them:
+
+- the `Definition` and its builder, and the `Comp` type name;
+- the Spec: field names, JSON names, meaning, and presets;
+- the Resources and the Ports field names;
+- protocol messages and roles;
+- exported functions that read a component, such as `dram.AverageReadLatency`.
+
+It does not cover:
+
+- the State and Middlewares of a built-in component. Their types are
+  unexported, and they may change in any release; read a component through
+  its exported functions instead;
+- the tracing vocabulary: the task kinds, names, and tags a component emits;
+- checkpoint files. Only the same build of a simulator restores a checkpoint;
+- code under `examples/` and the acceptance test programs.

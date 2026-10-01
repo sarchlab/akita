@@ -601,7 +601,7 @@ func (ds *directoryStage) transAddrPIDReqMeta(
 }
 
 func (ds *directoryStage) updateBlockForFetch(
-	next *State, setID, wayID int,
+	next *state, setID, wayID int,
 	cacheLineID uint64, pid vm.PID,
 ) {
 	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
@@ -613,7 +613,7 @@ func (ds *directoryStage) updateBlockForFetch(
 }
 
 func (ds *directoryStage) addMSHREntryBlock(
-	next *State, mshrIdx, setID, wayID int,
+	next *state, mshrIdx, setID, wayID int,
 	transIdx int,
 ) {
 	entry := &next.MSHRState.Entries[mshrIdx]

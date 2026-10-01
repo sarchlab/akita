@@ -26,7 +26,7 @@ var _ = Describe("Respond Stage", func() {
 			Definition.DefaultSpec,
 			Resources{Storage: mem.NewStorage(4 * mem.KB)},
 			ports,
-			State{},
+			state{},
 		)
 
 		topPort = ports.Top

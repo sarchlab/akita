@@ -208,7 +208,7 @@ func (m *ctrlMiddleware) rejectMustBePaused(msg memcontrolprotocol.Req) bool {
 // (mirroring how lookups and refills derive segments). An empty address
 // list drops every segment; a zero PID matches every PID.
 func invalidateEntries(
-	state *State,
+	state *state,
 	spec Spec,
 	addresses []uint64,
 	pid vm.PID,
@@ -231,7 +231,7 @@ func invalidateEntries(
 
 // invalidateAllSegments drops every live block whose PID matches the
 // filter (zero PID matches all) across all cache levels.
-func invalidateAllSegments(state *State, pid vm.PID) {
+func invalidateAllSegments(state *state, pid vm.PID) {
 	for li := range state.Table {
 		set := &state.Table[li]
 		for wi := range set.Blocks {

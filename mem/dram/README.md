@@ -201,16 +201,19 @@ explicit bank-selection address conversion).
 
 ## Statistics
 
-The `State` tracks runtime statistics, accessible via helper functions:
+The controller tracks runtime statistics, read through these functions:
 
 ```go
-state := ctrl.State
-hitRate := dram.RowBufferHitRate(&state)
-avgRead := dram.AverageReadLatency(&state)
-avgWrite := dram.AverageWriteLatency(&state)
-readBW := dram.ReadBandwidth(&state)    // bytes per cycle
-writeBW := dram.WriteBandwidth(&state)  // bytes per cycle
+hitRate := dram.RowBufferHitRate(ctrl)
+avgRead := dram.AverageReadLatency(ctrl)
+avgWrite := dram.AverageWriteLatency(ctrl)
+readBW := dram.ReadBandwidth(ctrl)    // bytes per cycle
+writeBW := dram.WriteBandwidth(ctrl)  // bytes per cycle
 ```
+
+Read statistics through these functions rather than the fields of `ctrl.State`:
+the State of a built-in component is an implementation detail that may
+change between minor versions.
 
 Available counters: `TotalReadCommands`, `TotalWriteCommands`,
 `TotalActivates`, `TotalPrecharges`, `RowBufferHits`, `RowBufferMisses`,

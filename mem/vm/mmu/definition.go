@@ -11,7 +11,7 @@ import (
 // Middlewares. The system builder builds an instance with
 // Definition.Builder()...Build(name), supplying Resources.PageTable; tooling
 // reads the same declaration statically.
-var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
+var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
 		Freq:                1 * timing.GHz,
 		Log2PageSize:        12,
@@ -21,7 +21,7 @@ var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 	NewMiddlewares: newMiddlewares,
 }
 
-func newMiddlewares(c *Comp) Middlewares {
+func newMiddlewares(c *Comp) middlewares {
 	pt := c.Resources().PageTable
 	if pt == nil {
 		panic("mmu: Resources.PageTable is required")
@@ -29,7 +29,7 @@ func newMiddlewares(c *Comp) Middlewares {
 
 	validatePageTablePageSize(pt, c.Spec().Log2PageSize)
 
-	return Middlewares{
+	return middlewares{
 		Ctrl:        &ctrlMiddleware{comp: c},
 		Translation: &translationMW{comp: c},
 	}

@@ -21,7 +21,7 @@ var _ = Describe("DirectoryStage", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
-		initialState := State{
+		initialState := state{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
 			DirStageBuf:  queueing.NewBuffer[int]("Cache.DirStageBuf", 4),

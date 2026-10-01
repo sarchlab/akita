@@ -31,7 +31,7 @@ func (m *parseTopMW) Handle(_ timing.Event) bool {
 	return m.parseTop(&spec, next)
 }
 
-func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
+func (m *parseTopMW) parseTop(spec *Spec, next *state) bool {
 	msgI, ok := m.topPort().PeekIncoming()
 	if !ok {
 		return false

@@ -37,7 +37,7 @@ func splitTransaction(
 }
 
 // canPushSubTrans returns true if the subtrans queue can hold n more entries.
-func canPushSubTrans(state *State, n int, capacity int) bool {
+func canPushSubTrans(state *state, n int, capacity int) bool {
 	if n >= capacity {
 		panic("queue size not large enough to handle a single transaction")
 	}
@@ -46,7 +46,7 @@ func canPushSubTrans(state *State, n int, capacity int) bool {
 
 // pushSubTrans adds all subtransactions of a transaction to the sub-transaction
 // queue, referenced by the transaction's stable ID.
-func pushSubTrans(state *State, transIdx int) {
+func pushSubTrans(state *state, transIdx int) {
 	trans := &state.Transactions[transIdx]
 	for i := range trans.SubTransactions {
 		state.SubTransQueue.Entries = append(
@@ -61,7 +61,7 @@ func pushSubTrans(state *State, transIdx int) {
 // made. Production drives this through the component's configured controller
 // (see controller.fillCommandQueue); this package-level shim builds the default
 // controller so tests can exercise the path directly.
-func tickSubTransQueue(newID func() uint64, spec *Spec, state *State) bool {
+func tickSubTransQueue(newID func() uint64, spec *Spec, state *state) bool {
 	return newController(spec).fillCommandQueue(newID, spec, state)
 }
 
@@ -71,7 +71,7 @@ func tickSubTransQueue(newID func() uint64, spec *Spec, state *State) bool {
 func createClosePageCommand(
 	newID func() uint64,
 	spec *Spec,
-	state *State,
+	state *state,
 	ref subTransRef,
 ) *commandState {
 	st := subTransByRef(state, ref)
@@ -86,7 +86,7 @@ func createClosePageCommand(
 func createOpenPageCommand(
 	newID func() uint64,
 	spec *Spec,
-	state *State,
+	state *state,
 	ref subTransRef,
 ) *commandState {
 	st := subTransByRef(state, ref)
@@ -110,7 +110,7 @@ func isWriteCommand(cmd *commandState) bool {
 // the command. When read/write queue separation is configured (sizes > 0),
 // it checks read and write capacities separately.
 func canAcceptCommand(
-	state *State,
+	state *state,
 	cmd *commandState,
 	spec *Spec,
 ) bool {
@@ -142,7 +142,7 @@ func canAcceptCommand(
 }
 
 // acceptCommand adds a command to the command queue.
-func acceptCommand(state *State, cmd *commandState) {
+func acceptCommand(state *state, cmd *commandState) {
 	queueIdx := getQueueIndex(cmd)
 	state.CommandQueues.Entries = append(
 		state.CommandQueues.Entries,
@@ -161,7 +161,7 @@ func acceptCommand(state *State, cmd *commandState) {
 // the low watermark. It prioritises row-buffer hits (bank is open, matching
 // row, and the command is ready) over other ready commands. Among commands
 // of equal priority, the oldest (earliest in the queue) wins.
-func getCommandToIssue(spec *Spec, next *State) *commandState {
+func getCommandToIssue(spec *Spec, next *state) *commandState {
 	// Write drain logic (only when R/W queue separation is configured)
 	if spec.ReadQueueSize > 0 && spec.WriteQueueSize > 0 {
 		writeCount := countWriteCommands(next)
@@ -202,7 +202,7 @@ func getCommandToIssue(spec *Spec, next *State) *commandState {
 // findRowBufferHitCommand scans the command queue for a row-buffer hit
 // (bank is open, matching row, and the command is ready). Returns the first
 // (oldest) such command, or nil if none found.
-func findRowBufferHitCommand(spec *Spec, next *State) *commandState {
+func findRowBufferHitCommand(spec *Spec, next *state) *commandState {
 	for i := range next.CommandQueues.Entries {
 		e := &next.CommandQueues.Entries[i]
 		cmd := &e.Command
@@ -226,7 +226,7 @@ func findRowBufferHitCommand(spec *Spec, next *State) *commandState {
 
 // findOldestReadyCommand scans the command queue for the oldest ready command
 // regardless of row-buffer state. Returns the first ready command, or nil.
-func findOldestReadyCommand(spec *Spec, next *State) *commandState {
+func findOldestReadyCommand(spec *Spec, next *state) *commandState {
 	for i := range next.CommandQueues.Entries {
 		e := &next.CommandQueues.Entries[i]
 		cmd := &e.Command
@@ -248,7 +248,7 @@ func findOldestReadyCommand(spec *Spec, next *State) *commandState {
 
 // removeCommandFromQueueByIndex removes a command entry at the given index
 // from the command queue.
-func removeCommandFromQueueByIndex(next *State, idx int) {
+func removeCommandFromQueueByIndex(next *state, idx int) {
 	next.CommandQueues.Entries = append(
 		next.CommandQueues.Entries[:idx],
 		next.CommandQueues.Entries[idx+1:]...,
@@ -263,7 +263,7 @@ func findBankStateByLocation(flat *bankStatesFlat, loc location) *bankState {
 
 // countWriteCommands returns the total number of write commands in the
 // command queue.
-func countWriteCommands(state *State) int {
+func countWriteCommands(state *state) int {
 	count := 0
 	for _, e := range state.CommandQueues.Entries {
 		if e.IsWrite {
@@ -275,7 +275,7 @@ func countWriteCommands(state *State) int {
 
 // getFirstReadyWrite returns the first ready write command from the queue,
 // using FR-FCFS ordering (row-buffer hits first, then oldest).
-func getFirstReadyWrite(spec *Spec, next *State) *commandState {
+func getFirstReadyWrite(spec *Spec, next *state) *commandState {
 	// First pass: look for a row-buffer hit among writes
 	for i := range next.CommandQueues.Entries {
 		e := &next.CommandQueues.Entries[i]

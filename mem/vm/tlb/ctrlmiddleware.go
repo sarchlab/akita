@@ -195,7 +195,7 @@ func (m *ctrlMiddleware) rejectMustBePaused(msg memcontrolprotocol.Req) bool {
 
 // invalidateEntries marks every cached page matching the filter invalid.
 func invalidateEntries(
-	state *State,
+	state *state,
 	spec Spec,
 	addresses []uint64,
 	pid vm.PID,

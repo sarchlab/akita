@@ -18,7 +18,7 @@ var _ = Describe("Flusher", func() {
 	)
 
 	BeforeEach(func() {
-		initialState := State{
+		initialState := state{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
 			DirStageBuf:  queueing.NewBuffer[int]("Cache.DirStageBuf", 4),

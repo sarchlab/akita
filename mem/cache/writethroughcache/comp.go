@@ -71,11 +71,11 @@ type Ports struct {
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
-// Middlewares holds the writethroughcache's behavior, run in field order every
+// middlewares holds the writethroughcache's behavior, run in field order every
 // cycle. Control runs before the data pipeline so that a Pause, Drain, or
 // Reset takes effect in the same cycle, before any Top or Bottom traffic
 // advances.
-type Middlewares struct {
+type middlewares struct {
 	// Ctrl handles every control command: Pause, Drain, Enable, Reset,
 	// Invalidate, and Flush.
 	Ctrl *ctrlMiddleware
@@ -85,8 +85,8 @@ type Middlewares struct {
 	Pipeline *pipelineMW
 }
 
-// State contains mutable runtime data for the writethroughcache.
-type State struct {
+// state contains mutable runtime data for the writethroughcache.
+type state struct {
 	DirectoryState cache.DirectoryState `json:"directory_state"`
 	MSHRState      cache.MSHRState      `json:"mshr_state"`
 
@@ -218,4 +218,4 @@ type Resources struct {
 }
 
 // Comp is the writethroughcache component, a ticking component.
-type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
+type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]

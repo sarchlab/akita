@@ -41,7 +41,7 @@ func makePorts(name string, bufSize int) Ports {
 // given spec, resources, and ports, and replaces its State with state. It
 // returns the pipeline middleware the stages under test belong to.
 func buildStageTestCache(
-	spec Spec, res Resources, ports Ports, state State,
+	spec Spec, res Resources, ports Ports, state state,
 ) *pipelineMW {
 	comp := Definition.Builder().
 		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
@@ -61,7 +61,7 @@ func TestWriteThroughCache(t *testing.T) {
 }
 
 func TestValidateState(t *testing.T) {
-	if err := modeling.ValidateState(State{}); err != nil {
+	if err := modeling.ValidateState(state{}); err != nil {
 		t.Fatalf("State failed validation: %v", err)
 	}
 }

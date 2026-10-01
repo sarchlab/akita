@@ -88,11 +88,11 @@ type Ports struct {
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
-// Middlewares holds the writeback cache's behavior, run in field order every
+// middlewares holds the writeback cache's behavior, run in field order every
 // cycle. Control runs before the data pipeline so that a Pause, Drain, or
 // Reset takes effect in the same cycle, before any Top or Bottom traffic or
 // in-flight operation advances.
-type Middlewares struct {
+type middlewares struct {
 	// Ctrl handles every control command except Flush: Pause, Drain, Enable,
 	// Reset, and Invalidate.
 	Ctrl *ctrlMiddleware
@@ -106,8 +106,8 @@ type Middlewares struct {
 	Pipeline *pipelineMW
 }
 
-// State contains mutable runtime data for the writeback cache.
-type State struct {
+// state contains mutable runtime data for the writeback cache.
+type state struct {
 	CacheState     int                  `json:"cache_state"`
 	CurrentCmdID   uint64               `json:"current_cmd_id"`
 	CurrentCmdSrc  messaging.RemotePort `json:"current_cmd_src"`
@@ -154,7 +154,7 @@ type State struct {
 // MSHR, so indices must stay stable). Reuse a Removed slot when one is
 // available so the slice stays bounded by the number of active transactions
 // instead of growing with every request ever issued.
-func (s *State) allocTransaction(t transactionState) int {
+func (s *state) allocTransaction(t transactionState) int {
 	for i := range s.Transactions {
 		if !s.Transactions[i].Removed {
 			continue
@@ -199,7 +199,7 @@ func (s *State) allocTransaction(t transactionState) int {
 // write-back or a line fetch). Such slots must not be reused, because the
 // matching bottom-port response is correlated by the request ID held in the
 // slot.
-func (s *State) indexHasInflightBottomTransaction(i int) bool {
+func (s *state) indexHasInflightBottomTransaction(i int) bool {
 	for _, idx := range s.InflightEvictionIndices {
 		if idx == i {
 			return true
@@ -382,4 +382,4 @@ type Resources struct {
 }
 
 // Comp is the writeback cache component, a ticking component.
-type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
+type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]

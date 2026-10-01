@@ -11,7 +11,7 @@ import (
 // fields of Ports and Middlewares. The system builder builds an instance with
 // Definition.Builder()...Build(name); tooling reads the same declaration
 // statically.
-var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
+var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
 		Freq:          1 * timing.GHz,
 		Latency:       100,
@@ -23,18 +23,18 @@ var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 }
 
 // newState returns an enabled controller with no in-flight access.
-func newState(_ *Comp) State {
-	return State{ControlState: memcontrolprotocol.StateEnabled}
+func newState(_ *Comp) state {
+	return state{ControlState: memcontrolprotocol.StateEnabled}
 }
 
 // newMiddlewares creates the controller's middlewares. It panics if the system
 // builder did not supply a storage.
-func newMiddlewares(c *Comp) Middlewares {
+func newMiddlewares(c *Comp) middlewares {
 	if c.Resources().Storage == nil {
 		panic("idealmemcontroller: Resources.Storage is required")
 	}
 
-	return Middlewares{
+	return middlewares{
 		Ctrl:   &ctrlMiddleware{comp: c},
 		Memory: &memMiddleware{comp: c},
 	}

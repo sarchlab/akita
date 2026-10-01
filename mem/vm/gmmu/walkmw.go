@@ -157,7 +157,7 @@ func (m *walkMW) walkPageTable() bool {
 	return madeProgress
 }
 
-func (m *walkMW) removeCompletedTranslations(state *State) {
+func (m *walkMW) removeCompletedTranslations(state *state) {
 	if len(state.ToRemoveFromPTW) == 0 {
 		return
 	}
@@ -178,7 +178,7 @@ func (m *walkMW) removeCompletedTranslations(state *State) {
 }
 
 func (m *walkMW) processRemoteMemReq(
-	state *State,
+	state *state,
 	walkingIndex int,
 ) bool {
 	if !m.bottomPort().CanSend() {
@@ -222,7 +222,7 @@ func (m *walkMW) processRemoteMemReq(
 }
 
 func (m *walkMW) finalizePageWalk(
-	state *State,
+	state *state,
 	walkingIndex int,
 ) bool {
 	ts := state.WalkingTranslations[walkingIndex]
@@ -237,7 +237,7 @@ func (m *walkMW) finalizePageWalk(
 }
 
 func (m *walkMW) doPageWalkHit(
-	state *State,
+	state *state,
 	walkingIndex int,
 ) bool {
 	if !m.topPort().CanSend() {

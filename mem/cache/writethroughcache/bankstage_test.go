@@ -22,7 +22,7 @@ var _ = Describe("Bankstage", func() {
 	BeforeEach(func() {
 		storage = mem.NewStorage(4 * mem.KB)
 
-		initialState := State{
+		initialState := state{
 			DirBuf: queueing.NewBuffer[int]("Cache.DirBuf", 4),
 			BankBufs: []queueing.Buffer[int]{
 				queueing.NewBuffer[int]("Cache.BankBuf0", 1),

@@ -20,14 +20,14 @@ import (
 // queue, and returns it, or returns nil if nothing is ready.
 type scheduler interface {
 	Name() string
-	Pick(spec *Spec, st *State, t *dramTiming) *commandState
+	Pick(spec *Spec, st *state, t *dramTiming) *commandState
 }
 
 // rowPolicy turns a queued sub-transaction into a column command, deciding the
 // open- vs close-page variant. The location is resolved by the addrMapper.
 type rowPolicy interface {
 	Name() string
-	CommandFor(newID func() uint64, spec *Spec, st *State, ref subTransRef, loc location) *commandState
+	CommandFor(newID func() uint64, spec *Spec, st *state, ref subTransRef, loc location) *commandState
 }
 
 // addrMapper maps a physical address to a DRAM location. The location keeps a
@@ -48,7 +48,7 @@ type frfcfsScheduler struct{}
 
 func (frfcfsScheduler) Name() string { return schedulerFRFCFS }
 
-func (frfcfsScheduler) Pick(spec *Spec, st *State, _ *dramTiming) *commandState {
+func (frfcfsScheduler) Pick(spec *Spec, st *state, _ *dramTiming) *commandState {
 	return getCommandToIssue(spec, st)
 }
 
@@ -64,7 +64,7 @@ func (openPageRowPolicy) Name() string { return rowPolicyOpen }
 
 func (openPageRowPolicy) CommandFor(
 	newID func() uint64,
-	_ *Spec, st *State, ref subTransRef, loc location,
+	_ *Spec, st *state, ref subTransRef, loc location,
 ) *commandState {
 	return buildColumnCommand(newID, st, ref, loc, cmdKindRead, cmdKindWrite)
 }
@@ -77,7 +77,7 @@ func (closePageRowPolicy) Name() string { return rowPolicyClose }
 
 func (closePageRowPolicy) CommandFor(
 	newID func() uint64,
-	_ *Spec, st *State, ref subTransRef, loc location,
+	_ *Spec, st *state, ref subTransRef, loc location,
 ) *commandState {
 	return buildColumnCommand(
 		newID,
@@ -89,7 +89,7 @@ func (closePageRowPolicy) CommandFor(
 // transaction's direction.
 func buildColumnCommand(
 	newID func() uint64,
-	st *State, ref subTransRef, loc location,
+	st *state, ref subTransRef, loc location,
 	readKind, writeKind commandKind,
 ) *commandState {
 	trans := findTransaction(st, ref.TxID)
@@ -192,7 +192,7 @@ func newController(spec *Spec) *controller {
 // sub-transaction queue into a command queue: it maps the address and turns the
 // sub-transaction into a column command via the configured strategies. Returns
 // true if a sub-transaction was enqueued.
-func (c *controller) fillCommandQueue(newID func() uint64, spec *Spec, state *State) bool {
+func (c *controller) fillCommandQueue(newID func() uint64, spec *Spec, state *state) bool {
 	for i, ref := range state.SubTransQueue.Entries {
 		sub := subTransByRef(state, ref)
 		if sub == nil {
@@ -217,7 +217,7 @@ func (c *controller) fillCommandQueue(newID func() uint64, spec *Spec, state *St
 
 // subTransByRef resolves a sub-transaction reference to its current state, or
 // nil if the parent transaction is no longer present.
-func subTransByRef(state *State, ref subTransRef) *subTransState {
+func subTransByRef(state *state, ref subTransRef) *subTransState {
 	trans := findTransaction(state, ref.TxID)
 	if trans == nil ||
 		ref.SubIndex < 0 || ref.SubIndex >= len(trans.SubTransactions) {

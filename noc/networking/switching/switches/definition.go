@@ -15,7 +15,7 @@ import (
 // Definition.Builder()...Build(name), passing one port per link in Ports.Port
 // and the matching links in Resources.Links; tooling reads the same
 // declaration statically.
-var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
+var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
 		Freq: 1 * timing.GHz,
 	},
@@ -24,7 +24,7 @@ var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 }
 
 // newState creates one port complex per port, sized by the port's link.
-func newState(c *Comp) State {
+func newState(c *Comp) state {
 	ports := c.Ports.Port
 	links := c.Resources().Links
 
@@ -34,7 +34,7 @@ func newState(c *Comp) State {
 			c.Name(), len(ports), len(links)))
 	}
 
-	state := State{PortComplexes: make([]portComplexState, len(ports))}
+	state := state{PortComplexes: make([]portComplexState, len(ports))}
 	for i, port := range ports {
 		state.PortComplexes[i] = newPortComplex(port, links[i])
 	}
@@ -65,7 +65,7 @@ func newPortComplex(port messaging.Port, link Link) portComplexState {
 
 // newMiddlewares creates the middlewares. Both share the index from a port,
 // local or remote, to its port complex.
-func newMiddlewares(c *Comp) Middlewares {
+func newMiddlewares(c *Comp) middlewares {
 	if c.Resources().RoutingTable == nil {
 		panic("switches: Resources.RoutingTable is required")
 	}
@@ -79,7 +79,7 @@ func newMiddlewares(c *Comp) Middlewares {
 		}
 	}
 
-	return Middlewares{
+	return middlewares{
 		RouteForwardSend: &routeForwardSendMW{
 			comp:         c,
 			portIndex:    portIndex,

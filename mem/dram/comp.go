@@ -279,8 +279,8 @@ type dramTiming struct {
 	OtherRanks            timeTable
 }
 
-// State contains mutable runtime data for the DRAM memory controller.
-type State struct {
+// state contains mutable runtime data for the DRAM memory controller.
+type state struct {
 	ControlState  memcontrolprotocol.State `json:"control_state"`
 	CurrentCmdID  uint64                   `json:"current_cmd_id"`
 	CurrentCmdSrc messaging.RemotePort     `json:"current_cmd_src"`
@@ -518,7 +518,7 @@ func findBankState(flat *bankStatesFlat, rank, bankGroup, bank int) *bankState {
 // findTransaction returns the transaction with the given stable ID, or nil if
 // it is not present (e.g. already completed and removed). The transaction list
 // is bounded by TransactionQueueSize, so the scan is short.
-func findTransaction(state *State, txID uint64) *transactionState {
+func findTransaction(state *state, txID uint64) *transactionState {
 	for i := range state.Transactions {
 		if state.Transactions[i].ID == txID {
 			return &state.Transactions[i]
@@ -543,9 +543,9 @@ type Ports struct {
 	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
 }
 
-// Middlewares holds the DRAM controller's behavior, run in field order every
+// middlewares holds the DRAM controller's behavior, run in field order every
 // cycle.
-type Middlewares struct {
+type middlewares struct {
 	// Ctrl handles control commands.
 	Ctrl *ctrlMiddleware
 
@@ -567,4 +567,4 @@ type Middlewares struct {
 }
 
 // Comp is the DRAM memory controller component.
-type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
+type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]

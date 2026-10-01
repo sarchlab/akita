@@ -95,7 +95,7 @@ func (ep *idealEndpoint) NotifyRecv(port messaging.Port) {
 func (ep *idealEndpoint) NotifyPortFree(_ messaging.Port) {}
 
 func TestValidateState(t *testing.T) {
-	if err := modeling.ValidateState(State{}); err != nil {
+	if err := modeling.ValidateState(state{}); err != nil {
 		t.Fatalf("State failed validation: %v", err)
 	}
 }

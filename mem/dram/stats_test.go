@@ -15,64 +15,64 @@ import (
 var _ = Describe("DRAM Statistics", func() {
 	// Unit tests for stat computation functions
 	It("should compute row buffer hit rate", func() {
-		state := &dram.State{}
-		state.RowBufferHits = 3
-		state.RowBufferMisses = 7
-		Expect(dram.RowBufferHitRate(state)).To(
+		c := &dram.Comp{}
+		c.State.RowBufferHits = 3
+		c.State.RowBufferMisses = 7
+		Expect(dram.RowBufferHitRate(c)).To(
 			BeNumerically("~", 0.3, 0.001))
 	})
 
 	It("should return 0 hit rate when no accesses", func() {
-		state := &dram.State{}
-		Expect(dram.RowBufferHitRate(state)).To(Equal(0.0))
+		c := &dram.Comp{}
+		Expect(dram.RowBufferHitRate(c)).To(Equal(0.0))
 	})
 
 	It("should compute average read latency", func() {
-		state := &dram.State{}
-		state.CompletedReads = 10
-		state.TotalReadLatencyCycles = 200
-		Expect(dram.AverageReadLatency(state)).To(
+		c := &dram.Comp{}
+		c.State.CompletedReads = 10
+		c.State.TotalReadLatencyCycles = 200
+		Expect(dram.AverageReadLatency(c)).To(
 			BeNumerically("~", 20.0, 0.001))
 	})
 
 	It("should return 0 average read latency when no reads completed", func() {
-		state := &dram.State{}
-		Expect(dram.AverageReadLatency(state)).To(Equal(0.0))
+		c := &dram.Comp{}
+		Expect(dram.AverageReadLatency(c)).To(Equal(0.0))
 	})
 
 	It("should compute average write latency", func() {
-		state := &dram.State{}
-		state.CompletedWrites = 5
-		state.TotalWriteLatencyCycles = 100
-		Expect(dram.AverageWriteLatency(state)).To(
+		c := &dram.Comp{}
+		c.State.CompletedWrites = 5
+		c.State.TotalWriteLatencyCycles = 100
+		Expect(dram.AverageWriteLatency(c)).To(
 			BeNumerically("~", 20.0, 0.001))
 	})
 
 	It("should return 0 average write latency when no writes completed", func() {
-		state := &dram.State{}
-		Expect(dram.AverageWriteLatency(state)).To(Equal(0.0))
+		c := &dram.Comp{}
+		Expect(dram.AverageWriteLatency(c)).To(Equal(0.0))
 	})
 
 	It("should compute read bandwidth", func() {
-		state := &dram.State{}
-		state.BytesRead = 1024
-		state.TotalCycles = 100
-		Expect(dram.ReadBandwidth(state)).To(
+		c := &dram.Comp{}
+		c.State.BytesRead = 1024
+		c.State.TotalCycles = 100
+		Expect(dram.ReadBandwidth(c)).To(
 			BeNumerically("~", 10.24, 0.001))
 	})
 
 	It("should compute write bandwidth", func() {
-		state := &dram.State{}
-		state.BytesWritten = 2048
-		state.TotalCycles = 200
-		Expect(dram.WriteBandwidth(state)).To(
+		c := &dram.Comp{}
+		c.State.BytesWritten = 2048
+		c.State.TotalCycles = 200
+		Expect(dram.WriteBandwidth(c)).To(
 			BeNumerically("~", 10.24, 0.001))
 	})
 
 	It("should return 0 bandwidth when no cycles", func() {
-		state := &dram.State{}
-		Expect(dram.ReadBandwidth(state)).To(Equal(0.0))
-		Expect(dram.WriteBandwidth(state)).To(Equal(0.0))
+		c := &dram.Comp{}
+		Expect(dram.ReadBandwidth(c)).To(Equal(0.0))
+		Expect(dram.WriteBandwidth(c)).To(Equal(0.0))
 	})
 
 	// Integration test: verify stats accumulate during real simulation
@@ -135,9 +135,9 @@ var _ = Describe("DRAM Statistics", func() {
 		Expect(state.TotalCycles).To(BeNumerically(">", 0))
 		Expect(state.RowBufferHits + state.RowBufferMisses).To(
 			BeNumerically(">", 0))
-		Expect(dram.AverageReadLatency(state)).To(BeNumerically(">", 0))
-		Expect(dram.AverageWriteLatency(state)).To(BeNumerically(">", 0))
-		Expect(dram.ReadBandwidth(state)).To(BeNumerically(">", 0))
-		Expect(dram.WriteBandwidth(state)).To(BeNumerically(">", 0))
+		Expect(dram.AverageReadLatency(dramComp)).To(BeNumerically(">", 0))
+		Expect(dram.AverageWriteLatency(dramComp)).To(BeNumerically(">", 0))
+		Expect(dram.ReadBandwidth(dramComp)).To(BeNumerically(">", 0))
+		Expect(dram.WriteBandwidth(dramComp)).To(BeNumerically(">", 0))
 	})
 })

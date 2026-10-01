@@ -234,7 +234,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 	It("should handle control pause", func() {
 		spec := comp.Spec()
-		comp.State = State{
+		comp.State = state{
 			CurrentState: mmuCacheStateEnable,
 			Table:        initSets(spec.NumLevels, spec.NumBlocks),
 		}

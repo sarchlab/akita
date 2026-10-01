@@ -32,7 +32,7 @@ func (m *respondMW) Handle(_ timing.Event) bool {
 	return progress
 }
 
-func (m *respondMW) respond(spec *Spec, next *State) bool {
+func (m *respondMW) respond(spec *Spec, next *state) bool {
 	for i := range next.Transactions {
 		t := &next.Transactions[i]
 		if isTransactionCompleted(t) {
@@ -48,7 +48,7 @@ func (m *respondMW) respond(spec *Spec, next *State) bool {
 
 func (m *respondMW) finalizeTransaction(
 	spec *Spec,
-	state *State,
+	state *state,
 	t *transactionState,
 	i int,
 ) bool {
@@ -68,7 +68,7 @@ func (m *respondMW) finalizeTransaction(
 }
 
 func (m *respondMW) finalizeWriteTrans(
-	state *State,
+	state *state,
 	t *transactionState,
 	i int,
 ) bool {
@@ -96,7 +96,7 @@ func (m *respondMW) finalizeWriteTrans(
 }
 
 func (m *respondMW) finalizeReadTrans(
-	state *State,
+	state *state,
 	t *transactionState,
 	i int,
 ) bool {
@@ -129,7 +129,7 @@ func (m *respondMW) finalizeReadTrans(
 // all refer to transactions by stable ID, and a completed transaction has no
 // outstanding references (its sub-transactions were drained from the queues and
 // retired from the pending-completion list before it could be finalized).
-func (m *respondMW) removeTransaction(state *State, idx int) {
+func (m *respondMW) removeTransaction(state *state, idx int) {
 	state.Transactions = append(
 		state.Transactions[:idx],
 		state.Transactions[idx+1:]...,
