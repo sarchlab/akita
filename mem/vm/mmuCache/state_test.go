@@ -8,7 +8,7 @@ import (
 )
 
 func TestValidateState(t *testing.T) {
-	if err := modeling.ValidateState(State{}); err != nil {
+	if err := modeling.ValidateState(state{}); err != nil {
 		t.Errorf("ValidateState(State{}) = %v, want nil", err)
 	}
 }
@@ -25,7 +25,7 @@ func TestStateWithTable(t *testing.T) {
 	setUpdate(&table[1], 1, vm.PID(2), 0x200)
 	setVisit(&table[1], 1)
 
-	s := State{
+	s := state{
 		CurrentState: mmuCacheStateEnable,
 		Table:        table,
 	}
@@ -66,7 +66,7 @@ func TestStatePauseDefaults(t *testing.T) {
 		LatencyPerLevel: 50,
 	}
 
-	s := State{
+	s := state{
 		CurrentState: mmuCacheStatePause,
 		Table:        initSets(spec.NumLevels, spec.NumBlocks),
 	}

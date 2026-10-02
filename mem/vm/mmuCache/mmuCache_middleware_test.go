@@ -34,25 +34,24 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
-		comp = MakeBuilder().
+		comp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				LowModulePort: messaging.RemotePort("LowModule"),
 				UpModulePort:  messaging.RemotePort("UpModule"),
 			}).
+			WithPorts(defaultPorts("MMUCache")).
 			Build("MMUCache")
 
-		assignDefaultPorts(sim, comp)
-
-		topPort = comp.GetPortByName("Top")
-		bottomPort = comp.GetPortByName("Bottom")
-		controlPort = comp.GetPortByName("Control")
+		topPort = comp.Ports.Top
+		bottomPort = comp.Ports.Bottom
+		controlPort = comp.Ports.Control
 		(&noopConn{}).PlugIn(topPort)
 		(&noopConn{}).PlugIn(bottomPort)
 		(&noopConn{}).PlugIn(controlPort)
 
-		mw = &mmuCacheMiddleware{comp: comp}
+		mw = comp.Middlewares.Cache
 	})
 
 	It("should send full latency on miss", func() {
@@ -94,7 +93,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		req.TrafficClass = "vmprotocol.TranslationReq"
 
 		// Compute seg and wayID for level 1
-		spec := comp.Spec()
+		spec := comp.Spec
 		seg := segForLevelSpec(spec, 1, req.VAddr)
 		wayID := setIDForSegSpec(spec, seg)
 
@@ -136,7 +135,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 		madeProgress := mw.handleRsp(rsp)
 
-		spec := comp.Spec()
+		spec := comp.Spec
 		next := &comp.State
 		Expect(madeProgress).To(BeTrue())
 
@@ -156,7 +155,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 	It("drops the addressed page's segments while a sibling page survives", func() {
 		pid := vm.PID(1)
-		spec := comp.Spec()
+		spec := comp.Spec
 
 		// dropAddr and keepAddr share their upper-level (level-1) segment
 		// but differ at level 0. A page-walk cache stores per-level VPN
@@ -182,7 +181,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 			setVisit(&next.Table[level], setIDForSegSpec(spec, keepSeg))
 		}
 
-		ctrl := &ctrlMiddleware{comp: comp}
+		ctrl := comp.Middlewares.Ctrl
 		req := memcontrolprotocol.Req{
 			Command:   memcontrolprotocol.CmdInvalidate,
 			Addresses: []uint64{dropAddr},

@@ -7,32 +7,32 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
-	"github.com/sarchlab/akita/v5/tracing"
-
-	// walkMW handles the top→page-table walk path:
-	// parseFromTop, startWalking, walkPageTable, removeCompletedTranslations,
-	// processRemoteMemReq, finalizePageWalk, doPageWalkHit.
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
+// walkMW handles the top→page-table walk path:
+// parseFromTop, startWalking, walkPageTable, removeCompletedTranslations,
+// processRemoteMemReq, finalizePageWalk, doPageWalkHit.
 type walkMW struct {
-	comp      *modeling.Component[Spec, State, Resources]
+	comp *Comp
+
+	// pageTable is Resources.PageTable, taken by newMiddlewares.
 	pageTable vm.PageTable
 }
 
 func (m *walkMW) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
 func (m *walkMW) bottomPort() messaging.Port {
-	return m.comp.GetPortByName("Bottom")
+	return m.comp.Ports.Bottom
 }
 
-// Tick runs the walk stages. Paused GMMUs make no progress; draining
+// Handle runs the walk stages. Paused GMMUs make no progress; draining
 // GMMUs continue page-table walks but accept no new requests.
-func (m *walkMW) Tick() bool {
+func (m *walkMW) Handle(_ timing.Event) bool {
 	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
@@ -48,7 +48,7 @@ func (m *walkMW) Tick() bool {
 }
 
 func (m *walkMW) parseFromTop() bool {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 
 	reqI, ok := m.topPort().PeekIncoming()
@@ -85,11 +85,11 @@ func (m *walkMW) parseFromTop() bool {
 }
 
 func (m *walkMW) startWalking(req vmprotocol.TranslationReq) {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 
 	recvTaskID := tracing.MsgIDAtReceiver(req, m.comp)
-	walkTaskID := m.comp.Simulation().NewID()
+	walkTaskID := m.comp.NewID()
 
 	ts := transactionState{
 		ReqID:      req.ID,
@@ -126,7 +126,7 @@ func (m *walkMW) walkPageTable() bool {
 	}
 
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	for i := 0; i < len(state.WalkingTranslations); i++ {
 		if state.WalkingTranslations[i].CycleLeft > 0 {
@@ -157,7 +157,7 @@ func (m *walkMW) walkPageTable() bool {
 	return madeProgress
 }
 
-func (m *walkMW) removeCompletedTranslations(state *State) {
+func (m *walkMW) removeCompletedTranslations(state *state) {
 	if len(state.ToRemoveFromPTW) == 0 {
 		return
 	}
@@ -178,18 +178,18 @@ func (m *walkMW) removeCompletedTranslations(state *State) {
 }
 
 func (m *walkMW) processRemoteMemReq(
-	state *State,
+	state *state,
 	walkingIndex int,
 ) bool {
 	if !m.bottomPort().CanSend() {
 		return false
 	}
 
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	walking := state.WalkingTranslations[walkingIndex]
 
 	req := vmprotocol.TranslationReq{}
-	req.ID = m.comp.Simulation().NewID()
+	req.ID = m.comp.NewID()
 	req.Src = m.bottomPort().AsRemote()
 	req.Dst = spec.LowModule
 	req.PID = vm.PID(walking.PID)
@@ -222,7 +222,7 @@ func (m *walkMW) processRemoteMemReq(
 }
 
 func (m *walkMW) finalizePageWalk(
-	state *State,
+	state *state,
 	walkingIndex int,
 ) bool {
 	ts := state.WalkingTranslations[walkingIndex]
@@ -237,7 +237,7 @@ func (m *walkMW) finalizePageWalk(
 }
 
 func (m *walkMW) doPageWalkHit(
-	state *State,
+	state *state,
 	walkingIndex int,
 ) bool {
 	if !m.topPort().CanSend() {
@@ -248,7 +248,7 @@ func (m *walkMW) doPageWalkHit(
 	rsp := vmprotocol.TranslationRsp{
 		Page: pageFromPageState(walking.Page),
 	}
-	rsp.ID = m.comp.Simulation().NewID()
+	rsp.ID = m.comp.NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = walking.ReqSrc
 	rsp.RspTo = walking.ReqID

@@ -4,7 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -14,8 +14,6 @@ type Spec struct {
 	Width         int         `json:"width"`
 	Latency       int         `json:"latency"`
 	CacheLineSize int         `json:"cache_line_size"`
-	Capacity      uint64      `json:"capacity"`
-	StorageRef    string      `json:"storage_ref"`
 }
 
 // inflightTransaction tracks an in-progress memory request with a countdown.
@@ -31,20 +29,43 @@ type inflightTransaction struct {
 	Src            messaging.RemotePort `json:"src"`
 }
 
-// State contains mutable runtime data for the ideal memory controller.
-type State struct {
+// state contains mutable runtime data for the ideal memory controller.
+type state struct {
 	InflightTransactions []inflightTransaction    `json:"inflight_transactions"`
 	ControlState         memcontrolprotocol.State `json:"control_state"`
 	CurrentCmdID         uint64                   `json:"current_cmd_id"`
 	CurrentCmdSrc        messaging.RemotePort     `json:"current_cmd_src"`
 }
 
-// Resources holds the shared resources referenced by the memory controller.
+// Resources holds the shared resources referenced by the memory controller,
+// supplied by the system builder.
 type Resources struct {
+	// Storage holds the memory's data. It is required; the system builder
+	// sizes it and may share it with other components.
 	Storage *mem.Storage
 }
 
+// Ports holds the memory controller's ports.
+type Ports struct {
+	// Top receives read and write requests and returns their responses.
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`
+
+	// Control receives enable, pause, drain, and reset commands.
+	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
+}
+
+// middlewares holds the memory controller's behavior, run in field order
+// every cycle. Control runs first so that a Pause, Drain, or Reset takes
+// effect before any Top traffic is admitted in the same cycle.
+type middlewares struct {
+	// Ctrl handles control commands.
+	Ctrl *ctrlMiddleware
+
+	// Memory admits requests, counts down their latency, and responds.
+	Memory *memMiddleware
+}
+
 // Comp is an ideal memory controller that always responds to a request in a
-// fixed number of cycles, with no limit on concurrency. It is a
-// modeling.Component specialized to this package's Spec, State, and Resources.
-type Comp = modeling.Component[Spec, State, Resources]
+// fixed number of cycles, with no limit on concurrency. It is a ticking
+// component.
+type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]

@@ -10,7 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// obFakeComp is a minimal component that satisfies both messaging.Component
+// obFakeComp is a minimal component that satisfies both messaging.PortOwner
 // (so it can own a real port) and NamedHookable (so the tracing API can emit
 // tasks on it). InvokeHook is provided by the embedded HookableBase, which is
 // how CollectTrace forwards events to a tracer.
@@ -24,13 +24,8 @@ type obFakeComp struct {
 func (c *obFakeComp) Name() string                       { return c.name }
 func (c *obFakeComp) CurrentTime() timing.VTimeInPicoSec { return c.time }
 
-func (c *obFakeComp) DeclarePort(string, ...*messaging.Role)      {}
-func (c *obFakeComp) DeclarePortGroup(string, ...*messaging.Role) {}
-func (c *obFakeComp) AssignPort(string, messaging.Port)           {}
-func (c *obFakeComp) GetPortByName(string) messaging.Port         { return nil }
-func (c *obFakeComp) Ports() []messaging.Port                     { return nil }
-func (c *obFakeComp) NotifyRecv(messaging.Port)                   {}
-func (c *obFakeComp) NotifyPortFree(messaging.Port)               {}
+func (c *obFakeComp) NotifyRecv(messaging.Port)     {}
+func (c *obFakeComp) NotifyPortFree(messaging.Port) {}
 
 // obRecordingTracer captures the task events the hook produces.
 type obRecordingTracer struct {
@@ -72,7 +67,8 @@ var _ = Describe("Outgoing buffer tracer", func() {
 		tracer = &obRecordingTracer{}
 		CollectTrace(comp, tracer)
 
-		port = messaging.NewPort(comp, 4, 4, "Comp.Bottom")
+		port = messaging.NewPort("Comp.Bottom", 4, 4)
+		port.SetOwner(comp)
 		port.SetConnection(&obFakeConn{})
 		CollectOutgoingBufferTrace(port)
 	})
@@ -144,7 +140,8 @@ var _ = Describe("Outgoing buffer tracer", func() {
 
 	It("is a no-op when the owning component is not being traced", func() {
 		untraced := &obFakeComp{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()), name: "Untraced"}
-		p2 := messaging.NewPort(untraced, 4, 4, "Untraced.Bottom")
+		p2 := messaging.NewPort("Untraced.Bottom", 4, 4)
+		p2.SetOwner(untraced)
 		p2.SetConnection(&obFakeConn{})
 		CollectOutgoingBufferTrace(p2)
 
@@ -158,4 +155,4 @@ var _ = Describe("Outgoing buffer tracer", func() {
 	})
 })
 
-func (c *obFakeComp) Simulation() timing.Simulation { return c.sim }
+func (c *obFakeComp) NewID() uint64 { return c.sim.NewID() }

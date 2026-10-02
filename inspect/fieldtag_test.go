@@ -14,18 +14,13 @@ func TestParseFieldTag(t *testing.T) {
 		wantErr string
 	}{
 		{tag: "", want: fieldTag{}},
-		{tag: "derived", want: fieldTag{Derived: true}},
 		{tag: "min=1", want: fieldTag{Min: f(1)}},
 		{tag: "max=8.5", want: fieldTag{Max: f(8.5)}},
-		{
-			tag:  "derived,min=1,max=8",
-			want: fieldTag{Derived: true, Min: f(1), Max: f(8)},
-		},
+		{tag: "min=1,max=8", want: fieldTag{Min: f(1), Max: f(8)}},
 		{tag: "min=-2,max=-1", want: fieldTag{Min: f(-2), Max: f(-1)}},
 
 		{tag: "bogus", wantErr: `unknown directive "bogus"`},
-		{tag: "derived=yes", wantErr: `"derived" takes no value`},
-		{tag: "derived,derived", wantErr: `duplicate directive "derived"`},
+		{tag: "derived", wantErr: `unknown directive "derived"`},
 		{tag: "min", wantErr: `"min" requires a value`},
 		{tag: "min=abc", wantErr: `non-numeric or non-finite value "abc"`},
 		{tag: "min=NaN", wantErr: "non-finite"},
@@ -33,7 +28,7 @@ func TestParseFieldTag(t *testing.T) {
 		{tag: "min=-Inf", wantErr: "non-finite"},
 		{tag: "min=1,min=2", wantErr: `duplicate directive "min"`},
 		{tag: "min=2,max=1", wantErr: "min=2 is greater than max=1"},
-		{tag: "derived,", wantErr: `unknown directive ""`},
+		{tag: "min=1,", wantErr: `unknown directive ""`},
 	}
 
 	for _, c := range cases {
@@ -52,8 +47,7 @@ func TestParseFieldTag(t *testing.T) {
 			continue
 		}
 
-		if got.Derived != c.want.Derived ||
-			!floatPtrEqual(got.Min, c.want.Min) ||
+		if !floatPtrEqual(got.Min, c.want.Min) ||
 			!floatPtrEqual(got.Max, c.want.Max) {
 			t.Errorf("parseFieldTag(%q) = %+v, want %+v", c.tag, got, c.want)
 		}

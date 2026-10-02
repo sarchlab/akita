@@ -1,11 +1,11 @@
 package directconnection
 
 import (
-	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/timing"
-
-	// Builder can help building directconnection.
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
+	"github.com/sarchlab/akita/v5/naming"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // defaultSpec provides the default configuration for a direct connection.
@@ -46,32 +46,21 @@ func (b Builder) Build(name string) *Comp {
 		panic("directconnection: WithSimulation is required")
 	}
 
-	sim := b.simulation
-	spec := b.spec
+	naming.MustBeValid(name)
+	modeling.MustBeCheckpointable[Spec, State](name, b.spec)
 
-	modelComp := modeling.NewBuilder[Spec, State, modeling.None]().
-		WithSimulation(sim).
-		WithFreq(spec.Freq).
-		WithSpec(spec).
-		Build(name)
-
-	// DirectConnection uses secondary tick events so it runs after primary
-	// components. Replace the primary TickingComponent created by the builder
-	// with a secondary one. Since SerialEngine.RegisterHandler overwrites by
-	// name, the final registration is for the secondary component. ✓
-	modelComp.TickingComponent = modeling.NewSecondaryTickingComponent(
-		name, sim, spec.Freq, modelComp)
-
-	mw := &middleware{
-		comp: modelComp,
-		ports: ports{
-			ports:   make([]messaging.Port, 0),
-			portMap: make(map[messaging.RemotePort]int),
-		},
+	conn := &Comp{
+		name: name,
+		spec: b.spec,
+		// A direct connection ticks on secondary events, so it runs after the
+		// components of the same cycle.
+		ticks: ticking.NewSecondaryScheduler(name, b.simulation, b.spec.Freq),
+		ports: ports{portMap: make(map[messaging.RemotePort]int)},
 	}
-	modelComp.AddMiddleware(mw)
 
-	conn := &Comp{Component: modelComp}
+	if handlers, ok := b.simulation.Engine().(timing.HandlerRegistry); ok {
+		handlers.RegisterHandler(name, conn)
+	}
 
 	b.simulation.RegisterConnection(conn)
 

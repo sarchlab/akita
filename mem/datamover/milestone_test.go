@@ -72,7 +72,7 @@ var _ = Describe("DataMover milestones", func() {
 	var (
 		engine         timing.Engine
 		sim            timing.Simulation
-		dataMover      *modeling.Component[Spec, State, modeling.None]
+		dataMover      *Comp
 		insideMem      *idealmemcontroller.Comp
 		insideStorage  *mem.Storage
 		outsideMem     *idealmemcontroller.Comp
@@ -87,7 +87,7 @@ var _ = Describe("DataMover milestones", func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		srcPort = messaging.NewPort(nil, 4, 4, "Src.Top")
+		srcPort = newDriverPort("Src.Top", 4)
 
 		memSpec := idealmemcontroller.Definition.DefaultSpec
 		memSpec.Latency = 100
@@ -95,70 +95,41 @@ var _ = Describe("DataMover milestones", func() {
 		memSpec.CacheLineSize = 64
 
 		insideStorage = mem.NewStorage(1 * mem.MB)
-		insideMem = idealmemcontroller.MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(memSpec).
-			WithResources(idealmemcontroller.Resources{Storage: insideStorage}).
-			Build("InsideMem")
-		insideMem.AssignPort("Top",
-			messaging.NewPort(insideMem, 16, 16, insideMem.Name()+".Top"))
-		insideMem.AssignPort("Control",
-			messaging.NewPort(insideMem, 16, 16, insideMem.Name()+".Control"))
+		insideMem = buildIdealMem(sim, memSpec, insideStorage, "InsideMem")
 
 		outsideStorage = mem.NewStorage(1 * mem.MB)
-		outsideMem = idealmemcontroller.MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(memSpec).
-			WithResources(idealmemcontroller.Resources{Storage: outsideStorage}).
-			Build("OutsideMem")
-		outsideMem.AssignPort("Top",
-			messaging.NewPort(outsideMem, 16, 16, outsideMem.Name()+".Top"))
-		outsideMem.AssignPort("Control",
-			messaging.NewPort(outsideMem, 16, 16, outsideMem.Name()+".Control"))
+		outsideMem = buildIdealMem(sim, memSpec, outsideStorage, "OutsideMem")
 
 		dmSpec := Definition.DefaultSpec
 		dmSpec.BufferSize = 2048
 		dmSpec.InsideByteGranularity = 64
 		dmSpec.OutsideByteGranularity = 256
 
-		dmReg := sim
-		dataMover = MakeBuilder().
-			WithSimulation(dmReg).
+		dataMover = Definition.Builder().
+			WithSimulation(sim).
 			WithSpec(dmSpec).
 			WithResources(Resources{
 				InsideMapper: &mem.SinglePortMapper{
-					Port: insideMem.GetPortByName("Top").AsRemote(),
+					Port: insideMem.Ports.Top.AsRemote(),
 				},
 				OutsideMapper: &mem.SinglePortMapper{
-					Port: outsideMem.GetPortByName("Top").AsRemote(),
+					Port: outsideMem.Ports.Top.AsRemote(),
 				},
 			}).
+			WithPorts(makePorts("DataMover", 16, 64, 64, 40960000)).
 			Build("DataMover")
 
-		assignDM := func(name string, bufSize int) {
-			p := modeling.MakePortBuilder().
-				WithSimulation(dmReg).
-				WithComponent(dataMover).
-				WithSpec(modeling.PortSpec{BufSize: bufSize}).
-				Build(name)
-			dataMover.AssignPort(name, p)
-		}
-		assignDM("Top", 16)
-		assignDM("Inside", 64)
-		assignDM("Outside", 64)
-		assignDM("Control", 40960000)
-
-		topPort = dataMover.GetPortByName("Top")
+		topPort = dataMover.Ports.Top
 
 		conn = directconnection.MakeBuilder().
 			WithSimulation(sim).
 			Build("Conn")
 		conn.PlugIn(srcPort)
 		conn.PlugIn(topPort)
-		conn.PlugIn(dataMover.GetPortByName("Inside"))
-		conn.PlugIn(dataMover.GetPortByName("Outside"))
-		conn.PlugIn(insideMem.GetPortByName("Top"))
-		conn.PlugIn(outsideMem.GetPortByName("Top"))
+		conn.PlugIn(dataMover.Ports.Inside)
+		conn.PlugIn(dataMover.Ports.Outside)
+		conn.PlugIn(insideMem.Ports.Top)
+		conn.PlugIn(outsideMem.Ports.Top)
 
 		// Attach the recorder before driving so MsgIDAtReceiver and
 		// MsgIDAtIncomingBuffer hand out real task IDs (they return 0 when there
@@ -177,7 +148,7 @@ var _ = Describe("DataMover milestones", func() {
 		}
 		outsideStorage.Write(0, data)
 
-		req := datamoverprotocol.DataMoveRequest{}
+		req := datamoverprotocol.DataMoveReq{}
 		req.ID = sim.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = topPort.AsRemote()
@@ -186,7 +157,7 @@ var _ = Describe("DataMover milestones", func() {
 		req.DstAddress = 0
 		req.DstSide = "inside"
 		req.ByteSize = 4096
-		req.TrafficClass = "datamoverprotocol.DataMoveRequest"
+		req.TrafficClass = "datamoverprotocol.DataMoveReq"
 
 		topPort.Deliver(req)
 
@@ -197,7 +168,7 @@ var _ = Describe("DataMover milestones", func() {
 		value0, present0 := srcPort.RetrieveIncoming()
 		Expect(present0).To(BeTrue())
 		Expect(value0).To(
-			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
+			BeAssignableToTypeOf(datamoverprotocol.DataMoveRsp{}))
 
 		// (a) The admission milestone lands on the buffer task, not on req_in.
 		bufID := rec.taskID(tracing.IncomingBufferTaskKind)
@@ -230,7 +201,7 @@ var _ = Describe("DataMover milestones", func() {
 		}
 		outsideStorage.Write(0, data)
 
-		req := datamoverprotocol.DataMoveRequest{}
+		req := datamoverprotocol.DataMoveReq{}
 		req.ID = sim.NewID()
 		req.Src = srcPort.AsRemote()
 		req.Dst = topPort.AsRemote()
@@ -239,7 +210,7 @@ var _ = Describe("DataMover milestones", func() {
 		req.DstAddress = 0
 		req.DstSide = "inside"
 		req.ByteSize = 4096
-		req.TrafficClass = "datamoverprotocol.DataMoveRequest"
+		req.TrafficClass = "datamoverprotocol.DataMoveReq"
 
 		topPort.Deliver(req)
 
@@ -251,7 +222,7 @@ var _ = Describe("DataMover milestones", func() {
 		value1, present1 := srcPort.RetrieveIncoming()
 		Expect(present1).To(BeTrue())
 		Expect(value1).To(
-			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
+			BeAssignableToTypeOf(datamoverprotocol.DataMoveRsp{}))
 
 		reqInID := rec.taskID("req_in")
 		Expect(reqInID).ToNot(BeZero())
@@ -262,11 +233,11 @@ var _ = Describe("DataMover milestones", func() {
 		var hasData, hasSubTask bool
 		for _, ms := range reqInMs {
 			if ms.Kind == tracing.MilestoneKindData &&
-				ms.What == dataMover.GetPortByName("Outside").Name() {
+				ms.What == dataMover.Ports.Outside.Name() {
 				hasData = true
 			}
 			if ms.Kind == tracing.MilestoneKindSubTask &&
-				ms.What == dataMover.GetPortByName("Inside").Name() {
+				ms.What == dataMover.Ports.Inside.Name() {
 				hasSubTask = true
 			}
 		}
@@ -284,8 +255,8 @@ var _ = Describe("DataMover milestones", func() {
 		}
 		outsideStorage.Write(0, data)
 
-		makeMove := func() datamoverprotocol.DataMoveRequest {
-			req := datamoverprotocol.DataMoveRequest{}
+		makeMove := func() datamoverprotocol.DataMoveReq {
+			req := datamoverprotocol.DataMoveReq{}
 			req.ID = sim.NewID()
 			req.Src = srcPort.AsRemote()
 			req.Dst = topPort.AsRemote()
@@ -294,7 +265,7 @@ var _ = Describe("DataMover milestones", func() {
 			req.DstAddress = 0
 			req.DstSide = "inside"
 			req.ByteSize = 4096
-			req.TrafficClass = "datamoverprotocol.DataMoveRequest"
+			req.TrafficClass = "datamoverprotocol.DataMoveReq"
 			return req
 		}
 
@@ -313,11 +284,11 @@ var _ = Describe("DataMover milestones", func() {
 		value2, present2 := srcPort.RetrieveIncoming()
 		Expect(present2).To(BeTrue())
 		Expect(value2).To(
-			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
+			BeAssignableToTypeOf(datamoverprotocol.DataMoveRsp{}))
 		value3, present3 := srcPort.RetrieveIncoming()
 		Expect(present3).To(BeTrue())
 		Expect(value3).To(
-			BeAssignableToTypeOf(datamoverprotocol.DataMoveResponse{}))
+			BeAssignableToTypeOf(datamoverprotocol.DataMoveRsp{}))
 
 		// Two req_in tasks opened and both were closed (one per request), so the
 		// second request was processed, not dropped.

@@ -2,7 +2,7 @@ package dram
 
 // tickBanks counts down the per-next-command timing gaps on every bank.
 // Returns true if any gap was decremented.
-func tickBanks(state *State) bool {
+func tickBanks(state *state) bool {
 	madeProgress := false
 
 	for i := range state.BankStates.Entries {
@@ -35,7 +35,7 @@ func tickBank(bs *bankState) bool {
 // This is the data-return timeline, decoupled from bank occupancy: multiple
 // reads/writes may be in flight on the same bank, each completing on its own
 // schedule, while the bank accepts further column commands per the timing table.
-func processPendingCompletions(state *State) []uint64 {
+func processPendingCompletions(state *state) []uint64 {
 	if len(state.PendingCompletions) == 0 {
 		return nil
 	}
@@ -59,7 +59,7 @@ func processPendingCompletions(state *State) []uint64 {
 // markSubTransCompleted flags the referenced sub-transaction as completed and
 // returns its (trace task) ID. A stale reference (parent transaction already
 // removed) is a safe no-op that reports ok=false.
-func markSubTransCompleted(state *State, ref subTransRef) (uint64, bool) {
+func markSubTransCompleted(state *state, ref subTransRef) (uint64, bool) {
 	t := findTransaction(state, ref.TxID)
 	if t == nil {
 		return 0, false
@@ -80,7 +80,7 @@ func isReadOrWrite(kind commandKind) bool {
 
 // getReadyCommand checks if a command can be issued to the bank.
 // It returns a copy of the command with the required kind, or nil.
-func getReadyCommand(spec *Spec, state *State, bs *bankState, cmd *commandState) *commandState {
+func getReadyCommand(spec *Spec, state *state, bs *bankState, cmd *commandState) *commandState {
 	requiredKind := getRequiredCommandKind(bs, cmd)
 	if requiredKind == numCmdKind {
 		return nil
@@ -103,7 +103,7 @@ func getReadyCommand(spec *Spec, state *State, bs *bankState, cmd *commandState)
 
 // canActivateUnderTFAW checks whether issuing an activate on the given rank
 // would violate the tFAW constraint.
-func canActivateUnderTFAW(spec *Spec, state *State, rank int) bool {
+func canActivateUnderTFAW(spec *Spec, state *state, rank int) bool {
 	history := findActivateHistory(&state.BankStates, rank)
 	if history == nil {
 		return true
@@ -165,7 +165,7 @@ func getRequiredCommandKind(bs *bankState, cmd *commandState) commandKind {
 // "busy": next-command eligibility is governed solely by the timing table
 // (CyclesToCmdAvailable), the state machine, and tFAW, which is what allows
 // pipelined column commands without conflating bus occupancy with data latency.
-func startCommand(cmdCycles map[commandKind]int, state *State, bs *bankState, cmd *commandState) {
+func startCommand(cmdCycles map[commandKind]int, state *state, bs *bankState, cmd *commandState) {
 	kind := commandKind(cmd.Kind)
 
 	if isReadOrWrite(kind) {
@@ -216,7 +216,7 @@ func startCommand(cmdCycles map[commandKind]int, state *State, bs *bankState, cm
 
 // updateTiming updates timing constraints across all banks after a command
 // is issued.
-func updateTiming(timing dramTiming, state *State, cmd *commandState) {
+func updateTiming(timing dramTiming, state *state, cmd *commandState) {
 	kind := commandKind(cmd.Kind)
 
 	switch kind {
@@ -229,7 +229,7 @@ func updateTiming(timing dramTiming, state *State, cmd *commandState) {
 }
 
 // updateAllBankTiming iterates over all banks and applies timing constraints.
-func updateAllBankTiming(timing dramTiming, state *State, cmd *commandState) {
+func updateAllBankTiming(timing dramTiming, state *state, cmd *commandState) {
 	kind := commandKind(cmd.Kind)
 	flat := &state.BankStates
 
@@ -268,7 +268,7 @@ func updateAllBankTiming(timing dramTiming, state *State, cmd *commandState) {
 
 // recordActivateTimestamp records the current tick as an activate timestamp
 // for the given rank and keeps only the last 4 (the tFAW window).
-func recordActivateTimestamp(state *State, rank int) {
+func recordActivateTimestamp(state *state, rank int) {
 	history := findActivateHistory(&state.BankStates, rank)
 	if history == nil {
 		return

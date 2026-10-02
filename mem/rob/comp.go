@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -51,13 +52,34 @@ type transactionState struct {
 	RspData []byte `json:"rsp_data,omitempty"`
 }
 
-// State contains mutable runtime data for a reorder buffer.
-type State struct {
+// state contains mutable runtime data for a reorder buffer.
+type state struct {
 	Transactions  []transactionState       `json:"transactions"`
 	ControlState  memcontrolprotocol.State `json:"control_state"`
 	CurrentCmdID  uint64                   `json:"current_cmd_id"`
 	CurrentCmdSrc messaging.RemotePort     `json:"current_cmd_src"`
 }
 
+// Ports holds the reorder buffer's ports.
+type Ports struct {
+	// Top receives memory requests and returns their responses in request
+	// order.
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`
+
+	// Bottom forwards the requests to the bottom unit and receives its
+	// responses in any order.
+	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.requester"`
+
+	// Control receives enable, pause, drain, and reset commands.
+	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
+}
+
+// middlewares holds the reorder buffer's behavior.
+type middlewares struct {
+	// Pipeline handles control commands, forwards requests, and releases
+	// responses in order.
+	Pipeline *middleware
+}
+
 // Comp is a reorder buffer component.
-type Comp = modeling.Component[Spec, State, modeling.None]
+type Comp = ticking.Component[Spec, state, modeling.None, Ports, middlewares]

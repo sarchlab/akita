@@ -8,194 +8,25 @@
 // of the req_in task it is currently handling. That makes every downstream
 // task a child of the task that caused it, so the whole hierarchy forms one
 // task tree. A custom tracer attached to every component prints that tree.
+//
+// The three component types live in the client, cache, and memory packages,
+// one component per package; this file is the system builder that wires them
+// together.
 package main
 
 import (
 	"fmt"
 	"strings"
 
+	"github.com/sarchlab/akita/v5/examples/tasktree/cache"
+	"github.com/sarchlab/akita/v5/examples/tasktree/client"
+	"github.com/sarchlab/akita/v5/examples/tasktree/memory"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
-
-// --- Messages ---
-
-type readReq struct {
-	messaging.MsgMeta
-}
-
-type readRsp struct {
-	messaging.MsgMeta
-}
-
-func newReq(ids timing.Simulation, src, dst messaging.RemotePort) readReq {
-	return readReq{MsgMeta: messaging.MsgMeta{
-		ID: ids.NewID(), Src: src, Dst: dst}}
-}
-
-func newRsp(ids timing.Simulation, src, dst messaging.RemotePort, rspTo uint64) readRsp {
-	return readRsp{MsgMeta: messaging.MsgMeta{
-		ID: ids.NewID(), Src: src, Dst: dst, RspTo: rspTo}}
-}
-
-// --- Client ---
-
-type clientState struct {
-	ReqsToSend int                  `json:"reqs_to_send"`
-	Dst        messaging.RemotePort `json:"dst"`
-}
-
-type ClientComp = modeling.Component[modeling.None, clientState, modeling.None]
-
-type clientMW struct {
-	comp     *ClientComp
-	inFlight map[uint64]readReq
-}
-
-func (m *clientMW) Tick() bool {
-	p := false
-	p = m.receive() || p
-	p = m.send() || p
-	return p
-}
-
-func (m *clientMW) send() bool {
-	s := &m.comp.State
-	port := m.comp.GetPortByName("Out")
-	if s.ReqsToSend == 0 || len(m.inFlight) > 0 || !port.CanSend() {
-		return false
-	}
-
-	req := newReq(m.comp.Simulation(), port.AsRemote(), s.Dst)
-	tracing.TraceReqInitiate(m.comp, req, 0) // root task, no parent
-	port.Send(req)
-	m.inFlight[req.ID] = req
-	s.ReqsToSend--
-	return true
-}
-
-func (m *clientMW) receive() bool {
-	port := m.comp.GetPortByName("Out")
-	msg, ok := port.PeekIncoming()
-	if !ok {
-		return false
-	}
-	rsp := msg.(readRsp)
-	if req, ok := m.inFlight[rsp.RspTo]; ok {
-		tracing.TraceReqFinalize(m.comp, req)
-		delete(m.inFlight, rsp.RspTo)
-	}
-	port.RetrieveIncoming()
-	return true
-}
-
-// --- Cache (reused for L1 and L2) ---
-
-type cacheState struct {
-	DownstreamDst messaging.RemotePort `json:"downstream_dst"`
-}
-
-type CacheComp = modeling.Component[modeling.None, cacheState, modeling.None]
-
-type cacheTxn struct {
-	upReq   readReq
-	downReq readReq
-}
-
-type cacheMW struct {
-	comp *CacheComp
-	txns map[uint64]cacheTxn // keyed by downstream request id
-}
-
-func (m *cacheMW) Tick() bool {
-	p := false
-	p = m.forwardDown() || p
-	p = m.respondUp() || p
-	return p
-}
-
-// forwardDown takes an upstream request and, on a "miss", initiates a child
-// request to the next level down.
-func (m *cacheMW) forwardDown() bool {
-	top := m.comp.GetPortByName("Top")
-	bottom := m.comp.GetPortByName("Bottom")
-
-	if !bottom.CanSend() {
-		return false
-	}
-	msg, ok := top.PeekIncoming()
-	if !ok {
-		return false
-	}
-	upReq := msg.(readReq)
-
-	// Open the handling task for the request we received.
-	tracing.TraceReqReceive(m.comp, upReq) // req_in @ this cache
-
-	// Miss: send a request one level down, parented to the task above.
-	downReq := newReq(m.comp.Simulation(), bottom.AsRemote(), m.comp.State.DownstreamDst)
-	tracing.TraceReqInitiate(m.comp, downReq, tracing.MsgIDAtReceiver(upReq, m.comp))
-	bottom.Send(downReq)
-
-	m.txns[downReq.ID] = cacheTxn{upReq: upReq, downReq: downReq}
-	top.RetrieveIncoming()
-	return true
-}
-
-// respondUp takes a downstream response and answers the original requester.
-func (m *cacheMW) respondUp() bool {
-	top := m.comp.GetPortByName("Top")
-	bottom := m.comp.GetPortByName("Bottom")
-
-	if !top.CanSend() {
-		return false
-	}
-	msg, ok := bottom.PeekIncoming()
-	if !ok {
-		return false
-	}
-	downRsp := msg.(readRsp)
-	txn := m.txns[downRsp.RspTo]
-
-	tracing.TraceReqFinalize(m.comp, txn.downReq) // close the downstream task
-
-	upRsp := newRsp(m.comp.Simulation(), top.AsRemote(), txn.upReq.Src, txn.upReq.ID)
-	top.Send(upRsp)
-	tracing.TraceReqComplete(m.comp, txn.upReq) // close the handling task
-
-	delete(m.txns, downRsp.RspTo)
-	bottom.RetrieveIncoming()
-	return true
-}
-
-// --- Memory (leaf) ---
-
-type MemComp = modeling.Component[modeling.None, modeling.None, modeling.None]
-
-type memMW struct {
-	comp *MemComp
-}
-
-func (m *memMW) Tick() bool {
-	port := m.comp.GetPortByName("Top")
-	msg, ok := port.PeekIncoming()
-	if !ok {
-		return false
-	}
-	if !port.CanSend() {
-		return false
-	}
-	req := msg.(readReq)
-
-	tracing.TraceReqReceive(m.comp, req) // req_in @ Memory — a leaf task
-	port.Send(newRsp(m.comp.Simulation(), port.AsRemote(), req.Src, req.ID))
-	tracing.TraceReqComplete(m.comp, req)
-	port.RetrieveIncoming()
-	return true
-}
 
 // --- A custom tracer that prints the task tree ---
 
@@ -243,73 +74,58 @@ func (t *treeTracer) print() {
 
 // --- Wiring ---
 
-func buildClient(sim timing.Simulation) *ClientComp {
-	c := modeling.NewBuilder[modeling.None, clientState, modeling.None]().
-		WithSimulation(sim).WithFreq(1 * timing.GHz).Build("Client")
-	c.AddMiddleware(&clientMW{comp: c, inFlight: map[uint64]readReq{}})
-	c.DeclarePort("Out")
-	c.AssignPort("Out", messaging.NewPort(c, 4, 4, "Client.Out"))
-	sim.RegisterComponent(c)
+// buildCache builds a cache level that forwards its misses to lower, the Top
+// port of the level below.
+func buildCache(sim timing.Simulation, name string, lower messaging.Port) *cache.Comp {
+	spec := cache.Definition.DefaultSpec
+	spec.Downstream = lower.AsRemote()
 
-	return c
-}
-
-func buildCache(sim timing.Simulation, name string) *CacheComp {
-	c := modeling.NewBuilder[modeling.None, cacheState, modeling.None]().
-		WithSimulation(sim).WithFreq(1 * timing.GHz).Build(name)
-	c.AddMiddleware(&cacheMW{comp: c, txns: map[uint64]cacheTxn{}})
-	c.DeclarePort("Top")
-	c.AssignPort("Top", messaging.NewPort(c, 4, 4, name+".Top"))
-	c.DeclarePort("Bottom")
-	c.AssignPort("Bottom", messaging.NewPort(c, 4, 4, name+".Bottom"))
-	sim.RegisterComponent(c)
-
-	return c
-}
-
-func buildMemory(sim timing.Simulation) *MemComp {
-	mem := modeling.NewBuilder[modeling.None, modeling.None, modeling.None]().
-		WithSimulation(sim).WithFreq(1 * timing.GHz).Build("Memory")
-	mem.AddMiddleware(&memMW{comp: mem})
-	mem.DeclarePort("Top")
-	mem.AssignPort("Top", messaging.NewPort(mem, 4, 4, "Memory.Top"))
-	sim.RegisterComponent(mem)
-
-	return mem
+	return cache.Definition.Builder().
+		WithSimulation(sim).
+		WithSpec(spec).
+		WithPorts(cache.Ports{
+			Top:    messaging.NewPort(name+".Top", 4, 4),
+			Bottom: messaging.NewPort(name+".Bottom", 4, 4),
+		}).
+		Build(name)
 }
 
 func main() {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
 
-	client := buildClient(sim)
-	l1 := buildCache(sim, "L1")
-	l2 := buildCache(sim, "L2")
-	mem := buildMemory(sim)
+	// Build bottom-up, so each level's Spec can name the port of the level
+	// below it.
+	mem := memory.Definition.Builder().
+		WithSimulation(sim).
+		WithPorts(memory.Ports{Top: messaging.NewPort("Memory.Top", 4, 4)}).
+		Build("Memory")
+	l2 := buildCache(sim, "L2", mem.Ports.Top)
+	l1 := buildCache(sim, "L1", l2.Ports.Top)
+
+	clientSpec := client.Definition.DefaultSpec
+	clientSpec.Dst = l1.Ports.Top.AsRemote()
+	cli := client.Definition.Builder().
+		WithSimulation(sim).
+		WithSpec(clientSpec).
+		WithPorts(client.Ports{Out: messaging.NewPort("Client.Out", 4, 4)}).
+		Build("Client")
 
 	connect := func(name string, a, b messaging.Port) {
 		conn := directconnection.MakeBuilder().WithSimulation(sim).Build(name)
 		conn.PlugIn(a)
 		conn.PlugIn(b)
 	}
-	connect("ConnClientL1", client.GetPortByName("Out"), l1.GetPortByName("Top"))
-	connect("ConnL1L2", l1.GetPortByName("Bottom"), l2.GetPortByName("Top"))
-	connect("ConnL2Mem", l2.GetPortByName("Bottom"), mem.GetPortByName("Top"))
-
-	l1.State.DownstreamDst = l2.GetPortByName("Top").AsRemote()
-	l2.State.DownstreamDst = mem.GetPortByName("Top").AsRemote()
+	connect("ConnClientL1", cli.Ports.Out, l1.Ports.Top)
+	connect("ConnL1L2", l1.Ports.Bottom, l2.Ports.Top)
+	connect("ConnL2Mem", l2.Ports.Bottom, mem.Ports.Top)
 
 	tracer := &treeTracer{nodes: map[uint64]taskNode{}}
-	for _, c := range []tracing.NamedHookable{client, l1, l2, mem} {
+	for _, c := range []tracing.NamedHookable{cli, l1, l2, mem} {
 		tracing.CollectTrace(c, tracer)
 	}
 
-	cs := client.State
-	cs.Dst = l1.GetPortByName("Top").AsRemote()
-	cs.ReqsToSend = 1
-	client.State = cs
-
-	client.TickLater()
+	cli.TickLater()
 	if err := engine.Run(); err != nil {
 		panic(err)
 	}

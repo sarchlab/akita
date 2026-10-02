@@ -17,8 +17,8 @@ conn := directconnection.MakeBuilder().
     WithSpec(directconnection.DefaultSpec()).
     Build("conn")
 
-conn.PlugIn(componentA.GetPortByName("Top"))
-conn.PlugIn(componentB.GetPortByName("Top"))
+conn.PlugIn(componentA.Ports.Top)
+conn.PlugIn(componentB.Ports.Top)
 ```
 
 `directconnection.Comp` is a ticking component that forwards messages

@@ -3,7 +3,6 @@ package endpoint
 import (
 	"math"
 
-	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 
 	"github.com/sarchlab/akita/v5/timing"
@@ -14,7 +13,7 @@ import (
 )
 
 func msgMetaToFlits(
-	ids timing.Simulation,
+	newID func() uint64,
 	meta messaging.MsgMeta,
 	spec Spec,
 	networkPortRemote messaging.RemotePort,
@@ -33,7 +32,7 @@ func msgMetaToFlits(
 	for i := 0; i < numFlit; i++ {
 		flits[i] = packetization.Flit{
 			MsgMeta: messaging.MsgMeta{
-				ID:  ids.NewID(),
+				ID:  newID(),
 				Src: networkPortRemote,
 				Dst: defaultSwitchDst,
 			},
@@ -57,19 +56,18 @@ func msgMetaToFlits(
 // outgoingMW handles the device→network path:
 // sendFlitOut, prepareMsg, prepareFlits.
 type outgoingMW struct {
-	comp             *modeling.Component[Spec, State, modeling.None]
-	devicePorts      []messaging.Port
-	defaultSwitchDst messaging.RemotePort
+	comp        *Comp
+	devicePorts []messaging.Port
 }
 
 // networkPort resolves the endpoint's network port by name. The instance is
 // assigned externally after Build, so it is resolved lazily.
 func (m *outgoingMW) networkPort() messaging.Port {
-	return m.comp.GetPortByName("NetworkPort")
+	return m.comp.Ports.NetworkPort
 }
 
-// Tick runs the outgoing stages.
-func (m *outgoingMW) Tick() bool {
+// Handle runs the outgoing stages on every tick.
+func (m *outgoingMW) Handle(_ timing.Event) bool {
 	madeProgress := false
 
 	madeProgress = m.sendFlitOut() || madeProgress
@@ -81,7 +79,7 @@ func (m *outgoingMW) Tick() bool {
 
 func (m *outgoingMW) sendFlitOut() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 
 	numSent := 0
@@ -162,7 +160,7 @@ const maxFlitsToBuffer = 64
 
 func (m *outgoingMW) prepareFlits() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 	networkPortRemote := m.networkPort().AsRemote()
 
@@ -185,10 +183,10 @@ func (m *outgoingMW) prepareFlits() bool {
 		// simulation), travels in every flit as MsgTaskID, and is the parent of
 		// each per-flit flit_e2e task. It is parented to the message's own ID so
 		// it nests under that req_out when one exists.
-		msgTaskID := m.comp.Simulation().NewID()
+		msgTaskID := m.comp.NewID()
 		flits := msgMetaToFlits(
-			m.comp.Simulation(),
-			meta, spec, networkPortRemote, m.defaultSwitchDst, msgTaskID)
+			m.comp.NewID,
+			meta, spec, networkPortRemote, m.comp.Spec.DefaultSwitchDst, msgTaskID)
 
 		state.FlitsToSend = append(state.FlitsToSend, flits...)
 

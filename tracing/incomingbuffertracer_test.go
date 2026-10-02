@@ -10,7 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// ibFakeComp is a minimal component that satisfies both messaging.Component
+// ibFakeComp is a minimal component that satisfies both messaging.PortOwner
 // (so it can own a real port) and NamedHookable (so the tracing API can emit
 // tasks on it). InvokeHook is provided by the embedded HookableBase, which is
 // how CollectTrace forwards events to a tracer.
@@ -24,13 +24,8 @@ type ibFakeComp struct {
 func (c *ibFakeComp) Name() string                       { return c.name }
 func (c *ibFakeComp) CurrentTime() timing.VTimeInPicoSec { return c.time }
 
-func (c *ibFakeComp) DeclarePort(string, ...*messaging.Role)      {}
-func (c *ibFakeComp) DeclarePortGroup(string, ...*messaging.Role) {}
-func (c *ibFakeComp) AssignPort(string, messaging.Port)           {}
-func (c *ibFakeComp) GetPortByName(string) messaging.Port         { return nil }
-func (c *ibFakeComp) Ports() []messaging.Port                     { return nil }
-func (c *ibFakeComp) NotifyRecv(messaging.Port)                   {}
-func (c *ibFakeComp) NotifyPortFree(messaging.Port)               {}
+func (c *ibFakeComp) NotifyRecv(messaging.Port)     {}
+func (c *ibFakeComp) NotifyPortFree(messaging.Port) {}
 
 // ibRecordingTracer captures the task events the hook produces.
 type ibRecordingTracer struct {
@@ -60,7 +55,8 @@ var _ = Describe("Incoming buffer tracer", func() {
 		tracer = &ibRecordingTracer{}
 		CollectTrace(comp, tracer)
 
-		port = messaging.NewPort(comp, 4, 4, "Comp.Top")
+		port = messaging.NewPort("Comp.Top", 4, 4)
+		port.SetOwner(comp)
 		CollectIncomingBufferTrace(port)
 	})
 
@@ -131,7 +127,8 @@ var _ = Describe("Incoming buffer tracer", func() {
 
 	It("is a no-op when the owning component is not being traced", func() {
 		untraced := &ibFakeComp{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()), name: "Untraced"}
-		p2 := messaging.NewPort(untraced, 4, 4, "Untraced.Top")
+		p2 := messaging.NewPort("Untraced.Top", 4, 4)
+		p2.SetOwner(untraced)
 		CollectIncomingBufferTrace(p2)
 
 		untraced.time = 100
@@ -144,4 +141,4 @@ var _ = Describe("Incoming buffer tracer", func() {
 	})
 })
 
-func (c *ibFakeComp) Simulation() timing.Simulation { return c.sim }
+func (c *ibFakeComp) NewID() uint64 { return c.sim.NewID() }

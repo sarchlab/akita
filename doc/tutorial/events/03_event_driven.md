@@ -2,43 +2,44 @@
 sidebar_position: 3
 ---
 
-# Event-Driven Components
+# Wakeup and Event Components
 
-You have now seen both worlds: the default ticking component from the
-first section, and raw events scheduled directly on the engine from the
-previous two chapters. Event-driven components sit between them — they
-wear the component shape (Spec, State, ports) like the default components,
-but wake on demand like raw events instead of every cycle.
+You have now seen both worlds: ticking components from the first section,
+and raw events scheduled directly on the engine from the previous two
+chapters. Akita has three component models, and two of them sit between
+those worlds: they wear the component shape (five structs and a
+`Definition`) but have no clock.
 
-That is the right fit when a component is mostly idle, when latencies are
-easier to express as absolute times than as cycle counts, or when running
-a `Tick` every cycle would be wasted work.
+| Model | Runs when | Its middlewares |
+|---|---|---|
+| `modeling/ticking` | every cycle while it makes progress | do one cycle of work |
+| `modeling/wakeup` | a port has activity, or at a time it asked for | poll the State and ports for work that is ready |
+| `modeling/event` | an event arrives: port activity, or an event it scheduled | react to specific event types and their data |
 
-A `modeling.EventDrivenComponent` wakes only when:
+In all three, a middleware is the same thing, an event handler:
 
-- A message arrives on one of its ports, or
-- It has scheduled itself to wake at a specific time.
+```go
+type Middleware interface {
+    Handle(e timing.Event) bool
+}
+```
 
-A single `Process` function decides what work is due at each wake-up — it
-is the component-shaped counterpart to the handlers from the previous two
-chapters.
-
-This chapter walks through `examples/ping`, a ping protocol implemented as
-two event-driven components: Agent A sends ping messages, Agent B replies
-after a fixed delay.
-
-The source is in `examples/ping/`.
+The component passes every event it receives to its middlewares in field
+order. What differs between the models is only which events arrive.
 
 ## What You Will Learn
 
-- The `EventDrivenComponent` alternative to the default `Component`.
-- Implementing the `EventProcessor` interface.
-- Using `ScheduleWakeAt` for latency that does not need a tick counter.
-- When to reach for event-driven instead of the default ticking style.
+- Writing a wakeup component, using `examples/ping`.
+- Using `WakeAt` for latency that does not need a tick counter.
+- Writing an event component that schedules events carrying data.
+- Choosing between ticking, wakeup, and event.
 
-## Spec, State, Comp
+## A Wakeup Component: Ping
 
-Same shape as before:
+`examples/ping` implements a ping protocol with two wakeup components:
+Agent A sends pings, and Agent B replies after a fixed delay.
+
+### The five structs
 
 ```go
 type Spec struct{}
@@ -50,118 +51,102 @@ type State struct {
     ScheduledPings   []scheduledPing
 }
 
-type Comp = modeling.EventDrivenComponent[Spec, State, modeling.None]
+type Ports struct {
+    Out messaging.Port
+}
+
+type Middlewares struct {
+    Ping *pingMW
+}
+
+type Comp = wakeup.Component[Spec, State, modeling.None, Ports, Middlewares]
+
+var Definition = wakeup.Definition[Spec, State, modeling.None, Ports, Middlewares]{
+    DefaultSpec:    Spec{},
+    NewMiddlewares: newMiddlewares,
+}
 ```
 
-Notice the alias points at `modeling.EventDrivenComponent` rather than
-`modeling.Component`. The Spec is empty here — no `Freq` (there is no tick),
-and no port-buffer size: the builder declares the `Out` port and the instance
-is supplied externally during wiring (below).
+The Spec is empty: there is no `Freq`, because there is no clock.
 
-## The Processor
-
-Instead of one or more `Tick() bool` middlewares, an event-driven
-component has a single `Process` function:
+### The middleware
 
 ```go
-type pingProcessor struct{}
-
-func (p *pingProcessor) Process(
-    comp *modeling.EventDrivenComponent[Spec, State, modeling.None],
-    now timing.VTimeInPicoSec,
-) bool {
+func (m *pingMW) Handle(e timing.Event) bool {
+    now := e.Time()
     progress := false
-    state := &comp.State
 
-    progress = p.sendScheduledPings(comp, state, now) || progress
-    progress = p.deliverPendingResponses(comp, state, now) || progress
-    progress = p.processIncoming(comp, state, now) || progress
+    progress = m.sendScheduledPings(now) || progress
+    progress = m.deliverPendingResponses(now) || progress
+    progress = m.processIncoming(now) || progress
 
     return progress
 }
 ```
 
-`Process` is called whenever the component wakes up. It receives the
-current time, looks at its state, and does whatever work is due. The
-return value matters only for tracing — there is no "tick again next
-cycle" logic to drive.
+`Handle` runs on every wakeup. The event is a `wakeup.Event`, which
+carries nothing but its time: the middleware looks at the State and the
+port and does whatever work is due. If it made progress, the component
+wakes again at once, so it keeps running until nothing is left to do.
 
-### Sending scheduled pings
+Work that is not due yet asks for a wakeup at its time:
 
 ```go
 for _, sp := range state.ScheduledPings {
-    if sp.SendAt <= now {
-        // build pingMsg, send it, record start time
-        progress = true
-    } else {
+    if sp.SendAt > now {
         remaining = append(remaining, sp)
-        comp.ScheduleWakeAt(sp.SendAt)
+        m.comp.WakeAt(sp.SendAt)
+        continue
     }
+    // build the ping, send it, record its start time
 }
 ```
 
-`ScheduleWakeAt(t)` asks the engine to wake this component at simulated
-time `t`. If multiple wakeups are requested, only the earliest matters
-— the engine deduplicates and replaces.
+`WakeAt(t)` asks the engine to wake the component at simulated time `t`.
+Asking for a wakeup at or after one already pending does nothing, so a
+middleware asks again, each time it wakes, for the work still waiting.
 
-### Delivering responses after a fixed delay
+Responses use the same trick: a ping schedules its response two seconds
+later, with no tick counter.
 
 ```go
-case *pingReq:
+case pingReq:
     state.PendingResponses = append(state.PendingResponses,
-        pendingResponse{
-            DeliverAt: now + 2_000_000_000_000,  // 2 seconds in ps
-            Dst:       m.Src,
-            OrigMsgID: m.Meta().ID,
-            SeqID:     m.SeqID,
-        })
-    comp.ScheduleWakeAt(now + 2_000_000_000_000)
+        pendingResponse{DeliverAt: now + 2_000_000_000_000, ...})
+    m.comp.WakeAt(now + 2_000_000_000_000)
 ```
 
-This is the event-driven version of "wait two cycles before responding".
-No tick counter, no middleware running every cycle — just schedule a
-wakeup two seconds in the future and resume there.
-
-## Wiring
-
-Wiring is almost identical to the default components you have already met:
+### Wiring
 
 ```go
 engine := timing.NewSerialEngine()
 sim := modeling.NewStandaloneSimulation(engine)
 
-agentA := MakeBuilder().WithSimulation(sim).Build("AgentA")
-agentA.AssignPort("Out", modeling.MakePortBuilder().
+agentA := ping.Definition.Builder().
     WithSimulation(sim).
-    WithComponent(agentA).
-    WithSpec(modeling.PortSpec{BufSize: 4}).
-    Build("Out"))
-agentB := MakeBuilder().WithSimulation(sim).Build("AgentB")
-agentB.AssignPort("Out", modeling.MakePortBuilder().
+    WithPorts(ping.Ports{Out: messaging.NewPort("AgentA.Out", 16, 16)}).
+    Build("AgentA")
+agentB := ping.Definition.Builder().
     WithSimulation(sim).
-    WithComponent(agentB).
-    WithSpec(modeling.PortSpec{BufSize: 4}).
-    Build("Out"))
+    WithPorts(ping.Ports{Out: messaging.NewPort("AgentB.Out", 16, 16)}).
+    Build("AgentB")
 
-conn := directconnection.MakeBuilder().
-    WithSimulation(sim).
-    Build("Conn")
+conn := directconnection.MakeBuilder().WithSimulation(sim).Build("Conn")
+conn.PlugIn(agentA.Ports.Out)
+conn.PlugIn(agentB.Ports.Out)
 
-conn.PlugIn(agentA.GetPortByName("Out"))
-conn.PlugIn(agentB.GetPortByName("Out"))
-
-SchedulePing(agentA, 1, agentB.GetPortByName("Out").AsRemote())
-SchedulePing(agentA, 3, agentB.GetPortByName("Out").AsRemote())
+ping.SchedulePing(agentA, 1, agentB.Ports.Out.AsRemote())
+ping.SchedulePing(agentA, 3, agentB.Ports.Out.AsRemote())
 
 engine.Run()
 ```
 
-`SchedulePing(agent, sendAt, dst)` is a helper that appends to
-`state.ScheduledPings` and calls `agent.ScheduleWakeAt(sendAt)`. That
-single call is enough to start the simulation — there is no `TickLater`
-to call because there is no tick.
+The system builder creates each port, choosing its buffer sizes, and passes
+all of them to `Build`, which binds them to the component. `SchedulePing`
+records a ping in the State and calls `WakeAt(sendAt)`; that is enough to
+start the simulation.
 
-## Run It
+### Run it
 
 ```bash
 cd examples/ping
@@ -177,31 +162,76 @@ Ping 1, 2000000000997 ps
 
 About 2 seconds round-trip plus a tiny delivery overhead.
 
-## When to Reach for This
+## An Event Component: A Delay Line
 
-Reach for an event-driven component when it is mostly idle, when latencies
-are easier to express as absolute times than as cycle counts, or when a
-per-cycle `Tick` would be doing no work most of the time.
+An event component has no clock either, but instead of polling, its
+middlewares react to events that carry data. Port activity arrives as
+`event.Recv` and `event.PortFree`, each naming its port, and the component
+schedules its own events with `Schedule`. The example in `modeling/event` is
+a delay line that completes every request a fixed latency after it arrives:
 
-Reach for the default component (the kind you met in the first section)
-when work happens every cycle — pipeline stages, controllers, anything
-with continuous activity. The two styles share the same Spec/State/Builder
-shape, the same ports, and the same messages, so you can freely mix them
-in one simulation.
+```go
+type doneEvent struct {
+    timing.EventBase
+    ReqID uint64 `json:"req_id"`
+}
+
+func init() { timing.RegisterEvent(doneEvent{}) }
+
+func (m *delayMW) Handle(e timing.Event) bool {
+    switch e := e.(type) {
+    case event.Recv:
+        for {
+            msg, ok := m.comp.Ports.In.RetrieveIncoming()
+            if !ok {
+                break
+            }
+            m.comp.Schedule(doneEvent{
+                EventBase: m.comp.MakeEventBase(e.Time() + m.comp.Spec.Latency),
+                ReqID:     msg.Meta().ID,
+            })
+        }
+    case doneEvent:
+        m.comp.State.Done = append(m.comp.State.Done,
+            done{ID: e.ReqID, At: e.Time()})
+    default:
+        return false
+    }
+    return true
+}
+```
+
+The request's ID travels in the event itself, so there is no list of
+pending work to scan. Register every event type the component schedules
+with `timing.RegisterEvent`, so a checkpoint can hold it while it is
+pending.
+
+## Choosing a Model
+
+- **Ticking** when work happens cycle by cycle: pipeline stages, caches,
+  controllers, anything with continuous activity. It is the default.
+- **Wakeup** when the component is mostly idle and knows when it next has
+  work, and a middleware can find that work by looking at the State.
+- **Event** when the behavior is a set of distinct happenings, each with its
+  own data and time, like requests that complete after computed latencies.
+
+All three share the five structs, the ports, and the messages, so you can
+freely mix them in one simulation.
 
 ## Key Concepts
 
-- **`EventDrivenComponent` wakes on demand**, not every cycle.
-- **`Process(comp, now) bool`** replaces middleware. Do everything in
-  one function, branch on what is due.
-- **`ScheduleWakeAt(t)`** is the event-driven version of "tick later" —
-  the engine wakes you at simulated time `t`.
+- **A middleware is `Handle(e timing.Event) bool`** in every model; the
+  models differ only in which events arrive.
+- **A wakeup component polls** when woken and asks for future wakeups with
+  `WakeAt(t)`.
+- **An event component reacts** to `Recv`, `PortFree`, and the events it
+  schedules for itself with `Schedule`.
 
 ## Where to Next
 
-You now have every component pattern Akita offers — default ticking
-components, raw events for ad-hoc work, and event-driven components for
-the idle case. Together with ports and connections and the
+You now have every component pattern Akita offers — ticking components,
+raw events for ad-hoc work, and wakeup and event components for the idle
+and event-shaped cases. Together with ports and connections and the
 hooks-and-tracing tools from the earlier sections, that is the core toolkit
 for building and observing an Akita simulation. From here, explore the
 ready-made `mem/` and `noc/` packages to compose those pieces into larger

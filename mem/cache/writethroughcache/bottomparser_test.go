@@ -1,10 +1,10 @@
 package writethroughcache
 
 import (
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/queueing"
 
@@ -22,48 +22,44 @@ var _ = Describe("Bottom Parser", func() {
 	)
 
 	BeforeEach(func() {
-		initialState := State{
-			DirBuf: queueing.NewBuffer[int]("Cache.DirBuf", 4),
+		initialState := state{
+			DirBuf: queueing.MakeBuffer[int](4),
 			BankBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.BankBuf0", 4),
+				queueing.MakeBuffer[int](4),
 			},
-			DirPipeline: queueing.NewPipeline[int](4, 2),
-			DirPostBuf:  queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
+			DirPipeline: queueing.MakePipeline[int](4, 2),
+			DirPostBuf:  queueing.MakeBuffer[int](4),
 			BankPipelines: []queueing.Pipeline[int]{
-				queueing.NewPipeline[int](4, 10),
+				queueing.MakePipeline[int](4, 10),
 			},
 			BankPostBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.BankPostBuf0", 4),
+				queueing.MakeBuffer[int](4),
 			},
 		}
-
-		c = &pipelineMW{}
-		c.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
-				Log2BlockSize:    6,
-				WayAssociativity: 4,
-				NumMSHREntry:     4,
-				NumSets:          16,
-				NumBanks:         1,
-				WritePolicyType:  "write-around",
-			}).
-			Build("Cache")
-
-		// bottomPort is a real port with no owning component, so Deliver does
-		// not try to schedule a tick on the engine-less comp. The bottomParser
-		// resolves it lazily via GetPortByName("Bottom"), so it is still
-		// declared and assigned a real port.
-		bottomPort = messaging.NewPort(nil, 4, 4, "Cache.Bottom")
-		(&noopConn{}).PlugIn(bottomPort)
-		c.comp.DeclarePort("Bottom")
-		c.comp.AssignPort("Bottom", bottomPort)
 
 		// Initialize directoryState before SetState so both buffers match
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
-		c.comp.State = initialState
+		ports := makePorts("Cache", 4)
+		c = buildStageTestCache(
+			Spec{
+				Freq:             1 * timing.GHz,
+				Log2BlockSize:    6,
+				WayAssociativity: 4,
+				NumMSHREntry:     4,
+				TotalByteSize:    4 * mem.KB, // 16 sets
+				NumBanks:         1,
+				WritePolicyType:  "write-around",
+			},
+			Resources{Storage: mem.NewStorage(4 * mem.KB)},
+			ports,
+			initialState,
+		)
+
+		// The bottomParser reads responses from the cache's real Bottom port,
+		// so the tests deliver into it.
+		bottomPort = ports.Bottom
+		(&noopConn{}).PlugIn(bottomPort)
 
 		p = &bottomParser{cache: c}
 	})
@@ -78,13 +74,13 @@ var _ = Describe("Bottom Parser", func() {
 			next := &c.comp.State
 
 			writeToBottomMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -103,7 +99,7 @@ var _ = Describe("Bottom Parser", func() {
 			)
 
 			done := memprotocol.WriteDoneRsp{}
-			done.ID = c.comp.Simulation().NewID()
+			done.ID = c.comp.NewID()
 			done.RspTo = writeToBottomMeta.ID
 			done.TrafficBytes = 4
 			done.TrafficClass = "rsp"
@@ -123,12 +119,12 @@ var _ = Describe("Bottom Parser", func() {
 			next := &c.comp.State
 
 			writeToBottomMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -153,7 +149,7 @@ var _ = Describe("Bottom Parser", func() {
 			)
 
 			done := memprotocol.WriteDoneRsp{}
-			done.ID = c.comp.Simulation().NewID()
+			done.ID = c.comp.NewID()
 			done.RspTo = writeToBottomMeta.ID
 			done.TrafficBytes = 4
 			done.TrafficClass = "rsp"
@@ -182,7 +178,7 @@ var _ = Describe("Bottom Parser", func() {
 			next := &c.comp.State
 
 			readToBottomMeta = messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -198,7 +194,7 @@ var _ = Describe("Bottom Parser", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}
 			dataReady = memprotocol.DataReadyRsp{}
-			dataReady.ID = c.comp.Simulation().NewID()
+			dataReady.ID = c.comp.NewID()
 			dataReady.RspTo = readToBottomMeta.ID
 			dataReady.Data = drData
 			dataReady.TrafficBytes = len(drData) + 4
@@ -212,7 +208,7 @@ var _ = Describe("Bottom Parser", func() {
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -245,7 +241,7 @@ var _ = Describe("Bottom Parser", func() {
 
 		It("should stall if bank is busy", func() {
 			next := &c.comp.State
-			next.BankBufs[0] = queueing.NewBuffer[int]("Cache.BankBuf0", 0)
+			next.BankBufs[0] = queueing.MakeBuffer[int](0)
 
 			bottomPort.Deliver(dataReady)
 
@@ -287,7 +283,7 @@ var _ = Describe("Bottom Parser", func() {
 
 			// Add another read transaction (index 1) that is in the MSHR
 			read2Meta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -303,7 +299,7 @@ var _ = Describe("Bottom Parser", func() {
 
 			// Add a write transaction (index 2)
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 16 + 12,
 				TrafficClass: "req",
 			}
@@ -357,5 +353,4 @@ var _ = Describe("Bottom Parser", func() {
 			Expect(next.BankBufs[0].Size()).To(Equal(1))
 		})
 	})
-
 })

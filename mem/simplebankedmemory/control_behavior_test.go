@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -31,17 +32,14 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 	)
 
 	build := func() {
-
-		comp = MakeBuilder().
+		comp = Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
+			WithPorts(makePorts("BankedMem", 16, 16)).
 			Build("BankedMem")
 
-		assignPort(sim, comp, "Top", 16)
-		assignPort(sim, comp, "Control", 16)
-
-		topPort = comp.GetPortByName("Top")
-		ctrlPort = comp.GetPortByName("Control")
+		topPort = comp.Ports.Top
+		ctrlPort = comp.Ports.Control
 		for _, p := range []messaging.Port{topPort, ctrlPort} {
 			(&noopConn{}).PlugIn(p)
 		}
@@ -85,8 +83,8 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 
 		// Tick a couple of times so dispatchMW routes the reads into the
 		// bank pipelines, putting real work in flight.
-		comp.Tick()
-		comp.Tick()
+		modelingtest.Tick(comp)
+		modelingtest.Tick(comp)
 		Expect(allBanksQuiescent()).To(BeFalse())
 
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
@@ -96,7 +94,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		var drainRsp memcontrolprotocol.Rsp
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := topPort.RetrieveOutgoing()
 				if !ok {
@@ -131,7 +129,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		topPort.Deliver(makeRead(0))
 
 		for range 5 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 		}
 
 		// The request is neither consumed nor turned into work, and no
@@ -146,8 +144,8 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 	DescribeTable("Reset wipes in-flight state from any control state",
 		func(startState memcontrolprotocol.State) {
 			topPort.Deliver(makeRead(0))
-			comp.Tick()
-			comp.Tick()
+			modelingtest.Tick(comp)
+			modelingtest.Tick(comp)
 			Expect(allBanksQuiescent()).To(BeFalse())
 
 			comp.State.ControlState = startState
@@ -158,7 +156,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 			var rsp memcontrolprotocol.Rsp
 			found := false
 			for i := 0; i < 64 && !found; i++ {
-				comp.Tick()
+				modelingtest.Tick(comp)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					if r, ok := out.(memcontrolprotocol.Rsp); ok {
 						rsp = r
@@ -178,7 +176,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 			// No leftover completion is produced from the wiped-out read.
 			completion := false
 			for range 8 {
-				comp.Tick()
+				modelingtest.Tick(comp)
 				for {
 					out, ok := topPort.RetrieveOutgoing()
 					if !ok {
@@ -212,7 +210,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 
 		var rsps []memcontrolprotocol.Rsp
 		for range 16 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := ctrlPort.RetrieveOutgoing()
 				if !ok {

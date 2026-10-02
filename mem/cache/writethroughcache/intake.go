@@ -26,7 +26,7 @@ func (s *intake) Tick() bool {
 		return false
 	}
 
-	if s.countActive(next) >= s.cache.comp.Spec().MaxNumConcurrentTrans {
+	if s.countActive(next) >= s.cache.comp.Spec.MaxNumConcurrentTrans {
 		return false
 	}
 
@@ -64,7 +64,7 @@ func (s *intake) Tick() bool {
 	return true
 }
 
-func (s *intake) countActive(state *State) int {
+func (s *intake) countActive(state *state) int {
 	count := 0
 	for i := range state.Transactions {
 		if !state.Transactions[i].Removed {
@@ -81,7 +81,7 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 	switch m := msg.(type) {
 	case memprotocol.ReadReq:
 		t = transactionState{
-			ID:                 s.cache.comp.Simulation().NewID(),
+			ID:                 s.cache.comp.NewID(),
 			HasRead:            true,
 			ReadMeta:           m.MsgMeta,
 			ReadAddress:        m.Address,
@@ -90,7 +90,7 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 		}
 	case memprotocol.WriteReq:
 		t = transactionState{
-			ID:             s.cache.comp.Simulation().NewID(),
+			ID:             s.cache.comp.NewID(),
 			HasWrite:       true,
 			WriteMeta:      m.MsgMeta,
 			WriteAddress:   m.Address,
@@ -120,7 +120,7 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 // indices must stay stable). Reuse a Removed slot when one is available so the
 // slice stays bounded by the number of active transactions instead of growing
 // with every request ever issued.
-func (s *intake) allocTransaction(next *State, t transactionState) int {
+func (s *intake) allocTransaction(next *state, t transactionState) int {
 	for i := range next.Transactions {
 		if next.Transactions[i].Removed {
 			next.Transactions[i] = t

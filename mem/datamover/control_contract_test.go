@@ -31,28 +31,24 @@ func TestControlContract(t *testing.T) {
 		spec.InsideByteGranularity = 8
 		spec.OutsideByteGranularity = 8
 
-		comp := MakeBuilder().
+		comp := Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				InsideMapper:  &mem.SinglePortMapper{Port: messaging.RemotePort("InsideMem")},
 				OutsideMapper: &mem.SinglePortMapper{Port: messaging.RemotePort("OutsideMem")},
 			}).
+			WithPorts(makePorts("DataMover", 16, 16, 16, 16)).
 			Build("DataMover")
 
-		for _, name := range []string{"Top", "Inside", "Outside", "Control"} {
-			p := modeling.MakePortBuilder().
-				WithSimulation(sim).
-				WithComponent(comp).
-				WithSpec(modeling.PortSpec{BufSize: 16}).
-				Build(name)
-			comp.AssignPort(name, p)
-			(&ccNoopConn{}).PlugIn(comp.GetPortByName(name))
+		for _, p := range allPorts(comp) {
+			(&ccNoopConn{}).PlugIn(p)
 		}
 
 		return &memcontrolprotocol.Harness{
 			Comp: comp,
-			Ctrl: comp.GetPortByName("Control"),
+			Sim:  sim,
+			Ctrl: comp.Ports.Control,
 			IsQuiescent: func() bool {
 				return !comp.State.CurrentTransaction.Active
 			},

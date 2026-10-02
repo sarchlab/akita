@@ -12,7 +12,7 @@ import (
 // behavior. Defining the protocol registers the message types with the
 // checkpoint codec.
 var (
-	Protocol = messaging.DefineProtocol("mem.control",
+	Protocol = messaging.DefineProtocol(
 		messaging.RoleDef{Name: "requester",
 			Sends: []messaging.Msg{Req{}}},
 		messaging.RoleDef{Name: "responder",

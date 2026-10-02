@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/sarchlab/akita/v5/tracing/tracingtest"
@@ -22,24 +23,16 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
 
-	comp := MakeBuilder().
+	comp := Definition.Builder().
 		WithSimulation(sim).
 		WithResources(Resources{Storage: mem.NewStorage(1 * mem.MB)}).
+		WithPorts(defaultPorts("DRAM", 16)).
 		Build("DRAM")
 
-	assign := func(name string) messaging.Port {
-		p := modeling.MakePortBuilder().
-			WithSimulation(sim).
-			WithComponent(comp).
-			WithSpec(modeling.PortSpec{BufSize: 16}).
-			Build(name)
-		comp.AssignPort(name, p)
-		(&noopConn{}).PlugIn(p)
-		return p
-	}
-
-	topPort := assign("Top")
-	ctrlPort := assign("Control")
+	topPort := comp.Ports.Top
+	ctrlPort := comp.Ports.Control
+	(&noopConn{}).PlugIn(topPort)
+	(&noopConn{}).PlugIn(ctrlPort)
 
 	// Attach the leak tracer BEFORE any traffic, so it sees every task start.
 	// Deliberately not CollectIncomingBufferTrace: those buffer tasks are ended
@@ -60,7 +53,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	topPort.Deliver(read)
 
 	for i := 0; i < 8 && len(comp.State.Transactions) == 0; i++ {
-		comp.Tick()
+		modelingtest.Tick(comp)
 	}
 
 	if len(comp.State.Transactions) == 0 {
@@ -91,7 +84,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	acked := false
 	for range 16 {
-		comp.Tick()
+		modelingtest.Tick(comp)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {

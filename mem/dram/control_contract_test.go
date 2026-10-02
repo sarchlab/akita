@@ -27,24 +27,20 @@ func TestControlContract(t *testing.T) {
 		sim := modeling.NewStandaloneSimulation(engine)
 		storage := mem.NewStorage(1 * mem.MB)
 
-		comp := MakeBuilder().
+		comp := Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
+			WithPorts(defaultPorts("DRAM", 16)).
 			Build("DRAM")
 
-		for _, name := range []string{"Top", "Control"} {
-			p := modeling.MakePortBuilder().
-				WithSimulation(sim).
-				WithComponent(comp).
-				WithSpec(modeling.PortSpec{BufSize: 16}).
-				Build(name)
-			comp.AssignPort(name, p)
-			(&noopConn{}).PlugIn(comp.GetPortByName(name))
+		for _, p := range []messaging.Port{comp.Ports.Top, comp.Ports.Control} {
+			(&noopConn{}).PlugIn(p)
 		}
 
 		return &memcontrolprotocol.Harness{
 			Comp: comp,
-			Ctrl: comp.GetPortByName("Control"),
+			Sim:  sim,
+			Ctrl: comp.Ports.Control,
 			IsQuiescent: func() bool {
 				return len(comp.State.Transactions) == 0
 			},

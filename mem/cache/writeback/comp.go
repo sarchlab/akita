@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -23,19 +23,20 @@ const (
 
 // Spec contains immutable configuration for the writeback cache.
 type Spec struct {
-	Freq                timing.Freq `json:"freq"`
-	NumReqPerCycle      int         `json:"num_req_per_cycle"`
-	Log2BlockSize       uint64      `json:"log2_block_size"`
-	BankLatency         int         `json:"bank_latency"`
-	WayAssociativity    int         `json:"way_associativity"`
-	NumBanks            int         `json:"num_banks"`
-	NumSets             int         `json:"num_sets"`
-	NumMSHREntry        int         `json:"num_mshr_entry"`
-	TotalByteSize       uint64      `json:"total_byte_size"`
-	DirLatency          int         `json:"dir_latency"`
-	WriteBufferCapacity int         `json:"write_buffer_capacity"`
-	MaxInflightFetch    int         `json:"max_inflight_fetch"`
-	MaxInflightEviction int         `json:"max_inflight_eviction"`
+	Freq             timing.Freq `json:"freq"`
+	NumReqPerCycle   int         `json:"num_req_per_cycle"`
+	Log2BlockSize    uint64      `json:"log2_block_size"`
+	BankLatency      int         `json:"bank_latency"`
+	WayAssociativity int         `json:"way_associativity"`
+
+	// NumBanks is the number of banks; a value below 1 means one bank.
+	NumBanks            int    `json:"num_banks"`
+	NumMSHREntry        int    `json:"num_mshr_entry"`
+	TotalByteSize       uint64 `json:"total_byte_size"`
+	DirLatency          int    `json:"dir_latency"`
+	WriteBufferCapacity int    `json:"write_buffer_capacity"`
+	MaxInflightFetch    int    `json:"max_inflight_fetch"`
+	MaxInflightEviction int    `json:"max_inflight_eviction"`
 
 	// AddressMapperType ("single" or "interleaved") and InterleavingSize
 	// describe how to route to Resources.RemotePorts when no
@@ -44,8 +45,69 @@ type Spec struct {
 	InterleavingSize  uint64 `json:"interleaving_size"`
 }
 
-// State contains mutable runtime data for the writeback cache.
-type State struct {
+// numSets returns the number of sets in the directory,
+// TotalByteSize / (WayAssociativity * 2^Log2BlockSize).
+func (s Spec) numSets() int {
+	blockSize := 1 << s.Log2BlockSize
+
+	return int(s.TotalByteSize / uint64(s.WayAssociativity*blockSize))
+}
+
+// numBanks returns the number of banks: NumBanks, or 1 if NumBanks is below 1.
+func (s Spec) numBanks() int {
+	if s.NumBanks < 1 {
+		return 1
+	}
+
+	return s.NumBanks
+}
+
+// laneWidth returns the width of the directory and bank pipelines:
+// NumReqPerCycle, widened to 2 when it is 1 so that a bank can always reserve
+// one lane for up-going transactions.
+func (s Spec) laneWidth() int {
+	if s.NumReqPerCycle == 1 {
+		return 2
+	}
+
+	return s.NumReqPerCycle
+}
+
+// Ports holds the writeback cache's ports.
+type Ports struct {
+	// Top receives read and write requests from the upper level and returns
+	// their responses.
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`
+
+	// Bottom sends line fetches and eviction write-backs to lower memory and
+	// receives their responses.
+	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.requester"`
+
+	// Control receives pause, drain, enable, reset, invalidate, and flush
+	// commands.
+	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
+}
+
+// middlewares holds the writeback cache's behavior, run in field order every
+// cycle. Control runs before the data pipeline so that a Pause, Drain, or
+// Reset takes effect in the same cycle, before any Top or Bottom traffic or
+// in-flight operation advances.
+type middlewares struct {
+	// Ctrl handles every control command except Flush: Pause, Drain, Enable,
+	// Reset, and Invalidate.
+	Ctrl *ctrlMiddleware
+
+	// Flusher handles Flush commands, writing dirty blocks back to lower
+	// memory.
+	Flusher *controlMW
+
+	// Pipeline runs the data pipeline: the top parser, the directory, the
+	// banks, the MSHR stage, and the write buffer.
+	Pipeline *pipelineMW
+}
+
+// state contains mutable runtime data for the writeback cache.
+type state struct {
 	CacheState     int                  `json:"cache_state"`
 	CurrentCmdID   uint64               `json:"current_cmd_id"`
 	CurrentCmdSrc  messaging.RemotePort `json:"current_cmd_src"`
@@ -92,7 +154,7 @@ type State struct {
 // MSHR, so indices must stay stable). Reuse a Removed slot when one is
 // available so the slice stays bounded by the number of active transactions
 // instead of growing with every request ever issued.
-func (s *State) allocTransaction(t transactionState) int {
+func (s *state) allocTransaction(t transactionState) int {
 	for i := range s.Transactions {
 		if !s.Transactions[i].Removed {
 			continue
@@ -137,7 +199,7 @@ func (s *State) allocTransaction(t transactionState) int {
 // write-back or a line fetch). Such slots must not be reused, because the
 // matching bottom-port response is correlated by the request ID held in the
 // slot.
-func (s *State) indexHasInflightBottomTransaction(i int) bool {
+func (s *state) indexHasInflightBottomTransaction(i int) bool {
 	for _, idx := range s.InflightEvictionIndices {
 		if idx == i {
 			return true
@@ -306,15 +368,18 @@ func (t *transactionState) hasReqMeta() bool {
 }
 
 // Resources holds the shared resources and wiring referenced by the writeback
-// cache. Storage is the backing store. AddressToPortMapper routes fetches and
-// evictions to lower memory; when it is not supplied, Build creates one from
-// Spec.AddressMapperType over RemotePorts. Only one of the two needs to be
-// supplied.
+// cache, supplied by the system builder.
 type Resources struct {
-	Storage             *mem.Storage
+	// Storage is the data array. It is required; size it to hold at least
+	// Spec.TotalByteSize bytes.
+	Storage *mem.Storage
+
+	// AddressToPortMapper routes fetches and evictions to lower memory. When
+	// it is not supplied, the cache creates one from Spec.AddressMapperType
+	// over RemotePorts. Only one of the two needs to be supplied.
 	AddressToPortMapper mem.AddressToPortMapper
 	RemotePorts         []messaging.RemotePort
 }
 
-// Comp is the writeback cache component.
-type Comp = modeling.Component[Spec, State, Resources]
+// Comp is the writeback cache component, a ticking component.
+type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]

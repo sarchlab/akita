@@ -3,25 +3,24 @@ package tlb
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type tlbMiddleware struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *tlbMiddleware) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
 func (m *tlbMiddleware) bottomPort() messaging.Port {
-	return m.comp.GetPortByName("Bottom")
+	return m.comp.Ports.Bottom
 }
 
-func (m *tlbMiddleware) Tick() bool {
+func (m *tlbMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 	next := &m.comp.State
 
@@ -53,7 +52,7 @@ func (m *tlbMiddleware) tickPipeline() bool {
 
 func (m *tlbMiddleware) insertIntoPipeline() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	next := &m.comp.State
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
@@ -88,7 +87,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		// milestones.
 		tracing.TraceReqReceive(m.comp, msg)
 
-		pid := m.comp.Simulation().NewID()
+		pid := m.comp.NewID()
 		tracing.StartTask(m.comp, tracing.TaskStart{
 			ID:       pid,
 			ParentID: tracing.MsgIDAtReceiver(msg, m.comp),
@@ -109,7 +108,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 
 func (m *tlbMiddleware) extractFromPipeline() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	next := &m.comp.State
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
@@ -148,7 +147,7 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 
 func (m *tlbMiddleware) handleEnable() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
@@ -164,7 +163,7 @@ func (m *tlbMiddleware) handleEnable() bool {
 
 func (m *tlbMiddleware) handleDrain() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
@@ -209,7 +208,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	rspToTop := vmprotocol.TranslationRsp{
 		Page: page,
 	}
-	rspToTop.ID = m.comp.Simulation().NewID()
+	rspToTop.ID = m.comp.NewID()
 	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = reqMsg.Src
 	rspToTop.RspTo = reqMsg.ID
@@ -238,7 +237,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 }
 
 func (m *tlbMiddleware) lookup(msg vmprotocol.TranslationReq) bool {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	next := &m.comp.State
 
 	_, found := mshrGetEntry(next.MSHREntries, msg.PID, msg.VAddr)
@@ -285,7 +284,7 @@ func (m *tlbMiddleware) handleTranslationHit(
 
 func (m *tlbMiddleware) handleTranslationMiss(msg vmprotocol.TranslationReq) bool {
 	next := &m.comp.State
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	if mshrIsFull(next.MSHREntries, spec.MSHRSize) {
 		return false
@@ -310,7 +309,7 @@ func (m *tlbMiddleware) handleTranslationMiss(msg vmprotocol.TranslationReq) boo
 }
 
 func vAddrToSetID(vAddr uint64, spec Spec) (setID int) {
-	return int(vAddr / spec.PageSize % uint64(spec.NumSets))
+	return int(vAddr / spec.pageSize() % uint64(spec.NumSets))
 }
 
 func (m *tlbMiddleware) sendRspToTop(
@@ -320,7 +319,7 @@ func (m *tlbMiddleware) sendRspToTop(
 	rsp := vmprotocol.TranslationRsp{
 		Page: page,
 	}
-	rsp.ID = m.comp.Simulation().NewID()
+	rsp.ID = m.comp.NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.RspTo = msg.ID
@@ -358,11 +357,11 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 }
 
 func (m *tlbMiddleware) fetchBottom(msg vmprotocol.TranslationReq) bool {
-	spec := m.comp.Spec()
-	mapper := m.comp.Resources().TranslationProviderMapper
+	spec := m.comp.Spec
+	mapper := m.comp.Resources.TranslationProviderMapper
 
 	fetchBottom := vmprotocol.TranslationReq{}
-	fetchBottom.ID = m.comp.Simulation().NewID()
+	fetchBottom.ID = m.comp.NewID()
 	fetchBottom.Src = m.bottomPort().AsRemote()
 	fetchBottom.Dst = findTranslationPort(mapper, msg.VAddr)
 	fetchBottom.PID = msg.PID
@@ -406,7 +405,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 	}
 
 	item := itemI.(vmprotocol.TranslationRsp)
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	page := item.Page
 
 	mshrIdx, found := mshrGetEntry(next.MSHREntries, page.PID, page.VAddr)

@@ -12,11 +12,16 @@
 // Two AverageTimeTracers — one filtering "req_out" on the client, one
 // filtering "req_in" on the server — then report the round-trip latency and
 // the server handling time from the same run.
+//
+// The two components live in the client and server packages, one component
+// per package; this file is the system builder that wires them together.
 package main
 
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/examples/reqtracing/client"
+	"github.com/sarchlab/akita/v5/examples/reqtracing/server"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
@@ -24,220 +29,41 @@ import (
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
-// --- Messages ---
-
-type readReq struct {
-	messaging.MsgMeta
-	Seq int
-}
-
-type readRsp struct {
-	messaging.MsgMeta
-	Seq int
-}
-
-// --- Client ---
-
-type clientSpec struct {
-	Freq timing.Freq `json:"freq"`
-}
-
-type clientState struct {
-	ReqsToSend int                  `json:"reqs_to_send"`
-	NextSeq    int                  `json:"next_seq"`
-	Dst        messaging.RemotePort `json:"dst"`
-}
-
-// ClientComp is the requesting component.
-type ClientComp = modeling.Component[clientSpec, clientState, modeling.None]
-
-type clientMW struct {
-	comp     *ClientComp
-	inFlight map[uint64]readReq
-}
-
-func (m *clientMW) Tick() bool {
-	progress := false
-	progress = m.receive() || progress
-	progress = m.send() || progress
-	return progress
-}
-
-func (m *clientMW) send() bool {
-	s := &m.comp.State
-	port := m.comp.GetPortByName("Out")
-
-	// Send one request at a time: wait for the response before the next.
-	if s.ReqsToSend == 0 || len(m.inFlight) > 0 || !port.CanSend() {
-		return false
-	}
-
-	req := readReq{
-		MsgMeta: messaging.MsgMeta{
-			ID:  m.comp.Simulation().NewID(),
-			Src: port.AsRemote(),
-			Dst: s.Dst,
-		},
-		Seq: s.NextSeq,
-	}
-
-	// The req_out task is keyed by the request's own message ID.
-	tracing.TraceReqInitiate(m.comp, req, 0)
-	port.Send(req)
-
-	m.inFlight[req.ID] = req
-	s.ReqsToSend--
-	s.NextSeq++
-
-	return true
-}
-
-func (m *clientMW) receive() bool {
-	port := m.comp.GetPortByName("Out")
-
-	msg, ok := port.PeekIncoming()
-	if !ok {
-		return false
-	}
-
-	rsp := msg.(readRsp)
-	if req, ok := m.inFlight[rsp.RspTo]; ok {
-		tracing.TraceReqFinalize(m.comp, req)
-		delete(m.inFlight, rsp.RspTo)
-	}
-	port.RetrieveIncoming()
-
-	return true
-}
-
-// --- Server ---
-
-type serverSpec struct {
-	Freq    timing.Freq `json:"freq"`
-	Latency int         `json:"latency"`
-}
-
-type serverState struct{}
-
-// ServerComp is the responding component.
-type ServerComp = modeling.Component[serverSpec, serverState, modeling.None]
-
-type serverTxn struct {
-	req  readReq
-	left int
-}
-
-type serverMW struct {
-	comp    *ServerComp
-	pending []serverTxn
-}
-
-func (m *serverMW) Tick() bool {
-	progress := false
-	progress = m.respond() || progress
-	progress = m.countDown() || progress
-	progress = m.receive() || progress
-	return progress
-}
-
-func (m *serverMW) receive() bool {
-	port := m.comp.GetPortByName("Out")
-
-	msg, ok := port.PeekIncoming()
-	if !ok {
-		return false
-	}
-
-	req := msg.(readReq)
-	tracing.TraceReqReceive(m.comp, req)
-	m.pending = append(m.pending, serverTxn{req: req, left: m.comp.Spec().Latency})
-	port.RetrieveIncoming()
-
-	return true
-}
-
-func (m *serverMW) countDown() bool {
-	progress := false
-	for i := range m.pending {
-		if m.pending[i].left > 0 {
-			m.pending[i].left--
-			progress = true
-		}
-	}
-	return progress
-}
-
-func (m *serverMW) respond() bool {
-	if len(m.pending) == 0 || m.pending[0].left > 0 {
-		return false
-	}
-
-	port := m.comp.GetPortByName("Out")
-	if !port.CanSend() {
-		return false
-	}
-
-	txn := m.pending[0]
-	port.Send(readRsp{
-		MsgMeta: messaging.MsgMeta{
-			ID:    m.comp.Simulation().NewID(),
-			Src:   port.AsRemote(),
-			Dst:   txn.req.Src,
-			RspTo: txn.req.ID,
-		},
-		Seq: txn.req.Seq,
-	})
-
-	tracing.TraceReqComplete(m.comp, txn.req)
-	m.pending = m.pending[1:]
-
-	return true
-}
-
-// --- Wiring ---
-
 func main() {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
 
-	client := modeling.NewBuilder[clientSpec, clientState, modeling.None]().
+	// Build the server first, so the client's Spec can name its port.
+	srv := server.Definition.Builder().
 		WithSimulation(sim).
-		WithFreq(1 * timing.GHz).
-		WithSpec(clientSpec{Freq: 1 * timing.GHz}).
-		Build("Client")
-	client.AddMiddleware(&clientMW{comp: client, inFlight: make(map[uint64]readReq)})
-	client.DeclarePort("Out")
-	client.AssignPort("Out", messaging.NewPort(client, 4, 4, "Client.Out"))
-	sim.RegisterComponent(client)
-
-	server := modeling.NewBuilder[serverSpec, serverState, modeling.None]().
-		WithSimulation(sim).
-		WithFreq(1 * timing.GHz).
-		WithSpec(serverSpec{Freq: 1 * timing.GHz, Latency: 4}).
+		WithPorts(server.Ports{Out: messaging.NewPort("Server.Out", 4, 4)}).
 		Build("Server")
-	server.AddMiddleware(&serverMW{comp: server})
-	server.DeclarePort("Out")
-	server.AssignPort("Out", messaging.NewPort(server, 4, 4, "Server.Out"))
-	sim.RegisterComponent(server)
+
+	clientSpec := client.Definition.DefaultSpec
+	clientSpec.Dst = srv.Ports.Out.AsRemote()
+	clientSpec.NumReqs = 3
+
+	cli := client.Definition.Builder().
+		WithSimulation(sim).
+		WithSpec(clientSpec).
+		WithPorts(client.Ports{Out: messaging.NewPort("Client.Out", 4, 4)}).
+		Build("Client")
 
 	conn := directconnection.MakeBuilder().WithSimulation(sim).Build("Conn")
-	conn.PlugIn(client.GetPortByName("Out"))
-	conn.PlugIn(server.GetPortByName("Out"))
+	conn.PlugIn(cli.Ports.Out)
+	conn.PlugIn(srv.Ports.Out)
 
 	// The filter is how each tracer selects the tasks it cares about.
 	roundTrip := tracing.NewAverageTimeTracer(
 		func(t tracing.TaskStart) bool { return t.Kind == "req_out" })
 	handling := tracing.NewAverageTimeTracer(
 		func(t tracing.TaskStart) bool { return t.Kind == "req_in" })
-	tracing.CollectTrace(client, roundTrip)
-	tracing.CollectTrace(server, handling)
+	tracing.CollectTrace(cli, roundTrip)
+	tracing.CollectTrace(srv, handling)
 
-	cs := client.State
-	cs.Dst = server.GetPortByName("Out").AsRemote()
-	cs.ReqsToSend = 3
-	client.State = cs
-
-	client.TickLater()
+	// The client sends on its own, so start it; the server wakes when a
+	// request arrives.
+	cli.TickLater()
 
 	if err := engine.Run(); err != nil {
 		panic(err)

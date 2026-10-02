@@ -10,7 +10,7 @@ import (
 // message to the destination device port. Defining the protocol registers
 // both message types with the checkpoint codec.
 var (
-	Protocol = messaging.DefineProtocol("packetization",
+	Protocol = messaging.DefineProtocol(
 		messaging.RoleDef{Name: "link",
 			Sends: []messaging.Msg{Flit{}}},
 		messaging.RoleDef{Name: "delivery",

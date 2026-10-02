@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -99,25 +100,24 @@ var _ = Describe("MMUCache milestones", func() {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
-		comp = MakeBuilder().
+		comp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				LowModulePort: messaging.RemotePort("LowModule"),
 				UpModulePort:  messaging.RemotePort("UpModule"),
 			}).
+			WithPorts(defaultPorts("MMUCache")).
 			Build("MMUCache")
 
-		assignDefaultPorts(sim, comp)
-
-		topPort = comp.GetPortByName("Top")
-		bottomPort = comp.GetPortByName("Bottom")
-		controlPort := comp.GetPortByName("Control")
+		topPort = comp.Ports.Top
+		bottomPort = comp.Ports.Bottom
+		controlPort := comp.Ports.Control
 		(&noopConn{}).PlugIn(topPort)
 		(&noopConn{}).PlugIn(bottomPort)
 		(&noopConn{}).PlugIn(controlPort)
 
-		mw = &mmuCacheMiddleware{comp: comp}
+		mw = comp.Middlewares.Cache
 
 		rec = &mmuCacheMilestoneRecorder{}
 		tracing.CollectTrace(comp, rec)
@@ -129,7 +129,7 @@ var _ = Describe("MMUCache milestones", func() {
 
 	makeTopReq := func(vAddr uint64) vmprotocol.TranslationReq {
 		req := vmprotocol.TranslationReq{}
-		req.ID = comp.Simulation().NewID()
+		req.ID = comp.NewID()
 		req.Src = messaging.RemotePort("UpModule")
 		req.Dst = topPort.AsRemote()
 		req.PID = 1
@@ -161,7 +161,7 @@ var _ = Describe("MMUCache milestones", func() {
 			Valid: true,
 		}
 		rsp := vmprotocol.TranslationRsp{Page: page}
-		rsp.ID = comp.Simulation().NewID()
+		rsp.ID = comp.NewID()
 		rsp.Src = messaging.RemotePort("LowModule")
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.RspTo = bottomReqID
@@ -291,16 +291,16 @@ var _ = Describe("MMUCache milestones", func() {
 
 		// Reset while the walk is in flight.
 		reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-		reset.ID = comp.Simulation().NewID()
+		reset.ID = comp.NewID()
 		reset.Src = messaging.RemotePort("CtrlAgent")
-		reset.Dst = comp.GetPortByName("Control").AsRemote()
+		reset.Dst = comp.Ports.Control.AsRemote()
 		reset.TrafficClass = "memcontrolprotocol.Req"
-		comp.GetPortByName("Control").Deliver(reset)
+		comp.Ports.Control.Deliver(reset)
 
 		acked := false
 		for i := 0; i < 64 && !acked; i++ {
-			comp.Tick()
-			if out, ok := comp.GetPortByName("Control").RetrieveOutgoing(); ok {
+			modelingtest.Tick(comp)
+			if out, ok := comp.Ports.Control.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdReset {
 					acked = true

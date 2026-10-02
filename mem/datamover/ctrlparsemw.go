@@ -6,29 +6,27 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
-	"github.com/sarchlab/akita/v5/tracing"
-
-	// ctrlParseMW handles control port parsing and transaction completion.
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
+// ctrlParseMW handles control port parsing and transaction completion.
 type ctrlParseMW struct {
-	comp *modeling.Component[Spec, State, modeling.None]
+	comp *Comp
 }
 
 // topPort is the workload-request port the data mover listens on for
-// datamoverprotocol.DataMoveRequest messages. (It was historically named "Control" but
+// datamoverprotocol.DataMoveReq messages. (It was historically named "Control" but
 // that name is now reserved for the uniform control protocol.)
 func (m *ctrlParseMW) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
-// Tick runs finishTransaction and parseFromCP. Paused data movers
+// Handle runs finishTransaction and parseFromCP. Paused data movers
 // freeze entirely; draining ones finish the current transaction but
 // don't accept new ones.
-func (m *ctrlParseMW) Tick() bool {
+func (m *ctrlParseMW) Handle(_ timing.Event) bool {
 	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
@@ -59,7 +57,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		return false
 	}
 
-	req, ok := reqI.(datamoverprotocol.DataMoveRequest)
+	req, ok := reqI.(datamoverprotocol.DataMoveReq)
 	if !ok {
 		log.Panicf("can't process request of type %s", reflect.TypeOf(reqI))
 	}
@@ -75,7 +73,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 
 	m.topPort().RetrieveIncoming()
 
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	srcByteGranularity := resolveByteGranularity(spec, req.SrcSide)
 	addressMustBeAligned(req.SrcAddress, srcByteGranularity)
@@ -134,9 +132,9 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		return false
 	}
 
-	rsp := datamoverprotocol.DataMoveResponse{
+	rsp := datamoverprotocol.DataMoveRsp{
 		MsgMeta: messaging.MsgMeta{
-			ID:    m.comp.Simulation().NewID(),
+			ID:    m.comp.NewID(),
 			Src:   trans.ReqDst,
 			Dst:   trans.ReqSrc,
 			RspTo: trans.ReqID,
@@ -150,7 +148,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 	m.topPort().Send(rsp)
 
 	// Reconstruct the original request before the transaction is reset. req_in
-	// was opened (in parseFromCP) on the DataMoveRequest, keyed by its ID, so it
+	// was opened (in parseFromCP) on the DataMoveReq, keyed by its ID, so it
 	// must be closed on that same request — not on the freshly minted response,
 	// which carries a different ID and would leak the req_in task.
 	reqMsg := transactionAsMsg(trans)

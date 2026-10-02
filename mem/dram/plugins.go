@@ -2,8 +2,6 @@ package dram
 
 import (
 	"fmt"
-
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 // This file holds the controller's swappable *strategies* — the scheduler, row
@@ -12,24 +10,24 @@ import (
 // middleware or hooks: a strategy is used *inside* the bank-tick middleware to
 // produce a value, rather than running each cycle or observing.
 //
-// The two genuinely reactive/observing concerns are expressed with Akita's own
-// mechanisms instead: refresh is a Middleware (refreshmw.go) and command
-// observation is a hook (hook.go). New schedulers/mappers are added in-tree and
-// selected by name — the same model DRAMSim3 and Ramulator2 use.
+// The one genuinely reactive concern, refresh, is expressed with Akita's own
+// mechanism instead: it is a Middleware (refreshmw.go). New schedulers and
+// mappers are added in-tree and selected by name — the same model DRAMSim3 and
+// Ramulator2 use.
 
 // scheduler chooses the next command to put on the command bus from the per-rank
 // command queues. Pick resolves the command's concrete kind, removes it from its
 // queue, and returns it, or returns nil if nothing is ready.
 type scheduler interface {
 	Name() string
-	Pick(spec *Spec, st *State, t *dramTiming) *commandState
+	Pick(spec *Spec, st *state, t *dramTiming) *commandState
 }
 
 // rowPolicy turns a queued sub-transaction into a column command, deciding the
 // open- vs close-page variant. The location is resolved by the addrMapper.
 type rowPolicy interface {
 	Name() string
-	CommandFor(ids timing.Simulation, spec *Spec, st *State, ref subTransRef, loc location) *commandState
+	CommandFor(newID func() uint64, spec *Spec, st *state, ref subTransRef, loc location) *commandState
 }
 
 // addrMapper maps a physical address to a DRAM location. The location keeps a
@@ -50,7 +48,7 @@ type frfcfsScheduler struct{}
 
 func (frfcfsScheduler) Name() string { return schedulerFRFCFS }
 
-func (frfcfsScheduler) Pick(spec *Spec, st *State, _ *dramTiming) *commandState {
+func (frfcfsScheduler) Pick(spec *Spec, st *state, _ *dramTiming) *commandState {
 	return getCommandToIssue(spec, st)
 }
 
@@ -65,10 +63,10 @@ type openPageRowPolicy struct{}
 func (openPageRowPolicy) Name() string { return rowPolicyOpen }
 
 func (openPageRowPolicy) CommandFor(
-	ids timing.Simulation,
-	_ *Spec, st *State, ref subTransRef, loc location,
+	newID func() uint64,
+	_ *Spec, st *state, ref subTransRef, loc location,
 ) *commandState {
-	return buildColumnCommand(ids, st, ref, loc, cmdKindRead, cmdKindWrite)
+	return buildColumnCommand(newID, st, ref, loc, cmdKindRead, cmdKindWrite)
 }
 
 // closePageRowPolicy issues ReadPrecharge/WritePrecharge (auto-precharge),
@@ -78,11 +76,11 @@ type closePageRowPolicy struct{}
 func (closePageRowPolicy) Name() string { return rowPolicyClose }
 
 func (closePageRowPolicy) CommandFor(
-	ids timing.Simulation,
-	_ *Spec, st *State, ref subTransRef, loc location,
+	newID func() uint64,
+	_ *Spec, st *state, ref subTransRef, loc location,
 ) *commandState {
 	return buildColumnCommand(
-		ids,
+		newID,
 		st, ref, loc, cmdKindReadPrecharge, cmdKindWritePrecharge)
 }
 
@@ -90,15 +88,15 @@ func (closePageRowPolicy) CommandFor(
 // given location, choosing the read or write variant from the parent
 // transaction's direction.
 func buildColumnCommand(
-	ids timing.Simulation,
-	st *State, ref subTransRef, loc location,
+	newID func() uint64,
+	st *state, ref subTransRef, loc location,
 	readKind, writeKind commandKind,
 ) *commandState {
 	trans := findTransaction(st, ref.TxID)
 	sub := &trans.SubTransactions[ref.SubIndex]
 
 	cmd := &commandState{
-		ID:          ids.NewID(),
+		ID:          newID(),
 		Address:     sub.Address,
 		SubTransRef: ref,
 		Location:    loc,
@@ -113,13 +111,16 @@ func buildColumnCommand(
 
 const addrMapperDefault = "default"
 
-// fixedAddrMapper applies the single fixed bit-decode scheme configured on Spec.
-type fixedAddrMapper struct{}
+// fixedAddrMapper applies the single fixed bit-decode scheme derived from the
+// geometry in Spec (see newAddrMapping).
+type fixedAddrMapper struct {
+	mapping addrMapping
+}
 
 func (fixedAddrMapper) Name() string { return addrMapperDefault }
 
-func (fixedAddrMapper) Map(spec *Spec, addr uint64) location {
-	return mapAddress(spec, addr)
+func (m *fixedAddrMapper) Map(_ *Spec, addr uint64) location {
+	return m.mapping.mapAddress(addr)
 }
 
 // --- Registries ----------------------------------------------------------
@@ -128,8 +129,12 @@ var schedulerRegistry = map[string]func() scheduler{
 	schedulerFRFCFS: func() scheduler { return frfcfsScheduler{} },
 }
 
-var addrMapperRegistry = map[string]func() addrMapper{
-	addrMapperDefault: func() addrMapper { return fixedAddrMapper{} },
+// addrMapperRegistry holds the address mapper factories. A factory receives
+// the Spec so it can derive its mapping once, when the component is built.
+var addrMapperRegistry = map[string]func(spec *Spec) addrMapper{
+	addrMapperDefault: func(spec *Spec) addrMapper {
+		return &fixedAddrMapper{mapping: newAddrMapping(spec)}
+	},
 }
 
 func newScheduler(name string) scheduler {
@@ -143,7 +148,7 @@ func newScheduler(name string) scheduler {
 	return factory()
 }
 
-func newAddrMapper(name string) addrMapper {
+func newAddrMapper(name string, spec *Spec) addrMapper {
 	if name == "" {
 		name = addrMapperDefault
 	}
@@ -151,7 +156,14 @@ func newAddrMapper(name string) addrMapper {
 	if !ok {
 		panic(fmt.Sprintf("dram: unknown address mapper %q", name))
 	}
-	return factory()
+	return factory(spec)
+}
+
+func newRowPolicy(p PagePolicy) rowPolicy {
+	if p == PagePolicyOpen {
+		return openPageRowPolicy{}
+	}
+	return closePageRowPolicy{}
 }
 
 // --- Controller ----------------------------------------------------------
@@ -165,11 +177,22 @@ type controller struct {
 	addrMapper addrMapper
 }
 
+// newController selects the controller strategies from configuration: the
+// scheduler and address mapper from their Spec registry keys, the row policy
+// from Spec.PagePolicy. It panics on an unknown registry key.
+func newController(spec *Spec) *controller {
+	return &controller{
+		scheduler:  newScheduler(spec.Scheduler),
+		rowPolicy:  newRowPolicy(spec.PagePolicy),
+		addrMapper: newAddrMapper(spec.AddrMapper, spec),
+	}
+}
+
 // fillCommandQueue moves at most one ready sub-transaction from the
 // sub-transaction queue into a command queue: it maps the address and turns the
 // sub-transaction into a column command via the configured strategies. Returns
 // true if a sub-transaction was enqueued.
-func (c *controller) fillCommandQueue(ids timing.Simulation, spec *Spec, state *State) bool {
+func (c *controller) fillCommandQueue(newID func() uint64, spec *Spec, state *state) bool {
 	for i, ref := range state.SubTransQueue.Entries {
 		sub := subTransByRef(state, ref)
 		if sub == nil {
@@ -177,7 +200,7 @@ func (c *controller) fillCommandQueue(ids timing.Simulation, spec *Spec, state *
 		}
 
 		loc := c.addrMapper.Map(spec, sub.Address)
-		cmd := c.rowPolicy.CommandFor(ids, spec, state, ref, loc)
+		cmd := c.rowPolicy.CommandFor(newID, spec, state, ref, loc)
 
 		if canAcceptCommand(state, cmd, spec) {
 			acceptCommand(state, cmd)
@@ -194,7 +217,7 @@ func (c *controller) fillCommandQueue(ids timing.Simulation, spec *Spec, state *
 
 // subTransByRef resolves a sub-transaction reference to its current state, or
 // nil if the parent transaction is no longer present.
-func subTransByRef(state *State, ref subTransRef) *subTransState {
+func subTransByRef(state *state, ref subTransRef) *subTransState {
 	trans := findTransaction(state, ref.TxID)
 	if trans == nil ||
 		ref.SubIndex < 0 || ref.SubIndex >= len(trans.SubTransactions) {

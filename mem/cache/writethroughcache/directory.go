@@ -28,7 +28,7 @@ func (d *directory) Tick() (madeProgress bool) {
 // buffer task and the post-lookup milestones. The subtask is closed when the
 // transaction leaves the post-pipeline buffer.
 func (d *directory) acceptIntoPipeline() (madeProgress bool) {
-	spec := d.cache.comp.Spec()
+	spec := d.cache.comp.Spec
 	next := &d.cache.comp.State
 	dirBuf := &next.DirBuf
 	dirPipeline := &next.DirPipeline
@@ -40,7 +40,7 @@ func (d *directory) acceptIntoPipeline() (madeProgress bool) {
 
 		transIdx, _ := dirBuf.Pop()
 		trans := &next.Transactions[transIdx]
-		pid := d.cache.comp.Simulation().NewID()
+		pid := d.cache.comp.NewID()
 		trans.DirPipelineTaskID = pid
 		tracing.StartTask(d.cache.comp, tracing.TaskStart{
 			ID:       pid,
@@ -63,7 +63,7 @@ func (d *directory) acceptIntoPipeline() (madeProgress bool) {
 // the (Kind, What) dedup keeps the first), and the pipeline subtask is closed
 // once the transaction is processed.
 func (d *directory) processPostPipeline() (madeProgress bool) {
-	spec := d.cache.comp.Spec()
+	spec := d.cache.comp.Spec
 	next := &d.cache.comp.State
 	dirPostBuf := &next.DirPostBuf
 
@@ -126,7 +126,7 @@ func reqInTaskIDOf(comp *Comp, trans *transactionState) uint64 {
 func (d *directory) processRead(trans *transactionState, transIdx int) bool {
 	addr := trans.ReadAddress
 	pid := trans.ReadPID
-	spec := d.cache.comp.Spec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	next := &d.cache.comp.State
@@ -138,7 +138,7 @@ func (d *directory) processRead(trans *transactionState, transIdx int) bool {
 	}
 
 	setID, wayID, found := cache.DirectoryLookup(
-		&next.DirectoryState, spec.NumSets, int(blockSize),
+		&next.DirectoryState, spec.numSets(), int(blockSize),
 		pid, cacheLineID)
 	if found && next.DirectoryState.Sets[setID].Blocks[wayID].IsValid {
 		return d.processReadHit(trans, setID, wayID, transIdx)
@@ -215,13 +215,13 @@ func (d *directory) processReadHit(
 
 func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool {
 	addr := trans.ReadAddress
-	spec := d.cache.comp.Spec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	next := &d.cache.comp.State
 
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
-		&next.DirectoryState, spec.NumSets, int(blockSize), cacheLineID)
+		&next.DirectoryState, spec.numSets(), int(blockSize), cacheLineID)
 	victim := &next.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
 	if victim.IsLocked || victim.ReadCount > 0 {
 		return false
@@ -248,7 +248,7 @@ func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool 
 func (d *directory) processWrite(trans *transactionState, transIdx int) bool {
 	addr := trans.WriteAddress
 	pid := trans.WritePID
-	spec := d.cache.comp.Spec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	next := &d.cache.comp.State
@@ -273,7 +273,7 @@ func (d *directory) processWrite(trans *transactionState, transIdx int) bool {
 	}
 
 	setID, wayID, found := cache.DirectoryLookup(
-		&next.DirectoryState, spec.NumSets, int(blockSize),
+		&next.DirectoryState, spec.numSets(), int(blockSize),
 		pid, cacheLineID)
 	if found && next.DirectoryState.Sets[setID].Blocks[wayID].IsValid {
 		return d.handleWriteHit(trans, setID, wayID, transIdx)
@@ -284,12 +284,12 @@ func (d *directory) processWrite(trans *transactionState, transIdx int) bool {
 
 func (d *directory) writeBottom(trans *transactionState) bool {
 	addr := trans.WriteAddress
-	spec := d.cache.comp.Spec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
 	writeToBottom := memprotocol.WriteReq{}
-	writeToBottom.ID = d.cache.comp.Simulation().NewID()
+	writeToBottom.ID = d.cache.comp.NewID()
 	writeToBottom.Src = d.cache.bottomPort().AsRemote()
 	// Route by cache-line ID so the write-through write and the
 	// corresponding read-fill always target the same lower-memory port,
@@ -326,7 +326,7 @@ func (d *directory) fetchFromBottom(
 ) bool {
 	addr := trans.Address()
 	pid := trans.PID()
-	spec := d.cache.comp.Spec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	next := &d.cache.comp.State
@@ -337,7 +337,7 @@ func (d *directory) fetchFromBottom(
 		PID:            pid,
 		AccessByteSize: blockSize,
 	}
-	readToBottom.ID = d.cache.comp.Simulation().NewID()
+	readToBottom.ID = d.cache.comp.NewID()
 	readToBottom.Src = d.cache.bottomPort().AsRemote()
 	readToBottom.Dst = bottomModule
 	readToBottom.TrafficBytes, readToBottom.TrafficClass = 12, "req"
@@ -380,7 +380,7 @@ func (d *directory) fetchFromBottom(
 
 func (d *directory) getBankBuf(setID, wayID int) *queueing.Buffer[int] {
 	next := &d.cache.comp.State
-	numWaysPerSet := d.cache.comp.Spec().WayAssociativity
+	numWaysPerSet := d.cache.comp.Spec.WayAssociativity
 	blockID := setID*numWaysPerSet + wayID
 	bankID := blockID % len(next.BankBufs)
 

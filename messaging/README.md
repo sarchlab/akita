@@ -7,15 +7,19 @@ buffer to another port's incoming buffer.
 
 ## Key Concepts
 
-- A **message** (`Msg`) is any value carrying a `*MsgMeta` with routing and
+- A **message** (`Msg`) is any value carrying a `MsgMeta` with routing and
   identification metadata. Bare `MsgMeta` is the envelope, not a message — it
   belongs to no protocol.
-- A **protocol** (`Protocol`) is a named set of message types organized into
-  **roles** (`Role`). Defining a protocol with `DefineProtocol` registers
-  every message type it carries with the checkpoint codec; ports declare the
-  role(s) they speak in `DeclarePort`. Protocols are **opt-in**: messages
-  flow without one, and registration only matters when a checkpoint can
-  capture the message.
+- A **protocol** (`Protocol`) is a set of message types organized into
+  **roles** (`Role`), named after the package that defines it: its import
+  path. Defining a protocol with `DefineProtocol` registers every message type
+  it carries with the checkpoint codec; components tag each port with the
+  role(s) it speaks, `akita:"role=<protocol>.<role>"`, for example
+  `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`.
+  Protocols are **opt-in**: messages flow without one, and registration only
+  matters when a checkpoint can capture the message. A port that takes
+  messages of every protocol, such as a message sink, speaks `AnyRole`, the
+  only role of `AnyProtocol`: `akita:"role=github.com/sarchlab/akita/v5/messaging.any"`.
 - A **port** is owned by a component and holds an incoming and an outgoing
   buffer. Components `Send`/`RetrieveIncoming` on their side; connections
   `Deliver`/`RetrieveOutgoing` on theirs.
@@ -31,7 +35,7 @@ buffer to another port's incoming buffer.
 
 ```go
 type Msg interface {
-    Meta() *MsgMeta
+    Meta() MsgMeta
 }
 
 type MsgMeta struct {
@@ -40,8 +44,6 @@ type MsgMeta struct {
     TrafficClass string
     TrafficBytes int
     RspTo        uint64 // ID of the request this responds to, if any
-    SendTaskID   uint64
-    RecvTaskID   uint64
 }
 ```
 
@@ -54,7 +56,7 @@ recommended way is to declare the package's protocol once:
 
 ```go
 var (
-    Protocol  = messaging.DefineProtocol("mem",
+    Protocol  = messaging.DefineProtocol( // named ".../mem/memprotocol"
         messaging.RoleDef{Name: "requester",
             Sends: []messaging.Msg{ReadReq{}, WriteReq{}}},
         messaging.RoleDef{Name: "responder",
@@ -65,14 +67,19 @@ var (
 )
 ```
 
-and bind ports to roles where they are declared:
-`comp.DeclarePort("Top", memprotocol.Responder)`. Each protocol lives in its
+and bind ports to roles with a tag on the component's Ports field:
+
+```go
+Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`
+```
+
+The inspector checks each tag against the protocol's roles. Each protocol lives in its
 own package (e.g. `mem/memprotocol`, `mem/memcontrolprotocol`, `mem/vm/vmprotocol`)
 that owns the message types and the protocol definition. A
 registration-coverage audit
 (`protocolaudit_test.go`) fails CI for any message type in the module that is
-not registered. `RegisterMsg(MyReq{})` in an `init()` remains as the low-level
-primitive (and `RegisterEvent` for events). No custom marshalling is needed.
+not registered. Events are registered with `timing.RegisterEvent`. No custom
+marshalling is needed.
 See [`doc/tutorial/checkpointing.md`](../doc/tutorial/checkpointing.md).
 
 ### Port
@@ -97,8 +104,8 @@ type Port interface {
     NotifyAvailable()
 
     SetConnection(conn Connection)
-    Component() Component
-    SetComponent(comp Component)
+    Owner() PortOwner
+    SetOwner(owner PortOwner)
     NumIncoming() int
     NumOutgoing() int
 }
@@ -107,13 +114,12 @@ type Port interface {
 Create a port with `NewPort`:
 
 ```go
-port := messaging.NewPort(comp, incomingCap, outgoingCap, "MyComp.Top")
+port := messaging.NewPort("MyComp.Top", incomingCap, outgoingCap)
 ```
 
-In assembly, prefer `modeling.MakePortBuilder` — it wraps `NewPort` and
-registers the port with the simulation (and the monitor),
-mirroring how component and connection builders register themselves. `NewPort`
-is the low-level constructor it builds on.
+In assembly, the system builder creates each port with no component and passes
+it to the component's `Build`, which binds the port to the component and
+registers it with the simulation (and the monitor).
 
 `Send` pushes onto the outgoing buffer — callers must check `CanSend` first;
 sending into a full buffer panics — and, when the buffer transitions from
@@ -143,38 +149,31 @@ type Connection interface {
 A connection moves messages from outgoing to incoming buffers. `directconnection`
 is the simplest implementation.
 
-### Component and PortOwner
+### PortOwner
 
 ```go
-type Component interface {
-    naming.Named
-    hooking.Hookable
-    PortOwner
-
+type PortOwner interface {
     NotifyRecv(port Port)
     NotifyPortFree(port Port)
 }
-
-type PortOwner interface {
-    DeclarePort(name string, roles ...*Role)
-    DeclarePortGroup(name string, roles ...*Role)
-    AssignPort(name string, port Port)
-    GetPortByName(name string) Port
-    Ports() []Port
-}
 ```
 
-Embed `PortOwnerBase` (via `NewPortOwnerBase`) to manage a named set of ports.
-A component owns its port topology: it declares its ports with `DeclarePort`
-(typically in its builder), and setup code supplies the instances with
-`AssignPort`. `GetPortByName` panics with a helpful message if the name is
-unknown or was declared but not yet assigned.
+A port notifies its owner when a message arrives in an empty incoming buffer
+and when it can send again. The owner is usually a component
+(`modeling.Component`), but `messaging` asks only for these two methods. The
+interface says nothing about which ports an owner has or how it reaches them.
+A component defined by a component model (`modeling/ticking` and its
+siblings) holds its ports in a typed `Ports` struct: the system builder creates
+each port with `NewPort` and passes them all to `Build`, which binds and
+registers them. An owner written without a component model, such as a test
+driver, calls `SetOwner` itself. A port must have an owner before it carries
+traffic: `Deliver`, `RetrieveOutgoing`, and `NotifyAvailable` panic on a port
+without one.
 
 ## How It Works
 
-1. A component declares its ports with `DeclarePort`; setup code builds each
-   port with `modeling.MakePortBuilder` (which registers it with the
-   simulation) — or the low-level `NewPort` — and attaches it with `AssignPort`.
+1. Setup code creates each port with `NewPort` and passes it to its component's
+   `Build`.
 2. A connection is plugged into the ports with `PlugIn`, and each port's
    connection is set with `SetConnection`.
 3. To send, a component builds a message with `Src`/`Dst` remote port names and

@@ -38,8 +38,15 @@ requests can occupy different banks while earlier ones are still in flight.
   post-pipeline buffer depth, capacity, and bank selection.
 - `State` — mutable runtime data: the per-bank pipelines and post-pipeline
   buffers.
-- `Resources` — shared wiring; holds the backing `*mem.Storage`.
-- `Comp` — `modeling.Component[Spec, State, Resources]`.
+- `Resources` — shared wiring; holds the backing `*mem.Storage`, which is
+  required.
+- `Ports` — the `Top` and `Control` ports.
+- `Middlewares` — `Ctrl` (control commands), `TickFinalize` (commits and
+  responds to requests leaving the bank pipelines, then advances the
+  pipelines), and `Dispatch` (moves incoming requests into their banks), run in
+  that order every cycle.
+- `Comp` — `ticking.Component[Spec, state, Resources, Ports, middlewares]`, a
+  ticking component.
 
 ```go
 type Spec struct {
@@ -49,8 +56,7 @@ type Spec struct {
     BankPipelineDepth   int         // Pipeline stages per bank
     StageLatency        int         // Cycles per pipeline stage
     PostPipelineBufSize int         // Post-pipeline buffer depth per bank
-    Capacity            uint64      // Backing-storage size when built internally
-    StorageRef          string      // Storage resource name (set by Build)
+    Capacity            uint64      // Memory size; sizes the Storage the system builder supplies
 
     BankSelectorKind               string // "interleaved"
     BankSelectorLog2InterleaveSize uint64 // log2 of the bank interleave stride
@@ -74,12 +80,10 @@ also runs on the request's global address.
 
 Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the whole spec
 to `WithSpec`. Wiring comes from `WithSimulation` (which provides the engine and
-registers the component) and `WithResources` (the shared backing storage). When
-`WithResources` is omitted, the controller builds its own storage sized by
-`Spec.Capacity`. `Build` declares the `Top` and `Control` ports but does not
-create their instances. Build each port with `modeling.MakePortBuilder` (which
-registers the port with the simulation) and attach it with `AssignPort`,
-choosing the buffer size.
+registers the component), `WithResources` (the backing storage, required), and
+`WithPorts` (the port instances). The component does not build a storage of its
+own: the system builder creates one, usually sized by `Spec.Capacity`, and may
+share it with other components. `Build` panics if `Resources.Storage` is nil.
 
 ```go
 spec := simplebankedmemory.Definition.DefaultSpec
@@ -89,34 +93,30 @@ spec.BankPipelineDepth = 3
 spec.StageLatency = 2
 spec.BankSelectorLog2InterleaveSize = 6 // 64 B stride
 
-memCtrl := simplebankedmemory.MakeBuilder().
+storage := mem.MakeStorageBuilder().
+    WithCapacity(spec.Capacity).
+    WithSimulation(sim).
+    Build("MyMemCtrl.Storage")
+
+memCtrl := simplebankedmemory.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(simplebankedmemory.Resources{Storage: storage}).
+    WithPorts(simplebankedmemory.Ports{
+        Top:     messaging.NewPort("MyMemCtrl.Top", 16, 16),
+        Control: messaging.NewPort("MyMemCtrl.Control", 4, 4),
+    }).
     Build("MyMemCtrl")
 
-topPort := modeling.MakePortBuilder().
-    WithSimulation(sim).
-    WithComponent(memCtrl).
-    WithSpec(modeling.PortSpec{BufSize: 16}).
-    Build("Top")
-memCtrl.AssignPort("Top", topPort)
-
-ctrlPort := modeling.MakePortBuilder().
-    WithSimulation(sim).
-    WithComponent(memCtrl).
-    WithSpec(modeling.PortSpec{BufSize: 4}).
-    Build("Control")
-memCtrl.AssignPort("Control", ctrlPort)
-
-topPort = memCtrl.GetPortByName("Top")
+topPort := memCtrl.Ports.Top
 ```
 
 | Method | Description |
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak |
-| `WithResources(Resources{Storage: s})` | Shared backing storage (built internally if omitted) |
+| `WithResources(Resources{Storage: s})` | Backing storage (required) |
+| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required) |
 
 ### Default Configuration
 
@@ -127,7 +127,7 @@ topPort = memCtrl.GetPortByName("Top")
 | Bank pipeline width / depth | 1 / 1 |
 | Stage latency | 10 cycles |
 | Post-pipeline buffer | 1 |
-| Storage capacity | 4 GB |
+| Capacity | 4 GB |
 | Bank selector | `"interleaved"`, 64 B stride (log2 = 6) |
 
 ## Bank selection across interleaved controllers
@@ -175,10 +175,13 @@ memory is one of several interleaved controllers; a standalone memory leaves
 
 ## Ports
 
-- **Top**: accepts `mem.ReadReq` and `mem.WriteReq`, returns `mem.DataReadyRsp`
-  and `mem.WriteDoneRsp`.
-- **Control**: accepts `mem.ControlReq` (enable / pause / drain / reset),
-  returns `mem.ControlRsp`.
+The system builder creates each port with `messaging.NewPort`, choosing its
+buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
+
+- **Top**: accepts `memprotocol.ReadReq` and `memprotocol.WriteReq`, returns `memprotocol.DataReadyRsp`
+  and `memprotocol.WriteDoneRsp`.
+- **Control**: accepts `memcontrolprotocol.Req` (enable / pause / drain / reset),
+  returns `memcontrolprotocol.Rsp`.
 
 ## Example
 

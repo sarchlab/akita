@@ -17,24 +17,26 @@ func TestControlContract(t *testing.T) {
 		spec := Definition.DefaultSpec
 		spec.BottomUnit = messaging.RemotePort("BottomUnit")
 
-		comp := MakeBuilder().
+		port := func(name string) messaging.Port {
+			p := messaging.NewPort("ROB."+name, 16, 16)
+			(&noopConn{}).PlugIn(p)
+			return p
+		}
+
+		comp := Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
+			WithPorts(Ports{
+				Top:     port("Top"),
+				Bottom:  port("Bottom"),
+				Control: port("Control"),
+			}).
 			Build("ROB")
-
-		for _, name := range []string{"Top", "Bottom", "Control"} {
-			p := modeling.MakePortBuilder().
-				WithSimulation(sim).
-				WithComponent(comp).
-				WithSpec(modeling.PortSpec{BufSize: 16}).
-				Build(name)
-			comp.AssignPort(name, p)
-			(&noopConn{}).PlugIn(comp.GetPortByName(name))
-		}
 
 		return &memcontrolprotocol.Harness{
 			Comp: comp,
-			Ctrl: comp.GetPortByName("Control"),
+			Sim:  sim,
+			Ctrl: comp.Ports.Control,
 			IsQuiescent: func() bool {
 				return len(comp.State.Transactions) == 0
 			},

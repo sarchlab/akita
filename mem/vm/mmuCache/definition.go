@@ -1,18 +1,16 @@
 package mmuCache
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// Definition declares the MMUCache component: its default configuration and
-// its port topology. The builder consumes it at runtime and tooling reads it
-// statically, so it is the single source of truth for both.
-var Definition = modeling.ComponentDef[Spec]{
-	Name: "MMUCache",
+// Definition declares the MMUCache, a ticking component: its default
+// configuration and its behavior. Its ports and middlewares are the fields of
+// Ports and Middlewares. The system builder builds an instance with
+// Definition.Builder()...Build(name); tooling reads the same declaration
+// statically.
+var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
 		Freq:            1 * timing.GHz,
 		NumReqPerCycle:  4,
@@ -22,9 +20,28 @@ var Definition = modeling.ComponentDef[Spec]{
 		LatencyPerLevel: 100,
 		Log2PageSize:    12,
 	},
-	Ports: []modeling.PortDef{
-		{Name: "Top", Roles: []*messaging.Role{vmprotocol.Responder}},
-		{Name: "Bottom", Roles: []*messaging.Role{vmprotocol.Requester}},
-		{Name: "Control", Roles: []*messaging.Role{memcontrolprotocol.Responder}},
-	},
+	NewState:       newState,
+	NewMiddlewares: newMiddlewares,
+}
+
+func newState(c *Comp) state {
+	spec := c.Spec
+
+	if spec.NumBlocks <= 0 {
+		panic("mmuCache: Spec.NumBlocks must be > 0")
+	}
+
+	return state{
+		CurrentState:          mmuCacheStateEnable,
+		Table:                 initSets(spec.NumLevels, spec.NumBlocks),
+		OutstandingBottomReqs: map[uint64]bool{},
+		InflightReqs:          map[uint64]inflightReqState{},
+	}
+}
+
+func newMiddlewares(c *Comp) middlewares {
+	return middlewares{
+		Ctrl:  &ctrlMiddleware{comp: c},
+		Cache: &mmuCacheMiddleware{comp: c},
+	}
 }

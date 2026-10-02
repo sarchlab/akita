@@ -26,24 +26,26 @@ func TestControlContract(t *testing.T) {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
 
-		comp := MakeBuilder().
+		comp := Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{
 				TranslationProviderMapper: &mem.SinglePortMapper{
 					Port: messaging.RemotePort("MMU"),
 				},
 			}).
+			WithPorts(defaultPorts("TLB")).
 			Build("TLB")
 
-		assignDefaultPorts(sim, comp)
-
-		for _, name := range []string{"Top", "Bottom", "Control"} {
-			(&ccNoopConn{}).PlugIn(comp.GetPortByName(name))
+		for _, p := range []messaging.Port{
+			comp.Ports.Top, comp.Ports.Bottom, comp.Ports.Control,
+		} {
+			(&ccNoopConn{}).PlugIn(p)
 		}
 
 		return &memcontrolprotocol.Harness{
 			Comp: comp,
-			Ctrl: comp.GetPortByName("Control"),
+			Sim:  sim,
+			Ctrl: comp.Ports.Control,
 			IsQuiescent: func() bool {
 				return len(comp.State.MSHREntries) == 0 &&
 					!comp.State.HasRespondingMSHR

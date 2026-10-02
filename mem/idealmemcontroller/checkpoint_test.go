@@ -7,6 +7,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/simulation"
 )
 
@@ -25,14 +26,22 @@ func TestCheckpointRoundTrip(t *testing.T) {
 		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
 	}()
 
-	spec := idealmemcontroller.Definition.DefaultSpec
-	spec.Capacity = 4 * mem.KB
-	dram := idealmemcontroller.MakeBuilder().
+	// The storage registers itself with the simulation, so the checkpoint
+	// includes its data.
+	storage := mem.MakeStorageBuilder().
+		WithCapacity(4 * mem.KB).
 		WithSimulation(sim).
-		WithSpec(spec).
+		Build("DRAM.Storage")
+
+	dram := idealmemcontroller.Definition.Builder().
+		WithSimulation(sim).
+		WithResources(idealmemcontroller.Resources{Storage: storage}).
+		WithPorts(idealmemcontroller.Ports{
+			Top:     messaging.NewPort("DRAM.Top", 16, 16),
+			Control: messaging.NewPort("DRAM.Control", 16, 16),
+		}).
 		Build("DRAM")
 
-	storage := dram.Resources().Storage
 	storage.Write(0x40, []byte(payload))
 	dram.State.CurrentCmdID = 7
 

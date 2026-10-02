@@ -6,29 +6,27 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
-	"github.com/sarchlab/akita/v5/tracing"
-
-	// respondMW handles the bottom→top response path:
-	// fetchFromBottom, handleTranslationRsp.
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
+// respondMW handles the bottom→top response path:
+// fetchFromBottom, handleTranslationRsp.
 type respondMW struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *respondMW) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
 func (m *respondMW) bottomPort() messaging.Port {
-	return m.comp.GetPortByName("Bottom")
+	return m.comp.Ports.Bottom
 }
 
-// Tick runs the respond stage. Paused GMMUs make no progress.
-func (m *respondMW) Tick() bool {
+// Handle runs the respond stage. Paused GMMUs make no progress.
+func (m *respondMW) Handle(_ timing.Event) bool {
 	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
@@ -87,7 +85,7 @@ func (m *respondMW) handleTranslationRsp(rsp vmprotocol.TranslationRsp) bool {
 	rspToTop := vmprotocol.TranslationRsp{
 		Page: rsp.Page,
 	}
-	rspToTop.ID = m.comp.Simulation().NewID()
+	rspToTop.ID = m.comp.NewID()
 	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = reqTransaction.ReqSrc
 	rspToTop.RspTo = rsp.ID

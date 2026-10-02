@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/sarchlab/akita/v5/tracing/tracingtest"
@@ -32,19 +33,15 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.Latency = 100
 	spec.CacheLineSize = 64
 
-	comp := MakeBuilder().
+	comp := Definition.Builder().
 		WithSimulation(sim).
 		WithResources(Resources{Storage: storage}).
 		WithSpec(spec).
+		WithPorts(makePorts("MemCtrl", 16)).
 		Build("MemCtrl")
 
-	comp.AssignPort("Top",
-		messaging.NewPort(comp, 16, 16, comp.Name()+".Top"))
-	comp.AssignPort("Control",
-		messaging.NewPort(comp, 16, 16, comp.Name()+".Control"))
-
-	topPort := comp.GetPortByName("Top")
-	ctrlPort := comp.GetPortByName("Control")
+	topPort := comp.Ports.Top
+	ctrlPort := comp.Ports.Control
 	for _, p := range []messaging.Port{topPort, ctrlPort} {
 		(&noopConn{}).PlugIn(p)
 	}
@@ -60,7 +57,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	read.Dst = topPort.AsRemote()
 	read.TrafficClass = "memprotocol.ReadReq"
 	topPort.Deliver(read)
-	comp.Tick()
+	modelingtest.Tick(comp)
 
 	if len(comp.State.InflightTransactions) < 1 {
 		t.Fatalf("expected the read to be in flight, got %d in-flight transactions",
@@ -81,7 +78,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	acked := false
 	for range 16 {
-		comp.Tick()
+		modelingtest.Tick(comp)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {

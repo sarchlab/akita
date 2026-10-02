@@ -6,18 +6,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestBufferName(t *testing.T) {
-	b := NewBuffer[int]("test_buf", 4)
-	assert.Equal(t, "test_buf", b.Name())
-}
-
 func TestBufferCapacity(t *testing.T) {
-	b := NewBuffer[int]("b", 8)
+	b := MakeBuffer[int](8)
 	assert.Equal(t, 8, b.Capacity())
 }
 
 func TestBufferPushSize(t *testing.T) {
-	b := NewBuffer[int]("b", 3)
+	b := MakeBuffer[int](3)
 	assert.Equal(t, 0, b.Size())
 
 	b.Push(10)
@@ -30,7 +25,7 @@ func TestBufferPushSize(t *testing.T) {
 }
 
 func TestBufferCanPush(t *testing.T) {
-	b := NewBuffer[int]("b", 2)
+	b := MakeBuffer[int](2)
 	assert.True(t, b.CanPush())
 
 	b.Push(1)
@@ -41,13 +36,13 @@ func TestBufferCanPush(t *testing.T) {
 }
 
 func TestBufferPushOverflowPanics(t *testing.T) {
-	b := NewBuffer[int]("b", 1)
+	b := MakeBuffer[int](1)
 	b.Push(1)
 	assert.Panics(t, func() { b.Push(2) })
 }
 
 func TestBufferClear(t *testing.T) {
-	b := NewBuffer[int]("b", 5)
+	b := MakeBuffer[int](5)
 	b.Push(1)
 	b.Push(2)
 	b.Push(3)
@@ -58,21 +53,21 @@ func TestBufferClear(t *testing.T) {
 }
 
 func TestBufferPeekEmpty(t *testing.T) {
-	b := NewBuffer[int]("b", 3)
+	b := MakeBuffer[int](3)
 	value1, present1 := b.Peek()
 	assert.False(t, present1)
 	assert.Equal(t, 0, value1)
 }
 
 func TestBufferPopEmpty(t *testing.T) {
-	b := NewBuffer[int]("b", 3)
+	b := MakeBuffer[int](3)
 	value2, present2 := b.Pop()
 	assert.False(t, present2)
 	assert.Equal(t, 0, value2)
 }
 
 func TestBufferFIFOOrder(t *testing.T) {
-	b := NewBuffer[int]("b", 5)
+	b := MakeBuffer[int](5)
 	for i := 0; i < 5; i++ {
 		b.Push(i)
 	}

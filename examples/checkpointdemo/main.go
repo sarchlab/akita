@@ -4,7 +4,8 @@
 // A "worker" component processes one item per tick: it generates an ID, folds it
 // into a running checksum, and counts items processed. It works in two batches
 // with an idle (engine-quiescent) gap between them — the realistic place to
-// checkpoint, e.g. between GPU kernels.
+// checkpoint, e.g. between GPU kernels. Each batch is queued with addWork, the
+// worker's entry point for new work.
 //
 // Run it in two modes to see the oracle "run-to-end == checkpoint, resume,
 // run-to-end" hold:
@@ -28,12 +29,14 @@ import (
 	"os"
 
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
 // A fixed build identity keeps the demo reproducible across separate `go run`
-// invocations. Real code passes "" to use checkpoint.DefaultBuildID().
+// invocations. Real code passes "" to use the default build identity, which
+// changes whenever the binary does.
 const buildID = "checkpoint-demo"
 
 const (
@@ -41,32 +44,67 @@ const (
 	batch2 = 3
 )
 
-type workerSpec struct {
-	Label string `json:"label"`
+// Spec is the worker's configuration.
+type Spec struct {
+	Freq  timing.Freq `json:"freq"`
+	Label string      `json:"label"`
 }
 
-type workerState struct {
+// State is the worker's runtime data. A checkpoint saves it, so a resumed
+// run continues from the same counts.
+type State struct {
 	Processed int    `json:"processed"`
 	Pending   int    `json:"pending"`
 	Checksum  uint64 `json:"checksum"`
+}
+
+// Ports is empty: work arrives through addWork.
+type Ports struct{}
+
+// Middlewares holds the worker's behavior.
+type Middlewares struct {
+	// Work processes one pending item per tick.
+	Work *workerMW
+}
+
+// Comp is the worker, a ticking component.
+type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
+
+// Definition declares the worker.
+var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
+	DefaultSpec:    Spec{Freq: 1 * timing.GHz, Label: "demo"},
+	NewMiddlewares: newMiddlewares,
+}
+
+func newMiddlewares(c *Comp) Middlewares {
+	return Middlewares{Work: &workerMW{comp: c}}
+}
+
+// addWork queues n more items on the worker and starts it ticking. It is the
+// worker's entry point for new work: only the worker's own code writes its
+// State, and this function belongs to it.
+func addWork(c *Comp, n int) {
+	c.State.Pending += n
+	c.TickLater()
 }
 
 // workerMW processes one pending item per tick, generating an ID and folding it
 // into the checksum. When no items are pending it makes no progress, so the
 // engine runs out of events and goes quiescent.
 type workerMW struct {
-	comp *modeling.Component[workerSpec, workerState, modeling.None]
+	comp *Comp
 }
 
-func (m *workerMW) Tick() bool {
-	if m.comp.State.Pending <= 0 {
+func (m *workerMW) Handle(_ timing.Event) bool {
+	s := &m.comp.State
+	if s.Pending <= 0 {
 		return false
 	}
 
-	id := m.comp.Simulation().NewID()
-	m.comp.State.Processed++
-	m.comp.State.Checksum = m.comp.State.Checksum*1000003 + id
-	m.comp.State.Pending--
+	id := m.comp.NewID()
+	s.Processed++
+	s.Checksum = s.Checksum*1000003 + id
+	s.Pending--
 
 	return true
 }
@@ -84,14 +122,10 @@ func main() {
 		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
 	}()
 
-	engine := sim.GetEngine().(*timing.SerialEngine)
-	worker := modeling.NewBuilder[workerSpec, workerState, modeling.None]().
+	engine := sim.Engine().(*timing.SerialEngine)
+	worker := Definition.Builder().
 		WithSimulation(sim).
-		WithFreq(1 * timing.GHz).
-		WithSpec(workerSpec{Label: "demo"}).
 		Build("Worker")
-	worker.AddMiddleware(&workerMW{comp: worker})
-	sim.RegisterComponent(worker)
 
 	switch *mode {
 	case "save":
@@ -122,23 +156,14 @@ func main() {
 }
 
 // runBatch queues a batch of work and runs the engine until it goes quiescent.
-func runBatch(
-	engine *timing.SerialEngine,
-	worker *modeling.Component[workerSpec, workerState, modeling.None],
-	n int,
-) {
-	worker.State.Pending = n
-	worker.TickLater()
+func runBatch(engine *timing.SerialEngine, worker *Comp, n int) {
+	addWork(worker, n)
 	if err := engine.Run(); err != nil {
 		panic(err)
 	}
 }
 
-func report(
-	mode, label string,
-	engine *timing.SerialEngine,
-	worker *modeling.Component[workerSpec, workerState, modeling.None],
-) {
+func report(mode, label string, engine *timing.SerialEngine, worker *Comp) {
 	s := worker.State
 	fmt.Printf("[%s] %-12s processed=%d checksum=%d t=%d\n",
 		mode, label, s.Processed, s.Checksum, engine.CurrentTime())

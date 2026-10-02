@@ -7,10 +7,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/dram"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 
 	"github.com/sarchlab/akita/v5/simulation"
@@ -24,7 +24,7 @@ var maxAddressFlag = flag.Uint64("max-address", 1048576, "Address range to use")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 var traceFlag = flag.Bool("trace", false, "Collect trace")
 
-func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
+func setupTest(seed int64) (*simulation.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
 	simBuilder := simulation.MakeBuilder()
 
 	if *parallelFlag {
@@ -35,58 +35,67 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 	}
 
 	s := simBuilder.Build()
-	engine := s.GetEngine()
+	engine := s.Engine()
 
 	conn := directconnection.MakeBuilder().
 		WithSimulation(s).
 		Build("Conn")
 
+	// The agent sends to the memory controller's Top port, so the
+	// controller's ports are created before the agent is built.
+	memCtrlPorts := dram.Ports{
+		Top:     messaging.NewPort("Mem.Top", 16, 16),
+		Control: messaging.NewPort("Mem.Control", 16, 16),
+	}
+
 	agentSpec := memaccessagent.Definition.DefaultSpec
 	agentSpec.MaxAddress = *maxAddressFlag
 	agentSpec.WriteLeft = *numAccessFlag
 	agentSpec.ReadLeft = *numAccessFlag
+	agentSpec.RandSeed = seed
 
-	agent := memaccessagent.MakeBuilder().
+	agent := memaccessagent.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(agentSpec).
+		WithResources(memaccessagent.Resources{LowModule: memCtrlPorts.Top}).
+		WithPorts(memaccessagent.Ports{
+			Mem: messaging.NewPort("MemAccessAgent.Mem", 16, 16),
+		}).
 		Build("MemAccessAgent")
-	assignPorts(s, agent, "Mem")
-	if monitor := s.GetMonitor(); monitor != nil {
-		agent.CreateProgressBars(monitor.CreateProgressBar)
+	if monitor := s.Monitor(); monitor != nil {
+		memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
 	}
 
 	dramSpec := dram.Definition.DefaultSpec
 	dramSpec.Freq = 1 * timing.GHz
 
-	memCtrl := dram.MakeBuilder().
+	memCtrl := dram.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(dramSpec).
+		WithResources(dram.Resources{
+			Storage: mem.MakeStorageBuilder().
+				WithCapacity(dramCapacity(dramSpec)).
+				WithSimulation(s).
+				Build("Mem.Storage"),
+		}).
+		WithPorts(memCtrlPorts).
 		Build("Mem")
-	assignPorts(s, memCtrl, "Top", "Control")
 
-	agent.LowModule = memCtrl.GetPortByName("Top")
-
-	conn.PlugIn(agent.GetPortByName("Mem"))
-	conn.PlugIn(memCtrl.GetPortByName("Top"))
+	conn.PlugIn(agent.Ports.Mem)
+	conn.PlugIn(memCtrl.Ports.Top)
 
 	return s, engine, agent
 }
 
-// assignPorts builds a port for each declared name on the component and assigns
-// it, choosing a default buffer size.
-func assignPorts(
-	s *simulation.Simulation,
-	comp messaging.Component,
-	names ...string,
-) {
-	for _, name := range names {
-		p := modeling.MakePortBuilder().
-			WithSimulation(s).
-			WithComponent(comp).
-			WithSpec(modeling.PortSpec{BufSize: 16}).
-			Build(name)
-		comp.AssignPort(name, p)
-	}
+// dramCapacity returns the number of bytes addressable by a DRAM with the
+// given geometry.
+func dramCapacity(spec dram.Spec) uint64 {
+	devicePerRank := spec.BusWidth / spec.DeviceWidth
+	bankSize := spec.NumCol * spec.NumRow * spec.DeviceWidth / 8
+	rankSize := bankSize * spec.NumBank * devicePerRank
+	totalSize := rankSize * spec.NumRank * spec.NumChannel
+
+	return uint64(totalSize)
 }
 
 func main() {
@@ -100,7 +109,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, "Seed %d\n", seed)
 	rand.Seed(seed)
 
-	s, engine, agent := setupTest()
+	s, engine, agent := setupTest(seed)
 	agent.TickLater()
 
 	err := engine.Run()

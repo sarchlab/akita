@@ -215,11 +215,6 @@ func (e *SerialEngine) CurrentTime() VTimeInPicoSec {
 	return e.time
 }
 
-// SetCurrentTime sets the current time of the engine.
-func (e *SerialEngine) SetCurrentTime(t VTimeInPicoSec) {
-	e.time = t
-}
-
 // recoverRun is deferred once by Run/RunUntil, not once per event.
 func (e *SerialEngine) recoverRun(err *error) {
 	if cause := recover(); cause != nil {

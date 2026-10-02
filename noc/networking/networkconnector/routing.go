@@ -1,9 +1,9 @@
 package networkconnector
 
 import (
+	"fmt"
 	"math"
 
-	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/switches"
@@ -42,8 +42,16 @@ type Node interface {
 	Name() string
 }
 
+// switchNode is a switch of the network. Its ports and links are collected as
+// devices and switches are connected; the switch itself is built from them by
+// EstablishRoute.
 type switchNode struct {
-	sw      *modeling.Component[switches.Spec, switches.State, modeling.None]
+	name    string
+	spec    switches.Spec
+	table   routing.Table
+	ports   []messaging.Port
+	links   []switches.Link
+	sw      *switches.Comp
 	remotes []Remote
 }
 
@@ -52,11 +60,37 @@ func (sn *switchNode) ListRemotes() []Remote {
 }
 
 func (sn *switchNode) Name() string {
-	return sn.sw.Name()
+	return sn.name
 }
 
 func (sn *switchNode) Table() routing.Table {
-	return switches.GetRoutingTable(sn.sw)
+	return sn.table
+}
+
+// addPort creates the switch's next port and the link behind it, and returns
+// the port and the link's index. remote may be empty and set later, once the
+// port at the other end exists.
+func (sn *switchNode) addPort(
+	factory PortFactory,
+	remote messaging.RemotePort,
+	param LinkEndSwitchParameter,
+) (messaging.Port, int) {
+	if sn.sw != nil {
+		panic(fmt.Sprintf("networkconnector: switch %s is already built", sn.name))
+	}
+
+	port := factory(fmt.Sprintf("%s.Port[%d]", sn.name, len(sn.ports)),
+		param.OutgoingBufSize, param.OutgoingBufSize)
+
+	sn.ports = append(sn.ports, port)
+	sn.links = append(sn.links, switches.Link{
+		Remote:           remote,
+		Latency:          param.Latency,
+		NumInputChannel:  param.NumInputChannel,
+		NumOutputChannel: param.NumOutputChannel,
+	})
+
+	return port, len(sn.links) - 1
 }
 
 type deviceNode struct {

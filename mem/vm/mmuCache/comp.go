@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/lruset"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -18,6 +18,28 @@ type Spec struct {
 	Log2PageSize    uint64      `json:"log2_page_size"`
 	NumReqPerCycle  int         `json:"num_req_per_cycle"`
 	LatencyPerLevel uint64      `json:"latency_per_level"`
+}
+
+// Ports holds the mmuCache's ports.
+type Ports struct {
+	// Top receives translation requests and returns their responses.
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.responder"`
+
+	// Bottom forwards translation requests for misses to the low module.
+	Bottom messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.requester"`
+
+	// Control receives enable, pause, drain, flush, invalidate, and reset
+	// commands.
+	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
+}
+
+// middlewares holds the mmuCache's behavior, run in field order every cycle.
+type middlewares struct {
+	// Ctrl handles control commands.
+	Ctrl *ctrlMiddleware
+
+	// Cache looks up translations, forwards misses, and relays responses.
+	Cache *mmuCacheMiddleware
 }
 
 // Resources holds the external wiring referenced by the mmuCache: the remote
@@ -33,8 +55,8 @@ const (
 	mmuCacheStateDrain  = "drain"
 )
 
-// State contains mutable runtime data for the mmuCache.
-type State struct {
+// state contains mutable runtime data for the mmuCache.
+type state struct {
 	CurrentState    string               `json:"current_state"`
 	PendingDrainRsp bool                 `json:"pending_drain_rsp"`
 	CurrentCmdID    uint64               `json:"current_cmd_id"`
@@ -125,7 +147,7 @@ func initSets(numLevels, numBlocks int) []setState {
 	for i := 0; i < numLevels; i++ {
 		s := setState{
 			Blocks: make([]blockState, numBlocks),
-			LRU:    lruset.NewSet(numBlocks),
+			LRU:    lruset.MakeSet(numBlocks),
 		}
 		for j := 0; j < numBlocks; j++ {
 			s.Blocks[j] = blockState{WayID: j}
@@ -148,4 +170,4 @@ func restoreTransReq(
 }
 
 // Comp is the mmuCache component.
-type Comp = modeling.Component[Spec, State, Resources]
+type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]

@@ -3,7 +3,6 @@ package writethroughcache
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/queueing"
 
@@ -23,42 +22,39 @@ var _ = Describe("Bankstage", func() {
 	BeforeEach(func() {
 		storage = mem.NewStorage(4 * mem.KB)
 
-		initialState := State{
-			DirBuf: queueing.NewBuffer[int]("Cache.DirBuf", 4),
+		initialState := state{
+			DirBuf: queueing.MakeBuffer[int](4),
 			BankBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.BankBuf0", 1),
+				queueing.MakeBuffer[int](1),
 			},
-			DirPipeline: queueing.NewPipeline[int](1, 2),
-			DirPostBuf:  queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
+			DirPipeline: queueing.MakePipeline[int](1, 2),
+			DirPostBuf:  queueing.MakeBuffer[int](4),
 			BankPipelines: []queueing.Pipeline[int]{
-				queueing.NewPipeline[int](1, 10),
+				queueing.MakePipeline[int](1, 10),
 			},
 			BankPostBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.BankPostBuf0", 1),
+				queueing.MakeBuffer[int](1),
 			},
 		}
-
-		c = &pipelineMW{
-			storage: storage,
-		}
-		c.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
-				BankLatency:      10,
-				Log2BlockSize:    6,
-				WayAssociativity: 4,
-				NumSets:          16,
-				NumBanks:         1,
-				NumReqPerCycle:   1,
-				WritePolicyType:  "write-around",
-			}).
-			Build("Cache")
 
 		// Initialize directoryState before SetState so both buffers match
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
-		c.comp.State = initialState
+		c = buildStageTestCache(
+			Spec{
+				Freq:             1 * timing.GHz,
+				BankLatency:      10,
+				Log2BlockSize:    6,
+				WayAssociativity: 4,
+				TotalByteSize:    4 * mem.KB, // 16 sets
+				NumBanks:         1,
+				NumReqPerCycle:   1,
+				WritePolicyType:  "write-around",
+			},
+			Resources{Storage: storage},
+			makePorts("Cache", 4),
+			initialState,
+		)
 
 		s = &bankStage{
 			cache:          c,
@@ -115,7 +111,7 @@ var _ = Describe("Bankstage", func() {
 			})
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -168,7 +164,7 @@ var _ = Describe("Bankstage", func() {
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 64 + 12,
 				TrafficClass: "req",
 			}
@@ -297,7 +293,7 @@ var _ = Describe("Bankstage", func() {
 				// the coalesced write that depends on the fetcher's
 				// merged fill landing in storage.
 				coalescedWriteMeta = messaging.MsgMeta{
-					ID:           c.comp.Simulation().NewID(),
+					ID:           c.comp.NewID(),
 					TrafficBytes: 4 + 12,
 					TrafficClass: "req",
 				}

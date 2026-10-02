@@ -1,36 +1,66 @@
+// Command 03_random_walk is the smallest useful Akita simulation: one ticking
+// component, no ports. The walker takes one ±1 step per cycle until it drifts
+// WallDistance away from the origin, then reports where and when it stopped.
 package main
 
 import (
 	"fmt"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-type walkSpec struct {
+// Spec is the walker's configuration.
+type Spec struct {
 	Freq         timing.Freq `json:"freq"`
 	WallDistance int         `json:"wall_distance"`
 }
 
-type walkState struct {
+// State is the walker's runtime data.
+type State struct {
 	Position int `json:"position"`
 	Steps    int `json:"steps"`
 }
 
-// Comp is the random-walk component. The alias keeps the long generic
-// modeling.Component[Spec, State, Resources] type out of the rest of the code.
-type Comp = modeling.Component[walkSpec, walkState, modeling.None]
+// Resources holds the random source the walker draws its steps from. The
+// system builder supplies it, so it also chooses the seed.
+type Resources struct {
+	RNG *rand.Rand
+}
+
+// Ports is empty: the walker talks to no one.
+type Ports struct{}
+
+// Middlewares holds the walker's behavior.
+type Middlewares struct {
+	// Walk takes one step per tick until the walker hits a wall.
+	Walk *walkMW
+}
+
+// Comp is the walker, a ticking component.
+type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
+
+// Definition declares the walker.
+var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
+	DefaultSpec:    Spec{Freq: 1 * timing.GHz, WallDistance: 10},
+	NewMiddlewares: newMiddlewares,
+}
+
+func newMiddlewares(c *Comp) Middlewares {
+	return Middlewares{Walk: &walkMW{comp: c}}
+}
 
 type walkMW struct {
 	comp *Comp
-	rng  *rand.Rand
 }
 
-func (m *walkMW) Tick() bool {
+// Handle takes one step. It makes no progress once the walker is at a wall,
+// so the component stops ticking and the simulation ends.
+func (m *walkMW) Handle(_ timing.Event) bool {
 	state := &m.comp.State
-	wall := m.comp.Spec().WallDistance
+	wall := m.comp.Spec.WallDistance
 
 	if state.Position >= wall || state.Position <= -wall {
 		fmt.Printf("hit wall at %+d after %d steps (%d ps)\n",
@@ -38,7 +68,7 @@ func (m *walkMW) Tick() bool {
 		return false
 	}
 
-	if m.rng.Intn(2) == 0 {
+	if m.comp.Resources.RNG.Intn(2) == 0 {
 		state.Position--
 	} else {
 		state.Position++
@@ -51,20 +81,15 @@ func (m *walkMW) Tick() bool {
 func main() {
 	s := simulation.MakeBuilder().Build()
 
-	spec := walkSpec{Freq: 1 * timing.GHz, WallDistance: 10}
-	comp := modeling.NewBuilder[walkSpec, walkState, modeling.None]().
+	walker := Definition.Builder().
 		WithSimulation(s).
-		WithFreq(spec.Freq).
-		WithSpec(spec).
+		WithResources(Resources{RNG: rand.New(rand.NewSource(1))}).
 		Build("Walker")
-	comp.AddMiddleware(&walkMW{
-		comp: comp,
-		rng:  rand.New(rand.NewSource(1)),
-	})
 
-	comp.TickLater()
+	// Nothing wakes a component with no ports, so start it explicitly.
+	walker.TickLater()
 
-	if err := s.GetEngine().Run(); err != nil {
+	if err := s.Engine().Run(); err != nil {
 		panic(err)
 	}
 

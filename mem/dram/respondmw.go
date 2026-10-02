@@ -3,29 +3,28 @@ package dram
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type respondMW struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *respondMW) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
-// Tick runs the respond stage twice (matching original execution
+// Handle runs the respond stage twice (matching original execution
 // order). Paused DRAM makes no progress; draining DRAM continues so
 // in-flight transactions can finish and the drain can converge.
-func (m *respondMW) Tick() bool {
+func (m *respondMW) Handle(_ timing.Event) bool {
 	next := &m.comp.State
 	if next.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	progress := m.respond(&spec, next)
 	progress = m.respond(&spec, next) || progress
@@ -33,7 +32,7 @@ func (m *respondMW) Tick() bool {
 	return progress
 }
 
-func (m *respondMW) respond(spec *Spec, next *State) bool {
+func (m *respondMW) respond(spec *Spec, next *state) bool {
 	for i := range next.Transactions {
 		t := &next.Transactions[i]
 		if isTransactionCompleted(t) {
@@ -49,7 +48,7 @@ func (m *respondMW) respond(spec *Spec, next *State) bool {
 
 func (m *respondMW) finalizeTransaction(
 	spec *Spec,
-	state *State,
+	state *state,
 	t *transactionState,
 	i int,
 ) bool {
@@ -69,15 +68,15 @@ func (m *respondMW) finalizeTransaction(
 }
 
 func (m *respondMW) finalizeWriteTrans(
-	state *State,
+	state *state,
 	t *transactionState,
 	i int,
 ) bool {
-	m.comp.Resources().Storage.Write(
+	m.comp.Resources.Storage.Write(
 		transactionGlobalAddress(t), t.WriteMsg.Data)
 
 	writeDone := memprotocol.WriteDoneRsp{}
-	writeDone.ID = m.comp.Simulation().NewID()
+	writeDone.ID = m.comp.NewID()
 	writeDone.Src = m.topPort().AsRemote()
 	writeDone.Dst = t.WriteMsg.Src
 	writeDone.RspTo = t.WriteMsg.ID
@@ -97,15 +96,15 @@ func (m *respondMW) finalizeWriteTrans(
 }
 
 func (m *respondMW) finalizeReadTrans(
-	state *State,
+	state *state,
 	t *transactionState,
 	i int,
 ) bool {
-	data := m.comp.Resources().Storage.Read(
+	data := m.comp.Resources.Storage.Read(
 		transactionGlobalAddress(t), t.ReadMsg.AccessByteSize)
 
 	dataReady := memprotocol.DataReadyRsp{}
-	dataReady.ID = m.comp.Simulation().NewID()
+	dataReady.ID = m.comp.NewID()
 	dataReady.Src = m.topPort().AsRemote()
 	dataReady.Dst = t.ReadMsg.Src
 	dataReady.Data = data
@@ -130,7 +129,7 @@ func (m *respondMW) finalizeReadTrans(
 // all refer to transactions by stable ID, and a completed transaction has no
 // outstanding references (its sub-transactions were drained from the queues and
 // retired from the pending-completion list before it could be finalized).
-func (m *respondMW) removeTransaction(state *State, idx int) {
+func (m *respondMW) removeTransaction(state *state, idx int) {
 	state.Transactions = append(
 		state.Transactions[:idx],
 		state.Transactions[idx+1:]...,

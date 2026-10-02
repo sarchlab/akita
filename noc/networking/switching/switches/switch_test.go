@@ -22,7 +22,7 @@ var _ = Describe("Switch", func() {
 		port1, port2 *MockPort
 		dstPort      *MockPort
 		routingTable *MockTable
-		sw           *modeling.Component[Spec, State, modeling.None]
+		sw           *Comp
 		rfsMW        *routeForwardSendMW
 		rpMW         *receivePipelineMW
 	)
@@ -36,7 +36,7 @@ var _ = Describe("Switch", func() {
 			Return(messaging.RemotePort("LocalPort1")).
 			AnyTimes()
 		port1.EXPECT().Name().
-			Return("LocalPort1").
+			Return("Switch.Port[0]").
 			AnyTimes()
 
 		port2 = NewMockPort(mockCtrl)
@@ -44,7 +44,7 @@ var _ = Describe("Switch", func() {
 			Return(messaging.RemotePort("LocalPort2")).
 			AnyTimes()
 		port2.EXPECT().Name().
-			Return("LocalPort2").
+			Return("Switch.Port[1]").
 			AnyTimes()
 
 		remote1 := NewMockPort(mockCtrl)
@@ -68,39 +68,32 @@ var _ = Describe("Switch", func() {
 		spec := Definition.DefaultSpec
 		spec.Freq = 1
 
-		sw = MakeBuilder().
+		for _, p := range []*MockPort{port1, port2} {
+			p.EXPECT().Owner().Return(nil)
+			p.EXPECT().SetOwner(gomock.Any())
+		}
+
+		link := func(remote *MockPort) Link {
+			return Link{
+				Remote:           remote.AsRemote(),
+				NumInputChannel:  1,
+				NumOutputChannel: 1,
+				Latency:          1,
+			}
+		}
+
+		sw = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
-			WithResources(Resources{RoutingTable: routingTable}).
+			WithResources(Resources{
+				RoutingTable: routingTable,
+				Links:        []Link{link(remote1), link(remote2)},
+			}).
+			WithPorts(Ports{Port: []messaging.Port{port1, port2}}).
 			Build("Switch")
 
-		pcs1 := portComplexState{
-			LocalPortName:    "LocalPort1",
-			RemotePort:       remote1.AsRemote(),
-			NumInputChannel:  1,
-			NumOutputChannel: 1,
-			Latency:          1,
-			PipelineWidth:    1,
-		}
-		rfsMWLocal := routeForwardSendMiddleware(sw)
-		sw.AssignPortToGroup("Port", port1)
-		addPort(rfsMWLocal.comp, rfsMWLocal.portIndex,
-			port1, remote1.AsRemote(), pcs1)
-
-		pcs2 := portComplexState{
-			LocalPortName:    "LocalPort2",
-			RemotePort:       remote2.AsRemote(),
-			NumInputChannel:  1,
-			NumOutputChannel: 1,
-			Latency:          1,
-			PipelineWidth:    1,
-		}
-		sw.AssignPortToGroup("Port", port2)
-		addPort(rfsMWLocal.comp, rfsMWLocal.portIndex,
-			port2, remote2.AsRemote(), pcs2)
-
-		rfsMW = sw.Middlewares()[0].(*routeForwardSendMW)
-		rpMW = sw.Middlewares()[1].(*receivePipelineMW)
+		rfsMW = sw.Middlewares.RouteForwardSend
+		rpMW = sw.Middlewares.ReceivePipeline
 	})
 
 	AfterEach(func() {
@@ -187,7 +180,7 @@ var _ = Describe("Switch", func() {
 		// Place item in route buffer for port1
 		next := &sw.State
 		next.PortComplexes[0].RouteBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort1RouteBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[0].RouteBuffer.Push(
 			routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
 
@@ -217,11 +210,11 @@ var _ = Describe("Switch", func() {
 		// Place item in route buffer and fill forward buffer
 		next := &sw.State
 		next.PortComplexes[0].RouteBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort1RouteBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[0].RouteBuffer.Push(
 			routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
 		next.PortComplexes[0].ForwardBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort1FwdBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[0].ForwardBuffer.Push(
 			routedFlit{Flit: packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 300}}})
 
@@ -243,7 +236,7 @@ var _ = Describe("Switch", func() {
 		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
 		next := &sw.State
 		next.PortComplexes[0].ForwardBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort1FwdBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[0].ForwardBuffer.Push(
 			routedFlit{Flit: flit, OutputBufIdx: 1})
 
@@ -268,11 +261,11 @@ var _ = Describe("Switch", func() {
 		// Fill sendOut buffer to capacity, forward buffer targets port2
 		next := &sw.State
 		next.PortComplexes[0].ForwardBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort1FwdBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[0].ForwardBuffer.Push(
 			routedFlit{Flit: flit, OutputBufIdx: 1})
 		next.PortComplexes[1].SendOutBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort2SendBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[1].SendOutBuffer.Push(
 			routedFlit{Flit: packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 400}}})
 
@@ -295,7 +288,7 @@ var _ = Describe("Switch", func() {
 		// Place flit in sendOutBuffer of port2
 		next := &sw.State
 		next.PortComplexes[1].SendOutBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort2SendBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[1].SendOutBuffer.Push(routedFlit{Flit: flit})
 
 		port2.EXPECT().CanSend().Return(true)
@@ -322,7 +315,7 @@ var _ = Describe("Switch", func() {
 		// Place flit in sendOutBuffer of port2
 		next := &sw.State
 		next.PortComplexes[1].SendOutBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort2SendBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[1].SendOutBuffer.Push(routedFlit{Flit: flit})
 
 		port2.EXPECT().CanSend().Return(false)

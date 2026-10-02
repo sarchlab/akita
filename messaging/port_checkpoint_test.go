@@ -7,7 +7,7 @@ import (
 )
 
 func newCkptPort(in, out int) *defaultPort {
-	return NewPort(nil, in, out, "P").(*defaultPort)
+	return NewPort("P", in, out).(*defaultPort)
 }
 
 func TestPortCheckpointRoundTrip(t *testing.T) {
@@ -40,7 +40,7 @@ func TestPortCheckpointCapacityMismatch(t *testing.T) {
 }
 
 func TestPortCheckpointRoundTripWithMessages(t *testing.T) {
-	RegisterMsg(registryTestMsg{})
+	msgCodec.Register(registryTestMsg{})
 
 	mk := func(id uint64, v int) registryTestMsg {
 		m := registryTestMsg{Value: v}

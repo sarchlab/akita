@@ -15,9 +15,8 @@ type Component interface {
 	Entity
 }
 
-// Port is the minimal port contract the simulation runtime needs.
-// Concrete messaging ports satisfy this without the simulation package
-// depending on messaging.
+// Port is the minimal port contract the simulation runtime needs to register
+// and monitor a port. Every messaging.Port satisfies it.
 type Port interface {
 	Entity
 	NumIncoming() int
@@ -25,8 +24,7 @@ type Port interface {
 }
 
 // Connection is the minimal connection contract the simulation runtime needs.
-// Concrete messaging connections satisfy this without the simulation package
-// depending on messaging.
+// Every messaging.Connection satisfies it.
 type Connection interface {
 	Entity
 }
@@ -39,9 +37,4 @@ type Connection interface {
 // canonical name.
 type Resource interface {
 	Entity
-}
-
-// PortOwner is implemented by simulation-native components that expose ports.
-type PortOwner interface {
-	Ports() []Port
 }

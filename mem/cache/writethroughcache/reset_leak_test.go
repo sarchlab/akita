@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/sarchlab/akita/v5/tracing/tracingtest"
@@ -35,7 +36,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.TotalByteSize = 64 * 1024
 	spec.MaxNumConcurrentTrans = 16
 
-	comp := MakeBuilder().
+	comp := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(Resources{
@@ -44,24 +45,16 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 				Port: messaging.RemotePort("LowerCache"),
 			},
 		}).
+		WithPorts(makePorts("L1Cache", 16)).
 		Build("L1Cache")
 
-	// Build declares the ports; assign every declared port instance and plug
-	// each into a no-op connection before the component is ticked.
-	assign := func(name string) messaging.Port {
-		p := modeling.MakePortBuilder().
-			WithSimulation(sim).
-			WithComponent(comp).
-			WithSpec(modeling.PortSpec{BufSize: 16}).
-			Build(name)
-		comp.AssignPort(name, p)
+	// Plug each port into a no-op connection before the component is ticked.
+	topPort := comp.Ports.Top
+	bottomPort := comp.Ports.Bottom
+	ctrlPort := comp.Ports.Control
+	for _, p := range []messaging.Port{topPort, bottomPort, ctrlPort} {
 		(&ccNoopConn{}).PlugIn(p)
-		return p
 	}
-
-	topPort := assign("Top")
-	bottomPort := assign("Bottom")
-	ctrlPort := assign("Control")
 
 	rec := &tracingtest.LeakRecorder{}
 	tracing.CollectTrace(comp, rec)
@@ -82,7 +75,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// bottom request.
 	bottomSent := false
 	for i := 0; i < 256 && !bottomSent; i++ {
-		comp.Tick()
+		modelingtest.Tick(comp)
 		if out, ok := bottomPort.RetrieveOutgoing(); ok {
 			if _, ok := out.(memprotocol.ReadReq); ok {
 				bottomSent = true
@@ -124,7 +117,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
-		comp.Tick()
+		modelingtest.Tick(comp)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {

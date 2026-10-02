@@ -71,31 +71,20 @@ defer sim.Terminate()
 sim.RegisterComponent(myComponent)
 ```
 
-Registration automatically adds the component and its ports to the inventory,
-attaches visual tracing hooks, connects the component to the monitoring system
-(if enabled), and registers any shared-state resources it exposes. Use
-`RegisterConnection` and `RegisterResource` to register connections and shared
-resources directly.
+Registration adds the component to the inventory, attaches the visual
+tracer, and connects the component to the monitor (if enabled). A component's
+`Build` already registers the component and each of its ports
+(`RegisterPort`), so a system builder calls `RegisterComponent` only for a
+component written without a component model. Use `RegisterConnection` and
+`RegisterResource` to register connections and shared resources.
 
 ### Accessing the Simulation
 
 ```go
-engine := sim.GetEngine()
-recorder := sim.GetDataRecorder()
-tracer := sim.GetVisTracer()
-
-comp := sim.GetComponentByName("myComp")    // panics if not registered
-port := sim.GetPortByName("myComp.Top")     // panics if not registered
-
-components := sim.Components()               // copy, in registration order
-connections := sim.Connections()
-resources := sim.Resources()
+engine := sim.Engine()
+recorder := sim.DataRecorder() // a simulator can write its own tables into the recording
+monitor := sim.Monitor()       // nil when monitoring is off
 ```
-
-`GetComponentByName` and `GetPortByName` resolve a globally unique name to the
-registered entity. `Components`, `Connections`, and `Resources` each return a
-copy of the registered objects in registration order, which is useful for
-inventory, debugging, and tooling.
 
 ## Checkpoint and Resume
 
@@ -142,12 +131,13 @@ setup rebuilds; put cursors and counters in `State`.
   checkpoint.
 - **Register your message and event types.** A port can hold any `messaging.Msg`
   and the engine queue any `timing.Event`; each concrete type must be registered
-  with `messaging.RegisterMsg` / `timing.RegisterEvent` in an `init()` so a
-  checkpoint that captures it can be decoded. A forgotten registration fails
+  (a message by listing it in a `messaging.DefineProtocol`, an event with
+  `timing.RegisterEvent` in an `init()`) so a checkpoint that captures it can
+  be decoded. A forgotten registration fails
   loudly at load.
 - An entity package becomes checkpointable by implementing the structural
   `Checkpointable` interface (`SaveCheckpoint(io.Writer)` / `LoadCheckpoint(io.Reader)`);
-  it never imports `simulation`. `modeling.Component`/`EventDrivenComponent`,
+  it never imports `simulation`. components built with the component models,
   ports, `mem.Storage`, and `vm.PageTable` already do.
 
 **Writing your own checkpointable messages, events, and components:** see

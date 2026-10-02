@@ -33,7 +33,7 @@ func (t *cmdTracer) AddMilestone(m tracing.Milestone) {
 var _ = Describe("P1: strategy selection", func() {
 	It("selects the default strategies from a default spec", func() {
 		spec := Definition.DefaultSpec
-		ctrl := newDefaultController(&spec)
+		ctrl := newController(&spec)
 
 		Expect(ctrl.scheduler.Name()).To(Equal("FRFCFS"))
 		Expect(ctrl.addrMapper.Name()).To(Equal("default"))
@@ -42,23 +42,23 @@ var _ = Describe("P1: strategy selection", func() {
 	It("derives the row policy from PagePolicy", func() {
 		open := Definition.DefaultSpec
 		open.PagePolicy = PagePolicyOpen
-		Expect(newDefaultController(&open).rowPolicy.Name()).To(Equal("open"))
+		Expect(newController(&open).rowPolicy.Name()).To(Equal("open"))
 
 		closed := Definition.DefaultSpec
 		closed.PagePolicy = PagePolicyClose
-		Expect(newDefaultController(&closed).rowPolicy.Name()).To(Equal("close"))
+		Expect(newController(&closed).rowPolicy.Name()).To(Equal("close"))
 	})
 
 	It("selects a scheduler by its Spec registry key", func() {
 		spec := Definition.DefaultSpec
 		spec.Scheduler = "FRFCFS"
-		Expect(newDefaultController(&spec).scheduler.Name()).To(Equal("FRFCFS"))
+		Expect(newController(&spec).scheduler.Name()).To(Equal("FRFCFS"))
 	})
 
 	It("panics on an unknown registry key", func() {
 		spec := Definition.DefaultSpec
 		spec.Scheduler = "does-not-exist"
-		Expect(func() { newDefaultController(&spec) }).To(Panic())
+		Expect(func() { newController(&spec) }).To(Panic())
 	})
 })
 

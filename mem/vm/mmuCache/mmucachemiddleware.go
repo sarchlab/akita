@@ -5,25 +5,24 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type mmuCacheMiddleware struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *mmuCacheMiddleware) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
 func (m *mmuCacheMiddleware) bottomPort() messaging.Port {
-	return m.comp.GetPortByName("Bottom")
+	return m.comp.Ports.Bottom
 }
 
-func (m *mmuCacheMiddleware) Tick() bool {
+func (m *mmuCacheMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 	next := &m.comp.State
 
@@ -45,7 +44,7 @@ func (m *mmuCacheMiddleware) handleDrain() bool {
 	// on the Top queue, so the drain converges even if upstream keeps queuing;
 	// those queued requests resume after Enable.
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.handleBottomPort() || madeProgress
 	}
@@ -69,7 +68,7 @@ func (m *mmuCacheMiddleware) handleEnable() bool {
 // processRequests handles both incoming lookup requests and bottom port responses.
 func (m *mmuCacheMiddleware) processRequests() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.lookup() || madeProgress
 	}
@@ -100,7 +99,7 @@ func (m *mmuCacheMiddleware) lookup() bool {
 func (m *mmuCacheMiddleware) walkCacheLevels(
 	msg vmprotocol.TranslationReq,
 ) bool {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	totalLatency := spec.LatencyPerLevel * uint64(spec.NumLevels)
 
 	for level := spec.NumLevels - 1; level >= 0; level-- {
@@ -121,7 +120,7 @@ func (m *mmuCacheMiddleware) walkCacheLevels(
 func (m *mmuCacheMiddleware) lookupLevel(
 	level int, req vmprotocol.TranslationReq,
 ) bool {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	next := &m.comp.State
 	vAddr := req.VAddr
 	pid := req.PID
@@ -146,10 +145,10 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 		return false
 	}
 
-	res := m.comp.Resources()
+	res := m.comp.Resources
 
 	reqToBottom := vmprotocol.TranslationReq{}
-	reqToBottom.ID = m.comp.Simulation().NewID()
+	reqToBottom.ID = m.comp.NewID()
 	reqToBottom.Src = m.bottomPort().AsRemote()
 	reqToBottom.Dst = res.LowModulePort
 	reqToBottom.PID = req.PID
@@ -227,12 +226,12 @@ func (m *mmuCacheMiddleware) handleRsp(rsp vmprotocol.TranslationRsp) bool {
 
 	m.updateCacheLevels(rsp)
 
-	res := m.comp.Resources()
+	res := m.comp.Resources
 
 	rspToTop := vmprotocol.TranslationRsp{
 		Page: rsp.Page,
 	}
-	rspToTop.ID = m.comp.Simulation().NewID()
+	rspToTop.ID = m.comp.NewID()
 	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = res.UpModulePort
 	rspToTop.RspTo = rsp.RspTo
@@ -284,13 +283,13 @@ func (m *mmuCacheMiddleware) handleRsp(rsp vmprotocol.TranslationRsp) bool {
 
 // segToSetID maps a segment to a cache set ID using modulo hashing.
 func (m *mmuCacheMiddleware) segToSetID(seg uint64) int {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	return int(seg % uint64(spec.NumBlocks))
 }
 
 // updateCacheLevels updates all cache levels with the translation response.
 func (m *mmuCacheMiddleware) updateCacheLevels(rsp vmprotocol.TranslationRsp) bool {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	next := &m.comp.State
 	page := rsp.Page
 	vAddr := page.VAddr

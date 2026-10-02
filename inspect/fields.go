@@ -59,7 +59,6 @@ func structFields(
 			Type:     types.TypeString(f.Type(), types.RelativeTo(pkg.Types)),
 			Doc:      docs[f.Name()],
 			Unit:     unitByType[qualifiedTypeName(f.Type())],
-			Derived:  akitaTag.Derived,
 			Min:      akitaTag.Min,
 			Max:      akitaTag.Max,
 			Choices:  choicesFor(f.Type()),

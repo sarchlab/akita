@@ -4,7 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -15,6 +15,25 @@ type Spec struct {
 	MaxRequestsInFlight int         `json:"max_requests_in_flight"`
 	AutoPageAllocation  bool        `json:"auto_page_allocation"`
 	Log2PageSize        uint64      `json:"log2_page_size"`
+}
+
+// Ports holds the MMU's ports.
+type Ports struct {
+	// Top receives translation requests and returns their responses.
+	Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/vm/vmprotocol.responder"`
+
+	// Control receives enable, pause, drain, flush, and reset commands.
+	Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
+}
+
+// middlewares holds the MMU's behavior, run in field order every cycle.
+type middlewares struct {
+	// Ctrl handles control commands.
+	Ctrl *ctrlMiddleware
+
+	// Translation accepts translation requests, walks the page table, and
+	// responds.
+	Translation *translationMW
 }
 
 // transactionState is the canonical transaction representation.
@@ -36,8 +55,8 @@ type transactionState struct {
 	WalkTaskID uint64 `json:"walk_task_id"`
 }
 
-// State contains mutable runtime data for the MMU.
-type State struct {
+// state contains mutable runtime data for the MMU.
+type state struct {
 	ControlState        memcontrolprotocol.State `json:"control_state"`
 	CurrentCmdID        uint64                   `json:"current_cmd_id"`
 	CurrentCmdSrc       messaging.RemotePort     `json:"current_cmd_src"`
@@ -49,8 +68,10 @@ type State struct {
 // Resources holds the shared resources referenced by the MMU. The page table is
 // external wiring shared with other components.
 type Resources struct {
+	// PageTable holds the translations the MMU walks. It is required, and its
+	// page size must match Spec.Log2PageSize.
 	PageTable vm.PageTable `json:"-"`
 }
 
 // Comp is the MMU component.
-type Comp = modeling.Component[Spec, State, Resources]
+type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]

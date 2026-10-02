@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -127,7 +128,7 @@ var _ = Describe("TLB milestones", func() {
 		spec.NumWays = 32
 		spec.Log2PageSize = 12
 
-		tlbComp = MakeBuilder().
+		tlbComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
@@ -135,12 +136,12 @@ var _ = Describe("TLB milestones", func() {
 					Port: remotePort,
 				},
 			}).
+			WithPorts(defaultPorts("TLB")).
 			Build("TLB")
 
-		assignDefaultPorts(sim, tlbComp)
 		plugNoopConn(tlbComp)
 
-		topPort = tlbComp.GetPortByName("Top")
+		topPort = tlbComp.Ports.Top
 
 		rec = &tlbMilestoneRecorder{}
 		tracing.CollectTrace(tlbComp, rec)
@@ -165,7 +166,7 @@ var _ = Describe("TLB milestones", func() {
 	// and been looked up, or until a generous tick budget is exhausted.
 	drive := func(maxTicks int) {
 		for i := 0; i < maxTicks; i++ {
-			tlbComp.Tick()
+			modelingtest.Tick(tlbComp)
 		}
 	}
 
@@ -262,7 +263,7 @@ var _ = Describe("TLB milestones", func() {
 		// is on req_in.
 		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindHardwareResource,
 			tlbComp.Name()+".MSHR")).To(BeTrue())
-		bottomPort := tlbComp.GetPortByName("Bottom")
+		bottomPort := tlbComp.Ports.Bottom
 		Expect(rec.hasMilestone(reqInID, tracing.MilestoneKindNetworkBusy,
 			bottomPort.Name())).To(BeTrue())
 		Expect(rec.tagsOn(reqInID)).To(ContainElement("miss"))

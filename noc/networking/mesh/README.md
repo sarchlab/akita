@@ -53,10 +53,7 @@ connector := mesh.NewConnector().
     WithFreq(1 * timing.GHz).
     WithFlitSize(16).
     WithBandwidth(1).      // transfers per cycle, per link
-    WithSwitchLatency(1).  // cycles per switch hop
-    WithMonitor(monitor).
-    WithVisTracer(visTracer).
-    WithNoCTracer(nocTracer)
+    WithSwitchLatency(1)   // cycles per switch hop
 ```
 
 ### Builder Options
@@ -68,9 +65,9 @@ connector := mesh.NewConnector().
 | `WithFlitSize(n)` | Flit size in bytes |
 | `WithBandwidth(t)` | Per-link bandwidth as transfers per cycle |
 | `WithSwitchLatency(n)` | Latency in cycles added at each switch |
-| `WithMonitor(m)` | Monitor for inspecting component state |
-| `WithVisTracer(t)` | Tracer for visualizing network tasks |
-| `WithNoCTracer(t)` | Tracer for NoC traffic and congestion metrics |
+
+The connector builds its switches and endpoints with `WithSimulation(sim)`,
+so the simulation's tracer and monitor see each of them.
 
 ## Usage
 
@@ -81,9 +78,9 @@ connector := mesh.NewConnector().
 
 connector.CreateNetwork("Mesh")
 
-connector.AddTile([3]int{0, 0, 0}, []messaging.Port{tile00.GetPortByName("Net")})
-connector.AddTile([3]int{1, 0, 0}, []messaging.Port{tile10.GetPortByName("Net")})
-connector.AddTile([3]int{0, 1, 0}, []messaging.Port{tile01.GetPortByName("Net")})
+connector.AddTile([3]int{0, 0, 0}, []messaging.Port{tile00.Ports.Net})
+connector.AddTile([3]int{1, 0, 0}, []messaging.Port{tile10.Ports.Net})
+connector.AddTile([3]int{0, 1, 0}, []messaging.Port{tile01.Ports.Net})
 
 connector.EstablishNetwork()
 ```

@@ -50,14 +50,3 @@ func (f Freq) NCyclesLater(n int, now VTimeInPicoSec) VTimeInPicoSec {
 	base := uint64(f.ThisTick(now))
 	return VTimeInPicoSec(base + uint64(n)*period)
 }
-
-// NoEarlierThan returns the tick time that is at or right after the given time.
-// This is equivalent to ThisTick.
-func (f Freq) NoEarlierThan(t VTimeInPicoSec) VTimeInPicoSec {
-	return f.ThisTick(t)
-}
-
-// HalfTick returns the time in middle of two ticks.
-func (f Freq) HalfTick(t VTimeInPicoSec) VTimeInPicoSec {
-	return f.ThisTick(t) + f.Period()/2
-}

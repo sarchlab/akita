@@ -3,15 +3,17 @@ package tickingping
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // receiveProcessMW handles receiving messages and counting down transactions.
 type receiveProcessMW struct {
-	comp *modeling.Component[Spec, State, modeling.None]
+	comp *Comp
 }
 
-func (m *receiveProcessMW) Tick() bool {
+// Handle counts down every ping being answered and takes at most one incoming
+// message per tick.
+func (m *receiveProcessMW) Handle(_ timing.Event) bool {
 	madeProgress := false
 
 	madeProgress = m.countDown() || madeProgress
@@ -21,16 +23,16 @@ func (m *receiveProcessMW) Tick() bool {
 }
 
 func (m *receiveProcessMW) processInput() bool {
-	msgI, ok := outPort(m.comp).PeekIncoming()
+	msgI, ok := m.comp.Ports.Out.RetrieveIncoming()
 	if !ok {
 		return false
 	}
 
 	switch msg := msgI.(type) {
 	case pingReq:
-		m.processingPingReq(msg)
+		m.processPingReq(msg)
 	case pingRsp:
-		m.processingPingRsp(msg)
+		m.processPingRsp(msg)
 	default:
 		panic("unknown message type")
 	}
@@ -38,30 +40,26 @@ func (m *receiveProcessMW) processInput() bool {
 	return true
 }
 
-func (m *receiveProcessMW) processingPingReq(msg pingReq) {
+// processPingReq starts answering a ping; the response goes out two cycles
+// later.
+func (m *receiveProcessMW) processPingReq(msg pingReq) {
 	state := &m.comp.State
 
-	trans := pingTransactionState{
-		SeqID:     msg.SeqID,
-		CycleLeft: 2,
-		ReqID:     msg.ID,
-		ReqSrc:    msg.Src,
-	}
-	state.CurrentTransactions = append(state.CurrentTransactions, trans)
-
-	outPort(m.comp).RetrieveIncoming()
+	state.CurrentTransactions = append(state.CurrentTransactions,
+		pingTransactionState{
+			SeqID:     msg.SeqID,
+			CycleLeft: 2,
+			ReqID:     msg.ID,
+			ReqSrc:    msg.Src,
+		})
 }
 
-func (m *receiveProcessMW) processingPingRsp(msg pingRsp) {
-	state := &m.comp.State
+// processPingRsp prints the round-trip time of the ping it answers.
+func (m *receiveProcessMW) processPingRsp(msg pingRsp) {
+	startTime := m.comp.State.StartTimes[msg.SeqID]
+	duration := uint64(m.comp.CurrentTime()) - startTime
 
-	seqID := msg.SeqID
-	startTime := state.StartTimes[seqID]
-	currentTime := uint64(m.comp.CurrentTime())
-	duration := currentTime - startTime
-
-	fmt.Printf("Ping %d, %d ps\n", seqID, duration)
-	outPort(m.comp).RetrieveIncoming()
+	fmt.Printf("Ping %d, %d ps\n", msg.SeqID, duration)
 }
 
 func (m *receiveProcessMW) countDown() bool {

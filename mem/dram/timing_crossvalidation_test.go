@@ -8,22 +8,13 @@ import (
 )
 
 // ---------------------------------------------------------------
-// Helper: build timing + cmdCycles for any Spec (replicates Build logic)
+// Helper: build timing + cmdCycles for any Spec (as the component does when
+// it is built). NOTE: In this codebase writeDelay = tRL + burstCycle, NOT
+// tWL + burstCycle. This is a known deviation from DRAMSim3 where
+// writeDelay = tWL + burstCycle.
 // ---------------------------------------------------------------
 func buildTimingForSpec(spec Spec) (dramTiming, map[commandKind]int) {
-	b := MakeBuilder().WithSpec(spec)
-	b.calculateBurstCycle()
-	b.spec.TRL = b.spec.TAL + b.spec.TCL
-	b.spec.TWL = b.spec.TAL + b.spec.TCWL
-	b.spec.ReadDelay = b.spec.TRL + b.spec.BurstCycle
-	// NOTE: In this codebase writeDelay = tRL + burstCycle, NOT tWL + burstCycle.
-	// This is a known deviation from DRAMSim3 where writeDelay = tWL + burstCycle.
-	b.spec.WriteDelay = b.spec.TRL + b.spec.BurstCycle
-	b.spec.TRC = b.spec.TRAS + b.spec.TRP
-
-	timing := b.generateTiming()
-	cmdCycles := b.buildCmdCycles()
-	return timing, cmdCycles
+	return generateTiming(&spec), buildCmdCycles(&spec)
 }
 
 // ---------------------------------------------------------------
@@ -44,8 +35,8 @@ func lookupTiming(table timeTable, srcCmd, dstCmd commandKind) (int, bool) {
 // ---------------------------------------------------------------
 // Helper: create fresh State for any Spec
 // ---------------------------------------------------------------
-func newStateForSpec(spec Spec) *State {
-	return &State{
+func newStateForSpec(spec Spec) *state {
+	return &state{
 		BankStates: initBankStatesFlat(
 			spec.NumRank, spec.NumBankGroup, spec.NumBank,
 		),
@@ -408,19 +399,19 @@ var _ = Describe("Timing Cross-Validation", func() {
 		var (
 			timing    dramTiming
 			cmdCycles map[commandKind]int
-			state     *State
+			st        *state
 			spec      Spec
 		)
 
 		BeforeEach(func() {
 			spec = DDR4Spec
 			timing, cmdCycles = buildTimingForSpec(spec)
-			state = newStateForSpec(spec)
+			st = newStateForSpec(spec)
 		})
 
 		It("closed-bank read: total cycles = tRCD + readDelay", func() {
 			// A read to a closed bank requires ACT + wait tRCD + READ.
-			bs := findBankState(&state.BankStates, 0, 0, 0)
+			bs := findBankState(&st.BankStates, 0, 0, 0)
 			Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
 
 			// Determine required command: should be Activate.
@@ -436,8 +427,8 @@ var _ = Describe("Timing Cross-Validation", func() {
 				Kind:     int(cmdKindActivate),
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 1},
 			}
-			startCommand(cmdCycles, state, bs, actCmd)
-			updateTiming(timing, state, actCmd)
+			startCommand(cmdCycles, st, bs, actCmd)
+			updateTiming(timing, st, actCmd)
 
 			// Activate→Read gap = tRCD - tAL = 16
 			Expect(bs.CyclesToCmdAvailable[cmdKindRead]).To(
@@ -446,24 +437,24 @@ var _ = Describe("Timing Cross-Validation", func() {
 			// Tick until the Activate→Read gap drains.
 			tRCDcycles := spec.TRCD - spec.TAL
 			for range tRCDcycles {
-				tickBanks(state)
+				tickBanks(st)
 			}
 			Expect(bs.CyclesToCmdAvailable[cmdKindRead]).To(Equal(0))
 
 			// Now issue Read.
-			ready := getReadyCommand(&spec, state, bs, readCmd)
+			ready := getReadyCommand(&spec, st, bs, readCmd)
 			Expect(ready).NotTo(BeNil())
 			Expect(commandKind(ready.Kind)).To(Equal(cmdKindRead))
 
-			startCommand(cmdCycles, state, bs, ready)
-			updateTiming(timing, state, ready)
+			startCommand(cmdCycles, st, bs, ready)
+			updateTiming(timing, st, ready)
 
 			// The read's data returns readDelay cycles after issue. With
 			// TickCount still at 0 here, the scheduled completion tick equals
 			// readDelay.
 			exp := computeExpectedTimings(spec)
-			Expect(state.PendingCompletions).NotTo(BeEmpty())
-			last := state.PendingCompletions[len(state.PendingCompletions)-1]
+			Expect(st.PendingCompletions).NotTo(BeEmpty())
+			last := st.PendingCompletions[len(st.PendingCompletions)-1]
 			Expect(last.CompletionTick).To(Equal(uint64(exp.readDelay)))
 
 			// Total cycles = tRCD + readDelay
@@ -472,17 +463,17 @@ var _ = Describe("Timing Cross-Validation", func() {
 		})
 
 		It("row-buffer-hit read: no ACT needed", func() {
-			bs := findBankState(&state.BankStates, 0, 0, 0)
+			bs := findBankState(&st.BankStates, 0, 0, 0)
 
 			// Open bank to row 42.
 			actCmd := &commandState{
 				Kind:     int(cmdKindActivate),
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 42},
 			}
-			startCommand(cmdCycles, state, bs, actCmd)
-			updateTiming(timing, state, actCmd)
+			startCommand(cmdCycles, st, bs, actCmd)
+			updateTiming(timing, st, actCmd)
 			for range spec.TRCD {
-				tickBanks(state)
+				tickBanks(st)
 			}
 
 			// Read same row → should immediately return Read.
@@ -493,23 +484,23 @@ var _ = Describe("Timing Cross-Validation", func() {
 			reqKind := getRequiredCommandKind(bs, readCmd)
 			Expect(reqKind).To(Equal(cmdKindRead))
 
-			ready := getReadyCommand(&spec, state, bs, readCmd)
+			ready := getReadyCommand(&spec, st, bs, readCmd)
 			Expect(ready).NotTo(BeNil())
 			Expect(commandKind(ready.Kind)).To(Equal(cmdKindRead))
 		})
 
 		It("row-conflict read: PRE + tRP + ACT + tRCD + READ", func() {
-			bs := findBankState(&state.BankStates, 0, 0, 0)
+			bs := findBankState(&st.BankStates, 0, 0, 0)
 
 			// Open bank to row 100.
 			actCmd := &commandState{
 				Kind:     int(cmdKindActivate),
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 100},
 			}
-			startCommand(cmdCycles, state, bs, actCmd)
-			updateTiming(timing, state, actCmd)
+			startCommand(cmdCycles, st, bs, actCmd)
+			updateTiming(timing, st, actCmd)
 			for range spec.TRCD {
-				tickBanks(state)
+				tickBanks(st)
 			}
 
 			// Request read for different row → row conflict → Precharge first.
@@ -526,7 +517,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 			preKey := cmdKindPrecharge
 			remaining := bs.CyclesToCmdAvailable[preKey]
 			for range remaining {
-				tickBanks(state)
+				tickBanks(st)
 			}
 
 			// Issue Precharge.
@@ -534,36 +525,36 @@ var _ = Describe("Timing Cross-Validation", func() {
 				Kind:     int(cmdKindPrecharge),
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 100},
 			}
-			startCommand(cmdCycles, state, bs, preCmd)
-			updateTiming(timing, state, preCmd)
+			startCommand(cmdCycles, st, bs, preCmd)
+			updateTiming(timing, st, preCmd)
 			Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
 
 			// Wait tRP for Precharge to complete.
 			for range spec.TRP {
-				tickBanks(state)
+				tickBanks(st)
 			}
 
 			// Now Activate should be ready.
 			reqKind2 := getRequiredCommandKind(bs, readCmd)
 			Expect(reqKind2).To(Equal(cmdKindActivate))
 
-			actCmd2 := getReadyCommand(&spec, state, bs, readCmd)
+			actCmd2 := getReadyCommand(&spec, st, bs, readCmd)
 			Expect(actCmd2).NotTo(BeNil())
 			Expect(commandKind(actCmd2.Kind)).To(Equal(cmdKindActivate))
 		})
 
 		It("write-then-read same bank: writeToReadL gap enforced", func() {
-			bs := findBankState(&state.BankStates, 0, 0, 0)
+			bs := findBankState(&st.BankStates, 0, 0, 0)
 
 			// Open bank.
 			actCmd := &commandState{
 				Kind:     int(cmdKindActivate),
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 50},
 			}
-			startCommand(cmdCycles, state, bs, actCmd)
-			updateTiming(timing, state, actCmd)
+			startCommand(cmdCycles, st, bs, actCmd)
+			updateTiming(timing, st, actCmd)
 			for range spec.TRCD {
-				tickBanks(state)
+				tickBanks(st)
 			}
 
 			// Issue Write.
@@ -571,8 +562,8 @@ var _ = Describe("Timing Cross-Validation", func() {
 				Kind:     int(cmdKindWrite),
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 50},
 			}
-			startCommand(cmdCycles, state, bs, writeCmd)
-			updateTiming(timing, state, writeCmd)
+			startCommand(cmdCycles, st, bs, writeCmd)
+			updateTiming(timing, st, writeCmd)
 
 			// Check Write→Read constraint on same bank.
 			readKey := cmdKindRead
@@ -588,7 +579,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 			}
 			// The bank is busy with the write command, so wait for it.
 			for range exp.readDelay {
-				tickBanks(state)
+				tickBanks(st)
 			}
 
 			// After readDelay ticks, the write command should be done,
@@ -597,13 +588,13 @@ var _ = Describe("Timing Cross-Validation", func() {
 			remainingWTR := bs.CyclesToCmdAvailable[readKey]
 			if remainingWTR > 0 {
 				for range remainingWTR {
-					tickBanks(state)
+					tickBanks(st)
 				}
 			}
 
 			// Now Read should be ready.
 			Expect(bs.CyclesToCmdAvailable[readKey]).To(Equal(0))
-			ready := getReadyCommand(&spec, state, bs, readCmd)
+			ready := getReadyCommand(&spec, st, bs, readCmd)
 			Expect(ready).NotTo(BeNil())
 			Expect(commandKind(ready.Kind)).To(Equal(cmdKindRead))
 		})
@@ -616,28 +607,28 @@ var _ = Describe("Timing Cross-Validation", func() {
 		var (
 			timing    dramTiming
 			cmdCycles map[commandKind]int
-			state     *State
+			st        *state
 			spec      Spec
 		)
 
 		BeforeEach(func() {
 			spec = DDR4Spec
 			timing, cmdCycles = buildTimingForSpec(spec)
-			state = newStateForSpec(spec)
+			st = newStateForSpec(spec)
 		})
 
 		It("sequential reads to same row: only first ACT, subsequent pay CCD", func() {
-			bs := findBankState(&state.BankStates, 0, 0, 0)
+			bs := findBankState(&st.BankStates, 0, 0, 0)
 
 			// Open the bank.
 			actCmd := &commandState{
 				Kind:     int(cmdKindActivate),
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 10},
 			}
-			startCommand(cmdCycles, state, bs, actCmd)
-			updateTiming(timing, state, actCmd)
+			startCommand(cmdCycles, st, bs, actCmd)
+			updateTiming(timing, st, actCmd)
 			for range spec.TRCD {
-				tickBanks(state)
+				tickBanks(st)
 			}
 
 			exp := computeExpectedTimings(spec)
@@ -647,8 +638,8 @@ var _ = Describe("Timing Cross-Validation", func() {
 				Kind:     int(cmdKindRead),
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 10},
 			}
-			startCommand(cmdCycles, state, bs, read1)
-			updateTiming(timing, state, read1)
+			startCommand(cmdCycles, st, bs, read1)
+			updateTiming(timing, st, read1)
 
 			// Same bank Read→Read = tCCDL (=6 for DDR4)
 			readKey := cmdKindRead
@@ -657,7 +648,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 			// Tick until read completes and CCD constraint drains.
 			drainCycles := max(exp.readDelay, exp.readToReadL)
 			for range drainCycles {
-				tickBanks(state)
+				tickBanks(st)
 			}
 
 			// Second read: should be ready (no new ACT needed).
@@ -669,7 +660,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 			Expect(reqKind).To(Equal(cmdKindRead),
 				"second read should not need ACT (row buffer hit)")
 
-			ready := getReadyCommand(&spec, state, bs, read2)
+			ready := getReadyCommand(&spec, st, bs, read2)
 			Expect(ready).NotTo(BeNil())
 			Expect(commandKind(ready.Kind)).To(Equal(cmdKindRead))
 		})
@@ -677,16 +668,16 @@ var _ = Describe("Timing Cross-Validation", func() {
 		It("parallel bank reads: bounded by tRRD", func() {
 			// Open two banks in different bank groups and verify
 			// the Activate→Activate constraint between them.
-			bs0 := findBankState(&state.BankStates, 0, 0, 0)
-			bs1 := findBankState(&state.BankStates, 0, 1, 0)
+			bs0 := findBankState(&st.BankStates, 0, 0, 0)
+			bs1 := findBankState(&st.BankStates, 0, 1, 0)
 
 			// Activate bank (0,0,0).
 			act0 := &commandState{
 				Kind:     int(cmdKindActivate),
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 1},
 			}
-			startCommand(cmdCycles, state, bs0, act0)
-			updateTiming(timing, state, act0)
+			startCommand(cmdCycles, st, bs0, act0)
+			updateTiming(timing, st, act0)
 
 			// Check that bank (0,1,0) has tRRDS constraint.
 			actKey := cmdKindActivate
@@ -698,7 +689,7 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Tick until constraint drains.
 			for range constraint {
-				tickBanks(state)
+				tickBanks(st)
 			}
 
 			// Now Activate on bank (0,1,0) should be ready.
@@ -706,22 +697,22 @@ var _ = Describe("Timing Cross-Validation", func() {
 				Kind:     int(cmdKindRead),
 				Location: location{Rank: 0, BankGroup: 1, Bank: 0, Row: 2},
 			}
-			ready := getReadyCommand(&spec, state, bs1, act1Cmd)
+			ready := getReadyCommand(&spec, st, bs1, act1Cmd)
 			Expect(ready).NotTo(BeNil())
 			Expect(commandKind(ready.Kind)).To(Equal(cmdKindActivate))
 		})
 
 		It("same bank-group reads: bounded by tRRDL", func() {
 			// Activate on bank (0,0,0), check constraint on bank (0,0,1).
-			bs0 := findBankState(&state.BankStates, 0, 0, 0)
-			bs1 := findBankState(&state.BankStates, 0, 0, 1)
+			bs0 := findBankState(&st.BankStates, 0, 0, 0)
+			bs1 := findBankState(&st.BankStates, 0, 0, 1)
 
 			act0 := &commandState{
 				Kind:     int(cmdKindActivate),
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 5},
 			}
-			startCommand(cmdCycles, state, bs0, act0)
-			updateTiming(timing, state, act0)
+			startCommand(cmdCycles, st, bs0, act0)
+			updateTiming(timing, st, act0)
 
 			actKey := cmdKindActivate
 			constraint := bs1.CyclesToCmdAvailable[actKey]
@@ -737,11 +728,11 @@ var _ = Describe("Timing Cross-Validation", func() {
 
 			// Rebuild timing with updated spec.
 			timing, cmdCycles = buildTimingForSpec(spec)
-			state = newStateForSpec(spec)
+			st = newStateForSpec(spec)
 
 			for i := range 4 {
-				state.TickCount = uint64(i * 2)
-				bs := findBankState(&state.BankStates,
+				st.TickCount = uint64(i * 2)
+				bs := findBankState(&st.BankStates,
 					0, i%spec.NumBankGroup, i/spec.NumBankGroup)
 
 				cmd := &commandState{
@@ -753,13 +744,13 @@ var _ = Describe("Timing Cross-Validation", func() {
 						Row:       uint64(300 + i),
 					},
 				}
-				startCommand(cmdCycles, state, bs, cmd)
-				updateTiming(timing, state, cmd)
+				startCommand(cmdCycles, st, bs, cmd)
+				updateTiming(timing, st, cmd)
 			}
 
 			// 5th activate within tFAW window → should be blocked.
-			state.TickCount = 7 // oldest was at tick 0, 7 < 28
-			bs := findBankState(&state.BankStates, 0, 0, 1)
+			st.TickCount = 7 // oldest was at tick 0, 7 < 28
+			bs := findBankState(&st.BankStates, 0, 0, 1)
 			bs.State = int(bankStateClosed)
 			bs.CyclesToCmdAvailable = [numCmdKind]int{}
 
@@ -769,13 +760,13 @@ var _ = Describe("Timing Cross-Validation", func() {
 					Rank: 0, BankGroup: 0, Bank: 1, Row: 999,
 				},
 			}
-			ready := getReadyCommand(&spec, state, bs, readCmd)
+			ready := getReadyCommand(&spec, st, bs, readCmd)
 			Expect(ready).To(BeNil(),
 				"5th activate within tFAW window should be blocked")
 
 			// After tFAW passes, should be allowed.
-			state.TickCount = 28
-			ready = getReadyCommand(&spec, state, bs, readCmd)
+			st.TickCount = 28
+			ready = getReadyCommand(&spec, st, bs, readCmd)
 			Expect(ready).NotTo(BeNil(),
 				"activate should be allowed after tFAW passes")
 			Expect(commandKind(ready.Kind)).To(Equal(cmdKindActivate))

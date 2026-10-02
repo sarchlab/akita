@@ -5,33 +5,33 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 // parseTranslateMW handles incoming requests from topPort and initiates
 // address translation. Control-port handling lives in ctrlMiddleware.
 type parseTranslateMW struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *parseTranslateMW) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
 func (m *parseTranslateMW) translationPort() messaging.Port {
-	return m.comp.GetPortByName("Translation")
+	return m.comp.Ports.Translation
 }
 
-// Tick runs translate while the component is enabled. Pause, Drain, and
+// Handle runs translate while the component is enabled. Pause, Drain, and
 // Reset all stop new translation work; in-flight transactions continue
 // to drain through respondPipelineMW until the component is fully
 // paused.
-func (m *parseTranslateMW) Tick() bool {
+func (m *parseTranslateMW) Handle(_ timing.Event) bool {
 	madeProgress := false
 
 	if m.comp.State.ControlState == memcontrolprotocol.StateEnabled {
-		spec := m.comp.Spec()
+		spec := m.comp.Spec
 		for range spec.NumReqPerCycle {
 			madeProgress = m.translate() || madeProgress
 		}
@@ -48,13 +48,13 @@ func (m *parseTranslateMW) translate() bool {
 
 	item := itemI.(memprotocol.AccessReq)
 	vAddr := item.GetAddress()
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
 
 	transReq := vmprotocol.TranslationReq{}
-	transReq.ID = m.comp.Simulation().NewID()
+	transReq.ID = m.comp.NewID()
 	transReq.Src = m.translationPort().AsRemote()
-	transReq.Dst = m.comp.Resources().TranslationProviderMapper.Find(vAddr)
+	transReq.Dst = m.comp.Resources.TranslationProviderMapper.Find(vAddr)
 	transReq.PID = item.GetPID()
 	transReq.VAddr = vPageID
 	transReq.DeviceID = spec.DeviceID

@@ -11,28 +11,25 @@ import (
 )
 
 func buildWithMappers(inside, outside messaging.RemotePort) *Comp {
-	return MakeBuilder().
+	return Definition.Builder().
 		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
 		WithSpec(Definition.DefaultSpec).
 		WithResources(Resources{
 			InsideMapper:  &mem.SinglePortMapper{Port: inside},
 			OutsideMapper: &mem.SinglePortMapper{Port: outside},
 		}).
+		WithPorts(makePorts("DataMover", 1, 1, 1, 1)).
 		Build("DataMover")
 }
 
 func dataTransferOf(t *testing.T, comp *Comp) *dataTransferMW {
 	t.Helper()
 
-	for _, mw := range comp.Middlewares() {
-		if dt, ok := mw.(*dataTransferMW); ok {
-			return dt
-		}
+	if comp.Middlewares.DataTransfer == nil {
+		t.Fatal("Build installed no dataTransferMW")
 	}
 
-	t.Fatal("Build installed no dataTransferMW")
-
-	return nil
+	return comp.Middlewares.DataTransfer
 }
 
 // TestRestoreRoutesThroughRebuiltMappers saves a data mover wired to one pair

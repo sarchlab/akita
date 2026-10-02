@@ -25,10 +25,10 @@ type ParallelEngine struct {
 	waitGroup    sync.WaitGroup
 	maxGoRoutine int
 
-	queues             []EventQueue
-	queueChan          chan EventQueue
-	secondaryQueues    []EventQueue
-	secondaryQueueChan chan EventQueue
+	queues             []eventQueue
+	queueChan          chan eventQueue
+	secondaryQueues    []eventQueue
+	secondaryQueueChan chan eventQueue
 
 	registry map[string]Handler
 	failure  atomic.Pointer[PanicError]
@@ -55,18 +55,18 @@ func NewParallelEngine() *ParallelEngine {
 	e.registry = make(map[string]Handler)
 
 	// e.spawnWorkers()
-	e.queues = make([]EventQueue, 0, numQueues)
-	e.queueChan = make(chan EventQueue, numQueues)
-	e.secondaryQueues = make([]EventQueue, 0, numQueues)
-	e.secondaryQueueChan = make(chan EventQueue, numQueues)
+	e.queues = make([]eventQueue, 0, numQueues)
+	e.queueChan = make(chan eventQueue, numQueues)
+	e.secondaryQueues = make([]eventQueue, 0, numQueues)
+	e.secondaryQueueChan = make(chan eventQueue, numQueues)
 
 	for i := 0; i < numQueues; i++ {
-		queue := NewEventQueue()
+		queue := newEventQueue()
 		e.queueChan <- queue
 
 		e.queues = append(e.queues, queue)
 
-		secondaryQueue := NewEventQueue()
+		secondaryQueue := newEventQueue()
 		e.secondaryQueueChan <- secondaryQueue
 
 		e.secondaryQueues = append(e.secondaryQueues, secondaryQueue)
@@ -168,7 +168,7 @@ func (e *ParallelEngine) determineWhatToRun() {
 }
 
 func (e *ParallelEngine) earliestTimeInQueueGroup(
-	queues []EventQueue,
+	queues []eventQueue,
 ) VTimeInPicoSec {
 	earliestTime := VTimeInPicoSec(math.MaxUint64)
 
@@ -209,8 +209,8 @@ func (e *ParallelEngine) runRound() {
 }
 
 func (e *ParallelEngine) emptyQueueChan(
-	queues []EventQueue,
-	queueChan chan EventQueue,
+	queues []eventQueue,
+	queueChan chan eventQueue,
 ) {
 	for range queues {
 		<-queueChan
@@ -246,8 +246,8 @@ func (e *ParallelEngine) hasMoreSecondaryEvents() bool {
 }
 
 func (e *ParallelEngine) runEventsUntilConflict(
-	queues []EventQueue,
-	queueChan chan EventQueue,
+	queues []eventQueue,
+	queueChan chan eventQueue,
 ) {
 	now := e.readNow()
 

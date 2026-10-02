@@ -7,10 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type portPresenceOwner struct {
-	Component
-	received, freed int
-}
+type portPresenceOwner struct{ received, freed int }
 
 func (c *portPresenceOwner) NotifyRecv(Port)     { c.received++ }
 func (c *portPresenceOwner) NotifyPortFree(Port) { c.freed++ }
@@ -37,7 +34,8 @@ func (h *portPresenceHook) Func(ctx hooking.HookCtx) {
 func TestPortReadPresenceAndNotifications(t *testing.T) {
 	comp := &portPresenceOwner{}
 	conn := &portPresenceConnection{}
-	p := NewPort(comp, 2, 2, "P")
+	p := NewPort("P", 2, 2)
+	p.SetOwner(comp)
 	p.SetConnection(conn)
 	hook := &portPresenceHook{}
 	p.AcceptHook(hook)
@@ -77,6 +75,22 @@ func TestPortReadPresenceAndNotifications(t *testing.T) {
 	require.Equal(t, []Msg{first, second}, hook.outgoing)
 	t.Log("Both retrieval directions preserved FIFO order and emitted one full-to-available notification; " +
 		"empty reads emitted no notifications or retrieval hooks")
+}
+
+func TestPortWithoutOwnerPanics(t *testing.T) {
+	msg := registryTestMsg{MsgMeta: MsgMeta{Src: "Other", Dst: "P"}}
+	for name, use := range map[string]func(p Port){
+		"Deliver":          func(p Port) { p.Deliver(msg) },
+		"RetrieveOutgoing": func(p Port) { p.RetrieveOutgoing() },
+		"NotifyAvailable":  func(p Port) { p.NotifyAvailable() },
+	} {
+		p := NewPort("P", 1, 1)
+		p.SetConnection(&portPresenceConnection{})
+		require.PanicsWithValue(t,
+			`messaging: port "P" has no owner; a component's Build binds `+
+				`its ports, and any other owner must call SetOwner`,
+			func() { use(p) }, name)
+	}
 }
 
 func assertEmptyPortReads(t *testing.T, p Port) {

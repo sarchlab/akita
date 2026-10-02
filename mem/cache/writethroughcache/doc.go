@@ -2,11 +2,12 @@
 // multiple write policies (write-around, write-evict, write-through) via the
 // Spec.WritePolicyType string field.
 //
-// Components are built with the minimal builder: configuration is supplied as a
-// whole through WithSpec (start from Definition.DefaultSpec), the engine and registration
-// come from WithSimulation, and shared/external wiring (storage, the
-// address-to-port mapper, and remote ports) is injected through WithResources.
-// Build declares the component's Top, Bottom, and Control ports; the port
-// instances are built with modeling.MakePortBuilder and attached after Build
-// with AssignPort, so the caller chooses the buffer sizes.
+// The cache is a ticking component. The system builder builds it with
+// Definition.Builder(): configuration is supplied as a whole through WithSpec
+// (start from Definition.DefaultSpec), the engine and registration come from
+// WithSimulation, shared/external wiring (the required storage, and the
+// address-to-port mapper or remote ports) is injected through WithResources,
+// and the Top, Bottom, and Control port instances, created with
+// messaging.NewPort so the caller chooses the buffer sizes, are passed with
+// WithPorts.
 package writethroughcache

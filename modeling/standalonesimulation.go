@@ -20,10 +20,9 @@ func NewStandaloneSimulation(engine timing.Engine) timing.Simulation {
 	return &standaloneSimulation{engine: engine, ids: &timing.IDGenerator{}}
 }
 
-func (s *standaloneSimulation) GetEngine() timing.Engine            { return s.engine }
-func (s *standaloneSimulation) NewID() uint64                       { return s.ids.NewID() }
-func (s *standaloneSimulation) GetIDGenerator() *timing.IDGenerator { return s.ids }
-func (s *standaloneSimulation) RegisterComponent(_ naming.Named)    {}
-func (s *standaloneSimulation) RegisterConnection(_ naming.Named)   {}
-func (s *standaloneSimulation) RegisterResource(_ naming.Named)     {}
-func (s *standaloneSimulation) RegisterPort(_ naming.Named)         {}
+func (s *standaloneSimulation) Engine() timing.Engine             { return s.engine }
+func (s *standaloneSimulation) NewID() uint64                     { return s.ids.NewID() }
+func (s *standaloneSimulation) RegisterComponent(_ naming.Named)  {}
+func (s *standaloneSimulation) RegisterConnection(_ naming.Named) {}
+func (s *standaloneSimulation) RegisterResource(_ naming.Named)   {}
+func (s *standaloneSimulation) RegisterPort(_ naming.Named)       {}

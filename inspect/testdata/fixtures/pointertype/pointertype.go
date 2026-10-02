@@ -1,7 +1,24 @@
+// Package pointertype passes a pointer as the Spec type argument. The
+// inspector must reject it: Spec must be a struct.
 package pointertype
 
-import "github.com/sarchlab/akita/v5/modeling"
+import (
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
+)
 
 type Spec = *struct{ N int }
 
-var Definition = modeling.ComponentDef[Spec]{Name: "C"}
+type (
+	State       struct{}
+	Ports       struct{}
+	Middlewares struct{}
+)
+
+type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
+
+var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
+	NewMiddlewares: newMiddlewares,
+}
+
+func newMiddlewares(*Comp) Middlewares { return Middlewares{} }

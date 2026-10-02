@@ -18,34 +18,8 @@ type Named interface {
 ## Name Structure
 
 A name is a series of dot-separated tokens. Each token has an element name and
-zero or more square-bracket indices (supporting multi-dimensional indexing):
-
-```go
-type Name struct {
-    Tokens []NameToken
-}
-
-type NameToken struct {
-    ElemName string
-    Index    []int
-}
-```
-
-`ParseName` splits a string into its tokens:
-
-```go
-name := naming.ParseName("GPU[0].Core[1]")
-name.Tokens[0].ElemName // "GPU"
-name.Tokens[0].Index    // []int{0}
-name.Tokens[1].ElemName // "Core"
-name.Tokens[1].Index    // []int{1}
-
-// Multi-dimensional indices are supported:
-naming.ParseName("Mesh[0][1]") // Index == []int{0, 1}
-```
-
-`ParseName` panics if square brackets are unmatched or an index is not an
-integer.
+zero or more square-bracket indices, which may be multi-dimensional:
+`GPU[0].Core[1]`, `Mesh[0][1]`.
 
 ## Validation
 

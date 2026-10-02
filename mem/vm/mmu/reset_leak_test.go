@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/sarchlab/akita/v5/tracing/tracingtest"
@@ -29,14 +30,15 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec := Definition.DefaultSpec
 	spec.Latency = 100
 
-	comp := MakeBuilder().
+	comp := Definition.Builder().
 		WithSimulation(sim).
 		WithResources(Resources{PageTable: pageTable}).
 		WithSpec(spec).
+		WithPorts(makePorts("MMU", 16)).
 		Build("MMU")
 
-	topPort := assignPort(sim, comp, "Top", 16)
-	ctrlPort := assignPort(sim, comp, "Control", 4)
+	topPort := comp.Ports.Top
+	ctrlPort := comp.Ports.Control
 	(&noopConn{}).PlugIn(topPort)
 	(&noopConn{}).PlugIn(ctrlPort)
 
@@ -68,7 +70,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// One tick parses the request into a walk (opening the req_in) with a full
 	// CycleLeft countdown of spec.Latency, so the walk is in flight but nowhere
 	// near finished.
-	comp.Tick()
+	modelingtest.Tick(comp)
 
 	if len(comp.State.WalkingTranslations) != 1 {
 		t.Fatalf("expected 1 in-flight walk, got %d",
@@ -89,7 +91,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	acked := false
 	for range 64 {
-		comp.Tick()
+		modelingtest.Tick(comp)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {

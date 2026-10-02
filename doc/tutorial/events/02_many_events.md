@@ -104,7 +104,7 @@ when no more events are pending, the engine returns.
 randGen = rand.New(rand.NewSource(0))
 
 s := simulation.MakeBuilder().Build()
-engine = s.GetEngine()
+engine = s.Engine()
 h := handler{count: 1}
 
 if handlers, ok := engine.(timing.HandlerRegistry); ok {
@@ -159,7 +159,8 @@ count climbs exponentially.
 ## Where to Next
 
 So far events are bare functions over global state. The next chapter
-introduces **event-driven components**, which wear the component shape you
-already know from the first section — Spec, State, ports — but wake on
-demand instead of every cycle. They are the bridge between raw events and
-the default ticking components.
+introduces **wakeup and event components**, the two component models
+besides ticking. They wear the component shape you already know from the
+first section — five structs and a `Definition` — but have no clock: they
+run on demand instead of every cycle. They are the bridge between raw
+events and the default ticking components.

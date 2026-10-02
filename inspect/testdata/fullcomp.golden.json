@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
   "kind": "component",
-  "name": "FullComp",
+  "model": "ticking",
+  "name": "fullcomp",
   "package": "github.com/sarchlab/akita/v5/inspect/testdata/fixtures/fullcomp",
   "module": "github.com/sarchlab/akita/v5",
   "spec": [
@@ -26,9 +27,8 @@
       "name": "NumOut",
       "json_name": "num_out",
       "type": "int",
-      "doc": "NumOut is computed in Build from the number of wired Out ports.",
-      "default": 0,
-      "derived": true
+      "doc": "NumOut is the number of Out ports the system builder wires.",
+      "default": 0
     },
     {
       "name": "Mode",
@@ -59,7 +59,7 @@
       "name": "Top",
       "roles": [
         {
-          "protocol": "mem",
+          "protocol": "github.com/sarchlab/akita/v5/mem/memprotocol",
           "role": "responder"
         }
       ]
@@ -68,11 +68,11 @@
       "name": "Ctrl",
       "roles": [
         {
-          "protocol": "mem",
+          "protocol": "github.com/sarchlab/akita/v5/mem/memprotocol",
           "role": "responder"
         },
         {
-          "protocol": "mem.control",
+          "protocol": "github.com/sarchlab/akita/v5/mem/memcontrolprotocol",
           "role": "responder"
         }
       ]
@@ -81,11 +81,23 @@
       "name": "Out",
       "roles": [
         {
-          "protocol": "mem",
+          "protocol": "github.com/sarchlab/akita/v5/mem/memprotocol",
           "role": "requester"
         }
       ],
       "group": true
+    }
+  ],
+  "middlewares": [
+    {
+      "name": "Control",
+      "type": "*controlMW",
+      "doc": "Control handles control commands."
+    },
+    {
+      "name": "Serve",
+      "type": "*serveMW",
+      "doc": "Serve forwards requests from Top to Out."
     }
   ]
 }

@@ -1,0 +1,103 @@
+package wakeup
+
+import (
+	"io"
+	"sync"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/internal/base"
+	"github.com/sarchlab/akita/v5/timing"
+)
+
+// Component is an instance of a wakeup component type, built from its
+// Definition. It adds wakeups to what the component models share.
+//
+// Its exported fields, the five structs, come from the embedded
+// ComponentBase:
+//
+//   - Spec is the configuration given to Build.
+//   - State is the instance's mutable runtime data, saved in checkpoints.
+//     Only the component itself, its NewState and middlewares, writes it.
+//   - Resources holds the references to shared objects given to Build.
+//   - Ports holds the ports the system builder passed to Build, bound to this
+//     instance.
+//   - Middlewares holds the instance's behavior. Every event the instance
+//     receives goes to each field in declaration order.
+//
+// Spec, Resources, and Ports are fixed after Build.
+//
+// A Component is hookable (hooking.Hookable): tracing attaches to it with
+// AcceptHook.
+type Component[S, T, R, P, M any] struct {
+	base.ComponentBase[S, T, R, P, M]
+
+	wakeups  *scheduler
+	pipeline []modeling.Middleware
+
+	// handling makes the instance handle one event at a time: the parallel
+	// engine runs the events of one time concurrently, and a superseded
+	// wakeup can fall at the same time as a later one.
+	handling sync.Mutex
+}
+
+// Handle passes the event, usually an Event, to every middleware in the
+// declaration order of Middlewares. If any of them made progress, the
+// instance wakes again at the same time, so it keeps running until no
+// middleware has work ready. The instance handles one event at a time.
+func (c *Component[S, T, R, P, M]) Handle(e timing.Event) {
+	c.handling.Lock()
+	defer c.handling.Unlock()
+
+	if _, ok := e.(Event); ok {
+		c.wakeups.Woke(e.Time())
+	}
+
+	if base.Dispatch(c.pipeline, e) {
+		c.wakeups.WakeNow()
+	}
+}
+
+// WakeAt wakes the instance at time t, for work that becomes ready then.
+// Asking for a wakeup at or after one already pending does nothing, so a
+// middleware asks again, when it wakes, for the work still waiting.
+func (c *Component[S, T, R, P, M]) WakeAt(t timing.VTimeInPicoSec) {
+	c.wakeups.WakeAt(t)
+}
+
+// NotifyRecv wakes the instance when a port receives a message.
+func (c *Component[S, T, R, P, M]) NotifyRecv(_ messaging.Port) {
+	c.wakeups.WakeNow()
+}
+
+// NotifyPortFree wakes the instance when a port can send again.
+func (c *Component[S, T, R, P, M]) NotifyPortFree(_ messaging.Port) {
+	c.wakeups.WakeNow()
+}
+
+// SaveCheckpoint writes the instance's spec hash, State, and wakeup guard.
+func (c *Component[S, T, R, P, M]) SaveCheckpoint(w io.Writer) error {
+	return modeling.WriteCheckpoint(w, c.Spec, c.State, c.wakeups)
+}
+
+// LoadCheckpoint restores the State and wakeup guard after verifying that the
+// saved spec hash matches this instance's.
+func (c *Component[S, T, R, P, M]) LoadCheckpoint(r io.Reader) error {
+	return modeling.ReadCheckpoint(r, c.Spec, &c.State, c.wakeups)
+}
+
+// Name returns the instance name given to Build.
+func (c *Component[S, T, R, P, M]) Name() string {
+	return c.ComponentBase.Name()
+}
+
+// NewID allocates an ID, unique within the instance's simulation, for a
+// message or event the instance creates.
+func (c *Component[S, T, R, P, M]) NewID() uint64 {
+	return c.ComponentBase.NewID()
+}
+
+// CurrentTime returns the simulation's current time.
+func (c *Component[S, T, R, P, M]) CurrentTime() timing.VTimeInPicoSec {
+	return c.ComponentBase.CurrentTime()
+}

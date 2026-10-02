@@ -24,25 +24,13 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
 
-	dramComp := MakeBuilder().
-		WithSimulation(sim).
-		WithSpec(spec).
-		Build("P0DRAM")
+	dramComp := buildDRAM(sim, spec, "P0DRAM", 1024)
 	for _, t := range tracers {
 		tracing.CollectTrace(dramComp, t)
 	}
 
-	for _, name := range []string{"Top", "Control"} {
-		p := modeling.MakePortBuilder().
-			WithSimulation(sim).
-			WithComponent(dramComp).
-			WithSpec(modeling.PortSpec{BufSize: 1024}).
-			Build(name)
-		dramComp.AssignPort(name, p)
-	}
-
-	top := dramComp.GetPortByName("Top")
-	src := messaging.NewPort(nil, 1024, 1024, "P0Src.Top")
+	top := dramComp.Ports.Top
+	src := newDriverPort("P0Src.Top", 1024)
 
 	conn := directconnection.MakeBuilder().
 		WithSimulation(sim).
@@ -55,7 +43,7 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 
 func (h *p0Harness) read(addr uint64) memprotocol.ReadReq {
 	r := memprotocol.ReadReq{}
-	r.ID = h.dram.Simulation().NewID()
+	r.ID = h.dram.NewID()
 	r.Address = addr
 	r.AccessByteSize = 64
 	r.Src = h.src.AsRemote()
@@ -67,7 +55,7 @@ func (h *p0Harness) read(addr uint64) memprotocol.ReadReq {
 
 func (h *p0Harness) write(addr uint64, data []byte) memprotocol.WriteReq {
 	w := memprotocol.WriteReq{}
-	w.ID = h.dram.Simulation().NewID()
+	w.ID = h.dram.NewID()
 	w.Address = addr
 	w.Data = data
 	w.Src = h.src.AsRemote()
@@ -201,8 +189,8 @@ var _ = Describe("P0: close-page completion latency", func() {
 	})
 
 	It("schedules a ReadPrecharge completion at ReadDelay", func() {
-		state := newDDR4State()
-		bs := findBankState(&state.BankStates, 0, 0, 0)
+		st := newDDR4State()
+		bs := findBankState(&st.BankStates, 0, 0, 0)
 		bs.State = int(bankStateOpen)
 		bs.OpenRow = 0
 
@@ -210,11 +198,11 @@ var _ = Describe("P0: close-page completion latency", func() {
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0, Row: 0},
 		}
-		startCommand(cmdCycles, state, bs, cmd)
+		startCommand(cmdCycles, st, bs, cmd)
 
-		Expect(state.PendingCompletions).To(HaveLen(1))
-		Expect(state.PendingCompletions[0].CompletionTick).
-			To(Equal(state.TickCount + uint64(cmdCycles[cmdKindRead])))
+		Expect(st.PendingCompletions).To(HaveLen(1))
+		Expect(st.PendingCompletions[0].CompletionTick).
+			To(Equal(st.TickCount + uint64(cmdCycles[cmdKindRead])))
 	})
 })
 
@@ -226,15 +214,12 @@ var _ = Describe("P0: channel guard", func() {
 
 			spec := Definition.DefaultSpec
 			spec.NumChannel = numChannel
-			MakeBuilder().
-				WithSimulation(sim).
-				WithSpec(spec).
-				Build("ChannelGuard")
+			buildDRAM(sim, spec, "ChannelGuard", 16)
 		}
 	}
 
 	It("should reject NumChannel > 1 at build time", func() {
-		Expect(build(2)).To(Panic())
+		Expect(build(2)).To(PanicWith(ContainSubstring("NumChannel > 1")))
 	})
 
 	It("should still build with a single channel", func() {

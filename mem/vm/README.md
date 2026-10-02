@@ -97,7 +97,7 @@ Application (virtual address)
 | **tlb** | Translation Lookaside Buffer — caches recent virtual-to-physical translations per process. Handles TLB hits locally and forwards misses to the MMU. |
 | **mmu** | Memory Management Unit — performs page table walks and manages page allocation. Supports auto-allocation for unmapped pages. |
 | **gmmu** | GPU Memory Management Unit — specialized MMU for GPU-side page table walks. Reads page table entries from memory via the bottom port. |
-| **addresstranslator** | Sits between a compute unit and memory. Translates virtual addresses in `mem.ReadReq`/`mem.WriteReq` to physical addresses before forwarding to the memory hierarchy. |
+| **addresstranslator** | Sits between a compute unit and memory. Translates virtual addresses in `memprotocol.ReadReq`/`memprotocol.WriteReq` to physical addresses before forwarding to the memory hierarchy. |
 | **mmuCache** | Caches translation results between the TLB and MMU to reduce page walk traffic. |
 | **lruset** | LRU set implementation used by the TLB for replacement decisions. |
 

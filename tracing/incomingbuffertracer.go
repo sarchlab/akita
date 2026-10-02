@@ -53,7 +53,7 @@ func (h *incomingBufferHook) Func(ctx hooking.HookCtx) {
 		return
 	}
 
-	domain, ok := port.Component().(NamedHookable)
+	domain, ok := port.Owner().(NamedHookable)
 	if !ok {
 		return
 	}

@@ -3,36 +3,15 @@ package switches
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
+	"github.com/sarchlab/akita/v5/timing"
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
-// routeForwardSendMiddleware returns the routeForwardSendMW from the
-// component's middleware list (registered at index 0).
-func routeForwardSendMiddleware(
-	c *modeling.Component[Spec, State, modeling.None],
-) *routeForwardSendMW {
-	return c.Middlewares()[0].(*routeForwardSendMW)
-}
-
-// GetRoutingTable returns the routing table used by the switch. It locates the
-// routeForwardSendMW by type rather than by middleware index, so it does not
-// depend on the order in which middlewares were registered.
-func GetRoutingTable(c *modeling.Component[Spec, State, modeling.None]) routing.Table {
-	for _, mw := range c.Middlewares() {
-		if rfsMW, ok := mw.(*routeForwardSendMW); ok {
-			return rfsMW.routingTable
-		}
-	}
-
-	panic(fmt.Sprintf("%s: no routeForwardSendMW middleware found", c.Name()))
-}
-
 type routeForwardSendMW struct {
-	comp         *modeling.Component[Spec, State, modeling.None]
+	comp         *Comp
 	portIndex    map[messaging.RemotePort]int // remotePort → index in State.PortComplexes
 	routingTable routing.Table
 }
@@ -40,11 +19,11 @@ type routeForwardSendMW struct {
 // ports returns the switch's local ports, in index order aligned with
 // State.PortComplexes.
 func (m *routeForwardSendMW) ports() []messaging.Port {
-	return m.comp.PortsInGroup("Port")
+	return m.comp.Ports.Port
 }
 
-// Tick runs sendOut → forward → route.
-func (m *routeForwardSendMW) Tick() bool {
+// Handle runs sendOut → forward → route on every tick.
+func (m *routeForwardSendMW) Handle(_ timing.Event) bool {
 	madeProgress := false
 
 	madeProgress = m.sendOut() || madeProgress

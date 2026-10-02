@@ -5,7 +5,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -23,24 +22,21 @@ func TestControlContract(t *testing.T) {
 		spec.Latency = 10
 		spec.CacheLineSize = 64
 
-		comp := MakeBuilder().
+		comp := Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			WithSpec(spec).
+			WithPorts(makePorts("MemCtrl", 16)).
 			Build("MemCtrl")
 
-		comp.AssignPort("Top",
-			messaging.NewPort(comp, 16, 16, comp.Name()+".Top"))
-		comp.AssignPort("Control",
-			messaging.NewPort(comp, 16, 16, comp.Name()+".Control"))
-
-		ctrl := comp.GetPortByName("Control")
+		ctrl := comp.Ports.Control
 		conn := &noopConn{}
-		conn.PlugIn(comp.GetPortByName("Top"))
+		conn.PlugIn(comp.Ports.Top)
 		conn.PlugIn(ctrl)
 
 		return &memcontrolprotocol.Harness{
 			Comp: comp,
+			Sim:  sim,
 			Ctrl: ctrl,
 			IsQuiescent: func() bool {
 				return len(comp.State.InflightTransactions) == 0
@@ -51,6 +47,6 @@ func TestControlContract(t *testing.T) {
 	memcontrolprotocol.RunContract(t, "idealmemcontroller", build, memcontrolprotocol.Universal())
 }
 
-// Compile-time guard: the contract harness needs the component's Tick
+// Compile-time guard: the contract harness needs the component's Handle
 // to satisfy memcontrolprotocol.Controllable.
 var _ memcontrolprotocol.Controllable = (*Comp)(nil)

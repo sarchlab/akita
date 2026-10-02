@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -27,6 +28,15 @@ func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
 
+// makePorts creates the ports of the controller named name: a Top port with
+// the given buffer size and a Control port with a 16-message buffer.
+func makePorts(name string, topBufSize int) Ports {
+	return Ports{
+		Top:     messaging.NewPort(name+".Top", topBufSize, topBufSize),
+		Control: messaging.NewPort(name+".Control", 16, 16),
+	}
+}
+
 var _ = Describe("Ideal Memory Controller", func() {
 	var (
 		engine        timing.Engine
@@ -44,18 +54,14 @@ var _ = Describe("Ideal Memory Controller", func() {
 		spec.Latency = 10
 		spec.CacheLineSize = 64
 
-		memController = MakeBuilder().
+		memController = Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{Storage: storage}).
 			WithSpec(spec).
+			WithPorts(makePorts("MemCtrl", topBufSize)).
 			Build("MemCtrl")
 
-		memController.AssignPort("Top", messaging.NewPort(
-			memController, topBufSize, topBufSize, memController.Name()+".Top"))
-		memController.AssignPort("Control",
-			messaging.NewPort(memController, 16, 16, memController.Name()+".Control"))
-
-		topPort = memController.GetPortByName("Top")
+		topPort = memController.Ports.Top
 		conn := &noopConn{}
 		conn.PlugIn(topPort)
 	}
@@ -82,7 +88,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 	It("should accept read request and add to inflight transactions", func() {
 		topPort.Deliver(makeReadReq())
 
-		madeProgress := memController.Tick()
+		madeProgress := modelingtest.Tick(memController)
 
 		Expect(madeProgress).To(BeTrue())
 		state := memController.State
@@ -104,7 +110,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		writeReq.TrafficClass = "memprotocol.WriteReq"
 		topPort.Deliver(writeReq)
 
-		madeProgress := memController.Tick()
+		madeProgress := modelingtest.Tick(memController)
 		Expect(madeProgress).To(BeTrue())
 		state := memController.State
 		Expect(state.InflightTransactions).To(HaveLen(1))
@@ -116,11 +122,11 @@ var _ = Describe("Ideal Memory Controller", func() {
 		topPort.Deliver(makeReadReq())
 
 		// Tick 1: take request, CycleLeft: 10 → 9
-		memController.Tick()
+		modelingtest.Tick(memController)
 
 		// Ticks 2-9: count down (9 → 2)
 		for i := 0; i < 8; i++ {
-			memController.Tick()
+			modelingtest.Tick(memController)
 		}
 
 		state := memController.State
@@ -128,7 +134,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(1))
 
 		// Tick 10: CycleLeft 1→0, then send response
-		memController.Tick()
+		modelingtest.Tick(memController)
 
 		state = memController.State
 		Expect(state.InflightTransactions).To(HaveLen(0))
@@ -149,15 +155,15 @@ var _ = Describe("Ideal Memory Controller", func() {
 		topPort.Deliver(writeReq)
 
 		// Tick 1: take request, CycleLeft: 10 → 9
-		memController.Tick()
+		modelingtest.Tick(memController)
 
 		// Ticks 2-9: count down
 		for i := 0; i < 8; i++ {
-			memController.Tick()
+			modelingtest.Tick(memController)
 		}
 
 		// Tick 10: CycleLeft 1→0, send response
-		memController.Tick()
+		modelingtest.Tick(memController)
 
 		state := memController.State
 		Expect(state.InflightTransactions).To(HaveLen(0))
@@ -185,11 +191,11 @@ var _ = Describe("Ideal Memory Controller", func() {
 		topPort.Deliver(makeReadReq())
 
 		// Tick 1: take request, CycleLeft: 10 → 9
-		memController.Tick()
+		modelingtest.Tick(memController)
 
 		// Ticks 2-9: count down (8 ticks, 9→1)
 		for i := 0; i < 8; i++ {
-			memController.Tick()
+			modelingtest.Tick(memController)
 		}
 
 		state := memController.State
@@ -197,7 +203,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(1))
 
 		// Tick 10: CycleLeft 1→0, send fails (outgoing buffer full)
-		memController.Tick()
+		modelingtest.Tick(memController)
 
 		state = memController.State
 		Expect(state.InflightTransactions).To(HaveLen(1))
@@ -207,7 +213,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		value0, present0 := topPort.RetrieveOutgoing()
 		Expect(present0).To(BeTrue())
 		Expect(value0).To(Equal(dummy))
-		memController.Tick()
+		modelingtest.Tick(memController)
 
 		state = memController.State
 		Expect(state.InflightTransactions).To(HaveLen(0))
@@ -229,15 +235,15 @@ var _ = Describe("Ideal Memory Controller", func() {
 		topPort.Deliver(writeReq)
 
 		// Tick 1: take request
-		memController.Tick()
+		modelingtest.Tick(memController)
 
 		// Ticks 2-9: count down
 		for i := 0; i < 8; i++ {
-			memController.Tick()
+			modelingtest.Tick(memController)
 		}
 
 		// Tick 10: send response
-		memController.Tick()
+		modelingtest.Tick(memController)
 
 		// Check that only dirty bytes were written
 		data := storage.Read(0, 4)
@@ -245,7 +251,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should use Spec for latency and width", func() {
-		spec := memController.Spec()
+		spec := memController.Spec
 		Expect(spec.Latency).To(Equal(10))
 		Expect(spec.Width).To(Equal(1))
 	})

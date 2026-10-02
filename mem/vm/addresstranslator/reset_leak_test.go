@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/sarchlab/akita/v5/tracing/tracingtest"
@@ -35,21 +36,20 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		},
 	}
 
-	at := MakeBuilder().
+	at := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(resources).
+		WithPorts(makePorts("AddressTranslator", 16)).
 		Build("AddressTranslator")
 
-	assignPorts(sim, at, 16)
-
-	topPort := at.GetPortByName("Top")
-	translationPort := at.GetPortByName("Translation")
-	ctrlPort := at.GetPortByName("Control")
+	topPort := at.Ports.Top
+	translationPort := at.Ports.Translation
+	ctrlPort := at.Ports.Control
 
 	for _, p := range []messaging.Port{
 		topPort,
-		at.GetPortByName("Bottom"),
+		at.Ports.Bottom,
 		translationPort,
 		ctrlPort,
 	} {
@@ -73,7 +73,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	var transReqSent bool
 	for range 8 {
-		at.Tick()
+		modelingtest.Tick(at)
 		if out, ok := translationPort.RetrieveOutgoing(); ok {
 			if _, ok := out.(vmprotocol.TranslationReq); ok {
 				transReqSent = true
@@ -104,7 +104,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	acked := false
 	for range 64 {
-		at.Tick()
+		modelingtest.Tick(at)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {

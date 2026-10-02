@@ -2,27 +2,30 @@ package dram
 
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
+// bankTickMW drives the banks. Its timing tables, completion delays, and
+// controller strategies are immutable, derived from the Spec when the
+// component is built; all mutable data lives in State.
 type bankTickMW struct {
-	comp      *modeling.Component[Spec, State, Resources]
+	comp      *Comp
 	timing    dramTiming
 	cmdCycles map[commandKind]int
 	ctrl      *controller
 }
 
-// Tick advances per-bank timing, issues a command, and refills the command
+// Handle advances per-bank timing, issues a command, and refills the command
 // queue. Refresh runs in a separate middleware ahead of this one and stalls
 // issue via State.RefreshInProgress. Paused DRAM freezes the timing pipeline;
 // draining DRAM continues so the drain can converge.
-func (m *bankTickMW) Tick() bool {
+func (m *bankTickMW) Handle(_ timing.Event) bool {
 	next := &m.comp.State
 	if next.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	next.TickCount++
 	next.TotalCycles++
 
@@ -48,7 +51,7 @@ func (m *bankTickMW) Tick() bool {
 		next.RefreshBlockedIssue = true
 	}
 
-	progress = m.ctrl.fillCommandQueue(m.comp.Simulation(), &spec, next) || progress
+	progress = m.ctrl.fillCommandQueue(m.comp.NewID, &spec, next) || progress
 
 	// Keep ticking while reads/writes are still in flight, even on cycles when
 	// no timing gap counted down — otherwise a pending completion with no other
@@ -60,7 +63,7 @@ func (m *bankTickMW) Tick() bool {
 	return progress
 }
 
-func (m *bankTickMW) issue(spec *Spec, next *State) bool {
+func (m *bankTickMW) issue(spec *Spec, next *state) bool {
 	cmd := m.ctrl.scheduler.Pick(spec, next, &m.timing)
 	if cmd == nil {
 		return false
@@ -92,7 +95,7 @@ func (m *bankTickMW) issue(spec *Spec, next *State) bool {
 // refresh commands, so without this the refresh window would be invisible in
 // the trace; attributing it to the first command that issues afterward charges
 // the wait to the sub-transaction that was actually held off.
-func (m *bankTickMW) traceRefreshStall(next *State, cmd *commandState) {
+func (m *bankTickMW) traceRefreshStall(next *state, cmd *commandState) {
 	if m.comp.NumHooks() == 0 {
 		return
 	}
@@ -111,7 +114,7 @@ func (m *bankTickMW) traceRefreshStall(next *State, cmd *commandState) {
 // trace task — each ACT/RD/PRE the controller issues for a sub-transaction is a
 // point on that task's timeline. Guarded by NumHooks so the hot path does
 // nothing when no tracer is attached.
-func (m *bankTickMW) traceCmdIssue(next *State, cmd *commandState) {
+func (m *bankTickMW) traceCmdIssue(next *state, cmd *commandState) {
 	if m.comp.NumHooks() == 0 {
 		return
 	}

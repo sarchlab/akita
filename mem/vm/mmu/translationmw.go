@@ -7,14 +7,13 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
-	"github.com/sarchlab/akita/v5/tracing"
-
-	// pageTable aggregates all the methods of the page table that are used in the MMU package.
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
+// pageTable aggregates all the methods of the page table that are used in the
+// MMU package.
 type pageTable interface {
 	Insert(page vm.Page)
 	Remove(pid vm.PID, vAddr uint64)
@@ -27,22 +26,22 @@ type pageTable interface {
 // translationMW handles translation requests: parsing from top,
 // page table walks, and sending responses for local hits.
 type translationMW struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 // Port helpers.
 
 func (m *translationMW) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
 func (m *translationMW) pageTable() vm.PageTable {
-	return m.comp.Resources().PageTable
+	return m.comp.Resources.PageTable
 }
 
-// Tick runs the translation stages. Paused MMUs make no progress;
+// Handle runs the translation stages. Paused MMUs make no progress;
 // draining MMUs continue walks but accept no new requests.
-func (m *translationMW) Tick() bool {
+func (m *translationMW) Handle(_ timing.Event) bool {
 	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
@@ -88,7 +87,7 @@ func (m *translationMW) walkPageTable() bool {
 }
 
 func (m *translationMW) finalizePageWalk(walkingIndex int) bool {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 	walking := state.WalkingTranslations[walkingIndex]
 
@@ -121,7 +120,7 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	rsp := vmprotocol.TranslationRsp{
 		Page: walking.Page,
 	}
-	rsp.ID = m.comp.Simulation().NewID()
+	rsp.ID = m.comp.NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = walking.ReqSrc
 	rsp.RspTo = walking.ReqID
@@ -148,7 +147,7 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 }
 
 func (m *translationMW) parseFromTop() bool {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 
 	reqI, ok := m.topPort().PeekIncoming()
@@ -185,11 +184,11 @@ func (m *translationMW) parseFromTop() bool {
 }
 
 func (m *translationMW) startWalking(req vmprotocol.TranslationReq) {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 
 	recvTaskID := tracing.MsgIDAtReceiver(req, m.comp)
-	walkTaskID := m.comp.Simulation().NewID()
+	walkTaskID := m.comp.NewID()
 
 	ts := transactionState{
 		ReqID:        req.ID,
@@ -233,7 +232,7 @@ func (m *translationMW) toRemove(index int) bool {
 func (m *translationMW) createDefaultPage(
 	pid vm.PID, vAddr uint64, deviceID uint64,
 ) vm.Page {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	alignedVAddr := (vAddr >> spec.Log2PageSize) << spec.Log2PageSize
 	pageSize := uint64(1) << spec.Log2PageSize
 	pAddr := m.allocatePhysicalPage()
@@ -252,7 +251,7 @@ func (m *translationMW) createDefaultPage(
 }
 
 func (m *translationMW) allocatePhysicalPage() uint64 {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 	pageSize := uint64(1) << spec.Log2PageSize
 

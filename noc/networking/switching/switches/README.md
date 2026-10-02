@@ -10,8 +10,8 @@ table. Switches are wired together (and to endpoints) by the higher-level
 
 ### Comp, Spec, Resources, State
 
-`Comp` is a `modeling.Component[Spec, State, modeling.None]`. Configuration is
-split the usual way:
+`Comp` is a ticking component, `ticking.Component[Spec, state, Resources, Ports,
+middlewares]`. Configuration is split the usual way:
 
 ```go
 type Spec struct {
@@ -20,16 +20,28 @@ type Spec struct {
 
 type Resources struct {
     RoutingTable routing.Table // shared, externally owned
+    Links        []Link        // the link behind each port
+}
+
+type Link struct {
+    Remote           messaging.RemotePort // the port at the other end
+    Latency          int
+    NumInputChannel  int
+    NumOutputChannel int
+}
+
+type Ports struct {
+    Port []messaging.Port // one port per link, aligned with Resources.Links
 }
 ```
 
-`State` holds one `portComplexState` per added port — each with an input
+`State` holds one `portComplexState` per port — each with an input
 pipeline (modeling per-port latency), a route buffer, a forward buffer, and a
 send-out buffer (all `queueing` types). The number of input/output channels on a
 port controls how many flits may be injected/ejected per cycle.
 
-`GetRoutingTable(comp)` returns the routing table the switch uses, located by
-middleware type rather than index.
+The middlewares are `RouteForwardSend` and `ReceivePipeline`, run in that order
+every cycle.
 
 ## How It Works
 
@@ -48,31 +60,27 @@ Each tick the switch runs two middlewares as a five-stage pipeline:
 
 ## Builder Pattern
 
-The switch is built first, then ports are added one at a time.
+A switch takes all of its ports at `Build`: one port per link, created by the
+system builder with `messaging.NewPort` and named `"<instance>.Port[i]"`, and the
+matching links in `Resources.Links`. No port is added later, so a switch is
+built once its links are known; `networkconnector` builds its switches in
+`EstablishRoute`.
 
 ```go
-sw := switches.MakeBuilder().
-    WithSimulation(sim).                                  // *simulation.Simulation or a standalone simulation
-    WithSpec(switches.Definition.DefaultSpec).
-    WithResources(switches.Resources{RoutingTable: rt}).
-    Build("Switch0")
-
-// The switch declares a "Port" group; each call mints a local port (named
-// "Port[i]"), registers it, builds the internal port complex toward the remote
-// peer, and returns the new local port to connect.
-swPort := switches.MakeSwitchPortAdder(sw).
+sw := switches.Definition.Builder().
     WithSimulation(sim).
-    WithRemotePort(remotePort). // an endpoint's NetworkPort or another switch's port
-    WithLatency(1).
-    WithNumInputChannel(1).
-    WithNumOutputChannel(1).
-    Add()
+    WithSpec(switches.Definition.DefaultSpec).
+    WithResources(switches.Resources{
+        RoutingTable: rt,
+        Links: []switches.Link{
+            {Remote: epPort.AsRemote(), Latency: 1, NumInputChannel: 1, NumOutputChannel: 1},
+        },
+    }).
+    WithPorts(switches.Ports{Port: []messaging.Port{
+        messaging.NewPort("Switch0.Port[0]", 1, 1),
+    }}).
+    Build("Switch0")
 ```
 
-`WithSimulation` and a non-nil `RoutingTable` are required — `Build` panics
-otherwise. `MakeSwitchPortAdder` defaults to one input/output channel, a latency
-of 1, and buffer size 1; `Add` mints the switch-side local port and wires it to
-the remote peer you supply. For a switch-to-switch link — where both local ports
-must exist before either route can resolve — add each side with `Add` and then
-call `switches.SetPortRemote(sw, localPort, remotePort)` for the side whose peer
-was not yet known when its port was added.
+`WithSimulation` and a non-nil `RoutingTable` are required, and `Links` must have
+one entry per port; `Build` panics otherwise.

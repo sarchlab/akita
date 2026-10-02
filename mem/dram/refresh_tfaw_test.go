@@ -8,7 +8,7 @@ import (
 var _ = Describe("tFAW and Refresh", func() {
 	var (
 		spec      Spec
-		state     *State
+		st        *state
 		cmdCycles map[commandKind]int
 		timing    dramTiming
 	)
@@ -18,18 +18,10 @@ var _ = Describe("tFAW and Refresh", func() {
 			spec = DDR4Spec
 			spec.TFAW = 28
 
-			b := MakeBuilder().WithSpec(spec)
-			b.spec.BurstCycle = b.spec.BurstLength / 2
-			b.spec.TRL = b.spec.TAL + b.spec.TCL
-			b.spec.TWL = b.spec.TAL + b.spec.TCWL
-			b.spec.ReadDelay = b.spec.TRL + b.spec.BurstCycle
-			b.spec.WriteDelay = b.spec.TRL + b.spec.BurstCycle
-			b.spec.TRC = b.spec.TRAS + b.spec.TRP
+			timing = generateTiming(&spec)
+			cmdCycles = buildCmdCycles(&spec)
 
-			timing = b.generateTiming()
-			cmdCycles = b.buildCmdCycles()
-
-			state = &State{
+			st = &state{
 				BankStates: initBankStatesFlat(
 					spec.NumRank, spec.NumBankGroup, spec.NumBank),
 			}
@@ -39,8 +31,8 @@ var _ = Describe("tFAW and Refresh", func() {
 			// Issue 4 activates on different banks in rank 0.
 			// Each at successive ticks so they're all within tFAW.
 			for i := range 4 {
-				state.TickCount = uint64(i * 2) // spread by 2 ticks
-				bs := findBankState(&state.BankStates,
+				st.TickCount = uint64(i * 2) // spread by 2 ticks
+				bs := findBankState(&st.BankStates,
 					0, i%spec.NumBankGroup, i/spec.NumBankGroup)
 				Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
 
@@ -53,15 +45,15 @@ var _ = Describe("tFAW and Refresh", func() {
 						Row:       uint64(100 + i),
 					},
 				}
-				startCommand(cmdCycles, state, bs, cmd)
-				updateTiming(timing, state, cmd)
+				startCommand(cmdCycles, st, bs, cmd)
+				updateTiming(timing, st, cmd)
 			}
 
 			// Now try a 5th activate. The window is tFAW=28 and the
 			// oldest activate was at tick 0, current tick is 6 (< 28).
-			state.TickCount = 6
+			st.TickCount = 6
 
-			bs := findBankState(&state.BankStates, 0, 0, 1)
+			bs := findBankState(&st.BankStates, 0, 0, 1)
 			// First close this bank so it can accept an activate
 			bs.State = int(bankStateClosed)
 			bs.CyclesToCmdAvailable = [numCmdKind]int{} // clear timing
@@ -78,15 +70,15 @@ var _ = Describe("tFAW and Refresh", func() {
 
 			// getReadyCommand should determine CmdKindActivate is needed
 			// (bank is closed) but tFAW should block it.
-			ready := getReadyCommand(&spec, state, bs, cmd)
+			ready := getReadyCommand(&spec, st, bs, cmd)
 			Expect(ready).To(BeNil())
 		})
 
 		It("should allow activate after tFAW window passes", func() {
 			// Issue 4 activates at tick 0, 1, 2, 3
 			for i := range 4 {
-				state.TickCount = uint64(i)
-				bs := findBankState(&state.BankStates,
+				st.TickCount = uint64(i)
+				bs := findBankState(&st.BankStates,
 					0, i%spec.NumBankGroup, i/spec.NumBankGroup)
 
 				cmd := &commandState{
@@ -98,14 +90,14 @@ var _ = Describe("tFAW and Refresh", func() {
 						Row:       uint64(100 + i),
 					},
 				}
-				startCommand(cmdCycles, state, bs, cmd)
-				updateTiming(timing, state, cmd)
+				startCommand(cmdCycles, st, bs, cmd)
+				updateTiming(timing, st, cmd)
 			}
 
 			// Advance past tFAW window (oldest was at tick 0, tFAW=28)
-			state.TickCount = 28
+			st.TickCount = 28
 
-			bs := findBankState(&state.BankStates, 0, 0, 1)
+			bs := findBankState(&st.BankStates, 0, 0, 1)
 			bs.State = int(bankStateClosed)
 			bs.CyclesToCmdAvailable = [numCmdKind]int{}
 
@@ -120,7 +112,7 @@ var _ = Describe("tFAW and Refresh", func() {
 			}
 
 			// Now the window has passed, activate should be allowed.
-			ready := getReadyCommand(&spec, state, bs, cmd)
+			ready := getReadyCommand(&spec, st, bs, cmd)
 			Expect(ready).NotTo(BeNil())
 			Expect(commandKind(ready.Kind)).To(Equal(cmdKindActivate))
 		})
@@ -130,8 +122,8 @@ var _ = Describe("tFAW and Refresh", func() {
 
 			// Issue 4 activates
 			for i := range 4 {
-				state.TickCount = uint64(i)
-				bs := findBankState(&state.BankStates,
+				st.TickCount = uint64(i)
+				bs := findBankState(&st.BankStates,
 					0, i%spec.NumBankGroup, i/spec.NumBankGroup)
 
 				cmd := &commandState{
@@ -143,11 +135,11 @@ var _ = Describe("tFAW and Refresh", func() {
 						Row:       uint64(100 + i),
 					},
 				}
-				startCommand(cmdCycles, state, bs, cmd)
+				startCommand(cmdCycles, st, bs, cmd)
 			}
 
-			state.TickCount = 4
-			bs := findBankState(&state.BankStates, 0, 0, 1)
+			st.TickCount = 4
+			bs := findBankState(&st.BankStates, 0, 0, 1)
 			bs.State = int(bankStateClosed)
 			bs.CyclesToCmdAvailable = [numCmdKind]int{}
 
@@ -162,7 +154,7 @@ var _ = Describe("tFAW and Refresh", func() {
 			}
 
 			// tFAW=0 means no constraint
-			ready := getReadyCommand(&spec, state, bs, cmd)
+			ready := getReadyCommand(&spec, st, bs, cmd)
 			Expect(ready).NotTo(BeNil())
 		})
 	})
@@ -173,7 +165,7 @@ var _ = Describe("tFAW and Refresh", func() {
 			spec.TREFI = 20 // small value for testing
 			spec.TRFC = 5
 
-			state = &State{
+			st = &state{
 				BankStates: initBankStatesFlat(
 					spec.NumRank, spec.NumBankGroup, spec.NumBank),
 			}
@@ -181,47 +173,47 @@ var _ = Describe("tFAW and Refresh", func() {
 
 		It("should trigger refresh after TREFI ticks and stall for TRFC", func() {
 			// Simulate the countdown
-			Expect(state.RefreshInProgress).To(BeFalse())
+			Expect(st.RefreshInProgress).To(BeFalse())
 
 			// After TREFI ticks, refresh should trigger
 			for i := range spec.TREFI {
 				_ = i
-				progress := runFakeStallRefresh(&spec, state)
+				progress := runFakeStallRefresh(&spec, st)
 				if i < spec.TREFI-1 {
-					Expect(state.RefreshInProgress).To(BeFalse())
+					Expect(st.RefreshInProgress).To(BeFalse())
 				}
 				_ = progress
 			}
 
-			Expect(state.RefreshInProgress).To(BeTrue())
-			Expect(state.RefreshCyclesRemaining).To(Equal(spec.TRFC))
-			Expect(state.RefreshCycleCounter).To(Equal(0))
+			Expect(st.RefreshInProgress).To(BeTrue())
+			Expect(st.RefreshCyclesRemaining).To(Equal(spec.TRFC))
+			Expect(st.RefreshCycleCounter).To(Equal(0))
 		})
 
 		It("should complete refresh after TRFC cycles", func() {
 			// Set up state as if refresh just triggered
-			state.RefreshInProgress = true
-			state.RefreshCyclesRemaining = spec.TRFC
-			state.RefreshCycleCounter = 0
+			st.RefreshInProgress = true
+			st.RefreshCyclesRemaining = spec.TRFC
+			st.RefreshCycleCounter = 0
 
 			// Tick TRFC times
 			for range spec.TRFC {
-				Expect(state.RefreshInProgress).To(BeTrue())
-				runFakeStallRefresh(&spec, state)
+				Expect(st.RefreshInProgress).To(BeTrue())
+				runFakeStallRefresh(&spec, st)
 			}
 
 			// After TRFC ticks, refresh should be complete
-			Expect(state.RefreshInProgress).To(BeFalse())
+			Expect(st.RefreshInProgress).To(BeFalse())
 		})
 
 		It("should not trigger refresh when TREFI is 0", func() {
 			spec.TREFI = 0
 
 			for range 100 {
-				runFakeStallRefresh(&spec, state)
+				runFakeStallRefresh(&spec, st)
 			}
 
-			Expect(state.RefreshInProgress).To(BeFalse())
+			Expect(st.RefreshInProgress).To(BeFalse())
 		})
 	})
 })

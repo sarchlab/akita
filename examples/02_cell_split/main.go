@@ -63,7 +63,7 @@ func main() {
 	randGen = rand.New(rand.NewSource(0))
 
 	s := simulation.MakeBuilder().Build()
-	engine = s.GetEngine()
+	engine = s.Engine()
 	h := handler{
 		count: 1,
 	}

@@ -38,7 +38,7 @@ func mustPanic(t *testing.T, substr string, f func()) {
 }
 
 func TestDefineProtocol(t *testing.T) {
-	p := DefineProtocol("test.protocol",
+	p := defineProtocol("test.protocol",
 		RoleDef{Name: "requester", Sends: []Msg{protoTestReq{}}},
 		RoleDef{Name: "responder", Sends: []Msg{protoTestRsp{}}},
 	)
@@ -72,33 +72,27 @@ func TestDefineProtocol(t *testing.T) {
 
 func TestDefineProtocolPanics(t *testing.T) {
 	mustPanic(t, "must not be empty", func() {
-		DefineProtocol("")
+		defineProtocol("")
 	})
 
 	mustPanic(t, "at least one role", func() {
-		DefineProtocol("test.noroles")
+		defineProtocol("test.noroles")
 	})
 
-	DefineProtocol("test.duplicate",
+	defineProtocol("test.duplicate",
 		RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
 	mustPanic(t, "already defined", func() {
-		DefineProtocol("test.duplicate",
+		defineProtocol("test.duplicate",
 			RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
 	})
 
 	mustPanic(t, `role "dup" is already defined`, func() {
-		DefineProtocol("test.duprole",
+		defineProtocol("test.duprole",
 			RoleDef{Name: "dup", Sends: []Msg{protoTestReq{}}},
 			RoleDef{Name: "dup", Sends: []Msg{protoTestRsp{}}})
 	})
 
-	mustPanic(t, "exactly one role", func() {
-		DefineProtocol("test.twosenders",
-			RoleDef{Name: "a", Sends: []Msg{protoTestReq{}}},
-			RoleDef{Name: "b", Sends: []Msg{protoTestReq{}}})
-	})
-
-	p := DefineProtocol("test.unknownrole",
+	p := defineProtocol("test.unknownrole",
 		RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
 	mustPanic(t, "does not define role", func() {
 		p.Role("nonexistent")
@@ -106,66 +100,64 @@ func TestDefineProtocolPanics(t *testing.T) {
 }
 
 func TestMsgTypeMayBelongToTwoProtocols(t *testing.T) {
-	DefineProtocol("test.shared.a",
+	defineProtocol("test.shared.a",
 		RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
-	DefineProtocol("test.shared.b",
+	defineProtocol("test.shared.b",
 		RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
 }
 
-func TestPortRoles(t *testing.T) {
-	p := DefineProtocol("test.portroles",
-		RoleDef{Name: "requester", Sends: []Msg{protoTestReq{}}},
-		RoleDef{Name: "responder", Sends: []Msg{protoTestRsp{}}},
-	)
+func TestMsgTypeMayBeSentByTwoRoles(t *testing.T) {
+	p := defineProtocol("test.twosenders",
+		RoleDef{Name: "a", Sends: []Msg{protoTestReq{}}},
+		RoleDef{Name: "b", Sends: []Msg{protoTestReq{}, protoTestRsp{}}})
 
-	po := NewPortOwnerBase()
-	po.DeclarePort("Top", p.Role("responder"))
-	po.DeclarePort("Legacy")
-	po.DeclarePortGroup("Link", p.Role("requester"))
-
-	topRoles := po.PortRoles("Top")
-	if len(topRoles) != 1 || topRoles[0] != p.Role("responder") {
-		t.Errorf("PortRoles(Top) = %v", topRoles)
+	if len(p.Role("a").Sends()) != 1 || len(p.Role("b").Sends()) != 2 {
+		t.Errorf("roles send %v and %v", p.Role("a").Sends(), p.Role("b").Sends())
 	}
 
-	if roles := po.PortRoles("Legacy"); roles != nil {
-		t.Errorf("PortRoles(Legacy) = %v, want nil", roles)
+	if len(p.Messages()) != 2 {
+		t.Errorf("Messages() = %v, want each message type once", p.Messages())
+	}
+}
+
+// AnyProtocol is messaging's own protocol, so it also shows that a protocol
+// is named after the package that defines it, and that a package defines at
+// most one.
+func TestAnyProtocolIsNamedAfterMessaging(t *testing.T) {
+	if AnyProtocol.Name() != "github.com/sarchlab/akita/v5/messaging" {
+		t.Errorf("Name() = %q, want the defining package's import path",
+			AnyProtocol.Name())
 	}
 
-	linkRoles := po.PortRoles("Link")
-	if len(linkRoles) != 1 || linkRoles[0] != p.Role("requester") {
-		t.Errorf("PortRoles(Link) = %v", linkRoles)
+	if AnyRole.Name() != "any" || AnyRole.Protocol() != AnyProtocol ||
+		len(AnyRole.Sends()) != 0 || len(AnyProtocol.Messages()) != 0 {
+		t.Errorf("AnyRole = %q sending %v, want a role named any that lists no messages",
+			AnyRole.Name(), AnyRole.Sends())
 	}
 
-	mustPanic(t, "not declared", func() {
-		po.PortRoles("Nonexistent")
+	mustPanic(t, "at most one protocol", func() {
+		DefineProtocol(RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
 	})
 }
 
-func TestDeclarePortCopiesRoles(t *testing.T) {
-	p := DefineProtocol("test.copiedroles",
-		RoleDef{Name: "requester", Sends: []Msg{protoTestReq{}}},
-		RoleDef{Name: "responder", Sends: []Msg{protoTestRsp{}}},
-	)
-
-	roles := []*Role{p.Role("responder")}
-	po := NewPortOwnerBase()
-	po.DeclarePort("Top", roles...)
-	po.DeclarePortGroup("Link", roles...)
-
-	roles[0] = p.Role("requester")
-
-	if got := po.PortRoles("Top")[0]; got != p.Role("responder") {
-		t.Errorf("PortRoles(Top) changed with the caller's slice: %v", got)
+func TestRoleNameMustFitInATag(t *testing.T) {
+	for _, name := range []string{"", "a.b", "a,b", "a=b", "a/b", "a b"} {
+		mustPanic(t, "role name", func() {
+			defineProtocol("test.badrole."+name,
+				RoleDef{Name: name, Sends: []Msg{protoTestReq{}}})
+		})
 	}
+}
 
-	if got := po.PortRoles("Link")[0]; got != p.Role("responder") {
-		t.Errorf("PortRoles(Link) changed with the caller's slice: %v", got)
-	}
-
-	po.PortRoles("Top")[0] = p.Role("requester")
-
-	if got := po.PortRoles("Top")[0]; got != p.Role("responder") {
-		t.Errorf("mutating a PortRoles result changed the port: %v", got)
+func TestPackageOfFunc(t *testing.T) {
+	for funcName, want := range map[string]string{
+		"github.com/sarchlab/akita/v5/mem/memprotocol.init":  "github.com/sarchlab/akita/v5/mem/memprotocol",
+		"github.com/sarchlab/akita/v5/messaging.TestX.func1": "github.com/sarchlab/akita/v5/messaging",
+		"gopkg.in/yaml%2ev3.init":                            "gopkg.in/yaml.v3",
+		"main.init":                                          "main",
+	} {
+		if got := packageOfFunc(funcName); got != want {
+			t.Errorf("packageOfFunc(%q) = %q, want %q", funcName, got, want)
+		}
 	}
 }

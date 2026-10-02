@@ -27,10 +27,10 @@ by **connections**:
 ```
 
 A component is a reusable, named bundle of immutable configuration
-(**Spec**), mutable runtime state (**State**), and per-cycle behaviour
-(**middleware**). Components send messages out their **ports**; the
-connection delivers them; the destination component reads them and reacts
-on its next cycle. That is the default pattern, and most of this tutorial
+(**Spec**), mutable runtime state (**State**), references to shared objects
+(**Resources**), **Ports**, and per-cycle behaviour (**Middlewares**).
+Components send messages out their ports; the connection delivers them;
+the destination component reads them and reacts on its next cycle. That is the default pattern, and most of this tutorial
 works at this level.
 
 Underneath the component layer is a smaller, more general primitive: an
@@ -45,8 +45,9 @@ test scaffolding.
 ## What Akita Gives You
 
 - **A deterministic engine** with serial and parallel implementations.
-- **A component model** with generic Spec/State separation, so component
-  configuration is separate from runtime data and both are
+- **Three component models** — ticking, wakeup, and event — that share one
+  shape: five structs (Spec, State, Resources, Ports, Middlewares) and a
+  `Definition`. Configuration is separate from runtime data, and both are
   JSON-serializable for checkpointing.
 - **A ports and connections layer** with realistic timing, including a
   zero-latency `directconnection` for simple topologies and a `noc/`
@@ -80,16 +81,17 @@ It is not a fit for:
 Each chapter is one runnable example. You can read the code, run it, and
 modify it. The chapters build on each other:
 
-1. **Create a component** — the default Akita pattern. Write a component
-   with Spec, State, and middleware, built up a few lines at a time.
+1. **Create a component** — the default Akita pattern. Write a ticking
+   component — its five structs and its `Definition` — built up a few lines
+   at a time.
 2. **Make components talk to each other** — add ports and messages, and
    connect two components so they can communicate.
 3. **Getting information from a simulation** — observe a running simulation
    with hooks that log events and messages, and measure work with tracing
    tasks.
 4. **Event-based simulation** — open the layer underneath: schedule
-   events directly, write custom event types, and use event-driven
-   components for the idle case.
+   events directly, write custom event types, and use wakeup and event
+   components for the idle and event-shaped cases.
 
 By the end you will be able to write components, connect them into a
 simulation, observe what they do, and drop to the event layer when the

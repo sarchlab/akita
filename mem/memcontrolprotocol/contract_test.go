@@ -23,7 +23,7 @@ type fakeComp struct {
 	name       string
 	matrix     memcontrolprotocol.VerbSupport
 	asyncDelay int
-	ports      map[string]messaging.Port
+	control    messaging.Port
 
 	// pending captures an in-flight async verb that owes a Rsp; sync
 	// verbs are answered inside the same tick and never sit here.
@@ -46,36 +46,20 @@ func newFakeComp(name string, matrix memcontrolprotocol.VerbSupport, asyncDelay 
 		name:       name,
 		matrix:     matrix,
 		asyncDelay: asyncDelay,
-		ports:      map[string]messaging.Port{},
 	}
-	port := messaging.NewPort(c, 4, 4, name+".Control")
-	c.AssignPort("Control", port)
+	c.control = messaging.NewPort(name+".Control", 4, 4)
+	c.control.SetOwner(c)
 	conn := &noopConn{}
-	conn.PlugIn(port)
+	conn.PlugIn(c.control)
 	return c
 }
 
-func (c *fakeComp) Name() string                                    { return c.name }
-func (c *fakeComp) DeclarePort(_ string, _ ...*messaging.Role)      {}
-func (c *fakeComp) DeclarePortGroup(_ string, _ ...*messaging.Role) {}
-func (c *fakeComp) AssignPort(name string, p messaging.Port) {
-	c.ports[name] = p
-	p.SetComponent(c)
-}
-func (c *fakeComp) GetPortByName(name string) messaging.Port { return c.ports[name] }
-func (c *fakeComp) Ports() []messaging.Port {
-	out := make([]messaging.Port, 0, len(c.ports))
-	for _, p := range c.ports {
-		out = append(out, p)
-	}
-	return out
-}
+func (c *fakeComp) Name() string                    { return c.name }
 func (c *fakeComp) NotifyRecv(_ messaging.Port)     {}
 func (c *fakeComp) NotifyPortFree(_ messaging.Port) {}
 
-func (c *fakeComp) Tick() bool {
-	port := c.ports["Control"]
-	made := false
+func (c *fakeComp) Handle(_ timing.Event) {
+	port := c.control
 
 	if c.pending != nil {
 		c.pending.ticksLeft--
@@ -86,7 +70,6 @@ func (c *fakeComp) Tick() bool {
 			port.Send(c.makeRsp(c.pending.cmd, c.pending.src,
 				c.pending.id, true, ""))
 			c.pending = nil
-			made = true
 		}
 	}
 
@@ -94,23 +77,23 @@ func (c *fakeComp) Tick() bool {
 		if msg, ok := port.PeekIncoming(); ok {
 			if req, ok := msg.(memcontrolprotocol.Req); ok {
 				port.RetrieveIncoming()
-				made = c.handleReq(port, req) || made
+				c.handleReq(port, req)
 			}
 		}
 	}
-
-	return made
 }
 
-func (c *fakeComp) handleReq(port messaging.Port, req memcontrolprotocol.Req) bool {
+func (c *fakeComp) handleReq(port messaging.Port, req memcontrolprotocol.Req) {
 	if !c.matrix.Supports(req.Command) {
-		return c.respond(port, req, false, memcontrolprotocol.ErrUnsupported)
+		c.respond(port, req, false, memcontrolprotocol.ErrUnsupported)
+		return
 	}
 
 	// Conditional verbs are only legal while paused or drained.
 	if (req.Command == memcontrolprotocol.CmdInvalidate || req.Command == memcontrolprotocol.CmdFlush) &&
 		!c.paused {
-		return c.respond(port, req, false, memcontrolprotocol.ErrMustBePausedOrDrained)
+		c.respond(port, req, false, memcontrolprotocol.ErrMustBePausedOrDrained)
+		return
 	}
 
 	switch req.Command {
@@ -121,7 +104,8 @@ func (c *fakeComp) handleReq(port messaging.Port, req memcontrolprotocol.Req) bo
 	}
 
 	if memcontrolprotocol.IsSyncVerb(req.Command) {
-		return c.respond(port, req, true, "")
+		c.respond(port, req, true, "")
+		return
 	}
 
 	c.pending = &pendingReq{
@@ -130,7 +114,6 @@ func (c *fakeComp) handleReq(port messaging.Port, req memcontrolprotocol.Req) bo
 		id:        req.ID,
 		ticksLeft: c.asyncDelay,
 	}
-	return true
 }
 
 func (c *fakeComp) respond(
@@ -138,12 +121,10 @@ func (c *fakeComp) respond(
 	req memcontrolprotocol.Req,
 	success bool,
 	errStr string,
-) bool {
-	if !port.CanSend() {
-		return false
+) {
+	if port.CanSend() {
+		port.Send(c.makeRsp(req.Command, req.Src, req.ID, success, errStr))
 	}
-	port.Send(c.makeRsp(req.Command, req.Src, req.ID, success, errStr))
-	return true
 }
 
 func (c *fakeComp) makeRsp(
@@ -153,13 +134,13 @@ func (c *fakeComp) makeRsp(
 	success bool,
 	errStr string,
 ) memcontrolprotocol.Rsp {
-	port := c.ports["Control"]
+	port := c.control
 	rsp := memcontrolprotocol.Rsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = c.Simulation().NewID()
+	rsp.ID = c.sim.NewID()
 	rsp.Src = port.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
@@ -188,7 +169,8 @@ func buildFake(matrix memcontrolprotocol.VerbSupport, asyncDelay int) memcontrol
 		c := newFakeComp("Fake", matrix, asyncDelay)
 		return &memcontrolprotocol.Harness{
 			Comp:        c,
-			Ctrl:        c.GetPortByName("Control"),
+			Sim:         c.sim,
+			Ctrl:        c.control,
 			IsQuiescent: func() bool { return c.pending == nil },
 		}
 	}
@@ -274,5 +256,3 @@ func TestState_String(t *testing.T) {
 		}
 	}
 }
-
-func (c *fakeComp) Simulation() timing.Simulation { return c.sim }

@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/sarchlab/akita/v5/tracing/tracingtest"
@@ -21,16 +22,14 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	sim := modeling.NewStandaloneSimulation(engine)
 	storage := mem.NewStorage(1 * mem.MB)
 
-	comp := MakeBuilder().
+	comp := Definition.Builder().
 		WithSimulation(sim).
 		WithResources(Resources{Storage: storage}).
+		WithPorts(makePorts("BankedMem", 16, 16)).
 		Build("BankedMem")
 
-	assignPort(sim, comp, "Top", 16)
-	assignPort(sim, comp, "Control", 16)
-
-	topPort := comp.GetPortByName("Top")
-	ctrlPort := comp.GetPortByName("Control")
+	topPort := comp.Ports.Top
+	ctrlPort := comp.Ports.Control
 	for _, p := range []messaging.Port{topPort, ctrlPort} {
 		(&noopConn{}).PlugIn(p)
 	}
@@ -46,7 +45,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// no downstream req_out.
 	read := makeReadReq(sim, messaging.RemotePort("Agent"), topPort.AsRemote(), 0)
 	topPort.Deliver(read)
-	comp.Tick()
+	modelingtest.Tick(comp)
 
 	if bankIsQuiescent(&comp.State.Banks[0]) {
 		t.Fatal("expected the read to be in flight in bank 0, but bank is quiescent")
@@ -70,7 +69,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	acked := false
 	for range 16 {
-		comp.Tick()
+		modelingtest.Tick(comp)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {

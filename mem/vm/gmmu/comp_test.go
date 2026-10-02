@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -26,32 +27,6 @@ func (c *noopConn) PlugIn(port messaging.Port)       { port.SetConnection(c) }
 func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
-
-// assignPort builds a port with the given buffer size using the same simulation
-// the component was built with, and assigns it to the component's declared port
-// of the same name.
-func assignPort(
-	sim timing.Simulation,
-	comp *Comp,
-	name string,
-	bufSize int,
-) messaging.Port {
-	p := modeling.MakePortBuilder().
-		WithSimulation(sim).
-		WithComponent(comp).
-		WithSpec(modeling.PortSpec{BufSize: bufSize}).
-		Build(name)
-	comp.AssignPort(name, p)
-	return p
-}
-
-// assignDefaultPorts assigns the GMMU's three declared ports (Top, Bottom,
-// Control) with the historical default buffer sizes.
-func assignDefaultPorts(sim timing.Simulation, comp *Comp) {
-	assignPort(sim, comp, "Top", 16)
-	assignPort(sim, comp, "Bottom", 16)
-	assignPort(sim, comp, "Control", 4)
-}
 
 var _ = Describe("GMMU", func() {
 	var (
@@ -77,24 +52,23 @@ var _ = Describe("GMMU", func() {
 		spec.Latency = 1
 		spec.LowModule = lowModulePort
 
-		gmmuComp = MakeBuilder().
+		gmmuComp = Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(spec).
+			WithPorts(defaultPorts("MMU")).
 			Build("MMU")
 
-		assignDefaultPorts(sim, gmmuComp)
+		mw = gmmuComp.Middlewares.Walk
 
-		mw = gmmuComp.Middlewares()[1].(*walkMW)
-
-		topPort = gmmuComp.GetPortByName("Top")
-		bottomPort = gmmuComp.GetPortByName("Bottom")
+		topPort = gmmuComp.Ports.Top
+		bottomPort = gmmuComp.Ports.Bottom
 
 		topConn := &noopConn{}
 		topConn.PlugIn(topPort)
 		bottomConn := &noopConn{}
 		bottomConn.PlugIn(bottomPort)
-		(&noopConn{}).PlugIn(gmmuComp.GetPortByName("Control"))
+		(&noopConn{}).PlugIn(gmmuComp.Ports.Control)
 	}
 
 	makeTranslationReq := func(vAddr uint64) vmprotocol.TranslationReq {
@@ -118,10 +92,10 @@ var _ = Describe("GMMU", func() {
 
 	Context("GMMU Builder", func() {
 		It("should build GMMU correctly", func() {
-			Expect(gmmuComp.Spec().Freq).To(Equal(1 * timing.GHz))
-			Expect(gmmuComp.Spec().MaxRequestsInFlight).To(Equal(16))
+			Expect(gmmuComp.Spec.Freq).To(Equal(1 * timing.GHz))
+			Expect(gmmuComp.Spec.MaxRequestsInFlight).To(Equal(16))
 			Expect(mw.pageTable).To(Equal(pageTable))
-			Expect(gmmuComp.Spec().DeviceID).To(Equal(uint64(0)))
+			Expect(gmmuComp.Spec.DeviceID).To(Equal(uint64(0)))
 		})
 	})
 
@@ -129,7 +103,7 @@ var _ = Describe("GMMU", func() {
 		It("should process translation request", func() {
 			topPort.Deliver(makeTranslationReq(0x00000000))
 
-			mw.Tick()
+			mw.Handle(modelingtest.TickEvent(gmmuComp))
 
 			state := &gmmuComp.State
 			Expect(state.WalkingTranslations).To(HaveLen(1))
@@ -147,12 +121,12 @@ var _ = Describe("GMMU", func() {
 			topPort.Deliver(makeTranslationReq(0x10000000))
 
 			// Tick 1: parseFromTop accepts the request into component state.
-			gmmuComp.Tick()
+			modelingtest.Tick(gmmuComp)
 			// Tick 2: walkPageTable sees the translation and decrements
 			// CycleLeft (latency=1 → 0).
-			gmmuComp.Tick()
+			modelingtest.Tick(gmmuComp)
 			// Tick 3: CycleLeft==0, page walk completes and sends response.
-			gmmuComp.Tick()
+			modelingtest.Tick(gmmuComp)
 
 			rspI, _ := topPort.RetrieveOutgoing()
 			Expect(rspI).NotTo(BeNil())
@@ -173,11 +147,11 @@ var _ = Describe("GMMU", func() {
 			topPort.Deliver(makeTranslationReq(0x10000000))
 
 			// Tick 1: parseFromTop adds translation to state.
-			gmmuComp.Tick()
+			modelingtest.Tick(gmmuComp)
 			// Tick 2: walkPageTable sees translation, decrements CycleLeft.
-			gmmuComp.Tick()
+			modelingtest.Tick(gmmuComp)
 			// Tick 3: CycleLeft==0, page is remote, sends request to bottom.
-			gmmuComp.Tick()
+			modelingtest.Tick(gmmuComp)
 
 			reqI, _ := bottomPort.RetrieveOutgoing()
 			Expect(reqI).NotTo(BeNil())
@@ -198,11 +172,11 @@ var _ = Describe("GMMU", func() {
 			topPort.Deliver(makeTranslationReq(0x10000000))
 
 			// Tick 1: parseFromTop adds translation to state.
-			gmmuComp.Tick()
+			modelingtest.Tick(gmmuComp)
 			// Tick 2: walkPageTable sees translation, decrements CycleLeft.
-			gmmuComp.Tick()
+			modelingtest.Tick(gmmuComp)
 			// Tick 3: CycleLeft==0, page is remote, sends request to bottom.
-			gmmuComp.Tick()
+			modelingtest.Tick(gmmuComp)
 
 			reqI, _ := bottomPort.RetrieveOutgoing()
 			Expect(reqI).NotTo(BeNil())
@@ -220,7 +194,7 @@ var _ = Describe("GMMU", func() {
 			bottomPort.Deliver(rsp)
 
 			// Tick: fetchFromBottom receives response, sends to top.
-			gmmuComp.Tick()
+			modelingtest.Tick(gmmuComp)
 
 			rspToTopI, _ := topPort.RetrieveOutgoing()
 			Expect(rspToTopI).NotTo(BeNil())
