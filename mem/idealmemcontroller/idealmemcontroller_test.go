@@ -251,7 +251,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should use Spec for latency and width", func() {
-		spec := memController.Spec()
+		spec := memController.Spec
 		Expect(spec.Latency).To(Equal(10))
 		Expect(spec.Width).To(Equal(1))
 	})

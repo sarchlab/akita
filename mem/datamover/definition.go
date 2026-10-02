@@ -18,7 +18,7 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 }
 
 func newMiddlewares(c *Comp) middlewares {
-	res := c.Resources()
+	res := c.Resources
 
 	return middlewares{
 		Ctrl:      &ctrlMiddleware{comp: c},

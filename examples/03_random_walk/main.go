@@ -60,7 +60,7 @@ type walkMW struct {
 // so the component stops ticking and the simulation ends.
 func (m *walkMW) Handle(_ timing.Event) bool {
 	state := &m.comp.State
-	wall := m.comp.Spec().WallDistance
+	wall := m.comp.Spec.WallDistance
 
 	if state.Position >= wall || state.Position <= -wall {
 		fmt.Printf("hit wall at %+d after %d steps (%d ps)\n",
@@ -68,7 +68,7 @@ func (m *walkMW) Handle(_ timing.Event) bool {
 		return false
 	}
 
-	if m.comp.Resources().RNG.Intn(2) == 0 {
+	if m.comp.Resources.RNG.Intn(2) == 0 {
 		state.Position--
 	} else {
 		state.Position++

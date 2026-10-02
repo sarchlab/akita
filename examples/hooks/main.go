@@ -90,7 +90,7 @@ func (m *agentMW) Handle(_ timing.Event) bool {
 
 func (m *agentMW) send() bool {
 	s := &m.comp.State
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	port := m.comp.Ports.Out
 	progress := false
 

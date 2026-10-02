@@ -75,7 +75,7 @@ func (m *requestMW) Handle(_ timing.Event) bool {
 
 func (m *requestMW) send() bool {
 	s := &m.comp.State
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	port := m.comp.Ports.Out
 	if s.Sent == spec.NumReqs || len(s.InFlight) > 0 || !port.CanSend() {
 		return false

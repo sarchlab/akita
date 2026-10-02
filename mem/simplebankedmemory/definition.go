@@ -29,7 +29,7 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 }
 
 func newState(c *Comp) state {
-	name, spec := c.Name(), c.Spec()
+	name, spec := c.Name(), c.Spec
 
 	return state{
 		Banks: buildInitialBanks(name, spec),
@@ -37,7 +37,7 @@ func newState(c *Comp) state {
 }
 
 func newMiddlewares(c *Comp) middlewares {
-	if c.Resources().Storage == nil {
+	if c.Resources.Storage == nil {
 		panic("simplebankedmemory: Resources.Storage is required")
 	}
 

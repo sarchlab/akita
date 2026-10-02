@@ -36,7 +36,7 @@ func (m *translationMW) topPort() messaging.Port {
 }
 
 func (m *translationMW) pageTable() vm.PageTable {
-	return m.comp.Resources().PageTable
+	return m.comp.Resources.PageTable
 }
 
 // Handle runs the translation stages. Paused MMUs make no progress;
@@ -87,7 +87,7 @@ func (m *translationMW) walkPageTable() bool {
 }
 
 func (m *translationMW) finalizePageWalk(walkingIndex int) bool {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 	walking := state.WalkingTranslations[walkingIndex]
 
@@ -147,7 +147,7 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 }
 
 func (m *translationMW) parseFromTop() bool {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 
 	reqI, ok := m.topPort().PeekIncoming()
@@ -184,7 +184,7 @@ func (m *translationMW) parseFromTop() bool {
 }
 
 func (m *translationMW) startWalking(req vmprotocol.TranslationReq) {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 
 	recvTaskID := tracing.MsgIDAtReceiver(req, m.comp)
@@ -232,7 +232,7 @@ func (m *translationMW) toRemove(index int) bool {
 func (m *translationMW) createDefaultPage(
 	pid vm.PID, vAddr uint64, deviceID uint64,
 ) vm.Page {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	alignedVAddr := (vAddr >> spec.Log2PageSize) << spec.Log2PageSize
 	pageSize := uint64(1) << spec.Log2PageSize
 	pAddr := m.allocatePhysicalPage()
@@ -251,7 +251,7 @@ func (m *translationMW) createDefaultPage(
 }
 
 func (m *translationMW) allocatePhysicalPage() uint64 {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 	pageSize := uint64(1) << spec.Log2PageSize
 

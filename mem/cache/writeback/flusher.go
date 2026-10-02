@@ -71,7 +71,7 @@ func (f *flusher) existInflightTransaction() bool {
 
 func (f *flusher) prepareBlockToFlushList() {
 	next := &f.pipeline.comp.State
-	spec := f.pipeline.comp.Spec()
+	spec := f.pipeline.comp.Spec
 	blockSize := uint64(1) << spec.Log2BlockSize
 
 	matchAddr := make(map[uint64]bool, len(next.ProcessingFlush.FilterAddresses))
@@ -112,7 +112,7 @@ func (f *flusher) processFlush() bool {
 		return false
 	}
 
-	spec := f.pipeline.comp.Spec()
+	spec := f.pipeline.comp.Spec
 	ref := next.FlusherBlockToEvictRefs[0]
 	block := &next.DirectoryState.Sets[ref.SetID].Blocks[ref.WayID]
 	bankNum := bankID(

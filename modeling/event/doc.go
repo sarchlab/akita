@@ -84,7 +84,7 @@
 // Every port is created by the system builder and named "<instance>.<field>",
 // or "<instance>.<field>[i]" for member i of a port group; Build binds and
 // registers them, and no port is added later. A component's configuration
-// does not change after Build: do not reassign its Ports or Middlewares. A
-// component type is identified by its package (TypeName); Name returns the
-// instance name given to Build.
+// does not change after Build: do not reassign its Spec, Resources, Ports, or
+// Middlewares. A component type is identified by its package's import path;
+// Name returns the instance name given to Build.
 package event

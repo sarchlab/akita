@@ -80,7 +80,7 @@
 //
 // # Type name and instance name
 //
-// A component type is identified by its package: TypeName returns the
-// package's import path, and each package declares at most one component.
-// Name returns the instance name given to Build.
+// A component type is identified by its package's import path, and each
+// package declares at most one component. Name returns the instance name
+// given to Build.
 package ticking

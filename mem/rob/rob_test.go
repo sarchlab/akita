@@ -148,7 +148,7 @@ var _ = Describe("Reorder Buffer", func() {
 		})
 
 		It("stalls when the buffer is full", func() {
-			spec := rob.Spec()
+			spec := rob.Spec
 			for i := 0; i < spec.BufferSize; i++ {
 				rob.State.Transactions = append(rob.State.Transactions,
 					transactionState{IsRead: true})

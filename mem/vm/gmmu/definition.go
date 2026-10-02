@@ -27,7 +27,7 @@ func newState(_ *Comp) state {
 }
 
 func newMiddlewares(c *Comp) middlewares {
-	pt := c.Resources().PageTable
+	pt := c.Resources.PageTable
 	if pt == nil {
 		panic("gmmu: Resources.PageTable is required")
 	}

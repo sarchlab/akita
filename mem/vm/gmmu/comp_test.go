@@ -92,10 +92,10 @@ var _ = Describe("GMMU", func() {
 
 	Context("GMMU Builder", func() {
 		It("should build GMMU correctly", func() {
-			Expect(gmmuComp.Spec().Freq).To(Equal(1 * timing.GHz))
-			Expect(gmmuComp.Spec().MaxRequestsInFlight).To(Equal(16))
+			Expect(gmmuComp.Spec.Freq).To(Equal(1 * timing.GHz))
+			Expect(gmmuComp.Spec.MaxRequestsInFlight).To(Equal(16))
 			Expect(mw.pageTable).To(Equal(pageTable))
-			Expect(gmmuComp.Spec().DeviceID).To(Equal(uint64(0)))
+			Expect(gmmuComp.Spec.DeviceID).To(Equal(uint64(0)))
 		})
 	})
 

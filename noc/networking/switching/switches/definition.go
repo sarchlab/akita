@@ -26,7 +26,7 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 // newState creates one port complex per port, sized by the port's link.
 func newState(c *Comp) state {
 	ports := c.Ports.Port
-	links := c.Resources().Links
+	links := c.Resources.Links
 
 	if len(links) != len(ports) {
 		panic(fmt.Sprintf(
@@ -66,7 +66,7 @@ func newPortComplex(port messaging.Port, link Link) portComplexState {
 // newMiddlewares creates the middlewares. Both share the index from a port,
 // local or remote, to its port complex.
 func newMiddlewares(c *Comp) middlewares {
-	if c.Resources().RoutingTable == nil {
+	if c.Resources.RoutingTable == nil {
 		panic("switches: Resources.RoutingTable is required")
 	}
 
@@ -74,7 +74,7 @@ func newMiddlewares(c *Comp) middlewares {
 	for i, port := range c.Ports.Port {
 		portIndex[port.AsRemote()] = i
 
-		if remote := c.Resources().Links[i].Remote; remote != "" {
+		if remote := c.Resources.Links[i].Remote; remote != "" {
 			portIndex[remote] = i
 		}
 	}
@@ -83,7 +83,7 @@ func newMiddlewares(c *Comp) middlewares {
 		RouteForwardSend: &routeForwardSendMW{
 			comp:         c,
 			portIndex:    portIndex,
-			routingTable: c.Resources().RoutingTable,
+			routingTable: c.Resources.RoutingTable,
 		},
 		ReceivePipeline: &receivePipelineMW{
 			comp:      c,

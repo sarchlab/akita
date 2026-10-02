@@ -174,7 +174,7 @@ func (m *ctrlMiddleware) handleInvalidate(msg memcontrolprotocol.Req) bool {
 		return false
 	}
 
-	invalidateEntries(state, m.comp.Spec(), msg.Addresses, msg.PID)
+	invalidateEntries(state, m.comp.Spec, msg.Addresses, msg.PID)
 
 	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdInvalidate,
 		msg.Src, msg.ID, true, ""))
@@ -301,7 +301,7 @@ func (m *ctrlMiddleware) handleReset(msg memcontrolprotocol.Req) bool {
 
 	// Reset is a hard reset: drop the cached page-walk entries so the
 	// component matches its freshly-built (empty) table.
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state.Table = initSets(spec.NumLevels, spec.NumBlocks)
 
 	for {

@@ -91,7 +91,7 @@ func (m *serveMW) receive() bool {
 	req := msg.(ReadReq)
 	tracing.TraceReqReceive(m.comp, req)
 	m.comp.State.Pending = append(m.comp.State.Pending,
-		txn{Req: req, Left: m.comp.Spec().Latency})
+		txn{Req: req, Left: m.comp.Spec.Latency})
 	port.RetrieveIncoming()
 
 	return true

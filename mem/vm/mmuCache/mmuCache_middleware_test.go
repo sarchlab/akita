@@ -93,7 +93,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		req.TrafficClass = "vmprotocol.TranslationReq"
 
 		// Compute seg and wayID for level 1
-		spec := comp.Spec()
+		spec := comp.Spec
 		seg := segForLevelSpec(spec, 1, req.VAddr)
 		wayID := setIDForSegSpec(spec, seg)
 
@@ -135,7 +135,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 		madeProgress := mw.handleRsp(rsp)
 
-		spec := comp.Spec()
+		spec := comp.Spec
 		next := &comp.State
 		Expect(madeProgress).To(BeTrue())
 
@@ -155,7 +155,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 	It("drops the addressed page's segments while a sibling page survives", func() {
 		pid := vm.PID(1)
-		spec := comp.Spec()
+		spec := comp.Spec
 
 		// dropAddr and keepAddr share their upper-level (level-1) segment
 		// but differ at level 0. A page-walk cache stores per-level VPN

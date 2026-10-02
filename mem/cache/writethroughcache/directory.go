@@ -28,7 +28,7 @@ func (d *directory) Tick() (madeProgress bool) {
 // buffer task and the post-lookup milestones. The subtask is closed when the
 // transaction leaves the post-pipeline buffer.
 func (d *directory) acceptIntoPipeline() (madeProgress bool) {
-	spec := d.cache.comp.Spec()
+	spec := d.cache.comp.Spec
 	next := &d.cache.comp.State
 	dirBuf := &next.DirBuf
 	dirPipeline := &next.DirPipeline
@@ -63,7 +63,7 @@ func (d *directory) acceptIntoPipeline() (madeProgress bool) {
 // the (Kind, What) dedup keeps the first), and the pipeline subtask is closed
 // once the transaction is processed.
 func (d *directory) processPostPipeline() (madeProgress bool) {
-	spec := d.cache.comp.Spec()
+	spec := d.cache.comp.Spec
 	next := &d.cache.comp.State
 	dirPostBuf := &next.DirPostBuf
 
@@ -126,7 +126,7 @@ func reqInTaskIDOf(comp *Comp, trans *transactionState) uint64 {
 func (d *directory) processRead(trans *transactionState, transIdx int) bool {
 	addr := trans.ReadAddress
 	pid := trans.ReadPID
-	spec := d.cache.comp.Spec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	next := &d.cache.comp.State
@@ -215,7 +215,7 @@ func (d *directory) processReadHit(
 
 func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool {
 	addr := trans.ReadAddress
-	spec := d.cache.comp.Spec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	next := &d.cache.comp.State
@@ -248,7 +248,7 @@ func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool 
 func (d *directory) processWrite(trans *transactionState, transIdx int) bool {
 	addr := trans.WriteAddress
 	pid := trans.WritePID
-	spec := d.cache.comp.Spec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	next := &d.cache.comp.State
@@ -284,7 +284,7 @@ func (d *directory) processWrite(trans *transactionState, transIdx int) bool {
 
 func (d *directory) writeBottom(trans *transactionState) bool {
 	addr := trans.WriteAddress
-	spec := d.cache.comp.Spec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
@@ -326,7 +326,7 @@ func (d *directory) fetchFromBottom(
 ) bool {
 	addr := trans.Address()
 	pid := trans.PID()
-	spec := d.cache.comp.Spec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	next := &d.cache.comp.State
@@ -380,7 +380,7 @@ func (d *directory) fetchFromBottom(
 
 func (d *directory) getBankBuf(setID, wayID int) *queueing.Buffer[int] {
 	next := &d.cache.comp.State
-	numWaysPerSet := d.cache.comp.Spec().WayAssociativity
+	numWaysPerSet := d.cache.comp.Spec.WayAssociativity
 	blockID := setID*numWaysPerSet + wayID
 	bankID := blockID % len(next.BankBufs)
 

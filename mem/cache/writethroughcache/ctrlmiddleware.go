@@ -143,7 +143,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	}
 
 	next := &m.comp.State
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	next.DirBuf.Clear()
 	for i := range next.BankBufs {
@@ -236,7 +236,7 @@ func (m *ctrlMiddleware) handleInvalidate(req memcontrolprotocol.Req) bool {
 	}
 
 	invalidateBlocks(
-		&next.DirectoryState, m.comp.Spec(), req.Addresses, req.PID)
+		&next.DirectoryState, m.comp.Spec, req.Addresses, req.PID)
 
 	m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdInvalidate,
 		req.Src, req.ID, true, ""))

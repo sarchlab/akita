@@ -37,7 +37,7 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 // newState returns a running cache with an empty directory, MSHR, and
 // transaction table, and empty stage buffers and pipelines.
 func newState(c *Comp) state {
-	name, spec := c.Name(), c.Spec()
+	name, spec := c.Name(), c.Spec
 
 	numBanks := spec.numBanks()
 	laneWidth := spec.laneWidth()
@@ -87,7 +87,7 @@ func newState(c *Comp) state {
 // the pipeline stages share the pipeline middleware, which holds the storage,
 // the address mapper, and the ports' accessors.
 func newMiddlewares(c *Comp) middlewares {
-	res := c.Resources()
+	res := c.Resources
 	if res.Storage == nil {
 		panic("writeback: Resources.Storage is required")
 	}
@@ -95,7 +95,7 @@ func newMiddlewares(c *Comp) middlewares {
 	pipeline := &pipelineMW{
 		comp:          c,
 		storage:       res.Storage,
-		addressMapper: resolveAddressMapper(c.Spec(), res),
+		addressMapper: resolveAddressMapper(c.Spec, res),
 	}
 	pipeline.createInternalStages()
 

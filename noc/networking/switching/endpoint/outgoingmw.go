@@ -79,7 +79,7 @@ func (m *outgoingMW) Handle(_ timing.Event) bool {
 
 func (m *outgoingMW) sendFlitOut() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 
 	numSent := 0
@@ -160,7 +160,7 @@ const maxFlitsToBuffer = 64
 
 func (m *outgoingMW) prepareFlits() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 	networkPortRemote := m.networkPort().AsRemote()
 
@@ -186,7 +186,7 @@ func (m *outgoingMW) prepareFlits() bool {
 		msgTaskID := m.comp.NewID()
 		flits := msgMetaToFlits(
 			m.comp.NewID,
-			meta, spec, networkPortRemote, m.comp.Spec().DefaultSwitchDst, msgTaskID)
+			meta, spec, networkPortRemote, m.comp.Spec.DefaultSwitchDst, msgTaskID)
 
 		state.FlitsToSend = append(state.FlitsToSend, flits...)
 

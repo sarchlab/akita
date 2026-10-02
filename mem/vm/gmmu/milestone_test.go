@@ -174,7 +174,7 @@ var _ = Describe("GMMU milestones", func() {
 	It("does not admit (and emits no admission milestone) while servicing "+
 		"the max in-flight requests", func() {
 		gmmuComp.State.WalkingTranslations = make(
-			[]transactionState, gmmuComp.Spec().MaxRequestsInFlight)
+			[]transactionState, gmmuComp.Spec.MaxRequestsInFlight)
 
 		req := makeReq(0x1000)
 		topPort.Deliver(req)

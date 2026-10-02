@@ -35,7 +35,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 		return false
 	}
 
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	for i := 0; i < spec.Width; i++ {
 		msgI, ok := m.topPort().RetrieveIncoming()
@@ -57,7 +57,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 }
 
 func (m *memMiddleware) msgToInflightTransaction(msg messaging.Msg) inflightTransaction {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	recvTaskID := tracing.MsgIDAtReceiver(msg, m.comp)
 
 	switch payload := msg.(type) {
@@ -131,7 +131,7 @@ func (m *memMiddleware) sendResponse(tx *inflightTransaction) bool {
 }
 
 func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
-	data := m.comp.Resources().Storage.Read(tx.Address, tx.AccessByteSize)
+	data := m.comp.Resources.Storage.Read(tx.Address, tx.AccessByteSize)
 
 	rsp := memprotocol.DataReadyRsp{}
 	rsp.ID = m.comp.NewID()
@@ -171,9 +171,9 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 	addr := tx.Address
 
 	if tx.DirtyMask == nil {
-		m.comp.Resources().Storage.Write(addr, tx.Data)
+		m.comp.Resources.Storage.Write(addr, tx.Data)
 	} else {
-		data := m.comp.Resources().Storage.Read(addr, uint64(len(tx.Data)))
+		data := m.comp.Resources.Storage.Read(addr, uint64(len(tx.Data)))
 
 		for i := 0; i < len(tx.Data); i++ {
 			if tx.DirtyMask[i] {
@@ -181,7 +181,7 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 			}
 		}
 
-		m.comp.Resources().Storage.Write(addr, data)
+		m.comp.Resources.Storage.Write(addr, data)
 	}
 
 	m.traceReqComplete(tx.RecvTaskID, tx.ReqID)

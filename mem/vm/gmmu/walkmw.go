@@ -48,7 +48,7 @@ func (m *walkMW) Handle(_ timing.Event) bool {
 }
 
 func (m *walkMW) parseFromTop() bool {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 
 	reqI, ok := m.topPort().PeekIncoming()
@@ -85,7 +85,7 @@ func (m *walkMW) parseFromTop() bool {
 }
 
 func (m *walkMW) startWalking(req vmprotocol.TranslationReq) {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state := &m.comp.State
 
 	recvTaskID := tracing.MsgIDAtReceiver(req, m.comp)
@@ -126,7 +126,7 @@ func (m *walkMW) walkPageTable() bool {
 	}
 
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	for i := 0; i < len(state.WalkingTranslations); i++ {
 		if state.WalkingTranslations[i].CycleLeft > 0 {
@@ -185,7 +185,7 @@ func (m *walkMW) processRemoteMemReq(
 		return false
 	}
 
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	walking := state.WalkingTranslations[walkingIndex]
 
 	req := vmprotocol.TranslationReq{}

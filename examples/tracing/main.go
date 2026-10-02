@@ -53,7 +53,7 @@ var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewar
 
 // newState gives the worker all of its jobs up front.
 func newState(c *Comp) State {
-	return State{JobsLeft: c.Spec().NumJobs}
+	return State{JobsLeft: c.Spec.NumJobs}
 }
 
 func newMiddlewares(c *Comp) Middlewares {
@@ -82,7 +82,7 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 		})
 
 		s.Working = true
-		s.CountDown = m.comp.Spec().CyclesPerJob
+		s.CountDown = m.comp.Spec.CyclesPerJob
 		s.JobsLeft--
 
 		return true

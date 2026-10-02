@@ -25,7 +25,7 @@ func (m *bankTickMW) Handle(_ timing.Event) bool {
 	if next.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	next.TickCount++
 	next.TotalCycles++
 

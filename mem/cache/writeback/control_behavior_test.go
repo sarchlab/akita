@@ -114,7 +114,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 	// a later flush write-back can be identified by its payload. It returns
 	// the block's set ID so the test can inspect it after the verb.
 	residentDirtyBlock := func(addr uint64, fill byte) int {
-		setID := cache.DirectorySetID(addr, blockSize, comp.Spec().numSets())
+		setID := cache.DirectorySetID(addr, blockSize, comp.Spec.numSets())
 		block := &comp.State.DirectoryState.Sets[setID].Blocks[0]
 		block.Tag = addr
 		block.PID = 0

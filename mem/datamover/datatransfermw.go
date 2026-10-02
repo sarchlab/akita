@@ -112,7 +112,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 	trans := &state.CurrentTransaction
 	addr := alignAddress(trans.NextReadAddr, state.SrcByteGranularity)
 
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	// The buffer is indexed in transaction-relative space (offsets measured from
 	// SrcAddress), and Buffer.Offset slides in that same relative space as data
 	// is written out. The read-window check must therefore use the relative

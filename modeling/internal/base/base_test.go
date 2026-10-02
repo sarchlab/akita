@@ -162,19 +162,15 @@ func TestInitComponentBaseRejectsMisconfiguredPorts(t *testing.T) {
 	})
 }
 
-func TestTypeNameIsThePackageAndNameIsTheInstance(t *testing.T) {
+func TestNameIsTheInstanceAndSpecIsKept(t *testing.T) {
 	c := buildBase(newRecordingSim(), basePorts{In: unowned("C.In")})
 
 	if c.Name() != "C" {
 		t.Errorf("Name() = %q, want the instance name C", c.Name())
 	}
 
-	if want := "github.com/sarchlab/akita/v5/modeling/internal/base_test"; c.TypeName() != want {
-		t.Errorf("TypeName() = %q, want the package path %q", c.TypeName(), want)
-	}
-
-	if c.Spec().Size != 4 {
-		t.Errorf("Spec() = %+v, want Size 4", c.Spec())
+	if c.Spec.Size != 4 {
+		t.Errorf("Spec = %+v, want Size 4", c.Spec)
 	}
 }
 
@@ -200,7 +196,7 @@ func TestInitGivesTheInstanceItsOwnSpecSlices(t *testing.T) {
 
 	spec.Targets[0] = "X"
 
-	if got := c.Spec().Targets; !reflect.DeepEqual(got, []string{"A", "B"}) {
-		t.Errorf("Spec().Targets = %v after the caller changed its slice, want [A B]", got)
+	if got := c.Spec.Targets; !reflect.DeepEqual(got, []string{"A", "B"}) {
+		t.Errorf("Spec.Targets = %v after the caller changed its slice, want [A B]", got)
 	}
 }

@@ -66,7 +66,7 @@ type pokeEvent struct {
 var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
 	DefaultSpec: Spec{Freq: 1 * timing.GHz, Depth: 2},
 	NewState: func(c *Comp) State {
-		return State{Count: c.Spec().Depth}
+		return State{Count: c.Spec.Depth}
 	},
 	NewMiddlewares: func(c *Comp) Middlewares {
 		return Middlewares{

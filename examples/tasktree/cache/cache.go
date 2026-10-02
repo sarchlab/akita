@@ -97,7 +97,7 @@ func (m *forwardMW) forwardDown() bool {
 
 	// Miss: send a request one level down, parented to the task above.
 	downReq := memory.NewReq(m.comp.NewID(),
-		bottom.AsRemote(), m.comp.Spec().Downstream)
+		bottom.AsRemote(), m.comp.Spec.Downstream)
 	tracing.TraceReqInitiate(m.comp, downReq,
 		tracing.MsgIDAtReceiver(upReq, m.comp))
 	bottom.Send(downReq)

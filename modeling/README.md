@@ -30,8 +30,8 @@ objects.
   `messaging.RemotePort`, or an enum-like string type) or slices of scalars,
   such as the list of remote ports a unit talks to, whose length depends on the
   system. No maps or nested structs. `Build` copies the slices, so an instance
-  never shares one with `DefaultSpec`; treat the slices `Spec()` returns as
-  read-only.
+  never shares one with `DefaultSpec`. The instance's `Spec` field is fixed
+  after `Build`.
 - **State** may contain nested structs, slices, and maps; it must be
   JSON-serializable. Only the component writes it: its `NewState`, which may
   read the Spec, Resources, and Ports, and its middlewares. A function in the
@@ -105,11 +105,12 @@ Each package doc shows how to declare and build a component of its model.
 - `modelingtest` — `CheckTicking`, `CheckWakeup`, and `CheckEvent` assert that
   the inspector's static view of a package matches its `Definition`;
   `Tick` steps a ticking component by one cycle in tests.
-- Every model's `Component` has the same methods — `Name`, `TypeName`,
-  `NewID`, `CurrentTime`, `Spec`, and `Resources` — and the `State`, `Ports`,
-  and `Middlewares` fields. They come from a base type in
+- Every model's `Component` has the same five fields — `Spec`, `State`,
+  `Resources`, `Ports`, and `Middlewares` — and the same methods — `Name`,
+  `NewID`, and `CurrentTime`. They come from a base type in
   `modeling/internal/base`, which also holds the steps of `Build`: a
-  component model is defined only by the three model packages.
+  component model is defined only by the three model packages. `Spec`,
+  `Resources`, and `Ports` are fixed after `Build`.
 
 ### Domain
 

@@ -62,7 +62,7 @@ response arrives:
 ```go
 func (m *requestMW) send() bool {
     s := &m.comp.State
-    spec := m.comp.Spec()
+    spec := m.comp.Spec
     port := m.comp.Ports.Out
 
     // Send one request at a time: wait for the response before the next.
@@ -133,7 +133,7 @@ func (m *serveMW) receive() bool {
     req := msg.(ReadReq)
     tracing.TraceReqReceive(m.comp, req)
     m.comp.State.Pending = append(m.comp.State.Pending,
-        txn{Req: req, Left: m.comp.Spec().Latency})
+        txn{Req: req, Left: m.comp.Spec.Latency})
     port.RetrieveIncoming()
 
     return true
@@ -240,7 +240,7 @@ tracing.TraceReqReceive(m.comp, upReq) // req_in @ this cache
 
 // Miss: send a request one level down, parented to the task above.
 downReq := memory.NewReq(m.comp.NewID(),
-    bottom.AsRemote(), m.comp.Spec().Downstream)
+    bottom.AsRemote(), m.comp.Spec.Downstream)
 tracing.TraceReqInitiate(m.comp, downReq,
     tracing.MsgIDAtReceiver(upReq, m.comp))
 bottom.Send(downReq)

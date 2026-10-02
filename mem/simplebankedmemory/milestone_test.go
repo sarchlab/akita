@@ -134,7 +134,7 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 		req := makeRead(0x0)
 		topPort.Deliver(req)
 
-		spec := memComp.Spec()
+		spec := memComp.Spec
 		bankID := selectBank(spec, bankSelectionAddress(spec, req.Address))
 
 		// One tick runs dispatchFromTopPort, which admits the request: the

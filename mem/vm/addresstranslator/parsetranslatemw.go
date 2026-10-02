@@ -31,7 +31,7 @@ func (m *parseTranslateMW) Handle(_ timing.Event) bool {
 	madeProgress := false
 
 	if m.comp.State.ControlState == memcontrolprotocol.StateEnabled {
-		spec := m.comp.Spec()
+		spec := m.comp.Spec
 		for range spec.NumReqPerCycle {
 			madeProgress = m.translate() || madeProgress
 		}
@@ -48,13 +48,13 @@ func (m *parseTranslateMW) translate() bool {
 
 	item := itemI.(memprotocol.AccessReq)
 	vAddr := item.GetAddress()
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
 
 	transReq := vmprotocol.TranslationReq{}
 	transReq.ID = m.comp.NewID()
 	transReq.Src = m.translationPort().AsRemote()
-	transReq.Dst = m.comp.Resources().TranslationProviderMapper.Find(vAddr)
+	transReq.Dst = m.comp.Resources.TranslationProviderMapper.Find(vAddr)
 	transReq.PID = item.GetPID()
 	transReq.VAddr = vPageID
 	transReq.DeviceID = spec.DeviceID

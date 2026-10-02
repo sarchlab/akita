@@ -40,7 +40,7 @@ func (m *respondPipelineMW) Handle(_ timing.Event) bool {
 
 	madeProgress := false
 
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	for range spec.NumReqPerCycle {
 		madeProgress = m.respond() || madeProgress
@@ -70,10 +70,10 @@ func (m *respondPipelineMW) parseTranslation() bool {
 
 	nextTrans := &nextState.Transactions[transIdx]
 	reqState := nextTrans.IncomingReqs[0]
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	translatedReq := createTranslatedReq(m.comp.NewID, reqState, rsp.Page,
 		spec.Log2PageSize, m.bottomPort().AsRemote(),
-		m.comp.Resources().MemProviderMapper)
+		m.comp.Resources.MemProviderMapper)
 
 	if !m.bottomPort().CanSend() {
 		return false

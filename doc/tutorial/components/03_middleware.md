@@ -25,7 +25,7 @@ type walkMW struct {
 
 func (m *walkMW) Handle(_ timing.Event) bool {
     state := &m.comp.State
-    wall := m.comp.Spec().WallDistance
+    wall := m.comp.Spec.WallDistance
 
     if state.Position >= wall || state.Position <= -wall {
         fmt.Printf("hit wall at %+d after %d steps (%d ps)\n",
@@ -33,7 +33,7 @@ func (m *walkMW) Handle(_ timing.Event) bool {
         return false
     }
 
-    if m.comp.Resources().RNG.Intn(2) == 0 {
+    if m.comp.Resources.RNG.Intn(2) == 0 {
         state.Position--
     } else {
         state.Position++
@@ -63,7 +63,7 @@ The next page hands this function to the component's `Definition`, and
 A few things to notice:
 
 - The middleware holds a reference to the component (`m.comp`) so it can
-  read `Spec()` and `Resources()`, mutate `State`, and call
+  read `Spec` and `Resources`, mutate `State`, and call
   `CurrentTime()`. That is the whole API surface for a minimal component.
 - It holds **nothing else**. A middleware keeps only references;
   everything that changes during the run lives in `State`, because only

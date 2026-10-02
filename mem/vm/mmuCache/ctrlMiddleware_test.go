@@ -121,7 +121,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 	})
 
 	It("should invalidate cached segments when paused", func() {
-		spec := comp.Spec()
+		spec := comp.Spec
 		next := &comp.State
 		next.CurrentState = mmuCacheStatePause
 
@@ -233,7 +233,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 	})
 
 	It("should handle control pause", func() {
-		spec := comp.Spec()
+		spec := comp.Spec
 		comp.State = state{
 			CurrentState: mmuCacheStateEnable,
 			Table:        initSets(spec.NumLevels, spec.NumBlocks),

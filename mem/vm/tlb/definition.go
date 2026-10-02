@@ -26,7 +26,7 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 }
 
 func newState(c *Comp) state {
-	name, spec := c.Name(), c.Spec()
+	name, spec := c.Name(), c.Spec
 
 	return state{
 		TLBState: tlbStateEnable,

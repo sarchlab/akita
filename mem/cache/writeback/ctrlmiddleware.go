@@ -135,7 +135,7 @@ func (m *ctrlMiddleware) handleInvalidate(req memcontrolprotocol.Req) bool {
 		return false
 	}
 
-	spec := m.pipeline.comp.Spec()
+	spec := m.pipeline.comp.Spec
 	blockSize := uint64(1) << spec.Log2BlockSize
 	invalidateBlocks(next, blockSize, req.Addresses, req.PID)
 
@@ -240,7 +240,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	}
 
 	next := &m.pipeline.comp.State
-	spec := m.pipeline.comp.Spec()
+	spec := m.pipeline.comp.Spec
 	blockSize := 1 << spec.Log2BlockSize
 	cache.DirectoryReset(
 		&next.DirectoryState, spec.numSets(), spec.WayAssociativity, blockSize)

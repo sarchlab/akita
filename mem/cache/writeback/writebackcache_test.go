@@ -169,7 +169,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 	It("should do read hit", func() {
 		state := m.comp.State
-		spec := m.comp.Spec()
+		spec := m.comp.Spec
 		blockSize := 1 << spec.Log2BlockSize
 		setID := cache.DirectorySetID(0x10000, blockSize, spec.numSets())
 		block := &state.DirectoryState.Sets[setID].Blocks[0]
@@ -208,7 +208,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 	It("should write hit", func() {
 		state := m.comp.State
-		spec := m.comp.Spec()
+		spec := m.comp.Spec
 		blockSize := 1 << spec.Log2BlockSize
 		setID := cache.DirectorySetID(0x10000, blockSize, spec.numSets())
 		block := &state.DirectoryState.Sets[setID].Blocks[0]
@@ -384,7 +384,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		// Fill target set with dirty blocks
 		state := m.comp.State
-		spec := m.comp.Spec()
+		spec := m.comp.Spec
 		blockSize := 1 << spec.Log2BlockSize
 		setID := cache.DirectorySetID(0x10000, blockSize, spec.numSets())
 		for i := 0; i < spec.WayAssociativity; i++ {

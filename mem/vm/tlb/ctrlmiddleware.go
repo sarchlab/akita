@@ -166,7 +166,7 @@ func (m *ctrlMiddleware) handleInvalidate(msg memcontrolprotocol.Req) bool {
 		return false
 	}
 
-	invalidateEntries(state, m.comp.Spec(), msg.Addresses, msg.PID)
+	invalidateEntries(state, m.comp.Spec, msg.Addresses, msg.PID)
 
 	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdInvalidate,
 		msg.Src, msg.ID, true, ""))
@@ -252,7 +252,7 @@ func (m *ctrlMiddleware) handleReset(msg memcontrolprotocol.Req) bool {
 	state.HasRespondingMSHR = false
 	state.RespondingMSHRData = mshrEntryState{}
 
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state.Sets = initSets(spec.NumSets, spec.NumWays)
 	state.Pipeline.Clear()
 	state.BufferItems.Clear()

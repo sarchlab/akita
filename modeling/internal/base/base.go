@@ -24,9 +24,18 @@ import (
 type ComponentBase[S, T, R, P, M any] struct {
 	hooking.HookableBase
 
+	// Spec is the instance's configuration, given to Build. It is fixed from
+	// then on; Build copies its slices, so the instance shares none with
+	// DefaultSpec.
+	Spec S
+
 	// State is the instance's mutable runtime data. Only the component itself
 	// (its NewState and middlewares) writes it.
 	State T
+
+	// Resources holds the instance's references to shared objects, given to
+	// Build. They are fixed from then on.
+	Resources R
 
 	// Ports holds the instance's ports: the port instances the system builder
 	// passed to Build, bound to this instance. They are fixed from then on.
@@ -39,8 +48,6 @@ type ComponentBase[S, T, R, P, M any] struct {
 	name       string
 	owner      modeling.Component
 	simulation timing.Simulation
-	spec       S
-	resources  R
 }
 
 // Init sets up the ComponentBase embedded in owner, a component being built:
@@ -59,8 +66,8 @@ func Init[S, T, R, P, M any](
 	base.name = name
 	base.owner = owner
 	base.simulation = sim
-	base.spec = cloneSpec(spec)
-	base.resources = resources
+	base.Spec = cloneSpec(spec)
+	base.Resources = resources
 	base.Ports = ports
 	bindPorts(owner, &base.Ports)
 }
@@ -85,12 +92,6 @@ func (c *ComponentBase[S, T, R, P, M]) Name() string {
 	return c.name
 }
 
-// TypeName returns the component type's name: the import path of the package
-// that declares it.
-func (c *ComponentBase[S, T, R, P, M]) TypeName() string {
-	return reflect.TypeFor[S]().PkgPath()
-}
-
 // NewID allocates an ID, unique within the instance's simulation, for a
 // message or event the instance creates.
 func (c *ComponentBase[S, T, R, P, M]) NewID() uint64 {
@@ -100,17 +101,6 @@ func (c *ComponentBase[S, T, R, P, M]) NewID() uint64 {
 // CurrentTime returns the simulation's current time.
 func (c *ComponentBase[S, T, R, P, M]) CurrentTime() timing.VTimeInPicoSec {
 	return c.simulation.GetEngine().CurrentTime()
-}
-
-// Spec returns the instance's configuration. The returned value is a copy, but
-// its slices are the instance's own: treat them as read-only.
-func (c *ComponentBase[S, T, R, P, M]) Spec() S {
-	return c.spec
-}
-
-// Resources returns the instance's shared-resource references.
-func (c *ComponentBase[S, T, R, P, M]) Resources() R {
-	return c.resources
 }
 
 var middlewareType = reflect.TypeFor[modeling.Middleware]()

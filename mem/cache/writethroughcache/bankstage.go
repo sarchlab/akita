@@ -102,7 +102,7 @@ func (s *bankStage) finalizeReadHitTrans(
 ) bool {
 	next := &s.cache.comp.State
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
-	blockSize := uint64(1 << s.cache.comp.Spec().Log2BlockSize)
+	blockSize := uint64(1 << s.cache.comp.Spec.Log2BlockSize)
 
 	data := s.cache.storage.Read(
 		nextBlock.CacheAddress, blockSize)
@@ -126,7 +126,7 @@ func (s *bankStage) finalizeWriteTrans(
 ) bool {
 	next := &s.cache.comp.State
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
-	blockSize := 1 << s.cache.comp.Spec().Log2BlockSize
+	blockSize := 1 << s.cache.comp.Spec.Log2BlockSize
 
 	data := s.cache.storage.Read(nextBlock.CacheAddress, uint64(blockSize))
 

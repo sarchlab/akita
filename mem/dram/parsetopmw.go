@@ -26,7 +26,7 @@ func (m *parseTopMW) Handle(_ timing.Event) bool {
 	if next.ControlState != memcontrolprotocol.StateEnabled {
 		return false
 	}
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	return m.parseTop(&spec, next)
 }

@@ -97,7 +97,7 @@ func (m *workerMW) Handle(_ timing.Event) bool {
         })
 
         s.Working = true
-        s.CountDown = m.comp.Spec().CyclesPerJob
+        s.CountDown = m.comp.Spec.CyclesPerJob
         s.JobsLeft--
 
         return true
@@ -115,7 +115,7 @@ func (m *workerMW) Handle(_ timing.Event) bool {
 ```
 
 The worker's `Definition` gives it a `NewState` that loads all of its jobs
-up front (`State{JobsLeft: c.Spec().NumJobs}`). With the default
+up front (`State{JobsLeft: c.Spec.NumJobs}`). With the default
 `NumJobs: 3` and `CyclesPerJob: 4` at 1 GHz, each job spans 4 cycles =
 4000 ps, and the three run back to back.
 

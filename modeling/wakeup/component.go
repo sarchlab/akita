@@ -13,14 +13,19 @@ import (
 // Component is an instance of a wakeup component type, built from its
 // Definition. It adds wakeups to what the component models share.
 //
-// Its exported fields come from the embedded ComponentBase:
+// Its exported fields, the five structs, come from the embedded
+// ComponentBase:
 //
+//   - Spec is the configuration given to Build.
 //   - State is the instance's mutable runtime data, saved in checkpoints.
 //     Only the component itself, its NewState and middlewares, writes it.
+//   - Resources holds the references to shared objects given to Build.
 //   - Ports holds the ports the system builder passed to Build, bound to this
 //     instance.
 //   - Middlewares holds the instance's behavior. Every event the instance
 //     receives goes to each field in declaration order.
+//
+// Spec, Resources, and Ports are fixed after Build.
 //
 // A Component is hookable (hooking.Hookable): tracing attaches to it with
 // AcceptHook.
@@ -72,24 +77,18 @@ func (c *Component[S, T, R, P, M]) NotifyPortFree(_ messaging.Port) {
 
 // SaveCheckpoint writes the instance's spec hash, State, and wakeup guard.
 func (c *Component[S, T, R, P, M]) SaveCheckpoint(w io.Writer) error {
-	return modeling.WriteCheckpoint(w, c.Spec(), c.State, c.wakeups)
+	return modeling.WriteCheckpoint(w, c.Spec, c.State, c.wakeups)
 }
 
 // LoadCheckpoint restores the State and wakeup guard after verifying that the
 // saved spec hash matches this instance's.
 func (c *Component[S, T, R, P, M]) LoadCheckpoint(r io.Reader) error {
-	return modeling.ReadCheckpoint(r, c.Spec(), &c.State, c.wakeups)
+	return modeling.ReadCheckpoint(r, c.Spec, &c.State, c.wakeups)
 }
 
 // Name returns the instance name given to Build.
 func (c *Component[S, T, R, P, M]) Name() string {
 	return c.ComponentBase.Name()
-}
-
-// TypeName returns the component type's name: the import path of the package
-// that declares it.
-func (c *Component[S, T, R, P, M]) TypeName() string {
-	return c.ComponentBase.TypeName()
 }
 
 // NewID allocates an ID, unique within the instance's simulation, for a
@@ -101,15 +100,4 @@ func (c *Component[S, T, R, P, M]) NewID() uint64 {
 // CurrentTime returns the simulation's current time.
 func (c *Component[S, T, R, P, M]) CurrentTime() timing.VTimeInPicoSec {
 	return c.ComponentBase.CurrentTime()
-}
-
-// Spec returns the instance's configuration. The returned value is a copy, but
-// its slices are the instance's own: treat them as read-only.
-func (c *Component[S, T, R, P, M]) Spec() S {
-	return c.ComponentBase.Spec()
-}
-
-// Resources returns the instance's shared-resource references.
-func (c *Component[S, T, R, P, M]) Resources() R {
-	return c.ComponentBase.Resources()
 }

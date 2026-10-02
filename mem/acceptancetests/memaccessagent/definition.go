@@ -24,7 +24,7 @@ var Definition = ticking.Definition[Spec, State, Resources, Ports, Middlewares]{
 }
 
 func newState(c *Comp) State {
-	spec := c.Spec()
+	spec := c.Spec
 
 	return State{
 		WriteLeft:       spec.WriteLeft,
@@ -37,7 +37,7 @@ func newState(c *Comp) State {
 }
 
 func newMiddlewares(c *Comp) Middlewares {
-	if c.Resources().LowModule == nil {
+	if c.Resources.LowModule == nil {
 		panic("memaccessagent: Resources.LowModule is required")
 	}
 

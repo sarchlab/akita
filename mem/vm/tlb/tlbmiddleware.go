@@ -52,7 +52,7 @@ func (m *tlbMiddleware) tickPipeline() bool {
 
 func (m *tlbMiddleware) insertIntoPipeline() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	next := &m.comp.State
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
@@ -108,7 +108,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 
 func (m *tlbMiddleware) extractFromPipeline() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	next := &m.comp.State
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
@@ -147,7 +147,7 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 
 func (m *tlbMiddleware) handleEnable() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
@@ -163,7 +163,7 @@ func (m *tlbMiddleware) handleEnable() bool {
 
 func (m *tlbMiddleware) handleDrain() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
@@ -237,7 +237,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 }
 
 func (m *tlbMiddleware) lookup(msg vmprotocol.TranslationReq) bool {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	next := &m.comp.State
 
 	_, found := mshrGetEntry(next.MSHREntries, msg.PID, msg.VAddr)
@@ -284,7 +284,7 @@ func (m *tlbMiddleware) handleTranslationHit(
 
 func (m *tlbMiddleware) handleTranslationMiss(msg vmprotocol.TranslationReq) bool {
 	next := &m.comp.State
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	if mshrIsFull(next.MSHREntries, spec.MSHRSize) {
 		return false
@@ -357,8 +357,8 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 }
 
 func (m *tlbMiddleware) fetchBottom(msg vmprotocol.TranslationReq) bool {
-	spec := m.comp.Spec()
-	mapper := m.comp.Resources().TranslationProviderMapper
+	spec := m.comp.Spec
+	mapper := m.comp.Resources.TranslationProviderMapper
 
 	fetchBottom := vmprotocol.TranslationReq{}
 	fetchBottom.ID = m.comp.NewID()
@@ -405,7 +405,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 	}
 
 	item := itemI.(vmprotocol.TranslationRsp)
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	page := item.Page
 
 	mshrIdx, found := mshrGetEntry(next.MSHREntries, page.PID, page.VAddr)

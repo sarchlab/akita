@@ -72,13 +72,13 @@ type walkMW struct {
 
 func (m *walkMW) Handle(_ timing.Event) bool {
 	s := &m.comp.State
-	wall := m.comp.Spec().WallDistance
+	wall := m.comp.Spec.WallDistance
 
 	if s.Position >= wall || s.Position <= -wall {
 		return false
 	}
 
-	if m.comp.Resources().RNG.Intn(2) == 0 {
+	if m.comp.Resources.RNG.Intn(2) == 0 {
 		s.Position--
 	} else {
 		s.Position++

@@ -144,7 +144,7 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 		// Two element-1 lines that select different banks (local 0 and 64).
 		addrs := []uint64{128, 192}
 
-		spec := memComp.Spec()
+		spec := memComp.Spec
 		Expect(selectBank(spec, bankSelectionAddress(spec, addrs[0]))).
 			NotTo(Equal(selectBank(spec, bankSelectionAddress(spec, addrs[1]))))
 

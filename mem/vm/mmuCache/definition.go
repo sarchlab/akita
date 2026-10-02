@@ -25,7 +25,7 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 }
 
 func newState(c *Comp) state {
-	spec := c.Spec()
+	spec := c.Spec
 
 	if spec.NumBlocks <= 0 {
 		panic("mmuCache: Spec.NumBlocks must be > 0")

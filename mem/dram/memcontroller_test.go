@@ -270,7 +270,7 @@ var _ = Describe("Predefined Specs", func() {
 		sim := modeling.NewStandaloneSimulation(engine)
 		ctrl := buildDRAM(sim, DDR4Spec, "DDR4Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
-		spec := ctrl.Spec()
+		spec := ctrl.Spec
 		Expect(spec.BurstLength).To(Equal(8))
 		Expect(spec.NumBankGroup).To(Equal(4))
 		Expect(spec.NumBank).To(Equal(4))
@@ -284,7 +284,7 @@ var _ = Describe("Predefined Specs", func() {
 		sim := modeling.NewStandaloneSimulation(engine)
 		ctrl := buildDRAM(sim, DDR5Spec, "DDR5Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
-		spec := ctrl.Spec()
+		spec := ctrl.Spec
 		Expect(spec.BurstLength).To(Equal(16))
 		Expect(spec.NumBankGroup).To(Equal(8))
 		Expect(spec.NumBank).To(Equal(4))
@@ -297,7 +297,7 @@ var _ = Describe("Predefined Specs", func() {
 		sim := modeling.NewStandaloneSimulation(engine)
 		ctrl := buildDRAM(sim, HBM2Spec, "HBM2Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
-		spec := ctrl.Spec()
+		spec := ctrl.Spec
 		Expect(spec.BurstLength).To(Equal(4))
 		Expect(spec.NumBankGroup).To(Equal(4))
 		Expect(spec.NumBank).To(Equal(4))
@@ -311,7 +311,7 @@ var _ = Describe("Predefined Specs", func() {
 		sim := modeling.NewStandaloneSimulation(engine)
 		ctrl := buildDRAM(sim, HBM3Spec, "HBM3Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
-		spec := ctrl.Spec()
+		spec := ctrl.Spec
 		Expect(spec.BurstLength).To(Equal(8))
 		Expect(spec.NumBankGroup).To(Equal(4))
 		Expect(spec.BusWidth).To(Equal(64))
@@ -324,7 +324,7 @@ var _ = Describe("Predefined Specs", func() {
 		sim := modeling.NewStandaloneSimulation(engine)
 		ctrl := buildDRAM(sim, GDDR6Spec, "GDDR6Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
-		spec := ctrl.Spec()
+		spec := ctrl.Spec
 		Expect(spec.BurstLength).To(Equal(16))
 		Expect(spec.NumBankGroup).To(Equal(4))
 		Expect(spec.NumBank).To(Equal(4))
@@ -1034,7 +1034,7 @@ var _ = Describe("Builder Configuration", func() {
 		spec.PagePolicy = PagePolicyOpen
 		ctrl := buildDRAM(sim, spec, "OpenPageCtrl", 16)
 
-		builtSpec := ctrl.Spec()
+		builtSpec := ctrl.Spec
 		Expect(builtSpec.PagePolicy).To(Equal(PagePolicyOpen))
 	})
 
@@ -1048,7 +1048,7 @@ var _ = Describe("Builder Configuration", func() {
 		spec.WriteLowWatermark = 2
 		ctrl := buildDRAM(sim, spec, "RWQueueCtrl", 16)
 
-		builtSpec := ctrl.Spec()
+		builtSpec := ctrl.Spec
 		Expect(builtSpec.ReadQueueSize).To(Equal(8))
 		Expect(builtSpec.WriteQueueSize).To(Equal(8))
 		Expect(builtSpec.WriteHighWatermark).To(Equal(6))
@@ -1062,7 +1062,7 @@ var _ = Describe("Builder Configuration", func() {
 		specWithOpenPage.PagePolicy = PagePolicyOpen
 		ctrl := buildDRAM(sim, specWithOpenPage, "DDR4OpenPage", 16)
 
-		builtSpec := ctrl.Spec()
+		builtSpec := ctrl.Spec
 		Expect(builtSpec.PagePolicy).To(Equal(PagePolicyOpen))
 		Expect(builtSpec.BurstLength).To(Equal(8))
 	})
@@ -1077,7 +1077,7 @@ var _ = Describe("Builder Configuration", func() {
 		specWithRW.WriteLowWatermark = 4
 		ctrl := buildDRAM(sim, specWithRW, "DDR4RWQueue", 16)
 
-		builtSpec := ctrl.Spec()
+		builtSpec := ctrl.Spec
 		Expect(builtSpec.ReadQueueSize).To(Equal(16))
 		Expect(builtSpec.WriteQueueSize).To(Equal(16))
 		Expect(builtSpec.WriteHighWatermark).To(Equal(12))

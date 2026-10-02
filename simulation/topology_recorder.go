@@ -43,10 +43,11 @@ type portEntry struct {
 // the recording, making it self-describing for tools such as Daisen's index
 // page.
 //
-// Specs are read through the public Spec accessor that every modeling.Component
-// exposes; because that accessor is generic there is no single non-generic
-// interface to assert against, so the recorder reaches it by reflection. This
-// runs once at Terminate, so its cost is irrelevant to simulation speed.
+// Specs are read from the exported Spec field that every component built from
+// a component model has; because its type differs per component there is no
+// single non-generic interface to assert against, so the recorder reaches it by
+// reflection. This runs once at Terminate, so its cost is irrelevant to
+// simulation speed.
 type topologyRecorder struct {
 	recorder datarecording.DataRecorder
 }
@@ -105,15 +106,20 @@ func (r *topologyRecorder) recordPorts(ports []Port) {
 	}
 }
 
-// reflectSpec returns the value of the component's Spec accessor, or ok=false
-// when the component exposes no such accessor.
+// reflectSpec returns the value of the component's exported Spec field, or
+// ok=false when the component has no such field.
 func reflectSpec(c Component) (any, bool) {
-	m := reflect.ValueOf(c).MethodByName("Spec")
-	if !m.IsValid() || m.Type().NumIn() != 0 || m.Type().NumOut() != 1 {
+	v := reflect.Indirect(reflect.ValueOf(c))
+	if v.Kind() != reflect.Struct {
 		return nil, false
 	}
 
-	spec := m.Call(nil)[0].Interface()
+	f := v.FieldByName("Spec")
+	if !f.IsValid() || !f.CanInterface() {
+		return nil, false
+	}
+
+	spec := f.Interface()
 	if spec == nil {
 		// A nil interface spec would make reflect.TypeOf(spec).String() panic
 		// in the Terminate teardown path; treat it as "no spec".

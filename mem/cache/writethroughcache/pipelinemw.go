@@ -34,7 +34,7 @@ func newPipelineMW(
 		addressMapper: addressMapper,
 	}
 
-	spec := c.Spec()
+	spec := c.Spec
 
 	m.intakeStage = &intake{cache: m}
 	m.directoryStage = &directory{cache: m}
@@ -96,7 +96,7 @@ func (m *pipelineMW) runPipeline() bool {
 
 func (m *pipelineMW) tickRespondStage() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respondStage.Tick() || madeProgress
 	}
@@ -107,7 +107,7 @@ func (m *pipelineMW) tickRespondStage() bool {
 func (m *pipelineMW) tickParseBottomStage() bool {
 	madeProgress := false
 
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.parseBottomStage.Tick() || madeProgress
 	}
@@ -130,7 +130,7 @@ func (m *pipelineMW) tickDirectoryStage() bool {
 
 func (m *pipelineMW) tickIntakeStage() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.intakeStage.Tick() || madeProgress
 	}

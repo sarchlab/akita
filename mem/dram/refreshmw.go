@@ -25,7 +25,7 @@ func (m *refreshMiddleware) Handle(_ timing.Event) bool {
 	if next.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	return runFakeStallRefresh(&spec, next)
 }
 

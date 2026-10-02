@@ -127,7 +127,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		ds := &comp.State.DirectoryState
 		cacheLineID := addr / blockSize * blockSize
 		setID, _, _ := cache.DirectoryLookup(
-			ds, comp.Spec().numSets(), int(blockSize), pid, cacheLineID)
+			ds, comp.Spec.numSets(), int(blockSize), pid, cacheLineID)
 		wayID := 0
 		block := &ds.Sets[setID].Blocks[wayID]
 		block.IsValid = true

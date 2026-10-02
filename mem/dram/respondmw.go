@@ -24,7 +24,7 @@ func (m *respondMW) Handle(_ timing.Event) bool {
 	if next.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	progress := m.respond(&spec, next)
 	progress = m.respond(&spec, next) || progress
@@ -72,7 +72,7 @@ func (m *respondMW) finalizeWriteTrans(
 	t *transactionState,
 	i int,
 ) bool {
-	m.comp.Resources().Storage.Write(
+	m.comp.Resources.Storage.Write(
 		transactionGlobalAddress(t), t.WriteMsg.Data)
 
 	writeDone := memprotocol.WriteDoneRsp{}
@@ -100,7 +100,7 @@ func (m *respondMW) finalizeReadTrans(
 	t *transactionState,
 	i int,
 ) bool {
-	data := m.comp.Resources().Storage.Read(
+	data := m.comp.Resources.Storage.Read(
 		transactionGlobalAddress(t), t.ReadMsg.AccessByteSize)
 
 	dataReady := memprotocol.DataReadyRsp{}

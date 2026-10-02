@@ -697,7 +697,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
 #### Determinism and Introspection
 
 - Determinism: avoid non‑deterministic IDs or iteration order; snapshot ID generators; canonicalize map iteration by sorting.
-- Introspection: `comp.Spec()` returns the effective Spec and `comp.State` can be dumped for debugging; the `inspect` package reads each `Definition`, its ports, and their roles without running the code.
+- Introspection: `comp.Spec` holds the effective Spec and `comp.State` can be dumped for debugging; the `inspect` package reads each `Definition`, its ports, and their roles without running the code.
 - Tracing/metrics: attach as hooks; avoid embedding tracing in business logic.
 
 #### Testing and Mocks
@@ -738,7 +738,7 @@ V5 Spec fields are scalars or slices (or arrays) of scalars. `Build` panics if a
 | Wiring through an address mapping | Resources, used directly by the component | The caches route through the `mem.AddressToPortMapper` in Resources. |
 | Runtime data that changes while simulating | State | Queues, in-flight transaction tables. |
 
-`Build` copies the Spec's slices, so an instance never shares one with `Definition.DefaultSpec` or with another instance. Treat the slices that `Spec()` returns as read-only. Since ports are created before `Build`, their remote names are known in time to fill such a list.
+`Build` copies the Spec's slices, so an instance never shares one with `Definition.DefaultSpec` or with another instance. The instance's `Spec` field is fixed after `Build`. Since ports are created before `Build`, their remote names are known in time to fill such a list.
 
 A component's Resources are not part of its checkpoint. The setup that rebuilds a simulation supplies them again, so a restored component uses the rebuilt wiring; a shared object they point to, such as a `mem.Storage`, is a registered resource that checkpoints itself. Do not copy wiring into State: `LoadCheckpoint` replaces the State wholesale and would bring back the wiring of the saved run.
 

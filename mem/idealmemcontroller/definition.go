@@ -30,7 +30,7 @@ func newState(_ *Comp) state {
 // newMiddlewares creates the controller's middlewares. It panics if the system
 // builder did not supply a storage.
 func newMiddlewares(c *Comp) middlewares {
-	if c.Resources().Storage == nil {
+	if c.Resources.Storage == nil {
 		panic("idealmemcontroller: Resources.Storage is required")
 	}
 

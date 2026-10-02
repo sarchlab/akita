@@ -30,7 +30,7 @@ type stage interface {
 
 // createInternalStages creates the pipeline stages, one bank stage per bank.
 func (m *pipelineMW) createInternalStages() {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	m.topParser = &topParser{cache: m}
 	m.dirStage = &directoryStage{cache: m}
@@ -51,7 +51,7 @@ func (m *pipelineMW) createInternalStages() {
 
 // GetSpec returns the immutable specification.
 func (m *pipelineMW) GetSpec() Spec {
-	return m.comp.Spec()
+	return m.comp.Spec
 }
 
 // topPort returns the Top port.
@@ -89,7 +89,7 @@ func (m *pipelineMW) Handle(_ timing.Event) bool {
 func (m *pipelineMW) runPipeline() bool {
 	madeProgress := false
 
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	madeProgress = m.runStage(m.mshrStage, spec.NumReqPerCycle) || madeProgress
 

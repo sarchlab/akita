@@ -62,7 +62,7 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 // newState returns the State of a freshly built controller: empty queues and
 // every bank closed.
 func newState(c *Comp) state {
-	spec := c.Spec()
+	spec := c.Spec
 
 	return state{
 		SubTransQueue: subTransQueueState{
@@ -83,10 +83,10 @@ func newState(c *Comp) state {
 // address mapping — are computed once here and held by the bank-tick
 // middleware.
 func newMiddlewares(c *Comp) middlewares {
-	spec := c.Spec()
+	spec := c.Spec
 	spec.mustBeSupported()
 
-	if c.Resources().Storage == nil {
+	if c.Resources.Storage == nil {
 		panic("dram: Resources.Storage is required")
 	}
 

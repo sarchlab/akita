@@ -54,7 +54,7 @@ func (m *sendMW) sendRsp() bool {
 
 func (m *sendMW) sendPing() bool {
 	state := &m.comp.State
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	out := m.comp.Ports.Out
 
 	if state.NextSeqID >= spec.NumPings {

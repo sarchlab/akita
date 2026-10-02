@@ -51,7 +51,7 @@ func (m *workMW) Handle(e timing.Event) bool {
 var Definition = wakeup.Definition[Spec, State, modeling.None, Ports, Middlewares]{
 	DefaultSpec: Spec{Work: 2},
 	NewState: func(c *Comp) State {
-		return State{Work: c.Spec().Work}
+		return State{Work: c.Spec.Work}
 	},
 	NewMiddlewares: func(c *Comp) Middlewares {
 		return Middlewares{Worker: &workMW{comp: c}}

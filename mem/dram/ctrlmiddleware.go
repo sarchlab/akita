@@ -121,7 +121,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	}
 
 	state := &m.comp.State
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	m.endInflightTasks()
 	state.Transactions = nil

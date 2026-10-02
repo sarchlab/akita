@@ -44,7 +44,7 @@ func (m *mmuCacheMiddleware) handleDrain() bool {
 	// on the Top queue, so the drain converges even if upstream keeps queuing;
 	// those queued requests resume after Enable.
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.handleBottomPort() || madeProgress
 	}
@@ -68,7 +68,7 @@ func (m *mmuCacheMiddleware) handleEnable() bool {
 // processRequests handles both incoming lookup requests and bottom port responses.
 func (m *mmuCacheMiddleware) processRequests() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.lookup() || madeProgress
 	}
@@ -99,7 +99,7 @@ func (m *mmuCacheMiddleware) lookup() bool {
 func (m *mmuCacheMiddleware) walkCacheLevels(
 	msg vmprotocol.TranslationReq,
 ) bool {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	totalLatency := spec.LatencyPerLevel * uint64(spec.NumLevels)
 
 	for level := spec.NumLevels - 1; level >= 0; level-- {
@@ -120,7 +120,7 @@ func (m *mmuCacheMiddleware) walkCacheLevels(
 func (m *mmuCacheMiddleware) lookupLevel(
 	level int, req vmprotocol.TranslationReq,
 ) bool {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	next := &m.comp.State
 	vAddr := req.VAddr
 	pid := req.PID
@@ -145,7 +145,7 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 		return false
 	}
 
-	res := m.comp.Resources()
+	res := m.comp.Resources
 
 	reqToBottom := vmprotocol.TranslationReq{}
 	reqToBottom.ID = m.comp.NewID()
@@ -226,7 +226,7 @@ func (m *mmuCacheMiddleware) handleRsp(rsp vmprotocol.TranslationRsp) bool {
 
 	m.updateCacheLevels(rsp)
 
-	res := m.comp.Resources()
+	res := m.comp.Resources
 
 	rspToTop := vmprotocol.TranslationRsp{
 		Page: rsp.Page,
@@ -283,13 +283,13 @@ func (m *mmuCacheMiddleware) handleRsp(rsp vmprotocol.TranslationRsp) bool {
 
 // segToSetID maps a segment to a cache set ID using modulo hashing.
 func (m *mmuCacheMiddleware) segToSetID(seg uint64) int {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	return int(seg % uint64(spec.NumBlocks))
 }
 
 // updateCacheLevels updates all cache levels with the translation response.
 func (m *mmuCacheMiddleware) updateCacheLevels(rsp vmprotocol.TranslationRsp) bool {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	next := &m.comp.State
 	page := rsp.Page
 	vAddr := page.VAddr

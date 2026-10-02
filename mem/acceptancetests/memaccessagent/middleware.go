@@ -25,7 +25,7 @@ func (m *agentMiddleware) memPort() messaging.Port {
 }
 
 func (m *agentMiddleware) lowModule() messaging.Port {
-	return m.comp.Resources().LowModule
+	return m.comp.Resources.LowModule
 }
 
 // Handle updates the states of the agent and issues new read and write
@@ -200,7 +200,7 @@ func (m *agentMiddleware) doRead() bool {
 }
 
 func (m *agentMiddleware) randomReadAddress(state *State) uint64 {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	var addr uint64
 
@@ -239,7 +239,7 @@ func (m *agentMiddleware) isAddressInPendingRead(state *State, addr uint64) bool
 
 func (m *agentMiddleware) doWrite() bool {
 	state := &m.comp.State
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	address := spec.AddressOffset + m.uint64()%(spec.MaxAddress/4)*4
 

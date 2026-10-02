@@ -22,12 +22,12 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 }
 
 func newMiddlewares(c *Comp) middlewares {
-	pt := c.Resources().PageTable
+	pt := c.Resources.PageTable
 	if pt == nil {
 		panic("mmu: Resources.PageTable is required")
 	}
 
-	validatePageTablePageSize(pt, c.Spec().Log2PageSize)
+	validatePageTablePageSize(pt, c.Spec.Log2PageSize)
 
 	return middlewares{
 		Ctrl:        &ctrlMiddleware{comp: c},

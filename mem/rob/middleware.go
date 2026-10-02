@@ -32,7 +32,7 @@ func (m *middleware) Handle(_ timing.Event) bool {
 
 func (m *middleware) runPipeline() bool {
 	madeProgress := false
-	width := m.comp.Spec().NumReqPerCycle
+	width := m.comp.Spec.NumReqPerCycle
 
 	for i := 0; i < width; i++ {
 		if !m.bottomUp() {
@@ -83,7 +83,7 @@ func (m *middleware) topDown() bool {
 		panic("rob: unsupported top-port message type")
 	}
 
-	if len(state.Transactions) >= m.comp.Spec().BufferSize {
+	if len(state.Transactions) >= m.comp.Spec.BufferSize {
 		return false
 	}
 
@@ -98,7 +98,7 @@ func (m *middleware) topDown() bool {
 	})
 
 	shadow, isRead := m.buildShadowReq(
-		req, m.comp.Ports.Bottom.AsRemote(), m.comp.Spec().BottomUnit)
+		req, m.comp.Ports.Bottom.AsRemote(), m.comp.Spec.BottomUnit)
 
 	if !m.comp.Ports.Bottom.CanSend() {
 		return false
@@ -310,13 +310,13 @@ func (m *middleware) shadowReqTraceMsg(trans transactionState) messaging.Msg {
 		req := memprotocol.ReadReq{}
 		req.ID = trans.ReqToBottomID
 		req.Src = m.comp.Ports.Bottom.AsRemote()
-		req.Dst = m.comp.Spec().BottomUnit
+		req.Dst = m.comp.Spec.BottomUnit
 		return req
 	}
 	req := memprotocol.WriteReq{}
 	req.ID = trans.ReqToBottomID
 	req.Src = m.comp.Ports.Bottom.AsRemote()
-	req.Dst = m.comp.Spec().BottomUnit
+	req.Dst = m.comp.Spec.BottomUnit
 	return req
 }
 

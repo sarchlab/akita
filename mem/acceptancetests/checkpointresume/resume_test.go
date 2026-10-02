@@ -95,7 +95,7 @@ func newDriverMiddlewares(d *driver) driverMiddlewares {
 }
 
 func done(d *driver) bool {
-	return d.State.ReadsVerified == d.Spec().NumOps && !d.State.Mismatch
+	return d.State.ReadsVerified == d.Spec.NumOps && !d.State.Mismatch
 }
 
 type driverMW struct {
@@ -138,7 +138,7 @@ func (m *driverMW) processResponse() bool {
 
 func (m *driverMW) sendNext() bool {
 	st := &m.d.State
-	spec := m.d.Spec()
+	spec := m.d.Spec
 	port := m.port()
 
 	// Phase 1: send every write.
@@ -150,7 +150,7 @@ func (m *driverMW) sendNext() bool {
 		req := memprotocol.WriteReq{}
 		req.ID = m.d.NewID()
 		req.Src = port.AsRemote()
-		req.Dst = m.d.Resources().LowModule.AsRemote()
+		req.Dst = m.d.Resources.LowModule.AsRemote()
 		req.Address = addressForOp(idx)
 		req.PID = 1
 		req.Data = uint32ToBytes(valueForOp(idx))
@@ -176,7 +176,7 @@ func (m *driverMW) sendNext() bool {
 		req := memprotocol.ReadReq{}
 		req.ID = m.d.NewID()
 		req.Src = port.AsRemote()
-		req.Dst = m.d.Resources().LowModule.AsRemote()
+		req.Dst = m.d.Resources.LowModule.AsRemote()
 		req.Address = addressForOp(idx)
 		req.AccessByteSize = 4
 		req.PID = 1

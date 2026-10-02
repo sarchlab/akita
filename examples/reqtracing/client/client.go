@@ -76,7 +76,7 @@ func (m *requestMW) Handle(_ timing.Event) bool {
 
 func (m *requestMW) send() bool {
 	s := &m.comp.State
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	port := m.comp.Ports.Out
 
 	// Send one request at a time: wait for the response before the next.

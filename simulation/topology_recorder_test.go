@@ -16,17 +16,16 @@ type fakeSpec struct {
 	Mode string `json:"mode"`
 }
 
-// specComponent is a Component that exposes a Spec accessor, like every
-// modeling.Component does.
+// specComponent is a Component with a Spec field, like every component built
+// from a component model.
 type specComponent struct {
 	name string
-	spec fakeSpec
+	Spec fakeSpec
 }
 
-func (c *specComponent) Name() string   { return c.name }
-func (c *specComponent) Spec() fakeSpec { return c.spec }
+func (c *specComponent) Name() string { return c.name }
 
-// plainComponent is a Component without a Spec accessor, exercising the
+// plainComponent is a Component without a Spec field, exercising the
 // graceful path where only the name is recorded.
 type plainComponent struct {
 	name string
@@ -74,7 +73,7 @@ func TestTopologyRecorderRecordsComponentSpecs(t *testing.T) {
 	r := newTopologyRecorder(recorder)
 
 	components := []Component{
-		&specComponent{name: "L1", spec: fakeSpec{Freq: 1000, Mode: "write-through"}},
+		&specComponent{name: "L1", Spec: fakeSpec{Freq: 1000, Mode: "write-through"}},
 		&plainComponent{name: "Agent"},
 	}
 	r.Record(components, nil)
@@ -97,7 +96,7 @@ func TestTopologyRecorderRecordsComponentSpecs(t *testing.T) {
 
 	agent := specs["Agent"]
 	if agent.Type != "" || agent.Spec != "" {
-		t.Fatalf("expected empty spec for component without Spec(), got %+v", agent)
+		t.Fatalf("expected empty spec for component without a Spec field, got %+v", agent)
 	}
 }
 

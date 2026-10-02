@@ -63,7 +63,7 @@ func (m *tickFinalizeMW) finalizeRead(
 	readReq := &item.ReadMsg
 
 	if !item.Committed {
-		data := m.comp.Resources().Storage.Read(
+		data := m.comp.Resources.Storage.Read(
 			readReq.Address, readReq.AccessByteSize)
 
 		item.ReadData = data
@@ -112,9 +112,9 @@ func (m *tickFinalizeMW) finalizeWrite(
 		addr := writeReq.Address
 
 		if writeReq.DirtyMask == nil {
-			m.comp.Resources().Storage.Write(addr, writeReq.Data)
+			m.comp.Resources.Storage.Write(addr, writeReq.Data)
 		} else {
-			data := m.comp.Resources().Storage.Read(addr, uint64(len(writeReq.Data)))
+			data := m.comp.Resources.Storage.Read(addr, uint64(len(writeReq.Data)))
 
 			for i := range writeReq.Data {
 				if writeReq.DirtyMask[i] {
@@ -122,7 +122,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 				}
 			}
 
-			m.comp.Resources().Storage.Write(addr, data)
+			m.comp.Resources.Storage.Write(addr, data)
 		}
 
 		item.Committed = true

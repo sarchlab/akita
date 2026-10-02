@@ -165,13 +165,13 @@ var Definition = ticking.Definition[
 func newMigState(c *migrationController) migState {
 	return migState{
 		Phase:     migIdle,
-		Countdown: c.Spec().Interval,
+		Countdown: c.Spec.Interval,
 	}
 }
 
 func newMigMiddlewares(c *migrationController) migMiddlewares {
 	return migMiddlewares{
-		Migration: &migMW{ctrl: c, res: c.Resources()},
+		Migration: &migMW{ctrl: c, res: c.Resources},
 	}
 }
 
@@ -269,7 +269,7 @@ func (m *migMW) allAgentsDone() bool {
 // enters the drain phase.
 func (m *migMW) beginMigration() {
 	state := &m.ctrl.State
-	spec := m.ctrl.Spec()
+	spec := m.ctrl.Spec
 
 	page := state.PageCursor % spec.NumPages
 	state.PageCursor = (state.PageCursor + 1) % spec.NumPages
@@ -521,7 +521,7 @@ func (m *migMW) finishMigration() {
 
 	state.NumMigrations++
 	state.Phase = migIdle
-	state.Countdown = m.ctrl.Spec().Interval
+	state.Countdown = m.ctrl.Spec.Interval
 	state.MoveSent = false
 	state.SendCursor = 0
 	state.PendingAcks = 0
