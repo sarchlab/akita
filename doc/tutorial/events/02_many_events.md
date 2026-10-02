@@ -104,7 +104,7 @@ when no more events are pending, the engine returns.
 randGen = rand.New(rand.NewSource(0))
 
 s := simulation.MakeBuilder().Build()
-engine = s.GetEngine()
+engine = s.Engine()
 h := handler{count: 1}
 
 if handlers, ok := engine.(timing.HandlerRegistry); ok {

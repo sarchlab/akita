@@ -48,7 +48,7 @@ func setupTest(
 
 	s := simBuilder.Build()
 
-	engine := s.GetEngine()
+	engine := s.Engine()
 
 	l1Cache, l2Cache, memCtrl := buildMemoryHierarchy(s)
 	ioMMU, tlb, l2TLB := buildTranslationHierarchy(s)
@@ -97,7 +97,7 @@ func setupTest(
 			Mem: newPort("MemAccessAgent.Mem"),
 		}).
 		Build("MemAccessAgent")
-	if monitor := s.GetMonitor(); monitor != nil {
+	if monitor := s.Monitor(); monitor != nil {
 		memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
 	}
 

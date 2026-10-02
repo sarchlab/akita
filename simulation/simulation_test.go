@@ -123,8 +123,8 @@ var _ = Describe("Simulation", func() {
 		simulation.RegisterComponent(comp)
 		simulation.RegisterPort(port)
 
-		Expect(simulation.GetComponentByName("comp")).To(Equal(comp))
-		Expect(simulation.GetPortByName("port")).To(Equal(port))
+		Expect(simulation.components).To(Equal([]Component{comp}))
+		Expect(simulation.ports).To(Equal([]Port{port}))
 	})
 
 	It("should reject duplicate component names", func() {
@@ -147,14 +147,6 @@ var _ = Describe("Simulation", func() {
 		}).To(PanicWith(ContainSubstring("already registered")))
 	})
 
-	It("should return all registered components", func() {
-		simulation.RegisterComponent(comp)
-
-		comps := simulation.Components()
-		Expect(comps).To(HaveLen(1))
-		Expect(comps[0]).To(Equal(comp))
-	})
-
 	It("should register shared state resources directly", func() {
 		resource := testResource{
 			name:     "Program.Memory",
@@ -166,9 +158,7 @@ var _ = Describe("Simulation", func() {
 
 		simulation.RegisterResource(resource)
 
-		resources := simulation.Resources()
-		Expect(resources).To(HaveLen(1))
-		Expect(resources[0].Name()).To(Equal("Program.Memory"))
+		Expect(simulation.entityByName).To(HaveKey("Program.Memory"))
 	})
 
 	It("should reject duplicate shared state names with different identities", func() {
@@ -234,7 +224,7 @@ var _ = Describe("Simulation", func() {
 			customSim = builder.Build()
 
 			Expect(customSim).ToNot(BeNil())
-			Expect(customSim.GetDataRecorder()).ToNot(BeNil())
+			Expect(customSim.DataRecorder()).ToNot(BeNil())
 		})
 	})
 
@@ -475,7 +465,7 @@ var _ = Describe("Checkpoint round trip", func() {
 		// A port-less component plus a storage resource: every entity
 		// (Engine, IDGenerator, Comp, Mem) is checkpointable, so no port or
 		// connection serializers are needed yet.
-		engine := sim.GetEngine().(*timing.SerialEngine)
+		engine := sim.Engine().(*timing.SerialEngine)
 		engine.RegisterHandler("TimeSetter", timeSetter{})
 		comp := roundTripDef.Builder().WithSimulation(sim).Build("Comp")
 		storage := mem.MakeStorageBuilder().
@@ -575,7 +565,7 @@ var _ = Describe("Mid-transaction resume", func() {
 
 		Expect(refSim.SaveCheckpoint(path, buildID)).To(Succeed())
 
-		refEngine := refSim.GetEngine().(*timing.SerialEngine)
+		refEngine := refSim.Engine().(*timing.SerialEngine)
 		Expect(refEngine.Run()).To(Succeed())
 		wantDone := refW.State.Done
 		wantChecksum := refW.State.Checksum
@@ -590,7 +580,7 @@ var _ = Describe("Mid-transaction resume", func() {
 		}()
 		Expect(resSim.LoadCheckpoint(path, buildID)).To(Succeed())
 
-		resEngine := resSim.GetEngine().(*timing.SerialEngine)
+		resEngine := resSim.Engine().(*timing.SerialEngine)
 		Expect(resEngine.Run()).To(Succeed())
 
 		Expect(resW.State.Done).To(Equal(wantDone))
@@ -670,7 +660,7 @@ var _ = Describe("Tick scheduler guard restore", func() {
 		// schedules no second tick at the same cycle.
 		dstC.TickLater()
 
-		engine := dstSim.GetEngine().(*timing.SerialEngine)
+		engine := dstSim.Engine().(*timing.SerialEngine)
 		Expect(engine.Run()).To(Succeed())
 
 		// Exactly one tick fired. Without the restored guard the stimulus would
@@ -746,7 +736,7 @@ var _ = Describe("Event-driven wakeup guard restore", func() {
 		// guard restored, it is recognized as redundant and queues no duplicate.
 		dstC.WakeAt(wakeTime)
 
-		engine := dstSim.GetEngine().(*timing.SerialEngine)
+		engine := dstSim.Engine().(*timing.SerialEngine)
 		Expect(engine.Run()).To(Succeed())
 
 		// Exactly one wakeup fired. Without the restored guard the redundant

@@ -248,7 +248,7 @@ func runReference(t *testing.T) (wantVerified int, wantTime timing.VTimeInPicoSe
 	refSim, refD := buildSim()
 	defer cleanup(refSim)
 
-	refEngine := refSim.GetEngine().(*timing.SerialEngine)
+	refEngine := refSim.Engine().(*timing.SerialEngine)
 	refD.TickLater()
 	if err := refEngine.Run(); err != nil {
 		t.Fatalf("reference run: %v", err)
@@ -273,7 +273,7 @@ func resumeAndVerify(
 	resSim, resD := buildSim()
 	defer cleanup(resSim)
 
-	resEngine := resSim.GetEngine().(*timing.SerialEngine)
+	resEngine := resSim.Engine().(*timing.SerialEngine)
 	if err := resSim.LoadCheckpoint(path, buildID); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
@@ -302,7 +302,7 @@ func checkpointAtMidTransaction(t *testing.T, path, buildID string, wantTime tim
 	t.Helper()
 
 	srcSim, srcD := buildSim()
-	srcEngine := srcSim.GetEngine().(*timing.SerialEngine)
+	srcEngine := srcSim.Engine().(*timing.SerialEngine)
 	srcD.TickLater()
 
 	step := wantTime / 8
@@ -356,7 +356,7 @@ func TestResumeOracleDeterministicAcrossBoundaries(t *testing.T) {
 			const buildID = "multi-boundary"
 
 			srcSim, srcD := buildSim()
-			srcEngine := srcSim.GetEngine().(*timing.SerialEngine)
+			srcEngine := srcSim.Engine().(*timing.SerialEngine)
 			srcD.TickLater()
 			if err := srcEngine.RunUntil(boundary); err != nil {
 				t.Fatalf("RunUntil(%d): %v", boundary, err)

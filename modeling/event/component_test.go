@@ -110,7 +110,7 @@ func TestRecvAndScheduledEventsReachTheMiddlewares(t *testing.T) {
 	c.Ports.In.Deliver(req{messaging.MsgMeta{ID: 1}})
 	c.Ports.In.Deliver(req{messaging.MsgMeta{ID: 2}})
 
-	if err := sim.GetEngine().Run(); err != nil {
+	if err := sim.Engine().Run(); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 
@@ -132,7 +132,7 @@ func TestSimultaneousEventsAreHandledOneAtATime(t *testing.T) {
 		c.Schedule(doneEvent{EventBase: c.MakeEventBase(10), ReqID: uint64(i)})
 	}
 
-	if err := sim.GetEngine().Run(); err != nil {
+	if err := sim.Engine().Run(); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 

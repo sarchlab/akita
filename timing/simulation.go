@@ -7,11 +7,8 @@ import "github.com/sarchlab/akita/v5/naming"
 // interface lets lower-level packages use the simulation without importing
 // the concrete simulation package.
 type Simulation interface {
-	GetEngine() Engine
+	Engine() Engine
 	NewID() uint64
-	// GetIDGenerator returns the same counter for this simulation's lifetime.
-	// Checkpoints save and restore it.
-	GetIDGenerator() *IDGenerator
 
 	// Registration adds elements to the simulation's inventory for checkpointing,
 	// lookup, tracing, and monitoring. Lightweight contexts may leave it empty.

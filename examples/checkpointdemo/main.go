@@ -122,7 +122,7 @@ func main() {
 		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
 	}()
 
-	engine := sim.GetEngine().(*timing.SerialEngine)
+	engine := sim.Engine().(*timing.SerialEngine)
 	worker := Definition.Builder().
 		WithSimulation(sim).
 		Build("Worker")

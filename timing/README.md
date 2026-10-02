@@ -120,12 +120,12 @@ evt := timing.MakeEventBase(sim.NewID(), when, comp.Name())
 Events and messages store IDs without retaining the simulation. The
 process-global generator, configuration, and reset functions have been removed.
 
-A `simulation.Simulation` checkpoints its counter automatically. Lightweight
-setups can create `sim := modeling.NewStandaloneSimulation(engine)` once and
-share it with every component builder. They must save and restore
-`sim.GetIDGenerator()` alongside the engine and other entities. Restore into a
+A `simulation.Simulation` checkpoints its counter automatically. Restore into a
 fresh, stopped simulation; restoring one simulation does not change another
 simulation's counter. Parallel simulation checkpointing remains unsupported.
+Lightweight setups can create `sim := modeling.NewStandaloneSimulation(engine)`
+once and share it with every component builder; such a simulation registers
+nothing and does not support checkpoints.
 
 ## Hooks
 

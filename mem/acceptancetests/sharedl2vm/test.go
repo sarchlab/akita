@@ -90,7 +90,7 @@ func setupTest(seed int64) (*simulation.Simulation, timing.Engine, []agentChain)
 	}
 
 	s := simBuilder.Build()
-	engine := s.GetEngine()
+	engine := s.Engine()
 
 	shared := buildSharedHierarchy(s)
 
@@ -400,7 +400,7 @@ func buildAgent(
 			Mem: newPort(name + ".Mem"),
 		}).
 		Build(name)
-	if monitor := s.GetMonitor(); monitor != nil {
+	if monitor := s.Monitor(); monitor != nil {
 		memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
 	}
 

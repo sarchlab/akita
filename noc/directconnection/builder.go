@@ -59,7 +59,7 @@ func (b Builder) Build(name string) *Comp {
 		ports: ports{portMap: make(map[messaging.RemotePort]int)},
 	}
 
-	if handlers, ok := b.simulation.GetEngine().(timing.HandlerRegistry); ok {
+	if handlers, ok := b.simulation.Engine().(timing.HandlerRegistry); ok {
 		handlers.RegisterHandler(name, conn)
 	}
 

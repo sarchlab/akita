@@ -35,7 +35,7 @@ func setupTest(seed int64) (*simulation.Simulation, timing.Engine, *memaccessage
 	}
 
 	s := simBuilder.Build()
-	engine := s.GetEngine()
+	engine := s.Engine()
 
 	conn := directconnection.MakeBuilder().
 		WithSimulation(s).
@@ -62,7 +62,7 @@ func setupTest(seed int64) (*simulation.Simulation, timing.Engine, *memaccessage
 			Mem: messaging.NewPort("MemAccessAgent.Mem", 16, 16),
 		}).
 		Build("MemAccessAgent")
-	if monitor := s.GetMonitor(); monitor != nil {
+	if monitor := s.Monitor(); monitor != nil {
 		memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
 	}
 

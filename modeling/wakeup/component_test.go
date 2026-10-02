@@ -73,7 +73,7 @@ func newSim() timing.Simulation {
 func run(t *testing.T, sim timing.Simulation) {
 	t.Helper()
 
-	if err := sim.GetEngine().Run(); err != nil {
+	if err := sim.Engine().Run(); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 }

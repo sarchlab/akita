@@ -205,7 +205,7 @@ if req.ID == 0 { ... }
 - Replace `fmt.Sprintf`-based ID formatting with `strconv.FormatUint` or `%d`.
 - Update tracing task ID comparisons from string to uint64.
 - Replace global ID allocation with `sim.NewID()` or `component.NewID()`.
-- Simulation checkpoints include the owned counter. Standalone simulation users must checkpoint `sim.GetIDGenerator()` alongside the engine. Restore into fresh instances.
+- Simulation checkpoints include the owned counter. A standalone simulation (`modeling.NewStandaloneSimulation`) does not support checkpoints. Restore into fresh instances.
 
 ---
 
@@ -364,7 +364,7 @@ registers the instance with the engine under its name (so events whose
 func Register[S, T, R, P, M any](base *ComponentBase[S, T, R, P, M]) {
     registerPorts(base.simulation, &base.Ports)
 
-    if handlers, ok := base.simulation.GetEngine().(timing.HandlerRegistry); ok {
+    if handlers, ok := base.simulation.Engine().(timing.HandlerRegistry); ok {
         handlers.RegisterHandler(base.name, base.owner)
     }
 

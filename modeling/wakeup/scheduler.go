@@ -50,14 +50,14 @@ func (s *scheduler) WakeAt(t timing.VTimeInPicoSec) {
 	s.at = t
 	s.scheduled = true
 
-	s.simulation.GetEngine().Schedule(Event{
+	s.simulation.Engine().Schedule(Event{
 		EventBase: timing.MakeEventBase(s.simulation.NewID(), t, s.handlerID),
 	})
 }
 
 // WakeNow schedules a wakeup at the current time.
 func (s *scheduler) WakeNow() {
-	s.WakeAt(s.simulation.GetEngine().CurrentTime())
+	s.WakeAt(s.simulation.Engine().CurrentTime())
 }
 
 // Woke clears the guard once the pending wakeup is delivered. The component

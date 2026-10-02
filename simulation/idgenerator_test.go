@@ -45,16 +45,16 @@ func TestSimulationsAllocateIndependentlyWhileRunning(t *testing.T) {
 				require.Equal(t, uint64(1), comp.NewID())
 				h := &allocatingHandler{ids: s}
 				handlers[i] = h
-				s.GetEngine().(timing.HandlerRegistry).RegisterHandler("handler", h)
+				s.Engine().(timing.HandlerRegistry).RegisterHandler("handler", h)
 				e := timing.MakeEventBase(s.NewID(), 1, "handler")
 				require.Equal(t, uint64(2), e.ID)
-				s.GetEngine().Schedule(e)
+				s.Engine().Schedule(e)
 			}
 			var wg sync.WaitGroup
 			errs := make([]error, len(sims))
 			for i, s := range sims {
 				wg.Add(1)
-				go func() { defer wg.Done(); errs[i] = s.GetEngine().Run() }()
+				go func() { defer wg.Done(); errs[i] = s.Engine().Run() }()
 			}
 			wg.Wait()
 			for i, s := range sims {
@@ -80,7 +80,7 @@ func TestRestoringSimulationDoesNotChangeOtherIDCounters(t *testing.T) {
 	require.Equal(t, uint64(101), b.NewID())
 	restored := buildIDTestSimulation(t, false)
 	require.NoError(t, restored.LoadCheckpoint(path, "ids"))
-	require.NotSame(t, a.GetIDGenerator(), restored.GetIDGenerator())
+	require.NotSame(t, a.idGenerator, restored.idGenerator)
 	require.Equal(t, uint64(11), restored.NewID())
 	require.Equal(t, uint64(12), a.NewID())
 	require.Equal(t, uint64(102), b.NewID())
@@ -96,7 +96,7 @@ func TestConcurrentSimulationIDAllocation(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a, b := buildIDTestSimulation(t, tc.parallel), buildIDTestSimulation(t, tc.parallel)
-			require.NotSame(t, a.GetIDGenerator(), b.GetIDGenerator())
+			require.NotSame(t, a.idGenerator, b.idGenerator)
 			const workers, perWorker = 8, 1024
 			var wg sync.WaitGroup
 			results := make([][]uint64, workers)

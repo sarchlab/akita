@@ -269,7 +269,7 @@ func TestVirtualMemHierarchyCompletes(t *testing.T) {
 	sim, d := buildSim()
 	defer cleanup(sim)
 
-	engine := sim.GetEngine().(*timing.SerialEngine)
+	engine := sim.Engine().(*timing.SerialEngine)
 	d.TickLater()
 	if err := engine.Run(); err != nil {
 		t.Fatalf("run: %v", err)
@@ -291,7 +291,7 @@ func runReference(t *testing.T) (wantVerified int, wantTime timing.VTimeInPicoSe
 	sim, d := buildSim()
 	defer cleanup(sim)
 
-	engine := sim.GetEngine().(*timing.SerialEngine)
+	engine := sim.Engine().(*timing.SerialEngine)
 	d.TickLater()
 	if err := engine.Run(); err != nil {
 		t.Fatalf("reference run: %v", err)
@@ -316,7 +316,7 @@ func resumeAndVerify(
 	sim, d := buildSim()
 	defer cleanup(sim)
 
-	engine := sim.GetEngine().(*timing.SerialEngine)
+	engine := sim.Engine().(*timing.SerialEngine)
 	if err := sim.LoadCheckpoint(path, buildID); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
@@ -347,7 +347,7 @@ func TestVirtualMemMidTransactionResume(t *testing.T) {
 	// Advance a fresh sim to a genuinely mid-transaction boundary (requests in
 	// flight somewhere in the translation/cache hierarchy), then checkpoint.
 	sim, d := buildSim()
-	engine := sim.GetEngine().(*timing.SerialEngine)
+	engine := sim.Engine().(*timing.SerialEngine)
 	d.TickLater()
 
 	step := wantTime / 8
@@ -387,7 +387,7 @@ func TestVirtualMemResumeAcrossBoundaries(t *testing.T) {
 			const buildID = "virtualmem-multi"
 
 			sim, d := buildSim()
-			engine := sim.GetEngine().(*timing.SerialEngine)
+			engine := sim.Engine().(*timing.SerialEngine)
 			d.TickLater()
 			if err := engine.RunUntil(boundary); err != nil {
 				t.Fatalf("RunUntil(%d): %v", boundary, err)

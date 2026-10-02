@@ -20,7 +20,7 @@ func main() {
 	rand.Seed(1)
 
 	s := acceptance.NewSimulation()
-	engine := s.GetEngine()
+	engine := s.Engine()
 	t := acceptance.NewTest()
 
 	createNetwork(s, t)

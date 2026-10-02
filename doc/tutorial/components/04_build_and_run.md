@@ -84,7 +84,7 @@ shows the system builder creating them.
 ```go
 walker.TickLater()
 
-if err := s.GetEngine().Run(); err != nil {
+if err := s.Engine().Run(); err != nil {
     panic(err)
 }
 

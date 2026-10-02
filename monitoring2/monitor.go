@@ -94,7 +94,7 @@ func (m *Monitor) WithPortNumber(port int) *Monitor {
 // RegisterSimulation supplies the monitor's simulation and its engine.
 func (m *Monitor) RegisterSimulation(sim timing.Simulation) {
 	m.simulation = sim
-	m.engine = sim.GetEngine()
+	m.engine = sim.Engine()
 }
 
 // RegisterComponent registers a component with the monitor so its internal

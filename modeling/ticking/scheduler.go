@@ -54,7 +54,7 @@ func NewScheduler(
 
 	ticker.handlerID = handlerID
 	ticker.simulation = sim
-	ticker.engine = sim.GetEngine()
+	ticker.engine = sim.Engine()
 	ticker.freq = freq
 	ticker.hasScheduledTick = false
 
@@ -72,7 +72,7 @@ func NewSecondaryScheduler(
 
 	ticker.handlerID = handlerID
 	ticker.simulation = sim
-	ticker.engine = sim.GetEngine()
+	ticker.engine = sim.Engine()
 	ticker.freq = freq
 	ticker.secondary = true
 	ticker.hasScheduledTick = false

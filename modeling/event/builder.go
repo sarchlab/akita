@@ -68,7 +68,7 @@ func (b Builder[S, T, R, P, M]) Build(name string) *Component[S, T, R, P, M] {
 
 	modeling.MustBeCheckpointable[S, T](name, b.spec)
 
-	c := &Component[S, T, R, P, M]{engine: b.simulation.GetEngine()}
+	c := &Component[S, T, R, P, M]{engine: b.simulation.Engine()}
 	base.Init(&c.ComponentBase, c,
 		b.simulation, name, b.spec, b.resources, b.ports)
 

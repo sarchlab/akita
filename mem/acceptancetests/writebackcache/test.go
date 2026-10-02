@@ -39,7 +39,7 @@ func buildEnvironment(
 	}
 
 	s := simBuilder.Build()
-	engine := s.GetEngine()
+	engine := s.Engine()
 
 	conn := directconnection.MakeBuilder().
 		WithSimulation(s).
@@ -124,7 +124,7 @@ func createProgressBars(
 	s *simulation.Simulation,
 	agent *memaccessagent.MemAccessAgent,
 ) {
-	if monitor := s.GetMonitor(); monitor != nil {
+	if monitor := s.Monitor(); monitor != nil {
 		memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
 	}
 }

@@ -80,7 +80,7 @@ func Init[S, T, R, P, M any](
 func Register[S, T, R, P, M any](base *ComponentBase[S, T, R, P, M]) {
 	registerPorts(base.simulation, &base.Ports)
 
-	if handlers, ok := base.simulation.GetEngine().(timing.HandlerRegistry); ok {
+	if handlers, ok := base.simulation.Engine().(timing.HandlerRegistry); ok {
 		handlers.RegisterHandler(base.name, base.owner)
 	}
 
@@ -100,7 +100,7 @@ func (c *ComponentBase[S, T, R, P, M]) NewID() uint64 {
 
 // CurrentTime returns the simulation's current time.
 func (c *ComponentBase[S, T, R, P, M]) CurrentTime() timing.VTimeInPicoSec {
-	return c.simulation.GetEngine().CurrentTime()
+	return c.simulation.Engine().CurrentTime()
 }
 
 var middlewareType = reflect.TypeFor[modeling.Middleware]()

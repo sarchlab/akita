@@ -89,7 +89,7 @@ func main() {
 	// Nothing wakes a component with no ports, so start it explicitly.
 	walker.TickLater()
 
-	if err := s.GetEngine().Run(); err != nil {
+	if err := s.Engine().Run(); err != nil {
 		panic(err)
 	}
 

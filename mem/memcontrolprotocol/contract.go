@@ -340,7 +340,7 @@ func newControlReq(h *Harness, cmd Command) Req {
 // does on every cycle.
 func (h *Harness) tick() {
 	h.Comp.Handle(ticking.MakeTickEvent(
-		h.Sim.NewID(), h.Comp.Name(), h.Sim.GetEngine().CurrentTime()))
+		h.Sim.NewID(), h.Comp.Name(), h.Sim.Engine().CurrentTime()))
 }
 
 // drainForRsp ticks the component up to budget times waiting for a

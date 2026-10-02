@@ -29,7 +29,7 @@ func main() {
 
 	test := acceptance.NewTest()
 	sim := acceptance.NewSimulation()
-	engine := sim.GetEngine()
+	engine := sim.Engine()
 
 	freq := 1 * timing.GHz
 	connector := mesh.NewConnector().

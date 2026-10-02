@@ -92,7 +92,7 @@ func MakeConnector() Connector {
 // WithSimulation sets the simulation that owns the network components.
 func (c Connector) WithSimulation(sim timing.Simulation) Connector {
 	c.simulation = sim
-	c.engine = sim.GetEngine()
+	c.engine = sim.Engine()
 	return c
 }
 

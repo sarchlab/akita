@@ -81,22 +81,10 @@ component written without a component model. Use `RegisterConnection` and
 ### Accessing the Simulation
 
 ```go
-engine := sim.GetEngine()
-recorder := sim.GetDataRecorder()
-tracer := sim.GetVisTracer()
-
-comp := sim.GetComponentByName("myComp")    // panics if not registered
-port := sim.GetPortByName("myComp.Top")     // panics if not registered
-
-components := sim.Components()               // copy, in registration order
-connections := sim.Connections()
-resources := sim.Resources()
+engine := sim.Engine()
+recorder := sim.DataRecorder() // a simulator can write its own tables into the recording
+monitor := sim.Monitor()       // nil when monitoring is off
 ```
-
-`GetComponentByName` and `GetPortByName` resolve a globally unique name to the
-registered entity. `Components`, `Connections`, and `Resources` each return a
-copy of the registered objects in registration order, which is useful for
-inventory, debugging, and tooling.
 
 ## Checkpoint and Resume
 

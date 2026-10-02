@@ -40,7 +40,7 @@ func NewAgent(
 		test:      test,
 	}
 
-	if handlers, ok := sim.GetEngine().(timing.HandlerRegistry); ok {
+	if handlers, ok := sim.Engine().(timing.HandlerRegistry); ok {
 		handlers.RegisterHandler(name, a)
 	}
 

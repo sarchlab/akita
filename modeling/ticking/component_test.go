@@ -136,7 +136,7 @@ func TestTicksWhileMiddlewaresMakeProgress(t *testing.T) {
 		Build("C")
 
 	c.NotifyRecv(c.Ports.In)
-	if err := sim.GetEngine().Run(); err != nil {
+	if err := sim.Engine().Run(); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 

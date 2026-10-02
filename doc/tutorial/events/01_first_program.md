@@ -57,7 +57,7 @@ owns an engine, an entity inventory, and optional tracing and monitoring
 infrastructure. We use the simulation to allocate IDs and its engine to schedule events:
 
 ```go
-engine := s.GetEngine()
+engine := s.Engine()
 ```
 
 ### 3. Registering the handler
