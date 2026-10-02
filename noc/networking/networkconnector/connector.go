@@ -10,7 +10,6 @@ import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/timing"
-	"github.com/sarchlab/akita/v5/tracing"
 )
 
 // LinkEndSwitchParameter defines the parameters of the end of a link that is
@@ -71,7 +70,6 @@ type Connector struct {
 	defaultFreq timing.Freq
 	flitSize    int
 	router      Router
-	nocTracer   tracing.Tracer
 	portFactory PortFactory
 
 	switches        []*switchNode
@@ -116,22 +114,10 @@ func (c Connector) WithRouter(r Router) Connector {
 	return c
 }
 
-// WithNoCTracer sets the tracer used to trace NoC-specific metrics, such as the
-// traffics and congestions in the channels.
-func (c Connector) WithNoCTracer(t tracing.Tracer) Connector {
-	c.nocTracer = t
-	return c
-}
-
 // WithPortFactory sets the factory function used to create ports.
 func (c Connector) WithPortFactory(f PortFactory) Connector {
 	c.portFactory = f
 	return c
-}
-
-// GetFlitSize returns the flit size used by the network.
-func (c *Connector) GetFlitSize() int {
-	return c.flitSize
 }
 
 // NewNetwork resets the connector, making it ready to create a new network
@@ -176,11 +162,6 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 func (c *Connector) AddSwitchWithName(swName string) (switchID int) {
 	routingTable := routing.NewTable()
 	return c.AddSwitchWithNameAndRoutingTable(swName, routingTable)
-}
-
-type namedHookableConnection interface {
-	messaging.Connection
-	tracing.NamedHookable
 }
 
 // ConnectDevice connects a few ports that belongs to the device to a switch
@@ -256,7 +237,7 @@ func (c *Connector) createEndPoint(
 func (c *Connector) createRemoteInfoFoEP(
 	epNode *deviceNode, swNode *switchNode,
 	epPort, swPort messaging.Port,
-	conn namedHookableConnection,
+	conn messaging.Connection,
 ) {
 	epNode.remote = Remote{
 		LocalNode:  epNode,
@@ -277,7 +258,7 @@ func (c *Connector) createRemoteInfoFoEP(
 func (c *Connector) connectPorts(
 	left, right messaging.Port,
 	linkParam LinkParameter,
-) (conn namedHookableConnection) {
+) (conn messaging.Connection) {
 	connName := fmt.Sprintf("%s.Conn[%d]", c.name, c.connectionCount)
 	c.connectionCount++
 
@@ -292,10 +273,6 @@ func (c *Connector) connectPorts(
 
 	conn.PlugIn(left)
 	conn.PlugIn(right)
-
-	if c.nocTracer != nil {
-		tracing.CollectTrace(conn.(tracing.NamedHookable), c.nocTracer)
-	}
 
 	return conn
 }
@@ -326,7 +303,7 @@ func (c *Connector) ConnectSwitches(
 func (c *Connector) createRemoteInfo(
 	leftNode, rightNode *switchNode,
 	leftPort, rightPort messaging.Port,
-	conn namedHookableConnection,
+	conn messaging.Connection,
 ) {
 	leftNode.remotes = append(leftNode.remotes, Remote{
 		LocalNode:  leftNode,

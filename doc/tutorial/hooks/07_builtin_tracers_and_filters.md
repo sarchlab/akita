@@ -70,8 +70,8 @@ the gap tells you how parallel it is.
 
 **`NewTagCountTracer(filter)`** counts the categorical **tags** you attach to
 a task with `tracing.AddTaskTag` (for example `"read-hit"` or `"write-miss"`).
-It needs no `TimeTeller` — it counts, not times. `GetTagNames()`,
-`GetTagCount(name)`, and `GetTaskCount(name)` tell you how often each tag was
+It needs no `TimeTeller` — it counts, not times. `TagNames()`,
+`TagCount(name)`, and `TaskCount(name)` tell you how often each tag was
 recorded and how many distinct tasks carried it — handy for seeing which path
 through a component is hot.
 

@@ -227,7 +227,7 @@ type TaskFilter func(t TaskStart) bool   // applied at StartTask
 | `Task.Steps` | `Task.Tags` |
 | `HookPosTaskStep` | `HookPosTaskTag` |
 | `Tracer.StepTask` | `Tracer.AddTaskTag` |
-| `StepCountTracer`, `GetStepNames`, `GetStepCount` | `TagCountTracer`, `GetTagNames`, `GetTagCount` |
+| `StepCountTracer`, `GetStepNames`, `GetStepCount` | `TagCountTracer`, `TagNames`, `TagCount` |
 
 This also resolves the old `StepTask`-vs-`AddTaskStep` asymmetry: emit and
 consume both become `AddTaskTag`.

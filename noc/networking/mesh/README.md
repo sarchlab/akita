@@ -53,8 +53,7 @@ connector := mesh.NewConnector().
     WithFreq(1 * timing.GHz).
     WithFlitSize(16).
     WithBandwidth(1).      // transfers per cycle, per link
-    WithSwitchLatency(1).  // cycles per switch hop
-    WithNoCTracer(nocTracer)
+    WithSwitchLatency(1)   // cycles per switch hop
 ```
 
 ### Builder Options
@@ -66,11 +65,9 @@ connector := mesh.NewConnector().
 | `WithFlitSize(n)` | Flit size in bytes |
 | `WithBandwidth(t)` | Per-link bandwidth as transfers per cycle |
 | `WithSwitchLatency(n)` | Latency in cycles added at each switch |
-| `WithNoCTracer(t)` | Tracer for NoC traffic and congestion metrics |
 
 The connector builds its switches and endpoints with `WithSimulation(sim)`,
-so the simulation's tracer and monitor see each of them. `WithNoCTracer`
-adds a tracer for the links only.
+so the simulation's tracer and monitor see each of them.
 
 ## Usage
 

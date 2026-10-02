@@ -52,7 +52,6 @@ func (b Builder) Build(name string) *Comp {
 	conn := &Comp{
 		name: name,
 		spec: b.spec,
-		sim:  b.simulation,
 		// A direct connection ticks on secondary events, so it runs after the
 		// components of the same cycle.
 		ticks: ticking.NewSecondaryScheduler(name, b.simulation, b.spec.Freq),

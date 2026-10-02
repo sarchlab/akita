@@ -9,7 +9,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
-	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type tile struct {
@@ -73,13 +72,6 @@ func (c *Connector) WithSwitchLatency(numCycles int) *Connector {
 // transfers per cycle.
 func (c *Connector) WithBandwidth(transferPerCycle float64) *Connector {
 	c.linkTransferPerCycle = transferPerCycle
-	return c
-}
-
-// WithNoCTracer sets the tracer used to trace NoC-specific metrics, such as the
-// traffics and congestions in the channels.
-func (c *Connector) WithNoCTracer(t tracing.Tracer) *Connector {
-	c.connector = c.connector.WithNoCTracer(t)
 	return c
 }
 

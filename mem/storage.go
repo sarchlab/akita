@@ -37,11 +37,6 @@ func (s *Storage) Name() string {
 	return s.name
 }
 
-// Capacity returns the capacity of the storage in bytes.
-func (s *Storage) Capacity() uint64 {
-	return s.capacity
-}
-
 type storageUnit struct {
 	sync.RWMutex
 

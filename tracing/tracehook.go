@@ -5,10 +5,16 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/hooking"
+	"github.com/sarchlab/akita/v5/naming"
 )
 
-// CollectTrace let the tracer to collect trace from a domain
-func CollectTrace(domain NamedHookable, tracer Tracer) {
+// CollectTrace lets the tracer collect the tasks that a domain reports. It
+// only attaches a hook, so any named, hookable object can be passed; the
+// domain must still be a NamedHookable to report tasks.
+func CollectTrace(domain interface {
+	naming.Named
+	hooking.Hookable
+}, tracer Tracer) {
 	hooks := domain.Hooks()
 	for _, hook := range hooks {
 		hook, ok := hook.(*traceHook)

@@ -2,6 +2,7 @@ package simulation
 
 import (
 	"github.com/sarchlab/akita/v5/datarecording"
+	"github.com/sarchlab/akita/v5/hooking"
 
 	"github.com/sarchlab/akita/v5/monitoring2"
 	"github.com/sarchlab/akita/v5/naming"
@@ -88,7 +89,10 @@ func (s *Simulation) RegisterComponent(c naming.Named) {
 	s.registerEntity(c)
 	s.components = append(s.components, c)
 
-	if hookable, ok := c.(tracing.NamedHookable); ok {
+	if hookable, ok := c.(interface {
+		naming.Named
+		hooking.Hookable
+	}); ok {
 		tracing.CollectTrace(hookable, s.visTracer)
 	}
 

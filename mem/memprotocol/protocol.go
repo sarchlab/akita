@@ -29,7 +29,6 @@ var (
 type AccessReq interface {
 	messaging.Msg
 	GetAddress() uint64
-	GetByteSize() uint64
 	GetPID() vm.PID
 }
 
@@ -40,11 +39,6 @@ type ReadReq struct {
 	AccessByteSize     uint64
 	PID                vm.PID
 	CanWaitForCoalesce bool
-}
-
-// GetByteSize returns the number of bytes that the request is accessing.
-func (r ReadReq) GetByteSize() uint64 {
-	return r.AccessByteSize
 }
 
 // GetAddress returns the address that the request is accessing.
@@ -65,11 +59,6 @@ type WriteReq struct {
 	DirtyMask          []bool
 	PID                vm.PID
 	CanWaitForCoalesce bool
-}
-
-// GetByteSize returns the number of bytes that the request is writing.
-func (r WriteReq) GetByteSize() uint64 {
-	return uint64(len(r.Data))
 }
 
 // GetAddress returns the address that the request is accessing.

@@ -54,7 +54,6 @@ type Comp struct {
 	lock  sync.Mutex
 	name  string
 	spec  Spec
-	sim   timing.Simulation
 	ticks *ticking.Scheduler
 	ports ports
 }
@@ -62,16 +61,6 @@ type Comp struct {
 // Name returns the connection's name.
 func (c *Comp) Name() string {
 	return c.name
-}
-
-// NewID allocates an ID, unique within the connection's simulation.
-func (c *Comp) NewID() uint64 {
-	return c.sim.NewID()
-}
-
-// CurrentTime returns the simulation's current time.
-func (c *Comp) CurrentTime() timing.VTimeInPicoSec {
-	return c.ticks.CurrentTime()
 }
 
 // PlugIn marks the port connects to this DirectConnection.
