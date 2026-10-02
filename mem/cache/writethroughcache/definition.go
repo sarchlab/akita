@@ -42,9 +42,7 @@ func newState(c *Comp) state {
 
 	bankBufs := make([]queueing.Buffer[int], spec.NumBanks)
 	for i := 0; i < spec.NumBanks; i++ {
-		bankBufs[i] = queueing.MakeBuffer[int](
-			spec.NumReqPerCycle)
-
+		bankBufs[i] = queueing.MakeBuffer[int](spec.NumReqPerCycle)
 	}
 
 	bankPipelines := make([]queueing.Pipeline[int], spec.NumBanks)
@@ -52,27 +50,22 @@ func newState(c *Comp) state {
 		bankPipelines[i] = queueing.MakePipeline[int](
 			spec.NumReqPerCycle,
 			spec.BankLatency)
-
 	}
 
 	bankPostBufs := make([]queueing.Buffer[int], spec.NumBanks)
 	for i := 0; i < spec.NumBanks; i++ {
-		bankPostBufs[i] = queueing.MakeBuffer[int](
-			spec.NumReqPerCycle)
-
+		bankPostBufs[i] = queueing.MakeBuffer[int](spec.NumReqPerCycle)
 	}
 
 	s := state{
-		DirBuf: queueing.MakeBuffer[int](
-			spec.NumReqPerCycle),
+		DirBuf: queueing.MakeBuffer[int](spec.NumReqPerCycle),
 
 		BankBufs: bankBufs,
 		DirPipeline: queueing.MakePipeline[int](
 			spec.NumReqPerCycle,
 			spec.DirLatency),
 
-		DirPostBuf: queueing.MakeBuffer[int](
-			spec.NumReqPerCycle),
+		DirPostBuf: queueing.MakeBuffer[int](spec.NumReqPerCycle),
 
 		BankPipelines: bankPipelines,
 		BankPostBufs:  bankPostBufs,

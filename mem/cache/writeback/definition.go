@@ -48,35 +48,27 @@ func newState(c *Comp) state {
 	bankPipes := make([]queueing.Pipeline[int], numBanks)
 	bankPostBufs := make([]queueing.Buffer[int], numBanks)
 	for i := 0; i < numBanks; i++ {
-		dirToBank[i] = queueing.MakeBuffer[int](
-			spec.NumReqPerCycle)
+		dirToBank[i] = queueing.MakeBuffer[int](spec.NumReqPerCycle)
 
-		wbToBank[i] = queueing.MakeBuffer[int](
-			spec.NumReqPerCycle)
+		wbToBank[i] = queueing.MakeBuffer[int](spec.NumReqPerCycle)
 
 		bankPipes[i] = queueing.MakePipeline[int](laneWidth, spec.BankLatency)
-		bankPostBufs[i] = queueing.MakeBuffer[int](
-			laneWidth)
-
+		bankPostBufs[i] = queueing.MakeBuffer[int](laneWidth)
 	}
 
 	s := state{
 		CacheState:   int(cacheStateRunning),
 		EvictingList: make(map[uint64]bool),
-		DirStageBuf: queueing.MakeBuffer[int](
-			spec.NumReqPerCycle),
+		DirStageBuf:  queueing.MakeBuffer[int](spec.NumReqPerCycle),
 
 		DirToBankBufs:         dirToBank,
 		WriteBufferToBankBufs: wbToBank,
-		MSHRStageBuf: queueing.MakeBuffer[int](
-			spec.NumReqPerCycle),
+		MSHRStageBuf:          queueing.MakeBuffer[int](spec.NumReqPerCycle),
 
-		WriteBufferBuf: queueing.MakeBuffer[int](
-			spec.NumReqPerCycle),
+		WriteBufferBuf: queueing.MakeBuffer[int](spec.NumReqPerCycle),
 
-		DirPipeline: queueing.MakePipeline[int](laneWidth, spec.DirLatency),
-		DirPostPipelineBuf: queueing.MakeBuffer[int](
-			spec.NumReqPerCycle),
+		DirPipeline:        queueing.MakePipeline[int](laneWidth, spec.DirLatency),
+		DirPostPipelineBuf: queueing.MakeBuffer[int](spec.NumReqPerCycle),
 
 		BankPipelines:                   bankPipes,
 		BankPostPipelineBufs:            bankPostBufs,

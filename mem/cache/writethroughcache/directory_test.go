@@ -708,5 +708,4 @@ var _ = Describe("Directory", func() {
 			Expect(trans.HasWriteToBottom).To(BeTrue())
 		})
 	})
-
 })

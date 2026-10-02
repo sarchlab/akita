@@ -35,8 +35,7 @@ func newState(c *Comp) state {
 			spec.NumReqPerCycle,
 			spec.Latency),
 
-		BufferItems: queueing.MakeBuffer[pipelineTLBReqState](
-			spec.NumReqPerCycle),
+		BufferItems: queueing.MakeBuffer[pipelineTLBReqState](spec.NumReqPerCycle),
 	}
 }
 

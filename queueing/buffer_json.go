@@ -2,10 +2,11 @@ package queueing
 
 import "encoding/json"
 
-// bufferState is the JSON form of a Buffer: its capacity and FIFO contents. Buffer's fields are unexported, so without these methods
-// encoding/json would serialize a Buffer as an empty object and silently drop
-// its contents. The MarshalJSON receiver is a value (not a pointer) so it is
-// invoked even when a Buffer is embedded by value in a component's State.
+// bufferState is the JSON form of a Buffer: its capacity and FIFO contents.
+// Buffer's fields are unexported, so without these methods encoding/json would
+// serialize a Buffer as an empty object and silently drop its contents. The
+// MarshalJSON receiver is a value (not a pointer) so it is invoked even when a
+// Buffer is embedded by value in a component's State.
 type bufferState[T any] struct {
 	Cap      int `json:"cap"`
 	Elements []T `json:"elements"`

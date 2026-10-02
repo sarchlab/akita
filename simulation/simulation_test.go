@@ -338,7 +338,6 @@ var _ = Describe("Simulation", func() {
 
 			Expect(err).To(HaveOccurred())
 		})
-
 	})
 })
 

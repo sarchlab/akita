@@ -353,5 +353,4 @@ var _ = Describe("Bottom Parser", func() {
 			Expect(next.BankBufs[0].Size()).To(Equal(1))
 		})
 	})
-
 })

@@ -52,17 +52,13 @@ func newPortComplex(port messaging.Port, link Link) portComplexState {
 		NumOutputChannel: link.NumOutputChannel,
 		Latency:          link.Latency,
 		PipelineWidth:    link.NumInputChannel,
-		Pipeline: queueing.MakePipeline[routedFlit](
-			link.NumInputChannel, link.Latency),
+		Pipeline:         queueing.MakePipeline[routedFlit](link.NumInputChannel, link.Latency),
 
-		RouteBuffer: queueing.MakeBuffer[routedFlit](
-			link.NumInputChannel),
+		RouteBuffer: queueing.MakeBuffer[routedFlit](link.NumInputChannel),
 
-		ForwardBuffer: queueing.MakeBuffer[routedFlit](
-			link.NumInputChannel),
+		ForwardBuffer: queueing.MakeBuffer[routedFlit](link.NumInputChannel),
 
-		SendOutBuffer: queueing.MakeBuffer[routedFlit](
-			link.NumOutputChannel),
+		SendOutBuffer: queueing.MakeBuffer[routedFlit](link.NumOutputChannel),
 	}
 }
 

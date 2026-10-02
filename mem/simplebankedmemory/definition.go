@@ -57,8 +57,7 @@ func buildInitialBanks(name string, spec Spec) []bankState {
 				spec.BankPipelineWidth,
 				spec.BankPipelineDepth*spec.StageLatency),
 
-			PostPipelineBuf: queueing.MakeBuffer[bankPipelineItemState](
-				spec.PostPipelineBufSize),
+			PostPipelineBuf: queueing.MakeBuffer[bankPipelineItemState](spec.PostPipelineBufSize),
 		}
 	}
 
