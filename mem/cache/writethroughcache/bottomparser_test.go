@@ -23,17 +23,17 @@ var _ = Describe("Bottom Parser", func() {
 
 	BeforeEach(func() {
 		initialState := state{
-			DirBuf: queueing.NewBuffer[int]("Cache.DirBuf", 4),
+			DirBuf: queueing.MakeBuffer[int](4),
 			BankBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.BankBuf0", 4),
+				queueing.MakeBuffer[int](4),
 			},
-			DirPipeline: queueing.NewPipeline[int](4, 2),
-			DirPostBuf:  queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
+			DirPipeline: queueing.MakePipeline[int](4, 2),
+			DirPostBuf:  queueing.MakeBuffer[int](4),
 			BankPipelines: []queueing.Pipeline[int]{
-				queueing.NewPipeline[int](4, 10),
+				queueing.MakePipeline[int](4, 10),
 			},
 			BankPostBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.BankPostBuf0", 4),
+				queueing.MakeBuffer[int](4),
 			},
 		}
 
@@ -241,7 +241,7 @@ var _ = Describe("Bottom Parser", func() {
 
 		It("should stall if bank is busy", func() {
 			next := &c.comp.State
-			next.BankBufs[0] = queueing.NewBuffer[int]("Cache.BankBuf0", 0)
+			next.BankBufs[0] = queueing.MakeBuffer[int](0)
 
 			bottomPort.Deliver(dataReady)
 

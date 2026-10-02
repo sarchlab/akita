@@ -25,10 +25,10 @@ func KeyString(a uint64, b uint64) string {
 	return fmt.Sprintf("%d%016x", a, b)
 }
 
-// NewSet creates a Set with the given number of ways. All ways start in the
+// MakeSet creates a Set with the given number of ways. All ways start in the
 // visit list so the first eviction returns way 0 (the least recently visited
 // after initialisation).
-func NewSet(numWays int) Set {
+func MakeSet(numWays int) Set {
 	s := Set{
 		wayCount:   numWays,
 		lastVisits: make([]uint64, numWays),

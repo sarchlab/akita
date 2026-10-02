@@ -318,8 +318,8 @@ func (p *defaultPort) mustHaveOwner() PortOwner {
 // SetOwner.
 func NewPort(name string, incomingBufCap, outgoingBufCap int) Port {
 	p := new(defaultPort)
-	p.incomingBuf = queueing.NewBuffer[Msg](name+".Incoming", incomingBufCap)
-	p.outgoingBuf = queueing.NewBuffer[Msg](name+".Outgoing", outgoingBufCap)
+	p.incomingBuf = queueing.MakeBuffer[Msg](incomingBufCap)
+	p.outgoingBuf = queueing.MakeBuffer[Msg](outgoingBufCap)
 	p.name = name
 
 	return p

@@ -28,10 +28,10 @@ landing spot.
 
 ## Buffer[T]
 
-A bounded buffer with FIFO and indexed access. Create one with `NewBuffer`:
+A bounded buffer with FIFO and indexed access. Create one with `MakeBuffer`:
 
 ```go
-inbox := queueing.NewBuffer[MyRequest]("inbox", 16)
+inbox := queueing.MakeBuffer[MyRequest](16)
 
 if inbox.CanPush() {
     inbox.Push(req)
@@ -54,7 +54,6 @@ fmt.Println(inbox.Size(), inbox.Capacity())
 | `Clear()` | Remove all elements |
 | `Size() int` | Current number of elements |
 | `Capacity() int` | Maximum capacity |
-| `Name() string` | Buffer name (for monitoring) |
 
 Reads return the zero value and `false` when empty or out of range, including
 negative indices. A stored zero or nil value returns `true`. `PopAt` shifts later
@@ -77,11 +76,11 @@ on making a component, message, or event checkpointable, see
 A multi-lane, multi-stage pipeline that models fixed-latency processing. Items
 enter at stage 0 and advance one stage per tick until they exit the last stage
 into a `Sink[T]`. Total latency through the pipeline equals `numStages` ticks.
-Create one with `NewPipeline`:
+Create one with `MakePipeline`:
 
 ```go
-pipe := queueing.NewPipeline[MyItem](4, 3) // 4 lanes, 3 stages
-post := queueing.NewBuffer[MyItem]("post", 8)
+pipe := queueing.MakePipeline[MyItem](4, 3) // 4 lanes, 3 stages
+post := queueing.MakeBuffer[MyItem](8)
 
 if pipe.CanAccept() {
     pipe.Accept(item)

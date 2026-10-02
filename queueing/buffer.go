@@ -6,23 +6,14 @@ import "log"
 // Indexed removal preserves the order of the remaining elements. Buffer is not
 // synchronized; callers must serialize access. Capacity checks do not reserve space.
 type Buffer[T any] struct {
-	name     string
 	cap      int
 	elements []T
 }
 
-// NewBuffer creates a FIFO buffer with the given name and capacity. It returns
-// a value so the buffer can be embedded directly in a component's state.
-func NewBuffer[T any](name string, capacity int) Buffer[T] {
-	return Buffer[T]{
-		name: name,
-		cap:  capacity,
-	}
-}
-
-// Name returns the name of the buffer.
-func (b *Buffer[T]) Name() string {
-	return b.name
+// MakeBuffer creates a FIFO buffer with the given capacity. It returns a value
+// so the buffer can be embedded directly in a component's state.
+func MakeBuffer[T any](capacity int) Buffer[T] {
+	return Buffer[T]{cap: capacity}
 }
 
 // Capacity returns the capacity of the buffer.

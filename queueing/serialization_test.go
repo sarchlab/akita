@@ -8,7 +8,7 @@ import (
 )
 
 func TestBufferJSONRoundTrip(t *testing.T) {
-	b := NewBuffer[int]("buf", 4)
+	b := MakeBuffer[int](4)
 	b.Push(10)
 	b.Push(20)
 	b.Push(30)
@@ -27,9 +27,8 @@ func TestBufferJSONRoundTrip(t *testing.T) {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 
-	if got.Name() != "buf" || got.Capacity() != 4 || got.Size() != 3 {
-		t.Fatalf("name/cap/size = %q/%d/%d, want buf/4/3",
-			got.Name(), got.Capacity(), got.Size())
+	if got.Capacity() != 4 || got.Size() != 3 {
+		t.Fatalf("cap/size = %d/%d, want 4/3", got.Capacity(), got.Size())
 	}
 	for _, want := range []int{10, 20, 30} { // FIFO order preserved
 		if got, _ := got.Pop(); got != want {
@@ -39,7 +38,7 @@ func TestBufferJSONRoundTrip(t *testing.T) {
 }
 
 func TestPipelineJSONRoundTrip(t *testing.T) {
-	p := NewPipeline[int](2, 3)
+	p := MakePipeline[int](2, 3)
 	p.AcceptWithDelay(1, 2) // lands at stage 0 with a 2-cycle dwell
 	p.Accept(2)
 	p.Tick(&nopSink[int]{}) // advance so stages/cycle-left are non-trivial
@@ -74,7 +73,7 @@ func (nopSink[T]) CanPush() bool { return false }
 func (nopSink[T]) Push(T)        {}
 
 func drainPipeline(p *Pipeline[int]) []int {
-	sink := NewBuffer[int]("sink", 1024)
+	sink := MakeBuffer[int](1024)
 	out := []int{}
 	for i := 0; i < 1000 && len(p.Stages()) > 0; i++ {
 		p.Tick(&sink)

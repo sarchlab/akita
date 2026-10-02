@@ -8,7 +8,7 @@ import (
 )
 
 func TestBufferIndexedRemoval(t *testing.T) {
-	b := NewBuffer[int]("indexed", 4)
+	b := MakeBuffer[int](4)
 	for _, v := range []int{0, 10, 20, 30} {
 		b.Push(v)
 	}
@@ -46,7 +46,7 @@ func TestBufferIndexedRemoval(t *testing.T) {
 }
 
 func TestBufferNilIsPresent(t *testing.T) {
-	b := NewBuffer[*int]("nil", 1)
+	b := MakeBuffer[*int](1)
 	b.Push(nil)
 	v, ok := b.Peek()
 	require.True(t, ok)
@@ -60,7 +60,7 @@ func TestBufferNilIsPresent(t *testing.T) {
 }
 
 func TestBufferUpdateFrontPresence(t *testing.T) {
-	b := NewBuffer[int]("head", 1)
+	b := MakeBuffer[int](1)
 	require.False(t, b.UpdateFront(9))
 	require.Zero(t, b.Size())
 	b.Push(5)
@@ -71,7 +71,7 @@ func TestBufferUpdateFrontPresence(t *testing.T) {
 }
 
 func TestBufferIndexedJSONRoundTrip(t *testing.T) {
-	b := NewBuffer[int]("bank", 4)
+	b := MakeBuffer[int](4)
 	for _, v := range []int{0, 1, 2} {
 		b.Push(v)
 	}
@@ -80,7 +80,6 @@ func TestBufferIndexedJSONRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	var restored Buffer[int]
 	require.NoError(t, json.Unmarshal(data, &restored))
-	require.Equal(t, b.Name(), restored.Name())
 	require.Equal(t, b.Capacity(), restored.Capacity())
 	require.Equal(t, []int{0, 2}, restored.Elements())
 	v, ok := restored.Pop()

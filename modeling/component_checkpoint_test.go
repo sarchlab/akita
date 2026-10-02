@@ -105,7 +105,7 @@ type bufState struct {
 // component's State round-trips through the checkpoint. Before queueing gained
 // MarshalJSON/UnmarshalJSON this dropped the contents silently.
 func TestCheckpointPreservesStateBuffer(t *testing.T) {
-	src := bufState{Items: queueing.NewBuffer[int]("items", 8)}
+	src := bufState{Items: queueing.MakeBuffer[int](8)}
 	src.Items.Push(7)
 	src.Items.Push(8)
 
@@ -114,7 +114,7 @@ func TestCheckpointPreservesStateBuffer(t *testing.T) {
 		t.Fatalf("WriteCheckpoint: %v", err)
 	}
 
-	dst := bufState{Items: queueing.NewBuffer[int]("items", 8)}
+	dst := bufState{Items: queueing.MakeBuffer[int](8)}
 	if err := modeling.ReadCheckpoint(&buf, ckptSpec{}, &dst, nil); err != nil {
 		t.Fatalf("ReadCheckpoint: %v", err)
 	}

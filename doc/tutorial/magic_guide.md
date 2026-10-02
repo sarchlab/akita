@@ -331,7 +331,7 @@ translation.
 **Goal:** never evict, never stall on capacity.
 **Seam:** `Spec` config (§3.2). Set capacity to a huge value and/or select a
 "no-eviction" policy at build time. A buffer's capacity is a constructor
-argument (`queueing.NewBuffer(name, hugeCap)`); a cache's associativity/sets
+argument (`queueing.MakeBuffer[T](hugeCap)`); a cache's associativity/sets
 are `Spec` fields. The thing you wanted to poke is a build-time knob — set it.
 
 ### 4.3 Global Counter on Every TLB Access

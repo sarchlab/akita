@@ -44,19 +44,6 @@ func (f *InterleavedAddressPortMapper) Find(address uint64) messaging.RemotePort
 	return f.LowModules[number]
 }
 
-// NewInterleavedAddressPortMapper creates a new finder for interleaved lower
-// modules
-func NewInterleavedAddressPortMapper(
-	interleavingSize uint64,
-) *InterleavedAddressPortMapper {
-	finder := new(InterleavedAddressPortMapper)
-
-	finder.LowModules = make([]messaging.RemotePort, 0)
-	finder.InterleavingSize = interleavingSize
-
-	return finder
-}
-
 // BankedAddressPortMapper defines the lower level modules by address banks
 type BankedAddressPortMapper struct {
 	BankSize   uint64

@@ -26,19 +26,17 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 }
 
 func newState(c *Comp) state {
-	name, spec := c.Name(), c.Spec
+	spec := c.Spec
 
 	return state{
 		TLBState: tlbStateEnable,
 		Sets:     initSets(spec.NumSets, spec.NumWays),
-		Pipeline: queueing.NewPipeline[pipelineTLBReqState](
+		Pipeline: queueing.MakePipeline[pipelineTLBReqState](
 			spec.NumReqPerCycle,
-			spec.Latency,
-		),
-		BufferItems: queueing.NewBuffer[pipelineTLBReqState](
-			name+".BufferItems",
-			spec.NumReqPerCycle,
-		),
+			spec.Latency),
+
+		BufferItems: queueing.MakeBuffer[pipelineTLBReqState](
+			spec.NumReqPerCycle),
 	}
 }
 

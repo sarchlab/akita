@@ -19,7 +19,7 @@ All ways start in the visit list, so the first `Evict` returns way 0.
 ```go
 type Set struct { /* unexported fields */ }
 
-func NewSet(numWays int) Set
+func MakeSet(numWays int) Set
 func KeyString(a uint64, b uint64) string // canonical key from two uint64s
 
 func (s *Set) Lookup(key string) (wayID int, found bool)
@@ -34,7 +34,7 @@ PID and a virtual address (TLB) or a PID and a page-table segment (mmuCache).
 ## Usage Example
 
 ```go
-set := lruset.NewSet(4)
+set := lruset.MakeSet(4)
 key := lruset.KeyString(uint64(pid), vAddr)
 
 if wayID, found := set.Lookup(key); found {

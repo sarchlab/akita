@@ -251,12 +251,31 @@ func (m *Monitor) StopServer() {
 
 // ---- Buffer inspection ----
 
-// bufferState is a minimal interface for buffer inspection by the hang detector.
+// bufferState is a buffer as the hang detector lists it.
 type bufferState interface {
 	Name() string
 	Size() int
 	Capacity() int
 }
+
+// sizedBuffer is what the hang detector reads from a buffer it finds in a
+// field of a component, such as a queueing.Buffer. A buffer has no name of its
+// own: the component and the field name it.
+type sizedBuffer interface {
+	Size() int
+	Capacity() int
+}
+
+// fieldBufferAdapter lists a buffer found in a component's field under the
+// name "<component>.<field>".
+type fieldBufferAdapter struct {
+	name string
+	buf  sizedBuffer
+}
+
+func (a *fieldBufferAdapter) Name() string  { return a.name }
+func (a *fieldBufferAdapter) Size() int     { return a.buf.Size() }
+func (a *fieldBufferAdapter) Capacity() int { return a.buf.Capacity() }
 
 // portBufferAdapter wraps a port to expose one of its internal buffers
 // (incoming or outgoing) as a bufferState for the hang detector.
@@ -284,7 +303,7 @@ func (a *portBufferAdapter) Capacity() int {
 func (m *Monitor) registerBuffers(c Component) {
 	// Port buffers are registered with each port (RegisterPort) through
 	// portBufferAdapter; this walk finds the component's own buffers.
-	m.registerComponentOrPortBuffers(c)
+	m.registerFieldBuffers(c)
 }
 
 func (m *Monitor) registerPortBuffers(p monitorPort) {
@@ -294,9 +313,11 @@ func (m *Monitor) registerPortBuffers(p monitorPort) {
 	)
 }
 
-func (m *Monitor) registerComponentOrPortBuffers(c any) {
+// registerFieldBuffers registers the buffers held in the top-level fields of
+// component c, each named after c and its field.
+func (m *Monitor) registerFieldBuffers(c Component) {
 	v := reflect.ValueOf(c).Elem()
-	bufferType := reflect.TypeOf((*bufferState)(nil)).Elem()
+	bufferType := reflect.TypeOf((*sizedBuffer)(nil)).Elem()
 
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Field(i)
@@ -308,11 +329,15 @@ func (m *Monitor) registerComponentOrPortBuffers(c any) {
 		// than a stale copy.
 		ref := reflect.NewAt(fieldType, unsafe.Pointer(field.UnsafeAddr()))
 
+		name := c.Name() + "." + v.Type().Field(i).Name
+
 		switch {
 		case fieldType.Implements(bufferType):
-			m.buffers = append(m.buffers, ref.Elem().Interface().(bufferState))
+			m.buffers = append(m.buffers, &fieldBufferAdapter{
+				name: name, buf: ref.Elem().Interface().(sizedBuffer)})
 		case reflect.PointerTo(fieldType).Implements(bufferType):
-			m.buffers = append(m.buffers, ref.Interface().(bufferState))
+			m.buffers = append(m.buffers, &fieldBufferAdapter{
+				name: name, buf: ref.Interface().(sizedBuffer)})
 		}
 	}
 }

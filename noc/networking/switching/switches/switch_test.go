@@ -180,7 +180,7 @@ var _ = Describe("Switch", func() {
 		// Place item in route buffer for port1
 		next := &sw.State
 		next.PortComplexes[0].RouteBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort1RouteBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[0].RouteBuffer.Push(
 			routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
 
@@ -210,11 +210,11 @@ var _ = Describe("Switch", func() {
 		// Place item in route buffer and fill forward buffer
 		next := &sw.State
 		next.PortComplexes[0].RouteBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort1RouteBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[0].RouteBuffer.Push(
 			routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
 		next.PortComplexes[0].ForwardBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort1FwdBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[0].ForwardBuffer.Push(
 			routedFlit{Flit: packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 300}}})
 
@@ -236,7 +236,7 @@ var _ = Describe("Switch", func() {
 		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
 		next := &sw.State
 		next.PortComplexes[0].ForwardBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort1FwdBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[0].ForwardBuffer.Push(
 			routedFlit{Flit: flit, OutputBufIdx: 1})
 
@@ -261,11 +261,11 @@ var _ = Describe("Switch", func() {
 		// Fill sendOut buffer to capacity, forward buffer targets port2
 		next := &sw.State
 		next.PortComplexes[0].ForwardBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort1FwdBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[0].ForwardBuffer.Push(
 			routedFlit{Flit: flit, OutputBufIdx: 1})
 		next.PortComplexes[1].SendOutBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort2SendBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[1].SendOutBuffer.Push(
 			routedFlit{Flit: packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 400}}})
 
@@ -288,7 +288,7 @@ var _ = Describe("Switch", func() {
 		// Place flit in sendOutBuffer of port2
 		next := &sw.State
 		next.PortComplexes[1].SendOutBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort2SendBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[1].SendOutBuffer.Push(routedFlit{Flit: flit})
 
 		port2.EXPECT().CanSend().Return(true)
@@ -315,7 +315,7 @@ var _ = Describe("Switch", func() {
 		// Place flit in sendOutBuffer of port2
 		next := &sw.State
 		next.PortComplexes[1].SendOutBuffer =
-			queueing.NewBuffer[routedFlit]("LocalPort2SendBuf", 1)
+			queueing.MakeBuffer[routedFlit](1)
 		next.PortComplexes[1].SendOutBuffer.Push(routedFlit{Flit: flit})
 
 		port2.EXPECT().CanSend().Return(false)

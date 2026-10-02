@@ -7,12 +7,12 @@ import (
 )
 
 func newPipeline(width, numStages int) *Pipeline[int] {
-	p := NewPipeline[int](width, numStages)
+	p := MakePipeline[int](width, numStages)
 	return &p
 }
 
 func newPostBuf(capacity int) *Buffer[int] {
-	b := NewBuffer[int]("post", capacity)
+	b := MakeBuffer[int](capacity)
 	return &b
 }
 

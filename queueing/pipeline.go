@@ -25,10 +25,10 @@ type Pipeline[T any] struct {
 	stages    []PipelineStage[T]
 }
 
-// NewPipeline creates a pipeline with the given width (lanes) and number of
+// MakePipeline creates a pipeline with the given width (lanes) and number of
 // stages. It returns a value so the pipeline can be embedded directly in a
 // component's state.
-func NewPipeline[T any](width, numStages int) Pipeline[T] {
+func MakePipeline[T any](width, numStages int) Pipeline[T] {
 	return Pipeline[T]{
 		width:     width,
 		numStages: numStages,

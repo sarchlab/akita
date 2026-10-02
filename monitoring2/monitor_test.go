@@ -683,7 +683,7 @@ func newBufferOnlyComponent(
 ) *bufferOnlyComponent {
 	c := &bufferOnlyComponent{
 		name: name,
-		Buf:  queueing.NewBuffer[int](name+".buf", capacity),
+		Buf:  queueing.MakeBuffer[int](capacity),
 	}
 
 	for i := 0; i < filled; i++ {
@@ -742,8 +742,8 @@ func TestHangDetectorBuffersSortsByPercentByDefault(t *testing.T) {
 		t.Fatalf("expected 3 buffers, got %d", len(bufs))
 	}
 
-	if bufs[0].Buffer != "high.buf" || bufs[1].Buffer != "mid.buf" ||
-		bufs[2].Buffer != "low.buf" {
+	if bufs[0].Buffer != "high.Buf" || bufs[1].Buffer != "mid.Buf" ||
+		bufs[2].Buffer != "low.Buf" {
 		t.Fatalf("unexpected percent sort: %#v", bufs)
 	}
 }
@@ -768,8 +768,8 @@ func TestHangDetectorBuffersSortsByLevelHonorsPagination(t *testing.T) {
 		t.Fatalf("expected 2 buffers, got %d", len(bufs))
 	}
 
-	if bufs[0].Buffer != "a.buf" || bufs[0].Level != 5 ||
-		bufs[1].Buffer != "c.buf" || bufs[1].Level != 3 {
+	if bufs[0].Buffer != "a.Buf" || bufs[0].Level != 5 ||
+		bufs[1].Buffer != "c.Buf" || bufs[1].Level != 3 {
 		t.Fatalf("unexpected level page: %#v", bufs)
 	}
 }

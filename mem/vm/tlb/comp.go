@@ -145,7 +145,7 @@ func initSets(numSets, numWays int) []setState {
 	for i := 0; i < numSets; i++ {
 		s := setState{
 			Blocks: make([]blockState, numWays),
-			LRU:    lruset.NewSet(numWays),
+			LRU:    lruset.MakeSet(numWays),
 		}
 		for j := 0; j < numWays; j++ {
 			s.Blocks[j] = blockState{WayID: j}

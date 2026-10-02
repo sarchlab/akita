@@ -23,17 +23,17 @@ var _ = Describe("Bankstage", func() {
 		storage = mem.NewStorage(4 * mem.KB)
 
 		initialState := state{
-			DirBuf: queueing.NewBuffer[int]("Cache.DirBuf", 4),
+			DirBuf: queueing.MakeBuffer[int](4),
 			BankBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.BankBuf0", 1),
+				queueing.MakeBuffer[int](1),
 			},
-			DirPipeline: queueing.NewPipeline[int](1, 2),
-			DirPostBuf:  queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
+			DirPipeline: queueing.MakePipeline[int](1, 2),
+			DirPostBuf:  queueing.MakeBuffer[int](4),
 			BankPipelines: []queueing.Pipeline[int]{
-				queueing.NewPipeline[int](1, 10),
+				queueing.MakePipeline[int](1, 10),
 			},
 			BankPostBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.BankPostBuf0", 1),
+				queueing.MakeBuffer[int](1),
 			},
 		}
 

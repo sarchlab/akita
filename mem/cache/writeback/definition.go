@@ -5,6 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
@@ -37,7 +38,7 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 // newState returns a running cache with an empty directory, MSHR, and
 // transaction table, and empty stage buffers and pipelines.
 func newState(c *Comp) state {
-	name, spec := c.Name(), c.Spec
+	spec := c.Spec
 
 	numBanks := spec.numBanks()
 	laneWidth := spec.laneWidth()
@@ -47,30 +48,36 @@ func newState(c *Comp) state {
 	bankPipes := make([]queueing.Pipeline[int], numBanks)
 	bankPostBufs := make([]queueing.Buffer[int], numBanks)
 	for i := 0; i < numBanks; i++ {
-		dirToBank[i] = queueing.NewBuffer[int](
-			fmt.Sprintf("%s.DirToBankBuf%d", name, i), spec.NumReqPerCycle)
-		wbToBank[i] = queueing.NewBuffer[int](
-			fmt.Sprintf("%s.WriteBufferToBankBuf%d", name, i),
+		dirToBank[i] = queueing.MakeBuffer[int](
 			spec.NumReqPerCycle)
-		bankPipes[i] = queueing.NewPipeline[int](laneWidth, spec.BankLatency)
-		bankPostBufs[i] = queueing.NewBuffer[int](
-			fmt.Sprintf("%s.BankPostPipelineBuf%d", name, i), laneWidth)
+
+		wbToBank[i] = queueing.MakeBuffer[int](
+			spec.NumReqPerCycle)
+
+		bankPipes[i] = queueing.MakePipeline[int](laneWidth, spec.BankLatency)
+		bankPostBufs[i] = queueing.MakeBuffer[int](
+			laneWidth)
+
 	}
 
 	s := state{
 		CacheState:   int(cacheStateRunning),
 		EvictingList: make(map[uint64]bool),
-		DirStageBuf: queueing.NewBuffer[int](
-			name+".DirStageBuf", spec.NumReqPerCycle),
+		DirStageBuf: queueing.MakeBuffer[int](
+			spec.NumReqPerCycle),
+
 		DirToBankBufs:         dirToBank,
 		WriteBufferToBankBufs: wbToBank,
-		MSHRStageBuf: queueing.NewBuffer[int](
-			name+".MSHRStageBuf", spec.NumReqPerCycle),
-		WriteBufferBuf: queueing.NewBuffer[int](
-			name+".WriteBufferBuf", spec.NumReqPerCycle),
-		DirPipeline: queueing.NewPipeline[int](laneWidth, spec.DirLatency),
-		DirPostPipelineBuf: queueing.NewBuffer[int](
-			name+".DirPostPipelineBuf", spec.NumReqPerCycle),
+		MSHRStageBuf: queueing.MakeBuffer[int](
+			spec.NumReqPerCycle),
+
+		WriteBufferBuf: queueing.MakeBuffer[int](
+			spec.NumReqPerCycle),
+
+		DirPipeline: queueing.MakePipeline[int](laneWidth, spec.DirLatency),
+		DirPostPipelineBuf: queueing.MakeBuffer[int](
+			spec.NumReqPerCycle),
+
 		BankPipelines:                   bankPipes,
 		BankPostPipelineBufs:            bankPostBufs,
 		BankInflightTransCounts:         make([]int, numBanks),
@@ -140,10 +147,10 @@ func resolveAddressMapper(spec Spec, res Resources) mem.AddressToPortMapper {
 				"non-zero Spec.InterleavingSize")
 		}
 
-		mapper := mem.NewInterleavedAddressPortMapper(spec.InterleavingSize)
-		mapper.LowModules = append(mapper.LowModules, ports...)
-
-		return mapper
+		return &mem.InterleavedAddressPortMapper{
+			InterleavingSize: spec.InterleavingSize,
+			LowModules:       append([]messaging.RemotePort(nil), ports...),
+		}
 	default:
 		panic(fmt.Sprintf(
 			"writeback: unknown address mapper type %q",

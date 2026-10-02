@@ -970,53 +970,23 @@ topology is assembled separately from component internals.
 
 ## 9. Queueing
 
-The `queueing` package provides generic buffer and pipeline implementations that follow V5 design principles. V4's interface/implementation pattern (`sim.Buffer`, `pipelining.Pipeline`) is replaced by direct generic struct literals — no constructors, no builders, no pointer indirection.
+The `queueing` package provides generic buffer and pipeline value types. V4's interface/implementation pattern (`sim.Buffer`, `pipelining.Pipeline`) is replaced by `queueing.Buffer[T]` and `queueing.Pipeline[T]`, created with `MakeBuffer` and `MakePipeline`. Both are values, so they embed directly in a component's State, and they serialize to JSON for checkpoints.
 
 ### Key Changes from V4 to V5
 
-**V4 Pattern (Interface + Constructor):**
-```go
-// V4: Interface abstraction with hidden implementation. Pipelines were
-// likewise a pipelining.Pipeline interface, created by the package's builder.
-var buffer sim.Buffer = sim.NewBuffer("name", 10)
-```
+| V4 | V5 |
+|---|---|
+| `sim.NewBuffer("MyBuffer", 100)`, returning the `sim.Buffer` interface | `queueing.MakeBuffer[int](100)`, returning a `queueing.Buffer[int]` value |
+| A `pipelining` builder with `WithNumStage`, `WithCyclePerStage`, and `WithPostPipelineBuffer` | `queueing.MakePipeline[int](width, numStages)`; `Tick(sink)` moves completed items into a sink, such as a buffer |
+| A buffer has a name and hook positions | A buffer has neither; a component's State field already names it |
 
-**V5 Pattern (Generic Struct Literals):**
-```go
-// V5: Direct struct literal, no constructors or interfaces
-buffer := queueing.Buffer[int]{BufferName: "name", Cap: 10}
-pipeline := queueing.Pipeline[int]{NumStages: 5, Width: 1}
-```
-
-### Migration Benefits
-
-1. **Compile-time Type Safety**: Generic type parameter `[T]` ensures buffers and pipelines are type-safe at compile time.
-2. **JSON-Serializable State**: All fields have `json` tags, making them compatible with V5's state serialization requirements.
-3. **Value Types**: Buffers and pipelines are value types (no pointers), following V5's no-pointers-in-State rule.
-4. **Simplified APIs**: No constructors, builders, or interface abstractions — just struct literals.
-5. **Maintained Functionality**: All essential features preserved including hook support (`sim.HookableBase`), FIFO queue behavior, and multi-stage pipeline processing.
-
-### Usage Examples
-
-**Buffer Migration:**
 ```go
 // V4
 buffer := sim.NewBuffer("MyBuffer", 100)
 
 // V5
-buffer := queueing.Buffer[int]{BufferName: "MyBuffer", Cap: 100}
-```
-
-**Pipeline Migration:**
-
-V4 built a pipeline through the `pipelining` package's builder, setting the
-number of stages (`WithNumStage`), the cycles per stage (`WithCyclePerStage`),
-and a post-pipeline buffer (`WithPostPipelineBuffer`).
-
-```go
-// V5 — Pipeline has Width, NumStages, and Stages fields only.
-// No CyclePerStage or Name fields.
-pipeline := queueing.Pipeline[int]{NumStages: 5, Width: 1}
+buffer := queueing.MakeBuffer[int](100)
+pipeline := queueing.MakePipeline[int](1, 5) // 1 lane, 5 stages
 ```
 
 ### V5 Component Integration

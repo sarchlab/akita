@@ -53,14 +53,12 @@ func buildInitialBanks(name string, spec Spec) []bankState {
 	banks := make([]bankState, spec.NumBanks)
 	for i := range banks {
 		banks[i] = bankState{
-			Pipeline: queueing.NewPipeline[bankPipelineItemState](
+			Pipeline: queueing.MakePipeline[bankPipelineItemState](
 				spec.BankPipelineWidth,
-				spec.BankPipelineDepth*spec.StageLatency,
-			),
-			PostPipelineBuf: queueing.NewBuffer[bankPipelineItemState](
-				name+".Storage.PostPipelineBuf",
-				spec.PostPipelineBufSize,
-			),
+				spec.BankPipelineDepth*spec.StageLatency),
+
+			PostPipelineBuf: queueing.MakeBuffer[bankPipelineItemState](
+				spec.PostPipelineBufSize),
 		}
 	}
 

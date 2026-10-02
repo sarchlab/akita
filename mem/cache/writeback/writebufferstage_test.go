@@ -20,22 +20,22 @@ var _ = Describe("WriteBufferStage", func() {
 		initialState := state{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
-			DirStageBuf:  queueing.NewBuffer[int]("Cache.DirStageBuf", 4),
+			DirStageBuf:  queueing.MakeBuffer[int](4),
 			DirToBankBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.DirToBankBuf", 4),
+				queueing.MakeBuffer[int](4),
 			},
 			WriteBufferToBankBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.WBToBankBuf", 4),
+				queueing.MakeBuffer[int](4),
 			},
-			MSHRStageBuf:       queueing.NewBuffer[int]("Cache.MSHRStageBuf", 4),
-			WriteBufferBuf:     queueing.NewBuffer[int]("Cache.WriteBufferBuf", 4),
-			DirPipeline:        queueing.NewPipeline[int](4, 0),
-			DirPostPipelineBuf: queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
+			MSHRStageBuf:       queueing.MakeBuffer[int](4),
+			WriteBufferBuf:     queueing.MakeBuffer[int](4),
+			DirPipeline:        queueing.MakePipeline[int](4, 0),
+			DirPostPipelineBuf: queueing.MakeBuffer[int](4),
 			BankPipelines: []queueing.Pipeline[int]{
-				queueing.NewPipeline[int](4, 10),
+				queueing.MakePipeline[int](4, 10),
 			},
 			BankPostPipelineBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("BankPostPipelineBuf", 4),
+				queueing.MakeBuffer[int](4),
 			},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
