@@ -11,7 +11,6 @@ type Connection interface {
 	hooking.Hookable
 
 	PlugIn(port Port)
-	Unplug(port Port)
 	NotifyAvailable(port Port)
 
 	NotifySend()

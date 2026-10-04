@@ -84,11 +84,6 @@ func (d deviceSide) PlugIn(port messaging.Port) {
 	port.SetConnection(d)
 }
 
-// Unplug removes the association of a port and an endpoint.
-func (d deviceSide) Unplug(_ messaging.Port) {
-	panic("not implemented")
-}
-
 // NotifyAvailable wakes the endpoint when a device port has room again.
 func (d deviceSide) NotifyAvailable(_ messaging.Port) {
 	d.TickLater()

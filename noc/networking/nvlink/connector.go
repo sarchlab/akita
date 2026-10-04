@@ -1,5 +1,5 @@
 // Package nvlink provides a connector that can create a network that includes
-// PCIe, NVLink, and ethernet network.
+// PCIe and NVLink network.
 package nvlink
 
 import (
@@ -20,8 +20,7 @@ type deviceNode struct {
 	nvlinkSwitchID int
 }
 
-// Connector can connect devices into a network that includes PCIe, NVLink,
-// and ethernet network.
+// Connector can connect devices into a network of PCIe and NVLink links.
 type Connector struct {
 	freq         timing.Freq
 	flitByteSize int
@@ -32,14 +31,10 @@ type Connector struct {
 	nvlinkBandwidth     uint64
 	nvlinkSwitchLatency int
 
-	ethernetSwitchLatency int
-	ethernetBandwidth     uint64
-
 	connector networkconnector.Connector
 
-	devices          []*deviceNode
-	pcieSwitches     map[int]bool
-	ethernetSwitches map[int]bool
+	devices      []*deviceNode
+	pcieSwitches map[int]bool
 }
 
 // NewConnector creates a new connector that can help configure PCIe networks.
@@ -48,16 +43,13 @@ func NewConnector() *Connector {
 
 	c.connector = networkconnector.MakeConnector()
 
-	c.ethernetSwitches = make(map[int]bool)
 	c.pcieSwitches = make(map[int]bool)
 
 	c = c.WithFrequency(1*timing.GHz).
 		WithPCIeVersion(4, 16).
 		WithPCIeSwitchLatency(140).
 		WithNVLinkVersion(2).
-		WithNVLinkSwitchLatency(140).
-		WithEthernetSwitchLatency(100000).
-		WithEthernetBandwidth(1.25 * (1 << 30))
+		WithNVLinkSwitchLatency(140)
 
 	c.connector = c.connector.WithRouter(&networkconnector.BandwidthFirstRouter{
 		FlitSize: c.flitByteSize,
@@ -148,18 +140,6 @@ func (c *Connector) WithNVLinkVersion(version int) *Connector {
 func (c *Connector) WithNVLinkSwitchLatency(numCycle int) *Connector {
 	c.nvlinkSwitchLatency = numCycle
 
-	return c
-}
-
-// WithEthernetSwitchLatency sets the latency of the ethernet switch.
-func (c *Connector) WithEthernetSwitchLatency(numCycle int) *Connector {
-	c.ethernetSwitchLatency = numCycle
-	return c
-}
-
-// WithEthernetBandwidth sets the bandwidth of each ethernet link.
-func (c *Connector) WithEthernetBandwidth(bytePerSecond uint64) *Connector {
-	c.ethernetBandwidth = bytePerSecond
 	return c
 }
 
@@ -361,47 +341,6 @@ func (c *Connector) ConnectDevicesWithNVLink(
 				NumStage:      20,
 				CyclePerStage: 1,
 				PipelineWidth: numLink,
-			},
-		})
-}
-
-// CreateEthernetSwitch creates a ethernet switch.
-func (c *Connector) CreateEthernetSwitch() (switchID int) {
-	switchID = c.connector.AddSwitch()
-
-	c.ethernetSwitches[switchID] = true
-
-	return switchID
-}
-
-// ConnectSwitchesWithEthernetLink establishes a ethernet link between two
-// switches.
-func (c *Connector) ConnectSwitchesWithEthernetLink(switchAID, switchBID int) {
-	freq := math.Round(float64(c.ethernetBandwidth) / float64(c.flitByteSize))
-	c.connector.ConnectSwitches(
-		switchAID,
-		switchBID,
-		networkconnector.SwitchToSwitchLinkParameter{
-			LeftEndParam: networkconnector.LinkEndSwitchParameter{
-				IncomingBufSize:  16,
-				OutgoingBufSize:  16,
-				Latency:          c.ethernetSwitchLatency,
-				NumInputChannel:  1,
-				NumOutputChannel: 1,
-			},
-			RightEndParam: networkconnector.LinkEndSwitchParameter{
-				IncomingBufSize:  16,
-				OutgoingBufSize:  16,
-				Latency:          c.ethernetSwitchLatency,
-				NumInputChannel:  1,
-				NumOutputChannel: 1,
-			},
-			LinkParam: networkconnector.LinkParameter{
-				IsIdeal:       false,
-				Frequency:     timing.Freq(freq),
-				NumStage:      10000,
-				CyclePerStage: 1,
-				PipelineWidth: 1,
 			},
 		})
 }

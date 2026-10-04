@@ -51,7 +51,6 @@ type obFakeConn struct {
 
 func (c *obFakeConn) Name() string                   { return "Conn" }
 func (c *obFakeConn) PlugIn(messaging.Port)          {}
-func (c *obFakeConn) Unplug(messaging.Port)          {}
 func (c *obFakeConn) NotifyAvailable(messaging.Port) {}
 func (c *obFakeConn) NotifySend()                    {}
 

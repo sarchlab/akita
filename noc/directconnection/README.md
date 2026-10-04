@@ -27,7 +27,6 @@ type Comp struct {
 }
 
 func (c *Comp) PlugIn(port messaging.Port)          // Connect a port
-func (c *Comp) Unplug(port messaging.Port)          // (not implemented)
 func (c *Comp) NotifyAvailable(p messaging.Port)    // Port buffer space freed
 func (c *Comp) NotifySend()                         // Port has outgoing message
 ```
@@ -97,6 +96,5 @@ index advances by one each tick, ensuring no port is permanently starved.
 
 - No bandwidth modeling — all pending messages are forwarded each tick.
 - No latency modeling beyond the tick granularity.
-- `Unplug` is not implemented.
 - For simulations requiring realistic network modeling (latency, bandwidth,
   contention), use the `noc/networking` package instead.

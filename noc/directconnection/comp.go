@@ -72,11 +72,6 @@ func (c *Comp) PlugIn(port messaging.Port) {
 	port.SetConnection(c)
 }
 
-// Unplug marks the port no longer connects to this DirectConnection.
-func (c *Comp) Unplug(_ messaging.Port) {
-	panic("not implemented")
-}
-
 // NotifyAvailable is called by a port to notify the connection can deliver again.
 func (c *Comp) NotifyAvailable(p messaging.Port) {
 	for _, port := range c.ports.ports {
