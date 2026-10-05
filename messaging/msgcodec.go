@@ -2,6 +2,6 @@ package messaging
 
 import "github.com/sarchlab/akita/v5/internal/codec"
 
-// msgCodec registers payloads during package initialization. Runtime reads,
-// including the Send validation path, are plain map lookups.
-var msgCodec = codec.NewStaticRegistry[any]("payload")
+// msgCodec registers payload types for checkpoint restoration. Contains uses
+// an atomic snapshot load and map lookup, so Send never takes the registry lock.
+var msgCodec = codec.NewRegistry[any]("payload")

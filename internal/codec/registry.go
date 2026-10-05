@@ -18,8 +18,10 @@ package codec
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"reflect"
 	"sync"
+	"sync/atomic"
 )
 
 // typedPayload is the serialized form of a single polymorphic value: a type tag
@@ -32,15 +34,15 @@ type typedPayload struct {
 
 // Registry maps concrete type names to their reflect.Type so that values of an
 // interface type T (e.g. any or timing.Event) can be reconstructed
-// from a checkpoint. NewRegistry is safe for concurrent use; NewStaticRegistry
-// requires registration to finish before concurrent reads.
+// from a checkpoint. Registries created with NewRegistry are safe for concurrent
+// use. Contains reads an immutable snapshot without taking the registry lock.
 type Registry[T any] struct {
 	// label is the domain noun used in error messages, e.g. "message" or
 	// "event", so a failure reads "unknown message type ...".
 	label string
 
-	static bool
-	byType map[reflect.Type]bool
+	// Published type sets are immutable; writers clone before publishing.
+	byType atomic.Pointer[map[reflect.Type]bool]
 	mu     sync.RWMutex
 	types  map[string]reflect.Type
 }
@@ -48,11 +50,10 @@ type Registry[T any] struct {
 // NewRegistry returns an empty Registry. The label is a short domain noun (e.g.
 // "message", "event") that appears in error messages.
 func NewRegistry[T any](label string) *Registry[T] {
-	return &Registry[T]{
-		label:  label,
-		types:  map[string]reflect.Type{},
-		byType: map[reflect.Type]bool{},
-	}
+	r := &Registry[T]{label: label, types: map[string]reflect.Type{}}
+	empty := map[reflect.Type]bool{}
+	r.byType.Store(&empty)
+	return r
 }
 
 // Tag returns the wire tag the registry uses for the concrete type of v. It is
@@ -95,18 +96,23 @@ func (r *Registry[T]) Register(v T) {
 	}
 
 	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	r.types[tagOf(t)] = t
-	r.byType[t] = true
-	r.mu.Unlock()
+	current := *r.byType.Load()
+	if current[t] {
+		return
+	}
+	next := maps.Clone(current)
+	next[t] = true
+	r.byType.Store(&next)
 }
 
 // Tags returns the wire tags of all registered types, in no particular order.
 // It exists for coverage audits; it is not used on the checkpoint path.
 func (r *Registry[T]) Tags() []string {
-	if !r.static {
-		r.mu.RLock()
-		defer r.mu.RUnlock()
-	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
 	tags := make([]string, 0, len(r.types))
 	for tag := range r.types {
@@ -159,13 +165,9 @@ func (r *Registry[T]) DecodeSlice(data json.RawMessage) ([]T, error) {
 func (r *Registry[T]) decodeOne(tp typedPayload) (T, error) {
 	var zero T
 
-	if !r.static {
-		r.mu.RLock()
-	}
+	r.mu.RLock()
 	t, ok := r.types[tp.Type]
-	if !r.static {
-		r.mu.RUnlock()
-	}
+	r.mu.RUnlock()
 	if !ok {
 		return zero, fmt.Errorf(
 			"codec: unknown %s type %q (register it before checkpointing)",
@@ -227,21 +229,9 @@ func (r *Registry[T]) CheckRoundTrip(v T) error {
 	return nil
 }
 
-// NewStaticRegistry creates an init-only registry. Register must finish before
-// any concurrent readers begin. Reads use plain map lookups without locking.
-func NewStaticRegistry[T any](label string) *Registry[T] {
-	r := NewRegistry[T](label)
-	r.static = true
-	return r
-}
-
 // Contains reports whether the concrete value type is registered.
 func (r *Registry[T]) Contains(v T) bool {
-	if !r.static {
-		r.mu.RLock()
-		defer r.mu.RUnlock()
-	}
-	return r.byType[reflect.TypeOf(v)]
+	return (*r.byType.Load())[reflect.TypeOf(v)]
 }
 
 // Encode encodes one registered value as an object containing its type and payload.

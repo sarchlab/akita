@@ -30,3 +30,19 @@ func BenchmarkSend(b *testing.B) {
 		p.outgoingBuf.Pop()
 	}
 }
+
+// BenchmarkSendParallel gives each sender its own port so only registration
+// lookup is shared across senders, as it is in a parallel simulation.
+func BenchmarkSendParallel(b *testing.B) {
+	payload := benchmarkPayload{Data: make([]byte, 64)}
+	msg := Msg{ID: 1, Src: "src", Dst: "dst", TrafficBytes: 64, Payload: payload}
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		p := NewPort("src", 1, 1).(*defaultPort)
+		p.SetConnection(&benchmarkConnection{})
+		for pb.Next() {
+			p.Send(msg)
+			p.outgoingBuf.Pop()
+		}
+	})
+}

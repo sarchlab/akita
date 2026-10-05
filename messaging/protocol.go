@@ -124,26 +124,11 @@ var (
 // more than one role, and may belong to more than one protocol;
 // re-registration with the codec is harmless. Payloads must be value types
 // without pointers, interfaces, channels, functions, or unsafe pointers at any
-// depth. Nested Msg values are allowed. Calling DefineProtocol after package
-// initialization panics: the payload registry is immutable during simulation.
+// depth. Nested Msg values are allowed. Declare protocols as package-level vars
+// so inspect can discover them and their payloads are registered before a fresh
+// process restores a checkpoint. This convention is not enforced at runtime.
+// The codec registry supports concurrent registration and lookup.
 func DefineProtocol(roles ...RoleDef) *Protocol {
-	pcs := make([]uintptr, 32)
-	n := runtime.Callers(2, pcs)
-	frames := runtime.CallersFrames(pcs[:n])
-	initializing := false
-	for {
-		frame, more := frames.Next()
-		if frame.Function == "runtime.doInit1" {
-			initializing = true
-			break
-		}
-		if !more {
-			break
-		}
-	}
-	if !initializing {
-		panic("messaging: DefineProtocol must run during package initialization")
-	}
 	return defineProtocol(callerPackage(), roles...)
 }
 

@@ -61,8 +61,11 @@ Registration rejects pointer prototypes and pointer, interface, channel,
 function, and unsafe-pointer fields at any depth, even with `json:"-"` or custom
 JSON methods. Scalars, structs, arrays, slices, maps with supported JSON keys,
 and nested `messaging.Msg` values are allowed. `Send` rejects unregistered
-payloads, including pointers, and accepts a nil payload. Protocol definitions
-must run during package initialization; runtime registry lookups do not lock.
+payloads, including pointers, and accepts a nil payload. Declare protocols as
+package-level variables so `inspect` can discover them and every fresh process
+registers the payload types before restoring a checkpoint. This is a convention,
+not an init-only runtime check. The registry supports concurrent registration;
+`Send` reads an immutable snapshot with an atomic load and a map lookup.
 
 Slice and map storage is shared between sender and receiver. Do not mutate it
 after sending. Inspect a payload with `switch req := msg.Payload.(type)` while

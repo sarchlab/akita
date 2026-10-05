@@ -132,10 +132,6 @@ func TestAnyProtocolIsNamedAfterMessaging(t *testing.T) {
 		t.Errorf("AnyRole = %q sending %v, want a role named any that lists no messages",
 			AnyRole.Name(), AnyRole.Sends())
 	}
-
-	mustPanic(t, "package initialization", func() {
-		DefineProtocol(RoleDef{Name: "only", Sends: []any{protoTestReq{}}})
-	})
 }
 
 func TestRoleNameMustFitInATag(t *testing.T) {

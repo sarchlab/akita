@@ -63,7 +63,12 @@ var (
 
 Because the declaration runs at package initialization, defining the
 protocol also **registers every listed message type with the checkpoint
-codec** — that is the mechanical payoff.
+codec** — that is the mechanical payoff. Keep protocols as package-level
+variable declarations so `inspect` can discover them and a fresh process has
+the same payload types registered before restoring checkpoints. This convention
+is not enforced by a runtime initialization check. Concurrent registration and
+lookup are safe, but registration only in a previous process is not sufficient
+for checkpoint restore.
 
 `DefineProtocol` panics at init time on mistakes that would otherwise be
 silent: a second protocol in the same package, or an invalid or duplicate
