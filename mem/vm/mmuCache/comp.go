@@ -163,10 +163,8 @@ func initSets(numLevels, numBlocks int) []setState {
 // req_in/req_out tasks can be completed without retaining the live messages.
 func restoreTransReq(
 	id uint64, src, dst messaging.RemotePort,
-) vmprotocol.TranslationReq {
-	return vmprotocol.TranslationReq{
-		MsgMeta: messaging.MsgMeta{ID: id, Src: src, Dst: dst},
-	}
+) messaging.Msg {
+	return messaging.Msg{ID: id, Src: src, Dst: dst, Payload: vmprotocol.TranslationReq{}}
 }
 
 // Comp is the mmuCache component.

@@ -55,14 +55,14 @@ func (m *respondMW) finalizeTransaction(
 	if t.HasWrite {
 		done := m.finalizeWriteTrans(state, t, i)
 		if done {
-			tracing.TraceReqComplete(m.comp, &t.WriteMsg)
+			tracing.TraceReqComplete(m.comp, t.WriteMsg)
 		}
 		return done
 	}
 
 	done := m.finalizeReadTrans(state, t, i)
 	if done {
-		tracing.TraceReqComplete(m.comp, &t.ReadMsg)
+		tracing.TraceReqComplete(m.comp, t.ReadMsg)
 	}
 	return done
 }
@@ -73,15 +73,15 @@ func (m *respondMW) finalizeWriteTrans(
 	i int,
 ) bool {
 	m.comp.Resources.Storage.Write(
-		transactionGlobalAddress(t), t.WriteMsg.Data)
+		transactionGlobalAddress(t), t.WriteMsg.Payload.(memprotocol.WriteReq).Data)
 
-	writeDone := memprotocol.WriteDoneRsp{}
-	writeDone.ID = m.comp.NewID()
-	writeDone.Src = m.topPort().AsRemote()
-	writeDone.Dst = t.WriteMsg.Src
-	writeDone.RspTo = t.WriteMsg.ID
-	writeDone.TrafficBytes = 4
-	writeDone.TrafficClass = "memprotocol.WriteDoneRsp"
+	writeDone := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+		ID:           m.comp.NewID(),
+		Src:          m.topPort().AsRemote(),
+		Dst:          t.WriteMsg.Src,
+		RspTo:        t.WriteMsg.ID,
+		TrafficBytes: 4,
+		TrafficClass: "memprotocol.WriteDoneRsp"}
 
 	if !m.topPort().CanSend() {
 		return false
@@ -89,7 +89,7 @@ func (m *respondMW) finalizeWriteTrans(
 
 	m.topPort().Send(writeDone)
 	state.TotalWriteLatencyCycles += state.TickCount - t.ArrivalTick
-	state.BytesWritten += uint64(len(t.WriteMsg.Data))
+	state.BytesWritten += uint64(len(t.WriteMsg.Payload.(memprotocol.WriteReq).Data))
 	state.CompletedWrites++
 	m.removeTransaction(state, i)
 	return true
@@ -101,16 +101,17 @@ func (m *respondMW) finalizeReadTrans(
 	i int,
 ) bool {
 	data := m.comp.Resources.Storage.Read(
-		transactionGlobalAddress(t), t.ReadMsg.AccessByteSize)
+		transactionGlobalAddress(t), t.ReadMsg.Payload.(memprotocol.ReadReq).AccessByteSize)
 
-	dataReady := memprotocol.DataReadyRsp{}
-	dataReady.ID = m.comp.NewID()
-	dataReady.Src = m.topPort().AsRemote()
-	dataReady.Dst = t.ReadMsg.Src
-	dataReady.Data = data
-	dataReady.RspTo = t.ReadMsg.ID
-	dataReady.TrafficBytes = len(data) + 4
-	dataReady.TrafficClass = "memprotocol.DataReadyRsp"
+	dataReady := messaging.Msg{Payload: memprotocol.DataReadyRsp{
+		Data: data},
+		ID:  m.comp.NewID(),
+		Src: m.topPort().AsRemote(),
+		Dst: t.ReadMsg.Src,
+
+		RspTo:        t.ReadMsg.ID,
+		TrafficBytes: len(data) + 4,
+		TrafficClass: "memprotocol.DataReadyRsp"}
 
 	if !m.topPort().CanSend() {
 		return false
@@ -118,7 +119,7 @@ func (m *respondMW) finalizeReadTrans(
 
 	m.topPort().Send(dataReady)
 	state.TotalReadLatencyCycles += state.TickCount - t.ArrivalTick
-	state.BytesRead += t.ReadMsg.AccessByteSize
+	state.BytesRead += t.ReadMsg.Payload.(memprotocol.ReadReq).AccessByteSize
 	state.CompletedReads++
 	m.removeTransaction(state, i)
 	return true

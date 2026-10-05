@@ -159,9 +159,9 @@ func (a *bandwidthAgent) NotifyRecv(port messaging.Port) {
 			break
 		}
 
-		if msg.Meta().IsRsp() {
+		if msg.IsRsp() {
 			a.completed++
-			a.completedIDs = append(a.completedIDs, msg.Meta().RspTo)
+			a.completedIDs = append(a.completedIDs, msg.RspTo)
 		}
 	}
 }
@@ -204,16 +204,18 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.F
 	return memComp, agent, conn, freq
 }
 
-func makeReadReq(ids interface{ NewID() uint64 }, src, dst messaging.RemotePort, index int) memprotocol.ReadReq {
+func makeReadReq(ids interface{ NewID() uint64 }, src, dst messaging.RemotePort, index int) messaging.Msg {
 	addr := uint64(index * readSize)
-	r := memprotocol.ReadReq{}
-	r.ID = ids.NewID()
-	r.Src = src
-	r.Dst = dst
-	r.Address = addr
-	r.AccessByteSize = readSize
-	r.TrafficBytes = 12
-	r.TrafficClass = "memprotocol.ReadReq"
+	r := messaging.Msg{Payload: memprotocol.ReadReq{
+		Address:        addr,
+		AccessByteSize: readSize},
+		ID:  ids.NewID(),
+		Src: src,
+		Dst: dst,
+
+		TrafficBytes: 12,
+		TrafficClass: "memprotocol.ReadReq"}
+
 	return r
 }
 
@@ -277,14 +279,15 @@ var _ = Describe("SimpleBankedMemory", func() {
 		storage.Write(0x0, data)
 
 		topPort := memComp.Ports.Top
-		read := memprotocol.ReadReq{}
-		read.ID = sim.NewID()
-		read.Src = agent.port.AsRemote()
-		read.Dst = topPort.AsRemote()
-		read.Address = 0x0
-		read.AccessByteSize = uint64(len(data))
-		read.TrafficBytes = 12
-		read.TrafficClass = "memprotocol.ReadReq"
+		read := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x0,
+			AccessByteSize: uint64(len(data))},
+			ID:  sim.NewID(),
+			Src: agent.port.AsRemote(),
+			Dst: topPort.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
 
 		agent.send(read)
 
@@ -293,8 +296,8 @@ var _ = Describe("SimpleBankedMemory", func() {
 		}
 
 		Expect(agent.received).To(HaveLen(1))
-		rsp := agent.received[0].(memprotocol.DataReadyRsp)
-		Expect(rsp.Data).To(Equal(data))
+		rsp := agent.received[0]
+		Expect(rsp.Payload.(memprotocol.DataReadyRsp).Data).To(Equal(data))
 	})
 
 	It("should commit write before serving subsequent read", func() {
@@ -307,23 +310,25 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		topPort := memComp.Ports.Top
 
-		write := memprotocol.WriteReq{}
-		write.ID = sim.NewID()
-		write.Src = agent.port.AsRemote()
-		write.Dst = topPort.AsRemote()
-		write.Address = addr
-		write.Data = newData
-		write.TrafficBytes = len(newData) + 12
-		write.TrafficClass = "memprotocol.WriteReq"
+		write := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address: addr,
+			Data:    newData},
+			ID:  sim.NewID(),
+			Src: agent.port.AsRemote(),
+			Dst: topPort.AsRemote(),
 
-		read := memprotocol.ReadReq{}
-		read.ID = sim.NewID()
-		read.Src = agent.port.AsRemote()
-		read.Dst = topPort.AsRemote()
-		read.Address = addr
-		read.AccessByteSize = uint64(len(newData))
-		read.TrafficBytes = 12
-		read.TrafficClass = "memprotocol.ReadReq"
+			TrafficBytes: len(newData) + 12,
+			TrafficClass: "memprotocol.WriteReq"}
+
+		read := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        addr,
+			AccessByteSize: uint64(len(newData))},
+			ID:  sim.NewID(),
+			Src: agent.port.AsRemote(),
+			Dst: topPort.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
 
 		agent.send(write)
 		agent.send(read)
@@ -333,13 +338,12 @@ var _ = Describe("SimpleBankedMemory", func() {
 		}
 
 		Expect(agent.received).To(HaveLen(2))
-
-		_, isWriteDone := agent.received[0].(memprotocol.WriteDoneRsp)
+		_, isWriteDone := agent.received[0].Payload.(memprotocol.WriteDoneRsp)
 		Expect(isWriteDone).To(BeTrue())
-
-		readRsp, ok := agent.received[1].(memprotocol.DataReadyRsp)
+		_, ok := agent.received[1].Payload.(memprotocol.DataReadyRsp)
+		readRsp := agent.received[1]
 		Expect(ok).To(BeTrue())
-		Expect(readRsp.Data).To(Equal(newData))
+		Expect(readRsp.Payload.(memprotocol.DataReadyRsp).Data).To(Equal(newData))
 
 		committed := storage.Read(addr, uint64(len(newData)))
 		Expect(committed).To(Equal(newData))
@@ -367,24 +371,26 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		// Write 4 bytes at a non-zero global address.
 		writeData := []byte{1, 2, 3, 4}
-		write := memprotocol.WriteReq{}
-		write.ID = sim.NewID()
-		write.Src = agent.port.AsRemote()
-		write.Dst = topPort.AsRemote()
-		write.Address = 0x200
-		write.Data = writeData
-		write.TrafficBytes = len(writeData) + 12
-		write.TrafficClass = "memprotocol.WriteReq"
+		write := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address: 0x200,
+			Data:    writeData},
+			ID:  sim.NewID(),
+			Src: agent.port.AsRemote(),
+			Dst: topPort.AsRemote(),
+
+			TrafficBytes: len(writeData) + 12,
+			TrafficClass: "memprotocol.WriteReq"}
 
 		// Read the same global address back.
-		read := memprotocol.ReadReq{}
-		read.ID = sim.NewID()
-		read.Src = agent.port.AsRemote()
-		read.Dst = topPort.AsRemote()
-		read.Address = 0x200
-		read.AccessByteSize = 4
-		read.TrafficBytes = 12
-		read.TrafficClass = "memprotocol.ReadReq"
+		read := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x200,
+			AccessByteSize: 4},
+			ID:  sim.NewID(),
+			Src: agent.port.AsRemote(),
+			Dst: topPort.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
 
 		agent.send(write)
 		agent.send(read)
@@ -394,10 +400,10 @@ var _ = Describe("SimpleBankedMemory", func() {
 		}
 
 		Expect(agent.received).To(HaveLen(2))
-
-		readRsp, ok := agent.received[1].(memprotocol.DataReadyRsp)
+		_, ok := agent.received[1].Payload.(memprotocol.DataReadyRsp)
+		readRsp := agent.received[1]
 		Expect(ok).To(BeTrue())
-		Expect(readRsp.Data).To(Equal([]byte{1, 2, 3, 4}))
+		Expect(readRsp.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 })
 
@@ -408,7 +414,7 @@ func Example() {
 	dstRemote := topPort.AsRemote()
 
 	startCycles := make(map[uint64]int)
-	var pendingReq memprotocol.ReadReq
+	var pendingReq messaging.Msg
 	hasPending := false
 	requestsSent := 0
 	cycles := 0

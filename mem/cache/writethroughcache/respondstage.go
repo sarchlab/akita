@@ -2,6 +2,7 @@ package writethroughcache
 
 import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -32,14 +33,15 @@ func (s *respondStage) Tick() bool {
 }
 
 func (s *respondStage) respondReadTrans(trans *transactionState) bool {
-	dr := memprotocol.DataReadyRsp{}
-	dr.ID = s.cache.comp.NewID()
-	dr.Src = s.cache.topPort().AsRemote()
-	dr.Dst = trans.ReadMeta.Src
-	dr.RspTo = trans.ReadMeta.ID
-	dr.Data = trans.Data
-	dr.TrafficBytes = len(trans.Data) + 4
-	dr.TrafficClass = "rsp"
+	dr := messaging.Msg{Payload: memprotocol.DataReadyRsp{
+		Data: trans.Data},
+		ID:    s.cache.comp.NewID(),
+		Src:   s.cache.topPort().AsRemote(),
+		Dst:   trans.ReadMeta.Src,
+		RspTo: trans.ReadMeta.ID,
+
+		TrafficBytes: len(trans.Data) + 4,
+		TrafficClass: "rsp"}
 
 	if !s.cache.topPort().CanSend() {
 		return false
@@ -49,26 +51,21 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 
 	trans.Removed = true
 
-	// Reconstruct read for tracing
-	read := memprotocol.ReadReq{
-		MsgMeta:        trans.ReadMeta,
-		Address:        trans.ReadAddress,
-		AccessByteSize: trans.ReadAccessByteSize,
-		PID:            trans.ReadPID,
-	}
+	// Trace the original read request.
+	read := trans.ReadMeta
 	tracing.TraceReqComplete(s.cache.comp, read)
 
 	return true
 }
 
 func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
-	done := memprotocol.WriteDoneRsp{}
-	done.ID = s.cache.comp.NewID()
-	done.Src = s.cache.topPort().AsRemote()
-	done.Dst = trans.WriteMeta.Src
-	done.RspTo = trans.WriteMeta.ID
-	done.TrafficBytes = 4
-	done.TrafficClass = "rsp"
+	done := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+		ID:           s.cache.comp.NewID(),
+		Src:          s.cache.topPort().AsRemote(),
+		Dst:          trans.WriteMeta.Src,
+		RspTo:        trans.WriteMeta.ID,
+		TrafficBytes: 4,
+		TrafficClass: "rsp"}
 
 	if !s.cache.topPort().CanSend() {
 		return false
@@ -78,14 +75,8 @@ func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
 
 	trans.Removed = true
 
-	// Reconstruct write for tracing
-	write := memprotocol.WriteReq{
-		MsgMeta:   trans.WriteMeta,
-		Address:   trans.WriteAddress,
-		Data:      trans.WriteData,
-		DirtyMask: trans.WriteDirtyMask,
-		PID:       trans.WritePID,
-	}
+	// Trace the original write request.
+	write := trans.WriteMeta
 	tracing.TraceReqComplete(s.cache.comp, write)
 
 	return true

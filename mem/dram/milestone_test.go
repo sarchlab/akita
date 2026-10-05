@@ -78,13 +78,14 @@ var _ = Describe("DRAM admission milestones", func() {
 		tracing.CollectIncomingBufferTrace(topPort)
 	})
 
-	makeRead := func(addr uint64) memprotocol.ReadReq {
-		req := memprotocol.ReadReq{Address: addr, AccessByteSize: 4}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Agent")
-		req.Dst = topPort.AsRemote()
-		req.TrafficBytes = 12
-		req.TrafficClass = "memprotocol.ReadReq"
+	makeRead := func(addr uint64) messaging.Msg {
+		req := messaging.Msg{Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: 4},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("Agent"),
+			Dst:          topPort.AsRemote(),
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		return req
 	}
 
@@ -129,12 +130,13 @@ var _ = Describe("DRAM refresh-stall attribution", func() {
 		tracing.CollectTrace(memCtrl, rec)
 		tracing.CollectIncomingBufferTrace(topPort)
 
-		read := memprotocol.ReadReq{Address: 0x40, AccessByteSize: 4}
-		read.ID = sim.NewID()
-		read.Src = messaging.RemotePort("Agent")
-		read.Dst = topPort.AsRemote()
-		read.TrafficBytes = 12
-		read.TrafficClass = "memprotocol.ReadReq"
+		read := messaging.Msg{Payload: memprotocol.ReadReq{Address: 0x40, AccessByteSize: 4},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("Agent"),
+			Dst:          topPort.AsRemote(),
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		topPort.Deliver(read)
 
 		// Tick enough for the refresh window to open and close and the command

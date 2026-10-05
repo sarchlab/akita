@@ -37,15 +37,12 @@ func (m *sendMW) sendRsp() bool {
 		return false
 	}
 
-	out.Send(pingRsp{
-		MsgMeta: messaging.MsgMeta{
-			ID:    m.comp.NewID(),
-			Src:   out.AsRemote(),
-			Dst:   trans.ReqSrc,
-			RspTo: trans.ReqID,
-		},
-		SeqID: trans.SeqID,
-	})
+	out.Send(messaging.Msg{ID: m.comp.NewID(),
+		Src:   out.AsRemote(),
+		Dst:   trans.ReqSrc,
+		RspTo: trans.ReqID, Payload: pingRsp{
+			SeqID: trans.SeqID,
+		}})
 
 	state.CurrentTransactions = state.CurrentTransactions[1:]
 
@@ -65,14 +62,11 @@ func (m *sendMW) sendPing() bool {
 		return false
 	}
 
-	out.Send(pingReq{
-		MsgMeta: messaging.MsgMeta{
-			ID:  m.comp.NewID(),
-			Src: out.AsRemote(),
-			Dst: spec.PingDst,
-		},
-		SeqID: state.NextSeqID,
-	})
+	out.Send(messaging.Msg{ID: m.comp.NewID(),
+		Src: out.AsRemote(),
+		Dst: spec.PingDst, Payload: pingReq{
+			SeqID: state.NextSeqID,
+		}})
 
 	state.StartTimes = append(state.StartTimes, uint64(m.comp.CurrentTime()))
 	state.NextSeqID++

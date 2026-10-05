@@ -8,18 +8,20 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 
-	// msgMetaToFlits converts a MsgMeta into a slice of packetization.Flit entries.
 	"github.com/sarchlab/akita/v5/messaging"
 )
 
-func msgMetaToFlits(
+// msgToFlits converts a message into flit messages.
+func msgToFlits(
 	newID func() uint64,
-	meta messaging.MsgMeta,
+	meta messaging.Msg,
 	spec Spec,
 	networkPortRemote messaging.RemotePort,
 	defaultSwitchDst messaging.RemotePort,
 	msgTaskID uint64,
-) []packetization.Flit {
+) []messaging.Msg {
+	// Preserve the traffic-only network behavior until #495.
+	meta.Payload = nil
 	numFlit := 1
 	if meta.TrafficBytes > 0 {
 		trafficByte := meta.TrafficBytes
@@ -28,26 +30,16 @@ func msgMetaToFlits(
 		numFlit = (trafficByte-1)/spec.FlitByteSize + 1
 	}
 
-	flits := make([]packetization.Flit, numFlit)
+	flits := make([]messaging.Msg, numFlit)
 	for i := 0; i < numFlit; i++ {
-		flits[i] = packetization.Flit{
-			MsgMeta: messaging.MsgMeta{
-				ID:  newID(),
-				Src: networkPortRemote,
-				Dst: defaultSwitchDst,
-			},
-			SeqID:        i,
-			NumFlitInMsg: numFlit,
-			Msg: messaging.MsgMeta{
-				ID:           meta.ID,
-				Src:          meta.Src,
-				Dst:          meta.Dst,
-				RspTo:        meta.RspTo,
-				TrafficClass: meta.TrafficClass,
-				TrafficBytes: meta.TrafficBytes,
-			},
-			MsgTaskID: msgTaskID,
-		}
+		flits[i] = messaging.Msg{ID: newID(),
+			Src: networkPortRemote,
+			Dst: defaultSwitchDst, Payload: packetization.Flit{
+				SeqID:        i,
+				NumFlitInMsg: numFlit,
+				Msg:          meta,
+				MsgTaskID:    msgTaskID,
+			}}
 	}
 
 	return flits
@@ -101,7 +93,7 @@ func (m *outgoingMW) sendFlitOut() bool {
 		// accept it; charge that span to the flit_e2e task.
 		if m.comp.NumHooks() > 0 {
 			tracing.AddMilestone(m.comp, tracing.Milestone{
-				TaskID: flit.MsgMeta.ID,
+				TaskID: flit.ID,
 				Kind:   tracing.MilestoneKindNetworkBusy,
 				What:   m.comp.Name() + ".NetworkPort",
 			})
@@ -146,7 +138,7 @@ func (m *outgoingMW) prepareMsg() bool {
 		}
 
 		msg, _ := port.RetrieveOutgoing()
-		state.MsgOutBuf = append(state.MsgOutBuf, msg.Meta())
+		state.MsgOutBuf = append(state.MsgOutBuf, msg)
 
 		madeProgress = true
 	}
@@ -184,7 +176,7 @@ func (m *outgoingMW) prepareFlits() bool {
 		// each per-flit flit_e2e task. It is parented to the message's own ID so
 		// it nests under that req_out when one exists.
 		msgTaskID := m.comp.NewID()
-		flits := msgMetaToFlits(
+		flits := msgToFlits(
 			m.comp.NewID,
 			meta, spec, networkPortRemote, m.comp.Spec.DefaultSwitchDst, msgTaskID)
 
@@ -192,7 +184,7 @@ func (m *outgoingMW) prepareFlits() bool {
 
 		m.logMsgE2EStart(meta, msgTaskID)
 		for _, fs := range flits {
-			m.logFlitE2ETask(fs, false, &meta, msgTaskID)
+			m.logFlitE2ETask(fs, false, meta, msgTaskID)
 		}
 
 		madeProgress = true
@@ -202,7 +194,7 @@ func (m *outgoingMW) prepareFlits() bool {
 // logMsgE2EStart opens the per-message msg_e2e task that the receiving endpoint
 // closes once the message is reassembled. It is the parent of the message's
 // flit_e2e tasks.
-func (m *outgoingMW) logMsgE2EStart(meta messaging.MsgMeta, msgTaskID uint64) {
+func (m *outgoingMW) logMsgE2EStart(meta messaging.Msg, msgTaskID uint64) {
 	if m.comp.NumHooks() == 0 {
 		return
 	}
@@ -217,30 +209,23 @@ func (m *outgoingMW) logMsgE2EStart(meta messaging.MsgMeta, msgTaskID uint64) {
 }
 
 func (m *outgoingMW) logFlitE2ETask(
-	fs packetization.Flit, isEnd bool, meta *messaging.MsgMeta, msgE2ETaskID uint64,
+	fs messaging.Msg, isEnd bool, meta messaging.Msg, msgE2ETaskID uint64,
 ) {
 	if m.comp.NumHooks() == 0 {
 		return
 	}
 
 	if isEnd {
-		tracing.EndTask(m.comp, tracing.TaskEnd{ID: fs.MsgMeta.ID})
+		tracing.EndTask(m.comp, tracing.TaskEnd{ID: fs.ID})
 		return
 	}
 
-	flit := packetization.Flit{
-		MsgMeta:      fs.MsgMeta,
-		SeqID:        fs.SeqID,
-		NumFlitInMsg: fs.NumFlitInMsg,
-		Msg:          *meta,
-	}
-
 	tracing.StartTask(m.comp, tracing.TaskStart{
-		ID:       fs.MsgMeta.ID,
+		ID:       fs.ID,
 		ParentID: msgE2ETaskID,
 		Kind:     "flit_e2e",
 		What:     "flit_e2e",
 		Location: m.comp.Name() + ".FlitBuf",
-		Detail:   flit,
+		Detail:   fs,
 	})
 }

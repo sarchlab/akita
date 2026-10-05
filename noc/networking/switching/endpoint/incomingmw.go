@@ -8,11 +8,10 @@ import (
 
 	"github.com/sarchlab/akita/v5/tracing"
 
-	// incomingMW handles the network→device path:
-	// tryDeliver, assemble, recv.
 	"github.com/sarchlab/akita/v5/messaging"
 )
 
+// incomingMW handles the network→device path: tryDeliver, assemble, recv.
 type incomingMW struct {
 	comp        *Comp
 	devicePorts []messaging.Port
@@ -46,8 +45,8 @@ func (m *incomingMW) recv() bool {
 			return madeProgress
 		}
 
-		flit := receivedI.(packetization.Flit)
-		msg := &flit.Msg
+		flit := receivedI
+		msg := flit.Payload.(packetization.Flit).Msg
 
 		var assemblingIdx int = -1
 		for j, a := range state.AssemblingMsgs {
@@ -60,13 +59,13 @@ func (m *incomingMW) recv() bool {
 		if assemblingIdx < 0 {
 			state.AssemblingMsgs = append(state.AssemblingMsgs, assemblingMsgState{
 				MsgID:           msg.ID,
-				MsgTaskID:       flit.MsgTaskID,
+				MsgTaskID:       flit.Payload.(packetization.Flit).MsgTaskID,
 				Src:             msg.Src,
 				Dst:             msg.Dst,
 				RspTo:           msg.RspTo,
 				TrafficClass:    msg.TrafficClass,
 				TrafficBytes:    msg.TrafficBytes,
-				NumFlitRequired: flit.NumFlitInMsg,
+				NumFlitRequired: flit.Payload.(packetization.Flit).NumFlitInMsg,
 				NumFlitArrived:  1,
 			})
 		} else {
@@ -104,7 +103,7 @@ func (m *incomingMW) assemble() bool {
 			continue
 		}
 
-		assembled := messaging.MsgMeta{
+		assembled := messaging.Msg{
 			ID:           a.MsgID,
 			Src:          a.Src,
 			Dst:          a.Dst,
@@ -149,7 +148,8 @@ func (m *incomingMW) tryDeliver() bool {
 			panic(fmt.Sprintf("no dst port found for %s", dst))
 		}
 
-		msg := packetization.AssembledMsg{MsgMeta: meta}
+		msg := meta
+		msg.Payload = packetization.AssembledMsg{}
 
 		if !dstPort.CanDeliver() {
 			break
@@ -169,7 +169,7 @@ func (m *incomingMW) tryDeliver() bool {
 }
 
 func (m *incomingMW) logFlitE2ETaskFromFlit(
-	flit packetization.Flit, isEnd bool,
+	flit messaging.Msg, isEnd bool,
 ) {
 	if m.comp.NumHooks() == 0 {
 		return
@@ -180,17 +180,17 @@ func (m *incomingMW) logFlitE2ETaskFromFlit(
 		// was sent is its in-network transfer time (refined by the per-switch
 		// flit subtasks). Last milestone before the task ends.
 		tracing.AddMilestone(m.comp, tracing.Milestone{
-			TaskID: flit.MsgMeta.ID,
+			TaskID: flit.ID,
 			Kind:   tracing.MilestoneKindNetworkTransfer,
 			What:   m.comp.Name() + ".NetworkPort",
 		})
-		tracing.EndTask(m.comp, tracing.TaskEnd{ID: flit.MsgMeta.ID})
+		tracing.EndTask(m.comp, tracing.TaskEnd{ID: flit.ID})
 		return
 	}
 
 	tracing.StartTask(m.comp, tracing.TaskStart{
-		ID:       flit.MsgMeta.ID,
-		ParentID: flit.Msg.ID,
+		ID:       flit.ID,
+		ParentID: flit.Payload.(packetization.Flit).Msg.ID,
 		Kind:     "flit_e2e",
 		What:     "flit_e2e",
 		Location: m.comp.Name() + ".FlitBuf",

@@ -9,13 +9,11 @@ import (
 
 // pingReq is a ping request message.
 type pingReq struct {
-	messaging.MsgMeta
 	SeqID int
 }
 
 // pingRsp is a ping response message.
 type pingRsp struct {
-	messaging.MsgMeta
 	SeqID int
 }
 
@@ -56,14 +54,11 @@ func (m *pingMW) sendScheduledPings(now timing.VTimeInPicoSec) bool {
 			continue
 		}
 
-		pingMsg := pingReq{
-			MsgMeta: messaging.MsgMeta{
-				ID:  m.comp.NewID(),
-				Src: out.AsRemote(),
-				Dst: sp.Dst,
-			},
-			SeqID: state.NextSeqID,
-		}
+		pingMsg := messaging.Msg{ID: m.comp.NewID(),
+			Src: out.AsRemote(),
+			Dst: sp.Dst, Payload: pingReq{
+				SeqID: state.NextSeqID,
+			}}
 
 		out.Send(pingMsg)
 
@@ -95,15 +90,12 @@ func (m *pingMW) deliverPendingResponses(now timing.VTimeInPicoSec) bool {
 			continue
 		}
 
-		rsp := pingRsp{
-			MsgMeta: messaging.MsgMeta{
-				ID:    m.comp.NewID(),
-				Src:   out.AsRemote(),
-				Dst:   pr.Dst,
-				RspTo: pr.OrigMsgID,
-			},
-			SeqID: pr.SeqID,
-		}
+		rsp := messaging.Msg{ID: m.comp.NewID(),
+			Src:   out.AsRemote(),
+			Dst:   pr.Dst,
+			RspTo: pr.OrigMsgID, Payload: pingRsp{
+				SeqID: pr.SeqID,
+			}}
 
 		out.Send(rsp)
 		progress = true
@@ -124,19 +116,21 @@ func (m *pingMW) processIncoming(now timing.VTimeInPicoSec) bool {
 			break
 		}
 
-		switch msg := msg.(type) {
+		switch content := msg.Payload.(type) {
 		case pingReq:
+
 			state.PendingResponses = append(state.PendingResponses,
 				pendingResponse{
 					DeliverAt: now + 2_000_000_000_000,
 					Dst:       msg.Src,
-					OrigMsgID: msg.Meta().ID,
-					SeqID:     msg.SeqID,
+					OrigMsgID: msg.ID,
+					SeqID:     content.SeqID,
 				})
 			m.comp.WakeAt(now + 2_000_000_000_000)
 			progress = true
 		case pingRsp:
-			seqID := msg.SeqID
+
+			seqID := content.SeqID
 			startTime := state.StartTimes[seqID]
 			duration := now - startTime
 
@@ -147,3 +141,5 @@ func (m *pingMW) processIncoming(now timing.VTimeInPicoSec) bool {
 
 	return progress
 }
+
+var _ = messaging.DefineProtocol(messaging.RoleDef{Name: "peer", Sends: []any{pingReq{}, pingRsp{}}})

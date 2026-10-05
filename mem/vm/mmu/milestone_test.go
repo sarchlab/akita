@@ -91,15 +91,17 @@ var _ = Describe("MMU milestones", func() {
 		tracing.CollectIncomingBufferTrace(topPort)
 	})
 
-	makeReq := func(vAddr uint64) vmprotocol.TranslationReq {
-		req := vmprotocol.TranslationReq{}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Agent.Top")
-		req.Dst = topPort.AsRemote()
-		req.PID = 1
-		req.VAddr = vAddr
-		req.DeviceID = 0
-		req.TrafficClass = "vmprotocol.TranslationReq"
+	makeReq := func(vAddr uint64) messaging.Msg {
+		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+			PID:      1,
+			VAddr:    vAddr,
+			DeviceID: 0},
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Agent.Top"),
+			Dst: topPort.AsRemote(),
+
+			TrafficClass: "vmprotocol.TranslationReq"}
+
 		return req
 	}
 
@@ -150,7 +152,7 @@ var _ = Describe("MMU milestones", func() {
 		for i := 0; i < 64 && !sent; i++ {
 			mw.Handle(modelingtest.TickEvent(mmuComp))
 			if out, ok := topPort.RetrieveOutgoing(); ok {
-				if _, ok := out.(vmprotocol.TranslationRsp); ok {
+				if _, ok := out.Payload.(vmprotocol.TranslationRsp); ok {
 					sent = true
 				}
 			}

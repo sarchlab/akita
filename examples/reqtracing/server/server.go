@@ -14,13 +14,11 @@ import (
 
 // ReadReq asks the server for a read.
 type ReadReq struct {
-	messaging.MsgMeta
 	Seq int
 }
 
 // ReadRsp answers the ReadReq whose ID is RspTo.
 type ReadRsp struct {
-	messaging.MsgMeta
 	Seq int
 }
 
@@ -34,8 +32,8 @@ type Spec struct {
 
 // txn is a request being handled. Left counts the cycles until it is done.
 type txn struct {
-	Req  ReadReq `json:"req"`
-	Left int     `json:"left"`
+	Req  messaging.Msg `json:"req"`
+	Left int           `json:"left"`
 }
 
 // State is the server's runtime data.
@@ -88,7 +86,8 @@ func (m *serveMW) receive() bool {
 		return false
 	}
 
-	req := msg.(ReadReq)
+	_ = msg.Payload.(ReadReq)
+	req := msg
 	tracing.TraceReqReceive(m.comp, req)
 	m.comp.State.Pending = append(m.comp.State.Pending,
 		txn{Req: req, Left: m.comp.Spec.Latency})
@@ -123,18 +122,17 @@ func (m *serveMW) respond() bool {
 	}
 
 	req := s.Pending[0].Req
-	port.Send(ReadRsp{
-		MsgMeta: messaging.MsgMeta{
-			ID:    m.comp.NewID(),
-			Src:   port.AsRemote(),
-			Dst:   req.Src,
-			RspTo: req.ID,
-		},
-		Seq: req.Seq,
-	})
+	port.Send(messaging.Msg{ID: m.comp.NewID(),
+		Src:   port.AsRemote(),
+		Dst:   req.Src,
+		RspTo: req.ID, Payload: ReadRsp{
+			Seq: req.Payload.(ReadReq).Seq,
+		}})
 
 	tracing.TraceReqComplete(m.comp, req)
 	s.Pending = s.Pending[1:]
 
 	return true
 }
+
+var _ = messaging.DefineProtocol(messaging.RoleDef{Name: "peer", Sends: []any{ReadReq{}, ReadRsp{}}})

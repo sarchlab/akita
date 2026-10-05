@@ -57,12 +57,14 @@ func (m *agentMiddleware) processMsgRsp() bool {
 
 	state := &m.comp.State
 
-	switch msg := msgI.(type) {
+	switch content := msgI.Payload.(type) {
 	case memprotocol.WriteDoneRsp:
+		msg := msgI
+
 		if dumpLog {
 			write := state.PendingWriteReq[msg.RspTo]
 			log.Printf("%d, agent, write complete, 0x%X\n",
-				m.comp.CurrentTime(), write.Address)
+				m.comp.CurrentTime(), write.Payload.(memprotocol.WriteReq).Address)
 		}
 
 		req := state.PendingWriteReq[msg.RspTo]
@@ -75,11 +77,13 @@ func (m *agentMiddleware) processMsgRsp() bool {
 
 		return true
 	case memprotocol.DataReadyRsp:
+		msg := msgI
+
 		req := state.PendingReadReq[msg.RspTo]
 
 		if dumpLog {
 			log.Printf("%d, agent, read complete, 0x%X, %v\n",
-				m.comp.CurrentTime(), req.Address, msg.Data)
+				m.comp.CurrentTime(), req.Payload.(memprotocol.ReadReq).Address, content.Data)
 		}
 
 		m.checkReadResult(req, msg, state)
@@ -93,17 +97,19 @@ func (m *agentMiddleware) processMsgRsp() bool {
 
 		return true
 	default:
-		log.Panicf("cannot process message of type %s", reflect.TypeOf(msgI))
+		log.Panicf("cannot process message of type %s", reflect.TypeOf(msgI.Payload))
 	}
 
 	return false
 }
 
 func (m *agentMiddleware) checkReadResult(
-	read memprotocol.ReadReq,
-	dataReady memprotocol.DataReadyRsp,
+	read messaging.Msg,
+	dataReady messaging.Msg,
 	state *State,
 ) {
+	request := read.Payload.(memprotocol.ReadReq)
+
 	found := false
 
 	var (
@@ -111,9 +117,9 @@ func (m *agentMiddleware) checkReadResult(
 		value uint32
 	)
 
-	result := bytesToUint32(dataReady.Data)
+	result := bytesToUint32(dataReady.Payload.(memprotocol.DataReadyRsp).Data)
 
-	for i, value = range state.KnownMemValue[read.Address] {
+	for i, value = range state.KnownMemValue[request.Address] {
 		if value == result {
 			found = true
 			break
@@ -121,9 +127,9 @@ func (m *agentMiddleware) checkReadResult(
 	}
 
 	if found {
-		state.KnownMemValue[read.Address] = state.KnownMemValue[read.Address][i:]
+		state.KnownMemValue[request.Address] = state.KnownMemValue[request.Address][i:]
 	} else {
-		log.Panicf("Mismatch when read 0x%X", read.Address)
+		log.Panicf("Mismatch when read 0x%X", request.Address)
 	}
 }
 
@@ -167,15 +173,16 @@ func (m *agentMiddleware) doRead() bool {
 		return false
 	}
 
-	readReq := memprotocol.ReadReq{}
-	readReq.ID = m.comp.NewID()
-	readReq.Src = m.memPort().AsRemote()
-	readReq.Dst = m.lowModule().AsRemote()
-	readReq.Address = address
-	readReq.AccessByteSize = 4
-	readReq.PID = 1
-	readReq.TrafficBytes = 12
-	readReq.TrafficClass = "memprotocol.ReadReq"
+	readReq := messaging.Msg{Payload: memprotocol.ReadReq{
+		Address:        address,
+		AccessByteSize: 4,
+		PID:            1},
+		ID:  m.comp.NewID(),
+		Src: m.memPort().AsRemote(),
+		Dst: m.lowModule().AsRemote(),
+
+		TrafficBytes: 12,
+		TrafficClass: "memprotocol.ReadReq"}
 
 	if !m.memPort().CanSend() {
 		return false
@@ -219,7 +226,7 @@ func (m *agentMiddleware) isAddressInPendingReq(state *State, addr uint64) bool 
 
 func (m *agentMiddleware) isAddressInPendingWrite(state *State, addr uint64) bool {
 	for _, write := range state.PendingWriteReq {
-		if write.Address == addr {
+		if write.Payload.(memprotocol.WriteReq).Address == addr {
 			return true
 		}
 	}
@@ -229,7 +236,7 @@ func (m *agentMiddleware) isAddressInPendingWrite(state *State, addr uint64) boo
 
 func (m *agentMiddleware) isAddressInPendingRead(state *State, addr uint64) bool {
 	for _, read := range state.PendingReadReq {
-		if read.Address == addr {
+		if read.Payload.(memprotocol.ReadReq).Address == addr {
 			return true
 		}
 	}
@@ -250,15 +257,16 @@ func (m *agentMiddleware) doWrite() bool {
 	}
 
 	writeData := uint32ToBytes(data)
-	writeReq := memprotocol.WriteReq{}
-	writeReq.ID = m.comp.NewID()
-	writeReq.Src = m.memPort().AsRemote()
-	writeReq.Dst = m.lowModule().AsRemote()
-	writeReq.Address = address
-	writeReq.PID = 1
-	writeReq.Data = writeData
-	writeReq.TrafficBytes = len(writeData) + 12
-	writeReq.TrafficClass = "memprotocol.WriteReq"
+	writeReq := messaging.Msg{Payload: memprotocol.WriteReq{
+		Address: address,
+		PID:     1,
+		Data:    writeData},
+		ID:  m.comp.NewID(),
+		Src: m.memPort().AsRemote(),
+		Dst: m.lowModule().AsRemote(),
+
+		TrafficBytes: len(writeData) + 12,
+		TrafficClass: "memprotocol.WriteReq"}
 
 	if !m.memPort().CanSend() {
 		return false
@@ -278,7 +286,7 @@ func (m *agentMiddleware) doWrite() bool {
 
 	if dumpLog {
 		log.Printf("%d, agent, write, 0x%X, %v\n",
-			m.comp.CurrentTime(), address, writeReq.Data)
+			m.comp.CurrentTime(), address, writeReq.Payload.(memprotocol.WriteReq).Data)
 	}
 
 	return true

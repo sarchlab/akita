@@ -63,40 +63,46 @@ var _ = Describe("MMUCache control behavior", func() {
 		}
 	}
 
-	makeTranslationReq := func(vAddr uint64) vmprotocol.TranslationReq {
-		req := vmprotocol.TranslationReq{}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Requester")
-		req.Dst = topPort.AsRemote()
-		req.PID = 1
-		req.VAddr = vAddr
-		req.DeviceID = 1
-		req.TrafficClass = "vmprotocol.TranslationReq"
+	makeTranslationReq := func(vAddr uint64) messaging.Msg {
+		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+			PID:      1,
+			VAddr:    vAddr,
+			DeviceID: 1},
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Requester"),
+			Dst: topPort.AsRemote(),
+
+			TrafficClass: "vmprotocol.TranslationReq"}
+
 		return req
 	}
 
-	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
-		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Ctrl")
-		req.Dst = controlPort.AsRemote()
-		req.TrafficClass = "memcontrolprotocol.Req"
+	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
+		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("Ctrl"),
+			Dst:          controlPort.AsRemote(),
+			TrafficClass: "memcontrolprotocol.Req"}
+
 		return req
 	}
 
 	// makeBottomRsp fabricates the low module's response to a forwarded
 	// lookup, so the test can let an outstanding walk complete.
-	makeBottomRsp := func(fwd vmprotocol.TranslationReq) vmprotocol.TranslationRsp {
-		rsp := vmprotocol.TranslationRsp{
+	makeBottomRsp := func(fwd messaging.Msg) messaging.Msg {
+		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 			Page: vm.Page{
-				PID: fwd.PID, VAddr: fwd.VAddr, PAddr: 0x5000, Valid: true,
+				PID:   fwd.Payload.(vmprotocol.TranslationReq).PID,
+				VAddr: fwd.Payload.(vmprotocol.TranslationReq).VAddr,
+				PAddr: 0x5000, Valid: true,
 			},
-		}
-		rsp.ID = sim.NewID()
-		rsp.Src = messaging.RemotePort("LowModule")
-		rsp.Dst = bottomPort.AsRemote()
-		rsp.RspTo = fwd.ID
-		rsp.TrafficClass = "vmprotocol.TranslationRsp"
+		},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("LowModule"),
+			Dst:          bottomPort.AsRemote(),
+			RspTo:        fwd.ID,
+			TrafficClass: "vmprotocol.TranslationRsp"}
+
 		return rsp
 	}
 
@@ -114,7 +120,7 @@ var _ = Describe("MMUCache control behavior", func() {
 
 		// Forward every lookup down the Bottom port while still enabled (Drain
 		// itself admits no new Top traffic).
-		forwarded := []vmprotocol.TranslationReq{}
+		forwarded := []messaging.Msg{}
 		for i := 0; i < 256 && len(forwarded) < n; i++ {
 			modelingtest.Tick(comp)
 			for {
@@ -122,8 +128,9 @@ var _ = Describe("MMUCache control behavior", func() {
 				if !ok {
 					break
 				}
-				if r, ok := out.(vmprotocol.TranslationReq); ok {
-					forwarded = append(forwarded, r)
+				if _, ok := out.Payload.(vmprotocol.TranslationReq); ok {
+
+					forwarded = append(forwarded, out)
 				}
 			}
 		}
@@ -161,7 +168,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		// Now the cache can quiesce: every walk is answered up the Top port
 		// and only then is the async Drain acked.
 		upResponses := 0
-		var drainRsp memcontrolprotocol.Rsp
+		var drainRsp messaging.Msg
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
 			modelingtest.Tick(comp)
@@ -170,21 +177,23 @@ var _ = Describe("MMUCache control behavior", func() {
 				if !ok {
 					break
 				}
-				if _, ok := out.(vmprotocol.TranslationRsp); ok {
+				if _, ok := out.Payload.(vmprotocol.TranslationRsp); ok {
 					upResponses++
 				}
 			}
 			if out, ok := controlPort.RetrieveOutgoing(); ok {
-				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
-					rsp.Command == memcontrolprotocol.CmdDrain {
-					drainRsp = rsp
+				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+					Command == memcontrolprotocol.CmdDrain {
+					drainRsp = out
+
 					drainFound = true
 				}
+
 			}
 		}
 
 		Expect(drainFound).To(BeTrue())
-		Expect(drainRsp.Success).To(BeTrue())
+		Expect(drainRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
 		Expect(upResponses).To(Equal(n))
 		Expect(comp.State.OutstandingBottomReqs).To(BeEmpty())
@@ -198,12 +207,13 @@ var _ = Describe("MMUCache control behavior", func() {
 	It("drops a late bottom response that arrives after Reset", func() {
 		// Forward a lookup so a bottom request is outstanding.
 		topPort.Deliver(makeTranslationReq(0x1000))
-		var fwd vmprotocol.TranslationReq
+		var fwd messaging.Msg
 		gotFwd := false
 		for i := 0; i < 64 && !gotFwd; i++ {
 			modelingtest.Tick(comp)
 			if out, ok := bottomPort.RetrieveOutgoing(); ok {
-				fwd, gotFwd = out.(vmprotocol.TranslationReq)
+				_, gotFwd = out.Payload.(vmprotocol.TranslationReq)
+				fwd = out
 			}
 		}
 		Expect(gotFwd).To(BeTrue())
@@ -216,10 +226,11 @@ var _ = Describe("MMUCache control behavior", func() {
 		for i := 0; i < 64 && !resetAcked; i++ {
 			modelingtest.Tick(comp)
 			if out, ok := controlPort.RetrieveOutgoing(); ok {
-				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
-					rsp.Command == memcontrolprotocol.CmdReset {
+				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+					Command == memcontrolprotocol.CmdReset {
 					resetAcked = true
 				}
+
 			}
 		}
 		Expect(resetAcked).To(BeTrue())
@@ -260,18 +271,19 @@ var _ = Describe("MMUCache control behavior", func() {
 			reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 			controlPort.Deliver(reset)
 
-			var rsp memcontrolprotocol.Rsp
+			var rsp messaging.Msg
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				modelingtest.Tick(comp)
 				if out, ok := controlPort.RetrieveOutgoing(); ok {
-					rsp, found = out.(memcontrolprotocol.Rsp)
+					_, found = out.Payload.(memcontrolprotocol.Rsp)
+					rsp = out
 				}
 			}
 
 			Expect(found).To(BeTrue())
-			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
-			Expect(rsp.Success).To(BeTrue())
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			Expect(comp.State.CurrentState).To(Equal(mmuCacheStateEnable))
 			_, present7 := topPort.PeekIncoming()
@@ -297,7 +309,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		controlPort.Deliver(reset)
 
-		var rsps []memcontrolprotocol.Rsp
+		var rsps []messaging.Msg
 		for range 32 {
 			modelingtest.Tick(comp)
 			for {
@@ -305,16 +317,17 @@ var _ = Describe("MMUCache control behavior", func() {
 				if !ok {
 					break
 				}
-				if r, ok := out.(memcontrolprotocol.Rsp); ok {
-					rsps = append(rsps, r)
+				if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
+
+					rsps = append(rsps, out)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(memcontrolprotocol.CmdDrain))
+		Expect(rsps[0].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(memcontrolprotocol.CmdReset))
+		Expect(rsps[1].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(comp.State.CurrentState).To(Equal(mmuCacheStateEnable))
 	})

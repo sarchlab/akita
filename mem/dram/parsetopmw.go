@@ -39,15 +39,19 @@ func (m *parseTopMW) parseTop(spec *Spec, next *state) bool {
 
 	ts := transactionState{ID: m.comp.NewID()}
 
-	switch msg := msgI.(type) {
+	switch msgI.Payload.(type) {
 	case memprotocol.ReadReq:
+		msg := msgI
+
 		ts.HasRead = true
 		ts.ReadMsg = msg
 	case memprotocol.WriteReq:
+		msg := msgI
+
 		ts.HasWrite = true
 		ts.WriteMsg = msg
 	default:
-		panic(fmt.Sprintf("dram parseTop: unsupported message type %T", msgI))
+		panic(fmt.Sprintf("dram parseTop: unsupported message type %T", msgI.Payload))
 	}
 
 	// Split into sub-transactions

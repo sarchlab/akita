@@ -5,7 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mshr"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/lruset"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/queueing"
@@ -90,12 +89,12 @@ type setState struct {
 
 // mshrEntryState is a serializable representation of an mshrEntry.
 type mshrEntryState struct {
-	PID            uint32                      `json:"pid"`
-	VAddr          uint64                      `json:"vaddr"`
-	Requests       []vmprotocol.TranslationReq `json:"requests"`
-	HasReqToBottom bool                        `json:"has_req_to_bottom"`
-	ReqToBottom    vmprotocol.TranslationReq   `json:"req_to_bottom"`
-	Page           vm.Page                     `json:"page"`
+	PID            uint32          `json:"pid"`
+	VAddr          uint64          `json:"vaddr"`
+	Requests       []messaging.Msg `json:"requests"`
+	HasReqToBottom bool            `json:"has_req_to_bottom"`
+	ReqToBottom    messaging.Msg   `json:"req_to_bottom"`
+	Page           vm.Page         `json:"page"`
 }
 
 // GetPID returns the PID of the MSHR entry.
@@ -108,8 +107,8 @@ func (e mshrEntryState) GetAddress() uint64 { return e.VAddr }
 // of the tracing pipeline subtask opened (as a child of req_in) when the request
 // enters the pipeline at retrieve and closed when it is popped at lookup.
 type pipelineTLBReqState struct {
-	Msg            vmprotocol.TranslationReq `json:"msg"`
-	PipelineTaskID uint64                    `json:"pipeline_task_id"`
+	Msg            messaging.Msg `json:"msg"`
+	PipelineTaskID uint64        `json:"pipeline_task_id"`
 }
 
 // --- Free functions for Set operations (delegating to lruset) ---

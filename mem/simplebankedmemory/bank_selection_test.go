@@ -3,6 +3,7 @@ package simplebankedmemory
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
@@ -149,13 +150,15 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 			NotTo(Equal(selectBank(spec, bankSelectionAddress(spec, addrs[1]))))
 
 		for i, a := range addrs {
-			w := memprotocol.WriteReq{}
-			w.ID = sim.NewID()
-			w.Src = agent.port.AsRemote()
-			w.Dst = tp.AsRemote()
-			w.Address = a
-			w.Data = []byte{byte(i + 1), byte(i + 2), byte(i + 3), byte(i + 4)}
-			w.TrafficClass = "memprotocol.WriteReq"
+			w := messaging.Msg{Payload: memprotocol.WriteReq{
+				Address: a,
+				Data:    []byte{byte(i + 1), byte(i + 2), byte(i + 3), byte(i + 4)}},
+				ID:  sim.NewID(),
+				Src: agent.port.AsRemote(),
+				Dst: tp.AsRemote(),
+
+				TrafficClass: "memprotocol.WriteReq"}
+
 			agent.send(w)
 		}
 
@@ -164,22 +167,24 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 		}
 
 		for i, a := range addrs {
-			r := memprotocol.ReadReq{}
-			r.ID = sim.NewID()
-			r.Src = agent.port.AsRemote()
-			r.Dst = tp.AsRemote()
-			r.Address = a
-			r.AccessByteSize = 4
-			r.TrafficClass = "memprotocol.ReadReq"
+			r := messaging.Msg{Payload: memprotocol.ReadReq{
+				Address:        a,
+				AccessByteSize: 4},
+				ID:  sim.NewID(),
+				Src: agent.port.AsRemote(),
+				Dst: tp.AsRemote(),
+
+				TrafficClass: "memprotocol.ReadReq"}
+
 			agent.send(r)
 
 			for j := 0; j < 20; j++ {
 				modelingtest.Tick(memComp)
 			}
-
-			rsp, ok := agent.received[len(agent.received)-1].(memprotocol.DataReadyRsp)
+			_, ok := agent.received[len(agent.received)-1].Payload.(memprotocol.DataReadyRsp)
+			rsp := agent.received[len(agent.received)-1]
 			Expect(ok).To(BeTrue())
-			Expect(rsp.Data).To(Equal(
+			Expect(rsp.Payload.(memprotocol.DataReadyRsp).Data).To(Equal(
 				[]byte{byte(i + 1), byte(i + 2), byte(i + 3), byte(i + 4)}))
 		}
 	})

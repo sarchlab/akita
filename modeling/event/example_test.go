@@ -20,7 +20,7 @@ func Example() {
 		WithPorts(Ports{In: messaging.NewPort("Delay.In", 4, 4)}).
 		Build("Delay")
 
-	delay.Ports.In.Deliver(req{messaging.MsgMeta{ID: 1}})
+	delay.Ports.In.Deliver(messaging.Msg{ID: 1, Payload: req{}})
 
 	if err := engine.Run(); err != nil {
 		panic(err)

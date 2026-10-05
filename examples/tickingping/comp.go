@@ -9,13 +9,11 @@ import (
 
 // pingReq is a ping request message.
 type pingReq struct {
-	messaging.MsgMeta
 	SeqID int
 }
 
 // pingRsp is a ping response message.
 type pingRsp struct {
-	messaging.MsgMeta
 	SeqID int
 }
 
@@ -65,3 +63,5 @@ type Middlewares struct {
 
 // Comp is the tickingping component.
 type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
+
+var _ = messaging.DefineProtocol(messaging.RoleDef{Name: "peer", Sends: []any{pingReq{}, pingRsp{}}})

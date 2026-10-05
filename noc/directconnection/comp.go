@@ -119,7 +119,7 @@ func (c *Comp) forwardMany(port messaging.Port) bool {
 		if !ok {
 			break
 		}
-		dst := head.Meta().Dst
+		dst := head.Dst
 		dstPort := c.ports.getPortByName(dst)
 		if !dstPort.CanDeliver() {
 			break

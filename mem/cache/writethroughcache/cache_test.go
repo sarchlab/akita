@@ -105,44 +105,50 @@ var _ = Describe("Cache", func() {
 
 	It("should do read miss", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4})
-		read := memprotocol.ReadReq{}
-		read.ID = sim.NewID()
-		read.Src = cuPort.AsRemote()
-		read.Dst = c.Ports.Top.AsRemote()
-		read.Address = 0x100
-		read.AccessByteSize = 4
-		read.TrafficBytes = 12
-		read.TrafficClass = "req"
+		read := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x100,
+			AccessByteSize: 4},
+			ID:  sim.NewID(),
+			Src: cuPort.AsRemote(),
+			Dst: c.Ports.Top.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "req"}
+
 		c.Ports.Top.Deliver(read)
 
 		Expect(engine.Run()).To(Succeed())
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
-		dr := rsps[0].(memprotocol.DataReadyRsp)
-		Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
+		dr := rsps[0]
+		Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 
 	It("should do read miss coalesce", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
-		read1 := memprotocol.ReadReq{}
-		read1.ID = sim.NewID()
-		read1.Src = cuPort.AsRemote()
-		read1.Dst = c.Ports.Top.AsRemote()
-		read1.Address = 0x100
-		read1.AccessByteSize = 4
-		read1.TrafficBytes = 12
-		read1.TrafficClass = "req"
+		read1 := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x100,
+			AccessByteSize: 4},
+			ID:  sim.NewID(),
+			Src: cuPort.AsRemote(),
+			Dst: c.Ports.Top.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "req"}
+
 		c.Ports.Top.Deliver(read1)
 
-		read2 := memprotocol.ReadReq{}
-		read2.ID = sim.NewID()
-		read2.Src = cuPort.AsRemote()
-		read2.Dst = c.Ports.Top.AsRemote()
-		read2.Address = 0x104
-		read2.AccessByteSize = 4
-		read2.TrafficBytes = 12
-		read2.TrafficClass = "req"
+		read2 := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x104,
+			AccessByteSize: 4},
+			ID:  sim.NewID(),
+			Src: cuPort.AsRemote(),
+			Dst: c.Ports.Top.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "req"}
+
 		c.Ports.Top.Deliver(read2)
 
 		Expect(engine.Run()).To(Succeed())
@@ -152,10 +158,10 @@ var _ = Describe("Cache", func() {
 		// any order as long as both data values are received.
 		received := make(map[string]bool)
 		for _, msg := range drainResponses() {
-			dr := msg.(memprotocol.DataReadyRsp)
-			if string(dr.Data) == string([]byte{1, 2, 3, 4}) {
+			dr := msg
+			if string(dr.Payload.(memprotocol.DataReadyRsp).Data) == string([]byte{1, 2, 3, 4}) {
 				received["1234"] = true
-			} else if string(dr.Data) == string([]byte{5, 6, 7, 8}) {
+			} else if string(dr.Payload.(memprotocol.DataReadyRsp).Data) == string([]byte{5, 6, 7, 8}) {
 				received["5678"] = true
 			}
 		}
@@ -166,86 +172,94 @@ var _ = Describe("Cache", func() {
 
 	It("should do read hit", func() {
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
-		read1 := memprotocol.ReadReq{}
-		read1.ID = sim.NewID()
-		read1.Src = cuPort.AsRemote()
-		read1.Dst = c.Ports.Top.AsRemote()
-		read1.Address = 0x100
-		read1.AccessByteSize = 4
-		read1.TrafficBytes = 12
-		read1.TrafficClass = "req"
+		read1 := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x100,
+			AccessByteSize: 4},
+			ID:  sim.NewID(),
+			Src: cuPort.AsRemote(),
+			Dst: c.Ports.Top.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "req"}
+
 		c.Ports.Top.Deliver(read1)
 		Expect(engine.Run()).To(Succeed())
 		t1 := engine.CurrentTime()
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
-		Expect(rsps[0].(memprotocol.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
+		Expect(rsps[0].Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
 
-		read2 := memprotocol.ReadReq{}
-		read2.ID = sim.NewID()
-		read2.Src = cuPort.AsRemote()
-		read2.Dst = c.Ports.Top.AsRemote()
-		read2.Address = 0x104
-		read2.AccessByteSize = 4
-		read2.TrafficBytes = 12
-		read2.TrafficClass = "req"
+		read2 := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x104,
+			AccessByteSize: 4},
+			ID:  sim.NewID(),
+			Src: cuPort.AsRemote(),
+			Dst: c.Ports.Top.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "req"}
+
 		c.Ports.Top.Deliver(read2)
 		Expect(engine.Run()).To(Succeed())
 		t2 := engine.CurrentTime()
 
 		rsps = drainResponses()
 		Expect(rsps).To(HaveLen(1))
-		Expect(rsps[0].(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
+		Expect(rsps[0].Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
 
 		Expect(t2 - t1).To(BeNumerically("<", t1))
 	})
 
 	It("should write partial line", func() {
-		write := memprotocol.WriteReq{}
-		write.ID = sim.NewID()
-		write.Src = cuPort.AsRemote()
-		write.Dst = c.Ports.Top.AsRemote()
-		write.Address = 0x100
-		write.Data = []byte{1, 2, 3, 4}
-		write.TrafficBytes = 4 + 12
-		write.TrafficClass = "req"
+		write := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address: 0x100,
+			Data:    []byte{1, 2, 3, 4}},
+			ID:  sim.NewID(),
+			Src: cuPort.AsRemote(),
+			Dst: c.Ports.Top.AsRemote(),
+
+			TrafficBytes: 4 + 12,
+			TrafficClass: "req"}
+
 		c.Ports.Top.Deliver(write)
 
 		Expect(engine.Run()).To(Succeed())
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
-		Expect(rsps[0].Meta().RspTo).To(Equal(write.ID))
+		Expect(rsps[0].RspTo).To(Equal(write.ID))
 
 		data := dramStorage.Read(0x100, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 
 	It("should write full line", func() {
-		write := memprotocol.WriteReq{}
-		write.ID = sim.NewID()
-		write.Src = cuPort.AsRemote()
-		write.Dst = c.Ports.Top.AsRemote()
-		write.Address = 0x100
-		write.Data = []byte{
-			1, 2, 3, 4, 5, 6, 7, 8,
-			1, 2, 3, 4, 5, 6, 7, 8,
-			1, 2, 3, 4, 5, 6, 7, 8,
-			1, 2, 3, 4, 5, 6, 7, 8,
-			1, 2, 3, 4, 5, 6, 7, 8,
-			1, 2, 3, 4, 5, 6, 7, 8,
-			1, 2, 3, 4, 5, 6, 7, 8,
-			1, 2, 3, 4, 5, 6, 7, 8,
-		}
-		write.TrafficBytes = 64 + 12
-		write.TrafficClass = "req"
+		write := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address: 0x100,
+			Data: []byte{
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+			}},
+			ID:  sim.NewID(),
+			Src: cuPort.AsRemote(),
+			Dst: c.Ports.Top.AsRemote(),
+
+			TrafficBytes: 64 + 12,
+			TrafficClass: "req"}
+
 		c.Ports.Top.Deliver(write)
 		Expect(engine.Run()).To(Succeed())
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
-		Expect(rsps[0].Meta().RspTo).To(Equal(write.ID))
+		Expect(rsps[0].RspTo).To(Equal(write.ID))
 
 		data := dramStorage.Read(0x100, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))

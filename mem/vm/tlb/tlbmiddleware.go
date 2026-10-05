@@ -79,7 +79,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		})
 
 		msgI, _ := m.topPort().RetrieveIncoming()
-		msg := msgI.(vmprotocol.TranslationReq)
+		msg := msgI
 
 		// Admit the request: open req_in at retrieve, then open the pipeline
 		// subtask as a child of req_in so the pipeline latency is attributed
@@ -205,14 +205,14 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	mshrEntry := &next.RespondingMSHRData
 	page := mshrEntry.Page
 	reqMsg := mshrEntry.Requests[0]
-	rspToTop := vmprotocol.TranslationRsp{
+	rspToTop := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 		Page: page,
-	}
-	rspToTop.ID = m.comp.NewID()
-	rspToTop.Src = m.topPort().AsRemote()
-	rspToTop.Dst = reqMsg.Src
-	rspToTop.RspTo = reqMsg.ID
-	rspToTop.TrafficClass = "vmprotocol.TranslationRsp"
+	},
+		ID:           m.comp.NewID(),
+		Src:          m.topPort().AsRemote(),
+		Dst:          reqMsg.Src,
+		RspTo:        reqMsg.ID,
+		TrafficClass: "vmprotocol.TranslationRsp"}
 
 	if !m.topPort().CanSend() {
 		return false
@@ -221,7 +221,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	m.topPort().Send(rspToTop)
 
 	tracing.AddMilestone(m.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(&reqMsg, m.comp),
+		TaskID: tracing.MsgIDAtReceiver(reqMsg, m.comp),
 		Kind:   tracing.MilestoneKindNetworkBusy,
 		What:   m.topPort().Name(),
 	})
@@ -231,22 +231,24 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 		next.HasRespondingMSHR = false
 	}
 
-	tracing.TraceReqComplete(m.comp, &reqMsg)
+	tracing.TraceReqComplete(m.comp, reqMsg)
 
 	return true
 }
 
-func (m *tlbMiddleware) lookup(msg vmprotocol.TranslationReq) bool {
+func (m *tlbMiddleware) lookup(msg messaging.Msg) bool {
+	request := msg.Payload.(vmprotocol.TranslationReq)
+
 	spec := m.comp.Spec
 	next := &m.comp.State
 
-	_, found := mshrGetEntry(next.MSHREntries, msg.PID, msg.VAddr)
+	_, found := mshrGetEntry(next.MSHREntries, request.PID, request.VAddr)
 	if found {
 		return m.processTLBMSHRHit(msg)
 	}
 
-	setID := vAddrToSetID(msg.VAddr, spec)
-	wayID, page, setFound := setLookup(&next.Sets[setID], msg.PID, msg.VAddr)
+	setID := vAddrToSetID(request.VAddr, spec)
+	wayID, page, setFound := setLookup(&next.Sets[setID], request.PID, request.VAddr)
 
 	if setFound && page.Valid {
 		return m.handleTranslationHit(msg, setID, wayID, page)
@@ -255,7 +257,7 @@ func (m *tlbMiddleware) lookup(msg vmprotocol.TranslationReq) bool {
 }
 
 func (m *tlbMiddleware) handleTranslationHit(
-	msg vmprotocol.TranslationReq,
+	msg messaging.Msg,
 	setID, wayID int,
 	page vm.Page,
 ) bool {
@@ -282,7 +284,7 @@ func (m *tlbMiddleware) handleTranslationHit(
 	return true
 }
 
-func (m *tlbMiddleware) handleTranslationMiss(msg vmprotocol.TranslationReq) bool {
+func (m *tlbMiddleware) handleTranslationMiss(msg messaging.Msg) bool {
 	next := &m.comp.State
 	spec := m.comp.Spec
 
@@ -313,17 +315,17 @@ func vAddrToSetID(vAddr uint64, spec Spec) (setID int) {
 }
 
 func (m *tlbMiddleware) sendRspToTop(
-	msg vmprotocol.TranslationReq,
+	msg messaging.Msg,
 	page vm.Page,
 ) bool {
-	rsp := vmprotocol.TranslationRsp{
+	rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 		Page: page,
-	}
-	rsp.ID = m.comp.NewID()
-	rsp.Src = m.topPort().AsRemote()
-	rsp.Dst = msg.Src
-	rsp.RspTo = msg.ID
-	rsp.TrafficClass = "vmprotocol.TranslationRsp"
+	},
+		ID:           m.comp.NewID(),
+		Src:          m.topPort().AsRemote(),
+		Dst:          msg.Src,
+		RspTo:        msg.ID,
+		TrafficClass: "vmprotocol.TranslationRsp"}
 
 	if !m.topPort().CanSend() {
 		return false
@@ -339,10 +341,12 @@ func (m *tlbMiddleware) sendRspToTop(
 }
 
 func (m *tlbMiddleware) processTLBMSHRHit(
-	msg vmprotocol.TranslationReq,
+	msg messaging.Msg,
 ) bool {
+	request := msg.Payload.(vmprotocol.TranslationReq)
+
 	next := &m.comp.State
-	idx, found := mshrGetEntry(next.MSHREntries, msg.PID, msg.VAddr)
+	idx, found := mshrGetEntry(next.MSHREntries, request.PID, request.VAddr)
 	if !found {
 		return false
 	}
@@ -356,18 +360,21 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 	return true
 }
 
-func (m *tlbMiddleware) fetchBottom(msg vmprotocol.TranslationReq) bool {
+func (m *tlbMiddleware) fetchBottom(msg messaging.Msg) bool {
+	request := msg.Payload.(vmprotocol.TranslationReq)
+
 	spec := m.comp.Spec
 	mapper := m.comp.Resources.TranslationProviderMapper
 
-	fetchBottom := vmprotocol.TranslationReq{}
-	fetchBottom.ID = m.comp.NewID()
-	fetchBottom.Src = m.bottomPort().AsRemote()
-	fetchBottom.Dst = findTranslationPort(mapper, msg.VAddr)
-	fetchBottom.PID = msg.PID
-	fetchBottom.VAddr = msg.VAddr
-	fetchBottom.DeviceID = msg.DeviceID
-	fetchBottom.TrafficClass = "vmprotocol.TranslationReq"
+	fetchBottom := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		PID:      request.PID,
+		VAddr:    request.VAddr,
+		DeviceID: request.DeviceID},
+		ID:  m.comp.NewID(),
+		Src: m.bottomPort().AsRemote(),
+		Dst: findTranslationPort(mapper, request.VAddr),
+
+		TrafficClass: "vmprotocol.TranslationReq"}
 
 	if !m.bottomPort().CanSend() {
 		return false
@@ -383,7 +390,7 @@ func (m *tlbMiddleware) fetchBottom(msg vmprotocol.TranslationReq) bool {
 
 	next := &m.comp.State
 	var idx int
-	next.MSHREntries, idx = mshrAdd(next.MSHREntries, spec.MSHRSize, msg.PID, msg.VAddr)
+	next.MSHREntries, idx = mshrAdd(next.MSHREntries, spec.MSHRSize, request.PID, request.VAddr)
 	next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, msg)
 	next.MSHREntries[idx].HasReqToBottom = true
 	next.MSHREntries[idx].ReqToBottom = fetchBottom
@@ -404,9 +411,9 @@ func (m *tlbMiddleware) parseBottom() bool {
 		return false
 	}
 
-	item := itemI.(vmprotocol.TranslationRsp)
+	item := itemI
 	spec := m.comp.Spec
-	page := item.Page
+	page := item.Payload.(vmprotocol.TranslationRsp).Page
 
 	mshrIdx, found := mshrGetEntry(next.MSHREntries, page.PID, page.VAddr)
 	if !found || next.MSHREntries[mshrIdx].ReqToBottom.ID != item.RspTo {
@@ -452,7 +459,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 	m.bottomPort().RetrieveIncoming()
 
 	if next.RespondingMSHRData.HasReqToBottom {
-		tracing.TraceReqFinalize(m.comp, &reqToBottom)
+		tracing.TraceReqFinalize(m.comp, reqToBottom)
 	}
 
 	return true

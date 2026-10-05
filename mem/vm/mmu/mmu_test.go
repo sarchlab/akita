@@ -75,14 +75,16 @@ var _ = Describe("MMU", func() {
 
 	Context("parse top", func() {
 		It("should process translation request", func() {
-			translationReq := vmprotocol.TranslationReq{}
-			translationReq.ID = sim.NewID()
-			translationReq.Src = messaging.RemotePort("Agent.Top")
-			translationReq.Dst = topPort.AsRemote()
-			translationReq.PID = 1
-			translationReq.VAddr = 0x100000100
-			translationReq.DeviceID = 0
-			translationReq.TrafficClass = "vmprotocol.TranslationReq"
+			translationReq := messaging.Msg{Payload: vmprotocol.TranslationReq{
+				PID:      1,
+				VAddr:    0x100000100,
+				DeviceID: 0},
+				ID:  sim.NewID(),
+				Src: messaging.RemotePort("Agent.Top"),
+				Dst: topPort.AsRemote(),
+
+				TrafficClass: "vmprotocol.TranslationReq"}
+
 			topPort.Deliver(translationReq)
 
 			translationMWRef.parseFromTop()
@@ -157,8 +159,8 @@ var _ = Describe("MMU", func() {
 			Expect(next.WalkingTranslations).To(HaveLen(0))
 
 			rsp, _ := topPort.RetrieveOutgoing()
-			Expect(rsp).To(BeAssignableToTypeOf(vmprotocol.TranslationRsp{}))
-			Expect(rsp.(vmprotocol.TranslationRsp).Page).To(Equal(page))
+			Expect(rsp).To(BeAssignableToTypeOf(messaging.Msg{Payload: vmprotocol.TranslationRsp{}}))
+			Expect(rsp.Payload.(vmprotocol.TranslationRsp).Page).To(Equal(page))
 		})
 
 		It("should stall if cannot send to top", func() {
@@ -175,10 +177,11 @@ var _ = Describe("MMU", func() {
 			}
 			pageTable.Insert(page)
 
-			dummy := vmprotocol.TranslationRsp{}
-			dummy.Src = topPort.AsRemote()
-			dummy.Dst = messaging.RemotePort("Agent.Top")
-			dummy.TrafficClass = "vmprotocol.TranslationRsp"
+			dummy := messaging.Msg{Payload: vmprotocol.TranslationRsp{},
+				Src:          topPort.AsRemote(),
+				Dst:          messaging.RemotePort("Agent.Top"),
+				TrafficClass: "vmprotocol.TranslationRsp"}
+
 			topPort.Send(dummy)
 
 			mmuComp.State = state{
@@ -244,14 +247,16 @@ var _ = Describe("MMU Integration", func() {
 		}
 		pageTable.Insert(page)
 
-		req := vmprotocol.TranslationReq{}
-		req.ID = sim.NewID()
-		req.Src = agentPort.AsRemote()
-		req.Dst = topPort.AsRemote()
-		req.PID = 1
-		req.VAddr = 0x1000
-		req.DeviceID = 0
-		req.TrafficClass = "vmprotocol.TranslationReq"
+		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+			PID:      1,
+			VAddr:    0x1000,
+			DeviceID: 0},
+			ID:  sim.NewID(),
+			Src: agentPort.AsRemote(),
+			Dst: topPort.AsRemote(),
+
+			TrafficClass: "vmprotocol.TranslationReq"}
+
 		topPort.Deliver(req)
 
 		// Drive enough ticks for the request to be parsed, walked, and
@@ -262,8 +267,8 @@ var _ = Describe("MMU Integration", func() {
 
 		rspI, _ := topPort.RetrieveOutgoing()
 		Expect(rspI).ToNot(BeNil())
-		rsp := rspI.(vmprotocol.TranslationRsp)
-		Expect(rsp.Page).To(Equal(page))
+		rsp := rspI
+		Expect(rsp.Payload.(vmprotocol.TranslationRsp).Page).To(Equal(page))
 		Expect(rsp.RspTo).To(Equal(req.ID))
 	})
 })

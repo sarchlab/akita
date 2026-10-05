@@ -110,7 +110,7 @@ var _ = Describe("Bankstage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			})
 
-			readMeta := messaging.MsgMeta{
+			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -163,7 +163,7 @@ var _ = Describe("Bankstage", func() {
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked = true
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
-			writeMeta := messaging.MsgMeta{
+			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 64 + 12,
 				TrafficClass: "req",
@@ -284,7 +284,7 @@ var _ = Describe("Bankstage", func() {
 		})
 
 		Context("with an MSHR-coalesced write waiter", func() {
-			var coalescedWriteMeta messaging.MsgMeta
+			var coalescedWriteMeta messaging.Msg
 
 			BeforeEach(func() {
 				next := &c.comp.State
@@ -292,7 +292,7 @@ var _ = Describe("Bankstage", func() {
 				// Fetcher is the read at index 0 (set up above). Append
 				// the coalesced write that depends on the fetcher's
 				// merged fill landing in storage.
-				coalescedWriteMeta = messaging.MsgMeta{
+				coalescedWriteMeta = messaging.Msg{
 					ID:           c.comp.NewID(),
 					TrafficBytes: 4 + 12,
 					TrafficClass: "req",

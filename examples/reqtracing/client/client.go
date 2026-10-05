@@ -30,7 +30,7 @@ type State struct {
 	NextSeq int `json:"next_seq"`
 
 	// InFlight holds the requests awaiting a response, keyed by ID.
-	InFlight map[uint64]server.ReadReq `json:"in_flight"`
+	InFlight map[uint64]messaging.Msg `json:"in_flight"`
 }
 
 // Ports holds the client's only port.
@@ -56,7 +56,7 @@ var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewar
 }
 
 func newState(_ *Comp) State {
-	return State{InFlight: map[uint64]server.ReadReq{}}
+	return State{InFlight: map[uint64]messaging.Msg{}}
 }
 
 func newMiddlewares(c *Comp) Middlewares {
@@ -84,14 +84,11 @@ func (m *requestMW) send() bool {
 		return false
 	}
 
-	req := server.ReadReq{
-		MsgMeta: messaging.MsgMeta{
-			ID:  m.comp.NewID(),
-			Src: port.AsRemote(),
-			Dst: spec.Dst,
-		},
-		Seq: s.NextSeq,
-	}
+	req := messaging.Msg{ID: m.comp.NewID(),
+		Src: port.AsRemote(),
+		Dst: spec.Dst, Payload: server.ReadReq{
+			Seq: s.NextSeq,
+		}}
 
 	// The req_out task is keyed by the request's own message ID.
 	tracing.TraceReqInitiate(m.comp, req, 0)
@@ -112,7 +109,8 @@ func (m *requestMW) receive() bool {
 		return false
 	}
 
-	rsp := msg.(server.ReadRsp)
+	_ = msg.Payload.(server.ReadRsp)
+	rsp := msg
 	if req, ok := s.InFlight[rsp.RspTo]; ok {
 		tracing.TraceReqFinalize(m.comp, req)
 		delete(s.InFlight, rsp.RspTo)

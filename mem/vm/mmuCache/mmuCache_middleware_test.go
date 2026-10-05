@@ -55,14 +55,16 @@ var _ = Describe("MMUCacheMiddleware", func() {
 	})
 
 	It("should send full latency on miss", func() {
-		req := vmprotocol.TranslationReq{}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("UpModule")
-		req.Dst = topPort.AsRemote()
-		req.PID = 1
-		req.VAddr = 0x2000
-		req.DeviceID = 3
-		req.TrafficClass = "vmprotocol.TranslationReq"
+		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+			PID:      1,
+			VAddr:    0x2000,
+			DeviceID: 3},
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("UpModule"),
+			Dst: topPort.AsRemote(),
+
+			TrafficClass: "vmprotocol.TranslationReq"}
+
 		topPort.Deliver(req)
 
 		madeProgress := mw.lookup()
@@ -70,36 +72,38 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		Expect(madeProgress).To(BeTrue())
 
 		sent, _ := bottomPort.RetrieveOutgoing()
-		sentReq, ok := sent.(vmprotocol.TranslationReq)
+		_, ok := sent.Payload.(vmprotocol.TranslationReq)
+		sentReq := sent
 		Expect(ok).To(BeTrue())
-		Expect(sentReq.TransLatency).To(Equal(uint64(200)))
+		Expect(sentReq.Payload.(vmprotocol.TranslationReq).TransLatency).To(Equal(uint64(200)))
 		Expect(sentReq.Dst).To(Equal(messaging.RemotePort("LowModule")))
 		Expect(sentReq.Src).To(Equal(bottomPort.AsRemote()))
-		Expect(sentReq.PID).To(Equal(vm.PID(1)))
-		Expect(sentReq.VAddr).To(Equal(uint64(0x2000)))
-		Expect(sentReq.DeviceID).To(Equal(uint64(3)))
+		Expect(sentReq.Payload.(vmprotocol.TranslationReq).PID).To(Equal(vm.PID(1)))
+		Expect(sentReq.Payload.(vmprotocol.TranslationReq).VAddr).To(Equal(uint64(0x2000)))
+		Expect(sentReq.Payload.(vmprotocol.TranslationReq).DeviceID).To(Equal(uint64(3)))
 		_, present0 := topPort.PeekIncoming()
 		Expect(present0).To(BeFalse())
 	})
 
 	It("should reduce latency on upper-level hit", func() {
-		req := vmprotocol.TranslationReq{}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("UpModule")
-		req.Dst = topPort.AsRemote()
-		req.PID = 1
-		req.VAddr = 0x3000
-		req.DeviceID = 2
-		req.TrafficClass = "vmprotocol.TranslationReq"
+		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+			PID:      1,
+			VAddr:    0x3000,
+			DeviceID: 2},
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("UpModule"),
+			Dst: topPort.AsRemote(),
+
+			TrafficClass: "vmprotocol.TranslationReq"}
 
 		// Compute seg and wayID for level 1
 		spec := comp.Spec
-		seg := segForLevelSpec(spec, 1, req.VAddr)
+		seg := segForLevelSpec(spec, 1, req.Payload.(vmprotocol.TranslationReq).VAddr)
 		wayID := setIDForSegSpec(spec, seg)
 
 		// Update the set in state
 		next := &comp.State
-		setUpdate(&next.Table[1], wayID, req.PID, seg)
+		setUpdate(&next.Table[1], wayID, req.Payload.(vmprotocol.TranslationReq).PID, seg)
 
 		topPort.Deliver(req)
 
@@ -108,9 +112,10 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		Expect(madeProgress).To(BeTrue())
 
 		sent, _ := bottomPort.RetrieveOutgoing()
-		sentReq, ok := sent.(vmprotocol.TranslationReq)
+		_, ok := sent.Payload.(vmprotocol.TranslationReq)
+		sentReq := sent
 		Expect(ok).To(BeTrue())
-		Expect(sentReq.TransLatency).To(Equal(uint64(100)))
+		Expect(sentReq.Payload.(vmprotocol.TranslationReq).TransLatency).To(Equal(uint64(100)))
 	})
 
 	It("should forward response and update cache", func() {
@@ -120,14 +125,15 @@ var _ = Describe("MMUCacheMiddleware", func() {
 			PAddr: 0x5000,
 			Valid: true,
 		}
-		rsp := vmprotocol.TranslationRsp{
+		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 			Page: page,
-		}
-		rsp.ID = sim.NewID()
-		rsp.Src = messaging.RemotePort("LowModule")
-		rsp.Dst = bottomPort.AsRemote()
-		rsp.RspTo = sim.NewID()
-		rsp.TrafficClass = "vmprotocol.TranslationRsp"
+		},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("LowModule"),
+			Dst:          bottomPort.AsRemote(),
+			RspTo:        sim.NewID(),
+			TrafficClass: "vmprotocol.TranslationRsp"}
+
 		bottomPort.Deliver(rsp)
 
 		// Mark the response's request as outstanding, as a real forward would.
@@ -140,11 +146,12 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		Expect(madeProgress).To(BeTrue())
 
 		sent, _ := topPort.RetrieveOutgoing()
-		sentRsp, ok := sent.(vmprotocol.TranslationRsp)
+		_, ok := sent.Payload.(vmprotocol.TranslationRsp)
+		sentRsp := sent
 		Expect(ok).To(BeTrue())
 		Expect(sentRsp.Dst).To(Equal(messaging.RemotePort("UpModule")))
 		Expect(sentRsp.Src).To(Equal(topPort.AsRemote()))
-		Expect(sentRsp.Page).To(Equal(page))
+		Expect(sentRsp.Payload.(vmprotocol.TranslationRsp).Page).To(Equal(page))
 
 		for level := 0; level < spec.NumLevels; level++ {
 			seg := segForLevelSpec(spec, level, page.VAddr)
@@ -182,14 +189,15 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		}
 
 		ctrl := comp.Middlewares.Ctrl
-		req := memcontrolprotocol.Req{
+		req := messaging.Msg{Payload: memcontrolprotocol.Req{
 			Command:   memcontrolprotocol.CmdInvalidate,
 			Addresses: []uint64{dropAddr},
-		}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Requester")
-		req.Dst = controlPort.AsRemote()
-		req.TrafficClass = "memcontrolprotocol.Req"
+		},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("Requester"),
+			Dst:          controlPort.AsRemote(),
+			TrafficClass: "memcontrolprotocol.Req"}
+
 		controlPort.Deliver(req)
 
 		Expect(ctrl.handleIncomingCommands()).To(BeTrue())
@@ -207,9 +215,9 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 		sentRspValue, _ := controlPort.RetrieveOutgoing()
 
-		sentRsp := sentRspValue.(memcontrolprotocol.Rsp)
-		Expect(sentRsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
-		Expect(sentRsp.Success).To(BeTrue())
+		sentRsp := sentRspValue
+		Expect(sentRsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdInvalidate))
+		Expect(sentRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 		Expect(sentRsp.Dst).To(Equal(messaging.RemotePort("Requester")))
 		Expect(sentRsp.Src).To(Equal(controlPort.AsRemote()))
 	})

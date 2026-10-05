@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/messaging"
 
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -137,19 +138,21 @@ func (wb *writeBufferStage) fetchFromBottom(
 
 	spec := wb.cache.comp.Spec
 	lowModulePort := wb.cache.findPort(trans.FetchAddress)
-	read := memprotocol.ReadReq{}
-	read.ID = wb.cache.comp.NewID()
-	read.Src = wb.cache.bottomPort().AsRemote()
-	read.Dst = lowModulePort
-	read.PID = trans.FetchPID
-	read.Address = trans.FetchAddress
-	read.AccessByteSize = 1 << spec.Log2BlockSize
-	read.TrafficBytes = 12
-	read.TrafficClass = "memprotocol.ReadReq"
+	read := messaging.Msg{Payload: memprotocol.ReadReq{
+		PID:            trans.FetchPID,
+		Address:        trans.FetchAddress,
+		AccessByteSize: 1 << spec.Log2BlockSize},
+		ID:  wb.cache.comp.NewID(),
+		Src: wb.cache.bottomPort().AsRemote(),
+		Dst: lowModulePort,
+
+		TrafficBytes: 12,
+		TrafficClass: "memprotocol.ReadReq"}
+
 	wb.cache.bottomPort().Send(read)
 
 	trans.HasFetchReadReq = true
-	trans.FetchReadReqMeta = read.MsgMeta
+	trans.FetchReadReqMeta = read
 	next.InflightFetchIndices = append(next.InflightFetchIndices, transIdx)
 
 	next.WriteBufferBuf.Pop()
@@ -242,20 +245,22 @@ func (wb *writeBufferStage) write() bool {
 	}
 
 	lowModulePort := wb.cache.findPort(trans.EvictingAddr)
-	write := memprotocol.WriteReq{}
-	write.ID = wb.cache.comp.NewID()
-	write.Src = wb.cache.bottomPort().AsRemote()
-	write.Dst = lowModulePort
-	write.PID = trans.EvictingPID
-	write.Address = trans.EvictingAddr
-	write.Data = trans.EvictingData
-	write.DirtyMask = trans.EvictingDirtyMask
-	write.TrafficBytes = len(trans.EvictingData) + 12
-	write.TrafficClass = "memprotocol.WriteReq"
+	write := messaging.Msg{Payload: memprotocol.WriteReq{
+		PID:       trans.EvictingPID,
+		Address:   trans.EvictingAddr,
+		Data:      trans.EvictingData,
+		DirtyMask: trans.EvictingDirtyMask},
+		ID:  wb.cache.comp.NewID(),
+		Src: wb.cache.bottomPort().AsRemote(),
+		Dst: lowModulePort,
+
+		TrafficBytes: len(trans.EvictingData) + 12,
+		TrafficClass: "memprotocol.WriteReq"}
+
 	wb.cache.bottomPort().Send(write)
 
 	trans.HasEvictionWriteReq = true
-	trans.EvictionWriteReqMeta = write.MsgMeta
+	trans.EvictionWriteReqMeta = write
 	next.PendingEvictionIndices = next.PendingEvictionIndices[1:]
 	next.InflightEvictionIndices = append(next.InflightEvictionIndices, transIdx)
 
@@ -272,10 +277,12 @@ func (wb *writeBufferStage) processReturnRsp() bool {
 		return false
 	}
 
-	switch msg := msg.(type) {
+	switch msg.Payload.(type) {
 	case memprotocol.DataReadyRsp:
+
 		return wb.processDataReadyRsp(msg)
 	case memprotocol.WriteDoneRsp:
+
 		return wb.processWriteDoneRsp(msg)
 	default:
 		panic("unknown msg type")
@@ -283,7 +290,7 @@ func (wb *writeBufferStage) processReturnRsp() bool {
 }
 
 func (wb *writeBufferStage) processDataReadyRsp(
-	msg memprotocol.DataReadyRsp,
+	msg messaging.Msg,
 ) bool {
 	spec := wb.cache.comp.Spec
 	next := &wb.cache.comp.State
@@ -312,10 +319,10 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	}
 
 	mshrIdx := wb.lookupMSHRIndex(trans)
-	trans.FetchedData = msg.Data
+	trans.FetchedData = msg.Payload.(memprotocol.DataReadyRsp).Data
 	trans.Action = bankWriteFetched
 	mshrEntry := &next.MSHRState.Entries[mshrIdx]
-	mshrEntry.Data = msg.Data
+	mshrEntry.Data = msg.Payload.(memprotocol.DataReadyRsp).Data
 	wb.combineData(mshrIdx)
 
 	// Resolve MSHR transaction pointers before removal
@@ -414,7 +421,7 @@ func (wb *writeBufferStage) removeInflightFetch(transIdx int) {
 }
 
 func (wb *writeBufferStage) processWriteDoneRsp(
-	msg memprotocol.WriteDoneRsp,
+	msg messaging.Msg,
 ) bool {
 	next := &wb.cache.comp.State
 

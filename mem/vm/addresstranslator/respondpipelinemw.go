@@ -59,7 +59,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 		return false
 	}
 
-	rsp := rspI.(vmprotocol.TranslationRsp)
+	rsp := rspI
 	nextState := &m.comp.State
 	transIdx := findTransactionByReqID(nextState.Transactions, rsp.RspTo)
 
@@ -71,7 +71,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 	nextTrans := &nextState.Transactions[transIdx]
 	reqState := nextTrans.IncomingReqs[0]
 	spec := m.comp.Spec
-	translatedReq := createTranslatedReq(m.comp.NewID, reqState, rsp.Page,
+	translatedReq := createTranslatedReq(m.comp.NewID, reqState, rsp.Payload.(vmprotocol.TranslationRsp).Page,
 		spec.Log2PageSize, m.bottomPort().AsRemote(),
 		m.comp.Resources.MemProviderMapper)
 
@@ -83,7 +83,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 
 	nextTrans = &nextState.Transactions[transIdx]
 	nextTrans.TranslationDone = true
-	nextTrans.Page = rsp.Page
+	nextTrans.Page = rsp.Payload.(vmprotocol.TranslationRsp).Page
 
 	reqToBot := buildReqToBottom(reqState, translatedReq)
 	nextState.InflightReqToBottom = append(
@@ -138,13 +138,9 @@ func (m *respondPipelineMW) traceTranslationComplete(
 		What:   m.bottomPort().Name(),
 	})
 
-	fakeTransReq := vmprotocol.TranslationReq{
-		MsgMeta: messaging.MsgMeta{
-			ID:  trans.TranslationReqID,
-			Src: trans.TranslationReqSrc,
-			Dst: trans.TranslationReqDst,
-		},
-	}
+	fakeTransReq := messaging.Msg{ID: trans.TranslationReqID,
+		Src: trans.TranslationReqSrc,
+		Dst: trans.TranslationReqDst, Payload: vmprotocol.TranslationReq{}}
 	tracing.TraceReqFinalize(m.comp, fakeTransReq)
 	tracing.TraceReqInitiate(m.comp, translatedReq, topTaskID)
 }
@@ -165,22 +161,21 @@ func (m *respondPipelineMW) respond() bool {
 
 	reqInBottom := false
 
-	switch rsp := rspI.(type) {
+	switch content := rspI.Payload.(type) {
 	case memprotocol.DataReadyRsp:
+		rsp := rspI
+
 		reqInBottom = isReqInBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 		if reqInBottom {
 			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
-			rspToTop = memprotocol.DataReadyRsp{
-				MsgMeta: messaging.MsgMeta{
-					ID:           m.comp.NewID(),
-					Src:          m.topPort().AsRemote(),
-					Dst:          reqFromTopState.ReqFromTopSrc,
-					RspTo:        reqFromTopState.ReqFromTopID,
-					TrafficBytes: len(rsp.Data) + 4,
-					TrafficClass: "memprotocol.DataReadyRsp",
-				},
-				Data: rsp.Data,
-			}
+			rspToTop = messaging.Msg{ID: m.comp.NewID(),
+				Src:          m.topPort().AsRemote(),
+				Dst:          reqFromTopState.ReqFromTopSrc,
+				RspTo:        reqFromTopState.ReqFromTopID,
+				TrafficBytes: len(content.Data) + 4,
+				TrafficClass: "memprotocol.DataReadyRsp", Payload: memprotocol.DataReadyRsp{
+					Data: content.Data,
+				}}
 
 			fakeFromTop := restoreMemMsg(
 				reqFromTopState.ReqFromTopID,
@@ -194,19 +189,17 @@ func (m *respondPipelineMW) respond() bool {
 			})
 		}
 	case memprotocol.WriteDoneRsp:
+		rsp := rspI
+
 		reqInBottom = isReqInBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 		if reqInBottom {
 			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
-			rspToTop = memprotocol.WriteDoneRsp{
-				MsgMeta: messaging.MsgMeta{
-					ID:           m.comp.NewID(),
-					Src:          m.topPort().AsRemote(),
-					Dst:          reqFromTopState.ReqFromTopSrc,
-					RspTo:        reqFromTopState.ReqFromTopID,
-					TrafficBytes: 4,
-					TrafficClass: "memprotocol.WriteDoneRsp",
-				},
-			}
+			rspToTop = messaging.Msg{ID: m.comp.NewID(),
+				Src:          m.topPort().AsRemote(),
+				Dst:          reqFromTopState.ReqFromTopSrc,
+				RspTo:        reqFromTopState.ReqFromTopID,
+				TrafficBytes: 4,
+				TrafficClass: "memprotocol.WriteDoneRsp", Payload: memprotocol.WriteDoneRsp{}}
 
 			fakeFromTop := restoreMemMsg(
 				reqFromTopState.ReqFromTopID,
@@ -220,7 +213,7 @@ func (m *respondPipelineMW) respond() bool {
 			})
 		}
 	default:
-		log.Panicf("cannot handle respond of type %s", fmt.Sprintf("%T", rspI))
+		log.Panicf("cannot handle respond of type %s", fmt.Sprintf("%T", rspI.Payload))
 	}
 
 	if reqInBottom {
@@ -242,7 +235,7 @@ func (m *respondPipelineMW) respond() bool {
 			What:   m.topPort().Name(),
 		})
 
-		rspMeta := rspI.Meta()
+		rspMeta := rspI
 		removeReqToBottomByID(nextState, rspMeta.RspTo)
 
 		fakeReqToBottom := restoreMemMsg(

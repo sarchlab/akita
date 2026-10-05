@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/timing"
@@ -26,10 +27,14 @@ var _ = Describe("Transaction Splitting", func() {
 		spec := &Spec{BusWidth: 64, BurstLength: 8} // 64-byte access unit
 		trans := &transactionState{
 			HasRead: true,
-			ReadMsg: memprotocol.ReadReq{},
+			ReadMsg: messaging.Msg{Payload: memprotocol.ReadReq{}},
 		}
-		trans.ReadMsg.Address = 0x100
-		trans.ReadMsg.AccessByteSize = 128
+		payload1 := trans.ReadMsg.Payload.(memprotocol.ReadReq)
+		payload1.Address = 0x100
+		trans.ReadMsg.Payload = payload1
+		payload2 := trans.ReadMsg.Payload.(memprotocol.ReadReq)
+		payload2.AccessByteSize = 128
+		trans.ReadMsg.Payload = payload2
 
 		splitTransaction(ids.NewID, spec, trans)
 		// 128 bytes at 64-byte units = 2 sub-transactions
@@ -42,10 +47,15 @@ var _ = Describe("Transaction Splitting", func() {
 		spec := &Spec{BusWidth: 64, BurstLength: 8} // 64-byte access unit
 		trans := &transactionState{
 			HasRead: true,
-			ReadMsg: memprotocol.ReadReq{},
+			ReadMsg: messaging.Msg{Payload: memprotocol.ReadReq{}},
 		}
-		trans.ReadMsg.Address = 0x110 // Not aligned
-		trans.ReadMsg.AccessByteSize = 4
+		payload3 := trans.ReadMsg.Payload.(memprotocol.ReadReq)
+		payload3.Address = 0x110
+		trans.ReadMsg.Payload = payload3
+		payload4 := // Not aligned
+			trans.ReadMsg.Payload.(memprotocol.ReadReq)
+		payload4.AccessByteSize = 4
+		trans.ReadMsg.Payload = payload4
 
 		splitTransaction(ids.NewID, spec, trans)
 		Expect(trans.SubTransactions).To(HaveLen(1))
@@ -209,23 +219,25 @@ var _ = Describe("DRAM Integration", func() {
 		conn.PlugIn(srcPort)
 
 		writeData := []byte{1, 2, 3, 4}
-		write := memprotocol.WriteReq{}
-		write.ID = sim.NewID()
-		write.Address = 0x40
-		write.Data = writeData
-		write.Src = srcPort.AsRemote()
-		write.Dst = topPort.AsRemote()
-		write.TrafficBytes = len(writeData) + 12
-		write.TrafficClass = "memprotocol.WriteReq"
+		write := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address: 0x40,
+			Data:    writeData},
+			ID: sim.NewID(),
 
-		read := memprotocol.ReadReq{}
-		read.ID = sim.NewID()
-		read.Address = 0x40
-		read.AccessByteSize = 4
-		read.Src = srcPort.AsRemote()
-		read.Dst = topPort.AsRemote()
-		read.TrafficBytes = 12
-		read.TrafficClass = "memprotocol.ReadReq"
+			Src:          srcPort.AsRemote(),
+			Dst:          topPort.AsRemote(),
+			TrafficBytes: len(writeData) + 12,
+			TrafficClass: "memprotocol.WriteReq"}
+
+		read := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x40,
+			AccessByteSize: 4},
+			ID: sim.NewID(),
+
+			Src:          srcPort.AsRemote(),
+			Dst:          topPort.AsRemote(),
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
 
 		srcPort.Send(write)
 		srcPort.Send(read)
@@ -233,8 +245,8 @@ var _ = Describe("DRAM Integration", func() {
 		Expect(engine.Run()).To(Succeed())
 
 		// Collect responses
-		var writeDone memprotocol.WriteDoneRsp
-		var dataReady memprotocol.DataReadyRsp
+		var writeDone messaging.Msg
+		var dataReady messaging.Msg
 		var gotWriteDone, gotDataReady bool
 
 		for {
@@ -242,11 +254,15 @@ var _ = Describe("DRAM Integration", func() {
 			if !ok {
 				break
 			}
-			switch m := msg.(type) {
+			switch msg.Payload.(type) {
 			case memprotocol.WriteDoneRsp:
+				m := msg
+
 				writeDone = m
 				gotWriteDone = true
 			case memprotocol.DataReadyRsp:
+				m := msg
+
 				dataReady = m
 				gotDataReady = true
 			}
@@ -256,7 +272,7 @@ var _ = Describe("DRAM Integration", func() {
 		Expect(writeDone.RspTo).To(Equal(write.ID))
 		Expect(gotDataReady).To(BeTrue())
 		Expect(dataReady.RspTo).To(Equal(read.ID))
-		Expect(dataReady.Data).To(Equal([]byte{1, 2, 3, 4}))
+		Expect(dataReady.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 })
 
@@ -440,7 +456,7 @@ var _ = Describe("Open Page Policy", func() {
 				{
 					ID:      0,
 					HasRead: true,
-					ReadMsg: memprotocol.ReadReq{},
+					ReadMsg: messaging.Msg{Payload: memprotocol.ReadReq{}},
 					SubTransactions: []subTransState{
 						{
 							ID:        10,
@@ -452,7 +468,7 @@ var _ = Describe("Open Page Policy", func() {
 				{
 					ID:       1,
 					HasWrite: true,
-					WriteMsg: memprotocol.WriteReq{},
+					WriteMsg: messaging.Msg{Payload: memprotocol.WriteReq{}},
 					SubTransactions: []subTransState{
 						{
 							ID:        20,

@@ -55,18 +55,20 @@ func (m *respondMW) fetchFromBottom() bool {
 
 	m.bottomPort().RetrieveIncoming()
 
-	switch rsp := rspI.(type) {
+	switch rspI.Payload.(type) {
 	case vmprotocol.TranslationRsp:
+		rsp := rspI
+
 		tracing.TraceReqReceive(m.comp, rsp)
 		return m.handleTranslationRsp(rsp)
 	default:
 		log.Panicf("gmmu cannot handle request of type %s",
-			fmt.Sprintf("%T", rspI))
+			fmt.Sprintf("%T", rspI.Payload))
 		return false
 	}
 }
 
-func (m *respondMW) handleTranslationRsp(rsp vmprotocol.TranslationRsp) bool {
+func (m *respondMW) handleTranslationRsp(rsp messaging.Msg) bool {
 	state := &m.comp.State
 
 	reqTransaction, exists := state.RemoteMemReqs[rsp.RspTo]
@@ -82,14 +84,14 @@ func (m *respondMW) handleTranslationRsp(rsp vmprotocol.TranslationRsp) bool {
 		return false
 	}
 
-	rspToTop := vmprotocol.TranslationRsp{
-		Page: rsp.Page,
-	}
-	rspToTop.ID = m.comp.NewID()
-	rspToTop.Src = m.topPort().AsRemote()
-	rspToTop.Dst = reqTransaction.ReqSrc
-	rspToTop.RspTo = rsp.ID
-	rspToTop.TrafficClass = "vmprotocol.TranslationRsp"
+	rspToTop := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+		Page: rsp.Payload.(vmprotocol.TranslationRsp).Page,
+	},
+		ID:           m.comp.NewID(),
+		Src:          m.topPort().AsRemote(),
+		Dst:          reqTransaction.ReqSrc,
+		RspTo:        rsp.ID,
+		TrafficClass: "vmprotocol.TranslationRsp"}
 
 	m.topPort().Send(rspToTop)
 
@@ -100,10 +102,7 @@ func (m *respondMW) handleTranslationRsp(rsp vmprotocol.TranslationRsp) bool {
 	// flight. RecvTaskID is the original req_in id; do not key this to the
 	// response message.
 	tracing.TraceReqFinalize(
-		m.comp,
-		vmprotocol.TranslationReq{
-			MsgMeta: messaging.MsgMeta{ID: rsp.RspTo},
-		},
+		m.comp, messaging.Msg{ID: rsp.RspTo, Payload: vmprotocol.TranslationReq{}},
 	)
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: reqTransaction.RecvTaskID,

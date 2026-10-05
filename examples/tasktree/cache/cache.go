@@ -24,8 +24,8 @@ type Spec struct {
 
 // txn pairs a request from above with the request the cache sent below.
 type txn struct {
-	UpReq   memory.ReadReq `json:"up_req"`
-	DownReq memory.ReadReq `json:"down_req"`
+	UpReq   messaging.Msg `json:"up_req"`
+	DownReq messaging.Msg `json:"down_req"`
 }
 
 // State is the cache's runtime data.
@@ -90,7 +90,8 @@ func (m *forwardMW) forwardDown() bool {
 	if !ok {
 		return false
 	}
-	upReq := msg.(memory.ReadReq)
+	_ = msg.Payload.(memory.ReadReq)
+	upReq := msg
 
 	// Open the handling task for the request we received.
 	tracing.TraceReqReceive(m.comp, upReq) // req_in @ this cache
@@ -118,7 +119,8 @@ func (m *forwardMW) respondUp() bool {
 	if !ok {
 		return false
 	}
-	downRsp := msg.(memory.ReadRsp)
+	_ = msg.Payload.(memory.ReadRsp)
+	downRsp := msg
 	t := m.comp.State.Txns[downRsp.RspTo]
 
 	tracing.TraceReqFinalize(m.comp, t.DownReq) // close the downstream task

@@ -64,14 +64,16 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		Valid:    true,
 	})
 
-	req := vmprotocol.TranslationReq{}
-	req.ID = sim.NewID()
-	req.Src = agentPort
-	req.Dst = topPort.AsRemote()
-	req.PID = 1
-	req.VAddr = vAddr
-	req.DeviceID = deviceID
-	req.TrafficClass = "vmprotocol.TranslationReq"
+	req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		PID:      1,
+		VAddr:    vAddr,
+		DeviceID: deviceID},
+		ID:  sim.NewID(),
+		Src: agentPort,
+		Dst: topPort.AsRemote(),
+
+		TrafficClass: "vmprotocol.TranslationReq"}
+
 	topPort.Deliver(req)
 
 	// Tick until the remote memory request has been issued: the walk has left
@@ -96,19 +98,20 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Reset while the remote walk is in flight; the remote response is never
 	// delivered.
-	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = sim.NewID()
-	reset.Src = messaging.RemotePort("Cmd")
-	reset.Dst = ctrlPort.AsRemote()
-	reset.TrafficClass = "memcontrolprotocol.Req"
+	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
+		ID:           sim.NewID(),
+		Src:          messaging.RemotePort("Cmd"),
+		Dst:          ctrlPort.AsRemote(),
+		TrafficClass: "memcontrolprotocol.Req"}
+
 	ctrlPort.Deliver(reset)
 
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
 		modelingtest.Tick(comp)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
-			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
-				rsp.Command == memcontrolprotocol.CmdReset {
+			if rsp, ok := msg.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+				Command == memcontrolprotocol.CmdReset {
 				acked = true
 			}
 		}

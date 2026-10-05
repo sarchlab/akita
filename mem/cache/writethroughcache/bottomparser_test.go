@@ -73,13 +73,13 @@ var _ = Describe("Bottom Parser", func() {
 		It("should handle write done", func() {
 			next := &c.comp.State
 
-			writeToBottomMeta := messaging.MsgMeta{
+			writeToBottomMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
 
-			writeMeta := messaging.MsgMeta{
+			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -98,11 +98,11 @@ var _ = Describe("Bottom Parser", func() {
 				},
 			)
 
-			done := memprotocol.WriteDoneRsp{}
-			done.ID = c.comp.NewID()
-			done.RspTo = writeToBottomMeta.ID
-			done.TrafficBytes = 4
-			done.TrafficClass = "rsp"
+			done := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+				ID:           c.comp.NewID(),
+				RspTo:        writeToBottomMeta.ID,
+				TrafficBytes: 4,
+				TrafficClass: "rsp"}
 
 			bottomPort.Deliver(done)
 
@@ -118,12 +118,12 @@ var _ = Describe("Bottom Parser", func() {
 		It("does not complete an MSHR-coalesced write before the fill", func() {
 			next := &c.comp.State
 
-			writeToBottomMeta := messaging.MsgMeta{
+			writeToBottomMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
-			writeMeta := messaging.MsgMeta{
+			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
@@ -148,11 +148,11 @@ var _ = Describe("Bottom Parser", func() {
 				},
 			)
 
-			done := memprotocol.WriteDoneRsp{}
-			done.ID = c.comp.NewID()
-			done.RspTo = writeToBottomMeta.ID
-			done.TrafficBytes = 4
-			done.TrafficClass = "rsp"
+			done := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+				ID:           c.comp.NewID(),
+				RspTo:        writeToBottomMeta.ID,
+				TrafficBytes: 4,
+				TrafficClass: "rsp"}
 
 			bottomPort.Deliver(done)
 
@@ -169,15 +169,15 @@ var _ = Describe("Bottom Parser", func() {
 
 	Context("data ready", func() {
 		var (
-			readToBottomMeta       messaging.MsgMeta
-			dataReady              memprotocol.DataReadyRsp
+			readToBottomMeta       messaging.Msg
+			dataReady              messaging.Msg
 			blockSetID, blockWayID int
 		)
 
 		BeforeEach(func() {
 			next := &c.comp.State
 
-			readToBottomMeta = messaging.MsgMeta{
+			readToBottomMeta = messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -193,12 +193,13 @@ var _ = Describe("Bottom Parser", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}
-			dataReady = memprotocol.DataReadyRsp{}
-			dataReady.ID = c.comp.NewID()
-			dataReady.RspTo = readToBottomMeta.ID
-			dataReady.Data = drData
-			dataReady.TrafficBytes = len(drData) + 4
-			dataReady.TrafficClass = "rsp"
+			dataReady = messaging.Msg{Payload: memprotocol.DataReadyRsp{
+				Data: drData},
+				ID:    c.comp.NewID(),
+				RspTo: readToBottomMeta.ID,
+
+				TrafficBytes: len(drData) + 4,
+				TrafficClass: "rsp"}
 
 			blockSetID = 4
 			blockWayID = 0
@@ -207,7 +208,7 @@ var _ = Describe("Bottom Parser", func() {
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
-			readMeta := messaging.MsgMeta{
+			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -282,7 +283,7 @@ var _ = Describe("Bottom Parser", func() {
 			next := &c.comp.State
 
 			// Add another read transaction (index 1) that is in the MSHR
-			read2Meta := messaging.MsgMeta{
+			read2Meta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -298,7 +299,7 @@ var _ = Describe("Bottom Parser", func() {
 			)
 
 			// Add a write transaction (index 2)
-			writeMeta := messaging.MsgMeta{
+			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 16 + 12,
 				TrafficClass: "req",

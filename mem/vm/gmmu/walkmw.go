@@ -72,19 +72,21 @@ func (m *walkMW) parseFromTop() bool {
 
 	m.topPort().RetrieveIncoming()
 
-	switch req := reqI.(type) {
+	switch reqI.Payload.(type) {
 	case vmprotocol.TranslationReq:
+		req := reqI
+
 		tracing.TraceReqReceive(m.comp, req)
 		m.startWalking(req)
 	default:
 		log.Panicf("gmmu cannot handle request of type %s",
-			fmt.Sprintf("%T", reqI))
+			fmt.Sprintf("%T", reqI.Payload))
 	}
 
 	return true
 }
 
-func (m *walkMW) startWalking(req vmprotocol.TranslationReq) {
+func (m *walkMW) startWalking(req messaging.Msg) {
 	spec := m.comp.Spec
 	state := &m.comp.State
 
@@ -96,9 +98,9 @@ func (m *walkMW) startWalking(req vmprotocol.TranslationReq) {
 		RecvTaskID: recvTaskID,
 		ReqSrc:     req.Src,
 		ReqDst:     req.Dst,
-		PID:        uint64(req.PID),
-		VAddr:      req.VAddr,
-		DeviceID:   req.DeviceID,
+		PID:        uint64(req.Payload.(vmprotocol.TranslationReq).PID),
+		VAddr:      req.Payload.(vmprotocol.TranslationReq).VAddr,
+		DeviceID:   req.Payload.(vmprotocol.TranslationReq).DeviceID,
 		CycleLeft:  spec.Latency,
 		WalkTaskID: walkTaskID,
 	}
@@ -188,14 +190,15 @@ func (m *walkMW) processRemoteMemReq(
 	spec := m.comp.Spec
 	walking := state.WalkingTranslations[walkingIndex]
 
-	req := vmprotocol.TranslationReq{}
-	req.ID = m.comp.NewID()
-	req.Src = m.bottomPort().AsRemote()
-	req.Dst = spec.LowModule
-	req.PID = vm.PID(walking.PID)
-	req.VAddr = walking.VAddr
-	req.DeviceID = walking.DeviceID
-	req.TrafficClass = "vmprotocol.TranslationReq"
+	req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		PID:      vm.PID(walking.PID),
+		VAddr:    walking.VAddr,
+		DeviceID: walking.DeviceID},
+		ID:  m.comp.NewID(),
+		Src: m.bottomPort().AsRemote(),
+		Dst: spec.LowModule,
+
+		TrafficClass: "vmprotocol.TranslationReq"}
 
 	state.RemoteMemReqs[req.ID] = walking
 
@@ -245,14 +248,14 @@ func (m *walkMW) doPageWalkHit(
 	}
 	walking := state.WalkingTranslations[walkingIndex]
 
-	rsp := vmprotocol.TranslationRsp{
+	rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 		Page: pageFromPageState(walking.Page),
-	}
-	rsp.ID = m.comp.NewID()
-	rsp.Src = m.topPort().AsRemote()
-	rsp.Dst = walking.ReqSrc
-	rsp.RspTo = walking.ReqID
-	rsp.TrafficClass = "vmprotocol.TranslationRsp"
+	},
+		ID:           m.comp.NewID(),
+		Src:          m.topPort().AsRemote(),
+		Dst:          walking.ReqSrc,
+		RspTo:        walking.ReqID,
+		TrafficClass: "vmprotocol.TranslationRsp"}
 
 	m.topPort().Send(rsp)
 
@@ -269,14 +272,9 @@ func (m *walkMW) doPageWalkHit(
 	tracing.EndTask(m.comp, tracing.TaskEnd{ID: walking.WalkTaskID})
 
 	tracing.TraceReqComplete(
-		m.comp,
-		vmprotocol.TranslationReq{
-			MsgMeta: messaging.MsgMeta{
-				ID:  walking.ReqID,
-				Src: walking.ReqSrc,
-				Dst: walking.ReqDst,
-			},
-		},
+		m.comp, messaging.Msg{ID: walking.ReqID,
+			Src: walking.ReqSrc,
+			Dst: walking.ReqDst, Payload: vmprotocol.TranslationReq{}},
 	)
 
 	return true

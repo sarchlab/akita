@@ -206,7 +206,7 @@ func driveExpectSuccess(t *testing.T, h *Harness, cmd Command) {
 	if !ok {
 		t.Fatalf("no ack for %v", cmd)
 	}
-	if rsp.Command != cmd || !rsp.Success {
+	if rsp.Payload.(Rsp).Command != cmd || !rsp.Payload.(Rsp).Success {
 		t.Errorf("%v: got %+v, want Success ack", cmd, rsp)
 	}
 }
@@ -226,7 +226,7 @@ func pauseForConditionalVerb(t *testing.T, h *Harness) {
 	h.Ctrl.Deliver(req)
 
 	rsp, ok := drainForRsp(h, maxTicks)
-	if !ok || rsp.Command != CmdPause || !rsp.Success {
+	if !ok || rsp.Payload.(Rsp).Command != CmdPause || !rsp.Payload.(Rsp).Success {
 		t.Fatalf("could not pause before conditional verb; got %+v", rsp)
 	}
 }
@@ -248,16 +248,16 @@ func checkConditionalIllegalState(
 		t.Fatalf("no ControlRsp received for %v issued while Enabled", cmd)
 	}
 
-	if rsp.Command != cmd {
-		t.Errorf("Rsp.Command = %v, want %v", rsp.Command, cmd)
+	if rsp.Payload.(Rsp).Command != cmd {
+		t.Errorf("Rsp.Command = %v, want %v", rsp.Payload.(Rsp).Command, cmd)
 	}
 
-	if rsp.Success {
+	if rsp.Payload.(Rsp).Success {
 		t.Errorf("Rsp.Success = true, want false for %v while Enabled", cmd)
 	}
 
-	if rsp.Error != ErrMustBePausedOrDrained {
-		t.Errorf("Rsp.Error = %q, want %q", rsp.Error, ErrMustBePausedOrDrained)
+	if rsp.Payload.(Rsp).Error != ErrMustBePausedOrDrained {
+		t.Errorf("Rsp.Error = %q, want %q", rsp.Payload.(Rsp).Error, ErrMustBePausedOrDrained)
 	}
 }
 
@@ -290,8 +290,8 @@ func checkVerb(
 			"(supported=%v)", budget, cmd, supported)
 	}
 
-	if rsp.Command != cmd {
-		t.Errorf("Rsp.Command = %v, want %v", rsp.Command, cmd)
+	if rsp.Payload.(Rsp).Command != cmd {
+		t.Errorf("Rsp.Command = %v, want %v", rsp.Payload.(Rsp).Command, cmd)
 	}
 
 	if rsp.RspTo != req.ID {
@@ -299,9 +299,9 @@ func checkVerb(
 	}
 
 	if supported {
-		if !rsp.Success {
+		if !rsp.Payload.(Rsp).Success {
 			t.Errorf("Rsp.Success = false (Error=%q), want true",
-				rsp.Error)
+				rsp.Payload.(Rsp).Error)
 			return
 		}
 		// Drain promises quiescence on ack; Reset returns to a freshly-
@@ -315,24 +315,25 @@ func checkVerb(
 		return
 	}
 
-	if rsp.Success {
+	if rsp.Payload.(Rsp).Success {
 		t.Errorf("Rsp.Success = true, want false for unsupported verb")
 	}
 
-	if rsp.Error != ErrUnsupported {
+	if rsp.Payload.(Rsp).Error != ErrUnsupported {
 		t.Errorf("Rsp.Error = %q, want %q",
-			rsp.Error, ErrUnsupported)
+			rsp.Payload.(Rsp).Error, ErrUnsupported)
 	}
 }
 
 // newControlReq builds a ControlReq addressed to the component's
 // Control port from a fixed pseudo-source "ContractAgent".
-func newControlReq(h *Harness, cmd Command) Req {
-	req := Req{Command: cmd}
-	req.ID = h.Sim.NewID()
-	req.Src = messaging.RemotePort("ContractAgent")
-	req.Dst = h.Ctrl.AsRemote()
-	req.TrafficClass = "Req"
+func newControlReq(h *Harness, cmd Command) messaging.Msg {
+	req := messaging.Msg{Payload: Req{Command: cmd},
+		ID:           h.Sim.NewID(),
+		Src:          messaging.RemotePort("ContractAgent"),
+		Dst:          h.Ctrl.AsRemote(),
+		TrafficClass: "Req"}
+
 	return req
 }
 
@@ -347,11 +348,11 @@ func (h *Harness) tick() {
 // ControlRsp to appear on the Control port's outgoing queue. It returns
 // the first such Rsp and true, or a zero Rsp and false if the budget is
 // exhausted.
-func drainForRsp(h *Harness, budget int) (Rsp, bool) {
+func drainForRsp(h *Harness, budget int) (messaging.Msg, bool) {
 	for range budget {
 		if msg, ok := h.Ctrl.RetrieveOutgoing(); ok {
-			if rsp, ok := msg.(Rsp); ok {
-				return rsp, true
+			if _, ok := msg.Payload.(Rsp); ok {
+				return msg, true
 			}
 		}
 		h.tick()
@@ -359,9 +360,9 @@ func drainForRsp(h *Harness, budget int) (Rsp, bool) {
 
 	// One last sweep in case the final tick produced the Rsp.
 	if msg, ok := h.Ctrl.RetrieveOutgoing(); ok {
-		if rsp, ok := msg.(Rsp); ok {
-			return rsp, true
+		if _, ok := msg.Payload.(Rsp); ok {
+			return msg, true
 		}
 	}
-	return Rsp{}, false
+	return messaging.Msg{Payload: Rsp{}}, false
 }

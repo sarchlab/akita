@@ -67,29 +67,31 @@ var _ = Describe("Reorder Buffer", func() {
 		}
 	}
 
-	makeRead := func(addr uint64) memprotocol.ReadReq {
-		req := memprotocol.ReadReq{
+	makeRead := func(addr uint64) messaging.Msg {
+		req := messaging.Msg{Payload: memprotocol.ReadReq{
 			Address:        addr,
 			AccessByteSize: 4,
-		}
-		req.ID = sim.NewID()
-		req.Src = topRemote
-		req.Dst = topPort.AsRemote()
-		req.TrafficBytes = 12
-		req.TrafficClass = "memprotocol.ReadReq"
+		},
+			ID:           sim.NewID(),
+			Src:          topRemote,
+			Dst:          topPort.AsRemote(),
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		return req
 	}
 
-	makeWrite := func(addr uint64, data []byte) memprotocol.WriteReq {
-		req := memprotocol.WriteReq{
+	makeWrite := func(addr uint64, data []byte) messaging.Msg {
+		req := messaging.Msg{Payload: memprotocol.WriteReq{
 			Address: addr,
 			Data:    data,
-		}
-		req.ID = sim.NewID()
-		req.Src = topRemote
-		req.Dst = topPort.AsRemote()
-		req.TrafficBytes = len(data) + 12
-		req.TrafficClass = "memprotocol.WriteReq"
+		},
+			ID:           sim.NewID(),
+			Src:          topRemote,
+			Dst:          topPort.AsRemote(),
+			TrafficBytes: len(data) + 12,
+			TrafficClass: "memprotocol.WriteReq"}
+
 		return req
 	}
 
@@ -120,12 +122,12 @@ var _ = Describe("Reorder Buffer", func() {
 			Expect(rob.State.Transactions[0].ReqFromTopSrc).To(Equal(topRemote))
 
 			sent, _ := bottomPort.RetrieveOutgoing()
-			Expect(sent).To(BeAssignableToTypeOf(memprotocol.ReadReq{}))
-			shadow := sent.(memprotocol.ReadReq)
+			Expect(sent).To(BeAssignableToTypeOf(messaging.Msg{Payload: memprotocol.ReadReq{}}))
+			shadow := sent
 			Expect(shadow.Src).To(Equal(bottomPort.AsRemote()))
 			Expect(shadow.Dst).To(Equal(bottomUnitRemote))
-			Expect(shadow.Address).To(Equal(uint64(0)))
-			Expect(shadow.AccessByteSize).To(Equal(uint64(4)))
+			Expect(shadow.Payload.(memprotocol.ReadReq).Address).To(Equal(uint64(0)))
+			Expect(shadow.Payload.(memprotocol.ReadReq).AccessByteSize).To(Equal(uint64(4)))
 			Expect(shadow.ID).To(Equal(rob.State.Transactions[0].ReqToBottomID))
 			Expect(shadow.ID).ToNot(Equal(req.ID))
 		})
@@ -141,9 +143,9 @@ var _ = Describe("Reorder Buffer", func() {
 			Expect(rob.State.Transactions[0].IsRead).To(BeFalse())
 
 			sent, _ := bottomPort.RetrieveOutgoing()
-			Expect(sent).To(BeAssignableToTypeOf(memprotocol.WriteReq{}))
-			shadow := sent.(memprotocol.WriteReq)
-			Expect(shadow.Data).To(Equal([]byte{1, 2, 3, 4}))
+			Expect(sent).To(BeAssignableToTypeOf(messaging.Msg{Payload: memprotocol.WriteReq{}}))
+			shadow := sent
+			Expect(shadow.Payload.(memprotocol.WriteReq).Data).To(Equal([]byte{1, 2, 3, 4}))
 			Expect(shadow.Dst).To(Equal(bottomUnitRemote))
 		})
 
@@ -169,11 +171,12 @@ var _ = Describe("Reorder Buffer", func() {
 
 			// Fill the bottom outgoing buffer so Send fails.
 			for i := 0; i < bottomBufSize; i++ {
-				filler := memprotocol.ReadReq{Address: uint64(i)}
-				filler.ID = sim.NewID()
-				filler.Src = bottomPort.AsRemote()
-				filler.Dst = bottomUnitRemote
-				filler.TrafficClass = "memprotocol.ReadReq"
+				filler := messaging.Msg{Payload: memprotocol.ReadReq{Address: uint64(i)},
+					ID:           sim.NewID(),
+					Src:          bottomPort.AsRemote(),
+					Dst:          bottomUnitRemote,
+					TrafficClass: "memprotocol.ReadReq"}
+
 				Expect(bottomPort.CanSend()).To(BeTrue())
 				bottomPort.Send(filler)
 			}
@@ -187,11 +190,12 @@ var _ = Describe("Reorder Buffer", func() {
 		})
 
 		It("panics on unsupported top-port traffic", func() {
-			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-			req.ID = sim.NewID()
-			req.Src = topRemote
-			req.Dst = topPort.AsRemote()
-			req.TrafficClass = "memcontrolprotocol.Req"
+			req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
+				ID:           sim.NewID(),
+				Src:          topRemote,
+				Dst:          topPort.AsRemote(),
+				TrafficClass: "memcontrolprotocol.Req"}
+
 			topPort.Deliver(req)
 
 			Expect(func() { modelingtest.Tick(rob) }).To(Panic())
@@ -207,12 +211,13 @@ var _ = Describe("Reorder Buffer", func() {
 			Expect(rob.State.Transactions).To(HaveLen(1))
 			shadowID := rob.State.Transactions[0].ReqToBottomID
 
-			rsp := memprotocol.WriteDoneRsp{}
-			rsp.ID = sim.NewID()
-			rsp.Src = bottomUnitRemote
-			rsp.Dst = bottomPort.AsRemote()
-			rsp.RspTo = shadowID
-			rsp.TrafficClass = "memprotocol.WriteDoneRsp"
+			rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+				ID:           sim.NewID(),
+				Src:          bottomUnitRemote,
+				Dst:          bottomPort.AsRemote(),
+				RspTo:        shadowID,
+				TrafficClass: "memprotocol.WriteDoneRsp"}
+
 			bottomPort.Deliver(rsp)
 
 			modelingtest.Tick(rob)
@@ -224,12 +229,13 @@ var _ = Describe("Reorder Buffer", func() {
 		})
 
 		It("ignores a response that does not match any transaction", func() {
-			rsp := memprotocol.WriteDoneRsp{}
-			rsp.ID = sim.NewID()
-			rsp.Src = bottomUnitRemote
-			rsp.Dst = bottomPort.AsRemote()
-			rsp.RspTo = 999999
-			rsp.TrafficClass = "memprotocol.WriteDoneRsp"
+			rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+				ID:           sim.NewID(),
+				Src:          bottomUnitRemote,
+				Dst:          bottomPort.AsRemote(),
+				RspTo:        999999,
+				TrafficClass: "memprotocol.WriteDoneRsp"}
+
 			bottomPort.Deliver(rsp)
 
 			modelingtest.Tick(rob)
@@ -239,11 +245,12 @@ var _ = Describe("Reorder Buffer", func() {
 		})
 
 		It("drops unsupported bottom-port traffic", func() {
-			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-			req.ID = sim.NewID()
-			req.Src = bottomUnitRemote
-			req.Dst = bottomPort.AsRemote()
-			req.TrafficClass = "memcontrolprotocol.Req"
+			req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
+				ID:           sim.NewID(),
+				Src:          bottomUnitRemote,
+				Dst:          bottomPort.AsRemote(),
+				TrafficClass: "memcontrolprotocol.Req"}
+
 			bottomPort.Deliver(req)
 
 			progress := modelingtest.Tick(rob)
@@ -265,12 +272,13 @@ var _ = Describe("Reorder Buffer", func() {
 
 			shadowID := rob.State.Transactions[0].ReqToBottomID
 
-			rsp := memprotocol.DataReadyRsp{Data: []byte{0xDE, 0xAD}}
-			rsp.ID = sim.NewID()
-			rsp.Src = bottomUnitRemote
-			rsp.Dst = bottomPort.AsRemote()
-			rsp.RspTo = shadowID
-			rsp.TrafficClass = "memprotocol.DataReadyRsp"
+			rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{0xDE, 0xAD}},
+				ID:           sim.NewID(),
+				Src:          bottomUnitRemote,
+				Dst:          bottomPort.AsRemote(),
+				RspTo:        shadowID,
+				TrafficClass: "memprotocol.DataReadyRsp"}
+
 			bottomPort.Deliver(rsp)
 
 			modelingtest.Tick(rob) // parseBottom records the response
@@ -279,9 +287,9 @@ var _ = Describe("Reorder Buffer", func() {
 			Expect(rob.State.Transactions).To(BeEmpty())
 
 			topOut, _ := topPort.RetrieveOutgoing()
-			Expect(topOut).To(BeAssignableToTypeOf(memprotocol.DataReadyRsp{}))
-			data := topOut.(memprotocol.DataReadyRsp)
-			Expect(data.Data).To(Equal([]byte{0xDE, 0xAD}))
+			Expect(topOut).To(BeAssignableToTypeOf(messaging.Msg{Payload: memprotocol.DataReadyRsp{}}))
+			data := topOut
+			Expect(data.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{0xDE, 0xAD}))
 			Expect(data.RspTo).To(Equal(req.ID))
 			Expect(data.Dst).To(Equal(topRemote))
 			Expect(data.Src).To(Equal(topPort.AsRemote()))
@@ -306,12 +314,13 @@ var _ = Describe("Reorder Buffer", func() {
 
 			// Deliver the second response first; the head must still wait
 			// since its response has not arrived yet.
-			rsp2 := memprotocol.DataReadyRsp{Data: []byte{0x22}}
-			rsp2.ID = sim.NewID()
-			rsp2.Src = bottomUnitRemote
-			rsp2.Dst = bottomPort.AsRemote()
-			rsp2.RspTo = shadow2
-			rsp2.TrafficClass = "memprotocol.DataReadyRsp"
+			rsp2 := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{0x22}},
+				ID:           sim.NewID(),
+				Src:          bottomUnitRemote,
+				Dst:          bottomPort.AsRemote(),
+				RspTo:        shadow2,
+				TrafficClass: "memprotocol.DataReadyRsp"}
+
 			bottomPort.Deliver(rsp2)
 
 			modelingtest.Tick(rob) // parseBottom records rsp2
@@ -324,12 +333,13 @@ var _ = Describe("Reorder Buffer", func() {
 			Expect(present6).To(BeFalse())
 			// Now deliver the response for the head; both should drain in
 			// order on subsequent ticks.
-			rsp1 := memprotocol.DataReadyRsp{Data: []byte{0x11}}
-			rsp1.ID = sim.NewID()
-			rsp1.Src = bottomUnitRemote
-			rsp1.Dst = bottomPort.AsRemote()
-			rsp1.RspTo = shadow1
-			rsp1.TrafficClass = "memprotocol.DataReadyRsp"
+			rsp1 := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{0x11}},
+				ID:           sim.NewID(),
+				Src:          bottomUnitRemote,
+				Dst:          bottomPort.AsRemote(),
+				RspTo:        shadow1,
+				TrafficClass: "memprotocol.DataReadyRsp"}
+
 			bottomPort.Deliver(rsp1)
 
 			modelingtest.Tick(rob) // parseBottom records rsp1
@@ -339,12 +349,12 @@ var _ = Describe("Reorder Buffer", func() {
 
 			out1, _ := topPort.RetrieveOutgoing()
 			out2, _ := topPort.RetrieveOutgoing()
-			Expect(out1).To(BeAssignableToTypeOf(memprotocol.DataReadyRsp{}))
-			Expect(out2).To(BeAssignableToTypeOf(memprotocol.DataReadyRsp{}))
-			Expect(out1.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{0x11}))
-			Expect(out2.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{0x22}))
-			Expect(out1.(memprotocol.DataReadyRsp).RspTo).To(Equal(r1.ID))
-			Expect(out2.(memprotocol.DataReadyRsp).RspTo).To(Equal(r2.ID))
+			Expect(out1).To(BeAssignableToTypeOf(messaging.Msg{Payload: memprotocol.DataReadyRsp{}}))
+			Expect(out2).To(BeAssignableToTypeOf(messaging.Msg{Payload: memprotocol.DataReadyRsp{}}))
+			Expect(out1.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{0x11}))
+			Expect(out2.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{0x22}))
+			Expect(out1.RspTo).To(Equal(r1.ID))
+			Expect(out2.RspTo).To(Equal(r2.ID))
 		})
 
 		It("stalls when the top port cannot accept the response", func() {
@@ -354,23 +364,25 @@ var _ = Describe("Reorder Buffer", func() {
 			bottomPort.RetrieveOutgoing()
 
 			shadowID := rob.State.Transactions[0].ReqToBottomID
-			rsp := memprotocol.DataReadyRsp{Data: []byte{0x1}}
-			rsp.ID = sim.NewID()
-			rsp.Src = bottomUnitRemote
-			rsp.Dst = bottomPort.AsRemote()
-			rsp.RspTo = shadowID
-			rsp.TrafficClass = "memprotocol.DataReadyRsp"
+			rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{0x1}},
+				ID:           sim.NewID(),
+				Src:          bottomUnitRemote,
+				Dst:          bottomPort.AsRemote(),
+				RspTo:        shadowID,
+				TrafficClass: "memprotocol.DataReadyRsp"}
+
 			bottomPort.Deliver(rsp)
 
 			modelingtest.Tick(rob) // parseBottom records the response
 
 			// Fill the top outgoing buffer so the next bottomUp Send fails.
 			for i := 0; i < topBufSize; i++ {
-				filler := memprotocol.DataReadyRsp{Data: []byte{byte(i)}}
-				filler.ID = sim.NewID()
-				filler.Src = topPort.AsRemote()
-				filler.Dst = topRemote
-				filler.TrafficClass = "memprotocol.DataReadyRsp"
+				filler := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{byte(i)}},
+					ID:           sim.NewID(),
+					Src:          topPort.AsRemote(),
+					Dst:          topRemote,
+					TrafficClass: "memprotocol.DataReadyRsp"}
+
 				Expect(topPort.CanSend()).To(BeTrue())
 				topPort.Send(filler)
 			}
@@ -391,13 +403,14 @@ var _ = Describe("Reorder Buffer", func() {
 			bottomPort.RetrieveOutgoing()
 			Expect(rob.State.Transactions).To(HaveLen(1))
 
-			req := memcontrolprotocol.Req{
+			req := messaging.Msg{Payload: memcontrolprotocol.Req{
 				Command: memcontrolprotocol.CmdReset,
-			}
-			req.ID = sim.NewID()
-			req.Src = messaging.RemotePort("Cmd")
-			req.Dst = ctrlPort.AsRemote()
-			req.TrafficClass = "memcontrolprotocol.Req"
+			},
+				ID:           sim.NewID(),
+				Src:          messaging.RemotePort("Cmd"),
+				Dst:          ctrlPort.AsRemote(),
+				TrafficClass: "memcontrolprotocol.Req"}
+
 			ctrlPort.Deliver(req)
 
 			modelingtest.Tick(rob)
@@ -406,10 +419,10 @@ var _ = Describe("Reorder Buffer", func() {
 			Expect(rob.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 
 			ack, _ := ctrlPort.RetrieveOutgoing()
-			Expect(ack).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
-			rsp := ack.(memcontrolprotocol.Rsp)
-			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
-			Expect(rsp.Success).To(BeTrue())
+			Expect(ack).To(BeAssignableToTypeOf(messaging.Msg{Payload: memcontrolprotocol.Rsp{}}))
+			rsp := ack
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(req.ID))
 		})
 
@@ -430,19 +443,21 @@ var _ = Describe("Reorder Buffer", func() {
 
 			// Stale traffic that should be cleared on resume.
 			topPort.Deliver(makeRead(0))
-			stray := memprotocol.DataReadyRsp{Data: []byte{0xFF}}
-			stray.ID = sim.NewID()
-			stray.Src = bottomUnitRemote
-			stray.Dst = bottomPort.AsRemote()
-			stray.RspTo = 0xDEAD
-			stray.TrafficClass = "memprotocol.DataReadyRsp"
+			stray := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{0xFF}},
+				ID:           sim.NewID(),
+				Src:          bottomUnitRemote,
+				Dst:          bottomPort.AsRemote(),
+				RspTo:        0xDEAD,
+				TrafficClass: "memprotocol.DataReadyRsp"}
+
 			bottomPort.Deliver(stray)
 
-			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdEnable}
-			req.ID = sim.NewID()
-			req.Src = messaging.RemotePort("Cmd")
-			req.Dst = ctrlPort.AsRemote()
-			req.TrafficClass = "memcontrolprotocol.Req"
+			req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdEnable},
+				ID:           sim.NewID(),
+				Src:          messaging.RemotePort("Cmd"),
+				Dst:          ctrlPort.AsRemote(),
+				TrafficClass: "memcontrolprotocol.Req"}
+
 			ctrlPort.Deliver(req)
 
 			modelingtest.Tick(rob)
@@ -453,16 +468,17 @@ var _ = Describe("Reorder Buffer", func() {
 			_, present9 := bottomPort.PeekIncoming()
 			Expect(present9).To(BeFalse())
 			ack, _ := ctrlPort.RetrieveOutgoing()
-			Expect(ack).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
-			Expect(ack.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdEnable))
+			Expect(ack).To(BeAssignableToTypeOf(messaging.Msg{Payload: memcontrolprotocol.Rsp{}}))
+			Expect(ack.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdEnable))
 		})
 
-		makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
-			req := memcontrolprotocol.Req{Command: cmd}
-			req.ID = sim.NewID()
-			req.Src = messaging.RemotePort("Cmd")
-			req.Dst = ctrlPort.AsRemote()
-			req.TrafficClass = "memcontrolprotocol.Req"
+		makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
+			req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
+				ID:           sim.NewID(),
+				Src:          messaging.RemotePort("Cmd"),
+				Dst:          ctrlPort.AsRemote(),
+				TrafficClass: "memcontrolprotocol.Req"}
+
 			return req
 		}
 
@@ -500,17 +516,18 @@ var _ = Describe("Reorder Buffer", func() {
 
 			// Now let the in-flight reads complete.
 			for _, id := range shadowIDs {
-				rsp := memprotocol.DataReadyRsp{Data: []byte{0x1}}
-				rsp.ID = sim.NewID()
-				rsp.Src = bottomUnitRemote
-				rsp.Dst = bottomPort.AsRemote()
-				rsp.RspTo = id
-				rsp.TrafficClass = "memprotocol.DataReadyRsp"
+				rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{0x1}},
+					ID:           sim.NewID(),
+					Src:          bottomUnitRemote,
+					Dst:          bottomPort.AsRemote(),
+					RspTo:        id,
+					TrafficClass: "memprotocol.DataReadyRsp"}
+
 				bottomPort.Deliver(rsp)
 			}
 
 			completed := 0
-			var drainRsp memcontrolprotocol.Rsp
+			var drainRsp messaging.Msg
 			drainFound := false
 			for i := 0; i < 64 && !drainFound; i++ {
 				modelingtest.Tick(rob)
@@ -519,21 +536,23 @@ var _ = Describe("Reorder Buffer", func() {
 					if !ok {
 						break
 					}
-					if _, ok := out.(memprotocol.DataReadyRsp); ok {
+					if _, ok := out.Payload.(memprotocol.DataReadyRsp); ok {
 						completed++
 					}
 				}
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-					if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
-						rsp.Command == memcontrolprotocol.CmdDrain {
-						drainRsp = rsp
+					if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+						Command == memcontrolprotocol.CmdDrain {
+						drainRsp = out
+
 						drainFound = true
 					}
+
 				}
 			}
 
 			Expect(drainFound).To(BeTrue())
-			Expect(drainRsp.Success).To(BeTrue())
+			Expect(drainRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 			Expect(drainRsp.RspTo).To(Equal(drain.ID))
 			// All in-flight reads finished before the async Drain ack.
 			Expect(completed).To(Equal(n))
@@ -552,18 +571,19 @@ var _ = Describe("Reorder Buffer", func() {
 				reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 				ctrlPort.Deliver(reset)
 
-				var rsp memcontrolprotocol.Rsp
+				var rsp messaging.Msg
 				found := false
 				for i := 0; i < 64 && !found; i++ {
 					modelingtest.Tick(rob)
 					if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-						rsp, found = out.(memcontrolprotocol.Rsp)
+						_, found = out.Payload.(memcontrolprotocol.Rsp)
+						rsp = out
 					}
 				}
 
 				Expect(found).To(BeTrue())
-				Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
-				Expect(rsp.Success).To(BeTrue())
+				Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
+				Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 				Expect(rsp.RspTo).To(Equal(reset.ID))
 				Expect(rob.State.Transactions).To(BeEmpty())
 				Expect(rob.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
@@ -588,7 +608,7 @@ var _ = Describe("Reorder Buffer", func() {
 			reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsps []memcontrolprotocol.Rsp
+			var rsps []messaging.Msg
 			for range 16 {
 				modelingtest.Tick(rob)
 				for {
@@ -596,16 +616,17 @@ var _ = Describe("Reorder Buffer", func() {
 					if !ok {
 						break
 					}
-					if r, ok := out.(memcontrolprotocol.Rsp); ok {
-						rsps = append(rsps, r)
+					if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
+
+						rsps = append(rsps, out)
 					}
 				}
 			}
 
 			Expect(rsps).To(HaveLen(2))
-			Expect(rsps[0].Command).To(Equal(memcontrolprotocol.CmdDrain))
+			Expect(rsps[0].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdDrain))
 			Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-			Expect(rsps[1].Command).To(Equal(memcontrolprotocol.CmdReset))
+			Expect(rsps[1].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
 			Expect(rsps[1].RspTo).To(Equal(reset.ID))
 			Expect(rob.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 		})

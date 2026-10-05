@@ -93,13 +93,13 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 	if !ok {
 		return false
 	}
-
-	req, ok := msg.(memcontrolprotocol.Req)
+	_, ok = msg.Payload.(memcontrolprotocol.Req)
+	req := msg
 	if !ok {
 		return false
 	}
 
-	switch req.Command {
+	switch req.Payload.(memcontrolprotocol.Req).Command {
 	case memcontrolprotocol.CmdPause:
 		return m.handlePause(req)
 	case memcontrolprotocol.CmdDrain:
@@ -126,7 +126,9 @@ func (m *ctrlMiddleware) handleIncoming() bool {
 // Invalidate is acknowledged synchronously but is only legal once the
 // cache is paused (or drained, which lands in paused); issued while
 // Running it is rejected with ErrMustBePausedOrDrained.
-func (m *ctrlMiddleware) handleInvalidate(req memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) handleInvalidate(req messaging.Msg) bool {
+	request := req.Payload.(memcontrolprotocol.Req)
+
 	next := &m.pipeline.comp.State
 	if cacheState(next.CacheState) != cacheStatePaused {
 		return m.rejectMustBePaused(req)
@@ -137,7 +139,7 @@ func (m *ctrlMiddleware) handleInvalidate(req memcontrolprotocol.Req) bool {
 
 	spec := m.pipeline.comp.Spec
 	blockSize := uint64(1) << spec.Log2BlockSize
-	invalidateBlocks(next, blockSize, req.Addresses, req.PID)
+	invalidateBlocks(next, blockSize, request.Addresses, request.PID)
 
 	m.ctrlPort().Send(makeCtrlRsp(m.pipeline.comp, memcontrolprotocol.CmdInvalidate,
 		req.Src, req.ID, true, ""))
@@ -147,11 +149,11 @@ func (m *ctrlMiddleware) handleInvalidate(req memcontrolprotocol.Req) bool {
 
 // rejectMustBePaused responds that a conditional verb is illegal while
 // the cache is Running (Enabled).
-func (m *ctrlMiddleware) rejectMustBePaused(req memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) rejectMustBePaused(req messaging.Msg) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	m.ctrlPort().Send(makeCtrlRsp(m.pipeline.comp, req.Command,
+	m.ctrlPort().Send(makeCtrlRsp(m.pipeline.comp, req.Payload.(memcontrolprotocol.Req).Command,
 		req.Src, req.ID, false, memcontrolprotocol.ErrMustBePausedOrDrained))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -194,7 +196,7 @@ func invalidateBlocks(
 	}
 }
 
-func (m *ctrlMiddleware) handlePause(req memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) handlePause(req messaging.Msg) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
@@ -206,7 +208,7 @@ func (m *ctrlMiddleware) handlePause(req memcontrolprotocol.Req) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleDrain(req memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) handleDrain(req messaging.Msg) bool {
 	next := &m.pipeline.comp.State
 	next.CacheState = int(cacheStateDraining)
 	next.CurrentCmdID = req.ID
@@ -215,7 +217,7 @@ func (m *ctrlMiddleware) handleDrain(req memcontrolprotocol.Req) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleEnable(req memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) handleEnable(req messaging.Msg) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
@@ -234,7 +236,7 @@ func (m *ctrlMiddleware) handleEnable(req memcontrolprotocol.Req) bool {
 // empty port queues. No writeback happens — dirty data is discarded
 // per the resolved-decision policy ("Invalidate-on-dirty: drop
 // silently" generalized to Reset).
-func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
@@ -338,11 +340,11 @@ func clearCachePipelinesAndBuffers(next *state) {
 	next.ProcessingMSHREntryIdx = 0
 }
 
-func (m *ctrlMiddleware) handleUnsupported(req memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) handleUnsupported(req messaging.Msg) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	m.ctrlPort().Send(makeCtrlRsp(m.pipeline.comp, req.Command,
+	m.ctrlPort().Send(makeCtrlRsp(m.pipeline.comp, req.Payload.(memcontrolprotocol.Req).Command,
 		req.Src, req.ID, false, memcontrolprotocol.ErrUnsupported))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -355,16 +357,17 @@ func makeCtrlRsp(
 	rspTo uint64,
 	success bool,
 	errStr string,
-) memcontrolprotocol.Rsp {
-	rsp := memcontrolprotocol.Rsp{
+) messaging.Msg {
+	rsp := messaging.Msg{Payload: memcontrolprotocol.Rsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,
-	}
-	rsp.ID = c.NewID()
-	rsp.Src = c.Ports.Control.AsRemote()
-	rsp.Dst = dst
-	rsp.RspTo = rspTo
-	rsp.TrafficClass = "memcontrolprotocol.Rsp"
+	},
+		ID:           c.NewID(),
+		Src:          c.Ports.Control.AsRemote(),
+		Dst:          dst,
+		RspTo:        rspTo,
+		TrafficClass: "memcontrolprotocol.Rsp"}
+
 	return rsp
 }

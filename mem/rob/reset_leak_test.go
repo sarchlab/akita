@@ -45,11 +45,12 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	// Admit a read: topDown opens the top req_in and the shadow req_out, then
 	// waits on the bottom response (which never comes — the request is in flight).
-	read := memprotocol.ReadReq{Address: 0, AccessByteSize: 4}
-	read.ID = sim.NewID()
-	read.Src = messaging.RemotePort("Agent")
-	read.Dst = topPort.AsRemote()
-	read.TrafficClass = "memprotocol.ReadReq"
+	read := messaging.Msg{Payload: memprotocol.ReadReq{Address: 0, AccessByteSize: 4},
+		ID:           sim.NewID(),
+		Src:          messaging.RemotePort("Agent"),
+		Dst:          topPort.AsRemote(),
+		TrafficClass: "memprotocol.ReadReq"}
+
 	topPort.Deliver(read)
 	modelingtest.Tick(rob)
 
@@ -63,19 +64,20 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	}
 
 	// Reset while the transaction is in flight.
-	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = sim.NewID()
-	reset.Src = messaging.RemotePort("Cmd")
-	reset.Dst = ctrlPort.AsRemote()
-	reset.TrafficClass = "memcontrolprotocol.Req"
+	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
+		ID:           sim.NewID(),
+		Src:          messaging.RemotePort("Cmd"),
+		Dst:          ctrlPort.AsRemote(),
+		TrafficClass: "memcontrolprotocol.Req"}
+
 	ctrlPort.Deliver(reset)
 
 	acked := false
 	for range 16 {
 		modelingtest.Tick(rob)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
-			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
-				rsp.Command == memcontrolprotocol.CmdReset {
+			if rsp, ok := msg.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+				Command == memcontrolprotocol.CmdReset {
 				acked = true
 				break
 			}

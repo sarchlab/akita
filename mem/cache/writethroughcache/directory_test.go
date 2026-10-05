@@ -24,11 +24,12 @@ var _ = Describe("Directory", func() {
 	// fillBottomOutgoing pre-fills bottomPort's single outgoing slot so the
 	// next CanSend returns false, simulating a busy port.
 	fillBottomOutgoing := func() {
-		dummy := memprotocol.ReadReq{}
-		dummy.ID = c.comp.NewID()
-		dummy.Src = bottomPort.AsRemote()
-		dummy.Dst = messaging.RemotePort("DRAM")
-		dummy.TrafficClass = "req"
+		dummy := messaging.Msg{Payload: memprotocol.ReadReq{},
+			ID:           c.comp.NewID(),
+			Src:          bottomPort.AsRemote(),
+			Dst:          messaging.RemotePort("DRAM"),
+			TrafficClass: "req"}
+
 		Expect(bottomPort.CanSend()).To(BeTrue())
 		bottomPort.Send(dummy)
 	}
@@ -95,7 +96,7 @@ var _ = Describe("Directory", func() {
 		It("Should add to mshr entry", func() {
 			next := &c.comp.State
 
-			readMeta := messaging.MsgMeta{
+			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -130,7 +131,7 @@ var _ = Describe("Directory", func() {
 		It("should send transaction to bank", func() {
 			next := &c.comp.State
 
-			readMeta := messaging.MsgMeta{
+			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -172,7 +173,7 @@ var _ = Describe("Directory", func() {
 		It("should stall if cannot send to bank", func() {
 			next := &c.comp.State
 
-			readMeta := messaging.MsgMeta{
+			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -206,7 +207,7 @@ var _ = Describe("Directory", func() {
 		It("should stall if block is locked", func() {
 			next := &c.comp.State
 
-			readMeta := messaging.MsgMeta{
+			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -239,7 +240,7 @@ var _ = Describe("Directory", func() {
 		It("should send request to bottom", func() {
 			next := &c.comp.State
 
-			readMeta := messaging.MsgMeta{
+			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -261,10 +262,10 @@ var _ = Describe("Directory", func() {
 
 			readToBottomValue, _ := bottomPort.RetrieveOutgoing()
 
-			readToBottom := readToBottomValue.(memprotocol.ReadReq)
-			Expect(readToBottom.Address).To(Equal(uint64(0x100)))
-			Expect(readToBottom.AccessByteSize).To(Equal(uint64(64)))
-			Expect(readToBottom.PID).To(Equal(vm.PID(1)))
+			readToBottom := readToBottomValue
+			Expect(readToBottom.Payload.(memprotocol.ReadReq).Address).To(Equal(uint64(0x100)))
+			Expect(readToBottom.Payload.(memprotocol.ReadReq).AccessByteSize).To(Equal(uint64(64)))
+			Expect(readToBottom.Payload.(memprotocol.ReadReq).PID).To(Equal(vm.PID(1)))
 			// Check MSHR entry was created
 			entryIdx, found := cache.MSHRQuery(&next.MSHRState, vm.PID(1), 0x100)
 			Expect(found).To(BeTrue())
@@ -288,7 +289,7 @@ var _ = Describe("Directory", func() {
 		It("should stall if every way in the set is locked", func() {
 			next := &c.comp.State
 
-			readMeta := messaging.MsgMeta{
+			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -317,7 +318,7 @@ var _ = Describe("Directory", func() {
 		It("should stall if every way in the set is being read", func() {
 			next := &c.comp.State
 
-			readMeta := messaging.MsgMeta{
+			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -346,7 +347,7 @@ var _ = Describe("Directory", func() {
 		It("should skip the LRU victim if it is locked and try another way", func() {
 			next := &c.comp.State
 
-			readMeta := messaging.MsgMeta{
+			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -380,7 +381,7 @@ var _ = Describe("Directory", func() {
 		It("should stall if mshr is full", func() {
 			next := &c.comp.State
 
-			readMeta := messaging.MsgMeta{
+			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -409,7 +410,7 @@ var _ = Describe("Directory", func() {
 		It("should stall if send to bottom failed", func() {
 			next := &c.comp.State
 
-			readMeta := messaging.MsgMeta{
+			readMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -440,7 +441,7 @@ var _ = Describe("Directory", func() {
 			// Pre-existing fetcher transaction (index 0) that allocated
 			// the MSHR — required so the coalesced write can record it
 			// as MSHRFillFetcherIdx.
-			fetcherReadMeta := messaging.MsgMeta{
+			fetcherReadMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -456,7 +457,7 @@ var _ = Describe("Directory", func() {
 				},
 			)
 
-			writeMeta := messaging.MsgMeta{
+			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
@@ -482,10 +483,10 @@ var _ = Describe("Directory", func() {
 
 			writeToBottomValue, _ := bottomPort.RetrieveOutgoing()
 
-			writeToBottom := writeToBottomValue.(memprotocol.WriteReq)
-			Expect(writeToBottom.Address).To(Equal(uint64(0x104)))
-			Expect(writeToBottom.Data).To(Equal([]byte{1, 2, 3, 4}))
-			Expect(writeToBottom.PID).To(Equal(vm.PID(1)))
+			writeToBottom := writeToBottomValue
+			Expect(writeToBottom.Payload.(memprotocol.WriteReq).Address).To(Equal(uint64(0x104)))
+			Expect(writeToBottom.Payload.(memprotocol.WriteReq).Data).To(Equal([]byte{1, 2, 3, 4}))
+			Expect(writeToBottom.Payload.(memprotocol.WriteReq).PID).To(Equal(vm.PID(1)))
 			entry := next.MSHRState.Entries[entryIdx]
 			Expect(entry.TransactionIndices).To(ContainElement(1))
 			trans := &next.Transactions[1]
@@ -502,7 +503,7 @@ var _ = Describe("Directory", func() {
 		It("should send to bank", func() {
 			next := &c.comp.State
 
-			writeMeta := messaging.MsgMeta{
+			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
@@ -530,10 +531,10 @@ var _ = Describe("Directory", func() {
 
 			wValue, _ := bottomPort.RetrieveOutgoing()
 
-			w := wValue.(memprotocol.WriteReq)
-			Expect(w.Address).To(Equal(uint64(0x104)))
-			Expect(w.Data).To(Equal([]byte{1, 2, 3, 4}))
-			Expect(w.PID).To(Equal(vm.PID(1)))
+			w := wValue
+			Expect(w.Payload.(memprotocol.WriteReq).Address).To(Equal(uint64(0x104)))
+			Expect(w.Payload.(memprotocol.WriteReq).Data).To(Equal([]byte{1, 2, 3, 4}))
+			Expect(w.Payload.(memprotocol.WriteReq).PID).To(Equal(vm.PID(1)))
 
 			trans := &next.Transactions[0]
 			Expect(madeProgress).To(BeTrue())
@@ -546,7 +547,7 @@ var _ = Describe("Directory", func() {
 		It("should stall if the block is locked", func() {
 			next := &c.comp.State
 
-			writeMeta := messaging.MsgMeta{
+			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
@@ -578,7 +579,7 @@ var _ = Describe("Directory", func() {
 		It("should stall if the block is being read", func() {
 			next := &c.comp.State
 
-			writeMeta := messaging.MsgMeta{
+			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
@@ -610,7 +611,7 @@ var _ = Describe("Directory", func() {
 		It("should stall if bank buf is full", func() {
 			next := &c.comp.State
 
-			writeMeta := messaging.MsgMeta{
+			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
@@ -643,7 +644,7 @@ var _ = Describe("Directory", func() {
 		It("should stall if send to bottom failed", func() {
 			next := &c.comp.State
 
-			writeMeta := messaging.MsgMeta{
+			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
@@ -678,7 +679,7 @@ var _ = Describe("Directory", func() {
 		It("should send to bottom", func() {
 			next := &c.comp.State
 
-			writeMeta := messaging.MsgMeta{
+			writeMeta := messaging.Msg{
 				ID:           c.comp.NewID(),
 				TrafficBytes: 64 + 12,
 				TrafficClass: "req",
@@ -698,10 +699,10 @@ var _ = Describe("Directory", func() {
 
 			wValue, _ := bottomPort.RetrieveOutgoing()
 
-			w := wValue.(memprotocol.WriteReq)
-			Expect(w.Address).To(Equal(uint64(0x100)))
-			Expect(w.Data).To(HaveLen(64))
-			Expect(w.PID).To(Equal(vm.PID(1)))
+			w := wValue
+			Expect(w.Payload.(memprotocol.WriteReq).Address).To(Equal(uint64(0x100)))
+			Expect(w.Payload.(memprotocol.WriteReq).Data).To(HaveLen(64))
+			Expect(w.Payload.(memprotocol.WriteReq).PID).To(Equal(vm.PID(1)))
 
 			trans := &next.Transactions[0]
 			Expect(madeProgress).To(BeTrue())

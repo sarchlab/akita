@@ -46,19 +46,20 @@ func (m *parseTranslateMW) translate() bool {
 		return false
 	}
 
-	item := itemI.(memprotocol.AccessReq)
-	vAddr := item.GetAddress()
+	item := itemI
+	vAddr := item.Payload.(memprotocol.AccessReq).GetAddress()
 	spec := m.comp.Spec
 	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
 
-	transReq := vmprotocol.TranslationReq{}
-	transReq.ID = m.comp.NewID()
-	transReq.Src = m.translationPort().AsRemote()
-	transReq.Dst = m.comp.Resources.TranslationProviderMapper.Find(vAddr)
-	transReq.PID = item.GetPID()
-	transReq.VAddr = vPageID
-	transReq.DeviceID = spec.DeviceID
-	transReq.TrafficClass = "vmprotocol.TranslationReq"
+	transReq := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		PID:      item.Payload.(memprotocol.AccessReq).GetPID(),
+		VAddr:    vPageID,
+		DeviceID: spec.DeviceID},
+		ID:  m.comp.NewID(),
+		Src: m.translationPort().AsRemote(),
+		Dst: m.comp.Resources.TranslationProviderMapper.Find(vAddr),
+
+		TrafficClass: "vmprotocol.TranslationReq"}
 
 	if !m.translationPort().CanSend() {
 		return false

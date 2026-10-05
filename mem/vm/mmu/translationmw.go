@@ -117,14 +117,14 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	state := &m.comp.State
 	walking := state.WalkingTranslations[walkingIndex]
 
-	rsp := vmprotocol.TranslationRsp{
+	rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 		Page: walking.Page,
-	}
-	rsp.ID = m.comp.NewID()
-	rsp.Src = m.topPort().AsRemote()
-	rsp.Dst = walking.ReqSrc
-	rsp.RspTo = walking.ReqID
-	rsp.TrafficClass = "vmprotocol.TranslationRsp"
+	},
+		ID:           m.comp.NewID(),
+		Src:          m.topPort().AsRemote(),
+		Dst:          walking.ReqSrc,
+		RspTo:        walking.ReqID,
+		TrafficClass: "vmprotocol.TranslationRsp"}
 
 	m.topPort().Send(rsp)
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
@@ -171,19 +171,21 @@ func (m *translationMW) parseFromTop() bool {
 
 	m.topPort().RetrieveIncoming()
 
-	switch req := reqI.(type) {
+	switch reqI.Payload.(type) {
 	case vmprotocol.TranslationReq:
+		req := reqI
+
 		tracing.TraceReqReceive(m.comp, req)
 		m.startWalking(req)
 	default:
 		log.Panicf("MMU canot handle request of type %s",
-			fmt.Sprintf("%T", reqI))
+			fmt.Sprintf("%T", reqI.Payload))
 	}
 
 	return true
 }
 
-func (m *translationMW) startWalking(req vmprotocol.TranslationReq) {
+func (m *translationMW) startWalking(req messaging.Msg) {
 	spec := m.comp.Spec
 	state := &m.comp.State
 
@@ -195,10 +197,10 @@ func (m *translationMW) startWalking(req vmprotocol.TranslationReq) {
 		RecvTaskID:   recvTaskID,
 		ReqSrc:       req.Src,
 		ReqDst:       req.Dst,
-		PID:          uint32(req.PID),
-		VAddr:        req.VAddr,
-		DeviceID:     req.DeviceID,
-		TransLatency: req.TransLatency,
+		PID:          uint32(req.Payload.(vmprotocol.TranslationReq).PID),
+		VAddr:        req.Payload.(vmprotocol.TranslationReq).VAddr,
+		DeviceID:     req.Payload.(vmprotocol.TranslationReq).DeviceID,
+		TransLatency: req.Payload.(vmprotocol.TranslationReq).TransLatency,
 		CycleLeft:    spec.Latency,
 		WalkTaskID:   walkTaskID,
 	}

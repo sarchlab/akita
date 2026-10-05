@@ -66,15 +66,17 @@ var _ = Describe("Ideal Memory Controller", func() {
 		conn.PlugIn(topPort)
 	}
 
-	makeReadReq := func() memprotocol.ReadReq {
-		req := memprotocol.ReadReq{}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Agent")
-		req.Dst = topPort.AsRemote()
-		req.Address = 0
-		req.AccessByteSize = 4
-		req.TrafficBytes = 12
-		req.TrafficClass = "memprotocol.ReadReq"
+	makeReadReq := func() messaging.Msg {
+		req := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0,
+			AccessByteSize: 4},
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Agent"),
+			Dst: topPort.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		return req
 	}
 
@@ -99,14 +101,15 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should accept write request and add to inflight transactions", func() {
-		writeReq := memprotocol.WriteReq{}
-		writeReq.ID = sim.NewID()
-		writeReq.Src = messaging.RemotePort("Agent")
-		writeReq.Dst = topPort.AsRemote()
-		writeReq.Address = 0
-		writeReq.Data = []byte{0, 1, 2, 3}
-		writeReq.DirtyMask = []bool{false, false, true, false}
-		writeReq.TrafficBytes = len(writeReq.Data) + 12
+		writeReq := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address:   0,
+			Data:      []byte{0, 1, 2, 3},
+			DirtyMask: []bool{false, false, true, false}},
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Agent"),
+			Dst: topPort.AsRemote()}
+
+		writeReq.TrafficBytes = len(writeReq.Payload.(memprotocol.WriteReq).Data) + 12
 		writeReq.TrafficClass = "memprotocol.WriteReq"
 		topPort.Deliver(writeReq)
 
@@ -140,17 +143,18 @@ var _ = Describe("Ideal Memory Controller", func() {
 		Expect(state.InflightTransactions).To(HaveLen(0))
 
 		rsp, _ := topPort.RetrieveOutgoing()
-		Expect(rsp).To(BeAssignableToTypeOf(memprotocol.DataReadyRsp{}))
+		Expect(rsp).To(BeAssignableToTypeOf(messaging.Msg{Payload: memprotocol.DataReadyRsp{}}))
 	})
 
 	It("should send write response after latency ticks", func() {
-		writeReq := memprotocol.WriteReq{}
-		writeReq.ID = sim.NewID()
-		writeReq.Src = messaging.RemotePort("Agent")
-		writeReq.Dst = topPort.AsRemote()
-		writeReq.Address = 0
-		writeReq.Data = []byte{0, 1, 2, 3}
-		writeReq.TrafficBytes = len(writeReq.Data) + 12
+		writeReq := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address: 0,
+			Data:    []byte{0, 1, 2, 3}},
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Agent"),
+			Dst: topPort.AsRemote()}
+
+		writeReq.TrafficBytes = len(writeReq.Payload.(memprotocol.WriteReq).Data) + 12
 		writeReq.TrafficClass = "memprotocol.WriteReq"
 		topPort.Deliver(writeReq)
 
@@ -169,7 +173,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		Expect(state.InflightTransactions).To(HaveLen(0))
 
 		rsp, _ := topPort.RetrieveOutgoing()
-		Expect(rsp).To(BeAssignableToTypeOf(memprotocol.WriteDoneRsp{}))
+		Expect(rsp).To(BeAssignableToTypeOf(messaging.Msg{Payload: memprotocol.WriteDoneRsp{}}))
 
 		// Verify data was written to storage
 		data := storage.Read(0, 4)
@@ -182,10 +186,11 @@ var _ = Describe("Ideal Memory Controller", func() {
 		build(1)
 
 		// Pre-fill the outgoing buffer so the controller's response Send fails.
-		dummy := memprotocol.WriteDoneRsp{}
-		dummy.Src = topPort.AsRemote()
-		dummy.Dst = messaging.RemotePort("Agent")
-		dummy.TrafficClass = "memprotocol.WriteDoneRsp"
+		dummy := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+			Src:          topPort.AsRemote(),
+			Dst:          messaging.RemotePort("Agent"),
+			TrafficClass: "memprotocol.WriteDoneRsp"}
+
 		topPort.Send(dummy)
 
 		topPort.Deliver(makeReadReq())
@@ -223,14 +228,15 @@ var _ = Describe("Ideal Memory Controller", func() {
 		// Pre-write data
 		storage.Write(0, []byte{10, 20, 30, 40})
 
-		writeReq := memprotocol.WriteReq{}
-		writeReq.ID = sim.NewID()
-		writeReq.Src = messaging.RemotePort("Agent")
-		writeReq.Dst = topPort.AsRemote()
-		writeReq.Address = 0
-		writeReq.Data = []byte{0, 1, 2, 3}
-		writeReq.DirtyMask = []bool{false, false, true, false}
-		writeReq.TrafficBytes = len(writeReq.Data) + 12
+		writeReq := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address:   0,
+			Data:      []byte{0, 1, 2, 3},
+			DirtyMask: []bool{false, false, true, false}},
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Agent"),
+			Dst: topPort.AsRemote()}
+
+		writeReq.TrafficBytes = len(writeReq.Payload.(memprotocol.WriteReq).Data) + 12
 		writeReq.TrafficClass = "memprotocol.WriteReq"
 		topPort.Deliver(writeReq)
 

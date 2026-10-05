@@ -161,19 +161,20 @@ var _ = Describe("Cache milestones", func() {
 		buildCache("write-around")
 
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4})
-		read := memprotocol.ReadReq{Address: 0x100, AccessByteSize: 4}
-		read.ID = sim.NewID()
-		read.Src = cuPort.AsRemote()
-		read.Dst = c.Ports.Top.AsRemote()
-		read.TrafficBytes = 12
-		read.TrafficClass = "req"
+		read := messaging.Msg{Payload: memprotocol.ReadReq{Address: 0x100, AccessByteSize: 4},
+			ID:           sim.NewID(),
+			Src:          cuPort.AsRemote(),
+			Dst:          c.Ports.Top.AsRemote(),
+			TrafficBytes: 12,
+			TrafficClass: "req"}
+
 		c.Ports.Top.Deliver(read)
 
 		Expect(engine.Run()).To(Succeed())
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
-		Expect(rsps[0].(memprotocol.DataReadyRsp).Data).
+		Expect(rsps[0].Payload.(memprotocol.DataReadyRsp).Data).
 			To(Equal([]byte{1, 2, 3, 4}))
 
 		// The buffer task exists and carries the two hardware-resource
@@ -210,12 +211,13 @@ var _ = Describe("Cache milestones", func() {
 		buildCache("write-around")
 
 		dramStorage.Write(0x100, []byte{1, 2, 3, 4})
-		read := memprotocol.ReadReq{Address: 0x100, AccessByteSize: 4}
-		read.ID = sim.NewID()
-		read.Src = cuPort.AsRemote()
-		read.Dst = c.Ports.Top.AsRemote()
-		read.TrafficBytes = 12
-		read.TrafficClass = "req"
+		read := messaging.Msg{Payload: memprotocol.ReadReq{Address: 0x100, AccessByteSize: 4},
+			ID:           sim.NewID(),
+			Src:          cuPort.AsRemote(),
+			Dst:          c.Ports.Top.AsRemote(),
+			TrafficBytes: 12,
+			TrafficClass: "req"}
+
 		c.Ports.Top.Deliver(read)
 
 		// Run to quiescence: the read miss fetches from the lower memory and the
@@ -224,7 +226,7 @@ var _ = Describe("Cache milestones", func() {
 
 		rsps := drainResponses()
 		Expect(rsps).To(HaveLen(1))
-		Expect(rsps[0].(memprotocol.DataReadyRsp).Data).
+		Expect(rsps[0].Payload.(memprotocol.DataReadyRsp).Data).
 			To(Equal([]byte{1, 2, 3, 4}))
 
 		reqInStart, ok := rec.firstStart("req_in")
@@ -260,12 +262,13 @@ var _ = Describe("Cache milestones", func() {
 		for i := range fullLine {
 			fullLine[i] = byte(i)
 		}
-		warm := memprotocol.WriteReq{Address: 0x100, Data: fullLine}
-		warm.ID = sim.NewID()
-		warm.Src = cuPort.AsRemote()
-		warm.Dst = c.Ports.Top.AsRemote()
-		warm.TrafficBytes = 64 + 12
-		warm.TrafficClass = "req"
+		warm := messaging.Msg{Payload: memprotocol.WriteReq{Address: 0x100, Data: fullLine},
+			ID:           sim.NewID(),
+			Src:          cuPort.AsRemote(),
+			Dst:          c.Ports.Top.AsRemote(),
+			TrafficBytes: 64 + 12,
+			TrafficClass: "req"}
+
 		c.Ports.Top.Deliver(warm)
 		Expect(engine.Run()).To(Succeed())
 		Expect(drainResponses()).To(HaveLen(1))
@@ -278,12 +281,13 @@ var _ = Describe("Cache milestones", func() {
 
 		// Now a partial write to the same line: this is a write-through write
 		// hit and must carry the write-hit tag.
-		hit := memprotocol.WriteReq{Address: 0x100, Data: []byte{9, 9, 9, 9}}
-		hit.ID = sim.NewID()
-		hit.Src = cuPort.AsRemote()
-		hit.Dst = c.Ports.Top.AsRemote()
-		hit.TrafficBytes = 4 + 12
-		hit.TrafficClass = "req"
+		hit := messaging.Msg{Payload: memprotocol.WriteReq{Address: 0x100, Data: []byte{9, 9, 9, 9}},
+			ID:           sim.NewID(),
+			Src:          cuPort.AsRemote(),
+			Dst:          c.Ports.Top.AsRemote(),
+			TrafficBytes: 4 + 12,
+			TrafficClass: "req"}
+
 		c.Ports.Top.Deliver(hit)
 		Expect(engine.Run()).To(Succeed())
 		Expect(drainResponses()).To(HaveLen(1))
@@ -332,12 +336,13 @@ var _ = Describe("Cache milestones", func() {
 		for i := range fullLine {
 			fullLine[i] = byte(i)
 		}
-		miss := memprotocol.WriteReq{Address: 0x100, Data: fullLine}
-		miss.ID = sim.NewID()
-		miss.Src = cuPort.AsRemote()
-		miss.Dst = c.Ports.Top.AsRemote()
-		miss.TrafficBytes = 64 + 12
-		miss.TrafficClass = "req"
+		miss := messaging.Msg{Payload: memprotocol.WriteReq{Address: 0x100, Data: fullLine},
+			ID:           sim.NewID(),
+			Src:          cuPort.AsRemote(),
+			Dst:          c.Ports.Top.AsRemote(),
+			TrafficBytes: 64 + 12,
+			TrafficClass: "req"}
+
 		c.Ports.Top.Deliver(miss)
 		Expect(engine.Run()).To(Succeed())
 		Expect(drainResponses()).To(HaveLen(1))
@@ -370,12 +375,13 @@ var _ = Describe("Cache milestones", func() {
 		// the bank, so the transaction traverses the bank pipeline and must
 		// open a bank subtask.
 		fullLine := make([]byte, 64)
-		w := memprotocol.WriteReq{Address: 0x100, Data: fullLine}
-		w.ID = sim.NewID()
-		w.Src = cuPort.AsRemote()
-		w.Dst = c.Ports.Top.AsRemote()
-		w.TrafficBytes = 64 + 12
-		w.TrafficClass = "req"
+		w := messaging.Msg{Payload: memprotocol.WriteReq{Address: 0x100, Data: fullLine},
+			ID:           sim.NewID(),
+			Src:          cuPort.AsRemote(),
+			Dst:          c.Ports.Top.AsRemote(),
+			TrafficBytes: 64 + 12,
+			TrafficClass: "req"}
+
 		c.Ports.Top.Deliver(w)
 		Expect(engine.Run()).To(Succeed())
 		Expect(drainResponses()).To(HaveLen(1))

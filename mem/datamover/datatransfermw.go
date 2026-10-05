@@ -131,15 +131,18 @@ func (m *dataTransferMW) readFromSrc() bool {
 
 	srcP := m.srcPort()
 
-	req := memprotocol.ReadReq{}
-	req.ID = m.comp.NewID()
-	req.Address = addr
-	req.Src = srcP.AsRemote()
-	req.Dst = m.findSrcPort(addr)
-	req.AccessByteSize = state.SrcByteGranularity
-	req.PID = 0
-	req.TrafficBytes = 12
-	req.TrafficClass = "memprotocol.ReadReq"
+	req := messaging.Msg{Payload: memprotocol.ReadReq{
+		Address: addr,
+
+		AccessByteSize: state.SrcByteGranularity,
+		PID:            0},
+		ID: m.comp.NewID(),
+
+		Src: srcP.AsRemote(),
+		Dst: m.findSrcPort(addr),
+
+		TrafficBytes: 12,
+		TrafficClass: "memprotocol.ReadReq"}
 
 	if !srcP.CanSend() {
 		return false
@@ -152,7 +155,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 		ID:      req.ID,
 		Src:     req.Src,
 		Dst:     req.Dst,
-		Address: req.Address,
+		Address: req.Payload.(memprotocol.ReadReq).Address,
 	}
 
 	tracing.TraceReqInitiate(m.comp, req,
@@ -173,8 +176,8 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 	if !ok {
 		return false
 	}
-
-	rsp, ok := rspI.(memprotocol.DataReadyRsp)
+	_, ok = rspI.Payload.(memprotocol.DataReadyRsp)
+	rsp := rspI
 	if !ok {
 		// it can be write done rsp if src and dst is the same side. So ignore.
 		return false
@@ -190,7 +193,7 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 	}
 
 	offset := originalReq.Address - trans.SrcAddress
-	bufferAddData(&state.Buffer, offset, rsp.Data)
+	bufferAddData(&state.Buffer, offset, rsp.Payload.(memprotocol.DataReadyRsp).Data)
 
 	delete(trans.PendingRead, rsp.RspTo)
 	srcP.RetrieveIncoming()
@@ -205,10 +208,11 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 	})
 
 	// Create a temporary msg for tracing
-	traceReq := memprotocol.ReadReq{}
-	traceReq.ID = originalReq.ID
-	traceReq.Src = originalReq.Src
-	traceReq.Dst = originalReq.Dst
+	traceReq := messaging.Msg{Payload: memprotocol.ReadReq{},
+		ID:  originalReq.ID,
+		Src: originalReq.Src,
+		Dst: originalReq.Dst}
+
 	tracing.TraceReqFinalize(m.comp, traceReq)
 
 	return true
@@ -231,15 +235,18 @@ func (m *dataTransferMW) writeToDst() bool {
 
 	dstP := m.dstPort()
 
-	req := memprotocol.WriteReq{}
-	req.ID = m.comp.NewID()
-	req.Address = trans.NextWriteAddr
-	req.Data = data
-	req.Src = dstP.AsRemote()
-	req.Dst = m.findDstPort(trans.NextWriteAddr)
-	req.PID = 0
-	req.TrafficBytes = len(data) + 12
-	req.TrafficClass = "memprotocol.WriteReq"
+	req := messaging.Msg{Payload: memprotocol.WriteReq{
+		Address: trans.NextWriteAddr,
+		Data:    data,
+
+		PID: 0},
+		ID: m.comp.NewID(),
+
+		Src: dstP.AsRemote(),
+		Dst: m.findDstPort(trans.NextWriteAddr),
+
+		TrafficBytes: len(data) + 12,
+		TrafficClass: "memprotocol.WriteReq"}
 
 	if !dstP.CanSend() {
 		return false
@@ -252,7 +259,7 @@ func (m *dataTransferMW) writeToDst() bool {
 		ID:      req.ID,
 		Src:     req.Src,
 		Dst:     req.Dst,
-		Address: req.Address,
+		Address: req.Payload.(memprotocol.WriteReq).Address,
 		Data:    data,
 	}
 	bufferMoveOffsetForwardTo(&state.Buffer, trans.NextWriteAddr-trans.DstAddress)
@@ -275,8 +282,8 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 	if !ok {
 		return false
 	}
-
-	rsp, ok := rspI.(memprotocol.WriteDoneRsp)
+	_, ok = rspI.Payload.(memprotocol.WriteDoneRsp)
+	rsp := rspI
 	if !ok {
 		return false
 	}
@@ -303,10 +310,11 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 	})
 
 	// Create a temporary msg for tracing
-	traceReq := memprotocol.WriteReq{}
-	traceReq.ID = originalReq.ID
-	traceReq.Src = originalReq.Src
-	traceReq.Dst = originalReq.Dst
+	traceReq := messaging.Msg{Payload: memprotocol.WriteReq{},
+		ID:  originalReq.ID,
+		Src: originalReq.Src,
+		Dst: originalReq.Dst}
+
 	tracing.TraceReqFinalize(m.comp, traceReq)
 
 	// Processing a write ack is real progress: the component must tick again

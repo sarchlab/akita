@@ -55,41 +55,45 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	rec := &tracingtest.LeakRecorder{}
 	tracing.CollectTrace(dataMover, rec)
 
-	makeMove := func() datamoverprotocol.DataMoveReq {
-		req := datamoverprotocol.DataMoveReq{}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Agent")
-		req.Dst = topPort.AsRemote()
-		req.SrcAddress = 0
-		req.SrcSide = "outside"
-		req.DstAddress = 0
-		req.DstSide = "inside"
-		req.ByteSize = 64
-		req.TrafficClass = "datamoverprotocol.DataMoveReq"
+	makeMove := func() messaging.Msg {
+		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+			SrcAddress: 0,
+			SrcSide:    "outside",
+			DstAddress: 0,
+			DstSide:    "inside",
+			ByteSize:   64},
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Agent"),
+			Dst: topPort.AsRemote(),
+
+			TrafficClass: "datamoverprotocol.DataMoveReq"}
+
 		return req
 	}
 
-	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
-		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Cmd")
-		req.Dst = ctrlPort.AsRemote()
-		req.TrafficClass = "memcontrolprotocol.Req"
+	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
+		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("Cmd"),
+			Dst:          ctrlPort.AsRemote(),
+			TrafficClass: "memcontrolprotocol.Req"}
+
 		return req
 	}
 
 	// startMove delivers a move and ticks until the first Outside read is issued.
 	// The read is left unanswered, so the move's req_in task and the read's
 	// req_out task stay open.
-	startMove := func() (memprotocol.ReadReq, bool) {
+	startMove := func() (messaging.Msg, bool) {
 		topPort.Deliver(makeMove())
 
-		var read memprotocol.ReadReq
+		var read messaging.Msg
 		gotRead := false
 		for i := 0; i < 64 && !gotRead; i++ {
 			modelingtest.Tick(dataMover)
 			if out, ok := outsidePort.RetrieveOutgoing(); ok {
-				read, gotRead = out.(memprotocol.ReadReq)
+				_, gotRead = out.Payload.(memprotocol.ReadReq)
+				read = out
 			}
 		}
 		return read, gotRead
@@ -115,8 +119,8 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	for i := 0; i < 64 && !acked; i++ {
 		modelingtest.Tick(dataMover)
 		if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-			if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
-				rsp.Command == memcontrolprotocol.CmdReset {
+			if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+				Command == memcontrolprotocol.CmdReset {
 				acked = true
 			}
 		}

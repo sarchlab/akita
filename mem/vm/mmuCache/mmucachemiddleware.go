@@ -87,8 +87,8 @@ func (m *mmuCacheMiddleware) lookup() bool {
 	if !ok {
 		return false
 	}
-
-	msg, ok := msgI.(vmprotocol.TranslationReq)
+	_, ok = msgI.Payload.(vmprotocol.TranslationReq)
+	msg := msgI
 	if !ok {
 		return false
 	}
@@ -97,7 +97,7 @@ func (m *mmuCacheMiddleware) lookup() bool {
 }
 
 func (m *mmuCacheMiddleware) walkCacheLevels(
-	msg vmprotocol.TranslationReq,
+	msg messaging.Msg,
 ) bool {
 	spec := m.comp.Spec
 	totalLatency := spec.LatencyPerLevel * uint64(spec.NumLevels)
@@ -118,12 +118,12 @@ func (m *mmuCacheMiddleware) walkCacheLevels(
 }
 
 func (m *mmuCacheMiddleware) lookupLevel(
-	level int, req vmprotocol.TranslationReq,
+	level int, req messaging.Msg,
 ) bool {
 	spec := m.comp.Spec
 	next := &m.comp.State
-	vAddr := req.VAddr
-	pid := req.PID
+	vAddr := req.Payload.(vmprotocol.TranslationReq).VAddr
+	pid := req.Payload.(vmprotocol.TranslationReq).PID
 
 	vpn := vAddr >> spec.Log2PageSize
 	levelWidth := (64 - spec.Log2PageSize) / uint64(spec.NumLevels)
@@ -139,7 +139,7 @@ func (m *mmuCacheMiddleware) lookupLevel(
 }
 
 func (m *mmuCacheMiddleware) sendReqToBottom(
-	req vmprotocol.TranslationReq,
+	req messaging.Msg,
 	latency uint64) bool {
 	if !m.bottomPort().CanSend() {
 		return false
@@ -147,15 +147,16 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 
 	res := m.comp.Resources
 
-	reqToBottom := vmprotocol.TranslationReq{}
-	reqToBottom.ID = m.comp.NewID()
-	reqToBottom.Src = m.bottomPort().AsRemote()
-	reqToBottom.Dst = res.LowModulePort
-	reqToBottom.PID = req.PID
-	reqToBottom.VAddr = req.VAddr
-	reqToBottom.DeviceID = req.DeviceID
-	reqToBottom.TransLatency = latency
-	reqToBottom.TrafficClass = "vmprotocol.TranslationReq"
+	reqToBottom := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		PID:          req.Payload.(vmprotocol.TranslationReq).PID,
+		VAddr:        req.Payload.(vmprotocol.TranslationReq).VAddr,
+		DeviceID:     req.Payload.(vmprotocol.TranslationReq).DeviceID,
+		TransLatency: latency},
+		ID:  m.comp.NewID(),
+		Src: m.bottomPort().AsRemote(),
+		Dst: res.LowModulePort,
+
+		TrafficClass: "vmprotocol.TranslationReq"}
 
 	m.bottomPort().Send(reqToBottom)
 	m.comp.State.OutstandingBottomReqs[reqToBottom.ID] = true
@@ -201,16 +202,18 @@ func (m *mmuCacheMiddleware) handleBottomPort() bool {
 		return false
 	}
 
-	switch item := itemI.(type) {
+	switch itemI.Payload.(type) {
 	case vmprotocol.TranslationRsp:
+		item := itemI
+
 		madeProgress = m.handleRsp(item) || madeProgress
 	default:
-		log.Panicf("cannot process request %s", fmt.Sprintf("%T", itemI))
+		log.Panicf("cannot process request %s", fmt.Sprintf("%T", itemI.Payload))
 	}
 	return madeProgress
 }
 
-func (m *mmuCacheMiddleware) handleRsp(rsp vmprotocol.TranslationRsp) bool {
+func (m *mmuCacheMiddleware) handleRsp(rsp messaging.Msg) bool {
 	next := &m.comp.State
 	if _, live := next.OutstandingBottomReqs[rsp.RspTo]; !live {
 		// Orphaned response: its forwarded request was dropped (e.g. a Reset
@@ -228,14 +231,14 @@ func (m *mmuCacheMiddleware) handleRsp(rsp vmprotocol.TranslationRsp) bool {
 
 	res := m.comp.Resources
 
-	rspToTop := vmprotocol.TranslationRsp{
-		Page: rsp.Page,
-	}
-	rspToTop.ID = m.comp.NewID()
-	rspToTop.Src = m.topPort().AsRemote()
-	rspToTop.Dst = res.UpModulePort
-	rspToTop.RspTo = rsp.RspTo
-	rspToTop.TrafficClass = "vmprotocol.TranslationRsp"
+	rspToTop := messaging.Msg{Payload: vmprotocol.TranslationRsp{
+		Page: rsp.Payload.(vmprotocol.TranslationRsp).Page,
+	},
+		ID:           m.comp.NewID(),
+		Src:          m.topPort().AsRemote(),
+		Dst:          res.UpModulePort,
+		RspTo:        rsp.RspTo,
+		TrafficClass: "vmprotocol.TranslationRsp"}
 
 	m.topPort().Send(rspToTop)
 
@@ -288,10 +291,10 @@ func (m *mmuCacheMiddleware) segToSetID(seg uint64) int {
 }
 
 // updateCacheLevels updates all cache levels with the translation response.
-func (m *mmuCacheMiddleware) updateCacheLevels(rsp vmprotocol.TranslationRsp) bool {
+func (m *mmuCacheMiddleware) updateCacheLevels(rsp messaging.Msg) bool {
 	spec := m.comp.Spec
 	next := &m.comp.State
-	page := rsp.Page
+	page := rsp.Payload.(vmprotocol.TranslationRsp).Page
 	vAddr := page.VAddr
 	pid := page.PID
 

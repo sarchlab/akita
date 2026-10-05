@@ -63,19 +63,20 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// then awaits the translation response (which never comes — the request is in
 	// flight). Tick until the transaction is created and the TranslationReq has
 	// actually gone out the Translation port.
-	read := memprotocol.ReadReq{Address: 0x1040, AccessByteSize: 4}
-	read.ID = sim.NewID()
-	read.Src = messaging.RemotePort("Agent")
-	read.Dst = topPort.AsRemote()
-	read.TrafficBytes = 12
-	read.TrafficClass = "memprotocol.ReadReq"
+	read := messaging.Msg{Payload: memprotocol.ReadReq{Address: 0x1040, AccessByteSize: 4},
+		ID:           sim.NewID(),
+		Src:          messaging.RemotePort("Agent"),
+		Dst:          topPort.AsRemote(),
+		TrafficBytes: 12,
+		TrafficClass: "memprotocol.ReadReq"}
+
 	topPort.Deliver(read)
 
 	var transReqSent bool
 	for range 8 {
 		modelingtest.Tick(at)
 		if out, ok := translationPort.RetrieveOutgoing(); ok {
-			if _, ok := out.(vmprotocol.TranslationReq); ok {
+			if _, ok := out.Payload.(vmprotocol.TranslationReq); ok {
 				transReqSent = true
 				break
 			}
@@ -95,19 +96,20 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	}
 
 	// Reset while the transaction is in flight (translation never answered).
-	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = sim.NewID()
-	reset.Src = messaging.RemotePort("Cmd")
-	reset.Dst = ctrlPort.AsRemote()
-	reset.TrafficClass = "memcontrolprotocol.Req"
+	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
+		ID:           sim.NewID(),
+		Src:          messaging.RemotePort("Cmd"),
+		Dst:          ctrlPort.AsRemote(),
+		TrafficClass: "memcontrolprotocol.Req"}
+
 	ctrlPort.Deliver(reset)
 
 	acked := false
 	for range 64 {
 		modelingtest.Tick(at)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
-			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
-				rsp.Command == memcontrolprotocol.CmdReset {
+			if rsp, ok := msg.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+				Command == memcontrolprotocol.CmdReset {
 				acked = true
 				break
 			}

@@ -223,7 +223,7 @@ func (s *state) indexHasInflightBottomTransaction(i int) bool {
 
 // flushReqState is a serializable representation of a flush control request.
 type flushReqState struct {
-	MsgMeta messaging.MsgMeta `json:"msg_meta"`
+	Msg messaging.Msg `json:"msg_meta"`
 
 	// FilterAddresses / FilterPID narrow which dirty blocks are written
 	// back. An empty address list matches every block address; a zero PID
@@ -261,23 +261,23 @@ type transactionState struct {
 	ID uint64 `json:"id"`
 
 	// Read request fields (flat, replaces memprotocol.ReadReq)
-	HasRead            bool              `json:"has_read"`
-	ReadMeta           messaging.MsgMeta `json:"read_meta"`
-	ReadAddress        uint64            `json:"read_address"`
-	ReadAccessByteSize uint64            `json:"read_access_byte_size"`
-	ReadPID            vm.PID            `json:"read_pid"`
+	HasRead            bool          `json:"has_read"`
+	ReadMeta           messaging.Msg `json:"read_meta"`
+	ReadAddress        uint64        `json:"read_address"`
+	ReadAccessByteSize uint64        `json:"read_access_byte_size"`
+	ReadPID            vm.PID        `json:"read_pid"`
 
 	// Write request fields (flat, replaces memprotocol.WriteReq)
-	HasWrite       bool              `json:"has_write"`
-	WriteMeta      messaging.MsgMeta `json:"write_meta"`
-	WriteAddress   uint64            `json:"write_address"`
-	WriteData      []byte            `json:"write_data"`
-	WriteDirtyMask []bool            `json:"write_dirty_mask"`
-	WritePID       vm.PID            `json:"write_pid"`
+	HasWrite       bool          `json:"has_write"`
+	WriteMeta      messaging.Msg `json:"write_meta"`
+	WriteAddress   uint64        `json:"write_address"`
+	WriteData      []byte        `json:"write_data"`
+	WriteDirtyMask []bool        `json:"write_dirty_mask"`
+	WritePID       vm.PID        `json:"write_pid"`
 
 	// Flush request fields (flat)
-	HasFlush  bool              `json:"has_flush"`
-	FlushMeta messaging.MsgMeta `json:"flush_meta"`
+	HasFlush  bool          `json:"has_flush"`
+	FlushMeta messaging.Msg `json:"flush_meta"`
 
 	// Block reference (into directoryState)
 	BlockSetID int  `json:"block_set_id"`
@@ -296,8 +296,8 @@ type transactionState struct {
 	FetchedData  []byte `json:"fetched_data"`
 
 	// Fetch read request fields (flat, replaces memprotocol.ReadReq)
-	HasFetchReadReq  bool              `json:"has_fetch_read_req"`
-	FetchReadReqMeta messaging.MsgMeta `json:"fetch_read_req_meta"`
+	HasFetchReadReq  bool          `json:"has_fetch_read_req"`
+	FetchReadReqMeta messaging.Msg `json:"fetch_read_req_meta"`
 
 	EvictingPID       vm.PID `json:"evicting_pid"`
 	EvictingAddr      uint64 `json:"evicting_addr"`
@@ -305,8 +305,8 @@ type transactionState struct {
 	EvictingDirtyMask []bool `json:"evicting_dirty_mask"`
 
 	// Eviction write request fields (flat, replaces memprotocol.WriteReq)
-	HasEvictionWriteReq  bool              `json:"has_eviction_write_req"`
-	EvictionWriteReqMeta messaging.MsgMeta `json:"eviction_write_req_meta"`
+	HasEvictionWriteReq  bool          `json:"has_eviction_write_req"`
+	EvictionWriteReqMeta messaging.Msg `json:"eviction_write_req_meta"`
 
 	// DirPipelinePID is the tracing task ID of the directory-pipeline subtask
 	// (a child of the request's req_in). It is set when the transaction enters
@@ -345,8 +345,8 @@ func (t *transactionState) accessReqAddress() uint64 {
 	panic("no access request")
 }
 
-// reqMeta returns the MsgMeta of the primary request.
-func (t *transactionState) reqMeta() messaging.MsgMeta {
+// reqMeta returns the original message of the primary request.
+func (t *transactionState) reqMeta() messaging.Msg {
 	if t.HasRead {
 		return t.ReadMeta
 	}

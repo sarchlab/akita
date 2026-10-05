@@ -61,24 +61,27 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		ctrlPort = comp.Ports.Control
 	}
 
-	makeRead := func(addr uint64) memprotocol.ReadReq {
-		req := memprotocol.ReadReq{}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Agent")
-		req.Dst = topPort.AsRemote()
-		req.Address = addr
-		req.AccessByteSize = 4
-		req.TrafficBytes = 12
-		req.TrafficClass = "memprotocol.ReadReq"
+	makeRead := func(addr uint64) messaging.Msg {
+		req := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        addr,
+			AccessByteSize: 4},
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Agent"),
+			Dst: topPort.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		return req
 	}
 
-	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
-		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Ctrl")
-		req.Dst = ctrlPort.AsRemote()
-		req.TrafficClass = "memcontrolprotocol.Req"
+	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
+		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("Ctrl"),
+			Dst:          ctrlPort.AsRemote(),
+			TrafficClass: "memcontrolprotocol.Req"}
+
 		return req
 	}
 
@@ -86,26 +89,29 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 	// the cache matches the response to the in-flight fetch by
 	// FetchReadReqMeta.ID == msg.RspTo, so RspTo must equal the captured Bottom
 	// read's ID. The data is block-sized.
-	makeFillRsp := func(read memprotocol.ReadReq) memprotocol.DataReadyRsp {
+	makeFillRsp := func(read messaging.Msg) messaging.Msg {
 		data := make([]byte, blockSize)
 		for i := range data {
 			data[i] = byte(i + 1)
 		}
-		rsp := memprotocol.DataReadyRsp{Data: data}
-		rsp.ID = sim.NewID()
-		rsp.Src = messaging.RemotePort("LowerCache")
-		rsp.Dst = botPort.AsRemote()
-		rsp.RspTo = read.ID
-		rsp.TrafficClass = "memprotocol.DataReadyRsp"
+		rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: data},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("LowerCache"),
+			Dst:          botPort.AsRemote(),
+			RspTo:        read.ID,
+			TrafficClass: "memprotocol.DataReadyRsp"}
+
 		return rsp
 	}
 
 	makeFilteredCtrlReq := func(
 		cmd memcontrolprotocol.Command,
 		addresses []uint64,
-	) memcontrolprotocol.Req {
+	) messaging.Msg {
 		req := makeCtrlReq(cmd)
-		req.Addresses = addresses
+		payload1 := req.Payload.(memcontrolprotocol.Req)
+		payload1.Addresses = addresses
+		req.Payload = payload1
 		return req
 	}
 
@@ -141,7 +147,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		const n = 3
 
 		// Deliver N distinct-block read misses.
-		reads := make([]memprotocol.ReadReq, n)
+		reads := make([]messaging.Msg, n)
 		for i := range n {
 			reads[i] = makeRead(uint64(i) * blockSize)
 			topPort.Deliver(reads[i])
@@ -149,7 +155,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 
 		// Tick until every miss has fired a Bottom read; capture them so we
 		// can answer later. Until we answer, the cache cannot be quiescent.
-		botReads := make([]memprotocol.ReadReq, 0, n)
+		botReads := make([]messaging.Msg, 0, n)
 		for i := 0; i < 64 && len(botReads) < n; i++ {
 			modelingtest.Tick(comp)
 			for {
@@ -157,8 +163,9 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 				if !ok {
 					break
 				}
-				if r, ok := out.(memprotocol.ReadReq); ok {
-					botReads = append(botReads, r)
+				if _, ok := out.Payload.(memprotocol.ReadReq); ok {
+
+					botReads = append(botReads, out)
 				}
 			}
 		}
@@ -178,7 +185,8 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		for range 5 {
 			modelingtest.Tick(comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-				if rsp, ok := out.(memcontrolprotocol.Rsp); ok {
+				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
+
 					Expect(rsp.Command).ToNot(Equal(memcontrolprotocol.CmdDrain),
 						"Drain must not ack before in-flight misses finish")
 				}
@@ -195,7 +203,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		// Tick while counting completed Top responses and watching Control for
 		// the async Drain ack.
 		completed := 0
-		var drainRsp memcontrolprotocol.Rsp
+		var drainRsp messaging.Msg
 		gotDrainRsp := false
 		for i := 0; i < 4096 && !gotDrainRsp; i++ {
 			modelingtest.Tick(comp)
@@ -204,21 +212,23 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 				if !ok {
 					break
 				}
-				if _, ok := out.(memprotocol.DataReadyRsp); ok {
+				if _, ok := out.Payload.(memprotocol.DataReadyRsp); ok {
 					completed++
 				}
 			}
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
-					rsp.Command == memcontrolprotocol.CmdDrain {
-					drainRsp = rsp
+				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+					Command == memcontrolprotocol.CmdDrain {
+					drainRsp = out
+
 					gotDrainRsp = true
 				}
+
 			}
 		}
 
 		Expect(gotDrainRsp).To(BeTrue())
-		Expect(drainRsp.Success).To(BeTrue())
+		Expect(drainRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
 		Expect(completed).To(Equal(n))
 		Expect(cacheIsQuiescent(&comp.State)).To(BeTrue())
@@ -283,18 +293,19 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 			reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp memcontrolprotocol.Rsp
+			var rsp messaging.Msg
 			gotRsp := false
 			for i := 0; i < 64 && !gotRsp; i++ {
 				modelingtest.Tick(comp)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-					rsp, gotRsp = out.(memcontrolprotocol.Rsp)
+					_, gotRsp = out.Payload.(memcontrolprotocol.Rsp)
+					rsp = out
 				}
 			}
 
 			Expect(gotRsp).To(BeTrue())
-			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
-			Expect(rsp.Success).To(BeTrue())
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			Expect(comp.State.Transactions).To(BeEmpty())
 			Expect(cacheState(comp.State.CacheState)).
@@ -318,7 +329,7 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		ctrlPort.Deliver(reset)
 
-		var rsps []memcontrolprotocol.Rsp
+		var rsps []messaging.Msg
 		for range 16 {
 			modelingtest.Tick(comp)
 			for {
@@ -326,16 +337,17 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 				if !ok {
 					break
 				}
-				if r, ok := out.(memcontrolprotocol.Rsp); ok {
-					rsps = append(rsps, r)
+				if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
+
+					rsps = append(rsps, out)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(memcontrolprotocol.CmdDrain))
+		Expect(rsps[0].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(memcontrolprotocol.CmdReset))
+		Expect(rsps[1].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(cacheState(comp.State.CacheState)).To(Equal(cacheStateRunning))
 	})
@@ -360,18 +372,19 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		inv := makeFilteredCtrlReq(memcontrolprotocol.CmdInvalidate, []uint64{addrDrop})
 		ctrlPort.Deliver(inv)
 
-		var rsp memcontrolprotocol.Rsp
+		var rsp messaging.Msg
 		gotRsp := false
 		for i := 0; i < 64 && !gotRsp; i++ {
 			modelingtest.Tick(comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-				rsp, gotRsp = out.(memcontrolprotocol.Rsp)
+				_, gotRsp = out.Payload.(memcontrolprotocol.Rsp)
+				rsp = out
 			}
 		}
 
 		Expect(gotRsp).To(BeTrue())
-		Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
-		Expect(rsp.Success).To(BeTrue())
+		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdInvalidate))
+		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 		Expect(rsp.RspTo).To(Equal(inv.ID))
 
 		// Only the filtered block was dropped; the other stays resident.
@@ -398,19 +411,20 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 			inv := makeCtrlReq(memcontrolprotocol.CmdInvalidate)
 			ctrlPort.Deliver(inv)
 
-			var rsp memcontrolprotocol.Rsp
+			var rsp messaging.Msg
 			gotRsp := false
 			for i := 0; i < 64 && !gotRsp; i++ {
 				modelingtest.Tick(comp)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-					rsp, gotRsp = out.(memcontrolprotocol.Rsp)
+					_, gotRsp = out.Payload.(memcontrolprotocol.Rsp)
+					rsp = out
 				}
 			}
 
 			Expect(gotRsp).To(BeTrue())
-			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
-			Expect(rsp.Success).To(BeFalse())
-			Expect(rsp.Error).To(Equal(memcontrolprotocol.ErrMustBePausedOrDrained))
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdInvalidate))
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeFalse())
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Error).To(Equal(memcontrolprotocol.ErrMustBePausedOrDrained))
 
 			// The block is untouched because the verb was rejected.
 			Expect(comp.State.DirectoryState.Sets[0].Blocks[0].IsValid).
@@ -435,8 +449,8 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 		// Drive to completion, capturing every Bottom write-back and the
 		// async Flush ack. The lower memory must answer write-backs with a
 		// WriteDoneRsp or the flush never finishes.
-		botWrites := []memprotocol.WriteReq{}
-		var flushRsp memcontrolprotocol.Rsp
+		botWrites := []messaging.Msg{}
+		var flushRsp messaging.Msg
 		gotFlushRsp := false
 		for i := 0; i < 4096 && !gotFlushRsp; i++ {
 			modelingtest.Tick(comp)
@@ -445,37 +459,42 @@ var _ = Describe("Write-Back Cache control behavior", func() {
 				if !ok {
 					break
 				}
-				if w, ok := out.(memprotocol.WriteReq); ok {
-					botWrites = append(botWrites, w)
-					done := memprotocol.WriteDoneRsp{}
-					done.ID = sim.NewID()
-					done.Src = messaging.RemotePort("LowerCache")
-					done.Dst = botPort.AsRemote()
-					done.RspTo = w.ID
-					done.TrafficClass = "memprotocol.WriteDoneRsp"
+				if _, ok := out.Payload.(memprotocol.WriteReq); ok {
+
+					botWrites = append(botWrites, out)
+					done := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+						ID:  sim.NewID(),
+						Src: messaging.RemotePort("LowerCache"),
+						Dst: botPort.AsRemote(),
+						RspTo: out.
+							ID,
+						TrafficClass: "memprotocol.WriteDoneRsp"}
+
 					botPort.Deliver(done)
 				}
 			}
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-				if r, ok := out.(memcontrolprotocol.Rsp); ok &&
-					r.Command == memcontrolprotocol.CmdFlush {
-					flushRsp = r
+				if r, ok := out.Payload.(memcontrolprotocol.Rsp); ok && r.
+					Command == memcontrolprotocol.CmdFlush {
+					flushRsp = out
+
 					gotFlushRsp = true
 				}
+
 			}
 		}
 
 		Expect(gotFlushRsp).To(BeTrue())
-		Expect(flushRsp.Success).To(BeTrue())
+		Expect(flushRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 		Expect(flushRsp.RspTo).To(Equal(flush.ID))
 
 		// Exactly one write-back, for the filtered block only.
 		Expect(botWrites).To(HaveLen(1))
-		Expect(botWrites[0].Address).To(Equal(addrFlush))
-		Expect(botWrites[0].Data).To(HaveLen(blockSize))
-		Expect(botWrites[0].Data[0]).To(Equal(flushFill),
+		Expect(botWrites[0].Payload.(memprotocol.WriteReq).Address).To(Equal(addrFlush))
+		Expect(botWrites[0].Payload.(memprotocol.WriteReq).Data).To(HaveLen(blockSize))
+		Expect(botWrites[0].Payload.(memprotocol.WriteReq).Data[0]).To(Equal(flushFill),
 			"the written-back payload must be the filtered block's data")
-		for _, b := range botWrites[0].Data {
+		for _, b := range botWrites[0].Payload.(memprotocol.WriteReq).Data {
 			Expect(b).To(Equal(flushFill))
 		}
 

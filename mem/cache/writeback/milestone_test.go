@@ -143,21 +143,23 @@ var _ = Describe("Write-Back Cache milestones", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			})
 
-			read := memprotocol.ReadReq{}
-			read.ID = sim.NewID()
-			read.Src = agentPort.AsRemote()
-			read.Dst = topPort.AsRemote()
-			read.Address = 0x10004
-			read.AccessByteSize = 4
-			read.TrafficBytes = 12
-			read.TrafficClass = "memprotocol.ReadReq"
+			read := messaging.Msg{Payload: memprotocol.ReadReq{
+				Address:        0x10004,
+				AccessByteSize: 4},
+				ID:  sim.NewID(),
+				Src: agentPort.AsRemote(),
+				Dst: topPort.AsRemote(),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.ReadReq"}
+
 			topPort.Deliver(read)
 
 			Expect(engine.Run()).To(Succeed())
 
 			rsp, _ := agentPort.RetrieveIncoming()
-			dr := rsp.(memprotocol.DataReadyRsp)
-			Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
+			dr := rsp
+			Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
 			Expect(dr.RspTo).To(Equal(read.ID))
 
 			bufID := rec.taskID(tracing.IncomingBufferTaskKind)
@@ -201,14 +203,16 @@ var _ = Describe("Write-Back Cache milestones", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			})
 
-			read := memprotocol.ReadReq{}
-			read.ID = sim.NewID()
-			read.Src = agentPort.AsRemote()
-			read.Dst = topPort.AsRemote()
-			read.Address = 0x10004
-			read.AccessByteSize = 4
-			read.TrafficBytes = 12
-			read.TrafficClass = "memprotocol.ReadReq"
+			read := messaging.Msg{Payload: memprotocol.ReadReq{
+				Address:        0x10004,
+				AccessByteSize: 4},
+				ID:  sim.NewID(),
+				Src: agentPort.AsRemote(),
+				Dst: topPort.AsRemote(),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.ReadReq"}
+
 			topPort.Deliver(read)
 
 			Expect(engine.Run()).To(Succeed())
@@ -216,8 +220,8 @@ var _ = Describe("Write-Back Cache milestones", func() {
 			// Drive the read miss all the way through the downstream fetch
 			// response: the agent must have received the data.
 			rsp, _ := agentPort.RetrieveIncoming()
-			dr := rsp.(memprotocol.DataReadyRsp)
-			Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
+			dr := rsp
+			Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
 			Expect(dr.RspTo).To(Equal(read.ID))
 
 			reqInID := rec.taskID("req_in")

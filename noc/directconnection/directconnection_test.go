@@ -16,15 +16,10 @@ import (
 )
 
 type testMsg struct {
-	messaging.MsgMeta
 }
 
-func newTestMsg(sim timing.Simulation) testMsg {
-	return testMsg{
-		MsgMeta: messaging.MsgMeta{
-			ID: sim.NewID(),
-		},
-	}
+func newTestMsg(sim timing.Simulation) messaging.Msg {
+	return messaging.Msg{ID: sim.NewID(), Payload: testMsg{}}
 }
 
 var _ = Describe("DirectConnection", func() {
@@ -79,13 +74,13 @@ var _ = Describe("DirectConnection", func() {
 		msg2.Dst = port1.AsRemote()
 
 		port1.EXPECT().PeekOutgoing().Return(msg1, true)
-		port1.EXPECT().PeekOutgoing().Return(nil, false)
+		port1.EXPECT().PeekOutgoing().Return(messaging.Msg{}, false)
 		port1.EXPECT().RetrieveOutgoing().Return(msg1, true)
 		port1.EXPECT().CanDeliver().Return(true)
 		port1.EXPECT().Deliver(msg2)
 
 		port2.EXPECT().PeekOutgoing().Return(msg2, true)
-		port2.EXPECT().PeekOutgoing().Return(nil, false)
+		port2.EXPECT().PeekOutgoing().Return(messaging.Msg{}, false)
 		port2.EXPECT().RetrieveOutgoing().Return(msg2, true)
 		port2.EXPECT().CanDeliver().Return(true)
 		port2.EXPECT().Deliver(msg1)
@@ -109,7 +104,7 @@ var _ = Describe("DirectConnection", func() {
 
 		port1.EXPECT().PeekOutgoing().Return(msg, true)
 		port2.EXPECT().CanDeliver().Return(false)
-		port2.EXPECT().PeekOutgoing().Return(nil, false)
+		port2.EXPECT().PeekOutgoing().Return(messaging.Msg{}, false)
 
 		connection.Handle(tick)
 	})
@@ -122,7 +117,7 @@ type agent struct {
 	hooking.HookableBase
 
 	name    string
-	msgsOut []testMsg
+	msgsOut []messaging.Msg
 	msgsIn  []messaging.Msg
 
 	OutPort messaging.Port
@@ -270,3 +265,5 @@ func directConnectionTest(seed int64) timing.VTimeInPicoSec {
 
 	return engine.CurrentTime()
 }
+
+var _ = messaging.DefineProtocol(messaging.RoleDef{Name: "peer", Sends: []any{testMsg{}}})

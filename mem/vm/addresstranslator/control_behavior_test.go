@@ -66,39 +66,44 @@ var _ = Describe("Address Translator control behavior", func() {
 		}
 	}
 
-	makeRead := func(addr uint64) memprotocol.ReadReq {
-		req := memprotocol.ReadReq{}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Agent")
-		req.Dst = topPort.AsRemote()
-		req.Address = addr
-		req.AccessByteSize = 4
-		req.TrafficBytes = 12
-		req.TrafficClass = "memprotocol.ReadReq"
+	makeRead := func(addr uint64) messaging.Msg {
+		req := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        addr,
+			AccessByteSize: 4},
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Agent"),
+			Dst: topPort.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		return req
 	}
 
-	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
-		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Ctrl")
-		req.Dst = ctrlPort.AsRemote()
-		req.TrafficClass = "memcontrolprotocol.Req"
+	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
+		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("Ctrl"),
+			Dst:          ctrlPort.AsRemote(),
+			TrafficClass: "memcontrolprotocol.Req"}
+
 		return req
 	}
 
 	// makeBottomReq builds the read the translator would itself have sent out
 	// the Bottom port, with Src = Bottom and Dst = the memory provider, exactly
 	// as createTranslatedReq does.
-	makeBottomReq := func(addr uint64) memprotocol.ReadReq {
-		req := memprotocol.ReadReq{}
-		req.ID = sim.NewID()
-		req.Src = bottomPort.AsRemote()
-		req.Dst = messaging.RemotePort("MemPort")
-		req.Address = addr
-		req.AccessByteSize = 4
-		req.TrafficBytes = 12
-		req.TrafficClass = "memprotocol.ReadReq"
+	makeBottomReq := func(addr uint64) messaging.Msg {
+		req := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        addr,
+			AccessByteSize: 4},
+			ID:  sim.NewID(),
+			Src: bottomPort.AsRemote(),
+			Dst: messaging.RemotePort("MemPort"),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		return req
 	}
 
@@ -106,7 +111,7 @@ var _ = Describe("Address Translator control behavior", func() {
 	// top-side read and bottom-side read, mirroring the Reset test's direct
 	// state fabrication. It returns the bottom-side ReqToBottomID so the test
 	// can later feed a matching response that retires the entry.
-	injectInflight := func(fromTop, toBottom memprotocol.ReadReq) uint64 {
+	injectInflight := func(fromTop, toBottom messaging.Msg) uint64 {
 		t.State.InflightReqToBottom = append(t.State.InflightReqToBottom,
 			reqToBottomState{
 				ReqFromTopID:    fromTop.ID,
@@ -125,13 +130,14 @@ var _ = Describe("Address Translator control behavior", func() {
 	// RspTo matches an in-flight ReqToBottomID. respond() recognises it, sends a
 	// DataReadyRsp out Top, and removes the in-flight entry.
 	feedBottomDataReady := func(rspTo uint64) {
-		dataReady := memprotocol.DataReadyRsp{}
-		dataReady.ID = sim.NewID()
-		dataReady.Src = messaging.RemotePort("MemPort")
-		dataReady.Dst = bottomPort.AsRemote()
-		dataReady.RspTo = rspTo
-		dataReady.TrafficBytes = 4
-		dataReady.TrafficClass = "memprotocol.DataReadyRsp"
+		dataReady := messaging.Msg{Payload: memprotocol.DataReadyRsp{},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("MemPort"),
+			Dst:          bottomPort.AsRemote(),
+			RspTo:        rspTo,
+			TrafficBytes: 4,
+			TrafficClass: "memprotocol.DataReadyRsp"}
+
 		bottomPort.Deliver(dataReady)
 	}
 
@@ -165,10 +171,11 @@ var _ = Describe("Address Translator control behavior", func() {
 		for range 8 {
 			modelingtest.Tick(t)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
-					rsp.Command == memcontrolprotocol.CmdDrain {
+				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+					Command == memcontrolprotocol.CmdDrain {
 					Fail("Drain acked while bottom requests still in flight")
 				}
+
 			}
 		}
 		Expect(t.State.ControlState).To(Equal(memcontrolprotocol.StateDraining))
@@ -179,7 +186,7 @@ var _ = Describe("Address Translator control behavior", func() {
 		feedBottomDataReady(id1)
 		feedBottomDataReady(id2)
 
-		var drainRsp memcontrolprotocol.Rsp
+		var drainRsp messaging.Msg
 		drainFound := false
 		topResponses := 0
 		for i := 0; i < 64 && !drainFound; i++ {
@@ -189,21 +196,23 @@ var _ = Describe("Address Translator control behavior", func() {
 				if !ok {
 					break
 				}
-				if _, ok := out.(memprotocol.DataReadyRsp); ok {
+				if _, ok := out.Payload.(memprotocol.DataReadyRsp); ok {
 					topResponses++
 				}
 			}
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
-					rsp.Command == memcontrolprotocol.CmdDrain {
-					drainRsp = rsp
+				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+					Command == memcontrolprotocol.CmdDrain {
+					drainRsp = out
+
 					drainFound = true
 				}
+
 			}
 		}
 
 		Expect(drainFound).To(BeTrue())
-		Expect(drainRsp.Success).To(BeTrue())
+		Expect(drainRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
 		// Each retired bottom request produced a Top-side response, and no
 		// in-flight state remains by the time the async Drain ack is sent.
@@ -244,18 +253,19 @@ var _ = Describe("Address Translator control behavior", func() {
 			reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp memcontrolprotocol.Rsp
+			var rsp messaging.Msg
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				modelingtest.Tick(t)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-					rsp, found = out.(memcontrolprotocol.Rsp)
+					_, found = out.Payload.(memcontrolprotocol.Rsp)
+					rsp = out
 				}
 			}
 
 			Expect(found).To(BeTrue())
-			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
-			Expect(rsp.Success).To(BeTrue())
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			Expect(t.State.Transactions).To(BeEmpty())
 			Expect(t.State.InflightReqToBottom).To(BeEmpty())
@@ -281,7 +291,7 @@ var _ = Describe("Address Translator control behavior", func() {
 		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		ctrlPort.Deliver(reset)
 
-		var rsps []memcontrolprotocol.Rsp
+		var rsps []messaging.Msg
 		for range 16 {
 			modelingtest.Tick(t)
 			for {
@@ -289,16 +299,17 @@ var _ = Describe("Address Translator control behavior", func() {
 				if !ok {
 					break
 				}
-				if r, ok := out.(memcontrolprotocol.Rsp); ok {
-					rsps = append(rsps, r)
+				if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
+
+					rsps = append(rsps, out)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(memcontrolprotocol.CmdDrain))
+		Expect(rsps[0].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(memcontrolprotocol.CmdReset))
+		Expect(rsps[1].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(t.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 	})

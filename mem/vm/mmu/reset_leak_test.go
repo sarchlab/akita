@@ -57,14 +57,16 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	}
 	pageTable.Insert(page)
 
-	req := vmprotocol.TranslationReq{}
-	req.ID = sim.NewID()
-	req.Src = messaging.RemotePort("Agent")
-	req.Dst = topPort.AsRemote()
-	req.PID = 1
-	req.VAddr = 0x1000
-	req.DeviceID = 0
-	req.TrafficClass = "vmprotocol.TranslationReq"
+	req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		PID:      1,
+		VAddr:    0x1000,
+		DeviceID: 0},
+		ID:  sim.NewID(),
+		Src: messaging.RemotePort("Agent"),
+		Dst: topPort.AsRemote(),
+
+		TrafficClass: "vmprotocol.TranslationReq"}
+
 	topPort.Deliver(req)
 
 	// One tick parses the request into a walk (opening the req_in) with a full
@@ -82,19 +84,20 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	}
 
 	// Reset while the walk is in flight.
-	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = sim.NewID()
-	reset.Src = messaging.RemotePort("Cmd")
-	reset.Dst = ctrlPort.AsRemote()
-	reset.TrafficClass = "memcontrolprotocol.Req"
+	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
+		ID:           sim.NewID(),
+		Src:          messaging.RemotePort("Cmd"),
+		Dst:          ctrlPort.AsRemote(),
+		TrafficClass: "memcontrolprotocol.Req"}
+
 	ctrlPort.Deliver(reset)
 
 	acked := false
 	for range 64 {
 		modelingtest.Tick(comp)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
-			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
-				rsp.Command == memcontrolprotocol.CmdReset {
+			if rsp, ok := msg.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+				Command == memcontrolprotocol.CmdReset {
 				acked = true
 				break
 			}
