@@ -18,15 +18,17 @@ type EventScheduler interface {
 	Schedule(e Event)
 }
 
-// HandlerRegistry allows registering named handlers for event dispatch.
-type HandlerRegistry interface {
-	RegisterHandler(name string, handler Handler)
-}
-
 // An Engine is a unit that keeps the discrete event simulation run.
 type Engine interface {
 	hooking.Hookable
 	EventScheduler
+
+	// RegisterHandler registers handler under name. An event names the
+	// handler that receives it with HandlerID, so a handler must be
+	// registered before an event is scheduled for it. A component's Build
+	// registers the component; a handler written without a component model
+	// registers itself.
+	RegisterHandler(name string, handler Handler)
 
 	// Run will process all the events until the simulation finishes.
 	Run() error

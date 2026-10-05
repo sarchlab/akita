@@ -5,21 +5,28 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // Controllable is the minimal interface the contract harness requires
-// from a component under test. Every Akita memory agent satisfies it
-// through embedding modeling.TickingComponent.
+// from a component under test. Every ticking Akita memory agent satisfies
+// it.
 type Controllable interface {
-	Tick() bool
+	timing.Handler
 	Name() string
 }
 
 // Harness bundles a built component, its Control port, and a teardown
 // callback. Build functions passed to RunContract return a *Harness.
 type Harness struct {
-	// Comp is the component under test. RunContract drives it via Tick.
+	// Comp is the component under test. RunContract drives it by handing
+	// it a TickEvent at a time, as the engine does.
 	Comp Controllable
+
+	// Sim is the simulation the component belongs to. RunContract allocates
+	// the IDs of the requests and ticks it makes from it.
+	Sim timing.Simulation
 
 	// Ctrl is the component's Control port. RunContract delivers
 	// ControlReq into it via Deliver and reads ControlRsp out of it via
@@ -187,7 +194,7 @@ func teardown(h *Harness) {
 func driveExpectSuccess(t *testing.T, h *Harness, cmd Command) {
 	t.Helper()
 
-	req := newControlReq(h.Ctrl, cmd)
+	req := newControlReq(h, cmd)
 	h.Ctrl.Deliver(req)
 
 	budget := maxTicks
@@ -215,7 +222,7 @@ func isConditionalVerb(cmd Command) bool {
 func pauseForConditionalVerb(t *testing.T, h *Harness) {
 	t.Helper()
 
-	req := newControlReq(h.Ctrl, CmdPause)
+	req := newControlReq(h, CmdPause)
 	h.Ctrl.Deliver(req)
 
 	rsp, ok := drainForRsp(h, maxTicks)
@@ -233,7 +240,7 @@ func checkConditionalIllegalState(
 ) {
 	t.Helper()
 
-	req := newControlReq(h.Ctrl, cmd)
+	req := newControlReq(h, cmd)
 	h.Ctrl.Deliver(req)
 
 	rsp, ok := drainForRsp(h, maxTicks)
@@ -269,7 +276,7 @@ func checkVerb(
 		pauseForConditionalVerb(t, h)
 	}
 
-	req := newControlReq(h.Ctrl, cmd)
+	req := newControlReq(h, cmd)
 	h.Ctrl.Deliver(req)
 
 	budget := maxTicks
@@ -320,16 +327,20 @@ func checkVerb(
 
 // newControlReq builds a ControlReq addressed to the component's
 // Control port from a fixed pseudo-source "ContractAgent".
-func newControlReq(
-	ctrl messaging.Port,
-	cmd Command,
-) Req {
+func newControlReq(h *Harness, cmd Command) Req {
 	req := Req{Command: cmd}
-	req.ID = ctrl.Component().Simulation().NewID()
+	req.ID = h.Sim.NewID()
 	req.Src = messaging.RemotePort("ContractAgent")
-	req.Dst = ctrl.AsRemote()
+	req.Dst = h.Ctrl.AsRemote()
 	req.TrafficClass = "Req"
 	return req
+}
+
+// tick hands the component a TickEvent at the current time, as the engine
+// does on every cycle.
+func (h *Harness) tick() {
+	h.Comp.Handle(ticking.MakeTickEvent(
+		h.Sim.NewID(), h.Comp.Name(), h.Sim.Engine().CurrentTime()))
 }
 
 // drainForRsp ticks the component up to budget times waiting for a
@@ -343,7 +354,7 @@ func drainForRsp(h *Harness, budget int) (Rsp, bool) {
 				return rsp, true
 			}
 		}
-		h.Comp.Tick()
+		h.tick()
 	}
 
 	// One last sweep in case the final tick produced the Rsp.

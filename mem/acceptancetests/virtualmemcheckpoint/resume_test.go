@@ -15,7 +15,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
@@ -40,72 +39,93 @@ func buildSim() (*simulation.Simulation, *driver) {
 	atSpec := addresstranslator.Definition.DefaultSpec
 	atSpec.Log2PageSize = 12
 	atSpec.NumReqPerCycle = 4
-	at := addresstranslator.MakeBuilder().
+	at := addresstranslator.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(atSpec).
 		WithResources(addresstranslator.Resources{
 			MemProviderMapper: &mem.SinglePortMapper{
-				Port: l1Cache.GetPortByName("Top").AsRemote(),
+				Port: l1Cache.Ports.Top.AsRemote(),
 			},
 			TranslationProviderMapper: &mem.SinglePortMapper{
-				Port: itlb.GetPortByName("Top").AsRemote(),
+				Port: itlb.Ports.Top.AsRemote(),
 			},
 		}).
+		WithPorts(addresstranslator.Ports{
+			Top:         newPort("AT.Top"),
+			Bottom:      newPort("AT.Bottom"),
+			Translation: newPort("AT.Translation"),
+			Control:     newPort("AT.Control"),
+		}).
 		Build("AT")
-	assignPorts(sim, at, "Top", "Bottom", "Translation", "Control")
 
-	d := buildDriver(sim, at.GetPortByName("Top"))
+	d := buildDriver(sim, at.Ports.Top)
 
 	setupConnection(sim, d, at, itlb, l2TLB, ioMMU, l1Cache, l2Cache, memCtrl)
 
 	return sim, d
 }
 
+//nolint:funlen // wires the whole hierarchy in one place
 func buildMemoryHierarchy(s *simulation.Simulation) (
-	*modeling.Component[writethroughcache.Spec, writethroughcache.State, writethroughcache.Resources],
-	*modeling.Component[writeback.Spec, writeback.State, writeback.Resources],
+	*writethroughcache.Comp,
+	*writeback.Comp,
 	*idealmemcontroller.Comp,
 ) {
 	memCtrlSpec := idealmemcontroller.Definition.DefaultSpec
-	memCtrlSpec.Capacity = 4 * mem.GB
 	memCtrlSpec.Width = 1
 	memCtrlSpec.Latency = 100
 	memCtrlSpec.CacheLineSize = 64
-	memCtrl := idealmemcontroller.MakeBuilder().
+	memCtrl := idealmemcontroller.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(memCtrlSpec).
+		WithResources(idealmemcontroller.Resources{
+			Storage: newStorage(s, 4*mem.GB, "MemCtrl.Storage"),
+		}).
+		WithPorts(idealmemcontroller.Ports{
+			Top:     newPort("MemCtrl.Top"),
+			Control: newPort("MemCtrl.Control"),
+		}).
 		Build("MemCtrl")
-	assignPorts(s, memCtrl, "Top", "Control")
 
 	l2Spec := writeback.Definition.DefaultSpec
 	l2Spec.WayAssociativity = 4
 	l2Spec.NumReqPerCycle = 2
 	l2Spec.AddressMapperType = "single"
-	l2Cache := writeback.MakeBuilder().
+	l2Cache := writeback.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(l2Spec).
 		WithResources(writeback.Resources{
+			Storage: newStorage(s, l2Spec.TotalByteSize, "L2Cache.Storage"),
 			RemotePorts: []messaging.RemotePort{
-				memCtrl.GetPortByName("Top").AsRemote(),
+				memCtrl.Ports.Top.AsRemote(),
 			},
 		}).
+		WithPorts(writeback.Ports{
+			Top:     newPort("L2Cache.Top"),
+			Bottom:  newPort("L2Cache.Bottom"),
+			Control: newPort("L2Cache.Control"),
+		}).
 		Build("L2Cache")
-	assignPorts(s, l2Cache, "Top", "Bottom", "Control")
 
 	l1Spec := writethroughcache.Definition.DefaultSpec
 	l1Spec.WritePolicyType = "write-through"
 	l1Spec.WayAssociativity = 2
 	l1Spec.AddressMapperType = "single"
-	l1Cache := writethroughcache.MakeBuilder().
+	l1Cache := writethroughcache.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(l1Spec).
 		WithResources(writethroughcache.Resources{
+			Storage: newStorage(s, l1Spec.TotalByteSize, "L1Cache.Storage"),
 			RemotePorts: []messaging.RemotePort{
-				l2Cache.GetPortByName("Top").AsRemote(),
+				l2Cache.Ports.Top.AsRemote(),
 			},
 		}).
+		WithPorts(writethroughcache.Ports{
+			Top:     newPort("L1Cache.Top"),
+			Bottom:  newPort("L1Cache.Bottom"),
+			Control: newPort("L1Cache.Control"),
+		}).
 		Build("L1Cache")
-	assignPorts(s, l1Cache, "Top", "Bottom", "Control")
 
 	return l1Cache, l2Cache, memCtrl
 }
@@ -117,44 +137,55 @@ func buildTranslationHierarchy(s *simulation.Simulation) (*mmu.Comp, *tlb.Comp, 
 	mmuSpec.Log2PageSize = 12
 	mmuSpec.MaxRequestsInFlight = 16
 	mmuSpec.Latency = 10
-	ioMMU := mmu.MakeBuilder().
+	ioMMU := mmu.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(mmuSpec).
 		WithResources(mmu.Resources{PageTable: pageTable}).
+		WithPorts(mmu.Ports{
+			Top:     newPort("IoMMU.Top"),
+			Control: newPort("IoMMU.Control"),
+		}).
 		Build("IoMMU")
-	assignPorts(s, ioMMU, "Top", "Control")
 
 	l2TLBSpec := tlb.Definition.DefaultSpec
 	l2TLBSpec.NumWays = 64
 	l2TLBSpec.NumSets = 64
 	l2TLBSpec.Log2PageSize = 12
 	l2TLBSpec.NumReqPerCycle = 4
-	l2TLB := tlb.MakeBuilder().
+	l2TLB := tlb.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(l2TLBSpec).
 		WithResources(tlb.Resources{
 			TranslationProviderMapper: &mem.SinglePortMapper{
-				Port: ioMMU.GetPortByName("Top").AsRemote(),
+				Port: ioMMU.Ports.Top.AsRemote(),
 			},
 		}).
+		WithPorts(tlb.Ports{
+			Top:     newPort("L2TLB.Top"),
+			Bottom:  newPort("L2TLB.Bottom"),
+			Control: newPort("L2TLB.Control"),
+		}).
 		Build("L2TLB")
-	assignPorts(s, l2TLB, "Top", "Bottom", "Control")
 
 	tlbSpec := tlb.Definition.DefaultSpec
 	tlbSpec.NumWays = 8
 	tlbSpec.NumSets = 8
 	tlbSpec.Log2PageSize = 12
 	tlbSpec.NumReqPerCycle = 2
-	itlb := tlb.MakeBuilder().
+	itlb := tlb.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(tlbSpec).
 		WithResources(tlb.Resources{
 			TranslationProviderMapper: &mem.SinglePortMapper{
-				Port: l2TLB.GetPortByName("Top").AsRemote(),
+				Port: l2TLB.Ports.Top.AsRemote(),
 			},
 		}).
+		WithPorts(tlb.Ports{
+			Top:     newPort("TLB.Top"),
+			Bottom:  newPort("TLB.Bottom"),
+			Control: newPort("TLB.Control"),
+		}).
 		Build("TLB")
-	assignPorts(s, itlb, "Top", "Bottom", "Control")
 
 	return ioMMU, itlb, l2TLB
 }
@@ -187,21 +218,23 @@ func setupPageTable(s *simulation.Simulation) vm.PageTable {
 	return pageTable
 }
 
-// assignPorts builds a port for each declared name on the component, registers
-// it, and assigns it, choosing a default buffer size.
-func assignPorts(
+// newPort creates an unowned port named fullName, for a component that takes
+// its ports at Build. The component's Build binds and registers it.
+func newPort(fullName string) messaging.Port {
+	return messaging.NewPort(fullName, 16, 16)
+}
+
+// newStorage builds a storage of the given capacity that registers with the
+// simulation, so its contents are part of the checkpoint.
+func newStorage(
 	s *simulation.Simulation,
-	comp messaging.Component,
-	names ...string,
-) {
-	for _, name := range names {
-		p := modeling.MakePortBuilder().
-			WithSimulation(s).
-			WithComponent(comp).
-			WithSpec(modeling.PortSpec{BufSize: 16}).
-			Build(name)
-		comp.AssignPort(name, p)
-	}
+	capacity uint64,
+	name string,
+) *mem.Storage {
+	return mem.MakeStorageBuilder().
+		WithCapacity(capacity).
+		WithSimulation(s).
+		Build(name)
 }
 
 func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {
@@ -213,15 +246,20 @@ func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {
 func setupConnection(
 	s *simulation.Simulation,
 	d *driver,
-	at, itlb, l2TLB, ioMMU, l1Cache, l2Cache, memCtrl messaging.Component,
+	at *addresstranslator.Comp,
+	itlb, l2TLB *tlb.Comp,
+	ioMMU *mmu.Comp,
+	l1Cache *writethroughcache.Comp,
+	l2Cache *writeback.Comp,
+	memCtrl *idealmemcontroller.Comp,
 ) {
-	connect(s, "Conn1", d.GetPortByName("Mem"), at.GetPortByName("Top"))
-	connect(s, "Conn2", at.GetPortByName("Translation"), itlb.GetPortByName("Top"))
-	connect(s, "Conn3", itlb.GetPortByName("Bottom"), l2TLB.GetPortByName("Top"))
-	connect(s, "Conn4", l2TLB.GetPortByName("Bottom"), ioMMU.GetPortByName("Top"))
-	connect(s, "Conn5", at.GetPortByName("Bottom"), l1Cache.GetPortByName("Top"))
-	connect(s, "Conn6", l1Cache.GetPortByName("Bottom"), l2Cache.GetPortByName("Top"))
-	connect(s, "Conn7", l2Cache.GetPortByName("Bottom"), memCtrl.GetPortByName("Top"))
+	connect(s, "Conn1", d.Ports.Mem, at.Ports.Top)
+	connect(s, "Conn2", at.Ports.Translation, itlb.Ports.Top)
+	connect(s, "Conn3", itlb.Ports.Bottom, l2TLB.Ports.Top)
+	connect(s, "Conn4", l2TLB.Ports.Bottom, ioMMU.Ports.Top)
+	connect(s, "Conn5", at.Ports.Bottom, l1Cache.Ports.Top)
+	connect(s, "Conn6", l1Cache.Ports.Bottom, l2Cache.Ports.Top)
+	connect(s, "Conn7", l2Cache.Ports.Bottom, memCtrl.Ports.Top)
 }
 
 // TestVirtualMemHierarchyCompletes validates the assembly and the deterministic
@@ -231,13 +269,13 @@ func TestVirtualMemHierarchyCompletes(t *testing.T) {
 	sim, d := buildSim()
 	defer cleanup(sim)
 
-	engine := sim.GetEngine().(*timing.SerialEngine)
+	engine := sim.Engine().(*timing.SerialEngine)
 	d.TickLater()
 	if err := engine.Run(); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 
-	if !d.done() {
+	if !done(d) {
 		t.Fatalf("did not finish: %+v", d.State)
 	}
 	if d.State.ReadsVerified != numOps {
@@ -253,12 +291,12 @@ func runReference(t *testing.T) (wantVerified int, wantTime timing.VTimeInPicoSe
 	sim, d := buildSim()
 	defer cleanup(sim)
 
-	engine := sim.GetEngine().(*timing.SerialEngine)
+	engine := sim.Engine().(*timing.SerialEngine)
 	d.TickLater()
 	if err := engine.Run(); err != nil {
 		t.Fatalf("reference run: %v", err)
 	}
-	if !d.done() {
+	if !done(d) {
 		t.Fatalf("reference run did not finish: %+v", d.State)
 	}
 
@@ -278,7 +316,7 @@ func resumeAndVerify(
 	sim, d := buildSim()
 	defer cleanup(sim)
 
-	engine := sim.GetEngine().(*timing.SerialEngine)
+	engine := sim.Engine().(*timing.SerialEngine)
 	if err := sim.LoadCheckpoint(path, buildID); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
@@ -286,7 +324,7 @@ func resumeAndVerify(
 		t.Fatalf("resumed run: %v", err)
 	}
 
-	if !d.done() {
+	if !done(d) {
 		t.Fatalf("resumed run did not finish: %+v", d.State)
 	}
 	if d.State.Mismatch {
@@ -309,7 +347,7 @@ func TestVirtualMemMidTransactionResume(t *testing.T) {
 	// Advance a fresh sim to a genuinely mid-transaction boundary (requests in
 	// flight somewhere in the translation/cache hierarchy), then checkpoint.
 	sim, d := buildSim()
-	engine := sim.GetEngine().(*timing.SerialEngine)
+	engine := sim.Engine().(*timing.SerialEngine)
 	d.TickLater()
 
 	step := wantTime / 8
@@ -320,15 +358,15 @@ func TestVirtualMemMidTransactionResume(t *testing.T) {
 		if err := engine.RunUntil(boundary); err != nil {
 			t.Fatalf("RunUntil: %v", err)
 		}
-		if d.inFlight() > 0 {
+		if inFlight(d) > 0 {
 			break
 		}
 	}
-	if d.inFlight() == 0 || d.done() {
+	if inFlight(d) == 0 || done(d) {
 		t.Fatalf("never reached a mid-transaction boundary: %+v", d.State)
 	}
 	t.Logf("checkpoint at t=%d: %d driver requests in flight, writesAcked=%d",
-		engine.CurrentTime(), d.inFlight(), d.State.WritesAcked)
+		engine.CurrentTime(), inFlight(d), d.State.WritesAcked)
 
 	if err := sim.SaveCheckpoint(path, buildID); err != nil {
 		t.Fatalf("SaveCheckpoint: %v", err)
@@ -349,7 +387,7 @@ func TestVirtualMemResumeAcrossBoundaries(t *testing.T) {
 			const buildID = "virtualmem-multi"
 
 			sim, d := buildSim()
-			engine := sim.GetEngine().(*timing.SerialEngine)
+			engine := sim.Engine().(*timing.SerialEngine)
 			d.TickLater()
 			if err := engine.RunUntil(boundary); err != nil {
 				t.Fatalf("RunUntil(%d): %v", boundary, err)

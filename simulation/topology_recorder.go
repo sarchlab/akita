@@ -5,6 +5,8 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/datarecording"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/naming"
 )
 
 // componentSpecTableName holds one row per component: its name, the Go type of
@@ -36,23 +38,16 @@ type portEntry struct {
 	Connection string
 }
 
-// named is anything that can report its name. Specs, components, ports, and
-// connections all satisfy it; the recorder relies on it to read names out of
-// reflectively obtained values without the simulation package depending on the
-// messaging package.
-type named interface {
-	Name() string
-}
-
 // topologyRecorder records the static structure of a simulation — every
 // component's spec and the full port inventory with its connection graph — into
 // the recording, making it self-describing for tools such as Daisen's index
 // page.
 //
-// Specs are read through the public Spec accessor that every modeling.Component
-// exposes; because that accessor is generic there is no single non-generic
-// interface to assert against, so the recorder reaches it by reflection. This
-// runs once at Terminate, so its cost is irrelevant to simulation speed.
+// Specs are read from the exported Spec field that every component built from
+// a component model has; because its type differs per component there is no
+// single non-generic interface to assert against, so the recorder reaches it by
+// reflection. This runs once at Terminate, so its cost is irrelevant to
+// simulation speed.
 type topologyRecorder struct {
 	recorder datarecording.DataRecorder
 }
@@ -95,29 +90,36 @@ func (r *topologyRecorder) recordComponentSpecs(components []Component) {
 // so the table is the complete port inventory, not only the connection graph.
 func (r *topologyRecorder) recordPorts(ports []Port) {
 	for _, p := range ports {
-		// reflectName reports ok=false for an unconnected port (nil
-		// Connection) or a port without the accessor; the empty Connection
-		// that leaves behind is intentional.
-		conn, _ := reflectName(p, "Connection")
-		comp, _ := reflectName(p, "Component")
+		entry := portEntry{Port: p.Name()}
 
-		r.recorder.InsertData(portTableName, portEntry{
-			Component:  comp,
-			Port:       p.Name(),
-			Connection: conn,
-		})
+		if mp, ok := p.(messaging.Port); ok {
+			if owner, ok := mp.Owner().(naming.Named); ok {
+				entry.Component = owner.Name()
+			}
+
+			if conn := mp.Connection(); conn != nil {
+				entry.Connection = conn.Name()
+			}
+		}
+
+		r.recorder.InsertData(portTableName, entry)
 	}
 }
 
-// reflectSpec returns the value of the component's Spec accessor, or ok=false
-// when the component exposes no such accessor.
+// reflectSpec returns the value of the component's exported Spec field, or
+// ok=false when the component has no such field.
 func reflectSpec(c Component) (any, bool) {
-	m := reflect.ValueOf(c).MethodByName("Spec")
-	if !m.IsValid() || m.Type().NumIn() != 0 || m.Type().NumOut() != 1 {
+	v := reflect.Indirect(reflect.ValueOf(c))
+	if v.Kind() != reflect.Struct {
 		return nil, false
 	}
 
-	spec := m.Call(nil)[0].Interface()
+	f := v.FieldByName("Spec")
+	if !f.IsValid() || !f.CanInterface() {
+		return nil, false
+	}
+
+	spec := f.Interface()
 	if spec == nil {
 		// A nil interface spec would make reflect.TypeOf(spec).String() panic
 		// in the Terminate teardown path; treat it as "no spec".
@@ -125,26 +127,4 @@ func reflectSpec(c Component) (any, bool) {
 	}
 
 	return spec, true
-}
-
-// reflectName calls a no-argument accessor (e.g. "Connection" or "Component")
-// on obj and returns the Name of the returned value. ok is false when the
-// accessor is absent, returns nil, or returns something without a Name.
-func reflectName(obj any, method string) (string, bool) {
-	m := reflect.ValueOf(obj).MethodByName(method)
-	if !m.IsValid() || m.Type().NumIn() != 0 || m.Type().NumOut() != 1 {
-		return "", false
-	}
-
-	out := m.Call(nil)[0]
-	if (out.Kind() == reflect.Interface || out.Kind() == reflect.Pointer) && out.IsNil() {
-		return "", false
-	}
-
-	n, ok := out.Interface().(named)
-	if !ok {
-		return "", false
-	}
-
-	return n.Name(), true
 }

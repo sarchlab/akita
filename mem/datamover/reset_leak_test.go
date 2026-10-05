@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/sarchlab/akita/v5/tracing/tracingtest"
@@ -27,7 +28,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.InsideByteGranularity = 64
 	spec.OutsideByteGranularity = 64
 
-	dataMover := MakeBuilder().
+	dataMover := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(Resources{
@@ -38,31 +39,24 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 				Port: messaging.RemotePort("OutsideMem"),
 			},
 		}).
+		WithPorts(makePorts("DataMover", 16, 64, 64, 1024)).
 		Build("DataMover")
 
-	assign := func(name string, bufSize int) messaging.Port {
-		p := modeling.MakePortBuilder().
-			WithSimulation(sim).
-			WithComponent(dataMover).
-			WithSpec(modeling.PortSpec{BufSize: bufSize}).
-			Build(name)
-		dataMover.AssignPort(name, p)
+	for _, p := range allPorts(dataMover) {
 		(&ccNoopConn{}).PlugIn(p)
-		return p
 	}
 
-	topPort := assign("Top", 16)
-	assign("Inside", 64)
-	outsidePort := assign("Outside", 64)
-	ctrlPort := assign("Control", 1024)
+	topPort := dataMover.Ports.Top
+	outsidePort := dataMover.Ports.Outside
+	ctrlPort := dataMover.Ports.Control
 
 	// Attach the leak tracker BEFORE any traffic is driven so every task start
 	// and end is observed.
 	rec := &tracingtest.LeakRecorder{}
 	tracing.CollectTrace(dataMover, rec)
 
-	makeMove := func() datamoverprotocol.DataMoveRequest {
-		req := datamoverprotocol.DataMoveRequest{}
+	makeMove := func() datamoverprotocol.DataMoveReq {
+		req := datamoverprotocol.DataMoveReq{}
 		req.ID = sim.NewID()
 		req.Src = messaging.RemotePort("Agent")
 		req.Dst = topPort.AsRemote()
@@ -71,7 +65,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		req.DstAddress = 0
 		req.DstSide = "inside"
 		req.ByteSize = 64
-		req.TrafficClass = "datamoverprotocol.DataMoveRequest"
+		req.TrafficClass = "datamoverprotocol.DataMoveReq"
 		return req
 	}
 
@@ -93,7 +87,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 		var read memprotocol.ReadReq
 		gotRead := false
 		for i := 0; i < 64 && !gotRead; i++ {
-			dataMover.Tick()
+			modelingtest.Tick(dataMover)
 			if out, ok := outsidePort.RetrieveOutgoing(); ok {
 				read, gotRead = out.(memprotocol.ReadReq)
 			}
@@ -119,7 +113,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
-		dataMover.Tick()
+		modelingtest.Tick(dataMover)
 		if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {

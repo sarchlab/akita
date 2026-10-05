@@ -3,13 +3,11 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-
-	"github.com/sarchlab/akita/v5/tracing"
-
-	// blockRef is a set+way pair referencing a block in the directory.
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
+// blockRef is a set+way pair referencing a block in the directory.
 type blockRef struct {
 	SetID int `json:"set_id"`
 	WayID int `json:"way_id"`
@@ -19,11 +17,9 @@ type flusher struct {
 	pipeline *pipelineMW
 }
 
-// ctrlPort resolves the "Control" port by name. The port instance is assigned
-// externally after Build, so it is resolved lazily on every use rather than
-// cached at build time.
+// ctrlPort returns the Control port.
 func (f *flusher) ctrlPort() messaging.Port {
-	return f.pipeline.comp.GetPortByName("Control")
+	return f.pipeline.comp.Ports.Control
 }
 
 func (f *flusher) Tick() bool {
@@ -75,7 +71,7 @@ func (f *flusher) existInflightTransaction() bool {
 
 func (f *flusher) prepareBlockToFlushList() {
 	next := &f.pipeline.comp.State
-	spec := f.pipeline.comp.Spec()
+	spec := f.pipeline.comp.Spec
 	blockSize := uint64(1) << spec.Log2BlockSize
 
 	matchAddr := make(map[uint64]bool, len(next.ProcessingFlush.FilterAddresses))
@@ -116,7 +112,7 @@ func (f *flusher) processFlush() bool {
 		return false
 	}
 
-	spec := f.pipeline.comp.Spec()
+	spec := f.pipeline.comp.Spec
 	ref := next.FlusherBlockToEvictRefs[0]
 	block := &next.DirectoryState.Sets[ref.SetID].Blocks[ref.WayID]
 	bankNum := bankID(
@@ -188,7 +184,7 @@ func (f *flusher) rejectFlush(msg memcontrolprotocol.Req) bool {
 		return false
 	}
 
-	f.ctrlPort().Send(makeCtrlRsp(f.ctrlPort(), memcontrolprotocol.CmdFlush,
+	f.ctrlPort().Send(makeCtrlRsp(f.pipeline.comp, memcontrolprotocol.CmdFlush,
 		msg.Src, msg.ID, false, memcontrolprotocol.ErrMustBePausedOrDrained))
 	f.ctrlPort().RetrieveIncoming()
 
@@ -229,7 +225,7 @@ func (f *flusher) finalizeFlushing() bool {
 	}
 
 	rsp := memcontrolprotocol.Rsp{Command: memcontrolprotocol.CmdFlush, Success: true}
-	rsp.ID = f.pipeline.comp.Simulation().NewID()
+	rsp.ID = f.pipeline.comp.NewID()
 	rsp.Src = f.ctrlPort().AsRemote()
 	rsp.Dst = next.ProcessingFlush.MsgMeta.Src
 	rsp.RspTo = next.ProcessingFlush.MsgMeta.ID

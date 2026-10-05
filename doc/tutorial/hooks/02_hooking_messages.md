@@ -51,12 +51,12 @@ func (h *msgHook) Func(ctx hooking.HookCtx) {
 }
 ```
 
-A port is reached by name and is itself `Hookable`, so we attach one hook
-per agent's `Out` port:
+A port is reached through its component's `Ports` struct and is itself
+`Hookable`, so we attach one hook per agent's `Out` port:
 
 ```go
-agentA.GetPortByName("Out").AcceptHook(&msgHook{agent: "AgentA"})
-agentB.GetPortByName("Out").AcceptHook(&msgHook{agent: "AgentB"})
+agentA.Ports.Out.AcceptHook(&msgHook{agent: "AgentA"})
+agentB.Ports.Out.AcceptHook(&msgHook{agent: "AgentB"})
 ```
 
 ## Running It

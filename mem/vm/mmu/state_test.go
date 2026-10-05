@@ -10,7 +10,7 @@ import (
 )
 
 func TestValidateState(t *testing.T) {
-	if err := modeling.ValidateState(State{}); err != nil {
+	if err := modeling.ValidateState(state{}); err != nil {
 		t.Fatalf("ValidateState(State{}) failed: %v", err)
 	}
 }
@@ -19,19 +19,18 @@ func buildTestMMU(sim timing.Simulation, name string) *Comp {
 	spec := Definition.DefaultSpec
 	spec.AutoPageAllocation = true
 
-	comp := MakeBuilder().
+	comp := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
+		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
+		WithPorts(makePorts(name, 4096)).
 		Build(name)
-
-	assignPort(sim, comp, "Top", 4096)
-	assignPort(sim, comp, "Control", 4)
 
 	return comp
 }
 
-func makeTestState(reqID uint64) State {
-	return State{
+func makeTestState(reqID uint64) state {
+	return state{
 		WalkingTranslations: []transactionState{
 			{
 				ReqID:    reqID,
@@ -51,7 +50,7 @@ func makeTestState(reqID uint64) State {
 	}
 }
 
-func verifyState(t *testing.T, got State, reqID uint64) {
+func verifyState(t *testing.T, got state, reqID uint64) {
 	t.Helper()
 
 	if len(got.WalkingTranslations) != 1 {

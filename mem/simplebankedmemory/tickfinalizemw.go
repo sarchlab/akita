@@ -3,21 +3,20 @@ package simplebankedmemory
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type tickFinalizeMW struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *tickFinalizeMW) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
-func (m *tickFinalizeMW) Tick() bool {
+func (m *tickFinalizeMW) Handle(_ timing.Event) bool {
 	if m.comp.State.ControlState == memcontrolprotocol.StatePaused {
 		return false
 	}
@@ -64,7 +63,7 @@ func (m *tickFinalizeMW) finalizeRead(
 	readReq := &item.ReadMsg
 
 	if !item.Committed {
-		data := m.comp.Resources().Storage.Read(
+		data := m.comp.Resources.Storage.Read(
 			readReq.Address, readReq.AccessByteSize)
 
 		item.ReadData = data
@@ -86,7 +85,7 @@ func (m *tickFinalizeMW) finalizeRead(
 	m.finishPipeline(&item.ReadMsg, item.PipelineTaskID)
 
 	rsp := memprotocol.DataReadyRsp{}
-	rsp.ID = m.comp.Simulation().NewID()
+	rsp.ID = m.comp.NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = readReq.Src
 	rsp.RspTo = readReq.ID
@@ -113,9 +112,9 @@ func (m *tickFinalizeMW) finalizeWrite(
 		addr := writeReq.Address
 
 		if writeReq.DirtyMask == nil {
-			m.comp.Resources().Storage.Write(addr, writeReq.Data)
+			m.comp.Resources.Storage.Write(addr, writeReq.Data)
 		} else {
-			data := m.comp.Resources().Storage.Read(addr, uint64(len(writeReq.Data)))
+			data := m.comp.Resources.Storage.Read(addr, uint64(len(writeReq.Data)))
 
 			for i := range writeReq.Data {
 				if writeReq.DirtyMask[i] {
@@ -123,7 +122,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 				}
 			}
 
-			m.comp.Resources().Storage.Write(addr, data)
+			m.comp.Resources.Storage.Write(addr, data)
 		}
 
 		item.Committed = true
@@ -139,7 +138,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 	m.finishPipeline(&item.WriteMsg, item.PipelineTaskID)
 
 	rsp := memprotocol.WriteDoneRsp{}
-	rsp.ID = m.comp.Simulation().NewID()
+	rsp.ID = m.comp.NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = writeReq.Src
 	rsp.RspTo = writeReq.ID

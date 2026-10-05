@@ -22,7 +22,8 @@ units), with `requester`/`responder` roles that ports bind to.
 All messages embed `messaging.MsgMeta` for routing (Src, Dst, ID, RspTo).
 
 The `AccessReq` interface (also in `mem/memprotocol`) unifies read/write
-requests with `GetAddress()`, `GetByteSize()`, and `GetPID()`.
+requests with `GetAddress()` and `GetPID()`. The Get prefix keeps the methods
+from clashing with the `Address` and `PID` fields they return.
 
 ### Control Messages
 
@@ -97,5 +98,4 @@ for that address:
 | `mem/idealmemcontroller` | Ideal (zero-latency) memory controller |
 | `mem/mshr` | Miss Status Holding Registers |
 | `mem/datamover` | Data movement between memory components |
-| `mem/trace` | Memory access tracing utilities |
 | `mem/simplebankedmemory` | Simple banked memory model |

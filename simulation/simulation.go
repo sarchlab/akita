@@ -2,6 +2,7 @@ package simulation
 
 import (
 	"github.com/sarchlab/akita/v5/datarecording"
+	"github.com/sarchlab/akita/v5/hooking"
 
 	"github.com/sarchlab/akita/v5/monitoring2"
 	"github.com/sarchlab/akita/v5/naming"
@@ -20,13 +21,10 @@ type Simulation struct {
 	topologyRecorder *topologyRecorder
 	monitor          *monitoring2.Monitor
 
-	components    []Component
-	compNameIndex map[string]int
-	ports         []Port
-	portNameIndex map[string]int
-	connections   []Connection
-	connNameIndex map[string]int
-	resources     []Resource
+	// components and ports are kept in registration order for the topology
+	// recorder.
+	components []Component
+	ports      []Port
 
 	// entities is the single, flat inventory of every registered runtime object
 	// (components, ports, connections, resources, the engine, and the ID
@@ -34,7 +32,7 @@ type Simulation struct {
 	// globally unique name to its index. Together they make the inventory a
 	// complete state snapshot: serializing every entity's state captures
 	// everything needed to recover the simulation. The engine is additionally
-	// held in the engine field for direct typed access (see GetEngine).
+	// held in the engine field for direct typed access (see Engine).
 	entities     []Entity
 	entityByName map[string]int
 }
@@ -45,30 +43,20 @@ func (s *Simulation) ID() string {
 	return s.id
 }
 
-// GetEngine returns the engine used in the simulation.
-func (s *Simulation) GetEngine() timing.Engine {
+// Engine returns the engine used in the simulation.
+func (s *Simulation) Engine() timing.Engine {
 	return s.engine
 }
 
-// GetDataRecorder returns the data recorder used in the simulation.
-func (s *Simulation) GetDataRecorder() datarecording.DataRecorder {
+// DataRecorder returns the data recorder used in the simulation. A simulator
+// can write its own tables into the same recording.
+func (s *Simulation) DataRecorder() datarecording.DataRecorder {
 	return s.dataRecorder
 }
 
-// GetMonitor returns the live monitor attached to the simulation, if enabled.
-func (s *Simulation) GetMonitor() *monitoring2.Monitor {
+// Monitor returns the live monitor attached to the simulation, if enabled.
+func (s *Simulation) Monitor() *monitoring2.Monitor {
 	return s.monitor
-}
-
-// GetVisTracer returns the tracer used in the simulation.
-func (s *Simulation) GetVisTracer() *tracing.DBTracer {
-	return s.visTracer
-}
-
-// Components returns a copy of the registered components, in registration
-// order.
-func (s *Simulation) Components() []Component {
-	return append([]Component(nil), s.components...)
 }
 
 // registerEntity records a live entity in the single, flat inventory. It is the
@@ -98,13 +86,13 @@ func (s *Simulation) registerEntity(e Entity) {
 // named object so that component builders can register through the
 // timing.Simulation interface without importing this package.
 func (s *Simulation) RegisterComponent(c naming.Named) {
-	compName := c.Name()
 	s.registerEntity(c)
-
 	s.components = append(s.components, c)
-	s.compNameIndex[compName] = len(s.components) - 1
 
-	if hookable, ok := c.(tracing.NamedHookable); ok {
+	if hookable, ok := c.(interface {
+		naming.Named
+		hooking.Hookable
+	}); ok {
 		tracing.CollectTrace(hookable, s.visTracer)
 	}
 
@@ -114,9 +102,8 @@ func (s *Simulation) RegisterComponent(c naming.Named) {
 }
 
 // RegisterPort registers a port with the simulation so it can be resolved by
-// name and monitored. Port builders call this through the timing.Simulation
-// interface, mirroring RegisterComponent — a component is registered when it is
-// built, and each of its ports is registered when the port is built.
+// name and monitored. A component model's Build registers each port it binds;
+// an owner written without a component model registers its own ports.
 func (s *Simulation) RegisterPort(p naming.Named) {
 	port, ok := p.(Port)
 	if !ok {
@@ -124,13 +111,8 @@ func (s *Simulation) RegisterPort(p naming.Named) {
 			p.Name())
 	}
 
-	if _, dup := s.portNameIndex[port.Name()]; dup {
-		panic("simulation: port " + port.Name() + " already registered " +
-			"(duplicate port name) — port names must be globally unique; " +
-			"use hierarchical names like \"ComponentName.PortName\"")
-	}
-
-	s.registerPort(port)
+	s.registerEntity(port)
+	s.ports = append(s.ports, port)
 
 	// Attach incoming- and outgoing-buffer tracing, mirroring how
 	// RegisterComponent attaches CollectTrace. The resulting tasks flow to the
@@ -144,38 +126,12 @@ func (s *Simulation) RegisterPort(p naming.Named) {
 	}
 }
 
-// registerPort registers a port with the simulation.
-func (s *Simulation) registerPort(p Port) {
-	portName := p.Name()
-	s.registerEntity(p)
-
-	s.ports = append(s.ports, p)
-	s.portNameIndex[portName] = len(s.ports) - 1
-}
-
 // RegisterConnection registers a connection with the simulation runtime
 // inventory. Setup code still owns topology construction and PlugIn calls, but
 // registered connections are tracked as runtime entities in the global state
 // manager.
 func (s *Simulation) RegisterConnection(c naming.Named) {
-	connName := c.Name()
 	s.registerEntity(c)
-
-	s.connections = append(s.connections, c)
-	s.connNameIndex[connName] = len(s.connections) - 1
-}
-
-// Connections returns a copy of the registered connections, in registration
-// order.
-func (s *Simulation) Connections() []Connection {
-	return append([]Connection(nil), s.connections...)
-}
-
-// Ports returns a copy of the registered ports, in registration order. It is
-// the symmetric counterpart of Components and Connections, and lets the
-// topology recorder reconstruct the connection graph from the port side.
-func (s *Simulation) Ports() []Port {
-	return append([]Port(nil), s.ports...)
 }
 
 // RegisterResource registers non-timing program state that can be referenced by
@@ -188,36 +144,6 @@ func (s *Simulation) RegisterResource(r naming.Named) {
 	}
 
 	s.registerEntity(r)
-	s.resources = append(s.resources, r)
-}
-
-// Resources returns a copy of the registered shared-state resources, in
-// registration order.
-func (s *Simulation) Resources() []Resource {
-	return append([]Resource(nil), s.resources...)
-}
-
-// GetComponentByName returns the component with the given name.
-func (s *Simulation) GetComponentByName(name string) Component {
-	idx, found := s.compNameIndex[name]
-	if !found {
-		panic("component " + name + " not registered")
-	}
-
-	return s.components[idx]
-}
-
-// GetPortByName returns the port with the given name. Ports are registered
-// either when their component is registered (legacy components that create
-// ports in Build) or when the port is built (via a port builder that calls
-// RegisterPort).
-func (s *Simulation) GetPortByName(name string) Port {
-	idx, found := s.portNameIndex[name]
-	if !found {
-		panic("port " + name + " not registered")
-	}
-
-	return s.ports[idx]
 }
 
 // Terminate terminates the simulation.
@@ -243,8 +169,3 @@ func (s *Simulation) Terminate() {
 
 // NewID allocates an ID unique within this simulation.
 func (s *Simulation) NewID() uint64 { return s.idGenerator.NewID() }
-
-// GetIDGenerator returns this simulation's checkpointed ID counter.
-func (s *Simulation) GetIDGenerator() *timing.IDGenerator {
-	return s.idGenerator
-}

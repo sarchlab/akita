@@ -3,22 +3,17 @@ package networkconnector
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/hooking"
-	"github.com/sarchlab/akita/v5/monitoring2"
-	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/switches"
 
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/timing"
-	"github.com/sarchlab/akita/v5/tracing"
-
-	// LinkEndSwitchParameter defines the parameter that associated with an end of a
-	// link that is connected to a switch.
-	"github.com/sarchlab/akita/v5/messaging"
 )
 
+// LinkEndSwitchParameter defines the parameters of the end of a link that is
+// connected to a switch.
 type LinkEndSwitchParameter struct {
 	IncomingBufSize  int
 	OutgoingBufSize  int
@@ -62,24 +57,19 @@ type SwitchToSwitchLinkParameter struct {
 	LinkParam     LinkParameter
 }
 
-// PortFactory is a function that creates a new port.
-type PortFactory func(
-	comp messaging.Component,
-	incomingBufCap, outgoingBufCap int,
-	name string,
-) messaging.Port
+// PortFactory creates a port with the given full name and buffer capacities,
+// like messaging.NewPort, the default. The port has no owner yet; the Build of
+// the component it is given to binds it.
+type PortFactory func(name string, incomingBufCap, outgoingBufCap int) messaging.Port
 
 // Connector can build complex network topologies.
 type Connector struct {
 	name        string
 	engine      timing.EventScheduler
 	simulation  timing.Simulation
-	monitor     *monitoring2.Monitor
 	defaultFreq timing.Freq
 	flitSize    int
 	router      Router
-	visTracer   tracing.Tracer
-	nocTracer   tracing.Tracer
 	portFactory PortFactory
 
 	switches        []*switchNode
@@ -100,14 +90,7 @@ func MakeConnector() Connector {
 // WithSimulation sets the simulation that owns the network components.
 func (c Connector) WithSimulation(sim timing.Simulation) Connector {
 	c.simulation = sim
-	c.engine = sim.GetEngine()
-	return c
-}
-
-// WithMonitor sets the monitor that monitors all the components in the
-// connection.
-func (c Connector) WithMonitor(m *monitoring2.Monitor) Connector {
-	c.monitor = m
+	c.engine = sim.Engine()
 	return c
 }
 
@@ -131,28 +114,10 @@ func (c Connector) WithRouter(r Router) Connector {
 	return c
 }
 
-// WithVisTracer sets the tracer used to trace tasks in the network.
-func (c Connector) WithVisTracer(t tracing.Tracer) Connector {
-	c.visTracer = t
-	return c
-}
-
-// WithNoCTracer sets the tracer used to trace NoC-specific metrics, such as the
-// traffics and congestions in the channels.
-func (c Connector) WithNoCTracer(t tracing.Tracer) Connector {
-	c.nocTracer = t
-	return c
-}
-
 // WithPortFactory sets the factory function used to create ports.
 func (c Connector) WithPortFactory(f PortFactory) Connector {
 	c.portFactory = f
 	return c
-}
-
-// GetFlitSize returns the flit size used by the network.
-func (c *Connector) GetFlitSize() int {
-	return c.flitSize
 }
 
 // NewNetwork resets the connector, making it ready to create a new network
@@ -180,28 +145,14 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 ) (switchID int) {
 	switchID = len(c.switches)
 
-	name := fmt.Sprintf("%s.%s", c.name, swName)
-	swSpec := switches.Definition.DefaultSpec
-	swSpec.Freq = c.defaultFreq
-	sw := switches.MakeBuilder().
-		WithSimulation(c.simulation).
-		WithSpec(swSpec).
-		WithResources(switches.Resources{RoutingTable: rt}).
-		Build(name)
+	spec := switches.Definition.DefaultSpec
+	spec.Freq = c.defaultFreq
 
-	if c.monitor != nil {
-		c.monitor.RegisterComponent(sw)
-	}
-
-	if c.visTracer != nil {
-		tracing.CollectTrace(sw, c.visTracer)
-	}
-
-	node := &switchNode{
-		sw: sw,
-	}
-
-	c.switches = append(c.switches, node)
+	c.switches = append(c.switches, &switchNode{
+		name:  fmt.Sprintf("%s.%s", c.name, swName),
+		spec:  spec,
+		table: rt,
+	})
 
 	return switchID
 }
@@ -213,13 +164,6 @@ func (c *Connector) AddSwitchWithName(swName string) (switchID int) {
 	return c.AddSwitchWithNameAndRoutingTable(swName, routingTable)
 }
 
-type namedHookableConnection interface {
-	messaging.Connection
-	naming.Named
-	hooking.Hookable
-	messaging.Component
-}
-
 // ConnectDevice connects a few ports that belongs to the device to a switch
 // that is identified by switchID.
 func (c *Connector) ConnectDevice(
@@ -227,17 +171,14 @@ func (c *Connector) ConnectDevice(
 	ports []messaging.Port,
 	param DeviceToSwitchLinkParameter,
 ) {
-	swNode := c.switches[switchID]
-
-	epNode := c.createEndPoint(ports, param, swNode)
-	swPort, conn := c.connectEndPointWithSwitch(swNode, epNode.endPoint, param)
-	c.createRemoteInfoFoEP(
-		epNode, swNode, epNode.endPoint.NetworkPort(), swPort, conn,
-	)
+	name := fmt.Sprintf("EndPoint[%d]", len(c.devices))
+	c.ConnectDeviceWithEPName(name, switchID, ports, param)
 }
 
 // ConnectDeviceWithEPName connects a few ports that belongs to the device to a
-// switch that is identified by switchID.
+// switch that is identified by switchID, through an endpoint with the given
+// name. It returns the endpoint's network port and the switch port at the
+// other end of the link.
 func (c *Connector) ConnectDeviceWithEPName(
 	epName string,
 	switchID int,
@@ -245,50 +186,43 @@ func (c *Connector) ConnectDeviceWithEPName(
 	param DeviceToSwitchLinkParameter,
 ) (epPort, swPort messaging.Port) {
 	swNode := c.switches[switchID]
+	epFullName := fmt.Sprintf("%s.%s", c.name, epName)
 
-	epNode := c.createEndPointWithName(ports, param, swNode, epName)
-	swPort, conn := c.connectEndPointWithSwitch(swNode, epNode.endPoint, param)
-	c.createRemoteInfoFoEP(
-		epNode, swNode, epNode.endPoint.NetworkPort(), swPort,
-		conn)
+	epPort = c.portFactory(epFullName+".NetworkPort",
+		param.DeviceEndParam.IncomingBufSize,
+		param.DeviceEndParam.OutgoingBufSize)
+	swPort, _ = swNode.addPort(c.portFactory, epPort.AsRemote(),
+		param.SwitchEndParam)
+
+	epNode := c.createEndPoint(epFullName, ports, param, swNode, epPort, swPort)
+	conn := c.connectPorts(epPort, swPort, param.LinkParam)
+	c.createRemoteInfoFoEP(epNode, swNode, epPort, swPort, conn)
 
 	return epPort, swPort
 }
 
-func (c *Connector) createEndPointWithName(
+// createEndPoint builds the endpoint that carries the device ports' messages
+// over the link from epPort to swPort.
+func (c *Connector) createEndPoint(
+	name string,
 	ports []messaging.Port,
 	param DeviceToSwitchLinkParameter,
 	swNode *switchNode,
-	name string,
+	epPort, swPort messaging.Port,
 ) *deviceNode {
-	fullName := fmt.Sprintf("%s.%s", c.name, name)
-
 	epSpec := endpoint.Definition.DefaultSpec
 	epSpec.Freq = c.defaultFreq
 	epSpec.FlitByteSize = c.flitSize
 	epSpec.NumInputChannels = param.DeviceEndParam.NumInputChannel
 	epSpec.NumOutputChannels = param.DeviceEndParam.NumOutputChannel
+	epSpec.DefaultSwitchDst = swPort.AsRemote()
 
-	endPoint := endpoint.MakeBuilder().
+	endPoint := endpoint.Definition.Builder().
 		WithSimulation(c.simulation).
 		WithSpec(epSpec).
 		WithResources(endpoint.Resources{DevicePorts: ports}).
-		Build(fullName)
-
-	if c.monitor != nil {
-		c.monitor.RegisterComponent(endPoint)
-	}
-
-	if c.visTracer != nil {
-		tracing.CollectTrace(endPoint, c.visTracer)
-	}
-
-	epPort := c.portFactory(endPoint,
-		param.DeviceEndParam.IncomingBufSize,
-		param.DeviceEndParam.OutgoingBufSize,
-		endPoint.Name()+".NetworkPort")
-	c.simulation.RegisterPort(epPort)
-	endPoint.SetNetworkPort(epPort)
+		WithPorts(endpoint.Ports{NetworkPort: epPort}).
+		Build(name)
 
 	epNode := &deviceNode{
 		ports:    ports,
@@ -300,41 +234,10 @@ func (c *Connector) createEndPointWithName(
 	return epNode
 }
 
-func (c *Connector) createEndPoint(
-	ports []messaging.Port,
-	param DeviceToSwitchLinkParameter,
-	swNode *switchNode,
-) *deviceNode {
-	name := fmt.Sprintf("EndPoint[%d]", len(c.devices))
-	return c.createEndPointWithName(ports, param, swNode, name)
-}
-
-func (c *Connector) connectEndPointWithSwitch(
-	swNode *switchNode, endPoint *endpoint.Comp,
-	param DeviceToSwitchLinkParameter,
-) (messaging.Port, namedHookableConnection) {
-	sw := swNode.sw
-	epPort := endPoint.NetworkPort()
-
-	swPort := switches.MakeSwitchPortAdder(sw).
-		WithSimulation(c.simulation).
-		WithRemotePort(epPort).
-		WithBufferSize(param.SwitchEndParam.OutgoingBufSize).
-		WithLatency(param.SwitchEndParam.Latency).
-		WithNumInputChannel(param.SwitchEndParam.NumInputChannel).
-		WithNumOutputChannel(param.SwitchEndParam.NumOutputChannel).
-		Add()
-	endPoint.SetDefaultSwitchDst(swPort.AsRemote())
-
-	conn := c.connectPorts(epPort, swPort, param.LinkParam)
-
-	return swPort, conn
-}
-
 func (c *Connector) createRemoteInfoFoEP(
 	epNode *deviceNode, swNode *switchNode,
 	epPort, swPort messaging.Port,
-	conn namedHookableConnection,
+	conn messaging.Connection,
 ) {
 	epNode.remote = Remote{
 		LocalNode:  epNode,
@@ -355,7 +258,7 @@ func (c *Connector) createRemoteInfoFoEP(
 func (c *Connector) connectPorts(
 	left, right messaging.Port,
 	linkParam LinkParameter,
-) (conn namedHookableConnection) {
+) (conn messaging.Connection) {
 	connName := fmt.Sprintf("%s.Conn[%d]", c.name, c.connectionCount)
 	c.connectionCount++
 
@@ -371,18 +274,6 @@ func (c *Connector) connectPorts(
 	conn.PlugIn(left)
 	conn.PlugIn(right)
 
-	if c.monitor != nil {
-		c.monitor.RegisterComponent(conn)
-	}
-
-	if c.visTracer != nil {
-		tracing.CollectTrace(conn.(tracing.NamedHookable), c.visTracer)
-	}
-
-	if c.nocTracer != nil {
-		tracing.CollectTrace(conn.(tracing.NamedHookable), c.nocTracer)
-	}
-
 	return conn
 }
 
@@ -393,31 +284,14 @@ func (c *Connector) ConnectSwitches(
 	param SwitchToSwitchLinkParameter,
 ) (leftPort, rightPort messaging.Port) {
 	leftNode := c.switches[leftSwitchID]
-	leftSwitch := leftNode.sw
 	rightNode := c.switches[rightSwitchID]
-	rightSwitch := rightNode.sw
 
-	// Switch-to-switch link: mint the left port first (its remote is the right
-	// port, which does not exist yet), then the right port (remote = left), then
-	// wire the left port's remote once both exist.
-	leftPort = switches.MakeSwitchPortAdder(leftSwitch).
-		WithSimulation(c.simulation).
-		WithBufferSize(param.LeftEndParam.OutgoingBufSize).
-		WithLatency(param.LeftEndParam.Latency).
-		WithNumInputChannel(param.LeftEndParam.NumInputChannel).
-		WithNumOutputChannel(param.LeftEndParam.NumOutputChannel).
-		Add()
-
-	rightPort = switches.MakeSwitchPortAdder(rightSwitch).
-		WithSimulation(c.simulation).
-		WithRemotePort(leftPort).
-		WithBufferSize(param.RightEndParam.OutgoingBufSize).
-		WithLatency(param.RightEndParam.Latency).
-		WithNumInputChannel(param.RightEndParam.NumInputChannel).
-		WithNumOutputChannel(param.RightEndParam.NumOutputChannel).
-		Add()
-
-	switches.SetPortRemote(leftSwitch, leftPort, rightPort)
+	// Each side's link names the other side's port, so add both ports first
+	// and then record each remote.
+	leftPort, leftLink := leftNode.addPort(c.portFactory, "", param.LeftEndParam)
+	rightPort, rightLink := rightNode.addPort(c.portFactory, "", param.RightEndParam)
+	leftNode.links[leftLink].Remote = rightPort.AsRemote()
+	rightNode.links[rightLink].Remote = leftPort.AsRemote()
 
 	conn := c.connectPorts(leftPort, rightPort, param.LinkParam)
 
@@ -429,7 +303,7 @@ func (c *Connector) ConnectSwitches(
 func (c *Connector) createRemoteInfo(
 	leftNode, rightNode *switchNode,
 	leftPort, rightPort messaging.Port,
-	conn namedHookableConnection,
+	conn messaging.Connection,
 ) {
 	leftNode.remotes = append(leftNode.remotes, Remote{
 		LocalNode:  leftNode,
@@ -449,13 +323,40 @@ func (c *Connector) createRemoteInfo(
 }
 
 // EstablishRoute sets the routing table for all the nodes.
+//
+// It first builds the switches: a switch takes all of its ports at Build, so
+// the switches are built once every device and link is connected. Call it
+// after the last ConnectDevice and ConnectSwitches of the network.
 func (c *Connector) EstablishRoute() {
+	c.BuildSwitches()
+
 	if c.router == nil {
 		return
 	}
 
 	nodes := c.createRoutingNodeList()
 	c.router.EstablishRoute(nodes)
+}
+
+// BuildSwitches builds every switch that is not built yet, with the ports and
+// links added to it. EstablishRoute calls it; a connector that fills the
+// routing tables itself calls it once every device and link is connected.
+func (c *Connector) BuildSwitches() {
+	for _, node := range c.switches {
+		if node.sw != nil {
+			continue
+		}
+
+		node.sw = switches.Definition.Builder().
+			WithSimulation(c.simulation).
+			WithSpec(node.spec).
+			WithResources(switches.Resources{
+				RoutingTable: node.table,
+				Links:        node.links,
+			}).
+			WithPorts(switches.Ports{Port: node.ports}).
+			Build(node.name)
+	}
 }
 
 func (c *Connector) createRoutingNodeList() []Node {

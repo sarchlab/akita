@@ -4,11 +4,9 @@ package pcie
 import (
 	"math"
 
-	"github.com/sarchlab/akita/v5/monitoring2"
 	"github.com/sarchlab/akita/v5/noc/networking/networkconnector"
 
 	"github.com/sarchlab/akita/v5/timing"
-	"github.com/sarchlab/akita/v5/tracing"
 
 	// Connector can connect devices into a PCIe network.
 	"github.com/sarchlab/akita/v5/messaging"
@@ -51,13 +49,6 @@ func (c *Connector) WithFrequency(freq timing.Freq) *Connector {
 	return c
 }
 
-// WithMonitor sets the monitor that inspects the states of the component
-// associated with the connection.
-func (c *Connector) WithMonitor(m *monitoring2.Monitor) *Connector {
-	c.connector = c.connector.WithMonitor(m)
-	return c
-}
-
 // WithBandwidth sets the bandwidth of all the connections in the PCIe network.
 func (c *Connector) WithBandwidth(bytePerSecond uint64) *Connector {
 	c.bandwidth = bytePerSecond
@@ -92,12 +83,6 @@ func (c *Connector) WithVersion(version int, width int) *Connector {
 // can forward a flit.
 func (c *Connector) WithSwitchLatency(numCycles int) *Connector {
 	c.switchLatency = numCycles
-	return c
-}
-
-// WithVisTracer sets the vis tracer that can be used to visualize the network.
-func (c *Connector) WithVisTracer(tracer tracing.Tracer) *Connector {
-	c.connector = c.connector.WithVisTracer(tracer)
 	return c
 }
 

@@ -326,17 +326,22 @@ memcontrolprotocol.ErrMustBePausedOrDrained
 
 ## Implementing the protocol in a new component
 
-1. Declare a `Control` port in the builder, and have setup code assign the
-   instance after `Build`:
+1. Add a `Control` field to the component's `Ports` struct, tagged with the
+   responder role; the system builder creates the port and passes it to `Build`:
    ```go
-   modelComp.DeclarePort("Control") // in Build
+   type Ports struct {
+       // ...
+       Control messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memcontrolprotocol.responder"`
+   }
 
-   // during assembly, after Build:
-   comp.AssignPort("Control", modeling.MakePortBuilder().
-       WithSimulation(sim).
-       WithComponent(comp).
-       WithSpec(modeling.PortSpec{BufSize: ctrlBufSize}).
-       Build("Control"))
+   // during assembly:
+   comp := mycomp.Definition.Builder().
+       // ...
+       WithPorts(mycomp.Ports{
+           // ...
+           Control: messaging.NewPort("MyComp.Control", ctrlBufSize, ctrlBufSize),
+       }).
+       Build("MyComp")
    ```
 2. Add a `memcontrolprotocol.State` field to the component's `State` struct so
    the control bookkeeping is uniform and serializable.
@@ -372,9 +377,11 @@ func RunContract(
 )
 
 type Harness struct {
-    Comp     Controllable      // Tick() bool, Name() string
-    Ctrl     messaging.Port    // the component's Control port
-    Teardown func()            // optional, called after each subtest
+    Comp        Controllable      // timing.Handler + Name(); driven by TickEvents
+    Sim         timing.Simulation // the component's simulation; IDs come from it
+    Ctrl        messaging.Port    // the component's Control port
+    IsQuiescent func() bool       // optional, checked after Drain and Reset
+    Teardown    func()            // optional, called after each subtest
 }
 ```
 

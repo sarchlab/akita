@@ -35,7 +35,7 @@ var _ = Describe("TLB", func() {
 		spec.NumWays = 32
 		spec.Log2PageSize = 12
 
-		tlbComp = MakeBuilder().
+		tlbComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
@@ -43,17 +43,17 @@ var _ = Describe("TLB", func() {
 					Port: remotePort,
 				},
 			}).
+			WithPorts(defaultPorts("TLB")).
 			Build("TLB")
 
-		assignDefaultPorts(sim, tlbComp)
 		plugNoopConn(tlbComp)
 
-		topPort = tlbComp.GetPortByName("Top")
-		bottomPort = tlbComp.GetPortByName("Bottom")
-		controlPort = tlbComp.GetPortByName("Control")
+		topPort = tlbComp.Ports.Top
+		bottomPort = tlbComp.Ports.Bottom
+		controlPort = tlbComp.Ports.Control
 
-		tlbMW = tlbComp.Middlewares()[1].(*tlbMiddleware)
-		tlbCtrlMW = tlbComp.Middlewares()[0].(*ctrlMiddleware)
+		tlbMW = tlbComp.Middlewares.TLB
+		tlbCtrlMW = tlbComp.Middlewares.Ctrl
 	})
 
 	It("should do nothing if there is no req in TopPort", func() {
@@ -504,7 +504,7 @@ var _ = Describe("TLB Integration", func() {
 		lowModule = newIdealEndpoint("LowModule")
 		agent = newIdealEndpoint("Agent")
 
-		tlbComp = MakeBuilder().
+		tlbComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(Definition.DefaultSpec).
 			WithResources(Resources{
@@ -512,15 +512,14 @@ var _ = Describe("TLB Integration", func() {
 					Port: lowModule.port.AsRemote(),
 				},
 			}).
+			WithPorts(defaultPorts("TLB")).
 			Build("TLB")
-
-		assignDefaultPorts(sim, tlbComp)
 
 		connection.PlugIn(agent.port)
 		connection.PlugIn(lowModule.port)
-		connection.PlugIn(tlbComp.GetPortByName("Top"))
-		connection.PlugIn(tlbComp.GetPortByName("Bottom"))
-		connection.PlugIn(tlbComp.GetPortByName("Control"))
+		connection.PlugIn(tlbComp.Ports.Top)
+		connection.PlugIn(tlbComp.Ports.Bottom)
+		connection.PlugIn(tlbComp.Ports.Control)
 
 		page = vm.Page{
 			PID:   1,
@@ -546,7 +545,7 @@ var _ = Describe("TLB Integration", func() {
 		req := vmprotocol.TranslationReq{}
 		req.ID = sim.NewID()
 		req.Src = agent.port.AsRemote()
-		req.Dst = tlbComp.GetPortByName("Top").AsRemote()
+		req.Dst = tlbComp.Ports.Top.AsRemote()
 		req.PID = 1
 		req.VAddr = 0x1000
 		req.DeviceID = 1
@@ -564,7 +563,7 @@ var _ = Describe("TLB Integration", func() {
 		req := vmprotocol.TranslationReq{}
 		req.ID = sim.NewID()
 		req.Src = agent.port.AsRemote()
-		req.Dst = tlbComp.GetPortByName("Top").AsRemote()
+		req.Dst = tlbComp.Ports.Top.AsRemote()
 		req.PID = 1
 		req.VAddr = 0x1000
 		req.DeviceID = 1
@@ -581,7 +580,7 @@ var _ = Describe("TLB Integration", func() {
 		req2 := vmprotocol.TranslationReq{}
 		req2.ID = sim.NewID()
 		req2.Src = agent.port.AsRemote()
-		req2.Dst = tlbComp.GetPortByName("Top").AsRemote()
+		req2.Dst = tlbComp.Ports.Top.AsRemote()
 		req2.PID = 1
 		req2.VAddr = 0x1000
 		req2.DeviceID = 1

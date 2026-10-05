@@ -17,7 +17,7 @@ type TrafficMsg struct {
 // messages symmetrically, so the protocol has a single role. Defining the
 // protocol registers the message type with the checkpoint codec.
 var (
-	Protocol = messaging.DefineProtocol("noc.acceptance",
+	Protocol = messaging.DefineProtocol(
 		messaging.RoleDef{Name: "agent",
 			Sends: []messaging.Msg{TrafficMsg{}}},
 	)
@@ -65,7 +65,7 @@ func (t *Test) GenerateMsgs(n uint64) {
 
 		msg := TrafficMsg{
 			MsgMeta: messaging.MsgMeta{
-				ID:           srcAgent.Simulation().NewID(),
+				ID:           srcAgent.NewID(),
 				Src:          srcPort.AsRemote(),
 				Dst:          dstPort.AsRemote(),
 				TrafficBytes: rand.Intn(4096),

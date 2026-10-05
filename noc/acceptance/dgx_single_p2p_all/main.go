@@ -42,7 +42,7 @@ func main() {
 			rand.Seed(1)
 
 			sim := acceptance.NewSimulation()
-			engine := sim.GetEngine()
+			engine := sim.Engine()
 			t := acceptance.NewTest()
 
 			agents := createNetwork(sim, t)
@@ -94,7 +94,7 @@ func createAgents(
 	for i := 0; i < 9; i++ {
 		name := fmt.Sprintf("Agent[%d]", i)
 		ports := []messaging.Port{
-			messaging.NewPort(nil, 1, 1, name+".Port0"),
+			messaging.NewPort(name+".Port0", 1, 1),
 		}
 		agent := acceptance.NewAgent(sim, freq, name, ports, test)
 		agent.TickLater()

@@ -4,26 +4,38 @@ import (
 	"log"
 	"reflect"
 
+	"github.com/sarchlab/akita/v5/daisen2"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type agentMiddleware struct {
-	agent *MemAccessAgent
+	comp *Comp
+
+	// writeProgressBar and readProgressBar observe the run. CreateProgressBars
+	// attaches them after Build; they are not simulation state.
+	writeProgressBar *daisen2.ProgressBar
+	readProgressBar  *daisen2.ProgressBar
 }
 
 func (m *agentMiddleware) memPort() messaging.Port {
-	return m.agent.GetPortByName("Mem")
+	return m.comp.Ports.Mem
 }
 
-// Tick updates the states of the agent and issues new read and write requests.
-func (m *agentMiddleware) Tick() bool {
+func (m *agentMiddleware) lowModule() messaging.Port {
+	return m.comp.Resources.LowModule
+}
+
+// Handle updates the states of the agent and issues new read and write
+// requests.
+func (m *agentMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 
 	madeProgress = m.processMsgRsp() || madeProgress
 
-	state := &m.agent.State
+	state := &m.comp.State
 	if state.ReadLeft == 0 && state.WriteLeft == 0 {
 		return madeProgress
 	}
@@ -43,22 +55,22 @@ func (m *agentMiddleware) processMsgRsp() bool {
 		return false
 	}
 
-	state := &m.agent.State
+	state := &m.comp.State
 
 	switch msg := msgI.(type) {
 	case memprotocol.WriteDoneRsp:
 		if dumpLog {
 			write := state.PendingWriteReq[msg.RspTo]
 			log.Printf("%d, agent, write complete, 0x%X\n",
-				m.agent.CurrentTime(), write.Address)
+				m.comp.CurrentTime(), write.Address)
 		}
 
 		req := state.PendingWriteReq[msg.RspTo]
-		tracing.TraceReqFinalize(m.agent, req)
+		tracing.TraceReqFinalize(m.comp, req)
 		delete(state.PendingWriteReq, msg.RspTo)
 
-		if m.agent.writeProgressBar != nil {
-			m.agent.writeProgressBar.MoveInProgressToFinished(1)
+		if m.writeProgressBar != nil {
+			m.writeProgressBar.MoveInProgressToFinished(1)
 		}
 
 		return true
@@ -67,16 +79,16 @@ func (m *agentMiddleware) processMsgRsp() bool {
 
 		if dumpLog {
 			log.Printf("%d, agent, read complete, 0x%X, %v\n",
-				m.agent.CurrentTime(), req.Address, msg.Data)
+				m.comp.CurrentTime(), req.Address, msg.Data)
 		}
 
 		m.checkReadResult(req, msg, state)
 
-		tracing.TraceReqFinalize(m.agent, req)
+		tracing.TraceReqFinalize(m.comp, req)
 		delete(state.PendingReadReq, msg.RspTo)
 
-		if m.agent.readProgressBar != nil {
-			m.agent.readProgressBar.MoveInProgressToFinished(1)
+		if m.readProgressBar != nil {
+			m.readProgressBar.MoveInProgressToFinished(1)
 		}
 
 		return true
@@ -116,28 +128,19 @@ func (m *agentMiddleware) checkReadResult(
 }
 
 func (m *agentMiddleware) float64() float64 {
-	if m.agent.rng != nil {
-		return m.agent.rng.Float64()
-	}
-	return globalFloat64()
+	return m.comp.State.RNG.Float64()
 }
 
 func (m *agentMiddleware) uint64() uint64 {
-	if m.agent.rng != nil {
-		return m.agent.rng.Uint64()
-	}
-	return globalUint64()
+	return m.comp.State.RNG.Uint64()
 }
 
 func (m *agentMiddleware) uint32r() uint32 {
-	if m.agent.rng != nil {
-		return m.agent.rng.Uint32()
-	}
-	return globalUint32()
+	return m.comp.State.RNG.Uint32()
 }
 
 func (m *agentMiddleware) shouldRead() bool {
-	state := &m.agent.State
+	state := &m.comp.State
 
 	if len(state.KnownMemValue) == 0 {
 		return false
@@ -157,7 +160,7 @@ func (m *agentMiddleware) shouldRead() bool {
 }
 
 func (m *agentMiddleware) doRead() bool {
-	state := &m.agent.State
+	state := &m.comp.State
 	address := m.randomReadAddress(state)
 
 	if m.isAddressInPendingReq(state, address) {
@@ -165,9 +168,9 @@ func (m *agentMiddleware) doRead() bool {
 	}
 
 	readReq := memprotocol.ReadReq{}
-	readReq.ID = m.agent.Simulation().NewID()
+	readReq.ID = m.comp.NewID()
 	readReq.Src = m.memPort().AsRemote()
-	readReq.Dst = m.agent.LowModule.AsRemote()
+	readReq.Dst = m.lowModule().AsRemote()
 	readReq.Address = address
 	readReq.AccessByteSize = 4
 	readReq.PID = 1
@@ -180,24 +183,24 @@ func (m *agentMiddleware) doRead() bool {
 
 	m.memPort().Send(readReq)
 
-	tracing.TraceReqInitiate(m.agent, readReq, 0)
+	tracing.TraceReqInitiate(m.comp, readReq, 0)
 
 	state.PendingReadReq[readReq.ID] = readReq
 	state.ReadLeft--
 
-	if m.agent.readProgressBar != nil {
-		m.agent.readProgressBar.IncrementInProgress(1)
+	if m.readProgressBar != nil {
+		m.readProgressBar.IncrementInProgress(1)
 	}
 
 	if dumpLog {
-		log.Printf("%d, agent, read, 0x%X\n", m.agent.CurrentTime(), address)
+		log.Printf("%d, agent, read, 0x%X\n", m.comp.CurrentTime(), address)
 	}
 
 	return true
 }
 
 func (m *agentMiddleware) randomReadAddress(state *State) uint64 {
-	spec := m.agent.Spec()
+	spec := m.comp.Spec
 
 	var addr uint64
 
@@ -235,8 +238,8 @@ func (m *agentMiddleware) isAddressInPendingRead(state *State, addr uint64) bool
 }
 
 func (m *agentMiddleware) doWrite() bool {
-	state := &m.agent.State
-	spec := m.agent.Spec()
+	state := &m.comp.State
+	spec := m.comp.Spec
 
 	address := spec.AddressOffset + m.uint64()%(spec.MaxAddress/4)*4
 
@@ -248,9 +251,9 @@ func (m *agentMiddleware) doWrite() bool {
 
 	writeData := uint32ToBytes(data)
 	writeReq := memprotocol.WriteReq{}
-	writeReq.ID = m.agent.Simulation().NewID()
+	writeReq.ID = m.comp.NewID()
 	writeReq.Src = m.memPort().AsRemote()
-	writeReq.Dst = m.agent.LowModule.AsRemote()
+	writeReq.Dst = m.lowModule().AsRemote()
 	writeReq.Address = address
 	writeReq.PID = 1
 	writeReq.Data = writeData
@@ -263,19 +266,19 @@ func (m *agentMiddleware) doWrite() bool {
 
 	m.memPort().Send(writeReq)
 
-	tracing.TraceReqInitiate(m.agent, writeReq, 0)
+	tracing.TraceReqInitiate(m.comp, writeReq, 0)
 
 	state.WriteLeft--
 	m.addKnownValue(state, address, data)
 	state.PendingWriteReq[writeReq.ID] = writeReq
 
-	if m.agent.writeProgressBar != nil {
-		m.agent.writeProgressBar.IncrementInProgress(1)
+	if m.writeProgressBar != nil {
+		m.writeProgressBar.IncrementInProgress(1)
 	}
 
 	if dumpLog {
 		log.Printf("%d, agent, write, 0x%X, %v\n",
-			m.agent.CurrentTime(), address, writeReq.Data)
+			m.comp.CurrentTime(), address, writeReq.Data)
 	}
 
 	return true

@@ -59,7 +59,7 @@ func (d *SampleDomain) End() {
 func ExampleTracer() {
 	timeTeller := &SampleTimeTeller{}
 	domain := &SampleDomain{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
-		HookableBase: hooking.NewHookableBase(),
+		HookableBase: &hooking.HookableBase{},
 		timeTeller:   timeTeller,
 	}
 
@@ -100,4 +100,4 @@ func ExampleTracer() {
 	// 12
 }
 
-func (c *SampleDomain) Simulation() timing.Simulation { return c.sim }
+func (c *SampleDomain) NewID() uint64 { return c.sim.NewID() }

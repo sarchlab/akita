@@ -57,10 +57,11 @@ akita check ./mycache
 Each reported problem is tagged (e.g. `<1>`, `<2b>`) to indicate which
 check failed. On success the command exits 0 with no output.
 
-Component metadata now comes from the package-level `Definition`, a
-`modeling.ComponentDef` literal read by the `inspect` package. `akita check`
-currently retains its legacy component and builder checks; inspector-based
-checks and an `akita inspect` command are follow-up work.
+Component metadata now comes from the package-level `Definition` of a component
+model (`ticking.Definition`, `wakeup.Definition`, or `event.Definition`), read
+by the `inspect` package. `akita component --create` and `akita check` still
+target the older builder-based layout; updating them to the component models,
+with inspector-based checks and an `akita inspect` command, is follow-up work.
 
 ## Usage in a Project
 

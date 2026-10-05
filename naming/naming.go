@@ -12,22 +12,22 @@ type Named interface {
 	Name() string
 }
 
-// A Name is a hierarchical name that includes a series of tokens separated
+// A parsedName is a hierarchical name that includes a series of tokens separated
 // by dots.
-type Name struct {
-	Tokens []NameToken
+type parsedName struct {
+	Tokens []nameToken
 }
 
-// NameToken is a token of a name.
-type NameToken struct {
+// nameToken is a token of a name.
+type nameToken struct {
 	ElemName string
 	Index    []int
 }
 
-// ParseName parses a name string and returns a Name object.
-func ParseName(sname string) Name {
+// parseName parses a name string and returns its tokens.
+func parseName(sname string) parsedName {
 	tokens := strings.Split(sname, ".")
-	name := Name{Tokens: make([]NameToken, len(tokens))}
+	name := parsedName{Tokens: make([]nameToken, len(tokens))}
 
 	for i, token := range tokens {
 		name.Tokens[i] = parseNameToken(token)
@@ -36,7 +36,7 @@ func ParseName(sname string) Name {
 	return name
 }
 
-func parseNameToken(token string) NameToken {
+func parseNameToken(token string) nameToken {
 	bracketMustMatch(token)
 
 	ts := strings.Split(token, "[")
@@ -53,7 +53,7 @@ func parseNameToken(token string) NameToken {
 		indices[i-1] = index
 	}
 
-	return NameToken{ElemName: elemName, Index: indices}
+	return nameToken{ElemName: elemName, Index: indices}
 }
 
 func bracketMustMatch(name string) {
@@ -90,13 +90,13 @@ func MustBeValid(name string) {
 		}
 	}()
 
-	n := ParseName(name)
+	n := parseName(name)
 	for _, token := range n.Tokens {
 		tokenMustBeValid(token)
 	}
 }
 
-func tokenMustBeValid(token NameToken) {
+func tokenMustBeValid(token nameToken) {
 	if token.ElemName == "" {
 		panic("Name element must not be empty")
 	}

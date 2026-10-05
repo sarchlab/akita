@@ -6,21 +6,20 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type dispatchMW struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *dispatchMW) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
-func (m *dispatchMW) Tick() bool {
+func (m *dispatchMW) Handle(_ timing.Event) bool {
 	if m.comp.State.ControlState != memcontrolprotocol.StateEnabled {
 		return false
 	}
@@ -29,7 +28,7 @@ func (m *dispatchMW) Tick() bool {
 
 func (m *dispatchMW) dispatchFromTopPort() bool {
 	madeProgress := false
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	next := &m.comp.State
 
 	for {
@@ -75,7 +74,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		// ID rides on the item through the pipeline and is closed at finalize.
 		tracing.TraceReqReceive(m.comp, msg)
 
-		pipelineTaskID := m.comp.Simulation().NewID()
+		pipelineTaskID := m.comp.NewID()
 		tracing.StartTask(m.comp, tracing.TaskStart{
 			ID:       pipelineTaskID,
 			ParentID: tracing.MsgIDAtReceiver(msg, m.comp),

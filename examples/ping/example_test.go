@@ -1,6 +1,7 @@
 package ping
 
 import (
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/timing"
@@ -10,35 +11,25 @@ func Example_pingWithEvents() {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
 
-	agentA := MakeBuilder().
+	agentA := Definition.Builder().
 		WithSimulation(sim).
+		WithPorts(Ports{Out: messaging.NewPort("AgentA.Out", 16, 16)}).
 		Build("AgentA")
-	agentAOut := modeling.MakePortBuilder().
-		WithSimulation(sim).
-		WithComponent(agentA).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Out")
-	agentA.AssignPort("Out", agentAOut)
 
-	agentB := MakeBuilder().
+	agentB := Definition.Builder().
 		WithSimulation(sim).
+		WithPorts(Ports{Out: messaging.NewPort("AgentB.Out", 16, 16)}).
 		Build("AgentB")
-	agentBOut := modeling.MakePortBuilder().
-		WithSimulation(sim).
-		WithComponent(agentB).
-		WithSpec(modeling.PortSpec{BufSize: 16}).
-		Build("Out")
-	agentB.AssignPort("Out", agentBOut)
 
 	conn := directconnection.MakeBuilder().
 		WithSimulation(sim).
 		Build("Conn")
 
-	conn.PlugIn(agentA.GetPortByName("Out"))
-	conn.PlugIn(agentB.GetPortByName("Out"))
+	conn.PlugIn(agentA.Ports.Out)
+	conn.PlugIn(agentB.Ports.Out)
 
-	SchedulePing(agentA, 1, agentB.GetPortByName("Out").AsRemote())
-	SchedulePing(agentA, 3, agentB.GetPortByName("Out").AsRemote())
+	SchedulePing(agentA, 1, agentB.Ports.Out.AsRemote())
+	SchedulePing(agentA, 3, agentB.Ports.Out.AsRemote())
 
 	if err := engine.Run(); err != nil {
 		panic(err)

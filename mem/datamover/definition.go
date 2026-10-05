@@ -1,26 +1,32 @@
 package datamover
 
 import (
-	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// Definition declares the StreamingDataMover component: its default configuration and
-// its port topology. The builder consumes it at runtime and tooling reads it
-// statically, so it is the single source of truth for both.
-var Definition = modeling.ComponentDef[Spec]{
-	Name: "StreamingDataMover",
+// Definition declares the StreamingDataMover, a ticking component: its
+// default configuration and its behavior. Its ports and middlewares are the
+// fields of Ports and Middlewares. The system builder builds an instance with
+// Definition.Builder()...Build(name); tooling reads the same declaration
+// statically.
+var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
 		Freq: 1 * timing.GHz,
 	},
-	Ports: []modeling.PortDef{
-		{Name: "Top", Roles: []*messaging.Role{datamoverprotocol.Responder}},
-		{Name: "Inside", Roles: []*messaging.Role{memprotocol.Requester}},
-		{Name: "Outside", Roles: []*messaging.Role{memprotocol.Requester}},
-		{Name: "Control", Roles: []*messaging.Role{memcontrolprotocol.Responder}},
-	},
+	NewMiddlewares: newMiddlewares,
+}
+
+func newMiddlewares(c *Comp) middlewares {
+	res := c.Resources
+
+	return middlewares{
+		Ctrl:      &ctrlMiddleware{comp: c},
+		CtrlParse: &ctrlParseMW{comp: c},
+		DataTransfer: &dataTransferMW{
+			comp:          c,
+			insideMapper:  res.InsideMapper,
+			outsideMapper: res.OutsideMapper,
+		},
+	}
 }

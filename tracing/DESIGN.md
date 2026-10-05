@@ -227,7 +227,7 @@ type TaskFilter func(t TaskStart) bool   // applied at StartTask
 | `Task.Steps` | `Task.Tags` |
 | `HookPosTaskStep` | `HookPosTaskTag` |
 | `Tracer.StepTask` | `Tracer.AddTaskTag` |
-| `StepCountTracer`, `GetStepNames`, `GetStepCount` | `TagCountTracer`, `GetTagNames`, `GetTagCount` |
+| `StepCountTracer`, `GetStepNames`, `GetStepCount` | `TagCountTracer`, `TagNames`, `TagCount` |
 
 This also resolves the old `StepTask`-vs-`AddTaskStep` asymmetry: emit and
 consume both become `AddTaskTag`.
@@ -339,22 +339,23 @@ an incoming message **without mutating the message**. The scenario:
   ID, with `ParentID = msg.Meta().ID` to link the two into a tree.
 
 `MsgIDAtReceiver` keeps a process-global, mutex-guarded map
-`(domain.Simulation().GetIDGenerator(), domain.Name(), msg.ID) → generated taskID`:
+`(domain, msg.ID) → generated taskID`, where the domain is the receiving
+component itself and `domain.NewID()` allocates the taskID:
 1. `TraceReqReceive` → first lookup generates and stores the id; `StartTask`
    uses it.
 2. `AddTaskTag` / `AddMilestone` → same key returns the **same** id, so every
    event lands on that receiver task.
 3. `TraceReqComplete` → `EndTask`, then `forget` deletes the entry.
 
-The generator identity isolates simulations that reuse component names and
-message IDs. The domain name distinguishes handling tasks at different
-components within one simulation. When `NumHooks()==0` it returns `0` and never
-touches the map.
+Keying by the domain itself, not its name, separates handling tasks at
+different components, and keeps simulations that reuse component names and
+message IDs apart. When `NumHooks()==0` it returns `0` and never touches the
+map.
 
-Known smells to revisit later: process-global lock contention, keying by name,
-and leak risk if a `forget` is missed. A likely direction is deriving the id deterministically
-(`hash(domainName, msgID)`), which removes the map, the mutex, and the `forget`
-calls — but that is a separate discussion.
+Known smells to revisit later: process-global lock contention, and leak risk
+if a `forget` is missed. A likely direction is deriving the id
+deterministically (`hash(domainName, msgID)`), which removes the map, the
+mutex, and the `forget` calls — but that is a separate discussion.
 
 ### Context / task handle (reference)
 

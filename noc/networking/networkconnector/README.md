@@ -17,7 +17,6 @@ then establishes routes. Configuration methods return a copy:
 ```go
 conn := networkconnector.MakeConnector().
     WithSimulation(sim).
-    WithMonitor(monitor).
     WithDefaultFreq(1 * timing.GHz).
     WithFlitSize(64).
     WithRouter(networkconnector.FloydWarshallRouter{})
@@ -30,7 +29,10 @@ Topology methods:
 - `ConnectDevice(switchID, ports, param)` — create an endpoint for the device's
   ports and link it to a switch.
 - `ConnectSwitches(leftID, rightID, param)` — add a bidirectional switch link.
-- `EstablishRoute()` — run the router to populate every switch's routing table.
+- `EstablishRoute()` — build the switches, then run the router to populate every
+  switch's routing table. Call it once, after the last `ConnectDevice` and
+  `ConnectSwitches`: a switch takes all of its ports at `Build`, so it is built
+  only when its links are final.
 
 Link parameters (`DeviceToSwitchLinkParameter`, `SwitchToSwitchLinkParameter`,
 and their `LinkEnd*`/`LinkParameter` fields) configure buffer sizes, channel
@@ -56,10 +58,12 @@ table for every reachable device port.
 
 ## How It Works
 
-`ConnectDevice` builds an `endpoint`, creates the switch-side port, adds it to
-the switch with a `SwitchPortAdder`, and links the two with a
-`directconnection`, recording the link as `Remote`s on both nodes.
-`ConnectSwitches` does the same symmetrically for two switches. After the
-topology is described, `EstablishRoute` gathers all nodes and lets the chosen
-`Router` fill in every switch's `routing.Table` so that flits can reach any
-device.
+`ConnectDevice` builds an `endpoint`, creates the switch-side port, records it
+on the switch's node, and links the two with a `directconnection`, recording
+the link as `Remote`s on both nodes. `ConnectSwitches` does the same
+symmetrically for two switches. A switch takes all of its ports at `Build`, so
+the connector builds the switches only in `EstablishRoute` (through
+`BuildSwitches`), once the topology is described; it then gathers all nodes
+and lets the chosen `Router` fill in every switch's `routing.Table` so that
+flits can reach any device. A `ConnectDevice` or `ConnectSwitches` that adds a
+port to a switch that is already built panics.

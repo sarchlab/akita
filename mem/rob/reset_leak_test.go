@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/sarchlab/akita/v5/tracing/tracingtest"
@@ -24,22 +25,20 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.NumReqPerCycle = 2
 	spec.BottomUnit = messaging.RemotePort("BottomUnit")
 
-	rob := MakeBuilder().WithSimulation(sim).WithSpec(spec).Build("Rob")
-
-	assign := func(name string) messaging.Port {
-		p := modeling.MakePortBuilder().
-			WithSimulation(sim).
-			WithComponent(rob).
-			WithSpec(modeling.PortSpec{BufSize: 4}).
-			Build(name)
-		rob.AssignPort(name, p)
+	port := func(name string) messaging.Port {
+		p := messaging.NewPort("Rob."+name, 4, 4)
 		(&noopConn{}).PlugIn(p)
 		return p
 	}
 
-	topPort := assign("Top")
-	assign("Bottom")
-	ctrlPort := assign("Control")
+	topPort := port("Top")
+	ctrlPort := port("Control")
+
+	rob := Definition.Builder().
+		WithSimulation(sim).
+		WithSpec(spec).
+		WithPorts(Ports{Top: topPort, Bottom: port("Bottom"), Control: ctrlPort}).
+		Build("Rob")
 
 	rec := &tracingtest.LeakRecorder{}
 	tracing.CollectTrace(rob, rec)
@@ -52,7 +51,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	read.Dst = topPort.AsRemote()
 	read.TrafficClass = "memprotocol.ReadReq"
 	topPort.Deliver(read)
-	rob.Tick()
+	modelingtest.Tick(rob)
 
 	if len(rob.State.Transactions) != 1 {
 		t.Fatalf("expected 1 in-flight transaction, got %d",
@@ -73,7 +72,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 
 	acked := false
 	for range 16 {
-		rob.Tick()
+		modelingtest.Tick(rob)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
 			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {

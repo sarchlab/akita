@@ -37,7 +37,7 @@ func TestControlContract(t *testing.T) {
 		spec.BankLatency = 1
 		spec.DirLatency = 1
 
-		comp := MakeBuilder().
+		comp := Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
@@ -46,24 +46,21 @@ func TestControlContract(t *testing.T) {
 					Port: messaging.RemotePort("LowerCache"),
 				},
 			}).
+			WithPorts(makePorts("L1Cache", 4)).
 			Build("L1Cache")
 
-		// Build declares the ports; assign every declared port instance
-		// (the caller now chooses the buffer sizes) before the component
-		// is ticked, then plug each into a no-op connection.
-		for _, name := range []string{"Top", "Bottom", "Control"} {
-			p := modeling.MakePortBuilder().
-				WithSimulation(sim).
-				WithComponent(comp).
-				WithSpec(modeling.PortSpec{BufSize: 4}).
-				Build(name)
-			comp.AssignPort(name, p)
-			(&ccNoopConn{}).PlugIn(comp.GetPortByName(name))
+		// Plug each port into a no-op connection before the component is
+		// ticked.
+		for _, p := range []messaging.Port{
+			comp.Ports.Top, comp.Ports.Bottom, comp.Ports.Control,
+		} {
+			(&ccNoopConn{}).PlugIn(p)
 		}
 
 		return &memcontrolprotocol.Harness{
 			Comp: comp,
-			Ctrl: comp.GetPortByName("Control"),
+			Sim:  sim,
+			Ctrl: comp.Ports.Control,
 			IsQuiescent: func() bool {
 				for i := range comp.State.Transactions {
 					if !comp.State.Transactions[i].Removed {

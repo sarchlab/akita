@@ -5,7 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/queueing"
 
@@ -26,7 +25,7 @@ var _ = Describe("Directory", func() {
 	// next CanSend returns false, simulating a busy port.
 	fillBottomOutgoing := func() {
 		dummy := memprotocol.ReadReq{}
-		dummy.ID = c.comp.Simulation().NewID()
+		dummy.ID = c.comp.NewID()
 		dummy.Src = bottomPort.AsRemote()
 		dummy.Dst = messaging.RemotePort("DRAM")
 		dummy.TrafficClass = "req"
@@ -35,54 +34,51 @@ var _ = Describe("Directory", func() {
 	}
 
 	BeforeEach(func() {
-		c = &pipelineMW{}
-
-		initialState := State{
-			DirBuf: queueing.NewBuffer[int]("Cache.DirBuf", 4),
+		initialState := state{
+			DirBuf: queueing.MakeBuffer[int](4),
 			BankBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.BankBuf0", 4),
+				queueing.MakeBuffer[int](4),
 			},
-			DirPipeline: queueing.NewPipeline[int](4, 2),
-			DirPostBuf:  queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
+			DirPipeline: queueing.MakePipeline[int](4, 2),
+			DirPostBuf:  queueing.MakeBuffer[int](4),
 			BankPipelines: []queueing.Pipeline[int]{
-				queueing.NewPipeline[int](4, 10),
+				queueing.MakePipeline[int](4, 10),
 			},
 			BankPostBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.BankPostBuf0", 4),
+				queueing.MakeBuffer[int](4),
 			},
 		}
 
 		// Initialize directoryState before SetState so both buffers match
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
-		c.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
+		// bottomPort is a real, single-slot port owned by the component.
+		// Success cases read the sent request back via RetrieveOutgoing;
+		// failure cases pre-fill the slot.
+		ports := makePorts("Cache", 4)
+		ports.Bottom = messaging.NewPort("Cache.Bottom", 1, 1)
+
+		c = buildStageTestCache(
+			Spec{
+				Freq:             1 * timing.GHz,
 				Log2BlockSize:    6,
 				NumReqPerCycle:   4,
 				WayAssociativity: 4,
 				NumMSHREntry:     4,
-				NumSets:          16,
+				TotalByteSize:    4 * mem.KB, // 16 sets
 				NumBanks:         1,
 				WritePolicyType:  "write-around",
-			}).
-			WithResources(Resources{
+			},
+			Resources{
+				Storage:       mem.NewStorage(4 * mem.KB),
 				AddressMapper: &mem.SinglePortMapper{Port: "DRAM"},
-			}).
-			Build("Cache")
+			},
+			ports,
+			initialState,
+		)
 
-		// bottomPort is a real, single-slot port owned by the component.
-		// Success cases read the sent request back via RetrieveOutgoing;
-		// failure cases pre-fill the slot. The directory stage resolves it
-		// lazily via GetPortByName("Bottom"), so it is declared and assigned a
-		// real port.
-		bottomPort = messaging.NewPort(c.comp, 1, 1, "Cache.Bottom")
+		bottomPort = ports.Bottom
 		(&noopConn{}).PlugIn(bottomPort)
-		c.comp.DeclarePort("Bottom")
-		c.comp.AssignPort("Bottom", bottomPort)
-
-		c.comp.State = initialState
 
 		d = &directory{
 			cache: c,
@@ -100,7 +96,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -135,7 +131,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -177,7 +173,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -200,7 +196,7 @@ var _ = Describe("Directory", func() {
 			next.DirPostBuf.Push(0)
 
 			// Fill up bank buffer
-			next.BankBufs[0] = queueing.NewBuffer[int]("Cache.BankBuf0", 0)
+			next.BankBufs[0] = queueing.MakeBuffer[int](0)
 
 			madeProgress := d.Tick()
 
@@ -211,7 +207,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -244,7 +240,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -293,7 +289,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -322,7 +318,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -351,7 +347,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -385,7 +381,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -414,7 +410,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			readMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -445,7 +441,7 @@ var _ = Describe("Directory", func() {
 			// the MSHR — required so the coalesced write can record it
 			// as MSHRFillFetcherIdx.
 			fetcherReadMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -461,7 +457,7 @@ var _ = Describe("Directory", func() {
 			)
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -507,7 +503,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -551,7 +547,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -583,7 +579,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -615,7 +611,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -637,7 +633,7 @@ var _ = Describe("Directory", func() {
 
 			next.DirPostBuf.Push(0)
 
-			next.BankBufs[0] = queueing.NewBuffer[int]("Cache.BankBuf0", 0)
+			next.BankBufs[0] = queueing.MakeBuffer[int](0)
 
 			madeProgress := d.Tick()
 
@@ -648,7 +644,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -683,7 +679,7 @@ var _ = Describe("Directory", func() {
 			next := &c.comp.State
 
 			writeMeta := messaging.MsgMeta{
-				ID:           c.comp.Simulation().NewID(),
+				ID:           c.comp.NewID(),
 				TrafficBytes: 64 + 12,
 				TrafficClass: "req",
 			}
@@ -712,5 +708,4 @@ var _ = Describe("Directory", func() {
 			Expect(trans.HasWriteToBottom).To(BeTrue())
 		})
 	})
-
 })

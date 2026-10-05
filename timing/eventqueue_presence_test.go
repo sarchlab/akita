@@ -8,9 +8,9 @@ import (
 
 func TestEventQueuePresence(t *testing.T) {
 	for _, safe := range []bool{false, true} {
-		var q EventQueue = newUnsafeEventQueue()
+		var q eventQueue = newUnsafeEventQueue()
 		if safe {
-			q = NewEventQueue()
+			q = newEventQueue()
 		}
 		for cycle := 0; cycle < 2; cycle++ {
 			evt, ok := q.Peek()

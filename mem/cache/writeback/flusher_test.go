@@ -3,13 +3,11 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 var _ = Describe("Flusher", func() {
@@ -20,79 +18,43 @@ var _ = Describe("Flusher", func() {
 	)
 
 	BeforeEach(func() {
-		initialState := State{
+		initialState := state{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
-			DirStageBuf:  queueing.NewBuffer[int]("Cache.DirStageBuf", 4),
+			DirStageBuf:  queueing.MakeBuffer[int](4),
 			DirToBankBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.DirToBankBuf", 4),
+				queueing.MakeBuffer[int](4),
 			},
 			WriteBufferToBankBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.WBToBankBuf", 4),
+				queueing.MakeBuffer[int](4),
 			},
-			MSHRStageBuf:       queueing.NewBuffer[int]("Cache.MSHRStageBuf", 4),
-			WriteBufferBuf:     queueing.NewBuffer[int]("Cache.WriteBufferBuf", 4),
-			DirPipeline:        queueing.NewPipeline[int](4, 0),
-			DirPostPipelineBuf: queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
+			MSHRStageBuf:       queueing.MakeBuffer[int](4),
+			WriteBufferBuf:     queueing.MakeBuffer[int](4),
+			DirPipeline:        queueing.MakePipeline[int](4, 0),
+			DirPostPipelineBuf: queueing.MakeBuffer[int](4),
 			BankPipelines: []queueing.Pipeline[int]{
-				queueing.NewPipeline[int](4, 10),
+				queueing.MakePipeline[int](4, 10),
 			},
 			BankPostPipelineBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("BankPostPipelineBuf", 4),
+				queueing.MakeBuffer[int](4),
 			},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &pipelineMW{}
-		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
-				Log2BlockSize:    6,
-				NumReqPerCycle:   4,
-				WayAssociativity: 4,
-				NumSets:          64,
-				NumBanks:         1,
-			}).
-			Build("Cache")
+		spec := stageTestSpec()
+		comp := buildStageTestComp(spec,
+			Resources{Storage: mem.NewStorage(spec.TotalByteSize)},
+			makePorts("Cache", 4))
+		controlPort = comp.Ports.Control
 
-		// The flusher resolves the "Control" port by name; the data pipeline
-		// resolves "Top"/"Bottom". Assign real ports (owned by the component)
-		// and plug a noop connection. Ticking the flusher only touches Control,
-		// but Top/Bottom are declared so the pipeline can resolve them too.
-		controlPort = messaging.NewPort(m.comp, 4, 4, "Cache.Control")
-		(&ccNoopConn{}).PlugIn(controlPort)
-		m.comp.DeclarePort("Control")
-		m.comp.AssignPort("Control", controlPort)
-
-		topPort := messaging.NewPort(m.comp, 4, 4, "Cache.Top")
-		(&ccNoopConn{}).PlugIn(topPort)
-		m.comp.DeclarePort("Top")
-		m.comp.AssignPort("Top", topPort)
-
-		bottomPort := messaging.NewPort(m.comp, 4, 4, "Cache.Bottom")
-		(&ccNoopConn{}).PlugIn(bottomPort)
-		m.comp.DeclarePort("Bottom")
-		m.comp.AssignPort("Bottom", bottomPort)
-
+		m = comp.Middlewares.Pipeline
 		m.comp.State = initialState
 		next := &m.comp.State
 
 		cache.DirectoryReset(&next.DirectoryState, 64, 4, 64)
 
-		m.dirStage = &directoryStage{cache: m}
-		m.mshrStage = &mshrStage{cache: m}
-		m.bankStages = []*bankStage{{
-			cache:         m,
-			bankID:        0,
-			pipelineWidth: 4,
-		}}
-		m.writeBuffer = &writeBufferStage{
-			cache: m,
-		}
-
-		f = &flusher{pipeline: m}
+		f = comp.Middlewares.Flusher.flusher
 	})
 
 	It("should do nothing if no request", func() {
@@ -106,7 +68,7 @@ var _ = Describe("Flusher", func() {
 			m.comp.State.CacheState = int(cacheStatePaused)
 
 			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-			req.ID = m.comp.Simulation().NewID()
+			req.ID = m.comp.NewID()
 			req.TrafficClass = "memcontrolprotocol.Req"
 			controlPort.Deliver(req)
 
@@ -126,7 +88,7 @@ var _ = Describe("Flusher", func() {
 			next.HasProcessingFlush = true
 			next.ProcessingFlush = flushReqState{
 				MsgMeta: messaging.MsgMeta{
-					ID: m.comp.Simulation().NewID(),
+					ID: m.comp.NewID(),
 				},
 			}
 
@@ -141,7 +103,7 @@ var _ = Describe("Flusher", func() {
 			next.HasProcessingFlush = true
 			next.ProcessingFlush = flushReqState{
 				MsgMeta: messaging.MsgMeta{
-					ID: m.comp.Simulation().NewID(),
+					ID: m.comp.NewID(),
 				},
 			}
 
@@ -162,7 +124,7 @@ var _ = Describe("Flusher", func() {
 			next := &m.comp.State
 			next.CacheState = int(cacheStateFlushing)
 			next.HasProcessingFlush = true
-			flushID := m.comp.Simulation().NewID()
+			flushID := m.comp.NewID()
 			next.ProcessingFlush = flushReqState{
 				MsgMeta: messaging.MsgMeta{
 					ID:  flushID,
@@ -191,7 +153,7 @@ var _ = Describe("Flusher", func() {
 			m.comp.State.CacheState = int(cacheStatePaused)
 
 			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-			req.ID = m.comp.Simulation().NewID()
+			req.ID = m.comp.NewID()
 			req.TrafficClass = "memcontrolprotocol.Req"
 
 			controlPort.Deliver(req)

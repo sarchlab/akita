@@ -1,7 +1,7 @@
-# nvlink — NVLink, PCIe, and Ethernet Multi-Fabric Interconnect
+# nvlink — NVLink and PCIe Multi-Fabric Interconnect
 
 Package `nvlink` provides a connector that builds a multi-device network for the
-Akita simulation framework, combining PCIe, NVLink, and Ethernet links. Within
+Akita simulation framework, combining PCIe and NVLink links. Within
 `noc`, it constructs the switches and links that move messages between a CPU and
 a set of devices (e.g. GPUs) that talk over PCIe to the host and high-bandwidth
 NVLink directly to one another.
@@ -17,8 +17,6 @@ switch, and connects the device switch to a PCIe switch toward the host.
   PCIe bandwidth (version × lane width) and the network frequency.
 - **NVLink** links directly join two devices' NVLink switches; bandwidth comes
   from the NVLink version, and `numLink` sets the link's pipeline width.
-- **Ethernet** switches and links connect nodes over a higher-latency,
-  non-ideal fabric.
 
 Routing uses a `BandwidthFirstRouter`, so paths prefer higher-bandwidth links
 (e.g. NVLink between peers) over PCIe. Routing tables are populated by
@@ -38,20 +36,17 @@ func (c *Connector) AddPCIeSwitch() (switchID int)
 func (c *Connector) ConnectSwitchesWithPCIeLink(switchAID, switchBID int)
 func (c *Connector) PlugInDevice(pcieSwitchID int, devicePorts []messaging.Port) (deviceID int)
 func (c *Connector) ConnectDevicesWithNVLink(deviceA, deviceB, numLink int)
-func (c *Connector) CreateEthernetSwitch() (switchID int)
-func (c *Connector) ConnectSwitchesWithEthernetLink(switchAID, switchBID int)
 func (c *Connector) EstablishRoute()
 ```
 
 `PlugInDevice` returns a `deviceID` used by `ConnectDevicesWithNVLink` to join
-two devices. Switch IDs returned by the `Add*`/`Create*` calls are used to wire
-PCIe and Ethernet links between switches.
+two devices. Switch IDs returned by the `Add*` calls are used to wire
+PCIe links between switches.
 
 ## Builder Pattern
 
 `NewConnector` returns a `Connector` with chained `WithX` options. Defaults are
-`1 GHz`, PCIe Gen4 x16, NVLink v2, PCIe/NVLink switch latency 140, Ethernet
-switch latency 100000, and Ethernet bandwidth 1.25 GiB/s.
+`1 GHz`, PCIe Gen4 x16, NVLink v2, and PCIe/NVLink switch latency 140.
 
 ```go
 connector := nvlink.NewConnector().
@@ -60,10 +55,7 @@ connector := nvlink.NewConnector().
     WithPCIeVersion(4, 16).
     WithPCIeSwitchLatency(140).
     WithNVLinkVersion(2).
-    WithNVLinkSwitchLatency(140).
-    WithEthernetBandwidth(1.25 * (1 << 30)).
-    WithEthernetSwitchLatency(100000).
-    WithMonitor(monitor)
+    WithNVLinkSwitchLatency(140)
 ```
 
 ### Builder Options
@@ -76,10 +68,10 @@ connector := nvlink.NewConnector().
 | `WithPCIeSwitchLatency(n)` | Cycles per PCIe switch hop |
 | `WithNVLinkVersion(v)` / `WithNVLinkBandwidth(b)` | NVLink link bandwidth |
 | `WithNVLinkSwitchLatency(n)` | Cycles per NVLink switch hop |
-| `WithEthernetBandwidth(b)` | Ethernet link bandwidth |
-| `WithEthernetSwitchLatency(n)` | Cycles per Ethernet switch hop |
-| `WithMonitor(m)` | Monitor for inspecting component state |
-| `WithVisTracer(t)` | Tracer for visualizing network tasks |
+
+The connector builds its switches and endpoints with `WithSimulation(sim)`,
+so the simulation's tracer and monitor see each of them; the connector has
+no tracer or monitor option of its own.
 
 ## Usage
 
@@ -92,10 +84,10 @@ connector := nvlink.NewConnector().
 
 connector.CreateNetwork("NVLink")
 
-root := connector.AddRootComplex([]messaging.Port{cpu.GetPortByName("PCIe")})
+root := connector.AddRootComplex([]messaging.Port{cpu.Ports.PCIe})
 
-dev0 := connector.PlugInDevice(root, []messaging.Port{gpu0.GetPortByName("Net")})
-dev1 := connector.PlugInDevice(root, []messaging.Port{gpu1.GetPortByName("Net")})
+dev0 := connector.PlugInDevice(root, []messaging.Port{gpu0.Ports.Net})
+dev1 := connector.PlugInDevice(root, []messaging.Port{gpu1.Ports.Net})
 
 connector.ConnectDevicesWithNVLink(dev0, dev1, 4) // 4 NVLinks between the GPUs
 

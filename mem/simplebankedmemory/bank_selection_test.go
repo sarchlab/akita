@@ -1,8 +1,10 @@
 package simplebankedmemory
 
 import (
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -123,23 +125,26 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 		spec.BankAddrTotalNumOfElements = 4
 		spec.BankAddrCurrentElementIndex = 1
 
-		memComp = MakeBuilder().WithSimulation(sim).WithSpec(spec).Build("MemBank")
-		assignPort(sim, memComp, "Top", 8)
-		assignPort(sim, memComp, "Control", 16)
+		memComp = Definition.Builder().
+			WithSimulation(sim).
+			WithSpec(spec).
+			WithResources(Resources{Storage: mem.NewStorage(spec.Capacity)}).
+			WithPorts(makePorts("MemBank", 8, 16)).
+			Build("MemBank")
 
 		agent = newTestAgent("AgentBank")
 		conn = newLoopbackConnection("ConnBank")
-		conn.PlugIn(memComp.GetPortByName("Top"))
+		conn.PlugIn(memComp.Ports.Top)
 		conn.PlugIn(agent.port)
 	})
 
 	It("writes and reads back at the global address across banks", func() {
-		tp := memComp.GetPortByName("Top")
+		tp := memComp.Ports.Top
 
 		// Two element-1 lines that select different banks (local 0 and 64).
 		addrs := []uint64{128, 192}
 
-		spec := memComp.Spec()
+		spec := memComp.Spec
 		Expect(selectBank(spec, bankSelectionAddress(spec, addrs[0]))).
 			NotTo(Equal(selectBank(spec, bankSelectionAddress(spec, addrs[1]))))
 
@@ -155,7 +160,7 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 		}
 
 		for i := 0; i < 20; i++ {
-			memComp.Tick()
+			modelingtest.Tick(memComp)
 		}
 
 		for i, a := range addrs {
@@ -169,7 +174,7 @@ var _ = Describe("Bank selection data correctness with global storage", func() {
 			agent.send(r)
 
 			for j := 0; j < 20; j++ {
-				memComp.Tick()
+				modelingtest.Tick(memComp)
 			}
 
 			rsp, ok := agent.received[len(agent.received)-1].(memprotocol.DataReadyRsp)

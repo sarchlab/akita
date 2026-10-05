@@ -105,9 +105,9 @@ later := freq.NCyclesLater(3, now)
 ## ID Generation
 
 Each simulation owns an atomic ID counter. Use `sim.NewID()` to allocate a
-`uint64` ID. Components retain their simulation, so middleware can call
-`comp.Simulation().NewID()`. Engines schedule events and do not allocate IDs.
-The first ID is 1; zero remains unset. Separate simulations can reuse the same
+`uint64` ID. A component keeps its simulation internal and offers
+`comp.NewID()`, so middleware allocates from the same counter. Engines schedule
+events and do not allocate IDs. The first ID is 1; zero remains unset. Separate simulations can reuse the same
 numeric IDs. Parallel callers receive unique IDs within their simulation, with
 allocation order determined by execution order.
 
@@ -120,12 +120,12 @@ evt := timing.MakeEventBase(sim.NewID(), when, comp.Name())
 Events and messages store IDs without retaining the simulation. The
 process-global generator, configuration, and reset functions have been removed.
 
-A `simulation.Simulation` checkpoints its counter automatically. Lightweight
-setups can create `sim := modeling.NewStandaloneSimulation(engine)` once and
-share it with every component builder. They must save and restore
-`sim.GetIDGenerator()` alongside the engine and other entities. Restore into a
+A `simulation.Simulation` checkpoints its counter automatically. Restore into a
 fresh, stopped simulation; restoring one simulation does not change another
 simulation's counter. Parallel simulation checkpointing remains unsupported.
+Lightweight setups can create `sim := modeling.NewStandaloneSimulation(engine)`
+once and share it with every component builder; such a simulation registers
+nothing and does not support checkpoints.
 
 ## Hooks
 

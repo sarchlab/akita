@@ -3,15 +3,16 @@ package idealmemcontroller
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type ctrlMiddleware struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
-func (m *ctrlMiddleware) Tick() (madeProgress bool) {
+// Handle completes a pending Drain and handles the next control command.
+func (m *ctrlMiddleware) Handle(_ timing.Event) (madeProgress bool) {
 	madeProgress = m.handleStateUpdate() || madeProgress
 	// Control commands are processed serially: while an async verb (Drain) is
 	// in progress, the next command is not accepted — it stays queued on the
@@ -23,7 +24,7 @@ func (m *ctrlMiddleware) Tick() (madeProgress bool) {
 }
 
 func (m *ctrlMiddleware) ctrlPort() messaging.Port {
-	return m.comp.GetPortByName("Control")
+	return m.comp.Ports.Control
 }
 
 // handleStateUpdate notices Drain completion and acks the pending
@@ -42,7 +43,7 @@ func (m *ctrlMiddleware) handleStateUpdate() (madeProgress bool) {
 		return false
 	}
 
-	rsp := makeRsp(m.ctrlPort(), memcontrolprotocol.CmdDrain,
+	rsp := makeRsp(m.comp, memcontrolprotocol.CmdDrain,
 		state.CurrentCmdSrc, state.CurrentCmdID, true, "")
 	m.ctrlPort().Send(rsp)
 	state.ControlState = memcontrolprotocol.StatePaused
@@ -84,7 +85,7 @@ func (m *ctrlMiddleware) handlePause(req memcontrolprotocol.Req) bool {
 	state := &m.comp.State
 	state.ControlState = memcontrolprotocol.StatePaused
 
-	m.ctrlPort().Send(makeRsp(m.ctrlPort(), memcontrolprotocol.CmdPause,
+	m.ctrlPort().Send(makeRsp(m.comp, memcontrolprotocol.CmdPause,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -98,7 +99,7 @@ func (m *ctrlMiddleware) handleEnable(req memcontrolprotocol.Req) bool {
 	state := &m.comp.State
 	state.ControlState = memcontrolprotocol.StateEnabled
 
-	m.ctrlPort().Send(makeRsp(m.ctrlPort(), memcontrolprotocol.CmdEnable,
+	m.ctrlPort().Send(makeRsp(m.comp, memcontrolprotocol.CmdEnable,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -130,7 +131,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	// requests still queued on the Top port; otherwise (the control
 	// middleware runs before the memory middleware) takeNewReqs would consume
 	// a stale request in the very same tick, right after the reset ack.
-	top := m.comp.GetPortByName("Top")
+	top := m.comp.Ports.Top
 	for {
 		if _, ok := top.PeekIncoming(); !ok {
 			break
@@ -138,7 +139,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 		top.RetrieveIncoming()
 	}
 
-	m.ctrlPort().Send(makeRsp(m.ctrlPort(), memcontrolprotocol.CmdReset,
+	m.ctrlPort().Send(makeRsp(m.comp, memcontrolprotocol.CmdReset,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -160,14 +161,14 @@ func (m *ctrlMiddleware) handleUnsupported(req memcontrolprotocol.Req) bool {
 		return false
 	}
 
-	m.ctrlPort().Send(makeRsp(m.ctrlPort(), req.Command,
+	m.ctrlPort().Send(makeRsp(m.comp, req.Command,
 		req.Src, req.ID, false, memcontrolprotocol.ErrUnsupported))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
 func makeRsp(
-	port messaging.Port,
+	c *Comp,
 	cmd memcontrolprotocol.Command,
 	dst messaging.RemotePort,
 	rspTo uint64,
@@ -179,8 +180,8 @@ func makeRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = port.Component().Simulation().NewID()
-	rsp.Src = port.AsRemote()
+	rsp.ID = c.NewID()
+	rsp.Src = c.Ports.Control.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
 	rsp.TrafficClass = "memcontrolprotocol.Rsp"

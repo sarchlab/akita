@@ -19,12 +19,12 @@ On a request arriving from the `Top` port:
    level for the corresponding segment. Each level that hits subtracts
    `LatencyPerLevel` from the total walk latency; the walk stops at the first
    miss.
-2. **sendReqToBottom** — A `vm.TranslationReq` is forwarded on the `Bottom` port
+2. **sendReqToBottom** — A `vmprotocol.TranslationReq` is forwarded on the `Bottom` port
    to `LowModulePort`, carrying the remaining latency in its `TransLatency`
    field so the downstream provider can account for the cached levels.
-3. **handleRsp** — When a `vm.TranslationRsp` returns on `Bottom`, every level is
+3. **handleRsp** — When a `vmprotocol.TranslationRsp` returns on `Bottom`, every level is
    filled with the resolved page's segments (using LRU replacement within each
-   level) and a `vm.TranslationRsp` is relayed up to `UpModulePort`.
+   level) and a `vmprotocol.TranslationRsp` is relayed up to `UpModulePort`.
 
 Up to `NumReqPerCycle` lookups and responses are processed each tick. The cache
 runs an `enable` / `drain` / `pause` / `flush` state machine; a flush clears all
@@ -38,17 +38,18 @@ levels.
   the current state, and inflight-flush bookkeeping.
 - `Resources` — external wiring; holds `LowModulePort` (downstream provider) and
   `UpModulePort` (upstream requester).
-- `Comp` — `modeling.Component[Spec, State, Resources]`.
+- `Ports` — the `Top`, `Bottom`, and `Control` ports.
+- `Middlewares` — `Ctrl` (control commands) and `Cache` (lookup, forwarding,
+  and responses), run in that order every cycle.
+- `Comp` — `ticking.Component[Spec, state, Resources, Ports, middlewares]`, a
+  ticking component.
 
 ## Builder Pattern
 
-Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the whole spec
-to `WithSpec`. Wiring comes from `WithSimulation` (which provides the engine and
-registers the component) and `WithResources` (the low- and up-module remote
-ports). `Build` declares the `Top`, `Bottom`, and `Control` ports but does not
-create their instances. Build each port with `modeling.MakePortBuilder` (which
-registers the port with the simulation) and attach it with `AssignPort`,
-choosing the buffer size.
+Start from `Definition.DefaultSpec`, tweak the fields you need, and pass the
+whole spec to `WithSpec`. Wiring comes from `WithSimulation` (which provides the
+engine and registers the component), `WithResources` (the low- and up-module
+remote ports), and `WithPorts` (the port instances).
 
 ```go
 spec := mmuCache.Definition.DefaultSpec
@@ -56,23 +57,19 @@ spec.NumLevels = 4
 spec.NumBlocks = 16
 spec.LatencyPerLevel = 50
 
-c := mmuCache.MakeBuilder().
+c := mmuCache.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithResources(mmuCache.Resources{
         LowModulePort: mmuPort,
         UpModulePort:  tlbPort,
     }).
+    WithPorts(mmuCache.Ports{
+        Top:     messaging.NewPort("MMUCache.Top", 16, 16),
+        Bottom:  messaging.NewPort("MMUCache.Bottom", 16, 16),
+        Control: messaging.NewPort("MMUCache.Control", 16, 16),
+    }).
     Build("MMUCache")
-
-for _, name := range []string{"Top", "Bottom", "Control"} {
-    p := modeling.MakePortBuilder().
-        WithSimulation(sim).
-        WithComponent(c).
-        WithSpec(modeling.PortSpec{BufSize: 16}).
-        Build(name)
-    c.AssignPort(name, p)
-}
 ```
 
 | Method | Description |
@@ -80,11 +77,15 @@ for _, name := range []string{"Top", "Bottom", "Control"} {
 | `WithSimulation(r)` | Source of the engine and component registration (required) |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec` and tweak (`NumBlocks` must be > 0) |
 | `WithResources(Resources{...})` | External wiring (low- and up-module remote ports) |
+| `WithPorts(Ports{...})` | The port instances, each named `"<instance>.<field>"` (required) |
 
 ## Ports
 
-- **Top**: accepts `vm.TranslationReq` from the upstream requester.
-- **Bottom**: forwards `vm.TranslationReq` to the downstream provider and
-  receives `vm.TranslationRsp`, which is then relayed back to `UpModulePort`.
-- **Control**: accepts `mem.ControlReq` (enable / drain / pause / flush / reset)
-  and returns `mem.ControlRsp` for flush and reset.
+The system builder creates each port with `messaging.NewPort`, choosing its
+buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
+
+- **Top**: accepts `vmprotocol.TranslationReq` from the upstream requester.
+- **Bottom**: forwards `vmprotocol.TranslationReq` to the downstream provider and
+  receives `vmprotocol.TranslationRsp`, which is then relayed back to `UpModulePort`.
+- **Control**: accepts `memcontrolprotocol.Req` (enable / drain / pause / flush / reset)
+  and returns `memcontrolprotocol.Rsp` for flush and reset.

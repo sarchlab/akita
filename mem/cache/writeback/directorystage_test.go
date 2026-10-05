@@ -3,13 +3,11 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 	"go.uber.org/mock/gomock"
 )
 
@@ -23,53 +21,43 @@ var _ = Describe("DirectoryStage", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
-		initialState := State{
+		initialState := state{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
-			DirStageBuf:  queueing.NewBuffer[int]("Cache.DirStageBuf", 4),
+			DirStageBuf:  queueing.MakeBuffer[int](4),
 			DirToBankBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.DirToBankBuf", 4),
+				queueing.MakeBuffer[int](4),
 			},
 			WriteBufferToBankBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.WBToBankBuf", 4),
+				queueing.MakeBuffer[int](4),
 			},
-			MSHRStageBuf:       queueing.NewBuffer[int]("Cache.MSHRStageBuf", 4),
-			WriteBufferBuf:     queueing.NewBuffer[int]("Cache.WriteBufferBuf", 4),
-			DirPipeline:        queueing.NewPipeline[int](4, 0),
-			DirPostPipelineBuf: queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
+			MSHRStageBuf:       queueing.MakeBuffer[int](4),
+			WriteBufferBuf:     queueing.MakeBuffer[int](4),
+			DirPipeline:        queueing.MakePipeline[int](4, 0),
+			DirPostPipelineBuf: queueing.MakeBuffer[int](4),
 			BankPipelines: []queueing.Pipeline[int]{
-				queueing.NewPipeline[int](4, 10),
+				queueing.MakePipeline[int](4, 10),
 			},
 			BankPostPipelineBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("BankPostPipelineBuf", 4),
+				queueing.MakeBuffer[int](4),
 			},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &pipelineMW{}
-		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
-				Log2BlockSize:    6,
-				NumReqPerCycle:   4,
-				WayAssociativity: 4,
-				NumMSHREntry:     16,
-				NumSets:          64,
-				NumBanks:         1,
-			}).
-			Build("Cache")
+		spec := stageTestSpec()
+		spec.NumMSHREntry = 16
+		comp := buildStageTestComp(spec,
+			Resources{Storage: mem.NewStorage(spec.TotalByteSize)},
+			makePorts("Cache", 4))
 
+		m = comp.Middlewares.Pipeline
 		m.comp.State = initialState
 		next := &m.comp.State
 
 		cache.DirectoryReset(&next.DirectoryState, 64, 4, 64)
 
-		ds = &directoryStage{
-			cache: m,
-		}
-		m.dirStage = ds
+		ds = m.dirStage
 	})
 
 	AfterEach(func() {
@@ -79,7 +67,7 @@ var _ = Describe("DirectoryStage", func() {
 	Context("read", func() {
 		BeforeEach(func() {
 			read := memprotocol.ReadReq{}
-			read.ID = m.comp.Simulation().NewID()
+			read.ID = m.comp.NewID()
 			read.Address = 0x100
 			read.PID = 1
 			read.AccessByteSize = 64
@@ -177,7 +165,7 @@ var _ = Describe("DirectoryStage", func() {
 	Context("write", func() {
 		BeforeEach(func() {
 			write := memprotocol.WriteReq{}
-			write.ID = m.comp.Simulation().NewID()
+			write.ID = m.comp.NewID()
 			write.Address = 0x100
 			write.PID = 1
 			write.TrafficBytes = 12

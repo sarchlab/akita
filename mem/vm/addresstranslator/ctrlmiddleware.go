@@ -3,31 +3,31 @@ package addresstranslator
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type ctrlMiddleware struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *ctrlMiddleware) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
 func (m *ctrlMiddleware) bottomPort() messaging.Port {
-	return m.comp.GetPortByName("Bottom")
+	return m.comp.Ports.Bottom
 }
 
 func (m *ctrlMiddleware) translationPort() messaging.Port {
-	return m.comp.GetPortByName("Translation")
+	return m.comp.Ports.Translation
 }
 
 func (m *ctrlMiddleware) ctrlPort() messaging.Port {
-	return m.comp.GetPortByName("Control")
+	return m.comp.Ports.Control
 }
 
-func (m *ctrlMiddleware) Tick() bool {
+func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 	madeProgress = m.completePendingDrain() || madeProgress
 	// Control commands are processed serially: while an async verb (Drain) is
@@ -55,7 +55,7 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 		return false
 	}
 
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdDrain,
+	m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdDrain,
 		state.CurrentCmdSrc, state.CurrentCmdID, true, ""))
 	state.ControlState = memcontrolprotocol.StatePaused
 
@@ -93,7 +93,7 @@ func (m *ctrlMiddleware) handlePause(req memcontrolprotocol.Req) bool {
 		return false
 	}
 	m.comp.State.ControlState = memcontrolprotocol.StatePaused
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdPause,
+	m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdPause,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -104,7 +104,7 @@ func (m *ctrlMiddleware) handleEnable(req memcontrolprotocol.Req) bool {
 		return false
 	}
 	m.comp.State.ControlState = memcontrolprotocol.StateEnabled
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdEnable,
+	m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdEnable,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -148,7 +148,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 		}
 	}
 
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdReset,
+	m.ctrlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdReset,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -181,14 +181,14 @@ func (m *ctrlMiddleware) handleUnsupported(req memcontrolprotocol.Req) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), req.Command,
+	m.ctrlPort().Send(makeCtrlRsp(m.comp, req.Command,
 		req.Src, req.ID, false, memcontrolprotocol.ErrUnsupported))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
 func makeCtrlRsp(
-	port messaging.Port,
+	c *Comp,
 	cmd memcontrolprotocol.Command,
 	dst messaging.RemotePort,
 	rspTo uint64,
@@ -200,8 +200,8 @@ func makeCtrlRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = port.Component().Simulation().NewID()
-	rsp.Src = port.AsRemote()
+	rsp.ID = c.NewID()
+	rsp.Src = c.Ports.Control.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
 	rsp.TrafficClass = "memcontrolprotocol.Rsp"

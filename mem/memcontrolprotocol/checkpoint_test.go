@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -50,8 +51,8 @@ type cacheOverDRAM struct {
 // tick advances both components one step and ferries messages across the
 // cache.Bottom <-> dram.Top link in both directions.
 func (h *cacheOverDRAM) tick() {
-	h.cache.Tick()
-	h.dram.Tick()
+	modelingtest.Tick(h.cache)
+	modelingtest.Tick(h.dram)
 
 	for {
 		m, ok := h.bottom.RetrieveOutgoing()
@@ -79,16 +80,16 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 	dramSpec := idealmemcontroller.Definition.DefaultSpec
 	dramSpec.Latency = 5
 	dramSpec.Width = 4
-	dram := idealmemcontroller.MakeBuilder().
+	dram := idealmemcontroller.Definition.Builder().
 		WithSimulation(sim).
 		WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 		WithSpec(dramSpec).
+		WithPorts(idealmemcontroller.Ports{
+			Top:     messaging.NewPort("DRAM.Top", 16, 16),
+			Control: messaging.NewPort("DRAM.Control", 16, 16),
+		}).
 		Build("DRAM")
-	dram.AssignPort("Top",
-		messaging.NewPort(dram, 16, 16, dram.Name()+".Top"))
-	dram.AssignPort("Control",
-		messaging.NewPort(dram, 16, 16, dram.Name()+".Control"))
-	dramTop := dram.GetPortByName("Top")
+	dramTop := dram.Ports.Top
 
 	cacheSpec := writeback.Definition.DefaultSpec
 	cacheSpec.TotalByteSize = 4 * mem.KB
@@ -96,7 +97,7 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 	cacheSpec.WayAssociativity = 4
 	cacheSpec.NumMSHREntry = 8
 	cacheSpec.NumReqPerCycle = 4
-	cache := writeback.MakeBuilder().
+	cache := writeback.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(cacheSpec).
 		WithResources(writeback.Resources{
@@ -105,21 +106,20 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 				Port: dramTop.AsRemote(),
 			},
 		}).
+		WithPorts(writeback.Ports{
+			Top:     messaging.NewPort("Cache.Top", 256, 256),
+			Bottom:  messaging.NewPort("Cache.Bottom", 256, 256),
+			Control: messaging.NewPort("Cache.Control", 16, 16),
+		}).
 		Build("Cache")
-	cache.AssignPort("Top",
-		messaging.NewPort(cache, 256, 256, cache.Name()+".Top"))
-	cache.AssignPort("Bottom",
-		messaging.NewPort(cache, 256, 256, cache.Name()+".Bottom"))
-	cache.AssignPort("Control",
-		messaging.NewPort(cache, 16, 16, cache.Name()+".Control"))
 
 	h := &cacheOverDRAM{
 		cache:       cache,
 		dram:        dram,
 		dramStorage: dramStorage,
-		top:         cache.GetPortByName("Top"),
-		ctrl:        cache.GetPortByName("Control"),
-		bottom:      cache.GetPortByName("Bottom"),
+		top:         cache.Ports.Top,
+		ctrl:        cache.Ports.Control,
+		bottom:      cache.Ports.Bottom,
 		dramTop:     dramTop,
 		agent:       messaging.RemotePort("Agent"),
 	}
@@ -134,7 +134,7 @@ func (h *cacheOverDRAM) write(t *testing.T, addr uint64, data []byte) {
 	t.Helper()
 
 	req := memprotocol.WriteReq{Address: addr, Data: data}
-	req.ID = h.cache.Simulation().NewID()
+	req.ID = h.cache.NewID()
 	req.Src = h.agent
 	req.Dst = h.top.AsRemote()
 	req.TrafficClass = "memprotocol.WriteReq"
@@ -157,7 +157,7 @@ func (h *cacheOverDRAM) read(t *testing.T, addr uint64, size uint64) []byte {
 	t.Helper()
 
 	req := memprotocol.ReadReq{Address: addr, AccessByteSize: size}
-	req.ID = h.cache.Simulation().NewID()
+	req.ID = h.cache.NewID()
 	req.Src = h.agent
 	req.Dst = h.top.AsRemote()
 	req.TrafficClass = "memprotocol.ReadReq"
@@ -180,7 +180,7 @@ func (h *cacheOverDRAM) control(t *testing.T, cmd memcontrolprotocol.Command) me
 	t.Helper()
 
 	req := memcontrolprotocol.Req{Command: cmd}
-	req.ID = h.cache.Simulation().NewID()
+	req.ID = h.cache.NewID()
 	req.Src = h.agent
 	req.Dst = h.ctrl.AsRemote()
 	req.TrafficClass = "memcontrolprotocol.Req"
@@ -303,7 +303,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 	// A read miss makes the cache issue a fetch out the Bottom port. Tick only
 	// the cache (no ferry) and capture that fetch so it stays "outstanding".
 	read := memprotocol.ReadReq{Address: 0, AccessByteSize: 4}
-	read.ID = h.cache.Simulation().NewID()
+	read.ID = h.cache.NewID()
 	read.Src = h.agent
 	read.Dst = h.top.AsRemote()
 	read.TrafficClass = "memprotocol.ReadReq"
@@ -312,7 +312,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 	var fetch memprotocol.ReadReq
 	gotFetch := false
 	for i := 0; i < 4096 && !gotFetch; i++ {
-		h.cache.Tick()
+		modelingtest.Tick(h.cache)
 		if out, ok := h.bottom.RetrieveOutgoing(); ok {
 			fetch, gotFetch = out.(memprotocol.ReadReq)
 		}
@@ -323,14 +323,14 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 
 	// Reset while the fetch is outstanding (this clears the inflight indices).
 	rst := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	rst.ID = h.cache.Simulation().NewID()
+	rst.ID = h.cache.NewID()
 	rst.Src = h.agent
 	rst.Dst = h.ctrl.AsRemote()
 	rst.TrafficClass = "memcontrolprotocol.Req"
 	h.ctrl.Deliver(rst)
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
-		h.cache.Tick()
+		modelingtest.Tick(h.cache)
 		if out, ok := h.ctrl.RetrieveOutgoing(); ok {
 			if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 				rsp.Command == memcontrolprotocol.CmdReset {
@@ -344,7 +344,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 
 	// The lower memory's now-orphaned response arrives after the reset.
 	rsp := memprotocol.DataReadyRsp{Data: make([]byte, cpBlockSize)}
-	rsp.ID = h.cache.Simulation().NewID()
+	rsp.ID = h.cache.NewID()
 	rsp.Src = h.dramTop.AsRemote()
 	rsp.Dst = h.bottom.AsRemote()
 	rsp.RspTo = fetch.ID
@@ -353,7 +353,7 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 
 	// Processing the orphan must not panic; it is simply dropped.
 	for range 16 {
-		h.cache.Tick()
+		modelingtest.Tick(h.cache)
 	}
 
 	// The cache still works: a fresh read re-fetches from the backing store.

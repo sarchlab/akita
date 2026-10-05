@@ -5,40 +5,39 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type parseTopMW struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *parseTopMW) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
-// Tick runs the parseTop stage. Pause and Drain both stop accepting
+// Handle runs the parseTop stage. Pause and Drain both stop accepting
 // new traffic from the Top port; only Enabled DRAM accepts new
 // transactions.
-func (m *parseTopMW) Tick() bool {
+func (m *parseTopMW) Handle(_ timing.Event) bool {
 	next := &m.comp.State
 	if next.ControlState != memcontrolprotocol.StateEnabled {
 		return false
 	}
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	return m.parseTop(&spec, next)
 }
 
-func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
+func (m *parseTopMW) parseTop(spec *Spec, next *state) bool {
 	msgI, ok := m.topPort().PeekIncoming()
 	if !ok {
 		return false
 	}
 
-	ts := transactionState{ID: m.comp.Simulation().NewID()}
+	ts := transactionState{ID: m.comp.NewID()}
 
 	switch msg := msgI.(type) {
 	case memprotocol.ReadReq:
@@ -53,7 +52,7 @@ func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
 
 	// Split into sub-transactions
 	transIdx := len(next.Transactions)
-	splitTransaction(m.comp.Simulation(), spec, &ts)
+	splitTransaction(m.comp.NewID, spec, &ts)
 
 	if !canPushSubTrans(next, len(ts.SubTransactions),
 		spec.TransactionQueueSize) {

@@ -10,7 +10,7 @@ import (
 // as an empty object, so a restored set had an empty visit list and could not
 // evict — which crashed a resumed TLB.
 func TestSetJSONRoundTrip(t *testing.T) {
-	s := NewSet(4)
+	s := MakeSet(4)
 	s.Visit(2)
 	s.Visit(0)
 	s.UpdateKey(2, "", KeyString(1, 0x1000))

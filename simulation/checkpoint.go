@@ -10,10 +10,7 @@ import (
 // SaveCheckpoint writes a checkpoint archive for the simulation. The simulation
 // must use a SerialEngine and be stopped outside an event handler. buildID
 // overrides the build identity (mainly for tests); pass "" to use the default.
-//
-// The foundation milestone implements archive writing and validation only.
-// Entity payload serializers land in later milestones, so this currently
-// returns an error for the first entity that has no serializer.
+// It returns an error for the first registered entity that cannot be saved.
 func (s *Simulation) SaveCheckpoint(path, buildID string) error {
 	if err := s.checkpointPreflight(); err != nil {
 		return err

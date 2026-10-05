@@ -30,22 +30,25 @@ func TestControlContract(t *testing.T) {
 			},
 		}
 
-		comp := MakeBuilder().
+		comp := Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(resources).
+			WithPorts(makePorts("AddressTranslator", topBufSize)).
 			Build("AddressTranslator")
 
-		assignPorts(sim, comp, topBufSize)
-
-		for _, name := range []string{"Top", "Bottom", "Translation", "Control"} {
+		for _, p := range []messaging.Port{
+			comp.Ports.Top, comp.Ports.Bottom,
+			comp.Ports.Translation, comp.Ports.Control,
+		} {
 			conn := &noopConn{}
-			conn.PlugIn(comp.GetPortByName(name))
+			conn.PlugIn(p)
 		}
 
 		return &memcontrolprotocol.Harness{
 			Comp: comp,
-			Ctrl: comp.GetPortByName("Control"),
+			Sim:  sim,
+			Ctrl: comp.Ports.Control,
 			IsQuiescent: func() bool {
 				return len(comp.State.Transactions) == 0 &&
 					len(comp.State.InflightReqToBottom) == 0

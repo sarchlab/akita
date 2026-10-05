@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// valueEvent is a value-type event (like modeling.TickEvent).
+// valueEvent is a value-type event (like ticking.TickEvent).
 type valueEvent struct {
 	EventBase
 	Payload int `json:"payload"`

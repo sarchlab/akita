@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -88,21 +89,19 @@ var _ = Describe("Reorder Buffer milestones", func() {
 		spec.NumReqPerCycle = 2
 		spec.BottomUnit = bottomUnitRemote
 
-		rob = MakeBuilder().WithSimulation(sim).WithSpec(spec).Build("Rob")
-
-		assign := func(name string, bufSize int) messaging.Port {
-			p := modeling.MakePortBuilder().
-				WithSimulation(sim).
-				WithComponent(rob).
-				WithSpec(modeling.PortSpec{BufSize: bufSize}).
-				Build(name)
-			rob.AssignPort(name, p)
-			return p
+		port := func(name string, bufSize int) messaging.Port {
+			return messaging.NewPort("Rob."+name, bufSize, bufSize)
 		}
 
-		topPort = assign("Top", 4)
-		bottomPort = assign("Bottom", 4)
-		ctrlPort := assign("Control", 2)
+		topPort = port("Top", 4)
+		bottomPort = port("Bottom", 4)
+		ctrlPort := port("Control", 2)
+
+		rob = Definition.Builder().
+			WithSimulation(sim).
+			WithSpec(spec).
+			WithPorts(Ports{Top: topPort, Bottom: bottomPort, Control: ctrlPort}).
+			Build("Rob")
 
 		for _, p := range []messaging.Port{topPort, bottomPort, ctrlPort} {
 			conn := &noopConn{}
@@ -118,7 +117,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 	makeRead := func(addr uint64) memprotocol.ReadReq {
 		req := memprotocol.ReadReq{Address: addr, AccessByteSize: 4}
-		req.ID = rob.Simulation().NewID()
+		req.ID = rob.NewID()
 		req.Src = topRemote
 		req.Dst = topPort.AsRemote()
 		req.TrafficClass = "memprotocol.ReadReq"
@@ -127,7 +126,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 	makeWrite := func(addr uint64, data []byte) memprotocol.WriteReq {
 		req := memprotocol.WriteReq{Address: addr, Data: data}
-		req.ID = rob.Simulation().NewID()
+		req.ID = rob.NewID()
 		req.Src = topRemote
 		req.Dst = topPort.AsRemote()
 		req.TrafficClass = "memprotocol.WriteReq"
@@ -141,7 +140,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 	driveRoundTrip := func(req memprotocol.AccessReq, rsp messaging.Msg) {
 		topPort.Deliver(req)
 
-		rob.Tick()
+		modelingtest.Tick(rob)
 		shadowID := rob.State.Transactions[0].ReqToBottomID
 		bottomPort.RetrieveOutgoing()
 
@@ -154,14 +153,14 @@ var _ = Describe("Reorder Buffer milestones", func() {
 			bottomPort.Deliver(r)
 		}
 
-		rob.Tick() // parseBottom records the response
-		rob.Tick() // bottomUp retires the head and responds
+		modelingtest.Tick(rob) // parseBottom records the response
+		modelingtest.Tick(rob) // bottomUp retires the head and responds
 	}
 
 	It("records admission milestones on the buffer task and processing "+
 		"milestones on req_in, plus a read tag, for a read", func() {
 		rsp := memprotocol.DataReadyRsp{Data: []byte{1, 2, 3, 4}}
-		rsp.ID = rob.Simulation().NewID()
+		rsp.ID = rob.NewID()
 		rsp.Src = bottomUnitRemote
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.TrafficClass = "memprotocol.DataReadyRsp"
@@ -204,7 +203,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 	It("distinguishes a write with a subtask milestone and a write tag", func() {
 		rsp := memprotocol.WriteDoneRsp{}
-		rsp.ID = rob.Simulation().NewID()
+		rsp.ID = rob.NewID()
 		rsp.Src = bottomUnitRemote
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.TrafficClass = "memprotocol.WriteDoneRsp"
@@ -225,7 +224,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 	It("emits the dependency milestone before the response-sent milestone "+
 		"so the in-order-commit reason wins a same-tick tie", func() {
 		rsp := memprotocol.DataReadyRsp{Data: []byte{0xAB}}
-		rsp.ID = rob.Simulation().NewID()
+		rsp.ID = rob.NewID()
 		rsp.Src = bottomUnitRemote
 		rsp.Dst = bottomPort.AsRemote()
 		rsp.TrafficClass = "memprotocol.DataReadyRsp"

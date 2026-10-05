@@ -2,14 +2,27 @@
 // the naming contract. The inspector must reject it.
 package wrongname
 
-import "github.com/sarchlab/akita/v5/modeling"
+import (
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
+)
 
 // Spec configures the component.
 type Spec struct {
 	N int `json:"n"`
 }
 
+type (
+	State       struct{}
+	Ports       struct{}
+	Middlewares struct{}
+)
+
+type Comp = ticking.Component[Spec, State, modeling.None, Ports, Middlewares]
+
 // Def is misnamed on purpose: the contract requires "Definition".
-var Def = modeling.ComponentDef[Spec]{
-	Name: "WrongName",
+var Def = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
+	NewMiddlewares: newMiddlewares,
 }
+
+func newMiddlewares(*Comp) Middlewares { return Middlewares{} }

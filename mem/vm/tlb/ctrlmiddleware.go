@@ -4,27 +4,27 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type ctrlMiddleware struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *ctrlMiddleware) controlPort() messaging.Port {
-	return m.comp.GetPortByName("Control")
+	return m.comp.Ports.Control
 }
 
 func (m *ctrlMiddleware) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
 func (m *ctrlMiddleware) bottomPort() messaging.Port {
-	return m.comp.GetPortByName("Bottom")
+	return m.comp.Ports.Bottom
 }
 
-func (m *ctrlMiddleware) Tick() bool {
+func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 	madeProgress = m.completePendingDrain() || madeProgress
 	// Control commands are processed serially: while an async verb (Drain) is
@@ -51,7 +51,7 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 		return false
 	}
 
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), memcontrolprotocol.CmdDrain,
+	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdDrain,
 		state.CurrentCmdSrc, state.CurrentCmdID, true, ""))
 	state.PendingDrainRsp = false
 	state.CurrentCmdID = 0
@@ -99,7 +99,7 @@ func (m *ctrlMiddleware) performCtrlEnable(msg memcontrolprotocol.Req) bool {
 	state := &m.comp.State
 	state.TLBState = tlbStateEnable
 
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), memcontrolprotocol.CmdEnable,
+	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdEnable,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
 	tracing.AddMilestone(m.comp, tracing.Milestone{
@@ -137,7 +137,7 @@ func (m *ctrlMiddleware) performCtrlPause(msg memcontrolprotocol.Req) bool {
 	state := &m.comp.State
 	state.TLBState = tlbStatePause
 
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), memcontrolprotocol.CmdPause,
+	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdPause,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
 	tracing.AddMilestone(m.comp, tracing.Milestone{
@@ -166,9 +166,9 @@ func (m *ctrlMiddleware) handleInvalidate(msg memcontrolprotocol.Req) bool {
 		return false
 	}
 
-	invalidateEntries(state, m.comp.Spec(), msg.Addresses, msg.PID)
+	invalidateEntries(state, m.comp.Spec, msg.Addresses, msg.PID)
 
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), memcontrolprotocol.CmdInvalidate,
+	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdInvalidate,
 		msg.Src, msg.ID, true, ""))
 	m.controlPort().RetrieveIncoming()
 	tracing.AddMilestone(m.comp, tracing.Milestone{
@@ -187,7 +187,7 @@ func (m *ctrlMiddleware) rejectMustBePaused(msg memcontrolprotocol.Req) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), msg.Command,
+	m.controlPort().Send(makeCtrlRsp(m.comp, msg.Command,
 		msg.Src, msg.ID, false, memcontrolprotocol.ErrMustBePausedOrDrained))
 	m.controlPort().RetrieveIncoming()
 	return true
@@ -195,14 +195,14 @@ func (m *ctrlMiddleware) rejectMustBePaused(msg memcontrolprotocol.Req) bool {
 
 // invalidateEntries marks every cached page matching the filter invalid.
 func invalidateEntries(
-	state *State,
+	state *state,
 	spec Spec,
 	addresses []uint64,
 	pid vm.PID,
 ) {
 	matchAddr := make(map[uint64]bool, len(addresses))
 	for _, a := range addresses {
-		matchAddr[a/spec.PageSize*spec.PageSize] = true
+		matchAddr[a/spec.pageSize()*spec.pageSize()] = true
 	}
 
 	for si := range state.Sets {
@@ -229,7 +229,7 @@ func (m *ctrlMiddleware) handleReset(msg memcontrolprotocol.Req) bool {
 		return false
 	}
 
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), memcontrolprotocol.CmdReset,
+	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdReset,
 		msg.Src, msg.ID, true, ""))
 	tracing.AddMilestone(m.comp, tracing.Milestone{
 		TaskID: tracing.MsgIDAtReceiver(msg, m.comp),
@@ -252,7 +252,7 @@ func (m *ctrlMiddleware) handleReset(msg memcontrolprotocol.Req) bool {
 	state.HasRespondingMSHR = false
 	state.RespondingMSHRData = mshrEntryState{}
 
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	state.Sets = initSets(spec.NumSets, spec.NumWays)
 	state.Pipeline.Clear()
 	state.BufferItems.Clear()
@@ -324,14 +324,14 @@ func (m *ctrlMiddleware) handleUnsupported(msg memcontrolprotocol.Req) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
-	m.controlPort().Send(makeCtrlRsp(m.controlPort(), msg.Command,
+	m.controlPort().Send(makeCtrlRsp(m.comp, msg.Command,
 		msg.Src, msg.ID, false, memcontrolprotocol.ErrUnsupported))
 	m.controlPort().RetrieveIncoming()
 	return true
 }
 
 func makeCtrlRsp(
-	port messaging.Port,
+	c *Comp,
 	cmd memcontrolprotocol.Command,
 	dst messaging.RemotePort,
 	rspTo uint64,
@@ -343,8 +343,8 @@ func makeCtrlRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = port.Component().Simulation().NewID()
-	rsp.Src = port.AsRemote()
+	rsp.ID = c.NewID()
+	rsp.Src = c.Ports.Control.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
 	rsp.TrafficClass = "memcontrolprotocol.Rsp"

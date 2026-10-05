@@ -8,12 +8,12 @@ import (
 var _ = Describe("Intake allocTransaction", func() {
 	var (
 		s    *intake
-		next *State
+		next *state
 	)
 
 	BeforeEach(func() {
 		s = &intake{}
-		next = &State{}
+		next = &state{}
 	})
 
 	It("should append when no Removed slot is available", func() {

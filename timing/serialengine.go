@@ -1,6 +1,7 @@
 package timing
 
 import (
+	"fmt"
 	"log"
 	"reflect"
 	"sync"
@@ -55,6 +56,8 @@ func (e *SerialEngine) Schedule(evt Event) {
 	if evt.Time() < e.time {
 		log.Panic("scheduling an event earlier than current time")
 	}
+
+	handlerMustBeRegistered(e.registry, evt)
 
 	if evt.IsSecondary() {
 		e.secondaryQueue.Push(evt)
@@ -215,11 +218,6 @@ func (e *SerialEngine) CurrentTime() VTimeInPicoSec {
 	return e.time
 }
 
-// SetCurrentTime sets the current time of the engine.
-func (e *SerialEngine) SetCurrentTime(t VTimeInPicoSec) {
-	e.time = t
-}
-
 // recoverRun is deferred once by Run/RunUntil, not once per event.
 func (e *SerialEngine) recoverRun(err *error) {
 	if cause := recover(); cause != nil {
@@ -227,4 +225,16 @@ func (e *SerialEngine) recoverRun(err *error) {
 		*err = e.failure
 	}
 	e.currentEvent = nil
+}
+
+// handlerMustBeRegistered panics unless an event's handler is registered, so a
+// misspelled or unregistered handler fails where the event is scheduled rather
+// than when it is dispatched.
+func handlerMustBeRegistered(registry map[string]Handler, evt Event) {
+	if _, ok := registry[evt.HandlerID()]; !ok {
+		panic(fmt.Sprintf(
+			"timing: event %s is for handler %q, which is not registered; "+
+				"a component's Build registers it, and any other handler "+
+				"must call RegisterHandler", reflect.TypeOf(evt), evt.HandlerID()))
+	}
 }

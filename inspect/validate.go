@@ -2,7 +2,6 @@ package inspect
 
 import (
 	"fmt"
-	"go/ast"
 	"go/types"
 	"reflect"
 	"slices"
@@ -20,7 +19,8 @@ func validateSpecType(pkg *packages.Package, typ types.Type, index pkgIndex) err
 	if !ok {
 		return fmt.Errorf("%s: Spec must be a struct, got %s", pkg.PkgPath, typ)
 	}
-	// Spec fields must be scalars even when the Spec customizes its JSON.
+	// Spec fields must be scalars or slices of scalars even when the Spec
+	// customizes its JSON.
 	hasUnexported, encodesField := false, false
 	for i := range st.NumFields() {
 		f := st.Field(i)
@@ -68,45 +68,41 @@ func encodedWhenZero(tag reflect.StructTag) bool {
 		!slices.Contains(options, "omitzero")
 }
 
-// validateSpecFieldType accepts only scalar field types: booleans, integers
-// (except uintptr), floats, strings, and named types based on them.
+// validateSpecFieldType accepts scalar field types (booleans, integers except
+// uintptr, floats, strings, and named types based on them) and slices and
+// arrays of scalars.
 func validateSpecFieldType(typ types.Type) error {
-	if t, ok := typ.Underlying().(*types.Basic); ok && t.Kind() != types.Uintptr &&
-		t.Info()&(types.IsBoolean|types.IsInteger|types.IsFloat|types.IsString) != 0 {
+	if isScalarType(typ) {
 		return nil
 	}
 
-	return fmt.Errorf("disallowed Spec type %s: Spec fields must be scalars", typ)
+	switch t := typ.Underlying().(type) {
+	case *types.Slice:
+		if isScalarType(t.Elem()) {
+			return nil
+		}
+	case *types.Array:
+		if isScalarType(t.Elem()) {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("disallowed Spec type %s: Spec fields must be scalars "+
+		"or slices of scalars", typ)
 }
 
-// validateDefinition checks the definition's metadata invariants. The
-// runtime does not re-check them, so the inspector is where they are enforced.
-func validateDefinition(
-	pkg *packages.Package, lit *ast.CompositeLit,
-	specType types.Type, def *schema.Definition,
-) error {
-	if def.Name == "" {
-		return posErrorf(pkg, lit.Pos(), "component definition must have a name")
-	}
-	seen := map[string]bool{}
-	checkName := func(name string) error {
-		if name == "" {
-			return posErrorf(pkg, lit.Pos(), "port has an empty name")
-		}
-		if seen[name] {
-			return posErrorf(pkg, lit.Pos(), "port %q declared more than once", name)
-		}
-		seen[name] = true
-		return nil
-	}
-	for _, p := range def.Ports {
-		if err := checkName(p.Name); err != nil {
-			return err
-		}
-	}
-	return validateFieldMetadata(pkg, specType, def.Spec)
+// isScalarType reports whether typ is a boolean, an integer other than
+// uintptr, a float, a string, or a named type based on one.
+func isScalarType(typ types.Type) bool {
+	t, ok := typ.Underlying().(*types.Basic)
+
+	return ok && t.Kind() != types.Uintptr &&
+		t.Info()&(types.IsBoolean|types.IsInteger|types.IsFloat|types.IsString) != 0
 }
 
+// validateFieldMetadata checks the Spec field metadata that the runtime does
+// not re-check, so the inspector is where it is enforced: min and max apply
+// only to numeric fields, and no two fields share a JSON name.
 func validateFieldMetadata(pkg *packages.Package, specType types.Type, fields []schema.Field) error {
 	st := specType.Underlying().(*types.Struct)
 	seen := map[string]bool{}

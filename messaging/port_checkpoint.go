@@ -27,7 +27,7 @@ type portCheckpoint struct {
 }
 
 // SaveCheckpoint writes the port's two buffers (capacity plus contents). Message
-// types must be registered with RegisterMsg.
+// types must be registered, which DefineProtocol does.
 func (p *defaultPort) SaveCheckpoint(w io.Writer) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()

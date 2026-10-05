@@ -13,7 +13,7 @@ import (
 // with the translated page. Defining the protocol registers every message
 // type it carries with the checkpoint codec.
 var (
-	Protocol = messaging.DefineProtocol("vm",
+	Protocol = messaging.DefineProtocol(
 		messaging.RoleDef{Name: "requester",
 			Sends: []messaging.Msg{TranslationReq{}}},
 		messaging.RoleDef{Name: "responder",

@@ -12,13 +12,20 @@ import (
 	"github.com/sarchlab/akita/v5/timing"
 )
 
+// buildWired builds a cache named "Cache" with the given spec and resources.
+// It supplies a storage when res has none.
 func buildWired(res Resources, spec Spec) *Comp {
 	sim := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
 
-	return MakeBuilder().
+	if res.Storage == nil {
+		res.Storage = mem.NewStorage(spec.TotalByteSize)
+	}
+
+	return Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithResources(res).
+		WithPorts(makePorts("Cache", 4)).
 		Build("Cache")
 }
 
@@ -46,7 +53,8 @@ func TestBuildMapsRemotePorts(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			pipeline := &pipelineMW{comp: buildWired(Resources{RemotePorts: ports}, c.spec)}
+			pipeline := buildWired(Resources{RemotePorts: ports}, c.spec).
+				Middlewares.Pipeline
 			for addr, want := range c.want {
 				if got := pipeline.findPort(addr); got != want {
 					t.Errorf("findPort(%d) = %s, want %s", addr, got, want)
@@ -79,7 +87,7 @@ func TestRestoreRoutesThroughRebuiltWiring(t *testing.T) {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
 
-	pipeline := &pipelineMW{comp: rebuilt}
+	pipeline := rebuilt.Middlewares.Pipeline
 	if got := pipeline.findPort(0); got != "NewMemory.Top" {
 		t.Errorf("restored cache routes to %s, want NewMemory.Top", got)
 	}
@@ -94,18 +102,29 @@ func TestBuildRejectsIncompleteInterleaving(t *testing.T) {
 	spec.AddressMapperType = "interleaved"
 	spec.InterleavingSize = 4096
 
-	noPorts := buildWired(Resources{}, spec)
-	if mapper := noPorts.Resources().AddressToPortMapper; mapper != nil {
+	noPorts := buildWired(Resources{}, spec).Middlewares.Pipeline
+	if mapper := noPorts.addressMapper; mapper != nil {
 		t.Errorf("mapper without remote ports = %v, want nil", mapper)
 	}
 
 	assertPanics(t, "no address mapper", func() {
-		(&pipelineMW{comp: noPorts}).findPort(0)
+		noPorts.findPort(0)
 	})
 
 	spec.InterleavingSize = 0
 	assertPanics(t, "non-zero Spec.InterleavingSize", func() {
 		buildWired(Resources{RemotePorts: []messaging.RemotePort{"DRAM0"}}, spec)
+	})
+}
+
+// TestBuildRequiresStorage checks that Build rejects a cache without a
+// backing storage instead of failing on the first bank access.
+func TestBuildRequiresStorage(t *testing.T) {
+	assertPanics(t, "Resources.Storage is required", func() {
+		Definition.Builder().
+			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
+			WithPorts(makePorts("Cache", 4)).
+			Build("Cache")
 	})
 }
 

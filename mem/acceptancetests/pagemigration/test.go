@@ -46,7 +46,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
@@ -84,10 +83,10 @@ var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 // sharedHierarchy holds the lower memory components shared by all agents, plus
 // the resources a migration controller needs to relocate pages.
 type sharedHierarchy struct {
-	l2Cache   messaging.Component
-	l2TLB     messaging.Component
-	ioMMU     messaging.Component
-	memCtrls  []messaging.Component
+	l2Cache   *writeback.Comp
+	l2TLB     *tlb.Comp
+	ioMMU     *mmu.Comp
+	memCtrls  []*idealmemcontroller.Comp
 	pageTable vm.PageTable
 
 	// deviceStride is the size of each device's physical address window and the
@@ -100,10 +99,10 @@ type sharedHierarchy struct {
 // agentChain holds an agent together with its private upstream components.
 type agentChain struct {
 	agent   *memaccessagent.MemAccessAgent
-	rob     messaging.Component
-	at      messaging.Component
-	l1Cache messaging.Component
-	l1TLB   messaging.Component
+	rob     *rob.Comp
+	at      *addresstranslator.Comp
+	l1Cache *writethroughcache.Comp
+	l1TLB   *tlb.Comp
 }
 
 func setupTest(seed int64) (
@@ -123,7 +122,7 @@ func setupTest(seed int64) (
 	}
 
 	s := simBuilder.Build()
-	engine := s.GetEngine()
+	engine := s.Engine()
 
 	shared := buildSharedHierarchy(s)
 
@@ -158,11 +157,11 @@ func buildSharedHierarchy(s *simulation.Simulation) sharedHierarchy {
 	deviceStride := ptBase + numPages*pageSize
 	deviceStride = (deviceStride/mem.MB + 1) * mem.MB
 
-	memCtrls := make([]messaging.Component, numDevices)
+	memCtrls := make([]*idealmemcontroller.Comp, numDevices)
 	memCtrlPorts := make([]messaging.RemotePort, numDevices)
 	for d := 0; d < numDevices; d++ {
 		memCtrls[d] = buildMemCtrl(s, d, uint64(numDevices)*deviceStride+mem.MB)
-		memCtrlPorts[d] = memCtrls[d].GetPortByName("Top").AsRemote()
+		memCtrlPorts[d] = memCtrls[d].Ports.Top.AsRemote()
 	}
 
 	l2Cache := buildL2Cache(s, memCtrlPorts, deviceStride)
@@ -186,17 +185,24 @@ func buildMemCtrl(
 	s *simulation.Simulation,
 	index int,
 	capacity uint64,
-) messaging.Component {
+) *idealmemcontroller.Comp {
 	memCtrlSpec := idealmemcontroller.Definition.DefaultSpec
-	memCtrlSpec.Capacity = capacity
 	memCtrlSpec.Width = 1
 	memCtrlSpec.Latency = 100
 	memCtrlSpec.CacheLineSize = 64
-	memCtrl := idealmemcontroller.MakeBuilder().
+
+	name := fmt.Sprintf("MemCtrl[%d]", index)
+	memCtrl := idealmemcontroller.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(memCtrlSpec).
-		Build(fmt.Sprintf("MemCtrl[%d]", index))
-	assignPorts(s, memCtrl, "Top", "Control")
+		WithResources(idealmemcontroller.Resources{
+			Storage: newStorage(s, capacity, name+".Storage"),
+		}).
+		WithPorts(idealmemcontroller.Ports{
+			Top:     newPort(name + ".Top"),
+			Control: newPort(name + ".Control"),
+		}).
+		Build(name)
 
 	return memCtrl
 }
@@ -208,21 +214,26 @@ func buildL2Cache(
 	s *simulation.Simulation,
 	memCtrlPorts []messaging.RemotePort,
 	deviceStride uint64,
-) messaging.Component {
+) *writeback.Comp {
 	l2Spec := writeback.Definition.DefaultSpec
 	l2Spec.WayAssociativity = 4
 	l2Spec.NumReqPerCycle = 2
-	l2Cache := writeback.MakeBuilder().
+	l2Cache := writeback.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(l2Spec).
 		WithResources(writeback.Resources{
+			Storage: newStorage(s, l2Spec.TotalByteSize, "L2Cache.Storage"),
 			AddressToPortMapper: &mem.InterleavedAddressPortMapper{
 				InterleavingSize: deviceStride,
 				LowModules:       memCtrlPorts,
 			},
 		}).
+		WithPorts(writeback.Ports{
+			Top:     newPort("L2Cache.Top"),
+			Bottom:  newPort("L2Cache.Bottom"),
+			Control: newPort("L2Cache.Control"),
+		}).
 		Build("L2Cache")
-	assignPorts(s, l2Cache, "Top", "Bottom", "Control")
 
 	return l2Cache
 }
@@ -230,40 +241,47 @@ func buildL2Cache(
 func buildMMU(
 	s *simulation.Simulation,
 	pageTable vm.PageTable,
-) messaging.Component {
+) *mmu.Comp {
 	mmuSpec := mmu.Definition.DefaultSpec
 	mmuSpec.Log2PageSize = log2PageSize
 	mmuSpec.MaxRequestsInFlight = 16
 	mmuSpec.Latency = 10
-	ioMMU := mmu.MakeBuilder().
+	ioMMU := mmu.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(mmuSpec).
 		WithResources(mmu.Resources{PageTable: pageTable}).
+		WithPorts(mmu.Ports{
+			Top:     newPort("IoMMU.Top"),
+			Control: newPort("IoMMU.Control"),
+		}).
 		Build("IoMMU")
-	assignPorts(s, ioMMU, "Top", "Control")
 
 	return ioMMU
 }
 
 func buildL2TLB(
 	s *simulation.Simulation,
-	ioMMU messaging.Component,
-) messaging.Component {
+	ioMMU *mmu.Comp,
+) *tlb.Comp {
 	l2TLBSpec := tlb.Definition.DefaultSpec
 	l2TLBSpec.NumWays = 64
 	l2TLBSpec.NumSets = 64
 	l2TLBSpec.Log2PageSize = log2PageSize
 	l2TLBSpec.NumReqPerCycle = 4
-	l2TLB := tlb.MakeBuilder().
+	l2TLB := tlb.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(l2TLBSpec).
 		WithResources(tlb.Resources{
 			TranslationProviderMapper: &mem.SinglePortMapper{
-				Port: ioMMU.GetPortByName("Top").AsRemote(),
+				Port: ioMMU.Ports.Top.AsRemote(),
 			},
 		}).
+		WithPorts(tlb.Ports{
+			Top:     newPort("L2TLB.Top"),
+			Bottom:  newPort("L2TLB.Bottom"),
+			Control: newPort("L2TLB.Control"),
+		}).
 		Build("L2TLB")
-	assignPorts(s, l2TLB, "Top", "Bottom", "Control")
 
 	return l2TLB
 }
@@ -296,22 +314,29 @@ func buildAgentChain(
 func buildL1Cache(
 	s *simulation.Simulation,
 	suffix string,
-	l2Cache messaging.Component,
-) messaging.Component {
+	l2Cache *writeback.Comp,
+) *writethroughcache.Comp {
 	l1Spec := writethroughcache.Definition.DefaultSpec
 	l1Spec.WritePolicyType = "write-through"
 	l1Spec.WayAssociativity = 2
 	l1Spec.AddressMapperType = "single"
-	l1Cache := writethroughcache.MakeBuilder().
+
+	name := "L1Cache" + suffix
+	l1Cache := writethroughcache.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(l1Spec).
 		WithResources(writethroughcache.Resources{
+			Storage: newStorage(s, l1Spec.TotalByteSize, name+".Storage"),
 			RemotePorts: []messaging.RemotePort{
-				l2Cache.GetPortByName("Top").AsRemote(),
+				l2Cache.Ports.Top.AsRemote(),
 			},
 		}).
-		Build("L1Cache" + suffix)
-	assignPorts(s, l1Cache, "Top", "Bottom", "Control")
+		WithPorts(writethroughcache.Ports{
+			Top:     newPort(name + ".Top"),
+			Bottom:  newPort(name + ".Bottom"),
+			Control: newPort(name + ".Control"),
+		}).
+		Build(name)
 
 	return l1Cache
 }
@@ -319,23 +344,29 @@ func buildL1Cache(
 func buildL1TLB(
 	s *simulation.Simulation,
 	suffix string,
-	l2TLB messaging.Component,
-) messaging.Component {
+	l2TLB *tlb.Comp,
+) *tlb.Comp {
 	l1TLBSpec := tlb.Definition.DefaultSpec
 	l1TLBSpec.NumWays = 8
 	l1TLBSpec.NumSets = 8
 	l1TLBSpec.Log2PageSize = log2PageSize
 	l1TLBSpec.NumReqPerCycle = 2
-	l1TLB := tlb.MakeBuilder().
+
+	name := "L1TLB" + suffix
+	l1TLB := tlb.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(l1TLBSpec).
 		WithResources(tlb.Resources{
 			TranslationProviderMapper: &mem.SinglePortMapper{
-				Port: l2TLB.GetPortByName("Top").AsRemote(),
+				Port: l2TLB.Ports.Top.AsRemote(),
 			},
 		}).
-		Build("L1TLB" + suffix)
-	assignPorts(s, l1TLB, "Top", "Bottom", "Control")
+		WithPorts(tlb.Ports{
+			Top:     newPort(name + ".Top"),
+			Bottom:  newPort(name + ".Bottom"),
+			Control: newPort(name + ".Control"),
+		}).
+		Build(name)
 
 	return l1TLB
 }
@@ -343,24 +374,32 @@ func buildL1TLB(
 func buildAddressTranslator(
 	s *simulation.Simulation,
 	suffix string,
-	l1Cache, l1TLB messaging.Component,
-) messaging.Component {
+	l1Cache *writethroughcache.Comp,
+	l1TLB *tlb.Comp,
+) *addresstranslator.Comp {
 	atSpec := addresstranslator.Definition.DefaultSpec
 	atSpec.Log2PageSize = log2PageSize
 	atSpec.NumReqPerCycle = 4
-	at := addresstranslator.MakeBuilder().
+
+	name := "AT" + suffix
+	at := addresstranslator.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(atSpec).
 		WithResources(addresstranslator.Resources{
 			MemProviderMapper: &mem.SinglePortMapper{
-				Port: l1Cache.GetPortByName("Top").AsRemote(),
+				Port: l1Cache.Ports.Top.AsRemote(),
 			},
 			TranslationProviderMapper: &mem.SinglePortMapper{
-				Port: l1TLB.GetPortByName("Top").AsRemote(),
+				Port: l1TLB.Ports.Top.AsRemote(),
 			},
 		}).
-		Build("AT" + suffix)
-	assignPorts(s, at, "Top", "Bottom", "Translation", "Control")
+		WithPorts(addresstranslator.Ports{
+			Top:         newPort(name + ".Top"),
+			Bottom:      newPort(name + ".Bottom"),
+			Translation: newPort(name + ".Translation"),
+			Control:     newPort(name + ".Control"),
+		}).
+		Build(name)
 
 	return at
 }
@@ -368,24 +407,29 @@ func buildAddressTranslator(
 func buildROB(
 	s *simulation.Simulation,
 	suffix string,
-	at messaging.Component,
-) messaging.Component {
+	at *addresstranslator.Comp,
+) *rob.Comp {
 	robSpec := rob.Definition.DefaultSpec
 	robSpec.NumReqPerCycle = 4
-	robSpec.BottomUnit = at.GetPortByName("Top").AsRemote()
-	robComp := rob.MakeBuilder().
+	robSpec.BottomUnit = at.Ports.Top.AsRemote()
+
+	name := "ROB" + suffix
+
+	return rob.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(robSpec).
-		Build("ROB" + suffix)
-	assignPorts(s, robComp, "Top", "Bottom", "Control")
-
-	return robComp
+		WithPorts(rob.Ports{
+			Top:     newPort(name + ".Top"),
+			Bottom:  newPort(name + ".Bottom"),
+			Control: newPort(name + ".Control"),
+		}).
+		Build(name)
 }
 
 func buildAgent(
 	s *simulation.Simulation,
 	index int,
-	robComp messaging.Component,
+	robComp *rob.Comp,
 	seed int64,
 ) *memaccessagent.MemAccessAgent {
 	agentSpec := memaccessagent.Definition.DefaultSpec
@@ -393,17 +437,21 @@ func buildAgent(
 	agentSpec.AddressOffset = uint64(index) * agentStride()
 	agentSpec.ReadLeft = *numAccessFlag
 	agentSpec.WriteLeft = *numAccessFlag
-	agent := memaccessagent.MakeBuilder().
+	agentSpec.RandSeed = seed + int64(index)
+
+	name := fmt.Sprintf("MemAccessAgent[%d]", index)
+	agent := memaccessagent.Definition.Builder().
 		WithSimulation(s).
 		WithSpec(agentSpec).
-		WithRandSeed(seed + int64(index)).
 		WithResources(memaccessagent.Resources{
-			LowModule: robComp.GetPortByName("Top"),
+			LowModule: robComp.Ports.Top,
 		}).
-		Build(fmt.Sprintf("MemAccessAgent[%d]", index))
-	assignPorts(s, agent, "Mem")
-	if monitor := s.GetMonitor(); monitor != nil {
-		agent.CreateProgressBars(monitor.CreateProgressBar)
+		WithPorts(memaccessagent.Ports{
+			Mem: newPort(name + ".Mem"),
+		}).
+		Build(name)
+	if monitor := s.Monitor(); monitor != nil {
+		memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
 	}
 
 	return agent
@@ -462,70 +510,72 @@ func setupConnections(
 		suffix := fmt.Sprintf("[%d]", i)
 
 		connect(s, "ConnAgentROB"+suffix,
-			c.agent.GetPortByName("Mem"),
-			c.rob.GetPortByName("Top"),
+			c.agent.Ports.Mem,
+			c.rob.Ports.Top,
 		)
 		connect(s, "ConnROBAT"+suffix,
-			c.rob.GetPortByName("Bottom"),
-			c.at.GetPortByName("Top"),
+			c.rob.Ports.Bottom,
+			c.at.Ports.Top,
 		)
 		connect(s, "ConnATL1"+suffix,
-			c.at.GetPortByName("Bottom"),
-			c.l1Cache.GetPortByName("Top"),
+			c.at.Ports.Bottom,
+			c.l1Cache.Ports.Top,
 		)
 		connect(s, "ConnATTrans"+suffix,
-			c.at.GetPortByName("Translation"),
-			c.l1TLB.GetPortByName("Top"),
+			c.at.Ports.Translation,
+			c.l1TLB.Ports.Top,
 		)
 	}
 
 	// Shared data path: all L1 caches plus the L2 cache on one connection.
 	dataConn := directconnection.MakeBuilder().WithSimulation(s).Build("ConnL1L2")
-	dataConn.PlugIn(shared.l2Cache.GetPortByName("Top"))
+	dataConn.PlugIn(shared.l2Cache.Ports.Top)
 	for _, c := range chains {
-		dataConn.PlugIn(c.l1Cache.GetPortByName("Bottom"))
+		dataConn.PlugIn(c.l1Cache.Ports.Bottom)
 	}
 
 	// Shared translation path: all L1 TLBs plus the L2 TLB on one connection.
 	transConn := directconnection.MakeBuilder().
 		WithSimulation(s).
 		Build("ConnL1L2TLB")
-	transConn.PlugIn(shared.l2TLB.GetPortByName("Top"))
+	transConn.PlugIn(shared.l2TLB.Ports.Top)
 	for _, c := range chains {
-		transConn.PlugIn(c.l1TLB.GetPortByName("Bottom"))
+		transConn.PlugIn(c.l1TLB.Ports.Bottom)
 	}
 
 	// L2 cache fans out to every memory controller on one connection; the
 	// interleaved mapper picks the right controller per physical address.
 	memConn := directconnection.MakeBuilder().WithSimulation(s).Build("ConnL2Mem")
-	memConn.PlugIn(shared.l2Cache.GetPortByName("Bottom"))
+	memConn.PlugIn(shared.l2Cache.Ports.Bottom)
 	for _, mc := range shared.memCtrls {
-		memConn.PlugIn(mc.GetPortByName("Top"))
+		memConn.PlugIn(mc.Ports.Top)
 	}
 
 	connect(s, "ConnL2TLBMMU",
-		shared.l2TLB.GetPortByName("Bottom"),
-		shared.ioMMU.GetPortByName("Top"),
+		shared.l2TLB.Ports.Bottom,
+		shared.ioMMU.Ports.Top,
 	)
 
 	return memConn
 }
 
-// assignPorts builds a port for each named, declared port of the component
-// (with a default buffer size) and assigns it.
-func assignPorts(
+// newPort creates an unowned port named fullName, for a component that takes
+// its ports at Build. The component's Build binds and registers it.
+func newPort(fullName string) messaging.Port {
+	return messaging.NewPort(fullName, 16, 16)
+}
+
+// newStorage builds a storage of the given capacity that registers with the
+// simulation.
+func newStorage(
 	s *simulation.Simulation,
-	comp messaging.Component,
-	names ...string,
-) {
-	for _, name := range names {
-		p := modeling.MakePortBuilder().
-			WithSimulation(s).
-			WithComponent(comp).
-			WithSpec(modeling.PortSpec{BufSize: 16}).
-			Build(name)
-		comp.AssignPort(name, p)
-	}
+	capacity uint64,
+	name string,
+) *mem.Storage {
+	return mem.MakeStorageBuilder().
+		WithCapacity(capacity).
+		WithSimulation(s).
+		Build(name)
 }
 
 func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {

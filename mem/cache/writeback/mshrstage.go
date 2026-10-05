@@ -66,7 +66,7 @@ func (s *mshrStage) processOneReq() bool {
 
 	transactionPresent := trans != nil && s.findTransaction(transIdx)
 
-	spec := s.cache.comp.Spec()
+	spec := s.cache.comp.Spec
 
 	if transactionPresent {
 		next.Transactions[transIdx].Removed = true
@@ -101,7 +101,7 @@ func (s *mshrStage) respondRead(
 	_, offset := getCacheLineID(trans.ReadAddress, log2BlockSize)
 	respondData := data[offset : offset+trans.ReadAccessByteSize]
 	dataReady := memprotocol.DataReadyRsp{}
-	dataReady.ID = s.cache.comp.Simulation().NewID()
+	dataReady.ID = s.cache.comp.NewID()
 	dataReady.Src = s.cache.topPort().AsRemote()
 	dataReady.Dst = trans.ReadMeta.Src
 	dataReady.RspTo = trans.ReadMeta.ID
@@ -125,7 +125,7 @@ func (s *mshrStage) respondRead(
 
 func (s *mshrStage) respondWrite(trans *transactionState) {
 	writeDoneRsp := memprotocol.WriteDoneRsp{}
-	writeDoneRsp.ID = s.cache.comp.Simulation().NewID()
+	writeDoneRsp.ID = s.cache.comp.NewID()
 	writeDoneRsp.Src = s.cache.topPort().AsRemote()
 	writeDoneRsp.Dst = trans.WriteMeta.Src
 	writeDoneRsp.RspTo = trans.WriteMeta.ID

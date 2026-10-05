@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/timing"
 
@@ -27,6 +28,8 @@ var _ = Describe("End Point", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
+		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
+		engine.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(0)).AnyTimes()
 		sim = modeling.NewStandaloneSimulation(engine)
 		devicePort = NewMockPort(mockCtrl)
 		devicePort.EXPECT().
@@ -45,18 +48,21 @@ var _ = Describe("End Point", func() {
 			AnyTimes()
 
 		devicePort.EXPECT().SetConnection(gomock.Any())
+		networkPort.EXPECT().Name().Return("EndPoint.NetworkPort").AnyTimes()
+		networkPort.EXPECT().Owner().Return(nil)
+		networkPort.EXPECT().SetOwner(gomock.Any())
 
 		spec := Definition.DefaultSpec
 		spec.Freq = 1
 		spec.FlitByteSize = 32
+		spec.DefaultSwitchDst = defaultSwitchPort.AsRemote()
 
-		endPoint = MakeBuilder().
+		endPoint = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{DevicePorts: []messaging.Port{devicePort}}).
+			WithPorts(Ports{NetworkPort: networkPort}).
 			Build("EndPoint")
-		endPoint.SetNetworkPort(networkPort)
-		endPoint.SetDefaultSwitchDst(defaultSwitchPort.AsRemote())
 	})
 
 	AfterEach(func() {
@@ -76,7 +82,7 @@ var _ = Describe("End Point", func() {
 		devicePort.EXPECT().RetrieveOutgoing().Return(msg, true)
 		devicePort.EXPECT().PeekOutgoing().Return(nil, false).AnyTimes()
 
-		madeProgress := endPoint.Tick()
+		madeProgress := modelingtest.Tick(endPoint)
 		Expect(madeProgress).To(BeTrue())
 
 		networkPort.EXPECT().CanSend().Return(true)
@@ -89,7 +95,7 @@ var _ = Describe("End Point", func() {
 		})
 		devicePort.EXPECT().NotifyAvailable()
 
-		madeProgress = endPoint.Tick()
+		madeProgress = modelingtest.Tick(endPoint)
 		Expect(madeProgress).To(BeTrue())
 
 		networkPort.EXPECT().CanSend().Return(true)
@@ -101,11 +107,11 @@ var _ = Describe("End Point", func() {
 			Expect(flit.NumFlitInMsg).To(Equal(2))
 		})
 
-		madeProgress = endPoint.Tick()
+		madeProgress = modelingtest.Tick(endPoint)
 
 		Expect(madeProgress).To(BeTrue())
 
-		madeProgress = endPoint.Tick()
+		madeProgress = modelingtest.Tick(endPoint)
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -137,19 +143,19 @@ var _ = Describe("End Point", func() {
 		devicePort.EXPECT().Deliver(packetization.AssembledMsg{MsgMeta: msg})
 		devicePort.EXPECT().PeekOutgoing().Return(nil, false).AnyTimes()
 
-		madeProgress := endPoint.Tick()
+		madeProgress := modelingtest.Tick(endPoint)
 		Expect(madeProgress).To(BeTrue())
 
-		madeProgress = endPoint.Tick()
+		madeProgress = modelingtest.Tick(endPoint)
 		Expect(madeProgress).To(BeTrue())
 
-		madeProgress = endPoint.Tick()
+		madeProgress = modelingtest.Tick(endPoint)
 		Expect(madeProgress).To(BeTrue())
 
-		madeProgress = endPoint.Tick()
+		madeProgress = modelingtest.Tick(endPoint)
 		Expect(madeProgress).To(BeTrue())
 
-		madeProgress = endPoint.Tick()
+		madeProgress = modelingtest.Tick(endPoint)
 		Expect(madeProgress).To(BeFalse())
 	})
 })

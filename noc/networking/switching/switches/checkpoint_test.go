@@ -24,7 +24,7 @@ func TestSwitchArbCursorRoundTrip(t *testing.T) {
 		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
 	}()
 
-	sw := switches.MakeBuilder().
+	sw := switches.Definition.Builder().
 		WithSimulation(sim).
 		WithResources(switches.Resources{RoutingTable: routing.NewTable()}).
 		Build("Switch")

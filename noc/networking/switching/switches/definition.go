@@ -1,25 +1,92 @@
 package switches
 
 import (
+	"fmt"
+
 	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/noc/packetization"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// Definition declares the Switch component: its default configuration and
-// its port topology. The builder consumes it at runtime and tooling reads it
-// statically, so it is the single source of truth for both.
-//
-// The switch has a dynamic number of ports, added at configuration time with
-// MakeSwitchPortAdder; they live in the "Port" group, addressed "Port[0]",
-// "Port[1]", ... The count is implicit in how many links get wired.
-var Definition = modeling.ComponentDef[Spec]{
-	Name: "Switch",
+// Definition declares the switch, a ticking component: its default
+// configuration and its behavior. Its ports and middlewares are the fields of
+// Ports and Middlewares. The system builder builds an instance with
+// Definition.Builder()...Build(name), passing one port per link in Ports.Port
+// and the matching links in Resources.Links; tooling reads the same
+// declaration statically.
+var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
 		Freq: 1 * timing.GHz,
 	},
-	Ports: []modeling.PortDef{
-		{Name: "Port", Roles: []*messaging.Role{packetization.Link}, Group: true},
-	},
+	NewState:       newState,
+	NewMiddlewares: newMiddlewares,
+}
+
+// newState creates one port complex per port, sized by the port's link.
+func newState(c *Comp) state {
+	ports := c.Ports.Port
+	links := c.Resources.Links
+
+	if len(links) != len(ports) {
+		panic(fmt.Sprintf(
+			"switches: %s: %d ports but %d links in Resources.Links",
+			c.Name(), len(ports), len(links)))
+	}
+
+	state := state{PortComplexes: make([]portComplexState, len(ports))}
+	for i, port := range ports {
+		state.PortComplexes[i] = newPortComplex(port, links[i])
+	}
+
+	return state
+}
+
+func newPortComplex(port messaging.Port, link Link) portComplexState {
+	name := port.Name()
+
+	return portComplexState{
+		LocalPortName:    name,
+		RemotePort:       link.Remote,
+		NumInputChannel:  link.NumInputChannel,
+		NumOutputChannel: link.NumOutputChannel,
+		Latency:          link.Latency,
+		PipelineWidth:    link.NumInputChannel,
+		Pipeline:         queueing.MakePipeline[routedFlit](link.NumInputChannel, link.Latency),
+
+		RouteBuffer: queueing.MakeBuffer[routedFlit](link.NumInputChannel),
+
+		ForwardBuffer: queueing.MakeBuffer[routedFlit](link.NumInputChannel),
+
+		SendOutBuffer: queueing.MakeBuffer[routedFlit](link.NumOutputChannel),
+	}
+}
+
+// newMiddlewares creates the middlewares. Both share the index from a port,
+// local or remote, to its port complex.
+func newMiddlewares(c *Comp) middlewares {
+	if c.Resources.RoutingTable == nil {
+		panic("switches: Resources.RoutingTable is required")
+	}
+
+	portIndex := make(map[messaging.RemotePort]int)
+	for i, port := range c.Ports.Port {
+		portIndex[port.AsRemote()] = i
+
+		if remote := c.Resources.Links[i].Remote; remote != "" {
+			portIndex[remote] = i
+		}
+	}
+
+	return middlewares{
+		RouteForwardSend: &routeForwardSendMW{
+			comp:         c,
+			portIndex:    portIndex,
+			routingTable: c.Resources.RoutingTable,
+		},
+		ReceivePipeline: &receivePipelineMW{
+			comp:      c,
+			portIndex: portIndex,
+		},
+	}
 }

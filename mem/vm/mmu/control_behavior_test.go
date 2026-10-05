@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -33,16 +34,17 @@ var _ = Describe("MMU control behavior", func() {
 
 	build := func() {
 
-		comp = MakeBuilder().
+		comp = Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(Definition.DefaultSpec).
+			WithPorts(makePorts("MMU", 16)).
 			Build("MMU")
 
-		topPort = assignPort(sim, comp, "Top", 16)
-		ctrlPort = assignPort(sim, comp, "Control", 4)
-		for _, name := range []string{"Top", "Control"} {
-			(&noopConn{}).PlugIn(comp.GetPortByName(name))
+		topPort = comp.Ports.Top
+		ctrlPort = comp.Ports.Control
+		for _, p := range []messaging.Port{topPort, ctrlPort} {
+			(&noopConn{}).PlugIn(p)
 		}
 	}
 
@@ -101,7 +103,7 @@ var _ = Describe("MMU control behavior", func() {
 		// Tick until every request has been parsed into a walk.
 		for i := 0; i < 4096 &&
 			len(comp.State.WalkingTranslations) != n; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 		}
 		Expect(comp.State.WalkingTranslations).To(HaveLen(n))
 
@@ -112,7 +114,7 @@ var _ = Describe("MMU control behavior", func() {
 		var drainRsp memcontrolprotocol.Rsp
 		gotDrainRsp := false
 		for i := 0; i < 4096 && !gotDrainRsp; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := topPort.RetrieveOutgoing()
 				if !ok {
@@ -148,7 +150,7 @@ var _ = Describe("MMU control behavior", func() {
 		topPort.Deliver(makeTranslationReq(0x1000))
 
 		for range 5 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 		}
 
 		// The request is neither consumed nor turned into a walk, and no
@@ -168,7 +170,7 @@ var _ = Describe("MMU control behavior", func() {
 			// Tick until the request is parsed into a walk in flight.
 			for i := 0; i < 4096 &&
 				len(comp.State.WalkingTranslations) == 0; i++ {
-				comp.Tick()
+				modelingtest.Tick(comp)
 			}
 			Expect(comp.State.WalkingTranslations).ToNot(BeEmpty())
 
@@ -180,7 +182,7 @@ var _ = Describe("MMU control behavior", func() {
 			var rsp memcontrolprotocol.Rsp
 			gotRsp := false
 			for i := 0; i < 64 && !gotRsp; i++ {
-				comp.Tick()
+				modelingtest.Tick(comp)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
 					rsp, gotRsp = out.(memcontrolprotocol.Rsp)
 				}
@@ -218,7 +220,7 @@ var _ = Describe("MMU control behavior", func() {
 
 		var rsps []memcontrolprotocol.Rsp
 		for range 16 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := ctrlPort.RetrieveOutgoing()
 				if !ok {

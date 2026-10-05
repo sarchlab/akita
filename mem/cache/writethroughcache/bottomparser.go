@@ -113,7 +113,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 
 	pid := trans.ReadToBottomPID
 	addr := trans.Address()
-	spec := p.cache.comp.Spec()
+	spec := p.cache.comp.Spec
 	cachelineID := (addr >> spec.Log2BlockSize) << spec.Log2BlockSize
 	drMsg := msg.(memprotocol.DataReadyRsp)
 	data := drMsg.Data
@@ -162,7 +162,7 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 }
 
 func (p *bottomParser) mergeMSHRData(
-	next *State,
+	next *state,
 	entryTransIdxs []int,
 	blockTag uint64,
 	data []byte,
@@ -186,7 +186,7 @@ func (p *bottomParser) mergeMSHRData(
 }
 
 func (p *bottomParser) finalizeMSHRTransExcept(
-	next *State,
+	next *state,
 	entryTransIdxs []int,
 	blockTag uint64,
 	data []byte,
@@ -252,7 +252,7 @@ func (p *bottomParser) getBankBuf(
 	setID, wayID int,
 ) *queueing.Buffer[int] {
 	next := &p.cache.comp.State
-	numWaysPerSet := p.cache.comp.Spec().WayAssociativity
+	numWaysPerSet := p.cache.comp.Spec.WayAssociativity
 	blockID := setID*numWaysPerSet + wayID
 	bankID := blockID % len(next.BankBufs)
 

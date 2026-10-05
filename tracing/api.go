@@ -10,15 +10,17 @@ import (
 )
 
 // NamedHookable represent something that has a name, can tell the current
-// time, and can be hooked. The tracing API stamps event times from the
-// domain's clock, but only after confirming the domain has hooks, so the
-// clock is never consulted when tracing is disabled.
+// time, allocates IDs, and can be hooked. The tracing API stamps event times
+// from the domain's clock, but only after confirming the domain has hooks, so
+// the clock is never consulted when tracing is disabled.
 type NamedHookable interface {
 	naming.Named
 	hooking.Hookable
 	timing.TimeTeller
-	timing.SimulationElement
 	InvokeHook(hooking.HookCtx)
+
+	// NewID allocates an ID, unique within the domain's simulation.
+	NewID() uint64
 }
 
 // A list of hook poses for the hooks to apply to
@@ -128,7 +130,7 @@ func AddTaskTag(domain NamedHookable, tag TaskTag) {
 	}
 
 	if tag.ID == 0 {
-		tag.ID = domain.Simulation().NewID()
+		tag.ID = domain.NewID()
 	}
 
 	tag.Time = domain.CurrentTime()
@@ -149,7 +151,7 @@ func AddMilestone(domain NamedHookable, m Milestone) {
 	}
 
 	if m.ID == 0 {
-		m.ID = domain.Simulation().NewID()
+		m.ID = domain.NewID()
 	}
 
 	m.Time = domain.CurrentTime()

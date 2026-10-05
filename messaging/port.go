@@ -12,7 +12,7 @@ import (
 // HookPosPortMsgSend marks when a message is sent out from the port.
 var HookPosPortMsgSend = &hooking.HookPos{Name: "Port Msg Send"}
 
-// HookPosPortMsgRecvd marks when an inbound message arrives at a the given port.
+// HookPosPortMsgRecvd marks when an inbound message arrives at the port.
 var HookPosPortMsgRecvd = &hooking.HookPos{Name: "Port Msg Recv"}
 
 // HookPosPortMsgRetrieveIncoming marks when an inbound message is retrieved
@@ -41,8 +41,9 @@ type Port interface {
 	AsRemote() RemotePort
 
 	SetConnection(conn Connection)
-	Component() Component
-	SetComponent(comp Component)
+	Connection() Connection
+	Owner() PortOwner
+	SetOwner(owner PortOwner)
 
 	// For connection
 	CanDeliver() bool
@@ -66,10 +67,10 @@ type Port interface {
 type defaultPort struct {
 	hooking.HookableBase
 
-	lock sync.Mutex
-	name string
-	comp Component
-	conn Connection
+	lock  sync.Mutex
+	name  string
+	owner PortOwner
+	conn  Connection
 
 	incomingBuf queueing.Buffer[Msg]
 	outgoingBuf queueing.Buffer[Msg]
@@ -102,14 +103,14 @@ func (p *defaultPort) Connection() Connection {
 	return p.conn
 }
 
-// Component returns the owner component of the port.
-func (p *defaultPort) Component() Component {
-	return p.comp
+// Owner returns the owner of the port, or nil if it has none yet.
+func (p *defaultPort) Owner() PortOwner {
+	return p.owner
 }
 
-// SetComponent sets the owner component of the port.
-func (p *defaultPort) SetComponent(comp Component) {
-	p.comp = comp
+// SetOwner sets the owner of the port.
+func (p *defaultPort) SetOwner(owner PortOwner) {
+	p.owner = owner
 }
 
 // Name returns the name of the port.
@@ -172,6 +173,8 @@ func (p *defaultPort) CanDeliver() bool {
 // the port has capacity with CanDeliver before calling Deliver; delivering
 // into a full incoming buffer is a programming error and will panic.
 func (p *defaultPort) Deliver(msg Msg) {
+	owner := p.mustHaveOwner()
+
 	p.lock.Lock()
 
 	if !p.incomingBuf.CanPush() {
@@ -195,8 +198,8 @@ func (p *defaultPort) Deliver(msg Msg) {
 	p.incomingBuf.Push(msg)
 	p.lock.Unlock()
 
-	if p.comp != nil && wasEmpty {
-		p.comp.NotifyRecv(p)
+	if wasEmpty {
+		owner.NotifyRecv(p)
 	}
 }
 
@@ -230,6 +233,8 @@ func (p *defaultPort) RetrieveIncoming() (Msg, bool) {
 // RetrieveOutgoing is used by the connection to take a message from the outgoing
 // buffer. The boolean reports whether a message was present.
 func (p *defaultPort) RetrieveOutgoing() (Msg, bool) {
+	owner := p.mustHaveOwner()
+
 	p.lock.Lock()
 
 	msg, ok := p.outgoingBuf.Pop()
@@ -239,7 +244,7 @@ func (p *defaultPort) RetrieveOutgoing() (Msg, bool) {
 	}
 
 	if p.outgoingBuf.Size() == p.outgoingBuf.Capacity()-1 {
-		p.comp.NotifyPortFree(p)
+		owner.NotifyPortFree(p)
 	}
 
 	p.lock.Unlock()
@@ -291,21 +296,30 @@ func (p *defaultPort) NumOutgoing() int {
 // NotifyAvailable is called by the connection to notify the port that the
 // connection is available again.
 func (p *defaultPort) NotifyAvailable() {
-	if p.comp != nil {
-		p.comp.NotifyPortFree(p)
-	}
+	p.mustHaveOwner().NotifyPortFree(p)
 }
 
-// NewPort creates a new port with default behavior.
-func NewPort(
-	comp Component,
-	incomingBufCap, outgoingBufCap int,
-	name string,
-) Port {
+// mustHaveOwner returns the port's owner. A port carries traffic only after
+// it is bound: a component's Build binds its ports, and an owner written
+// without a component model calls SetOwner. A port without an owner is a wiring
+// error, so it panics.
+func (p *defaultPort) mustHaveOwner() PortOwner {
+	if p.owner == nil {
+		panic(fmt.Sprintf("messaging: port %q has no owner; a component's "+
+			"Build binds its ports, and any other owner must call SetOwner", p.name))
+	}
+
+	return p.owner
+}
+
+// NewPort creates a port with default behavior, an incoming buffer, and an
+// outgoing buffer. The port has no owner yet: a component's Build binds it to
+// the component, and an owner written without a component model calls
+// SetOwner.
+func NewPort(name string, incomingBufCap, outgoingBufCap int) Port {
 	p := new(defaultPort)
-	p.comp = comp
-	p.incomingBuf = queueing.NewBuffer[Msg](name+".Incoming", incomingBufCap)
-	p.outgoingBuf = queueing.NewBuffer[Msg](name+".Outgoing", outgoingBufCap)
+	p.incomingBuf = queueing.MakeBuffer[Msg](incomingBufCap)
+	p.outgoingBuf = queueing.MakeBuffer[Msg](outgoingBufCap)
 	p.name = name
 
 	return p

@@ -21,11 +21,11 @@ Top ──► topDown ──► Bottom ──► (bottom unit) ──► Bottom 
                               bottomUp ──► Top   (released in arrival order)
 ```
 
-1. **topDown** — Peeks a `mem.AccessReq` (a `mem.ReadReq` or `mem.WriteReq`) from
+1. **topDown** — Peeks a `memprotocol.AccessReq` (a `memprotocol.ReadReq` or `memprotocol.WriteReq`) from
    `Top`, builds a fresh *shadow* request with a new ID, rewrites its `Dst` to
    the configured `BottomUnit`, sends it on `Bottom`, and appends a transaction
    to the FIFO list. Stalls when the list reaches `BufferSize`.
-2. **parseBottom** — Matches each `mem.DataReadyRsp`/`mem.WriteDoneRsp` from
+2. **parseBottom** — Matches each `memprotocol.DataReadyRsp`/`memprotocol.WriteDoneRsp` from
    `Bottom` to its transaction by `RspTo`, records the payload, and sets the
    transaction's `HasRsp` flag. Unmatched responses (e.g. left over after a
    flush) are dropped.
@@ -37,7 +37,7 @@ Top ──► topDown ──► Bottom ──► (bottom unit) ──► Bottom 
 ## Key Types
 
 ```go
-type Comp = modeling.Component[Spec, State, modeling.None]
+type Comp = ticking.Component[Spec, state, modeling.None, Ports, middlewares]
 ```
 
 - **Spec** — immutable config: `Freq`, `BufferSize` (max in-flight
@@ -47,37 +47,34 @@ type Comp = modeling.Component[Spec, State, modeling.None]
   flag. Each `transactionState` remembers the original request's ID and source,
   the shadow request's ID, whether it is a read, and the buffered response data.
 
-The reorder buffer references no shared resources, so it uses `modeling.None`
-and exposes no `WithResources`.
+The reorder buffer references no shared resources, so its Resources type is
+`modeling.None` and the system builder does not call `WithResources`.
 
 ## Builder Pattern
 
-Configuration is supplied as a whole through `WithSpec` (start from
-`Definition.DefaultSpec`); the engine and registration come from `WithSimulation`. `Build`
-declares the component's `Top`, `Bottom`, and `Control` ports; the port
-instances are built and attached externally after `Build` with `AssignPort`, so
-the caller chooses the buffer sizes.
+The reorder buffer is a ticking component (`modeling/ticking`). The system
+builder builds it from `rob.Definition`: configuration is supplied as a whole
+through `WithSpec` (start from `Definition.DefaultSpec`), and the port instances
+through `WithPorts`. The system builder creates each port with
+`messaging.NewPort`, choosing its buffer sizes, and names it
+`"<instance>.<field>"`; `Build` binds and registers the ports.
 
 ```go
 spec := rob.Definition.DefaultSpec
 spec.BufferSize = 256
 spec.BottomUnit = dramPort.AsRemote()
 
-reorderBuffer := rob.MakeBuilder().
+reorderBuffer := rob.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
+    WithPorts(rob.Ports{
+        Top:     messaging.NewPort("ROB.Top", 8, 8),
+        Bottom:  messaging.NewPort("ROB.Bottom", 8, 8),
+        Control: messaging.NewPort("ROB.Control", 8, 8),
+    }).
     Build("ROB")
 
-for _, name := range []string{"Top", "Bottom", "Control"} {
-    p := modeling.MakePortBuilder().
-        WithSimulation(sim).
-        WithComponent(reorderBuffer).
-        WithSpec(modeling.PortSpec{BufSize: 8}).
-        Build(name)
-    reorderBuffer.AssignPort(name, p)
-}
-
-topPort := reorderBuffer.GetPortByName("Top")
+topPort := reorderBuffer.Ports.Top
 ```
 
 ### Builder Methods
@@ -86,13 +83,14 @@ topPort := reorderBuffer.GetPortByName("Top")
 |---|---|
 | `WithSimulation(r)` | Source of the engine and component registration (required). |
 | `WithSpec(s)` | Full configuration; start from `Definition.DefaultSpec`. Set `BottomUnit` to the downstream port. |
+| `WithPorts(p)` | The `Top`, `Bottom`, and `Control` port instances (required). |
 
 ## Ports
 
-- **Top** — accepts `mem.ReadReq` and `mem.WriteReq`, returns
-  `mem.DataReadyRsp` and `mem.WriteDoneRsp` in arrival order.
-- **Bottom** — sends shadow `mem.ReadReq`/`mem.WriteReq` to the `BottomUnit` and
-  receives `mem.DataReadyRsp`/`mem.WriteDoneRsp`.
-- **Control** — accepts `mem.ControlReq` (`CmdFlush` drops in-flight
+- **Top** — accepts `memprotocol.ReadReq` and `memprotocol.WriteReq`, returns
+  `memprotocol.DataReadyRsp` and `memprotocol.WriteDoneRsp` in arrival order.
+- **Bottom** — sends shadow `memprotocol.ReadReq`/`memprotocol.WriteReq` to the `BottomUnit` and
+  receives `memprotocol.DataReadyRsp`/`memprotocol.WriteDoneRsp`.
+- **Control** — accepts `memcontrolprotocol.Req` (`CmdFlush` drops in-flight
   transactions and quiesces the pipeline; `CmdEnable` drains stale port traffic
-  and resumes), returns `mem.ControlRsp`.
+  and resumes), returns `memcontrolprotocol.Rsp`.

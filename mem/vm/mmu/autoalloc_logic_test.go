@@ -17,14 +17,14 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 	spec := Definition.DefaultSpec
 	spec.AutoPageAllocation = true
 
-	mmu := MakeBuilder().
+	mmu := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
+		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
+		WithPorts(makePorts("TestMMU", 4096)).
 		Build("TestMMU")
-	assignPort(sim, mmu, "Top", 4096)
-	assignPort(sim, mmu, "Control", 4)
 
-	mw := mmu.Middlewares()[1].(*translationMW)
+	mw := mmu.Middlewares.Translation
 
 	// Test physical page allocation starts at 0
 	firstPage := mw.createDefaultPage(vm.PID(1), 0x1234, 2)
@@ -81,14 +81,14 @@ func TestPhysicalPageAllocator(t *testing.T) {
 	spec.AutoPageAllocation = true
 	spec.Log2PageSize = 12 // 4KB pages
 
-	mmu := MakeBuilder().
+	mmu := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
+		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
+		WithPorts(makePorts("TestMMU", 4096)).
 		Build("TestMMU")
-	assignPort(sim, mmu, "Top", 4096)
-	assignPort(sim, mmu, "Control", 4)
 
-	mw := mmu.Middlewares()[1].(*translationMW)
+	mw := mmu.Middlewares.Translation
 
 	// Test multiple allocations to ensure unique physical pages
 	allocatedPages := make(map[uint64]bool)
@@ -123,14 +123,14 @@ func TestAutoPageAllocationDisabled(t *testing.T) {
 
 	// Create MMU with auto page allocation disabled (default)
 
-	mmu := MakeBuilder().
+	mmu := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(Definition.DefaultSpec).
+		WithResources(Resources{PageTable: vm.NewPageTable(12)}).
+		WithPorts(makePorts("TestMMU", 4096)).
 		Build("TestMMU")
-	assignPort(sim, mmu, "Top", 4096)
-	assignPort(sim, mmu, "Control", 4)
 
-	if mmu.Spec().AutoPageAllocation {
+	if mmu.Spec.AutoPageAllocation {
 		t.Error("Auto page allocation should be disabled by default")
 	}
 }
@@ -144,14 +144,14 @@ func TestAutoPageAllocationEnabled(t *testing.T) {
 	spec := Definition.DefaultSpec
 	spec.AutoPageAllocation = true
 
-	mmu := MakeBuilder().
+	mmu := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
+		WithResources(Resources{PageTable: vm.NewPageTable(spec.Log2PageSize)}).
+		WithPorts(makePorts("TestMMU", 4096)).
 		Build("TestMMU")
-	assignPort(sim, mmu, "Top", 4096)
-	assignPort(sim, mmu, "Control", 4)
 
-	if !mmu.Spec().AutoPageAllocation {
+	if !mmu.Spec.AutoPageAllocation {
 		t.Error("Auto page allocation should be enabled when set")
 	}
 

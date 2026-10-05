@@ -29,14 +29,98 @@ func TestCache(t *testing.T) {
 	RunSpecs(t, "Write-Back Suite")
 }
 
+// makePorts creates the ports of the writeback cache named name, each with
+// bufSize slots in each direction.
+func makePorts(name string, bufSize int) Ports {
+	return Ports{
+		Top:     messaging.NewPort(name+".Top", bufSize, bufSize),
+		Bottom:  messaging.NewPort(name+".Bottom", bufSize, bufSize),
+		Control: messaging.NewPort(name+".Control", bufSize, bufSize),
+	}
+}
+
+// testDriver owns the ports a test drives by hand. The test polls those ports,
+// so it ignores the notifications.
+type testDriver struct{}
+
+func (testDriver) NotifyRecv(messaging.Port)     {}
+func (testDriver) NotifyPortFree(messaging.Port) {}
+
+// newDriverPort creates a port with bufSize slots in each direction for the
+// test to drive by hand.
+func newDriverPort(name string, bufSize int) messaging.Port {
+	p := messaging.NewPort(name, bufSize, bufSize)
+	p.SetOwner(testDriver{})
+
+	return p
+}
+
+// plugNoopConn plugs each of comp's ports into a noop connection, so a test
+// can drive the ports directly.
+func plugNoopConn(comp *Comp) {
+	for _, p := range []messaging.Port{
+		comp.Ports.Top, comp.Ports.Bottom, comp.Ports.Control,
+	} {
+		(&ccNoopConn{}).PlugIn(p)
+	}
+}
+
+// stageTestSpec returns the configuration the white-box stage tests share:
+// 64 sets of 4 ways of 64-byte blocks in a single bank, 4 requests per cycle.
+func stageTestSpec() Spec {
+	spec := Definition.DefaultSpec
+	spec.Log2BlockSize = 6
+	spec.WayAssociativity = 4
+	spec.TotalByteSize = 64 * 4 * 64
+	spec.NumBanks = 1
+	spec.NumReqPerCycle = 4
+
+	return spec
+}
+
+// buildStageTestComp builds the "Cache" instance a white-box stage test
+// drives, with its ports plugged into noop connections. The test ticks the
+// stage under test directly rather than the component.
+func buildStageTestComp(spec Spec, res Resources, ports Ports) *Comp {
+	comp := Definition.Builder().
+		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
+		WithSpec(spec).
+		WithResources(res).
+		WithPorts(ports).
+		Build("Cache")
+	plugNoopConn(comp)
+
+	return comp
+}
+
+// buildIdealDRAM builds a 200-cycle ideal memory controller named "DRAM",
+// backed by storage, and returns its Top port.
+func buildIdealDRAM(sim timing.Simulation, storage *mem.Storage) messaging.Port {
+	dramSpec := idealmemcontroller.Definition.DefaultSpec
+	dramSpec.Width = 1
+	dramSpec.Latency = 200
+	dramSpec.CacheLineSize = 64
+	dram := idealmemcontroller.Definition.Builder().
+		WithSimulation(sim).
+		WithResources(idealmemcontroller.Resources{Storage: storage}).
+		WithSpec(dramSpec).
+		WithPorts(idealmemcontroller.Ports{
+			Top:     messaging.NewPort("DRAM.Top", 16, 16),
+			Control: messaging.NewPort("DRAM.Control", 16, 16),
+		}).
+		Build("DRAM")
+
+	return dram.Ports.Top
+}
+
 var _ = Describe("Write-Back Cache Integration", func() {
 	var (
 		engine              timing.Engine
 		sim                 timing.Simulation
 		addressToPortMapper *mem.SinglePortMapper
-		cacheComp           *modeling.Component[Spec, State, Resources]
+		cacheComp           *Comp
 		m                   *pipelineMW
-		dram                *idealmemcontroller.Comp
+		dramTop             messaging.Port
 		dramStorage         *mem.Storage
 		conn                *directconnection.Comp
 		agentPort           messaging.Port
@@ -47,67 +131,47 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		agentPort = messaging.NewPort(nil, 8, 8, "Agent.Top")
-		controlAgentPort = messaging.NewPort(nil, 8, 8, "Agent.Control")
+		agentPort = newDriverPort("Agent.Top", 8)
+		controlAgentPort = newDriverPort("Agent.Control", 8)
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
-		dramSpec := idealmemcontroller.Definition.DefaultSpec
-		dramSpec.Width = 1
-		dramSpec.Latency = 200
-		dramSpec.CacheLineSize = 64
-		dram = idealmemcontroller.MakeBuilder().
-			WithSimulation(sim).
-			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
-			WithSpec(dramSpec).
-			Build("DRAM")
-		dram.AssignPort("Top",
-			messaging.NewPort(dram, 16, 16, dram.Name()+".Top"))
-		dram.AssignPort("Control",
-			messaging.NewPort(dram, 16, 16, dram.Name()+".Control"))
+		dramTop = buildIdealDRAM(sim, dramStorage)
 
 		addressToPortMapper = &mem.SinglePortMapper{
-			Port: dram.GetPortByName("Top").AsRemote(),
+			Port: dramTop.AsRemote(),
 		}
 
 		cacheSpec := Definition.DefaultSpec
 		cacheSpec.TotalByteSize = 1024 * 4 * 64
 		cacheSpec.NumReqPerCycle = 4
 
-		cacheComp = MakeBuilder().
+		cacheComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(cacheSpec).
 			WithResources(Resources{
+				Storage:             mem.NewStorage(cacheSpec.TotalByteSize),
 				AddressToPortMapper: addressToPortMapper,
 			}).
+			WithPorts(makePorts("Cache", 8)).
 			Build("Cache")
-		// Build only declares the cache's ports; assign the instances and
-		// choose their buffer sizes here.
-		for _, name := range []string{"Top", "Bottom", "Control"} {
-			cacheComp.AssignPort(name,
-				messaging.NewPort(cacheComp, 8, 8, cacheComp.Name()+"."+name))
-		}
-		for _, mw := range cacheComp.Middlewares() {
-			if p, ok := mw.(*pipelineMW); ok {
-				m = p
-			}
-		}
+		m = cacheComp.Middlewares.Pipeline
 
 		conn = directconnection.MakeBuilder().
 			WithSimulation(sim).
 			Build("Connection")
-		conn.PlugIn(cacheComp.GetPortByName("Top"))
-		conn.PlugIn(cacheComp.GetPortByName("Bottom"))
-		conn.PlugIn(cacheComp.GetPortByName("Control"))
-		conn.PlugIn(dram.GetPortByName("Top"))
+		conn.PlugIn(cacheComp.Ports.Top)
+		conn.PlugIn(cacheComp.Ports.Bottom)
+		conn.PlugIn(cacheComp.Ports.Control)
+		conn.PlugIn(dramTop)
 		conn.PlugIn(agentPort)
 		conn.PlugIn(controlAgentPort)
 	})
 
 	It("should do read hit", func() {
 		state := m.comp.State
-		spec := m.comp.Spec()
+		spec := m.comp.Spec
 		blockSize := 1 << spec.Log2BlockSize
-		setID := cache.DirectorySetID(0x10000, blockSize, spec.NumSets)
+		setID := cache.DirectorySetID(0x10000, blockSize, spec.numSets())
 		block := &state.DirectoryState.Sets[setID].Blocks[0]
 		block.Tag = 0x10000
 		block.PID = 0
@@ -125,14 +189,14 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		})
 
 		read := memprotocol.ReadReq{}
-		read.ID = m.comp.Simulation().NewID()
+		read.ID = m.comp.NewID()
 		read.Src = agentPort.AsRemote()
-		read.Dst = cacheComp.GetPortByName("Top").AsRemote()
+		read.Dst = cacheComp.Ports.Top.AsRemote()
 		read.Address = 0x10004
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
 		read.TrafficClass = "memprotocol.ReadReq"
-		cacheComp.GetPortByName("Top").Deliver(read)
+		cacheComp.Ports.Top.Deliver(read)
 
 		Expect(engine.Run()).To(Succeed())
 
@@ -144,9 +208,9 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 	It("should write hit", func() {
 		state := m.comp.State
-		spec := m.comp.Spec()
+		spec := m.comp.Spec
 		blockSize := 1 << spec.Log2BlockSize
-		setID := cache.DirectorySetID(0x10000, blockSize, spec.NumSets)
+		setID := cache.DirectorySetID(0x10000, blockSize, spec.numSets())
 		block := &state.DirectoryState.Sets[setID].Blocks[0]
 		block.Tag = 0x10000
 		block.PID = 0
@@ -164,14 +228,14 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		})
 
 		write := memprotocol.WriteReq{}
-		write.ID = m.comp.Simulation().NewID()
+		write.ID = m.comp.NewID()
 		write.Src = agentPort.AsRemote()
-		write.Dst = cacheComp.GetPortByName("Top").AsRemote()
+		write.Dst = cacheComp.Ports.Top.AsRemote()
 		write.Address = 0x10004
 		write.Data = []byte{9, 9, 9, 9}
 		write.TrafficBytes = len([]byte{9, 9, 9, 9}) + 12
 		write.TrafficClass = "memprotocol.WriteReq"
-		cacheComp.GetPortByName("Top").Deliver(write)
+		cacheComp.Ports.Top.Deliver(write)
 
 		Expect(engine.Run()).To(Succeed())
 
@@ -200,14 +264,14 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		})
 
 		read := memprotocol.ReadReq{}
-		read.ID = m.comp.Simulation().NewID()
+		read.ID = m.comp.NewID()
 		read.Src = agentPort.AsRemote()
-		read.Dst = cacheComp.GetPortByName("Top").AsRemote()
+		read.Dst = cacheComp.Ports.Top.AsRemote()
 		read.Address = 0x10004
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
 		read.TrafficClass = "memprotocol.ReadReq"
-		cacheComp.GetPortByName("Top").Deliver(read)
+		cacheComp.Ports.Top.Deliver(read)
 
 		Expect(engine.Run()).To(Succeed())
 
@@ -230,24 +294,24 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		})
 
 		read1 := memprotocol.ReadReq{}
-		read1.ID = m.comp.Simulation().NewID()
+		read1.ID = m.comp.NewID()
 		read1.Src = agentPort.AsRemote()
-		read1.Dst = cacheComp.GetPortByName("Top").AsRemote()
+		read1.Dst = cacheComp.Ports.Top.AsRemote()
 		read1.Address = 0x10004
 		read1.AccessByteSize = 4
 		read1.TrafficBytes = 12
 		read1.TrafficClass = "memprotocol.ReadReq"
-		cacheComp.GetPortByName("Top").Deliver(read1)
+		cacheComp.Ports.Top.Deliver(read1)
 
 		read2 := memprotocol.ReadReq{}
-		read2.ID = m.comp.Simulation().NewID()
+		read2.ID = m.comp.NewID()
 		read2.Src = agentPort.AsRemote()
-		read2.Dst = cacheComp.GetPortByName("Top").AsRemote()
+		read2.Dst = cacheComp.Ports.Top.AsRemote()
 		read2.Address = 0x10008
 		read2.AccessByteSize = 4
 		read2.TrafficBytes = 12
 		read2.TrafficClass = "memprotocol.ReadReq"
-		cacheComp.GetPortByName("Top").Deliver(read2)
+		cacheComp.Ports.Top.Deliver(read2)
 
 		Expect(engine.Run()).To(Succeed())
 
@@ -274,24 +338,24 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 		}
 		write := memprotocol.WriteReq{}
-		write.ID = m.comp.Simulation().NewID()
+		write.ID = m.comp.NewID()
 		write.Src = agentPort.AsRemote()
-		write.Dst = cacheComp.GetPortByName("Top").AsRemote()
+		write.Dst = cacheComp.Ports.Top.AsRemote()
 		write.Address = 0x10000
 		write.Data = writeData
 		write.TrafficBytes = len(writeData) + 12
 		write.TrafficClass = "memprotocol.WriteReq"
-		cacheComp.GetPortByName("Top").Deliver(write)
+		cacheComp.Ports.Top.Deliver(write)
 
 		read := memprotocol.ReadReq{}
-		read.ID = m.comp.Simulation().NewID()
+		read.ID = m.comp.NewID()
 		read.Src = agentPort.AsRemote()
-		read.Dst = cacheComp.GetPortByName("Top").AsRemote()
+		read.Dst = cacheComp.Ports.Top.AsRemote()
 		read.Address = 0x10004
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
 		read.TrafficClass = "memprotocol.ReadReq"
-		cacheComp.GetPortByName("Top").Deliver(read)
+		cacheComp.Ports.Top.Deliver(read)
 
 		Expect(engine.Run()).To(Succeed())
 
@@ -320,9 +384,9 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		// Fill target set with dirty blocks
 		state := m.comp.State
-		spec := m.comp.Spec()
+		spec := m.comp.Spec
 		blockSize := 1 << spec.Log2BlockSize
-		setID := cache.DirectorySetID(0x10000, blockSize, spec.NumSets)
+		setID := cache.DirectorySetID(0x10000, blockSize, spec.numSets())
 		for i := 0; i < spec.WayAssociativity; i++ {
 			block := &state.DirectoryState.Sets[setID].Blocks[i]
 			block.IsValid = true
@@ -331,14 +395,14 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		m.comp.State = state
 
 		read := memprotocol.ReadReq{}
-		read.ID = m.comp.Simulation().NewID()
+		read.ID = m.comp.NewID()
 		read.Src = agentPort.AsRemote()
-		read.Dst = cacheComp.GetPortByName("Top").AsRemote()
+		read.Dst = cacheComp.Ports.Top.AsRemote()
 		read.Address = 0x10004
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
 		read.TrafficClass = "memprotocol.ReadReq"
-		cacheComp.GetPortByName("Top").Deliver(read)
+		cacheComp.Ports.Top.Deliver(read)
 
 		Expect(engine.Run()).To(Succeed())
 
@@ -350,24 +414,24 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 	It("should flush", func() {
 		write1 := memprotocol.WriteReq{}
-		write1.ID = m.comp.Simulation().NewID()
+		write1.ID = m.comp.NewID()
 		write1.Src = agentPort.AsRemote()
-		write1.Dst = cacheComp.GetPortByName("Top").AsRemote()
+		write1.Dst = cacheComp.Ports.Top.AsRemote()
 		write1.Address = 0x100000
 		write1.Data = []byte{1, 2, 3, 4}
 		write1.TrafficBytes = len([]byte{1, 2, 3, 4}) + 12
 		write1.TrafficClass = "memprotocol.WriteReq"
-		cacheComp.GetPortByName("Top").Deliver(write1)
+		cacheComp.Ports.Top.Deliver(write1)
 
 		write2 := memprotocol.WriteReq{}
-		write2.ID = m.comp.Simulation().NewID()
+		write2.ID = m.comp.NewID()
 		write2.Src = agentPort.AsRemote()
-		write2.Dst = cacheComp.GetPortByName("Top").AsRemote()
+		write2.Dst = cacheComp.Ports.Top.AsRemote()
 		write2.Address = 0x100000
 		write2.Data = []byte{1, 2, 3, 4}
 		write2.TrafficBytes = len([]byte{1, 2, 3, 4}) + 12
 		write2.TrafficClass = "memprotocol.WriteReq"
-		cacheComp.GetPortByName("Top").Deliver(write2)
+		cacheComp.Ports.Top.Deliver(write2)
 
 		// Let the writes settle so the block is resident and dirty.
 		Expect(engine.Run()).To(Succeed())
@@ -375,11 +439,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		Expect(present0).To(BeFalse())
 		// Flush is a conditional verb: pause first so it is legal.
 		pause := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdPause}
-		pause.ID = m.comp.Simulation().NewID()
+		pause.ID = m.comp.NewID()
 		pause.Src = controlAgentPort.AsRemote()
-		pause.Dst = cacheComp.GetPortByName("Control").AsRemote()
+		pause.Dst = cacheComp.Ports.Control.AsRemote()
 		pause.TrafficClass = "memcontrolprotocol.Req"
-		cacheComp.GetPortByName("Control").Deliver(pause)
+		cacheComp.Ports.Control.Deliver(pause)
 
 		Expect(engine.Run()).To(Succeed())
 
@@ -389,11 +453,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		Expect(pauseRsp.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 
 		flush := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-		flush.ID = m.comp.Simulation().NewID()
+		flush.ID = m.comp.NewID()
 		flush.Src = controlAgentPort.AsRemote()
-		flush.Dst = cacheComp.GetPortByName("Control").AsRemote()
+		flush.Dst = cacheComp.Ports.Control.AsRemote()
 		flush.TrafficClass = "memcontrolprotocol.Req"
-		cacheComp.GetPortByName("Control").Deliver(flush)
+		cacheComp.Ports.Control.Deliver(flush)
 
 		Expect(engine.Run()).To(Succeed())
 

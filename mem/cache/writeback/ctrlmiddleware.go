@@ -5,6 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -16,14 +17,13 @@ type ctrlMiddleware struct {
 	pipeline *pipelineMW
 }
 
-// ctrlPort resolves the "Control" port by name. The port instance is assigned
-// externally after Build, so it is resolved lazily on every use rather than
-// cached at build time.
+// ctrlPort returns the Control port.
 func (m *ctrlMiddleware) ctrlPort() messaging.Port {
-	return m.pipeline.comp.GetPortByName("Control")
+	return m.pipeline.comp.Ports.Control
 }
 
-func (m *ctrlMiddleware) Tick() bool {
+// Handle finalizes a pending Drain and handles the next control command.
+func (m *ctrlMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 	madeProgress = m.completePendingDrain() || madeProgress
 	// Control commands are processed serially: while an async verb (Drain or
@@ -55,7 +55,7 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 		return false
 	}
 
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdDrain,
+	m.ctrlPort().Send(makeCtrlRsp(m.pipeline.comp, memcontrolprotocol.CmdDrain,
 		next.CurrentCmdSrc, next.CurrentCmdID, true, ""))
 	next.CacheState = int(cacheStatePaused)
 	next.CurrentCmdID = 0
@@ -63,7 +63,7 @@ func (m *ctrlMiddleware) completePendingDrain() bool {
 	return true
 }
 
-func cacheIsQuiescent(state *State) bool {
+func cacheIsQuiescent(state *state) bool {
 	// Completed transactions are only marked Removed (the slice is compacted
 	// at Reset, not on each completion), so quiescence means no transaction
 	// is still live, not that the slice is empty.
@@ -135,11 +135,11 @@ func (m *ctrlMiddleware) handleInvalidate(req memcontrolprotocol.Req) bool {
 		return false
 	}
 
-	spec := m.pipeline.comp.Spec()
+	spec := m.pipeline.comp.Spec
 	blockSize := uint64(1) << spec.Log2BlockSize
 	invalidateBlocks(next, blockSize, req.Addresses, req.PID)
 
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdInvalidate,
+	m.ctrlPort().Send(makeCtrlRsp(m.pipeline.comp, memcontrolprotocol.CmdInvalidate,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -151,7 +151,7 @@ func (m *ctrlMiddleware) rejectMustBePaused(req memcontrolprotocol.Req) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), req.Command,
+	m.ctrlPort().Send(makeCtrlRsp(m.pipeline.comp, req.Command,
 		req.Src, req.ID, false, memcontrolprotocol.ErrMustBePausedOrDrained))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -163,7 +163,7 @@ func (m *ctrlMiddleware) rejectMustBePaused(req memcontrolprotocol.Req) bool {
 // Tag, so the requested addresses are aligned to the block before
 // matching.
 func invalidateBlocks(
-	state *State,
+	state *state,
 	blockSize uint64,
 	addresses []uint64,
 	pid vm.PID,
@@ -200,7 +200,7 @@ func (m *ctrlMiddleware) handlePause(req memcontrolprotocol.Req) bool {
 	}
 	next := &m.pipeline.comp.State
 	next.CacheState = int(cacheStatePaused)
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdPause,
+	m.ctrlPort().Send(makeCtrlRsp(m.pipeline.comp, memcontrolprotocol.CmdPause,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -223,7 +223,7 @@ func (m *ctrlMiddleware) handleEnable(req memcontrolprotocol.Req) bool {
 	// paused (e.g. bottom responses for frozen in-flight transactions),
 	// which the pipeline processes once it runs again.
 	m.pipeline.comp.State.CacheState = int(cacheStateRunning)
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdEnable,
+	m.ctrlPort().Send(makeCtrlRsp(m.pipeline.comp, memcontrolprotocol.CmdEnable,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -240,10 +240,10 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	}
 
 	next := &m.pipeline.comp.State
-	spec := m.pipeline.comp.Spec()
+	spec := m.pipeline.comp.Spec
 	blockSize := 1 << spec.Log2BlockSize
 	cache.DirectoryReset(
-		&next.DirectoryState, spec.NumSets, spec.WayAssociativity, blockSize)
+		&next.DirectoryState, spec.numSets(), spec.WayAssociativity, blockSize)
 	next.MSHRState = cache.MSHRState{}
 	m.endInflightTasks()
 	next.Transactions = nil
@@ -261,7 +261,7 @@ func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
 	clearPort(m.pipeline.topPort())
 	clearPort(m.pipeline.bottomPort())
 
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), memcontrolprotocol.CmdReset,
+	m.ctrlPort().Send(makeCtrlRsp(m.pipeline.comp, memcontrolprotocol.CmdReset,
 		req.Src, req.ID, true, ""))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -307,7 +307,7 @@ func (m *ctrlMiddleware) endInflightTasks() {
 // per-bank in-flight counter, and clears the MSHR/write-buffer stage
 // bookkeeping. It does not touch the directory, MSHR contents, or the
 // transaction table.
-func clearCachePipelinesAndBuffers(next *State) {
+func clearCachePipelinesAndBuffers(next *state) {
 	next.DirStageBuf.Clear()
 	for i := range next.DirToBankBufs {
 		next.DirToBankBufs[i].Clear()
@@ -342,14 +342,14 @@ func (m *ctrlMiddleware) handleUnsupported(req memcontrolprotocol.Req) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
-	m.ctrlPort().Send(makeCtrlRsp(m.ctrlPort(), req.Command,
+	m.ctrlPort().Send(makeCtrlRsp(m.pipeline.comp, req.Command,
 		req.Src, req.ID, false, memcontrolprotocol.ErrUnsupported))
 	m.ctrlPort().RetrieveIncoming()
 	return true
 }
 
 func makeCtrlRsp(
-	port messaging.Port,
+	c *Comp,
 	cmd memcontrolprotocol.Command,
 	dst messaging.RemotePort,
 	rspTo uint64,
@@ -361,8 +361,8 @@ func makeCtrlRsp(
 		Success: success,
 		Error:   errStr,
 	}
-	rsp.ID = port.Component().Simulation().NewID()
-	rsp.Src = port.AsRemote()
+	rsp.ID = c.NewID()
+	rsp.Src = c.Ports.Control.AsRemote()
 	rsp.Dst = dst
 	rsp.RspTo = rspTo
 	rsp.TrafficClass = "memcontrolprotocol.Rsp"

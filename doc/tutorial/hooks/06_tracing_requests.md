@@ -45,46 +45,66 @@ to thread through.
 
 The one thing you must do is **hold onto the original request** on each side:
 the sender finalizes with the request it sent, and the receiver completes
-with the request it received.
+with the request it received. Both sides keep it in their `State`, because a
+request in flight is runtime data that must survive a checkpoint.
+
+The client and the server are two ticking components, each in its own
+package (`reqtracing/client` and `reqtracing/server`); the `ReadReq` and
+`ReadRsp` messages live in `server`. `main.go` is the system builder that
+wires them together.
 
 ## Sender Side
 
 The client sends one request at a time. It initiates the task just before
-sending, then keeps the request in an in-flight map until the response
-arrives:
+sending, then keeps the request in its State's `InFlight` map until the
+response arrives:
 
 ```go
-func (m *clientMW) send() bool {
+func (m *requestMW) send() bool {
     s := &m.comp.State
-    port := m.comp.GetPortByName("Out")
+    spec := m.comp.Spec
+    port := m.comp.Ports.Out
 
-    if s.ReqsToSend == 0 || len(m.inFlight) > 0 || !port.CanSend() {
+    // Send one request at a time: wait for the response before the next.
+    if s.NextSeq == spec.NumReqs || len(s.InFlight) > 0 || !port.CanSend() {
         return false
     }
 
-    req := readReq{ /* MsgMeta{ID, Src, Dst}, Seq */ }
+    req := server.ReadReq{
+        MsgMeta: messaging.MsgMeta{
+            ID:  m.comp.NewID(),
+            Src: port.AsRemote(),
+            Dst: spec.Dst,
+        },
+        Seq: s.NextSeq,
+    }
 
     // The req_out task is keyed by the request's own message ID.
-    tracing.TraceReqInitiate(m.comp, req, 0) // open req_out
+    tracing.TraceReqInitiate(m.comp, req, 0)
     port.Send(req)
-    m.inFlight[req.ID] = req
 
-    s.ReqsToSend--
+    s.InFlight[req.ID] = req
     s.NextSeq++
+
     return true
 }
 
-func (m *clientMW) receive() bool {
-    msg, ok := m.comp.GetPortByName("Out").PeekIncoming()
+func (m *requestMW) receive() bool {
+    s := &m.comp.State
+    port := m.comp.Ports.Out
+
+    msg, ok := port.PeekIncoming()
     if !ok {
         return false
     }
-    rsp := msg.(readRsp)
-    if req, ok := m.inFlight[rsp.RspTo]; ok {
-        tracing.TraceReqFinalize(m.comp, req) // close req_out
-        delete(m.inFlight, rsp.RspTo)
+
+    rsp := msg.(server.ReadRsp)
+    if req, ok := s.InFlight[rsp.RspTo]; ok {
+        tracing.TraceReqFinalize(m.comp, req)
+        delete(s.InFlight, rsp.RspTo)
     }
-    m.comp.GetPortByName("Out").RetrieveIncoming()
+    port.RetrieveIncoming()
+
     return true
 }
 ```
@@ -93,7 +113,8 @@ Messages are value types, and `port.Send` returns nothing — the `CanSend()`
 check above is what guarantees there is room. `TraceReqInitiate` runs before
 `Send` so the `req_out` task exists by the time anything observes the message.
 When the response comes back, the client looks up the original request by
-`rsp.RspTo` and finalizes with it.
+`rsp.RspTo` and finalizes with it. (`InFlight` starts as an empty map: the
+client's `Definition` has a `NewState` that creates it.)
 
 ## Receiver Side
 
@@ -101,30 +122,48 @@ The server opens the handling task when it picks up the request, counts down
 a fixed latency, then completes the task and sends the response:
 
 ```go
-func (m *serverMW) receive() bool {
-    msg, ok := m.comp.GetPortByName("Out").PeekIncoming()
+func (m *serveMW) receive() bool {
+    port := m.comp.Ports.Out
+
+    msg, ok := port.PeekIncoming()
     if !ok {
         return false
     }
-    req := msg.(readReq)
-    tracing.TraceReqReceive(m.comp, req) // open req_in
-    m.pending = append(m.pending, serverTxn{req: req, left: m.comp.Spec().Latency})
-    m.comp.GetPortByName("Out").RetrieveIncoming()
+
+    req := msg.(ReadReq)
+    tracing.TraceReqReceive(m.comp, req)
+    m.comp.State.Pending = append(m.comp.State.Pending,
+        txn{Req: req, Left: m.comp.Spec.Latency})
+    port.RetrieveIncoming()
+
     return true
 }
 
-func (m *serverMW) respond() bool {
-    if len(m.pending) == 0 || m.pending[0].left > 0 {
+func (m *serveMW) respond() bool {
+    s := &m.comp.State
+    if len(s.Pending) == 0 || s.Pending[0].Left > 0 {
         return false
     }
-    port := m.comp.GetPortByName("Out")
+
+    port := m.comp.Ports.Out
     if !port.CanSend() {
         return false
     }
-    txn := m.pending[0]
-    port.Send(readRsp{ /* MsgMeta{ID, Src, Dst, RspTo: txn.req.ID}, Seq */ })
-    tracing.TraceReqComplete(m.comp, txn.req) // close req_in
-    m.pending = m.pending[1:]
+
+    req := s.Pending[0].Req
+    port.Send(ReadRsp{
+        MsgMeta: messaging.MsgMeta{
+            ID:    m.comp.NewID(),
+            Src:   port.AsRemote(),
+            Dst:   req.Src,
+            RspTo: req.ID,
+        },
+        Seq: req.Seq,
+    })
+
+    tracing.TraceReqComplete(m.comp, req)
+    s.Pending = s.Pending[1:]
+
     return true
 }
 ```
@@ -139,9 +178,8 @@ roundTrip := tracing.NewAverageTimeTracer(
     func(t tracing.TaskStart) bool { return t.Kind == "req_out" })
 handling := tracing.NewAverageTimeTracer(
     func(t tracing.TaskStart) bool { return t.Kind == "req_in" })
-
-tracing.CollectTrace(client, roundTrip)
-tracing.CollectTrace(server, handling)
+tracing.CollectTrace(cli, roundTrip)
+tracing.CollectTrace(srv, handling)
 ```
 
 The filter is a `func(tracing.TaskStart) bool` — it inspects the task at the
@@ -193,15 +231,18 @@ parentID := tracing.MsgIDAtReceiver(upReq, comp)
 
 Note the argument order: `MsgIDAtReceiver` takes the **message first, then the
 domain**. So a cache that misses initiates its downstream request as a child
-of the task it is currently handling:
+of the task it is currently handling. From the cache's middleware in
+`examples/tasktree/cache`:
 
 ```go
-tracing.TraceReqReceive(comp, upReq) // open req_in (handling)
+// Open the handling task for the request we received.
+tracing.TraceReqReceive(m.comp, upReq) // req_in @ this cache
 
-downReq := newReq(...)               // build the next-level-down request
-tracing.TraceReqInitiate(
-    comp, downReq,
-    tracing.MsgIDAtReceiver(upReq, comp)) // parent = the req_in above
+// Miss: send a request one level down, parented to the task above.
+downReq := memory.NewReq(m.comp.NewID(),
+    bottom.AsRemote(), m.comp.Spec.Downstream)
+tracing.TraceReqInitiate(m.comp, downReq,
+    tracing.MsgIDAtReceiver(upReq, m.comp))
 bottom.Send(downReq)
 ```
 
@@ -214,7 +255,9 @@ the way down.
 
 `examples/tasktree` wires a client to a small hierarchy — `Client → L1 → L2 →
 Memory` — where each cache misses and forwards downward using exactly that
-pattern (`L1` and `L2` are the same reusable cache component). A custom tracer
+pattern. `L1` and `L2` are two instances of the one component in the `cache`
+package; the system builder builds the hierarchy bottom-up, so each cache's
+`Spec.Downstream` can name the `Top` port of the level below. A custom tracer
 attached to every component records each task's kind, parent, and location,
 then prints them by parent link:
 

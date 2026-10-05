@@ -27,10 +27,10 @@ func NewTagCountTracer(filter TaskFilter) *TagCountTracer {
 	}
 }
 
-// GetTagNames returns all the tag names collected. It returns a copy so the
+// TagNames returns all the tag names collected. It returns a copy so the
 // caller cannot mutate, or race against appends to, the tracer's internal
 // slice.
-func (t *TagCountTracer) GetTagNames() []string {
+func (t *TagCountTracer) TagNames() []string {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -40,17 +40,17 @@ func (t *TagCountTracer) GetTagNames() []string {
 	return names
 }
 
-// GetTagCount returns the number of tags recorded with a certain tag name.
-func (t *TagCountTracer) GetTagCount(tagName string) uint64 {
+// TagCount returns the number of tags recorded with a certain tag name.
+func (t *TagCountTracer) TagCount(tagName string) uint64 {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	return t.tagCount[tagName]
 }
 
-// GetTaskCount returns the number of tasks that carry at least one tag with the
+// TaskCount returns the number of tasks that carry at least one tag with the
 // given name.
-func (t *TagCountTracer) GetTaskCount(tagName string) uint64 {
+func (t *TagCountTracer) TaskCount(tagName string) uint64 {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 

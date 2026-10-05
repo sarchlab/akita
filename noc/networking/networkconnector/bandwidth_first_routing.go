@@ -4,8 +4,8 @@ import (
 	"math"
 )
 
-// BandwidthFirstRouter is a simple router that always establish route that
-// involves the least number of hops.
+// BandwidthFirstRouter establishes, between every pair of nodes, the route
+// whose narrowest link has the highest bandwidth.
 type BandwidthFirstRouter struct {
 	FlitSize int
 }

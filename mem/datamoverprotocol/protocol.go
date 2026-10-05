@@ -12,11 +12,11 @@ import (
 // responds on completion. Defining the protocol registers every message type
 // it carries with the checkpoint codec.
 var (
-	Protocol = messaging.DefineProtocol("datamover",
+	Protocol = messaging.DefineProtocol(
 		messaging.RoleDef{Name: "requester",
-			Sends: []messaging.Msg{DataMoveRequest{}}},
+			Sends: []messaging.Msg{DataMoveReq{}}},
 		messaging.RoleDef{Name: "responder",
-			Sends: []messaging.Msg{DataMoveResponse{}}},
+			Sends: []messaging.Msg{DataMoveRsp{}}},
 	)
 	Requester = Protocol.Role("requester")
 	Responder = Protocol.Role("responder")
@@ -26,13 +26,13 @@ var (
 // It can be either inside or outside.
 type DataMovePort string
 
-// DataMoveResponse is sent when a data move operation completes.
-type DataMoveResponse struct {
+// DataMoveRsp is sent when a data move operation completes.
+type DataMoveRsp struct {
 	messaging.MsgMeta
 }
 
-// DataMoveRequest is a data move request.
-type DataMoveRequest struct {
+// DataMoveReq is a data move request.
+type DataMoveReq struct {
 	messaging.MsgMeta
 	SrcAddress uint64
 	DstAddress uint64

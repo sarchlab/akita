@@ -5,21 +5,22 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type memMiddleware struct {
-	comp *modeling.Component[Spec, State, Resources]
+	comp *Comp
 }
 
 func (m *memMiddleware) topPort() messaging.Port {
-	return m.comp.GetPortByName("Top")
+	return m.comp.Ports.Top
 }
 
-func (m *memMiddleware) Tick() bool {
+// Handle admits new requests and advances the in-flight accesses by one
+// cycle.
+func (m *memMiddleware) Handle(_ timing.Event) bool {
 	madeProgress := false
 
 	madeProgress = m.takeNewReqs() || madeProgress
@@ -34,7 +35,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 		return false
 	}
 
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 
 	for i := 0; i < spec.Width; i++ {
 		msgI, ok := m.topPort().RetrieveIncoming()
@@ -56,7 +57,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 }
 
 func (m *memMiddleware) msgToInflightTransaction(msg messaging.Msg) inflightTransaction {
-	spec := m.comp.Spec()
+	spec := m.comp.Spec
 	recvTaskID := tracing.MsgIDAtReceiver(msg, m.comp)
 
 	switch payload := msg.(type) {
@@ -130,10 +131,10 @@ func (m *memMiddleware) sendResponse(tx *inflightTransaction) bool {
 }
 
 func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
-	data := m.comp.Resources().Storage.Read(tx.Address, tx.AccessByteSize)
+	data := m.comp.Resources.Storage.Read(tx.Address, tx.AccessByteSize)
 
 	rsp := memprotocol.DataReadyRsp{}
-	rsp.ID = m.comp.Simulation().NewID()
+	rsp.ID = m.comp.NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
 	rsp.RspTo = tx.ReqID
@@ -154,7 +155,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 
 func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 	rsp := memprotocol.WriteDoneRsp{}
-	rsp.ID = m.comp.Simulation().NewID()
+	rsp.ID = m.comp.NewID()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
 	rsp.RspTo = tx.ReqID
@@ -170,9 +171,9 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 	addr := tx.Address
 
 	if tx.DirtyMask == nil {
-		m.comp.Resources().Storage.Write(addr, tx.Data)
+		m.comp.Resources.Storage.Write(addr, tx.Data)
 	} else {
-		data := m.comp.Resources().Storage.Read(addr, uint64(len(tx.Data)))
+		data := m.comp.Resources.Storage.Read(addr, uint64(len(tx.Data)))
 
 		for i := 0; i < len(tx.Data); i++ {
 			if tx.DirtyMask[i] {
@@ -180,7 +181,7 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 			}
 		}
 
-		m.comp.Resources().Storage.Write(addr, data)
+		m.comp.Resources.Storage.Write(addr, data)
 	}
 
 	m.traceReqComplete(tx.RecvTaskID, tx.ReqID)

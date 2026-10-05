@@ -3,13 +3,10 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 var _ = Describe("WriteBufferStage", func() {
@@ -20,62 +17,46 @@ var _ = Describe("WriteBufferStage", func() {
 	)
 
 	BeforeEach(func() {
-		initialState := State{
+		initialState := state{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
-			DirStageBuf:  queueing.NewBuffer[int]("Cache.DirStageBuf", 4),
+			DirStageBuf:  queueing.MakeBuffer[int](4),
 			DirToBankBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.DirToBankBuf", 4),
+				queueing.MakeBuffer[int](4),
 			},
 			WriteBufferToBankBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.WBToBankBuf", 4),
+				queueing.MakeBuffer[int](4),
 			},
-			MSHRStageBuf:       queueing.NewBuffer[int]("Cache.MSHRStageBuf", 4),
-			WriteBufferBuf:     queueing.NewBuffer[int]("Cache.WriteBufferBuf", 4),
-			DirPipeline:        queueing.NewPipeline[int](4, 0),
-			DirPostPipelineBuf: queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
+			MSHRStageBuf:       queueing.MakeBuffer[int](4),
+			WriteBufferBuf:     queueing.MakeBuffer[int](4),
+			DirPipeline:        queueing.MakePipeline[int](4, 0),
+			DirPostPipelineBuf: queueing.MakeBuffer[int](4),
 			BankPipelines: []queueing.Pipeline[int]{
-				queueing.NewPipeline[int](4, 10),
+				queueing.MakePipeline[int](4, 10),
 			},
 			BankPostPipelineBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("BankPostPipelineBuf", 4),
+				queueing.MakeBuffer[int](4),
 			},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &pipelineMW{}
-		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
-				Log2BlockSize:       6,
-				NumReqPerCycle:      4,
-				WayAssociativity:    4,
-				NumSets:             64,
-				NumBanks:            1,
-				WriteBufferCapacity: 16,
-				MaxInflightFetch:    4,
-				MaxInflightEviction: 4,
-			}).
-			WithResources(Resources{
+		spec := stageTestSpec()
+		spec.WriteBufferCapacity = 16
+		spec.MaxInflightFetch = 4
+		spec.MaxInflightEviction = 4
+		comp := buildStageTestComp(spec,
+			Resources{
+				Storage:             mem.NewStorage(spec.TotalByteSize),
 				AddressToPortMapper: &mem.SinglePortMapper{Port: "DRAM"},
-			}).
-			Build("Cache")
+			},
+			makePorts("Cache", 4))
+		bottomPort = comp.Ports.Bottom
 
-		// The stage resolves the "Bottom" port by name, so the test assigns a
-		// real port (owned by the component) and plugs a noop connection.
-		bottomPort = messaging.NewPort(m.comp, 4, 4, "Cache.Bottom")
-		(&ccNoopConn{}).PlugIn(bottomPort)
-		m.comp.DeclarePort("Bottom")
-		m.comp.AssignPort("Bottom", bottomPort)
-
+		m = comp.Middlewares.Pipeline
 		m.comp.State = initialState
 
-		wb = &writeBufferStage{
-			cache: m,
-		}
-		m.writeBuffer = wb
+		wb = m.writeBuffer
 	})
 
 	It("should do nothing if no transactions", func() {
@@ -87,7 +68,7 @@ var _ = Describe("WriteBufferStage", func() {
 	Context("processing new writeBufferFetch transactions", func() {
 		It("should fetch from bottom", func() {
 			read := memprotocol.ReadReq{}
-			read.ID = m.comp.Simulation().NewID()
+			read.ID = m.comp.NewID()
 			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				Action:       writeBufferFetch,
@@ -121,7 +102,7 @@ var _ = Describe("WriteBufferStage", func() {
 			next.InflightFetchIndices = []int{10, 11, 12, 13}
 
 			read := memprotocol.ReadReq{}
-			read.ID = m.comp.Simulation().NewID()
+			read.ID = m.comp.NewID()
 			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				Action:       writeBufferFetch,
@@ -145,7 +126,7 @@ var _ = Describe("WriteBufferStage", func() {
 	Context("writing evictions", func() {
 		It("should send eviction to bottom", func() {
 			read := memprotocol.ReadReq{}
-			read.ID = m.comp.Simulation().NewID()
+			read.ID = m.comp.NewID()
 			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				EvictingAddr: 0x200,
@@ -192,7 +173,7 @@ var _ = Describe("WriteBufferStage", func() {
 			evictWrite.TrafficClass = "memprotocol.WriteReq"
 
 			read := memprotocol.ReadReq{}
-			read.ID = m.comp.Simulation().NewID()
+			read.ID = m.comp.NewID()
 			read.TrafficClass = "memprotocol.ReadReq"
 			trans := transactionState{
 				HasEvictionWriteReq:  true,

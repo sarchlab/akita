@@ -18,27 +18,27 @@ func TestPageSizeValidation(t *testing.T) {
 	matchingSpec := Definition.DefaultSpec
 	matchingSpec.Log2PageSize = 12 // 4KB pages
 
-	builder := MakeBuilder().
+	builder := Definition.Builder().
 		WithSimulation(sim).
 		WithResources(Resources{PageTable: pageTable}).
-		WithSpec(matchingSpec)
+		WithSpec(matchingSpec).
+		WithPorts(makePorts("MatchingPageSizes", 4096))
 
 	// This should not panic
 	mmu := builder.Build("MatchingPageSizes")
 	if mmu == nil {
 		t.Error("MMU creation should succeed with matching page sizes")
 	}
-	assignPort(sim, mmu, "Top", 4096)
-	assignPort(sim, mmu, "Control", 4)
 
 	// Test case 2: Mismatched page sizes should panic
 	pageTable2 := vm.NewPageTable(12) // 4KB pages
 	mismatchedSpec := Definition.DefaultSpec
 	mismatchedSpec.Log2PageSize = 16 // 64KB pages
-	builder2 := MakeBuilder().
+	builder2 := Definition.Builder().
 		WithSimulation(sim).
 		WithResources(Resources{PageTable: pageTable2}).
-		WithSpec(mismatchedSpec)
+		WithSpec(mismatchedSpec).
+		WithPorts(makePorts("MismatchedPageSizes", 4096))
 
 	// This should panic
 	defer func() {
@@ -53,4 +53,22 @@ func TestPageSizeValidation(t *testing.T) {
 	}()
 
 	builder2.Build("MismatchedPageSizes") // Should panic
+}
+
+// TestPageTableRequired tests that Build panics when no page table is given.
+func TestPageTableRequired(t *testing.T) {
+	sim := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+
+	defer func() {
+		expectedMessage := "mmu: Resources.PageTable is required"
+		if r := recover(); r != expectedMessage {
+			t.Errorf("Expected panic with message '%s', got '%v'",
+				expectedMessage, r)
+		}
+	}()
+
+	Definition.Builder().
+		WithSimulation(sim).
+		WithPorts(makePorts("NoPageTable", 4096)).
+		Build("NoPageTable") // Should panic
 }

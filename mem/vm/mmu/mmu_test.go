@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -26,22 +27,13 @@ func (c *noopConn) Unplug(_ messaging.Port)          {}
 func (c *noopConn) NotifyAvailable(_ messaging.Port) {}
 func (c *noopConn) NotifySend()                      {}
 
-// assignPort builds a port with the given buffer size using the same simulation
-// the component was built with, and assigns it to the component's declared port
-// of the same name.
-func assignPort(
-	sim timing.Simulation,
-	comp *Comp,
-	name string,
-	bufSize int,
-) messaging.Port {
-	p := modeling.MakePortBuilder().
-		WithSimulation(sim).
-		WithComponent(comp).
-		WithSpec(modeling.PortSpec{BufSize: bufSize}).
-		Build(name)
-	comp.AssignPort(name, p)
-	return p
+// makePorts creates the ports of the MMU named name, with the given Top
+// buffer size and a Control buffer size of 4.
+func makePorts(name string, topBufSize int) Ports {
+	return Ports{
+		Top:     messaging.NewPort(name+".Top", topBufSize, topBufSize),
+		Control: messaging.NewPort(name+".Control", 4, 4),
+	}
 }
 
 var _ = Describe("MMU", func() {
@@ -59,19 +51,19 @@ var _ = Describe("MMU", func() {
 	// shared page table, and plugs noopConns so its ports can be driven.
 	build := func(topBufSize int) {
 
-		mmuComp = MakeBuilder().
+		mmuComp = Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(Definition.DefaultSpec).
+			WithPorts(makePorts("MMU", topBufSize)).
 			Build("MMU")
 
-		topPort = assignPort(sim, mmuComp, "Top", topBufSize)
-		assignPort(sim, mmuComp, "Control", 4)
+		topPort = mmuComp.Ports.Top
 
 		(&noopConn{}).PlugIn(topPort)
-		(&noopConn{}).PlugIn(mmuComp.GetPortByName("Control"))
+		(&noopConn{}).PlugIn(mmuComp.Ports.Control)
 
-		translationMWRef = mmuComp.Middlewares()[1].(*translationMW)
+		translationMWRef = mmuComp.Middlewares.Translation
 	}
 
 	BeforeEach(func() {
@@ -102,7 +94,7 @@ var _ = Describe("MMU", func() {
 		It("should stall parse from top "+
 			"if MMU is servicing max requests",
 			func() {
-				mmuComp.State = State{
+				mmuComp.State = state{
 					WalkingTranslations: make([]transactionState, 16),
 				}
 
@@ -114,7 +106,7 @@ var _ = Describe("MMU", func() {
 
 	Context("walk page table", func() {
 		It("should reduce translation cycles", func() {
-			mmuComp.State = State{
+			mmuComp.State = state{
 				WalkingTranslations: []transactionState{
 					{
 						ReqID:     sim.NewID(),
@@ -144,7 +136,7 @@ var _ = Describe("MMU", func() {
 			}
 			pageTable.Insert(page)
 
-			mmuComp.State = State{
+			mmuComp.State = state{
 				WalkingTranslations: []transactionState{
 					{
 						ReqID:     sim.NewID(),
@@ -189,7 +181,7 @@ var _ = Describe("MMU", func() {
 			dummy.TrafficClass = "vmprotocol.TranslationRsp"
 			topPort.Send(dummy)
 
-			mmuComp.State = State{
+			mmuComp.State = state{
 				WalkingTranslations: []transactionState{
 					{
 						ReqID:     sim.NewID(),
@@ -227,17 +219,17 @@ var _ = Describe("MMU Integration", func() {
 
 		pageTable = vm.NewPageTable(12)
 
-		mmuComp = MakeBuilder().
+		mmuComp = Definition.Builder().
 			WithSimulation(sim).
 			WithResources(Resources{PageTable: pageTable}).
 			WithSpec(Definition.DefaultSpec).
+			WithPorts(makePorts("MMU", 4096)).
 			Build("MMU")
 
-		topPort = assignPort(sim, mmuComp, "Top", 4096)
-		assignPort(sim, mmuComp, "Control", 4)
+		topPort = mmuComp.Ports.Top
 		(&noopConn{}).PlugIn(topPort)
 
-		agentPort = messaging.NewPort(nil, 4, 4, "Agent.Top")
+		agentPort = messaging.NewPort("Agent.Top", 4, 4)
 		(&noopConn{}).PlugIn(agentPort)
 	})
 
@@ -265,7 +257,7 @@ var _ = Describe("MMU Integration", func() {
 		// Drive enough ticks for the request to be parsed, walked, and
 		// answered (default latency is 10).
 		for i := 0; i < 20; i++ {
-			mmuComp.Tick()
+			modelingtest.Tick(mmuComp)
 		}
 
 		rspI, _ := topPort.RetrieveOutgoing()

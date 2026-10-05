@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -44,20 +45,19 @@ var _ = Describe("MMUCache control behavior", func() {
 		spec.NumReqPerCycle = 4
 		spec.LatencyPerLevel = 100
 
-		comp = MakeBuilder().
+		comp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(spec).
 			WithResources(Resources{
 				LowModulePort: messaging.RemotePort("LowModule"),
 				UpModulePort:  messaging.RemotePort("UpModule"),
 			}).
+			WithPorts(defaultPorts("MMUCache")).
 			Build("MMUCache")
 
-		assignDefaultPorts(sim, comp)
-
-		topPort = comp.GetPortByName("Top")
-		bottomPort = comp.GetPortByName("Bottom")
-		controlPort = comp.GetPortByName("Control")
+		topPort = comp.Ports.Top
+		bottomPort = comp.Ports.Bottom
+		controlPort = comp.Ports.Control
 		for _, p := range []messaging.Port{topPort, bottomPort, controlPort} {
 			(&noopConn{}).PlugIn(p)
 		}
@@ -116,7 +116,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		// itself admits no new Top traffic).
 		forwarded := []vmprotocol.TranslationReq{}
 		for i := 0; i < 256 && len(forwarded) < n; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := bottomPort.RetrieveOutgoing()
 				if !ok {
@@ -135,7 +135,7 @@ var _ = Describe("MMUCache control behavior", func() {
 
 		// Let the Drain take effect.
 		for i := 0; i < 8 && comp.State.CurrentState != mmuCacheStateDrain; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 		}
 		Expect(comp.State.CurrentState).To(Equal(mmuCacheStateDrain))
 
@@ -143,7 +143,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		// forward), and with the walks still outstanding Drain must NOT ack.
 		topPort.Deliver(makeTranslationReq(0x9000))
 		for range 8 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			_, present0 := controlPort.RetrieveOutgoing()
 			Expect(present0).To(BeFalse())
 			_, present1 := bottomPort.RetrieveOutgoing()
@@ -164,7 +164,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		var drainRsp memcontrolprotocol.Rsp
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := topPort.RetrieveOutgoing()
 				if !ok {
@@ -201,7 +201,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		var fwd vmprotocol.TranslationReq
 		gotFwd := false
 		for i := 0; i < 64 && !gotFwd; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			if out, ok := bottomPort.RetrieveOutgoing(); ok {
 				fwd, gotFwd = out.(vmprotocol.TranslationReq)
 			}
@@ -214,7 +214,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		controlPort.Deliver(reset)
 		resetAcked := false
 		for i := 0; i < 64 && !resetAcked; i++ {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			if out, ok := controlPort.RetrieveOutgoing(); ok {
 				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
 					rsp.Command == memcontrolprotocol.CmdReset {
@@ -230,7 +230,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		// the fix this repopulated the reset table and replied upward.
 		bottomPort.Deliver(makeBottomRsp(fwd))
 		for range 16 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			_, present4 := topPort.RetrieveOutgoing()
 			Expect(present4).To(BeFalse())
 		}
@@ -242,7 +242,7 @@ var _ = Describe("MMUCache control behavior", func() {
 		topPort.Deliver(makeTranslationReq(0x1000))
 
 		for range 5 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 		}
 
 		// The lookup is neither consumed nor forwarded while paused.
@@ -263,7 +263,7 @@ var _ = Describe("MMUCache control behavior", func() {
 			var rsp memcontrolprotocol.Rsp
 			found := false
 			for i := 0; i < 64 && !found; i++ {
-				comp.Tick()
+				modelingtest.Tick(comp)
 				if out, ok := controlPort.RetrieveOutgoing(); ok {
 					rsp, found = out.(memcontrolprotocol.Rsp)
 				}
@@ -299,7 +299,7 @@ var _ = Describe("MMUCache control behavior", func() {
 
 		var rsps []memcontrolprotocol.Rsp
 		for range 32 {
-			comp.Tick()
+			modelingtest.Tick(comp)
 			for {
 				out, ok := controlPort.RetrieveOutgoing()
 				if !ok {

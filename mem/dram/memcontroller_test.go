@@ -4,7 +4,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/timing"
@@ -12,10 +11,9 @@ import (
 
 var _ = Describe("Address Operations", func() {
 	It("should map address", func() {
-		b := MakeBuilder()
-		spec := b.buildSpec()
+		spec := Definition.DefaultSpec
 
-		loc := mapAddress(&spec, 0)
+		loc := newAddrMapping(&spec).mapAddress(0)
 		Expect(loc.Channel).To(Equal(uint64(0)))
 		Expect(loc.Rank).To(Equal(uint64(0)))
 	})
@@ -25,7 +23,7 @@ var _ = Describe("Transaction Splitting", func() {
 	var ids timing.Simulation
 	BeforeEach(func() { ids = modeling.NewStandaloneSimulation(timing.NewSerialEngine()) })
 	It("should split a transaction into sub-transactions", func() {
-		spec := &Spec{Log2AccessUnitSize: 6} // 64 bytes
+		spec := &Spec{BusWidth: 64, BurstLength: 8} // 64-byte access unit
 		trans := &transactionState{
 			HasRead: true,
 			ReadMsg: memprotocol.ReadReq{},
@@ -33,7 +31,7 @@ var _ = Describe("Transaction Splitting", func() {
 		trans.ReadMsg.Address = 0x100
 		trans.ReadMsg.AccessByteSize = 128
 
-		splitTransaction(ids, spec, trans)
+		splitTransaction(ids.NewID, spec, trans)
 		// 128 bytes at 64-byte units = 2 sub-transactions
 		Expect(trans.SubTransactions).To(HaveLen(2))
 		Expect(trans.SubTransactions[0].Address).To(Equal(uint64(0x100)))
@@ -41,7 +39,7 @@ var _ = Describe("Transaction Splitting", func() {
 	})
 
 	It("should align to unit boundaries", func() {
-		spec := &Spec{Log2AccessUnitSize: 6} // 64 bytes
+		spec := &Spec{BusWidth: 64, BurstLength: 8} // 64-byte access unit
 		trans := &transactionState{
 			HasRead: true,
 			ReadMsg: memprotocol.ReadReq{},
@@ -49,7 +47,7 @@ var _ = Describe("Transaction Splitting", func() {
 		trans.ReadMsg.Address = 0x110 // Not aligned
 		trans.ReadMsg.AccessByteSize = 4
 
-		splitTransaction(ids, spec, trans)
+		splitTransaction(ids.NewID, spec, trans)
 		Expect(trans.SubTransactions).To(HaveLen(1))
 		Expect(trans.SubTransactions[0].Address).To(Equal(uint64(0x100)))
 	})
@@ -101,7 +99,7 @@ var _ = Describe("Bank Operations", func() {
 	})
 
 	It("should tick banks and count down timing gaps", func() {
-		state := &State{
+		st := &state{
 			BankStates: bankStatesFlat{
 				NumRanks:      1,
 				NumBankGroups: 1,
@@ -120,14 +118,14 @@ var _ = Describe("Bank Operations", func() {
 			},
 		}
 
-		progress := tickBanks(state)
+		progress := tickBanks(st)
 		Expect(progress).To(BeTrue())
-		bs := &state.BankStates.Entries[0].Data
+		bs := &st.BankStates.Entries[0].Data
 		Expect(bs.CyclesToCmdAvailable[cmdKindRead]).To(Equal(2))
 	})
 
 	It("should complete pending reads/writes and mark subtrans done", func() {
-		state := &State{
+		st := &state{
 			TickCount: 100,
 			Transactions: []transactionState{
 				{
@@ -146,27 +144,27 @@ var _ = Describe("Bank Operations", func() {
 			},
 		}
 
-		completed := processPendingCompletions(state)
+		completed := processPendingCompletions(st)
 
 		Expect(completed).NotTo(BeEmpty())
-		Expect(state.PendingCompletions).To(BeEmpty())
-		Expect(state.Transactions[0].SubTransactions[0].Completed).To(BeTrue())
+		Expect(st.PendingCompletions).To(BeEmpty())
+		Expect(st.Transactions[0].SubTransactions[0].Completed).To(BeTrue())
 	})
 })
 
 var _ = Describe("Queue Operations", func() {
 	It("should check if sub-trans queue can push", func() {
-		state := &State{
+		st := &state{
 			SubTransQueue: subTransQueueState{
 				Entries: make([]subTransRef, 5),
 			},
 		}
-		Expect(canPushSubTrans(state, 3, 10)).To(BeTrue())
-		Expect(canPushSubTrans(state, 6, 10)).To(BeFalse())
+		Expect(canPushSubTrans(st, 3, 10)).To(BeTrue())
+		Expect(canPushSubTrans(st, 6, 10)).To(BeFalse())
 	})
 
 	It("should push sub-transactions", func() {
-		state := &State{
+		st := &state{
 			Transactions: []transactionState{
 				{
 					SubTransactions: []subTransState{
@@ -180,9 +178,9 @@ var _ = Describe("Queue Operations", func() {
 			},
 		}
 
-		pushSubTrans(state, 0)
-		Expect(state.SubTransQueue.Entries).To(HaveLen(2))
-		Expect(state.SubTransQueue.Entries[0]).To(Equal(
+		pushSubTrans(st, 0)
+		Expect(st.SubTransQueue.Entries).To(HaveLen(2))
+		Expect(st.SubTransQueue.Entries[0]).To(Equal(
 			subTransRef{TxID: 0, SubIndex: 0}))
 	})
 })
@@ -191,33 +189,22 @@ var _ = Describe("DRAM Integration", func() {
 	var (
 		engine  timing.Engine
 		sim     timing.Simulation
-		memCtrl *modeling.Component[Spec, State, Resources]
+		memCtrl *Comp
 	)
 
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		memCtrl = MakeBuilder().
-			WithSimulation(sim).
-			Build("MemCtrl")
-
-		for _, name := range []string{"Top", "Control"} {
-			p := modeling.MakePortBuilder().
-				WithSimulation(sim).
-				WithComponent(memCtrl).
-				WithSpec(modeling.PortSpec{BufSize: 1024}).
-				Build(name)
-			memCtrl.AssignPort(name, p)
-		}
+		memCtrl = buildDRAM(sim, Definition.DefaultSpec, "MemCtrl", 1024)
 	})
 
 	It("should read and write via direct connection", func() {
-		srcPort := messaging.NewPort(nil, 1024, 1024, "Src.Top")
+		srcPort := newDriverPort("Src.Top", 1024)
 		conn := directconnection.MakeBuilder().
 			WithSimulation(sim).
 			Build("Conn")
-		topPort := memCtrl.GetPortByName("Top")
+		topPort := memCtrl.Ports.Top
 		conn.PlugIn(topPort)
 		conn.PlugIn(srcPort)
 
@@ -281,12 +268,9 @@ var _ = Describe("Predefined Specs", func() {
 	It("should build with DDR4 spec", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(DDR4Spec).
-			Build("DDR4Ctrl")
+		ctrl := buildDRAM(sim, DDR4Spec, "DDR4Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
-		spec := ctrl.Spec()
+		spec := ctrl.Spec
 		Expect(spec.BurstLength).To(Equal(8))
 		Expect(spec.NumBankGroup).To(Equal(4))
 		Expect(spec.NumBank).To(Equal(4))
@@ -298,12 +282,9 @@ var _ = Describe("Predefined Specs", func() {
 	It("should build with DDR5 spec", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(DDR5Spec).
-			Build("DDR5Ctrl")
+		ctrl := buildDRAM(sim, DDR5Spec, "DDR5Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
-		spec := ctrl.Spec()
+		spec := ctrl.Spec
 		Expect(spec.BurstLength).To(Equal(16))
 		Expect(spec.NumBankGroup).To(Equal(8))
 		Expect(spec.NumBank).To(Equal(4))
@@ -314,12 +295,9 @@ var _ = Describe("Predefined Specs", func() {
 	It("should build with HBM2 spec", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(HBM2Spec).
-			Build("HBM2Ctrl")
+		ctrl := buildDRAM(sim, HBM2Spec, "HBM2Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
-		spec := ctrl.Spec()
+		spec := ctrl.Spec
 		Expect(spec.BurstLength).To(Equal(4))
 		Expect(spec.NumBankGroup).To(Equal(4))
 		Expect(spec.NumBank).To(Equal(4))
@@ -331,12 +309,9 @@ var _ = Describe("Predefined Specs", func() {
 	It("should build with HBM3 spec", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(HBM3Spec).
-			Build("HBM3Ctrl")
+		ctrl := buildDRAM(sim, HBM3Spec, "HBM3Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
-		spec := ctrl.Spec()
+		spec := ctrl.Spec
 		Expect(spec.BurstLength).To(Equal(8))
 		Expect(spec.NumBankGroup).To(Equal(4))
 		Expect(spec.BusWidth).To(Equal(64))
@@ -347,12 +322,9 @@ var _ = Describe("Predefined Specs", func() {
 	It("should build with GDDR6 spec", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(GDDR6Spec).
-			Build("GDDR6Ctrl")
+		ctrl := buildDRAM(sim, GDDR6Spec, "GDDR6Ctrl", 16)
 		Expect(ctrl).NotTo(BeNil())
-		spec := ctrl.Spec()
+		spec := ctrl.Spec
 		Expect(spec.BurstLength).To(Equal(16))
 		Expect(spec.NumBankGroup).To(Equal(4))
 		Expect(spec.NumBank).To(Equal(4))
@@ -454,17 +426,16 @@ var _ = Describe("Protocol Enums", func() {
 
 var _ = Describe("Open Page Policy", func() {
 	var (
-		ids   timing.Simulation
-		spec  *Spec
-		state *State
+		ids  timing.Simulation
+		spec *Spec
+		st   *state
 	)
 
 	BeforeEach(func() {
 		ids = modeling.NewStandaloneSimulation(timing.NewSerialEngine())
-		b := MakeBuilder()
-		builtSpec := b.buildSpec()
-		spec = &builtSpec
-		state = &State{
+		defaultSpec := Definition.DefaultSpec
+		spec = &defaultSpec
+		st = &state{
 			Transactions: []transactionState{
 				{
 					ID:      0,
@@ -505,7 +476,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyOpen
 
 		ref := subTransRef{TxID: 0, SubIndex: 0}
-		cmd := createOpenPageCommand(ids, spec, state, ref)
+		cmd := createOpenPageCommand(ids.NewID, spec, st, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindRead)))
@@ -515,7 +486,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyOpen
 
 		ref := subTransRef{TxID: 1, SubIndex: 0}
-		cmd := createOpenPageCommand(ids, spec, state, ref)
+		cmd := createOpenPageCommand(ids.NewID, spec, st, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindWrite)))
@@ -525,7 +496,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyClose
 
 		ref := subTransRef{TxID: 0, SubIndex: 0}
-		cmd := createClosePageCommand(ids, spec, state, ref)
+		cmd := createClosePageCommand(ids.NewID, spec, st, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindReadPrecharge)))
@@ -535,7 +506,7 @@ var _ = Describe("Open Page Policy", func() {
 		spec.PagePolicy = PagePolicyClose
 
 		ref := subTransRef{TxID: 1, SubIndex: 0}
-		cmd := createClosePageCommand(ids, spec, state, ref)
+		cmd := createClosePageCommand(ids.NewID, spec, st, ref)
 
 		Expect(cmd).NotTo(BeNil())
 		Expect(cmd.Kind).To(Equal(int(cmdKindWritePrecharge)))
@@ -543,7 +514,7 @@ var _ = Describe("Open Page Policy", func() {
 
 	It("should keep bank open after Read command in open-page mode", func() {
 		// Set up a bank that is Open at row 5
-		bs := &state.BankStates.Entries[0].Data
+		bs := &st.BankStates.Entries[0].Data
 		bs.State = int(bankStateOpen)
 		bs.OpenRow = 5
 
@@ -556,7 +527,7 @@ var _ = Describe("Open Page Policy", func() {
 			cmdKindRead: 10,
 		}
 
-		startCommand(cmdCycles, state, bs, cmd)
+		startCommand(cmdCycles, st, bs, cmd)
 
 		// Bank should remain open
 		Expect(bankStateKind(bs.State)).To(Equal(bankStateOpen))
@@ -564,7 +535,7 @@ var _ = Describe("Open Page Policy", func() {
 	})
 
 	It("should keep bank open after Write command in open-page mode", func() {
-		bs := &state.BankStates.Entries[0].Data
+		bs := &st.BankStates.Entries[0].Data
 		bs.State = int(bankStateOpen)
 		bs.OpenRow = 7
 
@@ -577,7 +548,7 @@ var _ = Describe("Open Page Policy", func() {
 			cmdKindWrite: 10,
 		}
 
-		startCommand(cmdCycles, state, bs, cmd)
+		startCommand(cmdCycles, st, bs, cmd)
 
 		// Bank should remain open
 		Expect(bankStateKind(bs.State)).To(Equal(bankStateOpen))
@@ -585,7 +556,7 @@ var _ = Describe("Open Page Policy", func() {
 	})
 
 	It("should close bank after ReadPrecharge command", func() {
-		bs := &state.BankStates.Entries[0].Data
+		bs := &st.BankStates.Entries[0].Data
 		bs.State = int(bankStateOpen)
 		bs.OpenRow = 5
 
@@ -598,14 +569,14 @@ var _ = Describe("Open Page Policy", func() {
 			cmdKindReadPrecharge: 10,
 		}
 
-		startCommand(cmdCycles, state, bs, cmd)
+		startCommand(cmdCycles, st, bs, cmd)
 
 		// Bank should be closed
 		Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
 	})
 
 	It("should close bank after WritePrecharge command", func() {
-		bs := &state.BankStates.Entries[0].Data
+		bs := &st.BankStates.Entries[0].Data
 		bs.State = int(bankStateOpen)
 		bs.OpenRow = 5
 
@@ -618,7 +589,7 @@ var _ = Describe("Open Page Policy", func() {
 			cmdKindWritePrecharge: 10,
 		}
 
-		startCommand(cmdCycles, state, bs, cmd)
+		startCommand(cmdCycles, st, bs, cmd)
 
 		// Bank should be closed
 		Expect(bankStateKind(bs.State)).To(Equal(bankStateClosed))
@@ -627,67 +598,67 @@ var _ = Describe("Open Page Policy", func() {
 	It("should select command creation based on page policy in tickSubTransQueue", func() {
 		// Test with open-page policy
 		spec.PagePolicy = PagePolicyOpen
-		state.SubTransQueue.Entries = []subTransRef{
+		st.SubTransQueue.Entries = []subTransRef{
 			{TxID: 0, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(ids, spec, state)
+		progress := tickSubTransQueue(ids.NewID, spec, st)
 		Expect(progress).To(BeTrue())
 
 		// The command in the queue should be CmdKindRead (not ReadPrecharge)
-		Expect(state.CommandQueues.Entries).To(HaveLen(1))
-		Expect(state.CommandQueues.Entries[0].Command.Kind).To(
+		Expect(st.CommandQueues.Entries).To(HaveLen(1))
+		Expect(st.CommandQueues.Entries[0].Command.Kind).To(
 			Equal(int(cmdKindRead)))
 	})
 
 	It("should use close-page commands when PagePolicyClose in tickSubTransQueue", func() {
 		spec.PagePolicy = PagePolicyClose
-		state.SubTransQueue.Entries = []subTransRef{
+		st.SubTransQueue.Entries = []subTransRef{
 			{TxID: 0, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(ids, spec, state)
+		progress := tickSubTransQueue(ids.NewID, spec, st)
 		Expect(progress).To(BeTrue())
 
 		// The command in the queue should be CmdKindReadPrecharge
-		Expect(state.CommandQueues.Entries).To(HaveLen(1))
-		Expect(state.CommandQueues.Entries[0].Command.Kind).To(
+		Expect(st.CommandQueues.Entries).To(HaveLen(1))
+		Expect(st.CommandQueues.Entries[0].Command.Kind).To(
 			Equal(int(cmdKindReadPrecharge)))
 	})
 
 	It("should use Write for write transaction with open-page in tickSubTransQueue", func() {
 		spec.PagePolicy = PagePolicyOpen
-		state.SubTransQueue.Entries = []subTransRef{
+		st.SubTransQueue.Entries = []subTransRef{
 			{TxID: 1, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(ids, spec, state)
+		progress := tickSubTransQueue(ids.NewID, spec, st)
 		Expect(progress).To(BeTrue())
 
-		Expect(state.CommandQueues.Entries).To(HaveLen(1))
-		Expect(state.CommandQueues.Entries[0].Command.Kind).To(
+		Expect(st.CommandQueues.Entries).To(HaveLen(1))
+		Expect(st.CommandQueues.Entries[0].Command.Kind).To(
 			Equal(int(cmdKindWrite)))
 	})
 
 	It("should use WritePrecharge for write transaction with close-page in tickSubTransQueue", func() {
 		spec.PagePolicy = PagePolicyClose
-		state.SubTransQueue.Entries = []subTransRef{
+		st.SubTransQueue.Entries = []subTransRef{
 			{TxID: 1, SubIndex: 0},
 		}
 
-		progress := tickSubTransQueue(ids, spec, state)
+		progress := tickSubTransQueue(ids.NewID, spec, st)
 		Expect(progress).To(BeTrue())
 
-		Expect(state.CommandQueues.Entries).To(HaveLen(1))
-		Expect(state.CommandQueues.Entries[0].Command.Kind).To(
+		Expect(st.CommandQueues.Entries).To(HaveLen(1))
+		Expect(st.CommandQueues.Entries[0].Command.Kind).To(
 			Equal(int(cmdKindWritePrecharge)))
 	})
 })
 
 var _ = Describe("FR-FCFS Scheduling", func() {
 	var (
-		spec  *Spec
-		state *State
+		spec *Spec
+		st   *state
 	)
 
 	BeforeEach(func() {
@@ -697,7 +668,7 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 			NumBank:              2,
 			CommandQueueCapacity: 16,
 		}
-		state = &State{
+		st = &state{
 			CommandQueues: commandQueueState{
 				NumQueues: 1,
 				Entries:   []queueEntry{},
@@ -708,7 +679,7 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 
 	It("should prioritize row-buffer hits over misses", func() {
 		// Open bank 0 at row 5
-		bs0 := findBankState(&state.BankStates, 0, 0, 0)
+		bs0 := findBankState(&st.BankStates, 0, 0, 0)
 		bs0.State = int(bankStateOpen)
 		bs0.OpenRow = 5
 		bs0.CyclesToCmdAvailable = [numCmdKind]int{}
@@ -731,12 +702,12 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 		}
 
 		// Add A first (older), then B (newer)
-		state.CommandQueues.Entries = []queueEntry{
+		st.CommandQueues.Entries = []queueEntry{
 			{QueueIndex: 0, Command: cmdA},
 			{QueueIndex: 0, Command: cmdB},
 		}
 
-		result := getCommandToIssue(spec, state)
+		result := getCommandToIssue(spec, st)
 		Expect(result).NotTo(BeNil())
 		// Should pick the hit (row 5) even though it was added second
 		Expect(result.Location.Row).To(Equal(uint64(5)))
@@ -744,9 +715,9 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 
 	It("should use FCFS when no row-buffer hits", func() {
 		// Both banks closed — no row-buffer hits possible
-		bs0 := findBankState(&state.BankStates, 0, 0, 0)
+		bs0 := findBankState(&st.BankStates, 0, 0, 0)
 		bs0.CyclesToCmdAvailable = [numCmdKind]int{}
-		bs1 := findBankState(&state.BankStates, 0, 0, 1)
+		bs1 := findBankState(&st.BankStates, 0, 0, 1)
 		bs1.CyclesToCmdAvailable = [numCmdKind]int{}
 
 		cmdA := commandState{
@@ -764,12 +735,12 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 			},
 		}
 
-		state.CommandQueues.Entries = []queueEntry{
+		st.CommandQueues.Entries = []queueEntry{
 			{QueueIndex: 0, Command: cmdA},
 			{QueueIndex: 0, Command: cmdB},
 		}
 
-		result := getCommandToIssue(spec, state)
+		result := getCommandToIssue(spec, st)
 		Expect(result).NotTo(BeNil())
 		// For closed banks, getRequiredCommandKind returns Activate.
 		// The ready command should be an Activate for the older command.
@@ -778,14 +749,14 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 	})
 
 	It("should handle empty queue", func() {
-		state.CommandQueues.Entries = []queueEntry{}
+		st.CommandQueues.Entries = []queueEntry{}
 
-		result := getCommandToIssue(spec, state)
+		result := getCommandToIssue(spec, st)
 		Expect(result).To(BeNil())
 	})
 
 	It("should return nil when all commands have timing constraints", func() {
-		bs0 := findBankState(&state.BankStates, 0, 0, 0)
+		bs0 := findBankState(&st.BankStates, 0, 0, 0)
 		bs0.CyclesToCmdAvailable = [numCmdKind]int{
 			cmdKindActivate:      5,
 			cmdKindReadPrecharge: 5,
@@ -800,20 +771,20 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 				Rank: 0, BankGroup: 0, Bank: 0, Row: 10,
 			},
 		}
-		state.CommandQueues.Entries = []queueEntry{
+		st.CommandQueues.Entries = []queueEntry{
 			{QueueIndex: 0, Command: cmd},
 		}
 
-		result := getCommandToIssue(spec, state)
+		result := getCommandToIssue(spec, st)
 		Expect(result).To(BeNil())
 	})
 })
 
 var _ = Describe("Read/Write Queue Separation", func() {
 	var (
-		ids   timing.Simulation
-		spec  *Spec
-		state *State
+		ids  timing.Simulation
+		spec *Spec
+		st   *state
 	)
 
 	BeforeEach(func() {
@@ -828,7 +799,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			WriteHighWatermark:   4,
 			WriteLowWatermark:    2,
 		}
-		state = &State{
+		st = &state{
 			CommandQueues: commandQueueState{
 				NumQueues: 1,
 				Entries:   []queueEntry{},
@@ -838,7 +809,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 	})
 
 	It("should count write commands", func() {
-		state.CommandQueues.Entries = []queueEntry{
+		st.CommandQueues.Entries = []queueEntry{
 			{QueueIndex: 0, Command: commandState{Kind: int(cmdKindRead)}, IsWrite: false},
 			{QueueIndex: 0, Command: commandState{Kind: int(cmdKindWrite)}, IsWrite: true},
 			{QueueIndex: 0, Command: commandState{Kind: int(cmdKindWritePrecharge)}, IsWrite: true},
@@ -846,19 +817,19 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			{QueueIndex: 0, Command: commandState{Kind: int(cmdKindWrite)}, IsWrite: true},
 		}
 
-		count := countWriteCommands(state)
+		count := countWriteCommands(st)
 		Expect(count).To(Equal(3))
 	})
 
 	It("should count zero writes in empty queue", func() {
-		count := countWriteCommands(state)
+		count := countWriteCommands(st)
 		Expect(count).To(Equal(0))
 	})
 
 	It("should enter drain mode at high watermark", func() {
 		// Set up 4 open banks, each with a write command that's a row hit
 		for i := range 4 {
-			bs := findBankState(&state.BankStates, 0, 0, i)
+			bs := findBankState(&st.BankStates, 0, 0, i)
 			bs.State = int(bankStateOpen)
 			bs.OpenRow = uint64(i)
 			bs.CyclesToCmdAvailable = [numCmdKind]int{}
@@ -866,8 +837,8 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 		// Add 4 write commands (hits high watermark of 4)
 		for i := range 4 {
-			state.CommandQueues.Entries = append(
-				state.CommandQueues.Entries,
+			st.CommandQueues.Entries = append(
+				st.CommandQueues.Entries,
 				queueEntry{
 					QueueIndex: 0,
 					Command: commandState{
@@ -880,29 +851,29 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			)
 		}
 
-		Expect(state.CommandQueues.WriteDrainMode).To(BeFalse())
+		Expect(st.CommandQueues.WriteDrainMode).To(BeFalse())
 
 		// getCommandToIssue should trigger drain mode
-		result := getCommandToIssue(spec, state)
+		result := getCommandToIssue(spec, st)
 		Expect(result).NotTo(BeNil())
-		Expect(state.CommandQueues.WriteDrainMode).To(BeTrue())
+		Expect(st.CommandQueues.WriteDrainMode).To(BeTrue())
 	})
 
 	It("should exit drain mode at low watermark", func() {
 		// Start in drain mode with exactly 2 writes (the low watermark)
-		state.CommandQueues.WriteDrainMode = true
+		st.CommandQueues.WriteDrainMode = true
 
-		bs0 := findBankState(&state.BankStates, 0, 0, 0)
+		bs0 := findBankState(&st.BankStates, 0, 0, 0)
 		bs0.State = int(bankStateOpen)
 		bs0.OpenRow = 1
 		bs0.CyclesToCmdAvailable = [numCmdKind]int{}
 
-		bs1 := findBankState(&state.BankStates, 0, 0, 1)
+		bs1 := findBankState(&st.BankStates, 0, 0, 1)
 		bs1.State = int(bankStateOpen)
 		bs1.OpenRow = 2
 		bs1.CyclesToCmdAvailable = [numCmdKind]int{}
 
-		state.CommandQueues.Entries = []queueEntry{
+		st.CommandQueues.Entries = []queueEntry{
 			{
 				QueueIndex: 0,
 				Command: commandState{
@@ -924,9 +895,9 @@ var _ = Describe("Read/Write Queue Separation", func() {
 		}
 
 		// 2 writes == low watermark, so drain mode should be exited
-		result := getCommandToIssue(spec, state)
+		result := getCommandToIssue(spec, st)
 		Expect(result).NotTo(BeNil())
-		Expect(state.CommandQueues.WriteDrainMode).To(BeFalse())
+		Expect(st.CommandQueues.WriteDrainMode).To(BeFalse())
 	})
 
 	It("should respect separate read/write queue capacities", func() {
@@ -937,8 +908,8 @@ var _ = Describe("Read/Write Queue Separation", func() {
 				Kind:     int(cmdKindWritePrecharge),
 				Location: location{Rank: 0, BankGroup: 0, Bank: uint64(i)},
 			}
-			Expect(canAcceptCommand(state, cmd, spec)).To(BeTrue())
-			acceptCommand(state, cmd)
+			Expect(canAcceptCommand(st, cmd, spec)).To(BeTrue())
+			acceptCommand(st, cmd)
 		}
 
 		// One more write should be rejected
@@ -947,7 +918,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
-		Expect(canAcceptCommand(state, extraWrite, spec)).To(BeFalse())
+		Expect(canAcceptCommand(st, extraWrite, spec)).To(BeFalse())
 
 		// But a read should still be accepted
 		readCmd := &commandState{
@@ -955,7 +926,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
-		Expect(canAcceptCommand(state, readCmd, spec)).To(BeTrue())
+		Expect(canAcceptCommand(st, readCmd, spec)).To(BeTrue())
 	})
 
 	It("should respect separate read queue capacity", func() {
@@ -966,8 +937,8 @@ var _ = Describe("Read/Write Queue Separation", func() {
 				Kind:     int(cmdKindReadPrecharge),
 				Location: location{Rank: 0, BankGroup: 0, Bank: uint64(i)},
 			}
-			Expect(canAcceptCommand(state, cmd, spec)).To(BeTrue())
-			acceptCommand(state, cmd)
+			Expect(canAcceptCommand(st, cmd, spec)).To(BeTrue())
+			acceptCommand(st, cmd)
 		}
 
 		// One more read should be rejected
@@ -976,7 +947,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
-		Expect(canAcceptCommand(state, extraRead, spec)).To(BeFalse())
+		Expect(canAcceptCommand(st, extraRead, spec)).To(BeFalse())
 
 		// But a write should still be accepted
 		writeCmd := &commandState{
@@ -984,7 +955,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
-		Expect(canAcceptCommand(state, writeCmd, spec)).To(BeTrue())
+		Expect(canAcceptCommand(st, writeCmd, spec)).To(BeTrue())
 	})
 
 	It("should fall back to unified capacity when sizes are 0", func() {
@@ -999,8 +970,8 @@ var _ = Describe("Read/Write Queue Separation", func() {
 				Kind:     int(cmdKindReadPrecharge),
 				Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 			}
-			Expect(canAcceptCommand(state, cmd, spec)).To(BeTrue())
-			acceptCommand(state, cmd)
+			Expect(canAcceptCommand(st, cmd, spec)).To(BeTrue())
+			acceptCommand(st, cmd)
 		}
 
 		// Both reads and writes should be rejected
@@ -1009,14 +980,14 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
-		Expect(canAcceptCommand(state, readCmd, spec)).To(BeFalse())
+		Expect(canAcceptCommand(st, readCmd, spec)).To(BeFalse())
 
 		writeCmd := &commandState{
 			ID:       ids.NewID(),
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0, BankGroup: 0, Bank: 0},
 		}
-		Expect(canAcceptCommand(state, writeCmd, spec)).To(BeFalse())
+		Expect(canAcceptCommand(st, writeCmd, spec)).To(BeFalse())
 	})
 
 	It("should identify write commands correctly", func() {
@@ -1042,16 +1013,16 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			Kind:     int(cmdKindWritePrecharge),
 			Location: location{Rank: 0},
 		}
-		acceptCommand(state, writeCmd)
-		Expect(state.CommandQueues.Entries[0].IsWrite).To(BeTrue())
+		acceptCommand(st, writeCmd)
+		Expect(st.CommandQueues.Entries[0].IsWrite).To(BeTrue())
 
 		readCmd := &commandState{
 			ID:       ids.NewID(),
 			Kind:     int(cmdKindReadPrecharge),
 			Location: location{Rank: 0},
 		}
-		acceptCommand(state, readCmd)
-		Expect(state.CommandQueues.Entries[1].IsWrite).To(BeFalse())
+		acceptCommand(st, readCmd)
+		Expect(st.CommandQueues.Entries[1].IsWrite).To(BeFalse())
 	})
 })
 
@@ -1061,12 +1032,9 @@ var _ = Describe("Builder Configuration", func() {
 		sim := modeling.NewStandaloneSimulation(engine)
 		spec := Definition.DefaultSpec
 		spec.PagePolicy = PagePolicyOpen
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(spec).
-			Build("OpenPageCtrl")
+		ctrl := buildDRAM(sim, spec, "OpenPageCtrl", 16)
 
-		builtSpec := ctrl.Spec()
+		builtSpec := ctrl.Spec
 		Expect(builtSpec.PagePolicy).To(Equal(PagePolicyOpen))
 	})
 
@@ -1078,12 +1046,9 @@ var _ = Describe("Builder Configuration", func() {
 		spec.WriteQueueSize = 8
 		spec.WriteHighWatermark = 6
 		spec.WriteLowWatermark = 2
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(spec).
-			Build("RWQueueCtrl")
+		ctrl := buildDRAM(sim, spec, "RWQueueCtrl", 16)
 
-		builtSpec := ctrl.Spec()
+		builtSpec := ctrl.Spec
 		Expect(builtSpec.ReadQueueSize).To(Equal(8))
 		Expect(builtSpec.WriteQueueSize).To(Equal(8))
 		Expect(builtSpec.WriteHighWatermark).To(Equal(6))
@@ -1095,12 +1060,9 @@ var _ = Describe("Builder Configuration", func() {
 		sim := modeling.NewStandaloneSimulation(engine)
 		specWithOpenPage := DDR4Spec
 		specWithOpenPage.PagePolicy = PagePolicyOpen
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(specWithOpenPage).
-			Build("DDR4OpenPage")
+		ctrl := buildDRAM(sim, specWithOpenPage, "DDR4OpenPage", 16)
 
-		builtSpec := ctrl.Spec()
+		builtSpec := ctrl.Spec
 		Expect(builtSpec.PagePolicy).To(Equal(PagePolicyOpen))
 		Expect(builtSpec.BurstLength).To(Equal(8))
 	})
@@ -1113,15 +1075,23 @@ var _ = Describe("Builder Configuration", func() {
 		specWithRW.WriteQueueSize = 16
 		specWithRW.WriteHighWatermark = 12
 		specWithRW.WriteLowWatermark = 4
-		ctrl := MakeBuilder().
-			WithSimulation(sim).
-			WithSpec(specWithRW).
-			Build("DDR4RWQueue")
+		ctrl := buildDRAM(sim, specWithRW, "DDR4RWQueue", 16)
 
-		builtSpec := ctrl.Spec()
+		builtSpec := ctrl.Spec
 		Expect(builtSpec.ReadQueueSize).To(Equal(16))
 		Expect(builtSpec.WriteQueueSize).To(Equal(16))
 		Expect(builtSpec.WriteHighWatermark).To(Equal(12))
 		Expect(builtSpec.WriteLowWatermark).To(Equal(4))
+	})
+
+	It("should require a storage", func() {
+		sim := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
+
+		Expect(func() {
+			Definition.Builder().
+				WithSimulation(sim).
+				WithPorts(defaultPorts("NoStorage", 16)).
+				Build("NoStorage")
+		}).To(PanicWith("dram: Resources.Storage is required"))
 	})
 })

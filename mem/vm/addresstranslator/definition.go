@@ -1,29 +1,29 @@
 package addresstranslator
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// Definition declares the AddressTranslator component: its default configuration and
-// its port topology. The builder consumes it at runtime and tooling reads it
-// statically, so it is the single source of truth for both.
-var Definition = modeling.ComponentDef[Spec]{
-	Name: "AddressTranslator",
+// Definition declares the AddressTranslator, a ticking component: its default
+// configuration and its behavior. Its ports and middlewares are the fields of
+// Ports and Middlewares. The system builder builds an instance with
+// Definition.Builder()...Build(name); tooling reads the same declaration
+// statically.
+var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 	DefaultSpec: Spec{
 		Freq:           1 * timing.GHz,
 		NumReqPerCycle: 4,
 		Log2PageSize:   12,
 		DeviceID:       1,
 	},
-	Ports: []modeling.PortDef{
-		{Name: "Top", Roles: []*messaging.Role{memprotocol.Responder}},
-		{Name: "Bottom", Roles: []*messaging.Role{memprotocol.Requester}},
-		{Name: "Translation", Roles: []*messaging.Role{vmprotocol.Requester}},
-		{Name: "Control", Roles: []*messaging.Role{memcontrolprotocol.Responder}},
-	},
+	NewMiddlewares: newMiddlewares,
+}
+
+func newMiddlewares(c *Comp) middlewares {
+	return middlewares{
+		Ctrl:            &ctrlMiddleware{comp: c},
+		ParseTranslate:  &parseTranslateMW{comp: c},
+		RespondPipeline: &respondPipelineMW{comp: c},
+	}
 }

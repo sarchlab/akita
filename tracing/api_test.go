@@ -18,7 +18,7 @@ var _ = Describe("Api", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		domain = NewMockNamedHookable(mockCtrl)
 		sim := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
-		domain.EXPECT().Simulation().Return(sim).AnyTimes()
+		domain.EXPECT().NewID().DoAndReturn(sim.NewID).AnyTimes()
 		domain.EXPECT().NumHooks().Return(1).AnyTimes()
 		domain.EXPECT().InvokeHook(gomock.Any()).AnyTimes()
 	})

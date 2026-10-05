@@ -269,8 +269,8 @@ fixed as part of the Step 5 rollout.** Item 2 (gmmu remote-path) and item 4
      `doPageWalkHit` path completes it, `walkmw.go:245`).
    → Drop the response-side `TraceReqReceive` and complete the top `req_in` when
    the remote response returns.
-3. **datamover — wrong-key `req_in` close.** Opens on `DataMoveRequest.ID`
-   (`ctrlparsemw.go:97`), closes on a fresh `DataMoveResponse.ID` (`:148`), so
+3. **datamover — wrong-key `req_in` close.** Opens on `DataMoveReq.ID`
+   (`ctrlparsemw.go:97`), closes on a fresh `DataMoveRsp.ID` (`:148`), so
    the `req_in` never ends and leaks a registry entry every transaction. → Close
    using a reconstruction carrying the request ID (as the ROB does via
    `topReqTraceMsg`).

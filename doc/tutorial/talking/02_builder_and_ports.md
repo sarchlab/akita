@@ -2,195 +2,217 @@
 sidebar_position: 2
 ---
 
-# The Builder and the Middlewares
+# The Definition and the Middlewares
 
-The builder ties Spec, middleware, and ports together. Every Akita builder
-follows the same shape, so once you know one you know them all.
+The `Definition` ties the Spec, the middlewares, and the ports together.
+Every Akita component declares one in the same shape, so once you know one
+you know them all.
 
-## Builder
+## Definition
+
+tickingping's middlewares are the fields of its `Middlewares` struct, in
+the order they run:
 
 ```go
-type Builder struct {
-    spec       Spec
-    simulation timing.Simulation
+type Middlewares struct {
+    // Send sends a due response or the next ping.
+    Send *sendMW
+
+    // ReceiveProcess counts down the pings being answered and takes incoming
+    // messages.
+    ReceiveProcess *receiveProcessMW
+}
+```
+
+and the package declares its `Definition`, in `definition.go`:
+
+```go
+var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewares]{
+    DefaultSpec:    Spec{Freq: 1 * timing.GHz},
+    NewMiddlewares: newMiddlewares,
 }
 
-func MakeBuilder() Builder { return Builder{spec: defaultSpec} }
-
-func (b Builder) WithSimulation(sim timing.Simulation) Builder {
-    b.simulation = sim
-    return b
-}
-
-func (b Builder) WithSpec(spec Spec) Builder {
-    b.spec = spec
-    return b
-}
-
-func (b Builder) Build(name string) *Comp {
-    comp := modeling.NewBuilder[Spec, State, modeling.None]().
-        WithSimulation(b.simulation).
-        WithFreq(b.spec.Freq).
-        WithSpec(b.spec).
-        Build(name)
-    comp.State = State{}
-
-    comp.AddMiddleware(&sendMW{comp: comp})
-    comp.AddMiddleware(&receiveProcessMW{comp: comp})
-
-    comp.DeclarePort("Out")
-
-    b.simulation.RegisterComponent(comp)
-
-    return comp
+func newMiddlewares(c *Comp) Middlewares {
+    return Middlewares{
+        Send:           &sendMW{comp: c},
+        ReceiveProcess: &receiveProcessMW{comp: c},
+    }
 }
 ```
 
 Things to notice:
 
-- The builder returns a `*Comp` — the same alias from the previous page.
-- The builder **declares the port** with `DeclarePort` but does not create the
-  instance. Setup code builds the instance with a port builder and attaches it
-  after `Build` (shown next); the component still reaches it by name with
-  `comp.GetPortByName("Out")`.
-- Middlewares are added in order; the first one added runs first.
-- The component is **registered with the simulation**, which adds it to
-  checkpointing, tracing, and monitoring.
-- The `MakeBuilder` → `WithX` → `Build(name)` shape is universal across
-  Akita components and connections.
+- It has the same shape as the walker's. `Definition.Builder()…Build(name)`
+  returns a `*Comp` — the alias from the previous page.
+- The component **declares its port** as a field of `Ports` but does not
+  create it. The system builder creates the port and passes it to `Build`,
+  which binds it to the component; the middlewares then reach it as
+  `m.comp.Ports.Out`.
+- Middlewares run in the **field order** of `Middlewares`: `Send` first,
+  then `ReceiveProcess`.
+- `Build` **registers the component and its ports with the simulation**,
+  which adds them to checkpointing, tracing, and monitoring.
+- The `Definition.Builder()` → `WithX` → `Build(name)` shape is universal
+  across Akita components.
 
-The port instance is supplied after `Build` — a port builder creates it and
-registers it with the simulation, and `AssignPort` attaches it to the component:
+The system builder creates the port with `messaging.NewPort` and passes it
+through `WithPorts`:
 
 ```go
-agent := tickingping.MakeBuilder().WithSimulation(sim).Build("AgentA")
+outA := messaging.NewPort("AgentA.Out", 16, 16)
 
-out := modeling.MakePortBuilder().
+agentA := Definition.Builder().
     WithSimulation(sim).
-    WithComponent(agent).
-    WithSpec(modeling.PortSpec{BufSize: 4}).
-    Build("Out")
-agent.AssignPort("Out", out)
+    WithSpec(specA).
+    WithPorts(Ports{Out: outA}).
+    Build("AgentA")
 ```
 
-This keeps the component agnostic to how its port is built (buffer size,
-instrumentation) while the component still owns which ports exist. The next page
-wires two agents together this way.
+`NewPort("AgentA.Out", 16, 16)` creates a port named `<instance>.<field>`,
+with room for 16 incoming and 16 outgoing messages and no owner yet.
+`Build` sets the owner, and it checks the name and
+panics on a mismatch, so a typo fails fast. Every port in `Ports` must be
+given, and none is added after `Build`. This keeps the component agnostic
+to how its port is built (buffer sizes, instrumentation) while the
+component still owns which ports exist. The next page wires two agents
+together this way.
 
-## Why a Custom Builder?
+## Why a Component Package?
 
-In *Create a Component* the walker had no ports and a single middleware, so we
-built it inline with `modeling.NewBuilder` right in `main`. Assembling this
-component is more work: declare the `Out` port, add two middlewares in the
-right order, and register with the simulation.
-Repeating all of that at every call site — and we build two agents — would be
-verbose and easy to get wrong.
+In *Create a Component* the walker lived in `package main`, next to the
+code that built it. tickingping is its own package, and that is the
+convention for every real component: **one component type per package**.
+(A component type's name is its package's import path.)
 
-Wrapping construction in a per-package builder buys three things:
+A package of its own buys three things:
 
-- **Correct assembly, every time.** All the steps live inside `Build`, so a
-  caller cannot forget to add a middleware or register the component;
-  `Build(name)` always returns a fully wired `*Comp`.
-- **Easy instances.** `MakeBuilder().WithSpec(spec).Build(name)` stamps out an
-  agent on demand — we call it twice, for AgentA and AgentB — and
-  `DefaultSpec()` gives a base configuration to tweak.
-- **A clean surface.** The `modeling.NewBuilder` generics and the port
-  declarations are written once, inside `Build`; callers only ever see
-  `MakeBuilder → WithX → Build`. This is the per-package builder that the
-  *Create a Component* section's builder-pattern callout pointed ahead to.
+- **Correct assembly, every time.** The package declares the parts once —
+  the five structs, the middlewares, the `Definition` — and `Build`
+  assembles them the same way for every instance. A caller cannot forget a
+  middleware or run them in the wrong order; `Build(name)` always returns a
+  fully wired `*Comp`.
+- **Easy instances.** `Definition.Builder().WithSpec(spec).WithPorts(ports).Build(name)`
+  stamps out an agent on demand — we build two, AgentA and AgentB — and
+  `Definition.DefaultSpec` gives a base configuration to tweak.
+- **A clean surface.** Callers see only what they must supply — the Spec,
+  the Resources, the Ports — and the `Definition`; the middlewares are
+  unexported. Tooling reads the same `Definition` without running the code,
+  and each component package keeps the two views in agreement with a
+  one-line test, `modelingtest.CheckTicking(t, Definition)`.
 
-Rule of thumb: build inline when a component is trivial; give it a builder
-once it owns ports, has more than one middleware, or gets instantiated more
-than once — which is to say, nearly every real component.
+Rule of thumb: keep a trivial, single-use component next to `main`; give it
+a package once it owns ports, has more than one middleware, or gets
+instantiated more than once — which is to say, nearly every real component.
 
 ## Middleware: Where Behaviour Lives
 
-A component has one or more middlewares. Each tick, the engine calls every
-middleware's `Tick() bool` method in registration order. If **any**
-middleware returns true, the component is rescheduled for the next tick.
-tickingping uses two.
+A component has one or more middlewares. Each tick, the component calls
+every middleware's `Handle` method in field order. If **any** middleware
+returns true, the component ticks again on the next cycle. tickingping uses
+two.
 
 ### `sendMW` — pushes work out
 
 ```go
-func (m *sendMW) Tick() bool {
+func (m *sendMW) Handle(_ timing.Event) bool {
     madeProgress := false
+
     madeProgress = m.sendRsp() || madeProgress
     madeProgress = m.sendPing() || madeProgress
+
     return madeProgress
 }
 ```
 
-`sendRsp` checks whether any in-flight transaction has finished its
+`sendRsp` checks whether the oldest ping being answered has finished its
 countdown and, if so, builds a `pingRsp` and sends it. `sendPing` checks
-whether more pings are queued and, if so, builds a `pingReq`. Messages are
+whether more pings are due and, if so, builds a `pingReq`. Messages are
 values, so the literal has no `&`:
 
 ```go
-pingMsg := pingReq{
-    MsgMeta: messaging.MsgMeta{
-        ID:  m.comp.Simulation().NewID(),
-        Src: outPort(m.comp).AsRemote(),
-        Dst: state.PingDst,
-    },
-    SeqID: state.NextSeqID,
-}
+func (m *sendMW) sendPing() bool {
+    state := &m.comp.State
+    spec := m.comp.Spec
+    out := m.comp.Ports.Out
 
-if !outPort(m.comp).CanSend() {
-    return false
-}
+    if state.NextSeqID >= spec.NumPings {
+        return false
+    }
 
-outPort(m.comp).Send(pingMsg)
+    if !out.CanSend() {
+        return false
+    }
+
+    out.Send(pingReq{
+        MsgMeta: messaging.MsgMeta{
+            ID:  m.comp.NewID(),
+            Src: out.AsRemote(),
+            Dst: spec.PingDst,
+        },
+        SeqID: state.NextSeqID,
+    })
+
+    state.StartTimes = append(state.StartTimes, uint64(m.comp.CurrentTime()))
+    state.NextSeqID++
+
+    return true
+}
 ```
 
 `Send` takes the message by value and returns nothing, so you guard it
 with `CanSend()` instead of checking a return error. If the outgoing
 port's buffer is full, `CanSend()` is false and we return false — no
-progress this cycle. The engine will retry next tick.
+progress this cycle. The component wakes again when the port has room.
 
 ### `receiveProcessMW` — pulls work in
 
 ```go
-func (m *receiveProcessMW) Tick() bool {
+func (m *receiveProcessMW) Handle(_ timing.Event) bool {
     madeProgress := false
+
     madeProgress = m.countDown() || madeProgress
     madeProgress = m.processInput() || madeProgress
+
     return madeProgress
 }
 ```
 
-`countDown` decrements the cycle counter of any in-flight transaction —
+`countDown` decrements the cycle counter of every ping being answered —
 this is the "fake latency" that makes the response take two cycles.
-`processInput` peeks at any incoming message; if there is a `pingReq` it
-adds a new transaction, and if there is a `pingRsp` it prints the duration
-and acknowledges receipt.
+`processInput` takes the next incoming message; a `pingReq` starts a new
+transaction, and a `pingRsp` prints the round-trip time.
 
 ```go
-msgI, ok := outPort(m.comp).PeekIncoming()
+msgI, ok := m.comp.Ports.Out.RetrieveIncoming()
 if !ok {
     return false
 }
 
 switch msg := msgI.(type) {
 case pingReq:
-    m.processingPingReq(msg)
+    m.processPingReq(msg)
 case pingRsp:
-    m.processingPingRsp(msg)
+    m.processPingRsp(msg)
 default:
     panic("unknown message type")
 }
+
+return true
 ```
 
 Because messages are values, the type switch matches on value cases
-(`pingReq`, `pingRsp`) — not pointer cases. `PeekIncoming` returns the
-message as a `messaging.Msg` interface value and a presence boolean; the handlers call
-`RetrieveIncoming()` to consume it.
+(`pingReq`, `pingRsp`) — not pointer cases. `RetrieveIncoming` consumes the
+message and returns it as a `messaging.Msg` interface value with a presence
+boolean.
 
-Note `Peek` then `Retrieve`: peek does not consume the message — you can
-look at it, decide you cannot process it (port full, no resource), and
-leave it for next cycle. `Retrieve` is the commit.
+tickingping can always handle a message, so it retrieves at once. A
+component that sometimes cannot — its output port is full, or it has no
+free resource — calls `PeekIncoming` first. Peek does not consume the
+message: you can look at it, decide you cannot process it, and leave it for
+next cycle. `RetrieveIncoming` is the commit. The client and server in
+*Tracing Requests* work that way.
 
 ## Where to Next
 
-The component is complete. The last page wires two of them together with a
-connection and runs the simulation.
+The component is complete. The last page is the system builder: it wires
+two instances together with a connection and runs the simulation.

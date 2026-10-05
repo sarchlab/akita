@@ -15,7 +15,7 @@ type bankStage struct {
 }
 
 func (s *bankStage) Tick() (madeProgress bool) {
-	spec := s.cache.comp.Spec()
+	spec := s.cache.comp.Spec
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = s.finalizeTrans() || madeProgress
@@ -47,7 +47,7 @@ func (s *bankStage) Reset() {
 
 func (s *bankStage) pullFromBuf() bool {
 	next := &s.cache.comp.State
-	spec := s.cache.comp.Spec()
+	spec := s.cache.comp.Spec
 
 	if !s.canAcceptIntoPipeline(*next) {
 		return false
@@ -75,8 +75,8 @@ func (s *bankStage) pullFromBuf() bool {
 	return s.pullFromDirBuffer(next, spec)
 }
 
-func (s *bankStage) canAcceptIntoPipeline(cur State) bool {
-	spec := s.cache.comp.Spec()
+func (s *bankStage) canAcceptIntoPipeline(cur state) bool {
+	spec := s.cache.comp.Spec
 
 	if spec.BankLatency > 0 {
 		return cur.BankPipelines[s.bankID].CanAccept()
@@ -86,7 +86,7 @@ func (s *bankStage) canAcceptIntoPipeline(cur State) bool {
 	return cur.BankPostPipelineBufs[s.bankID].CanPush()
 }
 
-func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
+func (s *bankStage) pullFromDirBuffer(next *state, spec Spec) bool {
 	dirBuf := &next.DirToBankBufs[s.bankID]
 	if dirBuf.Size() == 0 {
 		return false
@@ -111,7 +111,7 @@ func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
 	return true
 }
 
-func (s *bankStage) acceptIntoPipeline(next *State, spec Spec, transIdx int) {
+func (s *bankStage) acceptIntoPipeline(next *state, spec Spec, transIdx int) {
 	trans := &next.Transactions[transIdx]
 
 	// Open the bank subtask spanning this data-array pipeline traversal, a child
@@ -120,7 +120,7 @@ func (s *bankStage) acceptIntoPipeline(next *State, spec Spec, transIdx int) {
 	// transaction that visits the bank more than once (e.g. evict then fill)
 	// opens one subtask per visit, each closed in finishBank.
 	if trans.hasReqMeta() {
-		pid := s.cache.comp.Simulation().NewID()
+		pid := s.cache.comp.NewID()
 		trans.BankPID = pid
 		tracing.StartTask(s.cache.comp, tracing.TaskStart{
 			ID:       pid,
@@ -194,7 +194,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 		return false
 	}
 
-	spec := s.cache.comp.Spec()
+	spec := s.cache.comp.Spec
 	next := &s.cache.comp.State
 
 	addr := trans.ReadAddress
@@ -211,7 +211,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	nextBlock.ReadCount--
 
 	dataReady := memprotocol.DataReadyRsp{}
-	dataReady.ID = s.cache.comp.Simulation().NewID()
+	dataReady.ID = s.cache.comp.NewID()
 	dataReady.Src = s.cache.topPort().AsRemote()
 	dataReady.Dst = trans.ReadMeta.Src
 	dataReady.RspTo = trans.ReadMeta.ID
@@ -231,7 +231,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 		return false
 	}
 
-	spec := s.cache.comp.Spec()
+	spec := s.cache.comp.Spec
 	next := &s.cache.comp.State
 
 	addr := trans.WriteAddress
@@ -250,7 +250,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 	next.BankInflightTransCounts[s.bankID]--
 
 	done := memprotocol.WriteDoneRsp{}
-	done.ID = s.cache.comp.Simulation().NewID()
+	done.ID = s.cache.comp.NewID()
 	done.Src = s.cache.topPort().AsRemote()
 	done.Dst = trans.WriteMeta.Src
 	done.RspTo = trans.WriteMeta.ID
@@ -321,7 +321,7 @@ func (s *bankStage) finalizeBankEviction(
 	transIdx int,
 	trans *transactionState,
 ) bool {
-	spec := s.cache.comp.Spec()
+	spec := s.cache.comp.Spec
 	next := &s.cache.comp.State
 	wbBuf := &next.WriteBufferBuf
 

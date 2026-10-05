@@ -10,8 +10,8 @@ by the `networkconnector` and the higher-level mesh, PCIe, and NVLink builders.
 
 ### Comp, Spec, Resources, State
 
-`Comp` embeds a `modeling.Component[Spec, State, modeling.None]`. The `Spec`
-configures conversion and channel behavior:
+`Comp` is a ticking component, `ticking.Component[Spec, state, Resources, Ports,
+middlewares]`. The `Spec` configures conversion and channel behavior:
 
 ```go
 type Spec struct {
@@ -20,7 +20,7 @@ type Spec struct {
     NumOutputChannels int                  // flits injected per tick
     FlitByteSize      int                  // bytes per flit
     EncodingOverhead  float64              // extra bytes fraction
-    DefaultSwitchDst  messaging.RemotePort // first-hop switch port
+    DefaultSwitchDst  messaging.RemotePort // port at the other end of the link
 }
 
 type Resources struct {
@@ -31,17 +31,17 @@ type Resources struct {
 `State` holds the message-out buffer, the flits queued for sending, and the
 per-message reassembly records (`AssemblingMsgs`, `AssembledMsgs`).
 
-`Comp` implements `messaging.Connection`: device ports use the endpoint as their
-connection (`PlugIn` calls `SetConnection`), and `NotifySend`/`NotifyAvailable`
-wake the component. Key methods:
+`Ports` has one field, `NetworkPort`, the port facing the network. The
+middlewares are `Outgoing` (device → network) and `Incoming` (network → device),
+run in that order every cycle.
 
-- `NetworkPort()` / `SetNetworkPort(p)` — the port facing the network.
-- `SetDefaultSwitchDst(dst)` — first-hop destination for emitted flits.
-- `PlugIn(port)` — attach another device port after build.
+The endpoint is also the connection of its device ports: `Build` plugs every
+port in `Resources.DevicePorts` into it, and activity on a device port wakes the
+endpoint. No port is added after `Build`.
 
 ## How It Works
 
-Each tick two middlewares run. The outgoing path (`device → network`) retrieves
+Each tick the two middlewares run. The outgoing path (`device → network`) retrieves
 messages from device ports, converts each into one or more `packetization.Flit`
 values — flit count derived from `TrafficBytes`, `EncodingOverhead`, and
 `FlitByteSize` — and sends them out the network port with `Dst` set to the
@@ -53,15 +53,22 @@ backpressure to keep the serializable state bounded.
 ## Builder Pattern
 
 ```go
-ep := endpoint.MakeBuilder().
-    WithSimulation(sim).                                        // *simulation.Simulation or a standalone simulation
-    WithSpec(endpoint.Definition.DefaultSpec).
+spec := endpoint.Definition.DefaultSpec
+spec.DefaultSwitchDst = switchPort.AsRemote()
+
+ep := endpoint.Definition.Builder().
+    WithSimulation(sim).
+    WithSpec(spec).
     WithResources(endpoint.Resources{DevicePorts: ports}).
+    WithPorts(endpoint.Ports{
+        NetworkPort: messaging.NewPort("EndPoint0.NetworkPort", 4, 4),
+    }).
     Build("EndPoint0")
 ```
 
-`WithSimulation` is required (`Build` panics otherwise). `Build` creates the
-endpoint's network port; device ports listed in `Resources` are plugged in
-automatically, and more can be added later with `PlugIn`. `DefaultSpec`
-defaults to a 32-byte flit, 0.25 encoding overhead, single input/output
-channels, and a network-port buffer of 4.
+`WithSimulation` is required (`Build` panics otherwise). The system builder
+creates the network port with `messaging.NewPort`, named
+`"<instance>.NetworkPort"`, and sets `Spec.DefaultSwitchDst` to the port at the
+other end of the link; `Build` binds and registers the network port and plugs in
+the device ports. `DefaultSpec` defaults to a 32-byte flit, 0.25 encoding
+overhead, and single input/output channels.

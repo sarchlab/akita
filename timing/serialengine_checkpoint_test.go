@@ -2,7 +2,9 @@ package timing
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -33,6 +35,7 @@ func TestSerialEngineQueueRoundTrip(t *testing.T) {
 	// Engine A schedules a mix of times, including two at the same time, then
 	// is checkpointed without running.
 	a := NewSerialEngine()
+	a.RegisterHandler("h", &idRecordingHandler{})
 	a.Schedule(mk(5, 1))
 	a.Schedule(mk(2, 2))
 	a.Schedule(mk(5, 3))
@@ -69,6 +72,7 @@ func TestSerialEngineLoadRejectsUnknownHandler(t *testing.T) {
 	RegisterEvent(queueTestEvent{})
 
 	a := NewSerialEngine()
+	a.RegisterHandler("missing", &idRecordingHandler{})
 	e := queueTestEvent{}
 	e.Time_ = 1
 	e.HandlerID_ = "missing"
@@ -83,5 +87,25 @@ func TestSerialEngineLoadRejectsUnknownHandler(t *testing.T) {
 	err := b.LoadCheckpoint(&buf)
 	if err == nil {
 		t.Fatalf("expected unknown-handler error")
+	}
+}
+
+// TestScheduleRejectsUnregisteredHandler checks that both engines refuse an
+// event for a handler nobody registered, at the Schedule call.
+func TestScheduleRejectsUnregisteredHandler(t *testing.T) {
+	for name, e := range map[string]Engine{
+		"serial":   NewSerialEngine(),
+		"parallel": NewParallelEngine(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				r := recover()
+				if r == nil || !strings.Contains(fmt.Sprint(r), `handler "nobody"`) {
+					t.Fatalf("panic = %v, want one naming the handler", r)
+				}
+			}()
+
+			e.Schedule(MakeEventBase(1, 1, "nobody"))
+		})
 	}
 }

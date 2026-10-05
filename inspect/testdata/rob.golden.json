@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
   "kind": "component",
-  "name": "ReorderBuffer",
+  "model": "ticking",
+  "name": "rob",
   "package": "github.com/sarchlab/akita/v5/mem/rob",
   "module": "github.com/sarchlab/akita/v5",
   "spec": [
@@ -37,7 +38,7 @@
       "name": "Top",
       "roles": [
         {
-          "protocol": "mem",
+          "protocol": "github.com/sarchlab/akita/v5/mem/memprotocol",
           "role": "responder"
         }
       ]
@@ -46,7 +47,7 @@
       "name": "Bottom",
       "roles": [
         {
-          "protocol": "mem",
+          "protocol": "github.com/sarchlab/akita/v5/mem/memprotocol",
           "role": "requester"
         }
       ]
@@ -55,10 +56,17 @@
       "name": "Control",
       "roles": [
         {
-          "protocol": "mem.control",
+          "protocol": "github.com/sarchlab/akita/v5/mem/memcontrolprotocol",
           "role": "responder"
         }
       ]
+    }
+  ],
+  "middlewares": [
+    {
+      "name": "Pipeline",
+      "type": "*middleware",
+      "doc": "Pipeline handles control commands, forwards requests, and releases\nresponses in order."
     }
   ]
 }

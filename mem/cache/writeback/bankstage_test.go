@@ -6,11 +6,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/modeling"
-
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
 )
 
 var _ = Describe("Bank Stage", func() {
@@ -35,64 +32,47 @@ var _ = Describe("Bank Stage", func() {
 	BeforeEach(func() {
 		storage = mem.NewStorage(4 * mem.KB)
 
-		initialState := State{
+		initialState := state{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
-			DirStageBuf:  queueing.NewBuffer[int]("Cache.DirStageBuf", 4),
+			DirStageBuf:  queueing.MakeBuffer[int](4),
 			DirToBankBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.DirToBankBuf", 4),
+				queueing.MakeBuffer[int](4),
 			},
 			WriteBufferToBankBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("Cache.WBToBankBuf", 4),
+				queueing.MakeBuffer[int](4),
 			},
-			MSHRStageBuf:       queueing.NewBuffer[int]("Cache.MSHRStageBuf", 4),
-			WriteBufferBuf:     queueing.NewBuffer[int]("Cache.WriteBufferBuf", 4),
-			DirPipeline:        queueing.NewPipeline[int](4, 0),
-			DirPostPipelineBuf: queueing.NewBuffer[int]("Cache.DirPostBuf", 4),
+			MSHRStageBuf:       queueing.MakeBuffer[int](4),
+			WriteBufferBuf:     queueing.MakeBuffer[int](4),
+			DirPipeline:        queueing.MakePipeline[int](4, 0),
+			DirPostPipelineBuf: queueing.MakeBuffer[int](4),
 			BankPipelines: []queueing.Pipeline[int]{
-				queueing.NewPipeline[int](4, 10),
+				queueing.MakePipeline[int](4, 10),
 			},
 			BankPostPipelineBufs: []queueing.Buffer[int]{
-				queueing.NewBuffer[int]("BankPostPipelineBuf", 4),
+				queueing.MakeBuffer[int](4),
 			},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &pipelineMW{
-			storage: storage,
-		}
-		m.comp = modeling.NewBuilder[Spec, State, Resources]().
-			WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-			WithFreq(1 * timing.GHz).
-			WithSpec(Spec{
-				BankLatency:      10,
-				Log2BlockSize:    6,
-				WayAssociativity: 4,
-				NumSets:          64,
-				NumBanks:         1,
-				NumReqPerCycle:   4,
-			}).
-			Build("Cache")
+		spec := stageTestSpec()
+		spec.BankLatency = 10
 
-		// The stage resolves the "Top" port by name, so the test assigns a real
-		// single-slot port (owned by the component) and plugs a noop connection.
-		topPort = messaging.NewPort(m.comp, 1, 1, "Cache.Top")
-		(&ccNoopConn{}).PlugIn(topPort)
-		m.comp.DeclarePort("Top")
-		m.comp.AssignPort("Top", topPort)
+		// The stage sends on the Top port, so the test gives it a single-slot
+		// Top port to simulate a busy port.
+		ports := makePorts("Cache", 4)
+		ports.Top = messaging.NewPort("Cache.Top", 1, 1)
+		comp := buildStageTestComp(spec, Resources{Storage: storage}, ports)
+		topPort = comp.Ports.Top
 
+		m = comp.Middlewares.Pipeline
 		m.comp.State = initialState
 		next := &m.comp.State
 
 		cache.DirectoryReset(&next.DirectoryState, 64, 4, 64)
 
-		bs = &bankStage{
-			cache:         m,
-			bankID:        0,
-			pipelineWidth: 4,
-		}
-		m.bankStages = []*bankStage{bs}
+		bs = m.bankStages[0]
 	})
 
 	It("completes a later transaction while preserving a blocked zero-index head", func() {
@@ -130,7 +110,7 @@ var _ = Describe("Bank Stage", func() {
 			storage.Write(0x40, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 
 			read := memprotocol.ReadReq{}
-			read.ID = m.comp.Simulation().NewID()
+			read.ID = m.comp.NewID()
 			read.Src = messaging.RemotePort("Agent")
 			read.Address = 0x104
 			read.AccessByteSize = 4
@@ -189,7 +169,7 @@ var _ = Describe("Bank Stage", func() {
 			block.IsLocked = true
 
 			write := memprotocol.WriteReq{}
-			write.ID = m.comp.Simulation().NewID()
+			write.ID = m.comp.NewID()
 			write.Src = messaging.RemotePort("Agent")
 			write.Address = 0x104
 			write.Data = []byte{5, 6, 7, 8}

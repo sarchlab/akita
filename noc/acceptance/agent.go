@@ -3,16 +3,21 @@ package acceptance
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/timing"
-
-	// Agent can send and receive request.
+	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
+// Agent is a traffic generator for network tests. It sends the messages in
+// MsgsToSend out of its ports and reports every message it receives to the
+// test. It is a test double, not a modeled component, so it is written
+// directly on a ticking.Scheduler.
 type Agent struct {
-	*modeling.TickingComponent
+	*ticking.Scheduler
+	hooking.HookableBase
 
+	name       string
 	test       *Test
 	AgentPorts []messaging.Port
 	MsgsToSend []TrafficMsg
@@ -29,13 +34,18 @@ func NewAgent(
 	ports []messaging.Port,
 	test *Test,
 ) *Agent {
-	a := &Agent{}
-	a.test = test
-	a.TickingComponent = modeling.NewTickingComponent(name, sim, freq, a)
+	a := &Agent{
+		Scheduler: ticking.NewScheduler(name, sim, freq),
+		name:      name,
+		test:      test,
+	}
+
+	sim.Engine().RegisterHandler(name, a)
+
 	sim.RegisterComponent(a)
 
 	for _, p := range ports {
-		p.SetComponent(a)
+		p.SetOwner(a)
 		sim.RegisterPort(p)
 		a.AgentPorts = append(a.AgentPorts, p)
 	}
@@ -43,13 +53,31 @@ func NewAgent(
 	return a
 }
 
-// Tick tries to receive requests and send requests out.
-func (a *Agent) Tick() bool {
+// Name returns the agent's name.
+func (a *Agent) Name() string {
+	return a.name
+}
+
+// Handle tries to receive and send messages on a tick, and ticks again if it
+// made progress.
+func (a *Agent) Handle(_ timing.Event) {
 	madeProgress := false
 	madeProgress = a.send() || madeProgress
 	madeProgress = a.recv() || madeProgress
 
-	return madeProgress
+	if madeProgress {
+		a.TickLater()
+	}
+}
+
+// NotifyRecv wakes the agent when a port receives a message.
+func (a *Agent) NotifyRecv(_ messaging.Port) {
+	a.TickLater()
+}
+
+// NotifyPortFree wakes the agent when a port can send again.
+func (a *Agent) NotifyPortFree(_ messaging.Port) {
+	a.TickLater()
 }
 
 func (a *Agent) send() bool {
@@ -106,9 +134,4 @@ func (a *Agent) recv() bool {
 	}
 
 	return madeProgress
-}
-
-// Ports returns the ports of the agent.
-func (a *Agent) Ports() []messaging.Port {
-	return a.AgentPorts
 }

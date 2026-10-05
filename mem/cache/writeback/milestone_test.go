@@ -5,7 +5,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -76,7 +75,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 		engine      timing.Engine
 		sim         timing.Simulation
 		cacheComp   *Comp
-		dram        *idealmemcontroller.Comp
+		dramTop     messaging.Port
 		dramStorage *mem.Storage
 		conn        *directconnection.Comp
 		agentPort   messaging.Port
@@ -88,51 +87,37 @@ var _ = Describe("Write-Back Cache milestones", func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
 
-		agentPort = messaging.NewPort(nil, 8, 8, "Agent.Top")
+		agentPort = newDriverPort("Agent.Top", 8)
 
 		dramStorage = mem.NewStorage(4 * mem.GB)
-		dramSpec := idealmemcontroller.Definition.DefaultSpec
-		dramSpec.Width = 1
-		dramSpec.Latency = 200
-		dramSpec.CacheLineSize = 64
-		dram = idealmemcontroller.MakeBuilder().
-			WithSimulation(sim).
-			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
-			WithSpec(dramSpec).
-			Build("DRAM")
-		dram.AssignPort("Top",
-			messaging.NewPort(dram, 16, 16, dram.Name()+".Top"))
-		dram.AssignPort("Control",
-			messaging.NewPort(dram, 16, 16, dram.Name()+".Control"))
+		dramTop = buildIdealDRAM(sim, dramStorage)
 
 		addressToPortMapper := &mem.SinglePortMapper{
-			Port: dram.GetPortByName("Top").AsRemote(),
+			Port: dramTop.AsRemote(),
 		}
 
 		cacheSpec := Definition.DefaultSpec
 		cacheSpec.TotalByteSize = 1024 * 4 * 64
 		cacheSpec.NumReqPerCycle = 4
 
-		cacheComp = MakeBuilder().
+		cacheComp = Definition.Builder().
 			WithSimulation(sim).
 			WithSpec(cacheSpec).
 			WithResources(Resources{
+				Storage:             mem.NewStorage(cacheSpec.TotalByteSize),
 				AddressToPortMapper: addressToPortMapper,
 			}).
+			WithPorts(makePorts("Cache", 8)).
 			Build("Cache")
-		for _, name := range []string{"Top", "Bottom", "Control"} {
-			cacheComp.AssignPort(name,
-				messaging.NewPort(cacheComp, 8, 8, cacheComp.Name()+"."+name))
-		}
-		topPort = cacheComp.GetPortByName("Top")
+		topPort = cacheComp.Ports.Top
 
 		conn = directconnection.MakeBuilder().
 			WithSimulation(sim).
 			Build("Connection")
 		conn.PlugIn(topPort)
-		conn.PlugIn(cacheComp.GetPortByName("Bottom"))
-		conn.PlugIn(cacheComp.GetPortByName("Control"))
-		conn.PlugIn(dram.GetPortByName("Top"))
+		conn.PlugIn(cacheComp.Ports.Bottom)
+		conn.PlugIn(cacheComp.Ports.Control)
+		conn.PlugIn(dramTop)
 		conn.PlugIn(agentPort)
 
 		// Attach the recorder before driving so MsgIDAtReceiver hands out real

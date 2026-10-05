@@ -37,35 +37,19 @@ func (c *noopConn) NotifySend()                      {}
 // component's owned ports can be driven directly in tests.
 func plugNoopConn(comp *Comp) {
 	conn := &noopConn{}
-	conn.PlugIn(comp.GetPortByName("Top"))
-	conn.PlugIn(comp.GetPortByName("Bottom"))
-	conn.PlugIn(comp.GetPortByName("Control"))
+	conn.PlugIn(comp.Ports.Top)
+	conn.PlugIn(comp.Ports.Bottom)
+	conn.PlugIn(comp.Ports.Control)
 }
 
-// assignPort builds a port with the given buffer size using the same simulation
-// the component was built with, and assigns it to the component's declared port
-// of the same name.
-func assignPort(
-	sim timing.Simulation,
-	comp *Comp,
-	name string,
-	bufSize int,
-) messaging.Port {
-	p := modeling.MakePortBuilder().
-		WithSimulation(sim).
-		WithComponent(comp).
-		WithSpec(modeling.PortSpec{BufSize: bufSize}).
-		Build(name)
-	comp.AssignPort(name, p)
-	return p
-}
-
-// assignDefaultPorts assigns the TLB's three declared ports (Top, Bottom,
-// Control) with the historical default buffer sizes.
-func assignDefaultPorts(sim timing.Simulation, comp *Comp) {
-	assignPort(sim, comp, "Top", 4)
-	assignPort(sim, comp, "Bottom", 4)
-	assignPort(sim, comp, "Control", 1)
+// defaultPorts creates the ports of the TLB named name, with the historical
+// default buffer sizes.
+func defaultPorts(name string) Ports {
+	return Ports{
+		Top:     messaging.NewPort(name+".Top", 4, 4),
+		Bottom:  messaging.NewPort(name+".Bottom", 4, 4),
+		Control: messaging.NewPort(name+".Control", 1, 1),
+	}
 }
 
 // makeDirectConnection builds a direct connection using the given simulation.
@@ -75,13 +59,11 @@ func makeDirectConnection(sim timing.Simulation) messaging.Connection {
 		Build("Conn")
 }
 
-// idealEndpoint is a minimal messaging.Component used as the remote peer of the
+// idealEndpoint is a minimal messaging.PortOwner used as the remote peer of the
 // TLB in the integration tests. It owns a single real port; when a message is
 // delivered to that port it records the message and optionally runs onDeliver.
 type idealEndpoint struct {
-	sim timing.Simulation
 	hooking.HookableBase
-	*messaging.PortOwnerBase
 
 	name          string
 	port          messaging.Port
@@ -90,13 +72,11 @@ type idealEndpoint struct {
 }
 
 func newIdealEndpoint(name string) *idealEndpoint {
-	ep := &idealEndpoint{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()),
-		name:          name,
-		PortOwnerBase: messaging.NewPortOwnerBase(),
+	ep := &idealEndpoint{
+		name: name,
 	}
-	ep.port = messaging.NewPort(ep, 4, 4, name+".Port")
-	ep.DeclarePort("Port")
-	ep.AssignPort("Port", ep.port)
+	ep.port = messaging.NewPort(name+".Port", 4, 4)
+	ep.port.SetOwner(ep)
 
 	return ep
 }
@@ -115,9 +95,7 @@ func (ep *idealEndpoint) NotifyRecv(port messaging.Port) {
 func (ep *idealEndpoint) NotifyPortFree(_ messaging.Port) {}
 
 func TestValidateState(t *testing.T) {
-	if err := modeling.ValidateState(State{}); err != nil {
+	if err := modeling.ValidateState(state{}); err != nil {
 		t.Fatalf("State failed validation: %v", err)
 	}
 }
-
-func (c *idealEndpoint) Simulation() timing.Simulation { return c.sim }

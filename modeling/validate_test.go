@@ -244,12 +244,12 @@ func TestValidateState_AllowsNamesIgnoredByJSON(t *testing.T) {
 
 func TestValidateSpec_RejectsNonScalarDashField(t *testing.T) {
 	type spec struct {
-		N    int   `json:"n"`
-		List []int `json:"-"`
+		N    int            `json:"n"`
+		List map[string]int `json:"-"`
 	}
 
 	if err := ValidateSpec(spec{}); err == nil {
-		t.Fatal("expected a json:\"-\" slice field to be rejected in a Spec")
+		t.Fatal("expected a json:\"-\" map field to be rejected in a Spec")
 	}
 }
 
@@ -264,10 +264,10 @@ func TestValidateState_AllowsDashFieldRebuiltBySetup(t *testing.T) {
 	}
 }
 
-// marshalingSpec customizes its JSON but still holds a slice, which every
-// copy of a default Spec would share.
+// marshalingSpec customizes its JSON but still holds a map, which is not
+// configuration a Spec may hold.
 type marshalingSpec struct {
-	Sizes []int
+	Sizes map[string]int
 }
 
 func (s marshalingSpec) MarshalJSON() ([]byte, error) { return json.Marshal(s.Sizes) }

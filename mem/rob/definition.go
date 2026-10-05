@@ -1,26 +1,25 @@
 package rob
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
-// Definition declares the reorder buffer: its default configuration and its
-// port topology. The builder consumes it at runtime and tooling reads it
-// statically, so it is the single source of truth for both.
-var Definition = modeling.ComponentDef[Spec]{
-	Name: "ReorderBuffer",
+// Definition declares the reorder buffer, a ticking component: its default
+// configuration and its behavior. Its ports and middlewares are the fields of
+// Ports and Middlewares. The system builder builds an instance with
+// Definition.Builder()...Build(name); tooling reads the same declaration
+// statically.
+var Definition = ticking.Definition[Spec, state, modeling.None, Ports, middlewares]{
 	DefaultSpec: Spec{
 		Freq:           1 * timing.GHz,
 		BufferSize:     128,
 		NumReqPerCycle: 4,
 	},
-	Ports: []modeling.PortDef{
-		{Name: "Top", Roles: []*messaging.Role{memprotocol.Responder}},
-		{Name: "Bottom", Roles: []*messaging.Role{memprotocol.Requester}},
-		{Name: "Control", Roles: []*messaging.Role{memcontrolprotocol.Responder}},
-	},
+	NewMiddlewares: newMiddlewares,
+}
+
+func newMiddlewares(c *Comp) middlewares {
+	return middlewares{Pipeline: &middleware{comp: c}}
 }
