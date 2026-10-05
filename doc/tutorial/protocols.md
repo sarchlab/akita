@@ -4,27 +4,13 @@ sidebar_position: 9
 
 # Protocols
 
-The talking-components tutorial sends messages with nothing more than two
-struct types and a port — and that is fully supported. **Messages do not
-need a protocol.** Any type embedding `messaging.MsgMeta` can be sent,
-received, and type-switched on, exactly as the examples do.
+A **protocol** is a set of value payload types organized into roles. Every
+non-nil `messaging.Msg.Payload` must be registered through a protocol before
+`Port.Send` accepts it. Registration also lets JSON restore the concrete type
+when a message is checkpointed in a port, component state, or another payload.
 
-A **protocol** is an opt-in declaration on top of that: a named set of
-message types, organized into roles, that travel over a port. You want one
-when:
-
-- **Your simulation will be checkpointed.** A message captured in a port
-  buffer at save time can only be decoded at load time if its concrete
-  type was registered. Defining a protocol registers every message type it
-  carries. (If you never checkpoint, you do not need one.)
-- **You are building a component library.** A protocol package documents
-  the wire contract between your components — what a port sends and
-  receives — in one discoverable place, instead of spread across
-  middleware code.
-- **You want tooling to see your topology's contracts.** Ports bound to
-  roles can be read back programmatically: the `inspect` package reports
-  each port of a component together with its roles, without running the
-  code.
+Roles document what each endpoint sends. The inspector reads port role tags
+without running the simulation.
 
 ## Defining a Protocol
 
@@ -33,20 +19,18 @@ owns the message types:
 
 ```go
 type MyReq struct {
-    messaging.MsgMeta
     Address uint64
 }
 
 type MyRsp struct {
-    messaging.MsgMeta
 }
 
 var (
     Protocol = messaging.DefineProtocol(
         messaging.RoleDef{Name: "requester",
-            Sends: []messaging.Msg{MyReq{}}},
+            Sends: []any{MyReq{}}},
         messaging.RoleDef{Name: "responder",
-            Sends: []messaging.Msg{MyRsp{}}},
+            Sends: []any{MyRsp{}}},
     )
     Requester = Protocol.Role("requester")
     Responder = Protocol.Role("responder")
@@ -70,7 +54,7 @@ framework example (`noc/packetization`):
 var (
     Protocol = messaging.DefineProtocol(
         messaging.RoleDef{Name: "link",
-            Sends: []messaging.Msg{Flit{}}},
+            Sends: []any{Flit{}}},
         ...
     )
     Link = Protocol.Role("link")
@@ -83,7 +67,9 @@ codec** — that is the mechanical payoff.
 
 `DefineProtocol` panics at init time on mistakes that would otherwise be
 silent: a second protocol in the same package, or an invalid or duplicate
-role name. A role name uses only letters, digits, `_`, and `-`. The same
+role name. It also rejects pointer payloads and fields containing pointers,
+interfaces, channels, functions, or unsafe pointers, even when excluded from JSON.
+Nested `messaging.Msg` values are supported. A role name uses only letters, digits, `_`, and `-`. The same
 message type may be sent by more than one role, as when a response goes back
 to requesters of several kinds.
 
@@ -153,24 +139,20 @@ exported role handles.
 
 - **Checkpointability.** Every message type in a protocol can be decoded
   when a checkpoint that captured it is loaded. Without registration,
-  `LoadCheckpoint` fails loudly with `unknown message type` — never
+  `LoadCheckpoint` fails loudly with `unknown payload type` — never
   silently. See *Writing Checkpointable Code*.
-- **Audit coverage.** Akita's CI runs a registration-coverage audit that
-  finds every concrete `messaging.Msg` type in the module's library
-  packages and fails if one is unregistered, so a forgotten registration
-  is a build break, not a latent bug. The examples are deliberately out of
-  the audit's scope — they stay on the simple, protocol-less path. (The
-  audit covers the Akita module; for your own library the runtime
-  registration works as-is, and you can replicate the audit pattern from
-  `messaging/protocolaudit_test.go`.)
+- **Audit coverage.** CI checks concrete payloads constructed in library message
+  literals against the registry. Runtime `Send` also checks every non-nil
+  payload, including those supplied dynamically. Examples register their own
+  payload types during initialization.
 - **A contract you can read.** The role tag on a `Ports` field tells the
   next reader what a port sends and receives without tracing middleware
   code.
 
-One non-message to know about: bare `messaging.MsgMeta` is the envelope
-every message embeds, not a message — it belongs to no protocol. Always
-define a named message type, even when it carries no payload beyond the
-metadata.
+A nil payload is metadata-only traffic and needs no registration. Use a distinct
+empty payload struct when type identity represents a protocol operation, such as
+`WriteDoneRsp{}`. Slice and map storage is shared between sender and receiver;
+the message and payload must remain immutable after sending.
 
 ## Adding a Message Later
 

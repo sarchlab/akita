@@ -19,7 +19,8 @@ units), with `requester`/`responder` roles that ports bind to.
 | `DataReadyRsp` | Response | `Data []byte` |
 | `WriteDoneRsp` | Response | *(empty — acknowledgment only)* |
 
-All messages embed `messaging.MsgMeta` for routing (Src, Dst, ID, RspTo).
+All protocol payloads travel inside `messaging.Msg`, whose routing fields are
+`Src`, `Dst`, `ID`, and `RspTo`. Payload types contain only protocol fields.
 
 The `AccessReq` interface (also in `mem/memprotocol`) unifies read/write
 requests with `GetAddress()` and `GetPID()`. The Get prefix keeps the methods

@@ -66,25 +66,28 @@ Two message types, defined alongside the component:
 
 ```go
 type pingReq struct {
-    messaging.MsgMeta
     SeqID int
 }
 
 type pingRsp struct {
-    messaging.MsgMeta
     SeqID int
 }
 ```
 
-Messages are **value types** — a `pingReq` is a plain struct, not a
-pointer. You construct one with a composite literal (no `&`), send it by
-value, and receive it by value.
+Each protocol type is a **value payload**. Register both types at package
+initialization:
 
-`messaging.MsgMeta` is embedded in every message and carries routing
-metadata. Its fields are `ID`, `Src`, `Dst`, `TrafficClass`,
-`TrafficBytes`, and `RspTo`. Every message satisfies `messaging.Msg`,
-whose `Meta() MsgMeta` method returns that metadata by value. The `SeqID`
-field is the payload you actually care about.
+```go
+var Protocol = messaging.DefineProtocol(
+    messaging.RoleDef{Name: "peer", Sends: []any{pingReq{}, pingRsp{}}},
+)
+```
+
+Build a `messaging.Msg` with routing fields (`ID`, `Src`, `Dst`, `TrafficClass`,
+`TrafficBytes`, and `RspTo`) and put `pingReq{SeqID: seq}` in its `Payload` field.
+Ports send and return the envelope by value. Type switches inspect
+`msg.Payload`; the routing fields remain on `msg`. Slice and map storage inside
+payloads is shared and must not be mutated after sending.
 
 ## Ports
 

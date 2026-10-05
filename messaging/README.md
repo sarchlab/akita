@@ -7,19 +7,14 @@ buffer to another port's incoming buffer.
 
 ## Key Concepts
 
-- A **message** (`Msg`) is any value carrying a `MsgMeta` with routing and
-  identification metadata. Bare `MsgMeta` is the envelope, not a message — it
-  belongs to no protocol.
-- A **protocol** (`Protocol`) is a set of message types organized into
-  **roles** (`Role`), named after the package that defines it: its import
-  path. Defining a protocol with `DefineProtocol` registers every message type
-  it carries with the checkpoint codec; components tag each port with the
-  role(s) it speaks, `akita:"role=<protocol>.<role>"`, for example
+- A **message** (`Msg`) is a value with routing fields and a protocol-specific
+  `Payload`. A nil payload is metadata-only traffic.
+- A **protocol** (`Protocol`) registers value payload types during package
+  initialization and groups them into **roles** (`Role`). Its name is the defining
+  package's import path. Ports declare roles with tags such as
   `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`.
-  Protocols are **opt-in**: messages flow without one, and registration only
-  matters when a checkpoint can capture the message. A port that takes
-  messages of every protocol, such as a message sink, speaks `AnyRole`, the
-  only role of `AnyProtocol`: `akita:"role=github.com/sarchlab/akita/v5/messaging.any"`.
+  Non-nil payloads must be registered before they can be sent. `AnyRole` accepts
+  traffic from any protocol; it does not bypass payload registration.
 - A **port** is owned by a component and holds an incoming and an outgoing
   buffer. Components `Send`/`RetrieveIncoming` on their side; connections
   `Deliver`/`RetrieveOutgoing` on theirs.
@@ -31,43 +26,55 @@ buffer to another port's incoming buffer.
 
 ## Key Types
 
-### Msg and MsgMeta
+### Msg and payloads
 
 ```go
-type Msg interface {
-    Meta() MsgMeta
-}
-
-type MsgMeta struct {
+type Msg struct {
     ID           uint64
     Src, Dst     RemotePort
     TrafficClass string
     TrafficBytes int
-    RspTo        uint64 // ID of the request this responds to, if any
+    RspTo        uint64
+    Payload      any
 }
 ```
 
-Embed `MsgMeta` (or hold one) so a message satisfies `Msg`. `meta.IsRsp()`
-reports whether `RspTo` is set.
-
-**Checkpointing:** a message buffered in a port is serialized when the simulation
-is checkpointed, so each concrete message type must be registered. The
-recommended way is to declare the package's protocol once:
+`msg.IsRsp()` reports whether `RspTo` is nonzero. Routing fields live directly on
+`Msg`; protocol types contain only their own fields:
 
 ```go
-var (
-    Protocol  = messaging.DefineProtocol( // named ".../mem/memprotocol"
-        messaging.RoleDef{Name: "requester",
-            Sends: []messaging.Msg{ReadReq{}, WriteReq{}}},
-        messaging.RoleDef{Name: "responder",
-            Sends: []messaging.Msg{DataReadyRsp{}, WriteDoneRsp{}}},
-    )
-    Requester = Protocol.Role("requester")
-    Responder = Protocol.Role("responder")
+type ReadReq struct { Address uint64 }
+type WriteDoneRsp struct{}
+
+var Protocol = messaging.DefineProtocol(
+    messaging.RoleDef{Name: "requester", Sends: []any{ReadReq{}}},
+    messaging.RoleDef{Name: "responder", Sends: []any{WriteDoneRsp{}}},
 )
+
+port.Send(messaging.Msg{
+    ID: id, Src: port.AsRemote(), Dst: lower,
+    Payload: ReadReq{Address: 64},
+})
 ```
 
-and bind ports to roles with a tag on the component's Ports field:
+Registration rejects pointer prototypes and pointer, interface, channel,
+function, and unsafe-pointer fields at any depth, even with `json:"-"` or custom
+JSON methods. Scalars, structs, arrays, slices, maps with supported JSON keys,
+and nested `messaging.Msg` values are allowed. `Send` rejects unregistered
+payloads, including pointers, and accepts a nil payload. Protocol definitions
+must run during package initialization; runtime registry lookups do not lock.
+
+Slice and map storage is shared between sender and receiver. Do not mutate it
+after sending. Inspect a payload with `switch req := msg.Payload.(type)` while
+using `msg.ID`, `msg.Src`, and the other envelope fields for routing and replies.
+
+`Msg` implements JSON serialization itself, preserving the payload's concrete
+type with a full-import-path tag. It can be stored directly in component state,
+port buffers, or another payload. A nil payload omits both `type` and `payload`.
+The checkpoint shape is a readable object with routing fields, `type`, and
+`payload`.
+
+Declare roles in the protocol and bind ports to roles with a tag on the component's Ports field:
 
 ```go
 Top messaging.Port `akita:"role=github.com/sarchlab/akita/v5/mem/memprotocol.responder"`
@@ -77,7 +84,7 @@ The inspector checks each tag against the protocol's roles. Each protocol lives 
 own package (e.g. `mem/memprotocol`, `mem/memcontrolprotocol`, `mem/vm/vmprotocol`)
 that owns the message types and the protocol definition. A
 registration-coverage audit
-(`protocolaudit_test.go`) fails CI for any message type in the module that is
+(`protocolaudit_test.go`) fails CI for concrete payloads constructed in library message literals that are
 not registered. Events are registered with `timing.RegisterEvent`. No custom
 marshalling is needed.
 See [`doc/tutorial/checkpointing.md`](../doc/tutorial/checkpointing.md).
@@ -127,7 +134,7 @@ empty, notifies the connection via `NotifySend`. `Deliver` pushes onto the
 incoming buffer (guarded by `CanDeliver` the same way) and notifies the owning
 component via `NotifyRecv`.
 
-Reads return `(nil, false)` when empty. `Peek` leaves the message queued;
+Reads return `(Msg{}, false)` when empty. `Peek` leaves the message queued;
 `Retrieve` consumes it and retains the sender notification when a full buffer
 gains space. A successful read returns `true`. Capacity and peek checks do not
 reserve buffer space or messages.
@@ -140,7 +147,6 @@ type Connection interface {
     hooking.Hookable
 
     PlugIn(port Port)
-    Unplug(port Port)
     NotifyAvailable(port Port)
     NotifySend()
 }

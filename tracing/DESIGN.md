@@ -334,9 +334,9 @@ discussions. The current API for both is **kept unchanged**.
 an incoming message **without mutating the message**. The scenario:
 
 - The sender emits a `req_out` task whose ID *is* the message ID
-  (`msg.Meta().ID`), fixed at construction.
+  (`msg.ID`), fixed at construction.
 - The receiver emits a `req_in` task for *its* handling. It needs its own unique
-  ID, with `ParentID = msg.Meta().ID` to link the two into a tree.
+  ID, with `ParentID = msg.ID` to link the two into a tree.
 
 `MsgIDAtReceiver` keeps a process-global, mutex-guarded map
 `(domain, msg.ID) → generated taskID`, where the domain is the receiving
@@ -401,3 +401,6 @@ any solution here must stay explicit and data-driven.
 | Registry | **Kept as-is**; redesign deferred |
 | Context/handle | **Deferred** |
 | Backward compat | Not preserved; daisen updated in lockstep |
+
+Message tracing records the concrete type name of `msg.Payload`; nil payloads
+are named `metadata`. Request correlation uses `msg.ID` and `msg.RspTo`.

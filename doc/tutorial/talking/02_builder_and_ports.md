@@ -143,13 +143,11 @@ func (m *sendMW) sendPing() bool {
         return false
     }
 
-    out.Send(pingReq{
-        MsgMeta: messaging.MsgMeta{
+    out.Send(messaging.Msg{
             ID:  m.comp.NewID(),
             Src: out.AsRemote(),
             Dst: spec.PingDst,
-        },
-        SeqID: state.NextSeqID,
+        Payload: pingReq{SeqID: state.NextSeqID},
     })
 
     state.StartTimes = append(state.StartTimes, uint64(m.comp.CurrentTime()))
@@ -188,11 +186,11 @@ if !ok {
     return false
 }
 
-switch msg := msgI.(type) {
+switch msgI.Payload.(type) {
 case pingReq:
-    m.processPingReq(msg)
+    m.processPingReq(msgI)
 case pingRsp:
-    m.processPingRsp(msg)
+    m.processPingRsp(msgI)
 default:
     panic("unknown message type")
 }
@@ -202,7 +200,7 @@ return true
 
 Because messages are values, the type switch matches on value cases
 (`pingReq`, `pingRsp`) — not pointer cases. `RetrieveIncoming` consumes the
-message and returns it as a `messaging.Msg` interface value with a presence
+message and returns it as a `messaging.Msg` struct value with a presence
 boolean.
 
 tickingping can always handle a message, so it retrieves at once. A

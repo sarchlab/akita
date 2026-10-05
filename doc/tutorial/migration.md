@@ -108,32 +108,61 @@ hash, and serialize. V5 uses monotonically increasing `uint64` values.
 
 | V4 | V5 |
 |----|-----|
-| `MsgMeta.ID string` | `MsgMeta.ID uint64` |
-| `MsgMeta.RspTo string` | `MsgMeta.RspTo uint64` |
+| `MsgMeta.ID string` | `Msg.ID uint64` |
+| `MsgMeta.RspTo string` | `Msg.RspTo uint64` |
 | `IDGenerator.Generate() string` | `IDGenerator.Generate() uint64` |
 | `tracing.Task.ID string` | `tracing.Task.ID uint64` |
 | `tracing.Task.ParentID string` | `tracing.Task.ParentID uint64` |
 | Empty/nil sentinel: `""` | Empty/nil sentinel: `0` |
 
-### MsgMeta (V5)
+### Message envelopes and value payloads (V5)
+
+Before (the earlier V5 API):
 
 ```go
-// v5/sim/msg.go
-type MsgMeta struct {
-    ID           uint64
-    Src, Dst     RemotePort
-    TrafficClass string
-    TrafficBytes int
-    RspTo        uint64
-    SendTaskID   uint64 `json:"send_task_id"`
-    RecvTaskID   uint64 `json:"recv_task_id"`
+type ReadReq struct {
+    messaging.MsgMeta
+    Address uint64
 }
-
-// IsRsp returns true if this message is a response.
-func (m *MsgMeta) IsRsp() bool { return m.RspTo != 0 }
+req := ReadReq{MsgMeta: messaging.MsgMeta{ID: id, Src: src, Dst: dst}, Address: 64}
+port.Send(req)
+switch req := msg.(type) {
+case ReadReq:
+    handle(req.Meta().ID, req.Address)
+}
 ```
 
-Note the new `SendTaskID` and `RecvTaskID` fields for tracing integration.
+After:
+
+```go
+type ReadReq struct { Address uint64 }
+var Protocol = messaging.DefineProtocol(
+    messaging.RoleDef{Name: "requester", Sends: []any{ReadReq{}}},
+)
+req := messaging.Msg{ID: id, Src: src, Dst: dst, Payload: ReadReq{Address: 64}}
+port.Send(req)
+switch req := msg.Payload.(type) {
+case ReadReq:
+    handle(msg.ID, req.Address)
+}
+```
+
+`Msg` contains `ID`, `Src`, `Dst`, `TrafficClass`, `TrafficBytes`, `RspTo`, and
+`Payload`. `msg.IsRsp()` means `msg.RspTo != 0`. The earlier `MsgMeta` type and
+`Meta()` method are removed. Tracing task IDs remain in tracing's registry.
+
+Payloads must be registered values, including in examples that never checkpoint.
+Pointer prototypes and pointer/interface/channel/function/unsafe-pointer fields
+are rejected at registration, including JSON-excluded fields. Slice and map
+storage remains shared; do not mutate it after sending. A nil payload is allowed.
+Use message IDs for identity comparisons: comparing whole messages can panic
+when a payload contains slices or maps. Hooks carry the outer `messaging.Msg`;
+inspect its `Payload` for the protocol type.
+
+Store complete messages in component state and port buffers. `Msg` preserves
+concrete payload types through JSON, including nested messages; a separate
+`messaging.Envelope` is unnecessary. The switching network still clears the
+application payload before packetizing in this migration (#495 remains separate).
 
 ### IDGenerator (V5)
 

@@ -53,7 +53,7 @@ type MSHREntryState struct {
     TransactionIndices []int   // transactions coalesced onto this miss
     BlockSetID, BlockWayID int
     HasBlock           bool
-    ReadReq, DataReady messaging.MsgMeta
+    ReadReq, DataReady messaging.Msg
     Data               []byte
     // …HasReadReq / HasDataReady flags
 }

@@ -148,7 +148,7 @@ types. The message hook from *Hooking into Messages* is the natural case — a
 port carries both requests and responses:
 
 ```go
-switch msg := ctx.Item.(type) {
+switch msg := ctx.Item.(messaging.Msg).Payload.(type) {
 case pingReq:
     // msg is a pingReq in this branch
 case pingRsp:

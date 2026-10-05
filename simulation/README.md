@@ -129,7 +129,8 @@ setup rebuilds; put cursors and counters in `State`.
   (every event with time ≤ `t`), unlike `Run` (drains everything) or `Pause`
   (stops at a non-reproducible point) — useful for taking a mid-transaction
   checkpoint.
-- **Register your message and event types.** A port can hold any `messaging.Msg`
+- **Register your message and event types.** A port holds `messaging.Msg` values whose non-nil payloads must be registered
+  at package initialization
   and the engine queue any `timing.Event`; each concrete type must be registered
   (a message by listing it in a `messaging.DefineProtocol`, an event with
   `timing.RegisterEvent` in an `init()`) so a checkpoint that captures it can

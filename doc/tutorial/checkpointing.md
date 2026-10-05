@@ -50,37 +50,35 @@ tutorial). Defining the protocol registers every message type it carries with
 the checkpoint decoder (which needs the registration because Go cannot
 reconstruct a concrete type from a name on its own).
 
-Checklist:
-
-1. Embed `messaging.MsgMeta` and keep every routing/payload field **exported**
-   and JSON-serializable. Bare `MsgMeta` is the envelope, not a message — it
-   belongs to no protocol.
-2. Tag any transient, non-serializable scratch field `json:"-"` (e.g. the
-   `Info interface{}` data-plane field).
-3. List the type in your package's protocol (a package-level `var` in a
-   non-test file, so it runs in production builds).
+Keep protocol-specific fields in value payload types and register their zero
+values in a package-level protocol declaration. Pointer, interface, channel,
+function, and unsafe-pointer fields are rejected at any depth, including fields
+tagged `json:"-"`. A nested `messaging.Msg` is allowed because it serializes its
+own payload. Do not put transient references in a payload.
 
 ```go
 // in your package
 type MyReq struct {
-	messaging.MsgMeta
 	Address uint64
-	Info    interface{} `json:"-"` // transient scratch — excluded
 }
 
 type MyRsp struct {
-	messaging.MsgMeta
 }
 
 var (
 	Protocol = messaging.DefineProtocol( // named "example.com/sim/mypkg"
-		messaging.RoleDef{Name: "requester", Sends: []messaging.Msg{MyReq{}}},
-		messaging.RoleDef{Name: "responder", Sends: []messaging.Msg{MyRsp{}}},
+		messaging.RoleDef{Name: "requester", Sends: []any{MyReq{}}},
+		messaging.RoleDef{Name: "responder", Sends: []any{MyRsp{}}},
 	)
 	Requester = Protocol.Role("requester")
 	Responder = Protocol.Role("responder")
 )
 ```
+
+A component state can hold `Buf []messaging.Msg` directly. Plain `encoding/json`
+retains each message's routing fields, payload tag, and payload object; nested
+messages retain their inner payload types. Nil payloads omit the tag and payload.
+No separate wrapper or per-component serialization is needed.
 
 Components then declare which role each port speaks with a tag on the port's
 field in their `Ports` struct:
@@ -93,10 +91,10 @@ type Ports struct {
 
 Adding a new message is one type definition plus one entry in a `Sends` list.
 A protocol is the only way to register a message type. A registration-coverage
-audit in `messaging` fails CI for any message type in the Akita module that
-belongs to no protocol, and the load itself fails loudly — never silently —
-with `unknown message type "yourpkg.MyReq"` if an unregistered message was
-captured in a port buffer.
+audit in `messaging` checks payload types constructed in library message literals.
+`Port.Send` and message JSON encoding also reject unregistered payload types.
+Loading a checkpoint whose payload type is no longer registered fails with
+`unknown payload type`, naming the full import path and type.
 
 ## Events
 

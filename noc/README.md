@@ -70,10 +70,9 @@ unit on a network:
 
 ```go
 type Flit struct {
-    messaging.MsgMeta
     SeqID        int               // flit sequence number within a message
     NumFlitInMsg int               // total flits in the parent message
-    Msg          messaging.MsgMeta // metadata of the carried message
+    Msg          messaging.Msg // metadata of the carried message
 }
 ```
 
@@ -98,3 +97,7 @@ portA.Send(msg) // connection handles delivery to portB
 
 Components are unaware of the underlying network topology — they simply
 send messages through their ports.
+
+Flits are registered payload values inside `messaging.Msg`. The sending endpoint
+clears the carried message payload before packetizing; delivery still returns
+metadata with an empty `AssembledMsg` payload until #495 is implemented.
