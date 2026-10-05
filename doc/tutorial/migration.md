@@ -171,7 +171,7 @@ is no process-global generator or sequential/parallel configuration switch.
 
 ```go
 id := sim.NewID() // uint64, unique within this simulation
-req.ID = component.NewID() // uses the same counter
+msg := messaging.Msg{ID: component.NewID(), Payload: ReadReq{}} // same counter
 ```
 
 Event factories now take the allocated ID explicitly:
@@ -212,11 +212,14 @@ if req.ID == "" { ... }
 
 **After (V5) — uint64 IDs:**
 ```go
-pendingReqs := map[uint64]*ReadReq{}
+pendingReqs := map[uint64]messaging.Msg{}
 
-req := &ReadReq{}
-req.ID = component.NewID() // 1, 2, 3, ...
-pendingReqs[req.ID] = req
+msg := messaging.Msg{
+    ID: component.NewID(), // 1, 2, 3, ...
+    Src: port.AsRemote(), Dst: lower,
+    Payload: ReadReq{},
+}
+pendingReqs[msg.ID] = msg
 
 // Later, matching response:
 if original, ok := pendingReqs[rsp.RspTo]; ok {
@@ -224,7 +227,7 @@ if original, ok := pendingReqs[rsp.RspTo]; ok {
 }
 
 // Check if ID is empty:
-if req.ID == 0 { ... }
+if msg.ID == 0 { ... }
 ```
 
 ### Migration Checklist
@@ -242,37 +245,34 @@ if req.ID == 0 { ... }
 
 **Motivation:** V4 had separate request/response types for each control
 operation (flush, drain, restart). V5 consolidates them into a single
-`ControlReq` / `ControlRsp` pair with a `Command` enum.
+`memcontrolprotocol.Req` / `memcontrolprotocol.Rsp` payload pair with a
+`Command` enum. Both travel inside `messaging.Msg`.
 
 ### V5 Types
 
 ```go
-// v5/mem/protocol.go
-type ControlCommand int
+// package memcontrolprotocol
+type Command int
 
 const (
-    CmdFlush      ControlCommand = iota // Write back dirty data
-    CmdInvalidate                       // Invalidate entries without writeback
-    CmdDrain                            // Wait for in-flight ops to complete
-    CmdReset                            // Soft reset
-    CmdPause                            // Disable further processing
-    CmdEnable                           // Re-enable processing
+    CmdPause Command = iota // Freeze new and in-flight work
+    CmdDrain               // Finish in-flight work, then remain paused
+    CmdEnable              // Resume processing
+    CmdReset               // Reset component state
+    CmdInvalidate          // Drop filtered cache entries while paused/drained
+    CmdFlush               // Write back dirty lines while paused/drained
 )
 
-type ControlReq struct {
-    sim.MsgMeta
-    Command         ControlCommand
-    DiscardInflight bool     // For Flush: discard vs wait for in-flight
-    InvalidateAfter bool     // For Flush: invalidate lines after writeback
-    PauseAfter      bool     // For Flush/Drain: pause after completion
-    Addresses       []uint64 // For Invalidate: specific addresses (empty = all)
-    PID             vm.PID   // For Invalidate: process filter
+type Req struct {
+    Command   Command
+    Addresses []uint64 // Invalidate/Flush filter; empty = all entries
+    PID       vm.PID   // Filter; zero = all PIDs
 }
 
-type ControlRsp struct {
-    sim.MsgMeta
-    Command ControlCommand
+type Rsp struct {
+    Command Command
     Success bool
+    Error   string
 }
 ```
 
@@ -304,20 +304,29 @@ engine.Send(restartReq)
 **After (V5) — one request type, `memcontrolprotocol.Req`, with a command:**
 ```go
 // Draining a cache: in-flight work finishes, and the cache ends paused.
-drainReq := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdDrain}
-drainReq.ID = comp.NewID()
-drainReq.Src = controlPort.AsRemote()
-drainReq.Dst = cacheControlPort
-controlPort.Send(drainReq)
+controlPort.Send(messaging.Msg{
+    ID: comp.NewID(), Src: controlPort.AsRemote(), Dst: cacheControlPort,
+    Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdDrain},
+})
 
-// Flushing it once paused or drained: dirty lines are written back.
-flushReq := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
+// After the drain acknowledgment, flush dirty lines to backing memory.
+controlPort.Send(messaging.Msg{
+    ID: comp.NewID(), Src: controlPort.AsRemote(), Dst: cacheControlPort,
+    Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
+})
 
-// Re-enabling it.
-enableReq := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdEnable}
+// After the flush acknowledgment, resume processing.
+controlPort.Send(messaging.Msg{
+    ID: comp.NewID(), Src: controlPort.AsRemote(), Dst: cacheControlPort,
+    Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdEnable},
+})
 
-// One response type, memcontrolprotocol.Rsp, for every command:
-func handleControlRsp(rsp memcontrolprotocol.Rsp) {
+// One response payload type for every command; msg.RspTo identifies the request.
+func handleControlRsp(msg messaging.Msg) {
+    rsp, ok := msg.Payload.(memcontrolprotocol.Rsp)
+    if !ok {
+        panic("unexpected control payload")
+    }
     if !rsp.Success {
         // rsp.Error names the reason, e.g. "unsupported"
         return
@@ -336,11 +345,11 @@ func handleControlRsp(rsp memcontrolprotocol.Rsp) {
 
 ### Migration Checklist
 
-- Replace `FlushReq`/`FlushRsp` with `ControlReq{Command: mem.CmdFlush}` / `ControlRsp`.
-- Replace `DrainReq`/`DrainRsp` with `ControlReq{Command: mem.CmdDrain}` / `ControlRsp`.
-- Replace `RestartReq`/`RestartRsp` with `ControlReq{Command: mem.CmdEnable}` or `CmdReset` / `ControlRsp`.
-- Update type switches in message handlers to check `ControlRsp.Command`.
-- Use `DiscardInflight`, `InvalidateAfter`, `PauseAfter` flags for fine-grained flush/drain behavior.
+- Put `memcontrolprotocol.Req{Command: ...}` in `messaging.Msg.Payload`; put routing fields on the outer message.
+- Replace `FlushReq` with `CmdFlush`, `DrainReq` with `CmdDrain`, and `RestartReq` with `CmdEnable` or `CmdReset`, as appropriate.
+- Handle `msg.Payload.(memcontrolprotocol.Rsp)` and match `msg.RspTo` to the original message ID.
+- Pause or drain before `CmdFlush`/`CmdInvalidate`. Wait for each command's acknowledgment before issuing a dependent command.
+- Use `Addresses` and `PID` for filtered flush/invalidation; the earlier `DiscardInflight`, `InvalidateAfter`, and `PauseAfter` flags are not part of V5.
 
 ---
 
