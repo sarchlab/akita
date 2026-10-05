@@ -67,9 +67,10 @@ var _ = Describe("Flusher", func() {
 			// Flush is a conditional verb: it is only legal once paused.
 			m.comp.State.CacheState = int(cacheStatePaused)
 
-			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-			req.ID = m.comp.NewID()
-			req.TrafficClass = "memcontrolprotocol.Req"
+			req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
+				ID:           m.comp.NewID(),
+				TrafficClass: "memcontrolprotocol.Req"}
+
 			controlPort.Deliver(req)
 
 			ret := f.Tick()
@@ -87,7 +88,7 @@ var _ = Describe("Flusher", func() {
 				next.Transactions, transactionState{})
 			next.HasProcessingFlush = true
 			next.ProcessingFlush = flushReqState{
-				MsgMeta: messaging.MsgMeta{
+				Msg: messaging.Msg{
 					ID: m.comp.NewID(),
 				},
 			}
@@ -102,7 +103,7 @@ var _ = Describe("Flusher", func() {
 			next.CacheState = int(cacheStatePreFlushing)
 			next.HasProcessingFlush = true
 			next.ProcessingFlush = flushReqState{
-				MsgMeta: messaging.MsgMeta{
+				Msg: messaging.Msg{
 					ID: m.comp.NewID(),
 				},
 			}
@@ -126,7 +127,7 @@ var _ = Describe("Flusher", func() {
 			next.HasProcessingFlush = true
 			flushID := m.comp.NewID()
 			next.ProcessingFlush = flushReqState{
-				MsgMeta: messaging.MsgMeta{
+				Msg: messaging.Msg{
 					ID:  flushID,
 					Src: messaging.RemotePort("Agent"),
 				},
@@ -143,7 +144,7 @@ var _ = Describe("Flusher", func() {
 
 			out, _ := controlPort.RetrieveOutgoing()
 			Expect(out).NotTo(BeNil())
-			Expect(out.Meta().RspTo).To(Equal(flushID))
+			Expect(out.RspTo).To(Equal(flushID))
 		})
 	})
 
@@ -152,9 +153,9 @@ var _ = Describe("Flusher", func() {
 			// Flush is a conditional verb: it is only legal once paused.
 			m.comp.State.CacheState = int(cacheStatePaused)
 
-			req := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-			req.ID = m.comp.NewID()
-			req.TrafficClass = "memcontrolprotocol.Req"
+			req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
+				ID:           m.comp.NewID(),
+				TrafficClass: "memcontrolprotocol.Req"}
 
 			controlPort.Deliver(req)
 

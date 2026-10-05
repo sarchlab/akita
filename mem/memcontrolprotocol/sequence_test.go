@@ -40,27 +40,28 @@ func driveCtrl(
 	cmd memcontrolprotocol.Command,
 	addrs []uint64,
 	pid vm.PID,
-) memcontrolprotocol.Rsp {
+) messaging.Msg {
 	t.Helper()
 
-	req := memcontrolprotocol.Req{Command: cmd, Addresses: addrs, PID: pid}
-	req.ID = newIDFor(ctrl)
-	req.Src = messaging.RemotePort("Cmd")
-	req.Dst = ctrl.AsRemote()
-	req.TrafficClass = "memcontrolprotocol.Req"
+	req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd, Addresses: addrs, PID: pid},
+		ID:           newIDFor(ctrl),
+		Src:          messaging.RemotePort("Cmd"),
+		Dst:          ctrl.AsRemote(),
+		TrafficClass: "memcontrolprotocol.Req"}
+
 	ctrl.Deliver(req)
 
 	for range 256 {
 		tick()
 		if out, ok := ctrl.RetrieveOutgoing(); ok {
-			if rsp, ok := out.(memcontrolprotocol.Rsp); ok && rsp.Command == cmd {
-				return rsp
+			if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.Command == cmd {
+				return out
 			}
 		}
 	}
 
 	t.Fatalf("no ack received for %v", cmd)
-	return memcontrolprotocol.Rsp{}
+	return messaging.Msg{Payload: memcontrolprotocol.Rsp{}}
 }
 
 // TestTLBSequence_PauseInvalidateEnable exercises the canonical TLB control
@@ -106,16 +107,20 @@ func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
 	}
 
 	// Pause -> Invalidate(0x1000) -> Enable.
-	if rsp := driveCtrl(t, tick, ctrl, memcontrolprotocol.CmdPause, nil, 0); !rsp.Success {
-		t.Fatalf("Pause failed: %q", rsp.Error)
+	if rsp := driveCtrl(
+		t, tick, ctrl, memcontrolprotocol.CmdPause, nil, 0,
+	); !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		t.Fatalf("Pause failed: %q", rsp.Payload.(memcontrolprotocol.Rsp).Error)
 	}
 	if rsp := driveCtrl(
 		t, tick, ctrl, memcontrolprotocol.CmdInvalidate, []uint64{0x1000}, pid,
-	); !rsp.Success {
-		t.Fatalf("Invalidate failed: %q", rsp.Error)
+	); !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		t.Fatalf("Invalidate failed: %q", rsp.Payload.(memcontrolprotocol.Rsp).Error)
 	}
-	if rsp := driveCtrl(t, tick, ctrl, memcontrolprotocol.CmdEnable, nil, 0); !rsp.Success {
-		t.Fatalf("Enable failed: %q", rsp.Error)
+	if rsp := driveCtrl(
+		t, tick, ctrl, memcontrolprotocol.CmdEnable, nil, 0,
+	); !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		t.Fatalf("Enable failed: %q", rsp.Payload.(memcontrolprotocol.Rsp).Error)
 	}
 
 	// The invalidated page now misses; the untouched page still hits.
@@ -140,13 +145,14 @@ func resolveTranslation(
 
 	top.Deliver(makeTransReq(top, vAddr, pid))
 
-	var botReq vmprotocol.TranslationReq
+	var botReq messaging.Msg
 	botFound := false
 	for i := 0; i < 64 && !botFound; i++ {
 		tick()
 		if out, ok := bottom.RetrieveOutgoing(); ok {
-			if r, ok := out.(vmprotocol.TranslationReq); ok {
-				botReq = r
+			if _, ok := out.Payload.(vmprotocol.TranslationReq); ok {
+				botReq = out
+
 				botFound = true
 			}
 		}
@@ -155,20 +161,21 @@ func resolveTranslation(
 		t.Fatalf("TLB did not forward a miss for %#x to Bottom", vAddr)
 	}
 
-	rsp := vmprotocol.TranslationRsp{Page: vm.Page{
+	rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{Page: vm.Page{
 		PID: pid, VAddr: vAddr, PAddr: vAddr + 0x10000, Valid: true,
-	}}
-	rsp.ID = newIDFor(bottom)
-	rsp.Src = remote
-	rsp.Dst = bottom.AsRemote()
-	rsp.RspTo = botReq.ID
-	rsp.TrafficClass = "vmprotocol.TranslationRsp"
+	}},
+		ID:           newIDFor(bottom),
+		Src:          remote,
+		Dst:          bottom.AsRemote(),
+		RspTo:        botReq.ID,
+		TrafficClass: "vmprotocol.TranslationRsp"}
+
 	bottom.Deliver(rsp)
 
 	for range 64 {
 		tick()
 		if out, ok := top.RetrieveOutgoing(); ok {
-			if _, ok := out.(vmprotocol.TranslationRsp); ok {
+			if _, ok := out.Payload.(vmprotocol.TranslationRsp); ok {
 				return
 			}
 		}
@@ -192,12 +199,12 @@ func lookupMisses(
 	for range 64 {
 		tick()
 		if out, ok := bottom.RetrieveOutgoing(); ok {
-			if _, ok := out.(vmprotocol.TranslationReq); ok {
+			if _, ok := out.Payload.(vmprotocol.TranslationReq); ok {
 				return true
 			}
 		}
 		if out, ok := top.RetrieveOutgoing(); ok {
-			if _, ok := out.(vmprotocol.TranslationRsp); ok {
+			if _, ok := out.Payload.(vmprotocol.TranslationRsp); ok {
 				return false
 			}
 		}
@@ -221,8 +228,10 @@ func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
 	setB := installDirtyBlock(t, comp, storage, 0x40, 0xBB)
 
 	// 1. Drain: the cache holds no in-flight work, so it quiesces and acks.
-	if rsp := driveCtrl(t, tick, ctrl, memcontrolprotocol.CmdDrain, nil, 0); !rsp.Success {
-		t.Fatalf("Drain failed: %q", rsp.Error)
+	if rsp := driveCtrl(
+		t, tick, ctrl, memcontrolprotocol.CmdDrain, nil, 0,
+	); !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		t.Fatalf("Drain failed: %q", rsp.Payload.(memcontrolprotocol.Rsp).Error)
 	}
 
 	// 2. Flush (no filter): both dirty blocks are written back to Bottom.
@@ -247,8 +256,10 @@ func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
 	}
 
 	// 3. Invalidate (no filter): every block is dropped, with no write-back.
-	if rsp := driveCtrl(t, tick, ctrl, memcontrolprotocol.CmdInvalidate, nil, 0); !rsp.Success {
-		t.Fatalf("Invalidate failed: %q", rsp.Error)
+	if rsp := driveCtrl(
+		t, tick, ctrl, memcontrolprotocol.CmdInvalidate, nil, 0,
+	); !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		t.Fatalf("Invalidate failed: %q", rsp.Payload.(memcontrolprotocol.Rsp).Error)
 	}
 	if comp.State.DirectoryState.Sets[setA].Blocks[0].IsValid ||
 		comp.State.DirectoryState.Sets[setB].Blocks[0].IsValid {
@@ -259,8 +270,10 @@ func TestCacheSequence_DrainFlushInvalidateReset(t *testing.T) {
 	}
 
 	// 4. Reset: back to a freshly-built shape (no in-flight transactions).
-	if rsp := driveCtrl(t, tick, ctrl, memcontrolprotocol.CmdReset, nil, 0); !rsp.Success {
-		t.Fatalf("Reset failed: %q", rsp.Error)
+	if rsp := driveCtrl(
+		t, tick, ctrl, memcontrolprotocol.CmdReset, nil, 0,
+	); !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		t.Fatalf("Reset failed: %q", rsp.Payload.(memcontrolprotocol.Rsp).Error)
 	}
 	if len(comp.State.Transactions) != 0 {
 		t.Errorf("Transactions should be empty after Reset, got %d",
@@ -272,15 +285,17 @@ func makeTransReq(
 	top messaging.Port,
 	vAddr uint64,
 	pid vm.PID,
-) vmprotocol.TranslationReq {
-	req := vmprotocol.TranslationReq{}
-	req.ID = newIDFor(top)
-	req.Src = messaging.RemotePort("Agent")
-	req.Dst = top.AsRemote()
-	req.PID = pid
-	req.VAddr = vAddr
-	req.DeviceID = 1
-	req.TrafficClass = "vmprotocol.TranslationReq"
+) messaging.Msg {
+	req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		PID:      pid,
+		VAddr:    vAddr,
+		DeviceID: 1},
+		ID:  newIDFor(top),
+		Src: messaging.RemotePort("Agent"),
+		Dst: top.AsRemote(),
+
+		TrafficClass: "vmprotocol.TranslationReq"}
+
 	return req
 }
 
@@ -294,11 +309,12 @@ func driveFlushAll(
 ) map[byte]bool {
 	t.Helper()
 
-	flush := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-	flush.ID = newIDFor(ctrl)
-	flush.Src = messaging.RemotePort("Cmd")
-	flush.Dst = ctrl.AsRemote()
-	flush.TrafficClass = "memcontrolprotocol.Req"
+	flush := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
+		ID:           newIDFor(ctrl),
+		Src:          messaging.RemotePort("Cmd"),
+		Dst:          ctrl.AsRemote(),
+		TrafficClass: "memcontrolprotocol.Req"}
+
 	ctrl.Deliver(flush)
 
 	writtenBack := map[byte]bool{}
@@ -306,10 +322,11 @@ func driveFlushAll(
 		tick()
 		answerWriteBacks(bottom, writtenBack)
 		if out, ok := ctrl.RetrieveOutgoing(); ok {
-			rsp, ok := out.(memcontrolprotocol.Rsp)
-			if ok && rsp.Command == memcontrolprotocol.CmdFlush {
-				if !rsp.Success {
-					t.Fatalf("Flush failed: %q", rsp.Error)
+			_, ok := out.Payload.(memcontrolprotocol.Rsp)
+			rsp := out
+			if ok && rsp.Payload.(memcontrolprotocol.Rsp).Command == memcontrolprotocol.CmdFlush {
+				if !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+					t.Fatalf("Flush failed: %q", rsp.Payload.(memcontrolprotocol.Rsp).Error)
 				}
 				return writtenBack
 			}
@@ -329,19 +346,21 @@ func answerWriteBacks(bottom messaging.Port, writtenBack map[byte]bool) {
 		if !ok {
 			return
 		}
-		w, ok := out.(memprotocol.WriteReq)
+		_, ok = out.Payload.(memprotocol.WriteReq)
+		w := out
 		if !ok {
 			continue
 		}
-		if len(w.Data) > 0 {
-			writtenBack[w.Data[0]] = true
+		if len(w.Payload.(memprotocol.WriteReq).Data) > 0 {
+			writtenBack[w.Payload.(memprotocol.WriteReq).Data[0]] = true
 		}
-		done := memprotocol.WriteDoneRsp{}
-		done.ID = newIDFor(bottom)
-		done.Src = messaging.RemotePort("LowerCache")
-		done.Dst = bottom.AsRemote()
-		done.RspTo = w.ID
-		done.TrafficClass = "memprotocol.WriteDoneRsp"
+		done := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+			ID:           newIDFor(bottom),
+			Src:          messaging.RemotePort("LowerCache"),
+			Dst:          bottom.AsRemote(),
+			RspTo:        w.ID,
+			TrafficClass: "memprotocol.WriteDoneRsp"}
+
 		bottom.Deliver(done)
 	}
 }

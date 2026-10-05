@@ -118,25 +118,29 @@ var _ = Describe("DRAM Statistics", func() {
 		conn.PlugIn(srcPort)
 
 		// Send a write request
-		write := memprotocol.WriteReq{}
-		write.ID = sim.NewID()
-		write.Address = 0x40
-		write.Data = []byte{1, 2, 3, 4}
-		write.Src = srcPort.AsRemote()
-		write.Dst = topPort.AsRemote()
-		write.TrafficBytes = len(write.Data) + 12
+		write := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address: 0x40,
+			Data:    []byte{1, 2, 3, 4}},
+			ID: sim.NewID(),
+
+			Src: srcPort.AsRemote(),
+			Dst: topPort.AsRemote()}
+
+		write.TrafficBytes = len(write.Payload.(memprotocol.WriteReq).Data) + 12
 		write.TrafficClass = "memprotocol.WriteReq"
 		srcPort.Send(write)
 
 		// Send a read request
-		read := memprotocol.ReadReq{}
-		read.ID = sim.NewID()
-		read.Address = 0x40
-		read.AccessByteSize = 4
-		read.Src = srcPort.AsRemote()
-		read.Dst = topPort.AsRemote()
-		read.TrafficBytes = 12
-		read.TrafficClass = "memprotocol.ReadReq"
+		read := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x40,
+			AccessByteSize: 4},
+			ID: sim.NewID(),
+
+			Src:          srcPort.AsRemote(),
+			Dst:          topPort.AsRemote(),
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		srcPort.Send(read)
 
 		Expect(engine.Run()).To(Succeed())

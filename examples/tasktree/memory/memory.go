@@ -15,24 +15,21 @@ import (
 
 // ReadReq asks the level below for a read.
 type ReadReq struct {
-	messaging.MsgMeta
 }
 
 // ReadRsp answers the ReadReq whose ID is RspTo.
 type ReadRsp struct {
-	messaging.MsgMeta
 }
 
 // NewReq returns a read request with the given ID from src to dst.
-func NewReq(id uint64, src, dst messaging.RemotePort) ReadReq {
-	return ReadReq{MsgMeta: messaging.MsgMeta{ID: id, Src: src, Dst: dst}}
+func NewReq(id uint64, src, dst messaging.RemotePort) messaging.Msg {
+	return messaging.Msg{ID: id, Src: src, Dst: dst, Payload: ReadReq{}}
 }
 
 // NewRsp returns a response with the given ID from src to dst, for the
 // request whose ID is rspTo.
-func NewRsp(id uint64, src, dst messaging.RemotePort, rspTo uint64) ReadRsp {
-	return ReadRsp{MsgMeta: messaging.MsgMeta{
-		ID: id, Src: src, Dst: dst, RspTo: rspTo}}
+func NewRsp(id uint64, src, dst messaging.RemotePort, rspTo uint64) messaging.Msg {
+	return messaging.Msg{ID: id, Src: src, Dst: dst, RspTo: rspTo, Payload: ReadRsp{}}
 }
 
 // Spec is the memory's configuration.
@@ -78,7 +75,8 @@ func (m *serveMW) Handle(_ timing.Event) bool {
 	if !port.CanSend() {
 		return false
 	}
-	req := msg.(ReadReq)
+	_ = msg.Payload.(ReadReq)
+	req := msg
 
 	tracing.TraceReqReceive(m.comp, req) // req_in @ Memory — a leaf task
 	port.Send(NewRsp(m.comp.NewID(), port.AsRemote(), req.Src, req.ID))
@@ -86,3 +84,5 @@ func (m *serveMW) Handle(_ timing.Event) bool {
 	port.RetrieveIncoming()
 	return true
 }
+
+var _ = messaging.DefineProtocol(messaging.RoleDef{Name: "peer", Sends: []any{ReadReq{}, ReadRsp{}}})

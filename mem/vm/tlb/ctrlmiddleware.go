@@ -64,15 +64,15 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	if !ok {
 		return false
 	}
-
-	ctrlReq, ok := msg.(memcontrolprotocol.Req)
+	_, ok = msg.Payload.(memcontrolprotocol.Req)
+	ctrlReq := msg
 	if !ok {
 		// Drop unexpected message types so the Control port does not stall.
 		m.controlPort().RetrieveIncoming()
 		return true
 	}
 
-	switch ctrlReq.Command {
+	switch ctrlReq.Payload.(memcontrolprotocol.Req).Command {
 	case memcontrolprotocol.CmdEnable:
 		return m.performCtrlEnable(ctrlReq)
 	case memcontrolprotocol.CmdDrain:
@@ -92,7 +92,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	}
 }
 
-func (m *ctrlMiddleware) performCtrlEnable(msg memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) performCtrlEnable(msg messaging.Msg) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
@@ -112,7 +112,7 @@ func (m *ctrlMiddleware) performCtrlEnable(msg memcontrolprotocol.Req) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) performCtrlDrain(msg memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) performCtrlDrain(msg messaging.Msg) bool {
 	state := &m.comp.State
 	state.TLBState = tlbStateDrain
 	state.PendingDrainRsp = true
@@ -130,7 +130,7 @@ func (m *ctrlMiddleware) performCtrlDrain(msg memcontrolprotocol.Req) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) performCtrlPause(msg memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) performCtrlPause(msg messaging.Msg) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
@@ -154,7 +154,9 @@ func (m *ctrlMiddleware) performCtrlPause(msg memcontrolprotocol.Req) bool {
 // address/PID filter (empty address list = all addresses, zero PID = all
 // PIDs). Invalidate is a synchronous verb but is only legal once the TLB
 // is paused or drained; issued while Enabled it is rejected.
-func (m *ctrlMiddleware) handleInvalidate(msg memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) handleInvalidate(msg messaging.Msg) bool {
+	request := msg.Payload.(memcontrolprotocol.Req)
+
 	state := &m.comp.State
 	// Invalidate is only legal once the TLB is fully paused. While it is
 	// still draining, in-flight bottom responses can still be parsed into
@@ -166,7 +168,7 @@ func (m *ctrlMiddleware) handleInvalidate(msg memcontrolprotocol.Req) bool {
 		return false
 	}
 
-	invalidateEntries(state, m.comp.Spec, msg.Addresses, msg.PID)
+	invalidateEntries(state, m.comp.Spec, request.Addresses, request.PID)
 
 	m.controlPort().Send(makeCtrlRsp(m.comp, memcontrolprotocol.CmdInvalidate,
 		msg.Src, msg.ID, true, ""))
@@ -183,11 +185,11 @@ func (m *ctrlMiddleware) handleInvalidate(msg memcontrolprotocol.Req) bool {
 
 // rejectMustBePaused responds that a conditional verb is illegal while the
 // component is Enabled.
-func (m *ctrlMiddleware) rejectMustBePaused(msg memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) rejectMustBePaused(msg messaging.Msg) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
-	m.controlPort().Send(makeCtrlRsp(m.comp, msg.Command,
+	m.controlPort().Send(makeCtrlRsp(m.comp, msg.Payload.(memcontrolprotocol.Req).Command,
 		msg.Src, msg.ID, false, memcontrolprotocol.ErrMustBePausedOrDrained))
 	m.controlPort().RetrieveIncoming()
 	return true
@@ -224,7 +226,7 @@ func invalidateEntries(
 	}
 }
 
-func (m *ctrlMiddleware) handleReset(msg memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) handleReset(msg messaging.Msg) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
@@ -320,11 +322,11 @@ func (m *ctrlMiddleware) endPipelineItemTasks(item pipelineTLBReqState) {
 	}
 }
 
-func (m *ctrlMiddleware) handleUnsupported(msg memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) handleUnsupported(msg messaging.Msg) bool {
 	if !m.controlPort().CanSend() {
 		return false
 	}
-	m.controlPort().Send(makeCtrlRsp(m.comp, msg.Command,
+	m.controlPort().Send(makeCtrlRsp(m.comp, msg.Payload.(memcontrolprotocol.Req).Command,
 		msg.Src, msg.ID, false, memcontrolprotocol.ErrUnsupported))
 	m.controlPort().RetrieveIncoming()
 	return true
@@ -337,16 +339,17 @@ func makeCtrlRsp(
 	rspTo uint64,
 	success bool,
 	errStr string,
-) memcontrolprotocol.Rsp {
-	rsp := memcontrolprotocol.Rsp{
+) messaging.Msg {
+	rsp := messaging.Msg{Payload: memcontrolprotocol.Rsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,
-	}
-	rsp.ID = c.NewID()
-	rsp.Src = c.Ports.Control.AsRemote()
-	rsp.Dst = dst
-	rsp.RspTo = rspTo
-	rsp.TrafficClass = "memcontrolprotocol.Rsp"
+	},
+		ID:           c.NewID(),
+		Src:          c.Ports.Control.AsRemote(),
+		Dst:          dst,
+		RspTo:        rspTo,
+		TrafficClass: "memcontrolprotocol.Rsp"}
+
 	return rsp
 }

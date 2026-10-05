@@ -3,6 +3,7 @@ package writethroughcache
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/messaging"
 
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -115,12 +116,10 @@ func (d *directory) reqInTaskID(trans *transactionState) uint64 {
 // meta recovers the same ID.
 func reqInTaskIDOf(comp *Comp, trans *transactionState) uint64 {
 	if trans.HasRead {
-		return tracing.MsgIDAtReceiver(
-			memprotocol.ReadReq{MsgMeta: trans.ReadMeta}, comp)
+		return tracing.MsgIDAtReceiver(trans.ReadMeta, comp)
 	}
 
-	return tracing.MsgIDAtReceiver(
-		memprotocol.WriteReq{MsgMeta: trans.WriteMeta}, comp)
+	return tracing.MsgIDAtReceiver(trans.WriteMeta, comp)
 }
 
 func (d *directory) processRead(trans *transactionState, transIdx int) bool {
@@ -288,19 +287,22 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
-	writeToBottom := memprotocol.WriteReq{}
-	writeToBottom.ID = d.cache.comp.NewID()
-	writeToBottom.Src = d.cache.bottomPort().AsRemote()
-	// Route by cache-line ID so the write-through write and the
-	// corresponding read-fill always target the same lower-memory port,
-	// preserving per-line ordering.
-	writeToBottom.Dst = d.cache.findPort(cacheLineID)
-	writeToBottom.Address = addr
-	writeToBottom.PID = trans.WritePID
-	writeToBottom.Data = trans.WriteData
-	writeToBottom.DirtyMask = trans.WriteDirtyMask
-	writeToBottom.TrafficBytes = len(trans.WriteData) + 12
-	writeToBottom.TrafficClass = "req"
+	writeToBottom := messaging.Msg{Payload: memprotocol.WriteReq{
+		// Route by cache-line ID so the write-through write and the
+		// corresponding read-fill always target the same lower-memory port,
+		// preserving per-line ordering.
+
+		Address:   addr,
+		PID:       trans.WritePID,
+		Data:      trans.WriteData,
+		DirtyMask: trans.WriteDirtyMask},
+		ID:  d.cache.comp.NewID(),
+		Src: d.cache.bottomPort().AsRemote(),
+
+		Dst: d.cache.findPort(cacheLineID),
+
+		TrafficBytes: len(trans.WriteData) + 12,
+		TrafficClass: "req"}
 
 	if !d.cache.bottomPort().CanSend() {
 		return false
@@ -309,7 +311,7 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 	d.cache.bottomPort().Send(writeToBottom)
 
 	trans.HasWriteToBottom = true
-	trans.WriteToBottomMeta = writeToBottom.MsgMeta
+	trans.WriteToBottomMeta = writeToBottom
 	trans.WriteToBottomPID = trans.WritePID
 	trans.WriteToBottomData = trans.WriteData
 	trans.WriteToBottomDirtyMask = trans.WriteDirtyMask
@@ -332,14 +334,15 @@ func (d *directory) fetchFromBottom(
 	next := &d.cache.comp.State
 
 	bottomModule := d.cache.findPort(cacheLineID)
-	readToBottom := memprotocol.ReadReq{
+	readToBottom := messaging.Msg{Payload: memprotocol.ReadReq{
 		Address:        cacheLineID,
 		PID:            pid,
 		AccessByteSize: blockSize,
-	}
-	readToBottom.ID = d.cache.comp.NewID()
-	readToBottom.Src = d.cache.bottomPort().AsRemote()
-	readToBottom.Dst = bottomModule
+	},
+		ID:  d.cache.comp.NewID(),
+		Src: d.cache.bottomPort().AsRemote(),
+		Dst: bottomModule}
+
 	readToBottom.TrafficBytes, readToBottom.TrafficClass = 12, "req"
 
 	if !d.cache.bottomPort().CanSend() {
@@ -351,7 +354,7 @@ func (d *directory) fetchFromBottom(
 	tracing.TraceReqInitiate(d.cache.comp, readToBottom, d.reqInTaskID(trans))
 
 	trans.HasReadToBottom = true
-	trans.ReadToBottomMeta = readToBottom.MsgMeta
+	trans.ReadToBottomMeta = readToBottom
 	trans.ReadToBottomPID = pid
 	trans.BlockSetID = victimSetID
 	trans.BlockWayID = victimWayID
@@ -363,7 +366,7 @@ func (d *directory) fetchFromBottom(
 	entry.TransactionIndices = append(entry.TransactionIndices,
 		transIdx)
 	entry.HasReadReq = true
-	entry.ReadReq = readToBottom.MsgMeta
+	entry.ReadReq = readToBottom
 	entry.HasBlock = true
 	entry.BlockSetID = victimSetID
 	entry.BlockWayID = victimWayID

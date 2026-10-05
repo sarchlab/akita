@@ -11,20 +11,18 @@ shared by the `endpoint` and `switches` packages.
 
 ### Flit
 
-A `Flit` is a concrete network message (it embeds `messaging.MsgMeta`, so it
-satisfies the `messaging.Msg` contract) that represents one transfer unit on the
-network.
+A `Flit` is a value payload representing one transfer unit on the network.
+It travels inside a `messaging.Msg` envelope.
 
 ```go
 type Flit struct {
-    messaging.MsgMeta
     SeqID        int               // index of this flit within its message
     NumFlitInMsg int               // total flits the message was split into
-    Msg          messaging.MsgMeta // metadata of the carried message
+    Msg          messaging.Msg // metadata of the carried message
 }
 ```
 
-- The embedded `MsgMeta` carries the flit's own routing info (`Src`/`Dst`),
+- The outer `messaging.Msg` carries the flit's own routing info (`Src`/`Dst`),
   which describes the current hop between an endpoint and a switch port — not
   the final endpoints.
 - `Msg` carries the original message's metadata (true `Src`/`Dst`, traffic
@@ -40,3 +38,9 @@ shared `Msg` payload and increasing `SeqID`. Switches forward each flit
 independently using its hop-level `Dst`; the destination endpoint counts
 arriving flits per message ID and, once `NumFlitInMsg` flits are in, delivers
 the reassembled message to the device port.
+
+The flit's `Msg` field can preserve a complete nested message through JSON.
+For the current traffic-only switching network, the sending endpoint explicitly
+clears that inner message's `Payload` before packetization. The receiving endpoint
+delivers the routing fields with an empty `AssembledMsg` payload. Delivering the
+original application payload is a separate change tracked by #495.

@@ -188,7 +188,7 @@ func (m *delayMW) Handle(e timing.Event) bool {
             }
             m.comp.Schedule(doneEvent{
                 EventBase: m.comp.MakeEventBase(e.Time() + m.comp.Spec.Latency),
-                ReqID:     msg.Meta().ID,
+                ReqID:     msg.ID,
             })
         }
     case doneEvent:

@@ -122,14 +122,12 @@ const (
 )
 
 type Req struct {
-    messaging.MsgMeta
     Command   Command
     Addresses []uint64 // Invalidate / Flush filter; empty = all entries.
     PID       vm.PID   // Invalidate / Flush filter; zero = all PIDs.
 }
 
 type Rsp struct {
-    messaging.MsgMeta
     Command Command
     Success bool
     Error   string // Empty on success. memcontrolprotocol.ErrUnsupported or

@@ -22,7 +22,7 @@ var (
 )
 
 func lookupOrCreateReceiverTaskID(msg messaging.Msg, domain NamedHookable) uint64 {
-	key := receiverTaskKey{domain: domain, msgID: msg.Meta().ID}
+	key := receiverTaskKey{domain: domain, msgID: msg.ID}
 
 	receiverTaskIDsMu.Lock()
 	defer receiverTaskIDsMu.Unlock()
@@ -56,7 +56,7 @@ func receiverTaskIDByMsgID(
 }
 
 func forgetReceiverTaskID(msg messaging.Msg, domain NamedHookable) {
-	forgetReceiverTaskIDByMsgID(msg.Meta().ID, domain)
+	forgetReceiverTaskIDByMsgID(msg.ID, domain)
 }
 
 func forgetReceiverTaskIDByMsgID(msgID uint64, domain NamedHookable) {
@@ -86,7 +86,7 @@ var (
 func lookupOrCreateIncomingBufferTaskID(
 	msg messaging.Msg, domain NamedHookable,
 ) uint64 {
-	key := incomingBufferTaskKey{domain: domain, msgID: msg.Meta().ID}
+	key := incomingBufferTaskKey{domain: domain, msgID: msg.ID}
 
 	incomingBufferTaskIDsMu.Lock()
 	defer incomingBufferTaskIDsMu.Unlock()
@@ -129,7 +129,7 @@ var (
 func lookupOrCreateOutgoingBufferTaskID(
 	msg messaging.Msg, domain NamedHookable,
 ) uint64 {
-	key := outgoingBufferTaskKey{domain: domain, msgID: msg.Meta().ID}
+	key := outgoingBufferTaskKey{domain: domain, msgID: msg.ID}
 
 	outgoingBufferTaskIDsMu.Lock()
 	defer outgoingBufferTaskIDsMu.Unlock()

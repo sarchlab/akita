@@ -78,36 +78,40 @@ func (s *intake) createTransaction(msg messaging.Msg) int {
 	next := &s.cache.comp.State
 
 	var t transactionState
-	switch m := msg.(type) {
+	switch content := msg.Payload.(type) {
 	case memprotocol.ReadReq:
+		m := msg
+
 		t = transactionState{
 			ID:                 s.cache.comp.NewID(),
 			HasRead:            true,
-			ReadMeta:           m.MsgMeta,
-			ReadAddress:        m.Address,
-			ReadAccessByteSize: m.AccessByteSize,
-			ReadPID:            m.PID,
+			ReadMeta:           m,
+			ReadAddress:        content.Address,
+			ReadAccessByteSize: content.AccessByteSize,
+			ReadPID:            content.PID,
 		}
 	case memprotocol.WriteReq:
+		m := msg
+
 		t = transactionState{
 			ID:             s.cache.comp.NewID(),
 			HasWrite:       true,
-			WriteMeta:      m.MsgMeta,
-			WriteAddress:   m.Address,
-			WriteData:      m.Data,
-			WriteDirtyMask: m.DirtyMask,
-			WritePID:       m.PID,
+			WriteMeta:      m,
+			WriteAddress:   content.Address,
+			WriteData:      content.Data,
+			WriteDirtyMask: content.DirtyMask,
+			WritePID:       content.PID,
 		}
 
 		if t.WriteDirtyMask == nil {
-			t.WriteDirtyMask = make([]bool, len(m.Data))
+			t.WriteDirtyMask = make([]bool, len(content.Data))
 			for i := range t.WriteDirtyMask {
 				t.WriteDirtyMask[i] = true
 			}
 		}
 	default:
 		log.Panicf("cannot process request of type %s\n",
-			reflect.TypeOf(msg))
+			reflect.TypeOf(msg.Payload))
 		return -1
 	}
 

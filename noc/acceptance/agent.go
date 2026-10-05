@@ -20,7 +20,7 @@ type Agent struct {
 	name       string
 	test       *Test
 	AgentPorts []messaging.Port
-	MsgsToSend []TrafficMsg
+	MsgsToSend []messaging.Msg
 	sendBytes  uint64
 	recvBytes  uint64
 }
@@ -125,8 +125,8 @@ func (a *Agent) recv() bool {
 		msgI, ok := port.RetrieveIncoming()
 
 		if ok {
-			meta := msgI.Meta()
-			a.test.receiveMsgMeta(meta, port)
+			meta := msgI
+			a.test.receiveMsg(meta, port)
 			a.recvBytes += uint64(meta.TrafficBytes)
 
 			madeProgress = true

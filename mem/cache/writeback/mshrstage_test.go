@@ -19,10 +19,11 @@ var _ = Describe("MSHR Stage", func() {
 	// fillTop pre-fills topPort's single outgoing slot so the next CanSend
 	// returns false, simulating a busy port.
 	fillTop := func() {
-		dummy := memprotocol.DataReadyRsp{}
-		dummy.Src = topPort.AsRemote()
-		dummy.Dst = messaging.RemotePort("SomeSrc")
-		dummy.TrafficClass = "rsp"
+		dummy := messaging.Msg{Payload: memprotocol.DataReadyRsp{},
+			Src:          topPort.AsRemote(),
+			Dst:          messaging.RemotePort("SomeSrc"),
+			TrafficClass: "rsp"}
+
 		Expect(topPort.CanSend()).To(BeTrue())
 		topPort.Send(dummy)
 	}
@@ -74,18 +75,20 @@ var _ = Describe("MSHR Stage", func() {
 	})
 
 	It("should stall if topSender is busy", func() {
-		read := memprotocol.ReadReq{}
-		read.ID = m.comp.NewID()
-		read.Address = 0x104
-		read.AccessByteSize = 4
-		read.TrafficBytes = 12
-		read.TrafficClass = "memprotocol.ReadReq"
+		read := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x104,
+			AccessByteSize: 4},
+			ID: m.comp.NewID(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		trans := transactionState{
 			HasRead:            true,
-			ReadMeta:           read.MsgMeta,
-			ReadAddress:        read.Address,
-			ReadAccessByteSize: read.AccessByteSize,
-			ReadPID:            read.PID,
+			ReadMeta:           read,
+			ReadAddress:        read.Payload.(memprotocol.ReadReq).Address,
+			ReadAccessByteSize: read.Payload.(memprotocol.ReadReq).AccessByteSize,
+			ReadPID:            read.Payload.(memprotocol.ReadReq).PID,
 		}
 
 		mshrTrans := transactionState{
@@ -119,19 +122,21 @@ var _ = Describe("MSHR Stage", func() {
 	})
 
 	It("should send data ready to top", func() {
-		read := memprotocol.ReadReq{}
-		read.ID = m.comp.NewID()
-		read.Src = messaging.RemotePort("Agent")
-		read.Address = 0x104
-		read.AccessByteSize = 4
-		read.TrafficBytes = 12
-		read.TrafficClass = "memprotocol.ReadReq"
+		read := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x104,
+			AccessByteSize: 4},
+			ID:  m.comp.NewID(),
+			Src: messaging.RemotePort("Agent"),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		trans := transactionState{
 			HasRead:            true,
-			ReadMeta:           read.MsgMeta,
-			ReadAddress:        read.Address,
-			ReadAccessByteSize: read.AccessByteSize,
-			ReadPID:            read.PID,
+			ReadMeta:           read,
+			ReadAddress:        read.Payload.(memprotocol.ReadReq).Address,
+			ReadAccessByteSize: read.Payload.(memprotocol.ReadReq).AccessByteSize,
+			ReadPID:            read.Payload.(memprotocol.ReadReq).PID,
 		}
 
 		mshrTrans := transactionState{
@@ -161,8 +166,8 @@ var _ = Describe("MSHR Stage", func() {
 		Expect(next.Transactions[0].Removed).To(BeTrue())
 
 		out, _ := topPort.RetrieveOutgoing()
-		dr := out.(memprotocol.DataReadyRsp)
-		Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
+		dr := out
+		Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
 	})
 
 	It("should discard the request if it is no longer inflight", func() {

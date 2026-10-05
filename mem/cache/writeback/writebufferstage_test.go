@@ -67,9 +67,10 @@ var _ = Describe("WriteBufferStage", func() {
 
 	Context("processing new writeBufferFetch transactions", func() {
 		It("should fetch from bottom", func() {
-			read := memprotocol.ReadReq{}
-			read.ID = m.comp.NewID()
-			read.TrafficClass = "memprotocol.ReadReq"
+			read := messaging.Msg{Payload: memprotocol.ReadReq{},
+				ID:           m.comp.NewID(),
+				TrafficClass: "memprotocol.ReadReq"}
+
 			trans := transactionState{
 				Action:       writeBufferFetch,
 				FetchAddress: 0x100,
@@ -78,7 +79,7 @@ var _ = Describe("WriteBufferStage", func() {
 				BlockWayID:   0,
 				HasBlock:     true,
 				HasRead:      true,
-				ReadMeta:     read.MsgMeta,
+				ReadMeta:     read,
 				ReadAddress:  0x100,
 			}
 
@@ -101,14 +102,15 @@ var _ = Describe("WriteBufferStage", func() {
 			next := &m.comp.State
 			next.InflightFetchIndices = []int{10, 11, 12, 13}
 
-			read := memprotocol.ReadReq{}
-			read.ID = m.comp.NewID()
-			read.TrafficClass = "memprotocol.ReadReq"
+			read := messaging.Msg{Payload: memprotocol.ReadReq{},
+				ID:           m.comp.NewID(),
+				TrafficClass: "memprotocol.ReadReq"}
+
 			trans := transactionState{
 				Action:       writeBufferFetch,
 				FetchAddress: 0x100,
 				HasRead:      true,
-				ReadMeta:     read.MsgMeta,
+				ReadMeta:     read,
 				ReadAddress:  0x100,
 			}
 			next.Transactions = []transactionState{trans}
@@ -125,15 +127,16 @@ var _ = Describe("WriteBufferStage", func() {
 
 	Context("writing evictions", func() {
 		It("should send eviction to bottom", func() {
-			read := memprotocol.ReadReq{}
-			read.ID = m.comp.NewID()
-			read.TrafficClass = "memprotocol.ReadReq"
+			read := messaging.Msg{Payload: memprotocol.ReadReq{},
+				ID:           m.comp.NewID(),
+				TrafficClass: "memprotocol.ReadReq"}
+
 			trans := transactionState{
 				EvictingAddr: 0x200,
 				EvictingPID:  2,
 				EvictingData: make([]byte, 64),
 				HasRead:      true,
-				ReadMeta:     read.MsgMeta,
+				ReadMeta:     read,
 				ReadAddress:  0x200,
 			}
 
@@ -168,18 +171,19 @@ var _ = Describe("WriteBufferStage", func() {
 
 	Context("processing responses", func() {
 		It("should process write done response", func() {
-			evictWrite := memprotocol.WriteReq{}
-			evictWrite.ID = 9001
-			evictWrite.TrafficClass = "memprotocol.WriteReq"
+			evictWrite := messaging.Msg{Payload: memprotocol.WriteReq{},
+				ID:           9001,
+				TrafficClass: "memprotocol.WriteReq"}
 
-			read := memprotocol.ReadReq{}
-			read.ID = m.comp.NewID()
-			read.TrafficClass = "memprotocol.ReadReq"
+			read := messaging.Msg{Payload: memprotocol.ReadReq{},
+				ID:           m.comp.NewID(),
+				TrafficClass: "memprotocol.ReadReq"}
+
 			trans := transactionState{
 				HasEvictionWriteReq:  true,
-				EvictionWriteReqMeta: evictWrite.MsgMeta,
+				EvictionWriteReqMeta: evictWrite,
 				HasRead:              true,
-				ReadMeta:             read.MsgMeta,
+				ReadMeta:             read,
 				ReadAddress:          0,
 			}
 
@@ -187,9 +191,9 @@ var _ = Describe("WriteBufferStage", func() {
 			next.Transactions = []transactionState{trans}
 			next.InflightEvictionIndices = []int{0}
 
-			rsp := memprotocol.WriteDoneRsp{}
-			rsp.RspTo = 9001
-			rsp.TrafficClass = "memprotocol.WriteDoneRsp"
+			rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+				RspTo:        9001,
+				TrafficClass: "memprotocol.WriteDoneRsp"}
 
 			bottomPort.Deliver(rsp)
 

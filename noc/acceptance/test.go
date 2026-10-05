@@ -10,7 +10,6 @@ import (
 
 // TrafficMsg is a concrete message type used in acceptance tests.
 type TrafficMsg struct {
-	messaging.MsgMeta
 }
 
 // Protocol is the acceptance traffic protocol: test agents exchange traffic
@@ -19,7 +18,7 @@ type TrafficMsg struct {
 var (
 	Protocol = messaging.DefineProtocol(
 		messaging.RoleDef{Name: "agent",
-			Sends: []messaging.Msg{TrafficMsg{}}},
+			Sends: []any{TrafficMsg{}}},
 	)
 	AgentRole = Protocol.Role("agent")
 )
@@ -27,8 +26,8 @@ var (
 // Test is a test case.
 type Test struct {
 	agents            []*Agent
-	msgs              []TrafficMsg
-	receivedMsgs      []TrafficMsg
+	msgs              []messaging.Msg
+	receivedMsgs      []messaging.Msg
 	receivedMsgsTable map[uint64]bool
 }
 
@@ -63,25 +62,21 @@ func (t *Test) GenerateMsgs(n uint64) {
 		dstPortID := rand.Intn(len(dstAgent.AgentPorts))
 		dstPort := dstAgent.AgentPorts[dstPortID]
 
-		msg := TrafficMsg{
-			MsgMeta: messaging.MsgMeta{
-				ID:           srcAgent.NewID(),
-				Src:          srcPort.AsRemote(),
-				Dst:          dstPort.AsRemote(),
-				TrafficBytes: rand.Intn(4096),
-			},
-		}
+		msg := messaging.Msg{ID: srcAgent.NewID(),
+			Src:          srcPort.AsRemote(),
+			Dst:          dstPort.AsRemote(),
+			TrafficBytes: rand.Intn(4096), Payload: TrafficMsg{}}
 		srcAgent.MsgsToSend = append(srcAgent.MsgsToSend, msg)
 		t.registerMsg(msg)
 	}
 }
 
-func (t *Test) registerMsg(msg TrafficMsg) {
+func (t *Test) registerMsg(msg messaging.Msg) {
 	t.msgs = append(t.msgs, msg)
 }
 
-// receiveMsgMeta marks that a message (identified by its MsgMeta) is received.
-func (t *Test) receiveMsgMeta(meta messaging.MsgMeta, recvPort messaging.Port) {
+// receiveMsg marks that a message (identified by its ID) is received.
+func (t *Test) receiveMsg(meta messaging.Msg, recvPort messaging.Port) {
 	if meta.Dst != recvPort.AsRemote() {
 		panic("msg delivered to a wrong destination")
 	}
@@ -91,8 +86,8 @@ func (t *Test) receiveMsgMeta(meta messaging.MsgMeta, recvPort messaging.Port) {
 	}
 	t.receivedMsgsTable[meta.ID] = true
 
-	// Wrap in TrafficMsg so existing bookkeeping works.
-	t.receivedMsgs = append(t.receivedMsgs, TrafficMsg{MsgMeta: meta})
+	// Retain the received routing fields for acceptance checks.
+	t.receivedMsgs = append(t.receivedMsgs, meta)
 }
 
 // MustHaveReceivedAllMsgs asserts that all the messages sent are received.

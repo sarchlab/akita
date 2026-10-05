@@ -3,6 +3,7 @@ package tickingping
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -28,10 +29,14 @@ func (m *receiveProcessMW) processInput() bool {
 		return false
 	}
 
-	switch msg := msgI.(type) {
+	switch msgI.Payload.(type) {
 	case pingReq:
+		msg := msgI
+
 		m.processPingReq(msg)
 	case pingRsp:
+		msg := msgI
+
 		m.processPingRsp(msg)
 	default:
 		panic("unknown message type")
@@ -42,12 +47,12 @@ func (m *receiveProcessMW) processInput() bool {
 
 // processPingReq starts answering a ping; the response goes out two cycles
 // later.
-func (m *receiveProcessMW) processPingReq(msg pingReq) {
+func (m *receiveProcessMW) processPingReq(msg messaging.Msg) {
 	state := &m.comp.State
 
 	state.CurrentTransactions = append(state.CurrentTransactions,
 		pingTransactionState{
-			SeqID:     msg.SeqID,
+			SeqID:     msg.Payload.(pingReq).SeqID,
 			CycleLeft: 2,
 			ReqID:     msg.ID,
 			ReqSrc:    msg.Src,
@@ -55,11 +60,11 @@ func (m *receiveProcessMW) processPingReq(msg pingReq) {
 }
 
 // processPingRsp prints the round-trip time of the ping it answers.
-func (m *receiveProcessMW) processPingRsp(msg pingRsp) {
-	startTime := m.comp.State.StartTimes[msg.SeqID]
+func (m *receiveProcessMW) processPingRsp(msg messaging.Msg) {
+	startTime := m.comp.State.StartTimes[msg.Payload.(pingRsp).SeqID]
 	duration := uint64(m.comp.CurrentTime()) - startTime
 
-	fmt.Printf("Ping %d, %d ps\n", msg.SeqID, duration)
+	fmt.Printf("Ping %d, %d ps\n", msg.Payload.(pingRsp).SeqID, duration)
 }
 
 func (m *receiveProcessMW) countDown() bool {

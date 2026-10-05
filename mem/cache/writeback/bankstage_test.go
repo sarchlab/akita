@@ -21,10 +21,11 @@ var _ = Describe("Bank Stage", func() {
 	// fillTop pre-fills topPort's single outgoing slot so the next CanSend
 	// returns false, simulating a busy port.
 	fillTop := func() {
-		dummy := memprotocol.DataReadyRsp{}
-		dummy.Src = topPort.AsRemote()
-		dummy.Dst = messaging.RemotePort("SomeSrc")
-		dummy.TrafficClass = "rsp"
+		dummy := messaging.Msg{Payload: memprotocol.DataReadyRsp{},
+			Src:          topPort.AsRemote(),
+			Dst:          messaging.RemotePort("SomeSrc"),
+			TrafficClass: "rsp"}
+
 		Expect(topPort.CanSend()).To(BeTrue())
 		topPort.Send(dummy)
 	}
@@ -109,19 +110,21 @@ var _ = Describe("Bank Stage", func() {
 
 			storage.Write(0x40, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 
-			read := memprotocol.ReadReq{}
-			read.ID = m.comp.NewID()
-			read.Src = messaging.RemotePort("Agent")
-			read.Address = 0x104
-			read.AccessByteSize = 4
-			read.TrafficBytes = 12
-			read.TrafficClass = "memprotocol.ReadReq"
+			read := messaging.Msg{Payload: memprotocol.ReadReq{
+				Address:        0x104,
+				AccessByteSize: 4},
+				ID:  m.comp.NewID(),
+				Src: messaging.RemotePort("Agent"),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.ReadReq"}
+
 			trans := transactionState{
 				HasRead:            true,
-				ReadMeta:           read.MsgMeta,
-				ReadAddress:        read.Address,
-				ReadAccessByteSize: read.AccessByteSize,
-				ReadPID:            read.PID,
+				ReadMeta:           read,
+				ReadAddress:        read.Payload.(memprotocol.ReadReq).Address,
+				ReadAccessByteSize: read.Payload.(memprotocol.ReadReq).AccessByteSize,
+				ReadPID:            read.Payload.(memprotocol.ReadReq).PID,
 				BlockSetID:         0,
 				BlockWayID:         0,
 				HasBlock:           true,
@@ -155,8 +158,8 @@ var _ = Describe("Bank Stage", func() {
 			Expect(next.BankInflightTransCounts[0]).To(Equal(0))
 
 			out, _ := topPort.RetrieveOutgoing()
-			dr := out.(memprotocol.DataReadyRsp)
-			Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
+			dr := out
+			Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
 		})
 	})
 
@@ -168,19 +171,21 @@ var _ = Describe("Bank Stage", func() {
 			block.ReadCount = 1
 			block.IsLocked = true
 
-			write := memprotocol.WriteReq{}
-			write.ID = m.comp.NewID()
-			write.Src = messaging.RemotePort("Agent")
-			write.Address = 0x104
-			write.Data = []byte{5, 6, 7, 8}
-			write.TrafficBytes = len([]byte{5, 6, 7, 8}) + 12
-			write.TrafficClass = "memprotocol.WriteReq"
+			write := messaging.Msg{Payload: memprotocol.WriteReq{
+				Address: 0x104,
+				Data:    []byte{5, 6, 7, 8}},
+				ID:  m.comp.NewID(),
+				Src: messaging.RemotePort("Agent"),
+
+				TrafficBytes: len([]byte{5, 6, 7, 8}) + 12,
+				TrafficClass: "memprotocol.WriteReq"}
+
 			trans := transactionState{
 				HasWrite:     true,
-				WriteMeta:    write.MsgMeta,
-				WriteAddress: write.Address,
-				WriteData:    write.Data,
-				WritePID:     write.PID,
+				WriteMeta:    write,
+				WriteAddress: write.Payload.(memprotocol.WriteReq).Address,
+				WriteData:    write.Payload.(memprotocol.WriteReq).Data,
+				WritePID:     write.Payload.(memprotocol.WriteReq).PID,
 				BlockSetID:   0,
 				BlockWayID:   0,
 				HasBlock:     true,

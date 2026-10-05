@@ -115,21 +115,23 @@ var _ = Describe("Reorder Buffer milestones", func() {
 		tracing.CollectIncomingBufferTrace(topPort)
 	})
 
-	makeRead := func(addr uint64) memprotocol.ReadReq {
-		req := memprotocol.ReadReq{Address: addr, AccessByteSize: 4}
-		req.ID = rob.NewID()
-		req.Src = topRemote
-		req.Dst = topPort.AsRemote()
-		req.TrafficClass = "memprotocol.ReadReq"
+	makeRead := func(addr uint64) messaging.Msg {
+		req := messaging.Msg{Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: 4},
+			ID:           rob.NewID(),
+			Src:          topRemote,
+			Dst:          topPort.AsRemote(),
+			TrafficClass: "memprotocol.ReadReq"}
+
 		return req
 	}
 
-	makeWrite := func(addr uint64, data []byte) memprotocol.WriteReq {
-		req := memprotocol.WriteReq{Address: addr, Data: data}
-		req.ID = rob.NewID()
-		req.Src = topRemote
-		req.Dst = topPort.AsRemote()
-		req.TrafficClass = "memprotocol.WriteReq"
+	makeWrite := func(addr uint64, data []byte) messaging.Msg {
+		req := messaging.Msg{Payload: memprotocol.WriteReq{Address: addr, Data: data},
+			ID:           rob.NewID(),
+			Src:          topRemote,
+			Dst:          topPort.AsRemote(),
+			TrafficClass: "memprotocol.WriteReq"}
+
 		return req
 	}
 
@@ -137,18 +139,22 @@ var _ = Describe("Reorder Buffer milestones", func() {
 	// forward downstream (tick 1), parse the bottom response (tick 2, after the
 	// in-tick bottomUp-before-parseBottom ordering exposes it the next tick),
 	// then retire and respond upstream (tick 3).
-	driveRoundTrip := func(req memprotocol.AccessReq, rsp messaging.Msg) {
+	driveRoundTrip := func(req messaging.Msg, rsp messaging.Msg) {
 		topPort.Deliver(req)
 
 		modelingtest.Tick(rob)
 		shadowID := rob.State.Transactions[0].ReqToBottomID
 		bottomPort.RetrieveOutgoing()
 
-		switch r := rsp.(type) {
+		switch rsp.Payload.(type) {
 		case memprotocol.DataReadyRsp:
+			r := rsp
+
 			r.RspTo = shadowID
 			bottomPort.Deliver(r)
 		case memprotocol.WriteDoneRsp:
+			r := rsp
+
 			r.RspTo = shadowID
 			bottomPort.Deliver(r)
 		}
@@ -159,11 +165,11 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 	It("records admission milestones on the buffer task and processing "+
 		"milestones on req_in, plus a read tag, for a read", func() {
-		rsp := memprotocol.DataReadyRsp{Data: []byte{1, 2, 3, 4}}
-		rsp.ID = rob.NewID()
-		rsp.Src = bottomUnitRemote
-		rsp.Dst = bottomPort.AsRemote()
-		rsp.TrafficClass = "memprotocol.DataReadyRsp"
+		rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{1, 2, 3, 4}},
+			ID:           rob.NewID(),
+			Src:          bottomUnitRemote,
+			Dst:          bottomPort.AsRemote(),
+			TrafficClass: "memprotocol.DataReadyRsp"}
 
 		driveRoundTrip(makeRead(0), rsp)
 
@@ -202,11 +208,11 @@ var _ = Describe("Reorder Buffer milestones", func() {
 	})
 
 	It("distinguishes a write with a subtask milestone and a write tag", func() {
-		rsp := memprotocol.WriteDoneRsp{}
-		rsp.ID = rob.NewID()
-		rsp.Src = bottomUnitRemote
-		rsp.Dst = bottomPort.AsRemote()
-		rsp.TrafficClass = "memprotocol.WriteDoneRsp"
+		rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+			ID:           rob.NewID(),
+			Src:          bottomUnitRemote,
+			Dst:          bottomPort.AsRemote(),
+			TrafficClass: "memprotocol.WriteDoneRsp"}
 
 		driveRoundTrip(makeWrite(64, []byte{1, 2, 3, 4}), rsp)
 
@@ -223,11 +229,11 @@ var _ = Describe("Reorder Buffer milestones", func() {
 
 	It("emits the dependency milestone before the response-sent milestone "+
 		"so the in-order-commit reason wins a same-tick tie", func() {
-		rsp := memprotocol.DataReadyRsp{Data: []byte{0xAB}}
-		rsp.ID = rob.NewID()
-		rsp.Src = bottomUnitRemote
-		rsp.Dst = bottomPort.AsRemote()
-		rsp.TrafficClass = "memprotocol.DataReadyRsp"
+		rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{0xAB}},
+			ID:           rob.NewID(),
+			Src:          bottomUnitRemote,
+			Dst:          bottomPort.AsRemote(),
+			TrafficClass: "memprotocol.DataReadyRsp"}
 
 		driveRoundTrip(makeRead(0), rsp)
 

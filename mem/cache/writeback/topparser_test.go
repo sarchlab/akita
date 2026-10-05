@@ -67,12 +67,13 @@ var _ = Describe("TopParser", func() {
 	})
 
 	It("should parse read from top", func() {
-		read := memprotocol.ReadReq{}
-		read.ID = m.comp.NewID()
-		read.Address = 0x100
-		read.AccessByteSize = 64
-		read.TrafficBytes = 12
-		read.TrafficClass = "memprotocol.ReadReq"
+		read := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x100,
+			AccessByteSize: 64},
+			ID: m.comp.NewID(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
 
 		topPort.Deliver(read)
 
@@ -88,11 +89,12 @@ var _ = Describe("TopParser", func() {
 	})
 
 	It("should parse write from top", func() {
-		write := memprotocol.WriteReq{}
-		write.ID = m.comp.NewID()
-		write.Address = 0x100
-		write.TrafficBytes = 12
-		write.TrafficClass = "memprotocol.WriteReq"
+		write := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address: 0x100},
+			ID: m.comp.NewID(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.WriteReq"}
 
 		topPort.Deliver(write)
 

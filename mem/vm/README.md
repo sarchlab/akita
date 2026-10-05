@@ -54,7 +54,6 @@ Address translation uses a request/response protocol:
 ```go
 // Request: virtual → physical translation
 type TranslationReq struct {
-    messaging.MsgMeta
     VAddr    uint64
     PID      PID
     DeviceID uint64
@@ -62,7 +61,6 @@ type TranslationReq struct {
 
 // Response: carries the resolved Page
 type TranslationRsp struct {
-    messaging.MsgMeta
     Page Page
 }
 ```

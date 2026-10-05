@@ -37,7 +37,7 @@ last, for `TraceReqInitiate`).
 The `req_out` task spans the whole round trip as the sender sees it; the
 `req_in` task spans just the receiver's handling and is recorded as a child.
 The two tasks agree on identity without you managing ids by hand: the
-`req_out` task is keyed by the request's own message ID (`req.Meta().ID`), and
+`req_out` task is keyed by the request's own message ID (`req.ID`), and
 `TraceReqReceive` opens its `req_in` task with that same ID as the parent. The
 receiver-side task gets its own id from a tracing-local registry — the message
 value itself is never mutated, so there is no `SendTaskID`/`RecvTaskID` field
@@ -70,13 +70,11 @@ func (m *requestMW) send() bool {
         return false
     }
 
-    req := server.ReadReq{
-        MsgMeta: messaging.MsgMeta{
+    req := messaging.Msg{
             ID:  m.comp.NewID(),
             Src: port.AsRemote(),
             Dst: spec.Dst,
-        },
-        Seq: s.NextSeq,
+        Payload: server.ReadReq{Seq: s.NextSeq},
     }
 
     // The req_out task is keyed by the request's own message ID.
@@ -98,7 +96,8 @@ func (m *requestMW) receive() bool {
         return false
     }
 
-    rsp := msg.(server.ReadRsp)
+    _ = msg.Payload.(server.ReadRsp)
+    rsp := msg
     if req, ok := s.InFlight[rsp.RspTo]; ok {
         tracing.TraceReqFinalize(m.comp, req)
         delete(s.InFlight, rsp.RspTo)
@@ -130,7 +129,8 @@ func (m *serveMW) receive() bool {
         return false
     }
 
-    req := msg.(ReadReq)
+    _ = msg.Payload.(ReadReq)
+    req := msg
     tracing.TraceReqReceive(m.comp, req)
     m.comp.State.Pending = append(m.comp.State.Pending,
         txn{Req: req, Left: m.comp.Spec.Latency})
@@ -151,14 +151,12 @@ func (m *serveMW) respond() bool {
     }
 
     req := s.Pending[0].Req
-    port.Send(ReadRsp{
-        MsgMeta: messaging.MsgMeta{
+    port.Send(messaging.Msg{
             ID:    m.comp.NewID(),
             Src:   port.AsRemote(),
             Dst:   req.Src,
             RspTo: req.ID,
-        },
-        Seq: req.Seq,
+        Payload: ReadRsp{Seq: req.Payload.(ReadReq).Seq},
     })
 
     tracing.TraceReqComplete(m.comp, req)
@@ -222,7 +220,7 @@ is that task's id?
 
 When you called `TraceReqReceive(comp, req)`, it opened a `req_in` task whose
 id is the request's receiver-side id. That id is not stored on the message; it
-lives in a tracing-local registry keyed by `(domain, req.Meta().ID)`. You read
+lives in a tracing-local registry keyed by `(domain, req.ID)`. You read
 back the same id with:
 
 ```go
@@ -302,3 +300,7 @@ a request spent its time across the entire hierarchy.
 We have used a couple of tracers in passing. The next chapter surveys all the
 built-in tracers and goes deep on the **filter** — the function that selects
 which tasks a tracer measures.
+
+Trace task names use the concrete payload type, such as `ReadReq`. A message
+with a nil payload is named `metadata`. Routing and request correlation use the
+outer message IDs.

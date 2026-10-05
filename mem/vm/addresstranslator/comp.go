@@ -113,29 +113,29 @@ func addrToPageID(addr, log2PageSize uint64) uint64 {
 }
 
 func msgToIncomingReqState(msg messaging.Msg) incomingReqState {
-	meta := msg.Meta()
+	meta := msg
 	s := incomingReqState{
 		ID:    meta.ID,
 		Src:   meta.Src,
 		Dst:   meta.Dst,
 		RspTo: meta.RspTo,
-		Type:  fmt.Sprintf("%T", msg),
+		Type:  fmt.Sprintf("%T", msg.Payload),
 	}
 
-	switch req := msg.(type) {
+	switch content := msg.Payload.(type) {
 	case memprotocol.ReadReq:
-		s.Address = req.Address
-		s.AccessByteSize = req.AccessByteSize
-		s.PID = req.PID
-		s.CanWaitForCoalesce = req.CanWaitForCoalesce
+		s.Address = content.Address
+		s.AccessByteSize = content.AccessByteSize
+		s.PID = content.PID
+		s.CanWaitForCoalesce = content.CanWaitForCoalesce
 	case memprotocol.WriteReq:
-		s.Address = req.Address
-		s.PID = req.PID
-		s.Data = req.Data
-		s.DirtyMask = req.DirtyMask
-		s.CanWaitForCoalesce = req.CanWaitForCoalesce
+		s.Address = content.Address
+		s.PID = content.PID
+		s.Data = content.Data
+		s.DirtyMask = content.DirtyMask
+		s.CanWaitForCoalesce = content.CanWaitForCoalesce
 	default:
-		log.Panicf("cannot convert message of type %T", msg)
+		log.Panicf("cannot convert message of type %T", msg.Payload)
 	}
 
 	return s
@@ -154,33 +154,39 @@ func createTranslatedReq(
 
 	switch reqState.Type {
 	case "memprotocol.ReadReq":
-		clone := memprotocol.ReadReq{}
-		clone.ID = newID()
-		clone.Src = bottomPortRemote
-		clone.Dst = memProviderMapper.Find(addr)
-		clone.Address = addr
-		clone.AccessByteSize = reqState.AccessByteSize
-		clone.PID = 0
-		clone.TrafficBytes = 12
-		clone.TrafficClass = "memprotocol.ReadReq"
-		clone.CanWaitForCoalesce = reqState.CanWaitForCoalesce
+		clone := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        addr,
+			AccessByteSize: reqState.AccessByteSize,
+			PID:            0,
+
+			CanWaitForCoalesce: reqState.CanWaitForCoalesce},
+			ID:  newID(),
+			Src: bottomPortRemote,
+			Dst: memProviderMapper.Find(addr),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		return clone
 	case "memprotocol.WriteReq":
-		clone := memprotocol.WriteReq{}
-		clone.ID = newID()
-		clone.Src = bottomPortRemote
-		clone.Dst = memProviderMapper.Find(addr)
-		clone.Data = reqState.Data
-		clone.DirtyMask = reqState.DirtyMask
-		clone.Address = addr
-		clone.PID = 0
-		clone.TrafficBytes = len(reqState.Data) + 12
-		clone.TrafficClass = "memprotocol.WriteReq"
-		clone.CanWaitForCoalesce = reqState.CanWaitForCoalesce
+		clone := messaging.Msg{Payload: memprotocol.WriteReq{
+			Data:      reqState.Data,
+			DirtyMask: reqState.DirtyMask,
+			Address:   addr,
+			PID:       0,
+
+			CanWaitForCoalesce: reqState.CanWaitForCoalesce},
+			ID:  newID(),
+			Src: bottomPortRemote,
+			Dst: memProviderMapper.Find(addr),
+
+			TrafficBytes: len(reqState.Data) + 12,
+			TrafficClass: "memprotocol.WriteReq"}
+
 		return clone
 	default:
 		log.Panicf("cannot translate request of type %s", reqState.Type)
-		return nil
+		return messaging.Msg{}
 	}
 }
 
@@ -190,12 +196,14 @@ func createTranslatedReq(
 func restoreMemMsg(
 	id uint64, src, dst messaging.RemotePort, rspTo uint64, typ string,
 ) messaging.Msg {
-	meta := messaging.MsgMeta{ID: id, Src: src, Dst: dst, RspTo: rspTo}
+	meta := messaging.Msg{ID: id, Src: src, Dst: dst, RspTo: rspTo}
 	switch typ {
 	case "memprotocol.WriteReq":
-		return memprotocol.WriteReq{MsgMeta: meta}
+		meta.Payload = memprotocol.WriteReq{}
+		return meta
 	default:
-		return memprotocol.ReadReq{MsgMeta: meta}
+		meta.Payload = memprotocol.ReadReq{}
+		return meta
 	}
 }
 
@@ -254,10 +262,10 @@ func buildReqToBottom(
 		ReqFromTopSrc:   reqState.Src,
 		ReqFromTopDst:   reqState.Dst,
 		ReqFromTopType:  reqState.Type,
-		ReqToBottomID:   translatedReq.Meta().ID,
-		ReqToBottomSrc:  translatedReq.Meta().Src,
-		ReqToBottomDst:  translatedReq.Meta().Dst,
-		ReqToBottomType: fmt.Sprintf("%T", translatedReq),
+		ReqToBottomID:   translatedReq.ID,
+		ReqToBottomSrc:  translatedReq.Src,
+		ReqToBottomDst:  translatedReq.Dst,
+		ReqToBottomType: fmt.Sprintf("%T", translatedReq.Payload),
 	}
 }
 

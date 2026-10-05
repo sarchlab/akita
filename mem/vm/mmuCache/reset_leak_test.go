@@ -54,14 +54,16 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// Deliver a lookup that misses the empty cache. lookup forwards it out the
 	// Bottom port and opens both the top req_in and the forwarded req_out, then
 	// waits on the bottom response — which never comes, so the walk is in flight.
-	req := vmprotocol.TranslationReq{}
-	req.ID = sim.NewID()
-	req.Src = messaging.RemotePort("Requester")
-	req.Dst = topPort.AsRemote()
-	req.PID = 1
-	req.VAddr = 0x1000
-	req.DeviceID = 1
-	req.TrafficClass = "vmprotocol.TranslationReq"
+	req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		PID:      1,
+		VAddr:    0x1000,
+		DeviceID: 1},
+		ID:  sim.NewID(),
+		Src: messaging.RemotePort("Requester"),
+		Dst: topPort.AsRemote(),
+
+		TrafficClass: "vmprotocol.TranslationReq"}
+
 	topPort.Deliver(req)
 
 	// Tick until the forward happens and the walk is recorded in flight.
@@ -90,19 +92,20 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	}
 
 	// Reset while the walk is in flight (bottom response deliberately withheld).
-	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = sim.NewID()
-	reset.Src = messaging.RemotePort("Cmd")
-	reset.Dst = controlPort.AsRemote()
-	reset.TrafficClass = "memcontrolprotocol.Req"
+	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
+		ID:           sim.NewID(),
+		Src:          messaging.RemotePort("Cmd"),
+		Dst:          controlPort.AsRemote(),
+		TrafficClass: "memcontrolprotocol.Req"}
+
 	controlPort.Deliver(reset)
 
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
 		modelingtest.Tick(comp)
 		if msg, ok := controlPort.RetrieveOutgoing(); ok {
-			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
-				rsp.Command == memcontrolprotocol.CmdReset {
+			if rsp, ok := msg.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+				Command == memcontrolprotocol.CmdReset {
 				acked = true
 			}
 		}

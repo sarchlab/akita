@@ -2,6 +2,7 @@ package writeback
 
 import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -100,14 +101,16 @@ func (s *mshrStage) respondRead(
 ) {
 	_, offset := getCacheLineID(trans.ReadAddress, log2BlockSize)
 	respondData := data[offset : offset+trans.ReadAccessByteSize]
-	dataReady := memprotocol.DataReadyRsp{}
-	dataReady.ID = s.cache.comp.NewID()
-	dataReady.Src = s.cache.topPort().AsRemote()
-	dataReady.Dst = trans.ReadMeta.Src
-	dataReady.RspTo = trans.ReadMeta.ID
-	dataReady.Data = respondData
-	dataReady.TrafficBytes = len(respondData) + 4
-	dataReady.TrafficClass = "memprotocol.DataReadyRsp"
+	dataReady := messaging.Msg{Payload: memprotocol.DataReadyRsp{
+		Data: respondData},
+		ID:    s.cache.comp.NewID(),
+		Src:   s.cache.topPort().AsRemote(),
+		Dst:   trans.ReadMeta.Src,
+		RspTo: trans.ReadMeta.ID,
+
+		TrafficBytes: len(respondData) + 4,
+		TrafficClass: "memprotocol.DataReadyRsp"}
+
 	s.cache.topPort().Send(dataReady)
 
 	// This request waited for the fetched line to be written into the bank by
@@ -116,7 +119,7 @@ func (s *mshrStage) respondRead(
 	// own work — record it so the interval since the fill-data milestone is not
 	// an unexplained tail before the response.
 	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(&trans.ReadMeta, s.cache.comp),
+		TaskID: tracing.MsgIDAtReceiver(trans.ReadMeta, s.cache.comp),
 		Kind:   tracing.MilestoneKindDependency,
 		What:   s.cache.comp.Name() + ".fill",
 	})
@@ -124,20 +127,21 @@ func (s *mshrStage) respondRead(
 }
 
 func (s *mshrStage) respondWrite(trans *transactionState) {
-	writeDoneRsp := memprotocol.WriteDoneRsp{}
-	writeDoneRsp.ID = s.cache.comp.NewID()
-	writeDoneRsp.Src = s.cache.topPort().AsRemote()
-	writeDoneRsp.Dst = trans.WriteMeta.Src
-	writeDoneRsp.RspTo = trans.WriteMeta.ID
-	writeDoneRsp.TrafficBytes = 4
-	writeDoneRsp.TrafficClass = "memprotocol.WriteDoneRsp"
+	writeDoneRsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+		ID:           s.cache.comp.NewID(),
+		Src:          s.cache.topPort().AsRemote(),
+		Dst:          trans.WriteMeta.Src,
+		RspTo:        trans.WriteMeta.ID,
+		TrafficBytes: 4,
+		TrafficClass: "memprotocol.WriteDoneRsp"}
+
 	s.cache.topPort().Send(writeDoneRsp)
 
 	// See respondRead: the wait for the fetched line to land in the bank and
 	// resolve through this MSHR stage is a dependency on the fetcher, not this
 	// request's own bank work.
 	tracing.AddMilestone(s.cache.comp, tracing.Milestone{
-		TaskID: tracing.MsgIDAtReceiver(&trans.WriteMeta, s.cache.comp),
+		TaskID: tracing.MsgIDAtReceiver(trans.WriteMeta, s.cache.comp),
 		Kind:   tracing.MilestoneKindDependency,
 		What:   s.cache.comp.Name() + ".fill",
 	})

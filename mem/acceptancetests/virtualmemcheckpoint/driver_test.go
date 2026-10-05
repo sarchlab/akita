@@ -135,16 +135,20 @@ func (m *driverMW) processResponse() bool {
 	}
 
 	st := &m.d.State
-	switch rsp := msg.(type) {
+	switch msg.Payload.(type) {
 	case memprotocol.WriteDoneRsp:
+		rsp := msg
+
 		if _, ok := st.PendingWrite[rsp.RspTo]; ok {
 			delete(st.PendingWrite, rsp.RspTo)
 			st.WritesAcked++
 		}
 	case memprotocol.DataReadyRsp:
+		rsp := msg
+
 		if idx, ok := st.PendingRead[rsp.RspTo]; ok {
 			delete(st.PendingRead, rsp.RspTo)
-			if bytesToUint32(rsp.Data) != valueForOp(idx) {
+			if bytesToUint32(rsp.Payload.(memprotocol.DataReadyRsp).Data) != valueForOp(idx) {
 				st.Mismatch = true
 			}
 			st.ReadsVerified++
@@ -165,14 +169,15 @@ func (m *driverMW) sendNext() bool {
 			return false
 		}
 		idx := st.WritesSent
-		req := memprotocol.WriteReq{}
-		req.ID = m.d.NewID()
-		req.Src = port.AsRemote()
-		req.Dst = m.d.Resources.LowModule.AsRemote()
-		req.Address = addressForOp(idx)
-		req.PID = pid
-		req.Data = uint32ToBytes(valueForOp(idx))
-		req.TrafficBytes = len(req.Data) + 12
+		req := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address: addressForOp(idx),
+			PID:     pid,
+			Data:    uint32ToBytes(valueForOp(idx))},
+			ID:  m.d.NewID(),
+			Src: port.AsRemote(),
+			Dst: m.d.Resources.LowModule.AsRemote()}
+
+		req.TrafficBytes = len(req.Payload.(memprotocol.WriteReq).Data) + 12
 		req.TrafficClass = "memprotocol.WriteReq"
 		port.Send(req)
 		st.PendingWrite[req.ID] = idx
@@ -191,15 +196,17 @@ func (m *driverMW) sendNext() bool {
 			return false
 		}
 		idx := st.ReadsSent
-		req := memprotocol.ReadReq{}
-		req.ID = m.d.NewID()
-		req.Src = port.AsRemote()
-		req.Dst = m.d.Resources.LowModule.AsRemote()
-		req.Address = addressForOp(idx)
-		req.AccessByteSize = 4
-		req.PID = pid
-		req.TrafficBytes = 12
-		req.TrafficClass = "memprotocol.ReadReq"
+		req := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        addressForOp(idx),
+			AccessByteSize: 4,
+			PID:            pid},
+			ID:  m.d.NewID(),
+			Src: port.AsRemote(),
+			Dst: m.d.Resources.LowModule.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		port.Send(req)
 		st.PendingRead[req.ID] = idx
 		st.ReadsSent++

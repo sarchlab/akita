@@ -127,7 +127,7 @@ func (f *flusher) processFlush() bool {
 
 	trans := transactionState{
 		HasFlush:           true,
-		FlushMeta:          next.ProcessingFlush.MsgMeta,
+		FlushMeta:          next.ProcessingFlush.Msg,
 		HasVictim:          true,
 		VictimPID:          vm.PID(block.PID),
 		VictimTag:          block.Tag,
@@ -157,13 +157,13 @@ func (f *flusher) extractFromPort() bool {
 	if !ok {
 		return false
 	}
-
-	req, ok := msg.(memcontrolprotocol.Req)
+	_, ok = msg.Payload.(memcontrolprotocol.Req)
+	req := msg
 	if !ok {
 		return false
 	}
 
-	if req.Command != memcontrolprotocol.CmdFlush {
+	if req.Payload.(memcontrolprotocol.Req).Command != memcontrolprotocol.CmdFlush {
 		return false
 	}
 
@@ -179,7 +179,7 @@ func (f *flusher) extractFromPort() bool {
 }
 
 // rejectFlush replies that Flush is illegal while the cache is Running.
-func (f *flusher) rejectFlush(msg memcontrolprotocol.Req) bool {
+func (f *flusher) rejectFlush(msg messaging.Msg) bool {
 	if !f.ctrlPort().CanSend() {
 		return false
 	}
@@ -191,14 +191,14 @@ func (f *flusher) rejectFlush(msg memcontrolprotocol.Req) bool {
 	return true
 }
 
-func (f *flusher) startProcessingFlush(msg memcontrolprotocol.Req) bool {
+func (f *flusher) startProcessingFlush(msg messaging.Msg) bool {
 	next := &f.pipeline.comp.State
 
 	next.HasProcessingFlush = true
 	next.ProcessingFlush = flushReqState{
-		MsgMeta:         msg.MsgMeta,
-		FilterAddresses: msg.Addresses,
-		FilterPID:       msg.PID,
+		Msg:             msg,
+		FilterAddresses: msg.Payload.(memcontrolprotocol.Req).Addresses,
+		FilterPID:       msg.Payload.(memcontrolprotocol.Req).PID,
 	}
 
 	next.CacheState = int(cacheStatePreFlushing)
@@ -224,12 +224,13 @@ func (f *flusher) finalizeFlushing() bool {
 		return false
 	}
 
-	rsp := memcontrolprotocol.Rsp{Command: memcontrolprotocol.CmdFlush, Success: true}
-	rsp.ID = f.pipeline.comp.NewID()
-	rsp.Src = f.ctrlPort().AsRemote()
-	rsp.Dst = next.ProcessingFlush.MsgMeta.Src
-	rsp.RspTo = next.ProcessingFlush.MsgMeta.ID
-	rsp.TrafficClass = "memcontrolprotocol.Rsp"
+	rsp := messaging.Msg{Payload: memcontrolprotocol.Rsp{Command: memcontrolprotocol.CmdFlush, Success: true},
+		ID:           f.pipeline.comp.NewID(),
+		Src:          f.ctrlPort().AsRemote(),
+		Dst:          next.ProcessingFlush.Msg.Src,
+		RspTo:        next.ProcessingFlush.Msg.ID,
+		TrafficClass: "memcontrolprotocol.Rsp"}
+
 	f.ctrlPort().Send(rsp)
 
 	// Per protocol, Flush leaves clean entries valid: only the blocks that
@@ -245,7 +246,7 @@ func (f *flusher) finalizeFlushing() bool {
 	// Flush is only legal from paused, and returns the cache to paused.
 	next.CacheState = int(cacheStatePaused)
 
-	tracing.TraceReqComplete(f.pipeline.comp, next.ProcessingFlush.MsgMeta)
+	tracing.TraceReqComplete(f.pipeline.comp, next.ProcessingFlush.Msg)
 	next.HasProcessingFlush = false
 	next.ProcessingFlush = flushReqState{}
 

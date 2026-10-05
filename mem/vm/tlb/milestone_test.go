@@ -150,15 +150,17 @@ var _ = Describe("TLB milestones", func() {
 		tracing.CollectIncomingBufferTrace(topPort)
 	})
 
-	makeReq := func(vAddr uint64) vmprotocol.TranslationReq {
-		req := vmprotocol.TranslationReq{}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Agent")
-		req.Dst = topPort.AsRemote()
-		req.PID = 1
-		req.VAddr = vAddr
-		req.DeviceID = 1
-		req.TrafficClass = "vmprotocol.TranslationReq"
+	makeReq := func(vAddr uint64) messaging.Msg {
+		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+			PID:      1,
+			VAddr:    vAddr,
+			DeviceID: 1},
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Agent"),
+			Dst: topPort.AsRemote(),
+
+			TrafficClass: "vmprotocol.TranslationReq"}
+
 		return req
 	}
 
@@ -273,15 +275,16 @@ var _ = Describe("TLB milestones", func() {
 		// on req_in, and the response-send network_busy on the Top port comes
 		// only afterwards — not during the req_out.
 		fetchValue, _ := bottomPort.RetrieveOutgoing()
-		fetch := fetchValue.(vmprotocol.TranslationReq)
-		rsp := vmprotocol.TranslationRsp{
+		fetch := fetchValue
+		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 			Page: vm.Page{PID: 1, VAddr: 0x100, PAddr: 0x200, Valid: true},
-		}
-		rsp.ID = sim.NewID()
-		rsp.Src = remotePort
-		rsp.Dst = bottomPort.AsRemote()
-		rsp.RspTo = fetch.ID
-		rsp.TrafficClass = "vmprotocol.TranslationRsp"
+		},
+			ID:           sim.NewID(),
+			Src:          remotePort,
+			Dst:          bottomPort.AsRemote(),
+			RspTo:        fetch.ID,
+			TrafficClass: "vmprotocol.TranslationRsp"}
+
 		bottomPort.Deliver(rsp)
 		drive(20)
 

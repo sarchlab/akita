@@ -60,11 +60,11 @@ func (m *tickFinalizeMW) finalizeRead(
 	b *bankState,
 	item *bankPipelineItemState,
 ) bool {
-	readReq := &item.ReadMsg
+	readReq := item.ReadMsg
 
 	if !item.Committed {
 		data := m.comp.Resources.Storage.Read(
-			readReq.Address, readReq.AccessByteSize)
+			readReq.Payload.(memprotocol.ReadReq).Address, readReq.Payload.(memprotocol.ReadReq).AccessByteSize)
 
 		item.ReadData = data
 		item.Committed = true
@@ -82,20 +82,21 @@ func (m *tickFinalizeMW) finalizeRead(
 	// traversal as work on req_in before the response send and before
 	// TraceReqComplete, so the same-tick complete does not absorb it via the
 	// same-time dedup.
-	m.finishPipeline(&item.ReadMsg, item.PipelineTaskID)
+	m.finishPipeline(item.ReadMsg, item.PipelineTaskID)
 
-	rsp := memprotocol.DataReadyRsp{}
-	rsp.ID = m.comp.NewID()
-	rsp.Src = m.topPort().AsRemote()
-	rsp.Dst = readReq.Src
-	rsp.RspTo = readReq.ID
-	rsp.Data = item.ReadData
-	rsp.TrafficBytes = len(item.ReadData) + 4
-	rsp.TrafficClass = "memprotocol.DataReadyRsp"
+	rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{
+		Data: item.ReadData},
+		ID:    m.comp.NewID(),
+		Src:   m.topPort().AsRemote(),
+		Dst:   readReq.Src,
+		RspTo: readReq.ID,
+
+		TrafficBytes: len(item.ReadData) + 4,
+		TrafficClass: "memprotocol.DataReadyRsp"}
 
 	m.topPort().Send(rsp)
 
-	tracing.TraceReqComplete(m.comp, &item.ReadMsg)
+	tracing.TraceReqComplete(m.comp, item.ReadMsg)
 
 	bufferPop(b)
 
@@ -106,19 +107,19 @@ func (m *tickFinalizeMW) finalizeWrite(
 	b *bankState,
 	item *bankPipelineItemState,
 ) bool {
-	writeReq := &item.WriteMsg
+	writeReq := item.WriteMsg
 
 	if !item.Committed {
-		addr := writeReq.Address
+		addr := writeReq.Payload.(memprotocol.WriteReq).Address
 
-		if writeReq.DirtyMask == nil {
-			m.comp.Resources.Storage.Write(addr, writeReq.Data)
+		if writeReq.Payload.(memprotocol.WriteReq).DirtyMask == nil {
+			m.comp.Resources.Storage.Write(addr, writeReq.Payload.(memprotocol.WriteReq).Data)
 		} else {
-			data := m.comp.Resources.Storage.Read(addr, uint64(len(writeReq.Data)))
+			data := m.comp.Resources.Storage.Read(addr, uint64(len(writeReq.Payload.(memprotocol.WriteReq).Data)))
 
-			for i := range writeReq.Data {
-				if writeReq.DirtyMask[i] {
-					data[i] = writeReq.Data[i]
+			for i := range writeReq.Payload.(memprotocol.WriteReq).Data {
+				if writeReq.Payload.(memprotocol.WriteReq).DirtyMask[i] {
+					data[i] = writeReq.Payload.(memprotocol.WriteReq).Data[i]
 				}
 			}
 
@@ -135,19 +136,19 @@ func (m *tickFinalizeMW) finalizeWrite(
 
 	// See finalizeRead: attribute the bank-pipeline traversal as work on
 	// req_in at pipeline exit, before the response send and TraceReqComplete.
-	m.finishPipeline(&item.WriteMsg, item.PipelineTaskID)
+	m.finishPipeline(item.WriteMsg, item.PipelineTaskID)
 
-	rsp := memprotocol.WriteDoneRsp{}
-	rsp.ID = m.comp.NewID()
-	rsp.Src = m.topPort().AsRemote()
-	rsp.Dst = writeReq.Src
-	rsp.RspTo = writeReq.ID
-	rsp.TrafficBytes = 4
-	rsp.TrafficClass = "memprotocol.WriteDoneRsp"
+	rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+		ID:           m.comp.NewID(),
+		Src:          m.topPort().AsRemote(),
+		Dst:          writeReq.Src,
+		RspTo:        writeReq.ID,
+		TrafficBytes: 4,
+		TrafficClass: "memprotocol.WriteDoneRsp"}
 
 	m.topPort().Send(rsp)
 
-	tracing.TraceReqComplete(m.comp, &item.WriteMsg)
+	tracing.TraceReqComplete(m.comp, item.WriteMsg)
 
 	bufferPop(b)
 

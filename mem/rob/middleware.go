@@ -77,8 +77,8 @@ func (m *middleware) topDown() bool {
 	if !ok {
 		return false
 	}
-
-	req, ok := msg.(memprotocol.AccessReq)
+	_, ok = msg.Payload.(memprotocol.AccessReq)
+	req := msg
 	if !ok {
 		panic("rob: unsupported top-port message type")
 	}
@@ -119,9 +119,9 @@ func (m *middleware) topDown() bool {
 	m.tagReadWrite(req)
 
 	state.Transactions = append(state.Transactions, transactionState{
-		ReqFromTopID:  req.Meta().ID,
-		ReqFromTopSrc: req.Meta().Src,
-		ReqToBottomID: shadow.Meta().ID,
+		ReqFromTopID:  req.ID,
+		ReqFromTopSrc: req.Src,
+		ReqToBottomID: shadow.ID,
 		IsRead:        isRead,
 	})
 	m.comp.Ports.Top.RetrieveIncoming()
@@ -141,8 +141,10 @@ func (m *middleware) parseBottom() bool {
 		return false
 	}
 
-	switch dataRsp := msg.(type) {
+	switch content := msg.Payload.(type) {
 	case memprotocol.DataReadyRsp:
+		dataRsp := msg
+
 		idx := m.findTransactionByBottomID(dataRsp.RspTo)
 		m.comp.Ports.Bottom.RetrieveIncoming()
 
@@ -152,8 +154,9 @@ func (m *middleware) parseBottom() bool {
 
 		trans := &m.comp.State.Transactions[idx]
 		trans.HasRsp = true
-		trans.RspData = dataRsp.Data
+		trans.RspData = content.Data
 		// The bottom unit returned the data this transaction was waiting on.
+
 		tracing.AddMilestone(m.comp, tracing.Milestone{
 			TaskID: m.reqInTaskID(*trans),
 			Kind:   tracing.MilestoneKindData,
@@ -162,6 +165,8 @@ func (m *middleware) parseBottom() bool {
 		tracing.TraceReqFinalize(m.comp, m.shadowReqTraceMsg(*trans))
 		return true
 	case memprotocol.WriteDoneRsp:
+		dataRsp := msg
+
 		idx := m.findTransactionByBottomID(dataRsp.RspTo)
 		m.comp.Ports.Bottom.RetrieveIncoming()
 
@@ -246,33 +251,39 @@ func (m *middleware) findTransactionByBottomID(id uint64) int {
 // buildShadowReq mirrors the incoming request as a fresh request the bottom
 // unit will see. The returned bool is true when the source request is a read.
 func (m *middleware) buildShadowReq(
-	req memprotocol.AccessReq, src, dst messaging.RemotePort,
-) (memprotocol.AccessReq, bool) {
-	switch r := req.(type) {
+	req messaging.Msg, src, dst messaging.RemotePort,
+) (messaging.Msg, bool) {
+	switch content := req.Payload.(type) {
 	case memprotocol.ReadReq:
-		shadow := memprotocol.ReadReq{
-			Address:        r.Address,
-			AccessByteSize: r.AccessByteSize,
-			PID:            r.PID,
-		}
-		shadow.ID = m.comp.NewID()
-		shadow.Src = src
-		shadow.Dst = dst
-		shadow.TrafficBytes = r.TrafficBytes
-		shadow.TrafficClass = r.TrafficClass
+		r := req
+
+		shadow := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        content.Address,
+			AccessByteSize: content.AccessByteSize,
+			PID:            content.PID,
+		},
+			ID:           m.comp.NewID(),
+			Src:          src,
+			Dst:          dst,
+			TrafficBytes: r.TrafficBytes,
+			TrafficClass: r.TrafficClass}
+
 		return shadow, true
 	case memprotocol.WriteReq:
-		shadow := memprotocol.WriteReq{
-			Address:   r.Address,
-			Data:      r.Data,
-			DirtyMask: r.DirtyMask,
-			PID:       r.PID,
-		}
-		shadow.ID = m.comp.NewID()
-		shadow.Src = src
-		shadow.Dst = dst
-		shadow.TrafficBytes = r.TrafficBytes
-		shadow.TrafficClass = r.TrafficClass
+		r := req
+
+		shadow := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address:   content.Address,
+			Data:      content.Data,
+			DirtyMask: content.DirtyMask,
+			PID:       content.PID,
+		},
+			ID:           m.comp.NewID(),
+			Src:          src,
+			Dst:          dst,
+			TrafficBytes: r.TrafficBytes,
+			TrafficClass: r.TrafficClass}
+
 		return shadow, false
 	default:
 		panic("rob: unsupported request type")
@@ -283,23 +294,25 @@ func (m *middleware) buildTopRsp(
 	trans transactionState, src messaging.RemotePort,
 ) messaging.Msg {
 	if trans.IsRead {
-		rsp := memprotocol.DataReadyRsp{Data: trans.RspData}
-		rsp.ID = m.comp.NewID()
-		rsp.Src = src
-		rsp.Dst = trans.ReqFromTopSrc
-		rsp.RspTo = trans.ReqFromTopID
-		rsp.TrafficBytes = len(trans.RspData) + 4
-		rsp.TrafficClass = "memprotocol.DataReadyRsp"
+		rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: trans.RspData},
+			ID:           m.comp.NewID(),
+			Src:          src,
+			Dst:          trans.ReqFromTopSrc,
+			RspTo:        trans.ReqFromTopID,
+			TrafficBytes: len(trans.RspData) + 4,
+			TrafficClass: "memprotocol.DataReadyRsp"}
+
 		return rsp
 	}
 
-	rsp := memprotocol.WriteDoneRsp{}
-	rsp.ID = m.comp.NewID()
-	rsp.Src = src
-	rsp.Dst = trans.ReqFromTopSrc
-	rsp.RspTo = trans.ReqFromTopID
-	rsp.TrafficBytes = 4
-	rsp.TrafficClass = "memprotocol.WriteDoneRsp"
+	rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+		ID:           m.comp.NewID(),
+		Src:          src,
+		Dst:          trans.ReqFromTopSrc,
+		RspTo:        trans.ReqFromTopID,
+		TrafficBytes: 4,
+		TrafficClass: "memprotocol.WriteDoneRsp"}
+
 	return rsp
 }
 
@@ -307,16 +320,18 @@ func (m *middleware) buildTopRsp(
 // trace event for the shadow request the reorder buffer issued.
 func (m *middleware) shadowReqTraceMsg(trans transactionState) messaging.Msg {
 	if trans.IsRead {
-		req := memprotocol.ReadReq{}
-		req.ID = trans.ReqToBottomID
-		req.Src = m.comp.Ports.Bottom.AsRemote()
-		req.Dst = m.comp.Spec.BottomUnit
+		req := messaging.Msg{Payload: memprotocol.ReadReq{},
+			ID:  trans.ReqToBottomID,
+			Src: m.comp.Ports.Bottom.AsRemote(),
+			Dst: m.comp.Spec.BottomUnit}
+
 		return req
 	}
-	req := memprotocol.WriteReq{}
-	req.ID = trans.ReqToBottomID
-	req.Src = m.comp.Ports.Bottom.AsRemote()
-	req.Dst = m.comp.Spec.BottomUnit
+	req := messaging.Msg{Payload: memprotocol.WriteReq{},
+		ID:  trans.ReqToBottomID,
+		Src: m.comp.Ports.Bottom.AsRemote(),
+		Dst: m.comp.Spec.BottomUnit}
+
 	return req
 }
 
@@ -324,16 +339,18 @@ func (m *middleware) shadowReqTraceMsg(trans transactionState) messaging.Msg {
 // trace event for the original top-side request.
 func (m *middleware) topReqTraceMsg(trans transactionState) messaging.Msg {
 	if trans.IsRead {
-		req := memprotocol.ReadReq{}
-		req.ID = trans.ReqFromTopID
-		req.Src = trans.ReqFromTopSrc
-		req.Dst = m.comp.Ports.Top.AsRemote()
+		req := messaging.Msg{Payload: memprotocol.ReadReq{},
+			ID:  trans.ReqFromTopID,
+			Src: trans.ReqFromTopSrc,
+			Dst: m.comp.Ports.Top.AsRemote()}
+
 		return req
 	}
-	req := memprotocol.WriteReq{}
-	req.ID = trans.ReqFromTopID
-	req.Src = trans.ReqFromTopSrc
-	req.Dst = m.comp.Ports.Top.AsRemote()
+	req := messaging.Msg{Payload: memprotocol.WriteReq{},
+		ID:  trans.ReqFromTopID,
+		Src: trans.ReqFromTopSrc,
+		Dst: m.comp.Ports.Top.AsRemote()}
+
 	return req
 }
 
@@ -348,9 +365,9 @@ func (m *middleware) reqInTaskID(trans transactionState) uint64 {
 // tagReadWrite labels the req_in task as a "read" or a "write" so traces can be
 // filtered by access type. Called once, when the request is admitted (retrieved)
 // and its req_in task opens.
-func (m *middleware) tagReadWrite(req memprotocol.AccessReq) {
+func (m *middleware) tagReadWrite(req messaging.Msg) {
 	what := "write"
-	if _, ok := req.(memprotocol.ReadReq); ok {
+	if _, ok := req.Payload.(memprotocol.ReadReq); ok {
 		what = "read"
 	}
 
@@ -378,14 +395,14 @@ func (m *middleware) processControlMsg() bool {
 	if !ok {
 		return false
 	}
-
-	req, ok := msg.(memcontrolprotocol.Req)
+	_, ok = msg.Payload.(memcontrolprotocol.Req)
+	req := msg
 	if !ok {
 		m.comp.Ports.Control.RetrieveIncoming()
 		return true
 	}
 
-	switch req.Command {
+	switch req.Payload.(memcontrolprotocol.Req).Command {
 	case memcontrolprotocol.CmdPause:
 		return m.handlePause(req)
 	case memcontrolprotocol.CmdDrain:
@@ -420,7 +437,7 @@ func (m *middleware) completePendingDrain() bool {
 	return true
 }
 
-func (m *middleware) handlePause(req memcontrolprotocol.Req) bool {
+func (m *middleware) handlePause(req messaging.Msg) bool {
 	if !m.comp.Ports.Control.CanSend() {
 		return false
 	}
@@ -431,7 +448,7 @@ func (m *middleware) handlePause(req memcontrolprotocol.Req) bool {
 	return true
 }
 
-func (m *middleware) handleDrain(req memcontrolprotocol.Req) bool {
+func (m *middleware) handleDrain(req messaging.Msg) bool {
 	state := &m.comp.State
 	state.ControlState = memcontrolprotocol.StateDraining
 	state.CurrentCmdID = req.ID
@@ -440,7 +457,7 @@ func (m *middleware) handleDrain(req memcontrolprotocol.Req) bool {
 	return true
 }
 
-func (m *middleware) handleEnable(req memcontrolprotocol.Req) bool {
+func (m *middleware) handleEnable(req messaging.Msg) bool {
 	if !m.comp.Ports.Control.CanSend() {
 		return false
 	}
@@ -462,7 +479,7 @@ func (m *middleware) handleEnable(req memcontrolprotocol.Req) bool {
 // traffic, and lands the ROB back in Enabled. The req_in/req_out tracing tasks
 // that topDown opened for each in-flight transaction are ended (and their
 // receiver-registry entries released) so they do not outlive the transactions.
-func (m *middleware) handleReset(req memcontrolprotocol.Req) bool {
+func (m *middleware) handleReset(req messaging.Msg) bool {
 	if !m.comp.Ports.Control.CanSend() {
 		return false
 	}
@@ -488,11 +505,11 @@ func (m *middleware) handleReset(req memcontrolprotocol.Req) bool {
 	return true
 }
 
-func (m *middleware) handleUnsupported(req memcontrolprotocol.Req) bool {
+func (m *middleware) handleUnsupported(req messaging.Msg) bool {
 	if !m.comp.Ports.Control.CanSend() {
 		return false
 	}
-	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp, req.Command,
+	m.comp.Ports.Control.Send(makeCtrlRsp(m.comp, req.Payload.(memcontrolprotocol.Req).Command,
 		req.Src, req.ID, false, memcontrolprotocol.ErrUnsupported))
 	m.comp.Ports.Control.RetrieveIncoming()
 	return true
@@ -505,17 +522,18 @@ func makeCtrlRsp(
 	rspTo uint64,
 	success bool,
 	errStr string,
-) memcontrolprotocol.Rsp {
-	rsp := memcontrolprotocol.Rsp{
+) messaging.Msg {
+	rsp := messaging.Msg{Payload: memcontrolprotocol.Rsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,
-	}
-	rsp.ID = c.NewID()
-	rsp.Src = c.Ports.Control.AsRemote()
-	rsp.Dst = dst
-	rsp.RspTo = rspTo
-	rsp.TrafficClass = "memcontrolprotocol.Rsp"
+	},
+		ID:           c.NewID(),
+		Src:          c.Ports.Control.AsRemote(),
+		Dst:          dst,
+		RspTo:        rspTo,
+		TrafficClass: "memcontrolprotocol.Rsp"}
+
 	return rsp
 }
 

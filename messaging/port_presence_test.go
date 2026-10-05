@@ -39,8 +39,8 @@ func TestPortReadPresenceAndNotifications(t *testing.T) {
 	p.SetConnection(conn)
 	hook := &portPresenceHook{}
 	p.AcceptHook(hook)
-	first := registryTestMsg{MsgMeta: MsgMeta{Src: "P", Dst: "Other"}, Value: 0}
-	second := registryTestMsg{MsgMeta: MsgMeta{Src: "P", Dst: "Other"}, Value: 1}
+	first := Msg{Src: "P", Dst: "Other", Payload: registryTestMsg{Value: 0}}
+	second := Msg{Src: "P", Dst: "Other", Payload: registryTestMsg{Value: 1}}
 	assertEmptyPortReads(t, p)
 	require.Zero(t, conn.available)
 	require.Zero(t, comp.freed)
@@ -78,7 +78,7 @@ func TestPortReadPresenceAndNotifications(t *testing.T) {
 }
 
 func TestPortWithoutOwnerPanics(t *testing.T) {
-	msg := registryTestMsg{MsgMeta: MsgMeta{Src: "Other", Dst: "P"}}
+	msg := Msg{Src: "Other", Dst: "P", Payload: registryTestMsg{}}
 	for name, use := range map[string]func(p Port){
 		"Deliver":          func(p Port) { p.Deliver(msg) },
 		"RetrieveOutgoing": func(p Port) { p.RetrieveOutgoing() },
@@ -99,7 +99,7 @@ func assertEmptyPortReads(t *testing.T, p Port) {
 		p.PeekIncoming, p.RetrieveIncoming, p.PeekOutgoing, p.RetrieveOutgoing,
 	} {
 		msg, ok := read()
-		require.Nil(t, msg)
+		require.Equal(t, Msg{}, msg)
 		require.False(t, ok)
 	}
 }

@@ -188,21 +188,23 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 		})
 
-		read := memprotocol.ReadReq{}
-		read.ID = m.comp.NewID()
-		read.Src = agentPort.AsRemote()
-		read.Dst = cacheComp.Ports.Top.AsRemote()
-		read.Address = 0x10004
-		read.AccessByteSize = 4
-		read.TrafficBytes = 12
-		read.TrafficClass = "memprotocol.ReadReq"
+		read := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x10004,
+			AccessByteSize: 4},
+			ID:  m.comp.NewID(),
+			Src: agentPort.AsRemote(),
+			Dst: cacheComp.Ports.Top.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		cacheComp.Ports.Top.Deliver(read)
 
 		Expect(engine.Run()).To(Succeed())
 
 		rsp, _ := agentPort.RetrieveIncoming()
-		dr := rsp.(memprotocol.DataReadyRsp)
-		Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
+		dr := rsp
+		Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
 		Expect(dr.RspTo).To(Equal(read.ID))
 	})
 
@@ -227,26 +229,28 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 		})
 
-		write := memprotocol.WriteReq{}
-		write.ID = m.comp.NewID()
-		write.Src = agentPort.AsRemote()
-		write.Dst = cacheComp.Ports.Top.AsRemote()
-		write.Address = 0x10004
-		write.Data = []byte{9, 9, 9, 9}
-		write.TrafficBytes = len([]byte{9, 9, 9, 9}) + 12
-		write.TrafficClass = "memprotocol.WriteReq"
+		write := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address: 0x10004,
+			Data:    []byte{9, 9, 9, 9}},
+			ID:  m.comp.NewID(),
+			Src: agentPort.AsRemote(),
+			Dst: cacheComp.Ports.Top.AsRemote(),
+
+			TrafficBytes: len([]byte{9, 9, 9, 9}) + 12,
+			TrafficClass: "memprotocol.WriteReq"}
+
 		cacheComp.Ports.Top.Deliver(write)
 
 		Expect(engine.Run()).To(Succeed())
 
 		rsp, _ := agentPort.RetrieveIncoming()
-		Expect(rsp.Meta().RspTo).To(Equal(write.ID))
+		Expect(rsp.RspTo).To(Equal(write.ID))
 
 		// Re-read state after engine run
 		postState := m.comp.State
 		postBlock := &postState.DirectoryState.Sets[setID].Blocks[0]
 		retData := m.storage.Read(postBlock.CacheAddress+0x4, 4)
-		Expect(retData).To(Equal(write.Data))
+		Expect(retData).To(Equal(write.Payload.(memprotocol.WriteReq).Data))
 		Expect(postBlock.IsValid).To(BeTrue())
 		Expect(postBlock.IsDirty).To(BeTrue())
 	})
@@ -263,21 +267,23 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 		})
 
-		read := memprotocol.ReadReq{}
-		read.ID = m.comp.NewID()
-		read.Src = agentPort.AsRemote()
-		read.Dst = cacheComp.Ports.Top.AsRemote()
-		read.Address = 0x10004
-		read.AccessByteSize = 4
-		read.TrafficBytes = 12
-		read.TrafficClass = "memprotocol.ReadReq"
+		read := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x10004,
+			AccessByteSize: 4},
+			ID:  m.comp.NewID(),
+			Src: agentPort.AsRemote(),
+			Dst: cacheComp.Ports.Top.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		cacheComp.Ports.Top.Deliver(read)
 
 		Expect(engine.Run()).To(Succeed())
 
 		rsp, _ := agentPort.RetrieveIncoming()
-		dr := rsp.(memprotocol.DataReadyRsp)
-		Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
+		dr := rsp
+		Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
 		Expect(dr.RspTo).To(Equal(read.ID))
 	})
 
@@ -293,24 +299,28 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 		})
 
-		read1 := memprotocol.ReadReq{}
-		read1.ID = m.comp.NewID()
-		read1.Src = agentPort.AsRemote()
-		read1.Dst = cacheComp.Ports.Top.AsRemote()
-		read1.Address = 0x10004
-		read1.AccessByteSize = 4
-		read1.TrafficBytes = 12
-		read1.TrafficClass = "memprotocol.ReadReq"
+		read1 := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x10004,
+			AccessByteSize: 4},
+			ID:  m.comp.NewID(),
+			Src: agentPort.AsRemote(),
+			Dst: cacheComp.Ports.Top.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		cacheComp.Ports.Top.Deliver(read1)
 
-		read2 := memprotocol.ReadReq{}
-		read2.ID = m.comp.NewID()
-		read2.Src = agentPort.AsRemote()
-		read2.Dst = cacheComp.Ports.Top.AsRemote()
-		read2.Address = 0x10008
-		read2.AccessByteSize = 4
-		read2.TrafficBytes = 12
-		read2.TrafficClass = "memprotocol.ReadReq"
+		read2 := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x10008,
+			AccessByteSize: 4},
+			ID:  m.comp.NewID(),
+			Src: agentPort.AsRemote(),
+			Dst: cacheComp.Ports.Top.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		cacheComp.Ports.Top.Deliver(read2)
 
 		Expect(engine.Run()).To(Succeed())
@@ -319,8 +329,8 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		for i := 0; i < 2; i++ {
 			rsp, _ := agentPort.RetrieveIncoming()
 			Expect(rsp).NotTo(BeNil())
-			dr := rsp.(memprotocol.DataReadyRsp)
-			rsps[dr.RspTo] = dr.Data
+			dr := rsp
+			rsps[dr.RspTo] = dr.Payload.(memprotocol.DataReadyRsp).Data
 		}
 		Expect(rsps[read1.ID]).To(Equal([]byte{5, 6, 7, 8}))
 		Expect(rsps[read2.ID]).To(Equal([]byte{1, 2, 3, 4}))
@@ -337,24 +347,28 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
 		}
-		write := memprotocol.WriteReq{}
-		write.ID = m.comp.NewID()
-		write.Src = agentPort.AsRemote()
-		write.Dst = cacheComp.Ports.Top.AsRemote()
-		write.Address = 0x10000
-		write.Data = writeData
-		write.TrafficBytes = len(writeData) + 12
-		write.TrafficClass = "memprotocol.WriteReq"
+		write := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address: 0x10000,
+			Data:    writeData},
+			ID:  m.comp.NewID(),
+			Src: agentPort.AsRemote(),
+			Dst: cacheComp.Ports.Top.AsRemote(),
+
+			TrafficBytes: len(writeData) + 12,
+			TrafficClass: "memprotocol.WriteReq"}
+
 		cacheComp.Ports.Top.Deliver(write)
 
-		read := memprotocol.ReadReq{}
-		read.ID = m.comp.NewID()
-		read.Src = agentPort.AsRemote()
-		read.Dst = cacheComp.Ports.Top.AsRemote()
-		read.Address = 0x10004
-		read.AccessByteSize = 4
-		read.TrafficBytes = 12
-		read.TrafficClass = "memprotocol.ReadReq"
+		read := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x10004,
+			AccessByteSize: 4},
+			ID:  m.comp.NewID(),
+			Src: agentPort.AsRemote(),
+			Dst: cacheComp.Ports.Top.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		cacheComp.Ports.Top.Deliver(read)
 
 		Expect(engine.Run()).To(Succeed())
@@ -363,11 +377,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		for i := 0; i < 2; i++ {
 			rsp, _ := agentPort.RetrieveIncoming()
 			Expect(rsp).NotTo(BeNil())
-			rsps[rsp.Meta().RspTo] = rsp
+			rsps[rsp.RspTo] = rsp
 		}
 		Expect(rsps).To(HaveKey(write.ID))
-		dr := rsps[read.ID].(memprotocol.DataReadyRsp)
-		Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
+		dr := rsps[read.ID]
+		Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
 	})
 
 	It("should handle read miss, mshr miss, w/ fetch, w/ eviction", func() {
@@ -394,43 +408,49 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		}
 		m.comp.State = state
 
-		read := memprotocol.ReadReq{}
-		read.ID = m.comp.NewID()
-		read.Src = agentPort.AsRemote()
-		read.Dst = cacheComp.Ports.Top.AsRemote()
-		read.Address = 0x10004
-		read.AccessByteSize = 4
-		read.TrafficBytes = 12
-		read.TrafficClass = "memprotocol.ReadReq"
+		read := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        0x10004,
+			AccessByteSize: 4},
+			ID:  m.comp.NewID(),
+			Src: agentPort.AsRemote(),
+			Dst: cacheComp.Ports.Top.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		cacheComp.Ports.Top.Deliver(read)
 
 		Expect(engine.Run()).To(Succeed())
 
 		rsp, _ := agentPort.RetrieveIncoming()
-		dr := rsp.(memprotocol.DataReadyRsp)
-		Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
+		dr := rsp
+		Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{5, 6, 7, 8}))
 		Expect(dr.RspTo).To(Equal(read.ID))
 	})
 
 	It("should flush", func() {
-		write1 := memprotocol.WriteReq{}
-		write1.ID = m.comp.NewID()
-		write1.Src = agentPort.AsRemote()
-		write1.Dst = cacheComp.Ports.Top.AsRemote()
-		write1.Address = 0x100000
-		write1.Data = []byte{1, 2, 3, 4}
-		write1.TrafficBytes = len([]byte{1, 2, 3, 4}) + 12
-		write1.TrafficClass = "memprotocol.WriteReq"
+		write1 := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address: 0x100000,
+			Data:    []byte{1, 2, 3, 4}},
+			ID:  m.comp.NewID(),
+			Src: agentPort.AsRemote(),
+			Dst: cacheComp.Ports.Top.AsRemote(),
+
+			TrafficBytes: len([]byte{1, 2, 3, 4}) + 12,
+			TrafficClass: "memprotocol.WriteReq"}
+
 		cacheComp.Ports.Top.Deliver(write1)
 
-		write2 := memprotocol.WriteReq{}
-		write2.ID = m.comp.NewID()
-		write2.Src = agentPort.AsRemote()
-		write2.Dst = cacheComp.Ports.Top.AsRemote()
-		write2.Address = 0x100000
-		write2.Data = []byte{1, 2, 3, 4}
-		write2.TrafficBytes = len([]byte{1, 2, 3, 4}) + 12
-		write2.TrafficClass = "memprotocol.WriteReq"
+		write2 := messaging.Msg{Payload: memprotocol.WriteReq{
+			Address: 0x100000,
+			Data:    []byte{1, 2, 3, 4}},
+			ID:  m.comp.NewID(),
+			Src: agentPort.AsRemote(),
+			Dst: cacheComp.Ports.Top.AsRemote(),
+
+			TrafficBytes: len([]byte{1, 2, 3, 4}) + 12,
+			TrafficClass: "memprotocol.WriteReq"}
+
 		cacheComp.Ports.Top.Deliver(write2)
 
 		// Let the writes settle so the block is resident and dirty.
@@ -438,33 +458,35 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		_, present0 := controlAgentPort.RetrieveIncoming()
 		Expect(present0).To(BeFalse())
 		// Flush is a conditional verb: pause first so it is legal.
-		pause := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdPause}
-		pause.ID = m.comp.NewID()
-		pause.Src = controlAgentPort.AsRemote()
-		pause.Dst = cacheComp.Ports.Control.AsRemote()
-		pause.TrafficClass = "memcontrolprotocol.Req"
+		pause := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdPause},
+			ID:           m.comp.NewID(),
+			Src:          controlAgentPort.AsRemote(),
+			Dst:          cacheComp.Ports.Control.AsRemote(),
+			TrafficClass: "memcontrolprotocol.Req"}
+
 		cacheComp.Ports.Control.Deliver(pause)
 
 		Expect(engine.Run()).To(Succeed())
 
 		pauseRsp, _ := controlAgentPort.RetrieveIncoming()
 		Expect(pauseRsp).NotTo(BeNil())
-		Expect(pauseRsp.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdPause))
-		Expect(pauseRsp.(memcontrolprotocol.Rsp).Success).To(BeTrue())
+		Expect(pauseRsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdPause))
+		Expect(pauseRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 
-		flush := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush}
-		flush.ID = m.comp.NewID()
-		flush.Src = controlAgentPort.AsRemote()
-		flush.Dst = cacheComp.Ports.Control.AsRemote()
-		flush.TrafficClass = "memcontrolprotocol.Req"
+		flush := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdFlush},
+			ID:           m.comp.NewID(),
+			Src:          controlAgentPort.AsRemote(),
+			Dst:          cacheComp.Ports.Control.AsRemote(),
+			TrafficClass: "memcontrolprotocol.Req"}
+
 		cacheComp.Ports.Control.Deliver(flush)
 
 		Expect(engine.Run()).To(Succeed())
 
 		rsp, _ := controlAgentPort.RetrieveIncoming()
 		Expect(rsp).NotTo(BeNil())
-		Expect(rsp.Meta().RspTo).To(Equal(flush.ID))
-		Expect(rsp.(memcontrolprotocol.Rsp).Success).To(BeTrue())
+		Expect(rsp.RspTo).To(Equal(flush.ID))
+		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 
 		// The dirty block's data reached DRAM.
 		flushed := dramStorage.Read(0x100000, 4)

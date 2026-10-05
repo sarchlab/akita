@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
 	"go.uber.org/mock/gomock"
 )
@@ -66,19 +67,21 @@ var _ = Describe("DirectoryStage", func() {
 
 	Context("read", func() {
 		BeforeEach(func() {
-			read := memprotocol.ReadReq{}
-			read.ID = m.comp.NewID()
-			read.Address = 0x100
-			read.PID = 1
-			read.AccessByteSize = 64
-			read.TrafficBytes = 12
-			read.TrafficClass = "memprotocol.ReadReq"
+			read := messaging.Msg{Payload: memprotocol.ReadReq{
+				Address:        0x100,
+				PID:            1,
+				AccessByteSize: 64},
+				ID: m.comp.NewID(),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.ReadReq"}
+
 			trans := transactionState{
 				HasRead:            true,
-				ReadMeta:           read.MsgMeta,
-				ReadAddress:        read.Address,
-				ReadAccessByteSize: read.AccessByteSize,
-				ReadPID:            read.PID,
+				ReadMeta:           read,
+				ReadAddress:        read.Payload.(memprotocol.ReadReq).Address,
+				ReadAccessByteSize: read.Payload.(memprotocol.ReadReq).AccessByteSize,
+				ReadPID:            read.Payload.(memprotocol.ReadReq).PID,
 			}
 
 			next := &m.comp.State
@@ -164,17 +167,19 @@ var _ = Describe("DirectoryStage", func() {
 
 	Context("write", func() {
 		BeforeEach(func() {
-			write := memprotocol.WriteReq{}
-			write.ID = m.comp.NewID()
-			write.Address = 0x100
-			write.PID = 1
-			write.TrafficBytes = 12
-			write.TrafficClass = "memprotocol.WriteReq"
+			write := messaging.Msg{Payload: memprotocol.WriteReq{
+				Address: 0x100,
+				PID:     1},
+				ID: m.comp.NewID(),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.WriteReq"}
+
 			trans := transactionState{
 				HasWrite:     true,
-				WriteMeta:    write.MsgMeta,
-				WriteAddress: write.Address,
-				WritePID:     write.PID,
+				WriteMeta:    write,
+				WriteAddress: write.Payload.(memprotocol.WriteReq).Address,
+				WritePID:     write.Payload.(memprotocol.WriteReq).PID,
 			}
 
 			next := &m.comp.State

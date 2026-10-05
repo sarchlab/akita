@@ -56,10 +56,10 @@ func (m *ctrlParseMW) parseFromCP() bool {
 	if !ok {
 		return false
 	}
-
-	req, ok := reqI.(datamoverprotocol.DataMoveReq)
+	_, ok = reqI.Payload.(datamoverprotocol.DataMoveReq)
+	req := reqI
 	if !ok {
-		log.Panicf("can't process request of type %s", reflect.TypeOf(reqI))
+		log.Panicf("can't process request of type %s", reflect.TypeOf(reqI.Payload))
 	}
 
 	// The slot is free and this request is being admitted. Attribute the
@@ -75,14 +75,14 @@ func (m *ctrlParseMW) parseFromCP() bool {
 
 	spec := m.comp.Spec
 
-	srcByteGranularity := resolveByteGranularity(spec, req.SrcSide)
-	addressMustBeAligned(req.SrcAddress, srcByteGranularity)
+	srcByteGranularity := resolveByteGranularity(spec, req.Payload.(datamoverprotocol.DataMoveReq).SrcSide)
+	addressMustBeAligned(req.Payload.(datamoverprotocol.DataMoveReq).SrcAddress, srcByteGranularity)
 
-	dstByteGranularity := resolveByteGranularity(spec, req.DstSide)
-	addressMustBeAligned(req.DstAddress, dstByteGranularity)
+	dstByteGranularity := resolveByteGranularity(spec, req.Payload.(datamoverprotocol.DataMoveReq).DstSide)
+	addressMustBeAligned(req.Payload.(datamoverprotocol.DataMoveReq).DstAddress, dstByteGranularity)
 
-	state.SrcSide = string(req.SrcSide)
-	state.DstSide = string(req.DstSide)
+	state.SrcSide = string(req.Payload.(datamoverprotocol.DataMoveReq).SrcSide)
+	state.DstSide = string(req.Payload.(datamoverprotocol.DataMoveReq).DstSide)
 	state.SrcByteGranularity = srcByteGranularity
 	state.DstByteGranularity = dstByteGranularity
 
@@ -91,13 +91,13 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		ReqID:         req.ID,
 		ReqSrc:        req.Src,
 		ReqDst:        req.Dst,
-		SrcAddress:    req.SrcAddress,
-		DstAddress:    req.DstAddress,
-		ByteSize:      req.ByteSize,
-		SrcSide:       string(req.SrcSide),
-		DstSide:       string(req.DstSide),
-		NextReadAddr:  req.SrcAddress,
-		NextWriteAddr: req.DstAddress,
+		SrcAddress:    req.Payload.(datamoverprotocol.DataMoveReq).SrcAddress,
+		DstAddress:    req.Payload.(datamoverprotocol.DataMoveReq).DstAddress,
+		ByteSize:      req.Payload.(datamoverprotocol.DataMoveReq).ByteSize,
+		SrcSide:       string(req.Payload.(datamoverprotocol.DataMoveReq).SrcSide),
+		DstSide:       string(req.Payload.(datamoverprotocol.DataMoveReq).DstSide),
+		NextReadAddr:  req.Payload.(datamoverprotocol.DataMoveReq).SrcAddress,
+		NextWriteAddr: req.Payload.(datamoverprotocol.DataMoveReq).DstAddress,
 		PendingRead:   make(map[uint64]pendingReadState),
 		PendingWrite:  make(map[uint64]pendingWriteState),
 	}
@@ -132,14 +132,10 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		return false
 	}
 
-	rsp := datamoverprotocol.DataMoveRsp{
-		MsgMeta: messaging.MsgMeta{
-			ID:    m.comp.NewID(),
-			Src:   trans.ReqDst,
-			Dst:   trans.ReqSrc,
-			RspTo: trans.ReqID,
-		},
-	}
+	rsp := messaging.Msg{ID: m.comp.NewID(),
+		Src:   trans.ReqDst,
+		Dst:   trans.ReqSrc,
+		RspTo: trans.ReqID, Payload: datamoverprotocol.DataMoveRsp{}}
 
 	if !m.topPort().CanSend() {
 		return false

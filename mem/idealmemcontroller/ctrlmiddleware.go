@@ -56,14 +56,14 @@ func (m *ctrlMiddleware) handleIncomingCommands() (madeProgress bool) {
 	if !ok {
 		return false
 	}
-
-	req, ok := msg.(memcontrolprotocol.Req)
+	_, ok = msg.Payload.(memcontrolprotocol.Req)
+	req := msg
 	if !ok {
 		m.ctrlPort().RetrieveIncoming()
 		return true
 	}
 
-	switch req.Command {
+	switch req.Payload.(memcontrolprotocol.Req).Command {
 	case memcontrolprotocol.CmdPause:
 		return m.handlePause(req)
 	case memcontrolprotocol.CmdDrain:
@@ -77,7 +77,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() (madeProgress bool) {
 	}
 }
 
-func (m *ctrlMiddleware) handlePause(req memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) handlePause(req messaging.Msg) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
@@ -91,7 +91,7 @@ func (m *ctrlMiddleware) handlePause(req memcontrolprotocol.Req) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleEnable(req memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) handleEnable(req messaging.Msg) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
@@ -105,7 +105,7 @@ func (m *ctrlMiddleware) handleEnable(req memcontrolprotocol.Req) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleDrain(req memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) handleDrain(req messaging.Msg) bool {
 	state := &m.comp.State
 	state.ControlState = memcontrolprotocol.StateDraining
 	state.CurrentCmdID = req.ID
@@ -115,7 +115,7 @@ func (m *ctrlMiddleware) handleDrain(req memcontrolprotocol.Req) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleReset(req memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) handleReset(req messaging.Msg) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
@@ -156,12 +156,12 @@ func (m *ctrlMiddleware) endInflightTasks() {
 	}
 }
 
-func (m *ctrlMiddleware) handleUnsupported(req memcontrolprotocol.Req) bool {
+func (m *ctrlMiddleware) handleUnsupported(req messaging.Msg) bool {
 	if !m.ctrlPort().CanSend() {
 		return false
 	}
 
-	m.ctrlPort().Send(makeRsp(m.comp, req.Command,
+	m.ctrlPort().Send(makeRsp(m.comp, req.Payload.(memcontrolprotocol.Req).Command,
 		req.Src, req.ID, false, memcontrolprotocol.ErrUnsupported))
 	m.ctrlPort().RetrieveIncoming()
 	return true
@@ -174,16 +174,17 @@ func makeRsp(
 	rspTo uint64,
 	success bool,
 	errStr string,
-) memcontrolprotocol.Rsp {
-	rsp := memcontrolprotocol.Rsp{
+) messaging.Msg {
+	rsp := messaging.Msg{Payload: memcontrolprotocol.Rsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,
-	}
-	rsp.ID = c.NewID()
-	rsp.Src = c.Ports.Control.AsRemote()
-	rsp.Dst = dst
-	rsp.RspTo = rspTo
-	rsp.TrafficClass = "memcontrolprotocol.Rsp"
+	},
+		ID:           c.NewID(),
+		Src:          c.Ports.Control.AsRemote(),
+		Dst:          dst,
+		RspTo:        rspTo,
+		TrafficClass: "memcontrolprotocol.Rsp"}
+
 	return rsp
 }

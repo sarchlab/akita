@@ -40,7 +40,6 @@ func (t *obRecordingTracer) EndTask(te TaskEnd)       { t.ends = append(t.ends, 
 func (t *obRecordingTracer) AddMilestone(m Milestone) { t.milestones = append(t.milestones, m) }
 
 type obTestMsg struct {
-	messaging.MsgMeta
 }
 
 // obFakeConn is a no-op connection so that Send into an empty outgoing buffer
@@ -75,12 +74,12 @@ var _ = Describe("Outgoing buffer tracer", func() {
 	It("spans send to drain and marks reached-head the instant the message "+
 		"becomes the head of the buffer", func() {
 		// A enters an empty buffer => immediately at the head.
-		a := obTestMsg{messaging.MsgMeta{ID: 7, Src: "Comp.Bottom", Dst: "Other.Top"}}
+		a := messaging.Msg{ID: 7, Src: "Comp.Bottom", Dst: "Other.Top", Payload: obTestMsg{}}
 		comp.time = 100
 		port.Send(a)
 
 		// B enters behind A => not yet at the head.
-		b := obTestMsg{messaging.MsgMeta{ID: 8, Src: "Comp.Bottom", Dst: "Other.Top"}}
+		b := messaging.Msg{ID: 8, Src: "Comp.Bottom", Dst: "Other.Top", Payload: obTestMsg{}}
 		comp.time = 110
 		port.Send(b)
 
@@ -128,7 +127,7 @@ var _ = Describe("Outgoing buffer tracer", func() {
 	})
 
 	It("parents a response's buffer task to the task it responds to", func() {
-		rsp := obTestMsg{messaging.MsgMeta{ID: 9, RspTo: 7, Src: "Comp.Bottom", Dst: "Other.Top"}}
+		rsp := messaging.Msg{ID: 9, RspTo: 7, Src: "Comp.Bottom", Dst: "Other.Top", Payload: obTestMsg{}}
 
 		comp.time = 200
 		port.Send(rsp)
@@ -145,7 +144,7 @@ var _ = Describe("Outgoing buffer tracer", func() {
 		CollectOutgoingBufferTrace(p2)
 
 		untraced.time = 100
-		p2.Send(obTestMsg{messaging.MsgMeta{ID: 1, Src: "Untraced.Bottom", Dst: "Other.Top"}})
+		p2.Send(messaging.Msg{ID: 1, Src: "Untraced.Bottom", Dst: "Other.Top", Payload: obTestMsg{}})
 		_, present2 := p2.RetrieveOutgoing()
 		Expect(present2).To(BeTrue())
 		Expect(tracer.starts).To(BeEmpty())

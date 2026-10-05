@@ -43,7 +43,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 			break
 		}
 
-		msg := msgI.(messaging.Msg)
+		msg := msgI
 		tracing.TraceReqReceive(m.comp, msg)
 
 		tx := m.msgToInflightTransaction(msg)
@@ -60,31 +60,35 @@ func (m *memMiddleware) msgToInflightTransaction(msg messaging.Msg) inflightTran
 	spec := m.comp.Spec
 	recvTaskID := tracing.MsgIDAtReceiver(msg, m.comp)
 
-	switch payload := msg.(type) {
+	switch content := msg.Payload.(type) {
 	case memprotocol.ReadReq:
+		payload := msg
+
 		return inflightTransaction{
 			CycleLeft:      spec.Latency,
-			Address:        payload.Address,
-			AccessByteSize: payload.AccessByteSize,
+			Address:        content.Address,
+			AccessByteSize: content.AccessByteSize,
 			ReqID:          payload.ID,
 			RecvTaskID:     recvTaskID,
 			IsRead:         true,
 			Src:            payload.Src,
 		}
 	case memprotocol.WriteReq:
+		payload := msg
+
 		return inflightTransaction{
 			CycleLeft:      spec.Latency,
-			Address:        payload.Address,
-			AccessByteSize: uint64(len(payload.Data)),
+			Address:        content.Address,
+			AccessByteSize: uint64(len(content.Data)),
 			ReqID:          payload.ID,
 			RecvTaskID:     recvTaskID,
 			IsRead:         false,
-			Data:           payload.Data,
-			DirtyMask:      payload.DirtyMask,
+			Data:           content.Data,
+			DirtyMask:      content.DirtyMask,
 			Src:            payload.Src,
 		}
 	default:
-		log.Panicf("cannot handle request of type %T", msg)
+		log.Panicf("cannot handle request of type %T", msg.Payload)
 		return inflightTransaction{}
 	}
 }
@@ -133,14 +137,15 @@ func (m *memMiddleware) sendResponse(tx *inflightTransaction) bool {
 func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 	data := m.comp.Resources.Storage.Read(tx.Address, tx.AccessByteSize)
 
-	rsp := memprotocol.DataReadyRsp{}
-	rsp.ID = m.comp.NewID()
-	rsp.Src = m.topPort().AsRemote()
-	rsp.Dst = tx.Src
-	rsp.RspTo = tx.ReqID
-	rsp.Data = data
-	rsp.TrafficBytes = len(data) + 4
-	rsp.TrafficClass = "memprotocol.DataReadyRsp"
+	rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{
+		Data: data},
+		ID:    m.comp.NewID(),
+		Src:   m.topPort().AsRemote(),
+		Dst:   tx.Src,
+		RspTo: tx.ReqID,
+
+		TrafficBytes: len(data) + 4,
+		TrafficClass: "memprotocol.DataReadyRsp"}
 
 	if !m.topPort().CanSend() {
 		return false
@@ -154,13 +159,13 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 }
 
 func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
-	rsp := memprotocol.WriteDoneRsp{}
-	rsp.ID = m.comp.NewID()
-	rsp.Src = m.topPort().AsRemote()
-	rsp.Dst = tx.Src
-	rsp.RspTo = tx.ReqID
-	rsp.TrafficBytes = 4
-	rsp.TrafficClass = "memprotocol.WriteDoneRsp"
+	rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+		ID:           m.comp.NewID(),
+		Src:          m.topPort().AsRemote(),
+		Dst:          tx.Src,
+		RspTo:        tx.ReqID,
+		TrafficBytes: 4,
+		TrafficClass: "memprotocol.WriteDoneRsp"}
 
 	if !m.topPort().CanSend() {
 		return false

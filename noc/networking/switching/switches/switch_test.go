@@ -1,8 +1,6 @@
 package switches
 
 import (
-	"reflect"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -102,20 +100,20 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should start processing", func() {
-		msg := messaging.MsgMeta{
+		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := packetization.Flit{}
-		flit.ID = sim.NewID()
-		flit.Dst = port1.AsRemote()
-		flit.TrafficClass = reflect.TypeOf(msg).String()
-		flit.Msg = msg
+		flit := messaging.Msg{Payload: packetization.Flit{
+			Msg: msg},
+			ID:           sim.NewID(),
+			Dst:          port1.AsRemote(),
+			TrafficClass: "packetization.Flit"}
 
 		port1.EXPECT().PeekIncoming().Return(flit, true)
 		port1.EXPECT().RetrieveIncoming()
-		port2.EXPECT().PeekIncoming().Return(nil, false)
+		port2.EXPECT().PeekIncoming().Return(messaging.Msg{}, false)
 
 		madeProgress := rpMW.startProcessing()
 
@@ -127,23 +125,23 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should not start processing if pipeline is busy", func() {
-		msg := messaging.MsgMeta{
+		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := packetization.Flit{}
-		flit.ID = sim.NewID()
-		flit.Dst = port1.AsRemote()
-		flit.TrafficClass = reflect.TypeOf(msg).String()
-		flit.Msg = msg
+		flit := messaging.Msg{Payload: packetization.Flit{
+			Msg: msg},
+			ID:           sim.NewID(),
+			Dst:          port1.AsRemote(),
+			TrafficClass: "packetization.Flit"}
 
 		// Fill pipeline so it can't accept
 		next := &sw.State
 		next.PortComplexes[0].Pipeline.Accept(routedFlit{TaskID: 1})
 
 		port1.EXPECT().PeekIncoming().Return(flit, true)
-		port2.EXPECT().PeekIncoming().Return(nil, false)
+		port2.EXPECT().PeekIncoming().Return(messaging.Msg{}, false)
 
 		madeProgress := rpMW.startProcessing()
 
@@ -154,7 +152,7 @@ var _ = Describe("Switch", func() {
 		// Place an item in pipeline stage 0 for port1
 		next := &sw.State
 		next.PortComplexes[0].Pipeline.Accept(routedFlit{
-			Flit:   packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 100}},
+			Flit:   messaging.Msg{ID: 100, Payload: packetization.Flit{}},
 			TaskID: 101,
 		})
 
@@ -168,22 +166,21 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should route", func() {
-		msg := messaging.MsgMeta{
+		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := packetization.Flit{}
-		flit.ID = sim.NewID()
-		flit.TrafficClass = reflect.TypeOf(msg).String()
-		flit.Msg = msg
+		flit := messaging.Msg{Payload: packetization.Flit{
+			Msg: msg},
+			ID:           sim.NewID(),
+			TrafficClass: "packetization.Flit"}
 
 		// Place item in route buffer for port1
 		next := &sw.State
 		next.PortComplexes[0].RouteBuffer =
 			queueing.MakeBuffer[routedFlit](1)
-		next.PortComplexes[0].RouteBuffer.Push(
-			routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
+		next.PortComplexes[0].RouteBuffer.Push(routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
 
 		routingTable.EXPECT().
 			FindPort(dstPort.AsRemote()).
@@ -198,26 +195,24 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should not route if forward buffer is full", func() {
-		msg := messaging.MsgMeta{
+		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := packetization.Flit{}
-		flit.ID = sim.NewID()
-		flit.TrafficClass = reflect.TypeOf(msg).String()
-		flit.Msg = msg
+		flit := messaging.Msg{Payload: packetization.Flit{
+			Msg: msg},
+			ID:           sim.NewID(),
+			TrafficClass: "packetization.Flit"}
 
 		// Place item in route buffer and fill forward buffer
 		next := &sw.State
 		next.PortComplexes[0].RouteBuffer =
 			queueing.MakeBuffer[routedFlit](1)
-		next.PortComplexes[0].RouteBuffer.Push(
-			routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
+		next.PortComplexes[0].RouteBuffer.Push(routedFlit{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()})
 		next.PortComplexes[0].ForwardBuffer =
 			queueing.MakeBuffer[routedFlit](1)
-		next.PortComplexes[0].ForwardBuffer.Push(
-			routedFlit{Flit: packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 300}}})
+		next.PortComplexes[0].ForwardBuffer.Push(routedFlit{Flit: messaging.Msg{ID: 300, Payload: packetization.Flit{}}})
 
 		madeProgress := rfsMW.route()
 
@@ -225,21 +220,21 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should forward", func() {
-		msg := messaging.MsgMeta{
+		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := packetization.Flit{}
-		flit.ID = sim.NewID()
-		flit.TrafficClass = reflect.TypeOf(msg).String()
-		flit.Msg = msg
+		flit := messaging.Msg{Payload: packetization.Flit{
+			Msg: msg},
+			ID:           sim.NewID(),
+			TrafficClass: "packetization.Flit"}
+
 		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
 		next := &sw.State
 		next.PortComplexes[0].ForwardBuffer =
 			queueing.MakeBuffer[routedFlit](1)
-		next.PortComplexes[0].ForwardBuffer.Push(
-			routedFlit{Flit: flit, OutputBufIdx: 1})
+		next.PortComplexes[0].ForwardBuffer.Push(routedFlit{Flit: flit, OutputBufIdx: 1})
 
 		madeProgress := rfsMW.forward()
 
@@ -250,25 +245,24 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should not forward if the output buffer is busy", func() {
-		msg := messaging.MsgMeta{
+		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := packetization.Flit{}
-		flit.ID = sim.NewID()
-		flit.TrafficClass = reflect.TypeOf(msg).String()
-		flit.Msg = msg
+		flit := messaging.Msg{Payload: packetization.Flit{
+			Msg: msg},
+			ID:           sim.NewID(),
+			TrafficClass: "packetization.Flit"}
+
 		// Fill sendOut buffer to capacity, forward buffer targets port2
 		next := &sw.State
 		next.PortComplexes[0].ForwardBuffer =
 			queueing.MakeBuffer[routedFlit](1)
-		next.PortComplexes[0].ForwardBuffer.Push(
-			routedFlit{Flit: flit, OutputBufIdx: 1})
+		next.PortComplexes[0].ForwardBuffer.Push(routedFlit{Flit: flit, OutputBufIdx: 1})
 		next.PortComplexes[1].SendOutBuffer =
 			queueing.MakeBuffer[routedFlit](1)
-		next.PortComplexes[1].SendOutBuffer.Push(
-			routedFlit{Flit: packetization.Flit{MsgMeta: messaging.MsgMeta{ID: 400}}})
+		next.PortComplexes[1].SendOutBuffer.Push(routedFlit{Flit: messaging.Msg{ID: 400, Payload: packetization.Flit{}}})
 
 		madeProgress := rfsMW.forward()
 
@@ -276,15 +270,15 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should send flits out", func() {
-		msg := messaging.MsgMeta{
+		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := packetization.Flit{}
-		flit.ID = sim.NewID()
-		flit.TrafficClass = reflect.TypeOf(msg).String()
-		flit.Msg = msg
+		flit := messaging.Msg{Payload: packetization.Flit{
+			Msg: msg},
+			ID:           sim.NewID(),
+			TrafficClass: "packetization.Flit"}
 
 		// Place flit in sendOutBuffer of port2
 		next := &sw.State
@@ -303,15 +297,15 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should wait if port is busy sending flits out", func() {
-		msg := messaging.MsgMeta{
+		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := packetization.Flit{}
-		flit.ID = sim.NewID()
-		flit.TrafficClass = reflect.TypeOf(msg).String()
-		flit.Msg = msg
+		flit := messaging.Msg{Payload: packetization.Flit{
+			Msg: msg},
+			ID:           sim.NewID(),
+			TrafficClass: "packetization.Flit"}
 
 		// Place flit in sendOutBuffer of port2
 		next := &sw.State

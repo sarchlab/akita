@@ -25,8 +25,10 @@ var HookPosPortMsgRecvd = &hooking.HookPos{Name: "Port Msg Recv"}
 ```
 
 At both positions `ctx.Item` is the `messaging.Msg` involved. From there you
-can type-switch on the concrete message type to inspect its payload, or read
-its routing metadata with `msg.Meta()`.
+can read routing fields directly, such as `msg.ID` and `msg.Src`, or
+type-switch on `msg.Payload` to inspect the protocol-specific content.
+Ignore unrelated hook positions before asserting `Item`. At these two
+positions, an item of another type violates the contract and should panic.
 
 ## A Message-Logging Hook
 
@@ -40,13 +42,20 @@ type msgHook struct {
 }
 
 func (h *msgHook) Func(ctx hooking.HookCtx) {
+    switch ctx.Pos {
+    case messaging.HookPosPortMsgSend, messaging.HookPosPortMsgRecvd:
+        // These positions carry messages. Ignore other hook positions.
+    default:
+        return
+    }
+
     msg := ctx.Item.(messaging.Msg)
 
     switch ctx.Pos {
     case messaging.HookPosPortMsgSend:
-        fmt.Printf("[msg]   %s sends %T\n", h.agent, msg)
+        fmt.Printf("[msg]   %s sends %T\n", h.agent, msg.Payload)
     case messaging.HookPosPortMsgRecvd:
-        fmt.Printf("[msg]   %s recvd %T\n", h.agent, msg)
+        fmt.Printf("[msg]   %s recvd %T\n", h.agent, msg.Payload)
     }
 }
 ```

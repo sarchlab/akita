@@ -1,8 +1,6 @@
 package endpoint
 
 import (
-	"reflect"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -70,28 +68,31 @@ var _ = Describe("End Point", func() {
 	})
 
 	It("should send flits", func() {
-		msg := messaging.MsgMeta{
+		msg := messaging.Msg{
 			ID:           sim.NewID(),
 			Src:          devicePort.AsRemote(),
 			TrafficBytes: 33,
+			Payload:      packetization.AssembledMsg{},
 		}
 
-		networkPort.EXPECT().PeekIncoming().Return(nil, false).AnyTimes()
+		networkPort.EXPECT().PeekIncoming().Return(messaging.Msg{}, false).AnyTimes()
 
 		devicePort.EXPECT().PeekOutgoing().Return(msg, true)
 		devicePort.EXPECT().RetrieveOutgoing().Return(msg, true)
-		devicePort.EXPECT().PeekOutgoing().Return(nil, false).AnyTimes()
+		devicePort.EXPECT().PeekOutgoing().Return(messaging.Msg{}, false).AnyTimes()
 
 		madeProgress := modelingtest.Tick(endPoint)
 		Expect(madeProgress).To(BeTrue())
 
 		networkPort.EXPECT().CanSend().Return(true)
 		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
-			flit := msg.(packetization.Flit)
+			flit := msg
 			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
 			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
-			Expect(flit.SeqID).To(Equal(0))
-			Expect(flit.NumFlitInMsg).To(Equal(2))
+			Expect(flit.Payload.(packetization.Flit).SeqID).To(Equal(0))
+			Expect(flit.Payload.(packetization.Flit).NumFlitInMsg).To(Equal(2))
+			Expect(flit.Payload.(packetization.Flit).Msg.Payload).To(BeNil())
+			Expect(flit.Payload.(packetization.Flit).Msg.TrafficBytes).To(Equal(33))
 		})
 		devicePort.EXPECT().NotifyAvailable()
 
@@ -100,11 +101,13 @@ var _ = Describe("End Point", func() {
 
 		networkPort.EXPECT().CanSend().Return(true)
 		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
-			flit := msg.(packetization.Flit)
+			flit := msg
 			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
 			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
-			Expect(flit.SeqID).To(Equal(1))
-			Expect(flit.NumFlitInMsg).To(Equal(2))
+			Expect(flit.Payload.(packetization.Flit).SeqID).To(Equal(1))
+			Expect(flit.Payload.(packetization.Flit).NumFlitInMsg).To(Equal(2))
+			Expect(flit.Payload.(packetization.Flit).Msg.Payload).To(BeNil())
+			Expect(flit.Payload.(packetization.Flit).Msg.TrafficBytes).To(Equal(33))
 		})
 
 		madeProgress = modelingtest.Tick(endPoint)
@@ -117,31 +120,34 @@ var _ = Describe("End Point", func() {
 	})
 
 	It("should receive message", func() {
-		msg := messaging.MsgMeta{
+		msg := messaging.Msg{
 			ID:  sim.NewID(),
 			Dst: devicePort.AsRemote(),
 		}
 
-		flit0 := packetization.Flit{}
-		flit0.ID = sim.NewID()
-		flit0.TrafficClass = reflect.TypeOf(msg).String()
-		flit0.SeqID = 0
-		flit0.NumFlitInMsg = 2
-		flit0.Msg = msg
-		flit1 := packetization.Flit{}
-		flit1.ID = sim.NewID()
-		flit1.TrafficClass = reflect.TypeOf(msg).String()
-		flit1.SeqID = 1
-		flit1.NumFlitInMsg = 2
-		flit1.Msg = msg
+		flit0 := messaging.Msg{Payload: packetization.Flit{
+			SeqID:        0,
+			NumFlitInMsg: 2,
+			Msg:          msg},
+			ID:           sim.NewID(),
+			TrafficClass: "packetization.Flit"}
+
+		flit1 := messaging.Msg{Payload: packetization.Flit{
+			SeqID:        1,
+			NumFlitInMsg: 2,
+			Msg:          msg},
+			ID:           sim.NewID(),
+			TrafficClass: "packetization.Flit"}
 
 		networkPort.EXPECT().PeekIncoming().Return(flit0, true)
 		networkPort.EXPECT().PeekIncoming().Return(flit1, true)
-		networkPort.EXPECT().PeekIncoming().Return(nil, false).Times(3)
+		networkPort.EXPECT().PeekIncoming().Return(messaging.Msg{}, false).Times(3)
 		networkPort.EXPECT().RetrieveIncoming().Times(2)
 		devicePort.EXPECT().CanDeliver().Return(true)
-		devicePort.EXPECT().Deliver(packetization.AssembledMsg{MsgMeta: msg})
-		devicePort.EXPECT().PeekOutgoing().Return(nil, false).AnyTimes()
+		expected := msg
+		expected.Payload = packetization.AssembledMsg{}
+		devicePort.EXPECT().Deliver(expected)
+		devicePort.EXPECT().PeekOutgoing().Return(messaging.Msg{}, false).AnyTimes()
 
 		madeProgress := modelingtest.Tick(endPoint)
 		Expect(madeProgress).To(BeTrue())

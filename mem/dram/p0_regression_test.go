@@ -41,43 +41,51 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 	return &p0Harness{engine: engine, dram: dramComp, src: src, top: top}
 }
 
-func (h *p0Harness) read(addr uint64) memprotocol.ReadReq {
-	r := memprotocol.ReadReq{}
-	r.ID = h.dram.NewID()
-	r.Address = addr
-	r.AccessByteSize = 64
-	r.Src = h.src.AsRemote()
-	r.Dst = h.top.AsRemote()
-	r.TrafficBytes = 12
-	r.TrafficClass = "memprotocol.ReadReq"
+func (h *p0Harness) read(addr uint64) messaging.Msg {
+	r := messaging.Msg{Payload: memprotocol.ReadReq{
+		Address:        addr,
+		AccessByteSize: 64},
+		ID: h.dram.NewID(),
+
+		Src:          h.src.AsRemote(),
+		Dst:          h.top.AsRemote(),
+		TrafficBytes: 12,
+		TrafficClass: "memprotocol.ReadReq"}
+
 	return r
 }
 
-func (h *p0Harness) write(addr uint64, data []byte) memprotocol.WriteReq {
-	w := memprotocol.WriteReq{}
-	w.ID = h.dram.NewID()
-	w.Address = addr
-	w.Data = data
-	w.Src = h.src.AsRemote()
-	w.Dst = h.top.AsRemote()
-	w.TrafficBytes = len(data) + 12
-	w.TrafficClass = "memprotocol.WriteReq"
+func (h *p0Harness) write(addr uint64, data []byte) messaging.Msg {
+	w := messaging.Msg{Payload: memprotocol.WriteReq{
+		Address: addr,
+		Data:    data},
+		ID: h.dram.NewID(),
+
+		Src:          h.src.AsRemote(),
+		Dst:          h.top.AsRemote(),
+		TrafficBytes: len(data) + 12,
+		TrafficClass: "memprotocol.WriteReq"}
+
 	return w
 }
 
 func (h *p0Harness) collect() (
-	reads []memprotocol.DataReadyRsp,
-	writes []memprotocol.WriteDoneRsp,
+	reads []messaging.Msg,
+	writes []messaging.Msg,
 ) {
 	for {
 		msg, ok := h.src.RetrieveIncoming()
 		if !ok {
 			break
 		}
-		switch m := msg.(type) {
+		switch msg.Payload.(type) {
 		case memprotocol.DataReadyRsp:
+			m := msg
+
 			reads = append(reads, m)
 		case memprotocol.WriteDoneRsp:
+			m := msg
+
 			writes = append(writes, m)
 		}
 	}
@@ -159,7 +167,7 @@ var _ = Describe("P0: open-page panic regression", func() {
 		Expect(h.engine.Run()).To(Succeed())
 		reads, _ := h.collect()
 		Expect(reads).To(HaveLen(1))
-		Expect(reads[0].Data[:len(data)]).To(Equal(data))
+		Expect(reads[0].Payload.(memprotocol.DataReadyRsp).Data[:len(data)]).To(Equal(data))
 	})
 })
 

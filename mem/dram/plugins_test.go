@@ -3,6 +3,7 @@ package dram
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -92,6 +93,6 @@ var _ = Describe("P1: command tracing", func() {
 		Expect(tracedWrites).To(HaveLen(len(plainWrites)))
 		Expect(tracedReads).To(HaveLen(len(plainReads)))
 		Expect(tracedReads).To(HaveLen(1))
-		Expect(tracedReads[0].Data[:4]).To(Equal([]byte{1, 2, 3, 4}))
+		Expect(tracedReads[0].Payload.(memprotocol.DataReadyRsp).Data[:4]).To(Equal([]byte{1, 2, 3, 4}))
 	})
 })

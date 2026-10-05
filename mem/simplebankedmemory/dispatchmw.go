@@ -36,17 +36,17 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		if !ok {
 			break
 		}
-
-		msg, ok := msgI.(memprotocol.AccessReq)
+		_, ok = msgI.Payload.(memprotocol.AccessReq)
+		msg := msgI
 		if !ok {
-			log.Panicf("simplebankedmemory: unsupported message type %T", msgI)
+			log.Panicf("simplebankedmemory: unsupported message type %T", msgI.Payload)
 		}
 
 		if spec.NumBanks == 0 {
 			log.Panic("simplebankedmemory: no banks configured")
 		}
 
-		bankID := selectBank(spec, bankSelectionAddress(spec, msg.GetAddress()))
+		bankID := selectBank(spec, bankSelectionAddress(spec, msg.Payload.(memprotocol.AccessReq).GetAddress()))
 		if bankID < 0 || bankID >= spec.NumBanks {
 			log.Panicf("simplebankedmemory: bank selector returned %d", bankID)
 		}
@@ -92,19 +92,23 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 }
 
 func (m *dispatchMW) msgToItem(msg messaging.Msg) bankPipelineItemState {
-	switch r := msg.(type) {
+	switch msg.Payload.(type) {
 	case memprotocol.ReadReq:
+		r := msg
+
 		return bankPipelineItemState{
 			IsRead:  true,
 			ReadMsg: r,
 		}
 	case memprotocol.WriteReq:
+		r := msg
+
 		return bankPipelineItemState{
 			IsRead:   false,
 			WriteMsg: r,
 		}
 	default:
-		log.Panicf("simplebankedmemory: unsupported request type %T", msg)
+		log.Panicf("simplebankedmemory: unsupported request type %T", msg.Payload)
 		return bankPipelineItemState{}
 	}
 }

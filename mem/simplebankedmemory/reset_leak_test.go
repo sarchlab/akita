@@ -60,19 +60,20 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	}
 
 	// Reset while the read is in flight.
-	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = sim.NewID()
-	reset.Src = messaging.RemotePort("Cmd")
-	reset.Dst = ctrlPort.AsRemote()
-	reset.TrafficClass = "memcontrolprotocol.Req"
+	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
+		ID:           sim.NewID(),
+		Src:          messaging.RemotePort("Cmd"),
+		Dst:          ctrlPort.AsRemote(),
+		TrafficClass: "memcontrolprotocol.Req"}
+
 	ctrlPort.Deliver(reset)
 
 	acked := false
 	for range 16 {
 		modelingtest.Tick(comp)
 		if msg, ok := ctrlPort.RetrieveOutgoing(); ok {
-			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
-				rsp.Command == memcontrolprotocol.CmdReset {
+			if rsp, ok := msg.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+				Command == memcontrolprotocol.CmdReset {
 				acked = true
 				break
 			}

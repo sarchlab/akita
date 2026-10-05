@@ -70,7 +70,7 @@ func (p *defaultPort) LoadCheckpoint(r io.Reader) error {
 func saveBuffer(
 	buf *queueing.Buffer[Msg], portName, label string,
 ) (bufferCheckpoint, error) {
-	elements, err := msgCodec.EncodeSlice(buf.Elements())
+	elements, err := json.Marshal(buf.Elements())
 	if err != nil {
 		return bufferCheckpoint{}, fmt.Errorf(
 			"messaging: port %q %s: %w", portName, label, err)
@@ -93,8 +93,8 @@ func loadBuffer(
 			portName, label, bc.Capacity, got)
 	}
 
-	elements, err := msgCodec.DecodeSlice(bc.Elements)
-	if err != nil {
+	var elements []Msg
+	if err := json.Unmarshal(bc.Elements, &elements); err != nil {
 		return fmt.Errorf("messaging: port %q %s: %w", portName, label, err)
 	}
 

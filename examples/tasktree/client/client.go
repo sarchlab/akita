@@ -29,7 +29,7 @@ type State struct {
 	Sent int `json:"sent"`
 
 	// InFlight holds the reads awaiting a response, keyed by ID.
-	InFlight map[uint64]memory.ReadReq `json:"in_flight"`
+	InFlight map[uint64]messaging.Msg `json:"in_flight"`
 }
 
 // Ports holds the client's only port.
@@ -55,7 +55,7 @@ var Definition = ticking.Definition[Spec, State, modeling.None, Ports, Middlewar
 }
 
 func newState(_ *Comp) State {
-	return State{InFlight: map[uint64]memory.ReadReq{}}
+	return State{InFlight: map[uint64]messaging.Msg{}}
 }
 
 func newMiddlewares(c *Comp) Middlewares {
@@ -96,7 +96,8 @@ func (m *requestMW) receive() bool {
 	if !ok {
 		return false
 	}
-	rsp := msg.(memory.ReadRsp)
+	_ = msg.Payload.(memory.ReadRsp)
+	rsp := msg
 	if req, ok := s.InFlight[rsp.RspTo]; ok {
 		tracing.TraceReqFinalize(m.comp, req)
 		delete(s.InFlight, rsp.RspTo)

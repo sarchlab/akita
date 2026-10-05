@@ -1,7 +1,7 @@
 package memaccessagent
 
 import (
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
 )
@@ -30,8 +30,8 @@ func newState(c *Comp) State {
 		WriteLeft:       spec.WriteLeft,
 		ReadLeft:        spec.ReadLeft,
 		KnownMemValue:   make(map[uint64][]uint32),
-		PendingReadReq:  make(map[uint64]memprotocol.ReadReq),
-		PendingWriteReq: make(map[uint64]memprotocol.WriteReq),
+		PendingReadReq:  make(map[uint64]messaging.Msg),
+		PendingWriteReq: make(map[uint64]messaging.Msg),
 		RNG:             newRandState(spec.RandSeed),
 	}
 }

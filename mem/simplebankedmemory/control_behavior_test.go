@@ -45,16 +45,17 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		}
 	}
 
-	makeRead := func(index int) memprotocol.ReadReq {
+	makeRead := func(index int) messaging.Msg {
 		return makeReadReq(sim, messaging.RemotePort("Agent"), topPort.AsRemote(), index)
 	}
 
-	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
-		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Ctrl")
-		req.Dst = ctrlPort.AsRemote()
-		req.TrafficClass = "memcontrolprotocol.Req"
+	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
+		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("Ctrl"),
+			Dst:          ctrlPort.AsRemote(),
+			TrafficClass: "memcontrolprotocol.Req"}
+
 		return req
 	}
 
@@ -91,7 +92,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		ctrlPort.Deliver(drain)
 
 		completed := 0
-		var drainRsp memcontrolprotocol.Rsp
+		var drainRsp messaging.Msg
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
 			modelingtest.Tick(comp)
@@ -100,21 +101,23 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 				if !ok {
 					break
 				}
-				if _, ok := out.(memprotocol.DataReadyRsp); ok {
+				if _, ok := out.Payload.(memprotocol.DataReadyRsp); ok {
 					completed++
 				}
 			}
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
-					rsp.Command == memcontrolprotocol.CmdDrain {
-					drainRsp = rsp
+				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+					Command == memcontrolprotocol.CmdDrain {
+					drainRsp = out
+
 					drainFound = true
 				}
+
 			}
 		}
 
 		Expect(drainFound).To(BeTrue())
-		Expect(drainRsp.Success).To(BeTrue())
+		Expect(drainRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
 		// Every in-flight read finished, and every bank is quiescent, by the
 		// time the async Drain ack is sent. Counting completions at the ack
@@ -153,21 +156,23 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 			reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp memcontrolprotocol.Rsp
+			var rsp messaging.Msg
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				modelingtest.Tick(comp)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-					if r, ok := out.(memcontrolprotocol.Rsp); ok {
-						rsp = r
+					if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
+
+						rsp = out
+
 						found = true
 					}
 				}
 			}
 
 			Expect(found).To(BeTrue())
-			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
-			Expect(rsp.Success).To(BeTrue())
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			// Reset rebuilds the banks, so all in-flight work is gone.
 			Expect(allBanksQuiescent()).To(BeTrue())
@@ -182,7 +187,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 					if !ok {
 						break
 					}
-					if _, ok := out.(memprotocol.DataReadyRsp); ok {
+					if _, ok := out.Payload.(memprotocol.DataReadyRsp); ok {
 						completion = true
 					}
 				}
@@ -208,7 +213,7 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		ctrlPort.Deliver(reset)
 
-		var rsps []memcontrolprotocol.Rsp
+		var rsps []messaging.Msg
 		for range 16 {
 			modelingtest.Tick(comp)
 			for {
@@ -216,16 +221,17 @@ var _ = Describe("Simple Banked Memory control behavior", func() {
 				if !ok {
 					break
 				}
-				if r, ok := out.(memcontrolprotocol.Rsp); ok {
-					rsps = append(rsps, r)
+				if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
+
+					rsps = append(rsps, out)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(memcontrolprotocol.CmdDrain))
+		Expect(rsps[0].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(memcontrolprotocol.CmdReset))
+		Expect(rsps[1].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(comp.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 	})

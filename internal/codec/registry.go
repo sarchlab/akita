@@ -4,52 +4,56 @@
 //
 // It is the shared machinery behind the message codec in package messaging and
 // the event codec in package timing. Each owning package instantiates its own
-// Registry for its interface type (Registry[messaging.Msg],
-// Registry[timing.Event]) and re-exports a thin Register wrapper; the wire
+// Registry for its interface type (Registry[any] for message payloads,
+// Registry[timing.Event]); the wire
 // format never leaves this package.
 //
 // The registry exists because Go has no runtime "construct a value of the type
 // named X": to decode a heterogeneous container of an interface type (a port
 // buffer of Msg, the engine's queue of Event) each element must be tagged with
 // its concrete type name and that name resolved back to a reflect.Type that was
-// registered earlier. Encoding needs no registration; decoding does.
+// registered earlier. Single-value encoding and all decoding require registration.
 package codec
 
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"reflect"
 	"sync"
+	"sync/atomic"
 )
 
 // typedPayload is the serialized form of a single polymorphic value: a type tag
 // plus the JSON encoding of the concrete value. It is unexported and never
-// leaves this package — callers work with whole slices through EncodeSlice and
-// DecodeSlice, so the wire format stays hidden.
+// leaves this package — callers use Encode/Decode or EncodeSlice/DecodeSlice.
 type typedPayload struct {
 	Type    string          `json:"type"`
 	Payload json.RawMessage `json:"payload"`
 }
 
 // Registry maps concrete type names to their reflect.Type so that values of an
-// interface type T (e.g. messaging.Msg or timing.Event) can be reconstructed
-// from a checkpoint. A Registry is safe for concurrent use.
+// interface type T (e.g. any or timing.Event) can be reconstructed
+// from a checkpoint. Registries created with NewRegistry are safe for concurrent
+// use. Contains reads an immutable snapshot without taking the registry lock.
 type Registry[T any] struct {
 	// label is the domain noun used in error messages, e.g. "message" or
 	// "event", so a failure reads "unknown message type ...".
 	label string
 
-	mu    sync.RWMutex
-	types map[string]reflect.Type
+	// Published type sets are immutable; writers clone before publishing.
+	byType atomic.Pointer[map[reflect.Type]bool]
+	mu     sync.RWMutex
+	types  map[string]reflect.Type
 }
 
 // NewRegistry returns an empty Registry. The label is a short domain noun (e.g.
 // "message", "event") that appears in error messages.
 func NewRegistry[T any](label string) *Registry[T] {
-	return &Registry[T]{
-		label: label,
-		types: map[string]reflect.Type{},
-	}
+	r := &Registry[T]{label: label, types: map[string]reflect.Type{}}
+	empty := map[reflect.Type]bool{}
+	r.byType.Store(&empty)
+	return r
 }
 
 // Tag returns the wire tag the registry uses for the concrete type of v. It is
@@ -92,8 +96,16 @@ func (r *Registry[T]) Register(v T) {
 	}
 
 	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	r.types[tagOf(t)] = t
-	r.mu.Unlock()
+	current := *r.byType.Load()
+	if current[t] {
+		return
+	}
+	next := maps.Clone(current)
+	next[t] = true
+	r.byType.Store(&next)
 }
 
 // Tags returns the wire tags of all registered types, in no particular order.
@@ -215,4 +227,45 @@ func (r *Registry[T]) CheckRoundTrip(v T) error {
 	}
 
 	return nil
+}
+
+// Contains reports whether the concrete value type is registered.
+func (r *Registry[T]) Contains(v T) bool {
+	return (*r.byType.Load())[reflect.TypeOf(v)]
+}
+
+// Encode encodes one registered value as an object containing its type and payload.
+// A nil value has neither field.
+func (r *Registry[T]) Encode(v T) (json.RawMessage, error) {
+	if reflect.TypeOf(v) == nil {
+		return json.RawMessage("{}"), nil
+	}
+	if !r.Contains(v) {
+		return nil, fmt.Errorf("codec: unregistered %s type %T", r.label, v)
+	}
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("codec: encode %s %T: %w", r.label, v, err)
+	}
+	return json.Marshal(typedPayload{Type: Tag(v), Payload: raw})
+}
+
+// Decode decodes one registered value. Other object fields are ignored so an
+// owning envelope can include routing fields alongside the encoded payload.
+func (r *Registry[T]) Decode(data json.RawMessage) (T, error) {
+	var zero T
+	var tp typedPayload
+	if err := json.Unmarshal(data, &tp); err != nil {
+		return zero, err
+	}
+	if tp.Type == "" {
+		if len(tp.Payload) != 0 {
+			return zero, fmt.Errorf("codec: %s payload has no type", r.label)
+		}
+		return zero, nil
+	}
+	if len(tp.Payload) == 0 {
+		return zero, fmt.Errorf("codec: %s type %q has no payload", r.label, tp.Type)
+	}
+	return r.decodeOne(tp)
 }

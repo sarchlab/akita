@@ -3,7 +3,6 @@ package simplebankedmemory
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/queueing"
@@ -47,11 +46,11 @@ type Spec struct {
 
 // bankPipelineItemState is a serializable representation of a pipeline item.
 type bankPipelineItemState struct {
-	IsRead    bool                 `json:"is_read"`
-	ReadMsg   memprotocol.ReadReq  `json:"read_msg"`
-	WriteMsg  memprotocol.WriteReq `json:"write_msg"`
-	Committed bool                 `json:"committed"`
-	ReadData  []byte               `json:"read_data"`
+	IsRead    bool          `json:"is_read"`
+	ReadMsg   messaging.Msg `json:"read_msg"`
+	WriteMsg  messaging.Msg `json:"write_msg"`
+	Committed bool          `json:"committed"`
+	ReadData  []byte        `json:"read_data"`
 	// PipelineTaskID is the ID of the PipelineTaskKind subtask opened on the
 	// req_in at dispatch (pipeline entry) and closed at finalize (pipeline
 	// exit). It travels with the item through the bank pipeline so the exit

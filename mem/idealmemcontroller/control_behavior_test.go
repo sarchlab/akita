@@ -46,24 +46,27 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		}
 	}
 
-	makeRead := func(addr uint64) memprotocol.ReadReq {
-		req := memprotocol.ReadReq{}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Agent")
-		req.Dst = topPort.AsRemote()
-		req.Address = addr
-		req.AccessByteSize = 4
-		req.TrafficBytes = 12
-		req.TrafficClass = "memprotocol.ReadReq"
+	makeRead := func(addr uint64) messaging.Msg {
+		req := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        addr,
+			AccessByteSize: 4},
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Agent"),
+			Dst: topPort.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		return req
 	}
 
-	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
-		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Ctrl")
-		req.Dst = ctrlPort.AsRemote()
-		req.TrafficClass = "memcontrolprotocol.Req"
+	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
+		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("Ctrl"),
+			Dst:          ctrlPort.AsRemote(),
+			TrafficClass: "memcontrolprotocol.Req"}
+
 		return req
 	}
 
@@ -86,7 +89,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		ctrlPort.Deliver(drain)
 
 		completed := 0
-		var drainRsp memcontrolprotocol.Rsp
+		var drainRsp messaging.Msg
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
 			modelingtest.Tick(memController)
@@ -95,21 +98,23 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 				if !ok {
 					break
 				}
-				if _, ok := out.(memprotocol.DataReadyRsp); ok {
+				if _, ok := out.Payload.(memprotocol.DataReadyRsp); ok {
 					completed++
 				}
 			}
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
-					rsp.Command == memcontrolprotocol.CmdDrain {
-					drainRsp = rsp
+				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+					Command == memcontrolprotocol.CmdDrain {
+					drainRsp = out
+
 					drainFound = true
 				}
+
 			}
 		}
 
 		Expect(drainFound).To(BeTrue())
-		Expect(drainRsp.Success).To(BeTrue())
+		Expect(drainRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
 		// Every in-flight read finished, and none remain, by the time the
 		// async Drain ack is sent.
@@ -146,21 +151,23 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 			reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp memcontrolprotocol.Rsp
+			var rsp messaging.Msg
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				modelingtest.Tick(memController)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-					if r, ok := out.(memcontrolprotocol.Rsp); ok {
-						rsp = r
+					if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
+
+						rsp = out
+
 						found = true
 					}
 				}
 			}
 
 			Expect(found).To(BeTrue())
-			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
-			Expect(rsp.Success).To(BeTrue())
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			Expect(memController.State.InflightTransactions).To(BeEmpty())
 			Expect(memController.State.ControlState).
@@ -187,7 +194,7 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		ctrlPort.Deliver(reset)
 
-		var rsps []memcontrolprotocol.Rsp
+		var rsps []messaging.Msg
 		for range 16 {
 			modelingtest.Tick(memController)
 			for {
@@ -195,16 +202,17 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 				if !ok {
 					break
 				}
-				if r, ok := out.(memcontrolprotocol.Rsp); ok {
-					rsps = append(rsps, r)
+				if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
+
+					rsps = append(rsps, out)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(memcontrolprotocol.CmdDrain))
+		Expect(rsps[0].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(memcontrolprotocol.CmdReset))
+		Expect(rsps[1].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(memController.State.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 	})
@@ -231,11 +239,12 @@ var _ = Describe("Ideal Memory Controller control behavior", func() {
 		for i := 0; i < 64 && !found; i++ {
 			modelingtest.Tick(memController)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
-					rsp.Command == memcontrolprotocol.CmdReset {
+				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+					Command == memcontrolprotocol.CmdReset {
 					Expect(rsp.Success).To(BeTrue())
 					found = true
 				}
+
 			}
 		}
 		Expect(found).To(BeTrue())

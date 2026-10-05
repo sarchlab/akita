@@ -46,17 +46,17 @@ type outgoingBufferHook struct {
 
 // Func implements hooking.Hook.
 func (h *outgoingBufferHook) Func(ctx hooking.HookCtx) {
-	port, ok := ctx.Domain.(messaging.Port)
-	if !ok {
+	switch ctx.Pos {
+	case messaging.HookPosPortMsgSend, messaging.HookPosPortMsgRetrieveOutgoing:
+		// These positions require a port domain and a message item.
+	default:
 		return
 	}
+
+	port := ctx.Domain.(messaging.Port)
+	msg := mustItem[messaging.Msg](ctx)
 
 	domain, ok := port.Owner().(NamedHookable)
-	if !ok {
-		return
-	}
-
-	msg, ok := ctx.Item.(messaging.Msg)
 	if !ok {
 		return
 	}
@@ -82,7 +82,7 @@ func (h *outgoingBufferHook) onSend(
 		return
 	}
 
-	meta := msg.Meta()
+	meta := msg
 
 	parentID := meta.ID
 	if meta.IsRsp() {
@@ -132,7 +132,7 @@ func (h *outgoingBufferHook) onRetrieve(
 	h.mu.Unlock()
 
 	EndTask(domain, TaskEnd{ID: MsgIDAtOutgoingBuffer(retrieved, domain)})
-	ForgetMsgIDAtOutgoingBuffer(retrieved.Meta().ID, domain)
+	ForgetMsgIDAtOutgoingBuffer(retrieved.ID, domain)
 
 	newHead, ok := port.PeekOutgoing()
 	if !ok {

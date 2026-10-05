@@ -47,7 +47,7 @@ values — flit count derived from `TrafficBytes`, `EncodingOverhead`, and
 `FlitByteSize` — and sends them out the network port with `Dst` set to the
 default switch. The incoming path (`network → device`) receives flits, groups
 them by message ID, and once `NumFlitInMsg` flits have arrived, reassembles the
-`messaging.MsgMeta` and delivers it to the matching device port. Buffers apply
+`messaging.Msg` and delivers it to the matching device port. Buffers apply
 backpressure to keep the serializable state bounded.
 
 ## Builder Pattern

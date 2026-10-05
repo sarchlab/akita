@@ -15,9 +15,9 @@ import (
 var (
 	Protocol = messaging.DefineProtocol(
 		messaging.RoleDef{Name: "requester",
-			Sends: []messaging.Msg{TranslationReq{}}},
+			Sends: []any{TranslationReq{}}},
 		messaging.RoleDef{Name: "responder",
-			Sends: []messaging.Msg{TranslationRsp{}}},
+			Sends: []any{TranslationRsp{}}},
 	)
 	Requester = Protocol.Role("requester")
 	Responder = Protocol.Role("responder")
@@ -25,7 +25,6 @@ var (
 
 // TranslationReq is a translation request.
 type TranslationReq struct {
-	messaging.MsgMeta
 	VAddr        uint64
 	PID          vm.PID
 	DeviceID     uint64
@@ -34,6 +33,5 @@ type TranslationReq struct {
 
 // TranslationRsp is a translation response carrying the physical address.
 type TranslationRsp struct {
-	messaging.MsgMeta
 	Page vm.Page
 }

@@ -3,7 +3,6 @@ package endpoint
 import (
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling/ticking"
-	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/timing"
 )
 
@@ -44,10 +43,10 @@ type assemblingMsgState struct {
 
 // state contains mutable runtime data for the endpoint.
 type state struct {
-	MsgOutBuf      []messaging.MsgMeta  `json:"msg_out_buf"`
-	FlitsToSend    []packetization.Flit `json:"flits_to_send"`
+	MsgOutBuf      []messaging.Msg      `json:"msg_out_buf"`
+	FlitsToSend    []messaging.Msg      `json:"flits_to_send"`
 	AssemblingMsgs []assemblingMsgState `json:"assembling_msgs"`
-	AssembledMsgs  []messaging.MsgMeta  `json:"assembled_msgs"`
+	AssembledMsgs  []messaging.Msg      `json:"assembled_msgs"`
 }
 
 // Ports holds the endpoint's ports.

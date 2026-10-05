@@ -1,8 +1,6 @@
 package cache
 
-import (
-	"github.com/sarchlab/akita/v5/messaging"
-)
+import "github.com/sarchlab/akita/v5/messaging"
 
 // BlockState is a serializable representation of a cache Block.
 type BlockState struct {
@@ -31,17 +29,17 @@ type DirectoryState struct {
 
 // MSHREntryState is a serializable representation of an MSHREntry.
 type MSHREntryState struct {
-	PID                uint32            `json:"pid"`
-	Address            uint64            `json:"address"`
-	TransactionIndices []int             `json:"transaction_indices"`
-	BlockSetID         int               `json:"block_set_id"`
-	BlockWayID         int               `json:"block_way_id"`
-	HasBlock           bool              `json:"has_block"`
-	HasReadReq         bool              `json:"has_read_req"`
-	ReadReq            messaging.MsgMeta `json:"read_req"`
-	HasDataReady       bool              `json:"has_data_ready"`
-	DataReady          messaging.MsgMeta `json:"data_ready"`
-	Data               []byte            `json:"data"`
+	PID                uint32        `json:"pid"`
+	Address            uint64        `json:"address"`
+	TransactionIndices []int         `json:"transaction_indices"`
+	BlockSetID         int           `json:"block_set_id"`
+	BlockWayID         int           `json:"block_way_id"`
+	HasBlock           bool          `json:"has_block"`
+	HasReadReq         bool          `json:"has_read_req"`
+	ReadReq            messaging.Msg `json:"read_req"`
+	HasDataReady       bool          `json:"has_data_ready"`
+	DataReady          messaging.Msg `json:"data_ready"`
+	Data               []byte        `json:"data"`
 }
 
 // GetPID returns the PID of the MSHR entry.

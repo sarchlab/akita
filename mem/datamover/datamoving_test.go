@@ -79,16 +79,17 @@ var _ = Describe("DataMover", func() {
 		}
 		outsideStorage.Write(0, data)
 
-		req := datamoverprotocol.DataMoveReq{}
-		req.ID = sim.NewID()
-		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.Ports.Top.AsRemote()
-		req.SrcAddress = 0
-		req.SrcSide = "outside"
-		req.DstAddress = 0
-		req.DstSide = "inside"
-		req.ByteSize = 4096
-		req.TrafficClass = "datamoverprotocol.DataMoveReq"
+		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+			SrcAddress: 0,
+			SrcSide:    "outside",
+			DstAddress: 0,
+			DstSide:    "inside",
+			ByteSize:   4096},
+			ID:  sim.NewID(),
+			Src: srcPort.AsRemote(),
+			Dst: dataMover.Ports.Top.AsRemote(),
+
+			TrafficClass: "datamoverprotocol.DataMoveReq"}
 
 		dataMover.Ports.Top.Deliver(req)
 
@@ -98,7 +99,7 @@ var _ = Describe("DataMover", func() {
 		value0, present0 := srcPort.RetrieveIncoming()
 		Expect(present0).To(BeTrue())
 		Expect(value0).To(
-			BeAssignableToTypeOf(datamoverprotocol.DataMoveRsp{}))
+			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
 	})
 
 	It("should move data when SrcAddress is beyond BufferSize", func() {
@@ -112,16 +113,17 @@ var _ = Describe("DataMover", func() {
 		}
 		outsideStorage.Write(4096, data)
 
-		req := datamoverprotocol.DataMoveReq{}
-		req.ID = sim.NewID()
-		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.Ports.Top.AsRemote()
-		req.SrcAddress = 4096
-		req.SrcSide = "outside"
-		req.DstAddress = 8192
-		req.DstSide = "inside"
-		req.ByteSize = 2048
-		req.TrafficClass = "datamoverprotocol.DataMoveReq"
+		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+			SrcAddress: 4096,
+			SrcSide:    "outside",
+			DstAddress: 8192,
+			DstSide:    "inside",
+			ByteSize:   2048},
+			ID:  sim.NewID(),
+			Src: srcPort.AsRemote(),
+			Dst: dataMover.Ports.Top.AsRemote(),
+
+			TrafficClass: "datamoverprotocol.DataMoveReq"}
 
 		dataMover.Ports.Top.Deliver(req)
 
@@ -131,7 +133,7 @@ var _ = Describe("DataMover", func() {
 		value1, present1 := srcPort.RetrieveIncoming()
 		Expect(present1).To(BeTrue())
 		Expect(value1).To(
-			BeAssignableToTypeOf(datamoverprotocol.DataMoveRsp{}))
+			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
 	})
 
 	It("should move data inside to outside", func() {
@@ -141,16 +143,17 @@ var _ = Describe("DataMover", func() {
 		}
 		insideStorage.Write(0, data)
 
-		req := datamoverprotocol.DataMoveReq{}
-		req.ID = sim.NewID()
-		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.Ports.Top.AsRemote()
-		req.SrcAddress = 0
-		req.SrcSide = "inside"
-		req.DstAddress = 0
-		req.DstSide = "outside"
-		req.ByteSize = 4096
-		req.TrafficClass = "datamoverprotocol.DataMoveReq"
+		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+			SrcAddress: 0,
+			SrcSide:    "inside",
+			DstAddress: 0,
+			DstSide:    "outside",
+			ByteSize:   4096},
+			ID:  sim.NewID(),
+			Src: srcPort.AsRemote(),
+			Dst: dataMover.Ports.Top.AsRemote(),
+
+			TrafficClass: "datamoverprotocol.DataMoveReq"}
 
 		dataMover.Ports.Top.Deliver(req)
 
@@ -160,7 +163,7 @@ var _ = Describe("DataMover", func() {
 		value2, present2 := srcPort.RetrieveIncoming()
 		Expect(present2).To(BeTrue())
 		Expect(value2).To(
-			BeAssignableToTypeOf(datamoverprotocol.DataMoveRsp{}))
+			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
 	})
 
 	It("should move on difference addresses", func() {
@@ -170,16 +173,17 @@ var _ = Describe("DataMover", func() {
 		}
 		insideStorage.Write(0, data)
 
-		req := datamoverprotocol.DataMoveReq{}
-		req.ID = sim.NewID()
-		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.Ports.Top.AsRemote()
-		req.SrcAddress = 0
-		req.SrcSide = "inside"
-		req.DstAddress = 4096
-		req.DstSide = "outside"
-		req.ByteSize = 4096
-		req.TrafficClass = "datamoverprotocol.DataMoveReq"
+		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+			SrcAddress: 0,
+			SrcSide:    "inside",
+			DstAddress: 4096,
+			DstSide:    "outside",
+			ByteSize:   4096},
+			ID:  sim.NewID(),
+			Src: srcPort.AsRemote(),
+			Dst: dataMover.Ports.Top.AsRemote(),
+
+			TrafficClass: "datamoverprotocol.DataMoveReq"}
 
 		dataMover.Ports.Top.Deliver(req)
 
@@ -189,7 +193,7 @@ var _ = Describe("DataMover", func() {
 		value3, present3 := srcPort.RetrieveIncoming()
 		Expect(present3).To(BeTrue())
 		Expect(value3).To(
-			BeAssignableToTypeOf(datamoverprotocol.DataMoveRsp{}))
+			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
 	})
 
 	It("should move partial data", func() {
@@ -199,16 +203,17 @@ var _ = Describe("DataMover", func() {
 		}
 		outsideStorage.Write(0, data)
 
-		req := datamoverprotocol.DataMoveReq{}
-		req.ID = sim.NewID()
-		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.Ports.Top.AsRemote()
-		req.SrcAddress = 0
-		req.SrcSide = "outside"
-		req.DstAddress = 512
-		req.DstSide = "inside"
-		req.ByteSize = 512
-		req.TrafficClass = "datamoverprotocol.DataMoveReq"
+		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+			SrcAddress: 0,
+			SrcSide:    "outside",
+			DstAddress: 512,
+			DstSide:    "inside",
+			ByteSize:   512},
+			ID:  sim.NewID(),
+			Src: srcPort.AsRemote(),
+			Dst: dataMover.Ports.Top.AsRemote(),
+
+			TrafficClass: "datamoverprotocol.DataMoveReq"}
 
 		dataMover.Ports.Top.Deliver(req)
 
@@ -219,20 +224,21 @@ var _ = Describe("DataMover", func() {
 		value4, present4 := srcPort.RetrieveIncoming()
 		Expect(present4).To(BeTrue())
 		Expect(value4).To(
-			BeAssignableToTypeOf(datamoverprotocol.DataMoveRsp{}))
+			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
 	})
 
 	It("should handle zero-size transfers", func() {
-		req := datamoverprotocol.DataMoveReq{}
-		req.ID = sim.NewID()
-		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.Ports.Top.AsRemote()
-		req.SrcAddress = 0
-		req.SrcSide = "inside"
-		req.DstAddress = 0
-		req.DstSide = "outside"
-		req.ByteSize = 0
-		req.TrafficClass = "datamoverprotocol.DataMoveReq"
+		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+			SrcAddress: 0,
+			SrcSide:    "inside",
+			DstAddress: 0,
+			DstSide:    "outside",
+			ByteSize:   0},
+			ID:  sim.NewID(),
+			Src: srcPort.AsRemote(),
+			Dst: dataMover.Ports.Top.AsRemote(),
+
+			TrafficClass: "datamoverprotocol.DataMoveReq"}
 
 		Expect(func() {
 			dataMover.Ports.Top.Deliver(req)
@@ -246,16 +252,17 @@ var _ = Describe("DataMover", func() {
 		}
 		insideStorage.Write(0, data)
 
-		req := datamoverprotocol.DataMoveReq{}
-		req.ID = sim.NewID()
-		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.Ports.Top.AsRemote()
-		req.SrcAddress = 0
-		req.SrcSide = "inside"
-		req.DstAddress = 512
-		req.DstSide = "inside"
-		req.ByteSize = 512
-		req.TrafficClass = "datamoverprotocol.DataMoveReq"
+		req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
+			SrcAddress: 0,
+			SrcSide:    "inside",
+			DstAddress: 512,
+			DstSide:    "inside",
+			ByteSize:   512},
+			ID:  sim.NewID(),
+			Src: srcPort.AsRemote(),
+			Dst: dataMover.Ports.Top.AsRemote(),
+
+			TrafficClass: "datamoverprotocol.DataMoveReq"}
 
 		dataMover.Ports.Top.Deliver(req)
 
@@ -266,6 +273,6 @@ var _ = Describe("DataMover", func() {
 		value5, present5 := srcPort.RetrieveIncoming()
 		Expect(present5).To(BeTrue())
 		Expect(value5).To(
-			BeAssignableToTypeOf(datamoverprotocol.DataMoveRsp{}))
+			BeAssignableToTypeOf(messaging.Msg{Payload: datamoverprotocol.DataMoveRsp{}}))
 	})
 })

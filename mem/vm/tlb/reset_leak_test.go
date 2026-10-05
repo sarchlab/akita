@@ -51,14 +51,16 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	// lookup, creates an MSHR entry and forwards a bottom fetch (opening the
 	// shadow req_out). The bottom fetch is never answered, so the miss stays in
 	// flight.
-	req := vmprotocol.TranslationReq{}
-	req.ID = sim.NewID()
-	req.Src = messaging.RemotePort("Agent")
-	req.Dst = topPort.AsRemote()
-	req.PID = 1
-	req.VAddr = 0x1000
-	req.DeviceID = 1
-	req.TrafficClass = "vmprotocol.TranslationReq"
+	req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+		PID:      1,
+		VAddr:    0x1000,
+		DeviceID: 1},
+		ID:  sim.NewID(),
+		Src: messaging.RemotePort("Agent"),
+		Dst: topPort.AsRemote(),
+
+		TrafficClass: "vmprotocol.TranslationReq"}
+
 	topPort.Deliver(req)
 
 	// Tick just far enough for the miss to reach an MSHR entry with a bottom
@@ -67,7 +69,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	for i := 0; i < 64 && mshrIsEmpty(tlbComp.State.MSHREntries); i++ {
 		modelingtest.Tick(tlbComp)
 		if out, ok := bottomPort.RetrieveOutgoing(); ok {
-			if _, ok := out.(vmprotocol.TranslationReq); ok {
+			if _, ok := out.Payload.(vmprotocol.TranslationReq); ok {
 				bottomSent = true
 			}
 		}
@@ -86,19 +88,20 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	}
 
 	// Reset while the miss is in flight.
-	reset := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	reset.ID = sim.NewID()
-	reset.Src = messaging.RemotePort("Cmd")
-	reset.Dst = controlPort.AsRemote()
-	reset.TrafficClass = "memcontrolprotocol.Req"
+	reset := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
+		ID:           sim.NewID(),
+		Src:          messaging.RemotePort("Cmd"),
+		Dst:          controlPort.AsRemote(),
+		TrafficClass: "memcontrolprotocol.Req"}
+
 	controlPort.Deliver(reset)
 
 	acked := false
 	for i := 0; i < 64; i++ {
 		modelingtest.Tick(tlbComp)
 		if msg, ok := controlPort.RetrieveOutgoing(); ok {
-			if rsp, ok := msg.(memcontrolprotocol.Rsp); ok &&
-				rsp.Command == memcontrolprotocol.CmdReset {
+			if rsp, ok := msg.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+				Command == memcontrolprotocol.CmdReset {
 				acked = true
 				break
 			}

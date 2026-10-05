@@ -115,19 +115,21 @@ var _ = Describe("Address Translator", func() {
 
 	Context("translate stage", func() {
 		var (
-			req memprotocol.ReadReq
+			req messaging.Msg
 		)
 
 		BeforeEach(func() {
-			req = memprotocol.ReadReq{}
-			req.ID = sim.NewID()
-			req.Src = messaging.RemotePort("Agent")
-			req.Dst = topPort.AsRemote()
-			req.Address = 0x100
-			req.AccessByteSize = 4
-			req.PID = 1
-			req.TrafficBytes = 12
-			req.TrafficClass = "memprotocol.ReadReq"
+			req = messaging.Msg{Payload: memprotocol.ReadReq{
+				Address:        0x100,
+				AccessByteSize: 4,
+				PID:            1},
+				ID:  sim.NewID(),
+				Src: messaging.RemotePort("Agent"),
+				Dst: topPort.AsRemote(),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.ReadReq"}
+
 		})
 
 		It("should do nothing if there is no request", func() {
@@ -136,7 +138,9 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should send translation", func() {
-			req.Address = 0x1040
+			payload1 := req.Payload.(memprotocol.ReadReq)
+			payload1.Address = 0x1040
+			req.Payload = payload1
 			topPort.Deliver(req)
 
 			needTick := tParseTransMW.translate()
@@ -146,8 +150,8 @@ var _ = Describe("Address Translator", func() {
 			Expect(updatedState.Transactions).To(HaveLen(1))
 
 			sent, _ := translationPort.RetrieveOutgoing()
-			Expect(sent).To(BeAssignableToTypeOf(vmprotocol.TranslationReq{}))
-			transReq := sent.(vmprotocol.TranslationReq)
+			Expect(sent).To(BeAssignableToTypeOf(messaging.Msg{Payload: vmprotocol.TranslationReq{}}))
+			transReq := sent
 			Expect(updatedState.Transactions[0].TranslationReqID).
 				To(Equal(transReq.ID))
 		})
@@ -167,22 +171,25 @@ var _ = Describe("Address Translator", func() {
 
 	Context("parse translation", func() {
 		var (
-			transReq1, transReq2 vmprotocol.TranslationReq
+			transReq1, transReq2 messaging.Msg
 		)
 
 		BeforeEach(func() {
-			transReq1 = vmprotocol.TranslationReq{}
-			transReq1.ID = sim.NewID()
-			transReq1.PID = 1
-			transReq1.VAddr = 0x100
-			transReq1.DeviceID = 1
-			transReq1.TrafficClass = "vmprotocol.TranslationReq"
-			transReq2 = vmprotocol.TranslationReq{}
-			transReq2.ID = sim.NewID()
-			transReq2.PID = 1
-			transReq2.VAddr = 0x100
-			transReq2.DeviceID = 1
-			transReq2.TrafficClass = "vmprotocol.TranslationReq"
+			transReq1 = messaging.Msg{Payload: vmprotocol.TranslationReq{
+				PID:      1,
+				VAddr:    0x100,
+				DeviceID: 1},
+				ID: sim.NewID(),
+
+				TrafficClass: "vmprotocol.TranslationReq"}
+
+			transReq2 = messaging.Msg{Payload: vmprotocol.TranslationReq{
+				PID:      1,
+				VAddr:    0x100,
+				DeviceID: 1},
+				ID: sim.NewID(),
+
+				TrafficClass: "vmprotocol.TranslationReq"}
 
 			t.State = state{
 				Transactions: []transactionState{
@@ -198,22 +205,24 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should stall if send failed", func() {
-			req := memprotocol.ReadReq{}
-			req.ID = sim.NewID()
-			req.Address = 0x10040
-			req.AccessByteSize = 4
-			req.TrafficBytes = 12
-			req.TrafficClass = "memprotocol.ReadReq"
-			translationRsp := vmprotocol.TranslationRsp{
+			req := messaging.Msg{Payload: memprotocol.ReadReq{
+				Address:        0x10040,
+				AccessByteSize: 4},
+				ID: sim.NewID(),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.ReadReq"}
+
+			translationRsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 				Page: vm.Page{
 					PID:   1,
 					VAddr: 0x10000,
 					PAddr: 0x20000,
 				},
-			}
-			translationRsp.ID = sim.NewID()
-			translationRsp.RspTo = transReq1.ID
-			translationRsp.TrafficClass = "vmprotocol.TranslationRsp"
+			},
+				ID:           sim.NewID(),
+				RspTo:        transReq1.ID,
+				TrafficClass: "vmprotocol.TranslationRsp"}
 
 			t.State = state{
 				Transactions: []transactionState{
@@ -238,22 +247,24 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should forward read request", func() {
-			req := memprotocol.ReadReq{}
-			req.ID = sim.NewID()
-			req.Address = 0x10040
-			req.AccessByteSize = 4
-			req.TrafficBytes = 12
-			req.TrafficClass = "memprotocol.ReadReq"
-			translationRsp := vmprotocol.TranslationRsp{
+			req := messaging.Msg{Payload: memprotocol.ReadReq{
+				Address:        0x10040,
+				AccessByteSize: 4},
+				ID: sim.NewID(),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.ReadReq"}
+
+			translationRsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 				Page: vm.Page{
 					PID:   1,
 					VAddr: 0x10000,
 					PAddr: 0x20000,
 				},
-			}
-			translationRsp.ID = sim.NewID()
-			translationRsp.RspTo = transReq1.ID
-			translationRsp.TrafficClass = "vmprotocol.TranslationRsp"
+			},
+				ID:           sim.NewID(),
+				RspTo:        transReq1.ID,
+				TrafficClass: "vmprotocol.TranslationRsp"}
 
 			t.State = state{
 				Transactions: []transactionState{
@@ -275,10 +286,10 @@ var _ = Describe("Address Translator", func() {
 			Expect(madeProgress).To(BeTrue())
 
 			sent, _ := bottomPort.RetrieveOutgoing()
-			read := sent.(memprotocol.ReadReq)
-			Expect(read.PID).To(Equal(vm.PID(0)))
-			Expect(read.Address).To(Equal(uint64(0x20040)))
-			Expect(read.AccessByteSize).To(Equal(uint64(4)))
+			read := sent
+			Expect(read.Payload.(memprotocol.ReadReq).PID).To(Equal(vm.PID(0)))
+			Expect(read.Payload.(memprotocol.ReadReq).Address).To(Equal(uint64(0x20040)))
+			Expect(read.Payload.(memprotocol.ReadReq).AccessByteSize).To(Equal(uint64(4)))
 			Expect(read.Src).To(Equal(bottomPort.AsRemote()))
 
 			updatedState := &t.State
@@ -296,23 +307,25 @@ var _ = Describe("Address Translator", func() {
 		It("should forward write request", func() {
 			data := []byte{1, 2, 3, 4}
 			dirty := []bool{false, true, false, true}
-			write := memprotocol.WriteReq{}
-			write.ID = sim.NewID()
-			write.Address = 0x10040
-			write.Data = data
-			write.DirtyMask = dirty
-			write.TrafficBytes = len(data) + 12
-			write.TrafficClass = "memprotocol.WriteReq"
-			translationRsp := vmprotocol.TranslationRsp{
+			write := messaging.Msg{Payload: memprotocol.WriteReq{
+				Address:   0x10040,
+				Data:      data,
+				DirtyMask: dirty},
+				ID: sim.NewID(),
+
+				TrafficBytes: len(data) + 12,
+				TrafficClass: "memprotocol.WriteReq"}
+
+			translationRsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 				Page: vm.Page{
 					PID:   1,
 					VAddr: 0x10000,
 					PAddr: 0x20000,
 				},
-			}
-			translationRsp.ID = sim.NewID()
-			translationRsp.RspTo = transReq1.ID
-			translationRsp.TrafficClass = "vmprotocol.TranslationRsp"
+			},
+				ID:           sim.NewID(),
+				RspTo:        transReq1.ID,
+				TrafficClass: "vmprotocol.TranslationRsp"}
 
 			t.State = state{
 				Transactions: []transactionState{
@@ -334,12 +347,12 @@ var _ = Describe("Address Translator", func() {
 			Expect(madeProgress).To(BeTrue())
 
 			sent, _ := bottomPort.RetrieveOutgoing()
-			writeMsg := sent.(memprotocol.WriteReq)
-			Expect(writeMsg.PID).To(Equal(vm.PID(0)))
-			Expect(writeMsg.Address).To(Equal(uint64(0x20040)))
+			writeMsg := sent
+			Expect(writeMsg.Payload.(memprotocol.WriteReq).PID).To(Equal(vm.PID(0)))
+			Expect(writeMsg.Payload.(memprotocol.WriteReq).Address).To(Equal(uint64(0x20040)))
 			Expect(writeMsg.Src).To(Equal(bottomPort.AsRemote()))
-			Expect(writeMsg.Data).To(Equal(data))
-			Expect(writeMsg.DirtyMask).To(Equal(dirty))
+			Expect(writeMsg.Payload.(memprotocol.WriteReq).Data).To(Equal(data))
+			Expect(writeMsg.Payload.(memprotocol.WriteReq).DirtyMask).To(Equal(dirty))
 
 			updatedState := &t.State
 			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
@@ -348,43 +361,50 @@ var _ = Describe("Address Translator", func() {
 
 	Context("respond", func() {
 		var (
-			readFromTop   memprotocol.ReadReq
-			writeFromTop  memprotocol.WriteReq
-			readToBottom  memprotocol.ReadReq
-			writeToBottom memprotocol.WriteReq
+			readFromTop   messaging.Msg
+			writeFromTop  messaging.Msg
+			readToBottom  messaging.Msg
+			writeToBottom messaging.Msg
 		)
 
 		BeforeEach(func() {
-			readFromTop = memprotocol.ReadReq{}
-			readFromTop.ID = sim.NewID()
-			readFromTop.Src = messaging.RemotePort("Agent")
-			readFromTop.Dst = topPort.AsRemote()
-			readFromTop.Address = 0x10040
-			readFromTop.AccessByteSize = 4
-			readFromTop.TrafficBytes = 12
-			readFromTop.TrafficClass = "memprotocol.ReadReq"
-			readToBottom = memprotocol.ReadReq{}
-			readToBottom.ID = sim.NewID()
-			readToBottom.Src = bottomPort.AsRemote()
-			readToBottom.Dst = messaging.RemotePort("MemPort")
-			readToBottom.Address = 0x20040
-			readToBottom.AccessByteSize = 4
-			readToBottom.TrafficBytes = 12
-			readToBottom.TrafficClass = "memprotocol.ReadReq"
-			writeFromTop = memprotocol.WriteReq{}
-			writeFromTop.ID = sim.NewID()
-			writeFromTop.Src = messaging.RemotePort("Agent")
-			writeFromTop.Dst = topPort.AsRemote()
-			writeFromTop.Address = 0x10040
-			writeFromTop.TrafficBytes = 12
-			writeFromTop.TrafficClass = "memprotocol.WriteReq"
-			writeToBottom = memprotocol.WriteReq{}
-			writeToBottom.ID = sim.NewID()
-			writeToBottom.Src = bottomPort.AsRemote()
-			writeToBottom.Dst = messaging.RemotePort("MemPort")
-			writeToBottom.Address = 0x10040
-			writeToBottom.TrafficBytes = 12
-			writeToBottom.TrafficClass = "memprotocol.WriteReq"
+			readFromTop = messaging.Msg{Payload: memprotocol.ReadReq{
+				Address:        0x10040,
+				AccessByteSize: 4},
+				ID:  sim.NewID(),
+				Src: messaging.RemotePort("Agent"),
+				Dst: topPort.AsRemote(),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.ReadReq"}
+
+			readToBottom = messaging.Msg{Payload: memprotocol.ReadReq{
+				Address:        0x20040,
+				AccessByteSize: 4},
+				ID:  sim.NewID(),
+				Src: bottomPort.AsRemote(),
+				Dst: messaging.RemotePort("MemPort"),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.ReadReq"}
+
+			writeFromTop = messaging.Msg{Payload: memprotocol.WriteReq{
+				Address: 0x10040},
+				ID:  sim.NewID(),
+				Src: messaging.RemotePort("Agent"),
+				Dst: topPort.AsRemote(),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.WriteReq"}
+
+			writeToBottom = messaging.Msg{Payload: memprotocol.WriteReq{
+				Address: 0x10040},
+				ID:  sim.NewID(),
+				Src: bottomPort.AsRemote(),
+				Dst: messaging.RemotePort("MemPort"),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.WriteReq"}
 
 			t.State = state{
 				InflightReqToBottom: []reqToBottomState{
@@ -392,21 +412,21 @@ var _ = Describe("Address Translator", func() {
 						ReqFromTopID:    readFromTop.ID,
 						ReqFromTopSrc:   readFromTop.Src,
 						ReqFromTopDst:   readFromTop.Dst,
-						ReqFromTopType:  fmt.Sprintf("%T", readFromTop),
+						ReqFromTopType:  fmt.Sprintf("%T", readFromTop.Payload),
 						ReqToBottomID:   readToBottom.ID,
 						ReqToBottomSrc:  readToBottom.Src,
 						ReqToBottomDst:  readToBottom.Dst,
-						ReqToBottomType: fmt.Sprintf("%T", readToBottom),
+						ReqToBottomType: fmt.Sprintf("%T", readToBottom.Payload),
 					},
 					{
 						ReqFromTopID:    writeFromTop.ID,
 						ReqFromTopSrc:   writeFromTop.Src,
 						ReqFromTopDst:   writeFromTop.Dst,
-						ReqFromTopType:  fmt.Sprintf("%T", writeFromTop),
+						ReqFromTopType:  fmt.Sprintf("%T", writeFromTop.Payload),
 						ReqToBottomID:   writeToBottom.ID,
 						ReqToBottomSrc:  writeToBottom.Src,
 						ReqToBottomDst:  writeToBottom.Dst,
-						ReqToBottomType: fmt.Sprintf("%T", writeToBottom),
+						ReqToBottomType: fmt.Sprintf("%T", writeToBottom.Payload),
 					},
 				},
 			}
@@ -418,11 +438,12 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should respond data ready", func() {
-			dataReady := memprotocol.DataReadyRsp{}
-			dataReady.ID = sim.NewID()
-			dataReady.RspTo = readToBottom.ID
-			dataReady.TrafficBytes = 4
-			dataReady.TrafficClass = "memprotocol.DataReadyRsp"
+			dataReady := messaging.Msg{Payload: memprotocol.DataReadyRsp{},
+				ID:           sim.NewID(),
+				RspTo:        readToBottom.ID,
+				TrafficBytes: 4,
+				TrafficClass: "memprotocol.DataReadyRsp"}
+
 			bottomPort.Deliver(dataReady)
 
 			madeProgress := tRespondPipeMW.respond()
@@ -430,20 +451,21 @@ var _ = Describe("Address Translator", func() {
 			Expect(madeProgress).To(BeTrue())
 
 			sent, _ := topPort.RetrieveOutgoing()
-			dr := sent.(memprotocol.DataReadyRsp)
+			dr := sent
 			Expect(dr.RspTo).To(Equal(readFromTop.ID))
-			Expect(dr.Data).To(Equal(dataReady.Data))
+			Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal(dataReady.Payload.(memprotocol.DataReadyRsp).Data))
 
 			updatedState := &t.State
 			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
 		})
 
 		It("should respond write done", func() {
-			done := memprotocol.WriteDoneRsp{}
-			done.ID = sim.NewID()
-			done.RspTo = writeToBottom.ID
-			done.TrafficBytes = 4
-			done.TrafficClass = "memprotocol.WriteDoneRsp"
+			done := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+				ID:           sim.NewID(),
+				RspTo:        writeToBottom.ID,
+				TrafficBytes: 4,
+				TrafficClass: "memprotocol.WriteDoneRsp"}
+
 			bottomPort.Deliver(done)
 
 			madeProgress := tRespondPipeMW.respond()
@@ -451,7 +473,7 @@ var _ = Describe("Address Translator", func() {
 			Expect(madeProgress).To(BeTrue())
 
 			sent, _ := topPort.RetrieveOutgoing()
-			doneMsg := sent.(memprotocol.WriteDoneRsp)
+			doneMsg := sent
 			Expect(doneMsg.RspTo).To(Equal(writeFromTop.ID))
 
 			updatedState := &t.State
@@ -459,11 +481,11 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should stall if TopPort is busy", func() {
-			dataReady := memprotocol.DataReadyRsp{}
-			dataReady.ID = sim.NewID()
-			dataReady.RspTo = readToBottom.ID
-			dataReady.TrafficBytes = 4
-			dataReady.TrafficClass = "memprotocol.DataReadyRsp"
+			dataReady := messaging.Msg{Payload: memprotocol.DataReadyRsp{},
+				ID:           sim.NewID(),
+				RspTo:        readToBottom.ID,
+				TrafficBytes: 4,
+				TrafficClass: "memprotocol.DataReadyRsp"}
 
 			// Fill the top port's outgoing buffer so Send fails.
 			fillOutgoing(topPort, topBufSize)
@@ -486,53 +508,62 @@ var _ = Describe("Address Translator", func() {
 
 	Context("when handling control messages", func() {
 		var (
-			readFromTop   memprotocol.ReadReq
-			writeFromTop  memprotocol.WriteReq
-			readToBottom  memprotocol.ReadReq
-			writeToBottom memprotocol.WriteReq
-			flushReq      memcontrolprotocol.Req
-			restartReq    memcontrolprotocol.Req
+			readFromTop   messaging.Msg
+			writeFromTop  messaging.Msg
+			readToBottom  messaging.Msg
+			writeToBottom messaging.Msg
+			flushReq      messaging.Msg
+			restartReq    messaging.Msg
 		)
 
 		BeforeEach(func() {
-			readFromTop = memprotocol.ReadReq{}
-			readFromTop.ID = sim.NewID()
-			readFromTop.Address = 0x10040
-			readFromTop.AccessByteSize = 4
-			readFromTop.TrafficBytes = 12
-			readFromTop.TrafficClass = "memprotocol.ReadReq"
-			readToBottom = memprotocol.ReadReq{}
-			readToBottom.ID = sim.NewID()
-			readToBottom.Address = 0x20040
-			readToBottom.AccessByteSize = 4
-			readToBottom.TrafficBytes = 12
-			readToBottom.TrafficClass = "memprotocol.ReadReq"
-			writeFromTop = memprotocol.WriteReq{}
-			writeFromTop.ID = sim.NewID()
-			writeFromTop.Address = 0x10040
-			writeFromTop.TrafficBytes = 12
-			writeFromTop.TrafficClass = "memprotocol.WriteReq"
-			writeToBottom = memprotocol.WriteReq{}
-			writeToBottom.ID = sim.NewID()
-			writeToBottom.Address = 0x10040
-			writeToBottom.TrafficBytes = 12
-			writeToBottom.TrafficClass = "memprotocol.WriteReq"
-			flushReq = memcontrolprotocol.Req{
+			readFromTop = messaging.Msg{Payload: memprotocol.ReadReq{
+				Address:        0x10040,
+				AccessByteSize: 4},
+				ID: sim.NewID(),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.ReadReq"}
+
+			readToBottom = messaging.Msg{Payload: memprotocol.ReadReq{
+				Address:        0x20040,
+				AccessByteSize: 4},
+				ID: sim.NewID(),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.ReadReq"}
+
+			writeFromTop = messaging.Msg{Payload: memprotocol.WriteReq{
+				Address: 0x10040},
+				ID: sim.NewID(),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.WriteReq"}
+
+			writeToBottom = messaging.Msg{Payload: memprotocol.WriteReq{
+				Address: 0x10040},
+				ID: sim.NewID(),
+
+				TrafficBytes: 12,
+				TrafficClass: "memprotocol.WriteReq"}
+
+			flushReq = messaging.Msg{Payload: memcontrolprotocol.Req{
 				Command: memcontrolprotocol.CmdFlush,
-			}
-			flushReq.ID = sim.NewID()
-			flushReq.Src = messaging.RemotePort("Agent")
-			flushReq.Dst = ctrlPort.AsRemote()
-			flushReq.TrafficBytes = 4
-			flushReq.TrafficClass = "memcontrolprotocol.Req"
-			restartReq = memcontrolprotocol.Req{
+			},
+				ID:           sim.NewID(),
+				Src:          messaging.RemotePort("Agent"),
+				Dst:          ctrlPort.AsRemote(),
+				TrafficBytes: 4,
+				TrafficClass: "memcontrolprotocol.Req"}
+
+			restartReq = messaging.Msg{Payload: memcontrolprotocol.Req{
 				Command: memcontrolprotocol.CmdReset,
-			}
-			restartReq.ID = sim.NewID()
-			restartReq.Src = messaging.RemotePort("Agent")
-			restartReq.Dst = ctrlPort.AsRemote()
-			restartReq.TrafficBytes = 4
-			restartReq.TrafficClass = "memcontrolprotocol.Req"
+			},
+				ID:           sim.NewID(),
+				Src:          messaging.RemotePort("Agent"),
+				Dst:          ctrlPort.AsRemote(),
+				TrafficBytes: 4,
+				TrafficClass: "memcontrolprotocol.Req"}
 
 			nextState := &t.State
 			nextState.InflightReqToBottom = []reqToBottomState{
@@ -540,21 +571,21 @@ var _ = Describe("Address Translator", func() {
 					ReqFromTopID:    readFromTop.ID,
 					ReqFromTopSrc:   readFromTop.Src,
 					ReqFromTopDst:   readFromTop.Dst,
-					ReqFromTopType:  fmt.Sprintf("%T", readFromTop),
+					ReqFromTopType:  fmt.Sprintf("%T", readFromTop.Payload),
 					ReqToBottomID:   readToBottom.ID,
 					ReqToBottomSrc:  readToBottom.Src,
 					ReqToBottomDst:  readToBottom.Dst,
-					ReqToBottomType: fmt.Sprintf("%T", readToBottom),
+					ReqToBottomType: fmt.Sprintf("%T", readToBottom.Payload),
 				},
 				{
 					ReqFromTopID:    writeFromTop.ID,
 					ReqFromTopSrc:   writeFromTop.Src,
 					ReqFromTopDst:   writeFromTop.Dst,
-					ReqFromTopType:  fmt.Sprintf("%T", writeFromTop),
+					ReqFromTopType:  fmt.Sprintf("%T", writeFromTop.Payload),
 					ReqToBottomID:   writeToBottom.ID,
 					ReqToBottomSrc:  writeToBottom.Src,
 					ReqToBottomDst:  writeToBottom.Dst,
-					ReqToBottomType: fmt.Sprintf("%T", writeToBottom),
+					ReqToBottomType: fmt.Sprintf("%T", writeToBottom.Payload),
 				},
 			}
 		})
@@ -566,10 +597,10 @@ var _ = Describe("Address Translator", func() {
 
 			Expect(madeProgress).To(BeTrue())
 			rspMsg, _ := ctrlPort.RetrieveOutgoing()
-			Expect(rspMsg).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
-			rsp := rspMsg.(memcontrolprotocol.Rsp)
-			Expect(rsp.Success).To(BeFalse())
-			Expect(rsp.Error).To(Equal(memcontrolprotocol.ErrUnsupported))
+			Expect(rspMsg).To(BeAssignableToTypeOf(messaging.Msg{Payload: memcontrolprotocol.Rsp{}}))
+			rsp := rspMsg
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeFalse())
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Error).To(Equal(memcontrolprotocol.ErrUnsupported))
 		})
 
 		It("clears in-flight state on Reset", func() {
@@ -579,9 +610,9 @@ var _ = Describe("Address Translator", func() {
 
 			Expect(madeProgress).To(BeTrue())
 			rspMsg, _ := ctrlPort.RetrieveOutgoing()
-			Expect(rspMsg).To(BeAssignableToTypeOf(memcontrolprotocol.Rsp{}))
-			rsp := rspMsg.(memcontrolprotocol.Rsp)
-			Expect(rsp.Success).To(BeTrue())
+			Expect(rspMsg).To(BeAssignableToTypeOf(messaging.Msg{Payload: memcontrolprotocol.Rsp{}}))
+			rsp := rspMsg
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 			updatedState := &t.State
 			Expect(updatedState.ControlState).To(Equal(memcontrolprotocol.StateEnabled))
 			Expect(updatedState.InflightReqToBottom).To(BeEmpty())
@@ -595,11 +626,12 @@ var _ = Describe("Address Translator", func() {
 // validation) and is sent to a distinct destination.
 func fillOutgoing(p messaging.Port, n int) {
 	for i := 0; i < n; i++ {
-		dummy := memprotocol.WriteDoneRsp{}
-		dummy.ID = p.Owner().(interface{ NewID() uint64 }).NewID()
-		dummy.Src = p.AsRemote()
-		dummy.Dst = messaging.RemotePort("Dummy")
-		dummy.TrafficClass = "memprotocol.WriteDoneRsp"
+		dummy := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+			ID:           p.Owner().(interface{ NewID() uint64 }).NewID(),
+			Src:          p.AsRemote(),
+			Dst:          messaging.RemotePort("Dummy"),
+			TrafficClass: "memprotocol.WriteDoneRsp"}
+
 		Expect(p.CanSend()).To(BeTrue())
 		p.Send(dummy)
 	}

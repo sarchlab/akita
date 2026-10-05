@@ -29,8 +29,8 @@ func (m *receivePipelineMW) Handle(_ timing.Event) bool {
 	return madeProgress
 }
 
-func (m *receivePipelineMW) flitParentTaskID(flit packetization.Flit) uint64 {
-	return flit.MsgMeta.ID
+func (m *receivePipelineMW) flitParentTaskID(flit messaging.Msg) uint64 {
+	return flit.ID
 }
 
 func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
@@ -45,12 +45,12 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 				break
 			}
 
-			flit := itemI.(packetization.Flit)
+			flit := itemI
 			taskID := m.comp.NewID()
 			item := routedFlit{
 				Flit:    flit,
 				TaskID:  taskID,
-				RouteTo: flit.Msg.Dst,
+				RouteTo: flit.Payload.(packetization.Flit).Msg.Dst,
 			}
 
 			if pcs.Latency == 0 {

@@ -71,15 +71,17 @@ var _ = Describe("GMMU", func() {
 		(&noopConn{}).PlugIn(gmmuComp.Ports.Control)
 	}
 
-	makeTranslationReq := func(vAddr uint64) vmprotocol.TranslationReq {
-		req := vmprotocol.TranslationReq{}
-		req.ID = sim.NewID()
-		req.Src = agentPort
-		req.Dst = topPort.AsRemote()
-		req.PID = 1
-		req.VAddr = vAddr
-		req.DeviceID = 0
-		req.TrafficClass = "vmprotocol.TranslationReq"
+	makeTranslationReq := func(vAddr uint64) messaging.Msg {
+		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+			PID:      1,
+			VAddr:    vAddr,
+			DeviceID: 0},
+			ID:  sim.NewID(),
+			Src: agentPort,
+			Dst: topPort.AsRemote(),
+
+			TrafficClass: "vmprotocol.TranslationReq"}
+
 		return req
 	}
 
@@ -130,9 +132,9 @@ var _ = Describe("GMMU", func() {
 
 			rspI, _ := topPort.RetrieveOutgoing()
 			Expect(rspI).NotTo(BeNil())
-			rsp := rspI.(vmprotocol.TranslationRsp)
-			Expect(rsp.Page).To(Equal(page))
-			Expect(rsp.Page.PID).To(Equal(vm.PID(1)))
+			rsp := rspI
+			Expect(rsp.Payload.(vmprotocol.TranslationRsp).Page).To(Equal(page))
+			Expect(rsp.Payload.(vmprotocol.TranslationRsp).Page.PID).To(Equal(vm.PID(1)))
 		})
 
 		It("should send request remotely", func() {
@@ -155,9 +157,9 @@ var _ = Describe("GMMU", func() {
 
 			reqI, _ := bottomPort.RetrieveOutgoing()
 			Expect(reqI).NotTo(BeNil())
-			req := reqI.(vmprotocol.TranslationReq)
+			req := reqI
 			Expect(req.Dst).To(Equal(lowModulePort))
-			Expect(req.VAddr).To(Equal(uint64(0x10000000)))
+			Expect(req.Payload.(vmprotocol.TranslationReq).VAddr).To(Equal(uint64(0x10000000)))
 		})
 
 		It("should return response from remote page table", func() {
@@ -180,17 +182,18 @@ var _ = Describe("GMMU", func() {
 
 			reqI, _ := bottomPort.RetrieveOutgoing()
 			Expect(reqI).NotTo(BeNil())
-			sentReqToBottom := reqI.(vmprotocol.TranslationReq)
+			sentReqToBottom := reqI
 
 			// Deliver the response from the bottom (remote page table).
-			rsp := vmprotocol.TranslationRsp{
+			rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 				Page: page,
-			}
-			rsp.ID = sim.NewID()
-			rsp.Src = lowModulePort
-			rsp.Dst = bottomPort.AsRemote()
-			rsp.RspTo = sentReqToBottom.ID
-			rsp.TrafficClass = "vmprotocol.TranslationRsp"
+			},
+				ID:           sim.NewID(),
+				Src:          lowModulePort,
+				Dst:          bottomPort.AsRemote(),
+				RspTo:        sentReqToBottom.ID,
+				TrafficClass: "vmprotocol.TranslationRsp"}
+
 			bottomPort.Deliver(rsp)
 
 			// Tick: fetchFromBottom receives response, sends to top.
@@ -198,9 +201,9 @@ var _ = Describe("GMMU", func() {
 
 			rspToTopI, _ := topPort.RetrieveOutgoing()
 			Expect(rspToTopI).NotTo(BeNil())
-			rspToTop := rspToTopI.(vmprotocol.TranslationRsp)
-			Expect(rspToTop.Page).To(Equal(page))
-			Expect(rspToTop.Page.PID).To(Equal(vm.PID(1)))
+			rspToTop := rspToTopI
+			Expect(rspToTop.Payload.(vmprotocol.TranslationRsp).Page).To(Equal(page))
+			Expect(rspToTop.Payload.(vmprotocol.TranslationRsp).Page.PID).To(Equal(vm.PID(1)))
 		})
 	})
 })

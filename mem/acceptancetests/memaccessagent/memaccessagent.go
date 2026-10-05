@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 
 	"github.com/sarchlab/akita/v5/daisen2"
-	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/timing"
@@ -45,12 +44,12 @@ type Resources struct {
 
 // State contains the mutable runtime data for the MemAccessAgent.
 type State struct {
-	WriteLeft       int                             `json:"write_left"`
-	ReadLeft        int                             `json:"read_left"`
-	KnownMemValue   map[uint64][]uint32             `json:"known_mem_value"`
-	PendingReadReq  map[uint64]memprotocol.ReadReq  `json:"pending_read_req"`
-	PendingWriteReq map[uint64]memprotocol.WriteReq `json:"pending_write_req"`
-	RNG             randState                       `json:"rng"`
+	WriteLeft       int                      `json:"write_left"`
+	ReadLeft        int                      `json:"read_left"`
+	KnownMemValue   map[uint64][]uint32      `json:"known_mem_value"`
+	PendingReadReq  map[uint64]messaging.Msg `json:"pending_read_req"`
+	PendingWriteReq map[uint64]messaging.Msg `json:"pending_write_req"`
+	RNG             randState                `json:"rng"`
 }
 
 // Ports holds the MemAccessAgent's ports.

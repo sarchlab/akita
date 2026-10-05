@@ -70,24 +70,27 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		}
 	}
 
-	makeRead := func(addr uint64) memprotocol.ReadReq {
-		req := memprotocol.ReadReq{}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Agent")
-		req.Dst = topPort.AsRemote()
-		req.Address = addr
-		req.AccessByteSize = 4
-		req.TrafficBytes = 12
-		req.TrafficClass = "memprotocol.ReadReq"
+	makeRead := func(addr uint64) messaging.Msg {
+		req := messaging.Msg{Payload: memprotocol.ReadReq{
+			Address:        addr,
+			AccessByteSize: 4},
+			ID:  sim.NewID(),
+			Src: messaging.RemotePort("Agent"),
+			Dst: topPort.AsRemote(),
+
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		return req
 	}
 
-	makeCtrlReq := func(cmd memcontrolprotocol.Command) memcontrolprotocol.Req {
-		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Ctrl")
-		req.Dst = ctrlPort.AsRemote()
-		req.TrafficClass = "memcontrolprotocol.Req"
+	makeCtrlReq := func(cmd memcontrolprotocol.Command) messaging.Msg {
+		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("Ctrl"),
+			Dst:          ctrlPort.AsRemote(),
+			TrafficClass: "memcontrolprotocol.Req"}
+
 		return req
 	}
 
@@ -95,14 +98,15 @@ var _ = Describe("Writethrough cache control behavior", func() {
 	// outgoing bottom read. RspTo matches the bottom read's ID (which the
 	// cache stored as ReadToBottomMeta.ID), and Data is a full cache line so
 	// the fetcher's slice [offset:offset+AccessByteSize] is always in range.
-	makeFill := func(bottomRead memprotocol.ReadReq) memprotocol.DataReadyRsp {
-		rsp := memprotocol.DataReadyRsp{Data: make([]byte, blockSize)}
-		rsp.ID = sim.NewID()
-		rsp.Src = messaging.RemotePort("LowerCache")
-		rsp.Dst = bottomPort.AsRemote()
-		rsp.RspTo = bottomRead.ID
-		rsp.TrafficBytes = int(blockSize) + 4
-		rsp.TrafficClass = "memprotocol.DataReadyRsp"
+	makeFill := func(bottomRead messaging.Msg) messaging.Msg {
+		rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: make([]byte, blockSize)},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("LowerCache"),
+			Dst:          bottomPort.AsRemote(),
+			RspTo:        bottomRead.ID,
+			TrafficBytes: int(blockSize) + 4,
+			TrafficClass: "memprotocol.DataReadyRsp"}
+
 		return rsp
 	}
 
@@ -139,15 +143,16 @@ var _ = Describe("Writethrough cache control behavior", func() {
 
 	// captureBottomReads drains every outgoing bottom read the cache has
 	// issued so far, returning them so the test can fabricate matching fills.
-	captureBottomReads := func() []memprotocol.ReadReq {
-		reads := []memprotocol.ReadReq{}
+	captureBottomReads := func() []messaging.Msg {
+		reads := []messaging.Msg{}
 		for {
 			out, ok := bottomPort.RetrieveOutgoing()
 			if !ok {
 				break
 			}
-			if r, ok := out.(memprotocol.ReadReq); ok {
-				reads = append(reads, r)
+			if _, ok := out.Payload.(memprotocol.ReadReq); ok {
+
+				reads = append(reads, out)
 			}
 		}
 		return reads
@@ -170,7 +175,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 
 		// Tick until the cache has issued all n bottom fetches and there are
 		// in-flight transactions waiting on them.
-		bottomReads := []memprotocol.ReadReq{}
+		bottomReads := []messaging.Msg{}
 		for i := 0; i < 256 && len(bottomReads) < n; i++ {
 			modelingtest.Tick(comp)
 			bottomReads = append(bottomReads, captureBottomReads()...)
@@ -206,7 +211,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 
 		// Tick until the Drain ack appears, counting completed reads on Top.
 		completed := 0
-		var drainRsp memcontrolprotocol.Rsp
+		var drainRsp messaging.Msg
 		drainFound := false
 		for i := 0; i < 4096 && !drainFound; i++ {
 			modelingtest.Tick(comp)
@@ -216,22 +221,24 @@ var _ = Describe("Writethrough cache control behavior", func() {
 				if !ok {
 					break
 				}
-				if _, ok := out.(memprotocol.DataReadyRsp); ok {
+				if _, ok := out.Payload.(memprotocol.DataReadyRsp); ok {
 					completed++
 				}
 			}
 
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
-					rsp.Command == memcontrolprotocol.CmdDrain {
-					drainRsp = rsp
+				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+					Command == memcontrolprotocol.CmdDrain {
+					drainRsp = out
+
 					drainFound = true
 				}
+
 			}
 		}
 
 		Expect(drainFound).To(BeTrue())
-		Expect(drainRsp.Success).To(BeTrue())
+		Expect(drainRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
 		// Every read miss finished by the time the async Drain ack is sent.
 		Expect(completed).To(Equal(n))
@@ -246,7 +253,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 	It("does not abort an in-flight Drain when a Pause arrives", func() {
 		// Get a read miss in flight and capture its bottom fetch.
 		topPort.Deliver(makeRead(0))
-		bottomReads := []memprotocol.ReadReq{}
+		bottomReads := []messaging.Msg{}
 		for i := 0; i < 256 && len(bottomReads) == 0; i++ {
 			modelingtest.Tick(comp)
 			bottomReads = append(bottomReads, captureBottomReads()...)
@@ -279,11 +286,12 @@ var _ = Describe("Writethrough cache control behavior", func() {
 				if !ok {
 					break
 				}
-				r, ok := out.(memcontrolprotocol.Rsp)
+				_, ok = out.Payload.(memcontrolprotocol.Rsp)
+				r := out
 				if !ok {
 					continue
 				}
-				switch r.Command {
+				switch r.Payload.(memcontrolprotocol.Rsp).Command {
 				case memcontrolprotocol.CmdDrain:
 					drainAcked = true
 				case memcontrolprotocol.CmdPause:
@@ -300,7 +308,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 	It("completes a Drain issued while paused with work in flight", func() {
 		// Get a read miss in flight, then capture its bottom fetch.
 		topPort.Deliver(makeRead(0))
-		bottomReads := []memprotocol.ReadReq{}
+		bottomReads := []messaging.Msg{}
 		for i := 0; i < 256 && len(bottomReads) == 0; i++ {
 			modelingtest.Tick(comp)
 			bottomReads = append(bottomReads, captureBottomReads()...)
@@ -315,10 +323,13 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		for i := 0; i < 64 && !pausedAck; i++ {
 			modelingtest.Tick(comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-				if rsp, ok := out.(memcontrolprotocol.Rsp); ok && rsp.RspTo == pause.ID {
+				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok &&
+					out.
+						RspTo == pause.ID {
 					Expect(rsp.Success).To(BeTrue())
 					pausedAck = true
 				}
+
 			}
 		}
 		Expect(pausedAck).To(BeTrue())
@@ -335,21 +346,23 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		drain := makeCtrlReq(memcontrolprotocol.CmdDrain)
 		ctrlPort.Deliver(drain)
 
-		var drainRsp memcontrolprotocol.Rsp
+		var drainRsp messaging.Msg
 		found := false
 		for i := 0; i < 4096 && !found; i++ {
 			modelingtest.Tick(comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
-					rsp.Command == memcontrolprotocol.CmdDrain {
-					drainRsp = rsp
+				if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+					Command == memcontrolprotocol.CmdDrain {
+					drainRsp = out
+
 					found = true
 				}
+
 			}
 		}
 
 		Expect(found).To(BeTrue())
-		Expect(drainRsp.Success).To(BeTrue())
+		Expect(drainRsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 		Expect(drainRsp.RspTo).To(Equal(drain.ID))
 		for i := range comp.State.Transactions {
 			Expect(comp.State.Transactions[i].Removed).To(BeTrue())
@@ -389,18 +402,19 @@ var _ = Describe("Writethrough cache control behavior", func() {
 			reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 			ctrlPort.Deliver(reset)
 
-			var rsp memcontrolprotocol.Rsp
+			var rsp messaging.Msg
 			found := false
 			for i := 0; i < 64 && !found; i++ {
 				modelingtest.Tick(comp)
 				if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-					rsp, found = out.(memcontrolprotocol.Rsp)
+					_, found = out.Payload.(memcontrolprotocol.Rsp)
+					rsp = out
 				}
 			}
 
 			Expect(found).To(BeTrue())
-			Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdReset))
-			Expect(rsp.Success).To(BeTrue())
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
+			Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
 			Expect(rsp.RspTo).To(Equal(reset.ID))
 			Expect(comp.State.Transactions).To(BeEmpty())
 			Expect(comp.State.IsPaused).To(BeFalse())
@@ -431,7 +445,7 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		reset := makeCtrlReq(memcontrolprotocol.CmdReset)
 		ctrlPort.Deliver(reset)
 
-		var rsps []memcontrolprotocol.Rsp
+		var rsps []messaging.Msg
 		for range 16 {
 			modelingtest.Tick(comp)
 			for {
@@ -439,16 +453,17 @@ var _ = Describe("Writethrough cache control behavior", func() {
 				if !ok {
 					break
 				}
-				if r, ok := out.(memcontrolprotocol.Rsp); ok {
-					rsps = append(rsps, r)
+				if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok {
+
+					rsps = append(rsps, out)
 				}
 			}
 		}
 
 		Expect(rsps).To(HaveLen(2))
-		Expect(rsps[0].Command).To(Equal(memcontrolprotocol.CmdDrain))
+		Expect(rsps[0].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdDrain))
 		Expect(rsps[0].RspTo).To(Equal(uint64(999)))
-		Expect(rsps[1].Command).To(Equal(memcontrolprotocol.CmdReset))
+		Expect(rsps[1].Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdReset))
 		Expect(rsps[1].RspTo).To(Equal(reset.ID))
 		Expect(comp.State.IsDraining).To(BeFalse())
 		Expect(comp.State.IsPaused).To(BeFalse())
@@ -457,19 +472,23 @@ var _ = Describe("Writethrough cache control behavior", func() {
 	// driveCtrl delivers a control req and ticks until its ControlRsp comes
 	// back (or the budget runs out), returning the matching Rsp and whether
 	// it was found.
-	driveCtrl := func(req memcontrolprotocol.Req) (memcontrolprotocol.Rsp, bool) {
+	driveCtrl := func(req messaging.Msg) (messaging.Msg, bool) {
 		ctrlPort.Deliver(req)
 
 		for range 64 {
 			modelingtest.Tick(comp)
 			if out, ok := ctrlPort.RetrieveOutgoing(); ok {
-				if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
-					rsp.RspTo == req.ID {
-					return rsp, true
+				if _, ok := out.Payload.(memcontrolprotocol.Rsp); ok &&
+					out.
+						RspTo == req.ID {
+					return out,
+
+						true
 				}
+
 			}
 		}
-		return memcontrolprotocol.Rsp{}, false
+		return messaging.Msg{Payload: memcontrolprotocol.Rsp{}}, false
 	}
 
 	It("invalidates only directory blocks matching the address filter", func() {
@@ -486,15 +505,19 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		comp.State.IsPaused = true
 
 		inv := makeCtrlReq(memcontrolprotocol.CmdInvalidate)
-		inv.Addresses = []uint64{addrA}
-		inv.PID = vm.PID(1)
+		payload1 := inv.Payload.(memcontrolprotocol.Req)
+		payload1.Addresses = []uint64{addrA}
+		inv.Payload = payload1
+		payload2 := inv.Payload.(memcontrolprotocol.Req)
+		payload2.PID = vm.PID(1)
+		inv.Payload = payload2
 
 		rsp, found := driveCtrl(inv)
 
 		Expect(found).To(BeTrue())
-		Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
-		Expect(rsp.Success).To(BeTrue())
-		Expect(rsp.Error).To(BeEmpty())
+		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdInvalidate))
+		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
+		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Error).To(BeEmpty())
 
 		// Only the filtered block A is dropped; block B survives untouched.
 		blockA := comp.State.DirectoryState.Sets[setA].Blocks[wayA]
@@ -513,9 +536,9 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		rsp, found := driveCtrl(makeCtrlReq(memcontrolprotocol.CmdFlush))
 
 		Expect(found).To(BeTrue())
-		Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdFlush))
-		Expect(rsp.Success).To(BeTrue())
-		Expect(rsp.Error).To(BeEmpty())
+		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdFlush))
+		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeTrue())
+		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Error).To(BeEmpty())
 
 		// Flush is a no-op for writethrough: the clean block is untouched.
 		block := comp.State.DirectoryState.Sets[setID].Blocks[wayID]
@@ -531,14 +554,16 @@ var _ = Describe("Writethrough cache control behavior", func() {
 		Expect(comp.State.IsDraining).To(BeFalse())
 
 		inv := makeCtrlReq(memcontrolprotocol.CmdInvalidate)
-		inv.Addresses = []uint64{0}
+		payload3 := inv.Payload.(memcontrolprotocol.Req)
+		payload3.Addresses = []uint64{0}
+		inv.Payload = payload3
 
 		rsp, found := driveCtrl(inv)
 
 		Expect(found).To(BeTrue())
-		Expect(rsp.Command).To(Equal(memcontrolprotocol.CmdInvalidate))
-		Expect(rsp.Success).To(BeFalse())
-		Expect(rsp.Error).To(Equal(memcontrolprotocol.ErrMustBePausedOrDrained))
+		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Command).To(Equal(memcontrolprotocol.CmdInvalidate))
+		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Success).To(BeFalse())
+		Expect(rsp.Payload.(memcontrolprotocol.Rsp).Error).To(Equal(memcontrolprotocol.ErrMustBePausedOrDrained))
 
 		// Rejected Invalidate must leave the directory intact.
 		block := comp.State.DirectoryState.Sets[setID].Blocks[wayID]

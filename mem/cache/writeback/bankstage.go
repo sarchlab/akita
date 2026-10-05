@@ -3,6 +3,7 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/messaging"
 
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -210,14 +211,16 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 
 	nextBlock.ReadCount--
 
-	dataReady := memprotocol.DataReadyRsp{}
-	dataReady.ID = s.cache.comp.NewID()
-	dataReady.Src = s.cache.topPort().AsRemote()
-	dataReady.Dst = trans.ReadMeta.Src
-	dataReady.RspTo = trans.ReadMeta.ID
-	dataReady.Data = data
-	dataReady.TrafficBytes = len(data) + 4
-	dataReady.TrafficClass = "memprotocol.DataReadyRsp"
+	dataReady := messaging.Msg{Payload: memprotocol.DataReadyRsp{
+		Data: data},
+		ID:    s.cache.comp.NewID(),
+		Src:   s.cache.topPort().AsRemote(),
+		Dst:   trans.ReadMeta.Src,
+		RspTo: trans.ReadMeta.ID,
+
+		TrafficBytes: len(data) + 4,
+		TrafficClass: "memprotocol.DataReadyRsp"}
+
 	s.cache.topPort().Send(dataReady)
 
 	s.finishBank(trans)
@@ -249,13 +252,14 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 
 	next.BankInflightTransCounts[s.bankID]--
 
-	done := memprotocol.WriteDoneRsp{}
-	done.ID = s.cache.comp.NewID()
-	done.Src = s.cache.topPort().AsRemote()
-	done.Dst = trans.WriteMeta.Src
-	done.RspTo = trans.WriteMeta.ID
-	done.TrafficBytes = 4
-	done.TrafficClass = "memprotocol.WriteDoneRsp"
+	done := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+		ID:           s.cache.comp.NewID(),
+		Src:          s.cache.topPort().AsRemote(),
+		Dst:          trans.WriteMeta.Src,
+		RspTo:        trans.WriteMeta.ID,
+		TrafficBytes: 4,
+		TrafficClass: "memprotocol.WriteDoneRsp"}
+
 	s.cache.topPort().Send(done)
 
 	s.finishBank(trans)

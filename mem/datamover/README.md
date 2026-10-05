@@ -48,14 +48,12 @@ and write transfer sizes.
 type Comp = ticking.Component[Spec, state, Resources, Ports, middlewares]
 
 type DataMoveReq struct {
-    messaging.MsgMeta
     SrcAddress, DstAddress uint64
     ByteSize               uint64
     SrcSide, DstSide       DataMovePort // "inside" or "outside"
 }
 
 type DataMoveRsp struct {
-    messaging.MsgMeta
 }
 ```
 

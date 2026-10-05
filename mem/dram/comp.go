@@ -355,13 +355,13 @@ type pendingCompletion struct {
 
 // transactionState is a serializable representation of a Transaction.
 type transactionState struct {
-	ID              uint64               `json:"id"`
-	HasRead         bool                 `json:"has_read"`
-	HasWrite        bool                 `json:"has_write"`
-	ReadMsg         memprotocol.ReadReq  `json:"read_msg"`
-	WriteMsg        memprotocol.WriteReq `json:"write_msg"`
-	SubTransactions []subTransState      `json:"sub_transactions"`
-	ArrivalTick     uint64               `json:"arrival_tick"`
+	ID              uint64          `json:"id"`
+	HasRead         bool            `json:"has_read"`
+	HasWrite        bool            `json:"has_write"`
+	ReadMsg         messaging.Msg   `json:"read_msg"`
+	WriteMsg        messaging.Msg   `json:"write_msg"`
+	SubTransactions []subTransState `json:"sub_transactions"`
+	ArrivalTick     uint64          `json:"arrival_tick"`
 }
 
 // commandState is a serializable representation of a Command.
@@ -450,17 +450,17 @@ func isTransactionRead(t *transactionState) bool {
 // transactionGlobalAddress returns the address being accessed.
 func transactionGlobalAddress(t *transactionState) uint64 {
 	if t.HasRead {
-		return t.ReadMsg.Address
+		return t.ReadMsg.Payload.(memprotocol.ReadReq).Address
 	}
-	return t.WriteMsg.Address
+	return t.WriteMsg.Payload.(memprotocol.WriteReq).Address
 }
 
 // transactionAccessByteSize returns number of bytes being accessed.
 func transactionAccessByteSize(t *transactionState) uint64 {
 	if t.HasRead {
-		return t.ReadMsg.AccessByteSize
+		return t.ReadMsg.Payload.(memprotocol.ReadReq).AccessByteSize
 	}
-	return uint64(len(t.WriteMsg.Data))
+	return uint64(len(t.WriteMsg.Payload.(memprotocol.WriteReq).Data))
 }
 
 // initBankStatesFlat creates initial bank states for all banks (all closed).

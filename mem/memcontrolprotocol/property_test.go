@@ -92,22 +92,24 @@ func (f *fuzzer) collect() {
 }
 
 func (f *fuzzer) handleWorkloadRsp(out messaging.Msg) {
-	rspTo := out.Meta().RspTo
+	rspTo := out.RspTo
 	req, ok := f.pending[rspTo]
 	if !ok {
-		f.t.Fatalf("response %T for unknown request id %d", out, rspTo)
+		f.t.Fatalf("response %T for unknown request id %d", out.Payload, rspTo)
 	}
 
-	switch r := out.(type) {
+	switch out.Payload.(type) {
 	case memprotocol.DataReadyRsp:
-		if !bytes.Equal(r.Data, f.model[req.addr]) {
+		r := out
+
+		if !bytes.Equal(r.Payload.(memprotocol.DataReadyRsp).Data, f.model[req.addr]) {
 			f.t.Fatalf("read %#x = %v, want %v",
-				req.addr, r.Data, f.model[req.addr])
+				req.addr, r.Payload.(memprotocol.DataReadyRsp).Data, f.model[req.addr])
 		}
 	case memprotocol.WriteDoneRsp:
 		// model[addr] was set to the written value at issue time.
 	default:
-		f.t.Fatalf("unexpected workload response %T", out)
+		f.t.Fatalf("unexpected workload response %T", out.Payload)
 	}
 
 	delete(f.pending, rspTo)
@@ -115,7 +117,8 @@ func (f *fuzzer) handleWorkloadRsp(out messaging.Msg) {
 }
 
 func (f *fuzzer) handleControlRsp(out messaging.Msg) {
-	rsp, ok := out.(memcontrolprotocol.Rsp)
+	_, ok := out.Payload.(memcontrolprotocol.Rsp)
+	rsp := out
 	if !ok {
 		f.t.Fatalf("non-ControlRsp %T on control port", out)
 	}
@@ -123,16 +126,17 @@ func (f *fuzzer) handleControlRsp(out messaging.Msg) {
 		f.t.Fatalf("control ack for unknown request id %d", rsp.RspTo)
 	}
 	delete(f.ctrlIDs, rsp.RspTo)
-	if !rsp.Success {
-		f.t.Fatalf("control %v failed unexpectedly: %q", rsp.Command, rsp.Error)
+	if !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		payload := rsp.Payload.(memcontrolprotocol.Rsp)
+		f.t.Fatalf("control %v failed unexpectedly: %q", payload.Command, payload.Error)
 	}
-	if rsp.Command == memcontrolprotocol.CmdDrain && !f.cacheQuiescent() {
+	if rsp.Payload.(memcontrolprotocol.Rsp).Command == memcontrolprotocol.CmdDrain && !f.cacheQuiescent() {
 		f.t.Fatalf("Drain acked but cache is not quiescent")
 	}
 
 	// Track the lifecycle state from acks (not optimistically): Drain is
 	// async, so the cache is only paused once its ack arrives.
-	switch rsp.Command {
+	switch rsp.Payload.(memcontrolprotocol.Rsp).Command {
 	case memcontrolprotocol.CmdPause, memcontrolprotocol.CmdDrain:
 		f.paused = true
 	case memcontrolprotocol.CmdEnable, memcontrolprotocol.CmdReset:
@@ -184,11 +188,12 @@ func (f *fuzzer) issueWrite() {
 		byte(f.rng.Intn(256)), byte(f.rng.Intn(256)),
 		byte(f.rng.Intn(256)), byte(f.rng.Intn(256)),
 	}
-	req := memprotocol.WriteReq{Address: addr, Data: data}
-	req.ID = f.h.cache.NewID()
-	req.Src = f.h.agent
-	req.Dst = f.h.top.AsRemote()
-	req.TrafficClass = "memprotocol.WriteReq"
+	req := messaging.Msg{Payload: memprotocol.WriteReq{Address: addr, Data: data},
+		ID:           f.h.cache.NewID(),
+		Src:          f.h.agent,
+		Dst:          f.h.top.AsRemote(),
+		TrafficClass: "memprotocol.WriteReq"}
+
 	f.h.top.Deliver(req)
 
 	f.busy[addr] = true
@@ -201,11 +206,12 @@ func (f *fuzzer) issueRead() {
 	if !ok {
 		return
 	}
-	req := memprotocol.ReadReq{Address: addr, AccessByteSize: 4}
-	req.ID = f.h.cache.NewID()
-	req.Src = f.h.agent
-	req.Dst = f.h.top.AsRemote()
-	req.TrafficClass = "memprotocol.ReadReq"
+	req := messaging.Msg{Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: 4},
+		ID:           f.h.cache.NewID(),
+		Src:          f.h.agent,
+		Dst:          f.h.top.AsRemote(),
+		TrafficClass: "memprotocol.ReadReq"}
+
 	f.h.top.Deliver(req)
 
 	f.busy[addr] = true
@@ -213,11 +219,12 @@ func (f *fuzzer) issueRead() {
 }
 
 func (f *fuzzer) issueControl(cmd memcontrolprotocol.Command) {
-	req := memcontrolprotocol.Req{Command: cmd}
-	req.ID = f.h.cache.NewID()
-	req.Src = f.h.agent
-	req.Dst = f.h.ctrl.AsRemote()
-	req.TrafficClass = "memcontrolprotocol.Req"
+	req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
+		ID:           f.h.cache.NewID(),
+		Src:          f.h.agent,
+		Dst:          f.h.ctrl.AsRemote(),
+		TrafficClass: "memcontrolprotocol.Req"}
+
 	f.h.ctrl.Deliver(req)
 	f.ctrlIDs[req.ID] = cmd
 }

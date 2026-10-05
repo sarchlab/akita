@@ -119,13 +119,14 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 		tracing.CollectIncomingBufferTrace(topPort)
 	})
 
-	makeRead := func(addr uint64) memprotocol.ReadReq {
-		req := memprotocol.ReadReq{Address: addr, AccessByteSize: 4}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Agent")
-		req.Dst = topPort.AsRemote()
-		req.TrafficBytes = 12
-		req.TrafficClass = "memprotocol.ReadReq"
+	makeRead := func(addr uint64) messaging.Msg {
+		req := messaging.Msg{Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: 4},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("Agent"),
+			Dst:          topPort.AsRemote(),
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		return req
 	}
 
@@ -135,7 +136,7 @@ var _ = Describe("SimpleBankedMemory admission milestones", func() {
 		topPort.Deliver(req)
 
 		spec := memComp.Spec
-		bankID := selectBank(spec, bankSelectionAddress(spec, req.Address))
+		bankID := selectBank(spec, bankSelectionAddress(spec, req.Payload.(memprotocol.ReadReq).Address))
 
 		// One tick runs dispatchFromTopPort, which admits the request: the
 		// buffer task's bank admission milestone is emitted just before
@@ -211,21 +212,22 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 		data := []byte{1, 2, 3, 4}
 		storage.Write(0x40, data)
 
-		read := memprotocol.ReadReq{Address: 0x40, AccessByteSize: 4}
-		read.ID = sim.NewID()
-		read.Src = agent.port.AsRemote()
-		read.Dst = topPort.AsRemote()
-		read.TrafficBytes = 12
-		read.TrafficClass = "memprotocol.ReadReq"
+		read := messaging.Msg{Payload: memprotocol.ReadReq{Address: 0x40, AccessByteSize: 4},
+			ID:           sim.NewID(),
+			Src:          agent.port.AsRemote(),
+			Dst:          topPort.AsRemote(),
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
 
 		agent.send(read)
 		conn.transfer()
 		drive()
 
 		Expect(agent.received).To(HaveLen(1))
-		rsp, ok := agent.received[0].(memprotocol.DataReadyRsp)
+		_, ok := agent.received[0].Payload.(memprotocol.DataReadyRsp)
+		rsp := agent.received[0]
 		Expect(ok).To(BeTrue())
-		Expect(rsp.Data).To(Equal(data))
+		Expect(rsp.Payload.(memprotocol.DataReadyRsp).Data).To(Equal(data))
 
 		reqInID := rec.taskID("req_in")
 		Expect(reqInID).ToNot(BeZero())
@@ -248,14 +250,15 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 
 	It("attributes the bank-pipeline traversal as work on the write "+
 		"req_in", func() {
-		write := memprotocol.WriteReq{
+		write := messaging.Msg{Payload: memprotocol.WriteReq{
 			Address: 0x80,
 			Data:    []byte{9, 8, 7, 6},
-		}
-		write.ID = sim.NewID()
-		write.Src = agent.port.AsRemote()
-		write.Dst = topPort.AsRemote()
-		write.TrafficBytes = len(write.Data) + 12
+		},
+			ID:  sim.NewID(),
+			Src: agent.port.AsRemote(),
+			Dst: topPort.AsRemote()}
+
+		write.TrafficBytes = len(write.Payload.(memprotocol.WriteReq).Data) + 12
 		write.TrafficClass = "memprotocol.WriteReq"
 
 		agent.send(write)
@@ -263,7 +266,7 @@ var _ = Describe("SimpleBankedMemory pipeline-traversal milestones", func() {
 		drive()
 
 		Expect(agent.received).To(HaveLen(1))
-		_, ok := agent.received[0].(memprotocol.WriteDoneRsp)
+		_, ok := agent.received[0].Payload.(memprotocol.WriteDoneRsp)
 		Expect(ok).To(BeTrue())
 
 		reqInID := rec.taskID("req_in")

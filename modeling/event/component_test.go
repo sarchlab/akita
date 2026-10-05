@@ -67,7 +67,7 @@ func (m *delayMW) Handle(e timing.Event) bool {
 
 			m.comp.Schedule(doneEvent{
 				EventBase: m.comp.MakeEventBase(e.Time() + m.comp.Spec.Latency),
-				ReqID:     msg.Meta().ID,
+				ReqID:     msg.ID,
 			})
 		}
 	case doneEvent:
@@ -88,7 +88,6 @@ var Definition = event.Definition[Spec, State, modeling.None, Ports, Middlewares
 }
 
 type req struct {
-	messaging.MsgMeta
 }
 
 func build(sim timing.Simulation, spec Spec) *Comp {
@@ -107,8 +106,8 @@ func TestRecvAndScheduledEventsReachTheMiddlewares(t *testing.T) {
 	sim := newSim()
 	c := build(sim, Definition.DefaultSpec)
 
-	c.Ports.In.Deliver(req{messaging.MsgMeta{ID: 1}})
-	c.Ports.In.Deliver(req{messaging.MsgMeta{ID: 2}})
+	c.Ports.In.Deliver(messaging.Msg{ID: 1, Payload: req{}})
+	c.Ports.In.Deliver(messaging.Msg{ID: 2, Payload: req{}})
 
 	if err := sim.Engine().Run(); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -177,3 +176,5 @@ func TestCheckpointRoundTrip(t *testing.T) {
 		t.Errorf("LoadCheckpoint into a different Spec succeeded, want an error")
 	}
 }
+
+var _ = messaging.DefineProtocol(messaging.RoleDef{Name: "peer", Sends: []any{req{}}})

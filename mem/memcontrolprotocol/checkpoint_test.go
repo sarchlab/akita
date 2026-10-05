@@ -133,17 +133,18 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 func (h *cacheOverDRAM) write(t *testing.T, addr uint64, data []byte) {
 	t.Helper()
 
-	req := memprotocol.WriteReq{Address: addr, Data: data}
-	req.ID = h.cache.NewID()
-	req.Src = h.agent
-	req.Dst = h.top.AsRemote()
-	req.TrafficClass = "memprotocol.WriteReq"
+	req := messaging.Msg{Payload: memprotocol.WriteReq{Address: addr, Data: data},
+		ID:           h.cache.NewID(),
+		Src:          h.agent,
+		Dst:          h.top.AsRemote(),
+		TrafficClass: "memprotocol.WriteReq"}
+
 	h.top.Deliver(req)
 
 	for range 4096 {
 		h.tick()
 		if out, ok := h.top.RetrieveOutgoing(); ok {
-			if _, ok := out.(memprotocol.WriteDoneRsp); ok {
+			if _, ok := out.Payload.(memprotocol.WriteDoneRsp); ok {
 				return
 			}
 		}
@@ -156,17 +157,18 @@ func (h *cacheOverDRAM) write(t *testing.T, addr uint64, data []byte) {
 func (h *cacheOverDRAM) read(t *testing.T, addr uint64, size uint64) []byte {
 	t.Helper()
 
-	req := memprotocol.ReadReq{Address: addr, AccessByteSize: size}
-	req.ID = h.cache.NewID()
-	req.Src = h.agent
-	req.Dst = h.top.AsRemote()
-	req.TrafficClass = "memprotocol.ReadReq"
+	req := messaging.Msg{Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: size},
+		ID:           h.cache.NewID(),
+		Src:          h.agent,
+		Dst:          h.top.AsRemote(),
+		TrafficClass: "memprotocol.ReadReq"}
+
 	h.top.Deliver(req)
 
 	for range 4096 {
 		h.tick()
 		if out, ok := h.top.RetrieveOutgoing(); ok {
-			if rsp, ok := out.(memprotocol.DataReadyRsp); ok {
+			if rsp, ok := out.Payload.(memprotocol.DataReadyRsp); ok {
 				return rsp.Data
 			}
 		}
@@ -176,26 +178,27 @@ func (h *cacheOverDRAM) read(t *testing.T, addr uint64, size uint64) []byte {
 }
 
 // control issues a control verb and ticks until its ack, returning it.
-func (h *cacheOverDRAM) control(t *testing.T, cmd memcontrolprotocol.Command) memcontrolprotocol.Rsp {
+func (h *cacheOverDRAM) control(t *testing.T, cmd memcontrolprotocol.Command) messaging.Msg {
 	t.Helper()
 
-	req := memcontrolprotocol.Req{Command: cmd}
-	req.ID = h.cache.NewID()
-	req.Src = h.agent
-	req.Dst = h.ctrl.AsRemote()
-	req.TrafficClass = "memcontrolprotocol.Req"
+	req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
+		ID:           h.cache.NewID(),
+		Src:          h.agent,
+		Dst:          h.ctrl.AsRemote(),
+		TrafficClass: "memcontrolprotocol.Req"}
+
 	h.ctrl.Deliver(req)
 
 	for range 4096 {
 		h.tick()
 		if out, ok := h.ctrl.RetrieveOutgoing(); ok {
-			if rsp, ok := out.(memcontrolprotocol.Rsp); ok && rsp.Command == cmd {
-				return rsp
+			if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.Command == cmd {
+				return out
 			}
 		}
 	}
 	t.Fatalf("control verb %v never acked", cmd)
-	return memcontrolprotocol.Rsp{}
+	return messaging.Msg{Payload: memcontrolprotocol.Rsp{}}
 }
 
 func TestCheckpoint_DrainFlushReset_PersistsAndServesCorrectData(t *testing.T) {
@@ -213,11 +216,11 @@ func TestCheckpoint_DrainFlushReset_PersistsAndServesCorrectData(t *testing.T) {
 	}
 
 	// Quiesce, then persist all dirty data to the backing memory.
-	if rsp := h.control(t, memcontrolprotocol.CmdDrain); !rsp.Success {
-		t.Fatalf("Drain failed: %q", rsp.Error)
+	if rsp := h.control(t, memcontrolprotocol.CmdDrain); !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		t.Fatalf("Drain failed: %q", rsp.Payload.(memcontrolprotocol.Rsp).Error)
 	}
-	if rsp := h.control(t, memcontrolprotocol.CmdFlush); !rsp.Success {
-		t.Fatalf("Flush failed: %q", rsp.Error)
+	if rsp := h.control(t, memcontrolprotocol.CmdFlush); !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		t.Fatalf("Flush failed: %q", rsp.Payload.(memcontrolprotocol.Rsp).Error)
 	}
 
 	// Guarantee 1: after Drain+Flush the backing memory is a complete,
@@ -231,8 +234,8 @@ func TestCheckpoint_DrainFlushReset_PersistsAndServesCorrectData(t *testing.T) {
 	}
 
 	// Reset to a clean slate and confirm the directory is actually empty.
-	if rsp := h.control(t, memcontrolprotocol.CmdReset); !rsp.Success {
-		t.Fatalf("Reset failed: %q", rsp.Error)
+	if rsp := h.control(t, memcontrolprotocol.CmdReset); !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		t.Fatalf("Reset failed: %q", rsp.Payload.(memcontrolprotocol.Rsp).Error)
 	}
 	for si := range h.cache.State.DirectoryState.Sets {
 		for _, b := range h.cache.State.DirectoryState.Sets[si].Blocks {
@@ -268,17 +271,17 @@ func TestFlush_DoesNotStrandTransactions_AllowingLaterDrain(t *testing.T) {
 	}
 
 	// Pause, then Flush every dirty block back to the backing memory.
-	if rsp := h.control(t, memcontrolprotocol.CmdPause); !rsp.Success {
-		t.Fatalf("Pause failed: %q", rsp.Error)
+	if rsp := h.control(t, memcontrolprotocol.CmdPause); !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		t.Fatalf("Pause failed: %q", rsp.Payload.(memcontrolprotocol.Rsp).Error)
 	}
-	if rsp := h.control(t, memcontrolprotocol.CmdFlush); !rsp.Success {
-		t.Fatalf("Flush failed: %q", rsp.Error)
+	if rsp := h.control(t, memcontrolprotocol.CmdFlush); !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		t.Fatalf("Flush failed: %q", rsp.Payload.(memcontrolprotocol.Rsp).Error)
 	}
 
 	// Resume and run a fresh workload so the following Drain has real work
 	// in addition to whatever the flush left behind.
-	if rsp := h.control(t, memcontrolprotocol.CmdEnable); !rsp.Success {
-		t.Fatalf("Enable failed: %q", rsp.Error)
+	if rsp := h.control(t, memcontrolprotocol.CmdEnable); !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		t.Fatalf("Enable failed: %q", rsp.Payload.(memcontrolprotocol.Rsp).Error)
 	}
 	for i := range n {
 		h.write(t, uint64(i)*cpBlockSize, []byte{byte(i), 4, 5, 6})
@@ -287,8 +290,8 @@ func TestFlush_DoesNotStrandTransactions_AllowingLaterDrain(t *testing.T) {
 	// The regression: with flush transactions stranded in the table the
 	// cache could never reach quiescence, so this Drain hung (control()
 	// would fail "never acked"). It must ack now.
-	if rsp := h.control(t, memcontrolprotocol.CmdDrain); !rsp.Success {
-		t.Fatalf("Drain after Flush failed: %q", rsp.Error)
+	if rsp := h.control(t, memcontrolprotocol.CmdDrain); !rsp.Payload.(memcontrolprotocol.Rsp).Success {
+		t.Fatalf("Drain after Flush failed: %q", rsp.Payload.(memcontrolprotocol.Rsp).Error)
 	}
 }
 
@@ -302,38 +305,40 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 
 	// A read miss makes the cache issue a fetch out the Bottom port. Tick only
 	// the cache (no ferry) and capture that fetch so it stays "outstanding".
-	read := memprotocol.ReadReq{Address: 0, AccessByteSize: 4}
-	read.ID = h.cache.NewID()
-	read.Src = h.agent
-	read.Dst = h.top.AsRemote()
-	read.TrafficClass = "memprotocol.ReadReq"
+	read := messaging.Msg{Payload: memprotocol.ReadReq{Address: 0, AccessByteSize: 4},
+		ID:           h.cache.NewID(),
+		Src:          h.agent,
+		Dst:          h.top.AsRemote(),
+		TrafficClass: "memprotocol.ReadReq"}
+
 	h.top.Deliver(read)
 
-	var fetch memprotocol.ReadReq
-	gotFetch := false
-	for i := 0; i < 4096 && !gotFetch; i++ {
+	var fetch messaging.Msg
+	for i := 0; i < 4096 && fetch.ID == 0; i++ {
 		modelingtest.Tick(h.cache)
 		if out, ok := h.bottom.RetrieveOutgoing(); ok {
-			fetch, gotFetch = out.(memprotocol.ReadReq)
+			fetch = out
+			_ = out.Payload.(memprotocol.ReadReq)
 		}
 	}
-	if !gotFetch {
+	if fetch.ID == 0 {
 		t.Fatal("cache never issued a bottom fetch")
 	}
 
 	// Reset while the fetch is outstanding (this clears the inflight indices).
-	rst := memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset}
-	rst.ID = h.cache.NewID()
-	rst.Src = h.agent
-	rst.Dst = h.ctrl.AsRemote()
-	rst.TrafficClass = "memcontrolprotocol.Req"
+	rst := messaging.Msg{Payload: memcontrolprotocol.Req{Command: memcontrolprotocol.CmdReset},
+		ID:           h.cache.NewID(),
+		Src:          h.agent,
+		Dst:          h.ctrl.AsRemote(),
+		TrafficClass: "memcontrolprotocol.Req"}
+
 	h.ctrl.Deliver(rst)
 	acked := false
 	for i := 0; i < 64 && !acked; i++ {
 		modelingtest.Tick(h.cache)
 		if out, ok := h.ctrl.RetrieveOutgoing(); ok {
-			if rsp, ok := out.(memcontrolprotocol.Rsp); ok &&
-				rsp.Command == memcontrolprotocol.CmdReset {
+			if rsp, ok := out.Payload.(memcontrolprotocol.Rsp); ok && rsp.
+				Command == memcontrolprotocol.CmdReset {
 				acked = true
 			}
 		}
@@ -343,12 +348,13 @@ func TestReset_DropsOrphanedBottomResponse(t *testing.T) {
 	}
 
 	// The lower memory's now-orphaned response arrives after the reset.
-	rsp := memprotocol.DataReadyRsp{Data: make([]byte, cpBlockSize)}
-	rsp.ID = h.cache.NewID()
-	rsp.Src = h.dramTop.AsRemote()
-	rsp.Dst = h.bottom.AsRemote()
-	rsp.RspTo = fetch.ID
-	rsp.TrafficClass = "memprotocol.DataReadyRsp"
+	rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: make([]byte, cpBlockSize)},
+		ID:           h.cache.NewID(),
+		Src:          h.dramTop.AsRemote(),
+		Dst:          h.bottom.AsRemote(),
+		RspTo:        fetch.ID,
+		TrafficClass: "memprotocol.DataReadyRsp"}
+
 	h.bottom.Deliver(rsp)
 
 	// Processing the orphan must not panic; it is simply dropped.

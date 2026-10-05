@@ -29,20 +29,22 @@ func (p *topParser) Tick() bool {
 		ID: p.cache.comp.NewID(),
 	}
 
-	switch msg := msg.(type) {
+	switch content := msg.Payload.(type) {
 	case memprotocol.ReadReq:
+
 		trans.HasRead = true
-		trans.ReadMeta = msg.MsgMeta
-		trans.ReadAddress = msg.Address
-		trans.ReadAccessByteSize = msg.AccessByteSize
-		trans.ReadPID = msg.PID
+		trans.ReadMeta = msg
+		trans.ReadAddress = content.Address
+		trans.ReadAccessByteSize = content.AccessByteSize
+		trans.ReadPID = content.PID
 	case memprotocol.WriteReq:
+
 		trans.HasWrite = true
-		trans.WriteMeta = msg.MsgMeta
-		trans.WriteAddress = msg.Address
-		trans.WriteData = msg.Data
-		trans.WriteDirtyMask = msg.DirtyMask
-		trans.WritePID = msg.PID
+		trans.WriteMeta = msg
+		trans.WriteAddress = content.Address
+		trans.WriteData = content.Data
+		trans.WriteDirtyMask = content.DirtyMask
+		trans.WritePID = content.PID
 	}
 
 	idx := next.allocTransaction(trans)

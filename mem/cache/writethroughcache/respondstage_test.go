@@ -38,21 +38,22 @@ var _ = Describe("Respond Stage", func() {
 	// fillOutgoing pre-fills topPort's single outgoing slot so the next
 	// CanSend returns false, simulating a busy port.
 	fillOutgoing := func() {
-		dummy := memprotocol.DataReadyRsp{}
-		dummy.Src = topPort.AsRemote()
-		dummy.Dst = messaging.RemotePort("SomeSrc")
-		dummy.TrafficClass = "rsp"
+		dummy := messaging.Msg{Payload: memprotocol.DataReadyRsp{},
+			Src:          topPort.AsRemote(),
+			Dst:          messaging.RemotePort("SomeSrc"),
+			TrafficClass: "rsp"}
+
 		Expect(topPort.CanSend()).To(BeTrue())
 		topPort.Send(dummy)
 	}
 
 	Context("read", func() {
-		var readMeta messaging.MsgMeta
+		var readMeta messaging.Msg
 
 		BeforeEach(func() {
 			next := &mw.comp.State
 
-			readMeta = messaging.MsgMeta{
+			readMeta = messaging.Msg{
 				ID:           mw.comp.NewID(),
 				Src:          "SomeSrc",
 				TrafficBytes: 12,
@@ -92,19 +93,19 @@ var _ = Describe("Respond Stage", func() {
 			Expect(next.Transactions[0].Removed).To(BeTrue())
 
 			out, _ := topPort.RetrieveOutgoing()
-			dr := out.(memprotocol.DataReadyRsp)
+			dr := out
 			Expect(dr.RspTo).To(Equal(readMeta.ID))
-			Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
+			Expect(dr.Payload.(memprotocol.DataReadyRsp).Data).To(Equal([]byte{1, 2, 3, 4}))
 		})
 	})
 
 	Context("write", func() {
-		var writeMeta messaging.MsgMeta
+		var writeMeta messaging.Msg
 
 		BeforeEach(func() {
 			next := &mw.comp.State
 
-			writeMeta = messaging.MsgMeta{
+			writeMeta = messaging.Msg{
 				ID:           mw.comp.NewID(),
 				Src:          "SomeSrc",
 				TrafficBytes: 12,
@@ -142,7 +143,7 @@ var _ = Describe("Respond Stage", func() {
 			Expect(next.Transactions[0].Removed).To(BeTrue())
 
 			out, _ := topPort.RetrieveOutgoing()
-			Expect(out.Meta().RspTo).To(Equal(writeMeta.ID))
+			Expect(out.RspTo).To(Equal(writeMeta.ID))
 		})
 	})
 

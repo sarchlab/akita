@@ -144,23 +144,25 @@ var _ = Describe("Address Translator milestones", func() {
 		tracing.CollectIncomingBufferTrace(topPort)
 	})
 
-	makeRead := func(addr uint64) memprotocol.ReadReq {
-		req := memprotocol.ReadReq{Address: addr, AccessByteSize: 4}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Agent")
-		req.Dst = topPort.AsRemote()
-		req.TrafficBytes = 12
-		req.TrafficClass = "memprotocol.ReadReq"
+	makeRead := func(addr uint64) messaging.Msg {
+		req := messaging.Msg{Payload: memprotocol.ReadReq{Address: addr, AccessByteSize: 4},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("Agent"),
+			Dst:          topPort.AsRemote(),
+			TrafficBytes: 12,
+			TrafficClass: "memprotocol.ReadReq"}
+
 		return req
 	}
 
-	makeWrite := func(addr uint64, data []byte) memprotocol.WriteReq {
-		req := memprotocol.WriteReq{Address: addr, Data: data}
-		req.ID = sim.NewID()
-		req.Src = messaging.RemotePort("Agent")
-		req.Dst = topPort.AsRemote()
-		req.TrafficBytes = len(data) + 12
-		req.TrafficClass = "memprotocol.WriteReq"
+	makeWrite := func(addr uint64, data []byte) messaging.Msg {
+		req := messaging.Msg{Payload: memprotocol.WriteReq{Address: addr, Data: data},
+			ID:           sim.NewID(),
+			Src:          messaging.RemotePort("Agent"),
+			Dst:          topPort.AsRemote(),
+			TrafficBytes: len(data) + 12,
+			TrafficClass: "memprotocol.WriteReq"}
+
 		return req
 	}
 
@@ -170,7 +172,7 @@ var _ = Describe("Address Translator milestones", func() {
 	// and reply upstream (respond). bottomRsp builds the bottom-side response
 	// given the translated request's ID.
 	driveRoundTrip := func(
-		req memprotocol.AccessReq,
+		req messaging.Msg,
 		bottomRsp func(rspTo uint64) messaging.Msg,
 	) {
 		topPort.Deliver(req)
@@ -179,12 +181,13 @@ var _ = Describe("Address Translator milestones", func() {
 		transReqID := at.State.Transactions[0].TranslationReqID
 		translationPort.RetrieveOutgoing()
 
-		transRsp := vmprotocol.TranslationRsp{
+		transRsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 			Page: vm.Page{PID: 1, VAddr: 0x10000, PAddr: 0x20000},
-		}
-		transRsp.ID = sim.NewID()
-		transRsp.RspTo = transReqID
-		transRsp.TrafficClass = "vmprotocol.TranslationRsp"
+		},
+			ID:           sim.NewID(),
+			RspTo:        transReqID,
+			TrafficClass: "vmprotocol.TranslationRsp"}
+
 		translationPort.Deliver(transRsp)
 		Expect(rpMW.parseTranslation()).To(BeTrue())
 
@@ -199,10 +202,11 @@ var _ = Describe("Address Translator milestones", func() {
 
 	It("splits admission (buffer task) from processing (req_in) for a read", func() {
 		driveRoundTrip(makeRead(0x10040), func(rspTo uint64) messaging.Msg {
-			rsp := memprotocol.DataReadyRsp{Data: []byte{1, 2, 3, 4}}
-			rsp.ID = sim.NewID()
-			rsp.RspTo = rspTo
-			rsp.TrafficClass = "memprotocol.DataReadyRsp"
+			rsp := messaging.Msg{Payload: memprotocol.DataReadyRsp{Data: []byte{1, 2, 3, 4}},
+				ID:           sim.NewID(),
+				RspTo:        rspTo,
+				TrafficClass: "memprotocol.DataReadyRsp"}
+
 			return rsp
 		})
 
@@ -242,10 +246,11 @@ var _ = Describe("Address Translator milestones", func() {
 		driveRoundTrip(
 			makeWrite(0x10040, []byte{1, 2, 3, 4}),
 			func(rspTo uint64) messaging.Msg {
-				rsp := memprotocol.WriteDoneRsp{}
-				rsp.ID = sim.NewID()
-				rsp.RspTo = rspTo
-				rsp.TrafficClass = "memprotocol.WriteDoneRsp"
+				rsp := messaging.Msg{Payload: memprotocol.WriteDoneRsp{},
+					ID:           sim.NewID(),
+					RspTo:        rspTo,
+					TrafficClass: "memprotocol.WriteDoneRsp"}
+
 				return rsp
 			},
 		)
@@ -284,12 +289,13 @@ var _ = Describe("Address Translator milestones", func() {
 			},
 		}
 
-		transRsp := vmprotocol.TranslationRsp{
+		transRsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 			Page: vm.Page{PID: 1, VAddr: 0x10000, PAddr: 0x20000},
-		}
-		transRsp.ID = sim.NewID()
-		transRsp.RspTo = transReq1ID
-		transRsp.TrafficClass = "vmprotocol.TranslationRsp"
+		},
+			ID:           sim.NewID(),
+			RspTo:        transReq1ID,
+			TrafficClass: "vmprotocol.TranslationRsp"}
+
 		translationPort.Deliver(transRsp)
 
 		Expect(rpMW.parseTranslation()).To(BeTrue())

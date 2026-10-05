@@ -75,41 +75,43 @@ func (c *fakeComp) Handle(_ timing.Event) {
 
 	if c.pending == nil {
 		if msg, ok := port.PeekIncoming(); ok {
-			if req, ok := msg.(memcontrolprotocol.Req); ok {
+			if _, ok := msg.Payload.(memcontrolprotocol.Req); ok {
 				port.RetrieveIncoming()
-				c.handleReq(port, req)
+				c.handleReq(port, msg)
 			}
 		}
 	}
 }
 
-func (c *fakeComp) handleReq(port messaging.Port, req memcontrolprotocol.Req) {
-	if !c.matrix.Supports(req.Command) {
+func (c *fakeComp) handleReq(port messaging.Port, req messaging.Msg) {
+	request := req.Payload.(memcontrolprotocol.Req)
+
+	if !c.matrix.Supports(request.Command) {
 		c.respond(port, req, false, memcontrolprotocol.ErrUnsupported)
 		return
 	}
 
 	// Conditional verbs are only legal while paused or drained.
-	if (req.Command == memcontrolprotocol.CmdInvalidate || req.Command == memcontrolprotocol.CmdFlush) &&
+	if (request.Command == memcontrolprotocol.CmdInvalidate || request.Command == memcontrolprotocol.CmdFlush) &&
 		!c.paused {
 		c.respond(port, req, false, memcontrolprotocol.ErrMustBePausedOrDrained)
 		return
 	}
 
-	switch req.Command {
+	switch request.Command {
 	case memcontrolprotocol.CmdPause:
 		c.paused = true
 	case memcontrolprotocol.CmdEnable, memcontrolprotocol.CmdReset:
 		c.paused = false
 	}
 
-	if memcontrolprotocol.IsSyncVerb(req.Command) {
+	if memcontrolprotocol.IsSyncVerb(request.Command) {
 		c.respond(port, req, true, "")
 		return
 	}
 
 	c.pending = &pendingReq{
-		cmd:       req.Command,
+		cmd:       request.Command,
 		src:       req.Src,
 		id:        req.ID,
 		ticksLeft: c.asyncDelay,
@@ -118,12 +120,12 @@ func (c *fakeComp) handleReq(port messaging.Port, req memcontrolprotocol.Req) {
 
 func (c *fakeComp) respond(
 	port messaging.Port,
-	req memcontrolprotocol.Req,
+	req messaging.Msg,
 	success bool,
 	errStr string,
 ) {
 	if port.CanSend() {
-		port.Send(c.makeRsp(req.Command, req.Src, req.ID, success, errStr))
+		port.Send(c.makeRsp(req.Payload.(memcontrolprotocol.Req).Command, req.Src, req.ID, success, errStr))
 	}
 }
 
@@ -133,18 +135,19 @@ func (c *fakeComp) makeRsp(
 	rspTo uint64,
 	success bool,
 	errStr string,
-) memcontrolprotocol.Rsp {
+) messaging.Msg {
 	port := c.control
-	rsp := memcontrolprotocol.Rsp{
+	rsp := messaging.Msg{Payload: memcontrolprotocol.Rsp{
 		Command: cmd,
 		Success: success,
 		Error:   errStr,
-	}
-	rsp.ID = c.sim.NewID()
-	rsp.Src = port.AsRemote()
-	rsp.Dst = dst
-	rsp.RspTo = rspTo
-	rsp.TrafficClass = "memcontrolprotocol.Rsp"
+	},
+		ID:           c.sim.NewID(),
+		Src:          port.AsRemote(),
+		Dst:          dst,
+		RspTo:        rspTo,
+		TrafficClass: "memcontrolprotocol.Rsp"}
+
 	return rsp
 }
 

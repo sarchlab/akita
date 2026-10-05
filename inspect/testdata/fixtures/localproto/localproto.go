@@ -17,9 +17,9 @@ import (
 // Protocol is a local protocol carrying memprotocol's messages.
 var Protocol = messaging.DefineProtocol(
 	messaging.RoleDef{Name: "producer",
-		Sends: []messaging.Msg{memprotocol.ReadReq{}}},
+		Sends: []any{memprotocol.ReadReq{}}},
 	messaging.RoleDef{Name: "consumer",
-		Sends: []messaging.Msg{memprotocol.DataReadyRsp{}}},
+		Sends: []any{memprotocol.DataReadyRsp{}}},
 )
 
 // Spec configures the component.

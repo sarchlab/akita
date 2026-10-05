@@ -165,7 +165,7 @@ func AddMilestone(domain NamedHookable, m Milestone) {
 
 // MsgIDAtReceiver returns the receiver-side task ID for the message at the
 // given domain, generating one if needed. The ID is held in a tracing-local
-// registry keyed by (domain, msg.Meta().ID), so the message itself is never
+// registry keyed by (domain, msg.ID), so the message itself is never
 // mutated. When the domain has no hooks the receiver-side ID is unused, so
 // this returns 0 without touching the registry — that avoids accumulating
 // entries in simulations that never enable tracing.
@@ -192,7 +192,7 @@ func ForgetMsgIDAtReceiver(msgID uint64, domain NamedHookable) {
 
 // MsgIDAtIncomingBuffer returns the task ID of the buffer task that tracks a
 // message's residency in the receiving port's incoming buffer. The ID lives in
-// a tracing-local registry keyed by (domain, msg.Meta().ID), so the port hook
+// a tracing-local registry keyed by (domain, msg.ID), so the port hook
 // that opens the task and the component that adds admission milestones to it
 // derive the same ID without mutating the message. When the domain has no
 // hooks the ID is unused, so this returns 0 without touching the registry.
@@ -218,7 +218,7 @@ func ForgetMsgIDAtIncomingBuffer(msgID uint64, domain NamedHookable) {
 
 // MsgIDAtOutgoingBuffer returns the task ID of the buffer task that tracks a
 // message's residency in the sending port's outgoing buffer. The ID lives in a
-// tracing-local registry keyed by (domain, msg.Meta().ID), so the port hook
+// tracing-local registry keyed by (domain, msg.ID), so the port hook
 // that opens the task and the one that closes it derive the same ID without
 // mutating the message. When the domain has no hooks the ID is unused, so this
 // returns 0 without touching the registry.
@@ -256,7 +256,7 @@ func TraceReqInitiate(
 	}
 
 	StartTask(domain, TaskStart{
-		ID:       msg.Meta().ID,
+		ID:       msg.ID,
 		ParentID: taskParentID,
 		Kind:     ReqOutTaskKind,
 		What:     msgTypeName(msg),
@@ -277,7 +277,7 @@ func TraceReqReceive(
 
 	StartTask(domain, TaskStart{
 		ID:       MsgIDAtReceiver(msg, domain),
-		ParentID: msg.Meta().ID,
+		ParentID: msg.ID,
 		Kind:     ReqInTaskKind,
 		What:     msgTypeName(msg),
 		Detail:   msg,
@@ -308,7 +308,7 @@ func TraceReqFinalize(
 		return
 	}
 
-	EndTask(domain, TaskEnd{ID: msg.Meta().ID})
+	EndTask(domain, TaskEnd{ID: msg.ID})
 }
 
 // EndReqInOnReset ends the receiver-side (req_in) task for an in-flight request
@@ -351,14 +351,15 @@ func EndTaskOnReset(domain NamedHookable, taskID uint64) {
 	EndTask(domain, TaskEnd{ID: taskID})
 }
 
-// msgTypeName returns the Go type name of the message's underlying type,
-// transparently unwrapping pointers so both value- and pointer-typed
-// implementations of [messaging.Msg] yield a non-empty name.
+// msgTypeName returns the payload type name. Metadata-only messages are
+// recorded as "metadata" so traces distinguish them from protocol traffic.
 func msgTypeName(msg messaging.Msg) string {
-	t := reflect.TypeOf(msg)
-	if t.Kind() == reflect.Pointer {
-		t = t.Elem()
+	t := reflect.TypeOf(msg.Payload)
+	if t == nil {
+		return "metadata"
 	}
-
-	return t.Name()
+	if name := t.Name(); name != "" {
+		return name
+	}
+	return t.String()
 }

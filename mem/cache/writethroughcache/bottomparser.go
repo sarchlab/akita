@@ -19,12 +19,10 @@ type bottomParser struct {
 // meta recovers the same ID. Mirrors directory.reqInTaskID.
 func (p *bottomParser) reqInTaskID(trans *transactionState) uint64 {
 	if trans.HasRead {
-		return tracing.MsgIDAtReceiver(
-			memprotocol.ReadReq{MsgMeta: trans.ReadMeta}, p.cache.comp)
+		return tracing.MsgIDAtReceiver(trans.ReadMeta, p.cache.comp)
 	}
 
-	return tracing.MsgIDAtReceiver(
-		memprotocol.WriteReq{MsgMeta: trans.WriteMeta}, p.cache.comp)
+	return tracing.MsgIDAtReceiver(trans.WriteMeta, p.cache.comp)
 }
 
 // chargeFillDataMilestone records the data dependency at fill-response arrival
@@ -48,7 +46,7 @@ func (p *bottomParser) Tick() bool {
 		return false
 	}
 
-	switch itemI.(type) {
+	switch itemI.Payload.(type) {
 	case memprotocol.WriteDoneRsp:
 		return p.processDoneRsp(itemI)
 	case memprotocol.DataReadyRsp:
@@ -60,7 +58,7 @@ func (p *bottomParser) Tick() bool {
 
 func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 	next := &p.cache.comp.State
-	transIdx := p.findTransactionByWriteToBottomID(msg.Meta().RspTo)
+	transIdx := p.findTransactionByWriteToBottomID(msg.RspTo)
 	if transIdx < 0 {
 		p.cache.bottomPort().RetrieveIncoming()
 		return true
@@ -84,13 +82,8 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 
 	p.cache.bottomPort().RetrieveIncoming()
 
-	// Reconstruct writeToBottom for tracing
-	writeToBottom := memprotocol.WriteReq{
-		MsgMeta:   trans.WriteToBottomMeta,
-		Data:      trans.WriteToBottomData,
-		DirtyMask: trans.WriteToBottomDirtyMask,
-		PID:       trans.WriteToBottomPID,
-	}
+	// Trace the original request to lower memory.
+	writeToBottom := trans.WriteToBottomMeta
 	tracing.TraceReqFinalize(p.cache.comp, writeToBottom)
 
 	return true
@@ -98,7 +91,7 @@ func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
 
 func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 	next := &p.cache.comp.State
-	transIdx := p.findTransactionByReadToBottomID(msg.Meta().RspTo)
+	transIdx := p.findTransactionByReadToBottomID(msg.RspTo)
 	if transIdx < 0 {
 		p.cache.bottomPort().RetrieveIncoming()
 		return true
@@ -115,8 +108,8 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 	addr := trans.Address()
 	spec := p.cache.comp.Spec
 	cachelineID := (addr >> spec.Log2BlockSize) << spec.Log2BlockSize
-	drMsg := msg.(memprotocol.DataReadyRsp)
-	data := drMsg.Data
+	drMsg := msg
+	data := drMsg.Payload.(memprotocol.DataReadyRsp).Data
 	dirtyMask := make([]bool, 1<<spec.Log2BlockSize)
 
 	entryIdx, found := cache.MSHRQuery(&next.MSHRState, pid, cachelineID)
@@ -151,11 +144,8 @@ func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
 
 	p.cache.bottomPort().RetrieveIncoming()
 
-	// Reconstruct readToBottom for tracing
-	readToBottom := memprotocol.ReadReq{
-		MsgMeta: trans.ReadToBottomMeta,
-		PID:     trans.ReadToBottomPID,
-	}
+	// Trace the original request to lower memory.
+	readToBottom := trans.ReadToBottomMeta
 	tracing.TraceReqFinalize(p.cache.comp, readToBottom)
 
 	return true

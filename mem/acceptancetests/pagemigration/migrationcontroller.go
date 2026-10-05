@@ -373,11 +373,12 @@ func (m *migMW) runControlPhase(
 			break
 		}
 
-		req := memcontrolprotocol.Req{Command: cmd}
-		req.ID = m.ctrl.NewID()
-		req.Src = m.ctrlPort().AsRemote()
-		req.Dst = targets[state.SendCursor]
-		req.TrafficClass = "memcontrolprotocol.Req"
+		req := messaging.Msg{Payload: memcontrolprotocol.Req{Command: cmd},
+			ID:           m.ctrl.NewID(),
+			Src:          m.ctrlPort().AsRemote(),
+			Dst:          targets[state.SendCursor],
+			TrafficClass: "memcontrolprotocol.Req"}
+
 		m.ctrlPort().Send(req)
 
 		// Open a req_out task under the current phase so the receiver's req_in
@@ -407,15 +408,15 @@ func (m *migMW) processAcks() bool {
 		if !ok {
 			break
 		}
-
-		rsp, ok := msgI.(memcontrolprotocol.Rsp)
+		_, ok = msgI.Payload.(memcontrolprotocol.Rsp)
+		rsp := msgI
 		if !ok {
-			log.Panicf("migration: unexpected control msg %T", msgI)
+			log.Panicf("migration: unexpected control msg %T", msgI.Payload)
 		}
 
-		if !rsp.Success {
+		if !rsp.Payload.(memcontrolprotocol.Rsp).Success {
 			log.Panicf("migration: control command %d failed: %s",
-				rsp.Command, rsp.Error)
+				rsp.Payload.(memcontrolprotocol.Rsp).Command, rsp.Payload.(memcontrolprotocol.Rsp).Error)
 		}
 
 		// Close the req_out task opened for this command (keyed by request ID).
@@ -441,17 +442,18 @@ func (m *migMW) tickCopying() bool {
 		return false
 	}
 
-	req := datamoverprotocol.DataMoveReq{
+	req := messaging.Msg{Payload: datamoverprotocol.DataMoveReq{
 		SrcAddress: state.SrcAddr,
 		DstAddress: state.DstAddr,
 		ByteSize:   pageSize,
 		SrcSide:    "inside",
 		DstSide:    "outside",
-	}
-	req.ID = m.ctrl.NewID()
-	req.Src = m.moverPort().AsRemote()
-	req.Dst = m.res.MoverDst
-	req.TrafficClass = "datamoverprotocol.DataMoveReq"
+	},
+		ID:           m.ctrl.NewID(),
+		Src:          m.moverPort().AsRemote(),
+		Dst:          m.res.MoverDst,
+		TrafficClass: "datamoverprotocol.DataMoveReq"}
+
 	m.moverPort().Send(req)
 
 	// Open a req_out task under the copy phase so the data mover's req_in task
@@ -476,10 +478,10 @@ func (m *migMW) processMoveRsp() bool {
 	if !ok {
 		return false
 	}
-
-	rsp, ok := msgI.(datamoverprotocol.DataMoveRsp)
+	_, ok = msgI.Payload.(datamoverprotocol.DataMoveRsp)
+	rsp := msgI
 	if !ok {
-		log.Panicf("migration: unexpected mover msg %T", msgI)
+		log.Panicf("migration: unexpected mover msg %T", msgI.Payload)
 	}
 
 	state := &m.ctrl.State

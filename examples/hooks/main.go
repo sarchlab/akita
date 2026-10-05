@@ -21,12 +21,10 @@ import (
 // --- Messages ---
 
 type pingReq struct {
-	messaging.MsgMeta
 	SeqID int
 }
 
 type pingRsp struct {
-	messaging.MsgMeta
 	SeqID int
 }
 
@@ -96,28 +94,22 @@ func (m *agentMW) send() bool {
 
 	if len(s.Pending) > 0 && port.CanSend() {
 		p := s.Pending[0]
-		port.Send(pingRsp{
-			MsgMeta: messaging.MsgMeta{
-				ID:    m.comp.NewID(),
-				Src:   port.AsRemote(),
-				Dst:   p.Dst,
-				RspTo: p.ReqID,
-			},
-			SeqID: p.SeqID,
-		})
+		port.Send(messaging.Msg{ID: m.comp.NewID(),
+			Src:   port.AsRemote(),
+			Dst:   p.Dst,
+			RspTo: p.ReqID, Payload: pingRsp{
+				SeqID: p.SeqID,
+			}})
 		s.Pending = s.Pending[1:]
 		progress = true
 	}
 
 	if s.NextSeqID < spec.NumPings && port.CanSend() {
-		port.Send(pingReq{
-			MsgMeta: messaging.MsgMeta{
-				ID:  m.comp.NewID(),
-				Src: port.AsRemote(),
-				Dst: spec.PingDst,
-			},
-			SeqID: s.NextSeqID,
-		})
+		port.Send(messaging.Msg{ID: m.comp.NewID(),
+			Src: port.AsRemote(),
+			Dst: spec.PingDst, Payload: pingReq{
+				SeqID: s.NextSeqID,
+			}})
 		s.NextSeqID++
 		progress = true
 	}
@@ -132,11 +124,11 @@ func (m *agentMW) recv() bool {
 		return false
 	}
 
-	if req, ok := msgI.(pingReq); ok {
+	if req, ok := msgI.Payload.(pingReq); ok {
 		m.comp.State.Pending = append(m.comp.State.Pending, pendingRsp{
 			SeqID: req.SeqID,
-			ReqID: req.ID,
-			Dst:   req.Src,
+			ReqID: msgI.ID,
+			Dst:   msgI.Src,
 		})
 	}
 
@@ -164,13 +156,20 @@ type msgHook struct {
 }
 
 func (h *msgHook) Func(ctx hooking.HookCtx) {
+	switch ctx.Pos {
+	case messaging.HookPosPortMsgSend, messaging.HookPosPortMsgRecvd:
+		// These positions carry messages. Ignore other hook positions.
+	default:
+		return
+	}
+
 	msg := ctx.Item.(messaging.Msg)
 
 	switch ctx.Pos {
 	case messaging.HookPosPortMsgSend:
-		fmt.Printf("[msg]   %s sends %T\n", h.agent, msg)
+		fmt.Printf("[msg]   %s sends %T\n", h.agent, msg.Payload)
 	case messaging.HookPosPortMsgRecvd:
-		fmt.Printf("[msg]   %s recvd %T\n", h.agent, msg)
+		fmt.Printf("[msg]   %s recvd %T\n", h.agent, msg.Payload)
 	}
 }
 
@@ -209,3 +208,5 @@ func main() {
 		panic(err)
 	}
 }
+
+var _ = messaging.DefineProtocol(messaging.RoleDef{Name: "peer", Sends: []any{pingReq{}, pingRsp{}}})

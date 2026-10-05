@@ -153,7 +153,7 @@ func (ds *directoryStage) handleReadMSHRHit(
 	ds.popDirPostBuf()
 
 	tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-		TaskID: tracing.MsgIDAtReceiver(&trans.ReadMeta, ds.cache.comp),
+		TaskID: tracing.MsgIDAtReceiver(trans.ReadMeta, ds.cache.comp),
 		What:   "read-mshr-hit",
 	})
 
@@ -172,7 +172,7 @@ func (ds *directoryStage) handleReadHit(
 	}
 
 	tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-		TaskID: tracing.MsgIDAtReceiver(&trans.ReadMeta, ds.cache.comp),
+		TaskID: tracing.MsgIDAtReceiver(trans.ReadMeta, ds.cache.comp),
 		What:   "read-hit",
 	})
 
@@ -203,7 +203,7 @@ func (ds *directoryStage) handleReadMiss(transIdx int, trans *transactionState) 
 		ok := ds.evict(transIdx, trans, victimSetID, victimWayID)
 		if ok {
 			tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-				TaskID: tracing.MsgIDAtReceiver(&trans.ReadMeta, ds.cache.comp),
+				TaskID: tracing.MsgIDAtReceiver(trans.ReadMeta, ds.cache.comp),
 				What:   "read-miss",
 			})
 		}
@@ -214,7 +214,7 @@ func (ds *directoryStage) handleReadMiss(transIdx int, trans *transactionState) 
 	ok := ds.fetch(transIdx, trans, victimSetID, victimWayID)
 	if ok {
 		tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-			TaskID: tracing.MsgIDAtReceiver(&trans.ReadMeta, ds.cache.comp),
+			TaskID: tracing.MsgIDAtReceiver(trans.ReadMeta, ds.cache.comp),
 			What:   "read-miss",
 		})
 	}
@@ -233,7 +233,7 @@ func (ds *directoryStage) doWrite(transIdx int, trans *transactionState) bool {
 		ok := ds.doWriteMSHRHit(transIdx, trans, mshrIdx)
 		if ok {
 			tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-				TaskID: tracing.MsgIDAtReceiver(&trans.WriteMeta, ds.cache.comp),
+				TaskID: tracing.MsgIDAtReceiver(trans.WriteMeta, ds.cache.comp),
 				What:   "write-mshr-hit",
 			})
 		}
@@ -249,7 +249,7 @@ func (ds *directoryStage) doWrite(transIdx int, trans *transactionState) bool {
 		ok := ds.doWriteHit(transIdx, trans, setID, wayID)
 		if ok {
 			tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-				TaskID: tracing.MsgIDAtReceiver(&trans.WriteMeta, ds.cache.comp),
+				TaskID: tracing.MsgIDAtReceiver(trans.WriteMeta, ds.cache.comp),
 				What:   "write-hit",
 			})
 		}
@@ -260,7 +260,7 @@ func (ds *directoryStage) doWrite(transIdx int, trans *transactionState) bool {
 	ok := ds.doWriteMiss(transIdx, trans)
 	if ok {
 		tracing.AddTaskTag(ds.cache.comp, tracing.TaskTag{
-			TaskID: tracing.MsgIDAtReceiver(&trans.WriteMeta, ds.cache.comp),
+			TaskID: tracing.MsgIDAtReceiver(trans.WriteMeta, ds.cache.comp),
 			What:   "write-miss",
 		})
 	}
@@ -594,10 +594,10 @@ func (ds *directoryStage) transAddrPIDReqMeta(
 	trans *transactionState,
 ) (uint64, vm.PID, messaging.Msg) {
 	if trans.HasRead {
-		return trans.ReadAddress, trans.ReadPID, &trans.ReadMeta
+		return trans.ReadAddress, trans.ReadPID, trans.ReadMeta
 	}
 
-	return trans.WriteAddress, trans.WritePID, &trans.WriteMeta
+	return trans.WriteAddress, trans.WritePID, trans.WriteMeta
 }
 
 func (ds *directoryStage) updateBlockForFetch(

@@ -136,15 +136,17 @@ var _ = Describe("GMMU milestones", func() {
 		tracing.CollectIncomingBufferTrace(bottomPort)
 	})
 
-	makeReq := func(vAddr uint64) vmprotocol.TranslationReq {
-		req := vmprotocol.TranslationReq{}
-		req.ID = sim.NewID()
-		req.Src = agentPort
-		req.Dst = topPort.AsRemote()
-		req.PID = 1
-		req.VAddr = vAddr
-		req.DeviceID = 0
-		req.TrafficClass = "vmprotocol.TranslationReq"
+	makeReq := func(vAddr uint64) messaging.Msg {
+		req := messaging.Msg{Payload: vmprotocol.TranslationReq{
+			PID:      1,
+			VAddr:    vAddr,
+			DeviceID: 0},
+			ID:  sim.NewID(),
+			Src: agentPort,
+			Dst: topPort.AsRemote(),
+
+			TrafficClass: "vmprotocol.TranslationReq"}
+
 		return req
 	}
 
@@ -205,14 +207,15 @@ var _ = Describe("GMMU milestones", func() {
 			remoteReqID: walking,
 		}
 
-		rsp := vmprotocol.TranslationRsp{
+		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{
 			Page: vm.Page{PID: 1, VAddr: 0x1000, PAddr: 0x2000},
-		}
-		rsp.ID = sim.NewID()
-		rsp.Src = lowModulePort
-		rsp.Dst = bottomPort.AsRemote()
-		rsp.RspTo = remoteReqID
-		rsp.TrafficClass = "vmprotocol.TranslationRsp"
+		},
+			ID:           sim.NewID(),
+			Src:          lowModulePort,
+			Dst:          bottomPort.AsRemote(),
+			RspTo:        remoteReqID,
+			TrafficClass: "vmprotocol.TranslationRsp"}
+
 		bottomPort.Deliver(rsp)
 
 		Expect(respond.fetchFromBottom()).To(BeTrue())
@@ -283,7 +286,7 @@ var _ = Describe("GMMU milestones", func() {
 
 		reqI, _ := bottomPort.RetrieveOutgoing()
 		Expect(reqI).ToNot(BeNil())
-		downstream := reqI.(vmprotocol.TranslationReq)
+		downstream := reqI
 
 		reqInID := rec.taskID("req_in")
 		Expect(reqInID).ToNot(BeZero())
@@ -295,12 +298,13 @@ var _ = Describe("GMMU milestones", func() {
 		Expect(reqOut.ParentID).To(Equal(reqInID))
 
 		// Deliver the remote response.
-		rsp := vmprotocol.TranslationRsp{Page: page}
-		rsp.ID = sim.NewID()
-		rsp.Src = lowModulePort
-		rsp.Dst = bottomPort.AsRemote()
-		rsp.RspTo = downstream.ID
-		rsp.TrafficClass = "vmprotocol.TranslationRsp"
+		rsp := messaging.Msg{Payload: vmprotocol.TranslationRsp{Page: page},
+			ID:           sim.NewID(),
+			Src:          lowModulePort,
+			Dst:          bottomPort.AsRemote(),
+			RspTo:        downstream.ID,
+			TrafficClass: "vmprotocol.TranslationRsp"}
+
 		bottomPort.Deliver(rsp)
 
 		// Tick: fetchFromBottom forwards upstream and finalizes the walk.
