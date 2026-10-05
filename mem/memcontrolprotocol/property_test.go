@@ -95,7 +95,7 @@ func (f *fuzzer) handleWorkloadRsp(out messaging.Msg) {
 	rspTo := out.RspTo
 	req, ok := f.pending[rspTo]
 	if !ok {
-		f.t.Fatalf("response %T for unknown request id %d", out, rspTo)
+		f.t.Fatalf("response %T for unknown request id %d", out.Payload, rspTo)
 	}
 
 	switch out.Payload.(type) {
@@ -109,7 +109,7 @@ func (f *fuzzer) handleWorkloadRsp(out messaging.Msg) {
 	case memprotocol.WriteDoneRsp:
 		// model[addr] was set to the written value at issue time.
 	default:
-		f.t.Fatalf("unexpected workload response %T", out)
+		f.t.Fatalf("unexpected workload response %T", out.Payload)
 	}
 
 	delete(f.pending, rspTo)

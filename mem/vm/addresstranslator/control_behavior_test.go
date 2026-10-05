@@ -117,11 +117,11 @@ var _ = Describe("Address Translator control behavior", func() {
 				ReqFromTopID:    fromTop.ID,
 				ReqFromTopSrc:   fromTop.Src,
 				ReqFromTopDst:   fromTop.Dst,
-				ReqFromTopType:  fmt.Sprintf("%T", fromTop),
+				ReqFromTopType:  fmt.Sprintf("%T", fromTop.Payload),
 				ReqToBottomID:   toBottom.ID,
 				ReqToBottomSrc:  toBottom.Src,
 				ReqToBottomDst:  toBottom.Dst,
-				ReqToBottomType: fmt.Sprintf("%T", toBottom),
+				ReqToBottomType: fmt.Sprintf("%T", toBottom.Payload),
 			})
 		return toBottom.ID
 	}

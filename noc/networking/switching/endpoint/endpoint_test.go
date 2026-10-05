@@ -1,8 +1,6 @@
 package endpoint
 
 import (
-	"reflect"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -132,14 +130,14 @@ var _ = Describe("End Point", func() {
 			NumFlitInMsg: 2,
 			Msg:          msg},
 			ID:           sim.NewID(),
-			TrafficClass: reflect.TypeOf(msg).String()}
+			TrafficClass: "packetization.Flit"}
 
 		flit1 := messaging.Msg{Payload: packetization.Flit{
 			SeqID:        1,
 			NumFlitInMsg: 2,
 			Msg:          msg},
 			ID:           sim.NewID(),
-			TrafficClass: reflect.TypeOf(msg).String()}
+			TrafficClass: "packetization.Flit"}
 
 		networkPort.EXPECT().PeekIncoming().Return(flit0, true)
 		networkPort.EXPECT().PeekIncoming().Return(flit1, true)

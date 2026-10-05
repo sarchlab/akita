@@ -1,8 +1,6 @@
 package switches
 
 import (
-	"reflect"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -111,7 +109,7 @@ var _ = Describe("Switch", func() {
 			Msg: msg},
 			ID:           sim.NewID(),
 			Dst:          port1.AsRemote(),
-			TrafficClass: reflect.TypeOf(msg).String()}
+			TrafficClass: "packetization.Flit"}
 
 		port1.EXPECT().PeekIncoming().Return(flit, true)
 		port1.EXPECT().RetrieveIncoming()
@@ -136,7 +134,7 @@ var _ = Describe("Switch", func() {
 			Msg: msg},
 			ID:           sim.NewID(),
 			Dst:          port1.AsRemote(),
-			TrafficClass: reflect.TypeOf(msg).String()}
+			TrafficClass: "packetization.Flit"}
 
 		// Fill pipeline so it can't accept
 		next := &sw.State
@@ -176,7 +174,7 @@ var _ = Describe("Switch", func() {
 		flit := messaging.Msg{Payload: packetization.Flit{
 			Msg: msg},
 			ID:           sim.NewID(),
-			TrafficClass: reflect.TypeOf(msg).String()}
+			TrafficClass: "packetization.Flit"}
 
 		// Place item in route buffer for port1
 		next := &sw.State
@@ -205,7 +203,7 @@ var _ = Describe("Switch", func() {
 		flit := messaging.Msg{Payload: packetization.Flit{
 			Msg: msg},
 			ID:           sim.NewID(),
-			TrafficClass: reflect.TypeOf(msg).String()}
+			TrafficClass: "packetization.Flit"}
 
 		// Place item in route buffer and fill forward buffer
 		next := &sw.State
@@ -230,7 +228,7 @@ var _ = Describe("Switch", func() {
 		flit := messaging.Msg{Payload: packetization.Flit{
 			Msg: msg},
 			ID:           sim.NewID(),
-			TrafficClass: reflect.TypeOf(msg).String()}
+			TrafficClass: "packetization.Flit"}
 
 		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
 		next := &sw.State
@@ -255,7 +253,7 @@ var _ = Describe("Switch", func() {
 		flit := messaging.Msg{Payload: packetization.Flit{
 			Msg: msg},
 			ID:           sim.NewID(),
-			TrafficClass: reflect.TypeOf(msg).String()}
+			TrafficClass: "packetization.Flit"}
 
 		// Fill sendOut buffer to capacity, forward buffer targets port2
 		next := &sw.State
@@ -280,7 +278,7 @@ var _ = Describe("Switch", func() {
 		flit := messaging.Msg{Payload: packetization.Flit{
 			Msg: msg},
 			ID:           sim.NewID(),
-			TrafficClass: reflect.TypeOf(msg).String()}
+			TrafficClass: "packetization.Flit"}
 
 		// Place flit in sendOutBuffer of port2
 		next := &sw.State
@@ -307,7 +305,7 @@ var _ = Describe("Switch", func() {
 		flit := messaging.Msg{Payload: packetization.Flit{
 			Msg: msg},
 			ID:           sim.NewID(),
-			TrafficClass: reflect.TypeOf(msg).String()}
+			TrafficClass: "packetization.Flit"}
 
 		// Place flit in sendOutBuffer of port2
 		next := &sw.State
