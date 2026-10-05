@@ -27,5 +27,4 @@ func TestSimulationAttachesLiveMonitor(t *testing.T) {
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "live") {
 		t.Fatalf("live endpoint: %d %s", response.Code, response.Body.String())
 	}
-
 }
