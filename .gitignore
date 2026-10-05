@@ -28,14 +28,14 @@ __debug_bin*
 # Compiled main-package binaries dropped at the repo root by
 # `go build ./<main-pkg>/`. Each entry is a main package's leaf directory name
 # (the binary it produces). When a name also matches a root-level source
-# directory (akita, daisen2), the directory is re-included so its source stays
+# directory (akita, daisen), the directory is re-included so its source stays
 # tracked. Add new main packages here, or build with `-o`.
 /akita
 !/akita/
 !/akita/**
-/daisen2
-!/daisen2/
-!/daisen2/**
+/daisen
+!/daisen/
+!/daisen/**
 /cmd
 /debug
 /akitav5-lint

@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/modeling/ticking"
-	"github.com/sarchlab/akita/v5/modeling/wakeup"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/simulation/modeling"
+	"github.com/sarchlab/akita/v5/simulation/modeling/ticking"
+	"github.com/sarchlab/akita/v5/simulation/modeling/wakeup"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -108,7 +108,7 @@ var _ = Describe("Simulation", func() {
 	)
 
 	BeforeEach(func() {
-		simulation = MakeBuilder().WithoutMonitoring().Build()
+		simulation = MakeBuilder().Build()
 		port = testPort{name: "port"}
 		comp = testComponent{name: "comp"}
 	})
@@ -219,7 +219,6 @@ var _ = Describe("Simulation", func() {
 
 		It("should allow custom output file to be set", func() {
 			builder := MakeBuilder().
-				WithoutMonitoring().
 				WithOutputFileName("test_custom_output")
 			customSim = builder.Build()
 
@@ -232,7 +231,7 @@ var _ = Describe("Simulation", func() {
 		It("should reject an entity that has no serializer", func() {
 			// A bare component/port has no checkpoint serializer yet, so save
 			// must fail loudly and not leave an archive behind.
-			noSerializerSim := MakeBuilder().WithoutMonitoring().Build()
+			noSerializerSim := MakeBuilder().Build()
 			defer func() {
 				noSerializerSim.Terminate()
 				os.Remove("akita_sim_" + noSerializerSim.ID() + ".sqlite3")
@@ -251,7 +250,6 @@ var _ = Describe("Simulation", func() {
 
 		It("should reject checkpoints for parallel engines", func() {
 			parallelSim := MakeBuilder().
-				WithoutMonitoring().
 				WithParallelEngine().
 				Build()
 			defer func() {
@@ -345,7 +343,7 @@ var _ = Describe("Global state manager", func() {
 	var sim *Simulation
 
 	BeforeEach(func() {
-		sim = MakeBuilder().WithoutMonitoring().Build()
+		sim = MakeBuilder().Build()
 	})
 
 	AfterEach(func() {
@@ -380,7 +378,7 @@ var _ = Describe("Global state manager", func() {
 	Describe("Deterministic entity inventory", func() {
 		It("should list entities in stable registration order across rebuilds", func() {
 			build := func() []string {
-				s := MakeBuilder().WithoutMonitoring().Build()
+				s := MakeBuilder().Build()
 				defer func() {
 					s.Terminate()
 					os.Remove("akita_sim_" + s.ID() + ".sqlite3")
@@ -455,7 +453,7 @@ func advanceTo(engine *timing.SerialEngine, t timing.VTimeInPicoSec) {
 
 var _ = Describe("Checkpoint round trip", func() {
 	It("restores component state, storage, ID counter, and engine time", func() {
-		sim := MakeBuilder().WithoutMonitoring().Build()
+		sim := MakeBuilder().Build()
 		defer func() {
 			sim.Terminate()
 			os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
@@ -543,7 +541,7 @@ var resumeDef = ticking.Definition[
 }
 
 func buildResumeSim() (*Simulation, *resumeComp) {
-	sim := MakeBuilder().WithoutMonitoring().Build()
+	sim := MakeBuilder().Build()
 	return sim, resumeDef.Builder().WithSimulation(sim).Build("Worker")
 }
 
@@ -625,7 +623,7 @@ var tickCountDef = ticking.Definition[
 }
 
 func buildTickCountSim() (*Simulation, *tickCountComp) {
-	sim := MakeBuilder().WithoutMonitoring().Build()
+	sim := MakeBuilder().Build()
 	return sim, tickCountDef.Builder().WithSimulation(sim).Build("Ticker")
 }
 
@@ -702,7 +700,7 @@ var wakeDef = wakeup.Definition[wakeSpec, wakeState, modeling.None, noPorts, wak
 }
 
 func buildWakeSim() (*Simulation, *wakeComp) {
-	sim := MakeBuilder().WithoutMonitoring().Build()
+	sim := MakeBuilder().Build()
 	return sim, wakeDef.Builder().WithSimulation(sim).Build("Waker")
 }
 

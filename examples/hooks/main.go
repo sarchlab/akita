@@ -10,12 +10,12 @@ package main
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/hooking"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/simulation/hooking"
+	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/simulation/modeling"
+	"github.com/sarchlab/akita/v5/simulation/modeling/ticking"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 )
 
 // --- Messages ---

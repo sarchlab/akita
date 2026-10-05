@@ -2,8 +2,8 @@ package dram
 
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/timing"
-	"github.com/sarchlab/akita/v5/tracing"
+	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/simulation/tracing"
 )
 
 // bankTickMW drives the banks. Its timing tables, completion delays, and

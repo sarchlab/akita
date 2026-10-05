@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"github.com/sarchlab/akita/v5/datarecording"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/naming"
+	"github.com/sarchlab/akita/v5/simulation/datarecording"
+	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/simulation/naming"
 )
 
 // componentSpecTableName holds one row per component: its name, the Go type of

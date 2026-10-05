@@ -1,9 +1,36 @@
-# simulation — Top-Level Simulation Runner
+---
+slug: /simulation
+---
+
+# simulation — Simulation Framework and Runner
 
 Package `simulation` provides the top-level simulation runner for the Akita
 simulation framework. It wires together an engine, a data recorder, a visual
 tracer, and an optional monitoring server, and acts as a global inventory that
 registers every runtime object as a named entity.
+
+## Package layout
+
+The `simulation` package assembles and runs a simulation. Its subpackages
+provide independently usable building blocks:
+
+| Package | Responsibility |
+|---------|----------------|
+| `simulation/naming` | Hierarchical names |
+| `simulation/hooking` | Observation hooks |
+| `simulation/queueing` | Buffers and pipelines |
+| `simulation/timing` | Time, events, and engines |
+| `simulation/messaging` | Messages, ports, and protocols |
+| `simulation/modeling` | Component definitions and execution models |
+| `simulation/tracing` | Trace events and collectors |
+| `simulation/datarecording` | Recording simulation results |
+| `simulation/sourcefs` | Archiving and reading recorded source |
+
+These packages remain in the same Go module. Import, for example,
+`github.com/sarchlab/akita/v5/simulation/modeling/ticking`. Runtime subpackages
+use the `timing.Simulation` interface rather than importing the parent runner.
+Hardware models (`mem`, `noc`) and tools (`monitoring`, `daisen`, `inspect`)
+remain outside this directory. The runner has no dependency on either UI.
 
 ## How It Works
 
@@ -46,9 +73,10 @@ capabilities:
 ## Builder Pattern
 
 ```go
+monitor := monitoring.NewMonitor().WithPortNumber(8080)
 sim := simulation.MakeBuilder().
     WithParallelEngine().       // optional: use the parallel engine
-    WithMonitorPort(8080).      // optional: monitoring server port
+    WithMonitor(monitor).       // optional: attach live monitoring
     WithVisTracingOnStart().    // optional: start tracing immediately
     Build()
 
@@ -58,10 +86,22 @@ defer sim.Terminate()
 | Method | Description |
 |--------|-------------|
 | `WithParallelEngine()` | Use `ParallelEngine` instead of `SerialEngine` |
-| `WithoutMonitoring()` | Disable the monitoring web server |
-| `WithMonitorPort(port)` | Set the monitoring server port |
+| `WithMonitor(monitor)` | Attach an optional monitor; omitted by default |
 | `WithOutputFileName(name)` | Custom SQLite output file name |
 | `WithVisTracingOnStart()` | Enable visual tracing from time 0 |
+
+### Optional monitoring
+
+`MakeBuilder().Build()` starts no monitoring server. To enable the web UI,
+import `github.com/sarchlab/akita/v5/monitoring` and pass an instance as shown
+above. Each instance belongs to one simulation. The runner starts it after
+creating the engine, tracer, and recorder, forwards component and port
+registrations, and stops it before closing those resources in `Terminate`.
+
+A custom monitor implements `simulation.Monitor` with `Start`,
+`RegisterComponent`, `RegisterPort`, and `Stop`. Keep the concrete monitor in
+application setup when using implementation-specific features such as
+`monitor.CreateProgressBar`; `sim.Monitor()` exposes only the runtime contract.
 
 ## Usage
 

@@ -11,11 +11,12 @@ import (
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/cache/writethroughcache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
+	"github.com/sarchlab/akita/v5/simulation/messaging"
 
+	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 )
 
 var seedFlag = flag.Int64("seed", 0, "Random Seed")
@@ -29,7 +30,8 @@ var traceFlag = flag.Bool("trace", false, "Collect trace")
 func buildEnvironment(
 	seed int64,
 ) (*simulation.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
-	simBuilder := simulation.MakeBuilder()
+	monitor := monitoring.NewMonitor()
+	simBuilder := simulation.MakeBuilder().WithMonitor(monitor)
 
 	if *parallelFlag {
 		simBuilder = simBuilder.WithParallelEngine()
@@ -66,9 +68,7 @@ func buildEnvironment(
 			Mem: messaging.NewPort("MemAccessAgent.Mem", 16, 16),
 		}).
 		Build("MemAccessAgent")
-	if monitor := s.Monitor(); monitor != nil {
-		memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
-	}
+	memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
 
 	dram := idealmemcontroller.Definition.Builder().
 		WithSimulation(s).

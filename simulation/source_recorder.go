@@ -6,8 +6,8 @@ import (
 	"io/fs"
 	"sort"
 
-	"github.com/sarchlab/akita/v5/datarecording"
-	"github.com/sarchlab/akita/v5/sourcefs"
+	"github.com/sarchlab/akita/v5/simulation/datarecording"
+	"github.com/sarchlab/akita/v5/simulation/sourcefs"
 )
 
 // sourceTableName is the trace table holding recorded source archives.

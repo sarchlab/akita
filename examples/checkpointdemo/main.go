@@ -28,10 +28,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/simulation/modeling"
+	"github.com/sarchlab/akita/v5/simulation/modeling/ticking"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 )
 
 // A fixed build identity keeps the demo reproducible across separate `go run`
@@ -116,7 +116,7 @@ func main() {
 	ckpt := flag.String("ckpt", "/tmp/akita-checkpoint.tar.gz", "checkpoint path")
 	flag.Parse()
 
-	sim := simulation.MakeBuilder().WithoutMonitoring().Build()
+	sim := simulation.MakeBuilder().Build()
 	defer func() {
 		sim.Terminate()
 		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")

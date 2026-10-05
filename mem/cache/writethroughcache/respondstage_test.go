@@ -6,7 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/simulation/messaging"
 )
 
 var _ = Describe("Respond Stage", func() {

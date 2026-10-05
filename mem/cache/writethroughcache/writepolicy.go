@@ -2,7 +2,7 @@ package writethroughcache
 
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/tracing"
+	"github.com/sarchlab/akita/v5/simulation/tracing"
 )
 
 // writeTransIsReady reports whether a write transaction has met every

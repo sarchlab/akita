@@ -4,11 +4,11 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/sarchlab/akita/v5/daisen2"
+	"github.com/sarchlab/akita/v5/daisen"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
-	"github.com/sarchlab/akita/v5/tracing"
+	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/simulation/tracing"
 )
 
 type agentMiddleware struct {
@@ -16,8 +16,8 @@ type agentMiddleware struct {
 
 	// writeProgressBar and readProgressBar observe the run. CreateProgressBars
 	// attaches them after Build; they are not simulation state.
-	writeProgressBar *daisen2.ProgressBar
-	readProgressBar  *daisen2.ProgressBar
+	writeProgressBar *daisen.ProgressBar
+	readProgressBar  *daisen.ProgressBar
 }
 
 func (m *agentMiddleware) memPort() messaging.Port {

@@ -165,8 +165,8 @@ This is the primary tool for **cross-cutting instrumentation**.
 
 ```go
 import (
-    "github.com/sarchlab/akita/v5/hooking"
-    "github.com/sarchlab/akita/v5/messaging"
+    "github.com/sarchlab/akita/v5/simulation/hooking"
+    "github.com/sarchlab/akita/v5/simulation/messaging"
 )
 
 // A hook that counts inbound requests on whatever port it's attached to.

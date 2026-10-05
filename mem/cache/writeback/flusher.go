@@ -3,8 +3,8 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/tracing"
+	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/simulation/tracing"
 )
 
 // blockRef is a set+way pair referencing a block in the directory.

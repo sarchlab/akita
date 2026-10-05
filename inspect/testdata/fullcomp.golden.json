@@ -9,7 +9,7 @@
     {
       "name": "Freq",
       "json_name": "freq",
-      "type": "github.com/sarchlab/akita/v5/timing.Freq",
+      "type": "github.com/sarchlab/akita/v5/simulation/timing.Freq",
       "doc": "Freq is the clock frequency.",
       "default": 1000000000,
       "unit": "Hz"

@@ -5,16 +5,16 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/modeling/ticking"
-	"github.com/sarchlab/akita/v5/modeling/wakeup"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/simulation/modeling"
+	"github.com/sarchlab/akita/v5/simulation/modeling/ticking"
+	"github.com/sarchlab/akita/v5/simulation/modeling/wakeup"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 	"github.com/stretchr/testify/require"
 )
 
 func buildIDTestSimulation(t *testing.T, parallel bool) *Simulation {
 	t.Helper()
-	b := MakeBuilder().WithoutMonitoring().WithoutSourceRecording().
+	b := MakeBuilder().WithoutSourceRecording().
 		WithOutputFileName(filepath.Join(t.TempDir(), "simulation"))
 	if parallel {
 		b = b.WithParallelEngine()

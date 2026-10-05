@@ -63,10 +63,10 @@ const config = {
       /** @type {import('@docusaurus/plugin-content-docs').Options} */
       ({
         id: 'daisen',
-        path: '../daisen2',
+        path: '../daisen',
         routeBasePath: 'tools/daisen',
         sidebarPath: './sidebars-tools.js',
-        editUrl: 'https://github.com/sarchlab/akita/blob/main/daisen2/',
+        editUrl: 'https://github.com/sarchlab/akita/blob/main/daisen/',
         include: ['README.md'],
       }),
     ],
@@ -75,20 +75,22 @@ const config = {
       /** @type {import('@docusaurus/plugin-content-docs').Options} */
       ({
         id: 'akita-rtm',
-        path: '../monitoring2',
+        path: '../monitoring',
         routeBasePath: 'tools/akita-rtm',
         sidebarPath: './sidebars-tools.js',
-        editUrl: 'https://github.com/sarchlab/akita/blob/main/monitoring2/',
+        editUrl: 'https://github.com/sarchlab/akita/blob/main/monitoring/',
         include: ['README.md'],
       }),
     ],
-    ...['hooking', 'naming', 'timing', 'queueing', 'datarecording', 'messaging', 'modeling', 'tracing', 'simulation', 'examples', 'noc', 'mem'].map(pkg => [
+    // One docs instance owns the whole simulation tree, avoiding overlapping
+    // MDX loaders for the runner and its nested packages.
+    ...['simulation', 'examples', 'noc', 'mem'].map(pkg => [
       '@docusaurus/plugin-content-docs',
       /** @type {import('@docusaurus/plugin-content-docs').Options} */
       ({
         id: `pkg-${pkg}`,
         path: `../${pkg}`,
-        routeBasePath: `packages/${pkg}`,
+        routeBasePath: pkg === 'simulation' ? 'packages' : `packages/${pkg}`,
         sidebarPath: `./sidebars/${pkg}.js`,
         editUrl: `https://github.com/sarchlab/akita/blob/main/${pkg}/`,
         include: ['**/README.md'],
@@ -116,7 +118,7 @@ const config = {
           {
             type: 'docSidebar',
             sidebarId: 'coreGroupSidebar',
-            docsPluginId: 'pkg-hooking',
+            docsPluginId: 'pkg-simulation',
             position: 'left',
             label: 'Core',
           },

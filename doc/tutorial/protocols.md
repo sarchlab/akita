@@ -117,7 +117,7 @@ the examples — is untyped and works exactly the same.
 A port that takes messages of every protocol, such as a message sink that
 consumes whatever arrives, speaks `messaging.AnyRole`, the only role of
 `messaging.AnyProtocol`:
-`akita:"role=github.com/sarchlab/akita/v5/messaging.any"`. A port without a
+`akita:"role=github.com/sarchlab/akita/v5/simulation/messaging.any"`. A port without a
 tag declares nothing; a port with the any role declares that it speaks
 anything.
 ## One Package per Protocol

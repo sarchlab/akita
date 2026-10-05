@@ -21,7 +21,7 @@ var traceFlag = flag.Bool("trace", false,
 // Call after flag.Parse(), and call Terminate() on the returned simulation once
 // the run finishes so the recording is flushed and closed.
 func NewSimulation() *simulation.Simulation {
-	b := simulation.MakeBuilder().WithoutMonitoring()
+	b := simulation.MakeBuilder()
 
 	if *traceFlag {
 		b = b.WithVisTracingOnStart().WithOutputFileName("trace")

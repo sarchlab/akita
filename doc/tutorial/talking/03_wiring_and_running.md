@@ -61,7 +61,7 @@ Step by step:
 1. **Engine.** A serial engine for deterministic runs.
 2. **Simulation.** `NewStandaloneSimulation` supplies a lightweight context
    shared by the agents and connection, including their ID counter.
-   `simulation.MakeBuilder().Build()` adds recording, monitoring, and inventory.
+   `simulation.MakeBuilder().Build()` adds recording and inventory; attach a monitor with `WithMonitor`.
 3. **Create ports.** The system builder creates both ports with
    `messaging.NewPort`, choosing the buffer sizes (16 incoming, 16 outgoing)
    and naming each `<instance>.<field>`. Creating them before the agents

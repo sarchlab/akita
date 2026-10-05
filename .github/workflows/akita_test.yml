@@ -6,6 +6,7 @@ on:
   pull_request:
 
 jobs:
+  # Keep required check IDs stable; branch protection uses these names.
   daisen2_compile:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -16,10 +17,10 @@ jobs:
         with:
           node-version: 22.12.0
       - name: npm install
-        working-directory: ./daisen2/static
+        working-directory: ./daisen/static
         run: npm install
       - name: npm run build
-        working-directory: ./daisen2/static
+        working-directory: ./daisen/static
         run: npm run build
 
   monitoring2_compile:
@@ -32,10 +33,10 @@ jobs:
         with:
           node-version: 22.12.0
       - name: npm install
-        working-directory: ./monitoring2/static
+        working-directory: ./monitoring/static
         run: npm install
       - name: npm run build
-        working-directory: ./monitoring2/static
+        working-directory: ./monitoring/static
         run: npm run build
 
   akita_build_lint_test:

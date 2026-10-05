@@ -4,6 +4,35 @@ sidebar_position: 7
 
 # V4 → V5 Migration Guide
 
+## Simulation umbrella and tool names
+
+The runtime packages now live below `simulation/`: `naming`, `hooking`,
+`queueing`, `timing`, `messaging`, `modeling`, `tracing`, `datarecording`, and
+`sourcefs`. Change imports such as `github.com/sarchlab/akita/v5/timing` to
+`github.com/sarchlab/akita/v5/simulation/timing`; apply the same change to
+component-model subpackages and mock-generation directives. The runner's
+`github.com/sarchlab/akita/v5/simulation` import is unchanged.
+
+The live monitor is now `github.com/sarchlab/akita/v5/monitoring` and the
+visualizer is `github.com/sarchlab/akita/v5/daisen`. The old package paths are
+removed. Browser watched-property storage keys are retained so the rename
+preserves existing saved preferences.
+
+Monitoring is now explicit:
+
+```go
+monitor := monitoring.NewMonitor().WithPortNumber(8080)
+sim := simulation.MakeBuilder().WithMonitor(monitor).Build()
+defer sim.Terminate()
+```
+
+Remove `WithoutMonitoring()` calls; omitting `WithMonitor` now does that.
+Move `WithMonitorPort(port)` configuration to the monitor's
+`WithPortNumber(port)`. Keep the concrete `monitor` variable for progress-bar
+APIs; `sim.Monitor()` returns the small `simulation.Monitor` interface.
+Standalone monitor shutdown uses `Stop()`.
+
+
 This guide covers all breaking changes between Akita V4 and V5. Each section
 explains the motivation, shows before/after code, and notes pitfalls.
 

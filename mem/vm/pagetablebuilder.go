@@ -1,6 +1,6 @@
 package vm
 
-import "github.com/sarchlab/akita/v5/timing"
+import "github.com/sarchlab/akita/v5/simulation/timing"
 
 // PageTableBuilder builds PageTable resources. When wired to a simulation
 // through WithSimulation, the built page table registers itself as a resource.

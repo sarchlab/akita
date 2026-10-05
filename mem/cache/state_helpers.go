@@ -1,6 +1,6 @@
 package cache
 
-import "github.com/sarchlab/akita/v5/messaging"
+import "github.com/sarchlab/akita/v5/simulation/messaging"
 
 // BlockState is a serializable representation of a cache Block.
 type BlockState struct {

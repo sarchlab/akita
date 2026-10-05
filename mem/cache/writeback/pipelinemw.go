@@ -2,8 +2,8 @@ package writeback
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 )
 
 // pipelineMW runs the writeback cache's data pipeline. It holds only

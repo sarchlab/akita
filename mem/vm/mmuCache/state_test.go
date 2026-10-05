@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/simulation/modeling"
 )
 
 func TestValidateState(t *testing.T) {

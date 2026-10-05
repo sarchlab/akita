@@ -14,10 +14,10 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/addresstranslator"
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 )
 
 func cleanup(sim *simulation.Simulation) {
@@ -31,7 +31,7 @@ func cleanup(sim *simulation.Simulation) {
 // table. Every component, port, connection, and the page table is registered,
 // so all of it is part of the checkpoint inventory.
 func buildSim() (*simulation.Simulation, *driver) {
-	sim := simulation.MakeBuilder().WithoutMonitoring().Build()
+	sim := simulation.MakeBuilder().Build()
 
 	l1Cache, l2Cache, memCtrl := buildMemoryHierarchy(sim)
 	ioMMU, itlb, l2TLB := buildTranslationHierarchy(sim)

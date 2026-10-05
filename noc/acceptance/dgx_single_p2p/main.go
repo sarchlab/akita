@@ -8,9 +8,9 @@ import (
 	"github.com/sarchlab/akita/v5/noc/acceptance"
 	"github.com/sarchlab/akita/v5/noc/networking/nvlink"
 
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 	"github.com/tebeka/atexit"
 )
 

@@ -45,10 +45,11 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/addresstranslator"
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 )
 
 // numDevices is the number of memory devices the physical address space is
@@ -112,7 +113,8 @@ func setupTest(seed int64) (
 	sharedHierarchy,
 	*directconnection.Comp,
 ) {
-	simBuilder := simulation.MakeBuilder()
+	monitor := monitoring.NewMonitor()
+	simBuilder := simulation.MakeBuilder().WithMonitor(monitor)
 
 	if *parallelFlag {
 		simBuilder = simBuilder.WithParallelEngine()
@@ -129,6 +131,7 @@ func setupTest(seed int64) (
 	chains := make([]agentChain, *numAgentsFlag)
 	for i := 0; i < *numAgentsFlag; i++ {
 		chains[i] = buildAgentChain(s, i, shared, seed)
+		memaccessagent.CreateProgressBars(chains[i].agent, monitor.CreateProgressBar)
 	}
 
 	memConn := setupConnections(s, shared, chains)
@@ -450,9 +453,6 @@ func buildAgent(
 			Mem: newPort(name + ".Mem"),
 		}).
 		Build(name)
-	if monitor := s.Monitor(); monitor != nil {
-		memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
-	}
 
 	return agent
 }

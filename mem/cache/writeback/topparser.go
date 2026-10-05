@@ -2,7 +2,7 @@ package writeback
 
 import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/tracing"
+	"github.com/sarchlab/akita/v5/simulation/tracing"
 )
 
 type topParser struct {

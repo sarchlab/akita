@@ -1,13 +1,11 @@
 package simulation
 
 import (
-	"github.com/sarchlab/akita/v5/datarecording"
-	"github.com/sarchlab/akita/v5/hooking"
-
-	"github.com/sarchlab/akita/v5/monitoring2"
-	"github.com/sarchlab/akita/v5/naming"
-	"github.com/sarchlab/akita/v5/timing"
-	"github.com/sarchlab/akita/v5/tracing"
+	"github.com/sarchlab/akita/v5/simulation/datarecording"
+	"github.com/sarchlab/akita/v5/simulation/hooking"
+	"github.com/sarchlab/akita/v5/simulation/naming"
+	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/simulation/tracing"
 )
 
 type Simulation struct {
@@ -19,7 +17,7 @@ type Simulation struct {
 	visTracer        *tracing.DBTracer
 	metaRecorder     *metaRecorder
 	topologyRecorder *topologyRecorder
-	monitor          *monitoring2.Monitor
+	monitor          Monitor
 
 	// components and ports are kept in registration order for the topology
 	// recorder.
@@ -55,7 +53,7 @@ func (s *Simulation) DataRecorder() datarecording.DataRecorder {
 }
 
 // Monitor returns the live monitor attached to the simulation, if enabled.
-func (s *Simulation) Monitor() *monitoring2.Monitor {
+func (s *Simulation) Monitor() Monitor {
 	return s.monitor
 }
 
@@ -149,7 +147,7 @@ func (s *Simulation) RegisterResource(r naming.Named) {
 // Terminate terminates the simulation.
 func (s *Simulation) Terminate() {
 	if s.monitor != nil {
-		s.monitor.StopServer()
+		s.monitor.Stop()
 	}
 
 	if s.visTracer != nil {

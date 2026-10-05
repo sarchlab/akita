@@ -18,7 +18,7 @@ func TestSwitchArbCursorRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ck.tar.gz")
 	const buildID = "switch-test"
 
-	sim := simulation.MakeBuilder().WithoutMonitoring().Build()
+	sim := simulation.MakeBuilder().Build()
 	defer func() {
 		sim.Terminate()
 		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")

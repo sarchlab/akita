@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sarchlab/akita/v5/datarecording"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/simulation/datarecording"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 )
 
 type simulationInfo struct {

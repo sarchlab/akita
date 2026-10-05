@@ -10,11 +10,11 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/simulation/modeling/ticking"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 )
 
 const numOps = 16
@@ -213,7 +213,7 @@ func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
 // and an ideal memory controller wired over a direct connection. The connection
 // is registered so its round-robin cursor is checkpointed too.
 func buildSim() (*simulation.Simulation, *driver) {
-	sim := simulation.MakeBuilder().WithoutMonitoring().Build()
+	sim := simulation.MakeBuilder().Build()
 
 	dramSpec := idealmemcontroller.Definition.DefaultSpec
 	dramSpec.Width = 4

@@ -1,7 +1,7 @@
 package writeback
 
 import (
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/simulation/messaging"
 )
 
 func getCacheLineID(

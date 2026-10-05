@@ -5,10 +5,10 @@ package memaccessagent
 import (
 	"encoding/binary"
 
-	"github.com/sarchlab/akita/v5/daisen2"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling/ticking"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/daisen"
+	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/simulation/modeling/ticking"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 )
 
 var dumpLog = false
@@ -79,7 +79,7 @@ type MemAccessAgent = Comp
 // checkpointed. Call it after Build, like attaching a hook.
 func CreateProgressBars(
 	a *Comp,
-	createProgressBar func(name string, total uint64) *daisen2.ProgressBar,
+	createProgressBar func(name string, total uint64) *daisen.ProgressBar,
 ) {
 	if createProgressBar == nil {
 		return

@@ -4,8 +4,8 @@
 package badmiddleware
 
 import (
-	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/modeling/ticking"
+	"github.com/sarchlab/akita/v5/simulation/modeling"
+	"github.com/sarchlab/akita/v5/simulation/modeling/ticking"
 )
 
 type Spec struct{ N int }

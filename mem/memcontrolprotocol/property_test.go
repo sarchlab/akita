@@ -7,7 +7,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/simulation/messaging"
 )
 
 // This file is the Layer-4 property/fuzz test. It drives the write-back

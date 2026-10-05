@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 )
 
 // SaveCheckpoint writes a checkpoint archive for the simulation. The simulation

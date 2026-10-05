@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 )
 
 type EventPrinter struct {

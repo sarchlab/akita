@@ -9,7 +9,7 @@
     {
       "name": "Freq",
       "json_name": "freq",
-      "type": "github.com/sarchlab/akita/v5/timing.Freq",
+      "type": "github.com/sarchlab/akita/v5/simulation/timing.Freq",
       "default": 1000000000,
       "unit": "Hz"
     },
@@ -28,7 +28,7 @@
     {
       "name": "BottomUnit",
       "json_name": "bottom_unit",
-      "type": "github.com/sarchlab/akita/v5/messaging.RemotePort",
+      "type": "github.com/sarchlab/akita/v5/simulation/messaging.RemotePort",
       "doc": "BottomUnit is the remote port of the unit that the reorder buffer\nforwards requests to. The reorder buffer rewrites the Dst of every\nshadow request to this value.",
       "default": ""
     }

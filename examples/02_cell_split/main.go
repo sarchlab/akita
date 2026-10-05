@@ -5,7 +5,7 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 )
 
 var endTime = timing.VTimeInPicoSec(10_000_000_000_000) // 10 seconds in picoseconds

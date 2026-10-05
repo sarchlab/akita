@@ -18,10 +18,11 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/simulation/timing"
 )
 
 var seedFlag = flag.Int64("seed", 0, "Random Seed")
@@ -37,7 +38,8 @@ var agent *memaccessagent.MemAccessAgent
 func setupTest(
 	seed int64,
 ) (*simulation.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
-	simBuilder := simulation.MakeBuilder()
+	monitor := monitoring.NewMonitor()
+	simBuilder := simulation.MakeBuilder().WithMonitor(monitor)
 
 	if *parallelFlag {
 		simBuilder = simBuilder.WithParallelEngine()
@@ -97,9 +99,7 @@ func setupTest(
 			Mem: newPort("MemAccessAgent.Mem"),
 		}).
 		Build("MemAccessAgent")
-	if monitor := s.Monitor(); monitor != nil {
-		memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
-	}
+	memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
 
 	setupConnection(s, agent, robComp,
 		at, tlb, l2TLB, ioMMU,

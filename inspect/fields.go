@@ -18,9 +18,9 @@ import (
 // unitByType maps fully-qualified named types to the semantic unit they
 // imply.
 var unitByType = map[string]string{
-	"github.com/sarchlab/akita/v5/timing.Freq":           "Hz",
-	"github.com/sarchlab/akita/v5/timing.VTimeInSec":     "s",
-	"github.com/sarchlab/akita/v5/timing.VTimeInPicoSec": "ps",
+	"github.com/sarchlab/akita/v5/simulation/timing.Freq":           "Hz",
+	"github.com/sarchlab/akita/v5/simulation/timing.VTimeInSec":     "s",
+	"github.com/sarchlab/akita/v5/simulation/timing.VTimeInPicoSec": "ps",
 }
 
 // structFields describes the exported fields of a Spec or Resources type.

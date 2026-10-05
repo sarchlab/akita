@@ -5,18 +5,15 @@ import (
 	"maps"
 
 	"github.com/rs/xid"
-	"github.com/sarchlab/akita/v5/datarecording"
-
-	"github.com/sarchlab/akita/v5/monitoring2"
-	"github.com/sarchlab/akita/v5/timing"
-	"github.com/sarchlab/akita/v5/tracing"
+	"github.com/sarchlab/akita/v5/simulation/datarecording"
+	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/simulation/tracing"
 )
 
 // Builder can be used to build a simulation.
 type Builder struct {
 	parallelEngine    bool
-	monitorOn         bool
-	monitorPort       int
+	monitor           Monitor
 	outputFileName    string
 	visTracingOnStart bool
 	recordSource      bool
@@ -27,7 +24,6 @@ type Builder struct {
 func MakeBuilder() Builder {
 	return Builder{
 		parallelEngine: false,
-		monitorOn:      true,
 		recordSource:   true,
 	}
 }
@@ -38,21 +34,17 @@ func (b Builder) WithParallelEngine() Builder {
 	return b
 }
 
-// WithoutMonitoring sets the simulation to not use monitoring.
-func (b Builder) WithoutMonitoring() Builder {
-	b.monitorOn = false
-	return b
-}
-
 // WithOutputFileName sets the custom output file name for the data recorder.
 func (b Builder) WithOutputFileName(filename string) Builder {
 	b.outputFileName = filename
 	return b
 }
 
-// WithMonitorPort sets the port number for the monitoring server.
-func (b Builder) WithMonitorPort(port int) Builder {
-	b.monitorPort = port
+// WithMonitor attaches an optional monitor. Build starts it after the runtime
+// services are ready; Terminate stops it before closing the recording.
+// A monitor instance belongs to one simulation and must not be reused.
+func (b Builder) WithMonitor(monitor Monitor) Builder {
+	b.monitor = monitor
 	return b
 }
 
@@ -89,16 +81,8 @@ func (b Builder) WithoutSourceRecording() Builder {
 	return b
 }
 
-func (b Builder) parametersMustBeValid() {
-	if !b.monitorOn && b.monitorPort != 0 {
-		panic("monitor port cannot be set when monitoring is disabled")
-	}
-}
-
 // Build builds the simulation.
 func (b Builder) Build() *Simulation {
-	b.parametersMustBeValid()
-
 	s := b.createSimulation()
 
 	b.createDataRecorder(s)
@@ -108,7 +92,7 @@ func (b Builder) Build() *Simulation {
 	b.createSourceRecorder(s)
 	b.createTopologyRecorder(s)
 	b.createVisTracer(s)
-	b.createServer(s)
+	b.startMonitor(s)
 
 	return s
 }
@@ -184,20 +168,11 @@ func (b Builder) createVisTracer(s *Simulation) {
 	}
 }
 
-func (b Builder) createServer(s *Simulation) {
-	if !b.monitorOn {
+func (b Builder) startMonitor(s *Simulation) {
+	if b.monitor == nil {
 		return
 	}
 
-	monitor := monitoring2.NewMonitor()
-	if b.monitorPort != 0 {
-		monitor.WithPortNumber(b.monitorPort)
-	}
-
-	monitor.RegisterSimulation(s)
-	monitor.RegisterVisTracer(s.visTracer)
-	monitor.SetTraceDBPath(s.outputPath + ".sqlite3")
-	monitor.StartServer()
-
-	s.monitor = monitor
+	s.monitor = b.monitor
+	s.monitor.Start(s, s.visTracer, s.outputPath+".sqlite3")
 }
