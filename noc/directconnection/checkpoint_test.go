@@ -17,22 +17,22 @@ func TestDirectConnectionCursorRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ck.tar.gz")
 	const buildID = "conn-test"
 
-	sim := sim.MakeBuilder().Build()
+	s := sim.MakeBuilder().Build()
 	defer func() {
-		sim.Terminate()
-		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
+		s.Terminate()
+		os.Remove("akita_sim_" + s.ID() + ".sqlite3")
 	}()
 
-	conn := directconnection.MakeBuilder().WithSimulation(sim).Build("Conn")
+	conn := directconnection.MakeBuilder().WithSimulation(s).Build("Conn")
 	conn.State.NextPortID = 3
 
-	if err := sim.SaveCheckpoint(path, buildID); err != nil {
+	if err := s.SaveCheckpoint(path, buildID); err != nil {
 		t.Fatalf("SaveCheckpoint: %v", err)
 	}
 
 	conn.State.NextPortID = 99 // mutate away from the checkpoint
 
-	if err := sim.LoadCheckpoint(path, buildID); err != nil {
+	if err := s.LoadCheckpoint(path, buildID); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
 	if conn.State.NextPortID != 3 {

@@ -116,15 +116,15 @@ func main() {
 	ckpt := flag.String("ckpt", "/tmp/akita-checkpoint.tar.gz", "checkpoint path")
 	flag.Parse()
 
-	sim := sim.MakeBuilder().Build()
+	s := sim.MakeBuilder().Build()
 	defer func() {
-		sim.Terminate()
-		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
+		s.Terminate()
+		os.Remove("akita_sim_" + s.ID() + ".sqlite3")
 	}()
 
-	engine := sim.Engine().(*timing.SerialEngine)
+	engine := s.Engine().(*timing.SerialEngine)
 	worker := Definition.Builder().
-		WithSimulation(sim).
+		WithSimulation(s).
 		Build("Worker")
 
 	switch *mode {
@@ -132,7 +132,7 @@ func main() {
 		runBatch(engine, worker, batch1)
 		report("save", "phase 1 done", engine, worker)
 
-		if err := sim.SaveCheckpoint(*ckpt, buildID); err != nil {
+		if err := s.SaveCheckpoint(*ckpt, buildID); err != nil {
 			panic(err)
 		}
 		fmt.Printf("[save] checkpoint written to %s\n", *ckpt)
@@ -141,7 +141,7 @@ func main() {
 		report("save", "FINAL", engine, worker)
 
 	case "load":
-		if err := sim.LoadCheckpoint(*ckpt, buildID); err != nil {
+		if err := s.LoadCheckpoint(*ckpt, buildID); err != nil {
 			panic(err)
 		}
 		report("load", "resumed", engine, worker)

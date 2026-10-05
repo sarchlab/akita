@@ -30,8 +30,11 @@ var traceFlag = flag.Bool("trace", false, "Collect trace")
 func buildEnvironment(
 	seed int64,
 ) (*sim.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
-	monitor := monitoring.NewMonitor()
-	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
+	var monitor *monitoring.Monitor
+	simBuilder := sim.MakeBuilder().WithMonitorFactory(func(s *sim.Simulation) sim.Monitor {
+		monitor = monitoring.NewMonitor(s)
+		return monitor
+	})
 
 	if *parallelFlag {
 		simBuilder = simBuilder.WithParallelEngine()

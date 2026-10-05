@@ -12,12 +12,13 @@ import (
 
 // Builder can be used to build a simulation.
 type Builder struct {
-	parallelEngine    bool
-	monitor           Monitor
-	outputFileName    string
-	visTracingOnStart bool
-	recordSource      bool
-	sourceFSes        map[string]fs.FS
+	parallelEngine     bool
+	monitorFactory     func(*Simulation) Monitor
+	monitoringDisabled bool
+	outputFileName     string
+	visTracingOnStart  bool
+	recordSource       bool
+	sourceFSes         map[string]fs.FS
 }
 
 // MakeBuilder creates a new builder.
@@ -40,11 +41,19 @@ func (b Builder) WithOutputFileName(filename string) Builder {
 	return b
 }
 
-// WithMonitor attaches an optional monitor. Build starts it after the runtime
-// services are ready; Terminate stops it before closing the recording.
-// A monitor instance belongs to one simulation and must not be reused.
-func (b Builder) WithMonitor(monitor Monitor) Builder {
-	b.monitor = monitor
+// WithMonitorFactory sets the factory Build uses to create a fresh monitor for
+// each simulation. The factory receives the fully initialized runtime before
+// application components are registered. Without a factory, monitoring is off.
+// The factory must return a non-nil monitor bound to the supplied simulation.
+func (b Builder) WithMonitorFactory(factory func(*Simulation) Monitor) Builder {
+	b.monitorFactory = factory
+	return b
+}
+
+// WithoutMonitoring disables monitoring, even when a factory is configured.
+// Build will neither call the factory nor start a server. Tracing is unaffected.
+func (b Builder) WithoutMonitoring() Builder {
+	b.monitoringDisabled = true
 	return b
 }
 
@@ -61,7 +70,7 @@ func (b Builder) WithVisTracingOnStart() Builder {
 //
 //	//go:embed *.go cu/*.go
 //	var srcFS embed.FS
-//	sim := sim.MakeBuilder().WithSourceFS("github.com/me/mysim", srcFS)
+//	s := sim.MakeBuilder().WithSourceFS("github.com/me/mysim", srcFS)
 //
 // Source is only recorded when vis tracing is enabled (the trace is meant for
 // DaisenBot). Repeated calls add multiple roots.
@@ -169,10 +178,10 @@ func (b Builder) createVisTracer(s *Simulation) {
 }
 
 func (b Builder) startMonitor(s *Simulation) {
-	if b.monitor == nil {
+	if b.monitoringDisabled || b.monitorFactory == nil {
 		return
 	}
 
-	s.monitor = b.monitor
-	s.monitor.Start(s, s.visTracer, s.outputPath+".sqlite3")
+	s.monitor = b.monitorFactory(s)
+	s.monitor.Start()
 }

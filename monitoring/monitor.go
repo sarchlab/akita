@@ -47,7 +47,7 @@ type monitorPort = sim.Port
 var _ sim.Monitor = (*Monitor)(nil)
 
 type Monitor struct {
-	// Configuration (set before StartServer).
+	// Configuration (set before Start).
 	port       int
 	engine     timing.Engine
 	simulation timing.Simulation
@@ -55,6 +55,7 @@ type Monitor struct {
 	tracePath  string
 
 	// Internal state.
+	started          bool
 	components       []Component
 	buffers          []bufferState
 	progressBarsLock sync.Mutex
@@ -63,22 +64,29 @@ type Monitor struct {
 	fs               http.FileSystem
 }
 
-// NewMonitor creates a new Monitor with default settings. The monitor is not
-// started until StartServer() is called.
-func NewMonitor() *Monitor {
+// NewMonitor creates a monitor permanently bound to s and its recording
+// resources. The simulation owns those resources. Start begins serving HTTP;
+// construction alone does not open a listener.
+func NewMonitor(s *sim.Simulation) *Monitor {
 	return &Monitor{
+		simulation:   s,
+		engine:       s.Engine(),
+		visTracer:    s.VisTracer(),
+		tracePath:    s.TraceDBPath(),
 		fs:           static.GetAssets(),
 		progressBars: []*daisen.ProgressBar{},
 	}
 }
 
-// Start attaches the simulation services and starts live monitoring. It is
-// called by sim.Builder.WithMonitor; a monitor belongs to one simulation.
-func (m *Monitor) Start(sim timing.Simulation, tracer *tracing.DBTracer, traceDBPath string) {
-	m.RegisterSimulation(sim)
-	m.RegisterVisTracer(tracer)
-	m.SetTraceDBPath(traceDBPath)
-	m.StartServer()
+// Start starts live monitoring. sim.Builder calls it after factory construction.
+// A monitor may be started only once, including after Stop. Lifecycle methods
+// must be called sequentially by the simulation owner.
+func (m *Monitor) Start() {
+	if m.started {
+		panic("monitoring: monitor already started")
+	}
+	m.started = true
+	m.startServer()
 }
 
 // WithPortNumber sets the port number for the monitoring server. Returns the
@@ -98,12 +106,6 @@ func (m *Monitor) WithPortNumber(port int) *Monitor {
 	return m
 }
 
-// RegisterSimulation supplies the monitor's simulation and its engine.
-func (m *Monitor) RegisterSimulation(sim timing.Simulation) {
-	m.simulation = sim
-	m.engine = sim.Engine()
-}
-
 // RegisterComponent registers a component with the monitor so its internal
 // state can be inspected via the monitoring server.
 func (m *Monitor) RegisterComponent(c Component) {
@@ -118,18 +120,8 @@ func (m *Monitor) RegisterPort(p monitorPort) {
 	m.registerPortBuffers(p)
 }
 
-// RegisterVisTracer registers a visualization tracer with the monitor.
-func (m *Monitor) RegisterVisTracer(tr *tracing.DBTracer) {
-	m.visTracer = tr
-}
-
-// SetTraceDBPath sets the SQLite trace database path used for storage status.
-func (m *Monitor) SetTraceDBPath(path string) {
-	m.tracePath = path
-}
-
 // CreateProgressBar creates a new progress bar tracked by the monitor.
-// RegisterSimulation must be called first so the ID belongs to that simulation.
+// Its ID belongs to the simulation supplied at construction.
 func (m *Monitor) CreateProgressBar(name string, total uint64) *daisen.ProgressBar {
 	bar := &daisen.ProgressBar{
 		ID:    m.simulation.NewID(),
@@ -161,8 +153,8 @@ func (m *Monitor) CompleteProgressBar(pb *daisen.ProgressBar) {
 	m.progressBars = newBars
 }
 
-// StartServer initializes and starts the monitoring HTTP server.
-func (m *Monitor) StartServer() {
+// startServer initializes and starts the monitoring HTTP server.
+func (m *Monitor) startServer() {
 	// Build combined mux.
 	mux := http.NewServeMux()
 
@@ -197,7 +189,7 @@ func (m *Monitor) StartServer() {
 	fmt.Fprintf(os.Stderr,
 		"Monitoring simulation with http://localhost:%d\n", port)
 
-	m.httpServer = &http.Server{Handler: mux}
+	m.httpServer = &http.Server{Addr: listener.Addr().String(), Handler: mux}
 
 	go func() {
 		err := m.httpServer.Serve(listener)

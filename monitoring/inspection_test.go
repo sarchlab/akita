@@ -45,8 +45,7 @@ func TestMonitorSnapshotDoesNotWaitForSlowClient(t *testing.T) {
 		"parallel": timing.NewParallelEngine(),
 	} {
 		t.Run(name, func(t *testing.T) {
-			m := NewMonitor()
-			m.RegisterSimulation(modeling.NewStandaloneSimulation(e))
+			m := newTestMonitorWithSimulation(modeling.NewStandaloneSimulation(e))
 			component := newSliceFieldComponent("snapshot", []int{10, 20})
 			m.RegisterComponent(component)
 			e.RegisterHandler("model", inspectionHandler(func(timing.Event) {
@@ -106,8 +105,7 @@ func TestMonitorReportsHandlerRequestedPause(t *testing.T) {
 	if err := e.Pause(); err != nil {
 		t.Fatal(err)
 	}
-	m := NewMonitor()
-	m.RegisterSimulation(modeling.NewStandaloneSimulation(e))
+	m := newTestMonitorWithSimulation(modeling.NewStandaloneSimulation(e))
 	w := httptest.NewRecorder()
 	m.apiEngineState(w, httptest.NewRequest(http.MethodGet, "/api/engine/state", nil))
 	var state engineStateRsp
@@ -138,8 +136,7 @@ func TestMonitorReportsAllEngineStates(t *testing.T) {
 		{timing.EngineResuming, "resuming", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			m := NewMonitor()
-			m.RegisterSimulation(modeling.NewStandaloneSimulation(stateReportingEngine{state: tc.state}))
+			m := newTestMonitorWithSimulation(modeling.NewStandaloneSimulation(stateReportingEngine{state: tc.state}))
 			w := httptest.NewRecorder()
 			m.apiEngineState(w, httptest.NewRequest(http.MethodGet, "/api/engine/state", nil))
 			var response engineStateRsp

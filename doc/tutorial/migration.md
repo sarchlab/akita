@@ -4,6 +4,9 @@ sidebar_position: 7
 
 # V4 → V5 Migration Guide
 
+This guide covers all breaking changes between Akita V4 and V5. Each section
+explains the motivation, shows before/after code, and notes pitfalls.
+
 ## Simulation umbrella and tool names
 
 The runtime packages now live below `sim/`: `naming`, `hooking`,
@@ -19,27 +22,36 @@ visualizer is `github.com/sarchlab/akita/v5/daisen`. The old package paths are
 removed. Browser watched-property storage keys are retained so the rename
 preserves existing saved preferences.
 
-Monitoring is now explicit:
+**Monitoring default changed:** building a simulation no longer starts a web
+server unless a monitor factory is supplied. Downstream simulators, including
+MGPUSim, must add the factory to retain live monitoring; importing the package
+alone does not enable it. MGPUSim migration is a separate change.
 
 ```go
-monitor := monitoring.NewMonitor().WithPortNumber(8080)
-s := sim.MakeBuilder().WithMonitor(monitor).Build()
+s := sim.MakeBuilder().
+    WithMonitorFactory(func(s *sim.Simulation) sim.Monitor {
+        return monitoring.NewMonitor(s).WithPortNumber(8080)
+    }).Build()
 defer s.Terminate()
 ```
 
-Remove `WithoutMonitoring()` calls; omitting `WithMonitor` now does that.
-Move `WithMonitorPort(port)` configuration to the monitor's
-`WithPortNumber(port)`. Keep the concrete `monitor` variable for progress-bar
-APIs; `s.Monitor()` returns the small `sim.Monitor` interface.
-Standalone monitor shutdown uses `Stop()`.
+Keep `WithoutMonitoring()` for headless configurations. It overrides a factory
+and prevents both monitor construction and server startup without disabling
+tracing. Move `WithMonitorPort(port)` configuration to the monitor's
+`WithPortNumber(port)` inside the factory. Keep the concrete monitor in the
+factory's surrounding scope when using progress bars; `s.Monitor()` returns
+the small `sim.Monitor` interface, or nil when monitoring is disabled.
 
-
-This guide covers all breaking changes between Akita V4 and V5. Each section
-explains the motivation, shows before/after code, and notes pitfalls.
+`monitoring.NewMonitor(s)` now binds the simulation and recording resources at
+construction. Replace manual `RegisterSimulation`, `RegisterVisTracer`,
+`SetTraceDBPath`, and `StartServer` calls with factory construction. The runner
+owns `Start()` and `Stop()`; each monitor can be started only once.
 
 ---
 
 ## Table of Contents
+
+- [Simulation umbrella and tool names](#simulation-umbrella-and-tool-names)
 
 1. [Integer Time](#1-integer-time)
 2. [uint64 Entity IDs](#2-uint64-entity-ids)
@@ -218,7 +230,7 @@ keeps its simulation to itself and allocates IDs with `NewID()`; engines have
 no `NewID()`. For lightweight setups, create
 `modeling.NewStandaloneSimulation(engine)` once and share that instance with
 all builders. A custom tracing domain (`tracing.NamedHookable`) implements
-`NewID() uint64` from its simulation. Monitors use `RegisterSimulation(sim)`
+`NewID() uint64` from its simulation. Monitors receive the simulation through `monitoring.NewMonitor(s)`
 so progress IDs come from the same counter.
 
 ### Before / After

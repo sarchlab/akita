@@ -73,10 +73,11 @@ capabilities:
 ## Builder Pattern
 
 ```go
-monitor := monitoring.NewMonitor().WithPortNumber(8080)
 s := sim.MakeBuilder().
     WithParallelEngine().       // optional: use the parallel engine
-    WithMonitor(monitor).       // optional: attach live monitoring
+    WithMonitorFactory(func(s *sim.Simulation) sim.Monitor {
+        return monitoring.NewMonitor(s).WithPortNumber(8080)
+    }).
     WithVisTracingOnStart().    // optional: start tracing immediately
     Build()
 
@@ -86,19 +87,25 @@ defer s.Terminate()
 | Method | Description |
 |--------|-------------|
 | `WithParallelEngine()` | Use `ParallelEngine` instead of `SerialEngine` |
-| `WithMonitor(monitor)` | Attach an optional monitor; omitted by default |
+| `WithMonitorFactory(factory)` | Construct a fresh monitor for each simulation; omitted by default |
+| `WithoutMonitoring()` | Skip the factory and server startup; tracing is unaffected |
 | `WithOutputFileName(name)` | Custom SQLite output file name |
 | `WithVisTracingOnStart()` | Enable visual tracing from time 0 |
 
 ### Optional monitoring
 
 `MakeBuilder().Build()` starts no monitoring server. To enable the web UI,
-import `github.com/sarchlab/akita/v5/monitoring` and pass an instance as shown
-above. Each instance belongs to one simulation. The runner starts it after
-creating the engine, tracer, and recorder, forwards component and port
+import `github.com/sarchlab/akita/v5/monitoring` and supply a factory as shown
+above. The factory receives the initialized simulation and binds a fresh monitor
+to it. The runner calls `Start()` after construction, forwards component and port
 registrations, and stops it before closing those resources in `Terminate`.
 
-A custom monitor implements `sim.Monitor` with `Start`,
+`WithoutMonitoring()` overrides a configured factory regardless of option order.
+The visualization tracer is always constructed; tracing is enabled separately.
+Monitors can access runtime services through `Engine()`, `DataRecorder()`,
+`VisTracer()`, and `TraceDBPath()` without changing their lifecycle interface.
+
+A custom monitor implements `sim.Monitor` with `Start()`,
 `RegisterComponent`, `RegisterPort`, and `Stop`. Keep the concrete monitor in
 application setup when using implementation-specific features such as
 `monitor.CreateProgressBar`; `s.Monitor()` exposes only the runtime contract.

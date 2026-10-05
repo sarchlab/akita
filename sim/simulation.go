@@ -52,6 +52,17 @@ func (s *Simulation) DataRecorder() datarecording.DataRecorder {
 	return s.dataRecorder
 }
 
+// VisTracer returns the visualization tracer owned by the simulation.
+// The tracer exists even when monitoring and tracing are disabled.
+func (s *Simulation) VisTracer() *tracing.DBTracer {
+	return s.visTracer
+}
+
+// TraceDBPath returns the SQLite recording path, including the file extension.
+func (s *Simulation) TraceDBPath() string {
+	return s.outputPath + ".sqlite3"
+}
+
 // Monitor returns the live monitor attached to the simulation, if enabled.
 func (s *Simulation) Monitor() Monitor {
 	return s.monitor

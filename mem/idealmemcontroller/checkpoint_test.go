@@ -20,21 +20,21 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	const buildID = "test-build"
 	const payload = "persisted bytes"
 
-	sim := sim.MakeBuilder().Build()
+	s := sim.MakeBuilder().Build()
 	defer func() {
-		sim.Terminate()
-		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
+		s.Terminate()
+		os.Remove("akita_sim_" + s.ID() + ".sqlite3")
 	}()
 
 	// The storage registers itself with the simulation, so the checkpoint
 	// includes its data.
 	storage := mem.MakeStorageBuilder().
 		WithCapacity(4 * mem.KB).
-		WithSimulation(sim).
+		WithSimulation(s).
 		Build("DRAM.Storage")
 
 	dram := idealmemcontroller.Definition.Builder().
-		WithSimulation(sim).
+		WithSimulation(s).
 		WithResources(idealmemcontroller.Resources{Storage: storage}).
 		WithPorts(idealmemcontroller.Ports{
 			Top:     messaging.NewPort("DRAM.Top", 16, 16),
@@ -45,7 +45,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	storage.Write(0x40, []byte(payload))
 	dram.State.CurrentCmdID = 7
 
-	if err := sim.SaveCheckpoint(path, buildID); err != nil {
+	if err := s.SaveCheckpoint(path, buildID); err != nil {
 		t.Fatalf("SaveCheckpoint: %v", err)
 	}
 
@@ -53,7 +53,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	storage.Write(0x40, make([]byte, len(payload)))
 	dram.State.CurrentCmdID = 99
 
-	if err := sim.LoadCheckpoint(path, buildID); err != nil {
+	if err := s.LoadCheckpoint(path, buildID); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
 
