@@ -7,9 +7,11 @@ import (
 	"strings"
 	"sync"
 	"unicode"
+
+	"github.com/sarchlab/akita/v5/internal/valuecheck"
 )
 
-// A Protocol is an immutable set of message types that travel over a port,
+// A Protocol is an immutable set of payload types that travel over a port,
 // organized into roles. It is named after the package that defines it. Defining a protocol with DefineProtocol
 // registers every message type it carries with the checkpoint codec, so a
 // message type that belongs to a protocol can always be decoded when a
@@ -38,11 +40,11 @@ func (p *Protocol) Role(name string) *Role {
 		"protocol %q does not define role %q", p.name, name))
 }
 
-// Messages returns the union of all roles' sends: every message type the
-// protocol carries, each once, although more than one role may send it.
-func (p *Protocol) Messages() []Msg {
+// Messages returns payload prototypes from the union of all roles' sends. Each
+// type appears once, although more than one role may send it.
+func (p *Protocol) Messages() []any {
 	seen := map[reflect.Type]bool{}
-	msgs := make([]Msg, 0, len(p.roles)*2)
+	msgs := make([]any, 0, len(p.roles)*2)
 
 	for _, r := range p.roles {
 		for _, msg := range r.sends {
@@ -65,7 +67,7 @@ func (p *Protocol) Messages() []Msg {
 type Role struct {
 	protocol *Protocol
 	name     string
-	sends    []Msg
+	sends    []any
 }
 
 // Protocol returns the protocol this role belongs to.
@@ -78,9 +80,9 @@ func (r *Role) Name() string {
 	return r.name
 }
 
-// Sends returns the messages this role sends.
-func (r *Role) Sends() []Msg {
-	sends := make([]Msg, len(r.sends))
+// Sends returns prototypes of the payload types this role sends.
+func (r *Role) Sends() []any {
+	sends := make([]any, len(r.sends))
 	copy(sends, r.sends)
 
 	return sends
@@ -90,7 +92,7 @@ func (r *Role) Sends() []Msg {
 // DefineProtocol.
 type RoleDef struct {
 	Name  string
-	Sends []Msg
+	Sends []any
 }
 
 // protocolNames tracks every defined protocol name so a duplicate definition
@@ -108,9 +110,9 @@ var (
 //	var (
 //	    Protocol  = messaging.DefineProtocol(
 //	        messaging.RoleDef{Name: "requester",
-//	            Sends: []messaging.Msg{ReadReq{}, WriteReq{}}},
+//	            Sends: []any{ReadReq{}, WriteReq{}}},
 //	        messaging.RoleDef{Name: "responder",
-//	            Sends: []messaging.Msg{DataReadyRsp{}, WriteDoneRsp{}}},
+//	            Sends: []any{DataReadyRsp{}, WriteDoneRsp{}}},
 //	    )
 //	    Requester = Protocol.Role("requester")
 //	    Responder = Protocol.Role("responder")
@@ -120,8 +122,28 @@ var (
 // digits, '_', and '-'. DefineProtocol panics on a second protocol in the same
 // package or an invalid or duplicate role name. A message type may be sent by
 // more than one role, and may belong to more than one protocol;
-// re-registration with the codec is harmless.
+// re-registration with the codec is harmless. Payloads must be value types
+// without pointers, interfaces, channels, functions, or unsafe pointers at any
+// depth. Nested Msg values are allowed. Calling DefineProtocol after package
+// initialization panics: the payload registry is immutable during simulation.
 func DefineProtocol(roles ...RoleDef) *Protocol {
+	pcs := make([]uintptr, 32)
+	n := runtime.Callers(2, pcs)
+	frames := runtime.CallersFrames(pcs[:n])
+	initializing := false
+	for {
+		frame, more := frames.Next()
+		if frame.Function == "runtime.doInit1" {
+			initializing = true
+			break
+		}
+		if !more {
+			break
+		}
+	}
+	if !initializing {
+		panic("messaging: DefineProtocol must run during package initialization")
+	}
 	return defineProtocol(callerPackage(), roles...)
 }
 
@@ -188,10 +210,13 @@ func defineProtocol(name string, roles ...RoleDef) *Protocol {
 		seenRoles[def.Name] = true
 
 		for _, msg := range def.Sends {
+			if err := valuecheck.Payload(reflect.TypeOf(msg), reflect.TypeOf(Msg{})); err != nil {
+				panic(fmt.Sprintf("protocol %q: payload %T: %v", name, msg, err))
+			}
 			msgCodec.Register(msg)
 		}
 
-		sends := make([]Msg, len(def.Sends))
+		sends := make([]any, len(def.Sends))
 		copy(sends, def.Sends)
 
 		p.roles = append(p.roles, &Role{

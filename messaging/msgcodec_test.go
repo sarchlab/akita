@@ -2,25 +2,26 @@ package messaging
 
 import (
 	"encoding/json"
+	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 )
 
 type registryTestMsg struct {
-	MsgMeta
 	Value int `json:"value"`
 }
 
 func TestMsgRegistryRoundTrip(t *testing.T) {
 	msgCodec.Register(registryTestMsg{})
 
-	msg := registryTestMsg{Value: 42}
+	msg := Msg{Payload: registryTestMsg{Value: 42}}
 	msg.ID = 7
 	msg.Src = "A"
 	msg.Dst = "B"
 	msg.TrafficClass = "test"
 
-	if err := msgCodec.CheckRoundTrip(msg); err != nil {
+	if err := roundTripMsg(msg); err != nil {
 		t.Fatalf("CheckRoundTrip: %v", err)
 	}
 }
@@ -28,7 +29,24 @@ func TestMsgRegistryRoundTrip(t *testing.T) {
 func TestMsgRegistryUnknownType(t *testing.T) {
 	_, err := msgCodec.DecodeSlice(
 		json.RawMessage(`[{"type":"nonexistent.Type","payload":{}}]`))
-	if err == nil || !strings.Contains(err.Error(), "unknown message type") {
+	if err == nil || !strings.Contains(err.Error(), "unknown payload type") {
 		t.Fatalf("expected unknown-type error, got %v", err)
 	}
+}
+
+func init() { msgCodec.Register(registryTestMsg{}) }
+
+func roundTripMsg(msg Msg) error {
+	raw, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	var restored Msg
+	if err := json.Unmarshal(raw, &restored); err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(msg, restored) {
+		return fmt.Errorf("round trip: got %#v, want %#v", restored, msg)
+	}
+	return nil
 }

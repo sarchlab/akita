@@ -6,11 +6,9 @@ import (
 )
 
 type protoTestReq struct {
-	MsgMeta
 }
 
 type protoTestRsp struct {
-	MsgMeta
 }
 
 func mustPanic(t *testing.T, substr string, f func()) {
@@ -39,8 +37,8 @@ func mustPanic(t *testing.T, substr string, f func()) {
 
 func TestDefineProtocol(t *testing.T) {
 	p := defineProtocol("test.protocol",
-		RoleDef{Name: "requester", Sends: []Msg{protoTestReq{}}},
-		RoleDef{Name: "responder", Sends: []Msg{protoTestRsp{}}},
+		RoleDef{Name: "requester", Sends: []any{protoTestReq{}}},
+		RoleDef{Name: "responder", Sends: []any{protoTestRsp{}}},
 	)
 
 	if p.Name() != "test.protocol" {
@@ -80,20 +78,20 @@ func TestDefineProtocolPanics(t *testing.T) {
 	})
 
 	defineProtocol("test.duplicate",
-		RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
+		RoleDef{Name: "only", Sends: []any{protoTestReq{}}})
 	mustPanic(t, "already defined", func() {
 		defineProtocol("test.duplicate",
-			RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
+			RoleDef{Name: "only", Sends: []any{protoTestReq{}}})
 	})
 
 	mustPanic(t, `role "dup" is already defined`, func() {
 		defineProtocol("test.duprole",
-			RoleDef{Name: "dup", Sends: []Msg{protoTestReq{}}},
-			RoleDef{Name: "dup", Sends: []Msg{protoTestRsp{}}})
+			RoleDef{Name: "dup", Sends: []any{protoTestReq{}}},
+			RoleDef{Name: "dup", Sends: []any{protoTestRsp{}}})
 	})
 
 	p := defineProtocol("test.unknownrole",
-		RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
+		RoleDef{Name: "only", Sends: []any{protoTestReq{}}})
 	mustPanic(t, "does not define role", func() {
 		p.Role("nonexistent")
 	})
@@ -101,15 +99,15 @@ func TestDefineProtocolPanics(t *testing.T) {
 
 func TestMsgTypeMayBelongToTwoProtocols(t *testing.T) {
 	defineProtocol("test.shared.a",
-		RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
+		RoleDef{Name: "only", Sends: []any{protoTestReq{}}})
 	defineProtocol("test.shared.b",
-		RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
+		RoleDef{Name: "only", Sends: []any{protoTestReq{}}})
 }
 
 func TestMsgTypeMayBeSentByTwoRoles(t *testing.T) {
 	p := defineProtocol("test.twosenders",
-		RoleDef{Name: "a", Sends: []Msg{protoTestReq{}}},
-		RoleDef{Name: "b", Sends: []Msg{protoTestReq{}, protoTestRsp{}}})
+		RoleDef{Name: "a", Sends: []any{protoTestReq{}}},
+		RoleDef{Name: "b", Sends: []any{protoTestReq{}, protoTestRsp{}}})
 
 	if len(p.Role("a").Sends()) != 1 || len(p.Role("b").Sends()) != 2 {
 		t.Errorf("roles send %v and %v", p.Role("a").Sends(), p.Role("b").Sends())
@@ -135,8 +133,8 @@ func TestAnyProtocolIsNamedAfterMessaging(t *testing.T) {
 			AnyRole.Name(), AnyRole.Sends())
 	}
 
-	mustPanic(t, "at most one protocol", func() {
-		DefineProtocol(RoleDef{Name: "only", Sends: []Msg{protoTestReq{}}})
+	mustPanic(t, "package initialization", func() {
+		DefineProtocol(RoleDef{Name: "only", Sends: []any{protoTestReq{}}})
 	})
 }
 
@@ -144,7 +142,7 @@ func TestRoleNameMustFitInATag(t *testing.T) {
 	for _, name := range []string{"", "a.b", "a,b", "a=b", "a/b", "a b"} {
 		mustPanic(t, "role name", func() {
 			defineProtocol("test.badrole."+name,
-				RoleDef{Name: name, Sends: []Msg{protoTestReq{}}})
+				RoleDef{Name: name, Sends: []any{protoTestReq{}}})
 		})
 	}
 }

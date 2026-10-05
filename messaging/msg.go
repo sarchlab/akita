@@ -1,27 +1,55 @@
 package messaging
 
-// Msg is the interface for all messages transferred between components.
-//
-// Messages are value types: a message is constructed as a struct value (e.g.
-// `memprotocol.ReadReq{...}`) and passed by value through ports. Once a message has
-// been handed to a port, it is single-use, immutable data — callers must not
-// mutate the value after Send/Deliver.
-type Msg interface {
-	Meta() MsgMeta
+import "encoding/json"
+
+// Msg carries routing information and a registered protocol payload. Payloads
+// are values. Slice and map storage is shared between sender and receiver;
+// callers must not mutate a message or its payload after Send or Deliver.
+// A nil Payload represents metadata-only traffic.
+type Msg struct {
+	ID           uint64     `json:"ID"`
+	Src          RemotePort `json:"Src"`
+	Dst          RemotePort `json:"Dst"`
+	TrafficClass string     `json:"TrafficClass"`
+	TrafficBytes int        `json:"TrafficBytes"`
+	RspTo        uint64     `json:"RspTo"`
+	Payload      any        `json:"-"`
 }
 
-// MsgMeta contains routing and identification metadata. All fields are set at
-// construction time and must not change once the message is in flight.
-type MsgMeta struct {
-	ID           uint64
-	Src, Dst     RemotePort
-	TrafficClass string
-	TrafficBytes int
-	RspTo        uint64
+// IsRsp reports whether the message responds to another message.
+func (m Msg) IsRsp() bool { return m.RspTo != 0 }
+
+// MarshalJSON preserves the concrete payload type with its registered tag.
+func (m Msg) MarshalJSON() ([]byte, error) {
+	type plain Msg
+	routing, err := json.Marshal(plain(m))
+	if err != nil {
+		return nil, err
+	}
+	if m.Payload == nil {
+		return routing, nil
+	}
+	payload, err := msgCodec.Encode(m.Payload)
+	if err != nil {
+		return nil, err
+	}
+	// Both encodings are JSON objects. The codec owns the payload's wire fields.
+	routing[len(routing)-1] = ','
+	return append(routing, payload[1:]...), nil
 }
 
-// Meta returns the message metadata.
-func (m MsgMeta) Meta() MsgMeta { return m }
-
-// IsRsp returns true if this message is a response to another message.
-func (m MsgMeta) IsRsp() bool { return m.RspTo != 0 }
+// UnmarshalJSON restores the registered value type, including nested messages.
+func (m *Msg) UnmarshalJSON(data []byte) error {
+	type plain Msg
+	var decoded plain
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	payload, err := msgCodec.Decode(data)
+	if err != nil {
+		return err
+	}
+	decoded.Payload = payload
+	*m = Msg(decoded)
+	return nil
+}

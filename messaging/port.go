@@ -31,7 +31,7 @@ var HookPosPortMsgRetrieveOutgoing = &hooking.HookPos{
 type RemotePort string
 
 // A Port is owned by a component and is used to plug in connections.
-// Peek and Retrieve return nil, false when the corresponding buffer is empty.
+// Peek and Retrieve return Msg{}, false when the corresponding buffer is empty.
 // Retrieve removes a message and notifies its sender when a full buffer gains
 // space. Capacity and peek checks do not reserve space or messages.
 type Port interface {
@@ -132,9 +132,9 @@ func (p *defaultPort) CanSend() bool {
 // the port has capacity with CanSend before calling Send; sending into a full
 // outgoing buffer is a programming error and will panic.
 func (p *defaultPort) Send(msg Msg) {
-	p.lock.Lock()
-
 	p.msgMustBeValid(msg)
+
+	p.lock.Lock()
 
 	if !p.outgoingBuf.CanPush() {
 		p.lock.Unlock()
@@ -148,12 +148,14 @@ func (p *defaultPort) Send(msg Msg) {
 	wasEmpty := (p.outgoingBuf.Size() == 0)
 	p.outgoingBuf.Push(msg)
 
-	hookCtx := hooking.HookCtx{
-		Domain: p,
-		Pos:    HookPosPortMsgSend,
-		Item:   msg,
+	if p.NumHooks() > 0 {
+		hookCtx := hooking.HookCtx{
+			Domain: p,
+			Pos:    HookPosPortMsgSend,
+			Item:   msg,
+		}
+		p.InvokeHook(hookCtx)
 	}
-	p.InvokeHook(hookCtx)
 	p.lock.Unlock()
 
 	if wasEmpty {
@@ -188,12 +190,14 @@ func (p *defaultPort) Deliver(msg Msg) {
 
 	wasEmpty := (p.incomingBuf.Size() == 0)
 
-	hookCtx := hooking.HookCtx{
-		Domain: p,
-		Pos:    HookPosPortMsgRecvd,
-		Item:   msg,
+	if p.NumHooks() > 0 {
+		hookCtx := hooking.HookCtx{
+			Domain: p,
+			Pos:    HookPosPortMsgRecvd,
+			Item:   msg,
+		}
+		p.InvokeHook(hookCtx)
 	}
-	p.InvokeHook(hookCtx)
 
 	p.incomingBuf.Push(msg)
 	p.lock.Unlock()
@@ -211,7 +215,7 @@ func (p *defaultPort) RetrieveIncoming() (Msg, bool) {
 	msg, ok := p.incomingBuf.Pop()
 	if !ok {
 		p.lock.Unlock()
-		return nil, false
+		return Msg{}, false
 	}
 
 	if p.incomingBuf.Size() == p.incomingBuf.Capacity()-1 {
@@ -220,12 +224,14 @@ func (p *defaultPort) RetrieveIncoming() (Msg, bool) {
 
 	p.lock.Unlock()
 
-	hookCtx := hooking.HookCtx{
-		Domain: p,
-		Pos:    HookPosPortMsgRetrieveIncoming,
-		Item:   msg,
+	if p.NumHooks() > 0 {
+		hookCtx := hooking.HookCtx{
+			Domain: p,
+			Pos:    HookPosPortMsgRetrieveIncoming,
+			Item:   msg,
+		}
+		p.InvokeHook(hookCtx)
 	}
-	p.InvokeHook(hookCtx)
 
 	return msg, true
 }
@@ -240,7 +246,7 @@ func (p *defaultPort) RetrieveOutgoing() (Msg, bool) {
 	msg, ok := p.outgoingBuf.Pop()
 	if !ok {
 		p.lock.Unlock()
-		return nil, false
+		return Msg{}, false
 	}
 
 	if p.outgoingBuf.Size() == p.outgoingBuf.Capacity()-1 {
@@ -249,12 +255,14 @@ func (p *defaultPort) RetrieveOutgoing() (Msg, bool) {
 
 	p.lock.Unlock()
 
-	hookCtx := hooking.HookCtx{
-		Domain: p,
-		Pos:    HookPosPortMsgRetrieveOutgoing,
-		Item:   msg,
+	if p.NumHooks() > 0 {
+		hookCtx := hooking.HookCtx{
+			Domain: p,
+			Pos:    HookPosPortMsgRetrieveOutgoing,
+			Item:   msg,
+		}
+		p.InvokeHook(hookCtx)
 	}
-	p.InvokeHook(hookCtx)
 
 	return msg, true
 }
@@ -326,13 +334,16 @@ func NewPort(name string, incomingBufCap, outgoingBufCap int) Port {
 }
 
 func (p *defaultPort) msgMustBeValid(msg Msg) {
+	if msg.Payload != nil && !msgCodec.Contains(msg.Payload) {
+		panic(fmt.Sprintf("messaging: unregistered payload type %T; register a value through DefineProtocol", msg.Payload))
+	}
 	portMustBeMsgSrc(p, msg)
-	dstMustNotBeEmpty(msg.Meta().Dst)
+	dstMustNotBeEmpty(msg.Dst)
 	srcDstMustNotBeTheSame(msg)
 }
 
 func portMustBeMsgSrc(port Port, msg Msg) {
-	if port.Name() != string(msg.Meta().Src) {
+	if port.Name() != string(msg.Src) {
 		panic("sending port is not msg src")
 	}
 }
@@ -344,7 +355,7 @@ func dstMustNotBeEmpty(port RemotePort) {
 }
 
 func srcDstMustNotBeTheSame(msg Msg) {
-	if msg.Meta().Src == msg.Meta().Dst {
+	if msg.Src == msg.Dst {
 		panic("sending back to src")
 	}
 }
