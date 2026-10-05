@@ -28,6 +28,7 @@ var _ = Describe("End Point", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
+		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
 		engine.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(0)).AnyTimes()
 		sim = modeling.NewStandaloneSimulation(engine)
 		devicePort = NewMockPort(mockCtrl)

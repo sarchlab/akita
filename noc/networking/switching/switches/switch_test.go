@@ -30,6 +30,7 @@ var _ = Describe("Switch", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
+		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
 		sim = modeling.NewStandaloneSimulation(engine)
 		port1 = NewMockPort(mockCtrl)
 		port1.EXPECT().AsRemote().

@@ -19,10 +19,7 @@ type panicHook func(hooking.HookCtx)
 
 func (h panicHook) Func(ctx hooking.HookCtx) { h(ctx) }
 
-type testEngine interface {
-	Engine
-	HandlerRegistry
-}
+type testEngine = Engine
 
 func finishRun(t *testing.T, run func() error) error {
 	t.Helper()

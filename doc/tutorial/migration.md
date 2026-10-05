@@ -344,14 +344,18 @@ type EventBase struct {
 
 ### Handler Registration
 
-The engine implements `HandlerRegistry`:
+Every `timing.Engine` has `RegisterHandler`:
 
 ```go
-// v5/sim/engine.go
-type HandlerRegistry interface {
+// v5/timing/engine.go
+type Engine interface {
+    // ...
     RegisterHandler(name string, handler Handler)
 }
 ```
+
+`Schedule` panics on an event whose handler is not registered, so a
+misspelled or missing handler fails where the event is scheduled.
 
 Components register themselves during construction. Every component model's
 `Build` ends by registering the instance (`Register` in
@@ -364,9 +368,7 @@ registers the instance with the engine under its name (so events whose
 func Register[S, T, R, P, M any](base *ComponentBase[S, T, R, P, M]) {
     registerPorts(base.simulation, &base.Ports)
 
-    if handlers, ok := base.simulation.Engine().(timing.HandlerRegistry); ok {
-        handlers.RegisterHandler(base.name, base.owner)
-    }
+    base.simulation.Engine().RegisterHandler(base.name, base.owner)
 
     base.simulation.RegisterComponent(base.owner)
 }

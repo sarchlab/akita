@@ -68,9 +68,7 @@ func main() {
 		count: 1,
 	}
 
-	if handlers, ok := engine.(timing.HandlerRegistry); ok {
-		handlers.RegisterHandler("splitter", &h)
-	}
+	engine.RegisterHandler("splitter", &h)
 
 	firstEvtTime := timing.VTimeInPicoSec(uint64((randGen.Float64() + 1) * 1e12))
 	firstEvt := splitEvent{

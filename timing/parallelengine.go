@@ -105,6 +105,8 @@ func (e *ParallelEngine) Schedule(evt Event) {
 			reflect.TypeOf(evt), evt.Time(), now)
 	}
 
+	handlerMustBeRegistered(e.registry, evt)
+
 	queueChan := e.queueChan
 	if evt.IsSecondary() {
 		queueChan = e.secondaryQueueChan

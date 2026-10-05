@@ -80,9 +80,7 @@ func Init[S, T, R, P, M any](
 func Register[S, T, R, P, M any](base *ComponentBase[S, T, R, P, M]) {
 	registerPorts(base.simulation, &base.Ports)
 
-	if handlers, ok := base.simulation.Engine().(timing.HandlerRegistry); ok {
-		handlers.RegisterHandler(base.name, base.owner)
-	}
+	base.simulation.Engine().RegisterHandler(base.name, base.owner)
 
 	base.simulation.RegisterComponent(base.owner)
 }

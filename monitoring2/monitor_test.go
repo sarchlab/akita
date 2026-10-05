@@ -41,6 +41,8 @@ type fakeEngine struct {
 
 func (e *fakeEngine) Schedule(timing.Event) {}
 
+func (e *fakeEngine) RegisterHandler(string, timing.Handler) {}
+
 func (e *fakeEngine) Run() error {
 	e.mu.Lock()
 	e.runCalls++

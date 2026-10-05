@@ -48,6 +48,7 @@ var _ = Describe("DirectConnection", func() {
 		port2.EXPECT().AsRemote().Return(messaging.RemotePort("port2")).AnyTimes()
 
 		engine = NewMockEngine(mockCtrl)
+		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
 		sim = modeling.NewStandaloneSimulation(engine)
 		connection = MakeBuilder().
 			WithSimulation(sim).
@@ -134,7 +135,7 @@ func newAgent(sim timing.Simulation, freq timing.Freq, name string, outPort mess
 		OutPort:   outPort,
 	}
 	a.OutPort.SetOwner(a)
-	sim.Engine().(timing.HandlerRegistry).RegisterHandler(name, a)
+	sim.Engine().RegisterHandler(name, a)
 
 	return a
 }

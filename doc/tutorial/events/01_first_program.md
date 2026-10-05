@@ -66,13 +66,13 @@ The engine routes events to handlers by **name**, not by pointer. Register
 the handler under a name you choose:
 
 ```go
-if handlers, ok := engine.(timing.HandlerRegistry); ok {
-    handlers.RegisterHandler("printer", handler)
-}
+engine.RegisterHandler("printer", handler)
 ```
 
-The type assertion is a safety check — most engines implement
-`HandlerRegistry`, but the interface keeps that explicit.
+Register a handler before you schedule an event for it: `Schedule` panics on
+an event whose handler name is not registered. A component built from a
+component model registers itself in `Build`; only a handler you write by hand,
+like this one, needs the call.
 
 ### 4. Creating and scheduling the event
 

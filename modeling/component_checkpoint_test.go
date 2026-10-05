@@ -60,6 +60,7 @@ func TestCheckpointSpecMismatch(t *testing.T) {
 func TestCheckpointRestoresSchedulerGuard(t *testing.T) {
 	newScheduler := func() (*ticking.Scheduler, *timing.SerialEngine) {
 		engine := timing.NewSerialEngine()
+		engine.RegisterHandler("C", handlerFunc(func(timing.Event) {}))
 		sim := modeling.NewStandaloneSimulation(engine)
 
 		return ticking.NewScheduler("C", sim, 1*timing.GHz), engine

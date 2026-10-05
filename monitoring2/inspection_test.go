@@ -40,10 +40,10 @@ func waitInspection[T any](t *testing.T, ch <-chan T) T {
 }
 
 func TestMonitorSnapshotDoesNotWaitForSlowClient(t *testing.T) {
-	for name, e := range map[string]interface {
-		timing.Engine
-		timing.HandlerRegistry
-	}{"serial": timing.NewSerialEngine(), "parallel": timing.NewParallelEngine()} {
+	for name, e := range map[string]timing.Engine{
+		"serial":   timing.NewSerialEngine(),
+		"parallel": timing.NewParallelEngine(),
+	} {
 		t.Run(name, func(t *testing.T) {
 			m := NewMonitor()
 			m.RegisterSimulation(modeling.NewStandaloneSimulation(e))
