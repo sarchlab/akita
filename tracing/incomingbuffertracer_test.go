@@ -40,7 +40,6 @@ func (t *ibRecordingTracer) EndTask(te TaskEnd)       { t.ends = append(t.ends, 
 func (t *ibRecordingTracer) AddMilestone(m Milestone) { t.milestones = append(t.milestones, m) }
 
 type ibTestMsg struct {
-	messaging.MsgMeta
 }
 
 var _ = Describe("Incoming buffer tracer", func() {
@@ -63,12 +62,12 @@ var _ = Describe("Incoming buffer tracer", func() {
 	It("spans delivery to retrieve and marks reached-head the instant the "+
 		"message becomes the head of the buffer", func() {
 		// A lands in an empty buffer => immediately at the head.
-		a := ibTestMsg{messaging.MsgMeta{ID: 7, Dst: "Comp.Top"}}
+		a := messaging.Msg{ID: 7, Dst: "Comp.Top", Payload: ibTestMsg{}}
 		comp.time = 100
 		port.Deliver(a)
 
 		// B lands behind A => not yet at the head.
-		b := ibTestMsg{messaging.MsgMeta{ID: 8, Dst: "Comp.Top"}}
+		b := messaging.Msg{ID: 8, Dst: "Comp.Top", Payload: ibTestMsg{}}
 		comp.time = 110
 		port.Deliver(b)
 
@@ -116,7 +115,7 @@ var _ = Describe("Incoming buffer tracer", func() {
 	})
 
 	It("parents a response's buffer task to the task it responds to", func() {
-		rsp := ibTestMsg{messaging.MsgMeta{ID: 9, RspTo: 7, Dst: "Comp.Top"}}
+		rsp := messaging.Msg{ID: 9, RspTo: 7, Dst: "Comp.Top", Payload: ibTestMsg{}}
 
 		comp.time = 200
 		port.Deliver(rsp)
@@ -132,7 +131,7 @@ var _ = Describe("Incoming buffer tracer", func() {
 		CollectIncomingBufferTrace(p2)
 
 		untraced.time = 100
-		p2.Deliver(ibTestMsg{messaging.MsgMeta{ID: 1, Dst: "Untraced.Top"}})
+		p2.Deliver(messaging.Msg{ID: 1, Dst: "Untraced.Top", Payload: ibTestMsg{}})
 		_, present2 := p2.RetrieveIncoming()
 		Expect(present2).To(BeTrue())
 		Expect(tracer.starts).To(BeEmpty())
@@ -142,3 +141,7 @@ var _ = Describe("Incoming buffer tracer", func() {
 })
 
 func (c *ibFakeComp) NewID() uint64 { return c.sim.NewID() }
+
+var _ = messaging.DefineProtocol(
+	messaging.RoleDef{Name: "peer", Sends: []any{ibTestMsg{}, obTestMsg{}, resetTestMsg{}}},
+)

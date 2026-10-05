@@ -12,7 +12,6 @@ import (
 // resetTestMsg is a minimal message used to drive the reset helpers through the
 // real receiver-task registry and a recording tracer.
 type resetTestMsg struct {
-	messaging.MsgMeta
 }
 
 var _ = Describe("Reset task-cleanup helpers", func() {
@@ -29,7 +28,7 @@ var _ = Describe("Reset task-cleanup helpers", func() {
 
 	Describe("EndReqInOnReset", func() {
 		It("ends the in-flight req_in task and forgets its registry entry", func() {
-			req := resetTestMsg{messaging.MsgMeta{ID: 7}}
+			req := messaging.Msg{ID: 7, Payload: resetTestMsg{}}
 			comp.time = 100
 			TraceReqReceive(comp, req)
 
@@ -65,7 +64,7 @@ var _ = Describe("Reset task-cleanup helpers", func() {
 			// TraceReqComplete and EndReqInOnReset must end the same task ID and
 			// both clear the registry, so a reset is indistinguishable in the
 			// trace from a normal completion except for the end time.
-			req := resetTestMsg{messaging.MsgMeta{ID: 11}}
+			req := messaging.Msg{ID: 11, Payload: resetTestMsg{}}
 			TraceReqReceive(comp, req)
 			taskID, _ := receiverTaskIDByMsgID(11, comp)
 
@@ -80,7 +79,7 @@ var _ = Describe("Reset task-cleanup helpers", func() {
 
 	Describe("EndTaskOnReset", func() {
 		It("ends the in-flight req_out task by the message's own ID", func() {
-			reqToBottom := resetTestMsg{messaging.MsgMeta{ID: 42}}
+			reqToBottom := messaging.Msg{ID: 42, Payload: resetTestMsg{}}
 			comp.time = 100
 			TraceReqInitiate(comp, reqToBottom, 0)
 

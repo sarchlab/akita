@@ -84,7 +84,7 @@ func (h *incomingBufferHook) onDeliver(
 		return
 	}
 
-	meta := msg.Meta()
+	meta := msg
 
 	parentID := meta.ID
 	if meta.IsRsp() {
@@ -134,7 +134,7 @@ func (h *incomingBufferHook) onRetrieve(
 	h.mu.Unlock()
 
 	EndTask(domain, TaskEnd{ID: MsgIDAtIncomingBuffer(retrieved, domain)})
-	ForgetMsgIDAtIncomingBuffer(retrieved.Meta().ID, domain)
+	ForgetMsgIDAtIncomingBuffer(retrieved.ID, domain)
 
 	newHead, ok := port.PeekIncoming()
 	if !ok {
