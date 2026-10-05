@@ -10,6 +10,7 @@ import (
 )
 
 // HookPosPortMsgSend marks when a message is sent out from the port.
+// All four port message hook positions carry the Port as Domain and a Msg as Item.
 var HookPosPortMsgSend = &hooking.HookPos{Name: "Port Msg Send"}
 
 // HookPosPortMsgRecvd marks when an inbound message arrives at the port.

@@ -48,17 +48,17 @@ type incomingBufferHook struct {
 
 // Func implements hooking.Hook.
 func (h *incomingBufferHook) Func(ctx hooking.HookCtx) {
-	port, ok := ctx.Domain.(messaging.Port)
-	if !ok {
+	switch ctx.Pos {
+	case messaging.HookPosPortMsgRecvd, messaging.HookPosPortMsgRetrieveIncoming:
+		// These positions require a port domain and a message item.
+	default:
 		return
 	}
+
+	port := ctx.Domain.(messaging.Port)
+	msg := mustItem[messaging.Msg](ctx)
 
 	domain, ok := port.Owner().(NamedHookable)
-	if !ok {
-		return
-	}
-
-	msg, ok := ctx.Item.(messaging.Msg)
 	if !ok {
 		return
 	}

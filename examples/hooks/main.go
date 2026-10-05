@@ -156,6 +156,13 @@ type msgHook struct {
 }
 
 func (h *msgHook) Func(ctx hooking.HookCtx) {
+	switch ctx.Pos {
+	case messaging.HookPosPortMsgSend, messaging.HookPosPortMsgRecvd:
+		// These positions carry messages. Ignore other hook positions.
+	default:
+		return
+	}
+
 	msg := ctx.Item.(messaging.Msg)
 
 	switch ctx.Pos {
