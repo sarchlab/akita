@@ -2,7 +2,7 @@ package dram
 
 import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // refreshMiddleware models refresh as a reactive per-cycle behavior. Following

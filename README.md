@@ -121,9 +121,9 @@ It does not cover:
 
 ## Package organization
 
-`simulation` is the runner and umbrella for the simulation infrastructure:
-`simulation/{naming,hooking,queueing,timing,messaging,modeling,tracing,datarecording,sourcefs}`.
+`sim` is the runner and umbrella for the simulation infrastructure:
+`sim/{naming,hooking,queueing,timing,messaging,modeling,tracing,datarecording,sourcefs}`.
 Hardware models remain under `mem` and `noc`; the live UI and trace viewer are
-`monitoring` and `daisen`. See [the simulation guide](simulation/README.md)
+`monitoring` and `daisen`. See [the simulation guide](sim/README.md)
 for setup and [the migration guide](doc/tutorial/migration.md) for import and
 monitor configuration changes.

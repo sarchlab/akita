@@ -103,7 +103,7 @@ when no more events are pending, the engine returns.
 ```go
 randGen = rand.New(rand.NewSource(0))
 
-s := simulation.MakeBuilder().Build()
+s := sim.MakeBuilder().Build()
 engine = s.Engine()
 h := handler{count: 1}
 

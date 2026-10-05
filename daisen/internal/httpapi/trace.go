@@ -12,7 +12,7 @@ import (
 	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {

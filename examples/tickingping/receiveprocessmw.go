@@ -3,8 +3,8 @@ package tickingping
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/simulation/messaging"
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // receiveProcessMW handles receiving messages and counting down transactions.

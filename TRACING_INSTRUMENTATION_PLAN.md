@@ -70,7 +70,7 @@ can hang its admission milestones on it (see the boundary convention above).
 - `tracing/incomingbuffertracer.go` — `incomingBufferHook` +
   `CollectIncomingBufferTrace`; `tracing/registry.go` + `api.go` —
   `MsgIDAtIncomingBuffer`/`ForgetMsgIDAtIncomingBuffer`.
-- `simulation/simulation.go` — wired into `RegisterPort` (global, mirrors how
+- `sim/simulation.go` — wired into `RegisterPort` (global, mirrors how
   `RegisterComponent` attaches `CollectTrace`).
 - Tests: `tracing/incomingbuffertracer_test.go`.
 

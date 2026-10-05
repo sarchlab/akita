@@ -4,11 +4,11 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/noc/packetization"
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 
-	"github.com/sarchlab/akita/v5/simulation/tracing"
+	"github.com/sarchlab/akita/v5/sim/tracing"
 
-	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
 // incomingMW handles the network→device path: tryDeliver, assemble, recv.

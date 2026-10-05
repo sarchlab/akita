@@ -5,10 +5,10 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
-	"github.com/sarchlab/akita/v5/simulation/hooking"
-	"github.com/sarchlab/akita/v5/simulation/messaging"
-	"github.com/sarchlab/akita/v5/simulation/modeling"
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim/hooking"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 type ccNoopConn struct {

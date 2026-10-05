@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 type storagePanicHandler func(timing.Event)

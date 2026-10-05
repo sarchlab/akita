@@ -1,7 +1,7 @@
 package writethroughcache
 
 import (
-	"github.com/sarchlab/akita/v5/simulation/tracing"
+	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type bankStage struct {

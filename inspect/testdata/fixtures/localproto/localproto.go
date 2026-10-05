@@ -9,9 +9,9 @@ package localproto
 
 import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/simulation/messaging"
-	"github.com/sarchlab/akita/v5/simulation/modeling"
-	"github.com/sarchlab/akita/v5/simulation/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 )
 
 // Protocol is a local protocol carrying memprotocol's messages.
@@ -36,7 +36,7 @@ type State struct{}
 type Ports struct {
 	In   messaging.Port `akita:"role=github.com/sarchlab/akita/v5/inspect/testdata/fixtures/localproto.consumer"`
 	Feed messaging.Port `akita:"role=github.com/sarchlab/akita/v5/inspect/testdata/fixtures/localproto.producer"`
-	Sink messaging.Port `akita:"role=github.com/sarchlab/akita/v5/simulation/messaging.any"`
+	Sink messaging.Port `akita:"role=github.com/sarchlab/akita/v5/sim/messaging.any"`
 }
 
 // Middlewares holds the component's behavior.

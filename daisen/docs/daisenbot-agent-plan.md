@@ -574,7 +574,7 @@ read the code that produced the trace."*
 **Builds on:** the Phase 2 agent-loop / tool-dispatch seam (`agentloop.go`; a tool is just
 an `agentTool` entry in the `runAgentSSE` tool slice, dispatched by `runToolCalls`) and the
 `datarecording` writer (`CreateTable`/`InsertData`/`Flush`) that already records `exec_info`
-(`simulation/meta_recorder.go`).
+(`sim/meta_recorder.go`).
 
 **Non-goals (Phase 3):** the Python sandbox (Phase 4); symbol-level / semantic indexing
 (`go/packages`) — plain regex search is v1; remote source fetch from GitHub.
@@ -629,7 +629,7 @@ the same interface without touching the tools.
 - `sourcefs` package: `AkitaSourceDir()` (disk locator), `ArchiveDir`/`ArchiveFS` +
   `WriteArchive`/`ReadArchive` (the gzip-tar format, shared with daisen's future reader). No
   `//go:embed`, no generated blob, no `go generate` — so nothing to keep in sync.
-- `simulation` records a `source(Root, Format, Content)` table — one row per source root.
+- `sim` records a `source(Root, Format, Content)` table — one row per source root.
   `Content` is **base64(gzip-tar)** stored as TEXT: the data recorder accepts only scalar
   struct fields (`isAllowedType` rejects `[]byte`), so no BLOB column is available (~+33% over
   raw gzip; a later `datarecording` BLOB column could drop it).
@@ -640,7 +640,7 @@ the same interface without touching the tools.
   **+~292 KB**); the row base64-decodes → gunzips → untars to real source (268 files incl.
   `mem/mshr/mshr.go`, `tracing/tracer.go`), and the sim binary carries **no** embedded blob.
   Unit tests: archive round-trip/determinism, `ArchiveFS`, `AkitaSourceDir`, `ArchiveDir`
-  filtering; `recordSourceArchives` akita-from-disk + author rows. `simulation` +
+  filtering; `recordSourceArchives` akita-from-disk + author rows. `sim` +
   `datarecording` suites green.
 - **Next (Workstream B):** daisen reads the `source` table into a `codeSource` `fs.FS` (reusing
   `sourcefs.ReadArchive`).
@@ -699,7 +699,7 @@ the same interface without touching the tools.
 - Verified: unit tests (search match / filter / no-match / invalid-regex / caps / empty; read
   window / range / not-found / traversal-reject / long-file) and an end-to-end mock-provider SSE
   test driving `code_search → code_read → answer`. `daisen/internal/httpapi`, `sourcefs`,
-  `simulation` suites + `go build ./...` + vet green.
+  `sim` suites + `go build ./...` + vet green.
 
 ### Workstream E — system prompt, loop wiring & verification
 
@@ -710,7 +710,7 @@ the same interface without touching the tools.
 - **System prompt:** document the two tools and *when* to use them ("when a Kind / milestone /
   `What` type / component is unfamiliar, read the source to ground the interpretation before
   explaining it — do not guess"), plus a short **source map** (akita:
-  `mem/{cache,dram,mshr,rob,vm}`, `noc/`, `messaging/`, `queueing/`, `tracing/`, `simulation/`)
+  `mem/{cache,dram,mshr,rob,vm}`, `noc/`, `messaging/`, `queueing/`, `tracing/`, `sim/`)
   so searches are targeted. Tie back to the bottleneck catalog (§4.4): confirm a hypothesized
   mechanism by reading the component's source.
 - **Verification** (mirrors `agentloop_test.go`): guard/cap units (path normalization, byte/

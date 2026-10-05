@@ -31,10 +31,10 @@ import (
 	"github.com/sarchlab/akita/v5/daisen"
 	"github.com/sarchlab/akita/v5/monitoring/static"
 
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/simulation/naming"
-	"github.com/sarchlab/akita/v5/simulation/timing"
-	"github.com/sarchlab/akita/v5/simulation/tracing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/naming"
+	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/sarchlab/akita/v5/sim/tracing"
 	"github.com/shirou/gopsutil/v4/process"
 	"github.com/syifan/goseth"
 )
@@ -42,9 +42,9 @@ import (
 // Component is the minimal component contract required by the monitor.
 type Component = naming.Named
 
-type monitorPort = simulation.Port
+type monitorPort = sim.Port
 
-var _ simulation.Monitor = (*Monitor)(nil)
+var _ sim.Monitor = (*Monitor)(nil)
 
 type Monitor struct {
 	// Configuration (set before StartServer).
@@ -73,7 +73,7 @@ func NewMonitor() *Monitor {
 }
 
 // Start attaches the simulation services and starts live monitoring. It is
-// called by simulation.Builder.WithMonitor; a monitor belongs to one simulation.
+// called by sim.Builder.WithMonitor; a monitor belongs to one simulation.
 func (m *Monitor) Start(sim timing.Simulation, tracer *tracing.DBTracer, traceDBPath string) {
 	m.RegisterSimulation(sim)
 	m.RegisterVisTracer(tracer)

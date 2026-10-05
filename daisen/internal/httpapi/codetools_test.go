@@ -11,7 +11,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/sarchlab/akita/v5/simulation/sourcefs"
+	"github.com/sarchlab/akita/v5/sim/sourcefs"
 )
 
 func testSource(t *testing.T, files map[string]string) *sourcefs.Source {

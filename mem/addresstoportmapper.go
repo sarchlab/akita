@@ -1,7 +1,7 @@
 package mem
 
 import (
-	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
 // AddressToPortMapper helps a cache unit or a akita to find the low module that

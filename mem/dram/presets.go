@@ -1,7 +1,7 @@
 package dram
 
 import (
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // DDR4Spec provides a predefined Spec for DDR4-2400.

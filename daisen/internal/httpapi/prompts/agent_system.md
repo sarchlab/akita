@@ -180,9 +180,9 @@ Where things live in the Akita source (a starting map — `code_ls` to browse an
 - **Virtual memory / translation** — `mem/vm/`: `tlb`, `mmu`, `addresstranslator`,
   page tables.
 - **Interconnect** — `noc/` (e.g. `directconnection`).
-- **Ports, buffers, messages** — `simulation/messaging/`, `simulation/queueing/`.
-- **Task / trace / milestone model** — `simulation/tracing/`.
-- **Engine, components, time** — `simulation/`, `simulation/modeling/`, `simulation/timing/`.
+- **Ports, buffers, messages** — `sim/messaging/`, `sim/queueing/`.
+- **Task / trace / milestone model** — `sim/tracing/`.
+- **Engine, components, time** — `sim/`, `sim/modeling/`, `sim/timing/`.
 
 ### `screenshot_current_view` / `daisen_view` — see the visualizations
 

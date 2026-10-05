@@ -8,8 +8,8 @@ import (
 	"github.com/sarchlab/akita/v5/noc/networking/switching/switches"
 
 	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/simulation/messaging"
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // LinkEndSwitchParameter defines the parameters of the end of a link that is

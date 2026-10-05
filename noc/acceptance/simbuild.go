@@ -3,7 +3,7 @@ package acceptance
 import (
 	"flag"
 
-	"github.com/sarchlab/akita/v5/simulation"
+	"github.com/sarchlab/akita/v5/sim"
 )
 
 // traceFlag enables vis-trace collection. It is registered here so every
@@ -20,8 +20,8 @@ var traceFlag = flag.Bool("trace", false,
 //
 // Call after flag.Parse(), and call Terminate() on the returned simulation once
 // the run finishes so the recording is flushed and closed.
-func NewSimulation() *simulation.Simulation {
-	b := simulation.MakeBuilder()
+func NewSimulation() *sim.Simulation {
+	b := sim.MakeBuilder()
 
 	if *traceFlag {
 		b = b.WithVisTracingOnStart().WithOutputFileName("trace")

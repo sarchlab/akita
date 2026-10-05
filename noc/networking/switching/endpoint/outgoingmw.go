@@ -5,10 +5,10 @@ import (
 
 	"github.com/sarchlab/akita/v5/noc/packetization"
 
-	"github.com/sarchlab/akita/v5/simulation/timing"
-	"github.com/sarchlab/akita/v5/simulation/tracing"
+	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/sarchlab/akita/v5/sim/tracing"
 
-	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
 // msgToFlits converts a message into flit messages.

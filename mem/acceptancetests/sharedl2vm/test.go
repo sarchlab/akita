@@ -43,9 +43,9 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/simulation/messaging"
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // numAgents is the number of independent memory-access agents.
@@ -80,9 +80,9 @@ type agentChain struct {
 	l1TLB   *tlb.Comp
 }
 
-func setupTest(seed int64) (*simulation.Simulation, timing.Engine, []agentChain) {
+func setupTest(seed int64) (*sim.Simulation, timing.Engine, []agentChain) {
 	monitor := monitoring.NewMonitor()
-	simBuilder := simulation.MakeBuilder().WithMonitor(monitor)
+	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
 
 	if *parallelFlag {
 		simBuilder = simBuilder.WithParallelEngine()
@@ -121,7 +121,7 @@ func agentStride() uint64 {
 
 // buildSharedHierarchy builds the L2 cache, L2 TLB, memory controller, and MMU
 // that every agent shares, plus the page table backing the MMU.
-func buildSharedHierarchy(s *simulation.Simulation) sharedHierarchy {
+func buildSharedHierarchy(s *sim.Simulation) sharedHierarchy {
 	combinedRange := uint64(numAgents) * agentStride()
 
 	memCtrl := buildMemCtrl(s, combinedRange)
@@ -140,7 +140,7 @@ func buildSharedHierarchy(s *simulation.Simulation) sharedHierarchy {
 }
 
 func buildMemCtrl(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	combinedRange uint64,
 ) *idealmemcontroller.Comp {
 	memCtrlSpec := idealmemcontroller.Definition.DefaultSpec
@@ -164,7 +164,7 @@ func buildMemCtrl(
 }
 
 func buildL2Cache(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	memCtrl *idealmemcontroller.Comp,
 ) *writeback.Comp {
 	l2Spec := writeback.Definition.DefaultSpec
@@ -191,7 +191,7 @@ func buildL2Cache(
 }
 
 func buildMMU(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	pageTable vm.PageTable,
 ) *mmu.Comp {
 	mmuSpec := mmu.Definition.DefaultSpec
@@ -212,7 +212,7 @@ func buildMMU(
 }
 
 func buildL2TLB(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	ioMMU *mmu.Comp,
 ) *tlb.Comp {
 	l2TLBSpec := tlb.Definition.DefaultSpec
@@ -242,7 +242,7 @@ func buildL2TLB(
 // L1 TLB for one agent, plus the agent itself. The L1 cache and L1 TLB point
 // at the shared L2 cache and L2 TLB respectively.
 func buildAgentChain(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	index int,
 	shared sharedHierarchy,
 	seed int64,
@@ -265,7 +265,7 @@ func buildAgentChain(
 }
 
 func buildL1Cache(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	suffix string,
 	l2Cache *writeback.Comp,
 ) *writethroughcache.Comp {
@@ -295,7 +295,7 @@ func buildL1Cache(
 }
 
 func buildL1TLB(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	suffix string,
 	l2TLB *tlb.Comp,
 ) *tlb.Comp {
@@ -325,7 +325,7 @@ func buildL1TLB(
 }
 
 func buildAddressTranslator(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	suffix string,
 	l1Cache *writethroughcache.Comp,
 	l1TLB *tlb.Comp,
@@ -358,7 +358,7 @@ func buildAddressTranslator(
 }
 
 func buildROB(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	suffix string,
 	at *addresstranslator.Comp,
 ) *rob.Comp {
@@ -380,7 +380,7 @@ func buildROB(
 }
 
 func buildAgent(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	index int,
 	robComp *rob.Comp,
 	seed int64,
@@ -407,7 +407,7 @@ func buildAgent(
 	return agent
 }
 
-func setupPageTable(addressRange uint64, s *simulation.Simulation) vm.PageTable {
+func setupPageTable(addressRange uint64, s *sim.Simulation) vm.PageTable {
 	pageTable := vm.MakePageTableBuilder().
 		WithSimulation(s).
 		WithLog2PageSize(12).
@@ -435,7 +435,7 @@ func setupPageTable(addressRange uint64, s *simulation.Simulation) vm.PageTable 
 // setupConnections wires every private chain and fans the private L1s into the
 // shared L2 cache and L2 TLB.
 func setupConnections(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	shared sharedHierarchy,
 	chains []agentChain,
 ) {
@@ -495,7 +495,7 @@ func newPort(fullName string) messaging.Port {
 // newStorage builds a storage of the given capacity that registers with the
 // simulation.
 func newStorage(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	capacity uint64,
 	name string,
 ) *mem.Storage {
@@ -505,7 +505,7 @@ func newStorage(
 		Build(name)
 }
 
-func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {
+func connect(s *sim.Simulation, name string, p1, p2 messaging.Port) {
 	conn := directconnection.MakeBuilder().WithSimulation(s).Build(name)
 	conn.PlugIn(p1)
 	conn.PlugIn(p2)

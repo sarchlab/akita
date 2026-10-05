@@ -4,8 +4,8 @@ import (
 	"log"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v5/simulation/messaging"
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // TrafficMsg is a concrete message type used in acceptance tests.

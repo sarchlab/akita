@@ -22,7 +22,7 @@ observe and record what a simulation does.
   [timing](/packages/timing/), [queueing](/packages/queueing/),
   [datarecording](/packages/datarecording/), [messaging](/packages/messaging/),
   [modeling](/packages/modeling/), [tracing](/packages/tracing/),
-  [simulation](/packages/simulation/), and [examples](/packages/examples/).
+  [sim](/packages/simulation/), and [examples](/packages/examples/).
 
 - **First-party components** — reference for the ready-made component
   libraries:

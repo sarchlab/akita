@@ -15,12 +15,12 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/simulation/messaging"
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-func cleanup(sim *simulation.Simulation) {
+func cleanup(sim *sim.Simulation) {
 	sim.Terminate()
 	os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
 }
@@ -30,8 +30,8 @@ func cleanup(sim *simulation.Simulation) {
 // AT's translation path going AT -> TLB -> L2TLB -> IoMMU over a shared page
 // table. Every component, port, connection, and the page table is registered,
 // so all of it is part of the checkpoint inventory.
-func buildSim() (*simulation.Simulation, *driver) {
-	sim := simulation.MakeBuilder().Build()
+func buildSim() (*sim.Simulation, *driver) {
+	sim := sim.MakeBuilder().Build()
 
 	l1Cache, l2Cache, memCtrl := buildMemoryHierarchy(sim)
 	ioMMU, itlb, l2TLB := buildTranslationHierarchy(sim)
@@ -66,7 +66,7 @@ func buildSim() (*simulation.Simulation, *driver) {
 }
 
 //nolint:funlen // wires the whole hierarchy in one place
-func buildMemoryHierarchy(s *simulation.Simulation) (
+func buildMemoryHierarchy(s *sim.Simulation) (
 	*writethroughcache.Comp,
 	*writeback.Comp,
 	*idealmemcontroller.Comp,
@@ -130,7 +130,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 	return l1Cache, l2Cache, memCtrl
 }
 
-func buildTranslationHierarchy(s *simulation.Simulation) (*mmu.Comp, *tlb.Comp, *tlb.Comp) {
+func buildTranslationHierarchy(s *sim.Simulation) (*mmu.Comp, *tlb.Comp, *tlb.Comp) {
 	pageTable := setupPageTable(s)
 
 	mmuSpec := mmu.Definition.DefaultSpec
@@ -190,7 +190,7 @@ func buildTranslationHierarchy(s *simulation.Simulation) (*mmu.Comp, *tlb.Comp, 
 	return ioMMU, itlb, l2TLB
 }
 
-func setupPageTable(s *simulation.Simulation) vm.PageTable {
+func setupPageTable(s *sim.Simulation) vm.PageTable {
 	pageTable := vm.MakePageTableBuilder().
 		WithSimulation(s).
 		WithLog2PageSize(12).
@@ -227,7 +227,7 @@ func newPort(fullName string) messaging.Port {
 // newStorage builds a storage of the given capacity that registers with the
 // simulation, so its contents are part of the checkpoint.
 func newStorage(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	capacity uint64,
 	name string,
 ) *mem.Storage {
@@ -237,14 +237,14 @@ func newStorage(
 		Build(name)
 }
 
-func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {
+func connect(s *sim.Simulation, name string, p1, p2 messaging.Port) {
 	conn := directconnection.MakeBuilder().WithSimulation(s).Build(name)
 	conn.PlugIn(p1)
 	conn.PlugIn(p2)
 }
 
 func setupConnection(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	d *driver,
 	at *addresstranslator.Comp,
 	itlb, l2TLB *tlb.Comp,

@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sarchlab/akita/v5/simulation/sourcefs"
+	"github.com/sarchlab/akita/v5/sim/sourcefs"
 )
 
 // Code tools (DaisenBot Phase 3, Workstreams C/D): code_search and code_read let

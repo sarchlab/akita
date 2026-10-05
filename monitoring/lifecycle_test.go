@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sarchlab/akita/v5/simulation"
+	"github.com/sarchlab/akita/v5/sim"
 )
 
 func TestSimulationAttachesLiveMonitor(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "live")
 	monitor := NewMonitor()
-	sim := simulation.MakeBuilder().WithOutputFileName(output).WithMonitor(monitor).Build()
+	sim := sim.MakeBuilder().WithOutputFileName(output).WithMonitor(monitor).Build()
 	t.Cleanup(sim.Terminate)
 	if monitor.simulation != sim || monitor.engine != sim.Engine() || monitor.visTracer == nil {
 		t.Fatal("monitor was not attached to the simulation services")

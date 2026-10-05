@@ -9,7 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/noc/networking/switching/switches"
 
 	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
 // Remote records the link between two nodes.

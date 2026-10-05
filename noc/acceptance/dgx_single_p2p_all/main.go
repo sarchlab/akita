@@ -13,9 +13,9 @@ import (
 	"github.com/sarchlab/akita/v5/noc/acceptance"
 	"github.com/sarchlab/akita/v5/noc/networking/nvlink"
 
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/simulation/messaging"
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/tebeka/atexit"
 )
 
@@ -65,7 +65,7 @@ func main() {
 }
 
 func createNetwork(
-	sim *simulation.Simulation,
+	sim *sim.Simulation,
 	test *acceptance.Test,
 ) []*acceptance.Agent {
 	agents := createAgents(sim, test)
@@ -84,7 +84,7 @@ func createNetwork(
 }
 
 func createAgents(
-	sim *simulation.Simulation,
+	sim *sim.Simulation,
 	test *acceptance.Test,
 ) []*acceptance.Agent {
 	freq := 1.0 * timing.GHz

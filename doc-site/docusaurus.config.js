@@ -84,13 +84,13 @@ const config = {
     ],
     // One docs instance owns the whole simulation tree, avoiding overlapping
     // MDX loaders for the runner and its nested packages.
-    ...['simulation', 'examples', 'noc', 'mem'].map(pkg => [
+    ...['sim', 'examples', 'noc', 'mem'].map(pkg => [
       '@docusaurus/plugin-content-docs',
       /** @type {import('@docusaurus/plugin-content-docs').Options} */
       ({
         id: `pkg-${pkg}`,
         path: `../${pkg}`,
-        routeBasePath: pkg === 'simulation' ? 'packages' : `packages/${pkg}`,
+        routeBasePath: pkg === 'sim' ? 'packages' : `packages/${pkg}`,
         sidebarPath: `./sidebars/${pkg}.js`,
         editUrl: `https://github.com/sarchlab/akita/blob/main/${pkg}/`,
         include: ['**/README.md'],
@@ -118,7 +118,7 @@ const config = {
           {
             type: 'docSidebar',
             sidebarId: 'coreGroupSidebar',
-            docsPluginId: 'pkg-simulation',
+            docsPluginId: 'pkg-sim',
             position: 'left',
             label: 'Core',
           },

@@ -1,7 +1,7 @@
 package routing
 
 import (
-	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
 // Table is a routing table that can find the next-hop port according to the

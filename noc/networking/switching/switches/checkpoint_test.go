@@ -7,7 +7,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/switches"
-	"github.com/sarchlab/akita/v5/simulation"
+	"github.com/sarchlab/akita/v5/sim"
 )
 
 // TestSwitchArbCursorRoundTrip guards that the switch's round-robin arbitration
@@ -18,7 +18,7 @@ func TestSwitchArbCursorRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ck.tar.gz")
 	const buildID = "switch-test"
 
-	sim := simulation.MakeBuilder().Build()
+	sim := sim.MakeBuilder().Build()
 	defer func() {
 		sim.Terminate()
 		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")

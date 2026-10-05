@@ -8,11 +8,11 @@ import (
 
 	"github.com/sarchlab/akita/v5/noc/networking/networkconnector"
 
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 
 	// A deviceNode represents a switch associated with the device and
 	// and NVLink switch.
-	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
 type deviceNode struct {

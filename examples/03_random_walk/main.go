@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/simulation/modeling/ticking"
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // Spec is the walker's configuration.
@@ -79,7 +79,7 @@ func (m *walkMW) Handle(_ timing.Event) bool {
 }
 
 func main() {
-	s := simulation.MakeBuilder().Build()
+	s := sim.MakeBuilder().Build()
 
 	walker := Definition.Builder().
 		WithSimulation(s).

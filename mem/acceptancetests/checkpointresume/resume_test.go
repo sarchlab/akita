@@ -11,10 +11,10 @@ import (
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/simulation/messaging"
-	"github.com/sarchlab/akita/v5/simulation/modeling/ticking"
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 const numOps = 16
@@ -212,8 +212,8 @@ func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
 // buildSim assembles an identical simulation each time: a deterministic driver
 // and an ideal memory controller wired over a direct connection. The connection
 // is registered so its round-robin cursor is checkpointed too.
-func buildSim() (*simulation.Simulation, *driver) {
-	sim := simulation.MakeBuilder().Build()
+func buildSim() (*sim.Simulation, *driver) {
+	sim := sim.MakeBuilder().Build()
 
 	dramSpec := idealmemcontroller.Definition.DefaultSpec
 	dramSpec.Width = 4
@@ -242,7 +242,7 @@ func buildSim() (*simulation.Simulation, *driver) {
 	return sim, d
 }
 
-func cleanup(sim *simulation.Simulation) {
+func cleanup(sim *sim.Simulation) {
 	sim.Terminate()
 	os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
 }

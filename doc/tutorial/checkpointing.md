@@ -226,7 +226,7 @@ pattern.
 
 ## See also
 
-- `simulation/README.md` — the `SaveCheckpoint`/`LoadCheckpoint` orchestration.
+- `sim/README.md` — the `SaveCheckpoint`/`LoadCheckpoint` orchestration.
 - `examples/checkpointdemo` — a runnable save/load demo.
 - `mem/acceptancetests/checkpointresume` and
   `mem/acceptancetests/virtualmemcheckpoint` — mid-transaction resume oracles.

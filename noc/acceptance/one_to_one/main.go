@@ -9,9 +9,9 @@ import (
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
 
 	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/simulation/messaging"
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/tebeka/atexit"
 )
 
@@ -37,7 +37,7 @@ func main() {
 	atexit.Exit(0)
 }
 
-func createNetwork(s *simulation.Simulation, test *acceptance.Test) {
+func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 	freq := 1.0 * timing.GHz
 
 	var agents []*acceptance.Agent

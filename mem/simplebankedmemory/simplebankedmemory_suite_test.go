@@ -3,8 +3,8 @@ package simplebankedmemory
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/simulation/messaging"
-	"github.com/sarchlab/akita/v5/simulation/modeling"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

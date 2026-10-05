@@ -11,7 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/inspect/schema"
 )
 
-const defineProtocolFullName = "github.com/sarchlab/akita/v5/simulation/messaging.DefineProtocol"
+const defineProtocolFullName = "github.com/sarchlab/akita/v5/sim/messaging.DefineProtocol"
 
 // parsePortRoles parses a port's akita tag: comma-separated
 // role=<protocol>.<role> directives, where <protocol> is the import path of

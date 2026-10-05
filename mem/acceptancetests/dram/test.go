@@ -11,11 +11,11 @@ import (
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/dram"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 
 	"github.com/sarchlab/akita/v5/monitoring"
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/simulation/timing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 var seedFlag = flag.Int64("seed", 0, "Random Seed")
@@ -25,9 +25,9 @@ var maxAddressFlag = flag.Uint64("max-address", 1048576, "Address range to use")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 var traceFlag = flag.Bool("trace", false, "Collect trace")
 
-func setupTest(seed int64) (*simulation.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
+func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
 	monitor := monitoring.NewMonitor()
-	simBuilder := simulation.MakeBuilder().WithMonitor(monitor)
+	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
 
 	if *parallelFlag {
 		simBuilder = simBuilder.WithParallelEngine()

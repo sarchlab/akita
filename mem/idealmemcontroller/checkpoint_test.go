@@ -7,8 +7,8 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/simulation/messaging"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
 // TestCheckpointRoundTrip checkpoints a simulation containing a real memory
@@ -20,7 +20,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 	const buildID = "test-build"
 	const payload = "persisted bytes"
 
-	sim := simulation.MakeBuilder().Build()
+	sim := sim.MakeBuilder().Build()
 	defer func() {
 		sim.Terminate()
 		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")

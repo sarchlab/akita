@@ -1,6 +1,6 @@
 package packetization
 
-import "github.com/sarchlab/akita/v5/simulation/messaging"
+import "github.com/sarchlab/akita/v5/sim/messaging"
 
 // Protocol is the traffic-only transport protocol. On the link role,
 // endpoints and switches exchange flits over network links (symmetric link
