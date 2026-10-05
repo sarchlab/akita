@@ -16,9 +16,9 @@ import (
 var (
 	Protocol = messaging.DefineProtocol(
 		messaging.RoleDef{Name: "requester",
-			Sends: []messaging.Msg{ReadReq{}, WriteReq{}}},
+			Sends: []any{ReadReq{}, WriteReq{}}},
 		messaging.RoleDef{Name: "responder",
-			Sends: []messaging.Msg{DataReadyRsp{}, WriteDoneRsp{}}},
+			Sends: []any{DataReadyRsp{}, WriteDoneRsp{}}},
 	)
 	Requester = Protocol.Role("requester")
 	Responder = Protocol.Role("responder")
@@ -27,14 +27,12 @@ var (
 // AccessReq abstracts read and write requests sent to cache modules or memory
 // controllers.
 type AccessReq interface {
-	messaging.Msg
 	GetAddress() uint64
 	GetPID() vm.PID
 }
 
 // ReadReq is a read request sent to a memory controller.
 type ReadReq struct {
-	messaging.MsgMeta
 	Address            uint64
 	AccessByteSize     uint64
 	PID                vm.PID
@@ -53,7 +51,6 @@ func (r ReadReq) GetPID() vm.PID {
 
 // WriteReq is a write request sent to a memory controller.
 type WriteReq struct {
-	messaging.MsgMeta
 	Address            uint64
 	Data               []byte
 	DirtyMask          []bool
@@ -73,11 +70,9 @@ func (r WriteReq) GetPID() vm.PID {
 
 // DataReadyRsp is a response carrying data loaded from memory.
 type DataReadyRsp struct {
-	messaging.MsgMeta
 	Data []byte
 }
 
 // WriteDoneRsp is a response indicating a write request is completed.
 type WriteDoneRsp struct {
-	messaging.MsgMeta
 }

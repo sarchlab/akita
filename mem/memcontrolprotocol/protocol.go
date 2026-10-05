@@ -14,9 +14,9 @@ import (
 var (
 	Protocol = messaging.DefineProtocol(
 		messaging.RoleDef{Name: "requester",
-			Sends: []messaging.Msg{Req{}}},
+			Sends: []any{Req{}}},
 		messaging.RoleDef{Name: "responder",
-			Sends: []messaging.Msg{Rsp{}}},
+			Sends: []any{Rsp{}}},
 	)
 	Requester = Protocol.Role("requester")
 	Responder = Protocol.Role("responder")
@@ -61,7 +61,6 @@ const (
 
 // Req is the unified control request for all memory agents.
 type Req struct {
-	messaging.MsgMeta
 	Command   Command
 	Addresses []uint64 // Invalidate / Flush filter; empty = all entries.
 	PID       vm.PID   // Invalidate / Flush filter; zero = all PIDs.
@@ -75,7 +74,6 @@ type Req struct {
 // verb) and "must be paused or drained" (Invalidate/Flush issued while
 // Enabled).
 type Rsp struct {
-	messaging.MsgMeta
 	Command Command
 	Success bool
 	Error   string

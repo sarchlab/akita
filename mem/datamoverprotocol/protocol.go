@@ -3,9 +3,7 @@
 // roles ports bind to.
 package datamoverprotocol
 
-import (
-	"github.com/sarchlab/akita/v5/messaging"
-)
+import "github.com/sarchlab/akita/v5/messaging"
 
 // Protocol is the data move protocol: a requester asks the data mover to copy
 // a byte range between its inside and outside sides, and the data mover
@@ -14,9 +12,9 @@ import (
 var (
 	Protocol = messaging.DefineProtocol(
 		messaging.RoleDef{Name: "requester",
-			Sends: []messaging.Msg{DataMoveReq{}}},
+			Sends: []any{DataMoveReq{}}},
 		messaging.RoleDef{Name: "responder",
-			Sends: []messaging.Msg{DataMoveRsp{}}},
+			Sends: []any{DataMoveRsp{}}},
 	)
 	Requester = Protocol.Role("requester")
 	Responder = Protocol.Role("responder")
@@ -28,12 +26,10 @@ type DataMovePort string
 
 // DataMoveRsp is sent when a data move operation completes.
 type DataMoveRsp struct {
-	messaging.MsgMeta
 }
 
 // DataMoveReq is a data move request.
 type DataMoveReq struct {
-	messaging.MsgMeta
 	SrcAddress uint64
 	DstAddress uint64
 	ByteSize   uint64
