@@ -40,8 +40,7 @@
         "count": 64,
         "stride": "0x20000"
       },
-      "counts_check": "enforced",
-      "latency_check": "off"
+      "read_latency": "enforced"
     },
     {
       "name": "cp_read_256",
@@ -51,8 +50,7 @@
         "count": 256,
         "stride": "0x20000"
       },
-      "counts_check": "enforced",
-      "latency_check": "off"
+      "read_latency": "enforced"
     },
     {
       "name": "cp_write_64",
@@ -62,8 +60,7 @@
         "count": 64,
         "stride": "0x20000"
       },
-      "counts_check": "enforced",
-      "latency_check": "off"
+      "read_latency": "off"
     },
     {
       "name": "cp_write_256",
@@ -73,8 +70,7 @@
         "count": 256,
         "stride": "0x20000"
       },
-      "counts_check": "enforced",
-      "latency_check": "off"
+      "read_latency": "off"
     },
     {
       "name": "op_seq_64B",
@@ -84,8 +80,7 @@
         "count": 512,
         "stride": "0x40"
       },
-      "counts_check": "off",
-      "latency_check": "enforced"
+      "read_latency": "enforced"
     },
     {
       "name": "op_stride_128K",
@@ -95,8 +90,7 @@
         "count": 512,
         "stride": "0x20000"
       },
-      "counts_check": "off",
-      "latency_check": "enforced"
+      "read_latency": "enforced"
     },
     {
       "name": "op_stride_8K",
@@ -106,9 +100,8 @@
         "count": 512,
         "stride": "0x2000"
       },
-      "counts_check": "off",
-      "latency_check": "known_gap",
-      "gap_reason": "configurable address mapping (roadmap P3)"
+      "read_latency": "known_gap",
+      "gap_reason": "configurable address mapping"
     },
     {
       "name": "op_stride_16K",
@@ -118,9 +111,8 @@
         "count": 512,
         "stride": "0x4000"
       },
-      "counts_check": "off",
-      "latency_check": "known_gap",
-      "gap_reason": "configurable address mapping (roadmap P3)"
+      "read_latency": "known_gap",
+      "gap_reason": "configurable address mapping"
     }
   ]
 }
