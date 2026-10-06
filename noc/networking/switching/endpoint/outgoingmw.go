@@ -14,17 +14,15 @@ import (
 // msgToFlits converts a message into flit messages.
 func msgToFlits(
 	newID func() uint64,
-	meta messaging.Msg,
+	msg messaging.Msg,
 	spec Spec,
 	networkPortRemote messaging.RemotePort,
 	defaultSwitchDst messaging.RemotePort,
 	msgTaskID uint64,
 ) []messaging.Msg {
-	// Preserve the traffic-only network behavior until #495.
-	meta.Payload = nil
 	numFlit := 1
-	if meta.TrafficBytes > 0 {
-		trafficByte := meta.TrafficBytes
+	if msg.TrafficBytes > 0 {
+		trafficByte := msg.TrafficBytes
 		trafficByte += int(math.Ceil(
 			float64(trafficByte) * spec.EncodingOverhead))
 		numFlit = (trafficByte-1)/spec.FlitByteSize + 1
@@ -32,13 +30,19 @@ func msgToFlits(
 
 	flits := make([]messaging.Msg, numFlit)
 	for i := 0; i < numFlit; i++ {
+		var carried messaging.Msg
+		if i == 0 {
+			carried = msg
+		}
 		flits[i] = messaging.Msg{ID: newID(),
 			Src: networkPortRemote,
 			Dst: defaultSwitchDst, Payload: packetization.Flit{
 				SeqID:        i,
 				NumFlitInMsg: numFlit,
-				Msg:          meta,
+				MsgID:        msg.ID,
+				Dst:          msg.Dst,
 				MsgTaskID:    msgTaskID,
+				Msg:          carried,
 			}}
 	}
 

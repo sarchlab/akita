@@ -1,46 +1,44 @@
 # packetization — Flit Primitives for Interconnects
 
-Package `packetization` provides packetization primitives for the Akita
-simulation framework. Within the `noc` networking stack, messages do not travel
-across the network whole: endpoints split each message into fixed-size flits,
-the smallest unit that moves between switch ports, and reassemble the flits back
-into a message at the receiving endpoint. This package defines the flit type
-shared by the `endpoint` and `switches` packages.
+Endpoints split messages into flits for network timing and reassemble them into
+complete application messages at the destination. Switches route each flit
+independently.
 
-## Key Types
-
-### Flit
-
-A `Flit` is a value payload representing one transfer unit on the network.
-It travels inside a `messaging.Msg` envelope.
+## Flit layout
 
 ```go
 type Flit struct {
-    SeqID        int               // index of this flit within its message
-    NumFlitInMsg int               // total flits the message was split into
-    Msg          messaging.Msg // metadata of the carried message
+    MsgID        uint64
+    Dst          messaging.RemotePort
+    SeqID        int
+    NumFlitInMsg int
+    MsgTaskID    uint64
+    Msg          messaging.Msg // complete original message on flit 0 only
 }
 ```
 
-- The outer `messaging.Msg` carries the flit's own routing info (`Src`/`Dst`),
-  which describes the current hop between an endpoint and a switch port — not
-  the final endpoints.
-- `Msg` carries the original message's metadata (true `Src`/`Dst`, traffic
-  class, byte size), which the receiving endpoint uses to rebuild the message.
-- `SeqID` and `NumFlitInMsg` let the receiving endpoint know when every flit of
-  a message has arrived and reassembly can complete.
+Every flit has a transport header: the original message ID and destination,
+its sequence number and total flit count, and the message's tracing task ID.
+The outer `messaging.Msg` holds the flit's own ID and current-hop source and
+destination. Switches use `Flit.Dst` to select the next hop.
 
-## How It Works
+Only flit 0 holds the original message, including all routing metadata and its
+registered concrete payload. Other flits have a zero `Msg`, omitted from JSON.
+This avoids serializing the application payload once per flit. The existing
+`messaging.Msg` codec preserves the nested payload's type without a separate
+message wrapper or shared-message registry.
 
-An `endpoint` computes how many flits a message needs from its `TrafficBytes`,
-flit byte size, and encoding overhead, then emits that many `Flit` values with a
-shared `Msg` payload and increasing `SeqID`. Switches forward each flit
-independently using its hop-level `Dst`; the destination endpoint counts
-arriving flits per message ID and, once `NumFlitInMsg` flits are in, delivers
-the reassembled message to the device port.
+## Reassembly and checkpoints
 
-The flit's `Msg` field can preserve a complete nested message through JSON.
-For the current traffic-only switching network, the sending endpoint explicitly
-clears that inner message's `Payload` before packetization. The receiving endpoint
-delivers the routing fields with an empty `AssembledMsg` payload. Delivering the
-original application payload is a separate change tracked by #495.
+The receiver groups flits by `MsgID` and records their sequence numbers. Flits
+may arrive in any order: flit 0 can arrive before or after the body flits. Its
+message is retained in checkpointed reassembly state until every flit arrives.
+A nil application payload is valid; `SeqID == 0` identifies the head.
+
+Once complete, the original message waits for capacity on the destination device
+port and is delivered unchanged. Flit count and timing still derive from
+`TrafficBytes`, `FlitByteSize`, and `EncodingOverhead`; the Go payload is carried
+for functional correctness, not converted to physical network bytes.
+
+The transport protocol has only the symmetric `link` role. Device ports receive
+the application's own payload, so there is no `AssembledMsg` or `Delivery` role.

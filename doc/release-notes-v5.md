@@ -17,3 +17,12 @@ The memory access agent accepts a small `ProgressTracker` interface through
 
 See the [migration guide](./tutorial/migration.md) for updated imports,
 monitor wiring, and port configuration. MGPUSim migration is separate.
+
+## Switching-network payload delivery
+
+Switching networks preserve the complete original message, including its typed
+payload. Only flit 0 carries that message; body flits contain the routing and
+reassembly header. Checkpoints retain one copy of the message across flit queues
+and reassembly state. `packetization.AssembledMsg` and the `Delivery` role are
+removed. Existing checkpoints with the old network layout must be recreated.
+Link bandwidth and latency modeling are a separate change.

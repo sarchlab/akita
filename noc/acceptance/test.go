@@ -3,6 +3,7 @@ package acceptance
 import (
 	"log"
 	"math/rand"
+	"reflect"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -10,6 +11,7 @@ import (
 
 // TrafficMsg is a concrete message type used in acceptance tests.
 type TrafficMsg struct {
+	Data []byte
 }
 
 // Protocol is the acceptance traffic protocol: test agents exchange traffic
@@ -65,7 +67,9 @@ func (t *Test) GenerateMsgs(n uint64) {
 		msg := messaging.Msg{ID: srcAgent.NewID(),
 			Src:          srcPort.AsRemote(),
 			Dst:          dstPort.AsRemote(),
-			TrafficBytes: rand.Intn(4096), Payload: TrafficMsg{}}
+			TrafficBytes: rand.Intn(4096),
+			Payload:      TrafficMsg{Data: []byte{byte(i), byte(i >> 8), byte(i >> 16), byte(i >> 24)}},
+		}
 		srcAgent.MsgsToSend = append(srcAgent.MsgsToSend, msg)
 		t.registerMsg(msg)
 	}
@@ -86,13 +90,23 @@ func (t *Test) receiveMsg(meta messaging.Msg, recvPort messaging.Port) {
 	}
 	t.receivedMsgsTable[meta.ID] = true
 
-	// Retain the received routing fields for acceptance checks.
+	// Retain the complete message for payload and metadata integrity checks.
 	t.receivedMsgs = append(t.receivedMsgs, meta)
 }
 
 // MustHaveReceivedAllMsgs asserts that all the messages sent are received.
 func (t *Test) MustHaveReceivedAllMsgs() {
 	if len(t.msgs) == len(t.receivedMsgs) {
+		expected := make(map[uint64]messaging.Msg, len(t.msgs))
+		for _, msg := range t.msgs {
+			expected[msg.ID] = msg
+		}
+		for _, got := range t.receivedMsgs {
+			want, exists := expected[got.ID]
+			if !exists || !reflect.DeepEqual(got, want) {
+				panic("received message metadata or payload differs from sent message")
+			}
+		}
 		return
 	}
 

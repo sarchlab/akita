@@ -30,15 +30,11 @@ type Resources struct {
 // assemblingMsgState is a serializable representation of a message being
 // assembled from flits.
 type assemblingMsgState struct {
-	MsgID           uint64               `json:"msg_id"`
-	MsgTaskID       uint64               `json:"msg_task_id"`
-	Src             messaging.RemotePort `json:"src"`
-	Dst             messaging.RemotePort `json:"dst"`
-	RspTo           uint64               `json:"rsp_to"`
-	TrafficClass    string               `json:"traffic_class"`
-	TrafficBytes    int                  `json:"traffic_bytes"`
-	NumFlitRequired int                  `json:"num_flit_required"`
-	NumFlitArrived  int                  `json:"num_flit_arrived"`
+	MsgID          uint64        `json:"msg_id"`
+	MsgTaskID      uint64        `json:"msg_task_id"`
+	Msg            messaging.Msg `json:"msg,omitzero"`
+	Received       []bool        `json:"received"`
+	NumFlitArrived int           `json:"num_flit_arrived"`
 }
 
 // state contains mutable runtime data for the endpoint.
