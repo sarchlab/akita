@@ -8,9 +8,9 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	_ "github.com/sarchlab/akita/v5/mem/memcontrolprotocol" // Declares mem.control.
 	_ "github.com/sarchlab/akita/v5/mem/memprotocol"        // Declares mem.
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling/ticking"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // Mode selects how precisely the component is modeled.

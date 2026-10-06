@@ -9,10 +9,10 @@ package main
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/modeling/ticking"
-	"github.com/sarchlab/akita/v5/timing"
-	"github.com/sarchlab/akita/v5/tracing"
+	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 // Spec is the worker's configuration.

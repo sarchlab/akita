@@ -4,12 +4,12 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 
-	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/sim/queueing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 var _ = Describe("Bankstage", func() {

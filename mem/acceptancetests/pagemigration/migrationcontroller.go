@@ -10,12 +10,12 @@ import (
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
-	"github.com/sarchlab/akita/v5/tracing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 var migDebugFlag = flag.Bool(
@@ -538,7 +538,7 @@ func (m *migMW) finishMigration() {
 // wires their control/data connections, and starts the controller ticking. It
 // returns the controller so the caller can report the migration count.
 func setupMigrationController(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	shared sharedHierarchy,
 	chains []agentChain,
 	memConn *directconnection.Comp,
@@ -578,7 +578,7 @@ func setupMigrationController(
 }
 
 func buildDataMover(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	shared sharedHierarchy,
 ) *datamover.Comp {
 	memCtrlPorts := make([]messaging.RemotePort, len(shared.memCtrls))
@@ -615,7 +615,7 @@ func buildDataMover(
 }
 
 func buildMigrationController(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	shared sharedHierarchy,
 	chains []agentChain,
 	mover *datamover.Comp,

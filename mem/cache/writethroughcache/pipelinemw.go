@@ -2,8 +2,8 @@ package writethroughcache
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // pipelineMW runs the cache data pipeline. It holds only references: the

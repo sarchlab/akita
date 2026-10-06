@@ -35,7 +35,7 @@ code.
 ## Building the Component
 
 ```go
-s := simulation.MakeBuilder().Build()
+s := sim.MakeBuilder().Build()
 
 walker := Definition.Builder().
     WithSimulation(s).

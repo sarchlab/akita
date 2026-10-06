@@ -45,10 +45,11 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/addresstranslator"
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // numDevices is the number of memory devices the physical address space is
@@ -106,13 +107,14 @@ type agentChain struct {
 }
 
 func setupTest(seed int64) (
-	*simulation.Simulation,
+	*sim.Simulation,
 	timing.Engine,
 	[]agentChain,
 	sharedHierarchy,
 	*directconnection.Comp,
 ) {
-	simBuilder := simulation.MakeBuilder()
+	monitor := monitoring.NewMonitor()
+	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
 
 	if *parallelFlag {
 		simBuilder = simBuilder.WithParallelEngine()
@@ -129,6 +131,10 @@ func setupTest(seed int64) (
 	chains := make([]agentChain, *numAgentsFlag)
 	for i := 0; i < *numAgentsFlag; i++ {
 		chains[i] = buildAgentChain(s, i, shared, seed)
+		memaccessagent.SetProgressTrackers(chains[i].agent,
+			monitor.CreateProgressBar(chains[i].agent.Name()+".Writes", uint64(chains[i].agent.State.WriteLeft)),
+			monitor.CreateProgressBar(chains[i].agent.Name()+".Reads", uint64(chains[i].agent.State.ReadLeft)),
+		)
 	}
 
 	memConn := setupConnections(s, shared, chains)
@@ -147,7 +153,7 @@ func agentStride() uint64 {
 // buildSharedHierarchy builds the per-device memory controllers, the shared L2
 // cache (with an interleaved mapper that routes physical addresses to the owning
 // device), the shared L2 TLB and MMU, and the page table.
-func buildSharedHierarchy(s *simulation.Simulation) sharedHierarchy {
+func buildSharedHierarchy(s *sim.Simulation) sharedHierarchy {
 	combinedRange := uint64(*numAgentsFlag) * agentStride()
 	numPages := (combinedRange-1)/pageSize + 1
 
@@ -182,7 +188,7 @@ func buildSharedHierarchy(s *simulation.Simulation) sharedHierarchy {
 }
 
 func buildMemCtrl(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	index int,
 	capacity uint64,
 ) *idealmemcontroller.Comp {
@@ -211,7 +217,7 @@ func buildMemCtrl(
 // interleaved address mapper so that a physical address routes to the memory
 // controller of the device that owns it (address/deviceStride % numDevices).
 func buildL2Cache(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	memCtrlPorts []messaging.RemotePort,
 	deviceStride uint64,
 ) *writeback.Comp {
@@ -239,7 +245,7 @@ func buildL2Cache(
 }
 
 func buildMMU(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	pageTable vm.PageTable,
 ) *mmu.Comp {
 	mmuSpec := mmu.Definition.DefaultSpec
@@ -260,7 +266,7 @@ func buildMMU(
 }
 
 func buildL2TLB(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	ioMMU *mmu.Comp,
 ) *tlb.Comp {
 	l2TLBSpec := tlb.Definition.DefaultSpec
@@ -289,7 +295,7 @@ func buildL2TLB(
 // buildAgentChain builds the private ROB, address translator, L1 cache, and
 // L1 TLB for one agent, plus the agent itself.
 func buildAgentChain(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	index int,
 	shared sharedHierarchy,
 	seed int64,
@@ -312,7 +318,7 @@ func buildAgentChain(
 }
 
 func buildL1Cache(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	suffix string,
 	l2Cache *writeback.Comp,
 ) *writethroughcache.Comp {
@@ -342,7 +348,7 @@ func buildL1Cache(
 }
 
 func buildL1TLB(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	suffix string,
 	l2TLB *tlb.Comp,
 ) *tlb.Comp {
@@ -372,7 +378,7 @@ func buildL1TLB(
 }
 
 func buildAddressTranslator(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	suffix string,
 	l1Cache *writethroughcache.Comp,
 	l1TLB *tlb.Comp,
@@ -405,7 +411,7 @@ func buildAddressTranslator(
 }
 
 func buildROB(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	suffix string,
 	at *addresstranslator.Comp,
 ) *rob.Comp {
@@ -427,7 +433,7 @@ func buildROB(
 }
 
 func buildAgent(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	index int,
 	robComp *rob.Comp,
 	seed int64,
@@ -450,9 +456,6 @@ func buildAgent(
 			Mem: newPort(name + ".Mem"),
 		}).
 		Build(name)
-	if monitor := s.Monitor(); monitor != nil {
-		memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
-	}
 
 	return agent
 }
@@ -474,7 +477,7 @@ func pagePAddr(device, pageIndex, deviceStride uint64) uint64 {
 // touches both local and remote memory.
 func setupPageTable(
 	numPages, deviceStride uint64,
-	s *simulation.Simulation,
+	s *sim.Simulation,
 ) vm.PageTable {
 	pageTable := vm.MakePageTableBuilder().
 		WithSimulation(s).
@@ -502,7 +505,7 @@ func setupPageTable(
 // It returns the L2<->memory connection so the migration controller can plug
 // the data mover's memory-facing ports into the same fabric.
 func setupConnections(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	shared sharedHierarchy,
 	chains []agentChain,
 ) *directconnection.Comp {
@@ -568,7 +571,7 @@ func newPort(fullName string) messaging.Port {
 // newStorage builds a storage of the given capacity that registers with the
 // simulation.
 func newStorage(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	capacity uint64,
 	name string,
 ) *mem.Storage {
@@ -578,7 +581,7 @@ func newStorage(
 		Build(name)
 }
 
-func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {
+func connect(s *sim.Simulation, name string, p1, p2 messaging.Port) {
 	conn := directconnection.MakeBuilder().WithSimulation(s).Build(name)
 	conn.PlugIn(p1)
 	conn.PlugIn(p2)

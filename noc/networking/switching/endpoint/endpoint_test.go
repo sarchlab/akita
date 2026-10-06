@@ -3,12 +3,12 @@ package endpoint
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/noc/packetization"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
+	"github.com/sarchlab/akita/v5/sim/timing"
 
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 	gomock "go.uber.org/mock/gomock"
 )
 

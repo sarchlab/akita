@@ -10,11 +10,11 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling/ticking"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 const numOps = 16
@@ -198,9 +198,9 @@ func (m *driverMW) sendNext() bool {
 	return false
 }
 
-func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
+func buildDriver(s timing.Simulation, lowModule messaging.Port) *driver {
 	return Definition.Builder().
-		WithSimulation(sim).
+		WithSimulation(s).
 		WithSpec(Definition.DefaultSpec).
 		WithResources(driverResources{LowModule: lowModule}).
 		WithPorts(driverPorts{
@@ -212,19 +212,19 @@ func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
 // buildSim assembles an identical simulation each time: a deterministic driver
 // and an ideal memory controller wired over a direct connection. The connection
 // is registered so its round-robin cursor is checkpointed too.
-func buildSim() (*simulation.Simulation, *driver) {
-	sim := simulation.MakeBuilder().WithoutMonitoring().Build()
+func buildSim() (*sim.Simulation, *driver) {
+	s := sim.MakeBuilder().Build()
 
 	dramSpec := idealmemcontroller.Definition.DefaultSpec
 	dramSpec.Width = 4
 	dramSpec.Latency = 10
 	dram := idealmemcontroller.Definition.Builder().
-		WithSimulation(sim).
+		WithSimulation(s).
 		WithSpec(dramSpec).
 		WithResources(idealmemcontroller.Resources{
 			Storage: mem.MakeStorageBuilder().
 				WithCapacity(1 * mem.MB).
-				WithSimulation(sim).
+				WithSimulation(s).
 				Build("DRAM.Storage"),
 		}).
 		WithPorts(idealmemcontroller.Ports{
@@ -233,18 +233,18 @@ func buildSim() (*simulation.Simulation, *driver) {
 		}).
 		Build("DRAM")
 
-	d := buildDriver(sim, dram.Ports.Top)
+	d := buildDriver(s, dram.Ports.Top)
 
-	conn := directconnection.MakeBuilder().WithSimulation(sim).Build("Conn")
+	conn := directconnection.MakeBuilder().WithSimulation(s).Build("Conn")
 	conn.PlugIn(d.Ports.Mem)
 	conn.PlugIn(dram.Ports.Top)
 
-	return sim, d
+	return s, d
 }
 
-func cleanup(sim *simulation.Simulation) {
-	sim.Terminate()
-	os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
+func cleanup(s *sim.Simulation) {
+	s.Terminate()
+	os.Remove("akita_sim_" + s.ID() + ".sqlite3")
 }
 
 // runReference runs a full uninterrupted simulation and returns the oracle: the

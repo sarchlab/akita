@@ -3,10 +3,10 @@ package switches
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling/ticking"
-	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/queueing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // Definition declares the switch, a ticking component: its default

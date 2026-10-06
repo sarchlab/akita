@@ -116,7 +116,7 @@ func TestInspect(t *testing.T) {
 	checkDeclarationForms(t, byPkg)
 
 	t.Run("package without definition is skipped", func(t *testing.T) {
-		if _, ok := byPkg[modulePath+"/timing"]; ok {
+		if _, ok := byPkg[modulePath+"/sim/timing"]; ok {
 			t.Errorf("timing has no definition but one was extracted")
 		}
 	})
@@ -199,7 +199,7 @@ func checkSliceFields(t *testing.T, byPkg map[string]schema.Definition) {
 
 	want := map[string]schema.Field{
 		"Lanes":   {Type: "[]int", Default: []any{int64(1), int64(2)}},
-		"Targets": {Type: "[]github.com/sarchlab/akita/v5/messaging.RemotePort", Default: []any{}},
+		"Targets": {Type: "[]github.com/sarchlab/akita/v5/sim/messaging.RemotePort", Default: []any{}},
 	}
 
 	for _, f := range byPkg[fixturePath("scalars")].Spec {
@@ -236,7 +236,7 @@ func checkLocalProto(t *testing.T, byPkg map[string]schema.Definition) {
 	want := map[string]schema.Role{
 		"In":   {Protocol: fixturePath("localproto"), Role: "consumer"},
 		"Feed": {Protocol: fixturePath("localproto"), Role: "producer"},
-		"Sink": {Protocol: modulePath + "/messaging", Role: "any"},
+		"Sink": {Protocol: modulePath + "/sim/messaging", Role: "any"},
 	}
 
 	for _, port := range def.Ports {
@@ -446,7 +446,7 @@ func declaresDefinition(t *testing.T, path string) bool {
 func fixturePatterns(t *testing.T) []string {
 	t.Helper()
 
-	patterns := []string{modulePath + "/mem/rob", modulePath + "/timing"}
+	patterns := []string{modulePath + "/mem/rob", modulePath + "/sim/timing"}
 	fixtures, err := os.ReadDir("testdata/fixtures")
 	if err != nil {
 		t.Fatal(err)

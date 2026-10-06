@@ -1,7 +1,7 @@
 package mesh
 
 import (
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
 // meshRoutingTable is a routing table that can find the next-hop port according

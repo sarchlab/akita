@@ -1,7 +1,7 @@
 package writeback
 
 import (
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // controlMW runs the flusher, which takes Flush commands from the Control

@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/tracing"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type routeForwardSendMW struct {

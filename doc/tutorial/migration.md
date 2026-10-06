@@ -7,9 +7,67 @@ sidebar_position: 7
 This guide covers all breaking changes between Akita V4 and V5. Each section
 explains the motivation, shows before/after code, and notes pitfalls.
 
+## Simulation umbrella and tool names
+
+The runtime packages now live below `sim/`: `naming`, `hooking`,
+`queueing`, `timing`, `messaging`, `modeling`, `tracing`, `datarecording`, and
+`sourcefs`. Change imports such as `github.com/sarchlab/akita/v5/timing` to
+`github.com/sarchlab/akita/v5/sim/timing`; apply the same change to
+component-model subpackages and mock-generation directives. The runner also moves from
+`github.com/sarchlab/akita/v5/simulation` to `github.com/sarchlab/akita/v5/sim`;
+its Go package is now named `sim`, while the type remains `sim.Simulation`.
+
+The live monitor is now `github.com/sarchlab/akita/v5/monitoring` and the
+visualizer is `github.com/sarchlab/akita/v5/daisen`. The old package paths are
+removed. Browser watched-property storage keys are retained so the rename
+preserves existing saved preferences.
+
+**Monitoring default changed:** building a simulation no longer starts a web
+server unless a monitor is supplied. Downstream simulators, including MGPUSim,
+must add `WithMonitor` to retain live monitoring; importing the package alone
+does not enable it. MGPUSim migration is a separate change.
+
+```go
+monitor := monitoring.NewMonitor().WithPortNumber(8080)
+s := sim.MakeBuilder().WithMonitor(monitor).Build()
+defer s.Terminate()
+bar := monitor.CreateProgressBar("kernels", 100)
+```
+
+Remove `WithoutMonitoring()` calls; omitting `WithMonitor` disables monitoring.
+Tracing remains independent. Move `WithMonitorPort(port)` configuration to
+`monitoring.NewMonitor().WithPortNumber(port)`. Keep the concrete `monitor`
+variable for progress bars; `s.Monitor()` exposes the small `sim.Monitor`
+interface, or nil when monitoring is disabled.
+
+Replace manual `RegisterSimulation`, `RegisterVisTracer`, `SetTraceDBPath`, and
+`StartServer` calls with `WithMonitor`. The runner calls `Start(s)` to bind the
+initialized simulation and start the server, then `Stop()` during termination.
+A monitor can be started only once, even after stopping, and progress bars must
+be created after startup.
+
+`daisen.ProgressBar` moves to `monitoring.ProgressBar`; the offline viewer no
+longer owns live progress tracking. Component code should depend on the methods
+it uses rather than a UI type. `memaccessagent.ProgressTracker` declares only
+`IncrementInProgress` and `MoveInProgressToFinished`. Replace
+`memaccessagent.CreateProgressBars` with explicitly supplied trackers:
+
+```go
+memaccessagent.SetProgressTrackers(agent,
+    monitor.CreateProgressBar(agent.Name()+".Writes", uint64(agent.State.WriteLeft)),
+    monitor.CreateProgressBar(agent.Name()+".Reads", uint64(agent.State.ReadLeft)),
+)
+```
+
+Call this after building a fresh agent and before running. Either tracker can
+be nil to disable reporting for that operation. After checkpoint restoration,
+initialize fresh trackers for both remaining and already in-flight requests.
+
 ---
 
 ## Table of Contents
+
+- [Simulation umbrella and tool names](#simulation-umbrella-and-tool-names)
 
 1. [Integer Time](#1-integer-time)
 2. [uint64 Entity IDs](#2-uint64-entity-ids)
@@ -188,7 +246,7 @@ keeps its simulation to itself and allocates IDs with `NewID()`; engines have
 no `NewID()`. For lightweight setups, create
 `modeling.NewStandaloneSimulation(engine)` once and share that instance with
 all builders. A custom tracing domain (`tracing.NamedHookable`) implements
-`NewID() uint64` from its simulation. Monitors use `RegisterSimulation(sim)`
+`NewID() uint64` from its simulation. Monitors receive the simulation through `Start(s)`
 so progress IDs come from the same counter.
 
 ### Before / After

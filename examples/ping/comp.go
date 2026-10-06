@@ -1,10 +1,10 @@
 package ping
 
 import (
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/modeling/wakeup"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/modeling/wakeup"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // Spec is the immutable configuration for a ping component.

@@ -1,7 +1,7 @@
 package directconnection
 
-//go:generate mockgen -destination "mock_sim_test.go" -self_package=github.com/sarchlab/akita/v5/noc/directconnection -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/messaging Port,Connection
-//go:generate mockgen -destination "mock_timing_test.go" -self_package=github.com/sarchlab/akita/v5/noc/directconnection -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/timing Engine,Event,Handler
+//go:generate mockgen -destination "mock_sim_test.go" -self_package=github.com/sarchlab/akita/v5/noc/directconnection -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/sim/messaging Port,Connection
+//go:generate mockgen -destination "mock_timing_test.go" -self_package=github.com/sarchlab/akita/v5/noc/directconnection -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/sim/timing Engine,Event,Handler
 
 import (
 	"testing"

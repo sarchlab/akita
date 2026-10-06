@@ -1,8 +1,8 @@
 package addresstranslator
 
 import (
-	"github.com/sarchlab/akita/v5/modeling/ticking"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // Definition declares the AddressTranslator, a ticking component: its default

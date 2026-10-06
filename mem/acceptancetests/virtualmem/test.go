@@ -18,10 +18,11 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 var seedFlag = flag.Int64("seed", 0, "Random Seed")
@@ -36,8 +37,9 @@ var agent *memaccessagent.MemAccessAgent
 //nolint:funlen // wires the whole simulation in one place
 func setupTest(
 	seed int64,
-) (*simulation.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
-	simBuilder := simulation.MakeBuilder()
+) (*sim.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
+	monitor := monitoring.NewMonitor()
+	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
 
 	if *parallelFlag {
 		simBuilder = simBuilder.WithParallelEngine()
@@ -97,9 +99,10 @@ func setupTest(
 			Mem: newPort("MemAccessAgent.Mem"),
 		}).
 		Build("MemAccessAgent")
-	if monitor := s.Monitor(); monitor != nil {
-		memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
-	}
+	memaccessagent.SetProgressTrackers(agent,
+		monitor.CreateProgressBar(agent.Name()+".Writes", uint64(agent.State.WriteLeft)),
+		monitor.CreateProgressBar(agent.Name()+".Reads", uint64(agent.State.ReadLeft)),
+	)
 
 	setupConnection(s, agent, robComp,
 		at, tlb, l2TLB, ioMMU,
@@ -110,7 +113,7 @@ func setupTest(
 
 // buildROB builds a reorder buffer that forwards every access to bottomUnit
 // (the address translator's Top port) and reorders the responses back.
-func buildROB(s *simulation.Simulation, bottomUnit messaging.RemotePort) *rob.Comp {
+func buildROB(s *sim.Simulation, bottomUnit messaging.RemotePort) *rob.Comp {
 	robSpec := rob.Definition.DefaultSpec
 	robSpec.NumReqPerCycle = 4
 	robSpec.BottomUnit = bottomUnit
@@ -127,7 +130,7 @@ func buildROB(s *simulation.Simulation, bottomUnit messaging.RemotePort) *rob.Co
 }
 
 //nolint:funlen // wires the whole hierarchy in one place
-func buildMemoryHierarchy(s *simulation.Simulation) (
+func buildMemoryHierarchy(s *sim.Simulation) (
 	*writethroughcache.Comp,
 	*writeback.Comp,
 	*idealmemcontroller.Comp,
@@ -193,7 +196,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 
 //nolint:funlen // wires the whole hierarchy in one place
 func buildTranslationHierarchy(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 ) (
 	*mmu.Comp,
 	*tlb.Comp,
@@ -258,7 +261,7 @@ func buildTranslationHierarchy(
 	return IoMMU, TLB, L2TLB
 }
 
-func setupPageTable(maxAddress uint64, s *simulation.Simulation) vm.PageTable {
+func setupPageTable(maxAddress uint64, s *sim.Simulation) vm.PageTable {
 	pageTable := vm.MakePageTableBuilder().
 		WithSimulation(s).
 		WithLog2PageSize(12).
@@ -293,7 +296,7 @@ func newPort(fullName string) messaging.Port {
 // newStorage builds a storage of the given capacity that registers with the
 // simulation.
 func newStorage(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	capacity uint64,
 	name string,
 ) *mem.Storage {
@@ -303,14 +306,14 @@ func newStorage(
 		Build(name)
 }
 
-func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {
+func connect(s *sim.Simulation, name string, p1, p2 messaging.Port) {
 	conn := directconnection.MakeBuilder().WithSimulation(s).Build(name)
 	conn.PlugIn(p1)
 	conn.PlugIn(p2)
 }
 
 func setupConnection(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	agent *memaccessagent.MemAccessAgent,
 	ROB *rob.Comp,
 	AT *addresstranslator.Comp,

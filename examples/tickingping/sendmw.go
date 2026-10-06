@@ -1,8 +1,8 @@
 package tickingping
 
 import (
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // sendMW handles sending responses and ping requests.

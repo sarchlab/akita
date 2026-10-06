@@ -107,7 +107,7 @@ Attaching it is one call. The simulation engine is `Hookable`, so:
 engine.AcceptHook(&eventHook{})
 ```
 
-(`simulation`-built engines work the same way — `s.Engine()` returns a
+(`sim`-built engines work the same way — `s.Engine()` returns a
 `timing.Engine`, whose interface includes `AcceptHook`.)
 
 ## Running It

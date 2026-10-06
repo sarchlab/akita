@@ -14,15 +14,15 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/addresstranslator"
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
-	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-func cleanup(sim *simulation.Simulation) {
-	sim.Terminate()
-	os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
+func cleanup(s *sim.Simulation) {
+	s.Terminate()
+	os.Remove("akita_sim_" + s.ID() + ".sqlite3")
 }
 
 // buildSim assembles the full virtualmem hierarchy each time, identically:
@@ -30,17 +30,17 @@ func cleanup(sim *simulation.Simulation) {
 // AT's translation path going AT -> TLB -> L2TLB -> IoMMU over a shared page
 // table. Every component, port, connection, and the page table is registered,
 // so all of it is part of the checkpoint inventory.
-func buildSim() (*simulation.Simulation, *driver) {
-	sim := simulation.MakeBuilder().WithoutMonitoring().Build()
+func buildSim() (*sim.Simulation, *driver) {
+	s := sim.MakeBuilder().Build()
 
-	l1Cache, l2Cache, memCtrl := buildMemoryHierarchy(sim)
-	ioMMU, itlb, l2TLB := buildTranslationHierarchy(sim)
+	l1Cache, l2Cache, memCtrl := buildMemoryHierarchy(s)
+	ioMMU, itlb, l2TLB := buildTranslationHierarchy(s)
 
 	atSpec := addresstranslator.Definition.DefaultSpec
 	atSpec.Log2PageSize = 12
 	atSpec.NumReqPerCycle = 4
 	at := addresstranslator.Definition.Builder().
-		WithSimulation(sim).
+		WithSimulation(s).
 		WithSpec(atSpec).
 		WithResources(addresstranslator.Resources{
 			MemProviderMapper: &mem.SinglePortMapper{
@@ -58,15 +58,15 @@ func buildSim() (*simulation.Simulation, *driver) {
 		}).
 		Build("AT")
 
-	d := buildDriver(sim, at.Ports.Top)
+	d := buildDriver(s, at.Ports.Top)
 
-	setupConnection(sim, d, at, itlb, l2TLB, ioMMU, l1Cache, l2Cache, memCtrl)
+	setupConnection(s, d, at, itlb, l2TLB, ioMMU, l1Cache, l2Cache, memCtrl)
 
-	return sim, d
+	return s, d
 }
 
 //nolint:funlen // wires the whole hierarchy in one place
-func buildMemoryHierarchy(s *simulation.Simulation) (
+func buildMemoryHierarchy(s *sim.Simulation) (
 	*writethroughcache.Comp,
 	*writeback.Comp,
 	*idealmemcontroller.Comp,
@@ -130,7 +130,7 @@ func buildMemoryHierarchy(s *simulation.Simulation) (
 	return l1Cache, l2Cache, memCtrl
 }
 
-func buildTranslationHierarchy(s *simulation.Simulation) (*mmu.Comp, *tlb.Comp, *tlb.Comp) {
+func buildTranslationHierarchy(s *sim.Simulation) (*mmu.Comp, *tlb.Comp, *tlb.Comp) {
 	pageTable := setupPageTable(s)
 
 	mmuSpec := mmu.Definition.DefaultSpec
@@ -190,7 +190,7 @@ func buildTranslationHierarchy(s *simulation.Simulation) (*mmu.Comp, *tlb.Comp, 
 	return ioMMU, itlb, l2TLB
 }
 
-func setupPageTable(s *simulation.Simulation) vm.PageTable {
+func setupPageTable(s *sim.Simulation) vm.PageTable {
 	pageTable := vm.MakePageTableBuilder().
 		WithSimulation(s).
 		WithLog2PageSize(12).
@@ -227,7 +227,7 @@ func newPort(fullName string) messaging.Port {
 // newStorage builds a storage of the given capacity that registers with the
 // simulation, so its contents are part of the checkpoint.
 func newStorage(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	capacity uint64,
 	name string,
 ) *mem.Storage {
@@ -237,14 +237,14 @@ func newStorage(
 		Build(name)
 }
 
-func connect(s *simulation.Simulation, name string, p1, p2 messaging.Port) {
+func connect(s *sim.Simulation, name string, p1, p2 messaging.Port) {
 	conn := directconnection.MakeBuilder().WithSimulation(s).Build(name)
 	conn.PlugIn(p1)
 	conn.PlugIn(p2)
 }
 
 func setupConnection(
-	s *simulation.Simulation,
+	s *sim.Simulation,
 	d *driver,
 	at *addresstranslator.Comp,
 	itlb, l2TLB *tlb.Comp,
@@ -266,10 +266,10 @@ func setupConnection(
 // driver end-to-end (no checkpoint): every written value reads back through the
 // translation + cache hierarchy.
 func TestVirtualMemHierarchyCompletes(t *testing.T) {
-	sim, d := buildSim()
-	defer cleanup(sim)
+	s, d := buildSim()
+	defer cleanup(s)
 
-	engine := sim.Engine().(*timing.SerialEngine)
+	engine := s.Engine().(*timing.SerialEngine)
 	d.TickLater()
 	if err := engine.Run(); err != nil {
 		t.Fatalf("run: %v", err)
@@ -288,10 +288,10 @@ func TestVirtualMemHierarchyCompletes(t *testing.T) {
 func runReference(t *testing.T) (wantVerified int, wantTime timing.VTimeInPicoSec) {
 	t.Helper()
 
-	sim, d := buildSim()
-	defer cleanup(sim)
+	s, d := buildSim()
+	defer cleanup(s)
 
-	engine := sim.Engine().(*timing.SerialEngine)
+	engine := s.Engine().(*timing.SerialEngine)
 	d.TickLater()
 	if err := engine.Run(); err != nil {
 		t.Fatalf("reference run: %v", err)
@@ -313,11 +313,11 @@ func resumeAndVerify(
 ) {
 	t.Helper()
 
-	sim, d := buildSim()
-	defer cleanup(sim)
+	s, d := buildSim()
+	defer cleanup(s)
 
-	engine := sim.Engine().(*timing.SerialEngine)
-	if err := sim.LoadCheckpoint(path, buildID); err != nil {
+	engine := s.Engine().(*timing.SerialEngine)
+	if err := s.LoadCheckpoint(path, buildID); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
 	if err := engine.Run(); err != nil {
@@ -346,8 +346,8 @@ func TestVirtualMemMidTransactionResume(t *testing.T) {
 
 	// Advance a fresh sim to a genuinely mid-transaction boundary (requests in
 	// flight somewhere in the translation/cache hierarchy), then checkpoint.
-	sim, d := buildSim()
-	engine := sim.Engine().(*timing.SerialEngine)
+	s, d := buildSim()
+	engine := s.Engine().(*timing.SerialEngine)
 	d.TickLater()
 
 	step := wantTime / 8
@@ -368,10 +368,10 @@ func TestVirtualMemMidTransactionResume(t *testing.T) {
 	t.Logf("checkpoint at t=%d: %d driver requests in flight, writesAcked=%d",
 		engine.CurrentTime(), inFlight(d), d.State.WritesAcked)
 
-	if err := sim.SaveCheckpoint(path, buildID); err != nil {
+	if err := s.SaveCheckpoint(path, buildID); err != nil {
 		t.Fatalf("SaveCheckpoint: %v", err)
 	}
-	cleanup(sim)
+	cleanup(s)
 
 	resumeAndVerify(t, path, buildID, wantVerified, wantTime)
 }
@@ -386,16 +386,16 @@ func TestVirtualMemResumeAcrossBoundaries(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "ck.tar.gz")
 			const buildID = "virtualmem-multi"
 
-			sim, d := buildSim()
-			engine := sim.Engine().(*timing.SerialEngine)
+			s, d := buildSim()
+			engine := s.Engine().(*timing.SerialEngine)
 			d.TickLater()
 			if err := engine.RunUntil(boundary); err != nil {
 				t.Fatalf("RunUntil(%d): %v", boundary, err)
 			}
-			if err := sim.SaveCheckpoint(path, buildID); err != nil {
+			if err := s.SaveCheckpoint(path, buildID); err != nil {
 				t.Fatalf("SaveCheckpoint: %v", err)
 			}
-			cleanup(sim)
+			cleanup(s)
 
 			resumeAndVerify(t, path, buildID, wantVerified, wantTime)
 		})

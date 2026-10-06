@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 var endTime = timing.VTimeInPicoSec(10_000_000_000_000) // 10 seconds in picoseconds
@@ -62,7 +62,7 @@ func (h *handler) scheduleNextSplitEvent(now timing.VTimeInPicoSec, id int) {
 func main() {
 	randGen = rand.New(rand.NewSource(0))
 
-	s := simulation.MakeBuilder().Build()
+	s := sim.MakeBuilder().Build()
 	engine = s.Engine()
 	h := handler{
 		count: 1,

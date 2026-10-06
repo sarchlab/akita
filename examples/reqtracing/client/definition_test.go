@@ -3,7 +3,7 @@ package client
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/modeling/modelingtest"
+	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 )
 
 // TestDefinitionMatchesSource asserts that the inspector's static view of

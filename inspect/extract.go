@@ -22,11 +22,11 @@ const definitionVarName = "Definition"
 var extractors = map[string]func(
 	pkg *packages.Package, lit *ast.CompositeLit, index pkgIndex,
 ) (*schema.Definition, error){
-	"github.com/sarchlab/akita/v5/modeling/ticking.Definition": extractModel(
+	"github.com/sarchlab/akita/v5/sim/modeling/ticking.Definition": extractModel(
 		schema.ModelTicking),
-	"github.com/sarchlab/akita/v5/modeling/wakeup.Definition": extractModel(
+	"github.com/sarchlab/akita/v5/sim/modeling/wakeup.Definition": extractModel(
 		schema.ModelWakeup),
-	"github.com/sarchlab/akita/v5/modeling/event.Definition": extractModel(
+	"github.com/sarchlab/akita/v5/sim/modeling/event.Definition": extractModel(
 		schema.ModelEvent),
 }
 

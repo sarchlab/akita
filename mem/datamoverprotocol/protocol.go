@@ -3,7 +3,7 @@
 // roles ports bind to.
 package datamoverprotocol
 
-import "github.com/sarchlab/akita/v5/messaging"
+import "github.com/sarchlab/akita/v5/sim/messaging"
 
 // Protocol is the data move protocol: a requester asks the data mover to copy
 // a byte range between its inside and outside sides, and the data mover

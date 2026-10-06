@@ -8,9 +8,9 @@ import (
 	"github.com/sarchlab/akita/v5/noc/acceptance"
 	nc "github.com/sarchlab/akita/v5/noc/networking/networkconnector"
 
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/tebeka/atexit"
 )
 
@@ -18,11 +18,11 @@ func main() {
 	flag.Parse()
 	rand.Seed(1)
 
-	sim := acceptance.NewSimulation()
-	engine := sim.Engine()
+	s := acceptance.NewSimulation()
+	engine := s.Engine()
 	t := acceptance.NewTest()
 
-	createNetwork(sim, t)
+	createNetwork(s, t)
 	t.GenerateMsgs(20000)
 
 	err := engine.Run()
@@ -32,11 +32,11 @@ func main() {
 
 	t.MustHaveReceivedAllMsgs()
 	t.ReportBandwidthAchieved(engine.CurrentTime())
-	sim.Terminate()
+	s.Terminate()
 	atexit.Exit(0)
 }
 
-func createNetwork(sim *simulation.Simulation, test *acceptance.Test) {
+func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 	freq := 1.0 * timing.GHz
 
 	var agents []*acceptance.Agent
@@ -47,14 +47,14 @@ func createNetwork(sim *simulation.Simulation, test *acceptance.Test) {
 		for j := 0; j < 5; j++ {
 			ports[j] = messaging.NewPort(fmt.Sprintf("%s.Port%d", name, j), 1, 1)
 		}
-		agent := acceptance.NewAgent(sim, freq, name, ports, test)
+		agent := acceptance.NewAgent(s, freq, name, ports, test)
 		agent.TickLater()
 		agents = append(agents, agent)
 		test.RegisterAgent(agent)
 	}
 
 	connector := nc.MakeConnector().
-		WithSimulation(sim).
+		WithSimulation(s).
 		WithDefaultFreq(freq).
 		WithFlitSize(16)
 

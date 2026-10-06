@@ -1,9 +1,9 @@
 package tickingping
 
 import (
-	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/modeling/ticking"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 // Definition declares the tickingping component, a ticking component: its

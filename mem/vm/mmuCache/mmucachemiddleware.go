@@ -5,9 +5,9 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
-	"github.com/sarchlab/akita/v5/tracing"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
+	"github.com/sarchlab/akita/v5/sim/tracing"
 )
 
 type mmuCacheMiddleware struct {

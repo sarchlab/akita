@@ -1,0 +1,240 @@
+package timing
+
+import (
+	"fmt"
+	"log"
+	"reflect"
+	"sync"
+
+	"github.com/sarchlab/akita/v5/sim/hooking"
+)
+
+// A SerialEngine is an Engine that always run events one after another.
+type SerialEngine struct {
+	hooking.HookableBase
+	*engineControl
+
+	time           VTimeInPicoSec
+	queue          *unsafeEventQueue
+	secondaryQueue *unsafeEventQueue
+
+	singleRunLock sync.Mutex
+
+	registry     map[string]Handler
+	failure      *PanicError
+	currentEvent Event
+}
+
+// NewSerialEngine creates a SerialEngine.
+func NewSerialEngine() *SerialEngine {
+	e := new(SerialEngine)
+
+	e.queue = newUnsafeEventQueue()
+	e.secondaryQueue = newUnsafeEventQueue()
+	e.registry = make(map[string]Handler)
+	e.engineControl = newEngineControl()
+
+	return e
+}
+
+// Name returns the name of the engine. The engine is registered as a simulation
+// entity so its event-queue and time state are part of the state snapshot.
+func (e *SerialEngine) Name() string {
+	return "Engine"
+}
+
+// RegisterHandler registers a handler with the given name.
+func (e *SerialEngine) RegisterHandler(name string, handler Handler) {
+	e.registry[name] = handler
+}
+
+// Schedule registers an event to happen in the future.
+func (e *SerialEngine) Schedule(evt Event) {
+	if e.failure != nil {
+		panic(e.failure)
+	}
+	if evt.Time() < e.time {
+		log.Panic("scheduling an event earlier than current time")
+	}
+
+	handlerMustBeRegistered(e.registry, evt)
+
+	if evt.IsSecondary() {
+		e.secondaryQueue.Push(evt)
+
+		return
+	}
+
+	e.queue.Push(evt)
+}
+
+// Run processes all the events scheduled in the SerialEngine.
+func (e *SerialEngine) Run() (err error) {
+	e.singleRunLock.Lock()
+	defer e.singleRunLock.Unlock()
+	if err := e.engineControl.begin(); err != nil {
+		return err
+	}
+	defer e.engineControl.end(&err)
+	defer e.recoverRun(&err)
+
+	hasHooks := e.NumHooks() > 0
+
+	for {
+		e.currentEvent = nil
+		if e.noMoreEvent() {
+			return nil
+		}
+
+		if e.engineControl.pending.Load() {
+			e.engineControl.boundary()
+		}
+
+		e.dispatchNext(hasHooks)
+	}
+}
+
+// RunUntil runs events in time order until the next event's time would exceed t,
+// or the queue empties. Events at times <= t scheduled while running (including
+// newly scheduled ones) are processed; the engine stops with its time at the
+// last processed event and all later events still queued. This is a
+// deterministic mid-run boundary — unlike Pause, which stops at a
+// non-reproducible point — used to take a mid-transaction checkpoint.
+func (e *SerialEngine) RunUntil(t VTimeInPicoSec) (err error) {
+	e.singleRunLock.Lock()
+	defer e.singleRunLock.Unlock()
+	if err := e.engineControl.begin(); err != nil {
+		return err
+	}
+	defer e.engineControl.end(&err)
+	defer e.recoverRun(&err)
+
+	hasHooks := e.NumHooks() > 0
+
+	for {
+		e.currentEvent = nil
+		if e.noMoreEvent() {
+			return nil
+		}
+		if e.nextEventTime() > t {
+			return nil
+		}
+
+		if e.engineControl.pending.Load() {
+			e.engineControl.boundary()
+		}
+
+		e.dispatchNext(hasHooks)
+	}
+}
+
+// dispatchNext pops the earliest event and runs it, invoking hooks when present.
+func (e *SerialEngine) dispatchNext(hasHooks bool) {
+	evt := e.nextEvent()
+	e.currentEvent = evt
+
+	if evt.Time() < e.time {
+		log.Panicf(
+			"cannot run event in the past, evt %s @ %d, now %d",
+			reflect.TypeOf(evt), evt.Time(), e.time,
+		)
+	}
+
+	e.time = evt.Time()
+
+	if hasHooks {
+		hookCtx := hooking.HookCtx{
+			Domain: e,
+			Pos:    HookPosBeforeEvent,
+			Item:   evt,
+		}
+		e.InvokeHook(hookCtx)
+
+		handler := e.registry[evt.HandlerID()]
+		handler.Handle(evt)
+
+		hookCtx.Pos = HookPosAfterEvent
+		e.InvokeHook(hookCtx)
+	} else {
+		handler := e.registry[evt.HandlerID()]
+		handler.Handle(evt)
+	}
+}
+
+// nextEventTime returns the time of the earliest queued event. It must not be
+// called when both queues are empty.
+func (e *SerialEngine) nextEventTime() VTimeInPicoSec {
+	if e.queue.Len() == 0 {
+		evt, _ := e.secondaryQueue.Peek()
+		return evt.Time()
+	}
+	if e.secondaryQueue.Len() == 0 {
+		evt, _ := e.queue.Peek()
+		return evt.Time()
+	}
+
+	primaryEvent, _ := e.queue.Peek()
+	primary := primaryEvent.Time()
+	secondaryEvent, _ := e.secondaryQueue.Peek()
+	secondary := secondaryEvent.Time()
+	if primary <= secondary {
+		return primary
+	}
+
+	return secondary
+}
+
+func (e *SerialEngine) noMoreEvent() bool {
+	return e.queue.Len() == 0 && e.secondaryQueue.Len() == 0
+}
+
+func (e *SerialEngine) nextEvent() Event {
+	if e.queue.Len() == 0 {
+		evt, _ := e.secondaryQueue.Pop()
+		return evt
+	}
+
+	if e.secondaryQueue.Len() == 0 {
+		evt, _ := e.queue.Pop()
+		return evt
+	}
+
+	primaryEvt, _ := e.queue.Peek()
+	secondaryEvt, _ := e.secondaryQueue.Peek()
+
+	if primaryEvt.Time() <= secondaryEvt.Time() {
+		e.queue.Pop()
+		return primaryEvt
+	}
+
+	e.secondaryQueue.Pop()
+
+	return secondaryEvt
+}
+
+// CurrentTime returns the current time at which the engine is at.
+// Specifically, the run time of the current event.
+func (e *SerialEngine) CurrentTime() VTimeInPicoSec {
+	return e.time
+}
+
+// recoverRun is deferred once by Run/RunUntil, not once per event.
+func (e *SerialEngine) recoverRun(err *error) {
+	if cause := recover(); cause != nil {
+		e.failure = newPanicError(cause, e.currentEvent)
+		*err = e.failure
+	}
+	e.currentEvent = nil
+}
+
+// handlerMustBeRegistered panics unless an event's handler is registered, so a
+// misspelled or unregistered handler fails where the event is scheduled rather
+// than when it is dispatched.
+func handlerMustBeRegistered(registry map[string]Handler, evt Event) {
+	if _, ok := registry[evt.HandlerID()]; !ok {
+		panic(fmt.Sprintf(
+			"timing: event %s is for handler %q, which is not registered; "+
+				"a component's Build registers it, and any other handler "+
+				"must call RegisterHandler", reflect.TypeOf(evt), evt.HandlerID()))
+	}
+}

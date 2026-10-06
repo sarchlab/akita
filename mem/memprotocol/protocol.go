@@ -6,7 +6,7 @@ package memprotocol
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
 // Protocol is the memory access protocol: requesters issue reads and writes,

@@ -1,6 +1,6 @@
 package mem
 
-import "github.com/sarchlab/akita/v5/timing"
+import "github.com/sarchlab/akita/v5/sim/timing"
 
 // StorageBuilder builds Storage resources. When wired to a simulation through
 // WithSimulation, the built storage registers itself as a simulation resource.

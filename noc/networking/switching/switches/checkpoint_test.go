@@ -7,7 +7,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/switches"
-	"github.com/sarchlab/akita/v5/simulation"
+	"github.com/sarchlab/akita/v5/sim"
 )
 
 // TestSwitchArbCursorRoundTrip guards that the switch's round-robin arbitration
@@ -18,25 +18,25 @@ func TestSwitchArbCursorRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ck.tar.gz")
 	const buildID = "switch-test"
 
-	sim := simulation.MakeBuilder().WithoutMonitoring().Build()
+	s := sim.MakeBuilder().Build()
 	defer func() {
-		sim.Terminate()
-		os.Remove("akita_sim_" + sim.ID() + ".sqlite3")
+		s.Terminate()
+		os.Remove("akita_sim_" + s.ID() + ".sqlite3")
 	}()
 
 	sw := switches.Definition.Builder().
-		WithSimulation(sim).
+		WithSimulation(s).
 		WithResources(switches.Resources{RoutingTable: routing.NewTable()}).
 		Build("Switch")
 	sw.State.NextArbPort = 2
 
-	if err := sim.SaveCheckpoint(path, buildID); err != nil {
+	if err := s.SaveCheckpoint(path, buildID); err != nil {
 		t.Fatalf("SaveCheckpoint: %v", err)
 	}
 
 	sw.State.NextArbPort = 99 // mutate away from the checkpoint
 
-	if err := sim.LoadCheckpoint(path, buildID); err != nil {
+	if err := s.LoadCheckpoint(path, buildID); err != nil {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
 	if sw.State.NextArbPort != 2 {

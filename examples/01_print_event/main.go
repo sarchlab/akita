@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 type EventPrinter struct {
@@ -15,7 +15,7 @@ func (e *EventPrinter) Handle(event timing.Event) {
 }
 
 func main() {
-	s := simulation.MakeBuilder().Build()
+	s := sim.MakeBuilder().Build()
 
 	handler := &EventPrinter{}
 	engine := s.Engine()

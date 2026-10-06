@@ -6,8 +6,8 @@ package marshalercontainer
 import (
 	"encoding/json"
 
-	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/modeling/ticking"
+	"github.com/sarchlab/akita/v5/sim/modeling"
+	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 )
 
 // Spec customizes its JSON but still holds a slice.

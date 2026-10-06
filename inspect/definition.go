@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	messagingPath  = "github.com/sarchlab/akita/v5/messaging"
-	modelingPath   = "github.com/sarchlab/akita/v5/modeling"
+	messagingPath  = "github.com/sarchlab/akita/v5/sim/messaging"
+	modelingPath   = "github.com/sarchlab/akita/v5/sim/modeling"
 	portTypeName   = messagingPath + ".Port"
 	middlewareName = "Middleware"
 )

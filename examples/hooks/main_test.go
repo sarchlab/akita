@@ -5,9 +5,9 @@ import (
 
 	. "github.com/onsi/gomega"
 
-	"github.com/sarchlab/akita/v5/hooking"
-	"github.com/sarchlab/akita/v5/messaging"
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim/hooking"
+	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
 func TestMessageHookFiltersPositionsBeforeAssertingItem(t *testing.T) {

@@ -118,3 +118,12 @@ It does not cover:
 - the tracing vocabulary: the task kinds, names, and tags a component emits;
 - checkpoint files. Only the same build of a simulator restores a checkpoint;
 - code under `examples/` and the acceptance test programs.
+
+## Package organization
+
+`sim` is the runner and umbrella for the simulation infrastructure:
+`sim/{naming,hooking,queueing,timing,messaging,modeling,tracing,datarecording,sourcefs}`.
+Hardware models remain under `mem` and `noc`; the live UI and trace viewer are
+`monitoring` and `daisen`. See [the simulation guide](sim/README.md)
+for setup and [the migration guide](doc/tutorial/migration.md) for import and
+monitor configuration changes.

@@ -7,5 +7,5 @@
 // WithPorts.
 package idealmemcontroller
 
-//go:generate mockgen -destination mock_sim_test.go -package idealmemcontroller -write_package_comment=false github.com/sarchlab/akita/v5/messaging Port
-//go:generate mockgen -destination mock_timing_test.go -package idealmemcontroller -write_package_comment=false github.com/sarchlab/akita/v5/timing Engine
+//go:generate mockgen -destination mock_sim_test.go -package idealmemcontroller -write_package_comment=false github.com/sarchlab/akita/v5/sim/messaging Port
+//go:generate mockgen -destination mock_timing_test.go -package idealmemcontroller -write_package_comment=false github.com/sarchlab/akita/v5/sim/timing Engine

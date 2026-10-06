@@ -2,7 +2,7 @@ package memcontrolprotocol
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
 // Protocol is the uniform control protocol for memory agents: a requester

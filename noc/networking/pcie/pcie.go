@@ -6,10 +6,10 @@ import (
 
 	"github.com/sarchlab/akita/v5/noc/networking/networkconnector"
 
-	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/sim/timing"
 
 	// Connector can connect devices into a PCIe network.
-	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
 type Connector struct {
