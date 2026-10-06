@@ -31,6 +31,11 @@
     @apply border-border;
   }
 
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
   html,
   body,
   #root {

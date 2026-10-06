@@ -27,6 +27,7 @@ test("the production CSS pipeline preserves the theme and focus utilities", asyn
   assert.ok(declarations(".rounded-md").includes("border-radius: calc(var(--radius) - 2px)"));
   assert.ok(declarations("*").includes("border-color: hsl(var(--border))"));
   assert.ok(declarations(".focus-visible\\:outline-hidden:focus-visible").includes("outline: 2px solid transparent"));
+  assert.ok(declarations('button:not(:disabled),\n  [role="button"]:not(:disabled)').includes("cursor: pointer"));
   assert.ok(declarations(".shadow-xs").some((value) => value.startsWith("box-shadow:")));
   result.root.walkAtRules((rule) => {
     assert.ok(!["tailwind", "apply", "config"].includes(rule.name), `uncompiled @${rule.name}`);
