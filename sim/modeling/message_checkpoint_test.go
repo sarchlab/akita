@@ -20,7 +20,8 @@ func TestCheckpointPreservesMessagePayloadTypes(t *testing.T) {
 	src := state{Buf: []messaging.Msg{
 		request,
 		{ID: 2, Src: "a", Dst: "b"},
-		{ID: 3, Src: "network.a", Dst: "network.b", Payload: packetization.Flit{Msg: request, SeqID: 0, NumFlitInMsg: 1}},
+		{ID: 3, Src: "network.a", Dst: "network.b", Payload: packetization.Flit{
+			MsgID: request.ID, Dst: request.Dst, Msg: request, SeqID: 0, NumFlitInMsg: 1}},
 	}}
 	if err := modeling.ValidateState(src); err != nil {
 		t.Fatal(err)

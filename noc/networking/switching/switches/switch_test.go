@@ -106,7 +106,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
-			Msg: msg},
+			MsgID: msg.ID, Dst: msg.Dst},
 			ID:           sim.NewID(),
 			Dst:          port1.AsRemote(),
 			TrafficClass: "packetization.Flit"}
@@ -131,7 +131,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
-			Msg: msg},
+			MsgID: msg.ID, Dst: msg.Dst},
 			ID:           sim.NewID(),
 			Dst:          port1.AsRemote(),
 			TrafficClass: "packetization.Flit"}
@@ -172,7 +172,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
-			Msg: msg},
+			MsgID: msg.ID, Dst: msg.Dst},
 			ID:           sim.NewID(),
 			TrafficClass: "packetization.Flit"}
 
@@ -201,7 +201,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
-			Msg: msg},
+			MsgID: msg.ID, Dst: msg.Dst},
 			ID:           sim.NewID(),
 			TrafficClass: "packetization.Flit"}
 
@@ -226,7 +226,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
-			Msg: msg},
+			MsgID: msg.ID, Dst: msg.Dst},
 			ID:           sim.NewID(),
 			TrafficClass: "packetization.Flit"}
 
@@ -251,7 +251,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
-			Msg: msg},
+			MsgID: msg.ID, Dst: msg.Dst},
 			ID:           sim.NewID(),
 			TrafficClass: "packetization.Flit"}
 
@@ -276,7 +276,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
-			Msg: msg},
+			MsgID: msg.ID, Dst: msg.Dst},
 			ID:           sim.NewID(),
 			TrafficClass: "packetization.Flit"}
 
@@ -303,7 +303,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.Msg{Payload: packetization.Flit{
-			Msg: msg},
+			MsgID: msg.ID, Dst: msg.Dst},
 			ID:           sim.NewID(),
 			TrafficClass: "packetization.Flit"}
 

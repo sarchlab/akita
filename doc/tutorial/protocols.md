@@ -132,7 +132,7 @@ declaration *is* the protocol. Akita's protocols:
 | `mem/memcontrolprotocol` | memory-agent control | requester / responder |
 | `mem/vm/vmprotocol` | address translation | requester / responder |
 | `mem/datamoverprotocol` | data move | requester / responder |
-| `noc/packetization` | traffic-only transport | link / delivery |
+| `noc/packetization` | flit transport | link |
 
 Components import the protocol packages they speak; a protocol package
 imports only `messaging` (and whatever its payload types need). When you

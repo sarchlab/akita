@@ -46,31 +46,39 @@ func (m *incomingMW) recv() bool {
 		}
 
 		flit := receivedI
-		msg := flit.Payload.(packetization.Flit).Msg
+		part := flit.Payload.(packetization.Flit)
+		if part.NumFlitInMsg <= 0 || part.SeqID < 0 || part.SeqID >= part.NumFlitInMsg {
+			panic("endpoint: invalid flit sequence")
+		}
 
 		var assemblingIdx int = -1
 		for j, a := range state.AssemblingMsgs {
-			if a.MsgID == msg.ID {
+			if a.MsgID == part.MsgID {
 				assemblingIdx = j
 				break
 			}
 		}
 
 		if assemblingIdx < 0 {
+			assemblingIdx = len(state.AssemblingMsgs)
 			state.AssemblingMsgs = append(state.AssemblingMsgs, assemblingMsgState{
-				MsgID:           msg.ID,
-				MsgTaskID:       flit.Payload.(packetization.Flit).MsgTaskID,
-				Src:             msg.Src,
-				Dst:             msg.Dst,
-				RspTo:           msg.RspTo,
-				TrafficClass:    msg.TrafficClass,
-				TrafficBytes:    msg.TrafficBytes,
-				NumFlitRequired: flit.Payload.(packetization.Flit).NumFlitInMsg,
-				NumFlitArrived:  1,
+				MsgID:     part.MsgID,
+				MsgTaskID: part.MsgTaskID,
+				Received:  make([]bool, part.NumFlitInMsg),
 			})
-		} else {
-			state.AssemblingMsgs[assemblingIdx].NumFlitArrived++
 		}
+		a := &state.AssemblingMsgs[assemblingIdx]
+		if len(a.Received) != part.NumFlitInMsg || a.Received[part.SeqID] {
+			panic("endpoint: inconsistent or duplicate flit")
+		}
+		if part.SeqID == 0 {
+			if part.Msg.ID != part.MsgID || part.Msg.Dst != part.Dst {
+				panic("endpoint: head flit does not match its message")
+			}
+			a.Msg = part.Msg
+		}
+		a.Received[part.SeqID] = true
+		a.NumFlitArrived++
 
 		m.networkPort().RetrieveIncoming()
 
@@ -95,7 +103,7 @@ func (m *incomingMW) assemble() bool {
 
 	for i := range state.AssemblingMsgs {
 		a := &state.AssemblingMsgs[i]
-		if a.NumFlitArrived < a.NumFlitRequired {
+		if a.NumFlitArrived < len(a.Received) {
 			if writeIdx != i {
 				state.AssemblingMsgs[writeIdx] = *a
 			}
@@ -103,15 +111,7 @@ func (m *incomingMW) assemble() bool {
 			continue
 		}
 
-		assembled := messaging.Msg{
-			ID:           a.MsgID,
-			Src:          a.Src,
-			Dst:          a.Dst,
-			RspTo:        a.RspTo,
-			TrafficClass: a.TrafficClass,
-			TrafficBytes: a.TrafficBytes,
-		}
-		state.AssembledMsgs = append(state.AssembledMsgs, assembled)
+		state.AssembledMsgs = append(state.AssembledMsgs, a.Msg)
 
 		// The message is fully reassembled; close its msg_e2e task (the parent
 		// of all of this message's flit_e2e tasks).
@@ -132,8 +132,8 @@ func (m *incomingMW) tryDeliver() bool {
 	numDelivered := 0
 
 	for i := 0; i < len(state.AssembledMsgs); i++ {
-		meta := state.AssembledMsgs[i]
-		dst := meta.Dst
+		msg := state.AssembledMsgs[i]
+		dst := msg.Dst
 
 		var dstPort messaging.Port
 
@@ -147,9 +147,6 @@ func (m *incomingMW) tryDeliver() bool {
 		if dstPort == nil {
 			panic(fmt.Sprintf("no dst port found for %s", dst))
 		}
-
-		msg := meta
-		msg.Payload = packetization.AssembledMsg{}
 
 		if !dstPort.CanDeliver() {
 			break
@@ -190,7 +187,7 @@ func (m *incomingMW) logFlitE2ETaskFromFlit(
 
 	tracing.StartTask(m.comp, tracing.TaskStart{
 		ID:       flit.ID,
-		ParentID: flit.Payload.(packetization.Flit).Msg.ID,
+		ParentID: flit.Payload.(packetization.Flit).MsgID,
 		Kind:     "flit_e2e",
 		What:     "flit_e2e",
 		Location: m.comp.Name() + ".FlitBuf",

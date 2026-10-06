@@ -46,8 +46,11 @@ messages from device ports, converts each into one or more `packetization.Flit`
 values — flit count derived from `TrafficBytes`, `EncodingOverhead`, and
 `FlitByteSize` — and sends them out the network port with `Dst` set to the
 default switch. The incoming path (`network → device`) receives flits, groups
-them by message ID, and once `NumFlitInMsg` flits have arrived, reassembles the
-`messaging.Msg` and delivers it to the matching device port. Buffers apply
+them by message ID, and records each sequence number. Only flit 0 carries the
+original `messaging.Msg`; it can arrive before or after the other flits. Once
+all flits have arrived, the endpoint delivers that original message unchanged
+to the matching device port. The received-sequence tracking and retained message
+are checkpointed, including while delivery is blocked. Buffers apply
 backpressure to keep the serializable state bounded.
 
 ## Builder Pattern

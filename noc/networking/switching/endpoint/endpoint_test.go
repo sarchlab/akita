@@ -3,6 +3,7 @@ package endpoint
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
@@ -72,7 +73,7 @@ var _ = Describe("End Point", func() {
 			ID:           sim.NewID(),
 			Src:          devicePort.AsRemote(),
 			TrafficBytes: 33,
-			Payload:      packetization.AssembledMsg{},
+			Payload:      memprotocol.WriteReq{Address: 64, Data: []byte{1, 2, 3}},
 		}
 
 		networkPort.EXPECT().PeekIncoming().Return(messaging.Msg{}, false).AnyTimes()
@@ -85,14 +86,14 @@ var _ = Describe("End Point", func() {
 		Expect(madeProgress).To(BeTrue())
 
 		networkPort.EXPECT().CanSend().Return(true)
-		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
-			flit := msg
+		networkPort.EXPECT().Send(gomock.Any()).Do(func(sent messaging.Msg) {
+			flit := sent
 			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
 			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
 			Expect(flit.Payload.(packetization.Flit).SeqID).To(Equal(0))
 			Expect(flit.Payload.(packetization.Flit).NumFlitInMsg).To(Equal(2))
-			Expect(flit.Payload.(packetization.Flit).Msg.Payload).To(BeNil())
-			Expect(flit.Payload.(packetization.Flit).Msg.TrafficBytes).To(Equal(33))
+			Expect(flit.Payload.(packetization.Flit).Msg).To(Equal(msg))
+			Expect(flit.Payload.(packetization.Flit).MsgID).To(Equal(msg.ID))
 		})
 		devicePort.EXPECT().NotifyAvailable()
 
@@ -100,14 +101,14 @@ var _ = Describe("End Point", func() {
 		Expect(madeProgress).To(BeTrue())
 
 		networkPort.EXPECT().CanSend().Return(true)
-		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
-			flit := msg
+		networkPort.EXPECT().Send(gomock.Any()).Do(func(sent messaging.Msg) {
+			flit := sent
 			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
 			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
 			Expect(flit.Payload.(packetization.Flit).SeqID).To(Equal(1))
 			Expect(flit.Payload.(packetization.Flit).NumFlitInMsg).To(Equal(2))
 			Expect(flit.Payload.(packetization.Flit).Msg.Payload).To(BeNil())
-			Expect(flit.Payload.(packetization.Flit).Msg.TrafficBytes).To(Equal(33))
+			Expect(flit.Payload.(packetization.Flit).MsgID).To(Equal(msg.ID))
 		})
 
 		madeProgress = modelingtest.Tick(endPoint)
@@ -128,14 +129,14 @@ var _ = Describe("End Point", func() {
 		flit0 := messaging.Msg{Payload: packetization.Flit{
 			SeqID:        0,
 			NumFlitInMsg: 2,
-			Msg:          msg},
+			MsgID:        msg.ID, Dst: msg.Dst, Msg: msg},
 			ID:           sim.NewID(),
 			TrafficClass: "packetization.Flit"}
 
 		flit1 := messaging.Msg{Payload: packetization.Flit{
 			SeqID:        1,
 			NumFlitInMsg: 2,
-			Msg:          msg},
+			MsgID:        msg.ID, Dst: msg.Dst},
 			ID:           sim.NewID(),
 			TrafficClass: "packetization.Flit"}
 
@@ -144,9 +145,7 @@ var _ = Describe("End Point", func() {
 		networkPort.EXPECT().PeekIncoming().Return(messaging.Msg{}, false).Times(3)
 		networkPort.EXPECT().RetrieveIncoming().Times(2)
 		devicePort.EXPECT().CanDeliver().Return(true)
-		expected := msg
-		expected.Payload = packetization.AssembledMsg{}
-		devicePort.EXPECT().Deliver(expected)
+		devicePort.EXPECT().Deliver(msg)
 		devicePort.EXPECT().PeekOutgoing().Return(messaging.Msg{}, false).AnyTimes()
 
 		madeProgress := modelingtest.Tick(endPoint)

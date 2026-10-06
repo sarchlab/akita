@@ -219,8 +219,16 @@ inspect its `Payload` for the protocol type.
 
 Store complete messages in component state and port buffers. `Msg` preserves
 concrete payload types through JSON, including nested messages; a separate
-`messaging.Envelope` is unnecessary. The switching network still clears the
-application payload before packetizing in this migration (#495 remains separate).
+`messaging.Envelope` is unnecessary.
+
+Switching networks now deliver the original message and concrete payload.
+`packetization.AssembledMsg` and the `Delivery` role are removed; receivers use
+their application protocol. `Flit.Msg` contains the full message only on flit 0.
+Use `Flit.MsgID` and `Flit.Dst` for identification and routing on every flit,
+rather than reading `Flit.Msg.ID` or `Flit.Msg.Dst`. The remaining transport
+header contains `SeqID`, `NumFlitInMsg`, and `MsgTaskID`. Reassembly handles
+out-of-order arrival and checkpoints without duplicating the payload per flit.
+Existing checkpoints with the old flit/reassembly layout must be recreated.
 
 ### IDGenerator (V5)
 

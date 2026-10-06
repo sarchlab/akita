@@ -50,7 +50,7 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 			item := routedFlit{
 				Flit:    flit,
 				TaskID:  taskID,
-				RouteTo: flit.Payload.(packetization.Flit).Msg.Dst,
+				RouteTo: flit.Payload.(packetization.Flit).Dst,
 			}
 
 			if pcs.Latency == 0 {

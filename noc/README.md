@@ -98,6 +98,7 @@ portA.Send(msg) // connection handles delivery to portB
 Components are unaware of the underlying network topology — they simply
 send messages through their ports.
 
-Flits are registered payload values inside `messaging.Msg`. The sending endpoint
-clears the carried message payload before packetizing; delivery still returns
-metadata with an empty `AssembledMsg` payload until #495 is implemented.
+Flits are registered payload values inside `messaging.Msg`. Only flit 0 carries the complete
+original message; every flit has a small routing and reassembly header. The
+receiving endpoint delivers the original metadata and typed application payload
+after all flits arrive, including after checkpoint restoration.
