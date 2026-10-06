@@ -81,11 +81,8 @@ type agentChain struct {
 }
 
 func setupTest(seed int64) (*sim.Simulation, timing.Engine, []agentChain) {
-	var monitor *monitoring.Monitor
-	simBuilder := sim.MakeBuilder().WithMonitorFactory(func(s *sim.Simulation) sim.Monitor {
-		monitor = monitoring.NewMonitor(s)
-		return monitor
-	})
+	monitor := monitoring.NewMonitor()
+	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
 
 	if *parallelFlag {
 		simBuilder = simBuilder.WithParallelEngine()
@@ -102,7 +99,10 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, []agentChain) {
 	chains := make([]agentChain, numAgents)
 	for i := 0; i < numAgents; i++ {
 		chains[i] = buildAgentChain(s, i, shared, seed)
-		memaccessagent.CreateProgressBars(chains[i].agent, monitor.CreateProgressBar)
+		memaccessagent.SetProgressTrackers(chains[i].agent,
+			monitor.CreateProgressBar(chains[i].agent.Name()+".Writes", uint64(chains[i].agent.State.WriteLeft)),
+			monitor.CreateProgressBar(chains[i].agent.Name()+".Reads", uint64(chains[i].agent.State.ReadLeft)),
+		)
 	}
 
 	setupConnections(s, shared, chains)

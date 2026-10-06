@@ -6,9 +6,14 @@ Runtime packages are now under `sim/`; `simulation`, `monitoring2`, and
 `daisen2` are renamed to `sim`, `monitoring`, and `daisen`.
 
 **Live monitoring is now opt-in.** Downstream simulators such as MGPUSim must
-supply `WithMonitorFactory` to retain their monitoring server. `Build()` starts
-the supplied monitor, and `Terminate()` stops it. `WithoutMonitoring()` skips
-monitor construction and startup while leaving tracing independent.
+supply `WithMonitor(monitoring.NewMonitor())` to retain their monitoring server.
+`Build()` binds and starts the supplied monitor, and `Terminate()` stops it.
+Omitting `WithMonitor` leaves runs headless while tracing remains independent.
+The monitor factory and `WithoutMonitoring` options are removed.
+
+Live progress bars move from `daisen.ProgressBar` to `monitoring.ProgressBar`.
+The memory access agent accepts a small `ProgressTracker` interface through
+`SetProgressTrackers`, keeping UI types out of component code.
 
 See the [migration guide](./tutorial/migration.md) for updated imports,
-monitor construction, and port configuration. MGPUSim migration is separate.
+monitor wiring, and port configuration. MGPUSim migration is separate.

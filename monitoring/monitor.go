@@ -28,7 +28,6 @@ import (
 	_ "github.com/glebarez/go-sqlite"
 
 	"github.com/google/pprof/profile"
-	"github.com/sarchlab/akita/v5/daisen"
 	"github.com/sarchlab/akita/v5/monitoring/static"
 
 	"github.com/sarchlab/akita/v5/sim"
@@ -59,33 +58,32 @@ type Monitor struct {
 	components       []Component
 	buffers          []bufferState
 	progressBarsLock sync.Mutex
-	progressBars     []*daisen.ProgressBar
+	progressBars     []*ProgressBar
 	httpServer       *http.Server
 	fs               http.FileSystem
 }
 
-// NewMonitor creates a monitor permanently bound to s and its recording
-// resources. The simulation owns those resources. Start begins serving HTTP;
-// construction alone does not open a listener.
-func NewMonitor(s *sim.Simulation) *Monitor {
+// NewMonitor creates an unbound monitor with default settings. It opens no
+// listener until Start is called, normally by sim.Builder.WithMonitor.
+func NewMonitor() *Monitor {
 	return &Monitor{
-		simulation:   s,
-		engine:       s.Engine(),
-		visTracer:    s.VisTracer(),
-		tracePath:    s.TraceDBPath(),
 		fs:           static.GetAssets(),
-		progressBars: []*daisen.ProgressBar{},
+		progressBars: []*ProgressBar{},
 	}
 }
 
-// Start starts live monitoring. sim.Builder calls it after factory construction.
+// Start permanently binds the monitor to s and starts live monitoring.
 // A monitor may be started only once, including after Stop. Lifecycle methods
 // must be called sequentially by the simulation owner.
-func (m *Monitor) Start() {
+func (m *Monitor) Start(s *sim.Simulation) {
 	if m.started {
 		panic("monitoring: monitor already started")
 	}
 	m.started = true
+	m.simulation = s
+	m.engine = s.Engine()
+	m.visTracer = s.VisTracer()
+	m.tracePath = s.TraceDBPath()
 	m.startServer()
 }
 
@@ -121,9 +119,13 @@ func (m *Monitor) RegisterPort(p monitorPort) {
 }
 
 // CreateProgressBar creates a new progress bar tracked by the monitor.
-// Its ID belongs to the simulation supplied at construction.
-func (m *Monitor) CreateProgressBar(name string, total uint64) *daisen.ProgressBar {
-	bar := &daisen.ProgressBar{
+// Its ID belongs to the simulation supplied to Start. It panics before Start.
+func (m *Monitor) CreateProgressBar(name string, total uint64) *ProgressBar {
+	if !m.started {
+		panic("monitoring: CreateProgressBar requires a started monitor")
+	}
+
+	bar := &ProgressBar{
 		ID:    m.simulation.NewID(),
 		Name:  name,
 		Total: total,
@@ -138,11 +140,11 @@ func (m *Monitor) CreateProgressBar(name string, total uint64) *daisen.ProgressB
 }
 
 // CompleteProgressBar removes a bar from the progress list.
-func (m *Monitor) CompleteProgressBar(pb *daisen.ProgressBar) {
+func (m *Monitor) CompleteProgressBar(pb *ProgressBar) {
 	m.progressBarsLock.Lock()
 	defer m.progressBarsLock.Unlock()
 
-	newBars := make([]*daisen.ProgressBar, 0, len(m.progressBars)-1)
+	newBars := make([]*ProgressBar, 0, len(m.progressBars)-1)
 
 	for _, b := range m.progressBars {
 		if b != pb {
@@ -985,7 +987,7 @@ func (m *Monitor) listProgressBars(
 	m.progressBarsLock.Lock()
 	progressBars := m.progressBars
 	if progressBars == nil {
-		progressBars = []*daisen.ProgressBar{}
+		progressBars = []*ProgressBar{}
 	}
 	m.progressBarsLock.Unlock()
 

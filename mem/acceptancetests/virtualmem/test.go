@@ -38,11 +38,8 @@ var agent *memaccessagent.MemAccessAgent
 func setupTest(
 	seed int64,
 ) (*sim.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
-	var monitor *monitoring.Monitor
-	simBuilder := sim.MakeBuilder().WithMonitorFactory(func(s *sim.Simulation) sim.Monitor {
-		monitor = monitoring.NewMonitor(s)
-		return monitor
-	})
+	monitor := monitoring.NewMonitor()
+	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
 
 	if *parallelFlag {
 		simBuilder = simBuilder.WithParallelEngine()
@@ -102,7 +99,10 @@ func setupTest(
 			Mem: newPort("MemAccessAgent.Mem"),
 		}).
 		Build("MemAccessAgent")
-	memaccessagent.CreateProgressBars(agent, monitor.CreateProgressBar)
+	memaccessagent.SetProgressTrackers(agent,
+		monitor.CreateProgressBar(agent.Name()+".Writes", uint64(agent.State.WriteLeft)),
+		monitor.CreateProgressBar(agent.Name()+".Reads", uint64(agent.State.ReadLeft)),
+	)
 
 	setupConnection(s, agent, robComp,
 		at, tlb, l2TLB, ioMMU,

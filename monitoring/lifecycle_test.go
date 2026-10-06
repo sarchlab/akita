@@ -15,15 +15,11 @@ import (
 
 func TestSimulationAttachesLiveMonitor(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "live")
-	var monitor *Monitor
-	s := sim.MakeBuilder().WithOutputFileName(output).
-		WithMonitorFactory(func(s *sim.Simulation) sim.Monitor {
-			monitor = NewMonitor(s)
-			if monitor.httpServer != nil {
-				t.Fatal("constructor opened a listener")
-			}
-			return monitor
-		}).Build()
+	monitor := NewMonitor()
+	if monitor.httpServer != nil || monitor.simulation != nil {
+		t.Fatal("constructor bound a simulation or opened a listener")
+	}
+	s := sim.MakeBuilder().WithOutputFileName(output).WithMonitor(monitor).Build()
 	if monitor.simulation != s || monitor.engine != s.Engine() || monitor.visTracer != s.VisTracer() {
 		t.Fatal("monitor was not bound to the simulation services")
 	}
@@ -74,9 +70,11 @@ func TestSimulationAttachesLiveMonitor(t *testing.T) {
 func TestMonitorRejectsRepeatedStart(t *testing.T) {
 	s := sim.MakeBuilder().WithOutputFileName(filepath.Join(t.TempDir(), "live")).Build()
 	defer s.Terminate()
-	m := NewMonitor(s)
-	m.Start()
+	m := NewMonitor()
+	m.Start(s)
 	defer m.Stop()
+	other := sim.MakeBuilder().WithOutputFileName(filepath.Join(t.TempDir(), "other")).Build()
+	defer other.Terminate()
 	server := m.httpServer
 	assertRejected := func() {
 		t.Helper()
@@ -84,13 +82,24 @@ func TestMonitorRejectsRepeatedStart(t *testing.T) {
 			if recover() != "monitoring: monitor already started" {
 				t.Error("repeated Start was not rejected")
 			}
-			if m.httpServer != server {
-				t.Error("repeated Start replaced the server")
+			if m.httpServer != server || m.simulation != s || m.engine != s.Engine() ||
+				m.visTracer != s.VisTracer() || m.tracePath != s.TraceDBPath() {
+				t.Error("repeated Start rebound the monitor or replaced the server")
 			}
 		}()
-		m.Start()
+		m.Start(other)
 	}
 	assertRejected()
 	m.Stop()
 	assertRejected()
+}
+
+func TestProgressBarBeforeStartPanicsClearly(t *testing.T) {
+	m := NewMonitor()
+	defer func() {
+		if got := recover(); got != "monitoring: CreateProgressBar requires a started monitor" {
+			t.Fatalf("unexpected panic: %v", got)
+		}
+	}()
+	m.CreateProgressBar("too early", 1)
 }

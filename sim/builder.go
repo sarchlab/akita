@@ -12,13 +12,12 @@ import (
 
 // Builder can be used to build a simulation.
 type Builder struct {
-	parallelEngine     bool
-	monitorFactory     func(*Simulation) Monitor
-	monitoringDisabled bool
-	outputFileName     string
-	visTracingOnStart  bool
-	recordSource       bool
-	sourceFSes         map[string]fs.FS
+	parallelEngine    bool
+	monitor           Monitor
+	outputFileName    string
+	visTracingOnStart bool
+	recordSource      bool
+	sourceFSes        map[string]fs.FS
 }
 
 // MakeBuilder creates a new builder.
@@ -41,19 +40,12 @@ func (b Builder) WithOutputFileName(filename string) Builder {
 	return b
 }
 
-// WithMonitorFactory sets the factory Build uses to create a fresh monitor for
-// each simulation. The factory receives the fully initialized runtime before
-// application components are registered. Without a factory, monitoring is off.
-// The factory must return a non-nil monitor bound to the supplied simulation.
-func (b Builder) WithMonitorFactory(factory func(*Simulation) Monitor) Builder {
-	b.monitorFactory = factory
-	return b
-}
-
-// WithoutMonitoring disables monitoring, even when a factory is configured.
-// Build will neither call the factory nor start a server. Tracing is unaffected.
-func (b Builder) WithoutMonitoring() Builder {
-	b.monitoringDisabled = true
+// WithMonitor attaches a monitor. Build calls Start with the initialized
+// simulation, and Terminate stops the monitor before closing recording resources.
+// Each monitor belongs to one simulation and must not be reused.
+// Omitting WithMonitor leaves monitoring disabled.
+func (b Builder) WithMonitor(m Monitor) Builder {
+	b.monitor = m
 	return b
 }
 
@@ -178,10 +170,10 @@ func (b Builder) createVisTracer(s *Simulation) {
 }
 
 func (b Builder) startMonitor(s *Simulation) {
-	if b.monitoringDisabled || b.monitorFactory == nil {
+	if b.monitor == nil {
 		return
 	}
 
-	s.monitor = b.monitorFactory(s)
-	s.monitor.Start()
+	s.monitor = b.monitor
+	s.monitor.Start(s)
 }

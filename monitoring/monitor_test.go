@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -361,7 +362,7 @@ func TestExecutionInfoReadsExecInfoTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 	monitor.tracePath = dbPath
 
 	recorder := httptest.NewRecorder()
@@ -399,7 +400,7 @@ func TestTraceStorageReportsDatabaseAndDiskSpace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 	monitor.tracePath = dbPath
 
 	recorder := httptest.NewRecorder()
@@ -442,7 +443,7 @@ func TestTraceStorageReportsDatabaseAndDiskSpace(t *testing.T) {
 }
 
 func TestApiModeReturnsLiveJSON(t *testing.T) {
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/mode", nil)
@@ -502,7 +503,7 @@ func TestRunInvokesEngineRun(t *testing.T) {
 }
 
 func TestListComponentsReturnsRegisteredNames(t *testing.T) {
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 	monitor.RegisterComponent(newSliceFieldComponent("alpha", nil))
 	monitor.RegisterComponent(newSliceFieldComponent("beta", nil))
 
@@ -578,7 +579,7 @@ func (c *tickableComponent) NotifyPortFree(messaging.Port) {}
 func (c *tickableComponent) TickLater()                    { c.tickCalls++ }
 
 func TestTickInvokesTickLaterOnTickingComponent(t *testing.T) {
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 	tickable := newTickableComponent("ticker")
 	monitor.RegisterComponent(tickable)
 
@@ -597,7 +598,7 @@ func TestTickInvokesTickLaterOnTickingComponent(t *testing.T) {
 }
 
 func TestTickReturns405ForNonTickingComponent(t *testing.T) {
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 	monitor.RegisterComponent(newSliceFieldComponent("slice-comp", nil))
 
 	recorder := httptest.NewRecorder()
@@ -612,7 +613,7 @@ func TestTickReturns405ForNonTickingComponent(t *testing.T) {
 }
 
 func TestTickReturns404ForUnknownComponent(t *testing.T) {
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/tick/missing", nil)
@@ -625,7 +626,9 @@ func TestTickReturns404ForUnknownComponent(t *testing.T) {
 }
 
 func TestProgressBarsLifecycleRoundtripsThroughHandler(t *testing.T) {
-	monitor := newTestMonitorWithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine()))
+	monitor := NewMonitor()
+	s := sim.MakeBuilder().WithOutputFileName(filepath.Join(t.TempDir(), "progress")).WithMonitor(monitor).Build()
+	defer s.Terminate()
 
 	requireEmpty := func() {
 		recorder := httptest.NewRecorder()
@@ -645,20 +648,26 @@ func TestProgressBarsLifecycleRoundtripsThroughHandler(t *testing.T) {
 	requireEmpty()
 
 	bar := monitor.CreateProgressBar("decode", 100)
+	bar.IncrementInProgress(7)
+	bar.MoveInProgressToFinished(3)
+	bar.IncrementFinished(2)
 
 	recorder := httptest.NewRecorder()
 	monitor.listProgressBars(recorder,
 		httptest.NewRequest(http.MethodGet, "/api/progress", nil))
 
 	var bars []struct {
-		Name  string `json:"name"`
-		Total uint64 `json:"total"`
+		Name       string `json:"name"`
+		Total      uint64 `json:"total"`
+		Finished   uint64 `json:"finished"`
+		InProgress uint64 `json:"in_progress"`
 	}
 	if err := json.NewDecoder(recorder.Body).Decode(&bars); err != nil {
 		t.Fatal(err)
 	}
 
-	if len(bars) != 1 || bars[0].Name != "decode" || bars[0].Total != 100 {
+	if len(bars) != 1 || bars[0].Name != "decode" || bars[0].Total != 100 ||
+		bars[0].Finished != 5 || bars[0].InProgress != 4 {
 		t.Fatalf("unexpected progress bar list: %#v", bars)
 	}
 
@@ -718,7 +727,7 @@ type bufferRsp struct {
 }
 
 func TestHangDetectorBuffersSortsByPercentByDefault(t *testing.T) {
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 	monitor.RegisterComponent(newBufferOnlyComponent("low", 10, 1))
 	monitor.RegisterComponent(newBufferOnlyComponent("high", 4, 3))
 	monitor.RegisterComponent(newBufferOnlyComponent("mid", 4, 2))
@@ -744,7 +753,7 @@ func TestHangDetectorBuffersSortsByPercentByDefault(t *testing.T) {
 }
 
 func TestHangDetectorBuffersSortsByLevelHonorsPagination(t *testing.T) {
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 	monitor.RegisterComponent(newBufferOnlyComponent("a", 10, 5))
 	monitor.RegisterComponent(newBufferOnlyComponent("b", 10, 7))
 	monitor.RegisterComponent(newBufferOnlyComponent("c", 10, 3))
@@ -770,7 +779,7 @@ func TestHangDetectorBuffersSortsByLevelHonorsPagination(t *testing.T) {
 }
 
 func TestHangDetectorBuffersIncludesPortAdapters(t *testing.T) {
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 	comp := newPortedComponent("comp")
 	monitor.RegisterComponent(comp)
 	monitor.RegisterPort(comp.port)
@@ -796,7 +805,7 @@ func TestHangDetectorBuffersIncludesPortAdapters(t *testing.T) {
 }
 
 func TestHangDetectorBuffersRejectsInvalidSort(t *testing.T) {
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 
 	recorder := httptest.NewRecorder()
 	monitor.hangDetectorBuffers(recorder,
@@ -821,7 +830,7 @@ func newTestDBTracer(t *testing.T) *tracing.DBTracer {
 }
 
 func TestTraceLifecycleRoundtripsStartEndStatus(t *testing.T) {
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 	monitor.visTracer = newTestDBTracer(t)
 
 	assertTracing := func(expected bool) {
@@ -866,7 +875,7 @@ func TestTraceLifecycleRoundtripsStartEndStatus(t *testing.T) {
 }
 
 func TestTraceStartEndRequirePOST(t *testing.T) {
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 	monitor.visTracer = newTestDBTracer(t)
 
 	for _, tc := range []struct {
@@ -887,7 +896,7 @@ func TestTraceStartEndRequirePOST(t *testing.T) {
 }
 
 func TestTraceHandlersWhenTracerUnset(t *testing.T) {
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 
 	recorder := httptest.NewRecorder()
 	monitor.apiTraceIsTracing(recorder,
@@ -924,7 +933,7 @@ func TestTraceHandlersWhenTracerUnset(t *testing.T) {
 }
 
 func TestCollectHeapProfileExposesHeapSampleTypes(t *testing.T) {
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 
 	// Cover both the default path and the gc=1 path that forces a collection.
 	for _, query := range []string{"", "?gc=1"} {
@@ -966,7 +975,7 @@ func TestCollectProfileReportsWhenCPUProfilingActive(t *testing.T) {
 	}
 	defer pprof.StopCPUProfile()
 
-	monitor := newTestMonitor()
+	monitor := NewMonitor()
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/profile?seconds=1", nil)
 

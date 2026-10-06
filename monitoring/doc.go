@@ -4,9 +4,7 @@
 //
 // Usage:
 //
-//	s := sim.MakeBuilder().
-//	    WithMonitorFactory(func(s *sim.Simulation) sim.Monitor {
-//	        return monitoring.NewMonitor(s).WithPortNumber(8080)
-//	    }).Build()
+//	monitor := monitoring.NewMonitor().WithPortNumber(8080)
+//	s := sim.MakeBuilder().WithMonitor(monitor).Build()
 //	defer s.Terminate()
 package monitoring

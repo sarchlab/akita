@@ -5,7 +5,6 @@ package memaccessagent
 import (
 	"encoding/binary"
 
-	"github.com/sarchlab/akita/v5/daisen"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -74,44 +73,20 @@ type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]
 // memory controllers by generating a large number of read and write requests.
 type MemAccessAgent = Comp
 
-// CreateProgressBars creates the read/write progress bars for the agent a.
-// Progress bars observe the run; they are not simulation state and are not
-// checkpointed. Call it after Build, like attaching a hook.
-func CreateProgressBars(
-	a *Comp,
-	createProgressBar func(name string, total uint64) *daisen.ProgressBar,
-) {
-	if createProgressBar == nil {
-		return
-	}
-
-	mw := a.Middlewares.Agent
-
-	writeTotal := remainingAccesses(
-		a.State.WriteLeft,
-		len(a.State.PendingWriteReq),
-	)
-	readTotal := remainingAccesses(
-		a.State.ReadLeft,
-		len(a.State.PendingReadReq),
-	)
-
-	if writeTotal > 0 && mw.writeProgressBar == nil {
-		mw.writeProgressBar = createProgressBar(a.Name()+".Writes", writeTotal)
-	}
-
-	if readTotal > 0 && mw.readProgressBar == nil {
-		mw.readProgressBar = createProgressBar(a.Name()+".Reads", readTotal)
-	}
+// ProgressTracker is the progress reporting contract used by the agent.
+// Implementations observe the run and are not checkpointed.
+type ProgressTracker interface {
+	IncrementInProgress(n uint64)
+	MoveInProgressToFinished(n uint64)
 }
 
-func remainingAccesses(left, pending int) uint64 {
-	total := left + pending
-	if total <= 0 {
-		return 0
-	}
-
-	return uint64(total)
+// SetProgressTrackers attaches observers for writes and reads, respectively.
+// Call after Build and before running the simulation. Either tracker can be nil
+// to disable reporting for that operation. After restoring a checkpoint, attach
+// fresh trackers initialized for the remaining and in-flight work.
+func SetProgressTrackers(a *Comp, writes, reads ProgressTracker) {
+	a.Middlewares.Agent.writeProgressBar = writes
+	a.Middlewares.Agent.readProgressBar = reads
 }
 
 func bytesToUint32(data []byte) uint32 {

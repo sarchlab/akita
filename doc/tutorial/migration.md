@@ -23,29 +23,46 @@ removed. Browser watched-property storage keys are retained so the rename
 preserves existing saved preferences.
 
 **Monitoring default changed:** building a simulation no longer starts a web
-server unless a monitor factory is supplied. Downstream simulators, including
-MGPUSim, must add the factory to retain live monitoring; importing the package
-alone does not enable it. MGPUSim migration is a separate change.
+server unless a monitor is supplied. Downstream simulators, including MGPUSim,
+must add `WithMonitor` to retain live monitoring; importing the package alone
+does not enable it. MGPUSim migration is a separate change.
 
 ```go
-s := sim.MakeBuilder().
-    WithMonitorFactory(func(s *sim.Simulation) sim.Monitor {
-        return monitoring.NewMonitor(s).WithPortNumber(8080)
-    }).Build()
+monitor := monitoring.NewMonitor().WithPortNumber(8080)
+s := sim.MakeBuilder().WithMonitor(monitor).Build()
 defer s.Terminate()
+bar := monitor.CreateProgressBar("kernels", 100)
 ```
 
-Keep `WithoutMonitoring()` for headless configurations. It overrides a factory
-and prevents both monitor construction and server startup without disabling
-tracing. Move `WithMonitorPort(port)` configuration to the monitor's
-`WithPortNumber(port)` inside the factory. Keep the concrete monitor in the
-factory's surrounding scope when using progress bars; `s.Monitor()` returns
-the small `sim.Monitor` interface, or nil when monitoring is disabled.
+Remove `WithoutMonitoring()` calls; omitting `WithMonitor` disables monitoring.
+Tracing remains independent. Move `WithMonitorPort(port)` configuration to
+`monitoring.NewMonitor().WithPortNumber(port)`. Keep the concrete `monitor`
+variable for progress bars; `s.Monitor()` exposes the small `sim.Monitor`
+interface, or nil when monitoring is disabled.
 
-`monitoring.NewMonitor(s)` now binds the simulation and recording resources at
-construction. Replace manual `RegisterSimulation`, `RegisterVisTracer`,
-`SetTraceDBPath`, and `StartServer` calls with factory construction. The runner
-owns `Start()` and `Stop()`; each monitor can be started only once.
+Replace manual `RegisterSimulation`, `RegisterVisTracer`, `SetTraceDBPath`, and
+`StartServer` calls with `WithMonitor`. The runner calls `Start(s)` to bind the
+initialized simulation and start the server, then `Stop()` during termination.
+A monitor can be started only once, even after stopping, and progress bars must
+be created after startup. `WithMonitorFactory` is removed in favor of direct
+instance injection.
+
+`daisen.ProgressBar` moves to `monitoring.ProgressBar`; the offline viewer no
+longer owns live progress tracking. Component code should depend on the methods
+it uses rather than a UI type. `memaccessagent.ProgressTracker` declares only
+`IncrementInProgress` and `MoveInProgressToFinished`. Replace
+`memaccessagent.CreateProgressBars` with explicitly supplied trackers:
+
+```go
+memaccessagent.SetProgressTrackers(agent,
+    monitor.CreateProgressBar(agent.Name()+".Writes", uint64(agent.State.WriteLeft)),
+    monitor.CreateProgressBar(agent.Name()+".Reads", uint64(agent.State.ReadLeft)),
+)
+```
+
+Call this after building a fresh agent and before running. Either tracker can
+be nil to disable reporting for that operation. After checkpoint restoration,
+initialize fresh trackers for both remaining and already in-flight requests.
 
 ---
 
@@ -230,7 +247,7 @@ keeps its simulation to itself and allocates IDs with `NewID()`; engines have
 no `NewID()`. For lightweight setups, create
 `modeling.NewStandaloneSimulation(engine)` once and share that instance with
 all builders. A custom tracing domain (`tracing.NamedHookable`) implements
-`NewID() uint64` from its simulation. Monitors receive the simulation through `monitoring.NewMonitor(s)`
+`NewID() uint64` from its simulation. Monitors receive the simulation through `Start(s)`
 so progress IDs come from the same counter.
 
 ### Before / After

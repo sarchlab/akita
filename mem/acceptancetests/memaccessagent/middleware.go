@@ -4,7 +4,6 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/sarchlab/akita/v5/daisen"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -14,10 +13,10 @@ import (
 type agentMiddleware struct {
 	comp *Comp
 
-	// writeProgressBar and readProgressBar observe the run. CreateProgressBars
+	// writeProgressBar and readProgressBar observe the run. SetProgressTrackers
 	// attaches them after Build; they are not simulation state.
-	writeProgressBar *daisen.ProgressBar
-	readProgressBar  *daisen.ProgressBar
+	writeProgressBar ProgressTracker
+	readProgressBar  ProgressTracker
 }
 
 func (m *agentMiddleware) memPort() messaging.Port {

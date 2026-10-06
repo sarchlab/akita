@@ -20,16 +20,12 @@ type lifecycleMonitor struct {
 	port      sim.Port
 }
 
-func (m *lifecycleMonitor) Start() {
-	m.events = append(m.events, "start")
-}
-
-func newLifecycleMonitor(t *testing.T, s *sim.Simulation) *lifecycleMonitor {
-	t.Helper()
+func (m *lifecycleMonitor) Start(s *sim.Simulation) {
 	if s.Engine() == nil || s.VisTracer() == nil || s.DataRecorder() == nil {
-		t.Fatal("factory called before runtime services were ready")
+		panic("monitor started before runtime services were ready")
 	}
-	return &lifecycleMonitor{runtime: s, path: s.TraceDBPath()}
+	m.runtime, m.path = s, s.TraceDBPath()
+	m.events = append(m.events, "start")
 }
 
 func (m *lifecycleMonitor) RegisterComponent(c naming.Named) {
@@ -55,14 +51,10 @@ type namedComponent string
 
 func (c namedComponent) Name() string { return string(c) }
 
-func TestMonitorFactoryLifecycle(t *testing.T) {
+func TestInjectedMonitorLifecycle(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "recording")
-	var monitor *lifecycleMonitor
-	s := sim.MakeBuilder().WithOutputFileName(output).
-		WithMonitorFactory(func(s *sim.Simulation) sim.Monitor {
-			monitor = newLifecycleMonitor(t, s)
-			return monitor
-		}).Build()
+	monitor := &lifecycleMonitor{}
+	s := sim.MakeBuilder().WithOutputFileName(output).WithMonitor(monitor).Build()
 	if s.Monitor() != monitor || monitor.runtime != s || monitor.path != output+".sqlite3" {
 		t.Fatal("monitor did not receive the simulation and recording destination")
 	}
@@ -91,52 +83,24 @@ func TestMonitoringIsOptIn(t *testing.T) {
 	}
 }
 
-func TestWithoutMonitoringSkipsFactoryAndPreservesTracing(t *testing.T) {
-	factory := func(*sim.Simulation) sim.Monitor {
-		t.Fatal("disabled monitor factory was invoked")
-		return nil
+func TestHeadlessSimulationPreservesTracing(t *testing.T) {
+	s := sim.MakeBuilder().WithOutputFileName(filepath.Join(t.TempDir(), "trace")).
+		WithVisTracingOnStart().WithoutSourceRecording().Build()
+	if s.Monitor() != nil || !s.VisTracer().IsTracing() {
+		t.Fatal("headless simulation must preserve tracing")
 	}
-	for _, disableFirst := range []bool{false, true} {
-		b := sim.MakeBuilder().WithOutputFileName(filepath.Join(t.TempDir(), "trace")).
-			WithVisTracingOnStart().WithoutSourceRecording()
-		if disableFirst {
-			b = b.WithoutMonitoring().WithMonitorFactory(factory)
-		} else {
-			b = b.WithMonitorFactory(factory).WithoutMonitoring()
-		}
-		s := b.Build()
-		if s.Monitor() != nil || !s.VisTracer().IsTracing() {
-			t.Fatal("WithoutMonitoring must disable monitoring but preserve tracing")
-		}
-		s.VisTracer().StartTask(tracing.TaskStart{ID: 1, Kind: "test", What: "headless", Location: "Agent.test", Time: 1})
-		s.VisTracer().EndTask(tracing.TaskEnd{ID: 1, Time: 2})
-		s.Terminate()
-		db, err := sql.Open("sqlite", s.TraceDBPath())
-		if err != nil {
-			t.Fatal(err)
-		}
-		var count int
-		err = db.QueryRow("SELECT COUNT(*) FROM trace WHERE What = 'headless'").Scan(&count)
-		db.Close()
-		if err != nil || count != 1 {
-			t.Fatalf("headless recording: count=%d, err=%v", count, err)
-		}
-		t.Log("WithoutMonitoring skipped factory construction; SQLite retained the traced task")
+	s.VisTracer().StartTask(tracing.TaskStart{ID: 1, Kind: "test", What: "headless", Location: "Agent.test", Time: 1})
+	s.VisTracer().EndTask(tracing.TaskEnd{ID: 1, Time: 2})
+	s.Terminate()
+	db, err := sql.Open("sqlite", s.TraceDBPath())
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestReusedBuilderCreatesFreshMonitors(t *testing.T) {
-	b := sim.MakeBuilder().WithMonitorFactory(func(s *sim.Simulation) sim.Monitor {
-		return newLifecycleMonitor(t, s)
-	})
-	first := b.WithOutputFileName(filepath.Join(t.TempDir(), "first")).Build()
-	defer first.Terminate()
-	second := b.WithOutputFileName(filepath.Join(t.TempDir(), "second")).Build()
-	defer second.Terminate()
-	if first.Monitor() == second.Monitor() {
-		t.Fatal("builder reused a monitor across simulations")
+	defer db.Close()
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM trace WHERE What = 'headless'").Scan(&count)
+	if err != nil || count != 1 {
+		t.Fatalf("headless recording: count=%d, err=%v", count, err)
 	}
-	if first.Monitor().(*lifecycleMonitor).runtime != first || second.Monitor().(*lifecycleMonitor).runtime != second {
-		t.Fatal("monitor is bound to the wrong simulation")
-	}
+	t.Log("No monitor attached; SQLite retained the traced task")
 }
