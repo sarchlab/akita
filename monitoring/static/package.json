@@ -24,16 +24,16 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.18.2",
-    "tailwind-merge": "^2.6.0"
+    "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.0.2",
-    "autoprefixer": "^10.4.20",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.8.3",
-    "vite": "^8.0.16"
+    "vite": "^8.0.16",
+    "@tailwindcss/postcss": "^4.3.3"
   }
 }

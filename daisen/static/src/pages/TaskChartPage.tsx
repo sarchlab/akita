@@ -195,7 +195,7 @@ export default function TaskChartPage() {
             onExpandNext={expandNext}
           />
           <div className="absolute bottom-2 right-2 z-20" onPointerDown={(e) => e.stopPropagation()}>
-            <TaskGanttHelp className="bg-white/85 p-1 shadow-sm ring-1 ring-slate-200 backdrop-blur-sm hover:bg-white" />
+            <TaskGanttHelp className="bg-white/85 p-1 shadow-xs ring-1 ring-slate-200 backdrop-blur-xs hover:bg-white" />
           </div>
         </div>
       </div>

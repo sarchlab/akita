@@ -65,7 +65,7 @@ const DATA_RANGE_DEBOUNCE_MS = 1000;
 // the button gets a translucent background so it stays legible over the chart.
 const CHART_HELP_CORNER = "absolute bottom-2 right-2 z-20";
 const CHART_HELP_BUTTON =
-  "bg-white/85 p-1 shadow-sm ring-1 ring-slate-200 backdrop-blur-sm hover:bg-white";
+  "bg-white/85 p-1 shadow-xs ring-1 ring-slate-200 backdrop-blur-xs hover:bg-white";
 // Above this many tasks in the visible range, the per-task timeline (one SVG
 // element per task) becomes the page's dominant cost, so we switch to the
 // server-aggregated density view instead. Zooming in until the count drops below
@@ -909,7 +909,7 @@ function ComponentTimeline({
       {/* stopPropagation so a click on the toolbar doesn't reach the gantt/parent
           drag handlers (which capture the pointer and would swallow the click). */}
       <div
-        className="absolute right-2 top-1 z-20 flex items-center gap-0.5 rounded border bg-white/90 px-1 py-0.5 shadow-sm"
+        className="absolute right-2 top-1 z-20 flex items-center gap-0.5 rounded border bg-white/90 px-1 py-0.5 shadow-xs"
         onPointerDown={(event) => event.stopPropagation()}
       >
         <span className="select-none px-0.5 text-[10px] font-medium text-muted-foreground">rows</span>
@@ -1031,7 +1031,7 @@ function ComponentTimeline({
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-14 items-start justify-center bg-gradient-to-b from-white via-white/70 to-transparent">
           <button
             type="button"
-            className="pointer-events-auto mt-1.5 flex items-center gap-1 rounded-full border bg-white/95 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm transition-colors hover:text-primary"
+            className="pointer-events-auto mt-1.5 flex items-center gap-1 rounded-full border bg-white/95 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-xs transition-colors hover:text-primary"
             title="Scroll up to see earlier task rows"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => scrollRef.current?.scrollBy({ top: -Math.max(1, height * 0.8), behavior: "smooth" })}
@@ -1045,7 +1045,7 @@ function ComponentTimeline({
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex h-14 items-end justify-center bg-gradient-to-t from-white via-white/70 to-transparent">
           <button
             type="button"
-            className="pointer-events-auto mb-1.5 flex items-center gap-1 rounded-full border bg-white/95 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm transition-colors hover:text-primary"
+            className="pointer-events-auto mb-1.5 flex items-center gap-1 rounded-full border bg-white/95 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-xs transition-colors hover:text-primary"
             title="Scroll down to see more task rows"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => scrollRef.current?.scrollBy({ top: Math.max(1, height * 0.8), behavior: "smooth" })}
@@ -2250,7 +2250,7 @@ function ComponentDetailView({ root }: { root: LocationNode }) {
             applies to every region (not just the gantt). The row-zoom tip only
             appears when the per-task gantt is shown, since that's the only region
             with rows. */}
-        <div className="pointer-events-none absolute bottom-7 left-2 z-10 rounded bg-white/75 px-1.5 py-0.5 text-[10px] text-muted-foreground shadow-sm">
+        <div className="pointer-events-none absolute bottom-7 left-2 z-10 rounded bg-white/75 px-1.5 py-0.5 text-[10px] text-muted-foreground shadow-xs">
           Scroll/drag to pan · pinch or ⌘/Ctrl+scroll to zoom time{showGantt ? " · Alt+scroll for rows" : ""}
         </div>
         {/* Crosshair: a vertical guide at the cursor's x, spanning all the stacked

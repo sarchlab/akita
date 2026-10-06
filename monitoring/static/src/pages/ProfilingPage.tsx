@@ -845,7 +845,7 @@ export default function ProfilingPage() {
                       role="tab"
                       aria-selected={activeProfileTab === "graph"}
                       className={`rounded px-3 py-1 text-xs font-medium ${
-                        activeProfileTab === "graph" ? "bg-white text-slate-950 shadow-sm" : "text-slate-700"
+                        activeProfileTab === "graph" ? "bg-white text-slate-950 shadow-xs" : "text-slate-700"
                       }`}
                       onClick={() => setActiveProfileTab("graph")}
                     >
@@ -856,7 +856,7 @@ export default function ProfilingPage() {
                       role="tab"
                       aria-selected={activeProfileTab === "top-functions"}
                       className={`rounded px-3 py-1 text-xs font-medium ${
-                        activeProfileTab === "top-functions" ? "bg-white text-slate-950 shadow-sm" : "text-slate-700"
+                        activeProfileTab === "top-functions" ? "bg-white text-slate-950 shadow-xs" : "text-slate-700"
                       }`}
                       onClick={() => setActiveProfileTab("top-functions")}
                     >
@@ -1238,7 +1238,7 @@ function CallGraph({
   return (
     <div className="relative">
       <div className="absolute right-2 top-2 z-10 flex items-center gap-1">
-        <div className="mr-1 rounded bg-white/85 px-1.5 py-0.5 font-mono text-xs text-slate-700 shadow-sm">
+        <div className="mr-1 rounded bg-white/85 px-1.5 py-0.5 font-mono text-xs text-slate-700 shadow-xs">
           {Math.round(viewport.scale * 100)}%
         </div>
         <Button
@@ -1563,7 +1563,7 @@ function TrendSegmentChart({
       </div>
       {activePoint ? (
         <div
-          className="pointer-events-none absolute z-10 min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 shadow"
+          className="pointer-events-none absolute z-10 min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 shadow-sm"
           style={{
             left: `${Math.min(88, Math.max(12, activePoint.leftPercent))}%`,
             top: `${Math.min(85, Math.max(18, activePoint.topPercent))}%`,

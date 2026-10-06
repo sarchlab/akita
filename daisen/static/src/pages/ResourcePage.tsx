@@ -68,7 +68,7 @@ const MIN_ROW_HEIGHT = 4;
 const MAX_ROW_HEIGHT = 80;
 const HW_RESOURCE_KIND = "hardware_resource";
 const CHART_HELP_CORNER = "absolute bottom-2 right-2 z-20";
-const CHART_HELP_BUTTON = "bg-white/85 p-1 shadow-sm ring-1 ring-slate-200 backdrop-blur-sm hover:bg-white";
+const CHART_HELP_BUTTON = "bg-white/85 p-1 shadow-xs ring-1 ring-slate-200 backdrop-blur-xs hover:bg-white";
 // Warm fill for the blocking-reason (milestone) family.
 const FILL = "#f59e0b";
 const STROKE = "#ea580c";
@@ -215,7 +215,7 @@ function ResourceGanttScrollFrame({
   return (
     <div className="relative h-full w-full">
       <div
-        className="absolute right-2 z-20 flex items-center gap-0.5 rounded border bg-white/90 px-1 py-0.5 shadow-sm"
+        className="absolute right-2 z-20 flex items-center gap-0.5 rounded border bg-white/90 px-1 py-0.5 shadow-xs"
         style={{ top: controlsTop }}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
@@ -243,7 +243,7 @@ function ResourceGanttScrollFrame({
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-14 items-start justify-center bg-gradient-to-b from-white via-white/70 to-transparent">
           <button
             type="button"
-            className="pointer-events-auto mt-1.5 flex items-center gap-1 rounded-full border bg-white/95 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm transition-colors hover:text-primary"
+            className="pointer-events-auto mt-1.5 flex items-center gap-1 rounded-full border bg-white/95 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-xs transition-colors hover:text-primary"
             title="Scroll up to see earlier task rows"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => scrollRef.current?.scrollBy({ top: -Math.max(1, height * 0.8), behavior: "smooth" })}
@@ -257,7 +257,7 @@ function ResourceGanttScrollFrame({
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex h-14 items-end justify-center bg-gradient-to-t from-white via-white/70 to-transparent">
           <button
             type="button"
-            className="pointer-events-auto mb-1.5 flex items-center gap-1 rounded-full border bg-white/95 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm transition-colors hover:text-primary"
+            className="pointer-events-auto mb-1.5 flex items-center gap-1 rounded-full border bg-white/95 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-xs transition-colors hover:text-primary"
             title="Scroll down to see more task rows"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => scrollRef.current?.scrollBy({ top: Math.max(1, height * 0.8), behavior: "smooth" })}

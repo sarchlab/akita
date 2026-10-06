@@ -22,6 +22,9 @@ jobs:
       - name: npm run build
         working-directory: ./daisen/static
         run: npm run build
+      - name: npm test
+        working-directory: ./daisen/static
+        run: npm test
 
   monitoring2_compile:
     runs-on: ubuntu-latest
@@ -38,6 +41,9 @@ jobs:
       - name: npm run build
         working-directory: ./monitoring/static
         run: npm run build
+      - name: npm test
+        working-directory: ./monitoring/static
+        run: npm test
 
   akita_build_lint_test:
     runs-on: ubuntu-latest
