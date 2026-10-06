@@ -44,8 +44,7 @@ Replace manual `RegisterSimulation`, `RegisterVisTracer`, `SetTraceDBPath`, and
 `StartServer` calls with `WithMonitor`. The runner calls `Start(s)` to bind the
 initialized simulation and start the server, then `Stop()` during termination.
 A monitor can be started only once, even after stopping, and progress bars must
-be created after startup. `WithMonitorFactory` is removed in favor of direct
-instance injection.
+be created after startup.
 
 `daisen.ProgressBar` moves to `monitoring.ProgressBar`; the offline viewer no
 longer owns live progress tracking. Component code should depend on the methods

@@ -9,7 +9,7 @@ Runtime packages are now under `sim/`; `simulation`, `monitoring2`, and
 supply `WithMonitor(monitoring.NewMonitor())` to retain their monitoring server.
 `Build()` binds and starts the supplied monitor, and `Terminate()` stops it.
 Omitting `WithMonitor` leaves runs headless while tracing remains independent.
-The monitor factory and `WithoutMonitoring` options are removed.
+The `WithoutMonitoring` and `WithMonitorPort` options are removed.
 
 Live progress bars move from `daisen.ProgressBar` to `monitoring.ProgressBar`.
 The memory access agent accepts a small `ProgressTracker` interface through
