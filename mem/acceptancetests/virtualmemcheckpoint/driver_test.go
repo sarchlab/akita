@@ -7,6 +7,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -225,7 +226,7 @@ func buildDriver(sim timing.Simulation, lowModule messaging.Port) *driver {
 		WithSpec(spec).
 		WithResources(driverResources{LowModule: lowModule}).
 		WithPorts(driverPorts{
-			Mem: messaging.NewPort("Driver.Mem", 4, 4),
+			Mem: twowaybuffered.NewPort("Driver.Mem", 4, 4),
 		}).
 		Build("Driver")
 }

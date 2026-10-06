@@ -1,7 +1,9 @@
-package messaging
+package twowaybuffered
 
 import (
 	"testing"
+
+	"github.com/sarchlab/akita/v5/sim/messaging"
 
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/stretchr/testify/require"
@@ -9,25 +11,25 @@ import (
 
 type portPresenceOwner struct{ received, freed int }
 
-func (c *portPresenceOwner) NotifyRecv(Port)     { c.received++ }
-func (c *portPresenceOwner) NotifyPortFree(Port) { c.freed++ }
+func (c *portPresenceOwner) NotifyRecv(messaging.Port)     { c.received++ }
+func (c *portPresenceOwner) NotifyPortFree(messaging.Port) { c.freed++ }
 
 type portPresenceConnection struct {
-	Connection
+	messaging.Connection
 	available, sent int
 }
 
-func (c *portPresenceConnection) NotifyAvailable(Port) { c.available++ }
-func (c *portPresenceConnection) NotifySend()          { c.sent++ }
+func (c *portPresenceConnection) NotifyAvailable(messaging.Port) { c.available++ }
+func (c *portPresenceConnection) NotifySend()                    { c.sent++ }
 
-type portPresenceHook struct{ incoming, outgoing []Msg }
+type portPresenceHook struct{ incoming, outgoing []messaging.Msg }
 
 func (h *portPresenceHook) Func(ctx hooking.HookCtx) {
 	switch ctx.Pos {
-	case HookPosPortMsgRetrieveIncoming:
-		h.incoming = append(h.incoming, ctx.Item.(Msg))
-	case HookPosPortMsgRetrieveOutgoing:
-		h.outgoing = append(h.outgoing, ctx.Item.(Msg))
+	case messaging.HookPosPortMsgRetrieveIncoming:
+		h.incoming = append(h.incoming, ctx.Item.(messaging.Msg))
+	case messaging.HookPosPortMsgRetrieveOutgoing:
+		h.outgoing = append(h.outgoing, ctx.Item.(messaging.Msg))
 	}
 }
 
@@ -39,8 +41,8 @@ func TestPortReadPresenceAndNotifications(t *testing.T) {
 	p.SetConnection(conn)
 	hook := &portPresenceHook{}
 	p.AcceptHook(hook)
-	first := Msg{Src: "P", Dst: "Other", Payload: registryTestMsg{Value: 0}}
-	second := Msg{Src: "P", Dst: "Other", Payload: registryTestMsg{Value: 1}}
+	first := messaging.Msg{Src: "P", Dst: "Other", Payload: registryTestMsg{Value: 0}}
+	second := messaging.Msg{Src: "P", Dst: "Other", Payload: registryTestMsg{Value: 1}}
 	assertEmptyPortReads(t, p)
 	require.Zero(t, conn.available)
 	require.Zero(t, comp.freed)
@@ -58,7 +60,7 @@ func TestPortReadPresenceAndNotifications(t *testing.T) {
 	require.Zero(t, comp.freed)
 	require.Empty(t, hook.incoming)
 	require.Empty(t, hook.outgoing)
-	for _, expected := range []Msg{first, second} {
+	for _, expected := range []messaging.Msg{first, second} {
 		msg, ok := p.RetrieveIncoming()
 		require.True(t, ok)
 		require.Equal(t, expected, msg)
@@ -71,42 +73,42 @@ func TestPortReadPresenceAndNotifications(t *testing.T) {
 	assertEmptyPortReads(t, p)
 	require.Equal(t, 1, conn.available)
 	require.Equal(t, 1, comp.freed)
-	require.Equal(t, []Msg{first, second}, hook.incoming)
-	require.Equal(t, []Msg{first, second}, hook.outgoing)
+	require.Equal(t, []messaging.Msg{first, second}, hook.incoming)
+	require.Equal(t, []messaging.Msg{first, second}, hook.outgoing)
 	t.Log("Both retrieval directions preserved FIFO order and emitted one full-to-available notification; " +
 		"empty reads emitted no notifications or retrieval hooks")
 }
 
 func TestPortWithoutOwnerPanics(t *testing.T) {
-	msg := Msg{Src: "Other", Dst: "P", Payload: registryTestMsg{}}
-	for name, use := range map[string]func(p Port){
-		"Deliver":          func(p Port) { p.Deliver(msg) },
-		"RetrieveOutgoing": func(p Port) { p.RetrieveOutgoing() },
-		"NotifyAvailable":  func(p Port) { p.NotifyAvailable() },
+	msg := messaging.Msg{Src: "Other", Dst: "P", Payload: registryTestMsg{}}
+	for name, use := range map[string]func(p messaging.Port){
+		"Deliver":          func(p messaging.Port) { p.Deliver(msg) },
+		"RetrieveOutgoing": func(p messaging.Port) { p.RetrieveOutgoing() },
+		"NotifyAvailable":  func(p messaging.Port) { p.NotifyAvailable() },
 	} {
 		p := NewPort("P", 1, 1)
 		p.SetConnection(&portPresenceConnection{})
 		require.PanicsWithValue(t,
-			`messaging: port "P" has no owner; a component's Build binds `+
+			`twowaybuffered: port "P" has no owner; a component's Build binds `+
 				`its ports, and any other owner must call SetOwner`,
 			func() { use(p) }, name)
 	}
 }
 
-func assertEmptyPortReads(t *testing.T, p Port) {
+func assertEmptyPortReads(t *testing.T, p messaging.Port) {
 	t.Helper()
-	for _, read := range []func() (Msg, bool){
+	for _, read := range []func() (messaging.Msg, bool){
 		p.PeekIncoming, p.RetrieveIncoming, p.PeekOutgoing, p.RetrieveOutgoing,
 	} {
 		msg, ok := read()
-		require.Equal(t, Msg{}, msg)
+		require.Equal(t, messaging.Msg{}, msg)
 		require.False(t, ok)
 	}
 }
 
-func assertPortPeeks(t *testing.T, p Port, first Msg) {
+func assertPortPeeks(t *testing.T, p messaging.Port, first messaging.Msg) {
 	t.Helper()
-	for _, read := range []func() (Msg, bool){p.PeekIncoming, p.PeekOutgoing} {
+	for _, read := range []func() (messaging.Msg, bool){p.PeekIncoming, p.PeekOutgoing} {
 		msg, ok := read()
 		require.True(t, ok)
 		require.Equal(t, first, msg)

@@ -55,11 +55,11 @@ Things to notice:
 - The `Definition.Builder()` → `WithX` → `Build(name)` shape is universal
   across Akita components.
 
-The system builder creates the port with `messaging.NewPort` and passes it
+The system builder creates the port with `twowaybuffered.NewPort` and passes it
 through `WithPorts`:
 
 ```go
-outA := messaging.NewPort("AgentA.Out", 16, 16)
+outA := twowaybuffered.NewPort("AgentA.Out", 16, 16)
 
 agentA := Definition.Builder().
     WithSimulation(sim).

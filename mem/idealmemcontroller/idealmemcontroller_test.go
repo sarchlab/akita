@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -32,8 +33,8 @@ func (c *noopConn) NotifySend()                      {}
 // the given buffer size and a Control port with a 16-message buffer.
 func makePorts(name string, topBufSize int) Ports {
 	return Ports{
-		Top:     messaging.NewPort(name+".Top", topBufSize, topBufSize),
-		Control: messaging.NewPort(name+".Control", 16, 16),
+		Top:     twowaybuffered.NewPort(name+".Top", topBufSize, topBufSize),
+		Control: twowaybuffered.NewPort(name+".Control", 16, 16),
 	}
 }
 

@@ -21,8 +21,9 @@ import (
 	"github.com/sarchlab/akita/v5/examples/tasktree/cache"
 	"github.com/sarchlab/akita/v5/examples/tasktree/client"
 	"github.com/sarchlab/akita/v5/examples/tasktree/memory"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tracing"
@@ -84,8 +85,8 @@ func buildCache(sim timing.Simulation, name string, lower messaging.Port) *cache
 		WithSimulation(sim).
 		WithSpec(spec).
 		WithPorts(cache.Ports{
-			Top:    messaging.NewPort(name+".Top", 4, 4),
-			Bottom: messaging.NewPort(name+".Bottom", 4, 4),
+			Top:    twowaybuffered.NewPort(name+".Top", 4, 4),
+			Bottom: twowaybuffered.NewPort(name+".Bottom", 4, 4),
 		}).
 		Build(name)
 }
@@ -98,7 +99,7 @@ func main() {
 	// below it.
 	mem := memory.Definition.Builder().
 		WithSimulation(sim).
-		WithPorts(memory.Ports{Top: messaging.NewPort("Memory.Top", 4, 4)}).
+		WithPorts(memory.Ports{Top: twowaybuffered.NewPort("Memory.Top", 4, 4)}).
 		Build("Memory")
 	l2 := buildCache(sim, "L2", mem.Ports.Top)
 	l1 := buildCache(sim, "L1", l2.Ports.Top)
@@ -108,11 +109,11 @@ func main() {
 	cli := client.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(clientSpec).
-		WithPorts(client.Ports{Out: messaging.NewPort("Client.Out", 4, 4)}).
+		WithPorts(client.Ports{Out: twowaybuffered.NewPort("Client.Out", 4, 4)}).
 		Build("Client")
 
 	connect := func(name string, a, b messaging.Port) {
-		conn := directconnection.MakeBuilder().WithSimulation(sim).Build(name)
+		conn := direct.Definition.Builder().WithSimulation(sim).Build(name)
 		conn.PlugIn(a)
 		conn.PlugIn(b)
 	}

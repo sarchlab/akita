@@ -1,4 +1,4 @@
-package directconnection
+package direct
 
 import (
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -8,13 +8,16 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
-// defaultSpec provides the default configuration for a direct connection.
-var defaultSpec = Spec{Freq: 1 * timing.GHz}
+// Definition supplies the default configuration and builder for direct connections.
+var Definition = definition{DefaultSpec: Spec{Freq: 1 * timing.GHz}}
 
-// DefaultSpec returns a copy of the default configuration. Callers obtain it,
-// tweak the fields they care about, and pass it to WithSpec.
-func DefaultSpec() Spec {
-	return defaultSpec
+type definition struct {
+	DefaultSpec Spec
+}
+
+// Builder creates a builder initialized with the definition's default configuration.
+func (d definition) Builder() Builder {
+	return Builder{spec: d.DefaultSpec}
 }
 
 // Builder builds direct connections. A connection owns no ports (ports plug in)
@@ -25,31 +28,27 @@ type Builder struct {
 	simulation timing.Simulation
 }
 
-func MakeBuilder() Builder {
-	return Builder{spec: defaultSpec}
-}
-
 // WithSimulation sets the simulation that owns and registers the built connection.
 func (b Builder) WithSimulation(sim timing.Simulation) Builder {
 	b.simulation = sim
 	return b
 }
 
-// WithSpec sets the entire configuration. Start from DefaultSpec() and tweak.
+// WithSpec sets the entire configuration. Start from Definition.DefaultSpec and tweak.
 func (b Builder) WithSpec(spec Spec) Builder {
 	b.spec = spec
 	return b
 }
 
-func (b Builder) Build(name string) *Comp {
+func (b Builder) Build(name string) *Connection {
 	if b.simulation == nil {
-		panic("directconnection: WithSimulation is required")
+		panic("direct: WithSimulation is required")
 	}
 
 	naming.MustBeValid(name)
 	modeling.MustBeCheckpointable[Spec, State](name, b.spec)
 
-	conn := &Comp{
+	conn := &Connection{
 		name: name,
 		spec: b.spec,
 		// A direct connection ticks on secondary events, so it runs after the

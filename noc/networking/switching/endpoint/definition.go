@@ -26,6 +26,10 @@ var Definition = ticking.Definition[Spec, state, Resources, Ports, middlewares]{
 func newMiddlewares(c *Comp) middlewares {
 	devicePorts := c.Resources.DevicePorts
 
+	for _, p := range devicePorts {
+		mustBeBufferedDevicePort(p)
+	}
+
 	conn := deviceSide{c}
 	for _, p := range devicePorts {
 		conn.PlugIn(p)

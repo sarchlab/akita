@@ -5,6 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 
@@ -27,8 +28,8 @@ func TestValidateState(t *testing.T) {
 // the given buffer size.
 func defaultPorts(name string, bufSize int) Ports {
 	return Ports{
-		Top:     messaging.NewPort(name+".Top", bufSize, bufSize),
-		Control: messaging.NewPort(name+".Control", bufSize, bufSize),
+		Top:     twowaybuffered.NewPort(name+".Top", bufSize, bufSize),
+		Control: twowaybuffered.NewPort(name+".Control", bufSize, bufSize),
 	}
 }
 
@@ -42,7 +43,7 @@ func (testDriver) NotifyPortFree(messaging.Port) {}
 // newDriverPort creates a port with bufSize slots in each direction for the
 // test to drive by hand.
 func newDriverPort(name string, bufSize int) messaging.Port {
-	p := messaging.NewPort(name, bufSize, bufSize)
+	p := twowaybuffered.NewPort(name, bufSize, bufSize)
 	p.SetOwner(testDriver{})
 
 	return p

@@ -6,8 +6,8 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tracing"
@@ -77,7 +77,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 		cacheComp   *Comp
 		dramTop     messaging.Port
 		dramStorage *mem.Storage
-		conn        *directconnection.Comp
+		conn        *direct.Connection
 		agentPort   messaging.Port
 		topPort     messaging.Port
 		rec         *wbMilestoneRecorder
@@ -111,7 +111,7 @@ var _ = Describe("Write-Back Cache milestones", func() {
 			Build("Cache")
 		topPort = cacheComp.Ports.Top
 
-		conn = directconnection.MakeBuilder().
+		conn = direct.Definition.Builder().
 			WithSimulation(sim).
 			Build("Connection")
 		conn.PlugIn(topPort)

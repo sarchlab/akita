@@ -16,6 +16,7 @@ import (
 	nc "github.com/sarchlab/akita/v5/noc/networking/networkconnector"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -29,8 +30,8 @@ func payloadNetwork(t *testing.T) (*sim.Simulation, messaging.Port, messaging.Po
 	t.Helper()
 	s := sim.MakeBuilder().WithOutputFileName(filepath.Join(t.TempDir(), "trace.sqlite3")).Build()
 	t.Cleanup(s.Terminate)
-	src := messaging.NewPort("Sender.Port", 1, 4)
-	dst := messaging.NewPort("Receiver.Port", 1, 4)
+	src := twowaybuffered.NewPort("Sender.Port", 1, 4)
+	dst := twowaybuffered.NewPort("Receiver.Port", 1, 4)
 	for _, item := range []struct {
 		name string
 		port messaging.Port

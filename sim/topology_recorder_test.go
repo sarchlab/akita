@@ -7,6 +7,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 )
 
 // fakeSpec is a stand-in component spec that serializes to JSON, mirroring the
@@ -54,7 +55,7 @@ func (c *namedConnection) Name() string { return c.name }
 // newOwnedPort creates a real port owned by owner and, unless conn is nil,
 // plugged into conn.
 func newOwnedPort(name string, owner *portOwner, conn messaging.Connection) messaging.Port {
-	p := messaging.NewPort(name, 1, 1)
+	p := twowaybuffered.NewPort(name, 1, 1)
 	p.SetOwner(owner)
 	if conn != nil {
 		p.SetConnection(conn)

@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/timing"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -18,7 +19,7 @@ var _ = Describe("End Point", func() {
 		mockCtrl          *gomock.Controller
 		engine            *MockEngine
 		sim               timing.Simulation
-		devicePort        *MockPort
+		devicePort        *twowaybuffered.Port
 		networkPort       *MockPort
 		defaultSwitchPort *MockPort
 		endPoint          *Comp
@@ -30,11 +31,9 @@ var _ = Describe("End Point", func() {
 		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
 		engine.EXPECT().CurrentTime().Return(timing.VTimeInPicoSec(0)).AnyTimes()
 		sim = modeling.NewStandaloneSimulation(engine)
-		devicePort = NewMockPort(mockCtrl)
-		devicePort.EXPECT().
-			AsRemote().
-			Return(messaging.RemotePort("DevicePort")).
-			AnyTimes()
+		devicePort = twowaybuffered.NewPort("DevicePort", 1, 1)
+		devicePort.SetOwner(payloadOwner{"Device"})
+		engine.EXPECT().Schedule(gomock.Any()).AnyTimes()
 		networkPort = NewMockPort(mockCtrl)
 		networkPort.EXPECT().
 			AsRemote().
@@ -46,7 +45,6 @@ var _ = Describe("End Point", func() {
 			Return(messaging.RemotePort("DefaultSwitchPort")).
 			AnyTimes()
 
-		devicePort.EXPECT().SetConnection(gomock.Any())
 		networkPort.EXPECT().Name().Return("EndPoint.NetworkPort").AnyTimes()
 		networkPort.EXPECT().Owner().Return(nil)
 		networkPort.EXPECT().SetOwner(gomock.Any())
@@ -72,15 +70,14 @@ var _ = Describe("End Point", func() {
 		msg := messaging.Msg{
 			ID:           sim.NewID(),
 			Src:          devicePort.AsRemote(),
+			Dst:          "OtherDevice",
 			TrafficBytes: 33,
 			Payload:      memprotocol.WriteReq{Address: 64, Data: []byte{1, 2, 3}},
 		}
 
 		networkPort.EXPECT().PeekIncoming().Return(messaging.Msg{}, false).AnyTimes()
 
-		devicePort.EXPECT().PeekOutgoing().Return(msg, true)
-		devicePort.EXPECT().RetrieveOutgoing().Return(msg, true)
-		devicePort.EXPECT().PeekOutgoing().Return(messaging.Msg{}, false).AnyTimes()
+		devicePort.Send(msg)
 
 		madeProgress := modelingtest.Tick(endPoint)
 		Expect(madeProgress).To(BeTrue())
@@ -95,7 +92,6 @@ var _ = Describe("End Point", func() {
 			Expect(flit.Payload.(packetization.Flit).Msg).To(Equal(msg))
 			Expect(flit.Payload.(packetization.Flit).MsgID).To(Equal(msg.ID))
 		})
-		devicePort.EXPECT().NotifyAvailable()
 
 		madeProgress = modelingtest.Tick(endPoint)
 		Expect(madeProgress).To(BeTrue())
@@ -144,9 +140,6 @@ var _ = Describe("End Point", func() {
 		networkPort.EXPECT().PeekIncoming().Return(flit1, true)
 		networkPort.EXPECT().PeekIncoming().Return(messaging.Msg{}, false).Times(3)
 		networkPort.EXPECT().RetrieveIncoming().Times(2)
-		devicePort.EXPECT().CanDeliver().Return(true)
-		devicePort.EXPECT().Deliver(msg)
-		devicePort.EXPECT().PeekOutgoing().Return(messaging.Msg{}, false).AnyTimes()
 
 		madeProgress := modelingtest.Tick(endPoint)
 		Expect(madeProgress).To(BeTrue())
@@ -162,5 +155,8 @@ var _ = Describe("End Point", func() {
 
 		madeProgress = modelingtest.Tick(endPoint)
 		Expect(madeProgress).To(BeFalse())
+		received, ok := devicePort.PeekIncoming()
+		Expect(ok).To(BeTrue())
+		Expect(received).To(Equal(msg))
 	})
 })

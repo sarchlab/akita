@@ -3,9 +3,10 @@ package tlb
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 
@@ -46,15 +47,15 @@ func plugNoopConn(comp *Comp) {
 // default buffer sizes.
 func defaultPorts(name string) Ports {
 	return Ports{
-		Top:     messaging.NewPort(name+".Top", 4, 4),
-		Bottom:  messaging.NewPort(name+".Bottom", 4, 4),
-		Control: messaging.NewPort(name+".Control", 1, 1),
+		Top:     twowaybuffered.NewPort(name+".Top", 4, 4),
+		Bottom:  twowaybuffered.NewPort(name+".Bottom", 4, 4),
+		Control: twowaybuffered.NewPort(name+".Control", 1, 1),
 	}
 }
 
 // makeDirectConnection builds a direct connection using the given simulation.
 func makeDirectConnection(sim timing.Simulation) messaging.Connection {
-	return directconnection.MakeBuilder().
+	return direct.Definition.Builder().
 		WithSimulation(sim).
 		Build("Conn")
 }
@@ -75,7 +76,7 @@ func newIdealEndpoint(name string) *idealEndpoint {
 	ep := &idealEndpoint{
 		name: name,
 	}
-	ep.port = messaging.NewPort(name+".Port", 4, 4)
+	ep.port = twowaybuffered.NewPort(name+".Port", 4, 4)
 	ep.port.SetOwner(ep)
 
 	return ep

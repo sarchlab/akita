@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -31,8 +32,8 @@ func (c *noopConn) NotifySend()                      {}
 // buffer size and a Control buffer size of 4.
 func makePorts(name string, topBufSize int) Ports {
 	return Ports{
-		Top:     messaging.NewPort(name+".Top", topBufSize, topBufSize),
-		Control: messaging.NewPort(name+".Control", 4, 4),
+		Top:     twowaybuffered.NewPort(name+".Top", topBufSize, topBufSize),
+		Control: twowaybuffered.NewPort(name+".Control", 4, 4),
 	}
 }
 
@@ -232,7 +233,7 @@ var _ = Describe("MMU Integration", func() {
 		topPort = mmuComp.Ports.Top
 		(&noopConn{}).PlugIn(topPort)
 
-		agentPort = messaging.NewPort("Agent.Top", 4, 4)
+		agentPort = twowaybuffered.NewPort("Agent.Top", 4, 4)
 		(&noopConn{}).PlugIn(agentPort)
 	})
 

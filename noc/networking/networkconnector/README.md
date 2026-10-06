@@ -36,7 +36,7 @@ Topology methods:
 
 Link parameters (`DeviceToSwitchLinkParameter`, `SwitchToSwitchLinkParameter`,
 and their `LinkEnd*`/`LinkParameter` fields) configure buffer sizes, channel
-counts, latency, and link frequency. Only ideal (zero-latency `directconnection`)
+counts, latency, and link frequency. Only ideal (zero-latency `direct.Connection`)
 links are implemented; non-ideal links panic.
 
 ### Node, Remote, Router
@@ -59,7 +59,7 @@ table for every reachable device port.
 ## How It Works
 
 `ConnectDevice` builds an `endpoint`, creates the switch-side port, records it
-on the switch's node, and links the two with a `directconnection`, recording
+on the switch's node, and links the two with a `direct.Connection`, recording
 the link as `Remote`s on both nodes. `ConnectSwitches` does the same
 symmetrically for two switches. A switch takes all of its ports at `Build`, so
 the connector builds the switches only in `EstablishRoute` (through
@@ -67,3 +67,11 @@ the connector builds the switches only in `EstablishRoute` (through
 and lets the chosen `Router` fill in every switch's `routing.Table` so that
 flits can reach any device. A `ConnectDevice` or `ConnectSwitches` that adds a
 port to a switch that is already built panics.
+
+## Supported ports and links
+
+The connector creates `twowaybuffered.Port` instances directly and uses only
+`direct.Connection` links. There is no configurable port factory. Device ports
+must be `*twowaybuffered.Port`; endpoint construction rejects other implementations
+before attaching device ports. Component port fields remain `messaging.Port`.
+Wire ports and non-ideal links are outside this connector's current support.

@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 
@@ -48,10 +49,10 @@ const (
 // defaults for the rest.
 func makePorts(name string, topBufSize int) Ports {
 	return Ports{
-		Top:         messaging.NewPort(name+".Top", topBufSize, topBufSize),
-		Bottom:      messaging.NewPort(name+".Bottom", bottomBufSize, bottomBufSize),
-		Translation: messaging.NewPort(name+".Translation", translationBufSize, translationBufSize),
-		Control:     messaging.NewPort(name+".Control", ctrlBufSize, ctrlBufSize),
+		Top:         twowaybuffered.NewPort(name+".Top", topBufSize, topBufSize),
+		Bottom:      twowaybuffered.NewPort(name+".Bottom", bottomBufSize, bottomBufSize),
+		Translation: twowaybuffered.NewPort(name+".Translation", translationBufSize, translationBufSize),
+		Control:     twowaybuffered.NewPort(name+".Control", ctrlBufSize, ctrlBufSize),
 	}
 }
 

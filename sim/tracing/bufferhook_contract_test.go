@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -44,7 +45,7 @@ func TestBufferHooksRejectBrokenContracts(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
 			// Missing optional tracing support must not hide a malformed event.
-			port := messaging.NewPort("unowned", 1, 1)
+			port := twowaybuffered.NewPort("unowned", 1, 1)
 			for _, pos := range []*hooking.HookPos{tc.enter, tc.leave} {
 				for _, item := range []any{nil, "not a message", &messaging.Msg{}} {
 					g.Expect(func() {
@@ -71,7 +72,7 @@ func TestBufferHooksAllowAbsentTracing(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
 			for _, owner := range []messaging.PortOwner{nil, &untracedPortOwner{}, &ibFakeComp{}} {
-				port := messaging.NewPort("untraced", 1, 1)
+				port := twowaybuffered.NewPort("untraced", 1, 1)
 				port.SetOwner(owner)
 				hook := tc.newHook()
 				for _, pos := range []*hooking.HookPos{tc.enter, tc.leave} {
@@ -91,7 +92,7 @@ func TestBufferHooksTraceNilPayload(t *testing.T) {
 			comp := &ibFakeComp{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()), name: "Comp"}
 			tracer := &ibRecordingTracer{}
 			CollectTrace(comp, tracer)
-			port := messaging.NewPort("Comp.Port", 1, 1)
+			port := twowaybuffered.NewPort("Comp.Port", 1, 1)
 			port.SetOwner(comp)
 			hook := tc.newHook()
 			ctx := hooking.HookCtx{Domain: port, Pos: tc.enter, Item: messaging.Msg{ID: 7}}

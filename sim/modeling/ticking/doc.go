@@ -70,7 +70,7 @@
 //	    WithPorts(cache.Ports{Top: top, Bottom: bottom}).
 //	    Build("GPU[0].L1Cache")
 //
-// The system builder creates every port with messaging.NewPort, choosing its
+// The system builder creates every port with twowaybuffered.NewPort, choosing its
 // buffer sizes, and names it "<instance>.<field>", for example
 // "GPU[0].L1Cache.Top", or "<instance>.<field>[i]" for member i of a port
 // group. Build binds each port to the instance and registers it with the

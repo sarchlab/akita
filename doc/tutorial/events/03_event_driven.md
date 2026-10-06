@@ -124,14 +124,14 @@ sim := modeling.NewStandaloneSimulation(engine)
 
 agentA := ping.Definition.Builder().
     WithSimulation(sim).
-    WithPorts(ping.Ports{Out: messaging.NewPort("AgentA.Out", 16, 16)}).
+    WithPorts(ping.Ports{Out: twowaybuffered.NewPort("AgentA.Out", 16, 16)}).
     Build("AgentA")
 agentB := ping.Definition.Builder().
     WithSimulation(sim).
-    WithPorts(ping.Ports{Out: messaging.NewPort("AgentB.Out", 16, 16)}).
+    WithPorts(ping.Ports{Out: twowaybuffered.NewPort("AgentB.Out", 16, 16)}).
     Build("AgentB")
 
-conn := directconnection.MakeBuilder().WithSimulation(sim).Build("Conn")
+conn := direct.Definition.Builder().WithSimulation(sim).Build("Conn")
 conn.PlugIn(agentA.Ports.Out)
 conn.PlugIn(agentB.Ports.Out)
 

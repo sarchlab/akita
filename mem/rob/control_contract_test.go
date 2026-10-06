@@ -5,6 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -18,7 +19,7 @@ func TestControlContract(t *testing.T) {
 		spec.BottomUnit = messaging.RemotePort("BottomUnit")
 
 		port := func(name string) messaging.Port {
-			p := messaging.NewPort("ROB."+name, 16, 16)
+			p := twowaybuffered.NewPort("ROB."+name, 16, 16)
 			(&noopConn{}).PlugIn(p)
 			return p
 		}

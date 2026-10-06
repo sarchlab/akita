@@ -1,8 +1,8 @@
 package ping
 
 import (
-	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -13,15 +13,15 @@ func Example_pingWithEvents() {
 
 	agentA := Definition.Builder().
 		WithSimulation(sim).
-		WithPorts(Ports{Out: messaging.NewPort("AgentA.Out", 16, 16)}).
+		WithPorts(Ports{Out: twowaybuffered.NewPort("AgentA.Out", 16, 16)}).
 		Build("AgentA")
 
 	agentB := Definition.Builder().
 		WithSimulation(sim).
-		WithPorts(Ports{Out: messaging.NewPort("AgentB.Out", 16, 16)}).
+		WithPorts(Ports{Out: twowaybuffered.NewPort("AgentB.Out", 16, 16)}).
 		Build("AgentB")
 
-	conn := directconnection.MakeBuilder().
+	conn := direct.Definition.Builder().
 		WithSimulation(sim).
 		Build("Conn")
 

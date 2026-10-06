@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -47,7 +48,7 @@ func newFakeComp(name string, matrix memcontrolprotocol.VerbSupport, asyncDelay 
 		matrix:     matrix,
 		asyncDelay: asyncDelay,
 	}
-	c.control = messaging.NewPort(name+".Control", 4, 4)
+	c.control = twowaybuffered.NewPort(name+".Control", 4, 4)
 	c.control.SetOwner(c)
 	conn := &noopConn{}
 	conn.PlugIn(c.control)

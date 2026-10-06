@@ -7,9 +7,10 @@ import (
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/switches"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 
-	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 )
 
 // Remote records the link between two nodes.
@@ -20,19 +21,12 @@ type Remote struct {
 	RemoteNode Node
 	RemotePort messaging.Port
 
-	Link messaging.Connection
+	Link *direct.Connection
 }
 
-// Bandwidth returns the bandwidth of the link.
-func (r Remote) Bandwidth(flitSize int) float64 {
-	switch r.Link.(type) {
-	case *directconnection.Comp:
-		return math.Inf(1)
-	// case *messaging.Channel:
-	// 	return float64(l.Freq) * float64(flitSize)
-	default:
-		panic("unknown link type")
-	}
+// Bandwidth returns the unlimited bandwidth of an ideal direct link.
+func (r Remote) Bandwidth(_ int) float64 {
+	return math.Inf(1)
 }
 
 // Node represents an endpoint or a switch.
@@ -71,7 +65,6 @@ func (sn *switchNode) Table() routing.Table {
 // the port and the link's index. remote may be empty and set later, once the
 // port at the other end exists.
 func (sn *switchNode) addPort(
-	factory PortFactory,
 	remote messaging.RemotePort,
 	param LinkEndSwitchParameter,
 ) (messaging.Port, int) {
@@ -79,7 +72,7 @@ func (sn *switchNode) addPort(
 		panic(fmt.Sprintf("networkconnector: switch %s is already built", sn.name))
 	}
 
-	port := factory(fmt.Sprintf("%s.Port[%d]", sn.name, len(sn.ports)),
+	port := twowaybuffered.NewPort(fmt.Sprintf("%s.Port[%d]", sn.name, len(sn.ports)),
 		param.OutgoingBufSize, param.OutgoingBufSize)
 
 	sn.ports = append(sn.ports, port)

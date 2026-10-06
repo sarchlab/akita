@@ -61,7 +61,7 @@ Each tick the switch runs two middlewares as a five-stage pipeline:
 ## Builder Pattern
 
 A switch takes all of its ports at `Build`: one port per link, created by the
-system builder with `messaging.NewPort` and named `"<instance>.Port[i]"`, and the
+system builder with `twowaybuffered.NewPort` and named `"<instance>.Port[i]"`, and the
 matching links in `Resources.Links`. No port is added later, so a switch is
 built once its links are known; `networkconnector` builds its switches in
 `EstablishRoute`.
@@ -77,7 +77,7 @@ sw := switches.Definition.Builder().
         },
     }).
     WithPorts(switches.Ports{Port: []messaging.Port{
-        messaging.NewPort("Switch0.Port[0]", 1, 1),
+        twowaybuffered.NewPort("Switch0.Port[0]", 1, 1),
     }}).
     Build("Switch0")
 ```

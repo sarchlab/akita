@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -40,8 +40,8 @@ func TestRandStateMatchesMathRand(t *testing.T) {
 func buildAgent() *Comp {
 	return Definition.Builder().
 		WithSimulation(modeling.NewStandaloneSimulation(timing.NewSerialEngine())).
-		WithResources(Resources{LowModule: messaging.NewPort("Mem.Top", 1, 1)}).
-		WithPorts(Ports{Mem: messaging.NewPort("Agent.Mem", 4, 4)}).
+		WithResources(Resources{LowModule: twowaybuffered.NewPort("Mem.Top", 1, 1)}).
+		WithPorts(Ports{Mem: twowaybuffered.NewPort("Agent.Mem", 4, 4)}).
 		Build("Agent")
 }
 

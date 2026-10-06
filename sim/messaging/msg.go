@@ -1,6 +1,10 @@
 package messaging
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/sarchlab/akita/v5/sim/messaging/internal/payloadregistry"
+)
 
 // Msg carries routing information and a registered protocol payload. Payloads
 // are values. Slice and map storage is shared between sender and receiver;
@@ -29,7 +33,7 @@ func (m Msg) MarshalJSON() ([]byte, error) {
 	if m.Payload == nil {
 		return routing, nil
 	}
-	payload, err := msgCodec.Encode(m.Payload)
+	payload, err := payloadregistry.Registry.Encode(m.Payload)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +49,7 @@ func (m *Msg) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return err
 	}
-	payload, err := msgCodec.Decode(data)
+	payload, err := payloadregistry.Registry.Decode(data)
 	if err != nil {
 		return err
 	}

@@ -66,9 +66,9 @@ g := gmmu.Definition.Builder().
     WithSpec(spec).
     WithResources(gmmu.Resources{PageTable: pageTable}).
     WithPorts(gmmu.Ports{
-        Top:     messaging.NewPort("GMMU.Top", 16, 16),
-        Bottom:  messaging.NewPort("GMMU.Bottom", 16, 16),
-        Control: messaging.NewPort("GMMU.Control", 16, 16),
+        Top:     twowaybuffered.NewPort("GMMU.Top", 16, 16),
+        Bottom:  twowaybuffered.NewPort("GMMU.Bottom", 16, 16),
+        Control: twowaybuffered.NewPort("GMMU.Control", 16, 16),
     }).
     Build("GMMU")
 ```
@@ -82,7 +82,7 @@ g := gmmu.Definition.Builder().
 
 ## Ports
 
-The system builder creates each port with `messaging.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top**: accepts `vmprotocol.TranslationReq`, returns `vmprotocol.TranslationRsp`.

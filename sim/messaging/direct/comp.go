@@ -1,6 +1,6 @@
-// Package directconnection provides a connection that delivers messages
+// Package direct provides a connection that delivers messages
 // between the ports plugged into it without latency.
-package directconnection
+package direct
 
 import (
 	"fmt"
@@ -42,10 +42,10 @@ func (p *ports) getPortByName(name messaging.RemotePort) messaging.Port {
 	return p.ports[portIndex]
 }
 
-// Comp is a DirectConnection that connects components without latency. It is
+// Connection is an ideal connection that connects components without latency. It is
 // a connection, not a component: ports plug into it during wiring. It ticks on
 // secondary tick events, so it runs after the components of the same cycle.
-type Comp struct {
+type Connection struct {
 	hooking.HookableBase
 
 	// State is the connection's mutable data, saved in checkpoints.
@@ -59,12 +59,12 @@ type Comp struct {
 }
 
 // Name returns the connection's name.
-func (c *Comp) Name() string {
+func (c *Connection) Name() string {
 	return c.name
 }
 
 // PlugIn marks the port connects to this DirectConnection.
-func (c *Comp) PlugIn(port messaging.Port) {
+func (c *Connection) PlugIn(port messaging.Port) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -73,7 +73,7 @@ func (c *Comp) PlugIn(port messaging.Port) {
 }
 
 // NotifyAvailable is called by a port to notify the connection can deliver again.
-func (c *Comp) NotifyAvailable(p messaging.Port) {
+func (c *Connection) NotifyAvailable(p messaging.Port) {
 	for _, port := range c.ports.ports {
 		if port == p {
 			continue
@@ -84,13 +84,13 @@ func (c *Comp) NotifyAvailable(p messaging.Port) {
 }
 
 // NotifySend is called by a port to notify the connection can start ticking.
-func (c *Comp) NotifySend() {
+func (c *Connection) NotifySend() {
 	c.ticks.TickNow()
 }
 
 // Handle forwards messages on a tick and schedules the next tick if any
 // message moved.
-func (c *Comp) Handle(_ timing.Event) {
+func (c *Connection) Handle(_ timing.Event) {
 	if c.forward() {
 		c.ticks.TickLater()
 	}
@@ -98,7 +98,7 @@ func (c *Comp) Handle(_ timing.Event) {
 
 // forward moves the messages waiting in the plugged-in ports to their
 // destinations, starting from a round-robin port.
-func (c *Comp) forward() bool {
+func (c *Connection) forward() bool {
 	numPorts := len(c.ports.ports)
 	madeProgress := false
 
@@ -112,7 +112,7 @@ func (c *Comp) forward() bool {
 	return madeProgress
 }
 
-func (c *Comp) forwardMany(port messaging.Port) bool {
+func (c *Connection) forwardMany(port messaging.Port) bool {
 	madeProgress := false
 	for {
 		head, ok := port.PeekOutgoing()
@@ -134,12 +134,12 @@ func (c *Comp) forwardMany(port messaging.Port) bool {
 
 // SaveCheckpoint writes the connection's spec hash, State, and tick-scheduler
 // guard.
-func (c *Comp) SaveCheckpoint(w io.Writer) error {
+func (c *Connection) SaveCheckpoint(w io.Writer) error {
 	return modeling.WriteCheckpoint(w, c.spec, c.State, c.ticks)
 }
 
 // LoadCheckpoint restores the State and tick-scheduler guard after verifying
 // that the saved spec hash matches this connection's.
-func (c *Comp) LoadCheckpoint(r io.Reader) error {
+func (c *Connection) LoadCheckpoint(r io.Reader) error {
 	return modeling.ReadCheckpoint(r, c.spec, &c.State, c.ticks)
 }

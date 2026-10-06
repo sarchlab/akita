@@ -20,7 +20,7 @@ Both agents use the same component type. The source is in
 
 - How a component declares **ports** and how messages flow through them.
 - What "ticking" means and how middlewares advance state each cycle.
-- How the system builder creates ports, and how `directconnection` moves
+- How the system builder creates ports, and how `direct.Connection` moves
   messages between components.
 
 The component still follows the five-struct shape from the previous section

@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -31,9 +32,9 @@ func (c *noopConn) NotifySend()                      {}
 // name, each with the given buffer size.
 func makePorts(name string, bufSize int) Ports {
 	return Ports{
-		Top:     messaging.NewPort(name+".Top", bufSize, bufSize),
-		Bottom:  messaging.NewPort(name+".Bottom", bufSize, bufSize),
-		Control: messaging.NewPort(name+".Control", bufSize, bufSize),
+		Top:     twowaybuffered.NewPort(name+".Top", bufSize, bufSize),
+		Bottom:  twowaybuffered.NewPort(name+".Bottom", bufSize, bufSize),
+		Control: twowaybuffered.NewPort(name+".Control", bufSize, bufSize),
 	}
 }
 

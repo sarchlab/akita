@@ -4,8 +4,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tracing"
@@ -32,7 +32,7 @@ func newP0Harness(spec Spec, tracers ...tracing.Tracer) *p0Harness {
 	top := dramComp.Ports.Top
 	src := newDriverPort("P0Src.Top", 1024)
 
-	conn := directconnection.MakeBuilder().
+	conn := direct.Definition.Builder().
 		WithSimulation(sim).
 		Build("P0Conn")
 	conn.PlugIn(top)

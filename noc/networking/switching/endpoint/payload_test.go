@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -72,9 +73,9 @@ func (payloadOwner) NotifyPortFree(messaging.Port) {}
 
 func newPayloadReceiver() (*Comp, messaging.Port, messaging.Port) {
 	s := modeling.NewStandaloneSimulation(timing.NewSerialEngine())
-	device := messaging.NewPort("Receiver.Port", 1, 1)
+	device := twowaybuffered.NewPort("Receiver.Port", 1, 1)
 	device.SetOwner(payloadOwner{"Receiver"})
-	network := messaging.NewPort("Endpoint.NetworkPort", 8, 8)
+	network := twowaybuffered.NewPort("Endpoint.NetworkPort", 8, 8)
 	ep := Definition.Builder().WithSimulation(s).
 		WithResources(Resources{DevicePorts: []messaging.Port{device}}).
 		WithPorts(Ports{NetworkPort: network}).Build("Endpoint")

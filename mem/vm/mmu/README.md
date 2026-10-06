@@ -55,8 +55,8 @@ m := mmu.Definition.Builder().
     WithSpec(spec).
     WithResources(mmu.Resources{PageTable: pageTable}).
     WithPorts(mmu.Ports{
-        Top:     messaging.NewPort("MMU.Top", 16, 16),
-        Control: messaging.NewPort("MMU.Control", 4, 4),
+        Top:     twowaybuffered.NewPort("MMU.Top", 16, 16),
+        Control: twowaybuffered.NewPort("MMU.Control", 4, 4),
     }).
     Build("MMU")
 ```
@@ -70,7 +70,7 @@ m := mmu.Definition.Builder().
 
 ## Ports
 
-The system builder creates each port with `messaging.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top**: accepts `vmprotocol.TranslationReq`, returns `vmprotocol.TranslationRsp`.

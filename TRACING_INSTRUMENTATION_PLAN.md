@@ -345,7 +345,7 @@ subtasks, completing the round-trip decomposition.
 **Scope.** New cross-port tracer (the transfer spans the source's outgoing port
 and the destination's incoming port — `HookPosPortMsgRetrieveOutgoing` →
 `HookPosPortMsgRecvd`, correlated by msg ID), parented to the `req_out` task.
-For `directconnection` the transfer is ~0 latency; the meaningful cost appears
+For `direct.Connection` the transfer is ~0 latency; the meaningful cost appears
 under the real NoC (PCIe/mesh).
 
 **Approach options.** (a) a tracer attached to both endpoint ports correlating

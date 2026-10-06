@@ -78,7 +78,7 @@
 //	comp := mem.Definition.Builder().
 //	    WithSimulation(sim).
 //	    WithSpec(spec).
-//	    WithPorts(mem.Ports{Top: messaging.NewPort("Mem.Top", 4, 4)}).
+//	    WithPorts(mem.Ports{Top: twowaybuffered.NewPort("Mem.Top", 4, 4)}).
 //	    Build("Mem")
 //
 // Every port is created by the system builder and named "<instance>.<field>",

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/internal/base"
 	"github.com/sarchlab/akita/v5/sim/naming"
@@ -61,7 +62,7 @@ func buildBase(sim timing.Simulation, ports basePorts) *baseComp {
 }
 
 func unowned(name string) messaging.Port {
-	return messaging.NewPort(name, 1, 1)
+	return twowaybuffered.NewPort(name, 1, 1)
 }
 
 func expectPanic(t *testing.T, substr string, f func()) {

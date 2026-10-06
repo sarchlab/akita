@@ -1,13 +1,15 @@
-package messaging
+package twowaybuffered
 
 import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
-func newCkptPort(in, out int) *defaultPort {
-	return NewPort("P", in, out).(*defaultPort)
+func newCkptPort(in, out int) *Port {
+	return NewPort("P", in, out)
 }
 
 func TestPortCheckpointRoundTrip(t *testing.T) {
@@ -40,10 +42,8 @@ func TestPortCheckpointCapacityMismatch(t *testing.T) {
 }
 
 func TestPortCheckpointRoundTripWithMessages(t *testing.T) {
-	msgCodec.Register(registryTestMsg{})
-
-	mk := func(id uint64, v int) Msg {
-		m := Msg{Payload: registryTestMsg{Value: v}}
+	mk := func(id uint64, v int) messaging.Msg {
+		m := messaging.Msg{Payload: registryTestMsg{Value: v}}
 		m.ID = id
 		return m
 	}

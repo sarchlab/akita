@@ -8,8 +8,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 
-	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -22,7 +22,7 @@ var _ = Describe("DataMover", func() {
 		insideStorage  *mem.Storage
 		outsideMem     *idealmemcontroller.Comp
 		outsideStorage *mem.Storage
-		conn           *directconnection.Comp
+		conn           *direct.Connection
 		srcPort        messaging.Port
 	)
 
@@ -61,7 +61,7 @@ var _ = Describe("DataMover", func() {
 			WithPorts(makePorts("DataMover", 16, 64, 64, 40960000)).
 			Build("DataMover")
 
-		conn = directconnection.MakeBuilder().
+		conn = direct.Definition.Builder().
 			WithSimulation(sim).
 			Build("Conn")
 		conn.PlugIn(srcPort)

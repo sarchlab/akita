@@ -110,8 +110,8 @@ models. To run with perfect memory, you build an `idealmemcontroller` where you
 would have built `dram`.
 
 ```go
-top := messaging.NewPort("DRAM.Top", 1024, 1024)
-control := messaging.NewPort("DRAM.Control", 4, 4)
+top := twowaybuffered.NewPort("DRAM.Top", 1024, 1024)
+control := twowaybuffered.NewPort("DRAM.Control", 4, 4)
 
 // Real run:
 ctrl := dram.Definition.Builder().

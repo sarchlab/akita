@@ -337,7 +337,7 @@ memcontrolprotocol.ErrMustBePausedOrDrained
        // ...
        WithPorts(mycomp.Ports{
            // ...
-           Control: messaging.NewPort("MyComp.Control", ctrlBufSize, ctrlBufSize),
+           Control: twowaybuffered.NewPort("MyComp.Control", ctrlBufSize, ctrlBufSize),
        }).
        Build("MyComp")
    ```

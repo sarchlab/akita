@@ -7,6 +7,33 @@ sidebar_position: 7
 This guide covers all breaking changes between Akita V4 and V5. Each section
 explains the motivation, shows before/after code, and notes pitfalls.
 
+## Buffered ports and direct connections
+
+Concrete ports and connections now live under `sim/messaging`:
+
+| Before | After |
+|---|---|
+| `messaging.NewPort(name, in, out)` | `twowaybuffered.NewPort(name, in, out)` |
+| `noc/directconnection` | `sim/messaging/direct` |
+| `directconnection.Comp` | `direct.Connection` |
+| `directconnection.MakeBuilder()` | `direct.Definition.Builder()` |
+| `directconnection.DefaultSpec()` | `direct.Definition.DefaultSpec` |
+
+Import `github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered` for port
+construction. Components continue to declare `messaging.Port` fields, while
+`NewPort` now returns the concrete `*twowaybuffered.Port`. Old constructors and
+import paths are removed. Calls that type-asserted the old constructor result
+can now call checkpoint methods directly on the returned pointer.
+
+Port names, `SetOwner`, buffer behavior, and message checkpoint encoding are
+unchanged. Owner-assigned names and one-time binding are a separate follow-up.
+
+The NoC connector creates only buffered ports and ideal direct connections.
+Remove `WithPortFactory` calls; `PortFactory` is removed. Device ports attached
+to an endpoint must be `*twowaybuffered.Port`; unsupported implementations,
+including nil ports, panic during construction before any device port is
+attached. Wire support and non-ideal link timing remain separate changes.
+
 ## Simulation umbrella and tool names
 
 The runtime packages now live below `sim/`: `naming`, `hooking`,
@@ -601,7 +628,7 @@ checkpointing. See "Defining Components in V5" below for the full philosophy.
 | **Spec** | Configuration | System builder (defaults in `Definition.DefaultSpec`) | Scalars (bool, numbers, strings, and named types based on them) and slices or arrays of scalars. No maps, nested structs, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
 | **State** | Mutable runtime data, saved in checkpoints | Component (`NewState`, or the zero value) | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. Written only by the component's own code. |
 | **Resources** | References to shared objects (storage, page table, address mapper) | System builder | Not checkpointed; the rebuild supplies them again. `modeling.None` when there are none. |
-| **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`messaging.NewPort`) | Bound and registered by `Build`; none is added later. A field may carry an `akita:"role=<protocol>.<role>"` tag. |
+| **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`twowaybuffered.NewPort`) | Bound and registered by `Build`; none is added later. A field may carry an `akita:"role=<protocol>.<role>"` tag. |
 | **Middlewares** | The behavior: one exported pointer field per middleware | Component (`NewMiddlewares`) | Each implements `Handle(e timing.Event) bool`; they run in field order and hold only references. |
 
 Hooks are not a sixth struct: every component embeds `hooking.HookableBase`,
@@ -727,9 +754,9 @@ r := rob.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithPorts(rob.Ports{
-        Top:     messaging.NewPort("ROB.Top", 4, 4),
-        Bottom:  messaging.NewPort("ROB.Bottom", 4, 4),
-        Control: messaging.NewPort("ROB.Control", 4, 4),
+        Top:     twowaybuffered.NewPort("ROB.Top", 4, 4),
+        Bottom:  twowaybuffered.NewPort("ROB.Bottom", 4, 4),
+        Control: twowaybuffered.NewPort("ROB.Control", 4, 4),
     }).
     Build("ROB")
 
@@ -768,7 +795,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
 
 4. Ports (declared by the component, created by the system builder)
    - A component declares the ports it has as the fields of its `Ports` struct, tagged with the protocol roles they speak, but never constructs the instances or owns connections.
-   - The system builder creates each port with `messaging.NewPort("<instance>.<Field>", in, out)`, choosing its buffer sizes, and passes them all to `Build`, which binds them to the component and registers them with the simulation.
+   - The system builder creates each port with `twowaybuffered.NewPort("<instance>.<Field>", in, out)`, choosing its buffer sizes, and passes them all to `Build`, which binds them to the component and registers them with the simulation.
    - Middlewares reach ports as fields (`m.comp.Ports.Top`), checked by the compiler.
 
 5. Middlewares (ordered, holding only references)
@@ -790,7 +817,7 @@ V5 unifies how components are modeled and wired. Each component type is five str
 #### Build and Wire
 
 1. Create ports
-   - Create every port with `messaging.NewPort`, named `<instance>.<Field>` (or `<instance>.<Field>[i]` for member `i` of a port group).
+   - Create every port with `twowaybuffered.NewPort`, named `<instance>.<Field>` (or `<instance>.<Field>[i]` for member `i` of a port group).
    - Creating ports first lets one component's Spec name another's port (`spec.BottomUnit = port.AsRemote()`).
 
 2. Build from the Definition
@@ -859,7 +886,7 @@ A component's Resources are not part of its checkpoint. The setup that rebuilds 
 - Turn each per-tick method into `Handle(e timing.Event) bool`, list the middlewares as exported pointer fields of a `Middlewares` struct in the order they run, and create them in a `newMiddlewares(c *Comp) Middlewares` function. Move any mutable middleware field into State.
 - Declare `type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]` and `var Definition = ticking.Definition[...]{DefaultSpec: ..., NewState: ..., NewMiddlewares: ...}`, and delete the hand-written builder and constructor.
 - Turn exported methods on the component into package functions that take `*Comp`.
-- In the system builder, create every port with `messaging.NewPort("<instance>.<Field>", in, out)` and build with `Definition.Builder().WithSimulation(sim).WithSpec(spec).WithResources(res).WithPorts(ports).Build(name)`; start a component that begins work on its own with `TickLater()`.
+- In the system builder, create every port with `twowaybuffered.NewPort("<instance>.<Field>", in, out)` and build with `Definition.Builder().WithSimulation(sim).WithSpec(spec).WithResources(res).WithPorts(ports).Build(name)`; start a component that begins work on its own with `TickLater()`.
 - In tests, step the component with `modelingtest.Tick(comp)` and add a `modelingtest.CheckTicking(t, Definition)` test.
 
 ---
@@ -942,8 +969,8 @@ ctrl := dram.Definition.Builder().
     WithSpec(spec).
     WithResources(dram.Resources{Storage: storage}).
     WithPorts(dram.Ports{
-        Top:     messaging.NewPort("DRAM.Top", 1024, 1024),
-        Control: messaging.NewPort("DRAM.Control", 4, 4),
+        Top:     twowaybuffered.NewPort("DRAM.Top", 1024, 1024),
+        Control: twowaybuffered.NewPort("DRAM.Control", 4, 4),
     }).
     Build("DRAM")
 ```
@@ -994,8 +1021,8 @@ ctrl := dram.Definition.Builder().
     WithSpec(spec).
     WithResources(dram.Resources{Storage: storage}).
     WithPorts(dram.Ports{
-        Top:     messaging.NewPort("DRAM.Top", 4, 4),
-        Control: messaging.NewPort("DRAM.Control", 4, 4),
+        Top:     twowaybuffered.NewPort("DRAM.Top", 4, 4),
+        Control: twowaybuffered.NewPort("DRAM.Control", 4, 4),
     }).
     Build("DRAM")
 ```
@@ -1007,7 +1034,7 @@ ctrl := dram.Definition.Builder().
 In V4, ports were created internally by component builders. In V5, the
 component owns its port *topology* — the fields of its `Ports` struct say
 which ports it has — but it does not create the instances. The system builder
-creates each port with `messaging.NewPort` and passes all of them to `Build`
+creates each port with `twowaybuffered.NewPort` and passes all of them to `Build`
 through `WithPorts`. This makes wiring explicit and lets ports be sized or
 implemented differently without changing the component.
 
@@ -1029,9 +1056,9 @@ cache := writeback.Definition.Builder().
     WithSpec(spec).
     WithResources(writeback.Resources{Storage: storage}).
     WithPorts(writeback.Ports{
-        Top:     messaging.NewPort("Cache.Top", 4, 4),
-        Bottom:  messaging.NewPort("Cache.Bottom", 4, 4),
-        Control: messaging.NewPort("Cache.Control", 4, 4),
+        Top:     twowaybuffered.NewPort("Cache.Top", 4, 4),
+        Bottom:  twowaybuffered.NewPort("Cache.Bottom", 4, 4),
+        Control: twowaybuffered.NewPort("Cache.Control", 4, 4),
     }).
     Build("Cache")
 
@@ -1055,7 +1082,7 @@ is created without an owner, and `Build` calls `SetOwner` to associate
 it with the component:
 
 ```go
-outPort := messaging.NewPort("Agent.Out", 4, 4)
+outPort := twowaybuffered.NewPort("Agent.Out", 4, 4)
 
 agent := ping.Definition.Builder().
     WithSimulation(sim).

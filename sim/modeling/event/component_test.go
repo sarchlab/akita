@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/event"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -94,7 +95,7 @@ func build(sim timing.Simulation, spec Spec) *Comp {
 	return Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(spec).
-		WithPorts(Ports{In: messaging.NewPort("C.In", 4, 4)}).
+		WithPorts(Ports{In: twowaybuffered.NewPort("C.In", 4, 4)}).
 		Build("C")
 }
 

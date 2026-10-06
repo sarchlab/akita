@@ -3,13 +3,13 @@ package writethroughcache_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
 	. "github.com/sarchlab/akita/v5/mem/cache/writethroughcache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 
-	"github.com/sarchlab/akita/v5/noc/directconnection"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -26,7 +26,7 @@ func (testDriver) NotifyPortFree(messaging.Port) {}
 // newDriverPort creates a port with bufSize slots in each direction for the
 // test to drive by hand.
 func newDriverPort(name string, bufSize int) messaging.Port {
-	p := messaging.NewPort(name, bufSize, bufSize)
+	p := twowaybuffered.NewPort(name, bufSize, bufSize)
 	p.SetOwner(testDriver{})
 
 	return p
@@ -60,7 +60,7 @@ var _ = Describe("Cache", func() {
 	BeforeEach(func() {
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
-		connection = directconnection.MakeBuilder().
+		connection = direct.Definition.Builder().
 			WithSimulation(sim).
 			Build("Conn")
 
@@ -74,8 +74,8 @@ var _ = Describe("Cache", func() {
 			WithSimulation(sim).
 			WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 			WithPorts(idealmemcontroller.Ports{
-				Top:     messaging.NewPort("DRAM.Top", 16, 16),
-				Control: messaging.NewPort("DRAM.Control", 16, 16),
+				Top:     twowaybuffered.NewPort("DRAM.Top", 16, 16),
+				Control: twowaybuffered.NewPort("DRAM.Control", 16, 16),
 			}).
 			Build("DRAM")
 		addressToPortMapper = &mem.SinglePortMapper{
@@ -91,9 +91,9 @@ var _ = Describe("Cache", func() {
 				AddressMapper: addressToPortMapper,
 			}).
 			WithPorts(Ports{
-				Top:     messaging.NewPort("Cache.Top", 4, 4),
-				Bottom:  messaging.NewPort("Cache.Bottom", 4, 4),
-				Control: messaging.NewPort("Cache.Control", 4, 4),
+				Top:     twowaybuffered.NewPort("Cache.Top", 4, 4),
+				Bottom:  twowaybuffered.NewPort("Cache.Bottom", 4, 4),
+				Control: twowaybuffered.NewPort("Cache.Control", 4, 4),
 			}).
 			Build("Cache")
 

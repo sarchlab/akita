@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/noc/acceptance"
 	"github.com/sarchlab/akita/v5/noc/networking/mesh"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -42,7 +43,7 @@ func main() {
 		for y := 0; y < meshHeight; y++ {
 			name := fmt.Sprintf("Agent[%d][%d]", x, y)
 			ports := []messaging.Port{
-				messaging.NewPort(name+".Port0", 1, 1),
+				twowaybuffered.NewPort(name+".Port0", 1, 1),
 			}
 			agent := acceptance.NewAgent(sim, freq, name, ports, test)
 			agent.TickLater()

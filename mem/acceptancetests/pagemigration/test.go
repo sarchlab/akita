@@ -46,9 +46,10 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/monitoring"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -111,7 +112,7 @@ func setupTest(seed int64) (
 	timing.Engine,
 	[]agentChain,
 	sharedHierarchy,
-	*directconnection.Comp,
+	*direct.Connection,
 ) {
 	monitor := monitoring.NewMonitor()
 	simBuilder := sim.MakeBuilder().WithMonitor(monitor)
@@ -508,7 +509,7 @@ func setupConnections(
 	s *sim.Simulation,
 	shared sharedHierarchy,
 	chains []agentChain,
-) *directconnection.Comp {
+) *direct.Connection {
 	for i, c := range chains {
 		suffix := fmt.Sprintf("[%d]", i)
 
@@ -531,14 +532,14 @@ func setupConnections(
 	}
 
 	// Shared data path: all L1 caches plus the L2 cache on one connection.
-	dataConn := directconnection.MakeBuilder().WithSimulation(s).Build("ConnL1L2")
+	dataConn := direct.Definition.Builder().WithSimulation(s).Build("ConnL1L2")
 	dataConn.PlugIn(shared.l2Cache.Ports.Top)
 	for _, c := range chains {
 		dataConn.PlugIn(c.l1Cache.Ports.Bottom)
 	}
 
 	// Shared translation path: all L1 TLBs plus the L2 TLB on one connection.
-	transConn := directconnection.MakeBuilder().
+	transConn := direct.Definition.Builder().
 		WithSimulation(s).
 		Build("ConnL1L2TLB")
 	transConn.PlugIn(shared.l2TLB.Ports.Top)
@@ -548,7 +549,7 @@ func setupConnections(
 
 	// L2 cache fans out to every memory controller on one connection; the
 	// interleaved mapper picks the right controller per physical address.
-	memConn := directconnection.MakeBuilder().WithSimulation(s).Build("ConnL2Mem")
+	memConn := direct.Definition.Builder().WithSimulation(s).Build("ConnL2Mem")
 	memConn.PlugIn(shared.l2Cache.Ports.Bottom)
 	for _, mc := range shared.memCtrls {
 		memConn.PlugIn(mc.Ports.Top)
@@ -565,7 +566,7 @@ func setupConnections(
 // newPort creates an unowned port named fullName, for a component that takes
 // its ports at Build. The component's Build binds and registers it.
 func newPort(fullName string) messaging.Port {
-	return messaging.NewPort(fullName, 16, 16)
+	return twowaybuffered.NewPort(fullName, 16, 16)
 }
 
 // newStorage builds a storage of the given capacity that registers with the
@@ -582,7 +583,7 @@ func newStorage(
 }
 
 func connect(s *sim.Simulation, name string, p1, p2 messaging.Port) {
-	conn := directconnection.MakeBuilder().WithSimulation(s).Build(name)
+	conn := direct.Definition.Builder().WithSimulation(s).Build(name)
 	conn.PlugIn(p1)
 	conn.PlugIn(p2)
 }

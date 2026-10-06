@@ -64,14 +64,19 @@ ep := endpoint.Definition.Builder().
     WithSpec(spec).
     WithResources(endpoint.Resources{DevicePorts: ports}).
     WithPorts(endpoint.Ports{
-        NetworkPort: messaging.NewPort("EndPoint0.NetworkPort", 4, 4),
+        NetworkPort: twowaybuffered.NewPort("EndPoint0.NetworkPort", 4, 4),
     }).
     Build("EndPoint0")
 ```
 
 `WithSimulation` is required (`Build` panics otherwise). The system builder
-creates the network port with `messaging.NewPort`, named
+creates the network port with `twowaybuffered.NewPort`, named
 `"<instance>.NetworkPort"`, and sets `Spec.DefaultSwitchDst` to the port at the
 other end of the link; `Build` binds and registers the network port and plugs in
 the device ports. `DefaultSpec` defaults to a 32-byte flit, 0.25 encoding
 overhead, and single input/output channels.
+
+Device ports must be `*twowaybuffered.Port`. Build rejects unsupported and nil
+device ports before attaching any device port. The network connector constructs
+buffered network-facing ports and connects them with ideal `direct.Connection`
+links; wire ports are not supported.

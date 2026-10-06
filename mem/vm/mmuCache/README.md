@@ -65,9 +65,9 @@ c := mmuCache.Definition.Builder().
         UpModulePort:  tlbPort,
     }).
     WithPorts(mmuCache.Ports{
-        Top:     messaging.NewPort("MMUCache.Top", 16, 16),
-        Bottom:  messaging.NewPort("MMUCache.Bottom", 16, 16),
-        Control: messaging.NewPort("MMUCache.Control", 16, 16),
+        Top:     twowaybuffered.NewPort("MMUCache.Top", 16, 16),
+        Bottom:  twowaybuffered.NewPort("MMUCache.Bottom", 16, 16),
+        Control: twowaybuffered.NewPort("MMUCache.Control", 16, 16),
     }).
     Build("MMUCache")
 ```
@@ -81,7 +81,7 @@ c := mmuCache.Definition.Builder().
 
 ## Ports
 
-The system builder creates each port with `messaging.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top**: accepts `vmprotocol.TranslationReq` from the upstream requester.

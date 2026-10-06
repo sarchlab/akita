@@ -3,9 +3,9 @@ package rob
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -90,7 +90,7 @@ var _ = Describe("Reorder Buffer milestones", func() {
 		spec.BottomUnit = bottomUnitRemote
 
 		port := func(name string, bufSize int) messaging.Port {
-			return messaging.NewPort("Rob."+name, bufSize, bufSize)
+			return twowaybuffered.NewPort("Rob."+name, bufSize, bufSize)
 		}
 
 		topPort = port("Top", 4)

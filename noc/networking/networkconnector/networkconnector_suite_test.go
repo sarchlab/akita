@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -28,7 +29,7 @@ var _ = Describe("Connector", func() {
 		connector.AddSwitch()
 
 		for i := 0; i < 2; i++ {
-			port := messaging.NewPort(fmt.Sprintf("Device[%d].Port", i), 1, 1)
+			port := twowaybuffered.NewPort(fmt.Sprintf("Device[%d].Port", i), 1, 1)
 			connector.ConnectDevice(0, []messaging.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{
@@ -68,7 +69,7 @@ var _ = Describe("Connector", func() {
 		}
 
 		for i := 0; i < 2; i++ {
-			port := messaging.NewPort(fmt.Sprintf("Device[%d].Port", i), 1, 1)
+			port := twowaybuffered.NewPort(fmt.Sprintf("Device[%d].Port", i), 1, 1)
 			connector.ConnectDevice(1+i, []messaging.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{
@@ -135,7 +136,7 @@ var _ = Describe("Connector", func() {
 		}
 
 		for i := 0; i < 8; i++ {
-			port := messaging.NewPort(fmt.Sprintf("Device[%d].Port", i), 1, 1)
+			port := twowaybuffered.NewPort(fmt.Sprintf("Device[%d].Port", i), 1, 1)
 			connector.ConnectDevice(8+i, []messaging.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{
