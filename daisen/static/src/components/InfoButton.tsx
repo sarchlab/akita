@@ -34,7 +34,7 @@ export default function InfoButton({ title, children, className }: InfoButtonPro
       <button
         type="button"
         className={cn(
-          "inline-flex shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "inline-flex shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-primary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
           className,
         )}
         title={`What is this? — ${title}`}

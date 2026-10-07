@@ -37,7 +37,7 @@ interface DashboardWidgetProps {
 const HEADER_HEIGHT = 30;
 const LEGEND_HEIGHT = 18;
 const iconButton =
-  "shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-primary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
 
 export default function DashboardWidget({
   name,

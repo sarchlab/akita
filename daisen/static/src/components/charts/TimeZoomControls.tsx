@@ -18,7 +18,7 @@ export default function TimeZoomControls({
   return (
     <div
       className={cn(
-        "z-10 flex items-center gap-0.5 rounded border bg-white/90 px-1 py-0.5 shadow-sm",
+        "z-10 flex items-center gap-0.5 rounded border bg-white/90 px-1 py-0.5 shadow-xs",
         className,
       )}
       // stopPropagation so a click on the toolbar doesn't reach the chart's
