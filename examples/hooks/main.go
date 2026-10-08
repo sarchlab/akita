@@ -178,7 +178,7 @@ func main() {
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
 
-	// Create the ports first, so AgentA's Spec can name AgentB's port.
+	// Choose buffer sizes; binding below assigns each port its name.
 	outA := twowaybuffered.NewPort(4, 4)
 	outB := twowaybuffered.NewPort(4, 4)
 

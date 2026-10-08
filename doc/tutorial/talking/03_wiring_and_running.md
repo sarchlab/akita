@@ -14,7 +14,7 @@ pages actually talk.
 engine := timing.NewSerialEngine()
 sim := modeling.NewStandaloneSimulation(engine)
 
-// Create the ports first, so AgentA's Spec can name AgentB's port.
+// Choose buffer sizes; binding below assigns each port its name.
 outA := twowaybuffered.NewPort(16, 16)
 outB := twowaybuffered.NewPort(16, 16)
 
@@ -30,15 +30,13 @@ agentA := Definition.Builder().
 	WithSimulation(sim).
 	WithSpec(specA).
 	Build("AgentA")
-agentAPorts := Ports{Out: outA}
-agentA.BindPort("Out", agentAPorts.Out)
+agentA.BindPort("Out", outA)
 
 agentB := Definition.Builder().
 	WithSimulation(sim).
 	WithSpec(specB).
 	Build("AgentB")
-agentBPorts := Ports{Out: outB}
-agentB.BindPort("Out", agentBPorts.Out)
+agentB.BindPort("Out", outB)
 
 conn := direct.NewConnection("Conn", sim, timing.GHz)
 

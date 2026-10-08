@@ -114,9 +114,6 @@ func main() {
 		Build("Client")
 
 	cli.BindPort("Out", twowaybuffered.NewPort(4, 4))
-	if err := sim.Initialize(); err != nil {
-		panic(err)
-	}
 
 	connect := func(name string, a, b messaging.Port) {
 		conn := direct.NewConnection(name, sim, timing.GHz)
@@ -126,6 +123,9 @@ func main() {
 	connect("ConnClientL1", cli.Ports.Out, l1.Ports.Top)
 	connect("ConnL1L2", l1.Ports.Bottom, l2.Ports.Top)
 	connect("ConnL2Mem", l2.Ports.Bottom, mem.Ports.Top)
+	if err := sim.Initialize(); err != nil {
+		panic(err)
+	}
 
 	tracer := &treeTracer{nodes: map[uint64]taskNode{}}
 	for _, c := range []tracing.NamedHookable{cli, l1, l2, mem} {
