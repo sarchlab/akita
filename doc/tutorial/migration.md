@@ -48,6 +48,10 @@ port name, or build and bind the destination before asking for its address.
 Components remain unaware of domains; domain configuration/builders are a
 separate change.
 
+Custom `timing.Simulation` implementations must provide `Initialize`,
+`RequireSetup`, and `RequireNameAvailable`. Custom `timing.Engine` implementations
+must provide `SetRunGuard` and check the installed guard before executing events.
+
 ## Buffered ports and direct connections
 
 Concrete ports and connections now live under `sim/messaging`:
@@ -923,7 +927,7 @@ A component's Resources are not part of its checkpoint. The setup that rebuilds 
 - Turn each per-tick method into `Handle(e timing.Event) bool`, list the middlewares as exported pointer fields of a `Middlewares` struct in the order they run, and create them in a `newMiddlewares(c *Comp) Middlewares` function. Move any mutable middleware field into State.
 - Declare `type Comp = ticking.Component[Spec, State, Resources, Ports, Middlewares]` and `var Definition = ticking.Definition[...]{DefaultSpec: ..., NewState: ..., NewMiddlewares: ...}`, and delete the hand-written builder and constructor.
 - Turn exported methods on the component into package functions that take `*Comp`.
-- In the system builder, create every port with `twowaybuffered.NewPort(in, out)` and build with `Definition.Builder().WithSimulation(sim).WithSpec(spec).WithResources(res).Build(name)`; start a component that begins work on its own with `TickLater()`.
+- In the system builder, create every port with `twowaybuffered.NewPort(in, out)` and build with `Definition.Builder().WithSimulation(sim).WithSpec(spec).WithResources(res).Build(name)`. Bind every declared port and connection, then call `sim.Initialize()`. After initialization, start a component that begins work on its own with `TickLater()`.
 - In tests, step the component with `modelingtest.Tick(comp)` and add a `modelingtest.CheckTicking(t, Definition)` test.
 
 ---
@@ -1067,8 +1071,8 @@ ctrl.BindPort("Control", twowaybuffered.NewPort(4, 4))
 In V4, ports were created internally by component builders. In V5, the
 component owns its port *topology* — the fields of its `Ports` struct say
 which ports it has — but it does not create the instances. The system builder
-creates each port with `twowaybuffered.NewPort` and passes all of them to `Build`
-with `component.BindPort` after Build. This makes wiring explicit and lets ports be sized or
+creates each port with `twowaybuffered.NewPort` and assigns it with
+`component.BindPort` after Build. This makes wiring explicit and lets ports be sized or
 implemented differently without changing the component.
 
 **Before (V4):**

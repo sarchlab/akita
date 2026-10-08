@@ -60,8 +60,8 @@
 //	    WithSpec(spec).
 //	    Build("Agent")
 //
-// After Build, bind each declared slot with comp.BindPort("Top", port).
-// The component assigns the owner and full name, such as "GPU[0].L1Cache.Top".
+// After Build, bind each declared slot with comp.BindPort("Out", port).
+// The component assigns the owner and full name, such as "Agent.Out".
 // Use "Links[0]" for an indexed port group. Bind connections with
 // conn.BindPort(port), then call the shared simulation's Initialize method.
 // Initialize validates all ports, freezes topology, and creates State and
