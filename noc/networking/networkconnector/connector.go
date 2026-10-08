@@ -6,9 +6,10 @@ import (
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/switches"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 
-	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -57,12 +58,8 @@ type SwitchToSwitchLinkParameter struct {
 	LinkParam     LinkParameter
 }
 
-// PortFactory creates a port with the given full name and buffer capacities,
-// like messaging.NewPort, the default. The port has no owner yet; the Build of
-// the component it is given to binds it.
-type PortFactory func(name string, incomingBufCap, outgoingBufCap int) messaging.Port
-
-// Connector can build complex network topologies.
+// Connector builds networks with twowaybuffered.Port and direct.Connection.
+// Device ports must also be *twowaybuffered.Port; wire ports are not supported.
 type Connector struct {
 	name        string
 	engine      timing.EventScheduler
@@ -70,7 +67,6 @@ type Connector struct {
 	defaultFreq timing.Freq
 	flitSize    int
 	router      Router
-	portFactory PortFactory
 
 	switches        []*switchNode
 	devices         []*deviceNode
@@ -83,7 +79,6 @@ func MakeConnector() Connector {
 		defaultFreq: 1 * timing.GHz,
 		flitSize:    64,
 		router:      new(FloydWarshallRouter),
-		portFactory: messaging.NewPort,
 	}
 }
 
@@ -111,12 +106,6 @@ func (c Connector) WithFlitSize(size int) Connector {
 // WithRouter sets the router to use to establish the routing tables.
 func (c Connector) WithRouter(r Router) Connector {
 	c.router = r
-	return c
-}
-
-// WithPortFactory sets the factory function used to create ports.
-func (c Connector) WithPortFactory(f PortFactory) Connector {
-	c.portFactory = f
 	return c
 }
 
@@ -188,10 +177,10 @@ func (c *Connector) ConnectDeviceWithEPName(
 	swNode := c.switches[switchID]
 	epFullName := fmt.Sprintf("%s.%s", c.name, epName)
 
-	epPort = c.portFactory(epFullName+".NetworkPort",
+	epPort = twowaybuffered.NewPort(epFullName+".NetworkPort",
 		param.DeviceEndParam.IncomingBufSize,
 		param.DeviceEndParam.OutgoingBufSize)
-	swPort, _ = swNode.addPort(c.portFactory, epPort.AsRemote(),
+	swPort, _ = swNode.addPort(epPort.AsRemote(),
 		param.SwitchEndParam)
 
 	epNode := c.createEndPoint(epFullName, ports, param, swNode, epPort, swPort)
@@ -237,7 +226,7 @@ func (c *Connector) createEndPoint(
 func (c *Connector) createRemoteInfoFoEP(
 	epNode *deviceNode, swNode *switchNode,
 	epPort, swPort messaging.Port,
-	conn messaging.Connection,
+	conn *direct.Connection,
 ) {
 	epNode.remote = Remote{
 		LocalNode:  epNode,
@@ -258,15 +247,12 @@ func (c *Connector) createRemoteInfoFoEP(
 func (c *Connector) connectPorts(
 	left, right messaging.Port,
 	linkParam LinkParameter,
-) (conn messaging.Connection) {
+) (conn *direct.Connection) {
 	connName := fmt.Sprintf("%s.Conn[%d]", c.name, c.connectionCount)
 	c.connectionCount++
 
 	if linkParam.IsIdeal {
-		conn = directconnection.MakeBuilder().
-			WithSimulation(c.simulation).
-			WithSpec(directconnection.Spec{Freq: c.defaultFreq}).
-			Build(connName)
+		conn = direct.NewConnection(connName, c.simulation, c.defaultFreq)
 	} else {
 		panic("non-ideal (with latency) connection is not implemented.")
 	}
@@ -288,8 +274,8 @@ func (c *Connector) ConnectSwitches(
 
 	// Each side's link names the other side's port, so add both ports first
 	// and then record each remote.
-	leftPort, leftLink := leftNode.addPort(c.portFactory, "", param.LeftEndParam)
-	rightPort, rightLink := rightNode.addPort(c.portFactory, "", param.RightEndParam)
+	leftPort, leftLink := leftNode.addPort("", param.LeftEndParam)
+	rightPort, rightLink := rightNode.addPort("", param.RightEndParam)
 	leftNode.links[leftLink].Remote = rightPort.AsRemote()
 	rightNode.links[rightLink].Remote = leftPort.AsRemote()
 
@@ -303,7 +289,7 @@ func (c *Connector) ConnectSwitches(
 func (c *Connector) createRemoteInfo(
 	leftNode, rightNode *switchNode,
 	leftPort, rightPort messaging.Port,
-	conn messaging.Connection,
+	conn *direct.Connection,
 ) {
 	leftNode.remotes = append(leftNode.remotes, Remote{
 		LocalNode:  leftNode,

@@ -1,9 +1,10 @@
 package tracing
 
 import (
+	"testing"
+
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
-	"testing"
 )
 
 func TestMessageTraceNamesUsePayload(t *testing.T) {

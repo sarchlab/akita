@@ -16,7 +16,7 @@ package-level `Definition`:
 | `Spec` | configuration: scalars and slices of scalars | system builder (defaults in `Definition`) |
 | `State` | mutable runtime data, saved in checkpoints | component (`NewState`) |
 | `Resources` | references to shared objects | system builder |
-| `Ports` | one `messaging.Port` field per port, `[]messaging.Port` per group | system builder (`messaging.NewPort`) |
+| `Ports` | one `messaging.Port` field per port, `[]messaging.Port` per group | system builder (`twowaybuffered.NewPort`) |
 | `Middlewares` | the behavior, one field per middleware | component (`NewMiddlewares`) |
 
 The system builder is the code that assembles a simulation. It builds every
@@ -101,7 +101,7 @@ Each package doc shows how to declare and build a component of its model.
   Spec hash, State, and the dedup guard of its scheduler. A `Scheduler` is
   what they save the guard through. The ticking and wakeup models each keep
   their own scheduler next to the event it schedules; `ticking.Scheduler` is
-  exported for connections written by hand, such as `directconnection`.
+  exported for connections written by hand, such as `direct.Connection`.
 - `modelingtest` — `CheckTicking`, `CheckWakeup`, and `CheckEvent` assert that
   the inspector's static view of a package matches its `Definition`;
   `Tick` steps a ticking component by one cycle in tests.

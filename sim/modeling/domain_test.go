@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 )
 
@@ -18,7 +19,7 @@ type gpuPorts struct {
 }
 
 func TestDomainName(t *testing.T) {
-	port := messaging.NewPort("GPU[0].L2.Bottom", 1, 1)
+	port := twowaybuffered.NewPort("GPU[0].L2.Bottom", 1, 1)
 	d := modeling.NewDomain("GPU[0]", gpuPorts{Mem: port})
 
 	if d.Name() != "GPU[0]" {
@@ -34,7 +35,7 @@ func TestDomainNameMustBeValid(t *testing.T) {
 	}()
 
 	modeling.NewDomain("invalid_name",
-		gpuPorts{Mem: messaging.NewPort("A.B", 1, 1)})
+		gpuPorts{Mem: twowaybuffered.NewPort("A.B", 1, 1)})
 }
 
 func TestDomainNeedsEveryPort(t *testing.T) {
@@ -44,7 +45,7 @@ func TestDomainNeedsEveryPort(t *testing.T) {
 }
 
 func TestDomainNesting(t *testing.T) {
-	port := messaging.NewPort("GPU[0].SA[1].L1Cache.Top", 1, 1)
+	port := twowaybuffered.NewPort("GPU[0].SA[1].L1Cache.Top", 1, 1)
 	sa := modeling.NewDomain("GPU[0].SA[1]", saPorts{Top: port})
 	gpu := modeling.NewDomain("GPU[0]", gpuPorts{Mem: sa.Ports.Top})
 

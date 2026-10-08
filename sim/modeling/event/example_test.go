@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -17,7 +18,7 @@ func Example() {
 	delay := Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(Spec{Latency: 10}).
-		WithPorts(Ports{In: messaging.NewPort("Delay.In", 4, 4)}).
+		WithPorts(Ports{In: twowaybuffered.NewPort("Delay.In", 4, 4)}).
 		Build("Delay")
 
 	delay.Ports.In.Deliver(messaging.Msg{ID: 1, Payload: req{}})

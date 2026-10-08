@@ -99,9 +99,9 @@ cache := writeback.Definition.Builder().
         AddressToPortMapper: lowModuleMapper,
     }).
     WithPorts(writeback.Ports{
-        Top:     messaging.NewPort("L1Cache.Top", 8, 8),
-        Bottom:  messaging.NewPort("L1Cache.Bottom", 8, 8),
-        Control: messaging.NewPort("L1Cache.Control", 8, 8),
+        Top:     twowaybuffered.NewPort("L1Cache.Top", 8, 8),
+        Bottom:  twowaybuffered.NewPort("L1Cache.Bottom", 8, 8),
+        Control: twowaybuffered.NewPort("L1Cache.Control", 8, 8),
     }).
     Build("L1Cache")
 
@@ -147,7 +147,7 @@ The cache operates in one of six states (the `cacheState` constants):
 
 ## Ports
 
-The system builder creates each port with `messaging.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top**: accepts `memprotocol.ReadReq` and `memprotocol.WriteReq`, returns `memprotocol.DataReadyRsp`

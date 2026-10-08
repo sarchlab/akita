@@ -1,4 +1,4 @@
-package directconnection
+package direct
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -30,7 +31,7 @@ var _ = Describe("DirectConnection", func() {
 		port2      *MockPort
 		engine     *MockEngine
 		sim        timing.Simulation
-		connection *Comp
+		connection *Connection
 	)
 
 	BeforeEach(func() {
@@ -45,9 +46,7 @@ var _ = Describe("DirectConnection", func() {
 		engine = NewMockEngine(mockCtrl)
 		engine.EXPECT().RegisterHandler(gomock.Any(), gomock.Any()).AnyTimes()
 		sim = modeling.NewStandaloneSimulation(engine)
-		connection = MakeBuilder().
-			WithSimulation(sim).
-			Build("Direct")
+		connection = NewConnection("Direct", sim, timing.GHz)
 
 		port1.EXPECT().SetConnection(connection)
 		connection.PlugIn(port1)
@@ -164,7 +163,7 @@ var _ = Describe("Direct Connection Integration", func() {
 		mockCtrl        *gomock.Controller
 		engine          timing.Engine
 		sim             timing.Simulation
-		connection      *Comp
+		connection      *Connection
 		agents          []*agent
 		numAgents       = 10
 		numMsgsPerAgent = 1000
@@ -174,13 +173,11 @@ var _ = Describe("Direct Connection Integration", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = timing.NewSerialEngine()
 		sim = modeling.NewStandaloneSimulation(engine)
-		connection = MakeBuilder().
-			WithSimulation(sim).
-			Build("Conn")
+		connection = NewConnection("Conn", sim, timing.GHz)
 		agents = nil
 		for i := 0; i < numAgents; i++ {
 			a := newAgent(sim, 1*timing.GHz, fmt.Sprintf("Agent[%d]", i),
-				messaging.NewPort(fmt.Sprintf("Agent[%d].OutPort", i), 4, 4))
+				twowaybuffered.NewPort(fmt.Sprintf("Agent[%d].OutPort", i), 4, 4))
 			agents = append(agents, a)
 			connection.PlugIn(a.OutPort)
 		}
@@ -231,14 +228,12 @@ func directConnectionTest(seed int64) timing.VTimeInPicoSec {
 	numMsgsPerAgent := 1000
 	engine := timing.NewSerialEngine()
 	sim := modeling.NewStandaloneSimulation(engine)
-	connection := MakeBuilder().
-		WithSimulation(sim).
-		Build("Conn")
+	connection := NewConnection("Conn", sim, timing.GHz)
 	agents := make([]*agent, 0, numAgents)
 
 	for i := 0; i < numAgents; i++ {
 		a := newAgent(sim, 1*timing.GHz, fmt.Sprintf("Agent%d", i),
-			messaging.NewPort(fmt.Sprintf("Agent%d.OutPort", i), 4, 4))
+			twowaybuffered.NewPort(fmt.Sprintf("Agent%d.OutPort", i), 4, 4))
 		agents = append(agents, a)
 		connection.PlugIn(a.OutPort)
 	}

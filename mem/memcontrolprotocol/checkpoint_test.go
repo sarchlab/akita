@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -85,8 +86,8 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 		WithResources(idealmemcontroller.Resources{Storage: dramStorage}).
 		WithSpec(dramSpec).
 		WithPorts(idealmemcontroller.Ports{
-			Top:     messaging.NewPort("DRAM.Top", 16, 16),
-			Control: messaging.NewPort("DRAM.Control", 16, 16),
+			Top:     twowaybuffered.NewPort("DRAM.Top", 16, 16),
+			Control: twowaybuffered.NewPort("DRAM.Control", 16, 16),
 		}).
 		Build("DRAM")
 	dramTop := dram.Ports.Top
@@ -107,9 +108,9 @@ func buildCacheOverDRAM(t *testing.T) *cacheOverDRAM {
 			},
 		}).
 		WithPorts(writeback.Ports{
-			Top:     messaging.NewPort("Cache.Top", 256, 256),
-			Bottom:  messaging.NewPort("Cache.Bottom", 256, 256),
-			Control: messaging.NewPort("Cache.Control", 16, 16),
+			Top:     twowaybuffered.NewPort("Cache.Top", 256, 256),
+			Bottom:  twowaybuffered.NewPort("Cache.Bottom", 256, 256),
+			Control: twowaybuffered.NewPort("Cache.Control", 16, 16),
 		}).
 		Build("Cache")
 

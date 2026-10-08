@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/mem/vm/vmprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
@@ -80,9 +81,9 @@ func TestTLBSequence_PauseInvalidateEnable(t *testing.T) {
 			TranslationProviderMapper: &mem.SinglePortMapper{Port: remote},
 		}).
 		WithPorts(tlb.Ports{
-			Top:     messaging.NewPort("TLB.Top", 16, 16),
-			Bottom:  messaging.NewPort("TLB.Bottom", 16, 16),
-			Control: messaging.NewPort("TLB.Control", 16, 16),
+			Top:     twowaybuffered.NewPort("TLB.Top", 16, 16),
+			Bottom:  twowaybuffered.NewPort("TLB.Bottom", 16, 16),
+			Control: twowaybuffered.NewPort("TLB.Control", 16, 16),
 		}).
 		Build("TLB")
 	tick := stepperOf(comp)
@@ -397,9 +398,9 @@ func buildWritebackForSequence(
 			},
 		}).
 		WithPorts(writeback.Ports{
-			Top:     messaging.NewPort("L1Cache.Top", 16, 16),
-			Bottom:  messaging.NewPort("L1Cache.Bottom", 16, 16),
-			Control: messaging.NewPort("L1Cache.Control", 16, 16),
+			Top:     twowaybuffered.NewPort("L1Cache.Top", 16, 16),
+			Bottom:  twowaybuffered.NewPort("L1Cache.Bottom", 16, 16),
+			Control: twowaybuffered.NewPort("L1Cache.Control", 16, 16),
 		}).
 		Build("L1Cache")
 

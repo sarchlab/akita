@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -26,7 +27,7 @@ func TestResetEndsInflightTracingTasks(t *testing.T) { //nolint:funlen
 	spec.BottomUnit = messaging.RemotePort("BottomUnit")
 
 	port := func(name string) messaging.Port {
-		p := messaging.NewPort("Rob."+name, 4, 4)
+		p := twowaybuffered.NewPort("Rob."+name, 4, 4)
 		(&noopConn{}).PlugIn(p)
 		return p
 	}

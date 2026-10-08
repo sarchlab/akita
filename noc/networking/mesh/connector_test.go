@@ -2,6 +2,7 @@ package mesh_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	// . "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/noc/networking/mesh"
 	"github.com/sarchlab/akita/v5/sim/messaging"
@@ -24,7 +25,7 @@ var _ = Describe("Connector", func() {
 	})
 
 	It("should be able to connect ports outside current capacity", func() {
-		port := messaging.NewPort("Device.Port", 1, 1)
+		port := twowaybuffered.NewPort("Device.Port", 1, 1)
 
 		// 8,8,2 is the default capacity
 		connector.AddTile([3]int{8, 8, 2}, []messaging.Port{port})

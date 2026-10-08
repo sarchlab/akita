@@ -56,7 +56,7 @@ The reorder buffer is a ticking component (`modeling/ticking`). The system
 builder builds it from `rob.Definition`: configuration is supplied as a whole
 through `WithSpec` (start from `Definition.DefaultSpec`), and the port instances
 through `WithPorts`. The system builder creates each port with
-`messaging.NewPort`, choosing its buffer sizes, and names it
+`twowaybuffered.NewPort`, choosing its buffer sizes, and names it
 `"<instance>.<field>"`; `Build` binds and registers the ports.
 
 ```go
@@ -68,9 +68,9 @@ reorderBuffer := rob.Definition.Builder().
     WithSimulation(sim).
     WithSpec(spec).
     WithPorts(rob.Ports{
-        Top:     messaging.NewPort("ROB.Top", 8, 8),
-        Bottom:  messaging.NewPort("ROB.Bottom", 8, 8),
-        Control: messaging.NewPort("ROB.Control", 8, 8),
+        Top:     twowaybuffered.NewPort("ROB.Top", 8, 8),
+        Bottom:  twowaybuffered.NewPort("ROB.Bottom", 8, 8),
+        Control: twowaybuffered.NewPort("ROB.Control", 8, 8),
     }).
     Build("ROB")
 

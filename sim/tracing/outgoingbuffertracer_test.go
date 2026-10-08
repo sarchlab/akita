@@ -3,9 +3,9 @@ package tracing
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -65,7 +65,7 @@ var _ = Describe("Outgoing buffer tracer", func() {
 		tracer = &obRecordingTracer{}
 		CollectTrace(comp, tracer)
 
-		port = messaging.NewPort("Comp.Bottom", 4, 4)
+		port = twowaybuffered.NewPort("Comp.Bottom", 4, 4)
 		port.SetOwner(comp)
 		port.SetConnection(&obFakeConn{})
 		CollectOutgoingBufferTrace(port)
@@ -138,7 +138,7 @@ var _ = Describe("Outgoing buffer tracer", func() {
 
 	It("is a no-op when the owning component is not being traced", func() {
 		untraced := &obFakeComp{sim: modeling.NewStandaloneSimulation(timing.NewSerialEngine()), name: "Untraced"}
-		p2 := messaging.NewPort("Untraced.Bottom", 4, 4)
+		p2 := twowaybuffered.NewPort("Untraced.Bottom", 4, 4)
 		p2.SetOwner(untraced)
 		p2.SetConnection(&obFakeConn{})
 		CollectOutgoingBufferTrace(p2)

@@ -93,10 +93,10 @@ mover := datamover.Definition.Builder().
         OutsideMapper: &mem.SinglePortMapper{Port: dramPort},
     }).
     WithPorts(datamover.Ports{
-        Top:     messaging.NewPort("DMA.Top", 16, 16),
-        Inside:  messaging.NewPort("DMA.Inside", 16, 16),
-        Outside: messaging.NewPort("DMA.Outside", 16, 16),
-        Control: messaging.NewPort("DMA.Control", 16, 16),
+        Top:     twowaybuffered.NewPort("DMA.Top", 16, 16),
+        Inside:  twowaybuffered.NewPort("DMA.Inside", 16, 16),
+        Outside: twowaybuffered.NewPort("DMA.Outside", 16, 16),
+        Control: twowaybuffered.NewPort("DMA.Control", 16, 16),
     }).
     Build("DMA")
 
@@ -114,7 +114,7 @@ ctrlPort := mover.Ports.Control
 
 ## Ports
 
-The system builder creates each port with `messaging.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top** — accepts `DataMoveReq`, returns `DataMoveRsp` to the

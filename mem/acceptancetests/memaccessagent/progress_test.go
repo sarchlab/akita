@@ -6,8 +6,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -25,15 +25,15 @@ func buildProgressTestAgent() (*memaccessagent.Comp, timing.Engine) {
 	controller := idealmemcontroller.Definition.Builder().WithSimulation(s).
 		WithResources(idealmemcontroller.Resources{Storage: mem.NewStorage(4096)}).
 		WithPorts(idealmemcontroller.Ports{
-			Top:     messaging.NewPort("Mem.Top", 4, 4),
-			Control: messaging.NewPort("Mem.Control", 4, 4),
+			Top:     twowaybuffered.NewPort("Mem.Top", 4, 4),
+			Control: twowaybuffered.NewPort("Mem.Control", 4, 4),
 		}).Build("Mem")
 	spec := memaccessagent.Definition.DefaultSpec
 	spec.MaxAddress, spec.WriteLeft, spec.ReadLeft = 4096, 8, 8
 	agent := memaccessagent.Definition.Builder().WithSimulation(s).WithSpec(spec).
 		WithResources(memaccessagent.Resources{LowModule: controller.Ports.Top}).
-		WithPorts(memaccessagent.Ports{Mem: messaging.NewPort("Agent.Mem", 4, 4)}).Build("Agent")
-	connection := directconnection.MakeBuilder().WithSimulation(s).Build("Conn")
+		WithPorts(memaccessagent.Ports{Mem: twowaybuffered.NewPort("Agent.Mem", 4, 4)}).Build("Agent")
+	connection := direct.NewConnection("Conn", s, timing.GHz)
 	connection.PlugIn(agent.Ports.Mem)
 	connection.PlugIn(controller.Ports.Top)
 	return agent, engine

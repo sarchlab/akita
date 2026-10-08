@@ -58,7 +58,7 @@
 //	comp := agent.Definition.Builder().
 //	    WithSimulation(sim).
 //	    WithSpec(spec).
-//	    WithPorts(agent.Ports{Out: messaging.NewPort("Agent.Out", 4, 4)}).
+//	    WithPorts(agent.Ports{Out: twowaybuffered.NewPort("Agent.Out", 4, 4)}).
 //	    Build("Agent")
 //
 // Every port is created by the system builder and named "<instance>.<field>",

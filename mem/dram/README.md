@@ -143,8 +143,8 @@ ctrl := dram.Definition.Builder().
     WithSpec(spec).
     WithResources(dram.Resources{Storage: storage}).
     WithPorts(dram.Ports{
-        Top:     messaging.NewPort("DRAM.Top", 1024, 1024),
-        Control: messaging.NewPort("DRAM.Control", 4, 4),
+        Top:     twowaybuffered.NewPort("DRAM.Top", 1024, 1024),
+        Control: twowaybuffered.NewPort("DRAM.Control", 4, 4),
     }).
     Build("DRAM")
 
@@ -219,7 +219,7 @@ completed requests, bytes moved, and cycles), which the monitor also shows.
 
 ## Ports
 
-The system builder creates each port with `messaging.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top** (`mem` responder): accepts `memprotocol.ReadReq` and

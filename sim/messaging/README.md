@@ -5,6 +5,22 @@ simulation framework. It is the communication layer: components own ports,
 ports buffer messages, and a connection moves messages from one port's outgoing
 buffer to another port's incoming buffer.
 
+## Implementations
+
+The parent package owns the common interfaces, message values, and protocols.
+Concrete transports live in separate packages:
+
+- [`twowaybuffered`](./twowaybuffered/README.md) provides `Port` with independent
+  incoming and outgoing buffers. It works with direct connections and NoC endpoints.
+- [`direct`](./direct/README.md) provides the ideal `Connection`, created with
+  `NewConnection(name, simulation, frequency)`.
+- `sim/messaging/wire` is reserved for the future wire port and connection; wire
+  support is not implemented in this change.
+
+Components keep `messaging.Port` fields. System builders select the concrete
+port and connection implementations. NoC builders support only
+`twowaybuffered.Port` and `direct.Connection`.
+
 ## Key Concepts
 
 - A **message** (`Msg`) is a value with routing fields and a protocol-specific
@@ -67,6 +83,12 @@ registers the payload types before restoring a checkpoint. This is a convention,
 not an init-only runtime check. The registry supports concurrent registration;
 `Send` reads an immutable snapshot with an atomic load and a map lookup.
 
+Custom ports can call `messaging.PayloadRegistered(payload)` to perform the same
+registration check as `twowaybuffered.Port.Send`, including from another module.
+It returns true for nil or a registered value type, and false for unregistered
+types, including pointers. This read-only check does not register or serialize
+the payload; the registry remains private.
+
 Slice and map storage is shared between sender and receiver. Do not mutate it
 after sending. Inspect a payload with `switch req := msg.Payload.(type)` while
 using `msg.ID`, `msg.Src`, and the other envelope fields for routing and replies.
@@ -121,10 +143,10 @@ type Port interface {
 }
 ```
 
-Create a port with `NewPort`:
+Create a buffered port with `twowaybuffered.NewPort`:
 
 ```go
-port := messaging.NewPort("MyComp.Top", incomingCap, outgoingCap)
+port := twowaybuffered.NewPort("MyComp.Top", incomingCap, outgoingCap)
 ```
 
 In assembly, the system builder creates each port with no component and passes
@@ -155,8 +177,8 @@ type Connection interface {
 }
 ```
 
-A connection moves messages from outgoing to incoming buffers. `directconnection`
-is the simplest implementation.
+A connection moves messages from outgoing to incoming buffers. `direct.Connection`
+in `sim/messaging/direct` is the simplest implementation.
 
 ### PortOwner
 
@@ -173,7 +195,7 @@ and when it can send again. The owner is usually a component
 interface says nothing about which ports an owner has or how it reaches them.
 A component defined by a component model (`modeling/ticking` and its
 siblings) holds its ports in a typed `Ports` struct: the system builder creates
-each port with `NewPort` and passes them all to `Build`, which binds and
+each port with `twowaybuffered.NewPort` and passes them all to `Build`, which binds and
 registers them. An owner written without a component model, such as a test
 driver, calls `SetOwner` itself. A port must have an owner before it carries
 traffic: `Deliver`, `RetrieveOutgoing`, and `NotifyAvailable` panic on a port
@@ -181,7 +203,7 @@ without one.
 
 ## How It Works
 
-1. Setup code creates each port with `NewPort` and passes it to its component's
+1. Setup code creates each port with `twowaybuffered.NewPort` and passes it to its component's
    `Build`.
 2. A connection is plugged into the ports with `PlugIn`, and each port's
    connection is set with `SetConnection`.

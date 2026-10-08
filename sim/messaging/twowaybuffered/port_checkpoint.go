@@ -1,9 +1,11 @@
-package messaging
+package twowaybuffered
 
 import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/sarchlab/akita/v5/sim/messaging"
 
 	"github.com/sarchlab/akita/v5/sim/queueing"
 )
@@ -28,7 +30,7 @@ type portCheckpoint struct {
 
 // SaveCheckpoint writes the port's two buffers (capacity plus contents). Message
 // types must be registered, which DefineProtocol does.
-func (p *defaultPort) SaveCheckpoint(w io.Writer) error {
+func (p *Port) SaveCheckpoint(w io.Writer) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -50,7 +52,7 @@ func (p *defaultPort) SaveCheckpoint(w io.Writer) error {
 // LoadCheckpoint restores the buffer contents after checking that each rebuilt
 // buffer has the saved capacity. Buffers are restored directly, without calling
 // Send/Deliver, so no hooks fire and no connection is notified.
-func (p *defaultPort) LoadCheckpoint(r io.Reader) error {
+func (p *Port) LoadCheckpoint(r io.Reader) error {
 	var dto portCheckpoint
 	if err := json.NewDecoder(r).Decode(&dto); err != nil {
 		return err
@@ -68,12 +70,12 @@ func (p *defaultPort) LoadCheckpoint(r io.Reader) error {
 
 // saveBuffer captures a buffer's capacity and its type-tagged contents.
 func saveBuffer(
-	buf *queueing.Buffer[Msg], portName, label string,
+	buf *queueing.Buffer[messaging.Msg], portName, label string,
 ) (bufferCheckpoint, error) {
 	elements, err := json.Marshal(buf.Elements())
 	if err != nil {
 		return bufferCheckpoint{}, fmt.Errorf(
-			"messaging: port %q %s: %w", portName, label, err)
+			"twowaybuffered: port %q %s: %w", portName, label, err)
 	}
 
 	return bufferCheckpoint{
@@ -85,17 +87,17 @@ func saveBuffer(
 // loadBuffer checks the rebuilt buffer's capacity against the checkpoint (a shape
 // check) and restores its contents directly, firing no hooks.
 func loadBuffer(
-	buf *queueing.Buffer[Msg], bc bufferCheckpoint, portName, label string,
+	buf *queueing.Buffer[messaging.Msg], bc bufferCheckpoint, portName, label string,
 ) error {
 	if got := buf.Capacity(); bc.Capacity != got {
 		return fmt.Errorf(
-			"messaging: port %q %s capacity mismatch: checkpoint %d, rebuilt %d",
+			"twowaybuffered: port %q %s capacity mismatch: checkpoint %d, rebuilt %d",
 			portName, label, bc.Capacity, got)
 	}
 
-	var elements []Msg
+	var elements []messaging.Msg
 	if err := json.Unmarshal(bc.Elements, &elements); err != nil {
-		return fmt.Errorf("messaging: port %q %s: %w", portName, label, err)
+		return fmt.Errorf("twowaybuffered: port %q %s: %w", portName, label, err)
 	}
 
 	buf.Restore(elements)

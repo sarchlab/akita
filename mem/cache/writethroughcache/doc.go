@@ -8,6 +8,6 @@
 // WithSimulation, shared/external wiring (the required storage, and the
 // address-to-port mapper or remote ports) is injected through WithResources,
 // and the Top, Bottom, and Control port instances, created with
-// messaging.NewPort so the caller chooses the buffer sizes, are passed with
+// twowaybuffered.NewPort so the caller chooses the buffer sizes, are passed with
 // WithPorts.
 package writethroughcache

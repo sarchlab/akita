@@ -1,29 +1,29 @@
-package messaging
+package twowaybuffered
 
 import (
-	"github.com/sarchlab/akita/v5/sim/hooking"
 	"testing"
+
+	"github.com/sarchlab/akita/v5/sim/hooking"
+	"github.com/sarchlab/akita/v5/sim/messaging"
 )
 
 type benchmarkConnection struct{ hooking.HookableBase }
 
-func (*benchmarkConnection) Name() string         { return "benchmark" }
-func (*benchmarkConnection) PlugIn(Port)          {}
-func (*benchmarkConnection) NotifyAvailable(Port) {}
-func (*benchmarkConnection) NotifySend()          {}
+func (*benchmarkConnection) Name() string                   { return "benchmark" }
+func (*benchmarkConnection) PlugIn(messaging.Port)          {}
+func (*benchmarkConnection) NotifyAvailable(messaging.Port) {}
+func (*benchmarkConnection) NotifySend()                    {}
 
 type benchmarkPayload struct {
 	Data []byte
 }
 
-func init() { msgCodec.Register(benchmarkPayload{}) }
-
 // BenchmarkSend measures Send plus resetting the outgoing buffer for reuse.
 func BenchmarkSend(b *testing.B) {
-	p := NewPort("src", 1, 1).(*defaultPort)
+	p := NewPort("src", 1, 1)
 	p.SetConnection(&benchmarkConnection{})
 	payload := benchmarkPayload{Data: make([]byte, 64)}
-	msg := Msg{ID: 1, Src: "src", Dst: "dst", TrafficBytes: 64, Payload: payload}
+	msg := messaging.Msg{ID: 1, Src: "src", Dst: "dst", TrafficBytes: 64, Payload: payload}
 	b.ReportAllocs()
 	for b.Loop() {
 		p.Send(msg)
@@ -35,10 +35,10 @@ func BenchmarkSend(b *testing.B) {
 // lookup is shared across senders, as it is in a parallel simulation.
 func BenchmarkSendParallel(b *testing.B) {
 	payload := benchmarkPayload{Data: make([]byte, 64)}
-	msg := Msg{ID: 1, Src: "src", Dst: "dst", TrafficBytes: 64, Payload: payload}
+	msg := messaging.Msg{ID: 1, Src: "src", Dst: "dst", TrafficBytes: 64, Payload: payload}
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
-		p := NewPort("src", 1, 1).(*defaultPort)
+		p := NewPort("src", 1, 1)
 		p.SetConnection(&benchmarkConnection{})
 		for pb.Next() {
 			p.Send(msg)

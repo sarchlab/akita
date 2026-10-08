@@ -16,6 +16,12 @@ type Msg struct {
 	Payload      any        `json:"-"`
 }
 
+// PayloadRegistered reports whether v's concrete type was registered through
+// DefineProtocol. A nil payload is always valid.
+func PayloadRegistered(v any) bool {
+	return v == nil || msgCodec.Contains(v)
+}
+
 // IsRsp reports whether the message responds to another message.
 func (m Msg) IsRsp() bool { return m.RspTo != 0 }
 

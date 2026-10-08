@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -57,7 +57,7 @@ var _ = Describe("Directory", func() {
 		// Success cases read the sent request back via RetrieveOutgoing;
 		// failure cases pre-fill the slot.
 		ports := makePorts("Cache", 4)
-		ports.Bottom = messaging.NewPort("Cache.Bottom", 1, 1)
+		ports.Bottom = twowaybuffered.NewPort("Cache.Bottom", 1, 1)
 
 		c = buildStageTestCache(
 			Spec{

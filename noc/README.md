@@ -1,34 +1,34 @@
 # noc
 
-Package `noc` and its sub-packages provide network-on-chip (NoC)
-implementations for connecting simulation components. All network
-types implement the `messaging.Connection` interface, using `PlugIn(port)`
-to attach component ports.
+Package `noc` provides packet-switched networks with endpoints, switches, and
+routing. Builders currently use only `twowaybuffered.Port` and ideal
+`direct.Connection` links. Device ports must also be `*twowaybuffered.Port`.
+Wire ports and links with finite bandwidth or latency are not supported yet.
 
 ## Direct Connection
 
 The simplest connection type — zero-latency message forwarding between ports.
 
 ```go
-import "github.com/sarchlab/akita/v5/noc/directconnection"
+import (
+    "github.com/sarchlab/akita/v5/sim/messaging/direct"
+    "github.com/sarchlab/akita/v5/sim/timing"
+)
 
-conn := directconnection.MakeBuilder().
-    WithSimulation(sim).
-    WithSpec(directconnection.DefaultSpec()).
-    Build("conn")
+conn := direct.NewConnection("conn", sim, timing.GHz)
 
 conn.PlugIn(componentA.Ports.Top)
 conn.PlugIn(componentB.Ports.Top)
 ```
 
-`directconnection.Comp` is a ticking component that forwards messages
+`direct.Connection` lives in `sim/messaging/direct` and is a connection that forwards messages
 between all plugged-in ports each tick, with no latency or bandwidth
 modeling.
 
 ## Networking (Packet-Switched Networks)
 
 The `noc/networking` sub-packages provide realistic network models with
-switches, endpoints, routing, and pipeline-based links.
+switches, endpoints, routing, and switch pipelines. Links between them are ideal.
 
 ### Network Connector
 
@@ -38,7 +38,7 @@ and switches with parameterized links:
 ```go
 import "github.com/sarchlab/akita/v5/noc/networking/networkconnector"
 
-connector := networkconnector.NewConnector().
+connector := networkconnector.MakeConnector().
     WithSimulation(sim).
     WithDefaultFreq(1 * timing.GHz).
     WithFlitSize(64)
@@ -81,11 +81,11 @@ them at the destination.
 
 ## Connection Pattern
 
-All connection types follow the same pattern:
+Create an ideal direct connection, then plug in the ports:
 
 ```go
-// 1. Build the connection
-conn := builder.Build("my_connection")
+// 1. Create the connection
+conn := direct.NewConnection("my_connection", sim, timing.GHz)
 
 // 2. Plug in ports
 conn.PlugIn(portA)

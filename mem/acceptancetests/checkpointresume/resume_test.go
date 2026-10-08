@@ -10,9 +10,10 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -204,7 +205,7 @@ func buildDriver(s timing.Simulation, lowModule messaging.Port) *driver {
 		WithSpec(Definition.DefaultSpec).
 		WithResources(driverResources{LowModule: lowModule}).
 		WithPorts(driverPorts{
-			Mem: messaging.NewPort("Driver.Mem", 4, 4),
+			Mem: twowaybuffered.NewPort("Driver.Mem", 4, 4),
 		}).
 		Build("Driver")
 }
@@ -228,14 +229,14 @@ func buildSim() (*sim.Simulation, *driver) {
 				Build("DRAM.Storage"),
 		}).
 		WithPorts(idealmemcontroller.Ports{
-			Top:     messaging.NewPort("DRAM.Top", 8, 8),
-			Control: messaging.NewPort("DRAM.Control", 8, 8),
+			Top:     twowaybuffered.NewPort("DRAM.Top", 8, 8),
+			Control: twowaybuffered.NewPort("DRAM.Control", 8, 8),
 		}).
 		Build("DRAM")
 
 	d := buildDriver(s, dram.Ports.Top)
 
-	conn := directconnection.MakeBuilder().WithSimulation(s).Build("Conn")
+	conn := direct.NewConnection("Conn", s, timing.GHz)
 	conn.PlugIn(d.Ports.Mem)
 	conn.PlugIn(dram.Ports.Top)
 

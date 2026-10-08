@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -81,7 +82,7 @@ func newSim() timing.Simulation {
 }
 
 func newPort(name string) messaging.Port {
-	return messaging.NewPort(name, 1, 1)
+	return twowaybuffered.NewPort(name, 1, 1)
 }
 
 func build(ports Ports) *Comp {

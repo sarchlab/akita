@@ -5,8 +5,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 )
 
 var _ = Describe("Respond Stage", func() {
@@ -20,7 +20,7 @@ var _ = Describe("Respond Stage", func() {
 		// topPort is a real, single-slot port (owned by the component) so the
 		// "cannot send" cases can be forced by pre-filling its outgoing buffer.
 		ports := makePorts("Cache", 4)
-		ports.Top = messaging.NewPort("Cache.Top", 1, 1)
+		ports.Top = twowaybuffered.NewPort("Cache.Top", 1, 1)
 
 		mw = buildStageTestCache(
 			Definition.DefaultSpec,

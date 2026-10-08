@@ -86,9 +86,9 @@ cache := writethroughcache.Definition.Builder().
         AddressMapper: &mem.SinglePortMapper{Port: dramPort},
     }).
     WithPorts(writethroughcache.Ports{
-        Top:     messaging.NewPort("L2Cache.Top", 16, 16),
-        Bottom:  messaging.NewPort("L2Cache.Bottom", 16, 16),
-        Control: messaging.NewPort("L2Cache.Control", 16, 16),
+        Top:     twowaybuffered.NewPort("L2Cache.Top", 16, 16),
+        Bottom:  twowaybuffered.NewPort("L2Cache.Bottom", 16, 16),
+        Control: twowaybuffered.NewPort("L2Cache.Control", 16, 16),
     }).
     Build("L2Cache")
 
@@ -106,7 +106,7 @@ topPort := cache.Ports.Top
 
 ## Ports
 
-The system builder creates each port with `messaging.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top** — accepts `memprotocol.ReadReq` and `memprotocol.WriteReq`, returns

@@ -64,10 +64,10 @@ at := addresstranslator.Definition.Builder().
         TranslationProviderMapper: tlbMapper,
     }).
     WithPorts(addresstranslator.Ports{
-        Top:         messaging.NewPort("AddressTranslator.Top", 4, 4),
-        Bottom:      messaging.NewPort("AddressTranslator.Bottom", 4, 4),
-        Translation: messaging.NewPort("AddressTranslator.Translation", 4, 4),
-        Control:     messaging.NewPort("AddressTranslator.Control", 1, 1),
+        Top:         twowaybuffered.NewPort("AddressTranslator.Top", 4, 4),
+        Bottom:      twowaybuffered.NewPort("AddressTranslator.Bottom", 4, 4),
+        Translation: twowaybuffered.NewPort("AddressTranslator.Translation", 4, 4),
+        Control:     twowaybuffered.NewPort("AddressTranslator.Control", 1, 1),
     }).
     Build("AddressTranslator")
 ```
@@ -81,7 +81,7 @@ at := addresstranslator.Definition.Builder().
 
 ## Ports
 
-The system builder creates each port with `messaging.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top**: accepts `memprotocol.ReadReq` / `memprotocol.WriteReq` (virtual addresses), returns

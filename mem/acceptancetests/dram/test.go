@@ -10,8 +10,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/dram"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 
 	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/sim"
@@ -39,15 +39,13 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.MemA
 	s := simBuilder.Build()
 	engine := s.Engine()
 
-	conn := directconnection.MakeBuilder().
-		WithSimulation(s).
-		Build("Conn")
+	conn := direct.NewConnection("Conn", s, timing.GHz)
 
 	// The agent sends to the memory controller's Top port, so the
 	// controller's ports are created before the agent is built.
 	memCtrlPorts := dram.Ports{
-		Top:     messaging.NewPort("Mem.Top", 16, 16),
-		Control: messaging.NewPort("Mem.Control", 16, 16),
+		Top:     twowaybuffered.NewPort("Mem.Top", 16, 16),
+		Control: twowaybuffered.NewPort("Mem.Control", 16, 16),
 	}
 
 	agentSpec := memaccessagent.Definition.DefaultSpec
@@ -61,7 +59,7 @@ func setupTest(seed int64) (*sim.Simulation, timing.Engine, *memaccessagent.MemA
 		WithSpec(agentSpec).
 		WithResources(memaccessagent.Resources{LowModule: memCtrlPorts.Top}).
 		WithPorts(memaccessagent.Ports{
-			Mem: messaging.NewPort("MemAccessAgent.Mem", 16, 16),
+			Mem: twowaybuffered.NewPort("MemAccessAgent.Mem", 16, 16),
 		}).
 		Build("MemAccessAgent")
 	memaccessagent.SetProgressTrackers(agent,

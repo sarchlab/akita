@@ -42,7 +42,7 @@ func (b Builder[S, T, R, P, M]) WithResources(resources R) Builder[S, T, R, P, M
 }
 
 // WithPorts sets the instance's ports, created by the system builder with
-// messaging.NewPort. Every port must be given and named "<instance>.<field>",
+// twowaybuffered.NewPort. Every port must be given and named "<instance>.<field>",
 // or "<instance>.<field>[i]" for member i of a port group.
 func (b Builder[S, T, R, P, M]) WithPorts(ports P) Builder[S, T, R, P, M] {
 	b.ports = ports

@@ -22,6 +22,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim/datarecording"
 	"github.com/sarchlab/akita/v5/sim/hooking"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/queueing"
 	"github.com/sarchlab/akita/v5/sim/timing"
@@ -710,7 +711,7 @@ type portedComponent struct {
 
 func newPortedComponent(name string) *portedComponent {
 	c := &portedComponent{name: name}
-	c.port = messaging.NewPort(name+".p", 4, 4)
+	c.port = twowaybuffered.NewPort(name+".p", 4, 4)
 	c.port.SetOwner(c)
 
 	return c

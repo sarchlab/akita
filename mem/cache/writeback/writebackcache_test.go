@@ -8,9 +8,10 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 
-	"github.com/sarchlab/akita/v5/noc/directconnection"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -33,9 +34,9 @@ func TestCache(t *testing.T) {
 // bufSize slots in each direction.
 func makePorts(name string, bufSize int) Ports {
 	return Ports{
-		Top:     messaging.NewPort(name+".Top", bufSize, bufSize),
-		Bottom:  messaging.NewPort(name+".Bottom", bufSize, bufSize),
-		Control: messaging.NewPort(name+".Control", bufSize, bufSize),
+		Top:     twowaybuffered.NewPort(name+".Top", bufSize, bufSize),
+		Bottom:  twowaybuffered.NewPort(name+".Bottom", bufSize, bufSize),
+		Control: twowaybuffered.NewPort(name+".Control", bufSize, bufSize),
 	}
 }
 
@@ -49,7 +50,7 @@ func (testDriver) NotifyPortFree(messaging.Port) {}
 // newDriverPort creates a port with bufSize slots in each direction for the
 // test to drive by hand.
 func newDriverPort(name string, bufSize int) messaging.Port {
-	p := messaging.NewPort(name, bufSize, bufSize)
+	p := twowaybuffered.NewPort(name, bufSize, bufSize)
 	p.SetOwner(testDriver{})
 
 	return p
@@ -105,8 +106,8 @@ func buildIdealDRAM(sim timing.Simulation, storage *mem.Storage) messaging.Port 
 		WithResources(idealmemcontroller.Resources{Storage: storage}).
 		WithSpec(dramSpec).
 		WithPorts(idealmemcontroller.Ports{
-			Top:     messaging.NewPort("DRAM.Top", 16, 16),
-			Control: messaging.NewPort("DRAM.Control", 16, 16),
+			Top:     twowaybuffered.NewPort("DRAM.Top", 16, 16),
+			Control: twowaybuffered.NewPort("DRAM.Control", 16, 16),
 		}).
 		Build("DRAM")
 
@@ -122,7 +123,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		m                   *pipelineMW
 		dramTop             messaging.Port
 		dramStorage         *mem.Storage
-		conn                *directconnection.Comp
+		conn                *direct.Connection
 		agentPort           messaging.Port
 		controlAgentPort    messaging.Port
 	)
@@ -156,9 +157,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			Build("Cache")
 		m = cacheComp.Middlewares.Pipeline
 
-		conn = directconnection.MakeBuilder().
-			WithSimulation(sim).
-			Build("Connection")
+		conn = direct.NewConnection("Connection", sim, timing.GHz)
 		conn.PlugIn(cacheComp.Ports.Top)
 		conn.PlugIn(cacheComp.Ports.Bottom)
 		conn.PlugIn(cacheComp.Ports.Control)

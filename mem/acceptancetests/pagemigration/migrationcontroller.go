@@ -10,9 +10,9 @@ import (
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/mem/memcontrolprotocol"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tracing"
@@ -541,7 +541,7 @@ func setupMigrationController(
 	s *sim.Simulation,
 	shared sharedHierarchy,
 	chains []agentChain,
-	memConn *directconnection.Comp,
+	memConn *direct.Connection,
 ) *migrationController {
 	mover := buildDataMover(s, shared)
 
@@ -553,9 +553,7 @@ func setupMigrationController(
 
 	// One control connection carries the controller plus every component it
 	// drains/pauses/flushes/invalidates/enables; directconnection routes by Dst.
-	ctrlConn := directconnection.MakeBuilder().
-		WithSimulation(s).
-		Build("ConnControl")
+	ctrlConn := direct.NewConnection("ConnControl", s, timing.GHz)
 	ctrlConn.PlugIn(ctrl.Ports.Ctrl)
 	for _, c := range chains {
 		ctrlConn.PlugIn(c.rob.Ports.Control)

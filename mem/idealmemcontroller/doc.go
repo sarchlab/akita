@@ -3,7 +3,7 @@
 //
 // The controller is a ticking component. The system builder builds it with
 // Definition.Builder(), supplying the backing storage in Resources (required)
-// and the Top and Control port instances, created with messaging.NewPort, with
+// and the Top and Control port instances, created with twowaybuffered.NewPort, with
 // WithPorts.
 package idealmemcontroller
 

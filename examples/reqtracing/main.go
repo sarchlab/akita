@@ -22,8 +22,8 @@ import (
 
 	"github.com/sarchlab/akita/v5/examples/reqtracing/client"
 	"github.com/sarchlab/akita/v5/examples/reqtracing/server"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tracing"
@@ -36,7 +36,7 @@ func main() {
 	// Build the server first, so the client's Spec can name its port.
 	srv := server.Definition.Builder().
 		WithSimulation(sim).
-		WithPorts(server.Ports{Out: messaging.NewPort("Server.Out", 4, 4)}).
+		WithPorts(server.Ports{Out: twowaybuffered.NewPort("Server.Out", 4, 4)}).
 		Build("Server")
 
 	clientSpec := client.Definition.DefaultSpec
@@ -46,10 +46,10 @@ func main() {
 	cli := client.Definition.Builder().
 		WithSimulation(sim).
 		WithSpec(clientSpec).
-		WithPorts(client.Ports{Out: messaging.NewPort("Client.Out", 4, 4)}).
+		WithPorts(client.Ports{Out: twowaybuffered.NewPort("Client.Out", 4, 4)}).
 		Build("Client")
 
-	conn := directconnection.MakeBuilder().WithSimulation(sim).Build("Conn")
+	conn := direct.NewConnection("Conn", sim, timing.GHz)
 	conn.PlugIn(cli.Ports.Out)
 	conn.PlugIn(srv.Ports.Out)
 

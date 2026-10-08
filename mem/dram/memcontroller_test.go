@@ -4,8 +4,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -211,9 +211,7 @@ var _ = Describe("DRAM Integration", func() {
 
 	It("should read and write via direct connection", func() {
 		srcPort := newDriverPort("Src.Top", 1024)
-		conn := directconnection.MakeBuilder().
-			WithSimulation(sim).
-			Build("Conn")
+		conn := direct.NewConnection("Conn", sim, timing.GHz)
 		topPort := memCtrl.Ports.Top
 		conn.PlugIn(topPort)
 		conn.PlugIn(srcPort)

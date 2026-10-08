@@ -179,7 +179,7 @@ Where things live in the Akita source (a starting map — `code_ls` to browse an
   `mem/rob/`, the ideal controller in `mem/idealmemcontroller/`.
 - **Virtual memory / translation** — `mem/vm/`: `tlb`, `mmu`, `addresstranslator`,
   page tables.
-- **Interconnect** — `noc/` (e.g. `directconnection`).
+- **Interconnect** — `noc/` for networks and `sim/messaging/direct` for ideal direct connections.
 - **Ports, buffers, messages** — `sim/messaging/`, `sim/queueing/`.
 - **Task / trace / milestone model** — `sim/tracing/`.
 - **Engine, components, time** — `sim/`, `sim/modeling/`, `sim/timing/`.

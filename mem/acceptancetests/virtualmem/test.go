@@ -15,13 +15,14 @@ import (
 	"github.com/sarchlab/akita/v5/mem/rob"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addresstranslator"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/monitoring"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
 
@@ -290,7 +291,7 @@ func setupPageTable(maxAddress uint64, s *sim.Simulation) vm.PageTable {
 // newPort creates an unowned port named fullName, for a component that takes
 // its ports at Build. The component's Build binds and registers it.
 func newPort(fullName string) messaging.Port {
-	return messaging.NewPort(fullName, 16, 16)
+	return twowaybuffered.NewPort(fullName, 16, 16)
 }
 
 // newStorage builds a storage of the given capacity that registers with the
@@ -307,7 +308,7 @@ func newStorage(
 }
 
 func connect(s *sim.Simulation, name string, p1, p2 messaging.Port) {
-	conn := directconnection.MakeBuilder().WithSimulation(s).Build(name)
+	conn := direct.NewConnection(name, s, timing.GHz)
 	conn.PlugIn(p1)
 	conn.PlugIn(p2)
 }

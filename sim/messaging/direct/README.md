@@ -1,68 +1,54 @@
-# directconnection — Direct Point-to-Point Connection
+# direct — Ideal Direct Connection
 
-Package `directconnection` provides a simple network connection for the Akita
+Package `direct` provides a simple network connection for the Akita
 simulation framework. It connects any number of ports and delivers messages
 between them in a single tick, with no routing overhead or bandwidth modeling.
 
 ## How It Works
 
-A `Comp` maintains a set of plugged-in ports. Each tick, it round-robins
+A `Connection` maintains a set of plugged-in ports. Each tick, it round-robins
 through all ports, peeks at each port's outgoing buffer, resolves the
 destination port by name, and delivers the message directly. Messages are
 delivered in the same tick they are sent (subject to the connection's tick
 frequency).
 
-This makes `directconnection` ideal for connecting components that are
+This makes `direct.Connection` ideal for connecting components that are
 logically adjacent — for example, a cache and its memory controller, or
 a compute unit and its L1 cache — without modeling a full network-on-chip.
 
 ## Key Types
 
-### Comp
+### Connection
 
 ```go
-type Comp struct {
+type Connection struct {
     State State // saved in checkpoints
     // ...
 }
 
-func (c *Comp) PlugIn(port messaging.Port)          // Connect a port
-func (c *Comp) NotifyAvailable(p messaging.Port)    // Port buffer space freed
-func (c *Comp) NotifySend()                         // Port has outgoing message
+func (c *Connection) PlugIn(port messaging.Port)          // Connect a port
+func (c *Connection) NotifyAvailable(p messaging.Port)    // Port buffer space freed
+func (c *Connection) NotifySend()                         // Port has outgoing message
 ```
 
-`Comp` implements `messaging.Connection`, so ports can use it as their
+`Connection` implements `messaging.Connection`, so ports can use it as their
 connection for message delivery. It is a connection, not a component: ports plug
 into it during wiring. It ticks on secondary tick events, so it runs after the
-components of the same cycle. The only configuration is the `Freq` field on
-`Spec`, which sets the connection's tick frequency.
+components of the same cycle. Its constructor takes an explicit tick frequency.
 
-## Builder Pattern
+## Construction
 
-A connection owns no resources, so it is configured by `Spec` alone and wired to
-the simulation through `WithSimulation(sim)`. The simulation supplies the engine and
-registers the connection.
+Pass the name, simulation, and frequency to `NewConnection`. The constructor
+uses the simulation's engine and registers the connection and its event handler.
+It retains the frequency internally for checkpoint validation; no public
+`Definition`, `Spec`, or builder is needed.
 
 ```go
-spec := directconnection.DefaultSpec()
-spec.Freq = 1 * timing.GHz
-
-conn := directconnection.MakeBuilder().
-    WithSimulation(sim).
-    WithSpec(spec).
-    Build("Connection")
-
+conn := direct.NewConnection("Connection", s, timing.GHz)
 conn.PlugIn(portA)
 conn.PlugIn(portB)
 conn.PlugIn(portC)
 ```
-
-### Builder Methods
-
-| Method | Description |
-|---|---|
-| `WithSimulation(r)` | Source of the engine and connection registration (required) |
-| `WithSpec(s)` | Full configuration; start from `DefaultSpec()` and set `Freq` |
 
 ## Usage
 
@@ -70,10 +56,7 @@ conn.PlugIn(portC)
 // Create engine and connection
 engine := timing.NewSerialEngine()
 sim := modeling.NewStandaloneSimulation(engine)
-conn := directconnection.MakeBuilder().
-    WithSimulation(sim).
-    WithSpec(directconnection.DefaultSpec()).
-    Build("Bus")
+conn := direct.NewConnection("Bus", sim, timing.GHz)
 
 // Create components with ports, then plug them in
 conn.PlugIn(cache.Ports.Bottom)
@@ -96,5 +79,5 @@ index advances by one each tick, ensuring no port is permanently starved.
 
 - No bandwidth modeling — all pending messages are forwarded each tick.
 - No latency modeling beyond the tick granularity.
-- For simulations requiring realistic network modeling (latency, bandwidth,
-  contention), use the `noc/networking` package instead.
+- `noc/networking` adds switch pipelines, routing, and contention while using
+  ideal direct links. Finite link bandwidth and latency are separate future work.

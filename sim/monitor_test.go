@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/naming"
 	"github.com/sarchlab/akita/v5/sim/tracing"
 )
@@ -59,7 +59,7 @@ func TestInjectedMonitorLifecycle(t *testing.T) {
 		t.Fatal("monitor did not receive the simulation and recording destination")
 	}
 	component := namedComponent("Agent")
-	port := messaging.NewPort("Agent.Top", 2, 2)
+	port := twowaybuffered.NewPort("Agent.Top", 2, 2)
 	s.RegisterComponent(component)
 	s.RegisterPort(port)
 	s.Terminate()

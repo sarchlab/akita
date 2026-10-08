@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
 	"github.com/sarchlab/akita/v5/sim/hooking"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling/modelingtest"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -92,7 +93,7 @@ func newTestAgent(name string) *testAgent {
 		name: name,
 	}
 
-	a.port = messaging.NewPort(fmt.Sprintf("%s.Port", name), 4, 4)
+	a.port = twowaybuffered.NewPort(fmt.Sprintf("%s.Port", name), 4, 4)
 	a.port.SetOwner(a)
 
 	return a
@@ -142,7 +143,7 @@ func newBandwidthAgent(name string) *bandwidthAgent {
 		name: name,
 	}
 
-	a.port = messaging.NewPort(fmt.Sprintf("%s.Port", name), 8, 8)
+	a.port = twowaybuffered.NewPort(fmt.Sprintf("%s.Port", name), 8, 8)
 	a.port.SetOwner(a)
 
 	return a

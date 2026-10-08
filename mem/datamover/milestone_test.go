@@ -7,8 +7,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/datamoverprotocol"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/sarchlab/akita/v5/sim/tracing"
@@ -77,7 +77,7 @@ var _ = Describe("DataMover milestones", func() {
 		insideStorage  *mem.Storage
 		outsideMem     *idealmemcontroller.Comp
 		outsideStorage *mem.Storage
-		conn           *directconnection.Comp
+		conn           *direct.Connection
 		srcPort        messaging.Port
 		topPort        messaging.Port
 		rec            *dmTraceRecorder
@@ -121,9 +121,7 @@ var _ = Describe("DataMover milestones", func() {
 
 		topPort = dataMover.Ports.Top
 
-		conn = directconnection.MakeBuilder().
-			WithSimulation(sim).
-			Build("Conn")
+		conn = direct.NewConnection("Conn", sim, timing.GHz)
 		conn.PlugIn(srcPort)
 		conn.PlugIn(topPort)
 		conn.PlugIn(dataMover.Ports.Inside)

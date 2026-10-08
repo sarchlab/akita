@@ -15,8 +15,8 @@ engine := timing.NewSerialEngine()
 sim := modeling.NewStandaloneSimulation(engine)
 
 // Create the ports first, so AgentA's Spec can name AgentB's port.
-outA := messaging.NewPort("AgentA.Out", 16, 16)
-outB := messaging.NewPort("AgentB.Out", 16, 16)
+outA := twowaybuffered.NewPort("AgentA.Out", 16, 16)
+outB := twowaybuffered.NewPort("AgentB.Out", 16, 16)
 
 specA := Definition.DefaultSpec
 specA.Freq = 1 * timing.Hz
@@ -38,9 +38,7 @@ agentB := Definition.Builder().
     WithPorts(Ports{Out: outB}).
     Build("AgentB")
 
-conn := directconnection.MakeBuilder().
-    WithSimulation(sim).
-    Build("Conn")
+conn := direct.NewConnection("Conn", sim, timing.GHz)
 
 conn.PlugIn(agentA.Ports.Out)
 conn.PlugIn(agentB.Ports.Out)
@@ -63,7 +61,7 @@ Step by step:
    shared by the agents and connection, including their ID counter.
    `sim.MakeBuilder().Build()` adds recording and inventory; enable live monitoring with `WithMonitor`.
 3. **Create ports.** The system builder creates both ports with
-   `messaging.NewPort`, choosing the buffer sizes (16 incoming, 16 outgoing)
+   `twowaybuffered.NewPort`, choosing the buffer sizes (16 incoming, 16 outgoing)
    and naming each `<instance>.<field>`. Creating them before the agents
    lets AgentA's Spec name AgentB's port.
 4. **Choose specs.** Both agents start from `Definition.DefaultSpec` and
@@ -73,7 +71,7 @@ Step by step:
 5. **Build agents.** Two instances of the same component type, named
    `AgentA` and `AgentB`, each given its own port with `WithPorts`. `Build`
    binds each port to its agent and registers both with the simulation.
-6. **Build connection.** A `directconnection` — zero-latency, ideal for
+6. **Build connection.** A `direct.Connection` — zero-latency, ideal for
    simple topologies.
 7. **Plug ports.** Each agent's `Out` port, reached as `agent.Ports.Out`,
    goes into the connection. Now any port plugged into this connection can
@@ -107,16 +105,17 @@ cycle.
 - **A component = five structs + a `Definition`.** The same shape as the
   single component, now with a port and a second middleware.
 - **The system builder owns the wiring.** It creates every port with
-  `messaging.NewPort`, passes the ports to `Build` with `WithPorts`, and
+  `twowaybuffered.NewPort`, passes the ports to `Build` with `WithPorts`, and
   plugs them into connections.
 - **Ports buffer messages.** Messages are value types: construct them with
   no `&`, check `CanSend()` before `Send` because the outgoing buffer can
   be full, and `Peek` lets you look at incoming messages without consuming.
-- **Connections move messages.** Plug ports into a `directconnection` and
+- **Connections move messages.** Plug ports into a `direct.Connection` and
   any plugged port can reach any other.
-- **The builder pattern is universal.** Components are built with
-  `Definition.Builder().WithX().Build(name)`, and connections with
-  `directconnection.MakeBuilder().WithX().Build(name)`.
+- **Components use builders; ports and connections use constructors.** Build
+  components with `Definition.Builder().WithX().Build(name)`. Create ports with
+  `twowaybuffered.NewPort(name, in, out)` and connections with
+  `direct.NewConnection(name, sim, freq)`.
 
 ## Where to Next
 

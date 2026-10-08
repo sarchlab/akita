@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 )
 
@@ -24,9 +25,9 @@ func TestValidateState(t *testing.T) {
 // default buffer sizes.
 func defaultPorts(name string) Ports {
 	return Ports{
-		Top:     messaging.NewPort(name+".Top", 16, 16),
-		Bottom:  messaging.NewPort(name+".Bottom", 16, 16),
-		Control: messaging.NewPort(name+".Control", 4, 4),
+		Top:     twowaybuffered.NewPort(name+".Top", 16, 16),
+		Bottom:  twowaybuffered.NewPort(name+".Bottom", 16, 16),
+		Control: twowaybuffered.NewPort(name+".Control", 4, 4),
 	}
 }
 

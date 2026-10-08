@@ -7,10 +7,11 @@ import (
 
 	"github.com/sarchlab/akita/v5/noc/acceptance"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 
-	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
 	"github.com/sarchlab/akita/v5/sim/timing"
 	"github.com/tebeka/atexit"
 )
@@ -46,7 +47,7 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 		name := fmt.Sprintf("Agent[%d]", i)
 		ports := make([]messaging.Port, 5)
 		for j := 0; j < 5; j++ {
-			ports[j] = messaging.NewPort(fmt.Sprintf("%s.Port%d", name, j), 1, 1)
+			ports[j] = twowaybuffered.NewPort(fmt.Sprintf("%s.Port%d", name, j), 1, 1)
 		}
 		agent := acceptance.NewAgent(s, freq, name, ports, test)
 		agent.TickLater()
@@ -56,8 +57,8 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 	// The two endpoints are linked directly, so each one sends its flits to
 	// the other's network port.
 	netPorts := []messaging.Port{
-		messaging.NewPort("EP1.NetworkPort", 4, 4),
-		messaging.NewPort("EP2.NetworkPort", 4, 4),
+		twowaybuffered.NewPort("EP1.NetworkPort", 4, 4),
+		twowaybuffered.NewPort("EP2.NetworkPort", 4, 4),
 	}
 
 	for i, name := range []string{"EP1", "EP2"} {
@@ -74,9 +75,7 @@ func createNetwork(s *sim.Simulation, test *acceptance.Test) {
 			Build(name)
 	}
 
-	conn := directconnection.MakeBuilder().
-		WithSimulation(s).
-		Build("Conn")
+	conn := direct.NewConnection("Conn", s, timing.GHz)
 
 	conn.PlugIn(netPorts[0])
 	conn.PlugIn(netPorts[1])

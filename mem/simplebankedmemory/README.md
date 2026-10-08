@@ -103,8 +103,8 @@ memCtrl := simplebankedmemory.Definition.Builder().
     WithSpec(spec).
     WithResources(simplebankedmemory.Resources{Storage: storage}).
     WithPorts(simplebankedmemory.Ports{
-        Top:     messaging.NewPort("MyMemCtrl.Top", 16, 16),
-        Control: messaging.NewPort("MyMemCtrl.Control", 4, 4),
+        Top:     twowaybuffered.NewPort("MyMemCtrl.Top", 16, 16),
+        Control: twowaybuffered.NewPort("MyMemCtrl.Control", 4, 4),
     }).
     Build("MyMemCtrl")
 
@@ -175,7 +175,7 @@ memory is one of several interleaved controllers; a standalone memory leaves
 
 ## Ports
 
-The system builder creates each port with `messaging.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top**: accepts `memprotocol.ReadReq` and `memprotocol.WriteReq`, returns `memprotocol.DataReadyRsp`

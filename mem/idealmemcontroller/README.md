@@ -87,8 +87,8 @@ ctrl := idealmemcontroller.Definition.Builder().
     WithSpec(spec).
     WithResources(idealmemcontroller.Resources{Storage: storage}).
     WithPorts(idealmemcontroller.Ports{
-        Top:     messaging.NewPort("IdealMem.Top", 16, 16),
-        Control: messaging.NewPort("IdealMem.Control", 16, 16),
+        Top:     twowaybuffered.NewPort("IdealMem.Top", 16, 16),
+        Control: twowaybuffered.NewPort("IdealMem.Control", 16, 16),
     }).
     Build("IdealMem")
 
@@ -113,7 +113,7 @@ topPort := ctrl.Ports.Top
 
 ## Ports
 
-The system builder creates each port with `messaging.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top**: accepts `memprotocol.ReadReq` and `memprotocol.WriteReq`, returns `memprotocol.DataReadyRsp`

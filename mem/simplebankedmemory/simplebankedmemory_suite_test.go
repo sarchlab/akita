@@ -3,7 +3,7 @@ package simplebankedmemory
 import (
 	"testing"
 
-	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -25,7 +25,7 @@ func TestValidateState(t *testing.T) {
 // sizes (each used for both the incoming and outgoing buffer).
 func makePorts(name string, top, control int) Ports {
 	return Ports{
-		Top:     messaging.NewPort(name+".Top", top, top),
-		Control: messaging.NewPort(name+".Control", control, control),
+		Top:     twowaybuffered.NewPort(name+".Top", top, top),
+		Control: twowaybuffered.NewPort(name+".Control", control, control),
 	}
 }

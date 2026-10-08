@@ -61,9 +61,9 @@ t := tlb.Definition.Builder().
         TranslationProviderMapper: mmuMapper,
     }).
     WithPorts(tlb.Ports{
-        Top:     messaging.NewPort("L2TLB.Top", 4, 4),
-        Bottom:  messaging.NewPort("L2TLB.Bottom", 4, 4),
-        Control: messaging.NewPort("L2TLB.Control", 4, 4),
+        Top:     twowaybuffered.NewPort("L2TLB.Top", 4, 4),
+        Bottom:  twowaybuffered.NewPort("L2TLB.Bottom", 4, 4),
+        Control: twowaybuffered.NewPort("L2TLB.Control", 4, 4),
     }).
     Build("L2TLB")
 ```
@@ -77,7 +77,7 @@ t := tlb.Definition.Builder().
 
 ## Ports
 
-The system builder creates each port with `messaging.NewPort`, choosing its
+The system builder creates each port with `twowaybuffered.NewPort`, choosing its
 buffer sizes, and passes them to `WithPorts`; `Build` binds and registers them.
 
 - **Top**: accepts `vmprotocol.TranslationReq`, returns `vmprotocol.TranslationRsp`.

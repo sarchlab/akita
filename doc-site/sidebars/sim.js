@@ -9,7 +9,11 @@ const sidebars = {
     {type: 'doc', id: 'timing/README', label: 'timing'},
     {type: 'doc', id: 'queueing/README', label: 'queueing'},
     {type: 'doc', id: 'datarecording/README', label: 'datarecording'},
-    {type: 'doc', id: 'messaging/README', label: 'messaging'},
+    {type: 'category', label: 'messaging', items: [
+      {type: 'doc', id: 'messaging/README', label: 'Overview'},
+      {type: 'doc', id: 'messaging/twowaybuffered/README', label: 'twowaybuffered'},
+      {type: 'doc', id: 'messaging/direct/README', label: 'direct'},
+    ]},
     {type: 'doc', id: 'modeling/README', label: 'modeling'},
     {type: 'doc', id: 'tracing/README', label: 'tracing'},
     {type: 'doc', id: 'README', label: 'sim'},

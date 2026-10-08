@@ -48,21 +48,6 @@ func TestPayloadValidation(t *testing.T) {
 	defineProtocol("test.valid.nested", RoleDef{Name: "sender", Sends: []any{nestedTestPayload{}}})
 }
 
-func TestSendValidatesPayloadBeforeBuffering(t *testing.T) {
-	p := NewPort("src", 1, 1)
-	p.SetConnection(&benchmarkConnection{})
-	for _, v := range []any{&registryTestMsg{}, struct{ Unregistered int }{}} {
-		mustPanic(t, fmt.Sprintf("%T", v), func() { p.Send(Msg{Src: "src", Dst: "dst", Payload: v}) })
-		if p.NumOutgoing() != 0 {
-			t.Fatal("invalid payload was buffered")
-		}
-	}
-	p.Send(Msg{Src: "src", Dst: "dst"})
-	if msg, ok := p.PeekOutgoing(); !ok || msg.Payload != nil {
-		t.Fatalf("nil payload was not accepted: %#v, %v", msg, ok)
-	}
-}
-
 func TestMessageJSONPreservesNestedPayloads(t *testing.T) {
 	inner := Msg{ID: 7, Src: "a", Dst: "b", Payload: registryTestMsg{Value: 42}}
 	msg := Msg{ID: 8, Src: "b", Dst: "c", RspTo: 7, Payload: nestedTestPayload{Inner: inner, Values: []int{1, 2}}}

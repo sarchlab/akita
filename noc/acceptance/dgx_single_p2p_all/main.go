@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	// Enable profiling
 	_ "net/http/pprof"
 
@@ -94,7 +95,7 @@ func createAgents(
 	for i := 0; i < 9; i++ {
 		name := fmt.Sprintf("Agent[%d]", i)
 		ports := []messaging.Port{
-			messaging.NewPort(name+".Port0", 1, 1),
+			twowaybuffered.NewPort(name+".Port0", 1, 1),
 		}
 		agent := acceptance.NewAgent(s, freq, name, ports, test)
 		agent.TickLater()

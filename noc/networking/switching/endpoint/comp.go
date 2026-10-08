@@ -1,7 +1,10 @@
 package endpoint
 
 import (
+	"fmt"
+
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling/ticking"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -22,7 +25,7 @@ type Spec struct {
 // Resources holds the external wiring referenced by the endpoint, namely the
 // device ports that communicate directly through it. These are ports owned by
 // other components; Build plugs them into the endpoint, which acts as their
-// connection.
+// connection. Every device port must be a *twowaybuffered.Port.
 type Resources struct {
 	DevicePorts []messaging.Port `json:"-"`
 }
@@ -76,6 +79,7 @@ type deviceSide struct {
 
 // PlugIn connects a device port to the endpoint.
 func (d deviceSide) PlugIn(port messaging.Port) {
+	mustBeBufferedDevicePort(port)
 	port.SetConnection(d)
 }
 
@@ -87,4 +91,15 @@ func (d deviceSide) NotifyAvailable(_ messaging.Port) {
 // NotifySend wakes the endpoint when a device port has a message to send.
 func (d deviceSide) NotifySend() {
 	d.TickLater()
+}
+
+// mustBeBufferedDevicePort enforces v5 NoC's supported push-buffered transport.
+// The endpoint drains outgoing buffers and pushes reassembled messages through
+// CanDeliver/Deliver, with notifications for new messages and available capacity.
+// Planned wire ports use pull delivery and cannot support those push operations.
+// Custom ports may provide these semantics, but v5 NoC supports twowaybuffered only.
+func mustBeBufferedDevicePort(port messaging.Port) {
+	if p, ok := port.(*twowaybuffered.Port); !ok || p == nil {
+		panic(fmt.Sprintf("endpoint: device port must be *twowaybuffered.Port, got %T", port))
+	}
 }

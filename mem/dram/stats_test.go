@@ -6,8 +6,9 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/dram"
 	"github.com/sarchlab/akita/v5/mem/memprotocol"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -22,7 +23,7 @@ func (testDriver) NotifyPortFree(messaging.Port) {}
 // newDriverPort creates a port with bufSize slots in each direction for the
 // test to drive by hand.
 func newDriverPort(name string, bufSize int) messaging.Port {
-	p := messaging.NewPort(name, bufSize, bufSize)
+	p := twowaybuffered.NewPort(name, bufSize, bufSize)
 	p.SetOwner(testDriver{})
 
 	return p
@@ -96,9 +97,7 @@ var _ = Describe("DRAM Statistics", func() {
 		engine := timing.NewSerialEngine()
 		sim := modeling.NewStandaloneSimulation(engine)
 
-		conn := directconnection.MakeBuilder().
-			WithSimulation(sim).
-			Build("StatsConn")
+		conn := direct.NewConnection("StatsConn", sim, timing.GHz)
 
 		spec := dram.Definition.DefaultSpec
 		spec.Freq = 1 * timing.GHz
@@ -107,8 +106,8 @@ var _ = Describe("DRAM Statistics", func() {
 			WithSpec(spec).
 			WithResources(dram.Resources{Storage: mem.NewStorage(4 * mem.GB)}).
 			WithPorts(dram.Ports{
-				Top:     messaging.NewPort("StatsDRAM.Top", 1024, 1024),
-				Control: messaging.NewPort("StatsDRAM.Control", 1024, 1024),
+				Top:     twowaybuffered.NewPort("StatsDRAM.Top", 1024, 1024),
+				Control: twowaybuffered.NewPort("StatsDRAM.Control", 1024, 1024),
 			}).
 			Build("StatsDRAM")
 

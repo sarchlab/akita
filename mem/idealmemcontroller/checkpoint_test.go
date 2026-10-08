@@ -8,7 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 )
 
 // TestCheckpointRoundTrip checkpoints a simulation containing a real memory
@@ -37,8 +37,8 @@ func TestCheckpointRoundTrip(t *testing.T) {
 		WithSimulation(s).
 		WithResources(idealmemcontroller.Resources{Storage: storage}).
 		WithPorts(idealmemcontroller.Ports{
-			Top:     messaging.NewPort("DRAM.Top", 16, 16),
-			Control: messaging.NewPort("DRAM.Control", 16, 16),
+			Top:     twowaybuffered.NewPort("DRAM.Top", 16, 16),
+			Control: twowaybuffered.NewPort("DRAM.Control", 16, 16),
 		}).
 		Build("DRAM")
 

@@ -1,8 +1,8 @@
 package tickingping
 
 import (
-	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/sim/messaging"
+	"github.com/sarchlab/akita/v5/sim/messaging/direct"
+	"github.com/sarchlab/akita/v5/sim/messaging/twowaybuffered"
 	"github.com/sarchlab/akita/v5/sim/modeling"
 	"github.com/sarchlab/akita/v5/sim/timing"
 )
@@ -12,8 +12,8 @@ func Example() {
 	sim := modeling.NewStandaloneSimulation(engine)
 
 	// Create the ports first, so AgentA's Spec can name AgentB's port.
-	outA := messaging.NewPort("AgentA.Out", 16, 16)
-	outB := messaging.NewPort("AgentB.Out", 16, 16)
+	outA := twowaybuffered.NewPort("AgentA.Out", 16, 16)
+	outB := twowaybuffered.NewPort("AgentB.Out", 16, 16)
 
 	specA := Definition.DefaultSpec
 	specA.Freq = 1 * timing.Hz
@@ -35,10 +35,7 @@ func Example() {
 		WithPorts(Ports{Out: outB}).
 		Build("AgentB")
 
-	conn := directconnection.
-		MakeBuilder().
-		WithSimulation(sim).
-		Build("Conn")
+	conn := direct.NewConnection("Conn", sim, timing.GHz)
 
 	conn.PlugIn(agentA.Ports.Out)
 	conn.PlugIn(agentB.Ports.Out)

@@ -54,7 +54,7 @@ that does not fit the component shape, or when you write test scaffolding.
   configuration is separate from runtime data and both are JSON-serializable
   for checkpointing.
 - **A ports and connections layer** with realistic timing, including a
-  zero-latency `directconnection` for simple topologies and a `noc/` package
+  zero-latency `direct.Connection` for simple topologies and a `noc/` package
   for mesh, PCIe, and NVLink-style networks.
 - **Memory and cache components** ready to plug in: ideal memory
   controllers, write-back caches, DRAM models, TLBs, MMUs.
