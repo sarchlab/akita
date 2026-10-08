@@ -112,8 +112,9 @@ Each package doc shows how to declare and build a component of its model.
   `Resources`, `Ports`, and `Middlewares` — and the same methods — `Name`,
   `NewID`, and `CurrentTime`. They come from a base type in
   `modeling/internal/base`, which also holds the steps of `Build`: a
-  component model is defined only by the three model packages. `Spec`,
-  `Resources`, and `Ports` are fixed after `Build`.
+  component model is defined only by the three model packages. `Spec` and
+  `Resources` are fixed after `Build`; `Initialize` freezes port bindings and
+  creates State and Middlewares.
 
 ### Domain
 

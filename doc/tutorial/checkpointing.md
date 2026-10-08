@@ -42,7 +42,7 @@ That division drives the one rule that matters most:
 > resource). Runtime state hidden on a middleware struct — a round-robin cursor, a
 > counter, an RNG — is *not* checkpointed, so a resumed run silently diverges.
 
-Keep middleware fields to references that `Build` recreates — usually just the
+Keep middleware fields to references that `Initialize` recreates — usually just the
 component pointer; ports live in `Ports` and shared objects in `Resources`. Put
 cursors, counters, and in-flight tables in `State`.
 
@@ -133,7 +133,7 @@ your data in the right one of the five structs:
 | `State` | **all** mutable runtime data | serialized and restored — the only component data saved |
 | `Resources` | references to shared objects (e.g. `*mem.Storage`) | not serialized; the system builder supplies them again |
 | `Ports` | the component's ports | not part of the component's checkpoint; the system builder creates them again, and the simulation saves the messages buffered in them |
-| `Middlewares` | the behaviour, holding only references | not serialized; `Build` recreates them with `NewMiddlewares` |
+| `Middlewares` | the behaviour, holding only references | not serialized; `Initialize` recreates them with `NewMiddlewares` |
 
 ```go
 type Spec struct {

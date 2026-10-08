@@ -35,9 +35,11 @@ per-message reassembly records (`AssemblingMsgs`, `AssembledMsgs`).
 middlewares are `Outgoing` (device → network) and `Incoming` (network → device),
 run in that order every cycle.
 
-The endpoint is also the connection of its device ports: `Build` plugs every
-port in `Resources.DevicePorts` into it, and activity on a device port wakes the
-endpoint. No port is added after `Build`.
+The endpoint becomes the connection of its device ports when
+`endpoint.ConnectDevices(ep)` attaches every port in `Resources.DevicePorts`
+during wiring. Bind the device owners first, call `ConnectDevices`, and finish
+the network links before `simulation.Initialize()`. Activity on a connected
+device port then wakes the endpoint.
 
 ## How It Works
 

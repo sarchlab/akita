@@ -325,7 +325,7 @@ memcontrolprotocol.ErrMustBePausedOrDrained
 ## Implementing the protocol in a new component
 
 1. Add a `Control` field to the component's `Ports` struct, tagged with the
-   responder role; the system builder creates the port and passes it to `Build`:
+   responder role; the system builder creates the port and binds it after Build:
    ```go
    type Ports struct {
        // ...

@@ -74,8 +74,8 @@ controller, is built with the same shape:
 The whole configuration goes in as one `Spec` through `WithSpec` (there is
 no setter per Spec field), starting from `Definition.DefaultSpec`. That is
 why the clock frequency lives in the Spec: `Build` reads `Freq` from it. The
-ports go in as one `Ports` struct with `component.BindPort` after Build; the next section
-shows the system builder creating them.
+ports are assigned individually with `component.BindPort("Field", port)` after
+Build; the next section shows the system builder creating and binding them.
 
 :::
 

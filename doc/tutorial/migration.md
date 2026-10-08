@@ -679,7 +679,7 @@ checkpointing. See "Defining Components in V5" below for the full philosophy.
 | **Spec** | Configuration | System builder (defaults in `Definition.DefaultSpec`) | Scalars (bool, numbers, strings, and named types based on them) and slices or arrays of scalars. No maps, nested structs, pointers, or interfaces. A ticking component's Spec has a `Freq timing.Freq` field. |
 | **State** | Mutable runtime data, saved in checkpoints | Component (`NewState`, or the zero value) | Pure data: scalars, slices, arrays, maps, nested structs. No pointers, ports, functions, channels. Use IDs for cross-references. Written only by the component's own code. |
 | **Resources** | References to shared objects (storage, page table, address mapper) | System builder | Not checkpointed; the rebuild supplies them again. `modeling.None` when there are none. |
-| **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`twowaybuffered.NewPort`) | Bound and registered by `Build`; none is added later. A field may carry an `akita:"role=<protocol>.<role>"` tag. |
+| **Ports** | One `messaging.Port` field per port, `[]messaging.Port` per port group | System builder (`twowaybuffered.NewPort`) | Bound and registered by `BindPort`; topology is fixed at `Initialize`. A field may carry an `akita:"role=<protocol>.<role>"` tag. |
 | **Middlewares** | The behavior: one exported pointer field per middleware | Component (`NewMiddlewares`) | Each implements `Handle(e timing.Event) bool`; they run in field order and hold only references. |
 
 Hooks are not a sixth struct: every component embeds `hooking.HookableBase`,
@@ -912,7 +912,7 @@ V5 Spec fields are scalars or slices (or arrays) of scalars. `Build` panics if a
 | Wiring through an address mapping | Resources, used directly by the component | The caches route through the `mem.AddressToPortMapper` in Resources. |
 | Runtime data that changes while simulating | State | Queues, in-flight transaction tables. |
 
-`Build` copies the Spec's slices, so an instance never shares one with `Definition.DefaultSpec` or with another instance. The instance's `Spec` field is fixed after `Build`. Since ports are created before `Build`, their remote names are known in time to fill such a list.
+`Build` copies the Spec's slices, so an instance never shares one with `Definition.DefaultSpec` or with another instance. The instance's `Spec` field is fixed after `Build`. Fill remote-port lists with planned full names during configuration, or bind the destination ports before calling `AsRemote()`.
 
 A component's Resources are not part of its checkpoint. The setup that rebuilds a simulation supplies them again, so a restored component uses the rebuilt wiring; a shared object they point to, such as a `mem.Storage`, is a registered resource that checkpoints itself. Do not copy wiring into State: `LoadCheckpoint` replaces the State wholesale and would bring back the wiring of the saved run.
 

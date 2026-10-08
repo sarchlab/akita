@@ -40,8 +40,9 @@ func (b Builder) WithOutputFileName(filename string) Builder {
 	return b
 }
 
-// WithMonitor attaches a monitor. Build calls Start with the initialized
-// simulation, and Terminate stops the monitor before closing recording resources.
+// WithMonitor attaches a monitor. Build calls Start after creating runtime
+// services, before component assembly and Initialize. Terminate stops the
+// monitor before closing recording resources.
 // Each monitor belongs to one simulation and must not be reused.
 // Omitting WithMonitor leaves monitoring disabled.
 func (b Builder) WithMonitor(m Monitor) Builder {

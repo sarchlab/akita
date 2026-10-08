@@ -45,8 +45,8 @@ Things to notice:
 - It has the same shape as the walker's. `Definition.Builder()…Build(name)`
   returns a `*Comp` — the alias from the previous page.
 - The component **declares its port** as a field of `Ports` but does not
-  create it. The system builder creates the port and passes it to `Build`,
-  which binds it to the component; the middlewares then reach it as
+  create it. After Build, the system builder creates the port and calls
+  `component.BindPort` to bind it; the middlewares then reach it as
   `m.comp.Ports.Out`.
 - Middlewares run in the **field order** of `Middlewares`: `Send` first,
   then `ReceiveProcess`.

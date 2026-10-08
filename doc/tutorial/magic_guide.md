@@ -261,7 +261,7 @@ func newMiddlewares(c *Comp) Middlewares {
 }
 ```
 
-The middlewares are fixed when `Build` runs — nothing is added to a component
+The middlewares are created and fixed when `Initialize` runs — nothing is added to a component
 from outside — so this edit lives in the component's package: a variant
 (§3.1) or your research fork (§3.7). Like any middleware, the probe holds only
 references; anything it counts goes in `State`. Use middleware for per-cycle

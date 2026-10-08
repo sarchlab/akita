@@ -112,7 +112,7 @@ topPort := cache.Ports.Top
 | `WithResources(Resources{...})` | Backing storage (required) and the lower-memory address mapping (`AddressToPortMapper` or `RemotePorts`) |
 | `component.BindPort("Field", p)` | Bind each port after Build; its owner assigns the full name. |
 
-`Build` panics if `Resources.Storage` is nil; the cache no longer creates a
+`Initialize` panics if `Resources.Storage` is nil; the cache no longer creates a
 default storage. Size the storage to hold at least `Spec.TotalByteSize` bytes.
 
 ### Default Configuration

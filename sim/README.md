@@ -39,7 +39,9 @@ the supporting infrastructure. Once built, you register components, connections,
 and shared resources with the simulation; registration tracks each object in a
 flat inventory and wires it into tracing and monitoring. The simulation exposes
 typed accessors for the engine and infrastructure, plus name-based and
-inventory accessors for the registered entities.
+inventory accessors for the registered entities. After all ports and connections
+are bound, call `s.Initialize()` to validate wiring and create component State
+and Middlewares. This freezes topology; seed work and run only afterward.
 
 The runner depends only on minimal local interfaces (`Component`, `Port`,
 `Connection`, `Resource`). Concrete messaging types satisfy them structurally,
@@ -119,8 +121,8 @@ s.RegisterComponent(myComponent)
 
 Registration adds the component to the inventory, attaches the visual
 tracer, and connects the component to the monitor (if enabled). A component's
-`Build` already registers the component and each of its ports
-(`RegisterPort`), so a system builder calls `RegisterComponent` only for a
+`Build` registers the component, and `BindPort` registers each port
+(`RegisterPort`). A system builder calls `RegisterComponent` only for a
 component written without a component model. Use `RegisterConnection` and
 `RegisterResource` to register connections and shared resources.
 
@@ -143,7 +145,8 @@ to the end*.
 // Save (engine stopped, outside an event handler):
 err := s.SaveCheckpoint("snap.tar.gz", "")  // "" uses the default build ID
 
-// Resume: rebuild the *identical* simulation with the same setup code, then:
+// Resume: rebuild the *identical* simulation, bind its links, and successfully
+// call s.Initialize() with the same setup code, then:
 err := s.LoadCheckpoint("snap.tar.gz", "")
 engine.Run()                                   // continue to completion
 ```
